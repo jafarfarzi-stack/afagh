@@ -13,7 +13,7 @@ type Live = Record<number, { cap: number; enrolled: number; remaining: number }>
 
 export default function EnrollClient(props: {
   student: { id: number; status: string };
-  term: { id: number | null; title: string; open: boolean };
+  term: { id: number | null; title: string; open: boolean; windowLabel: string };
   offerings: Offering[];
   cart: CartCourse[];
   cartStartedAt: number | null;
@@ -76,7 +76,13 @@ export default function EnrollClient(props: {
   const mm = String(Math.floor(remain / 60)).padStart(2, '0');
   const ss = String(remain % 60).padStart(2, '0');
 
-  async function add(id: number) { setBusy(true); await addToCartAction(id); router.refresh(); setBusy(false); }
+  async function add(id: number) {
+    setBusy(true); setMsg('');
+    const res = await addToCartAction(id);
+    if (!res.ok) setMsg(res.error || 'افزودن ممکن نیست.');
+    else router.refresh();
+    setBusy(false);
+  }
   async function remove(id: number) { setBusy(true); await removeFromCartAction(id); router.refresh(); setBusy(false); }
 
   async function submit() {
@@ -98,7 +104,7 @@ export default function EnrollClient(props: {
 
   return (
     <div className="space-y-4">
-      {!props.term.open && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">پنجرهٔ انتخاب واحد برای «{props.term.title || '—'}» بسته است.</p>}
+      <div className={'rounded-xl p-3 text-sm ' + (props.term.open ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800')}>{props.term.windowLabel}</div>
 
       {props.cartStartedAt && (
         <div className={'card flex items-center justify-between ' + (expired ? 'text-red-600' : '')}>

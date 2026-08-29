@@ -6,6 +6,8 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { academic_terms, cart_items, course_offerings, courses, enrollments, notifications, process_definitions, process_steps, student_requests } from '@/db/schema';
 import { withUserRls } from '@/db';
+import { windowStatus } from '@/lib/enrollment-window';
+import { offeringVisible } from '@/lib/offering-targeting';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { enqueueSubmit, ensureWorker, rateLimitSubmit } from '@/lib/waitingRoom';
 
@@ -17,11 +19,19 @@ async function ctx() {
   return { user, me, term };
 }
 
-export async function addToCartAction(offeringId: number) {
+export async function addToCartAction(offeringId: number): Promise<{ ok: boolean; error?: string }> {
   const { user, me, term } = await ctx();
-  if (!term) return;
+  if (!term) return { ok: false, error: 'ترم جاری تعریف نشده است.' };
+  const win = windowStatus(term);
+  if (!win.open) return { ok: false, error: win.label };
+  // هدف‌گیری: ارائهٔ خارج از مقطع/رشته/ورودی دانشجو اصلاً به سبد نمی‌آید
+  const [off] = await db.select().from(course_offerings).where(eq(course_offerings.id, offeringId)).limit(1);
+  if (!off) return { ok: false, error: 'ارائه یافت نشد.' };
+  if (!offeringVisible(off, { degreeLevelId: me.degreeLevelId, majorId: me.majorId, entryYear: me.entryYear }))
+    return { ok: false, error: 'این درس برای مقطع/رشته/ورودی شما ارائه نشده است.' };
   // نوشتن تحت RLS (§۲۱۷۰): خط‌مشی cart_self_ins فقط سبد خودش را اجازه می‌دهد
   await withUserRls(user.id, tx => tx.insert(cart_items).values({ studentId: me.id, offeringId }).onConflictDoNothing());
+  return { ok: true };
 }
 
 export async function removeFromCartAction(offeringId: number) {

@@ -3,6 +3,8 @@ import { db } from '@/db';
 import { academic_terms, cart_items, course_offerings, courses, enrollments } from '@/db/schema';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { buildPrereqContext, formatPrereq } from '@/lib/enroll-engine';
+import { windowStatus } from '@/lib/enrollment-window';
+import { offeringVisible } from '@/lib/offering-targeting';
 import EnrollClient from './EnrollClient';
 
 export const dynamic = 'force-dynamic';
@@ -13,12 +15,15 @@ export default async function EnrollPage() {
   if (!me) return <p className="card">پروندهٔ دانشجویی یافت نشد.</p>;
 
   const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
-  const offerings = term
+  const allOfferings = term
     ? await db
-        .select({ id: course_offerings.id, courseId: course_offerings.courseId, code: courses.code, title: courses.title, units: courses.units, capacity: course_offerings.capacity, enrolled: course_offerings.enrolledCount, group: course_offerings.groupNumber })
+        .select({ id: course_offerings.id, courseId: course_offerings.courseId, code: courses.code, title: courses.title, units: courses.units, capacity: course_offerings.capacity, enrolled: course_offerings.enrolledCount, group: course_offerings.groupNumber, targetDegreeLevelId: course_offerings.targetDegreeLevelId, targetMajorId: course_offerings.targetMajorId, entryYearStart: course_offerings.entryYearStart, entryYearEnd: course_offerings.entryYearEnd })
         .from(course_offerings).innerJoin(courses, eq(courses.id, course_offerings.courseId))
         .where(and(eq(course_offerings.termId, term.id), eq(course_offerings.isActive, 1)))
     : [];
+  // هدف‌گیری: فقط ارائه‌های منطبق با مقطع/رشته/ورودی دانشجو (ارشد درس کارشناسی را نمی‌بیند…)
+  const offerings = allOfferings.filter(o => offeringVisible(o, { degreeLevelId: me.degreeLevelId, majorId: me.majorId, entryYear: me.entryYear }));
+  const win = windowStatus(term);
 
   // برچسب پیش‌نیاز هر درس از قاعدهٔ مؤثر دانشجو (سیلابسی مقدم بر عمومی)
   const prereqCtx = await buildPrereqContext(me.id);
@@ -39,7 +44,7 @@ export default async function EnrollPage() {
   return (
     <EnrollClient
       student={{ id: me.id, status: me.status }}
-      term={{ id: term?.id ?? null, title: term?.title ?? '', open: !!term?.isEnrollmentOpen }}
+      term={{ id: term?.id ?? null, title: term?.title ?? '', open: win.open, windowLabel: win.label }}
       offerings={offerings.map(o => ({ ...o, units: Number(o.units), prereq: prereqLabel.get(o.id) ?? null }))}
       cart={cartCourses.map(c => ({ ...c, units: Number(c.units) }))}
       cartStartedAt={cart.length ? cart.map(c => c.createdAt?.getTime?.() ?? 0).filter(Boolean).sort((a, b) => a - b)[0] || null : null}

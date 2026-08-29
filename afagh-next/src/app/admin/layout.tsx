@@ -19,6 +19,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/payroll" className="hover:underline">حقوق و دستمزد</Link>
           <Link href="/admin/archive" className="hover:underline">بایگانی مدارک</Link>
           <Link href="/admin/migration" className="hover:underline">مهاجرت داده</Link>
+          <Link href="/admin/offerings" className="hover:underline">زمان‌بندی و ارائه‌ها</Link>
         </nav>
       </header>
       <main className="mx-auto max-w-6xl p-4">{children}</main>

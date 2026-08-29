@@ -226,7 +226,11 @@ export const course_offerings = pgTable('course_offerings', {
   isActive: integer('isActive').notNull().default(1),
   gradesHash: text('gradesHash'),
   gradesTemporaryAt: timestamp('gradesTemporaryAt'),
-  gradesFinalizedAt: timestamp('gradesFinalizedAt')
+  gradesFinalizedAt: timestamp('gradesFinalizedAt'),
+  targetDegreeLevelId: integer('targetDegreeLevelId'),   // مقطع هدف (NULL = همهٔ مقاطع)
+  targetMajorId: integer('targetMajorId'),               // رشتهٔ هدف (NULL = همهٔ رشته‌ها)
+  entryYearStart: integer('entryYearStart'),             // بازهٔ ورودی (NULL = بدون محدودیت)
+  entryYearEnd: integer('entryYearEnd'),
 });
 
 export const offering_professors = pgTable('offering_professors', {
