@@ -63,6 +63,7 @@ export async function requireRole(allowed: string[]): Promise<SessionUser> {
 export function homeFor(roles: string[]): string {
   if (roles.length === 0) return '/login'; // نقشی ندارد → برگرد به ورود (ضدحلقه)
   if (roles.includes('STUDENT')) return '/student';
+  if (roles.includes('DEP_HEAD')) return '/group-manager';
   if (roles.includes('PROFESSOR')) return '/professor';
   return '/admin';
 }

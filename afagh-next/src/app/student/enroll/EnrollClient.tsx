@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { addToCartAction, removeFromCartAction, referCouncilAction, submitCartAction } from './actions';
 import type { SubmitResult } from '@/lib/enroll-engine';
 
-type Offering = { id: number; code: string; title: string; units: number; capacity: number; enrolled: number; group: number; prereq?: string | null };
+type Offering = { id: number; code: string; title: string; units: number; capacity: number; enrolled: number; group: number; prereq?: string | null; sched?: string | null };
 type CartCourse = { id: number; code: string; title: string; units: number };
 type Live = Record<number, { cap: number; enrolled: number; remaining: number }>;
 
@@ -171,6 +171,7 @@ export default function EnrollClient(props: {
               <div>
                 <p className="font-medium">{o.title}</p>
                 <p className="text-xs text-slate-500" dir="ltr">{o.code} · گروه {o.group} · {o.units} واحد{lv ? ' · باقی‌مانده ' + lv.remaining + '/' + lv.cap : ' · ظرفیت ' + o.enrolled + '/' + o.capacity}</p>
+                {o.sched && <p className="text-[11px] text-teal-700">🗓 {o.sched}</p>}
                 {o.prereq && <p className="mt-0.5 text-[11px] text-amber-700">پیش‌نیاز: {o.prereq}</p>}
               </div>
               <div className="flex items-center gap-2">

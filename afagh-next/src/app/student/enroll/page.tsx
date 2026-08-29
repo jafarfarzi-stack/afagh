@@ -1,6 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
-import { academic_terms, cart_items, course_offerings, courses, enrollments } from '@/db/schema';
+import { academic_terms, cart_items, classrooms, course_offerings, courses, enrollments, schedules } from '@/db/schema';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { buildPrereqContext, formatPrereq } from '@/lib/enroll-engine';
 import { windowStatus } from '@/lib/enrollment-window';
@@ -33,6 +33,20 @@ export default async function EnrollPage() {
     if (lbl) prereqLabel.set(o.id, lbl);
   }
 
+  // برنامهٔ هفتگی و نام کلاس برای هر ارائه (تعریف‌شده توسط مدیر گروه)
+  const DAYS = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه'];
+  const schedRows = offerings.length
+    ? await db
+        .select({ offeringId: schedules.offeringId, day: schedules.dayOfWeek, st: schedules.startTime, en: schedules.endTime, room: classrooms.name })
+        .from(schedules).leftJoin(classrooms, eq(classrooms.id, schedules.roomId))
+        .where(and(inArray(schedules.offeringId, offerings.map(o => o.id)), eq(schedules.scheduleType, 'CLASS')))
+    : [];
+  const schedLabel = new Map<number, string>();
+  for (const r of schedRows) {
+    const lbl = DAYS[r.day ?? 0] + ' ' + String(r.st).slice(0, 5) + '–' + String(r.en).slice(0, 5) + (r.room ? ' · ' + r.room : '');
+    schedLabel.set(r.offeringId, (schedLabel.get(r.offeringId) ? schedLabel.get(r.offeringId) + '، ' : '') + lbl);
+  }
+
   const cart = await db.select().from(cart_items).where(eq(cart_items.studentId, me.id));
   const cartOfferingIds = cart.map(c => c.offeringId);
   const cartCourses = cartOfferingIds.length
@@ -45,7 +59,7 @@ export default async function EnrollPage() {
     <EnrollClient
       student={{ id: me.id, status: me.status }}
       term={{ id: term?.id ?? null, title: term?.title ?? '', open: win.open, windowLabel: win.label }}
-      offerings={offerings.map(o => ({ ...o, units: Number(o.units), prereq: prereqLabel.get(o.id) ?? null }))}
+      offerings={offerings.map(o => ({ ...o, units: Number(o.units), prereq: prereqLabel.get(o.id) ?? null, sched: schedLabel.get(o.id) ?? null }))}
       cart={cartCourses.map(c => ({ ...c, units: Number(c.units) }))}
       cartStartedAt={cart.length ? cart.map(c => c.createdAt?.getTime?.() ?? 0).filter(Boolean).sort((a, b) => a - b)[0] || null : null}
     />
