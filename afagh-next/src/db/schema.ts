@@ -732,3 +732,19 @@ export const doc_sign_otps = pgTable('doc_sign_otps', {
   lockedAt: timestamp('lockedAt'),
   createdAt: timestamp('createdAt').defaultNow()
 });
+
+// ═══ سامانهٔ مهاجرت داده از سیستم قدیمی (ETL) ═══
+export const migration_runs = pgTable('migration_runs', {
+  id: serial('id').primaryKey(),
+  entity: varchar('entity', { length: 30 }).notNull(),       // student/course/term/enrollment/ledger/clearance
+  fileName: varchar('fileName', { length: 255 }),
+  mode: varchar('mode', { length: 10 }).notNull(),           // DRY | COMMIT
+  totalRows: integer('totalRows').default(0),
+  inserted: integer('inserted').default(0),
+  skippedExisting: integer('skippedExisting').default(0),
+  invalid: integer('invalid').default(0),
+  report: text('report'),                                    // JSON کامل گزارش
+  status: varchar('status', { length: 20 }).notNull(),       // OK | FAILED
+  triggeredByUserId: integer('triggeredByUserId'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
