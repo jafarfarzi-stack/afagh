@@ -1,0 +1,27 @@
+# زیرساخت کالبد آفاق — PostgreSQL + MinIO (Object Storage بایگانی §۲۴۴۵)
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: afagh
+      POSTGRES_PASSWORD: afagh
+      POSTGRES_DB: afagh_db
+    ports: ['5432:5432']
+    volumes: [afagh_pg:/var/lib/postgresql/data]
+  redis:
+    image: redis:7-alpine
+    container_name: afagh_redis
+    ports: ['6379:6379']
+    volumes: [redisdata:/data]
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: afagh
+      MINIO_ROOT_PASSWORD: afagh-secret
+    ports: ['9000:9000', '9001:9001']
+    volumes: [afagh_minio:/data]
+volumes:
+  afagh_pg:
+  afagh_minio:
+  redisdata:

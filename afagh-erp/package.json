@@ -1,0 +1,16 @@
+{
+  "name": "afagh-academic-erp",
+  "version": "0.1.0",
+  "description": "سامانه جامع آموزشی دانشگاه آفاق — فاز صفر (هسته قابل اجرا)",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "seed": "node src/db/seed.js",
+    "reset": "node src/db/seed.js --reset",
+    "stress": "node scripts/stress.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0"
+  }
+}

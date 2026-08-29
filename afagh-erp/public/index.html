@@ -1,0 +1,1606 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>سامانه جامع آموزشی دانشگاه آفاق</title>
+<style>
+  :root{
+    --primary:#1e40af; --primary-dark:#1e3a8a; --primary-light:#dbeafe;
+    --bg:#f1f5f9; --card:#ffffff; --text:#0f172a; --muted:#64748b;
+    --green:#059669; --green-bg:#d1fae5; --red:#dc2626; --red-bg:#fee2e2;
+    --amber:#d97706; --amber-bg:#fef3c7; --border:#e2e8f0; --radius:14px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Vazirmatn','Segoe UI',Tahoma,Arial,sans-serif}
+  body{background:var(--bg);color:var(--text);font-size:14px}
+  /* ─── ورود ─── */
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e3a8a,#1e40af 50%,#312e81);padding:20px}
+  .login-card{background:#fff;border-radius:20px;padding:36px;width:100%;max-width:420px;box-shadow:0 25px 60px rgba(0,0,0,.35)}
+  .login-card h1{font-size:20px;margin-bottom:4px}
+  .login-card .sub{color:var(--muted);margin-bottom:22px;font-size:13px}
+  .logo{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#1e40af,#3b82f6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px;margin-bottom:16px}
+  label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:12px 0 5px}
+  input,select,textarea{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;font-family:inherit;background:#fff;transition:.15s}
+  input:focus,textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-light)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 18px;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;transition:.15s;font-family:inherit}
+  .btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-dark)}
+  .btn-green{background:var(--green);color:#fff}.btn-green:hover{filter:brightness(1.08)}
+  .btn-red{background:var(--red);color:#fff}
+  .btn-amber{background:var(--amber);color:#fff}
+  .btn-ghost{background:transparent;color:var(--muted);border:1.5px solid var(--border)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn-block{width:100%;margin-top:18px}
+  .demo-accounts{margin-top:22px;border-top:1px dashed var(--border);padding-top:16px}
+  .demo-accounts b{font-size:12px;color:var(--muted);display:block;margin-bottom:8px}
+  .chip{display:inline-block;background:var(--primary-light);color:var(--primary-dark);border:none;border-radius:20px;padding:6px 11px;font-size:11.5px;margin:0 0 6px 6px;cursor:pointer;font-family:inherit;font-weight:600;transition:.15s}
+  .chip:hover{filter:brightness(.95)}
+  /* ─── چیدمان اصلی ─── */
+  .layout{display:flex;min-height:100vh}
+  .sidebar{width:250px;background:linear-gradient(180deg,#1e3a8a,#172554);color:#e2e8f0;padding:20px 0;flex-shrink:0;display:flex;flex-direction:column}
+  .sidebar .brand{padding:0 20px 18px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:12px}
+  .sidebar .brand h2{font-size:16px;color:#fff}
+  .sidebar .brand span{font-size:11px;color:#93c5fd}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:11px 20px;font-size:13.5px;cursor:pointer;color:#cbd5e1;border:none;background:none;width:100%;text-align:right;font-family:inherit;font-weight:600;transition:.15s}
+  .nav-item:hover{background:rgba(255,255,255,.08);color:#fff}
+  .nav-item.active{background:rgba(59,130,246,.25);color:#fff;border-left:3px solid #60a5fa}
+  .sidebar .user-box{margin-top:auto;padding:14px 20px;border-top:1px solid rgba(255,255,255,.12);font-size:12px}
+  .sidebar .user-box b{display:block;color:#fff;font-size:13px}
+  .main{flex:1;padding:24px 28px;max-width:calc(100vw - 250px);overflow-x:auto}
+  .page-title{font-size:19px;font-weight:800;margin-bottom:18px;display:flex;align-items:center;gap:10px}
+  /* ─── اجزاء ─── */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:18px}
+  .grid{display:grid;gap:16px}
+  .grid-4{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+  .grid-2{grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+  .stat{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px}
+  .stat .lbl{font-size:12px;color:var(--muted);margin-bottom:6px}
+  .stat .val{font-size:22px;font-weight:800}
+  .stat .hint{font-size:11px;color:var(--muted);margin-top:5px}
+  .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+  .b-green{background:var(--green-bg);color:var(--green)} .b-red{background:var(--red-bg);color:var(--red)}
+  .b-amber{background:var(--amber-bg);color:var(--amber)} .b-blue{background:var(--primary-light);color:var(--primary-dark)}
+  .b-gray{background:#e2e8f0;color:#475569}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{background:#f8fafc;color:var(--muted);font-size:11.5px;text-align:right;padding:10px 12px;border-bottom:1.5px solid var(--border);white-space:nowrap}
+  td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+  tr:hover td{background:#f8fafc}
+  .toast-wrap{position:fixed;bottom:20px;left:20px;z-index:99;display:flex;flex-direction:column;gap:8px}
+  .toast{background:#0f172a;color:#fff;padding:12px 18px;border-radius:10px;font-size:13px;box-shadow:0 8px 25px rgba(0,0,0,.3);animation:fade .25s;max-width:420px}
+  .toast.err{background:var(--red)}.toast.ok{background:var(--green)}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1}}
+  .empty{padding:34px;text-align:center;color:var(--muted);font-size:13px}
+  .kv{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--border);font-size:13px}
+  .kv:last-child{border:none}
+  .kv b{font-weight:700}
+  .sla-pill{font-size:11px;font-weight:800;padding:3px 9px;border-radius:16px}
+  .sla-ON_TIME{background:var(--green-bg);color:var(--green)}
+  .sla-WARNING{background:var(--amber-bg);color:var(--amber)}
+  .sla-BREACHED{background:var(--red-bg);color:var(--red)}
+  .sla-NO_SLA{background:#e2e8f0;color:#64748b}
+  .reasons{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.9}
+  pre.json{background:#0f172a;color:#7dd3fc;padding:16px;border-radius:10px;font-size:12px;direction:ltr;text-align:left;overflow-x:auto;line-height:1.7}
+  .cart-bar{position:sticky;bottom:14px;background:#0f172a;color:#fff;border-radius:14px;padding:13px 20px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 12px 35px rgba(0,0,0,.3);flex-wrap:wrap;gap:10px}
+  .cart-bar .units{font-size:13px}.cart-bar .units b{color:#93c5fd;font-size:16px}
+  .flex{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .offering{display:flex;justify-content:space-between;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .offering:last-child{border:none}
+  .offering .title-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+  .code-tag{background:var(--primary-light);color:var(--primary-dark);font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:6px;direction:ltr}
+  .meta{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.8}
+  .cap-bar{height:5px;border-radius:4px;background:#e2e8f0;overflow:hidden;margin-top:7px;max-width:230px}
+  .cap-fill{height:100%;border-radius:4px}
+  .cap-warn{background:var(--amber)}.cap-full{background:var(--red)}.cap-ok{background:var(--green)}
+  .tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+  .tab{padding:8px 16px;border-radius:10px;background:#fff;border:1.5px solid var(--border);cursor:pointer;font-size:13px;font-weight:700;font-family:inherit;color:var(--muted)}
+  .tab.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+  .term-block{border:1.5px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px}
+  .term-block h4{font-size:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+  .appeal-box{background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px;margin:10px 0;font-size:13px;line-height:2}
+  h3.sec{font-size:15px;margin-bottom:12px;color:var(--primary-dark)}
+  .gpa-circle{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;width:86px;height:86px;border-radius:50%;background:var(--primary-light);color:var(--primary-dark);font-weight:800;font-size:20px;border:3px solid var(--primary)}
+  .gpa-circle small{font-size:10px;font-weight:600}
+  .strike{color:#94a3b8;text-decoration:line-through}
+  .seat{width:52px;height:46px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;cursor:pointer;border:1.5px solid transparent;transition:.12s;overflow:hidden}
+  .seat b{font-size:12px}
+  .seat:hover{transform:scale(1.08);border-color:var(--primary)}
+  .seat.absent{opacity:.45;border-color:var(--red);background:var(--red-bg)!important}
+  .seat.selected-absent{outline:2.5px solid var(--red)}
+  .seat-grid{display:flex;flex-wrap:wrap;gap:8px;direction:rtl}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0;font-size:11.5px}
+  .legend i{width:14px;height:14px;border-radius:4px;display:inline-block;margin-left:4px;vertical-align:-2px}
+  .entry-card{border:2px solid var(--primary);border-radius:14px;padding:22px;background:#fff;max-width:760px}
+  .entry-card .head{display:flex;justify-content:space-between;border-bottom:2px dashed var(--border);padding-bottom:12px;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+  .entry-card .barcode{font-family:monospace;letter-spacing:2px;background:#0f172a;color:#fff;padding:6px 14px;border-radius:6px;font-size:13px;direction:ltr}
+  .photo-box{width:74px;height:92px;border:2px dashed var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:10px}
+  @media print{.sidebar,.cart-bar,.no-print{display:none!important}.main{max-width:100%}}
+  .star{color:var(--amber)}
+</style>
+</head>
+<body>
+
+<!-- ═══════ صفحه ورود ═══════ -->
+<div id="loginPage" class="login-wrap">
+  <div class="login-card">
+    <div class="logo">🎓</div>
+    <h1>سامانه جامع آموزشی</h1>
+    <div class="sub">دانشگاه آفاق — فاز صفر (هسته قابل اجرا)</div>
+    <label>کد ملی</label>
+    <input id="loginNc" placeholder="مثلاً 1010101010" dir="ltr">
+    <label>رمز عبور</label>
+    <input id="loginPass" type="password" placeholder="••••••" dir="ltr">
+    <button class="btn btn-primary btn-block" onclick="doLogin()">ورود به سامانه</button>
+    <div class="demo-accounts">
+      <b>حساب‌های نمونه (رمز: 123456) — برای ورود سریل کلیک کنید:</b>
+      <div id="demoChips"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ پنل اصلی ═══════ -->
+<div id="appPage" class="layout" style="display:none">
+  <aside class="sidebar">
+    <div class="brand"><h2>🎓 دانشگاه آفاق</h2><span>سامانه جامع آموزشی — v0.1</span></div>
+    <div id="navMenu"></div>
+    <div class="user-box"><b id="uName"></b><span id="uRoles"></span><br><button class="btn btn-ghost" style="margin-top:8px;padding:6px 12px;font-size:12px;color:#cbd5e1;border-color:#334155" onclick="logout()">خروج</button></div>
+  </aside>
+  <main class="main" id="mainArea"></main>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+/* ═══════════════ وضعیت سراسری ═══════════════ */
+// ذخیره‌سازی مقاوم: localStorage → در صورت مسدودسازی، متغیر درون‌حافظه + هش URL
+var __memTok = '';
+function tokGet() {
+  var h = (location.hash.match(/t=([a-f0-9]+)/) || [])[1] || '';
+  try { return localStorage.getItem('afagh_token') || __memTok || h; } catch (e) { return __memTok || h; }
+}
+function tokSet(v) {
+  __memTok = v;
+  try { localStorage.setItem('afagh_token', v); } catch (e) { try { history.replaceState(null, '', '#t=' + v); } catch (e2) {} }
+}
+function tokDel() {
+  __memTok = '';
+  try { localStorage.removeItem('afagh_token'); } catch (e) {}
+  try { history.replaceState(null, '', location.pathname); } catch (e) {}
+}
+let TOKEN = tokGet();
+let ME = null;
+const API = (path, opts = {}) => fetch(path, {
+  ...opts,
+  headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN, ...(opts.headers||{}) }
+}).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error || 'خطا'); return d; });
+
+const fa = n => (n===null||n===undefined) ? '—' : Number(n).toLocaleString('fa-IR');
+const faNum = n => (n===null||n===undefined) ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]);
+function toast(msg, type=''){ const t=document.createElement('div'); t.className='toast '+type; t.textContent=msg; document.getElementById('toasts').appendChild(t); setTimeout(()=>t.remove(), 5000); }
+
+/* ═══════════════ ورود ═══════════════ */
+const DEMOS = [
+  ['1010101010','👨‍🎓 دانشجو (عادی)'],['1010101011','👩‍🎓 دانشجو (معدل الف)'],['1010101012','🧑‍🎓 دانشجو (مشروطی)'],
+  ['1010101013','👩‍🎓 شاهد (بدون تسویه)'],['1010101014','🧓 ورودی ۱۳۹۰'],['1010101015','🎓 ترم آخر'],['1010101016','🎓 ارشد'],
+  ['0011111111','👨‍🏫 استاد رضایی (ریاضی/پروگرم)'],['0022222222','👩‍🏫 استاد احمدی (داده/پایان‌نامه)'],
+  ['0044444444','👨‍🏫 مدیر گروه'],['0055555555','🧑‍💼 کارشناس آموزش'],['0066666666','🧑‍⚖️ معاون'],['0000000001','🛡 مدیر سیستم']
+];
+document.getElementById('demoChips').innerHTML = DEMOS.map(d=>`<button class="chip" onclick="quickLogin('${d[0]}')">${d[1]}</button>`).join('');
+function quickLogin(nc){ document.getElementById('loginNc').value = nc; document.getElementById('loginPass').value='123456'; doLogin(); }
+async function doLogin(){
+  try{
+    const r = await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({nationalCode:document.getElementById('loginNc').value.trim(),password:document.getElementById('loginPass').value})});
+    const d = await r.json(); if(!r.ok) throw new Error(d.error);
+    TOKEN = d.token; tokSet(TOKEN);
+    await boot();
+  }catch(e){ toast(e.message,'err'); }
+}
+function logout(){ TOKEN=''; tokDel(); location.reload(); }
+
+/* ═══════════════ راه‌اندازی پنل ═══════════════ */
+async function boot(){
+  try{ ME = await API('/api/me'); }catch(e){ return; }
+  document.getElementById('loginPage').style.display='none';
+  document.getElementById('appPage').style.display='flex';
+  document.getElementById('uName').textContent = ME.user.name;
+  document.getElementById('uRoles').textContent = ME.roles.map(r=>r.title).join('، ');
+  buildNav(); navigate(ME.student ? 'dashboard' : (ME.roles.some(r=>r.code==='ADMIN') ? 'regulations' : 'inbox'));
+}
+const PAGES = [
+  {id:'dashboard', icon:'📊', title:'داشبورد', roles:null},
+  {id:'enroll',    icon:'🛒', title:'انتخاب واحد', roles:['STUDENT']},
+  {id:'schedule',  icon:'📅', title:'برنامه هفتگی', roles:['STUDENT']},
+  {id:'grades',    icon:'📝', title:'نمرات ترم جاری', roles:['STUDENT']},
+  {id:'examcard',  icon:'🎫', title:'کارت ورود به جلسه', roles:['STUDENT']},
+  {id:'transcript',icon:'📜', title:'کارنامه', roles:['STUDENT']},
+  {id:'requests',  icon:'📨', title:'درخواست‌های من', roles:['STUDENT']},
+  {id:'onboard',    icon:'🚀', title:'ثبت‌نام غیرحضوری', roles:['APPLICANT']},
+  {id:'finance',   icon:'💳', title:'امور مالی', roles:['STUDENT']},
+  {id:'myclasses', icon:'🏫', title:'کلاس‌های من', roles:['PROFESSOR']},
+  {id:'attclass',  icon:'✅', title:'حضور و غیاب کلاسی', roles:['PROFESSOR']},
+  {id:'docs',      icon:'📄', title:'قرارداد و ابلاغیه', roles:['PROFESSOR']},
+  {id:'mypay',     icon:'💰', title:'فیش حقوقی من', roles:['PROFESSOR']},
+  {id:'mybi',      icon:'📈', title:'بازخورد ارزشیابی من', roles:['PROFESSOR']},
+  {id:'appeals',   icon:'⚖️', title:'اعتراض به نمرات', roles:['PROFESSOR']},
+  {id:'inbox',     icon:'📥', title:'کارتابل گردش کار', roles:['DEP_HEAD','EDU_EXPERT','VICE_EDU','ADMIN','FINANCE_EXPERT']},
+  {id:'exams',     icon:'🏛', title:'مدیریت امتحانات', roles:['EDU_EXPERT','VICE_EDU','ADMIN']},
+  {id:'attrpt',    icon:'🖐', title:'داشبورد حضور استاد', roles:['EDU_EXPERT','VICE_EDU','ADMIN','DEP_HEAD']},
+  {id:'dr',        icon:'🎯', title:'معرفی به استاد', roles:['EDU_EXPERT','ADMIN']},
+  {id:'sakha',     icon:'🪖', title:'نظام وظیفه (سخا)', roles:['MILITARY_OFFICER','ADMIN']},
+  {id:'archive',    icon:'🗄', title:'بایگانی الکترونیک', roles:['ARCHIVE_EXPERT','ADMIN']},
+  {id:'payroll',   icon:'💼', title:'حق‌التدریس و فیش', roles:['FINANCE_EXPERT','ADMIN']},
+  {id:'payrules',  icon:'🧾', title:'فرمول‌ساز مالی', roles:['FINANCE_EXPERT','ADMIN']},
+  {id:'bi',        icon:'📊', title:'داشبورد ارزشیابی', roles:['DEP_HEAD','VICE_EDU','ADMIN']},
+  {id:'regulations',icon:'⚖️', title:'مرکز آیین‌نامه‌ها', roles:['ADMIN']},
+  {id:'kpi',       icon:'📈', title:'KPI و گلوگاه‌ها', roles:['ADMIN']},
+  {id:'audit',     icon:'🔐', title:'ردگیری امنیتی', roles:['ADMIN']},
+];
+function buildNav(){
+  const codes = ME.roles.map(r=>r.code);
+  document.getElementById('navMenu').innerHTML = PAGES
+    .filter(p => !p.roles || p.roles.some(x=>codes.includes(x)))
+    .map(p => `<button class="nav-item" id="nav-${p.id}" onclick="navigate('${p.id}')"><span>${p.icon}</span> ${p.title}</button>`).join('');
+}
+async function navigate(page){
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  const el = document.getElementById('nav-'+page); if(el) el.classList.add('active');
+  const area = document.getElementById('mainArea');
+  area.innerHTML = '<div class="empty">⏳ در حال بارگذاری...</div>';
+  try{ await RENDER[page](area); }catch(e){ area.innerHTML = `<div class="card"><div class="empty">⚠️ ${e.message}</div></div>`; }
+}
+
+/* ═══════════════ صفحات ═══════════════ */
+const RENDER = {
+
+  /* ── داشبورد ── */
+  async dashboard(area){
+    const d = await API('/api/offerings');
+    const t = d.term;
+    let html = `<div class="page-title">${ME.student?'داشبورد دانشجو':'داشبورد'} — ${t.title}</div>`;
+    if (d.studentContext){
+      const c = d.studentContext, L = c.limits;
+      const bal = ME.student ? (await API('/api/my-finance')).balance : 0;
+      html += `
+      ${c.studentStatus==='BLOCKED_COMMISSION' ? `<div class="appeal-box">⚠️ <b>اخطار آموزشی:</b> وضعیت تحصیلی شما مسدود شده است (${c.blockedEvent==='MAX_PROBATION_REACHED'?'مشروطی بیش از حد مجاز':'اتمام سنوات'}). برای ادامه تحصیل نیازمند رای کمیسیون موارد خاص هستید — <button class="btn btn-amber" style="padding:5px 12px;font-size:12px" onclick="navigate('requests')">ثبت درخواست (سجاد)</button></div>`:''}
+      <div class="grid grid-4">
+        <div class="stat"><div class="lbl">سقف واحد این ترم</div><div class="val" style="color:var(--primary)">${faNum(L.maxUnits)}</div><div class="hint">${L.reasons.map(faNum).join(' • ')}</div></div>
+        <div class="stat"><div class="lbl">واحدهای ثبت‌شده</div><div class="val">${faNum(c.currentUnits ?? 0)}</div><div class="hint">از ${faNum(L.maxUnits)} واحد</div></div>
+        <div class="stat"><div class="lbl">معدل کل</div><div class="val">${c.gpa!==null&&c.gpa!==undefined?fa(c.gpa):'—'}</div><div class="hint">واحد گذرانده: ${faNum(c.passedUnits ?? 0)}</div></div>
+        <div class="stat"><div class="lbl">گیت مالی ترم</div><div class="val" style="color:${c.financialCleared?'var(--green)':'var(--red)'}">${c.financialCleared?'✓ باز':'✗ قفل'}</div><div class="hint">تراز دفتر کل: ${fa(bal)} ریال</div></div>
+      </div>
+      <div class="grid grid-2" style="margin-top:16px">
+        <div class="card"><h3 class="sec">🔔 اعلامیه‌ها</h3><div id="dashNotifs"><div class="empty">خالی است</div></div></div>
+        <div class="card"><h3 class="sec">📌 وضعیت آموزشی</h3>
+          <div class="kv"><span>شماره دانشجویی</span><b dir="ltr">${ME.student.studentCode}</b></div>
+          <div class="kv"><span>وضعیت</span><b>${{ACTIVE:'فعال',BLOCKED_COMMISSION:'مسدود — کمیسیون',EXPELLED:'اخراج',GRADUATED:'فارغ‌التحصیل'}[c.studentStatus]||c.studentStatus}</b></div>
+          <div class="kv"><span>تعداد مشروطی</span><b>${faNum(c.probationCount)}</b></div>
+          <div class="kv"><span>سیاست نمره ردی (آیین‌نامه شما)</span><b>${(await API('/api/transcript')).policy==='KEEP_ALWAYS'?'نمره ردی همیشه در معدل می‌ماند (۱۳۹۰)':'حذف ردی پس از قبولی (۱۴۰۳)'}</b></div>
+        </div>
+      </div>`;
+      area.innerHTML = html;
+      API('/api/notifications').then(ns=>{
+        const el=document.getElementById('dashNotifs');
+        el.innerHTML = ns.length ? ns.slice(0,6).map(n=>`<div class="kv"><span>${n.payload?.text||n.eventCode}</span><small>${faNum(n.id)}</small></div>`).join(''):'<div class="empty">اعلانی ندارید</div>';
+      });
+    } else {
+      const inbox = await API('/api/workflow/inbox').catch(()=>[]);
+      area.innerHTML = html + `<div class="grid grid-4">
+        <div class="stat"><div class="lbl">پرونده‌های در انتظار شما</div><div class="val">${faNum(inbox.length)}</div></div>
+        <div class="stat"><div class="lbl">ترم جاری</div><div class="val" style="font-size:16px">${t.title}</div></div>
+        <div class="stat"><div class="lbl">بازه انتخاب واحد</div><div class="val" style="font-size:15px;color:${t.isEnrollmentOpen?'var(--green)':'var(--red)'}">${t.isEnrollmentOpen?'باز':'بسته'}</div></div>
+      </div>
+      <div class="card"><h3 class="sec">گام‌های بعدی این هسته</h3><div class="reasons">
+        این پنل، هستهٔ فاز صفر است: موتور آیین‌نامه‌ها، خط لوله انتخاب واحد، گردش کار با SLA و دفتر کل مالی فعال‌اند.
+        ماژول‌های نمره‌گذاری استاد، امتحانات و صندلی، حق‌التدریس، ارزشیابی و بایگانی الکترونیک طبق طرح، در فازهای بعدی روی همین هسته فعال می‌شوند.</div></div>`;
+    }
+  },
+
+  /* ── انتخاب واحد ── */
+  async enroll(area){
+    const d = await API('/api/offerings');
+    const c = d.studentContext;
+    let cart = new Set(d.studentContext?.cart || []);
+    const my = d.studentContext?.myEnrollments || {};
+    area.innerHTML = `
+      <div class="page-title">🛒 سبد انتخاب واحد — ${d.term.title} <span class="badge ${d.term.isEnrollmentOpen?'b-green':'b-red'}">${d.term.isEnrollmentOpen?'انتخاب واحد باز است':'بسته'}</span></div>
+      ${c && !c.financialCleared ? `<div class="appeal-box">💳 <b>گیت مالی:</b> پیش از ثبت نهایی، پرداخت علی‌الحساب ترم الزامی است. با تلاش برای ثبت، همین‌جا متوقف خواهید شد (خطای سخت).</div>`:''}
+      ${c && c.studentStatus==='BLOCKED_COMMISSION' ? `<div class="appeal-box">⛔ پنل انتخاب واحد به دلیل نیاز به رای کمیسیون موارد خاص مسدود است.</div>`:''}
+      <div class="card" id="offList"></div>
+      <div class="cart-bar">
+        <div class="units">🧺 سبد: <b id="cartCount">۰</b> درس — جمع واحد: <b id="cartUnits">۰</b> (سقف شما: ${faNum(c?.limits.maxUnits??'—')})</div>
+        <div class="flex">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#cbd5e1;margin:0"><input type="checkbox" id="allowCouncil" style="width:15px;height:15px"> خطاهای نرم را به شورا ارجاع بده</label>
+          <button class="btn btn-green" id="submitBtn" onclick="submitCart()">ثبت نهایی سبد</button>
+        </div>
+      </div>`;
+    const list = document.getElementById('offList');
+    list.innerHTML = `<h3 class="sec">دروس ارائه‌شده (${faNum(d.offerings.length)})</h3>` + d.offerings.map(o=>{
+      const pct = Math.round(100*o.enrolledCount/o.capacity);
+      const mine = my[o.id];
+      const inCart = cart.has(o.id);
+      const capCls = pct>=100?'cap-full':pct>=80?'cap-warn':'cap-ok';
+      return `<div class="offering" id="off-${o.id}">
+        <div style="flex:1;min-width:250px">
+          <div class="title-row">
+            <span class="code-tag">${o.code}</span>
+            <b>${o.title}</b>
+            <span class="badge b-blue">گروه ${faNum(o.groupNumber)}</span>
+            <span class="badge b-gray">${faNum(o.units)} واحد</span>
+            ${o.gradingType==='DESCRIPTIVE'?'<span class="badge b-amber">توصیفی</span>':''}
+            ${mine==='REGISTERED'?'<span class="badge b-green">ثبت‌شده ✓</span>':''}
+            ${mine==='PENDING_COUNCIL'?'<span class="badge b-amber">در انتظار شورا ⏳</span>':''}
+            ${mine==='WAITLISTED'?'<span class="badge b-gray">لیست انتظار</span>':''}
+          </div>
+          <div class="meta">👨‍🏫 ${o.professor||'—'} &nbsp;|&nbsp; ${o.scheduleText||'بدون زمان‌بندی'}</div>
+          <div class="cap-bar"><div class="cap-fill ${capCls}" style="width:${pct}%"></div></div>
+          <div class="meta">ظرفیت: ${faNum(o.enrolledCount)} / ${faNum(o.capacity)} ${o.waitlistCapacity?`(+ لیست انتظار ${faNum(o.waitlistCapacity)})`:''}</div>
+        </div>
+        <div class="flex" style="align-self:center">
+          ${mine==='REGISTERED'||mine==='WAITLISTED'||mine==='PENDING_COUNCIL'
+            ? `<button class="btn btn-red" onclick="dropCourse(${o.id})">حذف</button>`
+            : (pct>=100 && !o.waitlistCapacity)
+              ? '<span class="badge b-red">تکمیل</span>'
+              : `<button class="btn ${inCart?'btn-ghost':'btn-primary'}" onclick="toggleCart(${o.id})">${inCart?'− حذف از سبد':'+ افزودن به سبد'}</button>`}
+        </div>
+      </div>`;
+    }).join('');
+    window._offerings = d.offerings;
+    window._cart = cart;
+    updateCartBar();
+  },
+
+  /* ── برنامه هفتگی ── */
+  async schedule(area){
+    const rows = await API('/api/my-schedule');
+    const days = ['شنبه','یکشنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنجشنبه','جمعه'];
+    const cls = rows.filter(r=>r.scheduleType==='CLASS'), ex = rows.filter(r=>r.scheduleType==='EXAM');
+    area.innerHTML = `<div class="page-title">📅 برنامه هفتگی و امتحانات</div>
+      <div class="card"><h3 class="sec">کلاس‌ها</h3>${cls.length?`<table><tr><th>روز</th><th>ساعت</th><th>درس</th><th>کلاس</th><th>وضعیت</th></tr>
+        ${cls.map(r=>`<tr><td><b>${days[r.dayOfWeek]}</b></td><td dir="ltr">${r.startTime}–${r.endTime}</td><td>${r.title}</td><td>${r.room||'—'}</td><td>${r.status==='PENDING_COUNCIL'?'<span class="badge b-amber">در انتظار شورا</span>':'<span class="badge b-green">قطعی</span>'}</td></tr>`).join('')}</table>`:'<div class="empty">هنوز درسی ثبت نکرده‌اید</div>'}</div>
+      <div class="card"><h3 class="sec">امتحانات</h3>${ex.length?`<table><tr><th>تاریخ</th><th>ساعت</th><th>درس</th></tr>
+        ${ex.map(r=>`<tr><td><b>${faNum(r.examDate)}</b></td><td dir="ltr">${r.startTime}</td><td>${r.title}</td></tr>`).join('')}</table>`:'<div class="empty">برنامه امتحانی ندارید</div>'}</div>`;
+  },
+
+  /* ── کارنامه ── */
+  async transcript(area){
+    const tr = await API('/api/transcript');
+    area.innerHTML = `<div class="page-title">📜 کارنامه — ${tr.regulationTitle}</div>
+      <div class="card" style="display:flex;gap:22px;align-items:center;flex-wrap:wrap">
+        <div class="gpa-circle">${fa(tr.overallGpa)}<small>معدل کل</small></div>
+        <div style="flex:1;min-width:230px">
+          <div class="kv"><span>واحدهای گذرانده</span><b>${faNum(tr.totalPassedUnits)}</b></div>
+          <div class="kv"><span>واحدهای مؤثر در معدل</span><b>${faNum(tr.totalGpaUnits)}</b></div>
+          <div class="kv"><span>سیاست نمره ردی</span><b>${tr.policy==='KEEP_ALWAYS'?'نگهداری همیشه (ورودی ۱۳۹۰)':'حذف پس از قبولی (۱۴۰۳)'}</b></div>
+        </div></div>
+      ${tr.terms.map(t=>`<div class="term-block">
+        <h4>${t.termTitle} <span class="badge ${t.gpa>=17?'b-green':t.gpa>=12?'b-blue':'b-red'}">معدل: ${fa(t.gpa)}</span></h4>
+        <table><tr><th>کد</th><th>درس</th><th>واحد</th><th>نمره</th><th>وضعیت</th><th>در معدل</th></tr>
+        ${t.courses.map(c=>`<tr class="${c.repeatedLater?'strike':''}">
+          <td dir="ltr" class="code-tag" style="display:inline-block">${c.code}</td><td>${c.title}</td><td>${faNum(c.units)}</td>
+          <td><b>${typeof c.grade==='string'?c.grade:fa(c.grade)}${typeof c.grade==='string'&&c.grade.includes('★')?' <span class="star" title="جبران‌شده">★</span>':''}</b></td>
+          <td>${c.passed?'<span class="badge b-green">قبول</span>':'<span class="badge b-red">رد</span>'}</td>
+          <td>${c.inGpa?'<span class="badge b-blue">دارد</span>':`<span class="badge b-gray" title="${c.note||''}">ندارد</span>`}</td></tr>`).join('')}
+        </table></div>`).join('')}`;
+  },
+
+  /* ── درخواست‌های من ── */
+  async requests(area){
+    const rs = await API('/api/my-requests');
+    const c = (await API('/api/offerings')).studentContext;
+    area.innerHTML = `<div class="page-title">📨 درخواست‌های آموزشی من</div>
+      ${c?.studentStatus==='BLOCKED_COMMISSION' ? `<div class="card"><h3 class="sec">ثبت درخواست مجوز ادامه تحصیل (کمیسیون موارد خاص)</h3>
+        <div class="reasons">۱) وارد سامانه سجاد شوید و درخواست کمیسیون موارد خاص را ثبت کنید.<br>۲) کد رهگیری دریافتی را در کادر زیر وارد کنید و ارسال بزنید.<br>۳) پس از تایید کارشناس و معاون آموزشی، پنل انتخاب واحد به‌صورت خودکار بازگشایی می‌شود.</div>
+        <div class="flex" style="margin-top:10px">
+          <input id="sajadCode" placeholder="کد رهگیری سامانه سجاد (مثلاً SJ-12345)" style="max-width:300px">
+          <input id="extraSem" type="number" value="1" min="1" max="3" style="max-width:120px" title="سنوات ارفاقی اعطاشده">
+          <button class="btn btn-amber" onclick="sendCommission()">ارسال به آموزش</button>
+        </div></div>`:''}
+      <div class="card"><h3 class="sec">سوابق درخواست</h3>
+      ${rs.length?`<table><tr><th>کد رهگیری</th><th>فرآیند</th><th>مرحله</th><th>وضعیت</th><th>گردش کار</th></tr>
+        ${rs.map(r=>`<tr><td dir="ltr"><b>${r.trackingCode}</b></td><td>${r.processTitle}</td><td>${r.stepTitle||'—'}</td>
+        <td>${{SUBMITTED:'<span class="badge b-blue">ارسال‌شده</span>',IN_REVIEW:'<span class="badge b-amber">در حال بررسی</span>',APPROVED:'<span class="badge b-green">تاییدشده</span>',REJECTED:'<span class="badge b-red">ردشده</span>',CANCELED:'<span class="badge b-gray">لغوشده</span>',RETURNED:'<span class="badge b-amber">بازگشت</span>'}[r.status]||r.status}</td>
+        <td class="reasons" style="max-width:280px">${(r.history||'').split('←').filter(Boolean).map(s=>s.trim()).join(' ← ')||'—'}</td></tr>`).join('')}</table>`:'<div class="empty">درخواستی ثبت نکرده‌اید</div>'}</div>`;
+  },
+
+  /* ── مالی ── */
+  async finance(area){
+    const f = await API('/api/my-finance');
+    area.innerHTML = `<div class="page-title">💳 امور مالی — دفتر کل دانشجو</div>
+      <div class="grid grid-4"><div class="stat"><div class="lbl">تراز حساب</div>
+      <div class="val" style="color:${f.balance>=0?'var(--green)':'var(--red)'}">${fa(Math.abs(f.balance))} ریال</div>
+      <div class="hint">${f.balance>=0?'اعتبار مازاد / تسویه':'بدهی برای تسویه در گلوگاه‌ها'}</div></div></div>
+      <div class="card"><h3 class="sec">تراکنش‌ها (Silent Billing — بدون مسدودسازی در انتخاب واحد)</h3>
+      ${f.ledger.length?`<table><tr><th>ترم</th><th>نوع</th><th>مبلغ (ریال)</th><th>شرح</th></tr>
+        ${f.ledger.map(l=>`<tr><td>${l.termTitle||'—'}</td>
+        <td>${l.transactionType==='CREDIT'?'<span class="badge b-green">بستانکار</span>':'<span class="badge b-red">بدهکار</span>'}</td>
+        <td dir="ltr"><b>${Number(l.amount).toLocaleString('en-US')}</b></td><td>${l.description}</td></tr>`).join('')}</table>`:'<div class="empty">تراکنشی ثبت نشده</div>'}</div>`;
+  },
+
+  /* ── نمرات ترم جاری (دانشجو) — گیت ارزشیابی + اعتراض ── */
+  async grades(area){
+    const rows = await API('/api/my-grades');
+    const st = g => ({PENDING:'<span class="badge b-gray">ثبت نشده</span>', DRAFT:'<span class="badge b-gray">نزد استاد</span>',
+      TEMPORARY:'<span class="badge b-blue">موقت — قابل اعتراض</span>', APPEALED:'<span class="badge b-amber">در حال بررسی اعتراض</span>',
+      FINALIZED:'<span class="badge b-green">قطعی</span>'}[g]||g);
+    area.innerHTML = `<div class="page-title">📝 نمرات ترم جاری</div>
+      <div class="card"><div class="reasons">🔒 <b>گیت ارزشیابی:</b> تا زمانی که فرم ارزشیابی گمنام استاد را پر نکنید، نمره‌تان نمایش داده نمی‌شود. پاسخ‌ها کاملاً بی‌نام ذخیره می‌شوند.</div></div>
+      <div class="card">${rows.length?`<table><tr><th>کد</th><th>درس</th><th>نمره</th><th>وضعیت</th><th>اقدام</th></tr>
+      ${rows.map(r=>`<tr>
+        <td dir="ltr" class="code-tag" style="display:inline-block">${r.code}</td><td>${r.title}</td>
+        <td><b>${r.hasEvaluated ? (r.gradingType==='DESCRIPTIVE' ? (r.gradeValue>=1?'قبول':'رد') : (r.gradeValue??'—')) : '🔒 ارزشیابی کنید'}</b></td>
+        <td>${st(r.gradeStatus)}</td>
+        <td>${!r.hasEvaluated && r.gradeStatus!=='PENDING' && r.gradeStatus!=='DRAFT' ? `<button class="btn btn-primary" style="padding:6px 12px;font-size:12px" onclick="openEval(${r.offeringId},'${r.title.replace(/'/g,'')}')">ارزشیابی</button>`:''}
+            ${r.canAppeal ? `<button class="btn btn-amber" style="padding:6px 12px;font-size:12px" onclick="openAppeal(${r.enrollmentId},'${r.title.replace(/'/g,'')}')">اعتراض</button>`:''}</td>
+      </tr>`).join('')}</table>`:'<div class="empty">درس ثبت‌نام‌شده‌ای در ترم جاری ندارید</div>'}</div>
+      ${rows.some(r=>r.appealReply)?`<div class="card"><h3 class="sec">پاسخ استاد به اعتراض شما</h3>${rows.filter(r=>r.appealReply).map(r=>`<div class="kv"><span>${r.title}</span><b>${r.appealReply}</b></div>`).join('')}</div>`:''}`;
+  },
+
+  /* ── کلاس‌های من (استاد) ── */
+  async myclasses(area){
+    if (window._rosterId) return renderRoster(area, window._rosterId);
+    const offs = await API('/api/prof/offerings');
+    const dl = d => d? faNum(String(d).slice(0,10)) : '—';
+    area.innerHTML = `<div class="page-title">🏫 کلاس‌های من — ترم جاری</div>` +
+      (offs.length ? offs.map(o=>`
+      <div class="card">
+        <div class="flex" style="justify-content:space-between">
+          <div>
+            <div class="title-row"><span class="code-tag">${o.code}</span><b style="font-size:15px">${o.title}</b> <span class="badge b-blue">گروه ${faNum(o.groupNumber)}</span></div>
+            <div class="reasons">دانشجو: ${faNum(o.enrolledCount)} |
+              ${o.gradesFinalizedAt?'<span class="badge b-green">قطعی شده ✓</span>':`${faNum(o.pendingCount??0)} بدون نمره | ${faNum(o.temporaryCount??0)} موقت`}
+              ${o.openAppeals?` | <span class="badge b-amber">${faNum(o.openAppeals)} اعتراض باز</span>`:''}
+              ${o.offeringType==='DIRECTED_READING'
+                ? ` | <span class="badge b-amber">🎯 معرفی به استاد — مهلت نمره: <b>${dl(o.customGradeDeadline)}</b> (${Math.ceil((new Date(String(o.customGradeDeadline)+'T23:59:59Z')-Date.now())/86400000)} روز مانده — مستقل از تقویم ترم)</span>`
+                : (o.gradeEntryDeadline?` | مهلت ثبت: <b>${dl(o.gradeEntryDeadline)}</b>`:'')}</div>
+          </div>
+          <button class="btn btn-primary" onclick="openRoster(${o.id})">کارنامه کلاس</button>
+        </div>
+      </div>`).join('') : '<div class="card"><div class="empty">کلاسی در ترم جاری ندارید</div></div>');
+  },
+
+  /* ── اعتراضات (استاد) ── */
+  async appeals(area){
+    const list = await API('/api/prof/appeals');
+    area.innerHTML = `<div class="page-title">⚖️ اعتراضات به نمرات (${faNum(list.length)})</div>` +
+      (list.length? list.map(a=>`
+      <div class="card">
+        <div class="flex" style="justify-content:space-between">
+          <div style="flex:1;min-width:260px">
+            <b>${a.firstName} ${a.lastName}</b> <span class="badge b-gray" dir="ltr">${a.studentCode}</span> <span class="badge b-blue">${a.courseTitle}</span>
+            <div class="reasons">نمره فعلی: <b>${fa(a.gradeValue)}</b> | اعتراض: «${a.studentMessage}»</div>
+            ${a.hoursOpen > a.professorAppealSlaDays*24 ? `<div class="reasons" style="color:var(--red)">⛔ مهلت پاسخ گذشته — ریسک قطعی خودکار</div>`:`<div class="reasons">مهلت پاسخ: ${faNum(a.professorAppealSlaDays*24 - a.hoursOpen)} ساعت</div>`}
+          </div>
+          <div class="flex" style="align-self:center">
+            <button class="btn btn-green" onclick="openRespond(${a.id},'ACCEPTED')">پذیرش + نمره جدید</button>
+            <button class="btn btn-red" onclick="openRespond(${a.id},'REJECTED')">رد با پاسخ</button>
+          </div>
+        </div>
+      </div>`).join('') : '<div class="card"><div class="empty">اعتراضی ندارید ✓</div></div>');
+  },
+
+  /* ── کارت ورود به جلسه (سه‌گلوگاهی) ── */
+  async examcard(area){
+    const d = await API('/api/my-exam-card');
+    let html = `<div class="page-title">🎫 کارت ورود به جلسه امتحانات — ${d.term}</div>`;
+    if (d.blockers.length){
+      html += `<div class="card"><h3 class="sec">⛔ برای فعال شدن کارت، این موارد را تکمیل کنید:</h3>` +
+        d.blockers.map(b=>`<div class="kv"><span>${b.type==='FINANCE'?'💳':b.type==='EVALUATION'?'📝':'🏛'} ${b.message}</span></div>`).join('') + `</div>`;
+    }
+    if (d.exams.length){
+      const ready = d.ok;
+      html += `<div class="${ready?'':'no-print'}"><div class="entry-card" style="${ready?'':'opacity:.45;pointer-events:none'}">
+        <div class="head">
+          <div class="flex" style="gap:14px">
+            <div class="photo-box">محل عکس</div>
+            <div>
+              <b style="font-size:16px">${d.student.name}</b>
+              <div class="reasons">شماره دانشجویی: <b dir="ltr">${d.student.studentCode}</b> | کد ملی: <b dir="ltr">${d.student.nationalCode}</b></div>
+              <div class="reasons">${d.term}</div>
+            </div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:11px;color:var(--muted)">کد اصالت‌سنجی کارت</div>
+            <div class="barcode">AF|${d.student.studentCode}|${d.term.includes('۱۴۰۵')?'1051':''}</div>
+          </div>
+        </div>
+        <table><tr><th>تاریخ</th><th>ساعت</th><th>درس</th><th>استاد</th><th>سالن / ساختمان</th><th>صندلی</th></tr>
+        ${d.exams.map(x=>`<tr>
+          <td><b>${faNum(x.examDate)}</b></td><td dir="ltr">${x.startTime}–${x.endTime}</td>
+          <td>${x.course} <small style="color:var(--muted)">(گ${faNum(x.groupNumber)})</small></td><td>${x.professor||'—'}</td>
+          <td>${x.hall?`${x.hall} — ${x.building||''}`:'<span class="badge b-amber">در انتظار چیدمان</span>'}</td>
+          <td>${x.seatNumber?`<span class="badge b-green">صندلی ${faNum(x.seatNumber)}</span>`:'—'}</td>
+        </tr>`).join('')}</table>
+        <div class="reasons" style="margin-top:10px">⚠️ همراه داشتن کارت شناسایی با عکس الزامی است. ۱۵ دقیقه پیش از شروع امتحان در سالن حاضر شوید.</div>
+      </div>
+      ${ready?'<button class="btn btn-primary no-print" style="margin-top:12px" onclick="window.print()">🖨 چاپ / ذخیره PDF</button>':''}</div>`;
+    } else html += `<div class="card"><div class="empty">امتحانی برای شما ثبت نشده است</div></div>`;
+    area.innerHTML = html;
+  },
+
+  /* ── مدیریت امتحانات (اداره امتحانات) ── */
+  async exams(area){
+    const ss = await API('/api/admin/exams/sessions');
+    area.innerHTML = `<div class="page-title">🏛 مدیریت امتحانات — موتور سه‌فازی چیدمان</div>
+      <div class="card no-print">
+        <div class="flex" style="justify-content:space-between">
+          <div class="flex">
+            <label style="margin:0">استراتژی چیدمان (فاز ۳)</label>
+            <select id="strategy" style="max-width:230px">
+              <option value="ALTERNATING">یک‌درمیان (زیگزاگ — حداکثر ضدتقلب)</option>
+              <option value="EVEN_ODD">زوج/فرد (بلوک اول صندلی فرد)</option>
+              <option value="SEQUENTIAL">عادی (پشت‌سرهم)</option>
+            </select>
+            <button class="btn btn-primary" onclick="genSeating()">🎲 تولید شماره صندلی‌ها</button>
+          </div>
+          <button class="btn btn-amber" onclick="finalizeAbs()">⏱ اعمال سیاست غیبت‌های منقضی</button>
+        </div>
+        <div class="reasons" style="margin-top:8px">فاز ۱: بلوک‌بندی استاد→درس→گروه (برای توزیع مرتب برگه) ← فاز ۲: شافل Fisher-Yates داخل هر بلوک ← فاز ۳: چیدمان فیزیکی روی نقشه سالن.</div>
+      </div>
+      <div id="sessionList">` + (ss.length ? ss.map(x=>`
+        <div class="card">
+          <div class="flex" style="justify-content:space-between">
+            <div>
+              <b style="font-size:15px">📅 ${faNum(x.examDate)}</b> <span dir="ltr">${x.startTime}–${x.endTime}</span>
+              <span class="badge b-blue">${faNum(x.students)} دانشجو</span>
+              ${x.invigilatorCount?`<span class="badge b-green">${faNum(x.invigilatorCount)} مراقب</span>`:'<span class="badge b-amber">بدون مراقب</span>'}
+              <div class="reasons">درس‌ها: ${x.courses||'—'} | سالن‌ها: ${x.halls||'—'}</div>
+            </div>
+            <button class="btn btn-primary" onclick="openSession(${x.id})">نقشه سالن و حضور/غیاب</button>
+          </div>
+        </div>`).join('') : '<div class="card"><div class="empty">چیدمانی تولید نشده — دکمه «تولید شماره صندلی‌ها» را بزنید</div></div>') + `</div>
+      <div id="sessionDetail"></div>`;
+  },
+
+  /* ── حضور و غیاب کلاسی (استاد) ── */
+  async attclass(area){
+    if (window._rcId) return renderRollCall(area, window._rcId);
+    const d = await API('/api/prof/attendance/sessions');
+    const stMap = { SCHEDULED:'<span class="badge b-gray">برنامه‌ریزی</span>', HELD:'<span class="badge b-green">برگزار شد ✓</span>', ABSENT:'<span class="badge b-red">غیبت استاد</span>', CANCELED:'<span class="badge b-gray">لغو</span>' };
+    const vm = { ROLL_CALL:'فیش دانشجویان', CHAIN_CONTINUITY:'زنجیره کلاس‌ها', GATE_FINGERPRINT:'گیت اثر انگشت', MANUAL_ADMIN:'تایید آموزش' };
+    area.innerHTML = `<div class="page-title">✅ حضور و غیاب کلاسی</div>
+      ${!d.contractSigned ? `<div class="appeal-box">⛔ <b>گلوگاه قرارداد:</b> قرارداد تدریس این ترم را امضا نکرده‌اید؛ تا پیش از امضای الکترونیکی، لیست حضور و غیاب باز نمی‌شود — <button class="btn btn-amber" style="padding:5px 12px;font-size:12px" onclick="navigate('docs')">رفتن به قراردادها</button></div>`:''}
+      <div class="card"><h3 class="sec">جلسات (${faNum(d.sessions.length)})</h3>
+      ${d.sessions.length?`<table><tr><th>تاریخ</th><th>ساعت</th><th>درس</th><th>جلسه</th><th>وضعیت</th><th>اثبات حضور</th><th></th></tr>
+      ${d.sessions.map(r=>`<tr class="${r.isLive?'':''}">
+        <td><b>${faNum(r.sessionDate)}</b>${r.isLive?' 🔴':''}</td><td dir="ltr">${r.startTime}–${r.endTime}</td>
+        <td>${r.title}${r.isMakeUpSession?' <span class="badge b-amber">جبرانی</span>':''}</td>
+        <td>${faNum(r.sessionNo||'—')}</td><td>${stMap[r.status]}</td>
+        <td class="reasons">${r.verifyMethod ? (vm[r.verifyMethod]||r.verifyMethod) + (r.attStatus==='FLAGGED_SUSPICIOUS'?' <span class="badge b-amber">پرچم مشکوک</span>':'') : '—'}</td>
+        <td>${r.isLive?`<button class="btn btn-primary" style="padding:6px 12px;font-size:12px" onclick="openRC(${r.id})">لیست حضور</button>`:''}</td>
+      </tr>`).join('')}</table>`:'<div class="empty">جلسه‌ای تعریف نشده</div>'}</div>`;
+  },
+
+  /* ── قرارداد و ابلاغیه (استاد) ── */
+  async docs(area){
+    const ds = await API('/api/prof/documents');
+    area.innerHTML = `<div class="page-title">📄 قرارداد و ابلاغیه الکترونیکی</div>` +
+      (ds.length? ds.map(x=>`
+      <div class="card">
+        <div class="flex" style="justify-content:space-between">
+          <div>
+            <b style="font-size:15px">${x.title}</b>
+            ${x.signatureStatus==='SIGNED'?'<span class="badge b-green">امضاشده ✓</span>':'<span class="badge b-amber">در انتظار امضا</span>'}
+            <div class="reasons">${x.signedAt? 'امضا: '+faNum(String(x.signedAt).slice(0,16)) : 'امضا نشده — دسترسی به حضور و غیاب مسدود است'}</div>
+            <div class="reasons">هش سند: <span dir="ltr" style="font-family:monospace">${(x.documentHash||'').slice(0,26)}…</span></div>
+          </div>
+          ${x.signatureStatus!=='SIGNED'?`<button class="btn btn-green" onclick="signDoc(${x.id})">✍️ تایید و امضای الکترونیکی</button>`:''}
+        </div>
+        <div class="term-block" style="margin-top:10px;margin-bottom:0"><div class="reasons" style="white-space:pre-wrap">${x.documentSnapshot}</div></div>
+      </div>`).join('') : '<div class="card"><div class="empty">سندی برای شما صادر نشده</div></div>');
+  },
+
+  /* ── داشبورد حضور استاد (آموزش/مدیر) ── */
+  async attrpt(area){
+    const d = await API('/api/admin/attendance/report');
+    const vm = { ROLL_CALL:'فیش', CHAIN_CONTINUITY:'زنجیره', GATE_FINGERPRINT:'گیت', MANUAL_ADMIN:'دستی' };
+    area.innerHTML = `<div class="page-title">🖐 داشبورد حضور استاد و موتور تطبیق هوشمند</div>
+      <div class="card no-print"><div class="flex">
+        <button class="btn btn-primary" onclick="runCorrelate()">🔄 اجرای موتور تطبیق (زنجیره/گیت/بازبینی)</button>
+        <button class="btn btn-ghost" onclick="genTermSessions()">📅 تولید جلسات ۱۶گانه ترم</button>
+        <button class="btn btn-ghost" onclick="genContracts()">📄 تولید قراردادها</button>
+        <button class="btn btn-amber" onclick="simPunch()">🖐 شبیه‌سازی پانچ گیت</button>
+      </div>
+      <div class="reasons" style="margin-top:8px">موتور تطبیق: ① کلاس قبلی برگزارشده با وقفه ≤۳۰ دقیقه → «زنجیره» ② پانچ گیت در پنجره [۶۰− تا ۱۵+ دقیقه] → «گیت» ③ در غیر این صورت → «نیازمند بازبینی» در کارتابل.</div></div>
+
+      ${d.reviewQueue.length?`<div class="card"><h3 class="sec">📥 جلسات نیازمند بازبینی (${faNum(d.reviewQueue.length)})</h3>
+      <table><tr><th>تاریخ</th><th>ساعت</th><th>درس</th><th>استاد</th><th>اقدام</th></tr>
+      ${d.reviewQueue.map(q=>`<tr>
+        <td>${faNum(q.sessionDate)}</td><td dir="ltr">${q.startTime}–${q.endTime}</td><td>${q.title}</td><td>${q.professor||'—'}</td>
+        <td class="flex">
+          <button class="btn btn-green" style="padding:5px 12px;font-size:12px" onclick="attReview(${q.id},'HELD')">تایید برگزاری</button>
+          <button class="btn btn-red" style="padding:5px 12px;font-size:12px" onclick="attReview(${q.id},'ABSENT')">ثبت غیبت استاد</button>
+        </td></tr>`).join('')}</table>
+      <div class="reasons">پس از «ثبت غیبت» می‌توانید از جدول پایین برای آن جلسه کلاس جبرانی تعریف کنید.</div></div>`:''}
+
+      <div class="card"><h3 class="sec">گزارش کلاس‌ها (پایه کسر حق‌التدریس)</h3>
+      ${d.report.length?`<table><tr><th>درس</th><th>استاد</th><th>جلسات</th><th>برگزار</th><th>غیبت</th><th>جبرانی برگزار</th><th>غیبت قطعی</th><th>پرچم مشکوک</th><th>روش‌های اثبات</th></tr>
+      ${d.report.map(r=>`<tr>
+        <td>${r.title}</td><td>${r.professor||'—'}</td><td>${faNum(r.totalSessions)}</td>
+        <td><span class="badge b-green">${faNum(r.held)}</span></td>
+        <td>${r.absents?`<span class="badge b-red">${faNum(r.absents)}</span>`:'۰'}</td>
+        <td>${faNum(r.makeupHeld)}</td>
+        <td>${r.netAbsences?`<span class="badge b-red">${faNum(r.netAbsences)}</span>`:'۰'}</td>
+        <td>${r.suspicious?`<span class="badge b-amber">${faNum(r.suspicious)}</span>`:'۰'}</td>
+        <td class="reasons">${(r.methods||'—').split('،').filter(Boolean).map(m=>vm[m]||m).join('، ')}</td>
+      </tr>`).join('')}</table>`:'<div class="empty">جلسه‌ای ثبت نشده</div>'}</div>
+
+      <div class="card"><h3 class="sec">آخرین ترددهای گیت اثر انگشت</h3>
+      ${d.punches.length?`<table><tr><th>زمان</th><th>پرسنل</th><th>محل دستگاه</th></tr>
+      ${d.punches.map(x=>`<tr><td dir="ltr">${x.punchTime}</td><td>${x.staff}</td><td>${x.deviceLocation}</td></tr>`).join('')}</table>`:'<div class="empty">ترددی ثبت نشده</div>'}</div>`;
+  },
+
+  /* ── فیش حقوقی من (استاد — شفافیت کامل محاسبه) ── */
+  async mypay(area){
+    const d = await API('/api/prof/payroll');
+    const c = d.calc;
+    const st = { DRAFT:'<span class="badge b-gray">پیش‌نویس</span>', MID_TERM_PAID:'<span class="badge b-blue">میان‌ترم پرداخت شد</span>', FINAL_SETTLED:'<span class="badge b-green">تسویه کامل ✓</span>', NOT_COMPUTED:'<span class="badge b-gray">محاسبه نشده</span>' };
+    area.innerHTML = `<div class="page-title">💰 فیش حقوقی من — ${d.term} ${d.statement?st[d.statement.status]:st.NOT_COMPUTED}</div>
+      <div class="grid grid-4">
+        <div class="stat"><div class="lbl">نرخ پایه هر واحد (${c.staff.rank})</div><div class="val" style="font-size:16px">${fa(c.rate)} ریال</div></div>
+        <div class="stat"><div class="lbl">واحد معادل کل</div><div class="val">${fa(c.totalEquivalentUnits)}</div><div class="hint">پس از ضرایب و سهم</div></div>
+        <div class="stat"><div class="lbl">واحد قابل پرداخت</div><div class="val">${fa(c.payableUnits)}</div><div class="hint">پس از کسر موظفی ${fa(c.dutyUnits)} و غیبت‌ها</div></div>
+        <div class="stat"><div class="lbl">خالص پرداختی</div><div class="val" style="color:var(--green)">${fa(c.net)}</div><div class="hint">ناخالص ${fa(c.gross)} − مالیات ${fa(c.tax)}</div></div>
+      </div>
+      ${d.statement?`<div class="grid grid-4" style="margin-top:14px">
+        <div class="stat"><div class="lbl">علی‌الحساب میان‌ترم</div><div class="val" style="font-size:16px">${fa(d.statement.midtermPaidAmount)} ریال</div></div>
+        <div class="stat"><div class="lbl">تسویه نهایی</div><div class="val" style="font-size:16px">${fa(d.statement.finalPaidAmount)} ریال</div></div>
+        <div class="stat"><div class="lbl">باقیمانده</div><div class="val" style="font-size:16px;color:var(--amber)">${fa(d.statement.remaining)} ریال</div></div>
+        <div class="stat"><div class="lbl">گلوگاه تسویه</div><div class="val" style="font-size:13px">${c.gates.gradesFinalized?'✓ نمرات':'⛔ '+fa(c.gates.pendingGrades)+' نمره'} | ${c.gates.docsSigned?'✓ اسناد':'⛔ اسناد امضانشده'}</div></div>
+      </div>`:''}
+      <div class="card" style="margin-top:16px"><h3 class="sec">ریز محاسبه (شفافیت کامل — سند §۱۷۹۴)</h3>
+      <table><tr><th>درس</th><th>واحد</th><th>ضرایب اعمال‌شده</th><th>واحد معادل</th><th>جلسات</th><th>واحد مؤثر</th><th>کسور عدم برگزاری</th></tr>
+      ${c.rows.map(r=>`<tr>
+        <td><span class="code-tag">${r.code}</span> ${r.title}</td><td>${faNum(r.units)}</td>
+        <td class="reasons">${r.coefficients}</td><td><b>${fa(r.equivalentUnits)}</b></td>
+        <td class="reasons">${faNum(r.sessions.held)}/${faNum(r.sessions.planned)} برگزار${r.sessions.absents?` | <span style="color:var(--red)">غیبت ${faNum(r.sessions.absents)}</span>`:''}${r.sessions.makeup?` | جبرانی ${faNum(r.sessions.makeup)}`:''}</td>
+        <td>${fa(r.effectiveUnits)}</td>
+        <td>${r.absenceDeductionRial?`<span class="badge b-red">${fa(r.absenceDeductionRial)}</span>`:'—'}</td>
+      </tr>`).join('')}</table>
+      <div class="reasons" style="margin-top:10px">فرمول: واحد درس × ضرایب (${'ضرایب پویا از teaching_coefficients'}) × سهم استاد − موظفی ترمی (${faNum(c.dutyUnits)} واحد برای ${c.staff.contractType==='FULL_TIME'?'هیئت علمی':'مدعو'}) → × نرخ پایه − مالیات ${faNum(c.taxRate)}٪ − کسور عدم برگزاری کلاس</div></div>`;
+  },
+
+  /* ── حق‌التدریس (اداره مالی) ── */
+  async payroll(area){
+    const d = await API('/api/admin/payroll/overview');
+    const st = { DRAFT:'<span class="badge b-gray">پیش‌نویس</span>', MID_TERM_PAID:'<span class="badge b-blue">میان‌ترم</span>', FINAL_SETTLED:'<span class="badge b-green">تسویه ✓</span>', NOT_COMPUTED:'<span class="badge b-amber">محاسبه نشده</span>' };
+    area.innerHTML = `<div class="page-title">💼 حق‌التدریس ترم — ${d.term}</div>
+      <div class="grid grid-4">
+        <div class="stat"><div class="lbl">بودجه کل خالص</div><div class="val">${fa(d.totals.budget)}</div><div class="hint">ریال</div></div>
+        <div class="stat"><div class="lbl">پرداخت‌شده (میان‌ترم)</div><div class="val" style="color:var(--green)">${fa(d.totals.paid)}</div></div>
+        <div class="stat"><div class="lbl">باقیمانده</div><div class="val" style="color:var(--amber)">${fa(d.totals.remaining)}</div></div>
+        <div class="stat"><div class="lbl">اساتید</div><div class="val">${faNum(d.list.length)}</div></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <div class="flex no-print" style="justify-content:space-between">
+          <div class="flex">
+            <button class="btn btn-primary" onclick="computePayroll()">🧮 محاسبه حق‌التدریس ترم</button>
+            <button class="btn btn-ghost" onclick="downloadBatch()">⬇️ خروجی واریز دسته‌جمعی (CSV)</button>
+          </div>
+        </div>
+        <table style="margin-top:12px"><tr><th>استاد</th><th>قرارداد</th><th>معادل</th><th>قابل پرداخت</th><th>ناخالص</th><th>کسور غیبت</th><th>مالیات</th><th>خالص</th><th>وضعیت</th><th>گلوگاه تسویه</th><th></th></tr>
+        ${d.list.map(x=>`<tr>
+          <td><b>${x.name}</b><div class="reasons">${x.rank}</div></td>
+          <td>${x.contractType==='FULL_TIME'?'هیئت علمی':'مدعو'}</td>
+          <td>${fa(x.totalEquivalentUnits)}</td><td>${fa(x.payableUnits)}</td>
+          <td>${fa(x.gross)}</td>
+          <td>${x.absenceDeduction?`<span class="badge b-red">${fa(x.absenceDeduction)}</span>`:'۰'}</td>
+          <td>${fa(x.tax)}</td><td><b>${fa(x.net)}</b></td>
+          <td>${st[x.status]}</td>
+          <td class="reasons">${x.gates.gradesFinalized?'✓ نمرات':'⛔ '+fa(x.gates.pendingGrades)}<br>${x.gates.docsSigned?'✓ اسناد':'⛔ '+fa(x.gates.unsignedDocs)+' سند'}</td>
+          <td class="flex">
+            ${x.status==='DRAFT'?`<button class="btn btn-blue" style="padding:5px 12px;font-size:12px;background:var(--primary);color:#fff" onclick="payMid(${x.staffId})">میان‌ترم ۴۰٪</button>`:''}
+            ${x.status!=='FINAL_SETTLED'&&x.status!=='NOT_COMPUTED'?`<button class="btn btn-green" style="padding:5px 12px;font-size:12px" onclick="settlePay(${x.staffId})">تسویه نهایی</button>`:''}
+          </td>
+        </tr>`).join('')}</table>
+        <div class="reasons" style="margin-top:10px">گلوگاه‌های تسویه (اهرم فشار سند §۱۷۸۳): ① همهٔ نمرات استاد قطعی باشد ② همهٔ اسناد الکترونیکی امضاشده باشد. علی‌الحساب میان‌ترم (۴۰٪) فقط یک‌بار از وضعیت پیش‌نویس از وضعیت پیش‌نویس صادر می‌شود.</div>
+      </div>`;
+  },
+
+  /* ── پنل بازخورد استاد (BI §۱۳۵۰: رادار + روند + ابر کلمات) ── */
+  async mybi(area){
+    const d = await API('/api/prof/bi');
+    if(!d.axes.length){ area.innerHTML = `<div class="page-title">📈 بازخورد ارزشیابی من</div><div class="card" style="padding:24px;text-align:center">هنوز پاسخی برای ارزشیابی شما ثبت نشده است.</div>`; return; }
+    const up = d.trend.length>1 && d.trend[d.trend.length-1].score >= d.trend[0].score;
+    area.innerHTML = `<div class="page-title">📈 بازخورد ارزشیابی من — ${d.period} <span class="badge ${d.flagged?'b-red':'b-green'}">${d.flagged?'زیر آستانهٔ بحرانی':'وضعیت مطلوب'}</span></div>
+      <div class="grid grid-4">
+        <div class="stat"><div class="lbl">میانگین وزنی من</div><div class="val" style="color:${d.flagged?'var(--red)':'var(--green)'}">${faNum(d.score)}</div><div class="hint">از ۵</div></div>
+        <div class="stat"><div class="lbl">میانگین گروه آموزشی</div><div class="val">${faNum(d.deptAvg)}</div><div class="hint">مقایسهٔ رادار</div></div>
+        <div class="stat"><div class="lbl">روند ۳ ترم</div><div class="val" style="color:${up?'var(--green)':'var(--red)'}">${up?'▲ صعودی':'▼ نزولی'}</div><div class="hint">${d.trend.map(t=>faNum(t.score)).join(' → ')}</div></div>
+        <div class="stat"><div class="lbl">پاسخ‌های ثبت‌شده (ناشناس)</div><div class="val">${faNum(d.respondents)}</div><div class="hint">آستانهٔ بحرانی: ${faNum(d.threshold)}</div></div>
+      </div>
+      <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:16px">
+        <div class="card"><h3 class="sec">نمودار رادار — من در برابر میانگین گروه</h3>
+          <div style="display:flex;justify-content:center">${radarSVG(d.axes)}</div>
+          <div class="flex" style="justify-content:center;gap:18px;margin-top:6px">
+            <span><span style="display:inline-block;width:14px;height:3px;background:#0284c7"></span> من</span>
+            <span><span style="display:inline-block;width:14px;height:3px;background:#94a3b8;border-top:2px dashed #94a3b8"></span> میانگین گروه</span>
+          </div></div>
+        <div class="card"><h3 class="sec">روند ترمیک نمرهٔ ارزشیابی</h3>${trendSVG(d.trend, d.threshold)}</div>
+      </div>
+      <div class="card" style="margin-top:16px"><h3 class="sec">ابر کلمات نظرات دانشجویان (تحلیل متن)</h3>
+        <div style="line-height:2.4;text-align:center;padding:8px">${wordCloudHTML(d.words)}</div>
+        <div class="reasons" style="text-align:center">پرتکرارترین واژه‌های نظرات تشریحی — گمنامی مطلق: هیچ اثری از هویت پاسخ‌دهنده در سیستم ذخیره نمی‌شود (سند §۱۳۳۸).</div></div>`;
+  },
+
+  /* ── داشبورد مدیریتی ارزشیابی (BI §۱۳۵۵: گلوگاه کیفی + تحلیل امکانات) ── */
+  async bi(area){
+    const [d, f] = await Promise.all([API('/api/admin/bi/overview'), API('/api/admin/bi/facilities')]);
+    area.innerHTML = `<div class="page-title">📊 داشبورد ارزشیابی اساتید — ${d.period}</div>
+      ${d.flaggedCount?`<div class="card" style="border-right:4px solid var(--red);margin-bottom:14px">
+        <b style="color:var(--red)">⛔ ${faNum(d.flaggedCount)} استاد زیر آستانهٔ بحرانی (${faNum(d.threshold)} از ۵)</b>
+        <span class="reasons">— گلوگاه کیفی سند §۱۳۵۵: تصمیم تخصیص کلاس ترم بعد / گفت‌وگوی مدیر گروه</span></div>`:`<div class="card" style="border-right:4px solid var(--green);margin-bottom:14px"><b style="color:var(--green)">✅ همهٔ اساتید بالای آستانهٔ ${faNum(d.threshold)}</b></div>`}
+      <div class="card"><h3 class="sec">گلوگاه‌های کیفی (مرتب بر اساس میانگین)</h3>
+      <table><tr><th>استاد</th><th>مرتبه</th><th>میانگین وزنی</th><th>روند ۳ ترم</th><th>تغییر</th><th>پاسخ‌ها</th><th>وضعیت</th></tr>
+      ${d.list.map(x=>`<tr${x.flagged?' style="background:rgba(220,38,38,.06)"':''}>
+        <td><b>${x.name}</b></td><td>${x.rank||'—'}</td>
+        <td><b style="font-size:15px;color:${x.flagged?'var(--red)':'var(--green)'}">${faNum(x.score)}</b> <small class="reasons">/ ۵</small></td>
+        <td>${x.trend.map(t=>`<span class="code-tag" style="margin:0 2px">${faNum(t.score)}</span>`).join('→')}</td>
+        <td style="color:${x.delta==null?'var(--gray)':(x.delta>=0?'var(--green)':'var(--red)')}">${x.delta==null?'—':(x.delta>=0?'▲ ':'▼ ')+faNum(Math.abs(x.delta))}</td>
+        <td>${faNum(x.respondents)}</td>
+        <td>${x.flagged?'<span class="badge b-red">🔴 نیازمند توجه</span>':'<span class="badge b-green">🟢 مطلوب</span>'}</td>
+      </tr>`).join('')}</table></div>
+      <div class="card" style="margin-top:16px"><h3 class="sec">تحلیل امکانات کلاس‌ها (ارجاع به واحد فنی/تدارکات — سند §۱۳۵۷)</h3>
+      <div class="grid grid-4">${f.rooms.map(r=>`
+        <div class="stat" style="${r.needsRepair?'border:1px solid var(--red);border-radius:8px':''}">
+          <div class="lbl">${r.room}${r.building?` <small class="reasons">(${r.building})</small>`:''}</div>
+          ${r.axes.map(a=>`<div style="display:flex;justify-content:space-between;font-size:12px;margin:3px 0">
+            <span>${a.label}</span><b style="color:${a.score<3?'var(--red)':(a.score<4?'var(--amber)':'var(--green)')}">${faNum(a.score)}</b></div>`).join('')}
+          <div style="margin-top:8px">${r.needsRepair?`<span class="badge b-red">🔧 نیازمند تعمیر (${r.worstAxis})</span>`:`<span class="badge b-green">سالم</span>`}</div>
+          <div class="reasons" style="margin-top:6px">دروس: ${r.offerings.map(c=>`<span class="code-tag">${c}</span>`).join(' ')}</div>
+        </div>`).join('')}</div>
+      ${f.needsRepairCount?`<div class="reasons" style="margin-top:10px;color:var(--red)">⚠️ ${faNum(f.needsRepairCount)} کلاس برای واحد فنی/تدارکات ارسال شود (شاخص زیر ۳).</div>`:''}
+      </div>`;
+  },
+
+  /* ── فرمول‌ساز مالی + ابلاغیهٔ تدریس (سند §۲۷۸۲–۲۸۶۰) ── */
+  async payrules(area){
+    const d = await API('/api/admin/payrules');
+    const tf = {...d.typeFa, NORMAL:'نظری (عادی)'}, rf = d.roleFa;
+    area.innerHTML = `<div class="page-title">🧾 فرمول‌ساز حق‌التدریس — قوانین جبران خدمات</div>
+      <div class="card" style="border-right:4px solid var(--primary)">
+        <b>متغیرهای فرمول:</b> <span class="code-tag">{نرخ_پایه}</span> <span class="code-tag">{تعداد_واحد}</span> <span class="code-tag">{تعداد_دانشجو}</span> × ضریب نقش (راهنما/مشاور/داور/ممتحن) × ضریب نوع درس (نظری/عملی/پایان‌نامه/معرفی به استاد)
+        <div class="reasons" style="margin-top:6px">سه نوع فرمول: <b>ضریب واحد</b> (نرخ × واحد × ضریب) | <b>ضریب دانشجو</b> (نرخ × واحد × دانشجو × ضریب) | <b>مقطوع</b> (مبلغ ثابت × تعداد جلسه/دانشجو). خاص‌ترین قاعده برنده می‌شود؛ دروس بدون قانون اختصاصی طبق ضرایب استاندارد محاسبه می‌شوند. پس از هر تغییر، «محاسبهٔ ترم» را دوباره اجرا کنید.</div>
+      </div>
+      <div class="card" style="margin-top:14px"><h3 class="sec">قوانین فعال (${faNum(d.rules.length)})</h3>
+      <table><tr><th>نوع ارائه</th><th>نقش استاد</th><th>مرتبه</th><th>فرمول</th><th>عنوان</th><th></th></tr>
+      ${d.rules.map(r=>`<tr>
+        <td>${tf[r.offeringType]||'همه'}</td><td>${rf[r.professorRole]||'همه'}</td><td>${r.academicRank||'همه'}</td>
+        <td><b>${r.flatFee?`مقطوع ${fa(r.flatFee)} ریال`:(r.multiplierPerStudent!=null?`× دانشجو × ${faNum(r.multiplierPerStudent)}`:`× واحد × ${faNum(r.multiplierUnit??1)}`)}</b></td>
+        <td class="reasons">${r.title||'—'}</td>
+        <td><button class="btn btn-ghost" style="padding:4px 10px;font-size:12px;color:var(--red)" onclick="delPayRule(${r.id})">حذف</button></td>
+      </tr>`).join('')}</table>
+      <div class="flex" style="gap:8px;margin-top:14px;flex-wrap:wrap" id="ruleForm">
+        <select id="rf_type" style="width:auto"><option value="">نوع: همه</option><option value="THEORY">نظری</option><option value="THESIS">پایان‌نامه</option><option value="DIRECTED_READING">معرفی به استاد</option><option value="INTERNSHIP">کارآموزی</option></select>
+        <select id="rf_role" style="width:auto"><option value="">نقش: همه</option><option value="MAIN_LECTURER">مدرس اصلی</option><option value="SUPERVISOR">استاد راهنما</option><option value="ADVISOR">استاد مشاور</option><option value="REVIEWER">داور</option><option value="EXAMINER">ممتحن</option></select>
+        <input id="rf_unit" placeholder="ضریب واحد (مثلاً 1.5)" style="width:130px">
+        <input id="rf_perst" placeholder="ضریب دانشجو (مثلاً 0.33)" style="width:140px">
+        <input id="rf_flat" placeholder="یا مقطوع (ریال)" style="width:120px">
+        <input id="rf_title" placeholder="عنوان فرمول" style="width:170px">
+        <button class="btn btn-primary" onclick="savePayRule()">➕ افزودن فرمول</button>
+      </div></div>
+      <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:14px">
+        <div class="card"><h3 class="sec">📤 ابلاغیهٔ تدریس الکترونیک</h3>
+          <div class="reasons">سند سه‌بخشی (برنامهٔ هفتگی + فعالیت‌های پژوهشی + برآورد ریالی حق‌التدریس) برای همهٔ اساتید ترم صادر و برای امضای الکترونیک OTP به کارتابل آن‌ها می‌رود.</div>
+          <button class="btn btn-primary" style="margin-top:10px" onclick="issueAppts()">📤 صدور ابلاغیهٔ ترم</button>
+        </div>
+        <div class="card"><h3 class="sec">🔍 پیش‌نمایش برآورد استاد</h3>
+          <select id="est_staff" style="width:100%" onchange="showEstimate(this.value)"><option value="">— انتخاب استاد —</option></select>
+          <div id="est_box" style="margin-top:10px"></div>
+        </div>
+      </div>`;
+    const ov = await API('/api/admin/payroll/overview');
+    document.getElementById('est_staff').innerHTML += ov.list.map(x=>`<option value="${x.staffId}">${x.name}</option>`).join('');
+  },
+
+  /* ── معرفی به استاد سه‌کلیکی (Micro-Offering — سند §۲۷۴۵) ── */
+  async dr(area){
+    const d = await API('/api/admin/dr/list');
+    area.innerHTML = `<div class="page-title">🎯 ثبت درس معرفی به استاد — ${d.term}</div>
+      <div class="card" style="border-right:4px solid var(--primary)">
+        <h3 class="sec">گام ۱ — بررسی هوشمند شرایط دانشجو (موتور آیین‌نامه‌ها)</h3>
+        <div class="flex"><input id="dr_code" placeholder="کد دانشجویی (مثلاً 31412005)" style="max-width:240px" onkeydown="if(event.key==='Enter')drCheck()">
+          <button class="btn btn-primary" onclick="drCheck()">🔍 بررسی شرایط</button></div>
+        <div id="dr_elg" style="margin-top:12px"></div>
+      </div>
+      <div class="card" style="margin-top:14px"><h3 class="sec">دروس معرفی به استاد ثبت‌شده (${faNum(d.list.length)})</h3>
+      ${d.list.length?`<table><tr><th>دانشجو</th><th>درس</th><th>ممتحن</th><th>واحد</th><th>مهلت نمره</th><th>وضعیت نمره</th></tr>
+      ${d.list.map(x=>`<tr>
+        <td><b>${x.studentName}</b><div class="reasons">${x.studentCode}</div></td>
+        <td><span class="code-tag">${x.code}</span> ${x.title}</td><td>${x.examinerName}</td><td>${faNum(x.units)}</td>
+        <td>${faNum(String(x.customGradeDeadline).slice(0,10))} ${x.daysLeft!=null?`<span class="badge ${x.daysLeft<=0?'b-red':(x.daysLeft<=7?'b-amber':'b-gray')}">${x.daysLeft<=0?'گذشته ⛔':faNum(x.daysLeft)+' روز'}</span>`:''}</td>
+        <td>${x.gradeStatus==='FINALIZED'?'<span class="badge b-green">قطعی ✓</span>':x.gradeStatus==='TEMPORARY'?'<span class="badge b-blue">موقت</span>':'<span class="badge b-gray">در انتظار</span>'}</td>
+      </tr>`).join('')}</table>`:'<div class="reasons">هنوز درسی ثبت نشده است.</div>'}
+      <div class="reasons" style="margin-top:8px">سقف آیین‌نامه: حداکثر ${faNum(d.limits.courses)} درس / ${faNum(d.limits.units)} واحد — فقط برای دانشجویان آستانهٔ فارغ‌التحصیلی (باقیمانده ≤ ۸ واحد). ثبت‌نام و هزینهٔ متغیر به‌صورت خودکار و تراکنشی انجام می‌شود؛ مهلت نمرهٔ هر درس مستقل از تقویم ترم است.</div></div>`;
+    window._drMeta = d;
+  },
+
+  /* ── کارتابل سه‌صندوقی نظام وظیفه (سند §۲۵۵۸–۲۷۴۰) ── */
+  async sakha(area){
+    const d = await API('/api/admin/sakha/dashboard');
+    const cd = x => x==null?'—':(x<=0?'<span class="badge b-red">منقضی ⛔</span>':`<span class="badge ${x<=30?'b-red':'b-amber'}">${faNum(x)} روز</span>`);
+    const extFa = { PENDING_EXTENSION_REVIEW:'<span class="badge b-amber">منتظر ارسال به ناجا</span>', EXTENSION_SENT_TO_SAKHA:'<span class="badge b-blue">ارسال‌شده — در انتظار پرداخت</span>', EXTENSION_GRANTED:'<span class="badge b-green">تمدید شد ✓</span>' };
+    area.innerHTML = `<div class="page-title">🪖 کارتابل نظام وظیفه — سامانه سخا</div>
+      <div class="grid grid-4">
+        <div class="stat"><div class="lbl">📥 ثبت‌نام جدید</div><div class="val">${faNum(d.inboxNew.length)}</div><div class="hint">در انتظار تایید دانشگاه</div></div>
+        <div class="stat"><div class="lbl">📥 تمدید سنوات</div><div class="val">${faNum(d.inboxExtension.length)}</div><div class="hint">آرای کمیسیون</div></div>
+        <div class="stat"><div class="lbl">📥 پیشنهاد ابطال</div><div class="val">${faNum(d.inboxRevocation.length)}</div><div class="hint">انصراف/اخراج</div></div>
+        <div class="stat"><div class="lbl">🔴 انقضای نزدیک</div><div class="val" style="color:var(--red)">${faNum(d.expiring.length)}</div><div class="hint">شمارشگر قرمز</div></div>
+      </div>
+
+      <div class="card" style="margin-top:14px"><h3 class="sec">📥 صندوق ۱ — تایید ثبت‌نام‌های جدید (اعلام قبولی به ناجا)</h3>
+      ${d.inboxNew.length?`<table><tr><th>دانشجو</th><th>وضعیت تحصیلی</th><th>علی‌الحساب</th><th></th></tr>
+        ${d.inboxNew.map(x=>`<tr><td><b>${x.name}</b><div class="reasons">${x.studentCode}</div></td>
+          <td>${x.studentStatus}</td>
+          <td>${x.paid?'<span class="badge b-green">پرداخت شده ✓</span>':'<span class="badge b-red">پرداخت نشده ⛔</span>'}</td>
+          <td><button class="btn btn-primary" style="padding:5px 14px;font-size:12px" onclick="sakhaAct('approve-initial',${x.recordId})">تایید ثبت‌نام و اعلام قبولی به ناجا</button></td></tr>`).join('')}</table>`
+        :'<div class="reasons">صندوق خالی است.</div>'}
+      <div class="reasons" style="margin-top:6px">واریز شهریهٔ علی‌الحساب، اولین فیلتر نیت واقعی دانشجو برای درس خواندن است — بدون آن تایید امکان‌پذیر نیست (سند §۲۶۴۳).</div></div>
+
+      <div class="card" style="margin-top:14px"><h3 class="sec">📥 صندوق ۲ — تمدید سنوات ارفاقی (آرای کمیسیون — گلوگاه انسانی)</h3>
+      ${d.inboxExtension.length?`<table><tr><th>دانشجو</th><th>انقضای فعلی</th><th>شمارشگر</th><th>سنوات رای کمیسیون</th><th>وضعیت سخا</th><th></th></tr>
+        ${d.inboxExtension.map(x=>`<tr><td><b>${x.name}</b><div class="reasons">${x.studentCode}${x.sakhaTrackingCode?' | کد '+x.sakhaTrackingCode:''}</div></td>
+          <td>${faNum(String(x.exemptionExpiry).slice(0,10))}</td><td>${cd(x.daysLeft)}</td>
+          <td>${faNum(x.pendingExtraSemesters??1)} نیمسال</td><td>${extFa[x.sakhaStatus]||'—'}</td>
+          <td class="flex">${x.sakhaStatus==='PENDING_EXTENSION_REVIEW'?`<button class="btn btn-primary" style="padding:5px 12px;font-size:12px" onclick="sakhaAct('send-extension',${x.recordId})">تایید و ارسال به ناجا</button>`:''}
+            ${x.sakhaStatus==='EXTENSION_SENT_TO_SAKHA'?`<button class="btn btn-green" style="padding:5px 12px;font-size:12px" onclick="sakhaPay('${x.studentCode}')">شبیه‌سازی پرداخت دانشجو در سخا</button>`:''}</td></tr>`).join('')}</table>`
+        :'<div class="reasons">صندوق خالی است.</div>'}
+      <div class="flex" style="gap:8px;margin-top:10px;flex-wrap:wrap">
+        <input id="sk_commission" placeholder="کد دانشجویی (شبیه‌سازی رای کمیسیون)" style="width:230px">
+        <button class="btn btn-ghost" onclick="sakhaCommission()">🧪 شبیه‌سازی رای کمیسیون موارد خاص</button>
+      </div>
+      <div class="reasons" style="margin-top:6px">پیش‌نویس تمدید مستقیماً به ناجا ارسال نمی‌شود — ابتدا کارشناس بررسی و تایید می‌کند (Human-in-the-Loop سند §۲۷۰۷).</div></div>
+
+      <div class="card" style="margin-top:14px"><h3 class="sec">📥 صندوق ۳ — پیشنهادات ابطال (گزارش به ناجا)</h3>
+      ${d.inboxRevocation.length?`<table><tr><th>دانشجو</th><th>علت</th><th>انقضای معافیت</th><th></th></tr>
+        ${d.inboxRevocation.map(x=>`<tr><td><b>${x.name}</b><div class="reasons">${x.studentCode}</div></td>
+          <td><span class="badge b-red">${x.studentStatus==='EXPELLED'?'اخراج':'انصراف'}</span></td>
+          <td>${faNum(String(x.exemptionExpiry).slice(0,10))}</td>
+          <td><button class="btn btn-ghost" style="padding:5px 12px;font-size:12px;color:var(--red)" onclick="sakhaAct('revoke',${x.recordId})">تایید نهایی و گزارش ابطال به ناجا</button></td></tr>`).join('')}</table>`
+        :'<div class="reasons">صندوق خالی است.</div>'}</div>
+
+      ${d.expiring.length?`<div class="card" style="margin-top:14px;border-right:4px solid var(--red)"><h3 class="sec" style="color:var(--red)">🔴 سنوات رو به اتمام (هیچ پرونده‌ای فراموش نشود)</h3>
+      <table><tr><th>دانشجو</th><th>انقضا</th><th>شمارشگر</th><th>وضعیت تحصیلی</th></tr>
+        ${d.expiring.map(x=>`<tr><td><b>${x.name}</b></td><td>${faNum(String(x.exemptionExpiry).slice(0,10))}</td>
+          <td>${cd(x.daysLeft)}</td><td>${x.studentStatus==='BLOCKED_MILITARY'?'<span class="badge b-red">قفل انتخاب واحد</span>':'ACTIVE'}</td></tr>`).join('')}</table></div>`:''}`;
+  },
+
+  /* ── ثبت‌نام غیرحضوری متقاضی (سند §۲۴۲۷) ── */
+  async onboard(area){
+    const d = await API('/api/onboarding/me');
+    const steps = ['دریافت دادهٔ سنجش','بارگذاری مدارک و پرداخت','احراز هویت e-KYC','بررسی کارشناس و صدور شماره'];
+    const kycBox = d.kyc ? `
+      <div class="card" style="margin-top:12px;border-right:4px solid ${d.kyc.ai==='AUTO_APPROVED'?'var(--green)':(d.kyc.ai==='REJECTED'?'var(--red)':'var(--amber)')}">
+        <b>e-KYC:</b> شباهت چهره ${faNum(d.kyc.score)}٪ —
+        ${d.kyc.ai==='AUTO_APPROVED'?'<span class="badge b-green">تایید خودکار (≥۹۰٪)</span>':d.kyc.ai==='MANUAL_REVIEW'?'<span class="badge b-amber">بررسی چشمی کارشناس (۷۰–۹۰٪)</span> <span class="badge b-blue">'+(d.kyc.expert==='APPROVED'?'کارشناس تایید کرد ✓':d.kyc.expert==='REJECTED'?'کارشناس رد کرد':'در انتظار کارشناس')+'</span>':'<span class="badge b-red">رد خودکار (<۷۰٪) — دوباره تلاش کنید</span>'}
+        <div class="reasons" style="margin-top:6px">شاهکار: ${d.kyc.shahkar==='VERIFIED'?'✓ موبایل به نام شماست':'⛔'} | ثبت احوال: ${d.kyc.civil==='VERIFIED'?'✓ هویت تایید و فرم خودکار پر شد':'⛔'} | چالش لایونس: «${d.kyc.challenge||'—'}»</div></div>`:'';
+    area.innerHTML = `<div class="page-title">🚀 ثبت‌نام غیرحضوری — ${d.applicant.firstName} ${d.applicant.lastName}</div>
+      <div class="flex" style="gap:6px;flex-wrap:wrap">${steps.map((t,i)=>`<span class="badge ${d.flow>i?'b-green':(d.flow===i?'b-blue':'b-gray')}">${faNum(i+1)}. ${t} ${d.flow>i?'✓':''}</span>`).join('<span class="reasons">←</span>')}</div>
+      ${kycBox}
+      <div class="card" style="margin-top:12px"><h3 class="sec">مدارک اجباری (زونکن دیجیتال)</h3>
+        ${d.checklist.map(c=>`<div class="flex" style="justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--line)">
+          <span>${c.verified?'🟢':(c.uploaded?'🟡':'🔴')} ${c.title}</span>
+          <span>${c.verified?'<span class="badge b-green">تاییدشده</span>':(c.uploaded?'<span class="badge b-amber">در انتظار بررسی</span>':`<label class="btn btn-ghost" style="padding:4px 12px;font-size:12px;cursor:pointer">بارگذاری<input type="file" hidden onchange="upDoc('${c.code}',this)"></label>`)}
+          </span></div>`).join('')}
+        <div class="reasons" style="margin-top:8px">فایل‌ها در Object Storage ذخیره و فقط لینک آن‌ها در دیتابیس نگه‌داری می‌شود (سند §۲۴۴۵). مدارک توسط کارشناس بایگانی یا API اصالت‌سنجی می‌شود.</div></div>
+      <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:12px">
+        <div class="card"><h3 class="sec">💳 پرداخت علی‌الحساب (شرط صدور شماره دانشجویی)</h3>
+          ${d.staging.paid?`<span class="badge b-green">پرداخت شده: ${fa(d.staging.paidAmount)} ریال ✓</span>`:`<button class="btn btn-primary" onclick="onbPay()">پرداخت آنلاین ${fa(9500000)} ریال</button>`}
+        </div>
+        <div class="card"><h3 class="sec">🎬 احراز هویت زنده (Liveness + تطبیق چهره)</h3>
+          <div class="reasons">ویدیوی ۵ ثانیه‌ای با چالش تصادفی ضبط و با عکس ثبت‌احوال تطبیق داده می‌شود (سند §۲۵۰۸).</div>
+          <div class="flex" style="gap:6px;margin-top:8px">
+            <button class="btn btn-primary" style="padding:6px 12px;font-size:12px" onclick="onbKyc('ok')">شبیه‌سازی ضبط موفق (≥۹۰٪)</button>
+            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" onclick="onbKyc('mid')">کیفیت متوسط (۷۰–۹۰٪)</button>
+            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;color:var(--red)" onclick="onbKyc('bad')">چهرهٔ نامطابق (<۷۰٪)</button>
+          </div></div>
+      </div>`;
+  },
+
+  /* ── بایگانی الکترونیک کارشناس (سند §۲۴۱۵–۲۵۵۶) ── */
+  async archive(area){
+    const d = await API('/api/admin/archive/inbox');
+    area.innerHTML = `<div class="page-title">🗄 بایگانی الکترونیک — کارتابل کارشناس</div>
+      <div class="grid grid-4">
+        <div class="stat"><div class="lbl">پرونده‌های جاری</div><div class="val">${faNum(d.stats.total)}</div></div>
+        <div class="stat"><div class="lbl">آمادهٔ صدور شماره</div><div class="val" style="color:var(--green)">${faNum(d.stats.ready)}</div></div>
+        <div class="stat"><div class="lbl">KYC بررسی چشمی</div><div class="val" style="color:var(--amber)">${faNum(d.stats.kycManual)}</div></div>
+        <div class="stat"><div class="lbl">مدرک در انتظار</div><div class="val">${faNum(d.stats.pendingDocs)}</div></div>
+      </div>
+      ${d.kycManual.filter(k=>!k.expertDecision).length?`<div class="card" style="margin-top:14px;border-right:4px solid var(--amber)"><h3 class="sec">🧑‍🔬 تطبیق چهره ۷۰–۹۰٪ — بررسی چشمی (سند §۲۵۱۷)</h3>
+        ${d.kycManual.filter(k=>!k.expertDecision).map(k=>`<div class="flex" style="justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--line)">
+          <span><b>${k.owner}</b> <span class="reasons">${k.nationalCode}</span> — شباهت <b style="color:var(--amber)">${faNum(k.faceMatchScore)}٪</b> <span class="reasons">| چالش: «${k.livenessChallenge}» | شاهکار ✓ | ثبت‌احوال ✓</span></span>
+          <span class="flex"><button class="btn btn-green" style="padding:5px 12px;font-size:12px" onclick="kycReview(${k.id},true)">چهره مطابق است ✓</button>
+          <button class="btn btn-ghost" style="padding:5px 12px;font-size:12px;color:var(--red)" onclick="kycReview(${k.id},false)">رد</button></span></div>`).join('')}</div>`:''}
+      ${d.docs.length?`<div class="card" style="margin-top:14px"><h3 class="sec">📄 مدارک در انتظار اصالت‌سنجی</h3>
+        ${d.docs.map(x=>`<div class="flex" style="justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--line)">
+          <span><b>${x.owner}</b> <span class="reasons">${x.nationalCode}</span> — ${x.typeTitle} <span class="reasons">(${x.fileName})</span></span>
+          <span class="flex">
+            <button class="btn btn-ghost" style="padding:5px 12px;font-size:12px" onclick="viewDoc(${x.id})">👁 مشاهده (واترمارک)</button>
+            <button class="btn btn-green" style="padding:5px 12px;font-size:12px" onclick="docReview(${x.id},'VERIFIED')">اصالت تایید</button>
+            <button class="btn btn-ghost" style="padding:5px 12px;font-size:12px;color:var(--red)" onclick="docReview(${x.id},'REJECTED','عکس تار است')">رد</button></span></div>`).join('')}</div>`:''}
+      <div class="card" style="margin-top:14px"><h3 class="sec">📁 پرونده‌های ثبت‌نام (گام ۴ — صدور شماره دانشجویی)</h3>
+      <table><tr><th>متقاضی</th><th>رشته</th><th>مدارک اجباری</th><th>KYC</th><th>پرداخت</th><th>وضعیت</th><th></th></tr>
+      ${d.rows.map(r=>`<tr>
+        <td><b>${r.fullName}</b><div class="reasons">${r.nationalCode}</div></td><td>${r.majorTitle||'—'}</td>
+        <td>${faNum(r.requiredVerified)}/${faNum(r.requiredTotal)}</td>
+        <td>${r.kycAi=='AUTO_APPROVED'?'<span class="badge b-green">خودکار ✓</span>':r.kycAi=='MANUAL_REVIEW'?`<span class="badge ${r.kycExpert=='APPROVED'?'b-green':'b-amber'}">${faNum(r.kycScore)}٪ ${r.kycExpert=='APPROVED'?'✓':'چشمی'}</span>`:r.kycAi=='REJECTED'?'<span class="badge b-red">رد</span>':'—'}</td>
+        <td>${r.paidAdvance?'<span class="badge b-green">✓</span>':'<span class="badge b-red">نشده</span>'}</td>
+        <td>${r.onboardingStatus}${r.onboardingStatus=='REJECTED'?'<div class="reasons">'+(r.decisionNote||'')+'</div>':''}</td>
+        <td>${r.ready?`<button class="btn btn-primary" style="padding:5px 12px;font-size:12px" onclick="approveDossier(${r.id})">✅ تایید و صدور شماره دانشجویی</button>`:
+          r.onboardingStatus!='REJECTED'?`<button class="btn btn-ghost" style="padding:5px 12px;font-size:12px;color:var(--red)" onclick="rejectDossier(${r.id})">رد پرونده</button>`:''}</td>
+      </tr>`).join('')}</table></div>
+      <div class="card" style="margin-top:14px"><h3 class="sec">🔎 زونکن دیجیتال (پرونده‌های قطعی)</h3>
+        <div class="flex"><input id="arch_q" placeholder="کد ملی یا شمارهٔ کاربری — مثلاً 1010101010" style="max-width:280px" onkeydown="if(event.key==='Enter')viewDossier()">
+        <button class="btn btn-primary" onclick="viewDossier()">باز کردن زونکن</button></div>
+        <div id="dossier_box" style="margin-top:12px"></div>
+        <div class="reasons" style="margin-top:6px">RBAC پوشه‌ای: کارشناس مالی فقط پوشهٔ «اداری/مالی» را می‌بیند؛ هر مشاهده با واترمارک «کارشناس | تاریخ | IP» لاگ می‌شود (سند §۲۴۷۸–۲۴۸۳).</div></div>`;
+  },
+
+  /* ── کارتابل ── */
+  async inbox(area){
+    const items = await API('/api/workflow/inbox');
+    area.innerHTML = `<div class="page-title">📥 کارتابل گردش کار (${faNum(items.length)})</div>` +
+      (items.length ? items.map(i=>`
+        <div class="card">
+          <div class="flex" style="justify-content:space-between">
+            <div>
+              <b style="font-size:15px">${i.firstName} ${i.lastName}</b> <span class="badge b-gray" dir="ltr">${i.studentCode}</span>
+              <span class="badge b-blue">${i.processTitle}</span>
+              <div class="reasons">مرحله: <b>${i.stepTitle}</b> — ثبت: ${faNum(i.createdAt?.slice(0,10))} | کد رهگیری: <b dir="ltr">${i.trackingCode}</b></div>
+              <div class="reasons">${(i.formDataParsed?.reasons||[]).map(r=>'⚠️ '+r).join('<br>')}${i.formDataParsed?.sajadCode?'کد سجاد: '+i.formDataParsed.sajadCode:''}</div>
+            </div>
+            <div style="text-align:center">
+              <div class="sla-pill sla-${i.slaState}">${i.slaState==='ON_TIME'?'✓ در مهلت':i.slaState==='WARNING'?'⏰ نزدیک انقضا':'⛔ نقض مهلت'}</div>
+              <div class="reasons">${i.minutesLeft!==null?'باقیمانده: '+faNum(i.minutesLeft)+' دقیقه':''}</div>
+            </div>
+          </div>
+          <div class="flex" style="margin-top:12px">
+            <button class="btn btn-green" onclick="act(${i.id},'APPROVE')">تایید</button>
+            <button class="btn btn-red" onclick="act(${i.id},'REJECT')">رد</button>
+            <input id="note-${i.id}" placeholder="یادداشت اقدام (اختیاری)" style="max-width:320px">
+          </div>
+        </div>`).join('') : '<div class="card"><div class="empty">کارتابل شما خالی است ✓</div></div>');
+  },
+
+  /* ── مرکز آیین‌نامه‌ها ── */
+  async regulations(area){
+    const rs = await API('/api/admin/regulations');
+    area.innerHTML = `<div class="page-title">⚖️ مرکز مدیریت آیین‌نامه‌ها (قوانین = داده)</div>` + rs.map(r=>`
+      <div class="card">
+        <h3 class="sec">${r.title} <span class="badge b-blue">${r.levelTitle}</span> <span class="badge b-gray">${faNum(r.studentCount)} دانشجو</span>
+        ${!r.effectiveToYear?'<span class="badge b-green">فعال</span>':'<span class="badge b-gray">منقضی</span>'}</h3>
+        <div class="kv"><span>سال اجرا</span><b>${faNum(r.effectiveFromYear)} ${r.effectiveToYear?'تا '+faNum(r.effectiveToYear):'به بعد'}</b></div>
+        <div class="kv"><span>سیاست نمره ردی</span><b>${r.rules.failed_course_gpa_policy==='KEEP_ALWAYS'?'نگهداری همیشه در معدل':'حذف از معدل پس از قبولی'}</b></div>
+        <pre class="json">${JSON.stringify(r.rules, null, 2)}</pre>
+      </div>`).join('');
+  },
+
+  /* ── KPI ── */
+  async kpi(area){
+    const d = await API('/api/admin/kpi');
+    area.innerHTML = `<div class="page-title">📈 ارزیابی عملکرد و گلوگاه‌ها
+      <button class="btn btn-amber" style="font-size:12px;padding:7px 14px" onclick="runSla()">⏱ SLA گردش کار</button>
+      <button class="btn btn-amber" style="font-size:12px;padding:7px 14px" onclick="runGradeSla()">📝 SLA نمرات</button>
+      <button class="btn btn-primary" style="font-size:12px;padding:7px 14px" onclick="verifyGrades()">🔐 تطبیق امضای نمرات</button></div>
+      <div id="verifyBox"></div>
+      <div class="card"><h3 class="sec">KPI کارکنان (MTTR، پایبندی به مهلت، ارجاع خودکار)</h3>
+      ${d.kpi.length?`<table><tr><th>کارمند</th><th>مرحله</th><th>پرونده</th><th>میانگین زمان (دقیقه)</th><th>به‌موقع</th><th>ارجاع خودکار</th><th>SLA%</th></tr>
+      ${d.kpi.map(k=>`<tr><td><b>${k.firstName?k.firstName+' '+k.lastName:'اقدام سیستم'}</b></td><td>${k.stepTitle}</td><td>${faNum(k.handled)}</td>
+      <td>${fa(k.avgMinutes)}</td><td>${faNum(k.onTime)}</td><td>${faNum(k.escalations)}</td>
+      <td><span class="badge ${k.slaPct>=80?'b-green':k.slaPct>=50?'b-amber':'b-red'}">${fa(k.slaPct)}٪</span></td></tr>`).join('')}</table>`:'<div class="empty">داده‌ای موجود نیست — ابتدا در کارتابل اقدامی ثبت کنید</div>'}</div>
+      <div class="card"><h3 class="sec">نقشه حرارتی گلوگاه مراحل</h3>
+      ${d.bottlenecks.length?`<table><tr><th>فرآیند</th><th>مرحله</th><th>حجم</th><th>میانگین توقف</th><th>SLA (ساعت)</th><th>نقض‌شده</th></tr>
+      ${d.bottlenecks.map(b=>`<tr><td>${b.processTitle}</td><td>${b.stepTitle}</td><td>${faNum(b.total)}</td>
+      <td>${fa(b.avgMinutes)}</td><td>${faNum(b.slaHours)}</td>
+      <td>${b.breached>0?`<span class="badge b-red">${faNum(b.breached)}</span>`:'<span class="badge b-green">۰</span>'}</td></tr>`).join('')}</table>`:'<div class="empty">داده‌ای موجود نیست</div>'}</div>`;
+  },
+
+  /* ── Audit ── */
+  async audit(area){
+    const rows = await API('/api/admin/audit');
+    area.innerHTML = `<div class="page-title">🔐 ردگیری امنیتی (زنجیره هش — غیرقابل تغییر)</div>
+    <div class="card">${rows.length?`<table><tr><th>#</th><th>کاربر</th><th>اقدام</th><th>موجودیت</th><th>هش</th><th>زمان</th></tr>
+      ${rows.map(r=>`<tr><td>${faNum(r.id)}</td><td>${r.actor||'—'}</td><td><b>${r.action}</b></td><td>${r.entityType}#${r.entityId??'—'}</td>
+      <td dir="ltr" style="font-family:monospace;font-size:10px;color:var(--muted)">${(r.hash||'').slice(0,18)}…</td><td>${faNum(r.createdAt)}</td></tr>`).join('')}</table>`:'<div class="empty">رویدادی ثبت نشده</div>'}</div>`;
+  }
+};
+
+/* ═══════════════ اقدامات ═══════════════ */
+function toggleCart(id){
+  const off = window._offerings.find(o=>o.id===id);
+  if (window._cart.has(id)) window._cart.delete(id); else window._cart.add(id);
+  const btn = document.querySelector(`#off-${id} button.btn`);
+  if (btn){ btn.className = 'btn '+(window._cart.has(id)?'btn-ghost':'btn-primary'); btn.textContent = window._cart.has(id)?'− حذف از سبد':'+ افزودن به سبد'; }
+  updateCartBar();
+}
+function updateCartBar(){
+  const items = [...(window._cart||[])].map(id=>window._offerings.find(o=>o.id===id)).filter(Boolean);
+  document.getElementById('cartCount').textContent = faNum(items.length);
+  document.getElementById('cartUnits').textContent = faNum(items.reduce((a,o)=>a+Number(o.units),0));
+}
+async function submitCart(){
+  const allowCouncil = document.getElementById('allowCouncil')?.checked;
+  const ids = [...(window._cart||[])];
+  if (!ids.length) return toast('سبد خالی است','err');
+  try{
+    const r = await API('/api/enroll/submit',{method:'POST',body:JSON.stringify({offeringIds:ids,allowCouncil})});
+    let msg=[];
+    if (r.enrolled.length) msg.push(`✅ ${r.enrolled.length} درس قطعی شد`);
+    if (r.pendingCouncil.length) msg.push(`⏳ ${r.pendingCouncil.length} درخواست شورا ثبت شد (${r.pendingCouncil.map(p=>p.trackingCode).join(', ')})`);
+    if (r.waitlisted.length) msg.push(`📋 ${r.waitlisted.length} درس در لیست انتظار`);
+    r.softErrors.forEach(s=>toast('⚠️ '+s.message,'err'));
+    r.hardErrors.forEach(h=>toast('⛔ '+h,'err'));
+    if (r.enrolled.length||r.pendingCouncil.length) toast(msg.join(' | '),'ok');
+    navigate('enroll');
+  }catch(e){ toast(e.message,'err'); }
+}
+async function dropCourse(id){
+  if(!confirm('این درس حذف شود؟ در صورت وجود لیست انتظار، نفر بعدی به‌صورت خودکار ارتقا می‌یابد.')) return;
+  try{ const r = await API('/api/enroll/drop',{method:'POST',body:JSON.stringify({offeringId:id})});
+    toast(r.promoted? 'حذف شد — نفر بعدی لیست انتظار ارتقا یافت ✓':'حذف شد','ok'); navigate('enroll');
+  }catch(e){toast(e.message,'err');}
+}
+async function act(id, action){
+  const note = document.getElementById('note-'+id)?.value || '';
+  if (action==='REJECT' && !note && !confirm('بدون یادداشت رد شود؟')) return;
+  try{ const r = await API('/api/workflow/act',{method:'POST',body:JSON.stringify({requestId:id,action,note})});
+    toast(r.final?(action==='APPROVE'?'✅ تایید نهایی شد':'رد نهایی شد'):'به مرحله بعد رفت: '+r.movedTo, 'ok'); navigate('inbox');
+  }catch(e){toast(e.message,'err');}
+}
+async function sendCommission(){
+  const code=document.getElementById('sajadCode').value, sem=document.getElementById('extraSem').value;
+  try{ const r=await API('/api/requests/commission',{method:'POST',body:JSON.stringify({sajadCode:code,extraSemesters:sem})});
+    toast('درخواست ثبت شد — کد رهگیری '+r.trackingCode,'ok'); navigate('requests');
+  }catch(e){toast(e.message,'err');}
+}
+async function runGradeSla(){
+  try{ const r=await API('/api/admin/grade-sla-run',{method:'POST'});
+    toast(r.applied.length? `${r.applied.length} اقدام SLA نمرات اعمال شد`:'مورد SLA نمرات نبود','ok'); navigate('kpi');
+  }catch(e){toast(e.message,'err');}
+}
+async function verifyGrades(){
+  try{ const r=await API('/api/admin/verify-grades');
+    const box=document.getElementById('verifyBox'); if(!box) return;
+    box.innerHTML = `<div class="card"><h3 class="sec">🔐 امضای دیجیتال نمرات قطعی (کشف دستکاری)</h3>` +
+      (r.length? `<table><tr><th>درس</th><th>وضعیت امضا</th></tr>${r.map(x=>`<tr><td>${x.course}</td><td>${x.ok?'<span class=\'badge b-green\'>سالم ✓</span>':'<span class=\'badge b-red\'>⛔ دستکاری شده!</span>'}</td></tr>`).join('')}</table>` : '<div class="empty">هنوز نمره‌ای قطعی نشده</div>') + `</div>`;
+  }catch(e){toast(e.message,'err');}
+}
+async function runSla(){
+  try{ const r=await API('/api/admin/sla-run',{method:'POST'});
+    toast(r.applied.length? `${r.applied.length} اقدام خودکار SLA اعمال شد`:'پرونده منقضی‌شده‌ای نبود','ok'); navigate('kpi');
+  }catch(e){toast(e.message,'err');}
+}
+
+
+/* ═══════════════ ماژول نمره — اقدامات ═══════════════ */
+function openRoster(id){ window._rosterId = id; navigate('myclasses'); }
+async function renderRoster(area, id){
+  let d; try { d = await API('/api/prof/roster?offeringId='+id); } catch(e){ window._rosterId=null; return navigate('myclasses'); }
+  const o = d.offering, fin = !!o.gradesFinalizedAt;
+  area.innerHTML = `<div class="page-title"><button class="btn btn-ghost" onclick="window._rosterId=null;navigate('myclasses')">→ بازگشت</button>
+    کارنامه کلاس: ${o.title} (گروه ${faNum(o.groupNumber)}) ${fin?'<span class="badge b-green">قطعی ✓</span>':''}</div>
+    <div class="card">
+      <table><tr><th>شماره دانشجویی</th><th>نام</th><th>نمره</th><th>وضعیت</th><th>ارزشیابی</th></tr>
+      ${d.students.map(r=>`<tr>
+        <td dir="ltr" class="code-tag" style="display:inline-block">${r.studentCode}</td>
+        <td>${r.firstName} ${r.lastName}</td>
+        <td>${fin? `<b>${fa(r.gradeValue)}</b>` : (r.gradingType==='DESCRIPTIVE'
+            ? `<select id="g-${r.enrollmentId}" style="max-width:110px;padding:6px"><option value="1" ${Number(r.gradeValue)>=1?'selected':''}>قبول</option><option value="0" ${r.gradeValue!==null&&Number(r.gradeValue)<1?'selected':''}>رد</option></select>`
+            : `<input id="g-${r.enrollmentId}" type="number" min="0" max="20" step="0.25" value="${r.gradeValue??''}" style="max-width:100px" placeholder="۰–۲۰">`)}</td>
+        <td>${({PENDING:'<span class=\'badge b-gray\'>ثبت نشده</span>',DRAFT:'<span class=\'badge b-gray\'>پیش‌نویس</span>',TEMPORARY:'<span class=\'badge b-blue\'>موقت</span>',APPEALED:'<span class=\'badge b-amber\'>اعتراض</span>',FINALIZED:'<span class=\'badge b-green\'>قطعی</span>'})[r.gradeStatus]||r.gradeStatus}</td>
+        <td>${r.hasEvaluated?'✓':'—'}</td>
+      </tr>`).join('')}</table>
+      ${fin? `<div class="appeal-box">🔒 نمرات با کد تایید دو مرحله‌ای قطعی شده و قفل است. امضای دیجیتال: <span dir="ltr" style="font-family:monospace">${(o.gradesHash||'').slice(0,24)}…</span></div>`:
+      `<div class="flex" style="margin-top:14px">
+        <button class="btn btn-ghost" onclick="saveGrades(${o.id})">💾 ذخیره پیش‌نویس</button>
+        <button class="btn btn-primary" onclick="tempGrades(${o.id})">📤 ثبت موقت (نمایش به دانشجو)</button>
+        <button class="btn btn-green" onclick="openOtpModal(${o.id})">🔐 ارسال کد و نهایی‌سازی</button>
+      </div>
+      <div class="reasons" style="margin-top:8px">مسیر امن: پیش‌نویس → ثبت موقت (دانشجو می‌بیند و می‌تواند اعتراض کند) → کد ۵ رقمی پیامکی با اعتبار ۲ دقیقه → قطعی غیرقابل تغییر + امضای SHA-256.</div>`}
+    </div>`;
+}
+async function saveGrades(offId){
+  const inputs = [...document.querySelectorAll('[id^=g-]')];
+  const grades = inputs.map(i=>({enrollmentId:Number(i.id.slice(2)), gradeValue:Number(i.value)})).filter(g=>!Number.isNaN(g.gradeValue));
+  try{ const r = await API('/api/prof/grades/save',{method:'POST',body:JSON.stringify({offeringId:offId,grades})});
+    toast(`💾 ${faNum(r.saved)} نمره ذخیره شد — ${faNum(r.remaining)} بدون نمره`,'ok'); renderRoster(document.getElementById('mainArea'), offId);
+  }catch(e){toast(e.message,'err');}
+}
+async function tempGrades(offId){
+  try{ await saveGrades(offId); const r = await API('/api/prof/grades/temporary',{method:'POST',body:JSON.stringify({offeringId:offId})});
+    toast(`📤 ثبت موقت شد — بازه اعتراض دانشجو: ${faNum(r.appealWindowDays)} روز`,'ok'); renderRoster(document.getElementById('mainArea'), offId);
+  }catch(e){toast(e.message,'err');}
+}
+function modal(html){ closeOtp(); const m=document.createElement('div'); m.id='modalWrap'; m.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px'; m.innerHTML=`<div style="background:#fff;border-radius:16px;padding:24px;width:100%;max-width:460px;max-height:85vh;overflow:auto">${html}</div>`; document.body.appendChild(m); }
+function closeModal(){ document.getElementById('modalWrap')?.remove(); }
+let _otpTimer=null;
+async function openOtpModal(offId){
+  try{
+    const r = await API('/api/prof/grades/otp',{method:'POST',body:JSON.stringify({offeringId:offId})});
+    let secs = r.expiresInMinutes*60;
+    modal(`<h3 class="sec">🔐 کد تایید نهایی‌سازی نمرات</h3>
+      <div class="reasons">کد ۵ رقمی به موبایل شما پیامک شد (در این دمو: <a href="#" onclick="showSms();return false" style="color:var(--primary)">مشاهده پیامک شبیه‌سازی‌شده</a>). اعتبار: <b id="otpCount"></b></div>
+      <div id="smsBox" style="display:none" class="appeal-box"></div>
+      <input id="otpInput" dir="ltr" maxlength="5" placeholder="− − − − −" style="text-align:center;font-size:22px;letter-spacing:8px;margin:12px 0">
+      <div class="flex"><button class="btn btn-green" onclick="finalizeGrades(${offId})">تایید و قطعی کردن</button>
+      <button class="btn btn-ghost" onclick="closeModal()">انصراف</button></div>`);
+    _otpTimer = setInterval(()=>{ secs--; const el=document.getElementById('otpCount'); if(!el||secs<=0){clearInterval(_otpTimer); if(el)el.textContent='منقضی'; return;} el.textContent=faNum(secs)+' ثانیه'; },1000);
+    document.getElementById('otpInput').focus();
+  }catch(e){toast(e.message,'err');}
+}
+function closeOtp(){ if(_otpTimer){clearInterval(_otpTimer);_otpTimer=null;} }
+async function showSms(){
+  const ns = await API('/api/notifications');
+  const sms = ns.find(n=>n.eventCode==='GRADE_OTP_SENT');
+  const box=document.getElementById('smsBox'); if(!box) return;
+  box.style.display='block';
+  box.innerHTML = '📱 <b>پیامک (شبیه‌سازی):</b><br>' + (sms? sms.payload?.text||sms.payload?.vars?.text : 'اعلانی نیست');
+}
+async function finalizeGrades(offId){
+  const code = document.getElementById('otpInput')?.value;
+  try{
+    const r = await API('/api/prof/grades/finalize',{method:'POST',body:JSON.stringify({offeringId:offId,code})});
+    closeModal();
+    toast(`🔒 ${faNum(r.students)} نمره قطعی شد — امضای ${r.gradesHash}`,'ok');
+    if (r.termClosedFor?.length) toast(`📉 ترم ${faNum(r.termClosedFor.length)} دانشجو بسته شد (ارزیابی آیین‌نامه انجام شد)`,'');
+    renderRoster(document.getElementById('mainArea'), offId);
+  }catch(e){toast(e.message,'err');}
+}
+async function openEval(offeringId, title){
+  const f = await API('/api/student/eval-form?offeringId='+offeringId);
+  if (!f.open) return toast('دوره ارزشیابی باز نیست','err');
+  modal(`<h3 class="sec">فرم ارزشیابی گمنام — ${title}</h3>
+    <div class="reasons">پاسخ‌های شما بدون هیچ نشانی از هویتتان ذخیره می‌شود؛ استاد فقط میانگین و نظرات بی‌نام را می‌بیند.</div>
+    ${f.questions.map(q=>`<label style="margin-top:12px">${q.questionText}</label>
+      ${q.questionType==='TEXT' ? `<textarea id="ev-${q.id}" rows="2"></textarea>`
+      : `<select id="ev-${q.id}" style="width:100%">${q.options.map(op=>`<option value="${op.id}">${op.optionLabel}</option>`).join('')}</select>`}`).join('')}
+    <div class="flex" style="margin-top:14px"><button class="btn btn-primary" onclick="submitEval(${offeringId})">ثبت ارزشیابی و نمایش نمره</button>
+    <button class="btn btn-ghost" onclick="closeModal()">انصراف</button></div>`);
+}
+async function submitEval(offeringId){
+  const sels=[...document.querySelectorAll('[id^=ev-]')];
+  const answers=sels.map(el=>({questionId:Number(el.id.slice(3)), optionId:el.tagName==='SELECT'?Number(el.value):null, text:el.tagName==='TEXTAREA'?el.value:null}));
+  try{ await API('/api/student/eval-submit',{method:'POST',body:JSON.stringify({offeringId,answers})});
+    closeModal(); toast('✅ ارزشیابی ثبت شد — نمره شما آزاد شد','ok'); navigate('grades');
+  }catch(e){toast(e.message,'err');}
+}
+function openAppeal(enrollmentId, title){
+  modal(`<h3 class="sec">⚖️ اعتراض به نمره «${title}»</h3>
+    <div class="reasons">اعتراض مستقیماً به کارتابل استاد می‌رود و نمره تا پاسخ قفل می‌ماند (مهلت پاسخ قانونی است).</div>
+    <textarea id="appealMsg" rows="4" placeholder="متن اعتراض... مثلا: لطفا نمره تمرین دوم را بررسی بفرمایید"></textarea>
+    <div class="flex" style="margin-top:12px"><button class="btn btn-amber" onclick="sendAppeal(${enrollmentId})">ارسال اعتراض</button>
+    <button class="btn btn-ghost" onclick="closeModal()">انصراف</button></div>`);
+}
+async function sendAppeal(enrollmentId){
+  const msg=document.getElementById('appealMsg').value;
+  try{ await API('/api/student/appeal',{method:'POST',body:JSON.stringify({enrollmentId,message:msg})});
+    closeModal(); toast('⚖️ اعتراض ثبت شد و به استاد ارسال شد','ok'); navigate('grades');
+  }catch(e){toast(e.message,'err');}
+}
+function openRespond(appealId, decision){
+  modal(`<h3 class="sec">${decision==='ACCEPTED'?'✅ پذیرش اعتراض و اصلاح نمره':'⛔ رد اعتراض با پاسخ'}</h3>
+    ${decision==='ACCEPTED'?'<label>نمره جدید (۰ تا ۲۰)</label><input id="newGrade" type="number" min="0" max="20" step="0.25">':''}
+    <label>پاسخ به دانشجو (الزامی)</label><textarea id="respMsg" rows="3"></textarea>
+    <div class="flex" style="margin-top:12px"><button class="btn ${decision==='ACCEPTED'?'btn-green':'btn-red'}" onclick="sendRespond(${appealId},'${decision}')">ثبت پاسخ</button>
+    <button class="btn btn-ghost" onclick="closeModal()">انصراف</button></div>`);
+}
+async function sendRespond(appealId, decision){
+  const reply=document.getElementById('respMsg').value;
+  const ng=document.getElementById('newGrade')?.value;
+  try{ await API('/api/prof/appeals/respond',{method:'POST',body:JSON.stringify({appealId,decision,reply,newGrade:ng})});
+    closeModal(); toast('پاسخ ثبت شد','ok'); navigate('appeals');
+  }catch(e){toast(e.message,'err');}
+}
+
+
+/* ═══════════════ ماژول امتحانات — اقدامات ═══════════════ */
+const BLOCK_COLORS = ['#dbeafe','#dcfce7','#fef9c3','#f3e8ff','#fee2e2','#cffafe','#ffedd5','#e2e8f0'];
+async function genSeating(){
+  const strategy = document.getElementById('strategy').value;
+  try{ const r = await API('/api/admin/exams/generate',{method:'POST',body:JSON.stringify({strategy})});
+    toast(`✅ چیدمان «${{ALTERNATING:'یک‌درمیان',EVEN_ODD:'زوج/فرد',SEQUENTIAL:'عادی'}[strategy]}» برای ${r.sessions.length} جلسه تولید شد`,'ok');
+    navigate('exams');
+  }catch(e){toast(e.message,'err');}
+}
+async function finalizeAbs(){
+  try{ const r = await API('/api/admin/exams/finalize-absences',{method:'POST'});
+    toast(r.applied.length? `${r.applied.length} غیبت منقضی → سیاست آیین‌نامه اعمال شد` : 'غیبت منقضی‌شده‌ای نبود','ok');
+  }catch(e){toast(e.message,'err');}
+}
+let _absentSel = new Set();
+async function openSession(id){
+  _absentSel = new Set();
+  const d = await API('/api/admin/exams/session?id='+id);
+  const el = document.getElementById('sessionDetail');
+  const invStaff = await API('/api/me').then(()=>null).catch(()=>null);
+  el.innerHTML = `<div class="card">
+    <div class="flex" style="justify-content:space-between">
+      <h3 class="sec" style="margin:0">🗺 جلسه ${faNum(d.session.examDate)} ساعت <span dir="ltr">${d.session.startTime}</span></h3>
+      <button class="btn btn-ghost no-print" onclick="document.getElementById('sessionDetail').innerHTML=''">بستن</button>
+    </div>
+    <div class="legend">${d.blocks.map((b,i)=>`<span><i style="background:${BLOCK_COLORS[i%8]}"></i>${b.course} — استاد بلوک ${faNum(i+1)} (${faNum(b.count)} نفر، صندلی‌های ${faNum(b.seatRange)})</span>`).join('')}</div>
+    ${d.halls.map((h,hi)=>`
+      <div class="term-block">
+        <h4>${h.name} ${h.building?`— ${h.building}`:''} <span class="badge b-gray">${faNum(h.seats.length)} صندلی</span>
+          <span style="font-size:11px;color:var(--muted)">مراقب: ${d.invigilators.filter(v=>v.hallId===h.id).map(v=>`${v.name} (${v.role==='HEAD'?'سرپرست':'مراقب'})`).join('، ')||'تعیین نشده'}</span></h4>
+        <div class="seat-grid">${Array.from({length:h.capacity||h.seats.length},(_,i)=>{
+          const seat = h.seats.find(x=>x.seatNumber===i+1);
+          const bi = seat ? d.blocks.findIndex(b=>b.key===seat.blockKey) : -1;
+          if (!seat) return `<div class="seat" style="background:#f8fafc;color:#cbd5e1">${faNum(i+1)}<small>خالی</small></div>`;
+          return `<div class="seat ${seat.status==='ABSENT'?'absent':''}" id="seat-${seat.enrollmentId}"
+            style="background:${BLOCK_COLORS[bi%8]}" title="${seat.studentName} — ${seat.course}"
+            onclick="toggleAbsent(${seat.enrollmentId})"><b>${faNum(seat.seatNumber)}</b><small>${seat.studentName.split(' ')[0]}</small></div>`;
+        }).join('')}</div>
+      </div>`).join('')}
+    <div class="flex no-print" style="margin-top:12px">
+      <button class="btn btn-red" onclick="markAbsent(${id})">⛔ ثبت غیبت انتخاب‌شده‌ها (<span id="absCount">۰</span>)</button>
+      <button class="btn btn-ghost" onclick="window.print()">🖨 چاپ لیست مراقبت</button>
+      <span class="reasons">روی صندلی‌ها کلیک کنید تا برای ثبت غیبت انتخاب شوند (قرمز = غایب قطعی)</span>
+    </div>
+  </div>`;
+  el.scrollIntoView({behavior:'smooth'});
+}
+function toggleAbsent(enrollmentId){
+  const seat = document.getElementById('seat-'+enrollmentId);
+  if (seat.classList.contains('absent')) return; // غایب قبلی
+  if (_absentSel.has(enrollmentId)) { _absentSel.delete(enrollmentId); seat.classList.remove('selected-absent'); }
+  else { _absentSel.add(enrollmentId); seat.classList.add('selected-absent'); }
+  const c = document.getElementById('absCount'); if (c) c.textContent = faNum(_absentSel.size);
+}
+async function markAbsent(sessionId){
+  if (!_absentSel.size) return toast('صندلی‌ای انتخاب نشده','err');
+  try{ const r = await API('/api/admin/exams/absences',{method:'POST',body:JSON.stringify({sessionId,enrollmentIds:[..._absentSel]})});
+    toast(`⛔ ${faNum(r.marked)} غیبت ثبت شد — پیامک مهلت ۴۸ ساعته گواهی ارسال گردید`,'ok');
+    openSession(sessionId);
+  }catch(e){toast(e.message,'err');}
+}
+
+
+/* ═══════════════ حضور و غیاب — اقدامات ═══════════════ */
+function openRC(id){ window._rcId = id; navigate('attclass'); }
+async function renderRollCall(area, id){
+  const simExt = document.getElementById('simExt')?.checked;
+  let d;
+  try { d = await API('/api/prof/attendance/rollcall?id='+id + (simExt?'&x=1':''), {}); }
+  catch(e){
+    // باز کردن با شبیه‌سازی خارج از شبکه اگر فعال باشد
+    try { d = await API('/api/prof/attendance/rollcall?id='+id); } catch(e2){ window._rcId=null; toast(e2.message,'err'); return navigate('attclass'); }
+  }
+  area.innerHTML = `<div class="page-title"><button class="btn btn-ghost" onclick="window._rcId=null;navigate('attclass')">→ بازگشت</button>
+    لیست حضور و غیاب: ${d.session.title} — ${faNum(d.session.date)} <span dir="ltr">${d.session.start}–${d.session.end}</span>
+    ${d.session.inGrace?'<span class="badge b-amber">خارج از ساعت کلاس — ثبت با پرچم مشکوک</span>':''}</div>
+    <div class="card">
+      <table><tr><th>شماره دانشجویی</th><th>نام</th><th>غیبت‌های ترم</th><th>وضعیت</th></tr>
+      ${d.students.map(x=>`<tr>
+        <td dir="ltr" class="code-tag" style="display:inline-block">${x.studentCode}</td><td>${x.name}</td>
+        <td>${x.totalAbsents?`<span class="badge ${x.totalAbsents>=2?'b-red':'b-amber'}">${faNum(x.totalAbsents)}</span>`:'۰'}</td>
+        <td class="flex">
+          <label style="display:flex;gap:5px;align-items:center;font-size:12px;margin:0"><input type="radio" name="st-${x.enrollmentId}" value="PRESENT" checked onchange="markSt(${x.enrollmentId},'PRESENT')"> حاضر</label>
+          <label style="display:flex;gap:5px;align-items:center;font-size:12px;margin:0"><input type="radio" name="st-${x.enrollmentId}" value="ABSENT" onchange="markSt(${x.enrollmentId},'ABSENT')"> غایب</label>
+          <label style="display:flex;gap:5px;align-items:center;font-size:12px;margin:0"><input type="radio" name="st-${x.enrollmentId}" value="LATE" onchange="markSt(${x.enrollmentId},'LATE')"> تاخیر</label>
+        </td></tr>`).join('')}</table>
+      <div class="flex" style="margin-top:14px">
+        <button class="btn btn-green" onclick="submitRC(${id})">📝 ثبت نهایی حضور و غیاب</button>
+        <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);margin:0">
+          <input type="checkbox" id="simExt" style="width:15px;height:15px"> شبیه‌سازی اتصال خارج از دانشگاه (دموی حصار شبکه)
+        </label>
+      </div>
+      <div class="reasons" style="margin-top:8px">با ثبت نهایی: جلسه «برگزارشده» می‌شود، حضور شما به‌صورت رویدادمحور گواهی می‌گردد و IP/دستگاه شما ثبت می‌شود.</div>
+    </div>`;
+}
+const _rc = {};
+function markSt(enrollmentId, status){ _rc[enrollmentId] = status; }
+async function submitRC(sessionId){
+  const simExt = document.getElementById('simExt')?.checked;
+  const attendance = Object.keys(_rc).length
+    ? Object.entries(_rc).map(([enrollmentId, status]) => ({ enrollmentId: Number(enrollmentId), status }))
+    : []; // پیش‌فرض: همه حاضر (رادیو پیش‌فرض)
+  if (!attendance.length) return toast('وضعیتی انتخاب نشده','err');
+  try{
+    const r = await API('/api/prof/attendance/submit',{method:'POST',body:JSON.stringify({sessionId,attendance,simulateExternal:simExt})});
+    toast(r.message,'ok'); window._rcId=null; navigate('attclass');
+  }catch(e){toast(e.message,'err');}
+}
+async function signDoc(docId){
+  try{
+    await API('/api/prof/documents/otp',{method:'POST',body:JSON.stringify({documentId:docId})});
+    modal(`<h3 class="sec">✍️ امضای الکترونیکی</h3>
+      <div class="reasons">کد ۵ رقمی به موبایل شما پیامک شد (شبیه‌سازی: <a href="#" onclick="showSms();return false" style="color:var(--primary)">مشاهده پیامک</a>). زمان، IP و دستگاه شما به‌عنوان مهر دیجیتال ثبت می‌شود.</div>
+      <div id="smsBox" style="display:none" class="appeal-box"></div>
+      <input id="docOtp" dir="ltr" maxlength="5" placeholder="− − − − −" style="text-align:center;font-size:22px;letter-spacing:8px;margin:12px 0">
+      <div class="flex"><button class="btn btn-green" onclick="confirmSign(${docId})">تایید و امضا</button>
+      <button class="btn btn-ghost" onclick="closeModal()">انصراف</button></div>`);
+  }catch(e){toast(e.message,'err');}
+}
+async function confirmSign(docId){
+  const code = document.getElementById('docOtp')?.value;
+  try{ const r = await API('/api/prof/documents/sign',{method:'POST',body:JSON.stringify({documentId:docId,code})});
+    closeModal(); toast(`✅ امضا ثبت شد — مهر دیجیتال ${r.hash}`,'ok'); navigate('docs');
+  }catch(e){toast(e.message,'err');}
+}
+async function runCorrelate(){
+  try{ const r = await API('/api/admin/attendance/correlate',{method:'POST',body:'{}'});
+    const groups = (r.applied||[]).reduce((a,x)=>{a[x.applied]=(a[x.applied]||0)+1;return a;},{});
+    toast('🔄 '+ (Object.entries(groups).map(([k,v])=>({CHAIN_CONTINUITY:'زنجیره',GATE_FINGERPRINT:'گیت',NEEDS_REVIEW:'بازبینی',NO_PROFESSOR:'بدون استاد'}[k]||k)+':'+faNum(v)).join('، ')||'موردی نبود'),'ok');
+    navigate('attrpt');
+  }catch(e){toast(e.message,'err');}
+}
+async function genTermSessions(){
+  try{ const r = await API('/api/admin/attendance/generate-sessions',{method:'POST',body:'{}'});
+    toast(r.created? `📅 ${faNum(r.created)} جلسه جدید تولید شد`:'همه کلاس‌ها قبلاً جلسه دارند','ok');
+  }catch(e){toast(e.message,'err');}
+}
+async function genContracts(){
+  try{ const r = await API('/api/admin/attendance/generate-contracts',{method:'POST',body:'{}'});
+    toast(r.created? `📄 ${faNum(r.created)} قرارداد صادر و به کارتابل اساتید رفت`:'قرارداد همه اساتید موجود است','ok');
+  }catch(e){toast(e.message,'err');}
+}
+async function simPunch(){
+  const code = prompt('کد پرسنلی استاد (مثلاً F-101 برای رضایی / F-103 برای کاظمی):','F-101');
+  if (!code) return;
+  try{ const r = await API('/api/integrations/fingerprint/punch',{method:'POST',body:JSON.stringify({token:'gate-demo-token',staffCode:code})});
+    toast('🖐 پانچ ثبت شد: '+r.staff+' — '+r.punchTime,'ok'); navigate('attrpt');
+  }catch(e){toast(e.message,'err');}
+}
+async function attReview(sessionId, decision){
+  if (decision==='ABSENT' && !confirm('غیبت استاد در این جلسه ثبت شود؟ پیامک برای استاد ارسال می‌شود.')) return;
+  try{ await API('/api/admin/attendance/review-act',{method:'POST',body:JSON.stringify({sessionId,decision})});
+    toast(decision==='HELD'?'برگزاری تایید شد (MANUAL_ADMIN)':'غیبت ثبت شد','ok');
+    if (decision==='ABSENT'){
+      const sessionDate = prompt('تاریخ کلاس جبرانی (YYYY-MM-DD) — خالی = بدون جبرانی:');
+      if (sessionDate){
+        const startTime = prompt('ساعت شروع (HH:MM):','10:00')||'10:00';
+        const endTime = prompt('ساعت پایان (HH:MM):','12:00')||'12:00';
+        try{ await API('/api/admin/attendance/makeup',{method:'POST',body:JSON.stringify({sessionId,sessionDate,startTime,endTime})});
+          toast('کلاس جبرانی تعریف شد ✓','ok'); }catch(e){toast(e.message,'err');}
+      }
+    }
+    navigate('attrpt');
+  }catch(e){toast(e.message,'err');}
+}
+
+
+/* ═══════════════ حق‌التدریس — اقدامات ═══════════════ */
+async function computePayroll(){
+  try{ const r = await API('/api/admin/payroll/compute',{method:'POST',body:'{}'});
+    toast(`🧮 فیش ${faNum(r.computed)} استاد محاسبه شد`,'ok'); navigate('payroll');
+  }catch(e){toast(e.message,'err');}
+}
+async function payMid(staffId){
+  try{ const r = await API('/api/admin/payroll/midterm',{method:'POST',body:JSON.stringify({staffId})});
+    toast(`💳 علی‌الحساب ${fa(r.amount)} ریال ثبت شد`,'ok'); navigate('payroll');
+  }catch(e){toast(e.message,'err');}
+}
+async function settlePay(staffId){
+  try{ const r = await API('/api/admin/payroll/settle',{method:'POST',body:JSON.stringify({staffId})});
+    toast(`✅ تسویه ${fa(r.amount)} ریال انجام شد`,'ok'); navigate('payroll');
+  }catch(e){toast(e.message,'err');}
+}
+async function downloadBatch(){
+  try{
+    const r = await fetch('/api/admin/payroll/export',{headers:{Authorization:'Bearer '+TOKEN}});
+    if(!r.ok) throw new Error((await r.json()).error||'خطا');
+    const txt = await r.text();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([txt],{type:'text/csv;charset=utf-8'}));
+    a.download = 'afagh-payroll-batch.csv'; a.click();
+    toast('⬇️ فایل واریز دسته‌جمعی دانلود شد','ok');
+  }catch(e){toast(e.message,'err');}
+}
+
+
+
+
+
+
+/* ═══════════════ بایگانی/ثبت‌نام غیرحضوری — اقدامات ═══════════════ */
+async function upDoc(code, input){
+  const f = input.files[0]; if(!f) return;
+  const b64 = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result.split(',')[1]); fr.readAsDataURL(f); });
+  try{ await API('/api/onboarding/upload',{method:'POST',body:JSON.stringify({typeCode:code, fileName:f.name, mime:f.type||'image/svg+xml', dataBase64:b64})});
+    toast('📤 مدرک بارگذاری شد — در انتظار اصالت‌سنجی','ok'); navigate('onboard');
+  }catch(e){toast(e.message,'err');}
+}
+async function onbPay(){
+  try{ const r = await API('/api/onboarding/pay',{method:'POST',body:'{}'});
+    toast(`💳 پرداخت ${fa(r.amount)} ریالی ثبت شد`,'ok'); navigate('onboard');
+  }catch(e){toast(e.message,'err');}
+}
+async function onbKyc(sim){
+  try{ const r = await API('/api/onboarding/kyc',{method:'POST',body:JSON.stringify({simulate:sim})});
+    toast(`🎬 شباهت ${faNum(r.score)}٪ — ${r.ai==='AUTO_APPROVED'?'تایید خودکار':r.ai==='MANUAL_REVIEW'?'بررسی چشمی':'رد'}`, r.ai==='REJECTED'?'err':'ok');
+    navigate('onboard');
+  }catch(e){toast(e.message,'err');}
+}
+async function kycReview(id, ok){
+  try{ await API('/api/admin/archive/kyc-review',{method:'POST',body:JSON.stringify({kycId:id, approve:ok})});
+    toast(ok?'✅ چهره تایید شد':'رد شد','ok'); navigate('archive');
+  }catch(e){toast(e.message,'err');}
+}
+async function docReview(id, decision, note){
+  try{ await API('/api/admin/archive/doc-review',{method:'POST',body:JSON.stringify({docId:id, decision, note})});
+    toast(decision==='VERIFIED'?'✅ اصالت مدرک تایید شد':'مدرک رد شد','ok'); navigate('archive');
+  }catch(e){toast(e.message,'err');}
+}
+async function viewDoc(id){
+  try{
+    const r = await fetch('/api/files/'+id+'?token='+TOKEN);
+    if(!r.ok) throw new Error((await r.json()).error);
+    const wm = decodeURIComponent(r.headers.get('X-Watermark')||'');
+    const url = URL.createObjectURL(await r.blob());
+    showDocModal(url, wm);
+  }catch(e){toast(e.message,'err');}
+}
+function showDocModal(url, wm){
+  let m = document.getElementById('docModal');
+  if(!m){ m = document.createElement('div'); m.id='docModal';
+    m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99;display:flex;align-items:center;justify-content:center';
+    m.onclick=()=>m.remove(); document.body.appendChild(m); }
+  m.innerHTML = `<div style="position:relative;background:#fff;border-radius:12px;padding:14px;max-width:640px" onclick="event.stopPropagation()">
+    <img src="${url}" style="max-width:600px;max-height:420px;display:block;border-radius:8px">
+    <div style="position:absolute;inset:14px;display:flex;align-items:center;justify-content:center;pointer-events:none">
+      <div style="transform:rotate(-22deg);font-size:20px;color:rgba(220,38,38,.45);font-weight:700;border:3px solid rgba(220,38,38,.4);padding:10px 22px;border-radius:10px">${wm}</div></div>
+    <div class="reasons" style="text-align:center;margin-top:8px">واترمارک: ${wm} — در صورت نشت فایل، دارندهٔ دانلود مشخص است</div></div>`;
+}
+async function approveDossier(id){
+  try{ const r = await API('/api/admin/archive/approve',{method:'POST',body:JSON.stringify({stagingId:id})});
+    toast(`🎓 شماره دانشجویی صادر شد: ${r.studentCode}`,'ok'); navigate('archive');
+  }catch(e){toast(e.message,'err');}
+}
+async function rejectDossier(id){
+  const note = prompt('علت رد پرونده:') || 'مدارک مغایر';
+  try{ await API('/api/admin/archive/approve',{method:'POST',body:JSON.stringify({stagingId:id, decision:'reject', note})});
+    toast('پرونده رد شد','ok'); navigate('archive');
+  }catch(e){toast(e.message,'err');}
+}
+async function viewDossier(){
+  const q = document.getElementById('arch_q').value.trim();
+  if(!q) return toast('کد ملی وارد کنید','err');
+  const box = document.getElementById('dossier_box');
+  try{
+    const d = await API('/api/admin/archive/dossier?q='+encodeURIComponent(q));
+    box.innerHTML = `<div class="reasons" style="margin-bottom:8px"><b>${d.user.firstName} ${d.user.lastName}</b> — ${d.user.nationalCode}
+      ${d.student?`| دانشجو ${d.student.studentCode} (${d.student.major})`:''}${d.staff?`| پرسنل ${d.staff.staffCode} (${d.staff.staffType})`:''}</div>
+      <div class="grid" style="grid-template-columns:1fr 1fr">
+      ${d.folders.map(f=>`<div class="card" style="padding:10px"><b>📁 ${f.title}</b>
+        ${f.docs.length?f.docs.map(x=>`<div class="flex" style="justify-content:space-between;padding:5px 0;border-bottom:1px dashed var(--line)">
+          <span>${x.verificationStatus==='VERIFIED'?'🟢':x.verificationStatus==='REJECTED'?'🔴':'🟡'} ${x.typeTitle||x.fileName}</span>
+          <button class="btn btn-ghost" style="padding:3px 10px;font-size:11px" onclick="viewDoc(${x.id})">👁</button></div>`).join(''):'<div class="reasons">—</div>'}
+        ${f.title==='اداری/مالی'&&d.eDocs.length?'<div style="margin-top:6px">'+d.eDocs.map(e=>`<div class="reasons">📎 ${e.title} — ${e.signatureStatus==='SIGNED'?'امضاشده ✓':'در انتظار امضا'}</div>`).join('')+'</div>':''}
+      </div>`).join('')}</div>`;
+  }catch(e){ box.innerHTML = `<div class="card" style="border-right:4px solid var(--red)"><b style="color:var(--red)">${e.message}</b></div>`; }
+}
+
+/* ═══════════════ نظام وظیفه (سخا) — اقدامات ═══════════════ */
+async function sakhaAct(action, recordId){
+  try{ const r = await API('/api/admin/sakha/'+action,{method:'POST',body:JSON.stringify({recordId})});
+    toast(action==='approve-initial'?`✅ معافیت صادر شد — کد ${r.trackingCode} تا ${r.exemptionEndDate}`:
+          action==='send-extension'?`📤 درخواست تمدید به ناجا ارسال شد (${r.trackingCode})`:
+          '✅ ابطال به ناجا گزارش شد','ok'); navigate('sakha');
+  }catch(e){toast(e.message,'err');}
+}
+async function sakhaPay(code){
+  try{ const r = await API('/api/admin/sakha/simulate-payment',{method:'POST',body:JSON.stringify({studentCode:code})});
+    toast(`✅ پرداخت سخا تایید شد — معافیت تا ${r.newExpiry}`,'ok'); navigate('sakha');
+  }catch(e){toast(e.message,'err');}
+}
+async function sakhaCommission(){
+  const code = document.getElementById('sk_commission').value.trim();
+  if(!code) return toast('کد دانشجویی را وارد کنید','err');
+  try{
+    const stu = await API('/api/admin/sakha/simulate-commission',{method:'POST',body:JSON.stringify({studentCode:code})});
+    toast('🧪 پیش‌نویس تمدید در صندوق ۲ قرار گرفت','ok'); navigate('sakha');
+  }catch(e){toast(e.message,'err');}
+}
+
+/* ═══════════════ معرفی به استاد — اقدامات ═══════════════ */
+async function drCheck(){
+  const box = document.getElementById('dr_elg');
+  try{
+    const e = await API('/api/admin/dr/check?studentCode='+encodeURIComponent(document.getElementById('dr_code').value.trim()));
+    const d = window._drMeta;
+    box.innerHTML = `
+      <div class="grid grid-4">
+        <div class="stat"><div class="lbl">دانشجو</div><div class="val" style="font-size:15px">${e.student.name}</div><div class="hint">${e.student.code} — ${e.student.level}</div></div>
+        <div class="stat"><div class="lbl">واحد باقیمانده</div><div class="val">${e.remainingUnits!=null?faNum(e.remainingUnits):'—'}</div><div class="hint">گذرانده: ${faNum(e.passedUnits)}</div></div>
+        <div class="stat"><div class="lbl">آستانهٔ فارغ‌التحصیلی</div><div class="val" style="color:${e.graduating?'var(--green)':'var(--red)'}">${e.graduating?'✓ بله':'✗ خیر'}</div></div>
+        <div class="stat"><div class="lbl">مصرف سقف معرفی</div><div class="val">${faNum(e.drUsed.courses)}/${faNum(e.drUsed.limitCourses)} درس</div><div class="hint">${faNum(e.drUsed.units)}/${faNum(e.drUsed.limitUnits)} واحد</div></div>
+      </div>
+      ${e.eligible?`
+      <h3 class="sec" style="margin-top:12px">✅ شرایط فراهم — گام ۲ و ۳: انتخاب درس/استاد و مهلت نمره</h3>
+      <div class="flex" style="flex-wrap:wrap">
+        <select id="dr_course" style="width:auto;max-width:260px">${d.courses.map(c=>`<option value="${c.id}">${c.code} — ${c.title} (${faNum(c.units)} واحد)</option>`).join('')}</select>
+        <select id="dr_prof" style="width:auto">${d.professors.map(p=>`<option value="${p.id}">${p.name} (${p.rank||'—'})</option>`).join('')}</select>
+        <input id="dr_days" type="number" value="20" min="1" max="120" style="width:110px" title="مهلت ثبت نمره (روز)">
+        <button class="btn btn-primary" onclick="drCreate()">🎯 ثبت معرفی به استاد (۳ کلیک)</button>
+      </div>`:
+      `<div class="card" style="border-right:4px solid var(--red);margin-top:10px"><b style="color:var(--red)">⛔ ثبت مجاز نیست:</b><ul style="margin:6px 18px 0">${e.reasons.map(r=>`<li>${r}</li>`).join('')}</ul></div>`}`;
+  }catch(err){ box.innerHTML = `<div class="card" style="border-right:4px solid var(--red)"><b style="color:var(--red)">⛔ ${err.message}</b></div>`; }
+}
+async function drCreate(){
+  try{
+    const r = await API('/api/admin/dr/create',{method:'POST',body:JSON.stringify({
+      studentCode: document.getElementById('dr_code').value.trim(),
+      courseId: document.getElementById('dr_course').value,
+      staffId: document.getElementById('dr_prof').value,
+      deadlineDays: document.getElementById('dr_days').value })});
+    toast(`🎯 ثبت شد — کلاس ایزوله #${faNum(r.offeringId)} | مهلت نمره: ${faNum(r.deadline)} | بدهی: ${fa(r.billed)} ریال`,'ok');
+    navigate('dr');
+  }catch(e){toast(e.message,'err');}
+}
+
+/* ═══════════════ فرمول‌ساز مالی — اقدامات ═══════════════ */
+async function savePayRule(){
+  const g = id => document.getElementById(id).value.trim();
+  try{
+    await API('/api/admin/payrules/save',{method:'POST',body:JSON.stringify({
+      offeringType:g('rf_type')||null, professorRole:g('rf_role')||null, academicRank:null,
+      multiplierUnit:g('rf_unit')||null, multiplierPerStudent:g('rf_perst')||null, flatFee:g('rf_flat')||null, title:g('rf_title')||null })});
+    toast('✅ فرمول ذخیره شد — «محاسبهٔ ترم» را دوباره اجرا کنید','ok'); navigate('payrules');
+  }catch(e){toast(e.message,'err');}
+}
+async function delPayRule(id){
+  try{ await API('/api/admin/payrules/delete',{method:'POST',body:JSON.stringify({id})});
+    toast('فرمول حذف شد','ok'); navigate('payrules');
+  }catch(e){toast(e.message,'err');}
+}
+async function issueAppts(){
+  try{ const r = await API('/api/admin/appointments/issue',{method:'POST',body:'{}'});
+    toast(`📤 ابلاغیهٔ ${faNum(r.issued)} استاد صادر شد (کارتابل اسناد — امضای OTP)`,'ok');
+  }catch(e){toast(e.message,'err');}
+}
+async function showEstimate(staffId){
+  const box = document.getElementById('est_box');
+  if(!staffId){ box.innerHTML=''; return; }
+  const d = await API('/api/admin/payrules/estimate?staffId='+staffId);
+  box.innerHTML = `<table><tr><th>فعالیت</th><th>نقش</th><th>فرمول</th><th>ریال</th></tr>
+    ${d.rows.map(r=>`<tr><td><span class="code-tag">${r.code}</span> ${r.title}<div class="reasons">${r.type}</div></td><td>${r.role}</td>
+      <td class="reasons">${r.formula}</td><td><b>${fa(r.amount)}</b></td></tr>`).join('')}</table>
+    <div style="margin-top:8px">جمع برآورد فرمولی: <b style="color:var(--green)">${fa(d.total)} ریال</b>
+    ${d.regularCount?`<span class="reasons">(+${faNum(d.regularCount)} درس عادی طبق ضرایب استاندارد — نرخ ${fa(d.baseRate)})</span>`:''}</div>`;
+}
+
+/* ═══════════════ نمودارهای BI (SVG بومی — بدون کتابخانهٔ خارجی) ═══════════════ */
+function radarSVG(axes){
+  const N = axes.length, R = 104, cx = 160, cy = 148;
+  const pt = (i, r) => { const a = -Math.PI/2 + i*2*Math.PI/N; return [ (cx + r*Math.cos(a)).toFixed(1), (cy + r*Math.sin(a)).toFixed(1) ]; };
+  let g = '';
+  for (let v = 1; v <= 5; v++) g += `<polygon points="${axes.map((_,i)=>pt(i, R*v/5).join(',')).join(' ')}" fill="none" stroke="#e2e8f0"/>`;
+  axes.forEach((a,i)=>{
+    const [x,y] = pt(i,R); g += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="#e2e8f0"/>`;
+    const [lx,ly] = pt(i,R+26);
+    g += `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="11" fill="#334155">${a.label}</text>`;
+    g += `<text x="${lx}" y="${Number(ly)+14}" text-anchor="middle" font-size="10.5" font-weight="bold" fill="#0284c7">${faNum(a.mine)}</text>`;
+  });
+  const poly = key => axes.map((a,i)=>pt(i, R*Math.min(a[key],5)/5).join(',')).join(' ');
+  const dots = axes.map((a,i)=>{const [x,y]=pt(i, R*Math.min(a.mine,5)/5);return `<circle cx="${x}" cy="${y}" r="3.5" fill="#0284c7"/>`;}).join('');
+  return `<svg viewBox="0 0 320 316" style="max-width:330px;width:100%">
+    ${g}
+    <polygon points="${poly('dept')}" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5 4"/>
+    <polygon points="${poly('mine')}" fill="rgba(2,132,199,.22)" stroke="#0284c7" stroke-width="2"/>
+    ${dots}</svg>`;
+}
+function trendSVG(tr, threshold){
+  if(!tr.length) return '<div class="reasons">داده‌ای نیست.</div>';
+  const W=560,H=210,P=42, min=2.5, max=5;
+  const xs = tr.map((_,i)=> P + i*(W-2*P)/Math.max(tr.length-1,1));
+  const y = v => H-P - (v-min)/(max-min)*(H-2*P);
+  const pts = tr.map((t,i)=>xs[i]+','+y(t.score).toFixed(1)).join(' ');
+  const grid = [3,4,5].map(v=>`<line x1="${P}" y1="${y(v)}" x2="${W-P}" y2="${y(v)}" stroke="#e2e8f0"/><text x="${W-P+6}" y="${y(v)+4}" font-size="10" fill="#94a3b8">${faNum(v)}</text>`).join('');
+  const thr = (threshold>=min&&threshold<=max)?`<line x1="${P}" y1="${y(threshold)}" x2="${W-P}" y2="${y(threshold)}" stroke="#dc2626" stroke-dasharray="6 4" stroke-width="1.5"/><text x="${P+4}" y="${y(threshold)-5}" font-size="10" fill="#dc2626">آستانهٔ بحرانی ${faNum(threshold)}</text>`:'';
+  const labels = tr.map((t,i)=>`<text x="${xs[i]}" y="${H-P+22}" text-anchor="middle" font-size="10.5" fill="#475569">${(t.term||'').replace('نیمسال ','')}</text>
+    <text x="${xs[i]}" y="${y(t.score)-12}" text-anchor="middle" font-size="12" font-weight="bold" fill="${t.score<threshold?'#dc2626':'#0284c7'}">${faNum(t.score)}</text>`).join('');
+  const dots = tr.map((t,i)=>`<circle cx="${xs[i]}" cy="${y(t.score)}" r="5" fill="${t.score<threshold?'#dc2626':'#0284c7'}"/>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%">${grid}${thr}
+    <polyline points="${pts}" fill="none" stroke="#0284c7" stroke-width="2.5"/>${dots}${labels}</svg>`;
+}
+function wordCloudHTML(words){
+  if(!words.length) return '<div class="reasons">نظر تشریحی ثبت نشده.</div>';
+  const mx = words[0].c, pal = ['#0284c7','#7c3aed','#059669','#d97706','#dc2626','#0891b2','#be185d'];
+  return words.map((w,i)=>`<span style="font-size:${(13+24*Math.sqrt(w.c/mx)).toFixed(0)}px;color:${pal[i%pal.length]};margin:3px 12px;display:inline-block;font-weight:${w.c>=mx*0.6?'700':'400'}">${w.w} <small style="opacity:.5;font-size:11px">${faNum(w.c)}</small></span>`).join('');
+}
+
+/* ═══════════════ شروع ═══════════════ */
+if (TOKEN) boot(); else document.getElementById('loginPage').style.display='flex';
+</script>
+</body>
+</html>
