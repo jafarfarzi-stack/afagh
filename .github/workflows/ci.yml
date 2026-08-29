@@ -1,0 +1,28 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  afagh-next:
+    name: کالبد — تایپ و بیلد
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: afagh-next } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm, cache-dependency-path: afagh-next/package-lock.json }
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run build   # بدون نیاز به سرویس‌ها (اتصال DB تنبل است)
+
+  afagh-erp:
+    name: فاز صفر — سلامت کد
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: afagh-erp } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm, cache-dependency-path: afagh-erp/package-lock.json }
+      - run: npm ci
+      - run: find src -name '*.js' -exec node --check {} \;
