@@ -8,6 +8,7 @@ export default function StudentNav() {
 
   const nav = [
     { href: '/student', label: 'کارنامه کل تحصیلی', icon: '📄', exact: true },
+    { href: '/student/virtual-classes', label: 'کلاس مجازی (BBB)', icon: '💻', exact: false },
     { href: '/student/enroll', label: 'انتخاب واحد', icon: '🛒', exact: false },
     { href: '/student/schedule', label: 'برنامه هفتگی', icon: '📅', exact: false },
     { href: '/student/exam-card', label: 'کارت آزمون و ارزشیابی', icon: '📇', exact: false },

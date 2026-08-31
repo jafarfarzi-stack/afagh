@@ -3,6 +3,8 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { academic_terms, course_offerings, courses, payroll_statements, professor_term_contracts } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
+import VirtualClassroomWidget from '@/components/VirtualClassroomWidget';
+import { getTodayLiveClasses } from '@/lib/moodle-bbb';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +16,8 @@ export default async function ProfessorHome() {
   const user = await requireRole(['PROFESSOR']);
   const me = await getStaffByUser(user.id);
   if (!me) return <p className="card">پروندهٔ هیئت علمی یافت نشد.</p>;
+
+  const liveSessions = await getTodayLiveClasses();
 
   const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
   const classes = term
@@ -85,6 +89,12 @@ export default async function ProfessorHome() {
           </div>
         </div>
       </div>
+
+      {/* Virtual Classroom Widget (Moodle & BigBlueButton) */}
+      <VirtualClassroomWidget
+        user={{ id: user.id, name: user.name || 'دکتر جمیل احمدی', role: 'PROFESSOR' }}
+        initialSessions={liveSessions}
+      />
 
       {/* Quick Action Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">

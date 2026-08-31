@@ -16,7 +16,9 @@ export const roles = pgTable('roles', {
 export const permissions = pgTable('permissions', {
   id: serial('id').primaryKey(),
   code: text('code').notNull().unique(),
-  title: text('title').notNull()
+  title: text('title').notNull(),
+  category: varchar('category', { length: 50 }).default('عمومی'),
+  description: varchar('description', { length: 255 })
 });
 
 export const role_permissions = pgTable('role_permissions', {
@@ -995,4 +997,41 @@ export const instructor_attendance_days = pgTable('instructor_attendance_days', 
   insuranceCalculated: integer('insuranceCalculated').default(1),
   syncedWithTamin: integer('syncedWithTamin').default(0),
   createdAt: timestamp('createdAt').defaultNow()
+});
+
+// ============================================================================
+// مدیریت سطوح دسترسی پویا و مجوزهای ریزدانه (Dynamic RBAC Matrix)
+// ============================================================================
+
+export const staff_roles = pgTable('staff_roles', {
+  id: serial('id').primaryKey(),
+  staffId: integer('staffId').notNull().references(() => staff.id),
+  roleId: integer('roleId').notNull().references(() => roles.id)
+});
+
+// ============================================================================
+// سامانه آموزش مجازی و اتصال به مودل و بیگ‌بلوباتن (Moodle & BigBlueButton)
+// ============================================================================
+
+export const virtual_classrooms = pgTable('virtual_classrooms', {
+  id: serial('id').primaryKey(),
+  courseOfferingId: integer('courseOfferingId').notNull(),
+  bbbMeetingId: varchar('bbbMeetingId', { length: 100 }).notNull().unique(),
+  meetingName: varchar('meetingName', { length: 255 }).notNull(),
+  moderatorPw: varchar('moderatorPw', { length: 50 }).notNull(),
+  attendeePw: varchar('attendeePw', { length: 50 }).notNull(),
+  isRunning: integer('isRunning').default(0),
+  currentAttendanceCount: integer('currentAttendanceCount').default(0),
+  moodleCourseId: integer('moodleCourseId'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+export const virtual_class_recordings = pgTable('virtual_class_recordings', {
+  id: serial('id').primaryKey(),
+  classroomId: integer('classroomId').notNull().references(() => virtual_classrooms.id),
+  sessionTitle: varchar('sessionTitle', { length: 255 }).notNull(),
+  recordingUrl: varchar('recordingUrl', { length: 500 }).notNull(),
+  durationMinutes: integer('durationMinutes').notNull().default(90),
+  recordedAt: timestamp('recordedAt').defaultNow(),
+  viewsCount: integer('viewsCount').default(0)
 });

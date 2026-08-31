@@ -51,6 +51,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/short-courses" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/40 border border-indigo-700/50 transition-colors whitespace-nowrap">
             🏆 آموزش‌های آزاد و گواهینامه‌ها
           </Link>
+          <Link href="/admin/permissions" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/60 border border-indigo-700/50 transition-colors whitespace-nowrap">
+            🛡️ ماتریس دسترسی‌ها (RBAC)
+          </Link>
         </nav>
       </header>
       <main className="mx-auto max-w-6xl p-3 sm:p-5 pb-16">{children}</main>
