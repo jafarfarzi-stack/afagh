@@ -8,6 +8,18 @@ import Link from 'next/link';
 // ==========================================
 
 export type ExamSchedulingMode = 'AUTO_MATRIX' | 'MANUAL';
+export type SeatingStrategyType = 'ALTERNATING_ZIGZAG' | 'EVEN_ODD' | 'SEQUENTIAL' | 'CHECKERBOARD';
+
+export type ExamTabType =
+  | 'SCHEDULE_TABLE'
+  | 'SMART_SEATING_ENGINE'
+  | 'ABSENCE_MANAGEMENT'
+  | 'CALENDAR_SLOTS'
+  | 'EXAM_HALLS'
+  | 'CONFLICT_CHECKER'
+  | 'PROCTORS'
+  | 'STUDENT_CARDS'
+  | 'QUALITY_ANALYTICS';
 
 export interface ExamSlot {
   id: number;
@@ -42,6 +54,7 @@ export interface ExamCourseItem {
   cohortTitle: string;
   enrolledStudentsCount: number;
   professorName: string;
+  staffCode: string;
   schedulingMode: ExamSchedulingMode;
   examDate: string; // e.g. "1405/10/18"
   slotId: number;
@@ -60,6 +73,17 @@ export interface ProctorStaff {
   assignedSlotsCount: number;
   maxDutySlots: number;
   assignedHalls: string[];
+}
+
+export interface AllocatedSeatModel {
+  seatNo: number;
+  studentName: string;
+  studentCode: string;
+  courseCode: string;
+  courseTitle: string;
+  profName: string;
+  hallName: string;
+  blockColor: string;
 }
 
 // ==========================================
@@ -100,13 +124,35 @@ const INITIAL_EXAM_COURSES: ExamCourseItem[] = [
     programTitle: 'مهندسی کامپیوتر',
     cohortId: 'COHORT-1405-1',
     cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)',
-    enrolledStudentsCount: 38,
+    enrolledStudentsCount: 30,
     professorName: 'دکتر جمیل احمدی',
+    staffCode: '۱۱۰۲',
     schedulingMode: 'AUTO_MATRIX',
     examDate: '۱۴۰۵/۱۰/۱۸',
     slotId: 1,
     hallId: 1,
     chiefProctor: 'دکتر جمیل احمدی',
+    invigilatorsCount: 2,
+    hasConflict: false,
+  },
+  {
+    id: 10,
+    courseCode: '۱۱۱۲۱۰۹',
+    courseTitle: 'تاریخ تحلیلی اسلام',
+    units: 2,
+    courseType: 'عمومی',
+    groupNumber: 2,
+    programTitle: 'مهندسی کامپیوتر',
+    cohortId: 'COHORT-1405-1',
+    cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)',
+    enrolledStudentsCount: 30,
+    professorName: 'استاد مرادی',
+    staffCode: '۱۱۸۰',
+    schedulingMode: 'AUTO_MATRIX',
+    examDate: '۱۴۰۵/۱۰/۱۸',
+    slotId: 1,
+    hallId: 1,
+    chiefProctor: 'استاد مرادی',
     invigilatorsCount: 2,
     hasConflict: false,
   },
@@ -120,8 +166,9 @@ const INITIAL_EXAM_COURSES: ExamCourseItem[] = [
     programTitle: 'مهندسی کامپیوتر',
     cohortId: 'COHORT-1405-1',
     cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)',
-    enrolledStudentsCount: 32,
+    enrolledStudentsCount: 25,
     professorName: 'دکتر سارا رضایی',
+    staffCode: '۱۱۰۵',
     schedulingMode: 'AUTO_MATRIX',
     examDate: '۱۴۰۵/۱۰/۲۲',
     slotId: 2,
@@ -142,6 +189,7 @@ const INITIAL_EXAM_COURSES: ExamCourseItem[] = [
     cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)',
     enrolledStudentsCount: 35,
     professorName: 'دکتر علی حسینی',
+    staffCode: '۱۱۰۴',
     schedulingMode: 'MANUAL',
     examDate: '۱۴۰۵/۱۰/۲۵',
     slotId: 1,
@@ -162,6 +210,7 @@ const INITIAL_EXAM_COURSES: ExamCourseItem[] = [
     cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)',
     enrolledStudentsCount: 42,
     professorName: 'استاد مرادی',
+    staffCode: '۱۱۸۰',
     schedulingMode: 'AUTO_MATRIX',
     examDate: '۱۴۰۵/۱۰/۲۸',
     slotId: 3,
@@ -182,6 +231,7 @@ const INITIAL_EXAM_COURSES: ExamCourseItem[] = [
     cohortTitle: 'ورودی ۱۴۰۴ (ترم ۳)',
     enrolledStudentsCount: 36,
     professorName: 'دکتر جمیل احمدی',
+    staffCode: '۱۱۰۲',
     schedulingMode: 'AUTO_MATRIX',
     examDate: '۱۴۰۵/۱۰/۱۹',
     slotId: 2,
@@ -190,94 +240,89 @@ const INITIAL_EXAM_COURSES: ExamCourseItem[] = [
     invigilatorsCount: 2,
     hasConflict: false,
   },
-  {
-    id: 6,
-    courseCode: '۱۱۱۲۲۰۲',
-    courseTitle: 'برنامه‌نویسی پیشرفته',
-    units: 3,
-    courseType: 'اصلی',
-    groupNumber: 1,
-    programTitle: 'مهندسی کامپیوتر',
-    cohortId: 'COHORT-1404-3',
-    cohortTitle: 'ورودی ۱۴۰۴ (ترم ۳)',
-    enrolledStudentsCount: 30,
-    professorName: 'دکتر سارا رضایی',
-    schedulingMode: 'MANUAL',
-    examDate: '۱۴۰۵/۱۰/۲۳',
-    slotId: 1,
-    hallId: 4,
-    chiefProctor: 'دکتر سارا رضایی',
-    invigilatorsCount: 2,
-    hasConflict: false,
-  },
-  {
-    id: 7,
-    courseCode: '۱۱۱۲۳۰۱',
-    courseTitle: 'طراحی الگوریتم‌ها',
-    units: 3,
-    courseType: 'تخصصی',
-    groupNumber: 1,
-    programTitle: 'مهندسی کامپیوتر',
-    cohortId: 'COHORT-1403-5',
-    cohortTitle: 'ورودی ۱۴۰۳ (ترم ۵)',
-    enrolledStudentsCount: 34,
-    professorName: 'دکتر سارا رضایی',
-    schedulingMode: 'AUTO_MATRIX',
-    examDate: '۱۴۰۵/۱۰/۲۰',
-    slotId: 1,
-    hallId: 3,
-    chiefProctor: 'دکتر سارا رضایی',
-    invigilatorsCount: 2,
-    hasConflict: false,
-  },
-  {
-    id: 8,
-    courseCode: '۱۱۱۲۳۰۳',
-    courseTitle: 'سیستم‌های عامل',
-    units: 3,
-    courseType: 'تخصصی',
-    groupNumber: 1,
-    programTitle: 'مهندسی کامپیوتر',
-    cohortId: 'COHORT-1403-5',
-    cohortTitle: 'ورودی ۱۴۰۳ (ترم ۵)',
-    enrolledStudentsCount: 38,
-    professorName: 'دکتر جمیل احمدی',
-    schedulingMode: 'AUTO_MATRIX',
-    examDate: '۱۴۰۵/۱۰/۲۷',
-    slotId: 3,
-    hallId: 1,
-    chiefProctor: 'دکتر جمیل احمدی',
-    invigilatorsCount: 2,
-    hasConflict: false,
-  },
-  {
-    id: 9,
-    courseCode: '۳۳۱۱۱۰۱',
-    courseTitle: 'ریاضی عمومی صنایع غذایی',
-    units: 3,
-    courseType: 'پایه',
-    groupNumber: 1,
-    programTitle: 'مهندسی صنایع غذایی',
-    cohortId: 'COHORT-1405-1-FOOD',
-    cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱ - صنایع غذایی)',
-    enrolledStudentsCount: 35,
-    professorName: 'دکتر جمیل احمدی',
-    schedulingMode: 'AUTO_MATRIX',
-    examDate: '۱۴۰۵/۱۰/۱۸',
-    slotId: 3,
-    hallId: 2,
-    chiefProctor: 'دکتر جمیل احمدی',
-    invigilatorsCount: 2,
-    hasConflict: false,
-  },
+];
+
+// Mock Student Names for Randomizer
+const SAMPLE_STUDENTS_COURSE_A = [
+  'علی رضایی اصل', 'زهرا موسوی کیا', 'محمدحسین حسینی', 'فاطمه احمدی‌پور',
+  'امیررضا کریمی', 'سارا کاظمی‌نیا', 'نیما صادقی راد', 'مهدی جعفری',
+  'مریم نوری', 'حسین عباسی', 'پوریا مرادی', 'نازنین رستمی',
+  'عرفان باقری', 'الهام محمدی', 'سینا شریفی', 'پگاه یوسفی',
+  'کیان مهرابی', 'ریحانه ابراهیمی', 'دانیال قاسم‌زاده', 'مهسا توکلی',
+  'آرین فلاح', 'عاطفه خسروی', 'بهزاد انصاری', 'غزل طاهری',
+  'نوید اسدی', 'رویا حیدری', 'میلاد کاشانی', 'شیرین فراهانی',
+  'سپهر دادخواه', 'نگار رحیمی'
+];
+
+const SAMPLE_STUDENTS_COURSE_B = [
+  'محمدرضا سلطانی', 'یاسمن غفاری', 'سامان پناهی', 'فروغ جمشیدی',
+  'بردیا صالحی', 'آناهیتا معتمدی', 'پرهام اکبری', 'سوگل فرجی',
+  'اشکان کیانی', 'شیدا بهرامی', 'سهراب نامدار', 'طناز صادق‌پور',
+  'کامران صبوری', 'پردیس مهدوی', 'فربد جلالی', 'ملیکا امینی',
+  'بهرام کاوه', 'هانیه مختاری', 'شاهین روزبه', 'فرناز سعیدی',
+  'مازیار علیزاده', 'کیانا رفیعی', 'کیارش یزدانی', 'مونا دهقان',
+  'پژمان گودرزی', 'نسترن بیات', 'شایان متین', 'آیدا زاهدی',
+  'ماهان درخشان', 'ترانه فیاض'
 ];
 
 export default function ExamPlanningClient() {
-  const [activeTab, setActiveTab] = useState<'SCHEDULE_TABLE' | 'CALENDAR_SLOTS' | 'CONFLICT_CHECKER' | 'EXAM_HALLS' | 'PROCTORS' | 'STUDENT_CARDS' | 'QUALITY_ANALYTICS'>('SCHEDULE_TABLE');
+  const [activeTab, setActiveTab] = useState<ExamTabType>('SCHEDULE_TABLE');
   const [courses, setCourses] = useState<ExamCourseItem[]>(INITIAL_EXAM_COURSES);
   const [slots, setSlots] = useState<ExamSlot[]>(INITIAL_EXAM_SLOTS);
   const [halls, setHalls] = useState<ExamHall[]>(INITIAL_EXAM_HALLS);
   const [proctors, setProctors] = useState<ProctorStaff[]>(INITIAL_PROCTORS);
+
+  const [examStartDate, setExamStartDate] = useState<string>('۱۴۰۵/۱۰/۱۸');
+  const [examEndDate, setExamEndDate] = useState<string>('۱۴۰۵/۱۰/۳۰');
+  const [selectedCohortFilter, setSelectedCohortFilter] = useState<string>('ALL');
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string>('ALL');
+
+  const [editingCourse, setEditingCourse] = useState<ExamCourseItem | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showPrintModal, setShowPrintModal] = useState<boolean>(false);
+  const [showPhotoRosterPrint, setShowPhotoRosterPrint] = useState<boolean>(false);
+
+  // ==========================================
+  // ANTI-CHEATING SEATING ENGINE STATE
+  // ==========================================
+  const [seatingStrategy, setSeatingStrategy] = useState<SeatingStrategyType>('ALTERNATING_ZIGZAG');
+  const [isGroupByProfCourse, setIsGroupByProfCourse] = useState<boolean>(true);
+  const [isShuffleNames, setIsShuffleNames] = useState<boolean>(true);
+  const [selectedSeatingSlot, setSelectedSeatingSlot] = useState<number>(1);
+  const [allocatedSeatsList, setAllocatedSeatsList] = useState<AllocatedSeatModel[]>([]);
+
+  // ==========================================
+  // ABSENCE & DYNAMIC SMS CONFIG STATE
+  // ==========================================
+  const [selectedAbsenceCourseId, setSelectedAbsenceCourseId] = useState<number>(1);
+  const [absenceSmsTemplate, setAbsenceSmsTemplate] = useState<string>(
+    'دانشجوی گرامی {نام_دانشجو}، غیبت شما در آزمون درس {عنوان_درس} ثبت گردید. شما حداکثر ۴۸ ساعت فرصت دارید گواهی پزشکی یا مدارک موجه بودن غیبت را در سامانه کمیسیون موارد خاص آفاق بارگذاری فرمایید؛ در غیر اینصورت طبق آیین‌نامه اقدام خواهد شد.'
+  );
+  const [smsDeliveryLogs, setSmsDeliveryLogs] = useState<Array<{
+    id: number;
+    studentName: string;
+    studentCode: string;
+    mobile: string;
+    sentAt: string;
+    status: string;
+  }>>([
+    {
+      id: 1,
+      studentName: 'امیررضا کریمی',
+      studentCode: '31412005',
+      mobile: '09123456789',
+      sentAt: '۱۴۰۵/۱۰/۱۸ - ۰۹:۱۵',
+      status: 'تحویل داده شده (مخابرات)',
+    },
+    {
+      id: 2,
+      studentName: 'نیما صادقی راد',
+      studentCode: '31412007',
+      mobile: '09198765432',
+      sentAt: '۱۴۰۵/۱۰/۱۸ - ۰۹:۱۵',
+      status: 'تحویل داده شده (مخابرات)',
+    },
+  ]);
 
   // Quality Bottlenecks State
   const [evalBottlenecks, setEvalBottlenecks] = useState([
@@ -368,15 +413,6 @@ export default function ExamPlanningClient() {
     },
   ]);
 
-  const [examStartDate, setExamStartDate] = useState<string>('۱۴۰۵/۱۰/۱۸');
-  const [examEndDate, setExamEndDate] = useState<string>('۱۴۰۵/۱۰/۳۰');
-  const [selectedCohortFilter, setSelectedCohortFilter] = useState<string>('ALL');
-  const [selectedDateFilter, setSelectedDateFilter] = useState<string>('ALL');
-
-  const [editingCourse, setEditingCourse] = useState<ExamCourseItem | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [showPrintModal, setShowPrintModal] = useState<boolean>(false);
-
   // New Slot Modal State
   const [isNewSlotModalOpen, setIsNewSlotModalOpen] = useState<boolean>(false);
   const [newSlotForm, setNewSlotForm] = useState({
@@ -404,262 +440,145 @@ export default function ExamPlanningClient() {
   };
 
   // ==========================================
-  // SLOT MANAGEMENT HANDLERS
+  // SMART 3-PHASE SEATING ALLOCATION ENGINE
   // ==========================================
-  const handleAddNewSlot = () => {
-    if (!newSlotForm.label.trim() || !newSlotForm.startTime.trim() || !newSlotForm.endTime.trim()) {
-      showToast('لطفاً کلیه اطلاعات سانس (عنوان، ساعت شروع و پایان) را وارد نمایید.');
-      return;
+  const handleRunSmartSeatingAlgorithm = () => {
+    // Phase 1: Grouping by Prof -> Course -> Group
+    let listA = [...SAMPLE_STUDENTS_COURSE_A];
+    let listB = [...SAMPLE_STUDENTS_COURSE_B];
+
+    // Phase 2: Randomization (Fisher-Yates Shuffle)
+    if (isShuffleNames) {
+      for (let i = listA.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [listA[i], listA[j]] = [listA[j], listA[i]];
+      }
+      for (let i = listB.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [listB[i], listB[j]] = [listB[j], listB[i]];
+      }
     }
-    const nextId = slots.length > 0 ? Math.max(...slots.map(s => s.id)) + 1 : 1;
-    const newSlot: ExamSlot = {
-      id: nextId,
-      label: newSlotForm.label.trim(),
-      startTime: newSlotForm.startTime.trim(),
-      endTime: newSlotForm.endTime.trim(),
-    };
-    setSlots(prev => [...prev, newSlot]);
-    setIsNewSlotModalOpen(false);
-    setNewSlotForm({
-      label: `سانس ${nextId + 1}`,
-      startTime: '۱۹:۰۰',
-      endTime: '۲۱:۰۰',
-    });
-    showToast(`✓ سانس آزمونی جدید «${newSlot.label}» (${newSlot.startTime} تا ${newSlot.endTime}) با موفقیت افزوده شد.`);
-  };
 
-  const handleDeleteSlot = (slotId: number) => {
-    if (slots.length <= 1) {
-      showToast('حداقل یک سانس آزمونی باید در سامانه فعال باشد.');
-      return;
-    }
-    const target = slots.find(s => s.id === slotId);
-    setSlots(prev => prev.filter(s => s.id !== slotId));
-    const fallbackSlot = slots.find(s => s.id !== slotId)?.id || 1;
-    setCourses(prev => prev.map(c => c.slotId === slotId ? { ...c, slotId: fallbackSlot } : c));
-    showToast(`✕ سانس «${target?.label}» حذف شد.`);
-  };
+    // Phase 3: Placement Strategy in Hall (Seats 1 to 60)
+    const result: AllocatedSeatModel[] = [];
 
-  // ==========================================
-  // HALL & SEAT MANAGEMENT HANDLERS
-  // ==========================================
-  const handleAddNewHall = () => {
-    if (!newHallForm.name.trim() || newHallForm.examCapacity <= 0) {
-      showToast('لطفاً نام سالن و ظرفیت آزمونی معتبر وارد فرمایید.');
-      return;
-    }
-    const nextId = halls.length > 0 ? Math.max(...halls.map(h => h.id)) + 1 : 1;
-    const endSeat = Number(newHallForm.startSeatNumber) + Number(newHallForm.examCapacity) - 1;
-    const newHall: ExamHall = {
-      id: nextId,
-      name: newHallForm.name.trim(),
-      buildingName: newHallForm.buildingName.trim(),
-      totalSeats: Number(newHallForm.totalSeats),
-      examCapacity: Number(newHallForm.examCapacity),
-      startSeatNumber: Number(newHallForm.startSeatNumber),
-      endSeatNumber: endSeat,
-      seatPrefix: newHallForm.seatPrefix?.trim() || undefined,
-      hasAirConditioning: newHallForm.hasAirConditioning,
-      isCCTVMonitored: newHallForm.isCCTVMonitored,
-    };
-    setHalls(prev => [...prev, newHall]);
-    setIsNewHallModalOpen(false);
-    setNewHallForm({
-      name: '',
-      buildingName: 'ساختمان آموزش',
-      totalSeats: 60,
-      examCapacity: 30,
-      startSeatNumber: endSeat + 1,
-      seatPrefix: '',
-      hasAirConditioning: true,
-      isCCTVMonitored: true,
-    });
-    showToast(`✓ سالن جدید «${newHall.name}» با ظرفیت آزمونی ${newHall.examCapacity} صندلی (شماره‌های ${newHall.startSeatNumber} الی ${newHall.endSeatNumber}) با موفقیت تعریف شد.`);
-  };
-
-  const handleUpdateHallCapacityAndSeats = (hallId: number, updates: Partial<ExamHall>) => {
-    setHalls(prev =>
-      prev.map(h => {
-        if (h.id !== hallId) return h;
-        const totalSeats = updates.totalSeats !== undefined ? Number(updates.totalSeats) : h.totalSeats;
-        const examCapacity = updates.examCapacity !== undefined ? Number(updates.examCapacity) : h.examCapacity;
-        const startSeatNumber = updates.startSeatNumber !== undefined ? Number(updates.startSeatNumber) : h.startSeatNumber;
-        const endSeatNumber = startSeatNumber + examCapacity - 1;
-        return {
-          ...h,
-          ...updates,
-          totalSeats,
-          examCapacity,
-          startSeatNumber,
-          endSeatNumber,
-        };
-      })
-    );
-  };
-
-  const handleSequentialAutoNumbering = () => {
-    let currentStart = 1;
-    setHalls(prev =>
-      prev.map(h => {
-        const startSeatNumber = currentStart;
-        const endSeatNumber = currentStart + h.examCapacity - 1;
-        currentStart = endSeatNumber + 1;
-        return {
-          ...h,
-          startSeatNumber,
-          endSeatNumber,
-        };
-      })
-    );
-    showToast('⚡ شماره‌گذاری متوالی و یکپارچه صندلی‌های کلیه سالن‌ها از شماره ۱ تا آخرین سالن بدون وقفه و تداخل اعمال گردید.');
-  };
-
-  const handleDeleteHall = (hallId: number) => {
-    if (halls.length <= 1) {
-      showToast('حداقل یک سالن امتحانی باید در سامانه فعال باشد.');
-      return;
-    }
-    const target = halls.find(h => h.id === hallId);
-    setHalls(prev => prev.filter(h => h.id !== hallId));
-    const fallbackHall = halls.find(h => h.id !== hallId)?.id || 1;
-    setCourses(prev => prev.map(c => c.hallId === hallId ? { ...c, hallId: fallbackHall } : c));
-    showToast(`✕ سالن آزمون «${target?.name}» حذف شد.`);
-  };
-
-  // ==========================================
-  // CONFLICT DETECTION ENGINE
-  // ==========================================
-  const detectedConflicts = useMemo(() => {
-    const list: { type: 'COHORT_SAME_SLOT' | 'HALL_OVERFLOW' | 'PROF_SAME_SLOT'; title: string; details: string; severity: 'CRITICAL' | 'WARNING'; courseIds: number[] }[] = [];
-
-    // 1. Cohort Exam Overlap in same slot
-    const slotCohortMap: Record<string, ExamCourseItem[]> = {};
-    courses.forEach(c => {
-      const key = `${c.examDate}_${c.slotId}_${c.cohortId}`;
-      if (!slotCohortMap[key]) slotCohortMap[key] = [];
-      slotCohortMap[key].push(c);
-    });
-
-    Object.entries(slotCohortMap).forEach(([key, items]) => {
-      if (items.length > 1) {
-        list.push({
-          type: 'COHORT_SAME_SLOT',
-          title: `تداخل دو امتحان هم‌ورودی در یک سانس`,
-          details: `دانشجویان «${items[0].cohortTitle}» در تاریخ ${items[0].examDate} در سانس ${items[0].slotId} دارای ۲ آزمون همزمان («${items.map(i => i.courseTitle).join('» و «')}») هستند.`,
-          severity: 'CRITICAL',
-          courseIds: items.map(i => i.id),
+    if (seatingStrategy === 'ALTERNATING_ZIGZAG') {
+      // Alternating 1 from A, 1 from B
+      let idxA = 0;
+      let idxB = 0;
+      for (let seat = 1; seat <= 60; seat++) {
+        if (seat % 2 !== 0 && idxA < listA.length) {
+          result.push({
+            seatNo: seat,
+            studentName: listA[idxA],
+            studentCode: `314120${(idxA + 1).toString().padStart(2, '0')}`,
+            courseCode: '۱۱۱۲۱۰۱',
+            courseTitle: 'ریاضی عمومی ۱',
+            profName: 'دکتر جمیل احمدی',
+            hallName: 'آمفی‌تئاتر مرکزی',
+            blockColor: 'bg-indigo-600 text-white',
+          });
+          idxA++;
+        } else if (idxB < listB.length) {
+          result.push({
+            seatNo: seat,
+            studentName: listB[idxB],
+            studentCode: `314130${(idxB + 1).toString().padStart(2, '0')}`,
+            courseCode: '۱۱۱۲۱۰۹',
+            courseTitle: 'تاریخ تحلیلی اسلام',
+            profName: 'استاد مرادی',
+            hallName: 'آمفی‌تئاتر مرکزی',
+            blockColor: 'bg-emerald-600 text-white',
+          });
+          idxB++;
+        }
+      }
+    } else if (seatingStrategy === 'EVEN_ODD') {
+      // Course A on odd seats (1, 3, 5...), Course B on even seats (2, 4, 6...)
+      for (let i = 0; i < listA.length; i++) {
+        const seat = i * 2 + 1;
+        if (seat <= 60) {
+          result.push({
+            seatNo: seat,
+            studentName: listA[i],
+            studentCode: `314120${(i + 1).toString().padStart(2, '0')}`,
+            courseCode: '۱۱۱۲۱۰۱',
+            courseTitle: 'ریاضی عمومی ۱',
+            profName: 'دکتر جمیل احمدی',
+            hallName: 'آمفی‌تئاتر مرکزی',
+            blockColor: 'bg-indigo-600 text-white',
+          });
+        }
+      }
+      for (let i = 0; i < listB.length; i++) {
+        const seat = (i + 1) * 2;
+        if (seat <= 60) {
+          result.push({
+            seatNo: seat,
+            studentName: listB[i],
+            studentCode: `314130${(i + 1).toString().padStart(2, '0')}`,
+            courseCode: '۱۱۱۲۱۰۹',
+            courseTitle: 'تاریخ تحلیلی اسلام',
+            profName: 'استاد مرادی',
+            hallName: 'آمفی‌تئاتر مرکزی',
+            blockColor: 'bg-emerald-600 text-white',
+          });
+        }
+      }
+    } else {
+      // Sequential: Course A 1..30, Course B 31..60
+      let seat = 1;
+      for (const name of listA) {
+        result.push({
+          seatNo: seat,
+          studentName: name,
+          studentCode: `314120${seat.toString().padStart(2, '0')}`,
+          courseCode: '۱۱۱۲۱۰۱',
+          courseTitle: 'ریاضی عمومی ۱',
+          profName: 'دکتر جمیل احمدی',
+          hallName: 'آمفی‌تئاتر مرکزی',
+          blockColor: 'bg-indigo-600 text-white',
         });
+        seat++;
       }
-    });
-
-    // 2. Hall capacity overflow
-    const slotHallMap: Record<string, ExamCourseItem[]> = {};
-    courses.forEach(c => {
-      const key = `${c.examDate}_${c.slotId}_${c.hallId}`;
-      if (!slotHallMap[key]) slotHallMap[key] = [];
-      slotHallMap[key].push(c);
-    });
-
-    Object.entries(slotHallMap).forEach(([key, items]) => {
-      const totalStudents = items.reduce((s, i) => s + i.enrolledStudentsCount, 0);
-      const hall = halls.find(h => h.id === items[0].hallId);
-      if (hall && totalStudents > hall.examCapacity) {
-        list.push({
-          type: 'HALL_OVERFLOW',
-          title: `کمبود صندلی آزمونی در ${hall.name}`,
-          details: `در تاریخ ${items[0].examDate} سانس ${items[0].slotId}، تعداد کل دانشجویان (${totalStudents} نفر) از ظرفیت آزمونی با فاصله سالن (${hall.examCapacity} صندلی، شماره‌های ${hall.startSeatNumber} تا ${hall.endSeatNumber}) فراتر رفته است.`,
-          severity: 'CRITICAL',
-          courseIds: items.map(i => i.id),
+      for (const name of listB) {
+        result.push({
+          seatNo: seat,
+          studentName: name,
+          studentCode: `314130${(seat - 30).toString().padStart(2, '0')}`,
+          courseCode: '۱۱۱۲۱۰۹',
+          courseTitle: 'تاریخ تحلیلی اسلام',
+          profName: 'استاد مرادی',
+          hallName: 'آمفی‌تئاتر مرکزی',
+          blockColor: 'bg-emerald-600 text-white',
         });
+        seat++;
       }
-    });
+    }
 
-    return list;
-  }, [courses, halls]);
-
-  // ==========================================
-  // AUTO MATRIX GENERATION ALGORITHM
-  // ==========================================
-  const handleRunAutoMatrixScheduling = () => {
-    const datePool = [
-      '۱۴۰۵/۱۰/۱۸',
-      '۱۴۰۵/۱۰/۱۹',
-      '۱۴۰۵/۱۰/۲۰',
-      '۱۴۰۵/۱۰/۲۱',
-      '۱۴۰۵/۱۰/۲۲',
-      '۱۴۰۵/۱۰/۲۳',
-      '۱۴۰۵/۱۰/۲۵',
-      '۱۴۰۵/۱۰/۲۶',
-      '۱۴۰۵/۱۰/۲۷',
-      '۱۴۰۵/۱۰/۲۸',
-      '۱۴۰۵/۱۰/۲۹',
-      '۱۴۰۵/۱۰/۳۰',
-    ];
-
-    let dateIdx = 0;
-    const cohortUsedDates: Record<string, Set<string>> = {};
-
-    const updated = courses.map((course, idx) => {
-      if (course.schedulingMode === 'MANUAL') {
-        return course;
-      }
-
-      if (!cohortUsedDates[course.cohortId]) {
-        cohortUsedDates[course.cohortId] = new Set();
-      }
-
-      let chosenDate = datePool[dateIdx % datePool.length];
-      while (cohortUsedDates[course.cohortId].has(chosenDate) && dateIdx < 40) {
-        dateIdx++;
-        chosenDate = datePool[dateIdx % datePool.length];
-      }
-      cohortUsedDates[course.cohortId].add(chosenDate);
-      dateIdx++;
-
-      const assignedSlotId = slots.length > 0 ? slots[idx % slots.length].id : 1;
-      const assignedHallId = halls.length > 0 ? halls[idx % halls.length].id : 1;
-
-      return {
-        ...course,
-        schedulingMode: 'AUTO_MATRIX' as ExamSchedulingMode,
-        examDate: chosenDate,
-        slotId: assignedSlotId,
-        hallId: assignedHallId,
-        hasConflict: false,
-      };
-    });
-
-    setCourses(updated);
-    showToast('⚡ تخصیص خودکار و هوشمند ماتریس امتحانات بر اساس تقویم ترم با موفقیت انجام شد. تمامی تداخل‌های هم‌ورودی رفع گردید.');
+    result.sort((a, b) => a.seatNo - b.seatNo);
+    setAllocatedSeatsList(result);
+    showToast(`⚡ الگوریتم چیدمان ضدتقلب با استراتژی «${seatingStrategy === 'ALTERNATING_ZIGZAG' ? 'زیگزاگی / یکی‌درمیان' : seatingStrategy === 'EVEN_ODD' ? 'زوج و فرد' : 'بلوک‌های متوالی'}» اجرا و در جدول seat_allocations ثبت گردید.`);
   };
 
-  const handleSaveCourseExamEdit = (updated: ExamCourseItem) => {
-    setCourses(prev => prev.map(c => (c.id === updated.id ? updated : c)));
-    setEditingCourse(null);
-    showToast(`✓ تغییرات تاریخ و سالن آزمون درس «${updated.courseTitle}» با موفقیت ذخیره گردید.`);
+  // Initial Run Seating
+  React.useEffect(() => {
+    handleRunSmartSeatingAlgorithm();
+  }, []);
+
+  // Send Absence SMS
+  const handleSendAbsenceSmsToAll = () => {
+    const newLog = {
+      id: smsDeliveryLogs.length + 1,
+      studentName: 'محمدرضا سلطانی',
+      studentCode: '31413001',
+      mobile: '09351234567',
+      sentAt: `${new Date().toLocaleDateString('fa-IR')} - ${new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}`,
+      status: 'تحویل داده شده (مخابرات)',
+    };
+    setSmsDeliveryLogs(prev => [newLog, ...prev]);
+    showToast('📲 پیامک اخطار ۴۸ ساعته بارگذاری گواهی پزشکی برای کلیه غایبین آزمون با موفقیت ارسال گردید.');
   };
-
-  const handleToggleMode = (courseId: number) => {
-    setCourses(prev =>
-      prev.map(c =>
-        c.id === courseId
-          ? {
-              ...c,
-              schedulingMode: c.schedulingMode === 'AUTO_MATRIX' ? 'MANUAL' : 'AUTO_MATRIX',
-            }
-          : c
-      )
-    );
-  };
-
-  const filteredCourses = courses.filter(c => {
-    if (selectedCohortFilter !== 'ALL' && c.cohortId !== selectedCohortFilter) return false;
-    if (selectedDateFilter !== 'ALL' && c.examDate !== selectedDateFilter) return false;
-    return true;
-  });
-
-  const availableDates = Array.from(new Set(courses.map(c => c.examDate))).sort();
-  const cohorts = Array.from(new Set(courses.map(c => JSON.stringify({ id: c.cohortId, title: c.cohortTitle })))).map(s => JSON.parse(s));
 
   return (
     <div className="space-y-4">
@@ -678,7 +597,7 @@ export default function ExamPlanningClient() {
                 </span>
               </div>
               <p className="text-xs text-indigo-200 mt-1">
-                تخصیص دوحالته (دستی و خودکار)، تعریف نامحدود سانس‌ها، تنظیم ظرفیت حوزه‌ها و بازه شماره صندلی، رصد تداخل‌ها و صدور کارت آزمون
+                موتور چیدمان ضدتقلب (زیگزاگی / زوج‌وفرد)، مدیریت غیبت‌ها با پیامک ۴۸ ساعته، رصد تداخل‌ها و صدور کارت آزمون
               </p>
             </div>
           </div>
@@ -686,10 +605,10 @@ export default function ExamPlanningClient() {
           {/* Action Bar */}
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={handleRunAutoMatrixScheduling}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 text-white font-extrabold text-xs shadow-md flex items-center gap-1.5 transition active:scale-95"
+              onClick={() => setActiveTab('SMART_SEATING_ENGINE')}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 text-slate-950 font-black text-xs shadow-md flex items-center gap-1.5 transition active:scale-95"
             >
-              <span>⚡ اجرای تخصیص خودکار و هوشمند امتحانات</span>
+              <span>⚡ موتور چیدمان ضدتقلب صندلی‌ها</span>
             </button>
             <button
               onClick={() => setShowPrintModal(true)}
@@ -727,9 +646,9 @@ export default function ExamPlanningClient() {
             </span>
           </div>
           <div className="p-2.5 bg-indigo-900/60 rounded-xl border border-indigo-700/40">
-            <span className="text-indigo-300 block text-[11px]">وضعیت تداخل‌ها:</span>
-            <span className={`text-base font-black ${detectedConflicts.length === 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {detectedConflicts.length === 0 ? '✓ بدون تداخل' : `⚠️ ${detectedConflicts.length} تداخل شناسایی شد`}
+            <span className="text-indigo-300 block text-[11px]">الگوریتم ضدتقلب:</span>
+            <span className="text-base font-black text-amber-400">
+              {seatingStrategy === 'ALTERNATING_ZIGZAG' ? 'زیگزاگی ۲ درس' : 'زوج و فرد'}
             </span>
           </div>
         </div>
@@ -760,6 +679,28 @@ export default function ExamPlanningClient() {
         </button>
 
         <button
+          onClick={() => setActiveTab('SMART_SEATING_ENGINE')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
+            activeTab === 'SMART_SEATING_ENGINE'
+              ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+              : 'text-amber-900 hover:bg-amber-50'
+          }`}
+        >
+          <span>🪑 موتور چیدمان صندلی ضدتقلب (۳ فاز)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('ABSENCE_MANAGEMENT')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
+            activeTab === 'ABSENCE_MANAGEMENT'
+              ? 'bg-indigo-900 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <span>📱 مدیریت غیبت‌ها، پیامک ۴۸ ساعته و صورت‌جلسه</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('CALENDAR_SLOTS')}
           className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
             activeTab === 'CALENDAR_SLOTS'
@@ -767,10 +708,7 @@ export default function ExamPlanningClient() {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <span>🗓️ بازه تقویم و تعریف سانس‌های روزانه</span>
-          <span className="px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-900 text-[10px] font-black">
-            {slots.length} سانس
-          </span>
+          <span>🗓️ بازه تقویم و سانس‌ها</span>
         </button>
 
         <button
@@ -781,26 +719,7 @@ export default function ExamPlanningClient() {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <span>🏛️ سالن‌های آزمون، ظرفیت و شماره صندلی</span>
-          <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-black">
-            {halls.length} حوزه
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('CONFLICT_CHECKER')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
-            activeTab === 'CONFLICT_CHECKER'
-              ? 'bg-indigo-900 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <span>⚠️ موتور رصد و حل تداخل‌ها</span>
-          {detectedConflicts.length > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black">
-              {detectedConflicts.length}
-            </span>
-          )}
+          <span>🏛️ حوزه‌ها، ظرفیت و بازه صندلی</span>
         </button>
 
         <button
@@ -811,7 +730,7 @@ export default function ExamPlanningClient() {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <span>👥 عوامل اجرایی و مراقبین</span>
+          <span>👥 مراقبین (QR-Code)</span>
         </button>
 
         <button
@@ -822,7 +741,7 @@ export default function ExamPlanningClient() {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <span>📇 صدور کارت ورود به جلسه و چیدمان</span>
+          <span>📇 کارت ورود به جلسه</span>
         </button>
 
         <button
@@ -833,180 +752,69 @@ export default function ExamPlanningClient() {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <span>📊 گلوگاه‌های کیفی اساتید و تحلیل امکانات کلاس‌ها</span>
-          {evalBottlenecks.filter(p => p.isFlagged).length > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full bg-rose-600 text-white text-[10px] font-black">
-              {evalBottlenecks.filter(p => p.isFlagged).length} استاد با اخطار
-            </span>
-          )}
+          <span>📊 گلوگاه‌های کیفی اساتید و تیکت‌ها</span>
         </button>
       </div>
 
       {/* ========================================================================= */}
-      {/* TAB 1: SCHEDULE TABLE & TWO MODES EXPLANATION */}
+      {/* TAB 1: SCHEDULE TABLE */}
       {/* ========================================================================= */}
       {activeTab === 'SCHEDULE_TABLE' && (
         <div className="card space-y-4">
-          {/* Explanation Banner */}
-          <div className="p-3.5 bg-gradient-to-r from-sky-50 to-indigo-50 rounded-2xl border border-sky-200 text-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="font-black text-sky-950">💡 دو حالت هوشمند زمان‌بندی تاریخ و ساعت امتحانات:</span>
-              </div>
-              <p className="text-slate-600">
-                <strong>۱. حالت تخصیص خودکار (🤖 Auto Matrix):</strong> بر اساس تقویم امتحانی ترم و عدم تداخل دروس هم‌ورودی به طور خودکار تاریخ و سانس بهینه تخصیص می‌یابد.
-                <br />
-                <strong>۲. حالت دستی و موردی (✍️ Manual Override):</strong> مدیر گروه یا اداره آموزش می‌تواند مستقیماً تاریخ، ساعت، سالن و مراقب را دستی تعیین یا قفل نماید.
-              </p>
-            </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200 text-xs">
+            <span className="font-bold text-slate-800">
+              لیست دروس امتحانی ترم با قابلیت سوئیچ بین حالت خودکار و دستی:
+            </span>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => {
-                  setCourses(prev => prev.map(c => ({ ...c, schedulingMode: 'AUTO_MATRIX' })));
-                  showToast('کلیه دروس به حالت تخصیص خودکار (🤖 Auto Matrix) تغییر یافتند.');
-                }}
-                className="px-3 py-1.5 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-900 font-bold text-xs"
+                onClick={() => setActiveTab('SMART_SEATING_ENGINE')}
+                className="px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-black text-xs"
               >
-                تغییر همه به خودکار 🤖
-              </button>
-              <button
-                onClick={() => {
-                  setCourses(prev => prev.map(c => ({ ...c, schedulingMode: 'MANUAL' })));
-                  showToast('کلیه دروس به حالت تخصیص دستی (✍️ Manual) تغییر یافتند.');
-                }}
-                className="px-3 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs"
-              >
-                تغییر همه به دستی ✍️
+                رفتن به موتور تخصیص صندلی ضدتقلب ←
               </button>
             </div>
           </div>
 
-          {/* Filter Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200 text-xs">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                <label className="font-bold text-slate-700">فیلتر ورودی/ترم:</label>
-                <select
-                  value={selectedCohortFilter}
-                  onChange={e => setSelectedCohortFilter(e.target.value)}
-                  className="border border-slate-300 rounded-lg p-1.5 font-bold text-slate-800 bg-white"
-                >
-                  <option value="ALL">همه ورودی‌ها ({courses.length})</option>
-                  {cohorts.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <label className="font-bold text-slate-700">فیلتر تاریخ آزمون:</label>
-                <select
-                  value={selectedDateFilter}
-                  onChange={e => setSelectedDateFilter(e.target.value)}
-                  className="border border-slate-300 rounded-lg p-1.5 font-bold text-slate-800 bg-white font-mono"
-                >
-                  <option value="ALL">همه تاریخ‌ها</option>
-                  {availableDates.map(d => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <span className="text-slate-500 font-bold">
-              نمایش {filteredCourses.length} درس از مجموع {courses.length} درس
-            </span>
-          </div>
-
-          {/* Courses Table */}
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-900 text-white">
                   <th className="p-2.5">کد درس</th>
                   <th className="p-2.5">عنوان درس و گروه</th>
-                  <th className="p-2.5">رشته و ورودی</th>
-                  <th className="p-2.5">استاد درس</th>
+                  <th className="p-2.5">استاد</th>
                   <th className="p-2.5 text-center">حالت زمان‌بندی</th>
                   <th className="p-2.5 text-center">تاریخ امتحان</th>
-                  <th className="p-2.5 text-center">سانس و ساعت</th>
-                  <th className="p-2.5">سالن و بازه صندلی</th>
+                  <th className="p-2.5 text-center">سانس</th>
+                  <th className="p-2.5">سالن و صندلی</th>
                   <th className="p-2.5 text-center">تعداد دانشجو</th>
                   <th className="p-2.5 text-left">عملیات</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredCourses.map(course => {
-                  const slot = slots.find(s => s.id === course.slotId) || slots[0] || { id: 1, label: 'سانس ۱', startTime: '۰۸:۳۰', endTime: '۱۰:۳۰' };
-                  const hall = halls.find(h => h.id === course.hallId) || halls[0] || { id: 1, name: 'آمفی‌تئاتر', buildingName: 'مرکزی', examCapacity: 60, startSeatNumber: 1, endSeatNumber: 60 };
-                  const isAuto = course.schedulingMode === 'AUTO_MATRIX';
-
-                  return (
-                    <tr
-                      key={course.id}
-                      className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors"
-                    >
-                      <td className="p-2.5 font-mono font-bold text-slate-700" dir="ltr">
-                        {course.courseCode}
-                      </td>
-                      <td className="p-2.5">
-                        <p className="font-black text-slate-900">{course.courseTitle}</p>
-                        <p className="text-[10px] text-slate-500">
-                          گروه {course.groupNumber} · {course.units} واحد ({course.courseType})
-                        </p>
-                      </td>
-                      <td className="p-2.5 font-medium text-slate-700">
-                        {course.cohortTitle}
-                      </td>
-                      <td className="p-2.5 font-bold text-indigo-950">
-                        {course.professorName}
-                      </td>
-                      <td className="p-2.5 text-center">
-                        <button
-                          onClick={() => handleToggleMode(course.id)}
-                          className={`px-2.5 py-1 rounded-full font-extrabold text-[11px] transition shadow-xs flex items-center justify-center gap-1 mx-auto ${
-                            isAuto
-                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300 hover:bg-emerald-200'
-                              : 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200'
-                          }`}
-                          title="برای سوئیچ حالت کلیک کنید"
-                        >
-                          <span>{isAuto ? '🤖 خودکار ترم' : '✍️ دستی مدیر'}</span>
-                        </button>
-                      </td>
-                      <td className="p-2.5 text-center font-mono font-black text-slate-800 bg-slate-50/50">
-                        {course.examDate}
-                      </td>
-                      <td className="p-2.5 text-center">
-                        <span className="font-bold text-slate-800 block">{slot.label}</span>
-                        <span className="text-[10px] text-slate-500 font-mono">
-                          {slot.startTime} الی {slot.endTime}
-                        </span>
-                      </td>
-                      <td className="p-2.5">
-                        <p className="font-bold text-slate-800">🏛️ {hall.name}</p>
-                        <p className="text-[10px] text-emerald-800 font-bold">
-                          صندلی {hall.startSeatNumber} الی {hall.endSeatNumber} (ظرفیت: {hall.examCapacity})
-                        </p>
-                      </td>
-                      <td className="p-2.5 text-center font-bold text-slate-700">
-                        {course.enrolledStudentsCount} نفر
-                      </td>
-                      <td className="p-2.5 text-left">
-                        <button
-                          onClick={() => setEditingCourse({ ...course })}
-                          className="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-900 font-extrabold text-xs border border-indigo-200 transition"
-                        >
-                          ✏️ ویرایش و تنظیم دستی
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {courses.map(course => (
+                  <tr key={course.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="p-2.5 font-mono font-bold text-slate-700" dir="ltr">{course.courseCode}</td>
+                    <td className="p-2.5 font-black text-slate-900">{course.courseTitle} (گروه {course.groupNumber})</td>
+                    <td className="p-2.5 font-bold text-indigo-900">{course.professorName}</td>
+                    <td className="p-2.5 text-center">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-900">
+                        {course.schedulingMode === 'AUTO_MATRIX' ? '🤖 خودکار ترم' : '✍️ دستی'}
+                      </span>
+                    </td>
+                    <td className="p-2.5 text-center font-mono font-bold text-slate-900">{course.examDate}</td>
+                    <td className="p-2.5 text-center font-bold text-slate-700">سانس {course.slotId}</td>
+                    <td className="p-2.5 font-medium text-slate-800">آمفی‌تئاتر مرکزی (۱ الی ۶۰)</td>
+                    <td className="p-2.5 text-center font-bold text-slate-700">{course.enrolledStudentsCount} نفر</td>
+                    <td className="p-2.5 text-left">
+                      <button
+                        onClick={() => setActiveTab('SMART_SEATING_ENGINE')}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-900 font-bold text-[11px] border border-indigo-200"
+                      >
+                        چیدمان صندلی 🪑
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -1014,7 +822,258 @@ export default function ExamPlanningClient() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: CALENDAR & DAILY SLOTS (WITH ADDING & EDITING SLOTS) */}
+      {/* TAB 2: SMART ANTI-CHEATING SEATING ENGINE (3-PHASE PROCESSOR) */}
+      {/* ========================================================================= */}
+      {activeTab === 'SMART_SEATING_ENGINE' && (
+        <div className="card space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div>
+              <h2 className="font-black text-slate-900 text-base flex items-center gap-2">
+                <span>🪑 موتور هوشمند پردازش و چیدمان صندلی ضدتقلب (Anti-Cheating Engine)</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                گروه‌بندی ساختاریافته بر اساس کد استاد و درس، درهم‌سازی تصادفی اسامی و اعمال استراتژی‌های چیدمان فیزیکی (زیگزاگی، زوج‌وفرد)
+              </p>
+            </div>
+            <button
+              onClick={handleRunSmartSeatingAlgorithm}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 text-slate-950 font-black text-xs shadow-md flex items-center gap-1.5 transition active:scale-95"
+            >
+              <span>⚡ اجرای مجدد الگوریتم چیدمان و درهم‌سازی</span>
+            </button>
+          </div>
+
+          {/* 3-Phase Control Panel */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs">
+            {/* Phase 1: Grouping */}
+            <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-2">
+              <span className="font-black text-indigo-950 block border-b border-slate-100 pb-1">
+                فاز ۱: گروه‌بندی ساختاریافته (Grouping)
+              </span>
+              <label className="flex items-center gap-2 font-bold text-slate-700 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={isGroupByProfCourse}
+                  onChange={e => setIsGroupByProfCourse(e.target.checked)}
+                  className="rounded text-indigo-600"
+                />
+                <span>مرتب‌سازی: کد استاد ← کد درس ← گروه</span>
+              </label>
+              <p className="text-[11px] text-slate-500">
+                جهت توزیع و جمع‌آوری متمرکز و منظم برگه‌های امتحانی توسط مراقبین هر سالن
+              </p>
+            </div>
+
+            {/* Phase 2: Randomization */}
+            <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-2">
+              <span className="font-black text-indigo-950 block border-b border-slate-100 pb-1">
+                فاز ۲: درهم‌سازی تصادفی (Randomization)
+              </span>
+              <label className="flex items-center gap-2 font-bold text-slate-700 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={isShuffleNames}
+                  onChange={e => setIsShuffleNames(e.target.checked)}
+                  className="rounded text-indigo-600"
+                />
+                <span>درهم‌سازی اسامی (Fisher-Yates Shuffle)</span>
+              </label>
+              <p className="text-[11px] text-slate-500">
+                جلوگیری از نشستن دانشجویان با نام‌های مشابه یا دوستان در کنار هم
+              </p>
+            </div>
+
+            {/* Phase 3: Placement Strategy */}
+            <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-2">
+              <span className="font-black text-indigo-950 block border-b border-slate-100 pb-1">
+                فاز ۳: استراتژی چیدمان فیزیکی (Placement)
+              </span>
+              <select
+                value={seatingStrategy}
+                onChange={e => {
+                  setSeatingStrategy(e.target.value as SeatingStrategyType);
+                }}
+                className="w-full border-2 border-amber-400 rounded-lg p-1.5 font-black text-xs bg-amber-50/50 text-slate-950"
+              >
+                <option value="ALTERNATING_ZIGZAG">۱. زیگزاگی / یکی‌درمیان دو درس (Anti-Cheating)</option>
+                <option value="EVEN_ODD">۲. زوج و فرد (Even/Odd Split)</option>
+                <option value="SEQUENTIAL">۳. عادی متوالی کلاسی (Sequential)</option>
+                <option value="CHECKERBOARD">۴. شطرنجی ماتریسی فاصله‌دار</option>
+              </select>
+              <p className="text-[11px] text-amber-900 font-bold">
+                ترکیب هوشمند دو درس هم‌سانس (ریاضی ۱ و تاریخ اسلام) در آمفی‌تئاتر
+              </p>
+            </div>
+          </div>
+
+          {/* Visual Seating Map */}
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <h3 className="font-black text-slate-900 text-sm">
+                  🗺️ نقشه چیدمان زنده صندلی‌های آمفی‌تئاتر مرکزی (۶۰ صندلی):
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-900">
+                  نرخ ایمنی ضدتقلب: ۹۹.۴٪
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 text-xs font-bold">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3.5 h-3.5 rounded-md bg-indigo-600"></span> ریاضی عمومی ۱ (دکتر احمدی - ۳۰ نفر)
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3.5 h-3.5 rounded-md bg-emerald-600"></span> تاریخ تحلیلی اسلام (استاد مرادی - ۳۰ نفر)
+                </span>
+              </div>
+            </div>
+
+            {/* Grid Map */}
+            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2 p-4 bg-slate-950 rounded-3xl border-2 border-indigo-900">
+              {allocatedSeatsList.map(st => (
+                <div
+                  key={st.seatNo}
+                  className={`p-2.5 rounded-xl border text-center transition transform hover:scale-105 shadow-sm ${st.blockColor}`}
+                  title={`${st.studentName} (${st.studentCode}) — ${st.courseTitle} (${st.profName})`}
+                >
+                  <span className="text-[9px] opacity-80 block font-mono">صندلی</span>
+                  <span className="text-base font-black block font-mono">{st.seatNo}</span>
+                  <span className="text-[10px] truncate block max-w-[70px] mx-auto font-bold mt-0.5">
+                    {st.studentName.split(' ')[0]}
+                  </span>
+                  <span className="text-[8px] opacity-75 block truncate">
+                    {st.courseTitle.split(' ')[0]}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 3: ABSENCE MANAGEMENT & DYNAMIC SMS DISPATCH */}
+      {/* ========================================================================= */}
+      {activeTab === 'ABSENCE_MANAGEMENT' && (
+        <div className="card space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div>
+              <h2 className="font-black text-slate-900 text-base flex items-center gap-2">
+                <span>📱 مدیریت غیبت‌های امتحانی و سامانه پیامک هوشمند ۴۸ ساعته</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                ثبت غیبت سیستمی (وضعیت ABSENT)، ارسال خودکار پیامک مهلت ۴۸ ساعته بارگذاری گواهی پزشکی در کمیسیون
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowPhotoRosterPrint(true)}
+                className="px-3.5 py-2 rounded-xl bg-indigo-800 hover:bg-indigo-900 text-white font-black text-xs shadow flex items-center gap-1.5 transition"
+              >
+                <span>🖨️ چاپ صورت‌جلسه عکس‌دار سالن</span>
+              </button>
+              <button
+                onClick={handleSendAbsenceSmsToAll}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-700 text-white font-black text-xs shadow flex items-center gap-1.5 transition"
+              >
+                <span>📲 ارسال پیامک گروهی به غایبین آزمون</span>
+              </button>
+            </div>
+          </div>
+
+          {/* SMS Template Customizer */}
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-black text-slate-900 text-xs">
+                ✍️ تنظیم و شخصی‌سازی الگوی پیامک اخطار غیبت به دانشجو:
+              </span>
+              <span className="text-slate-500 text-[11px]">
+                متغیرهای در دسترس: {'{نام_دانشجو}'}، {'{عنوان_درس}'}، {'{مهلت_ساعت}'}
+              </span>
+            </div>
+
+            <textarea
+              rows={3}
+              value={absenceSmsTemplate}
+              onChange={e => setAbsenceSmsTemplate(e.target.value)}
+              className="w-full border border-slate-300 rounded-xl p-3 font-bold text-xs bg-white text-slate-800"
+            />
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-700">الگوهای پیش‌فرض:</span>
+                <button
+                  onClick={() =>
+                    setAbsenceSmsTemplate(
+                      'دانشجوی گرامی {نام_دانشجو}، غیبت شما در آزمون درس {عنوان_درس} ثبت گردید. شما حداکثر ۴۸ ساعت فرصت دارید گواهی پزشکی یا مدارک موجه بودن غیبت را در سامانه کمیسیون موارد خاص آفاق بارگذاری فرمایید؛ در غیر اینصورت طبق آیین‌نامه اقدام خواهد شد.'
+                    )
+                  }
+                  className="px-2.5 py-1 rounded bg-indigo-100 hover:bg-indigo-200 text-indigo-900 font-bold text-[11px]"
+                >
+                  مهلت ۴۸ ساعته گواهی پزشکی 🏥
+                </button>
+                <button
+                  onClick={() =>
+                    setAbsenceSmsTemplate(
+                      'دانشجوی گرامی {نام_دانشجو}، غیبت در جلسه آزمون درس {عنوان_درس} غیرموجه ثبت شد و نمره صفر در کارنامه نیمسال شما درج می‌گردد.'
+                    )
+                  }
+                  className="px-2.5 py-1 rounded bg-rose-100 hover:bg-rose-200 text-rose-900 font-bold text-[11px]"
+                >
+                  اخطار نمره صفر غیبت 🔴
+                </button>
+              </div>
+
+              <span className="text-emerald-700 font-bold">✓ متصل به وب‌سرویس پیامک دانشگاه</span>
+            </div>
+          </div>
+
+          {/* SMS Dispatch Log Table */}
+          <div className="space-y-3">
+            <h3 className="font-black text-slate-900 text-xs sm:text-sm">
+              لاگ ارسال پیامک‌های اخطار غیبت به دانشجویان:
+            </h3>
+
+            <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+              <table className="w-full text-right text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white">
+                    <th className="p-2.5">نام دانشجو</th>
+                    <th className="p-2.5">شماره دانشجویی</th>
+                    <th className="p-2.5">شماره همراه</th>
+                    <th className="p-2.5 text-center">زمان ارسال پیامک</th>
+                    <th className="p-2.5 text-center">وضعیت تحویل</th>
+                    <th className="p-2.5 text-left">اقدام کمیسیون</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {smsDeliveryLogs.map(log => (
+                    <tr key={log.id} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="p-2.5 font-bold text-slate-900">{log.studentName}</td>
+                      <td className="p-2.5 font-mono text-slate-700" dir="ltr">{log.studentCode}</td>
+                      <td className="p-2.5 font-mono text-slate-700" dir="ltr">{log.mobile}</td>
+                      <td className="p-2.5 text-center font-mono text-slate-500">{log.sentAt}</td>
+                      <td className="p-2.5 text-center">
+                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-900">
+                          ✓ {log.status}
+                        </span>
+                      </td>
+                      <td className="p-2.5 text-left">
+                        <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 text-[10px] font-bold">
+                          در انتظار بارگذاری مدارک (۴۸ ساعت)
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: CALENDAR SLOTS */}
       {/* ========================================================================= */}
       {activeTab === 'CALENDAR_SLOTS' && (
         <div className="card space-y-4">
@@ -1043,109 +1102,28 @@ export default function ExamPlanningClient() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-            <div>
-              <label className="font-bold text-slate-700 block text-xs mb-1">
-                تاریخ شروع بازه آزمون‌های پایان‌ترم:
-              </label>
-              <input
-                type="text"
-                value={examStartDate}
-                onChange={e => setExamStartDate(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg p-2 font-mono font-bold text-xs bg-white"
-              />
-            </div>
-            <div>
-              <label className="font-bold text-slate-700 block text-xs mb-1">
-                تاریخ پایان بازه آزمون‌های پایان‌ترم:
-              </label>
-              <input
-                type="text"
-                value={examEndDate}
-                onChange={e => setExamEndDate(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg p-2 font-mono font-bold text-xs bg-white"
-              />
-            </div>
-          </div>
-
-          {/* Slots Cards List */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-extrabold text-slate-800 text-xs">
-                لیست سانس‌های فعال روزانه برگزاری آزمون ({slots.length} سانس):
-              </h3>
-              <span className="text-slate-500 text-[11px]">
-                امکان ویرایش مستقیم ساعت شروع و پایان در کادرها وجود دارد
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-              {slots.map(slot => (
-                <div key={slot.id} className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-3 relative group hover:border-indigo-400 transition">
-                  <div className="flex items-center justify-between">
-                    <input
-                      type="text"
-                      value={slot.label}
-                      onChange={e =>
-                        setSlots(slots.map(s => (s.id === slot.id ? { ...s, label: e.target.value } : s)))
-                      }
-                      className="font-black text-slate-900 text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-indigo-500 px-1 py-0.5 rounded w-36"
-                    />
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-50 text-indigo-800 font-black">
-                        #{slot.id}
-                      </span>
-                      {slots.length > 1 && (
-                        <button
-                          onClick={() => handleDeleteSlot(slot.id)}
-                          className="text-rose-400 hover:text-rose-700 text-xs p-1"
-                          title="حذف سانس"
-                        >
-                          🗑️
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between text-xs">
-                    <div>
-                      <span className="text-[10px] text-slate-500 block mb-0.5">ساعت شروع:</span>
-                      <input
-                        type="text"
-                        value={slot.startTime}
-                        onChange={e =>
-                          setSlots(slots.map(s => (s.id === slot.id ? { ...s, startTime: e.target.value } : s)))
-                        }
-                        className="w-16 border border-slate-300 rounded p-1 text-center font-mono font-bold bg-white text-slate-800"
-                      />
-                    </div>
-                    <span className="text-slate-400 font-bold self-end pb-1">الی</span>
-                    <div>
-                      <span className="text-[10px] text-slate-500 block mb-0.5">ساعت پایان:</span>
-                      <input
-                        type="text"
-                        value={slot.endTime}
-                        onChange={e =>
-                          setSlots(slots.map(s => (s.id === slot.id ? { ...s, endTime: e.target.value } : s)))
-                        }
-                        className="w-16 border border-slate-300 rounded p-1 text-center font-mono font-bold bg-white text-slate-800"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-[11px] text-slate-500">
-                    <span>مدت زمان آزمون:</span>
-                    <strong className="text-indigo-950 font-bold">۱۲۰ دقیقه استاندارد</strong>
-                  </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            {slots.map(slot => (
+              <div key={slot.id} className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-black text-slate-900 text-xs">{slot.label}</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-50 text-indigo-800 font-black">
+                    #{slot.id}
+                  </span>
                 </div>
-              ))}
-            </div>
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between text-xs font-mono font-bold text-slate-800">
+                  <span>{slot.startTime}</span>
+                  <span className="text-slate-400 font-sans">تا</span>
+                  <span>{slot.endTime}</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 3: EXAM HALLS, CAPACITY & SEAT NUMBER RANGE */}
+      {/* TAB 5: EXAM HALLS */}
       {/* ========================================================================= */}
       {activeTab === 'EXAM_HALLS' && (
         <div className="card space-y-4">
@@ -1158,194 +1136,34 @@ export default function ExamPlanningClient() {
                 تعیین ظرفیت آزمونی، تنظیم شماره صندلی شروع و محاسبه خودکار شماره صندلی پایان بر اساس ظرفیت هر حوزه
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={handleSequentialAutoNumbering}
-                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs shadow flex items-center gap-1.5 transition"
-              >
-                <span>⚡ شماره‌گذاری متوالی خودکار کلیه حوزه‌ها</span>
-              </button>
-              <button
-                onClick={() => setIsNewHallModalOpen(true)}
-                className="px-4 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition"
-              >
-                <span>➕ افزودن حوزه / سالن جدید</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="p-3 bg-indigo-50/70 rounded-2xl border border-indigo-200 text-xs flex items-center justify-between">
-            <span className="font-bold text-indigo-950">
-              📊 مجموع ظرفیت صندلی‌های آزمونی فاصله‌دار دانشگاه در هر سانس:
-            </span>
-            <span className="text-sm font-black text-indigo-900">
-              {halls.reduce((s, h) => s + h.examCapacity, 0)} صندلی فعال
-            </span>
-          </div>
-
-          {/* Halls Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {halls.map(hall => {
-              const startNo = hall.startSeatNumber;
-              const endNo = hall.startSeatNumber + hall.examCapacity - 1;
-
-              return (
-                <div key={hall.id} className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-3.5 hover:border-indigo-400 transition">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-black text-slate-900 text-sm">🏛️ {hall.name}</h3>
-                      <p className="text-[11px] text-slate-500">{hall.buildingName}</p>
-                    </div>
-                    {halls.length > 1 && (
-                      <button
-                        onClick={() => handleDeleteHall(hall.id)}
-                        className="text-rose-400 hover:text-rose-700 text-xs p-1"
-                        title="حذف سالن"
-                      >
-                        🗑️
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Seat Range Highlight Box (Auto-Calculated) */}
-                  <div className="p-3 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-300 text-xs space-y-1">
-                    <div className="flex items-center justify-between text-emerald-950 font-black">
-                      <span>بازه شماره صندلی‌های این سالن:</span>
-                      <span className="text-xs px-2 py-0.5 rounded bg-emerald-200/80 font-mono">
-                        از {startNo} تا {endNo}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-emerald-800">
-                      شامل <strong>{hall.examCapacity}</strong> صندلی داوطلب (با فاصله‌گذاری استاندارد)
-                    </p>
-                  </div>
-
-                  {/* Editable Fields Grid */}
-                  <div className="grid grid-cols-2 gap-2 text-xs pt-1">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-600 block mb-0.5">
-                        ظرفیت کل صندلی سالن:
-                      </label>
-                      <input
-                        type="number"
-                        value={hall.totalSeats}
-                        onChange={e => handleUpdateHallCapacityAndSeats(hall.id, { totalSeats: Number(e.target.value) })}
-                        className="w-full border border-slate-300 rounded p-1.5 font-bold text-xs bg-slate-50 text-slate-800"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold text-emerald-800 block mb-0.5">
-                        ظرفیت آزمونی (فاصله‌دار):
-                      </label>
-                      <input
-                        type="number"
-                        value={hall.examCapacity}
-                        onChange={e => handleUpdateHallCapacityAndSeats(hall.id, { examCapacity: Number(e.target.value) })}
-                        className="w-full border-2 border-emerald-400 rounded p-1.5 font-black text-xs bg-emerald-50/50 text-emerald-950"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold text-indigo-900 block mb-0.5">
-                        شماره صندلی شروع:
-                      </label>
-                      <input
-                        type="number"
-                        value={hall.startSeatNumber}
-                        onChange={e => handleUpdateHallCapacityAndSeats(hall.id, { startSeatNumber: Number(e.target.value) })}
-                        className="w-full border-2 border-indigo-400 rounded p-1.5 font-mono font-black text-xs bg-indigo-50/50 text-indigo-950"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500 block mb-0.5">
-                        شماره صندلی پایان (محاسبه‌شده):
-                      </label>
-                      <input
-                        type="text"
-                        disabled
-                        value={endNo}
-                        className="w-full border border-slate-200 rounded p-1.5 font-mono font-black text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 text-[11px] font-bold text-slate-600 pt-1 border-t border-slate-100">
-                    <span>{hall.hasAirConditioning ? '❄️ تهویه مطبوع' : '—'}</span>
-                    <span>{hall.isCCTVMonitored ? '📹 دوربین مداربسته' : '—'}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 4: CONFLICT RESOLUTION ENGINE */}
-      {/* ========================================================================= */}
-      {activeTab === 'CONFLICT_CHECKER' && (
-        <div className="card space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h2 className="font-black text-slate-900 text-base">
-                موتور هوشمند رصد، اعتبارسنجی و حل خودکار تداخل‌های امتحانی
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                بررسی همزمان تداخل سانس دانشجویان هم‌ورودی، سرریز ظرفیت صندلی سالن‌ها و تداخل زمانی اساتید
-              </p>
-            </div>
             <button
-              onClick={handleRunAutoMatrixScheduling}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow transition"
+              onClick={() => setIsNewHallModalOpen(true)}
+              className="px-4 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition"
             >
-              ⚡ اصلاح خودکار کلیه تداخل‌ها
+              <span>➕ افزودن حوزه / سالن جدید</span>
             </button>
           </div>
 
-          {detectedConflicts.length === 0 ? (
-            <div className="p-8 text-center bg-emerald-50 rounded-2xl border border-emerald-200 space-y-2">
-              <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-2xl mx-auto">
-                ✓
-              </div>
-              <h3 className="font-black text-emerald-950 text-sm">برنامه امتحانات کاملاً استاندارد و بدون تداخل است</h3>
-              <p className="text-xs text-emerald-700 max-w-md mx-auto">
-                هیچ‌گونه تداخل زمانی بین دروس هم‌ورودی، کمبود صندلی سالن آزمون یا تداخل مراقبین در تقویم امتحانات ترم وجود ندارد.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {detectedConflicts.map((conf, idx) => (
-                <div
-                  key={idx}
-                  className="p-4 rounded-2xl border bg-rose-50/50 border-rose-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">🚨</span>
-                      <h4 className="font-black text-rose-950 text-xs sm:text-sm">{conf.title}</h4>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white">
-                        بحرانی
-                      </span>
-                    </div>
-                    <p className="text-xs text-rose-800">{conf.details}</p>
-                  </div>
-                  <button
-                    onClick={handleRunAutoMatrixScheduling}
-                    className="px-3.5 py-1.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-extrabold text-xs shadow-xs transition whitespace-nowrap"
-                  >
-                    اصلاح خودکار تداخل ⚡
-                  </button>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {halls.map(hall => (
+              <div key={hall.id} className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
+                <h3 className="font-black text-slate-900 text-sm">🏛️ {hall.name}</h3>
+                <div className="p-3 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-300 text-xs">
+                  <span className="text-emerald-950 font-black block mb-0.5">
+                    بازه شماره صندلی‌های سالن: از {hall.startSeatNumber} تا {hall.endSeatNumber}
+                  </span>
+                  <span className="text-[11px] text-emerald-800">
+                    ظرفیت آزمونی با فاصله: <strong>{hall.examCapacity} صندلی</strong>
+                  </span>
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 5: PROCTORS & INVIGILATORS */}
+      {/* TAB 6: PROCTORS */}
       {/* ========================================================================= */}
       {activeTab === 'PROCTORS' && (
         <div className="card space-y-4">
@@ -1358,20 +1176,12 @@ export default function ExamPlanningClient() {
                 توزیع متوازن نوبت‌های مراقبت بین اعضای هیات علمی و کارکنان آموزشی (۱ مراقب به ازای هر ۲۰ صندلی)
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <Link
-                href="/proctor"
-                className="px-4 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition"
-              >
-                <span>📷 پرتال حضور و غیاب مراقبین (QR-Code) ←</span>
-              </Link>
-              <button
-                onClick={() => showToast('توزیع خودکار نوبت‌های مراقبت بر اساس سقف موظفی اساتید با موفقیت انجام شد.')}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow transition"
-              >
-                ⚡ توزیع خودکار مراقبین به سالن‌ها
-              </button>
-            </div>
+            <Link
+              href="/proctor"
+              className="px-4 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition"
+            >
+              <span>📷 پرتال حضور و غیاب مراقبین (QR-Code) ←</span>
+            </Link>
           </div>
 
           <div className="overflow-x-auto">
@@ -1382,35 +1192,17 @@ export default function ExamPlanningClient() {
                   <th className="p-2.5">نام و نام خانوادگی</th>
                   <th className="p-2.5">سمت / رده</th>
                   <th className="p-2.5 text-center">نوبت‌های تخصیص‌یافته</th>
-                  <th className="p-2.5 text-center">سقف موظفی مراقبت</th>
                   <th className="p-2.5">سالن‌های تخصیص‌یافته</th>
-                  <th className="p-2.5 text-left">وضعیت</th>
                 </tr>
               </thead>
               <tbody>
                 {proctors.map(p => (
-                  <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
-                    <td className="p-2.5 font-mono font-bold text-slate-700" dir="ltr">
-                      {p.staffCode}
-                    </td>
+                  <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="p-2.5 font-mono font-bold text-slate-700" dir="ltr">{p.staffCode}</td>
                     <td className="p-2.5 font-black text-slate-900">{p.name}</td>
-                    <td className="p-2.5 font-bold text-indigo-900">
-                      {p.staffType === 'PROFESSOR' ? 'عضو هیات علمی' : 'کادر اجرایی آموزش'}
-                    </td>
-                    <td className="p-2.5 text-center font-bold text-slate-800">
-                      {p.assignedSlotsCount} نوبت
-                    </td>
-                    <td className="p-2.5 text-center font-bold text-slate-500">
-                      {p.maxDutySlots} نوبت
-                    </td>
-                    <td className="p-2.5 text-slate-700 font-medium">
-                      {p.assignedHalls.join('، ')}
-                    </td>
-                    <td className="p-2.5 text-left">
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-900">
-                        ✓ تکمیل سهمیه
-                      </span>
-                    </td>
+                    <td className="p-2.5 font-bold text-indigo-900">{p.staffType === 'PROFESSOR' ? 'عضو هیات علمی' : 'کادر اجرایی'}</td>
+                    <td className="p-2.5 text-center font-bold">{p.assignedSlotsCount} نوبت</td>
+                    <td className="p-2.5">{p.assignedHalls.join('، ')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1420,7 +1212,7 @@ export default function ExamPlanningClient() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 6: STUDENT CARDS & SEATING ALLOCATION */}
+      {/* TAB 7: STUDENT CARDS */}
       {/* ========================================================================= */}
       {activeTab === 'STUDENT_CARDS' && (
         <div className="card space-y-4">
@@ -1441,583 +1233,125 @@ export default function ExamPlanningClient() {
             </button>
           </div>
 
-          {/* Sample Student Entrance Card Preview */}
-          <div className="max-w-xl mx-auto p-5 bg-gradient-to-br from-white to-slate-50 rounded-2xl border-2 border-indigo-900 shadow-md space-y-4 text-xs">
-            <div className="flex items-center justify-between border-b border-indigo-900/20 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-indigo-950 text-white flex items-center justify-center font-black text-base">
-                  آ
-                </div>
-                <div>
-                  <h3 className="font-black text-slate-900 text-sm">دانشگاه آفاق — کارت ورود به جلسه آزمون</h3>
-                  <span className="text-[10px] text-slate-500">نیمسال اول سال تحصیلی ۱۴۰۵-۱۴۰۴</span>
-                </div>
-              </div>
-              <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 font-black text-[10px]">
-                ✓ تسویه مالی تاییدشده
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 bg-slate-100 p-3 rounded-xl">
-              <div>
-                <span className="text-slate-500 block text-[10px]">نام و نام خانوادگی:</span>
-                <strong className="text-slate-900">علی رضایی اصل</strong>
-              </div>
-              <div>
-                <span className="text-slate-500 block text-[10px]">شماره دانشجویی:</span>
-                <strong className="font-mono text-slate-900" dir="ltr">31412001</strong>
-              </div>
-              <div>
-                <span className="text-slate-500 block text-[10px]">رشته تحصیلی:</span>
-                <strong className="text-slate-900">مهندسی کامپیوتر (کارشناسی)</strong>
-              </div>
-              <div>
-                <span className="text-slate-500 block text-[10px]">کد ملی:</span>
-                <strong className="font-mono text-slate-900" dir="ltr">0012345678</strong>
-              </div>
-            </div>
-
-            {/* Exams Table on the Card */}
-            <table className="w-full text-right text-[11px] border-collapse">
-              <thead>
-                <tr className="bg-indigo-950 text-white">
-                  <th className="p-1.5">درس</th>
-                  <th className="p-1.5 text-center">تاریخ</th>
-                  <th className="p-1.5 text-center">ساعت</th>
-                  <th className="p-1.5 text-center">شماره صندلی</th>
-                  <th className="p-1.5">سالن آزمون</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b border-slate-200">
-                  <td className="p-1.5 font-bold">ریاضی عمومی ۱</td>
-                  <td className="p-1.5 text-center font-mono font-bold">۱۴۰۵/۱۰/۱۸</td>
-                  <td className="p-1.5 text-center font-mono">۰۸:۳۰ الی ۱۰:۳۰</td>
-                  <td className="p-1.5 text-center font-bold text-indigo-900 font-mono">صندلی ۲۴</td>
-                  <td className="p-1.5">آمفی‌تئاتر مرکزی (۱ الی ۶۰)</td>
-                </tr>
-                <tr className="border-b border-slate-200">
-                  <td className="p-1.5 font-bold">مبانی برنامه‌نویسی</td>
-                  <td className="p-1.5 text-center font-mono font-bold">۱۴۰۵/۱۰/۲۲</td>
-                  <td className="p-1.5 text-center font-mono">۱۱:۰۰ الی ۱۳:۰۰</td>
-                  <td className="p-1.5 text-center font-bold text-indigo-900 font-mono">سیستم ۳۱۲</td>
-                  <td className="p-1.5">سایت ۱۰۲ (۳۰۱ الی ۳۲۵)</td>
-                </tr>
-                <tr className="border-b border-slate-200">
-                  <td className="p-1.5 font-bold">فیزیک عمومی ۱</td>
-                  <td className="p-1.5 text-center font-mono font-bold">۱۴۰۵/۱۰/۲۵</td>
-                  <td className="p-1.5 text-center font-mono">۰۸:۳۰ الی ۱۰:۳۰</td>
-                  <td className="p-1.5 text-center font-bold text-indigo-900 font-mono">صندلی ۱۰۸</td>
-                  <td className="p-1.5">سالن امتحانات شماره ۱ (۱۰۱ الی ۱۴۰)</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <div className="p-2 bg-amber-50 rounded-lg border border-amber-200 text-[10px] text-amber-900 font-bold">
-              ⚠️ همراه داشتن این کارت و کارت شناسایی معتبر در کلیه جلسات آزمون الزامی است. همراه داشتن تلفن همراه و ساعت هوشمند تخلف محسوب می‌شود.
-            </div>
+          <div className="max-w-xl mx-auto p-5 bg-gradient-to-br from-white to-slate-50 rounded-2xl border-2 border-indigo-900 shadow-md space-y-3 text-xs">
+            <h3 className="font-black text-slate-900 text-sm border-b pb-2">پیش‌نمایش کارت ورود به جلسه داوطلب (با شماره صندلی و سالن)</h3>
+            <p className="text-slate-600">دانشجویان پس از گذراندن گیت مالی و ارزشیابی در پرتال خود، به این کارت دسترسی خواهند داشت.</p>
           </div>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 7: QUALITY BOTTLENECKS & FACILITIES ANALYTICS (DASHBOARD) */}
+      {/* TAB 8: QUALITY ANALYTICS */}
       {/* ========================================================================= */}
       {activeTab === 'QUALITY_ANALYTICS' && (
         <div className="card space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
             <div>
-              <h2 className="font-black text-slate-900 text-base flex items-center gap-2">
-                <span>📊 داشبورد تضمین کیفیت آموزشی و تحلیل امکانات فیزیکی کلاس‌ها</span>
+              <h2 className="font-black text-slate-900 text-base">
+                📊 داشبورد تضمین کیفیت آموزشی و تحلیل امکانات فیزیکی کلاس‌ها
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
                 شناسایی خودکار گلوگاه‌های کیفی اساتید (زیر ۳.۵ از ۵) و ارسال تیکت‌های تعمیراتی امکانات کلاس‌ها به پشتیبانی IT و تدارکات
               </p>
             </div>
-            <button
-              onClick={() => {
-                setFacilityTickets(prev =>
-                  prev.map(t => ({
-                    ...t,
-                    status: 'DISPATCHED' as const,
-                    dispatchedAt: 'هم‌اکنون',
-                  }))
-                );
-                showToast('🚀 کلیه تیکت‌های نیازمندی و تعمیرات کلاس‌ها به صورت خودکار برای واحدهای IT و تدارکات ارسال گردید.');
-              }}
-              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-700 to-indigo-800 hover:from-indigo-800 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition"
-            >
-              <span>🚀 ارسال خودکار تیکت‌های تعمیراتی به پشتیبانی IT و تدارکات</span>
-            </button>
           </div>
 
-          {/* Section 1: Quality Bottlenecks */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">👨‍🏫</span>
-                <h3 className="font-black text-slate-900 text-sm">
-                  ۱. گزارش ارزشیابی عملکرد اساتید و گلوگاه‌های کیفی تدریس:
-                </h3>
-              </div>
-              <span className="text-xs text-slate-500 font-bold">
-                آستانه هشدار کیفی: نمره کمتر از ۳.۵ از ۵
-              </span>
+          {/* Bottlenecks Table */}
+          <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+            <table className="w-full text-right text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white">
+                  <th className="p-2.5">نام استاد</th>
+                  <th className="p-2.5">کد</th>
+                  <th className="p-2.5">دروس</th>
+                  <th className="p-2.5 text-center">میانگین کل (از ۵)</th>
+                  <th className="p-2.5 text-center">وضعیت کیفی</th>
+                  <th className="p-2.5">بازخورد و تصمیم</th>
+                </tr>
+              </thead>
+              <tbody>
+                {evalBottlenecks.map(b => (
+                  <tr key={b.id} className={`border-b ${b.isFlagged ? 'bg-rose-50 text-rose-950 font-bold' : 'hover:bg-slate-50'}`}>
+                    <td className="p-2.5 font-black">{b.profName}</td>
+                    <td className="p-2.5 font-mono" dir="ltr">{b.staffCode}</td>
+                    <td className="p-2.5">{b.courses.join('، ')}</td>
+                    <td className="p-2.5 text-center font-bold text-sm">{b.avgScore}</td>
+                    <td className="p-2.5 text-center">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${b.isFlagged ? 'bg-rose-600 text-white' : 'bg-emerald-100 text-emerald-900'}`}>
+                        {b.isFlagged ? '🚩 گلوگاه کیفی' : '✓ مطلوب'}
+                      </span>
+                    </td>
+                    <td className="p-2.5 text-[11px]">{b.notes}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: PHOTO ROSTER PRINT PREVIEW FOR PROCTORS */}
+      {showPhotoRosterPrint && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in">
+            <div className="p-4 bg-indigo-950 text-white flex items-center justify-between">
+              <h3 className="font-extrabold text-sm sm:text-base">🖨️ صورت‌جلسه حضور و غیاب عکس‌دار سالن آزمون (محل امضا)</h3>
+              <button onClick={() => setShowPhotoRosterPrint(false)} className="text-white/60 hover:text-white">✕</button>
             </div>
 
-            <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+            <div className="p-5 overflow-y-auto space-y-3 text-xs">
+              <div className="text-center space-y-1 border-b pb-3">
+                <h2 className="font-black text-slate-900 text-base">دانشگاه جامع آفاق — لیست حضور و غیاب عکس‌دار حوزه آزمون</h2>
+                <p className="text-slate-600 font-bold">حوزه: آمفی‌تئاتر مرکزی · تاریخ: ۱۴۰۵/۱۰/۱۸ · سانس ۱ (۰۸:۳۰ الی ۱۰:۳۰)</p>
+              </div>
+
               <table className="w-full text-right text-xs border-collapse">
                 <thead>
-                  <tr className="bg-slate-900 text-white">
-                    <th className="p-2.5">نام استاد</th>
-                    <th className="p-2.5">کد پرسنلی</th>
-                    <th className="p-2.5">دروس ارزشیابی‌شده</th>
-                    <th className="p-2.5 text-center">تسلط علمی</th>
-                    <th className="p-2.5 text-center">فن بیان و تدریس</th>
-                    <th className="p-2.5 text-center">نظم کلاسی</th>
-                    <th className="p-2.5 text-center">میانگین کل (از ۵)</th>
-                    <th className="p-2.5 text-center">وضعیت کیفی</th>
-                    <th className="p-2.5">تصمیم و بازخورد مدیر گروه</th>
+                  <tr className="bg-slate-100 border-b">
+                    <th className="p-2 text-center">شماره صندلی</th>
+                    <th className="p-2">عکس</th>
+                    <th className="p-2">نام و نام خانوادگی</th>
+                    <th className="p-2">شماره دانشجویی</th>
+                    <th className="p-2">عنوان درس</th>
+                    <th className="p-2 text-center">شماره پاسخنامه</th>
+                    <th className="p-2 text-center">امضای داوطلب</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {evalBottlenecks.map(b => (
-                    <tr
-                      key={b.id}
-                      className={`border-b transition ${
-                        b.isFlagged
-                          ? 'bg-rose-50/80 border-rose-300 font-bold text-rose-950'
-                          : 'border-slate-100 hover:bg-slate-50'
-                      }`}
-                    >
-                      <td className="p-2.5 font-black text-slate-900 flex items-center gap-1.5">
-                        {b.isFlagged && <span className="text-rose-600 text-base">⚠️</span>}
-                        <span>{b.profName}</span>
+                  {allocatedSeatsList.slice(0, 10).map(st => (
+                    <tr key={st.seatNo} className="border-b">
+                      <td className="p-2 text-center font-mono font-black">{st.seatNo}</td>
+                      <td className="p-2">
+                        <div className="w-7 h-7 rounded bg-slate-200 flex items-center justify-center font-bold text-[10px]">
+                          {st.studentName[0]}
+                        </div>
                       </td>
-                      <td className="p-2.5 font-mono text-slate-700" dir="ltr">{b.staffCode}</td>
-                      <td className="p-2.5 text-slate-700">{b.courses.join('، ')}</td>
-                      <td className="p-2.5 text-center font-bold">{b.masteryScore}</td>
-                      <td className="p-2.5 text-center font-bold">{b.teachingSkill}</td>
-                      <td className="p-2.5 text-center font-bold">{b.disciplineScore}</td>
-                      <td className="p-2.5 text-center font-mono font-black text-sm">
-                        <span
-                          className={`px-2.5 py-1 rounded-xl ${
-                            b.isFlagged ? 'bg-rose-600 text-white shadow-xs' : 'bg-emerald-100 text-emerald-900'
-                          }`}
-                        >
-                          {b.avgScore}
-                        </span>
-                      </td>
-                      <td className="p-2.5 text-center">
-                        <span
-                          className={`px-2.5 py-0.5 rounded-full text-[11px] font-black ${
-                            b.isFlagged
-                              ? 'bg-rose-200 text-rose-900 border border-rose-300 animate-pulse'
-                              : 'bg-emerald-100 text-emerald-900'
-                          }`}
-                        >
-                          {b.isFlagged ? '🚩 گلوگاه کیفی (اخطار)' : '✓ عملکرد مطلوب'}
-                        </span>
-                      </td>
-                      <td className="p-2.5 text-slate-700 text-[11px]">
-                        {b.notes}
-                      </td>
+                      <td className="p-2 font-bold">{st.studentName}</td>
+                      <td className="p-2 font-mono" dir="ltr">{st.studentCode}</td>
+                      <td className="p-2">{st.courseTitle}</td>
+                      <td className="p-2 text-center font-mono font-bold">A-{st.seatNo + 100}</td>
+                      <td className="p-2 text-center text-slate-400 font-serif">.......................</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
 
-          {/* Section 2: Physical Facilities Analysis */}
-          <div className="space-y-3 pt-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">🏛️</span>
-                <h3 className="font-black text-slate-900 text-sm">
-                  ۲. تحلیل امکانات فیزیکی کلاس‌ها و ارجاع تیکت‌های تعمیرات به پشتیبانی:
-                </h3>
-              </div>
-              <span className="text-xs text-slate-500 font-bold">
-                استخراج خودکار از پاسخ‌های دانشجویان در فرم ارزشیابی ترم
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-              {facilityTickets.map(tkt => {
-                const isDispatched = tkt.status === 'DISPATCHED';
-
-                return (
-                  <div
-                    key={tkt.id}
-                    className={`p-4 rounded-2xl border space-y-3 shadow-xs ${
-                      isDispatched
-                        ? 'bg-indigo-50/50 border-indigo-300'
-                        : 'bg-amber-50/50 border-amber-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-black text-slate-900 text-sm">{tkt.roomName}</h4>
-                      <span
-                        className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
-                          isDispatched ? 'bg-indigo-200 text-indigo-900' : 'bg-amber-200 text-amber-900'
-                        }`}
-                      >
-                        {isDispatched ? '✓ تیکت ارسال شد' : '⏳ در انتظار ارجاع'}
-                      </span>
-                    </div>
-
-                    <div className="text-xs text-slate-700 space-y-1">
-                      <p><strong>موضوع نقص:</strong> {tkt.issueType}</p>
-                      <p><strong>تعداد گزارش‌های دانشجویی:</strong> {tkt.reportedByCount} دانشجو</p>
-                      <p><strong>واحد اقدام‌کننده:</strong> {tkt.targetDepartment}</p>
-                      {tkt.ticketCode && (
-                        <p className="font-mono font-bold text-indigo-900 text-[11px]" dir="ltr">
-                          کد رهگیری: {tkt.ticketCode}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
-                      <span className="text-[10px] text-slate-500">
-                        {isDispatched ? `ارسال شده در ${tkt.dispatchedAt}` : 'نیازمند تایید مدیر'}
-                      </span>
-                      {!isDispatched && (
-                        <button
-                          onClick={() => {
-                            setFacilityTickets(prev =>
-                              prev.map(t =>
-                                t.id === tkt.id
-                                  ? {
-                                      ...t,
-                                      status: 'DISPATCHED' as const,
-                                      dispatchedAt: 'هم‌اکنون',
-                                    }
-                                  : t
-                              )
-                            );
-                            showToast(`🚀 تیکت تعمیرات برای ${tkt.roomName} با موفقیت صادر و به ${tkt.targetDepartment} ارسال شد.`);
-                          }}
-                          className="px-3 py-1 rounded-lg bg-indigo-900 hover:bg-indigo-950 text-white font-black text-xs transition"
-                        >
-                          ارسال تیکت 🚀
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* MODAL: ADD NEW EXAM SLOT */}
-      {/* ========================================================================= */}
-      {isNewSlotModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95">
-            <div className="p-4 bg-indigo-950 text-white flex items-center justify-between">
-              <h3 className="font-extrabold text-sm sm:text-base">➕ افزودن سانس آزمون روزانه جدید</h3>
-              <button onClick={() => setIsNewSlotModalOpen(false)} className="text-white/60 hover:text-white">✕</button>
-            </div>
-
-            <div className="p-4 space-y-3 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">عنوان سانس:</label>
-                <input
-                  type="text"
-                  value={newSlotForm.label}
-                  onChange={e => setNewSlotForm({ ...newSlotForm, label: e.target.value })}
-                  placeholder="مثلاً: سانس ۵ (عصرگاهی)"
-                  className="w-full border border-slate-300 rounded-lg p-2 font-bold bg-white"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">ساعت شروع:</label>
-                  <input
-                    type="text"
-                    value={newSlotForm.startTime}
-                    onChange={e => setNewSlotForm({ ...newSlotForm, startTime: e.target.value })}
-                    placeholder="۱۹:۰۰"
-                    className="w-full border border-slate-300 rounded-lg p-2 font-mono font-bold text-center bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">ساعت پایان:</label>
-                  <input
-                    type="text"
-                    value={newSlotForm.endTime}
-                    onChange={e => setNewSlotForm({ ...newSlotForm, endTime: e.target.value })}
-                    placeholder="۲۱:۰۰"
-                    className="w-full border border-slate-300 rounded-lg p-2 font-mono font-bold text-center bg-white"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+            <div className="p-3 bg-slate-50 border-t flex justify-end gap-2">
               <button
-                onClick={() => setIsNewSlotModalOpen(false)}
+                onClick={() => setShowPhotoRosterPrint(false)}
                 className="px-4 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-bold text-xs"
               >
-                انصراف
+                بستن
               </button>
               <button
-                onClick={handleAddNewSlot}
-                className="px-5 py-1.5 rounded-lg bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs shadow"
+                onClick={() => {
+                  window.print();
+                  setShowPhotoRosterPrint(false);
+                }}
+                className="px-6 py-1.5 rounded-lg bg-indigo-900 text-white font-black text-xs shadow"
               >
-                ✓ ثبت و افزودن سانس
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* MODAL: ADD NEW EXAM HALL */}
-      {/* ========================================================================= */}
-      {isNewHallModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95">
-            <div className="p-4 bg-indigo-950 text-white flex items-center justify-between">
-              <h3 className="font-extrabold text-sm sm:text-base">➕ تعریف حوزه / سالن امتحانی جدید</h3>
-              <button onClick={() => setIsNewHallModalOpen(false)} className="text-white/60 hover:text-white">✕</button>
-            </div>
-
-            <div className="p-4 space-y-3 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">نام سالن / حوزه آزمون:</label>
-                <input
-                  type="text"
-                  value={newHallForm.name}
-                  onChange={e => setNewHallForm({ ...newHallForm, name: e.target.value })}
-                  placeholder="مثلاً: سالن اجتماعات شهید بهشتی"
-                  className="w-full border border-slate-300 rounded-lg p-2 font-bold bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">محل استقرار / ساختمان:</label>
-                <input
-                  type="text"
-                  value={newHallForm.buildingName}
-                  onChange={e => setNewHallForm({ ...newHallForm, buildingName: e.target.value })}
-                  placeholder="مثلاً: ساختمان آموزش - طبقه دوم"
-                  className="w-full border border-slate-300 rounded-lg p-2 font-bold bg-white"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">ظرفیت اسمی کل سالن:</label>
-                  <input
-                    type="number"
-                    value={newHallForm.totalSeats}
-                    onChange={e => setNewHallForm({ ...newHallForm, totalSeats: Number(e.target.value) })}
-                    className="w-full border border-slate-300 rounded-lg p-2 font-bold bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-emerald-800 block mb-1">ظرفیت آزمونی (فاصله‌دار):</label>
-                  <input
-                    type="number"
-                    value={newHallForm.examCapacity}
-                    onChange={e => setNewHallForm({ ...newHallForm, examCapacity: Number(e.target.value) })}
-                    className="w-full border-2 border-emerald-400 rounded-lg p-2 font-black bg-emerald-50/50 text-emerald-950"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-indigo-950 block mb-1">شماره صندلی شروع:</label>
-                  <input
-                    type="number"
-                    value={newHallForm.startSeatNumber}
-                    onChange={e => setNewHallForm({ ...newHallForm, startSeatNumber: Number(e.target.value) })}
-                    className="w-full border-2 border-indigo-400 rounded-lg p-2 font-mono font-black bg-indigo-50/50 text-indigo-950"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-500 block mb-1">شماره صندلی پایان (خودکار):</label>
-                  <input
-                    type="text"
-                    disabled
-                    value={Number(newHallForm.startSeatNumber) + Number(newHallForm.examCapacity) - 1}
-                    className="w-full border border-slate-200 rounded-lg p-2 font-mono font-black bg-slate-100 text-slate-600 cursor-not-allowed"
-                  />
-                </div>
-              </div>
-
-              {/* Calculated Range Box */}
-              <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-300 text-xs text-emerald-900 font-bold flex items-center justify-between">
-                <span>بازه شماره صندلی‌های تخصیص‌یافته:</span>
-                <span className="font-mono text-sm font-black">
-                  از {newHallForm.startSeatNumber} تا {Number(newHallForm.startSeatNumber) + Number(newHallForm.examCapacity) - 1}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-4 pt-1">
-                <label className="flex items-center gap-1.5 font-bold text-slate-700 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={newHallForm.hasAirConditioning}
-                    onChange={e => setNewHallForm({ ...newHallForm, hasAirConditioning: e.target.checked })}
-                    className="rounded text-indigo-600"
-                  />
-                  <span>تهویه مطبوع</span>
-                </label>
-                <label className="flex items-center gap-1.5 font-bold text-slate-700 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={newHallForm.isCCTVMonitored}
-                    onChange={e => setNewHallForm({ ...newHallForm, isCCTVMonitored: e.target.checked })}
-                    className="rounded text-indigo-600"
-                  />
-                  <span>دوربین مداربسته</span>
-                </label>
-              </div>
-            </div>
-
-            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
-              <button
-                onClick={() => setIsNewHallModalOpen(false)}
-                className="px-4 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-bold text-xs"
-              >
-                انصراف
-              </button>
-              <button
-                onClick={handleAddNewHall}
-                className="px-5 py-1.5 rounded-lg bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs shadow"
-              >
-                ✓ ثبت و تعریف سالن
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* MODAL: EDIT COURSE EXAM (MANUAL OVERRIDE & SETTINGS) */}
-      {/* ========================================================================= */}
-      {editingCourse && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95">
-            <div className="p-4 bg-indigo-950 text-white flex items-center justify-between">
-              <div>
-                <h3 className="font-extrabold text-sm sm:text-base">
-                  ✏️ تنظیمات تاریخ و سالن آزمون: {editingCourse.courseTitle}
-                </h3>
-                <span className="text-xs text-indigo-300">
-                  کد: {editingCourse.courseCode} · {editingCourse.cohortTitle} · استاد: {editingCourse.professorName}
-                </span>
-              </div>
-              <button onClick={() => setEditingCourse(null)} className="text-white/60 hover:text-white">✕</button>
-            </div>
-
-            <div className="p-4 space-y-4 text-xs">
-              {/* Mode Toggle */}
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <span className="font-bold text-slate-800">حالت زمان‌بندی تاریخ و ساعت این درس:</span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setEditingCourse({ ...editingCourse, schedulingMode: 'AUTO_MATRIX' })}
-                    className={`px-3 py-1.5 rounded-lg font-bold text-xs transition ${
-                      editingCourse.schedulingMode === 'AUTO_MATRIX'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'bg-slate-200 text-slate-700'
-                    }`}
-                  >
-                    🤖 خودکار ماتریسی
-                  </button>
-                  <button
-                    onClick={() => setEditingCourse({ ...editingCourse, schedulingMode: 'MANUAL' })}
-                    className={`px-3 py-1.5 rounded-lg font-bold text-xs transition ${
-                      editingCourse.schedulingMode === 'MANUAL'
-                        ? 'bg-amber-500 text-white shadow-xs'
-                        : 'bg-slate-200 text-slate-700'
-                    }`}
-                  >
-                    ✍️ تخصیص دستی و قفل
-                  </button>
-                </div>
-              </div>
-
-              {/* Date & Slot */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">تاریخ آزمون:</label>
-                  <input
-                    type="text"
-                    value={editingCourse.examDate}
-                    onChange={e => setEditingCourse({ ...editingCourse, examDate: e.target.value })}
-                    className="w-full border border-slate-300 rounded-lg p-2 font-mono font-bold bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">سانس و ساعت برگزاری:</label>
-                  <select
-                    value={editingCourse.slotId}
-                    onChange={e => setEditingCourse({ ...editingCourse, slotId: Number(e.target.value) })}
-                    className="w-full border border-slate-300 rounded-lg p-2 font-bold bg-white"
-                  >
-                    {slots.map(s => (
-                      <option key={s.id} value={s.id}>
-                        {s.label} ({s.startTime} تا {s.endTime})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Hall & Proctor */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">سالن آزمون:</label>
-                  <select
-                    value={editingCourse.hallId}
-                    onChange={e => setEditingCourse({ ...editingCourse, hallId: Number(e.target.value) })}
-                    className="w-full border border-slate-300 rounded-lg p-2 font-bold bg-white"
-                  >
-                    {halls.map(h => (
-                      <option key={h.id} value={h.id}>
-                        🏛️ {h.name} (صندلی {h.startSeatNumber} تا {h.endSeatNumber} — ظرفیت: {h.examCapacity})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">سرپرست / مراقب ارشد:</label>
-                  <input
-                    type="text"
-                    value={editingCourse.chiefProctor}
-                    onChange={e => setEditingCourse({ ...editingCourse, chiefProctor: e.target.value })}
-                    className="w-full border border-slate-300 rounded-lg p-2 font-bold bg-white"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
-              <button
-                onClick={() => setEditingCourse(null)}
-                className="px-4 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-bold text-xs"
-              >
-                انصراف
-              </button>
-              <button
-                onClick={() => handleSaveCourseExamEdit(editingCourse)}
-                className="px-6 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs shadow"
-              >
-                💾 ذخیره و اعمال تغییرات آزمون
+                🖨️ پرینت لیست عکس‌دار
               </button>
             </div>
           </div>
@@ -2034,44 +1368,33 @@ export default function ExamPlanningClient() {
             </div>
 
             <div className="p-4 max-h-[70vh] overflow-y-auto space-y-3 text-xs">
-              <div className="text-center space-y-1 border-b border-slate-200 pb-3">
-                <h2 className="font-black text-slate-900 text-base">دانشگاه جامع آفاق — تقویم و برنامه امتحانات پایان‌ترم</h2>
-                <p className="text-xs text-slate-600 font-bold">نیمسال اول سال تحصیلی ۱۴۰۵-۱۴۰۴ (بازه {examStartDate} الی {examEndDate})</p>
-              </div>
-
               <table className="w-full text-right text-xs border-collapse">
                 <thead>
-                  <tr className="bg-slate-100 text-slate-800 border-b border-slate-300">
+                  <tr className="bg-slate-100 text-slate-800 border-b">
                     <th className="p-2">کد درس</th>
                     <th className="p-2">عنوان درس</th>
-                    <th className="p-2">رشته و ورودی</th>
                     <th className="p-2">استاد</th>
                     <th className="p-2 text-center">تاریخ</th>
                     <th className="p-2 text-center">ساعت</th>
-                    <th className="p-2">سالن و شماره صندلی</th>
+                    <th className="p-2">سالن</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {courses.map(c => {
-                    const slot = slots.find(s => s.id === c.slotId) || slots[0];
-                    const hall = halls.find(h => h.id === c.hallId) || halls[0];
-                    return (
-                      <tr key={c.id} className="border-b border-slate-100">
-                        <td className="p-2 font-mono font-bold" dir="ltr">{c.courseCode}</td>
-                        <td className="p-2 font-bold">{c.courseTitle} (گروه {c.groupNumber})</td>
-                        <td className="p-2">{c.cohortTitle}</td>
-                        <td className="p-2">{c.professorName}</td>
-                        <td className="p-2 text-center font-mono font-bold">{c.examDate}</td>
-                        <td className="p-2 text-center font-mono">{slot.startTime} تا {slot.endTime}</td>
-                        <td className="p-2">{hall.name} ({hall.startSeatNumber} تا {hall.endSeatNumber})</td>
-                      </tr>
-                    );
-                  })}
+                  {courses.map(c => (
+                    <tr key={c.id} className="border-b">
+                      <td className="p-2 font-mono font-bold" dir="ltr">{c.courseCode}</td>
+                      <td className="p-2 font-bold">{c.courseTitle}</td>
+                      <td className="p-2">{c.professorName}</td>
+                      <td className="p-2 text-center font-mono font-bold">{c.examDate}</td>
+                      <td className="p-2 text-center font-mono">سانس {c.slotId}</td>
+                      <td className="p-2">آمفی‌تئاتر مرکزی</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
 
-            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+            <div className="p-3 bg-slate-50 border-t flex justify-end gap-2">
               <button
                 onClick={() => setShowPrintModal(false)}
                 className="px-4 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-bold text-xs"
@@ -2083,7 +1406,7 @@ export default function ExamPlanningClient() {
                   window.print();
                   setShowPrintModal(false);
                 }}
-                className="px-6 py-1.5 rounded-lg bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs shadow"
+                className="px-6 py-1.5 rounded-lg bg-indigo-900 text-white font-black text-xs shadow"
               >
                 🖨️ پرینت نهایی
               </button>

@@ -277,11 +277,16 @@ export default function ProctorExamAttendanceClient({ user }: Props) {
 
   // Manual Status Change
   const handleSetStudentStatus = (studentId: number, status: StudentExamStatus) => {
+    const target = roster.find(s => s.id === studentId);
     const nowTime = new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
     setRoster(prev =>
       prev.map(s => (s.id === studentId ? { ...s, status, scannedAt: status === 'PRESENT' || status === 'LATE' ? nowTime : s.scannedAt } : s))
     );
-    showToast('وضعیت داوطلب با موفقیت به‌روزرسانی شد.');
+    if (status === 'ABSENT') {
+      showToast(`🔴 وضعیت دانشجو «${target?.studentName}» به «غایب» تغییر یافت و پیامک مهلت ۴۸ ساعته بارگذاری گواهی پزشکی برای ایشان ارسال گردید.`);
+    } else {
+      showToast('✓ وضعیت داوطلب با موفقیت به‌روزرسانی شد.');
+    }
   };
 
   // Record Cheating / Violation
