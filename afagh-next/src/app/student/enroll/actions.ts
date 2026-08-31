@@ -7,6 +7,7 @@ import { db } from '@/db';
 import {
   academic_terms,
   cart_items,
+  classrooms,
   course_offerings,
   courses,
   degree_level_configs,
@@ -14,6 +15,7 @@ import {
   notifications,
   process_definitions,
   process_steps,
+  schedules,
   student_requests,
   students,
 } from '@/db/schema';
@@ -29,11 +31,15 @@ async function ctx() {
   return { user, me, term };
 }
 
+function timeOverlap(s1: string, e1: string, s2: string, e2: string) {
+  return s1.slice(0, 5) < e2.slice(0, 5) && s2.slice(0, 5) < e1.slice(0, 5);
+}
+
 export async function addToCartAction(offeringId: number) {
   const { user, me, term } = await ctx();
   if (!term) return { ok: false, error: 'ترم جاری فعال نیست' };
 
-  // بررسی تکراری نبودن درس (همان درس با گروه دیگر نباید در سبد باشد)
+  // دریافت اطلاعات این ارائه
   const [targetOff] = await db
     .select({ id: course_offerings.id, courseId: course_offerings.courseId })
     .from(course_offerings)
@@ -41,7 +47,7 @@ export async function addToCartAction(offeringId: number) {
     .limit(1);
 
   if (targetOff) {
-    // یافتن سایر گروه‌های همین درس در سبد دانشجو و جایگزینی
+    // یافتن و حذف سایر گروه‌های همین درس از سبد دانشجو (جایگزینی گروه جدید)
     const otherGroupOfferings = await db
       .select({ id: course_offerings.id })
       .from(course_offerings)
@@ -55,7 +61,7 @@ export async function addToCartAction(offeringId: number) {
     }
   }
 
-  // نوشتن تحت RLS (§۲۱۷۰) با ثبت تاریخ جاری جهت تمدید مهلت
+  // درج ارائه جدید در سبد تحت RLS (§۲۱۷۰) با تمدید مهلت
   await withUserRls(user.id, tx =>
     tx
       .insert(cart_items)
@@ -86,17 +92,23 @@ export async function clearCartAction() {
   return { ok: true };
 }
 
-/** چیدمان هوشمند و خودکار دروس ترم بر اساس چارت مصوب رشته */
-export async function autoFillCartFromChartAction(): Promise<{ ok: boolean; count: number; units: number; message: string }> {
+/** چیدمان هوشمند و خودکار دروس ترم بر اساس چارت، ظرفیت و کنترل عدم تداخل زمانی و امتحانی */
+export async function autoFillCartFromChartAction(): Promise<{
+  ok: boolean;
+  count: number;
+  units: number;
+  message: string;
+  conflictsResolved?: number;
+}> {
   const { user, me, term } = await ctx();
   if (!term) return { ok: false, count: 0, units: 0, message: 'ترم جاری فعال نیست.' };
 
-  // ۱. ابتدا سبد قبلی خالی می‌شود تا درس‌های تکراری و متناقض پاک شوند
+  // ۱. پاکسازی سبد قبلی جهت چیدمان تازه و بدون تداخل
   await withUserRls(user.id, tx =>
     tx.delete(cart_items).where(eq(cart_items.studentId, me.id))
   );
 
-  // ۲. دریافت دروس ارائه‌شده در ترم جاری به همراه مشخصات درس
+  // ۲. دریافت تمام ارائه‌های فعال ترم جاری
   const offerings = await db
     .select({
       id: course_offerings.id,
@@ -112,35 +124,109 @@ export async function autoFillCartFromChartAction(): Promise<{ ok: boolean; coun
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .where(and(eq(course_offerings.termId, term.id), eq(course_offerings.isActive, 1)));
 
-  // ۳. فیلتر هوشمند بر اساس مقطع دانشجو و دروس پیشنهادی ترم
-  // برای کارشناسی: دروس پایان‌نامه ارشد (2112901) و مطالعه فردی حذف می‌شوند
-  const isUndergrad = me.degreeLevelId === 1;
+  // ۳. دریافت زمان‌بندی کلاس‌ها و امتحانات ارائه‌ها
+  const allScheds = await db.select().from(schedules);
+  const schedMap = new Map<
+    number,
+    {
+      classes: { dayOfWeek: number; startTime: string; endTime: string }[];
+      exam?: { examDate: string; startTime: string; endTime: string };
+    }
+  >();
 
-  // انتخاب یکتا برای هر درس (جلوگیری از ثبت دو گروه از یک درس)
-  const chosenOfferings: typeof offerings = [];
-  const seenCourseIds = new Set<number>();
-  let totalUnits = 0;
-  const maxUnitsLimit = 20; // سقف آیین‌نامه ترمیک
-
-  // اولویت ۱: دروس پایه و اصلی ترمیک مرتبط با مقطع
-  for (const off of offerings) {
-    if (seenCourseIds.has(off.courseId)) continue;
-
-    // عدم اضافه کردن پایان‌نامه ارشد برای دانشجوی کارشناسی
-    if (isUndergrad && (off.code.startsWith('21') || off.title.includes('پایان‌نامه'))) continue;
-
-    // عدم اضافه کردن دروس موردی کمیسیون در چیدمان خودکار
-    if (off.title.includes('معرفی به استاد') || off.title.includes('مطالعه فردی')) continue;
-
-    const u = Number(off.units || 0);
-    if (totalUnits + u <= maxUnitsLimit) {
-      seenCourseIds.add(off.courseId);
-      chosenOfferings.push(off);
-      totalUnits += u;
+  for (const s of allScheds) {
+    if (!schedMap.has(s.offeringId)) schedMap.set(s.offeringId, { classes: [] });
+    const entry = schedMap.get(s.offeringId)!;
+    if (s.scheduleType === 'CLASS' && s.dayOfWeek != null) {
+      entry.classes.push({ dayOfWeek: s.dayOfWeek, startTime: s.startTime, endTime: s.endTime });
+    } else if (s.scheduleType === 'EXAM' && s.examDate) {
+      entry.exam = { examDate: String(s.examDate), startTime: s.startTime, endTime: s.endTime };
     }
   }
 
-  // ۴. درج دروس انتخاب‌شده در سبد دانشجو
+  // ۴. دسته‌بندی ارائه‌ها بر اساس کد/شناسه درس (جهت مدیریت چندگروهی)
+  const byCourse = new Map<number, typeof offerings>();
+  for (const off of offerings) {
+    // فیلتر عدم درج پایان‌نامه ارشد برای دانشجوی کارشناسی
+    if (me.degreeLevelId === 1 && (off.code.startsWith('21') || off.title.includes('پایان‌نامه'))) continue;
+    if (off.title.includes('معرفی به استاد') || off.title.includes('مطالعه فردی')) continue;
+
+    if (!byCourse.has(off.courseId)) byCourse.set(off.courseId, []);
+    byCourse.get(off.courseId)!.push(off);
+  }
+
+  // ۵. الگوریتم انتخاب بهینه گروه‌ها بدون تداخل و با اولویت ظرفیت خالی
+  const chosenOfferings: typeof offerings = [];
+  let totalUnits = 0;
+  let conflictsAvoidedCount = 0;
+  const maxUnitsLimit = 20;
+
+  for (const [courseId, groups] of byCourse.entries()) {
+    const courseUnits = Number(groups[0].units || 0);
+    if (totalUnits + courseUnits > maxUnitsLimit) continue;
+
+    // رتبه‌بندی گروه‌ها بر اساس:
+    // ۱) عدم تداخل کلاسی و امتحانی با دروس انتخاب‌شده تاکنون
+    // ۲) داشتن ظرفیت خالی (enrolled < capacity)
+    // ۳) شماره گروه کمتر
+    let bestGroup: typeof groups[0] | null = null;
+    let bestScore = -9999;
+
+    for (const grp of groups) {
+      const s = schedMap.get(grp.id);
+      const hasCap = grp.enrolledCount < grp.capacity;
+      let hasClassConflict = false;
+      let hasExamConflict = false;
+
+      // بررسی تداخل با دروس از قبل انتخاب‌شده
+      for (const chosen of chosenOfferings) {
+        const chSched = schedMap.get(chosen.id);
+        if (!chSched || !s) continue;
+
+        // بررسی تداخل کلاسی
+        for (const c1 of s.classes) {
+          for (const c2 of chSched.classes) {
+            if (c1.dayOfWeek === c2.dayOfWeek && timeOverlap(c1.startTime, c1.endTime, c2.startTime, c2.endTime)) {
+              hasClassConflict = true;
+            }
+          }
+        }
+
+        // بررسی تداخل امتحانی
+        if (s.exam && chSched.exam && s.exam.examDate === chSched.exam.examDate) {
+          if (timeOverlap(s.exam.startTime, s.exam.endTime, chSched.exam.startTime, chSched.exam.endTime)) {
+            hasExamConflict = true;
+          }
+        }
+      }
+
+      let score = 0;
+      if (hasCap) score += 100;
+      if (!hasClassConflict) score += 500;
+      else score -= 500;
+      if (!hasExamConflict) score += 500;
+      else score -= 500;
+
+      // ترجیح گروه ۱ اگر شرایط یکسان باشد
+      score -= grp.groupNumber * 2;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestGroup = grp;
+        if ((hasClassConflict || hasExamConflict) && groups.length > 1) {
+          conflictsAvoidedCount++;
+        }
+      }
+    }
+
+    // اگر گروه بدون تداخل یافت شد، اضافه می‌شود
+    if (bestGroup && bestScore > 0) {
+      chosenOfferings.push(bestGroup);
+      totalUnits += courseUnits;
+    }
+  }
+
+  // ۶. ذخیره در سبد دانشجو
   const now = new Date();
   for (const off of chosenOfferings) {
     await withUserRls(user.id, tx =>
@@ -155,7 +241,8 @@ export async function autoFillCartFromChartAction(): Promise<{ ok: boolean; coun
     ok: true,
     count: chosenOfferings.length,
     units: totalUnits,
-    message: `چیدمان خودکار انجام شد: ${chosenOfferings.length} درس معادل ${totalUnits} واحد مصوب بر اساس چارت در سبد شما چیده شد.`,
+    conflictsResolved: conflictsAvoidedCount,
+    message: `چیدمان هوشمند با موفقیت انجام شد: ${chosenOfferings.length} درس (${totalUnits} واحد) با بررسی دقیق ظرفیت و انتخاب گروه‌های فاقد تداخل کلاسی و امتحانی در سبد شما چیده شد.`,
   };
 }
 
