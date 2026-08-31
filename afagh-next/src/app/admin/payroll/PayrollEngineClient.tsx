@@ -53,6 +53,8 @@ export interface ProfessorPayrollRecord {
   bankName: string;
   evaluatedScore: number;
   gradesFinalized: boolean;
+  contractSigned: boolean;
+  appointmentSigned: boolean;
   computedAt: string;
   approvedByDeptHeadAt?: string;
   approvedByDeanAt?: string;
@@ -78,8 +80,51 @@ export interface MultiplierRuleItem {
   isActive: boolean;
 }
 
+export interface BiometricAttendanceLogItem {
+  id: number;
+  staffCode: string;
+  profName: string;
+  sessionDate: string;
+  courseTitle: string;
+  groupNumber: number;
+  classTime: string;
+  isBackToBack: boolean;
+  gatePunchTime?: string;
+  verificationMethod:
+    | 'GATE_FINGERPRINT'
+    | 'CHAIN_MATCHING_CONTINUOUS'
+    | 'STUDENT_ROLLCALL'
+    | 'CLASS_PC_LOGIN'
+    | 'UNJUSTIFIED_ABSENCE';
+  verificationDetail: string;
+  ipAddress: string;
+  isFlaggedSuspicious: boolean;
+  payrollPenaltyAmount: number;
+}
+
+export interface TeachingAppointmentDecree {
+  id: number;
+  decreeNo: string;
+  staffCode: string;
+  profName: string;
+  academicRank: string;
+  departmentName: string;
+  termTitle: string;
+  issueDate: string;
+  coursesList: Array<{ code: string; title: string; group: number; units: number; weeklyHours: number }>;
+  totalWeeklyHours: number;
+  totalTermHours: number;
+  signatureStatus: 'PENDING' | 'SIGNED';
+  signedAt?: string;
+  ipAddress?: string;
+  otpUsed?: string;
+  documentHash?: string;
+}
+
 export type PayrollTabType =
   | 'STATEMENTS_CARTABLE'
+  | 'ATTENDANCE_BIOMETRIC_CHAIN'
+  | 'ELECTRONIC_DECREES'
   | 'BASE_RATES'
   | 'MULTIPLIERS'
   | 'CONTRACTS'
@@ -122,6 +167,8 @@ const INITIAL_PAYROLL_RECORDS: ProfessorPayrollRecord[] = [
     baseRatePerUnit: 38000000,
     evaluatedScore: 4.85,
     gradesFinalized: true,
+    contractSigned: true,
+    appointmentSigned: true,
     computedAt: '۱۴۰۵/۱۰/۲۸ - ۱۰:۳۰',
     status: 'DEAN_APPROVED',
     approvedByDeptHeadAt: '۱۴۰۵/۱۰/۲۸ - ۱۲:۰۰',
@@ -137,7 +184,7 @@ const INITIAL_PAYROLL_RECORDS: ProfessorPayrollRecord[] = [
     ],
     totalEquivalentUnits: 14.6,
     overloadUnits: 4.6,
-    grossAmount: 174800000, // 4.6 * 38,000,000
+    grossAmount: 174800000,
     classAbsencePenaltyUnits: 0,
     classAbsencePenaltyAmount: 0,
     examAbsencePenaltyAmount: 0,
@@ -161,6 +208,8 @@ const INITIAL_PAYROLL_RECORDS: ProfessorPayrollRecord[] = [
     baseRatePerUnit: 38000000,
     evaluatedScore: 4.70,
     gradesFinalized: false,
+    contractSigned: true,
+    appointmentSigned: true,
     computedAt: '۱۴۰۵/۱۰/۲۸ - ۱۰:۳۰',
     status: 'DEPT_HEAD_APPROVED',
     approvedByDeptHeadAt: '۱۴۰۵/۱۰/۲۸ - ۱۵:۴۰',
@@ -174,7 +223,7 @@ const INITIAL_PAYROLL_RECORDS: ProfessorPayrollRecord[] = [
     ],
     totalEquivalentUnits: 15.55,
     overloadUnits: 5.55,
-    grossAmount: 210900000, // 5.55 * 38,000,000
+    grossAmount: 210900000,
     classAbsencePenaltyUnits: 0,
     classAbsencePenaltyAmount: 0,
     examAbsencePenaltyAmount: 0,
@@ -194,10 +243,12 @@ const INITIAL_PAYROLL_RECORDS: ProfessorPayrollRecord[] = [
     degree: 'کارشناسی ارشد',
     departmentName: 'مهندسی کامپیوتر',
     contractType: 'ADJUNCT',
-    baseDutyUnits: 0.0, // Adjunct starts from unit 1
+    baseDutyUnits: 0.0,
     baseRatePerUnit: 25000000,
     evaluatedScore: 3.10,
     gradesFinalized: false,
+    contractSigned: false,
+    appointmentSigned: false,
     computedAt: '۱۴۰۵/۱۰/۲۸ - ۱۰:۳۰',
     status: 'DRAFT',
     iban: 'IR770190000000123456789003',
@@ -208,14 +259,14 @@ const INITIAL_PAYROLL_RECORDS: ProfessorPayrollRecord[] = [
     ],
     totalEquivalentUnits: 6.45,
     overloadUnits: 6.45,
-    grossAmount: 161250000, // 6.45 * 25,000,000
+    grossAmount: 161250000,
     classAbsencePenaltyUnits: 0.5,
-    classAbsencePenaltyAmount: 12500000, // 0.5 unit uncompensated missed class
-    examAbsencePenaltyAmount: 15000000, // Exam Absence fine from minutes
-    lateGradePenaltyAmount: 5000000, // SLA deadline penalty
+    classAbsencePenaltyAmount: 12500000,
+    examAbsencePenaltyAmount: 15000000,
+    lateGradePenaltyAmount: 5000000,
     taxRate: 0.10,
     taxAmount: 16125000,
-    totalDeductions: 48625000, // 16.125m tax + 12.5m absence + 15m exam + 5m late grade
+    totalDeductions: 48625000,
     netAmount: 112625000,
   },
   {
@@ -232,6 +283,8 @@ const INITIAL_PAYROLL_RECORDS: ProfessorPayrollRecord[] = [
     baseRatePerUnit: 49000000,
     evaluatedScore: 4.40,
     gradesFinalized: true,
+    contractSigned: true,
+    appointmentSigned: true,
     computedAt: '۱۴۰۵/۱۰/۲۸ - ۱۰:۳۰',
     status: 'FINANCE_SETTLED',
     approvedByDeptHeadAt: '۱۴۰۵/۱۰/۲۸ - ۱۱:۰۰',
@@ -247,7 +300,7 @@ const INITIAL_PAYROLL_RECORDS: ProfessorPayrollRecord[] = [
     ],
     totalEquivalentUnits: 13.6,
     overloadUnits: 3.6,
-    grossAmount: 176400000, // 3.6 * 49,000,000
+    grossAmount: 176400000,
     classAbsencePenaltyUnits: 0,
     classAbsencePenaltyAmount: 0,
     examAbsencePenaltyAmount: 0,
@@ -271,6 +324,8 @@ const INITIAL_PAYROLL_RECORDS: ProfessorPayrollRecord[] = [
     baseRatePerUnit: 38000000,
     evaluatedScore: 4.65,
     gradesFinalized: true,
+    contractSigned: true,
+    appointmentSigned: true,
     computedAt: '۱۴۰۵/۱۰/۲۸ - ۱۰:۳۰',
     status: 'DEAN_APPROVED',
     approvedByDeptHeadAt: '۱۴۰۵/۱۰/۲۸ - ۱۴:۰۰',
@@ -284,7 +339,7 @@ const INITIAL_PAYROLL_RECORDS: ProfessorPayrollRecord[] = [
     ],
     totalEquivalentUnits: 9.6,
     overloadUnits: 9.6,
-    grossAmount: 364800000, // 9.6 * 38,000,000
+    grossAmount: 364800000,
     classAbsencePenaltyUnits: 0,
     classAbsencePenaltyAmount: 0,
     examAbsencePenaltyAmount: 0,
@@ -296,19 +351,155 @@ const INITIAL_PAYROLL_RECORDS: ProfessorPayrollRecord[] = [
   },
 ];
 
+const INITIAL_BIOMETRIC_LOGS: BiometricAttendanceLogItem[] = [
+  {
+    id: 1,
+    staffCode: '۱۱۰۲',
+    profName: 'دکتر جمیل احمدی',
+    sessionDate: '۱۴۰۵/۰۸/۱۲',
+    courseTitle: 'ریاضی عمومی ۱',
+    groupNumber: 1,
+    classTime: '۰۸:۰۰ - ۱۰:۰۰',
+    isBackToBack: false,
+    gatePunchTime: '۰۷:۴۸:۱۲',
+    verificationMethod: 'GATE_FINGERPRINT',
+    verificationDetail: 'تطبیق موفق اثر انگشت در گیت ورودی اصلی (ساختمان آموزش)',
+    ipAddress: '192.168.10.45 (شبکه داخلی دانشگاه)',
+    isFlaggedSuspicious: false,
+    payrollPenaltyAmount: 0,
+  },
+  {
+    id: 2,
+    staffCode: '۱۱۰۲',
+    profName: 'دکتر جمیل احمدی',
+    sessionDate: '۱۴۰۵/۰۸/۱۲',
+    courseTitle: 'ساختمان داده‌ها',
+    groupNumber: 1,
+    classTime: '۱۰:۰۰ - ۱۲:۰۰',
+    isBackToBack: true,
+    gatePunchTime: undefined,
+    verificationMethod: 'CHAIN_MATCHING_CONTINUOUS',
+    verificationDetail: 'منطق پیوستگی زنجیره‌ای (Chain Matching): کلاس متوالی دوم — تایید خودکار حضور بدون نیاز به اثر انگشت مجدد در گیت',
+    ipAddress: '192.168.10.45 (شبکه داخلی دانشگاه)',
+    isFlaggedSuspicious: false,
+    payrollPenaltyAmount: 0,
+  },
+  {
+    id: 3,
+    staffCode: '۱۱۰۵',
+    profName: 'دکتر سارا رضایی',
+    sessionDate: '۱۴۰۵/۰۸/۱۴',
+    courseTitle: 'مبانی برنامه‌نویسی',
+    groupNumber: 1,
+    classTime: '۱۳:۳۰ - ۱۵:۳۰',
+    isBackToBack: false,
+    gatePunchTime: '۱۳:۱۵:۴۰',
+    verificationMethod: 'CLASS_PC_LOGIN',
+    verificationDetail: 'لاگین مستقیم استاد در کامپیوتر تریبون کلاس ۳۰۴ (Single Sign-On)',
+    ipAddress: '10.20.4.102 (Classroom PC)',
+    isFlaggedSuspicious: false,
+    payrollPenaltyAmount: 0,
+  },
+  {
+    id: 4,
+    staffCode: '۱۱۹۰',
+    profName: 'استاد مهدی کاظمی (مدعو)',
+    sessionDate: '۱۴۰۵/۰۸/۱۶',
+    courseTitle: 'طراحی الگوریتم‌ها',
+    groupNumber: 1,
+    classTime: '۰۸:۰۰ - ۱۰:۰۰',
+    isBackToBack: false,
+    gatePunchTime: undefined,
+    verificationMethod: 'UNJUSTIFIED_ABSENCE',
+    verificationDetail: 'عدم ثبت اثر انگشت در گیت، عدم لاگین کلاسی و عدم تشکیل جلسه جبرانی',
+    ipAddress: '—',
+    isFlaggedSuspicious: true,
+    payrollPenaltyAmount: 12500000,
+  },
+];
+
+const INITIAL_APPOINTMENT_DECREES: TeachingAppointmentDecree[] = [
+  {
+    id: 1,
+    decreeNo: 'AF-DEC-1405-1102',
+    staffCode: '۱۱۰۲',
+    profName: 'دکتر جمیل احمدی',
+    academicRank: 'استادیار',
+    departmentName: 'مهندسی کامپیوتر',
+    termTitle: 'نیمسال اول ۱۴۰۵-۱۴۰۴',
+    issueDate: '۱۴۰۵/۰۶/۲۵',
+    coursesList: [
+      { code: '1112101', title: 'ریاضی عمومی ۱', group: 1, units: 3, weeklyHours: 3 },
+      { code: '1112201', title: 'ساختمان داده‌ها', group: 1, units: 3, weeklyHours: 3 },
+      { code: '1112302', title: 'سیستم‌های عامل پیشرفته', group: 1, units: 3, weeklyHours: 3 },
+      { code: '1112401', title: 'آزمایشگاه شبکه‌های کامپیوتری', group: 1, units: 2, weeklyHours: 2 },
+    ],
+    totalWeeklyHours: 11,
+    totalTermHours: 176,
+    signatureStatus: 'SIGNED',
+    signedAt: '۱۴۰۵/۰۶/۲۸ - ۱۰:۱۵',
+    ipAddress: '192.168.10.45',
+    otpUsed: '94182',
+    documentHash: 'SHA256:7f9a8b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a',
+  },
+  {
+    id: 2,
+    decreeNo: 'AF-DEC-1405-1105',
+    staffCode: '۱۱۰۵',
+    profName: 'دکتر سارا رضایی',
+    academicRank: 'استادیار',
+    departmentName: 'مهندسی کامپیوتر',
+    termTitle: 'نیمسال اول ۱۴۰۵-۱۴۰۴',
+    issueDate: '۱۴۰۵/۰۶/۲۵',
+    coursesList: [
+      { code: '1112103', title: 'مبانی برنامه‌نویسی', group: 1, units: 4, weeklyHours: 4 },
+      { code: '1112202', title: 'برنامه‌نویسی پیشرفته', group: 1, units: 3, weeklyHours: 3 },
+      { code: '1112303', title: 'پایگاه داده‌ها', group: 1, units: 3, weeklyHours: 3 },
+      { code: '1112402', title: 'هوش مصنوعی پیشرفته', group: 1, units: 3, weeklyHours: 3 },
+    ],
+    totalWeeklyHours: 13,
+    totalTermHours: 208,
+    signatureStatus: 'SIGNED',
+    signedAt: '۱۴۰۵/۰۶/۲۹ - ۱۶:۳۰',
+    ipAddress: '192.168.10.52',
+    otpUsed: '58124',
+    documentHash: 'SHA256:9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d',
+  },
+  {
+    id: 3,
+    decreeNo: 'AF-DEC-1405-1190',
+    staffCode: '۱۱۹۰',
+    profName: 'استاد مهدی کاظمی (مدعو)',
+    academicRank: 'مربی',
+    departmentName: 'مهندسی کامپیوتر',
+    termTitle: 'نیمسال اول ۱۴۰۵-۱۴۰۴',
+    issueDate: '۱۴۰۵/۰۶/۲۵',
+    coursesList: [
+      { code: '1112301', title: 'طراحی الگوریتم‌ها', group: 1, units: 3, weeklyHours: 3 },
+      { code: '1112108', title: 'مبانی فناوری اطلاعات (گروه ۲)', group: 2, units: 3, weeklyHours: 3 },
+    ],
+    totalWeeklyHours: 6,
+    totalTermHours: 96,
+    signatureStatus: 'PENDING',
+  },
+];
+
 export default function PayrollEngineClient() {
   const [activeTab, setActiveTab] = useState<PayrollTabType>('STATEMENTS_CARTABLE');
   const [payrollRecords, setPayrollRecords] = useState<ProfessorPayrollRecord[]>(INITIAL_PAYROLL_RECORDS);
   const [baseRates, setBaseRates] = useState<BaseRateItem[]>(INITIAL_BASE_RATES);
   const [multipliers, setMultipliers] = useState<MultiplierRuleItem[]>(INITIAL_MULTIPLIERS);
+  const [biometricLogs, setBiometricLogs] = useState<BiometricAttendanceLogItem[]>(INITIAL_BIOMETRIC_LOGS);
+  const [appointmentDecrees, setAppointmentDecrees] = useState<TeachingAppointmentDecree[]>(INITIAL_APPOINTMENT_DECREES);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [contractFilter, setContractFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
-  // Modals & Active Selections
+  // Modals & Selections
   const [detailedPayslipRecord, setDetailedPayslipRecord] = useState<ProfessorPayrollRecord | null>(null);
+  const [selectedDecreeForView, setSelectedDecreeForView] = useState<TeachingAppointmentDecree | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -347,7 +538,7 @@ export default function PayrollEngineClient() {
   // ACTIONS & HANDLERS
   // ==========================================
 
-  // Recalculate single or all payroll statements with live parameters
+  // Recalculate with live logs
   const handleRecalculateAll = () => {
     setPayrollRecords(prev =>
       prev.map(r => {
@@ -370,6 +561,21 @@ export default function PayrollEngineClient() {
 
   // Stage Approval Action
   const handleApproveStage = (id: number) => {
+    const rec = payrollRecords.find(r => r.id === id);
+    if (!rec) return;
+
+    // Enforcement Gate: Final settlement blocked if grades not finalized or documents not signed
+    if (rec.status === 'DEAN_APPROVED') {
+      if (!rec.gradesFinalized) {
+        alert('⛔ گلوگاه تسویه مالی: استاد هنوز کلیه نمرات دروس ترم را نهایی نکرده است. صدور سند تسویه مالی مسدود است.');
+        return;
+      }
+      if (!rec.contractSigned || !rec.appointmentSigned) {
+        alert('⛔ گلوگاه اسناد: استاد هنوز قرارداد یا ابلاغیه تدریس را با امضای الکترونیک تایید نکرده است.');
+        return;
+      }
+    }
+
     setPayrollRecords(prev =>
       prev.map(r => {
         if (r.id === id) {
@@ -400,20 +606,24 @@ export default function PayrollEngineClient() {
         return r;
       })
     );
-    const rec = payrollRecords.find(r => r.id === id);
     showToast(`✓ وضعیت تایید فیش حقوقی «${rec?.name}» به مرحله بعدی ارتقا یافت.`);
   };
 
   // Batch Payout & Settle
   const handleBatchSettle = () => {
+    const eligible = payrollRecords.filter(r => r.status === 'DEAN_APPROVED' && r.gradesFinalized && r.contractSigned);
+    if (eligible.length === 0) {
+      showToast('⚠️ فیش آماده تسویه‌ای که کلیه گلوگاه‌های نمرات و امضای الکترونیک را پاس کرده باشد یافت نشد.');
+      return;
+    }
     setPayrollRecords(prev =>
       prev.map(r =>
-        r.status === 'DEAN_APPROVED'
+        r.status === 'DEAN_APPROVED' && r.gradesFinalized && r.contractSigned
           ? { ...r, status: 'FINANCE_SETTLED', settledAt: 'هم‌اکنون' }
           : r
       )
     );
-    showToast('💳 کلیه فیش‌های تاییدشده توسط معاونت آموزشی، تسویه نهایی و سند حسابداری آن‌ها صادر شد.');
+    showToast(`💳 تعداد ${eligible.length} فیش تاییدشده با موفقیت تسویه نهایی و سند پرداخت آن‌ها صادر شد.`);
   };
 
   // Export Bank ACH / Paya Diskette
@@ -435,6 +645,16 @@ export default function PayrollEngineClient() {
     link.click();
     document.body.removeChild(link);
     showToast('💾 فایل استاندارد دیسکت پرداخت بانکی (پایا/ساتنا/شبا) اساتید با موفقیت بارگیری شد.');
+  };
+
+  // Batch Generate Decrees
+  const handleBatchGenerateDecrees = () => {
+    showToast('🚀 ابلاغیه‌های رسمی تدریس (Teaching Appointment Decrees) برای کلیه ۴۰۰ استاد ترم در ۳ ثانیه تولید و پیامک اطلاع‌رسانی ارسال گردید.');
+  };
+
+  // Send Decree Reminder SMS
+  const handleSendDecreeReminder = (profName: string) => {
+    showToast(`📲 پیامک یادآوری امضای الکترونیکی ابلاغیه تدریس با موفقیت برای «${profName}» ارسال شد.`);
   };
 
   // Inline Rate Update
@@ -465,14 +685,14 @@ export default function PayrollEngineClient() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="font-black text-lg sm:text-xl tracking-tight">
-                  سامانه جامع محاسبه حق‌التدریس و دستمزد اساتید دانشگاه
+                  سامانه جامع محاسبه حق‌التدریس، حضور بیومتریک و ابلاغیه‌های اساتید
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500/90 text-white shadow-xs">
                   نیمسال اول ۱۴۰۵-۱۴۰۴
                 </span>
               </div>
               <p className="text-xs text-indigo-200 mt-1">
-                تفکیک هوشمند ساعات موظفی هیئت علمی و مدعو، اعمال ضرایب تئوری/عملی/تحصیلات تکمیلی، کسر غیبت و دیسکت بانکی
+                تطبیق هوشمند اثر انگشت گیت با منطق پیوستگی زنجیره‌ای (Chain Matching)، صدور ۱۰۰٪ بدون کاغذ ابلاغیه‌ها و دیسکت بانکی
               </p>
             </div>
           </div>
@@ -559,6 +779,28 @@ export default function PayrollEngineClient() {
         </button>
 
         <button
+          onClick={() => setActiveTab('ATTENDANCE_BIOMETRIC_CHAIN')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
+            activeTab === 'ATTENDANCE_BIOMETRIC_CHAIN'
+              ? 'bg-indigo-900 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <span>🧬 پایش تردد بیومتریک و پیوستگی کلاس‌ها (Chain Matching)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('ELECTRONIC_DECREES')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
+            activeTab === 'ELECTRONIC_DECREES'
+              ? 'bg-indigo-900 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <span>📜 ابلاغیه‌ها و صدور احکام تدریس (E-Sign)</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('BASE_RATES')}
           className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
             activeTab === 'BASE_RATES'
@@ -566,7 +808,7 @@ export default function PayrollEngineClient() {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <span>🏷️ جدول تعرفه پایه به تفکیک مرتبه علمی</span>
+          <span>🏷️ جدول تعرفه پایه مرتبه علمی</span>
         </button>
 
         <button
@@ -588,7 +830,7 @@ export default function PayrollEngineClient() {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <span>📝 قراردادها و سقف موظفی اساتید</span>
+          <span>📝 قراردادها و سقف موظفی</span>
         </button>
 
         <button
@@ -599,7 +841,7 @@ export default function PayrollEngineClient() {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <span>💳 صدور دیسکت پرداخت بانکی (شبا / پایا)</span>
+          <span>💳 صدور دیسکت پرداخت بانکی (شبا)</span>
         </button>
       </div>
 
@@ -685,6 +927,7 @@ export default function PayrollEngineClient() {
                   <th className="p-2.5 text-center">ناخالص (ريال)</th>
                   <th className="p-2.5 text-center">کسورات (ريال)</th>
                   <th className="p-2.5 text-center">خالص دریافتی (ريال)</th>
+                  <th className="p-2.5 text-center">گلوگاه‌های تسویه</th>
                   <th className="p-2.5 text-center">وضعیت تایید</th>
                   <th className="p-2.5 text-left">عملیات</th>
                 </tr>
@@ -737,6 +980,16 @@ export default function PayrollEngineClient() {
                         {rec.netAmount.toLocaleString('fa-IR')}
                       </td>
                       <td className="p-2.5 text-center">
+                        <div className="flex flex-col gap-0.5 text-[9px] font-bold">
+                          <span className={rec.gradesFinalized ? 'text-emerald-700' : 'text-rose-600'}>
+                            {rec.gradesFinalized ? '✓ نمرات نهایی' : '⚠️ نمرات باز'}
+                          </span>
+                          <span className={rec.contractSigned ? 'text-emerald-700' : 'text-rose-600'}>
+                            {rec.contractSigned ? '✓ امضای قرارداد' : '⚠️ فاقد امضا'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="p-2.5 text-center">
                         {rec.status === 'FINANCE_SETTLED' ? (
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-600 text-white">
                             ✓ تسویه نهایی مالی
@@ -782,7 +1035,262 @@ export default function PayrollEngineClient() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: BASE RATES */}
+      {/* TAB 2: BIOMETRIC GATE & CHAIN MATCHING ENGINE */}
+      {/* ========================================================================= */}
+      {activeTab === 'ATTENDANCE_BIOMETRIC_CHAIN' && (
+        <div className="card space-y-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="font-black text-slate-900 text-base">
+                  🧬 موتور تطبیق هوشمند اثر انگشت گیت ورودی و پیوستگی کلاس‌ها (Chain Matching)
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-900 border border-emerald-200">
+                  اتصال به گیت‌های سخت‌افزاری ZKTeco / Suprema
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                تطبیق لاگ تردد گیت با ساعات کلاسی، تایید خودکار کلاس‌های متوالی بدون نیاز به ثبت مکرر اثر انگشت (Buffer Time: ۱۵ الی ۳۰ دقیقه)
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs">
+                📶 وضعیت وب‌هوک گیت ورودی: برخط (Live)
+              </span>
+            </div>
+          </div>
+
+          {/* KPI Cards for Biometric Attendance */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3 bg-indigo-50 rounded-2xl border border-indigo-200">
+              <span className="text-indigo-800 text-[11px] block font-bold">تطبیق با گیت ورودی (۰۷:۴۵):</span>
+              <span className="text-base font-black text-indigo-950 font-mono">
+                {biometricLogs.filter(l => l.verificationMethod === 'GATE_FINGERPRINT').length} جلسه (کلاس اول) 🧬
+              </span>
+            </div>
+            <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200">
+              <span className="text-emerald-800 text-[11px] block font-bold">پیوستگی زنجیره‌ای (Chain Match):</span>
+              <span className="text-base font-black text-emerald-950 font-mono">
+                {biometricLogs.filter(l => l.verificationMethod === 'CHAIN_MATCHING_CONTINUOUS').length} جلسه (کلاس‌های متوالی) 🔗
+              </span>
+            </div>
+            <div className="p-3 bg-blue-50 rounded-2xl border border-blue-200">
+              <span className="text-blue-800 text-[11px] block font-bold">لاگین سیستم تریبون کلاس (SSO):</span>
+              <span className="text-base font-black text-blue-950 font-mono">
+                {biometricLogs.filter(l => l.verificationMethod === 'CLASS_PC_LOGIN').length} جلسه تاییدشده 🖥️
+              </span>
+            </div>
+            <div className="p-3 bg-rose-50 rounded-2xl border border-rose-200">
+              <span className="text-rose-800 text-[11px] block font-bold">غیبت غیرموجه قطعی (کسر از حقوق):</span>
+              <span className="text-base font-black text-rose-950 font-mono">
+                {biometricLogs.filter(l => l.verificationMethod === 'UNJUSTIFIED_ABSENCE').length} جلسه ⚠️
+              </span>
+            </div>
+          </div>
+
+          {/* Logic Explanation Box */}
+          <div className="p-4 bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl space-y-2 text-xs">
+            <h4 className="font-black text-amber-300 text-xs">
+              💡 نحوه عملکرد منطق پیوستگی زنجیره‌ای (Chain Matching Logic) برای کلاس‌های پشت‌سرهم:
+            </h4>
+            <p className="text-indigo-100 leading-5">
+              اگر استادی در یک روز دو کلاس متوالی داشته باشد (مثلاً کلاس اول ۰۸:۰۰ الی ۱۰:۰۰ و کلاس دوم ۱۰:۰۰ الی ۱۲:۰۰):
+              <br />
+              ۱. سیستم کلاس اول را با اثر انگشت ثبت‌شده در گیت ورودی (ساعت ۰۷:۴۸) تایید می‌کند.
+              <br />
+              ۲. برای کلاس دوم، سیستم <b>به هیچ وجه</b> به دنبال اثر انگشت مجدد در گیت ورودی نمی‌گردد؛ بلکه پایان موفقیت‌آمیز کلاس اول را به عنوان حضور پیوسته در محیط دانشگاه محسوب کرده و با احتساب ۱۵ الی ۳۰ دقیقه پنجره جابجایی بین ساختمان‌ها، کلاس دوم را به طور خودکار تایید می‌کند.
+            </p>
+          </div>
+
+          {/* Biometric Logs Table */}
+          <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+            <table className="w-full text-right text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white">
+                  <th className="p-2.5">کد</th>
+                  <th className="p-2.5">نام استاد</th>
+                  <th className="p-2.5 text-center">تاریخ</th>
+                  <th className="p-2.5">عنوان درس و گروه</th>
+                  <th className="p-2.5 text-center">ساعت کلاسی</th>
+                  <th className="p-2.5 text-center">تردد گیت ورودی</th>
+                  <th className="p-2.5 text-center">روش تایید حضور</th>
+                  <th className="p-2.5">جزئیات و آی‌پی ثبت‌شده</th>
+                  <th className="p-2.5 text-center">اثر مالی</th>
+                </tr>
+              </thead>
+              <tbody>
+                {biometricLogs.map(log => (
+                  <tr
+                    key={log.id}
+                    className={`border-b border-slate-100 ${
+                      log.isFlaggedSuspicious ? 'bg-rose-50/80 font-bold' : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <td className="p-2.5 font-mono" dir="ltr">{log.staffCode}</td>
+                    <td className="p-2.5 font-black text-slate-900">{log.profName}</td>
+                    <td className="p-2.5 text-center font-mono font-bold text-slate-700">{log.sessionDate}</td>
+                    <td className="p-2.5 font-bold text-indigo-950">
+                      {log.courseTitle} (گروه {log.groupNumber})
+                    </td>
+                    <td className="p-2.5 text-center font-mono font-bold">{log.classTime}</td>
+                    <td className="p-2.5 text-center font-mono font-bold">
+                      {log.gatePunchTime ? (
+                        <span className="text-emerald-700">✓ {log.gatePunchTime}</span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="p-2.5 text-center">
+                      {log.verificationMethod === 'GATE_FINGERPRINT' && (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-900">
+                          🧬 اثر انگشت گیت
+                        </span>
+                      )}
+                      {log.verificationMethod === 'CHAIN_MATCHING_CONTINUOUS' && (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-900">
+                          🔗 پیوستگی زنجیره‌ای (پشت‌سرهم)
+                        </span>
+                      )}
+                      {log.verificationMethod === 'CLASS_PC_LOGIN' && (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-900">
+                          🖥️ ورود به سیستم کلاس
+                        </span>
+                      )}
+                      {log.verificationMethod === 'UNJUSTIFIED_ABSENCE' && (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white">
+                          ⚠️ غیبت غیرموجه قطعی
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-2.5 text-[11px] text-slate-600">
+                      <div>{log.verificationDetail}</div>
+                      <div className="font-mono text-[10px] text-slate-400" dir="ltr">{log.ipAddress}</div>
+                    </td>
+                    <td className="p-2.5 text-center">
+                      {log.payrollPenaltyAmount > 0 ? (
+                        <span className="font-mono font-black text-rose-700">
+                          - {log.payrollPenaltyAmount.toLocaleString('fa-IR')} ريال
+                        </span>
+                      ) : (
+                        <span className="text-emerald-700 font-bold">بدون کسر</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 3: ELECTRONIC APPOINTMENT DECREES & E-SIGN */}
+      {/* ========================================================================= */}
+      {activeTab === 'ELECTRONIC_DECREES' && (
+        <div className="card space-y-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="font-black text-slate-900 text-base">
+                  📜 مدیریت و صدور ابلاغیه‌های رسمی تدریس (Teaching Appointment Decrees)
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-900 border border-indigo-200">
+                  سامانه ۱۰۰٪ بدون کاغذ (Paperless)
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                صدور ابلاغیه‌های تدریس ترم با امضای الکترونیک، احراز هویت دو مرحله‌ای پیامکی (2FA/OTP) و قفل گلوگاه‌های آموزشی
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleBatchGenerateDecrees}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-800 to-indigo-950 hover:from-indigo-900 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition active:scale-95"
+              >
+                <span>🚀 صدور دسته‌جمعی ابلاغیه‌های ترم</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Decrees Table */}
+          <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+            <table className="w-full text-right text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white">
+                  <th className="p-2.5">شماره حکم ابلاغیه</th>
+                  <th className="p-2.5">نام استاد</th>
+                  <th className="p-2.5">مرتبه و دانشکده</th>
+                  <th className="p-2.5">دروس مصوب تخصیص‌یافته</th>
+                  <th className="p-2.5 text-center">مجموع ساعات ترم</th>
+                  <th className="p-2.5 text-center">وضعیت امضای الکترونیک</th>
+                  <th className="p-2.5 text-center">شناسه امنیتی (Hash)</th>
+                  <th className="p-2.5 text-left">عملیات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {appointmentDecrees.map(decree => (
+                  <tr key={decree.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="p-2.5 font-mono font-bold text-slate-700" dir="ltr">
+                      {decree.decreeNo}
+                    </td>
+                    <td className="p-2.5 font-black text-slate-900">{decree.profName}</td>
+                    <td className="p-2.5 text-slate-700">
+                      <div>{decree.academicRank}</div>
+                      <div className="text-[10px] text-slate-500">{decree.departmentName}</div>
+                    </td>
+                    <td className="p-2.5 font-bold text-indigo-950">
+                      {decree.coursesList.map(c => `${c.title} (${c.units} واحد)`).join('، ')}
+                    </td>
+                    <td className="p-2.5 text-center font-mono font-bold text-slate-800">
+                      {decree.totalTermHours} ساعت ({decree.totalWeeklyHours} ساعت/هفته)
+                    </td>
+                    <td className="p-2.5 text-center">
+                      {decree.signatureStatus === 'SIGNED' ? (
+                        <div>
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-600 text-white shadow-xs">
+                            ✓ امضا شده با OTP
+                          </span>
+                          <div className="text-[9px] text-slate-500 font-mono mt-0.5">{decree.signedAt}</div>
+                        </div>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-950">
+                          در انتظار امضای استاد
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-2.5 text-center font-mono text-[10px] text-slate-500" dir="ltr">
+                      {decree.documentHash ? `${decree.documentHash.slice(0, 16)}...` : '—'}
+                    </td>
+                    <td className="p-2.5 text-left">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => setSelectedDecreeForView(decree)}
+                          className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 font-black text-[11px] transition"
+                        >
+                          📜 مشاهده ابلاغیه
+                        </button>
+                        {decree.signatureStatus === 'PENDING' && (
+                          <button
+                            onClick={() => handleSendDecreeReminder(decree.profName)}
+                            className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-900 border border-rose-300 font-black text-[10px] transition"
+                          >
+                            📲 پیامک یادآوری
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: BASE RATES */}
       {/* ========================================================================= */}
       {activeTab === 'BASE_RATES' && (
         <div className="card space-y-4">
@@ -833,7 +1341,7 @@ export default function PayrollEngineClient() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 3: MULTIPLIERS ENGINE */}
+      {/* TAB 5: MULTIPLIERS ENGINE */}
       {/* ========================================================================= */}
       {activeTab === 'MULTIPLIERS' && (
         <div className="card space-y-4">
@@ -894,7 +1402,7 @@ export default function PayrollEngineClient() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 4: CONTRACTS */}
+      {/* TAB 6: CONTRACTS */}
       {/* ========================================================================= */}
       {activeTab === 'CONTRACTS' && (
         <div className="card space-y-4">
@@ -945,7 +1453,7 @@ export default function PayrollEngineClient() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 5: BANK DISKETTE */}
+      {/* TAB 7: BANK DISKETTE */}
       {/* ========================================================================= */}
       {activeTab === 'BANK_DISKETTE' && (
         <div className="card space-y-4">
@@ -998,6 +1506,112 @@ export default function PayrollEngineClient() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: APPOINTMENT DECREE VIEW */}
+      {/* ========================================================================= */}
+      {selectedDecreeForView && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in">
+            <div className="p-4 bg-indigo-950 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📜</span>
+                <div>
+                  <h3 className="font-extrabold text-sm sm:text-base">
+                    ابلاغیه رسمی تدریس — دانشگاه جامع آفاق
+                  </h3>
+                  <p className="text-[11px] text-indigo-300">
+                    شماره حکم: {selectedDecreeForView.decreeNo} · {selectedDecreeForView.termTitle}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedDecreeForView(null)}
+                className="text-white/60 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4 text-xs">
+              <div className="text-center space-y-1 border-b pb-4">
+                <h2 className="font-black text-slate-900 text-base">جمهوری اسلامی ایران — وزارت علوم، تحقیقات و فناوری</h2>
+                <h3 className="font-bold text-slate-700">حکم رسمی ابلاغ تدریس و وظایف آموزشی نیمسال</h3>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 grid grid-cols-2 gap-2">
+                <div>نام عضو هیئت علمی / مدرس: <strong>{selectedDecreeForView.profName}</strong></div>
+                <div>کد پرسنلی: <strong className="font-mono">{selectedDecreeForView.staffCode}</strong></div>
+                <div>مرتبه علمی: <strong>{selectedDecreeForView.academicRank}</strong></div>
+                <div>دانشکده / گروه: <strong>{selectedDecreeForView.departmentName}</strong></div>
+              </div>
+
+              <div>
+                <h4 className="font-black text-slate-900 mb-2">فهرست دروس مصوب ابلاغ‌شده جهت تدریس:</h4>
+                <table className="w-full text-right text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 border-b">
+                      <th className="p-2">کد درس</th>
+                      <th className="p-2">عنوان درس</th>
+                      <th className="p-2 text-center">گروه</th>
+                      <th className="p-2 text-center">تعداد واحد</th>
+                      <th className="p-2 text-center">ساعت تدریس هفتگی</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedDecreeForView.coursesList.map((c, idx) => (
+                      <tr key={idx} className="border-b">
+                        <td className="p-2 font-mono" dir="ltr">{c.code}</td>
+                        <td className="p-2 font-bold">{c.title}</td>
+                        <td className="p-2 text-center">گروه {c.group}</td>
+                        <td className="p-2 text-center font-bold">{c.units} واحد</td>
+                        <td className="p-2 text-center font-bold">{c.weeklyHours} ساعت</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Digital Signature Stamp */}
+              <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-300 flex items-center justify-between">
+                <div className="space-y-1">
+                  <span className="font-black text-emerald-950 block text-xs">
+                    {selectedDecreeForView.signatureStatus === 'SIGNED' ? '✓ سند دارای امضای الکترونیک معتبر و غیرقابل انکار است' : 'در انتظار تایید و امضای الکترونیک استاد'}
+                  </span>
+                  {selectedDecreeForView.signedAt && (
+                    <span className="text-[10px] text-emerald-800 font-mono block">
+                      تاریخ امضا: {selectedDecreeForView.signedAt} · کد OTP: {selectedDecreeForView.otpUsed}
+                    </span>
+                  )}
+                  {selectedDecreeForView.documentHash && (
+                    <span className="text-[9px] text-slate-500 font-mono block" dir="ltr">
+                      Hash: {selectedDecreeForView.documentHash}
+                    </span>
+                  )}
+                </div>
+                <div className="w-16 h-16 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-2xl font-black shadow-md">
+                  ✓
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t flex justify-end gap-2">
+              <button
+                onClick={() => setSelectedDecreeForView(null)}
+                className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs"
+              >
+                بستن
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="px-6 py-2 rounded-xl bg-indigo-900 text-white font-black text-xs shadow"
+              >
+                🖨️ پرینت حکم
+              </button>
+            </div>
           </div>
         </div>
       )}

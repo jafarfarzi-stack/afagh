@@ -491,61 +491,90 @@ export default function ProfessorAttendanceClient({
         </div>
       </div>
 
-      {/* Professor Attendance Verification Banner (Fingerprint & Status) */}
-      <div className={`p-4 rounded-2xl border flex flex-col md:flex-row items-start md:items-center justify-between gap-3 ${
-        currentSession.professorStatus === 'VERIFIED_PRESENT'
-          ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
-          : currentSession.professorStatus === 'ABSENT'
-          ? 'bg-rose-50 border-rose-300 text-rose-950'
-          : currentSession.professorStatus === 'APPROVED_MAKEUP'
-          ? 'bg-purple-50 border-purple-300 text-purple-950'
-          : 'bg-slate-50 border-slate-300 text-slate-800'
-      }`}>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-black ${
-              currentSession.professorStatus === 'VERIFIED_PRESENT'
-                ? 'bg-emerald-700 text-white'
-                : currentSession.professorStatus === 'ABSENT'
-                ? 'bg-rose-700 text-white animate-pulse'
-                : currentSession.professorStatus === 'APPROVED_MAKEUP'
-                ? 'bg-purple-700 text-white'
-                : 'bg-slate-300 text-slate-800'
-            }`}>
-              {currentSession.professorStatus === 'VERIFIED_PRESENT' && '🟢 حضور استاد تایید شده'}
-              {currentSession.professorStatus === 'ABSENT' && '🔴 غیبت استاد در جلسه'}
-              {currentSession.professorStatus === 'APPROVED_MAKEUP' && '🔷 جلسه جبرانی مصوب'}
-              {currentSession.professorStatus === 'UPCOMING' && '⏳ در انتظار تشکیل'}
+      {/* Professor Attendance Verification Banner (Fingerprint, Chain Matching & Status) */}
+      <div className="space-y-3">
+        {/* Biometric & Chain Matching Information Card */}
+        <div className="p-3.5 bg-slate-900 text-white rounded-2xl border border-indigo-500/40 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-indigo-700/80 border border-indigo-400/40 flex items-center justify-center text-lg shrink-0">
+              🧬
+            </div>
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-white text-xs">موتور تطبیق هوشمند تردد بیومتریک و پیوستگی کلاس‌ها:</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500 text-white">
+                  ✓ فعال (Chain Matching)
+                </span>
+              </div>
+              <p className="text-indigo-200 text-[11px] leading-4">
+                اثر انگشت در گیت ورودی (ساعت ۰۷:۴۸) ثبت شده است. برای کلاس‌های متوالی پشت‌سرهم، سیستم به طور خودکار حضور شما را تایید کرده و نیازی به ثبت مکرر اثر انگشت نیست.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="px-2.5 py-1 rounded-lg bg-white/10 text-emerald-300 font-mono text-[11px] border border-white/10">
+              IP: 192.168.10.45 (شبکه داخلی دانشگاه)
             </span>
-            <span className="text-xs font-bold text-slate-600">
-              {currentSession.verificationDetail}
-            </span>
+          </div>
+        </div>
+
+        {/* Status Alert */}
+        <div className={`p-4 rounded-2xl border flex flex-col md:flex-row items-start md:items-center justify-between gap-3 ${
+          currentSession.professorStatus === 'VERIFIED_PRESENT'
+            ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+            : currentSession.professorStatus === 'ABSENT'
+            ? 'bg-rose-50 border-rose-300 text-rose-950'
+            : currentSession.professorStatus === 'APPROVED_MAKEUP'
+            ? 'bg-purple-50 border-purple-300 text-purple-950'
+            : 'bg-slate-50 border-slate-300 text-slate-800'
+        }`}>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-black ${
+                currentSession.professorStatus === 'VERIFIED_PRESENT'
+                  ? 'bg-emerald-700 text-white'
+                  : currentSession.professorStatus === 'ABSENT'
+                  ? 'bg-rose-700 text-white animate-pulse'
+                  : currentSession.professorStatus === 'APPROVED_MAKEUP'
+                  ? 'bg-purple-700 text-white'
+                  : 'bg-slate-300 text-slate-800'
+              }`}>
+                {currentSession.professorStatus === 'VERIFIED_PRESENT' && '🟢 حضور استاد تایید شده'}
+                {currentSession.professorStatus === 'ABSENT' && '🔴 غیبت استاد در جلسه'}
+                {currentSession.professorStatus === 'APPROVED_MAKEUP' && '🔷 جلسه جبرانی مصوب'}
+                {currentSession.professorStatus === 'UPCOMING' && '⏳ در انتظار تشکیل'}
+              </span>
+              <span className="text-xs font-bold text-slate-600">
+                {currentSession.verificationDetail}
+              </span>
+            </div>
+
+            {currentSession.professorStatus === 'ABSENT' && (
+              <p className="text-xs text-rose-800 font-extrabold leading-5">
+                ⚠️ اخطار آموزش: عدم حضور استاد در این جلسه از روی عدم ثبت اثر انگشت در گیت ورود تایید شده است. طبق ماده ۱۰ آیین‌نامه، ملزم به تعریف و برگزاری جلسه جبرانی می‌باشید.
+              </p>
+            )}
+
+            {currentSession.professorStatus === 'VERIFIED_PRESENT' && (
+              <p className="text-xs text-emerald-800 font-bold leading-5">
+                ✓ حضور شما در این جلسه آموزشی از طریق سیستم گیت تردد و منطق پیوستگی ثبت گردیده و در فیش حقوقی لحاظ شد.
+              </p>
+            )}
           </div>
 
           {currentSession.professorStatus === 'ABSENT' && (
-            <p className="text-xs text-rose-800 font-extrabold leading-5">
-              ⚠️ اخطار آموزش: عدم حضور استاد در این جلسه از روی عدم ثبت اثر انگشت در گیت ورود تایید شده است. طبق ماده ۱۰ آیین‌نامه، ملزم به تعریف و برگزاری جلسه جبرانی می‌باشید.
-            </p>
-          )}
-
-          {currentSession.professorStatus === 'VERIFIED_PRESENT' && (
-            <p className="text-xs text-emerald-800 font-bold leading-5">
-              ✓ حضور شما در این جلسه آموزشی از طریق سیستم گیت تردد دانشگاه ثبت گردیده و در فیش حقوقی و کارکرد لحاظ شد.
-            </p>
+            <button
+              onClick={() => {
+                setMakeupForm(prev => ({ ...prev, replacedSessionNo: currentSession.sessionNo }));
+                setShowMakeupModal(true);
+              }}
+              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow transition shrink-0 flex items-center gap-1.5"
+            >
+              <span>➕ ثبت جلسه جبرانی برای این غیبت</span>
+            </button>
           )}
         </div>
-
-        {currentSession.professorStatus === 'ABSENT' && (
-          <button
-            onClick={() => {
-              setMakeupForm(prev => ({ ...prev, replacedSessionNo: currentSession.sessionNo }));
-              setShowMakeupModal(true);
-            }}
-            className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow transition shrink-0 flex items-center gap-1.5"
-          >
-            <span>➕ ثبت جلسه جبرانی برای این غیبت</span>
-          </button>
-        )}
       </div>
 
       {/* Session Details & Topic Card */}
