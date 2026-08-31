@@ -25,7 +25,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </div>
         <nav className="mx-auto flex max-w-6xl gap-2 sm:gap-4 px-4 pb-2.5 text-xs sm:text-sm font-medium overflow-x-auto">
           <Link href="/admin" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
-            📋 کارتابل گردش کار
+            📋 کارتابل گردش کار و جبرانی
           </Link>
           <Link href="/admin/students" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
             🎓 پرونده جامع دانشجویان و پرسنل
@@ -33,8 +33,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/curriculum" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
             📚 کاتالوگ و سرفصل رشته‌ها
           </Link>
-          <Link href="/admin/scheduling" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/50 border border-indigo-700/40 transition-colors whitespace-nowrap">
+          <Link href="/admin/scheduling" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
             🗓️ برنامه‌ریزی درسی مدیر گروه
+          </Link>
+          <Link href="/admin/exams" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/60 border border-indigo-700/50 transition-colors whitespace-nowrap">
+            📝 مدیریت و برنامه‌ریزی امتحانات
           </Link>
           <Link href="/admin/archive" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
             🗄️ بایگانی الکترونیک مدارک

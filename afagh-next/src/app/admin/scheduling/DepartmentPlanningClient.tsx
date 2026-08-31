@@ -99,6 +99,7 @@ export interface CourseDemand {
   weekRecurrence: WeekRecurrence;
   sessionsCountPerWeek: number;
   examDate: string;
+  examSchedulingMode?: 'AUTO_MATRIX' | 'MANUAL';
 }
 
 export interface DepartmentOffering {
@@ -765,6 +766,56 @@ export default function DepartmentPlanningClient() {
 
   const [generatedTermSessionsCount, setGeneratedTermSessionsCount] = useState<number>(0);
 
+  // Education Make-up session requests queue
+  const [makeupQueue, setMakeupQueue] = useState<Array<{
+    id: number;
+    profName: string;
+    courseTitle: string;
+    sessionNo: number;
+    sessionDate: string;
+    sessionTime: string;
+    reason: string;
+    status: 'PENDING_ROOM' | 'APPROVED' | 'REJECTED';
+    allocatedRoom?: string;
+  }>>([
+    {
+      id: 1,
+      profName: 'دکتر جمیل احمدی',
+      courseTitle: 'سیستم‌های عامل (گروه ۱)',
+      sessionNo: 8,
+      sessionDate: '۱۴۰۵/۰۹/۰۸',
+      sessionTime: '۱۳:۳۰ الی ۱۵:۳۰',
+      reason: 'ماموریت علمی و کنفرانس بین‌المللی',
+      status: 'PENDING_ROOM',
+    },
+    {
+      id: 2,
+      profName: 'دکتر سارا رضایی',
+      courseTitle: 'پایگاه داده‌ها (گروه ۲)',
+      sessionNo: 5,
+      sessionDate: '۱۴۰۵/۰۹/۱۲',
+      sessionTime: '۱۰:۰۰ الی ۱۲:۰۰',
+      reason: 'جلسه دفاع پایان‌نامه ارشد',
+      status: 'PENDING_ROOM',
+    },
+    {
+      id: 3,
+      profName: 'دکتر علی حسینی',
+      courseTitle: 'فیزیک عمومی ۱ (گروه ۱)',
+      sessionNo: 3,
+      sessionDate: '۱۴۰۵/۰۹/۰۵',
+      sessionTime: '۰۸:۰۰ الی ۱۰:۰۰',
+      reason: 'مرخصی استعلاجی',
+      status: 'APPROVED',
+      allocatedRoom: 'کلاس ۲۰۲ (ساختمان آموزش)',
+    },
+  ]);
+
+  const [selectedMakeupRoom, setSelectedMakeupRoom] = useState<Record<number, string>>({
+    1: 'کلاس ۳۰۴ (ساختمان آموزش)',
+    2: 'سایت تخصصی کامپیوتر ۱۰۲',
+  });
+
   // Core Data
   const [classrooms, setClassrooms] = useState<ClassroomOption[]>(INITIAL_CLASSROOMS);
   const [professors, setProfessors] = useState<ProfessorOption[]>(INITIAL_PROFESSORS);
@@ -815,6 +866,21 @@ export default function DepartmentPlanningClient() {
     setApprovedOfferings(scenario.offerings);
     setActiveMainTab('APPROVED');
     showToast(`✅ ${scenario.title} به عنوان برنامه رسمی و مصوب نیمسال با موفقیت بارگذاری شد.`, 'success');
+  };
+
+  const handleApproveMakeupSession = (reqId: number) => {
+    const room = selectedMakeupRoom[reqId] || 'کلاس ۳۰۴ (ساختمان آموزش)';
+    setMakeupQueue(prev =>
+      prev.map(r => (r.id === reqId ? { ...r, status: 'APPROVED', allocatedRoom: room } : r))
+    );
+    showToast(`✓ کلاس جبرانی تایید و «${room}» تخصیص داده شد. پیامک برای استاد و دانشجویان ارسال گردید.`, 'success');
+  };
+
+  const handleRejectMakeupSession = (reqId: number) => {
+    setMakeupQueue(prev =>
+      prev.map(r => (r.id === reqId ? { ...r, status: 'REJECTED' } : r))
+    );
+    showToast('✕ درخواست کلاس جبرانی رد شد و به استاد اطلاع داده شد.', 'warning');
   };
 
   // Change professor assigned to a course in the chart
@@ -870,6 +936,28 @@ export default function DepartmentPlanningClient() {
   const handleUpdateCourseGroupsCount = (demandId: number, groups: number) => {
     setCourseDemands(prev => prev.map(d => d.id === demandId ? { ...d, groupsCount: groups } : d));
     showToast(`تعداد گروه‌های ارائه‌شونده به ${faNum(groups)} گروه تغییر یافت.`, 'info');
+  };
+
+  // Toggle Exam Scheduling Mode (Auto vs Manual) for a course
+  const handleToggleDemandExamMode = (demandId: number) => {
+    setCourseDemands(prev =>
+      prev.map(d =>
+        d.id === demandId
+          ? {
+              ...d,
+              examSchedulingMode: d.examSchedulingMode === 'MANUAL' ? 'AUTO_MATRIX' : 'MANUAL',
+            }
+          : d
+      )
+    );
+    showToast('حالت زمان‌بندی تاریخ و ساعت امتحان این درس تغییر یافت.', 'info');
+  };
+
+  // Update Exam Date manually for a course
+  const handleUpdateDemandExamDate = (demandId: number, date: string) => {
+    setCourseDemands(prev =>
+      prev.map(d => (d.id === demandId ? { ...d, examDate: date, examSchedulingMode: 'MANUAL' } : d))
+    );
   };
 
   // Change max units cap for a professor
@@ -1072,6 +1160,12 @@ export default function DepartmentPlanningClient() {
             >
               <span>⚡ اجرای چیدمان متمرکز با قیود جاری</span>
             </button>
+            <Link
+              href="/admin/exams"
+              className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-700 to-indigo-800 hover:from-indigo-800 hover:to-indigo-900 text-white font-extrabold text-xs border border-indigo-500/50 flex items-center gap-1.5 shadow-md transition"
+            >
+              <span>📝 ماژول مدیریت و تخصیص امتحانات ←</span>
+            </Link>
             <Link
               href="/admin/curriculum"
               className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition"
@@ -1302,6 +1396,7 @@ export default function DepartmentPlanningClient() {
                   <th className="p-3 border border-slate-800">تعداد گروه‌ها</th>
                   <th className="p-3 border border-slate-800">انتخاب استاد مدرس</th>
                   <th className="p-3 border border-slate-800">وضعیت سقف تدریس استاد</th>
+                  <th className="p-3 border border-slate-800">تنظیم تاریخ امتحان (دو حالت)</th>
                 </tr>
               </thead>
               <tbody>
@@ -1457,6 +1552,29 @@ export default function DepartmentPlanningClient() {
                             )}
                           </div>
                         )}
+                      </td>
+
+                      <td className="p-2 border border-slate-200 text-center min-w-[150px]">
+                        <div className="space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleDemandExamMode(demand.id)}
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-black transition ${
+                              demand.examSchedulingMode === 'MANUAL'
+                                ? 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200'
+                                : 'bg-emerald-100 text-emerald-900 border border-emerald-300 hover:bg-emerald-200'
+                            }`}
+                            title="برای تغییر بین حالت خودکار و دستی کلیک کنید"
+                          >
+                            {demand.examSchedulingMode === 'MANUAL' ? '✍️ دستی مدیر' : '🤖 خودکار ترم'}
+                          </button>
+                          <input
+                            type="text"
+                            value={demand.examDate}
+                            onChange={e => handleUpdateDemandExamDate(demand.id, e.target.value)}
+                            className="w-full border border-slate-300 rounded p-1 font-mono font-bold text-center text-[11px] bg-white text-slate-800"
+                          />
+                        </div>
                       </td>
                     </tr>
                   );
@@ -2200,16 +2318,89 @@ export default function DepartmentPlanningClient() {
                 </span>
               </div>
 
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
-                <div className="flex items-center justify-between font-extrabold text-slate-800">
-                  <span>درخواست جلسه جبرانی درس سیستم‌های عامل (گروه ۱) — دکتر جمیل احمدی</span>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[10px]">✓ کلاس ۳۰۴ تخصیص و ابلاغ شد</span>
-                </div>
-                <div className="text-slate-600 flex items-center justify-between">
-                  <span>تاریخ برگزاری: ۱۴۰۵/۰۹/۰۸ ساعت ۱۳:۳۰ الی ۱۵:۳۰</span>
-                  <span>محل تشکیل: 🏛️ کلاس ۳۰۴ (ساختمان آموزش)</span>
-                  <span className="text-emerald-700 font-bold">پیامک تایید به استاد و دانشجویان ارسال شد</span>
-                </div>
+              <div className="space-y-2">
+                {makeupQueue.map(item => {
+                  const isPending = item.status === 'PENDING_ROOM';
+                  const isApproved = item.status === 'APPROVED';
+                  const isRejected = item.status === 'REJECTED';
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`p-3.5 rounded-xl border text-xs space-y-2 ${
+                        isPending
+                          ? 'bg-amber-50/60 border-amber-200'
+                          : isApproved
+                          ? 'bg-emerald-50/50 border-emerald-200'
+                          : 'bg-rose-50/50 border-rose-200'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-slate-900">{item.courseTitle}</span>
+                          <span className="text-indigo-900 font-bold">({item.profName})</span>
+                          <span className="text-slate-500">· جبران جلسه {faNum(item.sessionNo)}</span>
+                        </div>
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-black self-start sm:self-auto ${
+                            isPending
+                              ? 'bg-amber-200 text-amber-900'
+                              : isApproved
+                              ? 'bg-emerald-200 text-emerald-900'
+                              : 'bg-rose-200 text-rose-900'
+                          }`}
+                        >
+                          {isPending ? '⏳ نیازمند تخصیص سالن' : isApproved ? '✓ کلاس تخصیص و ابلاغ شد' : '✕ رد شد'}
+                        </span>
+                      </div>
+
+                      <div className="text-slate-600 flex flex-wrap items-center justify-between gap-2">
+                        <span>تاریخ پیشنهادی: <strong>{item.sessionDate}</strong> ساعت <strong>{item.sessionTime}</strong></span>
+                        <span>دلیل غیبت: {item.reason}</span>
+                      </div>
+
+                      {isApproved && (
+                        <div className="text-emerald-800 font-bold flex items-center justify-between bg-emerald-100/60 p-2 rounded-lg">
+                          <span>محل تشکیل: 🏛️ {item.allocatedRoom}</span>
+                          <span className="text-[11px]">✓ پیامک تایید زمان و مکان برای استاد و دانشجویان ارسال شد</span>
+                        </div>
+                      )}
+
+                      {isPending && (
+                        <div className="pt-2 border-t border-amber-200/60 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <label className="font-bold text-slate-700 text-[11px]">انتخاب کلاس خالی دانشگاه:</label>
+                            <select
+                              value={selectedMakeupRoom[item.id] || 'کلاس ۳۰۴ (ساختمان آموزش)'}
+                              onChange={e => setSelectedMakeupRoom({ ...selectedMakeupRoom, [item.id]: e.target.value })}
+                              className="border border-slate-300 rounded-lg p-1.5 font-bold text-xs bg-white text-slate-800"
+                            >
+                              <option value="کلاس ۳۰۴ (ساختمان آموزش)">🟢 کلاس ۳۰۴ (ساختمان آموزش - ظرفیت ۴۵)</option>
+                              <option value="کلاس ۲۰۲ (ساختمان آموزش)">🟢 کلاس ۲۰۲ (ساختمان آموزش - ظرفیت ۴۰)</option>
+                              <option value="سایت تخصصی کامپیوتر ۱۰۲">🟢 سایت تخصصی ۱۰۲ (دانشکده کامپیوتر - ظرفیت ۳۲)</option>
+                              <option value="آزمایشگاه نرم‌افزار ۱">🟢 آزمایشگاه نرم‌افزار ۱ (ظرفیت ۲۸)</option>
+                            </select>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleApproveMakeupSession(item.id)}
+                              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs"
+                            >
+                              ✓ تایید و تخصیص کلاس
+                            </button>
+                            <button
+                              onClick={() => handleRejectMakeupSession(item.id)}
+                              className="px-3 py-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold text-xs"
+                            >
+                              رد
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

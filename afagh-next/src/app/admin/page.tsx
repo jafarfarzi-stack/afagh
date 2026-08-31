@@ -4,7 +4,9 @@ import { process_definitions, student_requests, students, users } from '@/db/sch
 import { requireRole } from '@/lib/auth';
 import { ensureWorker, waitingRoomStats, warmupCapacities } from '@/lib/waitingRoom';
 import { revalidatePath } from 'next/cache';
+import Link from 'next/link';
 import RequestActionButtons from './RequestActionButtons';
+import AdminMakeupRequestsCard from './AdminMakeupRequestsCard';
 
 async function warmupAction() {
   'use server';
@@ -34,7 +36,7 @@ const stColor: Record<string, string> = {
 };
 
 export default async function AdminHome() {
-  await requireRole(['ADMIN']);
+  await requireRole(['ADMIN', 'EDU_EXPERT']);
   ensureWorker();
   const wr = await waitingRoomStats();
 
@@ -82,6 +84,52 @@ export default async function AdminHome() {
         })}
       </div>
 
+      {/* میانبرهای سریع ماژول‌های آموزشی و امتحانات */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Link
+          href="/admin/exams"
+          className="p-4 rounded-2xl bg-gradient-to-r from-indigo-900 to-indigo-950 text-white shadow-md hover:shadow-lg transition-all flex items-center justify-between group border border-indigo-700/50"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-indigo-700/80 border border-indigo-500/50 flex items-center justify-center text-2xl shadow-inner group-hover:scale-105 transition-transform">
+              📝
+            </div>
+            <div>
+              <h3 className="font-extrabold text-sm sm:text-base">ماژول مدیریت و برنامه‌ریزی امتحانات</h3>
+              <p className="text-xs text-indigo-200 mt-0.5">
+                تخصیص دوحالته (دستی / خودکار)، رصد تداخل‌ها، تخصیص سالن و کارت ورود به جلسه
+              </p>
+            </div>
+          </div>
+          <span className="text-indigo-300 font-extrabold text-xs group-hover:translate-x-1 transition-transform">
+            ورود به ماژول ←
+          </span>
+        </Link>
+
+        <Link
+          href="/admin/scheduling"
+          className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 to-indigo-900 text-white shadow-md hover:shadow-lg transition-all flex items-center justify-between group border border-slate-700/50"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-slate-800 border border-slate-600/50 flex items-center justify-center text-2xl shadow-inner group-hover:scale-105 transition-transform">
+              🗓️
+            </div>
+            <div>
+              <h3 className="font-extrabold text-sm sm:text-base">برنامه‌ریزی درسی و تقویم آموزشی</h3>
+              <p className="text-xs text-slate-300 mt-0.5">
+                ماتریس حضور اساتید، سناریوهای بهینه‌ساز هفتگی و تقویم ۱۶ جلسه‌ای ترم
+              </p>
+            </div>
+          </div>
+          <span className="text-slate-300 font-extrabold text-xs group-hover:translate-x-1 transition-transform">
+            ورود به ماژول ←
+          </span>
+        </Link>
+      </div>
+
+      {/* کارتابل درخواست‌های کلاس جبرانی اساتید (تخصیص سالن و تایید آموزش) */}
+      <AdminMakeupRequestsCard />
+
       {/* وضعیت موتور صف Redis */}
       <div className={'card flex flex-wrap items-center justify-between gap-3 ' + (wr.up ? 'border-emerald-300' : 'border-red-300')}>
         <div>
@@ -97,10 +145,10 @@ export default async function AdminHome() {
         </form>
       </div>
 
-      {/* جدول کارتابل گردش کار و اقدامات */}
+      {/* جدول کارتابل گردش کار و اقدامات دانشجویی */}
       <div className="card">
         <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
-          <h2 className="font-bold text-slate-800">کارتابل رسیدگی به درخواست‌ها (شورای آموزشی)</h2>
+          <h2 className="font-bold text-slate-800">کارتابل رسیدگی به درخواست‌های دانشجویی (شورای آموزشی)</h2>
           <span className="text-xs text-slate-500">{inbox.length} پرونده اخیر</span>
         </div>
 
