@@ -966,17 +966,23 @@ export default function ExamPlanningClient() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              <Link
+                href="/admin/templates"
+                className="px-3.5 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-black text-xs shadow flex items-center gap-1.5 transition"
+              >
+                <span>📨 موتور قالب‌های پیامک ←</span>
+              </Link>
               <button
                 onClick={() => setShowPhotoRosterPrint(true)}
                 className="px-3.5 py-2 rounded-xl bg-indigo-800 hover:bg-indigo-900 text-white font-black text-xs shadow flex items-center gap-1.5 transition"
               >
-                <span>🖨️ چاپ صورت‌جلسه عکس‌دار سالن</span>
+                <span>🖨️ چاپ صورت‌جلسه عکس‌دار</span>
               </button>
               <button
                 onClick={handleSendAbsenceSmsToAll}
                 className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-700 text-white font-black text-xs shadow flex items-center gap-1.5 transition"
               >
-                <span>📲 ارسال پیامک گروهی به غایبین آزمون</span>
+                <span>📲 ارسال پیامک گروهی به غایبین</span>
               </button>
             </div>
           </div>

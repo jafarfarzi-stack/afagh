@@ -85,24 +85,24 @@ export default async function AdminHome() {
       </div>
 
       {/* میانبرهای سریع ماژول‌های آموزشی و امتحانات */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Link
           href="/admin/exams"
           className="p-4 rounded-2xl bg-gradient-to-r from-indigo-900 to-indigo-950 text-white shadow-md hover:shadow-lg transition-all flex items-center justify-between group border border-indigo-700/50"
         >
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-indigo-700/80 border border-indigo-500/50 flex items-center justify-center text-2xl shadow-inner group-hover:scale-105 transition-transform">
+            <div className="w-10 h-10 rounded-xl bg-indigo-700/80 border border-indigo-500/50 flex items-center justify-center text-xl shadow-inner group-hover:scale-105 transition-transform">
               📝
             </div>
             <div>
-              <h3 className="font-extrabold text-sm sm:text-base">ماژول مدیریت و برنامه‌ریزی امتحانات</h3>
-              <p className="text-xs text-indigo-200 mt-0.5">
-                تخصیص دوحالته (دستی / خودکار)، رصد تداخل‌ها، تخصیص سالن و کارت ورود به جلسه
+              <h3 className="font-extrabold text-xs sm:text-sm">مدیریت امتحانات و چیدمان</h3>
+              <p className="text-[11px] text-indigo-200 mt-0.5">
+                موتور ضدتقلب، سالن‌ها و غیبت‌ها
               </p>
             </div>
           </div>
           <span className="text-indigo-300 font-extrabold text-xs group-hover:translate-x-1 transition-transform">
-            ورود به ماژول ←
+            ←
           </span>
         </Link>
 
@@ -111,18 +111,38 @@ export default async function AdminHome() {
           className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 to-indigo-900 text-white shadow-md hover:shadow-lg transition-all flex items-center justify-between group border border-slate-700/50"
         >
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-slate-800 border border-slate-600/50 flex items-center justify-center text-2xl shadow-inner group-hover:scale-105 transition-transform">
+            <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-600/50 flex items-center justify-center text-xl shadow-inner group-hover:scale-105 transition-transform">
               🗓️
             </div>
             <div>
-              <h3 className="font-extrabold text-sm sm:text-base">برنامه‌ریزی درسی و تقویم آموزشی</h3>
-              <p className="text-xs text-slate-300 mt-0.5">
-                ماتریس حضور اساتید، سناریوهای بهینه‌ساز هفتگی و تقویم ۱۶ جلسه‌ای ترم
+              <h3 className="font-extrabold text-xs sm:text-sm">برنامه‌ریزی درسی و تقویم</h3>
+              <p className="text-[11px] text-slate-300 mt-0.5">
+                ماتریس حضور، سناریوها و ۱۶ جلسه
               </p>
             </div>
           </div>
           <span className="text-slate-300 font-extrabold text-xs group-hover:translate-x-1 transition-transform">
-            ورود به ماژول ←
+            ←
+          </span>
+        </Link>
+
+        <Link
+          href="/admin/templates"
+          className="p-4 rounded-2xl bg-gradient-to-r from-teal-950 to-indigo-950 text-white shadow-md hover:shadow-lg transition-all flex items-center justify-between group border border-teal-700/50"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-teal-800/80 border border-teal-500/50 flex items-center justify-center text-xl shadow-inner group-hover:scale-105 transition-transform">
+              📨
+            </div>
+            <div>
+              <h3 className="font-extrabold text-xs sm:text-sm">موتور قالب‌های پیامک</h3>
+              <p className="text-[11px] text-teal-200 mt-0.5">
+                طراحی متون آزاد، تگ‌های پویا و تست
+              </p>
+            </div>
+          </div>
+          <span className="text-teal-300 font-extrabold text-xs group-hover:translate-x-1 transition-transform">
+            ←
           </span>
         </Link>
       </div>

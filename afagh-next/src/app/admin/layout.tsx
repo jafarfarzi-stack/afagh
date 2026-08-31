@@ -36,8 +36,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/scheduling" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
             🗓️ برنامه‌ریزی درسی مدیر گروه
           </Link>
-          <Link href="/admin/exams" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/60 border border-indigo-700/50 transition-colors whitespace-nowrap">
+          <Link href="/admin/exams" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
             📝 مدیریت و برنامه‌ریزی امتحانات
+          </Link>
+          <Link href="/admin/templates" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/60 border border-indigo-700/50 transition-colors whitespace-nowrap">
+            📨 قالب‌های پیامک و ارتباطات
           </Link>
           <Link href="/admin/archive" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
             🗄️ بایگانی الکترونیک مدارک
