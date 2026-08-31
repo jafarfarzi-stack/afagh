@@ -119,7 +119,7 @@ export default async function ProfessorSchedulePage() {
 
   const professorData = {
     id: me.id,
-    name: `${user.firstName} ${user.lastName}`,
+    name: user.name || 'دکتر جمیل احمدی',
     staffCode: me.staffCode,
     academicRank: me.academicRank || 'استادیار',
     contractType: me.staffType || 'تمام‌وقت',

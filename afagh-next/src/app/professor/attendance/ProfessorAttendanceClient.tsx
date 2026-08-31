@@ -43,22 +43,20 @@ export interface AttendanceCourseOffering {
   sessions: ClassSessionItem[];
 }
 
-export interface MakeupRequestItem {
+export interface MakeupSessionRecord {
   id: number;
   offeringId: number;
   courseTitle: string;
   groupNumber: number;
   professorName: string;
   replacedSessionNo: number;
-  proposedDate: string;
-  proposedTime: string;
+  sessionDate: string;
+  sessionTime: string;
+  roomName: string;
   topic: string;
   reason: string;
-  status: 'PENDING_ADMIN' | 'APPROVED' | 'REJECTED';
-  allocatedRoomId?: number;
-  allocatedRoomName?: string;
-  adminNote?: string;
-  approvedAt?: string;
+  status: 'APPROVED_DIRECT' | 'PENDING_EDUCATION' | 'APPROVED_BY_EDUCATION';
+  allocatedAt: string;
 }
 
 interface Props {
@@ -76,11 +74,12 @@ const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).rep
 
 const CURRENT_SYSTEM_DATE = '۱۴۰۵/۰۸/۳۱';
 
-const EMPTY_CLASSROOMS_POOL = [
-  { id: 101, name: 'کلاس ۳۰۴ (ساختمان آموزش)', capacity: 45, status: 'خالی و آزاد' },
-  { id: 102, name: 'سایت تخصصی کامپیوتر ۱۰۲ (دانشکده فنی)', capacity: 32, status: 'خالی و آزاد' },
-  { id: 103, name: 'کلاس ۲۰۲ (ساختمان آموزش)', capacity: 40, status: 'خالی و آزاد' },
-  { id: 104, name: 'آزمایشگاه نرم‌افزار ۱ (مجتمع آزمایشگاه‌ها)', capacity: 28, status: 'خالی و آزاد' },
+const EMPTY_CLASSROOMS_LIST = [
+  { id: 101, name: 'کلاس ۳۰۴ (ساختمان آموزش)', capacity: 45, type: 'THEORY' },
+  { id: 102, name: 'کلاس ۲۰۲ (ساختمان آموزش)', capacity: 40, type: 'THEORY' },
+  { id: 103, name: 'سایت تخصصی کامپیوتر ۱۰۲ (دانشکده فنی)', capacity: 32, type: 'LAB' },
+  { id: 104, name: 'آزمایشگاه نرم‌افزار ۱ (مجتمع آزمایشگاه‌ها)', capacity: 28, type: 'LAB' },
+  { id: 0, name: 'سایر / نیاز به بررسی و هماهنگی آموزش (کلاس ویژه)', capacity: 0, type: 'CUSTOM' },
 ];
 
 export default function ProfessorAttendanceClient({
@@ -89,6 +88,8 @@ export default function ProfessorAttendanceClient({
   initialOfferings,
   defaultOfferingId,
 }: Props) {
+  const profDisplayName = professor?.name || 'دکتر جمیل احمدی';
+
   const [offerings, setOfferings] = useState<AttendanceCourseOffering[]>(initialOfferings);
   const [selectedOfferingId, setSelectedOfferingId] = useState<number>(
     defaultOfferingId && initialOfferings.some(o => o.id === defaultOfferingId)
@@ -99,36 +100,35 @@ export default function ProfessorAttendanceClient({
   const [selectedSessionNo, setSelectedSessionNo] = useState<number>(7);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Modal State for Professor Requesting Make-up Session
+  // Make-up Session Creation Modal State
   const [showMakeupModal, setShowMakeupModal] = useState<boolean>(false);
+  const [selectedRoomOptionId, setSelectedRoomOptionId] = useState<number>(101);
   const [makeupForm, setMakeupForm] = useState({
     replacedSessionNo: 4,
-    proposedDate: '۱۴۰۵/۰۹/۰۸',
-    proposedTime: '۱۳:۳۰ الی ۱۵:۳۰',
+    sessionDate: '۱۴۰۵/۰۹/۰۸',
+    sessionTime: '۱۳:۳۰ الی ۱۵:۳۰',
     topic: 'جلسه جبرانی: مدیریت بن‌بست و الگوریتم‌های بانکدار در سیستم‌عامل',
     reason: 'هم‌پوشانی با شرکت در سمینار تخصصی دانشگاه',
   });
 
-  // Admin Education Approval State & Queue
-  const [makeupRequests, setMakeupRequests] = useState<MakeupRequestItem[]>([
+  // Log of make-up sessions requested / scheduled
+  const [makeupHistory, setMakeupHistory] = useState<MakeupSessionRecord[]>([
     {
-      id: 801,
+      id: 901,
       offeringId: 101,
       courseTitle: 'سیستم‌های عامل',
       groupNumber: 1,
-      professorName: professor.name,
+      professorName: profDisplayName,
       replacedSessionNo: 4,
-      proposedDate: '۱۴۰۵/۰۹/۰۸',
-      proposedTime: '۱۳:۳۰ الی ۱۵:۳۰',
+      sessionDate: '۱۴۰۵/۰۹/۰۸',
+      sessionTime: '۱۳:۳۰ الی ۱۵:۳۰',
+      roomName: 'کلاس ۳۰۴ (ساختمان آموزش)',
       topic: 'جلسه جبرانی: مدیریت بن‌بست و الگوریتم‌های بانکدار',
-      reason: 'عدم حضور به دلیل ماموریت آموزشی مصوب',
-      status: 'PENDING_ADMIN',
+      reason: 'عدم حضور به دلیل ماموریت آموزشی',
+      status: 'APPROVED_DIRECT',
+      allocatedAt: '۱۴۰۵/۰۸/۳۱ ساعت ۱۰:۳۰',
     },
   ]);
-
-  const [selectedRequestForApproval, setSelectedRequestForApproval] = useState<MakeupRequestItem | null>(null);
-  const [selectedRoomId, setSelectedRoomId] = useState<number>(EMPTY_CLASSROOMS_POOL[0].id);
-  const [adminApprovalNote, setAdminApprovalNote] = useState<string>('کلاس با موفقیت رزرو شد؛ تهویه و ویدیو پروژکتور آماده است.');
 
   // Current offering & session
   const currentOffering = useMemo(() => {
@@ -309,87 +309,80 @@ export default function ProfessorAttendanceClient({
     setTimeout(() => setToastMessage(null), 5000);
   };
 
-  // Professor Submits Make-up Session Request
-  const handleSubmitMakeupRequest = () => {
-    // Validate date
-    if (makeupForm.proposedDate < CURRENT_SYSTEM_DATE) {
-      alert('خطا: تاریخ جلسه جبرانی نمی‌تواند قبل از تاریخ جاری سامانه (۱۴۰۵/۰۸/۳۱) باشد.');
+  // Professor Creates Make-up Session
+  const handleCreateMakeupSession = () => {
+    // Validate date: cannot be before current date
+    if (makeupForm.sessionDate < CURRENT_SYSTEM_DATE) {
+      alert(`خطا: تاریخ جلسه جبرانی نمی‌تواند قبل از تاریخ جاری سامانه (${CURRENT_SYSTEM_DATE}) باشد.`);
       return;
     }
 
-    const newReq: MakeupRequestItem = {
+    const isDirect = selectedRoomOptionId !== 0;
+    const selectedRoom = EMPTY_CLASSROOMS_LIST.find(r => r.id === selectedRoomOptionId);
+    const roomName = isDirect ? selectedRoom!.name : 'در انتظار تخصیص کلاس توسط آموزش';
+
+    const newSessionNo = 100 + makeupForm.replacedSessionNo;
+
+    // 1. If direct room selected, add session directly to active sessions
+    if (isDirect) {
+      const newSession: ClassSessionItem = {
+        id: Date.now(),
+        sessionNo: newSessionNo,
+        sessionDate: makeupForm.sessionDate,
+        startTime: makeupForm.sessionTime.split('الی')[0]?.trim() || '۱۳:۳۰',
+        endTime: makeupForm.sessionTime.split('الی')[1]?.trim() || '۱۵:۳۰',
+        roomName: selectedRoom!.name,
+        topic: makeupForm.topic,
+        isHeld: false,
+        isMakeUp: true,
+        replacedSessionNo: makeupForm.replacedSessionNo,
+        professorStatus: 'APPROVED_MAKEUP',
+        verificationDetail: `تخصیص مستقیم کلاس ${selectedRoom!.name} توسط استاد در ${CURRENT_SYSTEM_DATE}`,
+        studentStatuses: {},
+      };
+
+      currentOffering.students.forEach(st => {
+        newSession.studentStatuses[st.id] = { status: 'PRESENT' };
+      });
+
+      setOfferings(prev =>
+        prev.map(off => {
+          if (off.id !== selectedOfferingId) return off;
+          return {
+            ...off,
+            sessions: [...off.sessions, newSession],
+          };
+        })
+      );
+
+      setSelectedSessionNo(newSessionNo);
+    }
+
+    // 2. Add to makeup history
+    const record: MakeupSessionRecord = {
       id: Date.now(),
       offeringId: selectedOfferingId,
       courseTitle: currentOffering.title,
       groupNumber: currentOffering.groupNumber,
-      professorName: professor.name,
+      professorName: profDisplayName,
       replacedSessionNo: makeupForm.replacedSessionNo,
-      proposedDate: makeupForm.proposedDate,
-      proposedTime: makeupForm.proposedTime,
+      sessionDate: makeupForm.sessionDate,
+      sessionTime: makeupForm.sessionTime,
+      roomName: roomName,
       topic: makeupForm.topic,
       reason: makeupForm.reason,
-      status: 'PENDING_ADMIN',
+      status: isDirect ? 'APPROVED_DIRECT' : 'PENDING_EDUCATION',
+      allocatedAt: `${CURRENT_SYSTEM_DATE} ساعت ${new Date().getHours()}:${String(new Date().getMinutes()).padStart(2, '0')}`,
     };
 
-    setMakeupRequests(prev => [newReq, ...prev]);
+    setMakeupHistory(prev => [record, ...prev]);
     setShowMakeupModal(false);
-    setToastMessage('📩 درخواست برگزاری جلسه جبرانی به کارتابل مدیر آموزش ارسال شد. پس از تخصیص کلاس خالی توسط آموزش، پیامک تایید به شما و دانشجویان ارسال خواهد گردید.');
-    setTimeout(() => setToastMessage(null), 7000);
-  };
 
-  // Education Admin Approves Make-up Session & Allocates Room
-  const handleAdminApproveMakeup = (req: MakeupRequestItem) => {
-    const room = EMPTY_CLASSROOMS_POOL.find(r => r.id === selectedRoomId) || EMPTY_CLASSROOMS_POOL[0];
-    const approvedReq: MakeupRequestItem = {
-      ...req,
-      status: 'APPROVED',
-      allocatedRoomId: room.id,
-      allocatedRoomName: room.name,
-      adminNote: adminApprovalNote,
-      approvedAt: CURRENT_SYSTEM_DATE + ' ساعت ۱۰:۴۵',
-    };
-
-    // Update Request list
-    setMakeupRequests(prev => prev.map(r => r.id === req.id ? approvedReq : r));
-
-    // Add new make-up session to the course
-    const newSessionNo = 100 + req.replacedSessionNo;
-    const newSession: ClassSessionItem = {
-      id: Date.now(),
-      sessionNo: newSessionNo,
-      sessionDate: req.proposedDate,
-      startTime: req.proposedTime.split('الی')[0]?.trim() || '۱۳:۳۰',
-      endTime: req.proposedTime.split('الی')[1]?.trim() || '۱۵:۳۰',
-      roomName: room.name,
-      topic: req.topic,
-      isHeld: false,
-      isMakeUp: true,
-      replacedSessionNo: req.replacedSessionNo,
-      professorStatus: 'APPROVED_MAKEUP',
-      verificationDetail: `تاییدیه آموزش در ${approvedReq.approvedAt} — مکان: ${room.name}`,
-      studentStatuses: {},
-    };
-
-    // Initialize students as present
-    currentOffering.students.forEach(st => {
-      newSession.studentStatuses[st.id] = { status: 'PRESENT' };
-    });
-
-    setOfferings(prev =>
-      prev.map(off => {
-        if (off.id !== req.offeringId) return off;
-        return {
-          ...off,
-          sessions: [...off.sessions, newSession],
-        };
-      })
-    );
-
-    setSelectedRequestForApproval(null);
-    setSelectedSessionNo(newSessionNo);
-
-    // Show double dispatch notification alert
-    setToastMessage(`🎉 جلسه جبرانی درس «${req.courseTitle}» تایید و کلاس «${room.name}» تخصیص داده شد. دو پیام خودکار به شماره همراه استاد («${req.professorName}») و کلیه دانشجویان کلاس مخابره گردید.`);
+    if (isDirect) {
+      setToastMessage(`🎉 جلسه جبرانی با موفقیت در «${selectedRoom!.name}» برای تاریخ ${makeupForm.sessionDate} ساعت ${makeupForm.sessionTime} ثبت شد. دو پیام خودکار به شما و دانشجویان کلاس ارسال گردید.`);
+    } else {
+      setToastMessage(`📩 درخواست تخصیص سالن ویژه برای جلسه جبرانی به کارتابل اداره آموزش ارسال شد. پس از تخصیص کلاس توسط کارشناس آموزش، پیامک تایید ارسال خواهد شد.`);
+    }
     setTimeout(() => setToastMessage(null), 8000);
   };
 
@@ -426,7 +419,7 @@ export default function ProfessorAttendanceClient({
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-slate-950">
                 سامانه هوشمند حضور و غیاب و اثر انگشت
               </span>
-              <span className="text-xs text-indigo-200">{termTitle} · تاریخ جاری سیستم: {CURRENT_SYSTEM_DATE}</span>
+              <span className="text-xs text-indigo-200">{termTitle} · استاد: {profDisplayName}</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
               📋 ثبت حضور و غیاب کلاسی و مدیریت جلسات جبرانی
@@ -487,7 +480,7 @@ export default function ProfessorAttendanceClient({
           </div>
 
           <div>
-            <label className="text-indigo-200 font-bold block mb-1">۳. تاریخ برگزاری این جلسه (تولید خودکار):</label>
+            <label className="text-indigo-200 font-bold block mb-1">۳. تاریخ برگزاری این جلسه:</label>
             <input
               type="text"
               value={currentSession.sessionDate}
@@ -785,87 +778,82 @@ export default function ProfessorAttendanceClient({
         </div>
       </div>
 
-      {/* Education Management Section: Make-up Session Approval Queue */}
+      {/* Make-up Sessions Status Tracker for Professor */}
       <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-slate-200">
           <div>
             <h3 className="font-extrabold text-slate-900 text-base">
-              🏛️ کارتابل مدیریت آموزش: بررسی، تخصیص کلاس خالی و ابلاغ جلسات جبرانی
+              📑 وضعیت و تاریخچه جلسات جبرانی ثبت‌شده
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              درخواست‌های جلسه جبرانی اساتید پس از بررسی توسط آموزش و تخصیص کلاس خالی، به صورت خودکار پیامک و در تقویم قرار می‌گیرند.
+              جلساتی که مستقیماً در کلاس خالی ثبت شده یا جهت تعیین سالن ویژه به آموزش ارجاع داده شده‌اند.
             </p>
           </div>
         </div>
 
-        <div className="space-y-3">
-          {makeupRequests.map(req => (
-            <div key={req.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2 border-b border-slate-200">
-                <div className="flex items-center gap-2">
-                  <span className="font-extrabold text-slate-900 text-sm">{req.courseTitle} (گروه {faNum(req.groupNumber)})</span>
-                  <span className="text-xs text-slate-500 font-bold">مدرس: {req.professorName}</span>
-                  <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 font-bold text-[10px]">
-                    جبران جلسه {faNum(req.replacedSessionNo)}
-                  </span>
+        {makeupHistory.length === 0 ? (
+          <div className="text-center p-6 bg-slate-50 rounded-2xl text-xs font-bold text-slate-500">
+            هیچ جلسه جبرانی برای این درس ثبت نشده است.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {makeupHistory.map(req => (
+              <div key={req.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-2">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-slate-900 text-sm">{req.courseTitle} (گروه {faNum(req.groupNumber)})</span>
+                    <span className="text-xs text-slate-600 font-bold">مدرس: {req.professorName}</span>
+                    <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 font-bold text-[10px]">
+                      جبران جلسه {faNum(req.replacedSessionNo)}
+                    </span>
+                  </div>
+
+                  <div>
+                    {req.status === 'APPROVED_DIRECT' || req.status === 'APPROVED_BY_EDUCATION' ? (
+                      <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 font-black text-xs border border-emerald-300">
+                        ✓ تایید و ابلاغ شد (مکان: {req.roomName})
+                      </span>
+                    ) : (
+                      <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-900 font-black text-xs border border-amber-300 animate-pulse">
+                        ⏳ در انتظار تخصیص کلاس توسط آموزش
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                <div>
-                  {req.status === 'APPROVED' ? (
-                    <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 font-black text-xs border border-emerald-300">
-                      ✓ تایید و ابلاغ شد (کلاس: {req.allocatedRoomName})
-                    </span>
-                  ) : (
-                    <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-900 font-black text-xs border border-amber-300 animate-pulse">
-                      ⏳ در انتظار تخصیص کلاس توسط آموزش
-                    </span>
-                  )}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <span className="text-slate-500 block">زمان برگزاری:</span>
+                    <span className="font-bold text-slate-900">{req.sessionDate} — ساعت {req.sessionTime}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">محل تشکیل:</span>
+                    <span className="font-extrabold text-indigo-950">🏛️ {req.roomName}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">سرفصل تدریس:</span>
+                    <span className="font-bold text-slate-700">{req.topic}</span>
+                  </div>
                 </div>
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                <div>
-                  <span className="text-slate-500 block">تاریخ و ساعت پیشنهادی:</span>
-                  <span className="font-bold text-slate-900">{req.proposedDate} — ساعت {req.proposedTime}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">سرفصل و موضوع تدریس:</span>
-                  <span className="font-bold text-indigo-950">{req.topic}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">دلیل برگزاری جبرانی:</span>
-                  <span className="font-bold text-slate-700">{req.reason}</span>
-                </div>
-              </div>
-
-              {req.status === 'PENDING_ADMIN' && (
-                <div className="pt-2 border-t border-slate-200 flex justify-end">
-                  <button
-                    onClick={() => setSelectedRequestForApproval(req)}
-                    className="px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-extrabold text-xs shadow transition flex items-center gap-1.5"
-                  >
-                    <span>🏛️ بررسی کلاس‌های خالی و تصویب جلسه جبرانی</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* MODAL 1: Professor Creates Make-up Session Request */}
+      {/* MODAL: Professor Creates Make-up Session & Selects Free Classrooms Directly */}
       {showMakeupModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
           <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-slate-200 space-y-4 animate-scaleUp text-slate-900">
             <div className="flex items-center justify-between pb-2 border-b border-slate-200">
               <h3 className="font-extrabold text-base text-slate-900">
-                ➕ درخواست و ایجاد جلسه جدید جبرانی
+                ➕ ایجاد و تخصیص کلاس جلسه جبرانی
               </h3>
               <button onClick={() => setShowMakeupModal(false)} className="text-slate-400 hover:text-slate-700">✕</button>
             </div>
 
             <p className="text-xs text-slate-600 leading-5">
-              استاد گرامی، تاریخ انتخابی جهت برگزاری جلسه جبرانی <b>باید پس از تاریخ جاری سیستم ({CURRENT_SYSTEM_DATE})</b> باشد. پس از ثبت، درخواست به کارتابل آموزش جهت تخصیص سالن/کلاس ارسال خواهد گردید.
+              استاد گرامی، در این فرم می‌توانید از میان <b>کلاس‌های خالی و در دسترس دانشگاه در تاریخ و ساعت انتخابی</b>، مستقیماً کلاس مورد نظر را انتخاب و نهایی فرمایید. در صورت عدم وجود کلاس مناسب، درخواست جهت تخصیص سالن ویژه به آموزش ارسال خواهد شد.
             </p>
 
             <div className="space-y-3 text-xs">
@@ -887,21 +875,21 @@ export default function ProfessorAttendanceClient({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">
-                    تاریخ پیشنهادی برگزاری (باید بعد از {CURRENT_SYSTEM_DATE} باشد):
+                    تاریخ برگزاری (باید بعد از {CURRENT_SYSTEM_DATE} باشد):
                   </label>
                   <input
                     type="text"
-                    value={makeupForm.proposedDate}
-                    onChange={e => setMakeupForm({ ...makeupForm, proposedDate: e.target.value })}
+                    value={makeupForm.sessionDate}
+                    onChange={e => setMakeupForm({ ...makeupForm, sessionDate: e.target.value })}
                     className="w-full border border-slate-300 rounded-xl p-2.5 font-bold font-mono"
                   />
                 </div>
 
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">ساعت پیشنهادی تشکیل:</label>
+                  <label className="font-bold text-slate-700 block mb-1">ساعت تشکیل:</label>
                   <select
-                    value={makeupForm.proposedTime}
-                    onChange={e => setMakeupForm({ ...makeupForm, proposedTime: e.target.value })}
+                    value={makeupForm.sessionTime}
+                    onChange={e => setMakeupForm({ ...makeupForm, sessionTime: e.target.value })}
                     className="w-full border border-slate-300 rounded-xl p-2.5 font-bold"
                   >
                     <option value="۱۳:۳۰ الی ۱۵:۳۰">۱۳:۳۰ الی ۱۵:۳۰ (شیفت بعدازظهر)</option>
@@ -911,6 +899,24 @@ export default function ProfessorAttendanceClient({
                     <option value="۱۰:۰۰ الی ۱۲:۰۰ (پنج‌شنبه)">۱۰:۰۰ الی ۱۲:۰۰ (پنج‌شنبه)</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Free Classrooms Selector */}
+              <div>
+                <label className="font-extrabold text-slate-900 block mb-1">
+                  🏛️ کلاس‌های خالی و در دسترس در این تاریخ و ساعت (انتخاب مستقیم):
+                </label>
+                <select
+                  value={selectedRoomOptionId}
+                  onChange={e => setSelectedRoomOptionId(Number(e.target.value))}
+                  className="w-full border-2 border-indigo-500 rounded-xl p-2.5 font-extrabold bg-indigo-50/50 text-indigo-950"
+                >
+                  {EMPTY_CLASSROOMS_LIST.map(room => (
+                    <option key={room.id} value={room.id}>
+                      {room.id !== 0 ? `🟢 ${room.name} (ظرفیت ${faNum(room.capacity)} نفر — خالی)` : `🏢 ${room.name}`}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -936,92 +942,13 @@ export default function ProfessorAttendanceClient({
 
             <div className="flex gap-2 pt-2 border-t border-slate-200">
               <button
-                onClick={handleSubmitMakeupRequest}
+                onClick={handleCreateMakeupSession}
                 className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-emerald-700 to-emerald-800 hover:from-emerald-800 text-white font-extrabold text-xs transition shadow-md"
               >
-                🚀 ارسال به کارتابل مدیر آموزش جهت تخصیص مکان
+                {selectedRoomOptionId !== 0 ? '✓ ثبت و تخصیص مستقیم کلاس جبرانی' : '🚀 ارسال به آموزش جهت تخصیص سالن'}
               </button>
               <button
                 onClick={() => setShowMakeupModal(false)}
-                className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition"
-              >
-                انصراف
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: Admin Education Approves Makeup & Allocates Empty Classroom */}
-      {selectedRequestForApproval && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-slate-200 space-y-4 animate-scaleUp text-slate-900">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-              <h3 className="font-extrabold text-base text-slate-900">
-                🏛️ تخصیص کلاس خالی و تصویب جلسه جبرانی (مدیریت آموزش)
-              </h3>
-              <button onClick={() => setSelectedRequestForApproval(null)} className="text-slate-400 hover:text-slate-700">✕</button>
-            </div>
-
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
-              <div className="flex justify-between">
-                <span className="text-slate-500">درس و گروه:</span>
-                <span className="font-extrabold text-slate-900">{selectedRequestForApproval.courseTitle} (گروه {faNum(selectedRequestForApproval.groupNumber)})</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">استاد مدرس:</span>
-                <span className="font-bold text-indigo-900">{selectedRequestForApproval.professorName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">زمان پیشنهادی:</span>
-                <span className="font-bold text-emerald-800">{selectedRequestForApproval.proposedDate} — ساعت {selectedRequestForApproval.proposedTime}</span>
-              </div>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="font-extrabold text-slate-900 block mb-1">
-                  کلاس‌های خالی و در دسترس دانشگاه در این تاریخ و ساعت:
-                </label>
-                <select
-                  value={selectedRoomId}
-                  onChange={e => setSelectedRoomId(Number(e.target.value))}
-                  className="w-full border-2 border-indigo-500 rounded-xl p-2.5 font-extrabold bg-indigo-50/50 text-indigo-950"
-                >
-                  {EMPTY_CLASSROOMS_POOL.map(room => (
-                    <option key={room.id} value={room.id}>
-                      🏛️ {room.name} (ظرفیت: {faNum(room.capacity)} نفر — {room.status})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">توضیحات و ابلاغیه آموزش:</label>
-                <input
-                  type="text"
-                  value={adminApprovalNote}
-                  onChange={e => setAdminApprovalNote(e.target.value)}
-                  className="w-full border border-slate-300 rounded-xl p-2.5 font-bold"
-                />
-              </div>
-
-              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-950 space-y-1 font-bold">
-                <p>🔔 پس از تایید توسط آموزش، دو پیام خودکار مخابره خواهد شد:</p>
-                <p>۱. پیام به استاد: اعلام تایید زمان و کلاس تخصیص‌یافته</p>
-                <p>۲. پیام به کلیه دانشجویان کلاس: اطلاع‌رسانی زمان و مکان تشکیل جلسه جبرانی</p>
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-2 border-t border-slate-200">
-              <button
-                onClick={() => handleAdminApproveMakeup(selectedRequestForApproval)}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 text-white font-extrabold text-xs transition shadow-md"
-              >
-                ✓ تصویب نهایی و ارسال پیامک به استاد و دانشجویان
-              </button>
-              <button
-                onClick={() => setSelectedRequestForApproval(null)}
                 className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition"
               >
                 انصراف

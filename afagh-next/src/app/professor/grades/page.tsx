@@ -130,7 +130,7 @@ export default async function ProfessorGradesPage({
         theoryProfName: 'دکتر مریم رضایی',
         theoryWeightRatio: 0.60,
         theoryWeightMarks: 12,
-        labProfName: `${user.firstName} ${user.lastName}`,
+        labProfName: user.name || 'دکتر جمیل احمدی',
         labWeightRatio: 0.40,
         labWeightMarks: 8,
         currentProfRole: 'LAB',
@@ -216,7 +216,7 @@ export default async function ProfessorGradesPage({
 
   const professorData = {
     id: me.id,
-    name: `${user.firstName} ${user.lastName}`,
+    name: user.name || 'دکتر جمیل احمدی',
     staffCode: me.staffCode,
   };
 

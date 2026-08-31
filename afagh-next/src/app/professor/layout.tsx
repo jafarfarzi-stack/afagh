@@ -21,7 +21,7 @@ export default async function ProfessorLayout({ children }: { children: React.Re
             </div>
             <div>
               <p className="font-extrabold text-sm sm:text-base">کارتابل جامع اعضای هیئت علمی و اساتید</p>
-              <p className="text-xs text-slate-400">{user.firstName} {user.lastName}{me ? ' · کد پرسنلی: ' + me.staffCode : ''}</p>
+              <p className="text-xs text-slate-400">{user.name || 'دکتر جمیل احمدی'}{me ? ' · کد پرسنلی: ' + me.staffCode : ''}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">

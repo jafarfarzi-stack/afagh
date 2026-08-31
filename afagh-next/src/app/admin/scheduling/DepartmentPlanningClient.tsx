@@ -2188,6 +2188,30 @@ export default function DepartmentPlanningClient() {
                 <span className="text-lg font-black text-amber-950">هوشمند با پیامک</span>
               </div>
             </div>
+
+            {/* Admin Make-up Session Approval Table */}
+            <div className="pt-4 border-t border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-extrabold text-slate-900 text-sm">
+                  🏛️ کارتابل اداره آموزش: بررسی و تخصیص کلاس‌های خالی به جلسات جبرانی
+                </h4>
+                <span className="text-xs text-slate-500 font-bold">
+                  (درخواست‌هایی که استاد به دلیل نیاز به کلاس خاص به آموزش ارجاع داده است)
+                </span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
+                <div className="flex items-center justify-between font-extrabold text-slate-800">
+                  <span>درخواست جلسه جبرانی درس سیستم‌های عامل (گروه ۱) — دکتر جمیل احمدی</span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[10px]">✓ کلاس ۳۰۴ تخصیص و ابلاغ شد</span>
+                </div>
+                <div className="text-slate-600 flex items-center justify-between">
+                  <span>تاریخ برگزاری: ۱۴۰۵/۰۹/۰۸ ساعت ۱۳:۳۰ الی ۱۵:۳۰</span>
+                  <span>محل تشکیل: 🏛️ کلاس ۳۰۴ (ساختمان آموزش)</span>
+                  <span className="text-emerald-700 font-bold">پیامک تایید به استاد و دانشجویان ارسال شد</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

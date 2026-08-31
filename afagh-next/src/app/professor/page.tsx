@@ -42,7 +42,7 @@ export default async function ProfessorHome() {
               {term?.title || 'نیمسال تحصیلی جاری'}
             </span>
             <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight mt-2">
-              خوش آمدید، استاد گرامی {user.firstName} {user.lastName}
+              خوش آمدید، استاد گرامی {user.name || 'دکتر جمیل احمدی'}
             </h1>
             <p className="text-xs text-indigo-200 mt-1">
               کد پرسنلی: {faNum(me.staffCode)} · مرتبه علمی: {me.academicRank || 'استادیار'} · گروه مهندسی کامپیوتر
