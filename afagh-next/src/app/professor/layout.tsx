@@ -21,8 +21,11 @@ export default async function ProfessorLayout({ children }: { children: React.Re
           </div>
           <form action={logoutAction}><button className="text-xs underline opacity-70">خروج</button></form>
         </div>
-        <nav className="mx-auto flex max-w-5xl gap-4 px-4 pb-3 text-sm">
+        <nav className="mx-auto flex max-w-5xl gap-4 px-4 pb-3 text-sm flex-wrap items-center">
           <Link href="/professor" className="opacity-90 hover:opacity-100">کلاس‌های من</Link>
+          <Link href="/professor/availability" className="opacity-90 hover:opacity-100 font-bold text-amber-300">
+            🗓️ فرم اعلام ساعات حضور نیمسال
+          </Link>
           <Link href="/professor/documents" className="opacity-90 hover:opacity-100">
             اسناد و امضا {pendingCount > 0 && <span className="mr-1 rounded-full bg-amber-500 px-2 text-xs text-slate-900">{pendingCount}</span>}
           </Link>
