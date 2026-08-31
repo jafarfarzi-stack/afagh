@@ -637,6 +637,9 @@ export default function PayrollEngineClient() {
     },
   ]);
 
+  // University Payment Policy: Full at term end vs Milestone Tranches
+  const [paymentPolicy, setPaymentPolicy] = useState<'FULL_TERM_END' | 'MILESTONE_INSTALLMENTS'>('FULL_TERM_END');
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 6000);
@@ -1023,6 +1026,47 @@ export default function PayrollEngineClient() {
                 className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition active:scale-95"
               >
                 <span>✅ تسویه و واریز کلیه فیش‌های تاییدشده</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Payment Policy Selector Banner */}
+          <div className="p-3.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="space-y-0.5">
+              <span className="text-amber-300 font-bold block">⚖️ شیوه و خط‌مشی پرداخت حق‌التدریس دانشگاه:</span>
+              <p className="text-indigo-200 text-[11px]">
+                {paymentPolicy === 'FULL_TERM_END'
+                  ? 'سیاست فعلی: پرداخت ۱۰۰٪ حق‌التدریس در پایان ترم پس از تایید نمرات و تحویل فیزیکی اوراق به بایگانی'
+                  : 'سیاست فعلی: پرداخت ۳ مرحله‌ای در طول ترم (۲۰٪ پس از جلسه ۴ + ۳۰٪ پس از میان‌ترم + ۵۰٪ تسویه نهایی بایگانی)'}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-1.5 bg-white/10 p-1 rounded-xl border border-white/15 shrink-0">
+              <button
+                onClick={() => {
+                  setPaymentPolicy('FULL_TERM_END');
+                  showToast('سیاست پرداخت به «۱۰۰٪ یکجا در پایان ترم» تغییر یافت.');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  paymentPolicy === 'FULL_TERM_END'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                پرداخت یکجا پایان ترم
+              </button>
+              <button
+                onClick={() => {
+                  setPaymentPolicy('MILESTONE_INSTALLMENTS');
+                  showToast('سیاست پرداخت به «اقساطی ۳ مرحله‌ای در طول ترم با شروط جلسات» تغییر یافت.');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  paymentPolicy === 'MILESTONE_INSTALLMENTS'
+                    ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                پرداخت اقساطی چندمرحله‌ای
               </button>
             </div>
           </div>

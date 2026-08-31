@@ -3,7 +3,7 @@ import { requireRole } from '@/lib/auth';
 import { logoutAction } from '../login/actions';
 
 export default async function ProctorLayout({ children }: { children: React.ReactNode }) {
-  const user = await requireRole(['PROCTOR', 'ADMIN', 'EDU_EXPERT', 'PROFESSOR']);
+  const user = await requireRole(['PROCTOR', 'VAULT_MANAGER', 'ADMIN', 'EDU_EXPERT', 'PROFESSOR']);
 
   return (
     <div className="min-h-screen bg-slate-100">

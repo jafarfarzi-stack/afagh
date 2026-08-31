@@ -43,7 +43,7 @@ function main() {
     ['ADMIN', 'مدیر سیستم', 1], ['STUDENT', 'دانشجو', 1], ['PROFESSOR', 'استاد', 1],
     ['DEP_HEAD', 'مدیر گروه', 1], ['EDU_EXPERT', 'کارشناس آموزش', 1],
     ['VICE_EDU', 'معاون آموزشی', 1], ['FINANCE_EXPERT', 'کارشناس مالی', 1], ['MILITARY_OFFICER', 'کارشناس نظام وظیفه', 1], ['ARCHIVE_EXPERT', 'کارشناس بایگانی', 1], ['APPLICANT', 'متقاضی ثبت‌نام', 1],
-    ['PROCTOR', 'مراقب آزمون', 1]
+    ['PROCTOR', 'مراقب آزمون', 1], ['VAULT_MANAGER', 'مسئول مخزن و قرنطینه امتحانات', 1]
   ];
   for (const [code, title, sys] of roles) run(`INSERT OR IGNORE INTO roles (code, title, isSystem) VALUES (?,?,?)`, [code, title, sys]);
 
@@ -179,6 +179,15 @@ function main() {
   const uArch = mkUser('0099999999', 'لیلا', 'آقایی', '09129999999', '123456');
   const arch = mkStaff(uArch, 'S-701', depId, 'کارشناس بایگانی', null, null);
   run(`INSERT INTO user_roles (userId, roleId) VALUES (?,?)`, [uArch, roleId('ARCHIVE_EXPERT')]);
+
+  const uProctor = mkUser('0012121212', 'علیرضا', 'مراقب‌زاده', '09121212121', '123456');
+  const proctorStaff = mkStaff(uProctor, 'P-801', depId, 'مراقب آزمون', null, null);
+  run(`INSERT INTO user_roles (userId, roleId) VALUES (?,?)`, [uProctor, roleId('PROCTOR')]);
+
+  const uVault = mkUser('0034343434', 'سعید', 'مخزنی', '09123434343', '123456');
+  const vaultStaff = mkStaff(uVault, 'V-901', depId, 'مسئول مخزن و قرنطینه امتحانات', null, null);
+  run(`INSERT INTO user_roles (userId, roleId) VALUES (?,?)`, [uVault, roleId('VAULT_MANAGER')]);
+  run(`INSERT INTO user_roles (userId, roleId) VALUES (?,?)`, [uVault, roleId('EDU_EXPERT')]);
 
   // ─────────────────────────────────────────────
   // دروس + چارت + قوانین پیش‌نیاز (درخت منطقی)
