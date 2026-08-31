@@ -27,8 +27,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
             📋 کارتابل گردش کار
           </Link>
-          <Link href="/admin/students" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/50 border border-indigo-700/40 transition-colors whitespace-nowrap">
+          <Link href="/admin/students" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
             🎓 پرونده جامع دانشجویان و پرسنل
+          </Link>
+          <Link href="/admin/curriculum" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/50 border border-indigo-700/40 transition-colors whitespace-nowrap">
+            📚 کاتالوگ و مشخصات رشته‌ها
           </Link>
           <Link href="/admin/archive" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
             🗄️ بایگانی الکترونیک مدارک
