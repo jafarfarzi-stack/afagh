@@ -273,11 +273,100 @@ const INITIAL_EXAM_COURSES: ExamCourseItem[] = [
 ];
 
 export default function ExamPlanningClient() {
-  const [activeTab, setActiveTab] = useState<'SCHEDULE_TABLE' | 'CALENDAR_SLOTS' | 'CONFLICT_CHECKER' | 'EXAM_HALLS' | 'PROCTORS' | 'STUDENT_CARDS'>('SCHEDULE_TABLE');
+  const [activeTab, setActiveTab] = useState<'SCHEDULE_TABLE' | 'CALENDAR_SLOTS' | 'CONFLICT_CHECKER' | 'EXAM_HALLS' | 'PROCTORS' | 'STUDENT_CARDS' | 'QUALITY_ANALYTICS'>('SCHEDULE_TABLE');
   const [courses, setCourses] = useState<ExamCourseItem[]>(INITIAL_EXAM_COURSES);
   const [slots, setSlots] = useState<ExamSlot[]>(INITIAL_EXAM_SLOTS);
   const [halls, setHalls] = useState<ExamHall[]>(INITIAL_EXAM_HALLS);
   const [proctors, setProctors] = useState<ProctorStaff[]>(INITIAL_PROCTORS);
+
+  // Quality Bottlenecks State
+  const [evalBottlenecks, setEvalBottlenecks] = useState([
+    {
+      id: 1,
+      profName: 'دکتر جمیل احمدی',
+      staffCode: '۱۱۰۲',
+      courses: ['ریاضی عمومی ۱', 'ساختمان داده‌ها', 'سیستم‌های عامل'],
+      avgScore: 4.85,
+      masteryScore: 4.95,
+      teachingSkill: 4.80,
+      disciplineScore: 4.90,
+      totalResponses: 112,
+      isFlagged: false,
+      notes: 'کیفیت تدریس عالی و رضایت حداکثری دانشجویان',
+    },
+    {
+      id: 2,
+      profName: 'دکتر سارا رضایی',
+      staffCode: '۱۱۰۵',
+      courses: ['مبانی برنامه‌نویسی', 'برنامه‌نویسی پیشرفته', 'پایگاه داده‌ها'],
+      avgScore: 4.70,
+      masteryScore: 4.85,
+      teachingSkill: 4.65,
+      disciplineScore: 4.70,
+      totalResponses: 98,
+      isFlagged: false,
+      notes: 'عملکرد بسیار خوب و پروژه‌محور در دروس تخصصی',
+    },
+    {
+      id: 3,
+      profName: 'دکتر علی حسینی',
+      staffCode: '۱۱۰۴',
+      courses: ['فیزیک عمومی ۱'],
+      avgScore: 4.40,
+      masteryScore: 4.60,
+      teachingSkill: 4.20,
+      disciplineScore: 4.50,
+      totalResponses: 35,
+      isFlagged: false,
+      notes: 'عملکرد مطلوب در دروس پایه',
+    },
+    {
+      id: 4,
+      profName: 'استاد مهدی کاظمی (مدعو)',
+      staffCode: '۱۱۹۰',
+      courses: ['مبانی فناوری اطلاعات (گروه ۲)'],
+      avgScore: 3.10,
+      masteryScore: 3.20,
+      teachingSkill: 2.90,
+      disciplineScore: 3.30,
+      totalResponses: 42,
+      isFlagged: true,
+      notes: '⚠️ گلوگاه کیفی: نمره میانگین زیر ۳.۵ — ضعف در انتقال مفاهیم و عدم پاسخگویی به ابهامات دانشجویان',
+    },
+  ]);
+
+  // Facilities Maintenance Tickets State
+  const [facilityTickets, setFacilityTickets] = useState([
+    {
+      id: 101,
+      roomName: 'کلاس ۳۰۴ (ساختمان آموزش)',
+      issueType: 'خرابی و افت کیفیت تصویر ویدئوپروژکتور',
+      reportedByCount: 32,
+      targetDepartment: 'واحد فناوری اطلاعات (IT)',
+      status: 'DISPATCHED' as 'PENDING' | 'DISPATCHED' | 'FIXED',
+      ticketCode: 'IT-TKT-1405-304',
+      dispatchedAt: '۱۴۰۵/۰۹/۲۱',
+    },
+    {
+      id: 102,
+      roomName: 'کلاس ۲۰۲ (ساختمان آموزش)',
+      issueType: 'نقص سیستم سرمایش/گرمایش و عدم تهویه مناسب',
+      reportedByCount: 28,
+      targetDepartment: 'امور پشتیبانی و تاسیسات',
+      status: 'PENDING' as 'PENDING' | 'DISPATCHED' | 'FIXED',
+      ticketCode: 'LOG-TKT-1405-202',
+    },
+    {
+      id: 103,
+      roomName: 'سایت تخصصی کامپیوتر ۱۰۲',
+      issueType: 'نیاز به ارتقای رم و نصب نرم‌افزارهای تخصصی روی ۵ سیستم',
+      reportedByCount: 19,
+      targetDepartment: 'واحد فناوری اطلاعات (IT)',
+      status: 'DISPATCHED' as 'PENDING' | 'DISPATCHED' | 'FIXED',
+      ticketCode: 'IT-TKT-1405-102',
+      dispatchedAt: '۱۴۰۵/۰۹/۲۲',
+    },
+  ]);
 
   const [examStartDate, setExamStartDate] = useState<string>('۱۴۰۵/۱۰/۱۸');
   const [examEndDate, setExamEndDate] = useState<string>('۱۴۰۵/۱۰/۳۰');
@@ -734,6 +823,22 @@ export default function ExamPlanningClient() {
           }`}
         >
           <span>📇 صدور کارت ورود به جلسه و چیدمان</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('QUALITY_ANALYTICS')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
+            activeTab === 'QUALITY_ANALYTICS'
+              ? 'bg-indigo-900 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <span>📊 گلوگاه‌های کیفی اساتید و تحلیل امکانات کلاس‌ها</span>
+          {evalBottlenecks.filter(p => p.isFlagged).length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-rose-600 text-white text-[10px] font-black">
+              {evalBottlenecks.filter(p => p.isFlagged).length} استاد با اخطار
+            </span>
+          )}
         </button>
       </div>
 
@@ -1410,6 +1515,198 @@ export default function ExamPlanningClient() {
 
             <div className="p-2 bg-amber-50 rounded-lg border border-amber-200 text-[10px] text-amber-900 font-bold">
               ⚠️ همراه داشتن این کارت و کارت شناسایی معتبر در کلیه جلسات آزمون الزامی است. همراه داشتن تلفن همراه و ساعت هوشمند تخلف محسوب می‌شود.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 7: QUALITY BOTTLENECKS & FACILITIES ANALYTICS (DASHBOARD) */}
+      {/* ========================================================================= */}
+      {activeTab === 'QUALITY_ANALYTICS' && (
+        <div className="card space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div>
+              <h2 className="font-black text-slate-900 text-base flex items-center gap-2">
+                <span>📊 داشبورد تضمین کیفیت آموزشی و تحلیل امکانات فیزیکی کلاس‌ها</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                شناسایی خودکار گلوگاه‌های کیفی اساتید (زیر ۳.۵ از ۵) و ارسال تیکت‌های تعمیراتی امکانات کلاس‌ها به پشتیبانی IT و تدارکات
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setFacilityTickets(prev =>
+                  prev.map(t => ({
+                    ...t,
+                    status: 'DISPATCHED' as const,
+                    dispatchedAt: 'هم‌اکنون',
+                  }))
+                );
+                showToast('🚀 کلیه تیکت‌های نیازمندی و تعمیرات کلاس‌ها به صورت خودکار برای واحدهای IT و تدارکات ارسال گردید.');
+              }}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-700 to-indigo-800 hover:from-indigo-800 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition"
+            >
+              <span>🚀 ارسال خودکار تیکت‌های تعمیراتی به پشتیبانی IT و تدارکات</span>
+            </button>
+          </div>
+
+          {/* Section 1: Quality Bottlenecks */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">👨‍🏫</span>
+                <h3 className="font-black text-slate-900 text-sm">
+                  ۱. گزارش ارزشیابی عملکرد اساتید و گلوگاه‌های کیفی تدریس:
+                </h3>
+              </div>
+              <span className="text-xs text-slate-500 font-bold">
+                آستانه هشدار کیفی: نمره کمتر از ۳.۵ از ۵
+              </span>
+            </div>
+
+            <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+              <table className="w-full text-right text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white">
+                    <th className="p-2.5">نام استاد</th>
+                    <th className="p-2.5">کد پرسنلی</th>
+                    <th className="p-2.5">دروس ارزشیابی‌شده</th>
+                    <th className="p-2.5 text-center">تسلط علمی</th>
+                    <th className="p-2.5 text-center">فن بیان و تدریس</th>
+                    <th className="p-2.5 text-center">نظم کلاسی</th>
+                    <th className="p-2.5 text-center">میانگین کل (از ۵)</th>
+                    <th className="p-2.5 text-center">وضعیت کیفی</th>
+                    <th className="p-2.5">تصمیم و بازخورد مدیر گروه</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {evalBottlenecks.map(b => (
+                    <tr
+                      key={b.id}
+                      className={`border-b transition ${
+                        b.isFlagged
+                          ? 'bg-rose-50/80 border-rose-300 font-bold text-rose-950'
+                          : 'border-slate-100 hover:bg-slate-50'
+                      }`}
+                    >
+                      <td className="p-2.5 font-black text-slate-900 flex items-center gap-1.5">
+                        {b.isFlagged && <span className="text-rose-600 text-base">⚠️</span>}
+                        <span>{b.profName}</span>
+                      </td>
+                      <td className="p-2.5 font-mono text-slate-700" dir="ltr">{b.staffCode}</td>
+                      <td className="p-2.5 text-slate-700">{b.courses.join('، ')}</td>
+                      <td className="p-2.5 text-center font-bold">{b.masteryScore}</td>
+                      <td className="p-2.5 text-center font-bold">{b.teachingSkill}</td>
+                      <td className="p-2.5 text-center font-bold">{b.disciplineScore}</td>
+                      <td className="p-2.5 text-center font-mono font-black text-sm">
+                        <span
+                          className={`px-2.5 py-1 rounded-xl ${
+                            b.isFlagged ? 'bg-rose-600 text-white shadow-xs' : 'bg-emerald-100 text-emerald-900'
+                          }`}
+                        >
+                          {b.avgScore}
+                        </span>
+                      </td>
+                      <td className="p-2.5 text-center">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[11px] font-black ${
+                            b.isFlagged
+                              ? 'bg-rose-200 text-rose-900 border border-rose-300 animate-pulse'
+                              : 'bg-emerald-100 text-emerald-900'
+                          }`}
+                        >
+                          {b.isFlagged ? '🚩 گلوگاه کیفی (اخطار)' : '✓ عملکرد مطلوب'}
+                        </span>
+                      </td>
+                      <td className="p-2.5 text-slate-700 text-[11px]">
+                        {b.notes}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Section 2: Physical Facilities Analysis */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🏛️</span>
+                <h3 className="font-black text-slate-900 text-sm">
+                  ۲. تحلیل امکانات فیزیکی کلاس‌ها و ارجاع تیکت‌های تعمیرات به پشتیبانی:
+                </h3>
+              </div>
+              <span className="text-xs text-slate-500 font-bold">
+                استخراج خودکار از پاسخ‌های دانشجویان در فرم ارزشیابی ترم
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+              {facilityTickets.map(tkt => {
+                const isDispatched = tkt.status === 'DISPATCHED';
+
+                return (
+                  <div
+                    key={tkt.id}
+                    className={`p-4 rounded-2xl border space-y-3 shadow-xs ${
+                      isDispatched
+                        ? 'bg-indigo-50/50 border-indigo-300'
+                        : 'bg-amber-50/50 border-amber-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-black text-slate-900 text-sm">{tkt.roomName}</h4>
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                          isDispatched ? 'bg-indigo-200 text-indigo-900' : 'bg-amber-200 text-amber-900'
+                        }`}
+                      >
+                        {isDispatched ? '✓ تیکت ارسال شد' : '⏳ در انتظار ارجاع'}
+                      </span>
+                    </div>
+
+                    <div className="text-xs text-slate-700 space-y-1">
+                      <p><strong>موضوع نقص:</strong> {tkt.issueType}</p>
+                      <p><strong>تعداد گزارش‌های دانشجویی:</strong> {tkt.reportedByCount} دانشجو</p>
+                      <p><strong>واحد اقدام‌کننده:</strong> {tkt.targetDepartment}</p>
+                      {tkt.ticketCode && (
+                        <p className="font-mono font-bold text-indigo-900 text-[11px]" dir="ltr">
+                          کد رهگیری: {tkt.ticketCode}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
+                      <span className="text-[10px] text-slate-500">
+                        {isDispatched ? `ارسال شده در ${tkt.dispatchedAt}` : 'نیازمند تایید مدیر'}
+                      </span>
+                      {!isDispatched && (
+                        <button
+                          onClick={() => {
+                            setFacilityTickets(prev =>
+                              prev.map(t =>
+                                t.id === tkt.id
+                                  ? {
+                                      ...t,
+                                      status: 'DISPATCHED' as const,
+                                      dispatchedAt: 'هم‌اکنون',
+                                    }
+                                  : t
+                              )
+                            );
+                            showToast(`🚀 تیکت تعمیرات برای ${tkt.roomName} با موفقیت صادر و به ${tkt.targetDepartment} ارسال شد.`);
+                          }}
+                          className="px-3 py-1 rounded-lg bg-indigo-900 hover:bg-indigo-950 text-white font-black text-xs transition"
+                        >
+                          ارسال تیکت 🚀
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

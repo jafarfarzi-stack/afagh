@@ -1,0 +1,655 @@
+'use client';
+
+import React, { useState, useMemo } from 'react';
+import Link from 'next/link';
+
+// ==========================================
+// INTERFACES & TYPES
+// ==========================================
+
+export interface StudentCourseEvaluationItem {
+  id: number;
+  courseCode: string;
+  courseTitle: string;
+  units: number;
+  professorName: string;
+  classRoomName: string;
+  hasEvaluated: boolean;
+  evaluatedAt?: string;
+  examDate: string;
+  examTime: string;
+  examHall: string;
+  seatNumber: number;
+}
+
+interface Props {
+  user: {
+    id: number;
+    name: string;
+    roles: string[];
+  };
+}
+
+const INITIAL_COURSES: StudentCourseEvaluationItem[] = [
+  {
+    id: 1,
+    courseCode: '۱۱۱۲۱۰۱',
+    courseTitle: 'ریاضی عمومی ۱',
+    units: 3,
+    professorName: 'دکتر جمیل احمدی',
+    classRoomName: 'کلاس ۳۰۴ (ساختمان آموزش)',
+    hasEvaluated: true,
+    evaluatedAt: '۱۴۰۵/۰۹/۲۰',
+    examDate: '۱۴۰۵/۱۰/۱۸',
+    examTime: '۰۸:۳۰ الی ۱۰:۳۰ (سانس ۱)',
+    examHall: 'آمفی‌تئاتر مرکزی',
+    seatNumber: 1,
+  },
+  {
+    id: 2,
+    courseCode: '۱۱۱۲۱۰۳',
+    courseTitle: 'مبانی برنامه‌نویسی',
+    units: 4,
+    professorName: 'دکتر سارا رضایی',
+    classRoomName: 'سایت تخصصی کامپیوتر ۱۰۲',
+    hasEvaluated: false,
+    examDate: '۱۴۰۵/۱۰/۲۲',
+    examTime: '۱۱:۰۰ الی ۱۳:۰۰ (سانس ۲)',
+    examHall: 'سایت تخصصی کامپیوتر ۱۰۲',
+    seatNumber: 301,
+  },
+  {
+    id: 3,
+    courseCode: '۱۱۱۲۱۰۵',
+    courseTitle: 'فیزیک عمومی ۱',
+    units: 3,
+    professorName: 'دکتر علی حسینی',
+    classRoomName: 'کلاس ۲۰۲ (ساختمان آموزش)',
+    hasEvaluated: false,
+    examDate: '۱۴۰۵/۱۰/۲۵',
+    examTime: '۰۸:۳۰ الی ۱۰:۳۰ (سانس ۱)',
+    examHall: 'سالن امتحانات شماره ۱',
+    seatNumber: 101,
+  },
+  {
+    id: 4,
+    courseCode: '۱۱۱۲۱۰۷',
+    courseTitle: 'زبان انگلیسی عمومی',
+    units: 3,
+    professorName: 'استاد مرادی',
+    classRoomName: 'کلاس ۳۰۱ (ساختمان ابن‌سینا)',
+    hasEvaluated: true,
+    evaluatedAt: '۱۴۰۵/۰۹/۲۲',
+    examDate: '۱۴۰۵/۱۰/۲۸',
+    examTime: '۱۴:۰۰ الی ۱۶:۰۰ (سانس ۳)',
+    examHall: 'آمفی‌تئاتر مرکزی',
+    seatNumber: 14,
+  },
+];
+
+export default function ExamCardClient({ user }: Props) {
+  const [courses, setCourses] = useState<StudentCourseEvaluationItem[]>(INITIAL_COURSES);
+  const [financialDebt, setFinancialDebt] = useState<number>(5000000); // 5,000,000 Rials (500,000 Tomans)
+  const [isPaying, setIsPaying] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Evaluation Modal
+  const [evaluatingCourse, setEvaluatingCourse] = useState<StudentCourseEvaluationItem | null>(null);
+  const [evalForm, setEvalForm] = useState({
+    profMastery: 5,        // تسلط علمی
+    profTeachingSkill: 4,  // شیوه تدریس و انتقال مفاهیم
+    profDiscipline: 5,     // نظم و انضباط در شروع و پایان کلاس
+    profRespect: 5,        // اخلاق و احترام به دانشجو
+    roomProjector: 4,      // کیفیت ویدئوپروژکتور و تجهیزات سمعی بصری
+    roomAirCondition: 2,   // سیستم سرمایش/گرمایش و تهویه
+    roomLighting: 4,       // روشنایی و نور کلاس
+    roomCleanliness: 4,    // نظافت و تمیزی صندلی‌ها
+    anonymousFeedback: '', // نظر و پیشنهاد محرمانه
+  });
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 6000);
+  };
+
+  // Payment Handler
+  const handleSimulatePayment = () => {
+    setIsPaying(true);
+    setTimeout(() => {
+      setFinancialDebt(0);
+      setIsPaying(false);
+      showToast('💳 تراکنش پرداخت با موفقیت در شاپرک انجام شد. تسویه مالی شما تایید گردید.');
+    }, 1000);
+  };
+
+  // Submit Evaluation Form
+  const handleSubmitEvaluation = () => {
+    if (!evaluatingCourse) return;
+
+    setCourses(prev =>
+      prev.map(c =>
+        c.id === evaluatingCourse.id
+          ? {
+              ...c,
+              hasEvaluated: true,
+              evaluatedAt: new Date().toLocaleDateString('fa-IR'),
+            }
+          : c
+      )
+    );
+
+    const evaluatedTitle = evaluatingCourse.courseTitle;
+    const evaluatedProf = evaluatingCourse.professorName;
+    setEvaluatingCourse(null);
+    showToast(`✓ فرم ارزشیابی درس «${evaluatedTitle}» (استاد: ${evaluatedProf}) به صورت کاملاً محرمانه ثبت گردید.`);
+  };
+
+  // Checkpoints logic
+  const isFinancialCleared = financialDebt === 0;
+  const pendingEvalsCount = courses.filter(c => !c.hasEvaluated).length;
+  const isAllEvaluated = pendingEvalsCount === 0;
+  const isCardUnlocked = isFinancialCleared && isAllEvaluated;
+
+  return (
+    <div className="space-y-4">
+      {/* Top Banner */}
+      <div className="card bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white p-5 rounded-2xl shadow-md border border-emerald-700/50">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-600 flex items-center justify-center text-3xl shadow-inner">
+              📇
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="font-black text-lg sm:text-xl tracking-tight">
+                  دریافت کارت ورود به جلسه و گیت ارزشیابی هوشمند
+                </h1>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-400 text-slate-950 shadow-xs">
+                  نیمسال اول ۱۴۰۵-۱۴۰۴
+                </span>
+              </div>
+              <p className="text-xs text-emerald-200 mt-1">
+                صدور کارت ورود به جلسه مشروط به تسویه مالی و تکمیل ارزشیابی اساتید و کیفیت امکانات کلاس‌ها می‌باشد
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <span
+              className={`px-3 py-1.5 rounded-xl font-extrabold text-xs shadow-xs flex items-center gap-1.5 ${
+                isCardUnlocked
+                  ? 'bg-emerald-500 text-white animate-pulse'
+                  : 'bg-amber-500/90 text-slate-950'
+              }`}
+            >
+              <span>{isCardUnlocked ? '✓ کارت صادر و فعال شد' : '🔒 کارت قفل است'}</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Toast Alert */}
+      {toastMessage && (
+        <div className="p-3.5 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl text-xs font-bold flex items-center justify-between shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">📢</span>
+            <span>{toastMessage}</span>
+          </div>
+          <button onClick={() => setToastMessage(null)} className="text-emerald-700 font-black">✕</button>
+        </div>
+      )}
+
+      {/* DUAL CHECKPOINT STATUS DASHBOARD */}
+      <div className="card space-y-3.5 border-l-4 border-l-emerald-600">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+          <h2 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
+            <span>🛡️ وضعیت گیت‌های کنترل دوگانه صدور کارت (Dual-Checkpoint)</span>
+          </h2>
+          <span className="text-xs text-slate-500 font-bold">
+            {isCardUnlocked ? '۲ از ۲ گیت تایید شد' : 'نیازمند اقدام'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          {/* Checkpoint 1: Financial Clearance */}
+          <div
+            className={`p-4 rounded-2xl border transition ${
+              isFinancialCleared
+                ? 'bg-emerald-50/70 border-emerald-300 text-emerald-950'
+                : 'bg-rose-50/70 border-rose-300 text-rose-950'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">{isFinancialCleared ? '🟢' : '🔴'}</span>
+                <h3 className="font-black text-sm">۱. چک‌پوینت تسویه حساب مالی</h3>
+              </div>
+              <span
+                className={`text-[11px] px-2.5 py-0.5 rounded-full font-black ${
+                  isFinancialCleared ? 'bg-emerald-200 text-emerald-900' : 'bg-rose-200 text-rose-900'
+                }`}
+              >
+                {isFinancialCleared ? '✓ تایید و تسویه کامل' : 'بدهکار'}
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-600 mb-3">
+              {isFinancialCleared
+                ? 'تراز مالی شما صفر است و مجوز شرکت در امتحانات از نظر مالی صادر گردیده است.'
+                : `بدهی شهریه متغیر نیمسال جاری: ${financialDebt.toLocaleString('fa-IR')} ریال (۵۰۰,۰۰۰ تومان)`}
+            </p>
+
+            {!isFinancialCleared && (
+              <button
+                onClick={handleSimulatePayment}
+                disabled={isPaying}
+                className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow transition flex items-center justify-center gap-1.5"
+              >
+                <span>💳 {isPaying ? 'در حال اتصال به شاپرک…' : 'پرداخت آنلاین بدهی با درگاه شتاب'}</span>
+              </button>
+            )}
+          </div>
+
+          {/* Checkpoint 2: Evaluation Clearance */}
+          <div
+            className={`p-4 rounded-2xl border transition ${
+              isAllEvaluated
+                ? 'bg-emerald-50/70 border-emerald-300 text-emerald-950'
+                : 'bg-amber-50/70 border-amber-300 text-amber-950'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">{isAllEvaluated ? '🟢' : '🟡'}</span>
+                <h3 className="font-black text-sm">۲. چک‌پوینت ارزشیابی هوشمند اساتید</h3>
+              </div>
+              <span
+                className={`text-[11px] px-2.5 py-0.5 rounded-full font-black ${
+                  isAllEvaluated ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-200 text-amber-900'
+                }`}
+              >
+                {isAllEvaluated ? '✓ کلیه دروس تکمیل شد' : `${pendingEvalsCount} درس باقیمانده`}
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-600 mb-2">
+              {isAllEvaluated
+                ? 'کلیه اساتید و امکانات فیزیکی کلاس‌ها با موفقیت و به صورت ناشناس ارزشیابی شدند.'
+                : 'برای تضمین کیفیت آموزش و مشاهده کارت ورود به جلسه، تکمیل فرم‌های ارزشیابی الزامی است.'}
+            </p>
+
+            <div className="text-[11px] font-bold text-slate-500">
+              ارزشیابی پیش از آزمون انجام می‌شود و استاد تا پس از نهایی شدن نمرات هیچ دسترسی‌ای به نظرات ندارد.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* COURSE EVALUATION LIST */}
+      <div className="card space-y-3">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+          <div>
+            <h3 className="font-black text-slate-900 text-sm">
+              لیست دروس انتخابی ترم و وضعیت ارزشیابی ({courses.length} عنوان درس)
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              روی دکمه «شروع ارزشیابی» هر درس کلیک کنید تا کیفیت تدریس استاد و امکانات کلاس را ثبت نمایید
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-2.5">
+          {courses.map(course => (
+            <div
+              key={course.id}
+              className={`p-3.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${
+                course.hasEvaluated
+                  ? 'bg-emerald-50/40 border-emerald-200'
+                  : 'bg-amber-50/40 border-amber-200 shadow-xs'
+              }`}
+            >
+              <div className="space-y-1 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-black text-slate-900 text-sm">
+                    {course.courseTitle}
+                  </span>
+                  <span className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                    کد: {course.courseCode}
+                  </span>
+                  <span className="text-xs font-bold text-indigo-900 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                    استاد: {course.professorName}
+                  </span>
+                  <span className="text-xs font-medium text-slate-600">
+                    🏛️ محل تشکیل: {course.classRoomName}
+                  </span>
+                </div>
+
+                <div className="text-xs text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1 pt-0.5">
+                  <span>📅 تاریخ امتحان: <strong className="font-mono text-slate-900">{course.examDate}</strong></span>
+                  <span>⏰ ساعت: <strong className="font-mono text-slate-900">{course.examTime}</strong></span>
+                  <span>🏛️ سالن آزمون: <strong className="text-slate-900">{course.examHall}</strong></span>
+                  <span>🪑 شماره صندلی: <strong className="text-indigo-900 font-mono font-black">صندلی {course.seatNumber}</strong></span>
+                </div>
+              </div>
+
+              <div className="self-end sm:self-auto">
+                {course.hasEvaluated ? (
+                  <span className="px-3.5 py-1.5 rounded-xl bg-emerald-100 text-emerald-900 font-black text-xs flex items-center gap-1 border border-emerald-300">
+                    <span>✓ ارزشیابی شد</span>
+                    <span className="text-[10px] text-emerald-700">({course.evaluatedAt})</span>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setEvaluatingCourse(course);
+                      setEvalForm({
+                        profMastery: 5,
+                        profTeachingSkill: 4,
+                        profDiscipline: 5,
+                        profRespect: 5,
+                        roomProjector: 4,
+                        roomAirCondition: 3,
+                        roomLighting: 4,
+                        roomCleanliness: 4,
+                        anonymousFeedback: '',
+                      });
+                    }}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 text-slate-950 font-black text-xs shadow-xs transition flex items-center gap-1.5"
+                  >
+                    <span>📝 شروع ارزشیابی استاد و کلاس</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* UNLOCKED OFFICIAL EXAM CARD */}
+      {isCardUnlocked ? (
+        <div className="card space-y-4 border-2 border-emerald-500 shadow-xl bg-gradient-to-br from-white via-slate-50 to-emerald-50/30 p-6 rounded-3xl animate-in fade-in zoom-in-95">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-emerald-600 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-800 text-white flex items-center justify-center font-black text-2xl shadow-md">
+                آ
+              </div>
+              <div>
+                <h2 className="font-black text-slate-900 text-base sm:text-lg">
+                  کارت رسمی ورود به جلسه آزمون‌های پایان‌ترم دانشگاه آفاق
+                </h2>
+                <p className="text-xs text-slate-600 font-bold">
+                  نیمسال اول سال تحصیلی ۱۴۰۵-۱۴۰۴ · مقطع کارشناسی پیوسته
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => window.print()}
+                className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs shadow flex items-center gap-1.5 transition"
+              >
+                <span>🖨️ چاپ و ذخیره کارت (PDF)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Student Profile Info Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-4 rounded-2xl border border-slate-200 text-xs">
+            <div>
+              <span className="text-slate-500 block text-[11px]">نام و نام خانوادگی:</span>
+              <strong className="text-slate-900 text-sm font-black">{user.name}</strong>
+            </div>
+            <div>
+              <span className="text-slate-500 block text-[11px]">شماره دانشجویی:</span>
+              <strong className="font-mono text-slate-900 text-sm font-black" dir="ltr">31412001</strong>
+            </div>
+            <div>
+              <span className="text-slate-500 block text-[11px]">کد ملی داوطلب:</span>
+              <strong className="font-mono text-slate-900 text-sm font-black" dir="ltr">0012345678</strong>
+            </div>
+            <div>
+              <span className="text-slate-500 block text-[11px]">رشته تحصیلی:</span>
+              <strong className="text-slate-900 text-sm font-black">مهندسی کامپیوتر</strong>
+            </div>
+          </div>
+
+          {/* Exams Timetable on the Card */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white">
+                  <th className="p-2.5">کد درس</th>
+                  <th className="p-2.5">عنوان درس</th>
+                  <th className="p-2.5">استاد مدرس</th>
+                  <th className="p-2.5 text-center">تاریخ امتحان</th>
+                  <th className="p-2.5 text-center">ساعت و سانس</th>
+                  <th className="p-2.5">حوزه و سالن آزمون</th>
+                  <th className="p-2.5 text-center font-black">شماره صندلی داوطلب</th>
+                </tr>
+              </thead>
+              <tbody>
+                {courses.map(c => (
+                  <tr key={c.id} className="border-b border-slate-200 hover:bg-slate-50/80 transition">
+                    <td className="p-2.5 font-mono font-bold text-slate-700" dir="ltr">{c.courseCode}</td>
+                    <td className="p-2.5 font-black text-slate-900">{c.courseTitle} ({c.units} واحد)</td>
+                    <td className="p-2.5 text-slate-800 font-bold">{c.professorName}</td>
+                    <td className="p-2.5 text-center font-mono font-black text-slate-900 bg-slate-100/60">{c.examDate}</td>
+                    <td className="p-2.5 text-center font-mono text-slate-700">{c.examTime}</td>
+                    <td className="p-2.5 font-bold text-indigo-950">🏛️ {c.examHall}</td>
+                    <td className="p-2.5 text-center bg-indigo-50 border-x border-indigo-200">
+                      <span className="px-3 py-1 rounded-xl bg-indigo-900 text-white font-mono font-black text-xs shadow-xs">
+                        صندلی {c.seatNumber}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* QR Code & Security Barcode Verification Block */}
+          <div className="p-4 bg-slate-900 text-white rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🔐</span>
+                <h4 className="font-black text-emerald-400">کد امنیتی و بارکد اختصاصی آزمون:</h4>
+              </div>
+              <p className="text-slate-300 font-mono" dir="ltr">AFAGH-EXAM-31412001-SEAT-01-MATH1</p>
+              <p className="text-[11px] text-slate-400">
+                این بارکد توسط مراقب سالن با اسکنر QR-Code در ورودی جلسه جهت ثبت حضور و احراز هویت اسکن خواهد شد.
+              </p>
+            </div>
+
+            <div className="p-2.5 bg-white rounded-xl text-slate-950 text-center shadow">
+              <div className="w-20 h-20 bg-slate-950 rounded-lg flex items-center justify-center text-white font-mono text-xs font-black">
+                [ QR-CODE ]
+              </div>
+              <span className="text-[9px] font-mono text-slate-600 block mt-1">31412001</span>
+            </div>
+          </div>
+
+          <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-900 font-bold leading-relaxed">
+            ⚠️ <strong>نکات مهم امتحانات:</strong> همراه داشتن پرینت این کارت و کارت شناسایی معتبر الزامی است. همراه داشتن تلفن همراه، ساعت هوشمند و یادداشت تقلب تخلف محسوب شده و صورت‌جلسه انضباطی تنظیم خواهد شد.
+          </div>
+        </div>
+      ) : (
+        <div className="p-8 text-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-300 text-slate-500 space-y-3">
+          <div className="w-14 h-14 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-3xl mx-auto">
+            🔒
+          </div>
+          <h3 className="font-black text-slate-900 text-base">
+            کارت ورود به جلسه قفل است
+          </h3>
+          <p className="text-xs text-slate-600 max-w-md mx-auto">
+            برای صدور و مشاهده کارت ورود به جلسه و دریافت شماره صندلی‌ها، ابتدا باید بدهی شهریه متغیر تسویه شده و تمام فرم‌های ارزشیابی اساتید تکمیل گردند.
+          </p>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: SMART COURSE & FACULTY EVALUATION FORM */}
+      {/* ========================================================================= */}
+      {evaluatingCourse && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="p-4 bg-indigo-950 text-white flex items-center justify-between">
+              <div>
+                <h3 className="font-extrabold text-sm sm:text-base">
+                  📝 فرم ارزشیابی هوشمند کیفیت تدریس و امکانات کلاس
+                </h3>
+                <span className="text-xs text-indigo-300">
+                  درس: {evaluatingCourse.courseTitle} · استاد: {evaluatingCourse.professorName} ({evaluatingCourse.classRoomName})
+                </span>
+              </div>
+              <button onClick={() => setEvaluatingCourse(null)} className="text-white/60 hover:text-white">✕</button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-4 text-xs">
+              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-950 text-xs font-bold flex items-center gap-2">
+                <span className="text-base">🛡️</span>
+                <span>پاسخ‌های شما کاملاً محرمانه، رمزنگاری‌شده و بدون نام ذخیره می‌شود.</span>
+              </div>
+
+              {/* Section 1: Professor Teaching Quality */}
+              <div className="space-y-3">
+                <h4 className="font-black text-slate-900 text-xs sm:text-sm border-b border-slate-200 pb-1.5 flex items-center gap-1.5">
+                  <span>👨‍🏫 ۱. ارزیابی کیفیت تدریس و عملکرد آموزشی استاد:</span>
+                </h4>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                    <span className="font-bold text-slate-800">تسلط علمی و احاطه استاد بر سرفصل‌های درس:</span>
+                    <select
+                      value={evalForm.profMastery}
+                      onChange={e => setEvalForm({ ...evalForm, profMastery: Number(e.target.value) })}
+                      className="border border-slate-300 rounded-lg p-1.5 font-bold text-xs bg-white text-indigo-950"
+                    >
+                      <option value={5}>⭐⭐⭐⭐⭐ عالی (۵)</option>
+                      <option value={4}>⭐⭐⭐⭐ خوب (۴)</option>
+                      <option value={3}>⭐⭐⭐ متوسط (۳)</option>
+                      <option value={2}>⭐⭐ ضعیف (۲)</option>
+                      <option value={1}>⭐ بسیار ضعیف (۱)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                    <span className="font-bold text-slate-800">شیوه تدریس، فن بیان و ایجاد انگیزه و مشارکت:</span>
+                    <select
+                      value={evalForm.profTeachingSkill}
+                      onChange={e => setEvalForm({ ...evalForm, profTeachingSkill: Number(e.target.value) })}
+                      className="border border-slate-300 rounded-lg p-1.5 font-bold text-xs bg-white text-indigo-950"
+                    >
+                      <option value={5}>⭐⭐⭐⭐⭐ عالی (۵)</option>
+                      <option value={4}>⭐⭐⭐⭐ خوب (۴)</option>
+                      <option value={3}>⭐⭐⭐ متوسط (۳)</option>
+                      <option value={2}>⭐⭐ ضعیف (۲)</option>
+                      <option value={1}>⭐ بسیار ضعیف (۱)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                    <span className="font-bold text-slate-800">نظم در تشکیل به موقع کلاس‌ها و حضور مستمر:</span>
+                    <select
+                      value={evalForm.profDiscipline}
+                      onChange={e => setEvalForm({ ...evalForm, profDiscipline: Number(e.target.value) })}
+                      className="border border-slate-300 rounded-lg p-1.5 font-bold text-xs bg-white text-indigo-950"
+                    >
+                      <option value={5}>⭐⭐⭐⭐⭐ عالی (۵)</option>
+                      <option value={4}>⭐⭐⭐⭐ خوب (۴)</option>
+                      <option value={3}>⭐⭐⭐ متوسط (۳)</option>
+                      <option value={2}>⭐⭐ ضعیف (۲)</option>
+                      <option value={1}>⭐ بسیار ضعیف (۱)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Physical Facilities Analysis */}
+              <div className="space-y-3 pt-2">
+                <h4 className="font-black text-slate-900 text-xs sm:text-sm border-b border-slate-200 pb-1.5 flex items-center gap-1.5">
+                  <span>🏛️ ۲. ارزیابی کیفیت امکانات و تجهیزات فیزیکی کلاس ({evaluatingCourse.classRoomName}):</span>
+                </h4>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                    <span className="font-bold text-slate-800">کیفیت ویدئوپروژکتور، وایت‌برد و تجهیزات سمعی بصری:</span>
+                    <select
+                      value={evalForm.roomProjector}
+                      onChange={e => setEvalForm({ ...evalForm, roomProjector: Number(e.target.value) })}
+                      className="border border-slate-300 rounded-lg p-1.5 font-bold text-xs bg-white text-indigo-950"
+                    >
+                      <option value={5}>⭐⭐⭐⭐⭐ عالی و بدون نقص (۵)</option>
+                      <option value={4}>⭐⭐⭐⭐ خوب (۴)</option>
+                      <option value={3}>⭐⭐⭐ متوسط (۳)</option>
+                      <option value={2}>⭐⭐ ضعیف و نیازمند تعمیر (۲)</option>
+                      <option value={1}>⭐ خراب / غیرقابل استفاده (۱)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                    <span className="font-bold text-slate-800">سیستم تهویه، سرمایش/گرمایش و دمای کلاس:</span>
+                    <select
+                      value={evalForm.roomAirCondition}
+                      onChange={e => setEvalForm({ ...evalForm, roomAirCondition: Number(e.target.value) })}
+                      className="border border-slate-300 rounded-lg p-1.5 font-bold text-xs bg-white text-indigo-950"
+                    >
+                      <option value={5}>⭐⭐⭐⭐⭐ کاملاً مطلوب (۵)</option>
+                      <option value={4}>⭐⭐⭐⭐ خوب (۴)</option>
+                      <option value={3}>⭐⭐⭐ متوسط (۳)</option>
+                      <option value={2}>⭐⭐ نامطلوب / نیازمند سرویس (۲)</option>
+                      <option value={1}>⭐ بسیار نامساعد (۱)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                    <span className="font-bold text-slate-800">نور، روشنایی و نظافت عمومی کلاس:</span>
+                    <select
+                      value={evalForm.roomLighting}
+                      onChange={e => setEvalForm({ ...evalForm, roomLighting: Number(e.target.value) })}
+                      className="border border-slate-300 rounded-lg p-1.5 font-bold text-xs bg-white text-indigo-950"
+                    >
+                      <option value={5}>⭐⭐⭐⭐⭐ عالی (۵)</option>
+                      <option value={4}>⭐⭐⭐⭐ خوب (۴)</option>
+                      <option value={3}>⭐⭐⭐ متوسط (۳)</option>
+                      <option value={2}>⭐⭐ ضعیف (۲)</option>
+                      <option value={1}>⭐ بسیار ضعیف (۱)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Confidential Feedback */}
+              <div className="space-y-1.5 pt-2">
+                <label className="font-bold text-slate-800 block">
+                  نظرات و پیشنهادات محرمانه شما جهت بهبود کیفیت آموزشی:
+                </label>
+                <textarea
+                  rows={3}
+                  value={evalForm.anonymousFeedback}
+                  onChange={e => setEvalForm({ ...evalForm, anonymousFeedback: e.target.value })}
+                  placeholder="پیشنهادات خود در خصوص نحوه تدریس استاد یا نیازهای فیزیکی کلاس را وارد نمایید..."
+                  className="w-full border border-slate-300 rounded-xl p-2.5 text-xs bg-white font-bold"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                onClick={() => setEvaluatingCourse(null)}
+                className="px-4 py-2 rounded-xl bg-slate-200 text-slate-700 font-bold text-xs"
+              >
+                انصراف
+              </button>
+              <button
+                onClick={handleSubmitEvaluation}
+                className="px-6 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 text-white font-black text-xs shadow transition"
+              >
+                ✓ ثبت قطعی ارزشیابی و تایید گیت
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
