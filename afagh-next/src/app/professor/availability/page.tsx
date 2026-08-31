@@ -15,7 +15,7 @@ export default async function ProfessorAvailabilityPage() {
       professor={{
         id: me?.id || 1,
         name: user.name,
-        staffCode: me?.staffCode || user.nationalId,
+        staffCode: me?.staffCode || String(user.id),
         academicRank: 'استادیار',
         contractType: 'تمام‌وقت',
         departmentName: 'گروه مهندسی کامپیوتر',
@@ -23,7 +23,7 @@ export default async function ProfessorAvailabilityPage() {
       }}
       terms={terms.map(t => ({
         id: t.id,
-        code: t.code,
+        code: t.termCode,
         title: t.title,
         isCurrent: Boolean(t.isCurrent),
       }))}

@@ -14,6 +14,8 @@ export type ExamTabType =
   | 'SCHEDULE_TABLE'
   | 'SMART_SEATING_ENGINE'
   | 'ABSENCE_MANAGEMENT'
+  | 'GRADE_DEADLINES'
+  | 'EXAM_MINUTES_PAYROLL'
   | 'CALENDAR_SLOTS'
   | 'EXAM_HALLS'
   | 'CONFLICT_CHECKER'
@@ -40,6 +42,67 @@ export interface ExamHall {
   hasAirConditioning: boolean;
   isCCTVMonitored: boolean;
   notes?: string;
+}
+
+export interface GradeTrackingCourse {
+  id: number;
+  courseCode: string;
+  courseTitle: string;
+  departmentName: string;
+  professorName: string;
+  professorPhone: string;
+  studentsCount: number;
+  examDate: string;
+  gradeDeadline: string;
+  hoursRemaining: number;
+  status: 'PENDING' | 'DRAFT' | 'FINALIZED';
+  remindersCount: number;
+  lastReminderSentAt?: string;
+}
+
+export interface ExamRemunerationRate {
+  id: number;
+  role: string;
+  roleTitle: string;
+  ratePerHour: number;
+}
+
+export interface ProfessorExamAttendanceItem {
+  id: number;
+  courseCode: string;
+  courseTitle: string;
+  professorName: string;
+  staffCode: string;
+  phone: string;
+  attendanceStatus: 'PRESENT' | 'WITH_COORDINATION' | 'ABSENT';
+  penaltyApplied: boolean;
+  notes: string;
+}
+
+export interface SessionProctorItem {
+  id: number;
+  staffId: number;
+  name: string;
+  staffCode: string;
+  role: 'HALL_SUPERVISOR' | 'STANDARD_PROCTOR' | 'EXAM_LIAISON' | 'PRINTING_OFFICER';
+  roleTitle: string;
+  attendanceStatus: 'PRESENT' | 'ABSENT' | 'LATE';
+  hoursWorked: number;
+  ratePerHour: number;
+  calculatedPayment: number;
+  paymentStatus: 'UNPAID' | 'PAID';
+}
+
+export interface ProctorTermPayrollItem {
+  staffId: number;
+  name: string;
+  staffCode: string;
+  roleTitle: string;
+  shiftsCount: number;
+  totalHours: number;
+  grossAmount: number;
+  paymentStatus: 'UNPAID' | 'PAID';
+  iban: string;
 }
 
 export interface ExamCourseItem {
@@ -380,6 +443,295 @@ export default function ExamPlanningClient() {
     },
   ]);
 
+  // ==========================================
+  // GRADE SUBMISSION & DEADLINE REMINDER STATE
+  // ==========================================
+  const [gradeCourses, setGradeCourses] = useState<GradeTrackingCourse[]>([
+    {
+      id: 1,
+      courseCode: '1112101',
+      courseTitle: 'ریاضی عمومی ۱',
+      departmentName: 'مهندسی کامپیوتر',
+      professorName: 'دکتر جمیل احمدی',
+      professorPhone: '09121111111',
+      studentsCount: 30,
+      examDate: '۱۴۰۵/۱۰/۱۸',
+      gradeDeadline: '۱۴۰۵/۱۰/۲۸ - ۲۳:۵۹',
+      hoursRemaining: 18,
+      status: 'PENDING',
+      remindersCount: 1,
+      lastReminderSentAt: '۱۴۰۵/۱۰/۲۵ - ۱۰:۱۵',
+    },
+    {
+      id: 2,
+      courseCode: '1112103',
+      courseTitle: 'مبانی برنامه‌نویسی',
+      departmentName: 'مهندسی کامپیوتر',
+      professorName: 'دکتر سارا رضایی',
+      professorPhone: '09122222222',
+      studentsCount: 30,
+      examDate: '۱۴۰۵/۱۰/۱۸',
+      gradeDeadline: '۱۴۰۵/۱۰/۲۸ - ۲۳:۵۹',
+      hoursRemaining: 18,
+      status: 'DRAFT',
+      remindersCount: 0,
+    },
+    {
+      id: 3,
+      courseCode: '1112105',
+      courseTitle: 'فیزیک عمومی ۱',
+      departmentName: 'مهندسی کامپیوتر',
+      professorName: 'دکتر علی حسینی',
+      professorPhone: '09123333333',
+      studentsCount: 25,
+      examDate: '۱۴۰۵/۱۰/۲۲',
+      gradeDeadline: '۱۴۰۵/۱۱/۰۲ - ۲۳:۵۹',
+      hoursRemaining: 65,
+      status: 'PENDING',
+      remindersCount: 0,
+    },
+    {
+      id: 4,
+      courseCode: '1112201',
+      courseTitle: 'ساختمان داده‌ها',
+      departmentName: 'مهندسی کامپیوتر',
+      professorName: 'دکتر جمیل احمدی',
+      professorPhone: '09121111111',
+      studentsCount: 35,
+      examDate: '۱۴۰۵/۱۰/۲۵',
+      gradeDeadline: '۱۴۰۵/۱۱/۰۵ - ۲۳:۵۹',
+      hoursRemaining: 96,
+      status: 'FINALIZED',
+      remindersCount: 0,
+    },
+    {
+      id: 5,
+      courseCode: '1112301',
+      courseTitle: 'طراحی الگوریتم‌ها',
+      departmentName: 'مهندسی کامپیوتر',
+      professorName: 'استاد مهدی کاظمی (مدعو)',
+      professorPhone: '09124444444',
+      studentsCount: 28,
+      examDate: '۱۴۰۵/۱۰/۱۵',
+      gradeDeadline: '۱۴۰۵/۱۰/۲۵ - ۲۳:۵۹',
+      hoursRemaining: -12,
+      status: 'PENDING',
+      remindersCount: 3,
+      lastReminderSentAt: '۱۴۰۵/۱۰/۲۶ - ۰۸:۰۰',
+    },
+    {
+      id: 6,
+      courseCode: '1112302',
+      courseTitle: 'پایگاه داده‌ها',
+      departmentName: 'مهندسی کامپیوتر',
+      professorName: 'دکتر سارا رضایی',
+      professorPhone: '09122222222',
+      studentsCount: 32,
+      examDate: '۱۴۰۵/۱۰/۱۹',
+      gradeDeadline: '۱۴۰۵/۱۰/۲۹ - ۲۳:۵۹',
+      hoursRemaining: 42,
+      status: 'DRAFT',
+      remindersCount: 1,
+      lastReminderSentAt: '۱۴۰۵/۱۰/۲۷ - ۱۴:۰۰',
+    },
+  ]);
+
+  const [gradeSearchQuery, setGradeSearchQuery] = useState<string>('');
+  const [gradeFilterStatus, setGradeFilterStatus] = useState<string>('ALL');
+  const [gradeFilterUrgency, setGradeFilterUrgency] = useState<string>('ALL');
+  const [nudgeModalCourse, setNudgeModalCourse] = useState<GradeTrackingCourse | null>(null);
+  const [nudgeMessageText, setNudgeMessageText] = useState<string>('');
+  const [sentNudgeLogs, setSentNudgeLogs] = useState<Array<{
+    id: number;
+    profName: string;
+    courseTitle: string;
+    phone: string;
+    sentAt: string;
+    text: string;
+  }>>([
+    {
+      id: 1,
+      profName: 'دکتر جمیل احمدی',
+      courseTitle: 'ریاضی عمومی ۱',
+      phone: '09121111111',
+      sentAt: '۱۴۰۵/۱۰/۲۵ - ۱۰:۱۵',
+      text: 'استاد محترم دکتر جمیل احمدی، مهلت ثبت نمرات درس ریاضی عمومی ۱ تا ۱۴۰۵/۱۰/۲۸ می‌باشد. لطفاً نهایی فرمایید.',
+    },
+    {
+      id: 2,
+      profName: 'استاد مهدی کاظمی',
+      courseTitle: 'طراحی الگوریتم‌ها',
+      phone: '09124444444',
+      sentAt: '۱۴۰۵/۱۰/۲۶ - ۰۸:۰۰',
+      text: 'اخطار ددلاین: استاد محترم مهلت ثبت نمرات درس طراحی الگوریتم‌ها منقضی شده است. پرونده به مدیر گروه ارجاع شد.',
+    },
+  ]);
+
+  // ==========================================
+  // EXAM MINUTES, PROFESSOR ATTENDANCE & PROCTOR REMUNERATION STATE
+  // ==========================================
+  const [minutesSelectedSlotId, setMinutesSelectedSlotId] = useState<number>(1);
+  const [minutesSelectedHallId, setMinutesSelectedHallId] = useState<number>(1);
+  const [minutesExamDate, setMinutesExamDate] = useState<string>('۱۴۰۵/۱۰/۱۸');
+  const [minutesIsSigned, setMinutesIsSigned] = useState<boolean>(false);
+  const [minutesSignatureHash, setMinutesSignatureHash] = useState<string | null>(null);
+
+  const [remunerationRates, setRemunerationRates] = useState<ExamRemunerationRate[]>([
+    { id: 1, role: 'HALL_SUPERVISOR', roleTitle: 'سرپرست سالن / رئیس حوزه', ratePerHour: 180000 },
+    { id: 2, role: 'STANDARD_PROCTOR', roleTitle: 'مراقب عادی آزمون', ratePerHour: 120000 },
+    { id: 3, role: 'EXAM_LIAISON', roleTitle: 'رابط و پیک سالن امتحانات', ratePerHour: 100000 },
+    { id: 4, role: 'PRINTING_OFFICER', roleTitle: 'مسئول مخزن و تکثیر سوالات', ratePerHour: 150000 },
+  ]);
+
+  const [minutesProfessors, setMinutesProfessors] = useState<ProfessorExamAttendanceItem[]>([
+    {
+      id: 1,
+      courseCode: '1112101',
+      courseTitle: 'ریاضی عمومی ۱',
+      professorName: 'دکتر جمیل احمدی',
+      staffCode: '۱۱۰۲',
+      phone: '09121111111',
+      attendanceStatus: 'PRESENT',
+      penaltyApplied: false,
+      notes: 'حضور به موقع در سالن و پاسخگویی به سوالات داوطلبان',
+    },
+    {
+      id: 2,
+      courseCode: '1112103',
+      courseTitle: 'مبانی برنامه‌نویسی',
+      professorName: 'دکتر سارا رضایی',
+      staffCode: '۱۱۰۵',
+      phone: '09122222222',
+      attendanceStatus: 'WITH_COORDINATION',
+      penaltyApplied: false,
+      notes: 'هماهنگی قبلی جهت اعزام دستیار آموزشی به سالن آزمون',
+    },
+    {
+      id: 3,
+      courseCode: '1112301',
+      courseTitle: 'طراحی الگوریتم‌ها',
+      professorName: 'استاد مهدی کاظمی (مدعو)',
+      staffCode: '۱۱۹۰',
+      phone: '09124444444',
+      attendanceStatus: 'ABSENT',
+      penaltyApplied: true,
+      notes: 'عدم حضور غیرموجه در جلسه آزمون - اعمال کسر حق‌التدریس و اخطار سیستمی',
+    },
+  ]);
+
+  const [minutesSessionProctors, setMinutesSessionProctors] = useState<SessionProctorItem[]>([
+    {
+      id: 1,
+      staffId: 101,
+      name: 'دکتر جمیل احمدی',
+      staffCode: '۱۱۰۲',
+      role: 'HALL_SUPERVISOR',
+      roleTitle: 'سرپرست سالن / رئیس حوزه',
+      attendanceStatus: 'PRESENT',
+      hoursWorked: 2.0,
+      ratePerHour: 180000,
+      calculatedPayment: 360000,
+      paymentStatus: 'UNPAID',
+    },
+    {
+      id: 2,
+      staffId: 102,
+      name: 'مهندس مهرداد نوری',
+      staffCode: '۲۰۱۵',
+      role: 'STANDARD_PROCTOR',
+      roleTitle: 'مراقب عادی آزمون',
+      attendanceStatus: 'PRESENT',
+      hoursWorked: 2.0,
+      ratePerHour: 120000,
+      calculatedPayment: 240000,
+      paymentStatus: 'UNPAID',
+    },
+    {
+      id: 3,
+      staffId: 103,
+      name: 'خانم الهام کاظمی',
+      staffCode: '۲۰۲۲',
+      role: 'STANDARD_PROCTOR',
+      roleTitle: 'مراقب عادی آزمون',
+      attendanceStatus: 'PRESENT',
+      hoursWorked: 2.0,
+      ratePerHour: 120000,
+      calculatedPayment: 240000,
+      paymentStatus: 'UNPAID',
+    },
+    {
+      id: 4,
+      staffId: 104,
+      name: 'آقای سعید رضازاده',
+      staffCode: '۲۰۳۰',
+      role: 'EXAM_LIAISON',
+      roleTitle: 'رابط و پیک سالن امتحانات',
+      attendanceStatus: 'PRESENT',
+      hoursWorked: 2.0,
+      ratePerHour: 100000,
+      calculatedPayment: 200000,
+      paymentStatus: 'UNPAID',
+    },
+  ]);
+
+  const [proctorTermPayrollList, setProctorTermPayrollList] = useState<ProctorTermPayrollItem[]>([
+    {
+      staffId: 101,
+      name: 'دکتر جمیل احمدی',
+      staffCode: '۱۱۰۲',
+      roleTitle: 'سرپرست سالن',
+      shiftsCount: 8,
+      totalHours: 16.0,
+      grossAmount: 2880000,
+      paymentStatus: 'UNPAID',
+      iban: 'IR120170000000123456789001',
+    },
+    {
+      staffId: 102,
+      name: 'مهندس مهرداد نوری',
+      staffCode: '۲۰۱۵',
+      roleTitle: 'مراقب عادی',
+      shiftsCount: 10,
+      totalHours: 20.0,
+      grossAmount: 2400000,
+      paymentStatus: 'UNPAID',
+      iban: 'IR550180000000123456789002',
+    },
+    {
+      staffId: 103,
+      name: 'خانم الهام کاظمی',
+      staffCode: '۲۰۲۲',
+      roleTitle: 'مراقب عادی',
+      shiftsCount: 9,
+      totalHours: 18.0,
+      grossAmount: 2160000,
+      paymentStatus: 'UNPAID',
+      iban: 'IR770190000000123456789003',
+    },
+    {
+      staffId: 104,
+      name: 'آقای سعید رضازاده',
+      staffCode: '۲۰۳۰',
+      roleTitle: 'رابط و پیک آزمون',
+      shiftsCount: 12,
+      totalHours: 24.0,
+      grossAmount: 2400000,
+      paymentStatus: 'UNPAID',
+      iban: 'IR330120000000123456789004',
+    },
+    {
+      staffId: 105,
+      name: 'مهندس فرشید بهرامی',
+      staffCode: '۲۰۴۵',
+      roleTitle: 'مسئول مخزن و تکثیر',
+      shiftsCount: 6,
+      totalHours: 18.0,
+      grossAmount: 2700000,
+      paymentStatus: 'UNPAID',
+      iban: 'IR990150000000123456789005',
+    },
+  ]);
+
   // Facilities Maintenance Tickets State
   const [facilityTickets, setFacilityTickets] = useState([
     {
@@ -437,6 +789,149 @@ export default function ExamPlanningClient() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 6000);
+  };
+
+  // ==========================================
+  // GRADE SUBMISSION DEADLINE HANDLERS
+  // ==========================================
+  const handleOpenNudgeModal = (course: GradeTrackingCourse) => {
+    setNudgeModalCourse(course);
+    const text = `استاد محترم ${course.professorName}، مهلت ثبت و نهایی کردن نمرات درس «${course.courseTitle}» تا تاریخ ${course.gradeDeadline} (${course.hoursRemaining > 0 ? `${course.hoursRemaining} ساعت مانده` : 'منقضی شده'}) می‌باشد. لطفاً پیش از پایان مهلت قانونی نسبت به نهایی‌سازی لیست‌ها در سامانه اقدام فرمایید: afagh.ac.ir/professor/grades`;
+    setNudgeMessageText(text);
+  };
+
+  const handleSendSingleNudge = () => {
+    if (!nudgeModalCourse) return;
+    const newLog = {
+      id: Date.now(),
+      profName: nudgeModalCourse.professorName,
+      courseTitle: nudgeModalCourse.courseTitle,
+      phone: nudgeModalCourse.professorPhone,
+      sentAt: 'هم‌اکنون',
+      text: nudgeMessageText,
+    };
+    setSentNudgeLogs(prev => [newLog, ...prev]);
+    setGradeCourses(prev =>
+      prev.map(c =>
+        c.id === nudgeModalCourse.id
+          ? { ...c, remindersCount: c.remindersCount + 1, lastReminderSentAt: 'هم‌اکنون' }
+          : c
+      )
+    );
+    showToast(`📲 پیامک و هشدار سیستمی یادآوری ددلاین با موفقیت برای «${nudgeModalCourse.professorName}» ارسال گردید.`);
+    setNudgeModalCourse(null);
+  };
+
+  const handleBulkNudge = () => {
+    const pendingCourses = gradeCourses.filter(c => c.status !== 'FINALIZED');
+    if (pendingCourses.length === 0) {
+      showToast('کلیه اساتید نمرات خود را نهایی کرده‌اند و نیازی به ارسال یادآوری نیست.');
+      return;
+    }
+    const newLogs = pendingCourses.map((c, idx) => ({
+      id: Date.now() + idx,
+      profName: c.professorName,
+      courseTitle: c.courseTitle,
+      phone: c.professorPhone,
+      sentAt: 'هم‌اکنون (ارسال دسته‌جمعی)',
+      text: `استاد محترم ${c.professorName}، یادآوری مهلت ثبت نمرات درس «${c.courseTitle}» تا ${c.gradeDeadline}. لطفاً پیش از پایان مهلت نهایی فرمایید.`,
+    }));
+    setSentNudgeLogs(prev => [...newLogs, ...prev]);
+    setGradeCourses(prev =>
+      prev.map(c =>
+        c.status !== 'FINALIZED'
+          ? { ...c, remindersCount: c.remindersCount + 1, lastReminderSentAt: 'هم‌اکنون (دسته‌جمعی)' }
+          : c
+      )
+    );
+    showToast(`📢 یادآوری دسته‌جمعی ددلاین برای ${pendingCourses.length} درس به اساتید مربوطه پیامک شد.`);
+  };
+
+  const handleEscalateToDeptHead = (courseId: number) => {
+    const crs = gradeCourses.find(c => c.id === courseId);
+    if (!crs) return;
+    showToast(`⛔ پرونده تاخیر در ثبت نمره درس «${crs.courseTitle}» به کارتابل مدیر گروه ارجاع داده شد.`);
+  };
+
+  // ==========================================
+  // EXAM MINUTES & POST-EXAM SETTLEMENT HANDLERS
+  // ==========================================
+  const handleUpdateProfExamAttendance = (
+    id: number,
+    status: 'PRESENT' | 'WITH_COORDINATION' | 'ABSENT',
+    notes?: string
+  ) => {
+    setMinutesProfessors(prev =>
+      prev.map(p => {
+        if (p.id === id) {
+          const penalty = status === 'ABSENT';
+          return {
+            ...p,
+            attendanceStatus: status,
+            penaltyApplied: penalty,
+            notes: notes !== undefined ? notes : (penalty ? 'غیبت غیرموجه در آزمون - ثبت کسر حق‌التدریس' : p.notes),
+          };
+        }
+        return p;
+      })
+    );
+    const prof = minutesProfessors.find(p => p.id === id);
+    if (status === 'ABSENT') {
+      showToast(`⚠️ غیبت غیرموجه «${prof?.professorName}» در صورتجلسه ثبت و جریمه کسر از فیش حق‌التدریس فعال گردید.`);
+    } else if (status === 'PRESENT') {
+      showToast(`✓ حضور «${prof?.professorName}» در جلسه آزمون تایید شد.`);
+    } else {
+      showToast(`✓ عدم حضور با هماهنگی قبلی «${prof?.professorName}» ثبت شد.`);
+    }
+  };
+
+  const handleUpdateProctorAttendance = (
+    id: number,
+    status: 'PRESENT' | 'ABSENT' | 'LATE',
+    hoursWorked: number = 2.0
+  ) => {
+    setMinutesSessionProctors(prev =>
+      prev.map(pr => {
+        if (pr.id === id) {
+          const calc = status === 'ABSENT' ? 0 : hoursWorked * pr.ratePerHour;
+          return {
+            ...pr,
+            attendanceStatus: status,
+            hoursWorked: status === 'ABSENT' ? 0 : hoursWorked,
+            calculatedPayment: calc,
+          };
+        }
+        return pr;
+      })
+    );
+  };
+
+  const handleSignExamMinutes = () => {
+    const hash = 'SHA256:8f4c2e71d9a04b56839210c4f828a1be998e35a7b6209';
+    setMinutesIsSigned(true);
+    setMinutesSignatureHash(hash);
+    showToast(`📝 صورتجلسه رسمی آزمون با امضای الکترونیکی نهایی و پلمب گردید.`);
+  };
+
+  const handleBatchPayProctors = () => {
+    setProctorTermPayrollList(prev => prev.map(p => ({ ...p, paymentStatus: 'PAID' })));
+    showToast(`✅ تسویه مالی کلیه مراقبین امتحانات انجام و سند حسابداری مربوطه صادر شد.`);
+  };
+
+  const handleExportProctorBankDiskette = () => {
+    const csvContent = 'data:text/csv;charset=utf-8,' +
+      'کد پرسنلی,نام و نام خانوادگی,تعداد شیفت,مجموع ساعات,مبلغ ناخالص (تومان),شماره شبا,وضعیت پرداخت\n' +
+      proctorTermPayrollList
+        .map(p => `${p.staffCode},${p.name},${p.shiftsCount},${p.totalHours},${p.grossAmount},${p.iban},${p.paymentStatus === 'PAID' ? 'پرداخت شده' : 'آماده پرداخت'}`)
+        .join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Proctor_Payroll_Bank_Diskette_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('💾 فایل دیسکت بانکی (پایا/شبا) مراقبین آزمون با موفقیت بارگیری شد.');
   };
 
   // ==========================================
@@ -697,7 +1192,29 @@ export default function ExamPlanningClient() {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <span>📱 مدیریت غیبت‌ها، پیامک ۴۸ ساعته و صورت‌جلسه</span>
+          <span>📱 غیبت‌ها و پیامک ۴۸ ساعته</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('GRADE_DEADLINES')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
+            activeTab === 'GRADE_DEADLINES'
+              ? 'bg-rose-700 text-white shadow-xs'
+              : 'text-rose-900 hover:bg-rose-50'
+          }`}
+        >
+          <span>⏱️ پایش ددلاین ثبت نمرات و اخطار اساتید</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('EXAM_MINUTES_PAYROLL')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
+            activeTab === 'EXAM_MINUTES_PAYROLL'
+              ? 'bg-indigo-900 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <span>📝 صورتجلسه آزمون، حضور استاد و تسویه مراقبین</span>
         </button>
 
         <button
@@ -1079,6 +1596,638 @@ export default function ExamPlanningClient() {
       )}
 
       {/* ========================================================================= */}
+      {/* TAB: GRADE SUBMISSION & SLA DEADLINE TRACKER */}
+      {/* ========================================================================= */}
+      {activeTab === 'GRADE_DEADLINES' && (
+        <div className="card space-y-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="font-black text-slate-900 text-base sm:text-lg">
+                  ⏱️ پایش ددلاین ثبت نمرات اساتید و ارسال اخطارهای هوشمند (SLA)
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-900 border border-rose-200">
+                  مهلت قانونی: ۱۰ روز پس از آزمون
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                رصد برخط وضعیت نمرات (قطعی 🟢، پیش‌نویس 🟡، ثبت‌نشده 🔴)، شمارش معکوس ددلاین و ارسال پیامک اخطار سریع به اساتید
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleBulkNudge}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-700 to-rose-800 hover:from-rose-800 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition active:scale-95"
+              >
+                <span>📢 ارسال یادآوری دسته‌جمعی به کلیه اساتید معوق</span>
+              </button>
+              <Link
+                href="/admin/templates"
+                className="px-3.5 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs shadow flex items-center gap-1.5 transition"
+              >
+                <span>📨 مدیریت قالب‌های پیامک ددلاین ←</span>
+              </Link>
+            </div>
+          </div>
+
+          {/* Quick Stats Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
+              <span className="text-slate-500 text-[11px] block font-medium">کل دروس ترم:</span>
+              <span className="text-lg font-black text-slate-900">{gradeCourses.length} درس</span>
+            </div>
+            <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200">
+              <span className="text-emerald-700 text-[11px] block font-medium">نهایی و قطعی (قفل شده):</span>
+              <span className="text-lg font-black text-emerald-800">
+                {gradeCourses.filter(c => c.status === 'FINALIZED').length} درس 🟢
+              </span>
+            </div>
+            <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200">
+              <span className="text-amber-700 text-[11px] block font-medium">پیش‌نویس موقت استاد:</span>
+              <span className="text-lg font-black text-amber-800">
+                {gradeCourses.filter(c => c.status === 'DRAFT').length} درس 🟡
+              </span>
+            </div>
+            <div className="p-3 bg-rose-50 rounded-2xl border border-rose-200">
+              <span className="text-rose-700 text-[11px] block font-medium">ثبت‌نشده / معلق:</span>
+              <span className="text-lg font-black text-rose-800">
+                {gradeCourses.filter(c => c.status === 'PENDING').length} درس 🔴
+              </span>
+            </div>
+            <div className="p-3 bg-red-100 rounded-2xl border border-red-300">
+              <span className="text-red-800 text-[11px] block font-medium">اخطار بحرانی (&lt;۲۴ ساعت/انقضا):</span>
+              <span className="text-lg font-black text-red-950">
+                {gradeCourses.filter(c => c.status !== 'FINALIZED' && c.hoursRemaining < 24).length} درس 🚨
+              </span>
+            </div>
+          </div>
+
+          {/* Filter & Search Bar */}
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-slate-700">فیلتر وضعیت:</span>
+                <select
+                  value={gradeFilterStatus}
+                  onChange={e => setGradeFilterStatus(e.target.value)}
+                  className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800"
+                >
+                  <option value="ALL">همه وضعیت‌ها</option>
+                  <option value="PENDING">ثبت‌نشده (قرمز)</option>
+                  <option value="DRAFT">پیش‌نویس موقت (زرد)</option>
+                  <option value="FINALIZED">نهایی و قطعی (سبز)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-slate-700">فوریت ددلاین:</span>
+                <select
+                  value={gradeFilterUrgency}
+                  onChange={e => setGradeFilterUrgency(e.target.value)}
+                  className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800"
+                >
+                  <option value="ALL">همه فوریت‌ها</option>
+                  <option value="CRITICAL">🚨 اضطراری (&lt;۲۴ ساعت)</option>
+                  <option value="WARNING">⚠️ هشدار (&lt;۷۲ ساعت)</option>
+                  <option value="EXPIRED">⛔ منقضی شده</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="w-full sm:w-64">
+              <input
+                type="text"
+                placeholder="جستجو با نام استاد یا عنوان درس..."
+                value={gradeSearchQuery}
+                onChange={e => setGradeSearchQuery(e.target.value)}
+                className="w-full border border-slate-300 rounded-xl px-3 py-1.5 text-xs bg-white text-slate-800"
+              />
+            </div>
+          </div>
+
+          {/* Courses Table */}
+          <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+            <table className="w-full text-right text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white">
+                  <th className="p-2.5">کد درس</th>
+                  <th className="p-2.5">عنوان درس</th>
+                  <th className="p-2.5">استاد درس</th>
+                  <th className="p-2.5 text-center">دانشجویان</th>
+                  <th className="p-2.5 text-center">تاریخ امتحان</th>
+                  <th className="p-2.5 text-center">مهلت ددلاین</th>
+                  <th className="p-2.5 text-center">زمان باقیمانده (SLA)</th>
+                  <th className="p-2.5 text-center">وضعیت نمرات</th>
+                  <th className="p-2.5 text-center">اخطارهای ارسالی</th>
+                  <th className="p-2.5 text-left">عملیات پیگیری</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gradeCourses
+                  .filter(c => {
+                    if (gradeFilterStatus !== 'ALL' && c.status !== gradeFilterStatus) return false;
+                    if (gradeFilterUrgency === 'CRITICAL' && (c.hoursRemaining >= 24 || c.hoursRemaining < 0)) return false;
+                    if (gradeFilterUrgency === 'WARNING' && (c.hoursRemaining >= 72 || c.hoursRemaining < 24)) return false;
+                    if (gradeFilterUrgency === 'EXPIRED' && c.hoursRemaining >= 0) return false;
+                    if (gradeSearchQuery.trim()) {
+                      const q = gradeSearchQuery.trim().toLowerCase();
+                      return (
+                        c.courseTitle.toLowerCase().includes(q) ||
+                        c.courseCode.includes(q) ||
+                        c.professorName.toLowerCase().includes(q)
+                      );
+                    }
+                    return true;
+                  })
+                  .map(course => {
+                    const isExpired = course.hoursRemaining < 0;
+                    const isCritical = course.hoursRemaining >= 0 && course.hoursRemaining <= 24;
+                    const isWarning = course.hoursRemaining > 24 && course.hoursRemaining <= 72;
+
+                    return (
+                      <tr
+                        key={course.id}
+                        className={`border-b border-slate-100 transition ${
+                          course.status === 'FINALIZED'
+                            ? 'bg-emerald-50/40 hover:bg-emerald-50/80'
+                            : isExpired
+                            ? 'bg-rose-50/70 hover:bg-rose-50'
+                            : isCritical
+                            ? 'bg-amber-50/70 hover:bg-amber-50'
+                            : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        <td className="p-2.5 font-mono font-bold text-slate-700" dir="ltr">
+                          {course.courseCode}
+                        </td>
+                        <td className="p-2.5 font-black text-slate-900">{course.courseTitle}</td>
+                        <td className="p-2.5 font-bold text-indigo-900">
+                          <div>{course.professorName}</div>
+                          <div className="font-mono text-[10px] text-slate-500" dir="ltr">
+                            {course.professorPhone}
+                          </div>
+                        </td>
+                        <td className="p-2.5 text-center font-bold text-slate-700">
+                          {course.studentsCount} نفر
+                        </td>
+                        <td className="p-2.5 text-center font-mono font-bold text-slate-800">
+                          {course.examDate}
+                        </td>
+                        <td className="p-2.5 text-center font-mono text-[11px] text-slate-700 font-bold">
+                          {course.gradeDeadline}
+                        </td>
+                        <td className="p-2.5 text-center">
+                          {course.status === 'FINALIZED' ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-900">
+                              ✓ بسته شده
+                            </span>
+                          ) : isExpired ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white animate-pulse">
+                              ⛔ منقضی ({Math.abs(course.hoursRemaining)} ساعت تاخیر)
+                            </span>
+                          ) : isCritical ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-900 border border-rose-300 font-mono">
+                              🚨 {course.hoursRemaining} ساعت مانده (فوری)
+                            </span>
+                          ) : isWarning ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 font-mono">
+                              ⚠️ {course.hoursRemaining} ساعت مانده
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 font-mono">
+                              {course.hoursRemaining} ساعت مانده
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-2.5 text-center">
+                          {course.status === 'FINALIZED' ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-600 text-white shadow-xs">
+                              🟢 نهایی و قطعی
+                            </span>
+                          ) : course.status === 'DRAFT' ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-amber-500 text-slate-950 shadow-xs">
+                              🟡 پیش‌نویس موقت
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-rose-600 text-white shadow-xs">
+                              🔴 ثبت‌نشده
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-2.5 text-center">
+                          <div className="font-bold text-slate-800">
+                            {course.remindersCount > 0 ? (
+                              <span className="text-indigo-900 font-black">
+                                {course.remindersCount} نوبت پیامک
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </div>
+                          {course.lastReminderSentAt && (
+                            <div className="text-[9px] text-slate-500 font-mono">
+                              {course.lastReminderSentAt}
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-2.5 text-left">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {course.status !== 'FINALIZED' && (
+                              <button
+                                onClick={() => handleOpenNudgeModal(course)}
+                                className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-900 border border-rose-300 font-black text-[11px] transition"
+                              >
+                                📲 اخطار سریع
+                              </button>
+                            )}
+                            {isExpired && (
+                              <button
+                                onClick={() => handleEscalateToDeptHead(course.id)}
+                                className="px-2.5 py-1 rounded-lg bg-red-800 hover:bg-red-900 text-white font-bold text-[10px] shadow-xs"
+                              >
+                                🚨 ارجاع مدیر گروه
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Dispatch Log Box */}
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+            <h3 className="font-black text-slate-900 text-xs">
+              📋 تاریخچه هشدارهای ارسالی به اساتید (Log Dispatch Engine):
+            </h3>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {sentNudgeLogs.map(log => (
+                <div
+                  key={log.id}
+                  className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-start justify-between gap-3 text-xs"
+                >
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-indigo-950">{log.profName}</span>
+                      <span className="text-slate-400">·</span>
+                      <span className="font-bold text-slate-700">درس: {log.courseTitle}</span>
+                      <span className="font-mono text-[10px] text-slate-500" dir="ltr">
+                        ({log.phone})
+                      </span>
+                    </div>
+                    <p className="text-slate-600 text-[11px]">{log.text}</p>
+                  </div>
+                  <div className="text-left shrink-0">
+                    <span className="font-mono text-[10px] text-slate-500 block">{log.sentAt}</span>
+                    <span className="text-[10px] font-bold text-emerald-700">✓ تحویل مخابرات</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB: EXAM MINUTES, PROFESSOR ATTENDANCE & PROCTOR REMUNERATION */}
+      {/* ========================================================================= */}
+      {activeTab === 'EXAM_MINUTES_PAYROLL' && (
+        <div className="card space-y-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="font-black text-slate-900 text-base sm:text-lg">
+                  📝 صورتجلسه الکترونیکی آزمون، ثبت حضور استاد و تسویه مراقبین
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-900 border border-indigo-200">
+                  اتصال مستقیم به ماژول حقوق و دستمزد
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                ثبت برخط حضور و پاسخگویی استاد، محاسبه خودکار حق‌الزحمه مراقبت، امضای دیجیتال و صدور دیسکت بانکی
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {!minutesIsSigned ? (
+                <button
+                  onClick={handleSignExamMinutes}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition active:scale-95"
+                >
+                  <span>✍️ امضای الکترونیکی و پلمب صورتجلسه</span>
+                </button>
+              ) : (
+                <div className="px-3 py-1.5 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-950 font-black text-xs flex items-center gap-1.5">
+                  <span>🔒 پلمب با امضای دیجیتال</span>
+                  <span className="font-mono text-[10px]" dir="ltr">({minutesSignatureHash?.slice(0, 16)}...)</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Session Selector */}
+          <div className="p-4 bg-indigo-950 text-white rounded-2xl shadow-md flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-indigo-300 font-bold">📅 تاریخ آزمون:</span>
+                <span className="font-mono font-black text-white">{minutesExamDate}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-indigo-300 font-bold">⏰ سانس:</span>
+                <span className="font-bold text-amber-300">سانس ۱ (۰۸:۳۰ الی ۱۰:۳۰)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-indigo-300 font-bold">🏛️ حوزه آزمون:</span>
+                <span className="font-bold text-emerald-300">آمفی‌تئاتر مرکزی (ظرفیت: ۶۰ نفر)</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 rounded bg-indigo-800 text-indigo-100 font-bold text-[11px]">
+                سرپرست حوزه: دکتر جمیل احمدی
+              </span>
+            </div>
+          </div>
+
+          {/* SECTION 1: PROFESSOR EXAM ATTENDANCE */}
+          <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-black text-slate-900 text-sm flex items-center gap-2">
+                  <span>👨‍🏫 ۱. وضعیت حضور اساتید دروس در سالن آزمون (جهت رفع اشکال)</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  طبق آیین‌نامه، عدم حضور استاد بدون هماهنگی قبلی موجب درج غیبت در کارگزینی و کسر از فیش حق‌التدریس می‌شود.
+                </p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+              <table className="w-full text-right text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white">
+                    <th className="p-2.5">کد درس</th>
+                    <th className="p-2.5">عنوان درس</th>
+                    <th className="p-2.5">استاد درس</th>
+                    <th className="p-2.5">شماره تماس</th>
+                    <th className="p-2.5 text-center">وضعیت حضور در سالن</th>
+                    <th className="p-2.5 text-center">اثر انضباطی و مالی</th>
+                    <th className="p-2.5">توضیحات و علت</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {minutesProfessors.map(prof => (
+                    <tr
+                      key={prof.id}
+                      className={`border-b border-slate-100 transition ${
+                        prof.attendanceStatus === 'ABSENT'
+                          ? 'bg-rose-50/70 font-bold'
+                          : prof.attendanceStatus === 'PRESENT'
+                          ? 'bg-emerald-50/40'
+                          : 'bg-amber-50/40'
+                      }`}
+                    >
+                      <td className="p-2.5 font-mono font-bold text-slate-700" dir="ltr">
+                        {prof.courseCode}
+                      </td>
+                      <td className="p-2.5 font-black text-slate-900">{prof.courseTitle}</td>
+                      <td className="p-2.5 font-bold text-indigo-950">{prof.professorName}</td>
+                      <td className="p-2.5 font-mono text-slate-600" dir="ltr">{prof.phone}</td>
+                      <td className="p-2.5 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => handleUpdateProfExamAttendance(prof.id, 'PRESENT')}
+                            className={`px-2 py-1 rounded text-[11px] font-black transition ${
+                              prof.attendanceStatus === 'PRESENT'
+                                ? 'bg-emerald-600 text-white shadow-xs'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            ✓ حاضر در سالن
+                          </button>
+                          <button
+                            onClick={() => handleUpdateProfExamAttendance(prof.id, 'WITH_COORDINATION')}
+                            className={`px-2 py-1 rounded text-[11px] font-black transition ${
+                              prof.attendanceStatus === 'WITH_COORDINATION'
+                                ? 'bg-amber-500 text-slate-950 shadow-xs'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            هماهنگ‌شده (دستیار)
+                          </button>
+                          <button
+                            onClick={() => handleUpdateProfExamAttendance(prof.id, 'ABSENT')}
+                            className={`px-2 py-1 rounded text-[11px] font-black transition ${
+                              prof.attendanceStatus === 'ABSENT'
+                                ? 'bg-rose-600 text-white shadow-xs'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            ✕ غایب بدون هماهنگی
+                          </button>
+                        </div>
+                      </td>
+                      <td className="p-2.5 text-center">
+                        {prof.penaltyApplied ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white">
+                            ⚠️ اعمال کسر حق‌التدریس
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-900">
+                            بدون جریمه
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-2.5 text-[11px] text-slate-700">{prof.notes}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* SECTION 2: PROCTOR ATTENDANCE & HOURLY REMUNERATION */}
+          <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-black text-slate-900 text-sm flex items-center gap-2">
+                  <span>👥 ۲. ثبت کارکرد مراقبین و محاسبه خودکار حق‌الزحمه این شیفت</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  محاسبه آنلاین حق‌الزحمه بر اساس: ساعت حضور × نرخ ساعتی مصوب نقش در جدول تعرفه‌ها
+                </p>
+              </div>
+
+              {/* Rate Badges */}
+              <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                {remunerationRates.map(rate => (
+                  <span key={rate.id} className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 font-bold">
+                    {rate.roleTitle}: {rate.ratePerHour.toLocaleString('fa-IR')} ت/ساعت
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+              <table className="w-full text-right text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white">
+                    <th className="p-2.5">کد پرسنلی</th>
+                    <th className="p-2.5">نام و نام خانوادگی</th>
+                    <th className="p-2.5">نقش در آزمون</th>
+                    <th className="p-2.5 text-center">وضعیت حضور</th>
+                    <th className="p-2.5 text-center">مدت زمان شیفت (ساعت)</th>
+                    <th className="p-2.5 text-center">نرخ مصوب (تومان)</th>
+                    <th className="p-2.5 text-center">حق‌الزحمه استحقاقی (تومان)</th>
+                    <th className="p-2.5 text-left">عملیات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {minutesSessionProctors.map(proctor => (
+                    <tr key={proctor.id} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="p-2.5 font-mono font-bold text-slate-700" dir="ltr">
+                        {proctor.staffCode}
+                      </td>
+                      <td className="p-2.5 font-black text-slate-900">{proctor.name}</td>
+                      <td className="p-2.5 font-bold text-indigo-900">{proctor.roleTitle}</td>
+                      <td className="p-2.5 text-center">
+                        <select
+                          value={proctor.attendanceStatus}
+                          onChange={e =>
+                            handleUpdateProctorAttendance(
+                              proctor.id,
+                              e.target.value as any,
+                              proctor.hoursWorked
+                            )
+                          }
+                          className="bg-white border border-slate-300 rounded-lg px-2 py-0.5 text-xs font-bold text-slate-800"
+                        >
+                          <option value="PRESENT">✓ حاضر</option>
+                          <option value="LATE">⚠️ با تاخیر</option>
+                          <option value="ABSENT">✕ غایب</option>
+                        </select>
+                      </td>
+                      <td className="p-2.5 text-center font-mono font-bold">
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max="8"
+                          value={proctor.hoursWorked}
+                          onChange={e =>
+                            handleUpdateProctorAttendance(
+                              proctor.id,
+                              proctor.attendanceStatus,
+                              parseFloat(e.target.value) || 0
+                            )
+                          }
+                          className="w-16 text-center border border-slate-300 rounded px-1 py-0.5 font-mono font-bold text-slate-800"
+                        />
+                      </td>
+                      <td className="p-2.5 text-center font-mono text-slate-700">
+                        {proctor.ratePerHour.toLocaleString('fa-IR')}
+                      </td>
+                      <td className="p-2.5 text-center font-mono font-black text-emerald-800 text-sm bg-emerald-50/50">
+                        {proctor.calculatedPayment.toLocaleString('fa-IR')}
+                      </td>
+                      <td className="p-2.5 text-left">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-black bg-indigo-50 text-indigo-900">
+                          ثبت در صورتجلسه
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* SECTION 3: TERM-WIDE PROCTOR PAYROLL SETTLEMENT CARTABLE */}
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+              <div>
+                <h3 className="font-black text-slate-900 text-sm flex items-center gap-2">
+                  <span>💼 ۳. کارتابل تجمیعی تسویه مالی مراقبین امتحانات (پایان ترم)</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  تجمیع کلیه شیفت‌های ترم، جمع ساعات، صدور دیسکت بانکی و تسویه آنلاین با حسابداری
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportProctorBankDiskette}
+                  className="px-3.5 py-1.5 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition"
+                >
+                  <span>💾 خروجی دیسکت بانکی (شبا/پایا)</span>
+                </button>
+                <button
+                  onClick={handleBatchPayProctors}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition"
+                >
+                  <span>✅ تسویه و ثبت پرداخت جمعی</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
+              <table className="w-full text-right text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white">
+                    <th className="p-2.5">کد پرسنلی</th>
+                    <th className="p-2.5">نام و نام خانوادگی</th>
+                    <th className="p-2.5">سمت در امتحانات</th>
+                    <th className="p-2.5 text-center">تعداد شیفت</th>
+                    <th className="p-2.5 text-center">مجموع ساعات</th>
+                    <th className="p-2.5 text-center">جمع ناخالص پرداختی (تومان)</th>
+                    <th className="p-2.5">شماره شبا بانکی</th>
+                    <th className="p-2.5 text-center">وضعیت تسویه</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {proctorTermPayrollList.map(item => (
+                    <tr key={item.staffId} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="p-2.5 font-mono font-bold text-slate-700" dir="ltr">
+                        {item.staffCode}
+                      </td>
+                      <td className="p-2.5 font-black text-slate-900">{item.name}</td>
+                      <td className="p-2.5 font-bold text-indigo-900">{item.roleTitle}</td>
+                      <td className="p-2.5 text-center font-bold text-slate-800">
+                        {item.shiftsCount} شیفت
+                      </td>
+                      <td className="p-2.5 text-center font-mono font-bold text-slate-800">
+                        {item.totalHours} ساعت
+                      </td>
+                      <td className="p-2.5 text-center font-mono font-black text-emerald-800 text-sm bg-emerald-50/40">
+                        {item.grossAmount.toLocaleString('fa-IR')}
+                      </td>
+                      <td className="p-2.5 font-mono text-[11px] text-slate-600" dir="ltr">
+                        {item.iban}
+                      </td>
+                      <td className="p-2.5 text-center">
+                        {item.paymentStatus === 'PAID' ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-600 text-white">
+                            ✓ واریز شد
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-950">
+                            در انتظار واریز
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* TAB 4: CALENDAR SLOTS */}
       {/* ========================================================================= */}
       {activeTab === 'CALENDAR_SLOTS' && (
@@ -1358,6 +2507,89 @@ export default function ExamPlanningClient() {
                 className="px-6 py-1.5 rounded-lg bg-indigo-900 text-white font-black text-xs shadow"
               >
                 🖨️ پرینت لیست عکس‌دار
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: MANUAL NUDGE SMS TO PROFESSOR */}
+      {nudgeModalCourse && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in fade-in">
+            <div className="p-4 bg-gradient-to-r from-rose-900 to-indigo-950 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📲</span>
+                <div>
+                  <h3 className="font-extrabold text-sm sm:text-base">
+                    ارسال اخطار سریع ددلاین به استاد
+                  </h3>
+                  <p className="text-[11px] text-rose-200">
+                    {nudgeModalCourse.professorName} · درس {nudgeModalCourse.courseTitle}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setNudgeModalCourse(null)}
+                className="text-white/60 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">شماره همراه استاد:</span>
+                  <span className="font-mono font-bold text-slate-800" dir="ltr">
+                    {nudgeModalCourse.professorPhone}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">مهلت قانونی (ددلاین):</span>
+                  <span className="font-mono font-bold text-rose-700">
+                    {nudgeModalCourse.gradeDeadline}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">زمان باقیمانده:</span>
+                  <span className="font-mono font-bold text-slate-800">
+                    {nudgeModalCourse.hoursRemaining > 0
+                      ? `${nudgeModalCourse.hoursRemaining} ساعت مانده`
+                      : `منقضی شده (${Math.abs(nudgeModalCourse.hoursRemaining)} ساعت تاخیر)`}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-black text-slate-800 text-xs mb-1.5">
+                  متن پیامک ارسالی (کاملاً قابل ویرایش):
+                </label>
+                <textarea
+                  rows={4}
+                  value={nudgeMessageText}
+                  onChange={e => setNudgeMessageText(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl p-3 font-bold text-xs bg-white text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
+                />
+                <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                  <span>طول پیام: {nudgeMessageText.length} کاراکتر</span>
+                  <span>متصل به درگاه پیامک دانشگاه</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t flex justify-end gap-2">
+              <button
+                onClick={() => setNudgeModalCourse(null)}
+                className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs"
+              >
+                انصراف
+              </button>
+              <button
+                onClick={handleSendSingleNudge}
+                className="px-6 py-2 rounded-xl bg-gradient-to-r from-rose-700 to-rose-800 hover:from-rose-800 text-white font-black text-xs shadow flex items-center gap-1.5"
+              >
+                <span>📲 تایید و ارسال پیامک</span>
               </button>
             </div>
           </div>

@@ -492,7 +492,47 @@ export const invigilators = pgTable('invigilators', {
   staffId: integer('staffId').notNull().references(() => staff.id),
   sessionId: integer('sessionId').notNull().references(() => exam_sessions.id),
   hallId: integer('hallId').notNull().references(() => exam_halls.id),
-  role: varchar('role', { length: 50 }).default('PROCTOR')
+  role: varchar('role', { length: 50 }).default('PROCTOR'),
+  attendanceStatus: varchar('attendanceStatus', { length: 20 }).default('PENDING'),
+  hoursWorked: numeric('hoursWorked', { precision: 4, scale: 2 }).default('2.0'),
+  calculatedPayment: numeric('calculatedPayment', { precision: 12, scale: 0 }).default('0'),
+  paymentStatus: varchar('paymentStatus', { length: 20 }).default('UNPAID'),
+  paidAt: timestamp('paidAt')
+});
+
+export const exam_remuneration_rates = pgTable('exam_remuneration_rates', {
+  id: serial('id').primaryKey(),
+  role: varchar('role', { length: 50 }).notNull(),
+  roleTitle: varchar('roleTitle', { length: 100 }).notNull(),
+  ratePerHour: numeric('ratePerHour', { precision: 12, scale: 0 }).notNull(),
+  effectiveYear: integer('effectiveYear').default(1405)
+});
+
+export const professor_exam_attendance = pgTable('professor_exam_attendance', {
+  id: serial('id').primaryKey(),
+  offeringId: integer('offeringId').references(() => course_offerings.id),
+  sessionId: integer('sessionId').references(() => exam_sessions.id),
+  staffId: integer('staffId').references(() => staff.id),
+  attendanceStatus: varchar('attendanceStatus', { length: 30 }).default('PENDING'),
+  penaltyApplied: integer('penaltyApplied').default(0),
+  penaltyAmount: numeric('penaltyAmount', { precision: 12, scale: 0 }).default('0'),
+  notes: text('notes'),
+  recordedAt: timestamp('recordedAt').defaultNow()
+});
+
+export const exam_minutes = pgTable('exam_minutes', {
+  id: serial('id').primaryKey(),
+  sessionId: integer('sessionId').notNull().references(() => exam_sessions.id),
+  hallId: integer('hallId').notNull().references(() => exam_halls.id),
+  totalStudentsExpected: integer('totalStudentsExpected').default(0),
+  totalStudentsPresent: integer('totalStudentsPresent').default(0),
+  totalStudentsAbsent: integer('totalStudentsAbsent').default(0),
+  cheatingIncidentsCount: integer('cheatingIncidentsCount').default(0),
+  supervisorStaffId: integer('supervisorStaffId').references(() => staff.id),
+  isSignedAndFinalized: integer('isSignedAndFinalized').default(0),
+  signedAt: timestamp('signedAt'),
+  notes: text('notes'),
+  summaryHash: varchar('summaryHash', { length: 255 })
 });
 
 export const teaching_rates = pgTable('teaching_rates', {

@@ -102,6 +102,41 @@ const INITIAL_TEMPLATES: NotificationTemplateItem[] = [
     ],
     updatedAt: '۱۴۰۵/۰۷/۱۰ - ۱۱:۳۰',
   },
+  {
+    id: 6,
+    eventCode: 'GRADE_DEADLINE_WARNING',
+    title: 'یادآوری مهلت ثبت نمرات به استاد',
+    channel: 'SMS',
+    templateText:
+      'استاد محترم {نام_استاد}، مهلت ثبت و نهایی کردن نمرات درس {نام_درس} تا تاریخ {تاریخ_ددلاین} ({ساعت_باقیمانده} مانده) می‌باشد. لطفاً پیش از پایان مهلت قانونی نسبت به نهایی‌سازی لیست‌ها در سامانه اقدام فرمایید: {لینک_سامانه}',
+    isActive: true,
+    allowedVariables: [
+      { tag: '{نام_استاد}', label: 'نام استاد', sampleValue: 'دکتر علیرضا رضایی' },
+      { tag: '{نام_درس}', label: 'نام درس', sampleValue: 'ساختمان داده‌ها و الگوریتم‌ها' },
+      { tag: '{تاریخ_ددلاین}', label: 'تاریخ مهلت', sampleValue: '۱۴۰۵/۱۱/۰۵' },
+      { tag: '{ساعت_باقیمانده}', label: 'زمان باقی‌مانده', sampleValue: '۲۴ ساعت' },
+      { tag: '{نام_دانشکده}', label: 'دانشکده', sampleValue: 'مهندسی کامپیوتر' },
+      { tag: '{لینک_سامانه}', label: 'لینک سامانه', sampleValue: 'afagh.ac.ir/professor/grades' },
+    ],
+    updatedAt: '۱۴۰۵/۰۸/۳۰ - ۱۸:۲۰',
+  },
+  {
+    id: 7,
+    eventCode: 'PROFESSOR_EXAM_ABSENCE',
+    title: 'اخطار عدم حضور استاد در جلسه آزمون',
+    channel: 'SMS',
+    templateText:
+      'استاد گرامی {نام_استاد}، عدم حضور شما در جلسه آزمون درس {نام_درس} مورخ {تاریخ_امتحان} توسط رئیس حوزه امتحانات ثبت گردید. طبق آیین‌نامه، مستندات خود را ظرف ۴۸ ساعت به مدیریت آموزش {نام_دانشکده} ارائه فرمایید.',
+    isActive: true,
+    allowedVariables: [
+      { tag: '{نام_استاد}', label: 'نام استاد', sampleValue: 'دکتر محمدرضا صادقی' },
+      { tag: '{نام_درس}', label: 'نام درس', sampleValue: 'مبانی برنامه‌نویسی' },
+      { tag: '{تاریخ_امتحان}', label: 'تاریخ امتحان', sampleValue: '۱۴۰۵/۱۰/۱۸' },
+      { tag: '{نام_دانشکده}', label: 'دانشکده', sampleValue: 'دانشکده مهندسی' },
+      { tag: '{لینک_سامانه}', label: 'لینک سامانه', sampleValue: 'afagh.ac.ir/professor' },
+    ],
+    updatedAt: '۱۴۰۵/۰۸/۳۰ - ۱۸:۳۰',
+  },
 ];
 
 export default function TemplateEngineClient() {

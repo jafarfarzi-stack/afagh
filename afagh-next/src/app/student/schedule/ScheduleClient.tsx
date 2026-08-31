@@ -48,6 +48,10 @@ const TIME_SLOTS = [
   { id: 5, label: '۱۶:۰۰ الی ۱۸:۰۰', start: '16:00', end: '18:00' },
 ];
 
+function checkTimeOverlap(startA: string, endA: string, startB: string, endB: string): boolean {
+  return startA < endB && endA > startB;
+}
+
 const COURSE_COLORS = [
   'bg-blue-100 text-blue-900 border-blue-300',
   'bg-emerald-100 text-emerald-900 border-emerald-300',
