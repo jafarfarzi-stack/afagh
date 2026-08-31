@@ -444,7 +444,79 @@ def generate_all_screenshots():
     draw9.text((1120, 560), fa("معدل کل دوره (GPA): ۱۸.۶۵ (دانشجوی ممتاز - رتبه الف)"), fill=(6, 95, 70), font=get_font(12, True), anchor="ra")
 
     img9.save("docs/images/screenshot_9_student_enroll_transcript.png")
-    print("All 9 screenshots generated successfully!")
+
+    # -------------------------------------------------------------------------
+    # 10. Regulations Control Center (مرکز مدیریت آیین‌نامه‌ها و شبیه‌ساز)
+    # -------------------------------------------------------------------------
+    img10 = Image.new("RGB", (1200, 675), color=(248, 250, 252))
+    draw10 = ImageDraw.Draw(img10)
+
+    # Top Navigation Bar
+    draw10.rectangle([(0, 0), (1200, 80)], fill=(15, 23, 42))
+    draw10.text((1160, 22), fa("مرکز مدیریت آیین‌نامه‌ها و قوانین آموزشی (Regulation Engine)"), fill=(255, 255, 255), font=get_font(16, True), anchor="ra")
+    draw10.text((1160, 48), fa("تنظیم No-Code قوانین مشروطی، سنوات، سقف واحد تابستان، سهمیه شاهد و حذف نمرات ردی"), fill=(148, 163, 184), font=get_font(10), anchor="ra")
+
+    # Left: Active Regulations List
+    draw10.rounded_rectangle([(40, 100), (380, 620)], radius=14, fill=(255, 255, 255), outline=(203, 213, 225), width=2)
+    draw10.text((360, 120), fa("نسخه‌های آیین‌نامه‌های مصوب"), fill=(15, 23, 42), font=get_font(12, True), anchor="ra")
+
+    reg_cards = [
+        ("آیین‌نامه کارشناسی (مصوب ۱۳۹۷ به بعد)", "ورودی‌های ۱۳۹۷ به بعد", "حذف نمره ردی پس از قبولی (EXCLUDE)", (16, 185, 129)),
+        ("آیین‌نامه کارشناسی (مصوب ۱۳۹۰)", "ورودی‌های ۱۳۹۰ تا ۱۳۹۶", "ابقای نمره ردی در معدل (KEEP_ALWAYS)", (245, 158, 11)),
+        ("آیین‌نامه کارشناسی ارشد (مصوب ۱۴۰۳)", "ورودی‌های ۱۴۰۳ به بعد", "کف قبولی ۱۲ · مرز مشروطی ۱۴", (99, 102, 241)),
+    ]
+    for idx, (rt, ry, rp, rc) in enumerate(reg_cards):
+        y = 150 + idx * 95
+        draw10.rounded_rectangle([(55, y), (365, y + 85)], radius=10, fill=(241, 245, 249) if idx > 0 else (238, 242, 255), outline=(99, 102, 241) if idx == 0 else (226, 232, 240), width=2 if idx == 0 else 1)
+        draw10.text((350, y + 12), fa(rt), fill=(15, 23, 42), font=get_font(11, True), anchor="ra")
+        draw10.text((350, y + 36), fa(ry), fill=(71, 85, 105), font=get_font(9), anchor="ra")
+        draw10.text((350, y + 58), fa(rp), fill=rc, font=get_font(9, True), anchor="ra")
+
+    # Right: Regulation Config & Live Simulator Box
+    draw10.rounded_rectangle([(400, 100), (1160, 620)], radius=14, fill=(255, 255, 255), outline=(203, 213, 225), width=2)
+    draw10.text((1140, 120), fa("تنظیمات اختصاصی آیین‌نامه و شبیه‌ساز زنده (Live Sandbox)"), fill=(15, 23, 42), font=get_font(13, True), anchor="ra")
+
+    # Tabs representation
+    draw10.rounded_rectangle([(420, 150), (1140, 185)], radius=8, fill=(241, 245, 249))
+    draw10.text((1120, 160), fa("سنوات و مشروطی"), fill=(99, 102, 241), font=get_font(10, True), anchor="ra")
+    draw10.text((950, 160), fa("سقف واحد و تابستان"), fill=(71, 85, 105), font=get_font(10), anchor="ra")
+    draw10.text((790, 160), fa("سیاست نمرات و GPA"), fill=(71, 85, 105), font=get_font(10), anchor="ra")
+    draw10.text((640, 160), fa("سهمیه شاهد و ایثارگر"), fill=(71, 85, 105), font=get_font(10), anchor="ra")
+    draw10.text((490, 160), fa("شبیه‌ساز زنده"), fill=(16, 185, 129), font=get_font(10, True), anchor="ra")
+
+    # Config Summary Fields
+    config_items = [
+        ("حداقل معدل مشروطی:", "۱۲.۰۰ (کارشناسی)", "سقف مشروطی متوالی:", "۳ نیمسال"),
+        ("سقف سنوات عادی:", "۸ نیمسال (۴ سال)", "سد تجاوز از سنوات:", "مسدودسازی و ارجاع خودکار به سجاد"),
+        ("سقف واحد عادی / الف:", "۲۰ واحد / ۲۴ واحد", "سقف واحد مشروط:", "۱۴ واحد"),
+        ("سقف واحد تابستان عادی:", "۶ واحد", "سقف تابستان ترم آخر / شاهد:", "۸ واحد (محاسبه خودکار)"),
+    ]
+    for idx, (k1, v1, k2, v2) in enumerate(config_items):
+        y = 205 + idx * 52
+        draw10.rounded_rectangle([(420, y), (770, y + 44)], radius=8, fill=(248, 250, 252), outline=(226, 232, 240), width=1)
+        draw10.text((755, y + 14), fa(f"{k1} {v1}"), fill=(15, 23, 42), font=get_font(10, True), anchor="ra")
+
+        draw10.rounded_rectangle([(790, y), (1140, y + 44)], radius=8, fill=(248, 250, 252), outline=(226, 232, 240), width=1)
+        draw10.text((1125, y + 14), fa(f"{k2} {v2}"), fill=(15, 23, 42), font=get_font(10, True), anchor="ra")
+
+    # Live Sandbox Test Output Box
+    draw10.rounded_rectangle([(420, 435), (1140, 600)], radius=12, fill=(15, 23, 42))
+    draw10.text((1120, 450), fa("🧪 نتیجه ارزیابی آنی شبیه‌ساز برای دانشجوی ورودی ۱۴۰۳ (ترم تابستان - باقیمانده ۸ واحد):"), fill=(255, 255, 255), font=get_font(11, True), anchor="ra")
+
+    draw10.rounded_rectangle([(440, 485), (650, 580)], radius=8, fill=(30, 41, 59))
+    draw10.text((630, 500), fa("سقف مجاز واحد:"), fill=(148, 163, 184), font=get_font(10), anchor="ra")
+    draw10.text((630, 535), fa("۸ واحد (تسهیلات ترم آخر)"), fill=(52, 211, 153), font=get_font(11, True), anchor="ra")
+
+    draw10.rounded_rectangle([(670, 485), (890, 580)], radius=8, fill=(30, 41, 59))
+    draw10.text((870, 500), fa("وضعیت دسترسی:"), fill=(148, 163, 184), font=get_font(10), anchor="ra")
+    draw10.text((870, 535), fa("مجاز به انتخاب واحد"), fill=(52, 211, 153), font=get_font(11, True), anchor="ra")
+
+    draw10.rounded_rectangle([(910, 485), (1120, 580)], radius=8, fill=(30, 41, 59))
+    draw10.text((1100, 500), fa("سیاست کارنامه:"), fill=(148, 163, 184), font=get_font(10), anchor="ra")
+    draw10.text((1100, 535), fa("حذف نمره ردی پس از قبولی"), fill=(129, 140, 248), font=get_font(10, True), anchor="ra")
+
+    img10.save("docs/images/screenshot_10_regulations_control_center.png")
+    print("All 10 screenshots generated successfully!")
 
 if __name__ == "__main__":
     generate_all_screenshots()

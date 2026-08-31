@@ -2,6 +2,7 @@ import { and, asc, desc, eq } from 'drizzle-orm';
 import { academic_terms, course_offerings, courses, degree_level_configs, educational_regulations, enrollments, majors } from '@/db/schema';
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
+import { calculateOfficialGPA } from '@/lib/regulations-engine';
 import PrintButton from './PrintButton';
 
 export const dynamic = 'force-dynamic';
@@ -85,11 +86,18 @@ export default async function StudentTranscriptPage() {
 
   const termsList = Array.from(termsMap.values());
 
+  // محاسبه رسمی معدل کل بر اساس موتور آیین‌نامه‌ها
+  let officialGpaData = { gpa: 0, totalUnits: 0, passedUnits: 0, excludedCount: 0, policy: 'EXCLUDE_IF_PASSED' };
+  try {
+    officialGpaData = await calculateOfficialGPA(me.id);
+  } catch (err) {
+    console.warn('Error calculating official GPA:', err);
+  }
+
   // محاسبات کل دوره
   let totalEnrolledUnits = 0;
-  let totalPassedUnits = 0;
-  let totalGradedUnits = 0;
-  let totalWeightedScore = 0;
+  let totalPassedUnits = officialGpaData.passedUnits;
+  let totalGradedUnits = officialGpaData.totalUnits;
   let failedUnits = 0;
 
   for (const r of allRows) {
@@ -97,32 +105,15 @@ export default async function StudentTranscriptPage() {
     if (r.status === 'REGISTERED' || r.status === 'PENDING_COUNCIL') {
       totalEnrolledUnits += u;
     }
-
     const isDescriptive = r.gradingType === 'DESCRIPTIVE' || Number(r.grade) === 1 || r.affectsGpa === 0;
-
     if (isDescriptive) {
-      // دروس توصیفی: نمره ۱ = قبولی توصیفی
-      if (Number(r.grade) === 1 || (r.grade != null && Number(r.grade) >= 10)) {
-        totalPassedUnits += u;
-      } else if (r.grade != null && Number(r.grade) === 0) {
-        failedUnits += u;
-      }
-      // دروس توصیفی در مخرج و صورت معدل عددی وارد نمی‌شوند
+      if (r.grade != null && Number(r.grade) === 0) failedUnits += u;
     } else {
-      // دروس نمره‌دار عددی (۰ تا ۲۰)
-      if (r.grade != null && Number(r.grade) >= 10) {
-        totalPassedUnits += u;
-      } else if (r.grade != null && Number(r.grade) < 10) {
-        failedUnits += u;
-      }
-      if (r.grade != null && Number(r.grade) >= 0 && Number(r.grade) <= 20) {
-        totalGradedUnits += u;
-        totalWeightedScore += Number(r.grade) * u;
-      }
+      if (r.grade != null && Number(r.grade) < 10) failedUnits += u;
     }
   }
 
-  const totalCumulativeGpa = totalGradedUnits > 0 ? (totalWeightedScore / totalGradedUnits).toFixed(2) : '—';
+  const totalCumulativeGpa = officialGpaData.totalUnits > 0 ? officialGpaData.gpa.toFixed(2) : '—';
   const todayFa = new Date().toLocaleDateString('fa-IR');
 
   return (
@@ -382,6 +373,12 @@ export default async function StudentTranscriptPage() {
               </tr>
             </tbody>
           </table>
+          {officialGpaData.excludedCount > 0 && (
+            <div className="bg-emerald-50 px-3 py-1.5 border-t border-emerald-200 text-[10px] text-emerald-900 font-medium flex items-center justify-between">
+              <span>✨ تعداد <b>{officialGpaData.excludedCount} نمره مردودی</b> پس از قبولی مجدد در درس، طبق مصوبه آیین‌نامه (EXCLUDE_IF_PASSED) از مخرج و صورت معدل کل کسر گردید.</span>
+              <span className="font-bold text-emerald-950">آیین‌نامه ملاک عمل</span>
+            </div>
+          )}
         </div>
 
         {/* ۵. متن حقوقی سند و محل امضا و مهرهای رسمی */}

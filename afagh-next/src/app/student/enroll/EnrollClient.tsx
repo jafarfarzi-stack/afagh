@@ -66,10 +66,25 @@ function checkTimeOverlap(s1: string, e1: string, s2: string, e2: string) {
 
 export default function EnrollClient(props: {
   student: { id: number; status: string };
-  term: { id: number | null; title: string; open: boolean };
+  term: { id: number | null; title: string; open: boolean; isSummer?: boolean };
   offerings: OfferingItem[];
   cart: CartItem[];
   cartStartedAt: number | null;
+  regulationStatus?: {
+    totalRequiredUnits: number;
+    passedUnits: number;
+    remainingUnits: number;
+    isGraduating: boolean;
+    lastTermGpa: number | null;
+    isProbatedLastTerm: boolean;
+    totalProbations: number;
+    completedSemesters: number;
+    status: string;
+    effectiveMaxUnits: number;
+    minAllowedUnits: number;
+    isSummer: boolean;
+    quotaType: string;
+  } | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -80,6 +95,9 @@ export default function EnrollClient(props: {
   const [live, setLive] = useState<Live>({});
   const [remain, setRemain] = useState(15 * 60);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const effectiveMaxUnits = props.regulationStatus?.effectiveMaxUnits ?? (props.term.isSummer ? 6 : 20);
+  const isBlockedCommission = props.student.status === 'BLOCKED_COMMISSION';
 
   // ⏱ مهلت ۱۵ دقیقه‌ای سبد (§۲۲۴۳)
   useEffect(() => {
@@ -245,8 +263,8 @@ export default function EnrollClient(props: {
   }
 
   async function submit() {
-    if (totalUnits > 20) {
-      alert('خطا: مجموع واحدهای سبد (بیش از ۲۰ واحد) از سقف مجاز آیین‌نامه بیشتر است.');
+    if (totalUnits > effectiveMaxUnits) {
+      alert(`خطا: مجموع واحدهای انتخابی (${totalUnits} واحد) از سقف مجاز آیین‌نامه برای شما (${effectiveMaxUnits} واحد) بیشتر است.`);
       return;
     }
     setBusy(true);
@@ -288,6 +306,98 @@ export default function EnrollClient(props: {
 
   return (
     <div className="space-y-4 text-slate-800 font-sans" dir="rtl">
+      {/* اخطار وضعیت مسدود کمیسیون موارد خاص و راهنمای سامانه سجاد */}
+      {isBlockedCommission && (
+        <div className="p-5 bg-rose-50 border-2 border-rose-500 rounded-2xl text-rose-950 space-y-3 shadow-md animate-pulse">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">⛔</span>
+            <div>
+              <h3 className="font-black text-base text-rose-900">
+                وضعیت تحصیلی شما مسدود است (ارجاع به کمیسیون موارد خاص)
+              </h3>
+              <p className="text-xs text-rose-800 mt-0.5">
+                به دلیل مشروطی بیش از حد یا اتمام سقف سنوات قانونی، ادامه تحصیل و انتخاب واحد شما منوط به تایید کمیسیون موارد خاص دانشگاه در <b>سامانه سجاد وزارت علوم</b> است.
+              </p>
+            </div>
+          </div>
+          <div className="bg-white/80 p-3.5 rounded-xl border border-rose-200 text-xs space-y-1.5">
+            <p className="font-bold text-rose-950">📌 مراحل رفع مسدودی:</p>
+            <ol className="list-decimal list-inside space-y-1 text-slate-700 leading-relaxed">
+              <li>
+                ورود به <b>سامانه ملی سجاد</b> به نشانی{' '}
+                <a href="https://portal.saorg.ir" target="_blank" rel="noreferrer" className="text-blue-700 font-bold underline">
+                  portal.saorg.ir
+                </a>{' '}
+                و ثبت دادخواست در بخش کمیسیون بررسی موارد خاص دانشگاه آفاق.
+              </li>
+              <li>دریافت کد رهگیری و نامه ابلاغ رای کمیسیون موارد خاص.</li>
+              <li>
+                ثبت کد رهگیری و آپلود تصویر نامه رای در میز خدمات الکترونیک پورتال آفاق جهت بررسی کارشناس آموزش.
+              </li>
+            </ol>
+          </div>
+          <div className="flex items-center gap-3 pt-1">
+            <Link
+              href="/student/requests"
+              className="bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow"
+            >
+              📝 ارسال رای کمیسیون و پیگیری در میز خدمات
+            </Link>
+            <a
+              href="https://portal.saorg.ir"
+              target="_blank"
+              rel="noreferrer"
+              className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow"
+            >
+              🌐 ورود مستقیم به سامانه سجاد (saorg.ir)
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* نوار وضعیت آیین‌نامه تحصیلی و سقف واحد */}
+      {props.regulationStatus && (
+        <div className="p-3.5 bg-slate-900 text-white rounded-2xl shadow flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+            <div className="flex items-center gap-1.5">
+              <span className="text-indigo-400 font-bold">📜 مقطع و سهمیه:</span>
+              <span className="bg-indigo-950 text-indigo-200 px-2.5 py-1 rounded-lg border border-indigo-800 font-semibold">
+                {props.regulationStatus.quotaType === 'SHAHED_ISARGAR' ? 'سهمیه شاهد و ایثارگر' : 'سهمیه عادی'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-indigo-400 font-bold">🎯 سقف مجاز انتخاب واحد:</span>
+              <span className="bg-emerald-950 text-emerald-300 font-black px-2.5 py-1 rounded-lg border border-emerald-700">
+                {faNum(effectiveMaxUnits)} واحد
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-indigo-400 font-bold">📊 پیشرفت تحصیلی:</span>
+              <span className="text-slate-300 font-mono">
+                {faNum(props.regulationStatus.passedUnits)} از {faNum(props.regulationStatus.totalRequiredUnits)} واحد پاس‌شده ({faNum(props.regulationStatus.remainingUnits)} باقیمانده)
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {props.regulationStatus.isGraduating && (
+              <span className="bg-amber-500 text-slate-950 font-black px-2.5 py-1 rounded-lg">
+                🎓 دانشجوی ترم آخر
+              </span>
+            )}
+            {props.regulationStatus.isProbatedLastTerm && (
+              <span className="bg-rose-600 text-white font-bold px-2.5 py-1 rounded-lg">
+                ⚠️ وضعیت مشروط
+              </span>
+            )}
+            {props.term.isSummer && (
+              <span className="bg-orange-600 text-white font-bold px-2.5 py-1 rounded-lg">
+                ☀️ ترم تابستان
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* دکمه انتخاب هوشمند و سریع از روی چارت */}
       <div className="card !p-4 bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white rounded-2xl border-0 shadow-lg flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -302,7 +412,7 @@ export default function EnrollClient(props: {
         <div className="flex items-center gap-2">
           <button
             onClick={autoFill}
-            disabled={busy || !props.term.open}
+            disabled={busy || !props.term.open || isBlockedCommission}
             className="bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black text-xs px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50 inline-flex items-center gap-1.5"
           >
             <span>⚡</span>

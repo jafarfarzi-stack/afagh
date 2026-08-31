@@ -258,25 +258,30 @@ def create_manual():
     story.append(PageBreak())
 
     # =========================================================================
-    # 4. CHAPTER 2: CURRICULUM PLANNING & EXAM ENGINE
+    # 4. CHAPTER 2: CURRICULUM PLANNING & EXAM ENGINE & REGULATIONS
     # =========================================================================
-    story.append(Paragraph(fa("فصل ۲: برنامه‌ریزی درسی و چیدمان ضدتقلب امتحانات"), h1_style))
+    story.append(Paragraph(fa("فصل ۲: برنامه‌ریزی درسی، چارت سرفصل و مرکز مدیریت آیین‌نامه‌ها"), h1_style))
     story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#312e81"), spaceAfter=8))
 
     story.append(Paragraph(fa("۲.۱. کاتالوگ دروس و چارت سرفصل‌ها (/admin/curriculum)"), h2_style))
     story.append(Paragraph(fa("تعریف واحدهای نظری و عملی، تعیین پیش‌نیازها و هم‌نیازها، تفکیک دروس توصیفی (Pass/Fail) از دروس نمره‌دار عددی (۰ تا ۲۰) و کنترل ضرایب در معدل کل."), body_style))
 
-    story.append(Paragraph(fa("۲.۲. برنامه‌ریزی هفتگی مدیر گروه و حل تداخل (/admin/scheduling)"), h2_style))
-    story.append(Paragraph(fa("ماتریس هوشمند تطبیق ساعات اساتید با اتاق‌ها و سالن‌های کلاسی جهت جلوگیری از تداخل فضا و زمان."), body_style))
+    story.append(Paragraph(fa("۲.۲. مرکز مدیریت آیین‌نامه‌ها و قوانین آموزشی (/admin/regulations)"), h2_style))
+    story.append(Paragraph(fa("• موتور آیین‌نامه‌ها (No-Code Regulation Engine): تنظیم داینامیک قوانین سنوات، مشروطی، سقف واحد ترم عادی و تابستان، سهمیه شاهد و حذف نمرات ردی پس از قبولی (EXCLUDE_IF_PASSED)."), bullet_style))
+    story.append(Paragraph(fa("• اتصال هوشمند به سامانه سجاد و کمیسیون موارد خاص: مسدودسازی خودکار حساب دانشجوی دارای مشروطی یا سنوات بیش از حد و ایجاد پرونده دادخواست استعلام سجاد."), bullet_style))
+    story.append(Paragraph(fa("• شبیه‌ساز و تست زنده قوانین (Regulation Sandbox): اعتبارسنجی بلادرنگ تصمیمات سیستم برای سناریوهای مختلف دانشجویان."), bullet_style))
 
-    if os.path.exists("docs/images/screenshot_8_curriculum_scheduling.png"):
-        story.append(RLImage("docs/images/screenshot_8_curriculum_scheduling.png", width=490, height=240))
+    if os.path.exists("docs/images/screenshot_10_regulations_control_center.png"):
+        story.append(RLImage("docs/images/screenshot_10_regulations_control_center.png", width=490, height=240))
         story.append(Spacer(1, 6))
 
-    story.append(Paragraph(fa("۲.۳. موتور چیدمان ضدتقلب امتحانات و زنجیره تحویل مخزن (/admin/exams)"), h2_style))
-    story.append(Paragraph(fa("• چیدمان شطرنجی و ماتریسی صندلی‌ها: عدم مجاورت دانشجویان هم‌رشته در سالن آزمون."), bullet_style))
-    story.append(Paragraph(fa("• تجمیع سالن‌ها و سد قرنطینه (Multi-Hall Barrier Aggregation): اوراق آزمون پس از پایان در سالن‌ها تجمیع شده و پس از شمارش دقیق به مخزن تحویل داده می‌شود."), bullet_style))
-    story.append(Paragraph(fa("• تحویل اوراق به استاد با توکن امنیتی و گیت بازگشت به بایگانی آموزش جهت تسویه نهایی."), bullet_style))
+    story.append(Paragraph(fa("۲.۳. برنامه‌ریزی هفتگی مدیر گروه و چیدمان ضدتقلب امتحانات (/admin/scheduling & /admin/exams)"), h2_style))
+    story.append(Paragraph(fa("• ماتریس هوشمند تطبیق ساعات اساتید با اتاق‌ها و حل تداخل فضا و زمان."), bullet_style))
+    story.append(Paragraph(fa("• چیدمان شطرنجی و ضدتقلب صندلی‌های آزمون و سد قرنطینه تجمیعی مخزن اوراق امتحانات."), bullet_style))
+
+    if os.path.exists("docs/images/screenshot_8_curriculum_scheduling.png"):
+        story.append(RLImage("docs/images/screenshot_8_curriculum_scheduling.png", width=490, height=220))
+        story.append(Spacer(1, 6))
 
     story.append(PageBreak())
 

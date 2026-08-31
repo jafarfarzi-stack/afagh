@@ -6,6 +6,7 @@ import {
 } from '@/db/schema';
 import { withUserRls } from '@/db';
 import { atomicSeat, nextWaitlistPosition, warmupCapacities } from './waitingRoom';
+import { evaluateStudentRegulationStatus } from './regulations-engine';
 
 // ═══ خط لولهٔ اعتبارسنجی — سند §۱۰۰۸ ═══
 // هر درخواست انتخاب واحد از ۵ فیلتر می‌گذرد:
@@ -188,9 +189,20 @@ export async function processQueuedSubmit(userId: number, studentId: number): Pr
     }
   }
 
-  // ── فیلتر ۳: سقف واحد (§۱۰۱۰) ──
+  // ── فیلتر ۳: سقف واحد بر اساس موتور آیین‌نامه‌ها (Regulation Engine) ──
+  let allowedMaxUnits = MAX_UNITS;
+  try {
+    const regStatus = await evaluateStudentRegulationStatus(studentId, term.id);
+    allowedMaxUnits = regStatus.effectiveMaxUnits;
+  } catch (err) {
+    console.warn('Failed to evaluate regulation status, falling back to default max units:', err);
+  }
+
   const totalUnits = offs.filter(o => !already.has(o.id)).reduce((s, o) => s + Number(o.units), 0);
-  if (totalUnits > MAX_UNITS) { out.ok = false; out.hardErrors.push('سقف ' + MAX_UNITS + ' واحد رعایت نشده (' + totalUnits + ' واحد).'); }
+  if (totalUnits > allowedMaxUnits) {
+    out.ok = false;
+    out.hardErrors.push(`سقف مجاز انتخاب واحد طبق آیین‌نامه آموزشی (${allowedMaxUnits} واحد) رعایت نشده است (مجموع انتخابی: ${totalUnits} واحد).`);
+  }
 
   // ── فیلتر ۵: تداخل کلاس (خطای نرم) ──
   const cartSched = await db.select().from(schedules).where(inArray(schedules.offeringId, ids));

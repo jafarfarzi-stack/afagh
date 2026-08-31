@@ -13,6 +13,7 @@ import {
 } from '@/db/schema';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { buildPrereqContext, formatPrereq } from '@/lib/enroll-engine';
+import { evaluateStudentRegulationStatus, type StudentAcademicSummary } from '@/lib/regulations-engine';
 import EnrollClient from './EnrollClient';
 
 export const dynamic = 'force-dynamic';
@@ -25,6 +26,13 @@ export default async function EnrollPage() {
   if (!me) return <p className="card">پروندهٔ دانشجویی یافت نشد.</p>;
 
   const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
+
+  let regulationStatus: StudentAcademicSummary | null = null;
+  try {
+    regulationStatus = await evaluateStudentRegulationStatus(me.id, term?.id);
+  } catch (err) {
+    console.warn('Error evaluating regulation status in enroll page:', err);
+  }
 
   // دریافت تمام ارائه‌های فعال ترم جاری
   const rawOfferings = term
@@ -162,10 +170,11 @@ export default async function EnrollPage() {
   return (
     <EnrollClient
       student={{ id: me.id, status: me.status }}
-      term={{ id: term?.id ?? null, title: term?.title ?? '', open: !!term?.isEnrollmentOpen }}
+      term={{ id: term?.id ?? null, title: term?.title ?? '', open: !!term?.isEnrollmentOpen, isSummer: !!term?.isSummer }}
       offerings={offerings}
       cart={cartList}
       cartStartedAt={cart.length ? cart.map(c => c.createdAt?.getTime?.() ?? 0).filter(Boolean).sort((a, b) => a - b)[0] || null : null}
+      regulationStatus={regulationStatus}
     />
   );
 }
