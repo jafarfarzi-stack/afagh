@@ -102,17 +102,50 @@ export default function ProfessorGradesClient({
   const totalRubric = (Number(rubric.midterm) || 0) + (Number(rubric.homework) || 0) + (Number(rubric.participation) || 0) + (Number(rubric.practical) || 0) + (Number(rubric.finalExam) || 0);
   const isRubricValid = totalRubric === 20;
 
+  // Helper to re-clamp all students of an offering to its rubric
+  const clampAllStudentsToRubric = (offering: GradingCourseOffering, newRubric: RubricWeights): StudentGradeItem[] => {
+    return offering.students.map(st => {
+      const m = st.midtermScore !== undefined ? Math.min(newRubric.midterm, st.midtermScore) : undefined;
+      const h = st.homeworkScore !== undefined ? Math.min(newRubric.homework, st.homeworkScore) : undefined;
+      const p = st.participationScore !== undefined ? Math.min(newRubric.participation, st.participationScore) : undefined;
+      const pr = st.practicalScore !== undefined ? Math.min(newRubric.practical, st.practicalScore) : undefined;
+      const f = st.finalExamScore !== undefined ? Math.min(newRubric.finalExam, st.finalExamScore) : undefined;
+
+      let calc = 0;
+      if (offering.isCoTaught && offering.coTaughtDetails) {
+        const theory = st.theoryProfScore ?? 0;
+        const lab = st.labProfScore ?? 0;
+        calc = (theory * offering.coTaughtDetails.theoryWeightRatio) + (lab * offering.coTaughtDetails.labWeightRatio);
+      } else {
+        calc = (m ?? 0) + (h ?? 0) + (p ?? 0) + (pr ?? 0) + (f ?? 0);
+      }
+
+      return {
+        ...st,
+        midtermScore: m,
+        homeworkScore: h,
+        participationScore: p,
+        practicalScore: pr,
+        finalExamScore: f,
+        calculatedFinalScore: Math.min(20, Math.round(calc * 100) / 100),
+      };
+    });
+  };
+
   // Handle Rubric Changes
   const updateRubricField = (field: keyof RubricWeights, value: number) => {
     setOfferings(prev =>
       prev.map(off => {
         if (off.id !== selectedOfferingId) return off;
+        const newRubric = {
+          ...off.rubric,
+          [field]: Math.max(0, Math.min(20, value)),
+        };
+        const updatedStudents = clampAllStudentsToRubric(off, newRubric);
         return {
           ...off,
-          rubric: {
-            ...off.rubric,
-            [field]: Math.max(0, Math.min(20, value)),
-          },
+          rubric: newRubric,
+          students: updatedStudents,
         };
       })
     );
@@ -128,14 +161,19 @@ export default function ProfessorGradesClient({
     setOfferings(prev =>
       prev.map(off => {
         if (off.id !== selectedOfferingId) return off;
-        return { ...off, rubric: newRubric };
+        const updatedStudents = clampAllStudentsToRubric(off, newRubric);
+        return {
+          ...off,
+          rubric: newRubric,
+          students: updatedStudents,
+        };
       })
     );
-    setToastMessage('الگوی بارم‌بندی با مجموع ۲۰ اعمال شد.');
-    setTimeout(() => setToastMessage(null), 3000);
+    setToastMessage('الگوی بارم‌بندی با مجموع ۲۰ اعمال شد و سقف نمرات دانشجویان بر اساس بارم تنظیم گردید.');
+    setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Handle Student Score Updates
+  // Handle Student Score Updates with STRICT CLAMPING
   const updateStudentScore = (studentId: number, field: keyof StudentGradeItem, val: number | undefined) => {
     setOfferings(prev =>
       prev.map(off => {
@@ -144,14 +182,26 @@ export default function ProfessorGradesClient({
           ...off,
           students: off.students.map(st => {
             if (st.studentId !== studentId) return st;
-            const updated = { ...st, [field]: val };
+
+            // Strict maximum check against rubric for this specific field
+            let maxAllowed = 20;
+            if (field === 'midtermScore') maxAllowed = off.rubric.midterm;
+            else if (field === 'homeworkScore') maxAllowed = off.rubric.homework;
+            else if (field === 'participationScore') maxAllowed = off.rubric.participation;
+            else if (field === 'practicalScore') maxAllowed = off.rubric.practical;
+            else if (field === 'finalExamScore') maxAllowed = off.rubric.finalExam;
+            else if (field === 'theoryProfScore' || field === 'labProfScore') maxAllowed = 20;
+
+            let clampedVal = val !== undefined ? Math.max(0, Math.min(maxAllowed, val)) : undefined;
+
+            const updated = { ...st, [field]: clampedVal };
 
             // Recalculate Final Score
             if (off.isCoTaught && off.coTaughtDetails) {
               const theory = updated.theoryProfScore ?? 0;
               const lab = updated.labProfScore ?? 0;
               const calc = (theory * off.coTaughtDetails.theoryWeightRatio) + (lab * off.coTaughtDetails.labWeightRatio);
-              updated.calculatedFinalScore = Math.round(calc * 100) / 100;
+              updated.calculatedFinalScore = Math.min(20, Math.round(calc * 100) / 100);
             } else {
               const m = Math.min(off.rubric.midterm, updated.midtermScore ?? 0);
               const h = Math.min(off.rubric.homework, updated.homeworkScore ?? 0);
@@ -159,7 +209,7 @@ export default function ProfessorGradesClient({
               const pr = Math.min(off.rubric.practical, updated.practicalScore ?? 0);
               const f = Math.min(off.rubric.finalExam, updated.finalExamScore ?? 0);
               const sum = m + h + p + pr + f;
-              updated.calculatedFinalScore = Math.round(sum * 100) / 100;
+              updated.calculatedFinalScore = Math.min(20, Math.round(sum * 100) / 100);
             }
             return updated;
           }),
@@ -176,7 +226,7 @@ export default function ProfessorGradesClient({
 
   const handleSubmitTemporary = () => {
     if (!isRubricValid && !currentOffering.isCoTaught) {
-      alert('خطا: مجموع بارم‌بندی شما دقیقاً ۲۰ نیست. ابتدا در برگه بارم‌بندی، مجموع را به ۲۰ برسانید.');
+      alert(`خطا: مجموع بارم‌بندی شما برابر با ${totalRubric} است و باید دقیقاً ۲۰ باشد. لطفاً در برگه بارم‌بندی سهم‌ها را تنظیم نمایید.`);
       return;
     }
     setOfferings(prev =>
@@ -408,7 +458,7 @@ export default function ProfessorGradesClient({
                 تنظیم سهم‌بندی و بارم نمره درس «{currentOffering.title}»
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                مجموع بارم بخش‌های مختلف باید <b>دقیقاً برابر با ۲۰ نمره</b> باشد.
+                مجموع بارم بخش‌های مختلف باید <b>دقیقاً برابر با ۲۰ نمره</b> باشد. نمرات وارد شده در لیست به طور خودکار به حداکثر بارم هر بخش محدود می‌شوند.
               </p>
             </div>
 
@@ -533,7 +583,7 @@ export default function ProfessorGradesClient({
               disabled={!isRubricValid}
               onClick={() => {
                 setActiveTab('ROSTER');
-                setToastMessage('بارم‌بندی با موفقیت تایید شد؛ اکنون می‌توانید نمرات دانشجویان را بر اساس این سرفصل وارد نمایید.');
+                setToastMessage('بارم‌بندی با موفقیت تایید شد؛ اکنون نمرات دانشجویان بر اساس این سقف‌ها محاسبه می‌گردند.');
                 setTimeout(() => setToastMessage(null), 4000);
               }}
               className="px-6 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white font-extrabold text-xs shadow transition"
@@ -557,7 +607,7 @@ export default function ProfessorGradesClient({
               <p className="text-xs text-slate-500 mt-0.5">
                 {currentOffering.isCoTaught
                   ? 'درس مشترک: نمره هر بخش از ۲۰ وارد شده و نمره کل طبق فرمول محاسبه می‌شود.'
-                  : `بر اساس بارم‌بندی: میان‌ترم (${faNum(rubric.midterm)})، تکالیف (${faNum(rubric.homework)})، حضور (${faNum(rubric.participation)})، عملی (${faNum(rubric.practical)})، پایان‌ترم (${faNum(rubric.finalExam)})`}
+                  : `بر اساس بارم‌بندی: میان‌ترم (${faNum(rubric.midterm)})، تکالیف (${faNum(rubric.homework)})، حضور (${faNum(rubric.participation)})، عملی (${faNum(rubric.practical)})، پایان‌ترم (${faNum(rubric.finalExam)}) — هیچ نمره‌ای نمی‌تواند بیشتر از سهم بارم باشد.`}
               </p>
             </div>
 
@@ -648,7 +698,10 @@ export default function ProfessorGradesClient({
                               max={20}
                               step={0.25}
                               value={st.theoryProfScore ?? ''}
-                              onChange={e => updateStudentScore(st.studentId, 'theoryProfScore', e.target.value === '' ? undefined : Number(e.target.value))}
+                              onChange={e => {
+                                const val = e.target.value === '' ? undefined : Math.max(0, Math.min(20, Number(e.target.value)));
+                                updateStudentScore(st.studentId, 'theoryProfScore', val);
+                              }}
                               className="w-16 border border-indigo-300 rounded-lg p-1 text-center font-extrabold text-indigo-950"
                             />
                           </td>
@@ -659,46 +712,80 @@ export default function ProfessorGradesClient({
                               max={20}
                               step={0.25}
                               value={st.labProfScore ?? ''}
-                              onChange={e => updateStudentScore(st.studentId, 'labProfScore', e.target.value === '' ? undefined : Number(e.target.value))}
+                              onChange={e => {
+                                const val = e.target.value === '' ? undefined : Math.max(0, Math.min(20, Number(e.target.value)));
+                                updateStudentScore(st.studentId, 'labProfScore', val);
+                              }}
                               className="w-16 border border-purple-300 rounded-lg p-1 text-center font-extrabold text-purple-950"
                             />
                           </td>
                         </>
                       ) : (
                         <>
+                          {/* Midterm Input */}
                           <td className="p-1.5 border border-slate-200 text-center">
                             <input
                               type="number"
                               min={0}
                               max={rubric.midterm}
                               step={0.25}
-                              value={st.midtermScore ?? ''}
-                              onChange={e => updateStudentScore(st.studentId, 'midtermScore', e.target.value === '' ? undefined : Number(e.target.value))}
-                              className="w-14 border border-slate-300 rounded-lg p-1 text-center font-bold text-xs"
+                              title={`حداکثر سهم میان‌ترم: ${faNum(rubric.midterm)} نمره`}
+                              value={st.midtermScore !== undefined ? Math.min(rubric.midterm, st.midtermScore) : ''}
+                              onChange={e => {
+                                if (e.target.value === '') {
+                                  updateStudentScore(st.studentId, 'midtermScore', undefined);
+                                } else {
+                                  const clamped = Math.max(0, Math.min(rubric.midterm, Number(e.target.value)));
+                                  updateStudentScore(st.studentId, 'midtermScore', clamped);
+                                }
+                              }}
+                              className="w-14 border border-slate-300 rounded-lg p-1 text-center font-bold text-xs focus:ring-2 focus:ring-indigo-500"
                             />
                           </td>
+
+                          {/* Homework Input */}
                           <td className="p-1.5 border border-slate-200 text-center">
                             <input
                               type="number"
                               min={0}
                               max={rubric.homework}
                               step={0.25}
-                              value={st.homeworkScore ?? ''}
-                              onChange={e => updateStudentScore(st.studentId, 'homeworkScore', e.target.value === '' ? undefined : Number(e.target.value))}
-                              className="w-14 border border-slate-300 rounded-lg p-1 text-center font-bold text-xs"
+                              title={`حداکثر سهم تکالیف: ${faNum(rubric.homework)} نمره`}
+                              value={st.homeworkScore !== undefined ? Math.min(rubric.homework, st.homeworkScore) : ''}
+                              onChange={e => {
+                                if (e.target.value === '') {
+                                  updateStudentScore(st.studentId, 'homeworkScore', undefined);
+                                } else {
+                                  const clamped = Math.max(0, Math.min(rubric.homework, Number(e.target.value)));
+                                  updateStudentScore(st.studentId, 'homeworkScore', clamped);
+                                }
+                              }}
+                              className="w-14 border border-slate-300 rounded-lg p-1 text-center font-bold text-xs focus:ring-2 focus:ring-indigo-500"
                             />
                           </td>
+
+                          {/* Participation Input */}
                           <td className="p-1.5 border border-slate-200 text-center">
                             <input
                               type="number"
                               min={0}
                               max={rubric.participation}
                               step={0.25}
-                              value={st.participationScore ?? ''}
-                              onChange={e => updateStudentScore(st.studentId, 'participationScore', e.target.value === '' ? undefined : Number(e.target.value))}
-                              className="w-14 border border-slate-300 rounded-lg p-1 text-center font-bold text-xs"
+                              title={`حداکثر سهم حضور و فعالیت: ${faNum(rubric.participation)} نمره`}
+                              value={st.participationScore !== undefined ? Math.min(rubric.participation, st.participationScore) : ''}
+                              onChange={e => {
+                                if (e.target.value === '') {
+                                  updateStudentScore(st.studentId, 'participationScore', undefined);
+                                } else {
+                                  const clamped = Math.max(0, Math.min(rubric.participation, Number(e.target.value)));
+                                  updateStudentScore(st.studentId, 'participationScore', clamped);
+                                }
+                              }}
+                              className="w-14 border border-slate-300 rounded-lg p-1 text-center font-bold text-xs focus:ring-2 focus:ring-indigo-500"
                             />
                           </td>
+
+                          {/* Practical Input (if rubric > 0) */}
                           {rubric.practical > 0 && (
                             <td className="p-1.5 border border-slate-200 text-center">
                               <input
@@ -706,21 +793,39 @@ export default function ProfessorGradesClient({
                                 min={0}
                                 max={rubric.practical}
                                 step={0.25}
-                                value={st.practicalScore ?? ''}
-                                onChange={e => updateStudentScore(st.studentId, 'practicalScore', e.target.value === '' ? undefined : Number(e.target.value))}
-                                className="w-14 border border-slate-300 rounded-lg p-1 text-center font-bold text-xs"
+                                title={`حداکثر سهم بخش عملی: ${faNum(rubric.practical)} نمره`}
+                                value={st.practicalScore !== undefined ? Math.min(rubric.practical, st.practicalScore) : ''}
+                                onChange={e => {
+                                  if (e.target.value === '') {
+                                    updateStudentScore(st.studentId, 'practicalScore', undefined);
+                                  } else {
+                                    const clamped = Math.max(0, Math.min(rubric.practical, Number(e.target.value)));
+                                    updateStudentScore(st.studentId, 'practicalScore', clamped);
+                                  }
+                                }}
+                                className="w-14 border border-slate-300 rounded-lg p-1 text-center font-bold text-xs focus:ring-2 focus:ring-indigo-500"
                               />
                             </td>
                           )}
+
+                          {/* Final Exam Input */}
                           <td className="p-1.5 border border-slate-200 text-center">
                             <input
                               type="number"
                               min={0}
                               max={rubric.finalExam}
                               step={0.25}
-                              value={st.finalExamScore ?? ''}
-                              onChange={e => updateStudentScore(st.studentId, 'finalExamScore', e.target.value === '' ? undefined : Number(e.target.value))}
-                              className="w-14 border border-slate-300 rounded-lg p-1 text-center font-bold text-xs"
+                              title={`حداکثر سهم آزمون پایان‌ترم: ${faNum(rubric.finalExam)} نمره`}
+                              value={st.finalExamScore !== undefined ? Math.min(rubric.finalExam, st.finalExamScore) : ''}
+                              onChange={e => {
+                                if (e.target.value === '') {
+                                  updateStudentScore(st.studentId, 'finalExamScore', undefined);
+                                } else {
+                                  const clamped = Math.max(0, Math.min(rubric.finalExam, Number(e.target.value)));
+                                  updateStudentScore(st.studentId, 'finalExamScore', clamped);
+                                }
+                              }}
+                              className="w-14 border border-slate-300 rounded-lg p-1 text-center font-bold text-xs focus:ring-2 focus:ring-indigo-500"
                             />
                           </td>
                         </>
