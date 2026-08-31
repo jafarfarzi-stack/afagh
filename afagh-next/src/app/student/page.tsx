@@ -2,7 +2,6 @@ import { and, asc, desc, eq } from 'drizzle-orm';
 import { academic_terms, course_offerings, courses, degree_level_configs, enrollments, majors } from '@/db/schema';
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
-import DropButton from './DropButton';
 import PrintButton from './PrintButton';
 
 export const dynamic = 'force-dynamic';
@@ -10,11 +9,11 @@ export const dynamic = 'force-dynamic';
 const statusFa: Record<string, string> = {
   REGISTERED: 'ثبت قطعی',
   WAITLISTED: 'اتاق انتظار',
-  PENDING_COUNCIL: 'در انتظار کمیسیون',
+  PENDING_COUNCIL: 'در انتظار شورا',
   DROPPED: 'حذف‌شده',
   EMERGENCY_DROPPED: 'حذف اضطراری',
   ABSENT: 'غایب',
-  REJECTED: 'ردشده',
+  REJECTED: 'مردود',
   ACTIVE: 'مجاز به ادامه تحصیل',
   PROBATION: 'مشروط',
   GRADUATED: 'فارغ‌التحصیل',
@@ -23,12 +22,12 @@ const statusFa: Record<string, string> = {
 export default async function StudentTranscriptPage() {
   const user = await requireRole(['STUDENT']);
   const me = await getStudentByUser(user.id);
-  if (!me) return <p className="card">پروندهٔ دانشجویی یافت نشد.</p>;
+  if (!me) return <p className="card p-6 text-center text-slate-500">پروندهٔ دانشجویی یافت نشد.</p>;
 
   const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
   const [level] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
 
-  // خواندن کلیه سوابق دروس دانشجو از تمام ترم‌ها
+  // خواندن کلیه سوابق دروس دانشجو از تمام ترم‌ها از مسیر امن RLS
   const allRows = await withUserRls(user.id, tx =>
     tx
       .select({
@@ -36,6 +35,7 @@ export default async function StudentTranscriptPage() {
         code: courses.code,
         title: courses.title,
         units: courses.units,
+        practicalUnits: courses.practicalUnits,
         courseType: courses.courseType,
         status: enrollments.status,
         grade: enrollments.gradeValue,
@@ -75,6 +75,7 @@ export default async function StudentTranscriptPage() {
   let totalPassedUnits = 0;
   let totalGradedUnits = 0;
   let totalWeightedScore = 0;
+  let failedUnits = 0;
 
   for (const r of allRows) {
     const u = Number(r.units || 0);
@@ -83,229 +84,286 @@ export default async function StudentTranscriptPage() {
     }
     if (r.grade != null && Number(r.grade) >= 10) {
       totalPassedUnits += u;
+    } else if (r.grade != null && Number(r.grade) < 10) {
+      failedUnits += u;
     }
     if (r.grade != null && Number(r.grade) >= 0 && Number(r.grade) <= 20) {
-      // نمره نهایی عددی
       totalGradedUnits += u;
       totalWeightedScore += Number(r.grade) * u;
     }
   }
 
   const totalCumulativeGpa = totalGradedUnits > 0 ? (totalWeightedScore / totalGradedUnits).toFixed(2) : '—';
+  const todayFa = new Date().toLocaleDateString('fa-IR');
 
   return (
-    <div className="space-y-4 print:p-0 print:space-y-2">
-      {/* سربرگ رسمی کارنامه (نمایش در چاپ و وب) */}
-      <div className="card !p-5 bg-white border-slate-200 shadow-sm relative overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-700 text-white flex items-center justify-center text-lg font-bold">
-              آ
-            </div>
-            <div>
-              <h1 className="text-base font-extrabold text-slate-900">دانشگاه جامع آفاق</h1>
-              <p className="text-xs text-slate-500 font-medium">کارنامه کل تحصیلی و ریزنمرات رسمی</p>
-            </div>
-          </div>
-          <div className="print:hidden">
-            <PrintButton />
+    <div className="space-y-4">
+      {/* دکمه چاپ و عملیات بالای سند */}
+      <div className="flex items-center justify-between bg-white p-3 px-4 rounded-xl shadow-sm border border-slate-200 print:hidden">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">📜</span>
+          <div>
+            <h2 className="text-sm font-bold text-slate-800">کارنامه کل تحصیلی (نسخه رسمی اداری)</h2>
+            <p className="text-xs text-slate-500">مشاهده ریزنمرات، وضعیت قبولی، معدل‌های ترمیک و معدل کل</p>
           </div>
         </div>
-
-        {/* اطلاعات سجلی و تحصیلی دانشجو */}
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-3 text-xs text-slate-700">
-          <div>
-            <span className="text-slate-400">نام و نام خانوادگی:</span> <b className="text-slate-900">{user.name}</b>
-          </div>
-          <div>
-            <span className="text-slate-400">شماره دانشجویی:</span> <b className="font-mono text-slate-900" dir="ltr">{me.studentCode}</b>
-          </div>
-          <div>
-            <span className="text-slate-400">مقطع و رشته:</span> <b>{level?.title || 'کارشناسی پیوسته'} — {major?.name || 'مهندسی کامپیوتر'}</b>
-          </div>
-          <div>
-            <span className="text-slate-400">سال ورود / دوره:</span> <b>{me.entryYear || '۱۴۰۳'} / روزانه</b>
-          </div>
-          <div>
-            <span className="text-slate-400">وضعیت تحصیلی:</span> <span className="font-bold text-emerald-700">{statusFa[me.status] ?? me.status}</span>
-          </div>
-          <div>
-            <span className="text-slate-400">تاریخ صدور:</span> <b>{new Date().toLocaleDateString('fa-IR')}</b>
-          </div>
-        </div>
-
-        {/* نوار تجمیعی کل دوره */}
-        <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-dashed border-slate-200 text-center">
-          <div className="rounded-lg bg-slate-50 border border-slate-100 p-2">
-            <p className="text-[10px] text-slate-400">کل واحدهای گذرانده</p>
-            <p className="text-sm font-bold text-emerald-700 mt-0.5">{totalPassedUnits} واحد</p>
-          </div>
-          <div className="rounded-lg bg-slate-50 border border-slate-100 p-2">
-            <p className="text-[10px] text-slate-400">کل واحدهای اخذشده</p>
-            <p className="text-sm font-bold text-indigo-700 mt-0.5">{totalEnrolledUnits} واحد</p>
-          </div>
-          <div className="rounded-lg bg-slate-50 border border-slate-100 p-2">
-            <p className="text-[10px] text-slate-400">معدل کل دوره</p>
-            <p className="text-sm font-bold text-slate-900 mt-0.5">{totalCumulativeGpa}</p>
-          </div>
-        </div>
+        <PrintButton />
       </div>
 
-      {/* جداول ترم به ترم (ریز نمرات کارنامه) */}
-      {termsList.length === 0 && (
-        <div className="card text-center py-10 text-slate-400">
-          <p className="text-2xl mb-1">📄</p>
-          <p className="text-sm">اطلاعات درسی ثبت‌شده‌ای در کارنامه موجود نیست.</p>
+      {/* سند رسمی کارنامه (کاغذ رسمی کارنامه دانشگاهی) */}
+      <div className="bg-white text-slate-900 border-2 border-slate-800 p-5 sm:p-8 shadow-xl print:shadow-none print:border print:m-0 print:p-4 text-xs font-sans">
+        
+        {/* ۱. سربرگ سه‌بخشی رسمی دانشگاه */}
+        <div className="border-b-2 border-slate-800 pb-4 mb-4">
+          <div className="grid grid-cols-3 items-center text-center">
+            {/* ستون راست */}
+            <div className="text-right space-y-1">
+              <p className="font-bold text-slate-800">جمهوری اسلامی ایران</p>
+              <p className="font-semibold text-slate-700">وزارت علوم، تحقیقات و فناوری</p>
+              <p className="font-extrabold text-slate-900 text-sm">دانشگاه جامع آفاق</p>
+              <p className="text-[11px] text-slate-500">معاونت آموزشی و تحصیلات تکمیلی</p>
+            </div>
+
+            {/* ستون وسط (نشان و عنوان سند) */}
+            <div className="flex flex-col items-center justify-center">
+              <div className="w-12 h-12 rounded-full border-2 border-slate-800 flex items-center justify-center font-bold text-xl text-slate-800 mb-1">
+                آفاق
+              </div>
+              <h1 className="text-base font-black tracking-wide text-slate-950 border-b border-slate-800 pb-0.5 px-4">
+                کارنامه کل تحصیلی دانشجو
+              </h1>
+              <p className="text-[10px] text-slate-600 mt-0.5">ریزنمرات قطعی دوره‌های آموزشی</p>
+            </div>
+
+            {/* ستون چپ (اطلاعات سند) */}
+            <div className="text-left space-y-1 font-mono text-[11px]">
+              <p><span className="font-sans text-slate-500">شماره پرونده: </span><b>{me.studentCode}</b></p>
+              <p><span className="font-sans text-slate-500">تاریخ صدور: </span><b>{todayFa}</b></p>
+              <p><span className="font-sans text-slate-500">صفحه: </span><b>۱ از ۱</b></p>
+              <p><span className="font-sans text-slate-500">وضعیت: </span><b className="text-emerald-800 font-sans">{statusFa[me.status] ?? me.status}</b></p>
+            </div>
+          </div>
         </div>
-      )}
 
-      {termsList.map((termItem, idx) => {
-        // محاسبات ترم
-        let termUnits = 0;
-        let termPassed = 0;
-        let termGradedUnits = 0;
-        let termWeightedScore = 0;
+        {/* ۲. جدول مشخصات هویتی و آموزشی دانشجو */}
+        <div className="border border-slate-800 mb-5 overflow-hidden">
+          <div className="bg-slate-100 px-3 py-1 font-bold text-slate-900 border-b border-slate-800 text-[11px]">
+            مشخصات فردی و تحصیلی دانشجو
+          </div>
+          <table className="w-full text-right text-[11px] border-collapse">
+            <tbody>
+              <tr className="border-b border-slate-300">
+                <td className="p-1.5 bg-slate-50 font-medium text-slate-600 w-1/6 border-l border-slate-300">نام و نام خانوادگی:</td>
+                <td className="p-1.5 font-bold text-slate-900 w-2/6 border-l border-slate-300">{user.name}</td>
+                <td className="p-1.5 bg-slate-50 font-medium text-slate-600 w-1/6 border-l border-slate-300">شماره دانشجویی:</td>
+                <td className="p-1.5 font-bold font-mono text-slate-900 w-2/6" dir="ltr">{me.studentCode}</td>
+              </tr>
+              <tr className="border-b border-slate-300">
+                <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">کد ملی:</td>
+                <td className="p-1.5 font-mono text-slate-900 border-l border-slate-300" dir="ltr">۱۰۱۰۱۰۱۰۱۰</td>
+                <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">مقطع تحصیلی:</td>
+                <td className="p-1.5 font-semibold text-slate-900">{level?.title || 'کارشناسی پیوسته'}</td>
+              </tr>
+              <tr className="border-b border-slate-300">
+                <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">رشته تحصیلی:</td>
+                <td className="p-1.5 font-bold text-slate-900 border-l border-slate-300">{major?.name || 'مهندسی کامپیوتر'}</td>
+                <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">سال و نیمسال ورود:</td>
+                <td className="p-1.5 font-semibold text-slate-900">{me.entryYear || '۱۴۰۳'} — نیمسال اول</td>
+              </tr>
+              <tr>
+                <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">نوع دوره / سهمیه:</td>
+                <td className="p-1.5 font-semibold text-slate-900 border-l border-slate-300">روزانه / منطقه ۱ (عادی)</td>
+                <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">نظام آموزشی:</td>
+                <td className="p-1.5 font-semibold text-slate-900">ترمی — واحدی مصوب وزارت علوم</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-        for (const r of termItem.rows) {
-          const u = Number(r.units || 0);
-          termUnits += u;
-          if (r.grade != null && Number(r.grade) >= 10) {
-            termPassed += u;
-          }
-          if (r.grade != null && Number(r.grade) >= 0 && Number(r.grade) <= 20) {
-            termGradedUnits += u;
-            termWeightedScore += Number(r.grade) * u;
-          }
-        }
-
-        const termGpa = termGradedUnits > 0 ? (termWeightedScore / termGradedUnits).toFixed(2) : '—';
-        const isA = termGradedUnits > 0 && Number(termGpa) >= 17;
-        const isProbation = termGradedUnits > 0 && Number(termGpa) < 12;
-
-        return (
-          <div key={idx} className="card !p-4 bg-white border-slate-200 shadow-sm space-y-3">
-            {/* هدر نیمسال */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-slate-900 text-sm">
-                  📚 {termItem.title}
-                </span>
-                {termItem.isCurrent && (
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
-                    نیمسال جاری
-                  </span>
-                )}
-              </div>
-              <span className="text-xs text-slate-500 font-mono" dir="ltr">کد: {termItem.code}</span>
+        {/* ۳. ریزنمرات به تفکیک نیمسال‌های تحصیلی */}
+        <div className="space-y-5">
+          {termsList.length === 0 && (
+            <div className="p-8 text-center text-slate-400 border border-dashed border-slate-300">
+              هنوز درسی در پرونده کارنامه ثبت نشده است.
             </div>
+          )}
 
-            {/* جدول دروس ترم */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                    <th className="p-2 font-medium">#</th>
-                    <th className="p-2 font-medium">کد درس</th>
-                    <th className="p-2 font-medium">عنوان درس</th>
-                    <th className="p-2 font-medium text-center">واحد</th>
-                    <th className="p-2 font-medium text-center">نمره</th>
-                    <th className="p-2 font-medium text-left">نتیجه</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {termItem.rows.map((row, rIdx) => {
-                    const isPassed = row.grade != null && Number(row.grade) >= 10;
-                    const isFailed = row.grade != null && Number(row.grade) < 10;
-                    const isPending = row.grade == null;
+          {termsList.map((termItem, idx) => {
+            let termUnits = 0;
+            let termPassed = 0;
+            let termGradedUnits = 0;
+            let termWeightedScore = 0;
 
-                    return (
-                      <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50/50">
-                        <td className="p-2 text-slate-400">{rIdx + 1}</td>
-                        <td className="p-2 font-mono text-slate-600" dir="ltr">{row.code}</td>
-                        <td className="p-2 font-semibold text-slate-800">
-                          {row.title}
-                          {row.status === 'PENDING_COUNCIL' && (
-                            <span className="block text-[10px] text-amber-700 font-normal">
-                              (درخواست اخذ در کمیسیون)
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-2 text-center font-mono">{Number(row.units)}</td>
-                        <td className="p-2 text-center font-bold">
-                          {row.grade != null ? (
-                            Number(row.grade) === 1 ? 'قبول (توصیفی)' : Number(row.grade).toFixed(2)
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </td>
-                        <td className="p-2 text-left">
-                          {isPassed && (
-                            <span className="inline-block px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium text-[10px]">
-                              قبول
-                            </span>
-                          )}
-                          {isFailed && (
-                            <span className="inline-block px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 font-medium text-[10px]">
-                              مردود
-                            </span>
-                          )}
-                          {isPending && (
-                            <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                              row.status === 'PENDING_COUNCIL'
-                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}>
-                              {statusFa[row.status] ?? 'در حال گذراندن'}
-                            </span>
-                          )}
-                          {termItem.isCurrent && row.status === 'REGISTERED' && (
-                            <div className="mt-1 print:hidden">
-                              <DropButton enrollmentId={row.id} />
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            for (const r of termItem.rows) {
+              const u = Number(r.units || 0);
+              termUnits += u;
+              if (r.grade != null && Number(r.grade) >= 10) {
+                termPassed += u;
+              }
+              if (r.grade != null && Number(r.grade) >= 0 && Number(r.grade) <= 20) {
+                termGradedUnits += u;
+                termWeightedScore += Number(r.grade) * u;
+              }
+            }
 
-            {/* خلاصه وضعیت آماری ترم */}
-            <div className="flex items-center justify-between bg-slate-50 rounded-xl p-2.5 text-xs border border-slate-100">
-              <div className="flex gap-3 text-slate-600">
-                <span>واحد اخذشده: <b className="text-slate-800">{termUnits}</b></span>
-                <span>واحد گذرانده: <b className="text-emerald-700">{termPassed}</b></span>
+            const termGpa = termGradedUnits > 0 ? (termWeightedScore / termGradedUnits).toFixed(2) : '—';
+            const isA = termGradedUnits > 0 && Number(termGpa) >= 17;
+            const isProbation = termGradedUnits > 0 && Number(termGpa) < 12;
+
+            return (
+              <div key={idx} className="border border-slate-700 overflow-hidden">
+                {/* هدر نیمسال */}
+                <div className="bg-slate-200/90 px-3 py-1.5 flex items-center justify-between border-b border-slate-700 font-bold">
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-950">📚 نیمسال تحصیلی: {termItem.title}</span>
+                    {termItem.isCurrent && (
+                      <span className="text-[10px] bg-emerald-700 text-white font-bold px-2 py-0.2 rounded">
+                        ترم جاری
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-mono text-slate-700" dir="ltr">کد نیمسال: {termItem.code}</span>
+                </div>
+
+                {/* جدول دروس */}
+                <table className="w-full text-right text-[11px] border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 border-b border-slate-700 font-bold text-slate-800">
+                      <th className="p-1.5 border-l border-slate-300 text-center w-8">ردیف</th>
+                      <th className="p-1.5 border-l border-slate-300 text-center w-24">کد درس</th>
+                      <th className="p-1.5 border-l border-slate-300">نام درس</th>
+                      <th className="p-1.5 border-l border-slate-300 text-center w-16">نوع درس</th>
+                      <th className="p-1.5 border-l border-slate-300 text-center w-12">نظری</th>
+                      <th className="p-1.5 border-l border-slate-300 text-center w-12">عملی</th>
+                      <th className="p-1.5 border-l border-slate-300 text-center w-12">کل واحد</th>
+                      <th className="p-1.5 border-l border-slate-300 text-center w-16">نمره</th>
+                      <th className="p-1.5 text-center w-24">نتیجه نهایی</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {termItem.rows.map((row, rIdx) => {
+                      const isPassed = row.grade != null && Number(row.grade) >= 10;
+                      const isFailed = row.grade != null && Number(row.grade) < 10;
+                      const isPending = row.grade == null;
+                      const totalU = Number(row.units || 0);
+                      const prU = Number(row.practicalUnits || 0);
+                      const thU = Math.max(0, totalU - prU);
+
+                      return (
+                        <tr key={row.id} className="border-b border-slate-200 hover:bg-slate-50">
+                          <td className="p-1.5 border-l border-slate-200 text-center text-slate-600">{rIdx + 1}</td>
+                          <td className="p-1.5 border-l border-slate-200 text-center font-mono" dir="ltr">{row.code}</td>
+                          <td className="p-1.5 border-l border-slate-200 font-semibold text-slate-900">
+                            {row.title}
+                            {row.status === 'PENDING_COUNCIL' && (
+                              <span className="mr-2 text-[10px] text-amber-700 font-normal">
+                                [درخواست شورا]
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-1.5 border-l border-slate-200 text-center text-slate-700">
+                            {row.courseType === 'GENERAL' ? 'عمومی' : row.courseType === 'BASIC' ? 'پایه' : 'تخصصی'}
+                          </td>
+                          <td className="p-1.5 border-l border-slate-200 text-center font-mono">{thU}</td>
+                          <td className="p-1.5 border-l border-slate-200 text-center font-mono">{prU}</td>
+                          <td className="p-1.5 border-l border-slate-200 text-center font-bold font-mono">{totalU}</td>
+                          <td className="p-1.5 border-l border-slate-200 text-center font-black text-slate-900">
+                            {row.grade != null ? (
+                              Number(row.grade) === 1 ? 'قبول' : Number(row.grade).toFixed(2)
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+                          <td className="p-1.5 text-center font-bold">
+                            {isPassed && <span className="text-emerald-700">قبول</span>}
+                            {isFailed && <span className="text-red-700">مردود</span>}
+                            {isPending && (
+                              <span className="text-slate-500 font-normal">
+                                {row.status === 'PENDING_COUNCIL' ? 'در انتظار شورا' : 'در حال گذراندن'}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                {/* خلاصه وضعیت آماری انتهای هر ترم */}
+                <div className="bg-slate-100 p-2 px-3 border-t border-slate-700 flex items-center justify-between font-bold text-[11px] text-slate-800">
+                  <div className="flex gap-4">
+                    <span>واحدهای اخذشده: <b className="text-slate-950 font-mono">{termUnits}</b></span>
+                    <span>واحدهای گذرانده: <b className="text-emerald-800 font-mono">{termPassed}</b></span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span>معدل نیمسال: <b className="text-slate-950 text-xs font-mono">{termGpa}</b></span>
+                    <span>وضعیت ترم: {isA ? <b className="text-emerald-800">ممتاز (الف)</b> : isProbation ? <b className="text-red-700">مشروط</b> : <b>عادی</b>}</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span>معدل ترم:</span>
-                <b className={`text-sm ${isA ? 'text-emerald-700' : isProbation ? 'text-red-700' : 'text-slate-900'}`}>
-                  {termGpa}
-                </b>
-                {isA && <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">ممتاز (الف)</span>}
-                {isProbation && <span className="text-[10px] bg-red-100 text-red-800 px-1.5 py-0.5 rounded">مشروط</span>}
+            );
+          })}
+        </div>
+
+        {/* ۴. جدول وضعیت تجمیعی کل دوره تحصیلی */}
+        <div className="border-2 border-slate-800 mt-6 overflow-hidden">
+          <div className="bg-slate-800 text-white px-3 py-1 font-bold text-center text-xs">
+            خلاصه وضعیت تحصیلی کل دوره تا تاریخ صدور کارنامه
+          </div>
+          <table className="w-full text-center text-[11px] border-collapse font-bold">
+            <tbody>
+              <tr className="bg-slate-100 border-b border-slate-400 text-slate-700">
+                <td className="p-2 border-l border-slate-300">کل واحدهای اخذشده</td>
+                <td className="p-2 border-l border-slate-300">کل واحدهای گذرانده</td>
+                <td className="p-2 border-l border-slate-300">کل واحدهای مردودی</td>
+                <td className="p-2 border-l border-slate-300">واحدهای مؤثر در معدل</td>
+                <td className="p-2 border-l border-slate-300 bg-slate-200 text-slate-950">معدل کل دوره (GPA)</td>
+                <td className="p-2">وضعیت نهایی دانشجو</td>
+              </tr>
+              <tr className="text-slate-950 text-xs font-mono">
+                <td className="p-2 border-l border-slate-300">{totalEnrolledUnits} واحد</td>
+                <td className="p-2 border-l border-slate-300 text-emerald-800">{totalPassedUnits} واحد</td>
+                <td className="p-2 border-l border-slate-300 text-red-700">{failedUnits} واحد</td>
+                <td className="p-2 border-l border-slate-300">{totalGradedUnits} واحد</td>
+                <td className="p-2 border-l border-slate-300 bg-emerald-50 text-emerald-950 font-black text-sm">
+                  {totalCumulativeGpa}
+                </td>
+                <td className="p-2 font-sans font-bold text-emerald-800">
+                  {statusFa[me.status] ?? me.status}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* ۵. متن حقوقی سند و محل امضا و مهرهای رسمی */}
+        <div className="mt-6 pt-3 border-t border-slate-400 text-[10px] text-slate-600 space-y-4">
+          <p className="leading-relaxed">
+            <b>تذکر مهم:</b> این کارنامه صرفاً جهت اطلاع از وضعیت تحصیلی دانشجو صادر گردیده و هرگونه خط‌خوردگی یا تغییر در مندرجات آن، سند را از درجه اعتبار ساقط می‌نماید. اعتبار نهایی این کارنامه پس از تسویه حساب کامل و منوط به تأیید اداره کل امور آموزشی دانشگاه می‌باشد.
+          </p>
+
+          <div className="grid grid-cols-3 text-center pt-6 pb-4 font-bold text-slate-800">
+            <div>
+              <p>کارشناس امور آموزشی و بایگانی</p>
+              <div className="h-12 flex items-end justify-center text-[9px] text-slate-400">
+                (امضا و تاریخ)
+              </div>
+            </div>
+            <div>
+              <p>محل مهر اداره کل آموزش دانشگاه</p>
+              <div className="w-16 h-16 rounded-full border border-dashed border-slate-400 mx-auto mt-2 flex items-center justify-center text-[9px] text-slate-400">
+                محل مهر
+              </div>
+            </div>
+            <div>
+              <p>مدیر کل امور آموزشی و تحصیلات تکمیلی</p>
+              <div className="h-12 flex items-end justify-center text-[9px] text-slate-400">
+                (امضا و تأیید نهایی)
               </div>
             </div>
           </div>
-        );
-      })}
+        </div>
 
-      {/* کادر رسمی تاییدیه و امضای آموزش (برای فرمت چاپ و اعتبار سند) */}
-      <div className="card !p-4 bg-slate-50 border-dashed border-slate-300 text-xs text-slate-500 space-y-2">
-        <div className="flex items-center justify-between">
-          <p>📌 کارنامهٔ حاضر بر اساس آخرین نمرات قطعی ثبت‌شده در سامانه جامع صادر شده است.</p>
-          <p className="font-mono" dir="ltr">SHA256: {user.name ? 'VERIFIED-OFFICIAL' : ''}</p>
-        </div>
-        <div className="grid grid-cols-2 text-center pt-4 border-t border-slate-200 print:grid">
-          <div>
-            <p className="font-bold text-slate-700">امضای کارشناس امور آموزشی</p>
-            <p className="text-[10px] text-slate-400 mt-6">............................................</p>
-          </div>
-          <div>
-            <p className="font-bold text-slate-700">مهر و امضای اداره کل آموزش دانشگاه</p>
-            <p className="text-[10px] text-slate-400 mt-6">............................................</p>
-          </div>
-        </div>
       </div>
     </div>
   );
