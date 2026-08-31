@@ -22,8 +22,12 @@ export interface ExamHall {
   buildingName: string;
   totalSeats: number;
   examCapacity: number; // distanced seating
+  startSeatNumber: number; // e.g. 1, 101, 201
+  endSeatNumber: number;   // startSeatNumber + examCapacity - 1
+  seatPrefix?: string;     // e.g. "A-", "B-"
   hasAirConditioning: boolean;
   isCCTVMonitored: boolean;
+  notes?: string;
 }
 
 export interface ExamCourseItem {
@@ -70,11 +74,11 @@ const INITIAL_EXAM_SLOTS: ExamSlot[] = [
 ];
 
 const INITIAL_EXAM_HALLS: ExamHall[] = [
-  { id: 1, name: 'آمفی‌تئاتر مرکزی', buildingName: 'ساختمان اداری مرکزی', totalSeats: 120, examCapacity: 60, hasAirConditioning: true, isCCTVMonitored: true },
-  { id: 2, name: 'سالن امتحانات شماره ۱', buildingName: 'ساختمان آموزش', totalSeats: 80, examCapacity: 40, hasAirConditioning: true, isCCTVMonitored: true },
-  { id: 3, name: 'سالن امتحانات شماره ۲', buildingName: 'ساختمان آموزش', totalSeats: 80, examCapacity: 40, hasAirConditioning: true, isCCTVMonitored: true },
-  { id: 4, name: 'سایت تخصصی کامپیوتر ۱۰۲', buildingName: 'دانشکده مهندسی', totalSeats: 50, examCapacity: 25, hasAirConditioning: true, isCCTVMonitored: true },
-  { id: 5, name: 'کلاس ۳۰۱ امتحانی', buildingName: 'ساختمان ابن‌سینا', totalSeats: 60, examCapacity: 30, hasAirConditioning: true, isCCTVMonitored: false },
+  { id: 1, name: 'آمفی‌تئاتر مرکزی', buildingName: 'ساختمان اداری مرکزی', totalSeats: 120, examCapacity: 60, startSeatNumber: 1, endSeatNumber: 60, hasAirConditioning: true, isCCTVMonitored: true },
+  { id: 2, name: 'سالن امتحانات شماره ۱', buildingName: 'ساختمان آموزش', totalSeats: 80, examCapacity: 40, startSeatNumber: 101, endSeatNumber: 140, hasAirConditioning: true, isCCTVMonitored: true },
+  { id: 3, name: 'سالن امتحانات شماره ۲', buildingName: 'ساختمان آموزش', totalSeats: 80, examCapacity: 40, startSeatNumber: 201, endSeatNumber: 240, hasAirConditioning: true, isCCTVMonitored: true },
+  { id: 4, name: 'سایت تخصصی کامپیوتر ۱۰۲', buildingName: 'دانشکده مهندسی', totalSeats: 50, examCapacity: 25, startSeatNumber: 301, endSeatNumber: 325, hasAirConditioning: true, isCCTVMonitored: true },
+  { id: 5, name: 'کلاس ۳۰۱ امتحانی', buildingName: 'ساختمان ابن‌سینا', totalSeats: 60, examCapacity: 30, startSeatNumber: 401, endSeatNumber: 430, hasAirConditioning: true, isCCTVMonitored: false },
 ];
 
 const INITIAL_PROCTORS: ProctorStaff[] = [
@@ -284,9 +288,153 @@ export default function ExamPlanningClient() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showPrintModal, setShowPrintModal] = useState<boolean>(false);
 
+  // New Slot Modal State
+  const [isNewSlotModalOpen, setIsNewSlotModalOpen] = useState<boolean>(false);
+  const [newSlotForm, setNewSlotForm] = useState({
+    label: 'سانس ۵ (عصرگاهی)',
+    startTime: '۱۹:۰۰',
+    endTime: '۲۱:۰۰',
+  });
+
+  // New Hall Modal State
+  const [isNewHallModalOpen, setIsNewHallModalOpen] = useState<boolean>(false);
+  const [newHallForm, setNewHallForm] = useState({
+    name: '',
+    buildingName: 'ساختمان آموزش',
+    totalSeats: 60,
+    examCapacity: 30,
+    startSeatNumber: 501,
+    seatPrefix: '',
+    hasAirConditioning: true,
+    isCCTVMonitored: true,
+  });
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 6000);
+  };
+
+  // ==========================================
+  // SLOT MANAGEMENT HANDLERS
+  // ==========================================
+  const handleAddNewSlot = () => {
+    if (!newSlotForm.label.trim() || !newSlotForm.startTime.trim() || !newSlotForm.endTime.trim()) {
+      showToast('لطفاً کلیه اطلاعات سانس (عنوان، ساعت شروع و پایان) را وارد نمایید.');
+      return;
+    }
+    const nextId = slots.length > 0 ? Math.max(...slots.map(s => s.id)) + 1 : 1;
+    const newSlot: ExamSlot = {
+      id: nextId,
+      label: newSlotForm.label.trim(),
+      startTime: newSlotForm.startTime.trim(),
+      endTime: newSlotForm.endTime.trim(),
+    };
+    setSlots(prev => [...prev, newSlot]);
+    setIsNewSlotModalOpen(false);
+    setNewSlotForm({
+      label: `سانس ${nextId + 1}`,
+      startTime: '۱۹:۰۰',
+      endTime: '۲۱:۰۰',
+    });
+    showToast(`✓ سانس آزمونی جدید «${newSlot.label}» (${newSlot.startTime} تا ${newSlot.endTime}) با موفقیت افزوده شد.`);
+  };
+
+  const handleDeleteSlot = (slotId: number) => {
+    if (slots.length <= 1) {
+      showToast('حداقل یک سانس آزمونی باید در سامانه فعال باشد.');
+      return;
+    }
+    const target = slots.find(s => s.id === slotId);
+    setSlots(prev => prev.filter(s => s.id !== slotId));
+    const fallbackSlot = slots.find(s => s.id !== slotId)?.id || 1;
+    setCourses(prev => prev.map(c => c.slotId === slotId ? { ...c, slotId: fallbackSlot } : c));
+    showToast(`✕ سانس «${target?.label}» حذف شد.`);
+  };
+
+  // ==========================================
+  // HALL & SEAT MANAGEMENT HANDLERS
+  // ==========================================
+  const handleAddNewHall = () => {
+    if (!newHallForm.name.trim() || newHallForm.examCapacity <= 0) {
+      showToast('لطفاً نام سالن و ظرفیت آزمونی معتبر وارد فرمایید.');
+      return;
+    }
+    const nextId = halls.length > 0 ? Math.max(...halls.map(h => h.id)) + 1 : 1;
+    const endSeat = Number(newHallForm.startSeatNumber) + Number(newHallForm.examCapacity) - 1;
+    const newHall: ExamHall = {
+      id: nextId,
+      name: newHallForm.name.trim(),
+      buildingName: newHallForm.buildingName.trim(),
+      totalSeats: Number(newHallForm.totalSeats),
+      examCapacity: Number(newHallForm.examCapacity),
+      startSeatNumber: Number(newHallForm.startSeatNumber),
+      endSeatNumber: endSeat,
+      seatPrefix: newHallForm.seatPrefix?.trim() || undefined,
+      hasAirConditioning: newHallForm.hasAirConditioning,
+      isCCTVMonitored: newHallForm.isCCTVMonitored,
+    };
+    setHalls(prev => [...prev, newHall]);
+    setIsNewHallModalOpen(false);
+    setNewHallForm({
+      name: '',
+      buildingName: 'ساختمان آموزش',
+      totalSeats: 60,
+      examCapacity: 30,
+      startSeatNumber: endSeat + 1,
+      seatPrefix: '',
+      hasAirConditioning: true,
+      isCCTVMonitored: true,
+    });
+    showToast(`✓ سالن جدید «${newHall.name}» با ظرفیت آزمونی ${newHall.examCapacity} صندلی (شماره‌های ${newHall.startSeatNumber} الی ${newHall.endSeatNumber}) با موفقیت تعریف شد.`);
+  };
+
+  const handleUpdateHallCapacityAndSeats = (hallId: number, updates: Partial<ExamHall>) => {
+    setHalls(prev =>
+      prev.map(h => {
+        if (h.id !== hallId) return h;
+        const totalSeats = updates.totalSeats !== undefined ? Number(updates.totalSeats) : h.totalSeats;
+        const examCapacity = updates.examCapacity !== undefined ? Number(updates.examCapacity) : h.examCapacity;
+        const startSeatNumber = updates.startSeatNumber !== undefined ? Number(updates.startSeatNumber) : h.startSeatNumber;
+        const endSeatNumber = startSeatNumber + examCapacity - 1;
+        return {
+          ...h,
+          ...updates,
+          totalSeats,
+          examCapacity,
+          startSeatNumber,
+          endSeatNumber,
+        };
+      })
+    );
+  };
+
+  const handleSequentialAutoNumbering = () => {
+    let currentStart = 1;
+    setHalls(prev =>
+      prev.map(h => {
+        const startSeatNumber = currentStart;
+        const endSeatNumber = currentStart + h.examCapacity - 1;
+        currentStart = endSeatNumber + 1;
+        return {
+          ...h,
+          startSeatNumber,
+          endSeatNumber,
+        };
+      })
+    );
+    showToast('⚡ شماره‌گذاری متوالی و یکپارچه صندلی‌های کلیه سالن‌ها از شماره ۱ تا آخرین سالن بدون وقفه و تداخل اعمال گردید.');
+  };
+
+  const handleDeleteHall = (hallId: number) => {
+    if (halls.length <= 1) {
+      showToast('حداقل یک سالن امتحانی باید در سامانه فعال باشد.');
+      return;
+    }
+    const target = halls.find(h => h.id === hallId);
+    setHalls(prev => prev.filter(h => h.id !== hallId));
+    const fallbackHall = halls.find(h => h.id !== hallId)?.id || 1;
+    setCourses(prev => prev.map(c => c.hallId === hallId ? { ...c, hallId: fallbackHall } : c));
+    showToast(`✕ سالن آزمون «${target?.name}» حذف شد.`);
   };
 
   // ==========================================
@@ -330,7 +478,7 @@ export default function ExamPlanningClient() {
         list.push({
           type: 'HALL_OVERFLOW',
           title: `کمبود صندلی آزمونی در ${hall.name}`,
-          details: `در تاریخ ${items[0].examDate} سانس ${items[0].slotId}، تعداد کل دانشجویان (${totalStudents} نفر) از ظرفیت آزمونی با فاصله سالن (${hall.examCapacity} صندلی) فراتر رفته است.`,
+          details: `در تاریخ ${items[0].examDate} سانس ${items[0].slotId}، تعداد کل دانشجویان (${totalStudents} نفر) از ظرفیت آزمونی با فاصله سالن (${hall.examCapacity} صندلی، شماره‌های ${hall.startSeatNumber} تا ${hall.endSeatNumber}) فراتر رفته است.`,
           severity: 'CRITICAL',
           courseIds: items.map(i => i.id),
         });
@@ -344,7 +492,6 @@ export default function ExamPlanningClient() {
   // AUTO MATRIX GENERATION ALGORITHM
   // ==========================================
   const handleRunAutoMatrixScheduling = () => {
-    // Generate dates between start and end date
     const datePool = [
       '۱۴۰۵/۱۰/۱۸',
       '۱۴۰۵/۱۰/۱۹',
@@ -365,14 +512,13 @@ export default function ExamPlanningClient() {
 
     const updated = courses.map((course, idx) => {
       if (course.schedulingMode === 'MANUAL') {
-        return course; // Keep manual locked
+        return course;
       }
 
       if (!cohortUsedDates[course.cohortId]) {
         cohortUsedDates[course.cohortId] = new Set();
       }
 
-      // Find next date not used for this cohort
       let chosenDate = datePool[dateIdx % datePool.length];
       while (cohortUsedDates[course.cohortId].has(chosenDate) && dateIdx < 40) {
         dateIdx++;
@@ -381,9 +527,8 @@ export default function ExamPlanningClient() {
       cohortUsedDates[course.cohortId].add(chosenDate);
       dateIdx++;
 
-      // Distribute slots and halls
-      const assignedSlotId = ((idx % 3) + 1);
-      const assignedHallId = ((idx % halls.length) + 1);
+      const assignedSlotId = slots.length > 0 ? slots[idx % slots.length].id : 1;
+      const assignedHallId = halls.length > 0 ? halls[idx % halls.length].id : 1;
 
       return {
         ...course,
@@ -418,7 +563,6 @@ export default function ExamPlanningClient() {
     );
   };
 
-  // Filtered courses
   const filteredCourses = courses.filter(c => {
     if (selectedCohortFilter !== 'ALL' && c.cohortId !== selectedCohortFilter) return false;
     if (selectedDateFilter !== 'ALL' && c.examDate !== selectedDateFilter) return false;
@@ -445,7 +589,7 @@ export default function ExamPlanningClient() {
                 </span>
               </div>
               <p className="text-xs text-indigo-200 mt-1">
-                تخصیص دوحالته (دستی و خودکار ماتریسی)، رصد بلادرنگ تداخل‌ها، چیدمان صندلی، سالن‌ها و صدور کارت آزمون
+                تخصیص دوحالته (دستی و خودکار)، تعریف نامحدود سانس‌ها، تنظیم ظرفیت حوزه‌ها و بازه شماره صندلی، رصد تداخل‌ها و صدور کارت آزمون
               </p>
             </div>
           </div>
@@ -484,8 +628,8 @@ export default function ExamPlanningClient() {
             <span className="text-xs font-bold text-white font-mono">{examStartDate} الی {examEndDate}</span>
           </div>
           <div className="p-2.5 bg-indigo-900/60 rounded-xl border border-indigo-700/40">
-            <span className="text-indigo-300 block text-[11px]">سانس‌های روزانه:</span>
-            <span className="text-base font-black text-white">{slots.length} سانس استاندارد</span>
+            <span className="text-indigo-300 block text-[11px]">سانس‌های فعال روزانه:</span>
+            <span className="text-base font-black text-white">{slots.length} سانس آزمونی</span>
           </div>
           <div className="p-2.5 bg-indigo-900/60 rounded-xl border border-indigo-700/40">
             <span className="text-indigo-300 block text-[11px]">ظرفیت صندلی‌های فاصله‌دار:</span>
@@ -527,6 +671,34 @@ export default function ExamPlanningClient() {
         </button>
 
         <button
+          onClick={() => setActiveTab('CALENDAR_SLOTS')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
+            activeTab === 'CALENDAR_SLOTS'
+              ? 'bg-indigo-900 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <span>🗓️ بازه تقویم و تعریف سانس‌های روزانه</span>
+          <span className="px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-900 text-[10px] font-black">
+            {slots.length} سانس
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('EXAM_HALLS')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
+            activeTab === 'EXAM_HALLS'
+              ? 'bg-indigo-900 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <span>🏛️ سالن‌های آزمون، ظرفیت و شماره صندلی</span>
+          <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-black">
+            {halls.length} حوزه
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('CONFLICT_CHECKER')}
           className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
             activeTab === 'CONFLICT_CHECKER'
@@ -540,28 +712,6 @@ export default function ExamPlanningClient() {
               {detectedConflicts.length}
             </span>
           )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('CALENDAR_SLOTS')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
-            activeTab === 'CALENDAR_SLOTS'
-              ? 'bg-indigo-900 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <span>🗓️ بازه تقویم و سانس‌های روزانه</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('EXAM_HALLS')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
-            activeTab === 'EXAM_HALLS'
-              ? 'bg-indigo-900 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <span>🏛️ سالن‌های آزمون و ظرفیت صندلی</span>
         </button>
 
         <button
@@ -679,15 +829,15 @@ export default function ExamPlanningClient() {
                   <th className="p-2.5 text-center">حالت زمان‌بندی</th>
                   <th className="p-2.5 text-center">تاریخ امتحان</th>
                   <th className="p-2.5 text-center">سانس و ساعت</th>
-                  <th className="p-2.5">سالن آزمون</th>
+                  <th className="p-2.5">سالن و بازه صندلی</th>
                   <th className="p-2.5 text-center">تعداد دانشجو</th>
                   <th className="p-2.5 text-left">عملیات</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredCourses.map(course => {
-                  const slot = slots.find(s => s.id === course.slotId) || slots[0];
-                  const hall = halls.find(h => h.id === course.hallId) || halls[0];
+                  const slot = slots.find(s => s.id === course.slotId) || slots[0] || { id: 1, label: 'سانس ۱', startTime: '۰۸:۳۰', endTime: '۱۰:۳۰' };
+                  const hall = halls.find(h => h.id === course.hallId) || halls[0] || { id: 1, name: 'آمفی‌تئاتر', buildingName: 'مرکزی', examCapacity: 60, startSeatNumber: 1, endSeatNumber: 60 };
                   const isAuto = course.schedulingMode === 'AUTO_MATRIX';
 
                   return (
@@ -734,7 +884,9 @@ export default function ExamPlanningClient() {
                       </td>
                       <td className="p-2.5">
                         <p className="font-bold text-slate-800">🏛️ {hall.name}</p>
-                        <p className="text-[10px] text-slate-500">{hall.buildingName}</p>
+                        <p className="text-[10px] text-emerald-800 font-bold">
+                          صندلی {hall.startSeatNumber} الی {hall.endSeatNumber} (ظرفیت: {hall.examCapacity})
+                        </p>
                       </td>
                       <td className="p-2.5 text-center font-bold text-slate-700">
                         {course.enrolledStudentsCount} نفر
@@ -757,7 +909,276 @@ export default function ExamPlanningClient() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: CONFLICT RESOLUTION ENGINE */}
+      {/* TAB 2: CALENDAR & DAILY SLOTS (WITH ADDING & EDITING SLOTS) */}
+      {/* ========================================================================= */}
+      {activeTab === 'CALENDAR_SLOTS' && (
+        <div className="card space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div>
+              <h2 className="font-black text-slate-900 text-base">
+                پیکربندی بازه زمانی امتحانات و تعریف سانس‌های استاندارد روزانه
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                تعریف بازه شروع و پایان امتحانات ترم، افزودن نامحدود سانس‌های امتحانی با ساعت دقیق شروع و پایان
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsNewSlotModalOpen(true)}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-700 to-indigo-800 hover:from-indigo-800 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition"
+              >
+                <span>➕ افزودن سانس آزمون جدید</span>
+              </button>
+              <button
+                onClick={() => showToast('تنظیمات بازه تقویم و سانس‌های امتحانی با موفقیت ذخیره گردید.')}
+                className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs shadow transition"
+              >
+                💾 ذخیره تنظیمات
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+            <div>
+              <label className="font-bold text-slate-700 block text-xs mb-1">
+                تاریخ شروع بازه آزمون‌های پایان‌ترم:
+              </label>
+              <input
+                type="text"
+                value={examStartDate}
+                onChange={e => setExamStartDate(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg p-2 font-mono font-bold text-xs bg-white"
+              />
+            </div>
+            <div>
+              <label className="font-bold text-slate-700 block text-xs mb-1">
+                تاریخ پایان بازه آزمون‌های پایان‌ترم:
+              </label>
+              <input
+                type="text"
+                value={examEndDate}
+                onChange={e => setExamEndDate(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg p-2 font-mono font-bold text-xs bg-white"
+              />
+            </div>
+          </div>
+
+          {/* Slots Cards List */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-extrabold text-slate-800 text-xs">
+                لیست سانس‌های فعال روزانه برگزاری آزمون ({slots.length} سانس):
+              </h3>
+              <span className="text-slate-500 text-[11px]">
+                امکان ویرایش مستقیم ساعت شروع و پایان در کادرها وجود دارد
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              {slots.map(slot => (
+                <div key={slot.id} className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-3 relative group hover:border-indigo-400 transition">
+                  <div className="flex items-center justify-between">
+                    <input
+                      type="text"
+                      value={slot.label}
+                      onChange={e =>
+                        setSlots(slots.map(s => (s.id === slot.id ? { ...s, label: e.target.value } : s)))
+                      }
+                      className="font-black text-slate-900 text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-indigo-500 px-1 py-0.5 rounded w-36"
+                    />
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-50 text-indigo-800 font-black">
+                        #{slot.id}
+                      </span>
+                      {slots.length > 1 && (
+                        <button
+                          onClick={() => handleDeleteSlot(slot.id)}
+                          className="text-rose-400 hover:text-rose-700 text-xs p-1"
+                          title="حذف سانس"
+                        >
+                          🗑️
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block mb-0.5">ساعت شروع:</span>
+                      <input
+                        type="text"
+                        value={slot.startTime}
+                        onChange={e =>
+                          setSlots(slots.map(s => (s.id === slot.id ? { ...s, startTime: e.target.value } : s)))
+                        }
+                        className="w-16 border border-slate-300 rounded p-1 text-center font-mono font-bold bg-white text-slate-800"
+                      />
+                    </div>
+                    <span className="text-slate-400 font-bold self-end pb-1">الی</span>
+                    <div>
+                      <span className="text-[10px] text-slate-500 block mb-0.5">ساعت پایان:</span>
+                      <input
+                        type="text"
+                        value={slot.endTime}
+                        onChange={e =>
+                          setSlots(slots.map(s => (s.id === slot.id ? { ...s, endTime: e.target.value } : s)))
+                        }
+                        className="w-16 border border-slate-300 rounded p-1 text-center font-mono font-bold bg-white text-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-500">
+                    <span>مدت زمان آزمون:</span>
+                    <strong className="text-indigo-950 font-bold">۱۲۰ دقیقه استاندارد</strong>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 3: EXAM HALLS, CAPACITY & SEAT NUMBER RANGE */}
+      {/* ========================================================================= */}
+      {activeTab === 'EXAM_HALLS' && (
+        <div className="card space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div>
+              <h2 className="font-black text-slate-900 text-base">
+                مدیریت سالن‌های آزمون، تنظیم ظرفیت و محاسبه بازه شماره صندلی‌ها
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                تعیین ظرفیت آزمونی، تنظیم شماره صندلی شروع و محاسبه خودکار شماره صندلی پایان بر اساس ظرفیت هر حوزه
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleSequentialAutoNumbering}
+                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs shadow flex items-center gap-1.5 transition"
+              >
+                <span>⚡ شماره‌گذاری متوالی خودکار کلیه حوزه‌ها</span>
+              </button>
+              <button
+                onClick={() => setIsNewHallModalOpen(true)}
+                className="px-4 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition"
+              >
+                <span>➕ افزودن حوزه / سالن جدید</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="p-3 bg-indigo-50/70 rounded-2xl border border-indigo-200 text-xs flex items-center justify-between">
+            <span className="font-bold text-indigo-950">
+              📊 مجموع ظرفیت صندلی‌های آزمونی فاصله‌دار دانشگاه در هر سانس:
+            </span>
+            <span className="text-sm font-black text-indigo-900">
+              {halls.reduce((s, h) => s + h.examCapacity, 0)} صندلی فعال
+            </span>
+          </div>
+
+          {/* Halls Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {halls.map(hall => {
+              const startNo = hall.startSeatNumber;
+              const endNo = hall.startSeatNumber + hall.examCapacity - 1;
+
+              return (
+                <div key={hall.id} className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-3.5 hover:border-indigo-400 transition">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-black text-slate-900 text-sm">🏛️ {hall.name}</h3>
+                      <p className="text-[11px] text-slate-500">{hall.buildingName}</p>
+                    </div>
+                    {halls.length > 1 && (
+                      <button
+                        onClick={() => handleDeleteHall(hall.id)}
+                        className="text-rose-400 hover:text-rose-700 text-xs p-1"
+                        title="حذف سالن"
+                      >
+                        🗑️
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Seat Range Highlight Box (Auto-Calculated) */}
+                  <div className="p-3 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-300 text-xs space-y-1">
+                    <div className="flex items-center justify-between text-emerald-950 font-black">
+                      <span>بازه شماره صندلی‌های این سالن:</span>
+                      <span className="text-xs px-2 py-0.5 rounded bg-emerald-200/80 font-mono">
+                        از {startNo} تا {endNo}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-emerald-800">
+                      شامل <strong>{hall.examCapacity}</strong> صندلی داوطلب (با فاصله‌گذاری استاندارد)
+                    </p>
+                  </div>
+
+                  {/* Editable Fields Grid */}
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 block mb-0.5">
+                        ظرفیت کل صندلی سالن:
+                      </label>
+                      <input
+                        type="number"
+                        value={hall.totalSeats}
+                        onChange={e => handleUpdateHallCapacityAndSeats(hall.id, { totalSeats: Number(e.target.value) })}
+                        className="w-full border border-slate-300 rounded p-1.5 font-bold text-xs bg-slate-50 text-slate-800"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-emerald-800 block mb-0.5">
+                        ظرفیت آزمونی (فاصله‌دار):
+                      </label>
+                      <input
+                        type="number"
+                        value={hall.examCapacity}
+                        onChange={e => handleUpdateHallCapacityAndSeats(hall.id, { examCapacity: Number(e.target.value) })}
+                        className="w-full border-2 border-emerald-400 rounded p-1.5 font-black text-xs bg-emerald-50/50 text-emerald-950"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-indigo-900 block mb-0.5">
+                        شماره صندلی شروع:
+                      </label>
+                      <input
+                        type="number"
+                        value={hall.startSeatNumber}
+                        onChange={e => handleUpdateHallCapacityAndSeats(hall.id, { startSeatNumber: Number(e.target.value) })}
+                        className="w-full border-2 border-indigo-400 rounded p-1.5 font-mono font-black text-xs bg-indigo-50/50 text-indigo-950"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 block mb-0.5">
+                        شماره صندلی پایان (محاسبه‌شده):
+                      </label>
+                      <input
+                        type="text"
+                        disabled
+                        value={endNo}
+                        className="w-full border border-slate-200 rounded p-1.5 font-mono font-black text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 text-[11px] font-bold text-slate-600 pt-1 border-t border-slate-100">
+                    <span>{hall.hasAirConditioning ? '❄️ تهویه مطبوع' : '—'}</span>
+                    <span>{hall.isCCTVMonitored ? '📹 دوربین مداربسته' : '—'}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: CONFLICT RESOLUTION ENGINE */}
       {/* ========================================================================= */}
       {activeTab === 'CONFLICT_CHECKER' && (
         <div className="card space-y-4">
@@ -815,143 +1236,6 @@ export default function ExamPlanningClient() {
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 3: CALENDAR & DAILY SLOTS */}
-      {/* ========================================================================= */}
-      {activeTab === 'CALENDAR_SLOTS' && (
-        <div className="card space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h2 className="font-black text-slate-900 text-base">
-                پیکربندی بازه زمانی امتحانات و سانس‌های استاندارد روزانه
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                تعریف بازه شروع و پایان امتحانات و ساعت دقیق برگزاری آزمون‌ها در طول روز
-              </p>
-            </div>
-            <button
-              onClick={() => showToast('تنظیمات بازه تقویم و سانس‌های امتحانی با موفقیت ذخیره گردید.')}
-              className="px-4 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs shadow transition"
-            >
-              💾 ذخیره تنظیمات تقویم
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-            <div>
-              <label className="font-bold text-slate-700 block text-xs mb-1">
-                تاریخ شروع بازه آزمون‌های پایان‌ترم:
-              </label>
-              <input
-                type="text"
-                value={examStartDate}
-                onChange={e => setExamStartDate(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg p-2 font-mono font-bold text-xs bg-white"
-              />
-            </div>
-            <div>
-              <label className="font-bold text-slate-700 block text-xs mb-1">
-                تاریخ پایان بازه آزمون‌های پایان‌ترم:
-              </label>
-              <input
-                type="text"
-                value={examEndDate}
-                onChange={e => setExamEndDate(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg p-2 font-mono font-bold text-xs bg-white"
-              />
-            </div>
-          </div>
-
-          {/* Slots Table */}
-          <div className="space-y-2">
-            <h3 className="font-extrabold text-slate-800 text-xs">سانس‌های تعریف‌شده روزانه آزمون:</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {slots.map(slot => (
-                <div key={slot.id} className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-black text-slate-900 text-xs">{slot.label}</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-50 text-indigo-800 font-bold">
-                      سانس {slot.id}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <input
-                      type="text"
-                      value={slot.startTime}
-                      onChange={e =>
-                        setSlots(slots.map(s => (s.id === slot.id ? { ...s, startTime: e.target.value } : s)))
-                      }
-                      className="w-16 border border-slate-300 rounded p-1 text-center font-mono font-bold"
-                    />
-                    <span className="text-slate-400">تا</span>
-                    <input
-                      type="text"
-                      value={slot.endTime}
-                      onChange={e =>
-                        setSlots(slots.map(s => (s.id === slot.id ? { ...s, endTime: e.target.value } : s)))
-                      }
-                      className="w-16 border border-slate-300 rounded p-1 text-center font-mono font-bold"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 4: EXAM HALLS & CAPACITY */}
-      {/* ========================================================================= */}
-      {activeTab === 'EXAM_HALLS' && (
-        <div className="card space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h2 className="font-black text-slate-900 text-base">
-                مدیریت سالن‌های آزمون، فاصله‌گذاری صندلی‌ها و نظارت تصویری
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                محاسبه ظرفیت آزمونی بر اساس استاندارد فاصله‌گذاری یک‌درمیان صندلی‌ها
-              </p>
-            </div>
-            <span className="text-xs font-bold text-indigo-900 bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-200">
-              مجموع ظرفیت آزمونی همزمان: {halls.reduce((s, h) => s + h.examCapacity, 0)} صندلی
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-            {halls.map(hall => (
-              <div key={hall.id} className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-black text-slate-900 text-sm">🏛️ {hall.name}</h3>
-                  <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-extrabold">
-                    {hall.examCapacity} صندلی آزمونی
-                  </span>
-                </div>
-
-                <p className="text-xs text-slate-500">{hall.buildingName}</p>
-
-                <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-100">
-                  <div className="p-2 bg-slate-50 rounded-lg">
-                    <span className="text-slate-500 block text-[10px]">ظرفیت اسمی کل:</span>
-                    <strong className="text-slate-800">{hall.totalSeats} نفر</strong>
-                  </div>
-                  <div className="p-2 bg-emerald-50 rounded-lg">
-                    <span className="text-emerald-700 block text-[10px]">ظرفیت آزمونی (با فاصله):</span>
-                    <strong className="text-emerald-950">{hall.examCapacity} صندلی</strong>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 text-[11px] font-bold text-slate-600 pt-1">
-                  <span>{hall.hasAirConditioning ? '❄️ تهویه مطبوع' : '—'}</span>
-                  <span>{hall.isCCTVMonitored ? '📹 دوربین مداربسته' : '—'}</span>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 
@@ -1096,28 +1380,219 @@ export default function ExamPlanningClient() {
                   <td className="p-1.5 font-bold">ریاضی عمومی ۱</td>
                   <td className="p-1.5 text-center font-mono font-bold">۱۴۰۵/۱۰/۱۸</td>
                   <td className="p-1.5 text-center font-mono">۰۸:۳۰ الی ۱۰:۳۰</td>
-                  <td className="p-1.5 text-center font-bold text-indigo-900">صندلی ۲۴</td>
-                  <td className="p-1.5">آمفی‌تئاتر مرکزی</td>
+                  <td className="p-1.5 text-center font-bold text-indigo-900 font-mono">صندلی ۲۴</td>
+                  <td className="p-1.5">آمفی‌تئاتر مرکزی (۱ الی ۶۰)</td>
                 </tr>
                 <tr className="border-b border-slate-200">
                   <td className="p-1.5 font-bold">مبانی برنامه‌نویسی</td>
                   <td className="p-1.5 text-center font-mono font-bold">۱۴۰۵/۱۰/۲۲</td>
                   <td className="p-1.5 text-center font-mono">۱۱:۰۰ الی ۱۳:۰۰</td>
-                  <td className="p-1.5 text-center font-bold text-indigo-900">سیستم ۱۲</td>
-                  <td className="p-1.5">سایت ۱۰۲</td>
+                  <td className="p-1.5 text-center font-bold text-indigo-900 font-mono">سیستم ۳۱۲</td>
+                  <td className="p-1.5">سایت ۱۰۲ (۳۰۱ الی ۳۲۵)</td>
                 </tr>
                 <tr className="border-b border-slate-200">
                   <td className="p-1.5 font-bold">فیزیک عمومی ۱</td>
                   <td className="p-1.5 text-center font-mono font-bold">۱۴۰۵/۱۰/۲۵</td>
                   <td className="p-1.5 text-center font-mono">۰۸:۳۰ الی ۱۰:۳۰</td>
-                  <td className="p-1.5 text-center font-bold text-indigo-900">صندلی ۰۸</td>
-                  <td className="p-1.5">سالن امتحانات شماره ۱</td>
+                  <td className="p-1.5 text-center font-bold text-indigo-900 font-mono">صندلی ۱۰۸</td>
+                  <td className="p-1.5">سالن امتحانات شماره ۱ (۱۰۱ الی ۱۴۰)</td>
                 </tr>
               </tbody>
             </table>
 
             <div className="p-2 bg-amber-50 rounded-lg border border-amber-200 text-[10px] text-amber-900 font-bold">
               ⚠️ همراه داشتن این کارت و کارت شناسایی معتبر در کلیه جلسات آزمون الزامی است. همراه داشتن تلفن همراه و ساعت هوشمند تخلف محسوب می‌شود.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: ADD NEW EXAM SLOT */}
+      {/* ========================================================================= */}
+      {isNewSlotModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="p-4 bg-indigo-950 text-white flex items-center justify-between">
+              <h3 className="font-extrabold text-sm sm:text-base">➕ افزودن سانس آزمون روزانه جدید</h3>
+              <button onClick={() => setIsNewSlotModalOpen(false)} className="text-white/60 hover:text-white">✕</button>
+            </div>
+
+            <div className="p-4 space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">عنوان سانس:</label>
+                <input
+                  type="text"
+                  value={newSlotForm.label}
+                  onChange={e => setNewSlotForm({ ...newSlotForm, label: e.target.value })}
+                  placeholder="مثلاً: سانس ۵ (عصرگاهی)"
+                  className="w-full border border-slate-300 rounded-lg p-2 font-bold bg-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">ساعت شروع:</label>
+                  <input
+                    type="text"
+                    value={newSlotForm.startTime}
+                    onChange={e => setNewSlotForm({ ...newSlotForm, startTime: e.target.value })}
+                    placeholder="۱۹:۰۰"
+                    className="w-full border border-slate-300 rounded-lg p-2 font-mono font-bold text-center bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">ساعت پایان:</label>
+                  <input
+                    type="text"
+                    value={newSlotForm.endTime}
+                    onChange={e => setNewSlotForm({ ...newSlotForm, endTime: e.target.value })}
+                    placeholder="۲۱:۰۰"
+                    className="w-full border border-slate-300 rounded-lg p-2 font-mono font-bold text-center bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                onClick={() => setIsNewSlotModalOpen(false)}
+                className="px-4 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-bold text-xs"
+              >
+                انصراف
+              </button>
+              <button
+                onClick={handleAddNewSlot}
+                className="px-5 py-1.5 rounded-lg bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs shadow"
+              >
+                ✓ ثبت و افزودن سانس
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: ADD NEW EXAM HALL */}
+      {/* ========================================================================= */}
+      {isNewHallModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="p-4 bg-indigo-950 text-white flex items-center justify-between">
+              <h3 className="font-extrabold text-sm sm:text-base">➕ تعریف حوزه / سالن امتحانی جدید</h3>
+              <button onClick={() => setIsNewHallModalOpen(false)} className="text-white/60 hover:text-white">✕</button>
+            </div>
+
+            <div className="p-4 space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">نام سالن / حوزه آزمون:</label>
+                <input
+                  type="text"
+                  value={newHallForm.name}
+                  onChange={e => setNewHallForm({ ...newHallForm, name: e.target.value })}
+                  placeholder="مثلاً: سالن اجتماعات شهید بهشتی"
+                  className="w-full border border-slate-300 rounded-lg p-2 font-bold bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">محل استقرار / ساختمان:</label>
+                <input
+                  type="text"
+                  value={newHallForm.buildingName}
+                  onChange={e => setNewHallForm({ ...newHallForm, buildingName: e.target.value })}
+                  placeholder="مثلاً: ساختمان آموزش - طبقه دوم"
+                  className="w-full border border-slate-300 rounded-lg p-2 font-bold bg-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">ظرفیت اسمی کل سالن:</label>
+                  <input
+                    type="number"
+                    value={newHallForm.totalSeats}
+                    onChange={e => setNewHallForm({ ...newHallForm, totalSeats: Number(e.target.value) })}
+                    className="w-full border border-slate-300 rounded-lg p-2 font-bold bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-emerald-800 block mb-1">ظرفیت آزمونی (فاصله‌دار):</label>
+                  <input
+                    type="number"
+                    value={newHallForm.examCapacity}
+                    onChange={e => setNewHallForm({ ...newHallForm, examCapacity: Number(e.target.value) })}
+                    className="w-full border-2 border-emerald-400 rounded-lg p-2 font-black bg-emerald-50/50 text-emerald-950"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-indigo-950 block mb-1">شماره صندلی شروع:</label>
+                  <input
+                    type="number"
+                    value={newHallForm.startSeatNumber}
+                    onChange={e => setNewHallForm({ ...newHallForm, startSeatNumber: Number(e.target.value) })}
+                    className="w-full border-2 border-indigo-400 rounded-lg p-2 font-mono font-black bg-indigo-50/50 text-indigo-950"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-500 block mb-1">شماره صندلی پایان (خودکار):</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={Number(newHallForm.startSeatNumber) + Number(newHallForm.examCapacity) - 1}
+                    className="w-full border border-slate-200 rounded-lg p-2 font-mono font-black bg-slate-100 text-slate-600 cursor-not-allowed"
+                  />
+                </div>
+              </div>
+
+              {/* Calculated Range Box */}
+              <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-300 text-xs text-emerald-900 font-bold flex items-center justify-between">
+                <span>بازه شماره صندلی‌های تخصیص‌یافته:</span>
+                <span className="font-mono text-sm font-black">
+                  از {newHallForm.startSeatNumber} تا {Number(newHallForm.startSeatNumber) + Number(newHallForm.examCapacity) - 1}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-4 pt-1">
+                <label className="flex items-center gap-1.5 font-bold text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newHallForm.hasAirConditioning}
+                    onChange={e => setNewHallForm({ ...newHallForm, hasAirConditioning: e.target.checked })}
+                    className="rounded text-indigo-600"
+                  />
+                  <span>تهویه مطبوع</span>
+                </label>
+                <label className="flex items-center gap-1.5 font-bold text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newHallForm.isCCTVMonitored}
+                    onChange={e => setNewHallForm({ ...newHallForm, isCCTVMonitored: e.target.checked })}
+                    className="rounded text-indigo-600"
+                  />
+                  <span>دوربین مداربسته</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                onClick={() => setIsNewHallModalOpen(false)}
+                className="px-4 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-bold text-xs"
+              >
+                انصراف
+              </button>
+              <button
+                onClick={handleAddNewHall}
+                className="px-5 py-1.5 rounded-lg bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs shadow"
+              >
+                ✓ ثبت و تعریف سالن
+              </button>
             </div>
           </div>
         </div>
@@ -1208,7 +1683,7 @@ export default function ExamPlanningClient() {
                   >
                     {halls.map(h => (
                       <option key={h.id} value={h.id}>
-                        🏛️ {h.name} (ظرفیت: {h.examCapacity})
+                        🏛️ {h.name} (صندلی {h.startSeatNumber} تا {h.endSeatNumber} — ظرفیت: {h.examCapacity})
                       </option>
                     ))}
                   </select>
@@ -1268,7 +1743,7 @@ export default function ExamPlanningClient() {
                     <th className="p-2">استاد</th>
                     <th className="p-2 text-center">تاریخ</th>
                     <th className="p-2 text-center">ساعت</th>
-                    <th className="p-2">سالن</th>
+                    <th className="p-2">سالن و شماره صندلی</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1283,7 +1758,7 @@ export default function ExamPlanningClient() {
                         <td className="p-2">{c.professorName}</td>
                         <td className="p-2 text-center font-mono font-bold">{c.examDate}</td>
                         <td className="p-2 text-center font-mono">{slot.startTime} تا {slot.endTime}</td>
-                        <td className="p-2">{hall.name}</td>
+                        <td className="p-2">{hall.name} ({hall.startSeatNumber} تا {hall.endSeatNumber})</td>
                       </tr>
                     );
                   })}
