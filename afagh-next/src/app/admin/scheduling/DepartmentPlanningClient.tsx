@@ -12,8 +12,8 @@ export type WeekRecurrence = 'ALL' | 'EVEN' | 'ODD';
 export interface TimeSlot {
   id: number;
   label: string;
-  startTime: string; // e.g. "08:00"
-  endTime: string;   // e.g. "09:30"
+  startTime: string; // e.g. "07:30" or "08:00"
+  endTime: string;   // e.g. "09:00" or "09:30"
   isBreak: boolean;  // prayer/lunch or class
 }
 
@@ -157,8 +157,8 @@ const DAY_NAMES = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه'
 
 export const TIME_SLOT_PRESETS = {
   STANDARD_120: {
-    name: 'الگوی ۱۲۰ دقیقه‌ای (۲ ساعته استاندارد دانشگاه)',
-    description: 'کلاس‌های ۲ ساعته با ۳۰ دقیقه استراحت بین کلاس‌ها و استراحت ظهرگاهی نماز و ناهار',
+    name: 'الگوی ۱۲۰ دقیقه‌ای (۲ ساعته استاندارد)',
+    description: 'کلاس‌های ۲ ساعته استاندارد دانشگاه‌ها با ۳۰ دقیقه استراحت بین کلاس‌ها',
     slots: [
       { id: 1, label: '۰۸:۰۰ الی ۱۰:۰۰', startTime: '08:00', endTime: '10:00', isBreak: false },
       { id: 2, label: '۱۰:۰۰ الی ۱۲:۰۰', startTime: '10:00', endTime: '12:00', isBreak: false },
@@ -169,7 +169,7 @@ export const TIME_SLOT_PRESETS = {
     ],
   },
   STANDARD_90: {
-    name: 'الگوی ۹۰ دقیقه‌ای (۱٫۵ ساعته سراسری و دولتی)',
+    name: 'الگوی ۹۰ دقیقه‌ای (۱٫۵ ساعته سراسری)',
     description: 'کلاس‌های ۱٫۵ ساعته مناسب دروس ۳ واحدی (۲ جلسه ۹۰ دقیقه‌ای در هفته)',
     slots: [
       { id: 1, label: '۰۸:۰۰ الی ۰۹:۳۰', startTime: '08:00', endTime: '09:30', isBreak: false },
@@ -182,7 +182,7 @@ export const TIME_SLOT_PRESETS = {
     ],
   },
   STANDARD_60: {
-    name: 'الگوی ۶۰ دقیقه‌ای (۱ ساعته فشرده و کارگاهی)',
+    name: 'الگوی ۶۰ دقیقه‌ای (۱ ساعته کارگاهی/فشرده)',
     description: 'کلاس‌های ۱ ساعته مناسب کارگاه‌ها و جلسات رفع اشکال و تمرین',
     slots: [
       { id: 1, label: '۰۸:۰۰ الی ۰۹:۰۰', startTime: '08:00', endTime: '09:00', isBreak: false },
@@ -244,95 +244,45 @@ const INITIAL_PROFESSORS: ProfessorOption[] = [
 function createDefaultAvailabilities(): ProfessorAvailabilityMap {
   const map: ProfessorAvailabilityMap = {};
   
-  // Dr. Jamil Ahmadi (Sat, Mon, Sun)
-  map[1] = {
-    0: { 1: 'PREF', 2: 'PREF', 3: 'AVAIL', 4: 'PREF', 5: 'AVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    1: { 1: 'PREF', 2: 'PREF', 3: 'AVAIL', 4: 'AVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    2: { 1: 'PREF', 2: 'PREF', 3: 'AVAIL', 4: 'PREF', 5: 'PREF', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    3: { 1: 'UNAVAIL', 2: 'UNAVAIL', 3: 'UNAVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    4: { 1: 'AVAIL', 2: 'AVAIL', 3: 'UNAVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    5: { 1: 'UNAVAIL', 2: 'UNAVAIL', 3: 'UNAVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-  };
-
-  // Dr. Fatemeh Akbari (Sun, Tue, Wed)
-  map[2] = {
-    0: { 1: 'UNAVAIL', 2: 'UNAVAIL', 3: 'UNAVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    1: { 1: 'PREF', 2: 'PREF', 3: 'AVAIL', 4: 'PREF', 5: 'AVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    2: { 1: 'AVAIL', 2: 'AVAIL', 3: 'AVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    3: { 1: 'PREF', 2: 'PREF', 3: 'AVAIL', 4: 'PREF', 5: 'PREF', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    4: { 1: 'PREF', 2: 'PREF', 3: 'AVAIL', 4: 'AVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    5: { 1: 'UNAVAIL', 2: 'UNAVAIL', 3: 'UNAVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-  };
-
-  // Eng. Sohrab Kazemi (Wed, Thu, Mon afternoon)
-  map[3] = {
-    0: { 1: 'UNAVAIL', 2: 'UNAVAIL', 3: 'UNAVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    1: { 1: 'UNAVAIL', 2: 'UNAVAIL', 3: 'UNAVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    2: { 1: 'UNAVAIL', 2: 'AVAIL', 3: 'AVAIL', 4: 'PREF', 5: 'PREF', 6: 'AVAIL', 7: 'UNAVAIL' },
-    3: { 1: 'UNAVAIL', 2: 'UNAVAIL', 3: 'UNAVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    4: { 1: 'AVAIL', 2: 'PREF', 3: 'AVAIL', 4: 'PREF', 5: 'PREF', 6: 'PREF', 7: 'UNAVAIL' },
-    5: { 1: 'PREF', 2: 'PREF', 3: 'AVAIL', 4: 'PREF', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-  };
-
-  // Dr. Maryam Rezaei (Physics: Sat, Sun, Wed mornings)
-  map[4] = {
-    0: { 1: 'PREF', 2: 'PREF', 3: 'AVAIL', 4: 'AVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    1: { 1: 'PREF', 2: 'PREF', 3: 'AVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    2: { 1: 'UNAVAIL', 2: 'UNAVAIL', 3: 'UNAVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    3: { 1: 'AVAIL', 2: 'AVAIL', 3: 'AVAIL', 4: 'AVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    4: { 1: 'PREF', 2: 'PREF', 3: 'AVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    5: { 1: 'UNAVAIL', 2: 'UNAVAIL', 3: 'UNAVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-  };
-
-  // Dr. Mohammad Hosseini (General/Islamic: Sun, Tue)
-  map[5] = {
-    0: { 1: 'AVAIL', 2: 'AVAIL', 3: 'UNAVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    1: { 1: 'PREF', 2: 'PREF', 3: 'AVAIL', 4: 'PREF', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    2: { 1: 'UNAVAIL', 2: 'UNAVAIL', 3: 'UNAVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    3: { 1: 'PREF', 2: 'PREF', 3: 'AVAIL', 4: 'PREF', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    4: { 1: 'PREF', 2: 'PREF', 3: 'AVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    5: { 1: 'UNAVAIL', 2: 'UNAVAIL', 3: 'UNAVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-  };
-
-  // Dr. Reza Naseri (Food Tech: Sat, Mon, Wed)
-  map[6] = {
-    0: { 1: 'PREF', 2: 'PREF', 3: 'AVAIL', 4: 'PREF', 5: 'AVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    1: { 1: 'UNAVAIL', 2: 'UNAVAIL', 3: 'UNAVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    2: { 1: 'PREF', 2: 'PREF', 3: 'AVAIL', 4: 'PREF', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    3: { 1: 'UNAVAIL', 2: 'UNAVAIL', 3: 'UNAVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    4: { 1: 'PREF', 2: 'PREF', 3: 'AVAIL', 4: 'AVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-    5: { 1: 'UNAVAIL', 2: 'UNAVAIL', 3: 'UNAVAIL', 4: 'UNAVAIL', 5: 'UNAVAIL', 6: 'UNAVAIL', 7: 'UNAVAIL' },
-  };
+  for (let profId = 1; profId <= 6; profId++) {
+    map[profId] = {};
+    for (let d = 0; d < 6; d++) {
+      map[profId][d] = {};
+      for (let s = 1; s <= 12; s++) {
+        if (profId === 1) { // Dr. Ahmadi: Sat, Mon, Sun mornings
+          map[profId][d][s] = (d === 0 || d === 2 || (d === 1 && s <= 3)) ? 'PREF' : (d === 3 ? 'UNAVAIL' : 'AVAIL');
+        } else if (profId === 2) { // Dr. Akbari: Sun, Tue, Wed
+          map[profId][d][s] = (d === 1 || d === 3 || d === 4) ? 'PREF' : (d === 0 ? 'UNAVAIL' : 'AVAIL');
+        } else if (profId === 3) { // Eng. Kazemi: Wed, Thu, Mon afternoons
+          map[profId][d][s] = (d === 4 || d === 5 || (d === 2 && s >= 4)) ? 'PREF' : (d <= 1 ? 'UNAVAIL' : 'AVAIL');
+        } else if (profId === 4) { // Dr. Rezaei: Sat, Sun, Wed mornings
+          map[profId][d][s] = ((d === 0 || d === 1 || d === 4) && s <= 3) ? 'PREF' : (d === 2 ? 'UNAVAIL' : 'AVAIL');
+        } else {
+          map[profId][d][s] = (d % 2 === 1) ? 'PREF' : 'AVAIL';
+        }
+      }
+    }
+  }
 
   return map;
 }
 
-// Initial Demands with Week Recurrence (ALL, EVEN, ODD)
 const INITIAL_COURSE_DEMANDS: CourseDemand[] = [
-  // Computer Engineering - Term 1
   { id: 1, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '1112101', title: 'ریاضی عمومی ۱', units: 3, courseType: 'پایه', preferredProfId: 1, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 2, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/18' },
   { id: 2, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '1112103', title: 'مبانی برنامه‌نویسی', units: 4, courseType: 'پایه', preferredProfId: 2, requiredRoomType: 'LAB', capacity: 32, groupsCount: 2, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/22' },
   { id: 3, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '1112105', title: 'فیزیک عمومی ۱', units: 3, courseType: 'پایه', preferredProfId: 4, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 2, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/25' },
-  // 1-Credit Lab (Even / Odd alternating sessions in the same lab)
   { id: 4, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '1112106', title: 'آزمایشگاه فیزیک ۱ (هفته زوج)', units: 1, courseType: 'عملی', preferredProfId: 3, requiredRoomType: 'LAB', capacity: 25, groupsCount: 1, weekRecurrence: 'EVEN', sessionsCountPerWeek: 1, examDate: '1405/10/15' },
   { id: 5, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '1112106-B', title: 'آزمایشگاه فیزیک ۱ (هفته فرد)', units: 1, courseType: 'عملی', preferredProfId: 3, requiredRoomType: 'LAB', capacity: 25, groupsCount: 1, weekRecurrence: 'ODD', sessionsCountPerWeek: 1, examDate: '1405/10/15' },
-  
   { id: 6, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '1112107', title: 'زبان انگلیسی عمومی', units: 3, courseType: 'عمومی', preferredProfId: 5, requiredRoomType: 'THEORY', capacity: 40, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/28' },
   { id: 7, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '1112108', title: 'تربیت بدنی ۱', units: 2, courseType: 'عمومی', preferredProfId: 3, requiredRoomType: 'GYM', capacity: 40, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/14' },
   { id: 8, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '1112109', title: 'اندیشه اسلامی ۱', units: 2, courseType: 'عمومی', preferredProfId: 5, requiredRoomType: 'THEORY', capacity: 45, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/30' },
-
-  // Term 3
   { id: 9, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1404-3', cohortTitle: 'ورودی ۱۴۰۴ (ترم ۳)', code: '1112201', title: 'ساختمان داده‌ها', units: 3, courseType: 'اصلی', preferredProfId: 1, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/19' },
   { id: 10, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1404-3', cohortTitle: 'ورودی ۱۴۰۴ (ترم ۳)', code: '1112202', title: 'برنامه‌نویسی پیشرفته', units: 3, courseType: 'اصلی', preferredProfId: 2, requiredRoomType: 'LAB', capacity: 30, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/23' },
-  { id: 11, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1404-3', cohortTitle: 'ورودی ۱۴۰۴ (ترم ۳)', code: '1112203', title: 'ریاضی مهندسی (جلسه حل تمرین هفته فرد)', units: 3, courseType: 'پایه', preferredProfId: 1, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 1, weekRecurrence: 'ODD', sessionsCountPerWeek: 1, examDate: '1405/10/26' },
+  { id: 11, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1404-3', cohortTitle: 'ورودی ۱۴۰۴ (ترم ۳)', code: '1112203', title: 'ریاضی مهندسی (حل تمرین هفته فرد)', units: 3, courseType: 'پایه', preferredProfId: 1, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 1, weekRecurrence: 'ODD', sessionsCountPerWeek: 1, examDate: '1405/10/26' },
   { id: 12, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1404-3', cohortTitle: 'ورودی ۱۴۰۴ (ترم ۳)', code: '1112204', title: 'مدار منطقی (کارگاه هفته زوج)', units: 3, courseType: 'اصلی', preferredProfId: 4, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 1, weekRecurrence: 'EVEN', sessionsCountPerWeek: 1, examDate: '1405/10/29' },
-
-  // Term 5
   { id: 13, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1403-5', cohortTitle: 'ورودی ۱۴۰۳ (ترم ۵)', code: '1112301', title: 'طراحی الگوریتم‌ها', units: 3, courseType: 'تخصصی', preferredProfId: 2, requiredRoomType: 'THEORY', capacity: 30, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/20' },
   { id: 14, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1403-5', cohortTitle: 'ورودی ۱۴۰۳ (ترم ۵)', code: '1112302', title: 'پایگاه داده‌ها', units: 3, courseType: 'تخصصی', preferredProfId: 1, requiredRoomType: 'LAB', capacity: 30, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/24' },
   { id: 15, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1403-5', cohortTitle: 'ورودی ۱۴۰۳ (ترم ۵)', code: '1112303', title: 'سیستم‌های عامل', units: 3, courseType: 'تخصصی', preferredProfId: 3, requiredRoomType: 'THEORY', capacity: 30, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/27' },
-
-  // Food Technology
   { id: 16, programId: 3, programTitle: 'مهندسی صنایع غذایی', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '3311101', title: 'ریاضی عمومی صنایع غذایی', units: 3, courseType: 'پایه', preferredProfId: 1, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/18' },
   { id: 17, programId: 3, programTitle: 'مهندسی صنایع غذایی', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '3311102', title: 'شیمی مواد غذایی (آزمایشگاه هفته زوج)', units: 3, courseType: 'پایه', preferredProfId: 6, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 1, weekRecurrence: 'EVEN', sessionsCountPerWeek: 1, examDate: '1405/10/21' },
 ];
@@ -378,8 +328,8 @@ function solveDynamicScenarios(
   demands.forEach(d => {
     for (let g = 1; g <= d.groupsCount; g++) {
       let prof = getProf(d.preferredProfId);
-      if (g === 2 && d.code === '1112101') prof = getProf(3); // Sohrab Kazemi
-      if (g === 2 && d.code === '1112103') prof = getProf(1); // Jamil Ahmadi
+      if (g === 2 && d.code === '1112101') prof = getProf(3);
+      if (g === 2 && d.code === '1112103') prof = getProf(1);
 
       flattenedList.push({
         demand: d,
@@ -390,11 +340,9 @@ function solveDynamicScenarios(
     }
   });
 
-  // -------------------------------------------------------------
-  // 1. COMPACT SCENARIO (2-3 DAYS CLUSTERED)
-  // -------------------------------------------------------------
+  // 1. COMPACT SCENARIO
   const compactOfferings: DepartmentOffering[] = [];
-  const compactDays = [0, 1, 2]; // شنبه، یکشنبه، دوشنبه
+  const compactDays = [0, 1, 2];
   const profTimeOccupiedCompact: { [profId: number]: Set<string> } = {};
 
   flattenedList.forEach((item, index) => {
@@ -406,7 +354,6 @@ function solveDynamicScenarios(
 
     for (const d of compactDays) {
       for (const s of teachingSlots) {
-        // Even / Odd weeks don't collide if they have different weekType!
         const timeKey = `${d}-${s.id}-${item.demand.weekRecurrence === 'ALL' ? 'ALL' : item.demand.weekRecurrence}`;
         const anyWeekKey = `${d}-${s.id}-ALL`;
 
@@ -418,9 +365,7 @@ function solveDynamicScenarios(
       }
     }
 
-    const rec = item.demand.weekRecurrence;
-    profTimeOccupiedCompact[profId].add(`${assignedDay}-${assignedSlot.id}-${rec}`);
-
+    profTimeOccupiedCompact[profId].add(`${assignedDay}-${assignedSlot.id}-${item.demand.weekRecurrence}`);
     const room = getFallbackRoom(item.demand.requiredRoomType, index);
 
     compactOfferings.push({
@@ -461,9 +406,7 @@ function solveDynamicScenarios(
     });
   });
 
-  // -------------------------------------------------------------
-  // 2. BALANCED SCENARIO (5 DAYS SAT-WED)
-  // -------------------------------------------------------------
+  // 2. BALANCED SCENARIO
   const balancedOfferings: DepartmentOffering[] = [];
   const balancedDays = [0, 1, 2, 3, 4];
   const profTimeOccupiedBalanced: { [profId: number]: Set<string> } = {};
@@ -488,7 +431,6 @@ function solveDynamicScenarios(
     }
 
     profTimeOccupiedBalanced[profId].add(`${assignedDay}-${assignedSlot.id}-${item.demand.weekRecurrence}`);
-
     const room = getFallbackRoom(item.demand.requiredRoomType, (index + 2));
 
     balancedOfferings.push({
@@ -529,9 +471,7 @@ function solveDynamicScenarios(
     });
   });
 
-  // -------------------------------------------------------------
   // 3. PROFESSOR PREFERENCE SCENARIO
-  // -------------------------------------------------------------
   const profPrefOfferings: DepartmentOffering[] = [];
   const profTimeOccupiedPref: { [profId: number]: Set<string> } = {};
 
@@ -574,7 +514,6 @@ function solveDynamicScenarios(
     }
 
     profTimeOccupiedPref[profId].add(`${bestDay}-${bestSlot.id}-${item.demand.weekRecurrence}`);
-
     const room = getFallbackRoom(item.demand.requiredRoomType, (index * 3));
 
     profPrefOfferings.push({
@@ -690,7 +629,7 @@ export default function DepartmentPlanningClient() {
   // Timetable View Mode: ALL (تمام جلسات), EVEN (هفته زوج), ODD (هفته فرد)
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<WeekRecurrence | 'ALL_VIEW'>('ALL_VIEW');
 
-  // Main Tabs: SCENARIOS | PROFESSOR_SCHEDULE | BELL_SCHEDULE | INPUTS | APPROVED | ROOMS_MATRIX
+  // Main Tabs
   const [activeMainTab, setActiveMainTab] = useState<'SCENARIOS' | 'PROFESSOR_SCHEDULE' | 'INPUTS' | 'APPROVED' | 'ROOMS_MATRIX'>('SCENARIOS');
   const [inputSubTab, setInputSubTab] = useState<'BELL_CONFIG' | 'PROFESSORS' | 'CLASSROOMS' | 'DEMANDS'>('BELL_CONFIG');
 
@@ -713,8 +652,11 @@ export default function DepartmentPlanningClient() {
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'warning' } | null>(null);
   const [isNewRoomModalOpen, setIsNewRoomModalOpen] = useState(false);
   const [newRoomForm, setNewRoomForm] = useState({ name: '', buildingName: 'ساختمان آموزش', capacity: 35, roomType: 'THEORY' as const, equipment: 'ویدئوپروژکتور، تخته وایت‌برد' });
+  
+  // Custom Time Slot Add Modal
   const [isNewSlotModalOpen, setIsNewSlotModalOpen] = useState(false);
-  const [newSlotForm, setNewSlotForm] = useState({ label: '', startTime: '08:00', endTime: '09:30', isBreak: false });
+  const [slotPositionChoice, setSlotPositionChoice] = useState<'START' | 'END' | 'AUTO'>('END');
+  const [newSlotForm, setNewSlotForm] = useState({ label: '', startTime: '17:30', endTime: '19:00', isBreak: false });
 
   // Initial solve
   useEffect(() => {
@@ -734,7 +676,7 @@ export default function DepartmentPlanningClient() {
     const slotsToUse = overrideSlots || timeSlots;
     const fresh = solveDynamicScenarios(slotsToUse, classrooms, professors, availabilities, courseDemands);
     setScenarios(fresh);
-    showToast('⚡ الگوریتم چیدمان با موفقیت مجدداً اجرا و ۳ سناریو بر اساس ساعات کلاسی و جلسات زوج/فرد بازتولید شد.', 'success');
+    showToast('⚡ الگوریتم چیدمان با موفقیت بازتولید شد.', 'success');
   };
 
   const handleApplyPresetSlots = (presetKey: 'STANDARD_120' | 'STANDARD_90' | 'STANDARD_60') => {
@@ -763,6 +705,92 @@ export default function DepartmentPlanningClient() {
     });
   };
 
+  // ==========================================
+  // TIME SLOTS MANAGER METHODS (ADD AT START/END, DELETE, EDIT, SORT)
+  // ==========================================
+
+  // Quick Open Modal with Pre-filled position
+  const handleOpenAddSlotModal = (position: 'START' | 'END' | 'AUTO') => {
+    setSlotPositionChoice(position);
+    if (position === 'START') {
+      const firstSlot = timeSlots[0];
+      const startHour = firstSlot ? firstSlot.startTime : '08:00';
+      setNewSlotForm({
+        label: '۰۷:۰۰ الی ۰۸:۰۰ (شیفت صبح زود)',
+        startTime: '07:00',
+        endTime: startHour,
+        isBreak: false,
+      });
+    } else if (position === 'END') {
+      const lastSlot = timeSlots[timeSlots.length - 1];
+      const endHour = lastSlot ? lastSlot.endTime : '17:30';
+      setNewSlotForm({
+        label: `${endHour} الی ۱۹:۳۰ (شیفت عصر/شب)`,
+        startTime: endHour,
+        endTime: '19:30',
+        isBreak: false,
+      });
+    } else {
+      setNewSlotForm({
+        label: 'بازه زمانی جدید',
+        startTime: '13:30',
+        endTime: '15:00',
+        isBreak: false,
+      });
+    }
+    setIsNewSlotModalOpen(true);
+  };
+
+  const handleSaveNewSlot = () => {
+    if (!newSlotForm.label.trim()) return;
+    const newSlot: TimeSlot = {
+      id: Date.now(),
+      label: newSlotForm.label,
+      startTime: newSlotForm.startTime,
+      endTime: newSlotForm.endTime,
+      isBreak: newSlotForm.isBreak,
+    };
+
+    let updatedSlots: TimeSlot[] = [];
+    if (slotPositionChoice === 'START') {
+      updatedSlots = [newSlot, ...timeSlots];
+    } else if (slotPositionChoice === 'END') {
+      updatedSlots = [...timeSlots, newSlot];
+    } else {
+      // Auto sort by startTime
+      updatedSlots = [...timeSlots, newSlot].sort((a, b) => a.startTime.localeCompare(b.startTime));
+    }
+
+    setTimeSlots(updatedSlots);
+    setIsNewSlotModalOpen(false);
+    handleTriggerSolver(updatedSlots);
+    showToast(`بازه زمانی «${newSlot.label}» با موفقیت افزوده شد.`, 'success');
+  };
+
+  const handleDeleteSlot = (id: number) => {
+    if (timeSlots.length <= 2) {
+      showToast('حداقل ۲ بازه زمانی برای برنامه‌ریزی دانشگاه لازم است.', 'warning');
+      return;
+    }
+    const updated = timeSlots.filter(s => s.id !== id);
+    setTimeSlots(updated);
+    handleTriggerSolver(updated);
+    showToast('بازه زمانی با موفقیت حذف شد.', 'info');
+  };
+
+  const handleUpdateSlotInPlace = (id: number, field: keyof TimeSlot, value: any) => {
+    const updated = timeSlots.map(s => s.id === id ? { ...s, [field]: value } : s);
+    setTimeSlots(updated);
+  };
+
+  const handleSortSlotsChronologically = () => {
+    const sorted = [...timeSlots].sort((a, b) => a.startTime.localeCompare(b.startTime));
+    setTimeSlots(sorted);
+    handleTriggerSolver(sorted);
+    showToast('بازه‌های زمانی بر اساس ساعت شروع مرتب شدند.', 'success');
+  };
+
+  // Computed state
   const currentScenario = useMemo(() => {
     return scenarios.find(s => s.id === activeScenarioId) || scenarios[0];
   }, [scenarios, activeScenarioId]);
@@ -775,7 +803,6 @@ export default function DepartmentPlanningClient() {
     return INITIAL_TERMS.find(t => t.id === selectedTermId) || INITIAL_TERMS[0];
   }, [selectedTermId]);
 
-  // Filter offerings by Program, Cohort, and WeekRecurrence (ALL / EVEN / ODD)
   const displayedScenarioOfferings = useMemo(() => {
     if (!currentScenario) return [];
     let list = currentScenario.offerings;
@@ -872,9 +899,7 @@ export default function DepartmentPlanningClient() {
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* GLOBAL CONTEXT BAR: TERM, MAJOR, COHORT, WEEK VIEW TOGGLE */}
-        {/* ========================================================================= */}
+        {/* Global Context Bar */}
         <div className="bg-white/10 backdrop-blur-md p-3.5 rounded-xl border border-white/15 grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
           <div>
             <label className="text-indigo-200 font-bold block mb-1">۱. نیمسال تحصیلی:</label>
@@ -916,7 +941,6 @@ export default function DepartmentPlanningClient() {
             </select>
           </div>
 
-          {/* Week Alternation Mode Switcher */}
           <div>
             <label className="text-amber-300 font-bold block mb-1">۴. نمای فیلتر هفته (زوج / فرد):</label>
             <div className="grid grid-cols-3 gap-1 bg-slate-900/90 p-1 rounded-lg border border-indigo-400/50">
@@ -988,9 +1012,9 @@ export default function DepartmentPlanningClient() {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <span>⚙️ مرحله ۳: تنظیمات دانشگاه (تایم‌های کلاسی، حضور اساتید، کلاس‌ها)</span>
+          <span>⏰ مرحله ۳: تنظیمات دانشگاه (تایم‌های کلاسی، حضور اساتید، کلاس‌ها)</span>
           <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-indigo-100 text-indigo-900 font-bold">
-            پیکربندی
+            پیکربندی زمان
           </span>
         </button>
 
@@ -1029,13 +1053,12 @@ export default function DepartmentPlanningClient() {
       {activeMainTab === 'SCENARIOS' && (
         <div className="space-y-5">
           
-          {/* Top Solver Trigger Callout */}
           <div className="bg-gradient-to-r from-amber-500/15 via-indigo-50 to-emerald-50 border border-amber-300/80 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className="text-xl">💡</span>
                 <h2 className="font-extrabold text-slate-900 text-sm sm:text-base">
-                  برنامه‌ریزی رشته «{currentProgram.title}» — زنگ‌های کلاسی: {TIME_SLOT_PRESETS[activeSlotPresetKey].name}
+                  برنامه‌ریزی رشته «{currentProgram.title}» — زنگ‌های کلاسی فعال ({faNum(teachingSlots.length)} بازه در روز)
                 </h2>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
@@ -1048,7 +1071,7 @@ export default function DepartmentPlanningClient() {
                 onClick={() => { setActiveMainTab('INPUTS'); setInputSubTab('BELL_CONFIG'); }}
                 className="px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-800 text-xs font-bold hover:bg-slate-50 transition shadow-sm"
               >
-                ⏰ تغییر تایم‌های کلاسی دانشگاه
+                ⏰ افزودن یا تغییر تایم‌های کلاسی
               </button>
               <button
                 onClick={() => handleTriggerSolver()}
@@ -1144,7 +1167,7 @@ export default function DepartmentPlanningClient() {
                   </h3>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  بر اساس اسلات‌های مصوب: {TIME_SLOT_PRESETS[activeSlotPresetKey].slots.length} بازه زمانی در روز
+                  تعداد بازه‌های زمانی فعال: {faNum(teachingSlots.length)} اسلات در روز
                 </p>
               </div>
 
@@ -1439,7 +1462,7 @@ export default function DepartmentPlanningClient() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 3: UNIVERSITY CONFIG (BELL SCHEDULE, PROFESSORS, CLASSROOMS, DEMANDS) */}
+      {/* TAB 3: UNIVERSITY CONFIG & CUSTOM TIME SLOT MANAGER */}
       {/* ========================================================================= */}
       {activeMainTab === 'INPUTS' && (
         <div className="space-y-5">
@@ -1450,7 +1473,7 @@ export default function DepartmentPlanningClient() {
                 inputSubTab === 'BELL_CONFIG' ? 'bg-indigo-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              ⏰ ۱. تنظیم بازه‌های زمانی و زنگ‌های کلاسی (Bell Schedule)
+              ⏰ ۱. تنظیم بازه‌های زمانی و افزودن تایم کلاس (Bell Schedule)
             </button>
             <button
               onClick={() => setInputSubTab('PROFESSORS')}
@@ -1478,19 +1501,39 @@ export default function DepartmentPlanningClient() {
             </button>
           </div>
 
-          {/* SUBTAB: BELL SCHEDULE CONFIGURATOR */}
+          {/* SUBTAB: ADVANCED TIME SLOTS & BELL SCHEDULE MANAGER */}
           {inputSubTab === 'BELL_CONFIG' && (
             <div className="space-y-4">
               
               {/* Presets Cards */}
               <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
-                <div>
-                  <h3 className="font-extrabold text-slate-900 text-base">
-                    ⏰ الگوهای استاندارد ساعات کلاسی دانشگاه (Bell Schedule Presets)
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    با انتخاب هر الگو، ساعات شروع و پایان اسلات‌های درسی در کل سیستم و موتور چیدمان تغییر می‌کند.
-                  </p>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 text-base">
+                      ⏰ الگوهای پیش‌فرض ساعات کلاسی دانشگاه (Bell Schedule Presets)
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      انتخاب سریع الگوی ۱۲۰ دقیقه‌ای، ۹۰ دقیقه‌ای یا ۶۰ دقیقه‌ای
+                    </p>
+                  </div>
+
+                  {/* Quick Shortcut Buttons to Add at Start/End */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => handleOpenAddSlotModal('START')}
+                      className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs shadow flex items-center gap-1 transition"
+                      title="افزودن کلاس صبح زود قبل از شروع ساعت ۸"
+                    >
+                      <span>🌅 + افزودن تایم به اول روز (صبح زود)</span>
+                    </button>
+                    <button
+                      onClick={() => handleOpenAddSlotModal('END')}
+                      className="px-3 py-1.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-extrabold text-xs shadow flex items-center gap-1 transition"
+                      title="افزودن کلاس عصر/شب بعد از ساعت ۱۷:۳۰"
+                    >
+                      <span>🌙 + افزودن تایم به آخر روز (شیفت عصر/شب)</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1525,46 +1568,112 @@ export default function DepartmentPlanningClient() {
                 </div>
               </div>
 
-              {/* Current Active Slots List & Custom Editor */}
+              {/* Interactive In-place Time Slot Editor Cards */}
               <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
                   <div>
                     <h3 className="font-extrabold text-slate-900 text-base">
-                      اسلات‌های زمانی فعال روزانه ({faNum(timeSlots.length)} بازه)
+                      مدیریت و ویرایش مستقیم اسلات‌های زمانی فعال روزانه ({faNum(timeSlots.length)} بازه)
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      امکان ویرایش مستقیم ساعت شروع، ساعت پایان و افزودن بازه دلخواه
+                      شما می‌توانید ساعت شروع، پایان و عنوان هر بازه را مستقیماً ویرایش کنید یا اسلات جدید اضافه/حذف فرمایید.
                     </p>
                   </div>
 
-                  <button
-                    onClick={() => setIsNewSlotModalOpen(true)}
-                    className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs shadow flex items-center gap-1.5"
-                  >
-                    <span>➕ افزودن بازه زمانی جدید</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleSortSlotsChronologically}
+                      className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-bold transition flex items-center gap-1"
+                    >
+                      <span>⏱️ مرتب‌سازی زمانی</span>
+                    </button>
+                    <button
+                      onClick={() => handleOpenAddSlotModal('AUTO')}
+                      className="px-4 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs shadow flex items-center gap-1.5"
+                    >
+                      <span>➕ افزودن بازه دلخواه</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* Slots Grid with In-place Edit and Delete */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {timeSlots.map((slot, idx) => (
-                    <div key={slot.id} className={`p-3.5 rounded-xl border ${
-                      slot.isBreak ? 'bg-amber-50/60 border-amber-300' : 'bg-slate-50 border-slate-200'
-                    }`}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-extrabold text-xs text-slate-900">
-                          بازه {faNum(idx + 1)}: {slot.label}
-                        </span>
-                        {slot.isBreak && <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500 text-white font-bold">نماز و استراحت</span>}
-                      </div>
-                      <div className="text-xs text-slate-600 font-mono mt-2 flex items-center justify-between">
-                        <span>از {faNum(slot.startTime)}</span>
-                        <span>تا {faNum(slot.endTime)}</span>
+                    <div
+                      key={slot.id}
+                      className={`p-4 rounded-2xl border-2 transition-all flex flex-col justify-between ${
+                        slot.isBreak ? 'bg-amber-50/70 border-amber-300' : 'bg-slate-50/80 border-slate-200 hover:border-indigo-400'
+                      }`}
+                    >
+                      <div>
+                        {/* Slot Header with Tag and Delete Button */}
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-extrabold text-xs text-slate-900">
+                            بازه {faNum(idx + 1)} {idx === 0 ? '(شروع صبح)' : idx === timeSlots.length - 1 ? '(پایان روز/عصر)' : ''}
+                          </span>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleUpdateSlotInPlace(slot.id, 'isBreak', !slot.isBreak)}
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition ${
+                                slot.isBreak ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                              }`}
+                            >
+                              {slot.isBreak ? 'استراحت / نماز' : 'کلاس درسی'}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSlot(slot.id)}
+                              className="text-slate-400 hover:text-rose-600 p-1 font-bold text-xs"
+                              title="حذف این بازه"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Label Input */}
+                        <div className="mb-2">
+                          <label className="text-[10px] text-slate-500 block mb-0.5">عنوان بازه زمانی:</label>
+                          <input
+                            type="text"
+                            value={slot.label}
+                            onChange={e => handleUpdateSlotInPlace(slot.id, 'label', e.target.value)}
+                            className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-900"
+                          />
+                        </div>
+
+                        {/* Start & End Times Inputs */}
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <label className="text-[10px] text-slate-500 block mb-0.5">ساعت شروع:</label>
+                            <input
+                              type="text"
+                              value={slot.startTime}
+                              onChange={e => handleUpdateSlotInPlace(slot.id, 'startTime', e.target.value)}
+                              className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 font-mono text-center font-bold text-indigo-900"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-500 block mb-0.5">ساعت پایان:</label>
+                            <input
+                              type="text"
+                              value={slot.endTime}
+                              onChange={e => handleUpdateSlotInPlace(slot.id, 'endTime', e.target.value)}
+                              className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 font-mono text-center font-bold text-indigo-900"
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                <div className="pt-3 border-t border-slate-200 flex justify-end">
+                {/* Bottom Trigger Solver */}
+                <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <span className="text-xs text-slate-500">
+                    با زدن دکمه زیر، ماتریس حضور اساتید و الگوریتم سناریوها با بازه‌های زمانی جدید منطبق می‌شوند.
+                  </span>
+
                   <button
                     onClick={() => {
                       handleTriggerSolver();
@@ -1572,7 +1681,7 @@ export default function DepartmentPlanningClient() {
                     }}
                     className="px-5 py-2.5 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs shadow flex items-center gap-2"
                   >
-                    <span>💾 ثبت تایم‌های جدید و بازتولید سناریوها</span>
+                    <span>💾 ذخیره تنظیمات تایم‌ها و بازتولید سناریوها</span>
                   </button>
                 </div>
               </div>
@@ -1702,7 +1811,7 @@ export default function DepartmentPlanningClient() {
             </div>
           )}
 
-          {/* SUBTAB: DEMANDS WITH EVEN/ODD WEEKS */}
+          {/* SUBTAB: DEMANDS */}
           {inputSubTab === 'DEMANDS' && (
             <div className="space-y-4">
               <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex items-center justify-between">
@@ -1721,8 +1830,8 @@ export default function DepartmentPlanningClient() {
                       <th className="p-3 border border-slate-800">عنوان درس</th>
                       <th className="p-3 border border-slate-800">رشته</th>
                       <th className="p-3 border border-slate-800">ورودی/ترم</th>
-                      <th className="p-3 border border-slate-800">تواتر برگزاری جلسه</th>
-                      <th className="p-3 border border-slate-800">استاد پیشنهادی</th>
+                      <th className="p-3 border border-slate-800">تواتر هفته</th>
+                      <th className="p-3 border border-slate-800">استاد</th>
                       <th className="p-3 border border-slate-800">نوع فضا</th>
                     </tr>
                   </thead>
@@ -1735,16 +1844,16 @@ export default function DepartmentPlanningClient() {
                         <td className="p-3 border border-slate-200 text-center">{c.cohortTitle}</td>
                         <td className="p-3 border border-slate-200 text-center">
                           {c.weekRecurrence === 'ALL' ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-900">ثابت (هر هفته)</span>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-900">هر هفته</span>
                           ) : c.weekRecurrence === 'EVEN' ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-100 text-cyan-900">هفته‌های زوج 🔷</span>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-100 text-cyan-900">هفته زوج 🔷</span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900">هفته‌های فرد 🔶</span>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900">هفته فرد 🔶</span>
                           )}
                         </td>
                         <td className="p-3 border border-slate-200 font-bold">{professors.find(p => p.id === c.preferredProfId)?.name}</td>
                         <td className="p-3 border border-slate-200 text-center font-bold text-slate-600">
-                          {c.requiredRoomType === 'LAB' ? '🧪 آزمایشگاه/سایت' : c.requiredRoomType === 'GYM' ? '⚽ سالن ورزشی' : '📖 نظری'}
+                          {c.requiredRoomType === 'LAB' ? '🧪 آزمایشگاه' : c.requiredRoomType === 'GYM' ? '⚽ سالن' : '📖 نظری'}
                         </td>
                       </tr>
                     ))}
@@ -1891,25 +2000,58 @@ export default function DepartmentPlanningClient() {
         </div>
       )}
 
-      {/* Modal: Add New Slot */}
+      {/* ========================================================================= */}
+      {/* MODAL: ADD NEW TIME SLOT (AT START, END, OR CUSTOM) */}
+      {/* ========================================================================= */}
       {isNewSlotModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="p-4 bg-indigo-950 text-white flex items-center justify-between">
-              <h3 className="font-extrabold text-sm sm:text-base">➕ افزودن بازه زمانی جدید</h3>
+              <h3 className="font-extrabold text-sm sm:text-base">
+                ➕ {slotPositionChoice === 'START' ? '🌅 افزودن تایم کلاس در ابتدای روز (صبح زود)' : slotPositionChoice === 'END' ? '🌙 افزودن تایم کلاس در انتهای روز (شیفت عصر/شب)' : 'افزودن بازه زمانی جدید'}
+              </h3>
               <button onClick={() => setIsNewSlotModalOpen(false)} className="text-white/60 hover:text-white">✕</button>
             </div>
+
             <div className="p-4 space-y-3 text-xs">
               <div>
-                <label className="font-bold text-slate-700 block mb-1">عنوان بازه:</label>
+                <label className="font-bold text-slate-700 block mb-1">موقعیت قرارگیری در برنامه:</label>
+                <div className="grid grid-cols-3 gap-1.5 bg-slate-100 p-1 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setSlotPositionChoice('START')}
+                    className={`py-1.5 rounded text-[11px] font-bold transition ${slotPositionChoice === 'START' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-600'}`}
+                  >
+                    🌅 اول روز
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSlotPositionChoice('END')}
+                    className={`py-1.5 rounded text-[11px] font-bold transition ${slotPositionChoice === 'END' ? 'bg-indigo-900 text-white shadow-sm' : 'text-slate-600'}`}
+                  >
+                    🌙 آخر روز
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSlotPositionChoice('AUTO')}
+                    className={`py-1.5 rounded text-[11px] font-bold transition ${slotPositionChoice === 'AUTO' ? 'bg-indigo-900 text-white shadow-sm' : 'text-slate-600'}`}
+                  >
+                    ⏱️ ترتیب ساعتی
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">عنوان بازه زمانی:</label>
                 <input
                   type="text"
-                  placeholder="مثال: ۰۸:۰۰ الی ۰۹:۳۰"
+                  placeholder="مثال: ۰۷:۰۰ الی ۰۸:۰۰ یا ۱۸:۰۰ الی ۱۹:۳۰"
                   value={newSlotForm.label}
                   onChange={e => setNewSlotForm({ ...newSlotForm, label: e.target.value })}
                   className="w-full border border-slate-300 px-3 py-2 rounded-lg font-bold"
                 />
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">ساعت شروع:</label>
@@ -1917,7 +2059,7 @@ export default function DepartmentPlanningClient() {
                     type="text"
                     value={newSlotForm.startTime}
                     onChange={e => setNewSlotForm({ ...newSlotForm, startTime: e.target.value })}
-                    className="w-full border border-slate-300 px-3 py-2 rounded-lg font-mono text-center font-bold"
+                    className="w-full border border-slate-300 px-3 py-2 rounded-lg font-mono text-center font-bold text-indigo-900"
                   />
                 </div>
                 <div>
@@ -1926,32 +2068,34 @@ export default function DepartmentPlanningClient() {
                     type="text"
                     value={newSlotForm.endTime}
                     onChange={e => setNewSlotForm({ ...newSlotForm, endTime: e.target.value })}
-                    className="w-full border border-slate-300 px-3 py-2 rounded-lg font-mono text-center font-bold"
+                    className="w-full border border-slate-300 px-3 py-2 rounded-lg font-mono text-center font-bold text-indigo-900"
                   />
                 </div>
               </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="isBreakCheck"
+                  checked={newSlotForm.isBreak}
+                  onChange={e => setNewSlotForm({ ...newSlotForm, isBreak: e.target.checked })}
+                  className="rounded border-slate-300 text-indigo-900 focus:ring-indigo-500 w-4 h-4"
+                />
+                <label htmlFor="isBreakCheck" className="text-slate-700 font-bold">
+                  این بازه برای استراحت / نماز / ناهار است (کلاس تشکیل نمی‌شود)
+                </label>
+              </div>
             </div>
+
             <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
-              <button onClick={() => setIsNewSlotModalOpen(false)} className="px-4 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-bold text-xs">انصراف</button>
+              <button onClick={() => setIsNewSlotModalOpen(false)} className="px-4 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-bold text-xs">
+                انصراف
+              </button>
               <button
-                onClick={() => {
-                  if (!newSlotForm.label.trim()) return;
-                  const newSlot: TimeSlot = {
-                    id: Date.now(),
-                    label: newSlotForm.label,
-                    startTime: newSlotForm.startTime,
-                    endTime: newSlotForm.endTime,
-                    isBreak: newSlotForm.isBreak,
-                  };
-                  const updatedSlots = [...timeSlots, newSlot];
-                  setTimeSlots(updatedSlots);
-                  setIsNewSlotModalOpen(false);
-                  handleTriggerSolver(updatedSlots);
-                  showToast(`بازه زمانی «${newSlot.label}» با موفقیت افزوده شد.`, 'success');
-                }}
+                onClick={handleSaveNewSlot}
                 className="px-5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs shadow"
               >
-                ذخیره بازه
+                ذخیره و اعمال بازه
               </button>
             </div>
           </div>
