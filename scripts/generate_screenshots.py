@@ -23,7 +23,7 @@ def draw_header_bar(draw, title, subtitle, bg_color=(20, 28, 58), w=1200):
     draw.text((w - 40, 56), fa(subtitle), fill=(180, 200, 255), font=get_font(13), anchor="ra")
     draw.rectangle([(0, 86), (w, 90)], fill=(245, 158, 11)) # Amber accent
 
-def generate_screenshots():
+def generate_all_screenshots():
     os.makedirs("docs/images", exist_ok=True)
     
     # -------------------------------------------------------------
@@ -33,7 +33,6 @@ def generate_screenshots():
     draw = ImageDraw.Draw(img)
     draw_header_bar(draw, "داشبورد مدیریت زنده و کارتابل گردش کار (Real-time Ops & BPM)", "پایش لحظه‌ای پرونده‌ها، ضرب‌الاجل‌های SLA و گلوگاه‌های اداری")
     
-    # Summary KPI Cards
     kpis = [
         ("کل درخواست‌ها", "۱۴۲ پرونده", (79, 70, 229)),
         ("در انتظار بررسی", "۲۸ مورد", (217, 119, 6)),
@@ -48,13 +47,11 @@ def generate_screenshots():
         draw.text((x1 - 15, 122), fa(title), fill=(100, 116, 139), font=get_font(11), anchor="ra")
         draw.text((x1 - 15, 146), fa(val), fill=col, font=get_font(18, True), anchor="ra")
 
-    # Urgent cases alert box
     draw.rounded_rectangle([(40, 200), (1160, 310)], radius=14, fill=(254, 242, 242), outline=(252, 165, 165), width=2)
     draw.text((1140, 215), fa("🚨 پایش زنده پرونده‌های فوری و در آستانه نقض SLA (Urgent Operations Monitor)"), fill=(153, 27, 27), font=get_font(14, True), anchor="ra")
     draw.text((1140, 245), fa("• کد REQ-1405-8821: تطبیق واحد - مدیر گروه مهندسی کامپیوتر (تنها ۲.۵ ساعت باقی‌مانده)"), fill=(185, 28, 28), font=get_font(12), anchor="ra")
     draw.text((1140, 275), fa("• کد REQ-1405-3104: دفاع پایان‌نامه - تحصیلات تکمیلی (انقضای مهلت - ارجاع خودکار سیستمی به معاونت)"), fill=(185, 28, 28), font=get_font(12), anchor="ra")
 
-    # Inbox Table Mockup
     draw.rounded_rectangle([(40, 330), (1160, 620)], radius=14, fill=(255, 255, 255), outline=(203, 213, 225), width=2)
     draw.rectangle([(40, 330), (1160, 375)], fill=(241, 245, 249))
     headers = [("کد رهگیری", 180), ("نام دانشجو", 380), ("عنوان خدمت", 600), ("مرحله فعلی", 820), ("وضعیت SLA", 980), ("اقدام", 1140)]
@@ -87,7 +84,6 @@ def generate_screenshots():
     draw2 = ImageDraw.Draw(img2)
     draw_header_bar(draw2, "میز خدمات الکترونیک و درخواست‌های دانشجو", "ثبت فرم‌های پویا، پیگیری تایم‌لاین گردش کار و صدور سند رسمی")
 
-    # Request Card (Certificate of Enrollment)
     draw2.rounded_rectangle([(40, 110), (580, 620)], radius=14, fill=(255, 255, 255), outline=(203, 213, 225), width=2)
     draw2.text((560, 130), fa("فرم درخواست گواهی اشتغال به تحصیل"), fill=(30, 41, 59), font=get_font(15, True), anchor="ra")
     draw2.text((560, 160), fa("سازمان / ارگان مقصد:"), fill=(100, 116, 139), font=get_font(11), anchor="ra")
@@ -106,7 +102,6 @@ def generate_screenshots():
     draw2.rounded_rectangle([(60, 460), (560, 510)], radius=10, fill=(16, 185, 129))
     draw2.text((310, 475), fa("📜 صدور آنی گواهی با بارکد امنیتی و امضا"), fill=(255, 255, 255), font=get_font(13, True), anchor="mm")
 
-    # Official Certificate Document Preview
     draw2.rounded_rectangle([(620, 110), (1160, 620)], radius=14, fill=(255, 255, 255), outline=(15, 23, 42), width=3)
     draw2.text((890, 135), fa("جمهوری اسلامی ایران - وزارت علوم، تحقیقات و فناوری"), fill=(71, 85, 105), font=get_font(10), anchor="mm")
     draw2.text((890, 160), fa("دانشگاه جامع آفاق - معاونت آموزشی"), fill=(15, 23, 42), font=get_font(14, True), anchor="mm")
@@ -118,7 +113,6 @@ def generate_screenshots():
     draw2.text((1130, 290), fa("پیوسته رشته مهندسی کامپیوتر در نیمسال اول ۱۴۰۵-۱۴۰۶ اشتغال به تحصیل"), fill=(30, 41, 59), font=get_font(11), anchor="ra")
     draw2.text((1130, 315), fa("دارد و وضعیت تحصیلی ایشان فعال و مجاز می‌باشد."), fill=(30, 41, 59), font=get_font(11), anchor="ra")
 
-    # Digital Seal & QR Code
     draw2.rounded_rectangle([(650, 430), (820, 590)], radius=10, fill=(248, 250, 252), outline=(203, 213, 225), width=1)
     draw2.text((735, 450), fa("بارکد رهگیری QR"), fill=(100, 116, 139), font=get_font(10), anchor="mm")
     draw2.rectangle([(675, 470), (795, 570)], fill=(15, 23, 42))
@@ -141,7 +135,6 @@ def generate_screenshots():
     draw3.text((1140, 160), fa("عنوان: ارزیابی کارایی الگوریتم‌های یادگیری ماشین در سامانه‌های دانشگاهی توزیع‌شده"), fill=(51, 65, 85), font=get_font(12), anchor="ra")
     draw3.text((1140, 190), fa("دانشجو: سهراب کیانی · استاد راهنما: دکتر جمیل احمدی · کد رهگیری ایرانداک: IRAN-1405-7719"), fill=(100, 116, 139), font=get_font(11), anchor="ra")
 
-    # API Flowchart Box
     draw3.rounded_rectangle([(40, 290), (1160, 620)], radius=14, fill=(240, 253, 250), outline=(94, 234, 212), width=2)
     draw3.text((1140, 310), fa("⚡ فرآیند خودکار وب‌سرویس (Automated Service Task & Rule Decision):"), fill=(15, 118, 110), font=get_font(14, True), anchor="ra")
 
@@ -171,7 +164,6 @@ def generate_screenshots():
     draw4 = ImageDraw.Draw(img4)
     draw_header_bar(draw4, "سامانه پذیرش سنجش و فرمول‌ساز شماره دانشجویی", "پردازش فایل متنی سازمان سنجش، تطبیق داده‌ها و صدور الگوریتمی شناسه دانشجو")
 
-    # Staging Grid Box
     draw4.rounded_rectangle([(40, 110), (680, 620)], radius=14, fill=(255, 255, 255), outline=(203, 213, 225), width=2)
     draw4.text((660, 130), fa("صف بازبینی داده‌های سنجش (Admissions Staging)"), fill=(15, 23, 42), font=get_font(14, True), anchor="ra")
     
@@ -191,7 +183,6 @@ def generate_screenshots():
     draw4.rounded_rectangle([(60, 550), (660, 600)], radius=8, fill=(16, 185, 129))
     draw4.text((360, 565), fa("🚀 صدور دسته‌جمعی شماره دانشجویی و ثبت‌نام نهایی"), fill=(255, 255, 255), font=get_font(12, True), anchor="mm")
 
-    # Formula Generator Box
     draw4.rounded_rectangle([(710, 110), (1160, 620)], radius=14, fill=(255, 255, 255), outline=(203, 213, 225), width=2)
     draw4.text((1140, 130), fa("فرمول‌ساز پویای شماره دانشجویی"), fill=(15, 23, 42), font=get_font(14, True), anchor="ra")
     draw4.text((1140, 165), fa("الگوی فرمول مقطع کارشناسی:"), fill=(100, 116, 139), font=get_font(11), anchor="ra")
@@ -229,14 +220,12 @@ def generate_screenshots():
         ("طراحی فرآیندها و تنظیمات SLA", [True, False, False, False, False]),
     ]
 
-    # Draw Matrix Header
     draw5.rectangle([(40, 160), (1160, 205)], fill=(241, 245, 249))
     draw5.text((1120, 175), fa("عنوان دسترسی و مجوز خرد"), fill=(71, 85, 105), font=get_font(11, True), anchor="ra")
     for r_i, r_name in enumerate(roles):
         x = 750 - r_i * 150
         draw5.text((x, 175), fa(r_name.split(' ')[0]), fill=(71, 85, 105), font=get_font(10, True), anchor="mm")
 
-    # Draw Matrix Rows
     for p_i, (p_title, p_grants) in enumerate(perms):
         y = 215 + p_i * 65
         draw5.line([(40, y + 55), (1160, y + 55)], fill=(241, 245, 249), width=1)
@@ -286,7 +275,176 @@ def generate_screenshots():
             draw6.text((190, y + 50), fa("▶️ بازپخش ویدیو ضبط‌شده"), fill=(51, 65, 85), font=get_font(11), anchor="mm")
 
     img6.save("docs/images/screenshot_6_virtual_classroom.png")
-    print("Screenshots generated successfully!")
+
+    # -------------------------------------------------------------
+    # 7. SCREENSHOT: Professor Portal & Academic Management
+    # -------------------------------------------------------------
+    img7 = Image.new("RGB", (1200, 650), color=(248, 250, 252))
+    draw7 = ImageDraw.Draw(img7)
+    draw_header_bar(draw7, "داشبورد هیئت علمی و اساتید (Professor Management)", "ثبت حضور و غیاب ۱۶ جلسه‌ای، قرارداد ۲FA و بارم‌بندی نمرات با OTP")
+
+    # Attendance & Session Card
+    draw7.rounded_rectangle([(40, 110), (580, 620)], radius=14, fill=(255, 255, 255), outline=(203, 213, 225), width=2)
+    draw7.text((560, 130), fa("لیست حضور و غیاب ۱۶ جلسه ترم جاری"), fill=(15, 23, 42), font=get_font(14, True), anchor="ra")
+    draw7.text((560, 160), fa("درس: ساختمان داده‌ها (گروه ۱) · استاد: دکتر جمیل احمدی"), fill=(71, 85, 105), font=get_font(11), anchor="ra")
+
+    att_students = [
+        ("۳۱۴۱۲۰۰۱", "علیرضا پیروزمند", "۱۴ جلسه حاضر", "۰ غیبت", "✓ مجاز به آزمون"),
+        ("۳۱۴۱۲۰۰۲", "نگین شجاعی", "۱۳ جلسه حاضر", "۱ غیبت", "✓ مجاز به آزمون"),
+        ("۳۱۴۱۲۰۰۳", "سهراب کیانی", "۱۰ جلسه حاضر", "۴ غیبت", "⚠️ محروم (بیش از ۳/۱۶)"),
+        ("۳۱۴۱۲۰۰۴", "مریم صادقی", "۱۴ جلسه حاضر", "۰ غیبت", "✓ مجاز به آزمون"),
+    ]
+    for idx, (sc, fn, pr, ab, st) in enumerate(att_students):
+        y = 195 + idx * 75
+        draw7.rounded_rectangle([(60, y), (560, y + 65)], radius=8, fill=(248, 250, 252) if "مجاز" in st else (254, 242, 242), outline=(226, 232, 240), width=1)
+        draw7.text((540, y + 12), fa(f"{fn} ({sc})"), fill=(15, 23, 42), font=get_font(11, True), anchor="ra")
+        draw7.text((540, y + 36), fa(f"{pr} · {ab}"), fill=(71, 85, 105), font=get_font(10), anchor="ra")
+        draw7.text((170, y + 22), fa(st), fill=(16, 185, 129) if "مجاز" in st else (239, 68, 68), font=get_font(10, True), anchor="ra")
+
+    draw7.rounded_rectangle([(60, 520), (560, 595)], radius=10, fill=(238, 242, 255), outline=(199, 210, 254), width=1)
+    draw7.text((540, 535), fa("✓ تطبیق حضور ضمنی (Implicit Attendance) و گیت بیومتریک:"), fill=(67, 56, 202), font=get_font(11, True), anchor="ra")
+    draw7.text((540, 565), fa("ورود پای تخته کلاس ۱۰۲ در ساعت ۰۷:۵۵ تایید و در کارکرد ماهانه ثبت شد."), fill=(79, 70, 229), font=get_font(10), anchor="ra")
+
+    # Contract & OTP Grading Box
+    draw7.rounded_rectangle([(610, 110), (1160, 620)], radius=14, fill=(255, 255, 255), outline=(203, 213, 225), width=2)
+    draw7.text((1140, 130), fa("قرارداد تدریس و بارم‌بندی نمرات آزمون"), fill=(15, 23, 42), font=get_font(14, True), anchor="ra")
+
+    draw7.rounded_rectangle([(630, 165), (1140, 345)], radius=10, fill=(254, 243, 199), outline=(245, 158, 11), width=1)
+    draw7.text((1120, 185), fa("📑 قرارداد حق‌التدریس و حکم کارگزینی نیمسال اول ۱۴۰۵:"), fill=(146, 64, 14), font=get_font(12, True), anchor="ra")
+    draw7.text((1120, 215), fa("• پایه حق‌التدریس: استادیار (ضریب ۱.۲۵ تخصصی)"), fill=(180, 83, 9), font=get_font(11), anchor="ra")
+    draw7.text((1120, 245), fa("• کسر مالیات تکلیفی ۱۰٪ + بیمه روزانه تامین اجتماعی"), fill=(180, 83, 9), font=get_font(11), anchor="ra")
+    draw7.text((1120, 275), fa("• وضعیت امضا: ✓ امضای الکترونیک ۲FA با پیامک در تاریخ ۱۴۰۵/۰۶/۱۵"), fill=(6, 95, 70), font=get_font(11, True), anchor="ra")
+    draw7.text((1120, 305), fa("• کد پیگیری امضا: SIGN-OTP-9921445"), fill=(71, 85, 105), font=get_font(10, True), anchor="ra")
+
+    draw7.rounded_rectangle([(630, 365), (1140, 595)], radius=10, fill=(240, 253, 244), outline=(74, 222, 128), width=1)
+    draw7.text((1120, 385), fa("🔐 قفل امن نهایی نمرات و ارسال رمز یکبار مصرف OTP:"), fill=(22, 101, 52), font=get_font(12, True), anchor="ra")
+    draw7.text((1120, 415), fa("• نمرات تئوری، عملی و میان‌ترم محاسبه گردید."), fill=(21, 128, 61), font=get_font(11), anchor="ra")
+    draw7.text((1120, 445), fa("• مهلت قانونی نهایی‌سازی: ۴۸ ساعت پس از آزمون"), fill=(21, 128, 61), font=get_font(11), anchor="ra")
+    draw7.rounded_rectangle([(650, 480), (1120, 530)], radius=8, fill=(22, 101, 52))
+    draw7.text((885, 497), fa("📱 ارسال رمز تایید پیامکی (OTP) و نهایی‌سازی نمرات"), fill=(255, 255, 255), font=get_font(11, True), anchor="mm")
+    draw7.text((1120, 555), fa("پس از قفل، تغییر نمره صرفاً با تشکیل شورای تجدیدنظر امکان‌پذیر است."), fill=(100, 116, 139), font=get_font(9), anchor="ra")
+
+    img7.save("docs/images/screenshot_7_professor_portal.png")
+
+    # -------------------------------------------------------------
+    # 8. SCREENSHOT: Curriculum Planning & Anti-Cheating Exam Hall
+    # -------------------------------------------------------------
+    img8 = Image.new("RGB", (1200, 650), color=(248, 250, 252))
+    draw8 = ImageDraw.Draw(img8)
+    draw_header_bar(draw8, "برنامه‌ریزی درسی و چیدمان ضدتقلب امتحانات (Exam Engine)", "چارت پیش‌نیازها، حل تداخل ساعات کلاس و چیدمان ماتریسی صندلی آزمون")
+
+    # Curriculum Tree Box
+    draw8.rounded_rectangle([(40, 110), (580, 620)], radius=14, fill=(255, 255, 255), outline=(203, 213, 225), width=2)
+    draw8.text((560, 130), fa("کاتالوگ دروس، سرفصل و چارت پیش‌نیازها"), fill=(15, 23, 42), font=get_font(14, True), anchor="ra")
+
+    chart_courses = [
+        ("مبانی برنامه‌نویسی", "پایه (۳ واحد)", "فاقد پیش‌نیاز", "ترم ۱"),
+        ("ساختمان داده‌ها", "تخصصی (۳ واحد)", "پیش‌نیاز: مبانی برنامه‌نویسی", "ترم ۲"),
+        ("طراحی الگوریتم‌ها", "تخصصی (۳ واحد)", "پیش‌نیاز: ساختمان داده‌ها", "ترم ۳"),
+        ("هوش مصنوعی", "تخصصی (۳ واحد)", "پیش‌نیاز: طراحی الگوریتم", "ترم ۴"),
+    ]
+    for idx, (cn, ct, cp, tm) in enumerate(chart_courses):
+        y = 175 + idx * 75
+        draw8.rounded_rectangle([(60, y), (560, y + 65)], radius=8, fill=(248, 250, 252), outline=(226, 232, 240), width=1)
+        draw8.text((540, y + 12), fa(f"{cn} ({ct})"), fill=(15, 23, 42), font=get_font(11, True), anchor="ra")
+        draw8.text((540, y + 36), fa(cp), fill=(71, 85, 105), font=get_font(10), anchor="ra")
+        draw8.rounded_rectangle([(80, y + 15), (140, y + 45)], radius=6, fill=(79, 70, 229))
+        draw8.text((110, y + 25), fa(tm), fill=(255, 255, 255), font=get_font(10, True), anchor="mm")
+
+    draw8.rounded_rectangle([(60, 520), (560, 595)], radius=8, fill=(243, 244, 246))
+    draw8.text((540, 540), fa("✓ کنترل خودکار تقدم و تاخر سرفصل و سقف واحد در زمان انتخاب واحد"), fill=(55, 65, 81), font=get_font(10, True), anchor="ra")
+    draw8.text((540, 565), fa("کف واحد مجاز: ۱۲ واحد · سقف عادی: ۲۰ واحد · سقف معدل الف: ۲۴ واحد"), fill=(107, 114, 128), font=get_font(9), anchor="ra")
+
+    # Anti-Cheating Exam Hall Box
+    draw8.rounded_rectangle([(610, 110), (1160, 620)], radius=14, fill=(255, 255, 255), outline=(203, 213, 225), width=2)
+    draw8.text((1140, 130), fa("موتور ضدتقلب و چیدمان صندلی آزمون (سالن مرکزی)"), fill=(15, 23, 42), font=get_font(14, True), anchor="ra")
+    draw8.text((1140, 160), fa("الگوریتم تفکیک رشته‌های مجاور جهت جلوگیری از شباهت پاسخ‌ها"), fill=(71, 85, 105), font=get_font(10), anchor="ra")
+
+    # Draw Matrix Seats (Checkerboard)
+    seat_types = [
+        ("صندلی ۱: کامپیوتر", (79, 70, 229)), ("صندلی ۲: برق", (13, 148, 136)), ("صندلی ۳: کامپیوتر", (79, 70, 229)),
+        ("صندلی ۴: عمران", (217, 119, 6)), ("صندلی ۵: صنایع", (225, 29, 72)), ("صندلی ۶: عمران", (217, 119, 6)),
+        ("صندلی ۷: کامپیوتر", (79, 70, 229)), ("صندلی ۸: برق", (13, 148, 136)), ("صندلی ۹: کامپیوتر", (79, 70, 229)),
+    ]
+    for idx, (st_name, col) in enumerate(seat_types):
+        r = idx // 3
+        c = idx % 3
+        x0 = 640 + c * 170
+        y0 = 200 + r * 105
+        draw8.rounded_rectangle([(x0, y0), (x0 + 155, y0 + 85)], radius=10, fill=(248, 250, 252), outline=col, width=2)
+        draw8.text((x0 + 140, y0 + 15), fa(f"شماره {idx+1}"), fill=(15, 23, 42), font=get_font(10, True), anchor="ra")
+        draw8.text((x0 + 140, y0 + 40), fa(st_name.split(': ')[1]), fill=col, font=get_font(11, True), anchor="ra")
+        draw8.text((x0 + 140, y0 + 60), fa("بارکد صندلی: SCAN-QR"), fill=(100, 116, 139), font=get_font(8), anchor="ra")
+
+    draw8.rounded_rectangle([(640, 530), (1130, 595)], radius=10, fill=(236, 253, 245), outline=(167, 243, 208), width=1)
+    draw8.text((1110, 545), fa("✓ تجمیع اوراق امتحانی و تحویل به مخزن قرنطینه با توکن امنیتی"), fill=(6, 95, 70), font=get_font(11, True), anchor="ra")
+    draw8.text((1110, 570), fa("ثبت ورود داوطلبان توسط مراقب با اسکن بارکد کارت آزمون"), fill=(4, 120, 87), font=get_font(9), anchor="ra")
+
+    img8.save("docs/images/screenshot_8_curriculum_scheduling.png")
+
+    # -------------------------------------------------------------
+    # 9. SCREENSHOT: Student Smart Enrollment & Official Transcript
+    # -------------------------------------------------------------
+    img9 = Image.new("RGB", (1200, 650), color=(248, 250, 252))
+    draw9 = ImageDraw.Draw(img9)
+    draw_header_bar(draw9, "انتخاب واحد هوشمند و کارنامه کل تحصیلی (Transcript)", "اتاق انتظار Redis (§۶۹۰۶)، محاسبه دروس توصیفی و مصوبه حذف نمره ردی")
+
+    # Smart Enroll Box
+    draw9.rounded_rectangle([(40, 110), (580, 620)], radius=14, fill=(255, 255, 255), outline=(203, 213, 225), width=2)
+    draw9.text((560, 130), fa("سامانه انتخاب واحد و کنترل اتاق انتظار Redis"), fill=(15, 23, 42), font=get_font(14, True), anchor="ra")
+
+    draw9.rounded_rectangle([(60, 165), (560, 235)], radius=10, fill=(236, 253, 245), outline=(167, 243, 208), width=1)
+    draw9.text((540, 180), fa("🚀 اتاق انتظار Redis (§۶۹۰۶) فعال و آماده:"), fill=(6, 95, 70), font=get_font(11, True), anchor="ra")
+    draw9.text((540, 205), fa("ظرفیت لحظه‌ای کش‌شده در حافظه · موقعیت در صف: مجاز به ثبت آنی"), fill=(4, 120, 87), font=get_font(10), anchor="ra")
+
+    cart_courses = [
+        ("ساختمان داده‌ها", "۳ واحد", "یکشنبه/سه‌شنبه ۱۰:۰۰-۱۲:۰۰", "دکتر احمدی", "✓ اخذ قطعی"),
+        ("معماری کامپیوتر", "۳ واحد", "دوشنبه ۰۸:۰۰-۱۰:۰۰", "دکتر حسینی", "✓ اخذ قطعی"),
+        ("آز معماری", "۱ واحد", "دوشنبه ۱۰:۰۰-۱۲:۰۰ (توصیفی)", "مهندس رضایی", "✓ اخذ قطعی"),
+        ("زبان تخصصی", "۲ واحد", "چهارشنبه ۱۴:۰۰-۱۶:۰۰", "دکتر علوی", "✓ اخذ قطعی"),
+    ]
+    for idx, (cn, cu, ct, cp, cs) in enumerate(cart_courses):
+        y = 250 + idx * 75
+        draw9.rounded_rectangle([(60, y), (560, y + 65)], radius=8, fill=(248, 250, 252), outline=(226, 232, 240), width=1)
+        draw9.text((540, y + 12), fa(f"{cn} ({cu})"), fill=(15, 23, 42), font=get_font(11, True), anchor="ra")
+        draw9.text((540, y + 36), fa(f"{ct} · {cp}"), fill=(71, 85, 105), font=get_font(9), anchor="ra")
+        draw9.text((160, y + 22), fa(cs), fill=(16, 185, 129), font=get_font(10, True), anchor="ra")
+
+    draw9.text((540, 570), fa("مجموع واحدهای اخذشده: ۹ واحد (مجاز تا ۲۰ واحد)"), fill=(15, 23, 42), font=get_font(11, True), anchor="ra")
+
+    # Official Transcript Box
+    draw9.rounded_rectangle([(610, 110), (1160, 620)], radius=14, fill=(255, 255, 255), outline=(15, 23, 42), width=2)
+    draw9.text((1140, 130), fa("کارنامه کل تحصیلی (نسخه اداری رسمی با استناد آیین‌نامه)"), fill=(15, 23, 42), font=get_font(13, True), anchor="ra")
+    draw9.text((1140, 155), fa("آیین‌نامه ملاک عمل: مصوب ۱۳۹۶ (حذف نمره ردی پس از قبولی در معدل کل)"), fill=(67, 56, 202), font=get_font(10, True), anchor="ra")
+
+    draw9.rectangle([(630, 185), (1140, 225)], fill=(241, 245, 249))
+    draw9.text((1120, 200), fa("نام درس"), fill=(71, 85, 105), font=get_font(10, True), anchor="ra")
+    draw9.text((920, 200), fa("واحد"), fill=(71, 85, 105), font=get_font(10, True), anchor="mm")
+    draw9.text((800, 200), fa("نمره"), fill=(71, 85, 105), font=get_font(10, True), anchor="mm")
+    draw9.text((690, 200), fa("وضعیت"), fill=(71, 85, 105), font=get_font(10, True), anchor="mm")
+
+    transcript_rows = [
+        ("ریاضی عمومی ۱", "۳", "۱۸.۵۰", "قبول (عادی)"),
+        ("فیزیک ۱", "۳", "۱۷.۰۰", "قبول (عادی)"),
+        ("آزمایشگاه فیزیک ۱", "۱", "قبول (توصیفی)", "عدم تاثیر در معدل"),
+        ("برنامه‌نویسی مقدماتی", "۳", "۱۹.۲۵", "قبول ممتاز"),
+    ]
+    for idx, (tn, tu, tg, ts) in enumerate(transcript_rows):
+        y = 235 + idx * 55
+        draw9.line([(630, y + 45), (1140, y + 45)], fill=(241, 245, 249), width=1)
+        draw9.text((1120, y + 15), fa(tn), fill=(15, 23, 42), font=get_font(11, True), anchor="ra")
+        draw9.text((920, y + 15), fa(tu), fill=(71, 85, 105), font=get_font(10), anchor="mm")
+        draw9.text((800, y + 15), fa(tg), fill=(15, 23, 42), font=get_font(11, True), anchor="mm")
+        draw9.text((690, y + 15), fa(ts), fill=(16, 185, 129), font=get_font(10), anchor="mm")
+
+    # GPA Summary
+    draw9.rounded_rectangle([(630, 480), (1140, 595)], radius=10, fill=(238, 242, 255), outline=(199, 210, 254), width=1)
+    draw9.text((1120, 500), fa("خلاصه کارنامه کل:"), fill=(67, 56, 202), font=get_font(11, True), anchor="ra")
+    draw9.text((1120, 530), fa("کل واحدهای گذرانده: ۵۸ واحد · واحدهای موثر در معدل: ۵۴ واحد"), fill=(79, 70, 229), font=get_font(10), anchor="ra")
+    draw9.text((1120, 560), fa("معدل کل دوره (GPA): ۱۸.۶۵ (دانشجوی ممتاز - رتبه الف)"), fill=(6, 95, 70), font=get_font(12, True), anchor="ra")
+
+    img9.save("docs/images/screenshot_9_student_enroll_transcript.png")
+    print("All 9 screenshots generated successfully!")
 
 if __name__ == "__main__":
-    generate_screenshots()
+    generate_all_screenshots()
