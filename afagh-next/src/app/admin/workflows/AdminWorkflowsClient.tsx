@@ -98,6 +98,30 @@ interface AnalyticsData {
     avgCsatScore: number;
     productivityScore: number;
   }[];
+  urgentCases?: {
+    requestId: number;
+    trackingCode: string;
+    studentName: string;
+    processTitle: string;
+    currentStepTitle: string;
+    roleCode: string;
+    slaHours: number;
+    hoursElapsed: number;
+    hoursRemaining: number;
+    isBreached: boolean;
+    priority: 'CRITICAL' | 'HIGH' | 'MEDIUM';
+  }[];
+  facultyReports?: {
+    facultyId: number;
+    facultyName: string;
+    departmentsCount: number;
+    totalRequests: number;
+    avgMttrHours: number;
+    slaCompliancePercent: number;
+    csatScore: number;
+    bounceRatePercent: number;
+    efficiencyGrade: 'A+' | 'A' | 'B' | 'C';
+  }[];
 }
 
 interface AdminWorkflowsClientProps {
@@ -600,6 +624,111 @@ export default function AdminWorkflowsClient({
       {/* TAB 3: تحلیل گلوگاه‌ها و ارزیابی پرسنل (Bottlenecks & Staff KPI Analytics) */}
       {activeTab === 'ANALYTICS' && (
         <div className="space-y-6">
+          {/* ۰. داشبورد زنده عملیاتی و پرونده‌های فوری (Real-time Operations Dashboard) */}
+          {analytics.urgentCases && analytics.urgentCases.length > 0 && (
+            <div className="card p-5 bg-gradient-to-r from-red-950 via-slate-900 to-indigo-950 text-white rounded-2xl shadow-lg border border-red-700/50 space-y-4">
+              <div className="flex items-center justify-between border-b border-red-800/60 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-red-500 animate-ping" />
+                  <h2 className="text-sm font-black text-white">
+                    🚨 پایش زنده پرونده‌های بحرانی و در آستانه انقضای SLA (Urgent Operations Monitor)
+                  </h2>
+                </div>
+                <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-red-600/80 text-white">
+                  {analytics.urgentCases.length} پرونده فوری
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {analytics.urgentCases.map(uc => (
+                  <div
+                    key={uc.requestId}
+                    className="p-3.5 rounded-xl bg-white/10 backdrop-blur-md border border-white/10 flex items-center justify-between text-xs"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-black text-amber-300" dir="ltr">{uc.trackingCode}</span>
+                        <span className="font-bold text-white">{uc.studentName}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        {uc.processTitle} · {uc.currentStepTitle} ({roleFa[uc.roleCode] || uc.roleCode})
+                      </p>
+                    </div>
+
+                    <div className="text-left space-y-1">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold block ${
+                          uc.isBreached
+                            ? 'bg-red-500 text-white'
+                            : 'bg-amber-400 text-slate-950'
+                        }`}
+                      >
+                        {uc.isBreached ? '⚠️ نقض مهلت SLA' : `⏳ ${uc.hoursRemaining} ساعت باقی‌مانده`}
+                      </span>
+                      <span className="text-[10px] text-slate-300 font-mono">
+                        سپری‌شده: {uc.hoursElapsed}h / {uc.slaHours}h
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ۰.۱. گزارش مقایسه‌ای دانشکده‌ها (Comparative Faculty Benchmarking) */}
+          {analytics.facultyReports && analytics.facultyReports.length > 0 && (
+            <div className="card p-5 bg-white border border-slate-200 rounded-2xl shadow-sm space-y-4">
+              <div className="border-b pb-3 flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                    <span>🏛️ گزارش مقایسه‌ای عملکرد دانشکده‌ها (Comparative Faculty Reports)</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    مقایسه سرعت پاسخگویی، پایبندی به SLA و رضایت دانشجویی بین دانشکده‌های دانشگاه آفاق
+                  </p>
+                </div>
+                <span className="text-xs font-bold px-3 py-1 rounded-xl bg-indigo-50 text-indigo-900 border">
+                  دوره ارزیابی: نیمسال جاری
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {analytics.facultyReports.map(fac => (
+                  <div
+                    key={fac.facultyId}
+                    className="p-4 rounded-2xl border-2 border-slate-200 bg-slate-50/70 space-y-3 hover:border-indigo-300 transition"
+                  >
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-black text-xs text-slate-900">{fac.facultyName}</h3>
+                      <span className="w-8 h-8 rounded-xl bg-indigo-600 text-white font-black text-xs flex items-center justify-center">
+                        {fac.efficiencyGrade}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5 text-xs pt-2 border-t border-slate-200 text-slate-600">
+                      <div className="flex justify-between">
+                        <span>حجم پرونده‌های مختومه:</span>
+                        <b className="font-mono text-slate-900">{fac.totalRequests} پرونده</b>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>سرعت اقدام (MTTR):</span>
+                        <b className="font-mono text-indigo-950">{fac.avgMttrHours} ساعت</b>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>پایبندی به ضرب‌الاجل (SLA %):</span>
+                        <b className="font-mono text-emerald-800 font-black">{fac.slaCompliancePercent}٪</b>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>رضایت دانشجو (CSAT):</span>
+                        <b className="font-mono text-amber-600 font-black">★ {fac.csatScore}</b>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* ۱. نقشه حرارتی مراحل (Process Step Heatmap) */}
           <div className="card p-5 bg-white border border-slate-200 rounded-2xl shadow-sm space-y-4">
             <div>

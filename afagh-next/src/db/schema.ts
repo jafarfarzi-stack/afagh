@@ -374,6 +374,32 @@ export const integrations_config = pgTable('integrations_config', {
   isActive: integer('isActive').default(1)
 });
 
+export const step_api_actions = pgTable('step_api_actions', {
+  id: serial('id').primaryKey(),
+  stepId: integer('stepId').notNull().references(() => process_steps.id),
+  integrationId: integer('integrationId').notNull().references(() => integrations_config.id),
+  endpointPath: varchar('endpointPath', { length: 255 }).notNull(),
+  httpMethod: varchar('httpMethod', { length: 10 }).notNull().default('POST'),
+  payloadMapping: text('payloadMapping'),
+  successCondition: text('successCondition'),
+  fallbackAction: varchar('fallbackAction', { length: 50 }).default('MANUAL_REVIEW'),
+  circuitBreakerThreshold: integer('circuitBreakerThreshold').default(3)
+});
+
+export const api_audit_logs = pgTable('api_audit_logs', {
+  id: serial('id').primaryKey(),
+  serviceName: varchar('serviceName', { length: 100 }).notNull(),
+  requestId: integer('requestId').references(() => student_requests.id),
+  stepId: integer('stepId').references(() => process_steps.id),
+  requestUrl: varchar('requestUrl', { length: 500 }).notNull(),
+  requestPayload: text('requestPayload'),
+  responseStatus: integer('responseStatus'),
+  responseBody: text('responseBody'),
+  durationMs: integer('durationMs'),
+  isSuccess: integer('isSuccess').default(1),
+  executedAt: timestamp('executedAt').defaultNow()
+});
+
 export const process_definitions = pgTable('process_definitions', {
   id: serial('id').primaryKey(),
   code: varchar('code', { length: 50 }).notNull().unique(),

@@ -12,6 +12,7 @@ import {
 import { requireRole } from '@/lib/auth';
 import { ensureDefaultProcesses } from '@/lib/workflow-engine';
 import { getWorkflowAnalytics } from '@/lib/workflow-analytics';
+import { getExecutiveRealtimeOps } from '@/lib/executive-analytics';
 import AdminWorkflowsClient from './AdminWorkflowsClient';
 
 export const dynamic = 'force-dynamic';
@@ -135,12 +136,17 @@ export default async function AdminWorkflowsPage() {
   });
 
   const analytics = await getWorkflowAnalytics();
+  const executiveOps = await getExecutiveRealtimeOps();
 
   return (
     <AdminWorkflowsClient
       processes={processesFormatted}
       inbox={inboxFormatted}
-      analytics={analytics}
+      analytics={{
+        ...analytics,
+        urgentCases: executiveOps.urgentCases,
+        facultyReports: executiveOps.facultyReports,
+      } as any}
     />
   );
 }
