@@ -772,3 +772,89 @@ export const doc_sign_otps = pgTable('doc_sign_otps', {
   lockedAt: timestamp('lockedAt'),
   createdAt: timestamp('createdAt').defaultNow()
 });
+
+// ============================================================================
+// ماژول آموزش‌های آزاد، بوت‌کمپ‌ها و دوره‌های کوتاه‌مدت (Continuing Education)
+// ============================================================================
+
+export const short_term_courses = pgTable('short_term_courses', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 50 }).notNull().unique(),
+  title: varchar('title', { length: 255 }).notNull(),
+  titleEn: varchar('titleEn', { length: 255 }),
+  category: varchar('category', { length: 100 }).notNull().default('مهندسی و فناوری'),
+  description: text('description'),
+  hours: integer('hours').notNull().default(40),
+  tuitionPrice: integer('tuitionPrice').notNull().default(0), // مبلغ شهریه به تومان
+  capacity: integer('capacity').notNull().default(30),
+  enrolledCount: integer('enrolledCount').notNull().default(0),
+  instructorName: varchar('instructorName', { length: 150 }).notNull(),
+  instructorBio: text('instructorBio'),
+  syllabusJson: text('syllabusJson'), // سرفصل‌های دوره به‌صورت آرایه JSON
+  startDate: varchar('startDate', { length: 20 }),
+  endDate: varchar('endDate', { length: 20 }),
+  scheduleText: varchar('scheduleText', { length: 200 }),
+  passingGrade: numeric('passingGrade', { precision: 4, scale: 2 }).default('12.00'),
+  maxAbsences: integer('maxAbsences').default(3),
+  status: varchar('status', { length: 20 }).default('OPEN'), // OPEN, IN_PROGRESS, COMPLETED, ARCHIVED
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+export const short_term_learners = pgTable('short_term_learners', {
+  id: serial('id').primaryKey(),
+  mobile: varchar('mobile', { length: 20 }).notNull().unique(),
+  nationalId: varchar('nationalId', { length: 10 }),
+  fullName: varchar('fullName', { length: 150 }).notNull(),
+  fullNameEn: varchar('fullNameEn', { length: 150 }),
+  email: varchar('email', { length: 150 }),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+export const short_term_discounts = pgTable('short_term_discounts', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 50 }).notNull().unique(),
+  courseId: integer('courseId').references(() => short_term_courses.id),
+  discountPercent: integer('discountPercent').notNull().default(10),
+  maxDiscountAmount: integer('maxDiscountAmount'),
+  maxUsage: integer('maxUsage').default(100),
+  usedCount: integer('usedCount').default(0),
+  isActive: integer('isActive').default(1),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+export const short_term_registrations = pgTable('short_term_registrations', {
+  id: serial('id').primaryKey(),
+  learnerId: integer('learnerId').notNull().references(() => short_term_learners.id),
+  courseId: integer('courseId').notNull().references(() => short_term_courses.id),
+  trackingCode: varchar('trackingCode', { length: 50 }).notNull().unique(),
+  amountPaid: integer('amountPaid').notNull().default(0),
+  discountAmount: integer('discountAmount').default(0),
+  discountCode: varchar('discountCode', { length: 50 }),
+  paymentStatus: varchar('paymentStatus', { length: 20 }).notNull().default('PAID'), // PAID, PENDING, REFUNDED
+  paymentRefId: varchar('paymentRefId', { length: 100 }),
+  attendanceCount: integer('attendanceCount').default(0),
+  totalSessions: integer('totalSessions').default(10),
+  finalGrade: numeric('finalGrade', { precision: 4, scale: 2 }),
+  isPassed: integer('isPassed').default(0),
+  certificateIssued: integer('certificateIssued').default(0),
+  certificateId: integer('certificateId'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+export const short_term_certificates = pgTable('short_term_certificates', {
+  id: serial('id').primaryKey(),
+  certificateNumber: varchar('certificateNumber', { length: 50 }).notNull().unique(),
+  verificationHash: varchar('verificationHash', { length: 64 }).notNull(), // SHA-256
+  learnerId: integer('learnerId').notNull().references(() => short_term_learners.id),
+  courseId: integer('courseId').notNull().references(() => short_term_courses.id),
+  registrationId: integer('registrationId').notNull().references(() => short_term_registrations.id),
+  fullNameFa: varchar('fullNameFa', { length: 150 }).notNull(),
+  fullNameEn: varchar('fullNameEn', { length: 150 }),
+  courseTitleFa: varchar('courseTitleFa', { length: 255 }).notNull(),
+  courseTitleEn: varchar('courseTitleEn', { length: 255 }),
+  grade: numeric('grade', { precision: 4, scale: 2 }).notNull(),
+  totalHours: integer('totalHours').notNull(),
+  issueDate: varchar('issueDate', { length: 20 }).notNull(),
+  isRevoked: integer('isRevoked').default(0),
+  createdAt: timestamp('createdAt').defaultNow()
+});
