@@ -9,7 +9,7 @@
     "db:generate": "npx drizzle-kit generate",
     "db:push": "npx drizzle-kit push",
     "db:migrate-sqlite": "node scripts/migrate-sqlite-to-pg.mjs",
-    "db:hardening": "psql $DATABASE_URL -f src/db/pg-hardening.sql"
+    "db:hardening": "node scripts/hardening.mjs"
   },
   "dependencies": {
     "drizzle-orm": "^0.36.4",

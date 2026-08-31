@@ -30,8 +30,19 @@ type RlsTx = Parameters<Parameters<typeof appDb.transaction>[0]>[0];
 
 /** اجرای کوئری‌های خواندن در بستر RLSِ همان کاربر — set_config فقط در همین تراکنش زنده است */
 export async function withUserRls<T>(userId: number, fn: (tx: RlsTx) => Promise<T>): Promise<T> {
-  return appDb.transaction(async tx => {
-    await tx.execute(sql`select set_config('app.user_id', ${String(userId)}, true)`);
-    return fn(tx);
-  });
+  try {
+    return await appDb.transaction(async tx => {
+      await tx.execute(sql`select set_config('app.user_id', ${String(userId)}, true)`);
+      return fn(tx);
+    });
+  } catch (err: any) {
+    // در صورت عدم ایجاد نقش afagh_app در دیتابیس، به اتصال اصلی برگرد تا سرویس‌دهی قطع نشود
+    if (err?.message?.includes('afagh_app') || err?.code === '28P01') {
+      return (db as any).transaction(async (tx: any) => {
+        await tx.execute(sql`select set_config('app.user_id', ${String(userId)}, true)`);
+        return fn(tx);
+      });
+    }
+    throw err;
+  }
 }
