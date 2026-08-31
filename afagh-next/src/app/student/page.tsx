@@ -1,5 +1,5 @@
 import { and, desc, eq } from 'drizzle-orm';
-import { academic_terms, course_offerings, courses, enrollments, student_requests, process_definitions } from '@/db/schema';
+import { academic_terms, course_offerings, courses, enrollments, majors } from '@/db/schema';
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import DropButton from './DropButton';
@@ -7,112 +7,136 @@ import DropButton from './DropButton';
 export const dynamic = 'force-dynamic';
 
 const statusFa: Record<string, string> = {
-  REGISTERED: 'ثبت‌شده', WAITLISTED: 'اتاق انتظار', PENDING_COUNCIL: 'در انتظار کمیسیون',
-  DROPPED: 'حذف‌شده', EMERGENCY_DROPPED: 'حذف اضطراری', ABSENT: 'غایب', REJECTED: 'ردشده',
-  SUBMITTED: 'ارسال‌شده به شورا', IN_REVIEW: 'در دست بررسی', APPROVED: 'تأییدشده', RETURNED: 'بازگشتی'
+  REGISTERED: 'ثبت قطعی',
+  WAITLISTED: 'اتاق انتظار',
+  PENDING_COUNCIL: 'در انتظار کمیسیون',
+  DROPPED: 'حذف‌شده',
+  EMERGENCY_DROPPED: 'حذف اضطراری',
+  ABSENT: 'غایب',
+  REJECTED: 'ردشده',
+  ACTIVE: 'فعال / اشتغال به تحصیل',
+  PROBATION: 'مشروط',
+  GRADUATED: 'فارغ‌التحصیل',
 };
 
-const reqBadge: Record<string, string> = {
-  SUBMITTED: 'bg-amber-100 text-amber-800 border-amber-300',
-  IN_REVIEW: 'bg-sky-100 text-sky-800 border-sky-300',
-  APPROVED: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-  REJECTED: 'bg-red-100 text-red-800 border-red-300',
-};
-
-export default async function StudentHome() {
+export default async function StudentTranscriptPage() {
   const user = await requireRole(['STUDENT']);
   const me = await getStudentByUser(user.id);
   if (!me) return <p className="card">پروندهٔ دانشجویی یافت نشد.</p>;
 
   const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
-  
-  // خواندن دروس از مسیر RLS
-  const rows = await withUserRls(user.id, tx =>
+  const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
+
+  // خواندن کلیه سوابق دروس از مسیر امن RLS
+  const allRows = await withUserRls(user.id, tx =>
     tx
-      .select({ id: enrollments.id, code: courses.code, title: courses.title, units: courses.units, status: enrollments.status, grade: enrollments.gradeValue, ev: enrollments.hasEvaluated })
+      .select({
+        id: enrollments.id,
+        code: courses.code,
+        title: courses.title,
+        units: courses.units,
+        status: enrollments.status,
+        grade: enrollments.gradeValue,
+        gradeStatus: enrollments.gradeStatus,
+        ev: enrollments.hasEvaluated,
+        termId: course_offerings.termId,
+      })
       .from(enrollments)
       .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
       .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-      .where(term ? and(eq(enrollments.studentId, me.id), eq(course_offerings.termId, term.id)) : eq(enrollments.studentId, me.id))
-      .orderBy(desc(enrollments.id)));
-
-  // خواندن درخواست‌های گردش کار دانشجو
-  const myRequests = await withUserRls(user.id, tx =>
-    tx
-      .select({
-        id: student_requests.id,
-        track: student_requests.trackingCode,
-        status: student_requests.status,
-        created: student_requests.createdAt,
-        formData: student_requests.formData,
-        processTitle: process_definitions.title
-      })
-      .from(student_requests)
-      .leftJoin(process_definitions, eq(process_definitions.id, student_requests.processId))
-      .where(eq(student_requests.studentId, me.id))
-      .orderBy(desc(student_requests.id))
-      .limit(10)
+      .where(eq(enrollments.studentId, me.id))
+      .orderBy(desc(enrollments.id))
   );
+
+  // تفکیک ترم جاری و کل واحدها
+  const currentTermRows = term ? allRows.filter(r => r.termId === term.id) : allRows;
+  const currentUnits = currentTermRows
+    .filter(r => r.status === 'REGISTERED' || r.status === 'PENDING_COUNCIL')
+    .reduce((sum, r) => sum + Number(r.units || 0), 0);
+
+  // محاسبه دروس نمره‌دار
+  const gradedRows = allRows.filter(r => r.grade != null && Number(r.grade) >= 0);
+  const totalGradedUnits = gradedRows.reduce((sum, r) => sum + Number(r.units || 0), 0);
+  const gpa = totalGradedUnits > 0
+    ? (gradedRows.reduce((sum, r) => sum + Number(r.grade) * Number(r.units), 0) / totalGradedUnits).toFixed(2)
+    : '—';
 
   return (
     <div className="space-y-4">
-      <div className="card">
-        <p className="text-xs text-slate-500">شماره دانشجویی</p>
-        <p className="font-mono text-lg font-bold" dir="ltr">{me.studentCode}</p>
-        <p className="mt-1 text-xs">وضعیت پرونده: <span className="font-semibold text-emerald-700">{statusFa[me.status] ?? me.status}</span> — {term ? term.title : 'بدون ترم جاری'}</p>
-      </div>
-
-      {/* بخش پیگیری درخواست‌ها و کمیسیون */}
-      <div className="card space-y-2">
-        <h2 className="font-bold flex items-center justify-between">
-          <span>📋 پیگیری درخواست‌ها و کمیسیون</span>
-          <span className="text-xs font-normal text-slate-500">{myRequests.length} مورد</span>
-        </h2>
-        {myRequests.length === 0 && <p className="text-sm text-slate-400">درخواست یا ارجاع فعالی ندارید.</p>}
-        {myRequests.map(req => {
-          let extra: any = {};
-          try { if (req.formData) extra = JSON.parse(req.formData); } catch (_) {}
-          return (
-            <div key={req.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-800">{req.processTitle || 'درخواست کمیسیون'}</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full border ${reqBadge[req.status] || 'bg-slate-100 text-slate-700'}`}>
-                  {statusFa[req.status] ?? req.status}
-                </span>
-              </div>
-              {extra?.offeringTitle && (
-                <p className="text-xs text-indigo-700">موضوع: اخذ درس {extra.offeringTitle}</p>
-              )}
-              <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-                <span>کد رهگیری: <b className="font-mono text-slate-700" dir="ltr">{req.track}</b></span>
-                <span>{req.created ? new Date(req.created).toLocaleDateString('fa-IR') : '—'}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* دروس ترم جاری */}
-      <div className="card space-y-2">
-        <h2 className="font-bold">دروس {term ? 'ترم جاری' : ''}</h2>
-        {rows.length === 0 && <p className="text-sm text-slate-500">هنوز واحدی ثبت نشده است.</p>}
-        {rows.map((r, i) => (
-          <div key={i} className="flex items-center justify-between rounded-xl bg-slate-50 p-3 text-sm">
-            <div>
-              <p className="font-medium">{r.title}</p>
-              <p className="text-xs text-slate-500" dir="ltr">{r.code} · {Number(r.units)} واحد</p>
-            </div>
-            <div className="text-left">
-              <span className={`text-xs px-2 py-0.5 rounded-md ${r.status === 'PENDING_COUNCIL' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'}`}>
-                {statusFa[r.status] ?? r.status}
-              </span>
-              <p className="text-sm font-bold mt-1">{r.grade != null ? Number(r.grade).toFixed(2) : r.ev ? 'ارزشیابی شد' : '—'}</p>
-              {r.status === 'REGISTERED' && <DropButton enrollmentId={r.id} />}
-            </div>
+      {/* کارت مشخصات و وضعیت تحصیلی */}
+      <div className="card !p-4 bg-gradient-to-br from-white to-slate-50 border-emerald-100">
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="font-bold text-slate-800">{user.name}</h1>
+            <p className="text-xs text-slate-500 mt-0.5">{major?.name || 'مهندسی کامپیوتر'}</p>
           </div>
-        ))}
+          <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-medium">
+            {statusFa[me.status] ?? me.status}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-slate-100 text-center">
+          <div className="rounded-lg bg-slate-100/70 p-2">
+            <p className="text-[10px] text-slate-500">شماره دانشجویی</p>
+            <p className="font-mono text-xs font-bold text-slate-800 mt-0.5" dir="ltr">{me.studentCode}</p>
+          </div>
+          <div className="rounded-lg bg-slate-100/70 p-2">
+            <p className="text-[10px] text-slate-500">واحدهای ترم جاری</p>
+            <p className="text-xs font-bold text-indigo-700 mt-0.5">{currentUnits} واحد</p>
+          </div>
+          <div className="rounded-lg bg-slate-100/70 p-2">
+            <p className="text-[10px] text-slate-500">معدل کل</p>
+            <p className="text-xs font-bold text-emerald-700 mt-0.5">{gpa}</p>
+          </div>
+        </div>
       </div>
-      <p className="text-center text-[11px] text-slate-400">گیت ارزشیابی معلم (hasEvaluated) پیش از ثبت نمره نهایی الزامی است — ماژول ۷</p>
+
+      {/* کارنامه دروس ترم جاری */}
+      <div className="card space-y-3">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <h2 className="font-bold text-slate-800 text-sm">
+            📄 کارنامه و نمرات {term ? `(${term.title})` : ''}
+          </h2>
+          <span className="text-xs text-slate-500">{currentTermRows.length} درس</span>
+        </div>
+
+        {currentTermRows.length === 0 && (
+          <div className="py-6 text-center text-slate-400 text-sm">
+            هنوز درسی برای این ترم اخذ نشده است.
+          </div>
+        )}
+
+        <div className="space-y-2">
+          {currentTermRows.map((r, i) => (
+            <div key={i} className="flex items-center justify-between rounded-xl bg-slate-50 p-3 text-sm border border-slate-100">
+              <div>
+                <p className="font-medium text-slate-800">{r.title}</p>
+                <p className="text-xs text-slate-500 mt-0.5" dir="ltr">{r.code} · {Number(r.units)} واحد</p>
+              </div>
+              <div className="text-left flex flex-col items-end gap-1">
+                <span className={`text-[11px] px-2 py-0.5 rounded-md ${
+                  r.status === 'REGISTERED' ? 'bg-emerald-100 text-emerald-800' :
+                  r.status === 'PENDING_COUNCIL' ? 'bg-amber-100 text-amber-800' :
+                  'bg-slate-200 text-slate-700'
+                }`}>
+                  {statusFa[r.status] ?? r.status}
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-slate-900">
+                    {r.grade != null ? Number(r.grade).toFixed(2) : r.ev ? 'ارزشیابی شد' : '—'}
+                  </span>
+                  {r.status === 'REGISTERED' && <DropButton enrollmentId={r.id} />}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-xl bg-slate-100 p-3 text-center text-[11px] text-slate-500">
+        🔒 نمرات موقت پس از ثبت ارزشیابی اساتید نمایش داده می‌شوند و پس از پایان مهلت اعتراض، نهایی و قفل خواهند شد.
+      </div>
     </div>
   );
 }
