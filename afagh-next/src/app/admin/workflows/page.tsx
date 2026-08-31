@@ -1,0 +1,146 @@
+import { desc, eq, inArray } from 'drizzle-orm';
+import { db } from '@/db';
+import {
+  process_definitions,
+  process_steps,
+  request_parallel_checkpoints,
+  request_step_logs,
+  student_requests,
+  students,
+  users,
+} from '@/db/schema';
+import { requireRole } from '@/lib/auth';
+import { ensureDefaultProcesses } from '@/lib/workflow-engine';
+import { getWorkflowAnalytics } from '@/lib/workflow-analytics';
+import AdminWorkflowsClient from './AdminWorkflowsClient';
+
+export const dynamic = 'force-dynamic';
+
+export default async function AdminWorkflowsPage() {
+  await requireRole(['ADMIN', 'EDU_EXPERT']);
+  await ensureDefaultProcesses();
+
+  const now = new Date();
+
+  // دریافت تمام فرآیندها
+  const rawProcesses = await db
+    .select()
+    .from(process_definitions)
+    .orderBy(process_definitions.id);
+
+  const rawSteps = await db.select().from(process_steps).orderBy(process_steps.stepOrder);
+
+  const processesFormatted = rawProcesses.map(p => {
+    let schema: any[] = [];
+    try {
+      if (p.formSchema) schema = JSON.parse(p.formSchema);
+    } catch (_) {}
+
+    const steps = rawSteps.filter(s => s.processId === p.id).map(s => ({
+      id: s.id,
+      stepOrder: s.stepOrder,
+      title: s.title,
+      stepType: (s.stepType as any) || 'USER',
+      roleCode: s.roleCode || 'USER',
+      slaHours: s.slaHours || 48,
+      timeoutAction: (s.timeoutAction as any) || 'ESCALATE',
+      timeoutEscalateToRole: s.timeoutEscalateToRole || undefined,
+    }));
+
+    return {
+      id: p.id,
+      code: p.code,
+      title: p.title,
+      category: p.category || 'عمومی',
+      description: p.description || '',
+      feeAmount: p.feeAmount || 0,
+      formSchema: schema,
+      steps,
+    };
+  });
+
+  // دریافت تمام درخواست‌ها برای کارتابل
+  const rawRequests = await db
+    .select({
+      id: student_requests.id,
+      trackingCode: student_requests.trackingCode,
+      status: student_requests.status,
+      created: student_requests.createdAt,
+      formData: student_requests.formData,
+      currentStepId: student_requests.currentStepId,
+      satisfactionScore: student_requests.satisfactionScore,
+      studentCode: students.studentCode,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      procTitle: process_definitions.title,
+      procCode: process_definitions.code,
+    })
+    .from(student_requests)
+    .innerJoin(students, eq(students.id, student_requests.studentId))
+    .innerJoin(users, eq(users.id, students.userId))
+    .innerJoin(process_definitions, eq(process_definitions.id, student_requests.processId))
+    .orderBy(desc(student_requests.id))
+    .limit(50);
+
+  const allLogs = await db.select().from(request_step_logs);
+  const allCheckpoints = await db.select().from(request_parallel_checkpoints);
+
+  const inboxFormatted = rawRequests.map(r => {
+    let parsedForm: any = {};
+    try {
+      if (r.formData) parsedForm = JSON.parse(r.formData);
+    } catch (_) {}
+
+    const step = rawSteps.find(s => s.id === r.currentStepId);
+    const lastLog = allLogs
+      .filter(l => l.requestId === r.id && !l.completedAt)
+      .sort((a, b) => (b.id || 0) - (a.id || 0))[0];
+
+    let hoursElapsed = 0;
+    if (lastLog?.assignedAt) {
+      hoursElapsed = Math.round((now.getTime() - new Date(lastLog.assignedAt).getTime()) / (1000 * 3600));
+    } else if (r.created) {
+      hoursElapsed = Math.round((now.getTime() - new Date(r.created).getTime()) / (1000 * 3600));
+    }
+
+    const slaHours = step?.slaHours || 48;
+    const isBreached = hoursElapsed > slaHours && r.status !== 'APPROVED' && r.status !== 'REJECTED';
+
+    const reqCheckpoints = allCheckpoints.filter(c => c.requestId === r.id).map(c => ({
+      id: c.id,
+      departmentCode: c.departmentCode,
+      departmentTitle: c.departmentTitle,
+      isCleared: c.isCleared || 0,
+      notes: c.notes,
+    }));
+
+    return {
+      id: r.id,
+      trackingCode: r.trackingCode,
+      studentName: `${r.firstName} ${r.lastName}`,
+      studentCode: r.studentCode,
+      processTitle: r.procTitle,
+      processCode: r.procCode,
+      status: r.status,
+      created: r.created ? r.created.toISOString() : null,
+      currentStepTitle: step?.title || undefined,
+      currentRoleCode: step?.roleCode || undefined,
+      slaHours,
+      hoursElapsed,
+      isBreached,
+      formData: parsedForm,
+      satisfactionScore: r.satisfactionScore,
+      checkpoints: reqCheckpoints,
+    };
+  });
+
+  const analytics = await getWorkflowAnalytics();
+
+  return (
+    <AdminWorkflowsClient
+      processes={processesFormatted}
+      inbox={inboxFormatted}
+      analytics={analytics}
+    />
+  );
+}

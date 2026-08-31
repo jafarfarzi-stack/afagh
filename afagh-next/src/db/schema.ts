@@ -378,8 +378,13 @@ export const process_definitions = pgTable('process_definitions', {
   id: serial('id').primaryKey(),
   code: varchar('code', { length: 50 }).notNull().unique(),
   title: varchar('title', { length: 150 }).notNull(),
-  formSchema: text('formSchema'),
-  isActive: integer('isActive').default(1)
+  category: varchar('category', { length: 50 }).notNull().default('عمومی'),
+  description: text('description'),
+  formSchema: text('formSchema'), // Dynamic JSON schema of fields
+  outputTemplate: varchar('outputTemplate', { length: 50 }),
+  feeAmount: integer('feeAmount').default(0),
+  isActive: integer('isActive').default(1),
+  createdAt: timestamp('createdAt').defaultNow()
 });
 
 export const process_steps = pgTable('process_steps', {
@@ -387,11 +392,12 @@ export const process_steps = pgTable('process_steps', {
   processId: integer('processId').notNull().references(() => process_definitions.id),
   stepOrder: integer('stepOrder').notNull(),
   title: varchar('title', { length: 150 }).notNull(),
-  stepType: varchar('stepType', { length: 20 }).notNull().default('USER'),
+  stepType: varchar('stepType', { length: 30 }).notNull().default('USER'), // USER, AUTO_INTEGRATION, PARALLEL_GATEWAY
   roleCode: varchar('roleCode', { length: 50 }),
   assigneeStaffId: integer('assigneeStaffId').references(() => staff.id),
-  slaHours: integer('slaHours'),
-  timeoutAction: varchar('timeoutAction', { length: 30 }),
+  slaHours: integer('slaHours').default(48), // Max duration allowed in hours
+  timeoutAction: varchar('timeoutAction', { length: 30 }).default('ESCALATE'), // ESCALATE, AUTO_APPROVE, AUTO_REJECT, NOTIFY
+  timeoutEscalateToRole: varchar('timeoutEscalateToRole', { length: 50 }),
   integrationId: integer('integrationId').references(() => integrations_config.id),
   apiConfig: text('apiConfig')
 });
@@ -399,21 +405,26 @@ export const process_steps = pgTable('process_steps', {
 export const process_transitions = pgTable('process_transitions', {
   id: serial('id').primaryKey(),
   stepId: integer('stepId').notNull().references(() => process_steps.id),
-  action: varchar('action', { length: 20 }).notNull(),
+  action: varchar('action', { length: 30 }).notNull(), // APPROVE, REJECT, RETURN_FOR_REVISION, ESCALATE
   toStepId: integer('toStepId').references(() => process_steps.id),
   isFinal: integer('isFinal').default(0)
 });
 
 export const student_requests = pgTable('student_requests', {
   id: serial('id').primaryKey(),
-  trackingCode: varchar('trackingCode', { length: 20 }).notNull().unique(),
+  trackingCode: varchar('trackingCode', { length: 30 }).notNull().unique(),
   studentId: integer('studentId').notNull().references(() => students.id),
   processId: integer('processId').notNull().references(() => process_definitions.id),
   currentStepId: integer('currentStepId').references(() => process_steps.id),
   formData: text('formData'),
-  status: varchar('status', { length: 30 }).notNull().default('SUBMITTED'),
+  status: varchar('status', { length: 30 }).notNull().default('SUBMITTED'), // DRAFT, SUBMITTED, IN_REVIEW, APPROVED, REJECTED, READY_TO_PRINT, CANCELLED
   autoCreated: integer('autoCreated').default(0),
   relatedEnrollmentId: integer('relatedEnrollmentId').references(() => enrollments.id),
+  satisfactionScore: integer('satisfactionScore'), // 1 to 5 CSAT stars
+  feedbackText: text('feedbackText'),
+  digitalStampHash: varchar('digitalStampHash', { length: 64 }),
+  certificateNumber: varchar('certificateNumber', { length: 50 }),
+  issuedAt: timestamp('issuedAt'),
   createdAt: timestamp('createdAt').defaultNow(),
   updatedAt: timestamp('updatedAt').defaultNow()
 });
@@ -426,10 +437,23 @@ export const request_step_logs = pgTable('request_step_logs', {
   firstViewedAt: timestamp('firstViewedAt'),
   completedAt: timestamp('completedAt'),
   actorStaffId: integer('actorStaffId').references(() => staff.id),
-  action: varchar('action', { length: 20 }),
+  actorRole: varchar('actorRole', { length: 50 }),
+  action: varchar('action', { length: 30 }), // APPROVE, REJECT, RETURN_FOR_REVISION, ESCALATE, AUTO_TIMEOUT
   note: text('note'),
   durationMinutes: integer('durationMinutes'),
-  slaStatus: varchar('slaStatus', { length: 20 })
+  slaStatus: varchar('slaStatus', { length: 30 }), // ON_TIME, WARNING, SLA_BREACHED, ESCALATED
+  satisfactionScore: integer('satisfactionScore')
+});
+
+export const request_parallel_checkpoints = pgTable('request_parallel_checkpoints', {
+  id: serial('id').primaryKey(),
+  requestId: integer('requestId').notNull().references(() => student_requests.id),
+  departmentCode: varchar('departmentCode', { length: 50 }).notNull(), // FINANCE, LIBRARY, WELFARE_FUND, LABORATORY, DORMITORY
+  departmentTitle: varchar('departmentTitle', { length: 100 }).notNull(),
+  isCleared: integer('isCleared').default(0),
+  clearedByStaffId: integer('clearedByStaffId').references(() => staff.id),
+  clearedAt: timestamp('clearedAt'),
+  notes: text('notes')
 });
 
 export const term_financial_rules = pgTable('term_financial_rules', {

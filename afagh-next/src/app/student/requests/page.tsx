@@ -1,117 +1,149 @@
 import { desc, eq } from 'drizzle-orm';
-import { process_definitions, student_requests } from '@/db/schema';
-import { withUserRls } from '@/db';
+import {
+  degree_level_configs,
+  majors,
+  process_definitions,
+  process_steps,
+  request_parallel_checkpoints,
+  request_step_logs,
+  student_requests,
+} from '@/db/schema';
+import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
+import { ensureDefaultProcesses } from '@/lib/workflow-engine';
+import StudentRequestsClient from './StudentRequestsClient';
 
 export const dynamic = 'force-dynamic';
-
-const statusFa: Record<string, string> = {
-  SUBMITTED: 'ارسال‌شده به شورا',
-  IN_REVIEW: 'در دست بررسی',
-  APPROVED: 'تأییدشده ✓',
-  REJECTED: 'ردشده ✗',
-  RETURNED: 'نیازمند بازبینی',
-};
-
-const reqBadge: Record<string, string> = {
-  SUBMITTED: 'bg-amber-50 text-amber-800 border-amber-300',
-  IN_REVIEW: 'bg-sky-50 text-sky-800 border-sky-300',
-  APPROVED: 'bg-emerald-50 text-emerald-800 border-emerald-300 font-bold',
-  REJECTED: 'bg-red-50 text-red-800 border-red-300',
-  RETURNED: 'bg-purple-50 text-purple-800 border-purple-300',
-};
 
 export default async function StudentRequestsPage() {
   const user = await requireRole(['STUDENT']);
   const me = await getStudentByUser(user.id);
-  if (!me) return <p className="card">پروندهٔ دانشجویی یافت نشد.</p>;
+  if (!me) return <p className="card p-6 text-center text-slate-500">پروندهٔ دانشجویی یافت نشد.</p>;
 
-  // خواندن درخواست‌های گردش کار دانشجو تحت RLS
-  const myRequests = await withUserRls(user.id, tx =>
+  await ensureDefaultProcesses();
+
+  const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
+  const [level] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
+
+  // دریافت فرآیندهای فعال سیستم
+  const rawProcesses = await db
+    .select()
+    .from(process_definitions)
+    .where(eq(process_definitions.isActive, 1))
+    .orderBy(process_definitions.id);
+
+  const rawSteps = await db.select().from(process_steps).orderBy(process_steps.stepOrder);
+
+  const processesList = rawProcesses.map(p => {
+    let schema: any[] = [];
+    try {
+      if (p.formSchema) schema = JSON.parse(p.formSchema);
+    } catch (_) {}
+
+    const steps = rawSteps.filter(s => s.processId === p.id).map(s => ({
+      stepOrder: s.stepOrder,
+      title: s.title,
+      stepType: s.stepType || 'USER',
+      roleCode: s.roleCode || 'USER',
+      slaHours: s.slaHours || 48,
+    }));
+
+    return {
+      id: p.id,
+      code: p.code,
+      title: p.title,
+      category: p.category || 'عمومی',
+      description: p.description || '',
+      feeAmount: p.feeAmount || 0,
+      formSchema: schema,
+      steps,
+    };
+  });
+
+  // دریافت درخواست‌های دانشجو با لاگ‌ها و چک‌پوینت‌ها
+  const rawRequests = await withUserRls(user.id, tx =>
     tx
       .select({
         id: student_requests.id,
-        track: student_requests.trackingCode,
+        trackingCode: student_requests.trackingCode,
         status: student_requests.status,
         created: student_requests.createdAt,
         updated: student_requests.updatedAt,
         formData: student_requests.formData,
-        processTitle: process_definitions.title,
+        processId: student_requests.processId,
+        currentStepId: student_requests.currentStepId,
+        digitalStampHash: student_requests.digitalStampHash,
+        certificateNumber: student_requests.certificateNumber,
+        satisfactionScore: student_requests.satisfactionScore,
+        feedbackText: student_requests.feedbackText,
+        procCode: process_definitions.code,
+        procTitle: process_definitions.title,
+        procCategory: process_definitions.category,
       })
       .from(student_requests)
-      .leftJoin(process_definitions, eq(process_definitions.id, student_requests.processId))
+      .innerJoin(process_definitions, eq(process_definitions.id, student_requests.processId))
       .where(eq(student_requests.studentId, me.id))
       .orderBy(desc(student_requests.id))
   );
 
-  const pendingCount = myRequests.filter(r => r.status === 'SUBMITTED' || r.status === 'IN_REVIEW').length;
-  const approvedCount = myRequests.filter(r => r.status === 'APPROVED').length;
+  const allLogs = await db.select().from(request_step_logs);
+  const allCheckpoints = await db.select().from(request_parallel_checkpoints);
+
+  const myRequestsFormatted = rawRequests.map(r => {
+    let parsedForm: any = {};
+    try {
+      if (r.formData) parsedForm = JSON.parse(r.formData);
+    } catch (_) {}
+
+    const reqLogs = allLogs.filter(l => l.requestId === r.id).map(l => ({
+      id: l.id,
+      actorRole: l.actorRole || undefined,
+      action: l.action || undefined,
+      note: l.note || undefined,
+      assignedAt: l.assignedAt ? l.assignedAt.toISOString() : null,
+      completedAt: l.completedAt ? l.completedAt.toISOString() : null,
+      durationMinutes: l.durationMinutes,
+      slaStatus: l.slaStatus || undefined,
+    }));
+
+    const reqCheckpoints = allCheckpoints.filter(c => c.requestId === r.id).map(c => ({
+      id: c.id,
+      departmentCode: c.departmentCode,
+      departmentTitle: c.departmentTitle,
+      isCleared: c.isCleared || 0,
+      notes: c.notes,
+    }));
+
+    return {
+      id: r.id,
+      trackingCode: r.trackingCode,
+      status: r.status,
+      created: r.created ? r.created.toISOString() : null,
+      updated: r.updated ? r.updated.toISOString() : null,
+      formData: parsedForm,
+      processCode: r.procCode,
+      processTitle: r.procTitle,
+      category: r.procCategory || 'عمومی',
+      certificateNumber: r.certificateNumber,
+      digitalStampHash: r.digitalStampHash,
+      satisfactionScore: r.satisfactionScore,
+      feedbackText: r.feedbackText,
+      logs: reqLogs,
+      checkpoints: reqCheckpoints,
+    };
+  });
 
   return (
-    <div className="space-y-4">
-      {/* هدر خلاصه وضعیت کارتابل */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="card text-center !p-3">
-          <p className="text-xl font-bold text-amber-600">{pendingCount}</p>
-          <p className="text-xs text-slate-500">در دست بررسی شورا</p>
-        </div>
-        <div className="card text-center !p-3">
-          <p className="text-xl font-bold text-emerald-600">{approvedCount}</p>
-          <p className="text-xs text-slate-500">تأیید و ثبت نهایی</p>
-        </div>
-      </div>
-
-      {/* فهرست درخواست‌های گردش کار */}
-      <div className="card space-y-3">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-          <h1 className="font-bold text-slate-800 text-sm">📋 کارتابل درخواست‌های دانشجو</h1>
-          <span className="text-xs text-slate-400">{myRequests.length} پرونده</span>
-        </div>
-
-        {myRequests.length === 0 && (
-          <div className="py-8 text-center text-slate-400">
-            <p className="text-3xl mb-2">📭</p>
-            <p className="text-sm">در حال حاضر هیچ درخواست یا ارجاعی به کمیسیون ندارید.</p>
-            <p className="text-xs text-slate-400 mt-1">در صورت وجود تداخل یا عدم پیش‌نیاز در انتخاب واحد، می‌توانید درس را به شورا ارجاع دهید.</p>
-          </div>
-        )}
-
-        {myRequests.map(req => {
-          let extra: any = {};
-          try {
-            if (req.formData) extra = JSON.parse(req.formData);
-          } catch (_) {}
-
-          return (
-            <div key={req.id} className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-800 text-sm">{req.processTitle || 'درخواست کمیسیون موارد خاص'}</span>
-                <span className={`text-xs px-2.5 py-0.5 rounded-full border ${reqBadge[req.status] || 'bg-slate-100 text-slate-700'}`}>
-                  {statusFa[req.status] ?? req.status}
-                </span>
-              </div>
-
-              {extra?.offeringTitle && (
-                <div className="rounded-lg bg-indigo-50/70 p-2 text-xs text-indigo-900">
-                  <p className="font-semibold">موضوع: درخواست اخذ درس {extra.offeringTitle}</p>
-                  {extra.reasons && Array.isArray(extra.reasons) && (
-                    <p className="text-[11px] text-indigo-700 mt-0.5 opacity-90">{extra.reasons.join(' · ')}</p>
-                  )}
-                </div>
-              )}
-
-              <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-50">
-                <span>کد رهگیری: <b className="font-mono text-slate-800" dir="ltr">{req.track}</b></span>
-                <span>{req.created ? new Date(req.created).toLocaleDateString('fa-IR') : '—'}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="rounded-xl bg-amber-50/80 p-3 text-xs text-amber-900 border border-amber-200">
-        💡 <b>راهنما:</b> نتیجهٔ بررسی شورا و مدیر گروه به صورت خودکار در همین کارتابل به‌روزرسانی شده و در صورت تأیید، درس مربوطه به صورت قطعی در کارنامه شما ثبت می‌شود.
-      </div>
-    </div>
+    <StudentRequestsClient
+      student={{
+        id: me.id,
+        name: user.name,
+        studentCode: me.studentCode,
+        majorName: major?.name || 'مهندسی کامپیوتر',
+        degreeTitle: level?.title || 'کارشناسی پیوسته',
+      }}
+      processes={processesList}
+      myRequests={myRequestsFormatted}
+    />
   );
 }

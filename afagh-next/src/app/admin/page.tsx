@@ -85,7 +85,27 @@ export default async function AdminHome() {
       </div>
 
       {/* میانبرهای سریع ماژول‌های آموزشی و امتحانات */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <Link
+          href="/admin/workflows"
+          className="p-4 rounded-2xl bg-gradient-to-r from-purple-950 to-indigo-950 text-white shadow-md hover:shadow-lg transition-all flex items-center justify-between group border border-purple-700/50"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-700/80 border border-purple-500/50 flex items-center justify-center text-xl shadow-inner group-hover:scale-105 transition-transform">
+              🔀
+            </div>
+            <div>
+              <h3 className="font-extrabold text-xs sm:text-sm">موتور فرآیندها و SLA</h3>
+              <p className="text-[11px] text-purple-200 mt-0.5">
+                کارتابل گردش کار و پایش گلوگاه‌ها
+              </p>
+            </div>
+          </div>
+          <span className="text-purple-300 font-extrabold text-xs group-hover:translate-x-1 transition-transform">
+            ←
+          </span>
+        </Link>
+
         <Link
           href="/admin/exams"
           className="p-4 rounded-2xl bg-gradient-to-r from-indigo-900 to-indigo-950 text-white shadow-md hover:shadow-lg transition-all flex items-center justify-between group border border-indigo-700/50"
