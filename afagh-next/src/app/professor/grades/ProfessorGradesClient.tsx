@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 
 export interface RubricWeights {
@@ -88,7 +88,7 @@ export default function ProfessorGradesClient({
       : initialOfferings[0]?.id || 101
   );
 
-  const [activeTab, setActiveTab] = useState<'RUBRIC' | 'ROSTER' | 'APPEALS'>('ROSTER');
+  const [activeTab, setActiveTab] = useState<'ROSTER' | 'RUBRIC' | 'APPEALS' | 'ANALYTICS'>('ROSTER');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showOtpModal, setShowOtpModal] = useState<boolean>(false);
   const [otpCode, setOtpCode] = useState<string>('');
@@ -96,11 +96,23 @@ export default function ProfessorGradesClient({
   const [selectedAppeal, setSelectedAppeal] = useState<GradeAppealItem | null>(null);
   const [appealReplyText, setAppealReplyText] = useState<string>('');
   const [appealNewGrade, setAppealNewGrade] = useState<number>(14);
+  const [lastAutoSaveTime, setLastAutoSaveTime] = useState<string>('هم‌اکنون');
+  const [searchStudentQuery, setSearchStudentQuery] = useState<string>('');
 
   const currentOffering = offerings.find(o => o.id === selectedOfferingId) || offerings[0];
   const rubric = currentOffering?.rubric || { midterm: 5, homework: 3, participation: 2, practical: 0, finalExam: 10 };
   const totalRubric = (Number(rubric.midterm) || 0) + (Number(rubric.homework) || 0) + (Number(rubric.participation) || 0) + (Number(rubric.practical) || 0) + (Number(rubric.finalExam) || 0);
   const isRubricValid = totalRubric === 20;
+
+  // Auto-save simulation
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      setLastAutoSaveTime(timeStr);
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Helper to re-clamp all students of an offering to its rubric
   const clampAllStudentsToRubric = (offering: GradingCourseOffering, newRubric: RubricWeights): StudentGradeItem[] => {
@@ -183,7 +195,6 @@ export default function ProfessorGradesClient({
           students: off.students.map(st => {
             if (st.studentId !== studentId) return st;
 
-            // Strict maximum check against rubric for this specific field
             let maxAllowed = 20;
             if (field === 'midtermScore') maxAllowed = off.rubric.midterm;
             else if (field === 'homeworkScore') maxAllowed = off.rubric.homework;
@@ -196,7 +207,6 @@ export default function ProfessorGradesClient({
 
             const updated = { ...st, [field]: clampedVal };
 
-            // Recalculate Final Score
             if (off.isCoTaught && off.coTaughtDetails) {
               const theory = updated.theoryProfScore ?? 0;
               const lab = updated.labProfScore ?? 0;
@@ -216,6 +226,35 @@ export default function ProfessorGradesClient({
         };
       })
     );
+  };
+
+  // Add Bonus Grace Mark to All Students
+  const applyBonusMarkToAll = (bonus: number) => {
+    if (!confirm(`آیا از افزودن ${bonus} نمره ارفاق/تشویقی به آزمون پایان‌ترم تمامی دانشجویان مطمئن هستید؟`)) return;
+    setOfferings(prev =>
+      prev.map(off => {
+        if (off.id !== selectedOfferingId) return off;
+        return {
+          ...off,
+          students: off.students.map(st => {
+            const currentFinal = st.finalExamScore ?? 0;
+            const newFinal = Math.min(off.rubric.finalExam, currentFinal + bonus);
+            const m = Math.min(off.rubric.midterm, st.midtermScore ?? 0);
+            const h = Math.min(off.rubric.homework, st.homeworkScore ?? 0);
+            const p = Math.min(off.rubric.participation, st.participationScore ?? 0);
+            const pr = Math.min(off.rubric.practical, st.practicalScore ?? 0);
+            const sum = m + h + p + pr + newFinal;
+            return {
+              ...st,
+              finalExamScore: newFinal,
+              calculatedFinalScore: Math.min(20, Math.round(sum * 100) / 100),
+            };
+          }),
+        };
+      })
+    );
+    setToastMessage(`✨ نمره تشویقی (${bonus} نمره) با موفقیت به برگه پایان‌ترم دانشجویان اضافه شد.`);
+    setTimeout(() => setToastMessage(null), 4000);
   };
 
   // Grade Workflow Actions
@@ -311,14 +350,36 @@ export default function ProfessorGradesClient({
     ? (students.reduce((s, st) => s + (st.calculatedFinalScore || 0), 0) / students.length).toFixed(2)
     : '۰';
 
+  const gradeDistribution = useMemo(() => {
+    let fail = 0;     // 0 - 9.9
+    let fair = 0;     // 10 - 13.9
+    let good = 0;     // 14 - 16.9
+    let excellent = 0;// 17 - 20
+    students.forEach(st => {
+      const g = st.calculatedFinalScore;
+      if (g === undefined) return;
+      if (g < 10) fail++;
+      else if (g < 14) fair++;
+      else if (g < 17) good++;
+      else excellent++;
+    });
+    return { fail, fair, good, excellent };
+  }, [students]);
+
+  const filteredStudents = students.filter(st => {
+    if (!searchStudentQuery.trim()) return true;
+    const q = searchStudentQuery.trim().toLowerCase();
+    return st.fullName.toLowerCase().includes(q) || st.studentCode.includes(q);
+  });
+
   return (
     <div className="space-y-5" dir="rtl">
       
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="p-4 bg-emerald-900 text-emerald-100 rounded-2xl shadow-xl border border-emerald-700 font-bold text-sm flex items-center justify-between">
+        <div className="p-4 bg-emerald-900 text-emerald-100 rounded-2xl shadow-xl border border-emerald-700 font-bold text-sm flex items-center justify-between animate-fadeIn">
           <div className="flex items-center gap-2">
-            <span>✅</span>
+            <span>📢</span>
             <span>{toastMessage}</span>
           </div>
           <button onClick={() => setToastMessage(null)} className="text-white/60 hover:text-white text-xs">✕</button>
@@ -326,17 +387,18 @@ export default function ProfessorGradesClient({
       )}
 
       {/* Header Bar */}
-      <div className="bg-gradient-to-l from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-5 shadow-lg border border-indigo-700/50 space-y-4">
+      <div className="bg-gradient-to-l from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-5 shadow-xl border border-indigo-700/50 space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-slate-950">
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-amber-400 text-slate-950">
                 ارزیابی تحصیلی و امتحانات
               </span>
               <span className="text-xs text-indigo-200">{termTitle}</span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
-              📝 سهم‌بندی بارم، ثبت نمرات و فرجام‌خواهی دروس
+            <h1 className="text-lg sm:text-2xl font-black tracking-tight flex items-center gap-2">
+              <span>📝</span>
+              <span>داشبورد ثبت نمرات، سهم‌بندی بارم و فرجام‌خواهی</span>
             </h1>
           </div>
 
@@ -356,27 +418,28 @@ export default function ProfessorGradesClient({
           </div>
         </div>
 
-        {/* Course Offering Selector */}
-        <div className="bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/15 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        {/* Course Offering Selector & Auto-Save Indicator */}
+        <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/15 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs items-center">
           <div className="sm:col-span-2">
             <label className="text-indigo-200 font-bold block mb-1">انتخاب کلاس و درس مورد نظر جهت ارزیابی:</label>
             <select
               value={selectedOfferingId}
               onChange={e => setSelectedOfferingId(Number(e.target.value))}
-              className="w-full bg-slate-900/90 text-white border border-indigo-400/50 rounded-lg px-3 py-2 font-bold"
+              className="w-full bg-slate-900/90 text-white border border-indigo-400/50 rounded-xl px-3 py-2 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-400"
             >
               {offerings.map(o => (
                 <option key={o.id} value={o.id}>
-                  {o.title} (گروه {faNum(o.groupNumber)} — کد {o.code}) {o.isCoTaught ? '👥 [درس مشترک]' : ''}
+                  {o.title} (گروه {faNum(o.groupNumber)} — کد {o.code}) {o.isCoTaught ? '👥 [درس مشترک تئوری/عملی]' : ''}
                 </option>
               ))}
             </select>
           </div>
 
-          <div>
-            <span className="text-indigo-200 font-bold block mb-1">نوع درس و تعداد دانشجو:</span>
-            <div className="font-extrabold text-amber-300">
-              {currentOffering.courseType} · {faNum(currentOffering.units)} واحد · {faNum(students.length)} دانشجو
+          <div className="flex sm:flex-col justify-between sm:justify-center items-end sm:items-start border-t sm:border-t-0 sm:border-r sm:border-white/15 pt-2 sm:pt-0 sm:pr-3">
+            <span className="text-indigo-200 font-bold block text-[11px]">وضعیت ذخیره‌سازی زنده:</span>
+            <div className="flex items-center gap-1.5 text-emerald-300 font-mono text-xs font-bold mt-0.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>ذخیره خودکار: {lastAutoSaveTime}</span>
             </div>
           </div>
         </div>
@@ -392,21 +455,21 @@ export default function ProfessorGradesClient({
             <span className="text-xs font-bold text-purple-200">فرمول سهم‌بندی مصوب شورای گروه آموزشی</span>
           </div>
           <p className="text-xs text-purple-100 leading-5">
-            این درس به صورت مشترک توسط <b>{currentOffering.coTaughtDetails.theoryProfName}</b> (بخش تئوری با سهم {faNum(currentOffering.coTaughtDetails.theoryWeightRatio * 100)}٪ معادل {faNum(currentOffering.coTaughtDetails.theoryWeightMarks)} نمره) و <b>{currentOffering.coTaughtDetails.labProfName}</b> (بخش عملی با سهم {faNum(currentOffering.coTaughtDetails.labWeightRatio * 100)}٪ معادل {faNum(currentOffering.coTaughtDetails.labWeightMarks)} نمره) تدریس می‌گردد. هر استاد نمره بخش خود را از ۲۰ وارد نموده و سیستم نمره نهایی را به صورت خودکار محاسبه می‌نماید.
+            این درس به صورت مشترک توسط <b>{currentOffering.coTaughtDetails.theoryProfName}</b> (بخش تئوری با سهم {faNum(currentOffering.coTaughtDetails.theoryWeightRatio * 100)}٪ معادل {faNum(currentOffering.coTaughtDetails.theoryWeightMarks)} نمره) و <b>{currentOffering.coTaughtDetails.labProfName}</b> (بخش عملی با سهم {faNum(currentOffering.coTaughtDetails.labWeightRatio * 100)}٪ معادل {faNum(currentOffering.coTaughtDetails.labWeightMarks)} نمره) تدریس می‌گردد.
           </p>
         </div>
       )}
 
       {/* Tabs Navigation */}
-      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between border-b border-slate-200 pb-2 gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setActiveTab('ROSTER')}
             className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 ${
-              activeTab === 'ROSTER' ? 'bg-indigo-700 text-white shadow-sm' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+              activeTab === 'ROSTER' ? 'bg-indigo-900 text-white shadow-sm' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
             }`}
           >
-            <span>📊 لیست ورود نمرات کلاسی</span>
+            <span>📊 لیست نمرات کلاسی</span>
             <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/30 text-[10px]">{faNum(students.length)}</span>
           </button>
 
@@ -414,10 +477,10 @@ export default function ProfessorGradesClient({
             <button
               onClick={() => setActiveTab('RUBRIC')}
               className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 ${
-                activeTab === 'RUBRIC' ? 'bg-indigo-700 text-white shadow-sm' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                activeTab === 'RUBRIC' ? 'bg-indigo-900 text-white shadow-sm' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
               }`}
             >
-              <span>⚙️ تنظیم بارم‌بندی و سهم اجزا</span>
+              <span>⚙️ سهم‌بندی بارم</span>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isRubricValid ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
                 جمع: {faNum(totalRubric)} از ۲۰
               </span>
@@ -427,21 +490,30 @@ export default function ProfessorGradesClient({
           <button
             onClick={() => setActiveTab('APPEALS')}
             className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 ${
-              activeTab === 'APPEALS' ? 'bg-indigo-700 text-white shadow-sm' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+              activeTab === 'APPEALS' ? 'bg-indigo-900 text-white shadow-sm' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
             }`}
           >
-            <span>📩 کارتابل اعتراضات دانشجویان</span>
+            <span>📩 کارتابل اعتراضات</span>
             {currentOffering.appeals.length > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 font-black text-[10px]">
                 {faNum(currentOffering.appeals.filter(a => a.status === 'OPEN').length)} باز
               </span>
             )}
           </button>
+
+          <button
+            onClick={() => setActiveTab('ANALYTICS')}
+            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 ${
+              activeTab === 'ANALYTICS' ? 'bg-indigo-900 text-white shadow-sm' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <span>📈 تحلیل آماری نمرات</span>
+          </button>
         </div>
 
-        {/* Roster Statistics Indicator */}
-        <div className="hidden sm:flex items-center gap-3 text-xs font-bold text-slate-600">
-          <span>میانگین کلاس: <b className="text-indigo-950">{faNum(averageGrade)}</b></span>
+        {/* Quick Stats Summary */}
+        <div className="hidden lg:flex items-center gap-3 text-xs font-bold text-slate-600">
+          <span>میانگین: <b className="text-indigo-950">{faNum(averageGrade)}</b></span>
           <span>قبولی: <b className="text-emerald-700">{faNum(passedStudents)} نفر</b></span>
           <span>مردودی: <b className="text-rose-700">{faNum(failedStudents)} نفر</b></span>
         </div>
@@ -451,14 +523,14 @@ export default function ProfessorGradesClient({
       {/* TAB 1: RUBRIC WEIGHTING CONFIGURATION */}
       {/* ========================================================================= */}
       {activeTab === 'RUBRIC' && !currentOffering.isCoTaught && (
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-5">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-5">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
-              <h3 className="font-extrabold text-slate-900 text-base">
+              <h3 className="font-black text-slate-900 text-base">
                 تنظیم سهم‌بندی و بارم نمره درس «{currentOffering.title}»
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                مجموع بارم بخش‌های مختلف باید <b>دقیقاً برابر با ۲۰ نمره</b> باشد. نمرات وارد شده در لیست به طور خودکار به حداکثر بارم هر بخش محدود می‌شوند.
+                مجموع بارم بخش‌های مختلف باید <b>دقیقاً برابر با ۲۰ نمره</b> باشد.
               </p>
             </div>
 
@@ -485,7 +557,7 @@ export default function ProfessorGradesClient({
                   : `مجموع بارم‌های فعلی برابر با ${faNum(totalRubric)} نمره است. (${totalRubric < 20 ? faNum(20 - totalRubric) + ' نمره کسری دارد' : faNum(totalRubric - 20) + ' نمره اضافه است'})`}
               </span>
             </div>
-            <div className="font-extrabold text-sm">
+            <div className="font-black text-sm">
               مجموع: {faNum(totalRubric)} / ۲۰ نمره
             </div>
           </div>
@@ -493,7 +565,7 @@ export default function ProfessorGradesClient({
           {/* Rubric Inputs Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-              <div className="font-extrabold text-slate-800 text-xs flex items-center justify-between">
+              <div className="font-bold text-slate-800 text-xs flex items-center justify-between">
                 <span>📝 آزمون میان‌ترم</span>
                 <span className="text-[10px] text-slate-500">از ۲۰</span>
               </div>
@@ -502,15 +574,16 @@ export default function ProfessorGradesClient({
                 min={0}
                 max={20}
                 step={0.5}
+                inputMode="decimal"
                 value={rubric.midterm}
                 onChange={e => updateRubricField('midterm', Number(e.target.value))}
-                className="w-full border border-slate-300 rounded-xl p-2.5 text-center font-extrabold text-indigo-950 text-base focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-slate-300 rounded-xl p-2.5 text-center font-black text-indigo-950 text-base focus:ring-2 focus:ring-indigo-500"
               />
               <span className="text-[10px] text-slate-500 block text-center">سهم بارم میان‌ترم</span>
             </div>
 
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-              <div className="font-extrabold text-slate-800 text-xs flex items-center justify-between">
+              <div className="font-bold text-slate-800 text-xs flex items-center justify-between">
                 <span>📑 تکالیف و تمرین‌ها</span>
                 <span className="text-[10px] text-slate-500">از ۲۰</span>
               </div>
@@ -519,15 +592,16 @@ export default function ProfessorGradesClient({
                 min={0}
                 max={20}
                 step={0.5}
+                inputMode="decimal"
                 value={rubric.homework}
                 onChange={e => updateRubricField('homework', Number(e.target.value))}
-                className="w-full border border-slate-300 rounded-xl p-2.5 text-center font-extrabold text-indigo-950 text-base focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-slate-300 rounded-xl p-2.5 text-center font-black text-indigo-950 text-base focus:ring-2 focus:ring-indigo-500"
               />
               <span className="text-[10px] text-slate-500 block text-center">تکالیف دوره‌ای و پروژه</span>
             </div>
 
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-              <div className="font-extrabold text-slate-800 text-xs flex items-center justify-between">
+              <div className="font-bold text-slate-800 text-xs flex items-center justify-between">
                 <span>🙋 حضور و فعالیت کلاسی</span>
                 <span className="text-[10px] text-slate-500">از ۲۰</span>
               </div>
@@ -536,15 +610,16 @@ export default function ProfessorGradesClient({
                 min={0}
                 max={20}
                 step={0.5}
+                inputMode="decimal"
                 value={rubric.participation}
                 onChange={e => updateRubricField('participation', Number(e.target.value))}
-                className="w-full border border-slate-300 rounded-xl p-2.5 text-center font-extrabold text-indigo-950 text-base focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-slate-300 rounded-xl p-2.5 text-center font-black text-indigo-950 text-base focus:ring-2 focus:ring-indigo-500"
               />
               <span className="text-[10px] text-slate-500 block text-center">نظم، حضور و کوئیزها</span>
             </div>
 
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-              <div className="font-extrabold text-slate-800 text-xs flex items-center justify-between">
+              <div className="font-bold text-slate-800 text-xs flex items-center justify-between">
                 <span>🔬 بخش عملی و کارگاهی</span>
                 <span className="text-[10px] text-slate-500">از ۲۰</span>
               </div>
@@ -553,15 +628,16 @@ export default function ProfessorGradesClient({
                 min={0}
                 max={20}
                 step={0.5}
+                inputMode="decimal"
                 value={rubric.practical}
                 onChange={e => updateRubricField('practical', Number(e.target.value))}
-                className="w-full border border-slate-300 rounded-xl p-2.5 text-center font-extrabold text-indigo-950 text-base focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-slate-300 rounded-xl p-2.5 text-center font-black text-indigo-950 text-base focus:ring-2 focus:ring-indigo-500"
               />
               <span className="text-[10px] text-slate-500 block text-center">گزارش‌کار و آزمایشگاه</span>
             </div>
 
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-              <div className="font-extrabold text-slate-800 text-xs flex items-center justify-between">
+              <div className="font-bold text-slate-800 text-xs flex items-center justify-between">
                 <span>🎓 آزمون کتبی پایان‌ترم</span>
                 <span className="text-[10px] text-slate-500">از ۲۰</span>
               </div>
@@ -570,15 +646,16 @@ export default function ProfessorGradesClient({
                 min={0}
                 max={20}
                 step={0.5}
+                inputMode="decimal"
                 value={rubric.finalExam}
                 onChange={e => updateRubricField('finalExam', Number(e.target.value))}
-                className="w-full border border-slate-300 rounded-xl p-2.5 text-center font-extrabold text-indigo-950 text-base focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-slate-300 rounded-xl p-2.5 text-center font-black text-indigo-950 text-base focus:ring-2 focus:ring-indigo-500"
               />
               <span className="text-[10px] text-slate-500 block text-center">برگه امتحان پایان‌ترم</span>
             </div>
           </div>
 
-          <div className="flex justify-end pt-3 border-t border-slate-200">
+          <div className="flex justify-end pt-3 border-t border-slate-100">
             <button
               disabled={!isRubricValid}
               onClick={() => {
@@ -586,93 +663,113 @@ export default function ProfessorGradesClient({
                 setToastMessage('بارم‌بندی با موفقیت تایید شد؛ اکنون نمرات دانشجویان بر اساس این سقف‌ها محاسبه می‌گردند.');
                 setTimeout(() => setToastMessage(null), 4000);
               }}
-              className="px-6 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white font-extrabold text-xs shadow transition"
+              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-indigo-900 hover:bg-indigo-950 disabled:opacity-50 text-white font-black text-xs shadow transition"
             >
-              تایید بارم و رفتن به لیست ورود نمرات ←
+              تایید بارم و ورود نمرات کلاسی ←
             </button>
           </div>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: ROSTER GRADE ENTRY TABLE */}
+      {/* TAB 2: ROSTER GRADE ENTRY (RESPONSIVE: DESKTOP SPREADSHEET + MOBILE ADAPTIVE CARDS) */}
       {/* ========================================================================= */}
       {activeTab === 'ROSTER' && (
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
-              <h3 className="font-extrabold text-slate-900 text-base">
+              <h3 className="font-black text-slate-900 text-base">
                 ورود نمرات درس {currentOffering.title} (گروه {faNum(currentOffering.groupNumber)})
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 {currentOffering.isCoTaught
-                  ? 'درس مشترک: نمره هر بخش از ۲۰ وارد شده و نمره کل طبق فرمول محاسبه می‌شود.'
-                  : `بر اساس بارم‌بندی: میان‌ترم (${faNum(rubric.midterm)})، تکالیف (${faNum(rubric.homework)})، حضور (${faNum(rubric.participation)})، عملی (${faNum(rubric.practical)})، پایان‌ترم (${faNum(rubric.finalExam)}) — هیچ نمره‌ای نمی‌تواند بیشتر از سهم بارم باشد.`}
+                  ? 'درس مشترک: نمره هر بخش از ۲۰ وارد شده و نمره کل طبق سهمیه مصوب محاسبه می‌گردد.'
+                  : `بر اساس بارم: میان‌ترم (${faNum(rubric.midterm)})، تکالیف (${faNum(rubric.homework)})، حضور (${faNum(rubric.participation)})، عملی (${faNum(rubric.practical)})، پایان‌ترم (${faNum(rubric.finalExam)})`}
               </p>
             </div>
 
-            {/* Workflow Action Buttons */}
+            {/* Workflow Action Buttons (Full-width on mobile, auto on desktop) */}
             <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={handleSaveDraft}
-                className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition"
+                onClick={() => applyBonusMarkToAll(0.5)}
+                className="w-full sm:w-auto px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold text-xs transition flex items-center justify-center gap-1"
               >
-                💾 ذخیره پیش‌نویس
+                <span>✨ ارفاق گروهی (+۰.۵ نمره)</span>
+              </button>
+              <button
+                onClick={handleSaveDraft}
+                className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition flex items-center justify-center gap-1"
+              >
+                <span>💾 ذخیره پیش‌نویس</span>
               </button>
               <button
                 onClick={handleSubmitTemporary}
-                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs shadow-xs transition"
+                className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow-xs transition flex items-center justify-center gap-1"
               >
-                📢 ثبت موقت (مشاهده دانشجو و اعتراض)
+                <span>📢 ثبت موقت و رویت دانشجو</span>
               </button>
               <button
                 onClick={handleRequestFinalizeOtp}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-extrabold text-xs shadow-md transition flex items-center gap-1.5"
+                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 text-white font-black text-xs shadow-md transition flex items-center justify-center gap-1.5"
               >
-                <span>🔒 نهایی‌سازی با رمز OTP</span>
+                <span>🔒 قفل قطعی نمرات با OTP</span>
               </button>
             </div>
           </div>
 
-          {/* Roster Table */}
-          <div className="overflow-x-auto">
+          {/* Search filter for roster */}
+          <div className="flex items-center justify-between gap-3">
+            <input
+              type="text"
+              placeholder="جستجوی دانشجو با نام یا شماره دانشجویی..."
+              value={searchStudentQuery}
+              onChange={e => setSearchStudentQuery(e.target.value)}
+              className="w-full sm:w-72 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <span className="text-xs text-slate-500 font-bold hidden sm:inline">
+              نمایش {faNum(filteredStudents.length)} از {faNum(students.length)} دانشجو
+            </span>
+          </div>
+
+          {/* VIEW A: DESKTOP TABLE VIEW (HIDDEN ON MOBILE) */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-900 text-white text-center">
-                  <th className="p-2.5 border border-slate-800 w-12 font-extrabold">ردیف</th>
-                  <th className="p-2.5 border border-slate-800 font-extrabold">شماره دانشجویی</th>
-                  <th className="p-2.5 border border-slate-800 font-extrabold">نام و نام خانوادگی دانشجو</th>
+                  <th className="p-2.5 border border-slate-800 w-12 font-bold">ردیف</th>
+                  <th className="p-2.5 border border-slate-800 font-bold">شماره دانشجویی</th>
+                  <th className="p-2.5 border border-slate-800 font-bold text-right">نام دانشجو</th>
 
                   {currentOffering.isCoTaught ? (
                     <>
-                      <th className="p-2.5 border border-slate-800 font-extrabold bg-indigo-950">
-                        نمره بخش تئوری (از ۲۰)
-                        <div className="text-[10px] text-indigo-300 font-normal">سهم: {faNum(currentOffering.coTaughtDetails?.theoryWeightRatio! * 100)}٪</div>
+                      <th className="p-2.5 border border-slate-800 font-bold bg-indigo-950">
+                        نمره تئوری (از ۲۰)
+                        <div className="text-[10px] text-indigo-300 font-normal">سهم {faNum(currentOffering.coTaughtDetails?.theoryWeightRatio! * 100)}٪</div>
                       </th>
-                      <th className="p-2.5 border border-slate-800 font-extrabold bg-purple-950">
-                        نمره بخش عملی (از ۲۰)
-                        <div className="text-[10px] text-purple-300 font-normal">سهم: {faNum(currentOffering.coTaughtDetails?.labWeightRatio! * 100)}٪</div>
+                      <th className="p-2.5 border border-slate-800 font-bold bg-purple-950">
+                        نمره عملی (از ۲۰)
+                        <div className="text-[10px] text-purple-300 font-normal">سهم {faNum(currentOffering.coTaughtDetails?.labWeightRatio! * 100)}٪</div>
                       </th>
                     </>
                   ) : (
                     <>
-                      <th className="p-2 border border-slate-800 font-extrabold">میان‌ترم ({faNum(rubric.midterm)})</th>
-                      <th className="p-2 border border-slate-800 font-extrabold">تکالیف ({faNum(rubric.homework)})</th>
-                      <th className="p-2 border border-slate-800 font-extrabold">حضور ({faNum(rubric.participation)})</th>
+                      <th className="p-2 border border-slate-800 font-bold">میان‌ترم ({faNum(rubric.midterm)})</th>
+                      <th className="p-2 border border-slate-800 font-bold">تکالیف ({faNum(rubric.homework)})</th>
+                      <th className="p-2 border border-slate-800 font-bold">حضور ({faNum(rubric.participation)})</th>
                       {rubric.practical > 0 && (
-                        <th className="p-2 border border-slate-800 font-extrabold">عملی ({faNum(rubric.practical)})</th>
+                        <th className="p-2 border border-slate-800 font-bold">عملی ({faNum(rubric.practical)})</th>
                       )}
-                      <th className="p-2 border border-slate-800 font-extrabold">پایان‌ترم ({faNum(rubric.finalExam)})</th>
+                      <th className="p-2 border border-slate-800 font-bold">پایان‌ترم ({faNum(rubric.finalExam)})</th>
                     </>
                   )}
 
-                  <th className="p-2.5 border border-slate-800 font-extrabold bg-slate-950 text-amber-300">نمره نهایی (از ۲۰)</th>
-                  <th className="p-2.5 border border-slate-800 font-extrabold">وضعیت قبولی</th>
-                  <th className="p-2.5 border border-slate-800 font-extrabold">وضعیت ثبت</th>
+                  <th className="p-2.5 border border-slate-800 font-black bg-slate-950 text-amber-300">نمره کل (از ۲۰)</th>
+                  <th className="p-2.5 border border-slate-800 font-bold">نتیجه</th>
+                  <th className="p-2.5 border border-slate-800 font-bold">وضعیت</th>
                 </tr>
               </thead>
               <tbody>
-                {students.map((st, idx) => {
+                {filteredStudents.map((st, idx) => {
                   const finalScore = st.calculatedFinalScore;
                   const isPass = finalScore !== undefined && finalScore >= 10;
                   const isFail = finalScore !== undefined && finalScore < 10;
@@ -682,10 +779,10 @@ export default function ProfessorGradesClient({
                       <td className="p-2.5 border border-slate-200 text-center font-bold text-slate-500">
                         {faNum(idx + 1)}
                       </td>
-                      <td className="p-2.5 border border-slate-200 font-mono text-center font-bold text-indigo-950">
-                        {faNum(st.studentCode)}
+                      <td className="p-2.5 border border-slate-200 font-mono text-center font-bold text-indigo-950" dir="ltr">
+                        {st.studentCode}
                       </td>
-                      <td className="p-2.5 border border-slate-200 font-extrabold text-slate-900">
+                      <td className="p-2.5 border border-slate-200 font-black text-slate-900">
                         {st.fullName}
                       </td>
 
@@ -697,12 +794,13 @@ export default function ProfessorGradesClient({
                               min={0}
                               max={20}
                               step={0.25}
+                              inputMode="decimal"
                               value={st.theoryProfScore ?? ''}
                               onChange={e => {
                                 const val = e.target.value === '' ? undefined : Math.max(0, Math.min(20, Number(e.target.value)));
                                 updateStudentScore(st.studentId, 'theoryProfScore', val);
                               }}
-                              className="w-16 border border-indigo-300 rounded-lg p-1 text-center font-extrabold text-indigo-950"
+                              className="w-16 border border-indigo-300 rounded-lg p-1 text-center font-black text-indigo-950"
                             />
                           </td>
                           <td className="p-2 border border-slate-200 bg-purple-50/40 text-center">
@@ -711,81 +809,66 @@ export default function ProfessorGradesClient({
                               min={0}
                               max={20}
                               step={0.25}
+                              inputMode="decimal"
                               value={st.labProfScore ?? ''}
                               onChange={e => {
                                 const val = e.target.value === '' ? undefined : Math.max(0, Math.min(20, Number(e.target.value)));
                                 updateStudentScore(st.studentId, 'labProfScore', val);
                               }}
-                              className="w-16 border border-purple-300 rounded-lg p-1 text-center font-extrabold text-purple-950"
+                              className="w-16 border border-purple-300 rounded-lg p-1 text-center font-black text-purple-950"
                             />
                           </td>
                         </>
                       ) : (
                         <>
-                          {/* Midterm Input */}
                           <td className="p-1.5 border border-slate-200 text-center">
                             <input
                               type="number"
                               min={0}
                               max={rubric.midterm}
                               step={0.25}
-                              title={`حداکثر سهم میان‌ترم: ${faNum(rubric.midterm)} نمره`}
+                              inputMode="decimal"
                               value={st.midtermScore !== undefined ? Math.min(rubric.midterm, st.midtermScore) : ''}
                               onChange={e => {
-                                if (e.target.value === '') {
-                                  updateStudentScore(st.studentId, 'midtermScore', undefined);
-                                } else {
-                                  const clamped = Math.max(0, Math.min(rubric.midterm, Number(e.target.value)));
-                                  updateStudentScore(st.studentId, 'midtermScore', clamped);
-                                }
+                                if (e.target.value === '') updateStudentScore(st.studentId, 'midtermScore', undefined);
+                                else updateStudentScore(st.studentId, 'midtermScore', Math.max(0, Math.min(rubric.midterm, Number(e.target.value))));
                               }}
                               className="w-14 border border-slate-300 rounded-lg p-1 text-center font-bold text-xs focus:ring-2 focus:ring-indigo-500"
                             />
                           </td>
 
-                          {/* Homework Input */}
                           <td className="p-1.5 border border-slate-200 text-center">
                             <input
                               type="number"
                               min={0}
                               max={rubric.homework}
                               step={0.25}
-                              title={`حداکثر سهم تکالیف: ${faNum(rubric.homework)} نمره`}
+                              inputMode="decimal"
                               value={st.homeworkScore !== undefined ? Math.min(rubric.homework, st.homeworkScore) : ''}
                               onChange={e => {
-                                if (e.target.value === '') {
-                                  updateStudentScore(st.studentId, 'homeworkScore', undefined);
-                                } else {
-                                  const clamped = Math.max(0, Math.min(rubric.homework, Number(e.target.value)));
-                                  updateStudentScore(st.studentId, 'homeworkScore', clamped);
-                                }
+                                if (e.target.value === '') updateStudentScore(st.studentId, 'homeworkScore', undefined);
+                                else updateStudentScore(st.studentId, 'homeworkScore', Math.max(0, Math.min(rubric.homework, Number(e.target.value))));
                               }}
                               className="w-14 border border-slate-300 rounded-lg p-1 text-center font-bold text-xs focus:ring-2 focus:ring-indigo-500"
                             />
                           </td>
 
-                          {/* Participation Input */}
                           <td className="p-1.5 border border-slate-200 text-center">
                             <input
                               type="number"
                               min={0}
                               max={rubric.participation}
                               step={0.25}
-                              title={`حداکثر سهم حضور و فعالیت: ${faNum(rubric.participation)} نمره`}
+                              inputMode="decimal"
                               value={st.participationScore !== undefined ? Math.min(rubric.participation, st.participationScore) : ''}
                               onChange={e => {
-                                if (e.target.value === '') {
-                                  updateStudentScore(st.studentId, 'participationScore', undefined);
-                                } else {
-                                  const clamped = Math.max(0, Math.min(rubric.participation, Number(e.target.value)));
-                                  updateStudentScore(st.studentId, 'participationScore', clamped);
-                                }
+                                if (e.target.value === '') updateStudentScore(st.studentId, 'participationScore', undefined);
+                                else updateStudentScore(st.studentId, 'participationScore', Math.max(0, Math.min(rubric.participation, Number(e.target.value))));
                               }}
                               className="w-14 border border-slate-300 rounded-lg p-1 text-center font-bold text-xs focus:ring-2 focus:ring-indigo-500"
                             />
                           </td>
 
-                          {/* Practical Input (if rubric > 0) */}
                           {rubric.practical > 0 && (
                             <td className="p-1.5 border border-slate-200 text-center">
                               <input
@@ -793,37 +876,28 @@ export default function ProfessorGradesClient({
                                 min={0}
                                 max={rubric.practical}
                                 step={0.25}
-                                title={`حداکثر سهم بخش عملی: ${faNum(rubric.practical)} نمره`}
+                                inputMode="decimal"
                                 value={st.practicalScore !== undefined ? Math.min(rubric.practical, st.practicalScore) : ''}
                                 onChange={e => {
-                                  if (e.target.value === '') {
-                                    updateStudentScore(st.studentId, 'practicalScore', undefined);
-                                  } else {
-                                    const clamped = Math.max(0, Math.min(rubric.practical, Number(e.target.value)));
-                                    updateStudentScore(st.studentId, 'practicalScore', clamped);
-                                  }
+                                  if (e.target.value === '') updateStudentScore(st.studentId, 'practicalScore', undefined);
+                                  else updateStudentScore(st.studentId, 'practicalScore', Math.max(0, Math.min(rubric.practical, Number(e.target.value))));
                                 }}
                                 className="w-14 border border-slate-300 rounded-lg p-1 text-center font-bold text-xs focus:ring-2 focus:ring-indigo-500"
                               />
                             </td>
                           )}
 
-                          {/* Final Exam Input */}
                           <td className="p-1.5 border border-slate-200 text-center">
                             <input
                               type="number"
                               min={0}
                               max={rubric.finalExam}
                               step={0.25}
-                              title={`حداکثر سهم آزمون پایان‌ترم: ${faNum(rubric.finalExam)} نمره`}
+                              inputMode="decimal"
                               value={st.finalExamScore !== undefined ? Math.min(rubric.finalExam, st.finalExamScore) : ''}
                               onChange={e => {
-                                if (e.target.value === '') {
-                                  updateStudentScore(st.studentId, 'finalExamScore', undefined);
-                                } else {
-                                  const clamped = Math.max(0, Math.min(rubric.finalExam, Number(e.target.value)));
-                                  updateStudentScore(st.studentId, 'finalExamScore', clamped);
-                                }
+                                if (e.target.value === '') updateStudentScore(st.studentId, 'finalExamScore', undefined);
+                                else updateStudentScore(st.studentId, 'finalExamScore', Math.max(0, Math.min(rubric.finalExam, Number(e.target.value))));
                               }}
                               className="w-14 border border-slate-300 rounded-lg p-1 text-center font-bold text-xs focus:ring-2 focus:ring-indigo-500"
                             />
@@ -831,14 +905,12 @@ export default function ProfessorGradesClient({
                         </>
                       )}
 
-                      {/* Calculated Final Score */}
                       <td className="p-2 border border-slate-200 text-center font-black text-sm bg-slate-50">
                         <span className={isPass ? 'text-emerald-700' : isFail ? 'text-rose-700' : 'text-slate-500'}>
                           {finalScore !== undefined ? faNum(finalScore) : '—'}
                         </span>
                       </td>
 
-                      {/* Pass/Fail Status */}
                       <td className="p-2 border border-slate-200 text-center">
                         {finalScore !== undefined ? (
                           isPass ? (
@@ -855,15 +927,14 @@ export default function ProfessorGradesClient({
                         )}
                       </td>
 
-                      {/* Submission Status */}
                       <td className="p-2 border border-slate-200 text-center">
                         {st.status === 'FINALIZED' ? (
                           <span className="px-2 py-0.5 rounded bg-emerald-700 text-white font-bold text-[10px]">
-                            🔒 قطعی شده
+                            🔒 قطعی
                           </span>
                         ) : st.status === 'TEMPORARY' ? (
                           <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-bold text-[10px]">
-                            📢 ثبت موقت
+                            📢 موقت
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-bold text-[10px]">
@@ -877,6 +948,183 @@ export default function ProfessorGradesClient({
               </tbody>
             </table>
           </div>
+
+          {/* VIEW B: MOBILE ADAPTIVE CARDS (TOUCH-FRIENDLY, ZERO HORIZONTAL OVERFLOW) */}
+          <div className="block md:hidden space-y-3">
+            {filteredStudents.map((st, idx) => {
+              const finalScore = st.calculatedFinalScore;
+              const isPass = finalScore !== undefined && finalScore >= 10;
+              const isFail = finalScore !== undefined && finalScore < 10;
+
+              return (
+                <div
+                  key={st.studentId}
+                  className="p-4 bg-slate-50 rounded-2xl border border-slate-200 shadow-xs space-y-3"
+                >
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-indigo-900 text-white font-black text-xs flex items-center justify-center">
+                        {faNum(idx + 1)}
+                      </span>
+                      <div>
+                        <h4 className="font-black text-sm text-slate-900">{st.fullName}</h4>
+                        <span className="text-[11px] font-mono text-slate-500" dir="ltr">
+                          {st.studentCode}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-left">
+                      <span className="text-[10px] text-slate-500 block font-bold">نمره نهایی:</span>
+                      <span
+                        className={`text-base font-black ${
+                          isPass ? 'text-emerald-700' : isFail ? 'text-rose-700' : 'text-slate-400'
+                        }`}
+                      >
+                        {finalScore !== undefined ? faNum(finalScore) : '—'} / ۲۰
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Inputs Grid for Mobile */}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {currentOffering.isCoTaught ? (
+                      <>
+                        <div className="bg-white p-2 rounded-xl border border-indigo-200 space-y-1">
+                          <label className="text-[10px] text-indigo-950 font-bold block">
+                            تئوری (سهم {faNum(currentOffering.coTaughtDetails?.theoryWeightRatio! * 100)}٪):
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={20}
+                            step={0.25}
+                            inputMode="decimal"
+                            value={st.theoryProfScore ?? ''}
+                            onChange={e => {
+                              const val = e.target.value === '' ? undefined : Math.max(0, Math.min(20, Number(e.target.value)));
+                              updateStudentScore(st.studentId, 'theoryProfScore', val);
+                            }}
+                            className="w-full border border-slate-300 rounded-lg p-2 text-center font-black text-sm"
+                          />
+                        </div>
+
+                        <div className="bg-white p-2 rounded-xl border border-purple-200 space-y-1">
+                          <label className="text-[10px] text-purple-950 font-bold block">
+                            عملی (سهم {faNum(currentOffering.coTaughtDetails?.labWeightRatio! * 100)}٪):
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={20}
+                            step={0.25}
+                            inputMode="decimal"
+                            value={st.labProfScore ?? ''}
+                            onChange={e => {
+                              const val = e.target.value === '' ? undefined : Math.max(0, Math.min(20, Number(e.target.value)));
+                              updateStudentScore(st.studentId, 'labProfScore', val);
+                            }}
+                            className="w-full border border-slate-300 rounded-lg p-2 text-center font-black text-sm"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="bg-white p-2 rounded-xl border border-slate-200 space-y-1">
+                          <label className="text-[10px] text-slate-600 font-bold block">
+                            میان‌ترم ({faNum(rubric.midterm)}):
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={rubric.midterm}
+                            step={0.25}
+                            inputMode="decimal"
+                            value={st.midtermScore !== undefined ? Math.min(rubric.midterm, st.midtermScore) : ''}
+                            onChange={e => {
+                              if (e.target.value === '') updateStudentScore(st.studentId, 'midtermScore', undefined);
+                              else updateStudentScore(st.studentId, 'midtermScore', Math.max(0, Math.min(rubric.midterm, Number(e.target.value))));
+                            }}
+                            className="w-full border border-slate-300 rounded-lg p-2 text-center font-black text-sm focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+
+                        <div className="bg-white p-2 rounded-xl border border-slate-200 space-y-1">
+                          <label className="text-[10px] text-slate-600 font-bold block">
+                            تکالیف ({faNum(rubric.homework)}):
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={rubric.homework}
+                            step={0.25}
+                            inputMode="decimal"
+                            value={st.homeworkScore !== undefined ? Math.min(rubric.homework, st.homeworkScore) : ''}
+                            onChange={e => {
+                              if (e.target.value === '') updateStudentScore(st.studentId, 'homeworkScore', undefined);
+                              else updateStudentScore(st.studentId, 'homeworkScore', Math.max(0, Math.min(rubric.homework, Number(e.target.value))));
+                            }}
+                            className="w-full border border-slate-300 rounded-lg p-2 text-center font-black text-sm focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+
+                        <div className="bg-white p-2 rounded-xl border border-slate-200 space-y-1">
+                          <label className="text-[10px] text-slate-600 font-bold block">
+                            حضور ({faNum(rubric.participation)}):
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={rubric.participation}
+                            step={0.25}
+                            inputMode="decimal"
+                            value={st.participationScore !== undefined ? Math.min(rubric.participation, st.participationScore) : ''}
+                            onChange={e => {
+                              if (e.target.value === '') updateStudentScore(st.studentId, 'participationScore', undefined);
+                              else updateStudentScore(st.studentId, 'participationScore', Math.max(0, Math.min(rubric.participation, Number(e.target.value))));
+                            }}
+                            className="w-full border border-slate-300 rounded-lg p-2 text-center font-black text-sm focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+
+                        <div className="bg-white p-2 rounded-xl border border-slate-200 space-y-1">
+                          <label className="text-[10px] text-slate-600 font-bold block">
+                            پایان‌ترم ({faNum(rubric.finalExam)}):
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={rubric.finalExam}
+                            step={0.25}
+                            inputMode="decimal"
+                            value={st.finalExamScore !== undefined ? Math.min(rubric.finalExam, st.finalExamScore) : ''}
+                            onChange={e => {
+                              if (e.target.value === '') updateStudentScore(st.studentId, 'finalExamScore', undefined);
+                              else updateStudentScore(st.studentId, 'finalExamScore', Math.max(0, Math.min(rubric.finalExam, Number(e.target.value))));
+                            }}
+                            className="w-full border border-slate-300 rounded-lg p-2 text-center font-black text-sm focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200 text-[11px]">
+                    <span className="text-slate-500">
+                      وضعیت: {st.status === 'FINALIZED' ? '🔒 قطعی' : st.status === 'TEMPORARY' ? '📢 موقت' : 'پیش‌نویس'}
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full font-black text-[10px] ${
+                        isPass ? 'bg-emerald-100 text-emerald-800' : isFail ? 'bg-rose-100 text-rose-800' : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {isPass ? 'قبول' : isFail ? 'مردود' : 'ناتمام'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -884,20 +1132,20 @@ export default function ProfessorGradesClient({
       {/* TAB 3: GRADE APPEALS MANAGEMENT */}
       {/* ========================================================================= */}
       {activeTab === 'APPEALS' && (
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div>
-              <h3 className="font-extrabold text-slate-900 text-base">
+              <h3 className="font-black text-slate-900 text-base">
                 کارتابل رسیدگی به اعتراضات دانشجویان (درس {currentOffering.title})
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                طبق آیین‌نامه، استاد موظف است حداکثر ظرف مدت ۴۸ ساعت کاری به اعتراضات ثبت‌شده پاسخ دهد.
+                استاد محترم طبق آیین‌نامه موظف است ظرف مدت ۴۸ ساعت کاری به اعتراضات ثبت‌شده پاسخ دهد.
               </p>
             </div>
           </div>
 
           {currentOffering.appeals.length === 0 ? (
-            <div className="text-center p-8 text-slate-500 text-xs font-bold bg-slate-50 rounded-2xl">
+            <div className="text-center p-8 text-slate-500 text-xs font-bold bg-slate-50 rounded-2xl border border-dashed border-slate-300">
               هیچ اعتراضی برای این کلاس ثبت نشده است.
             </div>
           ) : (
@@ -906,7 +1154,7 @@ export default function ProfessorGradesClient({
                 <div key={appeal.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2 border-b border-slate-200">
                     <div className="flex items-center gap-2">
-                      <span className="font-extrabold text-slate-900 text-xs">{appeal.fullName}</span>
+                      <span className="font-black text-slate-900 text-xs">{appeal.fullName}</span>
                       <span className="font-mono text-xs text-slate-500">({faNum(appeal.studentCode)})</span>
                       <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 font-bold text-[10px]">
                         نمره موقت ثبت‌شده: {faNum(appeal.currentGrade)}
@@ -927,13 +1175,11 @@ export default function ProfessorGradesClient({
                     </div>
                   </div>
 
-                  {/* Student Message */}
                   <div className="bg-white p-3 rounded-xl border border-slate-200 text-xs text-slate-800">
                     <span className="font-bold text-slate-500 block mb-1">متن اعتراض دانشجو:</span>
                     <p className="leading-5">{appeal.studentMessage}</p>
                   </div>
 
-                  {/* Professor Reply (if resolved) */}
                   {appeal.status !== 'OPEN' && (
                     <div className="bg-slate-100 p-3 rounded-xl border border-slate-200 text-xs text-slate-800">
                       <div className="flex items-center justify-between font-bold text-slate-600 mb-1">
@@ -946,7 +1192,6 @@ export default function ProfessorGradesClient({
                     </div>
                   )}
 
-                  {/* Action trigger if open */}
                   {appeal.status === 'OPEN' && (
                     <div className="flex justify-end pt-1">
                       <button
@@ -954,7 +1199,7 @@ export default function ProfessorGradesClient({
                           setSelectedAppeal(appeal);
                           setAppealNewGrade(appeal.currentGrade);
                         }}
-                        className="px-4 py-1.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-extrabold text-xs shadow-xs transition"
+                        className="w-full sm:w-auto px-4 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-black text-xs shadow-xs transition"
                       >
                         ✍️ پاسخ و تصمیم‌گیری درباره اعتراض
                       </button>
@@ -967,18 +1212,68 @@ export default function ProfessorGradesClient({
         </div>
       )}
 
+      {/* ========================================================================= */}
+      {/* TAB 4: GRADE ANALYTICS & DISTRIBUTION */}
+      {/* ========================================================================= */}
+      {activeTab === 'ANALYTICS' && (
+        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-5">
+          <div className="pb-3 border-b border-slate-100">
+            <h3 className="font-black text-slate-900 text-base">
+              تحلیل آماری و توزیع فراوانی نمرات درس {currentOffering.title}
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              نمودار بازه‌های نمرات جهت بررسی سطح کیفی آزمون و سنجش استاندارد نمره‌دهی.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-center space-y-1">
+              <span className="text-xs font-bold text-emerald-800">عالی (۱۷ الی ۲۰)</span>
+              <div className="text-2xl font-black text-emerald-950">{faNum(gradeDistribution.excellent)} نفر</div>
+              <span className="text-[10px] text-emerald-600 font-mono">
+                {students.length > 0 ? faNum(((gradeDistribution.excellent / students.length) * 100).toFixed(1)) : '۰'}٪
+              </span>
+            </div>
+
+            <div className="p-4 bg-sky-50 rounded-2xl border border-sky-200 text-center space-y-1">
+              <span className="text-xs font-bold text-sky-800">خوب (۱۴ الی ۱۶.۹)</span>
+              <div className="text-2xl font-black text-sky-950">{faNum(gradeDistribution.good)} نفر</div>
+              <span className="text-[10px] text-sky-600 font-mono">
+                {students.length > 0 ? faNum(((gradeDistribution.good / students.length) * 100).toFixed(1)) : '۰'}٪
+              </span>
+            </div>
+
+            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-center space-y-1">
+              <span className="text-xs font-bold text-amber-800">متوسط (۱۰ الی ۱۳.۹)</span>
+              <div className="text-2xl font-black text-amber-950">{faNum(gradeDistribution.fair)} نفر</div>
+              <span className="text-[10px] text-amber-600 font-mono">
+                {students.length > 0 ? faNum(((gradeDistribution.fair / students.length) * 100).toFixed(1)) : '۰'}٪
+              </span>
+            </div>
+
+            <div className="p-4 bg-rose-50 rounded-2xl border border-rose-200 text-center space-y-1">
+              <span className="text-xs font-bold text-rose-800">مردود (زیر ۱۰)</span>
+              <div className="text-2xl font-black text-rose-950">{faNum(gradeDistribution.fail)} نفر</div>
+              <span className="text-[10px] text-rose-600 font-mono">
+                {students.length > 0 ? faNum(((gradeDistribution.fail / students.length) * 100).toFixed(1)) : '۰'}٪
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Appeal Decision Modal */}
       {selectedAppeal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-slate-200 space-y-4 animate-scaleUp text-slate-900">
+          <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-slate-200 space-y-4 text-slate-900">
             <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-              <h3 className="font-extrabold text-base text-slate-900">
+              <h3 className="font-black text-base text-slate-900">
                 رسیدگی به اعتراض دانشجو: {selectedAppeal.fullName}
               </h3>
               <button onClick={() => setSelectedAppeal(null)} className="text-slate-400 hover:text-slate-700">✕</button>
             </div>
 
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-1">
               <div className="flex justify-between">
                 <span className="text-slate-500">شماره دانشجویی:</span>
                 <span className="font-mono font-bold text-slate-800">{faNum(selectedAppeal.studentCode)}</span>
@@ -989,7 +1284,7 @@ export default function ProfessorGradesClient({
               </div>
               <div className="pt-1 text-slate-700 border-t border-slate-200">
                 <span className="font-bold text-slate-500 block mb-0.5">متن اعتراض:</span>
-                <p className="leading-5 bg-white p-2 rounded-lg border border-slate-200">{selectedAppeal.studentMessage}</p>
+                <p className="leading-5 bg-white p-2 rounded-xl border border-slate-200">{selectedAppeal.studentMessage}</p>
               </div>
             </div>
 
@@ -1014,23 +1309,24 @@ export default function ProfessorGradesClient({
                   min={0}
                   max={20}
                   step={0.25}
+                  inputMode="decimal"
                   value={appealNewGrade}
                   onChange={e => setAppealNewGrade(Number(e.target.value))}
-                  className="w-32 border border-slate-300 rounded-xl p-2 text-center font-extrabold text-sm text-indigo-950"
+                  className="w-32 border border-slate-300 rounded-xl p-2 text-center font-black text-sm text-indigo-950"
                 />
               </div>
             </div>
 
-            <div className="flex gap-2 pt-2 border-t border-slate-200">
+            <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-slate-200">
               <button
                 onClick={() => handleResolveAppeal('ACCEPTED')}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs transition"
+                className="w-full sm:flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition"
               >
                 ✓ پذیرش و ثبت نمره جدید
               </button>
               <button
                 onClick={() => handleResolveAppeal('REJECTED')}
-                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs transition"
+                className="w-full sm:flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs transition"
               >
                 ✕ رد اعتراض و تثبیت نمره قبلی
               </button>
@@ -1042,20 +1338,20 @@ export default function ProfessorGradesClient({
       {/* OTP Finalize Modal */}
       {showOtpModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4 animate-scaleUp text-slate-900">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4 text-slate-900">
             <div className="w-12 h-12 bg-amber-100 text-amber-800 rounded-2xl flex items-center justify-center text-2xl mx-auto">
               🔒
             </div>
             <div className="text-center space-y-1">
-              <h3 className="font-extrabold text-base text-slate-900">
+              <h3 className="font-black text-base text-slate-900">
                 تایید نهایی و قفل نمرات با رمز یکبار مصرف (OTP)
               </h3>
               <p className="text-xs text-slate-600 leading-5">
-                با نهایی‌سازی، لیست نمرات به همراه امضای دیجیتال رمزنگاری‌شده فریز شده و صرفاً از طریق مصوبه شورای آموزشی قابل تغییر خواهد بود.
+                با نهایی‌سازی، لیست نمرات به همراه امضای دیجیتال فریز شده و تغییر آن تنها از طریق شورای آموزشی ممکن خواهد بود.
               </p>
             </div>
 
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1 text-center">
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-1 text-center">
               <span className="text-slate-500 block">کد تایید ۵ رقمی پیامک‌شده (کد آزمایشی):</span>
               <span className="font-mono font-black text-indigo-700 text-lg tracking-widest">{otpSentCode}</span>
             </div>
@@ -1067,6 +1363,7 @@ export default function ProfessorGradesClient({
               <input
                 type="text"
                 maxLength={5}
+                inputMode="numeric"
                 value={otpCode}
                 onChange={e => setOtpCode(e.target.value)}
                 placeholder="• • • • •"
@@ -1074,16 +1371,16 @@ export default function ProfessorGradesClient({
               />
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
               <button
                 onClick={handleConfirmFinalize}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs transition shadow-md"
+                className="w-full sm:flex-1 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs transition shadow-md"
               >
                 🔒 تایید و امضای قطعی نمرات
               </button>
               <button
                 onClick={() => setShowOtpModal(false)}
-                className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition"
               >
                 انصراف
               </button>
