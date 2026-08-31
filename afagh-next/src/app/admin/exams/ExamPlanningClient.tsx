@@ -1244,7 +1244,7 @@ export default function ExamPlanningClient() {
       {/* ========================================================================= */}
       {activeTab === 'PROCTORS' && (
         <div className="card space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
             <div>
               <h2 className="font-black text-slate-900 text-base">
                 تخصیص مراقبین، سرپرستان جلسات و کادر اجرایی امتحانات
@@ -1253,12 +1253,20 @@ export default function ExamPlanningClient() {
                 توزیع متوازن نوبت‌های مراقبت بین اعضای هیات علمی و کارکنان آموزشی (۱ مراقب به ازای هر ۲۰ صندلی)
               </p>
             </div>
-            <button
-              onClick={() => showToast('توزیع خودکار نوبت‌های مراقبت بر اساس سقف موظفی اساتید با موفقیت انجام شد.')}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow transition"
-            >
-              ⚡ توزیع خودکار مراقبین به سالن‌ها
-            </button>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/proctor"
+                className="px-4 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition"
+              >
+                <span>📷 پرتال حضور و غیاب مراقبین (QR-Code) ←</span>
+              </Link>
+              <button
+                onClick={() => showToast('توزیع خودکار نوبت‌های مراقبت بر اساس سقف موظفی اساتید با موفقیت انجام شد.')}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow transition"
+              >
+                ⚡ توزیع خودکار مراقبین به سالن‌ها
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">

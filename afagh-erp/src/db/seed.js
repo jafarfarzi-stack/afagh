@@ -42,7 +42,8 @@ function main() {
   const roles = [
     ['ADMIN', 'مدیر سیستم', 1], ['STUDENT', 'دانشجو', 1], ['PROFESSOR', 'استاد', 1],
     ['DEP_HEAD', 'مدیر گروه', 1], ['EDU_EXPERT', 'کارشناس آموزش', 1],
-    ['VICE_EDU', 'معاون آموزشی', 1], ['FINANCE_EXPERT', 'کارشناس مالی', 1], ['MILITARY_OFFICER', 'کارشناس نظام وظیفه', 1], ['ARCHIVE_EXPERT', 'کارشناس بایگانی', 1], ['APPLICANT', 'متقاضی ثبت‌نام', 1]
+    ['VICE_EDU', 'معاون آموزشی', 1], ['FINANCE_EXPERT', 'کارشناس مالی', 1], ['MILITARY_OFFICER', 'کارشناس نظام وظیفه', 1], ['ARCHIVE_EXPERT', 'کارشناس بایگانی', 1], ['APPLICANT', 'متقاضی ثبت‌نام', 1],
+    ['PROCTOR', 'مراقب آزمون', 1]
   ];
   for (const [code, title, sys] of roles) run(`INSERT OR IGNORE INTO roles (code, title, isSystem) VALUES (?,?,?)`, [code, title, sys]);
 
