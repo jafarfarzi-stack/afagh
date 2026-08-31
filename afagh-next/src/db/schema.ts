@@ -926,3 +926,73 @@ export const notification_logs = pgTable('notification_logs', {
   sentAt: timestamp('sentAt').defaultNow(),
   deliveredAt: timestamp('deliveredAt')
 });
+
+// ============================================================================
+// تجمیع سالن‌های امتحان، تحویل اوراق به استاد و چرخه بایگانی (Exam Handover & Chain)
+// ============================================================================
+
+export const course_exam_sessions = pgTable('course_exam_sessions', {
+  id: serial('id').primaryKey(),
+  courseOfferingId: integer('courseOfferingId').notNull(),
+  totalHallsCount: integer('totalHallsCount').notNull().default(1),
+  receivedHallsCount: integer('receivedHallsCount').notNull().default(0),
+  totalExpectedSheets: integer('totalExpectedSheets').notNull().default(0),
+  totalDeliveredSheets: integer('totalDeliveredSheets').notNull().default(0),
+  isFullyCollected: integer('isFullyCollected').default(0),
+  notificationSentAt: timestamp('notificationSentAt'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+export const instructor_deliveries = pgTable('instructor_deliveries', {
+  id: serial('id').primaryKey(),
+  courseOfferingId: integer('courseOfferingId').notNull(),
+  instructorId: integer('instructorId').notNull().references(() => staff.id),
+  sheetCount: integer('sheetCount').notNull(),
+  pickupToken: varchar('pickupToken', { length: 64 }).notNull().unique(),
+  deliveredAt: timestamp('deliveredAt').defaultNow(),
+  vaultManagerId: integer('vaultManagerId').references(() => staff.id),
+  gradeDeadline: timestamp('gradeDeadline').notNull(),
+  status: varchar('status', { length: 30 }).default('PENDING_GRADING'), // PENDING_GRADING, GRADES_SUBMITTED, ARCHIVED
+  papersReturnedToArchive: integer('papersReturnedToArchive').default(0),
+  archiveManagerId: integer('archiveManagerId').references(() => staff.id),
+  returnedAt: timestamp('returnedAt')
+});
+
+// ============================================================================
+// ماژول مساعده، مالیات و بیمه روزانه تامین اجتماعی اساتید (Advances & Social Security)
+// ============================================================================
+
+export const instructor_advances = pgTable('instructor_advances', {
+  id: serial('id').primaryKey(),
+  instructorId: integer('instructorId').notNull().references(() => staff.id),
+  courseOfferingId: integer('courseOfferingId').notNull(),
+  requestedAmount: integer('requestedAmount').notNull(),
+  approvedAmount: integer('approvedAmount'),
+  status: varchar('status', { length: 30 }).default('PENDING_APPROVAL'), // PENDING_APPROVAL, APPROVED, PAID, REJECTED
+  approvedByFinanceId: integer('approvedByFinanceId').references(() => staff.id),
+  paidAt: timestamp('paidAt'),
+  isDeductedFromFinalPayroll: integer('isDeductedFromFinalPayroll').default(0),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+export const instructor_financial_profiles = pgTable('instructor_financial_profiles', {
+  id: serial('id').primaryKey(),
+  instructorId: integer('instructorId').notNull().references(() => staff.id).unique(),
+  canRequestAdvance: integer('canRequestAdvance').default(0), // کلید کنترلی پنهان مساعده (پیش‌فرض ۰)
+  isInsuranceEnabled: integer('isInsuranceEnabled').default(1), // بیمه روزانه تامین اجتماعی
+  isTaxExempt: integer('isTaxExempt').default(0),
+  taxRatePercent: integer('taxRatePercent').default(10), // ۱۰٪ مالیات تکلیفی
+  insuranceType: varchar('insuranceType', { length: 50 }).default('TAMIN_DAILY'),
+  taminBranchCode: varchar('taminBranchCode', { length: 50 }),
+  updatedAt: timestamp('updatedAt').defaultNow()
+});
+
+export const instructor_attendance_days = pgTable('instructor_attendance_days', {
+  id: serial('id').primaryKey(),
+  instructorId: integer('instructorId').notNull().references(() => staff.id),
+  attendanceDate: varchar('attendanceDate', { length: 20 }).notNull(), // تاریخ روز تدریس (مثال: ۱۴۰۵/۰۸/۱۲)
+  sessionsHeldCount: integer('sessionsHeldCount').default(1),
+  insuranceCalculated: integer('insuranceCalculated').default(1),
+  syncedWithTamin: integer('syncedWithTamin').default(0),
+  createdAt: timestamp('createdAt').defaultNow()
+});

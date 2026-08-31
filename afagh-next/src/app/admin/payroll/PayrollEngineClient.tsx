@@ -10,6 +10,27 @@ import Link from 'next/link';
 export type FacultyContractType = 'FULL_TIME_FACULTY' | 'ADJUNCT';
 export type PayrollStatus = 'DRAFT' | 'DEPT_HEAD_APPROVED' | 'DEAN_APPROVED' | 'FINANCE_SETTLED';
 
+const faNum = (n: any) =>
+  n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+
+export interface CourseExamAggregationItem {
+  id: number;
+  courseCode: string;
+  courseTitle: string;
+  professorName: string;
+  totalHallsCount: number;
+  receivedHallsCount: number;
+  totalExpectedSheets: number;
+  totalDeliveredSheets: number;
+  isFullyCollected: boolean;
+  notificationSent: boolean;
+  pickupQrStatus: string;
+  pickupDate?: string;
+  gradeDeadline: string;
+  papersReturnedToArchive: boolean;
+  archiveReturnDate?: string;
+}
+
 export interface CoursePayrollBreakdown {
   id: number;
   courseCode: string;
@@ -125,6 +146,8 @@ export type PayrollTabType =
   | 'STATEMENTS_CARTABLE'
   | 'ATTENDANCE_BIOMETRIC_CHAIN'
   | 'ELECTRONIC_DECREES'
+  | 'INSURANCE_AND_ADVANCES'
+  | 'EXAM_AGGREGATION_CHAIN'
   | 'BASE_RATES'
   | 'MULTIPLIERS'
   | 'CONTRACTS'
@@ -502,6 +525,118 @@ export default function PayrollEngineClient() {
   const [selectedDecreeForView, setSelectedDecreeForView] = useState<TeachingAppointmentDecree | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Insurance, Tax & Advance Remuneration States
+  const [globalTaminSyncEnabled, setGlobalTaminSyncEnabled] = useState<boolean>(true);
+  const [profFinancialSettings, setProfFinancialSettings] = useState([
+    {
+      staffId: 101,
+      staffCode: '۱۱۰۲',
+      name: 'دکتر جمیل احمدی',
+      contractType: 'FULL_TIME_FACULTY',
+      canRequestAdvance: false, // پیش‌فرض پنهان
+      isInsuranceEnabled: true, // بیمه روزانه تامین اجتماعی
+      isTaxExempt: false,
+      daysTaughtCount: 16,
+      advanceAmountRequested: 0,
+      advanceAmountApproved: 0,
+      advanceStatus: 'NONE',
+    },
+    {
+      staffId: 102,
+      staffCode: '۱۱۰۵',
+      name: 'دکتر سارا رضایی',
+      contractType: 'FULL_TIME_FACULTY',
+      canRequestAdvance: true, // فعال‌شده توسط مدیر مالی برای تقاضای موردی
+      isInsuranceEnabled: true,
+      isTaxExempt: false,
+      daysTaughtCount: 14,
+      advanceAmountRequested: 50000000,
+      advanceAmountApproved: 50000000,
+      advanceStatus: 'PAID',
+    },
+    {
+      staffId: 103,
+      staffCode: '۱۱۹۰',
+      name: 'استاد مهدی کاظمی (مدعو)',
+      contractType: 'ADJUNCT',
+      canRequestAdvance: true, // فعال‌شده توسط مدیر مالی
+      isInsuranceEnabled: true,
+      isTaxExempt: false,
+      daysTaughtCount: 12,
+      advanceAmountRequested: 40000000,
+      advanceAmountApproved: 35000000,
+      advanceStatus: 'APPROVED',
+    },
+    {
+      staffId: 104,
+      staffCode: '۱۱۰۴',
+      name: 'دکتر علی حسینی',
+      contractType: 'FULL_TIME_FACULTY',
+      canRequestAdvance: false,
+      isInsuranceEnabled: true,
+      isTaxExempt: false,
+      daysTaughtCount: 15,
+      advanceAmountRequested: 0,
+      advanceAmountApproved: 0,
+      advanceStatus: 'NONE',
+    },
+  ]);
+
+  // Multi-hall Exam Aggregation & Archive Return Chain States
+  const [courseExamAggregations, setCourseExamAggregations] = useState<CourseExamAggregationItem[]>([
+    {
+      id: 1,
+      courseCode: '۱۱۱۲۱۰۱',
+      courseTitle: 'ریاضی عمومی ۱',
+      professorName: 'دکتر جمیل احمدی',
+      totalHallsCount: 3, // آمفی‌تئاتر مرکزی، سالن شماره ۲، سالن ورزشی
+      receivedHallsCount: 3,
+      totalExpectedSheets: 65,
+      totalDeliveredSheets: 65,
+      isFullyCollected: true,
+      notificationSent: true,
+      pickupQrStatus: 'PICKED_UP_BY_PROF',
+      pickupDate: '۱۴۰۵/۱۰/۱۹ - ۱۰:۰۰',
+      gradeDeadline: '۱۴۰۵/۱۰/۲۹ (۱۰ روز کاری)',
+      papersReturnedToArchive: true, // تایید بایگانی -> باز شدن تسویه مالی
+      archiveReturnDate: '۱۴۰۵/۱۰/۲۶',
+    },
+    {
+      id: 2,
+      courseCode: '۱۱۱۲۱۰۳',
+      courseTitle: 'مبانی برنامه‌نویسی',
+      professorName: 'دکتر سارا رضایی',
+      totalHallsCount: 2, // سایت ۱۰۲ و سایت ۱۰۳
+      receivedHallsCount: 2,
+      totalExpectedSheets: 40,
+      totalDeliveredSheets: 40,
+      isFullyCollected: true,
+      notificationSent: true,
+      pickupQrStatus: 'PICKED_UP_BY_PROF',
+      pickupDate: '۱۴۰۵/۱۰/۲۲ - ۱۴:۳۰',
+      gradeDeadline: '۱۴۰۵/۱۱/۰۲ (۱۰ روز کاری)',
+      papersReturnedToArchive: false, // هنوز برنگشته -> قفل تسویه مالی ۶۰٪
+      archiveReturnDate: undefined,
+    },
+    {
+      id: 3,
+      courseCode: '۱۱۱۲۱۰۵',
+      courseTitle: 'فیزیک عمومی ۱',
+      professorName: 'دکتر علی حسینی',
+      totalHallsCount: 3, // سالن ۱، سالن ۳، آمفی‌تئاتر
+      receivedHallsCount: 2, // ۲ سالن از ۳ سالن رسیده
+      totalExpectedSheets: 70,
+      totalDeliveredSheets: 45,
+      isFullyCollected: false, // هنوز کامل نشده -> پیامک به استاد قفل است
+      notificationSent: false,
+      pickupQrStatus: 'WAITING_AGGREGATION',
+      pickupDate: undefined,
+      gradeDeadline: '—',
+      papersReturnedToArchive: false,
+      archiveReturnDate: undefined,
+    },
+  ]);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 6000);
@@ -798,6 +933,28 @@ export default function PayrollEngineClient() {
           }`}
         >
           <span>📜 ابلاغیه‌ها و صدور احکام تدریس (E-Sign)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('INSURANCE_AND_ADVANCES')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
+            activeTab === 'INSURANCE_AND_ADVANCES'
+              ? 'bg-indigo-900 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <span>🏥 بیمه تامین اجتماعی، مالیات و مساعده</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('EXAM_AGGREGATION_CHAIN')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
+            activeTab === 'EXAM_AGGREGATION_CHAIN'
+              ? 'bg-indigo-900 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <span>📦 تجمیع اوراق امتحانی و بایگانی (No Sheet, No Pay)</span>
         </button>
 
         <button
@@ -1280,6 +1437,353 @@ export default function PayrollEngineClient() {
                           </button>
                         )}
                       </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB: INSURANCE & INTERIM ADVANCE REMUNERATION MANAGEMENT */}
+      {/* ========================================================================= */}
+      {activeTab === 'INSURANCE_AND_ADVANCES' && (
+        <div className="card space-y-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="font-black text-slate-900 text-base">
+                  🏥 مدیریت هوشمند بیمه روزانه تامین اجتماعی، مالیات تکلیفی و مساعده‌های میان‌ترم
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-900 border border-emerald-200">
+                  قانون یک روز بیمه به ازای هر روز حضور
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                محاسبه خودکار ۱ روز بیمه در تاریخ‌های تدریس بدون احتساب تکراری در روزهای چندکلاسه · فعال‌سازی گزینشی مساعده فقط برای اساتید متقاضی
+              </p>
+            </div>
+
+            {/* Global Master Switch */}
+            <div className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-2xl border border-slate-200">
+              <span className="text-xs font-black text-slate-800">کلید اصلی اتصال به تامین اجتماعی:</span>
+              <button
+                onClick={() => {
+                  setGlobalTaminSyncEnabled(!globalTaminSyncEnabled);
+                  showToast(
+                    `ارسال خودکار به سامانه تامین اجتماعی ${
+                      !globalTaminSyncEnabled ? 'فعال (ON)' : 'غیرفعال (OFF)'
+                    } شد.`
+                  );
+                }}
+                className={`px-3 py-1 rounded-xl text-xs font-black transition ${
+                  globalTaminSyncEnabled
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-slate-300 text-slate-700'
+                }`}
+              >
+                {globalTaminSyncEnabled ? 'روشن (ON) ✓' : 'خاموش (OFF)'}
+              </button>
+            </div>
+          </div>
+
+          {/* Logic Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-200 space-y-1">
+              <span className="text-indigo-900 font-bold block">قانون بیمه روزانه تامین اجتماعی:</span>
+              <p className="text-indigo-950 font-bold leading-5">
+                اگر استادی در یک روز ۳ کلاس (صبح، ظهر، عصر) داشته باشد، دقیقاً <b>۱ روز بیمه</b> رد می‌شود تا روزهای کارکرد ماهانه از سقف تجاوز نکند.
+              </p>
+            </div>
+
+            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 space-y-1">
+              <span className="text-amber-900 font-bold block">سیاست پرداخت مساعده (Advance):</span>
+              <p className="text-amber-950 font-bold leading-5">
+                منوی درخواست علی‌الحساب برای عموم اساتید <b>پنهان</b> است تا بار مالی زودرس ایجاد نشود؛ مدیر مالی می‌تواند به صورت موردی آن را برای استاد فعال کند.
+              </p>
+            </div>
+
+            <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 space-y-1">
+              <span className="text-emerald-900 font-bold block">کسر خودکار در تسویه نهایی:</span>
+              <p className="text-emerald-950 font-bold leading-5">
+                مبالغ مساعده پرداخت‌شده در میان‌ترم، به طور اتوماتیک از فیش تسویه حساب پایان ترم کسر می‌شوند (جلوگیری از پرداخت مضاعف).
+              </p>
+            </div>
+          </div>
+
+          {/* Table of Professors Settings */}
+          <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+            <table className="w-full text-right text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white">
+                  <th className="p-3">کد</th>
+                  <th className="p-3">نام عضو هیئت علمی / مدرس</th>
+                  <th className="p-3 text-center">روزهای تدریس ماه جاری</th>
+                  <th className="p-3 text-center">بیمه تامین اجتماعی</th>
+                  <th className="p-3 text-center">مالیات تکلیفی ۱۰٪</th>
+                  <th className="p-3 text-center">دسترسی به درخواست مساعده</th>
+                  <th className="p-3 text-center">مبلغ علی‌الحساب</th>
+                  <th className="p-3 text-left">عملیات مالی</th>
+                </tr>
+              </thead>
+              <tbody>
+                {profFinancialSettings.map(prof => (
+                  <tr key={prof.staffId} className="border-b border-slate-100 hover:bg-slate-50 transition">
+                    <td className="p-3 font-mono font-bold text-slate-600" dir="ltr">
+                      {prof.staffCode}
+                    </td>
+                    <td className="p-3 font-black text-slate-900">{prof.name}</td>
+                    <td className="p-3 text-center font-mono font-black text-indigo-950">
+                      {faNum(prof.daysTaughtCount)} روز کارکرد
+                    </td>
+
+                    {/* Insurance Toggle */}
+                    <td className="p-3 text-center">
+                      <button
+                        onClick={() => {
+                          setProfFinancialSettings(prev =>
+                            prev.map(p =>
+                              p.staffId === prof.staffId ? { ...p, isInsuranceEnabled: !p.isInsuranceEnabled } : p
+                            )
+                          );
+                          showToast(`وضعیت بیمه تامین اجتماعی برای ${prof.name} تغییر یافت.`);
+                        }}
+                        className={`px-2.5 py-1 rounded-xl text-[10px] font-black transition ${
+                          prof.isInsuranceEnabled
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : 'bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        {prof.isInsuranceEnabled ? '✓ مشمول بیمه روزانه' : 'معاف / خویش‌فرما'}
+                      </button>
+                    </td>
+
+                    {/* Tax Status */}
+                    <td className="p-3 text-center">
+                      <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-bold text-[10px]">
+                        {prof.isTaxExempt ? 'معاف از مالیات' : '۱۰٪ کسر استاندارد'}
+                      </span>
+                    </td>
+
+                    {/* Advance Request Access Toggle */}
+                    <td className="p-3 text-center">
+                      <button
+                        onClick={() => {
+                          const newState = !prof.canRequestAdvance;
+                          setProfFinancialSettings(prev =>
+                            prev.map(p =>
+                              p.staffId === prof.staffId ? { ...p, canRequestAdvance: newState } : p
+                            )
+                          );
+                          showToast(
+                            `دسترسی به دکمه مساعده برای «${prof.name}» در پنل استادی ${
+                              newState ? '🟢 فعال (قابل رویت)' : '🔴 پنهان (غیرفعال)'
+                            } شد.`
+                          );
+                        }}
+                        className={`px-2.5 py-1 rounded-xl text-[10px] font-black transition shadow-xs ${
+                          prof.canRequestAdvance
+                            ? 'bg-amber-400 text-slate-950 border border-amber-500'
+                            : 'bg-slate-100 text-slate-400 border border-slate-200'
+                        }`}
+                      >
+                        {prof.canRequestAdvance ? '🔓 منو در پنل فعال است' : '🔒 پنهان از دید استاد'}
+                      </button>
+                    </td>
+
+                    {/* Advance Amount Status */}
+                    <td className="p-3 text-center font-mono">
+                      {prof.advanceAmountRequested > 0 ? (
+                        <div>
+                          <span className="font-bold text-amber-700">
+                            {faNum(prof.advanceAmountApproved.toLocaleString('fa-IR'))} ريال
+                          </span>
+                          <span className="block text-[9px] text-slate-500 font-sans">
+                            {prof.advanceStatus === 'PAID' ? 'پرداخت شده (آماده کسر در تسویه)' : 'تایید شده'}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-[10px]">بدون مساعده</span>
+                      )}
+                    </td>
+
+                    <td className="p-3 text-left">
+                      {prof.advanceStatus === 'APPROVED' && (
+                        <button
+                          onClick={() => {
+                            setProfFinancialSettings(prev =>
+                              prev.map(p =>
+                                p.staffId === prof.staffId ? { ...p, advanceStatus: 'PAID' } : p
+                              )
+                            );
+                            showToast(`دستور پرداخت مساعده برای ${prof.name} صادر شد و سند حسابداری ثبت گردید.`);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] shadow-xs"
+                        >
+                          پرداخت علی‌الحساب 💳
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB: MULTI-HALL EXAM AGGREGATION & ARCHIVE RETURN CHAIN */}
+      {/* ========================================================================= */}
+      {activeTab === 'EXAM_AGGREGATION_CHAIN' && (
+        <div className="card space-y-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="font-black text-slate-900 text-base">
+                  📦 تجمیع اوراق امتحانات چندسالنه، تحویل با QR و بازگشت به بایگانی (No Sheet, No Pay!)
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-900 border border-indigo-200">
+                  الگوی سد تجمیعی (Barrier Synchronization)
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                صبر تا تحویل ۱۰۰٪ برگه‌ها از تمام سالن‌ها قبل از ارسال پیامک به استاد · قفل تسویه مالی ۶۰٪ تا زمان تحویل فیزیکی اوراق به بایگانی
+              </p>
+            </div>
+          </div>
+
+          {/* Workflow Explanation Banner */}
+          <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-2 text-xs">
+            <h4 className="font-black text-amber-300">
+              🔗 زنجیره ۴ مرحله‌ای ممیزی اوراق امتحانی و تسویه حساب مالی اساتید:
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1 text-[11px] text-indigo-100">
+              <div className="bg-white/10 p-2.5 rounded-xl border border-white/10">
+                <b>۱. تجمیع بسته‌ها در مخزن:</b> بررسی تمام سالن‌ها. تا آخرین برگه نرسد، پیامکی برای استاد ارسال نمی‌شود.
+              </div>
+              <div className="bg-white/10 p-2.5 rounded-xl border border-white/10">
+                <b>۲. تحویل به استاد با QR:</b> استاد بارکد روی گوشی را به مسئول مخزن نشان می‌دهد و مهلت ۱۰ روزه نمره فعال می‌شود.
+              </div>
+              <div className="bg-white/10 p-2.5 rounded-xl border border-white/10">
+                <b>۳. ثبت قطعی نمرات:</b> ورود نمرات در سامانه با تایید دو مرحله‌ای OTP.
+              </div>
+              <div className="bg-white/10 p-2.5 rounded-xl border border-white/10">
+                <b>۴. بازگشت به بایگانی:</b> تحویل اوراق فیزیکی به کارشناس بایگانی و آزادسازی تسویه نهایی ۶۰٪ حق‌التدریس.
+              </div>
+            </div>
+          </div>
+
+          {/* Aggregations Table */}
+          <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+            <table className="w-full text-right text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white">
+                  <th className="p-3">کد درس</th>
+                  <th className="p-3">عنوان درس امتحانی</th>
+                  <th className="p-3">استاد مدرس</th>
+                  <th className="p-3 text-center">وضعیت سالن‌ها</th>
+                  <th className="p-3 text-center">تعداد کل اوراق</th>
+                  <th className="p-3 text-center">پیامک تجمیعی به استاد</th>
+                  <th className="p-3 text-center">تحویل به استاد (QR)</th>
+                  <th className="p-3 text-center">بازگشت به بایگانی</th>
+                  <th className="p-3 text-left">عملیات بایگانی</th>
+                </tr>
+              </thead>
+              <tbody>
+                {courseExamAggregations.map(agg => (
+                  <tr key={agg.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
+                    <td className="p-3 font-mono font-bold text-slate-700" dir="ltr">
+                      {agg.courseCode}
+                    </td>
+                    <td className="p-3 font-black text-slate-900">{agg.courseTitle}</td>
+                    <td className="p-3 font-bold text-indigo-950">{agg.professorName}</td>
+
+                    {/* Multi-hall Barrier Status */}
+                    <td className="p-3 text-center">
+                      <span
+                        className={`px-2.5 py-1 rounded-xl text-[10px] font-black ${
+                          agg.isFullyCollected
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-amber-100 text-amber-900 animate-pulse'
+                        }`}
+                      >
+                        {faNum(agg.receivedHallsCount)} از {faNum(agg.totalHallsCount)} سالن تحویل شد
+                      </span>
+                    </td>
+
+                    <td className="p-3 text-center font-mono font-black text-slate-800">
+                      {faNum(agg.totalDeliveredSheets)} از {faNum(agg.totalExpectedSheets)} برگه
+                    </td>
+
+                    {/* SMS Status */}
+                    <td className="p-3 text-center">
+                      {agg.notificationSent ? (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                          ✓ پیامک ارسال شد
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 text-[10px]">
+                          قفل (منتظر سایر سالن‌ها)
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Professor Pickup QR Status */}
+                    <td className="p-3 text-center">
+                      {agg.pickupQrStatus === 'PICKED_UP_BY_PROF' ? (
+                        <div>
+                          <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-950 font-bold text-[10px]">
+                            ✓ تحویل به استاد با QR
+                          </span>
+                          <span className="text-[9px] text-slate-500 block font-mono mt-0.5">
+                            مهلت نمره: {agg.gradeDeadline}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-[10px]">در انتظار تجمیع</span>
+                      )}
+                    </td>
+
+                    {/* Physical Archive Return Gate */}
+                    <td className="p-3 text-center">
+                      {agg.papersReturnedToArchive ? (
+                        <span className="px-2.5 py-1 rounded-xl bg-emerald-600 text-white font-black text-[10px] shadow-xs">
+                          ✓ تحویل بایگانی شد (تسویه مالی آزاد)
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded-xl bg-rose-100 text-rose-800 font-black text-[10px]">
+                          ⛔ دست استاد (تسویه مالی قفل)
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="p-3 text-left">
+                      {!agg.papersReturnedToArchive && agg.pickupQrStatus === 'PICKED_UP_BY_PROF' && (
+                        <button
+                          onClick={() => {
+                            setCourseExamAggregations(prev =>
+                              prev.map(a =>
+                                a.id === agg.id
+                                  ? {
+                                      ...a,
+                                      papersReturnedToArchive: true,
+                                      archiveReturnDate: '۱۴۰۵/۱۰/۲۹',
+                                    }
+                                  : a
+                              )
+                            );
+                            showToast(
+                              `✓ اوراق تصحیح‌شده درس «${agg.courseTitle}» با موفقیت در بایگانی تحویل گرفته شد و قفل تسویه مالی ۶۰٪ آزاد گردید.`
+                            );
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] shadow-xs"
+                        >
+                          تایید دریافت اوراق در بایگانی 📥
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
