@@ -56,6 +56,9 @@ export type CartItem = {
 
 type Live = Record<number, { cap: number; enrolled: number; remaining: number }>;
 
+// تبدیل اعداد به فارسی جهت جلوگیری از به‌هم‌ریختگی و ادغام در متن راست‌به‌چپ (Bidi)
+const faNum = (n: any) => (n === null || n === undefined) ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+
 function checkTimeOverlap(s1: string, e1: string, s2: string, e2: string) {
   return s1.slice(0, 5) < e2.slice(0, 5) && s2.slice(0, 5) < e1.slice(0, 5);
 }
@@ -162,7 +165,7 @@ export default function EnrollClient(props: {
         for (const cA of itemA.classSchedules) {
           for (const cB of itemB.classSchedules) {
             if (cA.dayOfWeek === cB.dayOfWeek && checkTimeOverlap(cA.startTime, cA.endTime, cB.startTime, cB.endTime)) {
-              classConf.push(`تداخل کلاس در روز ${cA.dayName} (${cA.startTime}-${cA.endTime}) با درس «${itemB.title}»`);
+              classConf.push(`تداخل کلاس در روز ${cA.dayName} (${faNum(cA.startTime)} الی ${faNum(cA.endTime)}) با درس «${itemB.title}»`);
             }
           }
         }
@@ -170,7 +173,7 @@ export default function EnrollClient(props: {
         // تداخل امتحانی
         if (itemA.examSchedule && itemB.examSchedule && itemA.examSchedule.examDate === itemB.examSchedule.examDate) {
           if (checkTimeOverlap(itemA.examSchedule.startTime, itemA.examSchedule.endTime, itemB.examSchedule.startTime, itemB.examSchedule.endTime)) {
-            examConf.push(`تداخل ساعت امتحان در تاریخ ${itemA.examSchedule.examDate} با درس «${itemB.title}»`);
+            examConf.push(`تداخل ساعت امتحان در تاریخ ${faNum(itemA.examSchedule.examDate)} با درس «${itemB.title}»`);
           }
         }
       }
@@ -180,7 +183,6 @@ export default function EnrollClient(props: {
       if (classConf.length > 0 || examConf.length > 0) {
         const otherGroups = props.offerings.filter(o => o.courseId === itemA.courseId && o.id !== itemA.id);
         alternateGroup = otherGroups.find(alt => {
-          // بررسی که alt با سایر دروس سبد (به جز itemA) تداخلی نداشته باشد
           for (const other of props.cart) {
             if (other.id === itemA.id) continue;
             for (const ca of alt.classSchedules) {
@@ -331,7 +333,7 @@ export default function EnrollClient(props: {
           </div>
           <div className="flex items-center gap-3">
             <span className="font-mono text-base font-extrabold tracking-wider" dir="ltr">
-              {expired ? 'منقضی شده' : `${mm}:${ss}`}
+              {expired ? 'منقضی شده' : `${faNum(mm)}:${faNum(ss)}`}
             </span>
             {expired && (
               <button
@@ -355,7 +357,7 @@ export default function EnrollClient(props: {
             <span>هشدار تداخل زمانی در سبد انتخاب واحد:</span>
           </div>
           <p>
-            بین زمان برگزاری کلاس‌ها یا تاریخ امتحانات برخی دروس سبد تداخل وجود دارد. می‌توانید با زدن دکمهٔ «جابجایی به گروه دیگر»، گروه بدون تداخل را جایگزین نمایید.
+            بین زمان برگزاری کلاس‌ها یا تاریخ امتحانات برخی دروس سبد تداخل وجود دارد. می‌توانید با زدن دکمهٔ «انتقال به گروه دیگر»، گروه بدون تداخل را جایگزین نمایید.
           </p>
         </div>
       )}
@@ -367,29 +369,31 @@ export default function EnrollClient(props: {
           <div>
             <p className="text-sm font-bold text-emerald-900">درخواست شما در صف پردازش انتخاب واحد قرار گرفت</p>
             <p className="text-xs text-emerald-700">
-              {processing ? 'در حال اعتبارسنجی و ثبت قطعی در پایگاه داده…' : `نوبت شما در اتاق انتظار: ${queuePos ?? '—'}`}
+              {processing ? 'در حال اعتبارسنجی و ثبت قطعی در پایگاه داده…' : `نوبت شما در اتاق انتظار: ${faNum(queuePos ?? '—')}`}
             </p>
           </div>
         </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* سبد انتخاب واحد دانشجو با نمایش تفکیکی گروه‌ها و تداخل‌ها          */}
+      {/* سبد انتخاب واحد دانشجو با نمایش تفکیکی و تمیز گروه‌ها و واحدها     */}
       {/* ══════════════════════════════════════════════════════════════════ */}
       <div className="card !p-4 bg-white border border-slate-200 shadow-sm rounded-2xl space-y-3">
         <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <h2 className="font-extrabold text-base text-slate-900">🛒 سبد انتخاب واحد</h2>
             <span
-              className={`text-xs px-2.5 py-0.5 rounded-full font-bold font-mono ${
+              className={`text-xs px-3 py-1 rounded-full font-bold inline-flex items-center gap-1.5 ${
                 totalUnits > 20
                   ? 'bg-rose-100 text-rose-800'
                   : totalUnits >= 12
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'bg-amber-100 text-amber-800'
+                  ? 'bg-emerald-100 text-emerald-900'
+                  : 'bg-amber-100 text-amber-900'
               }`}
             >
-              {totalUnits} واحد ({props.cart.length} درس) — سقف مجاز: ۲۰ واحد
+              <span>{faNum(totalUnits)} واحد</span>
+              <span>({faNum(props.cart.length)} درس)</span>
+              <span>— سقف مجاز: {faNum(20)} واحد</span>
             </span>
           </div>
 
@@ -423,27 +427,29 @@ export default function EnrollClient(props: {
                   key={c.id || idx}
                   className={`rounded-xl border p-3 text-sm transition-all space-y-2 ${
                     isConflicted
-                      ? 'bg-amber-50/80 border-amber-300'
+                      ? 'bg-amber-50/80 border-amber-300 shadow-sm'
                       : 'bg-emerald-50/70 border-emerald-200/80'
                   }`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-3">
-                      <span className="w-6 h-6 rounded-lg bg-emerald-200 text-emerald-900 flex items-center justify-center font-mono font-bold text-xs">
-                        {idx + 1}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="w-6 h-6 rounded-lg bg-emerald-200 text-emerald-900 flex items-center justify-center font-bold text-xs">
+                        {faNum(idx + 1)}
                       </span>
-                      <div>
-                        <span className="font-extrabold text-slate-900">{c.title}</span>
-                        <span className="text-xs text-slate-500 mr-2 font-mono" dir="ltr">
-                          ({c.code})
-                        </span>
-                        <span className="mr-2 text-xs bg-indigo-100 text-indigo-900 px-2 py-0.5 rounded font-bold font-mono">
-                          گروه {c.group}
-                        </span>
-                        <span className="mr-2 text-[11px] bg-white text-emerald-800 px-2 py-0.5 rounded border border-emerald-300 font-bold font-mono">
-                          {c.units} واحد
-                        </span>
-                      </div>
+                      <span className="font-extrabold text-slate-900 text-sm">{c.title}</span>
+                      <span className="text-xs text-slate-500 font-mono" dir="ltr">
+                        ({c.code})
+                      </span>
+
+                      {/* نشان گروه به صورت تفکیک‌شده و با عدد فارسی */}
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-indigo-100 text-indigo-900 border border-indigo-200 text-xs font-bold mr-1">
+                        گروه {faNum(c.group)}
+                      </span>
+
+                      {/* نشان تعداد واحد به صورت تفکیک‌شده و با عدد فارسی */}
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-white text-emerald-800 border border-emerald-300 text-xs font-bold mr-1">
+                        {faNum(c.units)} واحد
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -454,7 +460,7 @@ export default function EnrollClient(props: {
                           className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-xl font-bold shadow-sm transition-all flex items-center gap-1"
                         >
                           <span>🔄</span>
-                          <span>انتقال به گروه {conf.alternateGroup.group} (بدون تداخل)</span>
+                          <span>انتقال به گروه {faNum(conf.alternateGroup.group)} (بدون تداخل)</span>
                         </button>
                       )}
 
@@ -469,24 +475,31 @@ export default function EnrollClient(props: {
                     </div>
                   </div>
 
-                  {/* جزئیات زمان‌بندی کلاس و امتحان در کارت سبد */}
-                  <div className="text-[11px] text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1 bg-white/70 p-2 rounded-lg border border-slate-200">
-                    <div>
-                      📅 <b>جلسات هفتگی:</b>{' '}
-                      {c.classSchedules.length > 0
-                        ? c.classSchedules.map((cs, i) => `${cs.dayName} ${cs.startTime}-${cs.endTime}`).join(' و ')
-                        : 'اعلام خواهد شد'}
+                  {/* جزئیات زمان‌بندی کلاس و امتحان در کارت سبد با برچسب‌های تفکیک‌شده و اعداد فارسی */}
+                  <div className="text-xs text-slate-700 flex flex-wrap items-center gap-x-4 gap-y-1 bg-white/80 p-2.5 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-1">
+                      <span>📅</span>
+                      <span className="font-bold">جلسات هفتگی:</span>
+                      <span className="text-slate-600 font-medium">
+                        {c.classSchedules.length > 0
+                          ? c.classSchedules.map(cs => `${cs.dayName} ساعت ${faNum(cs.startTime)} الی ${faNum(cs.endTime)}`).join(' و ')
+                          : 'اعلام خواهد شد'}
+                      </span>
                     </div>
                     {c.examSchedule && (
-                      <div>
-                        📝 <b>امتحان پایان‌ترم:</b> {c.examSchedule.examDate} ({c.examSchedule.startTime}-{c.examSchedule.endTime})
+                      <div className="flex items-center gap-1 border-r border-slate-200 pr-3 mr-1">
+                        <span>📝</span>
+                        <span className="font-bold">امتحان پایان‌ترم:</span>
+                        <span className="text-slate-600 font-medium">
+                          تاریخ {faNum(c.examSchedule.examDate)} ساعت {faNum(c.examSchedule.startTime)} الی {faNum(c.examSchedule.endTime)}
+                        </span>
                       </div>
                     )}
                   </div>
 
                   {/* هشدارهای تداخل */}
                   {isConflicted && (
-                    <div className="space-y-1 text-[11px] text-rose-800 bg-rose-50 p-2 rounded-lg border border-rose-200 font-medium">
+                    <div className="space-y-1 text-xs text-rose-800 bg-rose-50 p-2.5 rounded-lg border border-rose-200 font-medium">
                       {conf.classConflicts.map((cc, i) => (
                         <p key={i}>⚠️ {cc}</p>
                       ))}
@@ -504,7 +517,7 @@ export default function EnrollClient(props: {
         {totalUnits > 20 && (
           <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-800 font-bold flex items-center gap-2">
             <span>⛔</span>
-            <span>تعداد واحدهای سبد ({totalUnits} واحد) بیش از سقف مجاز ترمیک (۲۰ واحد) است. لطفاً حداقل {totalUnits - 20} واحد را حذف کنید.</span>
+            <span>تعداد واحدهای سبد ({faNum(totalUnits)} واحد) بیش از سقف مجاز ترمیک ({faNum(20)} واحد) است. لطفاً حداقل {faNum(totalUnits - 20)} واحد را حذف کنید.</span>
           </div>
         )}
 
@@ -514,7 +527,7 @@ export default function EnrollClient(props: {
             disabled={busy || totalUnits > 20 || queuePos !== null || processing}
             onClick={submit}
           >
-            {busy ? 'در حال ارسال و رزرو…' : `ثبت نهایی و اخذ قطعی (${totalUnits} واحد)`}
+            {busy ? 'در حال ارسال و رزرو…' : `ثبت نهایی و اخذ قطعی (${faNum(totalUnits)} واحد)`}
           </button>
         )}
       </div>
@@ -570,7 +583,7 @@ export default function EnrollClient(props: {
               نمایش گروه‌های درسی موازی با زمان‌بندی کلاس، تاریخ امتحان و کنترل زندهٔ ظرفیت.
             </p>
           </div>
-          <span className="text-xs text-slate-500 font-mono">تعداد کل گروه‌ها: {props.offerings.length}</span>
+          <span className="text-xs text-slate-500 font-bold">تعداد کل گروه‌ها: {faNum(props.offerings.length)}</span>
         </div>
 
         <div className="space-y-2.5">
@@ -586,7 +599,7 @@ export default function EnrollClient(props: {
             return (
               <div
                 key={o.id}
-                className={`flex flex-wrap items-center justify-between rounded-xl p-3 text-sm border transition-all ${
+                className={`flex flex-wrap items-center justify-between rounded-xl p-3.5 text-sm border transition-all ${
                   inCart
                     ? 'bg-emerald-50/70 border-emerald-300 ring-2 ring-emerald-200 shadow-sm'
                     : 'bg-slate-50 border-slate-200 hover:bg-slate-100/80'
@@ -594,50 +607,53 @@ export default function EnrollClient(props: {
               >
                 <div className="space-y-1.5 max-w-2xl">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-extrabold text-slate-900">{o.title}</p>
-                    <span className="text-xs bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-mono" dir="ltr">
-                      {o.code}
+                    <p className="font-extrabold text-slate-900 text-sm">{o.title}</p>
+                    <span className="text-xs text-slate-500 font-mono" dir="ltr">
+                      ({o.code})
                     </span>
-                    <span className="text-xs bg-indigo-100 text-indigo-900 px-2 py-0.5 rounded-full font-bold font-mono">
-                      گروه {o.group}
+
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-900 border border-indigo-200 text-xs font-bold">
+                      گروه {faNum(o.group)}
                     </span>
-                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">
+
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-300 text-xs font-medium">
                       استاد: {o.professor}
                     </span>
-                    <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold font-mono">
-                      {o.units} واحد
+
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-bold">
+                      {faNum(o.units)} واحد
                     </span>
                   </div>
 
                   {/* زمان‌بندی کلاس و امتحان */}
-                  <div className="text-[11px] text-slate-600 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                  <div className="text-xs text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-0.5">
                     <span>
                       🕒 <b>کلاس:</b>{' '}
                       {o.classSchedules.length > 0
-                        ? o.classSchedules.map((cs, i) => `${cs.dayName} ${cs.startTime} تا ${cs.endTime}`).join(' و ')
+                        ? o.classSchedules.map(cs => `${cs.dayName} ساعت ${faNum(cs.startTime)} الی ${faNum(cs.endTime)}`).join(' و ')
                         : 'اعلام نشده'}
                     </span>
                     {o.examSchedule && (
                       <span>
-                        📝 <b>امتحان:</b> {o.examSchedule.examDate} ({o.examSchedule.startTime}-{o.examSchedule.endTime})
+                        📝 <b>امتحان:</b> تاریخ {faNum(o.examSchedule.examDate)} ساعت {faNum(o.examSchedule.startTime)} الی {faNum(o.examSchedule.endTime)}
                       </span>
                     )}
                   </div>
 
                   {/* ظرفیت کلاس */}
-                  <div className="text-[11px]">
+                  <div className="text-xs">
                     {full ? (
                       <span className="text-rose-600 font-bold">
-                        ⛔ ظرفیت تکمیل ({o.enrolled}/{o.capacity}) — ورود به اتاق انتظار در صورت اخذ
+                        ⛔ ظرفیت تکمیل ({faNum(o.enrolled)}/{faNum(o.capacity)}) — ورود به اتاق انتظار در صورت اخذ
                       </span>
                     ) : (
                       <span className="text-emerald-700 font-bold">
-                        ✅ ظرفیت باقی‌مانده: {remainingSeats} از {o.capacity} صندلی
+                        ✅ ظرفیت باقی‌مانده: {faNum(remainingSeats)} از {faNum(o.capacity)} صندلی
                       </span>
                     )}
                   </div>
 
-                  {o.prereq && <p className="text-[11px] text-amber-700 font-medium">پیش‌نیاز: {o.prereq}</p>}
+                  {o.prereq && <p className="text-xs text-amber-700 font-medium">پیش‌نیاز: {o.prereq}</p>}
                 </div>
 
                 {/* دکمه‌های افزودن / حذف / تعویض گروه */}
@@ -658,7 +674,7 @@ export default function EnrollClient(props: {
                       onClick={() => add(o.id)}
                     >
                       <span>🔄</span>
-                      <span>تغییر به گروه {o.group}</span>
+                      <span>تغییر به گروه {faNum(o.group)}</span>
                     </button>
                   ) : (
                     <button
