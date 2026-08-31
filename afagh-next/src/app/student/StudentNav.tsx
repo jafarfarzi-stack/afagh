@@ -9,6 +9,7 @@ export default function StudentNav() {
   const nav = [
     { href: '/student', label: 'کارنامه کل تحصیلی', icon: '📄', exact: true },
     { href: '/student/enroll', label: 'انتخاب واحد', icon: '🛒', exact: false },
+    { href: '/student/schedule', label: 'برنامه هفتگی و تاییدیه', icon: '📅', exact: false },
     { href: '/student/chart', label: 'چارت سرفصل', icon: '🗺️', exact: false },
     { href: '/student/requests', label: 'کارتابل کمیسیون', icon: '📋', exact: false },
     { href: '/student/documents', label: 'مدارک من', icon: '📁', exact: false },

@@ -486,6 +486,15 @@ export default function EnrollClient(props: {
                           : 'اعلام خواهد شد'}
                       </span>
                     </div>
+                    {c.classSchedules.some(cs => cs.room) && (
+                      <div className="flex items-center gap-1 border-r border-slate-200 pr-3 mr-1 font-bold text-indigo-950">
+                        <span>🏛️</span>
+                        <span>محل کلاس:</span>
+                        <span className="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                          {c.classSchedules.map(cs => cs.room).filter(Boolean).join('، ')}
+                        </span>
+                      </div>
+                    )}
                     {c.examSchedule && (
                       <div className="flex items-center gap-1 border-r border-slate-200 pr-3 mr-1">
                         <span>📝</span>
@@ -541,9 +550,18 @@ export default function EnrollClient(props: {
       {result && (
         <div className="space-y-2">
           {result.ok && result.registered.length > 0 && (
-            <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800 border border-emerald-200 font-bold">
-              🎉 ثبت قطعی شد: {result.registered.join('، ')}
-            </p>
+            <div className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-900 border border-emerald-300 font-bold space-y-2 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span>🎉 ثبت قطعی شد: {result.registered.join('، ')}</span>
+                <Link
+                  href="/student/schedule"
+                  className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black px-4 py-2 rounded-xl shadow transition-all inline-flex items-center gap-1.5"
+                >
+                  <span>📄</span>
+                  <span>مشاهده و چاپ تاییدیه انتخاب واحد و برنامه هفتگی</span>
+                </Link>
+              </div>
+            </div>
           )}
           {result.waitlisted.length > 0 && (
             <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800 border border-amber-200">
@@ -625,17 +643,22 @@ export default function EnrollClient(props: {
                     </span>
                   </div>
 
-                  {/* زمان‌بندی کلاس و امتحان */}
-                  <div className="text-xs text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-0.5">
+                  {/* زمان‌بندی کلاس و امتحان و شماره کلاس */}
+                  <div className="text-xs text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1">
                     <span>
-                      🕒 <b>کلاس:</b>{' '}
+                      🕒 <b>جلسات هفتگی:</b>{' '}
                       {o.classSchedules.length > 0
                         ? o.classSchedules.map(cs => `${cs.dayName} ساعت ${faNum(cs.startTime)} الی ${faNum(cs.endTime)}`).join(' و ')
                         : 'اعلام نشده'}
                     </span>
+                    {o.classSchedules.some(cs => cs.room) && (
+                      <span className="font-bold text-indigo-950 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 inline-flex items-center gap-1">
+                        🏛️ <b>محل و شماره کلاس:</b> {o.classSchedules.map(cs => cs.room).filter(Boolean).join('، ')}
+                      </span>
+                    )}
                     {o.examSchedule && (
                       <span>
-                        📝 <b>امتحان:</b> تاریخ {faNum(o.examSchedule.examDate)} ساعت {faNum(o.examSchedule.startTime)} الی {faNum(o.examSchedule.endTime)}
+                        📝 <b>امتحان پایان‌ترم:</b> تاریخ {faNum(o.examSchedule.examDate)} ساعت {faNum(o.examSchedule.startTime)} الی {faNum(o.examSchedule.endTime)}
                       </span>
                     )}
                   </div>
