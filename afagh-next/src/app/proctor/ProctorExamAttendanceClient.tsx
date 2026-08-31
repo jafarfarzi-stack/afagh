@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 
 // ==========================================
@@ -9,19 +9,27 @@ import Link from 'next/link';
 
 export type StudentExamStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'VIOLATION' | 'PENDING';
 
+export interface CoursePacketInfo {
+  courseCode: string;
+  courseTitle: string;
+  professorName: string;
+  expectedSheets: number;
+  actualSheets?: number;
+  status: 'PENDING' | 'CONFIRMED' | 'DISCREPANCY';
+  discrepancyNote?: string;
+}
+
 export interface ProctorExamSession {
   id: number;
-  courseTitle: string;
-  courseCode: string;
-  groupNumber: number;
-  examDate: string; // e.g. "1405/10/18"
-  slotLabel: string; // e.g. "سانس ۱"
-  slotTime: string;  // e.g. "۰۸:۳۰ الی ۱۰:۳۰"
-  hallName: string;  // e.g. "آمفی‌تئاتر مرکزی"
-  startSeat: number; // e.g. 1
-  endSeat: number;   // e.g. 60
-  totalStudents: number;
-  professorName: string;
+  hallName: string;
+  examDate: string;
+  slotLabel: string;
+  slotTime: string;
+  isTimeWindowOpen: boolean;
+  timeWindowMessage: string;
+  invigilatorClockInTime?: string;
+  handoverStatus: 'IN_PROGRESS' | 'AWAITING_VAULT' | 'FINALIZED_BY_VAULT';
+  coursePackets: CoursePacketInfo[];
 }
 
 export interface StudentRosterItem {
@@ -31,8 +39,13 @@ export interface StudentRosterItem {
   studentCode: string;
   nationalCode: string;
   majorTitle: string;
+  courseCode: string;
+  courseTitle: string;
   isFinancialCleared: boolean;
+  hasTemporaryPermit: boolean; // تعهد موقت کتبی به آموزش
   status: StudentExamStatus;
+  checkInMethod?: 'QR_SCAN' | 'MANUAL_BY_INVIGILATOR' | 'SYSTEM_EXCUSE';
+  verifiedByStaffName?: string;
   scannedAt?: string;
   violationNote?: string;
   violationType?: string;
@@ -47,65 +60,83 @@ interface Props {
   };
 }
 
+const faNum = (n: any) =>
+  n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+
 // ==========================================
-// MOCK EXAM SESSIONS
+// MOCK MULTI-COURSE SESSIONS
 // ==========================================
 
-const ASSIGNED_EXAM_SESSIONS: ProctorExamSession[] = [
+const INITIAL_SESSIONS: ProctorExamSession[] = [
   {
     id: 1,
-    courseTitle: 'ریاضی عمومی ۱',
-    courseCode: '۱۱۱۲۱۰۱',
-    groupNumber: 1,
+    hallName: 'آمفی‌تئاتر مرکزی (سالن تجمیعی ۱)',
     examDate: '۱۴۰۵/۱۰/۱۸',
     slotLabel: 'سانس ۱',
     slotTime: '۰۸:۳۰ الی ۱۰:۳۰',
-    hallName: 'آمفی‌تئاتر مرکزی',
-    startSeat: 1,
-    endSeat: 60,
-    totalStudents: 38,
-    professorName: 'دکتر جمیل احمدی',
+    isTimeWindowOpen: true,
+    timeWindowMessage: 'پنجره زمانی فعال است (۰۸:۰۰ الی ۱۱:۰۰)',
+    invigilatorClockInTime: '۰۸:۰۵:۱۴',
+    handoverStatus: 'IN_PROGRESS',
+    coursePackets: [
+      {
+        courseCode: '۱۱۱۲۱۰۱',
+        courseTitle: 'ریاضی عمومی ۱',
+        professorName: 'دکتر جمیل احمدی',
+        expectedSheets: 20,
+        status: 'PENDING',
+      },
+      {
+        courseCode: '۱۱۱۲۱۰۳',
+        courseTitle: 'مبانی برنامه‌نویسی',
+        professorName: 'دکتر سارا رضایی',
+        expectedSheets: 15,
+        status: 'PENDING',
+      },
+      {
+        courseCode: '۱۱۱۲۱۰۹',
+        courseTitle: 'زبان تخصصی مهندسی',
+        professorName: 'دکتر علیرضا قنبری',
+        expectedSheets: 10,
+        status: 'PENDING',
+      },
+    ],
   },
   {
     id: 2,
-    courseTitle: 'مبانی برنامه‌نویسی',
-    courseCode: '۱۱۱۲۱۰۳',
-    groupNumber: 1,
+    hallName: 'سایت تخصصی کامپیوتر ۱۰۲',
     examDate: '۱۴۰۵/۱۰/۲۲',
     slotLabel: 'سانس ۲',
     slotTime: '۱۱:۰۰ الی ۱۳:۰۰',
-    hallName: 'سایت تخصصی کامپیوتر ۱۰۲',
-    startSeat: 301,
-    endSeat: 325,
-    totalStudents: 25,
-    professorName: 'دکتر سارا رضایی',
-  },
-  {
-    id: 3,
-    courseTitle: 'فیزیک عمومی ۱',
-    courseCode: '۱۱۱۲۱۰۵',
-    groupNumber: 1,
-    examDate: '۱۴۰۵/۱۰/۲۵',
-    slotLabel: 'سانس ۱',
-    slotTime: '۰۸:۳۰ الی ۱۰:۳۰',
-    hallName: 'سالن امتحانات شماره ۱',
-    startSeat: 101,
-    endSeat: 140,
-    totalStudents: 35,
-    professorName: 'دکتر علی حسینی',
+    isTimeWindowOpen: false,
+    timeWindowMessage: 'دسترسی در تاریخ ۱۴۰۵/۱۰/۲۲ ساعت ۱۰:۳۰ باز خواهد شد',
+    handoverStatus: 'IN_PROGRESS',
+    coursePackets: [
+      {
+        courseCode: '۱۱۱۲۲۰۲',
+        courseTitle: 'پایگاه داده‌ها',
+        professorName: 'مهندس سامان افشار',
+        expectedSheets: 25,
+        status: 'PENDING',
+      },
+    ],
   },
 ];
 
-const INITIAL_STUDENT_ROSTER: StudentRosterItem[] = [
+const INITIAL_ROSTER: StudentRosterItem[] = [
   {
     id: 1,
     seatNumber: 1,
     studentName: 'علی رضایی اصل',
     studentCode: '31412001',
-    nationalCode: '0012345678',
+    nationalCode: '۰۰۱۲۳۴۵۶۷۸',
     majorTitle: 'مهندسی کامپیوتر',
+    courseCode: '۱۱۱۲۱۰۱',
+    courseTitle: 'ریاضی عمومی ۱',
     isFinancialCleared: true,
+    hasTemporaryPermit: false,
     status: 'PRESENT',
+    checkInMethod: 'QR_SCAN',
     scannedAt: '۰۸:۱۵',
     qrPayload: 'AFAGH-EXAM-31412001-SEAT-01-MATH1',
   },
@@ -114,10 +145,14 @@ const INITIAL_STUDENT_ROSTER: StudentRosterItem[] = [
     seatNumber: 2,
     studentName: 'زهرا موسوی کیا',
     studentCode: '31412002',
-    nationalCode: '0023456789',
+    nationalCode: '۰۰۲۳۴۵۶۷۸۹',
     majorTitle: 'مهندسی کامپیوتر',
+    courseCode: '۱۱۱۲۱۰۱',
+    courseTitle: 'ریاضی عمومی ۱',
     isFinancialCleared: true,
+    hasTemporaryPermit: false,
     status: 'PRESENT',
+    checkInMethod: 'QR_SCAN',
     scannedAt: '۰۸:۱۸',
     qrPayload: 'AFAGH-EXAM-31412002-SEAT-02-MATH1',
   },
@@ -126,688 +161,575 @@ const INITIAL_STUDENT_ROSTER: StudentRosterItem[] = [
     seatNumber: 3,
     studentName: 'محمدحسین حسینی',
     studentCode: '31412003',
-    nationalCode: '0034567890',
+    nationalCode: '۰۰۳۴۵۶۷۸۹۰',
     majorTitle: 'مهندسی کامپیوتر',
-    isFinancialCleared: true,
+    courseCode: '۱۱۱۲۱۰۱',
+    courseTitle: 'ریاضی عمومی ۱',
+    isFinancialCleared: false,
+    hasTemporaryPermit: true, // ورود با تعهد موقت
     status: 'PENDING',
     qrPayload: 'AFAGH-EXAM-31412003-SEAT-03-MATH1',
   },
   {
     id: 4,
-    seatNumber: 4,
-    studentName: 'فاطمه احمدی‌پور',
-    studentCode: '31412004',
-    nationalCode: '0045678901',
-    majorTitle: 'مهندسی کامپیوتر',
+    seatNumber: 21,
+    studentName: 'سینا پاشایی',
+    studentCode: '31412021',
+    nationalCode: '۲۷۴۸۹۱۲۳۴۰',
+    majorTitle: 'مهندسی فناوری اطلاعات',
+    courseCode: '۱۱۱۲۱۰۳',
+    courseTitle: 'مبانی برنامه‌نویسی',
     isFinancialCleared: true,
+    hasTemporaryPermit: false,
     status: 'PRESENT',
+    checkInMethod: 'QR_SCAN',
     scannedAt: '۰۸:۲۲',
-    qrPayload: 'AFAGH-EXAM-31412004-SEAT-04-MATH1',
+    qrPayload: 'AFAGH-EXAM-31412021-SEAT-21-PROG1',
   },
   {
     id: 5,
-    seatNumber: 5,
-    studentName: 'امیررضا کریمی',
-    studentCode: '31412005',
-    nationalCode: '0056789012',
+    seatNumber: 22,
+    studentName: 'یلدا ابراهیمی',
+    studentCode: '31412022',
+    nationalCode: '۰۰۴۵۶۷۸۹۰۱',
     majorTitle: 'مهندسی کامپیوتر',
+    courseCode: '۱۱۱۲۱۰۳',
+    courseTitle: 'مبانی برنامه‌نویسی',
     isFinancialCleared: true,
-    status: 'ABSENT',
-    qrPayload: 'AFAGH-EXAM-31412005-SEAT-05-MATH1',
+    hasTemporaryPermit: false,
+    status: 'PENDING',
+    qrPayload: 'AFAGH-EXAM-31412022-SEAT-22-PROG1',
   },
   {
     id: 6,
-    seatNumber: 6,
-    studentName: 'سارا کاظمی‌نیا',
-    studentCode: '31412006',
-    nationalCode: '0067890123',
-    majorTitle: 'مهندسی کامپیوتر',
+    seatNumber: 36,
+    studentName: 'کیان سلطانی',
+    studentCode: '31412036',
+    nationalCode: '۰۰۵۶۷۸۹۰۱۲',
+    majorTitle: 'مهندسی صنایع',
+    courseCode: '۱۱۱۲۱۰۹',
+    courseTitle: 'زبان تخصصی مهندسی',
     isFinancialCleared: true,
-    status: 'LATE',
-    scannedAt: '۰۸:۴۰',
-    qrPayload: 'AFAGH-EXAM-31412006-SEAT-06-MATH1',
-  },
-  {
-    id: 7,
-    seatNumber: 7,
-    studentName: 'نیما صادقی راد',
-    studentCode: '31412007',
-    nationalCode: '0078901234',
-    majorTitle: 'مهندسی کامپیوتر',
-    isFinancialCleared: true,
-    status: 'VIOLATION',
-    scannedAt: '۰۸:۲۰',
-    violationType: 'همراه داشتن تلفن همراه روشن سر جلسه',
-    violationNote: 'تلفن همراه هوشمند در جیب دانشجو در حین آزمون کشف و توسط مراقب ضبط گردید.',
-    qrPayload: 'AFAGH-EXAM-31412007-SEAT-07-MATH1',
-  },
-  {
-    id: 8,
-    seatNumber: 8,
-    studentName: 'مهدی جعفری',
-    studentCode: '31412008',
-    nationalCode: '0089012345',
-    majorTitle: 'مهندسی کامپیوتر',
-    isFinancialCleared: true,
-    status: 'PENDING',
-    qrPayload: 'AFAGH-EXAM-31412008-SEAT-08-MATH1',
-  },
-  {
-    id: 9,
-    seatNumber: 9,
-    studentName: 'مریم نوری',
-    studentCode: '31412009',
-    nationalCode: '0090123456',
-    majorTitle: 'مهندسی کامپیوتر',
-    isFinancialCleared: true,
-    status: 'PENDING',
-    qrPayload: 'AFAGH-EXAM-31412009-SEAT-09-MATH1',
-  },
-  {
-    id: 10,
-    seatNumber: 10,
-    studentName: 'حسین عباسی',
-    studentCode: '31412010',
-    nationalCode: '0101234567',
-    majorTitle: 'مهندسی کامپیوتر',
-    isFinancialCleared: true,
-    status: 'PENDING',
-    qrPayload: 'AFAGH-EXAM-31412010-SEAT-10-MATH1',
+    hasTemporaryPermit: false,
+    status: 'PRESENT',
+    checkInMethod: 'QR_SCAN',
+    scannedAt: '۰۸:۲۵',
+    qrPayload: 'AFAGH-EXAM-31412036-SEAT-36-LANG',
   },
 ];
 
 export default function ProctorExamAttendanceClient({ user }: Props) {
+  const [sessions, setSessions] = useState<ProctorExamSession[]>(INITIAL_SESSIONS);
   const [selectedSessionId, setSelectedSessionId] = useState<number>(1);
-  const [roster, setRoster] = useState<StudentRosterItem[]>(INITIAL_STUDENT_ROSTER);
-  const [scanInput, setScanInput] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'SCANNER' | 'SEATING_GRID' | 'ROSTER_TABLE' | 'VIOLATIONS' | 'FINAL_MINUTES'>('SCANNER');
-  const [selectedStudentForModal, setSelectedStudentForModal] = useState<StudentRosterItem | null>(null);
+  const [roster, setRoster] = useState<StudentRosterItem[]>(INITIAL_ROSTER);
 
-  // Violation Modal State
-  const [isViolationModalOpen, setIsViolationModalOpen] = useState<boolean>(false);
-  const [violationForm, setViolationForm] = useState({
-    studentId: 1,
-    violationType: 'همراه داشتن تلفن همراه یا ساعت هوشمند',
-    violationNote: '',
-  });
-
-  // Final Minutes Submission State
-  const [isFinalSubmitting, setIsFinalSubmitting] = useState<boolean>(false);
-  const [isMinutesSubmitted, setIsMinutesSubmitted] = useState<boolean>(false);
-  const [proctorOtp, setProctorOtp] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'SCANNER' | 'ROSTER' | 'VAULT_HANDOVER'>('SCANNER');
+  const [filterCourseCode, setFilterCourseCode] = useState<string>('ALL');
+  const [searchStudentQuery, setSearchStudentQuery] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const currentSession = useMemo(() => {
-    return ASSIGNED_EXAM_SESSIONS.find(s => s.id === selectedSessionId) || ASSIGNED_EXAM_SESSIONS[0];
-  }, [selectedSessionId]);
+  // Manual Check-in / Violation Modal States
+  const [selectedStudentForManual, setSelectedStudentForManual] = useState<StudentRosterItem | null>(null);
+  const [violationStudent, setViolationStudent] = useState<StudentRosterItem | null>(null);
+  const [violationType, setViolationType] = useState('همراه داشتن یادداشت یا تلفن همراه');
+  const [violationNote, setViolationNote] = useState('');
+
+  // Vault Manager Handover Sheet Counts Input
+  const [vaultSheetsInput, setVaultSheetsInput] = useState<Record<string, number>>({});
+  const [vaultDiscrepancyReason, setVaultDiscrepancyReason] = useState<string>('');
+
+  const currentSession = sessions.find(s => s.id === selectedSessionId) || sessions[0];
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 6000);
+    setTimeout(() => setToastMessage(null), 5000);
   };
 
-  // ==========================================
-  // SCANNER HANDLER
-  // ==========================================
-  const handleProcessScan = (payload: string) => {
-    const clean = payload.trim();
-    if (!clean) return;
-
-    // Search by QR payload, studentCode, nationalCode, or seat number
-    const matched = roster.find(
-      s =>
-        s.qrPayload.toLowerCase() === clean.toLowerCase() ||
-        s.studentCode === clean ||
-        s.nationalCode === clean ||
-        String(s.seatNumber) === clean
+  // Auto Clock-In for Invigilator
+  const handleInvigilatorClockIn = () => {
+    const nowStr = new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    setSessions(prev =>
+      prev.map(s => (s.id === selectedSessionId ? { ...s, invigilatorClockInTime: nowStr } : s))
     );
-
-    if (matched) {
-      const nowTime = new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
-      setRoster(prev =>
-        prev.map(s => (s.id === matched.id ? { ...s, status: 'PRESENT', scannedAt: nowTime } : s))
-      );
-      setSelectedStudentForModal(matched);
-      showToast(`🟢 دانشجو «${matched.studentName}» (صندلی شماره ${matched.seatNumber}) با موفقیت احراز هویت و حاضر ثبت شد.`);
-      setScanInput('');
-    } else {
-      showToast(`⚠️ بارکد / داوطلب با کد «${clean}» در این سالن آزمون یافت نشد. لطفاً کارت ورود به جلسه را مجدداً بررسی کنید.`);
-    }
+    showToast(`🟢 اعلام حضور مراقب (${user.name}) با موفقیت در ساعت ${nowStr} ثبت و به سامانه حقوق و دستمزد ابلاغ شد.`);
   };
 
-  // Manual Status Change
-  const handleSetStudentStatus = (studentId: number, status: StudentExamStatus) => {
-    const target = roster.find(s => s.id === studentId);
-    const nowTime = new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+  // Instant QR Scan Simulation
+  const handleSimulateQrScan = (studentId: number) => {
+    const timeNow = new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
     setRoster(prev =>
-      prev.map(s => (s.id === studentId ? { ...s, status, scannedAt: status === 'PRESENT' || status === 'LATE' ? nowTime : s.scannedAt } : s))
-    );
-    if (status === 'ABSENT') {
-      showToast(`🔴 وضعیت دانشجو «${target?.studentName}» به «غایب» تغییر یافت و پیامک مهلت ۴۸ ساعته بارگذاری گواهی پزشکی برای ایشان ارسال گردید.`);
-    } else {
-      showToast('✓ وضعیت داوطلب با موفقیت به‌روزرسانی شد.');
-    }
-  };
-
-  // Record Cheating / Violation
-  const handleSaveViolation = () => {
-    if (!violationForm.violationNote.trim()) {
-      showToast('لطفاً شرح و جزییات صورت‌جلسه تخلف را وارد فرمایید.');
-      return;
-    }
-    setRoster(prev =>
-      prev.map(s =>
-        s.id === violationForm.studentId
+      prev.map(st =>
+        st.id === studentId
           ? {
-              ...s,
-              status: 'VIOLATION',
-              violationType: violationForm.violationType,
-              violationNote: violationForm.violationNote,
+              ...st,
+              status: 'PRESENT',
+              checkInMethod: 'QR_SCAN',
+              scannedAt: timeNow,
+              verifiedByStaffName: user.name,
             }
-          : s
+          : st
       )
     );
-    setIsViolationModalOpen(false);
-    setViolationForm({ studentId: 1, violationType: 'همراه داشتن تلفن همراه یا ساعت هوشمند', violationNote: '' });
-    showToast('🚨 صورت‌جلسه تخلف امتحانی با موفقیت ثبت و ضمیمه گزارش نهایی جلسه شد.');
+    showToast(`✓ حضور دانشجو با اسکن QR Code در ساعت ${timeNow} ثبت شد.`);
   };
 
-  // Final Minutes Submission
-  const handleSubmitFinalMinutes = () => {
-    if (!proctorOtp.trim()) {
-      showToast('لطفاً کد تایید یا رمز مراقب را جهت امضای دیجیتال صورت‌جلسه وارد نمایید.');
-      return;
+  // Manual Check-in (for Students with Temporary Permits or No Card)
+  const handleConfirmManualCheckIn = (st: StudentRosterItem) => {
+    const timeNow = new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+    setRoster(prev =>
+      prev.map(item =>
+        item.id === st.id
+          ? {
+              ...item,
+              status: 'PRESENT',
+              checkInMethod: 'MANUAL_BY_INVIGILATOR',
+              scannedAt: timeNow,
+              verifiedByStaffName: user.name,
+            }
+          : item
+      )
+    );
+    setSelectedStudentForManual(null);
+    showToast(`✓ حضور دستی دانشجو «${st.studentName}» (${st.hasTemporaryPermit ? 'با مجوز تعهد آموزش' : 'تایید مراقب'}) ثبت شد.`);
+  };
+
+  // Record Violation (ثبت صورت‌جلسه تخلف)
+  const handleRecordViolation = () => {
+    if (!violationStudent) return;
+    setRoster(prev =>
+      prev.map(item =>
+        item.id === violationStudent.id
+          ? {
+              ...item,
+              status: 'VIOLATION',
+              violationType,
+              violationNote,
+              verifiedByStaffName: user.name,
+            }
+          : item
+      )
+    );
+    setViolationStudent(null);
+    setViolationNote('');
+    showToast(`🚨 صورت‌جلسه تخلف انضباطی برای دانشجو «${violationStudent.studentName}» ثبت و ضمیمه آزمون شد.`);
+  };
+
+  // Submit Exam Session to Vault
+  const handleInitiateVaultHandover = () => {
+    setSessions(prev =>
+      prev.map(s => (s.id === selectedSessionId ? { ...s, handoverStatus: 'AWAITING_VAULT' } : s))
+    );
+    setActiveTab('VAULT_HANDOVER');
+    showToast('🔒 جلسه آزمون قفل شد. لطفاً برگه‌های امتحانی را به تفکیک بسته درسی به مسئول مخزن تحویل دهید.');
+  };
+
+  // Vault Manager Confirms Receipt
+  const handleConfirmVaultPacket = (courseCode: string, expected: number) => {
+    const actual = vaultSheetsInput[courseCode] ?? expected;
+    const isMatched = actual === expected;
+
+    setSessions(prev =>
+      prev.map(s => {
+        if (s.id !== selectedSessionId) return s;
+        const updatedPackets = s.coursePackets.map(p => {
+          if (p.courseCode !== courseCode) return p;
+          return {
+            ...p,
+            actualSheets: actual,
+            status: isMatched ? ('CONFIRMED' as const) : ('DISCREPANCY' as const),
+            discrepancyNote: isMatched ? undefined : `کسری برگه: ${expected - actual} برگه مفقود/مغایرت`,
+          };
+        });
+
+        const allConfirmed = updatedPackets.every(p => p.status === 'CONFIRMED');
+
+        return {
+          ...s,
+          coursePackets: updatedPackets,
+          handoverStatus: allConfirmed ? 'FINALIZED_BY_VAULT' : 'AWAITING_VAULT',
+        };
+      })
+    );
+
+    if (isMatched) {
+      showToast(`🟢 بسته درسی ${courseCode} (${expected} برگه) با موفقیت در مخزن تحویل و مهروموم شد.`);
+    } else {
+      showToast(`🔴 هشدار مغایرت در بسته ${courseCode}! تحویل ${actual} از ${expected} برگه. پرونده در وضعیت قرنطینه قرار گرفت.`);
     }
-    setIsFinalSubmitting(true);
-    setTimeout(() => {
-      setIsFinalSubmitting(false);
-      setIsMinutesSubmitted(true);
-      showToast('📜 صورت‌جلسه رسمی حضور و غیاب آزمون با امضای دیجیتال مراقب با موفقیت ثبت و به اداره آموزش و امتحانات دانشگاه ارسال گردید.');
-    }, 1200);
   };
 
-  // Live Statistics
+  const filteredRoster = roster.filter(st => {
+    if (filterCourseCode !== 'ALL' && st.courseCode !== filterCourseCode) return false;
+    if (searchStudentQuery.trim()) {
+      const q = searchStudentQuery.trim().toLowerCase();
+      return (
+        st.studentName.toLowerCase().includes(q) ||
+        st.studentCode.includes(q) ||
+        String(st.seatNumber).includes(q)
+      );
+    }
+    return true;
+  });
+
   const stats = useMemo(() => {
-    const presentCount = roster.filter(s => s.status === 'PRESENT' || s.status === 'LATE').length;
-    const absentCount = roster.filter(s => s.status === 'ABSENT').length;
-    const violationCount = roster.filter(s => s.status === 'VIOLATION').length;
-    const pendingCount = roster.filter(s => s.status === 'PENDING').length;
     const total = roster.length;
-    const percentage = total > 0 ? Math.round((presentCount / total) * 100) : 0;
-    return { presentCount, absentCount, violationCount, pendingCount, total, percentage };
+    const present = roster.filter(s => s.status === 'PRESENT').length;
+    const pending = roster.filter(s => s.status === 'PENDING').length;
+    const violations = roster.filter(s => s.status === 'VIOLATION').length;
+    return { total, present, pending, violations };
   }, [roster]);
 
   return (
-    <div className="space-y-4">
-      {/* Top Banner & Active Session Selector */}
-      <div className="card bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 text-white p-5 rounded-2xl shadow-lg border border-indigo-800/40">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center text-3xl shadow-inner">
-              📷
+    <div className="space-y-6" dir="rtl">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="p-4 bg-emerald-950 text-emerald-100 rounded-2xl shadow-xl border border-emerald-600 font-bold text-sm flex items-center justify-between animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <span>📢</span>
+            <span>{toastMessage}</span>
+          </div>
+          <button onClick={() => setToastMessage(null)} className="text-white/60 hover:text-white text-xs">
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Header Banner */}
+      <div className="bg-gradient-to-l from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 shadow-xl border border-indigo-700/50 space-y-4">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-amber-400 text-slate-950">
+                اپلیکیشن اختصاصی مراقبین و گیت امتحانات (PWA)
+              </span>
+              <span className="text-xs text-indigo-200">
+                مراقب حاضر: <b className="text-white">{user.name}</b>
+              </span>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-black text-lg sm:text-xl tracking-tight">
-                  سامانه هوشمند حضور و غیاب آزمون با بارکدخوان و QR-Code
-                </h1>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500 text-white shadow-xs">
-                  برخط و متصل
-                </span>
-              </div>
-              <p className="text-xs text-indigo-200 mt-1">
-                احراز هویت بلادرنگ داوطلبان، اسکن کارت آزمون، نقشه صندلی‌ها و صورت‌جلسه دیجیتال
-              </p>
-            </div>
+            <h1 className="text-xl sm:text-2xl font-black">
+              📋 مدیریت هوشمند حضور و غیاب سالن امتحانات و زنجیره تحویل مخزن
+            </h1>
+            <p className="text-xs text-indigo-300 mt-1">
+              اسکن زنده بارکد کارت ورود به جلسه · ثبت حضور دستی با تعهد آموزش · تحویل بسته‌های درسی به مخزن
+            </p>
           </div>
 
-          {/* Session Selector */}
-          <div className="bg-white/10 backdrop-blur-md p-2.5 rounded-xl border border-white/20 flex flex-col gap-1 min-w-[300px]">
-            <label className="text-[11px] font-bold text-indigo-200">
-              جلسه آزمون اختصاص‌یافته به شما:
-            </label>
+          {/* Time Fence & Clock-in Indicator */}
+          <div className="flex flex-wrap items-center gap-3">
+            {currentSession.invigilatorClockInTime ? (
+              <div className="p-3 bg-emerald-950/80 border border-emerald-500/60 rounded-2xl text-emerald-300 font-mono text-xs font-bold shadow-inner flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>حضور مراقب ثبت شد: {faNum(currentSession.invigilatorClockInTime)}</span>
+              </div>
+            ) : (
+              <button
+                onClick={handleInvigilatorClockIn}
+                disabled={!currentSession.isTimeWindowOpen}
+                className="px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-lg shadow-emerald-700/30 transition flex items-center gap-2 disabled:opacity-50"
+              >
+                <span>🟢 اعلام حضور و باز کردن سالن امتحان</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Exam Session Selector */}
+        <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/15 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs items-center">
+          <div className="sm:col-span-2">
+            <label className="text-indigo-200 font-bold block mb-1">سالن و حوزه امتحانی انتخابی:</label>
             <select
               value={selectedSessionId}
               onChange={e => setSelectedSessionId(Number(e.target.value))}
-              className="bg-slate-900 text-white border border-indigo-400/60 rounded-lg p-2 text-xs font-bold"
+              className="w-full bg-slate-900 text-white border border-indigo-400/50 rounded-xl px-3 py-2 font-bold"
             >
-              {ASSIGNED_EXAM_SESSIONS.map(s => (
+              {sessions.map(s => (
                 <option key={s.id} value={s.id}>
-                  {s.courseTitle} ({s.slotLabel} - {s.hallName})
+                  {s.hallName} ({s.examDate} — {s.slotLabel}: {faNum(s.slotTime)})
                 </option>
               ))}
             </select>
           </div>
-        </div>
 
-        {/* Session Details Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-4 mt-4 border-t border-indigo-800/60 text-xs">
-          <div className="p-2.5 bg-indigo-900/50 rounded-xl border border-indigo-700/40">
-            <span className="text-indigo-300 block text-[10px]">عنوان درس و استاد:</span>
-            <strong className="text-white text-xs">{currentSession.courseTitle} ({currentSession.professorName})</strong>
-          </div>
-          <div className="p-2.5 bg-indigo-900/50 rounded-xl border border-indigo-700/40">
-            <span className="text-indigo-300 block text-[10px]">تاریخ و ساعت برگزاری:</span>
-            <strong className="text-white text-xs font-mono">{currentSession.examDate} ({currentSession.slotTime})</strong>
-          </div>
-          <div className="p-2.5 bg-indigo-900/50 rounded-xl border border-indigo-700/40">
-            <span className="text-indigo-300 block text-[10px]">حوزه و سالن آزمون:</span>
-            <strong className="text-emerald-300 text-xs font-bold">{currentSession.hallName}</strong>
-          </div>
-          <div className="p-2.5 bg-indigo-900/50 rounded-xl border border-indigo-700/40">
-            <span className="text-indigo-300 block text-[10px]">بازه صندلی‌های این حوزه:</span>
-            <strong className="text-amber-300 text-xs font-mono">صندلی {currentSession.startSeat} الی {currentSession.endSeat}</strong>
-          </div>
-          <div className="p-2.5 bg-indigo-900/50 rounded-xl border border-indigo-700/40">
-            <span className="text-indigo-300 block text-[10px]">وضعیت حضور داوطلبان:</span>
-            <strong className="text-emerald-400 text-xs font-black">{stats.presentCount} از {stats.total} نفر ({stats.percentage}٪)</strong>
+          <div className="text-left sm:text-right">
+            <span className="text-indigo-200 font-bold block">وضعیت پنجره زمانی:</span>
+            <span
+              className={`font-bold inline-block mt-1 ${
+                currentSession.isTimeWindowOpen ? 'text-emerald-300' : 'text-amber-300'
+              }`}
+            >
+              {currentSession.timeWindowMessage}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Toast */}
-      {toastMessage && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl text-xs font-bold flex items-center justify-between shadow-xs animate-in fade-in">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">📢</span>
-            <span>{toastMessage}</span>
-          </div>
-          <button onClick={() => setToastMessage(null)} className="text-emerald-700 font-black">✕</button>
+      {/* KPI Stats Bar */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-1">
+          <span className="text-xs text-slate-500 font-bold">کل داوطلبان سالن</span>
+          <div className="text-2xl font-black text-indigo-950 font-mono">{faNum(stats.total)} نفر</div>
+          <span className="text-[10px] text-slate-400">۳ بسته درسی تجمیعی</span>
         </div>
-      )}
+
+        <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-1">
+          <span className="text-xs text-slate-500 font-bold">حاضران تاییدشده</span>
+          <div className="text-2xl font-black text-emerald-700 font-mono">{faNum(stats.present)} نفر</div>
+          <span className="text-[10px] text-emerald-600 font-bold">اسکن QR و دستی</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-1">
+          <span className="text-xs text-slate-500 font-bold">در انتظار ورود / غایب</span>
+          <div className="text-2xl font-black text-amber-600 font-mono">{faNum(stats.pending)} نفر</div>
+          <span className="text-[10px] text-amber-700 font-bold">صندلی خالی</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-1">
+          <span className="text-xs text-slate-500 font-bold">تخلفات انضباطی</span>
+          <div className="text-2xl font-black text-rose-700 font-mono">{faNum(stats.violations)} مورد</div>
+          <span className="text-[10px] text-rose-600 font-bold">دارای صورت‌جلسه</span>
+        </div>
+      </div>
 
       {/* Navigation Tabs */}
-      <div className="flex flex-wrap items-center gap-1.5 bg-white p-2 rounded-2xl shadow-xs border border-slate-200">
-        <button
-          onClick={() => setActiveTab('SCANNER')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
-            activeTab === 'SCANNER' ? 'bg-indigo-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <span>📷 اسکنر زنده QR-Code و احراز هویت</span>
-        </button>
+      <div className="flex flex-wrap items-center justify-between border-b border-slate-200 pb-2 gap-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveTab('SCANNER')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 ${
+              activeTab === 'SCANNER'
+                ? 'bg-indigo-900 text-white shadow-sm'
+                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <span>📷 اسکنر بارکد QR و حضور سریع</span>
+          </button>
 
-        <button
-          onClick={() => setActiveTab('SEATING_GRID')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
-            activeTab === 'SEATING_GRID' ? 'bg-indigo-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <span>🪑 نقشه زنده چیدمان صندلی‌های سالن</span>
-        </button>
+          <button
+            onClick={() => setActiveTab('ROSTER')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 ${
+              activeTab === 'ROSTER'
+                ? 'bg-indigo-900 text-white shadow-sm'
+                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <span>🗺️ نقشه صندلی‌ها و ثبت دستی</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/30 text-[10px]">{faNum(roster.length)}</span>
+          </button>
 
-        <button
-          onClick={() => setActiveTab('ROSTER_TABLE')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
-            activeTab === 'ROSTER_TABLE' ? 'bg-indigo-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <span>📋 لیست حضور و غیاب داوطلبان ({roster.length} نفر)</span>
-        </button>
+          <button
+            onClick={() => setActiveTab('VAULT_HANDOVER')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 ${
+              activeTab === 'VAULT_HANDOVER'
+                ? 'bg-indigo-900 text-white shadow-sm'
+                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <span>🔒 تحویل بسته‌های درسی به مخزن</span>
+            {currentSession.handoverStatus === 'FINALIZED_BY_VAULT' && (
+              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                ✓ تایید کامل مخزن
+              </span>
+            )}
+          </button>
+        </div>
 
-        <button
-          onClick={() => setActiveTab('VIOLATIONS')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
-            activeTab === 'VIOLATIONS' ? 'bg-indigo-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <span>🚨 صورت‌جلسه تخلفات و تقلب</span>
-          {stats.violationCount > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full bg-rose-600 text-white text-[10px] font-black">
-              {stats.violationCount}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('FINAL_MINUTES')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
-            activeTab === 'FINAL_MINUTES' ? 'bg-indigo-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <span>📜 صورت‌جلسه نهایی و امضای دیجیتال</span>
-          {isMinutesSubmitted && (
-            <span className="px-1.5 py-0.2 rounded-full bg-emerald-500 text-white text-[10px] font-black">
-              ✓ امضا شد
-            </span>
-          )}
-        </button>
+        {/* Finish Exam Button */}
+        {currentSession.handoverStatus === 'IN_PROGRESS' && (
+          <button
+            onClick={handleInitiateVaultHandover}
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 text-white font-black text-xs shadow-md transition flex items-center gap-1.5"
+          >
+            <span>🔒 پایان زمان آزمون و قفل لیست برای تحویل به مخزن</span>
+          </button>
+        )}
       </div>
 
       {/* ========================================================================= */}
-      {/* TAB 1: LIVE QR-CODE SCANNER */}
+      {/* TAB 1: FAST SCANNER VIEW */}
       {/* ========================================================================= */}
       {activeTab === 'SCANNER' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Scanner Viewport Box */}
-          <div className="lg:col-span-2 card space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
-                <h3 className="font-black text-slate-900 text-sm">
-                  دوربین اسکنر بارکد کارت آزمون (فعال)
-                </h3>
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+              <h3 className="font-black text-slate-900 text-base">اسکنر دوربین مراقبین (تایید آنی ورود)</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                با قرار دادن بارکد کارت دانشجو در کادر دوربین، حضور دانشجو ثبت و عکس پرسنلی جهت تطبیق چهره نمایش داده می‌شود.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+            {/* Camera Viewfinder */}
+            <div className="bg-slate-950 rounded-3xl p-6 border-2 border-indigo-600/50 shadow-2xl flex flex-col items-center justify-center space-y-3 min-h-[260px] relative overflow-hidden">
+              <div className="absolute inset-x-12 top-1/2 h-0.5 bg-emerald-400 shadow-[0_0_12px_#34d399] animate-pulse"></div>
+              <div className="w-20 h-20 rounded-2xl bg-indigo-900/60 border border-indigo-500/50 flex items-center justify-center text-4xl shadow-inner">
+                📷
               </div>
-              <span className="text-xs text-slate-500 font-bold">
-                کارت ورود به جلسه را مقابل دوربین قرار دهید
-              </span>
+              <span className="text-xs font-bold text-slate-300">دوربین فعال است · اسکن بارکد QR داوطلب</span>
             </div>
 
-            {/* Simulated Live Camera Frame */}
-            <div className="relative aspect-video bg-slate-950 rounded-2xl overflow-hidden border-2 border-indigo-500 shadow-inner flex flex-col items-center justify-center p-6 text-white text-center">
-              {/* Corner Target Frame */}
-              <div className="absolute inset-12 border-2 border-dashed border-emerald-400 rounded-2xl flex items-center justify-center pointer-events-none">
-                <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-bounce"></div>
-              </div>
-
-              <div className="relative z-10 space-y-2 bg-slate-900/80 p-4 rounded-xl backdrop-blur-xs border border-white/10">
-                <span className="text-4xl">📷</span>
-                <p className="font-bold text-xs">اسکنر بارکد و QR-Code هوشمند فعال است</p>
-                <p className="text-[11px] text-slate-300">
-                  آماده خوانش کارت‌های آزمون دانشجویان رشته {currentSession.courseTitle}
-                </p>
-              </div>
-            </div>
-
-            {/* Manual / Barcode Gun Input */}
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-              <label className="text-xs font-bold text-slate-700 block">
-                ورود با بارکدخوان دستی / شماره دانشجویی / شماره صندلی:
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={scanInput}
-                  onChange={e => setScanInput(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') handleProcessScan(scanInput);
-                  }}
-                  placeholder="شماره دانشجویی یا بارکد کارت را وارد یا اسکن کنید (مثلاً 31412001 یا صندلی 3)..."
-                  className="flex-1 border-2 border-indigo-300 rounded-xl p-2.5 text-xs font-mono font-bold bg-white focus:border-indigo-600"
-                />
-                <button
-                  onClick={() => handleProcessScan(scanInput)}
-                  className="px-5 py-2.5 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs shadow transition"
-                >
-                  ✓ بررسی و ثبت
-                </button>
-              </div>
-
-              {/* Quick Demo Scan Buttons */}
-              <div className="pt-2 flex flex-wrap items-center gap-1.5 text-xs">
-                <span className="text-slate-500 text-[11px] font-bold">تست سریع اسکن کارت:</span>
-                {roster.slice(0, 5).map(s => (
-                  <button
-                    key={s.id}
-                    onClick={() => handleProcessScan(s.qrPayload)}
-                    className="px-2.5 py-1 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-900 font-bold text-[11px] transition"
+            {/* Simulated Live Scan Queue */}
+            <div className="space-y-3">
+              <h4 className="font-black text-xs text-slate-800">تست شبیه‌سازی اسکن داوطلبان حاضر در سالن:</h4>
+              <div className="space-y-2">
+                {roster.map(st => (
+                  <div
+                    key={st.id}
+                    className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between text-xs hover:bg-slate-100 transition"
                   >
-                    اسکن کارت {s.studentName.split(' ')[0]} (صندلی {s.seatNumber})
-                  </button>
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-lg bg-indigo-900 text-white font-mono font-bold text-xs flex items-center justify-center">
+                          {faNum(st.seatNumber)}
+                        </span>
+                        <span className="font-black text-slate-900">{st.studentName}</span>
+                        {st.hasTemporaryPermit && (
+                          <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-bold text-[10px]">
+                            مجوز تعهد موقت
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-500">
+                        درس: {st.courseTitle} ({st.courseCode})
+                      </p>
+                    </div>
+
+                    <div>
+                      {st.status === 'PRESENT' ? (
+                        <span className="px-3 py-1 rounded-xl bg-emerald-100 text-emerald-800 font-black text-xs">
+                          ✓ حاضر ({faNum(st.scannedAt)})
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleSimulateQrScan(st.id)}
+                          className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs shadow-xs transition"
+                        >
+                          اسکن بارکد 📷
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
           </div>
-
-          {/* Right: Last Scanned Student Card Info */}
-          <div className="card space-y-4">
-            <h3 className="font-black text-slate-900 text-sm border-b border-slate-100 pb-2">
-              مشخصات آخرین داوطلب اسکن‌شده
-            </h3>
-
-            {selectedStudentForModal ? (
-              <div className="space-y-3">
-                <div className="p-4 bg-gradient-to-br from-indigo-50 to-emerald-50 rounded-2xl border border-indigo-200 space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-indigo-950 text-white flex items-center justify-center font-black text-lg">
-                      {selectedStudentForModal.studentName[0]}
-                    </div>
-                    <div>
-                      <h4 className="font-black text-slate-900 text-sm">
-                        {selectedStudentForModal.studentName}
-                      </h4>
-                      <p className="text-[11px] font-mono text-slate-600">
-                        ش.د: {selectedStudentForModal.studentCode}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-indigo-100">
-                    <div className="p-2 bg-white rounded-lg">
-                      <span className="text-slate-500 block text-[10px]">شماره صندلی:</span>
-                      <strong className="text-indigo-950 text-sm font-black">
-                        صندلی {selectedStudentForModal.seatNumber}
-                      </strong>
-                    </div>
-                    <div className="p-2 bg-white rounded-lg">
-                      <span className="text-slate-500 block text-[10px]">وضعیت مالی:</span>
-                      <strong className="text-emerald-700 font-bold">✓ تسویه تاییدشده</strong>
-                    </div>
-                  </div>
-
-                  <div className="p-2 bg-emerald-100/80 rounded-xl text-xs text-emerald-900 font-bold flex items-center justify-between">
-                    <span>وضعیت در جلسه:</span>
-                    <span className="font-black">✓ حاضر (اسکن در {selectedStudentForModal.scannedAt || 'هم‌اکنون'})</span>
-                  </div>
-                </div>
-
-                {/* Status Toggle Buttons */}
-                <div className="space-y-1.5 pt-2">
-                  <span className="text-[11px] font-bold text-slate-600 block">تغییر وضعیت یا ثبت گزارش:</span>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => handleSetStudentStatus(selectedStudentForModal.id, 'PRESENT')}
-                      className="py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
-                    >
-                      🟢 حاضر عادی
-                    </button>
-                    <button
-                      onClick={() => handleSetStudentStatus(selectedStudentForModal.id, 'LATE')}
-                      className="py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs"
-                    >
-                      🟡 تاخیر مجاز
-                    </button>
-                    <button
-                      onClick={() => handleSetStudentStatus(selectedStudentForModal.id, 'ABSENT')}
-                      className="py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs"
-                    >
-                      🔴 غایب
-                    </button>
-                    <button
-                      onClick={() => {
-                        setViolationForm({
-                          studentId: selectedStudentForModal.id,
-                          violationType: 'همراه داشتن تلفن همراه یا ساعت هوشمند',
-                          violationNote: '',
-                        });
-                        setIsViolationModalOpen(true);
-                      }}
-                      className="py-2 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs"
-                    >
-                      🚨 ثبت تخلف
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs space-y-2">
-                <span className="text-3xl block">📇</span>
-                <p>هنوز کارتی اسکن نشده است.</p>
-                <p className="text-[10px]">با قرار دادن کارت یا اسکن بارکد، هویت دانشجو در اینجا نمایش می‌یابد.</p>
-              </div>
-            )}
-          </div>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: VISUAL SEATING PLAN GRID */}
+      {/* TAB 2: SEAT MAP & MANUAL ATTENDANCE ROSTER */}
       {/* ========================================================================= */}
-      {activeTab === 'SEATING_GRID' && (
-        <div className="card space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+      {activeTab === 'ROSTER' && (
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
-              <h2 className="font-black text-slate-900 text-base">
-                نقشه زنده و تصویری چیدمان صندلی‌های {currentSession.hallName}
-              </h2>
+              <h3 className="font-black text-slate-900 text-base">لیست داوطلبان و ثبت حضور دستی</h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                نمایش وضعیت صندلی‌های داوطلبان آزمون با قابلیت کلیک برای مشاهده هویت و تغییر وضعیت
+                امکان ثبت حضور دستی برای دانشجویانی که کارت به همراه ندارند اما تعهد موقت آموزش دارند.
               </p>
             </div>
 
-            {/* Legend */}
-            <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-emerald-500"></span> حاضر
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-amber-500"></span> تاخیر
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-rose-500"></span> غایب
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-purple-600"></span> تخلف
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-slate-200"></span> در انتظار
-              </span>
+            {/* Filter by Course Packet */}
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={filterCourseCode}
+                onChange={e => setFilterCourseCode(e.target.value)}
+                className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800"
+              >
+                <option value="ALL">همه بسته‌های درسی سالن</option>
+                {currentSession.coursePackets.map(p => (
+                  <option key={p.courseCode} value={p.courseCode}>
+                    بسته: {p.courseTitle} ({p.courseCode})
+                  </option>
+                ))}
+              </select>
+
+              <input
+                type="text"
+                placeholder="جستجوی نام یا صندلی..."
+                value={searchStudentQuery}
+                onChange={e => setSearchStudentQuery(e.target.value)}
+                className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900"
+              />
             </div>
           </div>
 
-          {/* Seat Grid */}
-          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2.5 pt-2">
-            {roster.map(st => {
-              const isPresent = st.status === 'PRESENT';
-              const isLate = st.status === 'LATE';
-              const isAbsent = st.status === 'ABSENT';
-              const isViolation = st.status === 'VIOLATION';
-              const isPending = st.status === 'PENDING';
-
-              return (
-                <div
-                  key={st.id}
-                  onClick={() => {
-                    setSelectedStudentForModal(st);
-                    setActiveTab('SCANNER');
-                  }}
-                  className={`p-2.5 rounded-xl border text-center cursor-pointer transition transform hover:scale-105 shadow-xs ${
-                    isPresent
-                      ? 'bg-emerald-100 border-emerald-400 text-emerald-950 font-black'
-                      : isLate
-                      ? 'bg-amber-100 border-amber-400 text-amber-950 font-black'
-                      : isAbsent
-                      ? 'bg-rose-100 border-rose-400 text-rose-950 font-black'
-                      : isViolation
-                      ? 'bg-purple-100 border-purple-500 text-purple-950 font-black'
-                      : 'bg-slate-100 border-slate-300 text-slate-600'
-                  }`}
-                  title={`${st.studentName} — صندلی ${st.seatNumber}`}
-                >
-                  <span className="text-[10px] block font-mono">صندلی</span>
-                  <span className="text-base font-black block font-mono">{st.seatNumber}</span>
-                  <span className="text-[10px] truncate block max-w-[70px] mx-auto font-bold mt-0.5">
-                    {st.studentName.split(' ')[0]}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 3: ROSTER TABLE */}
-      {/* ========================================================================= */}
-      {activeTab === 'ROSTER_TABLE' && (
-        <div className="card space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h2 className="font-black text-slate-900 text-base">
-                فهرست کامل داوطلبان سالن {currentSession.hallName}
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                تعداد کل: {roster.length} نفر · حاضرین: {stats.presentCount} نفر · غایبین: {stats.absentCount} نفر
-              </p>
-            </div>
-          </div>
-
+          {/* Table */}
           <div className="overflow-x-auto">
-            <table className="w-full text-right text-xs border-collapse">
+            <table className="w-full border-collapse text-xs">
               <thead>
-                <tr className="bg-slate-900 text-white">
-                  <th className="p-2.5 text-center">شماره صندلی</th>
-                  <th className="p-2.5">نام و نام خانوادگی</th>
-                  <th className="p-2.5">شماره دانشجویی</th>
-                  <th className="p-2.5">کد ملی</th>
-                  <th className="p-2.5 text-center">وضعیت حضور</th>
-                  <th className="p-2.5 text-center">زمان ثبت</th>
-                  <th className="p-2.5 text-left">عملیات سریع</th>
+                <tr className="bg-slate-900 text-white text-right">
+                  <th className="p-3 text-center">شماره صندلی</th>
+                  <th className="p-3">نام و نام‌خانوادگی</th>
+                  <th className="p-3">شماره دانشجویی</th>
+                  <th className="p-3">عنوان درس امتحانی</th>
+                  <th className="p-3">وضعیت مجوز ورود</th>
+                  <th className="p-3 text-center">نحوه ثبت حضور</th>
+                  <th className="p-3 text-left">عملیات مراقب</th>
                 </tr>
               </thead>
               <tbody>
-                {roster.map(st => (
+                {filteredRoster.map(st => (
                   <tr key={st.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
-                    <td className="p-2.5 text-center font-mono font-black text-indigo-950 bg-indigo-50/50">
-                      {st.seatNumber}
-                    </td>
-                    <td className="p-2.5 font-bold text-slate-900">{st.studentName}</td>
-                    <td className="p-2.5 font-mono text-slate-700" dir="ltr">{st.studentCode}</td>
-                    <td className="p-2.5 font-mono text-slate-500" dir="ltr">{st.nationalCode}</td>
-                    <td className="p-2.5 text-center">
-                      <span
-                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-black ${
-                          st.status === 'PRESENT'
-                            ? 'bg-emerald-100 text-emerald-900'
-                            : st.status === 'LATE'
-                            ? 'bg-amber-100 text-amber-900'
-                            : st.status === 'ABSENT'
-                            ? 'bg-rose-100 text-rose-900'
-                            : st.status === 'VIOLATION'
-                            ? 'bg-purple-200 text-purple-900'
-                            : 'bg-slate-200 text-slate-700'
-                        }`}
-                      >
-                        {st.status === 'PRESENT'
-                          ? '✓ حاضر'
-                          : st.status === 'LATE'
-                          ? '🟡 تاخیر'
-                          : st.status === 'ABSENT'
-                          ? '✕ غایب'
-                          : st.status === 'VIOLATION'
-                          ? '🚨 تخلف'
-                          : 'در انتظار'}
+                    <td className="p-3 text-center">
+                      <span className="w-8 h-8 rounded-xl bg-indigo-950 text-amber-300 font-mono font-black text-sm inline-flex items-center justify-center">
+                        {faNum(st.seatNumber)}
                       </span>
                     </td>
-                    <td className="p-2.5 text-center font-mono text-slate-500">
-                      {st.scannedAt || '—'}
+                    <td className="p-3 font-black text-slate-900">{st.studentName}</td>
+                    <td className="p-3 font-mono text-slate-600" dir="ltr">
+                      {st.studentCode}
                     </td>
-                    <td className="p-2.5 text-left">
-                      <div className="flex items-center gap-1 justify-end">
+                    <td className="p-3 font-bold text-indigo-950">
+                      {st.courseTitle}{' '}
+                      <span className="text-[10px] text-slate-400 font-mono">({st.courseCode})</span>
+                    </td>
+                    <td className="p-3">
+                      {st.isFinancialCleared ? (
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                          ✓ تسویه قطعی
+                        </span>
+                      ) : st.hasTemporaryPermit ? (
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold text-[10px]">
+                          ⚠️ دارای تعهد موقت آموزش
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 font-bold text-[10px]">
+                          ⛔ فاقد مجوز
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="p-3 text-center">
+                      {st.status === 'PRESENT' ? (
+                        <span className="px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-800 font-black text-[11px] block">
+                          ✓ حاضر ({st.checkInMethod === 'QR_SCAN' ? 'اسکن QR' : 'دستی توسط مراقب'})
+                        </span>
+                      ) : st.status === 'VIOLATION' ? (
+                        <span className="px-2.5 py-1 rounded-xl bg-rose-100 text-rose-800 font-black text-[11px] block">
+                          🚨 تخلف انضباطی
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-bold">صندلی خالی (غایب)</span>
+                      )}
+                    </td>
+
+                    <td className="p-3 text-left">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {st.status === 'PENDING' && (
+                          <button
+                            onClick={() => setSelectedStudentForManual(st)}
+                            className="px-3 py-1.5 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs transition"
+                          >
+                            ثبت حضور دستی
+                          </button>
+                        )}
+
                         <button
-                          onClick={() => handleSetStudentStatus(st.id, 'PRESENT')}
-                          className="px-2 py-1 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-[10px]"
+                          onClick={() => setViolationStudent(st)}
+                          className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-[11px] transition"
                         >
-                          حاضر
-                        </button>
-                        <button
-                          onClick={() => handleSetStudentStatus(st.id, 'ABSENT')}
-                          className="px-2 py-1 rounded bg-rose-100 hover:bg-rose-200 text-rose-900 font-bold text-[10px]"
-                        >
-                          غایب
-                        </button>
-                        <button
-                          onClick={() => {
-                            setViolationForm({
-                              studentId: st.id,
-                              violationType: 'همراه داشتن یادداشت یا کتاب غیرمجاز',
-                              violationNote: '',
-                            });
-                            setIsViolationModalOpen(true);
-                          }}
-                          className="px-2 py-1 rounded bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold text-[10px]"
-                        >
-                          تخلف
+                          ثبت تخلف 🚨
                         </button>
                       </div>
                     </td>
@@ -820,214 +742,250 @@ export default function ProctorExamAttendanceClient({ user }: Props) {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 4: VIOLATIONS & CHEATING REPORTS */}
+      {/* TAB 3: CHAIN OF CUSTODY - COURSE PACKETS HANDOVER TO VAULT */}
       {/* ========================================================================= */}
-      {activeTab === 'VIOLATIONS' && (
-        <div className="card space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      {activeTab === 'VAULT_HANDOVER' && (
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
-              <h2 className="font-black text-slate-900 text-base">
-                صورت‌جلسات تخلف و تقلب‌های ثبت‌شده در این حوزه
-              </h2>
+              <h3 className="font-black text-slate-900 text-base">
+                زنجیره تحویل برگه‌های امتحانی به مسئول مخزن (Chain of Custody)
+              </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                گزارش‌های رسمی ارسالی به کمیته انضباطی و شورای آموزشی دانشگاه
+                تحویل فیزیکی برگه‌ها به تفکیک بسته‌های درسی و تسویه حق‌الزحمه مراقبت پس از تایید کامل مخزن.
               </p>
             </div>
-            <button
-              onClick={() => setIsViolationModalOpen(true)}
-              className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition"
-            >
-              <span>➕ ثبت تخلف امتحانی جدید</span>
-            </button>
-          </div>
 
-          {roster.filter(s => s.status === 'VIOLATION').length === 0 ? (
-            <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs">
-              هیچ تخلفی در این جلسه آزمون ثبت نشده است. جلسه در کمال نظم در حال برگزاری است.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {roster
-                .filter(s => s.status === 'VIOLATION')
-                .map(v => (
-                  <div key={v.id} className="p-4 bg-purple-50/70 rounded-2xl border border-purple-300 space-y-2 text-xs">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-base">🚨</span>
-                        <h4 className="font-black text-purple-950 text-sm">
-                          {v.studentName} (شماره دانشجویی: {v.studentCode} — صندلی {v.seatNumber})
-                        </h4>
-                      </div>
-                      <span className="px-2.5 py-0.5 rounded-full bg-purple-200 text-purple-900 font-black text-[10px]">
-                        صورت‌جلسه تخلف تنظیم شد
-                      </span>
-                    </div>
-
-                    <div className="text-purple-900 space-y-1 pt-1">
-                      <p><strong>عنوان تخلف:</strong> {v.violationType}</p>
-                      <p><strong>شرح و توضیحات مراقب:</strong> {v.violationNote}</p>
-                      <p className="text-[11px] text-purple-700">
-                        مراقب تنظیم‌کننده: {user.name} · زمان ثبت: {v.scannedAt || 'هم‌اکنون'}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 5: FINAL MINUTES & DIGITAL SIGNATURE */}
-      {/* ========================================================================= */}
-      {activeTab === 'FINAL_MINUTES' && (
-        <div className="card space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h2 className="font-black text-slate-900 text-base">
-                صورت‌جلسه رسمی پایانی آزمون و امضای دیجیتال مراقب
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                تایید نهایی آمار حاضرین، غایبین و ارسال به اداره امتحانات دانشگاه
-              </p>
-            </div>
-            {isMinutesSubmitted && (
-              <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 font-black text-xs">
-                ✓ صورت‌جلسه با موفقیت ارسال شد
+            {currentSession.handoverStatus === 'FINALIZED_BY_VAULT' ? (
+              <span className="px-4 py-2 rounded-2xl bg-emerald-600 text-white font-black text-xs shadow-md">
+                ✓ کلیه بسته‌ها با موفقیت تحویل مخزن شد (حق‌الزحمه تایید شد)
+              </span>
+            ) : (
+              <span className="px-4 py-2 rounded-2xl bg-amber-500 text-slate-950 font-black text-xs shadow-md">
+                ⏳ در انتظار شمارش و تایید مسئول مخزن
               </span>
             )}
           </div>
 
-          <div className="p-5 bg-gradient-to-br from-slate-50 to-indigo-50 rounded-2xl border border-indigo-200 space-y-4 text-xs">
-            <div className="text-center space-y-1 border-b border-indigo-200/60 pb-3">
-              <h3 className="font-black text-slate-900 text-base">
-                دانشگاه جامع آفاق — صورت‌جلسه رسمی برگزاری آزمون پایان‌ترم
-              </h3>
-              <p className="text-slate-600 font-bold">
-                درس: {currentSession.courseTitle} · تاریخ: {currentSession.examDate} · {currentSession.slotLabel} ({currentSession.slotTime}) · حوزه: {currentSession.hallName}
+          {/* Handover Summary Cards per Course Packet */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {currentSession.coursePackets.map(packet => {
+              const isConfirmed = packet.status === 'CONFIRMED';
+              const isDiscrepancy = packet.status === 'DISCREPANCY';
+
+              return (
+                <div
+                  key={packet.courseCode}
+                  className={`p-5 rounded-3xl border-2 transition shadow-sm space-y-4 ${
+                    isConfirmed
+                      ? 'bg-emerald-50/70 border-emerald-400'
+                      : isDiscrepancy
+                      ? 'bg-rose-50/70 border-rose-400'
+                      : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-900 text-white">
+                      بسته: {packet.courseCode}
+                    </span>
+                    <span
+                      className={`text-xs font-black ${
+                        isConfirmed
+                          ? 'text-emerald-700'
+                          : isDiscrepancy
+                          ? 'text-rose-700'
+                          : 'text-slate-500'
+                      }`}
+                    >
+                      {isConfirmed ? '🟢 تحویل کامل' : isDiscrepancy ? '🔴 مغایرت' : '⏳ در انتظار'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <h4 className="font-black text-sm text-slate-900">{packet.courseTitle}</h4>
+                    <p className="text-xs text-slate-500 mt-0.5">مدرس: {packet.professorName}</p>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-2xl border border-slate-200 space-y-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">برگه‌های مورد انتظار (حاضرین):</span>
+                      <span className="font-mono font-black text-indigo-950 text-sm">
+                        {faNum(packet.expectedSheets)} برگه
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                      <span className="text-slate-500">تعداد شمارش‌شده مخزن:</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        defaultValue={packet.expectedSheets}
+                        onChange={e =>
+                          setVaultSheetsInput({
+                            ...vaultSheetsInput,
+                            [packet.courseCode]: Number(e.target.value),
+                          })
+                        }
+                        className="w-16 border border-slate-300 rounded-xl p-1 text-center font-mono font-black text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  {packet.discrepancyNote && (
+                    <p className="text-[11px] text-rose-700 font-bold bg-rose-100 p-2 rounded-xl">
+                      ⚠️ {packet.discrepancyNote}
+                    </p>
+                  )}
+
+                  <button
+                    onClick={() => handleConfirmVaultPacket(packet.courseCode, packet.expectedSheets)}
+                    className={`w-full py-2.5 rounded-xl font-black text-xs transition shadow-xs ${
+                      isConfirmed
+                        ? 'bg-emerald-700 text-white'
+                        : 'bg-indigo-900 hover:bg-indigo-950 text-white'
+                    }`}
+                  >
+                    {isConfirmed ? '✓ بسته تایید و مهروموم شد' : 'ثبت و تایید تحویل بسته 📥'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Vault Handshake QR Code Display */}
+          <div className="bg-slate-950 text-white p-6 rounded-3xl border border-indigo-900/60 flex flex-col sm:flex-row items-center justify-between gap-6">
+            <div className="space-y-2 text-center sm:text-right">
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-800 text-indigo-200">
+                بارکد دیجیتال دست‌دادن (Handshake QR Code)
+              </span>
+              <h4 className="text-base font-black">تحویل نهایی جلسه آزمون به مخزن مرکزی قرنطینه</h4>
+              <p className="text-xs text-slate-400 leading-5 max-w-lg">
+                مسئول محترم مخزن با اسکن این بارکد روی گوشی مراقب، صورت‌جلسه فیزیکی را تایید نموده و فرآیند تسویه حق‌الزحمه مراقب فعال می‌شود.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3 bg-white rounded-xl border border-slate-200 text-center">
-                <span className="text-slate-500 block text-[10px]">کل داوطلبان:</span>
-                <strong className="text-slate-900 text-lg">{stats.total} نفر</strong>
+            <div className="bg-white p-3 rounded-2xl text-slate-900 text-center space-y-1 shadow-lg shrink-0">
+              <div className="w-24 h-24 bg-slate-100 rounded-xl flex items-center justify-center font-mono text-[10px] text-slate-500 border border-slate-300">
+                [QR-HANDOVER]
               </div>
-              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-center">
-                <span className="text-emerald-700 block text-[10px]">حاضرین در جلسه:</span>
-                <strong className="text-emerald-950 text-lg">{stats.presentCount} نفر</strong>
-              </div>
-              <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 text-center">
-                <span className="text-rose-700 block text-[10px]">غایبین:</span>
-                <strong className="text-rose-950 text-lg">{stats.absentCount} نفر</strong>
-              </div>
-              <div className="p-3 bg-purple-50 rounded-xl border border-purple-200 text-center">
-                <span className="text-purple-700 block text-[10px]">موارد تخلف:</span>
-                <strong className="text-purple-950 text-lg">{stats.violationCount} مورد</strong>
-              </div>
+              <span className="text-[10px] font-mono font-black block" dir="ltr">
+                AFQ-VAULT-SESS-01
+              </span>
             </div>
-
-            {!isMinutesSubmitted ? (
-              <div className="p-4 bg-white rounded-xl border border-slate-200 space-y-3 pt-2">
-                <label className="font-bold text-slate-800 block">
-                  امضای الکترونیکی مراقب آزمون ({user.name}):
-                </label>
-                <div className="flex flex-col sm:flex-row items-center gap-2">
-                  <input
-                    type="password"
-                    value={proctorOtp}
-                    onChange={e => setProctorOtp(e.target.value)}
-                    placeholder="رمز عبور یا کد تایید مراقب جهت امضای دیجیتال..."
-                    className="flex-1 border border-slate-300 rounded-lg p-2 font-bold text-xs"
-                  />
-                  <button
-                    onClick={handleSubmitFinalMinutes}
-                    disabled={isFinalSubmitting}
-                    className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 text-white font-black text-xs shadow transition"
-                  >
-                    {isFinalSubmitting ? 'در حال ارسال…' : '✓ امضای دیجیتال و ارسال نهایی صورت‌جلسه'}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="p-3.5 bg-emerald-100/90 border border-emerald-300 rounded-xl text-emerald-950 font-bold flex items-center justify-between">
-                <div>
-                  <span>✓ این صورت‌جلسه توسط <strong>{user.name}</strong> در تاریخ {new Date().toLocaleDateString('fa-IR')} ساعت {new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })} به صورت دیجیتال امضا و در سامانه بایگانی امتحانات دانشگاه ثبت گردید.</span>
-                </div>
-                <span className="text-xs font-mono bg-white px-2.5 py-1 rounded-lg">کد رهگیری: AFG-MIN-8902</span>
-              </div>
-            )}
           </div>
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL: RECORD VIOLATION */}
-      {/* ========================================================================= */}
-      {isViolationModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95">
-            <div className="p-4 bg-purple-950 text-white flex items-center justify-between">
-              <h3 className="font-extrabold text-sm sm:text-base">🚨 ثبت صورت‌جلسه تخلف و تقلب امتحانی</h3>
-              <button onClick={() => setIsViolationModalOpen(false)} className="text-white/60 hover:text-white">✕</button>
+      {/* Manual Check-In Modal */}
+      {selectedStudentForManual && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4 text-slate-900 animate-scaleUp">
+            <div className="text-center space-y-1">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-900 flex items-center justify-center text-2xl mx-auto">
+                ✍️
+              </div>
+              <h3 className="font-black text-base">تایید حضور دستی داوطلب</h3>
+              <p className="text-xs text-slate-500">
+                ثبت در لاگ بازرسی با شناسه مراقب: <b>{user.name}</b>
+              </p>
             </div>
 
-            <div className="p-4 space-y-3 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">انتخاب داوطلب متخلف:</label>
-                <select
-                  value={violationForm.studentId}
-                  onChange={e => setViolationForm({ ...violationForm, studentId: Number(e.target.value) })}
-                  className="w-full border border-slate-300 rounded-lg p-2 font-bold bg-white"
-                >
-                  {roster.map(st => (
-                    <option key={st.id} value={st.id}>
-                      {st.studentName} (صندلی {st.seatNumber} — ش.د: {st.studentCode})
-                    </option>
-                  ))}
-                </select>
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">نام دانشجو:</span>
+                <span className="font-black">{selectedStudentForManual.studentName}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">شماره صندلی:</span>
+                <span className="font-mono font-bold text-indigo-950">{faNum(selectedStudentForManual.seatNumber)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">درس امتحانی:</span>
+                <span className="font-bold">{selectedStudentForManual.courseTitle}</span>
+              </div>
+              <div className="flex justify-between pt-2 border-t border-slate-200">
+                <span className="text-slate-500">وضعیت مجوز:</span>
+                <span className="font-bold text-amber-800">
+                  {selectedStudentForManual.hasTemporaryPermit
+                    ? 'دارای تعهد موقت آموزش ✓'
+                    : 'بدون کارت — با تایید هویت مراقب'}
+                </span>
+              </div>
+            </div>
 
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => handleConfirmManualCheckIn(selectedStudentForManual)}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition shadow-md"
+              >
+                ✓ تایید و ثبت حضور دستی
+              </button>
+              <button
+                onClick={() => setSelectedStudentForManual(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition"
+              >
+                انصراف
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Violation Modal */}
+      {violationStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4 text-slate-900 animate-scaleUp">
+            <div className="text-center space-y-1">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center text-2xl mx-auto">
+                🚨
+              </div>
+              <h3 className="font-black text-base text-rose-700">ثبت صورت‌جلسه تخلف امتحانی</h3>
+              <p className="text-xs text-slate-500">
+                دانشجو: <b>{violationStudent.studentName}</b> (صندلی {faNum(violationStudent.seatNumber)})
+              </p>
+            </div>
+
+            <div className="space-y-3 text-xs">
               <div>
-                <label className="font-bold text-slate-700 block mb-1">نوع و عنوان تخلف:</label>
+                <label className="block font-bold text-slate-700 mb-1">نوع تخلف کشف‌شده:</label>
                 <select
-                  value={violationForm.violationType}
-                  onChange={e => setViolationForm({ ...violationForm, violationType: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg p-2 font-bold bg-white"
+                  value={violationType}
+                  onChange={e => setViolationType(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900"
                 >
-                  <option value="همراه داشتن تلفن همراه یا ساعت هوشمند">همراه داشتن تلفن همراه یا ساعت هوشمند</option>
-                  <option value="همراه داشتن یادداشت، کتاب یا جزوه غیرمجاز">همراه داشتن یادداشت، کتاب یا جزوه غیرمجاز</option>
-                  <option value="رد و بدل کردن پاسخنامه یا ورقه آزمون">رد و بدل کردن پاسخنامه یا ورقه آزمون</option>
-                  <option value="نگاه کردن به برگه دیگران / صحبت با داوطلب مجاور">نگاه کردن به برگه دیگران / صحبت با داوطلب مجاور</option>
-                  <option value="اخلال در نظم جلسه و عدم توجه به تذکرات مراقب">اخلال در نظم جلسه و عدم توجه به تذکرات مراقب</option>
+                  <option value="همراه داشتن یادداشت یا تلفن همراه">همراه داشتن یادداشت، کتابچه یا تلفن همراه</option>
+                  <option value="رد و بدل کردن ورقه یا صحبت با داوطلب مجاور">رد و بدل کردن ورقه یا صحبت با داوطلب مجاور</option>
+                  <option value="نگاه به برگه دیگران">نگاه به برگه دیگران</option>
                   <option value="جعل هویت و شرکت به جای داوطلب اصلی">جعل هویت و شرکت به جای داوطلب اصلی</option>
+                  <option value="اخلال در نظم جلسه آزمون">اخلال در نظم جلسه آزمون</option>
                 </select>
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">شرح دقیق و مشاهدات مراقب:</label>
+                <label className="block font-bold text-slate-700 mb-1">مشاهدات و توضیحات مراقب:</label>
                 <textarea
                   rows={3}
-                  value={violationForm.violationNote}
-                  onChange={e => setViolationForm({ ...violationForm, violationNote: e.target.value })}
-                  placeholder="جزییات کامل نحوه کشف تخلف، ضبط مدارک و ضمایم را شرح دهید..."
-                  className="w-full border border-slate-300 rounded-lg p-2 font-bold bg-white"
+                  value={violationNote}
+                  onChange={e => setViolationNote(e.target.value)}
+                  placeholder="نحوه کشف تخلف و ضمائم ضبط‌شده را شرح دهید..."
+                  className="w-full border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 font-bold focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
             </div>
 
-            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+            <div className="flex gap-2 pt-2">
               <button
-                onClick={() => setIsViolationModalOpen(false)}
-                className="px-4 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-bold text-xs"
+                onClick={handleRecordViolation}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs transition shadow-md"
               >
-                انصراف
+                🚨 ثبت قطعی صورت‌جلسه تخلف
               </button>
               <button
-                onClick={handleSaveViolation}
-                className="px-5 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-xs shadow"
+                onClick={() => setViolationStudent(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition"
               >
-                🚨 ثبت صورت‌جلسه تخلف
+                انصراف
               </button>
             </div>
           </div>

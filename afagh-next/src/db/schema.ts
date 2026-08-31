@@ -858,3 +858,71 @@ export const short_term_certificates = pgTable('short_term_certificates', {
   isRevoked: integer('isRevoked').default(0),
   createdAt: timestamp('createdAt').defaultNow()
 });
+
+// ============================================================================
+// کارت دانشجویی هوشمند و ره‌گیری فیزیکی (Student ID Cards)
+// ============================================================================
+
+export const student_cards = pgTable('student_cards', {
+  id: serial('id').primaryKey(),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  secureToken: varchar('secureToken', { length: 64 }).notNull().unique(),
+  printStatus: varchar('printStatus', { length: 20 }).default('PENDING'), // PENDING, PRINTED, LOST, REVOKED
+  rfidSerialNumber: varchar('rfidSerialNumber', { length: 100 }),
+  issuedAt: timestamp('issuedAt'),
+  expiresAt: timestamp('expiresAt'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+// ============================================================================
+// حضور و غیاب آزمون، مراقبین و بسته‌های تحویل مخزن (Invigilators & Chain of Custody)
+// ============================================================================
+
+export const exam_attendances = pgTable('exam_attendances', {
+  id: serial('id').primaryKey(),
+  examId: integer('examId').notNull().references(() => exam_sessions.id),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  isPresent: integer('isPresent').default(0),
+  checkInMethod: varchar('checkInMethod', { length: 30 }).default('QR_SCAN'), // QR_SCAN, MANUAL_BY_INVIGILATOR, SYSTEM_EXCUSE
+  verifiedByStaffId: integer('verifiedByStaffId').references(() => staff.id),
+  hasTemporaryPermit: integer('hasTemporaryPermit').default(0), // دارای مجوز موقت / تعهد کتبی
+  checkInTime: timestamp('checkInTime'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+export const exam_invigilators = pgTable('exam_invigilators', {
+  id: serial('id').primaryKey(),
+  examId: integer('examId').notNull().references(() => exam_sessions.id),
+  staffId: integer('staffId').notNull().references(() => staff.id),
+  role: varchar('role', { length: 50 }).notNull().default('INVIGILATOR'), // HEAD_INVIGILATOR, INVIGILATOR, TECHNICAL_SUPPORT
+  clockInTime: timestamp('clockInTime'),
+  clockOutTime: timestamp('clockOutTime'),
+  isBilledToPayroll: integer('isBilledToPayroll').default(0),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+export const exam_course_packets = pgTable('exam_course_packets', {
+  id: serial('id').primaryKey(),
+  examId: integer('examId').notNull().references(() => exam_sessions.id),
+  courseId: integer('courseId').notNull().references(() => courses.id),
+  invigilatorStaffId: integer('invigilatorStaffId').references(() => staff.id),
+  expectedSheetCount: integer('expectedSheetCount').notNull().default(0),
+  actualDeliveredCount: integer('actualDeliveredCount'),
+  handoverStatus: varchar('handoverStatus', { length: 30 }).default('NOT_STARTED'), // NOT_STARTED, AWAITING_HANDOVER, DISCREPANCY, RECEIVED_BY_VAULT
+  receivedByVaultManagerId: integer('receivedByVaultManagerId').references(() => staff.id),
+  handoverCompletedAt: timestamp('handoverCompletedAt'),
+  discrepancyNote: text('discrepancyNote'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+export const notification_logs = pgTable('notification_logs', {
+  id: serial('id').primaryKey(),
+  userId: integer('userId').notNull().references(() => users.id),
+  channel: varchar('channel', { length: 20 }).notNull(), // SMS, EMAIL, PUSH
+  eventType: varchar('eventType', { length: 50 }).notNull(),
+  messageBody: text('messageBody').notNull(),
+  deliveryStatus: varchar('deliveryStatus', { length: 20 }).default('PENDING'), // DELIVERED, FAILED, SEEN, PENDING
+  providerResponse: text('providerResponse'),
+  sentAt: timestamp('sentAt').defaultNow(),
+  deliveredAt: timestamp('deliveredAt')
+});
