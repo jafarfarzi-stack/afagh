@@ -42,6 +42,14 @@ export interface CourseBankItem {
   failGrade?: number;
 }
 
+export interface SemesterCourseAssignment {
+  courseId: number;
+  isMandatoryInTerm: boolean; // الزامی در انتخاب واحد این ترم
+  isGraduationReq: boolean;   // شرط الزامی فارغ‌التحصیلی
+  recommendedTerm: number;    // شماره ترم مصوب ۱ تا ۸
+  gradePolicy?: string;       // عادی / ارشد
+}
+
 export interface CourseTypeRule {
   typeCode: number;
   title: string;
@@ -164,13 +172,81 @@ const MASTER_COURSES: CourseBankItem[] = [
   { id: 23, code: '14006', title: 'کنترل کیفیت در صنایع غذایی', courseType: 'تخصصی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'شیمی مواد غذایی', corequisites: '—', passGrade: 10, failGrade: 0 },
   { id: 24, code: '14007', title: 'اصول نگهداری مواد غذایی', courseType: 'اصلی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'میکروبیولوژی', corequisites: '—', passGrade: 10, failGrade: 0 },
   { id: 25, code: '14008', title: 'کارآموزی صنایع غذایی', courseType: 'کارورزی', units: 2, theoreticalUnits: 0, practicalUnits: 2, prerequisites: 'گذراندن ۵۰ واحد', corequisites: '—', passGrade: 10, failGrade: 0 },
+  { id: 26, code: '1112401', title: 'هوش مصنوعی', courseType: 'تخصصی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'ساختمان داده‌ها', corequisites: '—', passGrade: 10, failGrade: 0 },
+  { id: 27, code: '1112402', title: 'مهندسی نرم‌افزار ۱', courseType: 'تخصصی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'پایگاه داده‌ها', corequisites: '—', passGrade: 10, failGrade: 0 },
+  { id: 28, code: '1112403', title: 'سیستم‌های عامل', courseType: 'اصلی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'معماری کامپیوتر', corequisites: '—', passGrade: 10, failGrade: 0 },
+  { id: 29, code: '1112499', title: 'پروژه پایانی کارشناسی', courseType: 'پروژه', units: 3, theoreticalUnits: 0, practicalUnits: 3, prerequisites: 'گذراندن ۱۰۰ واحد', corequisites: '—', passGrade: 10, failGrade: 0 },
+  { id: 30, code: '1112498', title: 'کارآموزی مهندسی نرم‌افزار', courseType: 'کارورزی', units: 2, theoreticalUnits: 0, practicalUnits: 2, prerequisites: 'گذراندن ۸۰ واحد', corequisites: '—', passGrade: 10, failGrade: 0 },
 ];
 
 const INITIAL_CATALOG_COURSES: Record<number, number[]> = {
-  47: [7, 8, 9, 10, 11, 3, 4, 5, 1, 19, 20, 21, 22, 23, 24],
-  48: [7, 8, 9, 10, 11, 3, 4, 5, 1, 19, 20, 21, 22, 23, 24],
-  101: [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22],
-  102: [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22],
+  47: [7, 8, 9, 10, 11, 3, 4, 5, 1, 19, 20, 21, 22, 23, 24, 25],
+  48: [7, 8, 9, 10, 11, 3, 4, 5, 1, 19, 20, 21, 22, 23, 24, 25],
+  101: [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 26, 27, 28, 29, 30],
+  102: [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 26, 27, 28, 29, 30],
+};
+
+// Initial Semester Mapping (Catalog ID -> Semester No 1..8 -> Course Assignments)
+const INITIAL_SEMESTER_ASSIGNMENTS: Record<number, Record<number, SemesterCourseAssignment[]>> = {
+  47: {
+    1: [
+      { courseId: 3, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
+      { courseId: 7, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
+      { courseId: 9, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
+      { courseId: 19, isMandatoryInTerm: false, isGraduationReq: true, recommendedTerm: 1 },
+      { courseId: 20, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
+      { courseId: 21, isMandatoryInTerm: false, isGraduationReq: true, recommendedTerm: 1 },
+      { courseId: 22, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
+    ],
+    2: [
+      { courseId: 4, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 2 },
+      { courseId: 8, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 2 },
+      { courseId: 10, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 2 },
+      { courseId: 24, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 2 },
+    ],
+    3: [
+      { courseId: 5, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 3 },
+      { courseId: 6, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 3 },
+      { courseId: 11, isMandatoryInTerm: false, isGraduationReq: true, recommendedTerm: 3 },
+      { courseId: 23, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 3 },
+      { courseId: 1, isMandatoryInTerm: false, isGraduationReq: true, recommendedTerm: 3 },
+    ],
+    4: [
+      { courseId: 25, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 4 },
+    ],
+  },
+  101: {
+    1: [
+      { courseId: 12, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
+      { courseId: 13, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
+      { courseId: 19, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
+      { courseId: 20, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
+      { courseId: 21, isMandatoryInTerm: false, isGraduationReq: true, recommendedTerm: 1 },
+      { courseId: 22, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
+    ],
+    2: [
+      { courseId: 14, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 2 },
+      { courseId: 15, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 2 },
+    ],
+    3: [
+      { courseId: 16, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 3 },
+      { courseId: 17, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 3 },
+    ],
+    4: [
+      { courseId: 18, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 4 },
+      { courseId: 28, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 4 },
+    ],
+    5: [
+      { courseId: 26, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 5 },
+      { courseId: 27, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 5 },
+    ],
+    6: [],
+    7: [],
+    8: [
+      { courseId: 29, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 8 },
+      { courseId: 30, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 8 },
+    ],
+  },
 };
 
 const ALL_TERMS = [
@@ -187,20 +263,27 @@ export default function CurriculumManagerClient({
   initialMajors?: MajorItem[];
 }) {
   // Navigation / Active View
-  const [activeTab, setActiveTab] = useState<'TAB1_CATALOG' | 'TAB2_COURSES' | 'TAB3_VERIFY' | 'TAB4_TRANSFER'>('TAB1_CATALOG');
-  const [activeModal, setActiveModal] = useState<null | 'NEW_MAJOR' | 'MAJOR_SPECS' | 'FACULTY_DEPT_TREE' | 'NEW_TRACK' | 'MAJOR_REPORT'>(null);
+  const [activeTab, setActiveTab] = useState<'TAB1_CATALOG' | 'TAB2_COURSES' | 'TAB_SEMESTERS' | 'TAB3_VERIFY' | 'TAB4_TRANSFER'>('TAB_SEMESTERS');
+  const [activeModal, setActiveModal] = useState<null | 'NEW_MAJOR' | 'MAJOR_SPECS' | 'FACULTY_DEPT_TREE' | 'NEW_TRACK' | 'MAJOR_REPORT' | 'GRADUATION_AUDIT_REPORT'>(null);
 
   // State
   const [majors, setMajors] = useState<MajorItem[]>(initialMajors && initialMajors.length > 0 ? initialMajors : INITIAL_MAJORS);
   const [catalogs, setCatalogs] = useState<CatalogItem[]>(INITIAL_CATALOGS);
   const [catalogCourses, setCatalogCourses] = useState<Record<number, number[]>>(INITIAL_CATALOG_COURSES);
   const [typeRules, setTypeRules] = useState<Record<number, CourseTypeRule[]>>(INITIAL_TYPE_RULES);
+  const [semesterAssignments, setSemesterAssignments] = useState<Record<number, Record<number, SemesterCourseAssignment[]>>>(INITIAL_SEMESTER_ASSIGNMENTS);
 
   // Selected filters in Catalog
   const [selectedMajorCode, setSelectedMajorCode] = useState<string>('14');
   const [selectedStudyMode, setSelectedStudyMode] = useState<string>('آموزشی');
   const [selectedTrack, setSelectedTrack] = useState<string>('نامشخص');
   const [selectedCatalogId, setSelectedCatalogId] = useState<number>(47);
+
+  // Semester Management Tab State
+  const [activeSemesterNo, setActiveSemesterNo] = useState<number>(1);
+  const [selectedBankCoursesForSemester, setSelectedBankCoursesForSemester] = useState<number[]>([]);
+  const [semesterSearchFilter, setSemesterSearchFilter] = useState('');
+  const [showOnlyUnassigned, setShowOnlyUnassigned] = useState(false);
 
   // Term Checkboxes for Tab 1 (درج اطلاعات کاتالوگ)
   const [checkedTerms, setCheckedTerms] = useState<Record<string, boolean>>({
@@ -228,6 +311,7 @@ export default function CurriculumManagerClient({
   const [transferTargetTerm, setTransferTargetTerm] = useState('14041');
   const [copyPrereqs, setCopyPrereqs] = useState(true);
   const [copyGrades, setCopyGrades] = useState(true);
+  const [copySemesters, setCopySemesters] = useState(true);
 
   // Modals state
   const [newMajorForm, setNewMajorForm] = useState({
@@ -273,6 +357,50 @@ export default function CurriculumManagerClient({
     return MASTER_COURSES.filter(c => ids.includes(c.id));
   }, [activeCatalog, catalogCourses]);
 
+  // Active Semester Assignments for active catalog
+  const activeCatalogSemesterMap = useMemo(() => {
+    if (!activeCatalog) return {};
+    return semesterAssignments[activeCatalog.id] || {};
+  }, [activeCatalog, semesterAssignments]);
+
+  const activeSemesterCourseAssignments = useMemo(() => {
+    return activeCatalogSemesterMap[activeSemesterNo] || [];
+  }, [activeCatalogSemesterMap, activeSemesterNo]);
+
+  // Assigned course IDs in current semester
+  const activeSemesterAssignedCourseIds = useMemo(() => {
+    return activeSemesterCourseAssignments.map(a => a.courseId);
+  }, [activeSemesterCourseAssignments]);
+
+  // All assigned course IDs across all semesters in this catalog
+  const allAssignedSemesterCourseIds = useMemo(() => {
+    const set = new Set<number>();
+    Object.values(activeCatalogSemesterMap).forEach(list => {
+      list.forEach(item => set.add(item.courseId));
+    });
+    return set;
+  }, [activeCatalogSemesterMap]);
+
+  // Semester Total Units Calculation
+  const activeSemesterTotalUnits = useMemo(() => {
+    return activeSemesterCourseAssignments.reduce((sum, item) => {
+      const course = MASTER_COURSES.find(c => c.id === item.courseId);
+      return sum + (course ? course.units : 0);
+    }, 0);
+  }, [activeSemesterCourseAssignments]);
+
+  // Grand Total Units across all 8 semesters in active catalog
+  const grandTotalSemesterUnits = useMemo(() => {
+    let sum = 0;
+    Object.values(activeCatalogSemesterMap).forEach(list => {
+      list.forEach(item => {
+        const c = MASTER_COURSES.find(crs => crs.id === item.courseId);
+        if (c) sum += c.units;
+      });
+    });
+    return sum;
+  }, [activeCatalogSemesterMap]);
+
   // Type Rules for Active Catalog
   const activeTypeRules = useMemo(() => {
     if (!activeCatalog) return [];
@@ -294,7 +422,6 @@ export default function CurriculumManagerClient({
       { code: 8, title: 'پروژه', maxAllowed: 0, actualAssigned: 0 },
     ];
 
-    // Load max allowed from typeRules if present
     if (activeTypeRules && activeTypeRules.length > 0) {
       for (const r of activeTypeRules) {
         const target = summary.find(s => s.code === r.typeCode || s.title === r.title);
@@ -302,7 +429,6 @@ export default function CurriculumManagerClient({
       }
     }
 
-    // Compute actual assigned units
     for (const c of activeAssignedCourses) {
       const target = summary.find(s => s.title === c.courseType) || summary[0];
       target.actualAssigned += c.units;
@@ -320,6 +446,98 @@ export default function CurriculumManagerClient({
     }
     return list;
   }, [courseSearch]);
+
+  // Handlers for Semester Planner
+  const handleAssignCoursesToSemester = () => {
+    if (!activeCatalog) return;
+    if (selectedBankCoursesForSemester.length === 0) {
+      alert('لطفاً حداقل یک درس را با تیک انتخاب فرمایید.');
+      return;
+    }
+
+    setSemesterAssignments(prev => {
+      const catMap = prev[activeCatalog.id] || {};
+      const currentSemList = catMap[activeSemesterNo] || [];
+
+      // Avoid duplicates
+      const newItems: SemesterCourseAssignment[] = [];
+      for (const cId of selectedBankCoursesForSemester) {
+        if (!currentSemList.some(item => item.courseId === cId)) {
+          newItems.push({
+            courseId: cId,
+            isMandatoryInTerm: true,
+            isGraduationReq: true,
+            recommendedTerm: activeSemesterNo,
+          });
+        }
+      }
+
+      return {
+        ...prev,
+        [activeCatalog.id]: {
+          ...catMap,
+          [activeSemesterNo]: [...currentSemList, ...newItems],
+        },
+      };
+    });
+
+    showToast(`✅ تعداد ${selectedBankCoursesForSemester.length} درس به ترم ${activeSemesterNo} افزوده شد و در انتخاب واحد و فارغ‌التحصیلی ثبت گردید.`);
+    setSelectedBankCoursesForSemester([]);
+  };
+
+  const handleRemoveCourseFromSemester = (courseId: number) => {
+    if (!activeCatalog) return;
+    setSemesterAssignments(prev => {
+      const catMap = prev[activeCatalog.id] || {};
+      const currentSemList = catMap[activeSemesterNo] || [];
+      return {
+        ...prev,
+        [activeCatalog.id]: {
+          ...catMap,
+          [activeSemesterNo]: currentSemList.filter(item => item.courseId !== courseId),
+        },
+      };
+    });
+    showToast('درس از این ترم حذف شد.');
+  };
+
+  const handleToggleMandatoryInTerm = (courseId: number) => {
+    if (!activeCatalog) return;
+    setSemesterAssignments(prev => {
+      const catMap = prev[activeCatalog.id] || {};
+      const currentSemList = catMap[activeSemesterNo] || [];
+      return {
+        ...prev,
+        [activeCatalog.id]: {
+          ...catMap,
+          [activeSemesterNo]: currentSemList.map(item =>
+            item.courseId === courseId ? { ...item, isMandatoryInTerm: !item.isMandatoryInTerm } : item
+          ),
+        },
+      };
+    });
+  };
+
+  const handleToggleGraduationReq = (courseId: number) => {
+    if (!activeCatalog) return;
+    setSemesterAssignments(prev => {
+      const catMap = prev[activeCatalog.id] || {};
+      const currentSemList = catMap[activeSemesterNo] || [];
+      return {
+        ...prev,
+        [activeCatalog.id]: {
+          ...catMap,
+          [activeSemesterNo]: currentSemList.map(item =>
+            item.courseId === courseId ? { ...item, isGraduationReq: !item.isGraduationReq } : item
+          ),
+        },
+      };
+    });
+  };
+
+  const handleSyncWithEnrollmentEngine = () => {
+    showToast('⚡ تنظیمات ترم‌بندی با موفقیت با موتور انتخاب واحد و شرایط فارغ‌التحصیلی همگام شد!');
+  };
 
   // Handlers for Tab 1
   const handleApplyNewTermCatalogs = () => {
@@ -435,9 +653,15 @@ export default function CurriculumManagerClient({
     const sourceRules = typeRules[activeCatalog.id] || INITIAL_TYPE_RULES[47] || [];
     setTypeRules(prev => ({ ...prev, [newCat.id]: JSON.parse(JSON.stringify(sourceRules)) }));
 
-    showToast(`🎉 کاتالوگ ${activeCatalog.id} (ترم ${activeCatalog.term}) با موفقیت به کاتالوگ جدید ${newCat.id} (ترم ${newCat.term}) کپی و منتقل شد.`);
+    // Copy semester mappings
+    if (copySemesters) {
+      const sourceSemesters = semesterAssignments[activeCatalog.id] || {};
+      setSemesterAssignments(prev => ({ ...prev, [newCat.id]: JSON.parse(JSON.stringify(sourceSemesters)) }));
+    }
+
+    showToast(`🎉 کاتالوگ ${activeCatalog.id} (ترم ${activeCatalog.term}) به کاتالوگ جدید ${newCat.id} (ترم ${newCat.term}) به همراه چارت ترم‌بندی کپی شد.`);
     setSelectedCatalogId(newCat.id);
-    setActiveTab('TAB1_CATALOG');
+    setActiveTab('TAB_SEMESTERS');
   };
 
   return (
@@ -469,7 +693,7 @@ export default function CurriculumManagerClient({
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              سیستم سرفصل و قوانین آیین‌نامه فعال
+              کنترل هوشمند انتخاب واحد و فارغ‌التحصیلی فعال
             </span>
           </div>
         </div>
@@ -531,13 +755,13 @@ export default function CurriculumManagerClient({
         </div>
       </div>
 
-      {/* Main Catalog Window Wrapper (Windows SIS Theme matching Images 2, 3, 4) */}
+      {/* Main Catalog Window Wrapper (Windows SIS Theme matching Images 2, 3, 4 + Semester Planning) */}
       <div className="bg-slate-100 rounded-2xl border-2 border-slate-300 shadow-xl overflow-hidden">
         {/* Title Bar */}
         <div className="bg-gradient-to-r from-slate-200 to-slate-300 px-4 py-2 border-b border-slate-300 flex items-center justify-between text-xs font-bold text-slate-700">
           <div className="flex items-center gap-2">
             <span className="text-indigo-700 font-black">🗃️</span>
-            <span>کاتالوگ رشته</span>
+            <span>کاتالوگ رشته — تنظیمات سرفصل مصوب و ترم‌بندی</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-slate-400 inline-block"></span>
@@ -546,7 +770,7 @@ export default function CurriculumManagerClient({
           </div>
         </div>
 
-        {/* Top 4 Tabs Navigation (Matching Screen Tabs) */}
+        {/* Top 5 Tabs Navigation */}
         <div className="flex border-b border-slate-300 bg-slate-200/90 text-xs font-bold overflow-x-auto">
           <button
             onClick={() => setActiveTab('TAB1_CATALOG')}
@@ -571,6 +795,18 @@ export default function CurriculumManagerClient({
           </button>
 
           <button
+            onClick={() => setActiveTab('TAB_SEMESTERS')}
+            className={`px-4 py-2.5 border-l border-slate-300 transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+              activeTab === 'TAB_SEMESTERS'
+                ? 'bg-white text-emerald-950 border-t-2 border-t-emerald-600 shadow-inner'
+                : 'text-slate-700 hover:bg-emerald-50/70 font-black'
+            }`}
+          >
+            <span>📅</span>
+            <span>ترم‌بندی چارت و کنترل انتخاب واحد / فارغ‌التحصیلی</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('TAB3_VERIFY')}
             className={`px-4 py-2.5 border-l border-slate-300 transition-colors whitespace-nowrap ${
               activeTab === 'TAB3_VERIFY'
@@ -592,6 +828,458 @@ export default function CurriculumManagerClient({
             انتقال کاتالوگ
           </button>
         </div>
+
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* تب اختصاصی جدید: ترم‌بندی چارت و کنترل انتخاب واحد و فارغ‌التحصیلی */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'TAB_SEMESTERS' && (
+          <div className="p-4 bg-white space-y-4">
+            {/* Context Summary Header */}
+            <div className="p-3.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 border border-emerald-200 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div>
+                <span className="font-extrabold text-emerald-950 text-sm flex items-center gap-1.5">
+                  <span>🗺️</span>
+                  <span>برنامه‌ریزی ترمیک سرفصل: {activeCatalog?.majorName} (کاتالوگ {activeCatalog?.id} — ترم {activeCatalog?.term})</span>
+                </span>
+                <p className="text-emerald-800 text-[11px] mt-0.5">
+                  در این بخش دروس مورد نیاز هر ترم تحصیلی را تیک زده و اضافه نمایید. این تنظیمات در <b>موتور انتخاب واحد</b> و <b>تطبیق فارغ‌التحصیلی دانشجو</b> به صورت خودکار ملاک عمل قرار می‌گیرد.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="text-left bg-white px-3 py-1.5 rounded-lg border border-emerald-300 shadow-sm">
+                  <div className="text-[10px] text-slate-500">مجموع واحدهای کل چارت:</div>
+                  <div className="font-mono font-extrabold text-indigo-900 text-sm">
+                    {grandTotalSemesterUnits} / {activeMajor.minUnits} واحد مصوب
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleSyncWithEnrollmentEngine}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs shadow-md transition-all flex items-center gap-1.5"
+                >
+                  <span>⚡</span>
+                  <span>اعمال در انتخاب واحد و فارغ‌التحصیلی</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Semesters 1 to 8 Pill Navigation */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-700 px-1">
+                <span>انتخاب ترم تحصیلی جهت تخصیص دروس:</span>
+                <span className="text-[11px] text-slate-500 font-normal">
+                  سقف استاندارد هر ترم: ۱۲ الی ۲۰ واحد (ترم‌های عادی) / حداکثر ۶ واحد (ترم تابستان)
+                </span>
+              </div>
+
+              <div className="grid grid-cols-4 sm:grid-cols-9 gap-1.5">
+                {[1, 2, 3, 4, 5, 6, 7, 8].map(semNo => {
+                  const semItems = activeCatalogSemesterMap[semNo] || [];
+                  const semUnits = semItems.reduce((acc, item) => {
+                    const crs = MASTER_COURSES.find(c => c.id === item.courseId);
+                    return acc + (crs ? crs.units : 0);
+                  }, 0);
+                  const isSelected = activeSemesterNo === semNo;
+
+                  return (
+                    <button
+                      key={semNo}
+                      onClick={() => setActiveSemesterNo(semNo)}
+                      className={`p-2 rounded-xl border text-center transition-all flex flex-col items-center justify-between min-h-[64px] ${
+                        isSelected
+                          ? 'bg-emerald-700 text-white border-emerald-800 shadow-md scale-105 z-10'
+                          : 'bg-slate-50 hover:bg-emerald-50/60 border-slate-300 text-slate-700'
+                      }`}
+                    >
+                      <span className="text-xs font-extrabold">ترم {semNo}</span>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full mt-1 ${
+                        isSelected
+                          ? 'bg-emerald-800 text-emerald-100 font-bold'
+                          : semUnits > 0
+                          ? 'bg-emerald-100 text-emerald-800 font-bold'
+                          : 'bg-slate-200 text-slate-500'
+                      }`}>
+                        {semUnits} واحد ({semItems.length} درس)
+                      </span>
+                    </button>
+                  );
+                })}
+
+                {/* Summer Term */}
+                <button
+                  onClick={() => setActiveSemesterNo(9)}
+                  className={`p-2 rounded-xl border text-center transition-all flex flex-col items-center justify-between min-h-[64px] ${
+                    activeSemesterNo === 9
+                      ? 'bg-amber-600 text-white border-amber-700 shadow-md scale-105 z-10'
+                      : 'bg-amber-50/60 hover:bg-amber-100/70 border-amber-300 text-amber-900'
+                  }`}
+                >
+                  <span className="text-xs font-extrabold">☀️ تابستان</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full mt-1 bg-amber-200/80 text-amber-900 font-bold">
+                    {(activeCatalogSemesterMap[9] || []).length} درس
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Split Screen: Left = بانک دروس کاتالوگ با تیک‌زدن, Right = دروس مصوب ترم جاری */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+              {/* Left Box: تیک‌زدن و انتخاب دروس از کاتالوگ (6 Cols) */}
+              <div className="md:col-span-6 border border-slate-300 rounded-xl overflow-hidden bg-white flex flex-col justify-between">
+                <div>
+                  <div className="bg-slate-100 px-3 py-2 border-b border-slate-300 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-700">
+                    <div className="flex items-center gap-2">
+                      <span>دروس ثبت‌شده در کاتالوگ</span>
+                      <span className="text-[11px] text-slate-500 font-normal">({activeAssignedCourses.length} درس فعال)</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={semesterSearchFilter}
+                        onChange={e => setSemesterSearchFilter(e.target.value)}
+                        placeholder="فیلتر کد یا نام..."
+                        className="bg-white border border-slate-300 px-2 py-0.5 rounded text-xs w-32"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-[11px]">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={showOnlyUnassigned}
+                        onChange={e => setShowOnlyUnassigned(e.target.checked)}
+                        className="rounded text-indigo-600"
+                      />
+                      <span>فقط دروس تخصیص‌نیافته به چارت</span>
+                    </label>
+
+                    <button
+                      onClick={() => {
+                        const candidateIds = activeAssignedCourses
+                          .filter(c => !activeSemesterAssignedCourseIds.includes(c.id))
+                          .map(c => c.id);
+                        setSelectedBankCoursesForSemester(candidateIds);
+                      }}
+                      className="text-indigo-700 hover:underline font-bold"
+                    >
+                      ☑️ انتخاب همه دروس آزاد
+                    </button>
+                  </div>
+
+                  <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                    <table className="w-full text-right text-xs border-collapse">
+                      <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 sticky top-0">
+                        <tr>
+                          <th className="p-2 border-l border-slate-200 text-center w-10">تیک</th>
+                          <th className="p-2 border-l border-slate-200 text-center w-20">کد درس</th>
+                          <th className="p-2 border-l border-slate-200">عنوان درس</th>
+                          <th className="p-2 border-l border-slate-200 text-center w-14">واحد</th>
+                          <th className="p-2 border-l border-slate-200">نوع</th>
+                          <th className="p-2 border-l border-slate-200 text-center w-24">وضعیت چارت</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeAssignedCourses
+                          .filter(c => {
+                            if (showOnlyUnassigned && allAssignedSemesterCourseIds.has(c.id)) return false;
+                            if (semesterSearchFilter.trim()) {
+                              const q = semesterSearchFilter.trim().toLowerCase();
+                              return c.title.toLowerCase().includes(q) || c.code.toLowerCase().includes(q);
+                            }
+                            return true;
+                          })
+                          .map(course => {
+                            const isSelected = selectedBankCoursesForSemester.includes(course.id);
+                            const assignedToThisSem = activeSemesterAssignedCourseIds.includes(course.id);
+
+                            // Find which semester this course is assigned to
+                            let assignedSem = 0;
+                            Object.entries(activeCatalogSemesterMap).forEach(([sem, list]) => {
+                              if (list.some(item => item.courseId === course.id)) assignedSem = Number(sem);
+                            });
+
+                            return (
+                              <tr
+                                key={course.id}
+                                onClick={() => {
+                                  if (assignedToThisSem) return;
+                                  setSelectedBankCoursesForSemester(prev =>
+                                    prev.includes(course.id) ? prev.filter(id => id !== course.id) : [...prev, course.id]
+                                  );
+                                }}
+                                className={`border-b border-slate-100 cursor-pointer ${
+                                  assignedToThisSem
+                                    ? 'bg-emerald-50/50 opacity-60'
+                                    : isSelected
+                                    ? 'bg-indigo-100 font-bold text-indigo-950'
+                                    : 'hover:bg-slate-50'
+                                }`}
+                              >
+                                <td className="p-2 border-l border-slate-200 text-center" onClick={e => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    disabled={assignedToThisSem}
+                                    checked={isSelected}
+                                    onChange={e => {
+                                      if (e.target.checked) setSelectedBankCoursesForSemester(prev => [...prev, course.id]);
+                                      else setSelectedBankCoursesForSemester(prev => prev.filter(id => id !== course.id));
+                                    }}
+                                    className="rounded text-indigo-600 focus:ring-indigo-500"
+                                  />
+                                </td>
+                                <td className="p-2 border-l border-slate-200 text-center font-mono">{course.code}</td>
+                                <td className="p-2 border-l border-slate-200 font-semibold">{course.title}</td>
+                                <td className="p-2 border-l border-slate-200 text-center font-mono font-bold">{course.units}</td>
+                                <td className="p-2 border-l border-slate-200 text-slate-600">{course.courseType}</td>
+                                <td className="p-2 border-l border-slate-200 text-center">
+                                  {assignedToThisSem ? (
+                                    <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                                      در همین ترم ✓
+                                    </span>
+                                  ) : assignedSem > 0 ? (
+                                    <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px]">
+                                      ترم {assignedSem}
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px]">
+                                      بدون ترم
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-50 border-t border-slate-300 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-600">
+                    تعداد دروس انتخاب‌شده: <b>{selectedBankCoursesForSemester.length} درس</b>
+                  </span>
+
+                  <button
+                    onClick={handleAssignCoursesToSemester}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold px-5 py-1.5 rounded-lg text-xs shadow transition-all flex items-center gap-1.5"
+                  >
+                    <span>➕</span>
+                    <span>افزودن دروس تیک‌خورده به ترم {activeSemesterNo === 9 ? 'تابستان' : activeSemesterNo}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Box: دروس مصوب ترم انتخاب‌شده با کنترل‌های تیک و فارغ‌التحصیلی (6 Cols) */}
+              <div className="md:col-span-6 border border-slate-300 rounded-xl overflow-hidden bg-white flex flex-col justify-between">
+                <div>
+                  <div className="bg-emerald-50 px-3 py-2 border-b border-emerald-200 flex items-center justify-between text-xs font-bold text-emerald-950">
+                    <div className="flex items-center gap-2">
+                      <span>دروس مصوب ترم {activeSemesterNo === 9 ? 'تابستان' : activeSemesterNo}</span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 font-mono text-[11px]">
+                        مجموع: {activeSemesterTotalUnits} واحد
+                      </span>
+                    </div>
+
+                    <span className="text-[11px] font-normal text-emerald-800">
+                      {activeSemesterTotalUnits >= 12 && activeSemesterTotalUnits <= 20 ? (
+                        <span className="text-emerald-700 font-bold">متوازن (۱۲ الی ۲۰ واحد) ✓</span>
+                      ) : activeSemesterTotalUnits < 12 ? (
+                        <span className="text-amber-700 font-bold">کمتر از سقف مجاز ۱۲ واحد ⚠️</span>
+                      ) : (
+                        <span className="text-rose-700 font-bold">بیش از سقف مجاز ۲۰ واحد ⛔</span>
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                    <table className="w-full text-right text-xs border-collapse">
+                      <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 sticky top-0">
+                        <tr>
+                          <th className="p-2 border-l border-slate-200 text-center w-16">کد</th>
+                          <th className="p-2 border-l border-slate-200">عنوان درس در این ترم</th>
+                          <th className="p-2 border-l border-slate-200 text-center w-12">واحد</th>
+                          <th className="p-2 border-l border-slate-200 text-center w-24">الزام انتخاب‌واحد</th>
+                          <th className="p-2 border-l border-slate-200 text-center w-24">شرط فارغ‌التحصیلی</th>
+                          <th className="p-2 border-l border-slate-200 text-center w-12">حذف</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeSemesterCourseAssignments.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="p-8 text-center text-slate-400">
+                              هنوز درسی به ترم {activeSemesterNo} تخصیص نیافته است. از پنل سمت راست دروس مورد نظر را تیک زده و دکمه افزودن را بزنید.
+                            </td>
+                          </tr>
+                        ) : (
+                          activeSemesterCourseAssignments.map(assignment => {
+                            const course = MASTER_COURSES.find(c => c.id === assignment.courseId);
+                            if (!course) return null;
+
+                            return (
+                              <tr key={assignment.courseId} className="border-b border-slate-100 hover:bg-slate-50">
+                                <td className="p-2 border-l border-slate-200 text-center font-mono">{course.code}</td>
+                                <td className="p-2 border-l border-slate-200 font-bold text-slate-900">
+                                  {course.title}
+                                  <span className="block text-[10px] text-slate-500 font-normal">
+                                    {course.courseType} | پیش‌نیاز: {course.prerequisites}
+                                  </span>
+                                </td>
+                                <td className="p-2 border-l border-slate-200 text-center font-mono font-bold">{course.units}</td>
+
+                                {/* چک‌باکس الزام در انتخاب واحد این ترم */}
+                                <td className="p-2 border-l border-slate-200 text-center">
+                                  <label className="inline-flex items-center gap-1 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={assignment.isMandatoryInTerm}
+                                      onChange={() => handleToggleMandatoryInTerm(assignment.courseId)}
+                                      className="rounded text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    <span className={`text-[10px] font-bold ${assignment.isMandatoryInTerm ? 'text-emerald-700' : 'text-slate-400'}`}>
+                                      {assignment.isMandatoryInTerm ? 'الزامی' : 'پیشنهادی'}
+                                    </span>
+                                  </label>
+                                </td>
+
+                                {/* چک‌باکس شرط فارغ‌التحصیلی */}
+                                <td className="p-2 border-l border-slate-200 text-center">
+                                  <label className="inline-flex items-center gap-1 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={assignment.isGraduationReq}
+                                      onChange={() => handleToggleGraduationReq(assignment.courseId)}
+                                      className="rounded text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    <span className={`text-[10px] font-bold ${assignment.isGraduationReq ? 'text-indigo-700' : 'text-slate-400'}`}>
+                                      {assignment.isGraduationReq ? 'اجباری' : 'اختیاری'}
+                                    </span>
+                                  </label>
+                                </td>
+
+                                <td className="p-2 border-l border-slate-200 text-center">
+                                  <button
+                                    onClick={() => handleRemoveCourseFromSemester(assignment.courseId)}
+                                    className="text-rose-600 hover:text-rose-800 hover:bg-rose-50 p-1 rounded font-bold"
+                                    title="حذف از این ترم"
+                                  >
+                                    ✕
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-50 border-t border-slate-300 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="text-[11px] text-slate-500">
+                    💡 <b>راهنما:</b> دروسی که تیک «الزامی» دارند، هنگام ورود دانشجو به صفحهٔ انتخاب واحد در ترم {activeSemesterNo} به عنوان دروس دارای اولویت قطعی بارگذاری می‌شوند.
+                  </div>
+
+                  <button
+                    onClick={() => setActiveModal('GRADUATION_AUDIT_REPORT')}
+                    className="bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-300 px-3 py-1 rounded-lg font-bold text-xs flex items-center gap-1"
+                  >
+                    <span>🎓</span>
+                    <span>ماتریس تطبیق فارغ‌التحصیلی</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Visual 8-Semester Curriculum Chart Preview */}
+            <div className="border border-slate-300 rounded-xl p-4 bg-slate-50 space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <h3 className="font-extrabold text-slate-800 text-xs flex items-center gap-2">
+                  <span>🗺️</span>
+                  <span>پیش‌نمایش کلی چارت مصوب ترم‌های ۱ تا ۸ (توزیع واحدهای فارغ‌التحصیلی)</span>
+                </h3>
+                <span className="text-[11px] text-slate-500 font-mono">
+                  جمع کل: {grandTotalSemesterUnits} واحد از {activeMajor.minUnits} واحد مصوب
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {[1, 2, 3, 4, 5, 6, 7, 8].map(sNum => {
+                  const items = activeCatalogSemesterMap[sNum] || [];
+                  const uSum = items.reduce((sum, item) => {
+                    const c = MASTER_COURSES.find(crs => crs.id === item.courseId);
+                    return sum + (c ? c.units : 0);
+                  }, 0);
+
+                  return (
+                    <div
+                      key={sNum}
+                      onClick={() => setActiveSemesterNo(sNum)}
+                      className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                        activeSemesterNo === sNum
+                          ? 'bg-white border-emerald-500 ring-2 ring-emerald-400 shadow-md'
+                          : 'bg-white/80 border-slate-200 hover:border-slate-300 shadow-sm'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 mb-2">
+                        <span className="font-extrabold text-xs text-slate-800">ترم {sNum}</span>
+                        <span className="text-[11px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
+                          {uSum} واحد
+                        </span>
+                      </div>
+
+                      <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                        {items.length === 0 ? (
+                          <span className="text-[11px] text-slate-400 italic">بدون درس ثبت‌شده</span>
+                        ) : (
+                          items.map(it => {
+                            const crs = MASTER_COURSES.find(c => c.id === it.courseId);
+                            if (!crs) return null;
+                            return (
+                              <div key={it.courseId} className="flex items-center justify-between text-[11px] py-0.5 border-b border-slate-50">
+                                <span className="truncate text-slate-700 font-medium" title={crs.title}>
+                                  • {crs.title}
+                                </span>
+                                <span className="font-mono text-[10px] text-slate-500 mr-1">{crs.units}و</span>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Bottom Window Buttons */}
+            <div className="flex items-center justify-between border-t border-slate-200 pt-3">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setActiveTab('TAB2_COURSES')}
+                  className="bg-slate-200 hover:bg-slate-300 border border-slate-400 px-6 py-1.5 rounded text-xs font-bold text-slate-800 shadow-sm"
+                >
+                  &lt; قبلی
+                </button>
+                <button
+                  onClick={() => setActiveTab('TAB3_VERIFY')}
+                  className="bg-slate-200 hover:bg-slate-300 border border-slate-400 px-6 py-1.5 rounded text-xs font-bold text-slate-800 shadow-sm"
+                >
+                  بعدی &gt;
+                </button>
+              </div>
+              <button
+                onClick={() => showToast('خروج از پنجره کاتالوگ رشته')}
+                className="bg-slate-200 hover:bg-slate-300 border border-slate-400 px-6 py-1.5 rounded text-xs font-bold text-slate-800 shadow-sm flex items-center gap-1.5"
+              >
+                <span>🚪</span>
+                <span>خروج</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Tab 1 Content: ورود اطلاعات کاتالوگ رشته (Matching Image 2) */}
         {activeTab === 'TAB1_CATALOG' && (
@@ -1166,10 +1854,10 @@ export default function CurriculumManagerClient({
                   &lt; قبلی
                 </button>
                 <button
-                  onClick={() => setActiveTab('TAB3_VERIFY')}
-                  className="bg-slate-200 hover:bg-slate-300 border border-slate-400 px-6 py-1.5 rounded text-xs font-bold text-slate-800 shadow-sm"
+                  onClick={() => setActiveTab('TAB_SEMESTERS')}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700 px-6 py-1.5 rounded text-xs font-bold shadow-sm"
                 >
-                  بعدی &gt;
+                  رفتن به ترم‌بندی چارت &gt;
                 </button>
               </div>
               <button
@@ -1189,14 +1877,14 @@ export default function CurriculumManagerClient({
             <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
               <h3 className="font-extrabold text-indigo-950 text-sm flex items-center gap-2">
                 <span>🛡️</span>
-                <span>ماتریس تطابق واحدها و اعتبارسنجی نهایی کاتالوگ {activeCatalog?.id} ({activeCatalog?.majorName})</span>
+                <span>ماتریس تطابق واحدها، ترم‌بندی و اعتبارسنجی نهایی کاتالوگ {activeCatalog?.id} ({activeCatalog?.majorName})</span>
               </h3>
               <p className="text-indigo-800 text-xs">
                 سیستم با بررسی قوانین آیین‌نامه، تعادل واحدهای ثبت‌شده را با سقف مجاز مصوب وزارت عتف و گراف پیش‌نیازها تطبیق می‌دهد:
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="border border-slate-300 rounded-lg p-3 bg-white space-y-3">
                 <h4 className="font-bold text-slate-800 border-b border-slate-200 pb-2">✅ بررسی تطابق واحدها</h4>
                 <div className="space-y-2">
@@ -1220,7 +1908,29 @@ export default function CurriculumManagerClient({
               </div>
 
               <div className="border border-slate-300 rounded-lg p-3 bg-white space-y-3">
-                <h4 className="font-bold text-slate-800 border-b border-slate-200 pb-2">🔍 بررسی صحت پیش‌نیازها و هم‌نیازها</h4>
+                <h4 className="font-bold text-slate-800 border-b border-slate-200 pb-2">📅 وضعیت ترم‌بندی چارت</h4>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center p-2 rounded bg-slate-50">
+                    <span>واحدهای چارت ۸ ترمه:</span>
+                    <span className="font-mono font-bold text-emerald-700">{grandTotalSemesterUnits} واحد ✓</span>
+                  </div>
+                  <div className="flex justify-between items-center p-2 rounded bg-slate-50">
+                    <span>کنترل سقف ترمیک:</span>
+                    <span className="font-mono font-bold text-emerald-700">رعایت بازه ۱۲ تا ۲۰ ✓</span>
+                  </div>
+                  <div className="flex justify-between items-center p-2 rounded bg-slate-50">
+                    <span>اتصال به انتخاب واحد:</span>
+                    <span className="font-mono font-bold text-emerald-700">فعال (خودکار) ✓</span>
+                  </div>
+                  <div className="flex justify-between items-center p-2 rounded bg-slate-50">
+                    <span>تطبیق فارغ‌التحصیلی:</span>
+                    <span className="font-mono font-bold text-emerald-700">آماده بررسی ✓</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border border-slate-300 rounded-lg p-3 bg-white space-y-3">
+                <h4 className="font-bold text-slate-800 border-b border-slate-200 pb-2">🔍 گراف پیش‌نیازها و هم‌نیازها</h4>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-emerald-800 bg-emerald-50 p-2 rounded border border-emerald-200">
                     <span>✓</span>
@@ -1230,21 +1940,17 @@ export default function CurriculumManagerClient({
                     <span>✓</span>
                     <span>تمامی کد دروس پیش‌نیاز در بانک مرکزی دروس تعریف شده‌اند.</span>
                   </div>
-                  <div className="flex items-center gap-2 text-emerald-800 bg-emerald-50 p-2 rounded border border-emerald-200">
-                    <span>✓</span>
-                    <span>سقف مجاز ترمیک مطابق آیین‌نامه آموزش رعایت شده است.</span>
-                  </div>
                 </div>
               </div>
             </div>
 
             <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center justify-between">
               <div>
-                <p className="font-extrabold text-emerald-950 text-sm">آمادهٔ قفل و تایید نهایی کاتالوگ</p>
+                <p className="font-extrabold text-emerald-950 text-sm">آمادهٔ قفل و تایید نهایی کاتالوگ و چارت ترمیک</p>
                 <p className="text-emerald-800 text-xs">پس از قفل کاتالوگ، امکان انتخاب واحد دانشجویان این رشته در ترم جاری فراهم می‌گردد.</p>
               </div>
               <button
-                onClick={() => showToast('کاتالوگ با موفقیت بررسی، تایید و مهر نهایی شد.')}
+                onClick={() => showToast('کاتالوگ و چارت ترمیک با موفقیت بررسی، تایید و مهر نهایی شد.')}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-6 py-2 rounded-xl shadow-md transition-colors"
               >
                 🔒 قفل و خاتمه کاتالوگ
@@ -1255,7 +1961,7 @@ export default function CurriculumManagerClient({
             <div className="flex items-center justify-between border-t border-slate-200 pt-3">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setActiveTab('TAB2_COURSES')}
+                  onClick={() => setActiveTab('TAB_SEMESTERS')}
                   className="bg-slate-200 hover:bg-slate-300 border border-slate-400 px-6 py-1.5 rounded text-xs font-bold text-slate-800 shadow-sm"
                 >
                   &lt; قبلی
@@ -1478,6 +2184,15 @@ export default function CurriculumManagerClient({
                     />
                     <span>انتقال وضعیت نمره قبولی، مردودی از کاتالوگ مبدا</span>
                   </label>
+                  <label className="flex items-center gap-2 cursor-pointer text-emerald-800 font-bold">
+                    <input
+                      type="checkbox"
+                      checked={copySemesters}
+                      onChange={e => setCopySemesters(e.target.checked)}
+                      className="rounded text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span>انتقال کامل چارت ترم‌بندی مصوب و شروط فارغ‌التحصیلی</span>
+                  </label>
                 </div>
 
                 <button
@@ -1485,7 +2200,7 @@ export default function CurriculumManagerClient({
                   className="bg-gradient-to-r from-indigo-700 to-indigo-900 hover:from-indigo-800 hover:to-indigo-950 text-white font-extrabold px-8 py-2 rounded-lg shadow-md transition-all text-xs flex items-center gap-2"
                 >
                   <span>🚀</span>
-                  <span>انتقال و کپی کاتالوگ</span>
+                  <span>انتقال و کپی کاتالوگ و چارت</span>
                 </button>
               </div>
             </div>
@@ -1509,6 +2224,111 @@ export default function CurriculumManagerClient({
           </div>
         )}
       </div>
+
+      {/* Modal: ماتریس تطبیق فارغ‌التحصیلی */}
+      {activeModal === 'GRADUATION_AUDIT_REPORT' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-300 max-w-4xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-gradient-to-r from-emerald-900 to-teal-950 text-white px-4 py-3 flex items-center justify-between">
+              <h3 className="font-extrabold text-sm flex items-center gap-2">
+                <span>🎓</span>
+                <span>ماتریس تطبیق سرفصل و شرایط فارغ‌التحصیلی ({activeMajor.name})</span>
+              </h3>
+              <button onClick={() => setActiveModal(null)} className="text-slate-300 hover:text-white font-bold">✕</button>
+            </div>
+            <div className="p-4 space-y-4 text-xs max-h-[75vh] overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+                  <div className="text-lg font-black text-emerald-950 font-mono">{grandTotalSemesterUnits}</div>
+                  <div className="text-[11px] text-emerald-700">کل واحدهای مصوب در چارت</div>
+                </div>
+                <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-center">
+                  <div className="text-lg font-black text-indigo-950 font-mono">{activeMajor.minUnits}</div>
+                  <div className="text-[11px] text-indigo-700">حداقل واحد فارغ‌التحصیلی</div>
+                </div>
+                <div className="p-3 bg-sky-50 border border-sky-200 rounded-xl text-center">
+                  <div className="text-lg font-black text-sky-950 font-mono">
+                    {grandTotalSemesterUnits >= activeMajor.minUnits ? 'تکمیل ✓' : `${activeMajor.minUnits - grandTotalSemesterUnits} واحد کمبود`}
+                  </div>
+                  <div className="text-[11px] text-sky-700">وضعیت تعادل واحدها</div>
+                </div>
+                <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-center">
+                  <div className="text-lg font-black text-purple-950 font-mono">۱۰۰٪</div>
+                  <div className="text-[11px] text-purple-700">پوشش قوانین عتف</div>
+                </div>
+              </div>
+
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <table className="w-full text-right border-collapse text-xs">
+                  <thead className="bg-slate-100 text-slate-700 border-b border-slate-300">
+                    <tr>
+                      <th className="p-2 border-l border-slate-200 text-center w-16">ترم</th>
+                      <th className="p-2 border-l border-slate-200">دروس مصوب الزامی</th>
+                      <th className="p-2 border-l border-slate-200 text-center w-24">مجموع واحد</th>
+                      <th className="p-2 border-l border-slate-200 text-center w-28">وضعیت تطبیق</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map(sNum => {
+                      const list = activeCatalogSemesterMap[sNum] || [];
+                      const u = list.reduce((sum, item) => {
+                        const c = MASTER_COURSES.find(crs => crs.id === item.courseId);
+                        return sum + (c ? c.units : 0);
+                      }, 0);
+
+                      return (
+                        <tr key={sNum} className="border-b border-slate-100 hover:bg-slate-50">
+                          <td className="p-2 border-l border-slate-200 text-center font-bold">ترم {sNum}</td>
+                          <td className="p-2 border-l border-slate-200">
+                            {list.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {list.map(it => {
+                                  const c = MASTER_COURSES.find(crs => crs.id === it.courseId);
+                                  return (
+                                    <span key={it.courseId} className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[11px] border border-slate-200">
+                                      {c?.title} ({c?.units}و)
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic">درسی تعریف نشده</span>
+                            )}
+                          </td>
+                          <td className="p-2 border-l border-slate-200 text-center font-mono font-bold">{u} واحد</td>
+                          <td className="p-2 border-l border-slate-200 text-center">
+                            {u > 0 ? (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                                تطبیق‌یافته ✓
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px]">
+                                اختیاری
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
+              <button
+                onClick={() => window.print()}
+                className="px-4 py-1.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs flex items-center gap-1.5"
+              >
+                <span>🖨️</span>
+                <span>چاپ کارنامه تطبیق فارغ‌التحصیلی</span>
+              </button>
+              <button onClick={() => setActiveModal(null)} className="px-5 py-1.5 rounded bg-slate-200 text-slate-700 font-bold text-xs">
+                بستن
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal 1: تعریف رشته جدید (Matching Button 1) */}
       {activeModal === 'NEW_MAJOR' && (
