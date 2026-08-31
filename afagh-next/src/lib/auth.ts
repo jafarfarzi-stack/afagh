@@ -36,7 +36,18 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 }
 
 export async function login(nationalCode: string, password: string): Promise<{ ok: boolean; error?: string }> {
-  const [u] = await db.select().from(users).where(eq(users.nationalCode, nationalCode)).limit(1);
+  const clean = nationalCode.trim();
+  let [u] = await db.select().from(users).where(eq(users.nationalCode, clean)).limit(1);
+  if (!u) {
+    // جستجو بر اساس شماره دانشجویی
+    const [st] = await db
+      .select({ user: users })
+      .from(students)
+      .innerJoin(users, eq(users.id, students.userId))
+      .where(eq(students.studentCode, clean))
+      .limit(1);
+    if (st) u = st.user;
+  }
   if (!u || !u.isActive) return { ok: false, error: 'کاربر یافت نشد.' };
   if (!(await verifyPassword(password, u.passwordHash))) return { ok: false, error: 'رمز نادرست است.' };
   const token = randomBytes(32).toString('hex');
