@@ -29,6 +29,27 @@ export async function removeFromCartAction(offeringId: number) {
   await withUserRls(user.id, tx => tx.delete(cart_items).where(and(eq(cart_items.studentId, me.id), eq(cart_items.offeringId, offeringId))));
 }
 
+export async function autoFillCartFromChartAction(): Promise<{ ok: boolean; count: number }> {
+  const { user, me, term } = await ctx();
+  if (!term) return { ok: false, count: 0 };
+
+  // دریافت تمام دروس ارائه‌شده در ترم جاری که دارای ظرفیت هستند
+  const offerings = await db
+    .select({ id: course_offerings.id, courseId: course_offerings.courseId })
+    .from(course_offerings)
+    .where(eq(course_offerings.termId, term.id));
+
+  let count = 0;
+  for (const off of offerings) {
+    await withUserRls(user.id, tx =>
+      tx.insert(cart_items).values({ studentId: me.id, offeringId: off.id }).onConflictDoNothing()
+    );
+    count++;
+  }
+
+  return { ok: true, count };
+}
+
 /** ورود به اتاق انتظار — پاسخ فوری با شمارهٔ نوبت (§۱۰۱۶ + §۶۹۰۶) */
 export async function submitCartAction(): Promise<{ queued: boolean; ticketId: string; position: number; limited?: boolean }> {
   const { user, me } = await ctx();

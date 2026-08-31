@@ -14,10 +14,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
           <form action={logoutAction}><button className="text-xs underline opacity-70">خروج</button></form>
         </div>
-        <nav className="mx-auto flex max-w-6xl gap-4 px-4 pb-3 text-sm">
-          <Link href="/admin" className="hover:underline">کارتابل گردش کار</Link>
-          <Link href="/admin/payroll" className="hover:underline">حقوق و دستمزد</Link>
-          <Link href="/admin/archive" className="hover:underline">بایگانی مدارک</Link>
+        <nav className="mx-auto flex max-w-6xl gap-4 px-4 pb-3 text-sm font-medium">
+          <Link href="/admin" className="hover:underline">📋 کارتابل گردش کار</Link>
+          <Link href="/admin/archive" className="hover:underline">🗄️ پذیرش، ثبت‌نام و بایگانی e-KYC</Link>
+          <Link href="/admin/payroll" className="hover:underline">💼 حقوق و دستمزد</Link>
         </nav>
       </header>
       <main className="mx-auto max-w-6xl p-4">{children}</main>

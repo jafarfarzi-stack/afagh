@@ -4,7 +4,7 @@
 // «ثبت نهایی» بی‌درنگ پاسخ می‌گیرد؛ نتیجه از صف با polling می‌رسد.
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { addToCartAction, removeFromCartAction, referCouncilAction, submitCartAction } from './actions';
+import { addToCartAction, autoFillCartFromChartAction, removeFromCartAction, referCouncilAction, submitCartAction } from './actions';
 import type { SubmitResult } from '@/lib/enroll-engine';
 
 type Offering = { id: number; code: string; title: string; units: number; capacity: number; enrolled: number; group: number; prereq?: string | null };
@@ -96,8 +96,35 @@ export default function EnrollClient(props: {
     router.refresh();
   }
 
+  async function autoFill() {
+    setBusy(true);
+    setMsg('در حال چیدمان هوشمند دروس از چارت مصوب رشته...');
+    const res = await autoFillCartFromChartAction();
+    if (res.ok) {
+      setMsg(`✅ ${res.count} درس پیشنهادی این ترم به سبد اضافه شد.`);
+    }
+    router.refresh();
+    setBusy(false);
+  }
+
   return (
     <div className="space-y-4">
+      {/* دکمه انتخاب هوشمند و سریع از روی چارت */}
+      <div className="card !p-4 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100 border border-emerald-200 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-extrabold text-emerald-950 text-sm">🤖 انتخاب واحد هوشمند بر اساس چارت سرفصل</h3>
+          <p className="text-xs text-emerald-800 mt-0.5">سیستم کلیه دروس پیشنهادی این ترم را طبق چارت در سبد شما می‌چیند تا با یک کلیک ثبت کنید.</p>
+        </div>
+        <button
+          onClick={autoFill}
+          disabled={busy || !props.term.open}
+          className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50 inline-flex items-center gap-1.5"
+        >
+          <span>⚡</span>
+          <span>چیدمان خودکار دروس ترم</span>
+        </button>
+      </div>
+
       {!props.term.open && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">پنجرهٔ انتخاب واحد برای «{props.term.title || '—'}» بسته است.</p>}
 
       {props.cartStartedAt && (

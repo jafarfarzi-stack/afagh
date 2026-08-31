@@ -1,5 +1,5 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
-import { academic_terms, course_offerings, courses, degree_level_configs, enrollments, majors } from '@/db/schema';
+import { academic_terms, course_offerings, courses, degree_level_configs, educational_regulations, enrollments, majors } from '@/db/schema';
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import PrintButton from './PrintButton';
@@ -26,6 +26,19 @@ export default async function StudentTranscriptPage() {
 
   const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
   const [level] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
+  const [reg] = me.regulationId ? await db.select().from(educational_regulations).where(eq(educational_regulations.id, me.regulationId)).limit(1) : [null];
+
+  let regPolicy = 'حذف نمره ردی پس از قبولی (EXCLUDE_IF_PASSED)';
+  try {
+    if (reg?.rulesConfig) {
+      const cfg = typeof reg.rulesConfig === 'string' ? JSON.parse(reg.rulesConfig) : reg.rulesConfig;
+      if (cfg.failed_course_gpa_policy === 'KEEP_ALWAYS') {
+        regPolicy = 'نگهداری همیشه نمره ردی در معدل (مصوب ۱۳۸۶ تا ۱۳۹۵)';
+      } else {
+        regPolicy = 'حذف نمره مردودی از معدل کل پس از قبولی (مصوب ۱۳۹۶ به بعد)';
+      }
+    }
+  } catch (_) {}
 
   // خواندن کلیه سوابق دروس دانشجو از تمام ترم‌ها از مسیر امن RLS
   const allRows = await withUserRls(user.id, tx =>
@@ -37,6 +50,8 @@ export default async function StudentTranscriptPage() {
         units: courses.units,
         practicalUnits: courses.practicalUnits,
         courseType: courses.courseType,
+        gradingType: courses.gradingType,
+        affectsGpa: courses.affectsGpa,
         status: enrollments.status,
         grade: enrollments.gradeValue,
         gradeStatus: enrollments.gradeStatus,
@@ -82,14 +97,28 @@ export default async function StudentTranscriptPage() {
     if (r.status === 'REGISTERED' || r.status === 'PENDING_COUNCIL') {
       totalEnrolledUnits += u;
     }
-    if (r.grade != null && Number(r.grade) >= 10) {
-      totalPassedUnits += u;
-    } else if (r.grade != null && Number(r.grade) < 10) {
-      failedUnits += u;
-    }
-    if (r.grade != null && Number(r.grade) >= 0 && Number(r.grade) <= 20) {
-      totalGradedUnits += u;
-      totalWeightedScore += Number(r.grade) * u;
+
+    const isDescriptive = r.gradingType === 'DESCRIPTIVE' || Number(r.grade) === 1 || r.affectsGpa === 0;
+
+    if (isDescriptive) {
+      // دروس توصیفی: نمره ۱ = قبولی توصیفی
+      if (Number(r.grade) === 1 || (r.grade != null && Number(r.grade) >= 10)) {
+        totalPassedUnits += u;
+      } else if (r.grade != null && Number(r.grade) === 0) {
+        failedUnits += u;
+      }
+      // دروس توصیفی در مخرج و صورت معدل عددی وارد نمی‌شوند
+    } else {
+      // دروس نمره‌دار عددی (۰ تا ۲۰)
+      if (r.grade != null && Number(r.grade) >= 10) {
+        totalPassedUnits += u;
+      } else if (r.grade != null && Number(r.grade) < 10) {
+        failedUnits += u;
+      }
+      if (r.grade != null && Number(r.grade) >= 0 && Number(r.grade) <= 20) {
+        totalGradedUnits += u;
+        totalWeightedScore += Number(r.grade) * u;
+      }
     }
   }
 
@@ -104,7 +133,7 @@ export default async function StudentTranscriptPage() {
           <span className="text-xl">📜</span>
           <div>
             <h2 className="text-sm font-bold text-slate-800">کارنامه کل تحصیلی (نسخه رسمی اداری)</h2>
-            <p className="text-xs text-slate-500">مشاهده ریزنمرات، وضعیت قبولی، معدل‌های ترمیک و معدل کل</p>
+            <p className="text-xs text-slate-500">مشاهده ریزنمرات، محاسبه صحیح دروس توصیفی و استناد به آیین‌نامه</p>
           </div>
         </div>
         <PrintButton />
@@ -145,10 +174,10 @@ export default async function StudentTranscriptPage() {
           </div>
         </div>
 
-        {/* ۲. جدول مشخصات هویتی و آموزشی دانشجو */}
+        {/* ۲. جدول مشخصات هویتی، آموزشی و آیین‌نامه اجرایی */}
         <div className="border border-slate-800 mb-5 overflow-hidden">
           <div className="bg-slate-100 px-3 py-1 font-bold text-slate-900 border-b border-slate-800 text-[11px]">
-            مشخصات فردی و تحصیلی دانشجو
+            مشخصات فردی، تحصیلی و آیین‌نامه ملاک عمل
           </div>
           <table className="w-full text-right text-[11px] border-collapse">
             <tbody>
@@ -167,14 +196,15 @@ export default async function StudentTranscriptPage() {
               <tr className="border-b border-slate-300">
                 <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">رشته تحصیلی:</td>
                 <td className="p-1.5 font-bold text-slate-900 border-l border-slate-300">{major?.name || 'مهندسی کامپیوتر'}</td>
-                <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">سال و نیمسال ورود:</td>
-                <td className="p-1.5 font-semibold text-slate-900">{me.entryYear || '۱۴۰۳'} — نیمسال اول</td>
+                <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">سال ورود / دوره:</td>
+                <td className="p-1.5 font-semibold text-slate-900">{me.entryYear || '۱۴۰۳'} / روزانه</td>
               </tr>
               <tr>
-                <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">نوع دوره / سهمیه:</td>
-                <td className="p-1.5 font-semibold text-slate-900 border-l border-slate-300">روزانه / منطقه ۱ (عادی)</td>
-                <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">نظام آموزشی:</td>
-                <td className="p-1.5 font-semibold text-slate-900">ترمی — واحدی مصوب وزارت علوم</td>
+                <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">آیین‌نامه ملاک عمل:</td>
+                <td colSpan={3} className="p-1.5 font-semibold text-slate-900">
+                  <span className="text-indigo-950 font-bold">{reg?.title || 'آیین‌نامه آموزشی دوره کارشناسی مصوب ۱۴۰۳'}</span>
+                  <span className="text-slate-500 text-[10px] mr-2">({regPolicy})</span>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -197,12 +227,21 @@ export default async function StudentTranscriptPage() {
             for (const r of termItem.rows) {
               const u = Number(r.units || 0);
               termUnits += u;
-              if (r.grade != null && Number(r.grade) >= 10) {
-                termPassed += u;
-              }
-              if (r.grade != null && Number(r.grade) >= 0 && Number(r.grade) <= 20) {
-                termGradedUnits += u;
-                termWeightedScore += Number(r.grade) * u;
+
+              const isDescriptive = r.gradingType === 'DESCRIPTIVE' || Number(r.grade) === 1 || r.affectsGpa === 0;
+
+              if (isDescriptive) {
+                if (Number(r.grade) === 1 || (r.grade != null && Number(r.grade) >= 10)) {
+                  termPassed += u;
+                }
+              } else {
+                if (r.grade != null && Number(r.grade) >= 10) {
+                  termPassed += u;
+                }
+                if (r.grade != null && Number(r.grade) >= 0 && Number(r.grade) <= 20) {
+                  termGradedUnits += u;
+                  termWeightedScore += Number(r.grade) * u;
+                }
               }
             }
 
@@ -236,14 +275,19 @@ export default async function StudentTranscriptPage() {
                       <th className="p-1.5 border-l border-slate-300 text-center w-12">نظری</th>
                       <th className="p-1.5 border-l border-slate-300 text-center w-12">عملی</th>
                       <th className="p-1.5 border-l border-slate-300 text-center w-12">کل واحد</th>
-                      <th className="p-1.5 border-l border-slate-300 text-center w-16">نمره</th>
+                      <th className="p-1.5 border-l border-slate-300 text-center w-20">نمره</th>
                       <th className="p-1.5 text-center w-24">نتیجه نهایی</th>
                     </tr>
                   </thead>
                   <tbody>
                     {termItem.rows.map((row, rIdx) => {
-                      const isPassed = row.grade != null && Number(row.grade) >= 10;
-                      const isFailed = row.grade != null && Number(row.grade) < 10;
+                      const isDescriptive = row.gradingType === 'DESCRIPTIVE' || Number(row.grade) === 1 || row.affectsGpa === 0;
+                      const isPassed = isDescriptive
+                        ? (Number(row.grade) === 1 || (row.grade != null && Number(row.grade) >= 10))
+                        : (row.grade != null && Number(row.grade) >= 10);
+                      const isFailed = isDescriptive
+                        ? (row.grade != null && Number(row.grade) === 0)
+                        : (row.grade != null && Number(row.grade) < 10);
                       const isPending = row.grade == null;
                       const totalU = Number(row.units || 0);
                       const prU = Number(row.practicalUnits || 0);
@@ -269,7 +313,11 @@ export default async function StudentTranscriptPage() {
                           <td className="p-1.5 border-l border-slate-200 text-center font-bold font-mono">{totalU}</td>
                           <td className="p-1.5 border-l border-slate-200 text-center font-black text-slate-900">
                             {row.grade != null ? (
-                              Number(row.grade) === 1 ? 'قبول' : Number(row.grade).toFixed(2)
+                              isDescriptive ? (
+                                <span className="text-emerald-800 text-[11px]">قبول (توصیفی)</span>
+                              ) : (
+                                Number(row.grade).toFixed(2)
+                              )
                             ) : (
                               <span className="text-slate-400">—</span>
                             )}
@@ -339,7 +387,7 @@ export default async function StudentTranscriptPage() {
         {/* ۵. متن حقوقی سند و محل امضا و مهرهای رسمی */}
         <div className="mt-6 pt-3 border-t border-slate-400 text-[10px] text-slate-600 space-y-4">
           <p className="leading-relaxed">
-            <b>تذکر مهم:</b> این کارنامه صرفاً جهت اطلاع از وضعیت تحصیلی دانشجو صادر گردیده و هرگونه خط‌خوردگی یا تغییر در مندرجات آن، سند را از درجه اعتبار ساقط می‌نماید. اعتبار نهایی این کارنامه پس از تسویه حساب کامل و منوط به تأیید اداره کل امور آموزشی دانشگاه می‌باشد.
+            <b>تذکر مهم:</b> این کارنامه صرفاً جهت اطلاع از وضعیت تحصیلی دانشجو صادر گردیده و هرگونه خط‌خوردگی یا تغییر در مندرجات آن، سند را از درجه اعتبار ساقط می‌نماید. نمرات دروس توصیفی در مخرج معدل عددی لحاظ نمی‌شوند.
           </p>
 
           <div className="grid grid-cols-3 text-center pt-6 pb-4 font-bold text-slate-800">
