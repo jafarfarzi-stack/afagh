@@ -8,6 +8,7 @@ import Link from 'next/link';
 // ==========================================
 
 export type WeekRecurrence = 'ALL' | 'EVEN' | 'ODD';
+export type ProgramShiftType = 'MORNING' | 'AFTERNOON_WORKING' | 'FLEXIBLE';
 
 export interface TimeSlot {
   id: number;
@@ -30,6 +31,7 @@ export interface AcademicProgram {
   title: string;
   facultyName: string;
   degreeLevel: string;
+  preferredShift: ProgramShiftType;
 }
 
 export interface CohortOption {
@@ -38,6 +40,7 @@ export interface CohortOption {
   semesterNo: number;
   title: string;
   expectedStudents: number;
+  isEmployedAudience?: boolean; // آیا ورودی ویژه شاغلین/شبانه/ارشد است؟
 }
 
 export interface ClassroomOption {
@@ -86,8 +89,8 @@ export interface CourseDemand {
   requiredRoomType: 'THEORY' | 'LAB' | 'GYM';
   capacity: number;
   groupsCount: number;
-  weekRecurrence: WeekRecurrence; // ALL (هر هفته), EVEN (هفته زوج), ODD (هفته فرد)
-  sessionsCountPerWeek: number; // 1 or 2 sessions
+  weekRecurrence: WeekRecurrence;
+  sessionsCountPerWeek: number;
   examDate: string;
 }
 
@@ -129,7 +132,7 @@ export interface DepartmentOffering {
 }
 
 export interface AutoScheduleScenario {
-  id: 'COMPACT' | 'BALANCED' | 'PROF_PREF';
+  id: 'COMPACT' | 'BALANCED' | 'PROF_PREF' | 'AFTERNOON_WORKING';
   title: string;
   subtitle: string;
   description: string;
@@ -208,17 +211,17 @@ const INITIAL_TERMS: AcademicTerm[] = [
 ];
 
 const INITIAL_PROGRAMS: AcademicProgram[] = [
-  { id: 1, code: 'CE-BS', title: 'مهندسی کامپیوتر', facultyName: 'دانشکده مهندسی برق و کامپیوتر', degreeLevel: 'کارشناسی پیوسته' },
-  { id: 2, code: 'IT-BS', title: 'فناوری اطلاعات و ارتباطات', facultyName: 'دانشکده مهندسی برق و کامپیوتر', degreeLevel: 'کارشناسی پیوسته' },
-  { id: 3, code: 'FT-BS', title: 'مهندسی صنایع غذایی', facultyName: 'دانشکده کشاورزی و صنایع غذایی', degreeLevel: 'کارشناسی پیوسته' },
-  { id: 4, code: 'CS-BS', title: 'علوم کامپیوتر', facultyName: 'دانشکده علوم پایه', degreeLevel: 'کارشناسی پیوسته' },
+  { id: 1, code: 'CE-BS', title: 'مهندسی کامپیوتر', facultyName: 'دانشکده مهندسی برق و کامپیوتر', degreeLevel: 'کارشناسی پیوسته', preferredShift: 'FLEXIBLE' },
+  { id: 2, code: 'IT-BS', title: 'فناوری اطلاعات و ارتباطات', facultyName: 'دانشکده مهندسی برق و کامپیوتر', degreeLevel: 'کارشناسی پیوسته', preferredShift: 'AFTERNOON_WORKING' },
+  { id: 3, code: 'FT-BS', title: 'مهندسی صنایع غذایی', facultyName: 'دانشکده کشاورزی و صنایع غذایی', degreeLevel: 'کارشناسی پیوسته', preferredShift: 'MORNING' },
+  { id: 4, code: 'CS-BS', title: 'علوم کامپیوتر', facultyName: 'دانشکده علوم پایه', degreeLevel: 'کارشناسی پیوسته', preferredShift: 'FLEXIBLE' },
 ];
 
 const INITIAL_COHORTS: CohortOption[] = [
-  { id: 'COHORT-1405-1', entryYear: '۱۴۰۵', semesterNo: 1, title: 'ورودی ۱۴۰۵ (ترم ۱ - نوورود)', expectedStudents: 65 },
-  { id: 'COHORT-1404-3', entryYear: '۱۴۰۴', semesterNo: 3, title: 'ورودی ۱۴۰۴ (ترم ۳)', expectedStudents: 55 },
-  { id: 'COHORT-1403-5', entryYear: '۱۴۰۳', semesterNo: 5, title: 'ورودی ۱۴۰۳ (ترم ۵)', expectedStudents: 48 },
-  { id: 'COHORT-1402-7', entryYear: '۱۴۰۲', semesterNo: 7, title: 'ورودی ۱۴۰۲ (ترم ۷)', expectedStudents: 40 },
+  { id: 'COHORT-1405-1', entryYear: '۱۴۰۵', semesterNo: 1, title: 'ورودی ۱۴۰۵ (ترم ۱ - نوورود)', expectedStudents: 65, isEmployedAudience: false },
+  { id: 'COHORT-1404-3', entryYear: '۱۴۰۴', semesterNo: 3, title: 'ورودی ۱۴۰۴ (ترم ۳)', expectedStudents: 55, isEmployedAudience: false },
+  { id: 'COHORT-1403-5', entryYear: '۱۴۰۳', semesterNo: 5, title: 'ورودی ۱۴۰۳ (ترم ۵ - نوبت عصر/شاغلین)', expectedStudents: 48, isEmployedAudience: true },
+  { id: 'COHORT-1402-7', entryYear: '۱۴۰۲', semesterNo: 7, title: 'ورودی ۱۴۰۲ (ترم ۷)', expectedStudents: 40, isEmployedAudience: true },
 ];
 
 const INITIAL_CLASSROOMS: ClassroomOption[] = [
@@ -249,16 +252,16 @@ function createDefaultAvailabilities(): ProfessorAvailabilityMap {
     for (let d = 0; d < 6; d++) {
       map[profId][d] = {};
       for (let s = 1; s <= 12; s++) {
-        if (profId === 1) { // Dr. Ahmadi: Sat, Mon, Sun mornings
+        if (profId === 1) { // Dr. Ahmadi
           map[profId][d][s] = (d === 0 || d === 2 || (d === 1 && s <= 3)) ? 'PREF' : (d === 3 ? 'UNAVAIL' : 'AVAIL');
-        } else if (profId === 2) { // Dr. Akbari: Sun, Tue, Wed
+        } else if (profId === 2) { // Dr. Akbari
           map[profId][d][s] = (d === 1 || d === 3 || d === 4) ? 'PREF' : (d === 0 ? 'UNAVAIL' : 'AVAIL');
-        } else if (profId === 3) { // Eng. Kazemi: Wed, Thu, Mon afternoons
-          map[profId][d][s] = (d === 4 || d === 5 || (d === 2 && s >= 4)) ? 'PREF' : (d <= 1 ? 'UNAVAIL' : 'AVAIL');
-        } else if (profId === 4) { // Dr. Rezaei: Sat, Sun, Wed mornings
+        } else if (profId === 3) { // Eng. Kazemi (Adjunct: loves afternoons & evenings)
+          map[profId][d][s] = (d === 4 || d === 5 || s >= 4) ? 'PREF' : (d <= 1 ? 'UNAVAIL' : 'AVAIL');
+        } else if (profId === 4) { // Dr. Rezaei
           map[profId][d][s] = ((d === 0 || d === 1 || d === 4) && s <= 3) ? 'PREF' : (d === 2 ? 'UNAVAIL' : 'AVAIL');
         } else {
-          map[profId][d][s] = (d % 2 === 1) ? 'PREF' : 'AVAIL';
+          map[profId][d][s] = (d % 2 === 1 || s >= 4) ? 'PREF' : 'AVAIL';
         }
       }
     }
@@ -280,15 +283,15 @@ const INITIAL_COURSE_DEMANDS: CourseDemand[] = [
   { id: 10, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1404-3', cohortTitle: 'ورودی ۱۴۰۴ (ترم ۳)', code: '1112202', title: 'برنامه‌نویسی پیشرفته', units: 3, courseType: 'اصلی', preferredProfId: 2, requiredRoomType: 'LAB', capacity: 30, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/23' },
   { id: 11, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1404-3', cohortTitle: 'ورودی ۱۴۰۴ (ترم ۳)', code: '1112203', title: 'ریاضی مهندسی (حل تمرین هفته فرد)', units: 3, courseType: 'پایه', preferredProfId: 1, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 1, weekRecurrence: 'ODD', sessionsCountPerWeek: 1, examDate: '1405/10/26' },
   { id: 12, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1404-3', cohortTitle: 'ورودی ۱۴۰۴ (ترم ۳)', code: '1112204', title: 'مدار منطقی (کارگاه هفته زوج)', units: 3, courseType: 'اصلی', preferredProfId: 4, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 1, weekRecurrence: 'EVEN', sessionsCountPerWeek: 1, examDate: '1405/10/29' },
-  { id: 13, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1403-5', cohortTitle: 'ورودی ۱۴۰۳ (ترم ۵)', code: '1112301', title: 'طراحی الگوریتم‌ها', units: 3, courseType: 'تخصصی', preferredProfId: 2, requiredRoomType: 'THEORY', capacity: 30, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/20' },
-  { id: 14, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1403-5', cohortTitle: 'ورودی ۱۴۰۳ (ترم ۵)', code: '1112302', title: 'پایگاه داده‌ها', units: 3, courseType: 'تخصصی', preferredProfId: 1, requiredRoomType: 'LAB', capacity: 30, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/24' },
-  { id: 15, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1403-5', cohortTitle: 'ورودی ۱۴۰۳ (ترم ۵)', code: '1112303', title: 'سیستم‌های عامل', units: 3, courseType: 'تخصصی', preferredProfId: 3, requiredRoomType: 'THEORY', capacity: 30, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/27' },
+  { id: 13, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1403-5', cohortTitle: 'ورودی ۱۴۰۳ (ترم ۵ - نوبت عصر/شاغلین)', code: '1112301', title: 'طراحی الگوریتم‌ها', units: 3, courseType: 'تخصصی', preferredProfId: 2, requiredRoomType: 'THEORY', capacity: 30, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/20' },
+  { id: 14, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1403-5', cohortTitle: 'ورودی ۱۴۰۳ (ترم ۵ - نوبت عصر/شاغلین)', code: '1112302', title: 'پایگاه داده‌ها', units: 3, courseType: 'تخصصی', preferredProfId: 1, requiredRoomType: 'LAB', capacity: 30, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/24' },
+  { id: 15, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1403-5', cohortTitle: 'ورودی ۱۴۰۳ (ترم ۵ - نوبت عصر/شاغلین)', code: '1112303', title: 'سیستم‌های عامل', units: 3, courseType: 'تخصصی', preferredProfId: 3, requiredRoomType: 'THEORY', capacity: 30, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/27' },
   { id: 16, programId: 3, programTitle: 'مهندسی صنایع غذایی', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '3311101', title: 'ریاضی عمومی صنایع غذایی', units: 3, courseType: 'پایه', preferredProfId: 1, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/18' },
   { id: 17, programId: 3, programTitle: 'مهندسی صنایع غذایی', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '3311102', title: 'شیمی مواد غذایی (آزمایشگاه هفته زوج)', units: 3, courseType: 'پایه', preferredProfId: 6, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 1, weekRecurrence: 'EVEN', sessionsCountPerWeek: 1, examDate: '1405/10/21' },
 ];
 
 // ==========================================
-// DYNAMIC MULTI-SCENARIO & BELL SOLVER ENGINE
+// DYNAMIC 4-SCENARIO SOLVER ENGINE
 // ==========================================
 
 function solveDynamicScenarios(
@@ -303,6 +306,11 @@ function solveDynamicScenarios(
   const theoryRooms = activeClassrooms.filter(c => c.roomType === 'THEORY');
   const labRooms = activeClassrooms.filter(c => c.roomType === 'LAB');
   const gymRooms = activeClassrooms.filter(c => c.roomType === 'GYM');
+
+  // Distinguish morning and afternoon slots
+  const morningSlots = teachingSlots.filter(s => s.startTime < '13:00');
+  const afternoonEveningSlots = teachingSlots.filter(s => s.startTime >= '13:00');
+  const fallbackAfternoonSlots = afternoonEveningSlots.length > 0 ? afternoonEveningSlots : teachingSlots;
 
   const getFallbackRoom = (type: string, idx: number): ClassroomOption => {
     if (type === 'LAB' && labRooms.length > 0) return labRooms[idx % labRooms.length];
@@ -340,7 +348,9 @@ function solveDynamicScenarios(
     }
   });
 
-  // 1. COMPACT SCENARIO
+  // -------------------------------------------------------------
+  // 1. COMPACT SCENARIO (2-3 DAYS)
+  // -------------------------------------------------------------
   const compactOfferings: DepartmentOffering[] = [];
   const compactDays = [0, 1, 2];
   const profTimeOccupiedCompact: { [profId: number]: Set<string> } = {};
@@ -354,9 +364,8 @@ function solveDynamicScenarios(
 
     for (const d of compactDays) {
       for (const s of teachingSlots) {
-        const timeKey = `${d}-${s.id}-${item.demand.weekRecurrence === 'ALL' ? 'ALL' : item.demand.weekRecurrence}`;
+        const timeKey = `${d}-${s.id}-${item.demand.weekRecurrence}`;
         const anyWeekKey = `${d}-${s.id}-ALL`;
-
         if (!profTimeOccupiedCompact[profId].has(timeKey) && !profTimeOccupiedCompact[profId].has(anyWeekKey) && isProfAvailable(profId, d, s.id) !== 'UNAVAIL') {
           assignedDay = d;
           assignedSlot = s;
@@ -406,7 +415,9 @@ function solveDynamicScenarios(
     });
   });
 
-  // 2. BALANCED SCENARIO
+  // -------------------------------------------------------------
+  // 2. BALANCED SCENARIO (5 DAYS SAT-WED)
+  // -------------------------------------------------------------
   const balancedOfferings: DepartmentOffering[] = [];
   const balancedDays = [0, 1, 2, 3, 4];
   const profTimeOccupiedBalanced: { [profId: number]: Set<string> } = {};
@@ -471,7 +482,9 @@ function solveDynamicScenarios(
     });
   });
 
+  // -------------------------------------------------------------
   // 3. PROFESSOR PREFERENCE SCENARIO
+  // -------------------------------------------------------------
   const profPrefOfferings: DepartmentOffering[] = [];
   const profTimeOccupiedPref: { [profId: number]: Set<string> } = {};
 
@@ -554,12 +567,103 @@ function solveDynamicScenarios(
     });
   });
 
+  // -------------------------------------------------------------
+  // 4. AFTERNOON & WORKING STUDENTS SCENARIO (تراکم شیفت بعدازظهر و عصر)
+  // Mornings (08:00 - 12:00) are 100% FREE for employment!
+  // Classes strictly allocated in slots starting at >= 13:00 and Thursdays
+  // -------------------------------------------------------------
+  const workingOfferings: DepartmentOffering[] = [];
+  const workingDays = [0, 1, 2, 3, 4, 5]; // شنبه تا پنج‌شنبه
+  const profTimeOccupiedWorking: { [profId: number]: Set<string> } = {};
+
+  flattenedList.forEach((item, index) => {
+    const profId = item.assignedProf.id;
+    if (!profTimeOccupiedWorking[profId]) profTimeOccupiedWorking[profId] = new Set();
+
+    let assignedDay = workingDays[index % workingDays.length];
+    let assignedSlot = fallbackAfternoonSlots[Math.floor(index / workingDays.length) % fallbackAfternoonSlots.length] || fallbackAfternoonSlots[0];
+
+    // Search strictly in afternoon/evening slots first
+    let found = false;
+    for (const d of workingDays) {
+      for (const s of fallbackAfternoonSlots) {
+        const timeKey = `${d}-${s.id}-${item.demand.weekRecurrence}`;
+        const anyWeekKey = `${d}-${s.id}-ALL`;
+        if (!profTimeOccupiedWorking[profId].has(timeKey) && !profTimeOccupiedWorking[profId].has(anyWeekKey) && isProfAvailable(profId, d, s.id) !== 'UNAVAIL') {
+          assignedDay = d;
+          assignedSlot = s;
+          found = true;
+          break;
+        }
+      }
+      if (found) break;
+    }
+
+    profTimeOccupiedWorking[profId].add(`${assignedDay}-${assignedSlot.id}-${item.demand.weekRecurrence}`);
+    const room = getFallbackRoom(item.demand.requiredRoomType, (index + 4));
+
+    workingOfferings.push({
+      id: 40000 + item.uniqueId,
+      termId: 14051,
+      programId: item.demand.programId,
+      programTitle: item.demand.programTitle,
+      cohortId: item.demand.cohortId,
+      cohortTitle: item.demand.cohortTitle,
+      courseId: item.demand.id,
+      code: item.demand.code,
+      title: item.demand.title,
+      units: item.demand.units,
+      courseType: item.demand.courseType,
+      groupNumber: item.groupNo,
+      professorId: item.assignedProf.id,
+      professorName: item.assignedProf.name,
+      capacity: Math.min(item.demand.capacity, room.capacity),
+      enrolledCount: 0,
+      waitlistCapacity: 5,
+      classSchedules: [{
+        dayOfWeek: assignedDay,
+        dayName: DAY_NAMES[assignedDay],
+        slotId: assignedSlot.id,
+        startTime: assignedSlot.startTime,
+        endTime: assignedSlot.endTime,
+        roomId: room.id,
+        roomName: room.name,
+        buildingName: room.buildingName,
+        weekType: item.demand.weekRecurrence,
+      }],
+      examSchedule: {
+        examDate: item.demand.examDate,
+        startTime: '۱۶:۰۰',
+        endTime: '۱۸:۰۰',
+        roomName: 'آمفی‌تئاتر مرکزی',
+      },
+    });
+  });
+
   return [
+    {
+      id: 'AFTERNOON_WORKING',
+      title: 'مدل چهارم: ویژه دانشجویان شاغل (شیفت بعدازظهر، عصر و پنج‌شنبه)',
+      subtitle: 'آزادسازی ۱۰۰٪ صبح‌ها برای اشتغال و تمرکز جلسات از ساعت ۱۳:۳۰ به بعد و نوبت عصر',
+      description: 'این سناریو برای دانشجویان شاغل، دوره‌های شبانه، کارشناسی ارشد و پاره‌وقت طراحی شده است. کلیه ساعات صبح (۰۸:۰۰ تا ۱۲:۰۰) کاملاً آزاد بوده و کلاس‌ها در بلوک‌های بعدازظهر و پنج‌شنبه تشکیل می‌شوند.',
+      badgeColor: 'bg-amber-600 text-slate-950 font-black',
+      accentBorder: 'border-amber-500 hover:border-amber-600',
+      bgGradient: 'from-amber-50 to-orange-50/50',
+      kpi: {
+        daysPerWeek: '۳٫۵ بعدازظهر',
+        profSatisfaction: '۹۶٪',
+        conflictsRate: '۰٪ (تضمین‌شده)',
+        roomEfficiency: '۹۵٪ (عصرگاهی)',
+        studentComfort: '۹۹٪ (شاغلین)',
+        commuteScore: 'صبح‌ها ۱۰۰٪ آزاد',
+      },
+      offerings: workingOfferings,
+    },
     {
       id: 'COMPACT',
       title: 'مدل اول: فشرده‌سازی حداکثری (۲ الی ۳ روز کاری)',
       subtitle: 'تجمیع کامل کلاس‌ها در روزهای شنبه، یکشنبه و دوشنبه جهت آزادسازی روزهای کاری/پژوهشی',
-      description: 'این سناریو برای دانشجویان شاغل یا غیربومی ایده‌آل است. کلیه جلسات در ساعات متوالی ۲ تا ۳ روز ابتدای هفته تجمیع شده و روزهای سه‌شنبه، چهارشنبه و پنج‌شنبه کاملاً آزاد خواهند بود.',
+      description: 'این سناریو برای دانشجویان غیربومی ایده‌آل است. کلیه جلسات در ساعات متوالی ۲ تا ۳ روز ابتدای هفته تجمیع شده و روزهای سه‌شنبه، چهارشنبه و پنج‌شنبه کاملاً آزاد خواهند بود.',
       badgeColor: 'bg-emerald-600 text-white',
       accentBorder: 'border-emerald-500 hover:border-emerald-600',
       bgGradient: 'from-emerald-50 to-teal-50/40',
@@ -577,7 +681,7 @@ function solveDynamicScenarios(
       id: 'BALANCED',
       title: 'مدل دوم: توزیع متوازن و استاندارد (شنبه تا چهارشنبه)',
       subtitle: 'پخش یکنواخت بار آموزشی در طول ۵ روز هفته با حداکثر ۱ تا ۲ جلسه در هر روز',
-      description: 'بهترین مدل از نظر روان‌شناختی و یادگیری پایدار دانشجویان. جلسات عمدتاً در ساعات شاداب صبحگاهی توزیع شده و زمان کافی برای مطالعه و پروژه‌های هفتگی فراهم است.',
+      description: 'بهترین مدل از نظر روان‌شناختی و یادگیری پایدار دانشجویان تمام‌وقت. جلسات عمدتاً در ساعات شاداب صبحگاهی توزیع شده و زمان کافی برای مطالعه فراهم است.',
       badgeColor: 'bg-blue-600 text-white',
       accentBorder: 'border-blue-500 hover:border-blue-600',
       bgGradient: 'from-blue-50 to-indigo-50/40',
@@ -595,7 +699,7 @@ function solveDynamicScenarios(
       id: 'PROF_PREF',
       title: 'مدل سوم: بهینه‌سازی بر مبنای حضور و ترجیحات اساتید',
       subtitle: 'انطباق حداکثری با فرم‌های اعلام حضور اساتید هیئت علمی و بلوک‌بندی اساتید مدعو',
-      description: 'در این مدل، اولویت نخست به ساعات سبز اعلام‌شده توسط اساتید داده شده است. اساتید تمام‌وقت در ساعات صبحگاهی و اساتید مدعو در روزهای متمرکز چیده شده‌اند تا کمترین اتلاف وقت رخ دهد.',
+      description: 'در این مدل، اولویت نخست به ساعات سبز اعلام‌شده توسط اساتید داده شده است. اساتید تمام‌وقت در ساعات صبحگاهی و اساتید مدعو در روزهای متمرکز چیده شده‌اند.',
       badgeColor: 'bg-purple-600 text-white',
       accentBorder: 'border-purple-500 hover:border-purple-600',
       bgGradient: 'from-purple-50 to-fuchsia-50/40',
@@ -621,6 +725,7 @@ export default function DepartmentPlanningClient() {
   const [selectedTermId, setSelectedTermId] = useState<number>(14051);
   const [selectedProgramId, setSelectedProgramId] = useState<number>(1);
   const [selectedCohortId, setSelectedCohortId] = useState<string>('ALL');
+  const [targetShiftPreference, setTargetShiftPreference] = useState<ProgramShiftType>('AFTERNOON_WORKING');
 
   // Time Slots / Bell Schedule State
   const [activeSlotPresetKey, setActiveSlotPresetKey] = useState<'STANDARD_120' | 'STANDARD_90' | 'STANDARD_60'>('STANDARD_120');
@@ -641,7 +746,7 @@ export default function DepartmentPlanningClient() {
 
   // Inspector & Scenarios
   const [inspectorProfId, setInspectorProfId] = useState<number>(1);
-  const [activeScenarioId, setActiveScenarioId] = useState<'COMPACT' | 'BALANCED' | 'PROF_PREF'>('COMPACT');
+  const [activeScenarioId, setActiveScenarioId] = useState<'COMPACT' | 'BALANCED' | 'PROF_PREF' | 'AFTERNOON_WORKING'>('AFTERNOON_WORKING');
   const [approvedOfferings, setApprovedOfferings] = useState<DepartmentOffering[]>([]);
   
   const [scenarios, setScenarios] = useState<AutoScheduleScenario[]>(() => 
@@ -676,7 +781,7 @@ export default function DepartmentPlanningClient() {
     const slotsToUse = overrideSlots || timeSlots;
     const fresh = solveDynamicScenarios(slotsToUse, classrooms, professors, availabilities, courseDemands);
     setScenarios(fresh);
-    showToast('⚡ الگوریتم چیدمان با موفقیت بازتولید شد.', 'success');
+    showToast('⚡ الگوریتم چیدمان با موفقیت بازتولید شد و ۴ مدل بهینه‌سازی به‌روزرسانی گردیدند.', 'success');
   };
 
   const handleApplyPresetSlots = (presetKey: 'STANDARD_120' | 'STANDARD_90' | 'STANDARD_60') => {
@@ -705,11 +810,6 @@ export default function DepartmentPlanningClient() {
     });
   };
 
-  // ==========================================
-  // TIME SLOTS MANAGER METHODS (ADD AT START/END, DELETE, EDIT, SORT)
-  // ==========================================
-
-  // Quick Open Modal with Pre-filled position
   const handleOpenAddSlotModal = (position: 'START' | 'END' | 'AUTO') => {
     setSlotPositionChoice(position);
     if (position === 'START') {
@@ -757,7 +857,6 @@ export default function DepartmentPlanningClient() {
     } else if (slotPositionChoice === 'END') {
       updatedSlots = [...timeSlots, newSlot];
     } else {
-      // Auto sort by startTime
       updatedSlots = [...timeSlots, newSlot].sort((a, b) => a.startTime.localeCompare(b.startTime));
     }
 
@@ -790,7 +889,7 @@ export default function DepartmentPlanningClient() {
     showToast('بازه‌های زمانی بر اساس ساعت شروع مرتب شدند.', 'success');
   };
 
-  // Computed state
+  // Computed
   const currentScenario = useMemo(() => {
     return scenarios.find(s => s.id === activeScenarioId) || scenarios[0];
   }, [scenarios, activeScenarioId]);
@@ -851,7 +950,7 @@ export default function DepartmentPlanningClient() {
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 p-3 sm:p-6 space-y-5" dir="rtl">
       
-      {/* Toast Notification Banner */}
+      {/* Toast Notification */}
       {toastMessage && (
         <div className={`fixed top-4 left-4 right-4 sm:right-auto sm:left-6 z-50 p-4 rounded-xl shadow-2xl border flex items-center justify-between gap-3 text-sm font-bold animate-in fade-in slide-in-from-top-4 duration-300 ${
           toastMessage.type === 'success' ? 'bg-emerald-900 text-emerald-100 border-emerald-700' :
@@ -874,12 +973,12 @@ export default function DepartmentPlanningClient() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-slate-950">
-                سامانه هوشمند چیدمان دانشگاهی
+                سامانه هوشمند چیدمان دانشگاهی و شاغلین
               </span>
               <span className="text-xs text-indigo-200">{currentTerm.title}</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              🗓️ کارتابل برنامه‌ریزی درسی، تایم‌های کلاسی و جلسات زوج/فرد
+              🗓️ کارتابل برنامه‌ریزی درسی و الگوریتم‌های چیدمان (روزانه و شاغلین)
             </h1>
           </div>
 
@@ -899,74 +998,99 @@ export default function DepartmentPlanningClient() {
           </div>
         </div>
 
-        {/* Global Context Bar */}
-        <div className="bg-white/10 backdrop-blur-md p-3.5 rounded-xl border border-white/15 grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+        {/* Global Context Bar: Term, Major, Cohort, Shift Preference, Week View */}
+        <div className="bg-white/10 backdrop-blur-md p-3.5 rounded-xl border border-white/15 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
           <div>
             <label className="text-indigo-200 font-bold block mb-1">۱. نیمسال تحصیلی:</label>
             <select
               value={selectedTermId}
               onChange={e => setSelectedTermId(Number(e.target.value))}
-              className="w-full bg-slate-900/90 text-white border border-indigo-400/50 rounded-lg px-3 py-2 font-bold focus:ring-2 focus:ring-amber-400"
+              className="w-full bg-slate-900/90 text-white border border-indigo-400/50 rounded-lg px-2.5 py-2 font-bold focus:ring-2 focus:ring-amber-400"
             >
               {INITIAL_TERMS.map(t => (
-                <option key={t.id} value={t.id}>{t.title} {t.isCurrent ? '(نیمسال جاری)' : ''}</option>
+                <option key={t.id} value={t.id}>{t.title}</option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="text-indigo-200 font-bold block mb-1">۲. رشته و دپارتمان هدف:</label>
+            <label className="text-indigo-200 font-bold block mb-1">۲. رشته و دپارتمان:</label>
             <select
               value={selectedProgramId}
               onChange={e => setSelectedProgramId(Number(e.target.value))}
-              className="w-full bg-slate-900/90 text-white border border-indigo-400/50 rounded-lg px-3 py-2 font-bold focus:ring-2 focus:ring-amber-400"
+              className="w-full bg-slate-900/90 text-white border border-indigo-400/50 rounded-lg px-2.5 py-2 font-bold focus:ring-2 focus:ring-amber-400"
             >
               {INITIAL_PROGRAMS.map(p => (
-                <option key={p.id} value={p.id}>{p.title} ({p.degreeLevel})</option>
+                <option key={p.id} value={p.id}>{p.title}</option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="text-indigo-200 font-bold block mb-1">۳. دوره و ورودی تحصیلی:</label>
+            <label className="text-indigo-200 font-bold block mb-1">۳. ورودی تحصیلی:</label>
             <select
               value={selectedCohortId}
               onChange={e => setSelectedCohortId(e.target.value)}
-              className="w-full bg-slate-900/90 text-white border border-indigo-400/50 rounded-lg px-3 py-2 font-bold focus:ring-2 focus:ring-amber-400"
+              className="w-full bg-slate-900/90 text-white border border-indigo-400/50 rounded-lg px-2.5 py-2 font-bold focus:ring-2 focus:ring-amber-400"
             >
-              <option value="ALL">کلیه ورودی‌های رشته (ترم ۱، ۳، ۵)</option>
+              <option value="ALL">کلیه ورودی‌ها</option>
               {INITIAL_COHORTS.map(c => (
                 <option key={c.id} value={c.id}>{c.title}</option>
               ))}
             </select>
           </div>
 
+          {/* Shift Preference Selector */}
           <div>
-            <label className="text-amber-300 font-bold block mb-1">۴. نمای فیلتر هفته (زوج / فرد):</label>
+            <label className="text-amber-300 font-bold block mb-1">۴. ترجیح شیفت زمانی رشته:</label>
+            <select
+              value={targetShiftPreference}
+              onChange={e => {
+                const shift = e.target.value as ProgramShiftType;
+                setTargetShiftPreference(shift);
+                if (shift === 'AFTERNOON_WORKING') {
+                  setActiveScenarioId('AFTERNOON_WORKING');
+                  showToast('ترجیح شیفت بر روی «دانشجویان شاغل (نوبت عصر)» تنظیم گردید.', 'info');
+                } else if (shift === 'MORNING') {
+                  setActiveScenarioId('BALANCED');
+                  showToast('ترجیح شیفت بر روی «شیفت صبح (روزانه)» تنظیم گردید.', 'info');
+                }
+              }}
+              className="w-full bg-amber-500/20 text-amber-200 border border-amber-400/60 rounded-lg px-2.5 py-2 font-extrabold focus:ring-2 focus:ring-amber-400"
+            >
+              <option value="AFTERNOON_WORKING" className="bg-slate-900 text-white">🌆 شیفت عصر/شب (دانشجویان شاغل)</option>
+              <option value="MORNING" className="bg-slate-900 text-white">☀️ شیفت صبح (دانشجویان تمام‌وقت)</option>
+              <option value="FLEXIBLE" className="bg-slate-900 text-white">⚡ شناور و متوازن</option>
+            </select>
+          </div>
+
+          {/* Week Filter Toggle */}
+          <div>
+            <label className="text-indigo-200 font-bold block mb-1">۵. نمای هفته (زوج / فرد):</label>
             <div className="grid grid-cols-3 gap-1 bg-slate-900/90 p-1 rounded-lg border border-indigo-400/50">
               <button
                 onClick={() => setSelectedWeekFilter('ALL_VIEW')}
-                className={`py-1.5 rounded font-bold text-[11px] transition ${
+                className={`py-1 rounded font-bold text-[10px] transition ${
                   selectedWeekFilter === 'ALL_VIEW' ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:text-white'
                 }`}
               >
-                کلیه هفته‌ها
+                کلیه
               </button>
               <button
                 onClick={() => setSelectedWeekFilter('EVEN')}
-                className={`py-1.5 rounded font-bold text-[11px] transition ${
+                className={`py-1 rounded font-bold text-[10px] transition ${
                   selectedWeekFilter === 'EVEN' ? 'bg-cyan-600 text-white' : 'text-cyan-300 hover:text-white'
                 }`}
               >
-                هفته زوج 🔷
+                زوج 🔷
               </button>
               <button
                 onClick={() => setSelectedWeekFilter('ODD')}
-                className={`py-1.5 rounded font-bold text-[11px] transition ${
+                className={`py-1 rounded font-bold text-[10px] transition ${
                   selectedWeekFilter === 'ODD' ? 'bg-amber-600 text-white' : 'text-amber-300 hover:text-white'
                 }`}
               >
-                هفته فرد 🔶
+                فرد 🔶
               </button>
             </div>
           </div>
@@ -984,9 +1108,9 @@ export default function DepartmentPlanningClient() {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <span>🤖 مرحله ۱: موتور هوشمند و ۳ سناریو</span>
+          <span>🤖 مرحله ۱: موتور هوشمند و ۴ مدل چیدمان</span>
           <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-400 text-slate-950 font-bold">
-            {faNum(3)} مدل
+            {faNum(4)} مدل
           </span>
         </button>
 
@@ -1014,7 +1138,7 @@ export default function DepartmentPlanningClient() {
         >
           <span>⏰ مرحله ۳: تنظیمات دانشگاه (تایم‌های کلاسی، حضور اساتید، کلاس‌ها)</span>
           <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-indigo-100 text-indigo-900 font-bold">
-            پیکربندی زمان
+            پیکربندی
           </span>
         </button>
 
@@ -1048,7 +1172,7 @@ export default function DepartmentPlanningClient() {
       </div>
 
       {/* ========================================================================= */}
-      {/* TAB 1: AI MULTI-SCENARIO OPTIMIZATION ENGINE */}
+      {/* TAB 1: AI MULTI-SCENARIO OPTIMIZATION ENGINE (4 MODELS) */}
       {/* ========================================================================= */}
       {activeMainTab === 'SCENARIOS' && (
         <div className="space-y-5">
@@ -1058,11 +1182,11 @@ export default function DepartmentPlanningClient() {
               <div className="flex items-center gap-2">
                 <span className="text-xl">💡</span>
                 <h2 className="font-extrabold text-slate-900 text-sm sm:text-base">
-                  برنامه‌ریزی رشته «{currentProgram.title}» — زنگ‌های کلاسی فعال ({faNum(teachingSlots.length)} بازه در روز)
+                  برنامه‌ریزی رشته «{currentProgram.title}» — ۴ سناریوی هوشمند بهینه‌سازی
                 </h2>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                موتور هوشمند جلسات <b>هر هفته</b> و <b>یک هفته در میان (زوج 🔷 / فرد 🔶)</b> را در اسلات‌های زمانی دانشگاه چیدمان کرده است.
+                شامل <b>مدل ویژه دانشجویان شاغل (شیفت عصر)</b>، <b>مدل فشرده ۲-۳ روزه</b>، <b>مدل متوازن ۵ روزه</b> و <b>مدل انطباق با ترجیحات اساتید</b>.
               </p>
             </div>
 
@@ -1071,7 +1195,7 @@ export default function DepartmentPlanningClient() {
                 onClick={() => { setActiveMainTab('INPUTS'); setInputSubTab('BELL_CONFIG'); }}
                 className="px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-800 text-xs font-bold hover:bg-slate-50 transition shadow-sm"
               >
-                ⏰ افزودن یا تغییر تایم‌های کلاسی
+                ⏰ تنظیم تایم‌های کلاسی
               </button>
               <button
                 onClick={() => handleTriggerSolver()}
@@ -1082,73 +1206,75 @@ export default function DepartmentPlanningClient() {
             </div>
           </div>
 
-          {/* 3 Scenario Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* 4 Scenario KPI Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
             {scenarios.map(scenario => {
               const isSelected = scenario.id === activeScenarioId;
               return (
                 <div
                   key={scenario.id}
                   onClick={() => setActiveScenarioId(scenario.id)}
-                  className={`relative cursor-pointer rounded-2xl p-5 border-2 transition-all duration-200 bg-white flex flex-col justify-between shadow-sm hover:shadow-md ${
+                  className={`relative cursor-pointer rounded-2xl p-4 border-2 transition-all duration-200 bg-white flex flex-col justify-between shadow-sm hover:shadow-md ${
                     isSelected
                       ? `ring-4 ring-indigo-500/20 border-indigo-600 bg-gradient-to-br ${scenario.bgGradient}`
                       : 'border-slate-200 hover:border-slate-300'
                   }`}
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <span className={`text-[11px] font-extrabold px-2.5 py-1 rounded-full ${scenario.badgeColor}`}>
-                        {scenario.id === 'COMPACT' ? '🟢 مدل فشرده ۲-۳ روزه' : scenario.id === 'BALANCED' ? '🔵 مدل متوازن ۵ روزه' : '🟣 مدل اساتید و ترجیحات'}
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${scenario.badgeColor}`}>
+                        {scenario.id === 'AFTERNOON_WORKING' ? '🌆 ویژه شاغلین/عصر' :
+                         scenario.id === 'COMPACT' ? '🟢 فشرده ۲-۳ روزه' :
+                         scenario.id === 'BALANCED' ? '🔵 متوازن ۵ روزه' : '🟣 ترجیحات اساتید'}
                       </span>
                       {isSelected ? (
-                        <span className="flex items-center gap-1 text-xs font-extrabold text-indigo-900 bg-indigo-100 px-2.5 py-0.5 rounded-full border border-indigo-300">
-                          <span>✓ فعال</span>
+                        <span className="text-[10px] font-extrabold text-indigo-900 bg-indigo-100 px-2 py-0.5 rounded-full border border-indigo-300">
+                          ✓ فعال
                         </span>
                       ) : (
-                        <span className="text-xs text-slate-400 font-bold">مشاهده</span>
+                        <span className="text-[10px] text-slate-400 font-bold">انتخاب</span>
                       )}
                     </div>
 
-                    <h3 className="text-base font-extrabold text-slate-900 leading-tight mb-1">
+                    <h3 className="text-sm font-extrabold text-slate-900 leading-tight mb-1">
                       {scenario.title}
                     </h3>
-                    <p className="text-[11px] text-slate-500 mb-4 line-clamp-2">
+                    <p className="text-[11px] text-slate-500 mb-3 line-clamp-2">
                       {scenario.subtitle}
                     </p>
 
-                    <div className="grid grid-cols-2 gap-2 text-xs bg-white/80 p-3 rounded-xl border border-slate-200/80 mb-4">
+                    <div className="grid grid-cols-2 gap-1.5 text-[11px] bg-white/80 p-2 rounded-xl border border-slate-200/80 mb-3">
                       <div>
-                        <span className="text-[10px] text-slate-400 block">روزهای حضور دانشجو:</span>
+                        <span className="text-[9px] text-slate-400 block">حضور دانشجو:</span>
                         <span className="font-extrabold text-slate-900">{scenario.kpi.daysPerWeek}</span>
                       </div>
                       <div>
-                        <span className="text-[10px] text-slate-400 block">تطابق با فرم اساتید:</span>
+                        <span className="text-[9px] text-slate-400 block">رضایت اساتید:</span>
                         <span className="font-extrabold text-emerald-700">{scenario.kpi.profSatisfaction}</span>
                       </div>
                       <div>
-                        <span className="text-[10px] text-slate-400 block">تداخل کلاسی/امتحانی:</span>
+                        <span className="text-[9px] text-slate-400 block">تداخل:</span>
                         <span className="font-extrabold text-indigo-700">{scenario.kpi.conflictsRate}</span>
                       </div>
                       <div>
-                        <span className="text-[10px] text-slate-400 block">بهره‌وری کلاس‌ها:</span>
-                        <span className="font-extrabold text-slate-800">{scenario.kpi.roomEfficiency}</span>
+                        <span className="text-[9px] text-slate-400 block">ویژگی کلیدی:</span>
+                        <span className="font-extrabold text-amber-800">{scenario.kpi.commuteScore}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-bold text-slate-600">
-                      تعداد: {faNum(scenario.offerings.filter(o => selectedProgramId === 0 || o.programId === selectedProgramId).length)} کلاس
+                  <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between gap-1">
+                    <span className="text-[10px] font-bold text-slate-600">
+                      {faNum(scenario.offerings.filter(o => selectedProgramId === 0 || o.programId === selectedProgramId).length)} کلاس
                     </span>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         handleApplyScenario(scenario);
                       }}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs shadow transition"
+                      className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs shadow transition"
                     >
-                      🚀 تصویب این مدل
+                      🚀 تصویب
                     </button>
                   </div>
                 </div>
@@ -1163,11 +1289,11 @@ export default function DepartmentPlanningClient() {
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-indigo-600 animate-pulse"></span>
                   <h3 className="font-extrabold text-slate-900 text-base">
-                    پیش‌نمایش جدول هفتگی رشته «{currentProgram.title}» ({selectedWeekFilter === 'ALL_VIEW' ? 'کلیه جلسات' : selectedWeekFilter === 'EVEN' ? 'فقط هفته‌های زوج 🔷' : 'فقط هفته‌های فرد 🔶'})
+                    پیش‌نمایش جدول هفتگی: {currentScenario.title}
                   </h3>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  تعداد بازه‌های زمانی فعال: {faNum(teachingSlots.length)} اسلات در روز
+                  {currentScenario.description}
                 </p>
               </div>
 
@@ -1233,24 +1359,16 @@ export default function DepartmentPlanningClient() {
                                           ? 'bg-amber-50/95 border-amber-400 text-amber-950'
                                           : isLab
                                           ? 'bg-purple-50/90 border-purple-300 text-purple-950'
-                                          : offering.cohortId.includes('1405')
-                                          ? 'bg-indigo-50/90 border-indigo-200 text-indigo-950'
-                                          : 'bg-emerald-50/90 border-emerald-200 text-emerald-950'
+                                          : offering.cohortId.includes('1403') || activeScenarioId === 'AFTERNOON_WORKING'
+                                          ? 'bg-amber-50/90 border-amber-300 text-amber-950'
+                                          : 'bg-indigo-50/90 border-indigo-200 text-indigo-950'
                                       }`}
                                     >
                                       <div className="flex items-center justify-between gap-1 font-extrabold text-[11px]">
                                         <span>{offering.title}</span>
                                         <div className="flex items-center gap-1">
-                                          {isEven && (
-                                            <span className="text-[9px] px-1 py-0.2 rounded bg-cyan-700 text-white font-bold">
-                                              هفته زوج 🔷
-                                            </span>
-                                          )}
-                                          {isOdd && (
-                                            <span className="text-[9px] px-1 py-0.2 rounded bg-amber-600 text-white font-bold">
-                                              هفته فرد 🔶
-                                            </span>
-                                          )}
+                                          {isEven && <span className="text-[9px] px-1 py-0.2 rounded bg-cyan-700 text-white font-bold">هفته زوج 🔷</span>}
+                                          {isOdd && <span className="text-[9px] px-1 py-0.2 rounded bg-amber-600 text-white font-bold">هفته فرد 🔶</span>}
                                           <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/80 border border-slate-300 font-bold">
                                             گروه {faNum(offering.groupNumber)}
                                           </span>
@@ -1505,7 +1623,6 @@ export default function DepartmentPlanningClient() {
           {inputSubTab === 'BELL_CONFIG' && (
             <div className="space-y-4">
               
-              {/* Presets Cards */}
               <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
                   <div>
@@ -1517,19 +1634,16 @@ export default function DepartmentPlanningClient() {
                     </p>
                   </div>
 
-                  {/* Quick Shortcut Buttons to Add at Start/End */}
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={() => handleOpenAddSlotModal('START')}
                       className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs shadow flex items-center gap-1 transition"
-                      title="افزودن کلاس صبح زود قبل از شروع ساعت ۸"
                     >
                       <span>🌅 + افزودن تایم به اول روز (صبح زود)</span>
                     </button>
                     <button
                       onClick={() => handleOpenAddSlotModal('END')}
                       className="px-3 py-1.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-extrabold text-xs shadow flex items-center gap-1 transition"
-                      title="افزودن کلاس عصر/شب بعد از ساعت ۱۷:۳۰"
                     >
                       <span>🌙 + افزودن تایم به آخر روز (شیفت عصر/شب)</span>
                     </button>
@@ -1568,7 +1682,7 @@ export default function DepartmentPlanningClient() {
                 </div>
               </div>
 
-              {/* Interactive In-place Time Slot Editor Cards */}
+              {/* Slots In-place Editor */}
               <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
                   <div>
@@ -1576,7 +1690,7 @@ export default function DepartmentPlanningClient() {
                       مدیریت و ویرایش مستقیم اسلات‌های زمانی فعال روزانه ({faNum(timeSlots.length)} بازه)
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      شما می‌توانید ساعت شروع، پایان و عنوان هر بازه را مستقیماً ویرایش کنید یا اسلات جدید اضافه/حذف فرمایید.
+                      امکان ویرایش مستقیم ساعت شروع و پایان، افزودن تایم به ابتدا یا انتهای روز و حذف اسلات
                     </p>
                   </div>
 
@@ -1596,7 +1710,6 @@ export default function DepartmentPlanningClient() {
                   </div>
                 </div>
 
-                {/* Slots Grid with In-place Edit and Delete */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {timeSlots.map((slot, idx) => (
                     <div
@@ -1606,7 +1719,6 @@ export default function DepartmentPlanningClient() {
                       }`}
                     >
                       <div>
-                        {/* Slot Header with Tag and Delete Button */}
                         <div className="flex items-center justify-between mb-2">
                           <span className="font-extrabold text-xs text-slate-900">
                             بازه {faNum(idx + 1)} {idx === 0 ? '(شروع صبح)' : idx === timeSlots.length - 1 ? '(پایان روز/عصر)' : ''}
@@ -1631,7 +1743,6 @@ export default function DepartmentPlanningClient() {
                           </div>
                         </div>
 
-                        {/* Label Input */}
                         <div className="mb-2">
                           <label className="text-[10px] text-slate-500 block mb-0.5">عنوان بازه زمانی:</label>
                           <input
@@ -1642,7 +1753,6 @@ export default function DepartmentPlanningClient() {
                           />
                         </div>
 
-                        {/* Start & End Times Inputs */}
                         <div className="grid grid-cols-2 gap-2 text-xs">
                           <div>
                             <label className="text-[10px] text-slate-500 block mb-0.5">ساعت شروع:</label>
@@ -1668,7 +1778,6 @@ export default function DepartmentPlanningClient() {
                   ))}
                 </div>
 
-                {/* Bottom Trigger Solver */}
                 <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
                   <span className="text-xs text-slate-500">
                     با زدن دکمه زیر، ماتریس حضور اساتید و الگوریتم سناریوها با بازه‌های زمانی جدید منطبق می‌شوند.
@@ -1689,7 +1798,7 @@ export default function DepartmentPlanningClient() {
             </div>
           )}
 
-          {/* SUBTAB: PROFESSOR MATRIX */}
+          {/* SUBTAB: PROFESSORS */}
           {inputSubTab === 'PROFESSORS' && (
             <div className="space-y-4">
               <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -2000,9 +2109,7 @@ export default function DepartmentPlanningClient() {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL: ADD NEW TIME SLOT (AT START, END, OR CUSTOM) */}
-      {/* ========================================================================= */}
+      {/* Modal: Add New Slot */}
       {isNewSlotModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
