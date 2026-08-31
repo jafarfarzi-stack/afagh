@@ -89,6 +89,10 @@ export interface CourseDemand {
   units: number;
   courseType: 'پایه' | 'اصلی' | 'تخصصی' | 'عمومی' | 'عملی';
   preferredProfId: number;
+  isCoTaught?: boolean;
+  coProfId?: number;
+  theoryWeightRatio?: number; // e.g. 0.70 (14 marks out of 20)
+  labWeightRatio?: number;    // e.g. 0.30 (6 marks out of 20)
   requiredRoomType: 'THEORY' | 'LAB' | 'GYM';
   capacity: number;
   groupsCount: number;
@@ -112,6 +116,11 @@ export interface DepartmentOffering {
   groupNumber: number;
   professorId: number;
   professorName: string;
+  isCoTaught?: boolean;
+  coProfId?: number;
+  coProfName?: string;
+  theoryWeightRatio?: number;
+  labWeightRatio?: number;
   capacity: number;
   enrolledCount: number;
   waitlistCapacity: number;
@@ -275,7 +284,7 @@ const INITIAL_COURSE_DEMANDS: CourseDemand[] = [
   { id: 1, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '1112101', title: 'ریاضی عمومی ۱', units: 3, courseType: 'پایه', preferredProfId: 1, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 2, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/18' },
   { id: 2, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '1112103', title: 'مبانی برنامه‌نویسی', units: 4, courseType: 'پایه', preferredProfId: 2, requiredRoomType: 'LAB', capacity: 32, groupsCount: 2, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/22' },
   { id: 3, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '1112105', title: 'فیزیک عمومی ۱', units: 3, courseType: 'پایه', preferredProfId: 4, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 2, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/25' },
-  { id: 4, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '1112106', title: 'آزمایشگاه فیزیک ۱ (هفته زوج)', units: 1, courseType: 'عملی', preferredProfId: 3, requiredRoomType: 'LAB', capacity: 25, groupsCount: 1, weekRecurrence: 'EVEN', sessionsCountPerWeek: 1, examDate: '1405/10/15' },
+  { id: 4, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '1112106', title: 'آزمایشگاه و مبانی فیزیک ۱ (مشترک)', units: 2, courseType: 'عملی', preferredProfId: 4, isCoTaught: true, coProfId: 3, theoryWeightRatio: 0.60, labWeightRatio: 0.40, requiredRoomType: 'LAB', capacity: 25, groupsCount: 1, weekRecurrence: 'EVEN', sessionsCountPerWeek: 1, examDate: '1405/10/15' },
   { id: 5, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '1112106-B', title: 'آزمایشگاه فیزیک ۱ (هفته فرد)', units: 1, courseType: 'عملی', preferredProfId: 3, requiredRoomType: 'LAB', capacity: 25, groupsCount: 1, weekRecurrence: 'ODD', sessionsCountPerWeek: 1, examDate: '1405/10/15' },
   { id: 6, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '1112107', title: 'زبان انگلیسی عمومی', units: 3, courseType: 'عمومی', preferredProfId: 5, requiredRoomType: 'THEORY', capacity: 40, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/28' },
   { id: 7, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1405-1', cohortTitle: 'ورودی ۱۴۰۵ (ترم ۱)', code: '1112108', title: 'تربیت بدنی ۱', units: 2, courseType: 'عمومی', preferredProfId: 3, requiredRoomType: 'GYM', capacity: 40, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/14' },
@@ -283,7 +292,7 @@ const INITIAL_COURSE_DEMANDS: CourseDemand[] = [
   { id: 9, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1404-3', cohortTitle: 'ورودی ۱۴۰۴ (ترم ۳)', code: '1112201', title: 'ساختمان داده‌ها', units: 3, courseType: 'اصلی', preferredProfId: 1, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/19' },
   { id: 10, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1404-3', cohortTitle: 'ورودی ۱۴۰۴ (ترم ۳)', code: '1112202', title: 'برنامه‌نویسی پیشرفته', units: 3, courseType: 'اصلی', preferredProfId: 2, requiredRoomType: 'LAB', capacity: 30, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/23' },
   { id: 11, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1404-3', cohortTitle: 'ورودی ۱۴۰۴ (ترم ۳)', code: '1112203', title: 'ریاضی مهندسی (حل تمرین هفته فرد)', units: 3, courseType: 'پایه', preferredProfId: 1, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 1, weekRecurrence: 'ODD', sessionsCountPerWeek: 1, examDate: '1405/10/26' },
-  { id: 12, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1404-3', cohortTitle: 'ورودی ۱۴۰۴ (ترم ۳)', code: '1112204', title: 'مدار منطقی (کارگاه هفته زوج)', units: 3, courseType: 'اصلی', preferredProfId: 4, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 1, weekRecurrence: 'EVEN', sessionsCountPerWeek: 1, examDate: '1405/10/29' },
+  { id: 12, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1404-3', cohortTitle: 'ورودی ۱۴۰۴ (ترم ۳)', code: '1112204', title: 'مدار منطقی (کارگاه هفته زوج - مشترک)', units: 3, courseType: 'اصلی', preferredProfId: 4, isCoTaught: true, coProfId: 1, theoryWeightRatio: 0.70, labWeightRatio: 0.30, requiredRoomType: 'THEORY', capacity: 35, groupsCount: 1, weekRecurrence: 'EVEN', sessionsCountPerWeek: 1, examDate: '1405/10/29' },
   { id: 13, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1403-5', cohortTitle: 'ورودی ۱۴۰۳ (ترم ۵ - نوبت عصر/شاغلین)', code: '1112301', title: 'طراحی الگوریتم‌ها', units: 3, courseType: 'تخصصی', preferredProfId: 2, requiredRoomType: 'THEORY', capacity: 30, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/20' },
   { id: 14, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1403-5', cohortTitle: 'ورودی ۱۴۰۳ (ترم ۵ - نوبت عصر/شاغلین)', code: '1112302', title: 'پایگاه داده‌ها', units: 3, courseType: 'تخصصی', preferredProfId: 1, requiredRoomType: 'LAB', capacity: 30, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/24' },
   { id: 15, programId: 1, programTitle: 'مهندسی کامپیوتر', cohortId: 'COHORT-1403-5', cohortTitle: 'ورودی ۱۴۰۳ (ترم ۵ - نوبت عصر/شاغلین)', code: '1112303', title: 'سیستم‌های عامل', units: 3, courseType: 'تخصصی', preferredProfId: 3, requiredRoomType: 'THEORY', capacity: 30, groupsCount: 1, weekRecurrence: 'ALL', sessionsCountPerWeek: 1, examDate: '1405/10/27' },
@@ -391,6 +400,11 @@ function solveDynamicScenarios(
       groupNumber: item.groupNo,
       professorId: item.assignedProf.id,
       professorName: item.assignedProf.name,
+      isCoTaught: item.demand.isCoTaught,
+      coProfId: item.demand.coProfId,
+      coProfName: item.demand.coProfId ? getProf(item.demand.coProfId).name : undefined,
+      theoryWeightRatio: item.demand.theoryWeightRatio,
+      labWeightRatio: item.demand.labWeightRatio,
       capacity: Math.min(item.demand.capacity, room.capacity),
       enrolledCount: 0,
       waitlistCapacity: 5,
@@ -456,6 +470,11 @@ function solveDynamicScenarios(
       groupNumber: item.groupNo,
       professorId: item.assignedProf.id,
       professorName: item.assignedProf.name,
+      isCoTaught: item.demand.isCoTaught,
+      coProfId: item.demand.coProfId,
+      coProfName: item.demand.coProfId ? getProf(item.demand.coProfId).name : undefined,
+      theoryWeightRatio: item.demand.theoryWeightRatio,
+      labWeightRatio: item.demand.labWeightRatio,
       capacity: Math.min(item.demand.capacity, room.capacity),
       enrolledCount: 0,
       waitlistCapacity: 5,
@@ -539,6 +558,11 @@ function solveDynamicScenarios(
       groupNumber: item.groupNo,
       professorId: item.assignedProf.id,
       professorName: item.assignedProf.name,
+      isCoTaught: item.demand.isCoTaught,
+      coProfId: item.demand.coProfId,
+      coProfName: item.demand.coProfId ? getProf(item.demand.coProfId).name : undefined,
+      theoryWeightRatio: item.demand.theoryWeightRatio,
+      labWeightRatio: item.demand.labWeightRatio,
       capacity: Math.min(item.demand.capacity, room.capacity),
       enrolledCount: 0,
       waitlistCapacity: 5,
@@ -604,6 +628,11 @@ function solveDynamicScenarios(
       groupNumber: item.groupNo,
       professorId: item.assignedProf.id,
       professorName: item.assignedProf.name,
+      isCoTaught: item.demand.isCoTaught,
+      coProfId: item.demand.coProfId,
+      coProfName: item.demand.coProfId ? getProf(item.demand.coProfId).name : undefined,
+      theoryWeightRatio: item.demand.theoryWeightRatio,
+      labWeightRatio: item.demand.labWeightRatio,
       capacity: Math.min(item.demand.capacity, room.capacity),
       enrolledCount: 0,
       waitlistCapacity: 5,
@@ -783,6 +812,48 @@ export default function DepartmentPlanningClient() {
     showToast(`استاد «${targetProf?.name}» به عنوان مدرس این درس تعیین شد.`, 'info');
   };
 
+  // Toggle Co-Teaching for a course
+  const handleToggleCoTeaching = (demandId: number) => {
+    setCourseDemands(prev =>
+      prev.map(d => {
+        if (d.id !== demandId) return d;
+        const nextState = !d.isCoTaught;
+        return {
+          ...d,
+          isCoTaught: nextState,
+          coProfId: nextState ? (d.coProfId || (d.preferredProfId === 1 ? 3 : 1)) : undefined,
+          theoryWeightRatio: nextState ? (d.theoryWeightRatio || 0.70) : undefined,
+          labWeightRatio: nextState ? (d.labWeightRatio || 0.30) : undefined,
+        };
+      })
+    );
+    showToast('وضعیت تخصیص دو استاد (مشترک تئوری و عملی) تغییر یافت.', 'info');
+  };
+
+  // Assign Second / Lab Professor
+  const handleAssignCoProfessor = (demandId: number, coProfId: number) => {
+    setCourseDemands(prev => prev.map(d => (d.id === demandId ? { ...d, coProfId } : d)));
+    const targetProf = professors.find(p => p.id === coProfId);
+    showToast(`استاد همکار «${targetProf?.name}» جهت بخش عملی تعیین شد.`, 'info');
+  };
+
+  // Update Co-Teaching Weights (e.g. 70% theory, 30% lab)
+  const handleUpdateCoWeights = (demandId: number, theoryPercent: number) => {
+    const theoryRatio = Math.max(0.1, Math.min(0.9, theoryPercent / 100));
+    const labRatio = Math.round((1 - theoryRatio) * 100) / 100;
+    setCourseDemands(prev =>
+      prev.map(d =>
+        d.id === demandId
+          ? {
+              ...d,
+              theoryWeightRatio: theoryRatio,
+              labWeightRatio: labRatio,
+            }
+          : d
+      )
+    );
+  };
+
   // Change groups count for a course
   const handleUpdateCourseGroupsCount = (demandId: number, groups: number) => {
     setCourseDemands(prev => prev.map(d => d.id === demandId ? { ...d, groupsCount: groups } : d));
@@ -852,16 +923,30 @@ export default function DepartmentPlanningClient() {
     showToast(`ساعات حضور و هماهنگی‌های استاد «${profName}» با موفقیت ثبت و در الگوریتم اعمال شد.`, 'success');
   };
 
-  // Compute Professor Assigned Units Load
+  // Compute Professor Assigned Units Load (accounting for single & co-taught courses)
   const profAssignedUnitsMap = useMemo(() => {
     const map: { [profId: number]: { units: number; coursesCount: number } } = {};
     professors.forEach(p => { map[p.id] = { units: 0, coursesCount: 0 }; });
 
     courseDemands.forEach(d => {
-      const assignedProfId = d.preferredProfId;
-      if (map[assignedProfId]) {
-        map[assignedProfId].units += (d.units * d.groupsCount);
-        map[assignedProfId].coursesCount += d.groupsCount;
+      const primaryProfId = d.preferredProfId;
+      if (d.isCoTaught && d.coProfId) {
+        // Split units based on theory & lab weights
+        const theoryUnits = Math.round((d.units * (d.theoryWeightRatio || 0.70)) * 10) / 10;
+        const labUnits = Math.round((d.units * (d.labWeightRatio || 0.30)) * 10) / 10;
+        if (map[primaryProfId]) {
+          map[primaryProfId].units += (theoryUnits * d.groupsCount);
+          map[primaryProfId].coursesCount += d.groupsCount;
+        }
+        if (map[d.coProfId]) {
+          map[d.coProfId].units += (labUnits * d.groupsCount);
+          map[d.coProfId].coursesCount += d.groupsCount;
+        }
+      } else {
+        if (map[primaryProfId]) {
+          map[primaryProfId].units += (d.units * d.groupsCount);
+          map[primaryProfId].coursesCount += d.groupsCount;
+        }
       }
     });
 
@@ -1232,27 +1317,122 @@ export default function DepartmentPlanningClient() {
                         </select>
                       </td>
 
-                      <td className="p-2 border border-slate-200 min-w-[200px]">
-                        <select
-                          value={demand.preferredProfId}
-                          onChange={e => handleAssignProfessorToCourse(demand.id, Number(e.target.value))}
-                          className="w-full border-2 border-indigo-400/80 rounded-lg px-2.5 py-1.5 font-extrabold bg-indigo-50/50 text-indigo-950 focus:ring-2 focus:ring-indigo-500"
-                        >
-                          {professors.map(p => (
-                            <option key={p.id} value={p.id}>
-                              {p.name} ({p.academicRank} — {p.contractType})
-                            </option>
-                          ))}
-                        </select>
+                      <td className="p-2 border border-slate-200 min-w-[280px]">
+                        {!demand.isCoTaught ? (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <select
+                                value={demand.preferredProfId}
+                                onChange={e => handleAssignProfessorToCourse(demand.id, Number(e.target.value))}
+                                className="w-full border-2 border-indigo-400/80 rounded-lg px-2 py-1 font-extrabold bg-indigo-50/50 text-indigo-950 focus:ring-2 focus:ring-indigo-500"
+                              >
+                                {professors.map(p => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name} ({p.academicRank} — {p.contractType})
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleCoTeaching(demand.id)}
+                                title="تخصیص دو استاد مشترک (تئوری + عملی)"
+                                className="px-2 py-1 rounded bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold text-[10px] whitespace-nowrap transition"
+                              >
+                                👥 مشترک
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-2 rounded-xl bg-purple-50 border border-purple-200 space-y-2">
+                            <div className="flex items-center justify-between pb-1 border-b border-purple-200/60">
+                              <span className="font-extrabold text-[10px] text-purple-950">👥 درس مشترک با دو استاد:</span>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleCoTeaching(demand.id)}
+                                className="text-[10px] text-purple-700 hover:underline font-bold"
+                              >
+                                لغو (تک‌استاد)
+                              </button>
+                            </div>
+
+                            {/* Theory Professor */}
+                            <div className="space-y-0.5">
+                              <div className="flex items-center justify-between text-[10px] font-bold text-slate-700">
+                                <span>📖 استاد بخش تئوری:</span>
+                                <span className="text-indigo-900">سهم: {faNum((demand.theoryWeightRatio || 0.7) * 100)}٪ ({faNum((demand.theoryWeightRatio || 0.7) * 20)} نمره)</span>
+                              </div>
+                              <select
+                                value={demand.preferredProfId}
+                                onChange={e => handleAssignProfessorToCourse(demand.id, Number(e.target.value))}
+                                className="w-full border border-indigo-300 rounded px-2 py-1 font-extrabold bg-white text-indigo-950 text-xs"
+                              >
+                                {professors.map(p => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name} ({p.academicRank})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* Lab / Practical Professor */}
+                            <div className="space-y-0.5">
+                              <div className="flex items-center justify-between text-[10px] font-bold text-slate-700">
+                                <span>🔬 استاد بخش عملی:</span>
+                                <span className="text-purple-900">سهم: {faNum((demand.labWeightRatio || 0.3) * 100)}٪ ({faNum((demand.labWeightRatio || 0.3) * 20)} نمره)</span>
+                              </div>
+                              <select
+                                value={demand.coProfId || professors[2].id}
+                                onChange={e => handleAssignCoProfessor(demand.id, Number(e.target.value))}
+                                className="w-full border border-purple-300 rounded px-2 py-1 font-extrabold bg-white text-purple-950 text-xs"
+                              >
+                                {professors.map(p => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name} ({p.academicRank})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* Weighting Slider */}
+                            <div className="pt-1 border-t border-purple-200/50">
+                              <div className="flex items-center justify-between text-[9px] font-bold text-slate-600 mb-0.5">
+                                <span>سهم‌بندی مدیر گروه:</span>
+                                <span>{faNum((demand.theoryWeightRatio || 0.7) * 100)}٪ تئوری / {faNum((demand.labWeightRatio || 0.3) * 100)}٪ عملی</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={10}
+                                max={90}
+                                step={5}
+                                value={Math.round((demand.theoryWeightRatio || 0.7) * 100)}
+                                onChange={e => handleUpdateCoWeights(demand.id, Number(e.target.value))}
+                                className="w-full h-1.5 bg-purple-200 rounded-lg appearance-none cursor-pointer"
+                              />
+                            </div>
+                          </div>
+                        )}
                       </td>
 
                       <td className="p-2 border border-slate-200 text-center">
-                        <div className={`p-1.5 rounded-lg text-[11px] font-bold ${
-                          isOverQuota ? 'bg-rose-100 text-rose-900 border border-rose-300' : 'bg-emerald-100 text-emerald-900'
-                        }`}>
-                          <span>{faNum(profLoad)} از {faNum(assignedProf.maxWeeklyUnits)} واحد</span>
-                          {isOverQuota && <span className="block text-[9px] font-black text-rose-700 mt-0.5">⚠️ تجاوز از سقف مجاز!</span>}
-                        </div>
+                        {!demand.isCoTaught ? (
+                          <div className={`p-1.5 rounded-lg text-[11px] font-bold ${
+                            isOverQuota ? 'bg-rose-100 text-rose-900 border border-rose-300' : 'bg-emerald-100 text-emerald-900'
+                          }`}>
+                            <span>{faNum(profLoad)} از {faNum(assignedProf.maxWeeklyUnits)} واحد</span>
+                            {isOverQuota && <span className="block text-[9px] font-black text-rose-700 mt-0.5">⚠️ تجاوز از سقف مجاز!</span>}
+                          </div>
+                        ) : (
+                          <div className="space-y-1 text-[10px] font-bold">
+                            <div className={`p-1 rounded ${profLoad > assignedProf.maxWeeklyUnits ? 'bg-rose-100 text-rose-900' : 'bg-indigo-100 text-indigo-900'}`}>
+                              <span>تئوری: {faNum(profLoad)}/{faNum(assignedProf.maxWeeklyUnits)} و</span>
+                            </div>
+                            {demand.coProfId && (
+                              <div className={`p-1 rounded ${profAssignedUnitsMap[demand.coProfId]?.units > (professors.find(p => p.id === demand.coProfId)?.maxWeeklyUnits || 10) ? 'bg-rose-100 text-rose-900' : 'bg-purple-100 text-purple-900'}`}>
+                                <span>عملی: {faNum(profAssignedUnitsMap[demand.coProfId]?.units)}/{(professors.find(p => p.id === demand.coProfId)?.maxWeeklyUnits || 10)} و</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -1847,7 +2027,14 @@ export default function DepartmentPlanningClient() {
                   <tr key={item.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                     <td className="p-2 border border-slate-200 text-center font-bold text-slate-500">{faNum(idx + 1)}</td>
                     <td className="p-2 border border-slate-200 font-mono text-center font-bold text-indigo-900">{item.code}</td>
-                    <td className="p-2 border border-slate-200 font-extrabold text-slate-900">{item.title}</td>
+                    <td className="p-2 border border-slate-200 font-extrabold text-slate-900">
+                      <div>{item.title}</div>
+                      {item.isCoTaught && (
+                        <div className="text-[10px] text-purple-700 font-bold mt-0.5">
+                          👥 مشترک: تئوری ({faNum((item.theoryWeightRatio || 0.7) * 100)}٪) + عملی ({faNum((item.labWeightRatio || 0.3) * 100)}٪)
+                        </div>
+                      )}
+                    </td>
                     <td className="p-2 border border-slate-200 text-center font-bold bg-indigo-50/50">گروه {faNum(item.groupNumber)}</td>
                     <td className="p-2 border border-slate-200 text-center">
                       {item.classSchedules[0]?.weekType === 'EVEN' ? (
@@ -1858,7 +2045,12 @@ export default function DepartmentPlanningClient() {
                         <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-bold text-[10px]">هر هفته</span>
                       )}
                     </td>
-                    <td className="p-2 border border-slate-200 font-bold text-slate-800">{item.professorName}</td>
+                    <td className="p-2 border border-slate-200 font-bold text-slate-800">
+                      <div>{item.professorName}</div>
+                      {item.isCoTaught && item.coProfName && (
+                        <div className="text-[10px] text-purple-800">همکار عملی: {item.coProfName}</div>
+                      )}
+                    </td>
                     <td className="p-2 border border-slate-200 text-slate-800 font-bold">
                       {item.classSchedules[0]?.dayName} {faNum(item.classSchedules[0]?.startTime)} تا {faNum(item.classSchedules[0]?.endTime)}
                     </td>

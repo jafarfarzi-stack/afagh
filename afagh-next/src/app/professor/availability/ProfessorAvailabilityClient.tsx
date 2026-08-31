@@ -40,7 +40,11 @@ export default function ProfessorAvailabilityClient({ professor, terms }: Props)
   const [selectedTermId, setSelectedTermId] = useState<number>(terms[0]?.id || 14051);
   const [notes, setNotes] = useState<string>('ترجیحاً جلسات در ساعات صبحگاهی دوشنبه و شنبه تنظیم شوند.');
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
+  const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // شبیه‌سازی وضعیت نهایی‌سازی برنامه توسط مدیر گروه
+  const [isScheduleFinalized, setIsScheduleFinalized] = useState<boolean>(true);
 
   // [dayIdx (0..5)][slotId (1..6)] = SlotStatus
   const [availability, setAvailability] = useState<{ [d: number]: { [s: number]: SlotStatus } }>(() => {
@@ -92,8 +96,9 @@ export default function ProfessorAvailabilityClient({ professor, terms }: Props)
 
   const handleSubmit = () => {
     setIsSubmitted(true);
-    setToastMessage('✅ فرم ساعات حضور و آمادگی تدریس شما برای نیمسال انتخابی با موفقیت در سامانه ثبت و به کارتابل مدیر گروه ارسال شد.');
-    setTimeout(() => setToastMessage(null), 5000);
+    setShowSuccessModal(true);
+    setToastMessage('✅ فرم ساعات حضور و آمادگی تدریس شما برای نیمسال انتخابی با موفقیت در سامانه ثبت و به کارتابل مدیر گروه آموزشی ارسال گردید.');
+    setTimeout(() => setToastMessage(null), 6000);
   };
 
   const currentTerm = terms.find(t => t.id === selectedTermId) || terms[0];
@@ -101,11 +106,41 @@ export default function ProfessorAvailabilityClient({ professor, terms }: Props)
   return (
     <div className="space-y-5" dir="rtl">
       
-      {/* Toast */}
+      {/* Toast Notification */}
       {toastMessage && (
-        <div className="p-4 bg-emerald-900 text-emerald-100 rounded-2xl shadow-xl border border-emerald-700 font-bold text-sm flex items-center justify-between">
-          <span>{toastMessage}</span>
+        <div className="p-4 bg-emerald-900 text-emerald-100 rounded-2xl shadow-xl border border-emerald-700 font-bold text-sm flex items-center justify-between animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <span className="text-xl">✅</span>
+            <span>{toastMessage}</span>
+          </div>
           <button onClick={() => setToastMessage(null)} className="text-white/60 hover:text-white text-xs">✕</button>
+        </div>
+      )}
+
+      {/* Schedule Finalized Banner */}
+      {isScheduleFinalized && (
+        <div className="p-4 bg-gradient-to-r from-sky-900 via-indigo-900 to-blue-900 text-white rounded-2xl shadow-lg border border-sky-600/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-extrabold text-[11px]">
+                اطلاعیه مهم آموزش
+              </span>
+              <span className="text-xs font-bold text-sky-200">برنامه درسی مصوب نیمسال</span>
+            </div>
+            <p className="font-extrabold text-sm sm:text-base">
+              🎉 برنامه هفتگی تدریس شما توسط مدیر گروه آموزشی نهایی و به تایید آموزش رسید.
+            </p>
+            <p className="text-xs text-sky-200">
+              می‌توانید برنامه هفتگی، شماره کلاس‌های فیزیکی و فهرست دانشجویان را در کارتابل مشاهده فرمایید.
+            </p>
+          </div>
+          <Link
+            href="/professor/schedule"
+            className="px-4 py-2 rounded-xl bg-white text-indigo-950 font-extrabold text-xs shadow hover:bg-sky-50 transition shrink-0 flex items-center gap-1.5"
+          >
+            <span>🗓️ مشاهده برنامه هفتگی تدریس</span>
+            <span>←</span>
+          </Link>
         </div>
       )}
 
@@ -125,8 +160,11 @@ export default function ProfessorAvailabilityClient({ professor, terms }: Props)
           </div>
 
           <div className="flex items-center gap-2">
+            <Link href="/professor/schedule" className="px-3.5 py-2 rounded-xl bg-indigo-700/80 hover:bg-indigo-600 text-white font-bold text-xs border border-indigo-500/50 transition">
+              🗓️ برنامه هفتگی من
+            </Link>
             <Link href="/professor" className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition">
-              بازگشت به کلاس‌های من
+              بازگشت به داشبورد
             </Link>
           </div>
         </div>
@@ -230,7 +268,7 @@ export default function ProfessorAvailabilityClient({ professor, terms }: Props)
                         }`}>
                           <span>{status === 'PREF' ? '🟩 اولویت اصلی' : status === 'AVAIL' ? '🟨 در صورت لزوم' : '🟥 عدم حضور'}</span>
                           <span className="text-[9px] opacity-80">
-                            {status === 'PREF' ? 'الویت تدریس' : status === 'AVAIL' ? 'ساعت آزاد' : 'خارج از دانشگاه'}
+                            {status === 'PREF' ? 'اولویت تدریس' : status === 'AVAIL' ? 'ساعت آزاد' : 'خارج از دانشگاه'}
                           </span>
                         </div>
                       </td>
@@ -272,6 +310,55 @@ export default function ProfessorAvailabilityClient({ professor, terms }: Props)
           </button>
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-slate-200 space-y-4 animate-scaleUp text-slate-900">
+            <div className="w-14 h-14 bg-emerald-100 text-emerald-800 rounded-2xl flex items-center justify-center text-3xl mx-auto">
+              ✓
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="font-extrabold text-lg text-slate-900">
+                فرم حضور شما با موفقیت ثبت شد
+              </h3>
+              <p className="text-xs text-slate-600 leading-5">
+                ساعات اولویت و عدم حضور شما برای <b>{currentTerm?.title}</b> در دیتابیس ثبت و جهت زمان‌بندی هوشمند دروس به کارتابل مدیر گروه آموزشی ارسال گردید.
+              </p>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-slate-500">کد رهگیری ثبت:</span>
+                <span className="font-mono font-bold text-slate-800">REQ-AVL-{Date.now().toString().slice(-6)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">وضعیت فرآیند:</span>
+                <span className="font-bold text-emerald-700">تحویل به مدیر گروه آموزشی</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">اطلاع‌رسانی بعدی:</span>
+                <span className="font-bold text-indigo-700">اعلان انتشار برنامه هفتگی نهایی</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Link
+                href="/professor/schedule"
+                className="flex-1 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-extrabold text-xs text-center transition"
+              >
+                مشاهده برنامه هفتگی من
+              </Link>
+              <button
+                onClick={() => setShowSuccessModal(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs transition"
+              >
+                بستن و بازگشت
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
