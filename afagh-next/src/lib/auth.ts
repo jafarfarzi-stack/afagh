@@ -1,6 +1,6 @@
 import { createHash, randomBytes, scrypt as _scrypt, timingSafeEqual } from 'crypto';
 import { promisify } from 'util';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { and, eq, gt } from 'drizzle-orm';
 import { db } from '@/db';
@@ -30,9 +30,45 @@ export async function verifyPassword(password: string, stored: string): Promise<
 
 export type SessionUser = { id: number; name: string; roles: string[] };
 
+export const SESSION_COOKIE = 'token';
+const SESSION_MAX_AGE = 2 * 86400; // دو روز
+
+/**
+ * فلگ‌های کوکی نشست — به‌صورت خودکار با پروتکل تطبیق می‌یابد:
+ *   • HTTPS → SameSite=None + Secure  (لازم برای iframe و دامنهٔ واسط)
+ *   • HTTP  → SameSite=Lax  + بدون Secure
+ * چون مرورگر کوکی Secure را روی http ذخیره نمی‌کند و کاربر در حلقهٔ ورود می‌افتد.
+ * قابل override با ENV: AFAGH_COOKIE_SECURE=auto|true|false ، AFAGH_COOKIE_SAMESITE=auto|lax|none|strict
+ */
+export async function sessionCookieOptions(): Promise<{
+  httpOnly: true; path: string; maxAge: number; secure: boolean; sameSite: 'lax' | 'none' | 'strict';
+}> {
+  let isHttps = false;
+  try {
+    const h = await headers();
+    const proto = (h.get('x-forwarded-proto') || h.get('x-forwarded-protocol') || '').split(',')[0].trim().toLowerCase();
+    const host = (h.get('host') || '').toLowerCase();
+    isHttps = proto === 'https' || (!proto && (h.get('x-forwarded-ssl') === 'on' || host.endsWith('.e2b.app')));
+  } catch {
+    isHttps = false;
+  }
+
+  const secureEnv = (process.env.AFAGH_COOKIE_SECURE || 'auto').toLowerCase();
+  const sameSiteEnv = (process.env.AFAGH_COOKIE_SAMESITE || 'auto').toLowerCase();
+
+  let secure = secureEnv === 'true' ? true : secureEnv === 'false' ? false : isHttps;
+  let sameSite: 'lax' | 'none' | 'strict' =
+    sameSiteEnv === 'none' ? 'none' : sameSiteEnv === 'strict' ? 'strict' : sameSiteEnv === 'lax' ? 'lax' : isHttps ? 'none' : 'lax';
+
+  // SameSite=None بدون Secure توسط مرورگر رد می‌شود
+  if (sameSite === 'none' && !secure) sameSite = 'lax';
+
+  return { httpOnly: true, path: '/', maxAge: SESSION_MAX_AGE, secure, sameSite };
+}
+
 export async function getSessionUser(): Promise<SessionUser | null> {
   const cookieStore = await cookies();
-  const token = cookieStore.get('token')?.value;
+  const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
   const rows = await db
     .select({ id: users.id, firstName: users.firstName, lastName: users.lastName, role: roles.code })
@@ -165,18 +201,17 @@ export async function login(nationalCode: string, password: string): Promise<{ o
   if (!u || !u.isActive) return { ok: false, error: 'کاربر یافت نشد.' };
   if (!(await verifyPassword(password, u.passwordHash))) return { ok: false, error: 'رمز نادرست است.' };
   const token = randomBytes(32).toString('hex');
-  await db.insert(sessions).values({ token, userId: u.id, expiresAt: new Date(Date.now() + 2 * 86400000) });
-  // SameSite=None برای کارکردن در iframe پیش‌نمایش (دامنهٔ واسط)؛ Secure از طریق پروکسی HTTPS
+  await db.insert(sessions).values({ token, userId: u.id, expiresAt: new Date(Date.now() + SESSION_MAX_AGE * 1000) });
   const cookieStore = await cookies();
-  cookieStore.set('token', token, { httpOnly: true, sameSite: 'none', secure: true, path: '/', maxAge: 2 * 86400 });
+  cookieStore.set(SESSION_COOKIE, token, await sessionCookieOptions());
   return { ok: true };
 }
 
 export async function logout() {
   const cookieStore = await cookies();
-  const token = cookieStore.get('token')?.value;
+  const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (token) await db.delete(sessions).where(eq(sessions.token, token));
-  cookieStore.delete('token');
+  cookieStore.delete(SESSION_COOKIE);
 }
 
 /** گیت نقش در layout ها — ریدایرکت به پورتال درست (سه داشبورد ایزوله — سند §۲۸۶۵) */
@@ -188,7 +223,8 @@ export async function requireRole(allowed: string[]): Promise<SessionUser> {
 }
 
 export function homeFor(roles: string[]): string {
-  if (roles.length === 0) return '/login'; // نقشی ندارد → برگرد به ورود (ضدحلقه)
+  // نقشی ندارد → برگرد به ورود با پیام روشن (جلوگیری از حلقهٔ بی‌پایان ورود)
+  if (roles.length === 0) return '/login?e=norole';
   if (roles.includes('STUDENT')) return '/student';
   if (roles.includes('PROCTOR') && !roles.includes('ADMIN') && !roles.includes('EDU_EXPERT')) return '/proctor';
   if (roles.includes('PROFESSOR') && !roles.includes('ADMIN') && !roles.includes('EDU_EXPERT')) return '/professor';

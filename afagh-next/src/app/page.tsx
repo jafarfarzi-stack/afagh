@@ -5,5 +5,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function Home() {
   const user = await getSessionUser();
-  redirect(user ? homeFor(user.roles) : '/login');
+  if (!user) redirect('/login');
+  // کاربر معتبر ولی بدون نقش → پیام روشن به‌جای ریدایرکت بی‌پایان
+  if (!user.roles.length) redirect('/login?e=norole');
+  redirect(homeFor(user.roles));
 }

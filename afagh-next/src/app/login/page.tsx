@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { homeForClient } from './roles';
 import { loginAndReport } from './actions';
@@ -12,6 +12,13 @@ export default function LoginPage() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // پیام‌های بازگشتی (مثلاً کاربر بدون نقش) — بدون نیاز به useSearchParams
+  useEffect(() => {
+    const e = new URLSearchParams(window.location.search).get('e');
+    if (e === 'norole') setErr('ورود موفق بود، اما برای این حساب هیچ نقشی تعریف نشده است. با مدیر سامانه تماس بگیرید.');
+    if (e === 'expired') setErr('نشست شما منقضی شده است. دوباره وارد شوید.');
+  }, []);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true); setErr('');
@@ -21,7 +28,9 @@ export default function LoginPage() {
       setBusy(false); return;
     }
     if (!res.ok) { setErr(res.error || 'خطا'); setBusy(false); return; }
-    router.replace(homeForClient()); // مسیر پس از ورود در client تعیین می‌شود؛ نقش نهایی سرور بازبینی می‌کند
+    // مسیر پس از ورود را سرور تعیین می‌کند؛ refresh لازم است تا کوکی تازه اعمال شود
+    router.replace(homeForClient());
+    router.refresh();
   }
 
   return (

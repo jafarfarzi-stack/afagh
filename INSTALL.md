@@ -230,6 +230,8 @@ tar xzf afagh-v1.0.0.tar.gz && cd afagh
 | مشکل | راه‌حل |
 |---|---|
 | بیلد داکر با `FATAL ERROR: Reached heap limit ... JavaScript heap out of memory` می‌افتد | برطرف شده (تایپ‌چک از بیلد ایمیج حذف شد). اگر باز هم رخ داد، در `.env` بگذارید `NODE_MAX_OLD_SPACE=1536` و ۲ گیگ swap بسازید: `fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile` |
+| بعد از زدن نام کاربری/رمز دوباره به صفحهٔ **ورود** برمی‌گردید (حلقهٔ لاگین) | برطرف شده: کوکی نشست دیگر روی HTTP ساده `Secure` نمی‌شود. اگر پشت پروکسی HTTPS هستید و پروکسی هدر `X-Forwarded-Proto` نمی‌فرستد، در `.env` بگذارید `AFAGH_COOKIE_SECURE=true` و `AFAGH_COOKIE_SAMESITE=none` (یا برعکس برای HTTP: `false` و `lax`) |
+| پیام «برای این حساب هیچ نقشی تعریف نشده است» | کاربر در دیتابیس هست ولی در `user_roles` نقشی ندارد؛ از پنل مدیر ← کاربران، نقش بدهید |
 | `docker: command not found` یا «Docker اجرا نمی‌شود» | Docker Desktop را باز کنید و صبر کنید وضعیتش **Running** شود |
 | `Bind for 0.0.0.0:5432 failed: port is already allocated` | PostgreSQL محلی را متوقف کنید یا در `docker-compose.yml` پورت را `'5433:5432'` کنید و `DATABASE_URL` را در `.env` هماهنگ کنید |
 | در ویندوز اسکریپت اجرا نمی‌شود (`running scripts is disabled`) | `powershell -ExecutionPolicy Bypass -File .\install-docker.ps1` |
