@@ -2,21 +2,89 @@
 
 // انتخاب واحد Optimistic UI + اتاق انتظار Redis — سند §۱۰۱۶/§۳۷۵۹/§۶۹۰۶
 // «ثبت نهایی» بی‌درنگ پاسخ می‌گیرد؛ نتیجه از صف با polling می‌رسد.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { addToCartAction, removeFromCartAction, referCouncilAction, submitCartAction } from './actions';
+import Link from 'next/link';
+import {
+  addToCartAction,
+  autoFillCartFromChartAction,
+  clearCartAction,
+  removeFromCartAction,
+  referCouncilAction,
+  submitCartAction,
+} from './actions';
 import type { SubmitResult } from '@/lib/enroll-engine';
 
-type Offering = { id: number; code: string; title: string; units: number; capacity: number; enrolled: number; group: number; prereq?: string | null; sched?: string | null };
-type CartCourse = { id: number; code: string; title: string; units: number };
+export type ClassScheduleItem = {
+  dayOfWeek: number;
+  dayName: string;
+  startTime: string;
+  endTime: string;
+  room?: string;
+};
+
+export type ExamScheduleItem = {
+  examDate: string;
+  startTime: string;
+  endTime: string;
+};
+
+export type OfferingItem = {
+  id: number;
+  courseId: number;
+  code: string;
+  title: string;
+  units: number;
+  capacity: number;
+  enrolled: number;
+  group: number;
+  professor: string;
+  prereq?: string | null;
+  classSchedules: ClassScheduleItem[];
+  examSchedule: ExamScheduleItem | null;
+};
+
+export type CartItem = {
+  id: number;
+  courseId: number;
+  code: string;
+  title: string;
+  units: number;
+  group: number;
+  classSchedules: ClassScheduleItem[];
+  examSchedule: ExamScheduleItem | null;
+};
+
 type Live = Record<number, { cap: number; enrolled: number; remaining: number }>;
+
+// تبدیل اعداد به فارسی جهت جلوگیری از به‌هم‌ریختگی و ادغام در متن راست‌به‌چپ (Bidi)
+const faNum = (n: any) => (n === null || n === undefined) ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+
+function checkTimeOverlap(s1: string, e1: string, s2: string, e2: string) {
+  return s1.slice(0, 5) < e2.slice(0, 5) && s2.slice(0, 5) < e1.slice(0, 5);
+}
 
 export default function EnrollClient(props: {
   student: { id: number; status: string };
-  term: { id: number | null; title: string; open: boolean; windowLabel: string };
-  offerings: Offering[];
-  cart: CartCourse[];
+  term: { id: number | null; title: string; open: boolean; isSummer?: boolean };
+  offerings: OfferingItem[];
+  cart: CartItem[];
   cartStartedAt: number | null;
+  regulationStatus?: {
+    totalRequiredUnits: number;
+    passedUnits: number;
+    remainingUnits: number;
+    isGraduating: boolean;
+    lastTermGpa: number | null;
+    isProbatedLastTerm: boolean;
+    totalProbations: number;
+    completedSemesters: number;
+    status: string;
+    effectiveMaxUnits: number;
+    minAllowedUnits: number;
+    isSummer: boolean;
+    quotaType: string;
+  } | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -28,10 +96,22 @@ export default function EnrollClient(props: {
   const [remain, setRemain] = useState(15 * 60);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const effectiveMaxUnits = props.regulationStatus?.effectiveMaxUnits ?? (props.term.isSummer ? 6 : 20);
+  const isBlockedCommission = props.student.status === 'BLOCKED_COMMISSION';
+
   // ⏱ مهلت ۱۵ دقیقه‌ای سبد (§۲۲۴۳)
   useEffect(() => {
-    if (!props.cartStartedAt) return;
-    const t = setInterval(() => setRemain(Math.max(0, 15 * 60 - Math.floor((Date.now() - props.cartStartedAt!) / 1000))), 1000);
+    if (!props.cartStartedAt) {
+      setRemain(15 * 60);
+      return;
+    }
+    const calc = () => {
+      const elapsed = Math.floor((Date.now() - props.cartStartedAt!) / 1000);
+      const left = Math.max(0, 15 * 60 - elapsed);
+      setRemain(left);
+    };
+    calc();
+    const t = setInterval(calc, 1000);
     return () => clearInterval(t);
   }, [props.cartStartedAt]);
 
@@ -44,11 +124,16 @@ export default function EnrollClient(props: {
         if (!r.ok) return;
         const j = (await r.json()) as Live;
         if (!stop) setLive(j);
-      } catch { /* ساکت */ }
+      } catch {
+        /* ساکت */
+      }
     };
     pull();
     const t = setInterval(pull, 4000);
-    return () => { stop = true; clearInterval(t); };
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
   }, []);
 
   // نظرسنجی وضعیت صف
@@ -57,40 +142,144 @@ export default function EnrollClient(props: {
     const t = setInterval(async () => {
       try {
         const r = await fetch('/api/waiting-room/status');
-        const j = await r.json() as { state: string; position?: number; result?: SubmitResult };
+        const j = (await r.json()) as { state: string; position?: number; result?: SubmitResult };
         if (j.state === 'WAITING' && j.position) setQueuePos(j.position);
-        else if (j.state === 'PROCESSING') { setQueuePos(null); setProcessing(true); }
-        else if (j.state === 'DONE' && j.result) {
-          setQueuePos(null); setProcessing(false); setResult(j.result);
+        else if (j.state === 'PROCESSING') {
+          setQueuePos(null);
+          setProcessing(true);
+        } else if (j.state === 'DONE' && j.result) {
+          setQueuePos(null);
+          setProcessing(false);
+          setResult(j.result);
           if (pollRef.current) clearInterval(pollRef.current);
           router.refresh();
         }
-      } catch { /* تلاش بعدی */ }
+      } catch {
+        /* تلاش بعدی */
+      }
     }, 1500);
     pollRef.current = t;
     return () => clearInterval(t);
   }, [queuePos, router]);
 
-  const expired = remain <= 0;
+  const expired = props.cart.length > 0 && remain <= 0;
   const totalUnits = props.cart.reduce((s, c) => s + c.units, 0);
   const mm = String(Math.floor(remain / 60)).padStart(2, '0');
   const ss = String(remain % 60).padStart(2, '0');
 
+  // بررسی تداخل‌های زمانی درون سبد انتخاب واحد دانشجو
+  const cartConflicts = useMemo(() => {
+    const conflicts: Record<number, { classConflicts: string[]; examConflicts: string[]; alternateGroup?: OfferingItem }> = {};
+
+    for (let i = 0; i < props.cart.length; i++) {
+      const itemA = props.cart[i];
+      const classConf: string[] = [];
+      const examConf: string[] = [];
+
+      for (let j = 0; j < props.cart.length; j++) {
+        if (i === j) continue;
+        const itemB = props.cart[j];
+
+        // تداخل کلاسی
+        for (const cA of itemA.classSchedules) {
+          for (const cB of itemB.classSchedules) {
+            if (cA.dayOfWeek === cB.dayOfWeek && checkTimeOverlap(cA.startTime, cA.endTime, cB.startTime, cB.endTime)) {
+              classConf.push(`تداخل کلاس در روز ${cA.dayName} (${faNum(cA.startTime)} الی ${faNum(cA.endTime)}) با درس «${itemB.title}»`);
+            }
+          }
+        }
+
+        // تداخل امتحانی
+        if (itemA.examSchedule && itemB.examSchedule && itemA.examSchedule.examDate === itemB.examSchedule.examDate) {
+          if (checkTimeOverlap(itemA.examSchedule.startTime, itemA.examSchedule.endTime, itemB.examSchedule.startTime, itemB.examSchedule.endTime)) {
+            examConf.push(`تداخل ساعت امتحان در تاریخ ${faNum(itemA.examSchedule.examDate)} با درس «${itemB.title}»`);
+          }
+        }
+      }
+
+      // جستجوی گروه جایگزینِ بدون تداخل برای همین درس
+      let alternateGroup: OfferingItem | undefined;
+      if (classConf.length > 0 || examConf.length > 0) {
+        const otherGroups = props.offerings.filter(o => o.courseId === itemA.courseId && o.id !== itemA.id);
+        alternateGroup = otherGroups.find(alt => {
+          for (const other of props.cart) {
+            if (other.id === itemA.id) continue;
+            for (const ca of alt.classSchedules) {
+              for (const cb of other.classSchedules) {
+                if (ca.dayOfWeek === cb.dayOfWeek && checkTimeOverlap(ca.startTime, ca.endTime, cb.startTime, cb.endTime)) return false;
+              }
+            }
+            if (alt.examSchedule && other.examSchedule && alt.examSchedule.examDate === other.examSchedule.examDate) {
+              if (checkTimeOverlap(alt.examSchedule.startTime, alt.examSchedule.endTime, other.examSchedule.startTime, other.examSchedule.endTime)) return false;
+            }
+          }
+          return true;
+        });
+      }
+
+      conflicts[itemA.id] = { classConflicts: classConf, examConflicts: examConf, alternateGroup };
+    }
+
+    return conflicts;
+  }, [props.cart, props.offerings]);
+
+  const hasAnyConflict = useMemo(() => {
+    return Object.values(cartConflicts).some(c => c.classConflicts.length > 0 || c.examConflicts.length > 0);
+  }, [cartConflicts]);
+
   async function add(id: number) {
-    setBusy(true); setMsg('');
-    const res = await addToCartAction(id);
-    if (!res.ok) setMsg(res.error || 'افزودن ممکن نیست.');
-    else router.refresh();
+    setBusy(true);
+    setMsg('');
+    await addToCartAction(id);
+    router.refresh();
     setBusy(false);
   }
-  async function remove(id: number) { setBusy(true); await removeFromCartAction(id); router.refresh(); setBusy(false); }
+
+  async function remove(id: number) {
+    setBusy(true);
+    setMsg('');
+    await removeFromCartAction(id);
+    router.refresh();
+    setBusy(false);
+  }
+
+  async function switchGroup(newOfferingId: number) {
+    setBusy(true);
+    setMsg('در حال جابجایی به گروه بدون تداخل...');
+    await addToCartAction(newOfferingId);
+    router.refresh();
+    setBusy(false);
+    setMsg('✅ درس به گروه بدون تداخل جابجا گردید.');
+  }
+
+  async function clearAll() {
+    if (!confirm('آیا از خالی کردن تمام دروس موجود در سبد انتخاب واحد مطمئن هستید؟')) return;
+    setBusy(true);
+    setMsg('');
+    await clearCartAction();
+    router.refresh();
+    setBusy(false);
+    setMsg('سبد انتخاب واحد کاملاً خالی گردید.');
+  }
 
   async function submit() {
-    setBusy(true); setMsg(''); setResult(null);
+    if (totalUnits > effectiveMaxUnits) {
+      alert(`خطا: مجموع واحدهای انتخابی (${totalUnits} واحد) از سقف مجاز آیین‌نامه برای شما (${effectiveMaxUnits} واحد) بیشتر است.`);
+      return;
+    }
+    setBusy(true);
+    setMsg('');
+    setResult(null);
     const res = await submitCartAction();
     setBusy(false);
-    if (res.limited) { setMsg('سرعت درخواست‌ها بیش از حد مجاز است — چند لحظه صبر کنید (سپر نرخ).'); return; }
-    if (!res.queued) { setMsg('ورود به صف ناموفق بود.'); return; }
+    if (res.limited) {
+      setMsg('سرعت درخواست‌ها بیش از حد مجاز است — چند لحظه صبر کنید (سپر نرخ).');
+      return;
+    }
+    if (!res.queued) {
+      setMsg('ورود به صف ناموفق بود.');
+      return;
+    }
     setQueuePos(res.position); // پاسخ فوری §۱۰۱۶
   }
 
@@ -102,87 +291,540 @@ export default function EnrollClient(props: {
     router.refresh();
   }
 
-  return (
-    <div className="space-y-4">
-      <div className={'rounded-xl p-3 text-sm ' + (props.term.open ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800')}>{props.term.windowLabel}</div>
+  async function autoFill() {
+    setBusy(true);
+    setMsg('در حال چیدمان هوشمند و خودکار دروس ترم با کنترل ظرفیت و عدم تداخل...');
+    const res = await autoFillCartFromChartAction();
+    if (res.ok) {
+      setMsg(`✅ ${res.message}`);
+    } else {
+      setMsg('خطا در چیدمان دروس چارت.');
+    }
+    router.refresh();
+    setBusy(false);
+  }
 
-      {props.cartStartedAt && (
-        <div className={'card flex items-center justify-between ' + (expired ? 'text-red-600' : '')}>
-          <span className="text-sm">مهلت تکمیل سبد</span>
-          <span className="font-mono text-lg font-bold" dir="ltr">{expired ? 'منقضی' : mm + ':' + ss}</span>
+  return (
+    <div className="space-y-4 text-slate-800 font-sans" dir="rtl">
+      {/* اخطار وضعیت مسدود کمیسیون موارد خاص و راهنمای سامانه سجاد */}
+      {isBlockedCommission && (
+        <div className="p-5 bg-rose-50 border-2 border-rose-500 rounded-2xl text-rose-950 space-y-3 shadow-md animate-pulse">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">⛔</span>
+            <div>
+              <h3 className="font-black text-base text-rose-900">
+                وضعیت تحصیلی شما مسدود است (ارجاع به کمیسیون موارد خاص)
+              </h3>
+              <p className="text-xs text-rose-800 mt-0.5">
+                به دلیل مشروطی بیش از حد یا اتمام سقف سنوات قانونی، ادامه تحصیل و انتخاب واحد شما منوط به تایید کمیسیون موارد خاص دانشگاه در <b>سامانه سجاد وزارت علوم</b> است.
+              </p>
+            </div>
+          </div>
+          <div className="bg-white/80 p-3.5 rounded-xl border border-rose-200 text-xs space-y-1.5">
+            <p className="font-bold text-rose-950">📌 مراحل رفع مسدودی:</p>
+            <ol className="list-decimal list-inside space-y-1 text-slate-700 leading-relaxed">
+              <li>
+                ورود به <b>سامانه ملی سجاد</b> به نشانی{' '}
+                <a href="https://portal.saorg.ir" target="_blank" rel="noreferrer" className="text-blue-700 font-bold underline">
+                  portal.saorg.ir
+                </a>{' '}
+                و ثبت دادخواست در بخش کمیسیون بررسی موارد خاص دانشگاه آفاق.
+              </li>
+              <li>دریافت کد رهگیری و نامه ابلاغ رای کمیسیون موارد خاص.</li>
+              <li>
+                ثبت کد رهگیری و آپلود تصویر نامه رای در میز خدمات الکترونیک پورتال آفاق جهت بررسی کارشناس آموزش.
+              </li>
+            </ol>
+          </div>
+          <div className="flex items-center gap-3 pt-1">
+            <Link
+              href="/student/requests"
+              className="bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow"
+            >
+              📝 ارسال رای کمیسیون و پیگیری در میز خدمات
+            </Link>
+            <a
+              href="https://portal.saorg.ir"
+              target="_blank"
+              rel="noreferrer"
+              className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow"
+            >
+              🌐 ورود مستقیم به سامانه سجاد (saorg.ir)
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* نوار وضعیت آیین‌نامه تحصیلی و سقف واحد */}
+      {props.regulationStatus && (
+        <div className="p-3.5 bg-slate-900 text-white rounded-2xl shadow flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+            <div className="flex items-center gap-1.5">
+              <span className="text-indigo-400 font-bold">📜 مقطع و سهمیه:</span>
+              <span className="bg-indigo-950 text-indigo-200 px-2.5 py-1 rounded-lg border border-indigo-800 font-semibold">
+                {props.regulationStatus.quotaType === 'SHAHED_ISARGAR' ? 'سهمیه شاهد و ایثارگر' : 'سهمیه عادی'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-indigo-400 font-bold">🎯 سقف مجاز انتخاب واحد:</span>
+              <span className="bg-emerald-950 text-emerald-300 font-black px-2.5 py-1 rounded-lg border border-emerald-700">
+                {faNum(effectiveMaxUnits)} واحد
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-indigo-400 font-bold">📊 پیشرفت تحصیلی:</span>
+              <span className="text-slate-300 font-mono">
+                {faNum(props.regulationStatus.passedUnits)} از {faNum(props.regulationStatus.totalRequiredUnits)} واحد پاس‌شده ({faNum(props.regulationStatus.remainingUnits)} باقیمانده)
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {props.regulationStatus.isGraduating && (
+              <span className="bg-amber-500 text-slate-950 font-black px-2.5 py-1 rounded-lg">
+                🎓 دانشجوی ترم آخر
+              </span>
+            )}
+            {props.regulationStatus.isProbatedLastTerm && (
+              <span className="bg-rose-600 text-white font-bold px-2.5 py-1 rounded-lg">
+                ⚠️ وضعیت مشروط
+              </span>
+            )}
+            {props.term.isSummer && (
+              <span className="bg-orange-600 text-white font-bold px-2.5 py-1 rounded-lg">
+                ☀️ ترم تابستان
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* دکمه انتخاب هوشمند و سریع از روی چارت */}
+      <div className="card !p-4 bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white rounded-2xl border-0 shadow-lg flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-extrabold text-white text-sm sm:text-base flex items-center gap-2">
+            <span>🤖</span>
+            <span>انتخاب واحد هوشمند بر اساس چارت سرفصل و کنترل تداخل</span>
+          </h3>
+          <p className="text-xs text-emerald-200 mt-0.5">
+            سیستم با بررسی تمام گروه‌های درسی، بهترین گروه‌های دارای ظرفیت و <b>فاقد تداخل کلاسی و امتحانی</b> را در سبد شما می‌چیند.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={autoFill}
+            disabled={busy || !props.term.open || isBlockedCommission}
+            className="bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black text-xs px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50 inline-flex items-center gap-1.5"
+          >
+            <span>⚡</span>
+            <span>چیدمان خودکار دروس ترم (بدون تداخل)</span>
+          </button>
+        </div>
+      </div>
+
+      {!props.term.open && (
+        <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800 border border-amber-200">
+          پنجرهٔ انتخاب واحد برای «{props.term.title || '—'}» بسته است.
+        </p>
+      )}
+
+      {/* مهلت تکمیل سبد */}
+      {props.cart.length > 0 && (
+        <div
+          className={`card !p-3 flex items-center justify-between rounded-xl border ${
+            expired
+              ? 'bg-rose-50 border-rose-300 text-rose-800'
+              : remain < 180
+              ? 'bg-amber-50 border-amber-300 text-amber-900'
+              : 'bg-indigo-50 border-indigo-200 text-indigo-900'
+          }`}
+        >
+          <div className="flex items-center gap-2 text-xs font-bold">
+            <span>⏱️</span>
+            <span>مهلت نهایی‌سازی و رزرو صندلی در سبد:</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-base font-extrabold tracking-wider" dir="ltr">
+              {expired ? 'منقضی شده' : `${faNum(mm)}:${faNum(ss)}`}
+            </span>
+            {expired && (
+              <button
+                onClick={() => {
+                  setRemain(15 * 60);
+                }}
+                className="text-[11px] bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1 rounded-lg"
+              >
+                🔄 تمدید مهلت
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* هشدار تداخل زمانی کلی */}
+      {hasAnyConflict && (
+        <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl text-xs text-amber-900 space-y-1 shadow-sm">
+          <div className="font-extrabold text-sm text-amber-950 flex items-center gap-2">
+            <span>⚠️</span>
+            <span>هشدار تداخل زمانی در سبد انتخاب واحد:</span>
+          </div>
+          <p>
+            بین زمان برگزاری کلاس‌ها یا تاریخ امتحانات برخی دروس سبد تداخل وجود دارد. می‌توانید با زدن دکمهٔ «انتقال به گروه دیگر»، گروه بدون تداخل را جایگزین نمایید.
+          </p>
         </div>
       )}
 
       {/* اتاق انتظار — پاسخ فوری §۱۰۱۶ */}
       {(queuePos !== null || processing) && (
-        <div className="card flex items-center gap-3 border-emerald-300 bg-emerald-50">
-          <span className="h-3 w-3 animate-pulse rounded-full bg-emerald-600"></span>
+        <div className="card flex items-center gap-3 border-emerald-300 bg-emerald-50 p-4 rounded-xl shadow-sm">
+          <span className="h-3.5 w-3.5 animate-pulse rounded-full bg-emerald-600"></span>
           <div>
-            <p className="text-sm font-bold text-emerald-900">درخواست شما در صف پردازش قرار گرفت</p>
-            <p className="text-xs text-emerald-700">{processing ? 'در حال اعتبارسنجی و ثبت…' : 'نوبت شما در اتاق انتظار: ' + (queuePos ?? '—')}</p>
+            <p className="text-sm font-bold text-emerald-900">درخواست شما در صف پردازش انتخاب واحد قرار گرفت</p>
+            <p className="text-xs text-emerald-700">
+              {processing ? 'در حال اعتبارسنجی و ثبت قطعی در پایگاه داده…' : `نوبت شما در اتاق انتظار: ${faNum(queuePos ?? '—')}`}
+            </p>
           </div>
         </div>
       )}
 
-      <div className="card">
-        <h2 className="mb-2 font-bold">سبد انتخاب ({totalUnits} واحد)</h2>
-        {props.cart.length === 0 && <p className="text-sm text-slate-500">سبد خالی است — از فهرست زیر اضافه کنید.</p>}
-        {props.cart.map(c => (
-          <div key={c.id} className="mb-1 flex items-center justify-between rounded-xl bg-emerald-50 p-2 text-sm">
-            <span>{c.title} <span className="text-xs text-slate-500" dir="ltr">({c.code})</span></span>
-            <button className="text-xs text-red-600" disabled={busy || expired} onClick={() => remove(c.id)}>حذف</button>
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {/* سبد انتخاب واحد دانشجو با نمایش تفکیکی و تمیز گروه‌ها و واحدها     */}
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      <div className="card !p-4 bg-white border border-slate-200 shadow-sm rounded-2xl space-y-3">
+        <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
+          <div className="flex items-center gap-3">
+            <h2 className="font-extrabold text-base text-slate-900">🛒 سبد انتخاب واحد</h2>
+            <span
+              className={`text-xs px-3 py-1 rounded-full font-bold inline-flex items-center gap-1.5 ${
+                totalUnits > 20
+                  ? 'bg-rose-100 text-rose-800'
+                  : totalUnits >= 12
+                  ? 'bg-emerald-100 text-emerald-900'
+                  : 'bg-amber-100 text-amber-900'
+              }`}
+            >
+              <span>{faNum(totalUnits)} واحد</span>
+              <span>({faNum(props.cart.length)} درس)</span>
+              <span>— سقف مجاز: {faNum(20)} واحد</span>
+            </span>
           </div>
-        ))}
-        {props.cart.length > 0 && <button className="btn-primary mt-2 w-full" disabled={busy || expired || queuePos !== null || processing} onClick={submit}>{busy ? 'در حال ارسال…' : 'ثبت نهایی'}</button>}
-        {expired && <p className="mt-2 text-xs text-red-600">سبد منقضی شد — موارد را حذف و دوباره انتخاب کنید.</p>}
+
+          {props.cart.length > 0 && (
+            <button
+              onClick={clearAll}
+              disabled={busy}
+              className="text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3 py-1.5 rounded-xl font-bold transition-colors flex items-center gap-1"
+            >
+              <span>🗑️</span>
+              <span>حذف همه (خالی کردن سبد)</span>
+            </button>
+          )}
+        </div>
+
+        {props.cart.length === 0 ? (
+          <div className="text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-300 space-y-1">
+            <p className="text-sm font-bold text-slate-600">سبد انتخاب واحد شما خالی است.</p>
+            <p className="text-xs text-slate-400">
+              می‌توانید با دکمهٔ «چیدمان خودکار» دروس ترم را بدون تداخل بچینید یا از فهرست زیر گروه مورد نظر را اضافه کنید.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {props.cart.map((c, idx) => {
+              const conf = cartConflicts[c.id];
+              const isConflicted = conf && (conf.classConflicts.length > 0 || conf.examConflicts.length > 0);
+
+              return (
+                <div
+                  key={c.id || idx}
+                  className={`rounded-xl border p-3 text-sm transition-all space-y-2 ${
+                    isConflicted
+                      ? 'bg-amber-50/80 border-amber-300 shadow-sm'
+                      : 'bg-emerald-50/70 border-emerald-200/80'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="w-6 h-6 rounded-lg bg-emerald-200 text-emerald-900 flex items-center justify-center font-bold text-xs">
+                        {faNum(idx + 1)}
+                      </span>
+                      <span className="font-extrabold text-slate-900 text-sm">{c.title}</span>
+                      <span className="text-xs text-slate-500 font-mono" dir="ltr">
+                        ({c.code})
+                      </span>
+
+                      {/* نشان گروه به صورت تفکیک‌شده و با عدد فارسی */}
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-indigo-100 text-indigo-900 border border-indigo-200 text-xs font-bold mr-1">
+                        گروه {faNum(c.group)}
+                      </span>
+
+                      {/* نشان تعداد واحد به صورت تفکیک‌شده و با عدد فارسی */}
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-white text-emerald-800 border border-emerald-300 text-xs font-bold mr-1">
+                        {faNum(c.units)} واحد
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {conf?.alternateGroup && (
+                        <button
+                          onClick={() => switchGroup(conf.alternateGroup!.id)}
+                          disabled={busy}
+                          className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-xl font-bold shadow-sm transition-all flex items-center gap-1"
+                        >
+                          <span>🔄</span>
+                          <span>انتقال به گروه {faNum(conf.alternateGroup.group)} (بدون تداخل)</span>
+                        </button>
+                      )}
+
+                      <button
+                        className="text-xs bg-white hover:bg-rose-600 hover:text-white text-rose-600 border border-rose-300 px-3 py-1.5 rounded-xl font-bold transition-all shadow-sm active:scale-95 flex items-center gap-1"
+                        disabled={busy}
+                        onClick={() => remove(c.id)}
+                      >
+                        <span>✕</span>
+                        <span>حذف از سبد</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* جزئیات زمان‌بندی کلاس و امتحان در کارت سبد با برچسب‌های تفکیک‌شده و اعداد فارسی */}
+                  <div className="text-xs text-slate-700 flex flex-wrap items-center gap-x-4 gap-y-1 bg-white/80 p-2.5 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-1">
+                      <span>📅</span>
+                      <span className="font-bold">جلسات هفتگی:</span>
+                      <span className="text-slate-600 font-medium">
+                        {c.classSchedules.length > 0
+                          ? c.classSchedules.map(cs => `${cs.dayName} ساعت ${faNum(cs.startTime)} الی ${faNum(cs.endTime)}`).join(' و ')
+                          : 'اعلام خواهد شد'}
+                      </span>
+                    </div>
+                    {c.classSchedules.some(cs => cs.room) && (
+                      <div className="flex items-center gap-1 border-r border-slate-200 pr-3 mr-1 font-bold text-indigo-950">
+                        <span>🏛️</span>
+                        <span>محل کلاس:</span>
+                        <span className="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                          {c.classSchedules.map(cs => cs.room).filter(Boolean).join('، ')}
+                        </span>
+                      </div>
+                    )}
+                    {c.examSchedule && (
+                      <div className="flex items-center gap-1 border-r border-slate-200 pr-3 mr-1">
+                        <span>📝</span>
+                        <span className="font-bold">امتحان پایان‌ترم:</span>
+                        <span className="text-slate-600 font-medium">
+                          تاریخ {faNum(c.examSchedule.examDate)} ساعت {faNum(c.examSchedule.startTime)} الی {faNum(c.examSchedule.endTime)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* هشدارهای تداخل */}
+                  {isConflicted && (
+                    <div className="space-y-1 text-xs text-rose-800 bg-rose-50 p-2.5 rounded-lg border border-rose-200 font-medium">
+                      {conf.classConflicts.map((cc, i) => (
+                        <p key={i}>⚠️ {cc}</p>
+                      ))}
+                      {conf.examConflicts.map((ec, i) => (
+                        <p key={i}>⚠️ {ec}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {totalUnits > 20 && (
+          <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-800 font-bold flex items-center gap-2">
+            <span>⛔</span>
+            <span>تعداد واحدهای سبد ({faNum(totalUnits)} واحد) بیش از سقف مجاز ترمیک ({faNum(20)} واحد) است. لطفاً حداقل {faNum(totalUnits - 20)} واحد را حذف کنید.</span>
+          </div>
+        )}
+
+        {props.cart.length > 0 && (
+          <button
+            className="btn-primary mt-3 w-full py-3 text-sm font-extrabold shadow-lg rounded-xl"
+            disabled={busy || totalUnits > 20 || queuePos !== null || processing}
+            onClick={submit}
+          >
+            {busy ? 'در حال ارسال و رزرو…' : `ثبت نهایی و اخذ قطعی (${faNum(totalUnits)} واحد)`}
+          </button>
+        )}
       </div>
 
-      {msg && <p className="rounded-xl bg-slate-100 p-2 text-center text-sm">{msg}</p>}
+      {msg && (
+        <div className="rounded-xl bg-slate-900 text-white p-3 text-center text-xs font-bold animate-fade-in shadow-md">
+          {msg}
+        </div>
+      )}
 
       {result && (
         <div className="space-y-2">
           {result.ok && result.registered.length > 0 && (
-            <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">ثبت قطعی شد: {result.registered.join('، ')}</p>
+            <div className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-900 border border-emerald-300 font-bold space-y-2 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span>🎉 ثبت قطعی شد: {result.registered.join('، ')}</span>
+                <Link
+                  href="/student/schedule"
+                  className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black px-4 py-2 rounded-xl shadow transition-all inline-flex items-center gap-1.5"
+                >
+                  <span>📄</span>
+                  <span>مشاهده و چاپ تاییدیه انتخاب واحد و برنامه هفتگی</span>
+                </Link>
+              </div>
+            </div>
           )}
           {result.waitlisted.length > 0 && (
-            <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
-              اتاق انتظار (ظرفیت تکمیل): {result.waitlisted.join('، ')} — با آزادشدن ظرفیت، به‌طور خودکار ثبت می‌شوید و اعلان می‌گیرید (ارتقای خودکار).
+            <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800 border border-amber-200">
+              اتاق انتظار (ظرفیت تکمیل): {result.waitlisted.join('، ')} — با آزادشدن ظرفیت، به‌طور خودکار ثبت می‌شوید و اعلان می‌گیرید.
             </p>
           )}
-          {result.hardErrors.map((e, i) => <p key={i} className="rounded-xl bg-red-50 p-3 text-sm text-red-800">⛔ {e}</p>)}
+          {result.hardErrors.map((e, i) => (
+            <p key={i} className="rounded-xl bg-red-50 p-3 text-sm text-red-800 border border-red-200 font-bold">
+              ⛔ {e}
+            </p>
+          ))}
           {result.softErrors.map((e, i) => (
-            <div key={i} className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
-              ⚠️ {e.msg}
-              <button className="btn-ghost mr-2 !py-1 !px-2 text-xs" disabled={busy} onClick={() => refer(e.offeringId, e.msg)}>ارجاع به کمیسیون موارد خاص</button>
+            <div key={i} className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900 border border-amber-200 flex items-center justify-between">
+              <span>⚠️ {e.msg}</span>
+              <button
+                className="btn-ghost mr-2 !py-1 !px-2 text-xs"
+                disabled={busy}
+                onClick={() => refer(e.offeringId, e.msg)}
+              >
+                ارجاع به کمیسیون موارد خاص
+              </button>
             </div>
           ))}
         </div>
       )}
 
-      <div className="card space-y-2">
-        <h2 className="font-bold">دروس ارائه‌شده — {props.term.title}</h2>
-        <p className="text-[11px] text-slate-400">ظرفیت‌ها زنده از حافظهٔ Redis خوانده می‌شوند (§۱۰۰۶)</p>
-        {props.offerings.map(o => {
-          const inCart = props.cart.some(c => c.id === o.id);
-          const lv = live[o.id];
-          const full = lv ? lv.remaining <= 0 : o.enrolled >= o.capacity;
-          return (
-            <div key={o.id} className="flex items-center justify-between rounded-xl bg-slate-50 p-3 text-sm">
-              <div>
-                <p className="font-medium">{o.title}</p>
-                <p className="text-xs text-slate-500" dir="ltr">{o.code} · گروه {o.group} · {o.units} واحد{lv ? ' · باقی‌مانده ' + lv.remaining + '/' + lv.cap : ' · ظرفیت ' + o.enrolled + '/' + o.capacity}</p>
-                {o.sched && <p className="text-[11px] text-teal-700">🗓 {o.sched}</p>}
-                {o.prereq && <p className="mt-0.5 text-[11px] text-amber-700">پیش‌نیاز: {o.prereq}</p>}
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {/* فهرست دروس ارائه‌شده با تفکیک دقیق گروه‌ها، ظرفیت و زمان‌بندی     */}
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      <div className="card !p-4 bg-white border border-slate-200 shadow-sm rounded-2xl space-y-3">
+        <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-2">
+          <div>
+            <h2 className="font-extrabold text-sm sm:text-base text-slate-900">
+              📚 دروس و گروه‌های ارائه‌شده در نیمسال جاری — {props.term.title}
+            </h2>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              نمایش گروه‌های درسی موازی با زمان‌بندی کلاس، تاریخ امتحان و کنترل زندهٔ ظرفیت.
+            </p>
+          </div>
+          <span className="text-xs text-slate-500 font-bold">تعداد کل گروه‌ها: {faNum(props.offerings.length)}</span>
+        </div>
+
+        <div className="space-y-2.5">
+          {props.offerings.map(o => {
+            const inCart = props.cart.some(c => c.id === o.id);
+            const lv = live[o.id];
+            const remainingSeats = lv ? lv.remaining : o.capacity - o.enrolled;
+            const full = remainingSeats <= 0;
+
+            // آیا گروه دیگری از همین درس در سبد هست؟
+            const otherGroupInCart = props.cart.find(c => c.courseId === o.courseId && c.id !== o.id);
+
+            return (
+              <div
+                key={o.id}
+                className={`flex flex-wrap items-center justify-between rounded-xl p-3.5 text-sm border transition-all ${
+                  inCart
+                    ? 'bg-emerald-50/70 border-emerald-300 ring-2 ring-emerald-200 shadow-sm'
+                    : 'bg-slate-50 border-slate-200 hover:bg-slate-100/80'
+                }`}
+              >
+                <div className="space-y-1.5 max-w-2xl">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-extrabold text-slate-900 text-sm">{o.title}</p>
+                    <span className="text-xs text-slate-500 font-mono" dir="ltr">
+                      ({o.code})
+                    </span>
+
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-900 border border-indigo-200 text-xs font-bold">
+                      گروه {faNum(o.group)}
+                    </span>
+
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-300 text-xs font-medium">
+                      استاد: {o.professor}
+                    </span>
+
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-bold">
+                      {faNum(o.units)} واحد
+                    </span>
+                  </div>
+
+                  {/* زمان‌بندی کلاس و امتحان و شماره کلاس */}
+                  <div className="text-xs text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span>
+                      🕒 <b>جلسات هفتگی:</b>{' '}
+                      {o.classSchedules.length > 0
+                        ? o.classSchedules.map(cs => `${cs.dayName} ساعت ${faNum(cs.startTime)} الی ${faNum(cs.endTime)}`).join(' و ')
+                        : 'اعلام نشده'}
+                    </span>
+                    {o.classSchedules.some(cs => cs.room) && (
+                      <span className="font-bold text-indigo-950 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 inline-flex items-center gap-1">
+                        🏛️ <b>محل و شماره کلاس:</b> {o.classSchedules.map(cs => cs.room).filter(Boolean).join('، ')}
+                      </span>
+                    )}
+                    {o.examSchedule && (
+                      <span>
+                        📝 <b>امتحان پایان‌ترم:</b> تاریخ {faNum(o.examSchedule.examDate)} ساعت {faNum(o.examSchedule.startTime)} الی {faNum(o.examSchedule.endTime)}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* ظرفیت کلاس */}
+                  <div className="text-xs">
+                    {full ? (
+                      <span className="text-rose-600 font-bold">
+                        ⛔ ظرفیت تکمیل ({faNum(o.enrolled)}/{faNum(o.capacity)}) — ورود به اتاق انتظار در صورت اخذ
+                      </span>
+                    ) : (
+                      <span className="text-emerald-700 font-bold">
+                        ✅ ظرفیت باقی‌مانده: {faNum(remainingSeats)} از {faNum(o.capacity)} صندلی
+                      </span>
+                    )}
+                  </div>
+
+                  {o.prereq && <p className="text-xs text-amber-700 font-medium">پیش‌نیاز: {o.prereq}</p>}
+                </div>
+
+                {/* دکمه‌های افزودن / حذف / تعویض گروه */}
+                <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                  {inCart ? (
+                    <button
+                      className="bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-300 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95"
+                      disabled={busy}
+                      onClick={() => remove(o.id)}
+                    >
+                      <span>✕</span>
+                      <span>حذف از سبد</span>
+                    </button>
+                  ) : otherGroupInCart ? (
+                    <button
+                      className="bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                      disabled={busy || !props.term.open}
+                      onClick={() => add(o.id)}
+                    >
+                      <span>🔄</span>
+                      <span>تغییر به گروه {faNum(o.group)}</span>
+                    </button>
+                  ) : (
+                    <button
+                      className="bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                      disabled={busy || !props.term.open}
+                      onClick={() => add(o.id)}
+                    >
+                      <span>➕</span>
+                      <span>افزودن به سبد</span>
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                {full && !inCart && <span className="badge bg-red-100 text-red-700">تکمیل</span>}
-                {inCart
-                  ? <button className="btn-ghost !py-1" disabled={busy} onClick={() => remove(o.id)}>در سبد ✓</button>
-                  : <button className="btn-primary !py-1" disabled={busy || !props.term.open} onClick={() => add(o.id)}>افزودن</button>}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );

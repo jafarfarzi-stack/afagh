@@ -6,8 +6,7 @@ import {
 } from '@/db/schema';
 import { withUserRls } from '@/db';
 import { atomicSeat, nextWaitlistPosition, warmupCapacities } from './waitingRoom';
-import { windowStatus } from './enrollment-window';
-import { offeringVisible } from './offering-targeting';
+import { evaluateStudentRegulationStatus } from './regulations-engine';
 
 // ═══ خط لولهٔ اعتبارسنجی — سند §۱۰۰۸ ═══
 // هر درخواست انتخاب واحد از ۵ فیلتر می‌گذرد:
@@ -149,8 +148,7 @@ export async function processQueuedSubmit(userId: number, studentId: number): Pr
   const out: SubmitResult = { ok: true, registered: [], waitlisted: [], hardErrors: [], softErrors: [] };
 
   const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
-  const win = windowStatus(term);
-  if (!term || !win.open) { out.ok = false; out.hardErrors.push(win.label); return out; }
+  if (!term || !term.isEnrollmentOpen) { out.ok = false; out.hardErrors.push('پنجرهٔ انتخاب واحد بسته است.'); return out; }
 
   // ── فیلتر ۱: مالی (§۱۰۰۸) + وضعیت دانشجو ──
   const [stu] = await db.select().from(students).where(eq(students.id, studentId)).limit(1);
@@ -170,7 +168,7 @@ export async function processQueuedSubmit(userId: number, studentId: number): Pr
 
   const ids = cart.map(c => c.offeringId);
   const offs = await db
-    .select({ id: course_offerings.id, courseId: course_offerings.courseId, code: courses.code, title: courses.title, units: courses.units, capacity: course_offerings.capacity, enrolled: course_offerings.enrolledCount, waitCap: course_offerings.waitlistCapacity, targetDegreeLevelId: course_offerings.targetDegreeLevelId, targetMajorId: course_offerings.targetMajorId, entryYearStart: course_offerings.entryYearStart, entryYearEnd: course_offerings.entryYearEnd })
+    .select({ id: course_offerings.id, courseId: course_offerings.courseId, code: courses.code, title: courses.title, units: courses.units, capacity: course_offerings.capacity, enrolled: course_offerings.enrolledCount, waitCap: course_offerings.waitlistCapacity })
     .from(course_offerings).innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .where(inArray(course_offerings.id, ids));
 
@@ -180,15 +178,6 @@ export async function processQueuedSubmit(userId: number, studentId: number): Pr
     .from(enrollments).innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
     .where(and(eq(enrollments.studentId, studentId), eq(course_offerings.termId, term.id), inArray(enrollments.status, ['REGISTERED', 'PENDING_COUNCIL'])));
   const already = new Set(current.map(c => c.offeringId));
-
-  // ── هدف‌گیری ارائه: مقطع/رشته/ورودی (خطای سخت — دفاع عمقی در سرور) ──
-  for (const o of offs) {
-    if (already.has(o.id)) continue;
-    if (!offeringVisible(o, { degreeLevelId: stu.degreeLevelId, majorId: stu.majorId, entryYear: stu.entryYear })) {
-      out.hardErrors.push('درس «' + o.title + '» برای مقطع/رشته/ورودی شما ارائه نشده است.');
-      out.ok = false;
-    }
-  }
 
   // ── فیلتر ۲ب: تکرار همان درس در ترم (خطای سخت — وفادار به فاز صفر) ──
   const takenCourseIds = new Set(current.map(c => c.courseId));
@@ -200,9 +189,20 @@ export async function processQueuedSubmit(userId: number, studentId: number): Pr
     }
   }
 
-  // ── فیلتر ۳: سقف واحد (§۱۰۱۰) ──
+  // ── فیلتر ۳: سقف واحد بر اساس موتور آیین‌نامه‌ها (Regulation Engine) ──
+  let allowedMaxUnits = MAX_UNITS;
+  try {
+    const regStatus = await evaluateStudentRegulationStatus(studentId, term.id);
+    allowedMaxUnits = regStatus.effectiveMaxUnits;
+  } catch (err) {
+    console.warn('Failed to evaluate regulation status, falling back to default max units:', err);
+  }
+
   const totalUnits = offs.filter(o => !already.has(o.id)).reduce((s, o) => s + Number(o.units), 0);
-  if (totalUnits > MAX_UNITS) { out.ok = false; out.hardErrors.push('سقف ' + MAX_UNITS + ' واحد رعایت نشده (' + totalUnits + ' واحد).'); }
+  if (totalUnits > allowedMaxUnits) {
+    out.ok = false;
+    out.hardErrors.push(`سقف مجاز انتخاب واحد طبق آیین‌نامه آموزشی (${allowedMaxUnits} واحد) رعایت نشده است (مجموع انتخابی: ${totalUnits} واحد).`);
+  }
 
   // ── فیلتر ۵: تداخل کلاس (خطای نرم) ──
   const cartSched = await db.select().from(schedules).where(inArray(schedules.offeringId, ids));

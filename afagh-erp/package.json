@@ -10,7 +10,7 @@
     "reset": "node src/db/seed.js --reset",
     "stress": "node scripts/stress.js"
   },
-  "dependencies": {
+  "optionalDependencies": {
     "better-sqlite3": "^11.3.0"
   }
 }

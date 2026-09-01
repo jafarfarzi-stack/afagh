@@ -4,7 +4,7 @@
 
 | | مسیر | پشته | توضیح |
 |---|---|---|---|
-| **کالبد مدرن** | [`afagh-next/`](afagh-next/README.md) | Next.js 16 + PostgreSQL + Drizzle + Redis + MinIO | سه داشبورد ایزوله، امضای الکترونیک، اتاق انتظار Redis، RLS کامل، Object Storage |
+| **کالبد مدرن** | [`afagh-next/`](afagh-next/README.md) | Next.js 14 + PostgreSQL + Drizzle + Redis + MinIO | سه داشبورد ایزوله، امضای الکترونیک، اتاق انتظار Redis، RLS کامل، Object Storage |
 | **فاز صفر** | [`afagh-erp/`](afagh-erp/README.md) | Node خالص + SQLite (بدون وابستگی سنگین) | ۱۲ ماژول کامل آموزشی/مالی/اداری + تست بار ۲۰۰۰ کاربر |
 
 ## شروع سریع

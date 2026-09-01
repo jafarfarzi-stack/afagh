@@ -4,15 +4,31 @@
 //  استفاده:  npm run db:push  &&  npm run db:migrate-sqlite
 // ════════════════════════════════════════════════════════════════════
 import { readFileSync } from 'fs';
-import Database from 'better-sqlite3';
 import pg from 'pg';
 
 const SQLITE = process.env.SQLITE_SOURCE || '../afagh-erp/data/afagh.db';
 const PG_URL = process.env.DATABASE_URL || 'postgres://afagh:afagh@localhost:5432/afagh_db';
 const BATCH = 400;
 
-const sqlite = new Database(SQLITE, { readonly: true });
-sqlite.pragma('journal_mode = WAL');
+let sqlite;
+try {
+  const { default: Database } = await import('better-sqlite3');
+  sqlite = new Database(SQLITE, { readonly: true });
+  sqlite.pragma('journal_mode = WAL');
+} catch (e) {
+  const { DatabaseSync } = await import('node:sqlite');
+  const d = new DatabaseSync(SQLITE, { readOnly: true });
+  sqlite = {
+    prepare: (sql) => {
+      const s = d.prepare(sql);
+      return {
+        all: (...args) => s.all(...args),
+        get: (...args) => s.get(...args)
+      };
+    },
+    close: () => d.close()
+  };
+}
 const client = new pg.Client({ connectionString: PG_URL });
 await client.connect();
 
