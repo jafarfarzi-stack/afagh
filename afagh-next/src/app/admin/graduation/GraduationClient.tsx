@@ -5,7 +5,7 @@ import {
   advanceAction, alumniRequestsAction, autoClearanceAction, deleteDepartmentAction, deliverAction,
   dossierAction, headApproveAction, holdAction, irandocAction, issueAction, ministryCodeAction,
   refreshListAction, resolveAlumniRequestAction, resumeAction, saveDepartmentAction, scanAction,
-  setClearanceAction, startClearanceAction,
+  setClearanceAction, startClearanceAction, waiveSajjadAction,
 } from './actions';
 
 // ═══ میز کار فارغ‌التحصیلی و صدور مدارک ═══
@@ -43,6 +43,7 @@ const STATUS_STYLE: Record<string, string> = {
   HEAD_APPROVAL: 'bg-amber-100 text-amber-800 border-amber-300',
   IRANDOC_VERIFICATION: 'bg-violet-100 text-violet-800 border-violet-300',
   CLEARANCE: 'bg-sky-100 text-sky-800 border-sky-300',
+  SAJJAD_REQUEST: 'bg-indigo-100 text-indigo-800 border-indigo-300',
   FINAL_DOCS: 'bg-orange-100 text-orange-800 border-orange-300',
   READY_TO_ISSUE: 'bg-emerald-100 text-emerald-800 border-emerald-300',
   ISSUED: 'bg-emerald-700 text-white border-emerald-800',
@@ -396,9 +397,28 @@ function DossierDrawer({ d, steps, pending, onClose, run }: {
           </div>
         </div>
 
+        {/* گام سجاد */}
+        <div className="card p-3 space-y-2">
+          <h3 className="text-xs font-black text-slate-800">۵) درخواست کد صحت در سجاد (اقدام دانشجو)</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
+            <Info label="وضعیت" value={
+              a.sajjadStatus === 'CONFIRMED' ? '✅ کد صحت دریافت شد'
+                : a.sajjadStatus === 'SKIPPED' ? '➖ معاف'
+                  : a.sajjadRequestCode ? '⏳ ثبت‌شده توسط دانشجو' : '⏳ در انتظار اقدام دانشجو'} />
+            <Info label="کد رهگیری سجاد" value={a.sajjadRequestCode ?? '—'} />
+            <Info label="تاریخ ثبت" value={dt(a.sajjadRequestedAt)} />
+          </div>
+          <p className="text-[10px] text-slate-500 leading-5">
+            تا وقتی دانشجو کد رهگیری درخواست سجاد را ثبت نکند، پرونده به کارشناس صدور مدرک ارجاع
+            نمی‌شود و «دریافت کد صحت» نیز مسدود است.
+          </p>
+          <button disabled={pending} onClick={() => run(() => waiveSajjadAction(a.id, 'معافیت از گام سجاد توسط کارشناس'), 'گام سجاد معاف شد.')}
+            className="px-3 py-1.5 rounded-lg bg-slate-200 text-[11px] font-black disabled:opacity-50">معاف‌کردن از گام سجاد</button>
+        </div>
+
         {/* مدارک پایانی و صدور */}
         <div className="card p-3 space-y-2">
-          <h3 className="text-xs font-black text-slate-800">۵) مدارک پایانی و صدور</h3>
+          <h3 className="text-xs font-black text-slate-800">۶) مدارک پایانی و صدور</h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
             <Info label="عکس ۴×۳" value={a.photoDocumentId ? '✅ بارگذاری شد' : '⏳ در انتظار دانشجو'} />
             <Info label="تمبر ابطال" value={Number(a.stampFeeAmount ?? 0) <= 0 ? 'غیرفعال' : a.stampFeePaid ? '✅ پرداخت شد' : `⏳ ${money(Number(a.stampFeeAmount))}`} />

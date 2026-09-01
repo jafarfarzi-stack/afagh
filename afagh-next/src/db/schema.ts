@@ -1336,6 +1336,11 @@ export const graduation_audits = pgTable('graduation_audits', {
   irandocSimilarityScore: numeric('irandocSimilarityScore', { precision: 5, scale: 2 }),
   irandocStatus: varchar('irandocStatus', { length: 30 }).default('PENDING'), // PENDING|PASSED|REJECTED|SKIPPED
   irandocCheckedAt: timestamp('irandocCheckedAt'),
+  // ── درخواست کد صحت در سامانهٔ سجاد (اقدام خودِ دانشجو، پیش از کارشناس صدور) ──
+  sajjadStatus: varchar('sajjadStatus', { length: 30 }).default('PENDING'),   // PENDING|SUBMITTED|CONFIRMED|SKIPPED
+  sajjadRequestCode: varchar('sajjadRequestCode', { length: 60 }),            // کد رهگیری درخواست دانشجو در سجاد
+  sajjadRequestedAt: timestamp('sajjadRequestedAt'),
+  sajjadConfirmedAt: timestamp('sajjadConfirmedAt'),
   // ── مدارک پایانی که فقط اینجا از دانشجو خواسته می‌شود ──
   photoDocumentId: integer('photoDocumentId'),
   stampFeePaid: integer('stampFeePaid').notNull().default(0),

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState, useTransition } from 'react';
-import { attachPhotoAction, payStampAction, photoCategoryAction, trackerAction } from './actions';
+import { attachPhotoAction, payStampAction, photoCategoryAction, submitSajjadAction, trackerAction } from './actions';
 
 // ═══ ردیاب فارغ‌التحصیلی دانشجو ═══
 // دانشجو هیچ درخواستی ثبت نمی‌کند؛ فقط پیشرفت را می‌بیند و در گام آخر
@@ -24,6 +24,7 @@ const DEGREE_LABEL: Record<string, string> = {
 export default function TrackerClient({ initial, userId }: { initial: Tracker; userId: number }) {
   const [t, setT] = useState<Tracker>(initial);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [sajjadCode, setSajjadCode] = useState('');
   const [pending, start] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -103,6 +104,14 @@ export default function TrackerClient({ initial, userId }: { initial: Tracker; u
 
   const needPhoto = t.needPhoto && !a.photoDocumentId;
   const needFee = Number(a.stampFeeAmount ?? 0) > 0 && !a.stampFeePaid;
+  const needSajjad = t.needSajjad;
+
+  const submitSajjad = () => start(async () => {
+    const r = await submitSajjadAction(a.id, sajjadCode);
+    if (!r.ok) { setMsg({ kind: 'err', text: r.error }); return; }
+    setT(r.tracker); setSajjadCode('');
+    setMsg({ kind: 'ok', text: 'کد رهگیری درخواست سجاد ثبت شد؛ پرونده به کارشناس صدور مدرک ارجاع می‌شود.' });
+  });
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -162,6 +171,38 @@ export default function TrackerClient({ initial, userId }: { initial: Tracker; u
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* گام سجاد: اقدام خودِ دانشجو پیش از کارشناس صدور مدرک */}
+      {needSajjad && (
+        <div className="card p-4 border-2 border-indigo-300 bg-indigo-50/60 space-y-3">
+          <h2 className="text-sm font-black text-indigo-900">اقدام لازم: ثبت درخواست «کد صحت» در سامانهٔ سجاد</h2>
+          <p className="text-xs text-indigo-900 leading-6">
+            همهٔ امضاها و تسویه‌حساب‌های شما کامل شد. طبق مقررات وزارت علوم، پیش از ارجاع پرونده به
+            کارشناس صدور مدرک، باید خودتان در سامانهٔ سجاد درخواست «تأیید مدرک / کد صحت» را ثبت کنید و
+            کد رهگیری آن را اینجا وارد نمایید.
+          </p>
+          <a href={t.sajjadPortal} target="_blank" rel="noreferrer"
+            className="inline-block px-3 py-1.5 rounded-lg bg-indigo-800 text-white text-xs font-black">
+            ورود به سامانهٔ سجاد ↗
+          </a>
+          <div className="flex flex-wrap gap-2 items-center">
+            <input value={sajjadCode} onChange={e => setSajjadCode(e.target.value)}
+              placeholder="کد رهگیری درخواست سجاد"
+              className="border border-indigo-200 rounded-lg px-3 py-2 text-xs min-w-56" />
+            <button onClick={submitSajjad} disabled={pending}
+              className="px-3 py-2 rounded-lg bg-emerald-700 text-white text-xs font-black disabled:opacity-50">
+              ثبت کد رهگیری و ادامهٔ فرآیند
+            </button>
+          </div>
+        </div>
+      )}
+
+      {a.sajjadRequestCode && (
+        <div className="card p-3 text-[11px] font-bold text-slate-600">
+          کد رهگیری سجاد ثبت‌شدهٔ شما: <span className="font-mono text-slate-900">{a.sajjadRequestCode}</span>
+          {a.sajjadStatus === 'CONFIRMED' ? ' — کد صحت از وزارت علوم دریافت شد ✅' : ' — در انتظار دریافت کد صحت'}
         </div>
       )}
 

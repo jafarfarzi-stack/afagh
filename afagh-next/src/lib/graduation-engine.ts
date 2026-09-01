@@ -22,8 +22,9 @@ import { createLogger } from '@/lib/logger';
 //  نوار پیشرفت را می‌بیند و در گام آخر عکس و تمبر را می‌دهد.
 //
 //  مسیر وضعیت‌ها:
-//  CATALOG_REVIEW → HEAD_APPROVAL → IRANDOC_VERIFICATION → CLEARANCE
-//                 → FINAL_DOCS → READY_TO_ISSUE → ISSUED
+//  CATALOG_REVIEW → HEAD_APPROVAL → IRANDOC_VERIFICATION (فقط ارشد/دکتری)
+//                 → CLEARANCE → SAJJAD_REQUEST (اقدام دانشجو) → FINAL_DOCS
+//                 → READY_TO_ISSUE → ISSUED
 // ═══════════════════════════════════════════════════════════════════
 
 const log = createLogger({ mod: 'graduation' });
@@ -33,12 +34,23 @@ export const WORKFLOW_STEPS = [
   { code: 'HEAD_APPROVAL', title: 'تأیید مدیر گروه', actor: 'مدیر گروه' },
   { code: 'IRANDOC_VERIFICATION', title: 'استعلام همانندجویی ایرانداک', actor: 'سیستم' },
   { code: 'CLEARANCE', title: 'تسویه‌حساب موازی دپارتمان‌ها', actor: 'سیستم / کارشناسان' },
+  { code: 'SAJJAD_REQUEST', title: 'ثبت درخواست کد صحت در سامانهٔ سجاد', actor: 'دانشجو' },
   { code: 'FINAL_DOCS', title: 'مدارک پایانی (عکس و تمبر)', actor: 'دانشجو' },
-  { code: 'READY_TO_ISSUE', title: 'آمادهٔ صدور مدرک', actor: 'اداره آموزش' },
+  { code: 'READY_TO_ISSUE', title: 'کارشناس صدور مدرک', actor: 'اداره آموزش' },
   { code: 'ISSUED', title: 'مدرک صادر شد', actor: '—' },
 ] as const;
 
 export type WorkflowStatus = typeof WORKFLOW_STEPS[number]['code'] | 'ON_HOLD';
+
+/**
+ * مراحل واقعی هر پرونده: همانندجویی ایرانداک فقط برای مقاطع دارای پایان‌نامه
+ * (ارشد/دکتری) و گام سجاد فقط وقتی در تنظیمات الزامی باشد نمایش داده می‌شود.
+ */
+export function stepsFor(opts: { thesisRequired: boolean; sajjadRequired: boolean }) {
+  return WORKFLOW_STEPS.filter(s =>
+    (s.code !== 'IRANDOC_VERIFICATION' || opts.thesisRequired) &&
+    (s.code !== 'SAJJAD_REQUEST' || opts.sajjadRequired));
+}
 
 /** دپارتمان‌های پیش‌فرض تسویه — فقط بار اول ساخته می‌شوند و از پنل مدیر قابل تغییرند */
 const DEFAULT_DEPARTMENTS = [
@@ -474,6 +486,13 @@ export async function setClearance(input: {
 
 // ───────────────── موتور پیشروی وضعیت ─────────────────
 
+/** آیا هنوز منتظر ثبت درخواست کد صحت توسط دانشجو هستیم؟ */
+async function sajjadPending(a: { sajjadStatus: string | null; sajjadRequestCode: string | null }) {
+  if (!(await getBool('GRAD_REQUIRE_SAJJAD'))) return false;
+  if (a.sajjadStatus === 'SKIPPED' || a.sajjadStatus === 'CONFIRMED') return false;
+  return !a.sajjadRequestCode;
+}
+
 /** با هر رویداد، وضعیت پرونده دوباره محاسبه می‌شود (بدون دخالت انسان) */
 export async function advanceDossier(auditId: number): Promise<{ status: string; changed: boolean }> {
   const [a] = await db.select().from(graduation_audits).where(eq(graduation_audits.id, auditId)).limit(1);
@@ -495,6 +514,10 @@ export async function advanceDossier(auditId: number): Promise<{ status: string;
       next = 'CLEARANCE';
     } else if (rows.some(r => r.status !== 'CLEARED' && r.status !== 'WAIVED')) {
       next = 'CLEARANCE';
+    } else if (await sajjadPending(a)) {
+      // همهٔ امضاها گرفته شده؛ پیش از ارجاع به کارشناس صدور مدرک، خودِ دانشجو
+      // باید در سامانهٔ سجاد درخواست کد صحت ثبت کند و کد رهگیری را وارد کند.
+      next = 'SAJJAD_REQUEST';
     } else {
       const needPhoto = await getBool('GRAD_REQUIRE_PHOTO');
       const fee = Number(a.stampFeeAmount ?? 0);
@@ -513,7 +536,10 @@ export async function advanceDossier(auditId: number): Promise<{ status: string;
 
   const [stu] = await db.select({ userId: students.userId }).from(students).where(eq(students.id, a.studentId)).limit(1);
   if (stu) {
-    if (next === 'FINAL_DOCS') {
+    if (next === 'SAJJAD_REQUEST') {
+      await notifyUser(stu.userId, 'GRADUATION_SAJJAD',
+        'تمام تأییدیه‌ها و تسویه‌حساب‌های پروندهٔ شما کامل شد. برای ادامه، لازم است در «سامانهٔ سجاد» (portal.saorg.ir) درخواست «کد صحت مدرک» ثبت کنید و کد رهگیری آن را در بخش «فارغ‌التحصیلی من» وارد نمایید؛ پس از آن پرونده به کارشناس صدور مدرک ارجاع می‌شود.');
+    } else if (next === 'FINAL_DOCS') {
       const parts = ['تمام تأییدیه‌های سیستمی پروندهٔ شما سبز شد.'];
       if (await getBool('GRAD_REQUIRE_PHOTO')) parts.push('لطفاً عکس ۴×۳ جدید خود را بارگذاری کنید');
       if (Number(a.stampFeeAmount ?? 0) > 0) parts.push(`هزینهٔ تمبر ابطال (${Number(a.stampFeeAmount).toLocaleString('fa-IR')} ریال) را پرداخت نمایید`);
@@ -525,6 +551,39 @@ export async function advanceDossier(auditId: number): Promise<{ status: string;
   }
   log.info('dossier_advanced', { auditId, from: a.workflowStatus, to: next });
   return { status: next, changed: true };
+}
+
+// ───────────── درخواست کد صحت در سجاد (اقدام خودِ دانشجو) ─────────────
+
+/** نشانی پورتال سجاد برای راهنمایی دانشجو (قابل تغییر از تنظیمات) */
+export async function sajjadPortalUrl() {
+  return (await getSetting('SAJJAD_PORTAL_URL')) || 'https://portal.saorg.ir';
+}
+
+/** ثبت کد رهگیری درخواست کد صحت که دانشجو در سامانهٔ سجاد گرفته است */
+export async function submitSajjadRequest(auditId: number, code: string) {
+  const trimmed = code.trim();
+  if (trimmed.length < 4) throw new Error('کد رهگیری درخواست سجاد را کامل وارد کنید.');
+  const [a] = await db.select().from(graduation_audits).where(eq(graduation_audits.id, auditId)).limit(1);
+  if (!a) throw new Error('پرونده یافت نشد.');
+
+  await db.update(graduation_audits).set({
+    sajjadRequestCode: trimmed, sajjadStatus: 'SUBMITTED',
+    sajjadRequestedAt: new Date(), lastEventAt: new Date(),
+  }).where(eq(graduation_audits.id, auditId));
+
+  await notifyRole('EDU_EXPERT', 'GRADUATION_SAJJAD_SUBMITTED',
+    `دانشجو کد رهگیری درخواست سجاد (${trimmed}) را ثبت کرد؛ پرونده آمادهٔ پیگیری کد صحت است.`);
+  log.info('sajjad_submitted', { auditId });
+  return advanceDossier(auditId);
+}
+
+/** معافیت/رد کردن گام سجاد توسط کارشناس (مثلاً مقاطع یا موارد خاص) */
+export async function waiveSajjad(auditId: number, note?: string) {
+  await db.update(graduation_audits).set({
+    sajjadStatus: 'SKIPPED', headNote: note ?? undefined, lastEventAt: new Date(),
+  }).where(eq(graduation_audits.id, auditId));
+  return advanceDossier(auditId);
 }
 
 // ───────────────── مدارک پایانی (تنها گام دانشجو) ─────────────────
@@ -638,6 +697,10 @@ export async function issueDegree(input: {
 export async function requestMinistryCode(auditId: number) {
   const [a] = await db.select().from(graduation_audits).where(eq(graduation_audits.id, auditId)).limit(1);
   if (!a) throw new Error('پرونده یافت نشد.');
+  // کد صحت فقط وقتی قابل پیگیری است که خودِ دانشجو درخواستش را در سجاد ثبت کرده باشد
+  if (await sajjadPending(a)) {
+    throw new Error('ابتدا دانشجو باید در سامانهٔ سجاد درخواست کد صحت ثبت و کد رهگیری را در پرونده وارد کند.');
+  }
   const [s] = await db.select({
     studentCode: students.studentCode, nationalCode: users.nationalCode,
     firstName: users.firstName, lastName: users.lastName,
@@ -654,7 +717,10 @@ export async function requestMinistryCode(auditId: number) {
       const resp = await fetch(`${base}/degree-verification`, {
         method: 'POST', signal: ctrl.signal,
         headers: { 'content-type': 'application/json', authorization: `Bearer ${await getSetting('IRANDOC_TOKEN')}` },
-        body: JSON.stringify({ national_id: s.nationalCode, student_code: s.studentCode, full_name: `${s.firstName} ${s.lastName}` }),
+        body: JSON.stringify({
+          national_id: s.nationalCode, student_code: s.studentCode,
+          full_name: `${s.firstName} ${s.lastName}`, request_code: a.sajjadRequestCode ?? null,
+        }),
       });
       clearTimeout(t);
       const j = (await resp.json()) as { verificationCode?: string; code?: string };
@@ -670,8 +736,9 @@ export async function requestMinistryCode(auditId: number) {
     code = `LOCAL-${crypto.createHash('sha1').update(s.nationalCode + s.studentCode).digest('hex').slice(0, 10).toUpperCase()}`;
   }
 
-  await db.update(graduation_audits).set({ note: `کد صحت: ${code}`, lastEventAt: new Date() })
-    .where(eq(graduation_audits.id, auditId));
+  await db.update(graduation_audits).set({
+    note: `کد صحت: ${code}`, sajjadStatus: 'CONFIRMED', sajjadConfirmedAt: new Date(), lastEventAt: new Date(),
+  }).where(eq(graduation_audits.id, auditId));
   return { ok: true, code, online };
 }
 
@@ -728,6 +795,8 @@ export async function getDossier(auditId: number) {
       completedAt: a.completedAt?.toISOString() ?? null,
       headApprovedAt: a.headApprovedAt?.toISOString() ?? null,
       irandocCheckedAt: a.irandocCheckedAt?.toISOString() ?? null,
+      sajjadRequestedAt: a.sajjadRequestedAt?.toISOString() ?? null,
+      sajjadConfirmedAt: a.sajjadConfirmedAt?.toISOString() ?? null,
       finalDocsAt: a.finalDocsAt?.toISOString() ?? null,
     },
     student: {
@@ -807,22 +876,28 @@ export async function getStudentTracker(studentId: number) {
   }
   const full = await getDossier(a.id);
   const needPhoto = await getBool('GRAD_REQUIRE_PHOTO');
+  const sajjadRequired = await getBool('GRAD_REQUIRE_SAJJAD') && a.sajjadStatus !== 'SKIPPED';
+  const steps = stepsFor({ thesisRequired: a.thesisRequired === 1, sajjadRequired });
   return {
     open: true as const,
     needPhoto,
+    sajjadRequired,
+    needSajjad: await sajjadPending(a),
+    sajjadPortal: await sajjadPortalUrl(),
     dossier: full,
-    steps: WORKFLOW_STEPS.map((s, i) => ({
+    steps: steps.map(s => ({
       code: s.code, title: s.title, actor: s.actor,
-      state: stepState(a.workflowStatus, s.code, i),
+      state: stepState(a.workflowStatus, s.code),
     })),
   };
 }
 
-function stepState(current: string, code: string, index: number): 'DONE' | 'CURRENT' | 'TODO' {
+function stepState(current: string, code: string): 'DONE' | 'CURRENT' | 'TODO' {
   const order = WORKFLOW_STEPS.map(s => s.code) as string[];
   const ci = order.indexOf(current);
-  if (ci < 0) return 'TODO';
-  if (index < ci) return 'DONE';
-  if (index === ci) return current === 'ISSUED' ? 'DONE' : 'CURRENT';
+  const si = order.indexOf(code);
+  if (ci < 0 || si < 0) return 'TODO';
+  if (si < ci) return 'DONE';
+  if (si === ci) return current === 'ISSUED' ? 'DONE' : 'CURRENT';
   return 'TODO';
 }

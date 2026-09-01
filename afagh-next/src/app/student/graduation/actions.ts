@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { document_categories, graduation_audits, students } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
-import { getStudentTracker, payStampFee, setFinalPhoto } from '@/lib/graduation-engine';
+import { getStudentTracker, payStampFee, setFinalPhoto, submitSajjadRequest } from '@/lib/graduation-engine';
 
 // ═══ تنها کنش‌هایی که از خودِ دانشجو خواسته می‌شود ═══
 // (بارگذاری عکس ۴×۳ و پرداخت تمبر ابطال) — بقیهٔ مراحل خودکار است.
@@ -45,6 +45,17 @@ export async function attachPhotoAction(auditId: number, documentId: number) {
   try {
     await ownAudit(studentId, auditId);
     await setFinalPhoto(auditId, documentId);
+    revalidatePath('/student/graduation');
+    return { ok: true as const, tracker: await getStudentTracker(studentId) };
+  } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : 'خطا' }; }
+}
+
+/** ثبت کد رهگیری درخواست «کد صحت» که دانشجو در سامانهٔ سجاد گرفته است */
+export async function submitSajjadAction(auditId: number, code: string) {
+  const { studentId } = await me();
+  try {
+    await ownAudit(studentId, auditId);
+    await submitSajjadRequest(auditId, code);
     revalidatePath('/student/graduation');
     return { ok: true as const, tracker: await getStudentTracker(studentId) };
   } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : 'خطا' }; }

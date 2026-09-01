@@ -8,7 +8,7 @@ import { requireRole } from '@/lib/auth';
 import {
   advanceDossier, approveByHead, getDossier, holdDossier, issueDegree, listDossiers,
   markDelivered, pipelineStats, requestMinistryCode, runAutoClearance, runGraduationScan,
-  runIrandoc, setClearance, startClearance, resumeDossier,
+  runIrandoc, setClearance, startClearance, resumeDossier, waiveSajjad,
 } from '@/lib/graduation-engine';
 import { allRequests, resolveRequest } from '@/lib/alumni';
 
@@ -128,6 +128,16 @@ export async function ministryCodeAction(auditId: number) {
   try {
     const r = await requestMinistryCode(auditId);
     return { ok: true as const, code: r.code, online: r.online, dossier: await getDossier(auditId) };
+  } catch (e) { return fail(e); }
+}
+
+/** معاف‌کردن پرونده از گام «درخواست کد صحت در سجاد» (موارد استثنا) */
+export async function waiveSajjadAction(auditId: number, note?: string) {
+  await guard();
+  try {
+    await waiveSajjad(auditId, note);
+    revalidatePath('/admin/graduation');
+    return { ok: true as const, dossier: await getDossier(auditId) };
   } catch (e) { return fail(e); }
 }
 
