@@ -8,15 +8,16 @@ export const dynamic = 'force-dynamic';
 
 const TYPE_OPTS = ['عمومی', 'پایه', 'تخصصی', 'اختیاری'];
 
-export default async function CoursesPage({ searchParams }: { searchParams: { msg?: string; err?: string } }) {
+export default async function CoursesPage({ searchParams }: { searchParams: Promise<{ msg?: string; err?: string }> }) {
+  const sp = await searchParams;
   const { staff: me, deptId } = await requireDepHead();
   const [dept] = await db.select().from(departments).where(eq(departments.id, deptId)).limit(1);
   const rows = await db.select().from(courses).where(eq(courses.departmentId, deptId)).orderBy(courses.code);
 
   return (
     <div className="space-y-4">
-      {searchParams.msg && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">✓ {searchParams.msg}</p>}
-      {searchParams.err && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-800">⛔ {searchParams.err}</p>}
+      {sp.msg && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">✓ {sp.msg}</p>}
+      {sp.err && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-800">⛔ {sp.err}</p>}
 
       <div className="card space-y-3">
         <h2 className="font-bold">تعریف درس جدید — گروه {dept?.name ?? deptId}</h2>

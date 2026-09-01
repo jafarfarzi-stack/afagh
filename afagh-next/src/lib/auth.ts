@@ -22,7 +22,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
 export type SessionUser = { id: number; name: string; roles: string[] };
 
 export async function getSessionUser(): Promise<SessionUser | null> {
-  const token = cookies().get('token')?.value;
+  const token = (await cookies()).get('token')?.value;
   if (!token) return null;
   const rows = await db
     .select({ id: users.id, firstName: users.firstName, lastName: users.lastName, role: roles.code })
@@ -42,14 +42,15 @@ export async function login(nationalCode: string, password: string): Promise<{ o
   const token = randomBytes(32).toString('hex');
   await db.insert(sessions).values({ token, userId: u.id, expiresAt: new Date(Date.now() + 2 * 86400000) });
   // SameSite=None برای کارکردن در iframe پیش‌نمایش (دامنهٔ واسط)؛ Secure از طریق پروکسی HTTPS
-  cookies().set('token', token, { httpOnly: true, sameSite: 'none', secure: true, path: '/', maxAge: 2 * 86400 });
+  (await cookies()).set('token', token, { httpOnly: true, sameSite: 'none', secure: true, path: '/', maxAge: 2 * 86400 });
   return { ok: true };
 }
 
 export async function logout() {
-  const token = cookies().get('token')?.value;
+  const store = await cookies();
+  const token = store.get('token')?.value;
   if (token) await db.delete(sessions).where(eq(sessions.token, token));
-  cookies().delete('token');
+  store.delete('token');
 }
 
 /** گیت نقش در layout ها — ریدایرکت به پورتال درست (سه داشبورد ایزوله — سند §۲۸۶۵) */

@@ -5,14 +5,15 @@ import { deleteClassroomAction, saveClassroomAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ClassroomsPage({ searchParams }: { searchParams: { msg?: string; err?: string } }) {
+export default async function ClassroomsPage({ searchParams }: { searchParams: Promise<{ msg?: string; err?: string }> }) {
+  const sp = await searchParams;
   await requireDepHead();
   const rooms = await db.select().from(classrooms).orderBy(classrooms.name);
 
   return (
     <div className="space-y-4">
-      {searchParams.msg && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">✓ {searchParams.msg}</p>}
-      {searchParams.err && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-800">⛔ {searchParams.err}</p>}
+      {sp.msg && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">✓ {sp.msg}</p>}
+      {sp.err && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-800">⛔ {sp.err}</p>}
 
       <div className="card space-y-3">
         <h2 className="font-bold">تعریف کلاس جدید (نام کلاس، ظرفیت، ساختمان)</h2>
