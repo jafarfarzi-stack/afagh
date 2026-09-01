@@ -9,7 +9,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$PWD"; NEXT="$ROOT/afagh-next"; ERP="$ROOT/afagh-erp"
-COMPOSE="$NEXT/docker-compose.yml"; PROJECT="afagh"
+COMPOSE="$NEXT/docker-compose.yml"; PROJECT="afagh-dev"
 
 G='\033[32m'; R='\033[31m'; Y='\033[33m'; C='\033[36m'; B='\033[1m'; N='\033[0m'
 step() { echo -e "\n${C}═══ $1 ═══${N}"; }
@@ -56,12 +56,12 @@ ok "کانتینرها بالا آمدند (پروژهٔ docker: $PROJECT)"
 printf "  … در انتظار آماده‌شدن PostgreSQL"
 PG_READY=0
 for _ in $(seq 1 90); do
-  if docker exec afagh_pg pg_isready -U afagh -d afagh_db >/dev/null 2>&1; then PG_READY=1; break; fi
+  if docker exec afagh_pg_dev pg_isready -U afagh -d afagh_db >/dev/null 2>&1; then PG_READY=1; break; fi
   printf "."; sleep 2
 done; echo ""
 [ "$PG_READY" = "1" ] || die "PostgreSQL آماده نشد — لاگ: docker compose -p $PROJECT logs postgres"
 ok "PostgreSQL :5432 (کاربر afagh / دیتابیس afagh_db)"
-docker exec afagh_redis redis-cli ping >/dev/null 2>&1 && ok "Redis :6379" || warn "Redis پاسخ نداد"
+docker exec afagh_redis_dev redis-cli ping >/dev/null 2>&1 && ok "Redis :6379" || warn "Redis پاسخ نداد"
 for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1 && break; sleep 2; done
 curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1 \
   && ok "MinIO :9000 (کنسول :9001 — afagh / afagh-secret)" || warn "MinIO آماده نشد — بایگانی مدارک کار نمی‌کند"
@@ -129,7 +129,7 @@ step "۷/۷ نصب تمام شد"
 cat <<EOF
 
   اجرا:
-      cd afagh-next && npm start        → http://localhost:3100
+      cd afagh-next && npm start        → http://localhost:8080
       (حالت توسعه: npm run dev)
 
   حساب‌های دمو — رمز همه: 123456
@@ -146,6 +146,6 @@ cat <<EOF
 EOF
 
 if [ "$START" = "1" ]; then
-  step "اجرای سرور روی پورت ۳۱۰۰ (توقف با Ctrl+C)"
+  step "اجرای سرور روی پورت ۸۰۸۰ (توقف با Ctrl+C)"
   (cd "$NEXT" && npm start)
 fi

@@ -22,13 +22,13 @@ alive 5432 && echo -e "${G}✓${N} PostgreSQL :5432" || { echo "PostgreSQL رو 
 alive 6379 && echo -e "${G}✓${N} Redis :6379" || { echo "Redis رو نیست"; exit 1; }
 redis-cli ping >/dev/null 2>&1 && (cd afagh-next && set -a && . ./.env 2>/dev/null; set +a; node scripts/warm-redis.mjs >/dev/null 2>&1 || true)
 
-# ③ کالبد Next.js (پورت ۳۱۰۰)
-if ! alive 3100; then
+# ③ کالبد Next.js (پورت ۸۰۸۰)
+if ! alive 8080; then
   echo -e "${B}[کالبد]${N} اجرای Next.js پروداکشن…"
   (cd afagh-next && set -a && . ./.env 2>/dev/null; set +a; nohup npm start > ../run/logs/next.log 2>&1 & echo $! > ../run/next.pid)
-  for i in $(seq 1 30); do alive 3100 && break; sleep 1; done
+  for i in $(seq 1 30); do alive 8080 && break; sleep 1; done
 fi
-alive 3100 && echo -e "${G}✓${N} کالبد :3100 → http://localhost:3100  (ورود: 0000000001 / 123456)" || { echo "کالبد بالا نیامد — run/logs/next.log"; exit 1; }
+alive 8080 && echo -e "${G}✓${N} کالبد :8080 → http://localhost:8080  (ورود: 0000000001 / 123456)" || { echo "کالبد بالا نیامد — run/logs/next.log"; exit 1; }
 
 # ④ فاز صفر (اختیاری)
 if [ "${1:-}" = "--with-demo" ] && ! alive 3000; then

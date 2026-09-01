@@ -3,9 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "dev": "next dev -p 3100",
+    "dev": "next dev -p 8080",
     "build": "next build",
-    "start": "next start -p 3100",
+    "start": "next start -p 8080",
     "db:generate": "npx drizzle-kit generate",
     "db:push": "npx drizzle-kit push",
     "db:migrate-sqlite": "node scripts/migrate-sqlite-to-pg.mjs",

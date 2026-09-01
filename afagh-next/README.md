@@ -28,7 +28,7 @@ npm run db:hardening          # ایندکس‌ها + RLS
 npm run db:migrate-sqlite     # انتقال دادهٔ فاز صفر (مسیر پیش‌فرض: ../afagh-erp/data/afagh.db)
 node scripts/warm-redis.mjs     # §۱۰۰۶: انتقال ظرفیت‌ها به Redis (یا دکمهٔ پنل ادمین)
 bash scripts/start-minio.sh &   # §۲۴۴۵: MinIO روی ۹۰۰۰ (کنسول: ۹۰۰۰۱)
-npm run dev                   # توسعه (۳۱۰۰)  |  npm run build && npm start
+npm run dev                   # توسعه (۸۰۸۰)  |  npm run build && npm start
 ```
 
 ## حساب‌های دمو (رمز ۱۲۳۴۵۶)

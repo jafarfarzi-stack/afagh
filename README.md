@@ -11,7 +11,20 @@
 
 ```bash
 ./install.sh    # نقش‌ها + ۷۳ جدول + RLS + دادهٔ دمو + Redis + بیلد
-./start.sh      # کالبد روی :3100  (دموی فاز صفر: ./start.sh --with-demo)
+./start.sh      # کالبد روی :8080  (دموی فاز صفر: ./start.sh --with-demo)
+```
+
+**استقرار پروداکشن روی Debian 13 — تماماً با Docker (پیشنهادی):**
+
+```bash
+sudo ./deploy-debian.sh          # نصب داکر + بیلد + اجرا روی http://SERVER_IP:8080
+```
+
+**نصب توسعه با Docker (ویندوز / لینوکس / مک):**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install-docker.ps1 -WithDemoData   # ویندوز
+./install-docker.sh --with-demo-data                                          # لینوکس/مک
 ```
 
 جزئیات کامل: [`INSTALL.md`](INSTALL.md)

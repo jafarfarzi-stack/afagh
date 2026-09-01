@@ -12,7 +12,7 @@
       -WithDemoData   ساخت دادهٔ دمو (فاز صفر SQLite) و انتقال به PostgreSQL
       -Fresh          حذف کانتینرها و کل داده، نصب از صفر
       -SkipBuild      رد کردن npm run build
-      -Start          پس از نصب، سرور را روی http://localhost:3100 اجرا کن
+      -Start          پس از نصب، سرور را روی http://localhost:8080 اجرا کن
 ════════════════════════════════════════════════════════════════════
 #>
 [CmdletBinding()]
@@ -30,7 +30,7 @@ $Root    = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $Next    = Join-Path $Root 'afagh-next'
 $Erp     = Join-Path $Root 'afagh-erp'
 $Compose = Join-Path $Next 'docker-compose.yml'
-$Project = 'afagh'
+$Project = 'afagh-dev'
 
 function Step($t) { Write-Host ""; Write-Host "=== $t ===" -ForegroundColor Cyan }
 function Ok($t)   { Write-Host "  [OK]  $t" -ForegroundColor Green }
@@ -85,7 +85,7 @@ if ((Run { docker info } -Quiet) -ne 0) { Fail "Docker نصب است ولی اج
 Ok "Docker آمادهٔ کار است"
 
 try {
-  foreach ($p in 5432, 6379, 9000, 3100) {
+  foreach ($p in 5432, 6379, 9000, 8080) {
     if (Get-NetTCPConnection -State Listen -LocalPort $p -ErrorAction SilentlyContinue) {
       Warn "پورت $p از قبل اشغال است — اگر مربوط به این پروژه نیست، سرویس مزاحم را ببندید."
     }
@@ -115,7 +115,7 @@ Ok "کانتینرها بالا آمدند (docker project: $Project)"
 Write-Host "  ... در انتظار آماده‌شدن PostgreSQL" -NoNewline
 $pgReady = $false
 for ($i = 0; $i -lt 90; $i++) {
-  if ((Run { docker exec afagh_pg pg_isready -U afagh -d afagh_db } -Quiet) -eq 0) { $pgReady = $true; break }
+  if ((Run { docker exec afagh_pg_dev pg_isready -U afagh -d afagh_db } -Quiet) -eq 0) { $pgReady = $true; break }
   Write-Host "." -NoNewline
   Start-Sleep -Seconds 2
 }
@@ -123,7 +123,7 @@ Write-Host ""
 if (-not $pgReady) { Fail "PostgreSQL آماده نشد — لاگ: docker compose -p $Project -f afagh-next\docker-compose.yml logs postgres" }
 Ok "PostgreSQL :5432  (کاربر afagh / دیتابیس afagh_db)"
 
-if ((Run { docker exec afagh_redis redis-cli ping } -Quiet) -eq 0) { Ok "Redis :6379" } else { Warn "Redis پاسخ نداد — انتخاب واحد کند می‌شود" }
+if ((Run { docker exec afagh_redis_dev redis-cli ping } -Quiet) -eq 0) { Ok "Redis :6379" } else { Warn "Redis پاسخ نداد — انتخاب واحد کند می‌شود" }
 
 $minioOk = $false
 for ($i = 0; $i -lt 30; $i++) {
@@ -215,7 +215,7 @@ if ($SkipBuild) {
 Step "۷/۷ نصب تمام شد"
 Write-Host ""
 Write-Host "  اجرا:" -ForegroundColor White
-Write-Host "      cd afagh-next ; npm start        →  http://localhost:3100"
+Write-Host "      cd afagh-next ; npm start        →  http://localhost:8080"
 Write-Host "      (حالت توسعه: npm run dev)"
 Write-Host ""
 Write-Host "  حساب‌های دمو — رمز همه: 123456" -ForegroundColor White
@@ -230,6 +230,6 @@ Write-Host "      MinIO : http://localhost:9001        (afagh / afagh-secret)"
 Write-Host ""
 
 if ($Start) {
-  Step "اجرای سرور روی پورت ۳۱۰۰ (توقف با Ctrl+C)"
+  Step "اجرای سرور روی پورت ۸۰۸۰ (توقف با Ctrl+C)"
   Must $Next { npm start } "اجرای سرور ناموفق بود"
 }

@@ -14,9 +14,9 @@ $Compose = Join-Path $Root 'afagh-next\docker-compose.yml'
 
 if ($RemoveData) {
   Write-Host "حذف کانتینرها و volumeها (کل داده پاک می‌شود)…" -ForegroundColor Yellow
-  & docker compose -p afagh -f $Compose down -v
+  & docker compose -p afagh-dev -f $Compose down -v
 } else {
   Write-Host "خاموش کردن سرویس‌ها (داده حفظ می‌شود)…" -ForegroundColor Cyan
-  & docker compose -p afagh -f $Compose stop
+  & docker compose -p afagh-dev -f $Compose stop
 }
 Write-Host "[OK] انجام شد." -ForegroundColor Green

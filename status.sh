@@ -8,9 +8,9 @@ echo "═══ وضعیت سرویس‌های آفاق ═══"
 st "PostgreSQL" 5432
 st "Redis"      6379
 st "MinIO"      9000
-st "کالبد Next.js" 3100
+st "کالبد Next.js" 8080
 st "فاز صفر (اختیاری)" 3000
 echo "────────────────────────"
 if alive 6379; then echo "  Redis: $(redis-cli ping 2>/dev/null) | کلاس‌های گرم: $(redis-cli HLEN afagh:caps 2>/dev/null || echo 0) | صف: $(redis-cli LLEN afagh:wr:queue 2>/dev/null || echo 0)"; fi
 if alive 5432; then PGPASSWORD=afagh psql -h 127.0.0.1 -U afagh -d afagh_db -t -A -c "SELECT '  PostgreSQL ' || version() || ' — جداول: ' || count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE';" 2>/dev/null | head -1; fi
-if alive 3100; then echo "  کالبد /login → HTTP $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3100/login)"; fi
+if alive 8080; then echo "  کالبد /login → HTTP $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/login)"; fi

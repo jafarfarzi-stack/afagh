@@ -4,8 +4,64 @@
 
 | | مسیر | پشته | پورت |
 |---|---|---|---|
-| **کالبد مدرن** | `afagh-next/` | Next.js 14 + PostgreSQL + Drizzle + Redis + MinIO | ۳۱۰۰ |
+| **کالبد مدرن** | `afagh-next/` | Next.js 14 + PostgreSQL + Drizzle + Redis + MinIO | ۸۰۸۰ |
 | **فاز صفر (دمو کامل)** | `afagh-erp/` | Node خالص + SQLite — ۱۲ ماژول E2E | ۳۰۰۰ (اختیاری) |
+
+## 🚀 استقرار پروداکشن روی Debian 13 — همه‌چیز داخل Docker
+
+سرور تازه‌نصب Debian 13 (Trixie) با دسترسی root. یک دستور، و سامانه روی **پورت ۸۰۸۰** بالا می‌آید:
+
+```bash
+git clone -b arena/01a05c13-afagh https://github.com/jafarfarzi-stack/afagh.git
+cd afagh
+sudo ./deploy-debian.sh
+```
+
+اسکریپت این کارها را می‌کند:
+
+1. تشخیص نسخهٔ Debian و نصب **Docker Engine + Compose plugin** از مخزن رسمی داکر (اگر نصب نباشد)
+2. ساخت فایل `.env` با **رمزهای تصادفی** برای PostgreSQL و MinIO (`chmod 600`)
+3. بیلد ایمیج Next.js (خروجی `standalone`، کاربر غیر-root داخل کانتینر)
+4. بالا آوردن `postgres` + `redis` + `minio` + `app` با `docker compose`
+5. اجرای خودکار سرویس **migrator**: ساخت جدول‌ها (`drizzle-kit push`) + ایندکس‌ها و RLS
+6. بررسی سلامت: `pg_isready`، `redis-cli ping` و `HTTP 200` روی `/login`
+7. باز کردن پورت ۸۰۸۰ در `ufw` (اگر فعال باشد)
+
+| سوییچ | کار |
+|---|---|
+| `--port 9090` | لیسن روی پورت دیگر به‌جای ۸۰۸۰ |
+| `--update` | `git pull` + بیلد مجدد + ری‌استارت (به‌روزرسانی نسخه) |
+| `--fresh` | حذف کانتینرها و **کل داده** و استقرار از صفر |
+| `--no-build` | فقط اجرا، بدون بیلد مجدد |
+| `--with-demo-data` | انتقال دادهٔ نمونهٔ فاز صفر به PostgreSQL |
+| `--skip-docker-install` | داکر از قبل نصب است |
+
+**معماری استقرار:**
+
+| سرویس | ایمیج | دسترسی |
+|---|---|---|
+| `app` (Next.js standalone) | از روی `afagh-next/Dockerfile` | **`0.0.0.0:8080`** — عمومی |
+| `postgres` | `postgres:16-alpine` | فقط `127.0.0.1:5432` |
+| `redis` | `redis:7-alpine` | فقط `127.0.0.1:6379` |
+| `minio` | `minio/minio` | فقط `127.0.0.1:9000` و کنسول `9001` |
+
+دیتابیس، Redis و MinIO **از بیرون سرور در دسترس نیستند**؛ فقط اپ روی ۸۰۸۰ باز است.
+دادهٔ ماندگار در volumeهای داکر: `afagh_pg`، `afagh_redis`، `afagh_minio`.
+
+**مدیریت روزمره:**
+
+```bash
+docker compose -p afagh -f docker-compose.prod.yml ps          # وضعیت
+docker compose -p afagh -f docker-compose.prod.yml logs -f app # لاگ زنده
+docker compose -p afagh -f docker-compose.prod.yml restart app # ری‌استارت
+sudo ./deploy-debian.sh --update                               # به‌روزرسانی نسخه
+docker exec afagh_pg pg_dump -U afagh afagh_db > backup-$(date +%F).sql   # پشتیبان
+```
+
+> پشت **Nginx/Caddy** با HTTPS: ترافیک را به `127.0.0.1:8080` پروکسی کنید و در `.env`
+> مقدار `APP_PORT=127.0.0.1:8080` بگذارید تا پورت مستقیم از اینترنت بسته شود.
+
+---
 
 ## 🐳 نصب با Docker — روش پیشنهادی (ویندوز / لینوکس / مک)
 
@@ -15,14 +71,14 @@
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install-docker.ps1 -WithDemoData
-cd afagh-next ; npm start          # → http://localhost:3100
+cd afagh-next ; npm start          # → http://localhost:8080
 ```
 
 **لینوکس / مک:**
 
 ```bash
 ./install-docker.sh --with-demo-data
-cd afagh-next && npm start         # → http://localhost:3100
+cd afagh-next && npm start         # → http://localhost:8080
 ```
 
 | سوییچ (ویندوز / لینوکس) | کار |
@@ -45,7 +101,7 @@ cd afagh-next && npm start         # → http://localhost:3100
 **مدیریت سرویس‌ها:**
 
 ```powershell
-docker compose -p afagh -f afagh-next\docker-compose.yml ps     # وضعیت
+docker compose -p afagh-dev -f afagh-next\docker-compose.yml ps     # وضعیت
 .\stop-docker.ps1                                               # خاموش (داده حفظ می‌شود)
 .\stop-docker.ps1 -RemoveData                                   # حذف کامل داده
 ```
@@ -61,7 +117,7 @@ docker compose -p afagh -f afagh-next\docker-compose.yml ps     # وضعیت
 ```bash
 tar xzf afagh-v1.0.0.tar.gz && cd afagh
 ./install.sh          # همه‌چیز: نقش‌ها، ۷۳ جدول، RLS، دادهٔ دمو، Redis، بیلد
-./start.sh            # MinIO + کالبد :3100  (فاز صفر: ./start.sh --with-demo)
+./start.sh            # MinIO + کالبد :8080  (فاز صفر: ./start.sh --with-demo)
 ```
 
 > نصب Docker-ای سرویس‌های زیرین: `AFAGH_USE_DOCKER=1 ./install.sh`
@@ -112,7 +168,7 @@ tar xzf afagh-v1.0.0.tar.gz && cd afagh
 | `docker: command not found` یا «Docker اجرا نمی‌شود» | Docker Desktop را باز کنید و صبر کنید وضعیتش **Running** شود |
 | `Bind for 0.0.0.0:5432 failed: port is already allocated` | PostgreSQL محلی را متوقف کنید یا در `docker-compose.yml` پورت را `'5433:5432'` کنید و `DATABASE_URL` را در `.env` هماهنگ کنید |
 | در ویندوز اسکریپت اجرا نمی‌شود (`running scripts is disabled`) | `powershell -ExecutionPolicy Bypass -File .\install-docker.ps1` |
-| `ECONNREFUSED 127.0.0.1:5432` هنگام `db:push` | کانتینر بالا نیست: `docker compose -p afagh -f afagh-next/docker-compose.yml ps` |
+| `ECONNREFUSED 127.0.0.1:5432` هنگام `db:push` | کانتینر بالا نیست: `docker compose -p afagh-dev -f afagh-next/docker-compose.yml ps` |
 | بیلد بعد از `git pull` خطا می‌دهد | `node_modules` و `.next` را پاک و دوباره `npm install` (نسخهٔ Next تغییر کرده) |
 | «PostgreSQL رو نیست» | `service postgresql start` یا `AFAGH_USE_DOCKER=1` |
 | دسترسی sudo برای PG نیست | دو دستور CREATE ROLE/createdb که installer چاپ می‌کند را دستی بزنید و دوباره اجرا کنید |
