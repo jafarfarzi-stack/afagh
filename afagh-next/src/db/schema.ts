@@ -4,7 +4,7 @@
 //  SQLite→PG مستقیم باشد. لایهٔ سخت‌سازی (ایندکس/پارتیشن/RLS — سند §۲۰۹۳–۲۲۴۰)
 //  → src/db/pg-hardening.sql
 // ══════════════════════════════════════════════════════════════════════
-import { pgTable, serial, integer, varchar, text, timestamp, date, time, numeric, unique, primaryKey, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, serial, integer, varchar, text, timestamp, date, time, numeric, jsonb, unique, primaryKey, type AnyPgColumn } from 'drizzle-orm/pg-core';
 
 export const roles = pgTable('roles', {
   id: serial('id').primaryKey(),
@@ -1182,6 +1182,7 @@ export const legacy_financial_records = pgTable('legacy_financial_records', {
   legacyTuition: numeric('legacyTuition', { precision: 14, scale: 0 }).notNull().default('0'),
   legacyDiscount: numeric('legacyDiscount', { precision: 14, scale: 0 }).notNull().default('0'),
   legacyPaid: numeric('legacyPaid', { precision: 14, scale: 0 }).notNull().default('0'),
+  batchId: integer('batchId'),                                 // دستهٔ واردسازی (برای واگرد)
   raw: text('raw'),                                            // JSON ردیف خام برای رهگیری
   importedAt: timestamp('importedAt').defaultNow()
 }, (t) => ({ uq: unique('uq_legacy_financial_records').on(t.sourceCode, t.studentCode, t.termCode) }));
@@ -1215,6 +1216,8 @@ export const tuition_compare_items = pgTable('tuition_compare_items', {
   computedAmount: numeric('computedAmount', { precision: 14, scale: 0 }).default('0'),
   diff: numeric('diff', { precision: 14, scale: 0 }).default('0'),
   status: varchar('status', { length: 20 }).notNull(),        // MATCH | DIFF | NO_FORMULA | ERROR
+  resolutionStatus: varchar('resolutionStatus', { length: 20 }).notNull().default('UNRESOLVED'), // UNRESOLVED|MATCHED|DISCREPANCY|FORCED_LEGACY
+  resolvedAt: timestamp('resolvedAt'),
   detail: text('detail')
 });
 
@@ -1232,9 +1235,59 @@ export const legacy_grades = pgTable('legacy_grades', {
   gradeValue: numeric('gradeValue', { precision: 5, scale: 2 }),
   gradeStatus: varchar('gradeStatus', { length: 20 }).notNull().default('FINALIZED'),
   professorName: varchar('professorName', { length: 150 }),
+  batchId: integer('batchId'),                                 // دستهٔ واردسازی (برای واگرد)
   compareStatus: varchar('compareStatus', { length: 20 }).default('PENDING'), // PENDING|SAME|DIFF|MISSING_IN_NEW|NO_STUDENT|NO_TERM
   compareNote: text('compareNote'),
   appliedAt: timestamp('appliedAt'),
   raw: text('raw'),
   importedAt: timestamp('importedAt').defaultNow()
 }, (t) => ({ uq: unique('uq_legacy_grades').on(t.sourceCode, t.studentCode, t.termCode, t.courseCode) }));
+
+// ── دسته‌های واردسازی: هر فایل اکسل = یک batch با سطرهای خام JSON ──
+// چرا خام نگه می‌داریم: اگر بعداً نگاشت کدی اصلاح شد، بدون آپلود دوبارهٔ فایل
+// می‌توان فقط ردیف‌های خطادار را دوباره پردازش کرد؛ و برای «واگرد» سند داریم.
+export const legacy_import_batches = pgTable('legacy_import_batches', {
+  id: serial('id').primaryKey(),
+  sourceCode: varchar('sourceCode', { length: 50 }).notNull().default('LEGACY'),
+  importType: varchar('importType', { length: 40 }).notNull(),
+  fileName: varchar('fileName', { length: 255 }),
+  sheetName: varchar('sheetName', { length: 120 }),
+  headers: text('headers'),                                   // JSON: سرستون‌های فایل
+  columnMap: text('columnMap'),                               // JSON: نگاشت دستی ستون‌ها {فیلد: شمارهٔ ستون}
+  totalRows: integer('totalRows').notNull().default(0),
+  okRows: integer('okRows').notNull().default(0),
+  errorRows: integer('errorRows').notNull().default(0),
+  status: varchar('status', { length: 20 }).notNull().default('PARSED'), // PARSED|PROCESSED|PARTIAL|ROLLED_BACK
+  note: text('note'),
+  createdByUserId: integer('createdByUserId'),
+  createdAt: timestamp('createdAt').defaultNow(),
+  processedAt: timestamp('processedAt'),
+  rolledBackAt: timestamp('rolledBackAt')
+});
+
+export const legacy_import_rows = pgTable('legacy_import_rows', {
+  id: serial('id').primaryKey(),
+  batchId: integer('batchId').notNull().references(() => legacy_import_batches.id, { onDelete: 'cascade' }),
+  rowNumber: integer('rowNumber').notNull(),                  // شمارهٔ خط در فایل (۱ = سرستون)
+  rawData: jsonb('rawData').notNull(),                        // کل سطر اکسل، خام
+  validationStatus: varchar('validationStatus', { length: 20 }).notNull().default('PENDING'), // PENDING|IMPORTED|ERROR|SKIPPED
+  errorMessage: text('errorMessage'),
+  processedAt: timestamp('processedAt')
+});
+
+// ── دفتر واگرد: هر نوشتن روی جدول‌های عملیاتی اینجا سند می‌خورد ──
+export const migration_audit_entries = pgTable('migration_audit_entries', {
+  id: serial('id').primaryKey(),
+  batchId: integer('batchId'),                                // ممکن است عملیات بدون فایل باشد (اعمال نمره/تراز)
+  opGroup: varchar('opGroup', { length: 40 }).notNull(),      // apply-grades | apply-formulas | opening-balance | commit-student…
+  sourceCode: varchar('sourceCode', { length: 50 }).notNull().default('LEGACY'),
+  tableName: varchar('tableName', { length: 60 }).notNull(),
+  rowId: integer('rowId').notNull(),
+  op: varchar('op', { length: 10 }).notNull(),                // INSERT | UPDATE
+  beforeData: jsonb('beforeData'),                            // مقدار پیشین برای UPDATE
+  afterData: jsonb('afterData'),                              // مقداری که مهاجرت نوشت (برای تشخیص تغییرِ بعدی)
+  revertedAt: timestamp('revertedAt'),
+  revertNote: text('revertNote'),
+  createdByUserId: integer('createdByUserId'),
+  createdAt: timestamp('createdAt').defaultNow()
+});

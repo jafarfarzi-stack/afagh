@@ -8,6 +8,12 @@ export type Table = {
   sheet: string;
   headers: string[];
   rows: string[][];
+  /**
+   * نگاشت دستی ستون‌ها که کاربر در گام «بررسی ستون‌ها» تأیید کرده است:
+   * { کلید فیلد (نخستین نامک) → شمارهٔ ستون در فایل }. اگر باشد، بر تشخیص
+   * خودکار اولویت دارد؛ ‎-1‎ یعنی «این ستون در فایل نیست».
+   */
+  columnMap?: Record<string, number>;
 };
 
 export type TableRow = {
@@ -60,7 +66,10 @@ export function iterate(table: Table): TableRow[] {
   const cache = new Map<string, number>();
   const idxOf = (aliases: string[]) => {
     const key = aliases.join('|');
-    if (!cache.has(key)) cache.set(key, pickCol(table.headers, aliases).idx);
+    if (!cache.has(key)) {
+      const manual = table.columnMap?.[aliases[0]];
+      cache.set(key, typeof manual === 'number' ? manual : pickCol(table.headers, aliases).idx);
+    }
     return cache.get(key) as number;
   };
   return table.rows.map((cells, i) => {
@@ -80,5 +89,20 @@ export function iterate(table: Table): TableRow[] {
 
 /** آیا هیچ‌کدام از سرستون‌های الزامی وجود ندارد؟ (پیام خطای دقیق برای کاربر) */
 export function missingHeaders(table: Table, required: { title: string; aliases: string[] }[]): string[] {
-  return required.filter(r => pickCol(table.headers, r.aliases).idx < 0).map(r => r.title);
+  return required
+    .filter(r => {
+      const manual = table.columnMap?.[r.aliases[0]];
+      const idx = typeof manual === 'number' ? manual : pickCol(table.headers, r.aliases).idx;
+      return idx < 0;
+    })
+    .map(r => r.title);
+}
+
+/** ساخت یک جدول از سطرهای خامِ ذخیره‌شده در staging (برای پردازش دوباره) */
+export function tableFromRaw(sheet: string, headers: string[], rows: Record<string, unknown>[]): Table {
+  return {
+    sheet,
+    headers,
+    rows: rows.map(r => headers.map(h => String((r as Record<string, unknown>)[h] ?? ''))),
+  };
 }

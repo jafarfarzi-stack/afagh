@@ -130,7 +130,7 @@ export default function CodeMapTab({ domains, sourceCode }: { domains: DomainDef
 
       <div className="card space-y-3">
         <Uploader
-          kind="codes" sourceCode={sourceCode} templateKind="codes"
+          kind="codes" sourceCode={sourceCode} templateKind="codes" mappable
           label="واردسازی جدول تطبیق از اکسل"
           actions={[{ id: 'imp', title: 'واردسازی', url: '/api/admin/migration/import', primary: true }]}
           onDone={r => { setReport(r); load(); }}

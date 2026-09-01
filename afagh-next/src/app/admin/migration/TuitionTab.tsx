@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { applyFormulasAction, compareTuitionAction } from './actions';
+import { acceptLegacyBalanceAction, applyFormulasAction, compareTuitionAction } from './actions';
 import { ImportReport, Msg, ReportBox, Stat, Uploader, fmt } from './ui';
 
 type Formula = {
@@ -20,6 +20,11 @@ type Summary = {
   worst: { studentCode: string; termCode: string | null; legacy: number; computed: number; diff: number; status: string; detail: string }[];
 };
 
+type OpeningBalance = {
+  total: number; created: number; skippedExisting: number; skippedZero: number;
+  noStudent: number; noTerm: number; sumDebit: number; sumCredit: number; errors: string[];
+};
+
 const ST_FA: Record<string, string> = { MATCH: 'منطبق', DIFF: 'اختلاف', NO_FORMULA: 'بدون فرمول', ERROR: 'خطای فرمول' };
 
 export default function TuitionTab({ sourceCode, formulas, runs, financialCount }: {
@@ -30,6 +35,7 @@ export default function TuitionTab({ sourceCode, formulas, runs, financialCount 
   const [tolerance, setTolerance] = useState('0');
   const [summary, setSummary] = useState<Summary | null>(null);
   const [busy, setBusy] = useState('');
+  const [balance, setBalance] = useState<OpeningBalance | null>(null);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err' | 'warn'; text: string } | null>(null);
 
   async function compare() {
@@ -38,6 +44,31 @@ export default function TuitionTab({ sourceCode, formulas, runs, financialCount 
     setBusy('');
     if (!r.ok) { setMsg({ kind: 'err', text: r.error ?? 'مقایسه ناموفق بود.' }); return; }
     setSummary(r.summary ?? null);
+  }
+
+  async function acceptBalance(scope: 'all' | 'mismatch') {
+    const what = scope === 'mismatch'
+      ? 'همهٔ ردیف‌های مغایرِ آخرین مقایسه'
+      : `همهٔ ردیف‌های مالی مبدأ ${sourceCode}` + (termCode ? ` در ترم ${termCode}` : '');
+    if (!confirm(`تراز سیستم قدیمی برای ${what} به‌عنوان «مانده اولیه» در دفتر مالی ثبت شود؟\n\n` +
+      'مبلغ = شهریهٔ قدیمی − تخفیف − پرداختی. اسناد تکراری ثبت نمی‌شوند و همه‌چیز از تب «واگرد» قابل برگشت است.')) return;
+    setBusy('bal'); setMsg(null);
+    const r = await acceptLegacyBalanceAction({
+      sourceCode, termCode,
+      runId: scope === 'mismatch' ? summary?.runId : undefined,
+    });
+    setBusy('');
+    if (!r.ok || !r.result) { setMsg({ kind: 'err', text: r.error ?? 'ثبت مانده اولیه ناموفق بود.' }); return; }
+    const b = r.result;
+    setBalance(b);
+    setMsg({
+      kind: b.noStudent || b.noTerm || b.errors.length ? 'warn' : 'ok',
+      text: `${fmt(b.created)} سند مانده اولیه ثبت شد (بدهکار ${fmt(b.sumDebit)} ریال، بستانکار ${fmt(b.sumCredit)} ریال).` +
+        (b.skippedExisting ? ` ${fmt(b.skippedExisting)} مورد قبلاً ثبت شده بود.` : '') +
+        (b.skippedZero ? ` ${fmt(b.skippedZero)} مورد تراز صفر داشت.` : '') +
+        (b.noStudent ? ` ${fmt(b.noStudent)} دانشجو در سامانهٔ جدید نبود.` : '') +
+        (b.noTerm ? ` ${fmt(b.noTerm)} ترم تطبیق نخورده بود.` : ''),
+    });
   }
 
   async function applyFormulas() {
@@ -64,13 +95,13 @@ export default function TuitionTab({ sourceCode, formulas, runs, financialCount 
         </div>
 
         <Uploader
-          kind="tuition-formula" sourceCode={sourceCode} templateKind="tuition-formula"
+          kind="tuition-formula" sourceCode={sourceCode} templateKind="tuition-formula" mappable
           label="۱) فرمول‌های شهریهٔ قدیمی"
           actions={[{ id: 'f', title: 'واردسازی فرمول‌ها', url: '/api/admin/migration/import', primary: true }]}
           onDone={r => setReport(r)}
         />
         <Uploader
-          kind="legacy-financial" sourceCode={sourceCode} templateKind="legacy-financial"
+          kind="legacy-financial" sourceCode={sourceCode} templateKind="legacy-financial" mappable
           label="۲) صورت‌حساب/شهریهٔ واقعی قدیمی"
           actions={[{ id: 'm', title: 'واردسازی داده مالی', url: '/api/admin/migration/import', primary: true }]}
           onDone={r => setReport(r)}
@@ -81,7 +112,26 @@ export default function TuitionTab({ sourceCode, formulas, runs, financialCount 
           <button className="btn-ghost" disabled={!!busy} onClick={applyFormulas}>
             {busy === 'apply' ? '…' : '⤴ اعمال فرمول‌ها روی قواعد مالی ترم'}
           </button>
+          <button className="btn-ghost" disabled={!!busy || !financialCount} onClick={() => acceptBalance('all')}>
+            {busy === 'bal' ? '…' : '💠 پذیرش تراز قدیمی به‌عنوان مانده اولیه'}
+          </button>
         </div>
+        <Msg kind="info">
+          <b>مانده اولیه:</b> بعضی مبالغ قدیمی با هیچ فرمولی بازسازی نمی‌شوند (تخفیف موردی، بخشودگی، توافق).
+          به‌جای جنگیدن با اعداد، همان تراز سیستم قدیمی (<span dir="ltr">شهریه − تخفیف − پرداختی</span>) به‌عنوان
+          سند افتتاحیه در دفتر مالی دانشجو ثبت می‌شود. اسناد با پیشوند <b>[مهاجرت]</b> ثبت می‌شوند، تکراری نمی‌خورند
+          و از تب «ناحیهٔ موقت و واگرد» کاملاً قابل برگشت‌اند.
+        </Msg>
+        {balance && (
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
+            <Stat label="ردیف بررسی‌شده" value={balance.total} />
+            <Stat label="سند ثبت‌شده" value={balance.created} tone="green" />
+            <Stat label="قبلاً ثبت‌شده" value={balance.skippedExisting} />
+            <Stat label="تراز صفر" value={balance.skippedZero} />
+            <Stat label="جمع بدهکار" value={balance.sumDebit} tone="red" />
+            <Stat label="جمع بستانکار" value={balance.sumCredit} tone="indigo" />
+          </div>
+        )}
         {msg && <Msg kind={msg.kind === 'err' ? 'err' : msg.kind === 'warn' ? 'warn' : 'ok'}>{msg.text}</Msg>}
       </div>
 
@@ -112,7 +162,14 @@ export default function TuitionTab({ sourceCode, formulas, runs, financialCount 
               <Stat label="جمع محاسبهٔ فرمول (ریال)" value={summary.sumComputed} tone="indigo" />
               <Stat label="اختلاف کل (ریال)" value={summary.sumDiff} tone={summary.sumDiff === 0 ? 'green' : 'red'} />
             </div>
-            <a className="btn-ghost inline-block" href={`/api/admin/migration/export?kind=tuition-compare&runId=${summary.runId}`}>⬇ خروجی اکسل این مقایسه</a>
+            <div className="flex flex-wrap gap-2">
+              <a className="btn-ghost" href={`/api/admin/migration/export?kind=tuition-compare&runId=${summary.runId}`}>⬇ خروجی اکسل این مقایسه</a>
+              {(summary.mismatched > 0 || summary.unresolved > 0) && (
+                <button className="btn-ghost" disabled={!!busy} onClick={() => acceptBalance('mismatch')}>
+                  {busy === 'bal' ? '…' : `💠 پذیرش تراز قدیمی برای ${fmt(summary.mismatched + summary.unresolved)} ردیف مغایر`}
+                </button>
+              )}
+            </div>
 
             {summary.worst.length > 0 && (
               <div className="overflow-x-auto">

@@ -3,11 +3,12 @@ import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, degree_level_configs, legacy_financial_records, legacy_tuition_formulas,
-  term_financial_rules, tuition_compare_items, tuition_compare_runs,
+  student_ledger, students, term_financial_rules, tuition_compare_items, tuition_compare_runs,
 } from '@/db/schema';
 import { norm, num } from './normalize';
 import { iterate, missingHeaders, pickTable, type Table } from './tabular';
 import { resolverFor } from './codemap';
+import { auditInsert, auditUpdate, type AuditCtx } from './audit';
 
 // ═══ انتقال فرمول‌های شهریه + مقایسه با دادهٔ مالی قدیمی ═══
 // دو نیمه دارد:
@@ -226,7 +227,7 @@ export const FORMULA_HEADERS = [
 ];
 
 /** واردسازی فرمول‌های شهریهٔ سیستم قدیمی */
-export async function importFormulas(userId: number, sourceCode: string, tables: Table[], fileName: string): Promise<ImportReport> {
+export async function importFormulas(userId: number, sourceCode: string, tables: Table[], fileName: string, batchId?: number | null): Promise<ImportReport> {
   const table = pickTable(tables, [['کد فرمول', 'formula_code', 'code'], ['شهریه ثابت', 'fixed'], ['هر واحد نظری', 'per_unit_theory']]);
   if (!table) return { ...emptyReport('tuition-formula', fileName, '-'), errors: [{ row: 0, msg: 'فایل خالی است.' }] };
   const rep = emptyReport('tuition-formula', fileName, table.sheet);
@@ -286,7 +287,7 @@ export async function importFormulas(userId: number, sourceCode: string, tables:
 }
 
 /** واردسازی صورت‌حساب/شهریهٔ واقعی سیستم قدیمی (مبنای مقایسه) */
-export async function importFinancials(sourceCode: string, tables: Table[], fileName: string): Promise<ImportReport> {
+export async function importFinancials(sourceCode: string, tables: Table[], fileName: string, batchId?: number | null): Promise<ImportReport> {
   const table = pickTable(tables, [['شماره دانشجویی', 'student_code'], ['کد ترم', 'term_code'], ['شهریه', 'tuition']]);
   if (!table) return { ...emptyReport('legacy-financial', fileName, '-'), errors: [{ row: 0, msg: 'فایل خالی است.' }] };
   const rep = emptyReport('legacy-financial', fileName, table.sheet);
@@ -322,6 +323,7 @@ export async function importFinancials(sourceCode: string, tables: Table[], file
       legacyTuition: String(Math.round(tuition)),
       legacyDiscount: String(Math.round(num(r.get(['تخفیف', 'discount'])) ?? 0)),
       legacyPaid: String(Math.round(num(r.get(['پرداختی', 'پرداخت شده', 'paid'])) ?? 0)),
+      batchId: batchId ?? null,
       raw: JSON.stringify(r.raw),
     };
 
@@ -378,6 +380,7 @@ export async function runTuitionCompare(userId: number, params: { sourceCode: st
         runId: run.id, studentCode: rec.studentCode, studentName: rec.studentName, termCode: rec.termCode,
         formulaCode: rec.formulaCode, totalUnits: rec.totalUnits, legacyAmount: String(legacyAmount),
         computedAmount: '0', diff: String(-legacyAmount), status: 'NO_FORMULA',
+        resolutionStatus: 'UNRESOLVED',
         detail: 'هیچ فرمولی با ترم/مقطع/رشتهٔ این ردیف منطبق نشد.',
       });
       continue;
@@ -396,14 +399,16 @@ export async function runTuitionCompare(userId: number, params: { sourceCode: st
       items.push({
         runId: run.id, studentCode: rec.studentCode, studentName: rec.studentName, termCode: rec.termCode,
         formulaCode: f.formulaCode, totalUnits: rec.totalUnits, legacyAmount: String(legacyAmount),
-        computedAmount: String(amount), diff: String(diff), status: ok ? 'MATCH' : 'DIFF', detail,
+        computedAmount: String(amount), diff: String(diff), status: ok ? 'MATCH' : 'DIFF',
+        resolutionStatus: ok ? 'MATCHED' : 'DISCREPANCY', detail,
       });
     } catch (e) {
       unresolved++;
       items.push({
         runId: run.id, studentCode: rec.studentCode, studentName: rec.studentName, termCode: rec.termCode,
         formulaCode: f.formulaCode, totalUnits: rec.totalUnits, legacyAmount: String(legacyAmount),
-        computedAmount: '0', diff: String(-legacyAmount), status: 'ERROR', detail: (e as Error).message,
+        computedAmount: '0', diff: String(-legacyAmount), status: 'ERROR',
+        resolutionStatus: 'UNRESOLVED', detail: (e as Error).message,
       });
     }
   }
@@ -444,7 +449,11 @@ export async function compareItems(runId: number, status?: string) {
  * ترم و مقطع از طریق جدول تطبیق کدها ترجمه می‌شوند؛ هر فرمولی که ترم/مقطعش
  * تطبیق نخورده باشد رد می‌شود و در گزارش می‌آید (هیچ حدسی زده نمی‌شود).
  */
-export async function applyFormulasToRules(sourceCode: string, formulaIds?: number[]): Promise<{ applied: number; skipped: { formulaCode: string; reason: string }[] }> {
+export async function applyFormulasToRules(
+  sourceCode: string, formulaIds?: number[],
+  opts: { batchId?: number | null; userId?: number | null } = {},
+): Promise<{ applied: number; skipped: { formulaCode: string; reason: string }[] }> {
+  const ctx: AuditCtx = { batchId: opts.batchId ?? null, opGroup: 'apply-formulas', sourceCode, userId: opts.userId ?? null };
   const where = formulaIds?.length
     ? and(eq(legacy_tuition_formulas.sourceCode, sourceCode), inArray(legacy_tuition_formulas.id, formulaIds))
     : eq(legacy_tuition_formulas.sourceCode, sourceCode);
@@ -472,23 +481,142 @@ export async function applyFormulasToRules(sourceCode: string, formulaIds?: numb
     if (!degreeId) { skipped.push({ formulaCode: f.formulaCode, reason: `مقطع «${f.degreeCode}» تطبیق نخورده — در میز تطبیق کدها مشخص کنید.` }); continue; }
 
     const perUnit = Math.max(Number(f.perUnitTheory ?? 0), Number(f.perUnitGeneral ?? 0), Number(f.perUnitPractical ?? 0));
-    const existing = await db.select({ id: term_financial_rules.id }).from(term_financial_rules)
+    const existing = await db.select({
+      id: term_financial_rules.id, fixedTuition: term_financial_rules.fixedTuition,
+      perUnitTuition: term_financial_rules.perUnitTuition,
+    }).from(term_financial_rules)
       .where(and(eq(term_financial_rules.termId, termId), eq(term_financial_rules.degreeLevelId, degreeId))).limit(1);
 
+    const after = {
+      fixedTuition: String(Math.round(Number(f.fixedAmount ?? 0))),
+      perUnitTuition: String(Math.round(perUnit)),
+    };
     if (existing.length) {
-      await db.update(term_financial_rules).set({
-        fixedTuition: String(Math.round(Number(f.fixedAmount ?? 0))),
-        perUnitTuition: String(Math.round(perUnit)),
-      }).where(eq(term_financial_rules.id, existing[0].id));
+      await db.update(term_financial_rules).set(after).where(eq(term_financial_rules.id, existing[0].id));
+      await auditUpdate(ctx, 'term_financial_rules', existing[0].id, {
+        fixedTuition: existing[0].fixedTuition, perUnitTuition: existing[0].perUnitTuition,
+      }, after);
     } else {
-      await db.insert(term_financial_rules).values({
-        termId, degreeLevelId: degreeId,
-        fixedTuition: String(Math.round(Number(f.fixedAmount ?? 0))),
-        perUnitTuition: String(Math.round(perUnit)),
+      const [nr] = await db.insert(term_financial_rules).values({
+        termId, degreeLevelId: degreeId, ...after,
         advancePaymentRequired: String(Math.round(Number(f.fixedAmount ?? 0) / 2)),
-      });
+      }).returning({ id: term_financial_rules.id });
+      if (nr?.id) await auditInsert(ctx, 'term_financial_rules', nr.id, after);
     }
     applied++;
   }
   return { applied, skipped };
+}
+
+
+// ───────────────── پذیرش تراز قدیمی به‌عنوان «مانده اولیه» ─────────────────
+// وقتی فرمول قدیمی بازسازی‌پذیر نیست (تخفیف موردی، بخشودگی، توافق شفاهی)،
+// بحث بر سر «چرا عدد فرق دارد» بی‌فایده است: عددِ سیستم قدیمی را به‌عنوان
+// سند افتتاحیه در دفتر مالی دانشجو ثبت می‌کنیم و پرونده بسته می‌شود.
+// همهٔ اسناد با پیشوند [مهاجرت] و ثبت در دفتر واگرد نوشته می‌شوند.
+
+export const OPENING_BALANCE_TAG = '[مهاجرت] مانده اولیه از سیستم قدیمی';
+
+export type OpeningBalanceResult = {
+  total: number; created: number; skippedExisting: number; skippedZero: number;
+  noStudent: number; noTerm: number; sumDebit: number; sumCredit: number;
+  errors: string[];
+};
+
+/**
+ * ثبت مانده اولیه برای دانشجویان یک مبدأ.
+ *  • مبلغ = شهریهٔ قدیمی − تخفیف − پرداختی  (مثبت ⇒ بدهکار، منفی ⇒ بستانکار)
+ *  • idempotent: اگر سند افتتاحیهٔ همان دانشجو/ترم قبلاً ثبت شده باشد رد می‌شود
+ *  • studentCodes: اگر داده شود فقط همان‌ها (مثلاً فقط ردیف‌های مغایر یک اجرا)
+ */
+export async function acceptLegacyBalance(params: {
+  sourceCode: string; termCode?: string; studentCodes?: string[];
+  runId?: number; onlyStatuses?: string[]; userId?: number | null; batchId?: number | null;
+}): Promise<OpeningBalanceResult> {
+  const { sourceCode } = params;
+  const baseCtx = { opGroup: 'opening-balance', sourceCode, userId: params.userId ?? null };
+  const ctxOf = (rowBatchId: number | null): AuditCtx => ({ ...baseCtx, batchId: params.batchId ?? rowBatchId ?? null });
+
+  let codes = params.studentCodes?.map(c => norm(c)).filter(Boolean) ?? [];
+  // انتخاب بر اساس نتیجهٔ یک اجرای مقایسه (مثلاً «همهٔ مغایرت‌ها»)
+  if (params.runId) {
+    const statuses = params.onlyStatuses?.length ? params.onlyStatuses : ['DIFF', 'NO_FORMULA', 'ERROR'];
+    const rows = await db.select({ studentCode: tuition_compare_items.studentCode })
+      .from(tuition_compare_items)
+      .where(and(eq(tuition_compare_items.runId, params.runId), inArray(tuition_compare_items.status, statuses)));
+    codes = [...new Set([...codes, ...rows.map(r => norm(r.studentCode))])];
+  }
+
+  const conds = [eq(legacy_financial_records.sourceCode, sourceCode)];
+  if (params.termCode) conds.push(eq(legacy_financial_records.termCode, params.termCode));
+  if (codes.length) conds.push(inArray(legacy_financial_records.studentCode, codes));
+  const records = await db.select().from(legacy_financial_records).where(and(...conds))
+    .orderBy(asc(legacy_financial_records.studentCode));
+
+  const res: OpeningBalanceResult = {
+    total: records.length, created: 0, skippedExisting: 0, skippedZero: 0,
+    noStudent: 0, noTerm: 0, sumDebit: 0, sumCredit: 0, errors: [],
+  };
+  if (!records.length) return res;
+
+  const termMap = await resolverFor(sourceCode, 'TERM');
+  const terms = new Map((await db.select({ id: academic_terms.id, code: academic_terms.termCode }).from(academic_terms))
+    .map(t => [norm(t.code), t.id]));
+  const stu = new Map((await db.select({ id: students.id, code: students.studentCode }).from(students)
+    .where(inArray(students.studentCode, [...new Set(records.map(r => r.studentCode))]))).map(s => [s.code, s.id]));
+
+  for (const rec of records) {
+    const sid = stu.get(rec.studentCode);
+    if (!sid) { res.noStudent++; continue; }
+    const tid = termMap.get(norm(rec.termCode))?.id ?? terms.get(norm(rec.termCode)) ?? null;
+    if (!tid) { res.noTerm++; continue; }
+
+    const balance = Math.round(
+      Number(rec.legacyTuition ?? 0) - Number(rec.legacyDiscount ?? 0) - Number(rec.legacyPaid ?? 0),
+    );
+    if (balance === 0) { res.skippedZero++; continue; }
+
+    const dup = await db.select({ id: student_ledger.id }).from(student_ledger).where(and(
+      eq(student_ledger.studentId, sid), eq(student_ledger.termId, tid),
+      sql`${student_ledger.description} like ${OPENING_BALANCE_TAG + '%'}`,
+    )).limit(1);
+    if (dup.length) { res.skippedExisting++; continue; }
+
+    const amount = Math.abs(balance);
+    const type = balance > 0 ? 'DEBIT' : 'CREDIT';
+    try {
+      const [led] = await db.insert(student_ledger).values({
+        studentId: sid, termId: tid, transactionType: type, amount: String(amount),
+        description: `${OPENING_BALANCE_TAG} — مبدأ ${sourceCode}، ترم ${rec.termCode}`
+          + ` (شهریه ${Math.round(Number(rec.legacyTuition ?? 0))}`
+          + `، تخفیف ${Math.round(Number(rec.legacyDiscount ?? 0))}`
+          + `، پرداختی ${Math.round(Number(rec.legacyPaid ?? 0))})`,
+        referenceId: rec.id,
+      }).returning({ id: student_ledger.id });
+      if (led?.id) await auditInsert(ctxOf(rec.batchId ?? null), 'student_ledger', led.id, { amount: String(amount), transactionType: type });
+      res.created++;
+      if (type === 'DEBIT') res.sumDebit += amount; else res.sumCredit += amount;
+    } catch (e) {
+      res.errors.push(`${rec.studentCode}: ${(e as Error).message}`);
+    }
+  }
+
+  // اقلام مقایسه‌ای که با این تصمیم تعیین‌تکلیف شدند: FORCED_LEGACY
+  if (params.runId) {
+    const statuses = params.onlyStatuses?.length ? params.onlyStatuses : ['DIFF', 'NO_FORMULA', 'ERROR'];
+    await db.update(tuition_compare_items)
+      .set({ resolutionStatus: 'FORCED_LEGACY', resolvedAt: new Date() })
+      .where(and(eq(tuition_compare_items.runId, params.runId), inArray(tuition_compare_items.status, statuses)));
+  }
+  return res;
+}
+
+/** آمار وضعیت رفع مغایرت یک اجرای مقایسه */
+export async function resolutionStats(runId: number) {
+  const rows = await db.select({
+    resolutionStatus: tuition_compare_items.resolutionStatus,
+    n: sql<number>`count(*)::int`,
+  }).from(tuition_compare_items).where(eq(tuition_compare_items.runId, runId))
+    .groupBy(tuition_compare_items.resolutionStatus);
+  return rows.map(r => ({ status: r.resolutionStatus, count: Number(r.n) }));
 }

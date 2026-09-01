@@ -7,6 +7,7 @@ import {
 import { norm, num } from './normalize';
 import { iterate, missingHeaders, pickTable, type Table } from './tabular';
 import { resolverFor, upsertLegacyCode } from './codemap';
+import { auditInsert, auditUpdate, type AuditCtx } from './audit';
 import type { ImportReport } from './tuition';
 
 // ═══ نمرات سیستم قدیمی ═══
@@ -63,7 +64,7 @@ const emptyReport = (kind: string, fileName: string, sheet: string): ImportRepor
   ({ kind, fileName, sheet, total: 0, inserted: 0, updated: 0, invalid: 0, errors: [], warnings: [], sample: [] });
 
 /** واردسازی نمرات قدیمی در جدول staging + ثبت خودکار کدهای دیده‌شده در میز تطبیق */
-export async function importGrades(sourceCode: string, tables: Table[], fileName: string): Promise<ImportReport> {
+export async function importGrades(sourceCode: string, tables: Table[], fileName: string, batchId?: number | null): Promise<ImportReport> {
   const table = pickTable(tables, [['شماره دانشجویی', 'student_code'], ['کد درس', 'course_code'], ['نمره', 'grade']]);
   if (!table) return { ...emptyReport('grades', fileName, '-'), errors: [{ row: 0, msg: 'فایل خالی است.' }] };
   const rep = emptyReport('grades', fileName, table.sheet);
@@ -100,7 +101,7 @@ export async function importGrades(sourceCode: string, tables: Table[], fileName
     seenTerms.set(termCode, r.get(['عنوان ترم', 'term_title']) || '');
 
     const values = {
-      sourceCode, studentCode, termCode, courseCode,
+      sourceCode, studentCode, termCode, courseCode, batchId: batchId ?? null,
       studentName: r.get(['نام دانشجو', 'نام و نام خانوادگی', 'student_name']) || null,
       courseTitle: courseTitle || null,
       units: (() => { const u = num(r.get(['واحد', 'تعداد واحد', 'units'])); return u == null ? null : String(u); })(),
@@ -222,7 +223,15 @@ export type ApplyResult = { created: number; updated: number; skipped: number; e
  * • overwrite: نمرهٔ موجود بازنویسی شود یا نه (پیش‌فرض: نه)
  * ثبت‌نام و «ارائهٔ مهاجرتی» در صورت نبود ساخته می‌شود تا کارنامه کامل باشد.
  */
-export async function applyGrades(sourceCode: string, opts: { termCode?: string; statuses?: string[]; overwrite?: boolean } = {}): Promise<ApplyResult> {
+export async function applyGrades(
+  sourceCode: string,
+  opts: { termCode?: string; statuses?: string[]; overwrite?: boolean; batchId?: number | null; userId?: number | null } = {},
+): Promise<ApplyResult> {
+  // هرچه اینجا نوشته شود در «دفتر واگرد» سند می‌خورد تا کل عملیات برگشت‌پذیر بماند.
+  // شناسهٔ دسته از خود سطر staging برداشته می‌شود تا «واگرد این دسته» دقیقاً همان
+  // چیزی را برگرداند که از همان فایل آمده است.
+  const baseCtx = { opGroup: 'apply-grades', sourceCode, userId: opts.userId ?? null };
+  const ctxOf = (rowBatchId: number | null): AuditCtx => ({ ...baseCtx, batchId: opts.batchId ?? rowBatchId ?? null });
   const statuses = opts.statuses?.length ? opts.statuses : ['MISSING_IN_NEW'];
   const conds = [eq(legacy_grades.sourceCode, sourceCode), inArray(legacy_grades.compareStatus, statuses)];
   if (opts.termCode) conds.push(eq(legacy_grades.termCode, opts.termCode));
@@ -237,6 +246,7 @@ export async function applyGrades(sourceCode: string, opts: { termCode?: string;
   const res: ApplyResult = { created: 0, updated: 0, skipped: 0, errors: [] };
 
   for (const l of rows) {
+    const ctx = ctxOf(l.batchId ?? null);
     const sid = stu.get(l.studentCode);
     const tid = termMap.get(norm(l.termCode))?.id ?? terms.get(norm(l.termCode)) ?? null;
     let cid = courseMap.get(norm(l.courseCode))?.id ?? crs.get(norm(l.courseCode)) ?? null;
@@ -247,6 +257,7 @@ export async function applyGrades(sourceCode: string, opts: { termCode?: string;
       const [nc] = await db.insert(courses).values({
         code: l.courseCode, title: l.courseTitle || `درس مهاجرتی ${l.courseCode}`, units: String(l.units ?? 0),
       }).onConflictDoNothing().returning({ id: courses.id });
+      if (nc?.id) await auditInsert(ctx, 'courses', nc.id, { code: l.courseCode });
       cid = nc?.id ?? (await db.select({ id: courses.id }).from(courses).where(eq(courses.code, l.courseCode)).limit(1))[0]?.id ?? null;
       if (cid) crs.set(norm(l.courseCode), cid);
     }
@@ -258,23 +269,29 @@ export async function applyGrades(sourceCode: string, opts: { termCode?: string;
       [off] = await db.insert(course_offerings).values({
         termId: tid, courseId: cid, capacity: 999, groupNumber: 1, enrolledCount: 0, isActive: 0,
       }).returning({ id: course_offerings.id });
+      if (off?.id) await auditInsert(ctx, 'course_offerings', off.id, { termId: tid, courseId: cid });
     }
 
     const gradeValue = l.gradeValue == null ? null : String(l.gradeValue);
-    const existing = await db.select({ id: enrollments.id, gradeValue: enrollments.gradeValue })
-      .from(enrollments).where(and(eq(enrollments.studentId, sid), eq(enrollments.offeringId, off.id))).limit(1);
+    const existing = await db.select({
+      id: enrollments.id, gradeValue: enrollments.gradeValue,
+      gradeStatus: enrollments.gradeStatus, hasEvaluated: enrollments.hasEvaluated,
+    }).from(enrollments).where(and(eq(enrollments.studentId, sid), eq(enrollments.offeringId, off.id))).limit(1);
 
     if (existing.length) {
       if (!opts.overwrite) { res.skipped++; continue; }
-      await db.update(enrollments).set({
-        gradeValue, gradeStatus: l.gradeStatus, hasEvaluated: gradeValue != null ? 1 : 0,
-      }).where(eq(enrollments.id, existing[0].id));
+      const after = { gradeValue, gradeStatus: l.gradeStatus, hasEvaluated: gradeValue != null ? 1 : 0 };
+      await db.update(enrollments).set(after).where(eq(enrollments.id, existing[0].id));
+      await auditUpdate(ctx, 'enrollments', existing[0].id, {
+        gradeValue: existing[0].gradeValue, gradeStatus: existing[0].gradeStatus, hasEvaluated: existing[0].hasEvaluated,
+      }, after);
       res.updated++;
     } else {
-      await db.insert(enrollments).values({
+      const [ne] = await db.insert(enrollments).values({
         studentId: sid, offeringId: off.id, status: 'REGISTERED',
         gradeValue, gradeStatus: l.gradeStatus, hasEvaluated: gradeValue != null ? 1 : 0,
-      }).onConflictDoNothing();
+      }).onConflictDoNothing().returning({ id: enrollments.id });
+      if (ne?.id) await auditInsert(ctx, 'enrollments', ne.id, { gradeValue, gradeStatus: l.gradeStatus });
       res.created++;
     }
     await db.update(legacy_grades).set({ appliedAt: new Date(), compareStatus: 'SAME', compareNote: 'اعمال شد.' }).where(eq(legacy_grades.id, l.id));

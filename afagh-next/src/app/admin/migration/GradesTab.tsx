@@ -76,7 +76,7 @@ export default function GradesTab({ sourceCode, stats }: { sourceCode: string; s
         </div>
 
         <Uploader
-          kind="grades" sourceCode={sourceCode} templateKind="grades"
+          kind="grades" sourceCode={sourceCode} templateKind="grades" mappable
           label="فایل نمرات سیستم قدیمی"
           actions={[{ id: 'g', title: 'واردسازی نمرات', url: '/api/admin/migration/import', primary: true }]}
           onDone={r => setReport(r)}

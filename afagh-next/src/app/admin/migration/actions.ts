@@ -6,8 +6,19 @@ import { db } from '@/db';
 import { legacy_code_maps, legacy_grades, legacy_sources, legacy_tuition_formulas } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { autoSuggestDomain, targetOptions, type MapDomain } from '@/lib/migration/codemap';
-import { applyFormulasToRules, runTuitionCompare, type CompareSummary } from '@/lib/migration/tuition';
+import {
+  acceptLegacyBalance, applyFormulasToRules, resolutionStats, runTuitionCompare,
+  type CompareSummary, type OpeningBalanceResult,
+} from '@/lib/migration/tuition';
 import { applyGrades, compareGrades, type ApplyResult, type GradeCompare } from '@/lib/migration/grades';
+import {
+  batchRows, deleteBatch, listBatches, reprocessBatch,
+  type BatchSummary,
+} from '@/lib/migration/batches';
+import { auditGroups, auditSummary, rollbackBatch, type RollbackResult } from '@/lib/migration/audit';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger({ mod: 'migration.actions' });
 
 // ═══ کنش‌های سرور میز کار مهاجرت (همه پشت نقش ADMIN) ═══
 
@@ -121,8 +132,8 @@ export async function compareTuitionAction(input: { sourceCode: string; termCode
 
 /** اعمال فرمول‌های قدیمی روی قواعد مالی ترم سامانهٔ جدید */
 export async function applyFormulasAction(sourceCode: string, formulaIds?: number[]): Promise<{ ok: boolean; applied: number; skipped: { formulaCode: string; reason: string }[] }> {
-  await guard();
-  const r = await applyFormulasToRules(clean(sourceCode), formulaIds);
+  const user = await guard();
+  const r = await applyFormulasToRules(clean(sourceCode), formulaIds, { userId: user.id });
   revalidatePath('/admin/migration');
   return { ok: true, ...r };
 }
@@ -149,12 +160,13 @@ export async function compareGradesAction(sourceCode: string, termCode?: string)
 
 /** اعمال نمرات قدیمی روی سامانه */
 export async function applyGradesAction(input: { sourceCode: string; termCode?: string; statuses?: string[]; overwrite?: boolean }): Promise<{ ok: boolean; error?: string; result?: ApplyResult }> {
-  await guard();
+  const user = await guard();
   try {
     const result = await applyGrades(clean(input.sourceCode), {
       termCode: input.termCode?.trim() || undefined,
       statuses: input.statuses,
       overwrite: !!input.overwrite,
+      userId: user.id,
     });
     revalidatePath('/admin/migration');
     return { ok: true, result };
@@ -169,4 +181,102 @@ export async function clearGradeStagingAction(sourceCode: string): Promise<{ ok:
   const rows = await db.delete(legacy_grades).where(eq(legacy_grades.sourceCode, clean(sourceCode))).returning({ id: legacy_grades.id });
   revalidatePath('/admin/migration');
   return { ok: true, deleted: rows.length };
+}
+
+
+// ═══ ناحیهٔ موقت، پردازش دوباره و واگرد ═══
+
+/** فهرست دسته‌های واردشده برای یک مبدأ */
+export async function listBatchesAction(sourceCode: string): Promise<{ ok: boolean; batches: BatchSummary[] }> {
+  await guard();
+  return { ok: true, batches: await listBatches(clean(sourceCode)) };
+}
+
+/** سطرهای یک دسته (پیش‌فرض فقط خطادارها) */
+export async function batchRowsAction(batchId: number, status = 'ERROR') {
+  await guard();
+  return { ok: true, rows: await batchRows(batchId, status) };
+}
+
+/** پردازش دوبارهٔ سطرهای خطادار یک دسته پس از تکمیل نگاشت کدها */
+export async function reprocessBatchAction(batchId: number, all = false): Promise<{ ok: boolean; error?: string; reprocessed?: number; inserted?: number; updated?: number; invalid?: number }> {
+  const user = await guard();
+  try {
+    const r = await reprocessBatch(batchId, user.id, { all });
+    revalidatePath('/admin/migration');
+    return {
+      ok: true, reprocessed: r.reprocessed,
+      inserted: r.report?.inserted ?? 0, updated: r.report?.updated ?? 0, invalid: r.report?.invalid ?? 0,
+    };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/** پیش‌نمایش واگرد: این دسته/عملیات چه چیزی روی جدول‌های عملیاتی نوشته است؟ */
+export async function auditSummaryAction(input: { batchId?: number; opGroup?: string; sourceCode?: string }) {
+  await guard();
+  return { ok: true, rows: await auditSummary(input) };
+}
+
+/** فهرست عملیات‌های واگردپذیر یک مبدأ (اعمال نمره، اعمال فرمول، مانده اولیه) */
+export async function auditGroupsAction(sourceCode: string) {
+  await guard();
+  return { ok: true, groups: await auditGroups(clean(sourceCode)) };
+}
+
+/**
+ * واگرد یک دسته یا یک گروه عملیاتی.
+ * پیش‌فرض محافظه‌کار است: سطری که بعد از مهاجرت دستی تغییر کرده دست نمی‌خورد
+ * مگر force=true. نتیجهٔ کامل (حذف/بازگردانده/مسدود) برگردانده می‌شود.
+ */
+export async function rollbackAction(input: {
+  batchId?: number; opGroup?: string; sourceCode?: string; force?: boolean;
+}): Promise<{ ok: boolean; error?: string; result?: RollbackResult }> {
+  const user = await guard();
+  try {
+    const result = await rollbackBatch({
+      batchId: input.batchId, opGroup: input.opGroup,
+      sourceCode: input.sourceCode ? clean(input.sourceCode) : undefined,
+      force: !!input.force, userId: user.id,
+    });
+    log.warn('rollback_requested', { userId: user.id, ...input, total: result.total, deleted: result.deleted, restored: result.restored });
+    revalidatePath('/admin/migration');
+    return { ok: true, result };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/** حذف یک دسته از ناحیهٔ موقت (دادهٔ عملیاتی دست نمی‌خورد) */
+export async function deleteBatchAction(batchId: number): Promise<{ ok: boolean }> {
+  await guard();
+  await deleteBatch(batchId);
+  revalidatePath('/admin/migration');
+  return { ok: true };
+}
+
+/** پذیرش تراز سیستم قدیمی به‌عنوان «مانده اولیه» در دفتر مالی */
+export async function acceptLegacyBalanceAction(input: {
+  sourceCode: string; termCode?: string; runId?: number; onlyStatuses?: string[]; studentCodes?: string[];
+}): Promise<{ ok: boolean; error?: string; result?: OpeningBalanceResult }> {
+  const user = await guard();
+  try {
+    const result = await acceptLegacyBalance({
+      sourceCode: clean(input.sourceCode),
+      termCode: input.termCode?.trim() || undefined,
+      runId: input.runId, onlyStatuses: input.onlyStatuses,
+      studentCodes: input.studentCodes, userId: user.id,
+    });
+    revalidatePath('/admin/migration');
+    return { ok: true, result };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/** آمار رفع مغایرت یک اجرای مقایسه */
+export async function resolutionStatsAction(runId: number) {
+  await guard();
+  return { ok: true, rows: await resolutionStats(runId) };
 }

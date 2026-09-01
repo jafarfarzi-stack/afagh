@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import BatchesTab from './BatchesTab';
 import CodeMapTab from './CodeMapTab';
 import GradesTab from './GradesTab';
 import TuitionTab from './TuitionTab';
@@ -21,7 +22,7 @@ export default function MigrationClient(props: {
   financialCount: number;
   gradeStats: { status: string; count: number }[];
 }) {
-  const [tab, setTab] = useState<'core' | 'codes' | 'tuition' | 'grades' | 'history'>('core');
+  const [tab, setTab] = useState<'core' | 'codes' | 'tuition' | 'grades' | 'batches' | 'history'>('core');
   const [sourceCode, setSourceCode] = useState(props.sources[0]?.code ?? 'LEGACY');
 
   const tabs = [
@@ -29,6 +30,7 @@ export default function MigrationClient(props: {
     { id: 'codes', title: '🔗 تطبیق کدها' },
     { id: 'tuition', title: '💰 شهریه و مالی' },
     { id: 'grades', title: '🎯 نمرات' },
+    { id: 'batches', title: '↩ ناحیهٔ موقت و واگرد' },
     { id: 'history', title: '🕘 تاریخچه' },
   ] as const;
 
@@ -58,6 +60,7 @@ export default function MigrationClient(props: {
       {tab === 'codes' && <CodeMapTab domains={props.domains} sourceCode={sourceCode} />}
       {tab === 'tuition' && <TuitionTab sourceCode={sourceCode} formulas={props.formulas} runs={props.compareRuns} financialCount={props.financialCount} />}
       {tab === 'grades' && <GradesTab sourceCode={sourceCode} stats={props.gradeStats} />}
+      {tab === 'batches' && <BatchesTab sourceCode={sourceCode} />}
       {tab === 'history' && <HistoryTab />}
     </div>
   );

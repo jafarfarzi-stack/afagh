@@ -35,20 +35,62 @@ export function Msg({ kind, children }: { kind: 'err' | 'ok' | 'warn' | 'info'; 
   return <div className={`rounded-xl p-3 text-xs leading-6 ${cls}`}>{children}</div>;
 }
 
-/** آپلودر مشترک: انتخاب فایل اکسل/CSV + دکمهٔ عملیات + دانلود قالب */
+export type InspectField = { key: string; title: string; required: boolean; detectedIndex: number; detectedHeader: string | null };
+export type InspectSheet = { sheet: string; headers: string[]; rowCount: number; fields: InspectField[]; missingRequired: string[]; sample: string[][] };
+export type InspectResult = { fileName: string; kind: string; sheets: InspectSheet[]; best: string | null };
+
+/**
+ * آپلودر مشترک: انتخاب فایل اکسل/CSV + (اختیاری) گام «بررسی و نگاشت ستون‌ها» + عملیات.
+ * جادوگر سه‌گامی: ۱) انتخاب فایل  ۲) بررسی ستون‌ها و اصلاح نگاشت  ۳) واردسازی.
+ */
 export function Uploader({
-  kind, sourceCode, label, actions, onDone, templateKind,
+  kind, sourceCode, label, actions, onDone, templateKind, mappable,
 }: {
   kind: string;
   sourceCode: string;
   label: string;
   templateKind?: string;
+  /** گام «بررسی ستون‌ها» را فعال می‌کند (فقط برای انواعی که فرهنگ ستون دارند) */
+  mappable?: boolean;
   actions: { id: string; title: string; url: string; primary?: boolean; extra?: Record<string, string> }[];
   onDone: (report: ImportReport & { error?: string }) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState('');
   const [name, setName] = useState('');
+  const [inspect, setInspect] = useState<InspectResult | null>(null);
+  const [sheet, setSheet] = useState('');
+  const [map, setMap] = useState<Record<string, number>>({});
+
+  const curSheet = inspect?.sheets.find(s => s.sheet === sheet) ?? null;
+
+  /** گام ۲: فایل را بررسی کن و حدس ستون‌ها را نشان بده */
+  async function doInspect() {
+    const f = fileRef.current?.files?.[0];
+    if (!f) { onDone({ error: 'اول فایل اکسل (xlsx) یا CSV را انتخاب کنید.' } as ImportReport & { error: string }); return; }
+    setBusy('inspect');
+    try {
+      const fd = new FormData();
+      fd.set('file', f); fd.set('kind', kind);
+      const r = await fetch('/api/admin/migration/inspect', { method: 'POST', body: fd });
+      const j = await r.json();
+      if (!r.ok) { onDone({ error: j.error || `HTTP ${r.status}` } as ImportReport & { error: string }); return; }
+      const res = j as InspectResult;
+      setInspect(res);
+      const best = res.best ?? res.sheets[0]?.sheet ?? '';
+      setSheet(best);
+      const sh = res.sheets.find(s => s.sheet === best);
+      setMap(Object.fromEntries((sh?.fields ?? []).map(f2 => [f2.key, f2.detectedIndex])));
+    } catch (e) {
+      onDone({ error: (e as Error).message } as ImportReport & { error: string });
+    } finally { setBusy(''); }
+  }
+
+  function selectSheet(name2: string) {
+    setSheet(name2);
+    const sh = inspect?.sheets.find(s => s.sheet === name2);
+    setMap(Object.fromEntries((sh?.fields ?? []).map(f2 => [f2.key, f2.detectedIndex])));
+  }
 
   async function run(a: { id: string; url: string; extra?: Record<string, string> }) {
     const f = fileRef.current?.files?.[0];
@@ -58,6 +100,8 @@ export function Uploader({
     fd.set('file', f);
     fd.set('kind', kind);
     fd.set('sourceCode', sourceCode);
+    // اگر کاربر ستون‌ها را دستی نگاشت کرده، همان اولویت دارد
+    if (inspect && sheet) { fd.set('sheet', sheet); fd.set('columnMap', JSON.stringify(map)); }
     for (const [k, v] of Object.entries(a.extra ?? {})) fd.set(k, v);
     try {
       const r = await fetch(a.url, { method: 'POST', body: fd });
@@ -76,9 +120,14 @@ export function Uploader({
       <input
         ref={fileRef} type="file" className="input md:col-span-5"
         accept=".xlsx,.xlsm,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
-        onChange={e => setName(e.target.files?.[0]?.name ?? '')}
+        onChange={e => { setName(e.target.files?.[0]?.name ?? ''); setInspect(null); setMap({}); }}
       />
       <div className="md:col-span-4 flex flex-wrap gap-2">
+        {mappable && (
+          <button className="btn-ghost whitespace-nowrap" disabled={!!busy} onClick={doInspect}>
+            {busy === 'inspect' ? '…' : '🔎 بررسی ستون‌ها'}
+          </button>
+        )}
         {actions.map(a => (
           <button key={a.id} disabled={!!busy}
             className={(a.primary ? 'btn-primary' : 'btn-ghost') + ' flex-1 whitespace-nowrap'}
@@ -93,6 +142,56 @@ export function Uploader({
         )}
       </div>
       {name && <p className="md:col-span-12 text-[11px] text-slate-400" dir="ltr">{name}</p>}
+
+      {curSheet && (
+        <div className="md:col-span-12 space-y-2 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold text-slate-700">نگاشت ستون‌ها</span>
+            {inspect!.sheets.length > 1 && (
+              <select className="input w-48 py-1 text-xs" value={sheet} onChange={e => selectSheet(e.target.value)}>
+                {inspect!.sheets.map(s2 => <option key={s2.sheet} value={s2.sheet}>{s2.sheet} ({fmt(s2.rowCount)} ردیف)</option>)}
+              </select>
+            )}
+            <span className="text-[11px] text-slate-500">
+              {fmt(curSheet.rowCount)} ردیف · {fmt(curSheet.headers.length)} ستون
+            </span>
+            <button className="btn-ghost py-1 text-[11px]" onClick={() => setInspect(null)}>بستن</button>
+          </div>
+          {curSheet.missingRequired.length > 0 && (
+            <Msg kind="warn">ستون‌های الزامیِ تشخیص‌داده‌نشده: <b>{curSheet.missingRequired.join('، ')}</b> — از فهرست زیر ستون درست را انتخاب کنید.</Msg>
+          )}
+          <div className="grid gap-2 md:grid-cols-3">
+            {curSheet.fields.map(f2 => (
+              <label key={f2.key} className="flex items-center gap-2 text-[11px]">
+                <span className={'w-28 shrink-0 ' + (f2.required ? 'font-bold text-slate-700' : 'text-slate-500')}>
+                  {f2.title}{f2.required ? ' *' : ''}
+                </span>
+                <select
+                  className={'input flex-1 py-1 text-[11px] ' + ((map[f2.key] ?? -1) < 0 && f2.required ? 'border-red-300' : '')}
+                  value={String(map[f2.key] ?? -1)}
+                  onChange={e => setMap(m => ({ ...m, [f2.key]: Number(e.target.value) }))}>
+                  <option value="-1">— ندارد —</option>
+                  {curSheet.headers.map((h, i) => <option key={i} value={i}>{h || `ستون ${i + 1}`}</option>)}
+                </select>
+              </label>
+            ))}
+          </div>
+          {curSheet.sample.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-[10px]">
+                <thead><tr className="text-slate-500">{curSheet.headers.map((h, i) => <th key={i} className="p-1">{h || i + 1}</th>)}</tr></thead>
+                <tbody>
+                  {curSheet.sample.map((r, i) => (
+                    <tr key={i} className="border-t border-slate-100">
+                      {curSheet.headers.map((_, c) => <td key={c} className="p-1 text-slate-600">{r[c]}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
