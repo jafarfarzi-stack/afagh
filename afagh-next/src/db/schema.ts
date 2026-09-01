@@ -228,7 +228,11 @@ export const course_offerings = pgTable('course_offerings', {
   isActive: integer('isActive').notNull().default(1),
   gradesHash: text('gradesHash'),
   gradesTemporaryAt: timestamp('gradesTemporaryAt'),
-  gradesFinalizedAt: timestamp('gradesFinalizedAt')
+  gradesFinalizedAt: timestamp('gradesFinalizedAt'),
+  targetDegreeLevelId: integer('targetDegreeLevelId'),
+  targetMajorId: integer('targetMajorId'),
+  entryYearStart: integer('entryYearStart'),
+  entryYearEnd: integer('entryYearEnd')
 });
 
 export const offering_professors = pgTable('offering_professors', {
@@ -1084,4 +1088,19 @@ export const virtual_class_recordings = pgTable('virtual_class_recordings', {
   durationMinutes: integer('durationMinutes').notNull().default(90),
   recordedAt: timestamp('recordedAt').defaultNow(),
   viewsCount: integer('viewsCount').default(0)
+});
+
+export const migration_runs = pgTable('migration_runs', {
+  id: serial('id').primaryKey(),
+  entity: varchar('entity', { length: 50 }).notNull(),
+  fileName: varchar('fileName', { length: 255 }).notNull(),
+  mode: varchar('mode', { length: 20 }).notNull(),
+  totalRows: integer('totalRows').default(0),
+  inserted: integer('inserted').default(0),
+  skippedExisting: integer('skippedExisting').default(0),
+  invalid: integer('invalid').default(0),
+  report: text('report'),
+  status: varchar('status', { length: 30 }).default('OK'),
+  triggeredByUserId: integer('triggeredByUserId'),
+  executedAt: timestamp('executedAt').defaultNow()
 });

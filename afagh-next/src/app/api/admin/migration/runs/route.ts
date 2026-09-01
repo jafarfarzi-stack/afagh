@@ -13,6 +13,6 @@ export async function GET() {
   return NextResponse.json(rows.map(r => ({
     id: r.id, entity: r.entity, fileName: r.fileName, mode: r.mode, status: r.status,
     total: r.totalRows, inserted: r.inserted, existing: r.skippedExisting, invalid: r.invalid,
-    at: r.createdAt,
+    at: r.executedAt,
   })));
 }
