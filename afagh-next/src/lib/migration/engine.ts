@@ -5,11 +5,13 @@ import {
   academic_terms, course_offerings, courses, enrollments, financial_clearances, majors,
   migration_runs, student_ledger, students, users,
 } from '@/db/schema';
-import { boolFa, checkNationalCode, dateFa, norm, num, parseCsv, pickCol } from './normalize';
+import { boolFa, checkNationalCode, dateFa, norm, num } from './normalize';
+import { iterate, pickTable, type Table } from './tabular';
+import { resolverFor } from './codemap';
 
 // ═══ سامانهٔ مهاجرت داده از سیستم قدیمی — آموزشی + مالی ═══
 // معماری: parse → normalize → validate → (dry-run گزارش | commit تراکنشی idempotent)
-// ورودی: CSV/متن با سرستون‌های فارسی یا انگلیسی (نامک‌ها انعطاف‌پذیر)
+// ورودی: فایل اکسل (xlsx) یا CSV با سرستون‌های فارسی یا انگلیسی (نامک‌ها انعطاف‌پذیر)
 
 export type Entity = 'student' | 'course' | 'term' | 'enrollment' | 'ledger' | 'clearance';
 export const ENTITIES: { id: Entity; title: string; sample: string }[] = [
@@ -53,21 +55,27 @@ type Prepared = {
 };
 
 // ── مرحلهٔ ۱+۲: تجزیه و اعتبارسنجی ──
-function prepare(entity: Entity, text: string, fileName: string): Prepared {
-  const table = parseCsv(text);
+const ENTITY_HINTS: Record<Entity, string[][]> = {
+  student: [['کد ملی', 'national_code'], ['شماره دانشجویی', 'student_code'], ['نام خانوادگی', 'last_name']],
+  course: [['کد درس', 'course_code'], ['نام درس', 'title'], ['واحد', 'units']],
+  term: [['کد ترم', 'term_code'], ['عنوان ترم', 'title']],
+  enrollment: [['شماره دانشجویی', 'student_code'], ['کد درس', 'course_code'], ['نمره', 'grade']],
+  ledger: [['شماره دانشجویی', 'student_code'], ['مبلغ', 'amount'], ['نوع', 'type']],
+  clearance: [['شماره دانشجویی', 'student_code'], ['تسویه', 'cleared']],
+};
+
+function prepare(entity: Entity, tables: Table[], fileName: string): Prepared {
   const report: Report = { entity, fileName, total: 0, invalid: 0, willInsert: 0, existing: 0, errors: [], warnings: [], sample: [] };
-  if (table.length < 2) { report.errors.push({ row: 0, msg: 'فایل خالی یا بدون ردیف داده است.' }); return { report, rows: [], rowNumbers: [] }; }
-  const headers = table[0];
-  const body = table.slice(1);
+  const table = pickTable(tables, ENTITY_HINTS[entity]);
+  if (!table || !table.rows.length) { report.errors.push({ row: 0, msg: 'فایل خالی یا بدون ردیف داده است.' }); return { report, rows: [], rowNumbers: [] }; }
+  const body = iterate(table);
   report.total = body.length;
 
-  const col = (aliases: string[]) => pickCol(headers, aliases).idx;
   const rows: Record<string, unknown>[] = [];
-  const rowNumbers: number[] = [];
 
-  body.forEach((r, i) => {
-    const ln = i + 2; // شمارهٔ خط انسانی (۱ = سرستون)
-    const get = (aliases: string[]) => (col(aliases) >= 0 ? norm(r[col(aliases)]) : '');
+  body.forEach(rec => {
+    const ln = rec.line; // شمارهٔ خط انسانی (۱ = سرستون)
+    const get = rec.get;
     const err = (m: string) => report.errors.push({ row: ln, msg: m });
     const warn = (m: string) => report.warnings.push({ row: ln, msg: m });
 
@@ -147,8 +155,8 @@ function prepare(entity: Entity, text: string, fileName: string): Prepared {
 }
 
 // ── مرحلهٔ ۳: dry-run — شبیه‌سازی بدون نوشتن ──
-export async function dryRun(entity: Entity, text: string, fileName: string): Promise<Report> {
-  const { report, rows } = prepare(entity, text, fileName);
+export async function dryRun(entity: Entity, tables: Table[], fileName: string): Promise<Report> {
+  const { report, rows } = prepare(entity, tables, fileName);
   const codes = rows.map(r => String(r.studentCode ?? ''));
 
   if (entity === 'student') {
@@ -182,17 +190,26 @@ export async function dryRun(entity: Entity, text: string, fileName: string): Pr
 }
 
 // ── مرحلهٔ ۴: commit — درج تراکنشی idempotent + تاریخچه ──
-export async function commit(userId: number, entity: Entity, text: string, fileName: string): Promise<Report> {
-  const { report, rows } = prepare(entity, text, fileName);
+export async function commit(userId: number, entity: Entity, tables: Table[], fileName: string, sourceCode = 'LEGACY'): Promise<Report> {
+  const { report, rows } = prepare(entity, tables, fileName);
   let inserted = 0; let existing = 0;
 
   if (entity === 'student') {
     const degId = 1;   // کارشناسی پیوسته (پیش‌فرض مهاجرت — در کد قابل تنظیم)
     const regId = 1;   // آیین‌نامهٔ پیش‌فرض کارشناسی
     const majorRows = await db.select().from(majors);
+    const majorMap = await resolverFor(sourceCode, 'MAJOR');       // میز تطبیق کدها
+    const statusMap = await resolverFor(sourceCode, 'STUDENT_STATUS');
     for (const r of rows) {
-      const major = majorRows.find(m => norm(m.name) === norm(String(r.majorName))) ?? null;
-      if (String(r.majorName) && !major) report.warnings.push({ row: 0, msg: `رشتهٔ «${r.majorName}» یافت نشد — بدون رشته ثبت شد.` });
+      const key = norm(String(r.majorName));
+      const mapped = majorMap.get(key);
+      const major = (mapped?.id ? majorRows.find(m => m.id === mapped.id) : null)
+        ?? majorRows.find(m => norm(m.name) === key)
+        ?? majorRows.find(m => norm(m.majorCode ?? '') === key)
+        ?? null;
+      if (String(r.majorName) && !major) report.warnings.push({ row: 0, msg: `رشتهٔ «${r.majorName}» تطبیق نخورد — بدون رشته ثبت شد (میز تطبیق کدها).` });
+      const mappedStatus = statusMap.get(norm(String(r.status)))?.code;
+      if (mappedStatus) r.status = mappedStatus;
       const res = await db.transaction(async tx => {
         let [u] = await tx.insert(users).values({
           nationalCode: String(r.nationalCode), firstName: String(r.firstName), lastName: String(r.lastName),

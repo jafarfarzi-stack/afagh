@@ -1105,3 +1105,136 @@ export const migration_runs = pgTable('migration_runs', {
   triggeredByUserId: integer('triggeredByUserId'),
   createdAt: timestamp('createdAt').defaultNow()
 });
+
+// ══════════════════════════════════════════════════════════════════════
+//  مهاجرت از سرورهای قدیمی — میز کار تطبیق کد، شهریه و نمرات
+//  (سند «انتقال داده‌های قدیمی»: staging جدا از دادهٔ عملیاتی تا مقایسه و
+//   بازبینی ممکن باشد و هیچ‌چیز کورکورانه روی سامانهٔ جدید نوشته نشود)
+// ══════════════════════════════════════════════════════════════════════
+
+/** سرور/سامانهٔ مبدأ (گلستان، سما، اکسل واحد مالی و…) */
+export const legacy_sources = pgTable('legacy_sources', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 50 }).notNull().unique(),   // LEGACY, GOLESTAN, SAMA…
+  title: varchar('title', { length: 150 }).notNull(),
+  kind: varchar('kind', { length: 30 }).default('OTHER'),     // GOLESTAN | SAMA | EXCEL | OTHER
+  note: text('note'),
+  isActive: integer('isActive').notNull().default(1),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+/** جدول تطبیق کدها: کد سیستم قدیمی → موجودیت سامانهٔ جدید */
+export const legacy_code_maps = pgTable('legacy_code_maps', {
+  id: serial('id').primaryKey(),
+  sourceCode: varchar('sourceCode', { length: 50 }).notNull().default('LEGACY'),
+  domain: varchar('domain', { length: 30 }).notNull(),        // MAJOR|DEGREE|TERM|COURSE|DEPARTMENT|STUDENT_STATUS|GRADE_STATUS|TX_TYPE|FEE_ITEM|COURSE_TYPE|QUOTA
+  legacyCode: varchar('legacyCode', { length: 100 }).notNull(),
+  legacyTitle: varchar('legacyTitle', { length: 250 }),
+  targetId: integer('targetId'),                              // شناسهٔ رکورد متناظر در سامانهٔ جدید
+  targetCode: varchar('targetCode', { length: 100 }),         // کد/مقدار متناظر (برای فهرست‌های ثابت)
+  targetTitle: varchar('targetTitle', { length: 250 }),
+  confidence: numeric('confidence', { precision: 5, scale: 2 }).default('0'),
+  status: varchar('status', { length: 20 }).notNull().default('UNMAPPED'), // UNMAPPED|SUGGESTED|CONFIRMED|IGNORED
+  note: text('note'),
+  updatedByUserId: integer('updatedByUserId'),
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow()
+}, (t) => ({ uq: unique('uq_legacy_code_maps').on(t.sourceCode, t.domain, t.legacyCode) }));
+
+/** فرمول شهریهٔ سیستم قدیمی (قابل ارزیابی و مقایسه با دادهٔ مالی قدیمی) */
+export const legacy_tuition_formulas = pgTable('legacy_tuition_formulas', {
+  id: serial('id').primaryKey(),
+  sourceCode: varchar('sourceCode', { length: 50 }).notNull().default('LEGACY'),
+  formulaCode: varchar('formulaCode', { length: 60 }).notNull(),
+  title: varchar('title', { length: 200 }),
+  termCode: varchar('termCode', { length: 10 }),              // خام از سیستم قدیمی (خالی = همهٔ ترم‌ها)
+  degreeCode: varchar('degreeCode', { length: 60 }),          // کد مقطع قدیمی
+  majorCode: varchar('majorCode', { length: 60 }),            // کد رشتهٔ قدیمی
+  entryYearFrom: integer('entryYearFrom'),
+  entryYearTo: integer('entryYearTo'),
+  fixedAmount: numeric('fixedAmount', { precision: 14, scale: 0 }).notNull().default('0'),
+  perUnitTheory: numeric('perUnitTheory', { precision: 14, scale: 0 }).notNull().default('0'),
+  perUnitPractical: numeric('perUnitPractical', { precision: 14, scale: 0 }).notNull().default('0'),
+  perUnitGeneral: numeric('perUnitGeneral', { precision: 14, scale: 0 }).notNull().default('0'),
+  expression: text('expression'),                             // فرمول متنی اختیاری (اولویت با آن)
+  variables: text('variables'),                               // JSON متغیرهای کمکی {"ضریب":1.2}
+  isActive: integer('isActive').notNull().default(1),
+  note: text('note'),
+  createdByUserId: integer('createdByUserId'),
+  createdAt: timestamp('createdAt').defaultNow()
+}, (t) => ({ uq: unique('uq_legacy_tuition_formulas').on(t.sourceCode, t.formulaCode, t.termCode) }));
+
+/** صورت‌حساب/شهریهٔ واقعیِ ثبت‌شده در سیستم قدیمی — مبنای مقایسه */
+export const legacy_financial_records = pgTable('legacy_financial_records', {
+  id: serial('id').primaryKey(),
+  sourceCode: varchar('sourceCode', { length: 50 }).notNull().default('LEGACY'),
+  studentCode: varchar('studentCode', { length: 20 }).notNull(),
+  studentName: varchar('studentName', { length: 150 }),
+  termCode: varchar('termCode', { length: 10 }).notNull(),
+  formulaCode: varchar('formulaCode', { length: 60 }),
+  degreeCode: varchar('degreeCode', { length: 60 }),
+  majorCode: varchar('majorCode', { length: 60 }),
+  entryYear: integer('entryYear'),
+  totalUnits: numeric('totalUnits', { precision: 6, scale: 2 }).default('0'),
+  theoryUnits: numeric('theoryUnits', { precision: 6, scale: 2 }).default('0'),
+  practicalUnits: numeric('practicalUnits', { precision: 6, scale: 2 }).default('0'),
+  generalUnits: numeric('generalUnits', { precision: 6, scale: 2 }).default('0'),
+  legacyTuition: numeric('legacyTuition', { precision: 14, scale: 0 }).notNull().default('0'),
+  legacyDiscount: numeric('legacyDiscount', { precision: 14, scale: 0 }).notNull().default('0'),
+  legacyPaid: numeric('legacyPaid', { precision: 14, scale: 0 }).notNull().default('0'),
+  raw: text('raw'),                                            // JSON ردیف خام برای رهگیری
+  importedAt: timestamp('importedAt').defaultNow()
+}, (t) => ({ uq: unique('uq_legacy_financial_records').on(t.sourceCode, t.studentCode, t.termCode) }));
+
+/** اجرای مقایسهٔ شهریه: فرمول‌های منتقل‌شده در برابر دادهٔ مالی قدیمی */
+export const tuition_compare_runs = pgTable('tuition_compare_runs', {
+  id: serial('id').primaryKey(),
+  sourceCode: varchar('sourceCode', { length: 50 }).notNull().default('LEGACY'),
+  termCode: varchar('termCode', { length: 10 }),
+  tolerance: numeric('tolerance', { precision: 14, scale: 0 }).notNull().default('0'),
+  totalRows: integer('totalRows').default(0),
+  matched: integer('matched').default(0),
+  mismatched: integer('mismatched').default(0),
+  unresolved: integer('unresolved').default(0),
+  sumLegacy: numeric('sumLegacy', { precision: 16, scale: 0 }).default('0'),
+  sumComputed: numeric('sumComputed', { precision: 16, scale: 0 }).default('0'),
+  sumDiff: numeric('sumDiff', { precision: 16, scale: 0 }).default('0'),
+  createdByUserId: integer('createdByUserId'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+export const tuition_compare_items = pgTable('tuition_compare_items', {
+  id: serial('id').primaryKey(),
+  runId: integer('runId').notNull().references(() => tuition_compare_runs.id),
+  studentCode: varchar('studentCode', { length: 20 }).notNull(),
+  studentName: varchar('studentName', { length: 150 }),
+  termCode: varchar('termCode', { length: 10 }),
+  formulaCode: varchar('formulaCode', { length: 60 }),
+  totalUnits: numeric('totalUnits', { precision: 6, scale: 2 }).default('0'),
+  legacyAmount: numeric('legacyAmount', { precision: 14, scale: 0 }).default('0'),
+  computedAmount: numeric('computedAmount', { precision: 14, scale: 0 }).default('0'),
+  diff: numeric('diff', { precision: 14, scale: 0 }).default('0'),
+  status: varchar('status', { length: 20 }).notNull(),        // MATCH | DIFF | NO_FORMULA | ERROR
+  detail: text('detail')
+});
+
+/** نمرات سیستم قدیمی (staging) — قبل از اعمال، با سامانهٔ جدید مقایسه می‌شود */
+export const legacy_grades = pgTable('legacy_grades', {
+  id: serial('id').primaryKey(),
+  sourceCode: varchar('sourceCode', { length: 50 }).notNull().default('LEGACY'),
+  studentCode: varchar('studentCode', { length: 20 }).notNull(),
+  studentName: varchar('studentName', { length: 150 }),
+  termCode: varchar('termCode', { length: 10 }).notNull(),
+  courseCode: varchar('courseCode', { length: 40 }).notNull(),
+  courseTitle: varchar('courseTitle', { length: 200 }),
+  units: numeric('units', { precision: 5, scale: 2 }),
+  gradeRaw: varchar('gradeRaw', { length: 40 }),              // مقدار خام («۱۷.۵»، «قبول»، «الف»)
+  gradeValue: numeric('gradeValue', { precision: 5, scale: 2 }),
+  gradeStatus: varchar('gradeStatus', { length: 20 }).notNull().default('FINALIZED'),
+  professorName: varchar('professorName', { length: 150 }),
+  compareStatus: varchar('compareStatus', { length: 20 }).default('PENDING'), // PENDING|SAME|DIFF|MISSING_IN_NEW|NO_STUDENT|NO_TERM
+  compareNote: text('compareNote'),
+  appliedAt: timestamp('appliedAt'),
+  raw: text('raw'),
+  importedAt: timestamp('importedAt').defaultNow()
+}, (t) => ({ uq: unique('uq_legacy_grades').on(t.sourceCode, t.studentCode, t.termCode, t.courseCode) }));
