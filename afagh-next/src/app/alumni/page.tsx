@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { requireRole } from '@/lib/auth';
 import { alumniOf, getProfile, myDegrees, myRequests, serviceCatalog } from '@/lib/alumni';
 import AlumniClient from './AlumniClient';
@@ -6,7 +7,9 @@ export const dynamic = 'force-dynamic';
 
 export default async function AlumniHome() {
   const user = await requireRole(['STUDENT']);
-  const me = (await alumniOf(user.id))!;
+  // صفحه و layout به‌صورت موازی رندر می‌شوند؛ پس همین‌جا هم گارد لازم است
+  const me = await alumniOf(user.id);
+  if (!me) redirect('/student');
   const [services, requests, degrees, profile] = await Promise.all([
     serviceCatalog(), myRequests(me.studentId), myDegrees(me.studentId), getProfile(me.studentId),
   ]);
