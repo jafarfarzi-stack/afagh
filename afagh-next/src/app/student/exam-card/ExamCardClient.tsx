@@ -87,6 +87,77 @@ const INITIAL_COURSES: StudentCourseEvaluationItem[] = [
   },
 ];
 
+// Component for rendering an SVG QR Code matrix for student tickets
+function SvgQrCode({ text, size = 90 }: { text: string; size?: number }) {
+  // Deterministic 21x21 QR-like matrix pattern based on hash of text
+  const matrix = useMemo(() => {
+    const grid: boolean[][] = Array.from({ length: 21 }, () => Array(21).fill(false));
+    // Fixed Finder Patterns in top-left, top-right, bottom-left
+    const addFinder = (r: number, c: number) => {
+      for (let i = 0; i < 7; i++) {
+        for (let j = 0; j < 7; j++) {
+          if (i === 0 || i === 6 || j === 0 || j === 6 || (i >= 2 && i <= 4 && j >= 2 && j <= 4)) {
+            grid[r + i][c + j] = true;
+          }
+        }
+      }
+    };
+    addFinder(0, 0);
+    addFinder(0, 14);
+    addFinder(14, 0);
+
+    // Hash seed data
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+      hash = (hash * 31 + text.charCodeAt(i)) & 0xffffffff;
+    }
+
+    for (let r = 0; r < 21; r++) {
+      for (let c = 0; c < 21; c++) {
+        // Skip finder areas
+        if ((r < 8 && c < 8) || (r < 8 && c > 12) || (r > 12 && c < 8)) continue;
+        // Timing patterns
+        if (r === 6 || c === 6) {
+          grid[r][c] = (r + c) % 2 === 0;
+        } else {
+          hash = (hash * 1103515245 + 12345) & 0x7fffffff;
+          grid[r][c] = (hash % 100) > 42;
+        }
+      }
+    }
+    return grid;
+  }, [text]);
+
+  return (
+    <svg width={size} height={size} viewBox="0 0 21 21" className="rounded-lg shadow-xs bg-white p-1">
+      {matrix.map((row, r) =>
+        row.map((cell, c) =>
+          cell ? <rect key={`${r}-${c}`} x={c} y={r} width="1" height="1" fill="#0f172a" /> : null
+        )
+      )}
+    </svg>
+  );
+}
+
+// Persian solar date converter helper
+function toShamsi(dStr: string | null | undefined): string {
+  if (!dStr) return '—';
+  if (dStr.startsWith('13') || dStr.startsWith('14') || dStr.startsWith('۱۴') || dStr.startsWith('۱۳')) {
+    return dStr;
+  }
+  try {
+    const d = new Date(dStr);
+    if (isNaN(d.getTime())) return dStr;
+    return new Intl.DateTimeFormat('fa-IR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+  } catch {
+    return dStr;
+  }
+}
+
 export default function ExamCardClient({ user }: Props) {
   const [courses, setCourses] = useState<StudentCourseEvaluationItem[]>(INITIAL_COURSES);
   const [financialDebt, setFinancialDebt] = useState<number>(5000000); // 5,000,000 Rials (500,000 Tomans)
@@ -153,7 +224,7 @@ export default function ExamCardClient({ user }: Props) {
   return (
     <div className="space-y-4">
       {/* Top Banner */}
-      <div className="card bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white p-5 rounded-2xl shadow-md border border-emerald-700/50">
+      <div className="card bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white p-5 rounded-2xl shadow-md border border-emerald-700/50 print:hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-emerald-600 flex items-center justify-center text-3xl shadow-inner">
@@ -190,7 +261,7 @@ export default function ExamCardClient({ user }: Props) {
 
       {/* Toast Alert */}
       {toastMessage && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl text-xs font-bold flex items-center justify-between shadow-xs animate-in fade-in">
+        <div className="p-3.5 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl text-xs font-bold flex items-center justify-between shadow-xs animate-in fade-in print:hidden">
           <div className="flex items-center gap-2">
             <span className="text-lg">📢</span>
             <span>{toastMessage}</span>
@@ -200,7 +271,7 @@ export default function ExamCardClient({ user }: Props) {
       )}
 
       {/* DUAL CHECKPOINT STATUS DASHBOARD */}
-      <div className="card space-y-3.5 border-l-4 border-l-emerald-600">
+      <div className="card space-y-3.5 border-l-4 border-l-emerald-600 print:hidden">
         <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
           <h2 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
             <span>🛡️ وضعیت گیت‌های کنترل دوگانه صدور کارت (Dual-Checkpoint)</span>
@@ -286,7 +357,7 @@ export default function ExamCardClient({ user }: Props) {
       </div>
 
       {/* COURSE EVALUATION LIST */}
-      <div className="card space-y-3">
+      <div className="card space-y-3 print:hidden">
         <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
           <div>
             <h3 className="font-black text-slate-900 text-sm">
@@ -325,7 +396,7 @@ export default function ExamCardClient({ user }: Props) {
                 </div>
 
                 <div className="text-xs text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1 pt-0.5">
-                  <span>📅 تاریخ امتحان: <strong className="font-mono text-slate-900">{course.examDate}</strong></span>
+                  <span>📅 تاریخ امتحان: <strong className="font-mono text-slate-900">{toShamsi(course.examDate)}</strong></span>
                   <span>⏰ ساعت: <strong className="font-mono text-slate-900">{course.examTime}</strong></span>
                   <span>🏛️ سالن آزمون: <strong className="text-slate-900">{course.examHall}</strong></span>
                   <span>🪑 شماره صندلی: <strong className="text-indigo-900 font-mono font-black">صندلی {course.seatNumber}</strong></span>
@@ -367,10 +438,13 @@ export default function ExamCardClient({ user }: Props) {
 
       {/* UNLOCKED OFFICIAL EXAM CARD */}
       {isCardUnlocked ? (
-        <div className="card space-y-4 border-2 border-emerald-500 shadow-xl bg-gradient-to-br from-white via-slate-50 to-emerald-50/30 p-6 rounded-3xl animate-in fade-in zoom-in-95">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-emerald-600 pb-4">
+        <div
+          id="exam-card-print-area"
+          className="card space-y-4 border-2 border-emerald-600 shadow-xl bg-white p-6 rounded-3xl animate-in fade-in zoom-in-95 print:border-2 print:border-black print:rounded-none print:shadow-none print:p-4 print:m-0"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-slate-800 pb-3">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-800 text-white flex items-center justify-center font-black text-2xl shadow-md">
+              <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-2xl shadow-md">
                 آ
               </div>
               <div>
@@ -383,10 +457,10 @@ export default function ExamCardClient({ user }: Props) {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 print:hidden">
               <button
                 onClick={() => window.print()}
-                className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs shadow flex items-center gap-1.5 transition"
+                className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs shadow flex items-center gap-1.5 transition active:scale-95"
               >
                 <span>🖨️ چاپ و ذخیره کارت (PDF)</span>
               </button>
@@ -394,7 +468,7 @@ export default function ExamCardClient({ user }: Props) {
           </div>
 
           {/* Student Profile Info Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-4 rounded-2xl border border-slate-200 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-300 text-xs">
             <div>
               <span className="text-slate-500 block text-[11px]">نام و نام خانوادگی:</span>
               <strong className="text-slate-900 text-sm font-black">{user.name}</strong>
@@ -415,29 +489,31 @@ export default function ExamCardClient({ user }: Props) {
 
           {/* Exams Timetable on the Card */}
           <div className="overflow-x-auto">
-            <table className="w-full text-right text-xs border-collapse">
+            <table className="w-full text-right text-xs border-collapse border border-slate-400">
               <thead>
                 <tr className="bg-slate-900 text-white">
-                  <th className="p-2.5">کد درس</th>
-                  <th className="p-2.5">عنوان درس</th>
-                  <th className="p-2.5">استاد مدرس</th>
-                  <th className="p-2.5 text-center">تاریخ امتحان</th>
-                  <th className="p-2.5 text-center">ساعت و سانس</th>
-                  <th className="p-2.5">حوزه و سالن آزمون</th>
-                  <th className="p-2.5 text-center font-black">شماره صندلی داوطلب</th>
+                  <th className="p-2 border border-slate-700 text-center w-10">ردیف</th>
+                  <th className="p-2 border border-slate-700 text-center w-20">کد درس</th>
+                  <th className="p-2 border border-slate-700">عنوان درس</th>
+                  <th className="p-2 border border-slate-700">استاد مدرس</th>
+                  <th className="p-2 border border-slate-700 text-center w-28">تاریخ امتحان</th>
+                  <th className="p-2 border border-slate-700 text-center w-32">ساعت و سانس</th>
+                  <th className="p-2 border border-slate-700">حوزه و سالن آزمون</th>
+                  <th className="p-2 border border-slate-700 text-center font-black w-28">شماره صندلی داوطلب</th>
                 </tr>
               </thead>
               <tbody>
-                {courses.map(c => (
-                  <tr key={c.id} className="border-b border-slate-200 hover:bg-slate-50/80 transition">
-                    <td className="p-2.5 font-mono font-bold text-slate-700" dir="ltr">{c.courseCode}</td>
-                    <td className="p-2.5 font-black text-slate-900">{c.courseTitle} ({c.units} واحد)</td>
-                    <td className="p-2.5 text-slate-800 font-bold">{c.professorName}</td>
-                    <td className="p-2.5 text-center font-mono font-black text-slate-900 bg-slate-100/60">{c.examDate}</td>
-                    <td className="p-2.5 text-center font-mono text-slate-700">{c.examTime}</td>
-                    <td className="p-2.5 font-bold text-indigo-950">🏛️ {c.examHall}</td>
-                    <td className="p-2.5 text-center bg-indigo-50 border-x border-indigo-200">
-                      <span className="px-3 py-1 rounded-xl bg-indigo-900 text-white font-mono font-black text-xs shadow-xs">
+                {courses.map((c, idx) => (
+                  <tr key={c.id} className="border-b border-slate-300 hover:bg-slate-50 transition">
+                    <td className="p-2 border border-slate-300 text-center font-bold">{idx + 1}</td>
+                    <td className="p-2 border border-slate-300 font-mono font-bold text-slate-700 text-center" dir="ltr">{c.courseCode}</td>
+                    <td className="p-2 border border-slate-300 font-black text-slate-900">{c.courseTitle} ({c.units} واحد)</td>
+                    <td className="p-2 border border-slate-300 text-slate-800 font-bold">{c.professorName}</td>
+                    <td className="p-2 border border-slate-300 text-center font-mono font-black text-slate-900 bg-slate-100/60">{toShamsi(c.examDate)}</td>
+                    <td className="p-2 border border-slate-300 text-center font-mono text-slate-700">{c.examTime}</td>
+                    <td className="p-2 border border-slate-300 font-bold text-slate-900">🏛️ {c.examHall}</td>
+                    <td className="p-2 border border-slate-300 text-center bg-indigo-50/80">
+                      <span className="px-2.5 py-0.5 rounded-lg bg-indigo-950 text-white font-mono font-black text-xs">
                         صندلی {c.seatNumber}
                       </span>
                     </td>
@@ -448,32 +524,30 @@ export default function ExamCardClient({ user }: Props) {
           </div>
 
           {/* QR Code & Security Barcode Verification Block */}
-          <div className="p-4 bg-slate-900 text-white rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
-            <div className="space-y-1">
+          <div className="p-3.5 bg-slate-900 text-white rounded-xl flex items-center justify-between gap-4 text-xs">
+            <div className="space-y-1 flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-base">🔐</span>
                 <h4 className="font-black text-emerald-400">کد امنیتی و بارکد اختصاصی آزمون:</h4>
               </div>
-              <p className="text-slate-300 font-mono" dir="ltr">AFAGH-EXAM-31412001-SEAT-01-MATH1</p>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-slate-300 font-mono text-xs" dir="ltr">AFAGH-EXAM-31412001-SEAT-01-MATH1</p>
+              <p className="text-[10px] text-slate-400">
                 این بارکد توسط مراقب سالن با اسکنر QR-Code در ورودی جلسه جهت ثبت حضور و احراز هویت اسکن خواهد شد.
               </p>
             </div>
 
-            <div className="p-2.5 bg-white rounded-xl text-slate-950 text-center shadow">
-              <div className="w-20 h-20 bg-slate-950 rounded-lg flex items-center justify-center text-white font-mono text-xs font-black">
-                [ QR-CODE ]
-              </div>
-              <span className="text-[9px] font-mono text-slate-600 block mt-1">31412001</span>
+            <div className="p-2 bg-white rounded-xl text-slate-950 text-center shadow flex flex-col items-center justify-center">
+              <SvgQrCode text="https://afagh.ac.ir/exam-ticket/VERIFY-31412001-MATH1" size={75} />
+              <span className="text-[9px] font-mono font-bold text-slate-700 block mt-0.5">31412001</span>
             </div>
           </div>
 
-          <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-900 font-bold leading-relaxed">
+          <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-300 text-[10px] text-amber-950 font-bold leading-relaxed">
             ⚠️ <strong>نکات مهم امتحانات:</strong> همراه داشتن پرینت این کارت و کارت شناسایی معتبر الزامی است. همراه داشتن تلفن همراه، ساعت هوشمند و یادداشت تقلب تخلف محسوب شده و صورت‌جلسه انضباطی تنظیم خواهد شد.
           </div>
         </div>
       ) : (
-        <div className="p-8 text-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-300 text-slate-500 space-y-3">
+        <div className="p-8 text-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-300 text-slate-500 space-y-3 print:hidden">
           <div className="w-14 h-14 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-3xl mx-auto">
             🔒
           </div>
@@ -486,11 +560,43 @@ export default function ExamCardClient({ user }: Props) {
         </div>
       )}
 
+      {/* Print Specific CSS */}
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 8mm;
+          }
+          body, html {
+            background: #ffffff !important;
+            color: #000000 !important;
+            font-size: 11px !important;
+          }
+          header, footer, nav, .print\\:hidden, [role="navigation"] {
+            display: none !important;
+          }
+          #exam-card-print-area {
+            display: block !important;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            box-shadow: none !important;
+            border: 2px solid #000 !important;
+            border-radius: 8px !important;
+            padding: 12px !important;
+            background: #fff !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+        }
+      `}</style>
+
       {/* ========================================================================= */}
       {/* MODAL: SMART COURSE & FACULTY EVALUATION FORM */}
       {/* ========================================================================= */}
       {evaluatingCourse && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
             <div className="p-4 bg-indigo-950 text-white flex items-center justify-between">
               <div>

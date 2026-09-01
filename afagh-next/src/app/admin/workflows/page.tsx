@@ -1,5 +1,5 @@
 import { desc, eq, inArray } from 'drizzle-orm';
-import { db } from '@/db';
+import { db, ensureDbSchemaPatches } from '@/db';
 import {
   process_definitions,
   process_steps,
@@ -19,6 +19,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function AdminWorkflowsPage() {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
+  await ensureDbSchemaPatches();
   await ensureDefaultProcesses();
 
   const now = new Date();

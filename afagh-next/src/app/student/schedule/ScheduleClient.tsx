@@ -31,6 +31,25 @@ export interface EnrolledCourseItem {
 
 const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
 
+function toShamsi(dStr: string | null | undefined): string {
+  if (!dStr) return '—';
+  // If already in Persian format
+  if (dStr.startsWith('13') || dStr.startsWith('14') || dStr.startsWith('۱۴') || dStr.startsWith('۱۳')) {
+    return faNum(dStr);
+  }
+  try {
+    const d = new Date(dStr);
+    if (isNaN(d.getTime())) return faNum(dStr);
+    return new Intl.DateTimeFormat('fa-IR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+  } catch {
+    return faNum(dStr);
+  }
+}
+
 const DAYS = [
   { id: 0, name: 'شنبه' },
   { id: 1, name: 'یکشنبه' },
@@ -374,7 +393,7 @@ export default function ScheduleClient({
                     <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
                       <td className="p-2 border-l border-slate-200 text-center font-bold">{faNum(idx + 1)}</td>
                       <td className="p-2 border-l border-slate-200 text-center font-bold text-indigo-950 font-mono">
-                        {faNum(ex.examDate)}
+                        {toShamsi(ex.examDate)}
                       </td>
                       <td className="p-2 border-l border-slate-200 text-center font-bold text-slate-800 font-mono">
                         {faNum(ex.startTime)} الی {faNum(ex.endTime)}

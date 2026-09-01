@@ -59,25 +59,33 @@ export async function getExecutiveRealtimeOps() {
   const now = new Date();
 
   // ۱. پرونده‌های فوری و در آستانه انقضا (Urgent Expiring Cases)
-  const openRequests = await db
-    .select({
-      id: student_requests.id,
-      trackingCode: student_requests.trackingCode,
-      status: student_requests.status,
-      currentStepId: student_requests.currentStepId,
-      createdAt: student_requests.createdAt,
-      procTitle: process_definitions.title,
-      firstName: users.firstName,
-      lastName: users.lastName,
-    })
-    .from(student_requests)
-    .innerJoin(students, eq(students.id, student_requests.studentId))
-    .innerJoin(users, eq(users.id, students.userId))
-    .innerJoin(process_definitions, eq(process_definitions.id, student_requests.processId))
-    .where(inArray(student_requests.status, ['SUBMITTED', 'IN_REVIEW']));
+  let openRequests: any[] = [];
+  let allSteps: any[] = [];
+  let allLogs: any[] = [];
 
-  const allSteps = await db.select().from(process_steps);
-  const allLogs = await db.select().from(request_step_logs);
+  try {
+    openRequests = await db
+      .select({
+        id: student_requests.id,
+        trackingCode: student_requests.trackingCode,
+        status: student_requests.status,
+        currentStepId: student_requests.currentStepId,
+        createdAt: student_requests.createdAt,
+        procTitle: process_definitions.title,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
+      .from(student_requests)
+      .innerJoin(students, eq(students.id, student_requests.studentId))
+      .innerJoin(users, eq(users.id, students.userId))
+      .innerJoin(process_definitions, eq(process_definitions.id, student_requests.processId))
+      .where(inArray(student_requests.status, ['SUBMITTED', 'IN_REVIEW']));
+
+    allSteps = await db.select().from(process_steps);
+    allLogs = await db.select().from(request_step_logs);
+  } catch (err) {
+    console.warn('Fallback in getExecutiveRealtimeOps query:', err);
+  }
 
   const urgentCases: UrgentExpiringCase[] = [];
 
