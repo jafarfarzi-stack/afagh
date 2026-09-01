@@ -55,7 +55,7 @@ export async function verifySignAction(documentId: number, otp: string): Promise
     return { ok: false, error: attempts >= MAX_ATTEMPTS ? 'تلاش‌ها بیش از حد مجاز — کد قفل شد.' : 'کد نادرست است (' + attempts + '/' + MAX_ATTEMPTS + ').' };
   }
 
-  const h = headers();
+  const h = await headers();
   const ip = (h.get('x-forwarded-for') || '').split(',')[0].trim() || 'local';
   const ua = h.get('user-agent') || '';
   const now = new Date();

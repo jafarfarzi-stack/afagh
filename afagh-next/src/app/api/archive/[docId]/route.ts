@@ -8,10 +8,10 @@ import { presignGet } from '@/lib/objectStore';
 export const dynamic = 'force-dynamic';
 
 // سرو فایل از Object Storage با لینک امضاشدهٔ موقت — کنترل دسترسی پیش از امضا
-export async function GET(_req: NextRequest, { params }: { params: { docId: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ docId: string }> }) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  const id = Number(params.docId);
+  const id = Number((await params).docId);
   const [doc] = await db.select().from(student_documents).where(eq(student_documents.id, id)).limit(1);
   if (!doc) return NextResponse.json({ error: 'not found' }, { status: 404 });
 

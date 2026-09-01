@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic';
 const DAYS = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه'];
 const hm = (t: string | null) => (t ? String(t).slice(0, 5) : '');
 
-export default async function OfferingsPage({ searchParams }: { searchParams: { msg?: string; err?: string } }) {
+export default async function OfferingsPage({ searchParams }: { searchParams: Promise<{ msg?: string; err?: string }> }) {
+  const sp = await searchParams;
   const { staff: me, deptId } = await requireDepHead();
   const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1)).limit(1);
 
@@ -57,8 +58,8 @@ export default async function OfferingsPage({ searchParams }: { searchParams: { 
 
   return (
     <div className="space-y-4">
-      {searchParams.msg && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">✓ {searchParams.msg}</p>}
-      {searchParams.err && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-800">⛔ {searchParams.err}</p>}
+      {sp.msg && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">✓ {sp.msg}</p>}
+      {sp.err && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-800">⛔ {sp.err}</p>}
 
       <div className="card space-y-3">
         <h2 className="font-bold">ارائهٔ جدید — ترم جاری: {term?.title ?? '—'}</h2>
