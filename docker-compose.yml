@@ -155,6 +155,9 @@ services:
     build:
       context: ./afagh-next
       target: runner
+      args:
+        # روی سرور کم‌حافظه کمترش کنید (مثلاً 1536) — .env: NODE_MAX_OLD_SPACE=1536
+        NODE_MAX_OLD_SPACE: ${NODE_MAX_OLD_SPACE:-3072}
     image: afagh-app:latest
     container_name: afagh_app
     restart: unless-stopped

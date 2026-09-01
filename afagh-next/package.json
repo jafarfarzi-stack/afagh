@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev -p 8080",
     "build": "next build",
+    "typecheck": "tsc --noEmit",
     "start": "next start -p 8080",
     "db:generate": "npx drizzle-kit generate",
     "db:push": "npx drizzle-kit push",

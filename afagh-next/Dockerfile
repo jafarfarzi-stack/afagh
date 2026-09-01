@@ -2,6 +2,9 @@
 # ════════════════════════════════════════════════════════════════════
 #  ایمیج پروداکشن کالبد آفاق (Next.js standalone) — لیسن روی پورت ۸۰۸۰
 #  ساخت:  docker build -t afagh-app ./afagh-next
+#
+#  روی سرورهای کم‌حافظه: مقدار هیپ Node را کم/زیاد کنید
+#      docker compose build --build-arg NODE_MAX_OLD_SPACE=1536
 # ════════════════════════════════════════════════════════════════════
 FROM node:22-bookworm-slim AS base
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -12,17 +15,24 @@ FROM base AS deps
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund --omit=optional
 
-# ── بیلد ──
-FROM base AS builder
+# ── مهاجرت/سخت‌سازی دیتابیس ──
+# نیازی به بیلد Next ندارد؛ فقط drizzle-kit (devDependency) و اسکریپت‌ها.
+FROM base AS migrator
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
-
-# ── مهاجرت/سخت‌سازی دیتابیس (drizzle-kit در devDependencies است) ──
-FROM builder AS migrator
-ENV NODE_ENV=production
 CMD ["sh", "-c", "npx drizzle-kit push --force && node scripts/hardening.mjs"]
+
+# ── بیلد ──
+FROM base AS builder
+ARG NODE_MAX_OLD_SPACE=3072
+ENV NODE_ENV=production \
+    NODE_OPTIONS=--max-old-space-size=${NODE_MAX_OLD_SPACE} \
+    NEXT_SKIP_TYPE_CHECK=1
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+# تایپ‌چک داخل ایمیج اجرا نمی‌شود (حافظه‌بر است و در CI/توسعه با npm run typecheck انجام می‌شود)
+RUN npm run build
 
 # ── اجرا ──
 FROM base AS runner
