@@ -10,6 +10,7 @@
 #
 #  سوییچ‌ها:
 #      --port N          پورت لیسن روی هاست (پیش‌فرض ۸۰۸۰)
+#      --base-url URL    نشانی عمومی سامانه (مبنای QR و لینک‌های استعلام)
 #      --fresh           حذف کانتینرها و کل دادهٔ قبلی و استقرار از صفر
 #      --no-build        بدون ساخت مجدد ایمیج‌ها
 #      --update          گرفتن آخرین تغییرات گیت، بیلد مجدد و ری‌استارت
@@ -28,10 +29,11 @@ ok()   { echo -e "  ${G}[OK]${N}   $1"; }
 warn() { echo -e "  ${Y}[!]${N}    $1"; }
 die()  { echo -e "  ${R}[X]${N}    $1" >&2; exit 1; }
 
-APP_PORT_ARG=""; FRESH=0; NO_BUILD=0; UPDATE=0; WITH_DEMO=0; SKIP_DOCKER=0
+APP_PORT_ARG=""; BASE_URL_ARG=""; FRESH=0; NO_BUILD=0; UPDATE=0; WITH_DEMO=0; SKIP_DOCKER=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --port) APP_PORT_ARG="${2:-}"; shift 2 ;;
+    --base-url) BASE_URL_ARG="${2:-}"; shift 2 ;;
     --fresh) FRESH=1; shift ;;
     --no-build) NO_BUILD=1; shift ;;
     --update) UPDATE=1; shift ;;
@@ -108,6 +110,7 @@ ENV_FILE="$ROOT/.env"
 rnd() { tr -dc 'A-Za-z0-9' </dev/urandom | head -c "${1:-28}"; }
 if [ ! -f "$ENV_FILE" ]; then
   PGPW="$(rnd 32)"; MINIOPW="$(rnd 32)"
+  HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
   cat > "$ENV_FILE" <<EOF
 # ساخته‌شده توسط deploy-debian.sh در $(date '+%Y-%m-%d %H:%M') — این فایل را جای امنی نگه دارید
 APP_PORT=8080
@@ -119,6 +122,12 @@ MINIO_ROOT_PASSWORD=$MINIOPW
 MINIO_HOST_PORT=9000
 MINIO_CONSOLE_PORT=9001
 S3_BUCKET=afagh-archive
+
+# نشانی عمومی سامانه — مبنای QR کارت آزمون، لینک استعلام مدرک و بازگشت از درگاه پرداخت
+AFAGH_PUBLIC_BASE_URL=${BASE_URL_ARG:-http://${HOST_IP:-localhost}:${APP_PORT_ARG:-8080}}
+
+# سایر سرویس‌ها (BBB، Moodle، پیامک، درگاه پرداخت، استعلام‌ها) را می‌توانید همین‌جا
+# تعریف کنید یا بعد از نصب از پنل مدیر ← «پیکربندی سامانه» وارد کنید.
 EOF
   chmod 600 "$ENV_FILE"
   ok "‎.env ساخته شد با رمزهای تصادفی (chmod 600)"
@@ -128,6 +137,14 @@ fi
 if [ -n "$APP_PORT_ARG" ]; then
   sed -i "s/^APP_PORT=.*/APP_PORT=$APP_PORT_ARG/" "$ENV_FILE"
   ok "پورت اپ روی $APP_PORT_ARG تنظیم شد"
+fi
+if [ -n "$BASE_URL_ARG" ]; then
+  if grep -q '^AFAGH_PUBLIC_BASE_URL=' "$ENV_FILE"; then
+    sed -i "s|^AFAGH_PUBLIC_BASE_URL=.*|AFAGH_PUBLIC_BASE_URL=$BASE_URL_ARG|" "$ENV_FILE"
+  else
+    echo "AFAGH_PUBLIC_BASE_URL=$BASE_URL_ARG" >> "$ENV_FILE"
+  fi
+  ok "نشانی عمومی سامانه: $BASE_URL_ARG"
 fi
 set -a; . "$ENV_FILE"; set +a
 APP_PORT="${APP_PORT:-8080}"
@@ -211,6 +228,11 @@ cat <<EOF
       استاد   0011111111   →  /professor
       دانشجو  31412001     →  /student
       (رمز مدیر را بلافاصله پس از اولین ورود عوض کنید)
+
+  ${B}پیکربندی سرویس‌های بیرونی:${N}
+      پنل مدیر ← «⚙️ پیکربندی سامانه» — نشانی و کلید BigBlueButton/Moodle، پیامک،
+      درگاه پرداخت و سرویس‌های استعلام بدون نیاز به ری‌استارت از وب تنظیم می‌شوند.
+      (همان مقادیر را می‌توانید در فایل .env هم به‌عنوان پیش‌فرض بگذارید.)
 
   ${B}مدیریت:${N}
       وضعیت      : docker compose -p $PROJECT -f docker-compose.prod.yml ps

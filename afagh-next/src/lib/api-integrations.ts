@@ -1,3 +1,4 @@
+import 'server-only';
 import crypto from 'crypto';
 import { desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
@@ -8,6 +9,7 @@ import {
   step_api_actions,
   student_requests,
 } from '@/db/schema';
+import { getNumber, getSetting } from '@/lib/settings';
 
 export interface IntegrationServiceDef {
   serviceName: string;
@@ -18,44 +20,56 @@ export interface IntegrationServiceDef {
   sampleEndpoint: string;
 }
 
-export const BUILTIN_INTEGRATIONS: IntegrationServiceDef[] = [
-  {
-    serviceName: 'IRANDOC_SIMILARITY',
-    titleFa: 'سامانه همانندجویی ایرانداک (پایان‌نامه و مقالات)',
-    baseUrl: 'https://tik.irandoc.ac.ir/api/v2',
-    authType: 'Bearer_Token',
-    description: 'استعلام خودکار درصد مشابهت متون دانشگاهی و دریافت گواهی دیجیتال اصالت پایان‌نامه.',
-    sampleEndpoint: '/similarity-check',
-  },
-  {
-    serviceName: 'CIVIL_REGISTRY_KYC',
-    titleFa: 'سامانه احراز هویت ثبت احوال و شاهکار',
-    baseUrl: 'https://kyc.pishkhan.ir/api/v1',
-    authType: 'API_Key',
-    description: 'تطبیق برخط کدملی با شماره همراه و دریافت اطلاعات شناسنامه‌ای.',
-    sampleEndpoint: '/verify-national-id',
-  },
-  {
-    serviceName: 'SHAPARAK_PAYMENT',
-    titleFa: 'درگاه یکپارچه پرداخت شاپرک',
-    baseUrl: 'https://sep.shaparak.ir/api/v1',
-    authType: 'OAuth2',
-    description: 'تسویه الکترونیک شهریه، بدهی صندوق رفاه و کارمزد صدور دانشنامه.',
-    sampleEndpoint: '/verify-transaction',
-  },
-  {
-    serviceName: 'MINISTRY_CERT_INQUIRY',
-    titleFa: 'سامانه استعلام اصالت مدارک وزارت علوم (سجاد)',
-    baseUrl: 'https://portal.saorg.ir/api/v1',
-    authType: 'Bearer_Token',
-    description: 'استعلام دانشنامه و ریزنمرات مقاطع قبلی دانشجو جهت تطبیق واحد و پذیرش.',
-    sampleEndpoint: '/degree-inquiry',
-  },
-];
+/**
+ * سرویس‌های داخلی سامانه — نشانی و کلید هیچ‌کدام در کد ثابت نیست:
+ * پنل مدیر (پیکربندی سامانه) ← ENV ← خالی (سرویس غیرفعال).
+ */
+export async function builtinIntegrations(): Promise<IntegrationServiceDef[]> {
+  const [irandoc, kyc, shaparak, sajjad] = await Promise.all([
+    getSetting('IRANDOC_BASE_URL'),
+    getSetting('KYC_BASE_URL'),
+    getSetting('SHAPARAK_BASE_URL'),
+    getSetting('SAJJAD_BASE_URL'),
+  ]);
+  return [
+    {
+      serviceName: 'IRANDOC_SIMILARITY',
+      titleFa: 'سامانه همانندجویی ایرانداک (پایان‌نامه و مقالات)',
+      baseUrl: irandoc,
+      authType: 'Bearer_Token',
+      description: 'استعلام خودکار درصد مشابهت متون دانشگاهی و دریافت گواهی دیجیتال اصالت پایان‌نامه.',
+      sampleEndpoint: '/similarity-check',
+    },
+    {
+      serviceName: 'CIVIL_REGISTRY_KYC',
+      titleFa: 'سامانه احراز هویت ثبت احوال و شاهکار',
+      baseUrl: kyc,
+      authType: 'API_Key',
+      description: 'تطبیق برخط کدملی با شماره همراه و دریافت اطلاعات شناسنامه‌ای.',
+      sampleEndpoint: '/verify-national-id',
+    },
+    {
+      serviceName: 'SHAPARAK_PAYMENT',
+      titleFa: 'درگاه یکپارچه پرداخت شاپرک',
+      baseUrl: shaparak,
+      authType: 'OAuth2',
+      description: 'تسویه الکترونیک شهریه، بدهی صندوق رفاه و کارمزد صدور دانشنامه.',
+      sampleEndpoint: '/verify-transaction',
+    },
+    {
+      serviceName: 'MINISTRY_CERT_INQUIRY',
+      titleFa: 'سامانه استعلام اصالت مدارک وزارت علوم (سجاد)',
+      baseUrl: sajjad,
+      authType: 'Bearer_Token',
+      description: 'استعلام دانشنامه و ریزنمرات مقاطع قبلی دانشجو جهت تطبیق واحد و پذیرش.',
+      sampleEndpoint: '/degree-inquiry',
+    },
+  ];
+}
 
 export async function ensureDefaultIntegrations() {
   try {
-    for (const s of BUILTIN_INTEGRATIONS) {
+    for (const s of await builtinIntegrations()) {
       const [existing] = await db
         .select()
         .from(integrations_config)
@@ -67,8 +81,8 @@ export async function ensureDefaultIntegrations() {
           serviceName: s.serviceName,
           baseUrl: s.baseUrl,
           authType: s.authType,
-          authCredentials: 'ENC_MOCK_KEY_' + crypto.randomBytes(8).toString('hex'),
-          timeoutSeconds: 10,
+          authCredentials: '',
+          timeoutSeconds: await getNumber('API_TIMEOUT_SECONDS', 10),
           isActive: 1,
         });
       }
@@ -103,6 +117,7 @@ export async function executeIrandocCheck(params: {
 }): Promise<IrandocCheckResult> {
   const startTime = Date.now();
   const threshold = params.maxAllowedThreshold ?? 20.0;
+  const irandocBase = (await getSetting('IRANDOC_BASE_URL')).replace(/\/+$/, '');
 
   // محاسبه درصد مشابهت بر اساس هش سند یا سناریوی داده
   let similarity = 14.2;
@@ -122,7 +137,7 @@ export async function executeIrandocCheck(params: {
     status: isApproved ? 'COMPLETED' : 'REJECTED',
     similarityPercentage: similarity,
     maxAllowedThreshold: threshold,
-    certificateUrl: `https://tik.irandoc.ac.ir/cert/verify-${params.trackingCode}.pdf`,
+    certificateUrl: irandocBase ? `${irandocBase}/cert/verify-${params.trackingCode}.pdf` : '',
     trackingCode: params.trackingCode,
     thesisTitle: params.thesisTitle,
     decision: isApproved ? 'AUTO_APPROVE' : 'REJECT_EXCEED_LIMIT',
@@ -136,7 +151,7 @@ export async function executeIrandocCheck(params: {
   try {
     await db.insert(api_audit_logs).values({
       serviceName: 'IRANDOC_SIMILARITY',
-      requestUrl: 'https://tik.irandoc.ac.ir/api/v2/similarity-check',
+      requestUrl: (irandocBase || 'LOCAL') + '/similarity-check',
       requestPayload: JSON.stringify({
         national_id: params.nationalCode,
         tracking_code: params.trackingCode,

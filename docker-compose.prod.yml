@@ -77,6 +77,8 @@ services:
     image: afagh-migrator:latest
     container_name: afagh_migrator
     restart: "no"
+    # هر متغیری که در .env بگذارید (توکن‌ها، نشانی سرویس‌ها و…) به کانتینر می‌رسد
+    env_file: [.env]
     environment: *db-env
     depends_on:
       postgres:
@@ -89,6 +91,8 @@ services:
     image: afagh-app:latest
     container_name: afagh_app
     restart: unless-stopped
+    # مقادیر قابل تنظیم از پنل مدیر هم اینجا به‌عنوان پیش‌فرض ENV قابل تعریف‌اند
+    env_file: [.env]
     environment:
       DATABASE_URL: postgres://afagh:${POSTGRES_PASSWORD:-afagh}@postgres:5432/afagh_db
       REDIS_URL: redis://redis:6379

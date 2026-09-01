@@ -65,6 +65,7 @@ function checkTimeOverlap(s1: string, e1: string, s2: string, e2: string) {
 }
 
 export default function EnrollClient(props: {
+  sajjadPortalUrl: string;
   student: { id: number; status: string };
   term: { id: number | null; title: string; open: boolean; isSummer?: boolean };
   offerings: OfferingItem[];
@@ -325,8 +326,8 @@ export default function EnrollClient(props: {
             <ol className="list-decimal list-inside space-y-1 text-slate-700 leading-relaxed">
               <li>
                 ورود به <b>سامانه ملی سجاد</b> به نشانی{' '}
-                <a href="https://portal.saorg.ir" target="_blank" rel="noreferrer" className="text-blue-700 font-bold underline">
-                  portal.saorg.ir
+                <a href={props.sajjadPortalUrl} target="_blank" rel="noreferrer" className="text-blue-700 font-bold underline">
+                  {props.sajjadPortalUrl.replace(/^https?:\/\//, '')}
                 </a>{' '}
                 و ثبت دادخواست در بخش کمیسیون بررسی موارد خاص دانشگاه آفاق.
               </li>
@@ -344,12 +345,12 @@ export default function EnrollClient(props: {
               📝 ارسال رای کمیسیون و پیگیری در میز خدمات
             </Link>
             <a
-              href="https://portal.saorg.ir"
+              href={props.sajjadPortalUrl}
               target="_blank"
               rel="noreferrer"
               className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow"
             >
-              🌐 ورود مستقیم به سامانه سجاد (saorg.ir)
+              🌐 ورود مستقیم به سامانهٔ سجاد
             </a>
           </div>
         </div>

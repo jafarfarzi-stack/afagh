@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { VirtualClassSession, getBigBlueButtonJoinUrl } from '@/lib/moodle-bbb';
+import type { VirtualClassSession } from '@/lib/moodle-bbb';
+import { joinVirtualClassAction } from '@/lib/moodle-bbb-actions';
 
 interface Props {
   user: {
@@ -23,7 +24,7 @@ export default function VirtualClassroomWidget({ user, initialSessions }: Props)
   const handleJoinClass = async (meetingId: string) => {
     setIsLaunching(meetingId);
     try {
-      const res = await getBigBlueButtonJoinUrl({
+      const res = await joinVirtualClassAction({
         meetingId,
         fullName: user.name,
         role: user.role === 'PROFESSOR' ? 'MODERATOR' : 'ATTENDEE',
@@ -32,6 +33,8 @@ export default function VirtualClassroomWidget({ user, initialSessions }: Props)
       if (res.ok) {
         // Open in new tab or popup
         window.open(res.url, '_blank');
+      } else {
+        alert(res.error || 'سرویس کلاس مجازی در دسترس نیست.');
       }
     } catch {
       alert('خطا در برقراری ارتباط با سرور آموزش مجازی (Moodle/BBB).');

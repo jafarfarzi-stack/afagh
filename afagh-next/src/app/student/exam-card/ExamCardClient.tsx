@@ -28,6 +28,8 @@ interface Props {
     name: string;
     roles: string[];
   };
+  /** نشانی عمومی سامانه — از پیکربندی سامانه خوانده می‌شود (بدون مقدار ثابت در کد) */
+  publicBaseUrl: string;
 }
 
 const INITIAL_COURSES: StudentCourseEvaluationItem[] = [
@@ -158,7 +160,7 @@ function toShamsi(dStr: string | null | undefined): string {
   }
 }
 
-export default function ExamCardClient({ user }: Props) {
+export default function ExamCardClient({ user, publicBaseUrl }: Props) {
   const [courses, setCourses] = useState<StudentCourseEvaluationItem[]>(INITIAL_COURSES);
   const [financialDebt, setFinancialDebt] = useState<number>(5000000); // 5,000,000 Rials (500,000 Tomans)
   const [isPaying, setIsPaying] = useState<boolean>(false);
@@ -537,7 +539,7 @@ export default function ExamCardClient({ user }: Props) {
             </div>
 
             <div className="p-2 bg-white rounded-xl text-slate-950 text-center shadow flex flex-col items-center justify-center">
-              <SvgQrCode text="https://afagh.ac.ir/exam-ticket/VERIFY-31412001-MATH1" size={75} />
+              <SvgQrCode text={`${publicBaseUrl}/exam-ticket/VERIFY-${user.id}`} size={75} />
               <span className="text-[9px] font-mono font-bold text-slate-700 block mt-0.5">31412001</span>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
+import { getSetting } from '@/lib/settings';
 import {
   degree_level_configs,
   educational_regulations,
@@ -314,8 +315,8 @@ export async function checkAndTriggerCommissionEvents(studentId: number): Promis
           formData: JSON.stringify({
             title: 'مجوز ادامه تحصیل — کمیسیون موارد خاص و سامانه سجاد',
             blockReason,
-            sajjadUrl: 'https://portal.saorg.ir',
-            instructions: '۱. ورود به سامانه سجاد (portal.saorg.ir)\n۲. ثبت دادخواست در کمیسیون بررسی موارد خاص دانشگاه\n۳. دریافت کد رهگیری و نامه ابلاغ رای\n۴. درج کد رهگیری و بارگذاری رای کمیسیون در این فرم',
+            sajjadUrl: await getSetting('SAJJAD_PORTAL_URL'),
+            instructions: '۱. ورود به سامانهٔ سجاد\n۲. ثبت دادخواست در کمیسیون بررسی موارد خاص دانشگاه\n۳. دریافت کد رهگیری و نامه ابلاغ رای\n۴. درج کد رهگیری و بارگذاری رای کمیسیون در این فرم',
           }),
         })
         .returning({ id: student_requests.id });

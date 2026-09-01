@@ -1,3 +1,5 @@
+import 'server-only';
+import { getPublicBaseUrl } from '@/lib/settings';
 import crypto from 'crypto';
 
 export interface CertificateData {
@@ -47,8 +49,8 @@ export function generateSvgQrCode(url: string): string {
 /**
  * قالب استاندارد HTML گواهینامه رسمی با طراحی لوکس جهت پرینت و تبدیل به PDF
  */
-export function buildCertificateHtml(data: CertificateData): string {
-  const verifyUrl = `https://edu.afagh.ac.ir/verify/${data.certCode}`;
+export async function buildCertificateHtml(data: CertificateData): Promise<string> {
+  const verifyUrl = `${await getPublicBaseUrl()}/verify/${data.certCode}`;
   const qrSvg = generateSvgQrCode(verifyUrl);
   const hash = generateCertificateVerificationHash(data);
 

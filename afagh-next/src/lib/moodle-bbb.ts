@@ -1,4 +1,6 @@
+import 'server-only';
 import crypto from 'crypto';
+import { getBbbConfig } from '@/lib/settings';
 
 export interface VirtualClassSession {
   courseId: number;
@@ -13,14 +15,12 @@ export interface VirtualClassSession {
   recordingsCount: number;
 }
 
-const BBB_SECRET = process.env.BIGBLUEBUTTON_SECRET || 'afagh_bbb_secret_salt_2026';
-const BBB_URL = process.env.BIGBLUEBUTTON_URL || 'https://vc.afagh.ac.ir/bigbluebutton/api';
-
 /**
- * تولید Checksum امن برای درخواست‌های بیگ‌بلوباتن طبق استاندارد API
+ * تولید Checksum امن برای درخواست‌های بیگ‌بلوباتن طبق استاندارد API.
+ * کلید مخفی از پیکربندی سامانه (پنل مدیر ← ENV) خوانده می‌شود و هرگز در کد ثابت نیست.
  */
-export function generateBbbChecksum(callName: string, queryString: string): string {
-  const raw = `${callName}${queryString}${BBB_SECRET}`;
+export function generateBbbChecksum(callName: string, queryString: string, secret: string): string {
+  const raw = `${callName}${queryString}${secret}`;
   return crypto.createHash('sha1').update(raw).digest('hex');
 }
 
@@ -35,24 +35,29 @@ export async function getBigBlueButtonJoinUrl({
   meetingId: string;
   fullName: string;
   role: 'MODERATOR' | 'ATTENDEE';
-}): Promise<{ ok: boolean; url: string }> {
-  const password = role === 'MODERATOR' ? 'mp_mod_1405' : 'ap_att_1405';
+}): Promise<{ ok: boolean; url: string; error?: string }> {
+  const cfg = await getBbbConfig();
+  if (!cfg.configured) {
+    return {
+      ok: false,
+      url: '',
+      error: 'سرویس کلاس مجازی پیکربندی نشده است — پنل مدیر ← پیکربندی سامانه ← کلاس مجازی',
+    };
+  }
+
   const queryParams = new URLSearchParams({
     fullName,
     meetingID: meetingId,
-    password,
+    password: role === 'MODERATOR' ? cfg.moderatorPw : cfg.attendeePw,
     redirect: 'true',
     joinViaHtml5: 'true',
   });
+  if (cfg.autoRecord) queryParams.set('record', 'true');
 
   const queryString = queryParams.toString();
-  const checksum = generateBbbChecksum('join', queryString);
-  const finalUrl = `${BBB_URL}/join?${queryString}&checksum=${checksum}`;
+  const checksum = generateBbbChecksum('join', queryString, cfg.secret);
 
-  return {
-    ok: true,
-    url: finalUrl,
-  };
+  return { ok: true, url: `${cfg.url}/join?${queryString}&checksum=${checksum}` };
 }
 
 /**

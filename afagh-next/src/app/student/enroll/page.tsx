@@ -14,6 +14,7 @@ import {
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { buildPrereqContext, formatPrereq } from '@/lib/enroll-engine';
 import { evaluateStudentRegulationStatus, type StudentAcademicSummary } from '@/lib/regulations-engine';
+import { getSetting } from '@/lib/settings';
 import EnrollClient from './EnrollClient';
 
 export const dynamic = 'force-dynamic';
@@ -169,6 +170,7 @@ export default async function EnrollPage() {
 
   return (
     <EnrollClient
+      sajjadPortalUrl={await getSetting('SAJJAD_PORTAL_URL')}
       student={{ id: me.id, status: me.status }}
       term={{ id: term?.id ?? null, title: term?.title ?? '', open: !!term?.isEnrollmentOpen, isSummer: !!term?.isSummer }}
       offerings={offerings}

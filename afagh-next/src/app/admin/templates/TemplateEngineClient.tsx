@@ -1,6 +1,9 @@
 'use client';
 
+
 import React, { useState, useMemo, useRef } from 'react';
+import { saveSettingsAction } from '@/lib/settings-actions';
+import { SECRET_MASK } from '@/lib/settings-shared';
 import Link from 'next/link';
 
 // ==========================================
@@ -139,7 +142,18 @@ const INITIAL_TEMPLATES: NotificationTemplateItem[] = [
   },
 ];
 
-export default function TemplateEngineClient() {
+export interface IntegrationSettingsProps {
+  bbb: { url: string; secret: string; moodleUrl: string; moodleToken: string; autoRecord: boolean };
+  bots: {
+    baleToken: string; baleChannel: string;
+    eitaaToken: string; eitaaChannel: string;
+    telegramToken: string; telegramChannel: string;
+    smsProvider: string; smsApiKey: string; smsSender: string;
+  };
+  pay: { provider: string; terminalId: string; merchantId: string; merchantKey: string; callbackUrl: string; sandbox: boolean; wagePercent: string };
+}
+
+export default function TemplateEngineClient({ settings }: { settings: IntegrationSettingsProps }) {
   const [activeTab, setActiveTab] = useState<'TEMPLATES' | 'MESSAGING_BOTS' | 'SHAPARAK' | 'LMS_BBB'>('TEMPLATES');
 
   // Templates state
@@ -152,11 +166,11 @@ export default function TemplateEngineClient() {
 
   // LMS & BigBlueButton Settings State
   const [bbbConfig, setBbbConfig] = useState({
-    url: 'https://vc.afagh.ac.ir/bigbluebutton/api',
-    secret: 'afagh_bbb_secret_salt_2026',
-    moodleUrl: 'https://lms.afagh.ac.ir',
-    moodleToken: 'mdl_token_afagh_993412',
-    enableAutoRecord: true,
+    url: settings.bbb.url,
+    secret: settings.bbb.secret,
+    moodleUrl: settings.bbb.moodleUrl,
+    moodleToken: settings.bbb.moodleToken,
+    enableAutoRecord: settings.bbb.autoRecord,
     enableWebRTC: true,
   });
   const [isTestingBbb, setIsTestingBbb] = useState(false);
@@ -164,32 +178,32 @@ export default function TemplateEngineClient() {
 
   // Messaging Bots Config State (Bale, Eitaa, Telegram, SMS)
   const [botConfig, setBotConfig] = useState({
-    baleEnabled: true,
-    baleToken: 'bot184920491:AAH8jQo901uKf-afagh-bale-key',
-    baleChannelId: '@afagh_university_news',
+    baleEnabled: Boolean(settings.bots.baleToken),
+    baleToken: settings.bots.baleToken,
+    baleChannelId: settings.bots.baleChannel,
 
-    eitaaEnabled: true,
-    eitaaToken: 'bot_eitaa_afagh_sec_88491029',
-    eitaaChannelId: '@afagh_uni_eitaa',
+    eitaaEnabled: Boolean(settings.bots.eitaaToken),
+    eitaaToken: settings.bots.eitaaToken,
+    eitaaChannelId: settings.bots.eitaaChannel,
 
-    telegramEnabled: true,
-    telegramToken: 'bot71940182:AAH9912049-afagh-tg-key',
-    telegramChannelId: '@afagh_official',
+    telegramEnabled: Boolean(settings.bots.telegramToken),
+    telegramToken: settings.bots.telegramToken,
+    telegramChannelId: settings.bots.telegramChannel,
 
-    smsProvider: 'KAVENEGAR',
-    smsApiKey: '547A6B3920184499120AFAGH990011',
-    smsSenderNumber: '10003141200',
+    smsProvider: settings.bots.smsProvider,
+    smsApiKey: settings.bots.smsApiKey,
+    smsSenderNumber: settings.bots.smsSender,
   });
 
   // Shaparak Payment Gateway Settings State
   const [shaparakConfig, setShaparakConfig] = useState({
-    provider: 'BEHPARDAKHT_MELLAT',
-    terminalId: '3149912',
-    merchantId: '9840129',
-    merchantKey: 'AFAGH_MELLAT_SEC_KEY_1405',
-    callbackUrl: 'https://afagh.ac.ir/api/payment/callback',
-    isSandbox: false,
-    wagePercent: '0',
+    provider: settings.pay.provider,
+    terminalId: settings.pay.terminalId,
+    merchantId: settings.pay.merchantId,
+    merchantKey: settings.pay.merchantKey,
+    callbackUrl: settings.pay.callbackUrl,
+    isSandbox: settings.pay.sandbox,
+    wagePercent: settings.pay.wagePercent,
   });
   const [isTestingShaparak, setIsTestingShaparak] = useState(false);
   const [shaparakTestResult, setShaparakTestResult] = useState<string | null>(null);
@@ -284,6 +298,54 @@ export default function TemplateEngineClient() {
       showToast(`📲 پیام آزمایشی با موفقیت از طریق ${channelFa} به ${testMobileNumber} ارسال شد.`);
     }, 1000);
   };
+
+  // ذخیرهٔ واقعی تنظیمات در پیکربندی سامانه (جدول system_settings)
+  const persist = async (payload: Record<string, string>, okText: string) => {
+    const res = await saveSettingsAction(payload);
+    showToast(res.ok ? `💾 ${okText}` : `⛔ ${res.message}`);
+  };
+
+  const handleSaveBbb = () =>
+    persist(
+      {
+        BBB_URL: bbbConfig.url,
+        BBB_SECRET: bbbConfig.secret,
+        MOODLE_URL: bbbConfig.moodleUrl,
+        MOODLE_TOKEN: bbbConfig.moodleToken,
+        BBB_AUTO_RECORD: String(bbbConfig.enableAutoRecord),
+      },
+      'تنظیمات کلاس مجازی (BBB/Moodle) ذخیره شد.',
+    );
+
+  const handleSaveBots = () =>
+    persist(
+      {
+        BALE_TOKEN: botConfig.baleEnabled ? botConfig.baleToken : '',
+        BALE_CHANNEL: botConfig.baleChannelId,
+        EITAA_TOKEN: botConfig.eitaaEnabled ? botConfig.eitaaToken : '',
+        EITAA_CHANNEL: botConfig.eitaaChannelId,
+        TELEGRAM_TOKEN: botConfig.telegramEnabled ? botConfig.telegramToken : '',
+        TELEGRAM_CHANNEL: botConfig.telegramChannelId,
+        SMS_PROVIDER: botConfig.smsProvider,
+        SMS_API_KEY: botConfig.smsApiKey,
+        SMS_SENDER: botConfig.smsSenderNumber,
+      },
+      'تنظیمات پیامک و ربات‌های پیام‌رسان ذخیره شد.',
+    );
+
+  const handleSavePay = () =>
+    persist(
+      {
+        PAY_PROVIDER: shaparakConfig.provider,
+        PAY_TERMINAL_ID: shaparakConfig.terminalId,
+        PAY_MERCHANT_ID: shaparakConfig.merchantId,
+        PAY_MERCHANT_KEY: shaparakConfig.merchantKey,
+        PAY_CALLBACK_URL: shaparakConfig.callbackUrl,
+        PAY_SANDBOX: String(shaparakConfig.isSandbox),
+        PAY_WAGE_PERCENT: shaparakConfig.wagePercent,
+      },
+      'تنظیمات درگاه پرداخت ذخیره شد.',
+    );
 
   // Test BBB Server
   const handleTestBbb = () => {
@@ -829,7 +891,7 @@ export default function TemplateEngineClient() {
 
           <div className="flex justify-end pt-3 border-t border-slate-200">
             <button
-              onClick={() => showToast('تنظیمات وب‌سرویس‌ها و بات‌های پیام‌رسان با موفقیت ذخیره گردید.')}
+              onClick={handleSaveBots}
               className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow flex items-center gap-1.5"
             >
               <span>💾 ذخیره تنظیمات بات‌ها و پیام‌رسان‌ها</span>
@@ -888,7 +950,7 @@ export default function TemplateEngineClient() {
                   dir="ltr"
                 />
                 <span className="text-[10px] text-slate-500">
-                  مثال: https://vc.afagh.ac.ir/bigbluebutton/api
+                  مثال: https://vc.example.ac.ir/bigbluebutton/api
                 </span>
               </div>
 
@@ -946,7 +1008,7 @@ export default function TemplateEngineClient() {
 
           <div className="flex justify-end pt-3 border-t border-slate-200">
             <button
-              onClick={() => showToast('تنظیمات BigBlueButton و Moodle با موفقیت ذخیره شد.')}
+              onClick={handleSaveBbb}
               className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow flex items-center gap-1.5"
             >
               <span>💾 ذخیره تنظیمات کلاس‌های مجازی</span>
@@ -1060,7 +1122,7 @@ export default function TemplateEngineClient() {
 
           <div className="flex justify-end pt-3 border-t border-slate-200">
             <button
-              onClick={() => showToast('تنظیمات درگاه شاپرک با موفقیت ذخیره شد.')}
+              onClick={handleSavePay}
               className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow flex items-center gap-1.5"
             >
               <span>💾 ذخیره تنظیمات درگاه شاپرک</span>

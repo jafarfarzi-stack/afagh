@@ -73,6 +73,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/permissions" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/60 border border-indigo-700/50 transition-colors whitespace-nowrap">
             🛡️ ماتریس دسترسی‌ها (RBAC)
           </Link>
+          <Link href="/admin/settings" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/60 border border-indigo-700/50 transition-colors whitespace-nowrap">
+            ⚙️ پیکربندی سامانه
+          </Link>
           <Link href="/manual" className="px-3 py-1.5 rounded-lg hover:bg-emerald-800/80 bg-emerald-700/70 border border-emerald-500/50 text-white font-bold transition-colors whitespace-nowrap">
             📖 راهنمای کاربری و PDF
           </Link>
