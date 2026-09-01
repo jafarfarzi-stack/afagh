@@ -13,7 +13,44 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const util = require('util');
-const Database = require('better-sqlite3');
+let Database;
+try {
+  Database = require('better-sqlite3');
+} catch (err) {
+  // پشتیبانی بومی از node:sqlite در نسخه‌های Node 22+ بدون نیاز به کامپایلر C++
+  const { DatabaseSync } = require('node:sqlite');
+  Database = function(filename) {
+    const d = new DatabaseSync(filename);
+    this.d = d;
+    this.pragma = (p) => { try { d.exec(`PRAGMA ${p};`); } catch (_) {} };
+    this.exec = (sql) => d.exec(sql);
+    this.prepare = (sql) => {
+      const stmt = d.prepare(sql);
+      return {
+        get: (...args) => stmt.get(...args),
+        all: (...args) => stmt.all(...args),
+        run: (...args) => {
+          const r = stmt.run(...args);
+          return { changes: r.changes, lastInsertRowid: Number(r.lastInsertRowid) };
+        }
+      };
+    };
+    this.transaction = (fn) => {
+      return (...args) => {
+        d.exec('BEGIN');
+        try {
+          const res = fn(...args);
+          d.exec('COMMIT');
+          return res;
+        } catch (e) {
+          d.exec('ROLLBACK');
+          throw e;
+        }
+      };
+    };
+    this.close = () => d.close();
+  };
+}
 
 const DB_PATH = process.env.AFAGH_DB || path.join(__dirname, '..', '..', 'data', 'afagh.db');
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });

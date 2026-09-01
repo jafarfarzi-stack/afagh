@@ -22,7 +22,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
 export type SessionUser = { id: number; name: string; roles: string[] };
 
 export async function getSessionUser(): Promise<SessionUser | null> {
-  const token = (await cookies()).get('token')?.value;
+  const token = cookies().get('token')?.value;
   if (!token) return null;
   const rows = await db
     .select({ id: users.id, firstName: users.firstName, lastName: users.lastName, role: roles.code })
@@ -36,21 +36,31 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 }
 
 export async function login(nationalCode: string, password: string): Promise<{ ok: boolean; error?: string }> {
-  const [u] = await db.select().from(users).where(eq(users.nationalCode, nationalCode)).limit(1);
+  const clean = nationalCode.trim();
+  let [u] = await db.select().from(users).where(eq(users.nationalCode, clean)).limit(1);
+  if (!u) {
+    // جستجو بر اساس شماره دانشجویی
+    const [st] = await db
+      .select({ user: users })
+      .from(students)
+      .innerJoin(users, eq(users.id, students.userId))
+      .where(eq(students.studentCode, clean))
+      .limit(1);
+    if (st) u = st.user;
+  }
   if (!u || !u.isActive) return { ok: false, error: 'کاربر یافت نشد.' };
   if (!(await verifyPassword(password, u.passwordHash))) return { ok: false, error: 'رمز نادرست است.' };
   const token = randomBytes(32).toString('hex');
   await db.insert(sessions).values({ token, userId: u.id, expiresAt: new Date(Date.now() + 2 * 86400000) });
   // SameSite=None برای کارکردن در iframe پیش‌نمایش (دامنهٔ واسط)؛ Secure از طریق پروکسی HTTPS
-  (await cookies()).set('token', token, { httpOnly: true, sameSite: 'none', secure: true, path: '/', maxAge: 2 * 86400 });
+  cookies().set('token', token, { httpOnly: true, sameSite: 'none', secure: true, path: '/', maxAge: 2 * 86400 });
   return { ok: true };
 }
 
 export async function logout() {
-  const store = await cookies();
-  const token = store.get('token')?.value;
+  const token = cookies().get('token')?.value;
   if (token) await db.delete(sessions).where(eq(sessions.token, token));
-  store.delete('token');
+  cookies().delete('token');
 }
 
 /** گیت نقش در layout ها — ریدایرکت به پورتال درست (سه داشبورد ایزوله — سند §۲۸۶۵) */
@@ -64,7 +74,7 @@ export async function requireRole(allowed: string[]): Promise<SessionUser> {
 export function homeFor(roles: string[]): string {
   if (roles.length === 0) return '/login'; // نقشی ندارد → برگرد به ورود (ضدحلقه)
   if (roles.includes('STUDENT')) return '/student';
-  if (roles.includes('DEP_HEAD')) return '/group-manager';
+  if (roles.includes('PROCTOR') && !roles.includes('ADMIN') && !roles.includes('EDU_EXPERT')) return '/proctor';
   if (roles.includes('PROFESSOR')) return '/professor';
   return '/admin';
 }
