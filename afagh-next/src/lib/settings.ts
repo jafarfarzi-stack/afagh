@@ -89,6 +89,7 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'KYC_API_KEY', env: 'KYC_API_KEY', group: 'سرویس‌های استعلام دولتی', label: 'کلید API احراز هویت', type: 'secret', default: '' },
   { key: 'SHAPARAK_BASE_URL', env: 'SHAPARAK_BASE_URL', group: 'سرویس‌های استعلام دولتی', label: 'نشانی API شاپرک', type: 'url', default: '' },
   { key: 'SAJJAD_BASE_URL', env: 'SAJJAD_BASE_URL', group: 'سرویس‌های استعلام دولتی', label: 'نشانی API سامانهٔ سجاد (وزارت علوم)', type: 'url', default: '' },
+  { key: 'COMMISSION_PROCESS_CODE', env: 'COMMISSION_PROCESS_CODE', group: 'سرویس‌های استعلام دولتی', label: 'کد فرایند کمیسیون موارد خاص', type: 'text', default: 'COMMISSION_PERMIT', help: 'کد فرایند در «فرایندهای اداری» که پروندهٔ خودکار سنوات/مشروطی در آن ساخته می‌شود' },
   { key: 'SAJJAD_PORTAL_URL', env: 'SAJJAD_PORTAL_URL', group: 'سرویس‌های استعلام دولتی', label: 'نشانی پرتال سجاد (لینک کاربران)', type: 'url', default: 'https://portal.saorg.ir' },
   { key: 'API_TIMEOUT_SECONDS', env: 'API_TIMEOUT_SECONDS', group: 'سرویس‌های استعلام دولتی', label: 'مهلت پاسخ سرویس‌ها (ثانیه)', type: 'number', default: '10' },
 

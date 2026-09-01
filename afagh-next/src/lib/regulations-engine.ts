@@ -1,7 +1,8 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { getSetting } from '@/lib/settings';
 import {
+  process_definitions,
   degree_level_configs,
   educational_regulations,
   students,
@@ -25,38 +26,103 @@ export * from './regulations-types';
 // موتور جامع آیین‌نامه‌های آموزشی (Afagh Regulation Engine)
 // ════════════════════════════════════════════════════════════════════════════
 
+// ───────────────────────────────────────────────────────────────────────────
+//  ابزارهای عددی: محاسبهٔ معدل با حساب صحیح (بدون خطای ممیز شناور)
+//
+//  نمره تا دو رقم اعشار و واحد تا یک رقم اعشار است؛ بنابراین همهٔ جمع‌ها روی
+//  اعداد صحیح مقیاس‌شده انجام و فقط در انتها یک تقسیم صورت می‌گیرد. با این کار
+//  خطای انباشتی نوع 0.1 + 0.2 = 0.30000000000000004 اصلاً به وجود نمی‌آید.
+// ───────────────────────────────────────────────────────────────────────────
+
+const GRADE_SCALE = 100; // نمره: دو رقم اعشار
+const UNIT_SCALE = 10;   // واحد: یک رقم اعشار
+
+/**
+ * تبدیل امنِ مقدار نمره به عدد.
+ * رشتهٔ خالی، فاصله، مقدار غیرعددی و NaN ⇒ null (یعنی «نمره‌ای ثبت نشده»)
+ * تا هرگز به‌اشتباه صفر در معدل دانشجو اثر نگذارد.
+ */
+export function parseGrade(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const raw = typeof value === 'number' ? value : String(value).trim();
+  if (raw === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** تبدیل امنِ تعداد واحد؛ مقدار نامعتبر یا منفی ⇒ صفر */
+export function parseUnits(value: unknown): number {
+  const n = parseGrade(value);
+  if (n === null || n < 0) return 0;
+  return n;
+}
+
+/** گرد کردن نیم‌بالا روی دو رقم اعشار، بدون خطای ممیز شناور */
+export function round2(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * انباشتگر معدل: جمع‌ها روی اعداد صحیح مقیاس‌شده نگه‌داری می‌شوند.
+ *   weighted = Σ (نمره×۱۰۰) × (واحد×۱۰)
+ *   units    = Σ (واحد×۱۰)
+ */
+export class GpaAccumulator {
+  private weighted = 0;
+  private unitsScaled = 0;
+
+  add(grade: number, units: number) {
+    const g = Math.round(grade * GRADE_SCALE);
+    const u = Math.round(units * UNIT_SCALE);
+    if (u <= 0) return;
+    this.weighted += g * u;
+    this.unitsScaled += u;
+  }
+
+  get hasUnits() { return this.unitsScaled > 0; }
+  get units() { return this.unitsScaled / UNIT_SCALE; }
+
+  /** معدل دقیق (بدون گرد کردن) برای مقایسه‌های آیین‌نامه‌ای مثل آستانهٔ مشروطی */
+  exact(): number | null {
+    if (this.unitsScaled <= 0) return null;
+    return this.weighted / (this.unitsScaled * GRADE_SCALE);
+  }
+
+  /** معدل گردشده روی دو رقم اعشار برای نمایش و ذخیره در دیتابیس */
+  rounded(): number | null {
+    if (this.unitsScaled <= 0) return null;
+    return Math.round((this.weighted * 100) / (this.unitsScaled * GRADE_SCALE)) / 100;
+  }
+}
+
 /**
  * بازیابی یا ایجاد پیش‌فرض آیین‌نامه برای یک دانشجو یا مقطع
  */
 export async function getRegulationConfig(regulationId?: number | null, degreeLevelId?: number | null): Promise<RegulationConfig> {
+  if (!regulationId && !degreeLevelId) return DEFAULT_BACHELOR_REGULATION_1403;
+
   try {
-    if (regulationId) {
-      const [reg] = await db
-        .select()
-        .from(educational_regulations)
-        .where(eq(educational_regulations.id, regulationId))
-        .limit(1);
+    // یک رفت‌وبرگشت به‌جای دو کوئری متوالی: هر دو شرط با OR واکشی و در حافظه
+    // اولویت‌بندی می‌شوند (آیین‌نامهٔ اختصاصی دانشجو مقدم بر آیین‌نامهٔ مقطع است).
+    const conditions = [
+      regulationId ? eq(educational_regulations.id, regulationId) : undefined,
+      degreeLevelId ? eq(educational_regulations.degreeLevelId, degreeLevelId) : undefined,
+    ].filter(Boolean);
 
-      if (reg && reg.rulesConfig) {
-        const parsed = JSON.parse(reg.rulesConfig);
-        if (parsed && typeof parsed === 'object' && parsed.grading_and_gpa) {
-          return { ...DEFAULT_BACHELOR_REGULATION_1403, ...parsed };
-        }
-      }
-    }
+    const rows = await db
+      .select()
+      .from(educational_regulations)
+      .where(conditions.length === 1 ? conditions[0] : or(...conditions))
+      .limit(20);
 
-    if (degreeLevelId) {
-      const [reg] = await db
-        .select()
-        .from(educational_regulations)
-        .where(eq(educational_regulations.degreeLevelId, degreeLevelId))
-        .limit(1);
+    const preferred = regulationId ? rows.find(r => r.id === regulationId) : undefined;
+    const fallback = degreeLevelId ? rows.find(r => r.degreeLevelId === degreeLevelId) : undefined;
 
-      if (reg && reg.rulesConfig) {
-        const parsed = JSON.parse(reg.rulesConfig);
-        if (parsed && typeof parsed === 'object' && parsed.grading_and_gpa) {
-          return { ...DEFAULT_BACHELOR_REGULATION_1403, ...parsed };
-        }
+    for (const reg of [preferred, fallback]) {
+      if (!reg?.rulesConfig) continue;
+      const parsed = JSON.parse(reg.rulesConfig);
+      if (parsed && typeof parsed === 'object' && parsed.grading_and_gpa) {
+        return { ...DEFAULT_BACHELOR_REGULATION_1403, ...parsed };
       }
     }
   } catch (err) {
@@ -92,90 +158,100 @@ export async function evaluateStudentRegulationStatus(
   studentId: number,
   termId?: number | null
 ): Promise<StudentAcademicSummary> {
-  const [stu] = await db.select().from(students).where(eq(students.id, studentId)).limit(1);
+  // ── موج اول: اطلاعات دانشجو + مقطع با یک JOIN، هم‌زمان با واکشی ترم جاری ──
+  const [baseRows, termRows] = await Promise.all([
+    db
+      .select({ stu: students, deg: degree_level_configs })
+      .from(students)
+      .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
+      .where(eq(students.id, studentId))
+      .limit(1),
+    db
+      .select()
+      .from(academic_terms)
+      .where(termId ? eq(academic_terms.id, termId) : eq(academic_terms.isCurrent, 1))
+      .limit(1),
+  ]);
+
+  const stu = baseRows[0]?.stu;
   if (!stu) {
     throw new Error('دانشجو یافت نشد.');
   }
-
-  const [deg] = await db
-    .select()
-    .from(degree_level_configs)
-    .where(eq(degree_level_configs.id, stu.degreeLevelId))
-    .limit(1);
-
-  // واکشی ترم جاری
-  let currentTerm: typeof academic_terms.$inferSelect | null = null;
-  if (termId) {
-    const [t] = await db.select().from(academic_terms).where(eq(academic_terms.id, termId)).limit(1);
-    currentTerm = t || null;
-  } else {
-    const [t] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1)).limit(1);
-    currentTerm = t || null;
-  }
-
+  const deg = baseRows[0]?.deg ?? null;
+  const currentTerm = termRows[0] ?? null;
   const isSummer = currentTerm?.isSummer === 1;
 
-  // واکشی آیین‌نامه مربوطه
-  const config = await getRegulationConfig(stu.regulationId, stu.degreeLevelId);
+  // ── موج دوم: آیین‌نامه، چارت درسی و کارنامه؛ هر سه مستقل‌اند و موازی اجرا می‌شوند ──
+  const [config, syllabusRows, studentEnrollments] = await Promise.all([
+    getRegulationConfig(stu.regulationId, stu.degreeLevelId),
+    stu.majorId
+      ? db
+          .select({ minTotalUnitsToGraduate: syllabuses.minTotalUnitsToGraduate })
+          .from(syllabuses)
+          .where(
+            and(
+              eq(syllabuses.majorId, stu.majorId),
+              sql`${syllabuses.entryYearStart} <= ${stu.entryYear}`,
+              or(
+                sql`${syllabuses.entryYearEnd} is null`,
+                sql`${syllabuses.entryYearEnd} >= ${stu.entryYear}`
+              )
+            )
+          )
+          .orderBy(desc(syllabuses.entryYearStart))
+          .limit(1)
+      : Promise.resolve([] as { minTotalUnitsToGraduate: number | null }[]),
+    db
+      .select({
+        id: enrollments.id,
+        offeringId: enrollments.offeringId,
+        gradeValue: enrollments.gradeValue,
+        gradeStatus: enrollments.gradeStatus,
+        termId: course_offerings.termId,
+        units: courses.units,
+        gradingType: courses.gradingType,
+        affectsGpa: courses.affectsGpa,
+        code: courses.code,
+      })
+      .from(enrollments)
+      .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+      .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+      .where(eq(enrollments.studentId, studentId)),
+  ]);
 
   // محاسبه کل واحدهای لازم از چارت (یا مقدار پیش‌فرض مقطع)
   let totalRequiredUnits = deg?.code?.includes('MASTER') || deg?.title?.includes('ارشد') ? 32 : 140;
-  if (stu.majorId) {
-    const [syl] = await db
-      .select()
-      .from(syllabuses)
-      .where(eq(syllabuses.majorId, stu.majorId))
-      .limit(1);
-    if (syl?.minTotalUnitsToGraduate) {
-      totalRequiredUnits = syl.minTotalUnitsToGraduate;
-    }
+  if (syllabusRows[0]?.minTotalUnitsToGraduate) {
+    totalRequiredUnits = syllabusRows[0].minTotalUnitsToGraduate!;
   }
-
-  // واکشی کارنامه و سوابق نمرات نهایی‌شده
-  const studentEnrollments = await db
-    .select({
-      id: enrollments.id,
-      offeringId: enrollments.offeringId,
-      gradeValue: enrollments.gradeValue,
-      gradeStatus: enrollments.gradeStatus,
-      termId: course_offerings.termId,
-      units: courses.units,
-      gradingType: courses.gradingType,
-      affectsGpa: courses.affectsGpa,
-      code: courses.code,
-    })
-    .from(enrollments)
-    .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
-    .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-    .where(eq(enrollments.studentId, studentId));
 
   const passingGrade = config.grading_and_gpa.default_passing_grade || (deg ? Number(deg.defaultPassingGrade) : 10);
   const probationGpaThreshold = config.probation_and_tenure.probation_gpa_threshold || (deg ? Number(deg.conditionalGpaThreshold) : 12);
 
-  // تجمیع نمرات و واحدها
+  // تجمیع نمرات و واحدها (با حساب صحیح و ردکردن نمرات خالی/نامعتبر)
   let passedUnits = 0;
-  const termMap = new Map<number, { weightedSum: number; gpaUnits: number }>();
+  const termMap = new Map<number, GpaAccumulator>();
 
   for (const e of studentEnrollments) {
-    if (e.gradeStatus !== 'FINALIZED' || e.gradeValue == null) continue;
-    const g = Number(e.gradeValue);
-    const u = Number(e.units);
+    if (e.gradeStatus !== 'FINALIZED') continue;
+    const g = parseGrade(e.gradeValue);
+    if (g === null) continue; // نمرهٔ ثبت‌نشده/خالی هرگز صفر حساب نمی‌شود
+    const u = parseUnits(e.units);
     const isPassed = e.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= passingGrade;
 
     if (isPassed) {
-      passedUnits += u;
+      passedUnits = round2(passedUnits + u);
     }
 
     // محاسبه معدل به ازای هر ترم
     if (e.termId && (e.affectsGpa === 1 || e.affectsGpa == null) && e.gradingType !== 'DESCRIPTIVE') {
-      const tData = termMap.get(e.termId) || { weightedSum: 0, gpaUnits: 0 };
-      tData.weightedSum += g * u;
-      tData.gpaUnits += u;
-      termMap.set(e.termId, tData);
+      const acc = termMap.get(e.termId) ?? new GpaAccumulator();
+      acc.add(g, u);
+      termMap.set(e.termId, acc);
     }
   }
 
-  const remainingUnits = Math.max(0, totalRequiredUnits - passedUnits);
+  const remainingUnits = round2(Math.max(0, totalRequiredUnits - passedUnits));
   // تشخیص ترم آخر: باقیمانده کمتر یا مساوی سقف واحد فارغ‌التحصیلی تابستان (معمولاً ۸ واحد) یا سقف ترم عادی (۲۴ واحد)
   const isGraduating = isSummer ? remainingUnits <= (config.summer_term_rules.graduating_max_units || 8) : remainingUnits <= (config.graduating_term_rules.max_units || 24);
 
@@ -185,23 +261,20 @@ export async function evaluateStudentRegulationStatus(
   const sortedTermIds = Array.from(termMap.keys()).sort((a, b) => b - a);
 
   if (sortedTermIds.length > 0) {
-    const lastTermData = termMap.get(sortedTermIds[0])!;
-    if (lastTermData.gpaUnits > 0) {
-      lastTermGpa = Number((lastTermData.weightedSum / lastTermData.gpaUnits).toFixed(2));
+    lastTermGpa = termMap.get(sortedTermIds[0])!.rounded();
+  }
+
+  for (const [, acc] of termMap.entries()) {
+    // مقایسهٔ مشروطی روی معدل دقیق انجام می‌شود، نه معدل گردشده
+    const termGpa = acc.exact();
+    if (termGpa !== null && termGpa < probationGpaThreshold) {
+      totalProbations++;
     }
   }
 
-  for (const [, tData] of termMap.entries()) {
-    if (tData.gpaUnits > 0) {
-      const termGpa = tData.weightedSum / tData.gpaUnits;
-      if (termGpa < probationGpaThreshold) {
-        totalProbations++;
-      }
-    }
-  }
-
-  const isProbatedLastTerm = lastTermGpa !== null && lastTermGpa < probationGpaThreshold;
-  const isHonorsLastTerm = lastTermGpa !== null && lastTermGpa >= config.regular_term_rules.honors_min_gpa;
+  const lastTermExact = sortedTermIds.length > 0 ? termMap.get(sortedTermIds[0])!.exact() : null;
+  const isProbatedLastTerm = lastTermExact !== null && lastTermExact < probationGpaThreshold;
+  const isHonorsLastTerm = lastTermExact !== null && lastTermExact >= config.regular_term_rules.honors_min_gpa;
 
   // محاسبه سقف واحد مجاز (Effective Max Units)
   let effectiveMaxUnits = config.regular_term_rules.max_units;
@@ -263,6 +336,7 @@ export async function checkAndTriggerCommissionEvents(studentId: number): Promis
   blocked: boolean;
   reason?: string;
   requestId?: number;
+  error?: string;
 }> {
   const [stu] = await db.select().from(students).where(eq(students.id, studentId)).limit(1);
   if (!stu) return { blocked: false };
@@ -283,54 +357,93 @@ export async function checkAndTriggerCommissionEvents(studentId: number): Promis
     blockReason = `سنوات مجاز تحصیلی (${summary.completedSemesters} ترم) به پایان رسیده است. ادامه تحصیل منوط به دریافت سنوات ارفاقی از کمیسیون موارد خاص در سامانه سجاد است.`;
   }
 
-  if (blockReason) {
-    // تغییر وضعیت دانشجو به BLOCKED_COMMISSION
-    await db
-      .update(students)
-      .set({ status: 'BLOCKED_COMMISSION' })
-      .where(eq(students.id, studentId));
+  if (!blockReason) return { blocked: false };
 
-    // بررسی اینکه آیا درخواست بازی برای این موضوع وجود دارد یا خیر
-    const existingRequests = await db
-      .select()
-      .from(student_requests)
-      .where(
-        and(
-          eq(student_requests.studentId, stu.id),
-          eq(student_requests.status, 'SUBMITTED')
+  // شناسهٔ فرایند «کمیسیون موارد خاص» از تنظیمات خوانده می‌شود (بدون مقدار سخت‌کد)
+  const [processCode, sajjadUrl] = await Promise.all([
+    getSetting('COMMISSION_PROCESS_CODE'),
+    getSetting('SAJJAD_PORTAL_URL'),
+  ]);
+  const [proc] = await db
+    .select({ id: process_definitions.id })
+    .from(process_definitions)
+    .where(eq(process_definitions.code, processCode.trim() || 'COMMISSION_PERMIT'))
+    .limit(1);
+  const [anyProc] = proc
+    ? [proc]
+    : await db.select({ id: process_definitions.id }).from(process_definitions).orderBy(asc(process_definitions.id)).limit(1);
+
+  if (!anyProc) {
+    // بدون فرایند مقصد، پروندهٔ کارتابل ساخته نمی‌شود؛ پس دانشجو را هم مسدود نمی‌کنیم
+    // تا هرگز «دانشجوی مسدودِ بدون پرونده» به وجود نیاید.
+    console.error('commission process definition not found; student not blocked', { studentId });
+    return {
+      blocked: false,
+      reason: blockReason,
+      error: 'فرایند «کمیسیون موارد خاص» در سامانه تعریف نشده است؛ مسدودسازی انجام نشد.',
+    };
+  }
+
+  const formData = JSON.stringify({
+    title: 'مجوز ادامه تحصیل — کمیسیون موارد خاص و سامانه سجاد',
+    blockReason,
+    sajjadUrl,
+    instructions: '۱. ورود به سامانهٔ سجاد\n۲. ثبت دادخواست در کمیسیون بررسی موارد خاص دانشگاه\n۳. دریافت کد رهگیری و نامه ابلاغ رای\n۴. درج کد رهگیری و بارگذاری رای کمیسیون در این فرم',
+  });
+
+  try {
+    // ⚠️ اتمی: مسدودسازی دانشجو و ساخت پروندهٔ کارتابل یا هر دو انجام می‌شوند یا هیچ‌کدام.
+    // اگر ساخت درخواست شکست بخورد، وضعیت دانشجو Rollback می‌شود تا دانشجوی مسدودِ
+    // بدون پرونده باقی نماند.
+    const requestId = await db.transaction(async tx => {
+      await tx
+        .update(students)
+        .set({ status: 'BLOCKED_COMMISSION' })
+        .where(eq(students.id, studentId));
+
+      // آیا پروندهٔ بازِ همین موضوع از قبل وجود دارد؟ (فقط همین فرایند، نه هر درخواست دیگری)
+      const [existing] = await tx
+        .select({ id: student_requests.id })
+        .from(student_requests)
+        .where(
+          and(
+            eq(student_requests.studentId, stu.id),
+            eq(student_requests.processId, anyProc.id),
+            inArray(student_requests.status, ['SUBMITTED', 'IN_REVIEW'])
+          )
         )
-      );
+        .orderBy(desc(student_requests.id))
+        .limit(1);
 
-    let reqId = existingRequests[0]?.id;
-    if (!reqId) {
-      const trackingCode = `REQ-COMM-${Date.now().toString().slice(-6)}`;
-      const [newReq] = await db
+      if (existing) return existing.id;
+
+      const trackingCode = `REQ-COMM-${stu.id}-${Date.now().toString(36).toUpperCase()}`;
+      const [newReq] = await tx
         .insert(student_requests)
         .values({
           studentId: stu.id,
           trackingCode,
-          processId: 1, // فرایند مجوز کمیسیون
+          processId: anyProc.id,
           status: 'SUBMITTED',
           autoCreated: 1,
-          formData: JSON.stringify({
-            title: 'مجوز ادامه تحصیل — کمیسیون موارد خاص و سامانه سجاد',
-            blockReason,
-            sajjadUrl: await getSetting('SAJJAD_PORTAL_URL'),
-            instructions: '۱. ورود به سامانهٔ سجاد\n۲. ثبت دادخواست در کمیسیون بررسی موارد خاص دانشگاه\n۳. دریافت کد رهگیری و نامه ابلاغ رای\n۴. درج کد رهگیری و بارگذاری رای کمیسیون در این فرم',
-          }),
+          formData,
         })
         .returning({ id: student_requests.id });
-      reqId = newReq?.id;
-    }
 
+      if (!newReq?.id) throw new Error('ساخت پروندهٔ کمیسیون ناموفق بود.');
+      return newReq.id;
+    });
+
+    return { blocked: true, reason: blockReason, requestId };
+  } catch (err) {
+    // تراکنش برگشت خورد: دانشجو دست‌نخورده ماند
+    console.error('commission trigger failed, transaction rolled back:', err);
     return {
-      blocked: true,
+      blocked: false,
       reason: blockReason,
-      requestId: reqId,
+      error: err instanceof Error ? err.message : 'خطای نامشخص در ثبت پروندهٔ کمیسیون',
     };
   }
-
-  return { blocked: false };
 }
 
 /**
@@ -371,27 +484,26 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
   // نقشه‌برداری دروس پاس‌شده
   const passedCourses = new Set<string>();
   for (const r of rows) {
-    if (r.gradeValue == null) continue;
-    const g = Number(r.gradeValue);
+    const g = parseGrade(r.gradeValue);
+    if (g === null) continue; // نمرهٔ خالی/نامعتبر = ثبت‌نشده
     const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= passingGrade;
     if (passed) {
       passedCourses.add(r.code);
     }
   }
 
-  let totalWeighted = 0;
-  let gpaUnits = 0;
+  const acc = new GpaAccumulator();
   let passedUnits = 0;
   let excludedCount = 0;
 
   for (const r of rows) {
-    if (r.gradeValue == null) continue;
-    const g = Number(r.gradeValue);
-    const u = Number(r.units);
+    const g = parseGrade(r.gradeValue);
+    if (g === null) continue;
+    const u = parseUnits(r.units);
     const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= passingGrade;
 
     if (passed) {
-      passedUnits += u;
+      passedUnits = round2(passedUnits + u);
     }
 
     // دروس توصیفی یا بی‌تاثیر در معدل وارد مخرج و صورت نمی‌شوند
@@ -405,15 +517,12 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
       continue; // حذف از صورت و مخرج معدل کل
     }
 
-    totalWeighted += g * u;
-    gpaUnits += u;
+    acc.add(g, u);
   }
 
-  const gpa = gpaUnits > 0 ? Number((totalWeighted / gpaUnits).toFixed(2)) : 0;
-
   return {
-    gpa,
-    totalUnits: gpaUnits,
+    gpa: acc.rounded() ?? 0,
+    totalUnits: acc.units,
     passedUnits,
     excludedCount,
     policy,

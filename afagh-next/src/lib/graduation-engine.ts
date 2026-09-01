@@ -12,6 +12,7 @@ import { getBool, getNumber, getSetting } from '@/lib/settings';
 import { executeIrandocCheck } from '@/lib/api-integrations';
 import { createLogger } from '@/lib/logger';
 import { deliveriesForUser, notifyUserMultichannel } from '@/lib/messaging';
+import { GpaAccumulator, parseGrade, parseUnits, round2 } from '@/lib/regulations-engine';
 
 // ═══════════════════════════════════════════════════════════════════
 //  موتور فارغ‌التحصیلی «رویدادمحور» (Zero-Touch Graduation)
@@ -129,17 +130,18 @@ export async function auditStudent(studentId: number): Promise<AuditResult | nul
 
   const passedIds = new Set<number>();
   let passedUnits = 0;
-  let gpaSum = 0; let gpaUnits = 0;
+  const acc = new GpaAccumulator(); // حساب صحیح؛ بدون خطای ممیز شناور
   for (const t of taken) {
-    const g = t.gradeValue == null ? null : Number(t.gradeValue);
+    const g = parseGrade(t.gradeValue); // نمرهٔ خالی/NaN = ثبت‌نشده، نه صفر
+    const u = parseUnits(t.units);
     const qualitativePass = ['PASSED_NO_GRADE', 'EXEMPT'].includes(String(t.gradeStatus ?? ''));
     const ok = qualitativePass || (g != null && g >= passing);
     if (!ok) continue;
     passedIds.add(t.courseId);
-    passedUnits += Number(t.units ?? 0);
-    if (g != null && t.affectsGpa !== 0) { gpaSum += g * Number(t.units ?? 0); gpaUnits += Number(t.units ?? 0); }
+    passedUnits = round2(passedUnits + u);
+    if (g != null && t.affectsGpa !== 0) acc.add(g, u);
   }
-  const gpa = gpaUnits > 0 ? Number((gpaSum / gpaUnits).toFixed(2)) : null;
+  const gpa = acc.rounded();
 
   // سرفصل مصوب
   const [syl] = row.majorId
@@ -165,7 +167,7 @@ export async function auditStudent(studentId: number): Promise<AuditResult | nul
     }
     if (!requiredUnits) requiredUnits = req.reduce((s, r) => s + Number(r.units ?? 0), 0);
   } else {
-    reasons.push('برای این رشته/سال ورود سرفصلی ثبت نشده — فقط حداقل واحد و معدل بررسی شد.');
+    reasons.push('برای این رشته/سال ورود، سرفصل مصوبی ثبت نشده است؛ تشکیل خودکار پرونده ممکن نیست و نیازمند بررسی کارشناس آموزش است.');
   }
 
   if (missing.length) reasons.push(`${missing.length} درس اجباری سرفصل هنوز پاس نشده است.`);
@@ -173,7 +175,9 @@ export async function auditStudent(studentId: number): Promise<AuditResult | nul
   if (gpa != null && gpa < minGpa) reasons.push(`معدل کل (${gpa}) کمتر از حداقل مجاز (${minGpa}) است.`);
   if (gpa == null) reasons.push('هنوز هیچ نمرهٔ عددی قطعی‌ای ثبت نشده است.');
 
-  const catalogOk = missing.length === 0
+  // بدون سرفصل مصوب هرگز پرونده به‌صورت خودکار باز نمی‌شود
+  const catalogOk = !!syl
+    && missing.length === 0
     && (!requiredUnits || passedUnits >= requiredUnits)
     && gpa != null && gpa >= minGpa;
 
