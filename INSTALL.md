@@ -4,7 +4,7 @@
 
 | | مسیر | پشته | پورت |
 |---|---|---|---|
-| **کالبد مدرن** | `afagh-next/` | Next.js 14 + PostgreSQL + Drizzle + Redis + MinIO | ۳۱۰۰ |
+| **کالبد مدرن** | `afagh-next/` | Next.js 16 + PostgreSQL + Drizzle + Redis + MinIO | ۳۱۰۰ |
 | **فاز صفر (دمو کامل)** | `afagh-erp/` | Node خالص + SQLite — ۱۲ ماژول E2E | ۳۰۰۰ (اختیاری) |
 
 ## نصب سریع (سه دستور)
