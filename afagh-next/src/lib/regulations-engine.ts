@@ -37,7 +37,10 @@ export async function getRegulationConfig(regulationId?: number | null, degreeLe
         .limit(1);
 
       if (reg && reg.rulesConfig) {
-        return JSON.parse(reg.rulesConfig) as RegulationConfig;
+        const parsed = JSON.parse(reg.rulesConfig);
+        if (parsed && typeof parsed === 'object' && parsed.grading_and_gpa) {
+          return { ...DEFAULT_BACHELOR_REGULATION_1403, ...parsed };
+        }
       }
     }
 
@@ -49,7 +52,10 @@ export async function getRegulationConfig(regulationId?: number | null, degreeLe
         .limit(1);
 
       if (reg && reg.rulesConfig) {
-        return JSON.parse(reg.rulesConfig) as RegulationConfig;
+        const parsed = JSON.parse(reg.rulesConfig);
+        if (parsed && typeof parsed === 'object' && parsed.grading_and_gpa) {
+          return { ...DEFAULT_BACHELOR_REGULATION_1403, ...parsed };
+        }
       }
     }
   } catch (err) {
@@ -339,9 +345,9 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
   const [stu] = await db.select().from(students).where(eq(students.id, studentId)).limit(1);
   if (!stu) return { gpa: 0, totalUnits: 0, passedUnits: 0, excludedCount: 0, policy: 'UNKNOWN' };
 
-  const config = await getRegulationConfig(stu.regulationId, stu.degreeLevelId);
-  const policy = config.grading_and_gpa.failed_course_gpa_policy;
-  const passingGrade = config.grading_and_gpa.default_passing_grade || 10;
+  const config = (await getRegulationConfig(stu.regulationId, stu.degreeLevelId)) || DEFAULT_BACHELOR_REGULATION_1403;
+  const policy = config?.grading_and_gpa?.failed_course_gpa_policy ?? 'EXCLUDE_IF_PASSED';
+  const passingGrade = config?.grading_and_gpa?.default_passing_grade || 10;
 
   const rows = await db
     .select({

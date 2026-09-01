@@ -89,6 +89,7 @@ export interface CourseDemand {
   units: number;
   courseType: 'پایه' | 'اصلی' | 'تخصصی' | 'عمومی' | 'عملی';
   preferredProfId: number;
+  groupProfessors?: { [groupNo: number]: number };
   isCoTaught?: boolean;
   coProfId?: number;
   theoryWeightRatio?: number; // e.g. 0.70 (14 marks out of 20)
@@ -346,9 +347,8 @@ function solveDynamicScenarios(
   const flattenedList: FlattenedDemand[] = [];
   demands.forEach(d => {
     for (let g = 1; g <= d.groupsCount; g++) {
-      let prof = getProf(d.preferredProfId);
-      if (g === 2 && d.code === '1112101') prof = getProf(3);
-      if (g === 2 && d.code === '1112103') prof = getProf(1);
+      const profId = d.groupProfessors?.[g] || d.preferredProfId;
+      const prof = getProf(profId);
 
       flattenedList.push({
         demand: d,
@@ -888,6 +888,24 @@ export default function DepartmentPlanningClient() {
     setCourseDemands(prev => prev.map(d => d.id === demandId ? { ...d, preferredProfId: profId } : d));
     const targetProf = professors.find(p => p.id === profId);
     showToast(`استاد «${targetProf?.name}» به عنوان مدرس این درس تعیین شد.`, 'info');
+  };
+
+  // Change professor assigned to a specific group of a course
+  const handleAssignProfessorToGroup = (demandId: number, groupNo: number, profId: number) => {
+    setCourseDemands(prev =>
+      prev.map(d => {
+        if (d.id !== demandId) return d;
+        return {
+          ...d,
+          groupProfessors: {
+            ...(d.groupProfessors || {}),
+            [groupNo]: profId,
+          },
+        };
+      })
+    );
+    const targetProf = professors.find(p => p.id === profId);
+    showToast(`استاد «${targetProf?.name}» برای گروه ${groupNo} تعیین شد.`, 'info');
   };
 
   // Toggle Co-Teaching for a course
@@ -1438,29 +1456,66 @@ export default function DepartmentPlanningClient() {
 
                       <td className="p-2 border border-slate-200 min-w-[280px]">
                         {!demand.isCoTaught ? (
-                          <div className="space-y-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <select
-                                value={demand.preferredProfId}
-                                onChange={e => handleAssignProfessorToCourse(demand.id, Number(e.target.value))}
-                                className="w-full border-2 border-indigo-400/80 rounded-lg px-2 py-1 font-extrabold bg-indigo-50/50 text-indigo-950 focus:ring-2 focus:ring-indigo-500"
-                              >
-                                {professors.map(p => (
-                                  <option key={p.id} value={p.id}>
-                                    {p.name} ({p.academicRank} — {p.contractType})
-                                  </option>
-                                ))}
-                              </select>
-                              <button
-                                type="button"
-                                onClick={() => handleToggleCoTeaching(demand.id)}
-                                title="تخصیص دو استاد مشترک (تئوری + عملی)"
-                                className="px-2 py-1 rounded bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold text-[10px] whitespace-nowrap transition"
-                              >
-                                👥 مشترک
-                              </button>
+                          demand.groupsCount === 1 ? (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <select
+                                  value={demand.preferredProfId}
+                                  onChange={e => handleAssignProfessorToCourse(demand.id, Number(e.target.value))}
+                                  className="w-full border-2 border-indigo-400/80 rounded-lg px-2 py-1 font-extrabold bg-indigo-50/50 text-indigo-950 focus:ring-2 focus:ring-indigo-500"
+                                >
+                                  {professors.map(p => (
+                                    <option key={p.id} value={p.id}>
+                                      {p.name} ({p.academicRank} — {p.contractType})
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleCoTeaching(demand.id)}
+                                  title="تخصیص دو استاد مشترک (تئوری + عملی)"
+                                  className="px-2 py-1 rounded bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold text-[10px] whitespace-nowrap transition"
+                                >
+                                  👥 مشترک
+                                </button>
+                              </div>
                             </div>
-                          </div>
+                          ) : (
+                            <div className="space-y-2 p-2 bg-slate-50 rounded-xl border border-slate-200">
+                              <div className="flex items-center justify-between pb-1 border-b border-slate-200 text-[10px] font-bold text-slate-600">
+                                <span>انتساب اساتید به گروه‌های مجزا:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleCoTeaching(demand.id)}
+                                  className="text-purple-700 font-black hover:underline"
+                                >
+                                  👥 تبدیل به مشترک
+                                </button>
+                              </div>
+                              {Array.from({ length: demand.groupsCount }).map((_, gIdx) => {
+                                const gNo = gIdx + 1;
+                                const curProfId = demand.groupProfessors?.[gNo] || demand.preferredProfId;
+                                return (
+                                  <div key={gNo} className="flex items-center gap-1 text-[11px]">
+                                    <span className="px-1.5 py-0.5 rounded bg-indigo-900 text-white font-bold text-[10px] whitespace-nowrap">
+                                      گروه {faNum(gNo)}:
+                                    </span>
+                                    <select
+                                      value={curProfId}
+                                      onChange={e => handleAssignProfessorToGroup(demand.id, gNo, Number(e.target.value))}
+                                      className="w-full border border-indigo-300 rounded px-1.5 py-0.5 font-bold bg-white text-indigo-950 text-xs"
+                                    >
+                                      {professors.map(p => (
+                                        <option key={p.id} value={p.id}>
+                                          {p.name} ({p.academicRank})
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )
                         ) : (
                           <div className="p-2 rounded-xl bg-purple-50 border border-purple-200 space-y-2">
                             <div className="flex items-center justify-between pb-1 border-b border-purple-200/60">

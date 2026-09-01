@@ -119,24 +119,47 @@ export default function RegulationsClient(props: {
 
   const simResults = useMemo(() => {
     const rem = Math.max(0, simTotalUnits - simPassedUnits);
-    const cfg = formConfig;
+    const cfg = {
+      ...DEFAULT_BACHELOR_REGULATION_1403,
+      ...(formConfig || {}),
+      probation_and_tenure: {
+        ...DEFAULT_BACHELOR_REGULATION_1403.probation_and_tenure,
+        ...(formConfig?.probation_and_tenure || {}),
+      },
+      regular_term_rules: {
+        ...DEFAULT_BACHELOR_REGULATION_1403.regular_term_rules,
+        ...(formConfig?.regular_term_rules || {}),
+      },
+      summer_term_rules: {
+        ...DEFAULT_BACHELOR_REGULATION_1403.summer_term_rules,
+        ...(formConfig?.summer_term_rules || {}),
+      },
+      graduating_term_rules: {
+        ...DEFAULT_BACHELOR_REGULATION_1403.graduating_term_rules,
+        ...(formConfig?.graduating_term_rules || {}),
+      },
+      grading_and_gpa: {
+        ...DEFAULT_BACHELOR_REGULATION_1403.grading_and_gpa,
+        ...(formConfig?.grading_and_gpa || {}),
+      },
+    };
 
-    const probationThreshold = cfg.probation_and_tenure.probation_gpa_threshold;
+    const probationThreshold = cfg.probation_and_tenure?.probation_gpa_threshold ?? 12;
     const isProbated = simPrevGpa < probationThreshold;
-    const isHonors = simPrevGpa >= cfg.regular_term_rules.honors_min_gpa;
+    const isHonors = simPrevGpa >= (cfg.regular_term_rules?.honors_min_gpa ?? 17);
 
     // تشخیص ترم آخر
     const isGraduating = simIsSummer
-      ? rem <= cfg.summer_term_rules.graduating_max_units
-      : rem <= cfg.graduating_term_rules.max_units;
+      ? rem <= (cfg.summer_term_rules?.graduating_max_units ?? 8)
+      : rem <= (cfg.graduating_term_rules?.max_units ?? 24);
 
-    let allowedMax = cfg.regular_term_rules.max_units;
-    let minAllowed = cfg.regular_term_rules.min_units;
+    let allowedMax = cfg.regular_term_rules?.max_units ?? 20;
+    let minAllowed = cfg.regular_term_rules?.min_units ?? 12;
 
     if (simIsSummer) {
       minAllowed = 0;
-      allowedMax = cfg.summer_term_rules.default_max_units;
-      if (isGraduating) allowedMax = cfg.summer_term_rules.graduating_max_units;
+      allowedMax = cfg.summer_term_rules?.default_max_units ?? 6;
+      if (isGraduating) allowedMax = cfg.summer_term_rules?.graduating_max_units ?? 8;
 
       if (
         simQuota === 'SHAHED_ISARGAR' &&
@@ -148,19 +171,19 @@ export default function RegulationsClient(props: {
         );
       }
     } else {
-      if (isGraduating && cfg.graduating_term_rules.can_take_with_probation) {
-        allowedMax = cfg.graduating_term_rules.max_units;
+      if (isGraduating && cfg.graduating_term_rules?.can_take_with_probation) {
+        allowedMax = cfg.graduating_term_rules?.max_units ?? 24;
         minAllowed = 0;
       } else if (isProbated) {
-        allowedMax = cfg.regular_term_rules.probation_max_units;
+        allowedMax = cfg.regular_term_rules?.probation_max_units ?? 14;
       } else if (isHonors) {
-        allowedMax = cfg.regular_term_rules.honors_max_units;
+        allowedMax = cfg.regular_term_rules?.honors_max_units ?? 24;
       }
     }
 
     // بررسی سد مشروطی یا سنوات
-    const maxProbations = cfg.probation_and_tenure.max_total_probations;
-    const maxSemesters = cfg.probation_and_tenure.max_study_semesters;
+    const maxProbations = cfg.probation_and_tenure?.max_total_probations ?? 3;
+    const maxSemesters = cfg.probation_and_tenure?.max_study_semesters ?? 10;
     const isBlockedProbation = simProbationCount >= maxProbations;
     const isBlockedTenure = simSemesters >= maxSemesters;
     const isBlocked = isBlockedProbation || isBlockedTenure;
@@ -175,7 +198,7 @@ export default function RegulationsClient(props: {
       isBlocked,
       isBlockedProbation,
       isBlockedTenure,
-      policy: cfg.grading_and_gpa.failed_course_gpa_policy,
+      policy: cfg.grading_and_gpa?.failed_course_gpa_policy ?? 'EXCLUDE_IF_PASSED',
     };
   }, [
     simTotalUnits,

@@ -3,7 +3,17 @@ import { requireRole } from '@/lib/auth';
 import { logoutAction } from '../login/actions';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const user = await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT']);
+  const user = await requireRole([
+    'ADMIN',
+    'EDU_EXPERT',
+    'ARCHIVE_EXPERT',
+    'FINANCE_EXPERT',
+    'FINANCE',
+    'MILITARY_OFFICER',
+    'VAULT_MANAGER',
+    'DEP_HEAD',
+    'VICE_EDU',
+  ]);
   return (
     <div className="min-h-screen bg-slate-100">
       <header className="bg-indigo-950 text-white shadow-md">

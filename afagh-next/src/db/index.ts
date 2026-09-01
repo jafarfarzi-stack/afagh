@@ -22,6 +22,28 @@ export async function ensureDbSchemaPatches() {
   schemaEnsured = true;
   try {
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS api_audit_logs (
+        id SERIAL PRIMARY KEY,
+        service_name VARCHAR(50),
+        endpoint VARCHAR(255),
+        request_body TEXT,
+        response_body TEXT,
+        status_code INTEGER,
+        response_time_ms INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS notification_templates (
+        id SERIAL PRIMARY KEY,
+        event_code VARCHAR(50),
+        title VARCHAR(255),
+        channel VARCHAR(50),
+        template_text TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      ALTER TABLE process_definitions ADD COLUMN IF NOT EXISTS "description" text;
       ALTER TABLE process_definitions ADD COLUMN IF NOT EXISTS "category" varchar(50) DEFAULT 'عمومی';
       ALTER TABLE process_definitions ADD COLUMN IF NOT EXISTS "formSchema" text;
       ALTER TABLE process_definitions ADD COLUMN IF NOT EXISTS "outputTemplate" varchar(50);

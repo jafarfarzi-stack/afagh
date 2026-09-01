@@ -31,11 +31,16 @@ export default async function AdminAdmissionsPage() {
     .orderBy(desc(admissions_staging.id))
     .limit(50);
 
-  const rawApiLogs = await db
-    .select()
-    .from(api_audit_logs)
-    .orderBy(desc(api_audit_logs.id))
-    .limit(20);
+  let rawApiLogs: any[] = [];
+  try {
+    rawApiLogs = await db
+      .select()
+      .from(api_audit_logs)
+      .orderBy(desc(api_audit_logs.id))
+      .limit(20);
+  } catch (_) {
+    rawApiLogs = [];
+  }
 
   const stagingFormatted = rawStaging.map(s => {
     let parsedData: any = {};

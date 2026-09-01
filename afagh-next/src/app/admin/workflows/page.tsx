@@ -24,13 +24,33 @@ export default async function AdminWorkflowsPage() {
 
   const now = new Date();
 
-  // دریافت تمام فرآیندها
-  const rawProcesses = await db
-    .select()
-    .from(process_definitions)
-    .orderBy(process_definitions.id);
+  // دریافت تمام فرآیندها با محافظت در برابر خطای ستون‌های احتمالی
+  let rawProcesses: any[] = [];
+  let rawSteps: any[] = [];
+  try {
+    rawProcesses = await db
+      .select()
+      .from(process_definitions)
+      .orderBy(process_definitions.id);
+  } catch (_) {
+    try {
+      const res = await db.execute(sql`SELECT id, name, category, title, code, is_active FROM process_definitions ORDER BY id`);
+      rawProcesses = (res as any).rows || [];
+    } catch {
+      rawProcesses = [];
+    }
+  }
 
-  const rawSteps = await db.select().from(process_steps).orderBy(process_steps.stepOrder);
+  try {
+    rawSteps = await db.select().from(process_steps).orderBy(process_steps.stepOrder);
+  } catch (_) {
+    try {
+      const res = await db.execute(sql`SELECT id, process_id as "processId", title FROM process_steps ORDER BY id`);
+      rawSteps = (res as any).rows || [];
+    } catch {
+      rawSteps = [];
+    }
+  }
 
   const processesFormatted = rawProcesses.map(p => {
     let schema: any[] = [];
