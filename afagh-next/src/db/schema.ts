@@ -1291,3 +1291,128 @@ export const migration_audit_entries = pgTable('migration_audit_entries', {
   createdByUserId: integer('createdByUserId'),
   createdAt: timestamp('createdAt').defaultNow()
 });
+
+// ═══════════════════════════════════════════════════════════════════
+//  ماژول ۱۲: فارغ‌التحصیلی، صدور مدارک و پورتال دانش‌آموختگان
+//  الگو: «رویدادمحور» — دانشجو هیچ درخواستی باز نمی‌کند؛ با قطعی‌شدن
+//  آخرین نمره، سیستم خودش پرونده را باز و مراحل را جلو می‌برد.
+// ═══════════════════════════════════════════════════════════════════
+
+/** دپارتمان‌های تسویه‌حساب — قابل تعریف از پنل مدیر (هیچ فهرست ثابتی در کد نیست) */
+export const clearance_departments = pgTable('clearance_departments', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 40 }).notNull().unique(),   // LIBRARY / FINANCE / DORMITORY / …
+  title: varchar('title', { length: 120 }).notNull(),
+  /** منبع بررسی خودکار: NONE (کارشناس) | FINANCE_LEDGER (دفتر مالی) | HTTP_API (سرویس بیرونی) */
+  autoCheck: varchar('autoCheck', { length: 30 }).notNull().default('NONE'),
+  apiUrl: varchar('apiUrl', { length: 500 }),                 // برای HTTP_API
+  responsibleRoleCode: varchar('responsibleRoleCode', { length: 40 }),
+  sortOrder: integer('sortOrder').notNull().default(100),
+  isActive: integer('isActive').notNull().default(1),
+  hint: text('hint')
+});
+
+/** پروندهٔ فارغ‌التحصیلی هر دانشجو (یک ردیف به‌ازای هر دانشجو) */
+export const graduation_audits = pgTable('graduation_audits', {
+  id: serial('id').primaryKey(),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  // CATALOG_REVIEW → HEAD_APPROVAL → IRANDOC_VERIFICATION → CLEARANCE → FINAL_DOCS → READY_TO_ISSUE → ISSUED
+  workflowStatus: varchar('workflowStatus', { length: 40 }).notNull().default('CATALOG_REVIEW'),
+  // ── نتیجهٔ تطبیق خودکار با سرفصل ──
+  requiredUnits: numeric('requiredUnits', { precision: 6, scale: 2 }).default('0'),
+  passedUnits: numeric('passedUnits', { precision: 6, scale: 2 }).default('0'),
+  gpa: numeric('gpa', { precision: 4, scale: 2 }),
+  missingCourses: jsonb('missingCourses'),                    // [{code,title,units}]
+  catalogOk: integer('catalogOk').notNull().default(0),
+  // ── تأیید مدیر گروه ──
+  headApprovalStatus: integer('headApprovalStatus').notNull().default(0),
+  headApprovedBy: integer('headApprovedBy'),
+  headApprovedAt: timestamp('headApprovedAt'),
+  headNote: text('headNote'),
+  // ── ایرانداک (ارشد/دکتری) ──
+  thesisRequired: integer('thesisRequired').notNull().default(0),
+  thesisTitle: varchar('thesisTitle', { length: 300 }),
+  irandocTrackingCode: varchar('irandocTrackingCode', { length: 60 }),
+  irandocSimilarityScore: numeric('irandocSimilarityScore', { precision: 5, scale: 2 }),
+  irandocStatus: varchar('irandocStatus', { length: 30 }).default('PENDING'), // PENDING|PASSED|REJECTED|SKIPPED
+  irandocCheckedAt: timestamp('irandocCheckedAt'),
+  // ── مدارک پایانی که فقط اینجا از دانشجو خواسته می‌شود ──
+  photoDocumentId: integer('photoDocumentId'),
+  stampFeePaid: integer('stampFeePaid').notNull().default(0),
+  stampFeeAmount: numeric('stampFeeAmount', { precision: 12, scale: 0 }).default('0'),
+  finalDocsAt: timestamp('finalDocsAt'),
+  // ── عمومی ──
+  graduationTermId: integer('graduationTermId').references(() => academic_terms.id),
+  note: text('note'),
+  startedAt: timestamp('startedAt').defaultNow(),
+  lastEventAt: timestamp('lastEventAt').defaultNow(),
+  completedAt: timestamp('completedAt')
+}, (t) => ({ uq: unique('uq_graduation_audits_student').on(t.studentId) }));
+
+/** چک‌لیست تسویه‌حساب موازی (یک ردیف به‌ازای هر دپارتمان برای هر دانشجو) */
+export const clearance_checklist = pgTable('clearance_checklist', {
+  id: serial('id').primaryKey(),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  auditId: integer('auditId').references(() => graduation_audits.id),
+  department: varchar('department', { length: 40 }).notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('PENDING'), // PENDING|CLEARED|HAS_DEBT|WAIVED
+  amountDue: numeric('amountDue', { precision: 14, scale: 0 }).default('0'),
+  detail: text('detail'),
+  autoChecked: integer('autoChecked').notNull().default(0),
+  resolvedBy: integer('resolvedBy'),
+  resolvedAt: timestamp('resolvedAt'),
+  notifiedAt: timestamp('notifiedAt'),
+  createdAt: timestamp('createdAt').defaultNow()
+}, (t) => ({ uq: unique('uq_clearance_checklist').on(t.studentId, t.department) }));
+
+/** مدارک صادرشده: گواهینامهٔ موقت، دانشنامه، ریزنمرات رسمی */
+export const issued_degrees = pgTable('issued_degrees', {
+  id: serial('id').primaryKey(),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  degreeType: varchar('degreeType', { length: 30 }).notNull(), // TEMPORARY|PERMANENT|TRANSCRIPT
+  serialNo: varchar('serialNo', { length: 60 }).notNull().unique(),
+  verifyCode: varchar('verifyCode', { length: 40 }).notNull().unique(), // مبنای QR استعلام عمومی
+  ministryVerificationCode: varchar('ministryVerificationCode', { length: 60 }), // کد صحت وزارت علوم
+  documentHash: varchar('documentHash', { length: 255 }).notNull(),
+  snapshot: jsonb('snapshot'),                                 // نام، رشته، معدل، تاریخ — لحظهٔ صدور
+  issuedByUserId: integer('issuedByUserId'),
+  issuedAt: timestamp('issuedAt').defaultNow().notNull(),
+  isDelivered: integer('isDelivered').notNull().default(0),
+  deliveredAt: timestamp('deliveredAt'),
+  deliveredTo: varchar('deliveredTo', { length: 150 }),
+  revokedAt: timestamp('revokedAt'),
+  revokeReason: text('revokeReason')
+});
+
+/** پروفایل دانش‌آموخته (پورتال آلومنای) */
+export const alumni_profiles = pgTable('alumni_profiles', {
+  id: serial('id').primaryKey(),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  employmentStatus: varchar('employmentStatus', { length: 40 }), // EMPLOYED|SEEKING|STUDYING|SELF_EMPLOYED
+  organization: varchar('organization', { length: 150 }),
+  jobTitle: varchar('jobTitle', { length: 150 }),
+  contactEmail: varchar('contactEmail', { length: 150 }),
+  contactMobile: varchar('contactMobile', { length: 11 }),
+  linkedinUrl: varchar('linkedinUrl', { length: 300 }),
+  allowContact: integer('allowContact').notNull().default(1),
+  updatedAt: timestamp('updatedAt').defaultNow()
+}, (t) => ({ uq: unique('uq_alumni_profiles_student').on(t.studentId) }));
+
+/** درخواست‌های خدمات دانش‌آموختگان (ریزنمرات رسمی، آزادسازی مدرک، تأییدیه ترجمه) */
+export const alumni_requests = pgTable('alumni_requests', {
+  id: serial('id').primaryKey(),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  requestType: varchar('requestType', { length: 40 }).notNull(), // OFFICIAL_TRANSCRIPT|DEGREE_RELEASE|TRANSLATION_CONFIRM|DUPLICATE_DEGREE
+  trackingCode: varchar('trackingCode', { length: 30 }).notNull().unique(),
+  status: varchar('status', { length: 30 }).notNull().default('AWAITING_PAYMENT'), // AWAITING_PAYMENT|PAID|IN_REVIEW|DONE|REJECTED
+  fee: numeric('fee', { precision: 12, scale: 0 }).default('0'),
+  paidAt: timestamp('paidAt'),
+  ledgerId: integer('ledgerId'),
+  destination: varchar('destination', { length: 200 }),        // دارالترجمه / سازمان مقصد
+  description: text('description'),
+  resultFileUrl: varchar('resultFileUrl', { length: 500 }),
+  handledBy: integer('handledBy'),
+  adminNote: text('adminNote'),
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow()
+});

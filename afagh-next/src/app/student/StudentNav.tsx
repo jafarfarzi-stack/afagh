@@ -14,6 +14,7 @@ export const NAV_ITEMS = [
   { href: '/student/chart', label: 'چارت مصوب سرفصل', icon: '🗺️', exact: false },
   { href: '/student/requests', label: 'میز خدمات و کمیسیون', icon: '📋', exact: false },
   { href: '/student/documents', label: 'مدارک و بایگانی', icon: '📁', exact: false },
+  { href: '/student/graduation', label: 'فارغ‌التحصیلی من', icon: '🎓', exact: false },
 ];
 
 export function StudentSidebar({ user }: { user: { name: string } }) {

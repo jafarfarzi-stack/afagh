@@ -9,6 +9,7 @@ import { iterate, missingHeaders, pickTable, type Table } from './tabular';
 import { resolverFor, upsertLegacyCode } from './codemap';
 import { auditInsert, auditUpdate, type AuditCtx } from './audit';
 import type { ImportReport } from './tuition';
+import { triggerGraduationCheck } from '@/lib/graduation-engine';
 
 // ═══ نمرات سیستم قدیمی ═══
 // جریان کار: واردسازی در جدول staging ← مقایسه با نمرات سامانهٔ جدید ←
@@ -244,6 +245,7 @@ export async function applyGrades(
   const stu = new Map((await db.select({ id: students.id, code: students.studentCode }).from(students)).map(s => [s.code, s.id]));
 
   const res: ApplyResult = { created: 0, updated: 0, skipped: 0, errors: [] };
+  const touched = new Set<number>();
 
   for (const l of rows) {
     const ctx = ctxOf(l.batchId ?? null);
@@ -295,7 +297,12 @@ export async function applyGrades(
       res.created++;
     }
     await db.update(legacy_grades).set({ appliedAt: new Date(), compareStatus: 'SAME', compareNote: 'اعمال شد.' }).where(eq(legacy_grades.id, l.id));
+    touched.add(sid);
   }
+
+  // رویدادمحور: هر جا نمره‌ای قطعی شد، موتور فارغ‌التحصیلی خودش بررسی می‌کند
+  // که آیا سرفصل دانشجو کامل شده و باید پرونده‌اش باز شود یا نه.
+  await triggerGraduationCheck([...touched]);
   return res;
 }
 

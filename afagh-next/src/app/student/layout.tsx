@@ -1,9 +1,14 @@
+import { redirect } from 'next/navigation';
 import { requireRole } from '@/lib/auth';
+import { alumniOf } from '@/lib/alumni';
 import { logoutAction } from '../login/actions';
 import StudentNav, { StudentSidebar } from './StudentNav';
 
 export default async function StudentLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRole(['STUDENT']);
+
+  // پس از صدور مدرک، حساب کاربر از پورتال دانشجویی به پورتال دانش‌آموختگان منتقل می‌شود
+  if (await alumniOf(user.id)) redirect('/alumni');
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col" dir="rtl">

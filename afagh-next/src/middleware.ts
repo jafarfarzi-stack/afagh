@@ -13,4 +13,4 @@ export function middleware(req: NextRequest) {
   return NextResponse.next();
 }
 
-export const config = { matcher: ['/student/:path*', '/professor/:path*', '/admin/:path*', '/proctor/:path*'] };
+export const config = { matcher: ['/student/:path*', '/professor/:path*', '/admin/:path*', '/proctor/:path*', '/alumni/:path*'] };

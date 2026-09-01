@@ -35,6 +35,7 @@ export const SETTING_GROUPS = [
   'پیامک و ربات‌های پیام‌رسان',
   'درگاه پرداخت',
   'سرویس‌های استعلام دولتی',
+  'فارغ‌التحصیلی و صدور مدارک',
   'زیرساخت (فقط ENV)',
 ] as const;
 
@@ -83,6 +84,20 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'SAJJAD_BASE_URL', env: 'SAJJAD_BASE_URL', group: 'سرویس‌های استعلام دولتی', label: 'نشانی API سامانهٔ سجاد (وزارت علوم)', type: 'url', default: '' },
   { key: 'SAJJAD_PORTAL_URL', env: 'SAJJAD_PORTAL_URL', group: 'سرویس‌های استعلام دولتی', label: 'نشانی پرتال سجاد (لینک کاربران)', type: 'url', default: 'https://portal.saorg.ir' },
   { key: 'API_TIMEOUT_SECONDS', env: 'API_TIMEOUT_SECONDS', group: 'سرویس‌های استعلام دولتی', label: 'مهلت پاسخ سرویس‌ها (ثانیه)', type: 'number', default: '10' },
+
+  // ── فارغ‌التحصیلی و صدور مدارک ──
+  { key: 'GRAD_AUTO_SCAN', env: 'GRAD_AUTO_SCAN', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'شروع خودکار پروندهٔ فارغ‌التحصیلی', type: 'boolean', default: 'true', help: 'با قطعی‌شدن آخرین نمره، پرونده بدون درخواست دانشجو باز می‌شود' },
+  { key: 'GRAD_MIN_GPA', env: 'GRAD_MIN_GPA', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'حداقل معدل کل برای فراغت', type: 'number', default: '12' },
+  { key: 'GRAD_THESIS_DEGREE_CODES', env: 'GRAD_THESIS_DEGREE_CODES', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'مقاطع دارای پایان‌نامه', type: 'text', default: 'MSC,PHD', help: 'کد مقاطعی که استعلام ایرانداک برایشان الزامی است (با ویرگول)' },
+  { key: 'GRAD_IRANDOC_MAX_SIMILARITY', env: 'GRAD_IRANDOC_MAX_SIMILARITY', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'سقف مجاز همانندجویی (٪)', type: 'number', default: '20' },
+  { key: 'GRAD_REQUIRE_PHOTO', env: 'GRAD_REQUIRE_PHOTO', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'الزام بارگذاری عکس ۴×۳', type: 'boolean', default: 'true' },
+  { key: 'GRAD_STAMP_FEE', env: 'GRAD_STAMP_FEE', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'هزینهٔ تمبر ابطال (ریال)', type: 'number', default: '0', help: 'صفر یعنی این گام حذف می‌شود' },
+  { key: 'GRAD_SERIAL_PREFIX', env: 'GRAD_SERIAL_PREFIX', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'پیشوند شمارهٔ سریال مدرک', type: 'text', default: 'AF' },
+  { key: 'GRAD_CRON_SECRET', env: 'GRAD_CRON_SECRET', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'کلید فراخوانی پویش زمان‌بندی‌شده', type: 'secret', default: '', help: 'هدر x-cron-secret برای POST /api/cron/graduation-scan' },
+  { key: 'ALUMNI_FEE_TRANSCRIPT', env: 'ALUMNI_FEE_TRANSCRIPT', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'هزینهٔ ریزنمرات رسمی (ریال)', type: 'number', default: '0' },
+  { key: 'ALUMNI_FEE_RELEASE', env: 'ALUMNI_FEE_RELEASE', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'هزینهٔ آزادسازی مدرک (ریال)', type: 'number', default: '0' },
+  { key: 'ALUMNI_FEE_TRANSLATION', env: 'ALUMNI_FEE_TRANSLATION', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'هزینهٔ تأییدیه برای دارالترجمه (ریال)', type: 'number', default: '0' },
+  { key: 'ALUMNI_FEE_DUPLICATE', env: 'ALUMNI_FEE_DUPLICATE', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'هزینهٔ صدور المثنی (ریال)', type: 'number', default: '0' },
 
   // ── زیرساخت (فقط ENV) ──
   { key: 'DATABASE_URL', env: 'DATABASE_URL', group: 'زیرساخت (فقط ENV)', label: 'اتصال PostgreSQL', type: 'secret', default: 'postgres://afagh:afagh@localhost:5432/afagh_db', envOnly: true },
