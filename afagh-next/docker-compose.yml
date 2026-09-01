@@ -1,26 +1,48 @@
-# زیرساخت کالبد آفاق — PostgreSQL + MinIO (Object Storage بایگانی §۲۴۴۵)
+# زیرساخت کالبد آفاق — PostgreSQL + Redis + MinIO (Object Storage بایگانی §۲۴۴۵)
+# اجرا:  docker compose -p afagh up -d      (یا از طریق install-docker.ps1 / install-docker.sh)
+name: afagh
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: afagh_pg
+    restart: unless-stopped
     environment:
       POSTGRES_USER: afagh
       POSTGRES_PASSWORD: afagh
       POSTGRES_DB: afagh_db
     ports: ['5432:5432']
     volumes: [afagh_pg:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U afagh -d afagh_db']
+      interval: 5s
+      timeout: 5s
+      retries: 20
   redis:
     image: redis:7-alpine
     container_name: afagh_redis
+    restart: unless-stopped
     ports: ['6379:6379']
     volumes: [redisdata:/data]
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 20
   minio:
     image: minio/minio
+    container_name: afagh_minio
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: afagh
       MINIO_ROOT_PASSWORD: afagh-secret
     ports: ['9000:9000', '9001:9001']
     volumes: [afagh_minio:/data]
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 20
 volumes:
   afagh_pg:
   afagh_minio:

@@ -7,7 +7,56 @@
 | **کالبد مدرن** | `afagh-next/` | Next.js 14 + PostgreSQL + Drizzle + Redis + MinIO | ۳۱۰۰ |
 | **فاز صفر (دمو کامل)** | `afagh-erp/` | Node خالص + SQLite — ۱۲ ماژول E2E | ۳۰۰۰ (اختیاری) |
 
-## نصب سریع (سه دستور)
+## 🐳 نصب با Docker — روش پیشنهادی (ویندوز / لینوکس / مک)
+
+دیتابیس و سرویس‌های زیرین **کاملاً روی Docker** نصب می‌شوند؛ هیچ PostgreSQL/Redis/MinIO محلی لازم نیست.
+
+**ویندوز (PowerShell، در ریشهٔ پروژه):**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install-docker.ps1 -WithDemoData
+cd afagh-next ; npm start          # → http://localhost:3100
+```
+
+**لینوکس / مک:**
+
+```bash
+./install-docker.sh --with-demo-data
+cd afagh-next && npm start         # → http://localhost:3100
+```
+
+| سوییچ (ویندوز / لینوکس) | کار |
+|---|---|
+| `-WithDemoData` / `--with-demo-data` | ساخت دادهٔ نمونهٔ فاز صفر و انتقالش به PostgreSQL |
+| `-Fresh` / `--fresh` | حذف کانتینرها و **کل داده**، نصب از صفر |
+| `-SkipBuild` / `--skip-build` | بدون بیلد پروداکشن (برای `npm run dev`) |
+| `-Start` / `--start` | بعد از نصب، سرور را هم اجرا کن |
+
+اسکریپت این کارها را انجام می‌دهد (چند بار اجرا کردنش بی‌خطر است):
+
+1. بررسی Node ≥ ۱۸، Docker در حال اجرا، و پورت‌های اشغال
+2. بالا آوردن **PostgreSQL 16 + Redis 7 + MinIO** با `docker compose` (پروژهٔ `afagh`) و صبر تا `pg_isready`
+3. ساخت `afagh-next/.env` از روی `.env.example` (اگر نبود)
+4. `npm install` هوشمند (فقط وقتی `package-lock.json` عوض شده باشد)
+5. `drizzle-kit push` → همهٔ جدول‌ها + `npm run db:hardening` → ایندکس‌ها، RLS و نقش `afagh_app`
+6. دادهٔ دمو (اختیاری) + گرم‌کردن ظرفیت کلاس‌ها در Redis
+7. `npm run build`
+
+**مدیریت سرویس‌ها:**
+
+```powershell
+docker compose -p afagh -f afagh-next\docker-compose.yml ps     # وضعیت
+.\stop-docker.ps1                                               # خاموش (داده حفظ می‌شود)
+.\stop-docker.ps1 -RemoveData                                   # حذف کامل داده
+```
+
+> ⚠️ اگر پورت ۵۴۳۲ روی سیستم شما با PostgreSQL محلی اشغال است، یا آن را متوقف کنید یا در
+> `afagh-next/docker-compose.yml` مقدار `ports` را به `'5433:5432'` تغییر داده و `DATABASE_URL`
+> را در `.env` هماهنگ کنید.
+
+---
+
+## نصب سنتی روی لینوکس (سرویس‌های محلی)
 
 ```bash
 tar xzf afagh-v1.0.0.tar.gz && cd afagh
@@ -20,6 +69,9 @@ tar xzf afagh-v1.0.0.tar.gz && cd afagh
 
 ## پیش‌نیازها
 
+**روش Docker (پیشنهادی):** فقط **Node.js ≥ ۱۸** و **Docker Desktop / Docker Engine**. تمام.
+
+**روش سنتی:**
 - **Node.js ≥ ۱۸** و npm
 - **PostgreSQL** (۱۴+) و **Redis** — محلی یا docker
 - MinIO لازم نیست نصب کنید؛ `start.sh` در صورت نبود، خودش دانلود و اجرا می‌کند
@@ -57,6 +109,11 @@ tar xzf afagh-v1.0.0.tar.gz && cd afagh
 
 | مشکل | راه‌حل |
 |---|---|
+| `docker: command not found` یا «Docker اجرا نمی‌شود» | Docker Desktop را باز کنید و صبر کنید وضعیتش **Running** شود |
+| `Bind for 0.0.0.0:5432 failed: port is already allocated` | PostgreSQL محلی را متوقف کنید یا در `docker-compose.yml` پورت را `'5433:5432'` کنید و `DATABASE_URL` را در `.env` هماهنگ کنید |
+| در ویندوز اسکریپت اجرا نمی‌شود (`running scripts is disabled`) | `powershell -ExecutionPolicy Bypass -File .\install-docker.ps1` |
+| `ECONNREFUSED 127.0.0.1:5432` هنگام `db:push` | کانتینر بالا نیست: `docker compose -p afagh -f afagh-next/docker-compose.yml ps` |
+| بیلد بعد از `git pull` خطا می‌دهد | `node_modules` و `.next` را پاک و دوباره `npm install` (نسخهٔ Next تغییر کرده) |
 | «PostgreSQL رو نیست» | `service postgresql start` یا `AFAGH_USE_DOCKER=1` |
 | دسترسی sudo برای PG نیست | دو دستور CREATE ROLE/createdb که installer چاپ می‌کند را دستی بزنید و دوباره اجرا کنید |
 | MinIO بالا نیامد | `run/logs/minio.log` — یا `docker run -p 9000:9000 minio/minio server /data` |
