@@ -1,0 +1,35 @@
+# ════════════════════════════════════════════════════════════════════
+#  لایهٔ اختیاری HTTPS — Caddy با گواهی خودکار Let's Encrypt
+#
+#  ۱) در فایل .env بگذارید:
+#         DOMAIN=edu.example.ac.ir
+#         APP_PORT=127.0.0.1:8080          ← اپ دیگر مستقیم از اینترنت باز نباشد
+#         AFAGH_PUBLIC_BASE_URL=https://edu.example.ac.ir
+#  ۲) اجرا:
+#         docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
+#     یا:  make up-https
+#
+#  پورت‌های ۸۰ و ۴۴۳ سرور باید آزاد و در فایروال باز باشند و رکورد A دامنه
+#  به IP همین سرور اشاره کند.
+# ════════════════════════════════════════════════════════════════════
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: afagh_caddy
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?متغیر DOMAIN را در .env تعریف کنید}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:

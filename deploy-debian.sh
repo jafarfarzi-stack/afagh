@@ -20,7 +20,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$PWD"
-COMPOSE_FILE="$ROOT/docker-compose.prod.yml"
+COMPOSE_FILE="$ROOT/docker-compose.yml"
 PROJECT="afagh"
 
 G='\033[32m'; R='\033[31m'; Y='\033[33m'; C='\033[36m'; B='\033[1m'; N='\033[0m'
@@ -235,12 +235,14 @@ cat <<EOF
       (همان مقادیر را می‌توانید در فایل .env هم به‌عنوان پیش‌فرض بگذارید.)
 
   ${B}مدیریت:${N}
-      وضعیت      : docker compose -p $PROJECT -f docker-compose.prod.yml ps
-      لاگ زنده   : docker compose -p $PROJECT -f docker-compose.prod.yml logs -f app
-      ری‌استارت   : docker compose -p $PROJECT -f docker-compose.prod.yml restart app
-      توقف       : docker compose -p $PROJECT -f docker-compose.prod.yml stop
-      به‌روزرسانی : sudo ./deploy-debian.sh --update
-      پشتیبان PG : docker exec afagh_pg pg_dump -U afagh afagh_db > backup-\$(date +%F).sql
+      وضعیت      : make ps            (یا docker compose ps)
+      لاگ زنده   : make logs
+      ری‌استارت   : make restart
+      توقف       : make down
+      به‌روزرسانی : sudo ./deploy-debian.sh --update   (یا make update)
+      پشتیبان PG : make backup         → backups/afagh_<تاریخ>.sql
+      HTTPS دامنه: DOMAIN را در .env بگذارید و make up-https
+      همهٔ میان‌بُرها: make help
 
   رمزهای تولیدشده در فایل ${B}.env${N} کنار همین اسکریپت است (chmod 600) — از آن نسخهٔ پشتیبان بگیرید.
   دیتابیس/Redis/MinIO فقط روی 127.0.0.1 باز شده‌اند و از بیرون سرور در دسترس نیستند.

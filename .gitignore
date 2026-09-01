@@ -20,3 +20,8 @@ run/
 SHA256SUMS.txt
 
 .DS_Store
+
+# ── استقرار ──
+.env
+backups/
+caddy_data/

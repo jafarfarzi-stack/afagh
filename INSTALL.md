@@ -34,11 +34,50 @@
 
 ## 🚀 استقرار پروداکشن روی Debian 13 — همه‌چیز داخل Docker
 
-سرور تازه‌نصب Debian 13 (Trixie) با دسترسی root. یک دستور، و سامانه روی **پورت ۸۰۸۰** بالا می‌آید:
+### راه ساده‌تر: فقط docker compose
+
+اگر داکر روی سرور نصب است، همین دو دستور کافی است — هیچ تنظیم اجباری دیگری لازم نیست:
 
 ```bash
 git clone -b arena/01a05c13-afagh https://github.com/jafarfarzi-stack/afagh.git
 cd afagh
+docker compose up -d --build          # یا:  make up
+```
+
+سامانه روی **http://SERVER_IP:8080** بالا می‌آید. فایل `docker-compose.yml` در ریشهٔ پروژه
+کل استک را می‌سازد و همهٔ مقادیر پیش‌فرض دارند؛ برای سفارشی‌سازی یک `.env` بسازید
+(`cp .env.prod.example .env`) و فقط همان چند مقدار لازم را عوض کنید.
+
+**میان‌بُرهای آماده (`make help`):**
+
+| دستور | کار |
+|---|---|
+| `make up` | ساخت `.env` (اگر نبود) + بیلد + اجرای کل استک |
+| `make up-https` | اجرا پشت **Caddy** با گواهی HTTPS خودکار (نیازمند `DOMAIN` در `.env`) |
+| `make ps` / `make health` | وضعیت سرویس‌ها و تست HTTP |
+| `make logs` | لاگ زندهٔ سرویس وب |
+| `make backup` | پشتیبان PostgreSQL در `backups/afagh_<تاریخ>.sql` |
+| `make restore FILE=…` | بازگردانی پشتیبان |
+| `make migrate` | اجرای دوبارهٔ مهاجرت schema |
+| `make update` | `git pull` + بیلد + ری‌استارت |
+| `make fresh` | ⚠️ حذف کامل داده و نصب از صفر |
+| `make psql` / `make shell` | کنسول دیتابیس / ورود به کانتینر اپ |
+
+**HTTPS با دامنه:** در `.env` بگذارید
+
+```env
+DOMAIN=edu.example.ac.ir
+APP_PORT=127.0.0.1:8080
+AFAGH_PUBLIC_BASE_URL=https://edu.example.ac.ir
+```
+
+و `make up-https` بزنید؛ Caddy گواهی Let's Encrypt را خودش می‌گیرد و تمدید می‌کند.
+
+### راه کامل‌تر: اسکریپت خودکار (نصب داکر + رمزهای تصادفی)
+
+روی سرور تازه‌نصب که هنوز داکر ندارد:
+
+```bash
 sudo ./deploy-debian.sh
 ```
 
@@ -76,9 +115,9 @@ sudo ./deploy-debian.sh
 **مدیریت روزمره:**
 
 ```bash
-docker compose -p afagh -f docker-compose.prod.yml ps          # وضعیت
-docker compose -p afagh -f docker-compose.prod.yml logs -f app # لاگ زنده
-docker compose -p afagh -f docker-compose.prod.yml restart app # ری‌استارت
+docker compose -p afagh -f docker-compose.yml ps          # وضعیت
+docker compose -p afagh -f docker-compose.yml logs -f app # لاگ زنده
+docker compose -p afagh -f docker-compose.yml restart app # ری‌استارت
 sudo ./deploy-debian.sh --update                               # به‌روزرسانی نسخه
 docker exec afagh_pg pg_dump -U afagh afagh_db > backup-$(date +%F).sql   # پشتیبان
 ```
