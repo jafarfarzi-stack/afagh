@@ -65,6 +65,13 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'EITAA_CHANNEL', env: 'EITAA_CHANNEL_ID', group: 'پیامک و ربات‌های پیام‌رسان', label: 'شناسهٔ کانال ایتا', type: 'text', default: '' },
   { key: 'TELEGRAM_TOKEN', env: 'TELEGRAM_BOT_TOKEN', group: 'پیامک و ربات‌های پیام‌رسان', label: 'توکن ربات تلگرام', type: 'secret', default: '' },
   { key: 'TELEGRAM_CHANNEL', env: 'TELEGRAM_CHANNEL_ID', group: 'پیامک و ربات‌های پیام‌رسان', label: 'شناسهٔ کانال تلگرام', type: 'text', default: '' },
+  { key: 'SMS_BASE_URL', env: 'SMS_BASE_URL', group: 'پیامک و ربات‌های پیام‌رسان', label: 'نشانی سرویس پیامک', type: 'url', default: '', help: 'خالی = نشانی پیش‌فرض همان سرویس‌دهنده. برای CUSTOM از جای‌گاه‌های {to} {text} {sender} {key} استفاده کنید' },
+  { key: 'TELEGRAM_API_BASE', env: 'TELEGRAM_API_BASE', group: 'پیامک و ربات‌های پیام‌رسان', label: 'نشانی API تلگرام', type: 'url', default: 'https://api.telegram.org' },
+  { key: 'BALE_API_BASE', env: 'BALE_API_BASE', group: 'پیامک و ربات‌های پیام‌رسان', label: 'نشانی API بله', type: 'url', default: 'https://tapi.bale.ai' },
+  { key: 'EITAA_API_BASE', env: 'EITAA_API_BASE', group: 'پیامک و ربات‌های پیام‌رسان', label: 'نشانی API ایتا', type: 'url', default: 'https://eitaayar.ir/api' },
+  { key: 'NOTIFY_CHANNELS', env: 'NOTIFY_CHANNELS', group: 'پیامک و ربات‌های پیام‌رسان', label: 'کانال‌های اعلان به کاربر', type: 'text', default: 'INAPP,SMS', help: 'با ویرگول: INAPP، SMS، TELEGRAM، BALE، EITAA' },
+  { key: 'NOTIFY_ENABLED', env: 'NOTIFY_ENABLED', group: 'پیامک و ربات‌های پیام‌رسان', label: 'ارسال اعلان بیرونی (پیامک/پیام‌رسان)', type: 'boolean', default: 'true' },
+  { key: 'NOTIFY_SIGNATURE', env: 'NOTIFY_SIGNATURE', group: 'پیامک و ربات‌های پیام‌رسان', label: 'امضای انتهای پیام', type: 'text', default: 'دانشگاه آفاق' },
 
   // ── پرداخت ──
   { key: 'PAY_PROVIDER', env: 'PAYMENT_PROVIDER', group: 'درگاه پرداخت', label: 'درگاه پرداخت', type: 'text', default: '', help: 'مثال: BEHPARDAKHT_MELLAT / SAMAN / PARSIAN' },

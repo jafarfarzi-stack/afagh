@@ -472,6 +472,40 @@ function DossierDrawer({ d, steps, pending, onClose, run }: {
             </table>
           )}
         </div>
+        {/* گزارش ارسال پیام‌ها */}
+        <div className="card p-3 space-y-2">
+          <h3 className="text-xs font-black text-slate-800">۷) پیام‌های ارسال‌شده به دانشجو</h3>
+          {!d.deliveries.length && (
+            <p className="text-[11px] text-slate-400 font-bold">
+              هنوز پیام بیرونی‌ای ارسال نشده است. کانال‌ها و سرویس پیامک در «تنظیمات ← پیامک و ربات‌های پیام‌رسان» پیکربندی می‌شوند.
+            </p>
+          )}
+          {!!d.deliveries.length && (
+            <table className="w-full text-[10px]">
+              <thead className="bg-slate-50 text-slate-500"><tr>
+                {['رویداد', 'کانال', 'گیرنده', 'نتیجه', 'زمان'].map(h => <th key={h} className="p-1 text-right font-black">{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {d.deliveries.map(v => (
+                  <tr key={v.id} className="border-t border-slate-100">
+                    <td className="p-1 font-mono">{v.eventCode}</td>
+                    <td className="p-1 font-bold">{v.channelLabel}</td>
+                    <td className="p-1 font-mono">{v.target ?? '—'}</td>
+                    <td className="p-1">
+                      <span className={`px-1.5 py-0.5 rounded font-black ${
+                        v.status === 'SENT' ? 'bg-emerald-100 text-emerald-800'
+                          : v.status === 'FAILED' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-600'}`}>
+                        {v.status === 'SENT' ? 'ارسال شد' : v.status === 'FAILED' ? 'ناموفق' : 'ارسال نشد'}
+                      </span>
+                      {v.error && <div className="text-[9px] text-slate-500 mt-0.5">{v.error}</div>}
+                    </td>
+                    <td className="p-1">{dt(v.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </div>
   );

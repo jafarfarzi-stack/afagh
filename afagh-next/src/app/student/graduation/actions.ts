@@ -6,6 +6,7 @@ import { db } from '@/db';
 import { document_categories, graduation_audits, students } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { getStudentTracker, payStampFee, setFinalPhoto, submitSajjadRequest } from '@/lib/graduation-engine';
+import { activeChannels, listUserChannels, saveUserChannel, sendTestMessage, type Channel } from '@/lib/messaging';
 
 // ═══ تنها کنش‌هایی که از خودِ دانشجو خواسته می‌شود ═══
 // (بارگذاری عکس ۴×۳ و پرداخت تمبر ابطال) — بقیهٔ مراحل خودکار است.
@@ -33,6 +34,35 @@ export async function photoCategoryAction() {
   if (found) return { ok: true as const, categoryId: found.id };
   const [ins] = await db.insert(document_categories).values({ title, scope: 'STUDENT' }).returning({ id: document_categories.id });
   return { ok: true as const, categoryId: ins.id };
+}
+
+/** کانال‌های اطلاع‌رسانی فعال سامانه + نشانی ثبت‌شدهٔ خود دانشجو */
+export async function myChannelsAction() {
+  const { user } = await me();
+  const rows = await listUserChannels(user.id);
+  return {
+    ok: true as const,
+    active: await activeChannels(),
+    mine: rows.map(r => ({ channel: r.channel, address: r.address })),
+  };
+}
+
+export async function saveChannelAction(channel: string, address: string) {
+  const { user } = await me();
+  try {
+    await saveUserChannel(user.id, channel as Channel, address);
+    revalidatePath('/student/graduation');
+    const rows = await listUserChannels(user.id);
+    return { ok: true as const, mine: rows.map(r => ({ channel: r.channel, address: r.address })) };
+  } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : 'خطا' }; }
+}
+
+export async function testChannelAction(channel: string) {
+  const { user } = await me();
+  try {
+    const r = await sendTestMessage(user.id, channel as Channel);
+    return { ok: true as const, status: r.status, error: 'error' in r ? r.error : undefined };
+  } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : 'خطا' }; }
 }
 
 export async function trackerAction() {

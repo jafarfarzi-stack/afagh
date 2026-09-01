@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useRef, useState, useTransition } from 'react';
-import { attachPhotoAction, payStampAction, photoCategoryAction, submitSajjadAction, trackerAction } from './actions';
+import {
+  attachPhotoAction, myChannelsAction, payStampAction, photoCategoryAction, saveChannelAction,
+  submitSajjadAction, testChannelAction, trackerAction,
+} from './actions';
 
 // ═══ ردیاب فارغ‌التحصیلی دانشجو ═══
 // دانشجو هیچ درخواستی ثبت نمی‌کند؛ فقط پیشرفت را می‌بیند و در گام آخر
@@ -63,6 +66,7 @@ export default function TrackerClient({ initial, userId }: { initial: Tracker; u
             </>
           )}
         </div>
+        <ChannelsCard />
       </div>
     );
   }
@@ -230,6 +234,8 @@ export default function TrackerClient({ initial, userId }: { initial: Tracker; u
         </div>
       )}
 
+      <ChannelsCard />
+
       {/* مدارک صادرشده */}
       {!!d.degrees.length && (
         <div className="card p-4">
@@ -251,6 +257,61 @@ export default function TrackerClient({ initial, userId }: { initial: Tracker; u
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+const CHANNEL_LABEL: Record<string, string> = {
+  INAPP: 'پیام درون‌سامانه', SMS: 'پیامک', TELEGRAM: 'تلگرام', BALE: 'بله', EITAA: 'ایتا',
+};
+
+/** ثبت نشانی دانشجو در کانال‌های اطلاع‌رسانی فعال دانشگاه */
+function ChannelsCard() {
+  const [state, setState] = useState<{ active: string[]; mine: { channel: string; address: string }[] } | null>(null);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [note, setNote] = useState('');
+  const [pending, start] = useTransition();
+
+  const load = () => start(async () => {
+    const r = await myChannelsAction();
+    if (r.ok) {
+      setState({ active: r.active, mine: r.mine });
+      setDraft(Object.fromEntries(r.mine.map(m => [m.channel, m.address])));
+    }
+  });
+
+  React.useEffect(load, []);
+  if (!state) return null;
+  const externals = state.active.filter(c => c !== 'INAPP');
+  if (!externals.length) return null;
+
+  return (
+    <div className="card p-4 space-y-2">
+      <h2 className="text-sm font-black text-slate-800">اطلاع‌رسانی مراحل فارغ‌التحصیلی</h2>
+      <p className="text-[11px] text-slate-500 leading-5">
+        همهٔ رویدادهای پرونده (تبریک شروع فرآیند، تسویه‌حساب، درخواست سجاد و صدور مدرک) علاوه بر
+        پیام درون‌سامانه‌ای، از این کانال‌ها هم برای شما ارسال می‌شود.
+      </p>
+      {externals.map(ch => (
+        <div key={ch} className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-black text-slate-700 w-20">{CHANNEL_LABEL[ch] ?? ch}</span>
+          <input
+            value={draft[ch] ?? ''} onChange={e => setDraft({ ...draft, [ch]: e.target.value })}
+            placeholder={ch === 'SMS' ? 'شمارهٔ موبایل (۰۹…)' : 'شناسهٔ چت شما در ربات دانشگاه'}
+            className="border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] flex-1 min-w-48"
+          />
+          <button disabled={pending} onClick={() => start(async () => {
+            const r = await saveChannelAction(ch, draft[ch] ?? '');
+            setNote(r.ok ? 'ذخیره شد.' : r.error);
+            if (r.ok) setState(s => (s ? { ...s, mine: r.mine } : s));
+          })} className="px-2 py-1 rounded-lg bg-slate-200 text-[11px] font-black disabled:opacity-50">ذخیره</button>
+          <button disabled={pending} onClick={() => start(async () => {
+            const r = await testChannelAction(ch);
+            setNote(!r.ok ? r.error : r.status === 'SENT' ? 'پیام آزمایشی ارسال شد.' : `ارسال نشد: ${r.error ?? r.status}`);
+          })} className="px-2 py-1 rounded-lg bg-emerald-700 text-white text-[11px] font-black disabled:opacity-50">ارسال آزمایشی</button>
+        </div>
+      ))}
+      {note && <div className="text-[11px] font-bold text-slate-600">{note}</div>}
     </div>
   );
 }

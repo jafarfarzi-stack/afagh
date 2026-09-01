@@ -1421,3 +1421,32 @@ export const alumni_requests = pgTable('alumni_requests', {
   createdAt: timestamp('createdAt').defaultNow(),
   updatedAt: timestamp('updatedAt').defaultNow()
 });
+
+// ═══ کانال‌های اعلان بیرونی (پیامک و پیام‌رسان‌ها) ═══
+
+/** نشانی هر کاربر در هر پیام‌رسان (شناسهٔ چت ربات) — کاربر خودش ثبت می‌کند */
+export const notification_channels = pgTable('notification_channels', {
+  id: serial('id').primaryKey(),
+  userId: integer('userId').notNull().references(() => users.id),
+  channel: varchar('channel', { length: 20 }).notNull(),      // SMS|TELEGRAM|BALE|EITAA
+  address: varchar('address', { length: 120 }).notNull(),     // شمارهٔ موبایل یا chat id
+  isActive: integer('isActive').notNull().default(1),
+  verifiedAt: timestamp('verifiedAt'),
+  createdAt: timestamp('createdAt').defaultNow()
+}, (t) => ({ uq: unique('uq_notification_channels').on(t.userId, t.channel) }));
+
+/** گزارش تحویل هر پیام بیرونی — برای پیگیری و ممیزی */
+export const notification_deliveries = pgTable('notification_deliveries', {
+  id: serial('id').primaryKey(),
+  userId: integer('userId').notNull().references(() => users.id),
+  notificationId: integer('notificationId'),
+  eventCode: varchar('eventCode', { length: 60 }),
+  channel: varchar('channel', { length: 20 }).notNull(),
+  target: varchar('target', { length: 120 }),
+  status: varchar('status', { length: 20 }).notNull(),        // SENT|FAILED|SKIPPED
+  providerRef: varchar('providerRef', { length: 120 }),
+  error: text('error'),
+  body: text('body'),
+  durationMs: integer('durationMs'),
+  createdAt: timestamp('createdAt').defaultNow()
+});

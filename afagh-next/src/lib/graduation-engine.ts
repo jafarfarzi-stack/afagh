@@ -11,6 +11,7 @@ import {
 import { getBool, getNumber, getSetting } from '@/lib/settings';
 import { executeIrandocCheck } from '@/lib/api-integrations';
 import { createLogger } from '@/lib/logger';
+import { deliveriesForUser, notifyUserMultichannel } from '@/lib/messaging';
 
 // ═══════════════════════════════════════════════════════════════════
 //  موتور فارغ‌التحصیلی «رویدادمحور» (Zero-Touch Graduation)
@@ -185,8 +186,18 @@ export async function auditStudent(studentId: number): Promise<AuditResult | nul
 
 // ───────────────────────── اعلان‌ها ─────────────────────────
 
+/**
+ * اعلان به دانشجو روی همهٔ کانال‌های فعال (پیام درون‌سامانه + پیامک + پیام‌رسان).
+ * کانال‌ها و سرویس‌دهنده‌ها از تنظیمات خوانده می‌شوند؛ خطای ارسال بیرونی هرگز
+ * فرآیند فارغ‌التحصیلی را متوقف نمی‌کند، فقط در گزارش تحویل ثبت می‌شود.
+ */
 async function notifyUser(userId: number, eventCode: string, text: string) {
-  await db.insert(notifications).values({ userId, eventCode, payload: JSON.stringify({ text }) });
+  try {
+    await notifyUserMultichannel({ userId, eventCode, text });
+  } catch (e) {
+    log.error('notify_failed', { eventCode, err: (e as Error).message });
+    await db.insert(notifications).values({ userId, eventCode, payload: JSON.stringify({ text }) });
+  }
 }
 
 async function notifyRole(roleCode: string | null, eventCode: string, text: string) {
@@ -285,8 +296,13 @@ export async function openDossier(audit: AuditResult): Promise<number> {
 
   const [stu] = await db.select({ userId: students.userId }).from(students).where(eq(students.id, audit.studentId)).limit(1);
   if (stu) {
-    await notifyUser(stu.userId, 'GRADUATION_STARTED',
-      'دانشجوی گرامی، بر اساس تکمیل سرفصل، فرآیند فارغ‌التحصیلی شما به‌صورت خودکار آغاز شد. نیازی به ثبت درخواست نیست؛ روند را از بخش «فارغ‌التحصیلی» پیگیری کنید.');
+    // پیام تبریک اتمام تحصیل + دعوت به پیگیری تسویه‌حساب (پیامک/پیام‌رسان + درون‌سامانه)
+    await notifyUser(stu.userId, 'GRADUATION_STARTED', [
+      `${audit.fullName} عزیز، اتمام دوره تحصیلی شما را صمیمانه تبریک می‌گوییم! 🎓`,
+      `بر اساس تکمیل واحدهای سرفصل${audit.gpa == null ? '' : ` (معدل کل ${audit.gpa})`}، پروندهٔ فارغ‌التحصیلی شما به‌صورت خودکار تشکیل شد و نیازی به ثبت درخواست ندارید.`,
+      'مرحلهٔ بعد، تأیید مدیر گروه و سپس تسویه‌حساب با واحدهای دانشگاه است؛ لطفاً وضعیت بدهی مالی، امانت کتاب و خوابگاه خود را پیگیری کنید تا فرآیند بدون وقفه پیش برود.',
+      'پیگیری لحظه‌ای مراحل: بخش «فارغ‌التحصیلی من» در سامانه.',
+    ].join('\n'));
   }
   await notifyRole('EDU_EXPERT', 'GRADUATION_HEAD_APPROVAL',
     `پروندهٔ فارغ‌التحصیلی ${audit.fullName} (${audit.studentCode}) آمادهٔ بررسی و تأیید مدیر گروه است.`);
@@ -464,6 +480,24 @@ export async function runAutoClearance(auditId: number) {
   }
 
   log.info('auto_clearance', { auditId, autoCleared, withDebt });
+
+  // اگر جایی بدهی/امانت باز ماند، فهرستش را با پیامک/پیام‌رسان به دانشجو می‌گوییم
+  if (withDebt > 0) {
+    const fresh = await db.select().from(clearance_checklist).where(eq(clearance_checklist.auditId, auditId));
+    const debts = fresh.filter(r => r.status === 'HAS_DEBT');
+    const [stu] = await db.select({ userId: students.userId }).from(students).where(eq(students.id, a.studentId)).limit(1);
+    if (stu && debts.length) {
+      const lines = debts.map(r => {
+        const title = deps.find(d => d.code === r.department)?.title ?? r.department;
+        const amount = Number(r.amountDue ?? 0);
+        return `• ${title}${amount > 0 ? ` — ${amount.toLocaleString('fa-IR')} ریال` : ''}`;
+      });
+      await notifyUser(stu.userId, 'GRADUATION_CLEARANCE_DEBT',
+        ['برای ادامهٔ فرآیند فارغ‌التحصیلی، تسویه‌حساب موارد زیر باقی مانده است:', ...lines,
+          'پس از تسویه، سامانه به‌صورت خودکار وضعیت را سبز می‌کند و نیازی به مراجعهٔ حضوری نیست.'].join('\n'));
+    }
+  }
+
   await advanceDossier(auditId);
   return { ok: true, autoCleared, withDebt };
 }
@@ -785,6 +819,8 @@ export async function getDossier(auditId: number) {
   const deps = await listDepartments(false);
   const degrees = await db.select().from(issued_degrees)
     .where(eq(issued_degrees.studentId, a.studentId)).orderBy(desc(issued_degrees.id));
+  const [stuUser] = await db.select({ userId: students.userId }).from(students).where(eq(students.id, a.studentId)).limit(1);
+  const deliveries = stuUser ? await deliveriesForUser(stuUser.userId, 12) : [];
 
   return {
     audit: {
@@ -815,6 +851,7 @@ export async function getDossier(auditId: number) {
       ministryVerificationCode: d.ministryVerificationCode, isDelivered: d.isDelivered === 1,
       issuedAt: d.issuedAt.toISOString(), documentHash: d.documentHash,
     })),
+    deliveries,
   };
 }
 
