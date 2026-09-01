@@ -96,6 +96,13 @@ export default function ProfessorGradesClient({
   const [selectedAppeal, setSelectedAppeal] = useState<GradeAppealItem | null>(null);
   const [appealReplyText, setAppealReplyText] = useState<string>('');
   const [appealNewGrade, setAppealNewGrade] = useState<number>(14);
+  const [appealMidterm, setAppealMidterm] = useState<number>(0);
+  const [appealHomework, setAppealHomework] = useState<number>(0);
+  const [appealParticipation, setAppealParticipation] = useState<number>(0);
+  const [appealPractical, setAppealPractical] = useState<number>(0);
+  const [appealFinalExam, setAppealFinalExam] = useState<number>(0);
+  const [appealTheoryProf, setAppealTheoryProf] = useState<number>(0);
+  const [appealLabProf, setAppealLabProf] = useState<number>(0);
   const [lastAutoSaveTime, setLastAutoSaveTime] = useState<string>('هم‌اکنون');
   const [searchStudentQuery, setSearchStudentQuery] = useState<string>('');
 
@@ -103,6 +110,34 @@ export default function ProfessorGradesClient({
   const rubric = currentOffering?.rubric || { midterm: 5, homework: 3, participation: 2, practical: 0, finalExam: 10 };
   const totalRubric = (Number(rubric.midterm) || 0) + (Number(rubric.homework) || 0) + (Number(rubric.participation) || 0) + (Number(rubric.practical) || 0) + (Number(rubric.finalExam) || 0);
   const isRubricValid = totalRubric === 20;
+
+  // Open Appeal Modal with initial student rubric values
+  const openAppealModal = (appeal: GradeAppealItem) => {
+    setSelectedAppeal(appeal);
+    const st = currentOffering?.students.find(s => s.studentId === appeal.studentId);
+    setAppealMidterm(st?.midtermScore ?? 0);
+    setAppealHomework(st?.homeworkScore ?? 0);
+    setAppealParticipation(st?.participationScore ?? 0);
+    setAppealPractical(st?.practicalScore ?? 0);
+    setAppealFinalExam(st?.finalExamScore ?? 0);
+    setAppealTheoryProf(st?.theoryProfScore ?? 0);
+    setAppealLabProf(st?.labProfScore ?? 0);
+    setAppealReplyText(appeal.professorReply || '');
+    setAppealNewGrade(st?.calculatedFinalScore ?? appeal.currentGrade);
+  };
+
+  // Live calculated total in the appeal modal based on updated breakdown inputs
+  const calculatedAppealTotal = useMemo(() => {
+    if (!currentOffering) return 0;
+    if (currentOffering.isCoTaught && currentOffering.coTaughtDetails) {
+      const t = appealTheoryProf * currentOffering.coTaughtDetails.theoryWeightRatio;
+      const l = appealLabProf * currentOffering.coTaughtDetails.labWeightRatio;
+      return Math.min(20, Math.round((t + l) * 100) / 100);
+    } else {
+      const sum = (appealMidterm || 0) + (appealHomework || 0) + (appealParticipation || 0) + (appealPractical || 0) + (appealFinalExam || 0);
+      return Math.min(20, Math.round(sum * 100) / 100);
+    }
+  }, [currentOffering, appealMidterm, appealHomework, appealParticipation, appealPractical, appealFinalExam, appealTheoryProf, appealLabProf]);
 
   // Auto-save simulation
   useEffect(() => {
@@ -308,7 +343,7 @@ export default function ProfessorGradesClient({
     setTimeout(() => setToastMessage(null), 6000);
   };
 
-  // Appeal Response
+  // Appeal Response with Rubric Breakdown updates
   const handleResolveAppeal = (decision: 'ACCEPTED' | 'REJECTED') => {
     if (!selectedAppeal) return;
     setOfferings(prev =>
@@ -322,23 +357,37 @@ export default function ProfessorGradesClient({
               ...ap,
               status: decision,
               professorReply: appealReplyText,
-              newGrade: decision === 'ACCEPTED' ? appealNewGrade : ap.currentGrade,
+              newGrade: decision === 'ACCEPTED' ? calculatedAppealTotal : ap.currentGrade,
             };
           }),
           students: off.students.map(st => {
             if (st.studentId !== selectedAppeal.studentId) return st;
-            return {
-              ...st,
-              status: 'TEMPORARY',
-              calculatedFinalScore: decision === 'ACCEPTED' ? appealNewGrade : st.calculatedFinalScore,
-            };
+            if (decision === 'ACCEPTED') {
+              return {
+                ...st,
+                status: 'TEMPORARY',
+                midtermScore: off.isCoTaught ? st.midtermScore : appealMidterm,
+                homeworkScore: off.isCoTaught ? st.homeworkScore : appealHomework,
+                participationScore: off.isCoTaught ? st.participationScore : appealParticipation,
+                practicalScore: off.isCoTaught ? st.practicalScore : appealPractical,
+                finalExamScore: off.isCoTaught ? st.finalExamScore : appealFinalExam,
+                theoryProfScore: off.isCoTaught ? appealTheoryProf : st.theoryProfScore,
+                labProfScore: off.isCoTaught ? appealLabProf : st.labProfScore,
+                calculatedFinalScore: calculatedAppealTotal,
+              };
+            }
+            return st;
           }),
         };
       })
     );
     setSelectedAppeal(null);
     setAppealReplyText('');
-    setToastMessage(`پاسخ اعتراض دانشجو (${decision === 'ACCEPTED' ? 'تغییر نمره پذیرفته شد' : 'اعتراض رد شد'}) با موفقیت ثبت و ابلاغ شد.`);
+    setToastMessage(
+      decision === 'ACCEPTED'
+        ? `✅ نمرات بارم‌بندی دانشجو به‌روزرسانی شد و نمره نهایی به ${faNum(calculatedAppealTotal)} تغییر یافت.`
+        : 'اعتراض دانشجو بررسی و رد شد؛ نمرات قبلی تثبیت گردید.'
+    );
     setTimeout(() => setToastMessage(null), 5000);
   };
 
@@ -783,7 +832,53 @@ export default function ProfessorGradesClient({
                         {st.studentCode}
                       </td>
                       <td className="p-2.5 border border-slate-200 font-black text-slate-900">
-                        {st.fullName}
+                        <div className="flex flex-col">
+                          <span>{st.fullName}</span>
+                          {(() => {
+                            const appeal = currentOffering.appeals.find(a => a.studentId === st.studentId);
+                            if (!appeal) return null;
+                            if (appeal.status === 'OPEN') {
+                              return (
+                                <div className="mt-1.5 flex flex-wrap items-center gap-1.5 p-1.5 bg-amber-50 border border-amber-300 rounded-lg text-[10px] text-amber-950 font-medium">
+                                  <span className="font-extrabold text-amber-900">📩 اعتراض ثبت‌شده:</span>
+                                  <span className="truncate max-w-[170px] text-slate-700" title={appeal.studentMessage}>
+                                    «{appeal.studentMessage}»
+                                  </span>
+                                  <button
+                                    onClick={() => openAppealModal(appeal)}
+                                    className="px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] shadow-xs transition"
+                                  >
+                                    ✍️ پاسخ و اصلاح بارم
+                                  </button>
+                                </div>
+                              );
+                            } else if (appeal.status === 'ACCEPTED') {
+                              return (
+                                <div className="mt-1 flex items-center justify-between gap-1 p-1 bg-emerald-50 border border-emerald-300 rounded text-[10px] text-emerald-900 font-medium">
+                                  <span className="font-bold text-emerald-800">✓ اعتراض پذیرفته شد (نمره: {faNum(appeal.newGrade)})</span>
+                                  <button
+                                    onClick={() => openAppealModal(appeal)}
+                                    className="text-indigo-700 hover:underline font-bold text-[10px]"
+                                  >
+                                    مشاهده
+                                  </button>
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div className="mt-1 flex items-center justify-between gap-1 p-1 bg-slate-100 border border-slate-300 rounded text-[10px] text-slate-700 font-medium">
+                                  <span className="font-bold text-rose-700">✕ اعتراض رد شد</span>
+                                  <button
+                                    onClick={() => openAppealModal(appeal)}
+                                    className="text-slate-600 hover:underline font-bold text-[10px]"
+                                  >
+                                    مشاهده
+                                  </button>
+                                </div>
+                              );
+                            }
+                          })()}
+                        </div>
                       </td>
 
                       {currentOffering.isCoTaught ? (
@@ -971,6 +1066,42 @@ export default function ProfessorGradesClient({
                         <span className="text-[11px] font-mono text-slate-500" dir="ltr">
                           {st.studentCode}
                         </span>
+                        {(() => {
+                          const appeal = currentOffering.appeals.find(a => a.studentId === st.studentId);
+                          if (!appeal) return null;
+                          if (appeal.status === 'OPEN') {
+                            return (
+                              <div className="mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-lg text-[10px] text-amber-950 font-medium space-y-1">
+                                <div className="font-bold text-amber-900">📩 اعتراض ثبت‌شده دانشجو:</div>
+                                <p className="line-clamp-2 text-slate-700">«{appeal.studentMessage}»</p>
+                                <button
+                                  onClick={() => openAppealModal(appeal)}
+                                  className="w-full py-1 rounded bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] transition shadow-xs"
+                                >
+                                  ✍️ پاسخ و اصلاح بارم‌بندی
+                                </button>
+                              </div>
+                            );
+                          } else if (appeal.status === 'ACCEPTED') {
+                            return (
+                              <div className="mt-1 p-1 bg-emerald-50 border border-emerald-300 rounded text-[10px] text-emerald-900 flex items-center justify-between">
+                                <span className="font-bold">✓ اعتراض پذیرفته شد (نمره: {faNum(appeal.newGrade)})</span>
+                                <button onClick={() => openAppealModal(appeal)} className="text-indigo-700 font-bold underline">
+                                  جزئیات
+                                </button>
+                              </div>
+                            );
+                          } else {
+                            return (
+                              <div className="mt-1 p-1 bg-slate-100 border border-slate-300 rounded text-[10px] text-slate-700 flex items-center justify-between">
+                                <span className="font-bold text-rose-700">✕ اعتراض رد شد</span>
+                                <button onClick={() => openAppealModal(appeal)} className="text-slate-600 font-bold underline">
+                                  جزئیات
+                                </button>
+                              </div>
+                            );
+                          }
+                        })()}
                       </div>
                     </div>
 
@@ -1185,23 +1316,29 @@ export default function ProfessorGradesClient({
                       <div className="flex items-center justify-between font-bold text-slate-600 mb-1">
                         <span>پاسخ ثبت‌شده استاد:</span>
                         {appeal.status === 'ACCEPTED' && (
-                          <span className="text-emerald-700">نمره جدید ابلاغی: {faNum(appeal.newGrade)}</span>
+                          <span className="text-emerald-700">نمره جدید ابلاغی: {faNum(appeal.newGrade)} از ۲۰</span>
                         )}
                       </div>
                       <p className="leading-5">{appeal.professorReply || 'بدون توضیح'}</p>
                     </div>
                   )}
 
-                  {appeal.status === 'OPEN' && (
+                  {appeal.status === 'OPEN' ? (
                     <div className="flex justify-end pt-1">
                       <button
-                        onClick={() => {
-                          setSelectedAppeal(appeal);
-                          setAppealNewGrade(appeal.currentGrade);
-                        }}
-                        className="w-full sm:w-auto px-4 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-black text-xs shadow-xs transition"
+                        onClick={() => openAppealModal(appeal)}
+                        className="w-full sm:w-auto px-4 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-black text-xs shadow-xs transition flex items-center justify-center gap-1.5"
                       >
-                        ✍️ پاسخ و تصمیم‌گیری درباره اعتراض
+                        <span>✍️ بررسی اعتراض و اصلاح بارم‌بندی نمرات</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex justify-end pt-1">
+                      <button
+                        onClick={() => openAppealModal(appeal)}
+                        className="w-full sm:w-auto px-3.5 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs transition"
+                      >
+                        مشاهده جزئیات و بارم‌ها
                       </button>
                     </div>
                   )}
@@ -1262,71 +1399,225 @@ export default function ProfessorGradesClient({
         </div>
       )}
 
-      {/* Appeal Decision Modal */}
+      {/* Appeal Decision Modal with Detailed Rubric Breakdown Editing */}
       {selectedAppeal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-slate-200 space-y-4 text-slate-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 max-w-xl w-full shadow-2xl border border-slate-200 space-y-4 text-slate-900 my-8">
             <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-              <h3 className="font-black text-base text-slate-900">
-                رسیدگی به اعتراض دانشجو: {selectedAppeal.fullName}
-              </h3>
-              <button onClick={() => setSelectedAppeal(null)} className="text-slate-400 hover:text-slate-700">✕</button>
+              <div className="flex items-center gap-2">
+                <span className="text-xl">✍️</span>
+                <h3 className="font-black text-base text-slate-900">
+                  رسیدگی به اعتراض و اصلاح بارم نمرات: {selectedAppeal.fullName}
+                </h3>
+              </div>
+              <button onClick={() => setSelectedAppeal(null)} className="text-slate-400 hover:text-slate-700 text-sm font-bold">✕</button>
             </div>
 
-            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-1">
-              <div className="flex justify-between">
-                <span className="text-slate-500">شماره دانشجویی:</span>
-                <span className="font-mono font-bold text-slate-800">{faNum(selectedAppeal.studentCode)}</span>
+            {/* Student Appeal Details Box */}
+            <div className="p-3 bg-amber-50/70 rounded-2xl border border-amber-200 text-xs space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span className="text-slate-600 font-medium">شماره دانشجویی: </span>
+                  <span className="font-mono font-bold text-slate-900">{faNum(selectedAppeal.studentCode)}</span>
+                </div>
+                <div>
+                  <span className="text-slate-600 font-medium">نمره قبلی ثبت‌شده: </span>
+                  <span className="font-black text-indigo-950 font-mono bg-white px-2 py-0.5 rounded border border-amber-300">
+                    {faNum(selectedAppeal.currentGrade)} از ۲۰
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">نمره ثبت‌شده قبلی:</span>
-                <span className="font-bold text-indigo-700">{faNum(selectedAppeal.currentGrade)} از ۲۰</span>
-              </div>
-              <div className="pt-1 text-slate-700 border-t border-slate-200">
-                <span className="font-bold text-slate-500 block mb-0.5">متن اعتراض:</span>
-                <p className="leading-5 bg-white p-2 rounded-xl border border-slate-200">{selectedAppeal.studentMessage}</p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">متن پاسخ استاد:</label>
-                <textarea
-                  value={appealReplyText}
-                  onChange={e => setAppealReplyText(e.target.value)}
-                  rows={3}
-                  placeholder="توضیحات استاد خطاب به دانشجو..."
-                  className="w-full border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 focus:ring-2 focus:ring-indigo-500 font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">
-                  نمره جدید اصلاح‌شده (در صورت پذیرش اعتراض):
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  max={20}
-                  step={0.25}
-                  inputMode="decimal"
-                  value={appealNewGrade}
-                  onChange={e => setAppealNewGrade(Number(e.target.value))}
-                  className="w-32 border border-slate-300 rounded-xl p-2 text-center font-black text-sm text-indigo-950"
-                />
+              <div className="pt-1.5 text-slate-800 border-t border-amber-200">
+                <span className="font-bold text-amber-950 block mb-0.5">متن اعتراض دانشجو:</span>
+                <p className="leading-5 bg-white p-2.5 rounded-xl border border-amber-200 text-slate-900 font-medium">{selectedAppeal.studentMessage}</p>
               </div>
             </div>
 
+            {/* Rubric Breakdown Component Editor */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-extrabold text-xs text-slate-900 flex items-center gap-1.5">
+                  <span>📊</span>
+                  <span>اصلاح تفکیکی بخش‌های بارم‌بندی درس:</span>
+                </h4>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  سقف نمرات مطابق بارم مصوب کلاس
+                </span>
+              </div>
+
+              {currentOffering.isCoTaught ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="bg-white p-3 rounded-xl border border-indigo-200 space-y-1.5">
+                    <div className="flex justify-between font-bold text-indigo-950">
+                      <span>بخش تئوری (از ۲۰)</span>
+                      <span className="text-[10px] text-indigo-600">سهم {faNum(currentOffering.coTaughtDetails?.theoryWeightRatio! * 100)}٪</span>
+                    </div>
+                    <input
+                      type="number"
+                      min={0}
+                      max={20}
+                      step={0.25}
+                      inputMode="decimal"
+                      value={appealTheoryProf}
+                      onChange={e => setAppealTheoryProf(Math.max(0, Math.min(20, Number(e.target.value))))}
+                      className="w-full border border-slate-300 rounded-lg p-2 text-center font-black text-sm text-indigo-950 focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-purple-200 space-y-1.5">
+                    <div className="flex justify-between font-bold text-purple-950">
+                      <span>بخش عملی / آزمایشگاه (از ۲۰)</span>
+                      <span className="text-[10px] text-purple-600">سهم {faNum(currentOffering.coTaughtDetails?.labWeightRatio! * 100)}٪</span>
+                    </div>
+                    <input
+                      type="number"
+                      min={0}
+                      max={20}
+                      step={0.25}
+                      inputMode="decimal"
+                      value={appealLabProf}
+                      onChange={e => setAppealLabProf(Math.max(0, Math.min(20, Number(e.target.value))))}
+                      className="w-full border border-slate-300 rounded-lg p-2 text-center font-black text-sm text-purple-950 focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                  <div className="bg-white p-2.5 rounded-xl border border-slate-200 space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 block text-center">
+                      میان‌ترم ({faNum(rubric.midterm)})
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={rubric.midterm}
+                      step={0.25}
+                      inputMode="decimal"
+                      value={appealMidterm}
+                      onChange={e => setAppealMidterm(Math.max(0, Math.min(rubric.midterm, Number(e.target.value))))}
+                      className="w-full border border-slate-300 rounded-lg p-1.5 text-center font-black text-xs text-indigo-950 focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div className="bg-white p-2.5 rounded-xl border border-slate-200 space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 block text-center">
+                      تکالیف ({faNum(rubric.homework)})
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={rubric.homework}
+                      step={0.25}
+                      inputMode="decimal"
+                      value={appealHomework}
+                      onChange={e => setAppealHomework(Math.max(0, Math.min(rubric.homework, Number(e.target.value))))}
+                      className="w-full border border-slate-300 rounded-lg p-1.5 text-center font-black text-xs text-indigo-950 focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div className="bg-white p-2.5 rounded-xl border border-slate-200 space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 block text-center">
+                      حضور ({faNum(rubric.participation)})
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={rubric.participation}
+                      step={0.25}
+                      inputMode="decimal"
+                      value={appealParticipation}
+                      onChange={e => setAppealParticipation(Math.max(0, Math.min(rubric.participation, Number(e.target.value))))}
+                      className="w-full border border-slate-300 rounded-lg p-1.5 text-center font-black text-xs text-indigo-950 focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  {rubric.practical > 0 && (
+                    <div className="bg-white p-2.5 rounded-xl border border-slate-200 space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700 block text-center">
+                        عملی ({faNum(rubric.practical)})
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={rubric.practical}
+                        step={0.25}
+                        inputMode="decimal"
+                        value={appealPractical}
+                        onChange={e => setAppealPractical(Math.max(0, Math.min(rubric.practical, Number(e.target.value))))}
+                        className="w-full border border-slate-300 rounded-lg p-1.5 text-center font-black text-xs text-indigo-950 focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  )}
+
+                  <div className="bg-white p-2.5 rounded-xl border border-slate-200 space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 block text-center">
+                      پایان‌ترم ({faNum(rubric.finalExam)})
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={rubric.finalExam}
+                      step={0.25}
+                      inputMode="decimal"
+                      value={appealFinalExam}
+                      onChange={e => setAppealFinalExam(Math.max(0, Math.min(rubric.finalExam, Number(e.target.value))))}
+                      className="w-full border border-slate-300 rounded-lg p-1.5 text-center font-black text-xs text-indigo-950 focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Calculated Total Summary Card */}
+              <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-200 flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-slate-600 font-medium">مجموع نمره جدید محاسبه‌شده: </span>
+                  <span className="font-black text-base text-indigo-950 font-mono">
+                    {faNum(calculatedAppealTotal)} از ۲۰
+                  </span>
+                </div>
+                <div>
+                  {calculatedAppealTotal !== selectedAppeal.currentGrade ? (
+                    <span
+                      className={`px-2.5 py-1 rounded-lg font-bold text-xs ${
+                        calculatedAppealTotal > selectedAppeal.currentGrade
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-rose-100 text-rose-800'
+                      }`}
+                    >
+                      {calculatedAppealTotal > selectedAppeal.currentGrade ? '+' : ''}
+                      {faNum((calculatedAppealTotal - selectedAppeal.currentGrade).toFixed(2))} نمره تغییر
+                    </span>
+                  ) : (
+                    <span className="text-slate-500 font-medium text-[11px]">بدون تغییر نمره</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Professor Reply Textarea */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700 block">توضیحات و پاسخ رسمی استاد به دانشجو:</label>
+              <textarea
+                value={appealReplyText}
+                onChange={e => setAppealReplyText(e.target.value)}
+                rows={2}
+                placeholder="مثال: برگه مجدداً بازبینی شد و با احتساب تمرین شماره ۲، نمره نهایی اصلاح گردید..."
+                className="w-full border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 focus:ring-2 focus:ring-indigo-500 font-medium"
+              />
+            </div>
+
+            {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-slate-200">
               <button
                 onClick={() => handleResolveAppeal('ACCEPTED')}
-                className="w-full sm:flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition"
+                className="w-full sm:flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition shadow flex items-center justify-center gap-1.5"
               >
-                ✓ پذیرش و ثبت نمره جدید
+                <span>✓</span>
+                <span>پذیرش اعتراض، اعمال بارم جدید و ثبت نمره ({faNum(calculatedAppealTotal)})</span>
               </button>
               <button
                 onClick={() => handleResolveAppeal('REJECTED')}
-                className="w-full sm:flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs transition"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-900 font-bold text-xs transition"
               >
                 ✕ رد اعتراض و تثبیت نمره قبلی
               </button>
