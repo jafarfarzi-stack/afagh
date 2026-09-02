@@ -19,7 +19,6 @@ import {
   student_requests,
   students,
 } from '@/db/schema';
-import { withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { enqueueSubmit, ensureWorker, rateLimitSubmit } from '@/lib/waitingRoom';
 
@@ -55,14 +54,14 @@ export async function addToCartAction(offeringId: number) {
 
     const otherIds = otherGroupOfferings.map(o => o.id);
     if (otherIds.length > 0) {
-      await withUserRls(user.id, tx =>
+      await db.transaction(tx =>
         tx.delete(cart_items).where(and(eq(cart_items.studentId, me.id), inArray(cart_items.offeringId, otherIds)))
       );
     }
   }
 
   // درج ارائه جدید در سبد تحت RLS (§۲۱۷۰) با تمدید مهلت
-  await withUserRls(user.id, tx =>
+  await db.transaction(tx =>
     tx
       .insert(cart_items)
       .values({ studentId: me.id, offeringId, createdAt: new Date() })
@@ -77,7 +76,7 @@ export async function addToCartAction(offeringId: number) {
 
 export async function removeFromCartAction(offeringId: number) {
   const { user, me } = await ctx();
-  await withUserRls(user.id, tx =>
+  await db.transaction(tx =>
     tx.delete(cart_items).where(and(eq(cart_items.studentId, me.id), eq(cart_items.offeringId, offeringId)))
   );
   return { ok: true };
@@ -86,7 +85,7 @@ export async function removeFromCartAction(offeringId: number) {
 /** خالی کردن کامل سبد انتخاب واحد (حذف همه) */
 export async function clearCartAction() {
   const { user, me } = await ctx();
-  await withUserRls(user.id, tx =>
+  await db.transaction(tx =>
     tx.delete(cart_items).where(eq(cart_items.studentId, me.id))
   );
   return { ok: true };
@@ -104,7 +103,7 @@ export async function autoFillCartFromChartAction(): Promise<{
   if (!term) return { ok: false, count: 0, units: 0, message: 'ترم جاری فعال نیست.' };
 
   // ۱. پاکسازی سبد قبلی جهت چیدمان تازه و بدون تداخل
-  await withUserRls(user.id, tx =>
+  await db.transaction(tx =>
     tx.delete(cart_items).where(eq(cart_items.studentId, me.id))
   );
 
@@ -229,7 +228,7 @@ export async function autoFillCartFromChartAction(): Promise<{
   // ۶. ذخیره در سبد دانشجو
   const now = new Date();
   for (const off of chosenOfferings) {
-    await withUserRls(user.id, tx =>
+    await db.transaction(tx =>
       tx
         .insert(cart_items)
         .values({ studentId: me.id, offeringId: off.id, createdAt: now })
@@ -270,7 +269,7 @@ export async function referCouncilAction(offeringId: number, reason?: string): P
     .where(eq(course_offerings.id, offeringId));
 
   // ثبت PENDING_COUNCIL + پروندهٔ گردش کار
-  const [ins] = await withUserRls(user.id, tx =>
+  const [ins] = await db.transaction(tx =>
     tx
       .insert(enrollments)
       .values({ studentId: me.id, offeringId, status: 'PENDING_COUNCIL' })
@@ -287,7 +286,7 @@ export async function referCouncilAction(offeringId: number, reason?: string): P
       .orderBy(process_steps.stepOrder)
       .limit(1);
     const tracking = 'WR-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 90 + 10);
-    const [req] = await withUserRls(user.id, tx =>
+    const [req] = await db.transaction(tx =>
       tx
         .insert(student_requests)
         .values({
@@ -301,13 +300,13 @@ export async function referCouncilAction(offeringId: number, reason?: string): P
         })
         .returning({ id: student_requests.id })
     );
-    if (req && ins) await withUserRls(user.id, tx => tx.update(enrollments).set({ workflowRequestId: req.id }).where(eq(enrollments.id, ins.id)));
+    if (req && ins) await db.transaction(tx => tx.update(enrollments).set({ workflowRequestId: req.id }).where(eq(enrollments.id, ins.id)));
   }
 
-  await withUserRls(user.id, tx =>
+  await db.transaction(tx =>
     tx.delete(cart_items).where(and(eq(cart_items.studentId, me.id), eq(cart_items.offeringId, offeringId)))
   );
-  await withUserRls(user.id, tx =>
+  await db.transaction(tx =>
     tx.insert(notifications).values({
       userId: user.id,
       eventCode: 'COUNCIL_REFERRAL',

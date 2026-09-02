@@ -120,6 +120,7 @@ export async function withUserRls<T>(userId: number, fn: (tx: RlsTx) => Promise<
       err?.code === '42P01' || // undefined table
       err?.code === '3D000' || // database does not exist
       err?.code === '28000' || // invalid authorization
+      err?.code === '25006' || // read-only transaction (نقش فقط-خواندنی)
       msg.includes('afagh_app') ||
       msg.includes('permission denied') ||
       msg.includes('does not exist') ||

@@ -64,6 +64,68 @@ function checkTimeOverlap(s1: string, e1: string, s2: string, e2: string) {
   return s1.slice(0, 5) < e2.slice(0, 5) && s2.slice(0, 5) < e1.slice(0, 5);
 }
 
+
+// ────────────────────────────────────────────────────────────────────────────
+// برنامه هفتگی موقت سبد — چیدمان زندهٔ جلسات دروس داخل سبد تا دانشجو پیش از
+// ثبت نهایی ببیند تایم‌ها چگونه پر می‌شوند؛ تداخل‌ها قرمز مشخص می‌شوند.
+// ────────────────────────────────────────────────────────────────────────────
+function TempWeeklySchedule({ cart }: { cart: CartItem[] }) {
+  const days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه'];
+
+  const byDay = useMemo(() => {
+    const all: { day: number; start: string; end: string; title: string; room?: string; conflict: boolean }[] = [];
+    for (const c of cart)
+      for (const cs of c.classSchedules)
+        all.push({ day: cs.dayOfWeek, start: cs.startTime, end: cs.endTime, title: c.title, room: cs.room, conflict: false });
+    for (const a of all)
+      for (const b of all)
+        if (a !== b && a.day === b.day && checkTimeOverlap(a.start, a.end, b.start, b.end)) a.conflict = true;
+    const map: Record<number, typeof all> = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [] };
+    for (const e of all) if (map[e.day]) map[e.day].push(e);
+    for (const k of Object.keys(map)) map[Number(k)].sort((x, y) => x.start.localeCompare(y.start));
+    return map;
+  }, [cart]);
+
+  if (cart.length === 0) return null;
+  const anyConflict = Object.values(byDay).some(list => list.some(e => e.conflict));
+
+  return (
+    <div className="card !p-4 bg-white border border-slate-200 shadow-sm rounded-2xl space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+        <h2 className="font-extrabold text-sm sm:text-base text-slate-900">🗓️ برنامه هفتگی موقت سبد شما</h2>
+        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg ${anyConflict ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'}`}>
+          {anyConflict ? '⚠️ دارای تداخل زمانی' : '✓ بدون تداخل زمانی'}
+        </span>
+      </div>
+      <p className="text-[11px] text-slate-500">
+        این چیدمان بر اساس دروس فعلی سبد است و با هر افزودن/حذف به‌روز می‌شود تا پیش از ثبت نهایی ببینید تایم‌ها چگونه پر می‌شوند.
+      </p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        {days.map((dn, di) => (
+          <div key={dn} className="rounded-xl border border-slate-200 bg-slate-50 p-2 space-y-1.5 min-h-[110px]">
+            <p className="text-[11px] font-black text-slate-700 text-center border-b border-slate-200 pb-1">{dn}</p>
+            {byDay[di].length === 0 && <p className="text-[10px] text-slate-400 text-center pt-3">—</p>}
+            {byDay[di].map((e, i) => (
+              <div
+                key={i}
+                className={`rounded-lg p-1.5 text-[10px] font-bold border ${
+                  e.conflict ? 'bg-rose-50 border-rose-300 text-rose-900' : 'bg-indigo-50 border-indigo-200 text-indigo-950'
+                }`}
+              >
+                <p className="font-mono" dir="ltr">
+                  {faNum(e.start)}–{faNum(e.end)}
+                </p>
+                <p className="leading-4 mt-0.5">{e.title}</p>
+                {e.room && <p className="text-[9px] text-slate-500 mt-0.5">🏛️ {e.room}</p>}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function EnrollClient(props: {
   sajjadPortalUrl: string;
   student: { id: number; status: string };
@@ -562,6 +624,16 @@ export default function EnrollClient(props: {
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-white text-emerald-800 border border-emerald-300 text-xs font-bold mr-1">
                         {faNum(c.units)} واحد
                       </span>
+                      {(() => {
+                        const off = props.offerings.find(o => o.id === c.id);
+                        const lv = live[c.id];
+                        const isFull = off ? (lv ? lv.remaining <= 0 : off.enrolled >= off.capacity) : false;
+                        return isFull ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold mr-1">
+                            ⏳ اتاق انتظار — ظرفیت تکمیل
+                          </span>
+                        ) : null;
+                      })()}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -652,6 +724,8 @@ export default function EnrollClient(props: {
           </button>
         )}
       </div>
+
+      <TempWeeklySchedule cart={props.cart} />
 
       {msg && (
         <div className="rounded-xl bg-slate-900 text-white p-3 text-center text-xs font-bold animate-fade-in shadow-md">
@@ -810,6 +884,16 @@ export default function EnrollClient(props: {
                     >
                       <span>🔄</span>
                       <span>تغییر به گروه {faNum(o.group)}</span>
+                    </button>
+                  ) : full ? (
+                    <button
+                      className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                      disabled={busy || !props.term.open}
+                      onClick={() => add(o.id)}
+                      title="ظرفیت این گروه تکمیل است؛ با افزودن، در اتاق انتظار قرار می‌گیرید و به محض آزادشدن صندلی، خودکار ثبت و اعلان می‌شوید"
+                    >
+                      <span>⏳</span>
+                      <span>ورود به اتاق انتظار</span>
                     </button>
                   ) : (
                     <button

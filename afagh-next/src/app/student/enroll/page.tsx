@@ -15,6 +15,7 @@ import { getStudentByUser, requireRole } from '@/lib/auth';
 import { buildPrereqContext, formatPrereq } from '@/lib/enroll-engine';
 import { evaluateStudentRegulationStatus, type StudentAcademicSummary } from '@/lib/regulations-engine';
 import { getSetting } from '@/lib/settings';
+import { toShamsi } from '@/lib/shamsi';
 import EnrollClient from './EnrollClient';
 
 export const dynamic = 'force-dynamic';
@@ -109,7 +110,7 @@ export default async function EnrollPage() {
       });
     } else if (s.scheduleType === 'EXAM' && s.examDate) {
       entry.exam = {
-        examDate: String(s.examDate),
+        examDate: toShamsi(String(s.examDate)),
         startTime: s.startTime.slice(0, 5),
         endTime: s.endTime.slice(0, 5),
       };
