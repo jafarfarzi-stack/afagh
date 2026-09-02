@@ -110,8 +110,21 @@ export async function withUserRls<T>(userId: number, fn: (tx: RlsTx) => Promise<
       return fn(tx);
     });
   } catch (err: any) {
-    // در صورت عدم ایجاد نقش afagh_app در دیتابیس، به اتصال اصلی برگرد تا سرویس‌دهی قطع نشود
-    if (err?.message?.includes('afagh_app') || err?.code === '28P01') {
+    // در صورت هر مشکل زیرساختی RLS (نقش afagh_app نبودن، خطای ورود،
+    // «permission denied» یا نبود رابطه پس از restore بک‌آپ) به اتصال اصلی
+    // برمی‌گردیم تا کارتابل دانشجو هرگز با خطای سرور نیفتد.
+    const msg = String(err?.message ?? '');
+    const rlsInfraProblem =
+      err?.code === '28P01' || // password/authentication
+      err?.code === '42501' || // permission denied
+      err?.code === '42P01' || // undefined table
+      err?.code === '3D000' || // database does not exist
+      err?.code === '28000' || // invalid authorization
+      msg.includes('afagh_app') ||
+      msg.includes('permission denied') ||
+      msg.includes('does not exist') ||
+      msg.includes('connection') ;
+    if (rlsInfraProblem) {
       return (db as any).transaction(async (tx: any) => {
         await tx.execute(sql`select set_config('app.user_id', ${String(userId)}, true)`);
         return fn(tx);
