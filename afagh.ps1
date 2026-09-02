@@ -15,6 +15,7 @@
       -Stop       فقط خاموش کردن سرویس‌های داکر و خروج
       -NoBrowser  مرورگر را خودکار باز نکن
       -Fresh      ⚠️ حذف کامل داده‌ها و نصب از صفر
+      -Doctor     گزارش وضعیت و عیب‌یابی (بدون اجرای سرور)
 
   این اسکریپت خودش:
     ۱) Docker Desktop را در صورت خاموش بودن اجرا و منتظر آماده شدنش می‌ماند
@@ -31,7 +32,8 @@ param(
   [switch]$Dev,
   [switch]$Stop,
   [switch]$NoBrowser,
-  [switch]$Fresh
+  [switch]$Fresh,
+  [switch]$Doctor
 )
 
 $ErrorActionPreference = 'Stop'
@@ -73,9 +75,39 @@ function HashOf([string]$path) {
 }
 function LoadState() {
   if (Test-Path $State) {
-    try { return (Get-Content $State -Raw | ConvertFrom-Json) } catch {}
+    try {
+      $s = Get-Content $State -Raw | ConvertFrom-Json
+      # سازگاری با نسخه‌های قدیمی‌تر فایل وضعیت
+      if (-not ($s.PSObject.Properties.Name -contains 'src')) {
+        Add-Member -InputObject $s -NotePropertyName 'src' -NotePropertyValue '' -Force
+      }
+      return $s
+    } catch {}
   }
-  return [pscustomobject]@{ lock=''; schema=''; hardening=''; built=$false }
+  return [pscustomobject]@{ lock=''; schema=''; hardening=''; src=''; built=$false }
+}
+
+# اثر انگشت کل درخت سورس — تا هر تغییری در کد باعث بیلد دوباره شود
+function SourceFingerprint([string]$dir) {
+  $sb = New-Object System.Text.StringBuilder
+  $targets = @('src', 'public')
+  foreach ($t in $targets) {
+    $p = Join-Path $dir $t
+    if (-not (Test-Path $p)) { continue }
+    Get-ChildItem -Path $p -Recurse -File -ErrorAction SilentlyContinue |
+      Sort-Object FullName |
+      ForEach-Object { [void]$sb.Append($_.FullName).Append('|').Append($_.Length).Append('|').Append($_.LastWriteTimeUtc.Ticks).Append("`n") }
+  }
+  foreach ($f in 'package.json','next.config.mjs','tailwind.config.ts','postcss.config.js','tsconfig.json','.env') {
+    $p = Join-Path $dir $f
+    if (Test-Path $p) {
+      $fi = Get-Item $p
+      [void]$sb.Append($f).Append('|').Append($fi.Length).Append('|').Append($fi.LastWriteTimeUtc.Ticks).Append("`n")
+    }
+  }
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes($sb.ToString())
+  $sha   = [System.Security.Cryptography.SHA256]::Create()
+  return [System.BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-','')
 }
 function SaveState($s) { $s | ConvertTo-Json | Set-Content -Path $State -Encoding UTF8 }
 
@@ -89,6 +121,38 @@ if ($Stop) {
   Step "خاموش کردن سرویس‌ها"
   Run { docker compose -p $Project -f $Compose stop } | Out-Null
   Ok "سرویس‌های داکر متوقف شدند (داده‌ها حفظ شد)"
+  exit 0
+}
+
+# ── حالت عیب‌یابی ─────────────────────────────────────────────────
+if ($Doctor) {
+  Step "گزارش وضعیت"
+  Write-Host "  Node    : $(try { node -v } catch { 'نصب نیست' })"
+  Write-Host "  npm     : $(try { npm -v } catch { 'نصب نیست' })"
+  Write-Host "  مسیر    : $Root"
+  Write-Host ""
+  Write-Host "  --- کانتینرها ---" -ForegroundColor Cyan
+  Run { docker ps -a --filter "name=afagh_" --format "  {{.Names}}  {{.Status}}  {{.Ports}}" } | Out-Null
+  Write-Host ""
+  Write-Host "  --- پورت دیتابیس در docker-compose ---" -ForegroundColor Cyan
+  (Select-String -Path $Compose -Pattern "5432" | ForEach-Object { "  " + $_.Line.Trim() })
+  Write-Host ""
+  Write-Host "  --- DATABASE_URL در .env ---" -ForegroundColor Cyan
+  if (Test-Path $EnvFile) { (Select-String -Path $EnvFile -Pattern "^\s*DATABASE_URL" | ForEach-Object { "  " + $_.Line.Trim() }) }
+  else { Write-Host "  فایل .env وجود ندارد!" -ForegroundColor Red }
+  Write-Host ""
+  Write-Host "  --- اتصال به PostgreSQL ---" -ForegroundColor Cyan
+  Run { docker exec afagh_pg_dev pg_isready -U afagh -d afagh_db } | Out-Null
+  Write-Host ""
+  Write-Host "  --- تعداد جدول‌ها ---" -ForegroundColor Cyan
+  Run { docker exec afagh_pg_dev psql -U afagh -d afagh_db -c "select count(*) as tables from information_schema.tables where table_schema='public';" } | Out-Null
+  Write-Host ""
+  Write-Host "  --- وضعیت گیت ---" -ForegroundColor Cyan
+  Run { git -C $Root --no-pager log --oneline -3 } | Out-Null
+  Run { git -C $Root status --short } | Out-Null
+  Write-Host ""
+  Write-Host "  --- آخرین لاگ PostgreSQL ---" -ForegroundColor Cyan
+  Run { docker logs --tail 15 afagh_pg_dev } | Out-Null
   exit 0
 }
 
@@ -179,9 +243,41 @@ if ($envText -match '(?m)^\s*DATABASE_URL\s*=\s*(.+?)\s*$') {
 if ($Update) {
   Step "به‌روزرسانی از گیت"
   if (Get-Command git -ErrorAction SilentlyContinue) {
+    Run { git -C $Root fetch origin } -Quiet | Out-Null
+    $branch = (& git -C $Root rev-parse --abbrev-ref HEAD).Trim()
+    Write-Host ""
+    Write-Host "  تغییرات پیشِ‌رو روی برنچ $branch :" -ForegroundColor White
+    Run { git -C $Root --no-pager log --oneline "HEAD..origin/$branch" } | Out-Null
+    Run { git -C $Root --no-pager diff --stat "HEAD..origin/$branch" } | Out-Null
+    Write-Host ""
+
+    # پشتیبان دیتابیس پیش از هر به‌روزرسانی (اگر کانتینر بالا باشد)
+    if ((Run { docker exec afagh_pg_dev pg_isready -U afagh -d afagh_db } -Quiet) -eq 0) {
+      $bkDir = Join-Path $Root 'backups'
+      New-Item -ItemType Directory -Force -Path $bkDir | Out-Null
+      $bk = Join-Path $bkDir ("afagh_" + (Get-Date -Format 'yyyy-MM-dd_HHmm') + ".sql")
+      $ErrorActionPreference = 'Continue'
+      & docker exec afagh_pg_dev pg_dump -U afagh afagh_db 2>$null | Out-File -FilePath $bk -Encoding UTF8
+      $ErrorActionPreference = 'Stop'
+      if ((Test-Path $bk) -and ((Get-Item $bk).Length -gt 1024)) { Ok "پشتیبان دیتابیس: backups\$(Split-Path $bk -Leaf)" }
+      else { Warn "پشتیبان‌گیری کامل نشد — با احتیاط ادامه دهید" }
+    }
+
+    # تغییرات محلی را کنار می‌گذاریم تا pull گیر نکند، بعد برمی‌گردانیم
+    $dirty = (& git -C $Root status --porcelain)
+    $stashed = $false
+    if ($dirty) {
+      Info "تغییرات محلی موقتاً کنار گذاشته شد (git stash)"
+      if ((Run { git -C $Root stash push -u -m "afagh-auto-update" } -Quiet) -eq 0) { $stashed = $true }
+    }
     if ((RunIn $Root { git pull --ff-only }) -ne 0) {
-      Warn "git pull ناموفق بود — احتمالاً تغییرات محلی دارید. با git stash امتحان کنید."
+      Warn "git pull ناموفق بود — تاریخچه واگرا شده است. دستی بررسی کنید: git status"
     } else { Ok "کد به‌روز شد" }
+    if ($stashed) {
+      if ((Run { git -C $Root stash pop } -Quiet) -ne 0) {
+        Warn "بازگرداندن تغییرات محلی تداخل داشت — با 'git status' بررسی کنید (تغییرات در git stash list محفوظ است)"
+      } else { Info "تغییرات محلی بازگردانده شد" }
+    }
   } else { Warn "git نصب نیست — از این مرحله عبور شد" }
 }
 
@@ -232,13 +328,21 @@ if ($st.hardening -ne $hardHash) {
 } else { Ok "hardening بدون تغییر — رد شد" }
 
 Step "۶/۶ بیلد"
+$srcHash = SourceFingerprint $Next
 if ($Dev) {
   Ok "حالت توسعه — بیلد لازم نیست"
-} elseif ($Rebuild -or (-not $st.built) -or (-not (Test-Path (Join-Path $Next '.next')))) {
-  Must $Next { npm run build } "بیلد ناموفق بود. اگر بعد از به‌روزرسانی است، node_modules و .next را پاک کنید."
+} elseif ($Rebuild -or (-not $st.built) -or ($st.src -ne $srcHash) -or (-not (Test-Path (Join-Path $Next '.next')))) {
+  # اگر سورس عوض شده، خروجی قدیمی را پاک می‌کنیم تا با کد جدید قاطی نشود
+  $nextDir = Join-Path $Next '.next'
+  if ((Test-Path $nextDir) -and ($Rebuild -or ($st.src -ne $srcHash))) {
+    Info "پاک کردن بیلد قبلی (.next)"
+    Remove-Item -Recurse -Force $nextDir -ErrorAction SilentlyContinue
+  }
+  Must $Next { npm run build } "بیلد ناموفق بود. اگر بعد از به‌روزرسانی است، node_modules و .next را پاک کرده و دوباره اجرا کنید."
   $st.built = $true
+  $st.src   = $srcHash
   Ok "بیلد موفق"
-} else { Ok "بیلد قبلی معتبر است — رد شد" }
+} else { Ok "سورس بدون تغییر — بیلد قبلی معتبر است" }
 SaveState $st
 
 # ── اجرا ──────────────────────────────────────────────────────────

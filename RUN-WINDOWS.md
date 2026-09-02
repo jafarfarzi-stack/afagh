@@ -13,7 +13,7 @@
 | ۳ | کانتینرهای **PostgreSQL + Redis + MinIO** را بالا می‌آورد و صبر می‌کند آماده شوند |
 | ۴ | `npm install` را **فقط اگر** `package-lock.json` عوض شده باشد می‌زند |
 | ۵ | `db:push` و `db:hardening` را **فقط اگر** schema تغییر کرده باشد می‌زند |
-| ۶ | `npm run build` را **فقط اگر** لازم باشد می‌زند |
+| ۶ | `npm run build` را **فقط اگر** سورس تغییر کرده باشد می‌زند (و اول `.next` قدیمی را پاک می‌کند) |
 | ۷ | سرور را اجرا و مرورگر را (وقتی واقعاً بالا آمد) باز می‌کند |
 
 اجرای دوباره‌اش بی‌خطر است؛ مراحل غیرلازم را رد می‌کند، پس دفعات بعد چند ثانیه‌ای بالا می‌آید.
@@ -28,12 +28,13 @@ powershell -ExecutionPolicy Bypass -File .\afagh.ps1 [سوییچ]
 
 | سوییچ | کار |
 |---|---|
-| `-Update` | اول `git pull` و بعد به‌روزرسانی وابستگی‌ها، دیتابیس و بیلد |
+| `-Update` | خلاصهٔ تغییرات را نشان می‌دهد، **از دیتابیس پشتیبان می‌گیرد** (در `backups\`)، تغییرات محلی را stash/pop می‌کند، `git pull` و سپس به‌روزرسانی وابستگی‌ها، دیتابیس و بیلد |
 | `-Rebuild` | بیلد اجباری دوباره |
 | `-Dev` | اجرا در حالت توسعه (`npm run dev`) با hot-reload |
 | `-Stop` | فقط خاموش کردن کانتینرهای داکر (داده حفظ می‌شود) |
 | `-Fresh` | ⚠️ حذف کامل داده‌ها و نصب از صفر |
 | `-NoBrowser` | مرورگر را خودکار باز نکن |
+| `-Doctor` | گزارش کامل وضعیت برای عیب‌یابی (کانتینرها، پورت، DATABASE_URL، تعداد جدول‌ها، لاگ) |
 
 می‌توانید سوییچ را به `afagh.cmd` هم بدهید:
 `afagh.cmd -Update`
@@ -65,3 +66,4 @@ powershell -ExecutionPolicy Bypass -File .\afagh.ps1 [سوییچ]
 | خطای دانلود ایمیج داکر (`no such host`) | Docker Desktop → Settings → Docker Engine → افزودن `"registry-mirrors": ["https://docker.arvancloud.ir"]` → Apply & Restart |
 | بیلد بعد از `-Update` خطا داد | `afagh-next\node_modules` و `afagh-next\.next` را پاک و دوباره اجرا کنید |
 | می‌خواهم مراحل از صفر کنترل شود | فایل `afagh-next\.afagh-state.json` را پاک کنید |
+| `Application error: a server-side exception` | بیلد و کد ناهماهنگ‌اند: `.\afagh.cmd -Rebuild` — و برای دیدن علت، متن خطا را در پنجرهٔ PowerShell بخوانید یا `.\afagh.cmd -Doctor` بزنید |
