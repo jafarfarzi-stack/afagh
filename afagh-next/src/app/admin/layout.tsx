@@ -33,7 +33,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </button>
           </form>
         </div>
-        <nav className="mx-auto flex max-w-6xl gap-2 sm:gap-4 px-4 pb-2.5 text-xs sm:text-sm font-medium overflow-x-auto">
+        <nav className="mx-auto flex max-w-6xl flex-wrap gap-2 sm:gap-x-3 gap-y-1.5 px-4 pb-2.5 text-xs sm:text-sm font-medium">
           <Link href="/admin" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
             📋 کارتابل گردش کار و جبرانی
           </Link>

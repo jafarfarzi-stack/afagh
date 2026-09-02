@@ -85,7 +85,7 @@ export default async function AdminHome() {
       </div>
 
       {/* میانبرهای سریع ماژول‌های آموزشی و امتحانات */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
         <Link
           href="/admin/workflows"
           className="p-4 rounded-2xl bg-gradient-to-r from-purple-950 to-indigo-950 text-white shadow-md hover:shadow-lg transition-all flex items-center justify-between group border border-purple-700/50"
@@ -162,6 +162,26 @@ export default async function AdminHome() {
             </div>
           </div>
           <span className="text-teal-300 font-extrabold text-xs group-hover:translate-x-1 transition-transform">
+            ←
+          </span>
+        </Link>
+
+        <Link
+          href="/admin/migration"
+          className="p-4 rounded-2xl bg-gradient-to-r from-amber-900 to-orange-950 text-white shadow-md hover:shadow-lg transition-all flex items-center justify-between group border border-amber-700/50"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-700/80 border border-amber-500/50 flex items-center justify-center text-xl shadow-inner group-hover:scale-105 transition-transform">
+              🔄
+            </div>
+            <div>
+              <h3 className="font-extrabold text-xs sm:text-sm">انتقال داده از سیستم قدیمی</h3>
+              <p className="text-[11px] text-amber-200 mt-0.5">
+                نگاشت کد، شهریه و نمرات سرورهای قدیمی (ETL)
+              </p>
+            </div>
+          </div>
+          <span className="text-amber-300 font-extrabold text-xs group-hover:translate-x-1 transition-transform">
             ←
           </span>
         </Link>
