@@ -122,9 +122,16 @@ export function pickFeeRule<T extends FeeRuleLike>(rows: T[], params: FeeRulePar
  * می‌کند، ولی موتور شهریه از `tuition_fee_rules` می‌خواند. بدون این پل، پس از
  * مهاجرت، موتور هیچ قاعده‌ای نمی‌بیند و شهریه بی‌صدا «صفر» محاسبه می‌شود.
  *
- * تفاوت کلیدی دو جدول: قدیمی به ازای «ترم» کلید می‌خورد (termId+degreeLevelId)،
- * جدید به ازای «نوع ترم» (degreeLevelId+termType+offeringType). پس باید چند ترم
- * هم‌نوع در یک قاعده جمع شوند.
+ * دو تفاوت کلیدی که نگاشت را تعیین می‌کنند:
+ *  ۱) قدیمی به ازای «ترم» کلید می‌خورد (termId+degreeLevelId)، جدید به ازای
+ *     «نوع ترم» (degreeLevelId+termType+offeringType) → چند ترم هم‌نوع باید در
+ *     یک قاعده جمع شوند و نرخ آخرین ترم بماند.
+ *  ۲) `effectiveFromYear` در موتور جدید با «سال ورودی دانشجو» مقایسه می‌شود
+ *     (params.entryYear ← students.entryYear)، یعنی قیمت‌گذاری بر اساس ورودی است.
+ *     جدول قدیمی هیچ بُعد «ورودی» ندارد؛ پر کردن این فیلد از روی «سال ترم»
+ *     غلط است: دانشجوی ورودی ۱۴۰۰ که در ترم ۱۴۰۳ درس می‌خواند نرخ را از دست
+ *     می‌داد. پس این فیلد عمداً خالی می‌ماند (بدون محدودیت ورودی) و اگر مدیر
+ *     قیمت‌گذاری ورودی‌محور خواست، در همین صفحه ویرایش می‌کند.
  * ──────────────────────────────────────────────────────────────────────────── */
 
 /** یک سطر قاعدهٔ مالی قدیمی به‌همراه اطلاعات ترمِ مربوطه */
@@ -132,11 +139,11 @@ export interface LegacyFeeRuleLike {
   degreeLevelId: number | null;
   /** نوع ترمِ از پیش تعیین‌شده (با termTypeOf به دست می‌آید) */
   termType: TermType;
+  /** کد ترم؛ فقط برای یادداشتِ رهگیری استفاده می‌شود */
+  termCode: string | null;
   fixedTuition: unknown;
   perUnitTuition: unknown;
-  /** سال تحصیلیِ شروع؛ NULL یعنی نامشخص */
-  effectiveFromYear: number | null;
-  /** کلید مرتب‌سازی برای انتخاب «جدیدترین» ترم در هر گروه (مثلاً id ترم) */
+  /** کلید تازگی ترم (معمولاً id ترم)؛ در هر گروه بزرگ‌ترین برنده است */
   termSortKey: number;
 }
 
@@ -146,29 +153,23 @@ export interface FeeRuleDraft {
   offeringType: null;
   fixedTuition: number;
   perUnitTuition: number;
-  effectiveFromYear: number | null;
+  /**
+   * همیشه null — عمداً. توضیح در هدر همین بخش (بند ۲).
+   */
+  effectiveFromYear: null;
   note: string;
 }
 
 /**
- * استخراج سال تحصیلی شمسی از کد ترم (مثلاً «1403-2» ← ۱۴۰۳).
- * فقط بازهٔ معقول ۱۳۰۰–۱۴۹۹ پذیرفته می‌شود تا کدهایی مثل «00EQ1» اشتباه تفسیر نشوند.
- */
-export function jalaliYearFromTermCode(termCode: string | null | undefined): number | null {
-  const m = String(termCode ?? '').match(/(1[34]\d{2})/);
-  return m ? Number(m[1]) : null;
-}
-
-/**
  * تبدیل قواعد قدیمی به پیش‌نویس قواعد جدید.
- *  - گروه‌بندی بر (مقطع، نوع ترم، سال مؤثر)؛
- *  - در هر گروه، جدیدترین ترم برنده است (تا نرخ ترم‌های قدیمیِ هم‌نوع جای آن را نگیرد)؛
+ *  - گروه‌بندی بر (مقطع، نوع ترم)؛
+ *  - در هر گروه، تازه‌ترین ترم برنده است تا نرخ ترم‌های قدیمیِ هم‌نوع جای آن را نگیرد؛
  *  - قواعدی که هر دو نرخشان صفر است دور ریخته می‌شوند (قاعدهٔ بی‌اثر).
  */
 export function mapLegacyFeeRules<T extends LegacyFeeRuleLike>(rows: T[]): FeeRuleDraft[] {
   const groups = new Map<string, T>();
   for (const r of rows) {
-    const key = `${r.degreeLevelId ?? 'null'}|${r.termType}|${r.effectiveFromYear ?? 'null'}`;
+    const key = `${r.degreeLevelId ?? 'null'}|${r.termType}`;
     const prev = groups.get(key);
     if (!prev || r.termSortKey > prev.termSortKey) groups.set(key, r);
   }
@@ -184,13 +185,14 @@ export function mapLegacyFeeRules<T extends LegacyFeeRuleLike>(rows: T[]): FeeRu
       offeringType: null,
       fixedTuition,
       perUnitTuition,
-      effectiveFromYear: r.effectiveFromYear,
-      note: 'درون‌ریزی از قواعد مالی قدیمی',
+      effectiveFromYear: null,
+      note: r.termCode
+        ? `درون‌ریزی از قواعد مالی قدیمی — نرخ ترم ${r.termCode}`
+        : 'درون‌ریزی از قواعد مالی قدیمی',
     });
   }
 
   return drafts.sort((a, b) =>
     (a.degreeLevelId ?? 0) - (b.degreeLevelId ?? 0) ||
-    a.termType.localeCompare(b.termType) ||
-    (a.effectiveFromYear ?? 0) - (b.effectiveFromYear ?? 0));
+    a.termType.localeCompare(b.termType));
 }

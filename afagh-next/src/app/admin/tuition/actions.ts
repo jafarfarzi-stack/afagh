@@ -5,7 +5,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { academic_terms, term_financial_rules, tuition_fee_rules } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
-import { jalaliYearFromTermCode, mapLegacyFeeRules, termTypeOf } from '@/lib/tuition-rules';
+import { mapLegacyFeeRules, termTypeOf } from '@/lib/tuition-rules';
 
 const FINANCE = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'];
 
@@ -78,7 +78,10 @@ export async function deleteFeeRuleAction(id: number): Promise<{ ok: boolean; er
  * بی‌صدا «صفر» محاسبه می‌شود.
  *
  * رفتار:
- *  - قواعد به ازای (مقطع، نوع ترم، سال مؤثر) جمع می‌شوند و جدیدترین ترم برنده است؛
+ *  - قواعد به ازای (مقطع، نوع ترم) جمع می‌شوند و نرخ آخرین ترم برنده است؛
+ *  - `effectiveFromYear` خالی می‌ماند: در موتور جدید این فیلد با «سال ورودی
+ *    دانشجو» مقایسه می‌شود، ولی جدول قدیمی بُعد ورودی ندارد. پر کردنش از روی
+ *    سال ترم باعث می‌شد دانشجویان ورودی قدیمی‌تر نرخ را از دست بدهند؛
  *  - قواعد تکراری (همان مقطع+نوع ترم+سال) دوباره ساخته نمی‌شوند → اجرایش بی‌خطر و تکرارپذیر است؛
  *  - `offeringType` خالی می‌ماند، چون جدول قدیمی این تفکیک را ندارد؛ نرخ خاص
  *    معادل‌سازی (TRANSFER) را مدیر باید خودش در همین صفحه تعریف کند.
@@ -109,9 +112,9 @@ export async function importLegacyFeeRulesAction(): Promise<{
     legacy.map((r) => ({
       degreeLevelId: r.degreeLevelId,
       termType: termTypeOf({ termType: r.termType, termCode: r.termCode, isSummer: r.isSummer }),
+      termCode: r.termCode,
       fixedTuition: r.fixedTuition,
       perUnitTuition: r.perUnitTuition,
-      effectiveFromYear: jalaliYearFromTermCode(r.termCode),
       termSortKey: r.termId ?? 0,
     })),
   );

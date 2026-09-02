@@ -5,7 +5,7 @@
  * چون src/lib/tuition-rules.ts هیچ وابستگی به دیتابیس یا Next ندارد، بدون
  * نیاز به PostgreSQL قابل اجراست.
  */
-import { jalaliYearFromTermCode, mapLegacyFeeRules, pickFeeRule, termTypeOf, toNum } from '../src/lib/tuition-rules.ts';
+import { mapLegacyFeeRules, pickFeeRule, termTypeOf, toNum } from '../src/lib/tuition-rules.ts';
 
 let pass = 0;
 let fail = 0;
@@ -84,33 +84,36 @@ eq('ترمیم‌شده به قاعدهٔ معادل‌سازی می‌رسد (i
 eq('شهریهٔ ثابت صحیح است', legacyRule?.fixedTuition, 7000);
 
 console.log('\n۸) پل: قواعد مالی قدیمی → قواعد موتور جدید');
-eq('سال شمسی از کد ترم', jalaliYearFromTermCode('1403-2'), 1403);
-eq('کد ترم معادل‌سازی سال نمی‌دهد', jalaliYearFromTermCode('00EQ1'), null);
-eq('کد خالی → null', jalaliYearFromTermCode(null), null);
-eq('عدد بیرون از بازهٔ معقول پذیرفته نمی‌شود', jalaliYearFromTermCode('9999-1'), null);
-
 const legacy = [
-  // دو ترم عادی هم‌مقطع و هم‌سال → باید در یک قاعده جمع شوند (جدیدترین برنده)
-  { degreeLevelId: 1, termType: 'NORMAL' as const, fixedTuition: '1000', perUnitTuition: '50', effectiveFromYear: 1403, termSortKey: 10 },
-  { degreeLevelId: 1, termType: 'NORMAL' as const, fixedTuition: '1500', perUnitTuition: '60', effectiveFromYear: 1403, termSortKey: 11 },
+  // دو ترم عادیِ هم‌مقطع از دو سال متفاوت → باید در یک قاعده جمع شوند (آخرین ترم برنده)
+  { degreeLevelId: 1, termType: 'NORMAL' as const, termCode: '1402-1', fixedTuition: '1000', perUnitTuition: '50', termSortKey: 10 },
+  { degreeLevelId: 1, termType: 'NORMAL' as const, termCode: '1403-1', fixedTuition: '1500', perUnitTuition: '60', termSortKey: 11 },
   // ترم تابستان همان مقطع
-  { degreeLevelId: 1, termType: 'SUMMER' as const, fixedTuition: '0', perUnitTuition: '80', effectiveFromYear: 1403, termSortKey: 12 },
+  { degreeLevelId: 1, termType: 'SUMMER' as const, termCode: '1403-3', fixedTuition: '0', perUnitTuition: '80', termSortKey: 12 },
   // قاعدهٔ بی‌اثر (هر دو صفر) → باید دور ریخته شود
-  { degreeLevelId: 2, termType: 'NORMAL' as const, fixedTuition: '0', perUnitTuition: '0', effectiveFromYear: 1403, termSortKey: 13 },
+  { degreeLevelId: 2, termType: 'NORMAL' as const, termCode: '1403-1', fixedTuition: '0', perUnitTuition: '0', termSortKey: 13 },
 ];
 const drafts = mapLegacyFeeRules(legacy);
 eq('تعداد پیش‌نویس‌ها (جمع‌شده + بی‌اثر حذف‌شده)', drafts.length, 2);
 const normal = drafts.find(d => d.termType === 'NORMAL');
-eq('ترم‌های هم‌نوع جمع شدند و جدیدترین نرخ ماند', normal?.fixedTuition, 1500);
-eq('نرخ هر واحد جدیدترین ترم', normal?.perUnitTuition, 60);
+eq('ترم‌های هم‌نوع جمع شدند و نرخ آخرین ترم ماند', normal?.fixedTuition, 1500);
+eq('نرخ هر واحد آخرین ترم', normal?.perUnitTuition, 60);
 eq('offeringType در پل همیشه خالی است', normal?.offeringType, null);
 eq('ترم تابستان جدا نگه داشته شد', drafts.some(d => d.termType === 'SUMMER' && d.perUnitTuition === 80), true);
 eq('قاعدهٔ کاملاً صفر حذف شد', drafts.some(d => d.degreeLevelId === 2), false);
 
-// خروجی پل باید واقعاً توسط pickFeeRule قابل انتخاب باشد
+// نکتهٔ کلیدی: effectiveFromYear باید خالی بماند، وگرنه دانشجوی ورودی قدیمی نرخ را از دست می‌دهد
+eq('effectiveFromYear عمداً خالی است', drafts.every(d => d.effectiveFromYear === null), true);
+eq('یادداشت، ترم مبدأ را ثبت می‌کند', normal?.note.includes('1403-1'), true);
+
+// خروجی پل باید واقعاً توسط pickFeeRule قابل انتخاب باشد — برای هر ورودی
 const imported = drafts.map((d, i) => ({ id: 100 + i, ...d }));
-eq('قاعدهٔ درون‌ریزی‌شده برای ترم عادی انتخاب می‌شود',
+eq('ورودی ۱۴۰۰ هم نرخ را می‌گیرد (نه فقط ورودی جدید)',
+  pickFeeRule(imported, { degreeLevelId: 1, termType: 'NORMAL', termLevelOnly: true, entryYear: 1400 })?.fixedTuition, 1500);
+eq('ورودی ۱۴۰۳ هم همان نرخ را می‌گیرد',
   pickFeeRule(imported, { degreeLevelId: 1, termType: 'NORMAL', termLevelOnly: true, entryYear: 1403 })?.fixedTuition, 1500);
+eq('دانشجوی بدون ورودی ثبت‌شده هم نرخ را می‌گیرد',
+  pickFeeRule(imported, { degreeLevelId: 1, termType: 'NORMAL', termLevelOnly: true, entryYear: null })?.fixedTuition, 1500);
 eq('همان قاعده به ترم معادل‌سازی نشت نمی‌کند',
   pickFeeRule(imported, { degreeLevelId: 1, termType: 'EQUIVALENCE', termLevelOnly: true, entryYear: 1403 }), null);
 
