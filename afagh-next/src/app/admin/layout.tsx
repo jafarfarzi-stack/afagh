@@ -64,6 +64,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/payroll" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
             💼 حقوق و دستمزد
           </Link>
+          <Link href="/admin/student-cards" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/40 border border-indigo-700/50 transition-colors whitespace-nowrap">
+            🪪 کارت دانشجویی
+          </Link>
           <Link href="/admin/short-courses" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/40 border border-indigo-700/50 transition-colors whitespace-nowrap">
             🏆 آموزش‌های آزاد و گواهینامه‌ها
           </Link>

@@ -2,8 +2,14 @@
 
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import {
+  createShortCourseAction, issueCertificateAction, updateRegistrationAction,
+} from './actions';
 
 export interface AdminLearnerRecord {
+  /** شناسهٔ ردیف ثبت‌نام — کلید واقعی عملیات‌ها در پایگاه داده */
+  registrationId: number;
   id: number;
   fullName: string;
   fullNameEn: string;
@@ -19,6 +25,7 @@ export interface AdminLearnerRecord {
   certificateNumber?: string;
   certificateIssued: boolean;
   registeredAt: string;
+  paymentStatus?: string;
 }
 
 export interface AdminCourseItem {
@@ -30,7 +37,10 @@ export interface AdminCourseItem {
   hours: number;
   tuitionPrice: number;
   capacity: number;
+  enrolledCount: number;
   instructorName: string;
+  passingGrade: number;
+  maxAbsences: number;
   status: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED';
   learners: AdminLearnerRecord[];
 }
@@ -45,8 +55,10 @@ export default function AdminShortCoursesClient({
 }: {
   initialCourses: AdminCourseItem[];
 }) {
+  const router = useRouter();
   const [courses, setCourses] = useState<AdminCourseItem[]>(initialCourses);
-  const [selectedCourseId, setSelectedCourseId] = useState<number>(initialCourses[0]?.id || 1);
+  const [selectedCourseId, setSelectedCourseId] = useState<number>(initialCourses[0]?.id || 0);
+  const [busyId, setBusyId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'ROSTER' | 'NEW_COURSE' | 'DISCOUNTS' | 'FINANCIAL'>('ROSTER');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -93,85 +105,84 @@ export default function AdminShortCoursesClient({
     return { totalLearners, totalIncome, totalCerts, activeCourses: courses.length };
   }, [courses]);
 
-  // Update Learner Score or Attendance
-  const updateLearnerData = (
-    learnerId: number,
+  /**
+   * ثبت نمره/حضور در پایگاه داده.
+   * پیش‌تر فقط در state مرورگر عوض می‌شد و قاعدهٔ قبولی («نمره ≥ ۱۲ و غیبت ≤ ۳»)
+   * هاردکد بود؛ حالا حد نصاب از خودِ دوره خوانده می‌شود و نتیجه از سرور
+   * برمی‌گردد.
+   */
+  const updateLearnerData = async (
+    registrationId: number,
     field: 'attendanceCount' | 'finalGrade',
     value: number | undefined
   ) => {
+    setBusyId(registrationId);
+    const res = await updateRegistrationAction({
+      registrationId,
+      ...(field === 'finalGrade' ? { finalGrade: value ?? null } : { attendanceCount: value }),
+    });
+    setBusyId(null);
+    if (!res.ok) {
+      showToast(`⚠️ ${res.error}`);
+      return;
+    }
     setCourses(prev =>
-      prev.map(c => {
-        if (c.id !== selectedCourseId) return c;
-        return {
-          ...c,
-          learners: c.learners.map(l => {
-            if (l.id !== learnerId) return l;
-            const updated = { ...l, [field]: value };
-            const grade = updated.finalGrade ?? 0;
-            updated.isPassed = grade >= 12 && updated.attendanceCount >= updated.totalSessions - 3;
-            return updated;
-          }),
-        };
-      })
+      prev.map(c => ({
+        ...c,
+        learners: c.learners.map(l =>
+          l.registrationId === registrationId
+            ? { ...l, finalGrade: res.data.finalGrade || undefined, attendanceCount: res.data.attendanceCount, isPassed: res.data.isPassed }
+            : l
+        ),
+      }))
     );
   };
 
-  // 1-Click Issue Official Certificate
-  const handleIssueCertificate = (learnerId: number) => {
-    const certNum = 'AFQ-CERT-2026-' + Math.floor(1000 + Math.random() * 9000);
-
+  /**
+   * صدور گواهینامهٔ واقعی: شماره از ترتیب پایگاه داده و اثر انگشت SHA-256 از
+   * محتوای گواهینامه ساخته می‌شود. پیش‌تر یک عدد تصادفی در state نوشته می‌شد و
+   * پورتال استعلام عمومی هرگز آن را پیدا نمی‌کرد.
+   */
+  const handleIssueCertificate = async (registrationId: number) => {
+    setBusyId(registrationId);
+    const res = await issueCertificateAction(registrationId);
+    setBusyId(null);
+    if (!res.ok) {
+      showToast(`⚠️ ${res.error}`);
+      return;
+    }
     setCourses(prev =>
-      prev.map(c => {
-        if (c.id !== selectedCourseId) return c;
-        return {
-          ...c,
-          learners: c.learners.map(l => {
-            if (l.id !== learnerId) return l;
-            return {
-              ...l,
-              certificateIssued: true,
-              certificateNumber: certNum,
-            };
-          }),
-        };
-      })
+      prev.map(c => ({
+        ...c,
+        learners: c.learners.map(l =>
+          l.registrationId === registrationId
+            ? { ...l, certificateIssued: true, certificateNumber: res.data.certificateNumber }
+            : l
+        ),
+      }))
     );
-
-    showToast(`🎓 گواهینامه رسمی با شماره «${certNum}» صادر شد و در پورتال استعلام عمومی ثبت گردید.`);
+    showToast(`🎓 گواهینامهٔ «${res.data.certificateNumber}» صادر و در پورتال استعلام عمومی ثبت شد.`);
   };
 
-  // Add New Course Handler
-  const handleCreateCourse = (e: React.FormEvent) => {
+  /** تعریف دوره در پایگاه داده و بارگذاری دوبارهٔ فهرست از سرور */
+  const handleCreateCourse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle || !newCode || !newInstructor) {
       alert('لطفاً تمامی فیلدهای الزامی دوره را تکمیل فرمایید.');
       return;
     }
-
-    const newCourseItem: AdminCourseItem = {
-      id: Date.now(),
-      code: newCode,
-      title: newTitle,
-      titleEn: newTitleEn || newTitle,
-      category: newCategory,
-      hours: newHours,
-      tuitionPrice: newPrice,
-      capacity: newCapacity,
-      instructorName: newInstructor,
-      status: 'OPEN',
-      learners: [],
-    };
-
-    setCourses(prev => [newCourseItem, ...prev]);
-    setSelectedCourseId(newCourseItem.id);
+    const res = await createShortCourseAction({
+      code: newCode, title: newTitle, titleEn: newTitleEn, category: newCategory,
+      hours: newHours, tuitionPrice: newPrice, capacity: newCapacity, instructorName: newInstructor,
+    });
+    if (!res.ok) {
+      showToast(`⚠️ ${res.error}`);
+      return;
+    }
+    setNewTitle(''); setNewTitleEn(''); setNewCode(''); setNewInstructor('');
+    showToast(`✅ دورهٔ «${newTitle}» در پایگاه داده ثبت شد.`);
+    router.refresh();
     setActiveTab('ROSTER');
-    showToast(`✅ دوره تخصصی «${newTitle}» با موفقیت تعریف و در کاتالوگ عمومی فعال شد.`);
-
-    // Reset Form
-    setNewTitle('');
-    setNewTitleEn('');
-    setNewCode('');
-    setNewInstructor('');
   };
 
   // Add Discount Code Handler
@@ -406,7 +417,7 @@ export default function AdminShortCoursesClient({
                           value={learner.finalGrade ?? ''}
                           onChange={e =>
                             updateLearnerData(
-                              learner.id,
+                              learner.registrationId,
                               'finalGrade',
                               e.target.value === '' ? undefined : Number(e.target.value)
                             )
@@ -449,8 +460,8 @@ export default function AdminShortCoursesClient({
                           </div>
                         ) : (
                           <button
-                            onClick={() => handleIssueCertificate(learner.id)}
-                            disabled={!learner.isPassed}
+                            onClick={() => handleIssueCertificate(learner.registrationId)}
+                            disabled={!learner.isPassed || busyId === learner.registrationId}
                             className="px-3 py-1.5 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-black text-[11px] shadow-xs transition disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             🎓 صدور گواهینامه دیجیتال

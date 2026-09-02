@@ -1,25 +1,27 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useTransition } from 'react';
 import Link from 'next/link';
+import type { ExamCardData } from '@/lib/verification';
+import { submitCourseEvaluationAction } from './actions';
 
 // ==========================================
 // INTERFACES & TYPES
 // ==========================================
 
+/** یک ردیف درس — دقیقاً همان ساختاری که `getExamCardData` از پایگاه داده می‌سازد */
 export interface StudentCourseEvaluationItem {
-  id: number;
+  enrollmentId: number;
   courseCode: string;
   courseTitle: string;
   units: number;
-  professorName: string;
-  classRoomName: string;
+  professorName: string | null;
+  classRoomName: string | null;
   hasEvaluated: boolean;
-  evaluatedAt?: string;
   examDate: string;
   examTime: string;
-  examHall: string;
-  seatNumber: number;
+  examHall: string | null;
+  seatNumber: number | null;
 }
 
 interface Props {
@@ -30,64 +32,19 @@ interface Props {
   };
   /** نشانی عمومی سامانه — از پیکربندی سامانه خوانده می‌شود (بدون مقدار ثابت در کد) */
   publicBaseUrl: string;
+  /** توکن امضاشدهٔ کارت ورود به جلسه — سرور از پایگاه داده می‌سازد */
+  examTicket: { token: string; expiresAt: string } | null;
+  /** علت ممانعت از صدور کارت (مثلاً بدهی مالی) */
+  examTicketBlocked: string | null;
+  /** دادهٔ واقعی کارت: هویت دانشجو، دروس، سالن/صندلی و بدهی — همه از پایگاه داده */
+  card: ExamCardData | null;
 }
 
-const INITIAL_COURSES: StudentCourseEvaluationItem[] = [
-  {
-    id: 1,
-    courseCode: '۱۱۱۲۱۰۱',
-    courseTitle: 'ریاضی عمومی ۱',
-    units: 3,
-    professorName: 'دکتر جمیل احمدی',
-    classRoomName: 'کلاس ۳۰۴ (ساختمان آموزش)',
-    hasEvaluated: true,
-    evaluatedAt: '۱۴۰۵/۰۹/۲۰',
-    examDate: '۱۴۰۵/۱۰/۱۸',
-    examTime: '۰۸:۳۰ الی ۱۰:۳۰ (سانس ۱)',
-    examHall: 'آمفی‌تئاتر مرکزی',
-    seatNumber: 1,
-  },
-  {
-    id: 2,
-    courseCode: '۱۱۱۲۱۰۳',
-    courseTitle: 'مبانی برنامه‌نویسی',
-    units: 4,
-    professorName: 'دکتر سارا رضایی',
-    classRoomName: 'سایت تخصصی کامپیوتر ۱۰۲',
-    hasEvaluated: false,
-    examDate: '۱۴۰۵/۱۰/۲۲',
-    examTime: '۱۱:۰۰ الی ۱۳:۰۰ (سانس ۲)',
-    examHall: 'سایت تخصصی کامپیوتر ۱۰۲',
-    seatNumber: 301,
-  },
-  {
-    id: 3,
-    courseCode: '۱۱۱۲۱۰۵',
-    courseTitle: 'فیزیک عمومی ۱',
-    units: 3,
-    professorName: 'دکتر علی حسینی',
-    classRoomName: 'کلاس ۲۰۲ (ساختمان آموزش)',
-    hasEvaluated: false,
-    examDate: '۱۴۰۵/۱۰/۲۵',
-    examTime: '۰۸:۳۰ الی ۱۰:۳۰ (سانس ۱)',
-    examHall: 'سالن امتحانات شماره ۱',
-    seatNumber: 101,
-  },
-  {
-    id: 4,
-    courseCode: '۱۱۱۲۱۰۷',
-    courseTitle: 'زبان انگلیسی عمومی',
-    units: 3,
-    professorName: 'استاد مرادی',
-    classRoomName: 'کلاس ۳۰۱ (ساختمان ابن‌سینا)',
-    hasEvaluated: true,
-    evaluatedAt: '۱۴۰۵/۰۹/۲۲',
-    examDate: '۱۴۰۵/۱۰/۲۸',
-    examTime: '۱۴:۰۰ الی ۱۶:۰۰ (سانس ۳)',
-    examHall: 'آمفی‌تئاتر مرکزی',
-    seatNumber: 14,
-  },
-];
+/**
+ * پیش‌تر چهار درس ساختگی («ریاضی عمومی ۱ / سالن آمفی‌تئاتر مرکزی / صندلی ۳۰۱»)
+ * اینجا هاردکد بود. حالا فهرست دروس، سالن، شمارهٔ صندلی، بدهی و هویت دانشجو
+ * همگی از پایگاه داده خوانده و به‌صورت prop تزریق می‌شوند.
+ */
 
 // Component for rendering an SVG QR Code matrix for student tickets
 function SvgQrCode({ text, size = 90 }: { text: string; size?: number }) {
@@ -160,11 +117,13 @@ function toShamsi(dStr: string | null | undefined): string {
   }
 }
 
-export default function ExamCardClient({ user, publicBaseUrl }: Props) {
-  const [courses, setCourses] = useState<StudentCourseEvaluationItem[]>(INITIAL_COURSES);
-  const [financialDebt, setFinancialDebt] = useState<number>(5000000); // 5,000,000 Rials (500,000 Tomans)
-  const [isPaying, setIsPaying] = useState<boolean>(false);
+export default function ExamCardClient({ user, publicBaseUrl, examTicket, examTicketBlocked, card }: Props) {
+  const [courses, setCourses] = useState<StudentCourseEvaluationItem[]>(card?.courses ?? []);
+  /** بدهی واقعی از دفتر کل مالی — نه یک عدد ثابت */
+  const [financialDebt, setFinancialDebt] = useState<number>(card?.debt ?? 0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [savingEval, setSavingEval] = useState(false);
+  const [, startTransition] = useTransition();
 
   // Evaluation Modal
   const [evaluatingCourse, setEvaluatingCourse] = useState<StudentCourseEvaluationItem | null>(null);
@@ -185,36 +144,35 @@ export default function ExamCardClient({ user, publicBaseUrl }: Props) {
     setTimeout(() => setToastMessage(null), 6000);
   };
 
-  // Payment Handler
-  const handleSimulatePayment = () => {
-    setIsPaying(true);
-    setTimeout(() => {
-      setFinancialDebt(0);
-      setIsPaying(false);
-      showToast('💳 تراکنش پرداخت با موفقیت در شاپرک انجام شد. تسویه مالی شما تایید گردید.');
-    }, 1000);
-  };
-
-  // Submit Evaluation Form
+  /**
+   * ثبت ارزشیابی در پایگاه داده (evaluation_responses + enrollments.hasEvaluated).
+   * پیش‌تر این دکمه فقط یک setState بود و هیچ چیزی ذخیره نمی‌شد.
+   */
   const handleSubmitEvaluation = () => {
     if (!evaluatingCourse) return;
-
-    setCourses(prev =>
-      prev.map(c =>
-        c.id === evaluatingCourse.id
-          ? {
-              ...c,
-              hasEvaluated: true,
-              evaluatedAt: new Date().toLocaleDateString('fa-IR'),
-            }
-          : c
-      )
-    );
-
-    const evaluatedTitle = evaluatingCourse.courseTitle;
-    const evaluatedProf = evaluatingCourse.professorName;
-    setEvaluatingCourse(null);
-    showToast(`✓ فرم ارزشیابی درس «${evaluatedTitle}» (استاد: ${evaluatedProf}) به صورت کاملاً محرمانه ثبت گردید.`);
+    const target = evaluatingCourse;
+    setSavingEval(true);
+    startTransition(async () => {
+      const res = await submitCourseEvaluationAction(target.enrollmentId, {
+        profMastery: evalForm.profMastery,
+        profTeachingSkill: evalForm.profTeachingSkill,
+        profDiscipline: evalForm.profDiscipline,
+        profRespect: evalForm.profRespect,
+        roomProjector: evalForm.roomProjector,
+        roomAirCondition: evalForm.roomAirCondition,
+        roomLighting: evalForm.roomLighting,
+        roomCleanliness: evalForm.roomCleanliness,
+        comment: evalForm.anonymousFeedback,
+      });
+      setSavingEval(false);
+      if (!res.ok) {
+        showToast(`⚠️ ${res.error ?? 'ثبت ارزشیابی ناموفق بود.'}`);
+        return;
+      }
+      setCourses(prev => prev.map(c => (c.enrollmentId === target.enrollmentId ? { ...c, hasEvaluated: true } : c)));
+      setEvaluatingCourse(null);
+      showToast(`✓ فرم ارزشیابی درس «${target.courseTitle}» در پایگاه داده ثبت شد (شناسهٔ پاسخ: ${res.responseId}).`);
+    });
   };
 
   // Checkpoints logic
@@ -238,7 +196,7 @@ export default function ExamCardClient({ user, publicBaseUrl }: Props) {
                   دریافت کارت ورود به جلسه و گیت ارزشیابی هوشمند
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-400 text-slate-950 shadow-xs">
-                  نیمسال اول ۱۴۰۵-۱۴۰۴
+                  {card?.termTitle ?? '—'}
                 </span>
               </div>
               <p className="text-xs text-emerald-200 mt-1">
@@ -308,18 +266,16 @@ export default function ExamCardClient({ user, publicBaseUrl }: Props) {
 
             <p className="text-xs text-slate-600 mb-3">
               {isFinancialCleared
-                ? 'تراز مالی شما صفر است و مجوز شرکت در امتحانات از نظر مالی صادر گردیده است.'
-                : `بدهی شهریه متغیر نیمسال جاری: ${financialDebt.toLocaleString('fa-IR')} ریال (۵۰۰,۰۰۰ تومان)`}
+                ? 'تراز مالی شما در دفتر کل صفر است و مجوز شرکت در امتحانات از نظر مالی صادر شده است.'
+                : `بدهی ثبت‌شده در دفتر کل مالی: ${financialDebt.toLocaleString('fa-IR')} ریال`}
             </p>
 
             {!isFinancialCleared && (
-              <button
-                onClick={handleSimulatePayment}
-                disabled={isPaying}
-                className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow transition flex items-center justify-center gap-1.5"
-              >
-                <span>💳 {isPaying ? 'در حال اتصال به شاپرک…' : 'پرداخت آنلاین بدهی با درگاه شتاب'}</span>
-              </button>
+              <div className="rounded-xl border border-rose-300 bg-rose-50 p-2.5 text-[11px] font-bold leading-5 text-rose-900">
+                پرداخت از طریق امور مالی دانشگاه انجام و در دفتر کل ثبت می‌شود؛ پس از ثبت تراکنش، این گیت به‌صورت
+                خودکار سبز می‌شود. برای پیگیری، درخواست «تسویهٔ مالی» ثبت کنید.
+                <Link href="/student/requests" className="mt-1 block text-rose-700 underline">ثبت درخواست تسویه ←</Link>
+              </div>
             )}
           </div>
 
@@ -374,7 +330,7 @@ export default function ExamCardClient({ user, publicBaseUrl }: Props) {
         <div className="space-y-2.5">
           {courses.map(course => (
             <div
-              key={course.id}
+              key={course.enrollmentId}
               className={`p-3.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${
                 course.hasEvaluated
                   ? 'bg-emerald-50/40 border-emerald-200'
@@ -390,18 +346,18 @@ export default function ExamCardClient({ user, publicBaseUrl }: Props) {
                     کد: {course.courseCode}
                   </span>
                   <span className="text-xs font-bold text-indigo-900 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
-                    استاد: {course.professorName}
+                    استاد: {course.professorName ?? '—'}
                   </span>
                   <span className="text-xs font-medium text-slate-600">
-                    🏛️ محل تشکیل: {course.classRoomName}
+                    🏛️ محل تشکیل: {course.classRoomName ?? '—'}
                   </span>
                 </div>
 
                 <div className="text-xs text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1 pt-0.5">
                   <span>📅 تاریخ امتحان: <strong className="font-mono text-slate-900">{toShamsi(course.examDate)}</strong></span>
                   <span>⏰ ساعت: <strong className="font-mono text-slate-900">{course.examTime}</strong></span>
-                  <span>🏛️ سالن آزمون: <strong className="text-slate-900">{course.examHall}</strong></span>
-                  <span>🪑 شماره صندلی: <strong className="text-indigo-900 font-mono font-black">صندلی {course.seatNumber}</strong></span>
+                  <span>🏛️ سالن آزمون: <strong className="text-slate-900">{course.examHall ?? 'تخصیص نیافته'}</strong></span>
+                  <span>🪑 شماره صندلی: <strong className="text-indigo-900 font-mono font-black">{course.seatNumber != null ? `صندلی ${course.seatNumber}` : 'تخصیص نیافته'}</strong></span>
                 </div>
               </div>
 
@@ -409,7 +365,6 @@ export default function ExamCardClient({ user, publicBaseUrl }: Props) {
                 {course.hasEvaluated ? (
                   <span className="px-3.5 py-1.5 rounded-xl bg-emerald-100 text-emerald-900 font-black text-xs flex items-center gap-1 border border-emerald-300">
                     <span>✓ ارزشیابی شد</span>
-                    <span className="text-[10px] text-emerald-700">({course.evaluatedAt})</span>
                   </span>
                 ) : (
                   <button
@@ -454,7 +409,7 @@ export default function ExamCardClient({ user, publicBaseUrl }: Props) {
                   کارت رسمی ورود به جلسه آزمون‌های پایان‌ترم دانشگاه آفاق
                 </h2>
                 <p className="text-xs text-slate-600 font-bold">
-                  نیمسال اول سال تحصیلی ۱۴۰۵-۱۴۰۴ · مقطع کارشناسی پیوسته
+                  {card?.termTitle ?? '—'} · ورودی {card?.entryYear ? String(card.entryYear).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]) : '—'}
                 </p>
               </div>
             </div>
@@ -473,19 +428,19 @@ export default function ExamCardClient({ user, publicBaseUrl }: Props) {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-300 text-xs">
             <div>
               <span className="text-slate-500 block text-[11px]">نام و نام خانوادگی:</span>
-              <strong className="text-slate-900 text-sm font-black">{user.name}</strong>
+              <strong className="text-slate-900 text-sm font-black">{card?.fullName ?? user.name}</strong>
             </div>
             <div>
               <span className="text-slate-500 block text-[11px]">شماره دانشجویی:</span>
-              <strong className="font-mono text-slate-900 text-sm font-black" dir="ltr">31412001</strong>
+              <strong className="font-mono text-slate-900 text-sm font-black" dir="ltr">{card?.studentCode ?? '—'}</strong>
             </div>
             <div>
-              <span className="text-slate-500 block text-[11px]">کد ملی داوطلب:</span>
-              <strong className="font-mono text-slate-900 text-sm font-black" dir="ltr">0012345678</strong>
+              <span className="text-slate-500 block text-[11px]">کد ملی داوطلب (ماسک‌شده):</span>
+              <strong className="font-mono text-slate-900 text-sm font-black" dir="ltr">{card?.nationalIdMasked ?? '—'}</strong>
             </div>
             <div>
               <span className="text-slate-500 block text-[11px]">رشته تحصیلی:</span>
-              <strong className="text-slate-900 text-sm font-black">مهندسی کامپیوتر</strong>
+              <strong className="text-slate-900 text-sm font-black">{card?.majorName ?? '—'}</strong>
             </div>
           </div>
 
@@ -506,17 +461,17 @@ export default function ExamCardClient({ user, publicBaseUrl }: Props) {
               </thead>
               <tbody>
                 {courses.map((c, idx) => (
-                  <tr key={c.id} className="border-b border-slate-300 hover:bg-slate-50 transition">
+                  <tr key={c.enrollmentId} className="border-b border-slate-300 hover:bg-slate-50 transition">
                     <td className="p-2 border border-slate-300 text-center font-bold">{idx + 1}</td>
                     <td className="p-2 border border-slate-300 font-mono font-bold text-slate-700 text-center" dir="ltr">{c.courseCode}</td>
                     <td className="p-2 border border-slate-300 font-black text-slate-900">{c.courseTitle} ({c.units} واحد)</td>
-                    <td className="p-2 border border-slate-300 text-slate-800 font-bold">{c.professorName}</td>
+                    <td className="p-2 border border-slate-300 text-slate-800 font-bold">{c.professorName ?? '—'}</td>
                     <td className="p-2 border border-slate-300 text-center font-mono font-black text-slate-900 bg-slate-100/60">{toShamsi(c.examDate)}</td>
                     <td className="p-2 border border-slate-300 text-center font-mono text-slate-700">{c.examTime}</td>
-                    <td className="p-2 border border-slate-300 font-bold text-slate-900">🏛️ {c.examHall}</td>
+                    <td className="p-2 border border-slate-300 font-bold text-slate-900">🏛️ {c.examHall ?? 'تخصیص نیافته'}</td>
                     <td className="p-2 border border-slate-300 text-center bg-indigo-50/80">
                       <span className="px-2.5 py-0.5 rounded-lg bg-indigo-950 text-white font-mono font-black text-xs">
-                        صندلی {c.seatNumber}
+                        {c.seatNumber != null ? `صندلی ${c.seatNumber}` : '—'}
                       </span>
                     </td>
                   </tr>
@@ -532,15 +487,23 @@ export default function ExamCardClient({ user, publicBaseUrl }: Props) {
                 <span className="text-base">🔐</span>
                 <h4 className="font-black text-emerald-400">کد امنیتی و بارکد اختصاصی آزمون:</h4>
               </div>
-              <p className="text-slate-300 font-mono text-xs" dir="ltr">AFAGH-EXAM-31412001-SEAT-01-MATH1</p>
+              <p className="text-slate-300 font-mono text-[10px] break-all" dir="ltr">
+                {examTicket ? examTicket.token : 'AFAGH-EXAM-NOT-ISSUED'}
+              </p>
               <p className="text-[10px] text-slate-400">
                 این بارکد توسط مراقب سالن با اسکنر QR-Code در ورودی جلسه جهت ثبت حضور و احراز هویت اسکن خواهد شد.
               </p>
             </div>
 
             <div className="p-2 bg-white rounded-xl text-slate-950 text-center shadow flex flex-col items-center justify-center">
-              <SvgQrCode text={`${publicBaseUrl}/exam-ticket/VERIFY-${user.id}`} size={75} />
-              <span className="text-[9px] font-mono font-bold text-slate-700 block mt-0.5">31412001</span>
+              {examTicket ? (
+                <SvgQrCode text={`${publicBaseUrl}/exam-ticket/${encodeURIComponent(examTicket.token)}`} size={75} />
+              ) : (
+                <div className="flex h-[75px] w-[75px] flex-col items-center justify-center rounded-lg border border-amber-500/60 bg-amber-950/40 text-center text-[8px] font-bold leading-3 text-amber-200">
+                  کارت صادر<br />نشده
+                </div>
+              )}
+              <span className="text-[9px] font-mono font-bold text-slate-700 block mt-0.5">{card?.studentCode ?? '—'}</span>
             </div>
           </div>
 

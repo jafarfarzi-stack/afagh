@@ -1,120 +1,91 @@
+import { desc, eq } from 'drizzle-orm';
+import { db } from '@/db';
+import { short_term_certificates, short_term_courses, short_term_learners, short_term_registrations } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import AdminShortCoursesClient, { AdminCourseItem } from './AdminShortCoursesClient';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * مدیریت دوره‌های آزاد.
+ *
+ * پیش‌تر این صفحه دو دورهٔ ساختگی («بوت‌کمپ جامع برنامه‌نویسی پایتون…» با
+ * پنج شرکت‌کنندهٔ خیالی) را هاردکد کرده بود و دکمهٔ «صدور گواهینامه» فقط یک
+ * setState بود؛ یعنی شماره‌ای که در پورتال عمومی استعلام می‌شد هرگز در پایگاه
+ * داده ثبت نمی‌شد. حالا همه از `short_term_*` خوانده می‌شود.
+ */
 export default async function AdminShortCoursesPage() {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
 
-  const initialCourses: AdminCourseItem[] = [
-    {
-      id: 1,
-      code: 'BOOT-AI-101',
-      title: 'بوت‌کمپ جامع برنامه‌نویسی پایتون و هوش مصنوعی کاربردی',
-      titleEn: 'Comprehensive Python & Applied AI Bootcamp',
-      category: 'مهندسی و هوش مصنوعی',
-      hours: 60,
-      tuitionPrice: 3800000,
-      capacity: 35,
-      instructorName: 'دکتر محمدرضا جلالی',
-      status: 'OPEN',
-      learners: [
-        {
-          id: 101,
-          fullName: 'امیررضا صادقی‌راد',
-          fullNameEn: 'Amir Reza Sadeghi Rad',
-          nationalId: '0021984589',
-          mobile: '09121112233',
-          courseId: 1,
-          amountPaid: 3800000,
-          attendanceCount: 10,
-          totalSessions: 10,
-          finalGrade: 19.5,
-          isPassed: true,
-          certificateIssued: true,
-          certificateNumber: 'AFQ-CERT-2026-9041',
-          registeredAt: '۱۴۰۵/۰۸/۱۰',
-        },
-        {
-          id: 102,
-          fullName: 'فاطمه موسوی',
-          fullNameEn: 'Fatemeh Mousavi',
-          nationalId: '0019847120',
-          mobile: '09123334455',
-          courseId: 1,
-          amountPaid: 2660000,
-          discountCode: 'AFAGH30',
-          attendanceCount: 9,
-          totalSessions: 10,
-          finalGrade: 17.0,
-          isPassed: true,
-          certificateIssued: false,
-          registeredAt: '۱۴۰۵/۰۸/۱۲',
-        },
-        {
-          id: 103,
-          fullName: 'حسین مرادی',
-          fullNameEn: 'Hossein Moradi',
-          nationalId: '0034567891',
-          mobile: '09351234567',
-          courseId: 1,
-          amountPaid: 3800000,
-          attendanceCount: 6,
-          totalSessions: 10,
-          finalGrade: 9.5,
-          isPassed: false,
-          certificateIssued: false,
-          registeredAt: '۱۴۰۵/۰۸/۱۴',
-        },
-      ],
-    },
-    {
-      id: 2,
-      code: 'BOOT-WEB-202',
-      title: 'بوت‌کمپ فول‌استک وب (Next.js 14, React & PostgreSQL)',
-      titleEn: 'Full-Stack Web Development Bootcamp',
-      category: 'برنامه‌نویسی و وب',
-      hours: 80,
-      tuitionPrice: 4500000,
-      capacity: 30,
-      instructorName: 'مهندس سامان افشار',
-      status: 'OPEN',
-      learners: [
-        {
-          id: 201,
-          fullName: 'مهسا کاظمی‌تبار',
-          fullNameEn: 'Mahsa Kazemi Tabar',
-          nationalId: '2750191230',
-          mobile: '09144445566',
-          courseId: 2,
-          amountPaid: 4500000,
-          attendanceCount: 12,
-          totalSessions: 12,
-          finalGrade: 18.0,
-          isPassed: true,
-          certificateIssued: true,
-          certificateNumber: 'AFQ-CERT-2026-8812',
-          registeredAt: '۱۴۰۵/۰۸/۱۸',
-        },
-        {
-          id: 202,
-          fullName: 'سینا پاشایی',
-          fullNameEn: 'Sina Pashaei',
-          nationalId: '2748912340',
-          mobile: '09145556677',
-          courseId: 2,
-          amountPaid: 3600000,
-          discountCode: 'NOROOZ',
-          attendanceCount: 11,
-          totalSessions: 12,
-          finalGrade: 15.5,
-          isPassed: true,
-          certificateIssued: false,
-          registeredAt: '۱۴۰۵/۰۸/۱۹',
-        },
-      ],
-    },
-  ];
+  const courses = await db.select().from(short_term_courses).orderBy(desc(short_term_courses.id));
+
+  // یک کوئری برای همهٔ ثبت‌نام‌ها + شرکت‌کننده + گواهینامه (بدون N+1)
+  const registrations = await db
+    .select({
+      id: short_term_registrations.id,
+      learnerId: short_term_registrations.learnerId,
+      courseId: short_term_registrations.courseId,
+      amountPaid: short_term_registrations.amountPaid,
+      discountCode: short_term_registrations.discountCode,
+      paymentStatus: short_term_registrations.paymentStatus,
+      attendanceCount: short_term_registrations.attendanceCount,
+      totalSessions: short_term_registrations.totalSessions,
+      finalGrade: short_term_registrations.finalGrade,
+      isPassed: short_term_registrations.isPassed,
+      certificateIssued: short_term_registrations.certificateIssued,
+      createdAt: short_term_registrations.createdAt,
+      fullName: short_term_learners.fullName,
+      fullNameEn: short_term_learners.fullNameEn,
+      nationalId: short_term_learners.nationalId,
+      mobile: short_term_learners.mobile,
+      certificateNumber: short_term_certificates.certificateNumber,
+    })
+    .from(short_term_registrations)
+    .innerJoin(short_term_learners, eq(short_term_learners.id, short_term_registrations.learnerId))
+    .leftJoin(short_term_certificates, eq(short_term_certificates.registrationId, short_term_registrations.id))
+    .orderBy(short_term_registrations.id);
+
+  const byCourse = new Map<number, AdminCourseItem['learners']>();
+  for (const r of registrations) {
+    const list = byCourse.get(r.courseId) ?? [];
+    list.push({
+      registrationId: r.id,
+      id: r.learnerId,
+      fullName: r.fullName,
+      fullNameEn: r.fullNameEn ?? '',
+      nationalId: r.nationalId ?? '',
+      mobile: r.mobile,
+      courseId: r.courseId,
+      amountPaid: r.amountPaid ?? 0,
+      discountCode: r.discountCode ?? undefined,
+      paymentStatus: r.paymentStatus,
+      attendanceCount: r.attendanceCount ?? 0,
+      totalSessions: r.totalSessions ?? 0,
+      finalGrade: r.finalGrade != null ? Number(r.finalGrade) : undefined,
+      isPassed: r.isPassed === 1,
+      certificateNumber: r.certificateNumber ?? undefined,
+      certificateIssued: r.certificateIssued === 1 || !!r.certificateNumber,
+      registeredAt: r.createdAt ? new Date(r.createdAt).toLocaleDateString('fa-IR') : '—',
+    });
+    byCourse.set(r.courseId, list);
+  }
+
+  const initialCourses: AdminCourseItem[] = courses.map(c => ({
+    id: c.id,
+    code: c.code,
+    title: c.title,
+    titleEn: c.titleEn ?? '',
+    category: c.category,
+    hours: c.hours,
+    tuitionPrice: c.tuitionPrice,
+    capacity: c.capacity,
+    enrolledCount: c.enrolledCount ?? 0,
+    instructorName: c.instructorName,
+    passingGrade: Number(c.passingGrade ?? 12),
+    maxAbsences: c.maxAbsences ?? 3,
+    status: (c.status as AdminCourseItem['status']) ?? 'OPEN',
+    learners: byCourse.get(c.id) ?? [],
+  }));
 
   return <AdminShortCoursesClient initialCourses={initialCourses} />;
 }
