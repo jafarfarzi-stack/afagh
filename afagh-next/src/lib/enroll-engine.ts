@@ -18,6 +18,11 @@ import { evaluateStudentRegulationStatus, parseGrade, parseUnits } from './regul
 //   ۵. تداخل زمانی کلاس و امتحان (خطای نرم → ارجاع کمیسیون) §۱۰۱۲
 const MAX_UNITS = 20;
 
+/** §آیین‌نامه معادل‌سازی: حداقل نمرهٔ قابل معادل‌سازی */
+export const EQUIV_MIN_GRADE = 12;
+/** §معادل‌سازی: حداکثر واحد هر ترم معادل‌سازی (هر ۲۰ واحد در یک نیمسال) */
+export const EQUIV_TERM_UNITS = 20;
+
 export type SubmitResult = {
   ok: boolean;
   registered: string[];
@@ -378,6 +383,14 @@ export async function applyCourseTransfer(input: {
   const grade = parseGrade(input.sourceGrade);
   const units = parseUnits(input.sourceUnits);
 
+  // §آیین‌نامه: فقط نمرات ۱۲ و بالاتر قابل معادل‌سازی است — از همان ابتدا اعمال می‌شود
+  if (grade !== null && grade < EQUIV_MIN_GRADE) {
+    return {
+      ok: false,
+      message: `بر اساس آیین‌نامه، فقط نمرات ${EQUIV_MIN_GRADE} و بالاتر قابل معادل‌سازی است (نمرهٔ واردشده: ${grade}).`,
+    };
+  }
+
   // ثبت یا به‌روزرسانی ردیف کارنامه.
   // عمداً از onConflictDoUpdate استفاده نمی‌کنیم: به قید یکتاییِ
   // («studentId», «offeringId») وابسته نباشد تا در دیتابیس‌های قدیمی‌تر که
@@ -415,5 +428,141 @@ export async function applyCourseTransfer(input: {
     offeringId: offering.id,
     createdOffering,
     message: `درس «${course.title}» با نمرهٔ ${grade === null ? 'ثبت‌نشده' : grade} و ${units} واحد از ${input.previousUniversity || 'دانشگاه مبدأ'} در کارنامه ثبت شد.`,
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  ثبت دسته‌ای معادل‌سازی — پس از تأیید مدیر گروه و مدیرکل آموزش
+//
+//  طبق دستور: هر ۲۰ واحد معادل‌سازی‌شده در یک «نیمسال معادل‌سازی» جداگانه
+//  ثبت می‌شود که پیش از اولین نیمسال واقعی در کارنامه نمایش داده می‌شود؛
+//  وضعیت درس «قبولی در معادل‌سازی پذیرفته شده» است و مشروطیت در این ترم‌ها
+//  معنا ندارد. فقط نمرات >= EQUIV_MIN_GRADE ثبت می‌شوند.
+// ══════════════════════════════════════════════════════════════════
+
+export type EquivalenceItem = {
+  sourceTitle: string;
+  sourceGrade: number | string | null;
+  sourceUnits: number | string | null;
+  targetCourseCode: string;
+  headComment?: string | null;
+};
+
+export type EquivalenceBatchResult = {
+  ok: boolean;
+  message: string;
+  termsCreated: number;
+  registered: { courseTitle: string; termTitle: string; grade: number | null; units: number }[];
+  rejected: { sourceTitle: string; reason: string }[];
+};
+
+export async function applyEquivalenceBatch(input: {
+  studentId: number;
+  items: EquivalenceItem[];
+  previousUniversity?: string;
+  workflowRequestId?: number | null;
+}): Promise<EquivalenceBatchResult> {
+  const registered: EquivalenceBatchResult['registered'] = [];
+  const rejected: EquivalenceBatchResult['rejected'] = [];
+
+  // ۱) فیلتر نمره و تطبیق درس مقصد
+  type Ready = { course: typeof courses.$inferSelect; grade: number; units: number; sourceTitle: string };
+  const ready: Ready[] = [];
+  for (const it of input.items) {
+    const grade = parseGrade(it.sourceGrade);
+    if (grade === null || grade < EQUIV_MIN_GRADE) {
+      rejected.push({ sourceTitle: it.sourceTitle, reason: grade === null ? 'نمره نامعتبر' : `نمرهٔ کمتر از ${EQUIV_MIN_GRADE} (غیرقابل معادل‌سازی)` });
+      continue;
+    }
+    const [course] = await db.select().from(courses).where(eq(courses.code, String(it.targetCourseCode ?? '').trim())).limit(1);
+    if (!course) {
+      rejected.push({ sourceTitle: it.sourceTitle, reason: `درس مقصد «${it.targetCourseCode}» در چارت آفاق یافت نشد` });
+      continue;
+    }
+    const units = parseUnits(it.sourceUnits) || Number(course.units || 0);
+    ready.push({ course, grade, units, sourceTitle: it.sourceTitle });
+  }
+
+  if (ready.length === 0) {
+    return { ok: false, message: 'هیچ درس واجد شرایطی برای معادل‌سازی یافت نشد.', termsCreated: 0, registered, rejected };
+  }
+
+  // ۲) دسته‌بندی هر ۲۰ واحد در یک ترم معادل‌سازی
+  const chunks: Ready[][] = [];
+  let cur: Ready[] = [];
+  let curUnits = 0;
+  for (const r of ready) {
+    if (curUnits + r.units > EQUIV_TERM_UNITS && cur.length > 0) {
+      chunks.push(cur);
+      cur = [];
+      curUnits = 0;
+    }
+    cur.push(r);
+    curUnits += r.units;
+  }
+  if (cur.length) chunks.push(cur);
+
+  // ۳) ساخت ترم‌های معادل‌سازی پیش از اولین نیمسال و ثبت دروس
+  let termsCreated = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    const termCode = `00EQ${i + 1}`;
+    let [term] = await db.select().from(academic_terms).where(eq(academic_terms.termCode, termCode)).limit(1);
+    if (!term) {
+      const [made] = await db
+        .insert(academic_terms)
+        .values({
+          termCode,
+          title: `معادل‌سازی — نوبت ${i + 1}`,
+          isCurrent: 0,
+          isSummer: 0,
+          isEnrollmentOpen: 0,
+          startDate: new Date(2000, 0, 1),
+          endDate: new Date(2000, 5, 30),
+        })
+        .onConflictDoNothing()
+        .returning();
+      term = made ?? (await db.select().from(academic_terms).where(eq(academic_terms.termCode, termCode)).limit(1))[0];
+    }
+    if (!term) continue;
+    termsCreated++;
+
+    for (const r of chunks[i]) {
+      let [offering] = await db
+        .select()
+        .from(course_offerings)
+        .where(and(eq(course_offerings.courseId, r.course.id), eq(course_offerings.termId, term.id), eq(course_offerings.offeringType, 'TRANSFER')))
+        .limit(1);
+      if (!offering) {
+        const [made] = await db
+          .insert(course_offerings)
+          .values({ termId: term.id, courseId: r.course.id, groupNumber: 900, capacity: 500, enrolledCount: 0, offeringType: 'TRANSFER', isActive: 1 })
+          .onConflictDoNothing()
+          .returning();
+        offering = made ?? (await db.select().from(course_offerings).where(and(eq(course_offerings.courseId, r.course.id), eq(course_offerings.termId, term.id), eq(course_offerings.offeringType, 'TRANSFER'))).limit(1))[0];
+      }
+      if (!offering) continue;
+
+      const [existing] = await db.select({ id: enrollments.id }).from(enrollments).where(and(eq(enrollments.studentId, input.studentId), eq(enrollments.offeringId, offering.id))).limit(1);
+      const payload = {
+        status: 'EQUIV_PASSED',
+        workflowRequestId: input.workflowRequestId ?? null,
+        gradeValue: String(r.grade),
+        gradeStatus: 'FINALIZED',
+      };
+      if (existing) {
+        await db.update(enrollments).set(payload).where(eq(enrollments.id, existing.id));
+      } else {
+        await db.insert(enrollments).values({ studentId: input.studentId, offeringId: offering.id, isDirectedReading: 0, ...payload });
+      }
+      registered.push({ courseTitle: r.course.title, termTitle: term.title, grade: r.grade, units: r.units });
+    }
+  }
+
+  return {
+    ok: true,
+    message: `${registered.length} درس معادل‌سازی‌شده در ${termsCreated} نیمسال معادل‌سازی (هر ${EQUIV_TERM_UNITS} واحد) پیش از اولین ترم ثبت شد.`,
+    termsCreated,
+    registered,
+    rejected,
   };
 }

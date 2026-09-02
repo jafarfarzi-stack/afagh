@@ -18,6 +18,7 @@ export default async function GroupManagerLayout({ children }: { children: React
           <Link href="/group-manager/courses" className="hover:underline">دروس گروه</Link>
           <Link href="/group-manager/offerings" className="hover:underline">ارائه‌های ترم</Link>
           <Link href="/group-manager/classrooms" className="hover:underline">کلاس‌ها</Link>
+          <Link href="/group-manager/equivalence" className="hover:underline">معادل‌سازی دروس</Link>
           {user.roles.includes('ADMIN') && <Link href="/admin" className="hover:underline">کارتابل مدیر</Link>}
         </nav>
       </header>

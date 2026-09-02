@@ -280,6 +280,7 @@ export default async function StudentTranscriptPage() {
                         ? (row.grade != null && Number(row.grade) === 0)
                         : (row.grade != null && Number(row.grade) < 10);
                       const isPending = row.grade == null;
+                      const isEquiv = row.status === 'EQUIV_PASSED';
                       const totalU = Number(row.units || 0);
                       const prU = Number(row.practicalUnits || 0);
                       const thU = Math.max(0, totalU - prU);
@@ -314,8 +315,11 @@ export default async function StudentTranscriptPage() {
                             )}
                           </td>
                           <td className="p-1.5 text-center font-bold">
-                            {isPassed && <span className="text-emerald-700">قبول</span>}
-                            {isFailed && <span className="text-red-700">مردود</span>}
+                            {isEquiv && (
+                              <span className="text-teal-700 text-[11px]">قبولی در معادسازی پذیرفته شده</span>
+                            )}
+                            {!isEquiv && isPassed && <span className="text-emerald-700">قبول</span>}
+                            {!isEquiv && isFailed && <span className="text-red-700">مردود</span>}
                             {isPending && (
                               <span className="text-slate-500 font-normal">
                                 {row.status === 'PENDING_COUNCIL' ? 'در انتظار شورا' : 'در حال گذراندن'}

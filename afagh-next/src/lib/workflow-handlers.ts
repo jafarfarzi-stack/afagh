@@ -1,6 +1,6 @@
 import 'server-only';
 import { registerWorkflowHandler } from '@/lib/workflow-events';
-import { applyCourseTransfer } from '@/lib/enroll-engine';
+import { applyCourseTransfer, applyEquivalenceBatch } from '@/lib/enroll-engine';
 import { createLogger } from '@/lib/logger';
 
 // ══════════════════════════════════════════════════════════════════════
@@ -20,6 +20,26 @@ registerWorkflowHandler({
   processCode: 'COURSE_TRANSFER',
   events: ['WORKFLOW_FINAL_APPROVED'],
   async run(ev) {
+    // حالت دسته‌ای (فرم هوشمند مدیر گروه): فهرست نگاشت‌ها در formData.items
+    const items = Array.isArray(ev.formData?.items) ? ev.formData.items : null;
+    if (items && items.length > 0) {
+      const res = await applyEquivalenceBatch({
+        studentId: ev.studentId,
+        items,
+        previousUniversity: ev.formData?.previousUniversity,
+        workflowRequestId: ev.requestId,
+      });
+      if (!res.ok) throw new Error(res.message);
+      log.info('equivalence_batch_applied', {
+        requestId: ev.requestId,
+        studentId: ev.studentId,
+        termsCreated: res.termsCreated,
+        registered: res.registered.length,
+        rejected: res.rejected.length,
+      });
+      return;
+    }
+
     const res = await applyCourseTransfer({
       studentId: ev.studentId,
       targetCourseCode: ev.formData?.targetCourseCode,

@@ -1,7 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { submitSatisfactionRatingAction, submitStudentRequestAction } from './actions';
+import { useMemo, useState } from 'react';
+import {
+  submitSatisfactionRatingAction,
+  submitStudentRequestAction,
+  uploadRequestAttachmentAction,
+} from './actions';
+
+type Attachment = { key: string; name: string; size: number; mimeType: string };
 
 interface ProcessDef {
   id: number;
@@ -109,6 +115,7 @@ export default function StudentRequestsClient({
   const [selectedProcessCode, setSelectedProcessCode] = useState<string>(processes[0]?.code || 'ENROLLMENT_CERT');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [formData, setFormData] = useState<Record<string, any>>({});
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -122,6 +129,39 @@ export default function StudentRequestsClient({
   const [ratingFeedback, setRatingFeedback] = useState<string>('');
 
   const selectedProcess = processes.find(p => p.code === selectedProcessCode) || processes[0];
+
+  // برای «معادل‌سازی» پیوست کارنامهٔ ممهور الزامی است حتی اگر در فرم‌اسکیما نباشد
+  const effectiveSchema = useMemo(() => {
+    const base: any[] = selectedProcess?.formSchema || [];
+    if (selectedProcess?.code === 'COURSE_TRANSFER' && !base.some(f => f.type === 'file')) {
+      return [
+        ...base,
+        {
+          key: 'transcriptAttachment',
+          label: 'پیوست کارنامهٔ ممهور دانشگاه قبلی',
+          type: 'file',
+          required: true,
+          helperText: 'تصویر کارنامهٔ ممهور (PDF/JPG/PNG تا ۱۰ مگابایت) — بدون پیوست، درخواست معادل‌سازی بررسی نمی‌شود.',
+        },
+      ];
+    }
+    return base;
+  }, [selectedProcess]);
+
+  const handleFile = async (fieldKey: string, file: File | null) => {
+    if (!file) return;
+    setUploadingKey(fieldKey);
+    setSubmitError(null);
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await uploadRequestAttachmentAction(fd);
+    setUploadingKey(null);
+    if (res.ok && res.attachment) {
+      handleInputChange(fieldKey, res.attachment);
+    } else {
+      setSubmitError(res.error || 'خطا در آپلود پیوست');
+    }
+  };
 
   const categories = ['ALL', ...Array.from(new Set(processes.map(p => p.category)))];
 
@@ -137,6 +177,14 @@ export default function StudentRequestsClient({
     e.preventDefault();
     setIsSubmitting(true);
     setSubmitError(null);
+
+    for (const f of effectiveSchema) {
+      if (f.type === 'file' && f.required && !formData[f.key]) {
+        setSubmitError(`پیوست «${f.label}» الزامی است.`);
+        setIsSubmitting(false);
+        return;
+      }
+    }
 
     const res = await submitStudentRequestAction(selectedProcess.code, formData);
     setIsSubmitting(false);
@@ -317,7 +365,7 @@ export default function StudentRequestsClient({
               {/* فیلدهای پویا */}
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {selectedProcess.formSchema?.map((field: any) => {
+                  {effectiveSchema.map((field: any) => {
                     return (
                       <div
                         key={field.key}
@@ -327,7 +375,25 @@ export default function StudentRequestsClient({
                           {field.label} {field.required && <span className="text-red-500">*</span>}
                         </label>
 
-                        {field.type === 'select' ? (
+                        {field.type === 'file' ? (
+                          <div className="space-y-1.5">
+                            <input
+                              type="file"
+                              required={field.required}
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              onChange={e => handleFile(field.key, e.target.files?.[0] ?? null)}
+                              className="w-full text-xs rounded-xl border border-dashed border-slate-300 bg-slate-50 p-2.5 file:ml-2 file:rounded-lg file:border-0 file:bg-indigo-600 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white"
+                            />
+                            {uploadingKey === field.key && (
+                              <p className="text-[11px] text-indigo-600 font-bold animate-pulse">در حال آپلود پیوست…</p>
+                            )}
+                            {formData[field.key]?.name && uploadingKey !== field.key && (
+                              <p className="text-[11px] text-emerald-700 font-bold">
+                                ✓ پیوست شد: {formData[field.key].name}
+                              </p>
+                            )}
+                          </div>
+                        ) : field.type === 'select' ? (
                           <select
                             required={field.required}
                             value={formData[field.key] || field.defaultValue || ''}

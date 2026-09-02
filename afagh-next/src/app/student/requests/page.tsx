@@ -34,7 +34,11 @@ export default async function StudentRequestsPage() {
 
   const rawSteps = await db.select().from(process_steps).orderBy(process_steps.stepOrder);
 
-  const processesList = rawProcesses.map(p => {
+  // درخواست «عدم رعایت پیش‌نیاز/هم‌نیاز» به‌صورت هوشمند از انتخاب واحد ثبت می‌شود؛
+  // بنابراین نیازی به ثبت دستی آن در میز خدمات نیست و از فهرست حذف می‌شود.
+  const processesList = rawProcesses
+    .filter(p => p.code !== 'PREREQ_WAIVER')
+    .map(p => {
     let schema: any[] = [];
     try {
       if (p.formSchema) schema = JSON.parse(p.formSchema);
