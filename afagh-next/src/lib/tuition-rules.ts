@@ -114,3 +114,83 @@ export function pickFeeRule<T extends FeeRuleLike>(rows: T[], params: FeeRulePar
     offeringType: best.offeringType,
   };
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * پل: قواعد مالی قدیمی (term_financial_rules) → قواعد موتور جدید
+ *
+ * چرا لازم است: ماژول مهاجرت داده‌ها جدول قدیمی `term_financial_rules` را پر
+ * می‌کند، ولی موتور شهریه از `tuition_fee_rules` می‌خواند. بدون این پل، پس از
+ * مهاجرت، موتور هیچ قاعده‌ای نمی‌بیند و شهریه بی‌صدا «صفر» محاسبه می‌شود.
+ *
+ * تفاوت کلیدی دو جدول: قدیمی به ازای «ترم» کلید می‌خورد (termId+degreeLevelId)،
+ * جدید به ازای «نوع ترم» (degreeLevelId+termType+offeringType). پس باید چند ترم
+ * هم‌نوع در یک قاعده جمع شوند.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** یک سطر قاعدهٔ مالی قدیمی به‌همراه اطلاعات ترمِ مربوطه */
+export interface LegacyFeeRuleLike {
+  degreeLevelId: number | null;
+  /** نوع ترمِ از پیش تعیین‌شده (با termTypeOf به دست می‌آید) */
+  termType: TermType;
+  fixedTuition: unknown;
+  perUnitTuition: unknown;
+  /** سال تحصیلیِ شروع؛ NULL یعنی نامشخص */
+  effectiveFromYear: number | null;
+  /** کلید مرتب‌سازی برای انتخاب «جدیدترین» ترم در هر گروه (مثلاً id ترم) */
+  termSortKey: number;
+}
+
+export interface FeeRuleDraft {
+  degreeLevelId: number | null;
+  termType: TermType;
+  offeringType: null;
+  fixedTuition: number;
+  perUnitTuition: number;
+  effectiveFromYear: number | null;
+  note: string;
+}
+
+/**
+ * استخراج سال تحصیلی شمسی از کد ترم (مثلاً «1403-2» ← ۱۴۰۳).
+ * فقط بازهٔ معقول ۱۳۰۰–۱۴۹۹ پذیرفته می‌شود تا کدهایی مثل «00EQ1» اشتباه تفسیر نشوند.
+ */
+export function jalaliYearFromTermCode(termCode: string | null | undefined): number | null {
+  const m = String(termCode ?? '').match(/(1[34]\d{2})/);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * تبدیل قواعد قدیمی به پیش‌نویس قواعد جدید.
+ *  - گروه‌بندی بر (مقطع، نوع ترم، سال مؤثر)؛
+ *  - در هر گروه، جدیدترین ترم برنده است (تا نرخ ترم‌های قدیمیِ هم‌نوع جای آن را نگیرد)؛
+ *  - قواعدی که هر دو نرخشان صفر است دور ریخته می‌شوند (قاعدهٔ بی‌اثر).
+ */
+export function mapLegacyFeeRules<T extends LegacyFeeRuleLike>(rows: T[]): FeeRuleDraft[] {
+  const groups = new Map<string, T>();
+  for (const r of rows) {
+    const key = `${r.degreeLevelId ?? 'null'}|${r.termType}|${r.effectiveFromYear ?? 'null'}`;
+    const prev = groups.get(key);
+    if (!prev || r.termSortKey > prev.termSortKey) groups.set(key, r);
+  }
+
+  const drafts: FeeRuleDraft[] = [];
+  for (const r of groups.values()) {
+    const fixedTuition = Math.round(toNum(r.fixedTuition));
+    const perUnitTuition = Math.round(toNum(r.perUnitTuition));
+    if (fixedTuition <= 0 && perUnitTuition <= 0) continue;
+    drafts.push({
+      degreeLevelId: r.degreeLevelId,
+      termType: r.termType,
+      offeringType: null,
+      fixedTuition,
+      perUnitTuition,
+      effectiveFromYear: r.effectiveFromYear,
+      note: 'درون‌ریزی از قواعد مالی قدیمی',
+    });
+  }
+
+  return drafts.sort((a, b) =>
+    (a.degreeLevelId ?? 0) - (b.degreeLevelId ?? 0) ||
+    a.termType.localeCompare(b.termType) ||
+    (a.effectiveFromYear ?? 0) - (b.effectiveFromYear ?? 0));
+}

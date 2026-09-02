@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { saveFeeRuleAction, deleteFeeRuleAction, type FeeRuleInput } from './actions';
+import { saveFeeRuleAction, deleteFeeRuleAction, importLegacyFeeRulesAction, type FeeRuleInput } from './actions';
 
 type Rule = {
   id: number;
@@ -70,6 +70,21 @@ export default function TuitionRulesClient({ rules, degrees }: { rules: Rule[]; 
       const res = await deleteFeeRuleAction(id);
       setMsg(res.ok ? { ok: true, text: 'حذف شد.' } : { ok: false, text: res.error || 'حذف ناموفق بود.' });
       if (editing === id) reset();
+    });
+  };
+
+  const importLegacy = () => {
+    if (!confirm('قواعد مالی قدیمی به موتور جدید درون‌ریزی شوند؟ قواعد تکراری ساخته نمی‌شوند.')) return;
+    start(async () => {
+      const res = await importLegacyFeeRulesAction();
+      if (res.ok) {
+        setMsg({
+          ok: true,
+          text: `درون‌ریزی انجام شد: ${fa(res.created ?? 0)} قاعدهٔ جدید، ${fa(res.skipped ?? 0)} مورد تکراری رد شد.`,
+        });
+      } else {
+        setMsg({ ok: false, text: res.error || 'درون‌ریزی ناموفق بود.' });
+      }
     });
   };
 
@@ -162,7 +177,15 @@ export default function TuitionRulesClient({ rules, degrees }: { rules: Rule[]; 
               انصراف
             </button>
           )}
+          <button onClick={importLegacy} disabled={pending}
+            className="mr-auto px-4 py-2 rounded-lg border border-indigo-300 text-sm font-bold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50">
+            درون‌ریزی از قواعد مالی قدیمی
+          </button>
         </div>
+        <p className="mt-2 text-xs text-slate-500">
+          درون‌ریزی، قواعد جدول قدیمی را به ازای <b>نوع ترم</b> جمع می‌کند (جدیدترین ترم هر نوع برنده است).
+          نرخ خاص <b>معادل‌سازی (TRANSFER)</b> در جدول قدیمی وجود ندارد و باید دستی تعریف شود.
+        </p>
         {msg && (
           <p className={`mt-3 text-sm font-bold ${msg.ok ? 'text-emerald-700' : 'text-rose-700'}`}>{msg.text}</p>
         )}

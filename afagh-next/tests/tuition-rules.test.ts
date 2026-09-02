@@ -5,7 +5,7 @@
  * چون src/lib/tuition-rules.ts هیچ وابستگی به دیتابیس یا Next ندارد، بدون
  * نیاز به PostgreSQL قابل اجراست.
  */
-import { pickFeeRule, termTypeOf, toNum } from '../src/lib/tuition-rules.ts';
+import { jalaliYearFromTermCode, mapLegacyFeeRules, pickFeeRule, termTypeOf, toNum } from '../src/lib/tuition-rules.ts';
 
 let pass = 0;
 let fail = 0;
@@ -82,6 +82,37 @@ const legacyTermType = termTypeOf({ termType: 'NORMAL', termCode: '00EQ2' });
 const legacyRule = pickFeeRule(rules, { degreeLevelId: 1, termType: legacyTermType, termLevelOnly: true });
 eq('ترمیم‌شده به قاعدهٔ معادل‌سازی می‌رسد (id 5، ثابت ۷۰۰۰) نه قاعدهٔ ترم عادی', legacyRule?.id, 5);
 eq('شهریهٔ ثابت صحیح است', legacyRule?.fixedTuition, 7000);
+
+console.log('\n۸) پل: قواعد مالی قدیمی → قواعد موتور جدید');
+eq('سال شمسی از کد ترم', jalaliYearFromTermCode('1403-2'), 1403);
+eq('کد ترم معادل‌سازی سال نمی‌دهد', jalaliYearFromTermCode('00EQ1'), null);
+eq('کد خالی → null', jalaliYearFromTermCode(null), null);
+eq('عدد بیرون از بازهٔ معقول پذیرفته نمی‌شود', jalaliYearFromTermCode('9999-1'), null);
+
+const legacy = [
+  // دو ترم عادی هم‌مقطع و هم‌سال → باید در یک قاعده جمع شوند (جدیدترین برنده)
+  { degreeLevelId: 1, termType: 'NORMAL' as const, fixedTuition: '1000', perUnitTuition: '50', effectiveFromYear: 1403, termSortKey: 10 },
+  { degreeLevelId: 1, termType: 'NORMAL' as const, fixedTuition: '1500', perUnitTuition: '60', effectiveFromYear: 1403, termSortKey: 11 },
+  // ترم تابستان همان مقطع
+  { degreeLevelId: 1, termType: 'SUMMER' as const, fixedTuition: '0', perUnitTuition: '80', effectiveFromYear: 1403, termSortKey: 12 },
+  // قاعدهٔ بی‌اثر (هر دو صفر) → باید دور ریخته شود
+  { degreeLevelId: 2, termType: 'NORMAL' as const, fixedTuition: '0', perUnitTuition: '0', effectiveFromYear: 1403, termSortKey: 13 },
+];
+const drafts = mapLegacyFeeRules(legacy);
+eq('تعداد پیش‌نویس‌ها (جمع‌شده + بی‌اثر حذف‌شده)', drafts.length, 2);
+const normal = drafts.find(d => d.termType === 'NORMAL');
+eq('ترم‌های هم‌نوع جمع شدند و جدیدترین نرخ ماند', normal?.fixedTuition, 1500);
+eq('نرخ هر واحد جدیدترین ترم', normal?.perUnitTuition, 60);
+eq('offeringType در پل همیشه خالی است', normal?.offeringType, null);
+eq('ترم تابستان جدا نگه داشته شد', drafts.some(d => d.termType === 'SUMMER' && d.perUnitTuition === 80), true);
+eq('قاعدهٔ کاملاً صفر حذف شد', drafts.some(d => d.degreeLevelId === 2), false);
+
+// خروجی پل باید واقعاً توسط pickFeeRule قابل انتخاب باشد
+const imported = drafts.map((d, i) => ({ id: 100 + i, ...d }));
+eq('قاعدهٔ درون‌ریزی‌شده برای ترم عادی انتخاب می‌شود',
+  pickFeeRule(imported, { degreeLevelId: 1, termType: 'NORMAL', termLevelOnly: true, entryYear: 1403 })?.fixedTuition, 1500);
+eq('همان قاعده به ترم معادل‌سازی نشت نمی‌کند',
+  pickFeeRule(imported, { degreeLevelId: 1, termType: 'EQUIVALENCE', termLevelOnly: true, entryYear: 1403 }), null);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);
