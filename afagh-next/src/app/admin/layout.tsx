@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requireRole } from '@/lib/auth';
 import { logoutAction } from '../login/actions';
+import { navModules } from '@/lib/admin-modules';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRole([
@@ -34,60 +35,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </form>
         </div>
         <nav className="mx-auto flex max-w-6xl flex-wrap gap-2 sm:gap-x-3 gap-y-1.5 px-4 pb-2.5 text-xs sm:text-sm font-medium">
-          <Link href="/admin" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
-            📋 کارتابل گردش کار و جبرانی
-          </Link>
-          <Link href="/admin/students" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
-            🎓 پرونده جامع دانشجویان و پرسنل
-          </Link>
-          <Link href="/admin/admissions" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/40 border border-indigo-700/50 transition-colors whitespace-nowrap">
-            📥 پذیرش سنجش و فرمول‌ساز
-          </Link>
-          <Link href="/admin/curriculum" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
-            📚 کاتالوگ و سرفصل رشته‌ها
-          </Link>
-          <Link href="/admin/regulations" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/40 border border-indigo-700/50 transition-colors whitespace-nowrap">
-            ⚖️ مرکز مدیریت آیین‌نامه‌ها
-          </Link>
-          <Link href="/admin/scheduling" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
-            🗓️ برنامه‌ریزی درسی مدیر گروه
-          </Link>
-          <Link href="/admin/exams" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
-            📝 مدیریت و برنامه‌ریزی امتحانات
-          </Link>
-          <Link href="/admin/templates" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/60 border border-indigo-700/50 transition-colors whitespace-nowrap">
-            📨 قالب‌های پیامک و ارتباطات
-          </Link>
-          <Link href="/admin/archive" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
-            🗄️ بایگانی الکترونیک مدارک
-          </Link>
-          <Link href="/admin/payroll" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap">
-            💼 حقوق و دستمزد
-          </Link>
-          <Link href="/admin/student-cards" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/40 border border-indigo-700/50 transition-colors whitespace-nowrap">
-            🪪 کارت دانشجویی
-          </Link>
-          <Link href="/admin/short-courses" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/40 border border-indigo-700/50 transition-colors whitespace-nowrap">
-            🏆 آموزش‌های آزاد و گواهینامه‌ها
-          </Link>
-          <Link href="/admin/workflows" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/60 border border-indigo-700/50 transition-colors whitespace-nowrap">
-            🔀 فرآیندها، SLA و کارتابل (BPM)
-          </Link>
-          <Link href="/admin/bi" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/60 border border-indigo-700/50 transition-colors whitespace-nowrap">
-            📊 هوش تجاری ارزشیابی (BI)
-          </Link>
-          <Link href="/admin/permissions" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/60 border border-indigo-700/50 transition-colors whitespace-nowrap">
-            🛡️ ماتریس دسترسی‌ها (RBAC)
-          </Link>
-          <Link href="/admin/graduation" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/40 border border-indigo-700/50 transition-colors whitespace-nowrap">
-            🎓 فارغ‌التحصیلی و مدارک
-          </Link>
-          <Link href="/admin/migration" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/40 border border-indigo-700/50 transition-colors whitespace-nowrap">
-            🔄 انتقال داده از سیستم قدیمی
-          </Link>
-          <Link href="/admin/settings" className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 bg-indigo-900/60 border border-indigo-700/50 transition-colors whitespace-nowrap">
-            ⚙️ پیکربندی سامانه
-          </Link>
+          {navModules(user.roles).map(m => (
+            <Link
+              key={m.href}
+              href={m.href}
+              className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap"
+            >
+              {m.icon} {m.title}
+            </Link>
+          ))}
           <Link href="/manual" className="px-3 py-1.5 rounded-lg hover:bg-emerald-800/80 bg-emerald-700/70 border border-emerald-500/50 text-white font-bold transition-colors whitespace-nowrap">
             📖 راهنمای کاربری و PDF
           </Link>

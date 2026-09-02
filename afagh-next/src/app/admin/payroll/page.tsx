@@ -13,7 +13,8 @@ type Tab = 'live' | 'simulator';
  *   • «شبیه‌ساز سناریو» — پیش‌نمایش رابط کاربری با دادهٔ نمونه (بدون نوشتن در دیتابیس)
  */
 export default async function PayrollPage(props: { searchParams?: { tab?: string } }) {
-  await requireRole(['ADMIN', 'EDU_EXPERT']);
+  const user = await requireRole(['ADMIN', 'EDU_EXPERT', 'FINANCE_EXPERT', 'FINANCE']);
+  const isFinance = user.roles.some(r => r === 'FINANCE_EXPERT' || r === 'FINANCE');
 
   const tab: Tab = props.searchParams?.tab === 'simulator' ? 'simulator' : 'live';
 
@@ -38,6 +39,16 @@ export default async function PayrollPage(props: { searchParams?: { tab?: string
           شبیه‌ساز سناریو (دادهٔ نمونه)
         </a>
       </div>
+
+      {isFinance && (
+        <a
+          href="/admin/student-finance"
+          className="flex items-center justify-between rounded-xl border border-emerald-300 bg-emerald-50 p-3.5 text-sm text-emerald-900 hover:bg-emerald-100 transition-colors"
+        >
+          <span className="font-bold">💳 امور مالی دانشجویان — شهریه، دفتر مالی و بدهی دانشجویان</span>
+          <span className="font-extrabold">←</span>
+        </a>
+      )}
 
       {!term ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">

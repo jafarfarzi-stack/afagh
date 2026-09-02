@@ -7,7 +7,7 @@ import StudentsManagerClient from './StudentsManagerClient';
 export const dynamic = 'force-dynamic';
 
 export default async function AdminStudentsPage() {
-  await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT']);
+  await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER']);
 
   // خواندن کلیه دانشجویان با مشخصات سجلی و تحصیلی
   const studentRows = await db
