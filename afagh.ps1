@@ -325,12 +325,27 @@ if ((Run { docker exec afagh_redis_dev redis-cli ping } -Quiet) -eq 0) { Ok "Red
 
 # ── ۶) وابستگی‌ها / دیتابیس / بیلد — فقط در صورت نیاز ─────────────
 $st = LoadState
-$lockHash  = HashOf (Join-Path $Next 'package-lock.json')
+$lockHash  = (HashOf (Join-Path $Next 'package-lock.json')) + '|' + (HashOf (Join-Path $Next 'package.json'))
 $schemaHash= HashOf (Join-Path $Next 'src\db\schema.ts')
 $hardHash  = HashOf (Join-Path $Next 'src\db\pg-hardening.sql')
 
 Step "۴/۶ وابستگی‌ها"
-if ((-not (Test-Path (Join-Path $Next 'node_modules'))) -or ($st.lock -ne $lockHash)) {
+# آیا همهٔ وابستگی‌های package.json واقعاً داخل node_modules هستند؟
+$missing = @()
+$nm = Join-Path $Next 'node_modules'
+try {
+  $pkg = Get-Content (Join-Path $Next 'package.json') -Raw | ConvertFrom-Json
+  $names = @()
+  foreach ($grp in 'dependencies','devDependencies') {
+    if ($pkg.PSObject.Properties.Name -contains $grp -and $pkg.$grp) {
+      $names += $pkg.$grp.PSObject.Properties.Name
+    }
+  }
+  foreach ($n in $names) { if (-not (Test-Path (Join-Path $nm $n))) { $missing += $n } }
+} catch {}
+
+if ((-not (Test-Path $nm)) -or ($st.lock -ne $lockHash) -or ($missing.Count -gt 0)) {
+  if ($missing.Count -gt 0) { Info ("وابستگی‌های نصب‌نشده: " + ($missing -join ', ')) }
   Must $Next { npm install } "npm install ناموفق بود"
   $st.lock = $lockHash
   $st.built = $false
