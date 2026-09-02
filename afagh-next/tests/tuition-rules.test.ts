@@ -1,0 +1,67 @@
+/**
+ * تست موتور انتخاب قاعدهٔ شهریه — مستقیماً روی کد واقعی اجرا می‌شود:
+ *     npm test
+ *
+ * چون src/lib/tuition-rules.ts هیچ وابستگی به دیتابیس یا Next ندارد، بدون
+ * نیاز به PostgreSQL قابل اجراست.
+ */
+import { pickFeeRule, toNum } from '../src/lib/tuition-rules.ts';
+
+let pass = 0;
+let fail = 0;
+const eq = (name: string, got: unknown, want: unknown) => {
+  const ok = JSON.stringify(got) === JSON.stringify(want);
+  if (ok) { pass++; console.log(`  ✓ ${name}`); }
+  else { fail++; console.log(`  ✗ ${name}\n      got:  ${JSON.stringify(got)}\n      want: ${JSON.stringify(want)}`); }
+};
+
+// قواعد نمونه (مقطع ۱ = کارشناسی):
+//  A(1): عمومی، بدون کلید              → ثابت ۱۰۰۰، هر واحد ۱۰۰
+//  B(2): نوع ترم NORMAL                → ثابت ۲۰۰۰
+//  C(3): نوع ترم EQUIVALENCE           → ثابت ۵۰۰۰
+//  D(4): نوع ترم NORMAL + درس TRANSFER → هر واحد ۹۰۰ (نرخ معادل‌سازی)
+//  E(5): مقطع ۱ + نوع ترم EQUIVALENCE  → ثابت ۷۰۰۰
+const rules = [
+  { id: 1, degreeLevelId: null, termType: null,          offeringType: null,       fixedTuition: '1000', perUnitTuition: '100', effectiveFromYear: null },
+  { id: 2, degreeLevelId: null, termType: 'NORMAL',      offeringType: null,       fixedTuition: '2000', perUnitTuition: '0',   effectiveFromYear: null },
+  { id: 3, degreeLevelId: null, termType: 'EQUIVALENCE', offeringType: null,       fixedTuition: '5000', perUnitTuition: '0',   effectiveFromYear: null },
+  { id: 4, degreeLevelId: null, termType: 'NORMAL',      offeringType: 'TRANSFER', fixedTuition: '0',    perUnitTuition: '900', effectiveFromYear: null },
+  { id: 5, degreeLevelId: 1,    termType: 'EQUIVALENCE', offeringType: null,       fixedTuition: '7000', perUnitTuition: '0',   effectiveFromYear: null },
+];
+
+console.log('\n۱) شهریهٔ ثابت فقط از قواعد سطح ترم می‌آید (نه قاعدهٔ مخصوص نوع درس)');
+eq('بدون termLevelOnly قاعدهٔ مقید به TRANSFER برنده می‌شد (ریشهٔ باگ)',
+  pickFeeRule(rules, { degreeLevelId: 1, termType: 'NORMAL', offeringType: null })?.id, 4);
+const fixed = pickFeeRule(rules, { degreeLevelId: 1, termType: 'NORMAL', termLevelOnly: true });
+eq('با termLevelOnly قاعدهٔ سطح ترم (B) برنده است', fixed?.id, 2);
+eq('شهریهٔ ثابت ترم عادی = ۲۰۰۰', fixed?.fixedTuition, 2000);
+
+console.log('\n۲) شهریهٔ ثابت ترم معادل‌سازی از قاعدهٔ سطح ترمِ همان نوع می‌آید');
+const eqFixed = pickFeeRule(rules, { degreeLevelId: 1, termType: 'EQUIVALENCE', termLevelOnly: true });
+eq('قاعدهٔ E (مقطع + نوع ترم) برنده است', eqFixed?.id, 5);
+eq('شهریهٔ ثابت معادل‌سازی = ۷۰۰۰', eqFixed?.fixedTuition, 7000);
+
+console.log('\n۳) شهریهٔ متغیر بر اساس نوع گذراندن درس');
+eq('درس TRANSFER → قاعدهٔ D', pickFeeRule(rules, { degreeLevelId: 1, termType: 'NORMAL', offeringType: 'TRANSFER' })?.id, 4);
+eq('نرخ هر واحد معادل‌سازی = ۹۰۰', pickFeeRule(rules, { degreeLevelId: 1, termType: 'NORMAL', offeringType: 'TRANSFER' })?.perUnitTuition, 900);
+eq('درس NORMAL → قاعدهٔ D تطبیق نمی‌خورد، B می‌آید', pickFeeRule(rules, { degreeLevelId: 1, termType: 'NORMAL', offeringType: 'NORMAL' })?.id, 2);
+eq('ترم تابستان → نرخ عمومی ۱۰۰', pickFeeRule(rules, { degreeLevelId: 1, termType: 'SUMMER', offeringType: 'NORMAL' })?.perUnitTuition, 100);
+
+console.log('\n۴) اولویت خاص‌بودن و شکنندهٔ تساوی');
+eq('مقطع‌دار بر بدون‌مقطع مقدم است', pickFeeRule(rules, { degreeLevelId: 1, termType: 'EQUIVALENCE', termLevelOnly: true })?.id, 5);
+eq('برای مقطع دیگر (۲) قاعدهٔ مقطع‌دار تطبیق نمی‌خورد', pickFeeRule(rules, { degreeLevelId: 2, termType: 'EQUIVALENCE', termLevelOnly: true })?.id, 3);
+const ties = [
+  { id: 10, degreeLevelId: null, termType: null, offeringType: null, fixedTuition: '1', perUnitTuition: '0', effectiveFromYear: 1400 },
+  { id: 11, degreeLevelId: null, termType: null, offeringType: null, fixedTuition: '2', perUnitTuition: '0', effectiveFromYear: 1403 },
+];
+eq('ورودی جدیدتر برنده است', pickFeeRule(ties, { degreeLevelId: null, termType: 'NORMAL', entryYear: 1404 })?.id, 11);
+eq('قاعدهٔ مؤثر در آینده کنار گذاشته می‌شود', pickFeeRule(ties, { degreeLevelId: null, termType: 'NORMAL', entryYear: 1401 })?.id, 10);
+
+console.log('\n۵) رفتارهای لبه‌ای');
+eq('بدون قاعدهٔ منطبق → null', pickFeeRule([], { degreeLevelId: 1, termType: 'NORMAL' }), null);
+eq('toNum رشتهٔ عددی را عدد می‌کند', toNum('1250'), 1250);
+eq('toNum برای مقدار نامعتبر صفر می‌دهد', toNum('abc'), 0);
+eq('toNum برای null صفر می‌دهد', toNum(null), 0);
+
+console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
+process.exit(fail === 0 ? 0 : 1);

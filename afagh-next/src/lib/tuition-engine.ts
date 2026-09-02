@@ -17,68 +17,21 @@ import {
  *   - شهریهٔ متغیر: به ازای هر واحد، بر اساس نوع گذراندن همان درس
  */
 
-export type TermType = 'NORMAL' | 'SUMMER' | 'EQUIVALENCE';
+// منطق خالص انتخاب قاعده در ماژول جداگانه است تا بدون دیتابیس قابل تست باشد
+export { pickFeeRule, toNum } from './tuition-rules';
+export type { TermType, ResolvedRule, FeeRuleParams, FeeRuleLike } from './tuition-rules';
+import { pickFeeRule, toNum, type FeeRuleParams, type ResolvedRule, type TermType } from './tuition-rules';
 
-export interface ResolvedRule {
-  id: number;
-  fixedTuition: number;
-  perUnitTuition: number;
-  degreeLevelId: number | null;
-  termType: string | null;
-  offeringType: string | null;
+type FeeRuleRow = typeof tuition_fee_rules.$inferSelect;
+
+/** خواندن همهٔ قواعد فعال شهریه (یک کوئری) */
+export async function loadActiveFeeRules(): Promise<FeeRuleRow[]> {
+  return db.select().from(tuition_fee_rules).where(eq(tuition_fee_rules.isActive, 1));
 }
 
-const toNum = (v: unknown): number => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-};
-
-/**
- * انتخاب خاص‌ترین قاعدهٔ فعالِ منطبق. خاص‌بودن = تعداد کلیدهای غیرخالی بیشتر
- * (مقطع، نوع ترم، نوع درس). تساوی → جدیدترین effectiveFromYear و سپس id بزرگ‌تر.
- */
-export async function resolveFeeRule(params: {
-  degreeLevelId: number | null;
-  termType: TermType | string | null;
-  offeringType?: string | null;
-  entryYear?: number | null;
-}): Promise<ResolvedRule | null> {
-  const rows = await db
-    .select()
-    .from(tuition_fee_rules)
-    .where(eq(tuition_fee_rules.isActive, 1));
-
-  const matches = rows.filter((r) => {
-    if (r.degreeLevelId != null && params.degreeLevelId != null && r.degreeLevelId !== params.degreeLevelId) return false;
-    if (r.degreeLevelId != null && params.degreeLevelId == null) return false;
-    if (r.termType && params.termType && r.termType !== params.termType) return false;
-    if (r.offeringType && params.offeringType && r.offeringType !== params.offeringType) return false;
-    if (r.effectiveFromYear != null && params.entryYear != null && r.effectiveFromYear > params.entryYear) return false;
-    return true;
-  });
-
-  if (matches.length === 0) return null;
-
-  const specificity = (r: (typeof matches)[number]) =>
-    (r.degreeLevelId != null ? 1 : 0) + (r.termType ? 1 : 0) + (r.offeringType ? 1 : 0);
-
-  matches.sort((a, b) => {
-    const s = specificity(b) - specificity(a);
-    if (s !== 0) return s;
-    const y = (b.effectiveFromYear ?? 0) - (a.effectiveFromYear ?? 0);
-    if (y !== 0) return y;
-    return b.id - a.id;
-  });
-
-  const best = matches[0];
-  return {
-    id: best.id,
-    fixedTuition: toNum(best.fixedTuition),
-    perUnitTuition: toNum(best.perUnitTuition),
-    degreeLevelId: best.degreeLevelId,
-    termType: best.termType,
-    offeringType: best.offeringType,
-  };
+/** همان انتخاب خاص‌ترین قاعده، با خواندن قواعد از دیتابیس */
+export async function resolveFeeRule(params: FeeRuleParams): Promise<ResolvedRule | null> {
+  return pickFeeRule(await loadActiveFeeRules(), params);
 }
 
 export interface TuitionLine {
@@ -119,8 +72,11 @@ export async function computeTermTuition(studentId: number, termId: number): Pro
   const degreeLevelId = stu?.degreeLevelId ?? null;
   const entryYear = stu?.entryYear ?? null;
 
-  // شهریهٔ ثابت — یک‌بار به ازای نوع ترم (قاعدهٔ بدون offeringType)
-  const fixedRule = await resolveFeeRule({ degreeLevelId, termType, offeringType: null, entryYear });
+  // قواعد شهریه یک‌بار خوانده می‌شوند تا به ازای هر درس کوئری تکراری نزنیم
+  const feeRules = await loadActiveFeeRules();
+
+  // شهریهٔ ثابت — یک‌بار به ازای نوع ترم؛ فقط از قواعد سطح ترم (بدون offeringType)
+  const fixedRule = pickFeeRule(feeRules, { degreeLevelId, termType, entryYear, termLevelOnly: true });
   const fixedTuition = fixedRule?.fixedTuition ?? 0;
 
   // دروس ثبت‌شدهٔ دانشجو در این ترم + نوع گذراندن هر درس
@@ -140,7 +96,7 @@ export async function computeTermTuition(studentId: number, termId: number): Pro
   let variableTuition = 0;
   for (const r of rows) {
     const units = toNum(r.units);
-    const rule = await resolveFeeRule({ degreeLevelId, termType, offeringType: r.offeringType, entryYear });
+    const rule = pickFeeRule(feeRules, { degreeLevelId, termType, offeringType: r.offeringType, entryYear });
     const perUnit = rule?.perUnitTuition ?? fixedRule?.perUnitTuition ?? 0;
     const amount = Math.round(units * perUnit);
     variableTuition += amount;
