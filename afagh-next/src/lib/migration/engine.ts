@@ -2,8 +2,8 @@ import { randomBytes, scryptSync } from 'crypto';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import {
-  academic_terms, course_offerings, courses, enrollments, financial_clearances, majors,
-  migration_runs, student_ledger, students, users,
+  academic_terms, course_offerings, courses, degree_level_configs, educational_regulations,
+  enrollments, financial_clearances, majors, migration_runs, student_ledger, students, users,
 } from '@/db/schema';
 import { boolFa, checkNationalCode, dateFa, norm, num } from './normalize';
 import { iterate, pickTable, type Table } from './tabular';
@@ -15,7 +15,7 @@ import { resolverFor } from './codemap';
 
 export type Entity = 'student' | 'course' | 'term' | 'enrollment' | 'ledger' | 'clearance';
 export const ENTITIES: { id: Entity; title: string; sample: string }[] = [
-  { id: 'student', title: 'دانشجویان (هویت + پرونده)', sample: 'کد ملی, نام, نام خانوادگی, شماره دانشجویی, سال ورود, رشته, وضعیت' },
+  { id: 'student', title: 'دانشجویان (هویت + پرونده)', sample: 'کد ملی, نام, نام خانوادگی, شماره دانشجویی, سال ورود, مقطع, رشته, وضعیت, شماره شناسنامه, نام پدر, تاریخ تولد, محل تولد, جنسیت' },
   { id: 'course', title: 'دروس', sample: 'کد درس, نام درس, واحد, نوع' },
   { id: 'term', title: 'ترم‌ها', sample: 'کد ترم, عنوان ترم, ترم جاری' },
   { id: 'enrollment', title: 'ثبت‌نام‌ها و نمرات (آموزشی)', sample: 'شماره دانشجویی, کد درس, کد ترم, نمره, وضعیت نمره' },
@@ -38,6 +38,10 @@ const STUDENT_STATUS: Record<string, string> = {
   'اخراج': 'EXPELLED', 'انصراف': 'EXPELLED', 'expelled': 'EXPELLED',
 };
 const GRADE_STATUS: Record<string, string> = { 'قطعی': 'FINALIZED', 'موقت': 'TEMPORARY', 'finalized': 'FINALIZED', 'temporary': 'TEMPORARY' };
+const GENDER: Record<string, string> = {
+  'مرد': 'MALE', 'مذکر': 'MALE', 'male': 'MALE', 'm': 'MALE',
+  'زن': 'FEMALE', 'مونث': 'FEMALE', 'female': 'FEMALE', 'f': 'FEMALE',
+};
 const TX_TYPE: Record<string, string> = {
   'بدهی': 'DEBIT', 'قبض': 'DEBIT', 'debit': 'DEBIT', 'طلب': 'CREDIT', 'بستانکار': 'CREDIT',
   'پرداخت': 'CREDIT', 'واریز': 'CREDIT', 'credit': 'CREDIT', 'برگشت': 'CREDIT',
@@ -86,15 +90,33 @@ function prepare(entity: Entity, tables: Table[], fileName: string): Prepared {
       const code = get(['شماره دانشجویی', 'شمارهدانشجویی', 'student_code', 'studentcode']);
       const entryYear = num(get(['سال ورود', 'ورودی', 'entry_year']));
       const majorName = get(['رشته', 'گرایش', 'major']);
+      const degreeName = get(['مقطع', 'مقطع تحصیلی', 'سطح', 'degree', 'degree_level']);
       const statusFa = get(['وضعیت']) || 'فعال';
+      // اطلاعات شناسنامه‌ای (اختیاری در فایل قدیمی، ولی برای اسناد رسمی لازم است)
+      const birthCertNo = get(['شماره شناسنامه', 'شمارهشناسنامه', 'birth_cert_no', 'shenasname']);
+      const birthCertSeries = get(['سریال شناسنامه', 'سری شناسنامه', 'birth_cert_series', 'series']);
+      const placeOfBirth = get(['محل تولد', 'محلتولد', 'place_of_birth', 'birth_place']);
+      const placeOfIssue = get(['محل صدور', 'محلصدور', 'place_of_issue']);
+      const birthDate = dateFa(get(['تاریخ تولد', 'تاریختولد', 'birth_date', 'birthdate']));
+      const fatherName = get(['نام پدر', 'نامپدر', 'father_name', 'father']);
+      const genderFa = get(['جنسیت', 'جنس', 'gender', 'sex']);
+      const address = get(['آدرس', 'نشانی', 'address']);
       if (!nc || !first || !last || !code) return err('کد ملی/نام/نام خانوادگی/شماره دانشجویی الزامی است.');
       const chk = checkNationalCode(nc);
       if (chk === 'format') return err(`کد ملی نامعتبر: ${nc}`);
       if (chk === 'checksum') warn(`چک‌سام کد ملی ${nc} منطبق نیست (ثبت می‌شود — در سیستم قدیمی هم رایج است).`);
       if (!/^\d{8,14}$/.test(code)) return err(`شماره دانشجویی نامعتبر: ${code}`);
       if (!entryYear || entryYear < 1330 || entryYear > 1410) warn(`سال ورود نامعمول: ${entryYear}`);
+      if (!degreeName) warn(`مقطع ذکر نشده — رشته ممکن است با مقطع دیگر هم‌نام باشد و اشتباه تطبیق یابد.`);
       const status = STUDENT_STATUS[statusFa] ?? (/^[A-Z_]+$/.test(statusFa) ? statusFa : 'ACTIVE');
-      rows.push({ nationalCode: nc, firstName: first, lastName: last, studentCode: code, entryYear: entryYear ?? 1400, majorName, status });
+      const gender = GENDER[genderFa ?? ''] ?? (/^(MALE|FEMALE)$/i.test(genderFa ?? '') ? (genderFa as string).toUpperCase() : null);
+      rows.push({
+        nationalCode: nc, firstName: first, lastName: last, studentCode: code,
+        entryYear: entryYear ?? 1400, majorName, degreeName: degreeName || null, status,
+        birthCertNo: birthCertNo || null, birthCertSeries: birthCertSeries || null,
+        placeOfBirth: placeOfBirth || null, placeOfIssue: placeOfIssue || null,
+        birthDate: birthDate ?? null, fatherName: fatherName || null, gender, address: address || null,
+      });
     }
 
     if (entity === 'course') {
@@ -195,24 +217,55 @@ export async function commit(userId: number, entity: Entity, tables: Table[], fi
   let inserted = 0; let existing = 0;
 
   if (entity === 'student') {
-    const degId = 1;   // کارشناسی پیوسته (پیش‌فرض مهاجرت — در کد قابل تنظیم)
-    const regId = 1;   // آیین‌نامهٔ پیش‌فرض کارشناسی
     const majorRows = await db.select().from(majors);
+    const degreeRows = await db.select().from(degree_level_configs);
+    const regRows = await db.select().from(educational_regulations);
     const majorMap = await resolverFor(sourceCode, 'MAJOR');       // میز تطبیق کدها
+    const degreeMap = await resolverFor(sourceCode, 'DEGREE');     // میز تطبیق مقطع
     const statusMap = await resolverFor(sourceCode, 'STUDENT_STATUS');
     for (const r of rows) {
-      const key = norm(String(r.majorName));
-      const mapped = majorMap.get(key);
+      const mKey = norm(String(r.majorName));
+      // ── حل مقطع: از میز تطبیق، سپس تطبیق عنوان/کد با degree_level_configs ──
+      const dKey = norm(String(r.degreeName ?? ''));
+      let degree: (typeof degreeRows)[number] | null = null;
+      if (dKey) {
+        degree = (degreeMap.get(dKey)?.id ? degreeRows.find(d => d.id === degreeMap.get(dKey)!.id) : null)
+          ?? degreeRows.find(d => norm(d.title) === dKey)
+          ?? degreeRows.find(d => norm(d.code) === dKey)
+          ?? null;
+        if (!degree) report.warnings.push({ row: 0, msg: `مقطع «${r.degreeName}» تطبیق نخورد — رشته/آیین‌نامه بدون مقطع انتخاب می‌شود.` });
+      }
+      const degId = degree?.id ?? null;
+
+      // ── تطبیق رشته با در نظر گرفتن مقطع (یک رشته ممکن است در دو مقطع هم‌نام باشد) ──
+      const mapped = majorMap.get(mKey);
+      const sameDegree = (m: (typeof majorRows)[number]) => degId == null || m.degreeLevelId === degId;
       const major = (mapped?.id ? majorRows.find(m => m.id === mapped.id) : null)
-        ?? majorRows.find(m => norm(m.name) === key)
-        ?? majorRows.find(m => norm(m.majorCode ?? '') === key)
+        ?? majorRows.find(m => norm(m.name) === mKey && sameDegree(m))
+        ?? majorRows.find(m => norm(m.majorCode ?? '') === mKey && sameDegree(m))
         ?? null;
-      if (String(r.majorName) && !major) report.warnings.push({ row: 0, msg: `رشتهٔ «${r.majorName}» تطبیق نخورد — بدون رشته ثبت شد (میز تطبیق کدها).` });
+      if (String(r.majorName) && !major) report.warnings.push({ row: 0, msg: `رشتهٔ «${r.majorName}»${degId ? ` (مقطع ${r.degreeName})` : ''} تطبیق نخورد — بدون رشته ثبت شد (میز تطبیق کدها).` });
+
+      // ── آیین‌نامه: متناسب با مقطع و سال ورود (بدون مقدار سخت‌کد) ──
+      const entryYr = Number(r.entryYear);
+      const regForDegree = regRows
+        .filter(g => (degId == null ? true : g.degreeLevelId === degId))
+        .filter(g => g.effectiveFromYear <= entryYr && (g.effectiveToYear == null || g.effectiveToYear >= entryYr));
+      const reg = regForDegree[0]
+        ?? regRows.filter(g => degId == null ? true : g.degreeLevelId === degId)[0]
+        ?? regRows[0]
+        ?? null;
+      if (!reg) { report.errors.push({ row: 0, msg: `آیین‌نامه‌ای برای مقطع «${r.degreeName ?? 'نامعلوم'}» یافت نشد — ابتدا مقاطع و آیین‌نامه‌ها را تعریف کنید.` }); continue; }
+
       const mappedStatus = statusMap.get(norm(String(r.status)))?.code;
       if (mappedStatus) r.status = mappedStatus;
       const res = await db.transaction(async tx => {
         let [u] = await tx.insert(users).values({
           nationalCode: String(r.nationalCode), firstName: String(r.firstName), lastName: String(r.lastName),
+          birthCertNo: r.birthCertNo as string | null, birthCertSeries: r.birthCertSeries as string | null,
+          placeOfBirth: r.placeOfBirth as string | null, placeOfIssue: r.placeOfIssue as string | null,
+          birthDate: (r.birthDate as Date | null) ?? null, fatherName: r.fatherName as string | null,
+          gender: r.gender as string | null, address: r.address as string | null,
           passwordHash: hashDefault(String(r.nationalCode)),   // رمز اولیه = کد ملی (کاربر بعداً عوض می‌کند)
         }).onConflictDoNothing().returning({ id: users.id });
         if (!u) {
@@ -222,7 +275,7 @@ export async function commit(userId: number, entity: Entity, tables: Table[], fi
         }
         const [st] = await tx.insert(students).values({
           userId: u.id, studentCode: String(r.studentCode), majorId: major?.id ?? null,
-          degreeLevelId: degId, regulationId: regId, entryYear: Number(r.entryYear), entryTerm: 1, status: String(r.status),
+          degreeLevelId: reg.degreeLevelId, regulationId: reg.id, entryYear: entryYr, entryTerm: 1, status: String(r.status),
         }).onConflictDoNothing().returning({ id: students.id });
         return !!st;
       });

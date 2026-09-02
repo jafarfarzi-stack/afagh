@@ -47,6 +47,8 @@ Ok "PostgreSQL آماده است"
 Step "۳/۴ نصب وابستگی‌ها و بیلد پروداکشن"
 Push-Location $Next
 npm install --no-audit --no-fund
+# اعمال تغییرات ساختار پایگاه داده (ستون‌های جدید) — افزودنی و غیرمخرب
+npx drizzle-kit push --force
 npm run build
 if ($LASTEXITCODE -ne 0) { Pop-Location; Warn "بیلد ناموفق بود"; exit 1 }
 Pop-Location

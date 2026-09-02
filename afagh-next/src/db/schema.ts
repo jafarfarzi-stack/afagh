@@ -33,6 +33,15 @@ export const users = pgTable('users', {
   lastName: varchar('lastName', { length: 100 }).notNull(),
   mobile: varchar('mobile', { length: 11 }),
   email: varchar('email', { length: 150 }),
+  // ── اطلاعات شناسنامه‌ای (هویت ثبت‌احوال) — برای مهاجرت از سیستم قدیم و صدور اسناد رسمی ──
+  birthCertNo: varchar('birthCertNo', { length: 20 }),        // شماره شناسنامه
+  birthCertSeries: varchar('birthCertSeries', { length: 30 }), // سریال شناسنامه (سری/سریال)
+  placeOfBirth: varchar('placeOfBirth', { length: 150 }),      // محل تولد
+  placeOfIssue: varchar('placeOfIssue', { length: 150 }),      // محل صدور شناسنامه
+  birthDate: timestamp('birthDate'),                           // تاریخ تولد
+  fatherName: varchar('fatherName', { length: 100 }),          // نام پدر
+  gender: varchar('gender', { length: 10 }),                   // جنسیت: MALE / FEMALE
+  address: varchar('address', { length: 300 }),                // نشانی پستی
   passwordHash: varchar('passwordHash', { length: 255 }).notNull(),
   isActive: integer('isActive').default(1),
   createdAt: timestamp('createdAt').defaultNow()
