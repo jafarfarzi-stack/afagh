@@ -1,5 +1,6 @@
 import 'server-only';
 import { inArray } from 'drizzle-orm';
+import { toJalaliFromDate } from '@/lib/calendar';
 import { db } from '@/db';
 import { system_settings } from '@/db/schema';
 
@@ -36,6 +37,7 @@ export const SETTING_GROUPS = [
   'درگاه پرداخت',
   'سرویس‌های استعلام دولتی',
   'فارغ‌التحصیلی و صدور مدارک',
+  'گردش کار و حق‌التدریس',
   'زیرساخت (فقط ENV)',
 ] as const;
 
@@ -107,6 +109,18 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'ALUMNI_FEE_RELEASE', env: 'ALUMNI_FEE_RELEASE', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'هزینهٔ آزادسازی مدرک (ریال)', type: 'number', default: '0' },
   { key: 'ALUMNI_FEE_TRANSLATION', env: 'ALUMNI_FEE_TRANSLATION', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'هزینهٔ تأییدیه برای دارالترجمه (ریال)', type: 'number', default: '0' },
   { key: 'ALUMNI_FEE_DUPLICATE', env: 'ALUMNI_FEE_DUPLICATE', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'هزینهٔ صدور المثنی (ریال)', type: 'number', default: '0' },
+
+  // ── گردش کار و حق‌التدریس ──
+  { key: 'WORKFLOW_WEBHOOK_URL', env: 'WORKFLOW_WEBHOOK_URL', group: 'گردش کار و حق‌التدریس', label: 'وب‌هوک رویدادهای گردش کار', type: 'url', default: '', help: 'خالی = فقط هندلرهای داخلی. در صورت پر بودن، خلاصهٔ هر رویداد به این نشانی POST می‌شود' },
+  { key: 'REQ_TRACKING_PREFIX', env: 'REQ_TRACKING_PREFIX', group: 'گردش کار و حق‌التدریس', label: 'پیشوند کد رهگیری درخواست‌ها', type: 'text', default: 'REQ' },
+  { key: 'FA_YEAR', env: 'FA_YEAR', group: 'گردش کار و حق‌التدریس', label: 'سال مالی/تحصیلی (شمسی)', type: 'text', default: '', help: 'خالی = محاسبهٔ خودکار از تاریخ روز؛ برای سال تحصیلی خاص عدد وارد کنید (مثلاً ۱۴۰۵)' },
+  { key: 'PAYROLL_TERM_SESSIONS', env: 'PAYROLL_TERM_SESSIONS', group: 'گردش کار و حق‌التدریس', label: 'جلسات مبنای ترم (حق‌التدریس)', type: 'number', default: '16', help: 'مبنای تناسب کسر غیبت، وقتی برای کلاس هیچ جلسه‌ای ثبت نشده باشد' },
+  { key: 'PAYROLL_MIDTERM_PERCENT', env: 'PAYROLL_MIDTERM_PERCENT', group: 'گردش کار و حق‌التدریس', label: 'درصد علی‌الحساب میان‌ترم', type: 'number', default: '40' },
+  { key: 'PAYROLL_CROWDED_THRESHOLD', env: 'PAYROLL_CROWDED_THRESHOLD', group: 'گردش کار و حق‌التدریس', label: 'حدنصاب کلاس پرجمعیت (نفر)', type: 'number', default: '40' },
+  { key: 'PAYROLL_COEF_PRACTICAL', env: 'PAYROLL_COEF_PRACTICAL', group: 'گردش کار و حق‌التدریس', label: 'نام ردیف ضریب درس عملی', type: 'text', default: 'ضریب درس عملی', help: 'نام ردیف در جدول teaching_coefficients؛ مقدار از همان جدول خوانده می‌شود' },
+  { key: 'PAYROLL_COEF_MS_LEVEL', env: 'PAYROLL_COEF_MS_LEVEL', group: 'گردش کار و حق‌التدریس', label: 'نام ردیف ضریب مقطع ارشد', type: 'text', default: 'ضریب مقطع ارشد' },
+  { key: 'PAYROLL_COEF_CROWDED', env: 'PAYROLL_COEF_CROWDED', group: 'گردش کار و حق‌التدریس', label: 'نام ردیف ضریب کلاس جمعی', type: 'text', default: 'ضریب کلاس جمعی (>۴۰ نفر)' },
+  { key: 'PAYROLL_MS_COURSE_PREFIX', env: 'PAYROLL_MS_COURSE_PREFIX', group: 'گردش کار و حق‌التدریس', label: 'پیشوند کد دروس کارشناسی ارشد', type: 'text', default: '21', help: 'کد دروسی که با این رقم شروع می‌شوند مشمول ضریب مقطع ارشد‌اند (با ویرگول)' },
 
   // ── زیرساخت (فقط ENV) ──
   { key: 'DATABASE_URL', env: 'DATABASE_URL', group: 'زیرساخت (فقط ENV)', label: 'اتصال PostgreSQL', type: 'secret', default: 'postgres://afagh:afagh@localhost:5432/afagh_db', envOnly: true },
@@ -246,4 +260,17 @@ export async function getPaymentCallbackUrl(): Promise<string> {
   const explicit = await getSetting('PAY_CALLBACK_URL');
   if (explicit) return explicit;
   return (await getPublicBaseUrl()) + '/api/payment/callback';
+}
+
+// ════════ سال تحصیلی/مالی شمسی ════════
+
+/**
+ * سال تحصیلی جاری:
+ *   ۱) تنظیم FA_YEAR (دیتابیس/ENV) — اختیار کامل دست مدیر
+ *   ۲) در غیر این صورت محاسبهٔ خودکار از تاریخ روز (تقویم جلالی)
+ */
+export async function getFiscalYear(): Promise<string> {
+  const v = (await getSetting('FA_YEAR')).trim();
+  if (v) return v;
+  return String(toJalaliFromDate(new Date()).jy);
 }

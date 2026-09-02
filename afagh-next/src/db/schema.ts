@@ -1435,6 +1435,29 @@ export const notification_channels = pgTable('notification_channels', {
   createdAt: timestamp('createdAt').defaultNow()
 }, (t) => ({ uq: unique('uq_notification_channels').on(t.userId, t.channel) }));
 
+// ═══ رویدادهای موتور گردش کار (Workflow Event Bus) ═══
+// موتور BPM فقط وضعیت‌ها را جابه‌جا می‌کند؛ اثر تجاری هر فرایند (مثلاً ثبت درس
+// تطبیق‌داده‌شده در کارنامه) در «هندلر» همان ماژول اجرا می‌شود. رویداد پیش از
+// commitِ تراکنشِ گردش کار به‌صورت PENDING ثبت می‌شود تا اگر سرویس وسط کار
+// خاموش شد، رد آن در دیتابیس باشد و بتوان دوباره اجرا/واگرد کرد.
+
+/** رویدادهای شلیک‌شده توسط موتور گردش کار و نتیجهٔ پردازش هر هندلر */
+export const workflow_events = pgTable('workflow_events', {
+  id: serial('id').primaryKey(),
+  requestId: integer('requestId').notNull().references(() => student_requests.id),
+  processCode: varchar('processCode', { length: 50 }).notNull(),
+  eventCode: varchar('eventCode', { length: 60 }).notNull(),   // WORKFLOW_FINAL_APPROVED | WORKFLOW_REJECTED | ...
+  payload: text('payload'),                                   // JSON — دادهٔ مورد نیاز هندلرها
+  handler: varchar('handler', { length: 60 }).notNull(),      // نام هندلر (مثلاً COURSE_TRANSFER)
+  status: varchar('status', { length: 20 }).notNull().default('PENDING'), // PENDING|PROCESSED|FAILED|SKIPPED
+  error: text('error'),
+  attempts: integer('attempts').notNull().default(0),
+  firedAt: timestamp('firedAt').defaultNow(),
+  processedAt: timestamp('processedAt')
+});
+
+// ═══ گزارش تحویل پیام‌های بیرونی ═══
+
 /** گزارش تحویل هر پیام بیرونی — برای پیگیری و ممیزی */
 export const notification_deliveries = pgTable('notification_deliveries', {
   id: serial('id').primaryKey(),

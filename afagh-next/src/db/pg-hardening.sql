@@ -115,3 +115,18 @@ CREATE POLICY notif_self_ins ON "notifications" FOR INSERT TO afagh_app
 
 -- ⑤ نگهداشت: VACUUM FULL در ساعات کم‌ترافیک + حذف ایندکس‌های بدون استفاده (سند §۲۱۳۰)
 -- cron: 0 3 * * 6  psql -c 'VACUUM (ANALYZE, VERBOSE);'
+
+-- ⑥ قیدهای یکتایی که در schema.ts تعریف شده‌اند
+--    `drizzle-kit push` این قیدهای نام‌دار را همیشه نمی‌سازد، ولی کد اپ در چند
+--    مسیر (ثبت درس تطبیق‌شده، کانال‌های اعلان) به `ON CONFLICT` روی همین ستون‌ها
+--    تکیه می‌کند؛ نبودِ قید = خطای 42P10 در زمان اجرا. اینجا idempotent ساخته
+--    می‌شوند و پیش از آن، ردیفهای تکراریِ احتمالی پاک می‌شوند.
+DELETE FROM "enrollments" a USING "enrollments" b
+ WHERE a.id > b.id AND a."studentId" = b."studentId" AND a."offeringId" = b."offeringId";
+ALTER TABLE "enrollments" DROP CONSTRAINT IF EXISTS "uq_enrollments";
+ALTER TABLE "enrollments" ADD CONSTRAINT "uq_enrollments" UNIQUE ("studentId", "offeringId");
+
+DELETE FROM "notification_channels" a USING "notification_channels" b
+ WHERE a.id > b.id AND a."userId" = b."userId" AND a.channel = b.channel;
+ALTER TABLE "notification_channels" DROP CONSTRAINT IF EXISTS "uq_notification_channels";
+ALTER TABLE "notification_channels" ADD CONSTRAINT "uq_notification_channels" UNIQUE ("userId", channel);

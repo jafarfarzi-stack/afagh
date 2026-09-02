@@ -4,20 +4,402 @@ import { db } from '@/db';
 import {
   academic_terms,
   course_offerings,
-  courses,
   enrollments,
   notifications,
   process_definitions,
   process_steps,
-  process_transitions,
   request_parallel_checkpoints,
   request_step_logs,
-  staff,
   student_ledger,
   student_requests,
   students,
-  users,
 } from '@/db/schema';
+import { getFiscalYear, getSetting } from '@/lib/settings';
+import { dispatchWorkflowEvent, fireWorkflowEvent, type WorkflowEventCode } from '@/lib/workflow-events';
+import { notifyUserMultichannel } from '@/lib/messaging';
+import { createLogger } from '@/lib/logger';
+// import با اثر جانبی عمدی: بارگذاری این فایل، هندلرهای رویداد را رجیستر می‌کند
+import '@/lib/workflow-handlers';
+
+// ══════════════════════════════════════════════════════════════════════
+//  موتور گردش کار (BPM) — نسخهٔ تراکنشی
+//
+//  سه اصل حاکم بر این فایل:
+//   ۱) اتمیک بودن: هر تصمیم روی پرونده (تأیید/رد/ارجاع/تسویهٔ موازی) در یک
+//      `db.transaction` انجام می‌شود؛ یا همهٔ نوشتن‌ها می‌نشینند یا هیچ‌کدام.
+//      پیش از این، لاگ مرحله و وضعیت درخواست در دو کوئری جدا نوشته می‌شد و
+//      خاموش‌شدن سرویس بین آن دو، پروندهٔ ناقص به جا می‌گذاشت.
+//   ۲) همزمانی: سطر پرونده با `for update` قفل می‌شود تا دو کارشناس (یا cron
+//      و کارشناس) همزمان یک مرحله را دوبار پیش نبرند؛ پروندهٔ مختومه هم
+//      idempotent برخورد می‌شود.
+//   ۳) جداسازی دغدغه‌ها: موتور فقط وضعیت جابه‌جا می‌کند و در لحظهٔ تصمیم
+//      «رویداد» شلیک می‌کند. اثر تجاری (مثلاً ثبت درس تطبیق‌شده) در ماژول
+//      صاحب اثر اجرا می‌شود — فایل workflow-handlers.ts.
+// ══════════════════════════════════════════════════════════════════════
+
+const log = createLogger({ mod: 'workflow.engine' });
+
+export type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+/** هر مجری کوئری — اتصال معمولی یا تراکنش */
+export type DbLike = DbTx | typeof db;
+
+/** اجرا در تراکنش — اگر از بیرون تراکنشی داده شد، در همان ادامه می‌یابد (بدون تودرتو) */
+async function inTx<T>(tx: DbTx | undefined, fn: (t: DbTx) => Promise<T>): Promise<T> {
+  if (tx) return fn(tx);
+  return db.transaction(fn);
+}
+
+/** وضعیت‌های پایانی — پرونده در این حالت‌ها دیگر پیش نمی‌رود */
+const TERMINAL_STATUSES = ['APPROVED', 'REJECTED', 'CANCELLED'];
+
+/** وضعیت‌های باز (در جریان) */
+const OPEN_STATUSES = ['SUBMITTED', 'IN_REVIEW', 'RETURNED'];
+
+/** تراز مالی دانشجو — با توابع تجمعی SQL، نه حلقه در Node */
+export async function studentLedgerBalance(tx: DbTx | undefined, studentId: number): Promise<number> {
+  const t = tx ?? db;
+  const [row] = await t
+    .select({ balance: sql<string>`coalesce(sum(case
+        when ${student_ledger.transactionType} in ('TUITION_CHARGE', 'CHARGE') then -${student_ledger.amount}
+        when ${student_ledger.transactionType} in ('PAYMENT', 'CREDIT') then ${student_ledger.amount}
+        else 0 end), 0)` })
+    .from(student_ledger)
+    .where(eq(student_ledger.studentId, studentId));
+  return Number(row?.balance ?? 0);
+}
+
+/**
+ * کد رهگیری یکتا.
+ * پیش از این «سال ثابت ۱۴۰۵ + عدد تصادفی ۵ رقمی» بود؛ یعنی هم سال هاردکد بود
+ * و هم با حدود ۳۸۰ درخواست احتمال برخورد به ۵۰٪ می‌رسید (تصادف تولد) و درج با
+ * خطای یکتایی می‌شکست. حالا: سال از تنظیمات/تقویم، شماره از ترتیب واقعی
+ * پرونده‌ها، و در نهایت تلاش مجدد در صورت برخورد.
+ */
+async function nextTrackingCode(tx: DbTx, prefix: string, year: string): Promise<string> {
+  const [row] = await tx
+    .select({ n: sql<string>`count(*)` })
+    .from(student_requests)
+    .where(sql`${student_requests.trackingCode} like ${'%' + year + '%'}`);
+  const base = Number(row?.n ?? 0) + 1;
+  for (let i = 0; i < 50; i++) {
+    const code = `${prefix}-${year}-${String(base + i).padStart(5, '0')}`;
+    const [dup] = await tx.select({ id: student_requests.id }).from(student_requests).where(eq(student_requests.trackingCode, code)).limit(1);
+    if (!dup) return code;
+  }
+  return `${prefix}-${year}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+}
+
+/** اعلان درون‌سامانه‌ای — داخل تراکنش (بدون تماس شبکه) */
+async function inboxNotify(tx: DbTx, userId: number, eventCode: string, text: string) {
+  await tx.insert(notifications).values({ userId, eventCode, payload: JSON.stringify({ text }) });
+}
+
+/** اعلان چندکاناله — *خارج* از تراکنش؛ شکست پیامک هرگز پرونده را برنمی‌گرداند */
+async function safeMultichannel(userId: number | null | undefined, eventCode: string, text: string) {
+  if (!userId) return;
+  try {
+    await notifyUserMultichannel({ userId, eventCode, text });
+  } catch (err) {
+    log.warn('notify_failed', { eventCode, userId, err: (err as Error).message });
+  }
+}
+
+// ============================================================================
+// عملیات آماده‌سازی و راه‌اندازی فرآیندها در پایگاه داده
+// ============================================================================
+
+let processCache: { at: number; codes: string[] } | null = null;
+const PROCESS_CACHE_TTL_MS = 30_000;
+
+/** بازنشانی کش فرآیندها — پس از ویرایش تعریف فرایند در پنل مدیر صدا زده می‌شود */
+export function invalidateProcessCache() {
+  processCache = null;
+}
+
+/**
+ * اطمینان از وجود فرآیندهای پیش‌فرض.
+ * به‌جای ۲ کوئری به ازای هر فرایند، یک واکشی جمعی + نوشتن فقط در صورت نیاز؛
+ * کل عملیات هم در یک تراکنش است تا نیمه‌کاره نماند.
+ */
+export async function ensureDefaultProcesses(force = false) {
+  if (!force && processCache && Date.now() - processCache.at < PROCESS_CACHE_TTL_MS) return;
+
+  try {
+    const existingDefs = await db
+      .select({
+        id: process_definitions.id,
+        code: process_definitions.code,
+        title: process_definitions.title,
+        feeAmount: process_definitions.feeAmount,
+        formSchema: process_definitions.formSchema,
+      })
+      .from(process_definitions);
+    const byCode = new Map(existingDefs.map(d => [d.code, d]));
+
+    const needWrite = BUILTIN_PROCESSES.some(p => {
+      const d = byCode.get(p.code);
+      return !d
+        || d.title !== p.title
+        || Number(d.feeAmount ?? 0) !== p.feeAmount
+        || String(d.formSchema ?? '') !== JSON.stringify(p.formSchema);
+    });
+
+    if (needWrite || !existingDefs.length) {
+      await db.transaction(async tx => {
+        for (const p of BUILTIN_PROCESSES) {
+          const existing = byCode.get(p.code);
+          const payload = {
+            title: p.title,
+            category: p.category,
+            description: p.description,
+            outputTemplate: p.outputTemplate,
+            feeAmount: p.feeAmount,
+            formSchema: JSON.stringify(p.formSchema),
+            isActive: 1,
+          };
+          let processId = existing?.id;
+          if (!existing) {
+            const [inserted] = await tx
+              .insert(process_definitions)
+              .values({ code: p.code, ...payload })
+              .onConflictDoNothing()
+              .returning({ id: process_definitions.id });
+            processId = inserted?.id ?? (await tx.select({ id: process_definitions.id }).from(process_definitions).where(eq(process_definitions.code, p.code)).limit(1))[0]?.id;
+          } else {
+            await tx.update(process_definitions).set(payload).where(eq(process_definitions.id, existing.id));
+          }
+          if (!processId) continue;
+
+          const stepsCount = await tx
+            .select({ n: sql<string>`count(*)` })
+            .from(process_steps)
+            .where(eq(process_steps.processId, processId));
+          if (Number(stepsCount[0]?.n ?? 0) > 0) continue;
+
+          await tx.insert(process_steps).values(
+            p.steps.map(s => ({
+              processId: processId as number,
+              stepOrder: s.stepOrder,
+              title: s.title,
+              stepType: s.stepType,
+              roleCode: s.roleCode,
+              slaHours: s.slaHours,
+              timeoutAction: s.timeoutAction,
+              timeoutEscalateToRole: s.timeoutEscalateToRole,
+            })),
+          );
+        }
+      });
+    }
+
+    const rows = await db.select({ code: process_definitions.code }).from(process_definitions);
+    processCache = { at: Date.now(), codes: rows.map(r => r.code) };
+  } catch (err) {
+    log.error('ensure_default_processes_failed', { err: (err as Error).message });
+  }
+}
+
+// ============================================================================
+// ثبت درخواست جدید توسط دانشجو (Submit Student Request) — اتمی
+// ============================================================================
+
+export type SubmitResultRow = typeof student_requests.$inferSelect;
+
+export async function submitStudentRequest(params: {
+  studentId: number;
+  userId: number;
+  processCode: string;
+  formData: Record<string, any>;
+}): Promise<SubmitResultRow> {
+  await ensureDefaultProcesses();
+
+  const [proc] = await db
+    .select()
+    .from(process_definitions)
+    .where(eq(process_definitions.code, params.processCode))
+    .limit(1);
+  if (!proc) throw new Error('فرآیند مورد نظر یافت نشد.');
+
+  const steps = await db
+    .select()
+    .from(process_steps)
+    .where(eq(process_steps.processId, proc.id))
+    .orderBy(process_steps.stepOrder);
+  if (steps.length === 0) throw new Error('مراحل این فرآیند هنوز پیکربندی نشده است.');
+
+  const firstStep = steps[0];
+  const [year, prefix] = await Promise.all([getFiscalYear(), getSetting('REQ_TRACKING_PREFIX')]);
+
+  const { created } = await db.transaction(async tx => {
+    const trackingCode = await nextTrackingCode(tx, prefix, year);
+    const now = new Date();
+
+    // ── گواهی اشتغال به تحصیل: احراز خودکار (ثبت‌نام ترم جاری + تراز مالی صفر/مثبت) ──
+    if (params.processCode === 'ENROLLMENT_CERT') {
+      const [currentTerm] = await tx.select({ id: academic_terms.id }).from(academic_terms).where(eq(academic_terms.isCurrent, 1)).limit(1);
+
+      let hasEnrollment = false;
+      if (currentTerm) {
+        const [cnt] = await tx
+          .select({ n: sql<string>`count(*)` })
+          .from(enrollments)
+          .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+          .where(and(
+            eq(enrollments.studentId, params.studentId),
+            eq(course_offerings.termId, currentTerm.id),
+            inArray(enrollments.status, ['REGISTERED', 'FINALIZED']),
+          ));
+        hasEnrollment = Number(cnt?.n ?? 0) > 0;
+      }
+
+      // تراز مالی با SUM در خود پایگاه داده — نه حلقه روی ردیف‌ها در Node
+      const balance = await studentLedgerBalance(tx, params.studentId);
+      const autoApprove = hasEnrollment && balance >= 0;
+
+      const digitalHash = crypto
+        .createHash('sha256')
+        .update(`${trackingCode}:${params.studentId}:${now.toISOString()}:AFAGH_CERT`)
+        .digest('hex');
+      const certNumber = trackingCode.replace(new RegExp('^' + prefix), 'CERT');
+
+      const [row] = await tx
+        .insert(student_requests)
+        .values({
+          trackingCode,
+          studentId: params.studentId,
+          processId: proc.id,
+          currentStepId: firstStep.id,
+          formData: JSON.stringify(params.formData),
+          status: autoApprove ? 'APPROVED' : 'IN_REVIEW',
+          digitalStampHash: digitalHash,
+          certificateNumber: certNumber,
+          issuedAt: autoApprove ? now : null,
+          updatedAt: now,
+        })
+        .returning();
+
+      await tx.insert(request_step_logs).values({
+        requestId: row.id,
+        stepId: firstStep.id,
+        assignedAt: now,
+        completedAt: autoApprove ? now : null,
+        actorRole: 'SYSTEM_BOT',
+        action: autoApprove ? 'APPROVE' : 'SUBMIT',
+        note: autoApprove
+          ? `احراز صلاحیت خودکار: ثبت‌نام ترم جاری و تراز مالی (${balance.toLocaleString('fa-IR')} ریال) تأیید و گواهی صادر شد.`
+          : `عدم احراز شرایط خودکار (${hasEnrollment ? 'ثبت‌نام ترم جاری دارد' : 'بدون انتخاب واحد در ترم جاری'}؛ تراز مالی ${balance.toLocaleString('fa-IR')} ریال) — در انتظار بررسی کارشناس آموزش.`,
+        slaStatus: 'ON_TIME',
+      });
+
+      // ثبت هزینهٔ فرایند در دفتر مالی دانشجو — داخل همان تراکنش
+      const fee = Number(proc.feeAmount ?? 0);
+      if (fee > 0) {
+        await tx.insert(student_ledger).values({
+          studentId: params.studentId,
+          termId: currentTerm?.id ?? null,
+          transactionType: 'CHARGE',
+          amount: String(fee),
+          description: `هزینهٔ فرایند «${proc.title}» — ${trackingCode}`,
+        });
+      }
+
+      const text = autoApprove
+        ? `گواهی اشتغال به تحصیل شما به شماره ${certNumber} صادر شد و آماده دریافت/چاپ است.`
+        : `درخواست گواهی اشتغال به تحصیل شما با کد رهگیری ${trackingCode} ثبت و جهت بررسی ارسال گردید.`;
+      await inboxNotify(tx, params.userId, 'REQUEST_SUBMITTED', text);
+
+      return { created: row };
+    }
+
+    // ── تسویه حساب فارغ‌التحصیلی: دروازهٔ موازی ──
+    if (params.processCode === 'GRADUATION_CHECKOUT') {
+      const [row] = await tx
+        .insert(student_requests)
+        .values({
+          trackingCode,
+          studentId: params.studentId,
+          processId: proc.id,
+          currentStepId: firstStep.id,
+          formData: JSON.stringify(params.formData),
+          status: 'IN_REVIEW',
+          updatedAt: now,
+        })
+        .returning();
+
+      const checkpoints = [
+        { code: 'FINANCE', title: 'امور مالی و شهریه (عدم بدهی)' },
+        { code: 'LIBRARY', title: 'کتابخانه مرکزی (عدم امانت کتاب)' },
+        { code: 'WELFARE_FUND', title: 'صندوق رفاه دانشجویان (تسویه وام)' },
+        { code: 'LABORATORY', title: 'آزمایشگاه‌ها و کارگاه‌های تخصصی' },
+        { code: 'DORMITORY', title: 'امور خوابگاه‌ها و اسکان' },
+      ];
+      // درج دسته‌جمعی — یک کوئری به‌جای پنج کوئری
+      await tx.insert(request_parallel_checkpoints).values(
+        checkpoints.map(cp => ({ requestId: row.id, departmentCode: cp.code, departmentTitle: cp.title, isCleared: 0 })),
+      );
+
+      await tx.insert(request_step_logs).values({
+        requestId: row.id,
+        stepId: firstStep.id,
+        assignedAt: now,
+        actorRole: 'MULTI_CHECKPOINT',
+        action: 'SUBMIT',
+        note: 'پرونده تسویه حساب موازی تشکیل شد و برای واحدهای پنج‌گانه ارسال گردید.',
+        slaStatus: 'ON_TIME',
+      });
+
+      const text = `پروندهٔ تسویه حساب فارغ‌التحصیلی شما با کد رهگیری ${trackingCode} تشکیل و به‌صورت موازی برای پنج واحد ارسال شد.`;
+      await inboxNotify(tx, params.userId, 'REQUEST_SUBMITTED', text);
+      return { created: row };
+    }
+
+    // ── سایر فرآیندهای عمومی ──
+    const [row] = await tx
+      .insert(student_requests)
+      .values({
+        trackingCode,
+        studentId: params.studentId,
+        processId: proc.id,
+        currentStepId: firstStep.id,
+        formData: JSON.stringify(params.formData),
+        status: 'SUBMITTED',
+        updatedAt: now,
+      })
+      .returning();
+
+    await tx.insert(request_step_logs).values({
+      requestId: row.id,
+      stepId: firstStep.id,
+      assignedAt: now,
+      actorRole: firstStep.roleCode || 'USER',
+      action: 'SUBMIT',
+      note: `درخواست با موفقیت ثبت و به کارتابل ${firstStep.title} ارجاع داده شد.`,
+      slaStatus: 'ON_TIME',
+    });
+
+    // هزینهٔ فرایند (در صورت تعریف) در همان تراکنش به دفتر مالی می‌نشیند
+    const fee = Number(proc.feeAmount ?? 0);
+    if (fee > 0) {
+      const [currentTerm] = await tx.select({ id: academic_terms.id }).from(academic_terms).where(eq(academic_terms.isCurrent, 1)).limit(1);
+      await tx.insert(student_ledger).values({
+        studentId: params.studentId,
+        termId: currentTerm?.id ?? null,
+        transactionType: 'CHARGE',
+        amount: String(fee),
+        description: `هزینهٔ فرایند «${proc.title}» — ${trackingCode}`,
+      });
+    }
+
+    const text = `درخواست «${proc.title}» با کد رهگیری ${trackingCode} ثبت و به کارتابل ${firstStep.title} ارجاع شد.`;
+    await inboxNotify(tx, params.userId, 'REQUEST_SUBMITTED', text);
+    return { created: row };
+  });
+
+  // نکته: اعلان درون‌سامانه‌ای داخل همان تراکنش نوشته شد. عمداً اینجا
+  // notifyUserMultichannel صدا زده نمی‌شود، چون آن تابع هم یک ردیف در
+  // notifications می‌نویسد و اعلان دوبار ثبت می‌شد.
+  return created;
+}
 
 // ============================================================================
 // تعاریف پیش‌فرض فرآیندهای گردش کار (Built-in Dynamic BPM Process Templates)
@@ -362,270 +744,23 @@ export const BUILTIN_PROCESSES: ProcessTemplate[] = [
 ];
 
 // ============================================================================
-// عملیات آماده‌سازی و راه‌اندازی فرآیندها در پایگاه داده
+// پیشبرد گام گردش کار (Advance Workflow Step) — اتمی + قفل سطری
 // ============================================================================
 
-export async function ensureDefaultProcesses() {
-  try {
-    for (const p of BUILTIN_PROCESSES) {
-      const [existing] = await db
-        .select()
-        .from(process_definitions)
-        .where(eq(process_definitions.code, p.code))
-        .limit(1);
-
-      let processId = existing?.id;
-
-      if (!existing) {
-        const [inserted] = await db
-          .insert(process_definitions)
-          .values({
-            code: p.code,
-            title: p.title,
-            category: p.category,
-            description: p.description,
-            outputTemplate: p.outputTemplate,
-            feeAmount: p.feeAmount,
-            formSchema: JSON.stringify(p.formSchema),
-            isActive: 1,
-          })
-          .returning();
-        processId = inserted.id;
-      } else {
-        await db
-          .update(process_definitions)
-          .set({
-            title: p.title,
-            category: p.category,
-            description: p.description,
-            outputTemplate: p.outputTemplate,
-            feeAmount: p.feeAmount,
-            formSchema: JSON.stringify(p.formSchema),
-            isActive: 1,
-          })
-          .where(eq(process_definitions.id, existing.id));
-      }
-
-      if (processId) {
-        // اطمینان از وجود گام‌ها
-        const existingSteps = await db
-          .select()
-          .from(process_steps)
-          .where(eq(process_steps.processId, processId));
-
-        if (existingSteps.length === 0) {
-          for (const s of p.steps) {
-            await db.insert(process_steps).values({
-              processId: processId,
-              stepOrder: s.stepOrder,
-              title: s.title,
-              stepType: s.stepType,
-              roleCode: s.roleCode,
-              slaHours: s.slaHours,
-              timeoutAction: s.timeoutAction,
-              timeoutEscalateToRole: s.timeoutEscalateToRole,
-            });
-          }
-        }
-      }
-    }
-  } catch (err) {
-    console.error('Error ensuring default processes:', err);
-  }
-}
-
-// ============================================================================
-// ثبت درخواست جدید توسط دانشجو (Submit Student Request)
-// ============================================================================
-
-export async function submitStudentRequest(params: {
-  studentId: number;
-  userId: number;
-  processCode: string;
-  formData: Record<string, any>;
-}) {
-  await ensureDefaultProcesses();
-
-  const [proc] = await db
-    .select()
-    .from(process_definitions)
-    .where(eq(process_definitions.code, params.processCode))
-    .limit(1);
-
-  if (!proc) throw new Error('فرآیند مورد نظر یافت نشد.');
-
-  const steps = await db
-    .select()
-    .from(process_steps)
-    .where(eq(process_steps.processId, proc.id))
-    .orderBy(process_steps.stepOrder);
-
-  if (steps.length === 0) throw new Error('مراحل این فرآیند هنوز پیکربندی نشده است.');
-
-  const firstStep = steps[0];
-  const now = new Date();
-  const yearFa = '1405';
-  const randomSuffix = Math.floor(10000 + Math.random() * 90000);
-  const trackingCode = `REQ-${yearFa}-${randomSuffix}`;
-
-  // اعتبارسنجی ویژه برای گواهی اشتغال به تحصیل:
-  if (params.processCode === 'ENROLLMENT_CERT') {
-    // ۱. بررسی انتخاب واحد ترم جاری
-    const [currentTerm] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1)).limit(1);
-    let hasEnrollment = false;
-    if (currentTerm) {
-      const myEnrollments = await db
-        .select({ id: enrollments.id })
-        .from(enrollments)
-        .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
-        .where(
-          and(
-            eq(enrollments.studentId, params.studentId),
-            eq(course_offerings.termId, currentTerm.id),
-            inArray(enrollments.status, ['REGISTERED', 'FINALIZED'])
-          )
-        );
-      hasEnrollment = myEnrollments.length > 0;
-    }
-
-    // ۲. بررسی تراز مالی (بدهی شهریه)
-    const ledgerRows = await db
-      .select({ type: student_ledger.transactionType, amount: student_ledger.amount })
-      .from(student_ledger)
-      .where(eq(student_ledger.studentId, params.studentId));
-
-    let balance = 0;
-    for (const row of ledgerRows) {
-      const amt = Number(row.amount || 0);
-      if (row.type === 'TUITION_CHARGE' || row.type === 'CHARGE') balance -= amt;
-      else if (row.type === 'PAYMENT' || row.type === 'CREDIT') balance += amt;
-    }
-
-    // اگر دانشجو دارای انتخاب واحد معتبر و بدون بدهی است، صدور آنی (AUTO_APPROVE)
-    const digitalHash = crypto
-      .createHash('sha256')
-      .update(`${trackingCode}:${params.studentId}:${now.toISOString()}:AFAGH_CERT`)
-      .digest('hex');
-
-    const certNumber = `CERT-${yearFa}-${randomSuffix}`;
-
-    const [created] = await db
-      .insert(student_requests)
-      .values({
-        trackingCode,
-        studentId: params.studentId,
-        processId: proc.id,
-        currentStepId: firstStep.id,
-        formData: JSON.stringify(params.formData),
-        status: hasEnrollment ? 'APPROVED' : 'IN_REVIEW',
-        digitalStampHash: digitalHash,
-        certificateNumber: certNumber,
-        issuedAt: hasEnrollment ? now : null,
-      })
-      .returning();
-
-    // ثبت لاگ گردش کار
-    await db.insert(request_step_logs).values({
-      requestId: created.id,
-      stepId: firstStep.id,
-      assignedAt: now,
-      completedAt: hasEnrollment ? now : null,
-      actorRole: 'SYSTEM_BOT',
-      action: hasEnrollment ? 'APPROVE' : 'SUBMIT',
-      note: hasEnrollment
-        ? 'احراز صلاحیت خودکار: ثبت‌نام ترم جاری و تراز مالی معتبر تایید گردید و گواهی صادر شد.'
-        : 'در انتظار بررسی تکمیلی کارشناس آموزش (عدم احراز شرایط خودکار).',
-      slaStatus: 'ON_TIME',
-    });
-
-    // اعلان دانشجو
-    await db.insert(notifications).values({
-      userId: params.userId,
-      eventCode: 'REQUEST_SUBMITTED',
-      payload: JSON.stringify({
-        text: hasEnrollment
-          ? `گواهی اشتغال به تحصیل شما به شماره ${certNumber} صادر شد و آماده دریافت/چاپ است.`
-          : `درخواست گواهی اشتغال به تحصیل شما با کد رهگیری ${trackingCode} ثبت و جهت بررسی ارسال گردید.`,
-      }),
-    });
-
-    return created;
-  }
-
-  // فرآیند تسویه حساب فارغ‌التحصیلی (Parallel Gateway Setup):
-  if (params.processCode === 'GRADUATION_CHECKOUT') {
-    const [created] = await db
-      .insert(student_requests)
-      .values({
-        trackingCode,
-        studentId: params.studentId,
-        processId: proc.id,
-        currentStepId: firstStep.id,
-        formData: JSON.stringify(params.formData),
-        status: 'IN_REVIEW',
-      })
-      .returning();
-
-    // ساخت بخش‌های موازی تسویه
-    const checkpoints = [
-      { code: 'FINANCE', title: 'امور مالی و شهریه (عدم بدهی)' },
-      { code: 'LIBRARY', title: 'کتابخانه مرکزی (عدم امانت کتاب)' },
-      { code: 'WELFARE_FUND', title: 'صندوق رفاه دانشجویان (تسویه وام)' },
-      { code: 'LABORATORY', title: 'آزمایشگاه‌ها و کارگاه‌های تخصصی' },
-      { code: 'DORMITORY', title: 'امور خوابگاه‌ها و اسکان' },
-    ];
-
-    for (const cp of checkpoints) {
-      await db.insert(request_parallel_checkpoints).values({
-        requestId: created.id,
-        departmentCode: cp.code,
-        departmentTitle: cp.title,
-        isCleared: 0,
-      });
-    }
-
-    await db.insert(request_step_logs).values({
-      requestId: created.id,
-      stepId: firstStep.id,
-      assignedAt: now,
-      actorRole: 'MULTI_CHECKPOINT',
-      action: 'SUBMIT',
-      note: 'پرونده تسویه حساب موازی تشکیل شد و برای واحدهای پنج‌گانه ارسال گردید.',
-      slaStatus: 'ON_TIME',
-    });
-
-    return created;
-  }
-
-  // سایر فرآیندهای عمومی
-  const [created] = await db
-    .insert(student_requests)
-    .values({
-      trackingCode,
-      studentId: params.studentId,
-      processId: proc.id,
-      currentStepId: firstStep.id,
-      formData: JSON.stringify(params.formData),
-      status: 'SUBMITTED',
-    })
-    .returning();
-
-  await db.insert(request_step_logs).values({
-    requestId: created.id,
-    stepId: firstStep.id,
-    assignedAt: now,
-    actorRole: firstStep.roleCode || 'USER',
-    action: 'SUBMIT',
-    note: `درخواست با موفقیت ثبت و به کارتابل ${firstStep.title} ارجاع داده شد.`,
-    slaStatus: 'ON_TIME',
-  });
-
-  return created;
-}
-
-// ============================================================================
-// پیشبرد گام گردش کار توسط پرسنل (Advance Workflow Step)
-// ============================================================================
+export type AdvanceResult = {
+  status:
+    | 'REJECTED'
+    | 'RETURNED'
+    | 'ESCALATED'
+    | 'MOVED_TO_NEXT_STEP'
+    | 'APPROVED_FINAL'
+    | 'ALREADY_FINAL'
+    | 'UNCHANGED';
+  nextStepTitle?: string;
+  targetRole?: string;
+  certificateNumber?: string;
+  events?: { processed: number; failed: number; skipped: number };
+};
 
 export async function advanceWorkflowStep(params: {
   requestId: number;
@@ -633,144 +768,132 @@ export async function advanceWorkflowStep(params: {
   actorRole: string;
   action: 'APPROVE' | 'REJECT' | 'RETURN_FOR_REVISION' | 'ESCALATE';
   note?: string;
-}) {
-  const [req] = await db
-    .select()
-    .from(student_requests)
-    .where(eq(student_requests.id, params.requestId))
-    .limit(1);
-
-  if (!req) throw new Error('درخواست یافت نشد.');
-
-  const [currentStep] = req.currentStepId
-    ? await db.select().from(process_steps).where(eq(process_steps.id, req.currentStepId)).limit(1)
-    : [null];
-
-  const allSteps = await db
-    .select()
-    .from(process_steps)
-    .where(eq(process_steps.processId, req.processId))
-    .orderBy(process_steps.stepOrder);
-
+  /** اگر از داخل تراکنش دیگری (مثلاً تسویهٔ موازی) صدا زده شود، همان اتصال استفاده می‌شود */
+  tx?: DbTx;
+}): Promise<AdvanceResult> {
   const now = new Date();
 
-  // محاسبه مدت زمان توقف مرحله
-  const [lastLog] = await db
-    .select()
-    .from(request_step_logs)
-    .where(and(eq(request_step_logs.requestId, req.id), isNull(request_step_logs.completedAt)))
-    .orderBy(desc(request_step_logs.id))
-    .limit(1);
+  const { result, dispatch } = await inTx(params.tx, async tx => {
+    // قفل سطری: دو اقدام همزمان روی یک پرونده پشت سر هم صف می‌شوند
+    const [req] = await tx
+      .select()
+      .from(student_requests)
+      .where(eq(student_requests.id, params.requestId))
+      .for('update');
+    if (!req) throw new Error('درخواست یافت نشد.');
 
-  let durationMin = 0;
-  if (lastLog?.assignedAt) {
-    durationMin = Math.round((now.getTime() - new Date(lastLog.assignedAt).getTime()) / 60000);
-  }
-
-  // ثبت لاگ پایان این مرحله
-  if (lastLog) {
-    const isSlaBreached = currentStep?.slaHours ? durationMin > currentStep.slaHours * 60 : false;
-    await db
-      .update(request_step_logs)
-      .set({
-        completedAt: now,
-        actorStaffId: params.actorStaffId,
-        actorRole: params.actorRole,
-        action: params.action,
-        note: params.note || (params.action === 'APPROVE' ? 'تایید شد' : 'رد شد'),
-        durationMinutes: durationMin,
-        slaStatus: isSlaBreached ? 'SLA_BREACHED' : 'ON_TIME',
-      })
-      .where(eq(request_step_logs.id, lastLog.id));
-  }
-
-  // ۱. حالت رد درخواست (REJECT)
-  if (params.action === 'REJECT') {
-    await db
-      .update(student_requests)
-      .set({
-        status: 'REJECTED',
-        updatedAt: now,
-      })
-      .where(eq(student_requests.id, req.id));
-
-    // اطلاع‌رسانی به دانشجو
-    const [stu] = await db.select().from(students).where(eq(students.id, req.studentId)).limit(1);
-    if (stu) {
-      await db.insert(notifications).values({
-        userId: stu.userId,
-        eventCode: 'REQUEST_REJECTED',
-        payload: JSON.stringify({
-          text: `درخواست شما با کد رهگیری ${req.trackingCode} رد شد. دلیل: ${params.note || 'عدم احراز شرایط'}`,
-        }),
-      });
+    // idempotent: پروندهٔ مختومه دیگر پیش نمی‌رود (کلیک دوباره / cron موازی)
+    if (TERMINAL_STATUSES.includes(req.status)) {
+      return { result: { status: 'ALREADY_FINAL' as const } as AdvanceResult, dispatch: null };
     }
-    return { status: 'REJECTED' };
-  }
 
-  // ۲. حالت بازگشت برای اصلاح (RETURN_FOR_REVISION)
-  if (params.action === 'RETURN_FOR_REVISION') {
-    await db
-      .update(student_requests)
-      .set({
-        status: 'RETURNED',
-        updatedAt: now,
-      })
-      .where(eq(student_requests.id, req.id));
+    const [currentStep] = req.currentStepId
+      ? await tx.select().from(process_steps).where(eq(process_steps.id, req.currentStepId)).limit(1)
+      : [undefined];
 
-    const [stu] = await db.select().from(students).where(eq(students.id, req.studentId)).limit(1);
-    if (stu) {
-      await db.insert(notifications).values({
-        userId: stu.userId,
-        eventCode: 'REQUEST_RETURNED',
-        payload: JSON.stringify({
-          text: `درخواست ${req.trackingCode} جهت اصلاح مدارک به شما بازگردانده شد: ${params.note || 'لطفاً فرم را ویرایش کنید.'}`,
-        }),
-      });
+    const allSteps = await tx
+      .select()
+      .from(process_steps)
+      .where(eq(process_steps.processId, req.processId))
+      .orderBy(process_steps.stepOrder);
+
+    // بازترین لاگ این پرونده (مبنای محاسبهٔ مدت توقف و SLA)
+    const [lastLog] = await tx
+      .select()
+      .from(request_step_logs)
+      .where(and(eq(request_step_logs.requestId, req.id), isNull(request_step_logs.completedAt)))
+      .orderBy(desc(request_step_logs.id), desc(request_step_logs.assignedAt))
+      .limit(1);
+
+    const durationMin = lastLog?.assignedAt
+      ? Math.max(0, Math.round((now.getTime() - new Date(lastLog.assignedAt).getTime()) / 60000))
+      : 0;
+
+    // بستن لاگ مرحلهٔ جاری — در همان تراکنشی که وضعیت عوض می‌شود
+    if (lastLog) {
+      const isSlaBreached = currentStep?.slaHours ? durationMin > currentStep.slaHours * 60 : false;
+      await tx
+        .update(request_step_logs)
+        .set({
+          completedAt: now,
+          actorStaffId: params.actorStaffId ?? null,
+          actorRole: params.actorRole,
+          action: params.action,
+          note: params.note || (params.action === 'APPROVE' ? 'تایید شد' : 'رد شد'),
+          durationMinutes: durationMin,
+          slaStatus: isSlaBreached ? 'SLA_BREACHED' : 'ON_TIME',
+        })
+        .where(eq(request_step_logs.id, lastLog.id));
     }
-    return { status: 'RETURNED' };
-  }
 
-  // ۳. حالت ارجاع / تشدید (ESCALATE)
-  if (params.action === 'ESCALATE') {
-    const nextRole = currentStep?.timeoutEscalateToRole || 'VICE_CHANCELLOR';
-    await db
-      .update(student_requests)
-      .set({
-        status: 'IN_REVIEW',
-        updatedAt: now,
-      })
-      .where(eq(student_requests.id, req.id));
+    const [stu] = await tx.select().from(students).where(eq(students.id, req.studentId)).limit(1);
 
-    await db.insert(request_step_logs).values({
-      requestId: req.id,
-      stepId: currentStep?.id || allSteps[0].id,
-      assignedAt: now,
-      actorRole: nextRole,
-      action: 'ESCALATE',
-      note: `ارجاع مدیریتی پرونده به ${nextRole}: ${params.note || 'به دلیل عدم اقدام در مهلت یا نیاز به تصمیم مقام بالاتر'}`,
-      slaStatus: 'ESCALATED',
-    });
-    return { status: 'ESCALATED', targetRole: nextRole };
-  }
+    // ── ۱. رد درخواست ──
+    if (params.action === 'REJECT') {
+      await tx.update(student_requests).set({ status: 'REJECTED', updatedAt: now }).where(eq(student_requests.id, req.id));
+      const text = `درخواست شما با کد رهگیری ${req.trackingCode} رد شد. دلیل: ${params.note || 'عدم احراز شرایط'}`;
+      const processCode = (await processCodeOf(tx, req.processId)) ?? '';
+      await fireWorkflowEvent(tx, { requestId: req.id, processCode, eventCode: 'WORKFLOW_REJECTED', formDataRaw: req.formData });
+      return {
+        result: { status: 'REJECTED' as const },
+        dispatch: {
+          processCode,
+          eventCode: 'WORKFLOW_REJECTED' as WorkflowEventCode,
+          stepTitle: currentStep?.title ?? null,
+          notify: stu ? { userId: stu.userId, eventCode: 'REQUEST_REJECTED', text } : null,
+        },
+      };
+    }
 
-  // ۴. حالت تأیید مرحله (APPROVE)
-  if (params.action === 'APPROVE') {
+    // ── ۲. بازگشت برای اصلاح ──
+    if (params.action === 'RETURN_FOR_REVISION') {
+      await tx.update(student_requests).set({ status: 'RETURNED', updatedAt: now }).where(eq(student_requests.id, req.id));
+      const text = `درخواست ${req.trackingCode} جهت اصلاح مدارک به شما بازگردانده شد: ${params.note || 'لطفاً فرم را ویرایش کنید.'}`;
+      const processCode = (await processCodeOf(tx, req.processId)) ?? '';
+      await fireWorkflowEvent(tx, { requestId: req.id, processCode, eventCode: 'WORKFLOW_RETURNED', formDataRaw: req.formData });
+      return {
+        result: { status: 'RETURNED' as const },
+        dispatch: {
+          processCode,
+          eventCode: 'WORKFLOW_RETURNED' as WorkflowEventCode,
+          stepTitle: currentStep?.title ?? null,
+          notify: stu ? { userId: stu.userId, eventCode: 'REQUEST_RETURNED', text } : null,
+        },
+      };
+    }
+
+    // ── ۳. ارجاع / تشدید ──
+    if (params.action === 'ESCALATE') {
+      const nextRole = currentStep?.timeoutEscalateToRole || 'VICE_CHANCELLOR';
+      // ایدمپوتنت: اگر همین مرحله پیش‌تر ارجاع شده، ارجاع دوباره ثبت نمی‌شود
+      // (دو cron همزمان یا کلیک دوبارهٔ کارشناس نباید پرونده را اسپم کنند)
+      if (lastLog?.action === 'ESCALATE') {
+        return { result: { status: 'ESCALATED' as const, targetRole: lastLog.actorRole || nextRole }, dispatch: null };
+      }
+      await tx.update(student_requests).set({ status: 'IN_REVIEW', updatedAt: now }).where(eq(student_requests.id, req.id));
+      await tx.insert(request_step_logs).values({
+        requestId: req.id,
+        stepId: currentStep?.id || allSteps[0]?.id,
+        assignedAt: now,
+        actorRole: nextRole,
+        action: 'ESCALATE',
+        note: `ارجاع مدیریتی پرونده به ${nextRole}: ${params.note || 'به دلیل عدم اقدام در مهلت یا نیاز به تصمیم مقام بالاتر'}`,
+        slaStatus: 'ESCALATED',
+      });
+      return { result: { status: 'ESCALATED' as const, targetRole: nextRole }, dispatch: null };
+    }
+
+    // ── ۴. تأیید مرحله ──
     const currentOrder = currentStep?.stepOrder || 1;
     const nextStep = allSteps.find(s => s.stepOrder > currentOrder);
+    const processCode = (await processCodeOf(tx, req.processId)) ?? '';
 
     if (nextStep) {
-      // انتقال به مرحله بعدی
-      await db
+      await tx
         .update(student_requests)
-        .set({
-          currentStepId: nextStep.id,
-          status: 'IN_REVIEW',
-          updatedAt: now,
-        })
+        .set({ currentStepId: nextStep.id, status: 'IN_REVIEW', updatedAt: now })
         .where(eq(student_requests.id, req.id));
-
-      await db.insert(request_step_logs).values({
+      await tx.insert(request_step_logs).values({
         requestId: req.id,
         stepId: nextStep.id,
         assignedAt: now,
@@ -779,265 +902,285 @@ export async function advanceWorkflowStep(params: {
         note: `پرونده به مرحله «${nextStep.title}» ارجاع داده شد.`,
         slaStatus: 'ON_TIME',
       });
-      return { status: 'MOVED_TO_NEXT_STEP', nextStepTitle: nextStep.title };
-    } else {
-      // این آخرین مرحله بود -> تایید نهایی و مختومه شدن پرونده (FINAL APPROVAL)
-      const digitalHash = crypto
-        .createHash('sha256')
-        .update(`${req.trackingCode}:${req.studentId}:${now.toISOString()}:AFAGH_FINAL`)
-        .digest('hex');
-
-      const certNumber = req.certificateNumber || `DOC-${req.trackingCode}`;
-
-      await db
-        .update(student_requests)
-        .set({
-          status: 'APPROVED',
-          digitalStampHash: digitalHash,
-          certificateNumber: certNumber,
-          issuedAt: now,
-          updatedAt: now,
-        })
-        .where(eq(student_requests.id, req.id));
-
-      // منطق تجاری ویژه تطبیق واحد (Course Transfer Final Application):
-      const [proc] = await db
-        .select()
-        .from(process_definitions)
-        .where(eq(process_definitions.id, req.processId))
-        .limit(1);
-
-      if (proc?.code === 'COURSE_TRANSFER' && req.formData) {
-        try {
-          const form = JSON.parse(req.formData);
-          // ثبت مستقیم درس تطبیق‌داده‌شده با کد مقصد
-          // پیدا کردن یا ایجاد درس مقصد
-          const [targetCourse] = await db
-            .select()
-            .from(courses)
-            .where(eq(courses.code, form.targetCourseCode || 'TRANS-01'))
-            .limit(1);
-
-          if (targetCourse) {
-            // پیدا کردن یا ایجاد آفرینگ تطبیق
-            const [currentTerm] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1)).limit(1);
-            if (currentTerm) {
-              const [offering] = await db
-                .select()
-                .from(course_offerings)
-                .where(and(eq(course_offerings.courseId, targetCourse.id), eq(course_offerings.termId, currentTerm.id)))
-                .limit(1);
-
-              if (offering) {
-                await db.insert(enrollments).values({
-                  studentId: req.studentId,
-                  offeringId: offering.id,
-                  status: 'REGISTERED',
-                  gradeValue: String(form.sourceGrade || 17.0),
-                  gradeStatus: 'FINALIZED',
-                  isDirectedReading: 0,
-                }).onConflictDoNothing();
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Error applying course transfer to transcript:', e);
-        }
-      }
-
-      // اطلاع‌رسانی نهایی به دانشجو
-      const [stu] = await db.select().from(students).where(eq(students.id, req.studentId)).limit(1);
-      if (stu) {
-        await db.insert(notifications).values({
-          userId: stu.userId,
-          eventCode: 'REQUEST_APPROVED',
-          payload: JSON.stringify({
-            text: `درخواست شما با کد رهگیری ${req.trackingCode} به طور کامل تایید و نهایی گردید.`,
-          }),
-        });
-      }
-
-      return { status: 'APPROVED_FINAL', certificateNumber: certNumber };
+      await fireWorkflowEvent(tx, { requestId: req.id, processCode, eventCode: 'WORKFLOW_STEP_MOVED', formDataRaw: req.formData });
+      return { result: { status: 'MOVED_TO_NEXT_STEP' as const, nextStepTitle: nextStep.title }, dispatch: null };
     }
+
+    // آخرین مرحله → تأیید نهایی و اختتام پرونده
+    const digitalHash = crypto
+      .createHash('sha256')
+      .update(`${req.trackingCode}:${req.studentId}:${now.toISOString()}:AFAGH_FINAL`)
+      .digest('hex');
+    const certNumber = req.certificateNumber || `DOC-${req.trackingCode}`;
+
+    await tx
+      .update(student_requests)
+      .set({
+        status: 'APPROVED',
+        digitalStampHash: digitalHash,
+        certificateNumber: certNumber,
+        issuedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(student_requests.id, req.id));
+
+    // رویداد «تأیید نهایی» — *داخل* تراکنش ثبت می‌شود (PENDING)،
+    // اجرای اثر تجاری پس از commit توسط هندلرِ ماژول صاحب اثر انجام می‌شود.
+    await fireWorkflowEvent(tx, { requestId: req.id, processCode, eventCode: 'WORKFLOW_FINAL_APPROVED', formDataRaw: req.formData });
+
+    const text = `درخواست شما با کد رهگیری ${req.trackingCode} به طور کامل تایید و نهایی گردید.`;
+
+    return {
+      result: { status: 'APPROVED_FINAL' as const, certificateNumber: certNumber },
+      dispatch: {
+        processCode,
+        eventCode: 'WORKFLOW_FINAL_APPROVED' as WorkflowEventCode,
+        stepTitle: currentStep?.title ?? null,
+        certificateNumber: certNumber,
+        notify: stu ? { userId: stu.userId, eventCode: 'REQUEST_APPROVED', text } : null,
+      },
+    };
+  });
+
+  // ── پس از commit: هندلرهای رویداد + اعلان بیرونی ──
+  if (dispatch) {
+    const events = await dispatchWorkflowEvent(params.requestId, {
+      processCode: dispatch.processCode,
+      eventCode: dispatch.eventCode,
+      stepTitle: dispatch.stepTitle ?? null,
+      actorRole: params.actorRole,
+      note: params.note ?? null,
+      certificateNumber: dispatch.certificateNumber ?? null,
+      firedAt: now,
+    }).catch(err => {
+      log.error('workflow_dispatch_failed', { requestId: params.requestId, err: (err as Error).message });
+      return { processed: 0, failed: 0, skipped: 0 };
+    });
+    (result as AdvanceResult).events = events;
+    if (dispatch.notify) await safeMultichannel(dispatch.notify.userId, dispatch.notify.eventCode, dispatch.notify.text);
   }
 
-  return { status: 'UNCHANGED' };
+  return result;
+}
+
+/** کد فرایند یک پرونده (برای شلیک رویداد) */
+async function processCodeOf(tx: DbTx, processId: number): Promise<string | null> {
+  const [row] = await tx
+    .select({ code: process_definitions.code })
+    .from(process_definitions)
+    .where(eq(process_definitions.id, processId))
+    .limit(1);
+  return row?.code ?? null;
 }
 
 // ============================================================================
-// تسویه حساب موازی (Parallel Gateway Checkpoints Toggle)
+// تسویه حساب موازی (Parallel Gateway) — اتمی
 // ============================================================================
 
 export async function clearParallelCheckpoint(params: {
   checkpointId: number;
   clearedByStaffId?: number;
   notes?: string;
-}) {
-  const [cp] = await db
-    .select()
-    .from(request_parallel_checkpoints)
-    .where(eq(request_parallel_checkpoints.id, params.checkpointId))
-    .limit(1);
-
-  if (!cp) throw new Error('چک‌پوینت تسویه یافت نشد.');
-
+}): Promise<{ ok: boolean; allCleared: boolean; advanced?: AdvanceResult }> {
   const now = new Date();
-  await db
-    .update(request_parallel_checkpoints)
-    .set({
-      isCleared: 1,
-      clearedByStaffId: params.clearedByStaffId,
-      clearedAt: now,
-      notes: params.notes || 'تسویه حساب تایید گردید.',
-    })
-    .where(eq(request_parallel_checkpoints.id, cp.id));
 
-  // بررسی وضعیت تمام بخش‌های موازی این درخواست
-  const allCheckpoints = await db
-    .select()
-    .from(request_parallel_checkpoints)
-    .where(eq(request_parallel_checkpoints.requestId, cp.requestId));
+  const { allCleared, advanced } = await db.transaction(async tx => {
+    const [cp] = await tx
+      .select()
+      .from(request_parallel_checkpoints)
+      .where(eq(request_parallel_checkpoints.id, params.checkpointId))
+      .for('update');
+    if (!cp) throw new Error('چک‌پوینت تسویه یافت نشد.');
 
-  const allCleared = allCheckpoints.every(c => c.id === cp.id || c.isCleared === 1);
+    // قفل پرونده → دو واحد نمی‌توانند همزمان «آخرین تسویه» باشند
+    const [req] = await tx
+      .select({ id: student_requests.id, status: student_requests.status })
+      .from(student_requests)
+      .where(eq(student_requests.id, cp.requestId))
+      .for('update');
+    if (!req) throw new Error('درخواست مرتبط با چک‌پوینت یافت نشد.');
 
-  if (allCleared) {
-    // همه بخش‌ها تسویه کردند -> پیشبرد خودکار به مرحله بعدی
-    await advanceWorkflowStep({
-      requestId: cp.requestId,
-      actorStaffId: params.clearedByStaffId,
-      actorRole: 'MULTI_CHECKPOINT',
-      action: 'APPROVE',
-      note: 'تمامی بخش‌های پنج‌گانه (مالی، کتابخانه، رفاه، آزمایشگاه، خوابگاه) تسویه را تأیید کردند.',
-    });
-  }
+    await tx
+      .update(request_parallel_checkpoints)
+      .set({
+        isCleared: 1,
+        clearedByStaffId: params.clearedByStaffId ?? null,
+        clearedAt: now,
+        notes: params.notes || 'تسویه حساب تایید گردید.',
+      })
+      .where(eq(request_parallel_checkpoints.id, cp.id));
 
-  return { ok: true, allCleared };
+    // بررسی مانده‌ها با تابع تجمعی SQL (یک کوئری، بدون بارگذاری ردیف‌ها)
+    const [agg] = await tx
+      .select({
+        total: sql<string>`count(*)`,
+        cleared: sql<string>`sum(case when ${request_parallel_checkpoints.isCleared} = 1 then 1 else 0 end)`,
+      })
+      .from(request_parallel_checkpoints)
+      .where(eq(request_parallel_checkpoints.requestId, cp.requestId));
+
+    const total = Number(agg?.total ?? 0);
+    const cleared = Number(agg?.cleared ?? 0);
+    const done = total > 0 && cleared >= total;
+
+    let advancedRes: AdvanceResult | undefined;
+    if (done) {
+      // پیشبرد در همان تراکنش (نه تراکنش تودرتو) تا یا همه‌چیز بنشیند یا هیچ‌چیز
+      advancedRes = await advanceWorkflowStep({
+        requestId: cp.requestId,
+        actorStaffId: params.clearedByStaffId,
+        actorRole: 'MULTI_CHECKPOINT',
+        action: 'APPROVE',
+        note: 'تمامی بخش‌های موازی تسویه حساب، تأیید شدند.',
+        tx,
+      });
+    }
+
+    return { allCleared: done, advanced: advancedRes };
+  });
+
+  return { ok: true, allCleared, advanced };
 }
 
 // ============================================================================
-// موتور بررسی SLA و اجرای خودکار سیاست‌های انقضا (SLA Scheduler & Timeout Trigger)
+// موتور SLA — یک کوئری جمعی + قفل مشورتی (بدون اجرای موازی cron)
 // ============================================================================
 
-export async function checkAndTriggerSlaTimeouts() {
-  const now = new Date();
+export type SlaTimeoutItem = {
+  requestId: number;
+  trackingCode: string;
+  stepTitle: string;
+  actionTaken: string;
+};
 
-  // دریافت تمام پرونده‌های در جریان (SUBMITTED, IN_REVIEW)
-  const openRequests = await db
-    .select({
-      id: student_requests.id,
-      track: student_requests.trackingCode,
-      status: student_requests.status,
-      currentStepId: student_requests.currentStepId,
-      processId: student_requests.processId,
-      createdAt: student_requests.createdAt,
-    })
-    .from(student_requests)
-    .where(inArray(student_requests.status, ['SUBMITTED', 'IN_REVIEW']));
+export async function checkAndTriggerSlaTimeouts(): Promise<SlaTimeoutItem[]> {
+  const lockKey = 'afagh:workflow:sla';
+  const lockRes = await db.execute(sql`select pg_try_advisory_lock(hashtext(${lockKey})) as got`);
+  const got = Boolean((lockRes.rows?.[0] as { got?: boolean } | undefined)?.got);
 
-  const results: {
-    requestId: number;
-    trackingCode: string;
-    stepTitle: string;
-    actionTaken: string;
-  }[] = [];
+  if (!got) {
+    log.info('sla_job_skipped', { reason: 'another_run_in_progress' });
+    return [];
+  }
 
-  for (const r of openRequests) {
-    if (!r.currentStepId) continue;
+  try {
+    // همهٔ پرونده‌های باز + گام جاری + بازترین لاگ — در یک کوئری JOIN
+    const rows = await db.execute(sql`
+      select r.id as "requestId", r."trackingCode" as "trackingCode",
+             s.id as "stepId", s.title as "stepTitle", s."slaHours" as "slaHours",
+             s."timeoutAction" as "timeoutAction", s."timeoutEscalateToRole" as "escalateTo",
+             l."assignedAt" as "assignedAt"
+      from student_requests r
+      join process_steps s on s.id = r."currentStepId"
+      join lateral (
+        select l2."assignedAt"
+        from request_step_logs l2
+        where l2."requestId" = r.id and l2."completedAt" is null
+        order by l2.id desc limit 1
+      ) l on true
+      where r.status in ('SUBMITTED', 'IN_REVIEW', 'RETURNED')
+        and s."slaHours" is not null
+        and s."slaHours" > 0
+        and l."assignedAt" is not null
+        and l."assignedAt" < (now() - (s."slaHours" || ' hours')::interval)
+      order by r.id
+    `);
 
-    const [step] = await db
-      .select()
-      .from(process_steps)
-      .where(eq(process_steps.id, r.currentStepId))
-      .limit(1);
+    const due = (rows.rows ?? []) as {
+      requestId: number;
+      trackingCode: string;
+      stepId: number;
+      stepTitle: string;
+      slaHours: number;
+      timeoutAction: string | null;
+      escalateTo: string | null;
+      assignedAt: string | Date;
+    }[];
 
-    if (!step || !step.slaHours) continue;
+    const results: SlaTimeoutItem[] = [];
+    for (const r of due) {
+      const action = (r.timeoutAction || '').toUpperCase();
+      let taken: 'ESCALATE' | 'APPROVE' | 'REJECT' | null = null;
+      let label = '';
 
-    const [openLog] = await db
-      .select()
-      .from(request_step_logs)
-      .where(and(eq(request_step_logs.requestId, r.id), isNull(request_step_logs.completedAt)))
-      .orderBy(desc(request_step_logs.id))
-      .limit(1);
+      if (action === 'ESCALATE') {
+        taken = 'ESCALATE';
+        label = `ESCALATE TO ${r.escalateTo || 'VICE_CHANCELLOR'}`;
+      } else if (action === 'AUTO_APPROVE') {
+        taken = 'APPROVE';
+        label = 'AUTO_APPROVE';
+      } else if (action === 'AUTO_REJECT') {
+        taken = 'REJECT';
+        label = 'AUTO_REJECT';
+      }
+      if (!taken) continue;
 
-    if (!openLog?.assignedAt) continue;
-
-    const assignedTime = new Date(openLog.assignedAt).getTime();
-    const hoursElapsed = (now.getTime() - assignedTime) / (1000 * 3600);
-
-    // اگر از مهلت قانونی SLA تجاوز کرده باشد:
-    if (hoursElapsed >= step.slaHours) {
-      if (step.timeoutAction === 'ESCALATE') {
-        const nextRole = step.timeoutEscalateToRole || 'VICE_CHANCELLOR';
+      try {
         await advanceWorkflowStep({
-          requestId: r.id,
+          requestId: r.requestId,
           actorRole: 'SYSTEM_SLA_ENGINE',
-          action: 'ESCALATE',
-          note: `انقضای مهلت پاسخگویی (${step.slaHours} ساعت) — ارجاع خودکار سیستمی به ${nextRole}`,
+          action: taken,
+          note: taken === 'ESCALATE'
+            ? `انقضای مهلت پاسخگویی (${r.slaHours} ساعت) — ارجاع خودکار سیستمی به ${r.escalateTo || 'VICE_CHANCELLOR'}`
+            : taken === 'APPROVE'
+              ? `انقضای مهلت قانونی مرحله (${r.slaHours} ساعت) — تایید خودکار و عبور از مرحله به استناد آیین‌نامه تسریع امور`
+              : `انقضای مهلت قانونی مرحله (${r.slaHours} ساعت) — بسته‌شدن خودکار پرونده به دلیل عدم ارائه مدارک در مهلت`,
         });
-        results.push({
-          requestId: r.id,
-          trackingCode: r.track,
-          stepTitle: step.title,
-          actionTaken: `ESCALATE TO ${nextRole}`,
-        });
-      } else if (step.timeoutAction === 'AUTO_APPROVE') {
-        await advanceWorkflowStep({
-          requestId: r.id,
-          actorRole: 'SYSTEM_SLA_ENGINE',
-          action: 'APPROVE',
-          note: `انقضای مهلت قانونی مرحله (${step.slaHours} ساعت) — تایید خودکار و عبور از مرحله به استناد آیین‌نامه تسریع امور`,
-        });
-        results.push({
-          requestId: r.id,
-          trackingCode: r.track,
-          stepTitle: step.title,
-          actionTaken: 'AUTO_APPROVE',
-        });
-      } else if (step.timeoutAction === 'AUTO_REJECT') {
-        await advanceWorkflowStep({
-          requestId: r.id,
-          actorRole: 'SYSTEM_SLA_ENGINE',
-          action: 'REJECT',
-          note: `انقضای مهلت قانونی مرحله (${step.slaHours} ساعت) — بسته‌شدن خودکار پرونده به دلیل عدم ارائه مدارک در مهلت`,
-        });
-        results.push({
-          requestId: r.id,
-          trackingCode: r.track,
-          stepTitle: step.title,
-          actionTaken: 'AUTO_REJECT',
-        });
+        results.push({ requestId: r.requestId, trackingCode: r.trackingCode, stepTitle: r.stepTitle, actionTaken: label });
+      } catch (err) {
+        log.error('sla_action_failed', { requestId: r.requestId, err: (err as Error).message });
       }
     }
-  }
 
-  return results;
+    return results;
+  } finally {
+    await db.execute(sql`select pg_advisory_unlock(hashtext(${lockKey}))`).catch(() => undefined);
+  }
 }
 
 // ============================================================================
-// ثبت نظرسنجی و امتیاز رضایت دانشجو (CSAT Satisfaction Score)
+// ثبت نظرسنجی و امتیاز رضایت دانشجو (CSAT)
 // ============================================================================
 
 export async function submitRequestSatisfaction(params: {
   requestId: number;
-  score: number; // 1 to 5
+  score: number;
   feedback?: string;
-}) {
+}): Promise<{ ok: boolean }> {
+  const score = Math.max(1, Math.min(5, Math.round(Number(params.score) || 0)));
+  const [row] = await db
+    .update(student_requests)
+    .set({ satisfactionScore: score, feedbackText: params.feedback || null, updatedAt: new Date() })
+    .where(eq(student_requests.id, params.requestId))
+    .returning({ id: student_requests.id });
+  if (!row) throw new Error('درخواست یافت نشد.');
+  return { ok: true };
+}
+
+// ============================================================================
+// وضعیت پرونده — برای کارتابل و صفحهٔ رهگیری دانشجو
+// ============================================================================
+
+export async function getRequestDetail(requestId: number) {
   const [req] = await db
     .select()
     .from(student_requests)
-    .where(eq(student_requests.id, params.requestId))
+    .where(eq(student_requests.id, requestId))
     .limit(1);
+  if (!req) return null;
 
-  if (!req) throw new Error('درخواست یافت نشد.');
+  const [logs, checkpoints, processCode] = await Promise.all([
+    db.select().from(request_step_logs).where(eq(request_step_logs.requestId, requestId)).orderBy(request_step_logs.id),
+    db.select().from(request_parallel_checkpoints).where(eq(request_parallel_checkpoints.requestId, requestId)),
+    processCodeOf(db as unknown as DbTx, req.processId),
+  ]);
 
-  await db
-    .update(student_requests)
-    .set({
-      satisfactionScore: Math.max(1, Math.min(5, params.score)),
-      feedbackText: params.feedback || null,
-      updatedAt: new Date(),
-    })
-    .where(eq(student_requests.id, req.id));
-
-  return { ok: true };
+  return {
+    ...req,
+    processCode,
+    isOpen: OPEN_STATUSES.includes(req.status),
+    isTerminal: TERMINAL_STATUSES.includes(req.status),
+    logs,
+    checkpoints,
+  };
 }

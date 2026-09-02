@@ -7,7 +7,9 @@ import {
   checkAndTriggerSlaTimeouts,
   clearParallelCheckpoint,
   ensureDefaultProcesses,
+  invalidateProcessCache,
 } from '@/lib/workflow-engine';
+import { eventsForRequest, retryPendingWorkflowEvents } from '@/lib/workflow-events';
 import { db } from '@/db';
 import { process_definitions, process_steps } from '@/db/schema';
 import { eq } from 'drizzle-orm';
@@ -154,24 +156,58 @@ export async function adminSaveProcessDefinitionAction(data: {
     processId = inserted.id;
   }
 
-  // به‌روزرسانی گام‌ها
+  // به‌روزرسانی گام‌ها — حذف و درج دسته‌جمعی، همه در یک تراکنش
   if (processId && data.steps) {
-    await db.delete(process_steps).where(eq(process_steps.processId, processId));
-    for (const s of data.steps) {
-      await db.insert(process_steps).values({
-        processId,
-        stepOrder: s.stepOrder,
-        title: s.title,
-        stepType: s.stepType,
-        roleCode: s.roleCode,
-        slaHours: s.slaHours,
-        timeoutAction: s.timeoutAction,
-        timeoutEscalateToRole: s.timeoutEscalateToRole,
-      });
-    }
+    await db.transaction(async tx => {
+      await tx.delete(process_steps).where(eq(process_steps.processId, processId as number));
+      if (data.steps.length) {
+        await tx.insert(process_steps).values(
+          data.steps.map(s => ({
+            processId: processId as number,
+            stepOrder: s.stepOrder,
+            title: s.title,
+            stepType: s.stepType,
+            roleCode: s.roleCode,
+            slaHours: s.slaHours,
+            timeoutAction: s.timeoutAction,
+            timeoutEscalateToRole: s.timeoutEscalateToRole,
+          })),
+        );
+      }
+    });
   }
+
+  // کش فرآیندها باید بشکند تا تغییر بلافاصله در موتور اثر کند
+  invalidateProcessCache();
 
   revalidatePath('/admin/workflows');
   revalidatePath('/student/requests');
   return { ok: true, processId };
+}
+
+/** رویدادهای شلیک‌شدهٔ یک پرونده (اثر تجاری هندلرها) — برای شفافیت کارتابل */
+export async function adminRequestEventsAction(requestId: number) {
+  await requireRole(['ADMIN', 'EDU_EXPERT']);
+  const rows = await eventsForRequest(requestId);
+  return {
+    ok: true,
+    events: rows.map(e => ({
+      id: e.id,
+      eventCode: e.eventCode,
+      handler: e.handler,
+      status: e.status,
+      error: e.error,
+      attempts: e.attempts,
+      firedAt: e.firedAt,
+      processedAt: e.processedAt,
+    })),
+  };
+}
+
+/** اجرای دوبارهٔ رویدادهای ناموفق (اثر تجاری که وسط کار خطا داد) */
+export async function adminRetryWorkflowEventsAction(limit = 50) {
+  await requireRole(['ADMIN']);
+  const res = await retryPendingWorkflowEvents(limit);
+  revalidatePath('/admin/workflows');
+  return { ...res, ok: true };
 }

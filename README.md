@@ -56,6 +56,9 @@ powershell -ExecutionPolicy Bypass -File .\install-docker.ps1 -WithDemoData   # 
 انجام می‌شود تا خطای ممیز شناور رخ ندهد، و نمرهٔ خالی/نامعتبر هرگز صفر حساب نمی‌شود.
 راهنما: [`docs/REGULATIONS.md`](docs/REGULATIONS.md)
 
+موتور گردش کار (BPM) با تراکنش‌های اتمی، گذرگاه رویداد و موتور حق‌التدریس:
+[`docs/WORKFLOW.md`](docs/WORKFLOW.md) · [`docs/PAYROLL.md`](docs/PAYROLL.md)
+
 ## 🎓 فارغ‌التحصیلی، تسویه‌حساب و پورتال دانش‌آموختگان
 
 فرآیند **رویدادمحور** است: دانشجو هیچ درخواستی ثبت نمی‌کند. با قطعی‌شدن آخرین نمره،
