@@ -36,6 +36,8 @@ export * from './regulations-types';
 
 const GRADE_SCALE = 100; // نمره: دو رقم اعشار
 const UNIT_SCALE = 10;   // واحد: یک رقم اعشار
+/** هر چند واحد معادل‌سازی = یک ترم کسر از سنوات (مطابق enroll-engine EQUIV_TERM_UNITS) */
+const EQUIV_SEMESTER_UNITS = 20;
 
 /**
  * تبدیل امنِ مقدار نمره به عدد.
@@ -143,6 +145,10 @@ export interface StudentAcademicSummary {
   isProbatedLastTerm: boolean;
   totalProbations: number;
   completedSemesters: number;
+  /** مجموع واحدهای قبول‌شدهٔ معادل‌سازی (EQUIV_PASSED/TRANSFER) */
+  equivalenceUnits: number;
+  /** تعداد ترم کسرشده از سنوات به ازای هر EQUIV_TERM_UNITS واحد معادل‌سازی */
+  equivalenceSemesters: number;
   status: string;
   effectiveMaxUnits: number;
   minAllowedUnits: number;
@@ -232,6 +238,7 @@ export async function evaluateStudentRegulationStatus(
 
   // تجمیع نمرات و واحدها (با حساب صحیح و ردکردن نمرات خالی/نامعتبر)
   let passedUnits = 0;
+  let equivalenceUnits = 0;
   const termMap = new Map<number, GpaAccumulator>();
 
   for (const e of studentEnrollments) {
@@ -246,13 +253,17 @@ export async function evaluateStudentRegulationStatus(
     }
 
     /**
-     * نوبت‌های معادل‌سازی (وضعیت EQUIV_PASSED یا گروه درسی TRANSFER) در محاسبهٔ
-     * معدل و مشروطیت منظور نمی‌شوند؛ واحد قبولی‌شان فقط در بالا شمرده شد.
-     * این همان «بدون مشروطیت» بودن معادل‌سازی است.
+     * نوبت‌های معادل‌سازی (وضعیت EQUIV_PASSED یا گروه درسی TRANSFER):
+     *  - در معدل کل (calculateOfficialGPA) مؤثرند و آنجا حساب می‌شوند؛
+     *  - ولی در معدل هر ترم و مشروطیت منظور نمی‌شوند (معادل‌سازی «بدون مشروطیت» است)؛
+     *  - واحدهای قبولی‌شان برای کسر سنوات شمارش می‌شود (هر EQUIV_TERM_UNITS واحد = یک ترم).
      */
     const isEquivalence = e.status === 'EQUIV_PASSED' || e.offeringType === 'TRANSFER';
+    if (isEquivalence && isPassed) {
+      equivalenceUnits = round2(equivalenceUnits + u);
+    }
 
-    // محاسبه معدل به ازای هر ترم
+    // محاسبه معدل به ازای هر ترم (معادل‌سازی excluded)
     if (!isEquivalence && e.termId && (e.affectsGpa === 1 || e.affectsGpa == null) && e.gradingType !== 'DESCRIPTIVE') {
       const acc = termMap.get(e.termId) ?? new GpaAccumulator();
       acc.add(g, u);
@@ -319,6 +330,12 @@ export async function evaluateStudentRegulationStatus(
 
   const completedSemesters = termMap.size;
 
+  /**
+   * قانون سنوات: به ازای هر ۲۰ واحد معادل‌سازی، یک ترم از سنوات مجاز دانشجو
+   * کسر می‌شود (دانشجو معادل آن ترم را پیش‌تر در مبدأ گذرانده است).
+   */
+  const equivalenceSemesters = Math.floor(equivalenceUnits / EQUIV_SEMESTER_UNITS);
+
   return {
     studentId,
     totalRequiredUnits,
@@ -329,6 +346,8 @@ export async function evaluateStudentRegulationStatus(
     isProbatedLastTerm,
     totalProbations,
     completedSemesters,
+    equivalenceUnits,
+    equivalenceSemesters,
     status: stu.status,
     effectiveMaxUnits,
     minAllowedUnits,
@@ -355,15 +374,21 @@ export async function checkAndTriggerCommissionEvents(studentId: number): Promis
 
   const maxAllowedProbations =
     config.probation_and_tenure.max_total_probations + stu.extraAllowedProbations;
+  // قانون سنوات: هر ۲۰ واحد معادل‌سازی یک ترم از سقف سنوات مجاز کم می‌کند
   const maxAllowedSemesters =
-    config.probation_and_tenure.max_study_semesters + stu.extraAllowedSemesters;
+    config.probation_and_tenure.max_study_semesters +
+    stu.extraAllowedSemesters -
+    summary.equivalenceSemesters;
 
   let blockReason: string | null = null;
 
   if (summary.totalProbations >= maxAllowedProbations) {
     blockReason = `تعداد مشروطی‌های تحصیلی (${summary.totalProbations} ترم) به سقف مجاز (${maxAllowedProbations} ترم) رسیده است. ادامه تحصیل منوط به تایید کمیسیون موارد خاص در سامانه سجاد می‌باشد.`;
   } else if (summary.completedSemesters >= maxAllowedSemesters) {
-    blockReason = `سنوات مجاز تحصیلی (${summary.completedSemesters} ترم) به پایان رسیده است. ادامه تحصیل منوط به دریافت سنوات ارفاقی از کمیسیون موارد خاص در سامانه سجاد است.`;
+    const equivNote = summary.equivalenceSemesters > 0
+      ? ` (شامل ${summary.equivalenceSemesters} ترم کسرشده بابت ${summary.equivalenceUnits} واحد معادل‌سازی)`
+      : '';
+    blockReason = `سنوات مجاز تحصیلی (${summary.completedSemesters} ترم از سقف ${maxAllowedSemesters} ترم${equivNote}) به پایان رسیده است. ادامه تحصیل منوط به دریافت سنوات ارفاقی از کمیسیون موارد خاص در سامانه سجاد است.`;
   }
 
   if (!blockReason) return { blocked: false };
