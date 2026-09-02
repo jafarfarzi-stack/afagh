@@ -137,7 +137,7 @@ if ($Doctor) {
   Write-Host "  --- پورت دیتابیس در docker-compose ---" -ForegroundColor Cyan
   (Select-String -Path $Compose -Pattern "5432" | ForEach-Object { "  " + $_.Line.Trim() })
   Write-Host ""
-  Write-Host "  --- DATABASE_URL در .env ---" -ForegroundColor Cyan
+  Write-Host "  --- اتصال‌های دیتابیس در .env ---" -ForegroundColor Cyan
   if (Test-Path $EnvFile) { (Select-String -Path $EnvFile -Pattern "^\s*DATABASE_URL" | ForEach-Object { "  " + $_.Line.Trim() }) }
   else { Write-Host "  فایل .env وجود ندارد!" -ForegroundColor Red }
   Write-Host ""
@@ -150,6 +150,9 @@ if ($Doctor) {
   Write-Host "  --- وضعیت گیت ---" -ForegroundColor Cyan
   Run { git -C $Root --no-pager log --oneline -3 } | Out-Null
   Run { git -C $Root status --short } | Out-Null
+  Write-Host ""
+  Write-Host "  --- نقش afagh_app (برای RLS) ---" -ForegroundColor Cyan
+  Run { docker exec afagh_pg_dev psql -U afagh -d afagh_db -c "select rolname from pg_roles where rolname='afagh_app';" } | Out-Null
   Write-Host ""
   Write-Host "  --- آخرین لاگ PostgreSQL ---" -ForegroundColor Cyan
   Run { docker logs --tail 15 afagh_pg_dev } | Out-Null
@@ -226,18 +229,36 @@ if (-not (Test-Path $EnvFile)) {
   Info "فایل .env ساخته شد"
 }
 $envText = Get-Content $EnvFile -Raw
-$wantUrl = "postgres://afagh:afagh@localhost:$hostPgPort/afagh_db"
-if ($envText -match '(?m)^\s*DATABASE_URL\s*=\s*(.+?)\s*$') {
-  $cur = $matches[1]
-  if ($cur -match '@localhost:(\d+)/' -and [int]$matches[1] -ne $hostPgPort) {
-    $envText = $envText -replace '(?m)^\s*DATABASE_URL\s*=.*$', "DATABASE_URL=$wantUrl"
-    Set-Content -Path $EnvFile -Value $envText -Encoding UTF8 -NoNewline
-    Ok "DATABASE_URL با پورت $hostPgPort هماهنگ شد"
+if ($null -eq $envText) { $envText = '' }
+
+# هر دو اتصال دیتابیس باید با پورت واقعی هماهنگ باشند:
+#   DATABASE_URL     → اتصال اصلی اپ
+#   DATABASE_URL_APP → اتصال نقش فقط-خواندنی afagh_app برای RLS (صفحات دانشجو)
+$pairs = @(
+  @{ key = 'DATABASE_URL';     val = "postgres://afagh:afagh@localhost:$hostPgPort/afagh_db" },
+  @{ key = 'DATABASE_URL_APP'; val = "postgres://afagh_app:afagh_app@127.0.0.1:$hostPgPort/afagh_db" }
+)
+$envChanged = $false
+foreach ($p in $pairs) {
+  $k = $p.key; $v = $p.val
+  $rx = "(?m)^\s*$k\s*=\s*(.+?)\s*$"
+  $m = [regex]::Match($envText, $rx)
+  if ($m.Success) {
+    $cur = $m.Groups[1].Value
+    if ($cur -match ':(\d+)/' -and [int]$matches[1] -ne $hostPgPort) {
+      $envText = [regex]::Replace($envText, "(?m)^\s*$k\s*=.*$", "$k=$v")
+      $envChanged = $true
+      Ok "$k با پورت $hostPgPort هماهنگ شد"
+    }
+  } else {
+    if ($envText.Length -gt 0 -and -not $envText.EndsWith("`n")) { $envText += "`r`n" }
+    $envText += "$k=$v`r`n"
+    $envChanged = $true
+    Ok "$k به .env اضافه شد"
   }
-} else {
-  Add-Content -Path $EnvFile -Value "`nDATABASE_URL=$wantUrl" -Encoding UTF8
-  Ok "DATABASE_URL به .env اضافه شد"
 }
+if ($envChanged) { Set-Content -Path $EnvFile -Value $envText -Encoding UTF8 -NoNewline }
+else { Ok "تنظیمات اتصال دیتابیس درست است" }
 
 # ── ۴) به‌روزرسانی از گیت (اختیاری) ───────────────────────────────
 if ($Update) {
