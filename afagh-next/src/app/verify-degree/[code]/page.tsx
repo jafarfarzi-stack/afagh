@@ -15,7 +15,7 @@ const DEGREE_LABEL: Record<string, string> = {
 export default async function VerifyDegreePage({ params }: { params: { code: string } }) {
   const r = await verifyDegree(params.code);
   const url = `${await getPublicBaseUrl()}/verify-degree/${params.code}`;
-  const qr = generateSvgQrCode(url);
+  const qr = await generateSvgQrCode(url);
 
   return (
     <main className="min-h-screen bg-slate-100 flex items-center justify-center p-4" dir="rtl">

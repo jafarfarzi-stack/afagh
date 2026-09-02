@@ -1,5 +1,6 @@
 import 'server-only';
 import { getPublicBaseUrl } from '@/lib/settings';
+import { qrSvg as renderQrSvg } from '@/lib/qr';
 import crypto from 'crypto';
 
 export interface CertificateData {
@@ -25,25 +26,15 @@ export function generateCertificateVerificationHash(data: CertificateData): stri
 }
 
 /**
- * تولید کد SVG بهینه‌شده برای بارکد کیوآر (بدون وابستگی سنگین به مرورگر)
+ * تولید QR واقعی و قابل اسکن (SVG برداری) برای اصالت‌سنجی مدرک.
+ * پیش‌تر یک الگوی ساختگی (Mock) بود که اسکن نمی‌شد؛ اکنون از موتور QR واقعی
+ * (`@/lib/qr`) تولید می‌شود تا نگهبان/کارفرما بتواند مدرک را اسکن و استعلام کند.
  */
-export function generateSvgQrCode(url: string): string {
-  // SVG Mock representation of high-contrast QR Matrix
-  return `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="120" height="120">
-      <rect width="100" height="100" fill="#ffffff" rx="8" />
-      <path d="M10 10h30v30h-30z M15 15h20v20h-20z M20 20h10v10h-10z" fill="#0f172a" />
-      <path d="M60 10h30v30h-30z M65 15h20v20h-20z M70 20h10v10h-10z" fill="#0f172a" />
-      <path d="M10 60h30v30h-30z M15 65h20v20h-20z M20 70h10v10h-10z" fill="#0f172a" />
-      <rect x="45" y="10" width="10" height="10" fill="#0f172a" />
-      <rect x="45" y="30" width="10" height="10" fill="#0f172a" />
-      <rect x="45" y="50" width="10" height="10" fill="#0f172a" />
-      <rect x="45" y="70" width="10" height="10" fill="#0f172a" />
-      <rect x="65" y="50" width="10" height="10" fill="#0f172a" />
-      <rect x="80" y="50" width="10" height="10" fill="#0f172a" />
-      <rect x="60" y="70" width="20" height="20" fill="#0f172a" />
-    </svg>
-  `;
+export async function generateSvgQrCode(url: string): Promise<string> {
+  let svg = await renderQrSvg(url, { errorCorrectionLevel: 'M' });
+  // svg تولیدی width/height ندارد؛ برای پرکردن ظرف والد، ۱۰۰٪ تزریق می‌کنیم (viewBox حفظ می‌شود)
+  svg = svg.replace('<svg ', '<svg width="100%" height="100%" ');
+  return `<div class="certificate-qr" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">${svg}</div>`;
 }
 
 /**
@@ -51,7 +42,7 @@ export function generateSvgQrCode(url: string): string {
  */
 export async function buildCertificateHtml(data: CertificateData): Promise<string> {
   const verifyUrl = `${await getPublicBaseUrl()}/verify/${data.certCode}`;
-  const qrSvg = generateSvgQrCode(verifyUrl);
+  const qrSvg = await generateSvgQrCode(verifyUrl);
   const hash = generateCertificateVerificationHash(data);
 
   return `
@@ -115,6 +106,7 @@ export async function buildCertificateHtml(data: CertificateData): Promise<strin
           border-top: 2px solid #e2e8f0;
           padding-top: 20px;
         }
+                .certificate-qr svg { width: 120px; height: 120px; display: block; margin: 0 auto; }
         .qr-box {
           text-align: center;
           font-size: 11px;

@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
   بروز کردن سامانه آفاق از گیت‌هاب + بیلد + اجرای دوباره (ویندوز)
       .\update.ps1              دریافت آخرین کد، بیلد و اجرا
@@ -43,9 +43,10 @@ if (-not $dbUp) {
 }
 Ok "PostgreSQL آماده است"
 
-# ۳) بیلد
-Step "۳/۴ بیلد پروداکشن"
+# ۳) نصب وابستگی‌ها و بیلد
+Step "۳/۴ نصب وابستگی‌ها و بیلد پروداکشن"
 Push-Location $Next
+npm install --no-audit --no-fund
 npm run build
 if ($LASTEXITCODE -ne 0) { Pop-Location; Warn "بیلد ناموفق بود"; exit 1 }
 Pop-Location

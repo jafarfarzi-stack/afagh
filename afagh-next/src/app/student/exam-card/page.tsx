@@ -1,6 +1,7 @@
 import { getSessionUser } from '@/lib/auth';
 import { getPublicBaseUrl } from '@/lib/settings';
 import { getExamCardData, issueExamTicketToken } from '@/lib/verification';
+import { qrSvg } from '@/lib/qr';
 import ExamCardClient from './ExamCardClient';
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +17,7 @@ export default async function StudentExamCardPage() {
    * مسدود را نشان می‌دهد.
    */
   const card = await getExamCardData(user.id);
+  const publicBaseUrl = await getPublicBaseUrl();
 
   let examTicket: { token: string; expiresAt: string } | null = null;
   let examTicketBlocked: string | null = null;
@@ -29,13 +31,26 @@ export default async function StudentExamCardPage() {
     }
   }
 
+  // QR واقعی و قابل اسکن برای احراز هویت در ورودی جلسه
+  let ticketQr = '';
+  if (examTicket) {
+    try {
+      ticketQr = await qrSvg(`${publicBaseUrl}/exam-ticket/${encodeURIComponent(examTicket.token)}`, {
+        errorCorrectionLevel: 'M',
+      });
+    } catch {
+      ticketQr = '';
+    }
+  }
+
   return (
     <ExamCardClient
       user={user}
-      publicBaseUrl={await getPublicBaseUrl()}
+      publicBaseUrl={publicBaseUrl}
       examTicket={examTicket}
       examTicketBlocked={examTicketBlocked}
       card={card}
+      ticketQr={ticketQr}
     />
   );
 }

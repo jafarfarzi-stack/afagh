@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useTransition } from 'react';
+import React, { useState, useTransition } from 'react';
 import Link from 'next/link';
 import type { ExamCardData } from '@/lib/verification';
 import { submitCourseEvaluationAction } from './actions';
@@ -38,6 +38,8 @@ interface Props {
   examTicketBlocked: string | null;
   /** دادهٔ واقعی کارت: هویت دانشجو، دروس، سالن/صندلی و بدهی — همه از پایگاه داده */
   card: ExamCardData | null;
+  /** SVG کیوآر واقعی و قابل اسکن توکن کارت — سمت سرور با موتور QR تولید می‌شود */
+  ticketQr?: string;
 }
 
 /**
@@ -45,58 +47,6 @@ interface Props {
  * اینجا هاردکد بود. حالا فهرست دروس، سالن، شمارهٔ صندلی، بدهی و هویت دانشجو
  * همگی از پایگاه داده خوانده و به‌صورت prop تزریق می‌شوند.
  */
-
-// Component for rendering an SVG QR Code matrix for student tickets
-function SvgQrCode({ text, size = 90 }: { text: string; size?: number }) {
-  // Deterministic 21x21 QR-like matrix pattern based on hash of text
-  const matrix = useMemo(() => {
-    const grid: boolean[][] = Array.from({ length: 21 }, () => Array(21).fill(false));
-    // Fixed Finder Patterns in top-left, top-right, bottom-left
-    const addFinder = (r: number, c: number) => {
-      for (let i = 0; i < 7; i++) {
-        for (let j = 0; j < 7; j++) {
-          if (i === 0 || i === 6 || j === 0 || j === 6 || (i >= 2 && i <= 4 && j >= 2 && j <= 4)) {
-            grid[r + i][c + j] = true;
-          }
-        }
-      }
-    };
-    addFinder(0, 0);
-    addFinder(0, 14);
-    addFinder(14, 0);
-
-    // Hash seed data
-    let hash = 0;
-    for (let i = 0; i < text.length; i++) {
-      hash = (hash * 31 + text.charCodeAt(i)) & 0xffffffff;
-    }
-
-    for (let r = 0; r < 21; r++) {
-      for (let c = 0; c < 21; c++) {
-        // Skip finder areas
-        if ((r < 8 && c < 8) || (r < 8 && c > 12) || (r > 12 && c < 8)) continue;
-        // Timing patterns
-        if (r === 6 || c === 6) {
-          grid[r][c] = (r + c) % 2 === 0;
-        } else {
-          hash = (hash * 1103515245 + 12345) & 0x7fffffff;
-          grid[r][c] = (hash % 100) > 42;
-        }
-      }
-    }
-    return grid;
-  }, [text]);
-
-  return (
-    <svg width={size} height={size} viewBox="0 0 21 21" className="rounded-lg shadow-xs bg-white p-1">
-      {matrix.map((row, r) =>
-        row.map((cell, c) =>
-          cell ? <rect key={`${r}-${c}`} x={c} y={r} width="1" height="1" fill="#0f172a" /> : null
-        )
-      )}
-    </svg>
-  );
-}
 
 // Persian solar date converter helper
 function toShamsi(dStr: string | null | undefined): string {
@@ -117,7 +67,7 @@ function toShamsi(dStr: string | null | undefined): string {
   }
 }
 
-export default function ExamCardClient({ user, publicBaseUrl, examTicket, examTicketBlocked, card }: Props) {
+export default function ExamCardClient({ user, publicBaseUrl, examTicket, examTicketBlocked, card, ticketQr }: Props) {
   const [courses, setCourses] = useState<StudentCourseEvaluationItem[]>(card?.courses ?? []);
   /** بدهی واقعی از دفتر کل مالی — نه یک عدد ثابت */
   const [financialDebt, setFinancialDebt] = useState<number>(card?.debt ?? 0);
@@ -497,7 +447,11 @@ export default function ExamCardClient({ user, publicBaseUrl, examTicket, examTi
 
             <div className="p-2 bg-white rounded-xl text-slate-950 text-center shadow flex flex-col items-center justify-center">
               {examTicket ? (
-                <SvgQrCode text={`${publicBaseUrl}/exam-ticket/${encodeURIComponent(examTicket.token)}`} size={75} />
+                ticketQr ? (
+                  <span className="[&>svg]:rounded-lg [&>svg]:bg-white" dangerouslySetInnerHTML={{ __html: ticketQr }} />
+                ) : (
+                  <span className="text-[10px] text-slate-400">QR در دسترس نیست</span>
+                )
               ) : (
                 <div className="flex h-[75px] w-[75px] flex-col items-center justify-center rounded-lg border border-amber-500/60 bg-amber-950/40 text-center text-[8px] font-bold leading-3 text-amber-200">
                   کارت صادر<br />نشده

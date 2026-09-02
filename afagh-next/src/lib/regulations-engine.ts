@@ -207,7 +207,9 @@ export async function evaluateStudentRegulationStatus(
         offeringId: enrollments.offeringId,
         gradeValue: enrollments.gradeValue,
         gradeStatus: enrollments.gradeStatus,
+        status: enrollments.status,
         termId: course_offerings.termId,
+        offeringType: course_offerings.offeringType,
         units: courses.units,
         gradingType: courses.gradingType,
         affectsGpa: courses.affectsGpa,
@@ -243,8 +245,15 @@ export async function evaluateStudentRegulationStatus(
       passedUnits = round2(passedUnits + u);
     }
 
+    /**
+     * نوبت‌های معادل‌سازی (وضعیت EQUIV_PASSED یا گروه درسی TRANSFER) در محاسبهٔ
+     * معدل و مشروطیت منظور نمی‌شوند؛ واحد قبولی‌شان فقط در بالا شمرده شد.
+     * این همان «بدون مشروطیت» بودن معادل‌سازی است.
+     */
+    const isEquivalence = e.status === 'EQUIV_PASSED' || e.offeringType === 'TRANSFER';
+
     // محاسبه معدل به ازای هر ترم
-    if (e.termId && (e.affectsGpa === 1 || e.affectsGpa == null) && e.gradingType !== 'DESCRIPTIVE') {
+    if (!isEquivalence && e.termId && (e.affectsGpa === 1 || e.affectsGpa == null) && e.gradingType !== 'DESCRIPTIVE') {
       const acc = termMap.get(e.termId) ?? new GpaAccumulator();
       acc.add(g, u);
       termMap.set(e.termId, acc);
