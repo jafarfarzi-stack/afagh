@@ -1,5 +1,5 @@
 import 'server-only';
-import { and, asc, desc, eq, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, course_offerings, courses, enrollments, majors,
@@ -11,10 +11,10 @@ import { computeTermTuition } from './tuition-engine';
 import { getSetting } from './settings';
 import { notifyUserMultichannel } from './messaging';
 import {
-  applyDiscounts, applySponsorships, bucketCourseUnits, buildTranscript,
-  buildChequeReminderText, chequeNeedsReminder,
+  bucketCourseUnits, buildTranscript, buildChequeReminderText,
+  chequeNeedsReminder, computeTermAdjustments,
   toNum, totalBuckets, transcriptTotals, tuitionFromFormula, pickFormula,
-  type AppliedAmount, type ChequeRow, type LoanRow, type TermStatement,
+  type ChequeRow, type LoanRow, type TermCharge, type TermStatement,
 } from './finance-rules';
 
 // ══════════════════════════════════════════════════════════════════════
@@ -39,7 +39,11 @@ export interface FinanceStudentRow {
   entryYear: number | null;
   status: string | null;
   charges: number;
+  discounts: number;
+  sponsorships: number;
   payments: number;
+  chequesCleared: number;
+  loans: number;
   balance: number;
   pendingCheques: number;
 }
@@ -64,75 +68,183 @@ export interface FinanceListFilters {
 export async function listFinanceStudents(
   filters: FinanceListFilters = {}
 ): Promise<FinanceStudentRow[]> {
-  const where: unknown[] = [];
+  const where: SQL[] = [];
   if (filters.majorId) where.push(eq(students.majorId, filters.majorId));
   if (filters.degreeLevelId) where.push(eq(students.degreeLevelId, filters.degreeLevelId));
   if (filters.entryYear) where.push(eq(students.entryYear, filters.entryYear));
 
   if (filters.search && filters.search.trim()) {
     const needle = `%${filters.search.trim()}%`;
-    where.push(or(
+    const searchCond = or(
       sql`${users.firstName} ILIKE ${needle}`,
       sql`${users.lastName} ILIKE ${needle}`,
       sql`${users.nationalCode} ILIKE ${needle}`,
       sql`${students.studentCode} ILIKE ${needle}`
-    ));
+    );
+    if (searchCond) where.push(searchCond);
   }
-
-  const whereSql = where.length ? sql`WHERE ${sql.join(where as never[], sql` AND `)}` : sql``;
 
   const limit = Math.min(Math.max(filters.limit ?? 500, 1), 2000);
 
-  const rows = await db.execute(sql`
-    SELECT
-      s."id"            AS "studentId",
-      s."userId"        AS "userId",
-      s."studentCode"   AS "studentCode",
-      u."firstName"     AS "firstName",
-      u."lastName"      AS "lastName",
-      u."nationalCode"  AS "nationalCode",
-      m."name"          AS "majorTitle",
-      d."title"         AS "degreeTitle",
-      s."entryYear"     AS "entryYear",
-      s."status"        AS "status",
-      COALESCE(ch.total, 0) AS charges,
-      COALESCE(pa.total, 0) AS payments,
-      COALESCE(ch.total, 0) - COALESCE(pa.total, 0) AS balance,
-      COALESCE(pc.pending, 0) AS "pendingCheques"
-    FROM students s
-    JOIN users u ON u."id" = s."userId"
-    LEFT JOIN majors m ON m."id" = s."majorId"
-    LEFT JOIN degree_level_configs d ON d."id" = s."degreeLevelId"
-    LEFT JOIN (
-      SELECT "studentId", SUM("amount") AS total
-      FROM student_ledger
-      WHERE "transactionType" IN ('CHARGE','TUITION_CHARGE')
-      GROUP BY "studentId"
-    ) ch ON ch."studentId" = s."id"
-    LEFT JOIN (
-      SELECT "studentId", SUM("amount") AS total
-      FROM student_ledger
-      WHERE "transactionType" IN ('PAYMENT','CREDIT')
-      GROUP BY "studentId"
-    ) pa ON pa."studentId" = s."id"
-    LEFT JOIN (
-      SELECT "studentId", SUM("amount") AS pending
-      FROM payment_cheques
-      WHERE "status" = 'PENDING'
-      GROUP BY "studentId"
-    ) pc ON pc."studentId" = s."id"
-    ${whereSql}
-    ORDER BY (COALESCE(ch.total,0) - COALESCE(pa.total,0)) DESC, s."studentCode" ASC
-    LIMIT ${limit}
-  `);
+  const base = await db.select({
+    studentId: students.id,
+    userId: students.userId,
+    studentCode: students.studentCode,
+    firstName: users.firstName,
+    lastName: users.lastName,
+    nationalCode: users.nationalCode,
+    majorTitle: majors.name,
+    degreeTitle: degree_level_configs.title,
+    entryYear: students.entryYear,
+    status: students.status,
+  }).from(students)
+    .innerJoin(users, eq(users.id, students.userId))
+    .leftJoin(majors, eq(majors.id, students.majorId))
+    .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
+    .where(where.length ? and(...where) : undefined)
+    .orderBy(asc(students.studentCode))
+    .limit(limit);
 
-  const list = (rows as unknown as { rows: FinanceStudentRow[] }).rows.map((r) => ({
-    ...r,
-    charges: toNum(r.charges),
-    payments: toNum(r.payments),
-    balance: toNum(r.balance),
-    pendingCheques: toNum(r.pendingCheques),
-  }));
+  if (base.length === 0) return [];
+  const ids = base.map((r) => r.studentId);
+
+  // شش کوئری تجمیعی به‌جای حلقه به ازای هر دانشجو — هزینه مستقل از تعداد
+  // دانشجویان است. مانده از همان computeTermAdjustments می‌آید که کارنامه
+  // استفاده می‌کند، پس عدد کارتابل و کارنامه نمی‌تواند واگرا شود.
+  const [ledgerAgg, discountRows, sponsorRows, chequeAgg, loanAgg] = await Promise.all([
+    db.select({
+      studentId: student_ledger.studentId,
+      termId: student_ledger.termId,
+      transactionType: student_ledger.transactionType,
+      total: sql<number>`SUM(${student_ledger.amount})`,
+    }).from(student_ledger)
+      .where(inArray(student_ledger.studentId, ids))
+      .groupBy(student_ledger.studentId, student_ledger.termId, student_ledger.transactionType),
+
+    db.select({
+      id: student_discounts.id,
+      studentId: student_discounts.studentId,
+      termId: student_discounts.termId,
+      kind: student_discounts.kind,
+      percent: student_discounts.percent,
+      amount: student_discounts.amount,
+    }).from(student_discounts)
+      .where(and(inArray(student_discounts.studentId, ids), eq(student_discounts.status, 'APPROVED'))),
+
+    db.select({
+      id: student_sponsorships.id,
+      studentId: student_sponsorships.studentId,
+      termId: student_sponsorships.termId,
+      coverageKind: student_sponsorships.coverageKind,
+      percent: student_sponsorships.percent,
+      amount: student_sponsorships.amount,
+    }).from(student_sponsorships)
+      .where(and(
+        inArray(student_sponsorships.studentId, ids),
+        inArray(student_sponsorships.status, ['CONFIRMED', 'PAID'])
+      )),
+
+    db.select({
+      studentId: payment_cheques.studentId,
+      status: payment_cheques.status,
+      total: sql<number>`SUM(${payment_cheques.amount})`,
+    }).from(payment_cheques)
+      .where(inArray(payment_cheques.studentId, ids))
+      .groupBy(payment_cheques.studentId, payment_cheques.status),
+
+    db.select({
+      studentId: student_loans.studentId,
+      status: student_loans.status,
+      total: sql<number>`SUM(${student_loans.amount})`,
+    }).from(student_loans)
+      .where(inArray(student_loans.studentId, ids))
+      .groupBy(student_loans.studentId, student_loans.status),
+  ]);
+
+  const NO_TERM = 0;
+
+  const termChargesByStudent = new Map<number, TermCharge[]>();
+  const paymentsByStudent = new Map<number, number>();
+  for (const r of ledgerAgg) {
+    const type = String(r.transactionType).toUpperCase();
+    const amount = toNum(r.total);
+    if (type === 'CHARGE' || type === 'TUITION_CHARGE') {
+      const arr = termChargesByStudent.get(r.studentId) || [];
+      arr.push({ termId: r.termId ?? NO_TERM, charges: amount });
+      termChargesByStudent.set(r.studentId, arr);
+    } else if (type === 'PAYMENT' || type === 'CREDIT') {
+      paymentsByStudent.set(r.studentId, (paymentsByStudent.get(r.studentId) || 0) + amount);
+    }
+  }
+
+  const discountsByStudent = new Map<number, typeof discountRows>();
+  for (const d of discountRows) {
+    const arr = discountsByStudent.get(d.studentId) || [];
+    arr.push(d);
+    discountsByStudent.set(d.studentId, arr);
+  }
+
+  const sponsorsByStudent = new Map<number, typeof sponsorRows>();
+  for (const sp of sponsorRows) {
+    const arr = sponsorsByStudent.get(sp.studentId) || [];
+    arr.push(sp);
+    sponsorsByStudent.set(sp.studentId, arr);
+  }
+
+  const chequesByStudent = new Map<number, { cleared: number; pending: number }>();
+  for (const c of chequeAgg) {
+    const slot = chequesByStudent.get(c.studentId) || { cleared: 0, pending: 0 };
+    const amount = toNum(c.total);
+    const status = String(c.status).toUpperCase();
+    if (status === 'CLEARED') slot.cleared += amount;
+    else if (status === 'PENDING') slot.pending += amount;
+    chequesByStudent.set(c.studentId, slot);
+  }
+
+  const loansByStudent = new Map<number, number>();
+  for (const l of loanAgg) {
+    const status = String(l.status).toUpperCase();
+    if (status !== 'ACTIVE' && status !== 'SETTLED') continue;
+    loansByStudent.set(l.studentId, (loansByStudent.get(l.studentId) || 0) + toNum(l.total));
+  }
+
+  const list = base.map((r) => {
+    const adjustments = computeTermAdjustments({
+      termCharges: termChargesByStudent.get(r.studentId) || [],
+      discounts: discountsByStudent.get(r.studentId) || [],
+      sponsorships: sponsorsByStudent.get(r.studentId) || [],
+    });
+
+    const charges = adjustments.reduce((a, t) => a + t.charges, 0);
+    const discounts = adjustments.reduce((a, t) => a + t.discounts, 0);
+    const sponsorships = adjustments.reduce((a, t) => a + t.sponsorships, 0);
+    const payments = paymentsByStudent.get(r.studentId) || 0;
+    const cheques = chequesByStudent.get(r.studentId) || { cleared: 0, pending: 0 };
+    const loans = loansByStudent.get(r.studentId) || 0;
+
+    return {
+      studentId: r.studentId,
+      userId: r.userId,
+      studentCode: r.studentCode,
+      firstName: r.firstName,
+      lastName: r.lastName,
+      nationalCode: r.nationalCode,
+      majorTitle: r.majorTitle,
+      degreeTitle: r.degreeTitle,
+      entryYear: r.entryYear,
+      status: r.status,
+      charges,
+      discounts,
+      sponsorships,
+      payments,
+      chequesCleared: cheques.cleared,
+      loans,
+      balance: charges - discounts - sponsorships - payments - cheques.cleared - loans,
+      pendingCheques: cheques.pending,
+    };
+  });
+
+  list.sort((a, b) => b.balance - a.balance || String(a.studentCode).localeCompare(String(b.studentCode)));
 
   return filters.onlyDebtors ? list.filter((r) => r.balance > 0) : list;
 }
@@ -261,11 +373,10 @@ export async function getStudentFinance(studentId: number): Promise<StudentFinan
   const termTitles: Record<string, string> = {};
   for (const t of terms) termTitles[String(t.id)] = t.termTitle || t.termCode;
 
-  // تخفیف‌ها و پوشش بنیادها ترم‌به‌ترم روی شهریهٔ همان ترم اعمال می‌شوند.
-  // تخفیف با termId تهی روی همهٔ ترم‌ها اثر دارد.
+  // تخفیف‌ها و پوشش بنیادها از computeTermAdjustments می‌آیند — همان تابعی
+  // که کارتابل هم صدایش می‌زند. دو پیاده‌سازی جدا یعنی دو عدد متفاوت برای
+  // یک دانشجو؛ این اشتراک، سازگاری را ساختاری تضمین می‌کند.
   const NO_TERM = 0;
-  const discountApplied: (AppliedAmount & { termId: number })[] = [];
-  const sponsorApplied: (AppliedAmount & { termId: number })[] = [];
 
   const ledgerByTerm = new Map<number, typeof ledger>();
   for (const txn of ledger) {
@@ -275,48 +386,34 @@ export async function getStudentFinance(studentId: number): Promise<StudentFinan
     ledgerByTerm.set(key, arr);
   }
 
-  const termIdsForStudent = new Set<number>(ledgerByTerm.keys());
-  for (const c of cheques) termIdsForStudent.add(c.termId ?? NO_TERM);
-  for (const l of loans) termIdsForStudent.add(l.termId ?? NO_TERM);
-
-  for (const termId of termIdsForStudent) {
-    const termLedger = ledgerByTerm.get(termId) || [];
+  const termCharges: TermCharge[] = [];
+  for (const [termId, termLedger] of ledgerByTerm.entries()) {
     const charges = termLedger
       .filter((t) => ['CHARGE', 'TUITION_CHARGE'].includes(String(t.transactionType).toUpperCase()))
       .reduce((a, t) => a + toNum(t.amount), 0);
-
-    if (charges <= 0 && termId === NO_TERM) continue;
-
-    const activeDiscounts = discounts.filter((d) =>
-      d.row.status === 'APPROVED' && (d.row.termId === null || d.row.termId === termId));
-    const activeSponsors = sponsorships.filter((s) =>
-      ['CONFIRMED', 'PAID'].includes(s.row.status) && (s.row.termId === null || s.row.termId === termId));
-
-    const disc = applyDiscounts(
-      activeDiscounts.map((d) => ({
-        id: d.row.id,
-        kind: d.row.kind,
-        percent: d.row.percent,
-        amount: d.row.amount,
-        appliesTo: d.row.appliesTo,
-        title: d.typeTitle,
-      })),
-      charges, 0
-    );
-    for (const a of disc.applied) discountApplied.push({ ...a, termId });
-
-    const spon = applySponsorships(
-      activeSponsors.map((s) => ({
-        id: s.row.id,
-        coverageKind: s.row.coverageKind,
-        percent: s.row.percent,
-        amount: s.row.amount,
-        title: s.sponsorTitle,
-      })),
-      disc.net
-    );
-    for (const a of spon.applied) sponsorApplied.push({ ...a, termId });
+    termCharges.push({ termId, charges });
   }
+
+  const adjustments = computeTermAdjustments({
+    termCharges,
+    discounts: discounts
+      .filter((d) => d.row.status === 'APPROVED')
+      .map((d) => ({
+        id: d.row.id, termId: d.row.termId, kind: d.row.kind,
+        percent: d.row.percent, amount: d.row.amount, title: d.typeTitle,
+      })),
+    sponsorships: sponsorships
+      .filter((sp) => ['CONFIRMED', 'PAID'].includes(sp.row.status))
+      .map((sp) => ({
+        id: sp.row.id, termId: sp.row.termId, coverageKind: sp.row.coverageKind,
+        percent: sp.row.percent, amount: sp.row.amount, title: sp.sponsorTitle,
+      })),
+  });
+
+  const discountApplied = adjustments.flatMap((a) =>
+    a.discountLines.map((l) => ({ ...l, termId: a.termId })));
+  const sponsorApplied = adjustments.flatMap((a) =>
+    a.sponsorLines.map((l) => ({ ...l, termId: a.termId })));
 
   const transcript = buildTranscript({
     ledger: ledger.map((t) => ({

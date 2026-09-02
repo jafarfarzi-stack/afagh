@@ -35,11 +35,16 @@ export default async function FinanceWorklistPage(props: {
   const totals = students.reduce(
     (acc, s) => ({
       charges: acc.charges + s.charges,
+      discounts: acc.discounts + s.discounts,
+      sponsorships: acc.sponsorships + s.sponsorships,
       payments: acc.payments + s.payments,
+      chequesCleared: acc.chequesCleared + s.chequesCleared,
+      loans: acc.loans + s.loans,
       balance: acc.balance + s.balance,
       pendingCheques: acc.pendingCheques + s.pendingCheques,
     }),
-    { charges: 0, payments: 0, balance: 0, pendingCheques: 0 }
+    { charges: 0, discounts: 0, sponsorships: 0, payments: 0,
+      chequesCleared: 0, loans: 0, balance: 0, pendingCheques: 0 }
   );
   const debtorCount = students.filter((s) => s.balance > 0).length;
 
@@ -158,8 +163,12 @@ export default async function FinanceWorklistPage(props: {
                   <th className="p-2">رشته</th>
                   <th className="p-2">مقطع</th>
                   <th className="p-2">ورودی</th>
-                  <th className="p-2">بدهی</th>
+                  <th className="p-2">شهریه</th>
+                  <th className="p-2">تخفیف</th>
+                  <th className="p-2">پوشش بنیاد</th>
                   <th className="p-2">پرداخت</th>
+                  <th className="p-2">چک وصولی</th>
+                  <th className="p-2">وام</th>
                   <th className="p-2">چک در انتظار</th>
                   <th className="p-2">مانده</th>
                   <th className="p-2 print:hidden"></th>
@@ -179,7 +188,11 @@ export default async function FinanceWorklistPage(props: {
                     <td className="p-2 text-xs text-slate-600">{s.degreeTitle || '—'}</td>
                     <td className="p-2 text-xs text-slate-600">{faYear(s.entryYear)}</td>
                     <td className="p-2 text-xs text-slate-700">{fa(s.charges)}</td>
+                    <td className="p-2 text-xs text-violet-700">{s.discounts > 0 ? fa(s.discounts) : '—'}</td>
+                    <td className="p-2 text-xs text-indigo-700">{s.sponsorships > 0 ? fa(s.sponsorships) : '—'}</td>
                     <td className="p-2 text-xs text-emerald-700">{fa(s.payments)}</td>
+                    <td className="p-2 text-xs text-emerald-700">{s.chequesCleared > 0 ? fa(s.chequesCleared) : '—'}</td>
+                    <td className="p-2 text-xs text-sky-700">{s.loans > 0 ? fa(s.loans) : '—'}</td>
                     <td className="p-2 text-xs text-amber-700">{s.pendingCheques > 0 ? fa(s.pendingCheques) : '—'}</td>
                     <td className={`p-2 text-xs font-bold ${s.balance > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
                       {fa(s.balance)}
@@ -199,7 +212,11 @@ export default async function FinanceWorklistPage(props: {
                 <tr className="border-t-2 border-slate-200 text-xs font-bold text-slate-800">
                   <td className="p-2" colSpan={5}>جمع</td>
                   <td className="p-2">{fa(totals.charges)}</td>
+                  <td className="p-2 text-violet-700">{fa(totals.discounts)}</td>
+                  <td className="p-2 text-indigo-700">{fa(totals.sponsorships)}</td>
                   <td className="p-2 text-emerald-700">{fa(totals.payments)}</td>
+                  <td className="p-2 text-emerald-700">{fa(totals.chequesCleared)}</td>
+                  <td className="p-2 text-sky-700">{fa(totals.loans)}</td>
                   <td className="p-2 text-amber-700">{fa(totals.pendingCheques)}</td>
                   <td className="p-2 text-rose-700">{fa(totals.balance)}</td>
                   <td className="p-2 print:hidden"></td>

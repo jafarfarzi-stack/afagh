@@ -12,6 +12,7 @@ import {
   buildChequeReminderText,
   buildTranscript,
   chequeNeedsReminder,
+  computeTermAdjustments,
   discountAmount,
   effectivePercent,
   formulaMatches,
@@ -267,6 +268,83 @@ section('کارنامهٔ مالی');
   eq('ماندهٔ کل', tot.balance, 3_000_000);
 }
 eq('کارنامهٔ دانشجو بدون تراکنش خالی است', buildTranscript({ ledger: [] }).length, 0);
+
+// ── ۸. تعدیلات ترم‌به‌ترم (مرجع مشترک کارتابل و کارنامه) ──────
+section('تعدیلات ترم‌به‌ترم');
+{
+  const adj = computeTermAdjustments({
+    termCharges: [
+      { termId: 1, charges: 4_000_000 },
+      { termId: 2, charges: 6_000_000 },
+    ],
+    discounts: [
+      { id: 1, termId: 1, kind: 'PERCENT', percent: 25, amount: 0, title: 'رتبهٔ برتر' },
+    ],
+    sponsorships: [],
+  });
+  eq('دو ترم خروجی می‌دهد', adj.length, 2);
+  eq('تخفیف فقط روی ترم خودش', adj[0].discounts, 1_000_000);
+  eq('ترم دیگر تخفیف نمی‌گیرد', adj[1].discounts, 0);
+  eq('سهم دانشجو پس از تخفیف', adj[0].studentShare, 3_000_000);
+  eq('سهم ترم بدون تخفیف دست‌نخورده', adj[1].studentShare, 6_000_000);
+}
+{
+  const adj = computeTermAdjustments({
+    termCharges: [
+      { termId: 1, charges: 4_000_000 },
+      { termId: 2, charges: 6_000_000 },
+    ],
+    discounts: [{ id: 1, termId: null, kind: 'PERCENT', percent: 10, amount: 0, title: 'خانوادهٔ چنددانشجویی' }],
+    sponsorships: [],
+  });
+  eq('تخفیف بدون ترم روی ترم ۱', adj[0].discounts, 400_000);
+  eq('تخفیف بدون ترم روی ترم ۲', adj[1].discounts, 600_000);
+}
+{
+  const adj = computeTermAdjustments({
+    termCharges: [{ termId: 1, charges: 2_000_000 }],
+    discounts: [{ id: 1, termId: 1, kind: 'PERCENT', percent: 50, amount: 0 }],
+    sponsorships: [{ id: 2, termId: 1, coverageKind: 'PERCENT', percent: 50, amount: 0, title: 'کمیتهٔ امداد' }],
+  });
+  eq('تخفیف ۵۰٪', adj[0].discounts, 1_000_000);
+  eq('پوشش بنیاد روی خالصِ پس از تخفیف', adj[0].sponsorships, 500_000);
+  eq('سهم نهایی دانشجو', adj[0].studentShare, 500_000);
+}
+{
+  const adj = computeTermAdjustments({
+    termCharges: [{ termId: 1, charges: 1_000_000 }],
+    discounts: [{ id: 1, termId: 1, kind: 'FIXED', percent: 0, amount: 9_000_000 }],
+    sponsorships: [],
+  });
+  eq('تخفیف مبلغی از کل شهریه بیشتر نمی‌شود', adj[0].discounts, 1_000_000);
+  eq('سهم دانشجو منفی نمی‌شود', adj[0].studentShare, 0);
+}
+{
+  const adj = computeTermAdjustments({
+    termCharges: [{ termId: 1, charges: 3_000_000 }],
+    discounts: [],
+    sponsorships: [{ id: 1, termId: 1, coverageKind: 'FIXED', percent: 0, amount: 3_000_000, title: 'بنیاد شهید' }],
+  });
+  eq('پوشش کامل بنیاد', adj[0].sponsorships, 3_000_000);
+  eq('سهم دانشجو صفر', adj[0].studentShare, 0);
+}
+{
+  // کارتابل و کارنامه هر دو همین تابع را صدا می‌زنند؛ اگر ورودی یکی باشد
+  // خروجی هم باید یکی باشد — این همان سازگاری‌ای است که پیش‌تر نقض می‌شد.
+  const input = {
+    termCharges: [{ termId: 1, charges: 5_000_000 }],
+    discounts: [{ id: 1, termId: null, kind: 'PERCENT', percent: 20, amount: 0 }],
+    sponsorships: [{ id: 2, termId: null, coverageKind: 'PERCENT', percent: 25, amount: 0 }],
+  };
+  const a = computeTermAdjustments(input);
+  const b = computeTermAdjustments(input);
+  eq('دو فراخوانی با ورودی یکسان، خروجی یکسان می‌دهند', a, b);
+  eq('ماندهٔ محاسبه‌شده پایدار است',
+    a[0].charges - a[0].discounts - a[0].sponsorships, a[0].studentShare);
+}
+eq('ترم بدون ورودی → خروجی خالی', computeTermAdjustments({
+  termCharges: [], discounts: [], sponsorships: [],
+}).length, 0);
 
 // ── ۸. یادآوری چک پیش از سررسید ──────────────────────────────
 section('یادآوری چک');

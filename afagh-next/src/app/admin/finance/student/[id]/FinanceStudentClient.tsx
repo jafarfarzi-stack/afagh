@@ -133,7 +133,7 @@ export default function FinanceStudentClient(props: {
                   discountTypeId: Number(f.get('discountTypeId')),
                   percent: Number(f.get('percent')) || 0,
                   amount: Number(f.get('amount')) || 0,
-                  appliesTo: String(f.get('appliesTo') || 'BOTH'),
+                  appliesTo: 'BOTH',
                   reason: String(f.get('reason') || ''),
                 }), 'تخفیف ثبت شد');
                 e.currentTarget.reset();
@@ -156,14 +156,6 @@ export default function FinanceStudentClient(props: {
                   <select name="termId" className={inputCls}>
                     <option value="">همهٔ ترم‌ها</option>
                     {terms.map((t) => <option key={t.id} value={t.id}>{t.termTitle}</option>)}
-                  </select>
-                </label>
-                <label className={labelCls}>
-                  قلمرو اثر
-                  <select name="appliesTo" className={inputCls}>
-                    <option value="BOTH">ثابت و متغیر</option>
-                    <option value="FIXED">فقط شهریهٔ ثابت</option>
-                    <option value="VARIABLE">فقط شهریهٔ متغیر</option>
                   </select>
                 </label>
                 {selectedType?.kind === 'PERCENT' ? (
@@ -253,7 +245,7 @@ export default function FinanceStudentClient(props: {
                   coverageKind: String(f.get('coverageKind')),
                   percent: Number(f.get('percent')) || 0,
                   amount: Number(f.get('amount')) || 0,
-                  appliesTo: String(f.get('appliesTo') || 'BOTH'),
+                  appliesTo: 'BOTH',
                   referenceNo: String(f.get('referenceNo') || ''),
                 }), 'پوشش بنیاد ثبت شد');
                 e.currentTarget.reset();
