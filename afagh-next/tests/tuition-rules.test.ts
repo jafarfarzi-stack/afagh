@@ -5,7 +5,7 @@
  * چون src/lib/tuition-rules.ts هیچ وابستگی به دیتابیس یا Next ندارد، بدون
  * نیاز به PostgreSQL قابل اجراست.
  */
-import { pickFeeRule, toNum } from '../src/lib/tuition-rules.ts';
+import { pickFeeRule, termTypeOf, toNum } from '../src/lib/tuition-rules.ts';
 
 let pass = 0;
 let fail = 0;
@@ -62,6 +62,26 @@ eq('بدون قاعدهٔ منطبق → null', pickFeeRule([], { degreeLevelId:
 eq('toNum رشتهٔ عددی را عدد می‌کند', toNum('1250'), 1250);
 eq('toNum برای مقدار نامعتبر صفر می‌دهد', toNum('abc'), 0);
 eq('toNum برای null صفر می‌دهد', toNum(null), 0);
+
+console.log('\n۶) تشخیص نوع ترم (termTypeOf) — از جمله ترم‌های معادل‌سازی قدیمی');
+// ترم معادل‌سازی که پیش از افزودن ستون termType ساخته شده و NORMAL پیش‌فرض خورده است
+eq('ترمیم: 00EQ1 با termType=NORMAL هم معادل‌سازی شناخته می‌شود',
+  termTypeOf({ termType: 'NORMAL', termCode: '00EQ1' }), 'EQUIVALENCE');
+eq('پیشوند با فاصله/حروف بزرگ هم تشخیص داده می‌شود',
+  termTypeOf({ termType: null, termCode: ' 00eq7 ' }), 'EQUIVALENCE');
+eq('پیشوند 00EQ بر ستون termType مقدم است (دادهٔ قدیمی NORMAL دارد)',
+  termTypeOf({ termType: 'NORMAL', termCode: '00EQ9' }), 'EQUIVALENCE');
+eq('ترم عادیِ دارای termType صریح دست‌نخورده می‌ماند',
+  termTypeOf({ termType: 'NORMAL', termCode: '1404-1' }), 'NORMAL');
+eq('ترم عادی بدون پیشوند → NORMAL', termTypeOf({ termType: null, termCode: '1404-1' }), 'NORMAL');
+eq('پرچم isSummer → SUMMER', termTypeOf({ termType: null, termCode: '1404-3', isSummer: 1 }), 'SUMMER');
+eq('ترتیب: termType صریح بر isSummer مقدم است', termTypeOf({ termType: 'EQUIVALENCE', isSummer: 1 }), 'EQUIVALENCE');
+
+console.log('\n۷) اثر عملی ترمیم: شهریهٔ ثابت ترم قدیمی معادل‌سازی');
+const legacyTermType = termTypeOf({ termType: 'NORMAL', termCode: '00EQ2' });
+const legacyRule = pickFeeRule(rules, { degreeLevelId: 1, termType: legacyTermType, termLevelOnly: true });
+eq('ترمیم‌شده به قاعدهٔ معادل‌سازی می‌رسد (id 5، ثابت ۷۰۰۰) نه قاعدهٔ ترم عادی', legacyRule?.id, 5);
+eq('شهریهٔ ثابت صحیح است', legacyRule?.fixedTuition, 7000);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

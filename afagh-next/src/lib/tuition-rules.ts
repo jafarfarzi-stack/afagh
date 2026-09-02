@@ -48,6 +48,34 @@ export const toNum = (v: unknown): number => {
 };
 
 /**
+ * تعیین نوع ترم برای محاسبهٔ شهریه.
+ * ترتیب اولویت:
+ *  1) ستون termType (منبع معتبر، قابل تنظیم از «تنظیمات»/«ترمیم دیتابیس»)،
+ *  2) کد ترم با پیشوند 00EQ → معادل‌سازی. این «درمانگر» برای ترم‌های معادل‌سازی‌ای است
+ *     که پیش از افزودن ستون termType ساخته شده‌اند و مقدار پیش‌فرض NORMAL دارند؛
+ *     بدون آن، نرخ ترم عادی به اشتباه به ترم معادل‌سازی اعمال می‌شد.
+ *  3) پرچم isSummer → تابستان.
+ */
+export function termTypeOf(term: {
+  termType?: string | null;
+  termCode?: string | null;
+  isSummer?: number | null;
+}): TermType {
+  // ۱) پیشوند 00EQ نشانهٔ قطعی ترم معادل‌سازی است (این ترم‌ها را خودِ موتور معادل‌سازی
+  //    می‌سازد). این بررسی عمداً بر ستون termType مقدم است: ترم‌های معادل‌سازیِ ساخته‌شدهٔ
+  //    پیش از افزودن آن ستون، مقدار پیش‌فرض NOT NULL یعنی NORMAL دارند و اگر ستون مقدم
+  //    بود این ترمیم هرگز اثر نمی‌کرد و نرخ ترم عادی به ترم معادل‌سازی اعمال می‌شد.
+  if (term.termCode && /^00EQ/i.test(String(term.termCode).trim())) return 'EQUIVALENCE';
+  // ۲) ستون termType (منبع معتبر و قابل تنظیم برای همهٔ ترم‌های دیگر)
+  if (term.termType === 'EQUIVALENCE' || term.termType === 'SUMMER' || term.termType === 'NORMAL') {
+    return term.termType;
+  }
+  // ۳) پرچم قدیمی isSummer
+  if (term.isSummer) return 'SUMMER';
+  return 'NORMAL';
+}
+
+/**
  * انتخاب خاص‌ترین قاعدهٔ منطبق.
  * خاص‌بودن = تعداد کلیدهای غیرخالی بیشتر (مقطع، نوع ترم، نوع درس).
  * تساوی → جدیدترین effectiveFromYear و سپس id بزرگ‌تر.

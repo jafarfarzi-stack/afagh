@@ -18,9 +18,9 @@ import {
  */
 
 // منطق خالص انتخاب قاعده در ماژول جداگانه است تا بدون دیتابیس قابل تست باشد
-export { pickFeeRule, toNum } from './tuition-rules';
+export { pickFeeRule, termTypeOf, toNum } from './tuition-rules';
 export type { TermType, ResolvedRule, FeeRuleParams, FeeRuleLike } from './tuition-rules';
-import { pickFeeRule, toNum, type FeeRuleParams, type ResolvedRule, type TermType } from './tuition-rules';
+import { pickFeeRule, termTypeOf, toNum, type FeeRuleParams, type ResolvedRule, type TermType } from './tuition-rules';
 
 type FeeRuleRow = typeof tuition_fee_rules.$inferSelect;
 
@@ -55,12 +55,6 @@ export interface TermTuition {
 }
 
 /** نوع ترم را از رکورد ترم می‌خواند (با بازگشت امن به NORMAL) */
-export function termTypeOf(term: { termType?: string | null; isSummer?: number | null }): TermType {
-  if (term.termType === 'EQUIVALENCE' || term.termType === 'SUMMER' || term.termType === 'NORMAL') return term.termType;
-  if (term.isSummer) return 'SUMMER';
-  return 'NORMAL';
-}
-
 /**
  * محاسبهٔ شهریهٔ یک ترم برای یک دانشجو:
  *   ثابت (بر اساس نوع ترم) + مجموع(واحد × نرخ هر واحد بر اساس نوع گذراندن درس)
