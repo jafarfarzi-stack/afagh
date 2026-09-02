@@ -130,3 +130,15 @@ DELETE FROM "notification_channels" a USING "notification_channels" b
  WHERE a.id > b.id AND a."userId" = b."userId" AND a.channel = b.channel;
 ALTER TABLE "notification_channels" DROP CONSTRAINT IF EXISTS "uq_notification_channels";
 ALTER TABLE "notification_channels" ADD CONSTRAINT "uq_notification_channels" UNIQUE ("userId", channel);
+
+-- ⑦ ایندکس‌های گزارش‌های هوش تجاری (BI)
+--    موتور bi-engine روی «همهٔ پاسخ‌ها × همهٔ اساتید/کلاس‌ها» کوئری تجمیعی
+--    می‌زند (GROUP BY)؛ بدون این ایندکس‌ها هر بار Seq Scan روی
+--    evaluation_responses و schedules انجام می‌شود. idempotent هستند.
+CREATE INDEX IF NOT EXISTS "idx_eval_resp_period_offering" ON "evaluation_responses" ("periodId", "offeringId");
+CREATE INDEX IF NOT EXISTS "idx_eval_resp_question"        ON "evaluation_responses" ("questionId");
+CREATE INDEX IF NOT EXISTS "idx_eval_resp_offering"        ON "evaluation_responses" ("offeringId");
+CREATE INDEX IF NOT EXISTS "idx_eval_q_form_axis"          ON "evaluation_questions" ("formId", "axisLabel");
+CREATE INDEX IF NOT EXISTS "idx_schedules_room_type"       ON "schedules" ("roomId", "scheduleType");
+CREATE INDEX IF NOT EXISTS "idx_offering_prof_role"        ON "offering_professors" ("role", "staffId");
+CREATE INDEX IF NOT EXISTS "idx_analytics_snapshots_type"  ON "analytics_snapshots" ("reportType");

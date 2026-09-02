@@ -38,6 +38,7 @@ export const SETTING_GROUPS = [
   'سرویس‌های استعلام دولتی',
   'فارغ‌التحصیلی و صدور مدارک',
   'گردش کار و حق‌التدریس',
+  'ارزشیابی و هوش تجاری',
   'زیرساخت (فقط ENV)',
 ] as const;
 
@@ -121,6 +122,15 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'PAYROLL_COEF_MS_LEVEL', env: 'PAYROLL_COEF_MS_LEVEL', group: 'گردش کار و حق‌التدریس', label: 'نام ردیف ضریب مقطع ارشد', type: 'text', default: 'ضریب مقطع ارشد' },
   { key: 'PAYROLL_COEF_CROWDED', env: 'PAYROLL_COEF_CROWDED', group: 'گردش کار و حق‌التدریس', label: 'نام ردیف ضریب کلاس جمعی', type: 'text', default: 'ضریب کلاس جمعی (>۴۰ نفر)' },
   { key: 'PAYROLL_MS_COURSE_PREFIX', env: 'PAYROLL_MS_COURSE_PREFIX', group: 'گردش کار و حق‌التدریس', label: 'پیشوند کد دروس کارشناسی ارشد', type: 'text', default: '21', help: 'کد دروسی که با این رقم شروع می‌شوند مشمول ضریب مقطع ارشد‌اند (با ویرگول)' },
+
+  // ── ارزشیابی و هوش تجاری ──
+  { key: 'EVAL_FLAG_THRESHOLD', env: 'EVAL_FLAG_THRESHOLD', group: 'ارزشیابی و هوش تجاری', label: 'آستانهٔ بحرانی نمرهٔ ارزشیابی استاد', type: 'number', default: '3.5', help: 'استاد زیر این نمره در داشبورد مدیریتی علامت می‌خورد' },
+  { key: 'EVAL_FACILITY_REPAIR_THRESHOLD', env: 'EVAL_FACILITY_REPAIR_THRESHOLD', group: 'ارزشیابی و هوش تجاری', label: 'آستانهٔ ارجاع کلاس به تعمیرات', type: 'number', default: '3', help: 'اگر میانگین هر شاخص امکانات زیر این عدد باشد، کلاس نیازمند تعمیر گزارش می‌شود' },
+  { key: 'EVAL_TREND_TERMS', env: 'EVAL_TREND_TERMS', group: 'ارزشیابی و هوش تجاری', label: 'تعداد دورهٔ روند ارزشیابی', type: 'number', default: '3', help: 'چند دورهٔ اخیر در نمودار روند نمایش داده شود' },
+  { key: 'BI_WORDCLOUD_LIMIT', env: 'BI_WORDCLOUD_LIMIT', group: 'ارزشیابی و هوش تجاری', label: 'تعداد واژه در ابر کلمات', type: 'number', default: '18' },
+  { key: 'BI_WORDCLOUD_MIN_LEN', env: 'BI_WORDCLOUD_MIN_LEN', group: 'ارزشیابی و هوش تجاری', label: 'حداقل طول واژه در ابر کلمات', type: 'number', default: '3' },
+  { key: 'BI_STOPWORDS', env: 'BI_STOPWORDS', group: 'ارزشیابی و هوش تجاری', label: 'واژه‌های توقف (با ویرگول)', type: 'text', default: 'و,به,از,که,در,این,آن,با,را,برای,است,بود,شد,هم,نیز,تا,یا,اما,خیلی,بسیار,بر,دارد,می,های,یک,دو,سه,من,او,ما,شما,باید,نمی,کنم,کرد,کردم,کنند,مورد,همه,چون,اگر,روی,بی,هر,چه,می‌شود,بودن,کلاس,استاد,درس' },
+  { key: 'BI_CACHE_TTL_SECONDS', env: 'BI_CACHE_TTL_SECONDS', group: 'ارزشیابی و هوش تجاری', label: 'عمر کش گزارش‌های BI (ثانیه)', type: 'number', default: '300', help: 'صفر = همیشه محاسبهٔ تازه. داشبورد مدیریتی و ابر کلمات از این کش می‌خوانند' },
 
   // ── زیرساخت (فقط ENV) ──
   { key: 'DATABASE_URL', env: 'DATABASE_URL', group: 'زیرساخت (فقط ENV)', label: 'اتصال PostgreSQL', type: 'secret', default: 'postgres://afagh:afagh@localhost:5432/afagh_db', envOnly: true },

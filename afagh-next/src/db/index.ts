@@ -63,6 +63,27 @@ export async function ensureDbSchemaPatches() {
       ALTER TABLE students ADD COLUMN IF NOT EXISTS "quotaType" varchar(50) DEFAULT 'NORMAL';
       ALTER TABLE students ADD COLUMN IF NOT EXISTS "extraAllowedSemesters" integer DEFAULT 0;
       ALTER TABLE students ADD COLUMN IF NOT EXISTS "extraAllowedProbations" integer DEFAULT 0;
+
+      -- کش گزارش‌های هوش تجاری (bi-engine)؛ همان تعریف schema.ts، idempotent
+      CREATE TABLE IF NOT EXISTS analytics_snapshots (
+        id SERIAL PRIMARY KEY,
+        "cacheKey" VARCHAR(160) NOT NULL UNIQUE,
+        "reportType" VARCHAR(60) NOT NULL,
+        payload TEXT NOT NULL,
+        "rowCount" INTEGER,
+        "durationMs" INTEGER,
+        "computedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "expiresAt" TIMESTAMP
+      );
+
+      -- ایندکس‌های کوئری‌های تجمیعی BI (بخش ⑦ pg-hardening.sql)
+      CREATE INDEX IF NOT EXISTS "idx_eval_resp_period_offering" ON evaluation_responses ("periodId", "offeringId");
+      CREATE INDEX IF NOT EXISTS "idx_eval_resp_question"        ON evaluation_responses ("questionId");
+      CREATE INDEX IF NOT EXISTS "idx_eval_resp_offering"        ON evaluation_responses ("offeringId");
+      CREATE INDEX IF NOT EXISTS "idx_eval_q_form_axis"          ON evaluation_questions ("formId", "axisLabel");
+      CREATE INDEX IF NOT EXISTS "idx_schedules_room_type"       ON schedules ("roomId", "scheduleType");
+      CREATE INDEX IF NOT EXISTS "idx_offering_prof_role"        ON offering_professors ("role", "staffId");
+      CREATE INDEX IF NOT EXISTS "idx_analytics_snapshots_type"  ON analytics_snapshots ("reportType");
     `);
   } catch (_) {}
 }

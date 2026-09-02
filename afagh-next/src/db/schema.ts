@@ -1473,3 +1473,22 @@ export const notification_deliveries = pgTable('notification_deliveries', {
   durationMs: integer('durationMs'),
   createdAt: timestamp('createdAt').defaultNow()
 });
+
+// ═══ حافظهٔ گزارش‌های تحلیلی (BI Snapshot Cache) ═══
+// گزارش‌های هوش تجاری (داشبورد مدیریتی، تحلیل امکانات، ابر کلمات) روی کل
+// پاسخ‌های ارزشیابی محاسبه می‌شوند. در پایان ترم این حجم زیاد است، پس نتیجه
+// اینجا کش می‌شود: خواندن داشبورد = یک SELECT، و محاسبهٔ سنگین فقط توسط
+// job زمان‌بندی‌شده (/api/cron/bi-refresh) یا اولین درخواستِ منقضی‌شده انجام
+// می‌شود. هرگز در حلقهٔ رویداد سرور وب پردازش متن اجرا نمی‌شود.
+
+/** نتیجهٔ کش‌شدهٔ یک گزارش تحلیلی */
+export const analytics_snapshots = pgTable('analytics_snapshots', {
+  id: serial('id').primaryKey(),
+  cacheKey: varchar('cacheKey', { length: 160 }).notNull().unique(),
+  reportType: varchar('reportType', { length: 60 }).notNull(),   // MANAGEMENT_OVERVIEW | FACILITIES | WORDCLOUD | ...
+  payload: text('payload').notNull(),                            // JSON نتیجه
+  rowCount: integer('rowCount'),                                 // برای پایش حجم گزارش
+  durationMs: integer('durationMs'),                             // هزینهٔ محاسبهٔ آخرین بار
+  computedAt: timestamp('computedAt').notNull().defaultNow(),
+  expiresAt: timestamp('expiresAt')
+});

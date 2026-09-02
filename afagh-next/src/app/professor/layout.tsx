@@ -72,6 +72,12 @@ export default async function ProfessorLayout({ children }: { children: React.Re
             📊 کارنامه عملکرد و ارزیابی
           </Link>
           <Link
+            href="/professor/evaluation"
+            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200"
+          >
+            📈 کارنامه ارزشیابی دانشجویان
+          </Link>
+          <Link
             href="/professor/contract"
             className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200"
           >
