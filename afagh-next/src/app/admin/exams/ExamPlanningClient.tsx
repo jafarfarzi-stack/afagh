@@ -2447,14 +2447,14 @@ export default function ExamPlanningClient() {
 
       {/* MODAL: PHOTO ROSTER PRINT PREVIEW FOR PROCTORS */}
       {showPhotoRosterPrint && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:static print:block print:bg-white print:p-0">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in">
-            <div className="p-4 bg-indigo-950 text-white flex items-center justify-between">
+            <div className="p-4 bg-indigo-950 text-white flex items-center justify-between print:hidden">
               <h3 className="font-extrabold text-sm sm:text-base">🖨️ صورت‌جلسه حضور و غیاب عکس‌دار سالن آزمون (محل امضا)</h3>
               <button onClick={() => setShowPhotoRosterPrint(false)} className="text-white/60 hover:text-white">✕</button>
             </div>
 
-            <div className="p-5 overflow-y-auto space-y-3 text-xs">
+            <div className="print-area p-5 overflow-y-auto space-y-3 text-xs print:max-h-none print:overflow-visible">
               <div className="text-center space-y-1 border-b pb-3">
                 <h2 className="font-black text-slate-900 text-base">دانشگاه جامع آفاق — لیست حضور و غیاب عکس‌دار حوزه آزمون</h2>
                 <p className="text-slate-600 font-bold">حوزه: آمفی‌تئاتر مرکزی · تاریخ: ۱۴۰۵/۱۰/۱۸ · سانس ۱ (۰۸:۳۰ الی ۱۰:۳۰)</p>
@@ -2492,7 +2492,7 @@ export default function ExamPlanningClient() {
               </table>
             </div>
 
-            <div className="p-3 bg-slate-50 border-t flex justify-end gap-2">
+            <div className="p-3 bg-slate-50 border-t flex justify-end gap-2 print:hidden">
               <button
                 onClick={() => setShowPhotoRosterPrint(false)}
                 className="px-4 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-bold text-xs"
@@ -2515,7 +2515,7 @@ export default function ExamPlanningClient() {
 
       {/* MODAL: MANUAL NUDGE SMS TO PROFESSOR */}
       {nudgeModalCourse && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:static print:block print:bg-white print:p-0">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in fade-in">
             <div className="p-4 bg-gradient-to-r from-rose-900 to-indigo-950 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -2598,14 +2598,14 @@ export default function ExamPlanningClient() {
 
       {/* MODAL: PRINT PREVIEW */}
       {showPrintModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:static print:block print:bg-white print:p-0">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden animate-in fade-in">
-            <div className="p-4 bg-indigo-950 text-white flex items-center justify-between">
+            <div className="p-4 bg-indigo-950 text-white flex items-center justify-between print:hidden">
               <h3 className="font-extrabold text-sm sm:text-base">🖨️ پیش‌نمایش چاپ برنامه امتحانات دانشگاه</h3>
               <button onClick={() => setShowPrintModal(false)} className="text-white/60 hover:text-white">✕</button>
             </div>
 
-            <div className="p-4 max-h-[70vh] overflow-y-auto space-y-3 text-xs">
+            <div className="print-area p-4 max-h-[70vh] overflow-y-auto space-y-3 text-xs print:max-h-none print:overflow-visible">
               <table className="w-full text-right text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-100 text-slate-800 border-b">
@@ -2632,7 +2632,7 @@ export default function ExamPlanningClient() {
               </table>
             </div>
 
-            <div className="p-3 bg-slate-50 border-t flex justify-end gap-2">
+            <div className="p-3 bg-slate-50 border-t flex justify-end gap-2 print:hidden">
               <button
                 onClick={() => setShowPrintModal(false)}
                 className="px-4 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-bold text-xs"

@@ -150,7 +150,7 @@ export default function ScheduleClient({
       {/* ══════════════════════════════════════════════════════════════════ */}
       {/* سربرگ رسمی تاییدیه تحصیلی (Official University Letterhead)        */}
       {/* ══════════════════════════════════════════════════════════════════ */}
-      <div className="bg-white rounded-2xl border-2 border-slate-300 p-5 sm:p-7 shadow-md space-y-5 print:border-none print:shadow-none print:p-0">
+      <div className="print-area bg-white rounded-2xl border-2 border-slate-300 p-5 sm:p-7 shadow-md space-y-5 print:border-none print:shadow-none print:p-0">
         {/* هدر رسمی با آرم و بارکد */}
         <div className="border-b-2 border-slate-800 pb-4 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">

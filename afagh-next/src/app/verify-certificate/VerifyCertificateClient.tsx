@@ -179,7 +179,7 @@ export default function VerifyCertificateClient({
 
         {/* سند گواهینامه — فقط در صورت اعتبار */}
         {isValid && cert && (
-          <div className="relative overflow-hidden space-y-8 rounded-3xl border-8 border-double border-indigo-950/20 bg-white p-8 text-slate-900 shadow-2xl print:rounded-none print:border-4 print:p-8 print:shadow-none sm:p-12">
+          <div className="print-area relative overflow-hidden space-y-8 rounded-3xl border-8 border-double border-indigo-950/20 bg-white p-8 text-slate-900 shadow-2xl print:rounded-none print:border-4 print:p-8 print:shadow-none sm:p-12">
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-[0.03]">
               <span className="text-[280px] font-black">AFAGH</span>
             </div>

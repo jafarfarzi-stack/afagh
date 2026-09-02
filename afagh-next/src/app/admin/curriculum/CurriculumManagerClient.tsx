@@ -2227,16 +2227,16 @@ export default function CurriculumManagerClient({
 
       {/* Modal: ماتریس تطبیق فارغ‌التحصیلی */}
       {activeModal === 'GRADUATION_AUDIT_REPORT' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-300 max-w-4xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-gradient-to-r from-emerald-900 to-teal-950 text-white px-4 py-3 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:static print:block print:bg-white print:p-0">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-300 max-w-4xl w-full overflow-hidden print:shadow-none print:border-0 print:rounded-none print:max-w-full animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-gradient-to-r from-emerald-900 to-teal-950 text-white px-4 py-3 flex items-center justify-between print:hidden">
               <h3 className="font-extrabold text-sm flex items-center gap-2">
                 <span>🎓</span>
                 <span>ماتریس تطبیق سرفصل و شرایط فارغ‌التحصیلی ({activeMajor.name})</span>
               </h3>
               <button onClick={() => setActiveModal(null)} className="text-slate-300 hover:text-white font-bold">✕</button>
             </div>
-            <div className="p-4 space-y-4 text-xs max-h-[75vh] overflow-y-auto">
+            <div className="print-area p-4 space-y-4 text-xs max-h-[75vh] overflow-y-auto print:max-h-none print:overflow-visible">
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
                   <div className="text-lg font-black text-emerald-950 font-mono">{grandTotalSemesterUnits}</div>
@@ -2314,7 +2314,7 @@ export default function CurriculumManagerClient({
                 </table>
               </div>
             </div>
-            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center print:hidden">
               <button
                 onClick={() => window.print()}
                 className="px-4 py-1.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs flex items-center gap-1.5"
@@ -2332,7 +2332,7 @@ export default function CurriculumManagerClient({
 
       {/* Modal 1: تعریف رشته جدید (Matching Button 1) */}
       {activeModal === 'NEW_MAJOR' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:static print:block print:bg-white print:p-0">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-300 max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="bg-gradient-to-r from-indigo-900 to-slate-900 text-white px-4 py-3 flex items-center justify-between">
               <h3 className="font-extrabold text-sm flex items-center gap-2">
@@ -2448,7 +2448,7 @@ export default function CurriculumManagerClient({
 
       {/* Modal 2: مشخصات رشته‌های دانشگاه (Matching Button 2) */}
       {activeModal === 'MAJOR_SPECS' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:static print:block print:bg-white print:p-0">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-300 max-w-3xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="bg-gradient-to-r from-sky-900 to-indigo-950 text-white px-4 py-3 flex items-center justify-between">
               <h3 className="font-extrabold text-sm flex items-center gap-2">
@@ -2494,7 +2494,7 @@ export default function CurriculumManagerClient({
 
       {/* Modal 3: دانشکده - رشته - گروه (Matching Button 3) */}
       {activeModal === 'FACULTY_DEPT_TREE' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:static print:block print:bg-white print:p-0">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-300 max-w-2xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="bg-gradient-to-r from-amber-900 to-slate-900 text-white px-4 py-3 flex items-center justify-between">
               <h3 className="font-extrabold text-sm flex items-center gap-2">
@@ -2556,7 +2556,7 @@ export default function CurriculumManagerClient({
 
       {/* Modal 4: تعریف گرایش (Matching Button 4) */}
       {activeModal === 'NEW_TRACK' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:static print:block print:bg-white print:p-0">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-300 max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="bg-gradient-to-r from-emerald-900 to-slate-900 text-white px-4 py-3 flex items-center justify-between">
               <h3 className="font-extrabold text-sm flex items-center gap-2">
@@ -2622,16 +2622,16 @@ export default function CurriculumManagerClient({
 
       {/* Modal 5: گزارش رشته‌ها (Matching Button 5) */}
       {activeModal === 'MAJOR_REPORT' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-300 max-w-4xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-gradient-to-r from-rose-900 to-slate-900 text-white px-4 py-3 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:static print:block print:bg-white print:p-0">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-300 max-w-4xl w-full overflow-hidden print:shadow-none print:border-0 print:rounded-none print:max-w-full animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-gradient-to-r from-rose-900 to-slate-900 text-white px-4 py-3 flex items-center justify-between print:hidden">
               <h3 className="font-extrabold text-sm flex items-center gap-2">
                 <span>📊</span>
                 <span>گزارش جامع آماری کاتالوگ و سرفصل رشته‌های دانشگاه</span>
               </h3>
               <button onClick={() => setActiveModal(null)} className="text-slate-300 hover:text-white font-bold">✕</button>
             </div>
-            <div className="p-4 space-y-4 text-xs max-h-[75vh] overflow-y-auto">
+            <div className="print-area p-4 space-y-4 text-xs max-h-[75vh] overflow-y-auto print:max-h-none print:overflow-visible">
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-center">
                   <div className="text-lg font-black text-indigo-950 font-mono">{majors.length}</div>
@@ -2683,7 +2683,7 @@ export default function CurriculumManagerClient({
                 </tbody>
               </table>
             </div>
-            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center print:hidden">
               <button
                 onClick={() => window.print()}
                 className="px-4 py-1.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs flex items-center gap-1.5"

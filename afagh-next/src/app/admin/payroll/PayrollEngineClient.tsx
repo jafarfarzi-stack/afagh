@@ -2062,9 +2062,9 @@ export default function PayrollEngineClient() {
       {/* MODAL: APPOINTMENT DECREE VIEW */}
       {/* ========================================================================= */}
       {selectedDecreeForView && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:static print:block print:bg-white print:p-0 print:overflow-visible">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in">
-            <div className="p-4 bg-indigo-950 text-white flex items-center justify-between">
+            <div className="p-4 bg-indigo-950 text-white flex items-center justify-between print:hidden">
               <div className="flex items-center gap-2">
                 <span className="text-xl">📜</span>
                 <div>
@@ -2084,7 +2084,7 @@ export default function PayrollEngineClient() {
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-4 text-xs">
+            <div className="print-area p-6 overflow-y-auto space-y-4 text-xs">
               <div className="text-center space-y-1 border-b pb-4">
                 <h2 className="font-black text-slate-900 text-base">جمهوری اسلامی ایران — وزارت علوم، تحقیقات و فناوری</h2>
                 <h3 className="font-bold text-slate-700">حکم رسمی ابلاغ تدریس و وظایف آموزشی نیمسال</h3>
@@ -2146,7 +2146,7 @@ export default function PayrollEngineClient() {
               </div>
             </div>
 
-            <div className="p-4 bg-slate-50 border-t flex justify-end gap-2">
+            <div className="p-4 bg-slate-50 border-t flex justify-end gap-2 print:hidden">
               <button
                 onClick={() => setSelectedDecreeForView(null)}
                 className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs"
@@ -2168,10 +2168,10 @@ export default function PayrollEngineClient() {
       {/* MODAL: DETAILED OFFICIAL PAYSLIP PREVIEW */}
       {/* ========================================================================= */}
       {detailedPayslipRecord && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:static print:block print:bg-white print:p-0 print:overflow-visible">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in">
             {/* Payslip Header */}
-            <div className="p-4 bg-indigo-950 text-white flex items-center justify-between">
+            <div className="p-4 bg-indigo-950 text-white flex items-center justify-between print:hidden">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-indigo-700 flex items-center justify-center font-black">
                   آ
@@ -2194,7 +2194,7 @@ export default function PayrollEngineClient() {
             </div>
 
             {/* Payslip Body */}
-            <div className="p-6 overflow-y-auto space-y-5 text-xs">
+            <div className="print-area p-6 overflow-y-auto space-y-5 text-xs">
               {/* Professor Profile Box */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                 <div>
@@ -2372,7 +2372,7 @@ export default function PayrollEngineClient() {
             </div>
 
             {/* Payslip Footer */}
-            <div className="p-4 bg-slate-50 border-t flex justify-end gap-2">
+            <div className="p-4 bg-slate-50 border-t flex justify-end gap-2 print:hidden">
               <button
                 onClick={() => setDetailedPayslipRecord(null)}
                 className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs"

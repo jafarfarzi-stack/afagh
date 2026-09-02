@@ -82,7 +82,7 @@ export default function ProfessorContractClient({ initialContract }: Props) {
       
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="p-4 bg-emerald-900 text-emerald-100 rounded-2xl shadow-xl border border-emerald-700 font-bold text-sm flex items-center justify-between animate-fadeIn">
+        <div className="p-4 bg-emerald-900 print:hidden text-emerald-100 rounded-2xl shadow-xl border border-emerald-700 font-bold text-sm flex items-center justify-between animate-fadeIn">
           <div className="flex items-center gap-2">
             <span>✅</span>
             <span>{toastMessage}</span>
@@ -133,7 +133,7 @@ export default function ProfessorContractClient({ initialContract }: Props) {
       </div>
 
       {/* Printable Official Contract Paper */}
-      <div className="bg-white rounded-3xl p-6 sm:p-10 shadow-lg border border-slate-200 space-y-6 text-slate-900 print:shadow-none print:border-none print:p-0">
+      <div className="print-area bg-white rounded-3xl p-6 sm:p-10 shadow-lg border border-slate-200 space-y-6 text-slate-900 print:shadow-none print:border-none print:p-0">
         
         {/* University Header */}
         <div className="flex items-center justify-between pb-6 border-b-2 border-slate-900">

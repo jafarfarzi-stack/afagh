@@ -64,7 +64,7 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
   };
 
   return (
-    <div className="space-y-5" dir="rtl">
+    <div className="print-area space-y-5" dir="rtl">
       
       {/* Header Bar */}
       <div className="bg-gradient-to-l from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-5 shadow-lg border border-indigo-700/50 space-y-4 print:bg-white print:text-black print:border-none print:shadow-none">

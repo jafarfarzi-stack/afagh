@@ -9,3 +9,20 @@ body { @apply bg-slate-100 text-slate-800; }
 .btn-ghost { @apply btn bg-slate-100 text-slate-700 hover:bg-slate-200; }
 .input { @apply w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500; }
 .badge { @apply inline-block rounded-full px-2.5 py-0.5 text-xs font-medium; }
+
+/* ─────────────────────────────────────────────────────────────
+   چاپ «فقط فرم» — همان رفتار کارت ورود به جلسه، برای همهٔ فرم‌ها
+   هر صفحه‌ای که سند/فرم خود را داخل .print-area بپیچد، هنگام چاپ فقط
+   همان ناحیه روی کاغذ می‌رود؛ نوارها، دکمه‌ها و بخش‌های print:hidden حذف می‌شوند.
+   ───────────────────────────────────────────────────────────── */
+@media print {
+  @page { size: A4 portrait; margin: 10mm; }
+  html, body { background: #ffffff !important; color: #000000 !important; }
+  header, footer, nav, aside, [role="navigation"], button, .print\:hidden { display: none !important; }
+  .print-area {
+    display: block !important;
+    position: absolute !important;
+    left: 0 !important; top: 0 !important; width: 100% !important;
+    margin: 0 !important; box-shadow: none !important; background: #fff !important;
+  }
+}

@@ -598,9 +598,9 @@ export default function StudentRequestsClient({
 
       {/* مودال مشاهده و چاپ رسمی سند و گواهی الکترونیک */}
       {viewingCertificate && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-3xl w-full shadow-2xl border-2 border-slate-800 space-y-6 text-slate-900 my-8">
-            <div className="flex items-center justify-between border-b pb-3">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto print:static print:block print:bg-white print:p-0 print:overflow-visible">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-3xl w-full shadow-2xl border-2 border-slate-800 space-y-6 text-slate-900 my-8 print:max-w-full print:w-full print:rounded-none print:border-0 print:p-0 print:m-0 print:shadow-none">
+            <div className="flex items-center justify-between border-b pb-3 print:hidden">
               <span className="font-black text-sm">📜 پیش‌نمایش سند رسمی الکترونیک دانشگاه آفاق</span>
               <div className="flex items-center gap-2">
                 <button
@@ -619,7 +619,7 @@ export default function StudentRequestsClient({
             </div>
 
             {/* بدنه رسمی گواهی */}
-            <div className="border-2 border-slate-800 p-6 rounded-2xl bg-white space-y-6 text-xs leading-relaxed">
+            <div className="print-area border-2 border-slate-800 p-6 rounded-2xl bg-white space-y-6 text-xs leading-relaxed">
               {/* سربرگ */}
               <div className="grid grid-cols-3 items-center text-center border-b-2 border-slate-800 pb-4">
                 <div className="text-right space-y-1">

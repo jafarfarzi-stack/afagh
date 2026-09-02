@@ -1344,7 +1344,7 @@ export default function ProfessorGradesClient({
       {/* TAB 3: OFFICIAL CERTIFIED GRADE SHEET & AUDIT DOSSIER ARCHIVE */}
       {/* ========================================================================= */}
       {(activeTab === 'CERTIFICATE' || isOfferingFullyFinalized) && activeTab === 'CERTIFICATE' && (
-        <div className="bg-white rounded-3xl p-6 shadow-xl border-2 border-slate-800 space-y-6">
+        <div className="print-area bg-white rounded-3xl p-6 shadow-xl border-2 border-slate-800 space-y-6">
           {/* Letterhead */}
           <div className="border-b-2 border-slate-900 pb-4 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">

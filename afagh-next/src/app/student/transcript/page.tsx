@@ -131,7 +131,7 @@ export default async function StudentTranscriptPage() {
       </div>
 
       {/* سند رسمی کارنامه (کاغذ رسمی کارنامه دانشگاهی) */}
-      <div className="bg-white text-slate-900 border-2 border-slate-800 p-5 sm:p-8 shadow-xl print:shadow-none print:border print:m-0 print:p-4 text-xs font-sans">
+      <div className="bg-white text-slate-900 border-2 border-slate-800 p-5 sm:p-8 shadow-xl print-area print:shadow-none print:border print:m-0 print:p-4 text-xs font-sans">
         
         {/* ۱. سربرگ سه‌بخشی رسمی دانشگاه */}
         <div className="border-b-2 border-slate-800 pb-4 mb-4">
