@@ -1529,3 +1529,137 @@ export const analytics_snapshots = pgTable('analytics_snapshots', {
   computedAt: timestamp('computedAt').notNull().defaultNow(),
   expiresAt: timestamp('expiresAt')
 });
+
+// ══════════════════════════════════════════════════════════════════════
+//  موتور مالی دانشجویان — تخفیف، حامی (بنیاد)، چک، وام و فرمول تخصیص
+//
+//  هیچ عنوان، درصد یا مبلغی در کد سخت‌کد نیست: انواع تخفیف، بنیادها و
+//  فرمول‌ها همه ردیف دیتابیسی‌اند و از پنل کارشناس مالی مدیریت می‌شوند.
+// ══════════════════════════════════════════════════════════════════════
+
+/**
+ * انواع تخفیف شهریه — فهرست قابل تنظیم توسط کارشناس مالی.
+ * نمونه: رتبهٔ برتر، قهرمان ورزشی، فعال فرهنگی، خانوادهٔ چنددانشجویی.
+ */
+export const tuition_discount_types = pgTable('tuition_discount_types', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 40 }).notNull().unique(),
+  title: varchar('title', { length: 150 }).notNull(),
+  /** PERCENT = درصدی از شهریه | FIXED = مبلغ ثابت ریالی */
+  kind: varchar('kind', { length: 20 }).notNull().default('PERCENT'),
+  defaultPercent: numeric('defaultPercent', { precision: 5, scale: 2 }).notNull().default('0'),
+  defaultAmount: numeric('defaultAmount', { precision: 12, scale: 0 }).notNull().default('0'),
+  /** سقف درصد مجاز؛ NULL = بدون سقف */
+  maxPercent: numeric('maxPercent', { precision: 5, scale: 2 }),
+  requiresApproval: integer('requiresApproval').notNull().default(1),
+  requiresDocument: integer('requiresDocument').notNull().default(0),
+  isActive: integer('isActive').notNull().default(1),
+  note: text('note'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+/** تخفیف تخصیص‌یافته به یک دانشجو (برای یک ترم، یا NULL = همهٔ ترم‌ها) */
+export const student_discounts = pgTable('student_discounts', {
+  id: serial('id').primaryKey(),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  termId: integer('termId').references(() => academic_terms.id),
+  discountTypeId: integer('discountTypeId').notNull().references(() => tuition_discount_types.id),
+  kind: varchar('kind', { length: 20 }).notNull().default('PERCENT'),
+  percent: numeric('percent', { precision: 5, scale: 2 }).notNull().default('0'),
+  amount: numeric('amount', { precision: 12, scale: 0 }).notNull().default('0'),
+  /** روی کدام بخش شهریه اثر بگذارد: FIXED | VARIABLE | BOTH */
+  appliesTo: varchar('appliesTo', { length: 20 }).notNull().default('BOTH'),
+  status: varchar('status', { length: 20 }).notNull().default('PENDING'), // PENDING | APPROVED | REJECTED
+  reason: text('reason'),
+  documentUrl: text('documentUrl'),
+  approvedBy: integer('approvedBy').references(() => users.id),
+  approvedAt: timestamp('approvedAt'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+/** بنیادها و نهادهای حامی — کمیتهٔ امداد، بنیاد شهید، خیرین و … */
+export const tuition_sponsors = pgTable('tuition_sponsors', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 40 }).notNull().unique(),
+  title: varchar('title', { length: 150 }).notNull(),
+  contactInfo: text('contactInfo'),
+  /** DIRECT = پرداخت مستقیم به دانشگاه | REIMBURSE = دانشجو پرداخت و بنیاد بازپرداخت می‌کند */
+  settlementMethod: varchar('settlementMethod', { length: 30 }).notNull().default('DIRECT'),
+  isActive: integer('isActive').notNull().default(1),
+  note: text('note'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+/** تعهد پرداخت یک بنیاد بابت شهریهٔ یک دانشجو */
+export const student_sponsorships = pgTable('student_sponsorships', {
+  id: serial('id').primaryKey(),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  termId: integer('termId').references(() => academic_terms.id),
+  sponsorId: integer('sponsorId').notNull().references(() => tuition_sponsors.id),
+  coverageKind: varchar('coverageKind', { length: 20 }).notNull().default('PERCENT'),
+  percent: numeric('percent', { precision: 5, scale: 2 }).notNull().default('0'),
+  amount: numeric('amount', { precision: 12, scale: 0 }).notNull().default('0'),
+  appliesTo: varchar('appliesTo', { length: 20 }).notNull().default('BOTH'),
+  referenceNo: varchar('referenceNo', { length: 80 }),
+  status: varchar('status', { length: 20 }).notNull().default('PENDING'), // PENDING | CONFIRMED | REJECTED | PAID
+  note: text('note'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+/** چک‌های دریافتی از دانشجو — مبنای یادآوری پیش از سررسید */
+export const payment_cheques = pgTable('payment_cheques', {
+  id: serial('id').primaryKey(),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  termId: integer('termId').references(() => academic_terms.id),
+  chequeNo: varchar('chequeNo', { length: 40 }).notNull(),
+  bankName: varchar('bankName', { length: 100 }),
+  branchCode: varchar('branchCode', { length: 40 }),
+  amount: numeric('amount', { precision: 12, scale: 0 }).notNull(),
+  dueDate: timestamp('dueDate').notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('PENDING'), // PENDING | CLEARED | BOUNCED | CANCELLED
+  /** شناسهٔ تراکنش دفتر مالی پس از وصول */
+  ledgerTxnId: integer('ledgerTxnId'),
+  remindedAt: timestamp('remindedAt'),
+  clearedAt: timestamp('clearedAt'),
+  note: text('note'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+/** وام‌های دانشجویی */
+export const student_loans = pgTable('student_loans', {
+  id: serial('id').primaryKey(),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  termId: integer('termId').references(() => academic_terms.id),
+  lender: varchar('lender', { length: 150 }).notNull(),
+  loanCode: varchar('loanCode', { length: 40 }),
+  amount: numeric('amount', { precision: 12, scale: 0 }).notNull(),
+  installments: integer('installments').notNull().default(1),
+  firstDueDate: timestamp('firstDueDate'),
+  status: varchar('status', { length: 20 }).notNull().default('ACTIVE'), // ACTIVE | SETTLED | CANCELLED
+  ledgerTxnId: integer('ledgerTxnId'),
+  note: text('note'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+/**
+ * فرمول تخصیص شهریه — قابل تعریف توسط کارشناس مالی.
+ * تفکیک نرخ هر واحد بر اساس نوع درس (نظری/عملی/عمومی) و بازهٔ ورودی.
+ */
+export const tuition_formulas = pgTable('tuition_formulas', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 40 }).notNull().unique(),
+  title: varchar('title', { length: 150 }).notNull(),
+  degreeLevelId: integer('degreeLevelId').references(() => degree_level_configs.id),
+  majorId: integer('majorId').references(() => majors.id),
+  entryYearFrom: integer('entryYearFrom'),
+  entryYearTo: integer('entryYearTo'),
+  fixedAmount: numeric('fixedAmount', { precision: 12, scale: 0 }).notNull().default('0'),
+  perUnitTheory: numeric('perUnitTheory', { precision: 12, scale: 0 }).notNull().default('0'),
+  perUnitPractical: numeric('perUnitPractical', { precision: 12, scale: 0 }).notNull().default('0'),
+  perUnitGeneral: numeric('perUnitGeneral', { precision: 12, scale: 0 }).notNull().default('0'),
+  /** عدد کوچک‌تر = اولویت بالاتر در انتخاب فرمول */
+  priority: integer('priority').notNull().default(100),
+  isActive: integer('isActive').notNull().default(1),
+  note: text('note'),
+  updatedAt: timestamp('updatedAt').defaultNow()
+});

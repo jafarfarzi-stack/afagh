@@ -152,6 +152,17 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/finance',
+    icon: '🗂️',
+    title: 'کارتابل کارشناس مالی',
+    desc: 'فهرست کامل دانشجویان، کارنامهٔ مالی، تخفیف، بنیاد، چک و وام',
+    roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'],
+    accent: 'from-teal-900 to-emerald-950 border-teal-600/50',
+    iconBg: 'bg-teal-700/80 border-teal-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/tuition',
     icon: '🧮',
     title: 'موتور شهریه',

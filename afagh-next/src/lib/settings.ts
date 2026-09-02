@@ -88,6 +88,9 @@ export const SETTING_DEFS: SettingDef[] = [
 
   // ── شهریه و امور مالی ──
   { key: 'EQUIV_FIXED_TUITION_MODE', env: 'AFAGH_EQUIV_FIXED_TUITION_MODE', group: 'شهریه و امور مالی', label: 'نحوهٔ محاسبهٔ شهریهٔ ثابت معادل‌سازی', type: 'text', default: 'ONCE', help: 'ONCE = یک بار به ازای هر دانشجو (روی اولین نیمسال معادل‌سازی)؛ PER_TERM = به ازای هر نیمسال معادل‌سازی (۰۰EQ)؛ NONE = بدون شهریهٔ ثابت. شهریهٔ متغیر همیشه به ازای هر واحد محاسبه می‌شود' },
+  { key: 'CHEQUE_REMIND_DAYS', env: 'AFAGH_CHEQUE_REMIND_DAYS', group: 'شهریه و امور مالی', label: 'یادآوری چک — چند روز پیش از سررسید', type: 'text', default: '7', help: 'چند روز پیش از سررسید چک، پیام یادآوری به دانشجو برود. چکِ گذشته از سررسید هم یک بار یادآوری می‌شود' },
+  { key: 'CHEQUE_REMIND_ENABLED', env: 'AFAGH_CHEQUE_REMIND_ENABLED', group: 'شهریه و امور مالی', label: 'یادآوری خودکار چک فعال باشد', type: 'text', default: '1', help: '۱ = پویش زمان‌بندی‌شدهٔ /api/cron/cheque-reminders پیام بفرستد؛ ۰ = فقط فهرست آماده شود، پیامی نرود' },
+  { key: 'FINANCE_CRON_SECRET', env: 'FINANCE_CRON_SECRET', group: 'شهریه و امور مالی', label: 'کلید پویش زمان‌بندی‌شدهٔ مالی', type: 'secret', default: '', help: 'هدر x-cron-secret برای POST /api/cron/cheque-reminders' },
 
   // ── سرویس‌های استعلام ──
   { key: 'IRANDOC_BASE_URL', env: 'IRANDOC_BASE_URL', group: 'سرویس‌های استعلام دولتی', label: 'نشانی API همانندجویی ایرانداک', type: 'url', default: '' },
