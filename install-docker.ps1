@@ -20,7 +20,8 @@ param(
   [switch]$WithDemoData,
   [switch]$Fresh,
   [switch]$SkipBuild,
-  [switch]$Start
+  [switch]$Start,
+  [switch]$NoStart
 )
 
 $ErrorActionPreference = 'Stop'
@@ -229,7 +230,19 @@ Write-Host "      توقف  : .\stop-docker.ps1            (با -RemoveData ک�
 Write-Host "      MinIO : http://localhost:9001        (afagh / afagh-secret)"
 Write-Host ""
 
+function Port-Up($p) {
+  try { $c = New-Object System.Net.Sockets.TcpClient; $c.Connect('127.0.0.1', $p); $c.Close(); return $true }
+  catch { return $false }
+}
+
 if ($Start) {
   Step "اجرای سرور روی پورت ۸۰۸۰ (توقف با Ctrl+C)"
   Must $Next { npm start } "اجرای سرور ناموفق بود"
+} elseif (-not $NoStart) {
+  Step "اجرای خودکار سرور در پس‌زمینه روی پورت ۸۰۸۰"
+  Start-Process powershell -ArgumentList "-NoExit","-Command","cd '$Next'; npm start" | Out-Null
+  $up = $false
+  for ($i = 0; $i -lt 40; $i++) { Start-Sleep -Seconds 1; if (Port-Up 8080) { $up = $true; break } }
+  if ($up) { Ok "سرور اجرا شد → http://localhost:8080  (ورود: 0000000001 / 123456)" }
+  else { Warn "سرور هنوز بالا نیامده — پنجرهٔ PowerShell جدید را ببینید یا دستی: cd afagh-next ; npm start" }
 }
