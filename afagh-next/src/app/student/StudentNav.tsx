@@ -9,6 +9,7 @@ export const NAV_ITEMS = [
   { href: '/student/enroll', label: 'انتخاب واحد', icon: '🛒', exact: false, badge: 'Redis' },
   { href: '/student/exam-card', label: 'کارت آزمون و صندلی', icon: '📇', exact: false },
   { href: '/student/transcript', label: 'کارنامه کل دوره‌ها', icon: '📜', exact: false },
+  { href: '/student/finance', label: 'امور مالی و شهریه', icon: '💳', exact: false },
   { href: '/student/virtual-classes', label: 'کلاس آنلاین و LMS', icon: '💻', exact: false, badge: 'BBB' },
   { href: '/student/schedule', label: 'برنامه هفتگی و آزمون', icon: '📅', exact: false },
   { href: '/student/chart', label: 'چارت مصوب سرفصل', icon: '🗺️', exact: false },
