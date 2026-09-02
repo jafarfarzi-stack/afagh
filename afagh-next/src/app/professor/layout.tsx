@@ -14,7 +14,7 @@ export default async function ProfessorLayout({ children }: { children: React.Re
   return (
     <div className="min-h-screen bg-slate-50" dir="rtl">
       <header className="bg-slate-900 text-white shadow-md border-b border-slate-800">
-        <div className="mx-auto flex max-w-6xl items-center justify-between p-4">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 p-4">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-sm text-white shadow">
               آفاق

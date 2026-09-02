@@ -35,6 +35,7 @@ export default async function ClassroomsPage({ searchParams }: { searchParams: P
 
       <div className="card">
         <h2 className="mb-2 font-bold">کلاس‌ها ({rooms.length})</h2>
+        <div className="overflow-x-auto">
         <table className="w-full text-right text-xs">
           <thead><tr className="text-slate-500"><th className="p-2">نام</th><th className="p-2">ظرفیت</th><th className="p-2">نوع</th><th className="p-2">ساختمان</th><th className="p-2">نیمکت (ر×س)</th><th className="p-2"></th></tr></thead>
           <tbody>
@@ -62,6 +63,7 @@ export default async function ClassroomsPage({ searchParams }: { searchParams: P
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

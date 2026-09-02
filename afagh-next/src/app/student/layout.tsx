@@ -14,7 +14,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
     <div className="min-h-screen bg-slate-100 flex flex-col" dir="rtl">
       {/* هدر اصلی */}
       <header className="bg-emerald-800 text-white shadow-md sticky top-0 z-40 print:hidden">
-        <div className="max-w-7xl mx-auto flex items-center justify-between p-3.5 px-4">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 p-3.5 px-4">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center font-bold text-base shadow-inner">
               آ

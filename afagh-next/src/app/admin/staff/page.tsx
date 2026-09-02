@@ -38,6 +38,7 @@ export default async function StaffPage() {
     <div className="card">
       <h2 className="mb-1 font-bold">استاف و مدیران گروه</h2>
       <p className="mb-3 text-xs text-slate-500">مدیر گروه (DEP_HEAD) به پنل /group-manager می‌رسد و فقط دروس/ارائه‌های گروه خودش را مدیریت می‌کند.</p>
+      <div className="overflow-x-auto">
       <table className="w-full text-right text-xs">
         <thead><tr className="text-slate-500"><th className="p-2">نام</th><th className="p-2">کد</th><th className="p-2">گروه</th><th className="p-2">رتبه/نوع</th><th className="p-2">مدیر گروه</th></tr></thead>
         <tbody>
@@ -60,6 +61,7 @@ export default async function StaffPage() {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

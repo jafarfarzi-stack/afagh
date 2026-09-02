@@ -26,3 +26,14 @@ body { @apply bg-slate-100 text-slate-800; }
     margin: 0 !important; box-shadow: none !important; background: #fff !important;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   ریسپانسیو موبایل — پایهٔ سراسری برای همهٔ کارتابل‌ها
+   در صفحه‌های باریک: جدول‌ها خوانا می‌مانند و ظرف‌های اسکرول،
+   لمسِ روان می‌گیرند تا هیچ داشبوردی از عرض بیرون نزند.
+   ───────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  table { font-size: 0.72rem; }
+  th, td { padding-left: 0.4rem; padding-right: 0.4rem; }
+  .overflow-x-auto, .overflow-auto { -webkit-overflow-scrolling: touch; }
+}
