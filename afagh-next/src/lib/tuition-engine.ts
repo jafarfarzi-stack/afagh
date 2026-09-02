@@ -135,10 +135,8 @@ export async function chargeTermTuition(
   opts?: { includeFixed?: boolean },
 ): Promise<{ charged: number; totalTuition: number }> {
   const t = await computeTermTuition(studentId, termId, opts);
-  if (t.totalTuition <= 0) return { charged: 0, totalTuition: 0 };
-
-  const [term] = await db.select({ title: academic_terms.title }).from(academic_terms).where(eq(academic_terms.id, termId)).limit(1);
-  const desc = `شهریهٔ ترم «${term?.title ?? termId}» — ثابت ${t.fixedTuition.toLocaleString('fa-IR')} + متغیر ${t.variableTuition.toLocaleString('fa-IR')}`;
+  // مبلغ نهایی هرگز منفی نمی‌شود
+  const amount = Math.max(0, t.totalTuition);
 
   const [existing] = await db
     .select({ id: student_ledger.id })
@@ -150,20 +148,29 @@ export async function chargeTermTuition(
     ))
     .limit(1);
 
+  // چیزی برای شارژ نیست و پیش‌تر هم شارژی ثبت نشده → هیچ کاری لازم نیست
+  if (amount === 0 && !existing) return { charged: 0, totalTuition: t.totalTuition };
+
+  const [term] = await db.select({ title: academic_terms.title }).from(academic_terms).where(eq(academic_terms.id, termId)).limit(1);
+  const desc = `شهریهٔ ترم «${term?.title ?? termId}» — ثابت ${t.fixedTuition.toLocaleString('fa-IR')} + متغیر ${t.variableTuition.toLocaleString('fa-IR')}`;
+
+  // نکته: اگر amount صفر شد ولی شارژ قبلی وجود دارد، باید «صفر» شود.
+  // (پیش‌تر در این حالت زودهنگام return می‌شد و با تغییر سیاست به NONE یا
+  //  حذف قاعدهٔ شهریه، شارژ قدیمی دست‌نخورده و نادرست باقی می‌ماند.)
   if (existing) {
     await db.update(student_ledger)
-      .set({ amount: String(t.totalTuition), description: desc })
+      .set({ amount: String(amount), description: desc })
       .where(eq(student_ledger.id, existing.id));
   } else {
     await db.insert(student_ledger).values({
       studentId,
       termId,
       transactionType: 'TUITION_CHARGE',
-      amount: String(t.totalTuition),
+      amount: String(amount),
       description: desc,
     });
   }
-  return { charged: t.totalTuition, totalTuition: t.totalTuition };
+  return { charged: amount, totalTuition: t.totalTuition };
 }
 
 /** سیاست شهریهٔ ثابت معادل‌سازی — از تنظیم EQUIV_FIXED_TUITION_MODE (دیتابیس ← ENV ← پیش‌فرض) */
