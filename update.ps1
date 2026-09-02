@@ -49,6 +49,10 @@ Push-Location $Next
 npm install --no-audit --no-fund
 # اعمال تغییرات ساختار پایگاه داده (ستون‌های جدید) — افزودنی و غیرمخرب
 npx drizzle-kit push --force
+# تست‌های منطق خالص (بدون نیاز به دیتابیس) — پیش از بیلد اجرا می‌شوند تا
+# رگرسیون موتور شهریه پیش از استقرار گرفته شود
+npm test
+if ($LASTEXITCODE -ne 0) { Pop-Location; Warn "تست‌ها ناموفق بودند — استقرار متوقف شد"; exit 1 }
 npm run build
 if ($LASTEXITCODE -ne 0) { Pop-Location; Warn "بیلد ناموفق بود"; exit 1 }
 Pop-Location
