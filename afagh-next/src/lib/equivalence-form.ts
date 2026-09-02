@@ -250,19 +250,11 @@ export async function issueEquivalenceForm(requestId: number): Promise<{ ok: boo
     .limit(1);
   if (!stu) return { ok: false, error: 'پروندهٔ دانشجو یافت نشد.' };
 
-  // idempotent: اگر قبلاً صادر شده، دوباره ننویس
   const { categoryId, typeId } = await ensureDocType();
-  const [dup] = await db
-    .select({ id: student_documents.id })
-    .from(student_documents)
-    .where(and(eq(student_documents.personUserId, stu.userId), eq(student_documents.typeId, typeId)))
-    .limit(1);
-  if (dup) return { ok: true, skipped: true };
 
-  const universityName = (await getSetting('UNIVERSITY_NAME')) || 'دانشگاه آفاق';
-  const signatories = await resolveSignatories(requestId);
-
-  // محتوای متعارف برای هش (پیش از ساخت HTML نهایی)
+  // محتوای متعارف برای هش — شامل کد رهگیری، پس هر درخواست معادل‌سازی
+  // امضای دیجیتال یکتای خودش را دارد و فرم‌های متعدد یک دانشجو یکدیگر را
+  // «تکراری» جلوه نمی‌دهند.
   const canonical = JSON.stringify({
     trackingCode: req.trackingCode,
     studentCode: stu.studentCode,
@@ -273,6 +265,17 @@ export async function issueEquivalenceForm(requestId: number): Promise<{ ok: boo
     })),
   });
   const contentHash = createHash('sha256').update(canonical).digest('hex');
+
+  // idempotent: اگر همین سند (با همین امضا) قبلاً صادر شده، دوباره ننویس
+  const [dup] = await db
+    .select({ id: student_documents.id })
+    .from(student_documents)
+    .where(eq(student_documents.contentHash, contentHash))
+    .limit(1);
+  if (dup) return { ok: true, skipped: true };
+
+  const universityName = (await getSetting('UNIVERSITY_NAME')) || 'دانشگاه آفاق';
+  const signatories = await resolveSignatories(requestId);
   const verifyUrl = `${await getPublicBaseUrl()}/verify/document/${contentHash}`;
 
   const html = await buildEquivalenceFormHtml({
