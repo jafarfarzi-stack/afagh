@@ -50,9 +50,17 @@ npm install --no-audit --no-fund
 # اعمال تغییرات ساختار پایگاه داده (ستون‌های جدید) — افزودنی و غیرمخرب
 npx drizzle-kit push --force
 # تست‌های منطق خالص (بدون نیاز به دیتابیس) — پیش از بیلد اجرا می‌شوند تا
-# رگرسیون موتور شهریه پیش از استقرار گرفته شود
-npm test
-if ($LASTEXITCODE -ne 0) { Pop-Location; Warn "تست‌ها ناموفق بودند — استقرار متوقف شد"; exit 1 }
+# رگرسیون موتور شهریه پیش از استقرار گرفته شود.
+# این تست‌ها با type-stripping خودِ Node اجرا می‌شوند که از Node ۲۲.۶ در دسترس است،
+# ولی install-docker.ps1 هنوز Node ۱۸+ را می‌پذیرد. پس نبودِ این قابلیت نباید
+# استقرار را بشکند؛ در آن صورت فقط هشدار می‌دهیم و رد می‌شویم.
+node --experimental-strip-types -e "" 2>$null
+if ($LASTEXITCODE -eq 0) {
+  npm test
+  if ($LASTEXITCODE -ne 0) { Pop-Location; Warn "تست‌ها ناموفق بودند — استقرار متوقف شد"; exit 1 }
+} else {
+  Warn "Node $(node -v) از type-stripping پشتیبانی نمی‌کند (نیاز به ۲۲.۶ یا بالاتر) — تست‌ها رد شدند"
+}
 npm run build
 if ($LASTEXITCODE -ne 0) { Pop-Location; Warn "بیلد ناموفق بود"; exit 1 }
 Pop-Location
