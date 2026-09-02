@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
   بروز کردن سامانه آفاق از گیت‌هاب + بیلد + اجرای دوباره (ویندوز)
       .\update.ps1              دریافت آخرین کد، بیلد و اجرا
@@ -35,6 +35,13 @@ if ($SkipBuild) { Warn "رد شد (-SkipBuild)"; exit 0 }
 Step "۲/۴ توقف سرور قبلی و روشن‌کردن Docker"
 Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 & docker compose -p afagh-dev -f (Join-Path $Next 'docker-compose.yml') up -d
+$dbUp = $false
+for ($i = 0; $i -lt 30; $i++) { Start-Sleep -Seconds 1; if (Port-Up 5432) { $dbUp = $true; break } }
+if (-not $dbUp) {
+  Warn "PostgreSQL روی 5432 بالا نیامد — ابتدا Docker Desktop را کامل روشن کنید و دوباره .\update.cmd بزنید"
+  exit 1
+}
+Ok "PostgreSQL آماده است"
 
 # ۳) بیلد
 Step "۳/۴ بیلد پروداکشن"
