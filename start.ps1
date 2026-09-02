@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
   راه‌اندازی سامانه جامع آفاق روی ویندوز — پس از install-docker.ps1
       .\start.ps1            سرویس‌های Docker و سرور Next.js را بالا می‌آورد
