@@ -47,6 +47,7 @@ Ok "PostgreSQL آماده است"
 Step "۳/۴ نصب وابستگی‌ها و بیلد پروداکشن"
 Push-Location $Next
 npm install --no-audit --no-fund
+if ($LASTEXITCODE -ne 0) { Pop-Location; Warn "npm install ناموفق بود — وابستگی‌ها کامل نصب نشدند. بدون آن‌ها بیلد با خطای گمراه‌کنندهٔ «Can't resolve» می‌شکند. اینترنت/دسترسی پوشه را بررسی کنید و دوباره .\update.cmd بزنید."; exit 1 }
 # اعمال تغییرات ساختار پایگاه داده (ستون‌های جدید) — افزودنی و غیرمخرب
 npx drizzle-kit push --force
 # تست‌های منطق خالص (بدون نیاز به دیتابیس) — پیش از بیلد اجرا می‌شوند تا
