@@ -94,12 +94,12 @@ export default async function AdminHome() {
           <h1 className="font-extrabold text-slate-800 text-base sm:text-lg">ماژول‌های سامانه</h1>
           <span className="text-xs text-slate-500">{mods.length} ماژول در دسترس نقش شما</span>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {mods.map(m => (
             <Link
               key={m.href}
               href={m.href}
-              className={`group p-4 rounded-2xl bg-gradient-to-br ${m.accent} text-white shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-start justify-between border`}
+              className={`group h-full p-4 rounded-2xl bg-gradient-to-br ${m.accent} text-white shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-start justify-between border`}
             >
               <div className="flex items-start gap-3">
                 <div className={`w-11 h-11 shrink-0 rounded-xl ${m.iconBg} border flex items-center justify-center text-2xl shadow-inner group-hover:scale-110 transition-transform`}>
