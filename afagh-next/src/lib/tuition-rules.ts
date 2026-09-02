@@ -196,3 +196,34 @@ export function mapLegacyFeeRules<T extends LegacyFeeRuleLike>(rows: T[]): FeeRu
     (a.degreeLevelId ?? 0) - (b.degreeLevelId ?? 0) ||
     a.termType.localeCompare(b.termType));
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * سیاست شهریهٔ ثابت معادل‌سازی
+ *
+ * چرا لازم است: دروس معادل‌سازی هر ۲۰ واحد در یک نیمسال جدا (00EQ1، 00EQ2، …)
+ * ثبت می‌شوند. اگر شهریهٔ ثابت به ازای هر نیمسال شارژ شود، دانشجویی با ۴۵ واحد
+ * معادل‌سازی سه بار شهریهٔ ثابت می‌دهد. اینکه کدام رفتار درست است یک تصمیم
+ * سیاستی است، پس به مدیر واگذار شده و در کد سخت‌کد نیست.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * ONCE     → شهریهٔ ثابت یک بار، روی اولین نیمسال معادل‌سازی دانشجو
+ * PER_TERM → به ازای هر نیمسال معادل‌سازی (۰۰EQ) جداگانه
+ * NONE     → بدون شهریهٔ ثابت برای معادل‌سازی
+ *
+ * شهریهٔ متغیر در هر سه حالت به ازای هر واحد محاسبه می‌شود.
+ */
+export type EquivFixedMode = 'ONCE' | 'PER_TERM' | 'NONE';
+
+/** نرمال‌سازی مقدار تنظیم؛ هر مقدار ناشناخته به پیش‌فرض امن ONCE برمی‌گردد */
+export function normalizeEquivFixedMode(value: unknown): EquivFixedMode {
+  const v = String(value ?? '').trim().toUpperCase();
+  return v === 'PER_TERM' || v === 'NONE' ? v : 'ONCE';
+}
+
+/** آیا برای این نیمسال باید شهریهٔ ثابت شارژ شود؟ */
+export function shouldChargeFixed(mode: EquivFixedMode, isFirstTerm: boolean): boolean {
+  if (mode === 'NONE') return false;
+  if (mode === 'PER_TERM') return true;
+  return isFirstTerm;
+}

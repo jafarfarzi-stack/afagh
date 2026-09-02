@@ -5,7 +5,8 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { academic_terms, term_financial_rules, tuition_fee_rules } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
-import { mapLegacyFeeRules, termTypeOf } from '@/lib/tuition-rules';
+import { mapLegacyFeeRules, normalizeEquivFixedMode, termTypeOf } from '@/lib/tuition-rules';
+import { saveSettings } from '@/lib/settings';
 
 const FINANCE = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'];
 
@@ -158,4 +159,16 @@ export async function importLegacyFeeRulesAction(): Promise<{
 
   revalidatePath('/admin/tuition');
   return { ok: true, created, skipped };
+}
+
+/**
+ * ذخیرهٔ سیاست شهریهٔ ثابت معادل‌سازی (تنظیم EQUIV_FIXED_TUITION_MODE).
+ * مقدار پیش از ذخیره نرمال‌سازی می‌شود تا مقدار نامعتبر در دیتابیس نماند.
+ */
+export async function setEquivFixedModeAction(mode: string): Promise<{ ok: boolean; error?: string; saved?: string }> {
+  await requireRole(FINANCE);
+  const value = normalizeEquivFixedMode(mode);
+  await saveSettings({ EQUIV_FIXED_TUITION_MODE: value });
+  revalidatePath('/admin/tuition');
+  return { ok: true, saved: value };
 }

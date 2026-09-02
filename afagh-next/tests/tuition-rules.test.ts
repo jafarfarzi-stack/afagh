@@ -5,7 +5,7 @@
  * چون src/lib/tuition-rules.ts هیچ وابستگی به دیتابیس یا Next ندارد، بدون
  * نیاز به PostgreSQL قابل اجراست.
  */
-import { mapLegacyFeeRules, pickFeeRule, termTypeOf, toNum } from '../src/lib/tuition-rules.ts';
+import { mapLegacyFeeRules, normalizeEquivFixedMode, pickFeeRule, shouldChargeFixed, termTypeOf, toNum } from '../src/lib/tuition-rules.ts';
 
 let pass = 0;
 let fail = 0;
@@ -116,6 +116,22 @@ eq('دانشجوی بدون ورودی ثبت‌شده هم نرخ را می‌�
   pickFeeRule(imported, { degreeLevelId: 1, termType: 'NORMAL', termLevelOnly: true, entryYear: null })?.fixedTuition, 1500);
 eq('همان قاعده به ترم معادل‌سازی نشت نمی‌کند',
   pickFeeRule(imported, { degreeLevelId: 1, termType: 'EQUIVALENCE', termLevelOnly: true, entryYear: 1403 }), null);
+
+console.log('\n۹) سیاست شهریهٔ ثابت معادل‌سازی (EQUIV_FIXED_TUITION_MODE)');
+eq('پیش‌فرض: مقدار ناشناخته به ONCE برمی‌گردد', normalizeEquivFixedMode(''), 'ONCE');
+eq('مقدار نامعتبر هم به ONCE برمی‌گردد', normalizeEquivFixedMode('SOMETHING'), 'ONCE');
+eq('حروف کوچک/فاصله پذیرفته می‌شود', normalizeEquivFixedMode(' per_term '), 'PER_TERM');
+eq('NONE تشخیص داده می‌شود', normalizeEquivFixedMode('none'), 'NONE');
+
+// سناریوی واقعی: ۴۵ واحد معادل‌سازی = ۳ نیمسال 00EQ
+const terms = [false, false, false]; // [نوبت اول، دوم، سوم]
+const countFixed = (mode: 'ONCE' | 'PER_TERM' | 'NONE') =>
+  terms.map((_, i) => shouldChargeFixed(mode, i === 0)).filter(Boolean).length;
+
+eq('ONCE: شهریهٔ ثابت دقیقاً یک بار', countFixed('ONCE'), 1);
+eq('ONCE: فقط روی اولین نیمسال', shouldChargeFixed('ONCE', true) && !shouldChargeFixed('ONCE', false), true);
+eq('PER_TERM: به ازای هر نیمسال (رفتار قبلی)', countFixed('PER_TERM'), 3);
+eq('NONE: هرگز شهریهٔ ثابت نمی‌گیرد', countFixed('NONE'), 0);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

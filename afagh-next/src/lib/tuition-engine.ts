@@ -19,8 +19,11 @@ import {
 
 // منطق خالص انتخاب قاعده در ماژول جداگانه است تا بدون دیتابیس قابل تست باشد
 export { pickFeeRule, termTypeOf, toNum } from './tuition-rules';
+export type { EquivFixedMode } from './tuition-rules';
 export type { TermType, ResolvedRule, FeeRuleParams, FeeRuleLike } from './tuition-rules';
-import { pickFeeRule, termTypeOf, toNum, type FeeRuleParams, type ResolvedRule, type TermType } from './tuition-rules';
+import { pickFeeRule, normalizeEquivFixedMode, termTypeOf, toNum,
+  type EquivFixedMode, type FeeRuleParams, type ResolvedRule, type TermType } from './tuition-rules';
+import { getSetting } from './settings';
 
 type FeeRuleRow = typeof tuition_fee_rules.$inferSelect;
 
@@ -59,7 +62,12 @@ export interface TermTuition {
  * محاسبهٔ شهریهٔ یک ترم برای یک دانشجو:
  *   ثابت (بر اساس نوع ترم) + مجموع(واحد × نرخ هر واحد بر اساس نوع گذراندن درس)
  */
-export async function computeTermTuition(studentId: number, termId: number): Promise<TermTuition> {
+export async function computeTermTuition(
+  studentId: number,
+  termId: number,
+  /** false = شهریهٔ ثابت محاسبه نشود (برای نیمسال‌های معادل‌سازی مطابق سیاست EQUIV_FIXED_TUITION_MODE) */
+  opts?: { includeFixed?: boolean },
+): Promise<TermTuition> {
   const [stu] = await db.select().from(students).where(eq(students.id, studentId)).limit(1);
   const [term] = await db.select().from(academic_terms).where(eq(academic_terms.id, termId)).limit(1);
   const termType = term ? termTypeOf(term) : 'NORMAL';
@@ -71,7 +79,8 @@ export async function computeTermTuition(studentId: number, termId: number): Pro
 
   // شهریهٔ ثابت — یک‌بار به ازای نوع ترم؛ فقط از قواعد سطح ترم (بدون offeringType)
   const fixedRule = pickFeeRule(feeRules, { degreeLevelId, termType, entryYear, termLevelOnly: true });
-  const fixedTuition = fixedRule?.fixedTuition ?? 0;
+  const includeFixed = opts?.includeFixed !== false;
+  const fixedTuition = includeFixed ? (fixedRule?.fixedTuition ?? 0) : 0;
 
   // دروس ثبت‌شدهٔ دانشجو در این ترم + نوع گذراندن هر درس
   const rows = await db
@@ -112,7 +121,7 @@ export async function computeTermTuition(studentId: number, termId: number): Pro
     variableTuition,
     totalTuition: fixedTuition + variableTuition,
     lines,
-    fixedRuleId: fixedRule?.id ?? null,
+    fixedRuleId: includeFixed ? (fixedRule?.id ?? null) : null,
   };
 }
 
@@ -120,8 +129,12 @@ export async function computeTermTuition(studentId: number, termId: number): Pro
  * شارژ شهریهٔ محاسبه‌شده در دفتر مالی دانشجو (idempotent با referenceId=termId
  * و نوع TUITION_CHARGE). اگر پیش‌تر برای همین ترم شارژ شده باشد، به‌روز می‌شود.
  */
-export async function chargeTermTuition(studentId: number, termId: number): Promise<{ charged: number; totalTuition: number }> {
-  const t = await computeTermTuition(studentId, termId);
+export async function chargeTermTuition(
+  studentId: number,
+  termId: number,
+  opts?: { includeFixed?: boolean },
+): Promise<{ charged: number; totalTuition: number }> {
+  const t = await computeTermTuition(studentId, termId, opts);
   if (t.totalTuition <= 0) return { charged: 0, totalTuition: 0 };
 
   const [term] = await db.select({ title: academic_terms.title }).from(academic_terms).where(eq(academic_terms.id, termId)).limit(1);
@@ -151,4 +164,9 @@ export async function chargeTermTuition(studentId: number, termId: number): Prom
     });
   }
   return { charged: t.totalTuition, totalTuition: t.totalTuition };
+}
+
+/** سیاست شهریهٔ ثابت معادل‌سازی — از تنظیم EQUIV_FIXED_TUITION_MODE (دیتابیس ← ENV ← پیش‌فرض) */
+export async function getEquivFixedMode(): Promise<EquivFixedMode> {
+  return normalizeEquivFixedMode(await getSetting('EQUIV_FIXED_TUITION_MODE'));
 }

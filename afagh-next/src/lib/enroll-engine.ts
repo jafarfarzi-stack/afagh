@@ -7,7 +7,8 @@ import {
 import { withUserRls } from '@/db';
 import { atomicSeat, nextWaitlistPosition, warmupCapacities } from './waitingRoom';
 import { evaluateStudentRegulationStatus, parseGrade, parseUnits } from './regulations-engine';
-import { chargeTermTuition } from './tuition-engine';
+import { chargeTermTuition, getEquivFixedMode } from './tuition-engine';
+import { shouldChargeFixed } from './tuition-rules';
 
 // ═══ خط لولهٔ اعتبارسنجی — سند §۱۰۰۸ ═══
 // هر درخواست انتخاب واحد از ۵ فیلتر می‌گذرد:
@@ -564,10 +565,19 @@ export async function applyEquivalenceBatch(input: {
   }
 
   // ۴) شارژ شهریهٔ معادل‌سازی بر اساس نوع ترم و نوع گذراندن درس (موتور شهریه)
+  //
+  // شهریهٔ ثابت مطابق سیاست EQUIV_FIXED_TUITION_MODE اعمال می‌شود (قابل تنظیم از
+  // پنل مدیر، بدون مقدار سخت‌کد). چون دروس معادل‌سازی هر ۲۰ واحد در یک نیمسال
+  // جدا ثبت می‌شوند، بدون این سیاست شهریهٔ ثابت به ازای هر نیمسال تکرار می‌شد
+  // (مثلاً ۴۵ واحد = ۳ نیمسال = ۳ برابر شهریهٔ ثابت).
+  const fixedMode = await getEquivFixedMode();
   let chargedTotal = 0;
-  for (const tid of equivTermIds) {
+  for (let i = 0; i < equivTermIds.length; i++) {
+    const tid = equivTermIds[i];
     try {
-      const { charged } = await chargeTermTuition(input.studentId, tid);
+      const { charged } = await chargeTermTuition(input.studentId, tid, {
+        includeFixed: shouldChargeFixed(fixedMode, i === 0),
+      });
       chargedTotal += charged;
     } catch (e) {
       // نبود قاعدهٔ شهریه نباید معادل‌سازی را شکست دهد؛ فقط ثبت نمی‌شود

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { saveFeeRuleAction, deleteFeeRuleAction, importLegacyFeeRulesAction, type FeeRuleInput } from './actions';
+import { saveFeeRuleAction, deleteFeeRuleAction, importLegacyFeeRulesAction, setEquivFixedModeAction, type FeeRuleInput } from './actions';
+import type { EquivFixedMode } from '@/lib/tuition-rules';
 
 type Rule = {
   id: number;
@@ -28,6 +29,12 @@ const OFFERING_TYPES = [
   { value: 'TRANSFER', label: 'معادل‌سازی (TRANSFER)' },
 ];
 
+const EQUIV_MODES: { value: EquivFixedMode; label: string; hint: string }[] = [
+  { value: 'ONCE', label: 'یک بار به ازای هر دانشجو', hint: 'شهریهٔ ثابت فقط روی اولین نیمسال معادل‌سازی شارژ می‌شود (پیشنهادی)' },
+  { value: 'PER_TERM', label: 'به ازای هر نیمسال معادل‌سازی', hint: 'هر نیمسال ۰۰EQ شهریهٔ ثابت جدا می‌گیرد' },
+  { value: 'NONE', label: 'بدون شهریهٔ ثابت', hint: 'فقط شهریهٔ متغیر به ازای هر واحد محاسبه می‌شود' },
+];
+
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR');
 const termFa = (t: string | null) => TERM_TYPES.find(x => x.value === (t ?? ''))?.label ?? (t || '—');
 const offFa = (t: string | null) => OFFERING_TYPES.find(x => x.value === (t ?? ''))?.label ?? (t || '—');
@@ -37,11 +44,12 @@ const emptyForm: FeeRuleInput = {
   fixedTuition: 0, perUnitTuition: 0, effectiveFromYear: null, isActive: true, note: '',
 };
 
-export default function TuitionRulesClient({ rules, degrees }: { rules: Rule[]; degrees: Degree[] }) {
+export default function TuitionRulesClient({ rules, degrees, equivFixedMode }: { rules: Rule[]; degrees: Degree[]; equivFixedMode: EquivFixedMode }) {
   const [form, setForm] = useState<FeeRuleInput>(emptyForm);
   const [editing, setEditing] = useState<number | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
+  const [mode, setMode] = useState<EquivFixedMode>(equivFixedMode);
 
   const set = (patch: Partial<FeeRuleInput>) => setForm(f => ({ ...f, ...patch }));
 
@@ -73,6 +81,15 @@ export default function TuitionRulesClient({ rules, degrees }: { rules: Rule[]; 
     });
   };
 
+  const saveMode = (next: EquivFixedMode) => {
+    setMode(next);
+    start(async () => {
+      const res = await setEquivFixedModeAction(next);
+      if (res.ok) setMsg({ ok: true, text: 'سیاست شهریهٔ ثابت معادل‌سازی ذخیره شد.' });
+      else setMsg({ ok: false, text: res.error || 'ذخیرهٔ سیاست ناموفق بود.' });
+    });
+  };
+
   const importLegacy = () => {
     if (!confirm('قواعد مالی قدیمی به موتور جدید درون‌ریزی شوند؟ قواعد تکراری ساخته نمی‌شوند.')) return;
     start(async () => {
@@ -96,6 +113,34 @@ export default function TuitionRulesClient({ rules, degrees }: { rules: Rule[]; 
           شهریهٔ ثابت بر اساس <b>نوع ترم</b> و شهریهٔ متغیر بر اساس <b>نوع گذراندن درس</b> اعمال می‌شود.
           خاص‌ترین قاعدهٔ منطبق برنده است؛ برای معادل‌سازی یک قاعده با نوع ترم «معادل‌سازی» و/یا نوع درس «TRANSFER» بسازید.
         </p>
+      </div>
+
+      {/* سیاست شهریهٔ ثابت معادل‌سازی */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+        <h2 className="font-bold text-slate-800">شهریهٔ ثابت معادل‌سازی</h2>
+        <p className="text-xs text-slate-500 mt-1 mb-4">
+          دروس معادل‌سازی هر ۲۰ واحد در یک نیمسال جدا (۰۰EQ) ثبت می‌شوند. این گزینه تعیین می‌کند
+          شهریهٔ ثابت چند بار شارژ شود. <b>شهریهٔ متغیر در همهٔ حالت‌ها به ازای هر واحد محاسبه می‌شود.</b>
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {EQUIV_MODES.map(m => (
+            <button
+              key={m.value}
+              onClick={() => saveMode(m.value)}
+              disabled={pending}
+              className={`text-right rounded-xl border p-3 transition disabled:opacity-50 ${
+                mode === m.value
+                  ? 'border-indigo-600 bg-indigo-50 ring-1 ring-indigo-600'
+                  : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50'
+              }`}
+            >
+              <span className={`block text-sm font-bold ${mode === m.value ? 'text-indigo-800' : 'text-slate-800'}`}>
+                {m.label}
+              </span>
+              <span className="block text-xs text-slate-500 mt-1">{m.hint}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* فرم ایجاد/ویرایش */}

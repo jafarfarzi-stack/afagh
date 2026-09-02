@@ -35,6 +35,7 @@ export const SETTING_GROUPS = [
   'کلاس مجازی (BBB / Moodle)',
   'پیامک و ربات‌های پیام‌رسان',
   'درگاه پرداخت',
+  'شهریه و امور مالی',
   'سرویس‌های استعلام دولتی',
   'فارغ‌التحصیلی و صدور مدارک',
   'گردش کار و حق‌التدریس',
@@ -84,6 +85,9 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'PAY_CALLBACK_URL', env: 'PAYMENT_CALLBACK_URL', group: 'درگاه پرداخت', label: 'نشانی بازگشت از درگاه', type: 'url', default: '', help: 'خالی = «نشانی عمومی سامانه» + /api/payment/callback' },
   { key: 'PAY_SANDBOX', env: 'PAYMENT_SANDBOX', group: 'درگاه پرداخت', label: 'حالت آزمایشی (Sandbox)', type: 'boolean', default: 'true' },
   { key: 'PAY_WAGE_PERCENT', env: 'PAYMENT_WAGE_PERCENT', group: 'درگاه پرداخت', label: 'درصد کارمزد', type: 'number', default: '0' },
+
+  // ── شهریه و امور مالی ──
+  { key: 'EQUIV_FIXED_TUITION_MODE', env: 'AFAGH_EQUIV_FIXED_TUITION_MODE', group: 'شهریه و امور مالی', label: 'نحوهٔ محاسبهٔ شهریهٔ ثابت معادل‌سازی', type: 'text', default: 'ONCE', help: 'ONCE = یک بار به ازای هر دانشجو (روی اولین نیمسال معادل‌سازی)؛ PER_TERM = به ازای هر نیمسال معادل‌سازی (۰۰EQ)؛ NONE = بدون شهریهٔ ثابت. شهریهٔ متغیر همیشه به ازای هر واحد محاسبه می‌شود' },
 
   // ── سرویس‌های استعلام ──
   { key: 'IRANDOC_BASE_URL', env: 'IRANDOC_BASE_URL', group: 'سرویس‌های استعلام دولتی', label: 'نشانی API همانندجویی ایرانداک', type: 'url', default: '' },
