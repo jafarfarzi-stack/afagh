@@ -1,6 +1,7 @@
 import 'server-only';
 import { registerWorkflowHandler } from '@/lib/workflow-events';
 import { applyCourseTransfer, applyEquivalenceBatch } from '@/lib/enroll-engine';
+import { issueEquivalenceForm } from '@/lib/equivalence-form';
 import { createLogger } from '@/lib/logger';
 
 // ══════════════════════════════════════════════════════════════════════
@@ -34,9 +35,19 @@ registerWorkflowHandler({
         requestId: ev.requestId,
         studentId: ev.studentId,
         termsCreated: res.termsCreated,
+        chargedTotal: res.chargedTotal ?? 0,
         registered: res.registered.length,
         rejected: res.rejected.length,
       });
+
+      // صدور فرم رسمی ممهور → پروندهٔ فارغ‌التحصیلان + بایگانی الکترونیک
+      try {
+        const form = await issueEquivalenceForm(ev.requestId);
+        log.info('equivalence_form_issued', { requestId: ev.requestId, ok: form.ok, skipped: !!form.skipped, hash: form.hash ?? null });
+      } catch (e) {
+        // صدور فرم نباید معادل‌سازیِ انجام‌شده را واگرد کند؛ فقط ثبت خطا
+        log.error('equivalence_form_failed', { requestId: ev.requestId, error: (e as Error)?.message });
+      }
       return;
     }
 

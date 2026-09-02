@@ -199,6 +199,7 @@ export const academic_terms = pgTable('academic_terms', {
   id: serial('id').primaryKey(),
   termCode: varchar('termCode', { length: 10 }).notNull().unique(),
   title: varchar('title', { length: 100 }).notNull(),
+  termType: varchar('termType', { length: 20 }).notNull().default('NORMAL'), // NORMAL | SUMMER | EQUIVALENCE
   isCurrent: integer('isCurrent').default(0),
   isSummer: integer('isSummer').default(0),
   isEnrollmentOpen: integer('isEnrollmentOpen').default(0),
@@ -504,6 +505,32 @@ export const term_financial_rules = pgTable('term_financial_rules', {
   advancePaymentRequired: numeric('advancePaymentRequired', { precision: 12, scale: 0 }).notNull()
 });
 
+/**
+ * قواعد شهریهٔ قابل تنظیم (بدون مقدار سخت‌کد) — موتور شهریه از اینجا می‌خواند.
+ *
+ * هر قاعده می‌تواند بر اساس سه کلید محدود شود:
+ *   - مقطع (degreeLevelId): NULL = همهٔ مقاطع
+ *   - نوع ترم (termType):   NORMAL / SUMMER / EQUIVALENCE — NULL = همه
+ *   - نوع گذراندن درس (offeringType): NORMAL / TRANSFER / … — NULL = همه
+ *
+ * شهریهٔ ثابت (fixedTuition) یک‌بار به ازای «نوع ترم» و شهریهٔ متغیر
+ * (perUnitTuition) به ازای هر واحد و بر اساس «نوع گذراندن درس» اعمال می‌شود؛
+ * بنابراین معادل‌سازی می‌تواند نرخ ثابت و نرخ هر واحد کاملاً جداگانه داشته باشد.
+ * هنگام انتخاب، خاص‌ترین قاعدهٔ منطبق (بر اساس تعداد کلیدهای غیرخالی) برنده است.
+ */
+export const tuition_fee_rules = pgTable('tuition_fee_rules', {
+  id: serial('id').primaryKey(),
+  degreeLevelId: integer('degreeLevelId').references(() => degree_level_configs.id), // NULL = همهٔ مقاطع
+  termType: varchar('termType', { length: 20 }),        // NORMAL | SUMMER | EQUIVALENCE — NULL = همه
+  offeringType: varchar('offeringType', { length: 30 }),// NORMAL | TRANSFER | … — NULL = همه
+  fixedTuition: numeric('fixedTuition', { precision: 12, scale: 0 }).notNull().default('0'),
+  perUnitTuition: numeric('perUnitTuition', { precision: 12, scale: 0 }).notNull().default('0'),
+  effectiveFromYear: integer('effectiveFromYear'),      // NULL = بدون محدودیت ورودی
+  isActive: integer('isActive').notNull().default(1),
+  note: text('note'),
+  updatedAt: timestamp('updatedAt').defaultNow()
+});
+
 export const student_ledger = pgTable('student_ledger', {
   id: serial('id').primaryKey(),
   studentId: integer('studentId').notNull().references(() => students.id),
@@ -760,6 +787,7 @@ export const student_documents = pgTable('student_documents', {
   fileName: varchar('fileName', { length: 255 }).notNull(),
   fileUrl: varchar('fileUrl', { length: 500 }).notNull(),
   mimeType: varchar('mimeType', { length: 100 }),
+  contentHash: varchar('contentHash', { length: 64 }),   // SHA-256 محتوای سند — مبنای استعلام اصالت فرم‌های ممهور
   verificationStatus: varchar('verificationStatus', { length: 20 }).default('PENDING'),
   verifiedBy: integer('verifiedBy'),
   rejectionReason: text('rejectionReason'),

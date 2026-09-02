@@ -7,6 +7,7 @@ import {
 import { withUserRls } from '@/db';
 import { atomicSeat, nextWaitlistPosition, warmupCapacities } from './waitingRoom';
 import { evaluateStudentRegulationStatus, parseGrade, parseUnits } from './regulations-engine';
+import { chargeTermTuition } from './tuition-engine';
 
 // ═══ خط لولهٔ اعتبارسنجی — سند §۱۰۰۸ ═══
 // هر درخواست انتخاب واحد از ۵ فیلتر می‌گذرد:
@@ -452,6 +453,7 @@ export type EquivalenceBatchResult = {
   ok: boolean;
   message: string;
   termsCreated: number;
+  chargedTotal?: number;
   registered: { courseTitle: string; termTitle: string; grade: number | null; units: number }[];
   rejected: { sourceTitle: string; reason: string }[];
 };
@@ -504,6 +506,7 @@ export async function applyEquivalenceBatch(input: {
 
   // ۳) ساخت ترم‌های معادل‌سازی پیش از اولین نیمسال و ثبت دروس
   let termsCreated = 0;
+  const equivTermIds: number[] = [];
   for (let i = 0; i < chunks.length; i++) {
     const termCode = `00EQ${i + 1}`;
     let [term] = await db.select().from(academic_terms).where(eq(academic_terms.termCode, termCode)).limit(1);
@@ -513,6 +516,7 @@ export async function applyEquivalenceBatch(input: {
         .values({
           termCode,
           title: `معادل‌سازی — نوبت ${i + 1}`,
+          termType: 'EQUIVALENCE',
           isCurrent: 0,
           isSummer: 0,
           isEnrollmentOpen: 0,
@@ -525,6 +529,7 @@ export async function applyEquivalenceBatch(input: {
     }
     if (!term) continue;
     termsCreated++;
+    equivTermIds.push(term.id);
 
     for (const r of chunks[i]) {
       let [offering] = await db
@@ -558,10 +563,24 @@ export async function applyEquivalenceBatch(input: {
     }
   }
 
+  // ۴) شارژ شهریهٔ معادل‌سازی بر اساس نوع ترم و نوع گذراندن درس (موتور شهریه)
+  let chargedTotal = 0;
+  for (const tid of equivTermIds) {
+    try {
+      const { charged } = await chargeTermTuition(input.studentId, tid);
+      chargedTotal += charged;
+    } catch (e) {
+      // نبود قاعدهٔ شهریه نباید معادل‌سازی را شکست دهد؛ فقط ثبت نمی‌شود
+      console.error('equivalence tuition charge failed', { studentId: input.studentId, termId: tid, e });
+    }
+  }
+
   return {
     ok: true,
-    message: `${registered.length} درس معادل‌سازی‌شده در ${termsCreated} نیمسال معادل‌سازی (هر ${EQUIV_TERM_UNITS} واحد) پیش از اولین ترم ثبت شد.`,
+    message: `${registered.length} درس معادل‌سازی‌شده در ${termsCreated} نیمسال معادل‌سازی (هر ${EQUIV_TERM_UNITS} واحد) پیش از اولین ترم ثبت شد.` +
+      (chargedTotal > 0 ? ` شهریهٔ معادل‌سازی: ${chargedTotal.toLocaleString('fa-IR')} ریال.` : ''),
     termsCreated,
+    chargedTotal,
     registered,
     rejected,
   };

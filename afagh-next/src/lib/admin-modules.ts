@@ -152,6 +152,17 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/tuition',
+    icon: '🧮',
+    title: 'موتور شهریه',
+    desc: 'قواعد شهریهٔ ثابت و متغیر بر اساس نوع ترم و نوع درس',
+    roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'],
+    accent: 'from-cyan-900 to-sky-950 border-cyan-600/50',
+    iconBg: 'bg-cyan-700/80 border-cyan-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/student-cards',
     icon: '🪪',
     title: 'کارت دانشجویی',
