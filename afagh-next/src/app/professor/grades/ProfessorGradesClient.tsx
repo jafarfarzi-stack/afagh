@@ -419,7 +419,10 @@ export default function ProfessorGradesClient({
 
   // Confirm Finalize / Section Sign
   const handleConfirmFinalize = () => {
-    if (otpCode !== otpSentCode && otpCode !== '12345' && otpCode !== '123456') {
+    // 🔒 کد عبور پشتیبان دمو (۱۲۳۴۵/۱۲۳۴۵۶) فقط در حالت دمو پذیرفته می‌شود
+    const demoOtpBypass =
+      process.env.NEXT_PUBLIC_AFAGH_DEMO_MODE === '1' || process.env.NODE_ENV !== 'production';
+    if (otpCode !== otpSentCode && !(demoOtpBypass && (otpCode === '12345' || otpCode === '123456'))) {
       alert('کد تایید اشتباه است. لطفاً کد پنج‌رقمی پیامک‌شده را وارد کنید.');
       return;
     }

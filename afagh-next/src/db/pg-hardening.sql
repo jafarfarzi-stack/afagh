@@ -30,7 +30,7 @@ CREATE INDEX IF NOT EXISTS idx_att_session_pg ON "student_class_attendance"("ses
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'afagh_app') THEN
-    CREATE ROLE afagh_app LOGIN PASSWORD 'afagh_app' NOSUPERUSER NOBYPASSRLS;
+    CREATE ROLE afagh_app LOGIN PASSWORD '__AFAGH_APP_PASSWORD__' NOSUPERUSER NOBYPASSRLS;
   END IF;
 END $$;
 GRANT CONNECT ON DATABASE afagh_db TO afagh_app;

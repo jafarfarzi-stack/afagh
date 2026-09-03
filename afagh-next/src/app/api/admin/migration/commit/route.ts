@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { commit, ENTITIES, type Entity } from '@/lib/migration/engine';
 import { parseTabular } from '@/lib/migration/tabular';
 import { readUpload, requireMigrationAdmin } from '@/lib/migration/http';
+import { assertSameOrigin } from '@/lib/security';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
+  const _csrf = assertSameOrigin(req);
+  if (_csrf) return _csrf;
   const auth = await requireMigrationAdmin();
   if ('res' in auth) return auth.res;
 

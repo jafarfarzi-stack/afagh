@@ -1,12 +1,25 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { sql } from 'drizzle-orm';
+import fs from 'fs';
+import path from 'path';
 import { Pool } from 'pg';
 import * as schema from './schema';
+
+// ── گارد production: در پروداکشن متغیرهای زیرساخت باید تعیین شوند، نه با پیش‌فرض ──
+// (NEXT_PHASE یعنی در حال build هستیم؛ اتصال ایجاد نمی‌شود)
+const isBuilding = !!process.env.NEXT_PHASE;
+const requireEnvInProd = (name: string, url: string) => {
+  if (!isBuilding && process.env.NODE_ENV === 'production' && !process.env[name]) {
+    // ⚠ به‌جای اتصال با پیش‌فرض ضعیف، جریان شروع را متوقف می‌کنیم (fail-fast)
+    throw new Error(`[db] در production متغیر ${name} اجباری است (پیش‌فرض توسعه‌ای «${url}» پذیرفته نمی‌شود).`);
+  }
+  return process.env[name] || url;
+};
 
 // اتصال تنبل (lazy) — در زمان build فایل‌های استاتیک، به دیتابیس وصل نمی‌شود
 const globalForDb = globalThis as unknown as { pool?: Pool; appPool?: Pool };
 export const pool = globalForDb.pool ?? new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgres://afagh:afagh@localhost:5432/afagh_db',
+  connectionString: requireEnvInProd('DATABASE_URL', 'postgres://afagh:afagh@localhost:5432/afagh_db'),
   max: 20,
 });
 if (process.env.NODE_ENV !== 'production') globalForDb.pool = pool;
@@ -14,128 +27,40 @@ if (process.env.NODE_ENV !== 'production') globalForDb.pool = pool;
 export const db = drizzle(pool, { schema });
 export { schema };
 
-// ═══ خودترمیمی خودکار اسکیما (Auto-Healing DB Schema Patches) ═══
-// برای جلوگیری از خطای نبود ستون‌ها در دیتابیس‌های لوکال یا نسخه‌های قبلی
+// ═══ پچ‌های اسکیما (Schema Patches) ═══
+// ⚠ سیاست مهاجرت امن (مطابق بررسی مهندسی): اجرای اصلی پچ‌ها وظیفهٔ «migrator»
+//   است (Dockerfile: drizzle-kit push → apply-patches → seed-base → hardening)
+//   و پیش از استارت اپ انجام می‌شود. در runtime پروداکشن این خودترمیمی
+//   غیرفعال است؛ فقط در توسعه (جایی که ممکن است DB محلی قدیمی باشد) به‌عنوان
+//   راحتی اجرا می‌شود. متن کامل پچ‌ها خارج از کد: src/db/patches.sql
 let schemaEnsured = false;
 export async function ensureDbSchemaPatches() {
   if (schemaEnsured) return;
   schemaEnsured = true;
+  if (process.env.NODE_ENV === 'production') {
+    console.warn('[db] پچ‌های اسکیما باید توسط migrator پیش از استارت اپ اجرا شده باشند — خودترمیمی runtime در production غیرفعال است.');
+    return;
+  }
   try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS api_audit_logs (
-        id SERIAL PRIMARY KEY,
-        service_name VARCHAR(50),
-        endpoint VARCHAR(255),
-        request_body TEXT,
-        response_body TEXT,
-        status_code INTEGER,
-        response_time_ms INTEGER,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE TABLE IF NOT EXISTS notification_templates (
-        id SERIAL PRIMARY KEY,
-        event_code VARCHAR(50),
-        title VARCHAR(255),
-        channel VARCHAR(50),
-        template_text TEXT,
-        is_active INTEGER DEFAULT 1,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      ALTER TABLE process_definitions ADD COLUMN IF NOT EXISTS "description" text;
-      ALTER TABLE process_definitions ADD COLUMN IF NOT EXISTS "category" varchar(50) DEFAULT 'عمومی';
-      ALTER TABLE process_definitions ADD COLUMN IF NOT EXISTS "formSchema" text;
-      ALTER TABLE process_definitions ADD COLUMN IF NOT EXISTS "outputTemplate" varchar(50);
-      ALTER TABLE process_definitions ADD COLUMN IF NOT EXISTS "feeAmount" integer DEFAULT 0;
-      ALTER TABLE process_definitions ADD COLUMN IF NOT EXISTS "isActive" integer DEFAULT 1;
-
-      ALTER TABLE process_steps ADD COLUMN IF NOT EXISTS "timeoutEscalateToRole" varchar(50);
-      ALTER TABLE process_steps ADD COLUMN IF NOT EXISTS "slaHours" integer DEFAULT 24;
-      ALTER TABLE process_steps ADD COLUMN IF NOT EXISTS "timeoutAction" varchar(50) DEFAULT 'AUTO_ESCALATE';
-      ALTER TABLE process_steps ADD COLUMN IF NOT EXISTS "stepOrder" integer DEFAULT 1;
-      ALTER TABLE process_steps ADD COLUMN IF NOT EXISTS "stepType" varchar(30) DEFAULT 'APPROVAL';
-      ALTER TABLE process_steps ADD COLUMN IF NOT EXISTS "serviceTaskType" varchar(50);
-      ALTER TABLE process_steps ADD COLUMN IF NOT EXISTS "autoConditionsJson" text;
-      ALTER TABLE process_steps ADD COLUMN IF NOT EXISTS "assignedStaffId" integer;
-
-      ALTER TABLE educational_regulations ADD COLUMN IF NOT EXISTS "rulesConfig" text DEFAULT '{}';
-      ALTER TABLE students ADD COLUMN IF NOT EXISTS "quotaType" varchar(50) DEFAULT 'NORMAL';
-      ALTER TABLE students ADD COLUMN IF NOT EXISTS "extraAllowedSemesters" integer DEFAULT 0;
-      ALTER TABLE students ADD COLUMN IF NOT EXISTS "extraAllowedProbations" integer DEFAULT 0;
-
-      -- کش گزارش‌های هوش تجاری (bi-engine)؛ همان تعریف schema.ts، idempotent
-      CREATE TABLE IF NOT EXISTS analytics_snapshots (
-        id SERIAL PRIMARY KEY,
-        "cacheKey" VARCHAR(160) NOT NULL UNIQUE,
-        "reportType" VARCHAR(60) NOT NULL,
-        payload TEXT NOT NULL,
-        "rowCount" INTEGER,
-        "durationMs" INTEGER,
-        "computedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "expiresAt" TIMESTAMP
-      );
-
-      -- ایندکس‌های کوئری‌های تجمیعی BI (بخش ⑦ pg-hardening.sql)
-      CREATE INDEX IF NOT EXISTS "idx_eval_resp_period_offering" ON evaluation_responses ("periodId", "offeringId");
-      CREATE INDEX IF NOT EXISTS "idx_eval_resp_question"        ON evaluation_responses ("questionId");
-      CREATE INDEX IF NOT EXISTS "idx_eval_resp_offering"        ON evaluation_responses ("offeringId");
-      CREATE INDEX IF NOT EXISTS "idx_eval_q_form_axis"          ON evaluation_questions ("formId", "axisLabel");
-      CREATE INDEX IF NOT EXISTS "idx_schedules_room_type"       ON schedules ("roomId", "scheduleType");
-      CREATE INDEX IF NOT EXISTS "idx_offering_prof_role"        ON offering_professors ("role", "staffId");
-      CREATE INDEX IF NOT EXISTS "idx_analytics_snapshots_type"  ON analytics_snapshots ("reportType");
-
-      -- ═══ پچ‌های امنیتی پذیرش (فاز اصلاح) ═══
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS "mustChangePassword" integer DEFAULT 0;
-
-      -- ═══ پچ‌های مهاجرت از دیتابیس قدیمی (رشته‌ها و اساتید) ═══
-      ALTER TABLE faculties ADD COLUMN IF NOT EXISTS "facultyCode" varchar(10);
-      ALTER TABLE departments ADD COLUMN IF NOT EXISTS "departmentCode" varchar(10);
-      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "facultyId" integer;
-      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "minUnits" integer;
-      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "standardCode" varchar(20);
-      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "establishedDate" varchar(10);
-      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "terminatedDate" varchar(10);
-      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "isActive" integer DEFAULT 1;
-      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "headStaffCode" varchar(20);
-      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "expertName" varchar(150);
-      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "lastCouncilDate" varchar(10);
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "title" varchar(50);
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "facultyId" integer;
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "isActive" integer DEFAULT 1;
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "cooperationType" varchar(50);
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "personnelNo" varchar(50);
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "employmentType" varchar(50);
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "hireDate" varchar(10);
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "lastDegreeYear" integer;
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "fieldOfStudy" varchar(200);
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "maritalStatusCode" integer;
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "maritalStatus" varchar(20);
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "lastDegreeCountryCode" varchar(10);
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "lastDegreeUniversity" varchar(200);
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "academicBase" varchar(20);
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "birthProvince" varchar(100);
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "birthCity" varchar(100);
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "bankAccountNo" varchar(50);
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "phone" varchar(20);
-      -- قید یکتایی فرمول شمارهٔ دانشجویی (پایهٔ افزایش اتمیک + onConflictDoNothing).
-      -- اگر ردیف تکراری قدیمی وجود داشته باشد، به‌جای شکستن استارت‌آپ،
-      -- ایندکس ساخته نشده و در لاگ هشدار داده می‌شود.
-      DO $$
-      BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'student_id_formulas_degreeLevelId_unique') THEN
-          IF (SELECT COUNT(*) FROM (
-                SELECT "degreeLevelId" FROM student_id_formulas
-                WHERE "degreeLevelId" IS NOT NULL GROUP BY "degreeLevelId" HAVING COUNT(*) > 1) d) = 0 THEN
-            CREATE UNIQUE INDEX IF NOT EXISTS "student_id_formulas_degreeLevelId_unique"
-              ON student_id_formulas ("degreeLevelId");
-          ELSE
-            RAISE WARNING 'student_id_formulas دارای ردیف تکراری degreeLevelId است — قید یکتایی ساخته نشد';
-          END IF;
-        END IF;
-      END $$;
-    `);
-  } catch (_) {}
+    // در dev، cwd ریشهٔ پروژه است (src/db/patches.sql). در باندل Next ممکن است
+    // __dirname به .next/server اشاره کند و فایل آن‌جا نباشد — چند مسیر امتحان می‌شود.
+    const candidates = [
+      path.join(process.cwd(), 'src', 'db', 'patches.sql'),
+      path.join(__dirname, 'patches.sql'),
+      path.join(process.cwd(), 'patches.sql'),
+    ];
+    let patchSql: string | null = null;
+    for (const p of candidates) {
+      try {
+        patchSql = fs.readFileSync(p, 'utf8');
+        break;
+      } catch { /* مسیر بعدی */ }
+    }
+    if (patchSql == null) throw new Error('patches.sql در هیچ مسیری پیدا نشد');
+    await pool.query(patchSql);
+  } catch (err: any) {
+    console.error('[db] پچ اسکیما ناموفق (توسعه):', err?.message);
+  }
 }
 
 // ═══ RLS (سند §۲۱۷۰) ═══
@@ -143,7 +68,7 @@ export async function ensureDbSchemaPatches() {
 // خواندن‌های دانشکیت از این مسیر می‌رود: با set_config محلیِ تراکنش، حتی با
 // بایپس کد اپ، دیتای دانشجوی دیگر قابل خواندن نیست.
 export const appPool = globalForDb.appPool ?? new Pool({
-  connectionString: process.env.DATABASE_URL_APP || 'postgres://afagh_app:afagh_app@127.0.0.1:5432/afagh_db',
+  connectionString: requireEnvInProd('DATABASE_URL_APP', 'postgres://afagh_app:afagh_app@127.0.0.1:5432/afagh_db'),
   max: 10,
 });
 if (process.env.NODE_ENV !== 'production') globalForDb.appPool = appPool;
@@ -152,7 +77,16 @@ export const appDb = drizzle(appPool, { schema });
 
 type RlsTx = Parameters<Parameters<typeof appDb.transaction>[0]>[0];
 
-/** اجرای کوئری‌های خواندن در بستر RLSِ همان کاربر — set_config فقط در همین تراکنش زنده است */
+/**
+ * اجرای کوئری‌های دانشجو/استاد در بستر RLSِ همان کاربر — set_config فقط در همین تراکنش زنده است.
+ *
+ * 🔴 سیاست FAIL-CLOSED (بررسی مهندسی — P0-1):
+ * اگر زیرساخت RLS (نقش afagh_app، grantها یا پچ‌های RLS) از دست برود، هرگز به
+ * اتصال مالک (BYPASSRLS) برگردانده نمی‌شود — چون در آن صورت عملاً کل عایق
+ * امنیتی سطری دور زده می‌شود. رفتار:
+ *   • production: خطای امنیتی کنترل‌شده + لاگ (فقط با AFAGH_RLS_FALLBACK=1 صریحاً قابل رد شدن)
+ *   • توسعه: fallback مجاز با هشدار بلند (برای دوباگ بدون afagh_app محلی)
+ */
 export async function withUserRls<T>(userId: number, fn: (tx: RlsTx) => Promise<T>): Promise<T> {
   try {
     return await appDb.transaction(async tx => {
@@ -160,9 +94,6 @@ export async function withUserRls<T>(userId: number, fn: (tx: RlsTx) => Promise<
       return fn(tx);
     });
   } catch (err: any) {
-    // در صورت هر مشکل زیرساختی RLS (نقش afagh_app نبودن، خطای ورود،
-    // «permission denied» یا نبود رابطه پس از restore بک‌آپ) به اتصال اصلی
-    // برمی‌گردیم تا کارتابل دانشجو هرگز با خطای سرور نیفتد.
     const msg = String(err?.message ?? '');
     const rlsInfraProblem =
       err?.code === '28P01' || // password/authentication
@@ -174,13 +105,20 @@ export async function withUserRls<T>(userId: number, fn: (tx: RlsTx) => Promise<
       msg.includes('afagh_app') ||
       msg.includes('permission denied') ||
       msg.includes('does not exist') ||
-      msg.includes('connection') ;
-    if (rlsInfraProblem) {
-      return (db as any).transaction(async (tx: any) => {
-        await tx.execute(sql`select set_config('app.user_id', ${String(userId)}, true)`);
-        return fn(tx);
-      });
+      msg.includes('connection');
+    if (!rlsInfraProblem) throw err;
+
+    const isProd = process.env.NODE_ENV === 'production';
+    // هشدار/آلرت — اتصال RLS از دست رفته است
+    console.error(`[rls] ⛔ زیرساخت RLS از دست رفت (${err?.code ?? '?'}): ${msg} — درخواست رد شد. ${isProd ? 'AFAGH_RLS_FALLBACK=1 به‌عنوان دورزدن صریح لازم است.' : ''}`);
+    if (isProd && process.env.AFAGH_RLS_FALLBACK !== '1') {
+      throw new Error('خطای امنیتی زیرساخت (RLS). با مدیر سامانه تماس بگیرید.');
     }
-    throw err;
+    // فقط توسعه (یا override صریح): fallback با لاگ هشدار — هرگز مسیر پیش‌فرض نیست
+    console.warn('[rls] fallback توسعه‌ای به اتصال مالک فعال شد — این مسیر در production ممنوع است.');
+    return (db as any).transaction(async (tx: any) => {
+      await tx.execute(sql`select set_config('app.user_id', ${String(userId)}, true)`);
+      return fn(tx);
+    });
   }
 }

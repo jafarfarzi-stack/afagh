@@ -4,12 +4,15 @@ import { desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { audit_logs, student_documents } from '@/db/schema';
 import { getSessionUser } from '@/lib/auth';
+import { assertSameOrigin } from '@/lib/security';
 import { archiveKey, putArchiveObject, sha256 } from '@/lib/objectStore';
 
 export const dynamic = 'force-dynamic';
 
 // بارگذاری مدرک در Object Storage — سند §۲۴۳۸: فقط URL و هش در دیتابیس می‌ماند
 export async function POST(req: NextRequest) {
+  const _csrf = assertSameOrigin(req);
+  if (_csrf) return _csrf;
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   // ادمین/کارشناس بایگانی برای هر کس؛ دانشجو فقط برای خودش (e-KYC §۲۴۳۸)
@@ -25,13 +28,22 @@ export async function POST(req: NextRequest) {
   const buf = Buffer.from(await file.arrayBuffer());
   if (buf.length > 10 * 1024 * 1024) return NextResponse.json({ error: 'حجم بیش از ۱۰MB' }, { status: 413 });
 
+  // ── whitelist سخت‌گیرانهٔ نوع محتوا (ضمیمهٔ آسیب‌پذیری Stored-XSS) ──
+  // فقط فایل‌های تصویری/PDF پذیرفته می‌شوند؛ هیچ `text/html` یا `image/svg+xml`
+  // (که می‌توانند اسکریپت اجرا کنند) از کلاینت قبول نمی‌شود.
+  const SAFE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'application/pdf']);
+  const mime = (file.type || 'application/octet-stream').toLowerCase();
+  if (!SAFE_MIME.has(mime)) {
+    return NextResponse.json({ error: 'نوع فایل مجاز نیست (فقط تصویر یا PDF).' }, { status: 415 });
+  }
+
   const ext = (file.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
   const key = archiveKey(studentUserId, typeId ?? categoryId, ext);
   const { size, etag } = await putArchiveObject(key, buf, file.type || 'application/octet-stream');
 
   const [row] = await db.insert(student_documents).values({
     personUserId: studentUserId, categoryId, typeId,
-    fileName: file.name, fileUrl: key, mimeType: file.type || 'application/octet-stream',
+    fileName: file.name, fileUrl: key, mimeType: mime,
   }).returning({ id: student_documents.id });
 
   // ممیزی زنجیره‌ای — رویداد واقعی بایگانی

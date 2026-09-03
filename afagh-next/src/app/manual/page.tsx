@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { isDemoMode } from '@/lib/auth';
 
 export default function ManualPage() {
   return (
@@ -139,7 +140,8 @@ export default function ManualPage() {
             </div>
           </section>
 
-          {/* حساب‌های کاربری نمونه */}
+          {/* حساب‌های کاربری نمونه — فقط در حالت دمو نمایش داده می‌شود (۵-①) */}
+          {isDemoMode() && (
           <section id="ch8" className="card p-6 bg-white border border-slate-200 rounded-2xl shadow-sm space-y-4">
             <h2 className="text-base sm:text-lg font-black text-indigo-950 border-b pb-2">
               فصل ۸: جدول حساب‌های کاربری پیش‌فرض دمو (کلمه عبور همه: 123456)
@@ -165,6 +167,7 @@ export default function ManualPage() {
               </table>
             </div>
           </section>
+          )}
 
         </div>
       </div>

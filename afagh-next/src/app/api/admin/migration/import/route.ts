@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseTabular, pickTable, type Table } from '@/lib/migration/tabular';
 import { readUpload, requireMigrationAdmin } from '@/lib/migration/http';
+import { assertSameOrigin } from '@/lib/security';
 import { createBatch, finalizeBatch, importerFor, storeRows } from '@/lib/migration/batches';
 import { FIELD_SPECS } from '@/lib/migration/fields';
 import { createLogger, requestId } from '@/lib/logger';
@@ -17,6 +18,8 @@ export const dynamic = 'force-dynamic';
  *   columnMap  JSON نگاشت دستی ستون‌ها { کلید فیلد: شمارهٔ ستون }
  */
 export async function POST(req: NextRequest) {
+  const _csrf = assertSameOrigin(req);
+  if (_csrf) return _csrf;
   const auth = await requireMigrationAdmin();
   if ('res' in auth) return auth.res;
 

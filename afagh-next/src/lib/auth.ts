@@ -94,6 +94,22 @@ export async function hashPassword(password: string): Promise<string> {
   return `${salt}:${buf.toString('hex')}`;
 }
 
+/**
+ * 🔒 حالت دمو (DEMO_MODE):
+ *   • `AFAGH_DEMO_MODE=1` (یا `DEMO_MODE=1`) → دمو فعال.
+ *   • پیش‌فرض: فقط خارج از production فعال است.
+ *   • در production، حساب‌های دمو هرگز ساخته/بازیابی/ورود خودکار نمی‌شوند
+ *     (C-1 سابق: هرکس شمارهٔ ملی دمو را می‌دانست با رمز ۱۲۳۴۵۶ وارد می‌شد).
+ */
+export function isDemoMode(): boolean {
+  const env = (process.env.AFAGH_DEMO_MODE ?? process.env.DEMO_MODE ?? '').trim().toLowerCase();
+  if (env) return env === '1' || env === 'true';
+  return process.env.NODE_ENV !== 'production';
+}
+
+/** رمز پیش‌فرض حساب‌های دمو — در دمو قابل تغییر است (AFAGH_DEMO_PASSWORD) */
+export const DEMO_PASSWORD = process.env.AFAGH_DEMO_PASSWORD || '123456';
+
 const DEMO_ACCOUNTS: Record<string, { firstName: string; lastName: string; role: string; staffCode?: string; isStudent?: boolean }> = {
   '0000000001': { firstName: 'مدیر', lastName: 'سامانه', role: 'ADMIN' },
   '0011111111': { firstName: 'محمد', lastName: 'رضایی', role: 'PROFESSOR', staffCode: 'F-101' },
@@ -151,7 +167,7 @@ async function ensureDemoStudentRecord(userId: number, nationalCode: string): Pr
 
 async function ensureDemoUser(nc: string) {
   const demo = DEMO_ACCOUNTS[nc];
-  if (!demo) return null;
+  if (!demo || !isDemoMode()) return null; // 🔒 در production هرگز پروویژن خودکار دمو
 
   let [u] = await db.select().from(users).where(eq(users.nationalCode, nc)).limit(1);
   if (!u && demo.isStudent) {
@@ -165,12 +181,10 @@ async function ensureDemoUser(nc: string) {
   }
 
   if (u) {
-    // Ensure active and password is 123456
-    const isPassValid = await verifyPassword('123456', u.passwordHash).catch(() => false);
-    if (!isPassValid || !u.isActive) {
-      const newHash = await hashPassword('123456');
-      await db.update(users).set({ passwordHash: newHash, isActive: 1 }).where(eq(users.id, u.id));
-      u.passwordHash = newHash;
+    // 🔒 رفع تضادِ «ریست رمز در هر ورود»: رمزی که کاربر عوض کرده هرگز
+    //    دوباره بازنویسی نمی‌شود. فقط حساب غیرفعال در دمو فعال می‌شود.
+    if (!u.isActive && isDemoMode()) {
+      await db.update(users).set({ isActive: 1 }).where(eq(users.id, u.id));
       u.isActive = 1;
     }
     // 🔴 قبلاً اینجا بدون هیچ ترمیمی برمی‌گشتیم — ردیف students هرگز ساخته نمی‌شد
@@ -179,7 +193,7 @@ async function ensureDemoUser(nc: string) {
   }
 
   // Provision missing demo user
-  const passwordHash = await hashPassword('123456');
+  const passwordHash = await hashPassword(DEMO_PASSWORD);
   const [created] = await db
     .insert(users)
     .values({
@@ -228,7 +242,7 @@ export async function login(nationalCode: string, password: string): Promise<{ o
       .limit(1);
     if (st) u = st.user;
   }
-  if (!u && DEMO_ACCOUNTS[clean]) {
+  if (!u && isDemoMode() && DEMO_ACCOUNTS[clean]) {
     u = (await ensureDemoUser(clean)) as any;
   }
   if (!u || !u.isActive) return { ok: false, error: 'کاربر یافت نشد.' };
@@ -293,7 +307,7 @@ export async function getStudentByUser(userId: number) {
   //    نصب تازه)، پرونده را همان لحظه می‌سازیم تا صفحه‌ها «پرونده یافت نشد» ندهند.
   try {
     const [u] = await db.select({ nationalCode: users.nationalCode }).from(users).where(eq(users.id, userId)).limit(1);
-    if (u && DEMO_ACCOUNTS[u.nationalCode]?.isStudent) {
+    if (isDemoMode() && u && DEMO_ACCOUNTS[u.nationalCode]?.isStudent) {
       await ensureDemoStudentRecord(userId, u.nationalCode);
       const [s2] = await db.select().from(students).where(eq(students.userId, userId)).limit(1);
       return s2 ?? null;

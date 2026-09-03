@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseTabular } from '@/lib/migration/tabular';
 import { readUpload, requireMigrationAdmin } from '@/lib/migration/http';
+import { assertSameOrigin } from '@/lib/security';
 import { inspectTables } from '@/lib/migration/fields';
 import { createLogger, requestId } from '@/lib/logger';
 
@@ -12,6 +13,8 @@ export const dynamic = 'force-dynamic';
  * چند سطر نمونه برگردانده می‌شود تا کاربر پیش از واردسازی، نگاشت را اصلاح کند.
  */
 export async function POST(req: NextRequest) {
+  const _csrf = assertSameOrigin(req);
+  if (_csrf) return _csrf;
   const auth = await requireMigrationAdmin();
   if ('res' in auth) return auth.res;
 

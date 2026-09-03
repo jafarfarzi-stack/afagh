@@ -4,11 +4,14 @@ import { desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { audit_logs, student_documents } from '@/db/schema';
 import { getSessionUser } from '@/lib/auth';
+import { assertSameOrigin } from '@/lib/security';
 
 export const dynamic = 'force-dynamic';
 
 // تأیید/رد مدرک بایگانی — کارشناس بایگانی یا ادمین
 export async function POST(req: NextRequest) {
+  const _csrf = assertSameOrigin(req);
+  if (_csrf) return _csrf;
   const user = await getSessionUser();
   if (!user || (!user.roles.includes('ADMIN') && !user.roles.includes('ARCHIVE_EXPERT'))) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });

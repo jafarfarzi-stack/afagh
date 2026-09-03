@@ -29,7 +29,16 @@ name: afagh
 # ── متغیرهای مشترک سرویس‌های اپ ──
 x-app-env: &app-env
   # زیرساخت (فقط از همین‌جا خوانده می‌شود)
+  # مالک اسکیما — فقط migrator/seed/hardening از این استفاده می‌کند
   DATABASE_URL: postgres://afagh:${POSTGRES_PASSWORD:-afagh}@postgres:5432/afagh_db
+  # اتصال اپ با نقش محدود afagh_app (RLS فعال — توسط hardening.mjs ساخته می‌شود)
+  DATABASE_URL_APP: postgres://afagh_app:${AFAGH_APP_DB_PASSWORD:-afagh-app-pass}@postgres:5432/afagh_db
+  AFAGH_APP_DB_PASSWORD: ${AFAGH_APP_DB_PASSWORD:-afagh-app-pass}
+  # ⟵ با اجرای hardening.mjs، رمز afagh_app روی این مقدار همگام می‌شود
+  # حالت دمو: ۱ = حساب‌های دمو فعال؛ در production حتماً ۰ (پیش‌فرض خاموش)
+  AFAGH_DEMO_MODE: ${AFAGH_DEMO_MODE:-0}
+  # fallback عمدی RLS فقط برای دیباگ — در production هرگز روشن نکنید
+  AFAGH_RLS_FALLBACK: ${AFAGH_RLS_FALLBACK:-}
   REDIS_URL: redis://redis:6379
   S3_ENDPOINT: minio
   S3_PORT: "9000"
@@ -86,6 +95,14 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "5"
 
+# ─ـ شبکهٔ داخلی داده (④-⑥): postgres/redis/minio فقط روی dbnet (internal) ──
+#   • کانتینرهای روی dbnet هیچ دسترسی به اینترنت ندارند (بدون default route).
+#   • هاست از طریق پورت‌های 127.0.0.1 منتشرشده (DNAT) همچنان به آن‌ها می‌رسد.
+#   • اپ روی هر دو شبکه است: dbnet برای دیتابیس، شبکهٔ پیش‌فرض برای اینترنت.
+networks:
+  dbnet:
+    internal: true
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -106,6 +123,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
+    networks: [dbnet]
 
   redis:
     image: redis:7-alpine
@@ -120,6 +138,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
+    networks: [dbnet]
 
   minio:
     image: minio/minio
@@ -139,6 +158,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 30
+    networks: [dbnet]
 
   # یک‌بار اجرا می‌شود و تمام: ساخت/به‌روزرسانی جدول‌ها، ایندکس‌ها و RLS
   migrator:
@@ -153,6 +173,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks: [dbnet]
 
   app:
     build:
@@ -174,6 +195,9 @@ services:
         condition: service_healthy
       migrator:
         condition: service_completed_successfully
+    networks:
+      - dbnet
+      - default
 
   # پویش‌های زمان‌بندی‌شده را صدا می‌زند (یادآوری چک، فارغ‌التحصیلی، BI، گردش کار).
   # بدون این سرویس endpoint‌های /api/cron/* هرگز خودکار اجرا نمی‌شوند.
