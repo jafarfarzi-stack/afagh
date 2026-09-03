@@ -28,7 +28,8 @@ FROM base AS builder
 ARG NODE_MAX_OLD_SPACE=3072
 ENV NODE_ENV=production \
     NODE_OPTIONS=--max-old-space-size=${NODE_MAX_OLD_SPACE} \
-    NEXT_SKIP_TYPE_CHECK=1
+    NEXT_SKIP_TYPE_CHECK=1 \
+    AFAGH_STANDALONE=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # تایپ‌چک داخل ایمیج اجرا نمی‌شود (حافظه‌بر است و در CI/توسعه با npm run typecheck انجام می‌شود)

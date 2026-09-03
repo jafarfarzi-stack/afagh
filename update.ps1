@@ -64,8 +64,20 @@ if ($LASTEXITCODE -eq 0) {
 }
 npm run build
 if ($LASTEXITCODE -ne 0) { Pop-Location; Warn "بیلد ناموفق بود"; exit 1 }
+
+# خروجی بیلد باید واقعاً روی دیسک باشد. اگر .next ناقص بماند (بیلد نصفه
+# قطع شده، آنتی‌ویروس/OneDrive فایل را برده، یا دیسک پر بوده) آنگاه
+# «next start» با خطای گیج‌کنندهٔ ENOENT prerender-manifest.json می‌شکند.
+# این‌جا صریح و قابل‌فهم گزارش می‌دهیم تا کاربر بداند مشکل از بیلد است.
+if (-not (Test-Path (Join-Path $Next '.next\prerender-manifest.json'))) {
+  Pop-Location
+  Warn "بیلد کامل نشد — فایل .next\prerender-manifest.json ساخته نشده است."
+  Warn "یعنی npm run build پیش از پایان قطع شده (حافظه/دیسک/آنتی‌ویروس یا OneDrive روی پوشهٔ Desktop)."
+  Warn "پیشنهاد: پوشه را از Desktop به مسیری مثل C:\afagh منتقل کنید، سپس دوباره .\update.cmd بزنید."
+  exit 1
+}
 Pop-Location
-Ok "بیلد موفق"
+Ok "بیلد موفق و خروجی آن سالم است"
 
 # ۴) اجرا
 Step "۴/۴ اجرای سرور روی پورت ۸۰۸۰"
