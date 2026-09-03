@@ -28,6 +28,12 @@ export default function LoginPage() {
       setBusy(false); return;
     }
     if (!res.ok) { setErr(res.error || 'خطا'); setBusy(false); return; }
+    // حساب تازه‌پذیرش‌شده با رمز پیش‌فرض → ابتدا تغییر اجباری رمز
+    if (res.mustChange) {
+      router.replace('/change-password');
+      router.refresh();
+      return;
+    }
     // مسیر پس از ورود را سرور تعیین می‌کند؛ refresh لازم است تا کوکی تازه اعمال شود
     router.replace(homeForClient());
     router.refresh();

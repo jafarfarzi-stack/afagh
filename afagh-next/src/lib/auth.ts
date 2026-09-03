@@ -4,9 +4,11 @@ import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { and, eq, gt } from 'drizzle-orm';
 import { db } from '@/db';
+import { ensureBaseReferenceData } from '@/lib/base-data';
 import {
   degree_level_configs,
   educational_regulations,
+  majors,
   roles,
   sessions,
   staff,
@@ -28,7 +30,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return calc.length === known.length && timingSafeEqual(calc, known);
 }
 
-export type SessionUser = { id: number; name: string; roles: string[] };
+export type SessionUser = { id: number; name: string; roles: string[]; mustChangePassword: boolean };
 
 export const SESSION_COOKIE = 'token';
 const SESSION_MAX_AGE = 2 * 86400; // دو روز
@@ -71,14 +73,19 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
   const rows = await db
-    .select({ id: users.id, firstName: users.firstName, lastName: users.lastName, role: roles.code })
+    .select({ id: users.id, firstName: users.firstName, lastName: users.lastName, role: roles.code, mustChangePassword: users.mustChangePassword })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
     .leftJoin(user_roles, eq(user_roles.userId, users.id))
     .leftJoin(roles, eq(roles.id, user_roles.roleId))
     .where(and(eq(sessions.token, token), gt(sessions.expiresAt, new Date())));
   if (!rows.length) return null;
-  return { id: rows[0].id, name: rows[0].firstName + ' ' + rows[0].lastName, roles: rows.map(r => r.role).filter(Boolean) as string[] };
+  return {
+    id: rows[0].id,
+    name: rows[0].firstName + ' ' + rows[0].lastName,
+    roles: rows.map(r => r.role).filter(Boolean) as string[],
+    mustChangePassword: rows[0].mustChangePassword === 1,
+  };
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -105,6 +112,43 @@ const DEMO_ACCOUNTS: Record<string, { firstName: string; lastName: string; role:
   '0012345678': { firstName: 'علی', lastName: 'رضایی اصل', role: 'STUDENT', isStudent: true },
 };
 
+/**
+ * ساخت/تکمیل رکورد «دانشجوی دمو» — حتی اگر کاربر از قبل موجود باشد.
+ *
+ * 🔴 دلیل وجود این تابع (رفع باگ «پروندهٔ دانشجویی یافت نشد.»):
+ * استقرار Docker سرویس migrator را اجرا می‌کند که فقط جدول‌ها را می‌سازد
+ * (drizzle-kit push) و هیچ دادهٔ پایه‌ای seed نمی‌کند؛ در نتیجه روی نصب تازه
+ * جدول‌های degree_level_configs و educational_regulations خالی‌اند و
+ * ensureDemoUser قدیمی شرط «degree && regulation» را رد می‌کرد و ردیف
+ * students ساخته نمی‌شد — دانشجوی دمو وارد می‌شد ولی پورتالش «پروندهٔ
+ * دانشجویی یافت نشد.» می‌داد. این تابع ابتدا دادهٔ پایه را تضمین می‌کند
+ * (ensureBaseReferenceData — idempotent) و سپس رکورد دانشجو را می‌سازد.
+ */
+async function ensureDemoStudentRecord(userId: number, nationalCode: string): Promise<void> {
+  const [existing] = await db.select({ id: students.id }).from(students).where(eq(students.userId, userId)).limit(1);
+  if (existing) return; // پرونده موجود است — کاری نیست
+
+  await ensureBaseReferenceData();
+
+  const [degree] = await db.select({ id: degree_level_configs.id }).from(degree_level_configs).limit(1);
+  const [regulation] = await db.select({ id: educational_regulations.id }).from(educational_regulations).limit(1);
+  if (!degree || !regulation) return; // غیرممکن پس از ensureBaseReferenceData — فقط محافظت
+
+  // رشتهٔ پیش‌فرض دمو: مهندسی نرم‌افزار (کد 412)؛ اگر موجود نبود، اولین رشته
+  const [major] = await db.select({ id: majors.id }).from(majors).where(eq(majors.majorCode, '412')).limit(1);
+
+  await db.insert(students).values({
+    userId,
+    studentCode: nationalCode === '0012345678' ? '31412001' : nationalCode,
+    degreeLevelId: degree.id,
+    regulationId: regulation.id,
+    majorId: major?.id ?? null,
+    status: 'ACTIVE',
+    entryYear: 1403,
+    currentTermNo: 3,
+  }).onConflictDoNothing({ target: students.userId });
+}
+
 async function ensureDemoUser(nc: string) {
   const demo = DEMO_ACCOUNTS[nc];
   if (!demo) return null;
@@ -129,6 +173,8 @@ async function ensureDemoUser(nc: string) {
       u.passwordHash = newHash;
       u.isActive = 1;
     }
+    // 🔴 قبلاً اینجا بدون هیچ ترمیمی برمی‌گشتیم — ردیف students هرگز ساخته نمی‌شد
+    if (demo.isStudent) await ensureDemoStudentRecord(u.id, nc);
     return u;
   }
 
@@ -162,27 +208,14 @@ async function ensureDemoUser(nc: string) {
         staffType: demo.role === 'PROFESSOR' ? 'هیئت علمی' : 'اداری',
       }).catch(() => {});
     } else if (demo.isStudent) {
-      // مقطع و آیین‌نامه در schema اجباری‌اند؛ اولین ردیف موجود به‌عنوان پیش‌فرض دمو استفاده می‌شود
-      const [degree] = await db.select({ id: degree_level_configs.id }).from(degree_level_configs).limit(1);
-      const [regulation] = await db.select({ id: educational_regulations.id }).from(educational_regulations).limit(1);
-      if (degree && regulation) {
-        await db.insert(students).values({
-          userId: created.id,
-          studentCode: nc === '0012345678' ? '31412001' : nc,
-          degreeLevelId: degree.id,
-          regulationId: regulation.id,
-          status: 'ACTIVE',
-          entryYear: 1403,
-          currentTermNo: 3,
-        }).catch(() => {});
-      }
+      await ensureDemoStudentRecord(created.id, nc);
     }
   }
 
   return created ?? null;
 }
 
-export async function login(nationalCode: string, password: string): Promise<{ ok: boolean; error?: string }> {
+export async function login(nationalCode: string, password: string): Promise<{ ok: boolean; error?: string; mustChange?: boolean }> {
   const clean = nationalCode.trim();
   let [u] = await db.select().from(users).where(eq(users.nationalCode, clean)).limit(1);
   if (!u) {
@@ -204,6 +237,22 @@ export async function login(nationalCode: string, password: string): Promise<{ o
   await db.insert(sessions).values({ token, userId: u.id, expiresAt: new Date(Date.now() + SESSION_MAX_AGE * 1000) });
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, token, await sessionCookieOptions());
+  // حساب تازه‌پذیرش‌شده با رمز پیش‌فرض → اجبار به تغییر رمز در اولین ورود
+  return { ok: true, mustChange: u.mustChangePassword === 1 };
+}
+
+/** تغییر رمز عبور کاربر جاری (با تأیید رمز فعلی) — حلقهٔ «تغییر اجباری رمز» */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<{ ok: boolean; error?: string }> {
+  const me = await getSessionUser();
+  if (!me) return { ok: false, error: 'برای تغییر رمز ابتدا وارد شوید.' };
+  const [u] = await db.select().from(users).where(eq(users.id, me.id)).limit(1);
+  if (!u) return { ok: false, error: 'کاربر یافت نشد.' };
+  if (!(await verifyPassword(currentPassword, u.passwordHash))) return { ok: false, error: 'رمز فعلی نادرست است.' };
+  const trimmed = newPassword.trim();
+  if (trimmed.length < 8) return { ok: false, error: 'رمز جدید باید حداقل ۸ کاراکتر باشد.' };
+  if (trimmed === currentPassword) return { ok: false, error: 'رمز جدید نباید با رمز فعلی یکسان باشد.' };
+  const passwordHash = await hashPassword(trimmed);
+  await db.update(users).set({ passwordHash, mustChangePassword: 0 }).where(eq(users.id, u.id));
   return { ok: true };
 }
 
@@ -218,6 +267,8 @@ export async function logout() {
 export async function requireRole(allowed: string[]): Promise<SessionUser> {
   const u = await getSessionUser();
   if (!u) redirect('/login');
+  // قبل از هر چیزی: رمز پیش‌فرض باید عوض شود (حساب‌های پذیرش‌شده)
+  if (u.mustChangePassword) redirect('/change-password');
   if (!u.roles.some(r => allowed.includes(r) || r === 'ADMIN')) redirect(homeFor(u.roles));
   return u;
 }
@@ -237,7 +288,20 @@ export function homeFor(roles: string[]): string {
 
 export async function getStudentByUser(userId: number) {
   const [s] = await db.select().from(students).where(eq(students.userId, userId)).limit(1);
-  return s ?? null;
+  if (s) return s;
+  // ── خودترمیم: اگر کاربر دمو است ولی رکورد دانشجویی ندارد (مشکل شناخته‌شدهٔ
+  //    نصب تازه)، پرونده را همان لحظه می‌سازیم تا صفحه‌ها «پرونده یافت نشد» ندهند.
+  try {
+    const [u] = await db.select({ nationalCode: users.nationalCode }).from(users).where(eq(users.id, userId)).limit(1);
+    if (u && DEMO_ACCOUNTS[u.nationalCode]?.isStudent) {
+      await ensureDemoStudentRecord(userId, u.nationalCode);
+      const [s2] = await db.select().from(students).where(eq(students.userId, userId)).limit(1);
+      return s2 ?? null;
+    }
+  } catch (err: any) {
+    console.error('[auth] خودترمیم پروندهٔ دانشجو ناموفق:', err?.message);
+  }
+  return null;
 }
 export async function getStaffByUser(userId: number) {
   const [s] = await db.select().from(staff).where(eq(staff.userId, userId)).limit(1);
