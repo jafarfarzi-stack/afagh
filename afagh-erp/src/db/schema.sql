@@ -68,13 +68,15 @@ CREATE TABLE IF NOT EXISTS degree_level_configs (
 
 CREATE TABLE IF NOT EXISTS faculties (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name VARCHAR(150) NOT NULL
+  name VARCHAR(150) NOT NULL,
+  facultyCode VARCHAR(10)                 -- کد دانشکده (مهاجرت از دیتابیس قدیمی)
 );
 
 CREATE TABLE IF NOT EXISTS departments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name VARCHAR(150) NOT NULL,
-  facultyId INTEGER NOT NULL REFERENCES faculties(id)
+  facultyId INTEGER NOT NULL REFERENCES faculties(id),
+  departmentCode VARCHAR(10)              -- کد گروه آموزشی (مهاجرت از دیتابیس قدیمی)
 );
 
 CREATE TABLE IF NOT EXISTS majors (
@@ -82,7 +84,16 @@ CREATE TABLE IF NOT EXISTS majors (
   name VARCHAR(150) NOT NULL,
   degreeLevelId INTEGER NOT NULL REFERENCES degree_level_configs(id),
   departmentId INTEGER REFERENCES departments(id),
-  majorCode VARCHAR(10)                    -- کد رشته برای فرمول شماره دانشجویی
+  majorCode VARCHAR(10),                  -- کد رشته برای فرمول شماره دانشجویی
+  facultyId INTEGER REFERENCES faculties(id),
+  minUnits INTEGER,                       -- حداقل واحد
+  standardCode VARCHAR(20),               -- کد استاندارد رشته
+  establishedDate VARCHAR(10),            -- تاریخ تاسیس (شمسی)
+  terminatedDate VARCHAR(10),             -- تاریخ خاتمه (شمسی)
+  isActive INTEGER DEFAULT 1,             -- فعال/غیرفعال
+  headStaffCode VARCHAR(20),              -- کد استادی مدیر گروه
+  expertName VARCHAR(150),                -- نام کارشناس رشته
+  lastCouncilDate VARCHAR(10)             -- آخرین جلسه شورای گسترش (شمسی)
 );
 
 -- پذیرش سازمان سنجش: نگاشت کد سنجش ↔ کد داخلی + جدول واسط Staging
@@ -160,7 +171,25 @@ CREATE TABLE IF NOT EXISTS staff (
   departmentId INTEGER REFERENCES departments(id),
   staffType VARCHAR(50),                   -- هیئت علمی / مدعو / کارشناس آموزش
   academicRank VARCHAR(50),                -- مربی / استادیار / دانشیار / استاد
-  degree VARCHAR(50)
+  degree VARCHAR(50),
+  title VARCHAR(50),                       -- لقب (آقای / سرکار خانم / دکتر...)
+  facultyId INTEGER REFERENCES faculties(id),
+  isActive INTEGER DEFAULT 1,              -- فعال/غیرفعال
+  cooperationType VARCHAR(50),             -- طریقه همکاری (حق‌التدریس / رسمی...)
+  personnelNo VARCHAR(50),                 -- شماره مستخدم
+  employmentType VARCHAR(50),              -- نوع استخدامی (قراردادی / رسمی...)
+  hireDate VARCHAR(10),                    -- تاریخ استخدام (شمسی)
+  lastDegreeYear INTEGER,                  -- سال اخذ آخرین مدرک تحصیلی
+  fieldOfStudy VARCHAR(200),               -- رشته و گرایش
+  maritalStatusCode INTEGER,               -- کد وضعیت تاهل
+  maritalStatus VARCHAR(20),               -- وضعیت تاهل
+  lastDegreeCountryCode VARCHAR(10),       -- کد کشور آخرین مدرک
+  lastDegreeUniversity VARCHAR(200),       -- دانشگاه محل اخذ آخرین مدرک
+  academicBase VARCHAR(20),                -- پایه استادی
+  birthProvince VARCHAR(100),              -- استان محل تولد
+  birthCity VARCHAR(100),                  -- شهر محل تولد
+  bankAccountNo VARCHAR(50),               -- شماره حساب
+  phone VARCHAR(20)                        -- تلفن ثابت
 );
 
 -- ---------------------------------------------------------------------
