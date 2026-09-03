@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from 'react';
 import {
-  deleteDiscountTypeAction, deleteFormulaAction, deleteSponsorAction,
-  saveDiscountTypeAction, saveFormulaAction, saveSponsorAction,
+  deleteDiscountTypeAction, deleteFormulaAction, deleteLoanProductAction,
+  deleteSponsorAction, saveDiscountTypeAction, saveFormulaAction,
+  saveLoanProductAction, saveSponsorAction,
 } from '../actions';
 
 type DiscountType = {
@@ -14,6 +15,11 @@ type DiscountType = {
 type Sponsor = {
   id: number; code: string; title: string; contactInfo: string | null;
   settlementMethod: string; isActive: boolean; note: string | null;
+};
+type LoanProduct = {
+  id: number; code: string; title: string; lender: string;
+  maxAmount: number | null; defaultAmount: number; defaultInstallments: number;
+  isInterestFree: boolean; requiresApproval: boolean; isActive: boolean; note: string | null;
 };
 type Formula = {
   id: number; code: string; title: string;
@@ -36,13 +42,15 @@ export default function RulesClient(props: {
   discountTypes: DiscountType[];
   sponsors: Sponsor[];
   formulas: Formula[];
+  loanProducts: LoanProduct[];
   degrees: { id: number; title: string }[];
   majorsOptions: { id: number; title: string }[];
 }) {
-  const [tab, setTab] = useState<'discount' | 'sponsor' | 'formula'>('discount');
+  const [tab, setTab] = useState<'discount' | 'sponsor' | 'formula' | 'loan'>('discount');
   const [editingDiscount, setEditingDiscount] = useState<DiscountType | null>(null);
   const [editingSponsor, setEditingSponsor] = useState<Sponsor | null>(null);
   const [editingFormula, setEditingFormula] = useState<Formula | null>(null);
+  const [editingLoan, setEditingLoan] = useState<LoanProduct | null>(null);
   const [pending, startTransition] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -63,6 +71,7 @@ export default function RulesClient(props: {
     { id: 'discount', label: '🎖️ انواع تخفیف' },
     { id: 'sponsor', label: '🏛️ بنیادهای حامی' },
     { id: 'formula', label: '🧮 فرمول تخصیص' },
+    { id: 'loan', label: '💰 وام‌ها' },
   ] as const;
 
   return (
@@ -385,6 +394,106 @@ export default function RulesClient(props: {
                         <div className="flex gap-1">
                           <button onClick={() => setEditingFormula(f)} className={ghostBtn}>ویرایش</button>
                           <button disabled={pending} onClick={() => run(() => deleteFormulaAction(f.id), 'حذف شد')} className={ghostBtn}>حذف</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══ وام‌ها ═══ */}
+      {tab === 'loan' && (
+        <div className="card space-y-4">
+          <form
+            key={editingLoan?.id ?? 'new-loan'}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const f = new FormData(e.currentTarget);
+              const draft = editingLoan;
+              run(() => saveLoanProductAction({
+                id: draft?.id,
+                code: String(f.get('code') || ''),
+                title: String(f.get('title') || ''),
+                lender: String(f.get('lender') || ''),
+                maxAmount: f.get('maxAmount') === '' ? null : Number(f.get('maxAmount')),
+                defaultAmount: Number(f.get('defaultAmount')) || 0,
+                defaultInstallments: Number(f.get('defaultInstallments')) || 1,
+                isInterestFree: f.get('isInterestFree') === 'on',
+                requiresApproval: f.get('requiresApproval') === 'on',
+                isActive: f.get('isActive') === 'on',
+                note: String(f.get('note') || ''),
+              }), draft ? 'نوع وام به‌روز شد' : 'نوع وام ساخته شد', () => setEditingLoan(null));
+              e.currentTarget.reset();
+            }}
+            className="rounded-lg border border-slate-200 p-3"
+          >
+            <h4 className="mb-2 text-xs font-bold text-slate-800">
+              {editingLoan ? `ویرایش: ${editingLoan.title}` : 'افزودن نوع وام'}
+            </h4>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className={labelCls}>کد *<input name="code" required defaultValue={editingLoan?.code} placeholder="REF_WELFARE" className={inputCls} /></label>
+              <label className={`${labelCls} sm:col-span-2`}>عنوان *<input name="title" required defaultValue={editingLoan?.title} placeholder="وام صندوق رفاه دانشجویان" className={inputCls} /></label>
+              <label className={labelCls}>نهاد پرداخت‌کننده *<input name="lender" required defaultValue={editingLoan?.lender} className={inputCls} /></label>
+              <label className={labelCls}>سقف مبلغ مجاز (خالی = بدون سقف)<input name="maxAmount" type="number" min={0} defaultValue={editingLoan?.maxAmount ?? ''} className={inputCls} /></label>
+              <label className={labelCls}>مبلغ پیش‌فرض (ریال)<input name="defaultAmount" type="number" min={0} defaultValue={editingLoan?.defaultAmount ?? 0} className={inputCls} /></label>
+              <label className={labelCls}>تعداد اقساط پیش‌فرض<input name="defaultInstallments" type="number" min={1} defaultValue={editingLoan?.defaultInstallments ?? 1} className={inputCls} /></label>
+              <label className={`${labelCls} sm:col-span-2`}>یادداشت<input name="note" defaultValue={editingLoan?.note ?? ''} className={inputCls} /></label>
+              <div className="flex flex-wrap items-center gap-3 sm:col-span-3">
+                <label className="flex items-center gap-1.5 text-[11px] text-slate-700">
+                  <input type="checkbox" name="isInterestFree" defaultChecked={editingLoan?.isInterestFree ?? true} className="accent-emerald-700" />
+                  بدون کارمزد
+                </label>
+                <label className="flex items-center gap-1.5 text-[11px] text-slate-700">
+                  <input type="checkbox" name="requiresApproval" defaultChecked={editingLoan?.requiresApproval ?? true} className="accent-emerald-700" />
+                  نیازمند تأیید
+                </label>
+                <label className="flex items-center gap-1.5 text-[11px] text-slate-700">
+                  <input type="checkbox" name="isActive" defaultChecked={editingLoan?.isActive ?? true} className="accent-emerald-700" />
+                  فعال
+                </label>
+              </div>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <button type="submit" disabled={pending} className={btnCls}>{editingLoan ? 'ذخیرهٔ تغییرات' : 'افزودن'}</button>
+              {editingLoan && <button type="button" onClick={() => setEditingLoan(null)} className={ghostBtn}>انصراف</button>}
+            </div>
+          </form>
+
+          {props.loanProducts.length === 0 ? (
+            <p className="py-4 text-center text-xs text-slate-500">هنوز نوع وامی تعریف نشده است.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 text-[11px] text-slate-500">
+                    <th className="p-2">کد</th><th className="p-2">عنوان</th><th className="p-2">نهاد</th>
+                    <th className="p-2">پیش‌فرض</th><th className="p-2">سقف</th><th className="p-2">اقساط</th>
+                    <th className="p-2">کارمزد</th><th className="p-2">وضعیت</th><th className="p-2">عملیات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {props.loanProducts.map((l) => (
+                    <tr key={l.id} className="border-b border-slate-100 last:border-0">
+                      <td className="p-2 text-slate-500">{l.code}</td>
+                      <td className="p-2 font-medium text-slate-800">{l.title}</td>
+                      <td className="p-2 text-slate-600">{l.lender}</td>
+                      <td className="p-2">{fa(l.defaultAmount)}</td>
+                      <td className="p-2 text-slate-500">{l.maxAmount === null ? '—' : fa(l.maxAmount)}</td>
+                      <td className="p-2">{fa(l.defaultInstallments)}</td>
+                      <td className="p-2 text-slate-600">{l.isInterestFree ? 'ندارد' : 'دارد'}</td>
+                      <td className="p-2">
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] ${l.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                          {l.isActive ? 'فعال' : 'غیرفعال'}
+                        </span>
+                      </td>
+                      <td className="p-2">
+                        <div className="flex gap-1">
+                          <button onClick={() => setEditingLoan(l)} className={ghostBtn}>ویرایش</button>
+                          <button disabled={pending} onClick={() => run(() => deleteLoanProductAction(l.id), 'حذف شد')} className={ghostBtn}>حذف</button>
                         </div>
                       </td>
                     </tr>

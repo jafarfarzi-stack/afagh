@@ -261,6 +261,13 @@ export default async function StudentFinancePage({ params }: { params: { id: str
         loans={fin.loans.map((l) => ({
           id: l.id, lender: l.lender, loanCode: l.loanCode,
           amount: Number(l.amount), installments: l.installments, status: l.status,
+          productTitle: l.productTitle,
+        }))}
+        loanProducts={fin.loanProducts.map((l) => ({
+          id: l.id, code: l.code, title: l.title, lender: l.lender,
+          maxAmount: l.maxAmount === null ? null : Number(l.maxAmount),
+          defaultAmount: Number(l.defaultAmount),
+          defaultInstallments: l.defaultInstallments,
         }))}
         formula={formulaCalc ? {
           termTitle: currentTerm?.termTitle || '',

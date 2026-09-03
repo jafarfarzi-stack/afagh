@@ -3,7 +3,7 @@ import { requireRole } from '@/lib/auth';
 import { db } from '@/db';
 import { asc } from 'drizzle-orm';
 import {
-  degree_level_configs, majors, tuition_discount_types,
+  degree_level_configs, loan_products, majors, tuition_discount_types,
   tuition_formulas, tuition_sponsors,
 } from '@/db/schema';
 import RulesClient from './RulesClient';
@@ -15,12 +15,13 @@ const FINANCE = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'];
 export default async function FinanceRulesPage() {
   await requireRole(FINANCE);
 
-  const [discountTypes, sponsors, formulas, degreeRows, majorRows] = await Promise.all([
+  const [discountTypes, sponsors, formulas, degreeRows, loanRows, majorRows] = await Promise.all([
     db.select().from(tuition_discount_types).orderBy(asc(tuition_discount_types.title)),
     db.select().from(tuition_sponsors).orderBy(asc(tuition_sponsors.title)),
     db.select().from(tuition_formulas).orderBy(asc(tuition_formulas.priority), asc(tuition_formulas.id)),
     db.select({ id: degree_level_configs.id, title: degree_level_configs.title })
       .from(degree_level_configs).orderBy(asc(degree_level_configs.title)),
+    db.select().from(loan_products).orderBy(asc(loan_products.title)),
     db.select({ id: majors.id, title: majors.name }).from(majors).orderBy(asc(majors.name)),
   ]);
 
@@ -57,6 +58,15 @@ export default async function FinanceRulesPage() {
           fixedAmount: Number(f.fixedAmount), perUnitTheory: Number(f.perUnitTheory),
           perUnitPractical: Number(f.perUnitPractical), perUnitGeneral: Number(f.perUnitGeneral),
           priority: f.priority, isActive: f.isActive === 1, note: f.note,
+        }))}
+        loanProducts={loanRows.map((l) => ({
+          id: l.id, code: l.code, title: l.title, lender: l.lender,
+          maxAmount: l.maxAmount === null ? null : Number(l.maxAmount),
+          defaultAmount: Number(l.defaultAmount),
+          defaultInstallments: l.defaultInstallments,
+          isInterestFree: l.isInterestFree === 1,
+          requiresApproval: l.requiresApproval === 1,
+          isActive: l.isActive === 1, note: l.note,
         }))}
         degrees={degreeRows}
         majorsOptions={majorRows}

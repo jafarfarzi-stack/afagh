@@ -1626,10 +1626,34 @@ export const payment_cheques = pgTable('payment_cheques', {
 });
 
 /** وام‌های دانشجویی */
+/**
+ * کاتالوگ وام‌های قابل ارائه — نمونه: وام صندوق رفاه، وام ضروری،
+ * ودیعهٔ مسکن. بدون این جدول، نام وام متن آزاد بود و هر کارشناس می‌توانست
+ * یک جور بنویسد؛ اکنون مانند انواع تخفیف و بنیادها قابل تعریف است.
+ */
+export const loan_products = pgTable('loan_products', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 40 }).notNull().unique(),
+  title: varchar('title', { length: 150 }).notNull(),
+  /** نام نهاد پرداخت‌کننده که هنگام تخصیص پیش‌فرض می‌شود */
+  lender: varchar('lender', { length: 150 }).notNull(),
+  /** سقف مبلغ مجاز؛ NULL = بدون سقف */
+  maxAmount: numeric('maxAmount', { precision: 12, scale: 0 }),
+  defaultAmount: numeric('defaultAmount', { precision: 12, scale: 0 }).notNull().default('0'),
+  defaultInstallments: integer('defaultInstallments').notNull().default(1),
+  /** ۱ = کارمزد ندارد */
+  isInterestFree: integer('isInterestFree').notNull().default(1),
+  requiresApproval: integer('requiresApproval').notNull().default(1),
+  isActive: integer('isActive').notNull().default(1),
+  note: text('note'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
 export const student_loans = pgTable('student_loans', {
   id: serial('id').primaryKey(),
   studentId: integer('studentId').notNull().references(() => students.id),
   termId: integer('termId').references(() => academic_terms.id),
+  loanProductId: integer('loanProductId').references(() => loan_products.id),
   lender: varchar('lender', { length: 150 }).notNull(),
   loanCode: varchar('loanCode', { length: 40 }),
   amount: numeric('amount', { precision: 12, scale: 0 }).notNull(),

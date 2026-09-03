@@ -269,14 +269,15 @@ export default async function StudentFinancePage() {
               <table className="w-full text-right text-xs">
                 <thead>
                   <tr className="border-b border-slate-200 text-[11px] text-slate-500">
-                    <th className="p-2">پرداخت‌کننده</th><th className="p-2">مبلغ</th>
-                    <th className="p-2">اقساط</th><th className="p-2">وضعیت</th>
+                    <th className="p-2">نوع وام</th><th className="p-2">پرداخت‌کننده</th>
+                    <th className="p-2">مبلغ</th><th className="p-2">اقساط</th><th className="p-2">وضعیت</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loans.map((l) => (
                     <tr key={l.id} className="border-b border-slate-100 last:border-0">
-                      <td className="p-2">{l.lender}</td>
+                      <td className="p-2">{l.productTitle || '—'}</td>
+                      <td className="p-2 text-slate-600">{l.lender}</td>
                       <td className="p-2">{fa(toNum(l.amount))}</td>
                       <td className="p-2">{fa(l.installments)}</td>
                       <td className="p-2">

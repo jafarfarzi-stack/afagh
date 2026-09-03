@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import {
-  payment_cheques, student_discounts, student_ledger, student_loans,
+  loan_products, payment_cheques, student_discounts, student_ledger, student_loans,
   student_sponsorships, tuition_discount_types, tuition_formulas, tuition_sponsors,
 } from '@/db/schema';
 import { requireRole, getSessionUser } from '@/lib/auth';
@@ -255,6 +255,7 @@ export async function deleteChequeAction(id: number): Promise<{ ok: boolean; err
 export async function addLoanAction(input: {
   studentId: number;
   termId: number | null;
+  loanProductId: number | null;
   lender: string;
   loanCode: string;
   amount: number;
@@ -270,12 +271,24 @@ export async function addLoanAction(input: {
   const lender = clean(input.lender);
   if (!lender) return { ok: false, error: 'نام پرداخت‌کنندهٔ وام الزامی است' };
 
+  // اگر وام از کاتالوگ انتخاب شده، سقف مجاز همان نوع وام اعمال می‌شود —
+  // وگرنه هر کارشناس می‌توانست هر مبلغی را با نام وامِ موجود ثبت کند.
+  if (input.loanProductId) {
+    const [product] = await db.select().from(loan_products)
+      .where(eq(loan_products.id, input.loanProductId)).limit(1);
+    if (!product) return { ok: false, error: 'نوع وام یافت نشد' };
+    if (product.maxAmount !== null && amount > toNum(product.maxAmount)) {
+      return { ok: false, error: `مبلغ از سقف مجاز این وام (${toNum(product.maxAmount).toLocaleString('fa-IR')} ریال) بیشتر است` };
+    }
+  }
+
   const firstDue = clean(input.firstDueDate);
   const firstDueMs = firstDue ? Date.parse(firstDue) : NaN;
 
   await db.insert(student_loans).values({
     studentId: input.studentId,
     termId: input.termId,
+    loanProductId: input.loanProductId || null,
     lender,
     loanCode: clean(input.loanCode),
     amount: String(amount),
@@ -522,6 +535,67 @@ export async function saveFormulaAction(input: {
 export async function deleteFormulaAction(id: number): Promise<{ ok: boolean }> {
   await requireRole(FINANCE);
   await db.delete(tuition_formulas).where(eq(tuition_formulas.id, id));
+  revalidatePath('/admin/finance/rules');
+  return { ok: true };
+}
+
+export async function saveLoanProductAction(input: {
+  id?: number;
+  code: string;
+  title: string;
+  lender: string;
+  maxAmount: number | null;
+  defaultAmount: number;
+  defaultInstallments: number;
+  isInterestFree: boolean;
+  requiresApproval: boolean;
+  isActive: boolean;
+  note: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  await requireRole(FINANCE);
+
+  const code = clean(input.code);
+  const title = clean(input.title);
+  const lender = clean(input.lender);
+  if (!code || !title) return { ok: false, error: 'کد و عنوان الزامی است' };
+  if (!lender) return { ok: false, error: 'نام نهاد پرداخت‌کننده الزامی است' };
+
+  const maxAmount = input.maxAmount === null ? null : Math.round(Math.max(0, num(input.maxAmount)));
+  const defaultAmount = Math.round(Math.max(0, num(input.defaultAmount)));
+  if (maxAmount !== null && defaultAmount > maxAmount) {
+    return { ok: false, error: 'مبلغ پیش‌فرض نمی‌تواند از سقف مجاز بیشتر باشد' };
+  }
+
+  const values = {
+    code,
+    title,
+    lender,
+    maxAmount: maxAmount === null ? null : String(maxAmount),
+    defaultAmount: String(defaultAmount),
+    defaultInstallments: Math.max(1, Math.trunc(num(input.defaultInstallments)) || 1),
+    isInterestFree: input.isInterestFree ? 1 : 0,
+    requiresApproval: input.requiresApproval ? 1 : 0,
+    isActive: input.isActive ? 1 : 0,
+    note: clean(input.note),
+  };
+
+  if (input.id) {
+    await db.update(loan_products).set(values).where(eq(loan_products.id, input.id));
+  } else {
+    await db.insert(loan_products).values(values);
+  }
+
+  revalidatePath('/admin/finance/rules');
+  return { ok: true };
+}
+
+export async function deleteLoanProductAction(id: number): Promise<{ ok: boolean; error?: string }> {
+  await requireRole(FINANCE);
+  const used = await db.select({ id: student_loans.id }).from(student_loans)
+    .where(eq(student_loans.loanProductId, id)).limit(1);
+  if (used.length) return { ok: false, error: 'این نوع وام به دانشجو تخصیص یافته؛ به‌جای حذف، غیرفعالش کنید' };
+
+  await db.delete(loan_products).where(eq(loan_products.id, id));
   revalidatePath('/admin/finance/rules');
   return { ok: true };
 }

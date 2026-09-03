@@ -2,8 +2,8 @@ import 'server-only';
 import { and, asc, desc, eq, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db';
 import {
-  academic_terms, course_offerings, courses, enrollments, majors,
-  degree_level_configs, payment_cheques, student_discounts, student_ledger,
+  academic_terms, course_offerings, courses, enrollments, loan_products,
+  majors, degree_level_configs, payment_cheques, student_discounts, student_ledger,
   student_loans, student_sponsorships, students, tuition_discount_types,
   tuition_formulas, tuition_sponsors, users,
 } from '@/db/schema';
@@ -294,9 +294,10 @@ export interface StudentFinanceDetail {
   discounts: (typeof student_discounts.$inferSelect & { typeTitle: string | null; typeCode: string | null })[];
   sponsorships: (typeof student_sponsorships.$inferSelect & { sponsorTitle: string | null })[];
   cheques: (typeof payment_cheques.$inferSelect)[];
-  loans: (typeof student_loans.$inferSelect)[];
+  loans: (typeof student_loans.$inferSelect & { productTitle: string | null })[];
   discountTypes: (typeof tuition_discount_types.$inferSelect)[];
   sponsors: (typeof tuition_sponsors.$inferSelect)[];
+  loanProducts: (typeof loan_products.$inferSelect)[];
   transcript: TermStatement[];
   totals: ReturnType<typeof transcriptTotals>;
 }
@@ -323,7 +324,7 @@ export async function getStudentFinance(studentId: number): Promise<StudentFinan
 
   if (!studentRow) return null;
 
-  const [terms, ledger, discounts, sponsorships, cheques, loans, discountTypes, sponsors] =
+  const [terms, ledger, discounts, sponsorships, cheques, loans, discountTypes, sponsors, loanProductRows] =
     await Promise.all([
       db.select({
         id: academic_terms.id,
@@ -357,7 +358,11 @@ export async function getStudentFinance(studentId: number): Promise<StudentFinan
         .where(eq(payment_cheques.studentId, studentId))
         .orderBy(desc(payment_cheques.dueDate)),
 
-      db.select().from(student_loans)
+      db.select({
+        row: student_loans,
+        productTitle: loan_products.title,
+      }).from(student_loans)
+        .leftJoin(loan_products, eq(loan_products.id, student_loans.loanProductId))
         .where(eq(student_loans.studentId, studentId))
         .orderBy(desc(student_loans.id)),
 
@@ -368,6 +373,10 @@ export async function getStudentFinance(studentId: number): Promise<StudentFinan
       db.select().from(tuition_sponsors)
         .where(eq(tuition_sponsors.isActive, 1))
         .orderBy(asc(tuition_sponsors.title)),
+
+      db.select().from(loan_products)
+        .where(eq(loan_products.isActive, 1))
+        .orderBy(asc(loan_products.title)),
     ]);
 
   const termTitles: Record<string, string> = {};
@@ -427,7 +436,7 @@ export async function getStudentFinance(studentId: number): Promise<StudentFinan
     discounts: discountApplied,
     sponsorships: sponsorApplied,
     cheques: cheques as ChequeRow[],
-    loans: loans as LoanRow[],
+    loans: loans.map((l) => l.row) as LoanRow[],
     termTitles,
   });
 
@@ -447,9 +456,10 @@ export async function getStudentFinance(studentId: number): Promise<StudentFinan
     discounts: discounts.map((d) => ({ ...d.row, typeTitle: d.typeTitle, typeCode: d.typeCode })),
     sponsorships: sponsorships.map((s) => ({ ...s.row, sponsorTitle: s.sponsorTitle })),
     cheques,
-    loans,
+    loans: loans.map((l) => ({ ...l.row, productTitle: l.productTitle })),
     discountTypes,
     sponsors,
+    loanProducts: loanProductRows,
     transcript,
     totals: transcriptTotals(transcript),
   };

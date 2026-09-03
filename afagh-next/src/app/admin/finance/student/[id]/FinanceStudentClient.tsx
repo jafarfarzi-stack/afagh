@@ -29,6 +29,11 @@ type ChequeRow = {
 type LoanRow = {
   id: number; lender: string; loanCode: string | null;
   amount: number; installments: number; status: string;
+  productTitle: string | null;
+};
+type LoanProduct = {
+  id: number; code: string; title: string; lender: string;
+  maxAmount: number | null; defaultAmount: number; defaultInstallments: number;
 };
 type FormulaInfo = {
   termTitle: string; formulaTitle: string | null;
@@ -55,6 +60,7 @@ export default function FinanceStudentClient(props: {
   sponsorships: SponsorshipRow[];
   cheques: ChequeRow[];
   loans: LoanRow[];
+  loanProducts: LoanProduct[];
   formula: FormulaInfo | null;
 }) {
   const { studentId, terms } = props;
@@ -80,6 +86,8 @@ export default function FinanceStudentClient(props: {
   }
 
   const selectedType = props.discountTypes.find((d) => d.id === Number(discountTypeId));
+  const [loanProductId, setLoanProductId] = useState<string>('');
+  const selectedLoan = props.loanProducts.find((l) => l.id === Number(loanProductId));
   const [discountTypeId, setDiscountTypeId] = useState<string>(
     props.discountTypes[0] ? String(props.discountTypes[0].id) : ''
   );
@@ -442,6 +450,7 @@ export default function FinanceStudentClient(props: {
               run(() => addLoanAction({
                 studentId,
                 termId: f.get('termId') ? Number(f.get('termId')) : null,
+                loanProductId: f.get('loanProductId') ? Number(f.get('loanProductId')) : null,
                 lender: String(f.get('lender') || ''),
                 loanCode: String(f.get('loanCode') || ''),
                 amount: Number(f.get('amount')) || 0,
@@ -450,15 +459,40 @@ export default function FinanceStudentClient(props: {
                 note: String(f.get('note') || ''),
               }), 'وام ثبت شد');
               e.currentTarget.reset();
+              setLoanProductId('');
             }}
             className="rounded-lg border border-slate-200 p-3"
           >
             <h4 className="mb-2 text-xs font-bold text-slate-800">ثبت وام</h4>
+            {props.loanProducts.length > 0 && (
+              <label className={`${labelCls} mb-3`}>
+                نوع وام (از کاتالوگ)
+                <select
+                  name="loanProductId"
+                  value={loanProductId}
+                  onChange={(e) => setLoanProductId(e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="">— انتخاب از کاتالوگ (اختیاری) —</option>
+                  {props.loanProducts.map((l) => (
+                    <option key={l.id} value={l.id}>{l.title}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {props.loanProducts.length === 0 && (
+              <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                هنوز نوع وامی در کاتالوگ تعریف نشده. از «⚙️ تعاریف موتور مالی ← وام‌ها» نوع وام بسازید.
+              </p>
+            )}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <label className={labelCls}>پرداخت‌کنندهٔ وام *<input name="lender" required placeholder="مثلاً صندوق رفاه دانشجویان" className={inputCls} /></label>
-              <label className={labelCls}>کد وام<input name="loanCode" className={inputCls} /></label>
-              <label className={labelCls}>مبلغ (ریال) *<input name="amount" type="number" min={1} required className={inputCls} /></label>
-              <label className={labelCls}>تعداد اقساط<input name="installments" type="number" min={1} defaultValue={1} className={inputCls} /></label>
+              <label className={labelCls}>پرداخت‌کنندهٔ وام *<input name="lender" required key={selectedLoan?.id ?? 'lender'} defaultValue={selectedLoan?.lender} placeholder="مثلاً صندوق رفاه دانشجویان" className={inputCls} /></label>
+              <label className={labelCls}>کد وام<input name="loanCode" key={selectedLoan ? `c${selectedLoan.id}` : 'loanCode'} defaultValue={selectedLoan?.code} className={inputCls} /></label>
+              <label className={labelCls}>
+                مبلغ (ریال) *{selectedLoan?.maxAmount ? ` (سقف ${fa(selectedLoan.maxAmount)})` : ''}
+                <input name="amount" type="number" min={1} max={selectedLoan?.maxAmount ?? undefined} required key={selectedLoan ? `a${selectedLoan.id}` : 'amount'} defaultValue={selectedLoan?.defaultAmount || undefined} className={inputCls} />
+              </label>
+              <label className={labelCls}>تعداد اقساط<input name="installments" type="number" min={1} key={selectedLoan ? `i${selectedLoan.id}` : 'inst'} defaultValue={selectedLoan?.defaultInstallments ?? 1} className={inputCls} /></label>
               <label className={labelCls}>سررسید اولین قسط<input name="firstDueDate" type="date" className={inputCls} /></label>
               <label className={labelCls}>
                 ترم
@@ -477,14 +511,15 @@ export default function FinanceStudentClient(props: {
               <table className="w-full text-right text-xs">
                 <thead>
                   <tr className="border-b border-slate-200 text-[11px] text-slate-500">
-                    <th className="p-2">پرداخت‌کننده</th><th className="p-2">کد</th><th className="p-2">مبلغ</th>
+                    <th className="p-2">نوع وام</th><th className="p-2">پرداخت‌کننده</th><th className="p-2">کد</th><th className="p-2">مبلغ</th>
                     <th className="p-2">اقساط</th><th className="p-2">وضعیت</th><th className="p-2">عملیات</th>
                   </tr>
                 </thead>
                 <tbody>
                   {props.loans.map((l) => (
                     <tr key={l.id} className="border-b border-slate-100 last:border-0">
-                      <td className="p-2 text-slate-800">{l.lender}</td>
+                      <td className="p-2 text-slate-800">{l.productTitle || '—'}</td>
+                      <td className="p-2 text-slate-600">{l.lender}</td>
                       <td className="p-2 text-slate-500">{l.loanCode || '—'}</td>
                       <td className="p-2">{fa(l.amount)}</td>
                       <td className="p-2">{fa(l.installments)}</td>
