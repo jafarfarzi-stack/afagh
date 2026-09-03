@@ -124,7 +124,7 @@ export default function AdmissionsClient({
   const [isTestingIrandoc, setIsTestingIrandoc] = useState(false);
 
   // پیام‌ها
-  const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' | 'warning' } | null>(null);
 
   // پردازش فایل سنجش
   const handleStageRawText = async () => {
@@ -151,7 +151,8 @@ export default function AdmissionsClient({
     const res = await importStagedStudentsAction(resolvedIds);
     setIsImporting(false);
     if (res.ok) {
-      setFeedback({ text: `${res.count} دانشجو با موفقیت ثبت قطعی شدند و شماره دانشجویی یکتا برای آنان صادر گردید.`, type: 'success' });
+      const failNote = res.failures?.length ? ` — ${res.failures.length} رکورد ناموفق بود (به‌طور کامل برگشت داده شد؛ جزئیات در لاگ سرور).` : '';
+      setFeedback({ text: `${res.count} دانشجو با موفقیت ثبت قطعی شدند و شماره دانشجویی یکتا برای آنان صادر گردید.${failNote}`, type: res.failures?.length ? 'warning' : 'success' });
       setTimeout(() => setFeedback(null), 5000);
     } else {
       setFeedback({ text: res.error || 'خطا در ثبت‌نام', type: 'error' });
@@ -286,7 +287,9 @@ export default function AdmissionsClient({
           className={`p-4 rounded-2xl border text-xs font-bold flex items-center justify-between animate-fadeIn ${
             feedback.type === 'success'
               ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
-              : 'bg-red-50 border-red-300 text-red-900'
+              : feedback.type === 'warning'
+                ? 'bg-amber-50 border-amber-300 text-amber-900'
+                : 'bg-red-50 border-red-300 text-red-900'
           }`}
         >
           <span>✓ {feedback.text}</span>

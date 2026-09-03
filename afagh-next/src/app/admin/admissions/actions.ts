@@ -30,10 +30,15 @@ export async function importStagedStudentsAction(stagingIds: number[]) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
 
   try {
-    const imported = await importStagedToStudents(stagingIds);
+    const result = await importStagedToStudents(stagingIds);
     revalidatePath('/admin/admissions');
     revalidatePath('/admin/students');
-    return { ok: true, count: imported.length, items: imported };
+    return {
+      ok: true,
+      count: result.imported.length,
+      items: result.imported,
+      failures: result.failures,
+    };
   } catch (err: any) {
     return { ok: false, error: err?.message || 'خطا در ثبت نهایی دانشجویان.' };
   }
