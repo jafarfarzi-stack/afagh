@@ -84,6 +84,56 @@ export async function ensureDbSchemaPatches() {
       CREATE INDEX IF NOT EXISTS "idx_schedules_room_type"       ON schedules ("roomId", "scheduleType");
       CREATE INDEX IF NOT EXISTS "idx_offering_prof_role"        ON offering_professors ("role", "staffId");
       CREATE INDEX IF NOT EXISTS "idx_analytics_snapshots_type"  ON analytics_snapshots ("reportType");
+
+      -- ═══ پچ‌های امنیتی پذیرش (فاز اصلاح) ═══
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS "mustChangePassword" integer DEFAULT 0;
+
+      -- ═══ پچ‌های مهاجرت از دیتابیس قدیمی (رشته‌ها و اساتید) ═══
+      ALTER TABLE faculties ADD COLUMN IF NOT EXISTS "facultyCode" varchar(10);
+      ALTER TABLE departments ADD COLUMN IF NOT EXISTS "departmentCode" varchar(10);
+      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "facultyId" integer;
+      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "minUnits" integer;
+      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "standardCode" varchar(20);
+      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "establishedDate" varchar(10);
+      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "terminatedDate" varchar(10);
+      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "isActive" integer DEFAULT 1;
+      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "headStaffCode" varchar(20);
+      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "expertName" varchar(150);
+      ALTER TABLE majors ADD COLUMN IF NOT EXISTS "lastCouncilDate" varchar(10);
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "title" varchar(50);
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "facultyId" integer;
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "isActive" integer DEFAULT 1;
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "cooperationType" varchar(50);
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "personnelNo" varchar(50);
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "employmentType" varchar(50);
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "hireDate" varchar(10);
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "lastDegreeYear" integer;
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "fieldOfStudy" varchar(200);
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "maritalStatusCode" integer;
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "maritalStatus" varchar(20);
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "lastDegreeCountryCode" varchar(10);
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "lastDegreeUniversity" varchar(200);
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "academicBase" varchar(20);
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "birthProvince" varchar(100);
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "birthCity" varchar(100);
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "bankAccountNo" varchar(50);
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS "phone" varchar(20);
+      -- قید یکتایی فرمول شمارهٔ دانشجویی (پایهٔ افزایش اتمیک + onConflictDoNothing).
+      -- اگر ردیف تکراری قدیمی وجود داشته باشد، به‌جای شکستن استارت‌آپ،
+      -- ایندکس ساخته نشده و در لاگ هشدار داده می‌شود.
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'student_id_formulas_degreeLevelId_unique') THEN
+          IF (SELECT COUNT(*) FROM (
+                SELECT "degreeLevelId" FROM student_id_formulas
+                WHERE "degreeLevelId" IS NOT NULL GROUP BY "degreeLevelId" HAVING COUNT(*) > 1) d) = 0 THEN
+            CREATE UNIQUE INDEX IF NOT EXISTS "student_id_formulas_degreeLevelId_unique"
+              ON student_id_formulas ("degreeLevelId");
+          ELSE
+            RAISE WARNING 'student_id_formulas دارای ردیف تکراری degreeLevelId است — قید یکتایی ساخته نشد';
+          END IF;
+        END IF;
+      END $$;
     `);
   } catch (_) {}
 }

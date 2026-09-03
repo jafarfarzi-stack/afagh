@@ -44,6 +44,8 @@ export const users = pgTable('users', {
   address: varchar('address', { length: 300 }),                // نشانی پستی
   passwordHash: varchar('passwordHash', { length: 255 }).notNull(),
   isActive: integer('isActive').default(1),
+  // ── فلگ «تغییر اجباری رمز در اولین ورود» (برای حساب‌های پذیرش‌شده با رمز پیش‌فرض) ──
+  mustChangePassword: integer('mustChangePassword').default(0),
   createdAt: timestamp('createdAt').defaultNow()
 });
 
@@ -69,13 +71,17 @@ export const degree_level_configs = pgTable('degree_level_configs', {
 
 export const faculties = pgTable('faculties', {
   id: serial('id').primaryKey(),
-  name: varchar('name', { length: 150 }).notNull()
+  name: varchar('name', { length: 150 }).notNull(),
+  // ── کد دانشکده از دیتابیس قدیمی/سازمان (فایل reshtelist—ستون «کد دانشکده») ──
+  facultyCode: varchar('facultyCode', { length: 10 })
 });
 
 export const departments = pgTable('departments', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 150 }).notNull(),
-  facultyId: integer('facultyId').notNull().references(() => faculties.id)
+  facultyId: integer('facultyId').notNull().references(() => faculties.id),
+  // ── کد گروه آموزشی از دیتابیس قدیمی (فایل reshtelist—ستون «گروه آموزشی») ──
+  departmentCode: varchar('departmentCode', { length: 10 })
 });
 
 export const majors = pgTable('majors', {
@@ -83,7 +89,17 @@ export const majors = pgTable('majors', {
   name: varchar('name', { length: 150 }).notNull(),
   degreeLevelId: integer('degreeLevelId').notNull().references(() => degree_level_configs.id),
   departmentId: integer('departmentId').references(() => departments.id),
-  majorCode: varchar('majorCode', { length: 10 })
+  majorCode: varchar('majorCode', { length: 10 }),
+  // ── فیلدهای تکمیلی از دیتابیس قدیمی/سازمان (فایل reshtelist) ──
+  facultyId: integer('facultyId').references(() => faculties.id),      // کد دانشکده
+  minUnits: integer('minUnits'),                                        // حداقل واحد
+  standardCode: varchar('standardCode', { length: 20 }),                // کد استاندارد رشته
+  establishedDate: varchar('establishedDate', { length: 10 }),          // تاریخ تاسیس (شمسی)
+  terminatedDate: varchar('terminatedDate', { length: 10 }),            // تاریخ خاتمه (شمسی)
+  isActive: integer('isActive').default(1),                             // فعال/غیرفعال
+  headStaffCode: varchar('headStaffCode', { length: 20 }),              // کد استادی مدیر گروه
+  expertName: varchar('expertName', { length: 150 }),                   // نام کارشناس رشته
+  lastCouncilDate: varchar('lastCouncilDate', { length: 10 })           // آخرین جلسه شورای گسترش (شمسی)
 });
 
 export const sanjesh_mappings = pgTable('sanjesh_mappings', {
@@ -120,7 +136,10 @@ export const student_id_formulas = pgTable('student_id_formulas', {
   entryYear: integer('entryYear'),
   formula: varchar('formula', { length: 255 }).notNull(),
   currentSequence: integer('currentSequence').default(0)
-});
+}, (t) => ({
+  // جلوگیری از رقابت روی شمارنده: هر مقطع فقط یک ردیف فرمول — مبنای onConflictDoNothing
+  uqDegreeLevel: unique('student_id_formulas_degreeLevelId_unique').on(t.degreeLevelId)
+}));
 
 export const educational_regulations = pgTable('educational_regulations', {
   id: serial('id').primaryKey(),
@@ -155,7 +174,26 @@ export const staff = pgTable('staff', {
   departmentId: integer('departmentId').references(() => departments.id),
   staffType: varchar('staffType', { length: 50 }),
   academicRank: varchar('academicRank', { length: 50 }),
-  degree: varchar('degree', { length: 50 })
+  degree: varchar('degree', { length: 50 }),
+  // ── فیلدهای تکمیلی از دیتابیس قدیمی/سازمان (فایل professorslist) ──
+  title: varchar('title', { length: 50 }),                // لقب: آقاي/سركار خانم/دکتر/مهندس
+  facultyId: integer('facultyId').references(() => faculties.id),  // دانشکده
+  isActive: integer('isActive').default(1),               // فعال/غیرفعال
+  cooperationType: varchar('cooperationType', { length: 50 }),      // طريقه همکاري: حق التدريس/رسمي...
+  personnelNo: varchar('personnelNo', { length: 50 }),    // شماره مستخدم
+  employmentType: varchar('employmentType', { length: 50 }),       // نوع استخدامي: قراردادي/رسمي...
+  hireDate: varchar('hireDate', { length: 10 }),          // تاريخ استخدام (شمسی)
+  lastDegreeYear: integer('lastDegreeYear'),              // سال اخذ آخرين مدرک تحصيلي
+  fieldOfStudy: varchar('fieldOfStudy', { length: 200 }), // رشته و گرايش
+  maritalStatusCode: integer('maritalStatusCode'),        // کد وضعيت تاهل
+  maritalStatus: varchar('maritalStatus', { length: 20 }),// وضعيت تاهل: مجرد/متاهل
+  lastDegreeCountryCode: varchar('lastDegreeCountryCode', { length: 10 }), // کد کشور آخرين مدرک
+  lastDegreeUniversity: varchar('lastDegreeUniversity', { length: 200 }), // دانشگاه محل اخذ آخرين مدرک
+  academicBase: varchar('academicBase', { length: 20 }),  // پايه استادي
+  birthProvince: varchar('birthProvince', { length: 100 }), // استان محل تولد
+  birthCity: varchar('birthCity', { length: 100 }),       // شهر محل تولد
+  bankAccountNo: varchar('bankAccountNo', { length: 50 }), // شماره حساب
+  phone: varchar('phone', { length: 20 })                 // تلفن ثابت
 });
 
 export const courses = pgTable('courses', {

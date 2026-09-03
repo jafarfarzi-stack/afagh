@@ -21,7 +21,7 @@ FROM base AS migrator
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-CMD ["sh", "-c", "npx drizzle-kit push --force && node scripts/hardening.mjs"]
+CMD ["sh", "-c", "npx drizzle-kit push --force && node scripts/seed-base.mjs && node scripts/hardening.mjs"]
 
 # ── بیلد ──
 FROM base AS builder

@@ -11,7 +11,8 @@
     "db:generate": "npx drizzle-kit generate",
     "db:push": "npx drizzle-kit push",
     "db:migrate-sqlite": "node scripts/migrate-sqlite-to-pg.mjs",
-    "db:hardening": "node scripts/hardening.mjs"
+    "db:hardening": "node scripts/hardening.mjs",
+    "db:base": "node scripts/seed-base.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
