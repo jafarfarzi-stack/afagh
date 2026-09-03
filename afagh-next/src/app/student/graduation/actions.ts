@@ -3,8 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { document_categories, graduation_audits, students } from '@/db/schema';
-import { requireRole } from '@/lib/auth';
+import { document_categories, graduation_audits } from '@/db/schema';
+import { getStudentByUser, requireRole } from '@/lib/auth';
 import { getStudentTracker, payStampFee, setFinalPhoto, submitSajjadRequest } from '@/lib/graduation-engine';
 import { activeChannels, listUserChannels, saveUserChannel, sendTestMessage, type Channel } from '@/lib/messaging';
 
@@ -13,7 +13,8 @@ import { activeChannels, listUserChannels, saveUserChannel, sendTestMessage, typ
 
 async function me() {
   const user = await requireRole(['STUDENT']);
-  const [s] = await db.select({ id: students.id }).from(students).where(eq(students.userId, user.id)).limit(1);
+  // getStudentByUser خودترمیم دارد: برای حساب دمو بدون رکورد، پرونده همان‌جا ساخته می‌شود
+  const s = await getStudentByUser(user.id);
   if (!s) throw new Error('پروندهٔ دانشجویی یافت نشد.');
   return { user, studentId: s.id };
 }
