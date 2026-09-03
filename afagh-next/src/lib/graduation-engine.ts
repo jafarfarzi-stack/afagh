@@ -680,6 +680,9 @@ export async function issueDegree(input: {
     const existingCode = (await db.select({ code: issued_degrees.ministryVerificationCode }).from(issued_degrees)
       .where(and(eq(issued_degrees.studentId, a.studentId), sql`${issued_degrees.ministryVerificationCode} is not null`)).limit(1))[0]?.code;
     if (!existingCode) throw new Error('برای دانشنامه، ابتدا «کد صحت» وزارت علوم (سجاد) باید دریافت شود.');
+    // استفادهٔ مجدد از کد صحت قبلی: باید حداقل در لاگ ردیابی شود تا اگر کد
+    // متعلق به چرخهٔ قبلی بود، در استعلام‌گیری مشخص باشد.
+    log.warn('degree_verification_code_reused', { studentId: a.studentId, code: existingCode });
     input.ministryVerificationCode = existingCode;
   }
 
@@ -707,28 +710,38 @@ export async function issueDegree(input: {
   };
   const documentHash = degreeHash(serialNo, verifyCode, snapshot, input.ministryVerificationCode ?? null);
 
-  const [deg] = await db.insert(issued_degrees).values({
-    studentId: a.studentId, degreeType: input.degreeType, serialNo, verifyCode,
-    ministryVerificationCode: input.ministryVerificationCode ?? null,
-    documentHash, snapshot: snapshot as never, issuedByUserId: input.userId,
-  }).returning();
+  // ── چهار نوشتار حیاتی در یک تراکنش: اگر هر یک شکست بخورد، هیچ‌کدام اعمال
+  //    نمی‌شود — مدرک صادرشده بدون «GRADUATED» شدن دانشجو باقی نمی‌ماند (و برعکس).
+  let deg: typeof issued_degrees.$inferSelect | null = null;
+  let studentUserId: number | null = null;
 
-  if (input.degreeType !== 'TRANSCRIPT') {
-    await db.update(graduation_audits).set({
-      workflowStatus: 'ISSUED', completedAt: new Date(), lastEventAt: new Date(),
-    }).where(eq(graduation_audits.id, input.auditId));
-    await db.update(students).set({ status: 'GRADUATED' }).where(eq(students.id, a.studentId));
-    await db.insert(alumni_profiles).values({ studentId: a.studentId }).onConflictDoNothing();
+  await db.transaction(async tx => {
+    const [inserted] = await tx.insert(issued_degrees).values({
+      studentId: a.studentId, degreeType: input.degreeType, serialNo, verifyCode,
+      ministryVerificationCode: input.ministryVerificationCode ?? null,
+      documentHash, snapshot: snapshot as never, issuedByUserId: input.userId,
+    }).returning();
+    deg = inserted;
 
-    const [stu] = await db.select({ userId: students.userId }).from(students).where(eq(students.id, a.studentId)).limit(1);
-    if (stu) {
-      await notifyUser(stu.userId, 'DEGREE_ISSUED',
-        `${input.degreeType === 'PERMANENT' ? 'دانشنامهٔ' : 'گواهینامهٔ موقت'} شما با شمارهٔ ${serialNo} صادر شد. از «پورتال دانش‌آموختگان» قابل مشاهده و استعلام است.`);
+    if (input.degreeType !== 'TRANSCRIPT') {
+      await tx.update(graduation_audits).set({
+        workflowStatus: 'ISSUED', completedAt: new Date(), lastEventAt: new Date(),
+      }).where(eq(graduation_audits.id, input.auditId));
+      await tx.update(students).set({ status: 'GRADUATED' }).where(eq(students.id, a.studentId));
+      await tx.insert(alumni_profiles).values({ studentId: a.studentId }).onConflictDoNothing();
+      const [stu] = await tx.select({ userId: students.userId }).from(students).where(eq(students.id, a.studentId)).limit(1);
+      studentUserId = stu?.userId ?? null;
     }
+  });
+
+  // اعلان پس از commit شدن تراکنش — تا تراکنش کوتاه بماند
+  if (input.degreeType !== 'TRANSCRIPT' && studentUserId) {
+    await notifyUser(studentUserId, 'DEGREE_ISSUED',
+      `${input.degreeType === 'PERMANENT' ? 'دانشنامهٔ' : 'گواهینامهٔ موقت'} شما با شمارهٔ ${serialNo} صادر شد. از «پورتال دانش‌آموختگان» قابل مشاهده و استعلام است.`);
   }
 
   log.info('degree_issued', { studentId: a.studentId, type: input.degreeType, serialNo });
-  return deg;
+  return deg!;
 }
 
 /** دریافت «کد صحت» از سامانهٔ سجاد (وزارت علوم) — پیش‌نیاز دانشنامه */
