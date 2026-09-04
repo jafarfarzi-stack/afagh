@@ -51,6 +51,8 @@ jobs:
       - run: AFAGH_APP_DB_PASSWORD=test-app-password node scripts/hardening.mjs
       # اثبات P0: کاربر A هرگز دادهٔ B را نمی‌بیند/تغییر نمی‌دهد
       - run: node scripts/rls-test.mjs
+      # اثبات P1 (بازبینی): مسابقهٔ همزمانی — تأیید/وصول فقط یک برنده دارد
+      - run: node scripts/concurrency-test.mjs
 
   afagh-erp:
     name: فاز صفر — سلامت کد

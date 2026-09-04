@@ -11,6 +11,8 @@ import { requireRole, getSessionUser } from '@/lib/auth';
 import { assertServerActionOrigin, requireStudentScope } from '@/lib/security';
 import { clearCheque, computeFormulaTuition } from '@/lib/finance-engine';
 import { toNum } from '@/lib/finance-rules';
+import { appendAudit } from '@/lib/audit';
+import { safeRials } from '@/lib/money';
 
 const FINANCE = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'];
 
@@ -28,7 +30,15 @@ const intOrNull = (v: unknown): number | null => {
   const n = Number(s);
   return Number.isFinite(n) ? Math.trunc(n) : null;
 };
-const money = (v: unknown): string => String(Math.round(Math.max(0, num(v))));
+/**
+ * 🔒 پولِ صحیح (بازبینی — Medium): مبلغ همیشه «عدد صحیح ریال» اعتبارسنجی و ذخیره
+ * می‌شود (safeRials) — نه float. ورودی نامعتبر → null → خطای صریح.
+ */
+const money = (v: unknown): string => {
+  const r = safeRials(v);
+  if (r === null) throw new Error('مبلغ نامعتبر است (می‌بایست عدد صحیح ریال باشد).');
+  return String(r);
+};
 
 function revalidateStudent(studentId: number) {
   revalidatePath('/admin/finance');
@@ -47,12 +57,10 @@ export async function addDiscountAction(input: {
   amount: number;
   appliesTo: string;
   reason: string;
-  status?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
-
   const sc = await requireStudentScope(input.studentId);
   if (!sc.ok) return { ok: false, error: sc.error };
 
@@ -66,25 +74,37 @@ export async function addDiscountAction(input: {
   }
 
   const user = await getSessionUser();
-  // اگر نوع تخفیف نیازمند تأیید است، با وضعیت در انتظار ثبت می‌شود.
-  const status = type.requiresApproval ? 'PENDING' : (input.status || 'APPROVED');
+  // 🔒 وضعیت «کاملاً سمت سرور» (بازبینی — Medium): کلاینت هیچ‌گونه نقشی در تعیین
+  // وضعیت ندارد؛ نوع نیازمند تأیید → PENDING، وگرنه (بدون تأیید) → APPROVED.
+  const status = type.requiresApproval ? 'PENDING' : 'APPROVED';
 
-  await db.insert(student_discounts).values({
-    studentId: input.studentId,
-    termId: input.termId,
-    discountTypeId: input.discountTypeId,
-    kind: type.kind,
-    percent: String(percent),
-    amount: money(input.amount),
-    appliesTo: input.appliesTo || 'BOTH',
-    status,
-    reason: clean(input.reason),
-    approvedBy: status === 'APPROVED' ? (user?.id ?? null) : null,
-    approvedAt: status === 'APPROVED' ? new Date() : null,
-  });
-
-  revalidateStudent(input.studentId);
-  return { ok: true };
+  try {
+    return await db.transaction(async (tx) => {
+      const [ins] = await tx.insert(student_discounts).values({
+        studentId: input.studentId,
+        termId: input.termId,
+        discountTypeId: input.discountTypeId,
+        kind: type.kind,
+        percent: String(percent),
+        amount: money(input.amount),
+        appliesTo: input.appliesTo || 'BOTH',
+        status,
+        reason: clean(input.reason),
+        approvedBy: status === 'APPROVED' ? (user?.id ?? null) : null,
+        approvedAt: status === 'APPROVED' ? new Date() : null,
+      }).returning({ id: student_discounts.id });
+      await appendAudit(tx, {
+        actorUserId: user?.id ?? null,
+        action: status === 'APPROVED' ? 'FINANCE_DISCOUNT_ADDED_APPROVED' : 'FINANCE_DISCOUNT_ADDED_PENDING',
+        entityType: 'student_discounts',
+        entityId: ins.id,
+        details: JSON.stringify({ studentId: input.studentId, discountTypeId: input.discountTypeId, percent, status }),
+      });
+      return { ok: true };
+    });
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'خطا در ثبت تخفیف' };
+  }
 }
 
 export async function setDiscountStatusAction(
@@ -96,30 +116,66 @@ export async function setDiscountStatusAction(
   if (!og.ok) return { ok: false, error: og.error };
   const user = await getSessionUser();
 
-  const [row] = await db.select().from(student_discounts).where(eq(student_discounts.id, id)).limit(1);
-  if (!row) return { ok: false, error: 'تخفیف یافت نشد' };
+  try {
+    return await db.transaction(async (tx) => {
+      const [row] = await tx.select().from(student_discounts).where(eq(student_discounts.id, id)).limit(1);
+      if (!row) return { ok: false, error: 'تخفیف یافت نشد' };
+      // فقط PENDING قابل تصمیم است (تخفیف خودکار-تأیید یا قبلاً تصمیم‌گرفته، بازنویسی نمی‌شود)
+      if (row.status !== 'PENDING') return { ok: false, error: 'این تخفیف قبلاً تصمیم‌گیری شده است (فقط «در انتظار» قابل تأیید/رد است).' };
 
-  const upd = await db.update(student_discounts)
-    .set({
-      status,
-      approvedBy: user?.id ?? null,
-      approvedAt: status === 'APPROVED' ? new Date() : null,
-    })
-    .where(and(eq(student_discounts.id, id), eq(student_discounts.status, 'PENDING')));
-  if (upd.rowCount !== 1) return { ok: false, error: 'این تخفیف قبلاً تصمیم‌گیری شده است (فقط «در انتظار» قابل تأیید/رد است).' };
+      const upd = await tx.update(student_discounts)
+        .set({
+          status,
+          approvedBy: user?.id ?? null,
+          approvedAt: status === 'APPROVED' ? new Date() : null,
+        })
+        .where(and(eq(student_discounts.id, id), eq(student_discounts.status, 'PENDING')));
+      if (upd.rowCount !== 1) return { ok: false, error: 'تغییر همزمان — دوباره تلاش کنید.' };
 
-  revalidateStudent(row.studentId);
-  return { ok: true };
+      await appendAudit(tx, {
+        actorUserId: user?.id ?? null,
+        action: status === 'APPROVED' ? 'FINANCE_DISCOUNT_APPROVED' : 'FINANCE_DISCOUNT_REJECTED',
+        entityType: 'student_discounts',
+        entityId: id,
+        details: JSON.stringify({ studentId: row.studentId }),
+      });
+      revalidateStudent(row.studentId);
+      return { ok: true };
+    });
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'خطا در تغییر وضعیت تخفیف' };
+  }
 }
 
 export async function deleteDiscountAction(id: number): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
-  const [row] = await db.select().from(student_discounts).where(eq(student_discounts.id, id)).limit(1);
-  await db.delete(student_discounts).where(eq(student_discounts.id, id));
-  if (row) revalidateStudent(row.studentId);
-  return { ok: true };
+  const user = await getSessionUser();
+
+  try {
+    return await db.transaction(async (tx) => {
+      const [row] = await tx.select().from(student_discounts).where(eq(student_discounts.id, id)).limit(1);
+      if (!row) return { ok: false, error: 'تخفیف یافت نشد' };
+      // 🔒 سیاست حذف (بازبینی — Medium): تخفیفِ «اثر مالی‌دار» (APPROVED) هرگز حذف ناپذیر است؛
+      // فقط باید رد شود (REJECTED) یا در حالت در انتظار است که قابل حذف است.
+      if (row.status === 'APPROVED') {
+        return { ok: false, error: 'تخفیف تأییدشده در محاسبهٔ شهریه اثر دارد — قابل حذف نیست؛ ابتدا ردش کنید (REJECTED).' };
+      }
+      await tx.delete(student_discounts).where(eq(student_discounts.id, id));
+      await appendAudit(tx, {
+        actorUserId: user?.id ?? null,
+        action: 'FINANCE_DISCOUNT_DELETED',
+        entityType: 'student_discounts',
+        entityId: id,
+        details: JSON.stringify({ studentId: row.studentId, wasStatus: row.status }),
+      });
+      revalidateStudent(row.studentId);
+      return { ok: true };
+    });
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'خطا در حذف تخفیف' };
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -135,12 +191,10 @@ export async function addSponsorshipAction(input: {
   amount: number;
   appliesTo: string;
   referenceNo: string;
-  status?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
-
   const sc = await requireStudentScope(input.studentId);
   if (!sc.ok) return { ok: false, error: sc.error };
 
@@ -148,20 +202,34 @@ export async function addSponsorshipAction(input: {
     .where(eq(tuition_sponsors.id, input.sponsorId)).limit(1);
   if (!sponsor) return { ok: false, error: 'بنیاد یافت نشد' };
 
-  await db.insert(student_sponsorships).values({
-    studentId: input.studentId,
-    termId: input.termId,
-    sponsorId: input.sponsorId,
-    coverageKind: input.coverageKind === 'FIXED' ? 'FIXED' : 'PERCENT',
-    percent: String(Math.min(Math.max(0, num(input.percent)), 100)),
-    amount: money(input.amount),
-    appliesTo: input.appliesTo || 'BOTH',
-    referenceNo: clean(input.referenceNo),
-    status: input.status || 'PENDING',
-  });
-
-  revalidateStudent(input.studentId);
-  return { ok: true };
+  const user = await getSessionUser();
+  try {
+    return await db.transaction(async (tx) => {
+      // 🔒 وضعیت کاملاً سمت سرور: پوششِ بنیاد همیشه ابتدا PENDING است (تأیید ناظر بنیاد
+      // یا کارشناس، جداگانه انجام می‌شود) — کلاینت حق تعیین وضعیت ندارد.
+      const [ins] = await tx.insert(student_sponsorships).values({
+        studentId: input.studentId,
+        termId: input.termId,
+        sponsorId: input.sponsorId,
+        coverageKind: input.coverageKind === 'FIXED' ? 'FIXED' : 'PERCENT',
+        percent: String(Math.min(Math.max(0, num(input.percent)), 100)),
+        amount: money(input.amount),
+        appliesTo: input.appliesTo || 'BOTH',
+        referenceNo: clean(input.referenceNo),
+        status: 'PENDING',
+      }).returning({ id: student_sponsorships.id });
+      await appendAudit(tx, {
+        actorUserId: user?.id ?? null,
+        action: 'FINANCE_SPONSORSHIP_ADDED_PENDING',
+        entityType: 'student_sponsorships',
+        entityId: ins.id,
+        details: JSON.stringify({ studentId: input.studentId, sponsorId: input.sponsorId }),
+      });
+      return { ok: true };
+    });
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'خطا در ثبت پوشش' };
+  }
 }
 
 export async function setSponsorshipStatusAction(
@@ -171,27 +239,62 @@ export async function setSponsorshipStatusAction(
   await requireRole(FINANCE);
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
-  const [row] = await db.select().from(student_sponsorships).where(eq(student_sponsorships.id, id)).limit(1);
-  if (!row) return { ok: false, error: 'پوشش یافت نشد' };
+  const user = await getSessionUser();
 
-  const allowedSponsor = (cur: string) =>
-    status === 'REJECTED' ? cur === 'PENDING' : ['PENDING', 'CONFIRMED'].includes(cur);
-  if (!allowedSponsor(row.status)) return { ok: false, error: 'انتقال نامعتبر: پوشش فقط از «در انتظار» تأیید/پرداخت می‌شود؛ «ردشده» پایانی است.' };
-  const upd = await db.update(student_sponsorships).set({ status })
-    .where(and(eq(student_sponsorships.id, id), eq(student_sponsorships.status, row.status)));
-  if (upd.rowCount !== 1) return { ok: false, error: 'تغییر همزمان — دوباره تلاش کنید.' };
-  revalidateStudent(row.studentId);
-  return { ok: true };
+  try {
+    return await db.transaction(async (tx) => {
+      const [row] = await tx.select().from(student_sponsorships).where(eq(student_sponsorships.id, id)).limit(1);
+      if (!row) return { ok: false, error: 'پوشش یافت نشد' };
+      const allowed = status === 'REJECTED' ? row.status === 'PENDING' : ['PENDING', 'CONFIRMED'].includes(row.status);
+      if (!allowed) return { ok: false, error: 'انتقال نامعتبر: پوشش فقط از «در انتظار» تأیید/پرداخت می‌شود؛ «ردشده» پایانی است.' };
+
+      const upd = await tx.update(student_sponsorships).set({ status })
+        .where(and(eq(student_sponsorships.id, id), eq(student_sponsorships.status, row.status)));
+      if (upd.rowCount !== 1) return { ok: false, error: 'تغییر همزمان — دوباره تلاش کنید.' };
+
+      await appendAudit(tx, {
+        actorUserId: user?.id ?? null,
+        action: `FINANCE_SPONSORSHIP_${status}`,
+        entityType: 'student_sponsorships',
+        entityId: id,
+        details: JSON.stringify({ studentId: row.studentId, from: row.status }),
+      });
+      revalidateStudent(row.studentId);
+      return { ok: true };
+    });
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'خطا در تغییر وضعیت پوشش' };
+  }
 }
 
 export async function deleteSponsorshipAction(id: number): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
-  const [row] = await db.select().from(student_sponsorships).where(eq(student_sponsorships.id, id)).limit(1);
-  await db.delete(student_sponsorships).where(eq(student_sponsorships.id, id));
-  if (row) revalidateStudent(row.studentId);
-  return { ok: true };
+  const user = await getSessionUser();
+
+  try {
+    return await db.transaction(async (tx) => {
+      const [row] = await tx.select().from(student_sponsorships).where(eq(student_sponsorships.id, id)).limit(1);
+      if (!row) return { ok: false, error: 'پوشش یافت نشد' };
+      // 🔒 پوششِ اثر مالی‌دار (CONFIRMED/PAID) حذف‌ناپذیر است
+      if (row.status === 'CONFIRMED' || row.status === 'PAID') {
+        return { ok: false, error: 'پوشش تأییدشده/پرداخت‌شده در شهریه اثر دارد — قابل حذف نیست؛ ابتدا ردش کنید.' };
+      }
+      await tx.delete(student_sponsorships).where(eq(student_sponsorships.id, id));
+      await appendAudit(tx, {
+        actorUserId: user?.id ?? null,
+        action: 'FINANCE_SPONSORSHIP_DELETED',
+        entityType: 'student_sponsorships',
+        entityId: id,
+        details: JSON.stringify({ studentId: row.studentId, wasStatus: row.status }),
+      });
+      revalidateStudent(row.studentId);
+      return { ok: true };
+    });
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'خطا در حذف پوشش' };
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -212,8 +315,8 @@ export async function addChequeAction(input: {
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
 
-  const amount = Math.round(num(input.amount));
-  if (amount <= 0) return { ok: false, error: 'مبلغ چک باید بزرگ‌تر از صفر باشد' };
+  const amount = safeRials(input.amount);
+  if (amount === null || amount <= 0) return { ok: false, error: 'مبلغ چک باید عدد صحیح و بزرگ‌تر از صفر باشد' };
   const sc = await requireStudentScope(input.studentId);
   if (!sc.ok) return { ok: false, error: sc.error };
 
@@ -225,20 +328,32 @@ export async function addChequeAction(input: {
   const chequeNo = clean(input.chequeNo);
   if (!chequeNo) return { ok: false, error: 'شمارهٔ چک الزامی است' };
 
-  await db.insert(payment_cheques).values({
-    studentId: input.studentId,
-    termId: input.termId,
-    chequeNo,
-    bankName: clean(input.bankName),
-    branchCode: clean(input.branchCode),
-    amount: String(amount),
-    dueDate: new Date(dueMs),
-    status: 'PENDING',
-    note: clean(input.note),
-  });
-
-  revalidateStudent(input.studentId);
-  return { ok: true };
+  const user = await getSessionUser();
+  try {
+    return await db.transaction(async (tx) => {
+      const [ins] = await tx.insert(payment_cheques).values({
+        studentId: input.studentId,
+        termId: input.termId,
+        chequeNo,
+        bankName: clean(input.bankName),
+        branchCode: clean(input.branchCode),
+        amount: String(amount),
+        dueDate: new Date(dueMs),
+        status: 'PENDING',
+        note: clean(input.note),
+      }).returning({ id: payment_cheques.id });
+      await appendAudit(tx, {
+        actorUserId: user?.id ?? null,
+        action: 'FINANCE_CHEQUE_ADDED',
+        entityType: 'payment_cheques',
+        entityId: ins.id,
+        details: JSON.stringify({ studentId: input.studentId, chequeNo, amount, dueDate: due }),
+      });
+      return { ok: true };
+    });
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'خطا در ثبت چک' };
+  }
 }
 
 export async function clearChequeAction(id: number): Promise<{ ok: boolean; error?: string }> {
@@ -246,7 +361,7 @@ export async function clearChequeAction(id: number): Promise<{ ok: boolean; erro
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
   const [row] = await db.select().from(payment_cheques).where(eq(payment_cheques.id, id)).limit(1);
-  const result = await clearCheque(id);
+  const result = await clearCheque(id); // داخل finance-engine: تراکنش + FOR UPDATE + audit
   if (row) revalidateStudent(row.studentId);
   return result;
 }
@@ -258,30 +373,60 @@ export async function setChequeStatusAction(
   await requireRole(FINANCE);
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
-  const [row] = await db.select().from(payment_cheques).where(eq(payment_cheques.id, id)).limit(1);
-  if (!row) return { ok: false, error: 'چک یافت نشد' };
-  if (row.status === 'CLEARED') return { ok: false, error: 'چک وصول‌شده قابل تغییر وضعیت نیست' };
+  const user = await getSessionUser();
 
-  const upd = await db.update(payment_cheques)
-    .set({ status, remindedAt: status === 'PENDING' ? null : row.remindedAt })
-    .where(and(eq(payment_cheques.id, id), eq(payment_cheques.status, row.status)));
-  if (upd.rowCount !== 1) return { ok: false, error: 'تغییر همزمان: وضعیت چک توسط کاربر دیگری عوض شده است.' };
+  try {
+    return await db.transaction(async (tx) => {
+      const [row] = await tx.select().from(payment_cheques).where(eq(payment_cheques.id, id)).limit(1);
+      if (!row) return { ok: false, error: 'چک یافت نشد' };
+      if (row.status === 'CLEARED') return { ok: false, error: 'چک وصول‌شده قابل تغییر وضعیت نیست' };
 
-  revalidateStudent(row.studentId);
-  return { ok: true };
+      const upd = await tx.update(payment_cheques)
+        .set({ status, remindedAt: status === 'PENDING' ? null : row.remindedAt })
+        .where(and(eq(payment_cheques.id, id), eq(payment_cheques.status, row.status)));
+      if (upd.rowCount !== 1) return { ok: false, error: 'تغییر همزمان: وضعیت چک توسط کاربر دیگری عوض شده است.' };
+
+      await appendAudit(tx, {
+        actorUserId: user?.id ?? null,
+        action: `FINANCE_CHEQUE_${status}`,
+        entityType: 'payment_cheques',
+        entityId: id,
+        details: JSON.stringify({ studentId: row.studentId, from: row.status }),
+      });
+      revalidateStudent(row.studentId);
+      return { ok: true };
+    });
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'خطا در تغییر وضعیت چک' };
+  }
 }
 
 export async function deleteChequeAction(id: number): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
-  const [row] = await db.select().from(payment_cheques).where(eq(payment_cheques.id, id)).limit(1);
-  if (!row) return { ok: false, error: 'چک یافت نشد' };
-  if (row.status === 'CLEARED') return { ok: false, error: 'چک وصول‌شده حذف نمی‌شود؛ در دفتر مالی ثبت شده است' };
+  const user = await getSessionUser();
 
-  await db.delete(payment_cheques).where(eq(payment_cheques.id, id));
-  revalidateStudent(row.studentId);
-  return { ok: true };
+  try {
+    return await db.transaction(async (tx) => {
+      const [row] = await tx.select().from(payment_cheques).where(eq(payment_cheques.id, id)).limit(1);
+      if (!row) return { ok: false, error: 'چک یافت نشد' };
+      if (row.status === 'CLEARED') return { ok: false, error: 'چک وصول‌شده حذف نمی‌شود؛ در دفتر مالی ثبت شده است' };
+
+      await tx.delete(payment_cheques).where(eq(payment_cheques.id, id));
+      await appendAudit(tx, {
+        actorUserId: user?.id ?? null,
+        action: 'FINANCE_CHEQUE_DELETED',
+        entityType: 'payment_cheques',
+        entityId: id,
+        details: JSON.stringify({ studentId: row.studentId, chequeNo: row.chequeNo, wasStatus: row.status }),
+      });
+      revalidateStudent(row.studentId);
+      return { ok: true };
+    });
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'خطا در حذف چک' };
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -303,8 +448,8 @@ export async function addLoanAction(input: {
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
 
-  const amount = Math.round(num(input.amount));
-  if (amount <= 0) return { ok: false, error: 'مبلغ وام باید بزرگ‌تر از صفر باشد' };
+  const amount = safeRials(input.amount);
+  if (amount === null || amount <= 0) return { ok: false, error: 'مبلغ وام باید عدد صحیح و بزرگ‌تر از صفر باشد' };
   const sc = await requireStudentScope(input.studentId);
   if (!sc.ok) return { ok: false, error: sc.error };
 
@@ -325,21 +470,33 @@ export async function addLoanAction(input: {
   const firstDue = clean(input.firstDueDate);
   const firstDueMs = firstDue ? Date.parse(firstDue) : NaN;
 
-  await db.insert(student_loans).values({
-    studentId: input.studentId,
-    termId: input.termId,
-    loanProductId: input.loanProductId || null,
-    lender,
-    loanCode: clean(input.loanCode),
-    amount: String(amount),
-    installments: Math.max(1, Math.trunc(num(input.installments)) || 1),
-    firstDueDate: Number.isFinite(firstDueMs) ? new Date(firstDueMs) : null,
-    status: 'ACTIVE',
-    note: clean(input.note),
-  });
-
-  revalidateStudent(input.studentId);
-  return { ok: true };
+  const user = await getSessionUser();
+  try {
+    return await db.transaction(async (tx) => {
+      const [ins] = await tx.insert(student_loans).values({
+        studentId: input.studentId,
+        termId: input.termId,
+        loanProductId: input.loanProductId || null,
+        lender,
+        loanCode: clean(input.loanCode),
+        amount: String(amount),
+        installments: Math.max(1, Math.trunc(num(input.installments)) || 1),
+        firstDueDate: Number.isFinite(firstDueMs) ? new Date(firstDueMs) : null,
+        status: 'ACTIVE',
+        note: clean(input.note),
+      }).returning({ id: student_loans.id });
+      await appendAudit(tx, {
+        actorUserId: user?.id ?? null,
+        action: 'FINANCE_LOAN_ADDED',
+        entityType: 'student_loans',
+        entityId: ins.id,
+        details: JSON.stringify({ studentId: input.studentId, lender, amount, installments: num(input.installments) }),
+      });
+      return { ok: true };
+    });
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'خطا در ثبت وام' };
+  }
 }
 
 export async function setLoanStatusAction(
@@ -349,25 +506,59 @@ export async function setLoanStatusAction(
   await requireRole(FINANCE);
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
-  const [row] = await db.select().from(student_loans).where(eq(student_loans.id, id)).limit(1);
-  if (!row) return { ok: false, error: 'وام یافت نشد' };
+  const user = await getSessionUser();
 
-  if (row.status === 'SETTLED' || row.status === 'CANCELLED') return { ok: false, error: 'وام تسویه/ابطال‌شده قابل تغییر نیست.' };
-  const upd = await db.update(student_loans).set({ status })
-    .where(and(eq(student_loans.id, id), eq(student_loans.status, row.status)));
-  if (upd.rowCount !== 1) return { ok: false, error: 'تغییر همزمان: وضعیت وام توسط کاربر دیگری عوض شده است.' };
-  revalidateStudent(row.studentId);
-  return { ok: true };
+  try {
+    return await db.transaction(async (tx) => {
+      const [row] = await tx.select().from(student_loans).where(eq(student_loans.id, id)).limit(1);
+      if (!row) return { ok: false, error: 'وام یافت نشد' };
+      if (row.status === 'SETTLED' || row.status === 'CANCELLED') return { ok: false, error: 'وام تسویه/ابطال‌شده قابل تغییر نیست.' };
+
+      const upd = await tx.update(student_loans).set({ status })
+        .where(and(eq(student_loans.id, id), eq(student_loans.status, row.status)));
+      if (upd.rowCount !== 1) return { ok: false, error: 'تغییر همزمان: وضعیت وام توسط کاربر دیگری عوض شده است.' };
+
+      await appendAudit(tx, {
+        actorUserId: user?.id ?? null,
+        action: `FINANCE_LOAN_${status}`,
+        entityType: 'student_loans',
+        entityId: id,
+        details: JSON.stringify({ studentId: row.studentId, from: row.status }),
+      });
+      revalidateStudent(row.studentId);
+      return { ok: true };
+    });
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'خطا در تغییر وضعیت وام' };
+  }
 }
 
 export async function deleteLoanAction(id: number): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
-  const [row] = await db.select().from(student_loans).where(eq(student_loans.id, id)).limit(1);
-  await db.delete(student_loans).where(eq(student_loans.id, id));
-  if (row) revalidateStudent(row.studentId);
-  return { ok: true };
+  const user = await getSessionUser();
+
+  try {
+    return await db.transaction(async (tx) => {
+      const [row] = await tx.select().from(student_loans).where(eq(student_loans.id, id)).limit(1);
+      if (!row) return { ok: false, error: 'وام یافت نشد' };
+      if (row.status === 'SETTLED') return { ok: false, error: 'وام تسویه‌شده حذف نمی‌شود (سابقهٔ مالی است).' };
+
+      await tx.delete(student_loans).where(eq(student_loans.id, id));
+      await appendAudit(tx, {
+        actorUserId: user?.id ?? null,
+        action: 'FINANCE_LOAN_DELETED',
+        entityType: 'student_loans',
+        entityId: id,
+        details: JSON.stringify({ studentId: row.studentId, wasStatus: row.status }),
+      });
+      revalidateStudent(row.studentId);
+      return { ok: true };
+    });
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'خطا در حذف وام' };
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -385,21 +576,33 @@ export async function recordLedgerAction(input: {
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
 
-  const amount = Math.round(num(input.amount));
-  if (amount <= 0) return { ok: false, error: 'مبلغ باید بزرگ‌تر از صفر باشد' };
+  const amount = safeRials(input.amount);
+  if (amount === null || amount <= 0) return { ok: false, error: 'مبلغ باید عدد صحیح و بزرگ‌تر از صفر باشد' };
   const sc = await requireStudentScope(input.studentId);
   if (!sc.ok) return { ok: false, error: sc.error };
 
-  await db.insert(student_ledger).values({
-    studentId: input.studentId,
-    termId: input.termId,
-    transactionType: input.transactionType,
-    amount: String(amount),
-    description: clean(input.description) || (input.transactionType === 'PAYMENT' ? 'پرداخت شهریه' : 'شارژ شهریه'),
-  });
-
-  revalidateStudent(input.studentId);
-  return { ok: true };
+  const user = await getSessionUser();
+  try {
+    return await db.transaction(async (tx) => {
+      const [ins] = await tx.insert(student_ledger).values({
+        studentId: input.studentId,
+        termId: input.termId,
+        transactionType: input.transactionType,
+        amount: String(amount),
+        description: clean(input.description) || (input.transactionType === 'PAYMENT' ? 'پرداخت شهریه' : 'شارژ شهریه'),
+      }).returning({ id: student_ledger.id });
+      await appendAudit(tx, {
+        actorUserId: user?.id ?? null,
+        action: `FINANCE_LEDGER_${input.transactionType}`,
+        entityType: 'student_ledger',
+        entityId: ins.id,
+        details: JSON.stringify({ studentId: input.studentId, amount, termId: input.termId }),
+      });
+      return { ok: true };
+    });
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'خطا در ثبت تراکنش مالی' };
+  }
 }
 
 /** ثبت شهریهٔ یک ترم بر اساس فرمول تخصیصِ منطبق بر دانشجو */
@@ -416,19 +619,35 @@ export async function chargeByFormulaAction(input: {
 
   const calc = await computeFormulaTuition(input.studentId, input.termId);
   if (!calc.formula) return { ok: false, error: 'هیچ فرمول تخصیصی با مقطع/رشته/ورودی این دانشجو نمی‌خواند' };
+  const formula = calc.formula; // برای انتقال غیر-null به بسته‌های (closure) تراکنش
   if (calc.total <= 0) return { ok: false, error: 'مبلغ محاسبه‌شده صفر است' };
 
-  await db.insert(student_ledger).values({
-    studentId: input.studentId,
-    termId: input.termId,
-    transactionType: 'TUITION_CHARGE',
-    amount: String(calc.total),
-    description: `شهریه بر اساس فرمول «${calc.formula.title}»`,
-    referenceId: calc.formula.id,
-  });
+  const amount = safeRials(calc.total);
+  if (amount === null || amount <= 0) return { ok: false, error: 'مبلغ محاسبه‌شده نامعتبر است' };
 
-  revalidateStudent(input.studentId);
-  return { ok: true, amount: calc.total };
+  const user = await getSessionUser();
+  try {
+    return await db.transaction(async (tx) => {
+      const [ins] = await tx.insert(student_ledger).values({
+        studentId: input.studentId,
+        termId: input.termId,
+        transactionType: 'TUITION_CHARGE',
+        amount: String(amount),
+        description: `شهریه بر اساس فرمول «${formula.title}»`,
+        referenceId: formula.id,
+      }).returning({ id: student_ledger.id });
+      await appendAudit(tx, {
+        actorUserId: user?.id ?? null,
+        action: 'FINANCE_TUITION_CHARGED',
+        entityType: 'student_ledger',
+        entityId: ins.id,
+        details: JSON.stringify({ studentId: input.studentId, amount, formulaId: formula.id, termId: input.termId }),
+      });
+      return { ok: true, amount };
+    });
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'خطا در شارژ شهریه' };
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -456,12 +675,19 @@ export async function saveDiscountTypeAction(input: {
   const title = clean(input.title);
   if (!code || !title) return { ok: false, error: 'کد و عنوان الزامی است' };
 
+  let defaultAmount: string;
+  try {
+    defaultAmount = money(input.defaultAmount);
+  } catch (e: any) {
+    return { ok: false, error: e?.message };
+  }
+
   const values = {
     code,
     title,
     kind: input.kind === 'FIXED' ? 'FIXED' : 'PERCENT',
     defaultPercent: String(Math.min(Math.max(0, num(input.defaultPercent)), 100)),
-    defaultAmount: money(input.defaultAmount),
+    defaultAmount,
     maxPercent: input.maxPercent === null ? null : String(Math.max(0, num(input.maxPercent))),
     requiresApproval: input.requiresApproval ? 1 : 0,
     requiresDocument: input.requiresDocument ? 1 : 0,
@@ -571,6 +797,16 @@ export async function saveFormulaAction(input: {
     return { ok: false, error: 'آغاز بازهٔ ورودی نمی‌تواند پس از پایان آن باشد' };
   }
 
+  let fixedAmount: string, perUnitTheory: string, perUnitPractical: string, perUnitGeneral: string;
+  try {
+    fixedAmount = money(input.fixedAmount);
+    perUnitTheory = money(input.perUnitTheory);
+    perUnitPractical = money(input.perUnitPractical);
+    perUnitGeneral = money(input.perUnitGeneral);
+  } catch (e: any) {
+    return { ok: false, error: e?.message };
+  }
+
   const values = {
     code,
     title,
@@ -578,10 +814,10 @@ export async function saveFormulaAction(input: {
     majorId: intOrNull(input.majorId),
     entryYearFrom: from,
     entryYearTo: to,
-    fixedAmount: money(input.fixedAmount),
-    perUnitTheory: money(input.perUnitTheory),
-    perUnitPractical: money(input.perUnitPractical),
-    perUnitGeneral: money(input.perUnitGeneral),
+    fixedAmount,
+    perUnitTheory,
+    perUnitPractical,
+    perUnitGeneral,
     priority: Math.trunc(num(input.priority)) || 100,
     isActive: input.isActive ? 1 : 0,
     note: clean(input.note),
@@ -607,6 +843,11 @@ export async function deleteFormulaAction(id: number): Promise<{ ok: boolean; er
   return { ok: true };
 }
 
+
+// ══════════════════════════════════════════════════════════════════════
+//  نهاد وام (Loan Product) — بازیابی‌شده از نسخهٔ پیشین + سخت‌گیری مبلغ
+// ══════════════════════════════════════════════════════════════════════
+
 export async function saveLoanProductAction(input: {
   id?: number;
   code: string;
@@ -630,12 +871,19 @@ export async function saveLoanProductAction(input: {
   if (!code || !title) return { ok: false, error: 'کد و عنوان الزامی است' };
   if (!lender) return { ok: false, error: 'نام نهاد پرداخت‌کننده الزامی است' };
 
-  const maxAmount = input.maxAmount === null ? null : Math.round(Math.max(0, num(input.maxAmount)));
-  const defaultAmount = Math.round(Math.max(0, num(input.defaultAmount)));
+  let maxAmount: number | null = null;
+  let defaultAmount = 0;
+  try {
+    maxAmount = input.maxAmount === null ? null : Number(money(input.maxAmount));
+    defaultAmount = Number(money(input.defaultAmount));
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'مبلغ نامعتبر است' };
+  }
   if (maxAmount !== null && defaultAmount > maxAmount) {
     return { ok: false, error: 'مبلغ پیش‌فرض نمی‌تواند از سقف مجاز بیشتر باشد' };
   }
 
+  const user = await getSessionUser();
   const values = {
     code,
     title,
@@ -649,12 +897,25 @@ export async function saveLoanProductAction(input: {
     note: clean(input.note),
   };
 
-  if (input.id) {
-    await db.update(loan_products).set(values).where(eq(loan_products.id, input.id));
-  } else {
-    await db.insert(loan_products).values(values);
+  try {
+    await db.transaction(async (tx) => {
+      if (input.id) {
+        const upd = await tx.update(loan_products).set(values).where(eq(loan_products.id, input.id));
+        if (upd.rowCount !== 1) throw new Error('نهاد وام یافت نشد یا ویرایش همزمانی دارد');
+      } else {
+        const [ins] = await tx.insert(loan_products).values(values).returning({ id: loan_products.id });
+        await appendAudit(tx, {
+          actorUserId: user?.id ?? null,
+          action: 'FINANCE_LOAN_PRODUCT_CREATED',
+          entityType: 'loan_products',
+          entityId: ins.id,
+          details: JSON.stringify({ code, maxAmount, defaultAmount }),
+        });
+      }
+    });
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'خطا در ذخیرهٔ نهاد وام' };
   }
-
   revalidatePath('/admin/finance/rules');
   return { ok: true };
 }
@@ -663,11 +924,27 @@ export async function deleteLoanProductAction(id: number): Promise<{ ok: boolean
   await requireRole(FINANCE);
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
+
   const used = await db.select({ id: student_loans.id }).from(student_loans)
     .where(eq(student_loans.loanProductId, id)).limit(1);
   if (used.length) return { ok: false, error: 'این نوع وام به دانشجو تخصیص یافته؛ به‌جای حذف، غیرفعالش کنید' };
 
-  await db.delete(loan_products).where(eq(loan_products.id, id));
+  const user = await getSessionUser();
+  try {
+    await db.transaction(async (tx) => {
+      const del = await tx.delete(loan_products).where(eq(loan_products.id, id));
+      if (del.rowCount !== 1) throw new Error('نهاد وام یافت نشد');
+      await appendAudit(tx, {
+        actorUserId: user?.id ?? null,
+        action: 'FINANCE_LOAN_PRODUCT_DELETED',
+        entityType: 'loan_products',
+        entityId: id,
+        details: JSON.stringify({}),
+      });
+    });
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'خطا در حذف نهاد وام' };
+  }
   revalidatePath('/admin/finance/rules');
   return { ok: true };
 }

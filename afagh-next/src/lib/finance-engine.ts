@@ -10,6 +10,7 @@ import {
 import { computeTermTuition } from './tuition-engine';
 import { getSetting } from './settings';
 import { notifyUserMultichannel } from './messaging';
+import { appendAudit } from './audit';
 import {
   bucketCourseUnits, buildTranscript, buildChequeReminderText,
   chequeNeedsReminder, computeTermAdjustments,
@@ -594,6 +595,13 @@ export async function clearCheque(chequeId: number): Promise<{ ok: boolean; reas
       if (upd.rowCount !== 1) {
         throw new Error('وضعیت چک در همین لحظه تغییر کرده است؛ صبر کنید و دوباره تلاش کنید.');
       }
+      // 🔒 حسابرسی غیرقابل‌انکار: وصول چک + ثبت دفتر + زنجیرهٔ audit — یک تراکنش
+      await appendAudit(tx, {
+        action: 'FINANCE_CHEQUE_CLEARED',
+        entityType: 'payment_cheques',
+        entityId: chequeId,
+        details: JSON.stringify({ studentId: cheque.studentId, ledgerTxnId: ins.id, amount: cheque.amount }),
+      });
       return { ok: true };
     });
   } catch (err: any) {
