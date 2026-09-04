@@ -13,6 +13,7 @@ import {
   toMinutes, validateGroupDrafts, type Shift,
   detectScheduleConflicts, hasHardConflicts, sessionDatesFor,
   type ScheduleConflictInput, type RoomCapacityInfo,
+  computeSessionDates, detectHardConflicts, jalaliDateOf, parseJalaliDate,
 } from '../src/lib/scheduling-core.ts';
 
 let pass = 0;
@@ -234,6 +235,71 @@ eq('اولین جلسهٔ ODD = هفتهٔ ۱', odd[0].date.toISOString().slice(
 
 // روز نامعتبر
 eq('روز خارج از ۱..۶ → خالی', sessionDatesFor(start, 9, 'ALL', 16), []);
+
+console.log('\n۷) قیود سخت V2 (استاد+دوم، سالن، ظرفیت)');
+{
+  const row = (over: Partial<Parameters<typeof detectHardConflicts>[0][number]>) => ({
+    offeringId: 1, groupNumber: 1, courseCode: 'C1', professorIds: [10], roomId: 100,
+    dayOfWeek: 2, startMinutes: 8 * 60, endMinutes: 9 * 60 + 30,
+    enrolledCount: 30, capacity: 40, ...over,
+  });
+  eq('بدون تداخل → خالی', detectHardConflicts([row({}), row({ offeringId: 2, courseCode: 'C2', professorIds: [11], roomId: 101, dayOfWeek: 3 })]).length, 0);
+  eq('استاد مشترک هم‌زمان → PROFESSOR_OVERLAP',
+    detectHardConflicts([row({}), row({ offeringId: 2, courseCode: 'C2', professorIds: [10], roomId: 101 })])[0].kind,
+    'PROFESSOR_OVERLAP');
+  eq('استاد دوم (Co-Teaching) هم‌زمان → تداخل',
+    detectHardConflicts([row({ professorIds: [10, 12] }), row({ offeringId: 2, courseCode: 'C2', professorIds: [12], roomId: 101 })])[0].kind,
+    'PROFESSOR_OVERLAP');
+  eq('استاد مشترک در روزهای مختلف → بدون تداخل',
+    detectHardConflicts([row({}), row({ offeringId: 2, courseCode: 'C2', professorIds: [10], roomId: 101, dayOfWeek: 4 })]).length, 0);
+  const roomConf = detectHardConflicts([row({}), row({ offeringId: 2, courseCode: 'C2', professorIds: [11], roomId: 100, startMinutes: 9 * 60, endMinutes: 10 * 60 })]);
+  eq('سالن مشترک هم‌زمان → ROOM_OVERLAP', roomConf[0].kind, 'ROOM_OVERLAP');
+  eq('سالن مشترک غیرهم‌زمان → بدون تداخل',
+    detectHardConflicts([row({}), row({ offeringId: 2, courseCode: 'C2', professorIds: [11], roomId: 100, startMinutes: 10 * 60, endMinutes: 11 * 60 })]).length, 0);
+  const cap = detectHardConflicts([row({ enrolledCount: 45, capacity: 40 })]);
+  eq('ظرفیت ۴۰ < ثبت‌نام ۴۵ → CAPACITY_OVERFLOW', cap[0].kind, 'CAPACITY_OVERFLOW');
+  eq('ظرفیت نامشخص (۰) → بدون خطای کاذب', detectHardConflicts([row({ capacity: 0, enrolledCount: 100 })]).length, 0);
+  const multi = detectHardConflicts([
+    row({}), row({ offeringId: 2, courseCode: 'C2', professorIds: [10], roomId: 100 }),
+    row({ offeringId: 3, courseCode: 'C3', professorIds: [11], roomId: 100, startMinutes: 8 * 60, endMinutes: 9 * 60 }),
+  ]);
+  // A↔B: استاد + سالن (۲) · A↔C: سالن (۱) · B↔C: سالن (۱) = ۴
+  eq('هم‌زمانی سه‌گانه → ۴ تداخل (۲ استاد + ۴ سالن؟ درست: ۴)', multi.length, 4);
+}
+
+console.log('\n۸) مولد تاریخ جلسات (شمسی، زوج/فرد، تعطیلات)');
+{
+  // شنبه ۱۴۰۵/۰۶/۲۹ = 2026-09-20 (بررسی با خود کتابخانه: سازگاری رفت‌وبرگشت)
+  const [parse1, parse2] = [parseJalaliDate('1405/06/29'), parseJalaliDate('1405/01/01')];
+  eq('برگشت شمسی ۱۴۰۵/۰۶/۲۹', jalaliDateOf(parse1), '1405/06/29');
+  eq('برگشت شمسی ۱۴۰۵/۰۱/۰۱', jalaliDateOf(parse2), '1405/01/01');
+  throws('قالب غلط تاریخ', () => parseJalaliDate('۱۴۰۵/۰۶/۲۹'), 'قالب');
+
+  // ۱۴۰۵/۰۶/۲۹ = یکشنبه (2026-09-20) → اولین شنبه = ۱۴۰۵/۰۷/۰۴
+  const start = parseJalaliDate('1405/06/29');
+  const all = computeSessionDates({ termStart: start, dayOfWeek: 1, sessionsCount: 16 });
+  eq('۱۶ جلسهٔ هفتگی شنبه', all.length, 16);
+  eq('جلسهٔ اول: نخستین شنبه بعد از شروع', all[0].jalaliDate, '1405/07/04');
+  eq('جلسهٔ دوم: ۷ روز بعد', all[1].jalaliDate, '1405/07/11');
+  eq('شمارهٔ جلسات متوالی', all.map(s => s.sessionNo).join(','), Array.from({ length: 16 }, (_, i) => i + 1).join(','));
+  eq('جلسهٔ چهارم: سه شنبه هفتهٔ بعد (۱۴۰۵/۰۷/۲۵)', all[3].jalaliDate, '1405/07/25');
+
+  const holiday = computeSessionDates({ termStart: start, dayOfWeek: 1, sessionsCount: 8, holidays: ['1405/07/11'] });
+  eq('تعطیل رسمی → پرش و ۸ جلسه', holiday.length, 8);
+  eq('جلسهٔ پرش‌شده حذف و جلسهٔ بعد جایگزین', holiday[1].jalaliDate, '1405/07/18');
+
+  const even = computeSessionDates({ termStart: start, dayOfWeek: 1, sessionsCount: 4, recurrence: 'EVEN' });
+  eq('هفتهٔ زوج: ۰۷/۱۱ (هفتهٔ دوم)', even[0].jalaliDate, '1405/07/11');
+  const odd = computeSessionDates({ termStart: start, dayOfWeek: 1, sessionsCount: 4, recurrence: 'ODD' });
+  eq('هفتهٔ فرد: ۰۷/۰۴ (هفتهٔ اول)', odd[0].jalaliDate, '1405/07/04');
+  throws('روز صفر', () => computeSessionDates({ termStart: start, dayOfWeek: 0, sessionsCount: 4 }), 'روز');
+  throws('روز هفت', () => computeSessionDates({ termStart: start, dayOfWeek: 7, sessionsCount: 4 }), 'روز');
+  throws('جلسات ۷۰', () => computeSessionDates({ termStart: start, dayOfWeek: 1, sessionsCount: 70 }), 'تعداد جلسات');
+
+  // چهارشنبه (روز ۵): ۱۴۰۵/۰۶/۲۹ یکشنبه → اولین چهارشنبه = ۱۴۰۵/۰۷/۰۱
+  const wed = computeSessionDates({ termStart: start, dayOfWeek: 5, sessionsCount: 3 });
+  eq('اولین چهارشنبهٔ بعد از شروع (۱۴۰۵/۰۷/۰۱)', wed[0].jalaliDate, '1405/07/01');
+}
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);
