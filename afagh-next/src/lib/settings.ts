@@ -113,6 +113,7 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'GRAD_STAMP_FEE', env: 'GRAD_STAMP_FEE', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'هزینهٔ تمبر ابطال (ریال)', type: 'number', default: '0', help: 'صفر یعنی این گام حذف می‌شود' },
   { key: 'GRAD_SERIAL_PREFIX', env: 'GRAD_SERIAL_PREFIX', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'پیشوند شمارهٔ سریال مدرک', type: 'text', default: 'AF' },
   { key: 'GRAD_CRON_SECRET', env: 'GRAD_CRON_SECRET', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'کلید فراخوانی پویش زمان‌بندی‌شده', type: 'secret', default: '', help: 'هدر x-cron-secret برای POST /api/cron/graduation-scan' },
+  { key: 'BI_CRON_SECRET', env: 'BI_CRON_SECRET', group: 'فراغت‌التحصیلی و صدور مدارک', label: 'کلید فراخوانی تازه‌سازی BI', type: 'secret', default: '', help: 'مستقل از GRAD_CRON_SECRET (M-3): هدر x-cron-secret برای POST /api/cron/bi-refresh' },
   { key: 'ALUMNI_FEE_TRANSCRIPT', env: 'ALUMNI_FEE_TRANSCRIPT', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'هزینهٔ ریزنمرات رسمی (ریال)', type: 'number', default: '0' },
   { key: 'ALUMNI_FEE_RELEASE', env: 'ALUMNI_FEE_RELEASE', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'هزینهٔ آزادسازی مدرک (ریال)', type: 'number', default: '0' },
   { key: 'ALUMNI_FEE_TRANSLATION', env: 'ALUMNI_FEE_TRANSLATION', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'هزینهٔ تأییدیه برای دارالترجمه (ریال)', type: 'number', default: '0' },

@@ -4,7 +4,7 @@
 //  SQLite→PG مستقیم باشد. لایهٔ سخت‌سازی (ایندکس/پارتیشن/RLS — سند §۲۰۹۳–۲۲۴۰)
 //  → src/db/pg-hardening.sql
 // ══════════════════════════════════════════════════════════════════════
-import { pgTable, serial, integer, varchar, text, timestamp, date, time, numeric, jsonb, unique, primaryKey, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, serial, integer, varchar, text, timestamp, date, time, numeric, jsonb, unique, primaryKey, index, type AnyPgColumn } from 'drizzle-orm/pg-core';
 
 export const roles = pgTable('roles', {
   id: serial('id').primaryKey(),
@@ -58,7 +58,11 @@ export const sessions = pgTable('sessions', {
   token: varchar('token', { length: 64 }).primaryKey(),
   userId: integer('userId').notNull().references(() => users.id),
   expiresAt: timestamp('expiresAt').notNull()
-});
+}, (t) => ({
+  // M-4: پاکسازی نشست‌های منقضی (WHERE expiresAt) و چرخش per-user (WHERE userId ORDER BY expiresAt)
+  sessionsUserIdIdx: index('sessions_userId_idx').on(t.userId),
+  sessionsExpiresAtIdx: index('sessions_expiresAt_idx').on(t.expiresAt),
+}));
 
 export const degree_level_configs = pgTable('degree_level_configs', {
   id: serial('id').primaryKey(),

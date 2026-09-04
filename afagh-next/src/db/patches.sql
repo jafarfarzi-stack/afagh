@@ -110,3 +110,7 @@ BEGIN
     END IF;
   END IF;
 END $$;
+
+-- M-4: ایندکس‌های پاکسازی/چرخش نشست‌ها (در drizzle push برای نصب‌های قدیمی ساخته نمی‌شود)
+CREATE INDEX IF NOT EXISTS "sessions_userId_idx" ON sessions ("userId");
+CREATE INDEX IF NOT EXISTS "sessions_expiresAt_idx" ON sessions ("expiresAt");

@@ -2,9 +2,10 @@ import { createHash, randomBytes, scrypt as _scrypt, timingSafeEqual } from 'cry
 import { promisify } from 'util';
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { and, eq, gt } from 'drizzle-orm';
+import { and, asc, eq, gt, lt, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { ensureBaseReferenceData } from '@/lib/base-data';
+import { clientIp, rateLimit } from '@/lib/rateLimit';
 import {
   degree_level_configs,
   educational_regulations,
@@ -229,7 +230,16 @@ async function ensureDemoUser(nc: string) {
   return created ?? null;
 }
 
+/** حداکثر نشست فعال همزمان برای هر کاربر — قدیمی‌ترین‌ها حذف می‌شوند (M-4) */
+const MAX_SESSIONS_PER_USER = 8;
+
 export async function login(nationalCode: string, password: string): Promise<{ ok: boolean; error?: string; mustChange?: boolean }> {
+  // ── M-1: محدودیت تلاش ورود (۵ تلاش / ۱۰ دقیقه به ازای هر IP) ──
+  const rl = await rateLimit(`login:${clientIp()}`, 5, 10 * 60);
+  if (!rl.ok) {
+    return { ok: false, error: `تلاش‌های ورود بیش از حد مجاز شد. ${Math.ceil(rl.retryAfterSec / 60)} دقیقهٔ دیگر دوباره تلاش کنید.` };
+  }
+
   const clean = nationalCode.trim();
   let [u] = await db.select().from(users).where(eq(users.nationalCode, clean)).limit(1);
   if (!u) {
@@ -248,6 +258,28 @@ export async function login(nationalCode: string, password: string): Promise<{ o
   if (!u || !u.isActive) return { ok: false, error: 'کاربر یافت نشد.' };
   if (!(await verifyPassword(password, u.passwordHash))) return { ok: false, error: 'رمز نادرست است.' };
   const token = randomBytes(32).toString('hex');
+
+  // ── M-4: پاکسازی و چرخش نشست‌ها ──
+  //  ۱) حذف نشست‌های منقضی (هر ورود یک پاکسازی سبک)
+  //  ۲) سقف نشست فعال هر کاربر — قدیمی‌ترین‌ها حذف می‌شوند (چرخش)
+  await db.delete(sessions).where(lt(sessions.expiresAt, new Date()));
+  const [activeCnt] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(sessions)
+    .where(eq(sessions.userId, u.id));
+  const active = activeCnt?.c ?? 0;
+  if (active >= MAX_SESSIONS_PER_USER) {
+    const oldSessions = await db
+      .select({ token: sessions.token })
+      .from(sessions)
+      .where(eq(sessions.userId, u.id))
+      .orderBy(asc(sessions.expiresAt))
+      .limit(active - MAX_SESSIONS_PER_USER + 1); // حداقل یکی، تا جایی برای نشست جدید باز شود
+    for (const s of oldSessions) {
+      await db.delete(sessions).where(eq(sessions.token, s.token)).catch(() => {});
+    }
+  }
+
   await db.insert(sessions).values({ token, userId: u.id, expiresAt: new Date(Date.now() + SESSION_MAX_AGE * 1000) });
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, token, await sessionCookieOptions());

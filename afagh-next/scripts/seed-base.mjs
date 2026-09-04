@@ -19,8 +19,14 @@
  * ══════════════════════════════════════════════════════════════════
  */
 import pg from 'pg';
+import { createRequire } from 'node:module';
 
 const { Pool } = pg;
+// برای import داینامیک ماژول‌های node در انتهای اسکریپت (بخش secrets)
+const nodeRequire = createRequire(import.meta.url);
+const fs = nodeRequire('node:fs');
+const path = nodeRequire('node:path');
+const crypto = nodeRequire('node:crypto');
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgres://afagh:afagh@localhost:5432/afagh_db',
   max: 5,
@@ -131,6 +137,52 @@ try {
     }
   }
   console.log(`  ✓ دانشکده/گروه/رشته (${STRUCTURE.length} دانشکده)`);
+
+  // ═══ M-2: تضمین کلیدهای محرمانهٔ پویش‌های زمان‌بندی‌شده ═══
+  // بدون این، scheduler هیچ پویشی را فراخوانی نمی‌کرد (خاموشی بی‌صدا):
+  //   FINANCE_CRON_SECRET → یادآوری چک
+  //   GRAD_CRON_SECRET    → فارغ‌التحصیلی + BI + گردش کار
+  // رفتار:
+  //   • DB منبع حقیقت برای اپ است (getSetting اول DB را می‌خواند)؛
+  //   • scheduler از فایل secrets.env در volume مشترک می‌خواند؛
+  //   • این دو همیشه با هم همگام می‌شوند تا هر دو طرف یک کلید را ببینند.
+  //   • اگر env ست شده → همان در DB ثبت می‌شود؛ اگر هیچ‌کس ست نکرده →
+  //     یک کلید تصادفی ۴۸-کاراکتری تولید و در DB + فایل ثبت می‌شود.
+  try {
+    const CRON_SECRETS = [
+      { key: 'FINANCE_CRON_SECRET', env: process.env.FINANCE_CRON_SECRET }, // یادآوری چک
+      { key: 'GRAD_CRON_SECRET', env: process.env.GRAD_CRON_SECRET },       // فارغ‌التحصیلی + گردش کار
+      { key: 'BI_CRON_SECRET', env: process.env.BI_CRON_SECRET },           // تازه‌سازی BI (M-3: مستقل از GRAD)
+    ];
+    const secretsDir = '/secrets';
+    const secretsFile = path.join(secretsDir, 'cron.env');
+    const writeable = fs.existsSync(secretsDir) ? secretsFile : null;
+
+    const outLines = [];
+    let prevValue = ''; // برای همارز اولیهٔ BI (سازگاری با نصب‌های قدیمی)
+    for (const { key, env } of CRON_SECRETS) {
+      const [row] = await q(`SELECT value FROM system_settings WHERE key = $1`, [key]);
+      let value = (row?.value || '').trim();
+      const envVal = (env || '').trim();
+      if (!value && envVal) value = envVal;
+      if (!value) value = key === 'BI_CRON_SECRET' && prevValue ? prevValue : crypto.randomBytes(24).toString('hex');
+      await q(
+        `INSERT INTO system_settings (key, value) VALUES ($1,$2)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+        [key, value],
+      );
+      if (writeable) outLines.push(`${key}=${value}`);
+      console.log(`  ✓ ${key} ${envVal ? '(از ENV)' : '(تصادفی جدید — در DB و فایل secrets ثبت شد)'}`);
+      prevValue = value;
+    }
+    if (writeable) {
+      fs.writeFileSync(secretsFile, outLines.join('\n') + '\n', { mode: 0o600 });
+      console.log(`  ✓ فایل کلیدها برای scheduler: ${secretsFile}`);
+    }
+  } catch (err) {
+    // شکست در secrets نباید نصب را متوقف کند؛ فقط هشدار واضح
+    console.error('⚠️  هشدار (ساخت کلیدهای پویش):', err.message);
+  }
 
   console.log('\n🎉 دادهٔ پایه آماده است — اکنون با حساب دمو (مثلاً 1010101010) دوباره وارد شوید؛ پروندهٔ دانشجویی خودکار ساخته می‌شود.');
 } catch (err) {

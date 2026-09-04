@@ -1,5 +1,19 @@
 import React from 'react';
 import Link from 'next/link';
+import { headers } from 'next/headers';
+import { rateLimit } from '@/lib/rateLimit';
+
+// 🔒 M-1: سقف استعلام اصالت از هر IP (ضد شمارش/بروت‌فورس کدهای رهگیری)
+async function verifyQuota(): Promise<boolean> {
+  try {
+    const h = await headers();
+    const ip = (h.get('x-forwarded-for') || '').split(',')[0]?.trim() || h.get('x-real-ip') || 'local';
+    const r = await rateLimit(`verify-page:${ip}`, 15, 10 * 60);
+    return r.ok;
+  } catch {
+    return true;
+  }
+}
 
 // شبیه‌سازی واکشی اطلاعات از دیتابیس بر اساس کد رهگیری (یا کوئری مستقیم به جداول Drizzle)
 async function getCertificateDetails(code: string) {
@@ -95,6 +109,22 @@ export default async function VerifyCertificatePage({
   params: { code: string };
 }) {
   const code = params.code;
+
+  // 🔒 M-1: در صورت عبور از سقف استعلام، به‌جای داده، پیام محدودیت نمایش داده می‌شود
+  // (اطلاعات ظاهری «یافت نشد» با محدودیت فرق دارد تا مهاجم تشخیص ندهد)
+  if (!(await verifyQuota())) {
+    return (
+      <div className="min-h-screen bg-slate-100 font-sans flex flex-col items-center py-10 px-4" dir="rtl">
+        <div className="bg-white p-8 rounded-3xl shadow-xl border-t-4 border-amber-500 text-center space-y-3 max-w-lg">
+          <p className="text-4xl">⏳</p>
+          <h1 className="text-lg font-black text-slate-900">تعداد استعلام‌ها بیش از حد مجاز شد</h1>
+          <p className="text-xs text-slate-500 font-bold">چند دقیقهٔ دیگر دوباره تلاش کنید.</p>
+          <Link href="/" className="inline-block mt-2 text-xs font-bold text-indigo-700 underline">بازگشت به صفحهٔ اصلی</Link>
+        </div>
+      </div>
+    );
+  }
+
   const certDetails = await getCertificateDetails(code);
 
   return (

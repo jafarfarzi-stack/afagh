@@ -170,6 +170,9 @@ services:
     restart: "no"
     logging: *default-logging
     environment: *app-env
+    volumes:
+      # M-2: کلیدهای پویش‌ها (cron.env) برای scheduler تولید و به اشتراک گذاشته می‌شود
+      - afagh_cron_secrets:/secrets
     depends_on:
       postgres:
         condition: service_healthy
@@ -208,11 +211,14 @@ services:
     logging: *default-logging
     volumes:
       - ./deploy/scheduler.sh:/scheduler.sh:ro
+      # M-2: کلیدهای تولیدشده توسط migrator (seed-base) — ENV روی آن مقدم است
+      - afagh_cron_secrets:/secrets:ro
     entrypoint: ["sh", "/scheduler.sh"]
     environment:
       APP_URL: http://app:8080
       FINANCE_CRON_SECRET: ${FINANCE_CRON_SECRET:-}
       GRAD_CRON_SECRET: ${GRAD_CRON_SECRET:-}
+      BI_CRON_SECRET: ${BI_CRON_SECRET:-}
       # فاصلهٔ پویش‌ها به دقیقه — همه از ENV، هیچ‌کدام در کد سخت‌کد نیست
       SCHEDULER_TICK_SECONDS: ${SCHEDULER_TICK_SECONDS:-60}
       CHEQUE_REMIND_INTERVAL_MIN: ${CHEQUE_REMIND_INTERVAL_MIN:-60}
@@ -227,3 +233,5 @@ volumes:
   afagh_pg:
   afagh_redis:
   afagh_minio:
+  # M-2: کلیدهای پویش‌های زمان‌بندی‌شده (تولید migrator، مصرف scheduler)
+  afagh_cron_secrets:

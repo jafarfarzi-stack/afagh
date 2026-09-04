@@ -20,6 +20,12 @@ set -u
 
 APP_URL="${APP_URL:-http://app:8080}"
 
+# M-2: کلیدهای محرمانه از volume مشترک (که seed-base هنگام نصب تولید می‌کند)
+# اگر ENV ست شده باشد، همان مقداری است که seed-base در DB ثبت کرده — همیشه هم‌ارزند.
+if [ -f /secrets/cron.env ]; then
+  . /secrets/cron.env
+fi
+
 # مقدار غیرعددی یا تهی → پیش‌فرض. بدون این محافظ، یک ENV اشتباه
 # حلقه را با خطای حساب می‌شکند و زمان‌بند بی‌صدا می‌میرد.
 num() {
@@ -37,6 +43,7 @@ WF_MIN="$(num "${WORKFLOW_EVENTS_INTERVAL_MIN:-60}" 60)"
 
 FINANCE_SECRET="${FINANCE_CRON_SECRET:-}"
 GRAD_SECRET="${GRAD_CRON_SECRET:-}"
+BI_SECRET="${BI_CRON_SECRET:-}"
 
 now_min() { echo $(( $(date +%s) / 60 )); }
 
@@ -68,7 +75,10 @@ if [ -z "$FINANCE_SECRET" ]; then
   echo "[scheduler] هشدار: FINANCE_CRON_SECRET خالی است — یادآوری چک ارسال نمی‌شود"
 fi
 if [ -z "$GRAD_SECRET" ]; then
-  echo "[scheduler] هشدار: GRAD_CRON_SECRET خالی است — پویش فارغ‌التحصیلی/BI/گردش کار اجرا نمی‌شود"
+  echo "[scheduler] هشدار: GRAD_CRON_SECRET خالی است — پویش فارغ‌التحصیلی/گردش کار اجرا نمی‌شود"
+fi
+if [ -z "$BI_SECRET" ]; then
+  echo "[scheduler] هشدار: BI_CRON_SECRET خالی است — تازه‌سازی گزارش‌های تحلیلی اجرا نمی‌شود"
 fi
 
 while :; do
@@ -85,7 +95,7 @@ while :; do
   fi
 
   if [ "$now" -ge "$next_bi" ]; then
-    call "/api/cron/bi-refresh" "$GRAD_SECRET"
+    call "/api/cron/bi-refresh" "$BI_SECRET"
     next_bi=$(( now + BI_MIN ))
   fi
 

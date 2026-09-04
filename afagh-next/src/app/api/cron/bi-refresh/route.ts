@@ -21,7 +21,9 @@ const log = createLogger({ mod: 'cron.bi-refresh' });
 export async function POST(req: NextRequest) {
   const _csrf = assertSameOrigin(req);
   if (_csrf) return _csrf;
-  const secret = (await getSetting('GRAD_CRON_SECRET')).trim();
+  // M-3: کلید مستقل BI؛ برای سازگاری با نصب‌های قدیمی، fallback به GRAD_CRON_SECRET
+  const [biSecret, gradSecret] = await Promise.all([getSetting('BI_CRON_SECRET'), getSetting('GRAD_CRON_SECRET')]);
+  const secret = (biSecret || gradSecret || '').trim();
   const provided = req.headers.get('x-cron-secret')?.trim() ?? '';
   let authorized = !!secret && provided === secret;
   if (!authorized) {
