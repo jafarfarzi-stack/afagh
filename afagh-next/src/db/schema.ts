@@ -93,7 +93,7 @@ export const majors = pgTable('majors', {
   name: varchar('name', { length: 150 }).notNull(),
   degreeLevelId: integer('degreeLevelId').notNull().references(() => degree_level_configs.id),
   departmentId: integer('departmentId').references(() => departments.id),
-  majorCode: varchar('majorCode', { length: 10 }),
+  majorCode: varchar('majorCode', { length: 10 }).unique(),  // 🔒 کلید ON CONFLICT سیّد — باید یکتا باشد (CI در این‌جا شکست می‌خورد)
   // ── فیلدهای تکمیلی از دیتابیس قدیمی/سازمان (فایل reshtelist) ──
   facultyId: integer('facultyId').references(() => faculties.id),      // کد دانشکده
   minUnits: integer('minUnits'),                                        // حداقل واحد
