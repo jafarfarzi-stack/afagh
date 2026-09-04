@@ -733,13 +733,27 @@ function solveDynamicScenarios(
   ];
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// فاز ۶ — دادهٔ اولیهٔ واقعی از سرور (D3). Mock های زیر فقط fallback اند
+// تا فاز ۷ این Client را به‌طور کامل به اکشن‌ها وصل کند.
+// ═══════════════════════════════════════════════════════════════════════
+export interface SchedulingInitialData {
+  terms: AcademicTerm[];
+  classrooms: ClassroomOption[];
+  professors: ProfessorOption[];
+  phases: { termId: number; phase: 'SUPPLY' | 'ALLOCATION' | 'REVIEW' | 'PUBLISHED' }[];
+}
+
 // ==========================================
 // MAIN COMPONENT
 // ==========================================
 
-export default function DepartmentPlanningClient() {
+export default function DepartmentPlanningClient(props: { initial?: SchedulingInitialData } = {}) {
+  const initial = props.initial;
+
   // Global Planning Context
-  const [selectedTermId, setSelectedTermId] = useState<number>(14051);
+  const [selectedTermId, setSelectedTermId] = useState<number>(initial?.terms?.find(t => t.isCurrent)?.id ?? initial?.terms?.[0]?.id ?? 14051);
+  const [terms, setTerms] = useState<AcademicTerm[]>(initial?.terms ?? INITIAL_TERMS);
   const [selectedProgramId, setSelectedProgramId] = useState<number>(1);
   const [selectedCohortId, setSelectedCohortId] = useState<string>('ALL');
   const [targetShiftPreference, setTargetShiftPreference] = useState<ProgramShiftType>('AFTERNOON_WORKING');
@@ -817,8 +831,8 @@ export default function DepartmentPlanningClient() {
   });
 
   // Core Data
-  const [classrooms, setClassrooms] = useState<ClassroomOption[]>(INITIAL_CLASSROOMS);
-  const [professors, setProfessors] = useState<ProfessorOption[]>(INITIAL_PROFESSORS);
+  const [classrooms, setClassrooms] = useState<ClassroomOption[]>(initial?.classrooms ?? INITIAL_CLASSROOMS);
+  const [professors, setProfessors] = useState<ProfessorOption[]>(initial?.professors ?? INITIAL_PROFESSORS);
   const [availabilities, setAvailabilities] = useState<ProfessorAvailabilityMap>(createDefaultAvailabilities);
   const [courseDemands, setCourseDemands] = useState<CourseDemand[]>(INITIAL_COURSE_DEMANDS);
 
@@ -1081,8 +1095,8 @@ export default function DepartmentPlanningClient() {
   }, [selectedProgramId]);
 
   const currentTerm = useMemo(() => {
-    return INITIAL_TERMS.find(t => t.id === selectedTermId) || INITIAL_TERMS[0];
-  }, [selectedTermId]);
+    return terms.find(t => t.id === selectedTermId) || terms[0];
+  }, [selectedTermId, terms]);
 
   const displayedScenarioOfferings = useMemo(() => {
     if (!currentScenario) return [];
@@ -1202,7 +1216,7 @@ export default function DepartmentPlanningClient() {
               onChange={e => setSelectedTermId(Number(e.target.value))}
               className="w-full bg-slate-900/90 text-white border border-indigo-400/50 rounded-lg px-2.5 py-2 font-bold focus:ring-2 focus:ring-amber-400"
             >
-              {INITIAL_TERMS.map(t => (
+              {terms.map(t => (
                 <option key={t.id} value={t.id}>{t.title}</option>
               ))}
             </select>

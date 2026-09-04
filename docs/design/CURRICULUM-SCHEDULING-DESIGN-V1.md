@@ -439,7 +439,7 @@ resolveApplicableCurriculum(student, term):
 | **۳ — Server Actions** | ✅ **انجام شد**: `src/app/admin/curriculum/actions.ts` با ۲۱ اکشن گارددار (۲ متدویه: الگوی D3) + `src/lib/curriculum-validator.ts` (هستهٔ واقعی ۶ چک — گیت تأیید بدون استاب) + `tests/curriculum-validator.test.ts` (۱۹ تست) | ~۹۵۰ خط |
 | **۴ — Validation Engine** | ✅ **انجام شد**: ۱۱ چک واقعی (۶ هسته + ۵ تکمیلی: SEMESTER_LOAD، COURSE_TYPES_COMPLETE، TRACK_INTEGRITY، EQUIVALENCY_DISJOINT، SEMESTER_UNASSIGNED) + سقف ترم سه‌لایه (نسخه←مقطع←۲۰) + مینیمم نقش‌ها (پایان‌نامه برای ارشد/دکتری) + ۳۶ تست | ~۶۵۰ + تست |
 | **۵ — اتصال Enroll/Graduation** | ✅ **انجام شد**: `src/lib/curriculum-apply.ts` (resolution DB-backed + پیام‌های صریح دلیل) + سیم‌کشی ۳ موتور (enroll/graduation/regulations) + فیلتر وضعیت در کوئری پیش‌بینی scheduling + `selectEffectiveRules` با رفع باگ null===null + ۱۰ تست فاز ۵ (۶۱ تست domain) | ~۲۵۰ خط |
-| **۶ — اتصال Scheduling** | سیم‌کشی `DepartmentPlanningClient` به `scheduling-engine` + `page.tsx` + تولید جلسهٔ واقعی + قیود سخت V2 در `scheduling-core` | ~۶۰۰ خط |
+| **۶ — اتصال Scheduling** | ✅ **انجام شد**: `src/app/admin/scheduling/actions.ts` (۴ اکشن گارددار: داشبورد، چک قیود، چرخهٔ فاز، تولید جلسات) + `src/lib/class-session-generator.ts` (تولید واقعی class_sessions — idempotent، هفتگی/زوج/فرد، تاریخ شمسی) + قیود سخت `detectScheduleConflicts` و `sessionDatesFor` در `scheduling-core` (۲۴ تست جدید) + سیم‌کشی `page.tsx` → `initial` به Client | ~۸۰۰ خط |
 | **۷ — Thin Client** | بازنویسی `CurriculumManagerClient` (خواندن از server actions + رندر `CheckResult[]`) — حفظ ظاهر | ~۴۰۰ خط |
 
 ---
