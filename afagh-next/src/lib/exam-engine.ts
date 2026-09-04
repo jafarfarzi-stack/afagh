@@ -2,8 +2,7 @@
  * ═══════════════════════════════════════════════════════════════════════════
  * موتور چرخهٔ امتحانات (Exam Workflow Engine) — نسخهٔ PostgreSQL/Drizzle
  *
- * زنجیرهٔ «تحویل و دادرسی اوراق امتحان» (Chain of Custody) که پیش‌تر فقط دموی
- * کلاینتی بود، این‌جا به‌صورت واقعی و سمت سرور پیاده می‌شود:
+ * زنجیرهٔ «تحویل و دادرسی اوراق امتحان» (Chain of Custody):
  *
  *   ① صدور حضور و غیاب      → issueExamAttendance      (از صندلی‌های تخصیصی)
  *   ② بررسی مراقب           → proctorClockIn / proctorVerifyAttendance
@@ -14,10 +13,13 @@
  *   ⑦ اعتراض                → openExamAppeal            (عکس‌برداری نمرهٔ قبلی)
  *   ⑧ پاسخ بر اساس بارم‌بندی → answerExamAppeal          (بازتصحیح + قواعد بارم)
  *
- *  اصول بارگذاری (همانند موتور حقوق):
- *   - کوئری‌های دسته‌ای (batch) — تعداد کوئری با تعداد ردیف رشد نمی‌کند؛
- *   - هر رویداد زنجیرهٔ هش ممیزی (audit-chain) را امضا می‌کند؛
- *   - گلوگاه‌های منطقی (مثل «بدون صورتجلسهٔ امضا تحویل مخزن ممنوع») سختگیرانه.
+ *  اصول:
+ *   - SQL امن: هیچ `sql.raw`ای روی ورودی کاربر وجود ندارد؛ VALUESها همه
+ *     پارامتری‌اند و اعتبارسنجی ورودی‌ها در هستهٔ خالص `exam-core` (قابل تست واحد).
+ *   - کوئری‌های دسته‌ای (batch) — تعداد کوئری با تعداد ردیف رشد نمی‌کند.
+ *   - همزمانی: مراحل رقابتی با `pg_advisory_xact_lock` و ردیف‌های حساس با
+ *     `FOR UPDATE` داخل تراکنش قفل می‌شوند (بدون double-count / duplicate).
+ *   - هر رویداد زنجیرهٔ هش ممیزی (`audit-chain`) را امضا می‌کند.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 import 'server-only';
@@ -25,27 +27,23 @@ import crypto from 'crypto';
 import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
-  audit_logs, course_exam_sessions, course_offerings, courses, enrollments,
+  course_exam_sessions, course_offerings, enrollments,
   exam_attendances, exam_course_packets, exam_halls, exam_invigilators,
   exam_minutes, exam_sessions, grade_appeals, instructor_deliveries,
-  invigilators, seat_allocations, staff, students,
+  invigilators, seat_allocations,
 } from '@/db/schema';
 import { getNumber } from '@/lib/settings';
 import { createLogger } from '@/lib/logger';
 import { auditChain, type AuditTx } from '@/lib/audit-chain';
-import { calculateFinalScore } from '@/app/professor/grades/grades-core';
-import type { RubricWeights, StudentGradeItem } from '@/app/professor/grades/types';
+import { decideAppealOutcome, scoreFromComponents, validateCheckIns } from '@/lib/exam-core';
+import type { ExamCheckIn, ExamCheckInInput } from '@/lib/exam-core';
+import type { RubricWeights } from '@/app/professor/grades/types';
+
+export type { ExamCheckIn, ExamCheckInInput } from '@/lib/exam-core';
 
 const log = createLogger({ mod: 'exam' });
 
 // ─────────────────────────── انواع ───────────────────────────
-
-export interface ExamCheckIn {
-  studentId: number;
-  isPresent: 0 | 1;
-  method?: 'QR_SCAN' | 'MANUAL_BY_INVIGILATOR' | 'SYSTEM_EXCUSE';
-  hasTemporaryPermit?: 0 | 1;
-}
 
 export interface ExamGradeEntry {
   studentId: number;
@@ -60,85 +58,77 @@ export interface ExamAppealRecheck {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-const CHECKIN_METHODS = ['QR_SCAN', 'MANUAL_BY_INVIGILATOR', 'SYSTEM_EXCUSE'] as const;
-type CheckInMethod = (typeof CHECKIN_METHODS)[number];
-
-/** ساخت VALUES چندردیفی پارامتری (جایگزین sql.raw — بدون تزریق SQL) */
-function valuesSql(rows: SQLFragment[]): ReturnType<typeof sql.join> {
+/** VALUES چندردیفی کاملاً پارامتری — هرگز روی ورودی کاربر sql.raw نمی‌شود */
+function valuesSql(rows: ReturnType<typeof sql>[]): ReturnType<typeof sql.join> {
   return sql.join(rows, sql`, `);
 }
-type SQLFragment = ReturnType<typeof sql>;
 
-/** محاسبهٔ نمرهٔ نهایی از روی اجزا با قواعد بارم‌بندی (همان هستهٔ نمرات) */
-function scoreFromComponents(components: { midtermScore?: number; finalExamScore?: number }, rubric: RubricWeights): number {
-  const st: StudentGradeItem = {
-    studentId: 0, studentCode: '', fullName: '', status: 'DRAFT' as const,
-    midtermScore: components.midtermScore,
-    homeworkScore: 0, participationScore: 0, practicalScore: 0,
-    finalExamScore: components.finalExamScore,
-    theoryProfScore: undefined, labProfScore: undefined,
-    calculatedFinalScore: 0,
-  };
-  return calculateFinalScore(st, {
-    id: 0, code: '', title: '', groupNumber: 1, units: 0, courseType: 'اصلی',
-    isCoTaught: false, rubric, students: [], appeals: [],
-  });
+/** قفل توافقی (advisory) برای مراحل رقابتی — تا پایان تراکنش نگه داشته می‌شود */
+async function advisoryLock(tx: AuditTx, ns: string, a: number, b = 0) {
+  // کلید ۶۴ بیتی بدون overflow (برخلاف ضرب در ۱۰۰۰۰ که برای شناسه‌های بزرگ سرریز می‌شود)
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${ns}:${a}:${b}`}, 0))`);
 }
 
 // ─────────────────────────── مرحلهٔ ۱: صدور حضور و غیاب ───────────────────────────
 
 /**
  * صدور حضور و غیاب: از صندلی‌های تخصیص‌یافتهٔ جلسه، ردیف حضور و غیاب برای
- * همهٔ دانشجویان ساخته می‌شود (isPresent=0، شمای QR). idempotent.
+ * همهٔ دانشجویان ساخته می‌شود (isPresent=0، شمای QR). idempotent و race-safe
+ * (قفل توافقی روی جلسه — دو فراخوانی همزمان نمی‌توانند ردیف تکراری بسازند).
  */
 export async function issueExamAttendance(actorUserId: number | null, sessionId: number) {
   const [sess] = await db.select().from(exam_sessions).where(eq(exam_sessions.id, sessionId)).limit(1);
   if (!sess) throw new Error('جلسهٔ امتحان یافت نشد.');
 
-  const [existing] = await db
-    .select({ n: count() })
-    .from(exam_attendances)
-    .where(eq(exam_attendances.examId, sessionId));
-  if (Number(existing?.n ?? 0) > 0) {
-    return { ok: true, issued: 0, skipped: Number(existing!.n), reason: 'ALREADY_ISSUED' };
-  }
+  return db.transaction(async tx => {
+    await advisoryLock(tx, 'exam_attendance', sessionId);
 
-  // ۱) درج دسته‌ای از صندلی‌ها (نه به‌ازای هر دانشجو یک کوئری)
-  const ins = await db.execute(sql`
-    insert into exam_attendances ("examId", "studentId", "isPresent", "checkInMethod", "hasTemporaryPermit", "createdAt")
-    select ${sessionId}, e."studentId", 0, 'QR_SCAN', 0, now()
-    from seat_allocations sa
-    join enrollments e on e.id = sa."enrollmentId"
-    where sa."sessionId" = ${sessionId}
-  `);
+    const [existing] = await tx
+      .select({ n: count() })
+      .from(exam_attendances)
+      .where(eq(exam_attendances.examId, sessionId));
+    if (Number(existing?.n ?? 0) > 0) {
+      return { ok: true, issued: 0, skipped: Number(existing!.n), reason: 'ALREADY_ISSUED' } as const;
+    }
 
-  // ۲) سقف برگهٔ مورد انتظار هر بستهٔ درس
-  await db.execute(sql`
-    update exam_course_packets p
-    set "expectedSheetCount" = x.n
-    from (
-      select co."courseId" as cid, count(*) as n
+    // ۱) درج دسته‌ای از صندلی‌ها (نه به‌ازای هر دانشجو یک کوئری)
+    const ins = await tx.execute(sql`
+      insert into exam_attendances ("examId", "studentId", "isPresent", "checkInMethod", "hasTemporaryPermit", "createdAt")
+      select ${sessionId}, e."studentId", 0, 'QR_SCAN', 0, now()
       from seat_allocations sa
       join enrollments e on e.id = sa."enrollmentId"
-      join course_offerings co on co.id = e."offeringId"
       where sa."sessionId" = ${sessionId}
-      group by co."courseId"
-    ) x
-    where p."examId" = ${sessionId} and p."courseId" = x.cid
-  `);
+    `);
 
-  const issued = Number(ins.rowCount ?? existing?.n ?? 0);
-  await db.transaction(async tx => {
+    // ۲) سقف برگهٔ مورد انتظار هر بستهٔ درس
+    await tx.execute(sql`
+      update exam_course_packets p
+      set "expectedSheetCount" = x.n
+      from (
+        select co."courseId" as cid, count(*) as n
+        from seat_allocations sa
+        join enrollments e on e.id = sa."enrollmentId"
+        join course_offerings co on co.id = e."offeringId"
+        where sa."sessionId" = ${sessionId}
+        group by co."courseId"
+      ) x
+      where p."examId" = ${sessionId} and p."courseId" = x.cid
+    `);
+
+    const issued = Number(ins.rowCount ?? 0);
     await auditChain(tx, actorUserId, 'EXAM_ATTENDANCE_ISSUED', 'exam_session', sessionId, { issued });
+    log.info('exam_attendance_issued', { sessionId, issued });
+    return { ok: true, issued, skipped: 0 } as const;
   });
-
-  log.info('exam_attendance_issued', { sessionId, issued });
-  return { ok: true, issued, skipped: 0 };
 }
 
 // ─────────────────────────── مرحلهٔ ۲: بررسی مراقب ───────────────────────────
 
-/** ثبت ساعت ورود مراقبان (به‌صورت دسته‌ای) */
+/**
+ * ثبت ساعت ورود مراقبان (به‌صورت دسته‌ای) — فقط مراقبانِ تخصیص‌یافتهٔ همین جلسه.
+ * زیر قفل توافقی: دو درخواست هم‌زمان نمی‌توانند ردیف را دوباره «به‌روز» کنند
+ * (گارد clockInTime is null) و رویداد ممیزی فقط ۱ بار ثبت می‌شود.
+ */
 export async function proctorClockIn(actorUserId: number | null, sessionId: number, staffIds: number[]) {
   if (!staffIds.length) throw new Error('مراقبی برای ثبت ورود داده نشده است.');
   const assigned = await db
@@ -148,30 +138,36 @@ export async function proctorClockIn(actorUserId: number | null, sessionId: numb
   if (assigned.length !== staffIds.length) {
     throw new Error(`${staffIds.length - assigned.length} مراقب در این جلسه تخصیص نیافته است.`);
   }
-  const upd = await db
-    .update(exam_invigilators)
-    .set({ clockInTime: new Date() })
-    .where(and(
-      eq(exam_invigilators.examId, sessionId),
-      inArray(exam_invigilators.staffId, staffIds),
-      sql`${exam_invigilators.clockInTime} is null`,
-    ));
-  await db.transaction(async tx => {
-    await auditChain(tx, actorUserId, 'EXAM_PROCTOR_CLOCKED_IN', 'exam_session', sessionId, { staffIds });
+  return db.transaction(async tx => {
+    await advisoryLock(tx, 'exam_clockin', sessionId);
+    const upd = await tx
+      .update(exam_invigilators)
+      .set({ clockInTime: new Date() })
+      .where(and(
+        eq(exam_invigilators.examId, sessionId),
+        inArray(exam_invigilators.staffId, staffIds),
+        sql`${exam_invigilators.clockInTime} is null`,
+      ));
+    const n = Number(upd.rowCount ?? 0);
+    if (n > 0) {
+      await auditChain(tx, actorUserId, 'EXAM_PROCTOR_CLOCKED_IN', 'exam_session', sessionId, { staffIds });
+    }
+    return { ok: true, clockedIn: n };
   });
-  return { ok: true, clockedIn: Number(upd.rowCount ?? 0) };
 }
 
 /**
  * بررسی حضور و غیاب توسط مراقب سالن: همهٔ دانشجویان یک سالن در یک کوئری
- * (CASE از VALUES) تأیید می‌شوند. هر دانشجو باید در همان سالن نشسته باشد.
+ * (VALUES کاملاً پارامتری). هر دانشجو باید در همان سالن نشسته باشد و مراقب
+ * باید به همان سالن تخصیص یافته باشد. ورودی‌ها اول در هستهٔ خالص اعتبارسنجی
+ * می‌شوند (وایت‌لیست method + اعداد) — هیچ رشته‌ای به SQL نمی‌رسد.
  */
 export async function proctorVerifyAttendance(
   actorUserId: number | null,
-  px: { sessionId: number; hallId: number; proctorStaffId: number; checkIns: ExamCheckIn[] },
+  px: { sessionId: number; hallId: number; proctorStaffId: number; checkIns: ExamCheckInInput[] },
 ) {
-  const { sessionId, hallId, proctorStaffId, checkIns } = px;
-  if (!checkIns.length) throw new Error('ردیف تأییدی برای بررسی ارسال نشده است.');
+  const { sessionId, hallId, proctorStaffId, checkIns: raw } = px;
+  const checkIns = validateCheckIns(raw); // ← خط اول دفاع (تست‌شده در exam-core)
 
   const assigned = await db
     .select({ id: invigilators.id })
@@ -184,17 +180,7 @@ export async function proctorVerifyAttendance(
     .limit(1);
   if (!assigned.length) throw new Error('این مراقب به این سالن در این جلسه تخصیص نیافته است.');
 
-  // اعتبارسنجی ورودی قبل از ساخت کوئری (دفاع در عمق — حتی اگر caller بداند چگونه فراخوانی کند)
-  for (const c of checkIns) {
-    if (!Number.isInteger(c.studentId) || c.studentId <= 0) throw new Error('شناسهٔ دانشجو نامعتبر است.');
-    if (c.isPresent !== 0 && c.isPresent !== 1) throw new Error('مقدار حضور و غیاب نامعتبر است.');
-    const method = c.method ?? 'QR_SCAN';
-    if (!CHECKIN_METHODS.includes(method)) throw new Error('روش ثبت حضور نامعتبر است.');
-    if (c.hasTemporaryPermit !== undefined && c.hasTemporaryPermit !== 0 && c.hasTemporaryPermit !== 1)
-      throw new Error('مقدار مجوز موقت نامعتبر است.');
-  }
-  // VALUES کاملاً پارامتری — بدون sql.raw (بدون امکان تزریق SQL)
-  const vals = valuesSql(checkIns.map(c => sql`(${c.studentId}::int, ${c.isPresent}::int, ${c.method ?? 'QR_SCAN'}::text, ${c.hasTemporaryPermit ?? 0}::int)`));
+  const vals = valuesSql(checkIns.map(c => sql`(${c.studentId}::int, ${c.isPresent}::int, ${c.method}::text, ${c.hasTemporaryPermit ?? 0}::int)`));
   const upd = await db.execute(sql`
     update exam_attendances a set
       "isPresent" = v.is_present,
@@ -226,7 +212,9 @@ export async function proctorVerifyAttendance(
 
 /**
  * صورتجلسهٔ سالن: جمع حضور/غیاب + هش زنجیره‌ای روی همهٔ ردیف‌های حضور و غیاب
- * سالن (summaryHash) + امضای نهایی. بدون امضای این صورتجلسه، مخزن تحویل نمی‌گیرد.
+ * سالن (summaryHash) + امضای نهایی. فقط مراقبِ تخصیص‌یافتهٔ همان سالن امضا
+ * می‌کند؛ بدون امضای این صورتجلسه، مخزن تحویل نمی‌گیرد. upsert زیر قفل
+ * توافقی است تا دو امضای همزمان ردیف تکراری نسازند.
  */
 export async function signHallMinutes(
   actorUserId: number | null,
@@ -276,15 +264,31 @@ export async function signHallMinutes(
   const absent = Number(totalsResult.rows[0]?.absent ?? 0);
   const total = Number(totalsResult.rows[0]?.total ?? 0);
 
-  const existing = await db
-    .select({ id: exam_minutes.id })
-    .from(exam_minutes)
-    .where(and(eq(exam_minutes.sessionId, sessionId), eq(exam_minutes.hallId, hallId)))
-    .limit(1);
-  if (existing.length) {
-    await db
-      .update(exam_minutes)
-      .set({
+  await db.transaction(async tx => {
+    await advisoryLock(tx, 'exam_minutes', sessionId, hallId);
+    const existing = await tx
+      .select({ id: exam_minutes.id })
+      .from(exam_minutes)
+      .where(and(eq(exam_minutes.sessionId, sessionId), eq(exam_minutes.hallId, hallId)))
+      .limit(1);
+    if (existing.length) {
+      await tx
+        .update(exam_minutes)
+        .set({
+          totalStudentsExpected: total,
+          totalStudentsPresent: present,
+          totalStudentsAbsent: absent,
+          cheatingIncidentsCount: px.cheatingIncidentsCount ?? 0,
+          supervisorStaffId,
+          isSignedAndFinalized: 1,
+          signedAt: new Date(),
+          notes: notes ?? null,
+          summaryHash,
+        })
+        .where(eq(exam_minutes.id, existing[0].id));
+    } else {
+      await tx.insert(exam_minutes).values({
+        sessionId, hallId,
         totalStudentsExpected: total,
         totalStudentsPresent: present,
         totalStudentsAbsent: absent,
@@ -294,24 +298,8 @@ export async function signHallMinutes(
         signedAt: new Date(),
         notes: notes ?? null,
         summaryHash,
-      })
-      .where(eq(exam_minutes.id, existing[0].id));
-  } else {
-    await db.insert(exam_minutes).values({
-      sessionId, hallId,
-      totalStudentsExpected: total,
-      totalStudentsPresent: present,
-      totalStudentsAbsent: absent,
-      cheatingIncidentsCount: px.cheatingIncidentsCount ?? 0,
-      supervisorStaffId,
-      isSignedAndFinalized: 1,
-      signedAt: new Date(),
-      notes: notes ?? null,
-      summaryHash,
-    });
-  }
-
-  await db.transaction(async tx => {
+      });
+    }
     await auditChain(tx, actorUserId, 'EXAM_MINUTES_SIGNED', 'exam_hall', hallId, {
       sessionId, present, absent, total, summaryHash,
     });
@@ -326,6 +314,9 @@ export async function signHallMinutes(
  * تحویل برگه‌های یک سالن به مخزن: فقط پس از امضای صورتجلسه (گلوگاه سخت‌گیرانه).
  * شمارش برگه = دانشجویان حاضر; به تفکیک هر درس، شمارش تجمیعیِ course_exam_sessions
  * به‌روز می‌شود (receivedHallsCount++ و totalDeliveredSheets += برگه‌های این سالن).
+ * **exactly-once:** ردیف صورتجلسه با FOR UPDATE قفل می‌شود و اگر
+ * vaultReceivedAt پر باشد یعنی این سالن قبلاً تحویل شده — هیچ شمارشگری دوباره
+ * زیاد نمی‌شود (دو درخواست هم‌زمان نمی‌توانند double-count کنند).
  */
 export async function vaultReceiveHall(
   actorUserId: number | null,
@@ -352,29 +343,44 @@ export async function vaultReceiveHall(
     group by co."id"
   `);
 
-  const vals = valuesSql((perCourse.rows as { offeringid: number; sheets: string }[])
-    .map(r => sql`(${Number(r.offeringid)}::int, ${Number(r.sheets)}::int)`));
-  await db.execute(sql`
-    update course_exam_sessions ces set
-      "receivedHallsCount" = ces."receivedHallsCount" + 1,
-      "totalDeliveredSheets" = ces."totalDeliveredSheets" + v.sheets
-    from (values ${vals}) as v("offeringId", "sheets")
-    where ces."courseOfferingId" = v."offeringId"
-  `);
+  return db.transaction(async tx => {
+    await advisoryLock(tx, 'exam_vault', sessionId, hallId);
+    const [m] = await tx
+      .select({ id: exam_minutes.id, vaultReceivedAt: exam_minutes.vaultReceivedAt })
+      .from(exam_minutes)
+      .where(and(eq(exam_minutes.sessionId, sessionId), eq(exam_minutes.hallId, hallId)))
+      .limit(1)
+      .for('update');
+    if (!m) throw new Error(`گلوگاه مخزن: صورتجلسهٔ سالن ${hallId} یافت نشد.`);
+    if (m.vaultReceivedAt) {
+      // قبلاً تحویل شده — idempotent: هیچ شمارشی دوباره اضافه نمی‌شود
+      return { ok: true, alreadyReceived: true, hallId, sheetsByCourse: [] };
+    }
+    await tx
+      .update(exam_minutes)
+      .set({ vaultReceivedAt: new Date() })
+      .where(eq(exam_minutes.id, m.id));
 
-  await db.transaction(async tx => {
+    const vals = valuesSql((perCourse.rows as { offeringid: number; sheets: string }[])
+      .map(r => sql`(${Number(r.offeringid)}::int, ${Number(r.sheets)}::int)`));
+    await tx.execute(sql`
+      update course_exam_sessions ces set
+        "receivedHallsCount" = ces."receivedHallsCount" + 1,
+        "totalDeliveredSheets" = ces."totalDeliveredSheets" + v.sheets
+      from (values ${vals}) as v("offeringId", "sheets")
+      where ces."courseOfferingId" = v."offeringId"
+    `);
     await auditChain(tx, actorUserId, 'EXAM_VAULT_RECEIVED_HALL', 'exam_hall', hallId, {
       sessionId, vaultManagerId, sheets: Number((perCourse.rows as { sheets: string }[]).reduce((s, r) => s + Number(r.sheets), 0)),
     });
+    return { ok: true, hallId, sheetsByCourse: perCourse.rows };
   });
-
-  return { ok: true, hallId, sheetsByCourse: perCourse.rows };
 }
 
 /**
  * تکمیل تحویل به مخزن: بسته‌های هر درس پایانی می‌شوند (RECEIVED_BY_VAULT یا
  * DISCREPANCY)، و درس‌هایی که برگه‌شان از همهٔ سالن‌ها رسیده است fully collected
- * می‌شوند. هم‌زمان بسته‌ها با تحویل‌دهنده (مراقب سرپرست بسته) قید می‌شوند.
+ * می‌شوند. (زیر قفل توافقی — نهایی‌سازی همزمان با تحویل سالن‌ها تداخل ندارد.)
  */
 export async function finalizeVaultHandover(actorUserId: number | null, sessionId: number, vaultManagerId: number) {
   // برگهٔ واقعی هر بسته = تعداد حاضرِ همان درس در کل جلسه
@@ -387,47 +393,45 @@ export async function finalizeVaultHandover(actorUserId: number | null, sessionI
     where sa."sessionId" = ${sessionId}
     group by co."courseId"
   `);
-  const vals = valuesSql((counts.rows as { cid: number; sheets: string }[])
-    .map(r => sql`(${Number(r.cid)}::int, ${Number(r.sheets)}::int)`));
-  const upd = await db.execute(sql`
-    update exam_course_packets p set
-      "actualDeliveredCount" = v.sheets,
-      "handoverStatus" = case when p."expectedSheetCount" = v.sheets then 'RECEIVED_BY_VAULT' else 'DISCREPANCY' end,
-      "receivedByVaultManagerId" = ${vaultManagerId},
-      "handoverCompletedAt" = now(),
-      "discrepancyNote" = case when p."expectedSheetCount" <> v.sheets then
-        'تعداد برگهٔ دریافتی (' || v.sheets || ') با برگهٔ مورد انتظار (' || p."expectedSheetCount" || ') مغایرت دارد.' end
-    from (values ${vals}) as v("cid", "sheets")
-    where p."examId" = ${sessionId} and p."courseId" = v.cid
-  `);
 
-  // درس‌های کاملاً جمع‌آوری‌شده (همهٔ سالن‌ها تحویل داده‌اند)
-  const collected = await db
-    .update(course_exam_sessions)
-    .set({ isFullyCollected: 1, notificationSentAt: new Date() })
-    .where(sql`"isFullyCollected" = 0 and "receivedHallsCount" >= "totalHallsCount"`)
-    .returning({ id: course_exam_sessions.id });
+  const result = await db.transaction(async tx => {
+    await advisoryLock(tx, 'exam_finalize', sessionId);
+    const vals = valuesSql((counts.rows as { cid: number; sheets: string }[])
+      .map(r => sql`(${Number(r.cid)}::int, ${Number(r.sheets)}::int)`));
+    const upd = await tx.execute(sql`
+      update exam_course_packets p set
+        "actualDeliveredCount" = v.sheets,
+        "handoverStatus" = case when p."expectedSheetCount" = v.sheets then 'RECEIVED_BY_VAULT' else 'DISCREPANCY' end,
+        "receivedByVaultManagerId" = ${vaultManagerId},
+        "handoverCompletedAt" = now(),
+        "discrepancyNote" = case when p."expectedSheetCount" <> v.sheets then
+          'تعداد برگهٔ دریافتی (' || v.sheets || ') با برگهٔ مورد انتظار (' || p."expectedSheetCount" || ') مغایرت دارد.' end
+      from (values ${vals}) as v("cid", "sheets")
+      where p."examId" = ${sessionId} and p."courseId" = v.cid
+    `);
 
-  const discrepancyResult = await db.execute(sql`
-    select count(*) as n from exam_course_packets
-    where "examId" = ${sessionId} and "handoverStatus" = 'DISCREPANCY'
-  `);
+    // درس‌های کاملاً جمع‌آوری‌شده (همهٔ سالن‌ها تحویل داده‌اند)
+    const collected = await tx
+      .update(course_exam_sessions)
+      .set({ isFullyCollected: 1, notificationSentAt: new Date() })
+      .where(sql`"isFullyCollected" = 0 and "receivedHallsCount" >= "totalHallsCount"`)
+      .returning({ id: course_exam_sessions.id });
 
-  await db.transaction(async tx => {
+    const discrepancyResult = await tx.execute(sql`
+      select count(*) as n from exam_course_packets
+      where "examId" = ${sessionId} and "handoverStatus" = 'DISCREPANCY'
+    `);
+    const discrepancies = Number(discrepancyResult.rows[0]?.n ?? 0);
     await auditChain(tx, actorUserId, 'EXAM_VAULT_FINALIZED', 'exam_session', sessionId, {
       vaultManagerId,
       packets: Number(upd.rowCount ?? 0),
       fullyCollected: collected.length,
-      discrepancies: Number(discrepancyResult.rows[0]?.n ?? 0),
+      discrepancies,
     });
+    return { packets: Number(upd.rowCount ?? 0), fullyCollected: collected.length, discrepancies };
   });
 
-  return {
-    ok: true,
-    packets: Number(upd.rowCount ?? 0),
-    fullyCollected: collected.length,
-    discrepancies: Number(discrepancyResult.rows[0]?.n ?? 0),
-  };
+  return { ok: true, ...result };
 }
 
 // ─────────────────────────── مرحلهٔ ۵: تحویل به استاد ───────────────────────────
@@ -435,7 +439,8 @@ export async function finalizeVaultHandover(actorUserId: number | null, sessionI
 /**
  * تحویل اوراق به استاد: مهلت نمره‌دهی (gradeDeadline) از تنظیمات خوانده می‌شود؛
  * توکن برداشت یکتا تولید و تحویل در instructor_deliveries ثبت می‌شود.
- * گلوگاه: فقط درس‌هایی که fully collected شده‌اند قابل تحویل‌اند.
+ * گلوگاه: فقط درس‌هایی که fully collected شده‌اند قابل تحویل‌اند؛
+ * چک «تحویل فعالِ تکراری» داخل تراکنش + قفل توافقی (بدون duplicate در race).
  */
 export async function deliverToInstructor(
   actorUserId: number | null,
@@ -459,42 +464,43 @@ export async function deliverToInstructor(
   if (row.professorId !== instructorId) throw new Error('این استاد، استاد این درس نیست.');
   if (!row.fullyCollected) throw new Error(`گلوگاه تحویل: اوراق درس هنوز جمع‌آوری (fully collected) نشده است.`);
 
-  const [activeDelivery] = await db
-    .select({ id: instructor_deliveries.id, status: instructor_deliveries.status })
-    .from(instructor_deliveries)
-    .where(and(
-      eq(instructor_deliveries.courseOfferingId, offeringId),
-      sql`${instructor_deliveries.status} <> 'ARCHIVED'`,
-    ))
-    .limit(1);
-  if (activeDelivery) {
-    return { ok: false, reason: 'ALREADY_DELIVERED', status: activeDelivery.status, deliveryId: activeDelivery.id };
-  }
-
   const pickupToken = crypto.randomBytes(32).toString('hex');
   const gradeDeadline = new Date(Date.now() + deadlineDays * 86400_000);
   const sheetCount = Number(row.totalDeliveredSheets ?? 0);
-  const [delivery] = await db
-    .insert(instructor_deliveries)
-    .values({
-      courseOfferingId: offeringId,
-      instructorId,
-      sheetCount,
-      pickupToken,
-      deliveredAt: new Date(),
-      vaultManagerId,
-      gradeDeadline,
-      status: 'PENDING_GRADING',
-    })
-    .returning({ id: instructor_deliveries.id });
 
-  await db.transaction(async tx => {
+  const result = await db.transaction(async tx => {
+    await advisoryLock(tx, 'exam_delivery', offeringId);
+    const [activeDelivery] = await tx
+      .select({ id: instructor_deliveries.id, status: instructor_deliveries.status })
+      .from(instructor_deliveries)
+      .where(and(
+        eq(instructor_deliveries.courseOfferingId, offeringId),
+        sql`${instructor_deliveries.status} <> 'ARCHIVED'`,
+      ))
+      .limit(1);
+    if (activeDelivery) {
+      return { ok: false as const, reason: 'ALREADY_DELIVERED' as const, status: activeDelivery.status, deliveryId: activeDelivery.id };
+    }
+    const [delivery] = await tx
+      .insert(instructor_deliveries)
+      .values({
+        courseOfferingId: offeringId,
+        instructorId,
+        sheetCount,
+        pickupToken,
+        deliveredAt: new Date(),
+        vaultManagerId,
+        gradeDeadline,
+        status: 'PENDING_GRADING',
+      })
+      .returning({ id: instructor_deliveries.id });
     await auditChain(tx, actorUserId, 'EXAM_DELIVERED_TO_INSTRUCTOR', 'instructor_delivery', delivery.id, {
       offeringId, instructorId, sheetCount, gradeDeadline: gradeDeadline.toISOString(),
     });
+    return { ok: true as const, deliveryId: delivery.id, pickupToken, sheetCount, gradeDeadline };
   });
 
-  return { ok: true, deliveryId: delivery.id, pickupToken, sheetCount, gradeDeadline };
+  return result;
 }
 
 // ─────────────────────────── مرحلهٔ ۶: ثبت نمرات (بارم‌بندی) ───────────────────────────
@@ -502,8 +508,10 @@ export async function deliverToInstructor(
 /**
  * ثبت نمرات توسط استاد: هر نمرهٔ جزئی به سقف بارم کلمپ می‌شود (۰..بارم)، نمرهٔ
  * نهایی از هستهٔ بارم‌بندی محاسبه و در enrollments با وضعیت FINALIZED ثبت می‌شود؛
- * hash نمرات درس + زمان قفل روی course_offerings می‌نشیند و تحویل به GRADES_SUBMITTED
- * می‌رود. همهٔ دانشجویان درس در یک کوئری (upsert دسته‌ای).
+ * hash نمرات درس + زمان قفل روی course_offerings می‌نشیند و تحویل به
+ * GRADES_SUBMITTED می‌رود. همهٔ دانشجویان درس در یک کوئری (upsert دسته‌ای).
+ * ردیف تحویل با FOR UPDATE قفل می‌شود — دو ثبت همزمان نمی‌توانند هم‌زمان
+ * از یک تحویل نمره ثبت کنند (state transition امن).
  */
 export async function submitExamGrades(
   actorUserId: number | null,
@@ -512,104 +520,116 @@ export async function submitExamGrades(
   const { offeringId, instructorId, rubric, entries } = px;
   if (!entries.length) throw new Error('ردیف نمره‌ای ارسال نشده است.');
 
-  const [delivery] = await db
-    .select({
-      id: instructor_deliveries.id,
-      status: instructor_deliveries.status,
-      instructorId: instructor_deliveries.instructorId,
-    })
-    .from(instructor_deliveries)
-    .where(eq(instructor_deliveries.courseOfferingId, offeringId))
-    .orderBy(desc(instructor_deliveries.id))
-    .limit(1);
-  if (!delivery) throw new Error('گلوگاه ثبت نمره: اوراق این درس هنوز به استاد تحویل نشده است.');
-  if (delivery.instructorId !== instructorId) throw new Error('این استاد مجاز به نمره‌دهی این درس نیست.');
-  if (delivery.status !== 'PENDING_GRADING') throw new Error(`وضعیت تحویل «${delivery.status}» اجازهٔ ثبت نمره نمی‌دهد.`);
+  return db.transaction(async tx => {
+    const [delivery] = await tx
+      .select({
+        id: instructor_deliveries.id,
+        status: instructor_deliveries.status,
+        instructorId: instructor_deliveries.instructorId,
+      })
+      .from(instructor_deliveries)
+      .where(eq(instructor_deliveries.courseOfferingId, offeringId))
+      .orderBy(desc(instructor_deliveries.id))
+      .limit(1)
+      .for('update');
+    if (!delivery) throw new Error('گلوگاه ثبت نمره: اوراق این درس هنوز به استاد تحویل نشده است.');
+    if (delivery.instructorId !== instructorId) throw new Error('این استاد مجاز به نمره‌دهی این درس نیست.');
+    if (delivery.status !== 'PENDING_GRADING') throw new Error(`وضعیت تحویل «${delivery.status}» اجازهٔ ثبت نمره نمی‌دهد.`);
 
-  const rows = entries.map(e => {
-    const total = round2(scoreFromComponents(
-      { midtermScore: e.midtermScore, finalExamScore: e.finalExamScore }, rubric,
-    ));
-    return {
-      studentId: e.studentId,
-      offeringId,
-      gradeValue: String(total),
-      gradeStatus: 'FINALIZED' as const,
-      status: 'REGISTERED' as const,
-    };
-  });
+    await tx
+      .insert(enrollments)
+      .values(entries.map(e => {
+        const total = round2(scoreFromComponents(
+          { midtermScore: e.midtermScore, finalExamScore: e.finalExamScore }, rubric,
+        ));
+        if (!Number.isFinite(e.midtermScore ?? 0) || !Number.isFinite(e.finalExamScore ?? 0)) {
+          throw new Error('نمرهٔ نامعتبر در ردیف ثبت نمره.');
+        }
+        return {
+          studentId: e.studentId,
+          offeringId,
+          status: 'REGISTERED' as const,
+          gradeValue: String(total),
+          gradeStatus: 'FINALIZED' as const,
+        };
+      }))
+      .onConflictDoUpdate({
+        target: [enrollments.studentId, enrollments.offeringId],
+        set: { gradeValue: sql`excluded."gradeValue"`, gradeStatus: sql`excluded."gradeStatus"` },
+      });
 
-  await db
-    .insert(enrollments)
-    .values(rows.map(r => ({ studentId: r.studentId, offeringId, status: 'REGISTERED', gradeValue: r.gradeValue, gradeStatus: 'FINALIZED' })))
-    .onConflictDoUpdate({
-      target: [enrollments.studentId, enrollments.offeringId],
-      set: { gradeValue: sql`excluded."gradeValue"`, gradeStatus: sql`excluded."gradeStatus"` },
-    });
+    // hash نمرات درس برای راستی‌آزمایی
+    const graded = await tx
+      .select({ studentId: enrollments.studentId, gradeValue: enrollments.gradeValue })
+      .from(enrollments)
+      .where(eq(enrollments.offeringId, offeringId));
+    const gradesHash = crypto
+      .createHash('sha256')
+      .update(graded.map(g => `${g.studentId}:${g.gradeValue}`).sort().join('|'))
+      .digest('hex');
 
-  // hash نمرات درس (مثل computeGradesHash) برای راستی‌آزمایی
-  const graded = await db
-    .select({ studentId: enrollments.studentId, gradeValue: enrollments.gradeValue })
-    .from(enrollments)
-    .where(eq(enrollments.offeringId, offeringId));
-  const gradesHash = crypto
-    .createHash('sha256')
-    .update(graded.map(g => `${g.studentId}:${g.gradeValue}`).sort().join('|'))
-    .digest('hex');
+    await tx
+      .update(course_offerings)
+      .set({ gradesHash, gradesFinalizedAt: new Date() })
+      .where(eq(course_offerings.id, offeringId));
+    await tx
+      .update(instructor_deliveries)
+      .set({ status: 'GRADES_SUBMITTED' })
+      .where(eq(instructor_deliveries.id, delivery.id));
 
-  await db
-    .update(course_offerings)
-    .set({ gradesHash, gradesFinalizedAt: new Date() })
-    .where(eq(course_offerings.id, offeringId));
-  await db
-    .update(instructor_deliveries)
-    .set({ status: 'GRADES_SUBMITTED' })
-    .where(eq(instructor_deliveries.id, delivery.id));
-
-  await db.transaction(async tx => {
     await auditChain(tx, actorUserId, 'EXAM_GRADES_SUBMITTED', 'course_offering', offeringId, {
       count: entries.length, gradesHash, deliveryId: delivery.id,
     });
-  });
 
-  log.info('exam_grades_submitted', { offeringId, count: entries.length });
-  return { ok: true, count: entries.length, gradesHash };
+    log.info('exam_grades_submitted', { offeringId, count: entries.length });
+    return { ok: true, count: entries.length, gradesHash };
+  });
 }
 
 // ─────────────────────────── مرحلهٔ ۷: اعتراض ───────────────────────────
 
-/** اعتراض دانشجو — نمرهٔ قبلی در همان لحظه عکس‌برداری می‌شود (oldGrade). */
+/**
+ * اعتراض دانشجو — نمرهٔ قبلی در همان لحظه عکس‌برداری می‌شود (oldGrade).
+ * فقط روی نمرهٔ FINALIZED؛ بررسی «اعتراض باز» داخل تراکنش زیر قفل توافقیِ
+ * ثبت‌نام انجام می‌شود تا دو درخواست هم‌زمان دو اعتراضِ باز نسازند.
+ */
 export async function openExamAppeal(actorUserId: number | null, px: { enrollmentId: number; studentMessage: string }) {
-  const [enr] = await db
-    .select({
-      id: enrollments.id,
-      gradeValue: enrollments.gradeValue,
-      gradeStatus: enrollments.gradeStatus,
-      offeringId: enrollments.offeringId,
-    })
-    .from(enrollments)
-    .where(eq(enrollments.id, px.enrollmentId))
-    .limit(1);
-  if (!enr) throw new Error('ثبت‌نام یافت نشد.');
-  if (enr.gradeStatus !== 'FINALIZED') throw new Error('اعتراض فقط پس از قطعی‌شدن نمره ممکن است.');
+  return db.transaction(async tx => {
+    await advisoryLock(tx, 'exam_appeal', px.enrollmentId);
+    const [enr] = await tx
+      .select({
+        id: enrollments.id,
+        gradeValue: enrollments.gradeValue,
+        gradeStatus: enrollments.gradeStatus,
+      })
+      .from(enrollments)
+      .where(eq(enrollments.id, px.enrollmentId))
+      .limit(1)
+      .for('update');
+    if (!enr) throw new Error('ثبت‌نام یافت نشد.');
+    if (enr.gradeStatus !== 'FINALIZED') throw new Error('اعتراض فقط پس از قطعی‌شدن نمره ممکن است.');
 
-  const [appeal] = await db
-    .insert(grade_appeals)
-    .values({
-      enrollmentId: px.enrollmentId,
-      studentMessage: px.studentMessage,
-      oldGrade: enr.gradeValue,
-      status: 'OPEN',
-    })
-    .returning({ id: grade_appeals.id });
+    const [open] = await tx
+      .select({ id: grade_appeals.id })
+      .from(grade_appeals)
+      .where(and(eq(grade_appeals.enrollmentId, px.enrollmentId), eq(grade_appeals.status, 'OPEN')))
+      .limit(1);
+    if (open) throw new Error('برای این درس هم‌اکنون یک اعتراض باز دارید.');
 
-  await db.transaction(async tx => {
-    await auditChain(tx, actorUserId, 'EXAM_APPEAL_OPENED', 'grade_appeal', appeal.id, {
+    const [a] = await tx
+      .insert(grade_appeals)
+      .values({
+        enrollmentId: px.enrollmentId,
+        studentMessage: px.studentMessage,
+        oldGrade: enr.gradeValue,
+        status: 'OPEN',
+      })
+      .returning({ id: grade_appeals.id });
+    await auditChain(tx, actorUserId, 'EXAM_APPEAL_OPENED', 'grade_appeal', a.id, {
       enrollmentId: px.enrollmentId, oldGrade: enr.gradeValue,
     });
+    return { ok: true, appealId: a.id, oldGrade: enr.gradeValue };
   });
-
-  return { ok: true, appealId: appeal.id, oldGrade: enr.gradeValue };
 }
 
 // ─────────────────────────── مرحلهٔ ۸: پاسخ به اعتراض بر اساس بارم‌بندی ───────────────────────────
@@ -619,6 +639,7 @@ export async function openExamAppeal(actorUserId: number | null, px: { enrollmen
  * (مقادیر جزئی جدید)؛ نمرهٔ نهایی از هستهٔ بارم‌بندی محاسبه می‌شود (کلمپ به
  * سقف بارم). اگر نمره تغییر کند → RESOLVED_ACCEPTED و به‌روزرسانی نمرهٔ
  * ثبت‌نام؛ در غیر این صورت REJECTED. نمره هرگز از بارم و از ۲۰ بالاتر نمی‌رود.
+ * ردیف اعتراض با FOR UPDATE قفل می‌شود — دو پاسخ همزمان غیرممکن است.
  */
 export async function answerExamAppeal(
   actorUserId: number | null,
@@ -632,57 +653,58 @@ export async function answerExamAppeal(
   },
 ) {
   const { appealId, professorReply, rubric, recheck, staffId } = px;
-  const [appeal] = await db
-    .select({
-      id: grade_appeals.id,
-      enrollmentId: grade_appeals.enrollmentId,
-      oldGrade: grade_appeals.oldGrade,
-      status: grade_appeals.status,
-      offeringId: enrollments.offeringId,
-      professorId: course_offerings.professorId,
-    })
-    .from(grade_appeals)
-    .innerJoin(enrollments, eq(enrollments.id, grade_appeals.enrollmentId))
-    .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
-    .where(eq(grade_appeals.id, appealId))
-    .limit(1);
-  if (!appeal) throw new Error('اعتراض یافت نشد.');
-  if (appeal.status !== 'OPEN') throw new Error('این اعتراض قبلاً پاسخ داده شده است.');
-  if (Number(appeal.professorId) !== Number(staffId)) {
-    throw new Error('مالکیت: فقط استاد همین درس می‌تواند به این اعتراض پاسخ دهد.');
-  }
 
-  const [enr] = await db
-    .select({ gradeValue: enrollments.gradeValue })
-    .from(enrollments)
-    .where(eq(enrollments.id, appeal.enrollmentId))
-    .limit(1);
+  return db.transaction(async tx => {
+    const [appeal] = await tx
+      .select({
+        id: grade_appeals.id,
+        enrollmentId: grade_appeals.enrollmentId,
+        oldGrade: grade_appeals.oldGrade,
+        status: grade_appeals.status,
+        offeringId: enrollments.offeringId,
+        professorId: course_offerings.professorId,
+      })
+      .from(grade_appeals)
+      .innerJoin(enrollments, eq(enrollments.id, grade_appeals.enrollmentId))
+      .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+      .where(eq(grade_appeals.id, appealId))
+      .limit(1)
+      .for('update');
+    if (!appeal) throw new Error('اعتراض یافت نشد.');
+    if (appeal.status !== 'OPEN') throw new Error('این اعتراض قبلاً پاسخ داده شده است.');
+    if (Number(appeal.professorId) !== Number(staffId)) {
+      throw new Error('مالکیت: فقط استاد همین درس می‌تواند به این اعتراض پاسخ دهد.');
+    }
 
-  const newTotal = round2(scoreFromComponents(
-    { midtermScore: recheck.midtermScore, finalExamScore: recheck.finalExamScore }, rubric,
-  ));
-  const oldGrade = round2(Number(appeal.oldGrade ?? enr?.gradeValue ?? 0));
-  const changed = Math.abs(newTotal - oldGrade) >= 0.01;
-  const status = changed ? 'RESOLVED_ACCEPTED' : 'REJECTED';
+    const [enr] = await tx
+      .select({ gradeValue: enrollments.gradeValue })
+      .from(enrollments)
+      .where(eq(enrollments.id, appeal.enrollmentId))
+      .limit(1);
 
-  if (changed) {
-    await db
-      .update(enrollments)
-      .set({ gradeValue: String(newTotal) })
-      .where(eq(enrollments.id, appeal.enrollmentId));
-  }
-  await db
-    .update(grade_appeals)
-    .set({ professorReply, newGrade: String(newTotal), status })
-    .where(eq(grade_appeals.id, appealId));
+    const newTotal = round2(scoreFromComponents(
+      { midtermScore: recheck.midtermScore, finalExamScore: recheck.finalExamScore }, rubric,
+    ));
+    const oldGrade = round2(Number(appeal.oldGrade ?? enr?.gradeValue ?? 0));
+    const { changed, status } = decideAppealOutcome(oldGrade, newTotal);
 
-  await db.transaction(async tx => {
+    if (changed) {
+      await tx
+        .update(enrollments)
+        .set({ gradeValue: String(newTotal) })
+        .where(eq(enrollments.id, appeal.enrollmentId));
+    }
+    await tx
+      .update(grade_appeals)
+      .set({ professorReply, newGrade: String(newTotal), status })
+      .where(eq(grade_appeals.id, appealId));
+
     await auditChain(tx, actorUserId, 'EXAM_APPEAL_RESOLVED', 'grade_appeal', appealId, {
       enrollmentId: appeal.enrollmentId, oldGrade, newGrade: newTotal, status,
     });
-  });
 
-  return { ok: true, status, oldGrade, newGrade: newTotal, changed };
+    return { ok: true, status, oldGrade, newGrade: newTotal, changed };
+  });
 }
 
 // ─────────────────────────── نمای کلی چرخه (برای تست و داشبورد) ───────────────────────────

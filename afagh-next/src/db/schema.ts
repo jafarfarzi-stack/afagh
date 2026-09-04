@@ -666,7 +666,9 @@ export const exam_minutes = pgTable('exam_minutes', {
   isSignedAndFinalized: integer('isSignedAndFinalized').default(0),
   signedAt: timestamp('signedAt'),
   notes: text('notes'),
-  summaryHash: varchar('summaryHash', { length: 255 })
+  summaryHash: varchar('summaryHash', { length: 255 }),
+  /** لحظهٔ تحویل برگه‌های این سالن به مخزن — دقیقاً یک‌بار (گلوله همان لوله) */
+  vaultReceivedAt: timestamp('vaultReceivedAt')
 });
 
 export const teaching_rates = pgTable('teaching_rates', {
