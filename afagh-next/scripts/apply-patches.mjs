@@ -31,6 +31,21 @@ try {
   await client.query(sql);
   console.log('✅ پچ‌های اسکیما اعمال شد.');
 
+  // 🎯 بازبینی ۵: دنبالهٔ کد رهگیری — بدون رقابت/تصادم در چند سرور (به‌جای count+حلقه)
+  // پس‌زمینه‌سازی: از آخرین شمارهٔ موجود در student_requests جلوتر می‌رود تا با
+  // دادهٔ فعلی برخورد نکند. idempotent است (هر بار اجرا، فقط اگر بزرگ‌تر بود setval).
+  await client.query(`CREATE SEQUENCE IF NOT EXISTS tracking_code_seq`);
+  await client.query(`
+    DO $$
+    DECLARE mx BIGINT;
+    BEGIN
+      SELECT COALESCE(MAX((regexp_match("trackingCode", '-([0-9]{4,12})$'))[1]::BIGINT), 0)
+        INTO mx FROM student_requests;
+      IF mx > (SELECT last_value FROM tracking_code_seq) THEN
+        PERFORM setval('tracking_code_seq', mx, TRUE);
+      END IF;
+    END $$;`);
+
   // ═══ تأیید سلامت اسکیما (Migration Verification — بازبینی Medium) ═══
   // پیش از ادامهٔ پایپ‌لاین، جدول‌های حیاتیِ اپ باید وجود داشته باشند؛
   // اگر drizzle-kit push یا پچ‌ها ناقص مانده باشند، این‌جا (نه در runtime اپ) شکست می‌خورد.
