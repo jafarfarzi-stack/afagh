@@ -127,12 +127,17 @@ try {
   // پس یا ۰ ردیف (اگر grant باشد) یا 42501 (بدون grant)؛ هر دو یعنی «دسترسی صفر»
   // و هر دو اثباتِ جداسازی‌اند.
   const expectDenied = async (name, sqlText) => {
+    // هر چک در تراکنش تازه: خطای 42501 تراکنش را abort می‌کند و چک بعدی 25P02 می‌گیرد
+    await q(app, 'ROLLBACK').catch(() => {});
+    await beginAs(uA.id);
     try {
       const rr = await q(app, sqlText, []);
       check(name, rr.rows[0]?.n === 0, `(got ${rr.rows[0]?.n})`);
     } catch (e) {
       if (e.code === '42501') { pass++; console.log(`  ✓ ${name} → 42501 (REVOKE — دسترسی اصلاً داده نشده)`); }
       else { fail++; console.log(`  ✗ ${name} → ${e.code}`); }
+    } finally {
+      await q(app, 'ROLLBACK').catch(() => {});
     }
   };
   await expectDenied('deny-all: system_settings (کلیدهای cron) = دسترسی صفر', `SELECT count(*)::int AS n FROM system_settings`);
