@@ -86,8 +86,11 @@ export async function assertServerActionOrigin(): Promise<{ ok: true } | { ok: f
       return { ok: true };
     }
     return { ok: false, error: 'منشأ درخواست با سامانه هم‌خوان نیست (CSRF blocked).' };
-  } catch {
-    return { ok: true };
+  } catch (err) {
+    // 🔒 fail-closed (بازبینی ۴ — High): اگر خودِ «بررسی منشأ» خطای غیرمنتظره بدهد،
+    // نباید اجازه صادر کند؛ رد شدن اشتباه، ارزان‌تر از پذیرش یک CSRF است.
+    console.error('[csrf] assertServerActionOrigin failed:', err);
+    return { ok: false, error: 'خطا در بررسی امنیتی درخواست؛ دوباره تلاش کنید.' };
   }
 }
 

@@ -120,6 +120,9 @@ export async function setDiscountStatusAction(
     return await db.transaction(async (tx) => {
       const [row] = await tx.select().from(student_discounts).where(eq(student_discounts.id, id)).limit(1);
       if (!row) return { ok: false, error: 'تخفیف یافت نشد' };
+      // 🔒 Object-Level (بازبینی ۴): رکورد با id پیدا شد — حالا تعلق دانشجو سنجیده می‌شود
+      const sc = await requireStudentScope(row.studentId);
+      if (!sc.ok) return { ok: false, error: sc.error };
       // فقط PENDING قابل تصمیم است (تخفیف خودکار-تأیید یا قبلاً تصمیم‌گرفته، بازنویسی نمی‌شود)
       if (row.status !== 'PENDING') return { ok: false, error: 'این تخفیف قبلاً تصمیم‌گیری شده است (فقط «در انتظار» قابل تأیید/رد است).' };
 
@@ -157,6 +160,9 @@ export async function deleteDiscountAction(id: number): Promise<{ ok: boolean; e
     return await db.transaction(async (tx) => {
       const [row] = await tx.select().from(student_discounts).where(eq(student_discounts.id, id)).limit(1);
       if (!row) return { ok: false, error: 'تخفیف یافت نشد' };
+      // 🔒 Object-Level (بازبینی ۴): رکورد با id پیدا شد — حالا تعلق دانشجو سنجیده می‌شود
+      const sc = await requireStudentScope(row.studentId);
+      if (!sc.ok) return { ok: false, error: sc.error };
       // 🔒 سیاست حذف (بازبینی — Medium): تخفیفِ «اثر مالی‌دار» (APPROVED) هرگز حذف ناپذیر است؛
       // فقط باید رد شود (REJECTED) یا در حالت در انتظار است که قابل حذف است.
       if (row.status === 'APPROVED') {
@@ -245,6 +251,9 @@ export async function setSponsorshipStatusAction(
     return await db.transaction(async (tx) => {
       const [row] = await tx.select().from(student_sponsorships).where(eq(student_sponsorships.id, id)).limit(1);
       if (!row) return { ok: false, error: 'پوشش یافت نشد' };
+      // 🔒 Object-Level (بازبینی ۴): رکورد با id پیدا شد — حالا تعلق دانشجو سنجیده می‌شود
+      const sc = await requireStudentScope(row.studentId);
+      if (!sc.ok) return { ok: false, error: sc.error };
       const allowed = status === 'REJECTED' ? row.status === 'PENDING' : ['PENDING', 'CONFIRMED'].includes(row.status);
       if (!allowed) return { ok: false, error: 'انتقال نامعتبر: پوشش فقط از «در انتظار» تأیید/پرداخت می‌شود؛ «ردشده» پایانی است.' };
 
@@ -277,6 +286,9 @@ export async function deleteSponsorshipAction(id: number): Promise<{ ok: boolean
     return await db.transaction(async (tx) => {
       const [row] = await tx.select().from(student_sponsorships).where(eq(student_sponsorships.id, id)).limit(1);
       if (!row) return { ok: false, error: 'پوشش یافت نشد' };
+      // 🔒 Object-Level (بازبینی ۴): رکورد با id پیدا شد — حالا تعلق دانشجو سنجیده می‌شود
+      const sc = await requireStudentScope(row.studentId);
+      if (!sc.ok) return { ok: false, error: sc.error };
       // 🔒 پوششِ اثر مالی‌دار (CONFIRMED/PAID) حذف‌ناپذیر است
       if (row.status === 'CONFIRMED' || row.status === 'PAID') {
         return { ok: false, error: 'پوشش تأییدشده/پرداخت‌شده در شهریه اثر دارد — قابل حذف نیست؛ ابتدا ردش کنید.' };
@@ -361,9 +373,13 @@ export async function clearChequeAction(id: number): Promise<{ ok: boolean; erro
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
   const [row] = await db.select().from(payment_cheques).where(eq(payment_cheques.id, id)).limit(1);
-  const result = await clearCheque(id); // داخل finance-engine: تراکنش + FOR UPDATE + audit
-  if (row) revalidateStudent(row.studentId);
-  return result;
+  if (!row) return { ok: false, error: 'چک یافت نشد' };
+  // 🔒 Object-Level (بازبینی ۴): چکِ دانشجوی خارج از scope هرگز وصول نمی‌شود
+  const sc = await requireStudentScope(row.studentId);
+  if (!sc.ok) return { ok: false, error: sc.error };
+  const res = await clearCheque(id); // داخل finance-engine: تراکنش + FOR UPDATE + audit
+  revalidateStudent(row.studentId);
+  return res;
 }
 
 export async function setChequeStatusAction(
@@ -379,6 +395,9 @@ export async function setChequeStatusAction(
     return await db.transaction(async (tx) => {
       const [row] = await tx.select().from(payment_cheques).where(eq(payment_cheques.id, id)).limit(1);
       if (!row) return { ok: false, error: 'چک یافت نشد' };
+      // 🔒 Object-Level (بازبینی ۴): رکورد با id پیدا شد — حالا تعلق دانشجو سنجیده می‌شود
+      const sc = await requireStudentScope(row.studentId);
+      if (!sc.ok) return { ok: false, error: sc.error };
       if (row.status === 'CLEARED') return { ok: false, error: 'چک وصول‌شده قابل تغییر وضعیت نیست' };
 
       const upd = await tx.update(payment_cheques)
@@ -411,6 +430,9 @@ export async function deleteChequeAction(id: number): Promise<{ ok: boolean; err
     return await db.transaction(async (tx) => {
       const [row] = await tx.select().from(payment_cheques).where(eq(payment_cheques.id, id)).limit(1);
       if (!row) return { ok: false, error: 'چک یافت نشد' };
+      // 🔒 Object-Level (بازبینی ۴): رکورد با id پیدا شد — حالا تعلق دانشجو سنجیده می‌شود
+      const sc = await requireStudentScope(row.studentId);
+      if (!sc.ok) return { ok: false, error: sc.error };
       if (row.status === 'CLEARED') return { ok: false, error: 'چک وصول‌شده حذف نمی‌شود؛ در دفتر مالی ثبت شده است' };
 
       await tx.delete(payment_cheques).where(eq(payment_cheques.id, id));
@@ -512,6 +534,9 @@ export async function setLoanStatusAction(
     return await db.transaction(async (tx) => {
       const [row] = await tx.select().from(student_loans).where(eq(student_loans.id, id)).limit(1);
       if (!row) return { ok: false, error: 'وام یافت نشد' };
+      // 🔒 Object-Level (بازبینی ۴): رکورد با id پیدا شد — حالا تعلق دانشجو سنجیده می‌شود
+      const sc = await requireStudentScope(row.studentId);
+      if (!sc.ok) return { ok: false, error: sc.error };
       if (row.status === 'SETTLED' || row.status === 'CANCELLED') return { ok: false, error: 'وام تسویه/ابطال‌شده قابل تغییر نیست.' };
 
       const upd = await tx.update(student_loans).set({ status })
@@ -543,6 +568,9 @@ export async function deleteLoanAction(id: number): Promise<{ ok: boolean; error
     return await db.transaction(async (tx) => {
       const [row] = await tx.select().from(student_loans).where(eq(student_loans.id, id)).limit(1);
       if (!row) return { ok: false, error: 'وام یافت نشد' };
+      // 🔒 Object-Level (بازبینی ۴): رکورد با id پیدا شد — حالا تعلق دانشجو سنجیده می‌شود
+      const sc = await requireStudentScope(row.studentId);
+      if (!sc.ok) return { ok: false, error: sc.error };
       if (row.status === 'SETTLED') return { ok: false, error: 'وام تسویه‌شده حذف نمی‌شود (سابقهٔ مالی است).' };
 
       await tx.delete(student_loans).where(eq(student_loans.id, id));
