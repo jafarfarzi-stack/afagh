@@ -5,7 +5,6 @@ node_modules/
 # ── Build/حساس ──
 afagh-next/.next/
 afagh-next/.env
-afagh-next/drizzle/
 *.tsbuildinfo
 
 # ── دیتای محلی (بازتولید با npm run reset / migrate) ──

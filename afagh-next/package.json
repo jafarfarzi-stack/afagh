@@ -10,6 +10,7 @@
     "start": "next start -p 8080",
     "db:generate": "npx drizzle-kit generate",
     "db:push": "npx drizzle-kit push",
+    "db:migrate": "node scripts/migrate-db.mjs",
     "db:migrate-sqlite": "node scripts/migrate-sqlite-to-pg.mjs",
     "db:hardening": "node scripts/hardening.mjs",
     "db:base": "node scripts/seed-base.mjs",

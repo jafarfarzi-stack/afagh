@@ -53,7 +53,7 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: afagh-next/package-lock.json }
       - run: npm ci
       # طبق پایپ‌لاین تولیدی migrator: اسکیما → پچ‌ها → دادهٔ پایه → سخت‌سازی
-      - run: npx drizzle-kit push --force
+      - run: node scripts/migrate-db.mjs   # مهاجرت‌های نسخه‌دار (بکاپ→migrate→verify) به‌جای push --force
       - run: node scripts/apply-patches.mjs
       - run: node scripts/seed-base.mjs
       - run: AFAGH_APP_DB_PASSWORD=test-app-password node scripts/hardening.mjs
