@@ -60,6 +60,15 @@ export interface ExamAppealRecheck {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+const CHECKIN_METHODS = ['QR_SCAN', 'MANUAL_BY_INVIGILATOR', 'SYSTEM_EXCUSE'] as const;
+type CheckInMethod = (typeof CHECKIN_METHODS)[number];
+
+/** ساخت VALUES چندردیفی پارامتری (جایگزین sql.raw — بدون تزریق SQL) */
+function valuesSql(rows: SQLFragment[]): ReturnType<typeof sql.join> {
+  return sql.join(rows, sql`, `);
+}
+type SQLFragment = ReturnType<typeof sql>;
+
 /** محاسبهٔ نمرهٔ نهایی از روی اجزا با قواعد بارم‌بندی (همان هستهٔ نمرات) */
 function scoreFromComponents(components: { midtermScore?: number; finalExamScore?: number }, rubric: RubricWeights): number {
   const st: StudentGradeItem = {
@@ -175,9 +184,17 @@ export async function proctorVerifyAttendance(
     .limit(1);
   if (!assigned.length) throw new Error('این مراقب به این سالن در این جلسه تخصیص نیافته است.');
 
-  const vals = checkIns
-    .map(c => `(${c.studentId}, ${c.isPresent ? 1 : 0}, '${c.method ?? 'QR_SCAN'}', ${c.hasTemporaryPermit ? 1 : 0})`)
-    .join(',');
+  // اعتبارسنجی ورودی قبل از ساخت کوئری (دفاع در عمق — حتی اگر caller بداند چگونه فراخوانی کند)
+  for (const c of checkIns) {
+    if (!Number.isInteger(c.studentId) || c.studentId <= 0) throw new Error('شناسهٔ دانشجو نامعتبر است.');
+    if (c.isPresent !== 0 && c.isPresent !== 1) throw new Error('مقدار حضور و غیاب نامعتبر است.');
+    const method = c.method ?? 'QR_SCAN';
+    if (!CHECKIN_METHODS.includes(method)) throw new Error('روش ثبت حضور نامعتبر است.');
+    if (c.hasTemporaryPermit !== undefined && c.hasTemporaryPermit !== 0 && c.hasTemporaryPermit !== 1)
+      throw new Error('مقدار مجوز موقت نامعتبر است.');
+  }
+  // VALUES کاملاً پارامتری — بدون sql.raw (بدون امکان تزریق SQL)
+  const vals = valuesSql(checkIns.map(c => sql`(${c.studentId}::int, ${c.isPresent}::int, ${c.method ?? 'QR_SCAN'}::text, ${c.hasTemporaryPermit ?? 0}::int)`));
   const upd = await db.execute(sql`
     update exam_attendances a set
       "isPresent" = v.is_present,
@@ -185,7 +202,7 @@ export async function proctorVerifyAttendance(
       "hasTemporaryPermit" = v.temp,
       "verifiedByStaffId" = ${proctorStaffId},
       "checkInTime" = case when v.is_present = 1 then now() else null end
-    from (values ${sql.raw(vals)}) as v("studentId", "is_present", "method", "temp")
+    from (values ${vals}) as v("studentId", "is_present", "method", "temp")
     where a."examId" = ${sessionId}
       and a."studentId" = v."studentId"
       and a."studentId" in (
@@ -218,6 +235,17 @@ export async function signHallMinutes(
   const { sessionId, hallId, supervisorStaffId, notes } = px;
   const [hall] = await db.select().from(exam_halls).where(eq(exam_halls.id, hallId)).limit(1);
   if (!hall) throw new Error('سالن یافت نشد.');
+  // فقط مراقبِ تخصیص‌یافته به همین سالن می‌تواند صورتجلسه را امضا کند
+  const [sup] = await db
+    .select({ id: invigilators.id })
+    .from(invigilators)
+    .where(and(
+      eq(invigilators.sessionId, sessionId),
+      eq(invigilators.hallId, hallId),
+      eq(invigilators.staffId, supervisorStaffId),
+    ))
+    .limit(1);
+  if (!sup) throw new Error('این مراقب به این سالن در این جلسه تخصیص نیافته است.');
 
   const totalsResult = await db.execute(sql`
     select
@@ -324,14 +352,13 @@ export async function vaultReceiveHall(
     group by co."id"
   `);
 
-  const vals = (perCourse.rows as { offeringid: number; sheets: string }[])
-    .map(r => `(${r.offeringid}, ${Number(r.sheets)})`)
-    .join(',');
+  const vals = valuesSql((perCourse.rows as { offeringid: number; sheets: string }[])
+    .map(r => sql`(${Number(r.offeringid)}::int, ${Number(r.sheets)}::int)`));
   await db.execute(sql`
     update course_exam_sessions ces set
       "receivedHallsCount" = ces."receivedHallsCount" + 1,
       "totalDeliveredSheets" = ces."totalDeliveredSheets" + v.sheets
-    from (values ${sql.raw(vals)}) as v("offeringId", "sheets")
+    from (values ${vals}) as v("offeringId", "sheets")
     where ces."courseOfferingId" = v."offeringId"
   `);
 
@@ -360,9 +387,8 @@ export async function finalizeVaultHandover(actorUserId: number | null, sessionI
     where sa."sessionId" = ${sessionId}
     group by co."courseId"
   `);
-  const vals = (counts.rows as { cid: number; sheets: string }[])
-    .map(r => `(${r.cid}, ${Number(r.sheets)})`)
-    .join(',');
+  const vals = valuesSql((counts.rows as { cid: number; sheets: string }[])
+    .map(r => sql`(${Number(r.cid)}::int, ${Number(r.sheets)}::int)`));
   const upd = await db.execute(sql`
     update exam_course_packets p set
       "actualDeliveredCount" = v.sheets,
@@ -371,7 +397,7 @@ export async function finalizeVaultHandover(actorUserId: number | null, sessionI
       "handoverCompletedAt" = now(),
       "discrepancyNote" = case when p."expectedSheetCount" <> v.sheets then
         'تعداد برگهٔ دریافتی (' || v.sheets || ') با برگهٔ مورد انتظار (' || p."expectedSheetCount" || ') مغایرت دارد.' end
-    from (values ${sql.raw(vals)}) as v("cid", "sheets")
+    from (values ${vals}) as v("cid", "sheets")
     where p."examId" = ${sessionId} and p."courseId" = v.cid
   `);
 
@@ -601,21 +627,30 @@ export async function answerExamAppeal(
     professorReply: string;
     rubric: RubricWeights;
     recheck: ExamAppealRecheck;
+    /** هویت استاد پاسخ‌دهنده — باید استاد همان درس باشد (مالکیت) */
+    staffId: number;
   },
 ) {
-  const { appealId, professorReply, rubric, recheck } = px;
+  const { appealId, professorReply, rubric, recheck, staffId } = px;
   const [appeal] = await db
     .select({
       id: grade_appeals.id,
       enrollmentId: grade_appeals.enrollmentId,
       oldGrade: grade_appeals.oldGrade,
       status: grade_appeals.status,
+      offeringId: enrollments.offeringId,
+      professorId: course_offerings.professorId,
     })
     .from(grade_appeals)
+    .innerJoin(enrollments, eq(enrollments.id, grade_appeals.enrollmentId))
+    .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
     .where(eq(grade_appeals.id, appealId))
     .limit(1);
   if (!appeal) throw new Error('اعتراض یافت نشد.');
   if (appeal.status !== 'OPEN') throw new Error('این اعتراض قبلاً پاسخ داده شده است.');
+  if (Number(appeal.professorId) !== Number(staffId)) {
+    throw new Error('مالکیت: فقط استاد همین درس می‌تواند به این اعتراض پاسخ دهد.');
+  }
 
   const [enr] = await db
     .select({ gradeValue: enrollments.gradeValue })

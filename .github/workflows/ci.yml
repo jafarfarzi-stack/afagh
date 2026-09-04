@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm, cache-dependency-path: afagh-next/package-lock.json }
+        with: { node-version: 22, cache: npm, cache-dependency-path: afagh-next/package-lock.json }
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm test        # M-6: تست‌های واحد با tsx روی Node 20 هم اجرا می‌شوند
@@ -50,7 +50,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm, cache-dependency-path: afagh-next/package-lock.json }
+        with: { node-version: 22, cache: npm, cache-dependency-path: afagh-next/package-lock.json }
       - run: npm ci
       # طبق پایپ‌لاین تولیدی migrator: اسکیما → پچ‌ها → دادهٔ پایه → سخت‌سازی
       - run: npx drizzle-kit push --force
@@ -71,6 +71,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm, cache-dependency-path: afagh-erp/package-lock.json }
+        with: { node-version: 22, cache: npm, cache-dependency-path: afagh-erp/package-lock.json }
       - run: npm ci
       - run: find src -name '*.js' -exec node --check {} \;

@@ -134,6 +134,17 @@ if (has('proctor')) {
   }
   const msTotal = performance.now() - totalT0;
   console.log(`   جمع بررسی: ${verified} دانشجو در ${(msTotal / 1000).toFixed(2)} ثانیه · ${totalQ} کوئری (${(totalQ / HALLS).toFixed(1)} کوئری/سالن — ثابت مستقل از ۱۰۰ دانشجو)`);
+
+  // 🔒 پروب تزریق SQL: method مخرب باید در موتور رد شود (بدون sql.raw)
+  try {
+    await engine.proctorVerifyAttendance(null, {
+      sessionId: Number((sess as any).id), hallId: Number(hallIds[0]), proctorStaffId: Number(proctorIds[0]),
+      checkIns: [{ studentId: Number((enrollRows as any[])[0].studentId), isPresent: 1, method: "QR_SCAN' OR '1'='1" as any }],
+    });
+    console.log('❌ تزریق SQL مسدود نشد!');
+  } catch (e: any) {
+    console.log(`🔒 پروب SQLi (method مخرب) ✅: ${e.message}`);
+  }
 }
 
 // ═══════════ مرحلهٔ ۳: امضای صورتجلسهٔ سالن ═══════════
@@ -273,6 +284,12 @@ if (has('appeals')) {
   const t1 = performance.now();
   let accepted = 0, rejected = 0;
   const appeals = (await db.execute(sql`SELECT id, "enrollmentId" FROM grade_appeals WHERE status='OPEN' ORDER BY id`)).rows as { id: number; enrollmentId: number }[];
+  // نگاشت ثبت‌نام → ارائه → استاد مالک (برای چک مالکیت پاسخ اعتراض)
+  const profOfEnrollment = new Map<number, number>();
+  for (const e of enrollRows as any[]) {
+    const off = (offeringRows as any[]).find(o => Number(o.id) === Number(e.offeringId));
+    if (off) profOfEnrollment.set(Number(e.id), Number(off.professorId));
+  }
   for (let i = 0; i < appeals.length; i++) {
     const enr = examEnroll.find(e => Number(e.id) === Number(appeals[i].enrollmentId))!;
     const sid = Number(enr.studentId);
@@ -287,6 +304,7 @@ if (has('appeals')) {
       professorReply: accept ? 'پس از بازبینی، نمرهٔ بخش پایان‌ترم اصلاح شد.' : 'پس از بازبینی، نمره تغییری نمی‌کند.',
       rubric: RUBRIC,
       recheck,
+      staffId: profOfEnrollment.get(Number(appeals[i].enrollmentId))!,
     });
     if (res.status === 'RESOLVED_ACCEPTED') accepted++; else rejected++;
   }
@@ -306,10 +324,13 @@ if (has('appeals')) {
   if (clampA) {
     const [en] = (await db.execute(sql`SELECT "studentId" FROM grade_appeals gr JOIN enrollments e ON e.id=gr."enrollmentId" WHERE gr.id=${clampA.id}`)).rows;
     const sid = Number(en.studentId);
+    const [clampEnr] = (await db.execute(sql`SELECT "offeringId" FROM enrollments WHERE id=(SELECT "enrollmentId" FROM grade_appeals WHERE id=${clampA.id})`)).rows;
+    const clampOff = (offeringRows as any[]).find(o => Number(o.id) === Number(clampEnr.offeringId));
     const res = await engine.answerExamAppeal(null, {
       appealId: Number(clampA.id), professorReply: 'بازبینی',
       rubric: RUBRIC,
       recheck: { midtermScore: 99, finalExamScore: 99 },
+      staffId: Number(clampOff.professorId),
     });
     const expect = totalOf(RUBRIC.midterm, RUBRIC.finalExam); // ۲۰
     console.log(`   کلمپ اعتراض (۹۹/۹۹ → بارم): نمرهٔ جدید ${res.newGrade} ${Math.abs(res.newGrade - expect) < 0.01 ? `✅ (=${expect})` : '❌'}`);
