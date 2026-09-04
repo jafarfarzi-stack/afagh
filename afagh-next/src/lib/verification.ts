@@ -36,8 +36,10 @@ const unb64u = (s: string) => Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'
 export function maskNationalCode(code: string | null | undefined): string {
   const c = String(code ?? '').trim();
   if (!c) return '—';
-  if (c.length <= 5) return '*'.repeat(c.length);
-  return `${c.slice(0, 3)}${'*'.repeat(Math.max(2, c.length - 5))}${c.slice(-2)}`;
+  // 🎯 گام ۳ سند: طول خروجی همیشه ثابت است تا طول واقعی کد ملی لو نرود
+  // (کد ۹ رقمی و ۱۰ رقمی هر دو «۳+۵+۲» ستاره/رقم می‌شوند).
+  if (c.length <= 5) return '*****';
+  return `${c.slice(0, 3)}*****${c.slice(-2)}`;
 }
 
 // ─────────────────── امضای توکن ───────────────────
@@ -69,10 +71,21 @@ export async function verifyTokenSignature<T extends Record<string, unknown>>(to
   const parts = String(token ?? '').trim().split('.');
   if (parts.length !== 3 || parts[0] !== 'T1') return { ok: false, reason: 'MALFORMED' };
   const [, body, sig] = parts;
-  const expected = b64u(createHmac('sha256', await tokenSecret()).update(body).digest());
+  // 🎯 گام ۳ سند (Soft Key Rotation): اگر ادمین کلید را وسط دوره چرخش بدهد،
+  // کارت‌هایی که با کلید قبلی صادر شده‌اند نباید یک‌شبه باطل شوند. بررسی:
+  // ۱) کلید جاری  ۲) کلید قبلی (PREVIOUS_TICKET_TOKEN_SECRET) — زمان‌ثابت (timingSafeEqual)
+  const currentSecret = await tokenSecret();
+  const previousSecret = (await getSetting('PREVIOUS_TICKET_TOKEN_SECRET').catch(() => '')).trim();
   const a = Buffer.from(sig);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return { ok: false, reason: 'BAD_SIGNATURE' };
+  const expectedCurrent = b64u(createHmac('sha256', currentSecret).update(body).digest());
+  const bCurrent = Buffer.from(expectedCurrent);
+  let valid = a.length === bCurrent.length && timingSafeEqual(a, bCurrent);
+  if (!valid && previousSecret) {
+    const expectedPrev = b64u(createHmac('sha256', previousSecret).update(body).digest());
+    const bPrev = Buffer.from(expectedPrev);
+    valid = a.length === bPrev.length && timingSafeEqual(a, bPrev);
+  }
+  if (!valid) return { ok: false, reason: 'BAD_SIGNATURE' };
   let payload: T & { exp: number };
   try {
     payload = JSON.parse(unb64u(body).toString('utf8'));

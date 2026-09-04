@@ -1,12 +1,27 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import Link from 'next/link';
 import { verifyCertificateAction } from './actions';
 import type { CertificateVerification } from '@/lib/verification';
 
 const faNum = (n: unknown) =>
   n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+
+/** دکمهٔ استعلام — pending را از useFormStatus می‌گیرد (بومی React 19) */
+function SearchButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-xs font-black text-white shadow-lg shadow-indigo-600/30 transition hover:bg-indigo-500 disabled:opacity-50"
+    >
+      {pending ? <span className="animate-spin text-sm">⏳</span> : <span>استعلام اصالت</span>}
+    </button>
+  );
+}
 
 /**
  * درگاه عمومی اصالت‌سنجی گواهینامه.
@@ -16,6 +31,11 @@ const faNum = (n: unknown) =>
  * برای REVOKED / TAMPERED / NOT_FOUND پنل ردِ صریح نمایش داده می‌شود تا یک
  * مدرک باطل، «رسمی و قابل چاپ» به نظر نرسد.
  */
+type FormState =
+  | { ok: true; result: CertificateVerification; code: string }
+  | { ok: false; error: string; code: string }
+  | null;
+
 export default function VerifyCertificateClient({
   initialCode = '',
   initialResult = null,
@@ -23,24 +43,24 @@ export default function VerifyCertificateClient({
   initialCode?: string;
   initialResult?: CertificateVerification | null;
 }) {
-  const [searchCode, setSearchCode] = useState<string>(initialCode);
-  const [result, setResult] = useState<CertificateVerification | null>(initialResult);
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchError, setSearchError] = useState('');
+  // 🎯 گام ۴ سند (React 19): useActionState — وضعیت pending/error/result بومی React
+  // است؛ بدون useState های دستی (isSearching/searchError). اکشن با FormData می‌گیرد
+  // و خودِ React کل فرم را زیر نظر می‌گیرد (درخواست مجدد و رفع خطا نیز با state).
+  const [state, formAction, isPending] = useActionState<FormState, FormData>(
+    async (_prev, formData) => {
+      const code = String(formData.get('searchCode') ?? '').trim();
+      const res = await verifyCertificateAction(code);
+      return res.ok
+        ? { ok: true, result: res.result, code }
+        : { ok: false, error: res.error, code };
+    },
+    initialResult ? { ok: true, result: initialResult, code: initialCode } : null,
+  );
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSearchError('');
-    setIsSearching(true);
-    const res = await verifyCertificateAction(searchCode.trim());
-    setIsSearching(false);
-    if (!res.ok) {
-      setSearchError(res.error);
-      setResult(null);
-      return;
-    }
-    setResult(res.result);
-  };
+  const isSearching = isPending;
+  const searchError = state && !state.ok ? state.error : '';
+  const result = state?.ok ? state.result : null;
+  const searchCode = state?.code ?? initialCode;
 
   const cert = result && result.verdict !== 'NOT_FOUND' ? result : null;
   const verdict = result?.verdict ?? null;
@@ -100,22 +120,16 @@ export default function VerifyCertificateClient({
             <span>🔍</span>
             <span>استعلام شمارهٔ سریال گواهینامه:</span>
           </h2>
-          <form onSubmit={handleSearch} className="flex flex-col gap-2 sm:flex-row">
+          <form action={formAction} className="flex flex-col gap-2 sm:flex-row">
             <input
               type="text"
+              name="searchCode"
+              defaultValue={searchCode}
               placeholder="شمارهٔ سریال گواهی (مثال: AFQ-CERT-2026-1001)"
-              value={searchCode}
-              onChange={e => setSearchCode(e.target.value)}
               className="flex-1 rounded-2xl border border-indigo-700/60 bg-slate-950 px-4 py-3 font-mono text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               dir="ltr"
             />
-            <button
-              type="submit"
-              disabled={isSearching}
-              className="flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-xs font-black text-white shadow-lg shadow-indigo-600/30 transition hover:bg-indigo-500 disabled:opacity-50"
-            >
-              {isSearching ? <span className="animate-spin text-sm">⏳</span> : <span>استعلام اصالت</span>}
-            </button>
+            <SearchButton />
           </form>
           {searchError && (
             <div className="rounded-2xl border border-rose-800/80 bg-rose-950/60 p-3 text-xs font-bold text-rose-300">⚠️ {searchError}</div>

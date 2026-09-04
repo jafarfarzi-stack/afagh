@@ -36,9 +36,17 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U afagh -d afagh_db"
           --health-interval 5s --health-timeout 5s --health-retries 20
+      # گام ۲ سند: اتاق انتظار ZSET — تست یکپارچه با Redis واقعی
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
     env:
       DATABASE_URL: postgres://afagh:test-password@127.0.0.1:5432/afagh_db
       DATABASE_URL_APP: postgres://afagh_app:test-app-password@127.0.0.1:5432/afagh_db
+      REDIS_URL: redis://127.0.0.1:6379
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -53,6 +61,8 @@ jobs:
       - run: node scripts/rls-test.mjs
       # اثبات P1 (بازبینی): مسابقهٔ همزمانی — تأیید/وصول فقط یک برنده دارد
       - run: node scripts/concurrency-test.mjs
+      # گام ۲ سند: اتاق انتظار ZSET — جایگاه O(log N) با Redis واقعی
+      - run: npx tsx scripts/waiting-room-zset.test.mts
 
   afagh-erp:
     name: فاز صفر — سلامت کد

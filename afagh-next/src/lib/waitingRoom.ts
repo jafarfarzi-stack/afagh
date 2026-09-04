@@ -13,7 +13,7 @@ export const redis: Redis = g.__afaghRedis ?? new Redis(REDIS_URL, { maxRetriesP
 redis.on('error', () => { /* قطعی موقت Redis نباید Node را کرش کند */ });
 if (process.env.NODE_ENV !== 'production') g.__afaghRedis = redis;
 
-const K = {
+export const K = {
   caps: 'afagh:caps',                                   // hash: offeringId → «cap,enrolled,waitCap»
   wl: (o: number) => `afagh:offering:${o}:wl`,          // شمارندهٔ ترتیب لیست انتظار
   queue: 'afagh:wr:queue',                              // صف ثبت نهایی (FIFO)
@@ -104,19 +104,25 @@ export async function peekCapacities(offeringIds: number[]): Promise<Record<numb
 }
 
 // ── §۱۰۱۶: صف پردازش — پاسخ فوری «درخواست شما در صف قرار گرفت» ──
+// ── §۱۰۱۶: صف پردازش — پاسخ فوری «درخواست شما در صف قرار گرفت» ──
+// 🎯 بازبینی/گام ۲ سند: صف از LIST به Sorted Set (ZSET) ارتقا یافت.
+//   • ورود:   ZADD afagh:wr:queue <timestamp> <item>   (score = زمان دقیق ثبت)
+//   • جایگاه: ZRANK → O(log N) به‌جای LPOS خطی O(N)؛ با ۵۰۰۰ دانشجوی همزمان،
+//             رفرش هر ثانیه بدون درگیری تک‌نخی Redis محاسبه می‌شود.
+//   • خروج:   ZPOPMIN → قدیمی‌ترین (عادلانه‌ترین) ثبت با یک دستور اتمیک.
 export async function enqueueSubmit(userId: number, studentId: number) {
   const ticket: QueueTicket = { id: randomUUID(), userId, studentId, enqueuedAt: Date.now() };
   const item = JSON.stringify(ticket);
-  await redis.rpush(K.queue, item);
-  // نوبت همان لحظه (LPOS با رشتهٔ کامل آیتم — مقایسهٔ اعضای لیست رشته‌ای است)
-  const idx = await redis.lpos(K.queue, item);
+  await redis.zadd(K.queue, ticket.enqueuedAt, item);
+  // ZRANK ایندیس را از ۰ برمی‌گرداند → ۱+ = شمارهٔ نوبت
+  const idx = await redis.zrank(K.queue, item);
   const position = idx === null ? -1 : idx + 1;
   await redis.set(K.latest(userId), JSON.stringify({ item, state: 'WAITING' as WrState, enqueuedAt: ticket.enqueuedAt, position }), 'EX', 1800);
   return { ticket, position, item };
 }
 
 export async function queuePosition(item: string): Promise<number> {
-  const idx = await redis.lpos(K.queue, item);
+  const idx = await redis.zrank(K.queue, item);
   return idx === null ? -1 : idx + 1;
 }
 
@@ -154,7 +160,10 @@ export function ensureWorker() {
     for (let i = 0; i < BATCH; i++) {
       let raw: string | null = null;
       try {
-        raw = await redis.lpop(K.queue);
+        // ZPOPMIN آرایهٔ [member, score] برمی‌گرداند — قدیمی‌ترین ثبت با کمترین score
+        const popped = await redis.zpopmin(K.queue, 1);
+        if (!popped || popped.length === 0) return;
+        raw = popped[0]; // member (خود آیتم JSON)
       } catch { return; }
       if (!raw) return;
       const t = JSON.parse(raw) as QueueTicket;
@@ -173,7 +182,7 @@ export function ensureWorker() {
 
 export async function waitingRoomStats() {
   try {
-    const [qlen, warmed, ping] = await Promise.all([redis.llen(K.queue), redis.hlen(K.caps), redis.ping()]);
+    const [qlen, warmed, ping] = await Promise.all([redis.zcard(K.queue), redis.hlen(K.caps), redis.ping()]);
     return { up: ping === 'PONG', queueLength: qlen, warmedOfferings: warmed };
   } catch {
     return { up: false, queueLength: 0, warmedOfferings: 0 };
