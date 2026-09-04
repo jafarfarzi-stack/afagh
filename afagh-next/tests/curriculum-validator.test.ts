@@ -27,11 +27,11 @@ const baseInput = (over?: Partial<CurriculumCheckInput>): CurriculumCheckInput =
   // مجموع دروس الزامی CORE/MAJOR: ساختمان داده ۴ + الگوریتم ۳ = ۷
   totalRequiredUnits: 7,
   courses: [
-    { courseId: 1, code: 'MA101', title: 'ریاضی ۱', units: 3, roleType: 'GENERAL', isRequired: 1, isElective: 0, isGraduationRequired: 0, recommendedSemester: 1, autoCorequisiteAllowed: 0 },
-    { courseId: 2, code: 'CS201', title: 'ساختمان داده', units: 4, roleType: 'CORE', isRequired: 1, isElective: 0, isGraduationRequired: 1, recommendedSemester: 3, autoCorequisiteAllowed: 0 },
-    { courseId: 3, code: 'CS301', title: 'الگوریتم', units: 3, roleType: 'MAJOR', isRequired: 1, isElective: 0, isGraduationRequired: 1, recommendedSemester: 4, autoCorequisiteAllowed: 0 },
-    { courseId: 4, code: 'CS401', title: 'پایان‌نامه', units: 6, roleType: 'THESIS', isRequired: 1, isElective: 0, isGraduationRequired: 0, recommendedSemester: 8, autoCorequisiteAllowed: 0 },
-    { courseId: 5, code: 'EL101', title: 'اختیاری', units: 2, roleType: 'ELECTIVE', isRequired: 0, isElective: 1, isGraduationRequired: 0, recommendedSemester: 5, autoCorequisiteAllowed: 0 },
+    { courseId: 1, code: 'MA101', title: 'ریاضی ۱', units: 3, roleType: 'GENERAL', isRequired: 1, isElective: 0, isGraduationRequired: 0, recommendedSemester: 1, autoCorequisiteAllowed: 0, clusterId: null },
+    { courseId: 2, code: 'CS201', title: 'ساختمان داده', units: 4, roleType: 'CORE', isRequired: 1, isElective: 0, isGraduationRequired: 1, recommendedSemester: 3, autoCorequisiteAllowed: 0, clusterId: null },
+    { courseId: 3, code: 'CS301', title: 'الگوریتم', units: 3, roleType: 'MAJOR', isRequired: 1, isElective: 0, isGraduationRequired: 1, recommendedSemester: 4, autoCorequisiteAllowed: 0, clusterId: null },
+    { courseId: 4, code: 'CS401', title: 'پایان‌نامه', units: 6, roleType: 'THESIS', isRequired: 1, isElective: 0, isGraduationRequired: 0, recommendedSemester: 8, autoCorequisiteAllowed: 0, clusterId: null },
+    { courseId: 5, code: 'EL101', title: 'اختیاری', units: 2, roleType: 'ELECTIVE', isRequired: 0, isElective: 1, isGraduationRequired: 0, recommendedSemester: 5, autoCorequisiteAllowed: 0, clusterId: null },
   ],
   rules: [],
   existingCodes: new Set(['MA101', 'CS201', 'CS301', 'CS401', 'EL101', 'PH101']),
@@ -123,6 +123,78 @@ eq('گیت: فقط WARN مانع نیست', hasBlockingErrors(validateCurriculum
   rules: [{ courseId: 2, ruleType: 'COREQ', logicTree: { operator: 'AND', conditions: [{ course: 'PH101' }] } }],
 }))), false);
 eq('گیت: نسخهٔ سالم آزاد است', hasBlockingErrors(okUnits), false);
+
+
+// ─────────────────────── فاز ۴: چک‌های تکمیلی ───────────────────────
+console.log('— فاز ۴: بار ترم، ترکیب نقش‌ها، گرایش، هم‌ارزی، ترم‌های نامشخص —');
+
+// ۷) SEMESTER_LOAD
+const heavySem = validateCurriculumCore(baseInput({
+  maxUnitsPerTerm: 20,
+  courses: baseInput().courses.map(c => ({
+    ...c,
+    units: c.courseId === 4 ? 25 : c.units, // پایان‌نامه ۲۵ واحد در ترم ۸
+  })),
+}));
+eq('بار ترم ۸ از سقف ۲۰ → WARN', hasCheck(heavySem, 'SEMESTER_LOAD', 'WARN'), true);
+eq('affected شامل CS401', (heavySem.find(r => r.check === 'SEMESTER_LOAD')?.affected ?? []).includes('CS401'), true);
+
+const lightSem = validateCurriculumCore(baseInput({ maxUnitsPerTerm: 30 }));
+eq('بار ترم زیر سقف → بدون یافته', hasCheck(lightSem, 'SEMESTER_LOAD'), false);
+
+const noCap = validateCurriculumCore(baseInput({ maxUnitsPerTerm: null }));
+eq('بدون سقف (null) → چک رد می‌شود', hasCheck(noCap, 'SEMESTER_LOAD'), false);
+
+// ۸) COURSE_TYPES_COMPLETE
+const missingGeneral = validateCurriculumCore(baseInput({
+  minRoleCounts: { GENERAL: 2, MAJOR: 1 },
+}));
+eq('گروهی بدون حداقل ۲ درس عمومی → WARN', hasCheck(missingGeneral, 'COURSE_TYPES_COMPLETE', 'WARN'), true);
+
+const rolesOk = validateCurriculumCore(baseInput({ minRoleCounts: { GENERAL: 1, MAJOR: 1, CORE: 1 } }));
+eq('حداقل نقش‌ها تأمین → بدون یافته', hasCheck(rolesOk, 'COURSE_TYPES_COMPLETE'), false);
+
+const noRolesSpec = validateCurriculumCore(baseInput({ minRoleCounts: {} }));
+eq('بدون حداقل مقرر → چک اجرا نمی‌شود', hasCheck(noRolesSpec, 'COURSE_TYPES_COMPLETE'), false);
+
+// ۹) TRACK_INTEGRITY
+const trackNoElective = validateCurriculumCore(baseInput({
+  trackId: 7,
+  courses: baseInput().courses.map(c => c.courseId === 5 ? { ...c, roleType: 'CORE' } : c), // EL101 دیگر انتخابی نیست
+}));
+eq('نسخهٔ گرایشی بدون درس انتخابی → WARN', hasCheck(trackNoElective, 'TRACK_INTEGRITY', 'WARN'), true);
+
+const trackWithElective = validateCurriculumCore(baseInput({ trackId: 7 })); // EL101 هست
+eq('نسخهٔ گرایشی با انتخابی → بدون یافته', hasCheck(trackWithElective, 'TRACK_INTEGRITY'), false);
+
+const freeTrack = validateCurriculumCore(baseInput({ trackId: null }));
+eq('گرایش آزاد → چک اجرا نمی‌شود', hasCheck(freeTrack, 'TRACK_INTEGRITY'), false);
+
+// ۱۰) EQUIVALENCY_DISJOINT
+const equivDup = validateCurriculumCore(baseInput({
+  courses: baseInput().courses.map(c =>
+    c.courseId === 1 ? { ...c, clusterId: 5 } : c.courseId === 2 ? { ...c, clusterId: 5 } : c
+  ),
+}));
+eq('دو درس هم‌ارز در یک نسخه → WARN', hasCheck(equivDup, 'EQUIVALENCY_DISJOINT', 'WARN'), true);
+eq('affected هر دو کد هم‌ارز', (equivDup.find(r => r.check === 'EQUIVALENCY_DISJOINT')?.affected ?? []).join(',') === 'MA101,CS201', true);
+
+const equivSingle = validateCurriculumCore(baseInput({
+  courses: baseInput().courses.map(c => c.courseId === 1 ? { ...c, clusterId: 5 } : c),
+}));
+eq('یک عضو خوشه → بدون یافته', hasCheck(equivSingle, 'EQUIVALENCY_DISJOINT'), false);
+
+// ۱۱) SEMESTER_UNASSIGNED
+const unassignedSem = validateCurriculumCore(baseInput({
+  courses: baseInput().courses.map(c => c.courseId === 5 ? { ...c, recommendedSemester: null } : c),
+}));
+eq('درس بدون ترم مصوب → WARN', hasCheck(unassignedSem, 'SEMESTER_UNASSIGNED', 'WARN'), true);
+eq('همه دارای ترم → بدون یافته', hasCheck(okUnits, 'SEMESTER_UNASSIGNED'), false);
+
+// ۱۲) نسخهٔ خالی — هیچ ERROR ساختاری نباید بدهد (فقط پوشش)
+const empty = validateCurriculumCore({ ...baseInput(), courses: [], rules: [] });
+eq('نسخهٔ خالی: دور ندارد', hasCheck(empty, 'PREREQ_CYCLE_FREE'), false);
+eq('نسخهٔ خالی: ارجاع ندارد', hasCheck(empty, 'PREREQ_REFERENCES_VALID'), false);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

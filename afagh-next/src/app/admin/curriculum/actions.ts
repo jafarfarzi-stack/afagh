@@ -85,6 +85,7 @@ async function loadVersionData(versionId: number) {
       courseId: curriculum_courses.courseId,
       code: courses.code,
       title: courses.title,
+      clusterId: courses.clusterId,                            // خوشهٔ هم‌ارزی — چک ۱۰
       units: courses.units,                                    // واحد بانک (numeric → number)
       versionUnits: curriculum_courses.units,                  // override نسخه
       roleType: curriculum_courses.roleType,
@@ -110,6 +111,7 @@ async function loadVersionData(versionId: number) {
       courseId: r.courseId,
       code: r.code,
       title: r.title,
+      clusterId: r.clusterId,
       units: Number(r.versionUnits ?? r.units ?? 0),
       roleType: r.roleType,
       isRequired: r.isRequired ?? 1,
@@ -128,14 +130,41 @@ async function loadVersionData(versionId: number) {
   };
 }
 
-async function runChecks(versionId: number): Promise<CheckResult[]> {
-  const data = await loadVersionData(versionId);
-  return validateCurriculumCore({
+/** حداقل مقرر از هر نقش در یک برنامهٔ درسی (قابل گسترش بعدی از تنظیمات) */
+const DEFAULT_MIN_ROLES: Record<string, number> = { GENERAL: 1, CORE: 1, MAJOR: 1 };
+
+/**
+ * تکمیل ورودی خالص Validator از دادهٔ بارگیری‌شده:
+ * سقف واحد ترم: override نسخه → مقطع → ۲۰ (پیش‌فرض سیستم)؛
+ * برای مقاطع ارشد/دکتری وجود پایان‌نامه نیز الزامی‌شده (چک ۸).
+ */
+async function buildCheckInput(data: Awaited<ReturnType<typeof loadVersionData>>) {
+  let maxUnitsPerTerm: number | null = data.version.maxUnitsPerTerm;
+  let minRoleCounts: Partial<Record<string, number>> = { ...DEFAULT_MIN_ROLES };
+  const [deg] = await db
+    .select({ code: degree_level_configs.code, title: degree_level_configs.title, maxUnitsPerTerm: degree_level_configs.maxUnitsPerTerm })
+    .from(degree_level_configs)
+    .where(eq(degree_level_configs.id, data.version.degreeLevelId))
+    .limit(1);
+  if (maxUnitsPerTerm == null) maxUnitsPerTerm = deg?.maxUnitsPerTerm ?? 20;
+  if (deg && (deg.code?.includes('MASTER') || deg.code?.includes('PHD') || deg.title?.includes('ارشد') || deg.title?.includes('دکتری'))) {
+    minRoleCounts = { ...minRoleCounts, THESIS: 1 };
+  }
+  return {
     totalRequiredUnits: Number(data.version.totalRequiredUnits ?? 0),
+    maxUnitsPerTerm,
+    trackId: data.version.trackId,
+    versionCode: data.version.versionCode,
     courses: data.courses,
     rules: data.rules,
     existingCodes: data.existingCodes,
-  });
+    minRoleCounts,
+  };
+}
+
+async function runChecks(versionId: number): Promise<CheckResult[]> {
+  const data = await loadVersionData(versionId);
+  return validateCurriculumCore(await buildCheckInput(data));
 }
 
 /** کپی عمیق دروس و قواعد از یک نسخه به نسخهٔ جدید (برای clone / revision) */
@@ -232,10 +261,7 @@ export async function getCurriculumVersionDetailAction(versionId: number) {
         courses: data.courses,
         rules: data.rules,
         approvals,
-        checks: validateCurriculumCore({
-          totalRequiredUnits: Number(data.version.totalRequiredUnits ?? 0),
-          courses: data.courses, rules: data.rules, existingCodes: data.existingCodes,
-        }),
+        checks: validateCurriculumCore(await buildCheckInput(data)),
       },
     };
   } catch (err: any) {

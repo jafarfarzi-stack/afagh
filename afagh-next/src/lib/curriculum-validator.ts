@@ -13,6 +13,14 @@ import type { CheckResult, LogicNode } from './curriculum-types';
 /** ورودی خالص ارزیابی — Actions داده را از DB بارگیری و پاس می‌دهند */
 export interface CurriculumCheckInput {
   totalRequiredUnits: number;
+  /** سقف واحد هر ترم (override نسخه یا مقطع) — null/تعریف‌نشده = بدون سقف (چک SEMESTER_LOAD رد می‌شود) */
+  maxUnitsPerTerm?: number | null;
+  /** گرایشِ نسخه — برای چک یکپارچگی گرایش (null = گرایش آزاد) */
+  trackId?: number | null;
+  /** کد نسخه — فقط برای پیام‌های خوانا */
+  versionCode?: string;
+  /** حداقل تعداد مقرر از هر نقش (خالی = چک ترکیب نقش‌ها اجرا نمی‌شود) */
+  minRoleCounts?: Partial<Record<string, number>>;
   /** دروسِ نسخه به‌همراه مشخصات بانک (units: واحد مؤثر — override نسخه یا درس) */
   courses: {
     courseId: number;
@@ -25,6 +33,7 @@ export interface CurriculumCheckInput {
     isGraduationRequired: number;
     recommendedSemester: number | null;
     autoCorequisiteAllowed: number;
+    clusterId: number | null; // خوشهٔ هم‌ارزی (NULL = درس مستقل)
   }[];
   /** قواعدِ مقیّد به همین نسخه (course_rules.syllabusId = نسخه) */
   rules: {
@@ -188,6 +197,89 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
       'GRADUATION_COVERAGE',
       'هیچ درسی به‌عنوان «شرط الزامی فارغ‌التحصیلی» علامت‌گذاری نشده است؛ بدون آن تطبیق سرفصل در فارغ‌التحصیلی ممکن نیست.',
       input.courses.filter((c) => c.roleType === 'CORE' || c.roleType === 'MAJOR').slice(0, 10).map((c) => c.code)
+    ));
+  }
+
+  // ── ۷) بار ترم: مجموع واحد هر ترم نباید از سقف مجاز بگذرد ──
+  if (input.maxUnitsPerTerm != null) {
+    const bySemester = new Map<number, { units: number; codes: string[] }>();
+    for (const c of input.courses) {
+      if (c.recommendedSemester == null) continue;
+      const cur = bySemester.get(c.recommendedSemester) ?? { units: 0, codes: [] };
+      cur.units += c.units;
+      cur.codes.push(c.code);
+      bySemester.set(c.recommendedSemester, cur);
+    }
+    for (const [sem, info] of [...bySemester.entries()].sort((a, b) => a[0] - b[0])) {
+      if (info.units > input.maxUnitsPerTerm) {
+        results.push(warn(
+          'SEMESTER_LOAD',
+          `بار ترم ${sem} (${info.units} واحد) از سقف مجاز (${input.maxUnitsPerTerm} واحد) بیشتر است.`,
+          info.codes
+        ));
+      }
+    }
+  }
+
+  // ── ۸) ترکیب نقش‌ها: هر حداقل مقرر، باید در نسخه تأمین شده باشد ──
+  if (input.minRoleCounts && Object.keys(input.minRoleCounts).length > 0) {
+    const countByRole = new Map<string, number>();
+    for (const c of input.courses) {
+      countByRole.set(c.roleType, (countByRole.get(c.roleType) ?? 0) + 1);
+    }
+    const roleFa: Record<string, string> = {
+      CORE: 'اصلی', MAJOR: 'تخصصی', ELECTIVE: 'اختیاری', GENERAL: 'عمومی',
+      THESIS: 'پایان‌نامه', INTERNSHIP: 'کارآموزی', WORKSHOP: 'کارگاه',
+    };
+    for (const [role, min] of Object.entries(input.minRoleCounts)) {
+      const count = countByRole.get(role) ?? 0;
+      if (count < (min ?? 0)) {
+        results.push(warn(
+          'COURSE_TYPES_COMPLETE',
+          `نقش «${roleFa[role] ?? role}» فقط ${count} درس دارد؛ حداقل مقرر ${min} درس است.`,
+          input.courses.filter((c) => c.roleType === role).map((c) => c.code)
+        ));
+      }
+    }
+  }
+
+  // ── ۹) یکپارچگی گرایش: نسخهٔ گرایش‌دار باید دست‌کم یک درس انتخابیِ متمایز داشته باشد ──
+  if (input.trackId != null) {
+    const electives = input.courses.filter((c) => c.roleType === 'ELECTIVE');
+    if (electives.length === 0) {
+      results.push(warn(
+        'TRACK_INTEGRITY',
+        `نسخهٔ گرایشی (${input.trackId}) هیچ درس انتخابی متمایزی ندارد؛ در عمل با نسخهٔ گرایش آزاد یکسان است.`,
+        []
+      ));
+    }
+  }
+
+  // ── ۱۰) تفکیک هم‌ارزها: دو درس هم‌ارز (یک خوشه) نباید هم‌زمان در یک نسخه باشند ──
+  const byCluster = new Map<number, { code: string; title: string }[]>();
+  for (const c of input.courses) {
+    if (c.clusterId == null) continue;
+    const cur = byCluster.get(c.clusterId) ?? [];
+    cur.push({ code: c.code, title: c.title });
+    byCluster.set(c.clusterId, cur);
+  }
+  for (const [clusterId, members] of byCluster) {
+    if (members.length > 1) {
+      results.push(warn(
+        'EQUIVALENCY_DISJOINT',
+        `دروس هم‌ارز «${members.map((m) => m.title).join('» و «')}» (خوشهٔ ${clusterId}) هر دو در این نسخه‌اند؛ گذراندن یکی باید دیگری را پوشش دهد وگرنه واحدها دوبار شمرده می‌شوند.`,
+        members.map((m) => m.code)
+      ));
+    }
+  }
+
+  // ── ۱۱) دروس بدون ترم مصوب: تخصیص ترمی برای چیدمان درسی الزامی است ──
+  const unassigned = input.courses.filter((c) => c.recommendedSemester == null);
+  if (unassigned.length > 0) {
+    results.push(warn(
+      'SEMESTER_UNASSIGNED',
+      `${unassigned.length} درس بدون ترم مصوب‌اند: ${unassigned.map((c) => c.code).join('، ')} — پیش از چیدمان ترمی تعیین شوند.`,
+      unassigned.map((c) => c.code)
     ));
   }
 
