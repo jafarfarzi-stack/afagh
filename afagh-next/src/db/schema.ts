@@ -4,7 +4,7 @@
 //  SQLite→PG مستقیم باشد. لایهٔ سخت‌سازی (ایندکس/پارتیشن/RLS — سند §۲۰۹۳–۲۲۴۰)
 //  → src/db/pg-hardening.sql
 // ══════════════════════════════════════════════════════════════════════
-import { pgTable, serial, integer, varchar, text, timestamp, date, time, numeric, jsonb, unique, primaryKey, index, check, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, serial, integer, varchar, text, timestamp, date, time, numeric, jsonb, boolean, unique, primaryKey, index, check, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const roles = pgTable('roles', {
@@ -104,7 +104,9 @@ export const majors = pgTable('majors', {
   isActive: integer('isActive').default(1),                             // فعال/غیرفعال
   headStaffCode: varchar('headStaffCode', { length: 20 }),              // کد استادی مدیر گروه
   expertName: varchar('expertName', { length: 150 }),                   // نام کارشناس رشته
-  lastCouncilDate: varchar('lastCouncilDate', { length: 10 })           // آخرین جلسه شورای گسترش (شمسی)
+  lastCouncilDate: varchar('lastCouncilDate', { length: 10 }),           // آخرین جلسه شورای گسترش (شمسی)
+  /** رشتهٔ دارای دانشجوی شاغلِ زیاد — اولویت شیفت عصر در امتحانات (فاز ۹) */
+  isWorkingClassMajority: boolean('isWorkingClassMajority').notNull().default(false)
 });
 
 export const sanjesh_mappings = pgTable('sanjesh_mappings', {
@@ -471,7 +473,9 @@ export const enrollments = pgTable('enrollments', {
   gradeStatus: varchar('gradeStatus', { length: 20 }).notNull().default('PENDING'),
   isDirectedReading: integer('isDirectedReading').default(0),
   registeredAt: timestamp('registeredAt').defaultNow(),
-  absenceMarkedAt: timestamp('absenceMarkedAt')
+  absenceMarkedAt: timestamp('absenceMarkedAt'),
+  /** تأییدیهٔ دیجیتال دانشجو برای داشتن دو امتحان هم‌روز (شیفت‌های متفاوت) — فاز ۱۰ */
+  hasAcceptedSameDayExam: integer('hasAcceptedSameDayExam').notNull().default(0)
 }, (t) => ({ uq: unique('uq_enrollments').on(t.studentId, t.offeringId) }));
 
 export const grade_appeals = pgTable('grade_appeals', {
@@ -746,6 +750,20 @@ export const exam_sessions = pgTable('exam_sessions', {
   endTime: varchar('endTime', { length: 5 }).notNull(),
   UNIQUE: text('UNIQUE')
 }, (t) => ({ uq: unique('uq_exam_sessions').on(t.termId, t.examDate, t.startTime) }));
+
+/** زون‌بندی تقویم امتحانات هر ترم (فاز ۹): ارشد = کل ۳ هفته؛ عمومی = هفتهٔ اول؛ تخصصی = هفتهٔ ۲–۳ */
+export const exam_calendar_configs = pgTable('exam_calendar_configs', {
+  id: serial('id').primaryKey(),
+  termId: integer('termId').notNull().references(() => academic_terms.id),
+  globalStart: varchar('globalStart', { length: 10 }).notNull(),
+  globalEnd: varchar('globalEnd', { length: 10 }).notNull(),
+  generalStart: varchar('generalStart', { length: 10 }).notNull(),
+  generalEnd: varchar('generalEnd', { length: 10 }).notNull(),
+  specializedStart: varchar('specializedStart', { length: 10 }).notNull(),
+  specializedEnd: varchar('specializedEnd', { length: 10 }).notNull(),
+  updatedByUserId: integer('updatedByUserId').references(() => users.id),
+  updatedAt: timestamp('updatedAt').defaultNow()
+}, (t) => ({ uq: unique('uq_exam_calendar_configs_term').on(t.termId) }));
 
 export const seat_allocations = pgTable('seat_allocations', {
   id: serial('id').primaryKey(),

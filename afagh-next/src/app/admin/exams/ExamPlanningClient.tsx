@@ -10,7 +10,12 @@
 // ════════════════════════════════════════════════════════════════════════
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { getExamWorkspaceAction, issueExamAttendanceAction } from './actions';
+import {
+  getExamWorkspaceAction, issueExamAttendanceAction,
+  getExamPlanningAction, upsertExamZoningAction, scheduleExamSlotAction,
+  scheduleUnifiedClusterAction, suggestExamSlotsAction, generateSeatAllocationsAction,
+} from './actions';
+import { examProctorClockInAction, examChainOverviewAction } from '@/lib/exam-actions';
 
 const faNum = (n: any) => (n === null || n === undefined || n === '' ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
 
@@ -45,7 +50,13 @@ const ATT_LABELS: Record<string, { label: string; cls: string }> = {
   PENDING: { label: 'در انتظار', cls: 'bg-slate-100 text-slate-600' },
 };
 
-type ExamTab = 'SCHEDULE_TABLE' | 'EXAM_COURSES' | 'EXAM_HALLS' | 'PROCTORS' | 'CONFLICT_CHECKER';
+type ExamTab = 'SCHEDULE_TABLE' | 'EXAM_COURSES' | 'EXAM_HALLS' | 'PROCTORS' | 'CONFLICT_CHECKER' | 'PLANNING';
+
+function addHours(start: string): string {
+  const [h, m] = start.split(':').map(Number);
+  const tot = (h ?? 8) * 60 + (m ?? 0) + 120;
+  return `${String(Math.floor(tot / 60) % 24).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
+}
 
 export default function ExamPlanningClient({ initial }: { initial: ExamWorkspace }) {
   const [terms, setTerms] = useState(initial.terms);
@@ -58,6 +69,21 @@ export default function ExamPlanningClient({ initial }: { initial: ExamWorkspace
   const [isLoading, setIsLoading] = useState(false);
   const [busySessionId, setBusySessionId] = useState<number | null>(null);
   const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // ── فاز ۹: کارتابل برنامه‌ریزی امتحانات ──
+  const [planning, setPlanning] = useState<{
+    zoning: { globalStart: string; globalEnd: string; generalStart: string; generalEnd: string; specializedStart: string; specializedEnd: string } | null;
+    radar: { examDate: string; startTime: string; endTime: string; booked: number; available: number; status: string; usagePercent: number; splitOptions: { label: string }[] }[];
+    clusters: { clusterId: number; clusterTitle: string; courseCount: number; demand: number; scheduledSlot: { examDate: string; startTime: string; endTime: string } | null }[];
+    totalCapacity: number;
+  } | null>(null);
+  const [zoneForm, setZoneForm] = useState<{ globalStart: string; globalEnd: string; generalStart: string; generalEnd: string; specializedStart: string; specializedEnd: string }>({
+    globalStart: '', globalEnd: '', generalStart: '', generalEnd: '', specializedStart: '', specializedEnd: '',
+  });
+  const [slotDraft, setSlotDraft] = useState<Record<number, { date: string; start: string }>>({});
+  const [suggestions, setSuggestions] = useState<Record<number, { examDate: string; startTime: string; endTime: string; score: number; reasons: string[] }[]>>({});
+  const [clusterDraft, setClusterDraft] = useState<Record<number, { date: string; start: string }>>({});
+  const [busyPlanning, setBusyPlanning] = useState(false);
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToast({ text, type });
@@ -81,11 +107,25 @@ export default function ExamPlanningClient({ initial }: { initial: ExamWorkspace
     }
   }, []);
 
+  const reloadPlanning = useCallback(async (termId: number) => {
+    const w = await getExamPlanningAction(termId);
+    if (!w.ok) { showToast(w.error, 'error'); return; }
+    setPlanning(w.data);
+    if (w.data.zoning) setZoneForm(w.data.zoning);
+  }, [showToast]);
+
+  // بارگذاری اولیهٔ کارتابل برنامه‌ریزی (فاز ۹)
+  useEffect(() => {
+    reloadPlanning(initial.selectedTermId ?? 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // تغییر نیمسال → بارگذاری مجدد واقعی
   useEffect(() => {
     if (selectedTermId === (initial.selectedTermId ?? 0)) return;
     reload(selectedTermId);
-  }, [selectedTermId, initial.selectedTermId, reload]);
+    reloadPlanning(selectedTermId);
+  }, [selectedTermId, initial.selectedTermId, reload, reloadPlanning]);
 
   /** صدور حضور و غیاب واقعی یک سشن از موتور */
   const handleIssueAttendance = async (sessionId: number) => {
@@ -110,12 +150,78 @@ export default function ExamPlanningClient({ initial }: { initial: ExamWorkspace
     return Array.from(byKey.entries()).filter(([, v]) => v.length > 1);
   }, [courses]);
 
+  // ── فاز ۹ هندلرها ──
+  const handleSaveZoning = async () => {
+    setBusyPlanning(true);
+    try {
+      const r = await upsertExamZoningAction(selectedTermId, zoneForm);
+      showToast(r.ok ? r.message : r.error ?? 'خطا', r.ok ? 'success' : 'error');
+      if (r.ok) reloadPlanning(selectedTermId);
+    } finally { setBusyPlanning(false); }
+  };
+
+  const handleSuggestSlots = async (offeringId: number) => {
+    const r = await suggestExamSlotsAction(selectedTermId, offeringId);
+    if (!r.ok) { showToast(r.error, 'error'); return; }
+    setSuggestions(prev => ({ ...prev, [offeringId]: r.data }));
+  };
+
+  const handleScheduleSlot = async (offeringId: number, code: string) => {
+    const d = slotDraft[offeringId];
+    if (!d?.date || !d?.start) { showToast('تاریخ و ساعت شروع را وارد کنید.', 'error'); return; }
+    const end = addHours(d.start);
+    setBusyPlanning(true);
+    try {
+      const r = await scheduleExamSlotAction({ termId: selectedTermId, offeringId, examDate: d.date, startTime: d.start, endTime: end });
+      showToast(r.ok ? r.message : r.error, r.ok ? 'success' : 'error');
+      if (!r.ok && (r as any).status === 'OVERFLOW' && (r as any).splitOptions?.length) {
+        showToast(`💡 ${(r as any).splitOptions.map((o: any) => o.label).join(' یا ')}`, 'error');
+      }
+      if (r.ok) { reload(selectedTermId); reloadPlanning(selectedTermId); }
+    } finally { setBusyPlanning(false); }
+    void code;
+  };
+
+  const handleUnifiedCluster = async (clusterId: number, title: string) => {
+    const d = clusterDraft[clusterId];
+    if (!d?.date || !d?.start) { showToast('تاریخ و ساعت شروع امتحان تجمیعی را وارد کنید.', 'error'); return; }
+    setBusyPlanning(true);
+    try {
+      const r = await scheduleUnifiedClusterAction({ termId: selectedTermId, clusterId, examDate: d.date, startTime: d.start, endTime: addHours(d.start) });
+      showToast(r.ok ? r.message : r.error, r.ok ? 'success' : 'error');
+      if (r.ok) { reload(selectedTermId); reloadPlanning(selectedTermId); }
+    } finally { setBusyPlanning(false); }
+    void title;
+  };
+
+  const handleGenerateSeats = async () => {
+    setBusyPlanning(true);
+    try {
+      const r = await generateSeatAllocationsAction(selectedTermId);
+      showToast(r.ok ? r.message : r.error ?? 'خطا', r.ok ? 'success' : 'error');
+      if (r.ok) reload(selectedTermId);
+    } finally { setBusyPlanning(false); }
+  };
+
+  const handleProctorClockIn = async (sessionId: number) => {
+    const r = await examProctorClockInAction(sessionId);
+    showToast(r.ok ? 'مراقبین سشن وارد شدند.' : r.error ?? 'خطا', r.ok ? 'success' : 'error');
+    if (r.ok) reload(selectedTermId);
+  };
+
+  const handleChainOverview = async (sessionId: number) => {
+    const r = await examChainOverviewAction({ sessionId });
+    if (!r.ok) { showToast(r.error ?? 'خطا', 'error'); return; }
+    showToast('زنجیرهٔ تحویل: ' + JSON.stringify((r as any).data ?? (r as any).overview ?? r), 'success');
+  };
+
   const tabs: { id: ExamTab; label: string; badge: string }[] = [
     { id: 'SCHEDULE_TABLE', label: '📅 جدول سشن‌های امتحان', badge: `${faNum(sessions.length)} سشن` },
     { id: 'EXAM_COURSES', label: '📖 دروس امتحانی و بستهٔ اوراق', badge: `${faNum(courses.length)} درس` },
     { id: 'EXAM_HALLS', label: '🏛️ سالن‌های امتحان', badge: `${faNum(halls.length)} سالن` },
     { id: 'PROCTORS', label: '🧑‍🏫 مراقبین جلسات', badge: `${faNum(sessions.reduce((s, x) => s + x.proctors.length, 0))} نفر` },
     { id: 'CONFLICT_CHECKER', label: '⚠️ بررسی سشن‌های هم‌زمان', badge: concurrentCount > 0 ? `${faNum(concurrentCount)} گروه` : 'پاک' },
+    { id: 'PLANNING', label: '🗓️ برنامه‌ریزی امتحانات', badge: planning?.radar.length ? `${faNum(planning.radar.length)} شیفت` : '—' },
   ];
 
   return (
@@ -326,9 +432,25 @@ export default function ExamPlanningClient({ initial }: { initial: ExamWorkspace
           <div className="space-y-2">
             {sessions.map(s => (
               <div key={s.id} className="p-3.5 rounded-xl border border-slate-200 space-y-1.5">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="font-black text-slate-900 text-xs">سشن {faNum(s.id)} — {faNum(s.examDate)} ({faNum(s.startTime)} تا {faNum(s.endTime)})</span>
-                  <span className="text-[10px] font-bold text-slate-500">{faNum(s.proctors.length)} مراقب</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold text-slate-500">{faNum(s.proctors.length)} مراقب</span>
+                    <button
+                      onClick={() => handleProctorClockIn(s.id)}
+                      disabled={busySessionId === s.id}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-700 hover:bg-indigo-800 text-white font-extrabold text-[10px] disabled:opacity-50"
+                    >
+                      🕐 ورود مراقبین
+                    </button>
+                    <button
+                      onClick={() => handleChainOverview(s.id)}
+                      disabled={busySessionId === s.id}
+                      className="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-800 text-white font-extrabold text-[10px] disabled:opacity-50"
+                    >
+                      🔗 زنجیرهٔ تحویل
+                    </button>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {s.proctors.map((p, i) => (
@@ -374,6 +496,222 @@ export default function ExamPlanningClient({ initial }: { initial: ExamWorkspace
               </div>
             );
           })()}
+        </div>
+      )}
+
+      {/* ── تب ۶: برنامه‌ریزی امتحانات (فاز ۹) + تخصیص صندلی (فاز ۱۰) ── */}
+      {activeTab === 'PLANNING' && (
+        <div className="space-y-5">
+          {/* زون‌بندی */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3 className="font-extrabold text-slate-900 text-sm">📆 زون‌بندی تقویم امتحانات (قانون ۱–۳: ارشد = کل ۳ هفته؛ عمومی = هفتهٔ اول؛ تخصصی = هفتهٔ ۲ و ۳)</h3>
+              <button
+                onClick={handleGenerateSeats}
+                disabled={busyPlanning}
+                className="px-3 py-2 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-[11px] disabled:opacity-50"
+              >
+                🪑 تخصیص صندلی همهٔ سشن‌ها (فاز ۱۰)
+              </button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+              {([['globalStart', 'شروع کل (۳ هفته)'], ['globalEnd', 'پایان کل'], ['generalStart', 'شروع هفتهٔ اول (عمومی)'], ['generalEnd', 'پایان هفتهٔ اول'], ['specializedStart', 'شروع هفتهٔ دوم (تخصصی)'], ['specializedEnd', 'پایان هفتهٔ سوم']] as const).map(([k, label]) => (
+                <label key={k} className="block font-bold text-slate-700">
+                  {label}:
+                  <input
+                    type="date"
+                    value={(zoneForm as any)[k]}
+                    onChange={e => setZoneForm({ ...zoneForm, [k]: e.target.value })}
+                    className="mt-1 w-full border border-slate-300 rounded-lg p-2 font-bold text-left"
+                    dir="ltr"
+                  />
+                </label>
+              ))}
+              <div className="flex items-end">
+                <button
+                  onClick={handleSaveZoning}
+                  disabled={busyPlanning}
+                  className="w-full px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs disabled:opacity-50"
+                >
+                  💾 ذخیرهٔ بازه‌ها
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* رادار ظرفیت */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3">
+            <h3 className="font-extrabold text-slate-900 text-sm">📡 رادار ظرفیت امتحانی — تقاضا در برابر {faNum(planning?.totalCapacity ?? 0)} صندلی سالن‌ها</h3>
+            {!planning || planning.radar.length === 0 ? (
+              <div className="p-6 rounded-xl bg-slate-50 border border-slate-200 text-center text-xs font-bold text-slate-500">
+                هنوز شیفت امتحانی رزرو نشده است.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-900 text-white text-center">
+                      <th className="p-2.5 border border-slate-800">تاریخ</th>
+                      <th className="p-2.5 border border-slate-800">شیفت</th>
+                      <th className="p-2.5 border border-slate-800">تقاضا</th>
+                      <th className="p-2.5 border border-slate-800">ظرفیت خالی</th>
+                      <th className="p-2.5 border border-slate-800">اشغال</th>
+                      <th className="p-2.5 border border-slate-800">وضعیت</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {planning.radar.map((r, i) => (
+                      <tr key={i} className={r.status === 'OVERFLOW' ? 'bg-rose-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+                        <td className="p-2.5 border border-slate-200 text-center font-black">{faNum(r.examDate)}</td>
+                        <td className="p-2.5 border border-slate-200 text-center font-mono font-bold">{faNum(r.startTime)} تا {faNum(r.endTime)}</td>
+                        <td className="p-2.5 border border-slate-200 text-center font-extrabold">{faNum(r.booked)}</td>
+                        <td className="p-2.5 border border-slate-200 text-center font-bold">{faNum(Math.max(r.available - r.booked, 0))}</td>
+                        <td className="p-2.5 border border-slate-200 text-center">
+                          <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                            <div className={`h-full ${r.status === 'OVERFLOW' ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(r.usagePercent, 100)}%` }} />
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-500">{faNum(r.usagePercent)}٪</span>
+                        </td>
+                        <td className="p-2.5 border border-slate-200 text-center">
+                          {r.status === 'OVERFLOW' ? (
+                            <span className="text-[10px] font-black text-rose-700">
+                              🔴 سرریز — {r.splitOptions.length > 0 ? r.splitOptions.map(o => o.label).join(' / ') : 'شیفت‌بندی دستی لازم است'}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-black text-emerald-700">🟢 ظرفیت کافی</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* رزرو شیفت دروس + پیشنهاد هوشمند */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3">
+            <h3 className="font-extrabold text-slate-900 text-sm">🎯 رزرو شیفت امتحان دروس (گیت زون‌بندی + قفل ظرفیت + پیشنهاد ۴تایی طلایی)</h3>
+            {courses.length === 0 ? (
+              <div className="p-6 rounded-xl bg-slate-50 border border-slate-200 text-center text-xs font-bold text-slate-500">
+                ابتدا درس‌های امتحانی (schedules نوع EXAM) ثبت شوند.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {courses.map(c => (
+                  <div key={c.offeringId} className="p-3 rounded-xl border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="font-black text-slate-900 text-xs">
+                        {c.courseCode} — {c.courseTitle} <span className="text-slate-400">(گروه {faNum(c.groupNumber)})</span>
+                        {c.examDate && <span className="mr-2 text-[10px] text-indigo-700">رزرو: {faNum(c.examDate)} {faNum(c.startTime)}</span>}
+                      </span>
+                      <button
+                        onClick={() => handleSuggestSlots(c.offeringId)}
+                        disabled={busyPlanning}
+                        className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-[10px] disabled:opacity-50"
+                      >
+                        💡 ۴ پیشنهاد طلایی
+                      </button>
+                    </div>
+                    {suggestions[c.offeringId] && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+                        {suggestions[c.offeringId].map((sug, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setSlotDraft(prev => ({ ...prev, [c.offeringId]: { date: sug.examDate, start: sug.startTime } }))}
+                            className="p-2.5 rounded-xl border-2 border-indigo-200 hover:border-indigo-500 text-right space-y-1"
+                          >
+                            <div className="font-black text-slate-900 text-xs">{faNum(sug.examDate)} — {faNum(sug.startTime)}</div>
+                            <div className="flex flex-wrap gap-1">
+                              {sug.reasons.map((r, j) => (
+                                <span key={j} className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700">{r}</span>
+                              ))}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex items-end gap-2 flex-wrap">
+                      <label className="text-[11px] font-bold text-slate-600">
+                        تاریخ:
+                        <input
+                          type="date"
+                          value={slotDraft[c.offeringId]?.date ?? ''}
+                          onChange={e => setSlotDraft(prev => ({ ...prev, [c.offeringId]: { date: e.target.value, start: prev[c.offeringId]?.start ?? '08:00' } }))}
+                          className="ms-1.5 border border-slate-300 rounded-lg px-2 py-1.5 font-bold text-left"
+                          dir="ltr"
+                        />
+                      </label>
+                      <label className="text-[11px] font-bold text-slate-600">
+                        ساعت شروع:
+                        <select
+                          value={slotDraft[c.offeringId]?.start ?? '08:00'}
+                          onChange={e => setSlotDraft(prev => ({ ...prev, [c.offeringId]: { date: prev[c.offeringId]?.date ?? '', start: e.target.value } }))}
+                          className="ms-1.5 border border-slate-300 rounded-lg px-2 py-1.5 font-bold bg-white"
+                        >
+                          {['08:00', '10:30', '14:00', '16:30'].map(t => <option key={t} value={t}>{faNum(t)}</option>)}
+                        </select>
+                      </label>
+                      <button
+                        onClick={() => handleScheduleSlot(c.offeringId, c.courseCode)}
+                        disabled={busyPlanning}
+                        className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-[11px] disabled:opacity-50"
+                      >
+                        📌 رزرو شیفت
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* امتحان تجمیعی خوشه‌های هم‌ارز */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3">
+            <h3 className="font-extrabold text-slate-900 text-sm">🧩 امتحان تجمیعی خوشه‌های هم‌ارز (یک آزمون واحد برای دروس هم‌محتوا)</h3>
+            {!planning || planning.clusters.length === 0 ? (
+              <div className="p-6 rounded-xl bg-slate-50 border border-slate-200 text-center text-xs font-bold text-slate-500">
+                هیچ خوشهٔ هم‌ارزی با ارائهٔ فعال در این ترم نیست.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {planning.clusters.map(cl => (
+                  <div key={cl.clusterId} className="p-3 rounded-xl border border-slate-200 flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <span className="font-black text-slate-900 text-xs">{cl.clusterTitle}</span>
+                      <span className="ms-2 text-[10px] font-bold text-slate-500">
+                        {faNum(cl.courseCount)} درس هم‌ارز · {faNum(cl.demand)} دانشجو
+                        {cl.scheduledSlot && <span className="text-indigo-700"> · رزرو: {faNum(cl.scheduledSlot.examDate)} {faNum(cl.scheduledSlot.startTime)}</span>}
+                      </span>
+                    </div>
+                    <div className="flex items-end gap-2 flex-wrap">
+                      <input
+                        type="date"
+                        value={clusterDraft[cl.clusterId]?.date ?? ''}
+                        onChange={e => setClusterDraft(prev => ({ ...prev, [cl.clusterId]: { date: e.target.value, start: prev[cl.clusterId]?.start ?? '08:00' } }))}
+                        className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold text-left"
+                        dir="ltr"
+                      />
+                      <select
+                        value={clusterDraft[cl.clusterId]?.start ?? '08:00'}
+                        onChange={e => setClusterDraft(prev => ({ ...prev, [cl.clusterId]: { date: prev[cl.clusterId]?.date ?? '', start: e.target.value } }))}
+                        className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold bg-white"
+                      >
+                        {['08:00', '10:30', '14:00', '16:30'].map(t => <option key={t} value={t}>{faNum(t)}</option>)}
+                      </select>
+                      <button
+                        onClick={() => handleUnifiedCluster(cl.clusterId, cl.clusterTitle)}
+                        disabled={busyPlanning}
+                        className="px-3.5 py-1.5 rounded-lg bg-indigo-700 hover:bg-indigo-800 text-white font-extrabold text-[11px] disabled:opacity-50"
+                      >
+                        🧩 ثبت امتحان تجمیعی
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

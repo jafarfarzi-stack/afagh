@@ -249,3 +249,126 @@ export async function deliverToInstructorAction(px: { offeringId: number; instru
     return { ok: false, error: e?.message ?? 'خطا در تحویل به استاد.' };
   }
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// فاز ۹ — برنامه‌ریزی امتحانات (زون‌بندی تقویم + رادار ظرفیت + قفل شیفت +
+// امتحان تجمیعی خوشه‌های هم‌ارز + ۴ پیشنهاد هوشمند) و فاز ۱۰ — تخصیص صندلی
+// ────────────────────────────────────────────────────────────────────────
+// هر اکشن: requireRole مستقیم (گارد CI) + pass-through به موتور exam-planning
+// (قفل توافقی/گیت ظرفیت/audit داخل موتور) + { ok,error } فارسی.
+// ════════════════════════════════════════════════════════════════════════
+
+import * as planning from '@/lib/exam-planning';
+
+export type ExamPlanningData = {
+  zoning: { globalStart: string; globalEnd: string; generalStart: string; generalEnd: string; specializedStart: string; specializedEnd: string } | null;
+  radar: { examDate: string; startTime: string; endTime: string; booked: number; available: number; status: 'OK' | 'OVERFLOW'; usagePercent: number; splitOptions: { label: string; shifts: number; seatsPerShift: number }[] }[];
+  clusters: { clusterId: number; clusterTitle: string; courseCount: number; demand: number; scheduledSlot: { examDate: string; startTime: string; endTime: string } | null }[];
+  halls: { id: number; name: string; totalCapacity: number }[];
+  totalCapacity: number;
+};
+export type ExamPlanningResult = { ok: true; data: ExamPlanningData } | { ok: false; error: string };
+
+/** کارتابل برنامه‌ریزی: زون‌بندی + رادار ظرفیت + خوشه‌های هم‌ارز */
+export async function getExamPlanningAction(termId: number): Promise<ExamPlanningResult> {
+  await requireRole(EDITORS);
+  try {
+    const [zoning, radar, clusters] = await Promise.all([
+      planning.getExamZoningRow(termId),
+      planning.examCapacityRadar(termId),
+      planning.listEquivClusters(termId),
+    ]);
+    const halls = await db.select().from(exam_halls).orderBy(asc(exam_halls.id));
+    return {
+      ok: true,
+      data: {
+        zoning,
+        radar,
+        clusters,
+        halls: halls.map(h => ({ id: h.id, name: h.name, totalCapacity: Number(h.totalCapacity) })),
+        totalCapacity: halls.reduce((s, h) => s + Number(h.totalCapacity), 0),
+      },
+    };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'خطا در بارگیری کارتابل برنامه‌ریزی امتحانات.' };
+  }
+}
+
+/** ذخیرهٔ زون‌بندی تقویم امتحانات ترم */
+export type SimpleAct = { ok: true; message: string } | { ok: false; error: string };
+export async function upsertExamZoningAction(termId: number, zoning: {
+  globalStart: string; globalEnd: string;
+  generalStart: string; generalEnd: string;
+  specializedStart: string; specializedEnd: string;
+}) {
+  try {
+    const user = await requireRole(EDITORS);
+    const out = await planning.saveExamZoning(user.id, termId, zoning);
+    revalidatePath('/admin/exams');
+    return out.ok ? { ok: true, message: 'بازه‌های تقویم امتحانات ذخیره شد.' } : { ok: false, error: out.error ?? 'خطا' };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'خطا در ذخیرهٔ تقویم امتحانات.' };
+  }
+}
+
+/** رزرو شیفت امتحان یک درس (گیت زون‌بندی + قفل ظرفیت + تجزیه در سرریز) */
+export type ScheduleExamResult =
+  | { ok: true; message: string }
+  | { ok: false; error: string; status?: 'OVERFLOW'; splitOptions?: { label: string; shifts: number; seatsPerShift: number }[] };
+export async function scheduleExamSlotAction(px: {
+  termId: number; offeringId: number; examDate: string; startTime: string; endTime: string;
+}): Promise<ScheduleExamResult> {
+  try {
+    const user = await requireRole(EDITORS);
+    const out = await planning.scheduleExamForOffering(user.id, px);
+    revalidatePath('/admin/exams');
+    return out;
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'خطا در رزرو شیفت امتحان.' };
+  }
+}
+
+/** امتحان تجمیعی خوشهٔ هم‌ارز — یک آزمون واحد برای همهٔ دروس هم‌ارز */
+export type UnifiedClusterResult = { ok: true; message: string } | { ok: false; error: string; status?: 'OVERFLOW'; splitOptions?: { label: string; shifts: number; seatsPerShift: number }[] };
+export async function scheduleUnifiedClusterAction(px: {
+  termId: number; clusterId: number; examDate: string; startTime: string; endTime: string;
+}): Promise<UnifiedClusterResult> {
+  try {
+    const user = await requireRole(EDITORS);
+    const out = await planning.scheduleUnifiedCluster(user.id, px);
+    revalidatePath('/admin/exams');
+    return out;
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'خطا در ثبت امتحان تجمیعی.' };
+  }
+}
+
+/** ۴ پیشنهاد طلایی زمان امتحان (ظرفیت گیت + امتیاز عصرِ ارشد/شاغل) */
+export type SuggestSlotsResult = { ok: true; data: { examDate: string; startTime: string; endTime: string; score: number; reasons: string[]; booked: number; available: number }[] } | { ok: false; error: string };
+export async function suggestExamSlotsAction(termId: number, offeringId: number): Promise<SuggestSlotsResult> {
+  await requireRole(EDITORS);
+  try {
+    const suggestions = await planning.suggestExamSlots(termId, offeringId);
+    return { ok: true, data: suggestions };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'خطا در محاسبهٔ پیشنهادهای زمان امتحان.' };
+  }
+}
+
+/** فاز ۱۰ — تولید/بازتولید تخصیص صندلی همهٔ سشن‌های ترم (سالن + شماره + بلوک) */
+export type GenerateSeatsResult = { ok: true; message: string; data: { ok: boolean; sessionCount: number; allocated: number; perSession: { sessionId: number; examDate: string; startTime: string; allocated: number; hallsUsed: number }[] } } | { ok: false; error: string };
+export async function generateSeatAllocationsAction(termId: number): Promise<GenerateSeatsResult> {
+  try {
+    const user = await requireRole(EDITORS);
+    const out = await planning.generateSeatAllocations(user.id, termId);
+    revalidatePath('/admin/exams');
+    revalidatePath('/student/exam-card');
+    return {
+      ok: true,
+      message: `${out.allocated} صندلی در ${out.sessionCount} سشن تخصیص یافت.`,
+      data: out,
+    };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'خطا در تخصیص صندلی.' };
+  }
+}
