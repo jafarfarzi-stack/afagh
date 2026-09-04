@@ -436,7 +436,7 @@ resolveApplicableCurriculum(student, term):
 |---|---|---|
 | **۱ — Domain Model** | ✅ **انجام شد**: `src/lib/curriculum-types.ts` + `src/lib/curriculum-resolution.ts` + `tests/curriculum-domain.test.ts` (۵۱ تست سبز — ماشین حالت، کدگذاری نسخه، نرمال‌سازی درخت، Resolution) | ~۴۰۰ خط |
 | **۲ — DB** | ✅ **انجام شد**: `drizzle/0002_curriculum_versions.sql` (۵۴ statement — rename + بازپرشدن داده + ۴ جدول/۲ جدول جدید + قیدهای جزئی/CHECK/FK) + دفترچهٔ `_journal.json` + ۱۷ رفرنس کد + `pg-hardening.sql` (RLS روی approvals) + `scheduling-seed.mjs` — **تأییدشده روی PostgreSQL واقعی (۲۳ آزمون PGlite)** | ~۵۵۰ خط |
-| **۳ — Server Actions** | `curriculum-actions.ts` با ۱۸ اقدام + پر کردن `audit_logs` | ~۷۰۰ خط |
+| **۳ — Server Actions** | ✅ **انجام شد**: `src/app/admin/curriculum/actions.ts` با ۲۱ اکشن گارددار (۲ متدویه: الگوی D3) + `src/lib/curriculum-validator.ts` (هستهٔ واقعی ۶ چک — گیت تأیید بدون استاب) + `tests/curriculum-validator.test.ts` (۱۹ تست) | ~۹۵۰ خط |
 | **۴ — Validation Engine** | `curriculum-validator.ts` (۱۰ چک) + `tests/curriculum-validator.test.ts` | ~۵۰۰ + تست |
 | **۵ — اتصال Enroll/Graduation** | `resolveApplicableCurriculum` + وصلهٔ ۳ موتور + تست regression | ~۱۵۰ خط |
 | **۶ — اتصال Scheduling** | سیم‌کشی `DepartmentPlanningClient` به `scheduling-engine` + `page.tsx` + تولید جلسهٔ واقعی + قیود سخت V2 در `scheduling-core` | ~۶۰۰ خط |
