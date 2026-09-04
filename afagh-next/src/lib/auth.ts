@@ -106,6 +106,10 @@ export async function hashPassword(password: string): Promise<string> {
  */
 let demoGateWarned = false;
 export function isDemoMode(): boolean {
+  // 🔒 قفل build-time (بازبینی — بند ۵): در ایمیج تولید، NEXT_PUBLIC_AFAGH_DEMO_LOCK=1
+  // هنگام build در Dockerfile ست می‌شود و Next آن را در باندل جای‌گذاری می‌کند؛
+  // یعنی «کد دمو در build تولید اساساً غیرفعال است» — نه فقط با ENV قابل خاموش‌کردن.
+  if (process.env.NEXT_PUBLIC_AFAGH_DEMO_LOCK === '1') return false;
   const env = (process.env.AFAGH_DEMO_MODE ?? process.env.DEMO_MODE ?? '').trim().toLowerCase();
   if (!env) return process.env.NODE_ENV !== 'production';
   const enabled = env === '1' || env === 'true';

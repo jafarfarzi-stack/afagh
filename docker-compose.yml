@@ -37,8 +37,8 @@ x-app-env: &app-env
   # ⟵ با اجرای hardening.mjs، رمز afagh_app روی این مقدار همگام می‌شود
   # حالت دمو: ۱ = حساب‌های دمو فعال؛ در production حتماً ۰ (پیش‌فرض خاموش)
   AFAGH_DEMO_MODE: ${AFAGH_DEMO_MODE:-0}
-  # fallback عمدی RLS فقط برای دیباگ — در production هرگز روشن نکنید
-  AFAGH_RLS_FALLBACK: ${AFAGH_RLS_FALLBACK:-}
+  # حوزهٔ مجوز سطح-شیء برای کارشناس مالی: all (پیش‌فرض) | department (فقط دانشجوی گروه خود)
+  AFAGH_OBJECT_SCOPE: ${AFAGH_OBJECT_SCOPE:-all}
   REDIS_URL: redis://redis:6379
   S3_ENDPOINT: minio
   S3_PORT: "9000"

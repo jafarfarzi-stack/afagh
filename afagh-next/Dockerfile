@@ -29,9 +29,13 @@ COPY . .
 CMD ["sh", "-c", "node scripts/backup-db.mjs && npx drizzle-kit push --force && node scripts/apply-patches.mjs && node scripts/seed-base.mjs && node scripts/hardening.mjs"]
 
 # ── بیلد ──
+# NEXT_PUBLIC_AFAGH_DEMO_LOCK=1 در build تزریق می‌شود: Next این متغیر را در
+# باندل جای‌گذاری می‌کند → «کد دمو در بیلد تولید اساساً غیرفعال است» (بازبینی بند ۵)،
+# نه صرفاً با ENV قابل خاموش‌کردن.
 FROM base AS builder
 ARG NODE_MAX_OLD_SPACE=3072
 ENV NODE_ENV=production \
+    NEXT_PUBLIC_AFAGH_DEMO_LOCK=1 \
     NODE_OPTIONS=--max-old-space-size=${NODE_MAX_OLD_SPACE} \
     NEXT_SKIP_TYPE_CHECK=1 \
     AFAGH_STANDALONE=1

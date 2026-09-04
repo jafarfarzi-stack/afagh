@@ -15,6 +15,7 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm test        # M-6: تست‌های واحد با tsx روی Node 20 هم اجرا می‌شوند
+      - run: node scripts/audit-actions.mjs   # P0: هیچ Server Action بدون گارد نماند
       - run: npm run build   # بدون نیاز به سرویس‌ها (اتصال DB تنبل است)
       # بازبینی مهندسی (P1): security scan در CI — بالا بودن قیدهای امنیتی = شکست
       # (audit-level=high؛ در صورت قطعی رجیستری، خطای صریح می‌گیرد نه سکوت)

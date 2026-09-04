@@ -84,8 +84,8 @@ type RlsTx = Parameters<Parameters<typeof appDb.transaction>[0]>[0];
  * اگر زیرساخت RLS (نقش afagh_app، grantها یا پچ‌های RLS) از دست برود، هرگز به
  * اتصال مالک (BYPASSRLS) برگردانده نمی‌شود — چون در آن صورت عملاً کل عایق
  * امنیتی سطری دور زده می‌شود. رفتار:
- *   • production: خطای امنیتی کنترل‌شده + لاگ (فقط با AFAGH_RLS_FALLBACK=1 صریحاً قابل رد شدن)
- *   • توسعه: fallback مجاز با هشدار بلند (برای دوباگ بدون afagh_app محلی)
+ *   • production: خطای امنیتی کنترل‌شده + لاگ — **بدون هیچ escape hatch** (بازبینی بند ۶)
+ *   • توسعه: fallback مجاز با هشدار بلند (برای دباگ بدون afagh_app محلی)
  */
 export async function withUserRls<T>(userId: number, fn: (tx: RlsTx) => Promise<T>): Promise<T> {
   try {
@@ -109,12 +109,14 @@ export async function withUserRls<T>(userId: number, fn: (tx: RlsTx) => Promise<
     if (!rlsInfraProblem) throw err;
 
     const isProd = process.env.NODE_ENV === 'production';
-    // هشدار/آلرت — اتصال RLS از دست رفته است
-    console.error(`[rls] ⛔ زیرساخت RLS از دست رفت (${err?.code ?? '?'}): ${msg} — درخواست رد شد. ${isProd ? 'AFAGH_RLS_FALLBACK=1 به‌عنوان دورزدن صریح لازم است.' : ''}`);
-    if (isProd && process.env.AFAGH_RLS_FALLBACK !== '1') {
+    if (isProd) {
+      // 🔴 production: NEVER fallback (بازبینی — بند ۶). هیچ ENV عمومی‌ای نمی‌تواند
+      // مسیر privileged را باز کند؛ در صورت نیاز دسترسی اضطراری، بازیابی از پشتیبان/
+      // کنسول مستقیم DBA انجام می‌شود، نه از طریق اپ.
+      console.error(`[rls] ⛔ زیرساخت RLS از دست رفت (${err?.code ?? '?'}): ${msg} — درخواست رد شد (fail-closed مطلق).`);
       throw new Error('خطای امنیتی زیرساخت (RLS). با مدیر سامانه تماس بگیرید.');
     }
-    // فقط توسعه (یا override صریح): fallback با لاگ هشدار — هرگز مسیر پیش‌فرض نیست
+    // فقط توسعه (برای دباگ بدون afagh_app محلی): fallback با لاگ هشدار
     console.warn('[rls] fallback توسعه‌ای به اتصال مالک فعال شد — این مسیر در production ممنوع است.');
     return (db as any).transaction(async (tx: any) => {
       await tx.execute(sql`select set_config('app.user_id', ${String(userId)}, true)`);

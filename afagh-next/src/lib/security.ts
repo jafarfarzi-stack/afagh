@@ -1,5 +1,6 @@
 import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';
+import { headers } from 'next/headers';
 
 /**
  * ══════════════════════════════════════════════════════════════
@@ -63,4 +64,76 @@ export function assertSameOrigin(req: NextRequest): NextResponse | null {
   }
 
   return null;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  ب) دفاع CSRF در Server Actions (بازبینی — بند ۱۰)
+//
+//  Next.js Server Actions به‌طور داخلی Origin را بررسی می‌کند، اما این گارد
+//  صریح برای عملیات حساس (تغییر رمز، مالی، تأیید درخواست، چک/وام/تخفیف)
+//  لایهٔ دوم می‌سازد — مطابق اصل «به SameSite اکتفا نکن».
+//  درخواست‌های غیرمرورگری (بدون Origin: cron، تست‌ها) مجازند.
+// ════════════════════════════════════════════════════════════════════════
+
+export async function assertServerActionOrigin(): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const h = await headers();
+    const host = h.get('host') ?? '';
+    const origin = h.get('origin') ?? '';
+    if (!origin) return { ok: true }; // curl/cron/test — CSRF مرورگری بدون Origin رخ نمی‌دهد
+    const originHost = hostOf(origin);
+    if (originHost === host || EXTRA_ORIGINS.includes(origin) || EXTRA_ORIGINS.some((o) => hostOf(o) === originHost)) {
+      return { ok: true };
+    }
+    return { ok: false, error: 'منشأ درخواست با سامانه هم‌خوان نیست (CSRF blocked).' };
+  } catch {
+    return { ok: true };
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  ج) مجوز سطح-شیء (Object-Level Authorization — بازبینی بند ۳)
+//
+//  «Role Authorization» (ادمین/مالی) کافی نیست؛ باید مشخص باشد کارشناس مالی
+//  روی *کدام* دانشجو مجاز است. سیاست پیش‌فرض: همهٔ دانشجویان (مطابق گردش
+//  کار فعلی دانشگاه). با AFAGH_OBJECT_SCOPE=department قابل فعال‌سازی است:
+//  کارشناس فقط دانشجوی گروه/دانشکدهٔ خودش را می‌بیند/تغییر می‌دهد.
+// ════════════════════════════════════════════════════════════════════════
+
+export async function requireStudentScope(studentId: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  const mode = (process.env.AFAGH_OBJECT_SCOPE || 'all').toLowerCase();
+  if (mode !== 'department' && mode !== 'faculty') return { ok: true };
+
+  const { getSessionUser } = await import('@/lib/auth');
+  const { db } = await import('@/db');
+  const { staff, students, majors } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+
+  const me = await getSessionUser();
+  if (!me) return { ok: false, error: 'unauthorized' };
+
+  const [s] = await db
+    .select({ id: staff.id, departmentId: staff.departmentId, facultyId: staff.facultyId })
+    .from(staff)
+    .where(eq(staff.userId, me.id))
+    .limit(1);
+  const [stu] = await db
+    .select({ departmentId: majors.departmentId, facultyId: majors.facultyId })
+    .from(students)
+    .leftJoin(majors, eq(majors.id, students.majorId))
+    .where(eq(students.id, studentId))
+    .limit(1);
+
+  if (!s || !stu) {
+    // بدون دادهٔ کافی برای مقایسه → اجازه با هشدار (نه مسدودسازی کور)
+    console.warn(`[scope] مقایسهٔ حوزهٔ سازمانی ممکن نشد (staff=${!!s}, student=${!!stu}) — دسترسی مجاز ماند.`);
+    return { ok: true };
+  }
+  const mismatch = mode === 'department'
+    ? stu.departmentId !== null && s.departmentId !== null && stu.departmentId !== s.departmentId
+    : stu.facultyId !== null && s.facultyId !== null && stu.facultyId !== s.facultyId;
+  if (mismatch) {
+    return { ok: false, error: 'دسترسی به پروندهٔ این دانشجو در حوزهٔ سازمانی شما نیست (Object-Level Authorization).' };
+  }
+  return { ok: true };
 }
