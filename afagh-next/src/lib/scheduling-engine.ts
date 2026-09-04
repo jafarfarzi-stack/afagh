@@ -410,6 +410,7 @@ export async function forecastCourseDemand(courseId: number, standardCapacity = 
     join majors m on m.id = s."majorId"
     join curriculum_versions cv on cv."majorId" = m.id
       and s."entryYear" between cv."entryYearFrom" and coalesce(cv."entryYearTo", 9999)
+      and cv."status" in ('PUBLISHED','ARCHIVED')
     join curriculum_courses sc on sc."curriculumVersionId" = cv.id
     where s.status = 'ACTIVE' and sc."courseId" in (${memberIn})
   `);

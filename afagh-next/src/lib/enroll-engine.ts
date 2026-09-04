@@ -9,6 +9,8 @@ import { atomicSeat, nextWaitlistPosition, warmupCapacities } from './waitingRoo
 import { EQUIV_SEMESTER_UNITS, evaluateStudentRegulationStatus, parseGrade, parseUnits } from './regulations-engine';
 import { chargeTermTuition, getEquivFixedMode } from './tuition-engine';
 import { shouldChargeFixed } from './tuition-rules';
+import { resolveStudentCurriculum } from './curriculum-apply';
+import { selectEffectiveRules } from './curriculum-resolution';
 
 // ═══ خط لولهٔ اعتبارسنجی — سند §۱۰۰۸ ═══
 // هر درخواست انتخاب واحد از ۵ فیلتر می‌گذرد:
@@ -90,29 +92,28 @@ export async function buildPrereqContext(studentId: number): Promise<PrereqConte
   const defaultPassing = Number(deg?.defaultPassingGrade ?? 10);
 
   const allRules = await db.select().from(course_rules);
-  const versionRows = await db.select().from(curriculum_versions);
 
   // اورراید نمرهٔ قبولی هر درس (اولین قاعدهٔ دارای customPassingGrade)
   const overrides = new Map<number, number>();
   for (const r of allRules) if (r.customPassingGrade != null && !overrides.has(r.courseId)) overrides.set(r.courseId, Number(r.customPassingGrade));
 
-  // قاعدهٔ مؤثر: قاعدهٔ مقیّد به «نسخهٔ برنامهٔ درسی» (رشته + بازهٔ ورودی) مقدم بر عمومی
+  // ── فاز ۵: نسخهٔ مؤثر = نتیجهٔ Resolution (فقط PUBLISHED/ARCHIVED) ──
+  // پیش از این، هر قاعدهٔ مقیّد به هر نسخهٔ دارای «پنجرهٔ ورودی منطبق» اعمال
+  // می‌شد (حتی نسخهٔ DRAFT!)؛ اکنون دقیقاً یک نسخهٔ حل‌شده مبنای قواعد است.
+  const { version: resolved } = await resolveStudentCurriculum(studentId);
+  const resolvedVersionId = resolved?.id ?? null;
+
+  // قاعدهٔ مؤثر: قاعدهٔ مقیّد به «نسخهٔ حل‌شدهٔ دانشجو» مقدم بر عمومی
+  const { global: globalRules, scoped: scopedRules } = selectEffectiveRules(
+    allRules, resolvedVersionId, ['PREREQ']
+  );
   const globalRule = new Map<number, LogicNode>();
   const scopedRule = new Map<number, LogicNode>();
-  for (const r of allRules) {
-    if (r.ruleType !== 'PREREQ') continue;
-    let applies = false; let scoped = false;
-    if (r.syllabusId == null) { applies = true; scoped = false; }
-    else {
-      const ver = versionRows.find(v => v.id === r.syllabusId);
-      applies = !!stu && !!ver && ver.majorId != null && stu.majorId === ver.majorId
-        && stu.entryYear >= (ver.entryYearFrom ?? 0)
-        && (ver.entryYearTo == null || stu.entryYear <= ver.entryYearTo);
-      scoped = true;
-    }
-    if (!applies) continue;
-    const target = scoped ? scopedRule : globalRule;
-    if (!target.has(r.courseId)) target.set(r.courseId, JSON.parse(r.logicTree) as LogicNode);
+  for (const r of globalRules) {
+    if (!globalRule.has(r.courseId)) globalRule.set(r.courseId, JSON.parse(r.logicTree) as LogicNode);
+  }
+  for (const r of scopedRules) {
+    if (!scopedRule.has(r.courseId)) scopedRule.set(r.courseId, JSON.parse(r.logicTree) as LogicNode);
   }
   const ruleByCourse = new Map<number, LogicNode>([...globalRule, ...scopedRule]); // scoped بازنویسی می‌کند
 

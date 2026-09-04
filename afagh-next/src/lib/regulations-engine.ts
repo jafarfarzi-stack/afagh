@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { getSetting } from '@/lib/settings';
+import { resolveStudentCurriculum } from '@/lib/curriculum-apply';
 import {
   process_definitions,
   degree_level_configs,
@@ -10,7 +11,6 @@ import {
   course_offerings,
   courses,
   academic_terms,
-  curriculum_versions,
   student_requests,
 } from '@/db/schema';
 import {
@@ -191,26 +191,12 @@ export async function evaluateStudentRegulationStatus(
   const currentTerm = termRows[0] ?? null;
   const isSummer = currentTerm?.isSummer === 1;
 
-  // ── موج دوم: آیین‌نامه، چارت درسی و کارنامه؛ هر سه مستقل‌اند و موازی اجرا می‌شوند ──
-  const [config, versionRows, studentEnrollments] = await Promise.all([
+  // ── موج دوم: آیین‌نامه، نسخهٔ حل‌شدهٔ برنامه و کارنامه؛ هر سه مستقل‌اند و موازی اجرا می‌شوند ──
+  // فاز ۵: به‌جای «جدیدترین نسخهٔ دارای پنجره» (بدون توجه به وضعیت)، نسخهٔ
+  // قابل اعمال از Resolution (فقط PUBLISHED/ARCHIVED) تعیین می‌شود.
+  const [config, resolved, studentEnrollments] = await Promise.all([
     getRegulationConfig(stu.regulationId, stu.degreeLevelId),
-    stu.majorId
-      ? db
-          .select({ totalRequiredUnits: curriculum_versions.totalRequiredUnits })
-          .from(curriculum_versions)
-          .where(
-            and(
-              eq(curriculum_versions.majorId, stu.majorId),
-              sql`${curriculum_versions.entryYearFrom} <= ${stu.entryYear}`,
-              or(
-                sql`${curriculum_versions.entryYearTo} is null`,
-                sql`${curriculum_versions.entryYearTo} >= ${stu.entryYear}`
-              )
-            )
-          )
-          .orderBy(desc(curriculum_versions.entryYearFrom))
-          .limit(1)
-      : Promise.resolve([] as { totalRequiredUnits: string | null }[]),
+    resolveStudentCurriculum(stu.id),
     db
       .select({
         id: enrollments.id,
@@ -231,10 +217,10 @@ export async function evaluateStudentRegulationStatus(
       .where(eq(enrollments.studentId, studentId)),
   ]);
 
-  // محاسبه کل واحدهای لازم از نسخهٔ برنامه (یا مقدار پیش‌فرض مقطع)
+  // محاسبه کل واحدهای لازم از نسخهٔ حل‌شده (یا مقدار پیش‌فرض مقطع)
   let totalRequiredUnits = deg?.code?.includes('MASTER') || deg?.title?.includes('ارشد') ? 32 : 140;
-  if (versionRows[0]?.totalRequiredUnits) {
-    totalRequiredUnits = Number(versionRows[0].totalRequiredUnits);
+  if (resolved.version?.totalRequiredUnits) {
+    totalRequiredUnits = Number(resolved.version.totalRequiredUnits);
   }
 
   const passingGrade = config.grading_and_gpa.default_passing_grade || (deg ? Number(deg.defaultPassingGrade) : 10);

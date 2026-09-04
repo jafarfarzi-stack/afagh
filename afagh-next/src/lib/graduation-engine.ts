@@ -13,6 +13,7 @@ import { executeIrandocCheck } from '@/lib/api-integrations';
 import { createLogger } from '@/lib/logger';
 import { deliveriesForUser, notifyUserMultichannel } from '@/lib/messaging';
 import { GpaAccumulator, parseGrade, parseUnits, round2 } from '@/lib/regulations-engine';
+import { resolveStudentCurriculum, resolutionReasonMessage } from '@/lib/curriculum-apply';
 
 // ═══════════════════════════════════════════════════════════════════
 //  موتور فارغ‌التحصیلی «رویدادمحور» (Zero-Touch Graduation)
@@ -143,18 +144,15 @@ export async function auditStudent(studentId: number): Promise<AuditResult | nul
   }
   const gpa = acc.rounded();
 
-  // نسخهٔ برنامهٔ درسی مصوب (سرفصل)
-  const [syl] = row.majorId
-    ? await db.select().from(curriculum_versions).where(and(
-        eq(curriculum_versions.majorId, row.majorId),
-        sql`${curriculum_versions.entryYearFrom} <= ${row.entryYear}`,
-        sql`(${curriculum_versions.entryYearTo} is null or ${curriculum_versions.entryYearTo} >= ${row.entryYear})`,
-      )).orderBy(desc(curriculum_versions.entryYearFrom)).limit(1)
-    : [];
+  // ── فاز ۵: نسخهٔ مصوب از طریق Resolution (فقط PUBLISHED/ARCHIVED) ──
+  // پیش از این «جدیدترین نسخهٔ دارای پنجرهٔ منطبق» بدون توجه به وضعیت انتخاب
+  // می‌شد؛ اکنون Resolver خالص یک نسخهٔ قابل اعمال قطعی برمی‌گرداند.
+  const resolved = await resolveStudentCurriculum(studentId);
+  const syl = resolved.version;
 
   const reasons: string[] = [];
   const missing: { code: string; title: string; units: number }[] = [];
-  let requiredUnits = Number(syl?.totalRequiredUnits ?? 0);
+  let requiredUnits = Number(syl?.totalRequiredUnits ?? 0) || 0;
 
   if (syl) {
     const req = await db.select({
@@ -167,7 +165,7 @@ export async function auditStudent(studentId: number): Promise<AuditResult | nul
     }
     if (!requiredUnits) requiredUnits = req.reduce((s, r) => s + Number(r.units ?? 0), 0);
   } else {
-    reasons.push('برای این رشته/سال ورود، سرفصل مصوبی ثبت نشده است؛ تشکیل خودکار پرونده ممکن نیست و نیازمند بررسی کارشناس آموزش است.');
+    reasons.push('برای این رشته/سال ورود، نسخهٔ برنامهٔ درسی قابل اعمالی ثبت نشده است؛ ' + resolutionReasonMessage(resolved.reason) + ' تشکیل خودکار پرونده ممکن نیست و نیازمند بررسی کارشناس آموزش است.');
   }
 
   if (missing.length) reasons.push(`${missing.length} درس اجباری سرفصل هنوز پاس نشده است.`);

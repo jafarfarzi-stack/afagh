@@ -22,6 +22,22 @@ import {
   type CurriculumVersionStatus,
 } from './curriculum-types';
 
+/**
+ * حداقل شکل ساختاریِ یک نسخه برای Resolution — عمداً حداقلی تا ردیف‌های
+ * Drizzle (numeric→string و timestamp→Date) بدون cast اضافی پذیرفته شوند.
+ * CurriculumVersion (فاز ۱) از نظر ساختاری با این سازگار است.
+ */
+export interface ResolvableVersion {
+  id: number;
+  majorId: number;
+  degreeLevelId: number;
+  trackId: number | null;
+  versionCode: string;
+  status: string;
+  entryYearFrom: number;
+  entryYearTo: number | null;
+}
+
 /** وضعیت‌هایی که در Resolution لحاظ می‌شوند */
 export const RESOLUTION_STATUSES: readonly CurriculumVersionStatus[] = ['PUBLISHED', 'ARCHIVED'];
 
@@ -52,16 +68,16 @@ export type ResolutionReason =
   | 'NO_TRACK';            // نسخهٔ گرایش−آزاد یا همان گرایش وجود ندارد
 
 export interface ResolutionOutcome {
-  version: CurriculumVersion | null;
+  version: ResolvableVersion | null;
   reason: ResolutionReason;
   /** شناسهٔ نسخه‌هایی که وارد مرحلهٔ رتبه‌بندی شدند (برای Audit) */
   candidates: number[];
 }
 
 /** رتبه‌بندی دو نسخه: خروجی منفی یعنی a مقدم است (برای sort صعودی) */
-export function rankVersions(a: CurriculumVersion, b: CurriculumVersion): number {
+export function rankVersions(a: ResolvableVersion, b: ResolvableVersion): number {
   // ۱) وضعیت: PUBLISHED اول
-  const st = STATUS_RANK[a.status] - STATUS_RANK[b.status];
+  const st = STATUS_RANK[a.status as CurriculumVersionStatus] - STATUS_RANK[b.status as CurriculumVersionStatus];
   if (st !== 0) return st;
   // ۲) نسخهٔ جدیدتر (base سپس revision): مثلاً 1404-R1 مقدم بر 1404
   const vc = compareVersionCodes(b.versionCode, a.versionCode);
@@ -79,7 +95,7 @@ export function rankVersions(a: CurriculumVersion, b: CurriculumVersion): number
  * تا منطق «قانون» در CI تست شود، نه در کوئری SQL پیچیده.
  */
 export function resolveApplicableCurriculum(
-  versions: CurriculumVersion[],
+  versions: ResolvableVersion[],
   ctx: CurriculumResolutionContext
 ): ResolutionOutcome {
   if (!versions || versions.length === 0) {
@@ -87,7 +103,7 @@ export function resolveApplicableCurriculum(
   }
 
   // فیلتر ۱ — وضعیت
-  const byStatus = versions.filter((v) => RESOLUTION_STATUSES.includes(v.status));
+  const byStatus = versions.filter((v) => RESOLUTION_STATUSES.includes(v.status as CurriculumVersionStatus));
   if (byStatus.length === 0) {
     return { version: null, reason: 'NO_ACTIVE_STATUS', candidates: [] };
   }
@@ -131,10 +147,32 @@ export function resolveApplicableCurriculum(
 }
 
 /** آیا نسخه‌ای که «آرشیو» است هنوز می‌تواند برای دانشجویان قدیمی سرویس بدهد؟ */
-export function isApplicableForStudent(v: CurriculumVersion, entryYear: number): boolean {
+export function isApplicableForStudent(v: ResolvableVersion, entryYear: number): boolean {
   return (
-    RESOLUTION_STATUSES.includes(v.status) &&
+    RESOLUTION_STATUSES.includes(v.status as CurriculumVersionStatus) &&
     v.entryYearFrom <= entryYear &&
     (v.entryYearTo == null || v.entryYearTo >= entryYear)
   );
+}
+
+// ─────────────────────────── انتخاب قواعد مؤثر ───────────────────────────
+
+/**
+ * قواعدِ قابل اعمال برای یک دانشجو:
+ *  - سراسری (syllabusId = NULL) همیشه مؤثرند
+ *  - مقیّد به نسخه، فقط اگر همان «نسخهٔ حل‌شده» دانشجو باشند (تصمیم فاز ۵)
+ *    — یعنی قاعدهٔ نسخهٔ DRAFT/REVIEW یا نسخهٔ غیرقابل اعمال هرگز به انتخاب
+ *      واحدِ دانشجو نشت نمی‌کند (رفع شکاف «قاعدهٔ پیش‌نویس اعمال می‌شد»).
+ */
+export function selectEffectiveRules<T extends { syllabusId: number | null; ruleType: string }>(
+  rules: T[],
+  resolvedVersionId: number | null,
+  ruleTypes: string[]
+): { global: T[]; scoped: T[] } {
+  return {
+    global: rules.filter((r) => r.syllabusId == null && ruleTypes.includes(r.ruleType)),
+    // ⚠ مقایسه با != null ضروری است: اگر نسخه‌ای حل نشد (resolvedVersionId = null)،
+    // قواعد سراسری (syllabusId = null) نباید در scoped بیفتند (null === null دام است).
+    scoped: rules.filter((r) => r.syllabusId != null && r.syllabusId === resolvedVersionId && ruleTypes.includes(r.ruleType)),
+  };
 }

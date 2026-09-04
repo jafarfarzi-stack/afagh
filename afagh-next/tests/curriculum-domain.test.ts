@@ -23,6 +23,7 @@ import {
   rankVersions,
   resolveApplicableCurriculum,
   isApplicableForStudent,
+  selectEffectiveRules,
   type ResolutionOutcome,
 } from '../src/lib/curriculum-resolution.ts';
 
@@ -188,6 +189,49 @@ eq('rank: R1 مقدم بر پایه', rankVersions(
   mk({ id: 11, majorId: 1, degreeLevelId: 1, versionCode: '1404-R1', status: 'PUBLISHED', entryYearFrom: 1404 }),
   mk({ id: 10, majorId: 1, degreeLevelId: 1, versionCode: '1404', status: 'PUBLISHED', entryYearFrom: 1404 })
 ) < 0, true);
+
+
+// ─────────────────────── فاز ۵: قواعد مؤثر + سازگاری با ردیف Drizzle ───────────────────────
+console.log('— فاز ۵: قواعد مؤثر و سازگاری ساختاری —');
+
+// selectEffectiveRules: فقط قواعد سراسری + قواعدِ نسخهٔ حل‌شده
+const dummyRules = [
+  { courseId: 1, syllabusId: null, ruleType: 'PREREQ' },               // سراسری
+  { courseId: 2, syllabusId: 10, ruleType: 'PREREQ' },                 // نسخهٔ حل‌شدهٔ ۱۰
+  { courseId: 3, syllabusId: 99, ruleType: 'PREREQ' },                 // نسخهٔ دیگر (DRAFT یا غیرقابل اعمال) → نشت نمی‌کند
+  { courseId: 4, syllabusId: 99, ruleType: 'COREQ' },                  // نوع دیگر → فیلتر ruleType
+  { courseId: 5, syllabusId: null, ruleType: 'COREQ' },
+];
+const eff = selectEffectiveRules(dummyRules, 10, ['PREREQ']);
+eq('قواعد سراسری PREREQ', eff.global.map(r => r.courseId), [1]);
+eq('قواعد مقیّد به نسخهٔ حل‌شده', eff.scoped.map(r => r.courseId), [2]);
+eq('نشت قاعدهٔ نسخهٔ دیگر (DRAFT) → هیچ', eff.scoped.some(r => r.courseId === 3), false);
+eq('نشت COREQ در انتخاب PREREQ → هیچ', eff.global.some(r => r.courseId === 5), false);
+eq('بدون نسخهٔ حل‌شده (null) → فقط سراسری', selectEffectiveRules(dummyRules, null, ['PREREQ']).scoped, []);
+
+// سازگاری ساختاری: ردیف Drizzle -like (numeric به‌صورت string، تاریخ به‌صورت Date)
+const drizzleLike = (p: Partial<ResolvableLike> & { id: number; majorId: number; degreeLevelId: number; versionCode: string; status: string; entryYearFrom: number }): ResolvableLike => ({
+  trackId: null, entryYearTo: null, createdAt: new Date('2025-01-01'), updatedAt: new Date('2025-01-01'),
+  title: 'برنامه', totalRequiredUnits: '140.0',
+  ...p,
+});
+type ResolvableLike = {
+  id: number; majorId: number; degreeLevelId: number; trackId: number | null;
+  versionCode: string; status: string; entryYearFrom: number; entryYearTo: number | null;
+  createdAt: Date; updatedAt: Date; totalRequiredUnits: string; title: string;
+};
+
+const rows = [
+  drizzleLike({ id: 1, majorId: 412, degreeLevelId: 1, versionCode: '1400', status: 'ARCHIVED', entryYearFrom: 1400, entryYearTo: 1401 }),
+  drizzleLike({ id: 2, majorId: 412, degreeLevelId: 1, versionCode: '1402', status: 'ARCHIVED', entryYearFrom: 1402, entryYearTo: 1403 }),
+  drizzleLike({ id: 3, majorId: 412, degreeLevelId: 1, versionCode: '1404', status: 'PUBLISHED', entryYearFrom: 1404, entryYearTo: 1405 }),
+  drizzleLike({ id: 4, majorId: 412, degreeLevelId: 1, versionCode: '1405', status: 'DRAFT', entryYearFrom: 1405 }),
+];
+r('ردیف Drizzle-like: ورودی ۱۴۰۳ → ۱۴۰۲', resolveApplicableCurriculum(rows, { majorId: 412, degreeLevelId: 1, trackId: null, entryYear: 1403 }), 2, 'RESOLVED');
+r('ردیف Drizzle-like: ورودی ۱۴۰۴ → ۱۴۰۴', resolveApplicableCurriculum(rows, { majorId: 412, degreeLevelId: 1, trackId: null, entryYear: 1404 }), 3, 'RESOLVED');
+r('ردیف Drizzle-like: ورودی ۱۴۰۶ → NO_ENTRY_WINDOW', resolveApplicableCurriculum(rows, { majorId: 412, degreeLevelId: 1, trackId: null, entryYear: 1406 }), null, 'NO_ENTRY_WINDOW');
+eq('isApplicable با ردیف Drizzle-like (منتشرشده، داخل پنجره)', isApplicableForStudent(drizzleLike({ id: 3, majorId: 412, degreeLevelId: 1, versionCode: '1404', status: 'PUBLISHED', entryYearFrom: 1404 }), 1404), true);
+eq('isApplicable با ردیف Drizzle-like (پیش‌نویس)', isApplicableForStudent(drizzleLike({ id: 4, majorId: 412, degreeLevelId: 1, versionCode: '1405', status: 'DRAFT', entryYearFrom: 1405 }), 1405), false);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);
