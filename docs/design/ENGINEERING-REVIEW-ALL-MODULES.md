@@ -188,8 +188,8 @@
 گام ۱  ✅ (انجام شد)  فاز ۱ Curriculum Domain (State Machine + Resolution + تست)
 گام ۲    فاز ۲–۴ Curriculum: Migration نسخه‌دار + Actions + Validator (سند V1)
 گام ۳    فاز ۵–۶ Curriculum: اتصال Enroll/Graduation + اتصال Scheduling به موتور واقعی
-گام ۴    فاز ۷ Curriculum: Thin Client — دخالت در UI فقط اینجا (پس از موتور)
-گام ۵    امتحانات: actions + اتصال به exam-engine + برچیدن Mock
+گام ۴  ✅ (انجام شد) فاز ۷ Curriculum: Thin Client (بدون Mock؛ CheckResult واقعی)
+گام ۵  ✅ (انجام شد) امتحانات: `admin/exams/actions.ts` (کارتابل واقعی + صدور حضور/صورت‌جلسه/تحویل به استاد) + Thin Client امتحانات (سشن‌ها/دروس/سالن‌ها/مراقبین/تداخل — بدون Mock)
 گام ۶    دانشجویان: اکشن‌های CRUD واقعی
 گام ۷    RLS adoption کامل + تست رگرسیون rls-test در CI
 گام ۸    تبارشناسی مهاجرت (patches → versioned) + قالب‌ها DB-backed
@@ -216,11 +216,11 @@
 
 ## پیوست — فایل‌هایی که «باید» قبل از Production اتصال شوند (چک‌لیست)
 
-- [ ] `admin/exams/ExamPlanningClient.tsx` → actions + exam-engine
+- [x] `admin/exams/ExamPlanningClient.tsx` → actions + exam-engine (گام ۵)
 - [ ] `admin/students/StudentsManagerClient.tsx` → actions (CRUD واقعی)
 - [ ] `admin/templates/TemplateEngineClient.tsx` → جدول + actions
-- [ ] `admin/curriculum/CurriculumManagerClient.tsx` → فاز ۷ (در جریان)
-- [ ] `admin/scheduling/DepartmentPlanningClient.tsx` → scheduling-engine (موجود!)
+- [x] `admin/curriculum/CurriculumManagerClient.tsx` → فاز ۷ (Thin Client)
+- [x] `admin/scheduling/DepartmentPlanningClient.tsx` → scheduling-engine (فاز ۶: کلاینت بدون Mock + تولید جلسات واقعی + قیود سخت)
 - [ ] `admin/AdminMakeupRequestsCard.tsx` → **جدول جدید** `makeup_requests` (در schema نیست) + actions
 - [ ] `open-courses/page.tsx` → `short_term_courses`
 - [ ] `admin/exams` → تولید جلسات واقعی از `class_sessions` (پاسخ بند ۱۱ گزارش قبلی)
