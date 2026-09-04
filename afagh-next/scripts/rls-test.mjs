@@ -88,7 +88,8 @@ try {
 
   await q(owner, `INSERT INTO student_ledger ("studentId","transactionType",amount) VALUES ($1,'CHARGE',1000)`, [sB.id]);
   await q(owner, `INSERT INTO financial_clearances ("studentId","termId","isCleared") VALUES ($1,$2,0)`, [sB.id, term.id]);
-  await q(owner, `INSERT INTO "student_documents" ("personUserId","fileName","fileUrl") VALUES ($1,'t.pdf','t.pdf')`, [uB.id]);
+  const [dcat] = (await q(owner, `INSERT INTO document_categories (title) VALUES ('تست RLS') RETURNING id`)).rows;
+  await q(owner, `INSERT INTO "student_documents" ("personUserId","categoryId","fileName","fileUrl") VALUES ($1,$2,'t.pdf','t.pdf')`, [uB.id, dcat.id]);
 
   const uid = (id) => `set_config('app.user_id','${id}',true)`;
 
