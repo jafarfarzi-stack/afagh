@@ -140,6 +140,7 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'BI_STOPWORDS', env: 'BI_STOPWORDS', group: 'ارزشیابی و هوش تجاری', label: 'واژه‌های توقف (با ویرگول)', type: 'text', default: 'و,به,از,که,در,این,آن,با,را,برای,است,بود,شد,هم,نیز,تا,یا,اما,خیلی,بسیار,بر,دارد,می,های,یک,دو,سه,من,او,ما,شما,باید,نمی,کنم,کرد,کردم,کنند,مورد,همه,چون,اگر,روی,بی,هر,چه,می‌شود,بودن,کلاس,استاد,درس' },
   { key: 'TICKET_TOKEN_SECRET', env: 'TICKET_TOKEN_SECRET', group: 'ارزشیابی و هوش تجاری', label: 'کلید امضای توکن کارت‌های آزمون', type: 'secret', default: '', help: 'برای امضای HMAC توکن کارت ورود به جلسه؛ بدون آن توکن صادر نمی‌شود' },
   { key: 'EXAM_TICKET_TTL_MINUTES', env: 'EXAM_TICKET_TTL_MINUTES', group: 'ارزشیابی و هوش تجاری', label: 'اعتبار توکن کارت آزمون (دقیقه)', type: 'number', default: '180' },
+  { key: 'EXAM_GRADE_DEADLINE_DAYS', env: 'EXAM_GRADE_DEADLINE_DAYS', group: 'ارزشیابی و هوش تجاری', label: 'مهلت ثبت نمرهٔ امتحان (روز)', type: 'number', default: '5' },
   { key: 'STUDENT_CARD_VALID_DAYS', env: 'STUDENT_CARD_VALID_DAYS', group: 'ارزشیابی و هوش تجاری', label: 'اعتبار کارت دانشجویی (روز)', type: 'number', default: '365' },
   { key: 'PERF_SLA_TARGET', env: 'PERF_SLA_TARGET', group: 'ارزشیابی و هوش تجاری', label: 'هدف پایبندی به ضرب‌الاجل (SLA) استاد', type: 'number', default: '90', help: 'درصد؛ مبنای نشان عملکرد و پاداش بهره‌وری' },
   { key: 'PERF_EVAL_TARGET', env: 'PERF_EVAL_TARGET', group: 'ارزشیابی و هوش تجاری', label: 'هدف نمرهٔ ارزشیابی استاد', type: 'number', default: '4', help: 'از ۵؛ مبنای نشان عملکرد و پاداش بهره‌وری' },
