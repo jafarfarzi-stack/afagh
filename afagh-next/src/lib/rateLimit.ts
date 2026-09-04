@@ -26,6 +26,8 @@ const rlRedis: Redis = g.__afaghRlRedis ?? new Redis(REDIS_URL, {
   retryStrategy: (t) => Math.min(t * 200, 2000),
   lazyConnect: false,
 });
+// شنوندهٔ خطا الزامی است: بدون آن، قطعی موقت Redis → Unhandled error → کرش Node (بازبینی مهندسی)
+rlRedis.on('error', () => { /* خاموش — مسیر rateLimit به fallback درون‌حافظه می‌رود */ });
 if (process.env.NODE_ENV !== 'production') g.__afaghRlRedis = rlRedis;
 
 // ── fallback درون‌حافظه (فقط وقتی Redis در دسترس نیست) ──
@@ -36,10 +38,10 @@ const memSweep = () => {
   for (const [k, v] of mem) if (v.resetAt <= now) mem.delete(k);
 };
 
-/** IP کلاینت از هدرهای پروکسی (Caddy در مسیر production) */
-export function clientIp(): string {
+/** IP کلاینت از هدرهای پروکسی (Caddy در مسیر production) — Next 15+: headers() پرامیس است */
+export async function clientIp(): Promise<string> {
   try {
-    const h = headers();
+    const h = await headers();
     const fwd = (h.get('x-forwarded-for') || '').split(',')[0]?.trim();
     return fwd || h.get('x-real-ip') || 'local';
   } catch {

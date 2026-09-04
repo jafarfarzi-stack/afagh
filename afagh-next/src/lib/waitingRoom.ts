@@ -10,6 +10,7 @@ export const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 
 const g = globalThis as unknown as { __afaghRedis?: Redis; __afaghWrWorker?: NodeJS.Timeout };
 export const redis: Redis = g.__afaghRedis ?? new Redis(REDIS_URL, { maxRetriesPerRequest: 2, retryStrategy: t => Math.min(t * 200, 2000) });
+redis.on('error', () => { /* قطعی موقت Redis نباید Node را کرش کند */ });
 if (process.env.NODE_ENV !== 'production') g.__afaghRedis = redis;
 
 const K = {

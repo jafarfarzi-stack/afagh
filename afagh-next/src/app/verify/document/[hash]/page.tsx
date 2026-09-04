@@ -9,8 +9,9 @@ const faNum = (v: unknown) =>
   v === null || v === undefined || v === '' ? '—' : String(v).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
 
 // استعلام عمومی اصالت سند ممهور — بدون نیاز به ورود؛ مقصد QR روی فرم رسمی
-export default async function VerifyDocumentPage({ params }: { params: { hash: string } }) {
-  const hash = decodeURIComponent(params.hash || '').trim();
+export default async function VerifyDocumentPage({ params }: { params: Promise<{ hash: string }> }) {
+  const { hash: rawHash } = await params;
+  const hash = decodeURIComponent(rawHash || '').trim();
 
   const [doc] = hash
     ? await db

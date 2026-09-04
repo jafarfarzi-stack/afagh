@@ -14,8 +14,9 @@ const faNum = (n: unknown) =>
  * «تسویهٔ مالی قطعی» نشان می‌داد؛ حالا توکن نامعتبر/منقضی صریحاً رد می‌شود و
  * بدهی مالی مانع صدور می‌گردد.
  */
-export default async function ExamTicketGatePage({ params }: { params: { token: string } }) {
-  const token = decodeURIComponent(params.token).trim();
+export default async function ExamTicketGatePage({ params }: { params: Promise<{ token: string }> }) {
+  const { token: rawToken } = await params;
+  const token = decodeURIComponent(rawToken).trim();
   const res = await verifyExamTicket(token);
 
   if (!res.ok) {

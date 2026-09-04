@@ -17,11 +17,16 @@ RUN npm ci --no-audit --no-fund --omit=optional
 
 # ── مهاجرت/سخت‌سازی دیتابیس ──
 # نیازی به بیلد Next ندارد؛ فقط drizzle-kit (devDependency) و اسکریپت‌ها.
+# postgresql-client برای پشتیبان پیش از استقرار (backup-db.mjs) نصب می‌شود.
 FROM base AS migrator
 ENV NODE_ENV=production
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client \
+ && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-CMD ["sh", "-c", "npx drizzle-kit push --force && node scripts/apply-patches.mjs && node scripts/seed-base.mjs && node scripts/hardening.mjs"]
+# ترتیب: پشتیبان → push → پچ‌ها → دادهٔ پایه → سخت‌سازی (+اعتبارسنجی)
+# اگر هر مرحله شکست بخورد، exit-code غیرصفر → اپ (depends_on مخصوص) استارت نمی‌شود.
+CMD ["sh", "-c", "node scripts/backup-db.mjs && npx drizzle-kit push --force && node scripts/apply-patches.mjs && node scripts/seed-base.mjs && node scripts/hardening.mjs"]
 
 # ── بیلد ──
 FROM base AS builder

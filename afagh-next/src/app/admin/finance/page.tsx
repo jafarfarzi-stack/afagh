@@ -10,17 +10,17 @@ const fa = (n: number) => Number(n || 0).toLocaleString('fa-IR');
 const faYear = (y: number | null) => (y ? fa(y) : '—');
 
 export default async function FinanceWorklistPage(props: {
-  searchParams?: {
+  searchParams: Promise<{
     majorId?: string;
     degreeLevelId?: string;
     entryYear?: string;
     q?: string;
     debtors?: string;
-  };
+  }>;
 }) {
   await requireRole(FINANCE);
 
-  const sp = props.searchParams || {};
+  const sp = (await props.searchParams) || {};
   const majorId = Number(sp.majorId) || null;
   const degreeLevelId = Number(sp.degreeLevelId) || null;
   const entryYear = Number(sp.entryYear) || null;

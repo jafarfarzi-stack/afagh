@@ -106,9 +106,9 @@ async function getCertificateDetails(code: string) {
 export default async function VerifyCertificatePage({
   params,
 }: {
-  params: { code: string };
+  params: Promise<{ code: string }>;
 }) {
-  const code = params.code;
+  const { code } = await params;
 
   // 🔒 M-1: در صورت عبور از سقف استعلام، به‌جای داده، پیام محدودیت نمایش داده می‌شود
   // (اطلاعات ظاهری «یافت نشد» با محدودیت فرق دارد تا مهاجم تشخیص ندهد)

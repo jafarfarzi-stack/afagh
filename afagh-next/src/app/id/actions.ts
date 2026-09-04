@@ -16,7 +16,7 @@ import { clientIp, guardedRateLimit } from '@/lib/rateLimit';
 export async function findCardTokenByStudentCodeAction(studentCode: string): Promise<
   { ok: true; found: true; token: string; fullName: string } | { ok: true; found: false } | { ok: false; error: string }
 > {
-  const rl = await guardedRateLimit(`verify-card:${clientIp()}`, 10, 10 * 60);
+  const rl = await guardedRateLimit(`verify-card:${await clientIp()}`, 10, 10 * 60);
   if (!rl.ok) return { ok: false, error: rl.error };
 
   const code = String(studentCode ?? '').trim();

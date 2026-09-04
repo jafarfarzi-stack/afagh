@@ -25,9 +25,12 @@ const client = new pg.Client({ connectionString: PG_URL });
 
 try {
   await client.connect();
+  // ── قفل مهاجرت (بازبینی مهندسی): دو نمونهٔ همزمان migrator هرگز پچ نمی‌زنند ──
+  await client.query(`SELECT pg_advisory_lock(hashtext('afagh_migrator'))`);
   console.log('🔧 اعمال پچ‌های اسکیما (patches.sql)…');
   await client.query(sql);
   console.log('✅ پچ‌های اسکیما اعمال شد.');
+  await client.query(`SELECT pg_advisory_unlock(hashtext('afagh_migrator'))`);
 } catch (err) {
   console.error('❌ خطا در اعمال پچ‌ها:', err.message);
   process.exit(1);

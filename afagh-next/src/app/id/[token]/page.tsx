@@ -19,8 +19,9 @@ const jalali = (iso: string | null) => {
  * است و هیچ دانشجوی فرضی ساخته نمی‌شود (پیش‌تر هر توکنی که با 7F یا AF شروع
  * می‌شد یک دانشجوی فعالِ جعلی نشان می‌داد).
  */
-export default async function StudentCardGatePage({ params }: { params: { token: string } }) {
-  const token = decodeURIComponent(params.token).trim();
+export default async function StudentCardGatePage({ params }: { params: Promise<{ token: string }> }) {
+  const { token: rawToken } = await params;
+  const token = decodeURIComponent(rawToken).trim();
   const res = await verifyStudentCard(token);
 
   if (res.verdict === 'NOT_FOUND') {

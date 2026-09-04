@@ -2,7 +2,7 @@ import { createHash, randomBytes, scrypt as _scrypt, timingSafeEqual } from 'cry
 import { promisify } from 'util';
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { and, asc, eq, gt, lt, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, lt, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { ensureBaseReferenceData } from '@/lib/base-data';
 import { clientIp, rateLimit } from '@/lib/rateLimit';
@@ -97,15 +97,31 @@ export async function hashPassword(password: string): Promise<string> {
 
 /**
  * 🔒 حالت دمو (DEMO_MODE):
- *   • `AFAGH_DEMO_MODE=1` (یا `DEMO_MODE=1`) → دمو فعال.
+ *   • `AFAGH_DEMO_MODE=1` → دمو فعال.
  *   • پیش‌فرض: فقط خارج از production فعال است.
- *   • در production، حساب‌های دمو هرگز ساخته/بازیابی/ورود خودکار نمی‌شوند
- *     (C-1 سابق: هرکس شمارهٔ ملی دمو را می‌دانست با رمز ۱۲۳۴۵۶ وارد می‌شد).
+ *   • **Production Safety Gate (بازبینی مهندسی):** در production، حتی با
+ *     AFAGH_DEMO_MODE=1، بدون `AFAGH_ALLOW_INSECURE_DEMO=true` صریح، دمو فعال
+ *     نمی‌شود و لاگ CRITICAL ثبت می‌شود — تا هیچ‌کس ناخواسته مجموعه‌ای از
+ *     حساب‌های شناخته‌شده بسازد.
  */
+let demoGateWarned = false;
 export function isDemoMode(): boolean {
   const env = (process.env.AFAGH_DEMO_MODE ?? process.env.DEMO_MODE ?? '').trim().toLowerCase();
-  if (env) return env === '1' || env === 'true';
-  return process.env.NODE_ENV !== 'production';
+  if (!env) return process.env.NODE_ENV !== 'production';
+  const enabled = env === '1' || env === 'true';
+  if (!enabled) return false;
+  if (process.env.NODE_ENV === 'production') {
+    const allow = (process.env.AFAGH_ALLOW_INSECURE_DEMO ?? '').trim().toLowerCase();
+    if (allow !== '1' && allow !== 'true') {
+      if (!demoGateWarned) {
+        demoGateWarned = true;
+        console.error('⚠ CRITICAL [demo] AFAGH_DEMO_MODE=1 در production بدون AFAGH_ALLOW_INSECURE_DEMO=true است — حساب‌های دمو غیرفعال‌اند. این پیکربندی برای محیط عمومی یک خطر است.');
+      }
+      return false;
+    }
+    console.error('⚠ CRITICAL [demo] حالت دمو به‌صورت صریح در production فعال شد (AFAGH_DEMO_MODE=1 + AFAGH_ALLOW_INSECURE_DEMO=true) — حساب‌های شناخته‌شده در دسترس‌اند! فقط برای محیط نمایشی داخل شبکهٔ محرمانه.');
+  }
+  return true;
 }
 
 /** رمز پیش‌فرض حساب‌های دمو — در دمو قابل تغییر است (AFAGH_DEMO_PASSWORD) */
@@ -235,7 +251,7 @@ const MAX_SESSIONS_PER_USER = 8;
 
 export async function login(nationalCode: string, password: string): Promise<{ ok: boolean; error?: string; mustChange?: boolean }> {
   // ── M-1: محدودیت تلاش ورود (۵ تلاش / ۱۰ دقیقه به ازای هر IP) ──
-  const rl = await rateLimit(`login:${clientIp()}`, 5, 10 * 60);
+  const rl = await rateLimit(`login:${await clientIp()}`, 5, 10 * 60);
   if (!rl.ok) {
     return { ok: false, error: `تلاش‌های ورود بیش از حد مجاز شد. ${Math.ceil(rl.retryAfterSec / 60)} دقیقهٔ دیگر دوباره تلاش کنید.` };
   }
@@ -299,7 +315,18 @@ export async function changePassword(currentPassword: string, newPassword: strin
   if (trimmed === currentPassword) return { ok: false, error: 'رمز جدید نباید با رمز فعلی یکسان باشد.' };
   const passwordHash = await hashPassword(trimmed);
   await db.update(users).set({ passwordHash, mustChangePassword: 0 }).where(eq(users.id, u.id));
+
+  // ── M-4/بازبینی: ابطال همهٔ نشست‌های دیگر کاربر (تغییر رمز = سوءظن یا اشتراک دستگاه) ──
+  //    نشست جاری حفظ می‌شود تا کاربر وسط کار اخراج نشود.
+  const cookieStore = await cookies();
+  const currentToken = cookieStore.get(SESSION_COOKIE)?.value ?? '';
+  await db.delete(sessions).where(and(eq(sessions.userId, u.id), ne(sessions.token, currentToken)));
   return { ok: true };
+}
+
+/** ابطال همهٔ نشست‌های یک کاربر — برای رویدادهای حساس (غیرفعال‌سازی، تغییر نقش، ریست رمز توسط ادمین) */
+export async function invalidateUserSessions(userId: number): Promise<void> {
+  await db.delete(sessions).where(eq(sessions.userId, userId));
 }
 
 export async function logout() {
