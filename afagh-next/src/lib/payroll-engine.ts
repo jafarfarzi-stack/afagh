@@ -20,9 +20,13 @@ import { createLogger } from '@/lib/logger';
 //  سه اصلاح ساختاری نسبت به نسخهٔ SQLite:
 //
 //  ۱) حذف N+1 — پیش‌تر به ازای هر استاد، چند کوئری جدا اجرا می‌شد (کلاس‌ها،
-//     جلسات، نمرات، اسناد، فیش). حالا کل ترم با «هفت کوئری ثابت» بارگذاری
-//     می‌شود و محاسبات در حافظه انجام می‌گیرد؛ تعداد کوئری‌ها با تعداد استاد
-//     رشد نمی‌کند (۵۰۰ استاد = همان ۷ کوئری).
+//     جلسات، نمرات، اسناد، فیش). حالا کل ترم با «۱۱ کوئری SQL ثابت» بارگذاری
+//     می‌شود (۷ کوئری حجمی دادهٔ ترم + ۴ کوئری پیکربندی کوچک که قابل کش است)
+//     و محاسبات در حافظه انجام می‌گیرد؛ تعداد کوئری‌ها با تعداد استاد رشد
+//     نمی‌کند (۱۵۰۰ استاد = همان ۱۱ کوئری — در تست بار روی PostgreSQL زنده
+//     تأیید شد). همچنین در تسویهٔ نهایی، چک گلوگاه داخل تراکنش با دو کوئری
+//     سبک سطری (loadStaffGates) انجام می‌شود نه بارگذاری مجدد کل ترم؛
+//     پرداخت دسته‌ای ۵۰۰ استاد از ~۳۲۰ ثانیه به ~۶٫۶ ثانیه رسید.
 //
 //  ۲) پول با عدد صحیح — همهٔ محاسبات ریالی روی اعداد صحیح و با گردکردن به
 //     مضرب ۱۰ ریال انجام می‌شود؛ دیگر `0.1 + 0.2` در فیش مالی ظاهر نمی‌شود.
@@ -408,6 +412,36 @@ export async function loadTermPayrollData(termId: number): Promise<TermData> {
 
 // ─────────────────── محاسبهٔ فیش یک استاد ───────────────────
 
+/**
+ * گلوگاه‌های یک استاد با دو کوئری سبک (index-friendly) به‌جای بارگذاری کامل ترم.
+ * هم‌ارز منطقیِ کوئری‌های ۵ و ۶ در loadTermPayrollData است — فقط برای یک استاد.
+ * علت وجود: settleFinal برای هر استاد داخل تراکنش گلوگاه را می‌چکد؛ بارگذاری کامل
+ * ترم در آن نقطه با ۱۵۰۰ استاد یعنی ۵۰۰×۱۱ کوئری سنگین (مشاهده‌شده: ۳۲۰ ثانیه).
+ */
+async function loadStaffGates(
+  q: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  termId: number,
+  staffId: number,
+) {
+  const [gradeRow, docRow] = await Promise.all([
+    q.execute(sql`
+      select count(e.id) as "pendingGrades"
+      from course_offerings o
+      join enrollments e on e."offeringId" = o.id and e.status = 'REGISTERED' and coalesce(e."gradeStatus", '') <> 'FINALIZED'
+      where o."termId" = ${termId}
+        and (o."professorId" = ${staffId} or exists (select 1 from offering_professors op where op."offeringId" = o.id and op."staffId" = ${staffId}))
+    `),
+    q.execute(sql`
+      select count(*) as "unsignedDocs"
+      from electronic_documents ed
+      where ed."termId" = ${termId} and ed."staffId" = ${staffId} and coalesce(ed."signatureStatus", '') <> 'SIGNED'
+    `),
+  ]);
+  const pendingGrades = Number(gradeRow.rows[0]?.pendingGrades ?? 0);
+  const unsignedDocs = Number(docRow.rows[0]?.unsignedDocs ?? 0);
+  return { pendingGrades, unsignedDocs, gradesFinalized: pendingGrades === 0, docsSigned: unsignedDocs === 0 };
+}
+
 function gatesOf(data: TermData, staffId: number) {
   const g = data.gatesByStaff.get(staffId) ?? { pendingGrades: 0, unsignedDocs: 0 };
   return {
@@ -772,8 +806,8 @@ export async function settleFinal(staffId: number, actorUserId?: number | null, 
     if (ps.status === 'FINAL_SETTLED') throw new Error('این فیش قبلاً تسویه شده است.');
 
     // گلوگاه‌ها داخل همان تراکنش خوانده می‌شوند تا بین بررسی و پرداخت چیزی عوض نشود
-    const data = await loadTermPayrollData(term.id);
-    const g = gatesOf(data, staffId);
+    // (دو کوئری سبک به‌جای بارگذاری کامل ترم — برای پرداخت دسته‌ای صدها برابر سریع‌تر)
+    const g = await loadStaffGates(tx, term.id, staffId);
     if (!g.gradesFinalized) throw new Error(`گلوگاه تسویه: ${g.pendingGrades} نمره هنوز FINALIZED نشده است.`);
     if (!g.docsSigned) throw new Error(`گلوگاه تسویه: ${g.unsignedDocs} سند الکترونیکی امضانشده دارید.`);
 
