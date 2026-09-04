@@ -104,36 +104,59 @@ export async function requireStudentScope(studentId: number): Promise<{ ok: true
   const mode = (process.env.AFAGH_OBJECT_SCOPE || 'all').toLowerCase();
   if (mode !== 'department' && mode !== 'faculty') return { ok: true };
 
-  const { getSessionUser } = await import('@/lib/auth');
-  const { db } = await import('@/db');
-  const { staff, students, majors } = await import('@/db/schema');
-  const { eq } = await import('drizzle-orm');
+  try {
+    const { getSessionUser } = await import('@/lib/auth');
+    const { db } = await import('@/db');
+    const { staff, students, majors } = await import('@/db/schema');
+    const { eq } = await import('drizzle-orm');
 
-  const me = await getSessionUser();
-  if (!me) return { ok: false, error: 'unauthorized' };
+    const me = await getSessionUser();
+    if (!me) return { ok: false, error: 'unauthorized' };
 
-  const [s] = await db
-    .select({ id: staff.id, departmentId: staff.departmentId, facultyId: staff.facultyId })
-    .from(staff)
-    .where(eq(staff.userId, me.id))
-    .limit(1);
-  const [stu] = await db
-    .select({ departmentId: majors.departmentId, facultyId: majors.facultyId })
-    .from(students)
-    .leftJoin(majors, eq(majors.id, students.majorId))
-    .where(eq(students.id, studentId))
-    .limit(1);
+    // 🔴 استثناء صریح (نه fail-open): مدیر سامانه در سطح کلان است و مشمول حوزهٔ
+    // سازمانی نمی‌شود — بقیهٔ نقش‌ها کاملاً مشمول fail-closed می‌شوند.
+    if (me.roles.includes('ADMIN')) return { ok: true };
 
-  if (!s || !stu) {
-    // بدون دادهٔ کافی برای مقایسه → اجازه با هشدار (نه مسدودسازی کور)
-    console.warn(`[scope] مقایسهٔ حوزهٔ سازمانی ممکن نشد (staff=${!!s}, student=${!!stu}) — دسترسی مجاز ماند.`);
+    const [s] = await db
+      .select({ id: staff.id, departmentId: staff.departmentId, facultyId: staff.facultyId })
+      .from(staff)
+      .where(eq(staff.userId, me.id))
+      .limit(1);
+    const [stu] = await db
+      .select({ departmentId: majors.departmentId, facultyId: majors.facultyId })
+      .from(students)
+      .leftJoin(majors, eq(majors.id, students.majorId))
+      .where(eq(students.id, studentId))
+      .limit(1);
+
+    // 🔒 FAIL-CLOSED (بازبینی — High): دادهٔ ناقص یا نبود پرونده → DENY.
+    //   «بدون دادهٔ کافی → اجازه» قبلاً مسیر fail-open بود — لغو شد.
+    if (!s) {
+      return { ok: false, error: 'پروندهٔ سازمانی شما (staff) یافت نشد — دسترسی رد شد (fail-closed).' };
+    }
+    if (!stu) {
+      return { ok: false, error: 'پروندهٔ دانشجو یافت نشد — دسترسی رد شد (fail-closed).' };
+    }
+
+    if (mode === 'department') {
+      if (s.departmentId == null || stu.departmentId == null) {
+        return { ok: false, error: 'نبودِ گروه سازمانی برای مقایسه — دسترسی رد شد (fail-closed).' };
+      }
+      if (stu.departmentId !== s.departmentId) {
+        return { ok: false, error: 'دسترسی به پروندهٔ این دانشجو در حوزهٔ سازمانی شما نیست (Object-Level Authorization).' };
+      }
+    } else {
+      if (s.facultyId == null || stu.facultyId == null) {
+        return { ok: false, error: 'نبودِ دانشکدهٔ سازمانی برای مقایسه — دسترسی رد شد (fail-closed).' };
+      }
+      if (stu.facultyId !== s.facultyId) {
+        return { ok: false, error: 'دسترسی به پروندهٔ این دانشجو در حوزهٔ سازمانی شما نیست (Object-Level Authorization).' };
+      }
+    }
     return { ok: true };
+  } catch (err: any) {
+    // 🔒 هر خطای غیرمنتظره → DENY + لاگ (هرگز fail-open)
+    console.error('[scope] ⛔ خطا در بررسی حوزهٔ سازمانی — دسترسی رد شد (fail-closed):', err?.message);
+    return { ok: false, error: 'خطا در بررسی سطح دسترسی؛ دوباره تلاش کنید.' };
   }
-  const mismatch = mode === 'department'
-    ? stu.departmentId !== null && s.departmentId !== null && stu.departmentId !== s.departmentId
-    : stu.facultyId !== null && s.facultyId !== null && stu.facultyId !== s.facultyId;
-  if (mismatch) {
-    return { ok: false, error: 'دسترسی به پروندهٔ این دانشجو در حوزهٔ سازمانی شما نیست (Object-Level Authorization).' };
-  }
-  return { ok: true };
 }

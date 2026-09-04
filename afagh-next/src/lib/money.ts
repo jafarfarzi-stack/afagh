@@ -71,3 +71,39 @@ export function sumUnits(values: Iterable<number>): number {
   for (const v of values) s += Math.round(Number(v) || 0);
   return s;
 }
+
+// ════════════════════════════════════════════════════════════════════════
+//  اعتبارسنجی سخت‌گیرانهٔ ریال (بازبینی: «ورودی کلاینت نباید مبلغ بد بدهد»)
+//
+//  مسیر مالی (تخفیف/پوشش/وام/چک) هر مبلغی از کلاینت می‌گیرد. اگر رشتهٔ
+//  `"1e5"` یا عدد `123.456` یا `"۱۰۰۰"` فارسی یا NaN/Infinity از کلاینت
+//  برسد و مستقیم در دستور SQL جا بگیرد، یا خطای ۵۰۰ می‌دهد یا (در بدترین
+//  حالت) مبلغ اشتباه ثبت می‌کند. این تابع در «مرز ورودی» هر Action مالی
+//  صدا زده می‌شود: فقط عدد صحیحِ نامنفیِ ریال می‌پذیرد، وگرنه null
+//  برمی‌گرداند تا Action با پیام «مبلغ نامعتبر است» رد شود (fail-closed).
+// ════════════════════════════════════════════════════════════════════════
+
+/** ریالِ معتبر (عدد صحیح نامنفی) → خودِ عدد؛ هر چیز دیگر → null */
+export function safeRials(value: unknown): number | null {
+  if (typeof value === 'number') {
+    if (!Number.isSafeInteger(value) || value < 0) return null;
+    return value;
+  }
+  if (typeof value === 'string') {
+    const t = value.trim();
+    if (!/^\d{1,15}$/.test(t)) return null;            // فقط ارقام، بدون ‍e/نقطه/علامت/فاصله
+    const n = Number(t);
+    return Number.isSafeInteger(n) ? n : null;
+  }
+  return null;
+}
+
+/** نمایش ریال با جداکنندهٔ هزارگان — فقط برای نمایش، نه محاسبه */
+export function fmtRial(value: number): string {
+  return new Intl.NumberFormat('fa-IR').format(Math.round(value)) + ' ریال';
+}
+
+/** ریال → رشتهٔ ریالیِ خام برای ذخیره در جزئیات/لاگ */
+export function rialString(value: number): string {
+  return String(Math.round(value));
+}
