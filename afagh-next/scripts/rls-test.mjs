@@ -41,6 +41,8 @@ const expectErrCode = async (name, fn, code) => {
   } catch (e) {
     if (e.code === code) { pass++; console.log(`  ✓ ${name} → ${code}`); }
     else { fail++; console.log(`  ✗ ${name} → ${e.code} (انتظار ${code})`); }
+  } finally {
+    await q(app, 'ROLLBACK').catch(() => {});
   }
 };
 
@@ -91,11 +93,14 @@ try {
   const [dcat] = (await q(owner, `INSERT INTO document_categories (title) VALUES ('تست RLS') RETURNING id`)).rows;
   await q(owner, `INSERT INTO "student_documents" ("personUserId","categoryId","fileName","fileUrl") VALUES ($1,$2,'t.pdf','t.pdf')`, [uB.id, dcat.id]);
 
-  const uid = (id) => `set_config('app.user_id','${id}',true)`;
+  // set_config فقط داخل SELECT معتبر است و با پارامتر نمی‌توان چند دستور فرستاد
+  // (node-pg چند دستور با پارامتر را نمی‌پذیرد)؛ پس تراکنش به سه پرس‌وجوی مجزا باز می‌شود.
+  const uid = (id) => `SELECT set_config('app.user_id','${id}',true)`;
+  const beginAs = async (id) => { await q(app, 'BEGIN'); await q(app, uid(id)); };
 
   // ═══ ۱) خواندن: A نباید هیچ دادهٔ B را ببیند ═══
   console.log('\n— ۱) جداسازی خواندن (A در برابر دادهٔ B)');
-  await q(app, `BEGIN; ${uid(uA.id)}`);
+  await beginAs(uA.id);
   let r = await q(app, `SELECT "userId" FROM students WHERE "userId" = $1`, [uB.id]);
   check('students: دادهٔ B از دید A = ۰ ردیف', r.rowCount === 0);
   r = await q(app, `SELECT "userId" FROM students WHERE "userId" = $1`, [uA.id]);
@@ -133,33 +138,35 @@ try {
 
   // ═══ ۳) نوشتن: هیچ تغییری روی دادهٔ B ممکن نیست ═══
   console.log('\n— ۳) نوشتن: حملهٔ Cross-User مسدود است');
-  await q(app, `BEGIN; ${uid(uA.id)}`);
+  await beginAs(uA.id);
   r = await q(app, `UPDATE enrollments SET status = 'DROPPED' WHERE "id" = $1`, [enrB.id]);
   check('UPDATE دانشجوی B → ۰ ردیف (سیاست USING)', r.rowCount === 0);
   r = await q(app, `DELETE FROM cart_items WHERE "studentId" = $1`, [sB.id]);
   check('DELETE سبد B → ۰ ردیف', r.rowCount === 0);
   await q(app, 'COMMIT');
   await expectErrCode('INSERT ثبت‌نام برای B → 42501 (WITH CHECK)',
-    async () => { await q(app, `BEGIN; ${uid(uA.id)} INSERT INTO enrollments ("studentId","offeringId","status") VALUES ($1,$2,'REGISTERED')`, [sB.id, off.id]); },
+    async () => { await beginAs(uA.id); await q(app, `INSERT INTO enrollments ("studentId","offeringId","status") VALUES ($1,$2,'REGISTERED')`, [sB.id, off.id]); },
     '42501');
   await expectErrCode('INSERT اعلان برای B → 42501',
-    async () => { await q(app, `BEGIN; ${uid(uA.id)} INSERT INTO notifications ("userId","eventCode") VALUES ($1,'X')`, [uB.id]); },
+    async () => { await beginAs(uA.id); await q(app, `INSERT INTO notifications ("userId","eventCode") VALUES ($1,'X')`, [uB.id]); },
     '42501');
   await expectErrCode('UPDATE نمرهٔ خود A → 42501 (گرنت ستونی: gradeValue خارج از مجوز)',
-    async () => { await q(app, `BEGIN; ${uid(uA.id)} UPDATE enrollments SET "gradeValue" = 20 WHERE "id" = $1`, [enrA.id]); },
+    async () => { await beginAs(uA.id); await q(app, `UPDATE enrollments SET "gradeValue" = 20 WHERE "id" = $1`, [enrA.id]); },
     '42501');
   await expectErrCode('UPDATE کارتابل/مبلغ توسط خود A → 42501 (ردیف B)',
-    async () => { await q(app, `BEGIN; ${uid(uA.id)} UPDATE student_ledger SET amount = -999999 WHERE "studentId" = $1`, [sB.id]); },
+    async () => { await beginAs(uA.id); await q(app, `UPDATE student_ledger SET amount = -999999 WHERE "studentId" = $1`, [sB.id]); },
     '42501');
 
   // ═══ ۴) مجازهای واقعی: اقدام دانشجو روی دادهٔ خودش ═══
   console.log('\n— ۴) مجوزهای ستونیِ دقیق (اقدام دانشجو روی خودش)');
-  await q(app, `BEGIN; ${uid(uA.id)} UPDATE enrollments SET status = 'DROPPED' WHERE "id" = $1`, [enrA.id]);
+  await beginAs(uA.id);
+  await q(app, `UPDATE enrollments SET status = 'DROPPED' WHERE "id" = $1`, [enrA.id]);
   await q(app, 'COMMIT');
   r = await q(owner, `SELECT status FROM enrollments WHERE "id" = $1`, [enrA.id]);
   check('UPDATE status توسط خود A → مجاز و اعمال شد', r.rows[0].status === 'DROPPED');
   await q(owner, `UPDATE enrollments SET status = 'REGISTERED' WHERE "id" = $1`, [enrA.id]);
-  await q(app, `BEGIN; ${uid(uA.id)} INSERT INTO notifications ("userId","eventCode") VALUES ($1,'OK')`, [uA.id]);
+  await beginAs(uA.id);
+  await q(app, `INSERT INTO notifications ("userId","eventCode") VALUES ($1,'OK')`, [uA.id]);
   await q(app, 'COMMIT');
   check('INSERT اعلان برای خود A → مجاز', true);
 
