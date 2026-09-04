@@ -7,7 +7,6 @@ import {
   checkAndTriggerSlaTimeouts,
   clearParallelCheckpoint,
   ensureDefaultProcesses,
-  invalidateProcessCache,
 } from '@/lib/workflow-engine';
 import { eventsForRequest, retryPendingWorkflowEvents } from '@/lib/workflow-events';
 import { db } from '@/db';
@@ -177,9 +176,8 @@ export async function adminSaveProcessDefinitionAction(data: {
     });
   }
 
-  // کش فرآیندها باید بشکند تا تغییر بلافاصله در موتور اثر کند
-  invalidateProcessCache();
-
+  // (بازبینی ۵) کش محلی فرآیندها حذف شد — موتور در هر فراخوانی وضعیت واقعی DB را می‌خواند؛
+  // تغییر این‌جا در همهٔ نمونه‌ها بلافاصله اثر می‌کند.
   revalidatePath('/admin/workflows');
   revalidatePath('/student/requests');
   return { ok: true, processId };

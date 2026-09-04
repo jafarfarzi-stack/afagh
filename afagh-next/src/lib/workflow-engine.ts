@@ -76,6 +76,19 @@ export async function studentLedgerBalance(tx: DbTx | undefined, studentId: numb
  * پرونده‌ها، و در نهایت تلاش مجدد در صورت برخورد.
  */
 async function nextTrackingCode(tx: DbTx, prefix: string, year: string): Promise<string> {
+  // 🎯 بازبینی ۵ (جای بهبود ۱): شماره از «دنبالهٔ دیتابیس» گرفته می‌شود، نه count+حلقهٔ ۵۰تایی.
+  // nextval در چند نسخهٔ همزمان سرور بی‌رقابت است؛ هیچ برخوردی رخ نمی‌دهد و همیشه یکتا می‌ماند
+  // (حتی اگر دو درخواست همزمان در دو سرور ثبت شوند). دنباله در apply-patches ساخته و
+  // بر اساس رکوردهای موجود پس‌زمینه‌سازی (setval) می‌شود؛ مصرف یک جای خالی در تراکنشِ
+  // برگشت‌خورده طبیعی است (شماره‌های پرشی — همان رفتار استاندارد sequences).
+  try {
+    const res = await tx.execute(sql`select nextval('tracking_code_seq')::text as n`);
+    const n = Number(res.rows[0]?.n);
+    if (Number.isFinite(n) && n > 0) return `${prefix}-${year}-${String(n).padStart(5, '0')}`;
+  } catch (err) {
+    // دنباله هنوز در دیتابیس نیست (محیط توسعهٔ بدون apply-patches) → fallback امن
+    log.warn('tracking_seq_missing', { err: (err as Error).message });
+  }
   const [row] = await tx
     .select({ n: sql<string>`count(*)` })
     .from(student_requests)
@@ -108,22 +121,21 @@ async function safeMultichannel(userId: number | null | undefined, eventCode: st
 // عملیات آماده‌سازی و راه‌اندازی فرآیندها در پایگاه داده
 // ============================================================================
 
-let processCache: { at: number; codes: string[] } | null = null;
-const PROCESS_CACHE_TTL_MS = 30_000;
-
-/** بازنشانی کش فرآیندها — پس از ویرایش تعریف فرایند در پنل مدیر صدا زده می‌شود */
-export function invalidateProcessCache() {
-  processCache = null;
-}
+// 🎯 بازبینی ۵ (جای بهبود ۲): کش محلیِ ماژول (processCache) حذف شد.
+// در استقرار چند-نمونه‌ای (چند سرور/پاد)، هر نمونه کش خودش را داشت و پس از ویرایش
+// تعریف فرآیندها در یک نمونه، بقیه تا ۳۰ ثانیه تعریف کهنه را می‌دیدند (ناهماهنگی).
+// بها: یک SELECT کوچک روی process_definitions (چند ردیف) به ازای هر فراخوانی؛
+// درستی بر بهینه‌سازیِ زودرس اولویت دارد. اگر پروفایل‌گیری بعداً نشان داد،
+// همان‌جا سراغ Redis/کش مشترک می‌رویم — نه در لایهٔ ماژول. (invalidProcessCache
+// هم حذف شد؛ فراخوانی‌اش از پنل مدیر — actions.ts — پاکسازی شد.)
 
 /**
  * اطمینان از وجود فرآیندهای پیش‌فرض.
  * به‌جای ۲ کوئری به ازای هر فرایند، یک واکشی جمعی + نوشتن فقط در صورت نیاز؛
  * کل عملیات هم در یک تراکنش است تا نیمه‌کاره نماند.
  */
-export async function ensureDefaultProcesses(force = false) {
-  if (!force && processCache && Date.now() - processCache.at < PROCESS_CACHE_TTL_MS) return;
-
+export async function ensureDefaultProcesses(_force = false) {
+  // بدون کش: همیشه اعتبارسنجی/همگام‌سازی — در چند سرور سازگار است (بازبینی ۵)
   try {
     const existingDefs = await db
       .select({
@@ -192,8 +204,6 @@ export async function ensureDefaultProcesses(force = false) {
       });
     }
 
-    const rows = await db.select({ code: process_definitions.code }).from(process_definitions);
-    processCache = { at: Date.now(), codes: rows.map(r => r.code) };
   } catch (err) {
     log.error('ensure_default_processes_failed', { err: (err as Error).message });
   }
