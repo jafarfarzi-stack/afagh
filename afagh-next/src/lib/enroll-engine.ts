@@ -6,7 +6,7 @@ import {
 } from '@/db/schema';
 import { withUserRls } from '@/db';
 import { atomicSeat, nextWaitlistPosition, warmupCapacities } from './waitingRoom';
-import { evaluateStudentRegulationStatus, parseGrade, parseUnits } from './regulations-engine';
+import { EQUIV_SEMESTER_UNITS, evaluateStudentRegulationStatus, parseGrade, parseUnits } from './regulations-engine';
 import { chargeTermTuition, getEquivFixedMode } from './tuition-engine';
 import { shouldChargeFixed } from './tuition-rules';
 
@@ -23,7 +23,8 @@ const MAX_UNITS = 20;
 /** §آیین‌نامه معادل‌سازی: حداقل نمرهٔ قابل معادل‌سازی */
 export const EQUIV_MIN_GRADE = 12;
 /** §معادل‌سازی: حداکثر واحد هر ترم معادل‌سازی (هر ۲۰ واحد در یک نیمسال) */
-export const EQUIV_TERM_UNITS = 20;
+// M-3: منبع واحد از regulations-engine (قبلاً دو ثابت همانند ۲۰ در دو فایل بود)
+export const EQUIV_TERM_UNITS = EQUIV_SEMESTER_UNITS;
 
 export type SubmitResult = {
   ok: boolean;

@@ -36,8 +36,12 @@ export * from './regulations-types';
 
 const GRADE_SCALE = 100; // نمره: دو رقم اعشار
 const UNIT_SCALE = 10;   // واحد: یک رقم اعشار
-/** هر چند واحد معادل‌سازی = یک ترم کسر از سنوات (مطابق enroll-engine EQUIV_TERM_UNITS) */
-const EQUIV_SEMESTER_UNITS = 20;
+/**
+ * هر چند واحد معادل‌سازی = یک ترم کسر از سنوات.
+ * 🔗 منبع واحد (M-3): enroll-engine از همین ثابت استفاده می‌کند — دیگر دو ثابت
+ * جدا با ریسک ناسازگاری وجود ندارد.
+ */
+export const EQUIV_SEMESTER_UNITS = 20;
 
 /**
  * تبدیل امنِ مقدار نمره به عدد.
