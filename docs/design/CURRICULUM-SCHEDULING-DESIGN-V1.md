@@ -401,7 +401,7 @@ type CheckResult = {
 | ۷ | فاصلهٔ ساختمان‌ها | ➕ هیچ | جدول `campus_buildings(id, name, distanceMinutes jsonb)` یا matris در تنظیمات — گام ۸ |
 | ۸ | زوج/فرد هم‌زمان | 🔶 `weekRecurrence` + `sharedScheduleGroupKey` | «زوج کلاس‌ها با هم چیده شوند» به‌صورت قید سخت در Solver |
 | ۹ | محدودیت دانشجویان شاغل | ➕ هیچ | نیازمند `cohort.shiftPreference` — فاز ۸ |
-| ۱۰ | تولید ۱۶ جلسهٔ واقعی | ➕ هیچ | `generateClassSessions(schedule, academicCalendar)` — فاز ۶ (پاسخ بند ۱۱) |
+| ۱۰ | تولید ۱۶ جلسهٔ واقعی | ✅ **انجام شد** | `generateClassSessionsForTerm` در `src/lib/class-session-generator.ts` — از `schedules` (روز/ساعت/سالن) + `academic_terms.startDate` جلسات شمسی ساخته و در `class_sessions` ثبت می‌شود (تراکنشی + قفل advisory + گیت قیود سخت + idempotent + dryRun + audit). پاسخ بند ۱۱. |
 
 ### ۸.۳ Solver V2 — «سخت افزوده، نرم امتیاز»
 
@@ -439,8 +439,8 @@ resolveApplicableCurriculum(student, term):
 | **۳ — Server Actions** | ✅ **انجام شد**: `src/app/admin/curriculum/actions.ts` با ۲۱ اکشن گارددار (۲ متدویه: الگوی D3) + `src/lib/curriculum-validator.ts` (هستهٔ واقعی ۶ چک — گیت تأیید بدون استاب) + `tests/curriculum-validator.test.ts` (۱۹ تست) | ~۹۵۰ خط |
 | **۴ — Validation Engine** | ✅ **انجام شد**: ۱۱ چک واقعی (۶ هسته + ۵ تکمیلی: SEMESTER_LOAD، COURSE_TYPES_COMPLETE، TRACK_INTEGRITY، EQUIVALENCY_DISJOINT، SEMESTER_UNASSIGNED) + سقف ترم سه‌لایه (نسخه←مقطع←۲۰) + مینیمم نقش‌ها (پایان‌نامه برای ارشد/دکتری) + ۳۶ تست | ~۶۵۰ + تست |
 | **۵ — اتصال Enroll/Graduation** | ✅ **انجام شد**: `src/lib/curriculum-apply.ts` (resolution DB-backed + پیام‌های صریح دلیل) + سیم‌کشی ۳ موتور (enroll/graduation/regulations) + فیلتر وضعیت در کوئری پیش‌بینی scheduling + `selectEffectiveRules` با رفع باگ null===null + ۱۰ تست فاز ۵ (۶۱ تست domain) | ~۲۵۰ خط |
-| **۶ — اتصال Scheduling** | ✅ **انجام شد**: `src/app/admin/scheduling/actions.ts` (۴ اکشن گارددار: داشبورد، چک قیود، چرخهٔ فاز، تولید جلسات) + `src/lib/class-session-generator.ts` (تولید واقعی class_sessions — idempotent، هفتگی/زوج/فرد، تاریخ شمسی) + قیود سخت `detectScheduleConflicts` و `sessionDatesFor` در `scheduling-core` (۲۴ تست جدید) + سیم‌کشی `page.tsx` → `initial` به Client | ~۸۰۰ خط |
-| **۷ — Thin Client** | ✅ **۷الف (Curriculum) انجام شد**: `page.tsx` → `CurriculumInitialData` واقعی (majors+dept/faculty+tracks+minUnits از آخرین نسخهٔ غیرپیش‌نویس، versions، tracks، بانک دروس)؛ Client بدون Mock (حذف ۱۴۶ خط دادهٔ ساختگی)؛ بارگیری lazy جزئیات نسخه (`getCurriculumVersionDetailAction` → دروس/ترم‌بندی/قواعد/تأییدها/`CheckResult[]`)؛ همهٔ عملیات‌ها واقعی (ترم‌بندی گروهی/تکی، حذف، نقشِ درس، سقف نیمسال، انتقال بانک با roleType، ساخت نسخهٔ ورودی با Deep Clone، Transfer با cloneFromId، Revision به‌جای حذف، چرخهٔ کامل DRAFT→REVIEW→APPROVED→PUBLISHED)؛ تب اعتبارسنجی با ۱۱ چک موتور (حذف «۱۰۰٪ عتف» ساختگی)؛ ⬜ ۷ب (Scheduling) باقی است | ~۱٬۲۰۰ خط |
+| **۶ — اتصال Scheduling** | ✅ **انجام شد (ادغام واقعی دو شاخهٔ موازی)**: `src/app/admin/scheduling/actions.ts` (۵ اکشن گارددار: کارتابل کامل صفحه + تولید جلسات + گذار فاز + داشبورد + چک قیود `detectScheduleConflicts`) + `src/lib/class-session-generator.ts` (تولید واقعی class_sessions از `schedules`+`academic_terms.startDate` — تراکنشی + `pg_advisory_xact_lock` + گیت قیود سخت + dryRun + audit + idempotent-به‌سبک-skip + هفتگی/زوج/فرد + تاریخ شمسی) + `scheduling-core` با **هر دو ست قیود و تاریخ جلسات** (`detectScheduleConflicts/sessionDatesFor` ریموت و `detectHardConflicts/computeSessionDates` ما — ۱۱۰ تست) + سیم‌کشی `page.tsx` → `getSchedulingWorkspaceAction` → کلاینت بدون هیچ Mock (نیمسال/رشته/ورودی/سالن/استاد/تقاضا/برنامهٔ مصوب/جبرانی read-only/KPI از DB؛ خروجی سناریو فقط پیش‌نمایش) | ~۲٬۴۰۰ خط |
+| **۷ — Thin Client** | ✅ **انجام شد (ادغام واقعی ۷الف ریموت + ۷ب ما)**: `CurriculumManagerClient` بازنویسی (بدون هیچ Mock) با `initial` غنی‌سازی‌شده از سرور (majors+dept/faculty+minUnits از آخرین نسخهٔ غیرپیش‌نویس+tracks)؛ بارگیری lazy جزئیات نسخه → دروس/ترم‌بندی/قواعد/تأییدها/`CheckResult[]` واقعی؛ چرخهٔ حیات کامل (submit/approve/reject/publish/archive/revision) + ویرایش DRAFT (افزودن تکی/گروهی از بانک با roleType، حذف، نقش، ترم، الزامی‌بودن، شرط فارغ‌التحصیلی، سقف واحد ترم) + کپی عمیق/انتقال کاتالوگ (cloneFromId)؛ تب اعتبارسنجی با ۱۱ چک موتور (حذف نشانگرهای ساختگی)؛ ۷ب: صفحهٔ Scheduling هم Thin است (فاز ۶ — بدون Mock) | ~۹۰۰ + ۲٬۶۰۰ خط |
 
 ---
 
@@ -480,5 +480,5 @@ resolveApplicableCurriculum(student, term):
 | `course_rules` | `course_rules` (بدون تغییر جدول) | گسترش مقادیر `ruleType` |
 | — | `curriculum_tracks` | جدول جدید |
 | — | `curriculum_approvals` | جدول جدید (append-only) |
-| `classrooms.roomType` | + `facilities jsonb` | فاز ۶ |
-| `staff` | + `max_weekly_units/max_daily_hours` | فاز ۶ |
+| `classrooms.roomType` | + `facilities jsonb` | **منتقل به فاز بعد** (در فاز ۶ نیاز نشد — تولید جلسه از `schedules` بدون آن کار می‌کند) |
+| `staff` | + `max_weekly_units/max_daily_hours` | **منتقل به فاز بعد** (فاز ۶ با پیش‌فرض صریح ۱۶ واحد/۶ ساعت در کلاینت — هیچ عددی در DB نیست؛ برای گیت واقعی سقف استاد لازم است) |

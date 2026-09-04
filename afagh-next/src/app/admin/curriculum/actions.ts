@@ -28,6 +28,15 @@ import {
 } from '@/lib/curriculum-types';
 import { validateCurriculumCore, hasBlockingErrors } from '@/lib/curriculum-validator';
 
+/**
+ * نتیجهٔ استاندارد اکشن (الگوی فاز ۳+).
+ * TypeScript 5.9 literal-type در return inference اکشن‌ها را به boolean
+ * گسترش می‌دهد؛ این annotation صریح، narrowing «ok» را در Client تضمین می‌کند.
+ */
+export type Act<T extends object = { message: string }> =
+  | ({ ok: true } & T)
+  | { ok: false; error: string };
+
 const EDITORS = ['ADMIN', 'EDU_EXPERT'];
 const APPROVERS = ['ADMIN', 'EDU_EXPERT'];
 const PHASE = 'curriculum';
@@ -213,7 +222,35 @@ function revalidateCurriculumPaths() {
 
 // ─────────────────────────── خواندن (برای Thin Client فاز ۷) ───────────────────────────
 
-export async function getCurriculumOverviewAction() {
+export interface CurriculumOverviewData {
+  majors: { id: number; code: string | null; name: string; degreeLevelId: number; degreeTitle: string | null }[];
+  versions: {
+    id: number; majorId: number; degreeLevelId: number; trackId: number | null;
+    versionCode: string; title: string; status: string;
+    entryYearFrom: number; entryYearTo: number | null;
+    totalRequiredUnits: string; courseCount: number;
+  }[];
+  tracks: { id: number; code: string | null; title: string; majorId: number }[];
+}
+export type CurriculumOverviewResult =
+  | { ok: true; data: CurriculumOverviewData }
+  | { ok: false; error: string };
+
+export type CurriculumVersionDetailData = {
+  version: Awaited<ReturnType<typeof getVersionOrThrow>>;
+  courses: Awaited<ReturnType<typeof loadVersionData>>['courses'];
+  rules: Awaited<ReturnType<typeof loadVersionData>>['rules'];
+  approvals: {
+    id: number; approvalType: string | null; fromStatus: string | null; toStatus: string | null;
+    decisionNote: string | null; approvedAt: Date | null;
+  }[];
+  checks: CheckResult[];
+};
+export type CurriculumVersionDetailResult =
+  | { ok: true; data: CurriculumVersionDetailData }
+  | { ok: false; error: string };
+
+export async function getCurriculumOverviewAction(): Promise<CurriculumOverviewResult> {
   await requireRole(EDITORS);
   try {
     const [majorRows, versionRows, trackRows] = await Promise.all([
@@ -245,7 +282,29 @@ export async function getCurriculumOverviewAction() {
   }
 }
 
-export async function getCurriculumVersionDetailAction(versionId: number) {
+/** بانک دروس دانشگاه — برای افزودن درس به نسخهٔ DRAFT (Thin Client فاز ۷) */
+export type CourseBankResult =
+  | { ok: true; data: { id: number; code: string; title: string; units: string; courseType: string }[] }
+  | { ok: false; error: string };
+
+export async function listCourseBankAction(): Promise<CourseBankResult> {
+  await requireRole(EDITORS);
+  try {
+    const rows = await db
+      .select({ id: courses.id, code: courses.code, title: courses.title, units: courses.units, courseType: courses.courseType })
+      .from(courses)
+      .orderBy(asc(courses.code));
+    return {
+      ok: true,
+      data: rows.map((r) => ({ id: r.id, code: r.code, title: r.title, units: String(r.units), courseType: r.courseType ?? '—' })),
+    };
+  } catch (err: any) {
+    console.error('listCourseBankAction:', err);
+    return { ok: false, error: 'خطا در بارگیری بانک دروس' };
+  }
+}
+
+export async function getCurriculumVersionDetailAction(versionId: number): Promise<CurriculumVersionDetailResult> {
   await requireRole(EDITORS);
   try {
     const data = await loadVersionData(versionId);
@@ -285,7 +344,7 @@ export interface CreateVersionInput {
   cloneFromId?: number; // کپی عمیق (دروس + قواعد) از نسخهٔ مرجع
 }
 
-export async function createCurriculumVersionAction(input: CreateVersionInput) {
+export async function createCurriculumVersionAction(input: CreateVersionInput): Promise<Act<{ message: string; data: { id: number } }>> {
   await requireRole(EDITORS);
   try {
     const [majorRow] = await db.select().from(majors).where(eq(majors.id, input.majorId)).limit(1);
@@ -393,7 +452,7 @@ export interface AddCourseInput {
   autoCorequisiteAllowed?: number;
 }
 
-export async function addCourseToCurriculumAction(versionId: number, item: AddCourseInput) {
+export async function addCourseToCurriculumAction(versionId: number, item: AddCourseInput): Promise<Act<{ message: string }>> {
   await requireRole(EDITORS);
   try {
     await assertEditable(versionId);
@@ -466,7 +525,7 @@ export async function bulkAddCoursesAction(versionId: number, items: AddCourseIn
   }
 }
 
-export async function removeCourseFromCurriculumAction(versionId: number, courseId: number) {
+export async function removeCourseFromCurriculumAction(versionId: number, courseId: number): Promise<Act<{ message: string }>> {
   await requireRole(EDITORS);
   try {
     await assertEditable(versionId);
@@ -516,7 +575,7 @@ export async function updateCourseInCurriculumAction(
     isRequired?: number; isElective?: number; isGraduationRequired?: number;
     minGrade?: number | null; autoCorequisiteAllowed?: number;
   }
-) {
+): Promise<Act<{ message: string }>> {
   await requireRole(EDITORS);
   try {
     await assertEditable(versionId);
@@ -554,7 +613,7 @@ export async function updateCourseInCurriculumAction(
   }
 }
 
-export async function assignCourseToSemesterAction(versionId: number, courseId: number, semesterNo: number | null) {
+export async function assignCourseToSemesterAction(versionId: number, courseId: number, semesterNo: number | null): Promise<Act<{ message: string }>> {
   await requireRole(EDITORS);
   try {
     await assertEditable(versionId);
@@ -683,7 +742,7 @@ export async function setCoursePassingGradeAction(versionId: number, courseId: n
 
 // ─────────────────────────── اعتبارسنجی و چرخهٔ حیات ───────────────────────────
 
-export async function validateCurriculumAction(versionId: number) {
+export async function validateCurriculumAction(versionId: number): Promise<Act<{ data: { checks: CheckResult[]; blocked: boolean } }>> {
   await requireRole(EDITORS);
   try {
     await getVersionOrThrow(versionId);
@@ -695,7 +754,11 @@ export async function validateCurriculumAction(versionId: number) {
   }
 }
 
-export async function submitCurriculumForApprovalAction(versionId: number, note?: string) {
+export type SubmitForApprovalResult =
+  | { ok: true; message: string; data: { checks: CheckResult[] } }
+  | { ok: false; error: string; checks?: CheckResult[] };
+
+export async function submitCurriculumForApprovalAction(versionId: number, note?: string): Promise<SubmitForApprovalResult> {
   await requireRole(EDITORS);
   try {
     const version = await getVersionOrThrow(versionId);
@@ -738,7 +801,7 @@ export async function submitCurriculumForApprovalAction(versionId: number, note?
   }
 }
 
-export async function approveCurriculumAction(versionId: number, note?: string) {
+export async function approveCurriculumAction(versionId: number, note?: string): Promise<Act<{ message: string }>> {
   await requireRole(APPROVERS);
   try {
     const version = await getVersionOrThrow(versionId);
@@ -769,7 +832,7 @@ export async function approveCurriculumAction(versionId: number, note?: string) 
   }
 }
 
-export async function rejectCurriculumAction(versionId: number, note: string) {
+export async function rejectCurriculumAction(versionId: number, note: string): Promise<Act<{ message: string }>> {
   await requireRole(APPROVERS);
   try {
     if (!note?.trim()) return { ok: false, error: 'دلیل بازگشت الزامی است.' };
@@ -801,7 +864,7 @@ export async function rejectCurriculumAction(versionId: number, note: string) {
   }
 }
 
-export async function publishCurriculumAction(versionId: number, note?: string) {
+export async function publishCurriculumAction(versionId: number, note?: string): Promise<Act<{ message: string; data: { superseded: string[] } }>> {
   await requireRole(APPROVERS);
   try {
     const version = await getVersionOrThrow(versionId);
@@ -860,7 +923,7 @@ export async function publishCurriculumAction(versionId: number, note?: string) 
   }
 }
 
-export async function archiveCurriculumAction(versionId: number, note?: string) {
+export async function archiveCurriculumAction(versionId: number, note?: string): Promise<Act<{ message: string }>> {
   await requireRole(APPROVERS);
   try {
     const version = await getVersionOrThrow(versionId);
@@ -891,7 +954,7 @@ export async function archiveCurriculumAction(versionId: number, note?: string) 
   }
 }
 
-export async function createCurriculumRevisionAction(versionId: number) {
+export async function createCurriculumRevisionAction(versionId: number): Promise<Act<{ message: string; data: { id: number; versionCode: string } }>> {
   await requireRole(EDITORS);
   try {
     const src = await getVersionOrThrow(versionId);
