@@ -197,7 +197,15 @@ export const staff = pgTable('staff', {
   birthProvince: varchar('birthProvince', { length: 100 }), // استان محل تولد
   birthCity: varchar('birthCity', { length: 100 }),       // شهر محل تولد
   bankAccountNo: varchar('bankAccountNo', { length: 50 }), // شماره حساب
-  phone: varchar('phone', { length: 20 })                 // تلفن ثابت
+  phone: varchar('phone', { length: 20 }),                 // تلفن ثابت
+  canManageServicePool: integer('canManageServicePool').default(0) // مدیر گروه خدماتی-سراسری (تربیت بدنی/زبان)
+});
+
+/** خوشهٔ دروس هم‌ارز (مثل «ریاضی عمومی ۱» و «ریاضیات پایه» — یک محتوا، چند کد) */
+export const equivalence_clusters = pgTable('equivalence_clusters', {
+  id: serial('id').primaryKey(),
+  clusterTitle: varchar('clusterTitle', { length: 100 }).notNull(),
+  isGeneralService: integer('isGeneralService').default(0)
 });
 
 export const courses = pgTable('courses', {
@@ -210,7 +218,11 @@ export const courses = pgTable('courses', {
   courseType: varchar('courseType', { length: 50 }),
   departmentId: integer('departmentId').references(() => departments.id),
   gradingType: varchar('gradingType', { length: 20 }).default('NUMERIC'),
-  affectsGpa: integer('affectsGpa').default(1)
+  affectsGpa: integer('affectsGpa').default(1),
+  // ── موتور برنامه‌ریزی درسی ──
+  clusterId: integer('clusterId').references(() => equivalence_clusters.id), // NULL = درس مستقل
+  offeringScope: varchar('offeringScope', { length: 20 }).default('DEPARTMENTAL'), // DEPARTMENTAL | GENERAL_SERVICE (کارتابل دوگانه)
+  locationType: varchar('locationType', { length: 20 }).default('IN_CAMPUS')        // IN_CAMPUS | OUT_CAMPUS (مهارتی/ورزشی خارج دانشگاه)
 });
 
 export const syllabuses = pgTable('syllabuses', {
@@ -261,7 +273,9 @@ export const classrooms = pgTable('classrooms', {
   roomType: varchar('roomType', { length: 30 }),
   buildingName: varchar('buildingName', { length: 100 }),
   rowsCount: integer('rowsCount'),
-  colsCount: integer('colsCount')
+  colsCount: integer('colsCount'),
+  // ── متعلق به کدام دانشکده است (زونینگ در برنامه‌ریزی درسی) ──
+  facultyId: integer('facultyId').references(() => faculties.id)
 });
 
 export const course_offerings = pgTable('course_offerings', {
@@ -284,8 +298,12 @@ export const course_offerings = pgTable('course_offerings', {
   targetDegreeLevelId: integer('targetDegreeLevelId'),   // مقطع هدف (NULL = همهٔ مقاطع)
   targetMajorId: integer('targetMajorId'),               // رشتهٔ هدف (NULL = همهٔ رشته‌ها)
   entryYearStart: integer('entryYearStart'),             // بازهٔ ورودی (NULL = بدون محدودیت)
-  entryYearEnd: integer('entryYearEnd')
-});
+  entryYearEnd: integer('entryYearEnd'),
+  // ── فاز تأمین/تخصیص درس‌های مشترک (موتور برنامه‌ریزی درسی) ──
+  ownerDepartmentId: integer('ownerDepartmentId').references(() => departments.id), // گروه سازندهٔ کلاس
+  isSharedService: integer('isSharedService').default(0),                            // 1 = استخر خدمات عمومی (فاز تأمین)
+  equivalenceClusterId: integer('equivalenceClusterId').references(() => equivalence_clusters.id) // استخر ظرفیت مشترک
+}, (t) => ({ termCourseGroupIdx: index('offerings_term_course_group_idx').on(t.termId, t.courseId, t.groupNumber) }));
 
 export const offering_professors = pgTable('offering_professors', {
   id: serial('id').primaryKey(),
@@ -314,6 +332,50 @@ export const professor_availabilities = pgTable('professor_availabilities', {
   startTime: time('startTime'),
   endTime: time('endTime')
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// موتور برنامه‌ریزی درسی — تکهٔ دیتابیس (فاز تأمین/تخصیص، سهمیه و استخر شناور)
+// ═══════════════════════════════════════════════════════════════════════
+
+/** فازهای برنامه‌ریزی ترم: تأمین ← تخصیص ← بازبینی کارشناس ← منتشرشده */
+export const term_scheduling_states = pgTable('term_scheduling_states', {
+  id: serial('id').primaryKey(),
+  termId: integer('termId').notNull().unique().references(() => academic_terms.id),
+  phase: varchar('phase', { length: 20 }).notNull().default('SUPPLY'),
+  supplyEndsAt: timestamp('supplyEndsAt'),
+  allocationEndsAt: timestamp('allocationEndsAt'),
+  reviewEndsAt: timestamp('reviewEndsAt'),
+  publishedAt: timestamp('publishedAt'),
+  publishedByStaffId: integer('publishedByStaffId').references(() => staff.id)
+});
+
+/**
+ * سهمیهٔ کلاس فیزیکی به تفکیک شیفت (صبح/عصر).
+ * هر (سالن، شیفت) در هر ترم یک مالک دارد؛ با آزادسازی → استخر مشترک دانشکده.
+ */
+export const scheduling_room_grants = pgTable('scheduling_room_grants', {
+  id: serial('id').primaryKey(),
+  termId: integer('termId').notNull().references(() => academic_terms.id),
+  classroomId: integer('classroomId').notNull().references(() => classrooms.id),
+  shift: varchar('shift', { length: 10 }).notNull(), // MORNING | EVENING
+  ownerDepartmentId: integer('ownerDepartmentId').notNull().references(() => departments.id),
+  status: varchar('status', { length: 10 }).notNull().default('ALLOCATED'), // ALLOCATED | RELEASED
+  releasedAt: timestamp('releasedAt'),
+  releasedByStaffId: integer('releasedByStaffId').references(() => staff.id)
+}, (t) => ({ roomShiftUniq: unique('uq_scheduling_room_shift').on(t.termId, t.classroomId, t.shift) }));
+
+/** اتصال «کلاس ساخته‌شده در فاز تأمین» به گروه‌های متقاضی در فاز تخصیص */
+export const scheduling_allocations = pgTable('scheduling_allocations', {
+  id: serial('id').primaryKey(),
+  termId: integer('termId').notNull().references(() => academic_terms.id),
+  offeringId: integer('offeringId').notNull().references(() => course_offerings.id),
+  departmentId: integer('departmentId').notNull().references(() => departments.id),
+  allocatedByStaffId: integer('allocatedByStaffId').references(() => staff.id),
+  createdAt: timestamp('createdAt').defaultNow()
+}, (t) => ({
+  offerDeptUniq: unique('uq_scheduling_allocation').on(t.offeringId, t.departmentId),
+  deptIdx: index('scheduling_allocations_dept_idx').on(t.termId, t.departmentId),
+}));
 
 export const cart_items = pgTable('cart_items', {
   id: serial('id').primaryKey(),
