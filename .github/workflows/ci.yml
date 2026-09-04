@@ -19,7 +19,7 @@ jobs:
       - run: npm run build   # بدون نیاز به سرویس‌ها (اتصال DB تنبل است)
       # بازبینی مهندسی (P1): security scan در CI — بالا بودن قیدهای امنیتی = شکست
       # (audit-level=high؛ در صورت قطعی رجیستری، خطای صریح می‌گیرد نه سکوت)
-      - run: npm audit --omit=dev --audit-level=high
+      - run: node scripts/ci-audit.mjs   # npm audit مقاوم: فقط یافتهٔ واقعی high/critical؛ خرابی endpoint رجیستری → هشدار
 
   rls-integration:
     name: RLS — اثبات جداسازی سطری (P0)

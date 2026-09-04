@@ -314,3 +314,119 @@ CREATE INDEX IF NOT EXISTS "idx_eval_q_form_axis"          ON "evaluation_questi
 CREATE INDEX IF NOT EXISTS "idx_schedules_room_type"       ON "schedules" ("roomId", "scheduleType");
 CREATE INDEX IF NOT EXISTS "idx_offering_prof_role"        ON "offering_professors" ("role", "staffId");
 CREATE INDEX IF NOT EXISTS "idx_analytics_snapshots_type"  ON "analytics_snapshots" ("reportType");
+
+
+-- ════════════════════════════════════════════════════════════════════════
+--  ⑧ تکمیل پوشش RLS — ۲۱ جدول هویتی/مالی باقی‌مانده (بازبینی ۴)
+--
+--  ماتریس اولیه ۳۸ جدول را پوشش می‌داد؛ این جدول‌ها بعداً به اسکیما اضافه
+--  شدند و بدون RLS بودند → نقش اپ (afagh_app) می‌توانست کل ستون‌های آن‌ها را
+--  بدون محدودیت بخواند. اینجا برای هر یک: ENABLE ROW LEVEL SECURITY + پالیسی
+--  self-read (همان الگوی بخش ③). جدول‌های بدون مالکیت مشخص (legacy_code_maps)
+--  با deny-all صریح بسته می‌شوند. همهٔ دستورها idempotent‌اند.
+-- ════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE "payment_cheques" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS payment_cheques_self_read ON "payment_cheques";
+CREATE POLICY payment_cheques_self_read ON "payment_cheques" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "student_discounts" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS student_discounts_self_read ON "student_discounts";
+CREATE POLICY student_discounts_self_read ON "student_discounts" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "student_sponsorships" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS student_sponsorships_self_read ON "student_sponsorships";
+CREATE POLICY student_sponsorships_self_read ON "student_sponsorships" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "student_loans" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS student_loans_self_read ON "student_loans";
+CREATE POLICY student_loans_self_read ON "student_loans" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "student_cards" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS student_cards_self_read ON "student_cards";
+CREATE POLICY student_cards_self_read ON "student_cards" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "clearance_checklist" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS clearance_checklist_self_read ON "clearance_checklist";
+CREATE POLICY clearance_checklist_self_read ON "clearance_checklist" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "issued_degrees" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS issued_degrees_self_read ON "issued_degrees";
+CREATE POLICY issued_degrees_self_read ON "issued_degrees" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "exam_attendances" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS exam_attendances_self_read ON "exam_attendances";
+CREATE POLICY exam_attendances_self_read ON "exam_attendances" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "graduation_audits" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS graduation_audits_self_read ON "graduation_audits";
+CREATE POLICY graduation_audits_self_read ON "graduation_audits" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "alumni_profiles" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS alumni_profiles_self_read ON "alumni_profiles";
+CREATE POLICY alumni_profiles_self_read ON "alumni_profiles" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "alumni_requests" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS alumni_requests_self_read ON "alumni_requests";
+CREATE POLICY alumni_requests_self_read ON "alumni_requests" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "exam_invigilators" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS exam_invigilators_self_read ON "exam_invigilators";
+CREATE POLICY exam_invigilators_self_read ON "exam_invigilators" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "invigilators" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS invigilators_self_read ON "invigilators";
+CREATE POLICY invigilators_self_read ON "invigilators" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "offering_professors" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS offering_professors_self_read ON "offering_professors";
+CREATE POLICY offering_professors_self_read ON "offering_professors" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "professor_availabilities" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS professor_availabilities_self_read ON "professor_availabilities";
+CREATE POLICY professor_availabilities_self_read ON "professor_availabilities" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "staff_roles" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS staff_roles_self_read ON "staff_roles";
+CREATE POLICY staff_roles_self_read ON "staff_roles" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "notification_channels" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS notification_channels_self_read ON "notification_channels";
+CREATE POLICY notification_channels_self_read ON "notification_channels" FOR SELECT TO afagh_app
+  USING ("userId" = nullif(current_setting('app.user_id', true), '')::int);
+
+ALTER TABLE "notification_deliveries" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS notification_deliveries_self_read ON "notification_deliveries";
+CREATE POLICY notification_deliveries_self_read ON "notification_deliveries" FOR SELECT TO afagh_app
+  USING ("userId" = nullif(current_setting('app.user_id', true), '')::int);
+
+ALTER TABLE "notification_logs" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS notification_logs_self_read ON "notification_logs";
+CREATE POLICY notification_logs_self_read ON "notification_logs" FOR SELECT TO afagh_app
+  USING ("userId" = nullif(current_setting('app.user_id', true), '')::int);
+
+ALTER TABLE "user_roles" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS user_roles_self_read ON "user_roles";
+CREATE POLICY user_roles_self_read ON "user_roles" FOR SELECT TO afagh_app
+  USING ("userId" = nullif(current_setting('app.user_id', true), '')::int);
+
+ALTER TABLE "legacy_code_maps" ENABLE ROW LEVEL SECURITY;
+-- targetId عمومی/داخلی است و کاربرد نقش اپ ندارد → برای نقش اپ «هیچ» (deny-all صریح)
+DROP POLICY IF EXISTS legacy_code_maps_deny_all ON "legacy_code_maps";
+CREATE POLICY legacy_code_maps_deny_all ON "legacy_code_maps" FOR ALL TO afagh_app USING (false);
