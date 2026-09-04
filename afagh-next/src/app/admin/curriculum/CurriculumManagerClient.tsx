@@ -1,7 +1,22 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import {
+  approveCurriculumAction,
+  assignCourseToSemesterAction,
+  bulkAddCoursesAction,
+  bulkAssignSemestersAction,
+  createCurriculumRevisionAction,
+  createCurriculumVersionAction,
+  getCurriculumOverviewAction,
+  getCurriculumVersionDetailAction,
+  publishCurriculumAction,
+  removeCourseFromCurriculumAction,
+  submitCurriculumForApprovalAction,
+  updateCourseInCurriculumAction,
+  updateCurriculumMetaAction,
+} from './actions';
 
 // Types
 export interface MajorItem {
@@ -115,140 +130,6 @@ const INITIAL_MAJORS: MajorItem[] = [
   },
 ];
 
-const INITIAL_CATALOGS: CatalogItem[] = [
-  { id: 47, majorCode: '14', majorName: 'مهندسی علوم و صنایع غذایی', degreeLevel: 'کارشناسی ناپیوسته', studyMode: 'آموزشی', track: 'نامشخص', term: '13881', totalUnits: 70 },
-  { id: 48, majorCode: '14', majorName: 'مهندسی علوم و صنایع غذایی', degreeLevel: 'کارشناسی ناپیوسته', studyMode: 'آموزشی', track: 'نامشخص', term: '13882', totalUnits: 70 },
-  { id: 49, majorCode: '14', majorName: 'مهندسی علوم و صنایع غذایی', degreeLevel: 'کارشناسی ناپیوسته', studyMode: 'آموزشی', track: 'نامشخص', term: '13891', totalUnits: 70 },
-  { id: 50, majorCode: '14', majorName: 'مهندسی علوم و صنایع غذایی', degreeLevel: 'کارشناسی ناپیوسته', studyMode: 'آموزشی', track: 'نامشخص', term: '13892', totalUnits: 70 },
-  { id: 51, majorCode: '14', majorName: 'مهندسی علوم و صنایع غذایی', degreeLevel: 'کارشناسی ناپیوسته', studyMode: 'آموزشی', track: 'نامشخص', term: '13901', totalUnits: 70 },
-  { id: 52, majorCode: '14', majorName: 'مهندسی علوم و صنایع غذایی', degreeLevel: 'کارشناسی ناپیوسته', studyMode: 'آموزشی', track: 'نامشخص', term: '13902', totalUnits: 70 },
-  { id: 53, majorCode: '14', majorName: 'مهندسی علوم و صنایع غذایی', degreeLevel: 'کارشناسی ناپیوسته', studyMode: 'آموزشی', track: 'نامشخص', term: '13903', totalUnits: 70 },
-  { id: 54, majorCode: '14', majorName: 'مهندسی علوم و صنایع غذایی', degreeLevel: 'کارشناسی ناپیوسته', studyMode: 'آموزشی', track: 'نامشخص', term: '13911', totalUnits: 70 },
-  { id: 55, majorCode: '14', majorName: 'مهندسی علوم و صنایع غذایی', degreeLevel: 'کارشناسی ناپیوسته', studyMode: 'آموزشی', track: 'نامشخص', term: '13912', totalUnits: 70 },
-  { id: 56, majorCode: '14', majorName: 'مهندسی علوم و صنایع غذایی', degreeLevel: 'کارشناسی ناپیوسته', studyMode: 'آموزشی', track: 'نامشخص', term: '13921', totalUnits: 70 },
-  { id: 71, majorCode: '14', majorName: 'مهندسی علوم و صنایع غذایی', degreeLevel: 'کارشناسی ناپیوسته', studyMode: 'آموزشی', track: 'نامشخص', term: '14021', totalUnits: 70 },
-  { id: 72, majorCode: '14', majorName: 'مهندسی علوم و صنایع غذایی', degreeLevel: 'کارشناسی ناپیوسته', studyMode: 'آموزشی', track: 'نامشخص', term: '14031', totalUnits: 70 },
-  { id: 101, majorCode: '412', majorName: 'مهندسی نرم‌افزار', degreeLevel: 'کارشناسی پیوسته', studyMode: 'آموزشی', track: 'سیستم‌های نرم‌افزاری', term: '14021', totalUnits: 140 },
-  { id: 102, majorCode: '412', majorName: 'مهندسی نرم‌افزار', degreeLevel: 'کارشناسی پیوسته', studyMode: 'آموزشی', track: 'سیستم‌های نرم‌افزاری', term: '14031', totalUnits: 140 },
-];
-
-const INITIAL_TYPE_RULES: Record<number, CourseTypeRule[]> = {
-  47: [
-    { typeCode: 0, title: 'نامشخص', maxUnits: 0 },
-    { typeCode: 1, title: 'عمومی', maxUnits: 9 },
-    { typeCode: 2, title: 'پایه', maxUnits: 13 },
-    { typeCode: 3, title: 'تخصصی', maxUnits: 36 },
-    { typeCode: 4, title: 'اصلی', maxUnits: 12 },
-    { typeCode: 5, title: 'کارورزی', maxUnits: 0 },
-    { typeCode: 6, title: 'مهارتی', maxUnits: 0 },
-    { typeCode: 7, title: 'کارگاه', maxUnits: 0 },
-    { typeCode: 8, title: 'پروژه', maxUnits: 0 },
-  ],
-};
-
-const MASTER_COURSES: CourseBankItem[] = [
-  { id: 1, code: '1', title: 'کارگاه‌های حین خدمت (ICDL)', courseType: 'عمومی', units: 1, theoreticalUnits: 1, practicalUnits: 0, prerequisites: '—', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 2, code: '100000', title: 'ارزیابی دانشگاه', courseType: 'نامشخص', units: 0, theoreticalUnits: 0, practicalUnits: 0, prerequisites: '—', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 3, code: '10001', title: 'میکروبیولوژی صنعتی', courseType: 'پایه', units: 3, theoreticalUnits: 2, practicalUnits: 1, prerequisites: 'شیمی عمومی', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 4, code: '10002', title: 'شیمی مواد غذایی تکمیلی', courseType: 'تخصصی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'شیمی آلی', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 5, code: '10003', title: 'مهندسی صنایع غذایی تکمیلی', courseType: 'تخصصی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'اصول مهندسی ۱', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 6, code: '10004', title: 'خواص بیوفیزیکی محصولات کشاورزی', courseType: 'پایه', units: 3, theoreticalUnits: 2, practicalUnits: 1, prerequisites: 'فیزیک عمومی', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 7, code: '14001', title: 'ریاضیات عمومی (۲)', courseType: 'پایه', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'ریاضی ۱', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 8, code: '14002', title: 'بیوشیمی', courseType: 'پایه', units: 3, theoreticalUnits: 2, practicalUnits: 1, prerequisites: 'شیمی آلی', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 9, code: '14003', title: 'نقشه‌کشی صنعتی', courseType: 'پایه', units: 2, theoreticalUnits: 1, practicalUnits: 1, prerequisites: 'هندسه ترسیمی', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 10, code: '14004', title: 'آمار و احتمالات', courseType: 'پایه', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'ریاضی ۱', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 11, code: '14005', title: 'مدیریت و بازاریابی', courseType: 'پایه', units: 2, theoreticalUnits: 2, practicalUnits: 0, prerequisites: '—', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 12, code: '1112101', title: 'ریاضی عمومی ۱', courseType: 'پایه', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: '—', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 13, code: '1112103', title: 'مبانی برنامه‌نویسی', courseType: 'پایه', units: 4, theoreticalUnits: 3, practicalUnits: 1, prerequisites: '—', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 14, code: '1112104', title: 'برنامه‌نویسی پیشرفته', courseType: 'اصلی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'مبانی برنامه‌نویسی', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 15, code: '1112201', title: 'ساختمان داده‌ها', courseType: 'اصلی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'برنامه‌نویسی پیشرفته', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 16, code: '1112301', title: 'معماری کامپیوتر', courseType: 'تخصصی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'مدارهای منطقی', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 17, code: '1112302', title: 'پایگاه داده‌ها', courseType: 'تخصصی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'ساختمان داده‌ها', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 18, code: '1112303', title: 'شبکه‌های کامپیوتری', courseType: 'تخصصی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'معماری کامپیوتر', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 19, code: '1112106', title: 'اندیشه اسلامی ۱', courseType: 'عمومی', units: 2, theoreticalUnits: 2, practicalUnits: 0, prerequisites: '—', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 20, code: '1112107', title: 'زبان انگلیسی عمومی', courseType: 'عمومی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: '—', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 21, code: '1112108', title: 'تربیت بدنی ۱', courseType: 'عمومی', units: 1, theoreticalUnits: 0, practicalUnits: 1, prerequisites: '—', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 22, code: '1112109', title: 'فارسی عمومی', courseType: 'عمومی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: '—', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 23, code: '14006', title: 'کنترل کیفیت در صنایع غذایی', courseType: 'تخصصی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'شیمی مواد غذایی', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 24, code: '14007', title: 'اصول نگهداری مواد غذایی', courseType: 'اصلی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'میکروبیولوژی', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 25, code: '14008', title: 'کارآموزی صنایع غذایی', courseType: 'کارورزی', units: 2, theoreticalUnits: 0, practicalUnits: 2, prerequisites: 'گذراندن ۵۰ واحد', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 26, code: '1112401', title: 'هوش مصنوعی', courseType: 'تخصصی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'ساختمان داده‌ها', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 27, code: '1112402', title: 'مهندسی نرم‌افزار ۱', courseType: 'تخصصی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'پایگاه داده‌ها', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 28, code: '1112403', title: 'سیستم‌های عامل', courseType: 'اصلی', units: 3, theoreticalUnits: 3, practicalUnits: 0, prerequisites: 'معماری کامپیوتر', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 29, code: '1112499', title: 'پروژه پایانی کارشناسی', courseType: 'پروژه', units: 3, theoreticalUnits: 0, practicalUnits: 3, prerequisites: 'گذراندن ۱۰۰ واحد', corequisites: '—', passGrade: 10, failGrade: 0 },
-  { id: 30, code: '1112498', title: 'کارآموزی مهندسی نرم‌افزار', courseType: 'کارورزی', units: 2, theoreticalUnits: 0, practicalUnits: 2, prerequisites: 'گذراندن ۸۰ واحد', corequisites: '—', passGrade: 10, failGrade: 0 },
-];
-
-const INITIAL_CATALOG_COURSES: Record<number, number[]> = {
-  47: [7, 8, 9, 10, 11, 3, 4, 5, 1, 19, 20, 21, 22, 23, 24, 25],
-  48: [7, 8, 9, 10, 11, 3, 4, 5, 1, 19, 20, 21, 22, 23, 24, 25],
-  101: [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 26, 27, 28, 29, 30],
-  102: [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 26, 27, 28, 29, 30],
-};
-
-// Initial Semester Mapping (Catalog ID -> Semester No 1..8 -> Course Assignments)
-const INITIAL_SEMESTER_ASSIGNMENTS: Record<number, Record<number, SemesterCourseAssignment[]>> = {
-  47: {
-    1: [
-      { courseId: 3, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
-      { courseId: 7, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
-      { courseId: 9, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
-      { courseId: 19, isMandatoryInTerm: false, isGraduationReq: true, recommendedTerm: 1 },
-      { courseId: 20, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
-      { courseId: 21, isMandatoryInTerm: false, isGraduationReq: true, recommendedTerm: 1 },
-      { courseId: 22, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
-    ],
-    2: [
-      { courseId: 4, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 2 },
-      { courseId: 8, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 2 },
-      { courseId: 10, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 2 },
-      { courseId: 24, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 2 },
-    ],
-    3: [
-      { courseId: 5, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 3 },
-      { courseId: 6, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 3 },
-      { courseId: 11, isMandatoryInTerm: false, isGraduationReq: true, recommendedTerm: 3 },
-      { courseId: 23, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 3 },
-      { courseId: 1, isMandatoryInTerm: false, isGraduationReq: true, recommendedTerm: 3 },
-    ],
-    4: [
-      { courseId: 25, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 4 },
-    ],
-  },
-  101: {
-    1: [
-      { courseId: 12, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
-      { courseId: 13, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
-      { courseId: 19, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
-      { courseId: 20, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
-      { courseId: 21, isMandatoryInTerm: false, isGraduationReq: true, recommendedTerm: 1 },
-      { courseId: 22, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 1 },
-    ],
-    2: [
-      { courseId: 14, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 2 },
-      { courseId: 15, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 2 },
-    ],
-    3: [
-      { courseId: 16, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 3 },
-      { courseId: 17, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 3 },
-    ],
-    4: [
-      { courseId: 18, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 4 },
-      { courseId: 28, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 4 },
-    ],
-    5: [
-      { courseId: 26, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 5 },
-      { courseId: 27, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 5 },
-    ],
-    6: [],
-    7: [],
-    8: [
-      { courseId: 29, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 8 },
-      { courseId: 30, isMandatoryInTerm: true, isGraduationReq: true, recommendedTerm: 8 },
-    ],
-  },
-};
-
 const ALL_TERMS = [
   '14042', '14041', '14032', '14031', '14022', '14021', '14012', '14011',
   '14002', '14001', '13993', '13992', '13991', '13982', '13981', '13972',
@@ -257,27 +138,141 @@ const ALL_TERMS = [
   '13892', '13891', '13882', '13881'
 ];
 
-export default function CurriculumManagerClient({
-  initialMajors,
-}: {
-  initialMajors?: MajorItem[];
-}) {
+/** دادهٔ اولیهٔ فاز ۷ — از سرور (اکشن Overview + بانک دروس) — جایگزین Mock ها */
+export interface CurriculumInitialData {
+  majors: MajorItem[];
+  versions: RealVersionRow[];
+  tracks: { id: number; majorId: number; title: string }[];
+  courseBank: CourseBankItem[];
+}
+
+export interface RealVersionRow {
+  id: number;
+  majorId: number | null;
+  degreeLevelId: number | null;
+  trackId: number | null;
+  versionCode: string;
+  title: string | null;
+  status: string;
+  entryYearFrom: number;
+  entryYearTo: number | null;
+  totalRequiredUnits: number | null;
+  courseCount: number;
+}
+
+/** نرمال‌سازی خروجی اکشن‌ها (union های ok/error) */
+type ActionResult = {
+  ok: boolean;
+  message?: string;
+  error?: string;
+  data?: { id?: number; added?: number; versionCode?: string };
+};
+const asResult = (r: unknown) => r as ActionResult;
+
+export interface VersionCheckInfo {
+  check: string;
+  severity: 'ERROR' | 'WARN';
+  message: string;
+  affected: (string | number)[];
+}
+
+export interface LoadedVersionDetail {
+  status: string;
+  versionCode: string;
+  totalRequiredUnits: number;
+  maxUnitsPerTerm: number | null;
+  courses: {
+    courseId: number; code: string; title: string; units: number;
+    roleType: string; isRequired: number; isElective: number;
+    isGraduationRequired: number; recommendedSemester: number | null;
+  }[];
+  rules: { courseId: number; ruleType: string; logicTree: unknown }[];
+  approvals: { id: number; approvalType: string; fromStatus: string | null; toStatus: string; decisionNote: string | null; approvedAt: string | Date | null }[];
+  checks: VersionCheckInfo[];
+}
+
+/** نقش‌های واقعی curriculum_courses → برچسب فارسی */
+export const ROLE_LABEL: Record<string, string> = {
+  GENERAL: 'عمومی', CORE: 'پایه', MAJOR: 'تخصصی', ELECTIVE: 'اختیاری', THESIS: 'پایان‌نامه', INTERNSHIP: 'کارآموزی', OTHER: 'سایر',
+};
+
+/** شناسهٔ ۱۱ چک موتور اعتبارسنجی (curriculum-validator.ts) */
+const CHECK_TITLES: Record<string, string> = {
+  UNITS_COVER_MIN: 'پوشش حداقل واحد الزامی (اصلی/تخصصی)',
+  PREREQ_REFERENCES_VALID: 'اعتبار کدهای پیش‌نیاز در بانک دروس',
+  PREREQ_CYCLE_FREE: 'آزادی گراف پیش‌نیازها از حلقهٔ دورانی',
+  PREREQ_SEMESTER_ORDER: 'ترتیب ترمی پیش‌نیازها',
+  COREQ_PRESENT: 'تعریف و هم‌ترمی هم‌نیازها',
+  SEMESTER_LOAD: 'سقف واحد هر نیمسال',
+  COURSE_TYPES_COMPLETE: 'تکمیل نقش‌های درسی (عمومی/پایه/تخصصی/…)',
+  TRACK_INTEGRITY: 'یکپارچگی گرایش‌ها (Track)',
+  EQUIVALENCY_DISJOINT: 'عدم هم‌پوشانی دروس هم‌ارز (Equivalence)',
+  SEMESTER_UNASSIGNED: 'ترم‌بندی کامل همهٔ دروس',
+  GRADUATION_COVERAGE: 'پوشش شرایط فارغ‌التحصیلی',
+};
+
+function buildCatalogsFrom(initial?: CurriculumInitialData): CatalogItem[] {
+  if (!initial) return [];
+  return initial.versions.map((v) => {
+    const m = initial.majors.find((x) => x.id === v.majorId);
+    return {
+      id: v.id,
+      majorCode: m?.code ?? String(v.majorId ?? ''),
+      majorName: m?.name ?? '',
+      degreeLevel: m?.degreeLevel ?? '',
+      studyMode: 'آموزشی',
+      track: initial.tracks.find((t) => t.id === v.trackId)?.title ?? 'نامشخص',
+      term: v.versionCode,
+      totalUnits: Number(v.totalRequiredUnits ?? 0),
+      isFinalized: v.status !== 'DRAFT',
+    };
+  });
+}
+
+function buildCatalogsFromVersions(
+  versions: RealVersionRow[],
+  majors: MajorItem[],
+  tracks: { id: number; title: string }[],
+): CatalogItem[] {
+  return versions.map((v) => {
+    const m = majors.find((x) => x.id === v.majorId);
+    return {
+      id: v.id,
+      majorCode: m?.code ?? String(v.majorId ?? ''),
+      majorName: m?.name ?? '',
+      degreeLevel: m?.degreeLevel ?? '',
+      studyMode: 'آموزشی',
+      track: tracks.find((t) => t.id === v.trackId)?.title ?? 'نامشخص',
+      term: v.versionCode,
+      totalUnits: Number(v.totalRequiredUnits ?? 0),
+      isFinalized: v.status !== 'DRAFT',
+    };
+  });
+}
+
+export default function CurriculumManagerClient({ initial }: { initial?: CurriculumInitialData }) {
   // Navigation / Active View
   const [activeTab, setActiveTab] = useState<'TAB1_CATALOG' | 'TAB2_COURSES' | 'TAB_SEMESTERS' | 'TAB3_VERIFY' | 'TAB4_TRANSFER'>('TAB_SEMESTERS');
   const [activeModal, setActiveModal] = useState<null | 'NEW_MAJOR' | 'MAJOR_SPECS' | 'FACULTY_DEPT_TREE' | 'NEW_TRACK' | 'MAJOR_REPORT' | 'GRADUATION_AUDIT_REPORT'>(null);
 
   // State
-  const [majors, setMajors] = useState<MajorItem[]>(initialMajors && initialMajors.length > 0 ? initialMajors : INITIAL_MAJORS);
-  const [catalogs, setCatalogs] = useState<CatalogItem[]>(INITIAL_CATALOGS);
-  const [catalogCourses, setCatalogCourses] = useState<Record<number, number[]>>(INITIAL_CATALOG_COURSES);
-  const [typeRules, setTypeRules] = useState<Record<number, CourseTypeRule[]>>(INITIAL_TYPE_RULES);
-  const [semesterAssignments, setSemesterAssignments] = useState<Record<number, Record<number, SemesterCourseAssignment[]>>>(INITIAL_SEMESTER_ASSIGNMENTS);
+  const [majors, setMajors] = useState<MajorItem[]>(() => (initial?.majors && initial.majors.length > 0 ? initial.majors : INITIAL_MAJORS));
+  const [courseBank] = useState<CourseBankItem[]>(() => initial?.courseBank ?? []);
+  const [catalogs, setCatalogs] = useState<CatalogItem[]>(() => buildCatalogsFrom(initial));
+  const [catalogCourses, setCatalogCourses] = useState<Record<number, number[]>>({});
+  const [semesterAssignments, setSemesterAssignments] = useState<Record<number, Record<number, SemesterCourseAssignment[]>>>({});
+  const [versionDetail, setVersionDetail] = useState<Record<number, LoadedVersionDetail>>({});
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   // Selected filters in Catalog
-  const [selectedMajorCode, setSelectedMajorCode] = useState<string>('14');
+  const [selectedMajorCode, setSelectedMajorCode] = useState<string>(() => initial?.majors?.[0]?.code ?? INITIAL_MAJORS[0]?.code ?? '');
   const [selectedStudyMode, setSelectedStudyMode] = useState<string>('آموزشی');
   const [selectedTrack, setSelectedTrack] = useState<string>('نامشخص');
-  const [selectedCatalogId, setSelectedCatalogId] = useState<number>(47);
+  const [selectedCatalogId, setSelectedCatalogId] = useState<number>(() => {
+    const m = initial?.majors?.[0];
+    return initial?.versions?.find((x) => x.majorId === m?.id)?.id ?? initial?.versions?.[0]?.id ?? 0;
+  });
 
   // Semester Management Tab State
   const [activeSemesterNo, setActiveSemesterNo] = useState<number>(1);
@@ -298,20 +293,18 @@ export default function CurriculumManagerClient({
   // Tab 2 selection states
   const [courseSearch, setCourseSearch] = useState('');
   const [selectedBankCourseIds, setSelectedBankCourseIds] = useState<number[]>([]);
-  const [selectedTargetCatalogIds, setSelectedTargetCatalogIds] = useState<number[]>([47]);
+  const [selectedTargetCatalogIds, setSelectedTargetCatalogIds] = useState<number[]>([]);
   const [catalogCourseSearch, setCatalogCourseSearch] = useState('');
-  const [selectedCatalogCourseId, setSelectedCatalogCourseId] = useState<number | null>(7);
+  const [selectedCatalogCourseId, setSelectedCatalogCourseId] = useState<number | null>(null);
   const [overrideCourseProperty, setOverrideCourseProperty] = useState(false);
-  const [selectedCourseTypeOverride, setSelectedCourseTypeOverride] = useState('پایه');
+  const [selectedCourseTypeOverride, setSelectedCourseTypeOverride] = useState('CORE');
 
   // Tab 4 (انتقال کاتالوگ)
   const [transferTargetMajorCode, setTransferTargetMajorCode] = useState('14');
   const [transferTargetStudyMode, setTransferTargetStudyMode] = useState('آموزشی');
   const [transferTargetTrack, setTransferTargetTrack] = useState('نامشخص');
   const [transferTargetTerm, setTransferTargetTerm] = useState('14041');
-  const [copyPrereqs, setCopyPrereqs] = useState(true);
-  const [copyGrades, setCopyGrades] = useState(true);
-  const [copySemesters, setCopySemesters] = useState(true);
+  // (فاز ۷) کپی پیش‌نیاز/نمره/ترم‌بندی دیگر آپشن نیست؛ Deep Clone واقعی در createCurriculumVersionAction(cloneFromId) است.
 
   // Modals state
   const [newMajorForm, setNewMajorForm] = useState({
@@ -336,6 +329,77 @@ export default function CurriculumManagerClient({
   };
 
   // Active Major Info
+  // ─────────── فاز ۷: بارگیری جزئیات واقعی نسخه از سرور ───────────
+  const loadVersionDetail = useCallback(async (versionId: number, force = false) => {
+    if (!versionId || (versionDetail[versionId] && !force)) return;
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const res = await getCurriculumVersionDetailAction(versionId);
+      if (!res.ok) { setDetailError(res.error ?? 'خطا در بارگیری جزئیات نسخه'); return; }
+      const d = res.data;
+      if (!d?.courses || !d?.version || !d?.checks) { setDetailError('دادهٔ ناقص از سرور'); return; }
+      const dCourses = d.courses;
+      const semMap: Record<number, SemesterCourseAssignment[]> = {};
+      for (const c of dCourses) {
+        const sem = c.recommendedSemester ?? 1;
+        (semMap[sem] ??= []).push({
+          courseId: c.courseId,
+          isMandatoryInTerm: c.isRequired === 1,
+          isGraduationReq: c.isGraduationRequired === 1,
+          recommendedTerm: sem,
+        });
+      }
+      setCatalogCourses((prev) => ({ ...prev, [versionId]: dCourses.map((c) => c.courseId) }));
+      setSemesterAssignments((prev) => ({ ...prev, [versionId]: semMap }));
+      setVersionDetail((prev) => ({
+        ...prev,
+        [versionId]: {
+          status: d.version.status,
+          versionCode: d.version.versionCode,
+          totalRequiredUnits: Number(d.version.totalRequiredUnits ?? 0),
+          maxUnitsPerTerm: d.version.maxUnitsPerTerm ?? null,
+          courses: dCourses,
+          rules: d.rules ?? [],
+          approvals: d.approvals ?? [],
+          checks: d.checks,
+        },
+      }));
+    } catch (e) {
+      console.error('loadVersionDetail:', e);
+      setDetailError('خطا در بارگیری جزئیات نسخه');
+    } finally {
+      setDetailLoading(false);
+    }
+  }, [versionDetail]);
+
+  /** باز-بارگیری فهرست نسخه‌ها پس از ساخت/انتشار */
+  const refreshCatalogs = useCallback(async () => {
+    const res = await getCurriculumOverviewAction();
+    if (res.ok && res.data) {
+      const versions: RealVersionRow[] = (res.data.versions ?? []).map((v) => ({
+        ...v,
+        totalRequiredUnits: v.totalRequiredUnits != null ? Number(v.totalRequiredUnits) : null,
+      }));
+      setCatalogs(buildCatalogsFromVersions(versions, majors, res.data.tracks));
+      return true;
+    }
+    return false;
+  }, [majors]);
+
+  // بارگیری خودکار بار اول + تغییر کاتالوگ
+  useEffect(() => {
+    if (selectedCatalogId) loadVersionDetail(selectedCatalogId);
+  }, [selectedCatalogId, loadVersionDetail]);
+
+  // هماهنگ‌سازی انتخاب کاتالوگ با رشتهٔ فعال
+  useEffect(() => {
+    const list = catalogs.filter((c) => c.majorCode === selectedMajorCode);
+    if (list.length > 0 && !list.some((c) => c.id === selectedCatalogId)) {
+      setSelectedCatalogId(list[0].id);
+    }
+  }, [selectedMajorCode, catalogs, selectedCatalogId]);
+
   const activeMajor = useMemo(() => {
     return majors.find(m => m.code === selectedMajorCode) || majors[0];
   }, [majors, selectedMajorCode]);
@@ -354,7 +418,7 @@ export default function CurriculumManagerClient({
   const activeAssignedCourses = useMemo(() => {
     if (!activeCatalog) return [];
     const ids = catalogCourses[activeCatalog.id] || [];
-    return MASTER_COURSES.filter(c => ids.includes(c.id));
+    return courseBank.filter(c => ids.includes(c.id));
   }, [activeCatalog, catalogCourses]);
 
   // Active Semester Assignments for active catalog
@@ -384,7 +448,7 @@ export default function CurriculumManagerClient({
   // Semester Total Units Calculation
   const activeSemesterTotalUnits = useMemo(() => {
     return activeSemesterCourseAssignments.reduce((sum, item) => {
-      const course = MASTER_COURSES.find(c => c.id === item.courseId);
+      const course = courseBank.find(c => c.id === item.courseId);
       return sum + (course ? course.units : 0);
     }, 0);
   }, [activeSemesterCourseAssignments]);
@@ -394,7 +458,7 @@ export default function CurriculumManagerClient({
     let sum = 0;
     Object.values(activeCatalogSemesterMap).forEach(list => {
       list.forEach(item => {
-        const c = MASTER_COURSES.find(crs => crs.id === item.courseId);
+        const c = courseBank.find(crs => crs.id === item.courseId);
         if (c) sum += c.units;
       });
     });
@@ -404,42 +468,40 @@ export default function CurriculumManagerClient({
   // Type Rules for Active Catalog
   const activeTypeRules = useMemo(() => {
     if (!activeCatalog) return [];
-    if (typeRules[activeCatalog.id]) return typeRules[activeCatalog.id];
-    return INITIAL_TYPE_RULES[47] || [];
-  }, [activeCatalog, typeRules]);
+    const d = versionDetail[activeCatalog.id];
+    if (!d) return [];
+    const rows: CourseTypeRule[] = [];
+    for (const c of d.courses) {
+      const title = ROLE_LABEL[c.roleType] ?? c.roleType;
+      const row = rows.find((r) => r.title === title);
+      if (row) row.maxUnits += c.units;
+      else rows.push({ typeCode: rows.length + 1, title, maxUnits: c.units });
+    }
+    rows.push({ typeCode: 0, title: 'سقف واحد هر نیمسال', maxUnits: d.maxUnitsPerTerm ?? 0 });
+    return rows;
+  }, [activeCatalog, versionDetail]);
 
   // Aggregation for Tab 4 (*جمع ۱ و *جمع ۲)
   const courseTypeSummary = useMemo(() => {
-    const summary = [
-      { code: 0, title: 'نامشخص', maxAllowed: 0, actualAssigned: 0 },
-      { code: 1, title: 'عمومی', maxAllowed: 9, actualAssigned: 0 },
-      { code: 2, title: 'پایه', maxAllowed: 13, actualAssigned: 0 },
-      { code: 3, title: 'تخصصی', maxAllowed: 36, actualAssigned: 0 },
-      { code: 4, title: 'اصلی', maxAllowed: 12, actualAssigned: 0 },
-      { code: 5, title: 'کارورزی', maxAllowed: 0, actualAssigned: 0 },
-      { code: 6, title: 'مهارتی', maxAllowed: 0, actualAssigned: 0 },
-      { code: 7, title: 'کارگاه', maxAllowed: 0, actualAssigned: 0 },
-      { code: 8, title: 'پروژه', maxAllowed: 0, actualAssigned: 0 },
-    ];
-
-    if (activeTypeRules && activeTypeRules.length > 0) {
-      for (const r of activeTypeRules) {
-        const target = summary.find(s => s.code === r.typeCode || s.title === r.title);
-        if (target) target.maxAllowed = r.maxUnits;
-      }
+    if (!activeCatalog) return [];
+    const d = versionDetail[activeCatalog.id];
+    if (!d) return [];
+    const rows = new Map<string, { code: number; title: string; maxAllowed: number; actualAssigned: number }>();
+    for (const c of d.courses) {
+      const title = ROLE_LABEL[c.roleType] ?? c.roleType;
+      const row = rows.get(title) ?? { code: rows.size + 1, title, maxAllowed: 0, actualAssigned: 0 };
+      row.actualAssigned += c.units;
+      rows.set(title, row);
     }
-
-    for (const c of activeAssignedCourses) {
-      const target = summary.find(s => s.title === c.courseType) || summary[0];
-      target.actualAssigned += c.units;
+    for (const r of rows.values()) {
+      if (r.title === ROLE_LABEL.CORE || r.title === ROLE_LABEL.MAJOR) r.maxAllowed = d.maxUnitsPerTerm ?? 0;
     }
-
-    return summary;
-  }, [activeTypeRules, activeAssignedCourses]);
+    return Array.from(rows.values());
+  }, [activeCatalog, versionDetail]);
 
   // Filtered Course Bank
   const filteredBankCourses = useMemo(() => {
-    let list = MASTER_COURSES;
+    let list = courseBank;
     if (courseSearch.trim()) {
       const q = courseSearch.trim().toLowerCase();
       list = list.filter(c => c.title.toLowerCase().includes(q) || c.code.toLowerCase().includes(q) || c.courseType.toLowerCase().includes(q));
@@ -448,99 +510,70 @@ export default function CurriculumManagerClient({
   }, [courseSearch]);
 
   // Handlers for Semester Planner
-  const handleAssignCoursesToSemester = () => {
+  const handleAssignCoursesToSemester = async () => {
     if (!activeCatalog) return;
     if (selectedBankCoursesForSemester.length === 0) {
       alert('لطفاً حداقل یک درس را با تیک انتخاب فرمایید.');
       return;
     }
-
-    setSemesterAssignments(prev => {
-      const catMap = prev[activeCatalog.id] || {};
-      const currentSemList = catMap[activeSemesterNo] || [];
-
-      // Avoid duplicates
-      const newItems: SemesterCourseAssignment[] = [];
-      for (const cId of selectedBankCoursesForSemester) {
-        if (!currentSemList.some(item => item.courseId === cId)) {
-          newItems.push({
-            courseId: cId,
-            isMandatoryInTerm: true,
-            isGraduationReq: true,
-            recommendedTerm: activeSemesterNo,
-          });
-        }
-      }
-
-      return {
-        ...prev,
-        [activeCatalog.id]: {
-          ...catMap,
-          [activeSemesterNo]: [...currentSemList, ...newItems],
-        },
-      };
-    });
-
-    showToast(`✅ تعداد ${selectedBankCoursesForSemester.length} درس به ترم ${activeSemesterNo} افزوده شد و در انتخاب واحد و فارغ‌التحصیلی ثبت گردید.`);
-    setSelectedBankCoursesForSemester([]);
+    setDetailLoading(true);
+    const res = await bulkAssignSemestersAction(
+      activeCatalog.id,
+      selectedBankCoursesForSemester.map((courseId) => ({ courseId, semesterNo: activeSemesterNo })),
+    );
+    setDetailLoading(false);
+    if (res.ok) {
+      showToast(`✅ ${selectedBankCoursesForSemester.length} درس به ترم ${activeSemesterNo} نسخهٔ ${activeCatalog.term} منصوب شد.`);
+      setSelectedBankCoursesForSemester([]);
+      await loadVersionDetail(activeCatalog.id, true);
+    } else {
+      showToast(`⚠️ ${res.error ?? 'خطا در ترم‌بندی'}`);
+    }
   };
 
-  const handleRemoveCourseFromSemester = (courseId: number) => {
+  const handleRemoveCourseFromSemester = async (courseId: number) => {
     if (!activeCatalog) return;
-    setSemesterAssignments(prev => {
-      const catMap = prev[activeCatalog.id] || {};
-      const currentSemList = catMap[activeSemesterNo] || [];
-      return {
-        ...prev,
-        [activeCatalog.id]: {
-          ...catMap,
-          [activeSemesterNo]: currentSemList.filter(item => item.courseId !== courseId),
-        },
-      };
-    });
-    showToast('درس از این ترم حذف شد.');
+    setDetailLoading(true);
+    const res = await assignCourseToSemesterAction(activeCatalog.id, courseId, null);
+    setDetailLoading(false);
+    if (res.ok) showToast('درس از چارت ترم‌بندی خارج شد و در انتخاب واحد در دسترس نیست.');
+    else showToast(`⚠️ ${res.error ?? 'خطا در حذف از ترم'}`);
+    await loadVersionDetail(activeCatalog.id, true);
   };
 
-  const handleToggleMandatoryInTerm = (courseId: number) => {
+  const handleToggleMandatoryInTerm = async (courseId: number) => {
     if (!activeCatalog) return;
-    setSemesterAssignments(prev => {
-      const catMap = prev[activeCatalog.id] || {};
-      const currentSemList = catMap[activeSemesterNo] || [];
-      return {
-        ...prev,
-        [activeCatalog.id]: {
-          ...catMap,
-          [activeSemesterNo]: currentSemList.map(item =>
-            item.courseId === courseId ? { ...item, isMandatoryInTerm: !item.isMandatoryInTerm } : item
-          ),
-        },
-      };
-    });
+    const cur = activeSemesterCourseAssignments.find((a) => a.courseId === courseId);
+    const res = await updateCourseInCurriculumAction(activeCatalog.id, courseId, { isRequired: cur?.isMandatoryInTerm ? 0 : 1 });
+    if (res.ok) showToast('الزامی/اختیاری بودن درس به‌روزرسانی شد و در انتخاب واحد اعمال می‌گردد.');
+    else showToast(`⚠️ ${res.error ?? 'خطا'}`);
+    await loadVersionDetail(activeCatalog.id, true);
   };
 
-  const handleToggleGraduationReq = (courseId: number) => {
+  const handleToggleGraduationReq = async (courseId: number) => {
     if (!activeCatalog) return;
-    setSemesterAssignments(prev => {
-      const catMap = prev[activeCatalog.id] || {};
-      const currentSemList = catMap[activeSemesterNo] || [];
-      return {
-        ...prev,
-        [activeCatalog.id]: {
-          ...catMap,
-          [activeSemesterNo]: currentSemList.map(item =>
-            item.courseId === courseId ? { ...item, isGraduationReq: !item.isGraduationReq } : item
-          ),
-        },
-      };
-    });
+    const cur = activeSemesterCourseAssignments.find((a) => a.courseId === courseId);
+    const res = await updateCourseInCurriculumAction(activeCatalog.id, courseId, { isGraduationRequired: cur?.isGraduationReq ? 0 : 1 });
+    if (res.ok) showToast('شرط فارغ‌التحصیلی درس به‌روزرسانی شد.');
+    else showToast(`⚠️ ${res.error ?? 'خطا'}`);
+    await loadVersionDetail(activeCatalog.id, true);
   };
 
-  const handleSyncWithEnrollmentEngine = () => {
-    showToast('⚡ تنظیمات ترم‌بندی با موفقیت با موتور انتخاب واحد و شرایط فارغ‌التحصیلی همگام شد!');
+  const handleSyncWithEnrollmentEngine = async () => {
+    const d = activeCatalog ? versionDetail[activeCatalog.id] : undefined;
+    if (d && (d.status === 'PUBLISHED' || d.status === 'ARCHIVED')) {
+      showToast('⚡ این نسخه به‌صورت خودکار در موتور انتخاب واحد و فارغ‌التحصیلی فعال است (همگام‌سازی دستی لازم نیست).');
+    } else {
+      showToast(`ℹ️ وضعیت نسخه: ${d?.status ?? '—'} — پس از PUBLISH به‌صورت خودکار در موتور انتخاب واحد فعال می‌شود.`);
+    }
   };
 
   // Handlers for Tab 1
-  const handleApplyNewTermCatalogs = () => {
+  const handleApplyNewTermCatalogs = async () => {
+    if (!activeMajor) {
+      alert('ابتدا یک رشته را از فهرست بالا انتخاب کنید.');
+      return;
+    }
     const selectedTerms = Object.keys(checkedTerms).filter(t => checkedTerms[t]);
     if (selectedTerms.length === 0) {
       alert('لطفاً حداقل یک نیمسال ورود را از لیست انتخاب کنید.');
@@ -548,52 +581,65 @@ export default function CurriculumManagerClient({
     }
 
     let addedCount = 0;
-    const newItems: CatalogItem[] = [];
-    let nextId = Math.max(...catalogs.map(c => c.id), 100) + 1;
-
+    const errors: string[] = [];
     for (const term of selectedTerms) {
-      const exists = catalogs.some(c => c.majorCode === activeMajor.code && c.term === term && c.studyMode === selectedStudyMode);
-      if (!exists) {
-        newItems.push({
-          id: nextId++,
-          majorCode: activeMajor.code,
-          majorName: activeMajor.name,
-          degreeLevel: activeMajor.degreeLevel,
-          studyMode: selectedStudyMode,
-          track: selectedTrack,
-          term: term,
-          totalUnits: activeMajor.minUnits,
-        });
-        addedCount++;
+      const exists = catalogs.some(c => c.majorCode === activeMajor.code && c.term === term);
+      if (exists) {
+        errors.push(`${term} (تکراری)`);
+        continue;
       }
+      const track = (initial?.tracks ?? []).find((t) => t.majorId === activeMajor.id && t.title === selectedTrack);
+      const res = asResult(await createCurriculumVersionAction({
+        majorId: activeMajor.id,
+        trackId: track?.id ?? null,
+        versionCode: term,
+        title: `${activeMajor.name} — ورودی ${term}`,
+        entryYearFrom: Number(String(term).slice(0, 4)),
+        totalRequiredUnits: activeMajor.minUnits > 0 ? activeMajor.minUnits : undefined,
+        cloneFromId: activeCatalog?.id,
+      }));
+      if (res.ok) addedCount++;
+      else errors.push(`${term}: ${res.error ?? 'خطا'}`);
     }
 
-    if (newItems.length > 0) {
-      setCatalogs(prev => [...prev, ...newItems]);
-      showToast(`✅ تعداد ${addedCount} کاتالوگ جدید برای نیمسال‌های انتخاب‌شده با موفقیت ایجاد گردید.`);
+    if (addedCount > 0) {
+      await refreshCatalogs();
+      showToast(`✅ ${addedCount} کاتالوگ برای نیمسال‌های انتخاب‌شده ساخته شد${errors.length ? ` — ${errors.join(' | ')}` : ''}.`);
     } else {
-      showToast('⚠️ کاتالوگ‌های نیمسال‌های انتخاب‌شده قبلاً ایجاد شده بودند.');
+      showToast(`⚠️ ${errors.join(' | ') || 'هیچ کاتالوگی ساخته نشد.'}`);
     }
   };
 
-  const handleDeleteCatalog = (id: number) => {
-    if (confirm(`آیا از حذف کاتالوگ شماره ${id} اطمینان دارید؟`)) {
-      setCatalogs(prev => prev.filter(c => c.id !== id));
-      showToast(`کاتالوگ شماره ${id} با موفقیت حذف گردید.`);
+  const handleDeleteCatalog = async (id: number) => {
+    if (!confirm('نسخه‌های برنامهٔ درسی قابل حذف نیستند (قاعدهٔ D1: تغییر = نسخهٔ جدید).\nیک نسخهٔ جدید (Revision) از روی نسخهٔ فعلی ساخته می‌شود.')) return;
+    const res = asResult(await createCurriculumRevisionAction(id));
+    if (res.ok) {
+      await refreshCatalogs();
+      const newId = (res.data as { id?: number } | undefined)?.id;
+      if (newId) setSelectedCatalogId(newId);
+      showToast(`✅ نسخهٔ جدید (Revision) از کاتالوگ ${id} ساخته شد.`);
+    } else {
+      showToast(`⚠️ ${res.error ?? 'ساخت Revision فقط از نسخهٔ تأییدشده/منتشر ممکن است.'}`);
     }
   };
 
-  const handleUpdateRuleUnit = (typeCode: number, newVal: number) => {
+  const handleUpdateRuleUnit = async (typeCode: number, newVal: number) => {
     if (!activeCatalog) return;
-    setTypeRules(prev => {
-      const current = prev[activeCatalog.id] || INITIAL_TYPE_RULES[47] || [];
-      const updated = current.map(r => r.typeCode === typeCode ? { ...r, maxUnits: newVal } : r);
-      return { ...prev, [activeCatalog.id]: updated };
-    });
+    if (typeCode !== 0) {
+      showToast('ℹ️ سقف واحدِ تک‌نقش‌ها از پیکربندی موتور اعمال می‌شود؛ فقط «سقف واحد هر نیمسال» نسخه قابل ویرایش است.');
+      return;
+    }
+    const res = await updateCurriculumMetaAction(activeCatalog.id, { maxUnitsPerTerm: newVal });
+    if (res.ok) {
+      showToast('✅ سقف واحد هر نیمسال نسخه به‌روزرسانی شد.');
+      await loadVersionDetail(activeCatalog.id, true);
+    } else {
+      showToast(`⚠️ ${res.error ?? 'خطا در به‌روزرسانی سقف'}`);
+    }
   };
 
   // Handlers for Tab 2
-  const handleTransferSelectedCoursesToCatalog = () => {
+  const handleTransferSelectedCoursesToCatalog = async () => {
     if (selectedBankCourseIds.length === 0) {
       alert('لطفاً حداقل یک درس را از جدول "کل دروس" انتخاب فرمایید.');
       return;
@@ -603,65 +649,98 @@ export default function CurriculumManagerClient({
       return;
     }
 
-    setCatalogCourses(prev => {
-      const updated = { ...prev };
-      for (const catId of selectedTargetCatalogIds) {
-        const existing = updated[catId] || [];
-        const combined = Array.from(new Set([...existing, ...selectedBankCourseIds]));
-        updated[catId] = combined;
+    let added = 0;
+    const errors: string[] = [];
+    for (const catId of selectedTargetCatalogIds) {
+      const res = await bulkAddCoursesAction(
+        catId,
+        selectedBankCourseIds.map((courseId) =>
+          overrideCourseProperty ? { courseId, roleType: selectedCourseTypeOverride } : { courseId },
+        ),
+      );
+      if (res.ok) {
+        added += res.data?.added ?? selectedBankCourseIds.length;
+        await loadVersionDetail(catId, true);
+      } else {
+        errors.push(res.error ?? 'خطا');
       }
-      return updated;
-    });
-
-    showToast(`✅ تعداد ${selectedBankCourseIds.length} درس به ${selectedTargetCatalogIds.length} کاتالوگ انتقال یافت.`);
+    }
+    showToast(`✅ ${added} درس به ${selectedTargetCatalogIds.length} نسخه افزوده شد.${errors.length ? ` ⚠️ ${errors.join(' | ')}` : ''}`);
     setSelectedBankCourseIds([]);
   };
 
-  const handleRemoveCoursesFromActiveCatalog = () => {
-    if (!selectedCatalogCourseId || !activeCatalog) return;
-    setCatalogCourses(prev => {
-      const existing = prev[activeCatalog.id] || [];
-      return { ...prev, [activeCatalog.id]: existing.filter(id => id !== selectedCatalogCourseId) };
-    });
-    showToast('درس مورد نظر از کاتالوگ جاری حذف گردید.');
+  const handleRemoveCoursesFromActiveCatalog = async () => {
+    if (!selectedCatalogCourseId) return;
+    const targets = selectedTargetCatalogIds.length > 0 ? selectedTargetCatalogIds : (activeCatalog ? [activeCatalog.id] : []);
+    if (targets.length === 0) return;
+    let removed = 0;
+    const errors: string[] = [];
+    for (const vId of targets) {
+      const res = await removeCourseFromCurriculumAction(vId, selectedCatalogCourseId);
+      if (res.ok) { removed++; await loadVersionDetail(vId, true); }
+      else { errors.push(res.error ?? 'خطا'); }
+    }
+    if (removed > 0) showToast(`درس از ${removed} نسخه حذف شد${errors.length ? ` — ${errors.join(' | ')}` : ''}.`);
+    else showToast(`⚠️ ${errors.join(' | ') || 'حذف ممکن نیست'}`);
   };
 
   // Handlers for Tab 4
-  const handleExecuteCatalogTransfer = () => {
+  const handleExecuteCatalogTransfer = async () => {
     if (!activeCatalog) return;
     const targetMajor = majors.find(m => m.code === transferTargetMajorCode) || activeMajor;
-    const nextId = Math.max(...catalogs.map(c => c.id), 200) + 1;
-
-    const newCat: CatalogItem = {
-      id: nextId,
-      majorCode: targetMajor.code,
-      majorName: targetMajor.name,
-      degreeLevel: targetMajor.degreeLevel,
-      studyMode: transferTargetStudyMode,
-      track: transferTargetTrack,
-      term: transferTargetTerm,
-      totalUnits: activeCatalog.totalUnits,
-    };
-
-    setCatalogs(prev => [...prev, newCat]);
-
-    // Copy courses
-    const sourceCourses = catalogCourses[activeCatalog.id] || [];
-    setCatalogCourses(prev => ({ ...prev, [newCat.id]: [...sourceCourses] }));
-
-    // Copy rules
-    const sourceRules = typeRules[activeCatalog.id] || INITIAL_TYPE_RULES[47] || [];
-    setTypeRules(prev => ({ ...prev, [newCat.id]: JSON.parse(JSON.stringify(sourceRules)) }));
-
-    // Copy semester mappings
-    if (copySemesters) {
-      const sourceSemesters = semesterAssignments[activeCatalog.id] || {};
-      setSemesterAssignments(prev => ({ ...prev, [newCat.id]: JSON.parse(JSON.stringify(sourceSemesters)) }));
+    const res = asResult(await createCurriculumVersionAction({
+      majorId: targetMajor.id,
+      versionCode: transferTargetTerm,
+      title: `${targetMajor.name} — ورودی ${transferTargetTerm} (کپی از نسخهٔ ${activeCatalog.term})`,
+      entryYearFrom: Number(String(transferTargetTerm).slice(0, 4)),
+      totalRequiredUnits: activeCatalog.totalUnits > 0 ? activeCatalog.totalUnits : undefined,
+      cloneFromId: activeCatalog.id,
+    }));
+    if (res.ok) {
+      await refreshCatalogs();
+      const newId = (res.data as { id?: number } | undefined)?.id;
+      if (newId) setSelectedCatalogId(newId);
+      showToast(`🎉 نسخهٔ ${transferTargetTerm} از کاتالوگ ${activeCatalog.term} با کپی کامل چارت (دروس + پیش‌نیازها + ترم‌بندی + نمره‌ها) ساخته شد.`);
+      setActiveTab('TAB_SEMESTERS');
+    } else {
+      showToast(`⚠️ ${res.error ?? 'خطا در انتقال'}`);
     }
+  };
 
-    showToast(`🎉 کاتالوگ ${activeCatalog.id} (ترم ${activeCatalog.term}) به کاتالوگ جدید ${newCat.id} (ترم ${newCat.term}) به همراه چارت ترم‌بندی کپی شد.`);
-    setSelectedCatalogId(newCat.id);
-    setActiveTab('TAB_SEMESTERS');
+  // ─────────── فاز ۷: آمار اعتبارسنجی واقعی (موتور Validation Engine) ───────────
+  const activeDetail = activeCatalog ? versionDetail[activeCatalog.id] : undefined;
+  const verifyChecks: VersionCheckInfo[] = activeDetail?.checks ?? [];
+  const verifyErrorCount = verifyChecks.filter((c) => c.severity === 'ERROR').length;
+  const verifyWarnCount = verifyChecks.filter((c) => c.severity === 'WARN').length;
+  const verifyTotalChecks = Object.keys(CHECK_TITLES).length;
+  const verifyPercent = verifyTotalChecks > 0
+    ? Math.max(0, Math.round((100 * (verifyTotalChecks - verifyErrorCount - verifyWarnCount)) / verifyTotalChecks))
+    : 0;
+  const findCheck = (id: string) => verifyChecks.find((c) => c.check === id);
+  const activeDetailTotalUnits = (activeDetail?.courses ?? []).reduce((sum, c) => sum + c.units, 0);
+  const activeDetailUnassigned = (activeDetail?.courses ?? []).filter((c) => c.recommendedSemester == null).length;
+  const isVersionLive = !!activeDetail && (activeDetail.status === 'PUBLISHED' || activeDetail.status === 'ARCHIVED');
+
+  const [lifecycleBusy, setLifecycleBusy] = useState(false);
+  const runLifecycle = async () => {
+    if (!activeCatalog) return;
+    setLifecycleBusy(true);
+    const st = activeDetail?.status ?? 'DRAFT';
+    const res = asResult(st === 'DRAFT' ? await submitCurriculumForApprovalAction(activeCatalog.id)
+      : st === 'REVIEW' ? await approveCurriculumAction(activeCatalog.id)
+      : st === 'APPROVED' ? await publishCurriculumAction(activeCatalog.id)
+      : await createCurriculumRevisionAction(activeCatalog.id));
+    setLifecycleBusy(false);
+    if (res.ok) {
+      if (st === 'DRAFT') showToast('📤 نسخه به وضعیت REVIEW ارسال شد (برای Edit قفل شد).');
+      else if (st === 'REVIEW') showToast('✅ نسخه تأیید نهایی شد (APPROVED).');
+      else if (st === 'APPROVED') showToast('🚀 نسخه منتشر شد (PUBLISHED) — از این پس در انتخاب واحد فعال است.');
+      else showToast('🆕 نسخهٔ جدید (Revision) ساخته شد.');
+      await refreshCatalogs();
+      await loadVersionDetail(activeCatalog.id, true);
+    } else {
+      showToast(`⚠️ ${res.error ?? 'خطا در چرخهٔ تأیید'}`);
+    }
   };
 
   return (
@@ -877,7 +956,7 @@ export default function CurriculumManagerClient({
                 {[1, 2, 3, 4, 5, 6, 7, 8].map(semNo => {
                   const semItems = activeCatalogSemesterMap[semNo] || [];
                   const semUnits = semItems.reduce((acc, item) => {
-                    const crs = MASTER_COURSES.find(c => c.id === item.courseId);
+                    const crs = courseBank.find(c => c.id === item.courseId);
                     return acc + (crs ? crs.units : 0);
                   }, 0);
                   const isSelected = activeSemesterNo === semNo;
@@ -1115,7 +1194,7 @@ export default function CurriculumManagerClient({
                           </tr>
                         ) : (
                           activeSemesterCourseAssignments.map(assignment => {
-                            const course = MASTER_COURSES.find(c => c.id === assignment.courseId);
+                            const course = courseBank.find(c => c.id === assignment.courseId);
                             if (!course) return null;
 
                             return (
@@ -1209,7 +1288,7 @@ export default function CurriculumManagerClient({
                 {[1, 2, 3, 4, 5, 6, 7, 8].map(sNum => {
                   const items = activeCatalogSemesterMap[sNum] || [];
                   const uSum = items.reduce((sum, item) => {
-                    const c = MASTER_COURSES.find(crs => crs.id === item.courseId);
+                    const c = courseBank.find(crs => crs.id === item.courseId);
                     return sum + (c ? c.units : 0);
                   }, 0);
 
@@ -1235,7 +1314,7 @@ export default function CurriculumManagerClient({
                           <span className="text-[11px] text-slate-400 italic">بدون درس ثبت‌شده</span>
                         ) : (
                           items.map(it => {
-                            const crs = MASTER_COURSES.find(c => c.id === it.courseId);
+                            const crs = courseBank.find(c => c.id === it.courseId);
                             if (!crs) return null;
                             return (
                               <div key={it.courseId} className="flex items-center justify-between text-[11px] py-0.5 border-b border-slate-50">
@@ -1388,9 +1467,9 @@ export default function CurriculumManagerClient({
                 <div className="p-2 bg-slate-50 border-t border-slate-200 flex justify-start">
                   <button
                     onClick={() => handleDeleteCatalog(selectedCatalogId)}
-                    className="bg-slate-200 hover:bg-rose-100 hover:text-rose-800 border border-slate-400 px-4 py-1 rounded text-xs font-bold text-slate-700 transition-colors"
+                    className="bg-slate-200 hover:bg-indigo-100 hover:text-indigo-800 border border-slate-400 px-4 py-1 rounded text-xs font-bold text-slate-700 transition-colors"
                   >
-                    حذف کاتالوگ انتخاب‌شده
+                    ایجاد نسخهٔ جدید (Revision) از کاتالوگ انتخاب‌شده
                   </button>
                 </div>
               </div>
@@ -1477,8 +1556,9 @@ export default function CurriculumManagerClient({
                             min="0"
                             max="150"
                             value={rule.maxUnits}
+                            disabled={rule.typeCode !== 0}
                             onChange={e => handleUpdateRuleUnit(rule.typeCode, Number(e.target.value))}
-                            className="w-20 border border-slate-300 bg-white px-2 py-0.5 text-center font-mono font-bold rounded"
+                            className="w-20 border border-slate-300 bg-white px-2 py-0.5 text-center font-mono font-bold rounded disabled:bg-slate-100 disabled:text-slate-500"
                           />
                         </td>
                         <td className="p-2 border-l border-slate-200 text-left">
@@ -1533,13 +1613,13 @@ export default function CurriculumManagerClient({
               <div className="bg-slate-100 px-3 py-1.5 border-b border-slate-300 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-700">
                 <div className="flex items-center gap-4">
                   <span>کل دروس</span>
-                  <span className="text-[11px] text-slate-500 font-normal">تعداد : {MASTER_COURSES.length}</span>
+                  <span className="text-[11px] text-slate-500 font-normal">تعداد : {courseBank.length}</span>
                   <label className="flex items-center gap-1.5 cursor-pointer text-slate-700 font-normal">
                     <input
                       type="checkbox"
-                      checked={selectedBankCourseIds.length === MASTER_COURSES.length}
+                      checked={selectedBankCourseIds.length === courseBank.length}
                       onChange={e => {
-                        if (e.target.checked) setSelectedBankCourseIds(MASTER_COURSES.map(c => c.id));
+                        if (e.target.checked) setSelectedBankCourseIds(courseBank.map(c => c.id));
                         else setSelectedBankCourseIds([]);
                       }}
                       className="rounded text-indigo-600 focus:ring-indigo-500"
@@ -1727,14 +1807,13 @@ export default function CurriculumManagerClient({
                   onChange={e => setSelectedCourseTypeOverride(e.target.value)}
                   className="bg-white border border-slate-300 px-2 py-1 rounded text-xs disabled:opacity-50"
                 >
-                  <option value="عمومی">عمومی</option>
-                  <option value="پایه">پایه</option>
-                  <option value="تخصصی">تخصصی</option>
-                  <option value="اصلی">اصلی</option>
-                  <option value="کارورزی">کارورزی</option>
-                  <option value="مهارتی">مهارتی</option>
-                  <option value="کارگاه">کارگاه</option>
-                  <option value="پروژه">پروژه</option>
+                  <option value="GENERAL">عمومی (GENERAL)</option>
+                  <option value="CORE">پایه (CORE)</option>
+                  <option value="MAJOR">تخصصی (MAJOR)</option>
+                  <option value="ELECTIVE">اختیاری (ELECTIVE)</option>
+                  <option value="THESIS">پایان‌نامه (THESIS)</option>
+                  <option value="INTERNSHIP">کارآموزی (INTERNSHIP)</option>
+                  <option value="OTHER">سایر (OTHER)</option>
                 </select>
 
                 <button
@@ -1808,7 +1887,7 @@ export default function CurriculumManagerClient({
                       <span className="text-slate-600 font-medium">پیش‌نیاز :</span>
                       <input
                         type="text"
-                        defaultValue={MASTER_COURSES.find(c => c.id === selectedCatalogCourseId)?.prerequisites || '—'}
+                        defaultValue={courseBank.find(c => c.id === selectedCatalogCourseId)?.prerequisites || '—'}
                         className="w-full mt-1 bg-slate-50 border border-slate-300 px-2 py-1 rounded font-mono text-xs"
                       />
                     </div>
@@ -1816,7 +1895,7 @@ export default function CurriculumManagerClient({
                       <span className="text-slate-600 font-medium">هم‌نیاز :</span>
                       <input
                         type="text"
-                        defaultValue={MASTER_COURSES.find(c => c.id === selectedCatalogCourseId)?.corequisites || '—'}
+                        defaultValue={courseBank.find(c => c.id === selectedCatalogCourseId)?.corequisites || '—'}
                         className="w-full mt-1 bg-slate-50 border border-slate-300 px-2 py-1 rounded font-mono text-xs"
                       />
                     </div>
@@ -1877,83 +1956,103 @@ export default function CurriculumManagerClient({
             <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
               <h3 className="font-extrabold text-indigo-950 text-sm flex items-center gap-2">
                 <span>🛡️</span>
-                <span>ماتریس تطابق واحدها، ترم‌بندی و اعتبارسنجی نهایی کاتالوگ {activeCatalog?.id} ({activeCatalog?.majorName})</span>
+                <span>ماتریس تطابق واحدها، ترم‌بندی و اعتبارسنجی نهایی — {activeCatalog?.term} ({activeCatalog?.majorName})</span>
               </h3>
               <p className="text-indigo-800 text-xs">
-                سیستم با بررسی قوانین آیین‌نامه، تعادل واحدهای ثبت‌شده را با سقف مجاز مصوب وزارت عتف و گراف پیش‌نیازها تطبیق می‌دهد:
+                نتایج زیر خروجی مستقیم موتور اعتبارسنجی برنامهٔ درسی است (۱۱ بررسی؛ عدم وجود خطا = اجازهٔ پیشرفت در چرخهٔ تأیید).
               </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-2.5 py-1 rounded-lg bg-white border border-indigo-300 font-bold text-indigo-900">
+                  وضعیت نسخه: {activeDetail?.status ?? '—'}
+                </span>
+                <span className={`px-2.5 py-1 rounded-lg border font-bold ${verifyErrorCount === 0 ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-rose-50 border-rose-300 text-rose-800'}`}>
+                  {verifyErrorCount === 0 ? `✓ بدون خطا (${verifyWarnCount} هشدار)` : `✗ ${verifyErrorCount} خطای مانع تأیید ${verifyWarnCount ? `+ ${verifyWarnCount} هشدار` : ''}`}
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-300 font-bold text-slate-700">
+                  {verifyPercent}٪ از ۱۱ بررسی سبز
+                </span>
+              </div>
+              {detailLoading && <p className="text-indigo-500 font-bold">⏳ در حال بارگیری نتایج اعتبارسنجی…</p>}
+              {detailError && <p className="text-rose-600 font-bold">⚠️ {detailError}</p>}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="border border-slate-300 rounded-lg p-3 bg-white space-y-3">
+              <div className="border border-slate-300 rounded-lg p-3 bg-white space-y-2">
                 <h4 className="font-bold text-slate-800 border-b border-slate-200 pb-2">✅ بررسی تطابق واحدها</h4>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center p-2 rounded bg-slate-50">
-                    <span>مجموع واحدهای عمومی:</span>
-                    <span className="font-mono font-bold text-emerald-700">۹ از ۹ واحد مصوب ✓</span>
-                  </div>
-                  <div className="flex justify-between items-center p-2 rounded bg-slate-50">
-                    <span>مجموع واحدهای پایه:</span>
-                    <span className="font-mono font-bold text-emerald-700">۱۳ از ۱۳ واحد مصوب ✓</span>
-                  </div>
-                  <div className="flex justify-between items-center p-2 rounded bg-slate-50">
-                    <span>مجموع واحدهای تخصصی:</span>
-                    <span className="font-mono font-bold text-emerald-700">۳۶ از ۳۶ واحد مصوب ✓</span>
-                  </div>
-                  <div className="flex justify-between items-center p-2 rounded bg-slate-50">
-                    <span>مجموع واحدهای اصلی:</span>
-                    <span className="font-mono font-bold text-emerald-700">۱۲ از ۱۲ واحد مصوب ✓</span>
-                  </div>
-                </div>
+                {[
+                  ['UNITS_COVER_MIN', `تأمین ${activeDetail?.totalRequiredUnits ?? 0} واحد الزامی — تعریف‌شده: ${activeDetailTotalUnits}`],
+                  ['SEMESTER_LOAD', `سقف واحد هر نیمسال: ${activeDetail?.maxUnitsPerTerm ?? 'نامشخص'}`],
+                  ['GRADUATION_COVERAGE', 'پوشش شروط فارغ‌التحصیلی'],
+                  ['COURSE_TYPES_COMPLETE', 'تکمیل نقش‌های درسی'],
+                ].map(([id, label]) => {
+                  const check = findCheck(id as string);
+                  return (
+                    <div key={id} className="flex justify-between items-center gap-2 p-2 rounded bg-slate-50">
+                      <span>{label}</span>
+                      {!check
+                        ? <span className="font-mono font-bold text-emerald-700 whitespace-nowrap">✓ منطبق</span>
+                        : <span className={`font-mono font-bold whitespace-nowrap ${check.severity === 'ERROR' ? 'text-rose-700' : 'text-amber-700'}`}>{check.severity === 'ERROR' ? '✗ خطا' : '⚠ هشدار'}</span>}
+                    </div>
+                  );
+                })}
               </div>
 
-              <div className="border border-slate-300 rounded-lg p-3 bg-white space-y-3">
+              <div className="border border-slate-300 rounded-lg p-3 bg-white space-y-2">
                 <h4 className="font-bold text-slate-800 border-b border-slate-200 pb-2">📅 وضعیت ترم‌بندی چارت</h4>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center p-2 rounded bg-slate-50">
-                    <span>واحدهای چارت ۸ ترمه:</span>
-                    <span className="font-mono font-bold text-emerald-700">{grandTotalSemesterUnits} واحد ✓</span>
-                  </div>
-                  <div className="flex justify-between items-center p-2 rounded bg-slate-50">
-                    <span>کنترل سقف ترمیک:</span>
-                    <span className="font-mono font-bold text-emerald-700">رعایت بازه ۱۲ تا ۲۰ ✓</span>
-                  </div>
-                  <div className="flex justify-between items-center p-2 rounded bg-slate-50">
-                    <span>اتصال به انتخاب واحد:</span>
-                    <span className="font-mono font-bold text-emerald-700">فعال (خودکار) ✓</span>
-                  </div>
-                  <div className="flex justify-between items-center p-2 rounded bg-slate-50">
-                    <span>تطبیق فارغ‌التحصیلی:</span>
-                    <span className="font-mono font-bold text-emerald-700">آماده بررسی ✓</span>
-                  </div>
+                <div className="flex justify-between items-center p-2 rounded bg-slate-50">
+                  <span>واحدهای چارت ({activeDetail?.courses.length ?? 0} درس):</span>
+                  <span className="font-mono font-bold text-emerald-700">{activeDetailTotalUnits} واحد</span>
+                </div>
+                <div className="flex justify-between items-center p-2 rounded bg-slate-50">
+                  <span>دروس بدون ترم مصوب:</span>
+                  <span className={`font-mono font-bold ${activeDetailUnassigned === 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{activeDetailUnassigned} درس</span>
+                </div>
+                <div className="flex justify-between items-center p-2 rounded bg-slate-50">
+                  <span>اتصال به انتخاب واحد:</span>
+                  <span className="font-mono font-bold text-emerald-700">{isVersionLive ? 'فعال (خودکار) ✓' : 'پس از انتشار'}</span>
+                </div>
+                <div className="flex justify-between items-center p-2 rounded bg-slate-50">
+                  <span>تطبیق فارغ‌التحصیلی:</span>
+                  <span className={`font-mono font-bold ${!findCheck('GRADUATION_COVERAGE') ? 'text-emerald-700' : 'text-amber-700'}`}>{!findCheck('GRADUATION_COVERAGE') ? 'آماده بررسی ✓' : 'نیاز به بررسی'}</span>
                 </div>
               </div>
 
-              <div className="border border-slate-300 rounded-lg p-3 bg-white space-y-3">
-                <h4 className="font-bold text-slate-800 border-b border-slate-200 pb-2">🔍 گراف پیش‌نیازها و هم‌نیازها</h4>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-emerald-800 bg-emerald-50 p-2 rounded border border-emerald-200">
-                    <span>✓</span>
-                    <span>عدم وجود حلقه دورانی (Circular Dependency) در گراف پیش‌نیازها.</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-emerald-800 bg-emerald-50 p-2 rounded border border-emerald-200">
-                    <span>✓</span>
-                    <span>تمامی کد دروس پیش‌نیاز در بانک مرکزی دروس تعریف شده‌اند.</span>
-                  </div>
-                </div>
+              <div className="border border-slate-300 rounded-lg p-3 bg-white space-y-2">
+                <h4 className="font-bold text-slate-800 border-b border-slate-200 pb-2">🔍 گراف پیش‌نیازها، هم‌نیازها و هم‌ارزی</h4>
+                {[
+                  ['PREREQ_CYCLE_FREE', 'عدم وجود حلقهٔ دورانی (Circular Dependency) در گراف پیش‌نیازها'],
+                  ['PREREQ_REFERENCES_VALID', 'تمام کدهای پیش‌نیاز در بانک مرکزی دروس تعریف شده‌اند'],
+                  ['COREQ_PRESENT', 'هم‌نیازها داخل نسخه و هم‌ترم‌اند'],
+                  ['PREREQ_SEMESTER_ORDER', 'ترتیب ترمی پیش‌نیازها رعایت شده است'],
+                  ['EQUIVALENCY_DISJOINT', 'دروس هم‌ارز (خوشه) بدون هم‌پوشانی‌اند'],
+                ].map(([id, label]) => {
+                  const check = findCheck(id as string);
+                  return (
+                    <div key={id} className={`flex items-start gap-2 p-2 rounded border ${!check ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : check.severity === 'ERROR' ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                      <span className="font-black">{!check ? '✓' : check.severity === 'ERROR' ? '✗' : '⚠'}</span>
+                      <span>{check ? check.message : label}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
-            <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center justify-between">
+            <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-xl flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="font-extrabold text-emerald-950 text-sm">آمادهٔ قفل و تایید نهایی کاتالوگ و چارت ترمیک</p>
-                <p className="text-emerald-800 text-xs">پس از قفل کاتالوگ، امکان انتخاب واحد دانشجویان این رشته در ترم جاری فراهم می‌گردد.</p>
+                <p className="font-extrabold text-emerald-950 text-sm">
+                  {isVersionLive ? 'نسخهٔ منتشره — تغییر فقط با نسخهٔ جدید (Revision)' : verifyErrorCount === 0 ? 'آمادهٔ پیشرفت در چرخهٔ تأیید' : 'خطاهای اعتبارسنجی مانع پیشرفت‌اند'}
+                </p>
+                <p className="text-emerald-800 text-xs">چرخهٔ مصوب: DRAFT ← REVIEW ← APPROVED ← PUBLISHED ← ARCHIVED (نسخه‌های منتشر خودکار در انتخاب واحد فعال‌اند).</p>
               </div>
               <button
-                onClick={() => showToast('کاتالوگ و چارت ترمیک با موفقیت بررسی، تایید و مهر نهایی شد.')}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-6 py-2 rounded-xl shadow-md transition-colors"
+                onClick={runLifecycle}
+                disabled={lifecycleBusy}
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold px-6 py-2 rounded-xl shadow-md transition-colors"
               >
-                🔒 قفل و خاتمه کاتالوگ
+                {lifecycleBusy ? '⏳ در حال انجام…' : activeDetail?.status === 'DRAFT' ? '📤 ارسال برای بررسی (REVIEW)'
+                  : activeDetail?.status === 'REVIEW' ? '✅ تأیید نهایی (APPROVED)'
+                  : activeDetail?.status === 'APPROVED' ? '🚀 انتشار (PUBLISHED)'
+                  : '🆕 ساخت نسخهٔ جدید (Revision)'}
               </button>
             </div>
 
@@ -1966,25 +2065,11 @@ export default function CurriculumManagerClient({
                 >
                   &lt; قبلی
                 </button>
-                <button
-                  onClick={() => setActiveTab('TAB4_TRANSFER')}
-                  className="bg-slate-200 hover:bg-slate-300 border border-slate-400 px-6 py-1.5 rounded text-xs font-bold text-slate-800 shadow-sm"
-                >
-                  بعدی &gt;
-                </button>
               </div>
-              <button
-                onClick={() => showToast('خروج از پنجره کاتالوگ رشته')}
-                className="bg-slate-200 hover:bg-slate-300 border border-slate-400 px-6 py-1.5 rounded text-xs font-bold text-slate-800 shadow-sm flex items-center gap-1.5"
-              >
-                <span>🚪</span>
-                <span>خروج</span>
-              </button>
             </div>
           </div>
         )}
 
-        {/* Tab 4 Content: انتقال کاتالوگ (Matching Image 4) */}
         {activeTab === 'TAB4_TRANSFER' && (
           <div className="p-4 bg-white space-y-4">
             {/* Top Box: اطلاعات کاتالوگ مبدا */}
@@ -2165,34 +2250,14 @@ export default function CurriculumManagerClient({
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-2 text-xs">
-                <div className="space-y-1.5">
-                  <label className="flex items-center gap-2 cursor-pointer text-slate-800 font-medium">
-                    <input
-                      type="checkbox"
-                      checked={copyPrereqs}
-                      onChange={e => setCopyPrereqs(e.target.checked)}
-                      className="rounded text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span>انتقال همنیاز، پیشنیاز درس از کاتالوگ مبدا</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-slate-800 font-medium">
-                    <input
-                      type="checkbox"
-                      checked={copyGrades}
-                      onChange={e => setCopyGrades(e.target.checked)}
-                      className="rounded text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span>انتقال وضعیت نمره قبولی، مردودی از کاتالوگ مبدا</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-emerald-800 font-bold">
-                    <input
-                      type="checkbox"
-                      checked={copySemesters}
-                      onChange={e => setCopySemesters(e.target.checked)}
-                      className="rounded text-emerald-600 focus:ring-emerald-500"
-                    />
-                    <span>انتقال کامل چارت ترم‌بندی مصوب و شروط فارغ‌التحصیلی</span>
-                  </label>
+                                <div className="space-y-1.5 text-slate-700">
+                  <p className="flex items-center gap-2 font-bold text-emerald-800">
+                    <span>🔁</span>
+                    <span>انتقال کامل به‌صورت Deep Clone در موتور نسخه‌ها (cloneFromId)</span>
+                  </p>
+                  <p className="text-[11px] text-slate-500 pr-6">
+                    دروس، پیش‌نیاز/هم‌نیازها (logicTree)، نمرهٔ قبولی، ترم‌بندی و شروط فارغ‌التحصیلی همگی در نسخهٔ جدید کپی می‌شوند — طبق قاعدهٔ D1 (نسخهٔ تأییدشده تغییرناپذیر است).
+                  </p>
                 </div>
 
                 <button
@@ -2253,8 +2318,8 @@ export default function CurriculumManagerClient({
                   <div className="text-[11px] text-sky-700">وضعیت تعادل واحدها</div>
                 </div>
                 <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-center">
-                  <div className="text-lg font-black text-purple-950 font-mono">۱۰۰٪</div>
-                  <div className="text-[11px] text-purple-700">پوشش قوانین عتف</div>
+                  <div className="text-lg font-black text-purple-950 font-mono">{verifyPercent}٪</div>
+                  <div className="text-[11px] text-purple-700">تطابق اعتبارسنجی موتور ({verifyErrorCount} خطا)</div>
                 </div>
               </div>
 
@@ -2272,7 +2337,7 @@ export default function CurriculumManagerClient({
                     {[1, 2, 3, 4, 5, 6, 7, 8].map(sNum => {
                       const list = activeCatalogSemesterMap[sNum] || [];
                       const u = list.reduce((sum, item) => {
-                        const c = MASTER_COURSES.find(crs => crs.id === item.courseId);
+                        const c = courseBank.find(crs => crs.id === item.courseId);
                         return sum + (c ? c.units : 0);
                       }, 0);
 
@@ -2283,7 +2348,7 @@ export default function CurriculumManagerClient({
                             {list.length > 0 ? (
                               <div className="flex flex-wrap gap-1">
                                 {list.map(it => {
-                                  const c = MASTER_COURSES.find(crs => crs.id === it.courseId);
+                                  const c = courseBank.find(crs => crs.id === it.courseId);
                                   return (
                                     <span key={it.courseId} className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[11px] border border-slate-200">
                                       {c?.title} ({c?.units}و)
@@ -2642,12 +2707,12 @@ export default function CurriculumManagerClient({
                   <div className="text-[11px] text-sky-700">تعداد کل کاتالوگ‌های ترمیک</div>
                 </div>
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
-                  <div className="text-lg font-black text-emerald-950 font-mono">{MASTER_COURSES.length}</div>
+                  <div className="text-lg font-black text-emerald-950 font-mono">{courseBank.length}</div>
                   <div className="text-[11px] text-emerald-700">بانک عناوین دروس</div>
                 </div>
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-center">
-                  <div className="text-lg font-black text-amber-950 font-mono">۱۰۰٪</div>
-                  <div className="text-[11px] text-amber-700">تطابق با آیین‌نامه عتف</div>
+                  <div className="text-lg font-black text-amber-950 font-mono">{catalogs.filter(c => c.isFinalized).length}</div>
+                  <div className="text-[11px] text-amber-700">نسخه‌های مصوب/منتشر (غیر پیش‌نویس)</div>
                 </div>
               </div>
 
@@ -2673,8 +2738,8 @@ export default function CurriculumManagerClient({
                         <td className="p-2 border-l border-slate-200 text-center font-mono">{count} ترم</td>
                         <td className="p-2 border-l border-slate-200 text-center font-mono font-bold">{m.minUnits} واحد</td>
                         <td className="p-2 border-l border-slate-200 text-center">
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-                            مصوب عتف ✓
+                          <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${count > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                            {count > 0 ? 'دارای نسخهٔ مصوب ✓' : 'در حال تدوین (پیش‌نویس)'}
                           </span>
                         </td>
                       </tr>
