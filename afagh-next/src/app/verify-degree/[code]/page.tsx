@@ -12,9 +12,10 @@ const DEGREE_LABEL: Record<string, string> = {
   TEMPORARY: 'گواهینامهٔ موقت پایان تحصیلات', PERMANENT: 'دانشنامهٔ رسمی', TRANSCRIPT: 'ریزنمرات رسمی',
 };
 
-export default async function VerifyDegreePage({ params }: { params: { code: string } }) {
-  const r = await verifyDegree(params.code);
-  const url = `${await getPublicBaseUrl()}/verify-degree/${params.code}`;
+export default async function VerifyDegreePage({ params }: { params: Promise<{ code: string }> }) {
+  const { code } = await params;
+  const r = await verifyDegree(code);
+  const url = `${await getPublicBaseUrl()}/verify-degree/${code}`;
   const qr = await generateSvgQrCode(url);
 
   return (
@@ -28,7 +29,7 @@ export default async function VerifyDegreePage({ params }: { params: { code: str
         {!r.found ? (
           <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-center">
             <div className="text-3xl">⛔</div>
-            <p className="text-sm font-black text-rose-800 mt-2">مدرکی با کد استعلام «{params.code}» یافت نشد.</p>
+            <p className="text-sm font-black text-rose-800 mt-2">مدرکی با کد استعلام «{code}» یافت نشد.</p>
             <p className="text-[11px] text-rose-700 mt-1">لطفاً کد را بررسی کنید یا با اداره آموزش تماس بگیرید.</p>
           </div>
         ) : (

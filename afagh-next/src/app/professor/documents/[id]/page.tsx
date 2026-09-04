@@ -7,10 +7,11 @@ import ElectronicSignature from '@/components/ElectronicSignature';
 
 export const dynamic = 'force-dynamic';
 
-export default async function DocumentPage({ params }: { params: { id: string } }) {
+export default async function DocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireRole(['PROFESSOR']);
   const me = await getStaffByUser(user.id);
-  const id = Number(params.id);
+  const { id: rawId } = await params;
+  const id = Number(rawId);
   const [doc] = await db.select().from(electronic_documents).where(eq(electronic_documents.id, id));
   if (!doc || !me || doc.staffId !== me.id) notFound(); // ایزولاسیون: سند دیگران دیده نمی‌شود
   const [sig] = await db.select().from(document_signatures).where(eq(document_signatures.documentId, id));

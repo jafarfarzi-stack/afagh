@@ -21,10 +21,18 @@ CREATE INDEX IF NOT EXISTS idx_att_session_pg ON "student_class_attendance"("ses
 -- CREATE TABLE enrollments (...) PARTITION BY RANGE ("termId");
 -- CREATE TABLE enrollments_14051 PARTITION OF enrollments FOR VALUES FROM (2) TO (3);
 
--- ③ امنیت سطح-ردیف — RLS (سند §۲۱۷۰): حتی با بایپس کد، دیتای دیگران خوانده نمی‌شود
--- نسخهٔ ۲ (سخت): سیاست‌ها فقط با «app.user_id» تنظیم‌شده در همان تراکنش پاس می‌شوند.
--- نقش اپلیکیشنِ فقط-خواندنی afagh_app (بدون SUPERUSER → تابعیت کامل از RLS)؛
--- نقش مالک (afagh) برای مهاجرت/داشبورد مدیریتی و نوشتن ثبت‌نام‌ها می‌ماند.
+-- ③ امنیت سطح-ردیف — RLS (سند §۲۱۷۰) — نسخهٔ ۳: ماتریس کامل داده‌های حساس
+-- ════════════════════════════════════════════════════════════════════════
+--  اصول (پاسخ به بازبینی مهندسی — «RLS فقط چهار جدول» دیگر کافی نیست):
+--   • نقش afagh_app فقط از مسیر withUserRls استفاده می‌شود (set_config در همان
+--     تراکنش)؛ نبودِ app.user_id → هیچ ردیفی دیده نمی‌شود.
+--   • هر جدول دادهٔ شخصی/مالی/آموزشی → RLS فعال + سیاست «فقط ردیف خود کاربر».
+--   • جداول دارای راز/بایگانی (system_settings با کلیدهای cron، integrations_config
+--     با اعتبارنامه‌ها، audit_logs و…) → RLS فعال بدون سیاست = deny-all برای نقش اپ.
+--   • نوشتن فقط با گرنت ستونی: دانشجو می‌تواند status و waitlistPosition را تغییر
+--     دهد، اما نه gradeValue/approvedBy/… → Mass Assignment در سطح دیتابیس قفل شد.
+--   • مالک (afagh) BYPASSRLS است؛ داشبوردهای مدیریتی/BI بدون تغییر کار می‌کنند.
+-- ════════════════════════════════════════════════════════════════════════
 
 -- ── نقش اپلیکیشن (idempotent) ──
 DO $$
@@ -38,50 +46,197 @@ GRANT USAGE ON SCHEMA public TO afagh_app;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO afagh_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO afagh_app;
 
--- ── فعال‌سازی RLS (بدون این، سیاست‌ها بی‌اثرند!) ──
+-- ══ ۱) فعال‌سازی RLS روی همهٔ جداول دادهٔ حساس ══
+--    (بدون ENABLE، سیاست‌ها بی‌اثرند؛ لیست بر اساس ماتریس طبقه‌بندی داده)
+ALTER TABLE "users" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "students" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "staff" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "sessions" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "enrollments" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "cart_items" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "notifications" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "student_requests" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "transcript_snapshots" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "student_ledger" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "financial_clearances" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "seat_allocations" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "student_class_attendance" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "student_documents" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "military_service_records" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "kyc_verifications" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "grade_appeals" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "grade_submission_otps" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "doc_sign_otps" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "professor_term_contracts" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "professor_class_attendance" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "professor_exam_attendance" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "electronic_documents" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "payroll_statements" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "exam_minutes" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "physical_access_logs" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "request_step_logs" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "request_parallel_checkpoints" ENABLE ROW LEVEL SECURITY;
 
--- ── سیاست‌های سختِ خواندن (uid = app.user_id همان تراکنش؛ نبود → هیچ ردیفی) ──
-DROP POLICY IF EXISTS enroll_self_read ON "enrollments";
-CREATE POLICY enroll_self_read ON "enrollments" FOR SELECT USING (
-  "studentId" IN (SELECT "id" FROM "students"
-                  WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
-);
-DROP POLICY IF EXISTS cart_self_read ON "cart_items";
-CREATE POLICY cart_self_read ON "cart_items" FOR SELECT USING (
-  "studentId" IN (SELECT "id" FROM "students"
-                  WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
-);
-DROP POLICY IF EXISTS notif_self_read ON "notifications";
-CREATE POLICY notif_self_read ON "notifications" FOR SELECT USING (
-  "userId" = nullif(current_setting('app.user_id', true), '')::int
-);
-DROP POLICY IF EXISTS request_self_read ON "student_requests";
-CREATE POLICY request_self_read ON "student_requests" FOR SELECT USING (
-  "studentId" IN (SELECT "id" FROM "students"
-                  WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
-);
--- ── نسخهٔ ۳: نوشتن تحت RLS — دانشجو فقط ردیف‌های خودش را می‌نویسد ──
--- (شمارنده‌های مشترک مثل enrolledCount و ارتقای لیست انتظارِ «دیگری» از نقش
---  مالک اجرا می‌شوند — اقدام سیستم، نه اقدام دانشجو)
+-- ══ ۲) deny-all: جداول راز/بایگانی — RLS بدون سیاست + REVOKE صریح ══
+--    app role هرگز نباید این‌ها را ببیند (کلیدهای cron، اعتبارنامه‌ها، لاگ‌ها،
+--    دادهٔ خام پذیرش، پاسخ‌های ارزشیابی بدون کلید کاربر).
+REVOKE SELECT ON "system_settings", "integrations_config", "audit_logs", "api_audit_logs",
+             "admissions_staging", "sanjesh_mappings", "evaluation_responses",
+             "verification_otps", "step_api_actions", "document_signatures"
+  FROM afagh_app;
+ALTER TABLE "system_settings" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "integrations_config" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "audit_logs" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "api_audit_logs" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "admissions_staging" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "sanjesh_mappings" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "evaluation_responses" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "verification_otps" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "step_api_actions" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "document_signatures" ENABLE ROW LEVEL SECURITY;
+
+-- ══ ۳) سیاست‌های خواندن (SELECT) — تعریف مشترک uid ══
+-- uid = nullif(current_setting('app.user_id', true), '')::int
+--    (نبودِ تنظیم → NULL → استفاده در مقایسه FALSE → صفر ردیف)
+
+DROP POLICY IF EXISTS users_self_read ON "users";
+CREATE POLICY users_self_read ON "users" FOR SELECT TO afagh_app
+  USING ("id" = nullif(current_setting('app.user_id', true), '')::int);
+
+DROP POLICY IF EXISTS students_self_read ON "students";
+CREATE POLICY students_self_read ON "students" FOR SELECT TO afagh_app
+  USING ("userId" = nullif(current_setting('app.user_id', true), '')::int);
+
+DROP POLICY IF EXISTS staff_self_read ON "staff";
+CREATE POLICY staff_self_read ON "staff" FOR SELECT TO afagh_app
+  USING ("userId" = nullif(current_setting('app.user_id', true), '')::int);
+
+DROP POLICY IF EXISTS sessions_self_read ON "sessions";
+CREATE POLICY sessions_self_read ON "sessions" FOR SELECT TO afagh_app
+  USING ("userId" = nullif(current_setting('app.user_id', true), '')::int);
+
+-- (الگوی مشترک: سطرهای دانشجویی → از طریق students؛ سطرهای کارکنان → از طریق staff)
+DROP POLICY IF EXISTS transcript_self_read ON "transcript_snapshots";
+CREATE POLICY transcript_self_read ON "transcript_snapshots" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students"
+    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+DROP POLICY IF EXISTS ledger_self_read ON "student_ledger";
+CREATE POLICY ledger_self_read ON "student_ledger" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students"
+    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+DROP POLICY IF EXISTS clearance_self_read ON "financial_clearances";
+CREATE POLICY clearance_self_read ON "financial_clearances" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students"
+    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+DROP POLICY IF EXISTS seat_self_read ON "seat_allocations";
+CREATE POLICY seat_self_read ON "seat_allocations" FOR SELECT TO afagh_app
+  USING ("enrollmentId" IN (SELECT e."id" FROM "enrollments" e
+    JOIN "students" s ON s."id" = e."studentId"
+    WHERE s."userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+DROP POLICY IF EXISTS attendance_self_read ON "student_class_attendance";
+CREATE POLICY attendance_self_read ON "student_class_attendance" FOR SELECT TO afagh_app
+  USING ("enrollmentId" IN (SELECT e."id" FROM "enrollments" e
+    JOIN "students" s ON s."id" = e."studentId"
+    WHERE s."userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+DROP POLICY IF EXISTS doc_self_read ON "student_documents";
+CREATE POLICY doc_self_read ON "student_documents" FOR SELECT TO afagh_app
+  USING ("personUserId" = nullif(current_setting('app.user_id', true), '')::int);
+
+DROP POLICY IF EXISTS military_self_read ON "military_service_records";
+CREATE POLICY military_self_read ON "military_service_records" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students"
+    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+DROP POLICY IF EXISTS kyc_self_read ON "kyc_verifications";
+CREATE POLICY kyc_self_read ON "kyc_verifications" FOR SELECT TO afagh_app
+  USING ("userId" = nullif(current_setting('app.user_id', true), '')::int);
+
+DROP POLICY IF EXISTS appeal_self_read ON "grade_appeals";
+CREATE POLICY appeal_self_read ON "grade_appeals" FOR SELECT TO afagh_app
+  USING ("enrollmentId" IN (SELECT e."id" FROM "enrollments" e
+    JOIN "students" s ON s."id" = e."studentId"
+    WHERE s."userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+-- ── کارکنان: ردیف‌های مرتبط با خودشان ──
+DROP POLICY IF EXISTS gsotp_self_read ON "grade_submission_otps";
+CREATE POLICY gsotp_self_read ON "grade_submission_otps" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff"
+    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+DROP POLICY IF EXISTS dsotp_self_read ON "doc_sign_otps";
+CREATE POLICY dsotp_self_read ON "doc_sign_otps" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff"
+    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+DROP POLICY IF EXISTS contract_self_read ON "professor_term_contracts";
+CREATE POLICY contract_self_read ON "professor_term_contracts" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff"
+    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+DROP POLICY IF EXISTS pclass_self_read ON "professor_class_attendance";
+CREATE POLICY pclass_self_read ON "professor_class_attendance" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff"
+    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+DROP POLICY IF EXISTS pexam_self_read ON "professor_exam_attendance";
+CREATE POLICY pexam_self_read ON "professor_exam_attendance" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff"
+    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+DROP POLICY IF EXISTS edoc_self_read ON "electronic_documents";
+CREATE POLICY edoc_self_read ON "electronic_documents" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff"
+    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+DROP POLICY IF EXISTS payroll_self_read ON "payroll_statements";
+CREATE POLICY payroll_self_read ON "payroll_statements" FOR SELECT TO afagh_app
+  USING ("contractId" IN (SELECT c."id" FROM "professor_term_contracts" c
+    JOIN "staff" st ON st."id" = c."staffId"
+    WHERE st."userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+DROP POLICY IF EXISTS minutes_self_read ON "exam_minutes";
+CREATE POLICY minutes_self_read ON "exam_minutes" FOR SELECT TO afagh_app
+  USING ("supervisorStaffId" IN (SELECT "id" FROM "staff"
+    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+DROP POLICY IF EXISTS accesslog_self_read ON "physical_access_logs";
+CREATE POLICY accesslog_self_read ON "physical_access_logs" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff"
+    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+DROP POLICY IF EXISTS reqlog_self_read ON "request_step_logs";
+CREATE POLICY reqlog_self_read ON "request_step_logs" FOR SELECT TO afagh_app
+  USING ("requestId" IN (SELECT r."id" FROM "student_requests" r
+    JOIN "students" s ON s."id" = r."studentId"
+    WHERE s."userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+DROP POLICY IF EXISTS checkpoint_self_read ON "request_parallel_checkpoints";
+CREATE POLICY checkpoint_self_read ON "request_parallel_checkpoints" FOR SELECT TO afagh_app
+  USING ("requestId" IN (SELECT r."id" FROM "student_requests" r
+    JOIN "students" s ON s."id" = r."studentId"
+    WHERE s."userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+-- ══ ۴) نوشتن تحت RLS: سیاست‌ها + گرنت ستونی (ضد Mass Assignment) ══
+-- دانشجو فقط این ستون‌ها را می‌تواند عوض کند؛ gradeValue/approvedBy/financial…
+-- از نقش اپ غیرقابل نوشتن‌اند (گرنت ستونی + سیاست ردیف).
+GRANT INSERT ON "enrollments" TO afagh_app;
+GRANT UPDATE ("status", "waitlistPosition") ON "enrollments" TO afagh_app;
 GRANT INSERT, DELETE ON "cart_items" TO afagh_app;
-GRANT INSERT, UPDATE ON "enrollments" TO afagh_app;
-GRANT INSERT, UPDATE ON "student_requests" TO afagh_app;
 GRANT INSERT ON "notifications" TO afagh_app;
+-- student_requests: هیچ مسیری از نقش اپ نمی‌نویسد (همه از نقش مالک) → revoke
+REVOKE INSERT, UPDATE ON "student_requests" FROM afagh_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO afagh_app;   -- serialها برای INSERT
 
-DROP POLICY IF EXISTS cart_self_ins ON "cart_items";
-CREATE POLICY cart_self_ins ON "cart_items" FOR INSERT TO afagh_app
-  WITH CHECK ("studentId" IN (SELECT "id" FROM "students"
-                              WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
-DROP POLICY IF EXISTS cart_self_del ON "cart_items";
-CREATE POLICY cart_self_del ON "cart_items" FOR DELETE TO afagh_app
-  USING ("studentId" IN (SELECT "id" FROM "students"
-                         WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
-
+DROP POLICY IF EXISTS enroll_self_read ON "enrollments";
+CREATE POLICY enroll_self_read ON "enrollments" FOR SELECT TO afagh_app USING (
+  "studentId" IN (SELECT "id" FROM "students"
+                  WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+);
 DROP POLICY IF EXISTS enroll_self_ins ON "enrollments";
 CREATE POLICY enroll_self_ins ON "enrollments" FOR INSERT TO afagh_app
   WITH CHECK ("studentId" IN (SELECT "id" FROM "students"
@@ -93,21 +248,38 @@ CREATE POLICY enroll_self_upd ON "enrollments" FOR UPDATE TO afagh_app
   WITH CHECK ("studentId" IN (SELECT "id" FROM "students"
                               WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
 
-DROP POLICY IF EXISTS request_self_ins ON "student_requests";
-CREATE POLICY request_self_ins ON "student_requests" FOR INSERT TO afagh_app
+DROP POLICY IF EXISTS cart_self_read ON "cart_items";
+CREATE POLICY cart_self_read ON "cart_items" FOR SELECT TO afagh_app USING (
+  "studentId" IN (SELECT "id" FROM "students"
+                  WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+);
+DROP POLICY IF EXISTS cart_self_ins ON "cart_items";
+CREATE POLICY cart_self_ins ON "cart_items" FOR INSERT TO afagh_app
   WITH CHECK ("studentId" IN (SELECT "id" FROM "students"
                               WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
-DROP POLICY IF EXISTS request_self_upd ON "student_requests";
-CREATE POLICY request_self_upd ON "student_requests" FOR UPDATE TO afagh_app
+DROP POLICY IF EXISTS cart_self_del ON "cart_items";
+CREATE POLICY cart_self_del ON "cart_items" FOR DELETE TO afagh_app
   USING ("studentId" IN (SELECT "id" FROM "students"
                          WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
 
+DROP POLICY IF EXISTS notif_self_read ON "notifications";
+CREATE POLICY notif_self_read ON "notifications" FOR SELECT TO afagh_app USING (
+  "userId" = nullif(current_setting('app.user_id', true), '')::int
+);
 DROP POLICY IF EXISTS notif_self_ins ON "notifications";
 CREATE POLICY notif_self_ins ON "notifications" FOR INSERT TO afagh_app
   WITH CHECK ("userId" = nullif(current_setting('app.user_id', true), '')::int);
 
--- الگوی استفاده در اپ: db.transaction → set_config('app.user_id', <uid>, true) → کوئری‌های خواندن
--- (set_config با is_local=true فقط در همان تراکنش می‌ماند — امن در استخر اتصال)
+DROP POLICY IF EXISTS request_self_read ON "student_requests";
+CREATE POLICY request_self_read ON "student_requests" FOR SELECT TO afagh_app USING (
+  "studentId" IN (SELECT "id" FROM "students"
+                  WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+);
+
+-- الگوی استفاده در اپ: appDb.transaction → set_config('app.user_id', <uid>, true) → کوئری
+-- (set_config با is_local=true فقط در همان تراکنش می‌ماند — امن در استخر اتصال؛
+--  گسترش مسیرهای خواندنِ دانشجو/استاد به باUserRls گام بعدی است — فعلاً نوشتن‌ها تحت RLS و
+--  خواندن‌ها با اسکوپ صریح در لایهٔ اپ + این آزمون‌های CI)
 
 -- ④ آرشیو سرد (سند §۲۱۰۲): انتقال ترم‌های قدیمی به دیتابیس ارزان‌تر
 --    INSERT INTO archive_db.enrollments SELECT * FROM enrollments WHERE "termId" < ...;

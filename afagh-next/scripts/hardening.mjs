@@ -29,17 +29,27 @@ try {
   await client.query(sql.replaceAll('__AFAGH_APP_PASSWORD__', appPassword));
   console.log('✅ سخت‌سازی دیتابیس و نقش afagh_app با موفقیت ایجاد و اعمال شد.');
 
-  // ═══ اعتبارسنجی پس از اعمال: اگر RLS درست فعال نشده باشد، استقرار ناموفق است ═══
-  const checks = await client.query(`
-    SELECT c.relname AS table_name,
-           c.relrowsecurity AS rls_enabled,
-           c.relforcerowsecurity AS rls_forced
-    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = 'public' AND c.relname IN ('enrollments','cart_items','notifications','student_requests')
-    ORDER BY c.relname`);
-  const missing = checks.rows.filter(r => !r.rls_enabled);
+  // ═══ اعتبارسنجی پس از اعمال: کل ماتریس RLS باید فعال باشد، وگرنه استقرار ناموفق است ═══
+  const RLS_TABLES = [
+    'users','students','staff','sessions','enrollments','cart_items','notifications','student_requests',
+    'transcript_snapshots','student_ledger','financial_clearances','seat_allocations',
+    'student_class_attendance','student_documents','military_service_records','kyc_verifications',
+    'grade_appeals','grade_submission_otps','doc_sign_otps','professor_term_contracts',
+    'professor_class_attendance','professor_exam_attendance','electronic_documents','payroll_statements',
+    'exam_minutes','physical_access_logs','request_step_logs','request_parallel_checkpoints', // ۲۸ حساس
+    'system_settings','integrations_config','audit_logs','api_audit_logs','admissions_staging',
+    'sanjesh_mappings','evaluation_responses','verification_otps','step_api_actions','document_signatures', // ۱۰ deny-all
+  ];
+  const checks = await client.query(
+    `SELECT c.relname AS table_name, c.relrowsecurity AS rls_enabled
+     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public' AND c.relname = ANY($1)
+     ORDER BY c.relname`,
+    [RLS_TABLES],
+  );
+  const missing = RLS_TABLES.filter(t => !checks.rows.find(r => r.table_name === t)?.rls_enabled);
   if (missing.length) {
-    console.error(`❌ RLS روی جدول‌های ${missing.map(r => r.table_name).join(', ')} فعال نیست — استقرار متوقف شد.`);
+    console.error(`❌ RLS روی جدول‌های ${missing.join(', ')} فعال نیست — استقرار متوقف شد.`);
     process.exit(1);
   }
 
@@ -52,7 +62,8 @@ try {
     process.exit(1);
   }
 
-  console.log(`✅ RLS فعال است (${4 - missing.length}/4 جدول) و نقش afagh_app امن است (NOSUPERUSER + NOBYPASSRLS).`);
+  console.log(`✅ RLS فعال است (${RLS_TABLES.length}/${RLS_TABLES.length} جدول — شامل deny-all) و نقش afagh_app امن است (NOSUPERUSER + NOBYPASSRLS).`);
+  console.log('✅ گرنت ستونی: نوشتن دانشجو فقط روی enrollments("status","waitlistPosition") + cart_items(INSERT/DELETE) + notifications(INSERT).');
 } catch (err) {
   console.error('خطا در اجرای سخت‌سازی:', err.message);
   process.exit(1);

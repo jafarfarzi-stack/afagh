@@ -12,11 +12,12 @@ type Tab = 'live' | 'simulator';
  *   • «محاسبهٔ واقعی» — دادهٔ زنده از موتور مالی (payroll-engine) روی PostgreSQL
  *   • «شبیه‌ساز سناریو» — پیش‌نمایش رابط کاربری با دادهٔ نمونه (بدون نوشتن در دیتابیس)
  */
-export default async function PayrollPage(props: { searchParams?: { tab?: string } }) {
+export default async function PayrollPage(props: { searchParams: Promise<{ tab?: string }> }) {
   const user = await requireRole(['ADMIN', 'EDU_EXPERT', 'FINANCE_EXPERT', 'FINANCE']);
   const isFinance = user.roles.some(r => r === 'FINANCE_EXPERT' || r === 'FINANCE');
 
-  const tab: Tab = props.searchParams?.tab === 'simulator' ? 'simulator' : 'live';
+  const sp = await props.searchParams;
+  const tab: Tab = sp?.tab === 'simulator' ? 'simulator' : 'live';
 
   if (tab === 'simulator') return <PayrollEngineClient />;
 

@@ -41,10 +41,11 @@ const EVENT_COLOR: Record<string, string> = {
   CLEARANCE: 'bg-slate-100 text-slate-700 border-slate-200',
 };
 
-export default async function StudentFinancePage({ params }: { params: { id: string } }) {
+export default async function StudentFinancePage({ params }: { params: Promise<{ id: string }> }) {
   await requireRole(FINANCE);
 
-  const studentId = Number(params.id);
+  const { id } = await params;
+  const studentId = Number(id);
   if (!Number.isFinite(studentId)) notFound();
 
   const fin = await getStudentFinance(studentId);
