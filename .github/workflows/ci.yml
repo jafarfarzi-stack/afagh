@@ -46,7 +46,7 @@ jobs:
     env:
       DATABASE_URL: postgres://afagh:test-password@127.0.0.1:5432/afagh_db
       DATABASE_URL_APP: postgres://afagh_app:test-app-password@127.0.0.1:5432/afagh_db
-      AFAGH_BACKUP_DIR: ${{ runner.temp }}/backups   # runner حق ساخت /backups را ندارد
+      AFAGH_BACKUP_DIR: ${{ runner.temp }}/backups
       REDIS_URL: redis://127.0.0.1:6379
     steps:
       - uses: actions/checkout@v4
