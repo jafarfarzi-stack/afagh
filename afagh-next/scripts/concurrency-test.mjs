@@ -94,10 +94,13 @@ try {
   const winners3 = [b1, b2].filter((x) => x === 1).length;
   ok('وصول همزمان چک: فقط یک تراکنش دفتر', winners3 === 1, `(got ${JSON.stringify([b1, b2])})`);
 
-  // ۴) تأیید همزمان تخفیف (فقط از PENDING)
+  // ۴) تأیید همزمان تخفیف (فقط از PENDING) — ابتدا نوع تخفیف (FK الزامی + seed نمی‌کند)
+  const [discType] = (await owner.query(
+    `INSERT INTO tuition_discount_types (code,title,kind,"defaultPercent","defaultAmount") VALUES ($1,'همزمانی','PERCENT',10,0) RETURNING id`,
+    [`DT${tag}`])).rows;
   const [disc] = (await owner.query(
     `INSERT INTO student_discounts ("studentId","discountTypeId","kind","percent","amount","status") VALUES ($1,$2,'PERCENT',10,'0','PENDING') RETURNING id`,
-    [s.id, (await owner.query(`SELECT id FROM tuition_discount_types ORDER BY id LIMIT 1`)).rows[0]?.id ?? 1])).rows;
+    [s.id, discType.id])).rows;
   const [c1r, c2r] = await race(
     `UPDATE student_discounts SET status = 'APPROVED' WHERE id = $1 AND status = 'PENDING' RETURNING id`,
     [disc.id]);
