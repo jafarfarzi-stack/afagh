@@ -26,7 +26,8 @@
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "postcss": "^8.5.28"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
@@ -42,5 +43,8 @@
   },
   "optionalDependencies": {
     "better-sqlite3": "^11.6.0"
+  },
+  "overrides": {
+    "postcss": "$postcss"
   }
 }
