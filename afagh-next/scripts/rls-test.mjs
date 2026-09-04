@@ -123,10 +123,20 @@ try {
   check('financial_clearances: تسویهٔ B = ۰ ردیف', r.rowCount === 0);
   r = await q(app, `SELECT id FROM "student_documents"`, []);
   check('student_documents: مدرک B = ۰ ردیف', r.rowCount === 0);
-  r = await q(app, `SELECT count(*)::int AS n FROM system_settings`, []);
-  check('deny-all: system_settings (کلیدهای cron) = ۰ ردیف', r.rows[0].n === 0);
-  r = await q(app, `SELECT count(*)::int AS n FROM audit_logs`, []);
-  check('deny-all: audit_logs = ۰ ردیف', r.rows[0].n === 0);
+  // deny-all: سخت‌گیریِ pg-hardening در این دو جدول با REVOKE (ACL) است نه پالیسی —
+  // پس یا ۰ ردیف (اگر grant باشد) یا 42501 (بدون grant)؛ هر دو یعنی «دسترسی صفر»
+  // و هر دو اثباتِ جداسازی‌اند.
+  const expectDenied = async (name, sqlText) => {
+    try {
+      const rr = await q(app, sqlText, []);
+      check(name, rr.rows[0]?.n === 0, `(got ${rr.rows[0]?.n})`);
+    } catch (e) {
+      if (e.code === '42501') { pass++; console.log(`  ✓ ${name} → 42501 (REVOKE — دسترسی اصلاً داده نشده)`); }
+      else { fail++; console.log(`  ✗ ${name} → ${e.code}`); }
+    }
+  };
+  await expectDenied('deny-all: system_settings (کلیدهای cron) = دسترسی صفر', `SELECT count(*)::int AS n FROM system_settings`);
+  await expectDenied('deny-all: audit_logs = دسترسی صفر', `SELECT count(*)::int AS n FROM audit_logs`);
   await q(app, 'COMMIT');
 
   // ═══ ۲) بدون set_config → همه‌چیز خالی ═══
