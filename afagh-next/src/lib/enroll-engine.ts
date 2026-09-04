@@ -153,7 +153,7 @@ export function formatPrereq(node: LogicNode | undefined, titles: Map<string, st
  * پردازش یک آیتم صف ثبت نهایی — بدون context درخواست (در کارگر صف اجرا می‌شود).
  * طبق §۶۹۰۶ فقط نتیجهٔ نهایی در PostgreSQL ثبت می‌شود؛ ظرفیت زنده در Redis می‌ماند.
  */
-export async function processQueuedSubmit(userId: number, studentId: number): Promise<SubmitResult> {
+export async function processQueuedSubmit(userId: number, studentId: number, acceptSameDayRisk = false): Promise<SubmitResult> {
   const out: SubmitResult = { ok: true, registered: [], waitlisted: [], hardErrors: [], softErrors: [] };
 
   const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
@@ -219,8 +219,6 @@ export async function processQueuedSubmit(userId: number, studentId: number): Pr
   const regSched = regIds.length ? await db.select().from(schedules).where(inArray(schedules.offeringId, regIds)) : [];
   const cartSet = new Set(ids);
   const classClash = new Set<number>();
-  const examClash = new Set<number>();
-  const examDateOf = new Map<number, string | null>();
   const classOnly = (s: typeof cartSched[number]) => s.scheduleType !== 'EXAM';
   for (const a of cartSched.filter(classOnly)) for (const b of [...cartSched, ...regSched].filter(classOnly)) {
     if (a.offeringId === b.offeringId) continue;
@@ -229,21 +227,41 @@ export async function processQueuedSubmit(userId: number, studentId: number): Pr
     if (cartSet.has(b.offeringId)) classClash.add(b.offeringId);
   }
 
-  // ── فیلتر ۵: تداخل امتحان (خطای نرم — همان‌طور که فاز صفر داشت) ──
+  // ── فیلتر ۵: تداخل امتحان (فاز ۱۰ — سند طراحی سامانه: تقسیم HARD/SOFT) ──
+  //   HARD: همان روز و ساعت هم‌پوشان → ممنوع قطعی (حتی با تأییدیه ثبت نمی‌شود)
+  //   SOFT: همان روز و ساعتِ متفاوت → هشدار + تأییدیهٔ دیجیتال (hasAcceptedSameDayExam)
   const examOnly = (s: typeof cartSched[number]) => s.scheduleType === 'EXAM';
+  const examHard = new Set<number>();
+  const examSoft = new Set<number>();
+  const examDateOf = new Map<number, string | null>();
+  const allExam = [...cartSched, ...regSched].filter(examOnly);
   for (const a of cartSched.filter(examOnly)) {
     examDateOf.set(a.offeringId, a.examDate);
-    for (const b of [...cartSched, ...regSched].filter(examOnly)) {
+    for (const b of allExam) {
       if (a.offeringId === b.offeringId) continue;
-      if (!examOverlaps(a, b)) continue;
-      examClash.add(a.offeringId);
-      if (cartSet.has(b.offeringId)) examClash.add(b.offeringId);
+      if (!a.examDate || a.examDate !== b.examDate) continue;
+      if (examOverlaps(a, b)) {
+        examHard.add(a.offeringId);
+        if (cartSet.has(b.offeringId)) examHard.add(b.offeringId);
+      } else {
+        examSoft.add(a.offeringId);
+        if (cartSet.has(b.offeringId)) examSoft.add(b.offeringId);
+      }
     }
   }
   for (const o of offs) {
     if (already.has(o.id)) continue;
-    if (classClash.has(o.id)) out.softErrors.push({ offeringId: o.id, msg: 'تداخل زمانی: «' + o.title + '» با کلاس دیگر.' });
-    else if (examClash.has(o.id)) out.softErrors.push({ offeringId: o.id, msg: 'تداخل امتحانی: «' + o.title + '» با امتحان دیگر' + (examDateOf.get(o.id) ? ' (' + examDateOf.get(o.id) + ')' : '') + '.' });
+    if (classClash.has(o.id)) {
+      out.softErrors.push({ offeringId: o.id, msg: 'تداخل زمانی: «' + o.title + '» با کلاس دیگر.' });
+    } else if (examHard.has(o.id)) {
+      out.hardErrors.push('تداخل قطعی امتحان: «' + o.title + '» با درس دیگری در ' + (examDateOf.get(o.id) ?? 'تاریخ') + ' و همان ساعت امتحان دارد.')
+      out.ok = false;
+    } else if (examSoft.has(o.id) && !acceptSameDayRisk) {
+      out.softErrors.push({
+        offeringId: o.id,
+        msg: 'تداخل نرم امتحان: «' + o.title + '» با امتحان دیگر در ' + (examDateOf.get(o.id) ?? '') + ' (ساعت متفاوت). برای ثبت، تأییدیهٔ دیجیتال عواقب لازم است.',
+      });
+    }
   }
 
   // ── فیلتر ۴: پیش‌نیاز — درخت منطقی (§۱۰۱۲، خطای نرم) ──
@@ -287,10 +305,19 @@ export async function processQueuedSubmit(userId: number, studentId: number): Pr
 
     // درج ثبت‌نام + خالی‌کردن سبد — تحت RLS (§۲۱۷۰): خط‌مشی enroll_self_ins فقط ردیف خودش
     await withUserRls(userId, tx => tx.insert(enrollments)
-      .values({ studentId, offeringId: o.id, status: waitlisted ? 'WAITLISTED' : 'REGISTERED', waitlistPosition: waitlisted ? (wlPos ?? o.enrolled - o.capacity + 1) : null })
+      .values({
+        studentId, offeringId: o.id, status: waitlisted ? 'WAITLISTED' : 'REGISTERED',
+        waitlistPosition: waitlisted ? (wlPos ?? o.enrolled - o.capacity + 1) : null,
+        // فاز ۱۰: تأییدیهٔ دیجیتال تداخل نرم (دو امتحان هم‌روز در شیفت‌های متفاوت)
+        hasAcceptedSameDayExam: acceptSameDayRisk && examSoft.has(o.id) ? 1 : 0,
+      })
       .onConflictDoUpdate({
         target: [enrollments.studentId, enrollments.offeringId],
-        set: { status: waitlisted ? 'WAITLISTED' : 'REGISTERED', waitlistPosition: waitlisted ? (wlPos ?? o.enrolled - o.capacity + 1) : null },
+        set: {
+          status: waitlisted ? 'WAITLISTED' : 'REGISTERED',
+          waitlistPosition: waitlisted ? (wlPos ?? o.enrolled - o.capacity + 1) : null,
+          hasAcceptedSameDayExam: acceptSameDayRisk && examSoft.has(o.id) ? 1 : 0,
+        },
       }));
     if (!waitlisted) {
       // شمارندهٔ مشترک = اقدام سیستم → نقش مالک (خط‌مشی دانشجویی ندارد)

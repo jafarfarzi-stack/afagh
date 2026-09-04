@@ -12,6 +12,7 @@ import {
   removeFromCartAction,
   referCouncilAction,
   submitCartAction,
+  previewExamConflictsAction,
 } from './actions';
 import type { SubmitResult } from '@/lib/enroll-engine';
 
@@ -325,6 +326,14 @@ export default function EnrollClient(props: {
     setMsg('سبد انتخاب واحد کاملاً خالی گردید.');
   }
 
+  // ── فاز ۱۰: گارد تداخل امتحان (HARD مسدود / SOFT با تأییدیهٔ دیجیتال) ──
+  const [conflictModal, setConflictModal] = useState<null | {
+    hard: { courseCode: string; title: string; examDate: string; startTime: string; withCourse: string }[];
+    soft: { courseCode: string; title: string; examDate: string; startTime: string; withCourse: string }[];
+  }>(null);
+  const [acceptRisk, setAcceptRisk] = useState(false);
+  const [submittingRisk, setSubmittingRisk] = useState(false);
+
   async function submit() {
     if (totalUnits > effectiveMaxUnits) {
       alert(`خطا: مجموع واحدهای انتخابی (${totalUnits} واحد) از سقف مجاز آیین‌نامه برای شما (${effectiveMaxUnits} واحد) بیشتر است.`);
@@ -333,6 +342,19 @@ export default function EnrollClient(props: {
     setBusy(true);
     setMsg('');
     setResult(null);
+
+    // فاز ۱۰: پیش‌بینی تداخل امتحانی سبد (همان روز + هم‌ساعت → قطعی؛ هم‌روز + ساعت متفاوت → نرم)
+    try {
+      const prev = await previewExamConflictsAction();
+      if (prev.hard.length > 0 || prev.soft.length > 0) {
+        setConflictModal({ hard: prev.hard, soft: prev.soft });
+        setBusy(false);
+        return;
+      }
+    } catch {
+      // اگر پیش‌بینی شکست خورد، گارد سمت سرور (کارگر صف) همچنان محکم است.
+    }
+
     const res = await submitCartAction();
     setBusy(false);
     if (res.limited) {
@@ -344,6 +366,20 @@ export default function EnrollClient(props: {
       return;
     }
     setQueuePos(res.position); // پاسخ فوری §۱۰۱۶
+  }
+
+  async function submitWithRisk() {
+    setSubmittingRisk(true);
+    setConflictModal(null);
+    setBusy(true);
+    setMsg('');
+    setResult(null);
+    const res = await submitCartAction(true);
+    setBusy(false);
+    setSubmittingRisk(false);
+    if (res.limited) { setMsg('سرعت درخواست‌ها بیش از حد مجاز است — چند لحظه صبر کنید (سپر نرخ).'); return; }
+    if (!res.queued) { setMsg('ورود به صف ناموفق بود.'); return; }
+    setQueuePos(res.position);
   }
 
   async function refer(id: number, reason?: string) {
@@ -726,6 +762,50 @@ export default function EnrollClient(props: {
       </div>
 
       <TempWeeklySchedule cart={props.cart} />
+
+      {conflictModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg p-5 space-y-4">
+            <h3 className="font-extrabold text-slate-900 text-sm">⚠️ تداخل امتحانی در سبد شما شناسایی شد</h3>
+            {conflictModal.hard.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-black text-rose-700">⛔ تداخل قطعی (همان روز و همان ساعت) — امکان اخذ این درس‌ها وجود ندارد:</p>
+                {conflictModal.hard.map((c, i) => (
+                  <div key={i} className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-[11px] font-bold text-rose-900">
+                    {c.courseCode} — {c.title} در {c.examDate} ساعت {c.startTime} هم‌زمان با {c.withCourse}
+                  </div>
+                ))}
+              </div>
+            )}
+            {conflictModal.soft.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-black text-amber-700">🌗 تداخل نرم (همان روز، ساعت‌های متفاوت) — با تأییدیهٔ دیجیتال قابل ثبت است:</p>
+                {conflictModal.soft.map((c, i) => (
+                  <div key={i} className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-900">
+                    {c.courseCode} — {c.title} در {c.examDate} ساعت {c.startTime} (با {c.withCourse} هم‌روز است)
+                  </div>
+                ))}
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-700 pt-1">
+                  <input type="checkbox" checked={acceptRisk} onChange={e => setAcceptRisk(e.target.checked)} className="accent-amber-600 w-4 h-4" />
+                  تأیید می‌کنم این دو امتحان در یک روز (شیفت‌های متفاوت) برگزار می‌شود و عواقب آن را می‌پذیرم. این تأییدیه به‌صورت امضای دیجیتال در پروندهٔ من ثبت می‌شود.
+                </label>
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setConflictModal(null)} className="px-4 py-2 rounded-lg bg-slate-200 text-slate-700 font-bold text-xs">انصراف</button>
+              {conflictModal.soft.length > 0 && (
+                <button
+                  onClick={submitWithRisk}
+                  disabled={!acceptRisk || submittingRisk}
+                  className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs disabled:opacity-50"
+                >
+                  {submittingRisk ? '…' : 'تأیید عواقب و ادامهٔ ثبت'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {msg && (
         <div className="rounded-xl bg-slate-900 text-white p-3 text-center text-xs font-bold animate-fade-in shadow-md">

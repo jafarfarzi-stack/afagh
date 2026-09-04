@@ -190,6 +190,8 @@
 گام ۳    فاز ۵–۶ Curriculum: اتصال Enroll/Graduation + اتصال Scheduling به موتور واقعی
 گام ۴  ✅ (انجام شد) فاز ۷ Curriculum: Thin Client (بدون Mock؛ CheckResult واقعی)
 گام ۵  ✅ (انجام شد) امتحانات: `admin/exams/actions.ts` (کارتابل واقعی + صدور حضور/صورت‌جلسه/تحویل به استاد) + Thin Client امتحانات (سشن‌ها/دروس/سالن‌ها/مراقبین/تداخل — بدون Mock)
+گام ۵ب ✅ (فاز ۹ — ادغام «طراحی سامانهٔ جامع آموزشی») موتور برنامه‌ریزی امتحانات: `exam-scheduler.ts` (خالص — زون‌بندی ۳ قانون، HARD/SOFT، گلوگاه ظرفیت + تجزیهٔ شیفت، امتیازدهی عصر، تخصیص صندلی) + `exam-planning.ts` (زون‌بندی DB + رادار ظرفیت + قفل شیفت + امتحان تجمیعی خوشه + ۴ پیشنهاد طلایی + تولید صندلی) + مهاجرت ۰۰۰۳ (exam_calendar_configs، isWorkingClassMajority، hasAcceptedSameDayExam) + تب «برنامه‌ریزی امتحانات» در کلاینت اداری (۳۸ تست)
+گام ۵ج ✅ (فاز ۱۰ — روز امتحان و دانشجو) گارد تداخل امتحان در انتخاب واحد (HARD قطعی مسدود / SOFT با تأییدیهٔ دیجیتال `hasAcceptedSameDayExam` ذخیره‌شده در ردیف ثبت‌نام + مودال تأیید عواقب در کلاینت) + دکمهٔ ورود مراقبین/زنجیرهٔ تحویل + تخصیص صندلی که کارت ورود به جلسهٔ دانشجو (سالن/صندلی/بلوک + QR) را پر می‌کند
 گام ۶    دانشجویان: اکشن‌های CRUD واقعی
 گام ۷    RLS adoption کامل + تست رگرسیون rls-test در CI
 گام ۸    تبارشناسی مهاجرت (patches → versioned) + قالب‌ها DB-backed
@@ -217,6 +219,8 @@
 ## پیوست — فایل‌هایی که «باید» قبل از Production اتصال شوند (چک‌لیست)
 
 - [x] `admin/exams/ExamPlanningClient.tsx` → actions + exam-engine (گام ۵)
+- [x] برنامه‌ریزی امتحانات: زون‌بندی تقویم + رادار ظرفیت + تجزیهٔ سرریز + امتحان تجمیعی هم‌ارز + ۴ پیشنهاد هوشمند (گام ۵ب/فاز ۹)
+- [x] روز امتحان: تخصیص صندلی + کارت ورود دانشجو + گارد HARD/SOFT با تأییدیهٔ دیجیتال در انتخاب واحد (گام ۵ج/فاز ۱۰)
 - [ ] `admin/students/StudentsManagerClient.tsx` → actions (CRUD واقعی)
 - [ ] `admin/templates/TemplateEngineClient.tsx` → جدول + actions
 - [x] `admin/curriculum/CurriculumManagerClient.tsx` → فاز ۷ (Thin Client)

@@ -246,7 +246,7 @@ export async function autoFillCartFromChartAction(): Promise<{
 }
 
 /** ورود به اتاق انتظار — پاسخ فوری با شمارهٔ نوبت (§۱۰۱۶ + §۶۹۰۶) */
-export async function submitCartAction(): Promise<{ queued: boolean; ticketId: string; position: number; limited?: boolean }> {
+export async function submitCartAction(acceptSameDayRisk = false): Promise<{ queued: boolean; ticketId: string; position: number; limited?: boolean }> {
   const { user, me } = await ctx();
   ensureWorker(); // کارگر صف در همین فرایند Next فعال است
 
@@ -255,8 +255,57 @@ export async function submitCartAction(): Promise<{ queued: boolean; ticketId: s
     return { queued: false, ticketId: '', position: 0, limited: true };
   }
 
-  const { ticket, position } = await enqueueSubmit(user.id, me.id);
+  // فاز ۱۰: اگر کاربر دو امتحانِ هم‌روز (شیفت‌های متفاوت) را با «تأیید عواقب» پذیرفت،
+  // همین پرچم در بلیت صف می‌ماند تا در کارگر صف، در ردیف ثبت‌نام ذخیره شود.
+  const { ticket, position } = await enqueueSubmit(user.id, me.id, acceptSameDayRisk);
   return { queued: true, ticketId: ticket.id, position };
+}
+
+/** پیش‌نمایش تداخل امتحانی سبد (قبل از ثبت): HARD = قطعی (همان روز + هم‌ساعت)، SOFT = نرم (هم‌روز، ساعت متفاوت) */
+export async function previewExamConflictsAction(): Promise<{
+  ok: boolean;
+  hard: { courseCode: string; title: string; examDate: string; startTime: string; withCourse: string }[];
+  soft: { courseCode: string; title: string; examDate: string; startTime: string; withCourse: string }[];
+}> {
+  const { user, me, term } = await ctx();
+  if (!term) return { ok: false, hard: [], soft: [] };
+  const cart = await db.select().from(cart_items).where(eq(cart_items.studentId, me.id));
+  const cartIds = cart.map(c => c.offeringId);
+  const own = await db
+    .select({ offeringId: enrollments.offeringId })
+    .from(enrollments)
+    .where(and(eq(enrollments.studentId, me.id), inArray(enrollments.status, ['REGISTERED', 'PENDING_COUNCIL'])));
+  const allIds = [...new Set([...cartIds, ...own.map(o => o.offeringId)])];
+  if (allIds.length < 2) return { ok: true, hard: [], soft: [] };
+
+  const rows = await db
+    .select({
+      offeringId: schedules.offeringId,
+      courseCode: courses.code,
+      title: courses.title,
+      examDate: schedules.examDate,
+      startTime: schedules.startTime,
+      endTime: schedules.endTime,
+    })
+    .from(schedules)
+    .innerJoin(course_offerings, eq(course_offerings.id, schedules.offeringId))
+    .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+    .where(and(eq(schedules.scheduleType, 'EXAM'), sql`${schedules.examDate} is not null`, inArray(schedules.offeringId, allIds)));
+
+  const hard: { courseCode: string; title: string; examDate: string; startTime: string; withCourse: string }[] = [];
+  const soft: { courseCode: string; title: string; examDate: string; startTime: string; withCourse: string }[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    for (let j = i + 1; j < rows.length; j++) {
+      const a = rows[i], b = rows[j];
+      if (!a.examDate || String(a.examDate) !== String(b.examDate)) continue;
+      const aS = String(a.startTime).slice(0, 5), aE = String(a.endTime).slice(0, 5);
+      const bS = String(b.startTime).slice(0, 5), bE = String(b.endTime).slice(0, 5);
+      const info = { courseCode: a.courseCode, title: a.title, examDate: String(a.examDate), startTime: aS, withCourse: b.courseCode };
+      if (aS < bE && bS < aE) hard.push(info);
+      else soft.push(info);
+    }
+  }
+  return { ok: true, hard, soft };
 }
 
 export async function referCouncilAction(offeringId: number, reason?: string): Promise<{ ok: boolean; error?: string }> {
