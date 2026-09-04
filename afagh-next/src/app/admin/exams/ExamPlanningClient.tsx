@@ -16,6 +16,7 @@ import {
   scheduleUnifiedClusterAction, suggestExamSlotsAction, generateSeatAllocationsAction,
 } from './actions';
 import { examProctorClockInAction, examChainOverviewAction } from '@/lib/exam-actions';
+import { jalaliDateOf, parseJalaliDate } from '@/lib/scheduling-core';
 
 const faNum = (n: any) => (n === null || n === undefined || n === '' ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
 
@@ -56,6 +57,25 @@ function addHours(start: string): string {
   const [h, m] = start.split(':').map(Number);
   const tot = (h ?? 8) * 60 + (m ?? 0) + 120;
   return `${String(Math.floor(tot / 60) % 24).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
+}
+
+/** 'YYYY-MM-DD' میلادی → 'YYYY/MM/DD' شمسی (ورودی date input) */
+function isoToJalali(v: string): string {
+  if (!v) return '';
+  const [y, m, d] = v.split('-').map(Number);
+  if (!y || !m || !d) return '';
+  return jalaliDateOf(new Date(y, m - 1, d));
+}
+
+/** 'YYYY/MM/DD' شمسی → 'YYYY-MM-DD' میلادی (برای نمایش در date input) */
+function jalaliToIso(v: string): string {
+  if (!v) return '';
+  try {
+    const d = parseJalaliDate(v);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  } catch {
+    return '';
+  }
 }
 
 export default function ExamPlanningClient({ initial }: { initial: ExamWorkspace }) {
@@ -111,7 +131,14 @@ export default function ExamPlanningClient({ initial }: { initial: ExamWorkspace
     const w = await getExamPlanningAction(termId);
     if (!w.ok) { showToast(w.error, 'error'); return; }
     setPlanning(w.data);
-    if (w.data.zoning) setZoneForm(w.data.zoning);
+    if (w.data.zoning) {
+      const z = w.data.zoning;
+      setZoneForm({
+        globalStart: jalaliToIso(z.globalStart), globalEnd: jalaliToIso(z.globalEnd),
+        generalStart: jalaliToIso(z.generalStart), generalEnd: jalaliToIso(z.generalEnd),
+        specializedStart: jalaliToIso(z.specializedStart), specializedEnd: jalaliToIso(z.specializedEnd),
+      });
+    }
   }, [showToast]);
 
   // بارگذاری اولیهٔ کارتابل برنامه‌ریزی (فاز ۹)
@@ -154,7 +181,12 @@ export default function ExamPlanningClient({ initial }: { initial: ExamWorkspace
   const handleSaveZoning = async () => {
     setBusyPlanning(true);
     try {
-      const r = await upsertExamZoningAction(selectedTermId, zoneForm);
+      const zJalali = {
+        globalStart: isoToJalali(zoneForm.globalStart), globalEnd: isoToJalali(zoneForm.globalEnd),
+        generalStart: isoToJalali(zoneForm.generalStart), generalEnd: isoToJalali(zoneForm.generalEnd),
+        specializedStart: isoToJalali(zoneForm.specializedStart), specializedEnd: isoToJalali(zoneForm.specializedEnd),
+      };
+      const r = await upsertExamZoningAction(selectedTermId, zJalali);
       showToast(r.ok ? r.message : r.error ?? 'خطا', r.ok ? 'success' : 'error');
       if (r.ok) reloadPlanning(selectedTermId);
     } finally { setBusyPlanning(false); }
@@ -172,7 +204,7 @@ export default function ExamPlanningClient({ initial }: { initial: ExamWorkspace
     const end = addHours(d.start);
     setBusyPlanning(true);
     try {
-      const r = await scheduleExamSlotAction({ termId: selectedTermId, offeringId, examDate: d.date, startTime: d.start, endTime: end });
+      const r = await scheduleExamSlotAction({ termId: selectedTermId, offeringId, examDate: isoToJalali(d.date), startTime: d.start, endTime: end });
       showToast(r.ok ? r.message : r.error, r.ok ? 'success' : 'error');
       if (!r.ok && (r as any).status === 'OVERFLOW' && (r as any).splitOptions?.length) {
         showToast(`💡 ${(r as any).splitOptions.map((o: any) => o.label).join(' یا ')}`, 'error');
@@ -187,7 +219,7 @@ export default function ExamPlanningClient({ initial }: { initial: ExamWorkspace
     if (!d?.date || !d?.start) { showToast('تاریخ و ساعت شروع امتحان تجمیعی را وارد کنید.', 'error'); return; }
     setBusyPlanning(true);
     try {
-      const r = await scheduleUnifiedClusterAction({ termId: selectedTermId, clusterId, examDate: d.date, startTime: d.start, endTime: addHours(d.start) });
+      const r = await scheduleUnifiedClusterAction({ termId: selectedTermId, clusterId, examDate: isoToJalali(d.date), startTime: d.start, endTime: addHours(d.start) });
       showToast(r.ok ? r.message : r.error, r.ok ? 'success' : 'error');
       if (r.ok) { reload(selectedTermId); reloadPlanning(selectedTermId); }
     } finally { setBusyPlanning(false); }
@@ -618,7 +650,7 @@ export default function ExamPlanningClient({ initial }: { initial: ExamWorkspace
                         {suggestions[c.offeringId].map((sug, i) => (
                           <button
                             key={i}
-                            onClick={() => setSlotDraft(prev => ({ ...prev, [c.offeringId]: { date: sug.examDate, start: sug.startTime } }))}
+                            onClick={() => setSlotDraft(prev => ({ ...prev, [c.offeringId]: { date: jalaliToIso(sug.examDate), start: sug.startTime } }))}
                             className="p-2.5 rounded-xl border-2 border-indigo-200 hover:border-indigo-500 text-right space-y-1"
                           >
                             <div className="font-black text-slate-900 text-xs">{faNum(sug.examDate)} — {faNum(sug.startTime)}</div>
