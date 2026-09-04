@@ -9,8 +9,10 @@ export const dynamic = 'force-dynamic';
 export default async function ProfessorGradesPage({
   searchParams,
 }: {
-  searchParams: { offeringId?: string };
+  searchParams: Promise<{ offeringId?: string }>;
 }) {
+  // Next 16: searchParams یک Promise است و باید await شود
+  const sp = await searchParams;
   const user = await requireRole(['PROFESSOR']);
   const me = await getStaffByUser(user.id);
 
@@ -24,7 +26,7 @@ export default async function ProfessorGradesPage({
 
   const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
   const termTitle = term?.title || 'نیمسال اول ۱۴۰۵–۱۴۰۶ (مهر ۱۴۰۵)';
-  const defaultOfferingId = searchParams.offeringId ? Number(searchParams.offeringId) : undefined;
+  const defaultOfferingId = sp.offeringId ? Number(sp.offeringId) : undefined;
 
   // Realistic course offerings with single-instructor and co-taught courses
   const initialOfferings: GradingCourseOffering[] = [
