@@ -64,6 +64,29 @@ try {
 
   console.log(`✅ RLS فعال است (${RLS_TABLES.length}/${RLS_TABLES.length} جدول — شامل deny-all) و نقش afagh_app امن است (NOSUPERUSER + NOBYPASSRLS).`);
   console.log('✅ گرنت ستونی: نوشتن دانشجو فقط روی enrollments("status","waitlistPosition") + cart_items(INSERT/DELETE) + notifications(INSERT).');
+
+  // ═══ اثبات پوشش کامل (بازبینی — بند ۴): هیچ جدولی که ستون هویتی/مالی دارد،
+  // بدون RLS نمی‌ماند. جدول‌های مرجع/کاتالوگ (بدون دادهٔ شخصی) مجازند.
+  const coverage = await client.query(`
+    SELECT c.relname AS table_name, c.relrowsecurity AS rls_enabled
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind = 'r'
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns col
+        WHERE col.table_schema = 'public' AND col.table_name = c.relname
+          AND col.column_name IN ('userId','studentId','staffId','personUserId','targetId',
+                                  'contractId','enrollmentId','supervisorStaffId',
+                                  'actorStaffId','clearedByStaffId')
+      )
+    ORDER BY 1`);
+  const unprotected = coverage.rows.filter(r => !r.rls_enabled).map(r => r.table_name);
+  if (unprotected.length) {
+    console.error(`❌ جدول‌های دادهٔ شخصی/مالی بدون RLS: ${unprotected.join(', ')} — استقرار متوقف شد.`);
+    process.exit(1);
+  }
+  console.log(`✅ پوشش RLS کامل: ${coverage.rows.length} جدول دارای دادهٔ هویتی/مالی — همه RLS دارند.`);
+
 } catch (err) {
   console.error('خطا در اجرای سخت‌سازی:', err.message);
   process.exit(1);

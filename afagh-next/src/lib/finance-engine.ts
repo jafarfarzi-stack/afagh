@@ -561,25 +561,44 @@ export async function recordPayment(input: {
  * اگر چک پیش‌تر وصول شده باشد کاری نمی‌کند؛ وگرنه هر بار اجرا یک پرداخت
  * تکراری در دفتر مالی می‌ساخت.
  */
+/**
+ * وصول چک — تراکنش + قفل ردیف (بازبینی — بند ۱/۲/۸)
+ *   • SELECT … FOR UPDATE: دو کارشناس همزمان نمی‌توانند یک چک را وصول کنند.
+ *   • ثبت دفتر مالی و تغییر وضعیت چک در یک تراکنش — هر دو یا هیچ‌کدام.
+ *   • انتقال فقط از PENDING: اگر وضعیت در همین لحظه تغییر کرده باشد،
+ *     تراکنش برگشت می‌خورد و خطای واضح می‌گیرد (optimistic concurrency).
+ */
 export async function clearCheque(chequeId: number): Promise<{ ok: boolean; reason?: string }> {
-  const [cheque] = await db.select().from(payment_cheques).where(eq(payment_cheques.id, chequeId)).limit(1);
-  if (!cheque) return { ok: false, reason: 'چک یافت نشد' };
-  if (cheque.status === 'CLEARED') return { ok: false, reason: 'این چک پیش‌تر وصول شده است' };
-  if (cheque.status === 'CANCELLED') return { ok: false, reason: 'چک باطل‌شده قابل وصول نیست' };
+  try {
+    return await db.transaction(async (tx) => {
+      const lock = await tx.execute(sql`
+        SELECT id, "studentId", "termId", amount, "chequeNo", status
+        FROM payment_cheques WHERE id = ${chequeId} FOR UPDATE`);
+      const cheque = lock.rows[0] as any;
+      if (!cheque) return { ok: false, reason: 'چک یافت نشد' };
+      if (cheque.status === 'CLEARED') return { ok: false, reason: 'این چک پیش‌تر وصول شده است' };
+      if (cheque.status === 'CANCELLED') return { ok: false, reason: 'چک باطل‌شده قابل وصول نیست' };
+      if (cheque.status === 'BOUNCED') return { ok: false, reason: 'چک برگشتی قابل وصول نیست؛ ابتدا وضعیت را به «در انتظار» برگردانید' };
 
-  const [ins] = await db.insert(student_ledger).values({
-    studentId: cheque.studentId,
-    termId: cheque.termId,
-    transactionType: 'PAYMENT',
-    amount: cheque.amount,
-    description: `وصول چک ${cheque.chequeNo || ''}`.trim(),
-  }).returning({ id: student_ledger.id });
+      const [ins] = await tx.insert(student_ledger).values({
+        studentId: cheque.studentId,
+        termId: cheque.termId,
+        transactionType: 'PAYMENT',
+        amount: String(cheque.amount),
+        description: `وصول چک ${cheque.chequeNo || ''}`.trim(),
+      }).returning({ id: student_ledger.id });
 
-  await db.update(payment_cheques)
-    .set({ status: 'CLEARED', clearedAt: new Date(), ledgerTxnId: ins.id })
-    .where(eq(payment_cheques.id, chequeId));
-
-  return { ok: true };
+      const upd = await tx.update(payment_cheques)
+        .set({ status: 'CLEARED', clearedAt: new Date(), ledgerTxnId: ins.id })
+        .where(and(eq(payment_cheques.id, chequeId), eq(payment_cheques.status, 'PENDING')));
+      if (upd.rowCount !== 1) {
+        throw new Error('وضعیت چک در همین لحظه تغییر کرده است؛ صبر کنید و دوباره تلاش کنید.');
+      }
+      return { ok: true };
+    });
+  } catch (err: any) {
+    return { ok: false, reason: err?.message || 'خطا در وصول چک' };
+  }
 }
 
 /** وضعیت دانشجو را برای کارتابل برمی‌گرداند (فعال/غیرفعال) */

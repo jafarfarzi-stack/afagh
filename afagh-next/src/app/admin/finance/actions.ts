@@ -1,13 +1,14 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   loan_products, payment_cheques, student_discounts, student_ledger, student_loans,
   student_sponsorships, tuition_discount_types, tuition_formulas, tuition_sponsors,
 } from '@/db/schema';
 import { requireRole, getSessionUser } from '@/lib/auth';
+import { assertServerActionOrigin, requireStudentScope } from '@/lib/security';
 import { clearCheque, computeFormulaTuition } from '@/lib/finance-engine';
 import { toNum } from '@/lib/finance-rules';
 
@@ -49,6 +50,11 @@ export async function addDiscountAction(input: {
   status?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
+
+  const sc = await requireStudentScope(input.studentId);
+  if (!sc.ok) return { ok: false, error: sc.error };
 
   const [type] = await db.select().from(tuition_discount_types)
     .where(eq(tuition_discount_types.id, input.discountTypeId)).limit(1);
@@ -86,25 +92,30 @@ export async function setDiscountStatusAction(
   status: 'APPROVED' | 'REJECTED'
 ): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const user = await getSessionUser();
 
   const [row] = await db.select().from(student_discounts).where(eq(student_discounts.id, id)).limit(1);
   if (!row) return { ok: false, error: 'تخفیف یافت نشد' };
 
-  await db.update(student_discounts)
+  const upd = await db.update(student_discounts)
     .set({
       status,
       approvedBy: user?.id ?? null,
       approvedAt: status === 'APPROVED' ? new Date() : null,
     })
-    .where(eq(student_discounts.id, id));
+    .where(and(eq(student_discounts.id, id), eq(student_discounts.status, 'PENDING')));
+  if (upd.rowCount !== 1) return { ok: false, error: 'این تخفیف قبلاً تصمیم‌گیری شده است (فقط «در انتظار» قابل تأیید/رد است).' };
 
   revalidateStudent(row.studentId);
   return { ok: true };
 }
 
-export async function deleteDiscountAction(id: number): Promise<{ ok: boolean }> {
+export async function deleteDiscountAction(id: number): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const [row] = await db.select().from(student_discounts).where(eq(student_discounts.id, id)).limit(1);
   await db.delete(student_discounts).where(eq(student_discounts.id, id));
   if (row) revalidateStudent(row.studentId);
@@ -127,6 +138,11 @@ export async function addSponsorshipAction(input: {
   status?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
+
+  const sc = await requireStudentScope(input.studentId);
+  if (!sc.ok) return { ok: false, error: sc.error };
 
   const [sponsor] = await db.select().from(tuition_sponsors)
     .where(eq(tuition_sponsors.id, input.sponsorId)).limit(1);
@@ -153,16 +169,25 @@ export async function setSponsorshipStatusAction(
   status: 'CONFIRMED' | 'PAID' | 'REJECTED'
 ): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const [row] = await db.select().from(student_sponsorships).where(eq(student_sponsorships.id, id)).limit(1);
   if (!row) return { ok: false, error: 'پوشش یافت نشد' };
 
-  await db.update(student_sponsorships).set({ status }).where(eq(student_sponsorships.id, id));
+  const allowedSponsor = (cur: string) =>
+    status === 'REJECTED' ? cur === 'PENDING' : ['PENDING', 'CONFIRMED'].includes(cur);
+  if (!allowedSponsor(row.status)) return { ok: false, error: 'انتقال نامعتبر: پوشش فقط از «در انتظار» تأیید/پرداخت می‌شود؛ «ردشده» پایانی است.' };
+  const upd = await db.update(student_sponsorships).set({ status })
+    .where(and(eq(student_sponsorships.id, id), eq(student_sponsorships.status, row.status)));
+  if (upd.rowCount !== 1) return { ok: false, error: 'تغییر همزمان — دوباره تلاش کنید.' };
   revalidateStudent(row.studentId);
   return { ok: true };
 }
 
-export async function deleteSponsorshipAction(id: number): Promise<{ ok: boolean }> {
+export async function deleteSponsorshipAction(id: number): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const [row] = await db.select().from(student_sponsorships).where(eq(student_sponsorships.id, id)).limit(1);
   await db.delete(student_sponsorships).where(eq(student_sponsorships.id, id));
   if (row) revalidateStudent(row.studentId);
@@ -184,9 +209,13 @@ export async function addChequeAction(input: {
   note: string;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
 
   const amount = Math.round(num(input.amount));
   if (amount <= 0) return { ok: false, error: 'مبلغ چک باید بزرگ‌تر از صفر باشد' };
+  const sc = await requireStudentScope(input.studentId);
+  if (!sc.ok) return { ok: false, error: sc.error };
 
   const due = clean(input.dueDate);
   if (!due) return { ok: false, error: 'تاریخ سررسید الزامی است — بدون آن یادآوری ممکن نیست' };
@@ -214,6 +243,8 @@ export async function addChequeAction(input: {
 
 export async function clearChequeAction(id: number): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const [row] = await db.select().from(payment_cheques).where(eq(payment_cheques.id, id)).limit(1);
   const result = await clearCheque(id);
   if (row) revalidateStudent(row.studentId);
@@ -225,13 +256,16 @@ export async function setChequeStatusAction(
   status: 'BOUNCED' | 'CANCELLED' | 'PENDING'
 ): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const [row] = await db.select().from(payment_cheques).where(eq(payment_cheques.id, id)).limit(1);
   if (!row) return { ok: false, error: 'چک یافت نشد' };
   if (row.status === 'CLEARED') return { ok: false, error: 'چک وصول‌شده قابل تغییر وضعیت نیست' };
 
-  await db.update(payment_cheques)
+  const upd = await db.update(payment_cheques)
     .set({ status, remindedAt: status === 'PENDING' ? null : row.remindedAt })
-    .where(eq(payment_cheques.id, id));
+    .where(and(eq(payment_cheques.id, id), eq(payment_cheques.status, row.status)));
+  if (upd.rowCount !== 1) return { ok: false, error: 'تغییر همزمان: وضعیت چک توسط کاربر دیگری عوض شده است.' };
 
   revalidateStudent(row.studentId);
   return { ok: true };
@@ -239,6 +273,8 @@ export async function setChequeStatusAction(
 
 export async function deleteChequeAction(id: number): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const [row] = await db.select().from(payment_cheques).where(eq(payment_cheques.id, id)).limit(1);
   if (!row) return { ok: false, error: 'چک یافت نشد' };
   if (row.status === 'CLEARED') return { ok: false, error: 'چک وصول‌شده حذف نمی‌شود؛ در دفتر مالی ثبت شده است' };
@@ -264,9 +300,13 @@ export async function addLoanAction(input: {
   note: string;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
 
   const amount = Math.round(num(input.amount));
   if (amount <= 0) return { ok: false, error: 'مبلغ وام باید بزرگ‌تر از صفر باشد' };
+  const sc = await requireStudentScope(input.studentId);
+  if (!sc.ok) return { ok: false, error: sc.error };
 
   const lender = clean(input.lender);
   if (!lender) return { ok: false, error: 'نام پرداخت‌کنندهٔ وام الزامی است' };
@@ -307,16 +347,23 @@ export async function setLoanStatusAction(
   status: 'ACTIVE' | 'SETTLED' | 'CANCELLED'
 ): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const [row] = await db.select().from(student_loans).where(eq(student_loans.id, id)).limit(1);
   if (!row) return { ok: false, error: 'وام یافت نشد' };
 
-  await db.update(student_loans).set({ status }).where(eq(student_loans.id, id));
+  if (row.status === 'SETTLED' || row.status === 'CANCELLED') return { ok: false, error: 'وام تسویه/ابطال‌شده قابل تغییر نیست.' };
+  const upd = await db.update(student_loans).set({ status })
+    .where(and(eq(student_loans.id, id), eq(student_loans.status, row.status)));
+  if (upd.rowCount !== 1) return { ok: false, error: 'تغییر همزمان: وضعیت وام توسط کاربر دیگری عوض شده است.' };
   revalidateStudent(row.studentId);
   return { ok: true };
 }
 
-export async function deleteLoanAction(id: number): Promise<{ ok: boolean }> {
+export async function deleteLoanAction(id: number): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const [row] = await db.select().from(student_loans).where(eq(student_loans.id, id)).limit(1);
   await db.delete(student_loans).where(eq(student_loans.id, id));
   if (row) revalidateStudent(row.studentId);
@@ -335,9 +382,13 @@ export async function recordLedgerAction(input: {
   description: string;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
 
   const amount = Math.round(num(input.amount));
   if (amount <= 0) return { ok: false, error: 'مبلغ باید بزرگ‌تر از صفر باشد' };
+  const sc = await requireStudentScope(input.studentId);
+  if (!sc.ok) return { ok: false, error: sc.error };
 
   await db.insert(student_ledger).values({
     studentId: input.studentId,
@@ -357,6 +408,11 @@ export async function chargeByFormulaAction(input: {
   termId: number;
 }): Promise<{ ok: boolean; error?: string; amount?: number }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
+
+  const sc = await requireStudentScope(input.studentId);
+  if (!sc.ok) return { ok: false, error: sc.error };
 
   const calc = await computeFormulaTuition(input.studentId, input.termId);
   if (!calc.formula) return { ok: false, error: 'هیچ فرمول تخصیصی با مقطع/رشته/ورودی این دانشجو نمی‌خواند' };
@@ -393,6 +449,8 @@ export async function saveDiscountTypeAction(input: {
   note: string;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
 
   const code = clean(input.code);
   const title = clean(input.title);
@@ -423,6 +481,8 @@ export async function saveDiscountTypeAction(input: {
 
 export async function deleteDiscountTypeAction(id: number): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const used = await db.select({ id: student_discounts.id }).from(student_discounts)
     .where(eq(student_discounts.discountTypeId, id)).limit(1);
   if (used.length) return { ok: false, error: 'این نوع تخفیف به دانشجو تخصیص یافته؛ به‌جای حذف، غیرفعالش کنید' };
@@ -442,6 +502,8 @@ export async function saveSponsorAction(input: {
   note: string;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
 
   const code = clean(input.code);
   const title = clean(input.title);
@@ -468,6 +530,8 @@ export async function saveSponsorAction(input: {
 
 export async function deleteSponsorAction(id: number): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const used = await db.select({ id: student_sponsorships.id }).from(student_sponsorships)
     .where(eq(student_sponsorships.sponsorId, id)).limit(1);
   if (used.length) return { ok: false, error: 'این بنیاد پوشش ثبت‌شده دارد؛ به‌جای حذف، غیرفعالش کنید' };
@@ -494,6 +558,8 @@ export async function saveFormulaAction(input: {
   note: string;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
 
   const code = clean(input.code);
   const title = clean(input.title);
@@ -532,8 +598,10 @@ export async function saveFormulaAction(input: {
   return { ok: true };
 }
 
-export async function deleteFormulaAction(id: number): Promise<{ ok: boolean }> {
+export async function deleteFormulaAction(id: number): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   await db.delete(tuition_formulas).where(eq(tuition_formulas.id, id));
   revalidatePath('/admin/finance/rules');
   return { ok: true };
@@ -553,6 +621,8 @@ export async function saveLoanProductAction(input: {
   note: string;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
 
   const code = clean(input.code);
   const title = clean(input.title);
@@ -591,6 +661,8 @@ export async function saveLoanProductAction(input: {
 
 export async function deleteLoanProductAction(id: number): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const used = await db.select({ id: student_loans.id }).from(student_loans)
     .where(eq(student_loans.loanProductId, id)).limit(1);
   if (used.length) return { ok: false, error: 'این نوع وام به دانشجو تخصیص یافته؛ به‌جای حذف، غیرفعالش کنید' };
