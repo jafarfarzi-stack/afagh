@@ -435,7 +435,7 @@ resolveApplicableCurriculum(student, term):
 | فاز | تحویلی | اندازهٔ تقریبی |
 |---|---|---|
 | **۱ — Domain Model** | ✅ **انجام شد**: `src/lib/curriculum-types.ts` + `src/lib/curriculum-resolution.ts` + `tests/curriculum-domain.test.ts` (۵۱ تست سبز — ماشین حالت، کدگذاری نسخه، نرمال‌سازی درخت، Resolution) | ~۴۰۰ خط |
-| **۲ — DB** | ۱ Migration نسخه‌دار: rename `syllabuses`+`syllabus_courses`، ستون‌های جدید، ۲ جدول جدید (`curriculum_tracks`, `curriculum_approvals`)، UNIQUE جزئی، ایندکس‌ها + به‌روزرسانی ۲۷ رفرنس + `pg-hardening.sql` | ~۴۰۰ خط |
+| **۲ — DB** | ✅ **انجام شد**: `drizzle/0002_curriculum_versions.sql` (۵۴ statement — rename + بازپرشدن داده + ۴ جدول/۲ جدول جدید + قیدهای جزئی/CHECK/FK) + دفترچهٔ `_journal.json` + ۱۷ رفرنس کد + `pg-hardening.sql` (RLS روی approvals) + `scheduling-seed.mjs` — **تأییدشده روی PostgreSQL واقعی (۲۳ آزمون PGlite)** | ~۵۵۰ خط |
 | **۳ — Server Actions** | `curriculum-actions.ts` با ۱۸ اقدام + پر کردن `audit_logs` | ~۷۰۰ خط |
 | **۴ — Validation Engine** | `curriculum-validator.ts` (۱۰ چک) + `tests/curriculum-validator.test.ts` | ~۵۰۰ + تست |
 | **۵ — اتصال Enroll/Graduation** | `resolveApplicableCurriculum` + وصلهٔ ۳ موتور + تست regression | ~۱۵۰ خط |
@@ -448,7 +448,7 @@ resolveApplicableCurriculum(student, term):
 
 | # | تصمیم | گزینه‌ها | پیشنهاد | اثر |
 |---|---|---|---|---|
-| **D1** | نام جدول: `syllabuses` یا `curriculum_versions`؟ | حفظ / rename | **rename** (۲۷ رفرنس، مکانیکی) | نام Domain صحیح؛ مهاجرت نسخه‌دار |
+| **D1** | نام جدول: `syllabuses` یا `curriculum_versions`؟ | حفظ / rename | ✅ **تصمیم گرفته شد (rename)** — مهاجرت ۰۰۰۲ با بازپرشدن کامل داده | اعمال‌شده |
 | **D2** | پیش‌نیازها در `course_rules.logicTree` بمانند یا جدول جدید؟ | موجود / جدید | **موجود** + افزودن `COREQ` و `unitsPassed` | جلوگیری از دو منبع حقیقت |
 | **D3** | واحدها با `numeric(3,1)` بمانند؟ | عدد صحیح / numeric | **numeric** (تغییر نوع = شکستن ۳ موتور؛ عملیات‌ها روی ×۱۰ عدد صحیح) | عدم regression |
 | **D4** | `curriculum_tracks` فوراً یا با دادهٔ Mock `tracks[]`؟ | فوراً / بعداً | **فوراً** (جدول کوچک؛ ریشهٔ Mock در Client را قطع می‌کند) | − |

@@ -2,7 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, cart_items, course_offerings, course_rules, courses, degree_level_configs,
-  enrollments, financial_clearances, notifications, schedules, students, syllabuses,
+  enrollments, financial_clearances, notifications, schedules, students, curriculum_versions,
 } from '@/db/schema';
 import { withUserRls } from '@/db';
 import { atomicSeat, nextWaitlistPosition, warmupCapacities } from './waitingRoom';
@@ -90,13 +90,13 @@ export async function buildPrereqContext(studentId: number): Promise<PrereqConte
   const defaultPassing = Number(deg?.defaultPassingGrade ?? 10);
 
   const allRules = await db.select().from(course_rules);
-  const syllRows = await db.select().from(syllabuses);
+  const versionRows = await db.select().from(curriculum_versions);
 
   // اورراید نمرهٔ قبولی هر درس (اولین قاعدهٔ دارای customPassingGrade)
   const overrides = new Map<number, number>();
   for (const r of allRules) if (r.customPassingGrade != null && !overrides.has(r.courseId)) overrides.set(r.courseId, Number(r.customPassingGrade));
 
-  // قاعدهٔ مؤثر: سیلابسیِ منطبق (رشته + بازهٔ ورودی) مقدم بر عمومی
+  // قاعدهٔ مؤثر: قاعدهٔ مقیّد به «نسخهٔ برنامهٔ درسی» (رشته + بازهٔ ورودی) مقدم بر عمومی
   const globalRule = new Map<number, LogicNode>();
   const scopedRule = new Map<number, LogicNode>();
   for (const r of allRules) {
@@ -104,10 +104,10 @@ export async function buildPrereqContext(studentId: number): Promise<PrereqConte
     let applies = false; let scoped = false;
     if (r.syllabusId == null) { applies = true; scoped = false; }
     else {
-      const sy = syllRows.find(s => s.id === r.syllabusId);
-      applies = !!stu && !!sy && sy.majorId != null && stu.majorId === sy.majorId
-        && stu.entryYear >= (sy.entryYearStart ?? 0)
-        && (sy.entryYearEnd == null || stu.entryYear <= sy.entryYearEnd);
+      const ver = versionRows.find(v => v.id === r.syllabusId);
+      applies = !!stu && !!ver && ver.majorId != null && stu.majorId === ver.majorId
+        && stu.entryYear >= (ver.entryYearFrom ?? 0)
+        && (ver.entryYearTo == null || stu.entryYear <= ver.entryYearTo);
       scoped = true;
     }
     if (!applies) continue;

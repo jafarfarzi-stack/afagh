@@ -4,7 +4,8 @@
 //  SQLite→PG مستقیم باشد. لایهٔ سخت‌سازی (ایندکس/پارتیشن/RLS — سند §۲۰۹۳–۲۲۴۰)
 //  → src/db/pg-hardening.sql
 // ══════════════════════════════════════════════════════════════════════
-import { pgTable, serial, integer, varchar, text, timestamp, date, time, numeric, jsonb, unique, primaryKey, index, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, serial, integer, varchar, text, timestamp, date, time, numeric, jsonb, unique, primaryKey, index, check, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 export const roles = pgTable('roles', {
   id: serial('id').primaryKey(),
@@ -225,26 +226,99 @@ export const courses = pgTable('courses', {
   locationType: varchar('locationType', { length: 20 }).default('IN_CAMPUS')        // IN_CAMPUS | OUT_CAMPUS (مهارتی/ورزشی خارج دانشگاه)
 });
 
-export const syllabuses = pgTable('syllabuses', {
+/** گرایش‌های برنامهٔ درسی (مثلاً «هوش مصنوعی و رباتیک») — جایگزین tracks[] Mock در Client قدیم (D4) */
+export const curriculum_tracks = pgTable('curriculum_tracks', {
   id: serial('id').primaryKey(),
-  majorId: integer('majorId').references(() => majors.id),
-  entryYearStart: integer('entryYearStart').notNull(),
-  entryYearEnd: integer('entryYearEnd'),
-  minTotalUnitsToGraduate: integer('minTotalUnitsToGraduate')
-});
+  majorId: integer('majorId').notNull().references(() => majors.id),
+  title: varchar('title', { length: 100 }).notNull(),
+  code: varchar('code', { length: 20 }),              // کد سازمانی گرایش
+  isActive: integer('isActive').default(1)
+}, (t) => ({
+  uqTrack: unique('uq_curriculum_tracks_major_title').on(t.majorId, t.title),
+}));
 
-export const syllabus_courses = pgTable('syllabus_courses', {
+/**
+ * نسخهٔ برنامهٔ درسی (ارتقای syllabuses — تصمیم D1).
+ *
+ * چرخهٔ حیات (تصمیم D1/D2 همان سند طراحی):
+ *   DRAFT → REVIEW → APPROVED → PUBLISHED → ARCHIVED
+ * قاعدهٔ طلایی: نسخهٔ تأییدشده هرگز Mutable نیست؛ تغییر = نسخهٔ جدید (1404-R1).
+ * ویرایش فقط در DRAFT مجاز است (curriculum-types.canEditStatus).
+ *
+ * ⚠ قیدهای یکتاییِ محافظت‌شده در برابر trackId NULL (coalesce) و «فقط یک
+ *   PUBLISHED فعال به ازای هر رشته/مقطع/گرایش» در فایل مهاجرت (drizzle/0002_*.sql)
+ *   به‌صورت ایندکس جزئی اعمال می‌شوند — در schema.ts عمداً نیستند چون Drizzle
+ *   روی کوئری `sql` قید جزئی (partial/expression) پشتیبانی کامل ندارد.
+ */
+export const curriculum_versions = pgTable('curriculum_versions', {
   id: serial('id').primaryKey(),
-  syllabusId: integer('syllabusId').notNull().references(() => syllabuses.id),
+  majorId: integer('majorId').notNull().references(() => majors.id),
+  degreeLevelId: integer('degreeLevelId').notNull().references(() => degree_level_configs.id),
+  trackId: integer('trackId').references(() => curriculum_tracks.id),   // NULL = گرایش آزاد
+  versionCode: varchar('versionCode', { length: 20 }).notNull(),        // «1404» یا «1404-R1»
+  title: varchar('title', { length: 150 }).notNull(),                   // «برنامهٔ مهندسی نرم‌افزار ۱۴۰۴»
+  status: varchar('status', { length: 20 }).notNull().default('DRAFT'), // DRAFT|REVIEW|APPROVED|PUBLISHED|ARCHIVED
+  entryYearFrom: integer('entryYearFrom').notNull(),                    // بازهٔ ورودی: از
+  entryYearTo: integer('entryYearTo'),                                  // بازهٔ ورودی: تا (NULL = به بعد)
+  effectiveFrom: varchar('effectiveFrom', { length: 10 }),              // تاریخ مصوبه (شمسی)
+  effectiveTo: varchar('effectiveTo', { length: 10 }),
+  totalRequiredUnits: numeric('totalRequiredUnits', { precision: 5, scale: 1 }).notNull().default('0'),
+  maxUnitsPerTerm: integer('maxUnitsPerTerm'),                          // override سقف واحد ترم (NULL = از degree_level_configs)
+  // آخرین رویداد تأیید (append-only). به‌دلیل ارجاع دوریِ (versions ↔ approvals)
+  // در Drizzle عمداً بدون .references تعریف شده؛ FK واقعی در مهاجرت 0002 است.
+  approvalId: integer('approvalId'),
+  createdByStaffId: integer('createdByStaffId').references(() => staff.id),
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow()
+}, (t) => ({
+  statusCheck: check('curriculum_versions_status_check', sql`${t.status} in ('DRAFT','REVIEW','APPROVED','PUBLISHED','ARCHIVED')`),
+}));
+
+/** دروسِ هر نسخهٔ برنامه (ارتقای syllabus_courses) */
+export const curriculum_courses = pgTable('curriculum_courses', {
+  id: serial('id').primaryKey(),
+  curriculumVersionId: integer('curriculumVersionId').notNull().references(() => curriculum_versions.id),
   courseId: integer('courseId').notNull().references(() => courses.id),
-  semesterNo: integer('semesterNo')
-});
+  roleType: varchar('roleType', { length: 20 }).notNull().default('CORE'), // CORE|MAJOR|ELECTIVE|GENERAL|THESIS|INTERNSHIP|WORKSHOP
+  units: numeric('units', { precision: 3, scale: 1 }),                   // NULL = همان courses.units
+  theoryUnits: numeric('theoryUnits', { precision: 3, scale: 1 }),
+  practicalUnits: numeric('practicalUnits', { precision: 3, scale: 1 }),
+  isRequired: integer('isRequired').default(1),
+  isElective: integer('isElective').default(0),
+  isGraduationRequired: integer('isGraduationRequired').default(0),     // شرط الزامی فارغ‌التحصیلی
+  recommendedSemester: integer('recommendedSemester'),                   // ۱..۸ (NULL = آزاد/نامشخص)
+  minGrade: numeric('minGrade', { precision: 4, scale: 2 }),             // کف قبولیِ خاص این درس در این نسخه
+  autoCorequisiteAllowed: integer('autoCorequisiteAllowed').default(0)   // «هم‌نیاز خودکار ترم آخر» (آیین‌نامه)
+}, (t) => ({
+  uqCourse: unique('uq_curriculum_courses_version_course').on(t.curriculumVersionId, t.courseId),
+  semIdx: index('curriculum_courses_semester_idx').on(t.curriculumVersionId, t.recommendedSemester),
+  roleCheck: check('curriculum_courses_role_check', sql`${t.roleType} in ('CORE','MAJOR','ELECTIVE','GENERAL','THESIS','INTERNSHIP','WORKSHOP')`),
+}));
+
+/**
+ * چرخهٔ تأیید نسخهٔ برنامه — جدول append-only؛ هر گذارِ وضعیت دقیقاً یک ردیف.
+ * (Audit دانشگاه: چه‌کسی، چه زمانی، از چه وضعیتی به کدام — با امضای الکترونیک اختیاری)
+ */
+export const curriculum_approvals = pgTable('curriculum_approvals', {
+  id: serial('id').primaryKey(),
+  curriculumVersionId: integer('curriculumVersionId').notNull().references(() => curriculum_versions.id),
+  approvalType: varchar('approvalType', { length: 20 }).notNull(), // DRAFT_SUBMIT|HEAD_APPROVE|COUNCIL_APPROVE|REJECT|PUBLISH|ARCHIVE|CREATE_REVISION
+  fromStatus: varchar('fromStatus', { length: 20 }),
+  toStatus: varchar('toStatus', { length: 20 }).notNull(),          // CHECK در مهاجرت با مقادیر وضعیت
+  approvedByStaffId: integer('approvedByStaffId').notNull().references(() => staff.id),
+  approvedByUserId: integer('approvedByUserId').notNull().references(() => users.id),
+  decisionNote: text('decisionNote'),
+  approvedAt: timestamp('approvedAt').defaultNow(),
+  signatureDocumentId: integer('signatureDocumentId').references(() => electronic_documents.id)
+}, (t) => ({
+  versionIdx: index('curriculum_approvals_version_idx').on(t.curriculumVersionId, t.approvedAt),
+}));
 
 export const course_rules = pgTable('course_rules', {
   id: serial('id').primaryKey(),
   courseId: integer('courseId').notNull().references(() => courses.id),
-  syllabusId: integer('syllabusId').references(() => syllabuses.id),
-  ruleType: varchar('ruleType', { length: 20 }).notNull(),
+  syllabusId: integer('syllabusId').references(() => curriculum_versions.id), // نام ستون حفظ شده (تصمیم D2) — مقیّدسازی قاعده به نسخهٔ برنامه
+  ruleType: varchar('ruleType', { length: 20 }).notNull(), // PREREQ | COREQ | UNIT_BOUNDARY | EQUIV_OVERRIDE
   logicTree: text('logicTree').notNull(),
   customPassingGrade: numeric('customPassingGrade', { precision: 4, scale: 2 })
 });

@@ -388,7 +388,7 @@ export async function listPoolShifts(termId: number, facultyId?: number) {
 
 /**
  * متقاضیان واقعی درس (یا کل خوشهٔ هم‌ارز): دانشجویان فعالی که چارت‌شان
- * (syllabus ورودی/رشته) شامل درس است، منهای پاس‌شده‌ها (نمرهٔ قطعی ≥ ۱۰
+ * (نسخهٔ برنامهٔ درسیِ ورودی/رشته) شامل درس است، منهای پاس‌شده‌ها (نمرهٔ قطعی ≥ ۱۰
  * روی هر کد هم‌ارز). خروجی به تفکیک دانشکده + تعداد گروه پیشنهادی.
  */
 export async function forecastCourseDemand(courseId: number, standardCapacity = 40) {
@@ -408,9 +408,9 @@ export async function forecastCourseDemand(courseId: number, standardCapacity = 
     select distinct s.id as "studentId", m."facultyId"
     from students s
     join majors m on m.id = s."majorId"
-    join syllabuses sy on sy."majorId" = m.id
-      and s."entryYear" between sy."entryYearStart" and coalesce(sy."entryYearEnd", 9999)
-    join syllabus_courses sc on sc."syllabusId" = sy.id
+    join curriculum_versions cv on cv."majorId" = m.id
+      and s."entryYear" between cv."entryYearFrom" and coalesce(cv."entryYearTo", 9999)
+    join curriculum_courses sc on sc."curriculumVersionId" = cv.id
     where s.status = 'ACTIVE' and sc."courseId" in (${memberIn})
   `);
   const needingRows = (needing.rows as { studentId: number; facultyId: number | null }[]);

@@ -10,7 +10,7 @@ import {
   course_offerings,
   courses,
   academic_terms,
-  syllabuses,
+  curriculum_versions,
   student_requests,
 } from '@/db/schema';
 import {
@@ -192,25 +192,25 @@ export async function evaluateStudentRegulationStatus(
   const isSummer = currentTerm?.isSummer === 1;
 
   // ── موج دوم: آیین‌نامه، چارت درسی و کارنامه؛ هر سه مستقل‌اند و موازی اجرا می‌شوند ──
-  const [config, syllabusRows, studentEnrollments] = await Promise.all([
+  const [config, versionRows, studentEnrollments] = await Promise.all([
     getRegulationConfig(stu.regulationId, stu.degreeLevelId),
     stu.majorId
       ? db
-          .select({ minTotalUnitsToGraduate: syllabuses.minTotalUnitsToGraduate })
-          .from(syllabuses)
+          .select({ totalRequiredUnits: curriculum_versions.totalRequiredUnits })
+          .from(curriculum_versions)
           .where(
             and(
-              eq(syllabuses.majorId, stu.majorId),
-              sql`${syllabuses.entryYearStart} <= ${stu.entryYear}`,
+              eq(curriculum_versions.majorId, stu.majorId),
+              sql`${curriculum_versions.entryYearFrom} <= ${stu.entryYear}`,
               or(
-                sql`${syllabuses.entryYearEnd} is null`,
-                sql`${syllabuses.entryYearEnd} >= ${stu.entryYear}`
+                sql`${curriculum_versions.entryYearTo} is null`,
+                sql`${curriculum_versions.entryYearTo} >= ${stu.entryYear}`
               )
             )
           )
-          .orderBy(desc(syllabuses.entryYearStart))
+          .orderBy(desc(curriculum_versions.entryYearFrom))
           .limit(1)
-      : Promise.resolve([] as { minTotalUnitsToGraduate: number | null }[]),
+      : Promise.resolve([] as { totalRequiredUnits: string | null }[]),
     db
       .select({
         id: enrollments.id,
@@ -231,10 +231,10 @@ export async function evaluateStudentRegulationStatus(
       .where(eq(enrollments.studentId, studentId)),
   ]);
 
-  // محاسبه کل واحدهای لازم از چارت (یا مقدار پیش‌فرض مقطع)
+  // محاسبه کل واحدهای لازم از نسخهٔ برنامه (یا مقدار پیش‌فرض مقطع)
   let totalRequiredUnits = deg?.code?.includes('MASTER') || deg?.title?.includes('ارشد') ? 32 : 140;
-  if (syllabusRows[0]?.minTotalUnitsToGraduate) {
-    totalRequiredUnits = syllabusRows[0].minTotalUnitsToGraduate!;
+  if (versionRows[0]?.totalRequiredUnits) {
+    totalRequiredUnits = Number(versionRows[0].totalRequiredUnits);
   }
 
   const passingGrade = config.grading_and_gpa.default_passing_grade || (deg ? Number(deg.defaultPassingGrade) : 10);

@@ -277,7 +277,7 @@ export interface CurriculumApproval {
   signatureDocumentId: number | null; // امضای الکترونیک (مکانیزم موجود پروژه)
 }
 
-/** آینهٔ course_rules — مقیّد به نسخه از طریق curriculumVersionId (ستون syllabusId آینده) */
+/** آینهٔ course_rules — مقیّد به نسخه از طریق ستون syllabusId (= curriculum_versions.id)؛ نام ستون طبق تصمیم D2 حفظ شده */
 export interface CurriculumCourseRule {
   id: number;
   courseId: number;

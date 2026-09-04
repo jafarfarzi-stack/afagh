@@ -1,5 +1,5 @@
 import { and, asc, eq } from 'drizzle-orm';
-import { courses, degree_level_configs, enrollments, majors, syllabuses, syllabus_courses } from '@/db/schema';
+import { courses, degree_level_configs, enrollments, majors } from '@/db/schema';
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import Link from 'next/link';

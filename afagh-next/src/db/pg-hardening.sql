@@ -82,7 +82,8 @@ ALTER TABLE "request_parallel_checkpoints" ENABLE ROW LEVEL SECURITY;
 --    دادهٔ خام پذیرش، پاسخ‌های ارزشیابی بدون کلید کاربر).
 REVOKE SELECT ON "system_settings", "integrations_config", "audit_logs", "api_audit_logs",
              "admissions_staging", "sanjesh_mappings", "evaluation_responses",
-             "verification_otps", "step_api_actions", "document_signatures"
+             "verification_otps", "step_api_actions", "document_signatures",
+             "curriculum_approvals"
   FROM afagh_app;
 ALTER TABLE "system_settings" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "integrations_config" ENABLE ROW LEVEL SECURITY;
@@ -94,6 +95,8 @@ ALTER TABLE "evaluation_responses" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "verification_otps" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "step_api_actions" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "document_signatures" ENABLE ROW LEVEL SECURITY;
+-- چرخهٔ تأیید برنامهٔ درسی: دفتر ممیزیِ فقط-مالک (بدون سیاست = deny-all برای نقش اپ)
+ALTER TABLE "curriculum_approvals" ENABLE ROW LEVEL SECURITY;
 
 -- ══ ۳) سیاست‌های خواندن (SELECT) — تعریف مشترک uid ══
 -- uid = nullif(current_setting('app.user_id', true), '')::int

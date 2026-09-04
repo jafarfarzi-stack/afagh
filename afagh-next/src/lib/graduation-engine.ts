@@ -6,7 +6,7 @@ import {
   academic_terms, alumni_profiles, clearance_checklist, clearance_departments,
   course_offerings, courses, degree_level_configs, enrollments, graduation_audits,
   issued_degrees, majors, notifications, students, student_ledger,
-  syllabus_courses, syllabuses, users,
+  curriculum_courses, curriculum_versions, users,
 } from '@/db/schema';
 import { getBool, getNumber, getSetting } from '@/lib/settings';
 import { executeIrandocCheck } from '@/lib/api-integrations';
@@ -143,25 +143,25 @@ export async function auditStudent(studentId: number): Promise<AuditResult | nul
   }
   const gpa = acc.rounded();
 
-  // سرفصل مصوب
+  // نسخهٔ برنامهٔ درسی مصوب (سرفصل)
   const [syl] = row.majorId
-    ? await db.select().from(syllabuses).where(and(
-        eq(syllabuses.majorId, row.majorId),
-        sql`${syllabuses.entryYearStart} <= ${row.entryYear}`,
-        sql`(${syllabuses.entryYearEnd} is null or ${syllabuses.entryYearEnd} >= ${row.entryYear})`,
-      )).orderBy(desc(syllabuses.entryYearStart)).limit(1)
+    ? await db.select().from(curriculum_versions).where(and(
+        eq(curriculum_versions.majorId, row.majorId),
+        sql`${curriculum_versions.entryYearFrom} <= ${row.entryYear}`,
+        sql`(${curriculum_versions.entryYearTo} is null or ${curriculum_versions.entryYearTo} >= ${row.entryYear})`,
+      )).orderBy(desc(curriculum_versions.entryYearFrom)).limit(1)
     : [];
 
   const reasons: string[] = [];
   const missing: { code: string; title: string; units: number }[] = [];
-  let requiredUnits = Number(syl?.minTotalUnitsToGraduate ?? 0);
+  let requiredUnits = Number(syl?.totalRequiredUnits ?? 0);
 
   if (syl) {
     const req = await db.select({
-      courseId: syllabus_courses.courseId, code: courses.code, title: courses.title, units: courses.units,
-    }).from(syllabus_courses)
-      .innerJoin(courses, eq(courses.id, syllabus_courses.courseId))
-      .where(eq(syllabus_courses.syllabusId, syl.id));
+      courseId: curriculum_courses.courseId, code: courses.code, title: courses.title, units: courses.units,
+    }).from(curriculum_courses)
+      .innerJoin(courses, eq(courses.id, curriculum_courses.courseId))
+      .where(eq(curriculum_courses.curriculumVersionId, syl.id));
     for (const r of req) {
       if (!passedIds.has(r.courseId)) missing.push({ code: r.code, title: r.title, units: Number(r.units ?? 0) });
     }
