@@ -24,11 +24,11 @@ export type Entity =
   | 'student' | 'course' | 'term' | 'enrollment' | 'ledger' | 'clearance';
 export const ENTITIES: { id: Entity; title: string; sample: string }[] = [
   { id: 'faculty', title: 'دانشکده‌ها', sample: 'کد دانشکده, نام دانشکده' },
-  { id: 'department', title: 'گروه‌های آموزشی', sample: 'کد گروه, نام گروه, دانشکده' },
-  { id: 'major', title: 'رشته‌ها و گرایش‌ها', sample: 'کد رشته, نام رشته, مقطع, گروه آموزشی, دانشکده, گرایش, حداقل واحد, کد استاندارد, تاریخ تاسیس, فعال' },
+  { id: 'department', title: 'گروه‌های آموزشی', sample: 'کد گروه, نام گروه, کد دانشکده, نام دانشکده' },
+  { id: 'major', title: 'رشته‌ها و گرایش‌ها', sample: 'کد رشته, نام رشته, کد مقطع, مقطع, کد گروه آموزشی, نام گروه آموزشی, کد دانشکده, نام دانشکده, گرایش, حداقل واحد, کد استاندارد, تاریخ تاسیس, فعال' },
   { id: 'professor', title: 'اطلاعات استادان', sample: 'کد استادی, کد ملی, نام, نام خانوادگی, لقب, گروه آموزشی, دانشکده, مرتبه علمی, مدرک, طریقه همکاری, تاریخ استخدام, رشته و گرایش, موبایل' },
-  { id: 'student', title: 'دانشجویان (هویت + پرونده)', sample: 'کد ملی, نام, نام خانوادگی, شماره دانشجویی, سال ورود, مقطع, رشته, وضعیت, شماره شناسنامه, نام پدر, تاریخ تولد, محل تولد, جنسیت' },
-  { id: 'course', title: 'دروس', sample: 'کد درس, نام درس, واحد, واحد نظری, واحد عملی, نوع, مقطع, گروه آموزشی' },
+  { id: 'student', title: 'دانشجویان (هویت + پرونده)', sample: 'کد ملی, نام, نام خانوادگی, شماره دانشجویی, سال ورود, کد رشته, نام رشته, کد مقطع, مقطع, وضعیت, شماره شناسنامه, نام پدر, تاریخ تولد, محل تولد, جنسیت' },
+  { id: 'course', title: 'دروس', sample: 'کد درس, نام درس, واحد, واحد نظری, واحد عملی, نوع, کد مقطع, مقطع, کد گروه آموزشی, نام گروه آموزشی' },
   { id: 'term', title: 'ترم‌ها', sample: 'کد ترم, عنوان ترم, ترم جاری' },
   { id: 'enrollment', title: 'ثبت‌نام‌ها و نمرات (آموزشی)', sample: 'شماره دانشجویی, کد درس, کد ترم, نمره, وضعیت نمره' },
   { id: 'ledger', title: 'صورتحساب دانشجویان (مالی)', sample: 'شماره دانشجویی, کد ترم, نوع, مبلغ, شرح, تاریخ' },
@@ -110,8 +110,12 @@ export function prepare(entity: Entity, tables: Table[], fileName: string): Prep
       const last = get(['نام خانوادگی', 'نامخانوادگی', 'last_name', 'lastname']);
       const code = get(['شماره دانشجویی', 'شمارهدانشجویی', 'student_code', 'studentcode']);
       const entryYear = num(get(['سال ورود', 'ورودی', 'entry_year']));
-      const majorName = get(['رشته', 'گرایش', 'major']);
+      const majorName = get(['نام رشته', 'رشته', 'گرایش', 'major']);
+      // ⭐ «کد رشته» سند اصالت است: نام رشته می‌تواند در دو مقطع یا دو دانشکده
+      //    تکرار شود، ولی کد یکتاست و مقطع/گروه/دانشکده را هم مشخص می‌کند.
+      const majorCode = get(['کد رشته', 'کدرشته', 'major_code']);
       const degreeName = get(['مقطع', 'مقطع تحصیلی', 'سطح', 'degree', 'degree_level']);
+      const degreeCode = get(['کد مقطع', 'کد مقطع تحصیلی', 'degree_code', 'degree_level_code']);
       const statusFa = get(['وضعیت']) || 'فعال';
       // اطلاعات شناسنامه‌ای (اختیاری در فایل قدیمی، ولی برای اسناد رسمی لازم است)
       const birthCertNo = get(['شماره شناسنامه', 'شمارهشناسنامه', 'birth_cert_no', 'shenasname']);
@@ -130,12 +134,16 @@ export function prepare(entity: Entity, tables: Table[], fileName: string): Prep
       if (chk === 'checksum') warn(`چک‌سام کد ملی ${nc} منطبق نیست (ثبت می‌شود — در سیستم قدیمی هم رایج است).`);
       if (!/^\d{8,14}$/.test(code)) return err(`شماره دانشجویی نامعتبر: ${code}`);
       if (!entryYear || entryYear < 1330 || entryYear > 1410) warn(`سال ورود نامعمول: ${entryYear}`);
-      if (!degreeName) warn(`مقطع ذکر نشده — رشته ممکن است با مقطع دیگر هم‌نام باشد و اشتباه تطبیق یابد.`);
+      if (!majorCode && !majorName) warn('نه «کد رشته» و نه «نام رشته» در این سطر نیست — دانشجو بدون رشته ثبت می‌شود.');
+      if (!majorCode && majorName && !degreeName && !degreeCode)
+        warn(`رشتهٔ «${majorName}» فقط با نام می‌آید (بدون «کد رشته» و بدون مقطع) — اگر رشتهٔ هم‌نامی در مقطع یا دانشکدهٔ دیگر باشد، خطر تطبیق اشتباه هست.`);
+      else if (!degreeName && !degreeCode) warn(`مقطع ذکر نشده — رشته ممکن است با مقطع دیگر هم‌نام باشد و اشتباه تطبیق یابد.`);
       const status = STUDENT_STATUS[statusFa] ?? (/^[A-Z_]+$/.test(statusFa) ? statusFa : 'ACTIVE');
       const gender = GENDER[genderFa ?? ''] ?? (/^(MALE|FEMALE)$/i.test(genderFa ?? '') ? (genderFa as string).toUpperCase() : null);
       rows.push({
         nationalCode: nc, firstName: first, lastName: last, studentCode: code,
-        entryYear: entryYear ?? 1400, majorName, degreeName: degreeName || null, status,
+        entryYear: entryYear ?? 1400, majorName, majorCode: majorCode || null,
+        degreeName: degreeName || null, degreeCode: degreeCode || null, status,
         birthCertNo: birthCertNo || null, birthCertSeries: birthCertSeries || null,
         placeOfBirth: placeOfBirth || null, placeOfIssue: placeOfIssue || null,
         birthDate: birthDate ?? null, fatherName: fatherName || null, gender, address: address || null,
@@ -298,11 +306,19 @@ export async function commit(
     const degreeMap = await resolverFor(sourceCode, 'DEGREE');     // میز تطبیق مقطع
     const statusMap = await resolverFor(sourceCode, 'STUDENT_STATUS');
     for (const r of rows) {
-      const mKey = norm(String(r.majorName));
-      // ── حل مقطع: از میز تطبیق، سپس تطبیق عنوان/کد با degree_level_configs ──
+      const mKey = norm(String(r.majorName ?? ''));
+      const mCode = norm(String(r.majorCode ?? ''));
+      // ── حل مقطع: کد مقطع مقدم بر عنوان مقطع ──
+      const dCode = norm(String(r.degreeCode ?? ''));
       const dKey = norm(String(r.degreeName ?? ''));
       let degree: (typeof degreeRows)[number] | null = null;
-      if (dKey) {
+      if (dCode) {
+        degree = degreeRows.find(d => norm(d.code) === dCode)
+          ?? (degreeMap.get(dCode)?.id ? degreeRows.find(d => d.id === degreeMap.get(dCode)!.id) : null)
+          ?? null;
+        if (!degree) report.warnings.push({ row: 0, msg: `کد مقطع «${r.degreeCode}» شناخته نشد — در میز «تطبیق کدها» دامنهٔ «مقطع تحصیلی» را کامل کنید.` });
+      }
+      if (!degree && dKey) {
         degree = (degreeMap.get(dKey)?.id ? degreeRows.find(d => d.id === degreeMap.get(dKey)!.id) : null)
           ?? degreeRows.find(d => norm(d.title) === dKey)
           ?? degreeRows.find(d => norm(d.code) === dKey)
@@ -311,14 +327,35 @@ export async function commit(
       }
       const degId = degree?.id ?? null;
 
-      // ── تطبیق رشته با در نظر گرفتن مقطع (یک رشته ممکن است در دو مقطع هم‌نام باشد) ──
-      const mapped = majorMap.get(mKey);
+      // ── تطبیق رشته: «کد رشته» قطعی است و بر نام مقدم ──
+      //    نام فقط وقتی به کار می‌آید که کد نیامده باشد، و آن هم مقیدِ مقطع.
       const sameDegree = (m: (typeof majorRows)[number]) => degId == null || m.degreeLevelId === degId;
-      const major = (mapped?.id ? majorRows.find(m => m.id === mapped.id) : null)
-        ?? majorRows.find(m => norm(m.name) === mKey && sameDegree(m))
-        ?? majorRows.find(m => norm(m.majorCode ?? '') === mKey && sameDegree(m))
-        ?? null;
-      if (String(r.majorName) && !major) report.warnings.push({ row: 0, msg: `رشتهٔ «${r.majorName}»${degId ? ` (مقطع ${r.degreeName})` : ''} تطبیق نخورد — بدون رشته ثبت شد (میز تطبیق کدها).` });
+      let major: (typeof majorRows)[number] | null = null;
+      if (mCode) {
+        major = majorRows.find(m => norm(m.majorCode ?? '') === mCode) ?? null;
+        // میز تطبیق کدها: کد قدیمی → رشتهٔ جدید
+        if (!major) {
+          const byMap = majorMap.get(mCode);
+          if (byMap?.id) major = majorRows.find(m => m.id === byMap.id) ?? null;
+        }
+        if (!major) report.warnings.push({ row: 0, msg: `کد رشتهٔ «${r.majorCode}»${r.majorName ? ` («${r.majorName}»)` : ''} در سامانه نیست — رشته‌ها را وارد کنید یا در میز «تطبیق کدها» دامنهٔ «رشته» را کامل کنید.` });
+        else if (degId != null && major.degreeLevelId !== degId) {
+          // کد و مقطعِ فایل با هم نمی‌خوانند؛ کد را معتبر می‌گیریم ولی صدایش می‌زنیم
+          report.warnings.push({ row: 0, msg: `کد رشتهٔ «${r.majorCode}» در سامانه مقطع دیگری دارد؛ کد ملاک قرار گرفت و مقطع فایل («${r.degreeName}») نادیده شد.` });
+        }
+      }
+      if (!major && mKey) {
+        const mapped = majorMap.get(mKey);
+        const byName = majorRows.filter(m => norm(m.name) === mKey && sameDegree(m));
+        major = (mapped?.id ? majorRows.find(m => m.id === mapped.id) : null)
+          ?? (byName.length === 1 ? byName[0] : null)
+          ?? null;
+        if (!major && byName.length > 1) {
+          report.errors.push({ row: 0, msg: `«${r.majorName}» به چند رشته می‌خورد و «کد رشته» در فایل نیست — تطبیق قطعی ممکن نیست؛ ستون «کد رشته» را به فایل دانشجو اضافه کنید.` });
+        } else if (!major) {
+          report.warnings.push({ row: 0, msg: `رشتهٔ «${r.majorName}»${degId ? ` (مقطع ${r.degreeName})` : ''} تطبیق نخورد — بدون رشته ثبت شد (میز تطبیق کدها).` });
+        }
+      }
 
       // ── آیین‌نامه: متناسب با مقطع و سال ورود (بدون مقدار سخت‌کد) ──
       const entryYr = Number(r.entryYear);
@@ -367,31 +404,79 @@ export async function commit(
   //  (ترتیب واردکردن هم باید همین باشد؛ هر لایه به لایهٔ قبل تکیه دارد)
   // ══════════════════════════════════════════════════════════════
 
-  /** دانشکده را پیدا یا (در صورت نبود) می‌سازد — تطبیق با کد یا نام */
-  async function ensureFaculty(nameOrCode: string | null, auto: boolean): Promise<number | null> {
-    const k = norm(String(nameOrCode ?? ''));
-    if (!k) return null;
+  /**
+   * دانشکده را پیدا یا (در صورت نبود) می‌سازد.
+   *
+   * ترتیب تطبیق عمدی است: **اول کد، بعد نام**. کد سند اصالت است و یکتاست؛
+   * نام ممکن است در دو سازمان/دو مقطع تکرار شود. اگر فقط با نام تطبیق بخورد
+   * هشدار می‌دهیم تا در گزارش انتقال دیده شود.
+   */
+  async function ensureFaculty(name: string | null, code: string | null, auto: boolean): Promise<number | null> {
+    const cKey = norm(String(code ?? ''));
+    const nKey = norm(String(name ?? ''));
+    if (!cKey && !nKey) return null;
     const all = await db.select({ id: faculties.id, name: faculties.name, code: faculties.facultyCode }).from(faculties);
-    const hit = all.find(f => norm(f.code ?? '') === k) ?? all.find(f => norm(f.name) === k);
-    if (hit) return hit.id;
+
+    if (cKey) {
+      const byCode = all.find(f => norm(f.code ?? '') === cKey);
+      if (byCode) return byCode.id;
+    }
+    if (nKey) {
+      const byName = all.filter(f => norm(f.name) === nKey);
+      if (byName.length > 1) {
+        report.errors.push({ row: 0, msg: `چند دانشکده به نام «${name}» هست و «کد دانشکده» در فایل نیامده — تطبیق قطعی ممکن نیست؛ ستون «کد دانشکده» را به فایل اضافه کنید.` });
+        return null;
+      }
+      if (byName.length === 1) {
+        // کد را همین‌جا تکمیل کن تا دفعهٔ بعد تطبیق قطعی باشد
+        if (cKey && !byName[0].code) await db.update(faculties).set({ facultyCode: String(code) }).where(eq(faculties.id, byName[0].id));
+        else if (!cKey) report.warnings.push({ row: 0, msg: `دانشکدهٔ «${name}» فقط با نام تطبیق خورد (کد در فایل نبود).` });
+        return byName[0].id;
+      }
+    }
     if (!auto) return null;
-    const [nf] = await db.insert(faculties).values({ name: String(nameOrCode) }).returning({ id: faculties.id });
-    report.warnings.push({ row: 0, msg: `دانشکدهٔ «${nameOrCode}» در سامانه نبود — خودکار ساخته شد.` });
+    const [nf] = await db.insert(faculties).values({ name: String(name ?? code), facultyCode: code ? String(code) : null }).returning({ id: faculties.id });
+    report.warnings.push({ row: 0, msg: `دانشکدهٔ «${name ?? code}»${code ? ` (کد ${code})` : ' بدون کد'} در سامانه نبود — خودکار ساخته شد.` });
     return nf.id;
   }
 
-  /** گروه آموزشی را پیدا یا می‌سازد — تطبیق با کد یا نام */
-  async function ensureDepartment(nameOrCode: string | null, facultyId: number | null, auto: boolean): Promise<number | null> {
-    const k = norm(String(nameOrCode ?? ''));
-    if (!k) return null;
-    const all = await db.select({ id: departments.id, name: departments.name, code: departments.departmentCode }).from(departments);
-    const hit = all.find(d => norm(d.code ?? '') === k) ?? all.find(d => norm(d.name) === k);
-    if (hit) return hit.id;
+  /**
+   * گروه آموزشی را پیدا یا می‌سازد.
+   *
+   * ⚠️ تطبیق نام **حتماً درون همان دانشکده** انجام می‌شود. پیش‌تر نام در کل
+   * سامانه جستجو می‌شد و «مهندسی کامپیوتر»ِ دانشکدهٔ فنی با «مهندسی کامپیوتر»ِ
+   * دانشکدهٔ علوم یکی گرفته می‌شد — همان اشتباهی که کد قرار است جلویش را بگیرد.
+   */
+  async function ensureDepartment(name: string | null, code: string | null, facultyId: number | null, auto: boolean): Promise<number | null> {
+    const cKey = norm(String(code ?? ''));
+    const nKey = norm(String(name ?? ''));
+    if (!cKey && !nKey) return null;
+    const all = await db.select({ id: departments.id, name: departments.name, code: departments.departmentCode, facultyId: departments.facultyId }).from(departments);
+
+    if (cKey) {
+      const byCode = all.find(d => norm(d.code ?? '') === cKey);
+      if (byCode) return byCode.id;
+    }
+    if (nKey) {
+      // فقط درون دانشکدهٔ داده‌شده؛ اگر دانشکده معلوم نیست، کل سامانه ولی با
+      // شرط یکتا بودن نام — وگرنه ابهام است و باید کد بیاید.
+      const pool = facultyId != null ? all.filter(d => d.facultyId === facultyId) : all;
+      const byName = pool.filter(d => norm(d.name) === nKey);
+      if (byName.length > 1) {
+        report.errors.push({ row: 0, msg: `چند گروه به نام «${name}»${facultyId != null ? ' در این دانشکده' : ''} هست و «کد گروه» در فایل نیامده — تطبیق قطعی ممکن نیست؛ ستون «کد گروه آموزشی» را اضافه کنید.` });
+        return null;
+      }
+      if (byName.length === 1) {
+        if (cKey && !byName[0].code) await db.update(departments).set({ departmentCode: String(code) }).where(eq(departments.id, byName[0].id));
+        else if (!cKey) report.warnings.push({ row: 0, msg: `گروه «${name}» فقط با نام تطبیق خورد (کد در فایل نبود).` });
+        return byName[0].id;
+      }
+    }
     if (!auto) return null;
     const fid = facultyId ?? (await db.select({ id: faculties.id }).from(faculties).limit(1))[0]?.id;
-    if (!fid) { report.errors.push({ row: 0, msg: `گروه «${nameOrCode}» ساخته نشد — هیچ دانشکده‌ای تعریف نشده است؛ اول فایل دانشکده‌ها را وارد کنید.` }); return null; }
-    const [nd] = await db.insert(departments).values({ name: String(nameOrCode), facultyId: fid }).returning({ id: departments.id });
-    report.warnings.push({ row: 0, msg: `گروه آموزشی «${nameOrCode}» در سامانه نبود — خودکار ساخته شد.` });
+    if (!fid) { report.errors.push({ row: 0, msg: `گروه «${name ?? code}» ساخته نشد — هیچ دانشکده‌ای تعریف نشده است؛ اول فایل دانشکده‌ها را وارد کنید.` }); return null; }
+    const [nd] = await db.insert(departments).values({ name: String(name ?? code), facultyId: fid, departmentCode: code ? String(code) : null }).returning({ id: departments.id });
+    report.warnings.push({ row: 0, msg: `گروه آموزشی «${name ?? code}»${code ? ` (کد ${code})` : ' بدون کد'} در سامانه نبود — خودکار ساخته شد.` });
     return nd.id;
   }
 
@@ -412,7 +497,7 @@ export async function commit(
 
   if (entity === 'department') {
     for (const r of rows) {
-      const facultyId = await ensureFaculty(r.facultyName as string | null, true);
+      const facultyId = await ensureFaculty(r.facultyName as string | null, r.facultyCode as string | null, true);
       const all = await db.select({ id: departments.id, name: departments.name, code: departments.departmentCode }).from(departments);
       const k = norm(String(r.code ?? ''));
       const hit = (k ? all.find(d => norm(d.code ?? '') === k) : null) ?? all.find(d => norm(d.name) === norm(String(r.name)));
@@ -450,8 +535,8 @@ export async function commit(
         continue;
       }
 
-      const facultyId = await ensureFaculty(r.facultyName as string | null, true);
-      const departmentId = await ensureDepartment(r.departmentName as string | null, facultyId, true);
+      const facultyId = await ensureFaculty(r.facultyName as string | null, r.facultyCode as string | null, true);
+      const departmentId = await ensureDepartment(r.departmentName as string | null, r.departmentCode as string | null, facultyId, true);
 
       const finalCode = rw.apply(String(r.code));
       if (finalCode !== String(r.code) && !warnedOnce.has('C:' + r.code)) {
@@ -541,8 +626,8 @@ export async function commit(
     };
 
     for (const r of rows) {
-      const facultyId = await ensureFaculty(r.facultyName as string | null, true);
-      const departmentId = await ensureDepartment(r.departmentName as string | null, facultyId, true);
+      const facultyId = await ensureFaculty(r.facultyName as string | null, r.facultyCode as string | null, true);
+      const departmentId = await ensureDepartment(r.departmentName as string | null, r.departmentCode as string | null, facultyId, true);
       const staffCode = String(r.staffCode);
 
       const [dup] = await db.select({ id: staff.id }).from(staff).where(eq(staff.staffCode, staffCode)).limit(1);
@@ -653,23 +738,45 @@ export async function commit(
       }
       return hit?.id ?? null;
     };
-    const resolveDept = (name: string | null): number | null => {
-      const k = norm(String(name ?? ''));
-      if (!k) return null;
-      const mapped = deptMap.get(k)?.id;
-      const hit = (mapped ? deptRows.find(d => d.id === mapped) : null)
-        ?? deptRows.find(d => norm(d.name) === k)
-        ?? deptRows.find(d => norm(d.code ?? '') === k);
-      if (!hit && !warnedOnce.has('P:' + k)) {
-        warnedOnce.add('P:' + k);
+    /**
+     * گروه آموزشی درس — **اول کد، بعد نام**. اگر نام به چند گروه بخورد (مثلاً
+     * «مهندسی کامپیوتر» در دو دانشکده) بدون کد، تطبیق قطعی نیست و به‌جای
+     * حدس‌زدن، درس بدون گروه می‌ماند و خطا گزارش می‌شود.
+     */
+    const resolveDept = (name: string | null, code: string | null): number | null => {
+      const cKey = norm(String(code ?? ''));
+      const nKey = norm(String(name ?? ''));
+      if (cKey) {
+        const byCode = deptRows.find(d => norm(d.code ?? '') === cKey)
+          ?? (deptMap.get(cKey)?.id ? deptRows.find(d => d.id === deptMap.get(cKey)!.id) : null);
+        if (byCode) return byCode.id;
+        if (!warnedOnce.has('PC:' + cKey)) {
+          warnedOnce.add('PC:' + cKey);
+          report.warnings.push({ row: 0, msg: `کد گروه آموزشی «${code}» شناخته نشد — در میز «تطبیق کدها» دامنهٔ «گروه آموزشی» را کامل کنید.` });
+        }
+      }
+      if (!nKey) return null;
+      const mapped = deptMap.get(nKey)?.id;
+      if (mapped) return deptRows.find(d => d.id === mapped)?.id ?? null;
+      const byName = deptRows.filter(d => norm(d.name) === nKey);
+      if (byName.length === 1) return byName[0].id;
+      if (byName.length > 1) {
+        if (!warnedOnce.has('PD:' + nKey)) {
+          warnedOnce.add('PD:' + nKey);
+          report.errors.push({ row: 0, msg: `«${name}» به چند گروه آموزشی می‌خورد و «کد گروه آموزشی» در فایل نیست — ستون کد را اضافه کنید تا درس به گروه درست بچسبد.` });
+        }
+        return null;
+      }
+      if (!warnedOnce.has('P:' + nKey)) {
+        warnedOnce.add('P:' + nKey);
         report.warnings.push({ row: 0, msg: `گروه آموزشی «${name}» تطبیق نخورد — درس‌های مربوطه بدون گروه ثبت شدند؛ در میز «تطبیق کدها» دامنهٔ «گروه آموزشی» را کامل کنید.` });
       }
-      return hit?.id ?? null;
+      return null;
     };
 
     for (const r of rows) {
-      const degreeLevelId = resolveDegree(r.degreeName as string | null);
-      const departmentId = resolveDept(r.deptName as string | null);
+      const degreeLevelId = resolveDegree((r.degreeCode as string | null) || (r.degreeName as string | null));
+      const departmentId = resolveDept(r.deptName as string | null, r.deptCode as string | null);
       const rawType = r.courseType ? String(r.courseType) : null;
       const courseType = rawType ? (typeMap.get(norm(rawType))?.code ?? rawType) : null;
 

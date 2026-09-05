@@ -21,6 +21,7 @@ export type DeptRow = {
   isActive: boolean;
   facultyId: number;
   facultyName: string;
+  facultyCode: string | null;
   headStaffId: number | null;
   headName: string | null;
   headUserId: number | null;
@@ -40,6 +41,7 @@ export async function listDepartments(): Promise<DeptRow[]> {
       isActive: departments.isActive,
       facultyId: departments.facultyId,
       facultyName: faculties.name,
+      facultyCode: faculties.facultyCode,
       headStaffId: departments.headStaffId,
       headFirst: users.firstName,
       headLast: users.lastName,
@@ -78,6 +80,7 @@ export async function listDepartments(): Promise<DeptRow[]> {
     isActive: r.isActive !== 0,
     facultyId: r.facultyId,
     facultyName: r.facultyName,
+    facultyCode: r.facultyCode,
     headStaffId: r.headStaffId,
     headName: r.headStaffId ? `${r.headTitle ? r.headTitle + ' ' : ''}${r.headFirst ?? ''} ${r.headLast ?? ''}`.trim() : null,
     headUserId: r.headUserId,
@@ -131,7 +134,26 @@ export async function listStaffPicks(): Promise<StaffPick[]> {
 }
 
 export async function listFaculties() {
-  return db.select({ id: faculties.id, name: faculties.name }).from(faculties).orderBy(faculties.name);
+  return db.select({ id: faculties.id, name: faculties.name, code: faculties.facultyCode }).from(faculties).orderBy(faculties.name);
+}
+
+/** کد دانشکده — سند اصالت آن؛ تا الان هیچ رابطی برای ویرایشش نبود */
+export async function setFacultyCodeAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  await requireRole(['ADMIN', 'VICE_EDU']);
+  const id = n(fd, 'facultyId');
+  const code = s(fd, 'code');
+  if (!id) return { ok: false, error: 'دانشکده نامعتبر است.' };
+  if (code) {
+    const dup = await db
+      .select({ id: faculties.id })
+      .from(faculties)
+      .where(and(eq(faculties.facultyCode, code), ne(faculties.id, id)))
+      .limit(1);
+    if (dup.length) return { ok: false, error: `کد «${code}» برای دانشکدهٔ دیگری ثبت شده است.` };
+  }
+  await db.update(faculties).set({ facultyCode: code || null }).where(eq(faculties.id, id));
+  revalidatePath('/admin/departments');
+  return { ok: true };
 }
 
 async function depHeadRoleId(): Promise<number | null> {
@@ -168,15 +190,26 @@ export async function createDepartmentAction(fd: FormData): Promise<{ ok: boolea
   if (!name) return { ok: false, error: 'نام گروه الزامی است.' };
   if (!facultyId) return { ok: false, error: 'دانشکده را انتخاب کنید.' };
 
-  const dup = await db.select({ id: departments.id }).from(departments).where(eq(departments.name, name)).limit(1);
-  if (dup.length) return { ok: false, error: `گروهی با نام «${name}» از قبل هست.` };
+  const code = s(fd, 'code');
+  if (code) {
+    const dupC = await db.select({ id: departments.id, name: departments.name }).from(departments).where(eq(departments.departmentCode, code)).limit(1);
+    if (dupC.length) return { ok: false, error: `کد گروه «${code}» قبلاً برای «${dupC[0].name}» ثبت شده — کد باید یکتا باشد.` };
+  }
+  // نام تکراری فقط *درون همان دانشکده* ممنوع است؛ دو دانشکده می‌توانند گروه
+  // هم‌نام داشته باشند و کد آن‌ها را از هم جدا می‌کند.
+  const dup = await db
+    .select({ id: departments.id })
+    .from(departments)
+    .where(and(eq(departments.name, name), eq(departments.facultyId, facultyId)))
+    .limit(1);
+  if (dup.length) return { ok: false, error: `گروهی با نام «${name}» در این دانشکده از قبل هست.` };
 
   const [row] = await db
     .insert(departments)
     .values({
       name,
       facultyId,
-      departmentCode: s(fd, 'code') || null,
+      departmentCode: code || null,
       kind: s(fd, 'kind') === 'GENERAL' ? 'GENERAL' : 'ACADEMIC',
       isActive: 1,
     })
@@ -198,19 +231,28 @@ export async function updateDepartmentAction(fd: FormData): Promise<{ ok: boolea
   if (!name) return { ok: false, error: 'نام گروه الزامی است.' };
   if (!facultyId) return { ok: false, error: 'دانشکده را انتخاب کنید.' };
 
+  const code = s(fd, 'code');
+  if (code) {
+    const dupC = await db
+      .select({ id: departments.id, name: departments.name })
+      .from(departments)
+      .where(and(eq(departments.departmentCode, code), ne(departments.id, id)))
+      .limit(1);
+    if (dupC.length) return { ok: false, error: `کد گروه «${code}» قبلاً برای «${dupC[0].name}» ثبت شده — کد باید یکتا باشد.` };
+  }
   const dup = await db
     .select({ id: departments.id })
     .from(departments)
-    .where(and(eq(departments.name, name), ne(departments.id, id)))
+    .where(and(eq(departments.name, name), eq(departments.facultyId, facultyId), ne(departments.id, id)))
     .limit(1);
-  if (dup.length) return { ok: false, error: `گروه دیگری با نام «${name}» هست.` };
+  if (dup.length) return { ok: false, error: `گروه دیگری با نام «${name}» در این دانشکده هست.` };
 
   await db
     .update(departments)
     .set({
       name,
       facultyId,
-      departmentCode: s(fd, 'code') || null,
+      departmentCode: code || null,
       kind: s(fd, 'kind') === 'GENERAL' ? 'GENERAL' : 'ACADEMIC',
       isActive: s(fd, 'isActive') === '0' ? 0 : 1,
     })

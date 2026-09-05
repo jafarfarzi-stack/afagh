@@ -30,6 +30,10 @@ export type ParsedCourseRow = {
   degreeName: string | null;
   /** نام/کد گروه آموزشی در فایل قدیمی؛ تطبیق با departments در commit */
   deptName: string | null;
+  /** «کد گروه آموزشی» — بر نام مقدم است (نام‌های هم‌شکل در دانشکده‌های مختلف) */
+  deptCode: string | null;
+  /** «کد مقطع» — بر عنوان مقطع مقدم است */
+  degreeCode: string | null;
 };
 
 export type CourseRowResult =
@@ -45,7 +49,9 @@ export const COURSE_ALIASES = {
   practical: ['واحد عملی', 'عملی', 'آزمایشگاه', 'practical_units', 'lab_units'],
   type: ['نوع', 'نوع درس', 'course_type'],
   degree: ['مقطع', 'مقطع درس', 'مقطع تحصیلی', 'سطح', 'degree', 'degree_level'],
-  department: ['گروه', 'گروه آموزشی', 'گروه درسی', 'دپارتمان', 'department', 'dept'],
+  degreeCode: ['کد مقطع', 'کد مقطع تحصیلی', 'degree_code', 'degree_level_code'],
+  department: ['نام گروه آموزشی', 'گروه آموزشی', 'گروه', 'گروه درسی', 'دپارتمان', 'department', 'dept'],
+  departmentCode: ['کد گروه آموزشی', 'کد گروه', 'department_code', 'dept_code'],
 } as const;
 
 /** درس‌هایی که ماهیتاً عملی‌اند — برای وقتی فایل تفکیک واحد ندارد */
@@ -72,6 +78,8 @@ export function parseCourseRow(get: CellReader): CourseRowResult {
   const type = get([...A.type]);
   const degreeName = get([...A.degree]);
   const deptName = get([...A.department]);
+  const deptCode = get([...A.departmentCode]);
+  const degreeCode = get([...A.degreeCode]);
 
   let theory = num(get([...A.theory]));
   let practical = num(get([...A.practical]));
@@ -111,6 +119,8 @@ export function parseCourseRow(get: CellReader): CourseRowResult {
       courseType: type || null,
       degreeName: degreeName || null,
       deptName: deptName || null,
+      deptCode: deptCode || null,
+      degreeCode: degreeCode || null,
     },
   };
 }
