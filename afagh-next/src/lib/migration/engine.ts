@@ -2,10 +2,12 @@ import { randomBytes, scryptSync } from 'crypto';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import {
-  academic_terms, course_offerings, courses, degree_level_configs, educational_regulations,
-  enrollments, financial_clearances, majors, migration_runs, student_ledger, students, users,
+  academic_terms, course_offerings, courses, degree_level_configs, departments,
+  educational_regulations, enrollments, financial_clearances, majors, migration_runs,
+  student_ledger, students, users,
 } from '@/db/schema';
 import { boolFa, checkNationalCode, dateFa, norm, num } from './normalize';
+import { COURSE_ALIASES, parseCourseRow } from './course-row';
 import { iterate, pickTable, type Table } from './tabular';
 import { resolverFor } from './codemap';
 
@@ -16,7 +18,7 @@ import { resolverFor } from './codemap';
 export type Entity = 'student' | 'course' | 'term' | 'enrollment' | 'ledger' | 'clearance';
 export const ENTITIES: { id: Entity; title: string; sample: string }[] = [
   { id: 'student', title: 'دانشجویان (هویت + پرونده)', sample: 'کد ملی, نام, نام خانوادگی, شماره دانشجویی, سال ورود, مقطع, رشته, وضعیت, شماره شناسنامه, نام پدر, تاریخ تولد, محل تولد, جنسیت' },
-  { id: 'course', title: 'دروس', sample: 'کد درس, نام درس, واحد, نوع' },
+  { id: 'course', title: 'دروس', sample: 'کد درس, نام درس, واحد, واحد نظری, واحد عملی, نوع, مقطع, گروه آموزشی' },
   { id: 'term', title: 'ترم‌ها', sample: 'کد ترم, عنوان ترم, ترم جاری' },
   { id: 'enrollment', title: 'ثبت‌نام‌ها و نمرات (آموزشی)', sample: 'شماره دانشجویی, کد درس, کد ترم, نمره, وضعیت نمره' },
   { id: 'ledger', title: 'صورتحساب دانشجویان (مالی)', sample: 'شماره دانشجویی, کد ترم, نوع, مبلغ, شرح, تاریخ' },
@@ -52,7 +54,7 @@ function hashDefault(nationalCode: string): string {
   return `${salt}:${scryptSync(nationalCode, salt, 32, { N: 16384, r: 8, p: 1, maxmem: 256 * 1024 * 1024 }).toString('hex')}`;
 }
 
-type Prepared = {
+export type Prepared = {
   report: Report;
   rows: Record<string, unknown>[];   // ردیف‌های سالمِ نرمال‌شده آمادهٔ درج
   rowNumbers: number[];              // شمارهٔ خط هر ردیف سالم
@@ -61,14 +63,19 @@ type Prepared = {
 // ── مرحلهٔ ۱+۲: تجزیه و اعتبارسنجی ──
 const ENTITY_HINTS: Record<Entity, string[][]> = {
   student: [['کد ملی', 'national_code'], ['شماره دانشجویی', 'student_code'], ['نام خانوادگی', 'last_name']],
-  course: [['کد درس', 'course_code'], ['نام درس', 'title'], ['واحد', 'units']],
+  course: [[...COURSE_ALIASES.code], [...COURSE_ALIASES.title], [...COURSE_ALIASES.units], [...COURSE_ALIASES.theory], [...COURSE_ALIASES.degree]],
   term: [['کد ترم', 'term_code'], ['عنوان ترم', 'title']],
   enrollment: [['شماره دانشجویی', 'student_code'], ['کد درس', 'course_code'], ['نمره', 'grade']],
   ledger: [['شماره دانشجویی', 'student_code'], ['مبلغ', 'amount'], ['نوع', 'type']],
   clearance: [['شماره دانشجویی', 'student_code'], ['تسویه', 'cleared']],
 };
 
-function prepare(entity: Entity, tables: Table[], fileName: string): Prepared {
+/**
+ * مرحلهٔ تجزیه/اعتبارسنجی — کاملاً خالص (بدون DB) تا در تست واحد پوشش داده شود.
+ * `dryRun` و `commit` هر دو از همین یک تابع استفاده می‌کنند، پس گزارشِ پیش‌نمایش
+ * دقیقاً همان چیزی است که در ثبت نهایی اعمال می‌شود.
+ */
+export function prepare(entity: Entity, tables: Table[], fileName: string): Prepared {
   const report: Report = { entity, fileName, total: 0, invalid: 0, willInsert: 0, existing: 0, errors: [], warnings: [], sample: [] };
   const table = pickTable(tables, ENTITY_HINTS[entity]);
   if (!table || !table.rows.length) { report.errors.push({ row: 0, msg: 'فایل خالی یا بدون ردیف داده است.' }); return { report, rows: [], rowNumbers: [] }; }
@@ -120,13 +127,10 @@ function prepare(entity: Entity, tables: Table[], fileName: string): Prepared {
     }
 
     if (entity === 'course') {
-      const code = get(['کد درس', 'کددرس', 'course_code', 'code']);
-      const title = get(['نام درس', 'عنوان درس', 'title']);
-      const units = num(get(['واحد', 'تعداد واحد', 'units']));
-      const type = get(['نوع', 'نوع درس', 'course_type']);
-      if (!code || !title) return err('کد درس و نام درس الزامی است.');
-      if (units == null || units <= 0 || units > 12) return err(`واحد نامعتبر: ${get(['واحد', 'تعداد واحد', 'units'])}`);
-      rows.push({ code, title, units, courseType: type || null });
+      const res = parseCourseRow(get);
+      res.warnings.forEach(warn);
+      if (!res.ok) return err(res.error);
+      rows.push({ ...res.row });
     }
 
     if (entity === 'term') {
@@ -284,11 +288,81 @@ export async function commit(userId: number, entity: Entity, tables: Table[], fi
   }
 
   if (entity === 'course') {
+    let enriched = 0;   // درس‌های موجود که فیلدهای خالی‌شان از این فایل کامل شد
+    const warnedOnce = new Set<string>();   // هر مقطع/گروهِ تطبیق‌نخورده فقط یک بار هشدار بگیرد
+    // ── حل «مقطع» و «گروه آموزشی» با همان سازوکار میز تطبیق کدها ──
+    const degreeMap = await resolverFor(sourceCode, 'DEGREE');
+    const deptMap = await resolverFor(sourceCode, 'DEPARTMENT');
+    const typeMap = await resolverFor(sourceCode, 'COURSE_TYPE');
+    const degreeRows = await db.select({ id: degree_level_configs.id, code: degree_level_configs.code, title: degree_level_configs.title }).from(degree_level_configs);
+    const deptRows = await db.select({ id: departments.id, name: departments.name, code: departments.departmentCode }).from(departments);
+
+    const resolveDegree = (name: string | null): number | null => {
+      const k = norm(String(name ?? ''));
+      if (!k) return null;
+      const mapped = degreeMap.get(k)?.id;
+      const hit = (mapped ? degreeRows.find(d => d.id === mapped) : null)
+        ?? degreeRows.find(d => norm(d.title) === k)
+        ?? degreeRows.find(d => norm(d.code) === k);
+      if (!hit && !warnedOnce.has('D:' + k)) {
+        warnedOnce.add('D:' + k);
+        report.warnings.push({ row: 0, msg: `مقطع «${name}» تطبیق نخورد — درس‌های مربوطه بدون مقطع (مشترک) ثبت شدند؛ در میز «تطبیق کدها» دامنهٔ «مقطع تحصیلی» را کامل کنید.` });
+      }
+      return hit?.id ?? null;
+    };
+    const resolveDept = (name: string | null): number | null => {
+      const k = norm(String(name ?? ''));
+      if (!k) return null;
+      const mapped = deptMap.get(k)?.id;
+      const hit = (mapped ? deptRows.find(d => d.id === mapped) : null)
+        ?? deptRows.find(d => norm(d.name) === k)
+        ?? deptRows.find(d => norm(d.code ?? '') === k);
+      if (!hit && !warnedOnce.has('P:' + k)) {
+        warnedOnce.add('P:' + k);
+        report.warnings.push({ row: 0, msg: `گروه آموزشی «${name}» تطبیق نخورد — درس‌های مربوطه بدون گروه ثبت شدند؛ در میز «تطبیق کدها» دامنهٔ «گروه آموزشی» را کامل کنید.` });
+      }
+      return hit?.id ?? null;
+    };
+
     for (const r of rows) {
-      const r0 = await db.insert(courses).values({
-        code: String(r.code), title: String(r.title), units: String(r.units), courseType: r.courseType ? String(r.courseType) : null,
-      }).onConflictDoNothing().returning({ id: courses.id });
-      r0.length ? inserted++ : existing++;
+      const degreeLevelId = resolveDegree(r.degreeName as string | null);
+      const departmentId = resolveDept(r.deptName as string | null);
+      const rawType = r.courseType ? String(r.courseType) : null;
+      const courseType = rawType ? (typeMap.get(norm(rawType))?.code ?? rawType) : null;
+
+      const values = {
+        code: String(r.code), title: String(r.title), units: String(r.units),
+        theoreticalUnits: String(r.theory), practicalUnits: String(r.practical),
+        courseType, departmentId, degreeLevelId,
+      };
+      const r0 = await db.insert(courses).values(values).onConflictDoNothing().returning({ id: courses.id });
+      if (r0.length) { inserted++; continue; }
+
+      // درس از قبل هست: فقط جاهای خالی را پر می‌کنیم (دادهٔ دستیِ کاربر بازنویسی نمی‌شود).
+      // بدون این گام، فایلِ کاملِ دوم هیچ اثری نداشت و «مقطع/گروه/واحد عملی» تا ابد خالی می‌ماند.
+      existing++;
+      const [cur] = await db
+        .select({
+          id: courses.id, theoreticalUnits: courses.theoreticalUnits, practicalUnits: courses.practicalUnits,
+          courseType: courses.courseType, departmentId: courses.departmentId, degreeLevelId: courses.degreeLevelId,
+        })
+        .from(courses).where(eq(courses.code, values.code)).limit(1);
+      if (!cur) continue;
+
+      const patch: Record<string, unknown> = {};
+      if (Number(cur.theoreticalUnits ?? 0) === 0 && Number(values.theoreticalUnits) !== 0) patch.theoreticalUnits = values.theoreticalUnits;
+      if (Number(cur.practicalUnits ?? 0) === 0 && Number(values.practicalUnits) !== 0) patch.practicalUnits = values.practicalUnits;
+      if (!cur.courseType && values.courseType) patch.courseType = values.courseType;
+      if (cur.departmentId == null && departmentId != null) patch.departmentId = departmentId;
+      if (cur.degreeLevelId == null && degreeLevelId != null) patch.degreeLevelId = degreeLevelId;
+
+      if (Object.keys(patch).length) {
+        await db.update(courses).set(patch).where(eq(courses.id, cur.id));
+        enriched++;
+      }
+    }
+    if (enriched) {
+      report.warnings.push({ row: 0, msg: `${enriched} درسِ موجود با اطلاعات این فایل کامل شد (مقطع/گروه/تفکیک واحد) — مقادیر پرشدهٔ قبلی دست نخورد.` });
     }
   }
 

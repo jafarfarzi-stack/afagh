@@ -114,3 +114,17 @@ END $$;
 -- M-4: ایندکس‌های پاکسازی/چرخش نشست‌ها (در drizzle push برای نصب‌های قدیمی ساخته نمی‌شود)
 CREATE INDEX IF NOT EXISTS "sessions_userId_idx" ON sessions ("userId");
 CREATE INDEX IF NOT EXISTS "sessions_expiresAt_idx" ON sessions ("expiresAt");
+
+-- ── مقطع درس (مهاجرت داده): فایل قدیمی ستون «مقطع» دارد ولی کاتالوگ جدید
+--    جایی برای نگه‌داشتنش نداشت. NULL = درس مشترک بین همهٔ مقاطع.
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS "degreeLevelId" integer;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'courses_degreeLevelId_fkey') THEN
+    ALTER TABLE courses
+      ADD CONSTRAINT "courses_degreeLevelId_fkey"
+      FOREIGN KEY ("degreeLevelId") REFERENCES degree_level_configs(id);
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS "courses_degreeLevelId_idx" ON courses ("degreeLevelId");
+CREATE INDEX IF NOT EXISTS "courses_departmentId_idx" ON courses ("departmentId");
