@@ -2,21 +2,31 @@ import { randomBytes, scryptSync } from 'crypto';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import {
-  academic_terms, course_offerings, courses, degree_level_configs, departments,
-  educational_regulations, enrollments, financial_clearances, majors, migration_runs,
-  student_ledger, students, users,
+  academic_terms, course_offerings, courses, curriculum_tracks, degree_level_configs,
+  departments, educational_regulations, enrollments, faculties, financial_clearances,
+  majors, migration_runs, staff, student_ledger, students, users,
 } from '@/db/schema';
 import { boolFa, checkNationalCode, dateFa, norm, num } from './normalize';
 import { COURSE_ALIASES, parseCourseRow } from './course-row';
+import {
+  DEPARTMENT_ALIASES, FACULTY_ALIASES, MAJOR_ALIASES, PROFESSOR_ALIASES,
+  parseDepartmentRow, parseFacultyRow, parseMajorRow, parseProfessorRow,
+} from './reference-rows';
 import { iterate, pickTable, type Table } from './tabular';
-import { resolverFor } from './codemap';
+import { codeRewriterFor, noopRewriter, resolverFor, type CodeRewriter, type MapDomain } from './codemap';
 
 // ═══ سامانهٔ مهاجرت داده از سیستم قدیمی — آموزشی + مالی ═══
 // معماری: parse → normalize → validate → (dry-run گزارش | commit تراکنشی idempotent)
 // ورودی: فایل اکسل (xlsx) یا CSV با سرستون‌های فارسی یا انگلیسی (نامک‌ها انعطاف‌پذیر)
 
-export type Entity = 'student' | 'course' | 'term' | 'enrollment' | 'ledger' | 'clearance';
+export type Entity =
+  | 'faculty' | 'department' | 'major' | 'professor'
+  | 'student' | 'course' | 'term' | 'enrollment' | 'ledger' | 'clearance';
 export const ENTITIES: { id: Entity; title: string; sample: string }[] = [
+  { id: 'faculty', title: 'دانشکده‌ها', sample: 'کد دانشکده, نام دانشکده' },
+  { id: 'department', title: 'گروه‌های آموزشی', sample: 'کد گروه, نام گروه, دانشکده' },
+  { id: 'major', title: 'رشته‌ها و گرایش‌ها', sample: 'کد رشته, نام رشته, مقطع, گروه آموزشی, دانشکده, گرایش, حداقل واحد, کد استاندارد, تاریخ تاسیس, فعال' },
+  { id: 'professor', title: 'اطلاعات استادان', sample: 'کد استادی, کد ملی, نام, نام خانوادگی, لقب, گروه آموزشی, دانشکده, مرتبه علمی, مدرک, طریقه همکاری, تاریخ استخدام, رشته و گرایش, موبایل' },
   { id: 'student', title: 'دانشجویان (هویت + پرونده)', sample: 'کد ملی, نام, نام خانوادگی, شماره دانشجویی, سال ورود, مقطع, رشته, وضعیت, شماره شناسنامه, نام پدر, تاریخ تولد, محل تولد, جنسیت' },
   { id: 'course', title: 'دروس', sample: 'کد درس, نام درس, واحد, واحد نظری, واحد عملی, نوع, مقطع, گروه آموزشی' },
   { id: 'term', title: 'ترم‌ها', sample: 'کد ترم, عنوان ترم, ترم جاری' },
@@ -62,6 +72,10 @@ export type Prepared = {
 
 // ── مرحلهٔ ۱+۲: تجزیه و اعتبارسنجی ──
 const ENTITY_HINTS: Record<Entity, string[][]> = {
+  faculty: [[...FACULTY_ALIASES.name], [...FACULTY_ALIASES.code]],
+  department: [[...DEPARTMENT_ALIASES.name], [...DEPARTMENT_ALIASES.code], [...DEPARTMENT_ALIASES.faculty]],
+  major: [[...MAJOR_ALIASES.code], [...MAJOR_ALIASES.name], [...MAJOR_ALIASES.degree]],
+  professor: [[...PROFESSOR_ALIASES.staffCode], [...PROFESSOR_ALIASES.last], [...PROFESSOR_ALIASES.department]],
   student: [['کد ملی', 'national_code'], ['شماره دانشجویی', 'student_code'], ['نام خانوادگی', 'last_name']],
   course: [[...COURSE_ALIASES.code], [...COURSE_ALIASES.title], [...COURSE_ALIASES.units], [...COURSE_ALIASES.theory], [...COURSE_ALIASES.degree]],
   term: [['کد ترم', 'term_code'], ['عنوان ترم', 'title']],
@@ -124,6 +138,17 @@ export function prepare(entity: Entity, tables: Table[], fileName: string): Prep
         placeOfBirth: placeOfBirth || null, placeOfIssue: placeOfIssue || null,
         birthDate: birthDate ?? null, fatherName: fatherName || null, gender, address: address || null,
       });
+    }
+
+    if (entity === 'faculty' || entity === 'department' || entity === 'major' || entity === 'professor') {
+      const parser = entity === 'faculty' ? parseFacultyRow
+        : entity === 'department' ? parseDepartmentRow
+        : entity === 'major' ? parseMajorRow
+        : parseProfessorRow;
+      const res = parser(get);
+      res.warnings.forEach(warn);
+      if (!res.ok) return err(res.error);
+      rows.push({ ...res.row });
     }
 
     if (entity === 'course') {
@@ -195,6 +220,28 @@ export async function dryRun(entity: Entity, tables: Table[], fileName: string):
       else report.willInsert++;
     }
   }
+  if (entity === 'faculty') {
+    const ex = await db.select({ id: faculties.id, name: faculties.name, code: faculties.facultyCode }).from(faculties);
+    for (const r of rows) {
+      const hit = ex.find(f => (r.code && norm(f.code ?? '') === norm(String(r.code))) || norm(f.name) === norm(String(r.name)));
+      hit ? report.existing++ : report.willInsert++;
+    }
+  }
+  if (entity === 'department') {
+    const ex = await db.select({ id: departments.id, name: departments.name, code: departments.departmentCode }).from(departments);
+    for (const r of rows) {
+      const hit = ex.find(d => (r.code && norm(d.code ?? '') === norm(String(r.code))) || norm(d.name) === norm(String(r.name)));
+      hit ? report.existing++ : report.willInsert++;
+    }
+  }
+  if (entity === 'major') {
+    const ex = new Set((await db.select({ c: majors.majorCode }).from(majors)).map(x => norm(x.c ?? '')));
+    for (const r of rows) ex.has(norm(String(r.code))) ? report.existing++ : report.willInsert++;
+  }
+  if (entity === 'professor') {
+    const ex = new Set((await db.select({ c: staff.staffCode }).from(staff)).map(x => norm(x.c)));
+    for (const r of rows) ex.has(norm(String(r.staffCode))) ? report.existing++ : report.willInsert++;
+  }
   if (entity === 'course') {
     const ex = new Set((await db.select({ c: courses.code }).from(courses).where(inArray(courses.code, rows.map(r => String(r.code))))).map(x => x.c));
     for (const r of rows) ex.has(String(r.code)) ? report.existing++ : report.willInsert++;
@@ -216,9 +263,29 @@ export async function dryRun(entity: Entity, tables: Table[], fileName: string):
 }
 
 // ── مرحلهٔ ۴: commit — درج تراکنشی idempotent + تاریخچه ──
-export async function commit(userId: number, entity: Entity, tables: Table[], fileName: string, sourceCode = 'LEGACY'): Promise<Report> {
+export async function commit(
+  userId: number, entity: Entity, tables: Table[], fileName: string,
+  sourceCode = 'LEGACY',
+  /** جایگزینی کد قدیمی با «کد جدید»ِ تأییدشده در میز تطبیق کدها (پیش‌فرض: روشن) */
+  rewriteCodes = true,
+): Promise<Report> {
   const { report, rows } = prepare(entity, tables, fileName);
   let inserted = 0; let existing = 0;
+
+  // ── سامانهٔ جایگزینی کد: هر دامنه فقط یک بار از دیتابیس خوانده می‌شود ──
+  const rewriter = async (domain: MapDomain): Promise<CodeRewriter> =>
+    rewriteCodes ? codeRewriterFor(sourceCode, domain) : noopRewriter();
+
+  /** گزارش شفافِ «چه کدی با چه کدی جایگزین شد» — بدون آن، تغییر کد نامرئی می‌ماند */
+  const reportRewrites = (rw: CodeRewriter, label: string) => {
+    const used = rw.used();
+    if (!used.length) return;
+    const preview = used.slice(0, 10).map(u => `${u.from} → ${u.to}`).join('، ');
+    report.warnings.push({
+      row: 0,
+      msg: `🔁 جایگزینی کد ${label}: ${used.length} کد قدیمی با کد جدیدِ تأییدشده ثبت شد (${preview}${used.length > 10 ? ' …' : ''}).`,
+    });
+  };
 
   if (entity === 'student') {
     const majorRows = await db.select().from(majors);
@@ -287,7 +354,242 @@ export async function commit(userId: number, entity: Entity, tables: Table[], fi
     }
   }
 
+  // ══════════════════════════════════════════════════════════════
+  //  دادهٔ پایهٔ سازمانی: دانشکده → گروه → رشته/گرایش → استاد
+  //  (ترتیب واردکردن هم باید همین باشد؛ هر لایه به لایهٔ قبل تکیه دارد)
+  // ══════════════════════════════════════════════════════════════
+
+  /** دانشکده را پیدا یا (در صورت نبود) می‌سازد — تطبیق با کد یا نام */
+  async function ensureFaculty(nameOrCode: string | null, auto: boolean): Promise<number | null> {
+    const k = norm(String(nameOrCode ?? ''));
+    if (!k) return null;
+    const all = await db.select({ id: faculties.id, name: faculties.name, code: faculties.facultyCode }).from(faculties);
+    const hit = all.find(f => norm(f.code ?? '') === k) ?? all.find(f => norm(f.name) === k);
+    if (hit) return hit.id;
+    if (!auto) return null;
+    const [nf] = await db.insert(faculties).values({ name: String(nameOrCode) }).returning({ id: faculties.id });
+    report.warnings.push({ row: 0, msg: `دانشکدهٔ «${nameOrCode}» در سامانه نبود — خودکار ساخته شد.` });
+    return nf.id;
+  }
+
+  /** گروه آموزشی را پیدا یا می‌سازد — تطبیق با کد یا نام */
+  async function ensureDepartment(nameOrCode: string | null, facultyId: number | null, auto: boolean): Promise<number | null> {
+    const k = norm(String(nameOrCode ?? ''));
+    if (!k) return null;
+    const all = await db.select({ id: departments.id, name: departments.name, code: departments.departmentCode }).from(departments);
+    const hit = all.find(d => norm(d.code ?? '') === k) ?? all.find(d => norm(d.name) === k);
+    if (hit) return hit.id;
+    if (!auto) return null;
+    const fid = facultyId ?? (await db.select({ id: faculties.id }).from(faculties).limit(1))[0]?.id;
+    if (!fid) { report.errors.push({ row: 0, msg: `گروه «${nameOrCode}» ساخته نشد — هیچ دانشکده‌ای تعریف نشده است؛ اول فایل دانشکده‌ها را وارد کنید.` }); return null; }
+    const [nd] = await db.insert(departments).values({ name: String(nameOrCode), facultyId: fid }).returning({ id: departments.id });
+    report.warnings.push({ row: 0, msg: `گروه آموزشی «${nameOrCode}» در سامانه نبود — خودکار ساخته شد.` });
+    return nd.id;
+  }
+
+  if (entity === 'faculty') {
+    for (const r of rows) {
+      const all = await db.select({ id: faculties.id, name: faculties.name, code: faculties.facultyCode }).from(faculties);
+      const k = norm(String(r.code ?? ''));
+      const hit = (k ? all.find(f => norm(f.code ?? '') === k) : null) ?? all.find(f => norm(f.name) === norm(String(r.name)));
+      if (hit) {
+        existing++;
+        if (r.code && !hit.code) await db.update(faculties).set({ facultyCode: String(r.code) }).where(eq(faculties.id, hit.id));
+        continue;
+      }
+      await db.insert(faculties).values({ name: String(r.name), facultyCode: r.code ? String(r.code) : null });
+      inserted++;
+    }
+  }
+
+  if (entity === 'department') {
+    for (const r of rows) {
+      const facultyId = await ensureFaculty(r.facultyName as string | null, true);
+      const all = await db.select({ id: departments.id, name: departments.name, code: departments.departmentCode }).from(departments);
+      const k = norm(String(r.code ?? ''));
+      const hit = (k ? all.find(d => norm(d.code ?? '') === k) : null) ?? all.find(d => norm(d.name) === norm(String(r.name)));
+      if (hit) {
+        existing++;
+        const patch: Record<string, unknown> = {};
+        if (r.code && !hit.code) patch.departmentCode = String(r.code);
+        if (facultyId) patch.facultyId = facultyId;
+        if (Object.keys(patch).length) await db.update(departments).set(patch).where(eq(departments.id, hit.id));
+        continue;
+      }
+      const fid = facultyId ?? (await db.select({ id: faculties.id }).from(faculties).limit(1))[0]?.id;
+      if (!fid) { report.errors.push({ row: 0, msg: `گروه «${r.name}» ساخته نشد — هیچ دانشکده‌ای تعریف نشده است.` }); continue; }
+      await db.insert(departments).values({ name: String(r.name), facultyId: fid, departmentCode: r.code ? String(r.code) : null });
+      inserted++;
+    }
+  }
+
+  if (entity === 'major') {
+    const rw = await rewriter('MAJOR');
+    const degreeMap = await resolverFor(sourceCode, 'DEGREE');
+    const degreeRows = await db.select({ id: degree_level_configs.id, code: degree_level_configs.code, title: degree_level_configs.title }).from(degree_level_configs);
+    const warnedOnce = new Set<string>();
+    let tracksMade = 0;
+
+    for (const r of rows) {
+      // ── مقطع: بدون آن رشته قابل ثبت نیست (ستون NOT NULL) ──
+      const dk = norm(String(r.degreeName ?? ''));
+      const mapped = degreeMap.get(dk)?.id;
+      const degree = (mapped ? degreeRows.find(d => d.id === mapped) : null)
+        ?? degreeRows.find(d => norm(d.title) === dk)
+        ?? degreeRows.find(d => norm(d.code) === dk);
+      if (!degree) {
+        report.errors.push({ row: 0, msg: `رشتهٔ «${r.name}» (${r.code}) ثبت نشد — مقطع «${r.degreeName ?? 'خالی'}» شناخته نشد؛ در میز «تطبیق کدها» دامنهٔ «مقطع تحصیلی» را کامل کنید.` });
+        continue;
+      }
+
+      const facultyId = await ensureFaculty(r.facultyName as string | null, true);
+      const departmentId = await ensureDepartment(r.departmentName as string | null, facultyId, true);
+
+      const finalCode = rw.apply(String(r.code));
+      if (finalCode !== String(r.code) && !warnedOnce.has('C:' + r.code)) {
+        warnedOnce.add('C:' + r.code);
+      }
+
+      const values = {
+        name: String(r.name), degreeLevelId: degree.id, departmentId, facultyId,
+        majorCode: finalCode,
+        minUnits: (r.minUnits as number | null) ?? null,
+        standardCode: (r.standardCode as string | null) ?? null,
+        establishedDate: (r.establishedDate as string | null) ?? null,
+        terminatedDate: (r.terminatedDate as string | null) ?? null,
+        isActive: r.isActive ? 1 : 0,
+        headStaffCode: (r.headStaffCode as string | null) ?? null,
+        expertName: (r.expertName as string | null) ?? null,
+        lastCouncilDate: (r.lastCouncilDate as string | null) ?? null,
+      };
+
+      const ins = await db.insert(majors).values(values).onConflictDoNothing({ target: majors.majorCode }).returning({ id: majors.id });
+      let majorId = ins[0]?.id ?? null;
+      if (majorId) inserted++;
+      else {
+        existing++;
+        const [cur] = await db.select().from(majors).where(eq(majors.majorCode, finalCode)).limit(1);
+        if (!cur) continue;
+        majorId = cur.id;
+        // تکمیل فیلدهای خالیِ رشتهٔ موجود (بدون بازنویسی دادهٔ پرشده)
+        const patch: Record<string, unknown> = {};
+        if (cur.departmentId == null && departmentId != null) patch.departmentId = departmentId;
+        if (cur.facultyId == null && facultyId != null) patch.facultyId = facultyId;
+        if (cur.minUnits == null && values.minUnits != null) patch.minUnits = values.minUnits;
+        if (!cur.standardCode && values.standardCode) patch.standardCode = values.standardCode;
+        if (!cur.establishedDate && values.establishedDate) patch.establishedDate = values.establishedDate;
+        if (!cur.terminatedDate && values.terminatedDate) patch.terminatedDate = values.terminatedDate;
+        if (!cur.headStaffCode && values.headStaffCode) patch.headStaffCode = values.headStaffCode;
+        if (!cur.expertName && values.expertName) patch.expertName = values.expertName;
+        if (!cur.lastCouncilDate && values.lastCouncilDate) patch.lastCouncilDate = values.lastCouncilDate;
+        if (Object.keys(patch).length) await db.update(majors).set(patch).where(eq(majors.id, cur.id));
+      }
+
+      // ── گرایش: چند سطر با یک کد رشته و گرایش‌های مختلف مجاز است ──
+      if (majorId && r.trackTitle) {
+        const t = await db.insert(curriculum_tracks)
+          .values({ majorId, title: String(r.trackTitle), code: (r.trackCode as string | null) ?? null })
+          .onConflictDoNothing()
+          .returning({ id: curriculum_tracks.id });
+        if (t.length) tracksMade++;
+      }
+    }
+    if (tracksMade) report.warnings.push({ row: 0, msg: `${tracksMade} گرایش جدید ذیل رشته‌ها ساخته شد.` });
+    reportRewrites(rw, 'رشته');
+  }
+
+  if (entity === 'professor') {
+    for (const r of rows) {
+      const facultyId = await ensureFaculty(r.facultyName as string | null, true);
+      const departmentId = await ensureDepartment(r.departmentName as string | null, facultyId, true);
+      const staffCode = String(r.staffCode);
+
+      const [dup] = await db.select({ id: staff.id }).from(staff).where(eq(staff.staffCode, staffCode)).limit(1);
+      const staffFields = {
+        departmentId, facultyId,
+        staffType: 'PROFESSOR',
+        academicRank: (r.academicRank as string | null) ?? null,
+        degree: (r.degree as string | null) ?? null,
+        title: (r.title as string | null) ?? null,
+        isActive: r.isActive ? 1 : 0,
+        cooperationType: (r.cooperationType as string | null) ?? null,
+        personnelNo: (r.personnelNo as string | null) ?? null,
+        employmentType: (r.employmentType as string | null) ?? null,
+        hireDate: (r.hireDate as string | null) ?? null,
+        lastDegreeYear: (r.lastDegreeYear as number | null) ?? null,
+        fieldOfStudy: (r.fieldOfStudy as string | null) ?? null,
+        maritalStatus: (r.maritalStatus as string | null) ?? null,
+        lastDegreeUniversity: (r.lastDegreeUniversity as string | null) ?? null,
+        academicBase: (r.academicBase as string | null) ?? null,
+        birthProvince: (r.birthProvince as string | null) ?? null,
+        birthCity: (r.birthCity as string | null) ?? null,
+        bankAccountNo: (r.bankAccountNo as string | null) ?? null,
+        phone: (r.phone as string | null) ?? null,
+      };
+
+      if (dup) {
+        existing++;
+        // فقط فیلدهای خالی تکمیل می‌شوند (دادهٔ ویرایش‌شدهٔ دستی حفظ می‌شود)
+        const [cur] = await db.select().from(staff).where(eq(staff.id, dup.id)).limit(1);
+        const patch: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(staffFields)) {
+          if (v == null || v === '') continue;
+          const curVal = (cur as Record<string, unknown>)[k];
+          if (curVal == null || curVal === '') patch[k] = v;
+        }
+        if (Object.keys(patch).length) await db.update(staff).set(patch).where(eq(staff.id, dup.id));
+        continue;
+      }
+
+      // ── حساب کاربری: کلید هویتی، کد ملی است ──
+      const nc = r.nationalCode as string | null;
+      let userId: number | null = null;
+      if (nc) {
+        const [exU] = await db.select({ id: users.id }).from(users).where(eq(users.nationalCode, nc)).limit(1);
+        if (exU) {
+          const [alreadyStaff] = await db.select({ id: staff.id }).from(staff).where(eq(staff.userId, exU.id)).limit(1);
+          if (alreadyStaff) {
+            report.errors.push({ row: 0, msg: `کد ملی ${nc} از قبل به کد استادی دیگری وصل است — استاد ${staffCode} ثبت نشد (کد ملی تکراری در فایل؟).` });
+            continue;
+          }
+          userId = exU.id;
+        } else {
+          const [nu] = await db.insert(users).values({
+            nationalCode: nc, firstName: String(r.firstName), lastName: String(r.lastName),
+            gender: (r.gender as string | null) ?? null,
+            mobile: (r.mobile as string | null) ?? null,
+            email: (r.email as string | null) ?? null,
+            passwordHash: hashDefault(nc),   // رمز اولیه = کد ملی
+          }).returning({ id: users.id });
+          userId = nu.id;
+        }
+      } else {
+        // بدون کد ملی: شناسهٔ جایگزینِ رزروشده تا ستون NOT NULL پر شود و
+        // در عین حال هرگز با هویت واقعی کسی ادغام نشود.
+        const placeholder = ('9' + staffCode.replace(/\D/g, '').padStart(9, '0')).slice(0, 10);
+        const [clash] = await db.select({ id: users.id }).from(users).where(eq(users.nationalCode, placeholder)).limit(1);
+        if (clash) {
+          report.errors.push({ row: 0, msg: `استاد ${staffCode} بدون کد ملی است و شناسهٔ جایگزین «${placeholder}» قبلاً استفاده شده — کد ملی را در فایل کامل کنید.` });
+          continue;
+        }
+        const [nu] = await db.insert(users).values({
+          nationalCode: placeholder, firstName: String(r.firstName), lastName: String(r.lastName),
+          gender: (r.gender as string | null) ?? null,
+          mobile: (r.mobile as string | null) ?? null,
+          email: (r.email as string | null) ?? null,
+          passwordHash: hashDefault(randomBytes(24).toString('hex')),   // ورود ناممکن تا اصلاح کد ملی
+        }).returning({ id: users.id });
+        userId = nu.id;
+      }
+
+      if (userId == null) continue;
+      await db.insert(staff).values({ userId, staffCode, ...staffFields }).onConflictDoNothing();
+      inserted++;
+    }
+  }
+
   if (entity === 'course') {
+    const rw = await rewriter('COURSE');
     let enriched = 0;   // درس‌های موجود که فیلدهای خالی‌شان از این فایل کامل شد
     const warnedOnce = new Set<string>();   // هر مقطع/گروهِ تطبیق‌نخورده فقط یک بار هشدار بگیرد
     // ── حل «مقطع» و «گروه آموزشی» با همان سازوکار میز تطبیق کدها ──
@@ -331,7 +633,8 @@ export async function commit(userId: number, entity: Entity, tables: Table[], fi
       const courseType = rawType ? (typeMap.get(norm(rawType))?.code ?? rawType) : null;
 
       const values = {
-        code: String(r.code), title: String(r.title), units: String(r.units),
+        code: rw.apply(String(r.code)),   // 🔁 کد جدیدِ تأییدشده (اگر تعریف شده باشد)
+        title: String(r.title), units: String(r.units),
         theoreticalUnits: String(r.theory), practicalUnits: String(r.practical),
         courseType, departmentId, degreeLevelId,
       };
@@ -364,6 +667,7 @@ export async function commit(userId: number, entity: Entity, tables: Table[], fi
     if (enriched) {
       report.warnings.push({ row: 0, msg: `${enriched} درسِ موجود با اطلاعات این فایل کامل شد (مقطع/گروه/تفکیک واحد) — مقادیر پرشدهٔ قبلی دست نخورد.` });
     }
+    reportRewrites(rw, 'درس');
   }
 
   if (entity === 'term') {
@@ -383,18 +687,23 @@ export async function commit(userId: number, entity: Entity, tables: Table[], fi
 
   if (entity === 'enrollment') {
     const stu = await db.select({ id: students.id, code: students.studentCode }).from(students);
+    // 🔁 اگر هنگام انتقالِ «دروس» کد قدیمی با کد جدید جایگزین شده باشد، فایل
+    //    نمرات/ثبت‌نام هنوز کد قدیمی را دارد؛ پس همان جایگزینی اینجا هم اعمال
+    //    می‌شود تا درسِ تکراری با کد قدیمی ساخته نشود.
+    const rwCourse = await rewriter('COURSE');
     const crs = await db.select({ id: courses.id, code: courses.code }).from(courses);
     const trm = await db.select({ id: academic_terms.id, code: academic_terms.termCode }).from(academic_terms);
     for (const r of rows) {
       const s = stu.find(x => x.code === String(r.studentCode));
       const t = trm.find(x => x.code === String(r.termCode));
       if (!s || !t) { report.errors.push({ row: 0, msg: `${r.studentCode}/${r.termCode} یافت نشد.` }); continue; }
-      let c = crs.find(x => x.code === String(r.courseCode));
+      const wantedCourseCode = rwCourse.apply(String(r.courseCode));
+      let c = crs.find(x => x.code === wantedCourseCode);
       if (!c) { // درس قدیمی — placeholder می‌سازیم تا نمره برنامهٔ درسی جدید را خراب نکند
         const warnBak = report.warnings.length;
-        const [nc] = await db.insert(courses).values({ code: String(r.courseCode), title: `درس مهاجرتی ${r.courseCode}`, units: '0' }).onConflictDoNothing().returning({ id: courses.id });
-        if (nc) { c = { id: nc.id, code: String(r.courseCode) }; crs.push(c); report.warnings.push({ row: 0, msg: `درس ${r.courseCode} نبود — به‌صورت placeholder ساخته شد.` }); }
-        else { const [ex] = await db.select({ id: courses.id, code: courses.code }).from(courses).where(eq(courses.code, String(r.courseCode))); c = ex; crs.push(c); }
+        const [nc] = await db.insert(courses).values({ code: wantedCourseCode, title: `درس مهاجرتی ${wantedCourseCode}`, units: '0' }).onConflictDoNothing().returning({ id: courses.id });
+        if (nc) { c = { id: nc.id, code: wantedCourseCode }; crs.push(c); report.warnings.push({ row: 0, msg: `درس ${wantedCourseCode} نبود — به‌صورت placeholder ساخته شد.` }); }
+        else { const [ex] = await db.select({ id: courses.id, code: courses.code }).from(courses).where(eq(courses.code, wantedCourseCode)); c = ex; crs.push(c); }
         void warnBak;
       }
       // ارائهٔ مهاجرتی: یک گروه با ظرفیت باز برای آن ترم/درس
@@ -412,6 +721,7 @@ export async function commit(userId: number, entity: Entity, tables: Table[], fi
       }).onConflictDoNothing().returning({ id: enrollments.id });
       r0.length ? inserted++ : existing++;
     }
+    reportRewrites(rwCourse, 'درس');
   }
 
   if (entity === 'ledger') {
