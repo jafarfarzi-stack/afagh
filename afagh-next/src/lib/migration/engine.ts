@@ -467,6 +467,7 @@ export async function commit(
         terminatedDate: (r.terminatedDate as string | null) ?? null,
         isActive: r.isActive ? 1 : 0,
         headStaffCode: (r.headStaffCode as string | null) ?? null,
+        headName: (r.headName as string | null) ?? null,
         expertName: (r.expertName as string | null) ?? null,
         lastCouncilDate: (r.lastCouncilDate as string | null) ?? null,
       };
@@ -488,6 +489,7 @@ export async function commit(
         if (!cur.establishedDate && values.establishedDate) patch.establishedDate = values.establishedDate;
         if (!cur.terminatedDate && values.terminatedDate) patch.terminatedDate = values.terminatedDate;
         if (!cur.headStaffCode && values.headStaffCode) patch.headStaffCode = values.headStaffCode;
+        if (!cur.headName && values.headName) patch.headName = values.headName;
         if (!cur.expertName && values.expertName) patch.expertName = values.expertName;
         if (!cur.lastCouncilDate && values.lastCouncilDate) patch.lastCouncilDate = values.lastCouncilDate;
         if (Object.keys(patch).length) await db.update(majors).set(patch).where(eq(majors.id, cur.id));
@@ -507,6 +509,37 @@ export async function commit(
   }
 
   if (entity === 'professor') {
+    /**
+     * فیلدهای هویتیِ استاد که در جدول users می‌نشینند (فایل قدیمی همان
+     * ستون‌های فایل دانشجویان را دارد: نام پدر، شناسنامه، تولد، آدرس…).
+     * تاریخ تولد شمسی است و باید به تاریخ میلادی تبدیل شود.
+     */
+    const identityOf = (r: Record<string, unknown>) => ({
+      gender: (r.gender as string | null) ?? null,
+      mobile: (r.mobile as string | null) ?? null,
+      email: (r.email as string | null) ?? null,
+      photoFileName: (r.photoFile as string | null) ?? null,
+      fatherName: (r.fatherName as string | null) ?? null,
+      birthCertNo: (r.birthCertNo as string | null) ?? null,
+      birthDate: dateFa(r.birthDate as string | null),
+      placeOfBirth: (r.placeOfBirth as string | null) ?? null,
+      placeOfIssue: (r.placeOfIssue as string | null) ?? null,
+      address: (r.address as string | null) ?? null,
+    });
+
+    /** فقط خانه‌های خالیِ کاربر موجود پر می‌شود؛ دادهٔ ویرایش‌شده دست نمی‌خورد */
+    const fillEmptyUser = async (userId: number, r: Record<string, unknown>) => {
+      const [cur] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!cur) return;
+      const patch: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(identityOf(r))) {
+        if (v == null || v === '') continue;
+        const curVal = (cur as Record<string, unknown>)[k];
+        if (curVal == null || curVal === '') patch[k] = v;
+      }
+      if (Object.keys(patch).length) await db.update(users).set(patch).where(eq(users.id, userId));
+    };
+
     for (const r of rows) {
       const facultyId = await ensureFaculty(r.facultyName as string | null, true);
       const departmentId = await ensureDepartment(r.departmentName as string | null, facultyId, true);
@@ -526,7 +559,10 @@ export async function commit(
         hireDate: (r.hireDate as string | null) ?? null,
         lastDegreeYear: (r.lastDegreeYear as number | null) ?? null,
         fieldOfStudy: (r.fieldOfStudy as string | null) ?? null,
+        fieldMain: (r.fieldMain as string | null) ?? null,
         maritalStatus: (r.maritalStatus as string | null) ?? null,
+        maritalStatusCode: (r.maritalStatusCode as number | null) ?? null,
+        lastDegreeCountryCode: (r.lastDegreeCountryCode as string | null) ?? null,
         lastDegreeUniversity: (r.lastDegreeUniversity as string | null) ?? null,
         academicBase: (r.academicBase as string | null) ?? null,
         birthProvince: (r.birthProvince as string | null) ?? null,
@@ -561,17 +597,11 @@ export async function commit(
             continue;
           }
           userId = exU.id;
-          if (r.photoFile) {
-            await db.update(users).set({ photoFileName: String(r.photoFile) })
-              .where(and(eq(users.id, exU.id), isNull(users.photoFileName)));
-          }
+          await fillEmptyUser(exU.id, r);
         } else {
           const [nu] = await db.insert(users).values({
             nationalCode: nc, firstName: String(r.firstName), lastName: String(r.lastName),
-            gender: (r.gender as string | null) ?? null,
-            mobile: (r.mobile as string | null) ?? null,
-            email: (r.email as string | null) ?? null,
-            photoFileName: (r.photoFile as string | null) ?? null,
+            ...identityOf(r),
             passwordHash: hashDefault(nc),   // رمز اولیه = کد ملی
           }).returning({ id: users.id });
           userId = nu.id;
@@ -587,10 +617,7 @@ export async function commit(
         }
         const [nu] = await db.insert(users).values({
           nationalCode: placeholder, firstName: String(r.firstName), lastName: String(r.lastName),
-          gender: (r.gender as string | null) ?? null,
-          mobile: (r.mobile as string | null) ?? null,
-          email: (r.email as string | null) ?? null,
-          photoFileName: (r.photoFile as string | null) ?? null,
+          ...identityOf(r),
           passwordHash: hashDefault(randomBytes(24).toString('hex')),   // ورود ناممکن تا اصلاح کد ملی
         }).returning({ id: users.id });
         userId = nu.id;

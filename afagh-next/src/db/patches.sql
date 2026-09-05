@@ -138,3 +138,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS "photoMime" varchar(100);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS "photoFileName" varchar(255);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS "photoUpdatedAt" timestamp;
 CREATE INDEX IF NOT EXISTS "users_photoFileName_idx" ON users ("photoFileName");
+
+-- ── ستون‌هایی که در فایل‌های واقعی reshtelist/professorslist هست ولی جایی نداشت ──
+ALTER TABLE staff  ADD COLUMN IF NOT EXISTS "fieldMain" varchar(200);
+ALTER TABLE majors ADD COLUMN IF NOT EXISTS "headName"  varchar(150);

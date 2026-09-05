@@ -74,6 +74,7 @@ export type ParsedMajor = {
   terminatedDate: string | null;
   isActive: boolean;
   headStaffCode: string | null;
+  headName: string | null;
   expertName: string | null;
   lastCouncilDate: string | null;
 };
@@ -91,7 +92,8 @@ export const MAJOR_ALIASES = {
   established: ['تاریخ تاسیس', 'تاریخ تأسیس', 'established_date'],
   terminated: ['تاریخ خاتمه', 'تاریخ انحلال', 'terminated_date'],
   active: ['فعال', 'وضعیت', 'is_active', 'active'],
-  headStaff: ['کد استادی مدیر گروه', 'مدیر گروه', 'head_staff_code'],
+  headStaff: ['کد استادی مدیر گروه', 'کد مدیر گروه', 'head_staff_code'],
+  headName: ['نام مدیر گروه', 'مدیر گروه', 'head_name'],
   expert: ['کارشناس رشته', 'کارشناس', 'expert_name'],
   council: ['آخرین جلسه شورای گسترش', 'شورای گسترش', 'last_council_date'],
 } as const;
@@ -138,6 +140,7 @@ export function parseMajorRow(get: CellReader): RowResult<ParsedMajor> {
     terminatedDate: jalali(terminated),
     isActive,
     headStaffCode: get([...A.headStaff]) || null,
+    headName: get([...A.headName]) || null,
     expertName: get([...A.expert]) || null,
     lastCouncilDate: jalali(council),
   }, warnings);
@@ -150,6 +153,15 @@ export type ParsedProfessor = {
   nationalCode: string | null;
   /** نام فایل عکس در سیستم قدیمی — آرشیو ZIP عکس‌ها با همین نام وصل می‌شود */
   photoFile: string | null;
+  fieldMain: string | null;
+  fatherName: string | null;
+  birthCertNo: string | null;
+  birthDate: string | null;        // شمسی، همان‌طور که در فایل آمده
+  placeOfBirth: string | null;
+  placeOfIssue: string | null;
+  address: string | null;
+  maritalStatusCode: number | null;
+  lastDegreeCountryCode: string | null;
   firstName: string;
   lastName: string;
   title: string | null;
@@ -177,11 +189,14 @@ export type ParsedProfessor = {
 };
 
 export const PROFESSOR_ALIASES = {
-  staffCode: ['کد استادی', 'کد استاد', 'کد پرسنلی', 'staff_code', 'professor_code', 'code'],
+  staffCode: ['کد استادی', 'کد استاد', 'کد پرسنلی', 'staff_code', 'professor_code', 'code', 'کد'],
   nationalCode: ['کد ملی', 'کدملی', 'national_code', 'nationalcode'],
   first: ['نام', 'first_name', 'firstname'],
   last: ['نام خانوادگی', 'نامخانوادگی', 'فامیل', 'last_name', 'lastname'],
-  fullName: ['نام و نام خانوادگی', 'نام کامل', 'استاد', 'نام استاد', 'full_name'],
+  fullName: ['نام و نام خانوادگی', 'نام کامل', 'نام و نام خانوادگی استاد', 'استاد', 'نام استاد', 'full_name'],
+  // فایل واقعی ستون «نام خانوادگي و نام» دارد: ترتیب برعکس است و اگر مثل
+  // «نام و نام خانوادگی» خوانده شود، نام و فامیل همه جابه‌جا ثبت می‌شود.
+  fullNameReversed: ['نام خانوادگی و نام', 'نام خانوادگی و نام ', 'فامیل و نام', 'lastname_firstname'],
   title: ['لقب', 'عنوان', 'title', 'prefix'],
   department: ['گروه آموزشی', 'گروه', 'دپارتمان', 'department', 'dept'],
   faculty: ['دانشکده', 'نام دانشکده', 'faculty'],
@@ -192,16 +207,26 @@ export const PROFESSOR_ALIASES = {
   personnelNo: ['شماره مستخدم', 'شماره پرسنلی', 'personnel_no'],
   hireDate: ['تاریخ استخدام', 'hire_date'],
   lastDegreeYear: ['سال اخذ آخرین مدرک', 'سال مدرک', 'last_degree_year'],
-  field: ['رشته و گرایش', 'رشته تحصیلی', 'رشته', 'field_of_study'],
+  field: ['رشته و گرایش', 'رشته تحصیلی', 'field_of_study'],
+  fieldMain: ['رشته', 'رشته اصلی', 'field'],
+  // ── هویت ثبت‌احوالی (فایل استادان همان ستون‌های فایل دانشجویان را دارد) ──
+  fatherName: ['نام پدر', 'father_name'],
+  birthCertNo: ['شماره شناسنامه', 'شناسنامه', 'birth_cert_no'],
+  birthDate: ['تاریخ تولد', 'birth_date'],
+  placeOfBirth: ['محل تولد', 'place_of_birth'],
+  placeOfIssue: ['محل صدور', 'place_of_issue'],
+  address: ['آدرس', 'نشانی', 'address'],
+  maritalCode: ['کد وضعیت تاهل', 'کد تاهل', 'marital_status_code'],
+  countryCode: ['کد کشور آخرین مدرک تحصیلی', 'کد کشور', 'degree_country_code'],
   marital: ['وضعیت تاهل', 'تاهل', 'marital_status'],
-  university: ['دانشگاه محل اخذ مدرک', 'دانشگاه', 'last_degree_university'],
+  university: ['دانشگاه محل اخذ آخرین مدرک تحصیلی', 'دانشگاه محل اخذ مدرک', 'دانشگاه', 'last_degree_university'],
   base: ['پایه استادی', 'پایه', 'academic_base'],
   province: ['استان محل تولد', 'استان', 'birth_province'],
   city: ['شهر محل تولد', 'شهر', 'birth_city'],
   bank: ['شماره حساب', 'حساب بانکی', 'bank_account'],
   phone: ['تلفن ثابت', 'تلفن', 'phone'],
   mobile: ['موبایل', 'همراه', 'تلفن همراه', 'mobile'],
-  email: ['ایمیل', 'پست الکترونیک', 'email'],
+  email: ['ایمیل', 'آدرس الکترونیکی', 'پست الکترونیک', 'email'],
   gender: ['جنسیت', 'جنس', 'gender'],
   active: ['فعال', 'وضعیت', 'is_active', 'active'],
   photo: ['نام فایل عکس', 'عکس', 'فایل عکس', 'تصویر', 'photo', 'photo_file', 'image', 'picture'],
@@ -225,6 +250,20 @@ export function splitFullName(full: string): { title: string | null; first: stri
   return { title, first: parts[0], last: parts.slice(1).join(' ') };
 }
 
+/** «احمدی رضا» (ستون «نام خانوادگي و نام») → فامیل + نام */
+export function splitFullNameReversed(full: string): { title: string | null; first: string; last: string } {
+  const parts = norm(full).split(' ').filter(Boolean);
+  let title: string | null = null;
+  while (parts.length > 1 && /^(آقای|جناب|خانم|سرکار|دکتر|مهندس|استاد|حاج)$/.test(parts[0])) {
+    title = title ? `${title} ${parts[0]}` : parts[0];
+    parts.shift();
+  }
+  if (!parts.length) return { title, first: '', last: '' };
+  if (parts.length === 1) return { title, first: parts[0], last: parts[0] };
+  // آخرین کلمه = نام کوچک، بقیه = نام خانوادگی (فامیل چندبخشی رایج است)
+  return { title, first: parts[parts.length - 1], last: parts.slice(0, -1).join(' ') };
+}
+
 export function parseProfessorRow(get: CellReader): RowResult<ParsedProfessor> {
   const A = PROFESSOR_ALIASES;
   const warnings: string[] = [];
@@ -232,13 +271,24 @@ export function parseProfessorRow(get: CellReader): RowResult<ParsedProfessor> {
   const staffCode = get([...A.staffCode]);
   if (!staffCode) return bad('کد استادی الزامی است (کلید یکتای استاد در سامانه).');
 
-  let first = get([...A.first]);
-  let last = get([...A.last]);
+  // { exact } لازم است: وگرنه نامک «نام خانوادگی» ستون «نام و نام خانوادگی» را
+  // برمی‌دارد و نام کامل به‌جای فامیل ثبت می‌شود (به‌جای تفکیک درست).
+  let first = get([...A.first], { exact: true });
+  let last = get([...A.last], { exact: true });
   let title = get([...A.title]) || null;
   if (!first || !last) {
-    const full = get([...A.fullName]);
+    const full = get([...A.fullName], { exact: true });   // «استاد» نباید با «کد استادی» بخورد
     if (full) {
       const s = splitFullName(full);
+      first = first || s.first;
+      last = last || s.last;
+      title = title || s.title;
+    }
+  }
+  if (!first || !last) {
+    const rev = get([...A.fullNameReversed], { exact: true });   // «نام خانوادگي و نام»
+    if (rev) {
+      const s = splitFullNameReversed(rev);
       first = first || s.first;
       last = last || s.last;
       title = title || s.title;
@@ -270,10 +320,26 @@ export function parseProfessorRow(get: CellReader): RowResult<ParsedProfessor> {
 
   const validNc = nationalCode && checkNationalCode(nationalCode) !== 'format' ? nationalCode : null;
 
+  const maritalCodeRaw = get([...A.maritalCode]);
+  const maritalCode = num(maritalCodeRaw);
+  const birthDateRaw = get([...A.birthDate]);
+  if (birthDateRaw && !jalali(birthDateRaw)) {
+    warnings.push(`تاریخ تولد «${birthDateRaw}» قالب شمسی (۱۳۶۰/۰۵/۱۲) ندارد — نادیده گرفته شد.`);
+  }
+
   return ok({
     staffCode,
     nationalCode: validNc,
     photoFile: get([...A.photo]) || null,
+    fieldMain: get([...A.fieldMain], { exact: true }) || null,
+    fatherName: get([...A.fatherName]) || null,
+    birthCertNo: get([...A.birthCertNo]) || null,
+    birthDate: jalali(birthDateRaw),
+    placeOfBirth: get([...A.placeOfBirth]) || null,
+    placeOfIssue: get([...A.placeOfIssue]) || null,
+    address: get([...A.address]) || null,
+    maritalStatusCode: maritalCode != null && Number.isInteger(maritalCode) ? maritalCode : null,
+    lastDegreeCountryCode: get([...A.countryCode]) || null,
     firstName: first,
     lastName: last,
     title,

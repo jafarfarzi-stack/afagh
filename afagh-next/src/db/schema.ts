@@ -109,6 +109,7 @@ export const majors = pgTable('majors', {
   terminatedDate: varchar('terminatedDate', { length: 10 }),            // تاریخ خاتمه (شمسی)
   isActive: integer('isActive').default(1),                             // فعال/غیرفعال
   headStaffCode: varchar('headStaffCode', { length: 20 }),              // کد استادی مدیر گروه
+  headName: varchar('headName', { length: 150 }),                       // نام مدیر گروه (ستون جدای فایل قدیمی)
   expertName: varchar('expertName', { length: 150 }),                   // نام کارشناس رشته
   lastCouncilDate: varchar('lastCouncilDate', { length: 10 }),           // آخرین جلسه شورای گسترش (شمسی)
   /** رشتهٔ دارای دانشجوی شاغلِ زیاد — اولویت شیفت عصر در امتحانات (فاز ۹) */
@@ -198,6 +199,7 @@ export const staff = pgTable('staff', {
   hireDate: varchar('hireDate', { length: 10 }),          // تاريخ استخدام (شمسی)
   lastDegreeYear: integer('lastDegreeYear'),              // سال اخذ آخرين مدرک تحصيلي
   fieldOfStudy: varchar('fieldOfStudy', { length: 200 }), // رشته و گرايش
+  fieldMain: varchar('fieldMain', { length: 200 }),       // «رشته» (ستون جدا از «رشته و گرايش» در فایل قدیمی)
   maritalStatusCode: integer('maritalStatusCode'),        // کد وضعيت تاهل
   maritalStatus: varchar('maritalStatus', { length: 20 }),// وضعيت تاهل: مجرد/متاهل
   lastDegreeCountryCode: varchar('lastDegreeCountryCode', { length: 10 }), // کد کشور آخرين مدرک
