@@ -220,6 +220,9 @@ export const courses = pgTable('courses', {
   units: numeric('units', { precision: 3, scale: 1 }).notNull(),
   courseType: varchar('courseType', { length: 50 }),
   departmentId: integer('departmentId').references(() => departments.id),
+  // مقطعِ ارائهٔ درس (کارشناسی/ارشد/…) — NULL = مشترک بین مقاطع.
+  // در مهاجرت از سیستم قدیمی از ستون «مقطع» فایل اکسل پر می‌شود.
+  degreeLevelId: integer('degreeLevelId').references(() => degree_level_configs.id),
   gradingType: varchar('gradingType', { length: 20 }).default('NUMERIC'),
   affectsGpa: integer('affectsGpa').default(1),
   // ── موتور برنامه‌ریزی درسی ──
