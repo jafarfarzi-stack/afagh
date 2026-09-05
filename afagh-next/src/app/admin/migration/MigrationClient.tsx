@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import BatchesTab from './BatchesTab';
 import CodeMapTab from './CodeMapTab';
 import GradesTab from './GradesTab';
+import PhotosTab from './PhotosTab';
 import TuitionTab from './TuitionTab';
 import { ImportReport, Msg, ReportBox, Uploader, fmt } from './ui';
 
@@ -22,12 +23,13 @@ export default function MigrationClient(props: {
   financialCount: number;
   gradeStats: { status: string; count: number }[];
 }) {
-  const [tab, setTab] = useState<'core' | 'codes' | 'tuition' | 'grades' | 'batches' | 'history'>('core');
+  const [tab, setTab] = useState<'core' | 'codes' | 'photos' | 'tuition' | 'grades' | 'batches' | 'history'>('core');
   const [sourceCode, setSourceCode] = useState(props.sources[0]?.code ?? 'LEGACY');
 
   const tabs = [
     { id: 'core', title: '📦 دادهٔ پایه' },
     { id: 'codes', title: '🔗 تطبیق کدها' },
+    { id: 'photos', title: '🖼 عکس افراد' },
     { id: 'tuition', title: '💰 شهریه و مالی' },
     { id: 'grades', title: '🎯 نمرات' },
     { id: 'batches', title: '↩ ناحیهٔ موقت و واگرد' },
@@ -58,6 +60,7 @@ export default function MigrationClient(props: {
 
       {tab === 'core' && <CoreTab entities={props.entities} sourceCode={sourceCode} />}
       {tab === 'codes' && <CodeMapTab domains={props.domains} sourceCode={sourceCode} />}
+      {tab === 'photos' && <PhotosTab />}
       {tab === 'tuition' && <TuitionTab sourceCode={sourceCode} formulas={props.formulas} runs={props.compareRuns} financialCount={props.financialCount} />}
       {tab === 'grades' && <GradesTab sourceCode={sourceCode} stats={props.gradeStats} />}
       {tab === 'batches' && <BatchesTab sourceCode={sourceCode} />}
@@ -68,6 +71,7 @@ export default function MigrationClient(props: {
 
 function CoreTab({ entities, sourceCode }: { entities: Entity[]; sourceCode: string }) {
   const [entity, setEntity] = useState(entities[0]?.id ?? 'student');
+  const [rewriteCodes, setRewriteCodes] = useState(true);
   const [report, setReport] = useState<(ImportReport & { error?: string; willInsert?: number; existing?: number }) | null>(null);
   const cur = entities.find(e => e.id === entity);
 
@@ -75,11 +79,15 @@ function CoreTab({ entities, sourceCode }: { entities: Entity[]; sourceCode: str
     <div className="space-y-4">
       <div className="card space-y-3">
         <div>
-          <h3 className="font-bold">دادهٔ پایه: دانشجو، درس، ترم، ثبت‌نام و مالی</h3>
+          <h3 className="font-bold">دادهٔ پایه: ساختار سازمانی، دانشجو، درس، ترم، ثبت‌نام و مالی</h3>
           <p className="mt-1 text-xs leading-6 text-slate-500">
             فایل <b>اکسل (xlsx)</b> یا CSV خروجی سیستم قدیمی را انتخاب کنید. اول <b>تحلیل اولیه</b> بگیرید
             (چیزی نوشته نمی‌شود)، پس از رفع خطاها <b>ثبت نهایی</b>. تکرار بی‌خطر است؛ ردیف‌های موجود دوباره ثبت نمی‌شوند.
-            ترتیب پیشنهادی: دانشجویان ← دروس ← ترم‌ها ← نمرات ← مالی.
+          </p>
+          <p className="mt-1 rounded-lg bg-slate-50 px-2 py-1.5 text-[11px] leading-6 text-slate-500">
+            <b>ترتیب درست انتقال:</b> دانشکده‌ها ← گروه‌های آموزشی ← رشته‌ها و گرایش‌ها ← استادان ← دانشجویان ←
+            دروس ← ترم‌ها ← نمرات ← مالی. هر لایه به لایهٔ پیش از خود تکیه دارد؛ اگر دانشکده یا گروهی در فایل
+            باشد که هنوز تعریف نشده، خودکار ساخته می‌شود و در هشدارها گزارش می‌گردد.
           </p>
         </div>
         <div className="grid gap-2 md:grid-cols-12 md:items-center">
@@ -88,16 +96,26 @@ function CoreTab({ entities, sourceCode }: { entities: Entity[]; sourceCode: str
           </select>
           <div className="md:col-span-9">
             <Uploader
-              kind={entity} sourceCode={sourceCode} templateKind={entity} label=""
+              kind={entity} sourceCode={sourceCode} templateKind={entity} label="" mappable
               actions={[
                 { id: 'dry', title: 'تحلیل اولیه', url: '/api/admin/migration/dry-run', extra: { entity } },
-                { id: 'commit', title: 'ثبت نهایی', url: '/api/admin/migration/commit', primary: true, extra: { entity } },
+                { id: 'commit', title: 'ثبت نهایی', url: '/api/admin/migration/commit', primary: true, extra: { entity, rewriteCodes: rewriteCodes ? '1' : '0' } },
               ]}
               onDone={r => setReport(r)}
             />
           </div>
         </div>
         {cur && <p className="text-[11px] text-slate-400">ستون‌های نمونه: <span dir="ltr">{cur.sample}</span></p>}
+
+        <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-indigo-100 bg-indigo-50/50 p-2">
+          <input type="checkbox" className="mt-1" checked={rewriteCodes} onChange={e => setRewriteCodes(e.target.checked)} />
+          <span className="text-[11px] leading-6 text-slate-600">
+            <b>🔁 جایگزینی کد قدیمی با کد جدید هنگام ثبت</b> — کدهایی که در سربرگ «تطبیق کدها» برایشان
+            <b> کد جدید</b> ثبت و وضعیتشان <b>تأییدشده</b> است، در لحظهٔ انتقال با کد جدید ذخیره می‌شوند
+            (فایل قدیمی دست‌نخورده می‌ماند). نگاشت‌های تأییدنشده هیچ اثری ندارند.
+            فهرست جایگزینی‌های انجام‌شده در هشدارهای گزارش می‌آید.
+          </span>
+        </label>
       </div>
 
       {report && !report.error && (

@@ -19,8 +19,8 @@ export type Table = {
 export type TableRow = {
   /** شمارهٔ خط انسانی در فایل (۱ = سرستون) */
   line: number;
-  /** خواندن ستون با نامک‌های فارسی/انگلیسی */
-  get: (aliases: string[]) => string;
+  /** خواندن ستون با نامک‌های فارسی/انگلیسی ({ exact } = فقط برابری دقیق) */
+  get: (aliases: string[], opts?: { exact?: boolean }) => string;
   cells: string[];
   raw: Record<string, string>;
 };
@@ -64,11 +64,11 @@ export function pickTable(tables: Table[], expected: string[][]): Table | null {
 /** پیمایش ردیف‌های یک جدول با کمکی‌های خواندن ستون */
 export function iterate(table: Table): TableRow[] {
   const cache = new Map<string, number>();
-  const idxOf = (aliases: string[]) => {
+  const idxOf = (aliases: string[], opts?: { exact?: boolean }) => {
     const key = aliases.join('|');
     if (!cache.has(key)) {
       const manual = table.columnMap?.[aliases[0]];
-      cache.set(key, typeof manual === 'number' ? manual : pickCol(table.headers, aliases).idx);
+      cache.set(key, typeof manual === 'number' ? manual : pickCol(table.headers, aliases, opts).idx);
     }
     return cache.get(key) as number;
   };
@@ -79,8 +79,8 @@ export function iterate(table: Table): TableRow[] {
       line: i + 2,
       cells,
       raw,
-      get: (aliases: string[]) => {
-        const idx = idxOf(aliases);
+      get: (aliases: string[], opts?: { exact?: boolean }) => {
+        const idx = idxOf(aliases, opts);
         return idx >= 0 ? norm(cells[idx] ?? '') : '';
       },
     };

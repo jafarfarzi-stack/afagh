@@ -71,6 +71,60 @@ export interface ProfessorOption {
   hasSubmittedAvailability: boolean;
 }
 
+/**
+ * کشویی انتخاب استاد — «تنبل».
+ *
+ * ⚠️ چرا لازم شد: در جدول تقاضا برای *هر ردیف* تا چهار کشویی با *همهٔ*
+ * استادان دانشگاه رندر می‌شد. با ۱۵۰۰ استاد و ۳۳۰۰ ردیف یعنی میلیون‌ها
+ * عنصر <option> در یک صفحه؛ رندر سمت سرور حافظهٔ Node را تمام می‌کرد و
+ * **کل سامانه** با «heap out of memory» می‌مرد (نه فقط این صفحه).
+ *
+ * راه‌حل: تا وقتی کاربر کشویی را باز نکرده، فقط گزینهٔ *انتخاب‌شده* رندر
+ * می‌شود. با اولین mousedown/focus (که پیش از باز شدن لیست رخ می‌دهد)
+ * فهرست کامل جای آن را می‌گیرد. رفتار برای کاربر عیناً همان است.
+ */
+/**
+ * استادِ «تهی» برای وقتی هنوز هیچ استادی در سامانه ثبت نشده (دانشگاهِ تازه‌راه‌افتاده).
+ * بدون این، `professors[0]` برابر undefined می‌شد و خواندن `.id` روی آن کل
+ * صفحه را — چه در سرور چه در مرورگر — از کار می‌انداخت.
+ */
+const NO_PROFESSOR: ProfessorOption = {
+  id: 0, name: '— استادی ثبت نشده —', staffCode: '', academicRank: '—',
+  contractType: 'تمام‌وقت', departmentName: '—', maxWeeklyUnits: 1,
+  maxDailyHours: 0, hasSubmittedAvailability: false,
+};
+
+function ProfessorSelect({
+  professors, value, onChange, className, label,
+}: {
+  professors: ProfessorOption[];
+  value: number;
+  onChange: (id: number) => void;
+  className?: string;
+  label?: (p: ProfessorOption) => string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const text = label ?? ((p: ProfessorOption) => `${p.name} (${p.academicRank})`);
+  const selected = professors.find(p => p.id === value);
+  const list = expanded ? professors : (selected ? [selected] : professors.slice(0, 1));
+  const open = () => { if (!expanded) setExpanded(true); };
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(Number(e.target.value))}
+      onMouseDown={open}
+      onFocus={open}
+      onTouchStart={open}
+      onKeyDown={open}
+      className={className}
+    >
+      {list.map(p => (
+        <option key={p.id} value={p.id}>{text(p)}</option>
+      ))}
+    </select>
+  );
+}
+
 export type SlotStatus = 'PREF' | 'AVAIL' | 'UNAVAIL';
 
 // [profId][dayIndex (0..5)][slotId] = SlotStatus
@@ -830,19 +884,26 @@ export default function DepartmentPlanningClient({ initial }: { initial: Schedul
     return list;
   }, [currentScenario, selectedProgramId, selectedCohortId, selectedWeekFilter]);
 
-  const displayedDemands = useMemo(() => {
+  const filteredDemands = useMemo(() => {
     let list = courseDemands;
     if (selectedProgramId > 0) list = list.filter(d => d.programId === 0 || d.programId === selectedProgramId);
     if (selectedCohortId !== 'ALL') list = list.filter(d => d.cohortId === 'ALL' || d.cohortId === selectedCohortId);
     return list;
   }, [courseDemands, selectedProgramId, selectedCohortId]);
 
+  // یک ترم واقعی چند هزار ارائهٔ درس دارد و هر ردیف این جدول سنگین است؛
+  // همه را یک‌جا رندر نمی‌کنیم تا مرورگر (و رندر سمت سرور) از پا نیفتد.
+  const DEMAND_PAGE = 100;
+  const [demandLimit, setDemandLimit] = useState(DEMAND_PAGE);
+  useEffect(() => { setDemandLimit(DEMAND_PAGE); }, [selectedProgramId, selectedCohortId, selectedTermId]);
+  const displayedDemands = useMemo(() => filteredDemands.slice(0, demandLimit), [filteredDemands, demandLimit]);
+
   const inspectorProf = useMemo(() => {
-    return professors.find(p => p.id === inspectorProfId) || professors[0];
+    return professors.find(p => p.id === inspectorProfId) || professors[0] || NO_PROFESSOR;
   }, [professors, inspectorProfId]);
 
   const editingProf = useMemo(() => {
-    return professors.find(p => p.id === editingProfId) || professors[0];
+    return professors.find(p => p.id === editingProfId) || professors[0] || NO_PROFESSOR;
   }, [professors, editingProfId]);
 
   const inspectorOfferings = useMemo(() => {
@@ -899,7 +960,7 @@ export default function DepartmentPlanningClient({ initial }: { initial: Schedul
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-slate-950">
                 سامانه جامع چیدمان متمرکز دانشگاهی
               </span>
-              <span className="text-xs text-indigo-200">{currentTerm.title}</span>
+              <span className="text-xs text-indigo-200">{currentTerm?.title ?? 'نیمسال تعریف‌نشده'}</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-700/60 text-indigo-100 font-bold mr-2">
                 فاز: {PHASE_LABELS[currentPhase] ?? currentPhase}{isLoadingWorkspace ? ' — در حال بارگذاری…' : ''}
               </span>
@@ -1118,7 +1179,7 @@ export default function DepartmentPlanningClient({ initial }: { initial: Schedul
               <div className="flex items-center gap-2">
                 <span className="text-xl">📚</span>
                 <h3 className="font-extrabold text-slate-900 text-base">
-                  چارت درسی رشته «{currentProgram.title}» و انتساب اساتید به دروس
+                  چارت درسی رشته «{currentProgram?.title ?? '—'}» و انتساب اساتید به دروس
                 </h3>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
@@ -1154,7 +1215,7 @@ export default function DepartmentPlanningClient({ initial }: { initial: Schedul
               </thead>
               <tbody>
                 {displayedDemands.map((demand, idx) => {
-                  const assignedProf = professors.find(p => p.id === demand.preferredProfId) || professors[0];
+                  const assignedProf = professors.find(p => p.id === demand.preferredProfId) || professors[0] || NO_PROFESSOR;
                   const profLoad = profAssignedUnitsMap[assignedProf.id]?.units || 0;
                   const isOverQuota = profLoad > assignedProf.maxWeeklyUnits;
 
@@ -1194,17 +1255,13 @@ export default function DepartmentPlanningClient({ initial }: { initial: Schedul
                           demand.groupsCount === 1 ? (
                             <div className="space-y-1.5">
                               <div className="flex items-center gap-1.5">
-                                <select
+                                <ProfessorSelect
+                                  professors={professors}
                                   value={demand.preferredProfId}
-                                  onChange={e => handleAssignProfessorToCourse(demand.id, Number(e.target.value))}
+                                  onChange={id => handleAssignProfessorToCourse(demand.id, id)}
+                                  label={p => `${p.name} (${p.academicRank} — ${p.contractType})`}
                                   className="w-full border-2 border-indigo-400/80 rounded-lg px-2 py-1 font-extrabold bg-indigo-50/50 text-indigo-950 focus:ring-2 focus:ring-indigo-500"
-                                >
-                                  {professors.map(p => (
-                                    <option key={p.id} value={p.id}>
-                                      {p.name} ({p.academicRank} — {p.contractType})
-                                    </option>
-                                  ))}
-                                </select>
+                                />
                                 <button
                                   type="button"
                                   onClick={() => handleToggleCoTeaching(demand.id)}
@@ -1235,17 +1292,12 @@ export default function DepartmentPlanningClient({ initial }: { initial: Schedul
                                     <span className="px-1.5 py-0.5 rounded bg-indigo-900 text-white font-bold text-[10px] whitespace-nowrap">
                                       گروه {faNum(gNo)}:
                                     </span>
-                                    <select
+                                    <ProfessorSelect
+                                      professors={professors}
                                       value={curProfId}
-                                      onChange={e => handleAssignProfessorToGroup(demand.id, gNo, Number(e.target.value))}
+                                      onChange={id => handleAssignProfessorToGroup(demand.id, gNo, id)}
                                       className="w-full border border-indigo-300 rounded px-1.5 py-0.5 font-bold bg-white text-indigo-950 text-xs"
-                                    >
-                                      {professors.map(p => (
-                                        <option key={p.id} value={p.id}>
-                                          {p.name} ({p.academicRank})
-                                        </option>
-                                      ))}
-                                    </select>
+                                    />
                                   </div>
                                 );
                               })}
@@ -1270,17 +1322,12 @@ export default function DepartmentPlanningClient({ initial }: { initial: Schedul
                                 <span>📖 استاد بخش تئوری:</span>
                                 <span className="text-indigo-900">سهم: {faNum((demand.theoryWeightRatio || 0.7) * 100)}٪ ({faNum((demand.theoryWeightRatio || 0.7) * 20)} نمره)</span>
                               </div>
-                              <select
+                              <ProfessorSelect
+                                professors={professors}
                                 value={demand.preferredProfId}
-                                onChange={e => handleAssignProfessorToCourse(demand.id, Number(e.target.value))}
+                                onChange={id => handleAssignProfessorToCourse(demand.id, id)}
                                 className="w-full border border-indigo-300 rounded px-2 py-1 font-extrabold bg-white text-indigo-950 text-xs"
-                              >
-                                {professors.map(p => (
-                                  <option key={p.id} value={p.id}>
-                                    {p.name} ({p.academicRank})
-                                  </option>
-                                ))}
-                              </select>
+                              />
                             </div>
 
                             {/* Lab / Practical Professor */}
@@ -1289,17 +1336,12 @@ export default function DepartmentPlanningClient({ initial }: { initial: Schedul
                                 <span>🔬 استاد بخش عملی:</span>
                                 <span className="text-purple-900">سهم: {faNum((demand.labWeightRatio || 0.3) * 100)}٪ ({faNum((demand.labWeightRatio || 0.3) * 20)} نمره)</span>
                               </div>
-                              <select
-                                value={demand.coProfId || professors[2].id}
-                                onChange={e => handleAssignCoProfessor(demand.id, Number(e.target.value))}
+                              <ProfessorSelect
+                                professors={professors}
+                                value={demand.coProfId || professors[2]?.id || professors[0]?.id || 0}
+                                onChange={id => handleAssignCoProfessor(demand.id, id)}
                                 className="w-full border border-purple-300 rounded px-2 py-1 font-extrabold bg-white text-purple-950 text-xs"
-                              >
-                                {professors.map(p => (
-                                  <option key={p.id} value={p.id}>
-                                    {p.name} ({p.academicRank})
-                                  </option>
-                                ))}
-                              </select>
+                              />
                             </div>
 
                             {/* Weighting Slider */}
@@ -1371,6 +1413,20 @@ export default function DepartmentPlanningClient({ initial }: { initial: Schedul
                 })}
               </tbody>
             </table>
+            {displayedDemands.length < filteredDemands.length && (
+              <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs">
+                <span className="font-bold text-slate-600">
+                  نمایش {faNum(displayedDemands.length)} ردیف از {faNum(filteredDemands.length)} ردیف
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setDemandLimit(n => n + DEMAND_PAGE)}
+                  className="rounded-lg bg-indigo-900 px-4 py-2 font-black text-white transition hover:bg-indigo-950"
+                >
+                  نمایش {faNum(Math.min(DEMAND_PAGE, filteredDemands.length - displayedDemands.length))} ردیف بعدی
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1484,7 +1540,7 @@ export default function DepartmentPlanningClient({ initial }: { initial: Schedul
               <div className="flex items-center gap-2">
                 <span className="text-xl">🏛️</span>
                 <h3 className="font-extrabold text-slate-900 text-base">
-                  کلاس‌ها، سایت‌ها و آزمایشگاه‌های اختصاص‌یافته به دپارتمان «{currentProgram.title}»
+                  کلاس‌ها، سایت‌ها و آزمایشگاه‌های اختصاص‌یافته به دپارتمان «{currentProgram?.title ?? '—'}»
                 </h3>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">

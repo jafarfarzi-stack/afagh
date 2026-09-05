@@ -6,7 +6,7 @@
     "dev": "next dev -p 8080",
     "build": "next build",
     "typecheck": "tsc --noEmit",
-    "test": "tsx tests/tuition-rules.test.ts && tsx tests/finance-rules.test.ts && tsx tests/grades-reducer.test.ts && tsx tests/exam-core.test.ts && tsx tests/scheduling-core.test.ts && tsx tests/exam-scheduler.test.ts && tsx tests/curriculum-domain.test.ts && tsx tests/curriculum-validator.test.ts",
+    "test": "tsx tests/tuition-rules.test.ts && tsx tests/finance-rules.test.ts && tsx tests/grades-reducer.test.ts && tsx tests/exam-core.test.ts && tsx tests/scheduling-core.test.ts && tsx tests/exam-scheduler.test.ts && tsx tests/curriculum-domain.test.ts && tsx tests/curriculum-validator.test.ts && tsx tests/migration-course.test.ts && tsx tests/migration-reference.test.ts && tsx tests/migration-photos.test.ts && tsx tests/migration-real-headers.test.ts && tsx tests/migration-codes.test.ts",
     "start": "next start -p 8080",
     "db:generate": "npx drizzle-kit generate",
     "db:push": "npx drizzle-kit push",
@@ -14,6 +14,7 @@
     "db:migrate-sqlite": "node scripts/migrate-sqlite-to-pg.mjs",
     "db:hardening": "node scripts/hardening.mjs",
     "db:base": "node scripts/seed-base.mjs",
+    "db:permissions": "node scripts/seed-permissions.mjs",
     "test:rls": "node scripts/rls-test.mjs",
     "test:concurrency": "node scripts/concurrency-test.mjs"
   },

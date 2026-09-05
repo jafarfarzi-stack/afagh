@@ -43,6 +43,12 @@ export const users = pgTable('users', {
   fatherName: varchar('fatherName', { length: 100 }),          // نام پدر
   gender: varchar('gender', { length: 10 }),                   // جنسیت: MALE / FEMALE
   address: varchar('address', { length: 300 }),                // نشانی پستی
+  // ── عکس پرسنلی/دانشجویی (مهاجرت از سیستم قدیمی + کارت دانشجویی و کارت ورود به جلسه) ──
+  // خودِ فایل در Object Storage می‌ماند (سند §۲۴۳۸: «فقط کلید در دیتابیس»).
+  photoKey: varchar('photoKey', { length: 500 }),        // کلید شیء در باکت
+  photoMime: varchar('photoMime', { length: 100 }),      // image/jpeg …
+  photoFileName: varchar('photoFileName', { length: 255 }), // نام فایل عکس در سیستم قدیمی (ستون اکسل)
+  photoUpdatedAt: timestamp('photoUpdatedAt'),
   passwordHash: varchar('passwordHash', { length: 255 }).notNull(),
   isActive: integer('isActive').default(1),
   // ── فلگ «تغییر اجباری رمز در اولین ورود» (برای حساب‌های پذیرش‌شده با رمز پیش‌فرض) ──
@@ -86,7 +92,21 @@ export const departments = pgTable('departments', {
   name: varchar('name', { length: 150 }).notNull(),
   facultyId: integer('facultyId').notNull().references(() => faculties.id),
   // ── کد گروه آموزشی از دیتابیس قدیمی (فایل reshtelist—ستون «گروه آموزشی») ──
-  departmentCode: varchar('departmentCode', { length: 10 })
+  departmentCode: varchar('departmentCode', { length: 10 }),
+  /**
+   * مدیر گروه — از میان پرونده‌های کارمندی/هیئت علمی انتخاب می‌شود.
+   * عمداً اینجا (روی گروه) ذخیره می‌شود نه روی staff، چون مدیر گروهِ «دروس
+   * عمومی و مشترک» معمولاً عضو همان گروه نیست؛ او استادی از یک گروه دیگر
+   * است که سرپرستی گروه عمومی را هم دارد. یک نفر می‌تواند مدیر چند گروه باشد.
+   */
+  headStaffId: integer('headStaffId'),
+  /**
+   * نوع گروه: ACADEMIC = گروه آموزشیِ رشته‌دار · GENERAL = گروه دروس عمومی و
+   * مشترک (معارف، تربیت بدنی، زبان، ریاضی عمومی…) که رشتهٔ مستقل ندارد ولی
+   * دروسش برای همهٔ رشته‌ها ارائه می‌شود.
+   */
+  kind: varchar('kind', { length: 20 }).default('ACADEMIC'),
+  isActive: integer('isActive').default(1)
 });
 
 export const majors = pgTable('majors', {
@@ -103,6 +123,7 @@ export const majors = pgTable('majors', {
   terminatedDate: varchar('terminatedDate', { length: 10 }),            // تاریخ خاتمه (شمسی)
   isActive: integer('isActive').default(1),                             // فعال/غیرفعال
   headStaffCode: varchar('headStaffCode', { length: 20 }),              // کد استادی مدیر گروه
+  headName: varchar('headName', { length: 150 }),                       // نام مدیر گروه (ستون جدای فایل قدیمی)
   expertName: varchar('expertName', { length: 150 }),                   // نام کارشناس رشته
   lastCouncilDate: varchar('lastCouncilDate', { length: 10 }),           // آخرین جلسه شورای گسترش (شمسی)
   /** رشتهٔ دارای دانشجوی شاغلِ زیاد — اولویت شیفت عصر در امتحانات (فاز ۹) */
@@ -192,6 +213,7 @@ export const staff = pgTable('staff', {
   hireDate: varchar('hireDate', { length: 10 }),          // تاريخ استخدام (شمسی)
   lastDegreeYear: integer('lastDegreeYear'),              // سال اخذ آخرين مدرک تحصيلي
   fieldOfStudy: varchar('fieldOfStudy', { length: 200 }), // رشته و گرايش
+  fieldMain: varchar('fieldMain', { length: 200 }),       // «رشته» (ستون جدا از «رشته و گرايش» در فایل قدیمی)
   maritalStatusCode: integer('maritalStatusCode'),        // کد وضعيت تاهل
   maritalStatus: varchar('maritalStatus', { length: 20 }),// وضعيت تاهل: مجرد/متاهل
   lastDegreeCountryCode: varchar('lastDegreeCountryCode', { length: 10 }), // کد کشور آخرين مدرک
@@ -220,6 +242,9 @@ export const courses = pgTable('courses', {
   units: numeric('units', { precision: 3, scale: 1 }).notNull(),
   courseType: varchar('courseType', { length: 50 }),
   departmentId: integer('departmentId').references(() => departments.id),
+  // مقطعِ ارائهٔ درس (کارشناسی/ارشد/…) — NULL = مشترک بین مقاطع.
+  // در مهاجرت از سیستم قدیمی از ستون «مقطع» فایل اکسل پر می‌شود.
+  degreeLevelId: integer('degreeLevelId').references(() => degree_level_configs.id),
   gradingType: varchar('gradingType', { length: 20 }).default('NUMERIC'),
   affectsGpa: integer('affectsGpa').default(1),
   // ── موتور برنامه‌ریزی درسی ──

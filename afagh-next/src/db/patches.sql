@@ -114,3 +114,71 @@ END $$;
 -- M-4: ایندکس‌های پاکسازی/چرخش نشست‌ها (در drizzle push برای نصب‌های قدیمی ساخته نمی‌شود)
 CREATE INDEX IF NOT EXISTS "sessions_userId_idx" ON sessions ("userId");
 CREATE INDEX IF NOT EXISTS "sessions_expiresAt_idx" ON sessions ("expiresAt");
+
+-- ── مقطع درس (مهاجرت داده): فایل قدیمی ستون «مقطع» دارد ولی کاتالوگ جدید
+--    جایی برای نگه‌داشتنش نداشت. NULL = درس مشترک بین همهٔ مقاطع.
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS "degreeLevelId" integer;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'courses_degreeLevelId_fkey') THEN
+    ALTER TABLE courses
+      ADD CONSTRAINT "courses_degreeLevelId_fkey"
+      FOREIGN KEY ("degreeLevelId") REFERENCES degree_level_configs(id);
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS "courses_degreeLevelId_idx" ON courses ("degreeLevelId");
+CREATE INDEX IF NOT EXISTS "courses_departmentId_idx" ON courses ("departmentId");
+
+-- ── عکس افراد (مهاجرت از سیستم قدیمی) ──
+--    فایل عکس در Object Storage می‌ماند؛ اینجا فقط کلید و فراداده.
+--    photoFileName نام فایل در فایل اکسل قدیمی است تا آرشیو ZIP عکس‌ها
+--    بتواند هر عکس را به صاحبش وصل کند حتی وقتی نام فایل با کد شخص یکی نیست.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "photoKey" varchar(500);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "photoMime" varchar(100);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "photoFileName" varchar(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "photoUpdatedAt" timestamp;
+CREATE INDEX IF NOT EXISTS "users_photoFileName_idx" ON users ("photoFileName");
+
+-- ── ستون‌هایی که در فایل‌های واقعی reshtelist/professorslist هست ولی جایی نداشت ──
+ALTER TABLE staff  ADD COLUMN IF NOT EXISTS "fieldMain" varchar(200);
+ALTER TABLE majors ADD COLUMN IF NOT EXISTS "headName"  varchar(150);
+
+-- ── مدیر گروه و نوع گروه آموزشی ──
+--    headStaffId روی خودِ گروه است (نه روی staff) چون مدیر گروهِ «دروس عمومی
+--    و مشترک» معمولاً عضو آن گروه نیست و یک نفر می‌تواند مدیر چند گروه باشد.
+ALTER TABLE departments ADD COLUMN IF NOT EXISTS "headStaffId" integer;
+ALTER TABLE departments ADD COLUMN IF NOT EXISTS "kind" varchar(20) DEFAULT 'ACADEMIC';
+ALTER TABLE departments ADD COLUMN IF NOT EXISTS "isActive" integer DEFAULT 1;
+CREATE INDEX IF NOT EXISTS "departments_headStaffId_idx" ON departments ("headStaffId");
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'departments_headStaffId_fkey') THEN
+    ALTER TABLE departments
+      ADD CONSTRAINT "departments_headStaffId_fkey"
+      FOREIGN KEY ("headStaffId") REFERENCES staff(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+-- ── یکتایی کد دانشکده و کد گروه ──
+--    کد سند اصالت است؛ اگر تکراری باشد، تطبیق «کد-اول» در انتقال داده بی‌معنا
+--    می‌شود. ایندکس جزئی است تا رکوردهای بدون کد (NULL) مانع نشوند.
+--    اگر کد تکراری در داده هست، ایندکس ساخته نمی‌شود و پیام می‌دهیم تا دستی
+--    اصلاح شود — عمداً داده حذف یا بازنویسی نمی‌کنیم.
+DO $$
+BEGIN
+  IF EXISTS (SELECT "facultyCode" FROM faculties WHERE "facultyCode" IS NOT NULL
+             GROUP BY "facultyCode" HAVING count(*) > 1) THEN
+    RAISE WARNING 'کد دانشکدهٔ تکراری هست — ایندکس یکتا ساخته نشد. در /admin/departments اصلاح کنید.';
+  ELSE
+    CREATE UNIQUE INDEX IF NOT EXISTS "faculties_facultyCode_uq"
+      ON faculties ("facultyCode") WHERE "facultyCode" IS NOT NULL;
+  END IF;
+
+  IF EXISTS (SELECT "departmentCode" FROM departments WHERE "departmentCode" IS NOT NULL
+             GROUP BY "departmentCode" HAVING count(*) > 1) THEN
+    RAISE WARNING 'کد گروه آموزشی تکراری هست — ایندکس یکتا ساخته نشد. در /admin/departments اصلاح کنید.';
+  ELSE
+    CREATE UNIQUE INDEX IF NOT EXISTS "departments_departmentCode_uq"
+      ON departments ("departmentCode") WHERE "departmentCode" IS NOT NULL;
+  END IF;
+END $$;

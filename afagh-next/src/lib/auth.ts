@@ -384,6 +384,11 @@ export function homeFor(roles: string[]): string {
   if (roles.includes('STUDENT')) return '/student';
   if (roles.includes('PROCTOR') && !roles.includes('ADMIN') && !roles.includes('EDU_EXPERT')) return '/proctor';
   if (roles.includes('PROFESSOR') && !roles.includes('ADMIN') && !roles.includes('EDU_EXPERT')) return '/professor';
+  // مدیر گروهی که استاد هم هست، بالاتر به /professor رفته است؛ پنل مدیر گروه از
+  // همان‌جا یک کلیک فاصله دارد (کارتابل‌ها ادغام شده‌اند). این خط برای کسی است
+  // که *فقط* مدیر گروه است و قبلاً اشتباهاً به /admin فرستاده می‌شد.
+  if (roles.includes('DEP_HEAD') && !roles.includes('ADMIN') && !roles.includes('EDU_EXPERT') && !roles.includes('VICE_EDU'))
+    return '/group-manager';
   if (roles.includes('FINANCE_EXPERT') || roles.includes('FINANCE')) return '/admin/payroll';
   if (roles.includes('VAULT_MANAGER')) return '/admin/exams';
   if (roles.includes('MILITARY_OFFICER')) return '/admin/students';

@@ -19,6 +19,7 @@
  * ══════════════════════════════════════════════════════════════════
  */
 import pg from 'pg';
+import { seedPermissions } from './seed-permissions.mjs';
 import { createRequire } from 'node:module';
 
 const { Pool } = pg;
@@ -87,6 +88,13 @@ try {
     await q(`INSERT INTO roles (code, title, "isSystem") VALUES ($1,$2,1) ON CONFLICT (code) DO NOTHING`, [code, title]);
   }
   console.log(`  ✓ نقش‌ها (${ROLES.length})`);
+
+  // ── کاتالوگ مجوزها + نگاشت پیش‌فرض نقش→مجوز (ماتریس RBAC) ──
+  //  بدون این بخش، جدول‌های permissions/role_permissions روی نصب تازه خالی
+  //  می‌مانند و صفحهٔ «ماتریس دسترسی‌ها» هیچ دادهٔ واقعی برای نمایش ندارد.
+  //  منطق در scripts/seed-permissions.mjs است تا روی سرورِ در حال کار هم
+  //  بتوان جداگانه (بدون بازتولید کلیدهای cron) اجرایش کرد.
+  await seedPermissions(q, { log: (m) => console.log(m) });
 
   // مقاطع
   const degreeIds = {};
