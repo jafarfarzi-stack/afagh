@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 const faDigits = (s: string) => String(s);
 
 /** صفحهٔ حضور و غیاب استاد — همهٔ داده‌ها واقعی (ارائه‌ها، جلسات، دانشجویان و رکوردهای حضور) */
-export default async function ProfessorAttendancePage({ searchParams }: { searchParams: { offeringId?: string } }) {
+export default async function ProfessorAttendancePage({ searchParams }: { searchParams: Promise<{ offeringId?: string }> }) {
   const user = await requireRole(['PROFESSOR']);
   const me = await getStaffByUser(user.id);
 
@@ -27,7 +27,8 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
 
   const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
   const termTitle = term?.title ?? '';
-  const defaultOfferingId = searchParams.offeringId ? Number(searchParams.offeringId) : undefined;
+  const sp = await searchParams;
+  const defaultOfferingId = sp.offeringId ? Number(sp.offeringId) : undefined;
   const todayJalali = jalaliDateOf(new Date());
 
   const myOfferings = await db
