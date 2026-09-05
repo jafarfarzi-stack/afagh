@@ -404,6 +404,18 @@ DROP POLICY IF EXISTS professor_availabilities_self_read ON "professor_availabil
 CREATE POLICY professor_availabilities_self_read ON "professor_availabilities" FOR SELECT TO afagh_app
   USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
 
+-- فاز ۱۱ (واقعی‌سازی): جدول‌های جدیدِ دارای staffId باید در پوشش RLS بیایند،
+-- وگرنه گیت «پوشش کامل RLS» در hardening.mjs استقرار را متوقف می‌کند (fail-closed).
+ALTER TABLE "professor_availability_notes" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS prof_avail_note_self_read ON "professor_availability_notes";
+CREATE POLICY prof_avail_note_self_read ON "professor_availability_notes" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "signature_otps" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS sigotp_self_read ON "signature_otps";
+CREATE POLICY sigotp_self_read ON "signature_otps" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
 ALTER TABLE "staff_roles" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS staff_roles_self_read ON "staff_roles";
 CREATE POLICY staff_roles_self_read ON "staff_roles" FOR SELECT TO afagh_app
