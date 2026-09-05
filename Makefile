@@ -7,8 +7,8 @@ HTTPS := -f docker-compose.yml -f docker-compose.https.yml
 STAMP := $(shell date +%Y-%m-%d_%H-%M)
 
 .DEFAULT_GOAL := help
-.PHONY: help up up-https build rebuild down stop restart logs logs-all ps health \
-        migrate backup restore psql redis-cli shell update fresh clean env
+.PHONY: help up up-https build build-lowmem rebuild down stop restart logs logs-all ps health \
+        migrate backup restore psql redis-cli shell update fresh clean env swap mem
 
 help: ## نمایش همین راهنما
 	@echo ""
@@ -30,6 +30,15 @@ up-https: env ## اجرا پشت Caddy با HTTPS خودکار (نیازمند D
 
 build: ## فقط ساخت ایمیج‌ها
 	$(DC) build
+
+mem: ## گزارش حافظه/swap سرور + سقف هیپ پیشنهادی بیلد (بدون تغییر سیستم)
+	bash scripts/ensure-build-memory.sh --dry-run
+
+swap: ## ساخت swap برای بیلد روی سرور کم‌حافظه (رفع «exit code: 137»)
+	sudo bash scripts/ensure-build-memory.sh
+
+build-lowmem: ## بیلد با هیپ ۱۵۳۶ مگابایت — سرور ۲ گیگی (اول make swap)
+	NODE_MAX_OLD_SPACE=1536 $(DC) build
 
 rebuild: ## ساخت ایمیج‌ها بدون کش و اجرای مجدد
 	$(DC) build --no-cache

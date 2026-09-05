@@ -184,7 +184,10 @@ services:
       target: runner
       args:
         # روی سرور کم‌حافظه کمترش کنید (مثلاً 1536) — .env: NODE_MAX_OLD_SPACE=1536
-        NODE_MAX_OLD_SPACE: ${NODE_MAX_OLD_SPACE:-3072}
+        # بیلد با «exit code: 137» = OOM است: swap بسازید و این مقدار را کم کنید.
+        NODE_MAX_OLD_SPACE: ${NODE_MAX_OLD_SPACE:-2048}
+        # آرگومان اضافهٔ next build — مثلاً NEXT_BUILD_ARGS=--webpack
+        NEXT_BUILD_ARGS: ${NEXT_BUILD_ARGS:-}
     image: afagh-app:latest
     container_name: afagh_app
     restart: unless-stopped

@@ -10,11 +10,14 @@ const skipTypeCheck = process.env.NEXT_SKIP_TYPE_CHECK === '1';
 // در مرحلهٔ builder تنظیم می‌کند.
 const standalone = process.env.AFAGH_STANDALONE === '1';
 
+// توجه (Next 16): کلید «eslint» در next.config دیگر پشتیبانی نمی‌شود و خودِ
+// «next build» هم دیگر ESLint اجرا نمی‌کند؛ گذاشتنش فقط دو هشدار
+// «Unrecognized key(s) in object: 'eslint'» در لاگ بیلد تولید می‌کرد.
+// (پروژه اسکریپت lint جداگانه ندارد؛ دروازه‌های CI تایپ‌چک و تست‌اند.)
 const nextConfig = {
   reactStrictMode: true,
   ...(standalone ? { output: 'standalone' } : {}),
   typescript: { ignoreBuildErrors: skipTypeCheck },
-  eslint: { ignoreDuringBuilds: skipTypeCheck },
 };
 
 export default nextConfig;
