@@ -1,0 +1,114 @@
+{
+  "_readme": "کاتالوگ مرجع مجوزها و نگاشت پیش‌فرض نقش→مجوز. تنها منبع حقیقت (Single Source of Truth) برای هر دو مسیر: اپ (src/lib/permissions-catalog.ts) و اسکریپت دادهٔ پایه (scripts/seed-base.mjs). افزودن مجوز جدید فقط همین‌جا انجام می‌شود.",
+  "categories": [
+    "ثبت‌نام و پذیرش (e-KYC)",
+    "امور مالی و شهریه",
+    "امتحانات و مخزن اوراق",
+    "آموزش و نمرات",
+    "برنامه‌ریزی درسی و سرفصل",
+    "بایگانی دیجیتال",
+    "فارغ‌التحصیلی و مدارک",
+    "مدیریت سامانه",
+    "پنل شخصی"
+  ],
+  "permissions": [
+    { "code": "students:verify_kyc", "title": "تأیید احراز هویت", "category": "ثبت‌نام و پذیرش (e-KYC)", "description": "تأیید مدارک هویتی و ثبت‌نام آنلاین دانشجو" },
+    { "code": "students:issue_card", "title": "صدور کارت دانشجویی", "category": "ثبت‌نام و پذیرش (e-KYC)", "description": "صدور و چاپ کارت دانشجویی هوشمند با QR" },
+    { "code": "students:view_dossier", "title": "مشاهدهٔ پروندهٔ دانشجو", "category": "ثبت‌نام و پذیرش (e-KYC)", "description": "مشاهدهٔ پروندهٔ تحصیلی و هویتی دانشجو" },
+    { "code": "admissions:import_sanjesh", "title": "ورود دادهٔ سنجش", "category": "ثبت‌نام و پذیرش (e-KYC)", "description": "بارگذاری و نگاشت فایل پذیرش سازمان سنجش" },
+
+    { "code": "finance:view_ledger", "title": "مشاهدهٔ دفتر مالی", "category": "امور مالی و شهریه", "description": "مشاهدهٔ تراز مالی، دفتر کل و بدهکاری دانشجویان" },
+    { "code": "finance:manage_tuition_rules", "title": "مدیریت قواعد شهریه", "category": "امور مالی و شهریه", "description": "تعریف فرمول شهریه، تخفیف‌ها و بنیادها" },
+    { "code": "finance:approve_advances", "title": "تأیید مساعده", "category": "امور مالی و شهریه", "description": "فعال‌سازی و تأیید مساعده و علی‌الحساب اساتید" },
+    { "code": "finance:settle_payroll", "title": "تسویهٔ حق‌التدریس", "category": "امور مالی و شهریه", "description": "تسویهٔ نهایی حق‌التدریس و صدور دیسکت بانکی" },
+    { "code": "finance:tamin_insurance", "title": "بیمه و مالیات", "category": "امور مالی و شهریه", "description": "مدیریت لیست بیمهٔ تأمین اجتماعی و کسور مالیاتی" },
+
+    { "code": "exams:plan_calendar", "title": "تقویم امتحانات", "category": "امتحانات و مخزن اوراق", "description": "زون‌بندی و تدوین تقویم امتحانات پایان نیمسال" },
+    { "code": "exams:manage_halls", "title": "سالن و صندلی", "category": "امتحانات و مخزن اوراق", "description": "برنامه‌ریزی سالن‌ها، شمارهٔ صندلی و مراقبین" },
+    { "code": "exams:vault_handover", "title": "تحویل مخزن", "category": "امتحانات و مخزن اوراق", "description": "شمارش و تأیید بسته‌های درسی مخزن قرنطینه" },
+    { "code": "exams:proctor_attendance", "title": "حضوروغیاب حوزه", "category": "امتحانات و مخزن اوراق", "description": "حضور و غیاب داوطلبان با اسکنر QR در سالن" },
+    { "code": "exams:temp_permit", "title": "مجوز ورود موقت", "category": "امتحانات و مخزن اوراق", "description": "صدور مجوز ورود موقت (تعهد) بدون کارت" },
+
+    { "code": "grades:enter_temporary", "title": "ثبت نمرهٔ موقت", "category": "آموزش و نمرات", "description": "ورود نمرات میان‌ترم و ثبت موقت" },
+    { "code": "grades:finalize_otp", "title": "نهایی‌سازی با OTP", "category": "آموزش و نمرات", "description": "قفل و نهایی‌سازی قطعی کارنامه با امضای OTP" },
+    { "code": "grades:resolve_appeals", "title": "رسیدگی به اعتراض", "category": "آموزش و نمرات", "description": "رسیدگی به فرجام‌خواهی و اعتراضات نمره" },
+    { "code": "edu:manage_enrollment", "title": "مدیریت انتخاب واحد", "category": "آموزش و نمرات", "description": "بازکردن/بستن انتخاب واحد، حذف‌واضافه و ترمیم ثبت‌نام" },
+
+    { "code": "curriculum:manage_versions", "title": "نسخه‌بندی سرفصل", "category": "برنامه‌ریزی درسی و سرفصل", "description": "تدوین و نسخه‌بندی چارت درسی و خوشه‌های هم‌ارز" },
+    { "code": "scheduling:manage_chart", "title": "چیدمان دروس", "category": "برنامه‌ریزی درسی و سرفصل", "description": "تعریف گروه‌های درسی و ماتریس زمان‌بندی نیمسال" },
+    { "code": "scheduling:assign_professors", "title": "انتساب اساتید", "category": "برنامه‌ریزی درسی و سرفصل", "description": "تخصیص استاد به گروه درسی و بررسی تعارض‌ها" },
+    { "code": "scheduling:approve_plan", "title": "تصویب برنامهٔ نیمسال", "category": "برنامه‌ریزی درسی و سرفصل", "description": "تأیید نهایی سناریوی چیدمان و انتشار برنامه" },
+
+    { "code": "archive:verify_papers", "title": "تأیید اوراق فیزیکی", "category": "بایگانی دیجیتال", "description": "تأیید دریافت فیزیکی اوراق امتحانی و آزادسازی مالی" },
+    { "code": "archive:view_documents", "title": "مشاهدهٔ اسناد محرمانه", "category": "بایگانی دیجیتال", "description": "مشاهدهٔ اسناد محرمانه و پرونده‌های بایگانی" },
+
+    { "code": "graduation:review_dossier", "title": "بررسی پروندهٔ فراغت", "category": "فارغ‌التحصیلی و مدارک", "description": "کنترل واحدهای گذرانده و تأیید شرایط فراغت از تحصیل" },
+    { "code": "graduation:issue_certificate", "title": "صدور مدرک", "category": "فارغ‌التحصیلی و مدارک", "description": "صدور دانشنامه/گواهی موقت با کد رهگیری استعلام" },
+
+    { "code": "system:manage_users", "title": "مدیریت کاربران", "category": "مدیریت سامانه", "description": "ایجاد کاربر، تخصیص نقش و غیرفعال‌سازی حساب" },
+    { "code": "system:manage_roles", "title": "مدیریت نقش و دسترسی", "category": "مدیریت سامانه", "description": "تعریف نقش سازمانی و ویرایش ماتریس دسترسی‌ها" },
+    { "code": "system:manage_settings", "title": "پیکربندی سامانه", "category": "مدیریت سامانه", "description": "تنظیمات عمومی، سرویس‌های بیرونی و قالب پیامک" },
+    { "code": "system:view_audit", "title": "مشاهدهٔ دفتر ممیزی", "category": "مدیریت سامانه", "description": "مطالعهٔ زنجیرهٔ ممیزی و گزارش‌های امنیتی" },
+
+    { "code": "portal:student_self", "title": "پورتال دانشجو", "category": "پنل شخصی", "description": "دسترسی به پورتال شخصی دانشجو (کارنامه، مالی، انتخاب واحد)" },
+    { "code": "portal:professor_self", "title": "پورتال استاد", "category": "پنل شخصی", "description": "دسترسی به پورتال شخصی استاد (کلاس‌ها، حضوروغیاب، قرارداد)" }
+  ],
+  "roleDefaults": {
+    "ADMIN": "*",
+    "STUDENT": ["portal:student_self"],
+    "PROFESSOR": [
+      "portal:professor_self",
+      "grades:enter_temporary",
+      "grades:finalize_otp",
+      "grades:resolve_appeals"
+    ],
+    "DEP_HEAD": [
+      "students:view_dossier",
+      "curriculum:manage_versions",
+      "scheduling:manage_chart",
+      "scheduling:assign_professors",
+      "edu:manage_enrollment"
+    ],
+    "EDU_EXPERT": [
+      "students:view_dossier",
+      "admissions:import_sanjesh",
+      "edu:manage_enrollment",
+      "curriculum:manage_versions",
+      "scheduling:manage_chart",
+      "scheduling:assign_professors",
+      "exams:plan_calendar",
+      "exams:manage_halls",
+      "grades:resolve_appeals"
+    ],
+    "VICE_EDU": [
+      "students:view_dossier",
+      "curriculum:manage_versions",
+      "scheduling:approve_plan",
+      "grades:resolve_appeals",
+      "graduation:review_dossier"
+    ],
+    "FINANCE_EXPERT": [
+      "finance:view_ledger",
+      "finance:manage_tuition_rules",
+      "finance:approve_advances",
+      "finance:settle_payroll",
+      "finance:tamin_insurance"
+    ],
+    "ARCHIVE_EXPERT": [
+      "archive:verify_papers",
+      "archive:view_documents"
+    ],
+    "MILITARY_OFFICER": [
+      "students:view_dossier",
+      "students:verify_kyc"
+    ],
+    "PROCTOR": [
+      "exams:proctor_attendance",
+      "exams:temp_permit"
+    ],
+    "VAULT_MANAGER": [
+      "exams:vault_handover",
+      "exams:manage_halls"
+    ]
+  }
+}
