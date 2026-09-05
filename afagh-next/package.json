@@ -6,7 +6,7 @@
     "dev": "next dev -p 8080",
     "build": "next build",
     "typecheck": "tsc --noEmit",
-    "test": "tsx tests/tuition-rules.test.ts && tsx tests/finance-rules.test.ts && tsx tests/grades-reducer.test.ts && tsx tests/exam-core.test.ts && tsx tests/scheduling-core.test.ts && tsx tests/exam-scheduler.test.ts && tsx tests/curriculum-domain.test.ts && tsx tests/curriculum-validator.test.ts && tsx tests/migration-course.test.ts && tsx tests/migration-reference.test.ts && tsx tests/migration-photos.test.ts",
+    "test": "tsx tests/tuition-rules.test.ts && tsx tests/finance-rules.test.ts && tsx tests/grades-reducer.test.ts && tsx tests/exam-core.test.ts && tsx tests/scheduling-core.test.ts && tsx tests/exam-scheduler.test.ts && tsx tests/curriculum-domain.test.ts && tsx tests/curriculum-validator.test.ts && tsx tests/migration-course.test.ts && tsx tests/migration-reference.test.ts && tsx tests/migration-photos.test.ts && tsx tests/migration-real-headers.test.ts",
     "start": "next start -p 8080",
     "db:generate": "npx drizzle-kit generate",
     "db:push": "npx drizzle-kit push",

@@ -12,7 +12,11 @@
 import { norm, num } from './normalize';
 
 /** خوانندهٔ ستون: فهرست نامک‌ها → مقدار سلول (رشتهٔ خالی اگر ستون نبود) */
-export type CellReader = (aliases: string[]) => string;
+/**
+ * خوانندهٔ سلول. `opts.exact` یعنی «فقط سرستونی که دقیقاً یکی از این نامک‌هاست»
+ * — برای نامک‌های عامی مثل «واحد» که نباید ستون تخصصی «واحد تئوری» را بردارند.
+ */
+export type CellReader = (aliases: string[], opts?: { exact?: boolean }) => string;
 
 export type ParsedCourseRow = {
   code: string;
@@ -64,7 +68,7 @@ export function parseCourseRow(get: CellReader): CourseRowResult {
 
   const code = get([...A.code]);
   const title = get([...A.title]);
-  const rawUnits = get([...A.units]);
+  const rawUnits = get([...A.units], { exact: true });
   const type = get([...A.type]);
   const degreeName = get([...A.degree]);
   const deptName = get([...A.department]);

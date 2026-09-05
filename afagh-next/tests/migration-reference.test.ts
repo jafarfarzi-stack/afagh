@@ -30,8 +30,8 @@ const truthy = (name: string, got: unknown) => eq(name, !!got, true);
  * مقدار (دقیقاً مثل tabular.ts). norm ارقام فارسی را لاتین و نیم‌فاصله را فاصله
  * می‌کند — پس تست باید همان را ببیند، وگرنه رفتار واقعی را نمی‌سنجد.
  */
-const reader = (headers: string[], cells: (string | number)[]) => (aliases: string[]) => {
-  const { idx } = pickCol(headers, aliases);
+const reader = (headers: string[], cells: (string | number)[]) => (aliases: string[], opts?: { exact?: boolean }) => {
+  const { idx } = pickCol(headers, aliases, opts);
   return idx >= 0 ? norm(cells[idx] ?? '') : '';
 };
 

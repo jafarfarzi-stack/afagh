@@ -31,8 +31,8 @@ const run = (headers: string[], rows: (string | number)[][]) => {
   const out: ParsedCourseRow[] = [];
   rows.forEach((cells, i) => {
     const line = i + 2;
-    const get = (aliases: string[]) => {
-      const { idx } = pickCol(headers, aliases);
+    const get = (aliases: string[], opts?: { exact?: boolean }) => {
+      const { idx } = pickCol(headers, aliases, opts);
       return idx >= 0 ? String(cells[idx] ?? '').trim() : '';
     };
     const res = parseCourseRow(get);
