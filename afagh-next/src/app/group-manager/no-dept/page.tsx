@@ -25,8 +25,8 @@ export default async function NoDept({ searchParams }: { searchParams: Promise<{
           : 'پروندهٔ کارمندی شما وجود دارد ولی گروه آموزشی آن خالی است؛ تا وقتی گروه مشخص نشود، فهرست دروس و ارائه‌ها قابل نمایش نیست.'}
       </p>
       <p className="text-sm leading-7">
-        لطفاً از مدیر سامانه بخواهید در پنل «کارکنان و مدیران گروه» ({' '}
-        <span className="font-mono text-xs">/admin/staff</span>{' '}) پروندهٔ شما را
+        لطفاً از مدیر سامانه بخواهید در پنل «گروه‌های آموزشی و مدیران گروه» ({' '}
+        <span className="font-mono text-xs">/admin/departments</span>{' '}) پروندهٔ شما را
         {noStaff ? ' بسازد و به گروه آموزشی وصل کند.' : ' به گروه آموزشی مربوطه وصل کند.'}
       </p>
       <div className="flex flex-wrap gap-2 pt-1 text-sm">
