@@ -8,6 +8,7 @@ import {
   listFaculties,
   listStaffPicks,
   setDepartmentHeadAction,
+  setFacultyCodeAction,
   setStaffDepartmentAction,
   updateDepartmentAction,
 } from './actions';
@@ -49,6 +50,7 @@ export default async function DepartmentsPage() {
         setHeadAction={setDepartmentHeadAction}
         setStaffDeptAction={setStaffDepartmentAction}
         assignOrphansAction={assignOrphanCoursesAction}
+        setFacultyCodeAction={setFacultyCodeAction}
       />
 
       <p className="text-center text-xs text-slate-400">

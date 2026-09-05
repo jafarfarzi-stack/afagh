@@ -22,16 +22,18 @@ export default function DepartmentsClient({
   setHeadAction,
   setStaffDeptAction,
   assignOrphansAction,
+  setFacultyCodeAction,
 }: {
   depts: DeptRow[];
   staffPicks: StaffPick[];
-  faculties: { id: number; name: string }[];
+  faculties: { id: number; name: string; code: string | null }[];
   orphanCourses: number;
   createAction: Act;
   updateAction: Act;
   setHeadAction: Act;
   setStaffDeptAction: Act;
   assignOrphansAction: Act;
+  setFacultyCodeAction: Act;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -67,6 +69,9 @@ export default function DepartmentsClient({
   }, [depts, q]);
 
   const noHead = depts.filter(d => !d.headStaffId && d.isActive).length;
+  // کد سند اصالت است: تطبیق انتقال داده و تفکیک گروه‌های هم‌نام به آن تکیه دارد
+  const noCode = depts.filter(d => !d.code).length;
+  const noFacCode = faculties.filter(f => !f.code).length;
 
   return (
     <div className="space-y-4">
@@ -79,6 +84,15 @@ export default function DepartmentsClient({
         >
           {msg.text}
           <button onClick={() => setMsg(null)} className="float-left text-xs opacity-60 hover:opacity-100">بستن</button>
+        </div>
+      )}
+
+      {(noCode > 0 || noFacCode > 0) && (
+        <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-3 text-xs leading-6 text-sky-900">
+          🔑 <b>کد، سند اصالت است.</b> انتقال داده اول با کد تطبیق می‌دهد و فقط اگر کد نبود سراغ نام می‌رود؛
+          نامِ تنها وقتی دو گروه هم‌نام در دو دانشکده باشند، خطای تطبیق می‌سازد.
+          {noCode > 0 && <> هم‌اکنون <b>{noCode.toLocaleString('fa-IR')} گروه</b> بدون «کد گروه» است.</>}
+          {noFacCode > 0 && <> <b>{noFacCode.toLocaleString('fa-IR')} دانشکده</b> بدون «کد دانشکده» است.</>}
         </div>
       )}
 
@@ -140,6 +154,7 @@ export default function DepartmentsClient({
         <table className="w-full text-right text-xs">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
+              <th className="p-2.5">کد</th>
               <th className="p-2.5">گروه</th>
               <th className="p-2.5">دانشکده</th>
               <th className="p-2.5">نوع</th>
@@ -153,12 +168,19 @@ export default function DepartmentsClient({
           <tbody>
             {filtered.map(d => (
               <tr key={d.id} className={'border-t border-slate-100 ' + (d.isActive ? '' : 'opacity-50')}>
+                <td className="p-2.5" dir="ltr">
+                  {d.code
+                    ? <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono font-bold text-slate-700">{d.code}</span>
+                    : <span className="text-[10px] text-amber-600">بدون کد</span>}
+                </td>
                 <td className="p-2.5">
                   <span className="font-bold text-slate-800">{d.name}</span>
-                  {d.code && <span className="mr-1 text-slate-400" dir="ltr">({d.code})</span>}
                   {!d.isActive && <span className="mr-1 rounded bg-slate-200 px-1 text-[10px]">غیرفعال</span>}
                 </td>
-                <td className="p-2.5 text-slate-600">{d.facultyName}</td>
+                <td className="p-2.5 text-slate-600">
+                  {d.facultyName}
+                  {d.facultyCode && <span className="mr-1 font-mono text-[10px] text-slate-400" dir="ltr">#{d.facultyCode}</span>}
+                </td>
                 <td className="p-2.5">
                   <span className={'rounded-md border px-1.5 py-0.5 text-[10px] ' + KINDS[d.kind].chip}>{KINDS[d.kind].label}</span>
                 </td>
@@ -186,11 +208,22 @@ export default function DepartmentsClient({
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={8} className="p-6 text-center text-slate-400">گروهی یافت نشد.</td></tr>
+              <tr><td colSpan={9} className="p-6 text-center text-slate-400">گروهی یافت نشد.</td></tr>
             )}
           </tbody>
         </table>
       </div>
+
+      <FacultyCodes
+        faculties={faculties}
+        pending={pending}
+        onSave={(facultyId, code) => {
+          const fd = new FormData();
+          fd.set('facultyId', String(facultyId));
+          fd.set('code', code);
+          run(setFacultyCodeAction, fd, 'کد دانشکده ذخیره شد.');
+        }}
+      />
 
       {memberOf && (
         <MembersPanel
@@ -219,7 +252,7 @@ function DeptForm({
   onCancel,
 }: {
   dept: DeptRow | null;
-  faculties: { id: number; name: string }[];
+  faculties: { id: number; name: string; code: string | null }[];
   staffPicks: StaffPick[];
   pending: boolean;
   onSubmit: (fd: FormData) => void;
@@ -239,12 +272,15 @@ function DeptForm({
         <span className="mb-1 block font-bold text-slate-600">دانشکده *</span>
         <select name="facultyId" required defaultValue={dept?.facultyId ?? ''} className="w-full rounded-lg border border-slate-300 bg-white p-2">
           <option value="" disabled>انتخاب کنید…</option>
-          {faculties.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+          {faculties.map(f => <option key={f.id} value={f.id}>{f.code ? `[${f.code}] ` : ''}{f.name}</option>)}
         </select>
       </label>
       <label className="text-xs">
-        <span className="mb-1 block font-bold text-slate-600">کد گروه</span>
-        <input name="code" defaultValue={dept?.code ?? ''} dir="ltr" className="w-full rounded-lg border border-slate-300 p-2" placeholder="اختیاری" />
+        <span className="mb-1 block font-bold text-slate-600">کد گروه 🔑</span>
+        <input name="code" defaultValue={dept?.code ?? ''} dir="ltr" className="w-full rounded-lg border border-slate-300 p-2 font-mono" placeholder="مثلاً ۱۲" />
+        <span className="mt-0.5 block text-[10px] leading-4 text-slate-400">
+          یکتا در کل سامانه. انتقال داده اول با همین کد تطبیق می‌دهد.
+        </span>
       </label>
       <label className="text-xs">
         <span className="mb-1 block font-bold text-slate-600">نوع گروه</span>
@@ -407,6 +443,61 @@ function MembersPanel({
           >
             + {c.name} <span className="text-[10px] text-slate-400">({c.deptName ?? 'بدون گروه'})</span>
           </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * کد دانشکده — تا پیش از این هیچ رابطی برای ثبت یا اصلاحش وجود نداشت و فقط
+ * از فایل انتقال پر می‌شد؛ دانشکده‌هایی که خودکار ساخته شده بودند برای همیشه
+ * بی‌کد می‌ماندند و تطبیق‌های بعدی مجبور بود به نام تکیه کند.
+ */
+function FacultyCodes({
+  faculties,
+  pending,
+  onSave,
+}: {
+  faculties: { id: number; name: string; code: string | null }[];
+  pending: boolean;
+  onSave: (facultyId: number, code: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    const missing = faculties.filter(f => !f.code).length;
+    return (
+      <button onClick={() => setOpen(true)} className="text-xs text-indigo-600 hover:underline">
+        🔑 کدهای دانشکده{missing > 0 && ` (${missing.toLocaleString('fa-IR')} دانشکده بدون کد)`}
+      </button>
+    );
+  }
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-bold text-slate-800">کد دانشکده‌ها</h3>
+        <button onClick={() => setOpen(false)} className="text-xs text-slate-500 hover:underline">بستن</button>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {faculties.map(f => (
+          <form
+            key={f.id}
+            onSubmit={e => {
+              e.preventDefault();
+              onSave(f.id, String(new FormData(e.currentTarget).get('code') ?? '').trim());
+            }}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 p-2"
+          >
+            <span className="flex-1 truncate text-xs text-slate-700" title={f.name}>{f.name}</span>
+            <input
+              name="code"
+              defaultValue={f.code ?? ''}
+              dir="ltr"
+              placeholder="کد"
+              className={'w-20 rounded border p-1 text-center font-mono text-xs ' + (f.code ? 'border-slate-300' : 'border-amber-400 bg-amber-50')}
+            />
+            <button disabled={pending} className="rounded bg-slate-700 px-2 py-1 text-[11px] text-white disabled:opacity-50">ثبت</button>
+          </form>
         ))}
       </div>
     </div>

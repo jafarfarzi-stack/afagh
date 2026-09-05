@@ -158,3 +158,27 @@ BEGIN
       FOREIGN KEY ("headStaffId") REFERENCES staff(id) ON DELETE SET NULL;
   END IF;
 END $$;
+
+-- ── یکتایی کد دانشکده و کد گروه ──
+--    کد سند اصالت است؛ اگر تکراری باشد، تطبیق «کد-اول» در انتقال داده بی‌معنا
+--    می‌شود. ایندکس جزئی است تا رکوردهای بدون کد (NULL) مانع نشوند.
+--    اگر کد تکراری در داده هست، ایندکس ساخته نمی‌شود و پیام می‌دهیم تا دستی
+--    اصلاح شود — عمداً داده حذف یا بازنویسی نمی‌کنیم.
+DO $$
+BEGIN
+  IF EXISTS (SELECT "facultyCode" FROM faculties WHERE "facultyCode" IS NOT NULL
+             GROUP BY "facultyCode" HAVING count(*) > 1) THEN
+    RAISE WARNING 'کد دانشکدهٔ تکراری هست — ایندکس یکتا ساخته نشد. در /admin/departments اصلاح کنید.';
+  ELSE
+    CREATE UNIQUE INDEX IF NOT EXISTS "faculties_facultyCode_uq"
+      ON faculties ("facultyCode") WHERE "facultyCode" IS NOT NULL;
+  END IF;
+
+  IF EXISTS (SELECT "departmentCode" FROM departments WHERE "departmentCode" IS NOT NULL
+             GROUP BY "departmentCode" HAVING count(*) > 1) THEN
+    RAISE WARNING 'کد گروه آموزشی تکراری هست — ایندکس یکتا ساخته نشد. در /admin/departments اصلاح کنید.';
+  ELSE
+    CREATE UNIQUE INDEX IF NOT EXISTS "departments_departmentCode_uq"
+      ON departments ("departmentCode") WHERE "departmentCode" IS NOT NULL;
+  END IF;
+END $$;

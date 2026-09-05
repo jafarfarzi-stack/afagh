@@ -40,22 +40,31 @@ export function parseFacultyRow(get: CellReader): RowResult<ParsedFaculty> {
 
 // ───────────────────────── گروه آموزشی ─────────────────────────
 
-export type ParsedDepartment = { code: string | null; name: string; facultyName: string | null };
+export type ParsedDepartment = {
+  code: string | null;
+  name: string;
+  facultyName: string | null;
+  /** «کد دانشکده» جدا از نام نگه داشته می‌شود — کد سند اصالت است، نام ممکن است تکراری باشد */
+  facultyCode: string | null;
+};
 
 export const DEPARTMENT_ALIASES = {
   code: ['کد گروه', 'کد گروه آموزشی', 'کد', 'department_code', 'dept_code', 'code'],
   name: ['نام گروه', 'گروه آموزشی', 'گروه', 'نام', 'department', 'department_name', 'name'],
-  faculty: ['دانشکده', 'نام دانشکده', 'کد دانشکده', 'faculty', 'faculty_code'],
+  faculty: ['نام دانشکده', 'دانشکده', 'faculty', 'faculty_name'],
+  facultyCode: ['کد دانشکده', 'faculty_code'],
 } as const;
 
 export function parseDepartmentRow(get: CellReader): RowResult<ParsedDepartment> {
   const name = get([...DEPARTMENT_ALIASES.name]);
   const code = get([...DEPARTMENT_ALIASES.code]);
   const facultyName = get([...DEPARTMENT_ALIASES.faculty]);
+  const facultyCode = get([...DEPARTMENT_ALIASES.facultyCode]);
   if (!name) return bad('نام گروه آموزشی الزامی است.');
   const warnings: string[] = [];
-  if (!facultyName) warnings.push(`گروه «${name}» بدون دانشکده است — به دانشکدهٔ پیش‌فرض وصل می‌شود.`);
-  return ok({ code: code || null, name, facultyName: facultyName || null }, warnings);
+  if (!code) warnings.push(`گروه «${name}» بدون «کد گروه» است — تطبیق فقط با نام انجام می‌شود و اگر گروه هم‌نامی در دانشکدهٔ دیگر باشد، خطر اشتباه هست.`);
+  if (!facultyName && !facultyCode) warnings.push(`گروه «${name}» بدون دانشکده است — به دانشکدهٔ پیش‌فرض وصل می‌شود.`);
+  return ok({ code: code || null, name, facultyName: facultyName || null, facultyCode: facultyCode || null }, warnings);
 }
 
 // ──────────────────────── رشته و گرایش ────────────────────────
@@ -65,7 +74,13 @@ export type ParsedMajor = {
   name: string;
   degreeName: string | null;
   departmentName: string | null;
+  /** «کد گروه آموزشی» — بر نام مقدم است */
+  departmentCode: string | null;
   facultyName: string | null;
+  /** «کد دانشکده» — بر نام مقدم است */
+  facultyCode: string | null;
+  /** «کد مقطع» — بر عنوان مقطع مقدم است */
+  degreeCode: string | null;
   trackTitle: string | null;
   trackCode: string | null;
   minUnits: number | null;
@@ -83,8 +98,11 @@ export const MAJOR_ALIASES = {
   code: ['کد رشته', 'کدرشته', 'major_code', 'code'],
   name: ['نام رشته', 'رشته', 'عنوان رشته', 'major', 'major_name', 'name'],
   degree: ['مقطع', 'مقطع تحصیلی', 'سطح', 'degree', 'degree_level'],
-  department: ['گروه آموزشی', 'گروه', 'دپارتمان', 'department', 'dept'],
-  faculty: ['دانشکده', 'نام دانشکده', 'کد دانشکده', 'faculty'],
+  degreeCode: ['کد مقطع', 'کد مقطع تحصیلی', 'degree_code', 'degree_level_code'],
+  department: ['نام گروه آموزشی', 'گروه آموزشی', 'گروه', 'دپارتمان', 'department', 'dept'],
+  departmentCode: ['کد گروه آموزشی', 'کد گروه', 'department_code', 'dept_code'],
+  faculty: ['نام دانشکده', 'دانشکده', 'faculty'],
+  facultyCode: ['کد دانشکده', 'faculty_code'],
   track: ['گرایش', 'نام گرایش', 'track', 'orientation'],
   trackCode: ['کد گرایش', 'track_code'],
   minUnits: ['حداقل واحد', 'کل واحد', 'واحد کل', 'min_units', 'total_units'],
@@ -131,7 +149,10 @@ export function parseMajorRow(get: CellReader): RowResult<ParsedMajor> {
     code, name,
     degreeName: degreeName || null,
     departmentName: get([...A.department]) || null,
+    departmentCode: get([...A.departmentCode]) || null,
     facultyName: get([...A.faculty]) || null,
+    facultyCode: get([...A.facultyCode]) || null,
+    degreeCode: get([...A.degreeCode]) || null,
     trackTitle: trackTitle || null,
     trackCode: get([...A.trackCode]) || null,
     minUnits: minUnits != null && minUnits > 0 && minUnits <= 400 ? Math.round(minUnits) : null,
