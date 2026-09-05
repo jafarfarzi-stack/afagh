@@ -11,7 +11,10 @@ export type DepHeadCtx = { user: SessionUser; staff: typeof staff.$inferSelect; 
 export async function requireDepHead(): Promise<DepHeadCtx> {
   const user = await requireRole(['DEP_HEAD']);
   const st = await getStaffByUser(user.id);
-  if (!st) redirect('/login');
+  // کاربری که نقش مدیر گروه دارد ولی پروندهٔ کارمندی‌اش ساخته نشده، نباید به
+  // صفحهٔ ورود پرت شود؛ او *وارد شده* است و این کار به‌نظرش یعنی «سامانه
+  // مرا بیرون انداخت / صفحه بالا نمی‌آید». به‌جایش پیام روشن می‌بیند.
+  if (!st) redirect('/group-manager/no-dept?reason=no-staff');
   if (st.departmentId == null) redirect('/group-manager/no-dept');
   return { user, staff: st, deptId: st.departmentId };
 }
