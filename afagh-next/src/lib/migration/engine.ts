@@ -1,5 +1,5 @@
 import { randomBytes, scryptSync } from 'crypto';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, course_offerings, courses, curriculum_tracks, degree_level_configs,
@@ -122,6 +122,8 @@ export function prepare(entity: Entity, tables: Table[], fileName: string): Prep
       const fatherName = get(['نام پدر', 'نامپدر', 'father_name', 'father']);
       const genderFa = get(['جنسیت', 'جنس', 'gender', 'sex']);
       const address = get(['آدرس', 'نشانی', 'address']);
+      // نام فایل عکس در سیستم قدیمی؛ آرشیو ZIP عکس‌ها بعداً با همین نام وصل می‌شود
+      const photoFile = get(['نام فایل عکس', 'عکس', 'فایل عکس', 'تصویر', 'photo', 'photo_file', 'image', 'picture']);
       if (!nc || !first || !last || !code) return err('کد ملی/نام/نام خانوادگی/شماره دانشجویی الزامی است.');
       const chk = checkNationalCode(nc);
       if (chk === 'format') return err(`کد ملی نامعتبر: ${nc}`);
@@ -137,6 +139,7 @@ export function prepare(entity: Entity, tables: Table[], fileName: string): Prep
         birthCertNo: birthCertNo || null, birthCertSeries: birthCertSeries || null,
         placeOfBirth: placeOfBirth || null, placeOfIssue: placeOfIssue || null,
         birthDate: birthDate ?? null, fatherName: fatherName || null, gender, address: address || null,
+        photoFile: photoFile || null,
       });
     }
 
@@ -337,10 +340,15 @@ export async function commit(
           placeOfBirth: r.placeOfBirth as string | null, placeOfIssue: r.placeOfIssue as string | null,
           birthDate: (r.birthDate as Date | null) ?? null, fatherName: r.fatherName as string | null,
           gender: r.gender as string | null, address: r.address as string | null,
+          photoFileName: (r.photoFile as string | null) ?? null,   // ZIP عکس‌ها بعداً با همین نام وصل می‌شود
           passwordHash: hashDefault(String(r.nationalCode)),   // رمز اولیه = کد ملی (کاربر بعداً عوض می‌کند)
         }).onConflictDoNothing().returning({ id: users.id });
         if (!u) {
           [u] = await tx.select({ id: users.id }).from(users).where(eq(users.nationalCode, String(r.nationalCode))).limit(1);
+          if (r.photoFile) {
+            await tx.update(users).set({ photoFileName: String(r.photoFile) })
+              .where(and(eq(users.id, u.id), isNull(users.photoFileName)));
+          }
           const [exSt] = await tx.select({ id: students.id }).from(students).where(eq(students.studentCode, String(r.studentCode))).limit(1);
           if (exSt) return false; // موجود
         }
@@ -553,12 +561,17 @@ export async function commit(
             continue;
           }
           userId = exU.id;
+          if (r.photoFile) {
+            await db.update(users).set({ photoFileName: String(r.photoFile) })
+              .where(and(eq(users.id, exU.id), isNull(users.photoFileName)));
+          }
         } else {
           const [nu] = await db.insert(users).values({
             nationalCode: nc, firstName: String(r.firstName), lastName: String(r.lastName),
             gender: (r.gender as string | null) ?? null,
             mobile: (r.mobile as string | null) ?? null,
             email: (r.email as string | null) ?? null,
+            photoFileName: (r.photoFile as string | null) ?? null,
             passwordHash: hashDefault(nc),   // رمز اولیه = کد ملی
           }).returning({ id: users.id });
           userId = nu.id;
@@ -577,6 +590,7 @@ export async function commit(
           gender: (r.gender as string | null) ?? null,
           mobile: (r.mobile as string | null) ?? null,
           email: (r.email as string | null) ?? null,
+          photoFileName: (r.photoFile as string | null) ?? null,
           passwordHash: hashDefault(randomBytes(24).toString('hex')),   // ورود ناممکن تا اصلاح کد ملی
         }).returning({ id: users.id });
         userId = nu.id;

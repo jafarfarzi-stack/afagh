@@ -128,3 +128,13 @@ BEGIN
 END $$;
 CREATE INDEX IF NOT EXISTS "courses_degreeLevelId_idx" ON courses ("degreeLevelId");
 CREATE INDEX IF NOT EXISTS "courses_departmentId_idx" ON courses ("departmentId");
+
+-- ── عکس افراد (مهاجرت از سیستم قدیمی) ──
+--    فایل عکس در Object Storage می‌ماند؛ اینجا فقط کلید و فراداده.
+--    photoFileName نام فایل در فایل اکسل قدیمی است تا آرشیو ZIP عکس‌ها
+--    بتواند هر عکس را به صاحبش وصل کند حتی وقتی نام فایل با کد شخص یکی نیست.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "photoKey" varchar(500);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "photoMime" varchar(100);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "photoFileName" varchar(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "photoUpdatedAt" timestamp;
+CREATE INDEX IF NOT EXISTS "users_photoFileName_idx" ON users ("photoFileName");

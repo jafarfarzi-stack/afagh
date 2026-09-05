@@ -148,6 +148,8 @@ export function parseMajorRow(get: CellReader): RowResult<ParsedMajor> {
 export type ParsedProfessor = {
   staffCode: string;
   nationalCode: string | null;
+  /** نام فایل عکس در سیستم قدیمی — آرشیو ZIP عکس‌ها با همین نام وصل می‌شود */
+  photoFile: string | null;
   firstName: string;
   lastName: string;
   title: string | null;
@@ -202,6 +204,7 @@ export const PROFESSOR_ALIASES = {
   email: ['ایمیل', 'پست الکترونیک', 'email'],
   gender: ['جنسیت', 'جنس', 'gender'],
   active: ['فعال', 'وضعیت', 'is_active', 'active'],
+  photo: ['نام فایل عکس', 'عکس', 'فایل عکس', 'تصویر', 'photo', 'photo_file', 'image', 'picture'],
 } as const;
 
 const GENDER_FA: Record<string, string> = {
@@ -270,6 +273,7 @@ export function parseProfessorRow(get: CellReader): RowResult<ParsedProfessor> {
   return ok({
     staffCode,
     nationalCode: validNc,
+    photoFile: get([...A.photo]) || null,
     firstName: first,
     lastName: last,
     title,
