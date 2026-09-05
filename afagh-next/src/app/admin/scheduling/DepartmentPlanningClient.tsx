@@ -899,7 +899,7 @@ export default function DepartmentPlanningClient({ initial }: { initial: Schedul
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-slate-950">
                 سامانه جامع چیدمان متمرکز دانشگاهی
               </span>
-              <span className="text-xs text-indigo-200">{currentTerm.title}</span>
+              <span className="text-xs text-indigo-200">{currentTerm?.title ?? 'نیمسال تعریف‌نشده'}</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-700/60 text-indigo-100 font-bold mr-2">
                 فاز: {PHASE_LABELS[currentPhase] ?? currentPhase}{isLoadingWorkspace ? ' — در حال بارگذاری…' : ''}
               </span>
@@ -1118,7 +1118,7 @@ export default function DepartmentPlanningClient({ initial }: { initial: Schedul
               <div className="flex items-center gap-2">
                 <span className="text-xl">📚</span>
                 <h3 className="font-extrabold text-slate-900 text-base">
-                  چارت درسی رشته «{currentProgram.title}» و انتساب اساتید به دروس
+                  چارت درسی رشته «{currentProgram?.title ?? '—'}» و انتساب اساتید به دروس
                 </h3>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
@@ -1484,7 +1484,7 @@ export default function DepartmentPlanningClient({ initial }: { initial: Schedul
               <div className="flex items-center gap-2">
                 <span className="text-xl">🏛️</span>
                 <h3 className="font-extrabold text-slate-900 text-base">
-                  کلاس‌ها، سایت‌ها و آزمایشگاه‌های اختصاص‌یافته به دپارتمان «{currentProgram.title}»
+                  کلاس‌ها، سایت‌ها و آزمایشگاه‌های اختصاص‌یافته به دپارتمان «{currentProgram?.title ?? '—'}»
                 </h3>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
