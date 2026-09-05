@@ -142,3 +142,19 @@ CREATE INDEX IF NOT EXISTS "users_photoFileName_idx" ON users ("photoFileName");
 -- ── ستون‌هایی که در فایل‌های واقعی reshtelist/professorslist هست ولی جایی نداشت ──
 ALTER TABLE staff  ADD COLUMN IF NOT EXISTS "fieldMain" varchar(200);
 ALTER TABLE majors ADD COLUMN IF NOT EXISTS "headName"  varchar(150);
+
+-- ── مدیر گروه و نوع گروه آموزشی ──
+--    headStaffId روی خودِ گروه است (نه روی staff) چون مدیر گروهِ «دروس عمومی
+--    و مشترک» معمولاً عضو آن گروه نیست و یک نفر می‌تواند مدیر چند گروه باشد.
+ALTER TABLE departments ADD COLUMN IF NOT EXISTS "headStaffId" integer;
+ALTER TABLE departments ADD COLUMN IF NOT EXISTS "kind" varchar(20) DEFAULT 'ACADEMIC';
+ALTER TABLE departments ADD COLUMN IF NOT EXISTS "isActive" integer DEFAULT 1;
+CREATE INDEX IF NOT EXISTS "departments_headStaffId_idx" ON departments ("headStaffId");
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'departments_headStaffId_fkey') THEN
+    ALTER TABLE departments
+      ADD CONSTRAINT "departments_headStaffId_fkey"
+      FOREIGN KEY ("headStaffId") REFERENCES staff(id) ON DELETE SET NULL;
+  END IF;
+END $$;

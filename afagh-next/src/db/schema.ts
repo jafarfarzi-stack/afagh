@@ -92,7 +92,21 @@ export const departments = pgTable('departments', {
   name: varchar('name', { length: 150 }).notNull(),
   facultyId: integer('facultyId').notNull().references(() => faculties.id),
   // ── کد گروه آموزشی از دیتابیس قدیمی (فایل reshtelist—ستون «گروه آموزشی») ──
-  departmentCode: varchar('departmentCode', { length: 10 })
+  departmentCode: varchar('departmentCode', { length: 10 }),
+  /**
+   * مدیر گروه — از میان پرونده‌های کارمندی/هیئت علمی انتخاب می‌شود.
+   * عمداً اینجا (روی گروه) ذخیره می‌شود نه روی staff، چون مدیر گروهِ «دروس
+   * عمومی و مشترک» معمولاً عضو همان گروه نیست؛ او استادی از یک گروه دیگر
+   * است که سرپرستی گروه عمومی را هم دارد. یک نفر می‌تواند مدیر چند گروه باشد.
+   */
+  headStaffId: integer('headStaffId'),
+  /**
+   * نوع گروه: ACADEMIC = گروه آموزشیِ رشته‌دار · GENERAL = گروه دروس عمومی و
+   * مشترک (معارف، تربیت بدنی، زبان، ریاضی عمومی…) که رشتهٔ مستقل ندارد ولی
+   * دروسش برای همهٔ رشته‌ها ارائه می‌شود.
+   */
+  kind: varchar('kind', { length: 20 }).default('ACADEMIC'),
+  isActive: integer('isActive').default(1)
 });
 
 export const majors = pgTable('majors', {

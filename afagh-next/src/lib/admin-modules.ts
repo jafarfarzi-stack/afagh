@@ -64,6 +64,17 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/departments',
+    icon: '🏛️',
+    title: 'گروه‌های آموزشی و مدیران گروه',
+    desc: 'تعریف گروه، انتخاب مدیر گروه و اعضا',
+    roles: ['ADMIN', 'VICE_EDU'],
+    accent: 'from-cyan-950 to-slate-950 border-cyan-700/50',
+    iconBg: 'bg-cyan-700/80 border-cyan-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/curriculum',
     icon: '📚',
     title: 'کاتالوگ و سرفصل رشته‌ها',
