@@ -19,6 +19,7 @@
  * ══════════════════════════════════════════════════════════════════
  */
 import pg from 'pg';
+import { seedPermissions } from './seed-permissions.mjs';
 import { createRequire } from 'node:module';
 
 const { Pool } = pg;
@@ -91,39 +92,9 @@ try {
   // ── کاتالوگ مجوزها + نگاشت پیش‌فرض نقش→مجوز (ماتریس RBAC) ──
   //  بدون این بخش، جدول‌های permissions/role_permissions روی نصب تازه خالی
   //  می‌مانند و صفحهٔ «ماتریس دسترسی‌ها» هیچ دادهٔ واقعی برای نمایش ندارد.
-  //  منبع واحد: src/lib/permissions-catalog.json (همان فایلی که اپ می‌خواند).
-  {
-    const catalogPath = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'src', 'lib', 'permissions-catalog.json');
-    const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
-    const permIdByCode = {};
-    for (const p of catalog.permissions) {
-      const [row] = await q(
-        `INSERT INTO permissions (code, title, category, description) VALUES ($1,$2,$3,$4)
-         ON CONFLICT (code) DO UPDATE SET title = EXCLUDED.title, category = EXCLUDED.category, description = EXCLUDED.description
-         RETURNING id`,
-        [p.code, p.title, p.category, p.description],
-      );
-      permIdByCode[p.code] = row.id;
-    }
-
-    // ⚠ نگاشت پیش‌فرض فقط برای نقش‌هایی اعمال می‌شود که هنوز هیچ مجوزی ندارند؛
-    //   در غیر این صورت هر بار اجرای seed، تنظیمات دستی مدیر را برمی‌گرداند.
-    let mapped = 0;
-    for (const [roleCode, codes] of Object.entries(catalog.roleDefaults)) {
-      const role = await q1(`SELECT id FROM roles WHERE code = $1`, [roleCode]);
-      if (!role) continue;
-      const existing = await q1(`SELECT count(*)::int AS c FROM role_permissions WHERE "roleId" = $1`, [role.id]);
-      if (existing.c > 0) continue;
-      const list = codes === '*' ? catalog.permissions.map((p) => p.code) : codes;
-      for (const code of list) {
-        const pid = permIdByCode[code];
-        if (!pid) continue;
-        await q(`INSERT INTO role_permissions ("roleId", "permissionId") VALUES ($1,$2) ON CONFLICT DO NOTHING`, [role.id, pid]);
-        mapped++;
-      }
-    }
-    console.log(`  ✓ مجوزها (${catalog.permissions.length}) و نگاشت پیش‌فرض نقش‌ها (${mapped} تخصیص)`);
-  }
+  //  منطق در scripts/seed-permissions.mjs است تا روی سرورِ در حال کار هم
+  //  بتوان جداگانه (بدون بازتولید کلیدهای cron) اجرایش کرد.
+  await seedPermissions(q, { log: (m) => console.log(m) });
 
   // مقاطع
   const degreeIds = {};
