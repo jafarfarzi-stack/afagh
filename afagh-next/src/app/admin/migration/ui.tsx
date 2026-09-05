@@ -35,7 +35,7 @@ export function Msg({ kind, children }: { kind: 'err' | 'ok' | 'warn' | 'info'; 
   return <div className={`rounded-xl p-3 text-xs leading-6 ${cls}`}>{children}</div>;
 }
 
-export type InspectField = { key: string; title: string; required: boolean; detectedIndex: number; detectedHeader: string | null };
+export type InspectField = { key: string; title: string; required: boolean; hint?: string; detectedIndex: number; detectedHeader: string | null };
 export type InspectSheet = { sheet: string; headers: string[]; rowCount: number; fields: InspectField[]; missingRequired: string[]; sample: string[][] };
 export type InspectResult = { fileName: string; kind: string; sheets: InspectSheet[]; best: string | null };
 
@@ -162,9 +162,9 @@ export function Uploader({
           )}
           <div className="grid gap-2 md:grid-cols-3">
             {curSheet.fields.map(f2 => (
-              <label key={f2.key} className="flex items-center gap-2 text-[11px]">
+              <label key={f2.key} className="flex items-center gap-2 text-[11px]" title={f2.hint ?? ''}>
                 <span className={'w-28 shrink-0 ' + (f2.required ? 'font-bold text-slate-700' : 'text-slate-500')}>
-                  {f2.title}{f2.required ? ' *' : ''}
+                  {f2.title}{f2.required ? ' *' : ''}{f2.hint ? ' ⓘ' : ''}
                 </span>
                 <select
                   className={'input flex-1 py-1 text-[11px] ' + ((map[f2.key] ?? -1) < 0 && f2.required ? 'border-red-300' : '')}

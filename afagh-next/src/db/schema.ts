@@ -43,6 +43,12 @@ export const users = pgTable('users', {
   fatherName: varchar('fatherName', { length: 100 }),          // نام پدر
   gender: varchar('gender', { length: 10 }),                   // جنسیت: MALE / FEMALE
   address: varchar('address', { length: 300 }),                // نشانی پستی
+  // ── عکس پرسنلی/دانشجویی (مهاجرت از سیستم قدیمی + کارت دانشجویی و کارت ورود به جلسه) ──
+  // خودِ فایل در Object Storage می‌ماند (سند §۲۴۳۸: «فقط کلید در دیتابیس»).
+  photoKey: varchar('photoKey', { length: 500 }),        // کلید شیء در باکت
+  photoMime: varchar('photoMime', { length: 100 }),      // image/jpeg …
+  photoFileName: varchar('photoFileName', { length: 255 }), // نام فایل عکس در سیستم قدیمی (ستون اکسل)
+  photoUpdatedAt: timestamp('photoUpdatedAt'),
   passwordHash: varchar('passwordHash', { length: 255 }).notNull(),
   isActive: integer('isActive').default(1),
   // ── فلگ «تغییر اجباری رمز در اولین ورود» (برای حساب‌های پذیرش‌شده با رمز پیش‌فرض) ──
