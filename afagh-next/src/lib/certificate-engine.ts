@@ -41,7 +41,7 @@ export async function generateSvgQrCode(url: string): Promise<string> {
  * قالب استاندارد HTML گواهینامه رسمی با طراحی لوکس جهت پرینت و تبدیل به PDF
  */
 export async function buildCertificateHtml(data: CertificateData): Promise<string> {
-  const verifyUrl = `${await getPublicBaseUrl()}/verify/${data.certCode}`;
+  const verifyUrl = `${await getPublicBaseUrl()}/verify-certificate/${data.certCode}`;
   const qrSvg = await generateSvgQrCode(verifyUrl);
   const hash = generateCertificateVerificationHash(data);
 

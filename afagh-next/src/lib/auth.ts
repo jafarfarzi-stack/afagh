@@ -13,6 +13,7 @@ import {
   roles,
   sessions,
   staff,
+  departments,
   students,
   user_roles,
   users,
@@ -131,12 +132,15 @@ export function isDemoMode(): boolean {
 /** رمز پیش‌فرض حساب‌های دمو — در دمو قابل تغییر است (AFAGH_DEMO_PASSWORD) */
 export const DEMO_PASSWORD = process.env.AFAGH_DEMO_PASSWORD || '123456';
 
-const DEMO_ACCOUNTS: Record<string, { firstName: string; lastName: string; role: string; staffCode?: string; isStudent?: boolean }> = {
+const DEMO_ACCOUNTS: Record<string, { firstName: string; lastName: string; role: string; staffCode?: string; departmentCode?: string; isStudent?: boolean }> = {
   '0000000001': { firstName: 'مدیر', lastName: 'سامانه', role: 'ADMIN' },
   '0011111111': { firstName: 'محمد', lastName: 'رضایی', role: 'PROFESSOR', staffCode: 'F-101' },
   '0022222222': { firstName: 'زهرا', lastName: 'احمدی', role: 'PROFESSOR', staffCode: 'F-102' },
   '0033333333': { firstName: 'حسین', lastName: 'کاظمی', role: 'PROFESSOR', staffCode: 'F-103' },
-  '0044444444': { firstName: 'سیدامیر', lastName: 'موسوی', role: 'DEP_HEAD', staffCode: 'F-201' },
+  '0044444444': { firstName: 'سیدامیر', lastName: 'موسوی', role: 'DEP_HEAD', staffCode: 'F-201', departmentCode: '3' }, // گروه علوم کامپیوتر
+  // ── دو کاربر دموی «مدیر گروه» (فاز ۱۱): هرکدام به یک گروهٔ واقعی متصل می‌شوند ──
+  '0041111111': { firstName: 'احمدرضا', lastName: 'توکلی', role: 'DEP_HEAD', staffCode: 'F-202', departmentCode: '1' }, // گروه مهندسی کامپیوتر
+  '0042222222': { firstName: 'لیلا', lastName: 'فرهادی', role: 'DEP_HEAD', staffCode: 'F-203', departmentCode: '2' }, // گروه مهندسی برق
   '0055555555': { firstName: 'فاطمه', lastName: 'محمدی', role: 'EDU_EXPERT', staffCode: 'S-301' },
   '0066666666': { firstName: 'علی', lastName: 'نیک‌پور', role: 'VICE_EDU', staffCode: 'S-401' },
   '0077777777': { firstName: 'مریم', lastName: 'صادقی', role: 'FINANCE_EXPERT', staffCode: 'S-501' },
@@ -186,6 +190,20 @@ async function ensureDemoStudentRecord(userId: number, nationalCode: string): Pr
   }).onConflictDoNothing({ target: students.userId });
 }
 
+/** یافتن شناسهٔ گروه بر اساس کد گروه seed-base ('1'=کامپیوتر، '2'=برق، …) */
+async function resolveDepartmentId(departmentCode: string): Promise<number | null> {
+  const [dep] = await db.select({ id: departments.id }).from(departments).where(eq(departments.departmentCode, departmentCode)).limit(1);
+  return dep?.id ?? null;
+}
+
+/** idempotent: اگر استافِ دمو گروه نداشت، به گروهٔ واقعی متصل می‌شود */
+async function linkDemoDepHead(staffId: number, departmentCode: string): Promise<void> {
+  const [row] = await db.select({ departmentId: staff.departmentId }).from(staff).where(eq(staff.id, staffId)).limit(1);
+  if (row?.departmentId) return;
+  const depId = await resolveDepartmentId(departmentCode);
+  if (depId) await db.update(staff).set({ departmentId: depId }).where(eq(staff.id, staffId));
+}
+
 async function ensureDemoUser(nc: string) {
   const demo = DEMO_ACCOUNTS[nc];
   if (!demo || !isDemoMode()) return null; // 🔒 در production هرگز پروویژن خودکار دمو
@@ -210,6 +228,11 @@ async function ensureDemoUser(nc: string) {
     }
     // 🔴 قبلاً اینجا بدون هیچ ترمیمی برمی‌گشتیم — ردیف students هرگز ساخته نمی‌شد
     if (demo.isStudent) await ensureDemoStudentRecord(u.id, nc);
+    // 🔗 فاز ۱۱: اتصال گروه در ورودهای بعدی هم idempotent اعمال می‌شود
+    if (demo.staffCode && demo.departmentCode) {
+      const [stRow] = await db.select({ id: staff.id }).from(staff).where(eq(staff.userId, u.id)).limit(1);
+      if (stRow) await linkDemoDepHead(stRow.id, demo.departmentCode);
+    }
     return u;
   }
 
@@ -237,11 +260,16 @@ async function ensureDemoUser(nc: string) {
     }
 
     if (demo.staffCode) {
-      await db.insert(staff).values({
+      const [staffRow] = await db.insert(staff).values({
         userId: created.id,
         staffCode: demo.staffCode,
         staffType: demo.role === 'PROFESSOR' ? 'هیئت علمی' : 'اداری',
-      }).catch(() => {});
+        // فاز ۱۱: مدیر گروه دمو مستقیم به گروهٔ واقعی متصل می‌شود (پنل مدیر گروه بدون no-dept)
+        departmentId: demo.departmentCode ? (await resolveDepartmentId(demo.departmentCode)) : null,
+      }).returning({ id: staff.id });
+      if (demo.departmentCode && staffRow?.id) {
+        await linkDemoDepHead(staffRow.id, demo.departmentCode);
+      }
     } else if (demo.isStudent) {
       await ensureDemoStudentRecord(created.id, nc);
     }

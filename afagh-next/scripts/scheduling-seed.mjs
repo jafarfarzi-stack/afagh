@@ -35,8 +35,8 @@ if (process.argv.includes('--reset') || (await q(`SELECT id FROM academic_terms 
   await c.query(`DELETE FROM offering_professors WHERE "offeringId" IN (${offerSel})`);
   await c.query(`DELETE FROM enrollments WHERE "offeringId" IN (${offerSel})`);
   await c.query(`DELETE FROM course_offerings WHERE "termId" IN (${termSel})`);
-  await c.query(`DELETE FROM syllabus_courses WHERE "courseId" IN (SELECT id FROM courses WHERE code LIKE 'SCT-%')`);
-  await c.query(`DELETE FROM syllabuses WHERE "majorId" IN (SELECT id FROM majors WHERE "majorCode" IN ('SCT-PSY','SCT-ACC','SCT-CS'))`);
+  await c.query(`DELETE FROM curriculum_courses WHERE "courseId" IN (SELECT id FROM courses WHERE code LIKE 'SCT-%')`);
+  await c.query(`DELETE FROM curriculum_versions WHERE "majorId" IN (SELECT id FROM majors WHERE "majorCode" IN ('SCT-PSY','SCT-ACC','SCT-CS'))`);
   await c.query(`DELETE FROM professor_availabilities WHERE "staffId" IN (${staffSel})`);
   await c.query(`DELETE FROM staff WHERE "staffCode" LIKE 'SCT-%'`);
   await c.query(`DELETE FROM students WHERE "studentCode" LIKE 'SCT-%'`);
@@ -152,16 +152,17 @@ for (let i = 0; i < 10; i++) {
   nc++;
 }
 
-// ── چارت‌ها (syllabus) ──
-async function syllabusOf(majorId, startYear, coursesArr) {
-  const [sy] = await q(`INSERT INTO syllabuses ("majorId","entryYearStart","entryYearEnd") VALUES ($1,$2,1406) RETURNING id`, [majorId, startYear]);
+// ── نسخه‌های برنامهٔ درسی (curriculum_versions) ──
+async function curriculumOf(majorId, startYear, coursesArr) {
+  const [cv] = await q(`INSERT INTO curriculum_versions ("majorId","degreeLevelId","versionCode","title","status","entryYearFrom","entryYearTo","totalRequiredUnits") VALUES ($1,$2,$3,$4,'PUBLISHED',$5,1406,0) RETURNING id`,
+    [majorId, degree.id, String(startYear), 'برنامهٔ بارگذاری ‐ ' + startYear]);
   for (const cid of coursesArr) {
-    await c.query(`INSERT INTO syllabus_courses ("syllabusId","courseId","semesterNo") VALUES ($1,$2,1)`, [sy.id, cid]);
+    await c.query(`INSERT INTO curriculum_courses ("curriculumVersionId","courseId","recommendedSemester","roleType") VALUES ($1,$2,1,'CORE')`, [cv.id, cid]);
   }
 }
-await syllabusOf(majorIds['SCT-PSY'], 1400, [andishe.id, varzesh.id, psyc.id]);       // روانشناسی: اندیشه + تربیت بدنی + تخصصی
-await syllabusOf(majorIds['SCT-ACC'], 1400, [andishe.id, varzesh.id, acc.id]);        // حسابداری: اندیشه + تربیت بدنی + تخصصی
-await syllabusOf(majorIds['SCT-CS'], 1400, [math1.id, math2.id, varzesh.id]);         // کامپیوتر: ریاضی (هر دو کد هم‌ارز) + تربیت بدنی
+await curriculumOf(majorIds['SCT-PSY'], 1400, [andishe.id, varzesh.id, psyc.id]);       // روانشناسی: اندیشه + تربیت بدنی + تخصصی
+await curriculumOf(majorIds['SCT-ACC'], 1400, [andishe.id, varzesh.id, acc.id]);        // حسابداری: اندیشه + تربیت بدنی + تخصصی
+await curriculumOf(majorIds['SCT-CS'], 1400, [math1.id, math2.id, varzesh.id]);         // کامپیوتر: ریاضی (هر دو کد هم‌ارز) + تربیت بدنی
 
 // ── نمرات پاس‌شده (ترم گذشته) برای آزمون پیش‌بینی ──
 const legacyPassed = [

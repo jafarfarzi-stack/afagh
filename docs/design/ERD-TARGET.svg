@@ -1,0 +1,271 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="1330" viewBox="0 0 1700 1330" font-family="Tahoma, 'Segoe UI', sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748B"/>
+    </marker>
+    <marker id="arrD" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#0EA5E9"/>
+    </marker>
+  </defs>
+
+  <!-- background -->
+  <rect x="0" y="0" width="1700" height="1330" fill="#FFFFFF"/>
+
+  <!-- title -->
+  <text x="850" y="38" text-anchor="middle" font-size="22" font-weight="bold" fill="#0F172A">ERD منطقی — Domain برنامه‌ریزی درسی (Curriculum) و زمان‌بندی (Scheduling)</text>
+  <text x="850" y="60" text-anchor="middle" font-size="12.5" fill="#64748B">منبع: src/db/schema.ts — شاخه arena/01a05c13-afagh-next16 (۱۳۱ جدول؛ اینجا فقط خوشهٔ آموزشی) · ★ بدون تغییر جدول موجود، فقط تکمیل/ارتقا</text>
+
+  <!-- legend -->
+  <rect x="40"  y="76" width="24" height="14" fill="#D1FAE5" stroke="#10B981"/>
+  <text x="72"  y="88" font-size="12" fill="#065F46">موجود — بدون تغییر</text>
+  <rect x="250" y="76" width="24" height="14" fill="#FEF3C7" stroke="#F59E0B"/>
+  <text x="282" y="88" font-size="12" fill="#92400E">ارتقایافته (ستون‌های جدید)</text>
+  <rect x="490" y="76" width="24" height="14" fill="#FFEDD5" stroke="#F97316"/>
+  <text x="522" y="88" font-size="12" fill="#9A3412">جدید (فاز ۲)</text>
+  <rect x="690" y="76" width="24" height="14" fill="#DBEAFE" stroke="#3B82F6"/>
+  <text x="722" y="88" font-size="12" fill="#1E40AF">پایین‌دست (مصرف‌کننده)</text>
+  <text x="900" y="88" font-size="11.5" fill="#64748B">____________ FK معمولی · − − − اتصال منطقی (resolution بدون FK اجباری)</text>
+
+  <!-- ================= CLUSTER A : پایه دانشگاهی ================= -->
+  <rect x="30" y="120" width="310" height="890" rx="14" fill="#FAFAFA" stroke="#E5E7EB" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="50" y="146" font-size="13.5" font-weight="bold" fill="#334155">پایهٔ دانشگاهی</text>
+
+  <g>
+    <rect x="50" y="160" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="185" y="186" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">دانشکده‌ها</text>
+    <text x="185" y="206" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">faculties</text>
+    <text x="185" y="228" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">id · name · facultyCode</text>
+  </g>
+  <g>
+    <rect x="50" y="270" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="185" y="296" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">گروه‌های آموزشی</text>
+    <text x="185" y="316" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">departments</text>
+    <text x="185" y="338" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">id · name · facultyId FK</text>
+  </g>
+  <g>
+    <rect x="50" y="380" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="185" y="406" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">رشته‌ها</text>
+    <text x="185" y="426" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">majors</text>
+    <text x="185" y="448" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">id · majorCode · minUnits · departmentId</text>
+  </g>
+  <g>
+    <rect x="50" y="490" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="185" y="516" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">مقاطع (کارشناسی/ارشد/…)</text>
+    <text x="185" y="536" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">degree_level_configs</text>
+    <text x="185" y="558" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">id · code · maxUnitsPerTerm · conditionalGPA</text>
+  </g>
+  <g>
+    <rect x="50" y="600" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="185" y="626" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">آیین‌نامه‌های آموزشی</text>
+    <text x="185" y="646" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">educational_regulations</text>
+    <text x="185" y="668" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">id · degreeLevelId · rulesConfig (JSON)</text>
+  </g>
+  <g>
+    <rect x="50" y="710" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="185" y="736" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">اعضای هیئت‌علمی</text>
+    <text x="185" y="756" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">staff</text>
+    <text x="185" y="778" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">id · staffCode · departmentId · cooperationType</text>
+  </g>
+  <g>
+    <rect x="50" y="820" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="185" y="846" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">دانشجویان</text>
+    <text x="185" y="866" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">students</text>
+    <text x="185" y="888" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">id · majorId · entryYear · regulationId</text>
+  </g>
+
+  <!-- ================= CLUSTER B : درس و هم‌ارزی ================= -->
+  <rect x="360" y="120" width="310" height="340" rx="14" fill="#FAFAFA" stroke="#E5E7EB" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="380" y="146" font-size="13.5" font-weight="bold" fill="#334155">درس و هم‌ارزی</text>
+  <g>
+    <rect x="380" y="160" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="515" y="186" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">بانک دروس</text>
+    <text x="515" y="206" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">courses</text>
+    <text x="515" y="228" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">id · code UNIQUE · units · clusterId · offeringScope</text>
+  </g>
+  <g>
+    <rect x="380" y="290" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="515" y="316" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">خوشه‌های هم‌ارزی</text>
+    <text x="515" y="336" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">equivalence_clusters</text>
+    <text x="515" y="358" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">id · clusterTitle · isGeneralService</text>
+  </g>
+
+  <!-- ================= CLUSTER C : برنامه درسی ================= -->
+  <rect x="360" y="480" width="670" height="530" rx="14" fill="#FBF7FA" stroke="#C2410C" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="380" y="506" font-size="13.5" font-weight="bold" fill="#9A3412">Domain برنامهٔ درسی — Curriculum (قلب بازطراحی)</text>
+
+  <g>
+    <rect x="380" y="520" width="300" height="96" rx="10" fill="#FEF3C7" stroke="#F59E0B" stroke-width="2"/>
+    <text x="530" y="546" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#92400E">نسخه‌های برنامهٔ درسی</text>
+    <text x="530" y="566" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">curriculum_versions ❰ از syllabuses ❱</text>
+    <text x="530" y="588" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">major · degreeLevel · track · versionCode · status</text>
+    <text x="530" y="604" text-anchor="middle" font-size="9.5" fill="#B45309" font-family="Consolas, monospace">DRAFT→REVIEW→APPROVED→PUBLISHED→ARCHIVED</text>
+  </g>
+  <g>
+    <rect x="710" y="520" width="300" height="96" rx="10" fill="#FFEDD5" stroke="#F97316" stroke-width="2"/>
+    <text x="860" y="546" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#9A3412">گرایش‌ها  ★ جدید</text>
+    <text x="860" y="566" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">curriculum_tracks</text>
+    <text x="860" y="588" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">id · majorId FK · title · code</text>
+  </g>
+  <g>
+    <rect x="380" y="640" width="300" height="96" rx="10" fill="#FEF3C7" stroke="#F59E0B" stroke-width="2"/>
+    <text x="530" y="666" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#92400E">دروسِ نسخه</text>
+    <text x="530" y="686" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">curriculum_courses ❰ از syllabus_courses ❱</text>
+    <text x="530" y="708" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">versionId · courseId · roleType · units · recommendedSemester</text>
+    <text x="530" y="724" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">isRequired · isGraduationRequired · minGrade</text>
+  </g>
+  <g>
+    <rect x="380" y="760" width="300" height="96" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="530" y="786" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">قواعد درس (پیش‌نیاز/هم‌نیاز)</text>
+    <text x="530" y="806" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">course_rules  (بدون تغییر جدول)</text>
+    <text x="530" y="828" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">courseId · syllabusId(=نسخه) · ruleType</text>
+    <text x="530" y="844" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">logicTree: AND/OR + course/minGrade/units</text>
+  </g>
+  <g>
+    <rect x="710" y="760" width="300" height="96" rx="10" fill="#FFEDD5" stroke="#F97316" stroke-width="2"/>
+    <text x="860" y="786" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#9A3412">چرخهٔ تأیید  ★ جدید</text>
+    <text x="860" y="806" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">curriculum_approvals (append-only)</text>
+    <text x="860" y="828" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">versionId · type · from→to · by(Staff/User)</text>
+    <text x="860" y="844" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">signatureDocumentId (امضای الکترونیک)</text>
+  </g>
+
+  <!-- ================= CLUSTER D : زمان‌بندی ================= -->
+  <rect x="1050" y="120" width="620" height="850" rx="14" fill="#FAFAFA" stroke="#E5E7EB" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="1070" y="146" font-size="13.5" font-weight="bold" fill="#334155">زمان‌بندی — Scheduling (تقریباً کامل؛ فقط سیم‌کشی + قیود)</text>
+
+  <g>
+    <rect x="1070" y="160" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="1205" y="186" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">ترم‌های تحصیلی</text>
+    <text x="1205" y="206" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">academic_terms</text>
+    <text x="1205" y="228" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">id · termCode · termType · isCurrent</text>
+  </g>
+  <g>
+    <rect x="1070" y="280" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="1205" y="306" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">ارائهٔ درس</text>
+    <text x="1205" y="326" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">course_offerings</text>
+    <text x="1205" y="348" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">term · course · group · capacity · targetMajor</text>
+  </g>
+  <g>
+    <rect x="1070" y="400" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="1205" y="426" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">برنامهٔ هفتگی</text>
+    <text x="1205" y="446" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">schedules</text>
+    <text x="1205" y="468" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">offeringId · day · start/end · roomId · type</text>
+  </g>
+  <g>
+    <rect x="1070" y="520" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="1205" y="546" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">جلسات کلاس (۱۶ جلسهٔ واقعی)</text>
+    <text x="1205" y="566" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">class_sessions</text>
+    <text x="1205" y="588" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">offeringId · sessionDate · sessionNo · makeup</text>
+  </g>
+  <g>
+    <rect x="1070" y="640" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="1205" y="666" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">تخصیص به گروه متقاضی</text>
+    <text x="1205" y="686" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">scheduling_allocations</text>
+    <text x="1205" y="708" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">term · offeringId · departmentId · byStaffId</text>
+  </g>
+  <g>
+    <rect x="1070" y="760" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="1205" y="786" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">فازهای زمان‌بندی</text>
+    <text x="1205" y="806" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">term_scheduling_states</text>
+    <text x="1205" y="828" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">term UNIQUE · phase · publishedAt/By</text>
+    <text x="1205" y="844" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">SUPPLY→ALLOCATION→REVIEW→PUBLISHED</text>
+  </g>
+  <g>
+    <rect x="1380" y="160" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="1515" y="186" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">سالن‌های درس</text>
+    <text x="1515" y="206" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">classrooms</text>
+    <text x="1515" y="228" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">id · name · capacity · roomType · building</text>
+  </g>
+  <g>
+    <rect x="1380" y="280" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="1515" y="306" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">استادانِ ارائه</text>
+    <text x="1515" y="326" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">offering_professors</text>
+    <text x="1515" y="348" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">offeringId · staffId · role · share%</text>
+  </g>
+  <g>
+    <rect x="1380" y="400" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="1515" y="426" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">در دسترس بودن استاد</text>
+    <text x="1515" y="446" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">professor_availabilities</text>
+    <text x="1515" y="468" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">staffId · termId · day · start/end</text>
+  </g>
+  <g>
+    <rect x="1380" y="520" width="270" height="92" rx="10" fill="#D1FAE5" stroke="#10B981" stroke-width="1.5"/>
+    <text x="1515" y="546" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#065F46">سهمیهٔ سالن/شیفت</text>
+    <text x="1515" y="566" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">scheduling_room_grants</text>
+    <text x="1515" y="588" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">term · classroom · shift · ownerDept</text>
+  </g>
+
+  <!-- ================= CLUSTER E : پایین‌دست ================= -->
+  <rect x="360" y="1030" width="1310" height="230" rx="14" fill="#FAFAFA" stroke="#E5E7EB" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="380" y="1056" font-size="13.5" font-weight="bold" fill="#334155">پایین‌دست — مصرف‌کننده‌های نسخهٔ برنامه (موجود)</text>
+  <g>
+    <rect x="380" y="1070" width="300" height="92" rx="10" fill="#DBEAFE" stroke="#3B82F6" stroke-width="1.5"/>
+    <text x="530" y="1096" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#1E40AF">انتخاب واحد</text>
+    <text x="530" y="1116" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">enrollments</text>
+    <text x="530" y="1138" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">student · offering · prereq via evaluateLogicTree</text>
+  </g>
+  <g>
+    <rect x="710" y="1070" width="300" height="92" rx="10" fill="#DBEAFE" stroke="#3B82F6" stroke-width="1.5"/>
+    <text x="860" y="1096" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#1E40AF">فارغ‌التحصیلی (تطبیق سرفصل)</text>
+    <text x="860" y="1116" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">graduation_audits</text>
+    <text x="860" y="1138" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">requiredUnits · missingCourses · catalogOk</text>
+  </g>
+  <g>
+    <rect x="1040" y="1070" width="300" height="92" rx="10" fill="#DBEAFE" stroke="#3B82F6" stroke-width="1.5"/>
+    <text x="1190" y="1096" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#1E40AF">جلسات امتحان</text>
+    <text x="1190" y="1116" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">exam_sessions · exam_attendances</text>
+    <text x="1190" y="1138" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">offeringId · examDate · سیم‌کشی از schedules</text>
+  </g>
+  <g>
+    <rect x="1370" y="1070" width="280" height="92" rx="10" fill="#DBEAFE" stroke="#3B82F6" stroke-width="1.5"/>
+    <text x="1510" y="1096" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#1E40AF">حضور و غیاب</text>
+    <text x="1510" y="1116" text-anchor="middle" font-size="10.5" fill="#4B5563" font-family="Consolas, monospace">student_class_attendance</text>
+    <text x="1510" y="1138" text-anchor="middle" font-size="9.5" fill="#6B7280" font-family="Consolas, monospace">sessionId · enrollmentId · status</text>
+  </g>
+
+  <!-- ================= ARROWS ================= -->
+  <!-- A: chain down -->
+  <path d="M185 252 V 268" stroke="#64748B" stroke-width="1.6" marker-end="url(#arr)" fill="none"/>
+  <path d="M185 362 V 378" stroke="#64748B" stroke-width="1.6" marker-end="url(#arr)" fill="none"/>
+  <path d="M185 472 V 488" stroke="#64748B" stroke-width="1.6" marker-end="url(#arr)" fill="none"/>
+  <!-- majors → curriculum_versions -->
+  <path d="M320 426 H 348 V 560 H 378" stroke="#64748B" stroke-width="1.6" marker-end="url(#arr)" fill="none"/>
+  <!-- equivalence → courses -->
+  <path d="M515 290 V 256" stroke="#64748B" stroke-width="1.4" marker-end="url(#arr)" fill="none"/>
+  <!-- versions → curriculum_courses -->
+  <path d="M530 616 V 638" stroke="#64748B" stroke-width="1.6" marker-end="url(#arr)" fill="none"/>
+  <!-- versions → approvals -->
+  <path d="M680 568 H 695 V 808 H 706" stroke="#64748B" stroke-width="1.6" marker-end="url(#arr)" fill="none"/>
+  <!-- track → versions -->
+  <path d="M710 568 H 690 V 560 H 682" stroke="#64748B" stroke-width="1.6" marker-end="url(#arr)" fill="none"/>
+  <!-- courses → curriculum_courses (مسیر از چپ، بدون عبور از باکس‌ها) -->
+  <path d="M380 206 H 350 V 688 H 378" stroke="#64748B" stroke-width="1.5" marker-end="url(#arr)" fill="none"/>
+  <!-- versions → course_rules (مقیّدسازی قواعد به نسخه، dashed) -->
+  <path d="M380 616 V 640 H 360 V 770 H 378" stroke="#0EA5E9" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#arrD)" fill="none"/>
+  <!-- courses → course_offerings (مسیر بالا) -->
+  <path d="M650 206 H 1000 V 300 H 1068" stroke="#64748B" stroke-width="1.5" marker-end="url(#arr)" fill="none"/>
+  <!-- academic_terms → course_offerings -->
+  <path d="M1205 252 V 278" stroke="#64748B" stroke-width="1.6" marker-end="url(#arr)" fill="none"/>
+  <!-- offerings → schedules -->
+  <path d="M1205 372 V 398" stroke="#64748B" stroke-width="1.6" marker-end="url(#arr)" fill="none"/>
+  <!-- offerings → offering_professors -->
+  <path d="M1340 326 H 1378" stroke="#64748B" stroke-width="1.6" marker-end="url(#arr)" fill="none"/>
+  <!-- classrooms → schedules -->
+  <path d="M1380 236 H 1360 V 446 H 1342" stroke="#64748B" stroke-width="1.4" marker-end="url(#arr)" fill="none"/>
+  <!-- classrooms → room_grants -->
+  <path d="M1515 252 V 280" stroke="#64748B" stroke-width="1.4" marker-end="url(#arr)" fill="none"/>
+  <!-- terms → scheduling_states -->
+  <path d="M1340 240 H 1360 V 806 H 1342" stroke="#64748B" stroke-width="1.4" marker-end="url(#arr)" fill="none"/>
+  <!-- offerings → allocations (مسیر از چپ) -->
+  <path d="M1085 372 V 390 H 1056 V 686 H 1068" stroke="#64748B" stroke-width="1.3" marker-end="url(#arr)" fill="none"/>
+  <!-- offerings → enrollments (مسیر از چپ، بدون عبور از جعبه‌ها) -->
+  <path d="M1070 326 H 1042 V 1020 H 520 V 1068" stroke="#3B82F6" stroke-width="1.5" marker-end="url(#arr)" fill="none"/>
+  <!-- students → enrollments -->
+  <path d="M200 912 V 985 H 480 V 1068" stroke="#64748B" stroke-width="1.5" marker-end="url(#arr)" fill="none"/>
+  <!-- students → graduation_audits -->
+  <path d="M200 922 V 1005 H 800 V 1068" stroke="#64748B" stroke-width="1.5" marker-end="url(#arr)" fill="none"/>
+  <!-- versions → graduation_audits (تطبیق سرفصل، dashed) -->
+  <path d="M530 856 V 940 H 830 V 1068" stroke="#0EA5E9" stroke-width="1.4" stroke-dasharray="6 4" marker-end="url(#arrD)" fill="none"/>
+
+  <!-- footnote -->
+  <text x="850" y="1290" text-anchor="middle" font-size="11.5" fill="#64748B">برای خوانایی، FKهای پرتکرار (users / staff / students به همهٔ جداول مربوط) و زنجیرهٔ کامل ۱۳۱ جدول حذف شده‌اند · جزئیات ستون‌ها در CURRICULUM-SCHEDULING-DESIGN-V1.md</text>
+</svg>

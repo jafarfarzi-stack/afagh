@@ -2,13 +2,14 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { registerOpenCourseAction, validateDiscountCodeAction } from './actions';
 
 export interface PublicShortCourse {
   id: number;
   code: string;
   title: string;
   titleEn: string;
-  category: 'مهندسی و هوش مصنوعی' | 'برنامه‌نویسی و وب' | 'معماری و عمران' | 'مدیریت و مالی';
+  category: string;
   description: string;
   hours: number;
   tuitionPrice: number; // تومان
@@ -52,31 +53,35 @@ export default function OpenCoursesClient({
   const [paymentSuccessData, setPaymentSuccessData] = useState<{
     trackingCode: string;
     courseTitle: string;
-    amountPaid: number;
+    amountDue: number;
+    discountAmount: number;
     learnerName: string;
   } | null>(null);
 
-  // Categories
-  const categories = ['ALL', 'مهندسی و هوش مصنوعی', 'برنامه‌نویسی و وب', 'معماری و عمران', 'مدیریت و مالی'];
+  // Categories — پویا از دوره‌های واقعی (نه فهرست ثابت)
+  const categories = ['ALL', ...Array.from(new Set(courses.map(c => c.category)))];
 
-  // Handle Apply Discount Code
-  const handleApplyDiscount = () => {
+  // اعتبارسنجی کد تخفیف — واقعی در سرور (جدول short_term_discounts)
+  const handleApplyDiscount = async () => {
     setDiscountError('');
     if (!checkoutCourse) return;
-
     const trimmed = discountCode.trim().toUpperCase();
-    if (trimmed === 'AFAGH30' || trimmed === 'STUDENT') {
-      const discount = Math.round(checkoutCourse.tuitionPrice * 0.30);
-      setDiscountAmount(discount);
+    if (!trimmed) {
+      setDiscountError('کد تخفیف را وارد کنید.');
+      return;
+    }
+    try {
+      const res = await validateDiscountCodeAction(checkoutCourse.id, trimmed);
+      if (!res.ok) {
+        setDiscountError(res.error || 'کد تخفیف نامعتبر است.');
+        setDiscountAmount(0);
+        setDiscountAppliedCode('');
+        return;
+      }
+      setDiscountAmount(res.discountAmount ?? 0);
       setDiscountAppliedCode(trimmed);
-    } else if (trimmed === 'NOROOZ' || trimmed === 'OFF20') {
-      const discount = Math.round(checkoutCourse.tuitionPrice * 0.20);
-      setDiscountAmount(discount);
-      setDiscountAppliedCode(trimmed);
-    } else {
-      setDiscountError('کد تخفیف وارد شده نامعتبر یا منقضی شده است.');
-      setDiscountAmount(0);
-      setDiscountAppliedCode('');
+    } catch {
+      setDiscountError('خطا در بررسی کد تخفیف.');
     }
   };
 
@@ -91,25 +96,35 @@ export default function OpenCoursesClient({
 
     setIsProcessingPayment(true);
 
-    // Simulate Payment Gateway & Instant Registration
-    await new Promise(r => setTimeout(r, 1200));
-
-    const generatedTracking = 'AFQ-' + Math.floor(100000 + Math.random() * 900000);
-    const finalAmount = Math.max(0, checkoutCourse.tuitionPrice - discountAmount);
-
-    setCourses(prev =>
-      prev.map(c => (c.id === checkoutCourse.id ? { ...c, enrolledCount: c.enrolledCount + 1 } : c))
-    );
-
-    setPaymentSuccessData({
-      trackingCode: generatedTracking,
-      courseTitle: checkoutCourse.title,
-      amountPaid: finalAmount,
-      learnerName: fullName,
-    });
-
-    setIsProcessingPayment(false);
-    setCheckoutCourse(null);
+    // ثبت واقعی: اعتبارسنجی + کد تخفیف + ردیف ثبت‌نام (paymentStatus=PENDING) — همه در سرور
+    try {
+      const res = await registerOpenCourseAction({
+        courseId: checkoutCourse.id,
+        fullName, fullNameEn,
+        nationalId, mobile,
+        discountCode: discountCode.trim() || undefined,
+      });
+      if (!res.ok) {
+        alert(res.error || 'ثبت‌نام ناموفق بود.');
+        return;
+      }
+      setPaymentSuccessData({
+        trackingCode: res.trackingCode ?? '',
+        courseTitle: checkoutCourse.title,
+        amountDue: res.amountDue ?? checkoutCourse.tuitionPrice,
+        discountAmount: res.discountAmount ?? 0,
+        learnerName: fullName,
+      });
+      setCourses(prev => prev.map(c => (c.id === checkoutCourse.id ? { ...c, enrolledCount: c.enrolledCount + 1 } : c)));
+      setCheckoutCourse(null);
+      setDiscountCode('');
+      setDiscountAmount(0);
+      setDiscountAppliedCode('');
+    } catch {
+      alert('خطا در ارتباط با سرور.');
+    } finally {
+      setIsProcessingPayment(false);
+    }
   };
 
   const filteredCourses = courses.filter(c => {
@@ -552,8 +567,11 @@ export default function OpenCoursesClient({
             </div>
 
             <div className="space-y-1">
-              <h3 className="font-black text-lg text-white">ثبت‌نام شما با موفقیت قطعی شد!</h3>
-              <p className="text-xs text-slate-400">رسید الکترونیکی و مشخصات دوره به شماره همراه شما پیامک شد.</p>
+              <h3 className="font-black text-lg text-white">درخواست ثبت‌نام شما ثبت شد</h3>
+              <p className="text-xs text-slate-400 leading-5">
+                برای قطعی‌شدن، مبلغ شهریه را به حساب دانشگاه واریز و رسید آن را به کارشناس آموزش اعلام کنید.
+                کد رهگیری زیر برای پیگیری وضعیت نزد شماست.
+              </p>
             </div>
 
             <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2 text-xs text-right">
@@ -565,14 +583,22 @@ export default function OpenCoursesClient({
                 <span className="text-slate-400">دوره ثبت‌نامی:</span>
                 <span className="font-bold text-indigo-300">{paymentSuccessData.courseTitle}</span>
               </div>
+              {paymentSuccessData.discountAmount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">تخفیف اعمال‌شده:</span>
+                  <span className="font-mono font-bold text-amber-400">
+                    {formatPrice(paymentSuccessData.discountAmount)}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
-                <span className="text-slate-400">مبلغ پرداختی:</span>
+                <span className="text-slate-400">مبلغ قابل پرداخت:</span>
                 <span className="font-mono font-bold text-emerald-400">
-                  {formatPrice(paymentSuccessData.amountPaid)}
+                  {formatPrice(paymentSuccessData.amountDue)}
                 </span>
               </div>
               <div className="flex justify-between pt-2 border-t border-slate-800">
-                <span className="text-slate-400">کد رهگیری تراکنش:</span>
+                <span className="text-slate-400">کد رهگیری ثبت‌نام:</span>
                 <span className="font-mono font-black text-amber-300 tracking-wider">
                   {paymentSuccessData.trackingCode}
                 </span>

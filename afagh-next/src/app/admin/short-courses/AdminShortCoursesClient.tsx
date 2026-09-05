@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   createShortCourseAction, issueCertificateAction, updateRegistrationAction,
+  confirmPaymentAction, createDiscountCodeAction, listDiscountCodesAction, toggleDiscountCodeAction,
 } from './actions';
 
 export interface AdminLearnerRecord {
@@ -50,10 +51,23 @@ const faNum = (n: any) =>
 
 const formatPrice = (p: number) => faNum(p.toLocaleString('fa-IR')) + ' تومان';
 
+export interface AdminDiscountRow {
+  id: number;
+  code: string;
+  courseId: number | null;
+  discountPercent: number;
+  maxDiscountAmount: number | null;
+  maxUsage: number;
+  usedCount: number;
+  isActive: boolean;
+}
+
 export default function AdminShortCoursesClient({
   initialCourses,
+  initialDiscounts,
 }: {
   initialCourses: AdminCourseItem[];
+  initialDiscounts: AdminDiscountRow[];
 }) {
   const router = useRouter();
   const [courses, setCourses] = useState<AdminCourseItem[]>(initialCourses);
@@ -72,12 +86,8 @@ export default function AdminShortCoursesClient({
   const [newCapacity, setNewCapacity] = useState(30);
   const [newInstructor, setNewInstructor] = useState('');
 
-  // Discount Codes State
-  const [discounts, setDiscounts] = useState([
-    { code: 'AFAGH30', percent: 30, used: 14, max: 100, validUntil: '۱۴۰۵/۱۲/۲۹' },
-    { code: 'NOROOZ', percent: 20, used: 8, max: 50, validUntil: '۱۴۰۵/۱۱/۳۰' },
-    { code: 'STUDENT', percent: 30, used: 25, max: 200, validUntil: '۱۴۰۵/۱۲/۲۹' },
-  ]);
+  // Discount Codes State — از جدول واقعی short_term_discounts
+  const [discounts, setDiscounts] = useState<AdminDiscountRow[]>(initialDiscounts);
   const [newDiscountCode, setNewDiscountCode] = useState('');
   const [newDiscountPercent, setNewDiscountPercent] = useState(25);
 
@@ -185,22 +195,49 @@ export default function AdminShortCoursesClient({
     setActiveTab('ROSTER');
   };
 
-  // Add Discount Code Handler
-  const handleCreateDiscount = (e: React.FormEvent) => {
+  // Add Discount Code Handler — واقعی در سرور (short_term_discounts)
+  const handleCreateDiscount = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newDiscountCode) return;
-    setDiscounts(prev => [
-      ...prev,
-      {
-        code: newDiscountCode.toUpperCase().trim(),
-        percent: newDiscountPercent,
-        used: 0,
-        max: 100,
-        validUntil: '۱۴۰۵/۱۲/۲۹',
-      },
-    ]);
+    if (!newDiscountCode.trim()) return;
+    const res = await createDiscountCodeAction({
+      code: newDiscountCode,
+      courseId: selectedCourseId || undefined,
+      discountPercent: newDiscountPercent,
+      maxUsage: 100,
+    });
+    if (!res.ok) {
+      showToast(res.error || 'ساخت کد تخفیف ناموفق بود.');
+      return;
+    }
     setNewDiscountCode('');
-    showToast('کد تخفیف جدید با موفقیت فعال شد.');
+    await reloadDiscounts();
+    showToast('کد تخفیف جدید در پایگاه داده ثبت شد.');
+  };
+
+  const reloadDiscounts = async () => {
+    const res = await listDiscountCodesAction();
+    if (res.ok) {
+      setDiscounts(res.data.map(d => ({ ...d, isActive: d.isActive === 1 })));
+    }
+  };
+
+  const handleToggleDiscount = async (id: number, active: boolean) => {
+    const res = await toggleDiscountCodeAction(id, active);
+    if (!res.ok) { showToast(res.error || 'خطا.'); return; }
+    await reloadDiscounts();
+    showToast(active ? 'کد تخفیف فعال شد.' : 'کد تخفیف غیرفعال شد.');
+  };
+
+  /** تأیید واریز شهریهٔ ثبت‌نام (PENDING → PAID) — با شمارهٔ پیگیری واقعی */
+  const handleConfirmPayment = async (registrationId: number, expected: number) => {
+    const refId = window.prompt('شمارهٔ پیگیری واریز (مرجع بانکی/شعبه):');
+    if (!refId) return;
+    const amount = window.prompt(`مبلغ واریزشده (تومان) — مبلغ دوره: ${expected.toLocaleString('fa-IR')}`, String(expected));
+    if (amount === null) return;
+    const res = await confirmPaymentAction({ registrationId, paymentRefId: refId, amountPaid: Number(amount) || 0 });
+    if (!res.ok) { showToast(res.error || 'خطا در تأیید واریز.'); return; }
+    router.refresh();
+    showToast(`واریز ثبت شد (کد رهگیری: ${res.data.trackingCode}).`);
   };
 
   return (
@@ -386,7 +423,19 @@ export default function AdminShortCoursesClient({
                         {learner.mobile}
                       </td>
                       <td className="p-3 font-mono font-bold text-emerald-700">
-                        {formatPrice(learner.amountPaid)}
+                        {learner.amountPaid > 0 ? formatPrice(learner.amountPaid) : '—'}
+                      </td>
+                      <td className="p-3 text-center">
+                        {(learner.paymentStatus ?? 'PAID') === 'PAID' ? (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black text-[10px]">✓ پرداخت</span>
+                        ) : (
+                          <button
+                            onClick={() => handleConfirmPayment(learner.registrationId, 0)}
+                            className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-black text-[10px] transition"
+                          >
+                            💳 تأیید واریز
+                          </button>
+                        )}
                       </td>
 
                       {/* Attendance input */}
@@ -659,13 +708,23 @@ export default function AdminShortCoursesClient({
                   <span className="px-3 py-1 rounded-xl bg-indigo-100 text-indigo-950 font-mono font-black text-xs">
                     {d.code}
                   </span>
-                  <span className="font-black text-emerald-700">{faNum(d.percent)}٪ تخفیف</span>
+                  <span className="font-black text-emerald-700">{faNum(d.discountPercent)}٪ تخفیف</span>
                   <span className="text-slate-500">
-                    استفاده‌شده: {faNum(d.used)} از {faNum(d.max)}
+                    استفاده‌شده: {faNum(d.usedCount)} از {faNum(d.maxUsage)}
                   </span>
+                  {d.maxDiscountAmount ? (
+                    <span className="text-slate-500">· سقف: {formatPrice(d.maxDiscountAmount)}</span>
+                  ) : null}
                 </div>
 
-                <span className="text-[11px] font-mono text-slate-400">مهلت اعتبار: {faNum(d.validUntil)}</span>
+                <button
+                  onClick={() => handleToggleDiscount(d.id, !d.isActive)}
+                  className={`px-3 py-1.5 rounded-xl text-[11px] font-black transition ${
+                    d.isActive ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
+                  }`}
+                >
+                  {d.isActive ? '✓ فعال' : 'غیرفعال'}
+                </button>
               </div>
             ))}
           </div>

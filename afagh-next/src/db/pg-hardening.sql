@@ -82,7 +82,8 @@ ALTER TABLE "request_parallel_checkpoints" ENABLE ROW LEVEL SECURITY;
 --    دادهٔ خام پذیرش، پاسخ‌های ارزشیابی بدون کلید کاربر).
 REVOKE SELECT ON "system_settings", "integrations_config", "audit_logs", "api_audit_logs",
              "admissions_staging", "sanjesh_mappings", "evaluation_responses",
-             "verification_otps", "step_api_actions", "document_signatures"
+             "verification_otps", "step_api_actions", "document_signatures",
+             "curriculum_approvals"
   FROM afagh_app;
 ALTER TABLE "system_settings" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "integrations_config" ENABLE ROW LEVEL SECURITY;
@@ -94,6 +95,8 @@ ALTER TABLE "evaluation_responses" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "verification_otps" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "step_api_actions" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "document_signatures" ENABLE ROW LEVEL SECURITY;
+-- چرخهٔ تأیید برنامهٔ درسی: دفتر ممیزیِ فقط-مالک (بدون سیاست = deny-all برای نقش اپ)
+ALTER TABLE "curriculum_approvals" ENABLE ROW LEVEL SECURITY;
 
 -- ══ ۳) سیاست‌های خواندن (SELECT) — تعریف مشترک uid ══
 -- uid = nullif(current_setting('app.user_id', true), '')::int
@@ -399,6 +402,18 @@ CREATE POLICY offering_professors_self_read ON "offering_professors" FOR SELECT 
 ALTER TABLE "professor_availabilities" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS professor_availabilities_self_read ON "professor_availabilities";
 CREATE POLICY professor_availabilities_self_read ON "professor_availabilities" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+-- فاز ۱۱ (واقعی‌سازی): جدول‌های جدیدِ دارای staffId باید در پوشش RLS بیایند،
+-- وگرنه گیت «پوشش کامل RLS» در hardening.mjs استقرار را متوقف می‌کند (fail-closed).
+ALTER TABLE "professor_availability_notes" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS prof_avail_note_self_read ON "professor_availability_notes";
+CREATE POLICY prof_avail_note_self_read ON "professor_availability_notes" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "signature_otps" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS sigotp_self_read ON "signature_otps";
+CREATE POLICY sigotp_self_read ON "signature_otps" FOR SELECT TO afagh_app
   USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
 
 ALTER TABLE "staff_roles" ENABLE ROW LEVEL SECURITY;

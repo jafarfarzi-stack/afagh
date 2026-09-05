@@ -2,7 +2,7 @@
 
 import { eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { short_term_courses, short_term_learners, short_term_registrations } from '@/db/schema';
+import { short_term_courses, short_term_discounts, short_term_learners, short_term_registrations } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { issueShortTermCertificate, revokeCertificate } from '@/lib/verification';
 import { invalidateSettingsCache } from '@/lib/settings';
@@ -150,4 +150,76 @@ export async function syncEnrolledCountsAction() {
   `);
   invalidateSettingsCache();
   return ok({ synced: true });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// کدهای تخفیف دوره‌های آزاد — جدول واقعی short_term_discounts (نه state کلاینت)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** فهرست کدهای تخفیف (بر اساس دورهٔ اختیاری) */
+export async function listDiscountCodesAction(courseId?: number) {
+  await requireRole(['ADMIN', 'EDU_EXPERT']);
+  const rows = await db.select().from(short_term_discounts)
+    .where(courseId ? eq(short_term_discounts.courseId, Number(courseId)) : undefined)
+    .orderBy(short_term_discounts.id);
+  return ok(rows.map(r => ({
+    id: r.id, code: r.code, courseId: r.courseId, discountPercent: r.discountPercent,
+    maxDiscountAmount: r.maxDiscountAmount, maxUsage: r.maxUsage ?? 100,
+    usedCount: r.usedCount ?? 0, isActive: r.isActive ?? 1,
+  })));
+}
+
+/** ساخت کد تخفیف جدید (درصد + سقف مبلغ + سهمیهٔ مصرف) */
+export async function createDiscountCodeAction(input: {
+  code: string; courseId?: number; discountPercent: number; maxDiscountAmount?: number; maxUsage?: number;
+}) {
+  await requireRole(['ADMIN', 'EDU_EXPERT']);
+  const code = String(input.code ?? '').trim().toUpperCase();
+  const percent = Number(input.discountPercent);
+  if (!/^[A-Z0-9]{3,20}$/.test(code)) return fail('کد تخفیف باید ۳ تا ۲۰ کاراکتر انگلیسی/رقمی باشد.');
+  if (!(percent >= 1 && percent <= 100)) return fail('درصد تخفیف باید بین ۱ تا ۱۰۰ باشد.');
+  if (input.maxUsage != null && (!Number.isInteger(Number(input.maxUsage)) || Number(input.maxUsage) < 1)) return fail('سهمیهٔ مصرف باید عدد صحیح مثبت باشد.');
+
+  try {
+    const [row] = await db.insert(short_term_discounts).values({
+      code,
+      courseId: input.courseId ? Number(input.courseId) : null,
+      discountPercent: percent,
+      maxDiscountAmount: input.maxDiscountAmount ? Number(input.maxDiscountAmount) : null,
+      maxUsage: input.maxUsage ? Number(input.maxUsage) : 100,
+      isActive: 1,
+    }).returning({ id: short_term_discounts.id, code: short_term_discounts.code });
+    log.info('discount_code_created', { discountId: row.id, code: row.code });
+    return ok({ id: row.id, code: row.code });
+  } catch (err) {
+    return fail('ساخت کد تخفیف ناموفق بود (ممکن است کد تکراری باشد): ' + (err as Error).message);
+  }
+}
+
+/** فعال/غیرفعال‌سازی کد تخفیف */
+export async function toggleDiscountCodeAction(discountId: number, isActive: boolean) {
+  await requireRole(['ADMIN', 'EDU_EXPERT']);
+  const [row] = await db.update(short_term_discounts)
+    .set({ isActive: isActive ? 1 : 0 })
+    .where(eq(short_term_discounts.id, Number(discountId)))
+    .returning({ id: short_term_discounts.id, isActive: short_term_discounts.isActive });
+  if (!row) return fail('کد تخفیف یافت نشد.');
+  return ok({ id: row.id, isActive: row.isActive });
+}
+
+/** تأیید واریز شهریهٔ ثبت‌نام دورهٔ آزاد (کارشناس) — PENDING → PAID */
+export async function confirmPaymentAction(input: { registrationId: number; paymentRefId: string; amountPaid: number }) {
+  await requireRole(['ADMIN', 'EDU_EXPERT']);
+  const regId = Number(input.registrationId);
+  const amount = Math.round(Number(input.amountPaid));
+  const refId = String(input.paymentRefId ?? '').trim();
+  if (!regId || !refId || !(amount >= 0)) return fail('شناسهٔ ثبت‌نام، شمارهٔ پیگیری و مبلغ الزامی است.');
+
+  const [row] = await db.update(short_term_registrations)
+    .set({ paymentStatus: 'PAID', amountPaid: amount, paymentRefId: refId })
+    .where(eq(short_term_registrations.id, regId))
+    .returning({ id: short_term_registrations.id, trackingCode: short_term_registrations.trackingCode });
+  if (!row) return fail('ثبت‌نام یافت نشد.');
+  log.info('short_term_payment_confirmed', { registrationId: regId, amount, refId });
+  return ok({ registrationId: row.id, trackingCode: row.trackingCode });
 }

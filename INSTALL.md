@@ -249,10 +249,78 @@ crontab -e
 
 جزئیات: [`docs/GRADUATION.md`](docs/GRADUATION.md)
 
+## بیلد روی سرور کم‌حافظه (`exit code: 137`)
+
+`next build` حافظه‌بر است. روی سروری که RAM+swap کمتر از ~۴ گیگ دارد، کرنل
+پروسهٔ بیلد را می‌کشد و داکر دقیقاً این‌طور گزارش می‌کند:
+
+```text
+> [app builder 3/3] RUN npm run build
+24.47   Creating an optimized production build ...
+1257.4 Killed
+target app: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 137
+```
+
+`137 = 128 + 9` یعنی پروسه با **SIGKILL** از طرف OOM killer کشته شده — نه خطای
+کد و نه باگ Next. برای اطمینان، همان بیلد روی ماشین ۲ هسته‌ای با ۳٫۹ گیگ RAM
+و **بدون swap** با `NODE_MAX_OLD_SPACE=1536` اجرا شد: `✓ Compiled successfully
+in 17.8s`، کل بیلد ۲۲ ثانیه، **اوج مصرف حافظهٔ Node: ۴۱۲MB**، و هر ۸۷ مسیر
+به‌همراه `.next/standalone/server.js` تولید شد. پس اگر بیلد شما ۲۰ دقیقه طول
+کشید و `Killed` شد، سرور در حال thrashing بوده است.
+
+**۱) گزارش حافظه و سقف هیپ پیشنهادی (بدون تغییر سیستم):**
+
+```bash
+bash scripts/ensure-build-memory.sh --dry-run      # یا: make mem
+```
+
+**۲) ساخت swap (یک‌بار، idempotent و دائمی در `/etc/fstab`):**
+
+```bash
+sudo bash scripts/ensure-build-memory.sh           # یا: make swap   (پیش‌فرض ۴ گیگ)
+sudo SWAP_GB=2 bash scripts/ensure-build-memory.sh # اگر دیسک کم است
+```
+
+**۳) بیلد با هیپ متناسب سرور:**
+
+```bash
+# .env کنار docker-compose.yml
+NODE_MAX_OLD_SPACE=1536
+
+NODE_MAX_OLD_SPACE=1536 docker compose build       # یا: make build-lowmem
+docker compose up -d
+```
+
+راهنمای سقف هیپ: RAM زیر ۱٫۵ گیگ ← `1024`، زیر ۲٫۵ گیگ ← `1536`، زیر ۴ گیگ
+← `2048`، بالاتر ← `3072`. (پیش‌فرض `docker-compose.yml` از `3072` به `2048`
+تغییر کرد تا روی سرورهای کوچک خودش OOM نسازد.)
+
+اگر باز هم حافظه کافی نبود، دو راه فرار دارید:
+
+```bash
+# الف) بیلد با webpack به‌جای Turbopack
+#     اندازه‌گیری روی همین پروژه (۲ هسته / ۳٫۹ گیگ RAM):
+#       Turbopack → ۲۲ ثانیه، اوج حافظهٔ Node ۴۱۲MB
+#       webpack   → ۵۰ ثانیه، اوج حافظهٔ Node ۹۶۶MB
+#     یعنی اینجا webpack حافظهٔ *بیشتری* گرفت؛ این سوییچ را فقط وقتی بزنید که
+#     Turbopack روی سرور شما رفتار متفاوتی دارد (مثلاً روی معماری/نسخهٔ دیگر).
+NEXT_BUILD_ARGS=--webpack NODE_MAX_OLD_SPACE=1536 docker compose build
+
+# ب) اصلاً روی سرور بیلد نکنید: ایمیج را جای دیگر بسازید و منتقل کنید
+docker save afagh-app:latest | gzip > afagh-app.tar.gz   # روی ماشین قوی‌تر
+# → انتقال با scp → سپس روی سرور:
+gunzip -c afagh-app.tar.gz | docker load && docker compose up -d --no-build
+```
+
+> نکته: `deploy-debian.sh` همهٔ این مراحل (ساخت swap + انتخاب سقف هیپ) را خودش
+> انجام می‌دهد؛ این بخش برای زمانی است که دستی `docker compose up -d --build`
+> می‌زنید.
+
 ## عیب‌یابی
 
 | مشکل | راه‌حل |
 |---|---|
+| بیلد داکر با `exit code: 137` و یک سطر `Killed` تمام می‌شود (`RUN npm run build`) | **OOM است، نه باگ کد**: ۱۳۷ = ۱۲۸+۹ یعنی کرنل پروسه را با SIGKILL کشته. راه‌حل: `sudo bash scripts/ensure-build-memory.sh` (ساخت swap) سپس `NODE_MAX_OLD_SPACE=1536 docker compose build`. جزئیات: بخش «بیلد روی سرور کم‌حافظه» پایین‌تر |
 | بیلد داکر با `FATAL ERROR: Reached heap limit ... JavaScript heap out of memory` می‌افتد | برطرف شده (تایپ‌چک از بیلد ایمیج حذف شد). اگر باز هم رخ داد، در `.env` بگذارید `NODE_MAX_OLD_SPACE=1536` و ۲ گیگ swap بسازید: `fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile` |
 | بعد از زدن نام کاربری/رمز دوباره به صفحهٔ **ورود** برمی‌گردید (حلقهٔ لاگین) | برطرف شده: کوکی نشست دیگر روی HTTP ساده `Secure` نمی‌شود. اگر پشت پروکسی HTTPS هستید و پروکسی هدر `X-Forwarded-Proto` نمی‌فرستد، در `.env` بگذارید `AFAGH_COOKIE_SECURE=true` و `AFAGH_COOKIE_SAMESITE=none` (یا برعکس برای HTTP: `false` و `lax`) |
 | پیام «برای این حساب هیچ نقشی تعریف نشده است» | کاربر در دیتابیس هست ولی در `user_roles` نقشی ندارد؛ از پنل مدیر ← کاربران، نقش بدهید |

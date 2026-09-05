@@ -39,6 +39,13 @@ const toHHMM = (minutes: number) =>
   `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 
 /** وضعیت فاز ترم — داخل تراکنش (هم‌خوانی با قفل) */
+/** تبدیل userId → staffId برای ستون‌های *ByStaffId (آن‌ها به staff.id FK دارند) */
+async function resolveStaffId(tx: AuditTx, userId: number | null): Promise<number | null> {
+  if (!userId) return null;
+  const rows = await tx.select({ id: staff.id }).from(staff).where(eq(staff.userId, userId)).limit(1);
+  return rows[0]?.id ?? null;
+}
+
 async function stateInTx(tx: AuditTx, termId: number) {
   const [st] = await tx.select().from(term_scheduling_states).where(eq(term_scheduling_states.termId, termId)).limit(1);
   return st ?? { termId, phase: 'SUPPLY' as const };
@@ -61,13 +68,13 @@ export async function transitionSchedulingPhase(actorUserId: number | null, term
       await tx.update(term_scheduling_states).set({
         phase: to,
         publishedAt: to === 'PUBLISHED' ? new Date() : st.publishedAt,
-        publishedByStaffId: to === 'PUBLISHED' ? actorUserId : st.publishedByStaffId,
+        publishedByStaffId: to === 'PUBLISHED' ? await resolveStaffId(tx, actorUserId) : st.publishedByStaffId,
       }).where(eq(term_scheduling_states.id, st.id));
     } else {
       await tx.insert(term_scheduling_states).values({
         termId, phase: to,
         publishedAt: to === 'PUBLISHED' ? new Date() : null,
-        publishedByStaffId: to === 'PUBLISHED' ? actorUserId : null,
+        publishedByStaffId: to === 'PUBLISHED' ? await resolveStaffId(tx, actorUserId) : null,
       });
     }
     await auditChain(tx, actorUserId, 'SCHEDULING_PHASE_TRANSITION', 'academic_term', termId, { from: st.phase, to });
@@ -171,7 +178,7 @@ export async function supplyGroupDrafts(actorUserId: number | null, px: SupplyIn
     const offeringByGroup = new Map(inserted.map(o => [Number(o.groupNumber), Number(o.id)]));
     await tx.insert(schedules).values(drafts.map(d => ({
       offeringId: offeringByGroup.get(d.groupNumber)!,
-      scheduleType: 'WEEKLY',
+      scheduleType: 'CLASS',
       dayOfWeek: d.dayOfWeek,
       startTime: hhmmss(d.startTime),
       endTime: hhmmss(d.endTime),
@@ -261,7 +268,7 @@ export async function allocateSections(actorUserId: number | null, px: {
     for (const o of offers) {
       const [ins] = await tx
         .insert(scheduling_allocations)
-        .values({ termId, offeringId: o.id, departmentId, allocatedByStaffId: actorUserId })
+        .values({ termId, offeringId: o.id, departmentId, allocatedByStaffId: await resolveStaffId(tx, actorUserId) })
         .onConflictDoNothing()
         .returning({ id: scheduling_allocations.id });
       if (ins) done.push(Number(o.id));
@@ -337,7 +344,7 @@ export async function releaseRoomShift(actorUserId: number | null, px: {
     if (!g) throw new Error('سهمیهٔ این (سالن، شیفت) برای این ترم وجود ندارد.');
     if (Number(g.ownerDepartmentId) !== px.departmentId) throw new Error('فقط گروه مالک می‌تواند این شیفت را آزاد کند.');
     await tx.update(scheduling_room_grants)
-      .set({ status: 'RELEASED', releasedAt: new Date(), releasedByStaffId: actorUserId })
+      .set({ status: 'RELEASED', releasedAt: new Date(), releasedByStaffId: await resolveStaffId(tx, actorUserId) })
       .where(eq(scheduling_room_grants.id, g.id));
     await auditChain(tx, actorUserId, 'SCHEDULING_SHIFT_RELEASED', 'classroom', px.classroomId, {
       termId: px.termId, shift: px.shift, fromDepartmentId: px.departmentId,
@@ -388,7 +395,7 @@ export async function listPoolShifts(termId: number, facultyId?: number) {
 
 /**
  * متقاضیان واقعی درس (یا کل خوشهٔ هم‌ارز): دانشجویان فعالی که چارت‌شان
- * (syllabus ورودی/رشته) شامل درس است، منهای پاس‌شده‌ها (نمرهٔ قطعی ≥ ۱۰
+ * (نسخهٔ برنامهٔ درسیِ ورودی/رشته) شامل درس است، منهای پاس‌شده‌ها (نمرهٔ قطعی ≥ ۱۰
  * روی هر کد هم‌ارز). خروجی به تفکیک دانشکده + تعداد گروه پیشنهادی.
  */
 export async function forecastCourseDemand(courseId: number, standardCapacity = 40) {
@@ -408,9 +415,10 @@ export async function forecastCourseDemand(courseId: number, standardCapacity = 
     select distinct s.id as "studentId", m."facultyId"
     from students s
     join majors m on m.id = s."majorId"
-    join syllabuses sy on sy."majorId" = m.id
-      and s."entryYear" between sy."entryYearStart" and coalesce(sy."entryYearEnd", 9999)
-    join syllabus_courses sc on sc."syllabusId" = sy.id
+    join curriculum_versions cv on cv."majorId" = m.id
+      and s."entryYear" between cv."entryYearFrom" and coalesce(cv."entryYearTo", 9999)
+      and cv."status" in ('PUBLISHED','ARCHIVED')
+    join curriculum_courses sc on sc."curriculumVersionId" = cv.id
     where s.status = 'ACTIVE' and sc."courseId" in (${memberIn})
   `);
   const needingRows = (needing.rows as { studentId: number; facultyId: number | null }[]);

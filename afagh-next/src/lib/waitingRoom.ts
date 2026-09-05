@@ -22,7 +22,7 @@ export const K = {
 };
 
 export type WrState = 'WAITING' | 'PROCESSING' | 'DONE';
-export type QueueTicket = { id: string; userId: number; studentId: number; enqueuedAt: number };
+export type QueueTicket = { id: string; userId: number; studentId: number; enqueuedAt: number; acceptSameDayRisk?: boolean };
 
 // ── §۱۰۰۶: شب قبل از انتخاب واحد، ظرفیت همهٔ کلاس‌ها از DB به Redis منتقل می‌شود ──
 export async function warmupCapacities(force = false): Promise<number> {
@@ -110,8 +110,8 @@ export async function peekCapacities(offeringIds: number[]): Promise<Record<numb
 //   • جایگاه: ZRANK → O(log N) به‌جای LPOS خطی O(N)؛ با ۵۰۰۰ دانشجوی همزمان،
 //             رفرش هر ثانیه بدون درگیری تک‌نخی Redis محاسبه می‌شود.
 //   • خروج:   ZPOPMIN → قدیمی‌ترین (عادلانه‌ترین) ثبت با یک دستور اتمیک.
-export async function enqueueSubmit(userId: number, studentId: number) {
-  const ticket: QueueTicket = { id: randomUUID(), userId, studentId, enqueuedAt: Date.now() };
+export async function enqueueSubmit(userId: number, studentId: number, acceptSameDayRisk = false) {
+  const ticket: QueueTicket = { id: randomUUID(), userId, studentId, enqueuedAt: Date.now(), acceptSameDayRisk };
   const item = JSON.stringify(ticket);
   await redis.zadd(K.queue, ticket.enqueuedAt, item);
   // ZRANK ایندیس را از ۰ برمی‌گرداند → ۱+ = شمارهٔ نوبت
@@ -170,7 +170,7 @@ export function ensureWorker() {
       try {
         await markProcessing(t.userId, t.id);
         const { processQueuedSubmit } = await import('./enroll-engine');
-        const result = await processQueuedSubmit(t.userId, t.studentId);
+        const result = await processQueuedSubmit(t.userId, t.studentId, t.acceptSameDayRisk ?? false);
         await finishTicket(t.userId, t.id, result);
       } catch (err) {
         await finishTicket(t.userId, t.id, { ok: false, registered: [], waitlisted: [], hardErrors: ['خطای داخلی صف: ' + String(err)], softErrors: [] });

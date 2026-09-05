@@ -2,42 +2,12 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { requestContractOtpAction, signContractAction, type ContractView } from './actions';
 
-export interface ContractCourseItem {
-  code: string;
-  title: string;
-  groupNumber: number;
-  theoryUnits: number;
-  practicalUnits: number;
-  weeklyHours: number;
-  termTotalHours: number;
-}
+export type { ContractView };
+export type ContractCourseItem = ContractView['lines'][number];
 
-export interface ContractDetails {
-  contractNo: string;
-  contractDate: string;
-  termTitle: string;
-  professorName: string;
-  nationalCode: string;
-  staffCode: string;
-  academicRank: string;
-  degree: string;
-  shebaNumber: string;
-  bankName: string;
-  courses: ContractCourseItem[];
-  hourlyRate: number;      // نرخ هر ساعت تدریس به ریال
-  totalTermHours: number;  // مجموع ساعات تدریس در ترم
-  grossAmount: number;     // ناخالص قرارداد
-  taxRatePercent: number;  // درصد مالیات (مثلاً ۱۰٪)
-  taxDeduction: number;    // مبلغ کسر مالیات
-  insuranceDeduction: number; // بیمه
-  netAmount: number;       // خالص دریافتی
-  midtermPayment: number;  // پیش‌پرداخت میان‌ترم
-  finalPayment: number;    // تسویه نهایی
-  signatureStatus: 'PENDING' | 'SIGNED';
-  signedAt?: string;
-  digitalHash?: string;
-}
+export type ContractDetails = ContractView;
 
 interface Props {
   initialContract: ContractDetails;
@@ -49,28 +19,64 @@ export default function ProfessorContractClient({ initialContract }: Props) {
   const [contract, setContract] = useState<ContractDetails>(initialContract);
   const [showSignModal, setShowSignModal] = useState<boolean>(false);
   const [otpCode, setOtpCode] = useState<string>('');
-  const [devOtp] = useState<string>('94182');
+  const [demoOtp, setDemoOtp] = useState<string | null>(null);
+  const [otpBusy, setOtpBusy] = useState<boolean>(false);
+  const [signing, setSigning] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastError, setToastError] = useState<boolean>(false);
 
-  const handleSignContract = () => {
-    if (otpCode !== devOtp && otpCode !== '12345') {
-      alert('کد تایید وارد شده نادرست است.');
+  const showToast = (msg: string, isError = false) => {
+    setToastMessage(msg);
+    setToastError(isError);
+    setTimeout(() => setToastMessage(null), 6000);
+  };
+
+  /** باز کردن مودال امضا → درخواست کد OTP واقعی از سرور (پیامک در production / نمایش در دمو) */
+  const openSignModal = async () => {
+    setShowSignModal(true);
+    setOtpCode('');
+    setDemoOtp(null);
+    setOtpBusy(true);
+    try {
+      const res = await requestContractOtpAction();
+      if (!res.ok) {
+        showToast(res.error || 'دریافت کد تأیید ناموفق بود.', true);
+        setShowSignModal(false);
+        return;
+      }
+      if (res.demoOtp) setDemoOtp(res.demoOtp);
+    } catch {
+      showToast('خطا در ارتباط با سرور برای دریافت کد تأیید.', true);
+      setShowSignModal(false);
+    } finally {
+      setOtpBusy(false);
+    }
+  };
+
+  /** ثبت امضا فقط پس از تأیید OTP در سرور (هش سند سمت سرور محاسبه می‌شود) */
+  const handleSignContract = async () => {
+    if (!otpCode.trim()) {
+      alert('کد تایید را وارد کنید.');
       return;
     }
-
-    const nowStr = new Date().toLocaleDateString('fa-IR') + ' - ' + new Date().toLocaleTimeString('fa-IR');
-    const hash = 'SHA256:' + Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-
-    setContract(prev => ({
-      ...prev,
-      signatureStatus: 'SIGNED',
-      signedAt: nowStr,
-      digitalHash: hash,
-    }));
-
-    setShowSignModal(false);
-    setToastMessage('✅ قرارداد تدریس حق‌التدریس شما با موفقیت امضای دیجیتال گردید و نسخه الکترونیک در دبیرخانه ثبت شد.');
-    setTimeout(() => setToastMessage(null), 6000);
+    setSigning(true);
+    try {
+      const res = await signContractAction(otpCode.trim());
+      if (!res.ok) {
+        alert(res.error || 'امضا ناموفق بود.');
+        return;
+      }
+      if (res.contract) {
+        setContract(res.contract);
+        setShowSignModal(false);
+        setOtpCode('');
+        showToast('✅ قرارداد تدریس شما با موفقیت امضای دیجیتال گردید و نسخهٔ الکترونیک در دبیرخانه ثبت شد.');
+      }
+    } catch {
+      alert('خطا در ارتباط با سرور.');
+    } finally {
+      setSigning(false);
+    }
   };
 
   const handlePrint = () => {
@@ -112,7 +118,7 @@ export default function ProfessorContractClient({ initialContract }: Props) {
 
           {contract.signatureStatus === 'PENDING' ? (
             <button
-              onClick={() => setShowSignModal(true)}
+              onClick={openSignModal}
               className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-extrabold text-xs shadow-md transition flex items-center gap-1.5"
             >
               <span>✍️ امضای الکترونیکی قرارداد</span>
@@ -174,7 +180,7 @@ export default function ProfessorContractClient({ initialContract }: Props) {
             <div className="space-y-1">
               <span className="font-extrabold text-indigo-950 block">طرف دوم (مدرس / عضو هیئت علمی):</span>
               <p className="text-slate-700">
-                جناب آقای/سرکار خانم <b>{contract.professorName}</b>، کد ملی: <span className="font-mono">{faNum(contract.nationalCode)}</span>، کد پرسنلی: <span className="font-mono">{faNum(contract.staffCode)}</span>، مرتبه علمی: <b>{contract.academicRank}</b>، آخرین مدرک: <b>{contract.degree}</b>، شماره شبا: <span className="font-mono text-[11px]">{contract.shebaNumber}</span> ({contract.bankName}).
+                جناب آقای/سرکار خانم <b>{contract.professorName}</b>، کد ملی: <span className="font-mono">{faNum(contract.nationalCode)}</span>، کد پرسنلی: <span className="font-mono">{faNum(contract.staffCode)}</span>، مرتبه علمی: <b>{contract.academicRank}</b>، آخرین مدرک: <b>{contract.degree}</b>، شماره حساب بانکی: <span className="font-mono text-[11px]">{faNum(contract.bankAccountNo || '—')}</span>.
               </p>
             </div>
           </div>
@@ -205,7 +211,7 @@ export default function ProfessorContractClient({ initialContract }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {contract.courses.map((c, idx) => (
+                {contract.lines.map((c, idx) => (
                   <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                     <td className="p-2 border border-slate-200 text-center font-bold text-slate-500">{faNum(idx + 1)}</td>
                     <td className="p-2 border border-slate-200 font-mono text-center font-bold text-indigo-950">{c.code}</td>
@@ -222,7 +228,7 @@ export default function ProfessorContractClient({ initialContract }: Props) {
                     مجموع کل ساعات تدریس موظف در طول نیمسال:
                   </td>
                   <td className="p-2.5 border border-slate-200 text-center text-indigo-900">
-                    {faNum(contract.courses.reduce((s, c) => s + c.weeklyHours, 0))} ساعت
+                    {faNum(contract.lines.reduce((s, c) => s + c.weeklyHours, 0))} ساعت
                   </td>
                   <td className="p-2.5 border border-slate-200 text-center text-slate-900">
                     {faNum(contract.totalTermHours)} ساعت
@@ -301,7 +307,7 @@ export default function ProfessorContractClient({ initialContract }: Props) {
                 </div>
               ) : (
                 <button
-                  onClick={() => setShowSignModal(true)}
+                  onClick={openSignModal}
                   className="px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-extrabold text-xs shadow transition print:hidden"
                 >
                   ✍️ جهت امضای دیجیتال کلیک کنید
@@ -330,8 +336,16 @@ export default function ProfessorContractClient({ initialContract }: Props) {
             </div>
 
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1 text-center">
-              <span className="text-slate-500 block">کد ۵ رقمی تایید امضا به شماره همراه شما پیامک شد (کد آزمایشی):</span>
-              <span className="font-mono font-black text-indigo-700 text-lg tracking-widest">{devOtp}</span>
+              {otpBusy ? (
+                <span className="text-slate-500 block">در حال ارسال کد تأیید…</span>
+              ) : demoOtp ? (
+                <>
+                  <span className="text-slate-500 block">حالت دمو — کد تأیید (در محیط عملیاتی از طریق پیامک ارسال می‌شود):</span>
+                  <span className="font-mono font-black text-indigo-700 text-lg tracking-widest">{demoOtp}</span>
+                </>
+              ) : (
+                <span className="text-slate-500 block">کد ۵ رقمی تأیید امضا به شمارهٔ همراه ثبت‌شده شما پیامک شد.</span>
+              )}
             </div>
 
             <div>
@@ -351,9 +365,10 @@ export default function ProfessorContractClient({ initialContract }: Props) {
             <div className="flex gap-2 pt-2">
               <button
                 onClick={handleSignContract}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs transition shadow-md"
+                disabled={signing || otpBusy}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs transition shadow-md disabled:opacity-50"
               >
-                ✓ ثبت قطعی امضای قرارداد
+                {signing ? 'در حال ثبت امضا…' : '✓ ثبت قطعی امضای قرارداد'}
               </button>
               <button
                 onClick={() => setShowSignModal(false)}

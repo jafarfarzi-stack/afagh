@@ -6,13 +6,14 @@ import {
   academic_terms, alumni_profiles, clearance_checklist, clearance_departments,
   course_offerings, courses, degree_level_configs, enrollments, graduation_audits,
   issued_degrees, majors, notifications, students, student_ledger,
-  syllabus_courses, syllabuses, users,
+  curriculum_courses, curriculum_versions, users,
 } from '@/db/schema';
 import { getBool, getNumber, getSetting } from '@/lib/settings';
 import { executeIrandocCheck } from '@/lib/api-integrations';
 import { createLogger } from '@/lib/logger';
 import { deliveriesForUser, notifyUserMultichannel } from '@/lib/messaging';
 import { GpaAccumulator, parseGrade, parseUnits, round2 } from '@/lib/regulations-engine';
+import { resolveStudentCurriculum, resolutionReasonMessage } from '@/lib/curriculum-apply';
 
 // ═══════════════════════════════════════════════════════════════════
 //  موتور فارغ‌التحصیلی «رویدادمحور» (Zero-Touch Graduation)
@@ -143,31 +144,28 @@ export async function auditStudent(studentId: number): Promise<AuditResult | nul
   }
   const gpa = acc.rounded();
 
-  // سرفصل مصوب
-  const [syl] = row.majorId
-    ? await db.select().from(syllabuses).where(and(
-        eq(syllabuses.majorId, row.majorId),
-        sql`${syllabuses.entryYearStart} <= ${row.entryYear}`,
-        sql`(${syllabuses.entryYearEnd} is null or ${syllabuses.entryYearEnd} >= ${row.entryYear})`,
-      )).orderBy(desc(syllabuses.entryYearStart)).limit(1)
-    : [];
+  // ── فاز ۵: نسخهٔ مصوب از طریق Resolution (فقط PUBLISHED/ARCHIVED) ──
+  // پیش از این «جدیدترین نسخهٔ دارای پنجرهٔ منطبق» بدون توجه به وضعیت انتخاب
+  // می‌شد؛ اکنون Resolver خالص یک نسخهٔ قابل اعمال قطعی برمی‌گرداند.
+  const resolved = await resolveStudentCurriculum(studentId);
+  const syl = resolved.version;
 
   const reasons: string[] = [];
   const missing: { code: string; title: string; units: number }[] = [];
-  let requiredUnits = Number(syl?.minTotalUnitsToGraduate ?? 0);
+  let requiredUnits = Number(syl?.totalRequiredUnits ?? 0) || 0;
 
   if (syl) {
     const req = await db.select({
-      courseId: syllabus_courses.courseId, code: courses.code, title: courses.title, units: courses.units,
-    }).from(syllabus_courses)
-      .innerJoin(courses, eq(courses.id, syllabus_courses.courseId))
-      .where(eq(syllabus_courses.syllabusId, syl.id));
+      courseId: curriculum_courses.courseId, code: courses.code, title: courses.title, units: courses.units,
+    }).from(curriculum_courses)
+      .innerJoin(courses, eq(courses.id, curriculum_courses.courseId))
+      .where(eq(curriculum_courses.curriculumVersionId, syl.id));
     for (const r of req) {
       if (!passedIds.has(r.courseId)) missing.push({ code: r.code, title: r.title, units: Number(r.units ?? 0) });
     }
     if (!requiredUnits) requiredUnits = req.reduce((s, r) => s + Number(r.units ?? 0), 0);
   } else {
-    reasons.push('برای این رشته/سال ورود، سرفصل مصوبی ثبت نشده است؛ تشکیل خودکار پرونده ممکن نیست و نیازمند بررسی کارشناس آموزش است.');
+    reasons.push('برای این رشته/سال ورود، نسخهٔ برنامهٔ درسی قابل اعمالی ثبت نشده است؛ ' + resolutionReasonMessage(resolved.reason) + ' تشکیل خودکار پرونده ممکن نیست و نیازمند بررسی کارشناس آموزش است.');
   }
 
   if (missing.length) reasons.push(`${missing.length} درس اجباری سرفصل هنوز پاس نشده است.`);

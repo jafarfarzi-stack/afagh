@@ -11,6 +11,9 @@ import {
   canTransition, classifyUtilization, distributeGroupsByFaculty, GENDERS,
   MAX_GROUPS, overlaps, SCORE, shiftOf, shiftUtilization, suggestedGroupCount,
   toMinutes, validateGroupDrafts, type Shift,
+  detectScheduleConflicts, hasHardConflicts, sessionDatesFor,
+  type ScheduleConflictInput, type RoomCapacityInfo,
+  computeSessionDates, detectHardConflicts, jalaliDateOf, parseJalaliDate,
 } from '../src/lib/scheduling-core.ts';
 
 let pass = 0;
@@ -146,6 +149,157 @@ eq('۴۱/۴۰ = OVERBOOKED', classifyUtilization(41, 40), 'OVERBOOKED');
 eq('ظرفیت صفر = OVERBOOKED', classifyUtilization(0, 0), 'OVERBOOKED');
 eq('نیم‌شیفت استفاده = ۰٫۵', shiftUtilization(120, 240), 0.5);
 eq('شیفت خالی = ۰', shiftUtilization(0, 240), 0);
+
+
+// ─────────────────────── فاز ۶: قیود سخت + تاریخ جلسات ───────────────────────
+console.log('— فاز ۶: قیود سخت برنامهٔ هفتگی و تاریخ جلسات —');
+
+const rooms: RoomCapacityInfo[] = [
+  { id: 1, capacity: 40, title: 'کلاس ۱۰۱' },
+  { id: 2, capacity: 20, title: 'کلاس ۱۰۲' },
+];
+
+const sched = (o: Partial<ScheduleConflictInput>): ScheduleConflictInput => ({
+  offeringId: o.offeringId ?? 0, groupNumber: 1, dayOfWeek: 1,
+  startTime: '08:00', endTime: '10:00', roomId: 1, requiredCapacity: 30,
+  professorIds: [], offeringTitle: `درس ${o.offeringId ?? 0}`,
+  ...o,
+});
+
+// بدون تداخل
+const clean = detectScheduleConflicts([
+  sched({ offeringId: 1, dayOfWeek: 1, startTime: '08:00', endTime: '09:30' }),
+  sched({ offeringId: 2, dayOfWeek: 1, startTime: '10:00', endTime: '11:30' }),
+], rooms);
+eq('برنامهٔ بدون تداخل → بدون یافته', clean.length, 0);
+eq('hasHardConflicts خالی → false', hasHardConflicts(clean), false);
+
+// ROOM_OVERLAP: دو کلاس هم‌زمان یک سالن
+const roomOverlap = detectScheduleConflicts([
+  sched({ offeringId: 1, dayOfWeek: 2, startTime: '08:00', endTime: '10:00', roomId: 1 }),
+  sched({ offeringId: 2, dayOfWeek: 2, startTime: '09:00', endTime: '11:00', roomId: 1 }),
+], rooms);
+eq('تداخل سالن → ROOM_OVERLAP', roomOverlap.some(c => c.type === 'ROOM_OVERLAP'), true);
+eq('offeringIds هر دو', roomOverlap.find(c => c.type === 'ROOM_OVERLAP')?.offeringIds.join(','), '1,2');
+eq('hasHardConflicts → true', hasHardConflicts(roomOverlap), true);
+
+// چند سالن → بدون تداخل
+eq('سالن‌های متفاوت هم‌زمان → بی‌یافته',
+  detectScheduleConflicts([
+    sched({ offeringId: 1, dayOfWeek: 2, startTime: '08:00', endTime: '10:00', roomId: 1 }),
+    sched({ offeringId: 2, dayOfWeek: 2, startTime: '08:00', endTime: '10:00', roomId: 2 }),
+  ], rooms).some(c => c.type === 'ROOM_OVERLAP'), false);
+
+// PROFESSOR_OVERLAP: استاد دوم (Co-Teaching) هم شکار می‌شود
+const profOverlap = detectScheduleConflicts([
+  sched({ offeringId: 1, dayOfWeek: 3, startTime: '08:00', endTime: '10:00', professorIds: [7] }),
+  sched({ offeringId: 2, dayOfWeek: 3, startTime: '09:00', endTime: '11:00', professorIds: [8, 7] }), // استاد دوم 7
+], rooms);
+eq('تداخل استاد دوم → PROFESSOR_OVERLAP', profOverlap.some(c => c.type === 'PROFESSOR_OVERLAP'), true);
+
+// استاد در روزهای مختلف → بی‌یافته
+eq('استاد در روزهای جدا → بی‌یافته',
+  detectScheduleConflicts([
+    sched({ offeringId: 1, dayOfWeek: 1, startTime: '08:00', endTime: '10:00', professorIds: [7] }),
+    sched({ offeringId: 2, dayOfWeek: 2, startTime: '08:00', endTime: '10:00', professorIds: [7] }),
+  ], rooms).some(c => c.type === 'PROFESSOR_OVERLAP'), false);
+
+// ROOM_CAPACITY
+const capIssue = detectScheduleConflicts([
+  sched({ offeringId: 9, requiredCapacity: 50, roomId: 1 }), // سالن ۱ فقط ۴۰
+], rooms);
+eq('ظرفیت کلاس > ظرفیت سالن → ROOM_CAPACITY', capIssue.some(c => c.type === 'ROOM_CAPACITY'), true);
+
+// sessionDatesFor: شنبه (dayOfWeek=1) — اولین جلسه = همان شنبهٔ هفتهٔ اول
+const start = new Date('2025-09-20T00:00:00Z'); // شنبه
+const all = sessionDatesFor(start, 1, 'ALL', 16);
+eq('ALL → ۱۶ جلسه', all.length, 16);
+eq('sessionNo ها ۱..۱۶', all[0].sessionNo, 1);
+eq('جلسهٔ آخر = هفتهٔ ۱۶', all[15].sessionNo, 16);
+eq('فاصلهٔ هفتگی دقیق', (all[1].date.getTime() - all[0].date.getTime()) / 86400000, 7);
+eq('تاریخ جلسهٔ ۱ = شنبه شروع', all[0].date.toISOString().slice(0, 10), '2025-09-20');
+
+// یکشنبه (dayOfWeek=2) → یک روز بعد از شنبهٔ شروع
+const sun = sessionDatesFor(start, 2, 'ALL', 4);
+eq('یکشنبه = +۱ روز', sun[0].date.toISOString().slice(0, 10), '2025-09-21');
+
+// EVEN → فقط هفته‌های زوج (۸ جلسه، sessionNo های ۱..۸)
+const even = sessionDatesFor(start, 1, 'EVEN', 16);
+eq('EVEN → ۸ جلسه', even.length, 8);
+eq('اولین جلسهٔ EVEN هفتهٔ ۲ (شنبهٔ بعدی)', even[0].date.toISOString().slice(0, 10), '2025-09-27');
+
+// ODD → هفته‌های فرد
+const odd = sessionDatesFor(start, 1, 'ODD', 16);
+eq('ODD → ۸ جلسه', odd.length, 8);
+eq('اولین جلسهٔ ODD = هفتهٔ ۱', odd[0].date.toISOString().slice(0, 10), '2025-09-20');
+
+// روز نامعتبر
+eq('روز خارج از ۱..۶ → خالی', sessionDatesFor(start, 9, 'ALL', 16), []);
+
+console.log('\n۷) قیود سخت V2 (استاد+دوم، سالن، ظرفیت)');
+{
+  const row = (over: Partial<Parameters<typeof detectHardConflicts>[0][number]>) => ({
+    offeringId: 1, groupNumber: 1, courseCode: 'C1', professorIds: [10], roomId: 100,
+    dayOfWeek: 2, startMinutes: 8 * 60, endMinutes: 9 * 60 + 30,
+    enrolledCount: 30, capacity: 40, ...over,
+  });
+  eq('بدون تداخل → خالی', detectHardConflicts([row({}), row({ offeringId: 2, courseCode: 'C2', professorIds: [11], roomId: 101, dayOfWeek: 3 })]).length, 0);
+  eq('استاد مشترک هم‌زمان → PROFESSOR_OVERLAP',
+    detectHardConflicts([row({}), row({ offeringId: 2, courseCode: 'C2', professorIds: [10], roomId: 101 })])[0].kind,
+    'PROFESSOR_OVERLAP');
+  eq('استاد دوم (Co-Teaching) هم‌زمان → تداخل',
+    detectHardConflicts([row({ professorIds: [10, 12] }), row({ offeringId: 2, courseCode: 'C2', professorIds: [12], roomId: 101 })])[0].kind,
+    'PROFESSOR_OVERLAP');
+  eq('استاد مشترک در روزهای مختلف → بدون تداخل',
+    detectHardConflicts([row({}), row({ offeringId: 2, courseCode: 'C2', professorIds: [10], roomId: 101, dayOfWeek: 4 })]).length, 0);
+  const roomConf = detectHardConflicts([row({}), row({ offeringId: 2, courseCode: 'C2', professorIds: [11], roomId: 100, startMinutes: 9 * 60, endMinutes: 10 * 60 })]);
+  eq('سالن مشترک هم‌زمان → ROOM_OVERLAP', roomConf[0].kind, 'ROOM_OVERLAP');
+  eq('سالن مشترک غیرهم‌زمان → بدون تداخل',
+    detectHardConflicts([row({}), row({ offeringId: 2, courseCode: 'C2', professorIds: [11], roomId: 100, startMinutes: 10 * 60, endMinutes: 11 * 60 })]).length, 0);
+  const cap = detectHardConflicts([row({ enrolledCount: 45, capacity: 40 })]);
+  eq('ظرفیت ۴۰ < ثبت‌نام ۴۵ → CAPACITY_OVERFLOW', cap[0].kind, 'CAPACITY_OVERFLOW');
+  eq('ظرفیت نامشخص (۰) → بدون خطای کاذب', detectHardConflicts([row({ capacity: 0, enrolledCount: 100 })]).length, 0);
+  const multi = detectHardConflicts([
+    row({}), row({ offeringId: 2, courseCode: 'C2', professorIds: [10], roomId: 100 }),
+    row({ offeringId: 3, courseCode: 'C3', professorIds: [11], roomId: 100, startMinutes: 8 * 60, endMinutes: 9 * 60 }),
+  ]);
+  // A↔B: استاد + سالن (۲) · A↔C: سالن (۱) · B↔C: سالن (۱) = ۴
+  eq('هم‌زمانی سه‌گانه → ۴ تداخل (۲ استاد + ۴ سالن؟ درست: ۴)', multi.length, 4);
+}
+
+console.log('\n۸) مولد تاریخ جلسات (شمسی، زوج/فرد، تعطیلات)');
+{
+  // شنبه ۱۴۰۵/۰۶/۲۹ = 2026-09-20 (بررسی با خود کتابخانه: سازگاری رفت‌وبرگشت)
+  const [parse1, parse2] = [parseJalaliDate('1405/06/29'), parseJalaliDate('1405/01/01')];
+  eq('برگشت شمسی ۱۴۰۵/۰۶/۲۹', jalaliDateOf(parse1), '1405/06/29');
+  eq('برگشت شمسی ۱۴۰۵/۰۱/۰۱', jalaliDateOf(parse2), '1405/01/01');
+  throws('قالب غلط تاریخ', () => parseJalaliDate('۱۴۰۵/۰۶/۲۹'), 'قالب');
+
+  // ۱۴۰۵/۰۶/۲۹ = یکشنبه (2026-09-20) → اولین شنبه = ۱۴۰۵/۰۷/۰۴
+  const start = parseJalaliDate('1405/06/29');
+  const all = computeSessionDates({ termStart: start, dayOfWeek: 1, sessionsCount: 16 });
+  eq('۱۶ جلسهٔ هفتگی شنبه', all.length, 16);
+  eq('جلسهٔ اول: نخستین شنبه بعد از شروع', all[0].jalaliDate, '1405/07/04');
+  eq('جلسهٔ دوم: ۷ روز بعد', all[1].jalaliDate, '1405/07/11');
+  eq('شمارهٔ جلسات متوالی', all.map(s => s.sessionNo).join(','), Array.from({ length: 16 }, (_, i) => i + 1).join(','));
+  eq('جلسهٔ چهارم: سه شنبه هفتهٔ بعد (۱۴۰۵/۰۷/۲۵)', all[3].jalaliDate, '1405/07/25');
+
+  const holiday = computeSessionDates({ termStart: start, dayOfWeek: 1, sessionsCount: 8, holidays: ['1405/07/11'] });
+  eq('تعطیل رسمی → پرش و ۸ جلسه', holiday.length, 8);
+  eq('جلسهٔ پرش‌شده حذف و جلسهٔ بعد جایگزین', holiday[1].jalaliDate, '1405/07/18');
+
+  const even = computeSessionDates({ termStart: start, dayOfWeek: 1, sessionsCount: 4, recurrence: 'EVEN' });
+  eq('هفتهٔ زوج: ۰۷/۱۱ (هفتهٔ دوم)', even[0].jalaliDate, '1405/07/11');
+  const odd = computeSessionDates({ termStart: start, dayOfWeek: 1, sessionsCount: 4, recurrence: 'ODD' });
+  eq('هفتهٔ فرد: ۰۷/۰۴ (هفتهٔ اول)', odd[0].jalaliDate, '1405/07/04');
+  throws('روز صفر', () => computeSessionDates({ termStart: start, dayOfWeek: 0, sessionsCount: 4 }), 'روز');
+  throws('روز هفت', () => computeSessionDates({ termStart: start, dayOfWeek: 7, sessionsCount: 4 }), 'روز');
+  throws('جلسات ۷۰', () => computeSessionDates({ termStart: start, dayOfWeek: 1, sessionsCount: 70 }), 'تعداد جلسات');
+
+  // چهارشنبه (روز ۵): ۱۴۰۵/۰۶/۲۹ یکشنبه → اولین چهارشنبه = ۱۴۰۵/۰۷/۰۱
+  const wed = computeSessionDates({ termStart: start, dayOfWeek: 5, sessionsCount: 3 });
+  eq('اولین چهارشنبهٔ بعد از شروع (۱۴۰۵/۰۷/۰۱)', wed[0].jalaliDate, '1405/07/01');
+}
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

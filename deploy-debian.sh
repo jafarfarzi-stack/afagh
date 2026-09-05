@@ -62,21 +62,16 @@ else
 fi
 ok "معماری: $(dpkg --print-architecture)  |  حافظه: $(free -h | awk '/Mem:/{print $2}')"
 
-# بیلد Next.js حافظه‌بر است؛ روی سرورهای کوچک بدون swap با OOM شکست می‌خورد
-MEM_MB=$(free -m | awk '/Mem:/{print $2}')
-SWAP_MB=$(free -m | awk '/Swap:/{print $2}')
-if [ "${MEM_MB:-0}" -lt 2500 ] && [ "${SWAP_MB:-0}" -lt 1024 ]; then
-  warn "حافظهٔ سرور ${MEM_MB}MB و swap ${SWAP_MB}MB است — برای بیلد ۲ گیگ swap می‌سازیم"
-  if fallocate -l 2G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none; then
-    chmod 600 /swapfile && mkswap -q /swapfile >/dev/null && swapon /swapfile \
-      && grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
-    ok "swap فعال شد ($(free -h | awk '/Swap:/{print $2}'))"
-  else
-    warn "ساخت swap ناموفق بود — اگر بیلد با خطای heap out of memory شکست خورد، NODE_MAX_OLD_SPACE را کم کنید"
-  fi
+# بیلد Next.js حافظه‌بر است؛ روی سرورهای کوچک بدون swap، کرنل پروسهٔ بیلد را
+# می‌کشد و داکر «exit code: 137» می‌دهد. اسکریپت مشترک، swap را idempotent
+# می‌سازد و سقف هیپ پیشنهادی را چاپ می‌کند.
+if ! bash "$ROOT/scripts/ensure-build-memory.sh"; then
+  warn "تأمین حافظهٔ بیلد ناموفق بود — اگر بیلد با exit code: 137 شکست خورد، NODE_MAX_OLD_SPACE را کم کنید"
 fi
+MEM_MB=$(free -m | awk '/Mem:/{print $2}')
 # سقف هیپ بیلد متناسب با حافظهٔ سرور
-if [ "${MEM_MB:-0}" -lt 2000 ]; then export NODE_MAX_OLD_SPACE=1536
+if [ "${MEM_MB:-0}" -lt 1500 ]; then export NODE_MAX_OLD_SPACE=1024
+elif [ "${MEM_MB:-0}" -lt 2500 ]; then export NODE_MAX_OLD_SPACE=1536
 elif [ "${MEM_MB:-0}" -lt 4000 ]; then export NODE_MAX_OLD_SPACE=2048
 fi
 AVAIL_GB=$(df -BG --output=avail "$ROOT" | tail -1 | tr -dc '0-9')
@@ -182,7 +177,7 @@ fi
 if [ "$NO_BUILD" = "1" ]; then
   warn "بدون بیلد (--no-build)"
 else
-  echo "  … بیلد ایمیج‌ها (بار اول ۳ تا ۱۰ دقیقه؛ سقف هیپ: ${NODE_MAX_OLD_SPACE:-3072}MB)"
+  echo "  … بیلد ایمیج‌ها (بار اول ۳ تا ۱۰ دقیقه؛ سقف هیپ: ${NODE_MAX_OLD_SPACE:-2048}MB)"
   dc build || die "ساخت ایمیج ناموفق بود"
   ok "ایمیج‌ها ساخته شدند"
 fi

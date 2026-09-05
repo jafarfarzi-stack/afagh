@@ -10,6 +10,7 @@
 
 // ─────────────────────────── ثابت‌ها و انواع ───────────────────────────
 
+import { d2j, j2d, toGregorian, toJalaliFromDate } from './calendar';
 export const GENDERS = ['MALE', 'FEMALE', 'MIXED'] as const;
 export type ClassGender = (typeof GENDERS)[number];
 
@@ -296,3 +297,315 @@ export function shiftUtilization(usedMinutes: number, shiftMinutes: number): num
   if (shiftMinutes <= 0) return 0;
   return Math.min(1, usedMinutes / shiftMinutes);
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// فاز ۶ — قیود سخت برنامهٔ هفتگی (Hard Constraints) — خالص و تست‌پذیر
+// پاسخ به بازبینی (بند ۹): «۰٪ تداخل تضمین‌شده» فقط بعد از اثبات این چک‌هاست.
+// این توابع هیچ DB نمی‌خوانند؛ داده از Scheduling Engine تزریق می‌شود.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** یک ردیف برنامهٔ هفتگی برای قیود سخت */
+export interface ScheduleConflictInput {
+  offeringId: number;
+  groupNumber: number | null;
+  dayOfWeek: number | null;          // 1..6 (شنبه=1) — null = بدون روز (ناقص)
+  startTime: string;                 // HH:MM
+  endTime: string;
+  roomId: number | null;
+  requiredCapacity: number;          // ظرفیت کلاس (course_offerings.capacity)
+  professorIds: (number | null)[];   // اصلی + استاد دوم (Co-Teaching)
+  offeringTitle: string;
+}
+
+/** ظرفیت و عنوان سالن — مبنای چک ROOM_CAPACITY */
+export interface RoomCapacityInfo {
+  id: number;
+  capacity: number;
+  title: string;
+}
+
+export type ScheduleConflictType = 'ROOM_OVERLAP' | 'PROFESSOR_OVERLAP' | 'ROOM_CAPACITY';
+
+export interface ScheduleConflict {
+  type: ScheduleConflictType;
+  severity: 'ERROR'; // قیود سخت همیشه ERROR اند (مانع انتشار برنامه)
+  message: string;
+  offeringIds: number[];
+}
+
+/**
+ * تشخیص تداخل‌های سخت در یک برنامهٔ هفتگی:
+ *   • ROOM_OVERLAP       → دو کلاس هم‌زمان در یک سالن
+ *   • PROFESSOR_OVERLAP  → تداخل استاد (اصلی یا دوم) بین دو کلاس هم‌زمان
+ *   • ROOM_CAPACITY      → ظرفیت کلاس بیشتر از ظرفیت فیزیکی سالن
+ * ورودی باید پیش از تبدیل به اعشارِ واحد Toman ساده شده باشد؛ این‌جا فقط
+ * مقایسهٔ زمانی با overlaps() موجود انجام می‌شود.
+ */
+export function detectScheduleConflicts(
+  entries: ScheduleConflictInput[],
+  rooms: RoomCapacityInfo[]
+): ScheduleConflict[] {
+  const conflicts: ScheduleConflict[] = [];
+  const byRoom = new Map<number | null, ScheduleConflictInput[]>();
+  const byProf = new Map<number, ScheduleConflictInput[]>();
+
+  for (const e of entries) {
+    if (e.roomId != null) {
+      const arr = byRoom.get(e.roomId) ?? [];
+      arr.push(e);
+      byRoom.set(e.roomId, arr);
+    }
+    for (const pid of e.professorIds) {
+      if (pid == null) continue;
+      const arr = byProf.get(pid) ?? [];
+      arr.push(e);
+      byProf.set(pid, arr);
+    }
+  }
+
+  const sameDayOverlap = (a: ScheduleConflictInput, b: ScheduleConflictInput) =>
+    a.dayOfWeek != null && a.dayOfWeek === b.dayOfWeek &&
+    overlaps(toMinutes(a.startTime), toMinutes(a.endTime), toMinutes(b.startTime), toMinutes(b.endTime));
+
+  // ROOM_OVERLAP
+  for (const [roomId, list] of byRoom) {
+    if (roomId == null) continue;
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        if (sameDayOverlap(list[i], list[j])) {
+          conflicts.push({
+            type: 'ROOM_OVERLAP',
+            severity: 'ERROR',
+            message: `سالن ${roomId}: «${list[i].offeringTitle}» و «${list[j].offeringTitle}» هم‌زمان‌اند.`,
+            offeringIds: [...new Set([list[i].offeringId, list[j].offeringId])],
+          });
+        }
+      }
+    }
+  }
+
+  // PROFESSOR_OVERLAP (استاد اصلی یا دوم)
+  for (const [profId, list] of byProf) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        if (sameDayOverlap(list[i], list[j])) {
+          conflicts.push({
+            type: 'PROFESSOR_OVERLAP',
+            severity: 'ERROR',
+            message: `استاد ${profId}: تداخل بین «${list[i].offeringTitle}» و «${list[j].offeringTitle}».`,
+            offeringIds: [...new Set([list[i].offeringId, list[j].offeringId])],
+          });
+        }
+      }
+    }
+  }
+
+  // ROOM_CAPACITY
+  const roomCap = new Map(rooms.map((r) => [r.id, r]));
+  for (const e of entries) {
+    const room = e.roomId != null ? roomCap.get(e.roomId) : undefined;
+    if (room && e.requiredCapacity > room.capacity) {
+      conflicts.push({
+        type: 'ROOM_CAPACITY',
+        severity: 'ERROR',
+        message: `سالن «${room.title}» (ظرفیت ${room.capacity}) برای «${e.offeringTitle}» (${e.requiredCapacity} نفر) کوچک است.`,
+        offeringIds: [e.offeringId],
+      });
+    }
+  }
+
+  return conflicts;
+}
+
+/** آیا برنامه بدون هیچ قید سخت نقض‌شده است؟ (پیش‌شرط انتشار) */
+export function hasHardConflicts(conflicts: ScheduleConflict[]): boolean {
+  return conflicts.length > 0;
+}
+
+/**
+ * تاریخ جلسات یک درس در ترم — خالص، بدون DB.
+ * قرارداد: dayOfWeek: 1..6 (شنبه = 1)، termStart تاریخ اولین روز هفتهٔ اول است.
+ *   ALL  → ۱۶ جلسهٔ هفتگی
+ *   EVEN → هفته‌های زوج (جلسات ۲، ۴، …، ۱۶ — ۸ جلسه)
+ *   ODD  → هفته‌های فرد (جلسات ۱، ۳، …، ۱۵ — ۸ جلسه)
+ * خروجی: sessionNo (از ۱) + Date میلادی — تبدیل به شمسی در لایهٔ DB انجام می‌شود.
+ */
+export function sessionDatesFor(
+  termStart: Date,
+  dayOfWeek: number,
+  scheduleType: 'ALL' | 'EVEN' | 'ODD',
+  totalSessions = 16
+): { sessionNo: number; date: Date }[] {
+  if (dayOfWeek < 1 || dayOfWeek > 6) return [];
+  const base = new Date(termStart.getTime());
+  base.setHours(0, 0, 0, 0);
+  const offsetDays = dayOfWeek - 1; // شنبه = 0
+  const first = new Date(base.getTime() + offsetDays * 86400000);
+  const out: { sessionNo: number; date: Date }[] = [];
+  let no = 1;
+  for (let w = 0; w < totalSessions; w++) {
+    const week = w + 1; // 1-based
+    const take = scheduleType === 'ALL' || (scheduleType === 'EVEN' && week % 2 === 0) || (scheduleType === 'ODD' && week % 2 === 1);
+    if (take) {
+      out.push({ sessionNo: no, date: new Date(first.getTime() + w * 7 * 86400000) });
+      no++;
+    }
+  }
+  return out;
+}
+// ═══════════════════════════════════════════════════════════════════════
+// فاز ۶ — قیود سخت V2 + مولد تاریخ جلسات (خالص و تست‌پذیر)
+// ═══════════════════════════════════════════════════════════════════════
+
+/** قیود سخت V2: خروجیِ ساختاریافتهٔ «قبل از امتیازدهی» — نه KPI تبلیغاتی */
+export type HardConflictKind = 'PROFESSOR_OVERLAP' | 'ROOM_OVERLAP' | 'CAPACITY_OVERFLOW';
+
+export interface HardConflictEntry {
+  offeringId: number;
+  groupNumber: number;
+  courseCode: string;
+  /** استاد اصلی + استاد دوم (Co-Teaching از offering_professors) */
+  professorIds: number[];
+  roomId: number | null;
+  dayOfWeek: number;      // 1..6 (شنبه=1)
+  startMinutes: number;
+  endMinutes: number;
+  enrolledCount: number;  // ثبت‌نام‌شدهٔ واقعی (یا پیش‌بینی تقاضا)
+  capacity: number;       // ظرفیت سالن (0 = نامشخص)
+}
+
+export interface HardConflict {
+  kind: HardConflictKind;
+  offeringIds: [number, number] | [number];
+  message: string;
+}
+
+/**
+ * تشخیص قیود سخت روی جدول زمان‌بندی‌شده:
+ *  - CAPACITY_OVERFLOW: ظرفیت سالن < تعداد ثبت‌نامی
+ *  - PROFESSOR_OVERLAP: استاد (اصلی یا دوم) در دو کلاس هم‌زمان
+ *  - ROOM_OVERLAP:       یک سالن در دو کلاس هم‌زمان
+ * پیام‌ها از داده ساخته می‌شوند (نه ثابت).
+ */
+export function detectHardConflicts(rows: HardConflictEntry[]): HardConflict[] {
+  const out: HardConflict[] = [];
+  for (const r of rows) {
+    if (r.capacity > 0 && r.enrolledCount > r.capacity) {
+      out.push({
+        kind: 'CAPACITY_OVERFLOW',
+        offeringIds: [r.offeringId],
+        message: `«${r.courseCode}» گروه ${r.groupNumber}: ${r.enrolledCount} ثبت‌نامی در کلاس با ظرفیت ${r.capacity}`,
+      });
+    }
+  }
+  for (let i = 0; i < rows.length; i++) {
+    for (let j = i + 1; j < rows.length; j++) {
+      const a = rows[i], b = rows[j];
+      if (a.dayOfWeek !== b.dayOfWeek) continue;
+      if (!overlaps(a.startMinutes, a.endMinutes, b.startMinutes, b.endMinutes)) continue;
+      const profShared = a.professorIds.some(p => b.professorIds.includes(p));
+      if (profShared) {
+        out.push({
+          kind: 'PROFESSOR_OVERLAP',
+          offeringIds: [a.offeringId, b.offeringId],
+          message: `تداخل استاد: «${a.courseCode}» گروه ${a.groupNumber} با «${b.courseCode}» گروه ${b.groupNumber}`,
+        });
+      }
+      if (a.roomId != null && a.roomId === b.roomId) {
+        out.push({
+          kind: 'ROOM_OVERLAP',
+          offeringIds: [a.offeringId, b.offeringId],
+          message: `تداخل سالن: «${a.courseCode}» گروه ${a.groupNumber} با «${b.courseCode}» گروه ${b.groupNumber}`,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+// ─────────────────────────── تاریخ جلسات ───────────────────────────
+
+export type WeekRecurrence = 'ALL' | 'EVEN' | 'ODD';
+
+export interface SessionDateInput {
+  /** شروع ترم (Date از academic_terms.startDate) */
+  termStart: Date;
+  /** 1..6 (شنبه=1) */
+  dayOfWeek: number;
+  /** تعداد جلسات (پیش‌فرض ۱۶) */
+  sessionsCount: number;
+  /** هفتهٔ اول ترم «فرد» است؟ (برای EVEN/ODD — پیش‌فرض: بله) */
+  oddFirstWeek?: boolean;
+  /** تاریخ‌های تعطیل رسمی 'YYYY/MM/DD' شمسی — حذف خودکار */
+  holidays?: string[];
+}
+
+export interface GeneratedSession {
+  sessionNo: number;
+  /** 'YYYY/MM/DD' شمسی */
+  jalaliDate: string;
+  jm: number;
+  jd: number;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** روز هفتهٔ ۱..۶ (شنبه=1) → باقی‌ماندهٔ JDN بر ۷ (شنبه=5) */
+function jalaliWeekdayToJdnMod(dow: number): number {
+  return (5 + ((dow - 1) % 7)) % 7;
+}
+
+/**
+ * تولید تاریخ جلسات هفتگی یک کلاس از شروع ترم:
+ *  - اولین تکرارِ روزِ هفته روی/بعد از شروع ترم
+ *  - گام ۷ روزه تا رسیدن به sessionsCount
+ *  - هفته‌های زوج/فرد و تعطیلات رسمی حذف می‌شوند
+ *  - سقف ایمنی ۴۰ هفته (جلوگیری از حلقهٔ بی‌پایان)
+ */
+export function computeSessionDates(
+  px: SessionDateInput & { recurrence?: WeekRecurrence },
+): GeneratedSession[] {
+  const { termStart, dayOfWeek, sessionsCount, oddFirstWeek = true } = px;
+  if (dayOfWeek < 1 || dayOfWeek > 6) throw new Error('روز هفته باید ۱..۶ باشد (شنبه=1).');
+  if (sessionsCount < 1 || sessionsCount > 60) throw new Error('تعداد جلسات باید ۱..۶۰ باشد.');
+  const holidays = new Set((px.holidays ?? []).map(h => h.trim()).filter(Boolean));
+  const start = new Date(termStart.getFullYear(), termStart.getMonth(), termStart.getDate());
+  const j0 = toJalaliFromDate(start);
+  let jdn = j2d(j0.jy, j0.jm, j0.jd);
+  const target = jalaliWeekdayToJdnMod(dayOfWeek);
+  while ((((jdn % 7) + 7) % 7) !== target) jdn += 1;
+  const out: GeneratedSession[] = [];
+  let weekIndex = 1;
+  for (let guard = 0; guard < 40 * 7 && out.length < sessionsCount; guard++) {
+    const isEven = weekIndex % 2 === 0;
+    const rec = px.recurrence ?? 'ALL';
+    const weekOk = rec === 'ALL'
+      ? true
+      : oddFirstWeek
+        ? (isEven ? rec === 'EVEN' : rec === 'ODD')
+        : (isEven ? rec === 'ODD' : rec === 'EVEN');
+    const j = d2j(jdn);
+    const ds = `${j.jy}/${pad2(j.jm)}/${pad2(j.jd)}`;
+    if (weekOk && !holidays.has(ds)) {
+      out.push({ sessionNo: out.length + 1, jalaliDate: ds, jm: j.jm, jd: j.jd });
+    }
+    jdn += 7;
+    weekIndex += 1;
+  }
+  return out;
+}
+
+/** تبدیل تاریخ شمسی 'YYYY/MM/DD' به Date میلادی (ذخیره در academic_terms) */
+export function parseJalaliDate(s: string): Date {
+  const m = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(s.trim());
+  if (!m) throw new Error(`قالب تاریخ شمسی نامعتبر: «${s}» (مورد انتظار YYYY/MM/DD)`);
+  const { gy, gm, gd } = toGregorian(Number(m[1]), Number(m[2]), Number(m[3]));
+  return new Date(gy, gm - 1, gd);
+}
+
+/** تاریخ شمسی 'YYYY/MM/DD' از Date میلادی */
+export function jalaliDateOf(d: Date): string {
+  const j = toJalaliFromDate(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
+  return `${j.jy}/${pad2(j.jm)}/${pad2(j.jd)}`;
+}
+

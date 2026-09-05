@@ -2,13 +2,15 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, cart_items, course_offerings, course_rules, courses, degree_level_configs,
-  enrollments, financial_clearances, notifications, schedules, students, syllabuses,
+  enrollments, financial_clearances, notifications, schedules, students, curriculum_versions,
 } from '@/db/schema';
 import { withUserRls } from '@/db';
 import { atomicSeat, nextWaitlistPosition, warmupCapacities } from './waitingRoom';
 import { EQUIV_SEMESTER_UNITS, evaluateStudentRegulationStatus, parseGrade, parseUnits } from './regulations-engine';
 import { chargeTermTuition, getEquivFixedMode } from './tuition-engine';
 import { shouldChargeFixed } from './tuition-rules';
+import { resolveStudentCurriculum } from './curriculum-apply';
+import { selectEffectiveRules } from './curriculum-resolution';
 
 // ═══ خط لولهٔ اعتبارسنجی — سند §۱۰۰۸ ═══
 // هر درخواست انتخاب واحد از ۵ فیلتر می‌گذرد:
@@ -90,29 +92,28 @@ export async function buildPrereqContext(studentId: number): Promise<PrereqConte
   const defaultPassing = Number(deg?.defaultPassingGrade ?? 10);
 
   const allRules = await db.select().from(course_rules);
-  const syllRows = await db.select().from(syllabuses);
 
   // اورراید نمرهٔ قبولی هر درس (اولین قاعدهٔ دارای customPassingGrade)
   const overrides = new Map<number, number>();
   for (const r of allRules) if (r.customPassingGrade != null && !overrides.has(r.courseId)) overrides.set(r.courseId, Number(r.customPassingGrade));
 
-  // قاعدهٔ مؤثر: سیلابسیِ منطبق (رشته + بازهٔ ورودی) مقدم بر عمومی
+  // ── فاز ۵: نسخهٔ مؤثر = نتیجهٔ Resolution (فقط PUBLISHED/ARCHIVED) ──
+  // پیش از این، هر قاعدهٔ مقیّد به هر نسخهٔ دارای «پنجرهٔ ورودی منطبق» اعمال
+  // می‌شد (حتی نسخهٔ DRAFT!)؛ اکنون دقیقاً یک نسخهٔ حل‌شده مبنای قواعد است.
+  const { version: resolved } = await resolveStudentCurriculum(studentId);
+  const resolvedVersionId = resolved?.id ?? null;
+
+  // قاعدهٔ مؤثر: قاعدهٔ مقیّد به «نسخهٔ حل‌شدهٔ دانشجو» مقدم بر عمومی
+  const { global: globalRules, scoped: scopedRules } = selectEffectiveRules(
+    allRules, resolvedVersionId, ['PREREQ']
+  );
   const globalRule = new Map<number, LogicNode>();
   const scopedRule = new Map<number, LogicNode>();
-  for (const r of allRules) {
-    if (r.ruleType !== 'PREREQ') continue;
-    let applies = false; let scoped = false;
-    if (r.syllabusId == null) { applies = true; scoped = false; }
-    else {
-      const sy = syllRows.find(s => s.id === r.syllabusId);
-      applies = !!stu && !!sy && sy.majorId != null && stu.majorId === sy.majorId
-        && stu.entryYear >= (sy.entryYearStart ?? 0)
-        && (sy.entryYearEnd == null || stu.entryYear <= sy.entryYearEnd);
-      scoped = true;
-    }
-    if (!applies) continue;
-    const target = scoped ? scopedRule : globalRule;
-    if (!target.has(r.courseId)) target.set(r.courseId, JSON.parse(r.logicTree) as LogicNode);
+  for (const r of globalRules) {
+    if (!globalRule.has(r.courseId)) globalRule.set(r.courseId, JSON.parse(r.logicTree) as LogicNode);
+  }
+  for (const r of scopedRules) {
+    if (!scopedRule.has(r.courseId)) scopedRule.set(r.courseId, JSON.parse(r.logicTree) as LogicNode);
   }
   const ruleByCourse = new Map<number, LogicNode>([...globalRule, ...scopedRule]); // scoped بازنویسی می‌کند
 
@@ -152,7 +153,7 @@ export function formatPrereq(node: LogicNode | undefined, titles: Map<string, st
  * پردازش یک آیتم صف ثبت نهایی — بدون context درخواست (در کارگر صف اجرا می‌شود).
  * طبق §۶۹۰۶ فقط نتیجهٔ نهایی در PostgreSQL ثبت می‌شود؛ ظرفیت زنده در Redis می‌ماند.
  */
-export async function processQueuedSubmit(userId: number, studentId: number): Promise<SubmitResult> {
+export async function processQueuedSubmit(userId: number, studentId: number, acceptSameDayRisk = false): Promise<SubmitResult> {
   const out: SubmitResult = { ok: true, registered: [], waitlisted: [], hardErrors: [], softErrors: [] };
 
   const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
@@ -218,8 +219,6 @@ export async function processQueuedSubmit(userId: number, studentId: number): Pr
   const regSched = regIds.length ? await db.select().from(schedules).where(inArray(schedules.offeringId, regIds)) : [];
   const cartSet = new Set(ids);
   const classClash = new Set<number>();
-  const examClash = new Set<number>();
-  const examDateOf = new Map<number, string | null>();
   const classOnly = (s: typeof cartSched[number]) => s.scheduleType !== 'EXAM';
   for (const a of cartSched.filter(classOnly)) for (const b of [...cartSched, ...regSched].filter(classOnly)) {
     if (a.offeringId === b.offeringId) continue;
@@ -228,21 +227,41 @@ export async function processQueuedSubmit(userId: number, studentId: number): Pr
     if (cartSet.has(b.offeringId)) classClash.add(b.offeringId);
   }
 
-  // ── فیلتر ۵: تداخل امتحان (خطای نرم — همان‌طور که فاز صفر داشت) ──
+  // ── فیلتر ۵: تداخل امتحان (فاز ۱۰ — سند طراحی سامانه: تقسیم HARD/SOFT) ──
+  //   HARD: همان روز و ساعت هم‌پوشان → ممنوع قطعی (حتی با تأییدیه ثبت نمی‌شود)
+  //   SOFT: همان روز و ساعتِ متفاوت → هشدار + تأییدیهٔ دیجیتال (hasAcceptedSameDayExam)
   const examOnly = (s: typeof cartSched[number]) => s.scheduleType === 'EXAM';
+  const examHard = new Set<number>();
+  const examSoft = new Set<number>();
+  const examDateOf = new Map<number, string | null>();
+  const allExam = [...cartSched, ...regSched].filter(examOnly);
   for (const a of cartSched.filter(examOnly)) {
     examDateOf.set(a.offeringId, a.examDate);
-    for (const b of [...cartSched, ...regSched].filter(examOnly)) {
+    for (const b of allExam) {
       if (a.offeringId === b.offeringId) continue;
-      if (!examOverlaps(a, b)) continue;
-      examClash.add(a.offeringId);
-      if (cartSet.has(b.offeringId)) examClash.add(b.offeringId);
+      if (!a.examDate || a.examDate !== b.examDate) continue;
+      if (examOverlaps(a, b)) {
+        examHard.add(a.offeringId);
+        if (cartSet.has(b.offeringId)) examHard.add(b.offeringId);
+      } else {
+        examSoft.add(a.offeringId);
+        if (cartSet.has(b.offeringId)) examSoft.add(b.offeringId);
+      }
     }
   }
   for (const o of offs) {
     if (already.has(o.id)) continue;
-    if (classClash.has(o.id)) out.softErrors.push({ offeringId: o.id, msg: 'تداخل زمانی: «' + o.title + '» با کلاس دیگر.' });
-    else if (examClash.has(o.id)) out.softErrors.push({ offeringId: o.id, msg: 'تداخل امتحانی: «' + o.title + '» با امتحان دیگر' + (examDateOf.get(o.id) ? ' (' + examDateOf.get(o.id) + ')' : '') + '.' });
+    if (classClash.has(o.id)) {
+      out.softErrors.push({ offeringId: o.id, msg: 'تداخل زمانی: «' + o.title + '» با کلاس دیگر.' });
+    } else if (examHard.has(o.id)) {
+      out.hardErrors.push('تداخل قطعی امتحان: «' + o.title + '» با درس دیگری در ' + (examDateOf.get(o.id) ?? 'تاریخ') + ' و همان ساعت امتحان دارد.')
+      out.ok = false;
+    } else if (examSoft.has(o.id) && !acceptSameDayRisk) {
+      out.softErrors.push({
+        offeringId: o.id,
+        msg: 'تداخل نرم امتحان: «' + o.title + '» با امتحان دیگر در ' + (examDateOf.get(o.id) ?? '') + ' (ساعت متفاوت). برای ثبت، تأییدیهٔ دیجیتال عواقب لازم است.',
+      });
+    }
   }
 
   // ── فیلتر ۴: پیش‌نیاز — درخت منطقی (§۱۰۱۲، خطای نرم) ──
@@ -286,10 +305,19 @@ export async function processQueuedSubmit(userId: number, studentId: number): Pr
 
     // درج ثبت‌نام + خالی‌کردن سبد — تحت RLS (§۲۱۷۰): خط‌مشی enroll_self_ins فقط ردیف خودش
     await withUserRls(userId, tx => tx.insert(enrollments)
-      .values({ studentId, offeringId: o.id, status: waitlisted ? 'WAITLISTED' : 'REGISTERED', waitlistPosition: waitlisted ? (wlPos ?? o.enrolled - o.capacity + 1) : null })
+      .values({
+        studentId, offeringId: o.id, status: waitlisted ? 'WAITLISTED' : 'REGISTERED',
+        waitlistPosition: waitlisted ? (wlPos ?? o.enrolled - o.capacity + 1) : null,
+        // فاز ۱۰: تأییدیهٔ دیجیتال تداخل نرم (دو امتحان هم‌روز در شیفت‌های متفاوت)
+        hasAcceptedSameDayExam: acceptSameDayRisk && examSoft.has(o.id) ? 1 : 0,
+      })
       .onConflictDoUpdate({
         target: [enrollments.studentId, enrollments.offeringId],
-        set: { status: waitlisted ? 'WAITLISTED' : 'REGISTERED', waitlistPosition: waitlisted ? (wlPos ?? o.enrolled - o.capacity + 1) : null },
+        set: {
+          status: waitlisted ? 'WAITLISTED' : 'REGISTERED',
+          waitlistPosition: waitlisted ? (wlPos ?? o.enrolled - o.capacity + 1) : null,
+          hasAcceptedSameDayExam: acceptSameDayRisk && examSoft.has(o.id) ? 1 : 0,
+        },
       }));
     if (!waitlisted) {
       // شمارندهٔ مشترک = اقدام سیستم → نقش مالک (خط‌مشی دانشجویی ندارد)

@@ -3,8 +3,12 @@
 #  ایمیج پروداکشن کالبد آفاق (Next.js standalone) — لیسن روی پورت ۸۰۸۰
 #  ساخت:  docker build -t afagh-app ./afagh-next
 #
-#  روی سرورهای کم‌حافظه: مقدار هیپ Node را کم/زیاد کنید
-#      docker compose build --build-arg NODE_MAX_OLD_SPACE=1536
+#  روی سرورهای کم‌حافظه (بیلد با «exit code: 137» یا «Killed» می‌میرد = OOM):
+#      ۱) swap بسازید:  sudo bash scripts/ensure-build-memory.sh
+#      ۲) هیپ را کم کنید:  docker compose build --build-arg NODE_MAX_OLD_SPACE=1536
+#         (یا در .env:  NODE_MAX_OLD_SPACE=1536)
+#  اندازه‌گیری واقعی بیلد این پروژه: اوج ۴۱۲MB هیپ، ۲۲ ثانیه روی ۲ هسته.
+#  پس سقف ۳۰۷۲ فقط روی سرورهای بزرگ لازم است و روی سرور ۲ گیگی باعث OOM می‌شود.
 # ════════════════════════════════════════════════════════════════════
 FROM node:22-bookworm-slim AS base
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -33,7 +37,10 @@ CMD ["sh", "-c", "node scripts/backup-db.mjs && npx drizzle-kit push --force && 
 # باندل جای‌گذاری می‌کند → «کد دمو در بیلد تولید اساساً غیرفعال است» (بازبینی بند ۵)،
 # نه صرفاً با ENV قابل خاموش‌کردن.
 FROM base AS builder
-ARG NODE_MAX_OLD_SPACE=3072
+ARG NODE_MAX_OLD_SPACE=2048
+# آرگومان‌های اضافهٔ «next build» — مثلاً «--webpack» اگر Turbopack روی سرور
+# شما حافظهٔ زیادی گرفت:  docker compose build --build-arg NEXT_BUILD_ARGS=--webpack
+ARG NEXT_BUILD_ARGS=""
 ENV NODE_ENV=production \
     NEXT_PUBLIC_AFAGH_DEMO_LOCK=1 \
     NODE_OPTIONS=--max-old-space-size=${NODE_MAX_OLD_SPACE} \
@@ -42,7 +49,7 @@ ENV NODE_ENV=production \
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # تایپ‌چک داخل ایمیج اجرا نمی‌شود (حافظه‌بر است و در CI/توسعه با npm run typecheck انجام می‌شود)
-RUN npm run build
+RUN npm run build ${NEXT_BUILD_ARGS}
 
 # ── اجرا ──
 FROM base AS runner

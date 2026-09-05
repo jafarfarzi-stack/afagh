@@ -13,6 +13,7 @@
 import React, {
   startTransition,
   useActionState,
+  useEffect,
   useOptimistic,
   useState,
 } from 'react';
@@ -42,7 +43,7 @@ import {
 interface RosterTabProps {
   offering: GradingCourseOffering;
   lastAutoSaveTime: string;
-  onRequestFinalizeOtp: () => void; // مودال OTP در همین تب مدیریت می‌شود
+  onRequestFinalizeOtp: () => Promise<{ ok: boolean; demoOtp?: string; error?: string }>; // مودال OTP در همین تب مدیریت می‌شود
   dispatch: GradesDispatch;
 }
 
@@ -55,8 +56,16 @@ type OptimisticUpdate = {
 export default function RosterTab({ offering, lastAutoSaveTime, onRequestFinalizeOtp, dispatch }: RosterTabProps) {
   const [searchStudentQuery, setSearchStudentQuery] = useState('');
   const [saveState, saveAction, isSaving] = useActionState<SaveGradeState, SaveGradePayload>(saveGradeAction, { ok: true });
+  // زمان آخرین ذخیرهٔ موفق از پاسخ واقعی سرور (نه تایمر محلی)
+  useEffect(() => {
+    if (saveState.ok && saveState.savedAt) dispatch({ type: 'SET_SAVE_TIME', payload: saveState.savedAt });
+  }, [saveState, dispatch]);
+
   const [otpModalOpen, setOtpModalOpen] = useState(false);
   const [otpCode, setOtpCode] = useState('');
+  const [demoOtp, setDemoOtp] = useState<string | null>(null);
+  const [otpBusy, setOtpBusy] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
 
   // ── لایهٔ خوش‌بینانه: نمرهٔ تایپ‌شده فوراً با محاسبهٔ مجدد نهایی دیده می‌شود
   const [optimisticStudents, addOptimisticUpdate] = useOptimistic(
@@ -208,7 +217,19 @@ export default function RosterTab({ offering, lastAutoSaveTime, onRequestFinaliz
             <span>📢 ثبت موقت و رویت دانشجو</span>
           </button>
           <button
-            onClick={() => { setOtpModalOpen(true); onRequestFinalizeOtp(); }}
+            onClick={async () => {
+              setOtpModalOpen(true);
+              setOtpCode('');
+              setDemoOtp(null);
+              setOtpBusy(true);
+              try {
+                const res = await onRequestFinalizeOtp();
+                if (res.ok && res.demoOtp) setDemoOtp(res.demoOtp);
+                if (!res.ok && res.error) alert(res.error);
+              } finally {
+                setOtpBusy(false);
+              }
+            }}
             disabled={isFinalized}
             className="w-full sm:w-auto px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 disabled:opacity-50 text-white font-black text-xs shadow-md transition"
           >
@@ -385,7 +406,9 @@ export default function RosterTab({ offering, lastAutoSaveTime, onRequestFinaliz
             <div className="text-3xl">🔐</div>
             <h4 className="font-black text-slate-900">تأیید هویت با کد یکبارمصرف</h4>
             <p className="text-xs text-slate-500 font-bold leading-5">
-              کد ۵ رقمی به شماره همراه ثبت‌شدهٔ شما پیامک شد. (دمو: ۵۸۲۱۹ یا ۱۲۳۴۵۶)
+              {otpBusy ? 'در حال صدور کد تأیید…' : demoOtp
+                ? `حالت دمو — کد تأیید (در محیط عملیاتی پیامک می‌شود): ${demoOtp}`
+                : 'کد ۵ رقمی به شمارهٔ همراه ثبت‌شدهٔ شما پیامک شد.'}
             </p>
             <input
               type="text"
@@ -398,26 +421,36 @@ export default function RosterTab({ offering, lastAutoSaveTime, onRequestFinaliz
             />
             <div className="flex gap-2">
               <button
-                onClick={() => {
-                  const demoBypass = process.env.NODE_ENV !== 'production' && (otpCode === '12345' || otpCode === '123456');
-                  if (otpCode !== '58219' && !demoBypass) {
-                    alert('کد تایید اشتباه است. لطفاً کد پنج‌رقمی پیامک‌شده را وارد کنید.');
+                onClick={async () => {
+                  if (!otpCode.trim()) {
+                    alert('کد تأیید را وارد کنید.');
                     return;
                   }
-                  dispatch({ type: 'SIGN_OFFERING' });
-                  setOtpModalOpen(false);
-                  setOtpCode('');
-                  // همگام‌سازی پس‌زمینه با سرور (قفل نهایی + هش ممیزی)
-                  void finalizeSignedAction({ ok: true } as SaveGradeState, {
-                    offeringId: offering.id,
-                    otp: otpCode,
-                    code: offering.code,
-                    groupNo: offering.groupNumber,
-                  });
+                  setFinalizing(true);
+                  try {
+                    // تأیید OTP و قفل نهایی کاملاً در سرور انجام می‌شود؛ UI فقط نتیجه را نمایش می‌دهد
+                    const res = await finalizeSignedAction({ ok: true } as SaveGradeState, {
+                      offeringId: offering.id,
+                      otp: otpCode.trim(),
+                      code: offering.code,
+                      groupNo: offering.groupNumber,
+                    });
+                    if (!res.ok) {
+                      alert(res.error || 'تأیید ناموفق بود.');
+                      return;
+                    }
+                    dispatch({ type: 'SIGN_OFFERING' });
+                    setOtpModalOpen(false);
+                    setOtpCode('');
+                    setDemoOtp(null);
+                  } finally {
+                    setFinalizing(false);
+                  }
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm transition"
+                disabled={finalizing || otpBusy}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm transition disabled:opacity-50"
               >
-                تأیید و امضا
+                {finalizing ? 'در حال تأیید…' : 'تأیید و امضا'}
               </button>
               <button
                 onClick={() => { setOtpModalOpen(false); setOtpCode(''); }}
