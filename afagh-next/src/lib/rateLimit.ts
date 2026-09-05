@@ -25,10 +25,27 @@ const rlRedis: Redis = g.__afaghRlRedis ?? new Redis(REDIS_URL, {
   maxRetriesPerRequest: 2,
   retryStrategy: (t) => Math.min(t * 200, 2000),
   lazyConnect: false,
+  // بدون این، دستورها هنگام قطعی در صف می‌مانند تا مهلت تمام شود؛ با آن،
+  // بی‌درنگ خطا می‌دهند و ما به شمارندهٔ حافظه‌ای سوییچ می‌کنیم.
+  enableOfflineQueue: false,
+  connectTimeout: 1000,
 });
 // شنوندهٔ خطا الزامی است: بدون آن، قطعی موقت Redis → Unhandled error → کرش Node (بازبینی مهندسی)
 rlRedis.on('error', () => { /* خاموش — مسیر rateLimit به fallback درون‌حافظه می‌رود */ });
 if (process.env.NODE_ENV !== 'production') g.__afaghRlRedis = rlRedis;
+
+/**
+ * کلید قطع‌کننده (circuit breaker).
+ *
+ * ⚠️ چرا لازم شد: با خاموش بودن Redis، هر فراخوانِ rateLimit پیش از رسیدن به
+ * fallback حدود ۶ ثانیه صرف تلاش مجدد می‌کرد. چون *ورود به سامانه* هم
+ * rate-limit دارد، قطعی Redis یعنی «هر تلاش ورود ۶ ثانیه» و در ساعت شلوغی،
+ * تلنبار شدن اتصال‌ها و از کار افتادن عملی سایت. حالا پس از نخستین شکست،
+ * تا ۳۰ ثانیه اصلاً سراغ Redis نمی‌رویم.
+ */
+const BREAKER_MS = 30_000;
+let redisDownUntil = 0;
+rlRedis.on('ready', () => { redisDownUntil = 0; });
 
 // ── fallback درون‌حافظه (فقط وقتی Redis در دسترس نیست) ──
 type MemCount = { count: number; resetAt: number };
@@ -60,6 +77,7 @@ export type RateLimitResult = { ok: true } | { ok: false; retryAfterSec: number 
 export async function rateLimit(key: string, limit: number, windowSec: number): Promise<RateLimitResult> {
   const rkey = `rl:${key}`;
   try {
+    if (Date.now() < redisDownUntil) throw new Error('redis-breaker-open');
     const n = await rlRedis.incr(rkey);
     if (n === 1) await rlRedis.expire(rkey, windowSec);
     if (n > limit) {
@@ -68,7 +86,8 @@ export async function rateLimit(key: string, limit: number, windowSec: number): 
     }
     return { ok: true };
   } catch {
-    // Redis در دسترس نیست → fallback درون‌حافظه
+    // Redis در دسترس نیست → fallback درون‌حافظه (و باز نگه‌داشتن کلید قطع‌کننده)
+    redisDownUntil = Date.now() + BREAKER_MS;
     const now = Date.now();
     if (mem.size > 10000) memSweep();
     const rec = mem.get(rkey);

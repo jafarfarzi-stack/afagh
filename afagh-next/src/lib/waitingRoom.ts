@@ -86,6 +86,25 @@ export async function nextWaitlistPosition(offeringId: number): Promise<number> 
   return redis.incr(K.wl(offeringId));
 }
 
+/**
+ * آیا Redis همین حالا پاسخ می‌دهد؟ (یک PING با مهلت کوتاه)
+ *
+ * انتخاب واحد نباید گروگانِ Redis باشد: اگر Redis پایین است، سامانه به مسیر
+ * «ثبت مستقیم روی دیتابیس» برمی‌گردد. بدون این بررسی، دانشجو در اوج ثبت‌نام
+ * فقط پیام «ورود به صف ناموفق بود» می‌دید و هیچ راهی برای ثبت نداشت.
+ */
+export async function redisAvailable(timeoutMs = 700): Promise<boolean> {
+  try {
+    const pong = await Promise.race([
+      redis.ping(),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), timeoutMs)),
+    ]);
+    return pong === 'PONG';
+  } catch {
+    return false;
+  }
+}
+
 /** نمای زندهٔ ظرفیت (§۳۴۰۳ — پیش‌نمایش سریع بدون DB) */
 export async function peekCapacities(offeringIds: number[]): Promise<Record<number, { cap: number; enrolled: number; remaining: number }>> {
   const out: Record<number, { cap: number; enrolled: number; remaining: number }> = {};
@@ -122,7 +141,7 @@ export async function enqueueSubmit(userId: number, studentId: number, acceptSam
 }
 
 export async function queuePosition(item: string): Promise<number> {
-  const idx = await redis.zrank(K.queue, item);
+  const idx = await redis.zrank(K.queue, item).catch(() => null);
   return idx === null ? -1 : idx + 1;
 }
 
@@ -135,7 +154,8 @@ export async function markProcessing(userId: number, ticketId: string) {
 }
 
 export async function myStatus(userId: number): Promise<{ state: WrState | 'IDLE'; position?: number; result?: unknown }> {
-  const raw = await redis.get(K.latest(userId));
+  // قطعی Redis نباید صفحهٔ انتخاب واحد را بشکند؛ «صفی در کار نیست» امن‌ترین پاسخ است.
+  const raw = await redis.get(K.latest(userId)).catch(() => null);
   if (!raw) return { state: 'IDLE' };
   const st = JSON.parse(raw) as { item?: string; state: WrState; result?: unknown; position?: number };
   if (st.state === 'DONE') return { state: 'DONE', result: st.result };
@@ -145,9 +165,16 @@ export async function myStatus(userId: number): Promise<{ state: WrState | 'IDLE
 
 // ── §۲۰۷۷: محدودیت نرخ — حداکثر ۵ درخواست ثبت در ثانیه برای هر کاربر ──
 export async function rateLimitSubmit(userId: number): Promise<boolean> {
-  const n = await redis.incr(K.rl(userId));
-  if (n === 1) await redis.expire(K.rl(userId), 1);
-  return n <= 5;
+  // اگر Redis پایین باشد، سپر نرخ «باز» می‌شود (اجازه می‌دهد) — بستنِ کاملِ
+  // ثبت‌نام برای همه بسیار پرهزینه‌تر از نبودِ موقتِ محدودیت نرخ است؛ گاردهای
+  // اصلی (سقف واحد، پیش‌نیاز، ظرفیت، تداخل) همگی روی دیتابیس‌اند.
+  try {
+    const n = await redis.incr(K.rl(userId));
+    if (n === 1) await redis.expire(K.rl(userId), 1);
+    return n <= 5;
+  } catch {
+    return true;
+  }
 }
 
 // ── کارگر صف: تخلیهٔ کنترل‌شده (مثلاً ۱۰ آیتم در هر تیک = ۴۰/ثانیه) ──
