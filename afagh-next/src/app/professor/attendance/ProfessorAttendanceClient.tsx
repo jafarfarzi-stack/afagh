@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
+import { saveSessionAttendanceAction, scheduleMakeupSessionAction } from './actions';
 
 export interface StudentInfo {
   id: number;
@@ -64,29 +65,28 @@ interface Props {
     id: number;
     name: string;
     staffCode: string;
+    academicRank?: string;
   };
   termTitle: string;
   initialOfferings: AttendanceCourseOffering[];
   defaultOfferingId?: number;
+  initialMakeupHistory: MakeupSessionRecord[];
+  todayJalali: string;
+  rooms: { id: number; name: string; capacity: number; type: string }[];
 }
 
 const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
 
-const CURRENT_SYSTEM_DATE = '۱۴۰۵/۰۸/۳۱';
 
-const EMPTY_CLASSROOMS_LIST = [
-  { id: 101, name: 'کلاس ۳۰۴ (ساختمان آموزش)', capacity: 45, type: 'THEORY' },
-  { id: 102, name: 'کلاس ۲۰۲ (ساختمان آموزش)', capacity: 40, type: 'THEORY' },
-  { id: 103, name: 'سایت تخصصی کامپیوتر ۱۰۲ (دانشکده فنی)', capacity: 32, type: 'LAB' },
-  { id: 104, name: 'آزمایشگاه نرم‌افزار ۱ (مجتمع آزمایشگاه‌ها)', capacity: 28, type: 'LAB' },
-  { id: 0, name: 'سایر / نیاز به بررسی و هماهنگی آموزش (کلاس ویژه)', capacity: 0, type: 'CUSTOM' },
-];
 
 export default function ProfessorAttendanceClient({
   professor,
   termTitle,
   initialOfferings,
   defaultOfferingId,
+  initialMakeupHistory,
+  todayJalali,
+  rooms: realRooms,
 }: Props) {
   const profDisplayName = professor?.name || 'دکتر جمیل احمدی';
 
@@ -102,6 +102,8 @@ export default function ProfessorAttendanceClient({
 
   // Make-up Session Creation Modal State
   const [showMakeupModal, setShowMakeupModal] = useState<boolean>(false);
+  const [savingSession, setSavingSession] = useState(false);
+  const [savingMakeup, setSavingMakeup] = useState(false);
   const [selectedRoomOptionId, setSelectedRoomOptionId] = useState<number>(101);
   const [makeupForm, setMakeupForm] = useState({
     replacedSessionNo: 4,
@@ -111,24 +113,8 @@ export default function ProfessorAttendanceClient({
     reason: 'هم‌پوشانی با شرکت در سمینار تخصصی دانشگاه',
   });
 
-  // Log of make-up sessions requested / scheduled
-  const [makeupHistory, setMakeupHistory] = useState<MakeupSessionRecord[]>([
-    {
-      id: 901,
-      offeringId: 101,
-      courseTitle: 'سیستم‌های عامل',
-      groupNumber: 1,
-      professorName: profDisplayName,
-      replacedSessionNo: 4,
-      sessionDate: '۱۴۰۵/۰۹/۰۸',
-      sessionTime: '۱۳:۳۰ الی ۱۵:۳۰',
-      roomName: 'کلاس ۳۰۴ (ساختمان آموزش)',
-      topic: 'جلسه جبرانی: مدیریت بن‌بست و الگوریتم‌های بانکدار',
-      reason: 'عدم حضور به دلیل ماموریت آموزشی',
-      status: 'APPROVED_DIRECT',
-      allocatedAt: '۱۴۰۵/۰۸/۳۱ ساعت ۱۰:۳۰',
-    },
-  ]);
+  // Log of make-up sessions requested / scheduled (واقعی از class_sessions)
+  const [makeupHistory, setMakeupHistory] = useState<MakeupSessionRecord[]>(initialMakeupHistory);
 
   // Current offering & session
   const currentOffering = useMemo(() => {
@@ -291,34 +277,59 @@ export default function ProfessorAttendanceClient({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Save current session
-  const handleSaveSession = () => {
-    setOfferings(prev =>
-      prev.map(off => {
-        if (off.id !== selectedOfferingId) return off;
-        return {
-          ...off,
-          sessions: off.sessions.map(sess => {
-            if (sess.sessionNo !== selectedSessionNo) return sess;
-            return { ...sess, isHeld: true };
-          }),
-        };
-      })
-    );
-    setToastMessage(`✅ لیست حضور و غیاب جلسه ${faNum(currentSession.sessionNo)} (مورخ ${currentSession.sessionDate}) با موفقیت در سامانه دانشگاه ثبت گردید.`);
+  // Save current session — ذخیرهٔ واقعی در student_class_attendance (سرور)
+  const handleSaveSession = async () => {
+    if (!currentSession || currentSession.id <= 0) {
+      alert('جلسهٔ انتخابی هنوز در سرور ثبت نشده است.');
+      return;
+    }
+    setSavingSession(true);
+    try {
+      const entries = Object.entries(currentSession.studentStatuses).map(([studentId, st]) => ({
+        studentId: Number(studentId),
+        status: st.status,
+        lateMinutes: st.lateMinutes,
+      }));
+      const res = await saveSessionAttendanceAction(currentSession.id, entries);
+      if (!res.ok) {
+        alert(res.error || 'خطا در ذخیرهٔ حضور و غیاب.');
+        return;
+      }
+      setOfferings(prev =>
+        prev.map(off => {
+          if (off.id !== selectedOfferingId) return off;
+          return {
+            ...off,
+            sessions: off.sessions.map(sess => {
+              if (sess.id !== currentSession.id) return sess;
+              return { ...sess, isHeld: true };
+            }),
+          };
+        })
+      );
+      setToastMessage(`✅ حضور و غیاب جلسه ${faNum(currentSession.sessionNo)} (مورخ ${faNum(currentSession.sessionDate)}) در پایگاه داده ثبت شد (${res.savedCount ?? entries.length} ردیف).`);
+    } catch {
+      alert('خطا در ارتباط با سرور.');
+    } finally {
+      setSavingSession(false);
+    }
     setTimeout(() => setToastMessage(null), 5000);
   };
 
   // Professor Creates Make-up Session
-  const handleCreateMakeupSession = () => {
+  const handleCreateMakeupSession = async () => {
     // Validate date: cannot be before current date
-    if (makeupForm.sessionDate < CURRENT_SYSTEM_DATE) {
-      alert(`خطا: تاریخ جلسه جبرانی نمی‌تواند قبل از تاریخ جاری سامانه (${CURRENT_SYSTEM_DATE}) باشد.`);
+    if (makeupForm.sessionDate < todayJalali) {
+      alert(`خطا: تاریخ جلسه جبرانی نمی‌تواند قبل از تاریخ جاری سامانه (${todayJalali}) باشد.`);
       return;
     }
 
     const isDirect = selectedRoomOptionId !== 0;
-    const selectedRoom = EMPTY_CLASSROOMS_LIST.find(r => r.id === selectedRoomOptionId);
+    const selectedRoom = realRooms.find(r => r.id === selectedRoomOptionId);
+    if (isDirect && !selectedRoom) {
+      alert('کلاس انتخابی معتبر نیست.');
+      return;
+    }
     const roomName = isDirect ? selectedRoom!.name : 'در انتظار تخصیص کلاس توسط آموزش';
 
     const newSessionNo = 100 + makeupForm.replacedSessionNo;
@@ -337,7 +348,7 @@ export default function ProfessorAttendanceClient({
         isMakeUp: true,
         replacedSessionNo: makeupForm.replacedSessionNo,
         professorStatus: 'APPROVED_MAKEUP',
-        verificationDetail: `تخصیص مستقیم کلاس ${selectedRoom!.name} توسط استاد در ${CURRENT_SYSTEM_DATE}`,
+        verificationDetail: `تخصیص مستقیم کلاس ${selectedRoom!.name} توسط استاد در ${todayJalali}`,
         studentStatuses: {},
       };
 
@@ -372,16 +383,40 @@ export default function ProfessorAttendanceClient({
       topic: makeupForm.topic,
       reason: makeupForm.reason,
       status: isDirect ? 'APPROVED_DIRECT' : 'PENDING_EDUCATION',
-      allocatedAt: `${CURRENT_SYSTEM_DATE} ساعت ${new Date().getHours()}:${String(new Date().getMinutes()).padStart(2, '0')}`,
+      allocatedAt: `${todayJalali} ساعت ${new Date().getHours()}:${String(new Date().getMinutes()).padStart(2, '0')}`,
     };
 
-    setMakeupHistory(prev => [record, ...prev]);
-    setShowMakeupModal(false);
-
-    if (isDirect) {
-      setToastMessage(`🎉 جلسه جبرانی با موفقیت در «${selectedRoom!.name}» برای تاریخ ${makeupForm.sessionDate} ساعت ${makeupForm.sessionTime} ثبت شد. دو پیام خودکار به شما و دانشجویان کلاس ارسال گردید.`);
-    } else {
-      setToastMessage(`📩 درخواست تخصیص سالن ویژه برای جلسه جبرانی به کارتابل اداره آموزش ارسال شد. پس از تخصیص کلاس توسط کارشناس آموزش، پیامک تایید ارسال خواهد شد.`);
+    // ذخیرهٔ واقعی در class_sessions (isMakeUpSession=1) — سپس به‌روزرسانی UI
+    const replacedSession = currentOffering.sessions.find(x => x.sessionNo === makeupForm.replacedSessionNo);
+    const sTimes = makeupForm.sessionTime.split('الی').map(x => x.trim());
+    const toAscii = (x: string) => x.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)));
+    const normTime = (x: string) => { const m = toAscii(x).match(/\d{1,2}:\d{2}/); return m ? m[0].padStart(5, '0') : '13:30'; };
+    setSavingMakeup(true);
+    try {
+      const res = await scheduleMakeupSessionAction({
+        offeringId: selectedOfferingId,
+        replacedSessionId: replacedSession?.id,
+        sessionDate: toAscii(makeupForm.sessionDate),
+        startTime: normTime(sTimes[0] ?? '').replace(/\d{2}:(\d{2})/, '13:30').length > 0 ? normTime(sTimes[0] ?? '') : '13:30',
+        endTime: normTime(sTimes[1] ?? ''),
+        roomName: isDirect ? roomName : '',
+        isDirect,
+      });
+      if (!res.ok) {
+        alert(res.error || 'ثبت جلسهٔ جبرانی ناموفق بود.');
+        return;
+      }
+      setMakeupHistory(prev => [{ ...record, id: res.sessionId ?? record.id }, ...prev]);
+      setShowMakeupModal(false);
+      if (isDirect) {
+        setToastMessage(`🎉 جلسه جبرانی در «${selectedRoom!.name}» برای تاریخ ${faNum(makeupForm.sessionDate)} ثبت شد و در فهرست جلسات درس قرار گرفت.`);
+      } else {
+        setToastMessage(`📩 درخواست جلسه جبرانی ثبت شد و در انتظار تأیید/تخصیص کلاس توسط ادارهٔ آموزش است.`);
+      }
+    } catch {
+      alert('خطا در ارتباط با سرور.');
+    } finally {
+      setSavingMakeup(false);
     }
     setTimeout(() => setToastMessage(null), 8000);
   };
@@ -904,7 +939,7 @@ export default function ProfessorAttendanceClient({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">
-                    تاریخ برگزاری (باید بعد از {CURRENT_SYSTEM_DATE} باشد):
+                    تاریخ برگزاری (باید بعد از {todayJalali} باشد):
                   </label>
                   <input
                     type="text"
@@ -933,18 +968,24 @@ export default function ProfessorAttendanceClient({
               {/* Free Classrooms Selector */}
               <div>
                 <label className="font-extrabold text-slate-900 block mb-1">
-                  🏛️ کلاس‌های خالی و در دسترس در این تاریخ و ساعت (انتخاب مستقیم):
+                  🏛️ انتخاب کلاس (لیست واقعی کلاس‌های دانشگاه — هماهنگی نهایی با آموزش):
                 </label>
                 <select
                   value={selectedRoomOptionId}
                   onChange={e => setSelectedRoomOptionId(Number(e.target.value))}
                   className="w-full border-2 border-indigo-500 rounded-xl p-2.5 font-extrabold bg-indigo-50/50 text-indigo-950"
                 >
-                  {EMPTY_CLASSROOMS_LIST.map(room => (
+                  {realRooms.length === 0 && (
+                    <option value={0}>🏢 بدون کلاس — درخواست تخصیص از ادارهٔ آموزش</option>
+                  )}
+                  {realRooms.map(room => (
                     <option key={room.id} value={room.id}>
-                      {room.id !== 0 ? `🟢 ${room.name} (ظرفیت ${faNum(room.capacity)} نفر — خالی)` : `🏢 ${room.name}`}
+                      🏫 {room.name} (ظرفیت {faNum(room.capacity)} نفر)
                     </option>
                   ))}
+                  {realRooms.length > 0 && (
+                    <option value={0}>🏢 سایر / درخواست تخصیص از ادارهٔ آموزش</option>
+                  )}
                 </select>
               </div>
 

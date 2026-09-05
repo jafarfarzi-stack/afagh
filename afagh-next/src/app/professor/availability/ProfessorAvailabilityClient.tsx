@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { loadAvailabilityAction, saveAvailabilityAction, type AvailabilityCell } from './actions';
 
 export type SlotStatus = 'PREF' | 'AVAIL' | 'UNAVAIL';
 
@@ -37,32 +38,46 @@ const DEFAULT_TIME_SLOTS = [
 ];
 
 export default function ProfessorAvailabilityClient({ professor, terms }: Props) {
-  const [selectedTermId, setSelectedTermId] = useState<number>(terms[0]?.id || 14051);
-  const [notes, setNotes] = useState<string>('ترجیحاً جلسات در ساعات صبحگاهی دوشنبه و شنبه تنظیم شوند.');
+  const [selectedTermId, setSelectedTermId] = useState<number>(terms[0]?.id || 0);
+  const [notes, setNotes] = useState<string>('');
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [loadingAvail, setLoadingAvail] = useState<boolean>(true);
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // شبیه‌سازی وضعیت نهایی‌سازی برنامه توسط مدیر گروه
-  const [isScheduleFinalized, setIsScheduleFinalized] = useState<boolean>(true);
-
-  // [dayIdx (0..5)][slotId (1..6)] = SlotStatus
+  // ماتریس از پایگاه داده (professor_availability) — هرگز پیش‌فرض UI نیست
   const [availability, setAvailability] = useState<{ [d: number]: { [s: number]: SlotStatus } }>(() => {
     const initial: { [d: number]: { [s: number]: SlotStatus } } = {};
     for (let d = 0; d < 6; d++) {
       initial[d] = {};
-      for (let s = 1; s <= 6; s++) {
-        if (d === 0 || d === 2) {
-          initial[d][s] = s <= 2 ? 'PREF' : 'AVAIL';
-        } else if (d === 3) {
-          initial[d][s] = 'UNAVAIL'; // روز پژوهشی سه‌شنبه
-        } else {
-          initial[d][s] = 'AVAIL';
-        }
-      }
+      for (let s = 1; s <= 6; s++) initial[d][s] = 'AVAIL';
     }
     return initial;
   });
+
+  useEffect(() => {
+    if (!selectedTermId) return;
+    let cancelled = false;
+    setLoadingAvail(true);
+    loadAvailabilityAction(selectedTermId).then(res => {
+      if (cancelled) return;
+      if (res.ok && res.cells) {
+        const grid: { [d: number]: { [s: number]: SlotStatus } } = {};
+        for (let d = 0; d < 6; d++) {
+          grid[d] = {};
+          for (let s = 1; s <= 6; s++) grid[d][s] = 'AVAIL';
+        }
+        for (const c of res.cells) {
+          if (grid[c.dayIndex]) grid[c.dayIndex][c.slotIndex] = c.status;
+        }
+        setAvailability(grid);
+        setNotes(res.notes ?? '');
+        setIsSubmitted(true);
+      }
+    }).finally(() => { if (!cancelled) setLoadingAvail(false); });
+    return () => { cancelled = true; };
+  }, [selectedTermId]);
 
   const toggleSlot = (d: number, s: number) => {
     setAvailability(prev => {
@@ -94,11 +109,30 @@ export default function ProfessorAvailabilityClient({ professor, terms }: Props)
     setAvailability(updated);
   };
 
-  const handleSubmit = () => {
-    setIsSubmitted(true);
-    setShowSuccessModal(true);
-    setToastMessage('✅ فرم ساعات حضور و آمادگی تدریس شما برای نیمسال انتخابی با موفقیت در سامانه ثبت و به کارتابل مدیر گروه آموزشی ارسال گردید.');
-    setTimeout(() => setToastMessage(null), 6000);
+  const handleSubmit = async () => {
+    if (!selectedTermId) return;
+    setSaving(true);
+    const cells: AvailabilityCell[] = [];
+    for (let d = 0; d < 6; d++) {
+      for (let s = 1; s <= 6; s++) {
+        cells.push({ dayIndex: d, slotIndex: s, status: availability[d][s] });
+      }
+    }
+    try {
+      const res = await saveAvailabilityAction(selectedTermId, cells, notes);
+      if (!res.ok) {
+        alert(res.error || 'خطا در ذخیرهٔ ماتریس.');
+        return;
+      }
+      setIsSubmitted(true);
+      setShowSuccessModal(true);
+      setToastMessage('✅ ماتریس ساعات حضور شما در پایگاه داده ثبت شد و مبنای زمان‌بندی گروه است.');
+      setTimeout(() => setToastMessage(null), 6000);
+    } catch {
+      alert('خطا در ارتباط با سرور.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const currentTerm = terms.find(t => t.id === selectedTermId) || terms[0];
@@ -117,32 +151,30 @@ export default function ProfessorAvailabilityClient({ professor, terms }: Props)
         </div>
       )}
 
-      {/* Schedule Finalized Banner */}
-      {isScheduleFinalized && (
-        <div className="p-4 bg-gradient-to-r from-sky-900 via-indigo-900 to-blue-900 text-white rounded-2xl shadow-lg border border-sky-600/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-extrabold text-[11px]">
-                اطلاعیه مهم آموزش
-              </span>
-              <span className="text-xs font-bold text-sky-200">برنامه درسی مصوب نیمسال</span>
-            </div>
-            <p className="font-extrabold text-sm sm:text-base">
-              🎉 برنامه هفتگی تدریس شما توسط مدیر گروه آموزشی نهایی و به تایید آموزش رسید.
-            </p>
-            <p className="text-xs text-sky-200">
-              می‌توانید برنامه هفتگی، شماره کلاس‌های فیزیکی و فهرست دانشجویان را در کارتابل مشاهده فرمایید.
-            </p>
+      {/* اطلاع‌رسانی صادقانه (بدون ادعای نهایی‌سازی ساختگی) */}
+      <div className="p-4 bg-gradient-to-r from-sky-900 via-indigo-900 to-blue-900 text-white rounded-2xl shadow-lg border border-sky-600/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-extrabold text-[11px]">
+              زمان‌بندی کلاس‌ها
+            </span>
+            <span className="text-xs font-bold text-sky-200">مبنای برنامهٔ هفتگی ترم</span>
           </div>
-          <Link
-            href="/professor/schedule"
-            className="px-4 py-2 rounded-xl bg-white text-indigo-950 font-extrabold text-xs shadow hover:bg-sky-50 transition shrink-0 flex items-center gap-1.5"
-          >
-            <span>🗓️ مشاهده برنامه هفتگی تدریس</span>
-            <span>←</span>
-          </Link>
+          <p className="font-extrabold text-sm sm:text-base">
+            این ماتریس در پایگاه داده ثبت می‌شود و مدیر گروه هنگام زمان‌بندی دروس به آن استناد می‌کند.
+          </p>
+          <p className="text-xs text-sky-200">
+            برنامهٔ هفتگی نهایی را پس از تأیید گروه از کارتابل خود پیگیری کنید.
+          </p>
         </div>
-      )}
+        <Link
+          href="/professor/schedule"
+          className="px-4 py-2 rounded-xl bg-white text-indigo-950 font-extrabold text-xs shadow hover:bg-sky-50 transition shrink-0 flex items-center gap-1.5"
+        >
+          <span>🗓️ برنامه هفتگی تدریس</span>
+          <span>←</span>
+        </Link>
+      </div>
 
       {/* Header Profile Card */}
       <div className="bg-gradient-to-l from-indigo-950 via-indigo-900 to-slate-900 text-white rounded-2xl p-5 shadow-lg border border-indigo-700/50 space-y-4">
@@ -194,7 +226,7 @@ export default function ProfessorAvailabilityClient({ professor, terms }: Props)
           <div>
             <span className="text-indigo-200 font-bold block mb-1">سقف موظفی تدریس در ترم:</span>
             <div className="font-extrabold text-amber-300">
-              حداکثر {faNum(professor.maxWeeklyUnits)} واحد در هفته
+              {professor.maxWeeklyUnits > 0 ? `سقف موظفی: ${faNum(professor.maxWeeklyUnits)} واحد در هفته` : ''}
             </div>
           </div>
         </div>
@@ -296,6 +328,7 @@ export default function ProfessorAvailabilityClient({ professor, terms }: Props)
 
         {/* Submit Bar */}
         <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+          {loadingAvail && <span className="text-[11px] text-slate-400 font-bold">در حال بارگذاری ماتریس از سرور…</span>}
           <div className="flex items-center gap-3 text-xs text-slate-600 font-bold">
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-600"></span> اولویت اصلی</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-200 border border-amber-400"></span> قابل حضور</span>
@@ -304,9 +337,10 @@ export default function ProfessorAvailabilityClient({ professor, terms }: Props)
 
           <button
             onClick={handleSubmit}
-            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-700 to-emerald-800 hover:from-emerald-800 hover:to-emerald-900 text-white font-extrabold text-xs shadow-lg flex items-center gap-2 transition"
+            disabled={saving || loadingAvail || !selectedTermId}
+            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-700 to-emerald-800 hover:from-emerald-800 hover:to-emerald-900 text-white font-extrabold text-xs shadow-lg flex items-center gap-2 transition disabled:opacity-50"
           >
-            <span>🚀 ارسال قطعی فرم ساعات حضور به مدیر گروه آموزشی</span>
+            <span>{saving ? 'در حال ذخیره…' : '🚀 ثبت ماتریس ساعات حضور (پایگاه داده)'}</span>
           </button>
         </div>
       </div>

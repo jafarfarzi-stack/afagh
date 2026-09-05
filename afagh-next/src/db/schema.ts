@@ -406,7 +406,9 @@ export const professor_availabilities = pgTable('professor_availabilities', {
   termId: integer('termId').references(() => academic_terms.id),
   dayOfWeek: integer('dayOfWeek'),
   startTime: time('startTime'),
-  endTime: time('endTime')
+  endTime: time('endTime'),
+  /** وضعیت پنل استاد: PREF (اولویت) / AVAIL (قابل حضور) — UNAVAIL یعنی ردیف ذخیره نمی‌شود */
+  status: varchar('status', { length: 10 }).default('AVAIL')
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -926,8 +928,32 @@ export const electronic_documents = pgTable('electronic_documents', {
   documentSnapshot: text('documentSnapshot').notNull(),
   documentHash: varchar('documentHash', { length: 255 }).notNull(),
   signatureStatus: varchar('signatureStatus', { length: 20 }).default('PENDING'),
+  signedAt: timestamp('signedAt'),
   createdAt: timestamp('createdAt').defaultNow()
 });
+
+/** کد یکبارمصرف امضای دیجیتال اسناد (قرارداد، تأیید نمرات و…) — فقط هش ذخیره می‌شود */
+export const signature_otps = pgTable('signature_otps', {
+  id: serial('id').primaryKey(),
+  staffId: integer('staffId').notNull().references(() => staff.id),
+  purpose: varchar('purpose', { length: 50 }).notNull(), // CONTRACT_SIGN, GRADE_FINALIZE, …
+  refId: integer('refId').notNull(), // شناسهٔ سند/درس هدف
+  otpHash: varchar('otpHash', { length: 64 }).notNull(), // SHA-256 کد
+  expiresAt: timestamp('expiresAt').notNull(),
+  isUsed: integer('isUsed').default(0),
+  attempts: integer('attempts').default(0),
+  lockedAt: timestamp('lockedAt'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+/** یادداشت استاد برای مدیر گروه در هر ترم (درخواست‌های تکمیلی زمان‌بندی) */
+export const professor_availability_notes = pgTable('professor_availability_notes', {
+  id: serial('id').primaryKey(),
+  staffId: integer('staffId').notNull().references(() => staff.id),
+  termId: integer('termId').notNull().references(() => academic_terms.id),
+  note: text('note').notNull(),
+  updatedAt: timestamp('updatedAt').defaultNow()
+}, (t) => ({ uq: unique('uq_prof_avail_note').on(t.staffId, t.termId) }));
 
 export const document_signatures = pgTable('document_signatures', {
   id: serial('id').primaryKey(),

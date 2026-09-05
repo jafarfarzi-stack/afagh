@@ -1,11 +1,14 @@
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { academic_terms } from '@/db/schema';
+import { electronic_documents, users } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
-import ProfessorContractClient, { ContractDetails } from './ProfessorContractClient';
+import { currentTerm } from '@/lib/payroll-engine';
+import { ensureContractDocument } from '@/lib/contract-engine';
+import ProfessorContractClient, { type ContractView } from './ProfessorContractClient';
 
 export const dynamic = 'force-dynamic';
 
+/** قرارداد تدریس — همهٔ ارقام از درس‌های واقعی استاد و تنظیمات سامانه محاسبه می‌شود */
 export default async function ProfessorContractPage() {
   const user = await requireRole(['PROFESSOR']);
   const me = await getStaffByUser(user.id);
@@ -18,78 +21,35 @@ export default async function ProfessorContractPage() {
     );
   }
 
-  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
-  const termTitle = term?.title || 'نیمسال اول ۱۴۰۵–۱۴۰۶ (مهر ۱۴۰۵)';
+  const term = await currentTerm();
+  if (!term) {
+    return (
+      <div className="card text-center p-8">
+        <p className="text-slate-600 font-bold">ترم جاری تعیین نشده است — با کارشناس آموزش هماهنگ کنید.</p>
+      </div>
+    );
+  }
 
-  const initialContract: ContractDetails = {
-    contractNo: 'CON-1405-CE-082',
-    contractDate: '۱۴۰۵/۰۶/۲۰',
-    termTitle: termTitle,
-    professorName: user.name || 'دکتر جمیل احمدی',
-    nationalCode: '0011111111',
-    staffCode: me.staffCode,
-    academicRank: me.academicRank || 'استادیار',
-    degree: me.degree || 'دکتری تخصصی مهندسی کامپیوتر',
-    shebaNumber: 'IR58 0120 0000 0000 1234 5678 90',
-    bankName: 'بانک تجارت — شعبه دانشگاه',
-    courses: [
-      {
-        code: 'CE-302',
-        title: 'سیستم‌های عامل (گروه ۱)',
-        groupNumber: 1,
-        theoryUnits: 3,
-        practicalUnits: 0,
-        weeklyHours: 3,
-        termTotalHours: 48,
-      },
-      {
-        code: 'CE-302',
-        title: 'سیستم‌های عامل (گروه ۲)',
-        groupNumber: 2,
-        theoryUnits: 3,
-        practicalUnits: 0,
-        weeklyHours: 3,
-        termTotalHours: 48,
-      },
-      {
-        code: 'CE-204',
-        title: 'ساختمان داده‌ها و الگوریتم‌ها',
-        groupNumber: 1,
-        theoryUnits: 3,
-        practicalUnits: 0,
-        weeklyHours: 3,
-        termTotalHours: 48,
-      },
-      {
-        code: 'CE-208',
-        title: 'آزمایشگاه سیستم‌های عامل و شبکه (مشترک)',
-        groupNumber: 1,
-        theoryUnits: 0,
-        practicalUnits: 1,
-        weeklyHours: 2,
-        termTotalHours: 32,
-      },
-      {
-        code: 'CE-410',
-        title: 'مهندسی اینترنت و وب پیشرفته',
-        groupNumber: 1,
-        theoryUnits: 3,
-        practicalUnits: 0,
-        weeklyHours: 3,
-        termTotalHours: 48,
-      },
-    ],
-    hourlyRate: 850000,       // ۸۵۰٬۰۰۰ ریال به ازای هر ساعت
-    totalTermHours: 224,      // ۲۲۴ ساعت تدریس در ترم
-    grossAmount: 190400000,   // ۱۹۰٬۴۰۰٬۰۰۰ ریال
-    taxRatePercent: 10,
-    taxDeduction: 19040000,   // ۱۹٬۰۴۰٬۰۰۰ ریال (۱۰٪ مالیات)
-    insuranceDeduction: 13328000, // ۱۳٬۳۲۸٬۰۰۰ ریال بیمه
-    netAmount: 158032000,     // ۱۵۸٬۰۳۲٬۰۰۰ ریال خالص دریافتی
-    midtermPayment: 79016000, // ۵۰٪ پیش‌پرداخت میان‌ترم
-    finalPayment: 79016000,   // ۵۰٪ تسویه نهایی
-    signatureStatus: 'PENDING',
+  const [identity] = await db.select({ nationalCode: users.nationalCode }).from(users).where(eq(users.id, user.id)).limit(1);
+  const res = await ensureContractDocument(me.id, term.id, { name: user.name, nationalCode: identity?.nationalCode ?? '' });
+  if (!res.ok) {
+    return (
+      <div className="card text-center p-8">
+        <p className="text-rose-700 font-bold">{res.error}</p>
+      </div>
+    );
+  }
+
+  const [doc] = await db
+    .select({ hash: electronic_documents.documentHash, signedAt: electronic_documents.signedAt })
+    .from(electronic_documents).where(eq(electronic_documents.id, res.documentId)).limit(1);
+
+  const contract: ContractView = {
+    ...res.contract,
+    signatureStatus: res.signed ? 'SIGNED' : 'PENDING',
+    signedAt: doc?.signedAt ? doc.signedAt.toLocaleString('fa-IR') : null,
+    digitalHash: doc?.hash ?? null,
   };
 
-  return <ProfessorContractClient initialContract={initialContract} />;
+  return <ProfessorContractClient initialContract={contract} />;
 }

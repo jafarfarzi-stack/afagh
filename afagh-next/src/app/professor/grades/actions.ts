@@ -12,16 +12,19 @@
  */
 'use server';
 
-import { and, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { randomInt, createHash } from 'node:crypto';
 import { db } from '@/db';
 import {
   course_offerings,
   enrollments,
   grade_appeals,
   grade_submission_otps,
+  users,
 } from '@/db/schema';
 import { getStaffByUser, isDemoMode, requireRole } from '@/lib/auth';
+import { sendSms } from '@/lib/messaging';
 import { ensureGradePersistence, resolveStudentRow } from '@/lib/demo-grades-seed';
 import type { StudentGradeField } from './types';
 import { SCORE_FIELDS } from './grades-core';
@@ -196,19 +199,24 @@ export async function submitTemporaryAction(
 // قفل قطعی نمرات با OTP (تماس با grade_submission_otps)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** درخواست صدور کد OTP (تولید و ذخیرهٔ هش + انقضا) */
+/** درخواست صدور کد OTP — کد واقعی تصادفی؛ فقط هش SHA-256 ذخیره می‌شود + پیامک واقعی */
 export async function requestFinalizeOtpAction(
   _prev: SaveGradeState,
   payload: { offeringId: number }
-): Promise<SaveGradeState & { sent?: boolean }> {
+): Promise<SaveGradeState & { sent?: boolean; demoOtp?: string }> {
   try {
     const user = await requireRole(['PROFESSOR']);
     const me = await getStaffByUser(user.id);
     if (!me) return invalid('پروندهٔ هیئت علمی یافت نشد.');
 
-    // در حالت دمو کد ثابت ۵۸۲۱۹ شبیه‌سازی می‌شود؛ در production از سرویس پیامک
-    const demoOtp = '58219';
-    const hash = demoOtp; // هش سادهٔ شبیه‌سازی — production: sha256 + salt
+    // 🔒 مالکیت: فقط استادِ خودِ ارائه می‌تواند کد بگیرد
+    const [off] = await db.select({ professorId: course_offerings.professorId })
+      .from(course_offerings).where(eq(course_offerings.id, payload.offeringId)).limit(1);
+    if (!off) return invalid('ارائهٔ درس یافت نشد.');
+    if (off.professorId !== me.id) return invalid('شما استاد مسئول این درس نیستید.');
+
+    const code = String(randomInt(10000, 100000));
+    const hash = createHash('sha256').update(code).digest('hex');
     await db
       .insert(grade_submission_otps)
       .values({
@@ -218,30 +226,71 @@ export async function requestFinalizeOtpAction(
         expiresAt: new Date(Date.now() + 5 * 60 * 1000),
       })
       .onConflictDoNothing();
-    return { ok: true, sent: true };
+
+    // پیامک واقعی از طریق سرویس‌دهندهٔ پیکربندی‌شده (Kavenegar/SMS.ir/…)
+    const [u] = await db.select({ mobile: users.mobile }).from(users).where(eq(users.id, user.id)).limit(1);
+    if (u?.mobile) await sendSms(u.mobile, `کد تأیید قفل نهایی نمرات (آفاق): ${code} — تا ۵ دقیقه معتبر است.`);
+
+    // در دمو کد در پاسخ برمی‌گردد تا بدون پیامک هم تست شود
+    return { ok: true, sent: true, demoOtp: isDemoMode() ? code : undefined };
   } catch (err) {
     return fail(err);
   }
 }
 
+/** قفل نهایی نمرات — تأیید OTP از جدول (هش) + مالکیت درس + هش زنجیره‌ای واقعی نمرات */
 export async function finalizeSignedAction(
   _prev: SaveGradeState,
   payload: { offeringId: number; otp: string; code: string; groupNo: number }
 ): Promise<SaveGradeState> {
   try {
-    await requireRole(['PROFESSOR']);
+    const user = await requireRole(['PROFESSOR']);
+    const me = await getStaffByUser(user.id);
+    if (!me) return invalid('پروندهٔ هیئت علمی یافت نشد.');
 
-    // 🔒 کد عبور پشتیبان دمو (۱۲۳۴۵/۱۲۳۴۵۶) فقط در حالت دمو پذیرفته می‌شود
-    const demoBypass = isDemoMode() && (payload.otp === '12345' || payload.otp === '123456');
-    if (payload.otp !== '58219' && !demoBypass) {
-      return invalid('کد تایید اشتباه است. لطفاً کد پنج‌رقمی پیامک‌شده را وارد کنید.');
+    // 🔒 مالکیت درس
+    const [off] = await db.select({ professorId: course_offerings.professorId })
+      .from(course_offerings).where(eq(course_offerings.id, payload.offeringId)).limit(1);
+    if (!off) return invalid('ارائهٔ درس یافت نشد.');
+    if (off.professorId !== me.id) return invalid('شما استاد مسئول این درس نیستید.');
+
+    // 🔒 بررسی OTP: هش کد ورودی باید با ردیف فعالِ استفاده‌نشده و غیرمنقضی یکی باشد
+    const [row] = await db.select().from(grade_submission_otps)
+      .where(and(
+        eq(grade_submission_otps.staffId, me.id),
+        eq(grade_submission_otps.offeringId, payload.offeringId),
+        eq(grade_submission_otps.isUsed, 0),
+      ))
+      .orderBy(desc(grade_submission_otps.id)).limit(1);
+    if (!row) return invalid('کد تأییدی فعالی وجود ندارد؛ دوباره درخواست کد بدهید.');
+    if (new Date(row.expiresAt).getTime() < Date.now()) return invalid('کد تأیید منقضی شده است؛ کد جدید بگیرید.');
+    if (row.lockedAt) return invalid('به دلیل تلاش‌های ناموفق، درخواست امضا قفل شده است.');
+
+    const inputHash = createHash('sha256').update(payload.otp.trim()).digest('hex');
+    if (inputHash !== row.otpHash) {
+      const attempts = (row.attempts ?? 0) + 1;
+      await db.update(grade_submission_otps).set({ attempts, lockedAt: attempts >= 5 ? new Date() : null }).where(eq(grade_submission_otps.id, row.id));
+      return invalid(`کد تأیید نادرست است. (تلاش ${attempts} از ۵)`);
     }
+    await db.update(grade_submission_otps).set({ isUsed: 1 }).where(eq(grade_submission_otps.id, row.id));
 
-    // ثبت هش ممیزی نمرات (ضد دستکاری — زنجیرهٔ هش)
+    // 🔒 هش زنجیره‌ای واقعی: از خودِ نمرات ذخیره‌شده (ضد دستکاری)
+    const grades = await db
+      .select({ studentId: enrollments.studentId, gradeValue: enrollments.gradeValue, gradeStatus: enrollments.gradeStatus })
+      .from(enrollments)
+      .where(eq(enrollments.offeringId, payload.offeringId))
+      .orderBy(enrollments.studentId);
     const now = new Date();
+    const chainInput = JSON.stringify({
+      offeringId: payload.offeringId,
+      finalizedAt: now.toISOString(),
+      grades: grades.map(g => [g.studentId, g.gradeValue, g.gradeStatus]),
+    });
+    const gradesHash = 'SHA256:' + createHash('sha256').update(chainInput).digest('hex');
+
     await db
       .update(course_offerings)
-      .set({ gradesFinalizedAt: now, gradesHash: 'AF-FIN-' + now.getTime().toString(16) })
+      .set({ gradesFinalizedAt: now, gradesHash })
       .where(eq(course_offerings.id, payload.offeringId));
     await db
       .update(enrollments)

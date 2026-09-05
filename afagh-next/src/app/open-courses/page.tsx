@@ -1,109 +1,42 @@
-import OpenCoursesClient, { PublicShortCourse } from './OpenCoursesClient';
+import { desc, eq } from 'drizzle-orm';
+import { db } from '@/db';
+import { short_term_courses } from '@/db/schema';
+import OpenCoursesClient, { type PublicShortCourse } from './OpenCoursesClient';
 
 export const dynamic = 'force-dynamic';
 
+/** کاتالوگ زندهٔ دوره‌های آزاد — فقط از پایگاه داده (بدون هیچ دادهٔ ثابت) */
 export default async function OpenCoursesPage() {
-  const initialCourses: PublicShortCourse[] = [
-    {
-      id: 1,
-      code: 'BOOT-AI-101',
-      title: 'بوت‌کمپ جامع برنامه‌نویسی پایتون و هوش مصنوعی کاربردی',
-      titleEn: 'Comprehensive Python & Applied AI Bootcamp',
-      category: 'مهندسی و هوش مصنوعی',
-      description: 'آموزش از صفر تا صد برنامه‌نویسی پایتون، یادگیری ماشین (Machine Learning)، بینایی ماشین، پردازش تصویر و ساخت وب‌سرویس‌های هوشمند با FastAPI.',
-      hours: 60,
-      tuitionPrice: 3800000,
-      capacity: 35,
-      enrolledCount: 28,
-      instructorName: 'دکتر محمدرضا جلالی',
-      instructorBio: 'دکترای هوش مصنوعی، عضو هیئت علمی و پژوهشگر ارشد پردازش داده‌های کلان.',
-      syllabus: [
-        'مبانی و سینتکس پیشرفته پایتون و ساختارهای داده',
-        'کتابخانه‌های تحلیل داده: NumPy, Pandas, Matplotlib, Seaborn',
-        'مبانی یادگیری ماشین با Scikit-Learn (رگرسیون، کلاسبندی، خوشه‌بندی)',
-        'پردازش تصویر و بینایی ماشین با OpenCV',
-        'دیپلوی مدل‌های هوش مصنوعی با FastAPI و Docker',
-      ],
-      scheduleText: 'پنج‌شنبه‌ها و جمعه‌ها ساعت ۹ الی ۱۳',
-      startDate: '۱۴۰۵/۰۸/۱۵',
-      endDate: '۱۴۰۵/۱۰/۲۰',
-      passingGrade: 14,
-    },
-    {
-      id: 2,
-      code: 'BOOT-WEB-202',
-      title: 'بوت‌کمپ فول‌استک وب (Next.js 14, React, TypeScript & PostgreSQL)',
-      titleEn: 'Full-Stack Web Development Bootcamp',
-      category: 'برنامه‌نویسی و وب',
-      description: 'طراحی سامانه‌های سازمانی و وب‌اپلیکیشن‌های پیشرفته با Next.js App Router، سرور اکشن‌ها، Drizzle ORM و پایگاه داده PostgreSQL.',
-      hours: 80,
-      tuitionPrice: 4500000,
-      capacity: 30,
-      enrolledCount: 22,
-      instructorName: 'مهندس سامان افشار',
-      instructorBio: 'معمار ارشد نرم‌افزار، لید دولوپر سیستم‌های پرترافیک و مدرس بین‌المللی فرانت‌اند.',
-      syllabus: [
-        'تسلط بر مدرن تایپ‌اسکریپت و الگوهای پیشرفته جاوااسکریپت',
-        'معماری React 18+ و Next.js 14 App Router',
-        'طراحی دیتابیس رابطه‌ای با PostgreSQL و Drizzle ORM',
-        'مدیریت کش، صف‌های Redis و بهینه‌سازی عملکرد (SSR/ISR)',
-        'استقرار ابری با Docker و مانیتورینگ سیستم',
-      ],
-      scheduleText: 'شنبه‌ها و سه‌شنبه‌ها ساعت ۱۷ الی ۲۰',
-      startDate: '۱۴۰۵/۰۸/۲۰',
-      endDate: '۱۴۰۵/۱۱/۱۰',
-      passingGrade: 13,
-    },
-    {
-      id: 3,
-      code: 'BOOT-BIM-303',
-      title: 'دوره مدلسازی اطلاعات ساختمان (BIM) و نرم‌افزار Revit پیشرفته',
-      titleEn: 'Building Information Modeling (BIM) & Advanced Revit',
-      category: 'معماری و عمران',
-      description: 'طراحی جامع معماری، سازه و تاسیسات به روش BIM با استانداردهای نظام مهندسی کشور جهت ورود مستقیم به دفاتر مهندسی.',
-      hours: 50,
-      tuitionPrice: 3200000,
-      capacity: 25,
-      enrolledCount: 19,
-      instructorName: 'دکتر هومن صدر',
-      instructorBio: 'مشاور پروژه‌های کلان ساختمانی، مدرس رسمی نرم‌افزارهای تخصصی معماری و شهرسازی.',
-      syllabus: [
-        'اصول و مفاهیم BIM در مدیریت ساخت‌وساز مدرن',
-        'مدلسازی سه‌بعدی و فامیلی‌سازی در Autodesk Revit Architecture',
-        'تهیه نقشه‌های فاز دو اجرایی و هماهنگی سازه/تاسیسات',
-        'متره و برآورد هوشمند مصالح از مدل سه‌بعدی',
-        'رندرینگ حرفه‌ای و آماده‌سازی پورتفولیوی کاری',
-      ],
-      scheduleText: 'چهارشنبه‌ها ساعت ۱۴ الی ۱۹',
-      startDate: '۱۴۰۵/۰۹/۰۱',
-      endDate: '۱۴۰۵/۱۱/۱۵',
-      passingGrade: 12,
-    },
-    {
-      id: 4,
-      code: 'BOOT-ACC-404',
-      title: 'کارگاه جامع حسابداری مالیاتی، سامانه مودیان و نرم‌افزار سپیدار',
-      titleEn: 'Comprehensive Tax Accounting & Sepidar Workshop',
-      category: 'مدیریت و مالی',
-      description: 'آموزش کاربردی قوانین مالیات‌های مستقیم، ارزش افزوده، نحوه ارسال صورتحساب به سامانه مودیان و کار با نرم‌افزارهای حسابداری شرکتی.',
-      hours: 45,
-      tuitionPrice: 2900000,
-      capacity: 40,
-      enrolledCount: 38,
-      instructorName: 'استاد علیرضا قنبری',
-      instructorBio: 'حسابدار رسمی، مشاور ارشد مالیاتی شرکت‌های بازرگانی و تولیدی.',
-      syllabus: [
-        'قوانین مالیات بر درآمد، حقوق، عملکرد و ارزش افزوده',
-        'ارسال اظهارنامه و تکالیف سامانه مودیان و کارپوشه',
-        'راه‌اندازی کدینگ، ثبت اسناد و انبار در نرم‌افزار سپیدار',
-        'تهیه صورت‌های مالی اساسی و گزارشات مدیریتی',
-      ],
-      scheduleText: 'دوشنبه‌ها و پنج‌شنبه‌ها ساعت ۱۶ الی ۱۹:۳۰',
-      startDate: '۱۴۰۵/۰۸/۱۰',
-      endDate: '۱۴۰۵/۱۰/۱۵',
-      passingGrade: 12,
-    },
-  ];
+  const rows = await db.select().from(short_term_courses)
+    .where(eq(short_term_courses.status, 'OPEN'))
+    .orderBy(desc(short_term_courses.createdAt));
+
+  const initialCourses: PublicShortCourse[] = rows.map(c => ({
+    id: c.id,
+    code: c.code,
+    title: c.title,
+    titleEn: c.titleEn ?? '',
+    category: (c.category as PublicShortCourse['category']) || 'مهندسی و فناوری',
+    description: c.description ?? '',
+    hours: c.hours,
+    tuitionPrice: c.tuitionPrice,
+    capacity: c.capacity,
+    enrolledCount: c.enrolledCount ?? 0,
+    instructorName: c.instructorName,
+    instructorBio: c.instructorBio ?? '',
+    syllabus: (() => {
+      try {
+        const parsed = JSON.parse(c.syllabusJson || '[]');
+        return Array.isArray(parsed) ? parsed.map(String) : [];
+      } catch {
+        return [];
+      }
+    })(),
+    scheduleText: c.scheduleText ?? '',
+    startDate: c.startDate ?? '',
+    endDate: c.endDate ?? '',
+    passingGrade: Number(c.passingGrade ?? 12),
+  }));
 
   return <OpenCoursesClient initialCourses={initialCourses} />;
 }

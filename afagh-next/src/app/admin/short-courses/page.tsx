@@ -1,6 +1,6 @@
 import { desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { short_term_certificates, short_term_courses, short_term_learners, short_term_registrations } from '@/db/schema';
+import { short_term_certificates, short_term_courses, short_term_discounts, short_term_learners, short_term_registrations } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import AdminShortCoursesClient, { AdminCourseItem } from './AdminShortCoursesClient';
 
@@ -18,6 +18,7 @@ export default async function AdminShortCoursesPage() {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
 
   const courses = await db.select().from(short_term_courses).orderBy(desc(short_term_courses.id));
+  const discounts = await db.select().from(short_term_discounts).orderBy(short_term_discounts.id);
 
   // یک کوئری برای همهٔ ثبت‌نام‌ها + شرکت‌کننده + گواهینامه (بدون N+1)
   const registrations = await db
@@ -87,5 +88,14 @@ export default async function AdminShortCoursesPage() {
     learners: byCourse.get(c.id) ?? [],
   }));
 
-  return <AdminShortCoursesClient initialCourses={initialCourses} />;
+  return (
+    <AdminShortCoursesClient
+      initialCourses={initialCourses}
+      initialDiscounts={discounts.map(d => ({
+        id: d.id, code: d.code, courseId: d.courseId, discountPercent: d.discountPercent,
+        maxDiscountAmount: d.maxDiscountAmount, maxUsage: d.maxUsage ?? 100,
+        usedCount: d.usedCount ?? 0, isActive: (d.isActive ?? 1) === 1,
+      }))}
+    />
+  );
 }

@@ -63,26 +63,21 @@ export default function ProfessorGradesClient({
   const isOfferingFullyFinalized = isOfferingFinalized(currentOffering);
   const coTaught = !!currentOffering?.isCoTaught && !!currentOffering?.coTaughtDetails;
 
-  // شبیه‌سازی ذخیرهٔ خودکار (فواصل منظم)
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const now = new Date();
-      dispatch({
-        type: 'SET_SAVE_TIME',
-        payload: now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      });
-    }, 15000);
-    return () => clearInterval(timer);
-  }, []);
+  // زمان «ذخیرهٔ خودکار» از پاسخ واقعی سرور (saveGradeAction) به‌روز می‌شود — نه تایمر محلی
 
   /** سازوکار «مشاهدهٔ اعتراض از جدول» — انتقال به تب اعتراضات */
   const openAppealFromRoster = (_appeal: GradeAppealItem) => {
     dispatch({ type: 'SET_TAB', payload: 'APPEALS' });
   };
 
-  /** درخواست کد OTP هنگام باز شدن مودال قفل */
-  const requestOtp = (offeringId: number) => {
-    void requestFinalizeOtpAction({ ok: true } as any, { offeringId });
+  /** درخواست کد OTP هنگام باز شدن مودال قفل — نتیجه (کد دمو) به مودال بازمی‌گردد */
+  const requestOtp = async (offeringId: number) => {
+    try {
+      const res = await requestFinalizeOtpAction({ ok: true } as any, { offeringId });
+      return { ok: res.ok, demoOtp: res.demoOtp, error: res.error };
+    } catch {
+      return { ok: false, error: 'خطا در درخواست کد تأیید.' };
+    }
   };
 
   if (!currentOffering) {

@@ -86,8 +86,8 @@ export default function AdmissionsClient({
 }: AdmissionsClientProps) {
   const [activeTab, setActiveTab] = useState<'SANJESH_STAGING' | 'ID_FORMULA' | 'MANUAL_ADMISSION' | 'IRANDOC_TEST'>('SANJESH_STAGING');
   
-  // Tab 1: Sanjesh Staging
-  const [rawText, setRawText] = useState<string>(SAMPLE_SANJESH_RAW);
+  // Tab 1: Sanjesh Staging — خالی شروع می‌شود (نمونه فقط به‌صورت «قالب» قابل مشاهده است)
+  const [rawText, setRawText] = useState<string>('');
   const [stagingList, setStagingList] = useState<StagingItem[]>(initialStaging);
   const [mappingsList, setMappingsList] = useState<SanjeshMappingItem[]>(initialMappings);
   const [isStaging, setIsStaging] = useState(false);
@@ -336,6 +336,10 @@ export default function AdmissionsClient({
               className="w-full p-3 font-mono text-xs rounded-xl border border-slate-300 bg-slate-50 focus:bg-white"
               placeholder="0011223344, علیرضا, پیروزمند, 11204, منطقه ۱, 09121111111, 1420"
             />
+            <details className="text-[11px] text-slate-500">
+              <summary className="cursor-pointer font-bold text-indigo-800">مشاهدهٔ قالب نمونهٔ فایل (ساختار ستون‌ها)</summary>
+              <pre className="mt-2 p-3 bg-slate-100 rounded-xl font-mono text-[10px] leading-5 overflow-x-auto whitespace-pre">{SAMPLE_SANJESH_RAW}</pre>
+            </details>
           </div>
 
           {/* جدول رکوردهای در صف Staging */}

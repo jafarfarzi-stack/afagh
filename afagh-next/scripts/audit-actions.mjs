@@ -26,6 +26,7 @@ const PUBLIC_FILES = [
   'id/actions.ts',                // استعلام عمومی کارت (rate-limited)
   'verify-certificate/actions.ts',// استعلام عمومی اصالت گواهینامه (rate-limited)
   'verify/[code]/page.tsx',       // صفحهٔ عمومی (rate-limited)
+  'open-courses/actions.ts',      // ثبت‌نام دوره‌های آزاد و استعلام کد تخفیف: عمداً برای عموم (بدون ورود) + rate-limit داخلی
 ];
 
 function collect(dir, out = []) {

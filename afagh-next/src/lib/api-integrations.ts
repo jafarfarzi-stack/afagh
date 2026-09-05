@@ -10,6 +10,8 @@ import {
   student_requests,
 } from '@/db/schema';
 import { getNumber, getSetting } from '@/lib/settings';
+import { isDemoMode } from '@/lib/auth';
+import { students, users } from '@/db/schema';
 
 export interface IntegrationServiceDef {
   serviceName: string;
@@ -108,6 +110,12 @@ export interface IrandocCheckResult {
   durationMs: number;
 }
 
+/**
+ * استعلام واقعی همانندجویی ایرانداک:
+ *   • اگر IRANDOC_BASE_URL پیکربندی شده باشد → درخواست HTTP واقعی (POST /similarity-check)
+ *   • در غیر این صورت فقط در حالت دمو محاسبهٔ قطعی محلی (با برچسب صریح «دمو»)
+ *   • در production بدون پیکربندی → FAILED (هرگز جواب ساختگی)
+ */
 export async function executeIrandocCheck(params: {
   nationalCode: string;
   trackingCode: string;
@@ -119,37 +127,8 @@ export async function executeIrandocCheck(params: {
   const threshold = params.maxAllowedThreshold ?? 20.0;
   const irandocBase = (await getSetting('IRANDOC_BASE_URL')).replace(/\/+$/, '');
 
-  // محاسبه درصد مشابهت بر اساس هش سند یا سناریوی داده
-  let similarity = 14.2;
-  const hashVal = params.docHash || params.trackingCode;
-  if (hashVal.includes('FAIL') || hashVal.includes('PLAGIARISM') || params.thesisTitle.includes('تکراری')) {
-    similarity = 28.5;
-  } else {
-    // تولید عدد پایدار بین ۸.۰ تا ۱۸.۵ درصد
-    const charCodeSum = hashVal.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-    similarity = Number((8.0 + (charCodeSum % 105) / 10).toFixed(1));
-  }
-
-  const durationMs = Math.floor(180 + Math.random() * 220);
-  const isApproved = similarity <= threshold;
-
-  const result: IrandocCheckResult = {
-    status: isApproved ? 'COMPLETED' : 'REJECTED',
-    similarityPercentage: similarity,
-    maxAllowedThreshold: threshold,
-    certificateUrl: irandocBase ? `${irandocBase}/cert/verify-${params.trackingCode}.pdf` : '',
-    trackingCode: params.trackingCode,
-    thesisTitle: params.thesisTitle,
-    decision: isApproved ? 'AUTO_APPROVE' : 'REJECT_EXCEED_LIMIT',
-    message: isApproved
-      ? `همانندجویی با موفقیت انجام شد: میزان مشابهت ${similarity}٪ در محدوده مجاز (زیر ${threshold}٪) است.`
-      : `درصد مشابهت متن پایان‌نامه (${similarity}٪) از سقف مجاز مصوب تحصیلات تکمیلی (${threshold}٪) بیشتر است. نیاز به اصلاح متن توسط دانشجو.`,
-    durationMs,
-  };
-
-  // ثبت لاگ در جدول ممیزی API
-  try {
-    await db.insert(api_audit_logs).values({
+  const audit = (status: number, body: unknown, ok: boolean) =>
+    db.insert(api_audit_logs).values({
       serviceName: 'IRANDOC_SIMILARITY',
       requestUrl: (irandocBase || 'LOCAL') + '/similarity-check',
       requestPayload: JSON.stringify({
@@ -157,21 +136,113 @@ export async function executeIrandocCheck(params: {
         tracking_code: params.trackingCode,
         thesis_title: params.thesisTitle,
       }),
-      responseStatus: 200,
-      responseBody: JSON.stringify(result),
-      durationMs,
-      isSuccess: isApproved ? 1 : 0,
-    });
-  } catch (err) {
-    console.error('Failed to write API audit log:', err);
+      responseStatus: status,
+      responseBody: JSON.stringify(body),
+      durationMs: Date.now() - startTime,
+      isSuccess: ok ? 1 : 0,
+    }).catch(err => console.error('API audit log failed:', err));
+
+  // ── مسیر ۱: اتصال واقعی به سرویس ──
+  if (irandocBase) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 10000);
+      const r = await fetch(`${irandocBase}/similarity-check`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          national_id: params.nationalCode,
+          tracking_code: params.trackingCode,
+          thesis_title: params.thesisTitle,
+          doc_hash: params.docHash ?? null,
+          max_allowed_threshold: threshold,
+        }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      const text = await r.text();
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${text.slice(0, 200)}`);
+      const data = JSON.parse(text) as Record<string, unknown>;
+      const similarity = Number(data.similarity ?? data.similarity_percent ?? data.similarityPercentage);
+      const decision = String(data.decision ?? '');
+      if (Number.isNaN(similarity)) throw new Error('پاسخ سرویس فاقد درصد مشابهت است.');
+      const isApproved = similarity <= threshold;
+      const result: IrandocCheckResult = {
+        status: isApproved ? 'COMPLETED' : 'REJECTED',
+        similarityPercentage: similarity,
+        maxAllowedThreshold: threshold,
+        certificateUrl: `${irandocBase}/cert/verify-${params.trackingCode}.pdf`,
+        trackingCode: params.trackingCode,
+        thesisTitle: params.thesisTitle,
+        decision: decision === 'AUTO_APPROVE' ? 'AUTO_APPROVE' : isApproved ? 'AUTO_APPROVE' : 'REJECT_EXCEED_LIMIT',
+        message: String(data.message ?? (isApproved
+          ? `همانندجویی انجام شد: مشابهت ${similarity}٪ در محدودهٔ مجاز (زیر ${threshold}٪).`
+          : `درصد مشابهت (${similarity}٪) از سقف مجاز (${threshold}٪) بیشتر است — نیاز به اصلاح متن.`)),
+        durationMs: Date.now() - startTime,
+      };
+      await audit(200, result, true);
+      return result;
+    } catch (err) {
+      const result: IrandocCheckResult = {
+        status: 'FAILED',
+        similarityPercentage: 0,
+        maxAllowedThreshold: threshold,
+        certificateUrl: '',
+        trackingCode: params.trackingCode,
+        thesisTitle: params.thesisTitle,
+        decision: 'MANUAL_REVIEW',
+        message: `اتصال به سرویس همانندجویی ناموفق بود: ${(err as Error).message} — بررسی دستی توسط کارشناس.`,
+        durationMs: Date.now() - startTime,
+      };
+      await audit(502, result, false);
+      return result;
+    }
   }
 
+  // ── مسیر ۲: فقط دمو — محاسبهٔ قطعی محلی با برچسب صریح ──
+  if (isDemoMode()) {
+    let similarity = 14.2;
+    const hashVal = params.docHash || params.trackingCode;
+    if (hashVal.includes('FAIL') || hashVal.includes('PLAGIARISM') || params.thesisTitle.includes('تکراری')) {
+      similarity = 28.5;
+    } else {
+      const charCodeSum = hashVal.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+      similarity = Number((8.0 + (charCodeSum % 105) / 10).toFixed(1));
+    }
+    const durationMs = Math.floor(180 + Math.random() * 220);
+    const isApproved = similarity <= threshold;
+    const result: IrandocCheckResult = {
+      status: isApproved ? 'COMPLETED' : 'REJECTED',
+      similarityPercentage: similarity,
+      maxAllowedThreshold: threshold,
+      certificateUrl: '',
+      trackingCode: params.trackingCode,
+      thesisTitle: params.thesisTitle,
+      decision: isApproved ? 'AUTO_APPROVE' : 'REJECT_EXCEED_LIMIT',
+      message: isApproved
+        ? `[دمو — بدون اتصال به سرویس] مشابهت محاسبه‌شده ${similarity}٪ (زیر ${threshold}٪).`
+        : `[دمو — بدون اتصال به سرویس] مشابهت محاسبه‌شده ${similarity}٪ — بالای سقف ${threshold}٪.`,
+      durationMs,
+    };
+    await audit(200, result, isApproved);
+    return result;
+  }
+
+  // ── مسیر ۳: production بدون پیکربندی → صادقانه FAILED ──
+  const result: IrandocCheckResult = {
+    status: 'FAILED',
+    similarityPercentage: 0,
+    maxAllowedThreshold: threshold,
+    certificateUrl: '',
+    trackingCode: params.trackingCode,
+    thesisTitle: params.thesisTitle,
+    decision: 'MANUAL_REVIEW',
+    message: 'سرویس همانندجویی ایرانداک پیکربندی نشده است (IRANDOC_BASE_URL).',
+    durationMs: Date.now() - startTime,
+  };
+  await audit(503, result, false);
   return result;
 }
-
-// ============================================================================
-// فراخوانی وظیفه سیستمی در جریان کار (Service Task Execution)
-// ============================================================================
 
 export async function executeStepServiceTask(params: {
   stepId: number;
@@ -198,8 +269,16 @@ export async function executeStepServiceTask(params: {
 
   // بررسی سناریوی استعلام همانندجویی پایان‌نامه
   if (params.formData?.thesisTitleFa || params.formData?.irandocTracking) {
+    // کد ملی واقعی متقاضی (نه مقدار ثابت)
+    const [applicant] = await db
+      .select({ nationalCode: users.nationalCode })
+      .from(student_requests)
+      .innerJoin(students, eq(students.id, student_requests.studentId))
+      .innerJoin(users, eq(users.id, students.userId))
+      .where(eq(student_requests.id, params.requestId))
+      .limit(1);
     const irandocRes = await executeIrandocCheck({
-      nationalCode: '1010101010',
+      nationalCode: applicant?.nationalCode ?? 'UNKNOWN',
       trackingCode: params.formData.irandocTracking || req.trackingCode,
       thesisTitle: params.formData.thesisTitleFa || 'پایان‌نامه کارشناسی ارشد',
       docHash: req.digitalStampHash || undefined,
