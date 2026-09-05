@@ -12,16 +12,17 @@
 // هیچ UI جدیدی ساخته نشده؛ فقط دادهٔ واقعی جایگزین Mock می‌شود.
 // ════════════════════════════════════════════════════════════════════════
 
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import {
   academic_terms, class_sessions, classrooms, course_offerings, courses, departments,
   degree_level_configs, faculties, majors, offering_professors, schedules,
-  scheduling_room_grants, staff, students, term_scheduling_states, users,
+  professor_availabilities, scheduling_room_grants, staff, students, term_scheduling_states, users,
 } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
-import { getSchedulingState, transitionSchedulingPhase } from '@/lib/scheduling-engine';
+import { getSchedulingState, transitionSchedulingPhase, supplyGroupDrafts, allocateSections, allocateRoomQuotas, getSmartSuggestions } from '@/lib/scheduling-engine';
+import { runSchedulingHealthCheck, type HealthReport } from '@/lib/scheduling-health';
 import { generateClassSessionsForTerm, getTermSessionsSummary, inspectSchedulingHardConflicts } from '@/lib/class-session-generator';
 import { detectScheduleConflicts, jalaliDateOf, type RoomCapacityInfo, type ScheduleConflictInput } from '@/lib/scheduling-core';
 
@@ -47,6 +48,8 @@ async function listRealPrograms() {
       title: majors.name,
       facultyName: faculties.name,
       degreeLevel: degree_level_configs.title,
+      facultyId: majors.facultyId,
+      deptFacultyId: departments.facultyId,
     })
     .from(majors)
     .leftJoin(degree_level_configs, eq(degree_level_configs.id, majors.degreeLevelId))
@@ -99,6 +102,8 @@ async function listRealDemands(termId: number) {
   const rows = await db
     .select({
       offeringId: course_offerings.id,
+      courseId: courses.id,
+      courseDeptId: courses.departmentId,
       courseCode: courses.code,
       courseTitle: courses.title,
       units: courses.units,
@@ -130,6 +135,8 @@ async function listRealDemands(termId: number) {
     const hasSingleEntryYear = r.entryYearStart != null && r.entryYearStart === r.entryYearEnd;
     return {
       offeringId: r.offeringId,
+      courseId: r.courseId,
+      courseDeptId: r.courseDeptId,
       code: r.courseCode,
       title: r.courseTitle,
       units: String(r.units),
@@ -253,13 +260,16 @@ export type SchedulingWorkspaceResult =
       ok: true;
       terms: { id: number; code: string; title: string; isCurrent: boolean }[];
       selectedTermId: number | null;
-      programs: { id: number; code: string; title: string; facultyName: string; degreeLevel: string }[];
+      programs: { id: number; code: string; title: string; facultyName: string; degreeLevel: string; facultyId: number | null }[];
       cohorts: { entryYear: number; expectedStudents: number }[];
       classrooms: { id: number; name: string; buildingName: string; capacity: number; roomType: string }[];
       allocatedRoomIds: number[];
+      departments: { id: number; name: string }[];
+      availabilities: { staffId: number; dayOfWeek: number | null; startTime: string | null; endTime: string | null; status: string | null }[];
       professors: { id: number; name: string; staffCode: string | null; academicRank: string | null; departmentName: string | null }[];
       demands: {
-        offeringId: number; code: string; title: string; units: string; courseType: string;
+        offeringId: number; courseId: number; courseDeptId: number | null;
+        code: string; title: string; units: string; courseType: string;
         capacity: number; groupNumber: number; professorId: number | null; isCoTaught: boolean;
         enrolledCount: number; programId: number; programTitle: string;
         cohortId: string; cohortTitle: string;
@@ -286,11 +296,12 @@ export type SchedulingWorkspaceResult =
 export async function getSchedulingWorkspaceAction(termId?: number): Promise<SchedulingWorkspaceResult> {
   try {
     await requireRole(EDITORS);
-    const [terms, programs, classrooms, professors] = await Promise.all([
+    const [terms, programs, classrooms, professors, deptRows] = await Promise.all([
       listRealTerms(),
       listRealPrograms(),
       listRealClassrooms(),
       listRealProfessors(),
+      db.select({ id: departments.id, name: departments.name }).from(departments).orderBy(departments.name),
     ]);
     const resolvedTermId = termId ?? terms.find(t => t.isCurrent === 1)?.id ?? terms[0]?.id ?? null;
 
@@ -304,12 +315,20 @@ export async function getSchedulingWorkspaceAction(termId?: number): Promise<Sch
     let approvedOfferings: Awaited<ReturnType<typeof listApprovedOfferings>> = [];
     let makeupSessions: Awaited<ReturnType<typeof listMakeupSessions>> = [];
     let allocatedRoomIds: number[] = [];
+    let availRows: { staffId: number; dayOfWeek: number | null; startTime: unknown; endTime: unknown; status: string | null }[] = [];
 
     if (resolvedTermId != null) {
-      [demands, phases, cohorts] = await Promise.all([
+      [demands, phases, cohorts, availRows] = await Promise.all([
         listRealDemands(resolvedTermId),
         db.select({ termId: term_scheduling_states.termId, phase: term_scheduling_states.phase }).from(term_scheduling_states),
         listRealCohorts(),
+        db.select({
+          staffId: professor_availabilities.staffId,
+          dayOfWeek: professor_availabilities.dayOfWeek,
+          startTime: professor_availabilities.startTime,
+          endTime: professor_availabilities.endTime,
+          status: professor_availabilities.status,
+        }).from(professor_availabilities).where(or(eq(professor_availabilities.termId, resolvedTermId), sql`${professor_availabilities.termId} is null`)),
       ]);
       const [inspect, term] = await Promise.all([
         inspectSchedulingHardConflicts(resolvedTermId),
@@ -343,6 +362,7 @@ export async function getSchedulingWorkspaceAction(termId?: number): Promise<Sch
       programs: programs.map(p => ({
         id: p.id, code: p.code ?? String(p.id), title: p.title,
         facultyName: p.facultyName ?? '—', degreeLevel: p.degreeLevel ?? '—',
+        facultyId: (p as any).facultyId ?? (p as any).deptFacultyId ?? null,
       })),
       cohorts,
       classrooms: classrooms.map(c => ({
@@ -352,6 +372,13 @@ export async function getSchedulingWorkspaceAction(termId?: number): Promise<Sch
       professors: professors.map(p => ({
         id: p.id, name: `${p.name} ${p.lastName}`.trim(), staffCode: p.staffCode,
         academicRank: p.academicRank ?? '—', departmentName: p.departmentName ?? '—',
+      })),
+      departments: deptRows,
+      availabilities: availRows.map(a => ({
+        staffId: a.staffId, dayOfWeek: a.dayOfWeek,
+        startTime: a.startTime == null ? null : String(a.startTime).slice(0, 5),
+        endTime: a.endTime == null ? null : String(a.endTime).slice(0, 5),
+        status: a.status ?? 'AVAIL',
       })),
       demands,
       phases: Object.fromEntries(phases.map(p => [p.termId, p.phase])),
@@ -403,14 +430,23 @@ export async function generateClassSessionsAction(px: {
   }
 }
 
-/** گذار فاز برنامه‌ریزی (SUPPLY→ALLOCATION→REVIEW→PUBLISHED پله‌ای) */
-export async function transitionSchedulingPhaseAction(termId: number, to: 'ALLOCATION' | 'REVIEW' | 'PUBLISHED') {
+/** گذار فاز برنامه‌ریزی (SUPPLY→ALLOCATION→REVIEW→PUBLISHED پله‌ای) — گیت: انتشار فقط بدون تداخل سخت */
+export async function transitionSchedulingPhaseAction(termId: number, to: 'ALLOCATION' | 'REVIEW' | 'PUBLISHED'): Promise<{ ok: true; phase: 'ALLOCATION' | 'REVIEW' | 'PUBLISHED'; from: string } | { ok: false; error: string }> {
   try {
     const user = await requireRole(EDITORS);
+    if (to === 'PUBLISHED') {
+      const insp = await inspectSchedulingHardConflicts(termId);
+      if (insp.hardConflicts.length > 0) {
+        return {
+          ok: false,
+          error: `انتشار برنامه متوقف شد: ${insp.hardConflicts.length} قید سخت (تداخل استاد/سالن/ظرفیت) باقی است. نمونه: ${insp.hardConflicts[0]?.message ?? ''}`,
+        };
+      }
+    }
     const state = await getSchedulingState(termId);
     const result = await transitionSchedulingPhase(user.id, termId, to);
     revalidatePath('/admin/scheduling');
-    return { ...result, from: state.phase };
+    return { ok: true as const, phase: result.phase as 'ALLOCATION' | 'REVIEW' | 'PUBLISHED', from: state.phase };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? 'گذار فاز ناموفق بود.' };
   }
@@ -535,6 +571,86 @@ export async function checkScheduleConflictsAction(termId: number) {
   } catch (err: any) {
     console.error('checkScheduleConflictsAction:', err);
     return { ok: false, error: err.message || 'خطا در بررسی تداخل‌ها' };
+  }
+}
+
+// ─────────────────────────── اکشن‌ها — موتور واقعی (فاز ۱۲: تأمین/تخصیص/پیشنهاد/سلامت) ───────────────────────────
+
+/** نتیجهٔ پیشنهاد هوشمند موتور (اسلات‌های ممکن برای یک درس/استاد) */
+export type SmartSlot = {
+  dayOfWeek: number; startTime: string; endTime: string;
+  classroomId: number; classroomName: string; classroomCapacity: number;
+  score: number; reasons: string[];
+};
+
+/** تأمین گروه درسی: درج واقعی offering + schedule + offering_professors (موتور — تراکنشی + قفل + audit) */
+export async function supplyGroupDraftsAction(px: {
+  termId: number; courseId: number; ownerDepartmentId: number; isSharedService?: boolean;
+  drafts: { groupNumber: number; capacity: number; gender: 'MALE' | 'FEMALE' | 'MIXED';
+            professorId: number; classroomId: number; dayOfWeek: number; startTime: string; endTime: string }[];
+}): Promise<{ ok: true; created: number; offeringIds: number[] } | { ok: false; error: string }> {
+  try {
+    const user = await requireRole(EDITORS);
+    const res = await supplyGroupDrafts(user.id, {
+      termId: px.termId, courseId: px.courseId, ownerDepartmentId: px.ownerDepartmentId,
+      isSharedService: !!px.isSharedService, drafts: px.drafts,
+    });
+    revalidatePath('/admin/scheduling');
+    revalidatePath('/group-manager/offerings');
+    revalidatePath('/student/enroll');
+    return { ok: true, created: res.created, offeringIds: res.offeringIds };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'خطا در تأمین گروه درسی.' };
+  }
+}
+
+/** تخصیص کلاس‌های مشترک (استخر خدمات) به یک گروه — فقط فاز ALLOCATION/REVIEW */
+export async function allocateSectionsAction(px: { termId: number; departmentId: number; offeringIds: number[] }) {
+  try {
+    const user = await requireRole(EDITORS);
+    const res = await allocateSections(user.id, px);
+    revalidatePath('/admin/scheduling');
+    return res;
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'خطا در تخصیص کلاس‌های مشترک.' };
+  }
+}
+
+/** سهمیه‌بندی (سالن، شیفت) گروه‌ها بر اساس جمعیت دانشجویی — موتور واقعی */
+export async function allocateRoomQuotasAction(termId: number) {
+  try {
+    const user = await requireRole(EDITORS);
+    const res = await allocateRoomQuotas(user.id, termId);
+    revalidatePath('/admin/scheduling');
+    return res;
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'خطا در سهمیه‌بندی سالن‌ها.' };
+  }
+}
+
+/** پیشنهاد هوشمند موتور: اسلات‌های ممکن بر اساس درٔ دسترس بودنِ واقعی استاد + اشغال سالن‌ها + زونینگ */
+export async function getSmartSuggestionsAction(px: {
+  termId: number; professorId: number; capacity: number;
+  targetFacultyId: number | null; durationMinutes?: number;
+}): Promise<{ ok: true; suggestions: SmartSlot[] } | { ok: false; error: string }> {
+  try {
+    await requireRole(EDITORS);
+    const rows = await getSmartSuggestions(px);
+    return { ok: true, suggestions: rows };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'خطا در محاسبهٔ پیشنهادها.' };
+  }
+}
+
+/** عارضه‌یابی خودکار برنامه (عرضه در برابر تقاضا، تداخل‌های پنهان، بهره‌وری سالن‌ها، کلاس‌های یتیم) */
+export type SchedulingHealthReport = HealthReport;
+export async function getSchedulingHealthAction(termId: number): Promise<{ ok: true; health: HealthReport } | { ok: false; error: string }> {
+  try {
+    await requireRole(EDITORS);
+    const health = await runSchedulingHealthCheck(termId);
+    return { ok: true, health };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'خطا در عارضه‌یابی برنامه.' };
   }
 }
 
