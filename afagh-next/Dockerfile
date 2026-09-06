@@ -24,13 +24,37 @@ RUN npm ci --no-audit --no-fund --omit=optional
 # postgresql-client برای پشتیبان پیش از استقرار (backup-db.mjs) نصب می‌شود.
 FROM base AS migrator
 ENV NODE_ENV=production
-RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client \
- && rm -rf /var/lib/apt/lists/*
+# ⚠️ نسخهٔ pg_dump باید ≥ نسخهٔ سرور باشد.
+#    Debian bookworm فقط postgresql-client-15 دارد ولی سرویس postgres در
+#    docker-compose نسخهٔ ۱۶ است؛ pg_dump 15 با «server version mismatch»
+#    شکست می‌خورد و چون پشتیبان‌گیری نخستین گام migrator است، کل استقرار با
+#    exit 1 متوقف می‌شد (بدون آنکه هیچ‌کدام از پچ‌ها اجرا شود).
+#    پس کلاینت ۱۶ را از مخزن رسمی PGDG نصب می‌کنیم. اگر شبکه در دسترس نبود،
+#    به کلاینت توزیع برمی‌گردیم تا بیلد نشکند؛ backup-db خودش تشخیص می‌دهد.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates curl gnupg; \
+    ( install -d /usr/share/postgresql-common/pgdg \
+      && curl -fsSL --retry 3 --max-time 30 \
+           https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+           -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+      && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+           > /etc/apt/sources.list.d/pgdg.list \
+      && apt-get update \
+      && apt-get install -y --no-install-recommends postgresql-client-16 ) \
+    || apt-get install -y --no-install-recommends postgresql-client; \
+    rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # ترتیب: پشتیبان → push → پچ‌ها → دادهٔ پایه → سخت‌سازی (+اعتبارسنجی)
 # اگر هر مرحله شکست بخورد، exit-code غیرصفر → اپ (depends_on مخصوص) استارت نمی‌شود.
-CMD ["sh", "-c", "node scripts/backup-db.mjs && npx drizzle-kit push --force && node scripts/apply-patches.mjs && node scripts/seed-base.mjs && node scripts/hardening.mjs"]
+CMD ["sh", "-c", "set -e; \
+  echo '=== گام ۱/۵: پشتیبان پیش از استقرار ==='; node scripts/backup-db.mjs; \
+  echo '=== گام ۲/۵: همگام‌سازی اسکیما (drizzle push) ==='; npx drizzle-kit push --force; \
+  echo '=== گام ۳/۵: پچ‌های اسکیما ==='; node scripts/apply-patches.mjs; \
+  echo '=== گام ۴/۵: دادهٔ پایه ==='; node scripts/seed-base.mjs; \
+  echo '=== گام ۵/۵: سخت‌سازی و RLS ==='; node scripts/hardening.mjs; \
+  echo '=== ✅ migrator با موفقیت تمام شد ==='"]
 
 # ── بیلد ──
 # NEXT_PUBLIC_AFAGH_DEMO_LOCK=1 در build تزریق می‌شود: Next این متغیر را در

@@ -22,12 +22,29 @@ import path from 'node:path';
 const PG_URL = process.env.DATABASE_URL;
 const OUT_DIR = process.env.AFAGH_BACKUP_DIR || '/backups';
 
-function hasPgDump() {
+function pgDumpMajor() {
   try {
-    execFileSync('pg_dump', ['--version'], { stdio: 'ignore' });
-    return true;
+    // خروجی: «pg_dump (PostgreSQL) 16.4 (Debian ...)»
+    const out = execFileSync('pg_dump', ['--version'], { encoding: 'utf8' });
+    const m = out.match(/(\d+)\.\d+/) || out.match(/\)\s*(\d+)/);
+    return m ? Number(m[1]) : null;
   } catch {
-    return false;
+    return null;
+  }
+}
+
+/** نسخهٔ اصلی سرور — بدون وابستگی به pg_dump */
+async function serverMajor() {
+  try {
+    const { default: pg } = await import('pg');
+    const c = new pg.Client({ connectionString: PG_URL });
+    await c.connect();
+    const r = await c.query('SHOW server_version');
+    await c.end();
+    const v = String(r.rows[0].server_version);
+    return Number(v.split('.')[0]);
+  } catch {
+    return null;
   }
 }
 
@@ -36,9 +53,33 @@ if (!PG_URL) {
   process.exit(1);
 }
 
-if (!hasPgDump()) {
+// راه گریز آگاهانه — فقط وقتی خودتان تازه پشتیبان گرفته‌اید:
+//     AFAGH_SKIP_BACKUP=1 docker compose up -d
+if (process.env.AFAGH_SKIP_BACKUP === '1') {
+  console.warn('⚠ AFAGH_SKIP_BACKUP=1 — پشتیبان‌گیری عمداً رد شد. مسئولیت با شماست.');
+  process.exit(0);
+}
+
+const dumpV = pgDumpMajor();
+if (dumpV === null) {
   console.warn('⚠ pg_dump یافت نشد — پشتیبان‌گیری رد شد (در ایمیج migrator موجود است؛ فقط توسعه).');
   process.exit(0);
+}
+
+// ⚠️ pg_dump قدیمی‌تر از سرور، حاضر به کار نیست («server version mismatch»).
+//    این یک نقص ابزار است نه خطر داده؛ ولی چون پشتیبان‌گیری نخستین گام
+//    migrator است، بی‌آنکه معلوم شود کل استقرار را متوقف می‌کرد. حالا پیام
+//    دقیق می‌دهیم تا کاربر بداند چه چیزی را باید درست کند.
+const srvV = await serverMajor();
+if (srvV !== null && dumpV < srvV) {
+  console.error(
+    `❌ ناسازگاری نسخه: pg_dump نسخهٔ ${dumpV} است ولی سرور PostgreSQL نسخهٔ ${srvV}.\n` +
+    `   pg_dump قدیمی‌تر از سرور کار نمی‌کند.\n` +
+    `   راه‌حل: ایمیج migrator را دوباره بسازید تا postgresql-client-${srvV} نصب شود:\n` +
+    `       docker compose build --no-cache migrator && docker compose up -d\n` +
+    `   اگر سرورتان به apt.postgresql.org دسترسی ندارد و پشتیبان دستی گرفته‌اید:\n` +
+    `       AFAGH_SKIP_BACKUP=1 docker compose up -d`);
+  process.exit(1);
 }
 
 try {
