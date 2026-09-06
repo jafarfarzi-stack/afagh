@@ -1,5 +1,10 @@
-# زیرساخت کالبد آفاق — PostgreSQL + Redis + MinIO (Object Storage بایگانی §۲۴۴۵)
+# زیرساخت توسعهٔ محلی آفاق — PostgreSQL + Redis + MinIO (Object Storage بایگانی §۲۴۴۵)
 # اجرا:  docker compose -p afagh-dev up -d      (یا از طریق install-docker.ps1 / install-docker.sh)
+#
+# ⚠ P0-3: فقط توسعهٔ محلی — هرگز پروداکشن. رمزها از ENV خوانده می‌شوند تا همان
+# قرارداد ریشه برقرار باشد؛ پیش‌فرض‌ها عمداً همان مقادیر ناامنِ محلی‌اند و
+# کامپوز پروداکشن (ریشهٔ ریپو: docker-compose.yml + .env ریشه) آن‌ها را fail می‌کند.
+# فایل env توسعه: afagh-next/.env (ساختهٔ install-docker.*) — پروداکشن: .env ریشه.
 name: afagh-dev
 services:
   postgres:
@@ -8,9 +13,9 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: afagh
-      POSTGRES_PASSWORD: afagh
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-afagh}
       POSTGRES_DB: afagh_db
-    ports: ['5432:5432']
+    ports: ['${PG_HOST_PORT:-5432}:5432']
     volumes: [afagh_pg:/var/lib/postgresql/data]
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U afagh -d afagh_db']
@@ -21,7 +26,7 @@ services:
     image: redis:7-alpine
     container_name: afagh_redis_dev
     restart: unless-stopped
-    ports: ['6379:6379']
+    ports: ['${REDIS_HOST_PORT:-6379}:6379']
     volumes: [redisdata:/data]
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
@@ -34,9 +39,9 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: afagh
-      MINIO_ROOT_PASSWORD: afagh-secret
-    ports: ['9000:9000', '9001:9001']
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-afagh}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-afagh-secret}
+    ports: ['${MINIO_HOST_PORT:-9000}:9000', '${MINIO_CONSOLE_PORT:-9001}:9001']
     volumes: [afagh_minio:/data]
     healthcheck:
       test: ['CMD', 'mc', 'ready', 'local']

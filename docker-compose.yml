@@ -7,6 +7,12 @@
 #  همین فایل بسازید (نمونه: .env.prod.example). هر متغیری که تعریف نکنید،
 #  مقدار پیش‌فرض زیر استفاده می‌شود.
 #
+#  ⚠ P0-3: پیش‌فرض‌های زیر فقط برای توسعهٔ محلی‌اند — در پروداکشن `make up`
+#  (گارد check-env) و `deploy-debian.sh` روی این مقادیر fail می‌دهند.
+#  قرارداد .env: پروداکشن = ریشهٔ ریپو (.env کنار همین فایل)؛
+#  توسعهٔ محلی = afagh-next/.env (ساختهٔ install-docker.ps1/.sh) که فقط
+#  زیرساخت dev در afagh-next/docker-compose.yml را تغذیه می‌کند.
+#
 #      app       → Next.js            روی پورت ${APP_PORT:-8080} هاست
 #      postgres  → PostgreSQL 16      فقط روی 127.0.0.1
 #      redis     → Redis 7            فقط روی 127.0.0.1
