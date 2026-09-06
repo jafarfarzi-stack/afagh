@@ -121,17 +121,33 @@ try {
 
   // دانشکده/گروه/رشته
   for (const [facName, facCode, depName, depCode, majors] of STRUCTURE) {
-    let [fac] = await q(`SELECT id FROM faculties WHERE "facultyCode" = $1 LIMIT 1`, [facCode]);
+    // ⚠️ q1 یک «ردیف» برمی‌گرداند نه آرایه — با [x] = ... باز نمی‌شود.
+    //    (نسخهٔ قبلی این‌جا `[fac] = await q1(...)` داشت و به‌محض فعال‌شدن مسیرِ
+    //     تعارض، خطای «undefined is not iterable» می‌داد.)
+    let fac = await q1(`SELECT id FROM faculties WHERE "facultyCode" = $1 LIMIT 1`, [facCode]);
     if (!fac) {
-      [fac] = await q(`INSERT INTO faculties (name, "facultyCode") VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING id`, [facName, facCode]);
-      if (!fac) [fac] = await q1(`SELECT id FROM faculties WHERE "facultyCode" = $1 LIMIT 1`, [facCode]);
+      fac = await q1(`INSERT INTO faculties (name, "facultyCode") VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING id`, [facName, facCode]);
+      if (!fac) fac = await q1(`SELECT id FROM faculties WHERE "facultyCode" = $1 LIMIT 1`, [facCode]);
+      if (!fac) fac = await q1(`SELECT id FROM faculties WHERE name = $1 LIMIT 1`, [facName]);
     }
     if (!fac) throw new Error(`ساخت دانشکده «${facName}» ممکن نشد`);
 
-    let [dep] = await q(`SELECT id FROM departments WHERE "facultyId" = $1 AND "departmentCode" = $2 LIMIT 1`, [fac.id, depCode]);
+    // ── گروه آموزشی ──
+    // «کد گروه» در کل سامانه یکتاست (ایندکس departments_departmentCode_uq).
+    // روی سرورِ دارای دادهٔ واقعی ممکن است همین کد را از قبل گروهی *در دانشکدهٔ
+    // دیگر* گرفته باشد. در آن حالت نباید گروه واقعی مشتری را تصاحب کنیم و نباید
+    // هم کرش کنیم: گروهِ پایه را با همان نام و بدون کد می‌سازیم و هشدار می‌دهیم.
+    let dep = await q1(`SELECT id FROM departments WHERE "facultyId" = $1 AND "departmentCode" = $2 LIMIT 1`, [fac.id, depCode]);
+    if (!dep) dep = await q1(`SELECT id FROM departments WHERE "facultyId" = $1 AND name = $2 LIMIT 1`, [fac.id, depName]);
     if (!dep) {
-      [dep] = await q(`INSERT INTO departments (name, "facultyId", "departmentCode") VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id`, [depName, fac.id, depCode]);
-      if (!dep) [dep] = await q1(`SELECT id FROM departments WHERE "facultyId" = $1 AND "departmentCode" = $2 LIMIT 1`, [fac.id, depCode]);
+      const owner = await q1(`SELECT id, "facultyId" FROM departments WHERE "departmentCode" = $1 LIMIT 1`, [depCode]);
+      if (owner) {
+        console.warn(`  ⚠ کد گروه «${depCode}» از قبل متعلق به گروه دیگری است — «${depName}» بدون کد ساخته شد؛ در /admin/codes کد بدهید.`);
+        dep = await q1(`INSERT INTO departments (name, "facultyId") VALUES ($1,$2) RETURNING id`, [depName, fac.id]);
+      } else {
+        dep = await q1(`INSERT INTO departments (name, "facultyId", "departmentCode") VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id`, [depName, fac.id, depCode]);
+        if (!dep) dep = await q1(`SELECT id FROM departments WHERE "departmentCode" = $1 LIMIT 1`, [depCode]);
+      }
     }
     if (!dep) throw new Error(`ساخت گروه «${depName}» ممکن نشد`);
 
