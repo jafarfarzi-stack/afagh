@@ -64,6 +64,17 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/codes',
+    icon: '🔑',
+    title: 'مرکز کدها',
+    desc: 'تعریف و بازبینی کد دانشکده، گروه، رشته، مقطع و درس',
+    roles: ['ADMIN', 'VICE_EDU', 'EDU_EXPERT'],
+    accent: 'from-amber-950 to-slate-950 border-amber-700/50',
+    iconBg: 'bg-amber-700/80 border-amber-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/departments',
     icon: '🏛️',
     title: 'گروه‌های آموزشی و مدیران گروه',
