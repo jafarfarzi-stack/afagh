@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { academic_terms, courses, degree_level_configs, departments, faculties, majors } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
-import { CODE_TABLES, type CodeRow, type CodeStat, type CodeTable } from './tables';
+import { CODE_TABLES, type CodeRow, type CodeStat, type CodeTable, type FormOptions } from './tables';
 
 /**
  * مرکز کدها — یک جای واحد برای تعریف و بازبینی «کد» همهٔ جدول‌های مرجع.
@@ -186,4 +186,161 @@ export async function countRows(table: CodeTable): Promise<number> {
   const map = { faculty: faculties, department: departments, major: majors, degree: degree_level_configs, course: courses, term: academic_terms } as const;
   const [r] = await db.select({ c: sql<number>`count(*)::int` }).from(map[table]);
   return r?.c ?? 0;
+}
+
+
+// ────────────────────────── ساخت و حذف رکورد مرجع ──────────────────────────
+//
+// چرا اینجا: مقطع تحصیلی، دانشکده و رشته تا امروز هیچ رابط ساختی نداشتند و فقط
+// از دادهٔ پایه (seed) یا فایل انتقال ساخته می‌شدند. یعنی اگر دانشگاه مقطع تازه‌ای
+// اضافه می‌کرد، هیچ راهی جز دست‌کاری مستقیم دیتابیس نبود. گروه آموزشی صفحهٔ خودش
+// را دارد و درس در کارتابل مدیر گروه ساخته می‌شود، پس اینجا تکرار نمی‌شوند.
+
+/** گزینه‌های والد برای فرم ساخت رشته */
+export async function codeFormOptions(): Promise<FormOptions> {
+  await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
+  const [degs, deps] = await Promise.all([
+    db.select({ id: degree_level_configs.id, title: degree_level_configs.title, code: degree_level_configs.code })
+      .from(degree_level_configs).orderBy(asc(degree_level_configs.title)),
+    db.select({ id: departments.id, name: departments.name, code: departments.departmentCode, fac: faculties.name })
+      .from(departments).leftJoin(faculties, eq(faculties.id, departments.facultyId))
+      .orderBy(asc(faculties.name), asc(departments.name)),
+  ]);
+  return {
+    degree: degs.map(d => ({ value: String(d.id), label: `${d.title} [${d.code}]` })),
+    department: deps.map(d => ({
+      value: String(d.id),
+      label: `${d.name}${d.code ? ` [${d.code}]` : ''}${d.fac ? ` — ${d.fac}` : ''}`,
+    })),
+  };
+}
+
+const num = (fd: FormData, k: string): number | null => {
+  const v = String(fd.get(k) ?? '').trim();
+  if (!v) return null;
+  const n = Number(v.replace(/[۰-۹]/g, c => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(c))));
+  return Number.isFinite(n) ? n : null;
+};
+const str = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
+
+/** افزودن رکورد مرجع تازه — مقطع، دانشکده یا رشته */
+export async function createCodeRowAction(fd: FormData): Promise<{ ok: boolean; error?: string; id?: number }> {
+  await requireRole(['ADMIN', 'VICE_EDU']);
+  const table = str(fd, 'table') as CodeTable;
+  const code = str(fd, 'code');
+
+  try {
+    if (table === 'degree') {
+      const title = str(fd, 'title');
+      if (!title) return { ok: false, error: 'عنوان مقطع را وارد کنید.' };
+      if (!code) return { ok: false, error: 'کد مقطع الزامی است — در فایل‌های دانشجو و درس با همین کد تطبیق داده می‌شود.' };
+
+      const dupCode = await db.select({ t: degree_level_configs.title }).from(degree_level_configs)
+        .where(eq(degree_level_configs.code, code)).limit(1);
+      if (dupCode.length) return { ok: false, error: `کد «${code}» قبلاً برای مقطع «${dupCode[0].t}» ثبت شده.` };
+
+      const dupTitle = await db.select({ c: degree_level_configs.code }).from(degree_level_configs)
+        .where(eq(degree_level_configs.title, title)).limit(1);
+      if (dupTitle.length) return { ok: false, error: `مقطعی با عنوان «${title}» از قبل هست (کد ${dupTitle[0].c}).` };
+
+      const pass = num(fd, 'defaultPassingGrade') ?? 10;
+      const cond = num(fd, 'conditionalGpaThreshold') ?? 12;
+      const maxU = num(fd, 'maxUnitsPerTerm') ?? 20;
+      if (pass < 0 || pass > 20) return { ok: false, error: 'نمرهٔ قبولی باید بین ۰ تا ۲۰ باشد.' };
+      if (cond < 0 || cond > 20) return { ok: false, error: 'معدل مشروطی باید بین ۰ تا ۲۰ باشد.' };
+      if (maxU < 1 || maxU > 60) return { ok: false, error: 'سقف واحد ترم باید بین ۱ تا ۶۰ باشد.' };
+
+      const [row] = await db.insert(degree_level_configs).values({
+        title, code,
+        defaultPassingGrade: pass.toFixed(2),
+        conditionalGpaThreshold: cond.toFixed(2),
+        maxUnitsPerTerm: maxU,
+      }).returning({ id: degree_level_configs.id });
+      revalidatePath('/admin/codes');
+      return { ok: true, id: row.id };
+    }
+
+    if (table === 'faculty') {
+      const name = str(fd, 'name');
+      if (!name) return { ok: false, error: 'نام دانشکده را وارد کنید.' };
+      const dupName = await db.select({ id: faculties.id }).from(faculties).where(eq(faculties.name, name)).limit(1);
+      if (dupName.length) return { ok: false, error: `دانشکدهٔ «${name}» از قبل ثبت شده.` };
+      if (code) {
+        const d = await db.select({ n: faculties.name }).from(faculties).where(eq(faculties.facultyCode, code)).limit(1);
+        if (d.length) return { ok: false, error: `کد «${code}» قبلاً برای «${d[0].n}» ثبت شده.` };
+      }
+      const [row] = await db.insert(faculties).values({ name, facultyCode: code || null }).returning({ id: faculties.id });
+      revalidatePath('/admin/codes');
+      revalidatePath('/admin/departments');
+      return { ok: true, id: row.id };
+    }
+
+    if (table === 'major') {
+      const name = str(fd, 'name');
+      const degreeLevelId = num(fd, 'degreeLevelId');
+      if (!name) return { ok: false, error: 'نام رشته را وارد کنید.' };
+      if (!degreeLevelId) return { ok: false, error: 'مقطع رشته را انتخاب کنید — رشته بدون مقطع معنا ندارد.' };
+      if (code) {
+        const d = await db.select({ n: majors.name }).from(majors).where(eq(majors.majorCode, code)).limit(1);
+        if (d.length) return { ok: false, error: `کد «${code}» قبلاً برای رشتهٔ «${d[0].n}» ثبت شده.` };
+      }
+      const departmentId = num(fd, 'departmentId');
+      // دانشکده را از روی گروه استنتاج می‌کنیم تا زنجیرهٔ رشته→گروه→دانشکده نشکند
+      let facultyId: number | null = null;
+      if (departmentId) {
+        const [dep] = await db.select({ f: departments.facultyId }).from(departments)
+          .where(eq(departments.id, departmentId)).limit(1);
+        facultyId = dep?.f ?? null;
+      }
+      const minUnits = num(fd, 'minUnits');
+      const [row] = await db.insert(majors).values({
+        name, degreeLevelId, departmentId, facultyId,
+        majorCode: code || null,
+        minUnits: minUnits && minUnits > 0 && minUnits <= 400 ? minUnits : null,
+      }).returning({ id: majors.id });
+      revalidatePath('/admin/codes');
+      return { ok: true, id: row.id };
+    }
+
+    return { ok: false, error: 'ساخت رکورد برای این جدول از این صفحه ممکن نیست.' };
+  } catch (e) {
+    // اگر دو کاربر هم‌زمان کد یکسانی ثبت کنند، بررسی‌های بالا از هم رد می‌شوند
+    // و داور نهایی خود دیتابیس است — پیامش را فارسی می‌کنیم.
+    if ((e as { code?: string })?.code === '23505') {
+      return { ok: false, error: `کد «${code}» هم‌اکنون توسط رکورد دیگری گرفته شد — کد دیگری بگذارید.` };
+    }
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: `ثبت نشد: ${msg}` };
+  }
+}
+
+/**
+ * حذف رکورد مرجع — فقط وقتی هیچ‌جا استفاده نشده باشد.
+ *
+ * به‌جای شمردن دستیِ ۱۰+ جدولِ ارجاع‌دهنده، اجازه می‌دهیم خود دیتابیس قضاوت کند
+ * و خطای کلید خارجی (SQLSTATE 23503) را به پیام فارسی ترجمه می‌کنیم. این‌طور
+ * هیچ جدول تازه‌ای از قلم نمی‌افتد.
+ */
+export async function deleteCodeRowAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  await requireRole(['ADMIN', 'VICE_EDU']);
+  const table = str(fd, 'table') as CodeTable;
+  const id = Number(fd.get('id') || 0);
+  if (!id) return { ok: false, error: 'رکورد نامعتبر است.' };
+
+  const target = { degree: degree_level_configs, faculty: faculties, major: majors } as const;
+  if (!(table in target)) return { ok: false, error: 'حذف این جدول از این صفحه ممکن نیست.' };
+
+  try {
+    await db.delete(target[table as keyof typeof target])
+      .where(eq(target[table as keyof typeof target].id, id));
+    revalidatePath('/admin/codes');
+    revalidatePath('/admin/departments');
+    return { ok: true };
+  } catch (e) {
+    const code = (e as { code?: string })?.code;
+    if (code === '23503') {
+      return { ok: false, error: 'این رکورد جای دیگری استفاده شده (رشته، دانشجو، درس یا …) و حذف نمی‌شود. اول وابستگی‌ها را جابه‌جا کنید.' };
+    }
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requireRole } from '@/lib/auth';
-import { codeStats, listCodes, setCodeAction } from './actions';
+import { codeFormOptions, codeStats, createCodeRowAction, deleteCodeRowAction, listCodes, setCodeAction } from './actions';
 import type { CodeTable } from './tables';
 import CodesClient from './CodesClient';
 
@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 export default async function CodesPage() {
   await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
   const initialTable: CodeTable = 'faculty';
-  const [stats, initialRows] = await Promise.all([codeStats(), listCodes(initialTable)]);
+  const [stats, initialRows, options] = await Promise.all([codeStats(), listCodes(initialTable), codeFormOptions()]);
 
   const totalMissing = stats.reduce((s, x) => s + x.missing, 0);
   const totalDup = stats.reduce((s, x) => s + x.duplicate, 0);
@@ -59,13 +59,17 @@ export default async function CodesPage() {
         initialRows={initialRows}
         listAction={listAction}
         setCodeAction={setCodeAction}
+        createAction={createCodeRowAction}
+        deleteAction={deleteCodeRowAction}
+        options={options}
       />
 
       <p className="text-center text-xs text-slate-400">
         نگاشت کد قدیمی به کد جدید در{' '}
         <Link href="/admin/migration" className="text-indigo-600 hover:underline">انتقال داده ← تطبیق کدها</Link>{' '}
-        انجام می‌شود · ساخت گروه و دانشکده در{' '}
-        <Link href="/admin/departments" className="text-indigo-600 hover:underline">گروه‌های آموزشی</Link>
+        انجام می‌شود · ساخت گروه آموزشی در{' '}
+        <Link href="/admin/departments" className="text-indigo-600 hover:underline">گروه‌های آموزشی</Link>{' '}
+        · مقطع، دانشکده و رشته را از دکمهٔ «افزودن» همین صفحه بسازید
       </p>
     </div>
   );

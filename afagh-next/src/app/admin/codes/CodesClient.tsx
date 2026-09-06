@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
-import type { CodeRow, CodeStat, CodeTable } from './tables';
+import { CREATE_ELSEWHERE, NEW_FIELDS, type CodeRow, type CodeStat, type CodeTable, type FormOptions } from './tables';
+import Link from 'next/link';
 
 type Res = { ok: boolean; error?: string };
 
@@ -13,12 +14,18 @@ export default function CodesClient({
   initialRows,
   listAction,
   setCodeAction,
+  createAction,
+  deleteAction,
+  options,
 }: {
   stats: CodeStat[];
   initialTable: CodeTable;
   initialRows: CodeRow[];
   listAction: (table: CodeTable, q: string) => Promise<CodeRow[]>;
   setCodeAction: (fd: FormData) => Promise<Res>;
+  createAction: (fd: FormData) => Promise<Res & { id?: number }>;
+  deleteAction: (fd: FormData) => Promise<Res>;
+  options: FormOptions;
 }) {
   const [table, setTable] = useState<CodeTable>(initialTable);
   const [rows, setRows] = useState<CodeRow[]>(initialRows);
@@ -28,8 +35,49 @@ export default function CodesClient({
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [dirty, setDirty] = useState<Record<number, string>>({});
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState<Record<string, string>>({});
 
   const cur = stats.find(s => s.id === table);
+  const newFields = NEW_FIELDS[table] ?? [];
+  const elsewhere = CREATE_ELSEWHERE[table];
+
+  // با عوض‌شدن جدول، فرمِ باز را ببند و مقادیر پیش‌فرض را بگذار
+  useEffect(() => {
+    setAdding(false);
+    setForm(Object.fromEntries((NEW_FIELDS[table] ?? []).map(f => [f.name, f.def ?? ''])));
+  }, [table]);
+
+  const submitNew = () =>
+    start(async () => {
+      const fd = new FormData();
+      fd.set('table', table);
+      for (const f of newFields) fd.set(f.name, form[f.name] ?? '');
+      const r = await createAction(fd);
+      if (r.ok) {
+        setMsg({ kind: 'ok', text: 'رکورد تازه ثبت شد. برای دیده‌شدن در فهرست‌های دیگر، صفحه را تازه کنید.' });
+        setAdding(false);
+        setForm(Object.fromEntries(newFields.map(f => [f.name, f.def ?? ''])));
+        setRows(await listAction(table, ''));
+      } else {
+        setMsg({ kind: 'err', text: r.error ?? 'ثبت نشد.' });
+      }
+    });
+
+  const remove = (row: CodeRow) =>
+    start(async () => {
+      if (!confirm(`«${row.title}» حذف شود؟ اگر جایی استفاده شده باشد، حذف نمی‌شود.`)) return;
+      const fd = new FormData();
+      fd.set('table', table);
+      fd.set('id', String(row.id));
+      const r = await deleteAction(fd);
+      if (r.ok) {
+        setMsg({ kind: 'ok', text: `«${row.title}» حذف شد.` });
+        setRows(await listAction(table, ''));
+      } else {
+        setMsg({ kind: 'err', text: r.error ?? 'حذف نشد.' });
+      }
+    });
 
   // بارگذاری جدول انتخاب‌شده
   useEffect(() => {
@@ -133,7 +181,69 @@ export default function CodesClient({
             {filtered.length.toLocaleString('fa-IR')} ردیف
             {pending && ' · در حال بارگذاری…'}
           </span>
+          {cur?.creatable && (
+            <button
+              onClick={() => setAdding(a => !a)}
+              className={'rounded-lg px-3 py-1.5 text-xs font-bold ' + (adding ? 'bg-slate-200 text-slate-700' : 'bg-emerald-600 text-white hover:bg-emerald-700')}
+            >
+              {adding ? 'انصراف' : `➕ افزودن ${cur.title.replace(/‌ها$|ها$/, '')}`}
+            </button>
+          )}
+          {elsewhere && (
+            <Link href={elsewhere.href} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+              ➕ {elsewhere.label}
+            </Link>
+          )}
         </div>
+
+        {/* فرم افزودن */}
+        {adding && cur?.creatable && (
+          <div className="border-b border-emerald-100 bg-emerald-50/60 p-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {newFields.map(f => (
+                <label key={f.name} className="block">
+                  <span className="mb-1 block text-[11px] font-bold text-slate-700">
+                    {f.label}{f.required && <span className="text-red-600"> *</span>}
+                  </span>
+                  {f.kind === 'select' ? (
+                    <select
+                      value={form[f.name] ?? ''}
+                      onChange={e => setForm(v => ({ ...v, [f.name]: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs"
+                    >
+                      <option value="">— انتخاب کنید —</option>
+                      {(options[f.optionsFrom ?? 'degree'] ?? []).map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      dir={f.kind === 'text' ? 'rtl' : 'ltr'}
+                      inputMode={f.kind === 'number' ? 'decimal' : undefined}
+                      value={form[f.name] ?? ''}
+                      onChange={e => setForm(v => ({ ...v, [f.name]: e.target.value }))}
+                      className={'w-full rounded-lg border border-slate-300 p-1.5 text-xs ' + (f.kind === 'text' ? '' : 'text-center font-mono')}
+                    />
+                  )}
+                  {f.hint && <span className="mt-0.5 block text-[10px] leading-4 text-slate-500">{f.hint}</span>}
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                disabled={pending}
+                onClick={submitNew}
+                className="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                ثبت
+              </button>
+              <button onClick={() => setAdding(false)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600">انصراف</button>
+              <span className="text-[11px] text-slate-500">
+                کد را همان‌طور بنویسید که در فایل‌های اکسل مبدأ آمده — تطبیق انتقال داده اول با کد انجام می‌شود.
+              </span>
+            </div>
+          </div>
+        )}
 
         <div className="overflow-x-auto">
           <table className="w-full text-right text-xs">
@@ -142,7 +252,7 @@ export default function CodesClient({
                 <th className="w-40 p-2.5">کد</th>
                 <th className="p-2.5">عنوان</th>
                 <th className="p-2.5">زمینه</th>
-                <th className="w-24 p-2.5"></th>
+                <th className="w-32 p-2.5"></th>
               </tr>
             </thead>
             <tbody>
@@ -171,15 +281,27 @@ export default function CodesClient({
                     </td>
                     <td className="p-2 text-slate-500">{r.context ?? '—'}</td>
                     <td className="p-2">
-                      {changed && (
-                        <button
-                          disabled={pending}
-                          onClick={() => save(r, val.trim())}
-                          className="rounded bg-indigo-600 px-2 py-1 text-[11px] font-bold text-white disabled:opacity-50"
-                        >
-                          ذخیره
-                        </button>
-                      )}
+                      <div className="flex flex-wrap items-center gap-1">
+                        {changed && (
+                          <button
+                            disabled={pending}
+                            onClick={() => save(r, val.trim())}
+                            className="rounded bg-indigo-600 px-2 py-1 text-[11px] font-bold text-white disabled:opacity-50"
+                          >
+                            ذخیره
+                          </button>
+                        )}
+                        {cur?.creatable && (
+                          <button
+                            disabled={pending}
+                            onClick={() => remove(r)}
+                            title="حذف — فقط اگر هیچ‌جا استفاده نشده باشد"
+                            className="rounded border border-red-200 px-2 py-1 text-[11px] text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            حذف
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
