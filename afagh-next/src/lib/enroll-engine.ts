@@ -5,7 +5,7 @@ import {
   enrollments, financial_clearances, notifications, schedules, students, curriculum_versions,
 } from '@/db/schema';
 import { withUserRls } from '@/db';
-import { atomicSeat, nextWaitlistPosition, warmupCapacities } from './waitingRoom';
+import { atomicSeat, nextWaitlistPosition, releaseSeat, warmupCapacities } from './waitingRoom';
 import { EQUIV_SEMESTER_UNITS, evaluateStudentRegulationStatus, parseGrade, parseUnits } from './regulations-engine';
 import { chargeTermTuition, getEquivFixedMode } from './tuition-engine';
 import { shouldChargeFixed } from './tuition-rules';
@@ -290,10 +290,18 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
     let gotSeat = seat === 1;
     let waitlisted = false;
     let wlPos: number | null = null;
+    let redisSeatTaken = seat === 1;
 
     if (seat === -2) {
-      // Redis در دسترس نیست → fallback به شمارش SQL (تداوم سرویس — همان روح فاز صفر)
-      gotSeat = o.enrolled < o.capacity;
+      // Redis در دسترس نیست → خوانش تازه از DB (نه دادهٔ قدیمی o.enrolled)
+      // سپس رزرو اتمیک شرطی تا دو کارگر همزمان overbooking نکنند.
+      const fresh = await db
+        .select({ enrolled: course_offerings.enrolledCount, capacity: course_offerings.capacity })
+        .from(course_offerings)
+        .where(eq(course_offerings.id, o.id))
+        .limit(1);
+      const f = fresh[0];
+      gotSeat = !!f && Number(f.enrolled) < Number(f.capacity);
     }
     if (!gotSeat && (o.waitCap ?? 0) > 0) { waitlisted = true; wlPos = await nextWaitlistPosition(o.id).catch(() => null); }
 
@@ -303,11 +311,33 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
       continue;
     }
 
+    if (!waitlisted) {
+      // منبع حقیقت DB است (Redis ممکن است از DB عقب باشد):
+      // افزایش شرطی اتمیک؛ اگر ۰ سطر اثر گرفت یعنی واقعاً پر است.
+      const inc = await db.execute(
+        sql`UPDATE course_offerings SET "enrolledCount" = "enrolledCount" + 1 WHERE id = ${o.id} AND "enrolledCount" < "capacity"`
+      );
+      const affected = Number((inc as unknown as { rowCount?: unknown })?.rowCount ?? 0);
+      if (affected !== 1) {
+        // ظرفیت واقعی پر بود — صندلی Redis را پس بده و به لیست انتظار برو
+        if (redisSeatTaken) await releaseSeat(o.id).catch(() => {});
+        if ((o.waitCap ?? 0) > 0) {
+          waitlisted = true;
+          wlPos = await nextWaitlistPosition(o.id).catch(() => null);
+        } else {
+          out.hardErrors.push('ظرفیت «' + o.title + '» تکمیل است.');
+          out.ok = false;
+          continue;
+        }
+      }
+    }
+
     // درج ثبت‌نام + خالی‌کردن سبد — تحت RLS (§۲۱۷۰): خط‌مشی enroll_self_ins فقط ردیف خودش
-    await withUserRls(userId, tx => tx.insert(enrollments)
+    try {
+      await withUserRls(userId, tx => tx.insert(enrollments)
       .values({
         studentId, offeringId: o.id, status: waitlisted ? 'WAITLISTED' : 'REGISTERED',
-        waitlistPosition: waitlisted ? (wlPos ?? o.enrolled - o.capacity + 1) : null,
+        waitlistPosition: waitlisted ? (wlPos ?? 1) : null,
         // فاز ۱۰: تأییدیهٔ دیجیتال تداخل نرم (دو امتحان هم‌روز در شیفت‌های متفاوت)
         hasAcceptedSameDayExam: acceptSameDayRisk && examSoft.has(o.id) ? 1 : 0,
       })
@@ -315,15 +345,22 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
         target: [enrollments.studentId, enrollments.offeringId],
         set: {
           status: waitlisted ? 'WAITLISTED' : 'REGISTERED',
-          waitlistPosition: waitlisted ? (wlPos ?? o.enrolled - o.capacity + 1) : null,
+          waitlistPosition: waitlisted ? (wlPos ?? 1) : null,
           hasAcceptedSameDayExam: acceptSameDayRisk && examSoft.has(o.id) ? 1 : 0,
         },
       }));
+    } catch (e) {
+      // جبران: اگر INSERT شکست خورد، شمارندهٔ DB و صندلی Redis نشت نکند
+      if (!waitlisted) {
+        await db.execute(sql`UPDATE course_offerings SET "enrolledCount" = GREATEST("enrolledCount" - 1, 0) WHERE id = ${o.id}`).catch(() => {});
+        if (redisSeatTaken) await releaseSeat(o.id).catch(() => {});
+      }
+      out.hardErrors.push('خطا در ثبت «' + o.title + '»: ' + String((e as Error)?.message ?? e));
+      out.ok = false;
+      continue;
+    }
     if (!waitlisted) {
-      // شمارندهٔ مشترک = اقدام سیستم → نقش مالک (خط‌مشی دانشجویی ندارد)
-      await db.update(course_offerings)
-        .set({ enrolledCount: sql`${course_offerings.enrolledCount} + 1` })
-        .where(eq(course_offerings.id, o.id));
+      // شمارندهٔ DB بالاتر به‌صورت شرطی زیاد شد؛ این‌جا فقط نتیجه ثبت می‌شود.
       out.registered.push(o.title);
     } else {
       out.waitlisted.push(o.title);
