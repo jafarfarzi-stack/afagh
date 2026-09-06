@@ -1423,7 +1423,7 @@ async function docReview(id, decision, note){
 }
 async function viewDoc(id){
   try{
-    const r = await fetch('/api/files/'+id+'?token='+TOKEN);
+    const r = await fetch('/api/files/'+id,{headers:{Authorization:'Bearer '+TOKEN}});
     if(!r.ok) throw new Error((await r.json()).error);
     const wm = decodeURIComponent(r.headers.get('X-Watermark')||'');
     const url = URL.createObjectURL(await r.blob());

@@ -8,9 +8,12 @@ import { NextRequest, NextResponse } from 'next/server';
 // عوض شده تا با نقش واقعی‌اش — پروکسی لبه پیش از رندر — هم‌خوان باشد).
 // مرجع: https://nextjs.org/docs/messages/middleware-to-proxy
 // ⚠ هرگز هر دو فایل middleware.ts و proxy.ts نباید هم‌زمان وجود داشته باشند.
+// P0-2: در لبه فقط «شکل» توکن چک می‌شود (۶۴ کاراکتر hex = خروجی randomBytes(32)).
+// این جلوی کوکی‌های جعلیِ بدیهی را می‌گیرد؛ اعتبارسنجی واقعی نشست (DB + انقضا)
+// همچنان در layoutها با getSessionUser/requireRole انجام می‌شود.
 export function proxy(req: NextRequest) {
   const token = req.cookies.get('token')?.value;
-  if (!token) {
+  if (!token || !/^[0-9a-f]{64}$/i.test(token)) {
     const url = req.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('next', req.nextUrl.pathname);

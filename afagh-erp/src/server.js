@@ -41,6 +41,7 @@ setInterval(() => {
   try { const f = exams.finalizeExpiredAbsences(); if (f.length) console.log(`⏱ غیبت‌های منقضی: ${f.length} مورد`); } catch (e) { console.error('Absence finalizer:', e.message); }
   try { const d = dr.runDrDeadlineSweeper(); if (d.length) console.log(`🎯 یادآور معرفی‌به‌استاد: ${d.length} درس`); } catch (e) { console.error('DR sweeper:', e.message); }
   try { const m = sakha.runExpirySweeper(); if (m.length) console.log(`🪖 سخا: ${m.length} اقدام انقضا`); } catch (e) { console.error('Sakha sweeper:', e.message); }
+  try { purgeExpiredSessions(); } catch (e) { console.error('Session purge:', e.message); }
 }, 60 * 1000).unref();
 // موتور تطبیق هوشمند حضور استاد (زنجیره + گیت اثر انگشت) — هر ۵ دقیقه
 setInterval(() => {
@@ -65,10 +66,52 @@ const token2user = token => {
 const getStudent = userId => db.prepare(`SELECT * FROM students WHERE userId = ?`).get(userId);
 const getStaff = userId => db.prepare(`SELECT * FROM staff WHERE userId = ?`).get(userId);
 
-function auth(req, url) {
+function auth(req) {
   const h = req.headers['authorization'] || '';
-  const token = h.startsWith('Bearer ') ? h.slice(7) : (parseCookie(req.headers.cookie || '').token) || (url && url.searchParams.get('token'));
+  // P0-2: توکن فقط از هدر Authorization یا کوکی پذیرفته می‌شود — هرگز از query (?token=)
+  // چون توکن در URL در لاگ سرور، هیستوری مرورگر و هدر Referer نشت می‌کند.
+  const token = h.startsWith('Bearer ') ? h.slice(7) : (parseCookie(req.headers.cookie || '').token);
   return token2user(token);
+}
+
+// ── P0-2: محدودیت نرخ ورود (حافظه‌ای) — دفاع در برابر بروت‌فورس و DoS روی scrypt ──
+// کلید: IP + کدملی؛ پس از ۱۰ تلاش ناموفق در ۱۰ دقیقه، ۵ دقیقه قفل می‌شود.
+const _loginAttempts = new Map(); // key → { fail: number, windowStart: number, lockUntil: number }
+const LOGIN_WINDOW_MS = 10 * 60 * 1000;
+const LOGIN_MAX_FAIL = 10;
+const LOGIN_LOCK_MS = 5 * 60 * 1000;
+function loginRateKey(req, nationalCode) {
+  const ip = (req.socket && req.socket.remoteAddress) || (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || '?';
+  return `${ip}|${String(nationalCode || '').trim()}`;
+}
+function loginBlocked(req, nationalCode) {
+  const k = loginRateKey(req, nationalCode);
+  const rec = _loginAttempts.get(k);
+  if (rec && rec.lockUntil > Date.now()) return Math.ceil((rec.lockUntil - Date.now()) / 1000);
+  return 0;
+}
+function loginRecordFail(req, nationalCode) {
+  const k = loginRateKey(req, nationalCode);
+  const now = Date.now();
+  let rec = _loginAttempts.get(k);
+  if (!rec || now - rec.windowStart > LOGIN_WINDOW_MS) rec = { fail: 0, windowStart: now, lockUntil: 0 };
+  rec.fail += 1;
+  if (rec.fail >= LOGIN_MAX_FAIL) { rec.lockUntil = now + LOGIN_LOCK_MS; rec.fail = 0; }
+  _loginAttempts.set(k, rec);
+  // هرس دوره‌ای để حافظه رشد نکند
+  if (_loginAttempts.size > 5000) {
+    for (const [key, r] of _loginAttempts) {
+      if (r.lockUntil < now && now - r.windowStart > LOGIN_WINDOW_MS) _loginAttempts.delete(key);
+      if (_loginAttempts.size <= 4000) break;
+    }
+  }
+}
+function loginRecordSuccess(req, nationalCode) {
+  _loginAttempts.delete(loginRateKey(req, nationalCode));
+}
+/** پاکسازی نشست‌های منقضی — هر ورود و هر دقیقه از sweeper صدا زده می‌شود */
+function purgeExpiredSessions() {
+  try { db.prepare(`DELETE FROM sessions WHERE expiresAt <= datetime('now')`).run(); } catch { /* نادیده */ }
 }
 function parseCookie(c) { return Object.fromEntries(c.split(';').map(p => p.trim().split('=').map(decodeURIComponent))); }
 
@@ -93,19 +136,38 @@ function listOfferings(termId) {
 
 // ─── مسیرهای API ───
 const api = async (req, res, url) => {
-  const user = auth(req, url);
+  const user = auth(req);
   const body = url.method === 'POST' || url.method === 'PUT' ? await readBody(req) : {};
   const route = url.pathname;
 
   // ── احراز هویت
   if (route === '/api/auth/login' && url.method === 'POST') {
+    const waitSec = loginBlocked(req, body.nationalCode);
+    if (waitSec > 0) return json(res, 429, { error: `تلاش‌های ناموفق زیاد است. ${waitSec} ثانیه دیگر دوباره تلاش کنید.` });
     const u = db.prepare(`SELECT * FROM users WHERE nationalCode = ?`).get(body.nationalCode);
-    if (!u || !(await verifyPasswordAsync(body.password || '', u.passwordHash))) return json(res, 401, { error: 'کد ملی یا رمز عبور اشتباه است.' });
+    if (!u || !(await verifyPasswordAsync(body.password || '', u.passwordHash))) {
+      loginRecordFail(req, body.nationalCode);
+      return json(res, 401, { error: 'کد ملی یا رمز عبور اشتباه است.' });
+    }
     if (!u.isActive) return json(res, 403, { error: 'حساب غیرفعال است.' });
+    loginRecordSuccess(req, body.nationalCode);
+    purgeExpiredSessions();
     const token = crypto.randomBytes(32).toString('hex');
     db.prepare(`INSERT INTO sessions (token, userId, expiresAt) VALUES (?,?, datetime('now','+2 days'))`).run(token, u.id);
     rbac.audit({ actorUserId: u.id, action: 'LOGIN', entityType: 'user', entityId: u.id, ipAddress: req.socket.remoteAddress });
     return json(res, 200, { token, user: { id: u.id, name: `${u.firstName} ${u.lastName}`, nationalCode: u.nationalCode } });
+  }
+
+  // ── خروج (ابطال نشست جاری) ──
+  if (route === '/api/auth/logout' && url.method === 'POST') {
+    if (!user) return json(res, 401, { error: 'ابتدا وارد شوید.' });
+    const h = req.headers['authorization'] || '';
+    const token = h.startsWith('Bearer ') ? h.slice(7) : (parseCookie(req.headers.cookie || '').token);
+    if (token) {
+      try { db.prepare(`DELETE FROM sessions WHERE token = ?`).run(token); } catch { /* نادیده */ }
+      rbac.audit({ actorUserId: user.id, action: 'LOGOUT', entityType: 'user', entityId: user.id, ipAddress: req.socket.remoteAddress });
+    }
+    return json(res, 200, { ok: true });
   }
 
   if (!user) return json(res, 401, { error: 'ابتدا وارد شوید.' });
@@ -719,9 +781,12 @@ const serveStatic = (res, filePath) => {
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
-  // ── CORS برای کارکردن در iframe پیش‌نمایش (مبدأ null) — پنل توکن را در هدر می‌فرستد، کوکی نمی‌خواهد ──
+  // ── CORS: پنل توکن را در هدر Authorization می‌فرستد (کوکی cross-site نمی‌خواهد)،
+  // پس انعکاس مبدأ دلخواه لازم نیست. `*` ثابت + Vary: Origin.
+  // P0-2: قبلاً `req.headers.origin` بدون اعتبارسنجی منعکس می‌شد.
   if (url.pathname.startsWith('/api/')) {
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Access-Control-Max-Age', '86400');

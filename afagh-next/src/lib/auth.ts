@@ -131,6 +131,12 @@ export function isDemoMode(): boolean {
 
 /** رمز پیش‌فرض حساب‌های دمو — در دمو قابل تغییر است (AFAGH_DEMO_PASSWORD) */
 export const DEMO_PASSWORD = process.env.AFAGH_DEMO_PASSWORD || '123456';
+if (process.env.NODE_ENV === 'production' && DEMO_PASSWORD === '123456') {
+  // P0-2: رمز دموی پیش‌فرض در پروداکشن = ورود شناخته‌شده برای همه.
+  // گیت isDemoMode جلوی ساخت حساب دمو را می‌گیرد، ولی اگر کسی صریحاً دمو را
+  // در پروداکشن فعال کرده باشد، این لاگ CRITICAL باید دیده شود.
+  console.error('⚠ CRITICAL [demo] AFAGH_DEMO_PASSWORD در production همان مقدار پیش‌فرض «123456» است — فوراً عوضش کنید.');
+}
 
 const DEMO_ACCOUNTS: Record<string, { firstName: string; lastName: string; role: string; staffCode?: string; departmentCode?: string; isStudent?: boolean }> = {
   '0000000001': { firstName: 'مدیر', lastName: 'سامانه', role: 'ADMIN' },
