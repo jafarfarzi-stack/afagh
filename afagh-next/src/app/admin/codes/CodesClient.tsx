@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
-import { CREATE_ELSEWHERE, NEW_FIELDS, type CodeRow, type CodeStat, type CodeTable, type FormOptions } from './tables';
+import { ADD_LABEL, CREATE_ELSEWHERE, NEW_FIELDS, type CodeRow, type CodeStat, type CodeTable, type FormOptions } from './tables';
 import Link from 'next/link';
 
 type Res = { ok: boolean; error?: string };
@@ -143,7 +143,11 @@ export default function CodesClient({
                 {s.missing > 0 && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">{s.missing.toLocaleString('fa-IR')} بدون کد</span>}
                 {s.duplicate > 0 && <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700">{s.duplicate.toLocaleString('fa-IR')} کد تکراری</span>}
                 {s.missing === 0 && s.duplicate === 0 && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700">✓ همه کد دارند</span>}
-                {!s.editable && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-500">فقط خواندنی</span>}
+                {!s.editable && (
+                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-500">
+                    {s.creatable ? 'کد ثابت — فقط افزودن' : 'فقط خواندنی'}
+                  </span>
+                )}
               </div>
             </button>
           );
@@ -186,7 +190,7 @@ export default function CodesClient({
               onClick={() => setAdding(a => !a)}
               className={'rounded-lg px-3 py-1.5 text-xs font-bold ' + (adding ? 'bg-slate-200 text-slate-700' : 'bg-emerald-600 text-white hover:bg-emerald-700')}
             >
-              {adding ? 'انصراف' : `➕ افزودن ${cur.title.replace(/‌ها$|ها$/, '')}`}
+              {adding ? 'انصراف' : `➕ ${ADD_LABEL[table] ?? 'افزودن'}`}
             </button>
           )}
           {elsewhere && (
@@ -212,7 +216,7 @@ export default function CodesClient({
                       className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs"
                     >
                       <option value="">— انتخاب کنید —</option>
-                      {(options[f.optionsFrom ?? 'degree'] ?? []).map(o => (
+                      {(f.choices ?? options[f.optionsFrom ?? 'degree'] ?? []).map(o => (
                         <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>

@@ -223,11 +223,17 @@ const num = (fd: FormData, k: string): number | null => {
 };
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
 
+/** کاربر ممکن است کد را با ارقام فارسی بنویسد؛ کد باید لاتین ذخیره شود
+ *  وگرنه با کدِ همان ردیف در فایل اکسل مبدأ تطبیق نمی‌خورد. */
+const latinDigits = (v: string) =>
+  v.replace(/[۰-۹]/g, c => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(c)))
+   .replace(/[٠-٩]/g, c => String('٠١٢٣٤٥٦٧٨٩'.indexOf(c)));
+
 /** افزودن رکورد مرجع تازه — مقطع، دانشکده یا رشته */
 export async function createCodeRowAction(fd: FormData): Promise<{ ok: boolean; error?: string; id?: number }> {
   await requireRole(['ADMIN', 'VICE_EDU']);
   const table = str(fd, 'table') as CodeTable;
-  const code = str(fd, 'code');
+  const code = latinDigits(str(fd, 'code'));
 
   try {
     if (table === 'degree') {
@@ -302,6 +308,32 @@ export async function createCodeRowAction(fd: FormData): Promise<{ ok: boolean; 
       return { ok: true, id: row.id };
     }
 
+    if (table === 'term') {
+      const title = str(fd, 'title');
+      const termType = str(fd, 'termType') || 'NORMAL';
+      if (!code) return { ok: false, error: 'کد ترم الزامی است — مثلاً 4031.' };
+      if (!/^[0-9A-Za-z_-]{2,10}$/.test(code)) {
+        return { ok: false, error: 'کد ترم باید ۲ تا ۱۰ نویسهٔ لاتین/رقم باشد — مثلاً 4031.' };
+      }
+      if (!title) return { ok: false, error: 'عنوان ترم را وارد کنید.' };
+      if (!['NORMAL', 'SUMMER', 'EQUIVALENCE'].includes(termType)) {
+        return { ok: false, error: 'نوع ترم نامعتبر است.' };
+      }
+      const dup = await db.select({ t: academic_terms.title }).from(academic_terms)
+        .where(eq(academic_terms.termCode, code)).limit(1);
+      if (dup.length) return { ok: false, error: `کد ترم «${code}» قبلاً برای «${dup[0].t}» ثبت شده.` };
+
+      // ترم تازه هرگز ترم جاری نیست و انتخاب واحدش باز نیست؛ این‌ها را
+      // مسئول آموزش آگاهانه در تنظیمات ترم فعال می‌کند، نه هنگام ساخت کد.
+      const [row] = await db.insert(academic_terms).values({
+        termCode: code, title, termType,
+        isSummer: termType === 'SUMMER' ? 1 : 0,
+        isCurrent: 0, isEnrollmentOpen: 0,
+      }).returning({ id: academic_terms.id });
+      revalidatePath('/admin/codes');
+      return { ok: true, id: row.id };
+    }
+
     return { ok: false, error: 'ساخت رکورد برای این جدول از این صفحه ممکن نیست.' };
   } catch (e) {
     // اگر دو کاربر هم‌زمان کد یکسانی ثبت کنند، بررسی‌های بالا از هم رد می‌شوند
@@ -327,7 +359,10 @@ export async function deleteCodeRowAction(fd: FormData): Promise<{ ok: boolean; 
   const id = Number(fd.get('id') || 0);
   if (!id) return { ok: false, error: 'رکورد نامعتبر است.' };
 
-  const target = { degree: degree_level_configs, faculty: faculties, major: majors } as const;
+  // ترم را هم می‌شود حذف کرد: چون کدش ویرایش‌پذیر نیست، اگر اشتباه ثبت شود
+  // تنها راه اصلاح، حذف رکوردِ بی‌استفاده است. محافظ کلید خارجی جلوی حذف
+  // ترمی که انتخاب واحد یا نمره دارد را می‌گیرد.
+  const target = { degree: degree_level_configs, faculty: faculties, major: majors, term: academic_terms } as const;
   if (!(table in target)) return { ok: false, error: 'حذف این جدول از این صفحه ممکن نیست.' };
 
   try {
@@ -339,7 +374,7 @@ export async function deleteCodeRowAction(fd: FormData): Promise<{ ok: boolean; 
   } catch (e) {
     const code = (e as { code?: string })?.code;
     if (code === '23503') {
-      return { ok: false, error: 'این رکورد جای دیگری استفاده شده (رشته، دانشجو، درس یا …) و حذف نمی‌شود. اول وابستگی‌ها را جابه‌جا کنید.' };
+      return { ok: false, error: 'این رکورد جای دیگری استفاده شده (رشته، دانشجو، درس، انتخاب واحد یا …) و حذف نمی‌شود. اول وابستگی‌ها را جابه‌جا کنید.' };
     }
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
