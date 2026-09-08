@@ -146,7 +146,7 @@ async function loadCaches() {
 // ── اجرا ──
 try {
   console.log(`Professors2 enrich | file=${FILE} | limit=${LIMIT || '∞'} | ${DRY ? 'DRY-RUN' : 'LIVE'}`);
-  await loadCaches();
+  if (!DRY) await loadCaches();
   const stats = { total: 0, matched: 0, updatedStaff: 0, updatedUser: 0, missing: 0, badCode: 0, facMiss: new Set(), deptMiss: new Set(), ncConflict: 0, activeMismatch: 0 };
   const missingCodes = [];
   for await (const { cols } of tsvRows(FILE)) {
@@ -190,6 +190,13 @@ try {
       birthCity: norm(cols[34]).slice(0, 100) || null,
       bankAcc: clean(cols[35]).slice(0, 50) || null,
     };
+    if (DRY) {
+      // فقط پارسینگ نمایش بده — بدون DB
+      if (stats.total <= 5 || stats.total % 200 === 0) {
+        console.log(`[DRY] code=${code} name=${F.lastName} ${F.firstName} | ${F.title} | ${F.faculty}/${F.dept} | NC=${F.nationalCode}`);
+      }
+      continue;
+    }
     // دانشکده/گروه
     let facultyId = F.faculty ? (facultyByName.get(F.faculty) ?? null) : null;
     if (F.faculty && facultyId == null) stats.facMiss.add(F.faculty);
@@ -209,7 +216,6 @@ try {
     }
     stats.matched++;
     if (F.active !== null && st.isActive !== null && Number(st.isActive) !== F.active) stats.activeMismatch++;
-    if (DRY) continue;
     //冲突 کد ملی با کاربر دیگر؟
     let ncOk = F.nationalCode;
     if (ncOk) {
@@ -269,8 +275,10 @@ try {
   if (missingCodes.length) console.log(`کدهای بدون پرونده (اول ${missingCodes.length} تا): ${missingCodes.join('، ')}${stats.missing > missingCodes.length ? ` (+${stats.missing - missingCodes.length} تای دیگر)` : ''}`);
   console.log(DRY ? 'DRY-RUN — چیزی نوشته نشد.' : '🎉 کامل شد.');
 } catch (err) {
-  console.error('❌ خطا:', err.message);
+  console.error('❌ خطا:', err?.message || err);
+  if (err?.code) console.error('   code:', err.code);
+  if (err?.stack) console.error(err.stack);
   process.exitCode = 1;
 } finally {
-  await pool.end();
+  await pool.end().catch(() => {});
 }
