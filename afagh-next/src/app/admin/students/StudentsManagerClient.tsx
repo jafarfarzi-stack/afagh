@@ -61,12 +61,12 @@ export default function StudentsManagerClient(props: {
   // انتخاب بخش اصلی (دانشجویان / اساتید / عملیات سریع)
   const [mainView, setMainView] = useState<'students' | 'professors' | 'quick_menu'>('students');
 
-  // تب‌های فرم دانشجو
-  const [stuTab, setStuTab] = useState<'info' | 'complementary' | 'other' | 'extra_alumni' | 'transcript' | 'list'>('info');
+  // تب‌های فرم دانشجو — لیست اول است و ۴ تب اطلاعات در یک تب ادغام شده‌اند
+  const [stuTab, setStuTab] = useState<'list' | 'info_combined' | 'transcript'>('list');
   const [stuSubTab, setStuSubTab] = useState<'extra' | 'alumni'>('extra');
 
-  // تب‌های فرم استاد
-  const [profTab, setProfTab] = useState<'edu' | 'employment' | 'personal' | 'list'>('edu');
+  // تب‌های فرم استاد — لیست اول است و ۳ تب اطلاعات در یک تب ادغام شده‌اند
+  const [profTab, setProfTab] = useState<'list' | 'info_combined'>('list');
 
   // ناوبری و انتخاب
   const [selectedStuIdx, setSelectedStuIdx] = useState<number>(0);
@@ -169,39 +169,23 @@ export default function StudentsManagerClient(props: {
       {mainView === 'students' && (
         <div className="bg-slate-200 p-2 sm:p-4 rounded-xl border border-slate-400 shadow-xl space-y-2">
           
-          {/* تب‌های اصلی بالای فرم ثبت‌نام دانشجو */}
+          {/* تب‌های اصلی بالای فرم ثبت‌نام دانشجو — لیست اول + اطلاعات ادغام‌شده */}
           <div className="flex flex-wrap items-center gap-1 border-b border-slate-400 pb-1 text-slate-800">
             <button
-              onClick={() => setStuTab('info')}
+              onClick={() => setStuTab('list')}
               className={`px-3 py-1.5 font-bold rounded-t-md border-t border-x transition-colors ${
-                stuTab === 'info' ? 'bg-white border-slate-400 text-indigo-950 shadow-sm' : 'bg-slate-300 border-transparent hover:bg-slate-100'
+                stuTab === 'list' ? 'bg-white border-slate-400 text-indigo-950 shadow-sm' : 'bg-slate-300 border-transparent hover:bg-slate-100'
               }`}
             >
-              اطلاعات دانشجویان
+              📋 لیست دانشجویان
             </button>
             <button
-              onClick={() => setStuTab('complementary')}
+              onClick={() => setStuTab('info_combined')}
               className={`px-3 py-1.5 font-bold rounded-t-md border-t border-x transition-colors ${
-                stuTab === 'complementary' ? 'bg-white border-slate-400 text-indigo-950 shadow-sm' : 'bg-slate-300 border-transparent hover:bg-slate-100'
+                stuTab === 'info_combined' ? 'bg-white border-slate-400 text-indigo-950 shadow-sm' : 'bg-slate-300 border-transparent hover:bg-slate-100'
               }`}
             >
-              اطلاعات تکمیلی دانشجو
-            </button>
-            <button
-              onClick={() => setStuTab('other')}
-              className={`px-3 py-1.5 font-bold rounded-t-md border-t border-x transition-colors ${
-                stuTab === 'other' ? 'bg-white border-slate-400 text-indigo-950 shadow-sm' : 'bg-slate-300 border-transparent hover:bg-slate-100'
-              }`}
-            >
-              سایر اطلاعات
-            </button>
-            <button
-              onClick={() => setStuTab('extra_alumni')}
-              className={`px-3 py-1.5 font-bold rounded-t-md border-t border-x transition-colors ${
-                stuTab === 'extra_alumni' ? 'bg-white border-slate-400 text-indigo-950 shadow-sm' : 'bg-slate-300 border-transparent hover:bg-slate-100'
-              }`}
-            >
-              اطلاعات اضافی / دانش‌آموختگان
+              📄 اطلاعات دانشجو (اصلی + تکمیلی + سایر + اضافی)
             </button>
             <button
               onClick={() => setStuTab('transcript')}
@@ -210,14 +194,6 @@ export default function StudentsManagerClient(props: {
               }`}
             >
               📊 کارنامه و نمرات
-            </button>
-            <button
-              onClick={() => setStuTab('list')}
-              className={`px-3 py-1.5 font-bold rounded-t-md border-t border-x transition-colors ${
-                stuTab === 'list' ? 'bg-white border-slate-400 text-indigo-950 shadow-sm' : 'bg-slate-300 border-transparent hover:bg-slate-100'
-              }`}
-            >
-              لیست دانشجویان
             </button>
           </div>
 
@@ -258,8 +234,8 @@ export default function StudentsManagerClient(props: {
             </div>
           </div>
 
-          {/* ── تب ۱: اطلاعات دانشجویان ── */}
-          {stuTab === 'info' && currentStudent && (
+          {/* ── تب ادغام‌شده: اطلاعات دانشجو (۴ بخش) — بخش ۱: اطلاعات دانشجویان ── */}
+          {stuTab === 'info_combined' && currentStudent && (
             <div className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* ستون ۱ */}
@@ -364,8 +340,8 @@ export default function StudentsManagerClient(props: {
             </div>
           )}
 
-          {/* ── تب ۲: اطلاعات تکمیلی دانشجو (مطابق تصویر ۱) ── */}
-          {stuTab === 'complementary' && currentStudent && (
+          {/* ── بخش ۲: اطلاعات تکمیلی دانشجو ── */}
+          {stuTab === 'info_combined' && currentStudent && (
             <div className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* کادر عکس پرسنلی */}
@@ -474,8 +450,8 @@ export default function StudentsManagerClient(props: {
             </div>
           )}
 
-          {/* ── تب ۳: سایر اطلاعات (مطابق تصویر ۲) ── */}
-          {stuTab === 'other' && currentStudent && (
+          {/* ── بخش ۳: سایر اطلاعات ── */}
+          {stuTab === 'info_combined' && currentStudent && (
             <div className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               {/* بخش خوابگاه و آدرس */}
               <div className="border border-slate-300 p-2.5 rounded bg-slate-50 space-y-1.5">
@@ -518,8 +494,8 @@ export default function StudentsManagerClient(props: {
             </div>
           )}
 
-          {/* ── تب ۴: اطلاعات اضافی و دانش‌آموختگان (مطابق تصاویر ۳ و ۴) ── */}
-          {stuTab === 'extra_alumni' && currentStudent && (
+          {/* ── بخش ۴: اطلاعات اضافی و دانش‌آموختگان ── */}
+          {stuTab === 'info_combined' && currentStudent && (
             <div className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               {/* زیرتب‌ها */}
               <div className="flex items-center gap-2 border-b border-slate-300 pb-2">
@@ -721,7 +697,7 @@ export default function StudentsManagerClient(props: {
                             onClick={() => {
                               const realIdx = props.students.findIndex(x => x.id === s.id);
                               setSelectedStuIdx(realIdx >= 0 ? realIdx : 0);
-                              setStuTab('info');
+                              setStuTab('info_combined');
                             }}
                             className="bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-[11px] px-2.5 py-1 rounded font-bold"
                           >
@@ -774,39 +750,23 @@ export default function StudentsManagerClient(props: {
       {mainView === 'professors' && (
         <div className="bg-slate-200 p-2 sm:p-4 rounded-xl border border-slate-400 shadow-xl space-y-2">
           
-          {/* تب‌های بالای فرم معرفی استاد */}
+          {/* تب‌های بالای فرم معرفی استاد — لیست اول + اطلاعات ادغام‌شده */}
           <div className="flex flex-wrap items-center gap-1 border-b border-slate-400 pb-1 text-slate-800">
-            <button
-              onClick={() => setProfTab('edu')}
-              className={`px-3 py-1.5 font-bold rounded-t-md border-t border-x transition-colors ${
-                profTab === 'edu' ? 'bg-white border-slate-400 text-indigo-950 shadow-sm' : 'bg-slate-300 border-transparent hover:bg-slate-100'
-              }`}
-            >
-              اطلاعات آموزشی
-            </button>
-            <button
-              onClick={() => setProfTab('employment')}
-              className={`px-3 py-1.5 font-bold rounded-t-md border-t border-x transition-colors ${
-                profTab === 'employment' ? 'bg-white border-slate-400 text-indigo-950 shadow-sm' : 'bg-slate-300 border-transparent hover:bg-slate-100'
-              }`}
-            >
-              اطلاعات استخدامی
-            </button>
-            <button
-              onClick={() => setProfTab('personal')}
-              className={`px-3 py-1.5 font-bold rounded-t-md border-t border-x transition-colors ${
-                profTab === 'personal' ? 'bg-white border-slate-400 text-indigo-950 shadow-sm' : 'bg-slate-300 border-transparent hover:bg-slate-100'
-              }`}
-            >
-              اطلاعات فردی
-            </button>
             <button
               onClick={() => setProfTab('list')}
               className={`px-3 py-1.5 font-bold rounded-t-md border-t border-x transition-colors ${
                 profTab === 'list' ? 'bg-white border-slate-400 text-indigo-950 shadow-sm' : 'bg-slate-300 border-transparent hover:bg-slate-100'
               }`}
             >
-              لیست اطلاعات اساتید
+              📋 لیست اطلاعات اساتید
+            </button>
+            <button
+              onClick={() => setProfTab('info_combined')}
+              className={`px-3 py-1.5 font-bold rounded-t-md border-t border-x transition-colors ${
+                profTab === 'info_combined' ? 'bg-white border-slate-400 text-indigo-950 shadow-sm' : 'bg-slate-300 border-transparent hover:bg-slate-100'
+              }`}
+            >
+              📄 اطلاعات استاد (آموزشی + استخدامی + فردی)
             </button>
           </div>
 
@@ -831,8 +791,8 @@ export default function StudentsManagerClient(props: {
             </div>
           </div>
 
-          {/* ── تب ۱ استاد: اطلاعات آموزشی (مطابق تصویر ۵) ── */}
-          {profTab === 'edu' && currentStaff && (
+          {/* ── بخش ۱ استاد: اطلاعات آموزشی (ادغام‌شده) ── */}
+          {profTab === 'info_combined' && currentStaff && (
             <div className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 
@@ -912,8 +872,8 @@ export default function StudentsManagerClient(props: {
             </div>
           )}
 
-          {/* ── تب ۲ استاد: اطلاعات استخدامی (مطابق تصویر ۶) ── */}
-          {profTab === 'employment' && currentStaff && (
+          {/* ── بخش ۲ استاد: اطلاعات استخدامی ── */}
+          {profTab === 'info_combined' && currentStaff && (
             <div className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               <div className="space-y-2 border border-slate-300 p-3 rounded bg-slate-50 max-w-2xl mx-auto">
                 <div className="grid grid-cols-3 gap-2 items-center">
@@ -958,8 +918,8 @@ export default function StudentsManagerClient(props: {
             </div>
           )}
 
-          {/* ── تب ۳ استاد: اطلاعات فردی (مطابق تصویر ۷) ── */}
-          {profTab === 'personal' && currentStaff && (
+          {/* ── بخش ۳ استاد: اطلاعات فردی ── */}
+          {profTab === 'info_combined' && currentStaff && (
             <div className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5 border border-slate-300 p-2.5 rounded bg-slate-50">
@@ -1043,7 +1003,7 @@ export default function StudentsManagerClient(props: {
                             onClick={() => {
                               const realIdx = props.staffList.findIndex(x => x.id === st.id);
                               setSelectedProfIdx(realIdx >= 0 ? realIdx : 0);
-                              setProfTab('edu');
+                              setProfTab('info_combined');
                             }}
                             className="bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-[11px] px-2.5 py-1 rounded font-bold"
                           >
@@ -1104,7 +1064,7 @@ export default function StudentsManagerClient(props: {
             <button
               onClick={() => {
                 setMainView('professors');
-                setProfTab('edu');
+                setProfTab('info_combined');
                 showToast('فرم معرفی استاد جدید باز شد');
               }}
               className="p-4 bg-gradient-to-b from-white to-slate-100 border-2 border-dashed border-indigo-400 hover:border-indigo-600 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-3 text-right group"
