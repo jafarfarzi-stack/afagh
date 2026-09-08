@@ -33,7 +33,7 @@ for (let i = 0; i < raw.length; i++) {
 }
 const DIR = args.dir || 'E:\\git\\information afagh';
 const SOURCE = (args.source || 'AFAGH').toUpperCase();
-const STEPS = (args.steps || 'pre,terms,majors,courses,students,grades,codemap').split(',').map(s => s.trim());
+const STEPS = (args.steps || 'pre,terms,majors,groups,courses,links,students,grades,codemap').split(',').map(s => s.trim());
 const LIMIT = args.limit ? Number(args.limit) : 0;
 const DRY = args.dry === 'true';
 const dbUrl = args.db || process.env.DATABASE_URL || 'postgres://afagh:afagh@localhost:5432/afagh_db';
@@ -141,6 +141,8 @@ async function detectFiles(dir) {
     else if (has('SanjeshCode')) found.sahmiye = p;
     else if (h.join(" ").replace(/\u200c/g, "").includes("تغيير رشته") || h.join(" ").includes("فارغ التحصيل")) found.status = p;
     else if (has('كد','نام') && has('مقطع','گروه_اموزشي') && has('تعداد_واحد')) found.tatbigh = p;
+    else if (has('GroupA','Daneshkadeh') && has('Code','Oldcode')) found.tatbighMap = p;
+    else if (has('Code','Name','PlaceCode') && h.includes('Admin')) found.groups = p;
   }
   if (cands.students.length) {
     cands.students.sort((a, b) => b.size - a.size);
@@ -902,6 +904,87 @@ async function phaseCodemap(files) {
   await logRun('codemap', 'lookups (SAMA)', stats);
 }
 
+async function phaseGroups(file) {
+  console.log('\n── گروه‌های آموزشی (گروههای آموزشی.txt) ──');
+  const stats = { total: 0, inserted: 0, existing: 0, invalid: 0, facNew: 0 };
+  // حذف گروه‌های بی‌کدِ خالی قبل از درج (به درخواست: حذف کن) — FKها اول آزاد شوند
+  if (!DRY) {
+    const toDel = (await q(`SELECT id FROM departments WHERE "departmentCode" IS NULL AND name ~ '^\\s*\\d+\\s*$'`)).map(r=>r.id);
+    if (toDel.length){
+      await pool.query(`UPDATE staff SET "departmentId"=NULL WHERE "departmentId"=ANY($1)`,[toDel]);
+      await pool.query(`UPDATE courses SET "departmentId"=NULL WHERE "departmentId"=ANY($1)`,[toDel]);
+      await pool.query(`UPDATE majors SET "departmentId"=NULL WHERE "departmentId"=ANY($1)`,[toDel]);
+      const del = (await pool.query(`DELETE FROM departments WHERE id=ANY($1)`,[toDel])).rowCount;
+      if (del) console.log(`  حذف گروه‌های عددی بی‌کد: ${del}`);
+    }
+  }
+  for await (const { cols } of tsvRows(file)) {
+    const code = (cols[0] || '').trim();
+    const name = normTxt(cols[1]);
+    if (!/^\d+$/.test(code) || !name || name === 'نامشخص') { stats.invalid++; continue; }
+    stats.total++;
+    const place = (cols[3] || '').trim() || '0';
+    const facId = await ensureFaculty(place);
+    if (!facId) { stats.invalid++; continue; }
+    const facCode = place;
+    // جستجو با کد جهانی
+    let row = (await q(`SELECT id, name FROM departments WHERE "departmentCode"=$1`, [code]))[0];
+    if (row) {
+      stats.existing++;
+      // اگر نام فرق دارد، به‌روز کن (فقط اگر placeholder بود)
+      if (normTxt(row.name) !== name && row.name.startsWith('گروه ')) {
+        if (!DRY) await pool.query(`UPDATE departments SET name=$2 WHERE id=$1`, [row.id, name.slice(0,150)]);
+      }
+      deptByFacAndCode.set(`${facId}|${code}`, Number(row.id));
+      deptByFacAndCode.set(`CODE:${code}`, Number(row.id));
+      deptByFacAndCode.set(`NAME:${name}`, Number(row.id));
+      continue;
+    }
+    // دانشکده-کد تکراری نیست → بساز
+    if (!DRY) {
+      row = (await q(`INSERT INTO departments (name, "facultyId", "departmentCode", kind, "isActive") VALUES ($1,$2,$3,'ACADEMIC',1) ON CONFLICT DO NOTHING RETURNING id`, [name.slice(0,150), facId, code]))[0]
+        || (await q(`SELECT id FROM departments WHERE "departmentCode"=$1`, [code]))[0];
+      if (row) { stats.inserted++; deptByFacAndCode.set(`${facId}|${code}`, Number(row.id)); deptByFacAndCode.set(`CODE:${code}`, Number(row.id)); deptByFacAndCode.set(`NAME:${name}`, Number(row.id)); }
+    } else stats.inserted++;
+  }
+  console.log(`گروه‌ها: total=${stats.total} inserted=${stats.inserted} existing=${stats.existing} invalid=${stats.invalid}`);
+  await logRun('department', 'گروههای آموزشی.txt', stats);
+}
+
+async function phaseCourseGroupLink(file) {
+  console.log('\n── تطبیق دروس→گروه (تطبيق کد دروس.txt) ──');
+  const stats = { total: 0, linked: 0, noDept: 0, noCourse: new Set(), badGroup: new Set() };
+  // کش کد گروه→deptId
+  if (![...deptByFacAndCode.keys()].some(k=>k.startsWith('CODE:'))) {
+    for (const r of await q(`SELECT id, "departmentCode" FROM departments WHERE "departmentCode" IS NOT NULL`)) deptByFacAndCode.set(`CODE:${r.departmentCode}`, Number(r.id));
+  }
+  const updates = []; // {code, deptId}
+  for await (const { cols } of tsvRows(file)) {
+    const code = (cols[0] || '').trim();
+    const groupA = (cols[7] || '').trim();
+    if (!/^\d+$/.test(code) || !/^\d+$/.test(groupA) || groupA==='0') continue;
+    stats.total++;
+    const deptId = deptByFacAndCode.get(`CODE:${groupA}`);
+    if (!deptId) { stats.badGroup.add(groupA); continue; }
+    updates.push({ code, deptId });
+  }
+  // بالک آپدیت
+  let done=0;
+  for (let i=0;i<updates.length && !DRY;i+=500){
+    const ch=updates.slice(i,i+500);
+    const vals=[]; const cases=[];
+    for(let j=0;j<ch.length;j++){ vals.push(ch[j].code, ch[j].deptId); cases.push(`WHEN $${j*2+1} THEN $${j*2+2}::int`); }
+    const codes=ch.map(c=>c.code);
+    const res=await pool.query(`UPDATE courses SET "departmentId" = CASE code ${cases.join(' ')} END WHERE code = ANY($${vals.length+1}::varchar[]) AND ("departmentId" IS NULL OR "departmentId" != CASE code ${cases.join(' ')} END)`, [...vals, codes]);
+    stats.linked+=res.rowCount; done+=ch.length;
+    if(done%2000===0) console.log(`  link… ${done}/${updates.length}`);
+  }
+  if (DRY) stats.linked=updates.length;
+  console.log(`تطبیق: total=${stats.total} linked=${stats.linked} noDept=${stats.badGroup.size}`);
+  if(stats.badGroup.size) console.log(`  گروه‌های بی‌تطبیق: ${[...stats.badGroup].slice(0,10).join('، ')}`);
+  await logRun('course_dept_link', 'تطبيق کد دروس.txt', stats);
+}
+
 async function phaseTatbigh(file) {
   console.log('\n── دروس (تطبیق — tatbigh dars.txt) ──');
   const stats = { total: 0, inserted: 0, updated: 0, invalid: 0, linked: 0, unlinkedGroup: new Set() };
@@ -994,14 +1077,22 @@ try {
   const files = await detectFiles(DIR);
   console.log('فایل‌ها:', Object.fromEntries(Object.entries(files).map(([k, v]) => [k, typeof v === 'string' ? v.split('\\').pop() : v])));
   if (files.studentsSubsetSkipped) console.log(`(زیرمجموعه نادیده گرفته شد: ${files.studentsSubsetSkipped.split('\\').pop()})`);
-  for (const s of ['pre', 'terms', 'majors', 'courses', 'students', 'grades', 'codemap']) {
+  for (const s of ['pre', 'terms', 'majors', 'groups', 'courses', 'links', 'students', 'grades', 'codemap']) {
     if (!STEPS.includes(s)) continue;
     if (s === 'pre') await phasePre();
     if (s === 'terms') { if (!files.terms) throw new Error('فایل ترم‌ها پیدا نشد'); await phaseTerms(files.terms); }
     if (s === 'majors') { if (!files.majors) throw new Error('فایل رشته‌ها پیدا نشد'); await phaseMajors(files.majors); }
+    if (s === 'groups') {
+      if (files.groups) await phaseGroups(files.groups);
+      else console.log('\n── گروه‌های آموزشی: فایل گروههای آموزشی.txt یافت نشد — رد شد');
+    }
     if (s === 'courses') {
       if (files.tatbigh) await phaseTatbigh(files.tatbigh);
       else console.log('\n── دروس: فایل tatbigh dars.txt یافت نشد — از روی placeholder ادامه داده می‌شود');
+    }
+    if (s === 'links') {
+      if (files.tatbighMap) await phaseCourseGroupLink(files.tatbighMap);
+      else console.log('\n── تطبیق دروس→گروه: فایل تطبيق کد دروس.txt یافت نشد — رد شد');
     }
     if (s === 'students') {
       if (!files.students) throw new Error('فایل دانشجویان پیدا نشد');

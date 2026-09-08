@@ -207,12 +207,36 @@ try {
       deptId = (sameFac || cands[0] || {}).id ?? null;
       if (deptId == null) stats.deptMiss.add(F.dept);
     }
-    // تطبیق با کد استاد
-    const st = (await q(`SELECT s.id, s."userId", s."isActive" FROM staff s WHERE s."staffCode" = $1`, [code]))[0];
+    // تطبیق با کد استاد — اگر نبود بساز (اساتید حذف شده بودند)
+    let st = (await q(`SELECT s.id, s."userId", s."isActive" FROM staff s WHERE s."staffCode" = $1`, [code]))[0];
     if (!st) {
       stats.missing++;
       if (missingCodes.length < 20) missingCodes.push(code);
-      continue;
+      // ساخت پرونده جدید: user + staff
+      let ncNew = F.nationalCode;
+      if (ncNew) {
+        const clash = (await q(`SELECT id FROM users WHERE "nationalCode"=$1`, [ncNew]))[0];
+        if (clash) { ncNew = null; stats.ncConflict++; }
+      }
+      const ncFinal = ncNew || ('9' + String(code).padStart(9, '0')).slice(-10);
+      const fn = F.firstName || F.lastName || 'نامشخص';
+      const ln = F.lastName || F.firstName || 'نامشخص';
+      try {
+        const u = (await pool.query(`INSERT INTO users ("nationalCode","firstName","lastName",mobile,email,"birthCertNo","birthDate","fatherName",gender,address,"placeOfBirth","placeOfIssue","passwordHash","isActive")
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,1) ON CONFLICT ("nationalCode") DO NOTHING RETURNING id`,
+          [ncFinal, fn.slice(0,100), ln.slice(0,100), F.mobile, F.email, F.birthCert, F.birthDate, F.father, F.gender, F.address, F.birthPlace, F.issuePlace, 'MIGRATED:' + code]))[0]
+          || (await q(`SELECT id FROM users WHERE "nationalCode"=$1`, [ncFinal]))[0];
+        if (!u) continue;
+        const staffCode = code;
+        // نقش استاد را بعداً بده — اینجا فقط staff
+        const sIns = (await pool.query(`INSERT INTO staff ("userId","staffCode","facultyId","departmentId","isActive","cooperationType",degree,"personnelNo","employmentType","academicRank","hireDate","lastDegreeYear","fieldOfStudy","fieldMain","maritalStatusCode","maritalStatus","lastDegreeCountryCode","lastDegreeUniversity","academicBase","birthProvince","birthCity","bankAccountNo",phone,title)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) ON CONFLICT ("staffCode") DO NOTHING RETURNING id`,
+          [u.id, staffCode, facultyId, deptId, F.active ?? 1, F.coop, F.degree, F.personnelNo, F.employment, F.rank, F.hireDate, F.degreeYear, F.field, F.fieldMain, F.maritalCode, F.marital, F.degreeCountry, F.degreeUniv, F.base, F.birthProv, F.birthCity, F.bankAcc, F.phone, F.title]))[0];
+        if (sIns) { stats.matched++; stats.updatedStaff++; }
+        // نقش PROFESSOR بده
+        try { const rId=(await q(`SELECT id FROM roles WHERE code='PROFESSOR'`))[0]?.id; if(rId) await pool.query(`INSERT INTO user_roles ("userId","roleId") VALUES ($1,$2) ON CONFLICT DO NOTHING`,[u.id,rId]); } catch {}
+        continue;
+      } catch (e) { console.error(`  ! ساخت استاد ${code} خطا:`, e.message); continue; }
     }
     stats.matched++;
     if (F.active !== null && st.isActive !== null && Number(st.isActive) !== F.active) stats.activeMismatch++;
