@@ -48,12 +48,34 @@ if [ -z "$(docker images -q "$IMAGE" 2>/dev/null)" ]; then
   exit 1
 fi
 
+# ── کانتینر پستگرس درحال‌اجرا را پیدا کن (نام ممکن است با استقرار فرق کند) ──
+PG_CONTAINER="$(docker ps --format '{{.Names}}' --filter 'name=^afagh_pg$' 2>/dev/null | head -n1 || true)"
+if [ -z "$PG_CONTAINER" ]; then
+  PG_CONTAINER="$(docker ps --format '{{.Names}}' --filter 'ancestor=postgres' 2>/dev/null | head -n1 || true)"
+fi
+if [ -z "$PG_CONTAINER" ]; then
+  echo "خطا: کانتینر پستگرس درحال‌اجرا پیدا نشد. کانتینرهای فعال:" >&2
+  docker ps --format '  {{.Names}} | {{.Image}} | {{.Status}}' >&2 || true
+  exit 1
+fi
+
+# ── شبکه‌ای که پستگرس واقعاً رویش است (نه حدس ثابت) + هاست مطمئن ──
+NETWORK="$(docker inspect "$PG_CONTAINER" --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' 2>/dev/null | awk '{print $1}')"
+if [ -z "$NETWORK" ]; then NETWORK="${PROJECT_NAME}_default"; fi
+PG_HOST="$PG_CONTAINER"   # نام کانتینر روی شبکهٔ user-defined همیشه resolve می‌شود
+
+# ── پیش‌پرواز: دیتابیس واقعاً جواب می‌دهد؟ ──
+if ! docker exec "$PG_CONTAINER" pg_isready -U afagh -d afagh_db >/dev/null 2>&1; then
+  echo "خطا: پستگرس ($PG_CONTAINER) آماده نیست. لاگ: docker logs $PG_CONTAINER --tail 30" >&2
+  exit 1
+fi
+
 # ── رمز واقعی پستگرس: اول از .env (با تحمل فاصله/کوتیشن)، بعد از کانتینر درحال‌اجرا ──
 ENV_FILE="$ROOT/.env"
 PGPW="$(grep -E '^[[:space:]]*POSTGRES_PASSWORD[[:space:]]*=' "$ENV_FILE" 2>/dev/null | head -n1 | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//" || true)"
 if [ -z "$PGPW" ]; then
-  echo "(.env خوانده نشد؛ تلاش برای خواندن رمز از کانتینر afagh_pg …)"
-  PGPW="$(docker exec afagh_pg printenv POSTGRES_PASSWORD 2>/dev/null | tr -d '\r\n' || true)"
+  echo "(.env خوانده نشد؛ تلاش برای خواندن رمز از کانتینر $PG_CONTAINER …)"
+  PGPW="$(docker exec "$PG_CONTAINER" printenv POSTGRES_PASSWORD 2>/dev/null | tr -d '\r\n' || true)"
 fi
 if [ -z "$PGPW" ]; then
   echo "خطا: رمز پستگرس پیدا نشد." >&2
@@ -65,13 +87,13 @@ fi
 echo "═ انتقال دادهٔ سما → آفاق ═"
 echo "  پوشهٔ داده: $SOURCE_DIR"
 echo "  مراحل:      $STEPS ${DRY:+[DRY-RUN]}"
-echo "  کانتینر:    $NETWORK / $IMAGE"
+echo "  پستگرس:     $PG_CONTAINER روی $NETWORK (هاست $PG_HOST)"
 echo ""
 
 docker run --rm \
   --network "$NETWORK" \
   -v "$SOURCE_DIR:/data:ro" \
-  -e DATABASE_URL="postgres://afagh:${PGPW}@postgres:5432/afagh_db" \
+  -e DATABASE_URL="postgres://afagh:${PGPW}@${PG_HOST}:5432/afagh_db" \
   "$IMAGE" \
   node scripts/import-sama-afagh.mjs --dir "/data" --steps "$STEPS" ${DRY}
 
