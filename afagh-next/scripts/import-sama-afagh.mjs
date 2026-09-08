@@ -72,7 +72,9 @@ function checkNationalCode(code) {
   const r = sum % 11;
   return (r < 2 ? r : 11 - r) === +code[9] ? 'ok' : 'checksum';
 }
-const normTxt = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
+// \x00 (باقی‌ماندهٔ باینری عکس در TSVها) را حذف می‌کند — پستگرس text/varchar با
+// NUL بایت خطای invalid byte sequence for encoding "UTF8": 0x00 می‌دهد
+const normTxt = (s) => String(s ?? '').replace(/\x00/g, '').replace(/\s+/g, ' ').trim();
 
 // ── خواندن جریانی TSV با دیکد win1256 (امن برای بایت‌های باینری عکس) ──
 const dec1256 = new TextDecoder('windows-1256');
@@ -135,7 +137,8 @@ async function detectFiles(dir) {
     else if (H.startsWith('Code\tBdate\tEdate')) found.terms = p;
     else if (has('Maghta', 'Daneshkadeh', 'MinUnit')) found.majors = p;
     else if (has('Avgeffect', 'Uniteffect')) found.markstat = p;
-    else if (has('MinPassedMark')) found.degrees = p;
+    // مقطعها امضای اختصاصی Mashrootmark دارد؛ وگرنه «تطبيق کد دروس» (MinPassedMark تنها) جایش را می‌گیرد
+    else if (has('MinPassedMark') && has('Mashrootmark')) found.degrees = p;
     else if (has('IncludedTuition') && has('isDeleted')) found.lessonreg = p;
     else if (has('applicantIsActive')) found.accept = p;
     else if (has('SanjeshCode')) found.sahmiye = p;
@@ -757,9 +760,11 @@ async function phaseCodemap(files) {
   const put = async (domain, code, title, targetCode, note, status = 'CONFIRMED') => {
     stats.total++;
     if (DRY) return;
+    const safeTitle = title ? String(title).replace(/\x00/g, '').slice(0, 250) : null;
+    const safeNote = note ? JSON.stringify(note).replace(/\\u0000/g, '').slice(0, 2000) : null;
     const r = await pool.query(`INSERT INTO legacy_code_maps ("sourceCode", domain, "legacyCode", "legacyTitle", "targetCode", note, status)
       VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT ("sourceCode", domain, "legacyCode") DO NOTHING`,
-      [SOURCE, domain, code, title ? title.slice(0, 250) : null, targetCode || null, note ? JSON.stringify(note).slice(0, 2000) : null, status]);
+      [SOURCE, domain, code, safeTitle, targetCode || null, safeNote, status]);
     stats.inserted += r.rowCount;
   };
   const readLookup = async (file, mapFn) => {
@@ -805,13 +810,15 @@ async function phaseCodemap(files) {
   // اینجا به‌صورت generic معادل می‌شود (هدر فارسی و انگلیسی هر دو پشتیبانی می‌شود)
   {
     const handled = new Set([files.status, files.markstat, files.sahmiye, files.accept, files.lessonreg].filter(Boolean));
-    const skipData = new Set([files.students, files.grades, files.supp, files.terms, files.majors, files.profs, files.schedule, files.curriculum, files.stterm, files.studentsSubsetSkipped, files.tatbigh].filter(Boolean));
+    const skipData = new Set([files.students, files.grades, files.supp, files.terms, files.majors, files.profs, files.schedule, files.curriculum, files.stterm, files.studentsSubsetSkipped, files.tatbigh, files.tatbighMap, files.groups, files.degrees].filter(Boolean));
     const isCodeCol = (c) => { const t = String(c || '').trim(); return t === 'Code' || t === 'کد' || t === 'كد'; };
     const isTitleCol = (c) => /Title/i.test(String(c || '')) || String(c || '').trim() === 'عنوان';
     let allTxt = [];
     try { allTxt = readdirSync(DIR).filter(n => /\.txt$/i.test(n)).map(n => join(DIR, n)); } catch {}
     for (const p of allTxt) {
       if (handled.has(p) || skipData.has(p)) continue;
+      // فایل‌های چندمگابایتی (رکورد عملیاتی/باینری عکس) مرجع نیستند — فقط لوکاپ‌های کوچک
+      try { if (statSync(p).size > 5 * 1024 * 1024) continue; } catch { continue; }
       let h = [];
       try { h = await readHeaderOnly(p); } catch { continue; }
       const codeIdx = h.findIndex(isCodeCol);
