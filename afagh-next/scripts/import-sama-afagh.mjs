@@ -249,6 +249,38 @@ async function ensureFaculty(code) {
   return id;
 }
 
+const deptByFacAndCode = new Map(); // `${facId}|${groupA}` -> deptId
+async function ensureDepartment(facId, groupA, facultyCode) {
+  const code = String(groupA ?? '').trim();
+  if (!code || code === '0' || !facId) return null;
+  const key = `${facId}|${code}`;
+  if (deptByFacAndCode.has(key)) return deptByFacAndCode.get(key);
+  // اگر همین دانشکده همین کد را دارد
+  let row = (await q(`SELECT id FROM departments WHERE "facultyId" = $1 AND "departmentCode" = $2`, [facId, code]))[0];
+  if (row) { deptByFacAndCode.set(key, Number(row.id)); return Number(row.id); }
+  // اگر دانشکده دیگر همین کد را گرفته باشد — کد یکتاست، بدون کد بساز (مثل seed-base)
+  const owner = (await q(`SELECT id FROM departments WHERE "departmentCode" = $1`, [code]))[0];
+  if (owner) {
+    // سعی: آیا گروه هم‌نام در همین دانشکده داریم؟
+    row = (await q(`SELECT id FROM departments WHERE "facultyId" = $1 AND name = $2`, [facId, `گروه ${code}`]))[0];
+    if (row) { deptByFacAndCode.set(key, Number(row.id)); return Number(row.id); }
+    if (!DRY) {
+      row = (await q(`INSERT INTO departments (name, "facultyId", "departmentCode") VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id`, [`گروه ${code}`, facId, `F${facultyCode}-${code}`]))[0]
+        || (await q(`INSERT INTO departments (name, "facultyId") VALUES ($1,$2) RETURNING id`, [`گروه ${code}`, facId]))[0];
+    }
+    const id = row ? Number(row.id) : null;
+    deptByFacAndCode.set(key, id);
+    return id;
+  }
+  if (!DRY) {
+    row = (await q(`INSERT INTO departments (name, "facultyId", "departmentCode") VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id`, [`گروه ${code}`, facId, code]))[0]
+      || (await q(`SELECT id FROM departments WHERE "departmentCode" = $1`, [code]))[0];
+  }
+  const id = row ? Number(row.id) : null;
+  deptByFacAndCode.set(key, id);
+  return id;
+}
+
 async function logRun(entity, fileName, stats) {
   if (DRY) return;
   await q(`INSERT INTO migration_runs (entity, "fileName", mode, "totalRows", inserted, "skippedExisting", invalid, report, status, "triggeredByUserId")
@@ -364,8 +396,11 @@ async function phaseMajors(file) {
     stats.total++;
     const degId = await ensureDegree((cols[2] || '').trim() || '0');
     const facId = await ensureFaculty((cols[3] || '').trim());
+    const facCode = (cols[3] || '').trim() || '0';
+    const groupA = (cols[4] || '').trim();
+    const depId = await ensureDepartment(facId, groupA, facCode);
     batch.push({
-      name: title.slice(0, 150), degId, depId: null, code: code.slice(0, 10), facId,
+      name: title.slice(0, 150), degId, depId, code: code.slice(0, 10), facId,
       minUnits: /^\d+$/.test((cols[5] || '').trim()) ? Number((cols[5] || '').trim()) : null,
       std: (cols[7] || '').trim().slice(0, 20) || null,
       est: (cols[9] || '').trim().slice(0, 10) || null,
@@ -869,25 +904,35 @@ async function phaseCodemap(files) {
 
 async function phaseTatbigh(file) {
   console.log('\n── دروس (تطبیق — tatbigh dars.txt) ──');
-  const stats = { total: 0, inserted: 0, updated: 0, invalid: 0 };
+  const stats = { total: 0, inserted: 0, updated: 0, invalid: 0, linked: 0, unlinkedGroup: new Set() };
+  // کش گروه→departmentId (نام دقیق گروه آموزشی)
+  if (!deptByFacAndCode.size) {
+    // پرکردن کش از DB برای تطبیق نامی
+    for (const r of await q(`SELECT id, name, "departmentCode" FROM departments`)) {
+      const n = normTxt(r.name);
+      if (n) deptByFacAndCode.set(`NAME:${n}`, Number(r.id));
+      if (r.departmentCode) deptByFacAndCode.set(`CODE:${r.departmentCode}`, Number(r.id));
+    }
+  }
   const batch = [];
   const flush = async () => {
     if (!batch.length) return;
     if (DRY) { batch.length = 0; return; }
     const vals = [];
     const ph = batch.map((r, i) => {
-      const o = i * 6;
-      vals.push(r.code, r.title, r.theory, r.practical, r.units, r.type);
-      return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5},$${o+6})`;
+      const o = i * 7;
+      vals.push(r.code, r.title, r.theory, r.practical, r.units, r.type, r.deptId);
+      return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5},$${o+6},$${o+7})`;
     }).join(',');
-    const res = await pool.query(`INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units, "courseType")
+    const res = await pool.query(`INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units, "courseType", "departmentId")
       VALUES ${ph}
       ON CONFLICT (code) DO UPDATE SET
         title = EXCLUDED.title,
         "theoreticalUnits" = EXCLUDED."theoreticalUnits",
         "practicalUnits" = EXCLUDED."practicalUnits",
         units = EXCLUDED.units,
-        "courseType" = COALESCE(EXCLUDED."courseType", courses."courseType")
+        "courseType" = COALESCE(EXCLUDED."courseType", courses."courseType"),
+        "departmentId" = COALESCE(courses."departmentId", EXCLUDED."departmentId")
       RETURNING xmax = 0 AS inserted`, vals);
     // xmax=0 means inserted, else updated — but simpler: count via rowCount and assume
     stats.inserted += res.rowCount;
@@ -904,17 +949,26 @@ async function phaseTatbigh(file) {
     const theory = parseFloat((cols[5] || '0').trim()) || 0;
     const practical = parseFloat((cols[6] || '0').trim()) || 0;
     const courseType = normTxt(cols[7]).slice(0, 50) || null;
+    const groupName = normTxt(cols[3]);
+    let deptId = null;
+    if (groupName && groupName !== 'نامشخص') {
+      // تطبیق دقیق با نام گروه — اگر دو گروه هم‌نام در دو دانشکده باشد، نام‌باید با کد تمایز یابد و تطبیق نامی خطاست
+      const hit = deptByFacAndCode.get(`NAME:${groupName}`);
+      if (hit) { deptId = hit; stats.linked++; }
+      else { stats.unlinkedGroup.add(groupName); }
+    }
     const equivRaw = (cols[14] || '').trim();
     if (equivRaw) equivJobs.push({ code, equivRaw });
     stats.total++;
-    batch.push({ code: code.slice(0,20), title: title.slice(0,150), theory, practical, units, type: courseType });
+    batch.push({ code: code.slice(0,20), title: title.slice(0,150), theory, practical, units, type: courseType, deptId });
     coursesByCode.set(code, -1); // mark as known for later placeholder avoidance
     if (batch.length >= 500) await flush();
   }
   await flush();
   // refresh coursesByCode
   for (const r of await q(`SELECT id, code FROM courses`)) coursesByCode.set(r.code, Number(r.id));
-  console.log(`دروس: total=${stats.total} upserted=${stats.inserted} invalid=${stats.invalid} (courses در DB: ${coursesByCode.size})`);
+  console.log(`دروس: total=${stats.total} upserted=${stats.inserted} invalid=${stats.invalid} linked=${stats.linked} (courses در DB: ${coursesByCode.size})`);
+  if (stats.unlinkedGroup.size) console.log(`  گروه‌های بی‌تطبیق tatbigh: ${[...stats.unlinkedGroup].slice(0,10).join('، ')}`);
   // هم‌ارزی‌ها را به legacy_code_maps بریز (برای گزارش و تطبیق آینده)
   if (equivJobs.length && !DRY) {
     let eqIns = 0;
