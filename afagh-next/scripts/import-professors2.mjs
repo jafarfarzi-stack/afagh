@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 /**
  * ══════════════════════════════════════════════════════════════════════
- *  غنی‌سازی پرونده اساتید از «اساتید2.txt» (سما) — کلید تطبیق: کد استاد
- *  — انکودینگ: Windows-1256، جداکننده: تب، هدر فارسی (کد/لقب/نام/…)
- *  — به‌روزرسانی fill-if-empty (فقط فیلدهای خالی پر می‌شود؛ دادهٔ دستی نمی‌پرد)
- *  — دانشکده/گروه با تطبیق «نام» پیدا می‌شود؛ اگر نباشد ساخته نمی‌شود (گزارش می‌شود)
+ *  بازسازی کامل پروندهٔ اساتید از «اساتید2.txt» (سما) — از صفر
+ *  ۱) حذف اساتید دمو (staffCode غیرعددی: F-LO…/SCT-…) — فقط یکی می‌ماند
+ *  ۲) درج/به‌روزرسانی کامل همهٔ ردیف‌های فایل با کلید «کد استاد»
+ *     (بازنویسی همهٔ فیلدها — فایل مرجع حقیقت است)
  *
  *  استفاده:
  *    node scripts/import-professors2.mjs --dir "E:\git\information afagh" --dry
  *    node scripts/import-professors2.mjs --dir ... --limit 20 --dry
- *    node scripts/import-professors2.mjs --dir ...            # اجرای واقعی
- *    node scripts/import-professors2.mjs --file x.txt --db postgres://...
+ *    node scripts/import-professors2.mjs --dir ...                     # اجرای واقعی
+ *    node scripts/import-professors2.mjs --dir ... --no-purge          # بدون حذف دمو
+ *    node scripts/import-professors2.mjs --dir ... --keep-demo SCT-PF01 # نگه‌داشتن دموی مشخص
  * ══════════════════════════════════════════════════════════════════════
  */
 import { createReadStream, existsSync, readdirSync, statSync } from 'node:fs';
@@ -31,7 +32,6 @@ for (let i = 0; i < raw.length; i++) {
 function resolveFile() {
   if (args.file) return args.file;
   const dir = args.dir || (existsSync('/data/اساتید2.txt') ? '/data' : 'E:\\git\\information afagh');
-  // نام فایل ممکن است «اساتید2.txt» یا با فاصله/نیم‌فاصله باشد — با پیشوند پیدا کن
   try {
     for (const n of readdirSync(dir)) {
       const p = join(dir, n);
@@ -45,6 +45,8 @@ function resolveFile() {
 const FILE = resolveFile();
 const LIMIT = args.limit ? Number(args.limit) : 0;
 const DRY = args.dry === 'true';
+const PURGE = args['no-purge'] !== 'true';
+const KEEP_DEMO = args['keep-demo'] || null;
 const dbUrl = args.db || process.env.DATABASE_URL || 'postgres://afagh:afagh@localhost:5432/afagh_db';
 
 const pool = new Pool({ connectionString: dbUrl, max: 5 });
@@ -125,10 +127,11 @@ function extractYear(s) {
   const m = String(s || '').match(/(13|14)\d{2}/);
   return m ? Number(m[0]) : null;
 }
+const synthNC = (code) => ('9' + String(code).replace(/\D/g, '').padStart(9, '0')).slice(-10);
 
-// ── کش دانشکده/گروه (تطبیق با نام) ──
+// ── کش دانشکده/گروه ──
 const facultyByName = new Map();
-const deptByName = new Map(); // name -> [{id, facultyId}]
+const deptByName = new Map();
 async function loadCaches() {
   for (const r of await q(`SELECT id, name FROM faculties`)) {
     const k = norm(r.name);
@@ -143,17 +146,54 @@ async function loadCaches() {
   console.log(`کش: ${facultyByName.size} دانشکده، ${deptByName.size} نام گروه`);
 }
 
+// ── مرحله ۱: حذف دموها (فقط یکی می‌ماند) ──
+async function purgeDemos() {
+  const demos = await q(`SELECT id, "staffCode", "userId" FROM staff WHERE "staffCode" !~ '^\\d+$' ORDER BY id`);
+  if (!demos.length) { console.log('دمویی برای حذف نیست.'); return; }
+  let keeper = null;
+  if (KEEP_DEMO) keeper = demos.find(d => d.staffCode === KEEP_DEMO) || null;
+  if (!keeper) keeper = demos[0];
+  const victims = demos.filter(d => d.id !== keeper.id);
+  console.log(`دمو: ${demos.length} مورد → نگه‌داری [${keeper.staffCode}]، حذف ${victims.length} مورد`);
+  if (DRY) return;
+  const vIds = victims.map(v => v.id);
+  const vUids = [...new Set(victims.map(v => v.userId))];
+  // آزادسازی ارجاع‌ها
+  await pool.query(`UPDATE departments SET "headStaffId"=NULL WHERE "headStaffId"=ANY($1)`, [vIds]);
+  const offN = (await pool.query(`UPDATE course_offerings SET "professorId"=NULL WHERE "professorId"=ANY($1)`, [vIds])).rowCount;
+  const opN = (await pool.query(`DELETE FROM offering_professors WHERE "staffId"=ANY($1)`, [vIds])).rowCount;
+  const avN = (await pool.query(`DELETE FROM professor_availabilities WHERE "staffId"=ANY($1)`, [vIds])).rowCount;
+  try { await pool.query(`DELETE FROM professor_term_contracts WHERE "staffId"=ANY($1)`, [vIds]); } catch {}
+  try { await pool.query(`DELETE FROM grade_submission_otps WHERE "staffId"=ANY($1)`, [vIds]); } catch {}
+  await pool.query(`DELETE FROM user_roles WHERE "userId"=ANY($1)`, [vUids]);
+  await pool.query(`DELETE FROM sessions WHERE "userId"=ANY($1)`, [vUids]);
+  const stN = (await pool.query(`DELETE FROM staff WHERE id=ANY($1)`, [vIds])).rowCount;
+  // کاربر دمو فقط اگر دانشجو نباشد حذف شود
+  let uN = 0, uKeep = 0;
+  for (const uid of vUids) {
+    const hasStu = (await q(`SELECT 1 FROM students WHERE "userId"=$1 LIMIT 1`, [uid]))[0];
+    if (hasStu) { uKeep++; continue; }
+    try { uN += (await pool.query(`DELETE FROM users WHERE id=$1`, [uid])).rowCount; }
+    catch (e) { uKeep++; }
+  }
+  console.log(`  حذف شد: staff=${stN} users=${uN} (نگه‌داشته user=${uKeep}) | آزادسازی: offerings.prof=${offN} offering_profs=${opN} avail=${avN}`);
+}
+
 // ── اجرا ──
 try {
-  console.log(`Professors2 enrich | file=${FILE} | limit=${LIMIT || '∞'} | ${DRY ? 'DRY-RUN' : 'LIVE'}`);
-  if (!DRY) await loadCaches();
-  const stats = { total: 0, matched: 0, updatedStaff: 0, updatedUser: 0, missing: 0, badCode: 0, facMiss: new Set(), deptMiss: new Set(), ncConflict: 0, activeMismatch: 0 };
-  const missingCodes = [];
+  console.log(`Professors fresh | file=${FILE} | limit=${LIMIT || '∞'} | ${DRY ? 'DRY-RUN' : 'LIVE'} | purge=${PURGE ? 'ON' : 'OFF'}`);
+  if (!DRY) {
+    if (PURGE) await purgeDemos();
+    await loadCaches();
+  }
+  let profRoleId = null;
+  if (!DRY) profRoleId = (await q(`SELECT id FROM roles WHERE code='PROFESSOR'`))[0]?.id ?? null;
+
+  const stats = { total: 0, badCode: 0, createdUser: 0, updatedUser: 0, createdStaff: 0, updatedStaff: 0, facMiss: new Set(), deptMiss: new Set(), ncFallback: 0 };
   for await (const { cols } of tsvRows(FILE)) {
     const code = clean(cols[0]);
     if (!/^\d+$/.test(code) || code === '0') { stats.badCode++; continue; }
     stats.total++;
-    // ستون‌ها (ایندکس ثابت — هدر فارسی با کاف عربی است)
     const F = {
       title: norm(cols[1]) || null,
       firstName: norm(cols[2]) || null,
@@ -191,112 +231,84 @@ try {
       bankAcc: clean(cols[35]).slice(0, 50) || null,
     };
     if (DRY) {
-      // فقط پارسینگ نمایش بده — بدون DB
       if (stats.total <= 5 || stats.total % 200 === 0) {
-        console.log(`[DRY] code=${code} name=${F.lastName} ${F.firstName} | ${F.title} | ${F.faculty}/${F.dept} | NC=${F.nationalCode}`);
+        console.log(`[DRY] code=${code} ${F.lastName} ${F.firstName} | NC=${F.nationalCode || synthNC(code) + '*'}`);
       }
       continue;
     }
-    // دانشکده/گروه
+    // دانشکده/گروه از روی نام
     let facultyId = F.faculty ? (facultyByName.get(F.faculty) ?? null) : null;
     if (F.faculty && facultyId == null) stats.facMiss.add(F.faculty);
+    // «نامشخص» گروه را نادیده بگیر
+    const deptName = F.dept && F.dept !== 'نامشخص' ? F.dept : null;
     let deptId = null;
-    if (F.dept) {
-      const cands = deptByName.get(F.dept) || [];
+    if (deptName) {
+      const cands = deptByName.get(deptName) || [];
       const sameFac = facultyId != null ? cands.find(c => c.facultyId === facultyId) : null;
       deptId = (sameFac || cands[0] || {}).id ?? null;
-      if (deptId == null) stats.deptMiss.add(F.dept);
+      if (deptId == null) stats.deptMiss.add(deptName);
     }
-    // تطبیق با کد استاد — اگر نبود بساز (اساتید حذف شده بودند)
-    let st = (await q(`SELECT s.id, s."userId", s."isActive" FROM staff s WHERE s."staffCode" = $1`, [code]))[0];
-    if (!st) {
-      stats.missing++;
-      if (missingCodes.length < 20) missingCodes.push(code);
-      // ساخت پرونده جدید: user + staff
-      let ncNew = F.nationalCode;
-      if (ncNew) {
-        const clash = (await q(`SELECT id FROM users WHERE "nationalCode"=$1`, [ncNew]))[0];
-        if (clash) { ncNew = null; stats.ncConflict++; }
-      }
-      const ncFinal = ncNew || ('9' + String(code).padStart(9, '0')).slice(-10);
-      const fn = F.firstName || F.lastName || 'نامشخص';
-      const ln = F.lastName || F.firstName || 'نامشخص';
-      try {
-        const u = (await pool.query(`INSERT INTO users ("nationalCode","firstName","lastName",mobile,email,"birthCertNo","birthDate","fatherName",gender,address,"placeOfBirth","placeOfIssue","passwordHash","isActive")
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,1) ON CONFLICT ("nationalCode") DO NOTHING RETURNING id`,
-          [ncFinal, fn.slice(0,100), ln.slice(0,100), F.mobile, F.email, F.birthCert, F.birthDate, F.father, F.gender, F.address, F.birthPlace, F.issuePlace, 'MIGRATED:' + code]))[0]
-          || (await q(`SELECT id FROM users WHERE "nationalCode"=$1`, [ncFinal]))[0];
-        if (!u) continue;
-        const staffCode = code;
-        // نقش استاد را بعداً بده — اینجا فقط staff
-        const sIns = (await pool.query(`INSERT INTO staff ("userId","staffCode","facultyId","departmentId","isActive","cooperationType",degree,"personnelNo","employmentType","academicRank","hireDate","lastDegreeYear","fieldOfStudy","fieldMain","maritalStatusCode","maritalStatus","lastDegreeCountryCode","lastDegreeUniversity","academicBase","birthProvince","birthCity","bankAccountNo",phone,title)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) ON CONFLICT ("staffCode") DO NOTHING RETURNING id`,
-          [u.id, staffCode, facultyId, deptId, F.active ?? 1, F.coop, F.degree, F.personnelNo, F.employment, F.rank, F.hireDate, F.degreeYear, F.field, F.fieldMain, F.maritalCode, F.marital, F.degreeCountry, F.degreeUniv, F.base, F.birthProv, F.birthCity, F.bankAcc, F.phone, F.title]))[0];
-        if (sIns) { stats.matched++; stats.updatedStaff++; }
-        // نقش PROFESSOR بده
-        try { const rId=(await q(`SELECT id FROM roles WHERE code='PROFESSOR'`))[0]?.id; if(rId) await pool.query(`INSERT INTO user_roles ("userId","roleId") VALUES ($1,$2) ON CONFLICT DO NOTHING`,[u.id,rId]); } catch {}
-        continue;
-      } catch (e) { console.error(`  ! ساخت استاد ${code} خطا:`, e.message); continue; }
+    // ── کاربر: اول کدملی واقعی، بعد مصنوعی ──
+    let nc = F.nationalCode;
+    if (!nc) { nc = synthNC(code); stats.ncFallback++; }
+    const clash = (await q(`SELECT id FROM users WHERE "nationalCode"=$1`, [nc]))[0];
+    let userId;
+    const fn = (F.firstName || F.lastName || 'نامشخص').slice(0, 100);
+    const ln = (F.lastName || F.firstName || 'نامشخص').slice(0, 100);
+    if (clash) {
+      userId = clash.id;
+      // آیا این کاربرِ همین استاد است (staff با همین staffCode)؟ اگر نه → مصنوعی جدا
+      const owner = (await q(`SELECT id FROM staff WHERE "userId"=$1 AND "staffCode"<>$2 LIMIT 1`, [userId, code]))[0];
+      if (owner) { nc = synthNC(code); stats.ncFallback++; }
     }
-    stats.matched++;
-    if (F.active !== null && st.isActive !== null && Number(st.isActive) !== F.active) stats.activeMismatch++;
-    //冲突 کد ملی با کاربر دیگر؟
-    let ncOk = F.nationalCode;
-    if (ncOk) {
-      const clash = (await q(`SELECT id FROM users WHERE "nationalCode" = $1 AND id <> $2`, [ncOk, st.userId]))[0];
-      if (clash) { ncOk = null; stats.ncConflict++; }
+    let u = (await q(`SELECT id FROM users WHERE "nationalCode"=$1`, [nc]))[0];
+    if (u) {
+      userId = u.id;
+      await pool.query(`UPDATE users SET "firstName"=$2,"lastName"=$3,mobile=COALESCE($4,mobile),email=COALESCE($5,email),
+        "birthCertNo"=COALESCE($6,"birthCertNo"),"birthDate"=COALESCE($7,"birthDate"),"fatherName"=COALESCE($8,"fatherName"),
+        gender=COALESCE($9,gender),address=COALESCE($10,address),"placeOfBirth"=COALESCE($11,"placeOfBirth"),
+        "placeOfIssue"=COALESCE($12,"placeOfIssue"),"isActive"=1 WHERE id=$1`,
+        [userId, fn, ln, F.mobile, F.email, F.birthCert, F.birthDate, F.father, F.gender, F.address, F.birthPlace, F.issuePlace]);
+      stats.updatedUser++;
+    } else {
+      const ins = (await pool.query(`INSERT INTO users ("nationalCode","firstName","lastName",mobile,email,"birthCertNo","birthDate",
+          "fatherName",gender,address,"placeOfBirth","placeOfIssue","passwordHash","isActive","mustChangePassword")
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,1,1) RETURNING id`,
+        [nc, fn, ln, F.mobile, F.email, F.birthCert, F.birthDate, F.father, F.gender, F.address, F.birthPlace, F.issuePlace, 'MIGRATED:' + code]))[0];
+      userId = ins.id;
+      stats.createdUser++;
     }
-    const r1 = await pool.query(`UPDATE staff SET
-        title = COALESCE(NULLIF(title,''), $2),
-        "facultyId" = COALESCE("facultyId", $3),
-        "departmentId" = COALESCE("departmentId", $4),
-        "isActive" = COALESCE("isActive", $5),
-        "cooperationType" = COALESCE(NULLIF("cooperationType",''), $6),
-        degree = COALESCE(NULLIF(degree,''), $7),
-        "personnelNo" = COALESCE(NULLIF("personnelNo",''), $8),
-        "employmentType" = COALESCE(NULLIF("employmentType",''), $9),
-        "academicRank" = COALESCE(NULLIF("academicRank",''), $10),
-        "hireDate" = COALESCE(NULLIF("hireDate",''), $11),
-        "lastDegreeYear" = COALESCE("lastDegreeYear", $12),
-        "fieldOfStudy" = COALESCE(NULLIF("fieldOfStudy",''), $13),
-        "fieldMain" = COALESCE(NULLIF("fieldMain",''), $14),
-        "maritalStatusCode" = COALESCE("maritalStatusCode", $15),
-        "maritalStatus" = COALESCE(NULLIF("maritalStatus",''), $16),
-        "lastDegreeCountryCode" = COALESCE(NULLIF("lastDegreeCountryCode",''), $17),
-        "lastDegreeUniversity" = COALESCE(NULLIF("lastDegreeUniversity",''), $18),
-        "academicBase" = COALESCE(NULLIF("academicBase",''), $19),
-        "birthProvince" = COALESCE(NULLIF("birthProvince",''), $20),
-        "birthCity" = COALESCE(NULLIF("birthCity",''), $21),
-        "bankAccountNo" = COALESCE(NULLIF("bankAccountNo",''), $22),
-        phone = COALESCE(NULLIF(phone,''), $23)
-      WHERE id = $1`,
-      [st.id, F.title, facultyId, deptId, F.active, F.coop, F.degree, F.personnelNo,
-       F.employment, F.rank, F.hireDate, F.degreeYear, F.field, F.fieldMain, F.maritalCode,
-       F.marital, F.degreeCountry, F.degreeUniv, F.base, F.birthProv, F.birthCity, F.bankAcc, F.phone]);
-    if (r1.rowCount) stats.updatedStaff++;
-    const r2 = await pool.query(`UPDATE users SET
-        "firstName" = COALESCE(NULLIF("firstName",''), $2),
-        "lastName" = COALESCE(NULLIF("lastName",''), $3),
-        "fatherName" = COALESCE(NULLIF("fatherName",''), $4),
-        "birthCertNo" = COALESCE(NULLIF("birthCertNo",''), $5),
-        "placeOfBirth" = COALESCE(NULLIF("placeOfBirth",''), $6),
-        "placeOfIssue" = COALESCE(NULLIF("placeOfIssue",''), $7),
-        "birthDate" = COALESCE("birthDate", $8),
-        gender = COALESCE(NULLIF(gender,''), $9),
-        address = COALESCE(NULLIF(address,''), $10),
-        email = COALESCE(NULLIF(email,''), $11),
-        mobile = COALESCE(NULLIF(mobile,''), $12),
-        "nationalCode" = COALESCE(NULLIF("nationalCode",''), $13)
-      WHERE id = $1`,
-      [st.userId, F.firstName, F.lastName, F.father, F.birthCert, F.birthPlace, F.issuePlace,
-       F.birthDate, F.gender, F.address, F.email, F.mobile, ncOk]);
-    if (r2.rowCount) stats.updatedUser++;
+    // ── پروندهٔ کارمندی: بازنویسی کامل ──
+    const ex = (await q(`SELECT id FROM staff WHERE "staffCode"=$1`, [code]))[0];
+    if (ex) {
+      await pool.query(`UPDATE staff SET "userId"=$2,title=$3,"facultyId"=$4,"departmentId"=$5,"isActive"=COALESCE($6,"isActive",1),
+        "cooperationType"=$7,degree=$8,"personnelNo"=$9,"employmentType"=$10,"academicRank"=$11,"hireDate"=$12,
+        "lastDegreeYear"=$13,"fieldOfStudy"=$14,"fieldMain"=$15,"maritalStatusCode"=$16,"maritalStatus"=$17,
+        "lastDegreeCountryCode"=$18,"lastDegreeUniversity"=$19,"academicBase"=$20,"birthProvince"=$21,"birthCity"=$22,
+        "bankAccountNo"=$23,phone=$24 WHERE id=$1`,
+        [ex.id, userId, F.title, facultyId, deptId, F.active, F.coop, F.degree, F.personnelNo, F.employment, F.rank,
+         F.hireDate, F.degreeYear, F.field, F.fieldMain, F.maritalCode, F.marital, F.degreeCountry, F.degreeUniv,
+         F.base, F.birthProv, F.birthCity, F.bankAcc, F.phone]);
+      stats.updatedStaff++;
+    } else {
+      await pool.query(`INSERT INTO staff ("userId","staffCode",title,"facultyId","departmentId","isActive","cooperationType",
+          degree,"personnelNo","employmentType","academicRank","hireDate","lastDegreeYear","fieldOfStudy","fieldMain",
+          "maritalStatusCode","maritalStatus","lastDegreeCountryCode","lastDegreeUniversity","academicBase",
+          "birthProvince","birthCity","bankAccountNo",phone)
+        VALUES ($1,$2,$3,$4,$5,COALESCE($6,1),$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
+        [userId, code, F.title, facultyId, deptId, F.active, F.coop, F.degree, F.personnelNo, F.employment, F.rank,
+         F.hireDate, F.degreeYear, F.field, F.fieldMain, F.maritalCode, F.marital, F.degreeCountry, F.degreeUniv,
+         F.base, F.birthProv, F.birthCity, F.bankAcc, F.phone]);
+      stats.createdStaff++;
+    }
+    if (profRoleId) {
+      await pool.query(`INSERT INTO user_roles ("userId","roleId") VALUES ($1,$2) ON CONFLICT DO NOTHING`, [userId, profRoleId]);
+    }
+    if (stats.total % 300 === 0) console.log(`  … ${stats.total} (staff+${stats.createdStaff}/~${stats.updatedStaff})`);
   }
-  console.log(`\nاساتید2: total=${stats.total} matched=${stats.matched} missing=${stats.missing} bad=${stats.badCode}`);
-  console.log(`به‌روزرسانی: staff=${stats.updatedStaff} users=${stats.updatedUser} تداخل کدملی=${stats.ncConflict} مغایرت فعالی=${stats.activeMismatch}`);
+  console.log(`\nاساتید: total=${stats.total} bad=${stats.badCode} | users +${stats.createdUser}/~${stats.updatedUser} | staff +${stats.createdStaff}/~${stats.updatedStaff} | کدملی مصنوعی=${stats.ncFallback}`);
   if (stats.facMiss.size) console.log(`دانشکده‌های بی‌تطبیق (${stats.facMiss.size}): ${[...stats.facMiss].slice(0, 10).join('، ')}`);
   if (stats.deptMiss.size) console.log(`گروه‌های بی‌تطبیق (${stats.deptMiss.size}): ${[...stats.deptMiss].slice(0, 10).join('، ')}`);
-  if (missingCodes.length) console.log(`کدهای بدون پرونده (اول ${missingCodes.length} تا): ${missingCodes.join('، ')}${stats.missing > missingCodes.length ? ` (+${stats.missing - missingCodes.length} تای دیگر)` : ''}`);
   console.log(DRY ? 'DRY-RUN — چیزی نوشته نشد.' : '🎉 کامل شد.');
 } catch (err) {
   console.error('❌ خطا:', err?.message || err);
