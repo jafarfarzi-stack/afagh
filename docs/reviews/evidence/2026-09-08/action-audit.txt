@@ -1,0 +1,7 @@
+  ⚪ عمومی (سفید): id/actions.ts
+  ⚪ عمومی (سفید): login/actions.ts
+  ⚪ عمومی (سفید): open-courses/actions.ts
+  ⚪ عمومی (سفید): verify-certificate/actions.ts
+
+🔎 اکشن‌های ممیزی‌شده: 201
+✅ همهٔ Server Actionهای غیرعمومی گارد دارند (Role/Object/Origin).

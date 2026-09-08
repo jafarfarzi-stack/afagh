@@ -1,0 +1,1 @@
+PASS: app has no published port even APP_PORT=8080

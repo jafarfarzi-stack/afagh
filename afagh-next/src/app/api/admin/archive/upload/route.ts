@@ -1,8 +1,8 @@
-import { createHash } from 'crypto';
+import { appendAudit } from '@/lib/audit';
+import { MAX_ARCHIVE_BYTES, parseArchiveId } from '@/lib/archive-files';
 import { NextRequest, NextResponse } from 'next/server';
-import { desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { audit_logs, student_documents } from '@/db/schema';
+import { student_documents } from '@/db/schema';
 import { getSessionUser } from '@/lib/auth';
 import { assertSameOrigin } from '@/lib/security';
 import { archiveKey, putArchiveObject, sha256 } from '@/lib/objectStore';
@@ -17,16 +17,20 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   // ادمین/کارشناس بایگانی برای هر کس؛ دانشجو فقط برای خودش (e-KYC §۲۴۳۸)
   const privileged = user.roles.includes('ADMIN') || user.roles.includes('ARCHIVE_EXPERT');
-  const form = await req.formData();
+  let form: FormData;
+  try { form = await req.formData(); }
+  catch { return NextResponse.json({ error: 'فرم بارگذاری نامعتبر است' }, { status: 400 }); }
   const file = form.get('file') as File | null;
-  const studentUserId = Number(form.get('studentUserId'));
+  const studentUserId = parseArchiveId(form.get('studentUserId'));
   if (!privileged && studentUserId !== user.id) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-  const categoryId = Number(form.get('categoryId'));
-  const typeId = form.get('typeId') ? Number(form.get('typeId')) : null;
-  if (!file || !studentUserId || !categoryId) return NextResponse.json({ error: 'پارامتر ناقص' }, { status: 400 });
+  const categoryId = parseArchiveId(form.get('categoryId'));
+  const rawTypeId = form.get('typeId');
+  const typeId = rawTypeId ? parseArchiveId(rawTypeId) : null;
+  if (!(file instanceof File) || studentUserId === null || categoryId === null || (!!rawTypeId && typeId === null)) return NextResponse.json({ error: 'پارامتر ناقص' }, { status: 400 });
 
+  if (file.size > MAX_ARCHIVE_BYTES) return NextResponse.json({ error: 'حجم بیش از ۱۰MB' }, { status: 413 });
   const buf = Buffer.from(await file.arrayBuffer());
-  if (buf.length > 10 * 1024 * 1024) return NextResponse.json({ error: 'حجم بیش از ۱۰MB' }, { status: 413 });
+  if (buf.length > MAX_ARCHIVE_BYTES) return NextResponse.json({ error: 'حجم بیش از ۱۰MB' }, { status: 413 });
 
   // ── whitelist سخت‌گیرانهٔ نوع محتوا (ضمیمهٔ آسیب‌پذیری Stored-XSS) ──
   // فقط فایل‌های تصویری/PDF پذیرفته می‌شوند؛ هیچ `text/html` یا `image/svg+xml`
@@ -39,22 +43,27 @@ export async function POST(req: NextRequest) {
 
   const ext = (file.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
   const key = archiveKey(studentUserId, typeId ?? categoryId, ext);
-  const { size, etag } = await putArchiveObject(key, buf, file.type || 'application/octet-stream');
+  let stored: { size: number; etag: string };
+  try { stored = await putArchiveObject(key, buf, mime); }
+  catch {
+    console.error('[archive] object upload failed');
+    return NextResponse.json({ error: 'ذخیره‌ساز در دسترس نیست؛ دوباره تلاش کنید' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+  }
+  const { size, etag } = stored;
 
-  const [row] = await db.insert(student_documents).values({
-    personUserId: studentUserId, categoryId, typeId,
-    fileName: file.name, fileUrl: key, mimeType: mime,
-  }).returning({ id: student_documents.id });
-
-  // ممیزی زنجیره‌ای — رویداد واقعی بایگانی
-  const [last] = await db.select({ hash: audit_logs.hash }).from(audit_logs).orderBy(desc(audit_logs.id)).limit(1);
-  const prevHash = last?.hash ?? '';
-  const now = new Date();
-  await db.insert(audit_logs).values({
-    actorUserId: user.id, action: 'ARCHIVE_FILE_STORED', entityType: 'student_documents', entityId: row.id,
-    details: JSON.stringify({ key, size, sha256: sha256(buf).slice(0, 16), etag: etag.slice(0, 16) }),
-    prevHash,
-    hash: createHash('sha256').update(prevHash + '|ARCHIVE_FILE_STORED|' + row.id + '|' + now.toISOString()).digest('hex'),
+  // Object storage and PostgreSQL do not share a transaction. An upload may
+  // leave an orphan object if the DB fails; never delete on an ambiguous commit.
+  const row = await db.transaction(async tx => {
+    const [document] = await tx.insert(student_documents).values({
+      personUserId: studentUserId, categoryId, typeId,
+      fileName: file.name, fileUrl: key, mimeType: mime,
+    }).returning({ id: student_documents.id });
+    await appendAudit(tx, {
+      actorUserId: user.id, action: 'ARCHIVE_FILE_STORED',
+      entityType: 'student_documents', entityId: document.id,
+      details: JSON.stringify({ key, size, sha256: sha256(buf), etag }),
+    });
+    return document;
   });
   return NextResponse.json({ ok: true, docId: row.id, key, size });
 }

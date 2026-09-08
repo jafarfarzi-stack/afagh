@@ -1,0 +1,5 @@
+در حال اعمال سخت‌سازی دیتابیس، ایندکس‌ها و نقش امنیتی afagh_app...
+✅ سخت‌سازی دیتابیس و نقش afagh_app با موفقیت ایجاد و اعمال شد.
+✅ RLS فعال است (41/41 جدول — شامل deny-all) و نقش afagh_app امن است (NOSUPERUSER + NOBYPASSRLS).
+✅ گرنت ستونی: نوشتن دانشجو فقط روی enrollments("status","waitlistPosition") + cart_items(INSERT/DELETE) + notifications(INSERT).
+✅ پوشش RLS کامل: 53 جدول دارای دادهٔ هویتی/مالی — همه RLS دارند.

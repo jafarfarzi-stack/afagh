@@ -1,5 +1,5 @@
 import * as Minio from 'minio';
-import { createHash, randomInt } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 
 // ═══ Object Storage — سند §۲۴۳۸: «فایل‌ها خارج از DB؛ فقط URL در دیتابیس» ═══
 // MinIO (سازگار با S3) — در پروداکشن همان کد به S3/Cloudine وصل می‌شود.
@@ -16,9 +16,20 @@ if (process.env.NODE_ENV !== 'production') g.__afaghMinio = S3;
 
 export const ARCHIVE_BUCKET = process.env.S3_BUCKET || 'afagh-archive';
 
+let bucketCheck: Promise<void> | undefined;
 export async function ensureBucket(): Promise<void> {
-  const exists = await S3.bucketExists(ARCHIVE_BUCKET).catch(() => false);
-  if (!exists) await S3.makeBucket(ARCHIVE_BUCKET, 'us-east-1');
+  if (!bucketCheck) {
+    bucketCheck = (async () => {
+      if (await S3.bucketExists(ARCHIVE_BUCKET)) return;
+      try { await S3.makeBucket(ARCHIVE_BUCKET, 'us-east-1'); }
+      catch (error) {
+        // A second process may win creation. Never hide transport/auth failures.
+        const code = (error as { code?: string }).code;
+        if (code !== 'BucketAlreadyOwnedByYou' || !(await S3.bucketExists(ARCHIVE_BUCKET))) throw error;
+      }
+    })().finally(() => { bucketCheck = undefined; });
+  }
+  return bucketCheck;
 }
 
 /** ذخیرهٔ فایل در باکت بایگانی — کلید: archive/{studentId}/{typeId}-{timestamp}-{rand} */
@@ -38,7 +49,7 @@ export async function removeArchiveObject(key: string): Promise<void> {
 }
 
 export function archiveKey(studentId: number, typeId: number, ext: string): string {
-  return `archive/${studentId}/${typeId}-${Date.now()}-${randomInt(100, 999)}.${ext}`;
+  return `archive/${studentId}/${typeId}-${Date.now()}-${randomUUID()}.${ext}`;
 }
 
 export const sha256 = (b: Buffer) => createHash('sha256').update(b).digest('hex');

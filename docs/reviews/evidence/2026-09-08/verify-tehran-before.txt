@@ -1,0 +1,1197 @@
+
+> afagh-next@1.0.0 audit:verify
+> tsx scripts/verify-audit.ts
+
+{
+  "ok": false,
+  "verified": 0,
+  "legacy": 0,
+  "errors": [
+    {
+      "id": 1,
+      "reason": "hash"
+    },
+    {
+      "id": 2,
+      "reason": "hash"
+    },
+    {
+      "id": 3,
+      "reason": "hash"
+    },
+    {
+      "id": 4,
+      "reason": "hash"
+    },
+    {
+      "id": 5,
+      "reason": "hash"
+    },
+    {
+      "id": 6,
+      "reason": "hash"
+    },
+    {
+      "id": 7,
+      "reason": "hash"
+    },
+    {
+      "id": 8,
+      "reason": "hash"
+    },
+    {
+      "id": 9,
+      "reason": "hash"
+    },
+    {
+      "id": 10,
+      "reason": "hash"
+    },
+    {
+      "id": 11,
+      "reason": "hash"
+    },
+    {
+      "id": 12,
+      "reason": "hash"
+    },
+    {
+      "id": 13,
+      "reason": "hash"
+    },
+    {
+      "id": 14,
+      "reason": "hash"
+    },
+    {
+      "id": 15,
+      "reason": "hash"
+    },
+    {
+      "id": 16,
+      "reason": "hash"
+    },
+    {
+      "id": 17,
+      "reason": "hash"
+    },
+    {
+      "id": 18,
+      "reason": "hash"
+    },
+    {
+      "id": 19,
+      "reason": "hash"
+    },
+    {
+      "id": 20,
+      "reason": "hash"
+    },
+    {
+      "id": 21,
+      "reason": "hash"
+    },
+    {
+      "id": 22,
+      "reason": "hash"
+    },
+    {
+      "id": 23,
+      "reason": "hash"
+    },
+    {
+      "id": 24,
+      "reason": "hash"
+    },
+    {
+      "id": 25,
+      "reason": "hash"
+    },
+    {
+      "id": 26,
+      "reason": "hash"
+    },
+    {
+      "id": 27,
+      "reason": "hash"
+    },
+    {
+      "id": 28,
+      "reason": "hash"
+    },
+    {
+      "id": 29,
+      "reason": "hash"
+    },
+    {
+      "id": 30,
+      "reason": "hash"
+    },
+    {
+      "id": 31,
+      "reason": "hash"
+    },
+    {
+      "id": 32,
+      "reason": "hash"
+    },
+    {
+      "id": 33,
+      "reason": "hash"
+    },
+    {
+      "id": 34,
+      "reason": "hash"
+    },
+    {
+      "id": 35,
+      "reason": "hash"
+    },
+    {
+      "id": 36,
+      "reason": "hash"
+    },
+    {
+      "id": 37,
+      "reason": "hash"
+    },
+    {
+      "id": 38,
+      "reason": "hash"
+    },
+    {
+      "id": 39,
+      "reason": "hash"
+    },
+    {
+      "id": 40,
+      "reason": "hash"
+    },
+    {
+      "id": 41,
+      "reason": "hash"
+    },
+    {
+      "id": 42,
+      "reason": "hash"
+    },
+    {
+      "id": 43,
+      "reason": "hash"
+    },
+    {
+      "id": 44,
+      "reason": "hash"
+    },
+    {
+      "id": 45,
+      "reason": "hash"
+    },
+    {
+      "id": 46,
+      "reason": "hash"
+    },
+    {
+      "id": 47,
+      "reason": "hash"
+    },
+    {
+      "id": 48,
+      "reason": "hash"
+    },
+    {
+      "id": 49,
+      "reason": "hash"
+    },
+    {
+      "id": 50,
+      "reason": "hash"
+    },
+    {
+      "id": 51,
+      "reason": "hash"
+    },
+    {
+      "id": 52,
+      "reason": "hash"
+    },
+    {
+      "id": 53,
+      "reason": "hash"
+    },
+    {
+      "id": 54,
+      "reason": "hash"
+    },
+    {
+      "id": 55,
+      "reason": "hash"
+    },
+    {
+      "id": 56,
+      "reason": "hash"
+    },
+    {
+      "id": 57,
+      "reason": "hash"
+    },
+    {
+      "id": 58,
+      "reason": "hash"
+    },
+    {
+      "id": 59,
+      "reason": "hash"
+    },
+    {
+      "id": 60,
+      "reason": "hash"
+    },
+    {
+      "id": 61,
+      "reason": "hash"
+    },
+    {
+      "id": 62,
+      "reason": "hash"
+    },
+    {
+      "id": 63,
+      "reason": "hash"
+    },
+    {
+      "id": 64,
+      "reason": "hash"
+    },
+    {
+      "id": 65,
+      "reason": "hash"
+    },
+    {
+      "id": 66,
+      "reason": "hash"
+    },
+    {
+      "id": 67,
+      "reason": "hash"
+    },
+    {
+      "id": 68,
+      "reason": "hash"
+    },
+    {
+      "id": 69,
+      "reason": "hash"
+    },
+    {
+      "id": 70,
+      "reason": "hash"
+    },
+    {
+      "id": 71,
+      "reason": "hash"
+    },
+    {
+      "id": 72,
+      "reason": "hash"
+    },
+    {
+      "id": 73,
+      "reason": "hash"
+    },
+    {
+      "id": 74,
+      "reason": "hash"
+    },
+    {
+      "id": 75,
+      "reason": "hash"
+    },
+    {
+      "id": 76,
+      "reason": "hash"
+    },
+    {
+      "id": 77,
+      "reason": "hash"
+    },
+    {
+      "id": 78,
+      "reason": "hash"
+    },
+    {
+      "id": 79,
+      "reason": "hash"
+    },
+    {
+      "id": 80,
+      "reason": "hash"
+    },
+    {
+      "id": 81,
+      "reason": "hash"
+    },
+    {
+      "id": 82,
+      "reason": "hash"
+    },
+    {
+      "id": 83,
+      "reason": "hash"
+    },
+    {
+      "id": 84,
+      "reason": "hash"
+    },
+    {
+      "id": 85,
+      "reason": "hash"
+    },
+    {
+      "id": 86,
+      "reason": "hash"
+    },
+    {
+      "id": 87,
+      "reason": "hash"
+    },
+    {
+      "id": 88,
+      "reason": "hash"
+    },
+    {
+      "id": 89,
+      "reason": "hash"
+    },
+    {
+      "id": 90,
+      "reason": "hash"
+    },
+    {
+      "id": 91,
+      "reason": "hash"
+    },
+    {
+      "id": 92,
+      "reason": "hash"
+    },
+    {
+      "id": 93,
+      "reason": "hash"
+    },
+    {
+      "id": 94,
+      "reason": "hash"
+    },
+    {
+      "id": 95,
+      "reason": "hash"
+    },
+    {
+      "id": 96,
+      "reason": "hash"
+    },
+    {
+      "id": 97,
+      "reason": "hash"
+    },
+    {
+      "id": 98,
+      "reason": "hash"
+    },
+    {
+      "id": 99,
+      "reason": "hash"
+    },
+    {
+      "id": 100,
+      "reason": "hash"
+    },
+    {
+      "id": 101,
+      "reason": "hash"
+    },
+    {
+      "id": 102,
+      "reason": "hash"
+    },
+    {
+      "id": 103,
+      "reason": "hash"
+    },
+    {
+      "id": 104,
+      "reason": "hash"
+    },
+    {
+      "id": 105,
+      "reason": "hash"
+    },
+    {
+      "id": 106,
+      "reason": "hash"
+    },
+    {
+      "id": 107,
+      "reason": "hash"
+    },
+    {
+      "id": 108,
+      "reason": "hash"
+    },
+    {
+      "id": 109,
+      "reason": "hash"
+    },
+    {
+      "id": 110,
+      "reason": "hash"
+    },
+    {
+      "id": 111,
+      "reason": "hash"
+    },
+    {
+      "id": 112,
+      "reason": "hash"
+    },
+    {
+      "id": 113,
+      "reason": "hash"
+    },
+    {
+      "id": 114,
+      "reason": "hash"
+    },
+    {
+      "id": 115,
+      "reason": "hash"
+    },
+    {
+      "id": 116,
+      "reason": "hash"
+    },
+    {
+      "id": 117,
+      "reason": "hash"
+    },
+    {
+      "id": 118,
+      "reason": "hash"
+    },
+    {
+      "id": 119,
+      "reason": "hash"
+    },
+    {
+      "id": 120,
+      "reason": "hash"
+    },
+    {
+      "id": 121,
+      "reason": "hash"
+    },
+    {
+      "id": 122,
+      "reason": "hash"
+    },
+    {
+      "id": 123,
+      "reason": "hash"
+    },
+    {
+      "id": 124,
+      "reason": "hash"
+    },
+    {
+      "id": 125,
+      "reason": "hash"
+    },
+    {
+      "id": 126,
+      "reason": "hash"
+    },
+    {
+      "id": 127,
+      "reason": "hash"
+    },
+    {
+      "id": 128,
+      "reason": "hash"
+    },
+    {
+      "id": 129,
+      "reason": "hash"
+    },
+    {
+      "id": 130,
+      "reason": "hash"
+    },
+    {
+      "id": 131,
+      "reason": "hash"
+    },
+    {
+      "id": 132,
+      "reason": "hash"
+    },
+    {
+      "id": 133,
+      "reason": "hash"
+    },
+    {
+      "id": 134,
+      "reason": "hash"
+    },
+    {
+      "id": 135,
+      "reason": "hash"
+    },
+    {
+      "id": 136,
+      "reason": "hash"
+    },
+    {
+      "id": 137,
+      "reason": "hash"
+    },
+    {
+      "id": 138,
+      "reason": "hash"
+    },
+    {
+      "id": 139,
+      "reason": "hash"
+    },
+    {
+      "id": 140,
+      "reason": "hash"
+    },
+    {
+      "id": 141,
+      "reason": "hash"
+    },
+    {
+      "id": 142,
+      "reason": "hash"
+    },
+    {
+      "id": 143,
+      "reason": "hash"
+    },
+    {
+      "id": 144,
+      "reason": "hash"
+    },
+    {
+      "id": 145,
+      "reason": "hash"
+    },
+    {
+      "id": 146,
+      "reason": "hash"
+    },
+    {
+      "id": 147,
+      "reason": "hash"
+    },
+    {
+      "id": 148,
+      "reason": "hash"
+    },
+    {
+      "id": 149,
+      "reason": "hash"
+    },
+    {
+      "id": 150,
+      "reason": "hash"
+    },
+    {
+      "id": 151,
+      "reason": "hash"
+    },
+    {
+      "id": 152,
+      "reason": "hash"
+    },
+    {
+      "id": 153,
+      "reason": "hash"
+    },
+    {
+      "id": 154,
+      "reason": "hash"
+    },
+    {
+      "id": 155,
+      "reason": "hash"
+    },
+    {
+      "id": 156,
+      "reason": "hash"
+    },
+    {
+      "id": 157,
+      "reason": "hash"
+    },
+    {
+      "id": 158,
+      "reason": "hash"
+    },
+    {
+      "id": 159,
+      "reason": "hash"
+    },
+    {
+      "id": 160,
+      "reason": "hash"
+    },
+    {
+      "id": 161,
+      "reason": "hash"
+    },
+    {
+      "id": 162,
+      "reason": "hash"
+    },
+    {
+      "id": 163,
+      "reason": "hash"
+    },
+    {
+      "id": 164,
+      "reason": "hash"
+    },
+    {
+      "id": 165,
+      "reason": "hash"
+    },
+    {
+      "id": 166,
+      "reason": "hash"
+    },
+    {
+      "id": 167,
+      "reason": "hash"
+    },
+    {
+      "id": 168,
+      "reason": "hash"
+    },
+    {
+      "id": 169,
+      "reason": "hash"
+    },
+    {
+      "id": 170,
+      "reason": "hash"
+    },
+    {
+      "id": 171,
+      "reason": "hash"
+    },
+    {
+      "id": 172,
+      "reason": "hash"
+    },
+    {
+      "id": 173,
+      "reason": "hash"
+    },
+    {
+      "id": 174,
+      "reason": "hash"
+    },
+    {
+      "id": 175,
+      "reason": "hash"
+    },
+    {
+      "id": 176,
+      "reason": "hash"
+    },
+    {
+      "id": 177,
+      "reason": "hash"
+    },
+    {
+      "id": 178,
+      "reason": "hash"
+    },
+    {
+      "id": 179,
+      "reason": "hash"
+    },
+    {
+      "id": 180,
+      "reason": "hash"
+    },
+    {
+      "id": 181,
+      "reason": "hash"
+    },
+    {
+      "id": 182,
+      "reason": "hash"
+    },
+    {
+      "id": 183,
+      "reason": "hash"
+    },
+    {
+      "id": 184,
+      "reason": "hash"
+    },
+    {
+      "id": 185,
+      "reason": "hash"
+    },
+    {
+      "id": 186,
+      "reason": "hash"
+    },
+    {
+      "id": 187,
+      "reason": "hash"
+    },
+    {
+      "id": 188,
+      "reason": "hash"
+    },
+    {
+      "id": 189,
+      "reason": "hash"
+    },
+    {
+      "id": 190,
+      "reason": "hash"
+    },
+    {
+      "id": 191,
+      "reason": "hash"
+    },
+    {
+      "id": 192,
+      "reason": "hash"
+    },
+    {
+      "id": 193,
+      "reason": "hash"
+    },
+    {
+      "id": 194,
+      "reason": "hash"
+    },
+    {
+      "id": 195,
+      "reason": "hash"
+    },
+    {
+      "id": 196,
+      "reason": "hash"
+    },
+    {
+      "id": 197,
+      "reason": "hash"
+    },
+    {
+      "id": 198,
+      "reason": "hash"
+    },
+    {
+      "id": 199,
+      "reason": "hash"
+    },
+    {
+      "id": 200,
+      "reason": "hash"
+    },
+    {
+      "id": 201,
+      "reason": "hash"
+    },
+    {
+      "id": 202,
+      "reason": "hash"
+    },
+    {
+      "id": 203,
+      "reason": "hash"
+    },
+    {
+      "id": 204,
+      "reason": "hash"
+    },
+    {
+      "id": 205,
+      "reason": "hash"
+    },
+    {
+      "id": 206,
+      "reason": "hash"
+    },
+    {
+      "id": 207,
+      "reason": "hash"
+    },
+    {
+      "id": 208,
+      "reason": "hash"
+    },
+    {
+      "id": 209,
+      "reason": "hash"
+    },
+    {
+      "id": 210,
+      "reason": "hash"
+    },
+    {
+      "id": 211,
+      "reason": "hash"
+    },
+    {
+      "id": 212,
+      "reason": "hash"
+    },
+    {
+      "id": 213,
+      "reason": "hash"
+    },
+    {
+      "id": 214,
+      "reason": "hash"
+    },
+    {
+      "id": 215,
+      "reason": "hash"
+    },
+    {
+      "id": 216,
+      "reason": "hash"
+    },
+    {
+      "id": 217,
+      "reason": "hash"
+    },
+    {
+      "id": 218,
+      "reason": "hash"
+    },
+    {
+      "id": 219,
+      "reason": "hash"
+    },
+    {
+      "id": 220,
+      "reason": "hash"
+    },
+    {
+      "id": 221,
+      "reason": "hash"
+    },
+    {
+      "id": 222,
+      "reason": "hash"
+    },
+    {
+      "id": 223,
+      "reason": "hash"
+    },
+    {
+      "id": 224,
+      "reason": "hash"
+    },
+    {
+      "id": 225,
+      "reason": "hash"
+    },
+    {
+      "id": 226,
+      "reason": "hash"
+    },
+    {
+      "id": 227,
+      "reason": "hash"
+    },
+    {
+      "id": 228,
+      "reason": "hash"
+    },
+    {
+      "id": 229,
+      "reason": "hash"
+    },
+    {
+      "id": 230,
+      "reason": "hash"
+    },
+    {
+      "id": 231,
+      "reason": "hash"
+    },
+    {
+      "id": 232,
+      "reason": "hash"
+    },
+    {
+      "id": 233,
+      "reason": "hash"
+    },
+    {
+      "id": 234,
+      "reason": "hash"
+    },
+    {
+      "id": 235,
+      "reason": "hash"
+    },
+    {
+      "id": 236,
+      "reason": "hash"
+    },
+    {
+      "id": 237,
+      "reason": "hash"
+    },
+    {
+      "id": 238,
+      "reason": "hash"
+    },
+    {
+      "id": 239,
+      "reason": "hash"
+    },
+    {
+      "id": 240,
+      "reason": "hash"
+    },
+    {
+      "id": 241,
+      "reason": "hash"
+    },
+    {
+      "id": 242,
+      "reason": "hash"
+    },
+    {
+      "id": 243,
+      "reason": "hash"
+    },
+    {
+      "id": 244,
+      "reason": "hash"
+    },
+    {
+      "id": 245,
+      "reason": "hash"
+    },
+    {
+      "id": 246,
+      "reason": "hash"
+    },
+    {
+      "id": 247,
+      "reason": "hash"
+    },
+    {
+      "id": 248,
+      "reason": "hash"
+    },
+    {
+      "id": 249,
+      "reason": "hash"
+    },
+    {
+      "id": 250,
+      "reason": "hash"
+    },
+    {
+      "id": 251,
+      "reason": "hash"
+    },
+    {
+      "id": 252,
+      "reason": "hash"
+    },
+    {
+      "id": 253,
+      "reason": "hash"
+    },
+    {
+      "id": 254,
+      "reason": "hash"
+    },
+    {
+      "id": 255,
+      "reason": "hash"
+    },
+    {
+      "id": 256,
+      "reason": "hash"
+    },
+    {
+      "id": 257,
+      "reason": "hash"
+    },
+    {
+      "id": 258,
+      "reason": "hash"
+    },
+    {
+      "id": 259,
+      "reason": "hash"
+    },
+    {
+      "id": 260,
+      "reason": "hash"
+    },
+    {
+      "id": 261,
+      "reason": "hash"
+    },
+    {
+      "id": 262,
+      "reason": "hash"
+    },
+    {
+      "id": 263,
+      "reason": "hash"
+    },
+    {
+      "id": 264,
+      "reason": "hash"
+    },
+    {
+      "id": 265,
+      "reason": "hash"
+    },
+    {
+      "id": 266,
+      "reason": "hash"
+    },
+    {
+      "id": 267,
+      "reason": "hash"
+    },
+    {
+      "id": 268,
+      "reason": "hash"
+    },
+    {
+      "id": 269,
+      "reason": "hash"
+    },
+    {
+      "id": 270,
+      "reason": "hash"
+    },
+    {
+      "id": 271,
+      "reason": "hash"
+    },
+    {
+      "id": 272,
+      "reason": "hash"
+    },
+    {
+      "id": 273,
+      "reason": "hash"
+    },
+    {
+      "id": 274,
+      "reason": "hash"
+    },
+    {
+      "id": 275,
+      "reason": "hash"
+    },
+    {
+      "id": 276,
+      "reason": "hash"
+    },
+    {
+      "id": 277,
+      "reason": "hash"
+    },
+    {
+      "id": 278,
+      "reason": "hash"
+    },
+    {
+      "id": 279,
+      "reason": "hash"
+    },
+    {
+      "id": 280,
+      "reason": "hash"
+    },
+    {
+      "id": 281,
+      "reason": "hash"
+    },
+    {
+      "id": 282,
+      "reason": "hash"
+    },
+    {
+      "id": 283,
+      "reason": "hash"
+    },
+    {
+      "id": 284,
+      "reason": "hash"
+    },
+    {
+      "id": 285,
+      "reason": "hash"
+    },
+    {
+      "id": 286,
+      "reason": "hash"
+    },
+    {
+      "id": 287,
+      "reason": "hash"
+    },
+    {
+      "id": 288,
+      "reason": "hash"
+    },
+    {
+      "id": 289,
+      "reason": "hash"
+    },
+    {
+      "id": 290,
+      "reason": "hash"
+    },
+    {
+      "id": 291,
+      "reason": "hash"
+    },
+    {
+      "id": 292,
+      "reason": "hash"
+    },
+    {
+      "id": 293,
+      "reason": "hash"
+    },
+    {
+      "id": 294,
+      "reason": "hash"
+    },
+    {
+      "id": 295,
+      "reason": "hash"
+    },
+    {
+      "id": 296,
+      "reason": "hash"
+    }
+  ],
+  "head": "9f054a20eda4e0a0266f09582e63a14c8f419759c6d89f15df77210b7c933505",
+  "note": "Legacy hashes unverified. Head must be externally anchored to detect full rewriting or tail deletion."
+}

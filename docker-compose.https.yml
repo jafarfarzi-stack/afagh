@@ -3,7 +3,8 @@
 #
 #  ۱) در فایل .env بگذارید:
 #         DOMAIN=edu.example.ac.ir
-#         APP_PORT=127.0.0.1:8080          ← اپ دیگر مستقیم از اینترنت باز نباشد
+#         AFAGH_PROXY_SECRET=<openssl rand -hex 32>
+#     Docker Compose >= 2.24.4 required (ports !reset).
 #         AFAGH_PUBLIC_BASE_URL=https://edu.example.ac.ir
 #  ۲) اجرا:
 #         docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
@@ -13,11 +14,19 @@
 #  به IP همین سرور اشاره کند.
 # ════════════════════════════════════════════════════════════════════
 services:
+  app:
+    # Remove inherited published ports, even if APP_PORT=8080 in .env.
+    ports: !reset []
+    environment:
+      AFAGH_TRUST_PROXY: 'true'
+      AFAGH_PROXY_SECRET: ${AFAGH_PROXY_SECRET:?یک راز تصادفی حداقل ۳۲ کاراکتری تعریف کنید}
+      AFAGH_COOKIE_SECURE: 'true'
   caddy:
     image: caddy:2-alpine
     container_name: afagh_caddy
     restart: unless-stopped
     environment:
+      AFAGH_PROXY_SECRET: ${AFAGH_PROXY_SECRET:?یک راز تصادفی حداقل ۳۲ کاراکتری تعریف کنید}
       DOMAIN: ${DOMAIN:?متغیر DOMAIN را در .env تعریف کنید}
     ports:
       - '80:80'

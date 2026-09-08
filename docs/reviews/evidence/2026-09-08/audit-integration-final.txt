@@ -1,0 +1,9 @@
+
+> afagh-next@1.0.0 test:audit-integration
+> tsx scripts/audit-integration.test.ts
+
+PASS: 60 concurrent transactions, 72 linked/recomputable hashes, empty-table race
+PASS: business change and audit roll back together
+PASS: audit insertion failure rolls back business change
+PASS: unsupported isolation rejected, lock released after rollback
+PASS: real verifier CLI reproduces hashes in Tehran and New York

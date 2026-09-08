@@ -47,6 +47,8 @@ x-app-env: &app-env
   S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-afagh-secret}
   # عمومی — بقیهٔ مقادیر از پنل مدیر ← «پیکربندی سامانه» قابل تنظیم‌اند
   AFAGH_UNIVERSITY_NAME: ${AFAGH_UNIVERSITY_NAME:-دانشگاه آفاق}
+  AFAGH_TRUST_PROXY: ${AFAGH_TRUST_PROXY:-false}
+  AFAGH_PROXY_SECRET: ${AFAGH_PROXY_SECRET:-}
   AFAGH_PUBLIC_BASE_URL: ${AFAGH_PUBLIC_BASE_URL:-http://localhost:8080}
   AFAGH_SUPPORT_EMAIL: ${AFAGH_SUPPORT_EMAIL:-}
   AFAGH_SUPPORT_PHONE: ${AFAGH_SUPPORT_PHONE:-}

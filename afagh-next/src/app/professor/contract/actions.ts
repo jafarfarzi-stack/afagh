@@ -1,5 +1,6 @@
 'use server';
 
+import { clientIp } from '@/lib/request-context';
 import { headers } from 'next/headers';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
@@ -79,7 +80,7 @@ export async function signContractAction(otp: string): Promise<{ ok: boolean; er
     if (!res.ok) return { ok: false, error: res.error };
 
     const h = await headers();
-    const signed = await signContract(me.id, res.documentId, otp, h.get('x-forwarded-for')?.split(',')[0]?.trim() || 'local', h.get('user-agent') || '');
+    const signed = await signContract(me.id, res.documentId, otp, await clientIp(), h.get('user-agent') || '');
     if (!signed.ok) return { ok: false, error: signed.error };
 
     const [doc] = await db

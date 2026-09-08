@@ -1,7 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { headers } from 'next/headers';
-import { rateLimit } from '@/lib/rateLimit';
+import { rateLimit, clientIp } from '@/lib/rateLimit';
 import { verifyCertificate, type CertificateVerification } from '@/lib/verification';
 
 export const dynamic = 'force-dynamic';
@@ -9,8 +8,7 @@ export const dynamic = 'force-dynamic';
 // 🔒 M-1: سقف استعلام اصالت از هر IP (ضد شمارش/بروت‌فورس کدهای رهگیری)
 async function verifyQuota(): Promise<boolean> {
   try {
-    const h = await headers();
-    const ip = (h.get('x-forwarded-for') || '').split(',')[0]?.trim() || h.get('x-real-ip') || 'local';
+    const ip = await clientIp();
     const r = await rateLimit(`verify-legacy:${ip}`, 15, 10 * 60);
     return r.ok;
   } catch {

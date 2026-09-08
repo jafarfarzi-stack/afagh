@@ -1,0 +1,1 @@
+{"browser": "Chromium", "realLogin": true, "secure": true, "httpOnly": true, "sameSite": "None", "javascriptCannotReadToken": true, "authenticatedRead": 200, "withoutCookie": 401, "tls": "TLS 1.3", "pageErrors": []}

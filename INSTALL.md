@@ -340,3 +340,8 @@ gunzip -c afagh-app.tar.gz | docker load && docker compose up -d --no-build
 - رمزهای پیش‌فرض (`afagh`/`afagh`، `afagh_app`/`afagh_app`، MinIO `afagh-secret`) فقط برای توسعه‌اند — در استقرار واقعی عوض کنید: `.env`، `pg-hardening.sql`، `docker-compose.yml`
 - RLS فعال است: نقش `afagh_app` حتی با بایپس کد، ردیف دانشجوی دیگر را نمی‌بیند/نمی‌نویسد (§۲۱۷۰)
 - فایل‌های مدارک در MinIO خارج از دیتابیس؛ دسترسی با لینک امضاشدهٔ ۵ دقیقه‌ای (§۲۴۳۸)
+
+
+## تغییر مرز اعتماد پروکسی (بستهٔ تثبیت)
+
+پیش از فعال‌کردن HTTPS، راز مشترک Caddy/اپ را تنظیم کنید و از Compose >= 2.24.4 استفاده کنید. پورت اپ در لایهٔ HTTPS دیگر منتشر نمی‌شود. راهنمای دقیق و محدودیت اجرای مستقیم/CDN: [اعتماد پروکسی](docs/PROXY_TRUST.md).

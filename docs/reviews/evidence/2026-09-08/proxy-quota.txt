@@ -1,0 +1,2 @@
+{"base":"http://127.0.0.1:58081","requests":100,"spoofedIPs":100,"limited":85,"limiterIdentity":"127.0.0.1"}
+{"base":"http://127.0.0.1:58080","requests":100,"spoofedIPs":100,"limited":85,"limiterIdentity":"unknown"}

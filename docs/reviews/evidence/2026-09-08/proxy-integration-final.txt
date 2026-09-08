@@ -1,0 +1,5 @@
+
+> afagh-next@1.0.0 test:proxy-integration
+> tsx scripts/proxy-integration.test.ts
+
+PASS: real Caddy overwrites forged identity/token; direct forged request untrusted; clean and spoofed requests share real peer IP

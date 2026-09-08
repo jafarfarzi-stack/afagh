@@ -1,0 +1,12 @@
+
+> afagh-next@1.0.0 audit:verify
+> tsx scripts/verify-audit.ts
+
+{
+  "ok": true,
+  "verified": 296,
+  "legacy": 0,
+  "errors": [],
+  "head": "9f054a20eda4e0a0266f09582e63a14c8f419759c6d89f15df77210b7c933505",
+  "note": "Legacy hashes unverified. Head must be externally anchored to detect full rewriting or tail deletion."
+}

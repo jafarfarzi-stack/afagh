@@ -6,7 +6,7 @@
     "dev": "next dev -p 8080",
     "build": "next build",
     "typecheck": "tsc --noEmit",
-    "test": "tsx tests/tuition-rules.test.ts && tsx tests/finance-rules.test.ts && tsx tests/grades-reducer.test.ts && tsx tests/exam-core.test.ts && tsx tests/scheduling-core.test.ts && tsx tests/exam-scheduler.test.ts && tsx tests/curriculum-domain.test.ts && tsx tests/curriculum-validator.test.ts",
+    "test": "tsx tests/tuition-rules.test.ts && tsx tests/finance-rules.test.ts && tsx tests/grades-reducer.test.ts && tsx tests/exam-core.test.ts && tsx tests/scheduling-core.test.ts && tsx tests/exam-scheduler.test.ts && tsx tests/curriculum-domain.test.ts && tsx tests/curriculum-validator.test.ts && tsx --test tests/archive-files.test.ts && tsx --test tests/audit-core.test.ts && node scripts/check-audit-writers.mjs && tsx --test tests/proxy-trust.test.ts",
     "start": "next start -p 8080",
     "db:generate": "npx drizzle-kit generate",
     "db:push": "npx drizzle-kit push",
@@ -15,7 +15,13 @@
     "db:hardening": "node scripts/hardening.mjs",
     "db:base": "node scripts/seed-base.mjs",
     "test:rls": "node scripts/rls-test.mjs",
-    "test:concurrency": "node scripts/concurrency-test.mjs"
+    "test:concurrency": "node scripts/concurrency-test.mjs",
+    "test:audit-integration": "tsx scripts/audit-integration.test.ts",
+    "audit:verify": "tsx scripts/verify-audit.ts",
+    "test:proxy-integration": "tsx scripts/proxy-integration.test.ts",
+    "test:adversarial": "tsx --test tests/stabilization-adversarial.test.ts",
+    "test:heavy:archive": "tsx scripts/heavy/archive-http.ts",
+    "test:heavy:audit": "tsx scripts/heavy/audit-multiprocess.ts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

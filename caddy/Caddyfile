@@ -1,8 +1,17 @@
 # HTTPS خودکار با Let's Encrypt — دامنه از متغیر DOMAIN خوانده می‌شود
 {$DOMAIN} {
 	encode zstd gzip
-	reverse_proxy app:8080
+	reverse_proxy app:8080 {
+		# Overwrite, never append/forward client-provided identity headers.
+		header_up X-Afagh-Client-IP {http.request.remote.host}
+		header_up X-Afagh-Proxy-Token {$AFAGH_PROXY_SECRET}
+		header_up -X-Real-IP
+		header_up -X-Forwarded-Protocol
+		header_up -X-Forwarded-SSL
+	}
 	header {
+		# Set after upstream response so security headers are not duplicated.
+		defer
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "SAMEORIGIN"

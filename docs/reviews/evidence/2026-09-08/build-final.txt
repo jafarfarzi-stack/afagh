@@ -1,0 +1,120 @@
+
+> afagh-next@1.0.0 build
+> next build
+
+▲ Next.js 16.3.4 (Turbopack)
+✓ Running next.config.mjs took 14ms
+
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.
+
+  To migrate automatically, run:
+  npx @next/codemod@canary middleware-to-proxy .
+
+  Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+  Creating an optimized production build ...
+✓ Compiled successfully in 7.4s
+  Running TypeScript ...
+  Finished TypeScript in 5.8s ...
+  Collecting page data using 1 worker ...
+  Generating static pages using 1 worker (0/8) ...
+  Generating static pages using 1 worker (2/8)
+  Generating static pages using 1 worker (4/8)
+  Generating static pages using 1 worker (6/8)
+✓ Generating static pages using 1 worker (8/8) in 245ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /admin
+├ ƒ /admin/admissions
+├ ƒ /admin/archive
+├ ƒ /admin/bi
+├ ƒ /admin/curriculum
+├ ƒ /admin/exams
+├ ƒ /admin/finance
+├ ƒ /admin/finance/rules
+├ ƒ /admin/finance/student/[id]
+├ ƒ /admin/graduation
+├ ƒ /admin/migration
+├ ƒ /admin/offerings
+├ ƒ /admin/payroll
+├ ƒ /admin/permissions
+├ ƒ /admin/regulations
+├ ƒ /admin/scheduling
+├ ƒ /admin/settings
+├ ƒ /admin/short-courses
+├ ƒ /admin/staff
+├ ƒ /admin/student-cards
+├ ƒ /admin/student-finance
+├ ƒ /admin/students
+├ ƒ /admin/templates
+├ ƒ /admin/tuition
+├ ƒ /admin/workflows
+├ ƒ /alumni
+├ ƒ /api/admin/archive/upload
+├ ƒ /api/admin/archive/verify
+├ ƒ /api/admin/migration/codemaps
+├ ƒ /api/admin/migration/commit
+├ ƒ /api/admin/migration/dry-run
+├ ƒ /api/admin/migration/export
+├ ƒ /api/admin/migration/import
+├ ƒ /api/admin/migration/inspect
+├ ƒ /api/admin/migration/runs
+├ ƒ /api/admin/migration/template
+├ ƒ /api/admin/redis-warmup
+├ ƒ /api/archive/[docId]
+├ ƒ /api/cron/bi-refresh
+├ ƒ /api/cron/cheque-reminders
+├ ƒ /api/cron/graduation-scan
+├ ƒ /api/cron/workflow-events
+├ ƒ /api/enroll/live-capacity
+├ ƒ /api/waiting-room/status
+├ ○ /change-password
+├ ƒ /exam-ticket/[token]
+├ ƒ /group-manager
+├ ƒ /group-manager/classrooms
+├ ƒ /group-manager/courses
+├ ƒ /group-manager/equivalence
+├ ƒ /group-manager/no-dept
+├ ƒ /group-manager/offerings
+├ ○ /id
+├ ƒ /id/[token]
+├ ○ /login
+├ ○ /manual
+├ ƒ /open-courses
+├ ƒ /proctor
+├ ƒ /professor
+├ ƒ /professor/attendance
+├ ƒ /professor/availability
+├ ƒ /professor/contract
+├ ƒ /professor/documents
+├ ƒ /professor/documents/[id]
+├ ƒ /professor/evaluation
+├ ƒ /professor/grades
+├ ƒ /professor/performance
+├ ƒ /professor/schedule
+├ ƒ /student
+├ ƒ /student/chart
+├ ƒ /student/documents
+├ ƒ /student/enroll
+├ ƒ /student/exam-card
+├ ƒ /student/finance
+├ ƒ /student/graduation
+├ ƒ /student/requests
+├ ƒ /student/schedule
+├ ƒ /student/transcript
+├ ƒ /student/virtual-classes
+├ ƒ /verify
+├ ƒ /verify-certificate
+├ ƒ /verify-certificate/[code]
+├ ƒ /verify-degree/[code]
+├ ƒ /verify/[code]
+├ ƒ /verify/document/[hash]
+└ ƒ /verify/search
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand

@@ -1,0 +1,27 @@
+{
+  "upload": {
+    "count": 1000,
+    "succeeded": 1000,
+    "concurrency": 24,
+    "durationMs": 7839,
+    "p95Ms": 252
+  },
+  "read": {
+    "count": 3000,
+    "concurrency": 32,
+    "durationMs": 9916
+  },
+  "verify": {
+    "count": 180,
+    "concurrency": 24,
+    "durationMs": 775
+  },
+  "audit": {
+    "ok": true,
+    "verified": 1476,
+    "legacy": 0,
+    "errors": [],
+    "head": "2484d00633e6458c9f8543c936cf88c179f57a5aac9ec2453e374dc5905d9efd"
+  },
+  "failures": []
+}

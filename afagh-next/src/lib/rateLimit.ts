@@ -1,5 +1,5 @@
 import 'server-only';
-import { headers } from 'next/headers';
+export { clientIp } from './request-context';
 import Redis from 'ioredis';
 
 /**
@@ -37,17 +37,6 @@ const memSweep = () => {
   const now = Date.now();
   for (const [k, v] of mem) if (v.resetAt <= now) mem.delete(k);
 };
-
-/** IP کلاینت از هدرهای پروکسی (Caddy در مسیر production) — Next 15+: headers() پرامیس است */
-export async function clientIp(): Promise<string> {
-  try {
-    const h = await headers();
-    const fwd = (h.get('x-forwarded-for') || '').split(',')[0]?.trim();
-    return fwd || h.get('x-real-ip') || 'local';
-  } catch {
-    return 'local';
-  }
-}
 
 export type RateLimitResult = { ok: true } | { ok: false; retryAfterSec: number };
 

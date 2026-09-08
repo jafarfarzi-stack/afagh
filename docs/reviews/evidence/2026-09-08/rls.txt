@@ -1,0 +1,32 @@
+
+— ۱) جداسازی خواندن (A در برابر دادهٔ B)
+  ✓ students: دادهٔ B از دید A = ۰ ردیف
+  ✓ students: دادهٔ خود A = ۱ ردیف
+  ✓ users: دادهٔ B = ۰ ردیف
+  ✓ enrollments: ثبت‌نام B = ۰ ردیف
+  ✓ enrollments: ثبت‌نام خود A = ۱ ردیف
+  ✓ cart_items: سبد B از دید A = ۰ ردیف
+  ✓ notifications: اعلان B = ۰ ردیف
+  ✓ student_requests: درخواست B = ۰ ردیف
+  ✓ student_ledger: تراکنش B = ۰ ردیف
+  ✓ financial_clearances: تسویهٔ B = ۰ ردیف
+  ✓ student_documents: مدرک B = ۰ ردیف
+  ✓ deny-all: system_settings (کلیدهای cron) = دسترسی صفر → 42501 (REVOKE — دسترسی اصلاً داده نشده)
+  ✓ deny-all: audit_logs = دسترسی صفر → 42501 (REVOKE — دسترسی اصلاً داده نشده)
+
+— ۲) نبود app.user_id = هیچ دسترسی‌ای
+  ✓ بدون تنظیم: students = ۰ ردیف
+
+— ۳) نوشتن: حملهٔ Cross-User مسدود است
+  ✓ UPDATE دانشجوی B → ۰ ردیف (سیاست USING)
+  ✓ DELETE سبد B → ۰ ردیف
+  ✓ INSERT ثبت‌نام برای B → 42501 (WITH CHECK) → 42501
+  ✓ INSERT اعلان برای B → 42501 → 42501
+  ✓ UPDATE نمرهٔ خود A → 42501 (گرنت ستونی: gradeValue خارج از مجوز) → 42501
+  ✓ UPDATE کارتابل/مبلغ توسط خود A → 42501 (ردیف B) → 42501
+
+— ۴) مجوزهای ستونیِ دقیق (اقدام دانشجو روی خودش)
+  ✓ UPDATE status توسط خود A → مجاز و اعمال شد
+  ✓ INSERT اعلان برای خود A → مجاز
+
+🔒 نتیجهٔ آزمون RLS: 22 موفق، 0 ناموفق

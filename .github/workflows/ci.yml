@@ -14,6 +14,7 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: afagh-next/package-lock.json }
       - run: npm ci
       - run: npx tsc --noEmit
+      - run: npm run test:adversarial
       - run: npm test        # M-6: تست‌های واحد با tsx روی Node 20 هم اجرا می‌شوند
       - run: node scripts/audit-actions.mjs   # P0: هیچ Server Action بدون گارد نماند
       - run: npm run build   # بدون نیاز به سرویس‌ها (اتصال DB تنبل است)
@@ -60,6 +61,7 @@ jobs:
       # اثبات P0: کاربر A هرگز دادهٔ B را نمی‌بیند/تغییر نمی‌دهد
       - run: node scripts/rls-test.mjs
       # اثبات P1 (بازبینی): مسابقهٔ همزمانی — تأیید/وصول فقط یک برنده دارد
+      - run: AUDIT_TEST_DATABASE_URL="$DATABASE_URL" npm run test:audit-integration
       - run: node scripts/concurrency-test.mjs
       # گام ۲ سند: اتاق انتظار ZSET — جایگاه O(log N) با Redis واقعی
       - run: npx tsx scripts/waiting-room-zset.test.mts

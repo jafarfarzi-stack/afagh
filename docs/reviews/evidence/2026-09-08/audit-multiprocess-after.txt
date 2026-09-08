@@ -1,0 +1,3 @@
+{"transactions":4000,"auditRecords":4400,"processes":4,"connections":48,"durationMs":8057,"chain":true}
+[db] connection failure { code: 'CONNECTION_LOST' }
+PASS: forced backend termination rolled back audit/business rows and released shared lock

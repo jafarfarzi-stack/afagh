@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { verifyAuditChain, type AuditRow } from '../src/lib/audit-core';
 /**
  * ════════════════════════════════════════════════════════════════════════
  *  تست سنگین چرخهٔ امتحانات — ۱۰۰۰ دانشجوی هم‌زمان
@@ -351,15 +352,12 @@ if (has('report')) {
 
   // راستی‌آزمایی زنجیرهٔ هش ممیزی
   const audit = (await db.execute(sql`
-    SELECT id, action, "entityType", "entityId", details, "prevHash", hash FROM audit_logs ORDER BY id
-  `)).rows as { id: number; action: string; entityType: string; entityId: number | null; details: string; prevHash: string; hash: string }[];
-  let chainOk = 0, chainBad = 0;
-  for (const r of audit) {
-    const expect = crypto.createHash('sha256')
-      .update(`${r.prevHash}|${r.action}|${r.entityType}|${r.entityId ?? ''}|${r.details}`)
-      .digest('hex');
-    if (expect === r.hash) chainOk++; else chainBad++;
-  }
+    SELECT id, "actorUserId", action, "entityType", "entityId", details, "prevHash", hash, "ipAddress", "createdAt" AT TIME ZONE 'UTC' AS "createdAt" FROM audit_logs ORDER BY id
+  `)).rows as AuditRow[];
+  const chain = verifyAuditChain(audit.map(r => ({ ...r, createdAt: new Date(r.createdAt) })) as AuditRow[]);
+  const chainOk = chain.verified;
+  const chainBad = chain.errors.length;
+  console.log(`   سوابق قدیمی با هش تأییدنشده: ${chain.legacy}`);
   const examActions = audit.filter(r => r.action.startsWith('EXAM_')).length;
   console.log(`   زنجیرهٔ هش ممیزی: ${chainOk} سالم / ${chainBad} خراب (کل ${audit.length} ردیف، از آن ${examActions} رویداد امتحانی) ${chainBad === 0 ? '✅' : '❌'}`);
 

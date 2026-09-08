@@ -1,0 +1,14 @@
+✅ پشتیبان پیش از استقرار: <temporary-test-backup>/afagh-2026-09-08T16-49-52.dump
+CREATE DATABASE
+
+> afagh-next@1.0.0 audit:verify
+> tsx scripts/verify-audit.ts
+
+{
+  "ok": true,
+  "verified": 1489,
+  "legacy": 0,
+  "errors": [],
+  "head": "b094b1ade89961067eafcfc096bd82f7ad20dd4547ad9e87b70a2f23e4bd338f",
+  "note": "Legacy hashes unverified. Head must be externally anchored to detect full rewriting or tail deletion."
+}

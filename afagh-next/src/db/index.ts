@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import fs from 'fs';
 import path from 'path';
 import { Pool } from 'pg';
+import { observePoolErrors } from './pool-errors';
 import * as schema from './schema';
 
 // ── گارد production: در پروداکشن متغیرهای زیرساخت باید تعیین شوند، نه با پیش‌فرض ──
@@ -24,6 +25,7 @@ export const pool = globalForDb.pool ?? new Pool({
 });
 if (process.env.NODE_ENV !== 'production') globalForDb.pool = pool;
 
+observePoolErrors(pool);
 export const db = drizzle(pool, { schema });
 export { schema };
 
@@ -73,6 +75,7 @@ export const appPool = globalForDb.appPool ?? new Pool({
 });
 if (process.env.NODE_ENV !== 'production') globalForDb.appPool = appPool;
 
+observePoolErrors(appPool);
 export const appDb = drizzle(appPool, { schema });
 
 type RlsTx = Parameters<Parameters<typeof appDb.transaction>[0]>[0];

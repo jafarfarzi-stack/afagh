@@ -1,0 +1,49 @@
+
+> afagh-next@1.0.0 test:adversarial
+> tsx --test tests/stabilization-adversarial.test.ts
+
+TAP version 13
+# Subtest: 20,000 archive keys at the exact same millisecond never collide
+ok 1 - 20,000 archive keys at the exact same millisecond never collide
+  ---
+  duration_ms: 62.75476
+  ...
+# Subtest: 10,000 traversal variants are rejected
+ok 2 - 10,000 traversal variants are rejected
+  ---
+  duration_ms: 13.577986
+  ...
+# Subtest: int4 ID bounds and coercion traps
+ok 3 - int4 ID bounds and coercion traps
+  ---
+  duration_ms: 0.355825
+  ...
+# Subtest: nested symlink escapes fail and FIFO cannot hang file reader
+ok 4 - nested symlink escapes fail and FIFO cannot hang file reader
+  ---
+  duration_ms: 28.78652
+  ...
+# Subtest: stream exact limit, empty, midstream network failure and 100 oversize cancellations
+ok 5 - stream exact limit, empty, midstream network failure and 100 oversize cancellations
+  ---
+  duration_ms: 23.528154
+  ...
+# Subtest: 10,000 forged credentials cannot manufacture trusted identity
+ok 6 - 10,000 forged credentials cannot manufacture trusted identity
+  ---
+  duration_ms: 103.702072
+  ...
+# Subtest: 5,000 audit records: Unicode, pipes/newlines, deleted middle row and edited IP
+ok 7 - 5,000 audit records: Unicode, pipes/newlines, deleted middle row and edited IP
+  ---
+  duration_ms: 126.238784
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 820.545033

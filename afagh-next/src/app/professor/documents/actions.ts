@@ -1,11 +1,13 @@
 'use server';
 
 // موتور امضای الکترونیک — سند §۲۹۲۶–۲۹۹۰: OTP پنج‌رقمی، هش SHA-256، قفل ۵ تلاش، ممیزی زنجیره‌ای
+import { appendAudit } from '@/lib/audit';
 import { randomInt } from 'crypto';
+import { clientIp } from '@/lib/request-context';
 import { headers } from 'next/headers';
 import { and, desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { audit_logs, doc_sign_otps, document_signatures, electronic_documents, notifications } from '@/db/schema';
+import { doc_sign_otps, document_signatures, electronic_documents, notifications } from '@/db/schema';
 import { getStaffByUser, requireRole, sha256 } from '@/lib/auth';
 
 const OTP_TTL_SECONDS = 120;
@@ -56,7 +58,7 @@ export async function verifySignAction(documentId: number, otp: string): Promise
   }
 
   const h = await headers();
-  const ip = (h.get('x-forwarded-for') || '').split(',')[0].trim() || 'local';
+  const ip = await clientIp();
   const ua = h.get('user-agent') || '';
   const now = new Date();
 
@@ -65,13 +67,9 @@ export async function verifySignAction(documentId: number, otp: string): Promise
     await tx.update(doc_sign_otps).set({ isUsed: 1 }).where(eq(doc_sign_otps.id, row.id));
     await tx.insert(document_signatures).values({ documentId, staffId: me.id, signedAt: now, ipAddress: ip, userAgent: ua, otpUsed: otp });
     await tx.update(electronic_documents).set({ signatureStatus: 'SIGNED' }).where(eq(electronic_documents.id, documentId));
-    const [last] = await tx.select({ hash: audit_logs.hash }).from(audit_logs).orderBy(desc(audit_logs.id)).limit(1);
-    const prevHash = last?.hash ?? '';
-    await tx.insert(audit_logs).values({
+    await appendAudit(tx, {
       actorUserId: user.id, action: 'ELECTRONIC_SIGN', entityType: 'electronic_documents', entityId: documentId,
-      details: JSON.stringify({ ip, ua: ua.slice(0, 120) }), prevHash,
-      hash: sha256(prevHash + '|ELECTRONIC_SIGN|' + documentId + '|' + now.toISOString()),
-      ipAddress: ip,
+      details: JSON.stringify({ ip, ua: ua.slice(0, 120) }), ipAddress: ip,
     });
     await tx.insert(notifications).values({ userId: user.id, eventCode: 'DOC_SIGNED', payload: JSON.stringify({ documentId, title: doc.title }) });
   });

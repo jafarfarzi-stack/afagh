@@ -1,6 +1,7 @@
 import { createHash, randomBytes, scrypt as _scrypt, timingSafeEqual } from 'crypto';
 import { promisify } from 'util';
-import { cookies, headers } from 'next/headers';
+import { cookies } from 'next/headers';
+import { sessionTransport } from './proxy-trust';
 import { redirect } from 'next/navigation';
 import { and, asc, eq, gt, lt, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
@@ -37,37 +38,11 @@ export type SessionUser = { id: number; name: string; roles: string[]; mustChang
 export const SESSION_COOKIE = 'token';
 const SESSION_MAX_AGE = 2 * 86400; // دو روز
 
-/**
- * فلگ‌های کوکی نشست — به‌صورت خودکار با پروتکل تطبیق می‌یابد:
- *   • HTTPS → SameSite=None + Secure  (لازم برای iframe و دامنهٔ واسط)
- *   • HTTP  → SameSite=Lax  + بدون Secure
- * چون مرورگر کوکی Secure را روی http ذخیره نمی‌کند و کاربر در حلقهٔ ورود می‌افتد.
- * قابل override با ENV: AFAGH_COOKIE_SECURE=auto|true|false ، AFAGH_COOKIE_SAMESITE=auto|lax|none|strict
- */
+/** Cookie policy uses the configured public URL, never client-supplied headers. */
 export async function sessionCookieOptions(): Promise<{
   httpOnly: true; path: string; maxAge: number; secure: boolean; sameSite: 'lax' | 'none' | 'strict';
 }> {
-  let isHttps = false;
-  try {
-    const h = await headers();
-    const proto = (h.get('x-forwarded-proto') || h.get('x-forwarded-protocol') || '').split(',')[0].trim().toLowerCase();
-    const host = (h.get('host') || '').toLowerCase();
-    isHttps = proto === 'https' || (!proto && (h.get('x-forwarded-ssl') === 'on' || host.endsWith('.e2b.app')));
-  } catch {
-    isHttps = false;
-  }
-
-  const secureEnv = (process.env.AFAGH_COOKIE_SECURE || 'auto').toLowerCase();
-  const sameSiteEnv = (process.env.AFAGH_COOKIE_SAMESITE || 'auto').toLowerCase();
-
-  let secure = secureEnv === 'true' ? true : secureEnv === 'false' ? false : isHttps;
-  let sameSite: 'lax' | 'none' | 'strict' =
-    sameSiteEnv === 'none' ? 'none' : sameSiteEnv === 'strict' ? 'strict' : sameSiteEnv === 'lax' ? 'lax' : isHttps ? 'none' : 'lax';
-
-  // SameSite=None بدون Secure توسط مرورگر رد می‌شود
-  if (sameSite === 'none' && !secure) sameSite = 'lax';
-
-  return { httpOnly: true, path: '/', maxAge: SESSION_MAX_AGE, secure, sameSite };
+  return { httpOnly: true, path: '/', maxAge: SESSION_MAX_AGE, ...sessionTransport(process.env) };
 }
 
 export async function getSessionUser(): Promise<SessionUser | null> {

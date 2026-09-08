@@ -1,9 +1,9 @@
 import 'server-only';
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import crypto from 'crypto';
+import { auditChain as writeAudit } from './audit-chain';
 import { db } from '@/db';
 import {
-  academic_terms, audit_logs, class_sessions, course_offerings, courses,
+  academic_terms, class_sessions, course_offerings, courses,
   electronic_documents, enrollments, offering_professors, payroll_calculation_rules,
   payroll_statements, professor_term_contracts, staff, teaching_coefficients,
   teaching_rates, users,
@@ -726,28 +726,6 @@ export async function getStaffPayslip(staffId: number, termId?: number) {
 }
 
 // ─────────────────── پرداخت‌ها ───────────────────
-
-/** زنجیرهٔ هش ممیزی — هر رکورد به رکورد قبلی گره می‌خورد */
-async function writeAudit(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
-  actorUserId: number | null,
-  action: string,
-  entityType: string,
-  entityId: number | null,
-  details: Record<string, unknown>,
-) {
-  // قفل آخرین رکورد → زنجیرهٔ هش در نوشتن‌های همزمان خطی می‌ماند
-  const [last] = await tx.select({ hash: audit_logs.hash }).from(audit_logs).orderBy(sql`${audit_logs.id} desc`).limit(1).for('update');
-  const prevHash = last?.hash ?? '';
-  const hash = crypto
-    .createHash('sha256')
-    .update(`${prevHash}|${action}|${entityType}|${entityId ?? ''}|${JSON.stringify(details)}`)
-    .digest('hex');
-  await tx.insert(audit_logs).values({
-    actorUserId, action, entityType, entityId,
-    details: JSON.stringify(details), prevHash, hash,
-  });
-}
 
 /** علی‌الحساب میان‌ترم — درصد از تنظیمات، پرداخت در تراکنش با قفل سطری */
 export async function payMidterm(staffId: number, actorUserId?: number | null, termId?: number) {
