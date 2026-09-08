@@ -48,11 +48,17 @@ if [ -z "$(docker images -q "$IMAGE" 2>/dev/null)" ]; then
   exit 1
 fi
 
-# ── رمز واقعی پستگرس از .env ریشهٔ پروژه (تصادفی و ساختهٔ deploy) ──
+# ── رمز واقعی پستگرس: اول از .env (با تحمل فاصله/کوتیشن)، بعد از کانتینر درحال‌اجرا ──
 ENV_FILE="$ROOT/.env"
-PGPW="$(grep -E '^POSTGRES_PASSWORD=' "$ENV_FILE" 2>/dev/null | head -n1 | cut -d= -f2- || true)"
+PGPW="$(grep -E '^[[:space:]]*POSTGRES_PASSWORD[[:space:]]*=' "$ENV_FILE" 2>/dev/null | head -n1 | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//" || true)"
 if [ -z "$PGPW" ]; then
-  echo "خطا: POSTGRES_PASSWORD در $ENV_FILE یافت نشد." >&2
+  echo "(.env خوانده نشد؛ تلاش برای خواندن رمز از کانتینر afagh_pg …)"
+  PGPW="$(docker exec afagh_pg printenv POSTGRES_PASSWORD 2>/dev/null | tr -d '\r\n' || true)"
+fi
+if [ -z "$PGPW" ]; then
+  echo "خطا: رمز پستگرس پیدا نشد." >&2
+  echo "  بررسی کنید: 1) فایل $ENV_FILE شامل POSTGRES_PASSWORD باشد" >&2
+  echo "              2) کانتینر بالا باشد: docker ps --format '{{.Names}}'" >&2
   exit 1
 fi
 
