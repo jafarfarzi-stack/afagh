@@ -32,7 +32,7 @@ fi
 SOURCE_DIR="$(cd "$SOURCE_DIR" && pwd)"
 
 shift || true
-STEPS="pre,terms,majors,students,grades,codemap"
+STEPS="pre,terms,majors,courses,students,grades,codemap"
 DRY=""
 while [ "$#" -gt 0 ]; do
   case "$1" in

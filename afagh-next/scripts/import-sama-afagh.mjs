@@ -33,7 +33,7 @@ for (let i = 0; i < raw.length; i++) {
 }
 const DIR = args.dir || 'E:\\git\\information afagh';
 const SOURCE = (args.source || 'AFAGH').toUpperCase();
-const STEPS = (args.steps || 'pre,terms,majors,students,grades,codemap').split(',').map(s => s.trim());
+const STEPS = (args.steps || 'pre,terms,majors,courses,students,grades,codemap').split(',').map(s => s.trim());
 const LIMIT = args.limit ? Number(args.limit) : 0;
 const DRY = args.dry === 'true';
 const dbUrl = args.db || process.env.DATABASE_URL || 'postgres://afagh:afagh@localhost:5432/afagh_db';
@@ -139,6 +139,7 @@ async function detectFiles(dir) {
     else if (has('applicantIsActive')) found.accept = p;
     else if (has('SanjeshCode')) found.sahmiye = p;
     else if (h.join(" ").replace(/\u200c/g, "").includes("تغيير رشته") || h.join(" ").includes("فارغ التحصيل")) found.status = p;
+    else if (has('كد','نام') && has('مقطع','گروه_اموزشي') && has('تعداد_واحد')) found.tatbigh = p;
   }
   if (cands.students.length) {
     cands.students.sort((a, b) => b.size - a.size);
@@ -831,17 +832,88 @@ async function phaseCodemap(files) {
   await logRun('codemap', 'lookups (SAMA)', stats);
 }
 
+async function phaseTatbigh(file) {
+  console.log('\n── دروس (تطبیق — tatbigh dars.txt) ──');
+  const stats = { total: 0, inserted: 0, updated: 0, invalid: 0 };
+  const batch = [];
+  const flush = async () => {
+    if (!batch.length) return;
+    if (DRY) { batch.length = 0; return; }
+    const vals = [];
+    const ph = batch.map((r, i) => {
+      const o = i * 6;
+      vals.push(r.code, r.title, r.theory, r.practical, r.units, r.type);
+      return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5},$${o+6})`;
+    }).join(',');
+    const res = await pool.query(`INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units, "courseType")
+      VALUES ${ph}
+      ON CONFLICT (code) DO UPDATE SET
+        title = EXCLUDED.title,
+        "theoreticalUnits" = EXCLUDED."theoreticalUnits",
+        "practicalUnits" = EXCLUDED."practicalUnits",
+        units = EXCLUDED.units,
+        "courseType" = COALESCE(EXCLUDED."courseType", courses."courseType")
+      RETURNING xmax = 0 AS inserted`, vals);
+    // xmax=0 means inserted, else updated — but simpler: count via rowCount and assume
+    stats.inserted += res.rowCount;
+    // updated = those where title changed from placeholder
+    batch.length = 0;
+  };
+  // also collect equivalencies for legacy_code_maps as COURSE_EQUIV
+  const equivJobs = [];
+  for await (const { cols } of tsvRows(file)) {
+    const code = (cols[0] || '').trim();
+    const title = normTxt(cols[1]);
+    if (!/^\d+$/.test(code) || !title || title === 'نامشخص' || code === '0') { stats.invalid++; continue; }
+    const units = parseFloat((cols[4] || '0').trim()) || 0;
+    const theory = parseFloat((cols[5] || '0').trim()) || 0;
+    const practical = parseFloat((cols[6] || '0').trim()) || 0;
+    const courseType = normTxt(cols[7]).slice(0, 50) || null;
+    const equivRaw = (cols[14] || '').trim();
+    if (equivRaw) equivJobs.push({ code, equivRaw });
+    stats.total++;
+    batch.push({ code: code.slice(0,20), title: title.slice(0,150), theory, practical, units, type: courseType });
+    coursesByCode.set(code, -1); // mark as known for later placeholder avoidance
+    if (batch.length >= 500) await flush();
+  }
+  await flush();
+  // refresh coursesByCode
+  for (const r of await q(`SELECT id, code FROM courses`)) coursesByCode.set(r.code, Number(r.id));
+  console.log(`دروس: total=${stats.total} upserted=${stats.inserted} invalid=${stats.invalid} (courses در DB: ${coursesByCode.size})`);
+  // هم‌ارزی‌ها را به legacy_code_maps بریز (برای گزارش و تطبیق آینده)
+  if (equivJobs.length && !DRY) {
+    let eqIns = 0;
+    for (const j of equivJobs) {
+      const parts = j.equivRaw.split(/[,&|]+/).map(s=>s.trim()).filter(s=>/^\d+$/.test(s));
+      for (const eq of parts) {
+        try {
+          const r = await pool.query(`INSERT INTO legacy_code_maps ("sourceCode", domain, "legacyCode", "legacyTitle", "targetCode", status)
+            VALUES ($1,'COURSE_EQUIV',$2,$3,$4,'CONFIRMED') ON CONFLICT ("sourceCode", domain, "legacyCode") DO NOTHING`,
+            [SOURCE, j.code, `هم‌ارز ${eq}`, eq]);
+          eqIns += r.rowCount;
+        } catch {}
+      }
+    }
+    if (eqIns) console.log(`  هم‌ارزی دروس: ${eqIns} رکورد`);
+  }
+  await logRun('course', 'tatbigh dars.txt (SAMA)', stats);
+}
+
 // ═══ اجرا ═══
 try {
   console.log(`SAMA→Afagh ETL | source=${SOURCE} | dir=${DIR} | steps=${STEPS.join(',')} | limit=${LIMIT || '∞'} | ${DRY ? 'DRY-RUN' : 'LIVE'}`);
   const files = await detectFiles(DIR);
   console.log('فایل‌ها:', Object.fromEntries(Object.entries(files).map(([k, v]) => [k, typeof v === 'string' ? v.split('\\').pop() : v])));
   if (files.studentsSubsetSkipped) console.log(`(زیرمجموعه نادیده گرفته شد: ${files.studentsSubsetSkipped.split('\\').pop()})`);
-  for (const s of ['pre', 'terms', 'majors', 'students', 'grades', 'codemap']) {
+  for (const s of ['pre', 'terms', 'majors', 'courses', 'students', 'grades', 'codemap']) {
     if (!STEPS.includes(s)) continue;
     if (s === 'pre') await phasePre();
     if (s === 'terms') { if (!files.terms) throw new Error('فایل ترم‌ها پیدا نشد'); await phaseTerms(files.terms); }
     if (s === 'majors') { if (!files.majors) throw new Error('فایل رشته‌ها پیدا نشد'); await phaseMajors(files.majors); }
+    if (s === 'courses') {
+      if (files.tatbigh) await phaseTatbigh(files.tatbigh);
+      else console.log('\n── دروس: فایل tatbigh dars.txt یافت نشد — از روی placeholder ادامه داده می‌شود');
+    }
     if (s === 'students') {
       if (!files.students) throw new Error('فایل دانشجویان پیدا نشد');
       // lookups پذیرش/سهمیه برای همان مرحله
