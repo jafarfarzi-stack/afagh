@@ -113,5 +113,18 @@ if [ -f "$SOURCE_DIR/اساتيد.txt" ]; then
     node scripts/update_profs_rank.mjs --dir /data || echo "⚠ به‌روزرسانی رتبه ناقص بود — لاگ بالا را ببینید"
 fi
 
+# ── مرحلهٔ اختیاری غنی‌سازی پرونده اساتید از اساتید2.txt (کلید: کد استاد) ──
+if [ -f "$SOURCE_DIR/اساتید2.txt" ]; then
+  echo ""
+  echo "── غنی‌سازی پرونده اساتید (از اساتید2.txt — شناسنامه، مدرک، مرتبه…) ──"
+  docker run --rm \
+    --network "$NETWORK" \
+    -v "$SOURCE_DIR:/data:ro" \
+    -v "$ROOT/afagh-next/scripts:/app/scripts:ro" \
+    -e DATABASE_URL="postgres://afagh:${PGPW}@${PG_HOST}:5432/afagh_db" \
+    "$IMAGE" \
+    node scripts/import-professors2.mjs --dir /data ${DRY} || echo "⚠ غنی‌سازی اساتید ناقص بود — لاگ بالا را ببینید"
+fi
+
 echo ""
 echo "✅ پایان. اگر نوشتنی بود، همین حالا وارد سامانه شوید و داده‌ها را در پنل ببینید."
