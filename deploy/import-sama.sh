@@ -9,6 +9,7 @@
 #  استفاده:
 #    bash deploy/import-sama.sh /path/to/information-afagh
 #    bash deploy/import-sama.sh /path/to/information-afagh --steps pre,terms,majors,students,grades,codemap
+#    bash deploy/import-sama.sh /path/to/information-afagh --steps professors2   # فقط غنی‌سازی اساتید
 #    bash deploy/import-sama.sh /path/to/information-afagh --dry        # فقط شبیه‌سازی، بدون نوشتن
 #
 #  ترتیب اجراْ داخلِ کانتینرِ afagh-migrator (همان ایمیجی که اسکیما و
@@ -92,6 +93,8 @@ echo ""
 
 # پوشهٔ scripts هاست را روی کانتینر mount می‌کنیم تا همیشه تازه‌ترین نسخهٔ
 # اسکریپت‌ها اجرا شود (بدون نیاز به rebuild ایمیج)؛ node_modules از داخل ایمیج می‌ماند
+# حالت professors2: فقط غنی‌سازی اساتید (بدون اجرای مجدد ETL اصلی)
+if [ "$STEPS" != "professors2" ]; then
 docker run --rm \
   --network "$NETWORK" \
   -v "$SOURCE_DIR:/data:ro" \
@@ -99,6 +102,7 @@ docker run --rm \
   -e DATABASE_URL="postgres://afagh:${PGPW}@${PG_HOST}:5432/afagh_db" \
   "$IMAGE" \
   node scripts/import-sama-afagh.mjs --dir "/data" --steps "$STEPS" ${DRY}
+fi
 
 # ── مرحلهٔ اختیاری رتبهٔ اساتید (اگر اساتيد.txt وجود داشت، یکجا اجرا می‌شود) ──
 if [ -f "$SOURCE_DIR/اساتيد.txt" ]; then
