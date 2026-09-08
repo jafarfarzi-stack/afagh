@@ -1,6 +1,18 @@
-import { createReadStream } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import pg from 'pg';
 const { Pool } = pg;
+// --file <path> یا --dir <dir> یا پیش‌فرض‌های ویندوز/لینوکس
+const rawArgs = process.argv.slice(2);
+const argMap = {};
+for (let i = 0; i < rawArgs.length; i++) if (rawArgs[i].startsWith('--')) { const k = rawArgs[i].slice(2); argMap[k] = (rawArgs[i+1] && !rawArgs[i+1].startsWith('--')) ? rawArgs[++i] : 'true'; }
+function resolveFile() {
+  if (argMap.file) return argMap.file;
+  if (argMap.dir) return join(argMap.dir, 'اساتيد.txt');
+  if (existsSync('/data/اساتيد.txt')) return '/data/اساتيد.txt';
+  if (existsSync('E:\\git\\information afagh\\اساتيد.txt')) return 'E:\\git\\information afagh\\اساتيد.txt';
+  return '/data/اساتيد.txt';
+}
 const pool=new Pool({connectionString:process.env.DATABASE_URL||'postgres://afagh:afagh@localhost:5432/afagh_db',max:5});
 const q=async(t,p)=>(await pool.query(t,p)).rows;
 const dec=new TextDecoder('windows-1256');
@@ -25,7 +37,8 @@ function clean(s){ return String(s??'').replace(/\x00/g,'').replace(/\s+/g,' ').
 // mapping Payeh -> rank title (based on common Iranian academic ranks)
 const PAYEH_RANK = { '0':'—', '1':'مربی', '2':'استادیار', '3':'دانشیار', '4':'استاد', '5':'استاد ممتاز' };
 const EMP_MAP = { '1':'رسمی', '2':'پیمانی', '3':'حق التدریس', '4':'مدعو', '0':'—' };
-const file='E:\\git\\information afagh\\اساتيد.txt';
+const file=resolveFile();
+console.log(`rank update | file=${file}`);
 let n=0, upd=0;
 for await(const {hdr, cols} of rows(file)){
   const code=clean(cols[0]);
