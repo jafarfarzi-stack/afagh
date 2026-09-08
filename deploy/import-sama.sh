@@ -90,9 +90,12 @@ echo "  مراحل:      $STEPS ${DRY:+[DRY-RUN]}"
 echo "  پستگرس:     $PG_CONTAINER روی $NETWORK (هاست $PG_HOST)"
 echo ""
 
+# پوشهٔ scripts هاست را روی کانتینر mount می‌کنیم تا همیشه تازه‌ترین نسخهٔ
+# اسکریپت‌ها اجرا شود (بدون نیاز به rebuild ایمیج)؛ node_modules از داخل ایمیج می‌ماند
 docker run --rm \
   --network "$NETWORK" \
   -v "$SOURCE_DIR:/data:ro" \
+  -v "$ROOT/afagh-next/scripts:/app/scripts:ro" \
   -e DATABASE_URL="postgres://afagh:${PGPW}@${PG_HOST}:5432/afagh_db" \
   "$IMAGE" \
   node scripts/import-sama-afagh.mjs --dir "/data" --steps "$STEPS" ${DRY}

@@ -258,7 +258,20 @@ async function logRun(entity, fileName, stats) {
 // ═══ فازها ═══
 async function phasePre() {
   console.log('\n── پیش‌نیازها ──');
-  const u = (await q(`SELECT id, code, title FROM universities WHERE code = $1`, [SOURCE]))[0];
+  let u = (await q(`SELECT id, code, title FROM universities WHERE code = $1`, [SOURCE]))[0];
+  if (!u && !DRY) {
+    // خودترمیم: drizzle-kit push فقط اسکیما می‌سازد و INSERTهای seed مایگریشن 0005 را اجرا نمی‌کند —
+    // پس ۵ دانشگاه مرجع را همین‌جا (idempotent) می‌سازیم
+    console.log('دانشگاه‌ها در جدول universities نیست — seed مرجع اعمال می‌شود…');
+    await q(`INSERT INTO universities (code, title, kind, status, province) VALUES
+      ('AFAGH','دانشگاه آفاق','OWN','ACTIVE','آذربایجان غربی'),
+      ('ZARINE','آموزشکده زرینه','DISSOLVED','ACTIVE','آذربایجان غربی'),
+      ('ALLAME','آموزشکده علامه','DISSOLVED','ACTIVE','آذربایجان غربی'),
+      ('SHAMS','موسسه شمس خوی','DISSOLVED','ACTIVE','آذربایجان غربی'),
+      ('NAZHAND','موسسه نژند','DISSOLVED','ACTIVE','آذربایجان غربی')
+      ON CONFLICT (code) DO NOTHING`);
+    u = (await q(`SELECT id, code, title FROM universities WHERE code = $1`, [SOURCE]))[0];
+  }
   if (!u) throw new Error(`دانشگاه ${SOURCE} در جدول universities نیست — اول مایگریشن 0005 را اعمال کنید`);
   universityId = u.id;
   console.log(`دانشگاه: ${SOURCE} (id=${universityId})`);
