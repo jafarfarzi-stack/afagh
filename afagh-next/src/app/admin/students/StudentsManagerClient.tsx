@@ -127,7 +127,7 @@ export function printOfficialTranscript(student: StudentItem, summary: Transcrip
     ['وضعیت', studentStatusFa(student.status, student.samaStatusCode)],
   ];
   const termTables = summary.terms.map(t => {
-    const rows = t.rows.map((r, i) => `<tr><td>${(i + 1).toLocaleString('fa-IR')}</td><td>${escHtml(r.courseCode)}</td><td class="t">${escHtml(r.courseTitle)}</td><td>${faNum(numOrNull(r.units), 1)}</td><td><b>${r.gradeValue ?? '—'}</b></td><td>${escHtml(gradeStatusFa(r.gradeStatus))}</td></tr>`).join('');
+    const rows = t.rows.map((r, i) => `<tr><td>${(i + 1).toLocaleString('fa-IR')}</td><td>${escHtml(r.courseCode)}</td><td class="t">${escHtml(r.courseTitle)}</td><td>${faNum(numOrNull(r.units), 1)}</td><td><b>${r.gradeValue ?? '—'}</b></td><td>${escHtml(r.gradeStatusTitle || gradeStatusFa(r.gradeStatus))}</td></tr>`).join('');
     return `<h3>نیمسال ${escHtml(t.termCode)}${t.termTitle ? ` — ${escHtml(t.termTitle)}` : ''}</h3>
 <table><thead><tr><th>ردیف</th><th>کد درس</th><th>عنوان درس</th><th>واحد</th><th>نمره</th><th>وضعیت</th></tr></thead><tbody>${rows}</tbody>
 <tfoot><tr><td colspan="3">جمع نیمسال</td><td>${faNum(t.taken, 1)} / ${faNum(t.passed, 1)}</td><td>${faNum(t.gpa)}</td><td>معدل</td></tr></tfoot></table>`;
@@ -198,6 +198,7 @@ function OfficialTranscriptView({ student, summary }: { student: StudentItem; su
                   <td className="p-1.5 text-center font-mono">{r.units ?? '—'}</td>
                   <td className="p-1.5 text-center font-mono font-bold">{r.gradeValue ?? '—'}</td>
                   <td className="p-1.5 text-center">
+                    {r.gradeStatusTitle && <span className="ml-1 font-bold">{r.gradeStatusTitle}</span>}
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${gradeStatusChip(r.gradeStatus)}`}>
                       {gradeStatusFa(r.gradeStatus)}
                     </span>
@@ -808,12 +809,13 @@ export default function StudentsManagerClient(props: {
                           <td className="p-1.5">{r.courseTitle}</td>
                           <td className="p-1.5 text-center font-mono">{r.units ?? '—'}</td>
                           <td className="p-1.5 text-center font-mono font-bold">{r.gradeValue ?? '—'}</td>
-                          <td className="p-1.5 text-center">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${gradeStatusChip(r.gradeStatus)}`}>
-                              {gradeStatusFa(r.gradeStatus)}
-                            </span>
-                          </td>
-                        </tr>
+                  <td className="p-1.5 text-center">
+                    {r.gradeStatusTitle && <span className="ml-1 font-bold">{r.gradeStatusTitle}</span>}
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${gradeStatusChip(r.gradeStatus)}`}>
+                      {gradeStatusFa(r.gradeStatus)}
+                    </span>
+                  </td>
+                </tr>
                       ))}
                     </tbody>
                   </table>

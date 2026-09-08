@@ -1,8 +1,8 @@
 'use server';
 
 import { db } from '@/db';
-import { academic_terms, course_offerings, courses, enrollments, legacy_grades, students } from '@/db/schema';
-import { and, desc, eq } from 'drizzle-orm';
+import { academic_terms, course_offerings, courses, enrollments, legacy_code_maps, legacy_grades, students } from '@/db/schema';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth';
 
 export type TranscriptRow = {
@@ -13,14 +13,43 @@ export type TranscriptRow = {
   units: string | null;
   gradeValue: string | null;
   gradeStatus: string;
+  /** عین عنوان ستون «عنوان» فایل وضع نمره (از میز تطبیق GRADE_STATUS) */
+  gradeStatusTitle: string | null;
   offeringType: string | null;
 };
+
+/** نقشه کد عددی وضع نمره → عین عنوان فایل مرجع */
+async function gradeStatusTitleMap(): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  try {
+    const rows = await db
+      .select({ code: legacy_code_maps.legacyCode, title: legacy_code_maps.legacyTitle })
+      .from(legacy_code_maps)
+      .where(eq(legacy_code_maps.domain, 'GRADE_STATUS'));
+    for (const r of rows) {
+      if (r.code && r.title && !map.has(r.code)) map.set(r.code, r.title);
+    }
+  } catch { /* میز تطبیق خالی باشد، fallback اعمال می‌شود */ }
+  return map;
+}
+
+function markStatOf(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const j = JSON.parse(raw);
+    const ms = String(j?.markStat ?? '').trim();
+    return ms || null;
+  } catch { return null; }
+}
 
 export async function getTranscript(studentId: number): Promise<TranscriptRow[]> {
   await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER']);
   const [stu] = await db.select({ id: students.id, code: students.studentCode }).from(students).where(eq(students.id, studentId)).limit(1);
   if (!stu) return [];
-  // enrollments (سامانه جدید — از سما)
+  const titleMap = await gradeStatusTitleMap();
+  const exactTitle = (markStat: string | null): string | null =>
+    markStat ? titleMap.get(markStat) ?? null : null;
+  // enrollments (سامانه جدید — از سما) + اتصال raw وضع نمره از legacy
   const ens = await db
     .select({
       termCode: academic_terms.termCode,
@@ -31,14 +60,31 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
       gradeValue: enrollments.gradeValue,
       gradeStatus: enrollments.gradeStatus,
       offeringType: course_offerings.offeringType,
+      legacyRaw: sql<string | null>`lg.raw`,
     })
     .from(enrollments)
     .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .innerJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
+    .leftJoin(
+      sql`legacy_grades lg`,
+      sql`lg."studentCode" = ${stu.code} AND lg."termCode" = ${academic_terms.termCode} AND lg."courseCode" = ${courses.code}`,
+    )
     .where(eq(enrollments.studentId, studentId))
     .orderBy(desc(academic_terms.termCode), courses.code);
-  if (ens.length) return ens;
+  if (ens.length) {
+    return ens.map(r => ({
+      termCode: r.termCode,
+      termTitle: r.termTitle,
+      courseCode: r.courseCode,
+      courseTitle: r.courseTitle,
+      units: r.units ? String(r.units) : null,
+      gradeValue: r.gradeValue ? String(r.gradeValue) : null,
+      gradeStatus: r.gradeStatus,
+      gradeStatusTitle: exactTitle(markStatOf(r.legacyRaw)),
+      offeringType: r.offeringType,
+    }));
+  }
   // fallback: legacy_grades (اگر هنوز promote نشده)
   const legs = await db
     .select({
@@ -48,6 +94,7 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
       units: legacy_grades.units,
       gradeValue: legacy_grades.gradeValue,
       gradeStatus: legacy_grades.gradeStatus,
+      raw: legacy_grades.raw,
     })
     .from(legacy_grades)
     .where(eq(legacy_grades.studentCode, stu.code))
@@ -61,6 +108,7 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
     units: r.units ? String(r.units) : null,
     gradeValue: r.gradeValue ? String(r.gradeValue) : null,
     gradeStatus: r.gradeStatus,
+    gradeStatusTitle: exactTitle(markStatOf(r.raw)),
     offeringType: null,
   }));
 }
