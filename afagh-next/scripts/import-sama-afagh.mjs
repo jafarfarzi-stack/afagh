@@ -135,6 +135,7 @@ async function detectFiles(dir) {
     else if (H.startsWith('Code\tBdate\tEdate')) found.terms = p;
     else if (has('Maghta', 'Daneshkadeh', 'MinUnit')) found.majors = p;
     else if (has('Avgeffect', 'Uniteffect')) found.markstat = p;
+    else if (has('MinPassedMark')) found.degrees = p;
     else if (has('IncludedTuition') && has('isDeleted')) found.lessonreg = p;
     else if (has('applicantIsActive')) found.accept = p;
     else if (has('SanjeshCode')) found.sahmiye = p;
@@ -835,6 +836,25 @@ async function phaseCodemap(files) {
       const r = await pool.query(`INSERT INTO legacy_code_maps ("sourceCode", domain, "legacyCode", "targetId", status)
         VALUES ($1,'DEGREE',$2,$3,'CONFIRMED') ON CONFLICT ("sourceCode", domain, "legacyCode") DO NOTHING`, [SOURCE, code.slice(5), id]);
       stats.inserted += r.rowCount;
+    }
+    // ── اعمال واقعی عنوان مقطع‌ها از مقطعها.txt روی degree_level_configs ──
+    // (فقط ردیف‌های placeholder «مقطع سما…» تا عنوان‌های اصلاح‌شده دستی نپرد)
+    if (files.degrees) {
+      let titleUpd = 0;
+      for await (const { cols } of tsvRows(files.degrees)) {
+        const code = (cols[0] || '').trim();
+        const title = normTxt(cols[1]);
+        if (!/^\d+$/.test(code) || !title || title === 'نامشخص') continue;
+        const passMark = parseFloat((cols[2] || '').trim());
+        const r = await pool.query(`UPDATE degree_level_configs
+          SET title = $2${Number.isFinite(passMark) ? `, "defaultPassingGrade" = $3` : ''}
+          WHERE code = $1 AND title LIKE 'مقطع سما%'`,
+          Number.isFinite(passMark) ? [`SAMA-${code}`, title.slice(0, 100), passMark] : [`SAMA-${code}`, title.slice(0, 100)]);
+        titleUpd += r.rowCount;
+      }
+      // کش حافظه را هم همگام کن تا ادامهٔ همین اجرا عنوان تازه ببیند
+      for (const r of await q(`SELECT id, code FROM degree_level_configs`)) degrees.set(r.code, Number(r.id));
+      console.log(`  عنوان مقطع‌ها به‌روز شد: ${titleUpd} ردیف`);
     }
     for (const [code, t] of termsByCode) {
       stats.total++;
