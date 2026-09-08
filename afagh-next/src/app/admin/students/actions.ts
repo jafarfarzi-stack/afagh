@@ -10,6 +10,7 @@ export type TranscriptRow = {
   termTitle: string | null;
   courseCode: string;
   courseTitle: string;
+  units: string | null;
   gradeValue: string | null;
   gradeStatus: string;
   offeringType: string | null;
@@ -26,6 +27,7 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
       termTitle: academic_terms.title,
       courseCode: courses.code,
       courseTitle: courses.title,
+      units: courses.units,
       gradeValue: enrollments.gradeValue,
       gradeStatus: enrollments.gradeStatus,
       offeringType: course_offerings.offeringType,
@@ -43,6 +45,7 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
       termCode: legacy_grades.termCode,
       courseCode: legacy_grades.courseCode,
       courseTitle: legacy_grades.courseTitle,
+      units: legacy_grades.units,
       gradeValue: legacy_grades.gradeValue,
       gradeStatus: legacy_grades.gradeStatus,
     })
@@ -55,6 +58,7 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
     termTitle: null,
     courseCode: r.courseCode,
     courseTitle: r.courseTitle || `درس ${r.courseCode}`,
+    units: r.units ? String(r.units) : null,
     gradeValue: r.gradeValue ? String(r.gradeValue) : null,
     gradeStatus: r.gradeStatus,
     offeringType: null,

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { getTranscript, type TranscriptRow } from './actions';
-import { QUOTA_FA, STUDENT_STATUS_FA, quotaFa, studentStatusChip, studentStatusFa } from '@/lib/student-labels';
+import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, quotaFa, studentStatusChip, studentStatusFa } from '@/lib/student-labels';
 
 export type StudentItem = {
   id: number;
@@ -51,6 +51,180 @@ export type StaffItem = {
   departmentName?: string;
 };
 
+/* ── کارنامه رسمی: گروه‌بندی ترم + معدل ── */
+const numOrNull = (v: string | null | undefined): number | null => {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+export type TermGroup = {
+  termCode: string;
+  termTitle: string | null;
+  rows: TranscriptRow[];
+  taken: number;
+  passed: number;
+  gpa: number | null;
+};
+
+export type TranscriptSummary = {
+  terms: TermGroup[];
+  totalTaken: number;
+  totalPassed: number;
+  gpa: number | null;
+};
+
+function summarizeTerm(rows: TranscriptRow[]): { taken: number; passed: number; wsum: number; wunits: number } {
+  let taken = 0, passed = 0, wsum = 0, wunits = 0;
+  for (const r of rows) {
+    const u = numOrNull(r.units) ?? 0;
+    const g = numOrNull(r.gradeValue);
+    if (r.gradeStatus === 'PENDING') continue;
+    taken += u;
+    if (r.gradeStatus === 'EXEMPT' || r.gradeStatus === 'PASSED_NO_GRADE') passed += u;
+    else if (g !== null && g >= 10) passed += u;
+    if (g !== null && (r.gradeStatus === 'FINALIZED' || r.gradeStatus === 'TEMPORARY')) {
+      wsum += g * u;
+      wunits += u;
+    }
+  }
+  return { taken, passed, wsum, wunits };
+}
+
+export function groupTranscript(rows: TranscriptRow[]): TranscriptSummary {
+  const map = new Map<string, TranscriptRow[]>();
+  for (const r of rows) {
+    const k = r.termCode || '—';
+    if (!map.has(k)) map.set(k, []);
+    map.get(k)!.push(r);
+  }
+  const terms: TermGroup[] = [...map.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], 'en'))
+    .map(([termCode, rs]) => {
+      const s = summarizeTerm(rs);
+      return { termCode, termTitle: rs[0]?.termTitle ?? null, rows: rs, taken: s.taken, passed: s.passed, gpa: s.wunits ? s.wsum / s.wunits : null };
+    });
+  const all = summarizeTerm(rows);
+  return { terms, totalTaken: all.taken, totalPassed: all.passed, gpa: all.wunits ? all.wsum / all.wunits : null };
+}
+
+export const faNum = (n: number | null | undefined, digits = 2): string =>
+  n == null ? '—' : n.toLocaleString('fa-IR', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
+
+const escHtml = (s: string | null | undefined): string =>
+  String(s ?? '—').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** چاپ کارنامهٔ رسمی در پنجرهٔ جدا (بدون نیاز به CSS سراسری چاپ) */
+export function printOfficialTranscript(student: StudentItem, summary: TranscriptSummary): void {
+  const infoRows = [
+    ['نام و نام خانوادگی', `${student.lastName} ${student.firstName}`],
+    ['شماره دانشجویی', student.studentCode],
+    ['کد ملی', student.nationalCode],
+    ['رشته', student.majorName],
+    ['مقطع', student.degreeLevel],
+    ['سال ورود', String(student.entryYear)],
+    ['سهمیه', quotaFa(student.quotaType)],
+    ['وضعیت', studentStatusFa(student.status, student.samaStatusCode)],
+  ];
+  const termTables = summary.terms.map(t => {
+    const rows = t.rows.map((r, i) => `<tr><td>${(i + 1).toLocaleString('fa-IR')}</td><td>${escHtml(r.courseCode)}</td><td class="t">${escHtml(r.courseTitle)}</td><td>${faNum(numOrNull(r.units), 1)}</td><td><b>${r.gradeValue ?? '—'}</b></td><td>${escHtml(gradeStatusFa(r.gradeStatus))}</td></tr>`).join('');
+    return `<h3>نیمسال ${escHtml(t.termCode)}${t.termTitle ? ` — ${escHtml(t.termTitle)}` : ''}</h3>
+<table><thead><tr><th>ردیف</th><th>کد درس</th><th>عنوان درس</th><th>واحد</th><th>نمره</th><th>وضعیت</th></tr></thead><tbody>${rows}</tbody>
+<tfoot><tr><td colspan="3">جمع نیمسال</td><td>${faNum(t.taken, 1)} / ${faNum(t.passed, 1)}</td><td>${faNum(t.gpa)}</td><td>معدل</td></tr></tfoot></table>`;
+  }).join('');
+  const html = `<!DOCTYPE html><html dir="rtl" lang="fa"><head><meta charset="utf-8"><title>کارنامه ${escHtml(student.studentCode)}</title>
+<style>body{font-family:Tahoma,Arial,sans-serif;font-size:12px;color:#111;margin:24px}h1,h2{text-align:center;margin:4px}h2{font-size:15px}h3{background:#eee;padding:6px 10px;border:1px solid #999;margin:18px 0 0;font-size:13px}table{width:100%;border-collapse:collapse;margin-top:6px}th,td{border:1px solid #555;padding:5px 6px;text-align:center}th{background:#ddd}.t{text-align:right}thead th{font-size:12px}tfoot td{font-weight:bold;background:#f4f4f4}.info{margin:12px 0}.info td{width:25%;text-align:right}.sign{display:flex;justify-content:space-between;margin-top:48px}.sign div{text-align:center}@media print{body{margin:8mm}}</style>
+</head><body><h1>دانشگاه آفاق</h1><h2>ادارهٔ کل امور آموزشی — کارنامهٔ تحصیلی دانشجو</h2>
+<table class="info"><tbody>${[0, 1, 2, 3].map(i => `<tr><td><b>${infoRows[i * 2][0]}:</b> ${escHtml(infoRows[i * 2][1])}</td><td><b>${infoRows[i * 2 + 1][0]}:</b> ${escHtml(infoRows[i * 2 + 1][1])}</td></tr>`).join('')}</tbody></table>
+${termTables}
+<h3>جمع کل</h3><table><tbody><tr><td><b>واحدهای اخذشده:</b> ${faNum(summary.totalTaken, 1)}</td><td><b>واحدهای گذرانده:</b> ${faNum(summary.totalPassed, 1)}</td><td><b>معدل کل:</b> ${faNum(summary.gpa)}</td></tr></tbody></table>
+<div class="sign"><div>کارشناس آموزش<br><br>امضا و مهر</div><div>مدیر آموزش<br><br>امضا و مهر</div></div>
+<script>window.onload=()=>{window.print();}</script></body></html>`;
+  const w = window.open('', '_blank', 'width=900,height=700');
+  if (!w) return;
+  w.document.write(html);
+  w.document.close();
+}
+
+/** نمای رسمی کارنامه داخل صفحه (همان ساختار نسخهٔ چاپی) */
+function OfficialTranscriptView({ student, summary }: { student: StudentItem; summary: TranscriptSummary }) {
+  const info: [string, string][] = [
+    ['نام و نام خانوادگی', `${student.lastName} ${student.firstName}`],
+    ['شماره دانشجویی', student.studentCode],
+    ['کد ملی', student.nationalCode],
+    ['رشته', student.majorName],
+    ['مقطع', student.degreeLevel],
+    ['سال ورود', String(student.entryYear)],
+    ['سهمیه', quotaFa(student.quotaType)],
+    ['وضعیت', studentStatusFa(student.status, student.samaStatusCode)],
+  ];
+  return (
+    <div className="border border-slate-400 rounded overflow-hidden">
+      <div className="bg-slate-900 text-white text-center py-2.5 px-3">
+        <p className="font-extrabold text-sm">دانشگاه آفاق</p>
+        <p className="text-[11px] text-slate-300">ادارهٔ کل امور آموزشی — کارنامهٔ تحصیلی دانشجو</p>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-slate-200 text-[11px]">
+        {info.map(([k, v]) => (
+          <div key={k} className="bg-white px-2 py-1.5">
+            <span className="text-slate-500">{k}: </span>
+            <span className="font-bold">{v || '—'}</span>
+          </div>
+        ))}
+      </div>
+      {summary.terms.map(t => (
+        <div key={t.termCode}>
+          <div className="bg-slate-100 border-y border-slate-300 px-3 py-1.5 font-extrabold text-[12px]">
+            نیمسال <span className="font-mono" dir="ltr">{t.termCode}</span>
+            {t.termTitle && <span className="font-normal text-slate-500"> — {t.termTitle}</span>}
+          </div>
+          <table className="w-full text-right text-[11px]">
+            <thead className="bg-white text-slate-500 border-b border-slate-200">
+              <tr>
+                <th className="p-1.5 w-10 text-center">ردیف</th>
+                <th className="p-1.5">کد درس</th>
+                <th className="p-1.5">عنوان درس</th>
+                <th className="p-1.5 text-center">واحد</th>
+                <th className="p-1.5 text-center">نمره</th>
+                <th className="p-1.5 text-center">وضعیت</th>
+              </tr>
+            </thead>
+            <tbody>
+              {t.rows.map((r, i) => (
+                <tr key={i} className="border-b border-slate-100">
+                  <td className="p-1.5 text-center text-slate-400">{(i + 1).toLocaleString('fa-IR')}</td>
+                  <td className="p-1.5 font-mono" dir="ltr">{r.courseCode}</td>
+                  <td className="p-1.5">{r.courseTitle}</td>
+                  <td className="p-1.5 text-center font-mono">{r.units ?? '—'}</td>
+                  <td className="p-1.5 text-center font-mono font-bold">{r.gradeValue ?? '—'}</td>
+                  <td className="p-1.5 text-center">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${gradeStatusChip(r.gradeStatus)}`}>
+                      {gradeStatusFa(r.gradeStatus)}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-slate-50 font-bold border-t border-slate-300">
+                <td colSpan={3} className="p-1.5">جمع نیمسال (اخذشده / گذرانده)</td>
+                <td className="p-1.5 text-center font-mono">{faNum(t.taken, 1)} / {faNum(t.passed, 1)}</td>
+                <td className="p-1.5 text-center">معدل: <span className="font-mono">{faNum(t.gpa)}</span></td>
+                <td />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      ))}
+      <div className="bg-indigo-950 text-white px-3 py-2 flex flex-wrap gap-x-6 gap-y-1 text-[12px] font-bold">
+        <span>واحدهای اخذشده: <span className="font-mono">{faNum(summary.totalTaken, 1)}</span></span>
+        <span>واحدهای گذرانده: <span className="font-mono">{faNum(summary.totalPassed, 1)}</span></span>
+        <span>معدل کل: <span className="font-mono">{faNum(summary.gpa)}</span></span>
+      </div>
+    </div>
+  );
+}
+
 export default function StudentsManagerClient(props: {
   students: StudentItem[];
   staffList: StaffItem[];
@@ -76,6 +250,8 @@ export default function StudentsManagerClient(props: {
   const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<TranscriptRow[] | null>(null);
   const [transcriptLoading, setTranscriptLoading] = useState(false);
+  // نمای کارنامه: رسمی (پیش‌فرض) یا جدول سادهٔ نمرات
+  const [transcriptView, setTranscriptView] = useState<'official' | 'simple'>('official');
 
   const currentStudent = props.students[selectedStuIdx] || props.students[0];
   const currentStaff = props.staffList[selectedProfIdx] || props.staffList[0];
@@ -578,18 +754,40 @@ export default function StudentsManagerClient(props: {
             </div>
           )}
 
-          {/* ── تب ۵: کارنامه و نمرات (سما + سامانه) ── */}
+          {/* ── تب ۵: کارنامهٔ رسمی + جدول نمرات ── */}
           {stuTab === 'transcript' && currentStudent && (
             <div className="bg-white p-3 sm:p-4 border border-slate-400 rounded-b-md space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-extrabold text-slate-900">📊 کارنامهٔ {currentStudent.lastName} - {currentStudent.firstName} ({currentStudent.studentCode})</h3>
-                <span className="text-[11px] text-slate-500">{transcript ? `${transcript.length} درس` : ''}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-slate-500 ml-1">{transcript ? `${transcript.length} درس` : ''}</span>
+                  <button
+                    onClick={() => setTranscriptView('official')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${transcriptView === 'official' ? 'bg-indigo-700 text-white border-indigo-700' : 'bg-slate-50 border-slate-300 hover:bg-slate-100'}`}
+                  >
+                    🧾 کارنامه رسمی
+                  </button>
+                  <button
+                    onClick={() => setTranscriptView('simple')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${transcriptView === 'simple' ? 'bg-indigo-700 text-white border-indigo-700' : 'bg-slate-50 border-slate-300 hover:bg-slate-100'}`}
+                  >
+                    📋 جدول نمرات
+                  </button>
+                  {transcript && transcript.length > 0 && (
+                    <button
+                      onClick={() => printOfficialTranscript(currentStudent, groupTranscript(transcript))}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-700 text-white hover:bg-emerald-800"
+                    >
+                      🖨️ مشاهده / چاپ
+                    </button>
+                  )}
+                </div>
               </div>
               {transcriptLoading ? (
                 <p className="text-center text-slate-500 py-6">در حال بارگذاری کارنامه…</p>
               ) : !transcript || transcript.length === 0 ? (
                 <p className="text-center text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">کارنامه‌ای برای این دانشجو یافت نشد (ممکن است نمرات در مرحلهٔ انتقال باشد).</p>
-              ) : (
+              ) : transcriptView === 'simple' ? (
                 <div className="overflow-x-auto border border-slate-300 rounded">
                   <table className="w-full text-right text-[11px]">
                     <thead className="bg-slate-100 border-b border-slate-300 font-bold">
@@ -597,6 +795,7 @@ export default function StudentsManagerClient(props: {
                         <th className="p-1.5">ترم</th>
                         <th className="p-1.5">کد درس</th>
                         <th className="p-1.5">عنوان درس</th>
+                        <th className="p-1.5 text-center">واحد</th>
                         <th className="p-1.5 text-center">نمره</th>
                         <th className="p-1.5 text-center">وضعیت</th>
                       </tr>
@@ -607,10 +806,11 @@ export default function StudentsManagerClient(props: {
                           <td className="p-1.5 font-mono" dir="ltr">{r.termCode}</td>
                           <td className="p-1.5 font-mono" dir="ltr">{r.courseCode}</td>
                           <td className="p-1.5">{r.courseTitle}</td>
+                          <td className="p-1.5 text-center font-mono">{r.units ?? '—'}</td>
                           <td className="p-1.5 text-center font-mono font-bold">{r.gradeValue ?? '—'}</td>
                           <td className="p-1.5 text-center">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.gradeStatus === 'FINALIZED' ? 'bg-emerald-100 text-emerald-800' : r.gradeStatus === 'TEMPORARY' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>
-                              {r.gradeStatus}
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${gradeStatusChip(r.gradeStatus)}`}>
+                              {gradeStatusFa(r.gradeStatus)}
                             </span>
                           </td>
                         </tr>
@@ -618,6 +818,8 @@ export default function StudentsManagerClient(props: {
                     </tbody>
                   </table>
                 </div>
+              ) : (
+                <OfficialTranscriptView student={currentStudent} summary={groupTranscript(transcript)} />
               )}
             </div>
           )}

@@ -71,6 +71,33 @@ export function studentStatusChip(status: string | null | undefined): string {
   }
 }
 
+/** وضع نمرهٔ داخلی → فارسی (از mapGrade در ETL: EXEMPT/TEMPORARY/FINALIZED/…) */
+export const GRADE_STATUS_FA: Record<string, string> = {
+  FINALIZED: 'نهایی',
+  TEMPORARY: 'موقت',
+  PENDING: 'در انتظار',
+  EXEMPT: 'معاف',
+  PASSED_NO_GRADE: 'قبول بدون نمره',
+  FAILED_NO_GRADE: 'مردود بدون نمره',
+};
+
+export function gradeStatusFa(status: string | null | undefined): string {
+  if (!status) return 'نامشخص';
+  return GRADE_STATUS_FA[status] ?? status;
+}
+
+/** رنگ چیپ وضع نمره */
+export function gradeStatusChip(status: string | null | undefined): string {
+  switch (status) {
+    case 'FINALIZED': return 'bg-emerald-100 text-emerald-800';
+    case 'TEMPORARY': return 'bg-amber-100 text-amber-800';
+    case 'EXEMPT':
+    case 'PASSED_NO_GRADE': return 'bg-sky-100 text-sky-800';
+    case 'FAILED_NO_GRADE': return 'bg-red-100 text-red-800';
+    default: return 'bg-slate-100 text-slate-600';
+  }
+}
+
 /** سهمیه → فارسی */
 export const QUOTA_FA: Record<string, string> = {
   NORMAL: 'عادی',
