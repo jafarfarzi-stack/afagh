@@ -37,7 +37,7 @@ function resolveFile() {
       const p = join(dir, n);
       try { if (!statSync(p).isFile() || !/\.txt$/i.test(n)) continue; } catch { continue; }
       const base = n.replace(/\.txt$/i, '');
-      if (/اساتید\s*2|اساتيد\s*2/.test(base)) return p;
+      if (/اساتید\s*2|اساتيد\s*2|ostadan/i.test(base)) return p;
     }
   } catch {}
   return join(dir, 'اساتید2.txt');
@@ -208,7 +208,7 @@ try {
       rank: norm(cols[12]) || null,
       hireDate: clean(cols[13]).slice(0, 10) || null,
       degreeYear: extractYear(cols[14]),
-      field: norm(cols[15]) || null,
+      fieldMain: norm(cols[15]).slice(0, 200) || null,   // «رشته» → fieldMain (مطابق کامنت اسکیما)
       father: norm(cols[16]) || null,
       birthCert: clean(cols[17]) || null,
       birthDate: faDate(cols[18]),
@@ -222,7 +222,7 @@ try {
       nationalCode: (/^\d{10}$/.test(clean(cols[26])) ? clean(cols[26]) : null),
       maritalCode: (/^\d+$/.test(clean(cols[27])) ? Number(clean(cols[27])) : null),
       marital: norm(cols[28]) && norm(cols[28]) !== 'نا مشخص' ? norm(cols[28]).slice(0, 20) : null,
-      fieldMain: norm(cols[29]).slice(0, 200) || null,
+      field: norm(cols[29]).slice(0, 200) || null,       // «رشته و گرایش» → fieldOfStudy (مطابق کامنت اسکیما)
       degreeCountry: clean(cols[30]) || null,
       degreeUniv: norm(cols[31]).slice(0, 200) || null,
       base: clean(cols[32]) || null,
