@@ -760,6 +760,51 @@ async function phaseCodemap(files) {
     if (!/^-?\d+$/.test(code)) return;
     await put('LESSONREG', code, normTxt(c[1]), null, { effect: (c[2] || '').trim(), deleted: (c[6] || '').trim() });
   });
+  // ── همهٔ فایل‌های مرجع باقی‌مانده با ستون Code (مقطع، رتبه استاد، نوع درس، نوع دوره، نظام وظیفه، وضعیت نیمسال …) ──
+  // هر فایلی که هدر Code+Title داشته باشد ولی در detectFiles جدا نشده بود، اینجا به‌صورت generic معادل می‌شود
+  {
+    const handled = new Set([files.status, files.markstat, files.sahmiye, files.accept, files.lessonreg].filter(Boolean));
+    const skipData = new Set([files.students, files.grades, files.supp, files.terms, files.majors, files.profs, files.schedule, files.curriculum, files.stterm, files.studentsSubsetSkipped].filter(Boolean));
+    let allTxt = [];
+    try { allTxt = readdirSync(DIR).filter(n => /\.txt$/i.test(n)).map(n => join(DIR, n)); } catch {}
+    for (const p of allTxt) {
+      if (handled.has(p) || skipData.has(p)) continue;
+      let h = [];
+      try { h = await readHeaderOnly(p); } catch { continue; }
+      if (!h.includes('Code')) continue;
+      const hasTitle = h.some(c => /Title/i.test(c));
+      if (!hasTitle) continue;
+      const base = p.split(/[\\/]/).pop().replace(/\.txt$/i, '').trim();
+      const lower = base.toLowerCase();
+      let domain;
+      if (lower.includes('رتبه')) domain = 'PROF_RANK';
+      else if (lower.includes('مقطع')) domain = 'DEGREE_LEVEL';
+      else if (lower.includes('نوع درس')) domain = 'COURSE_TYPE';
+      else if (lower.includes('نوع دوره')) domain = 'PERIOD_TYPE';
+      else if (lower.includes('نظام وظیفه') || lower.includes('وظیفه')) domain = 'MILITARY_STATUS';
+      else if (lower.includes('وضعیت نیمسال') && !lower.includes('دانشجو')) domain = 'TERM_STATUS';
+      else if (lower.includes('وضعیت دانشجو') || lower.includes('وضعيت دانشجو')) domain = 'STUDENT_STATUS';
+      else {
+        domain = base.replace(/\s+/g, '_').toUpperCase().replace(/[^A-Z0-9_\u0600-\u06FF]/g, '_').replace(/_+/g, '_').slice(0, 40);
+        if (!/^[A-Z_]/.test(domain)) domain = 'LOOKUP_' + domain;
+      }
+      // اگر دامنه از قبل به‌صورت explicit هندل شده، رد کن تا دوباره‌کاری نشود
+      if (['STUDENT_STATUS','GRADE_STATUS','QUOTA','ACCEPT_TYPE','LESSONREG'].includes(domain) && handled.has(p)) continue;
+      const titleIdx = h.findIndex(c => /Title/i.test(c));
+      const stdIdx = h.findIndex(c => /StandardCode/i.test(c));
+      let cnt = 0;
+      await readLookup(p, async (c) => {
+        const code = (c[0] || '').trim();
+        if (!/^-?\d+$/.test(code)) return;
+        const title = titleIdx >= 0 ? normTxt(c[titleIdx]) : normTxt(c[1]);
+        if (!title) return;
+        const std = stdIdx >= 0 ? (c[stdIdx] || '').trim() || null : null;
+        await put(domain, code, title, std, { file: base });
+        cnt++;
+      });
+      if (cnt) console.log(`  + ${domain} ← ${base}: ${cnt} کد`);
+    }
+  }
   // رشته/مقطع/ترم → id
   if (!DRY) {
     for (const [code, m] of majorsByCode) {
