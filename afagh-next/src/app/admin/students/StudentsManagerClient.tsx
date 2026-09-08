@@ -1,7 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { getTranscript, type TranscriptRow } from './actions';
+import { QUOTA_FA, STUDENT_STATUS_FA, quotaFa, studentStatusChip, studentStatusFa } from '@/lib/student-labels';
 
 export type StudentItem = {
   id: number;
@@ -13,6 +16,7 @@ export type StudentItem = {
   entryYear: number;
   entryTerm: number;
   status: string;
+  samaStatusCode?: string | null;
   quotaType: string;
   currentTermNo: number;
   majorName: string;
@@ -21,6 +25,16 @@ export type StudentItem = {
   degreeCode: string;
   regulationTitle: string;
   role: string;
+};
+
+export type Pagination = {
+  total: number;
+  page: number;
+  per: number;
+  totalPages: number;
+  q: string;
+  status: string;
+  degree: number;
 };
 
 export type StaffItem = {
@@ -40,12 +54,15 @@ export type StaffItem = {
 export default function StudentsManagerClient(props: {
   students: StudentItem[];
   staffList: StaffItem[];
+  pagination?: Pagination;
+  degrees?: { id: number; title: string }[];
+  statusCounts?: { status: string; n: number }[];
 }) {
   // انتخاب بخش اصلی (دانشجویان / اساتید / عملیات سریع)
   const [mainView, setMainView] = useState<'students' | 'professors' | 'quick_menu'>('students');
 
   // تب‌های فرم دانشجو
-  const [stuTab, setStuTab] = useState<'info' | 'complementary' | 'other' | 'extra_alumni' | 'list'>('info');
+  const [stuTab, setStuTab] = useState<'info' | 'complementary' | 'other' | 'extra_alumni' | 'transcript' | 'list'>('info');
   const [stuSubTab, setStuSubTab] = useState<'extra' | 'alumni'>('extra');
 
   // تب‌های فرم استاد
@@ -54,28 +71,48 @@ export default function StudentsManagerClient(props: {
   // ناوبری و انتخاب
   const [selectedStuIdx, setSelectedStuIdx] = useState<number>(0);
   const [selectedProfIdx, setSelectedProfIdx] = useState<number>(0);
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>(props.pagination?.q ?? '');
   const [toastMsg, setToastMsg] = useState<string>('');
   const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
+  const [transcript, setTranscript] = useState<TranscriptRow[] | null>(null);
+  const [transcriptLoading, setTranscriptLoading] = useState(false);
 
   const currentStudent = props.students[selectedStuIdx] || props.students[0];
   const currentStaff = props.staffList[selectedProfIdx] || props.staffList[0];
+
+  useEffect(() => {
+    if (stuTab !== 'transcript' || !currentStudent) return;
+    setTranscriptLoading(true);
+    setTranscript(null);
+    getTranscript(currentStudent.id).then(r => setTranscript(r)).catch(() => setTranscript([])).finally(() => setTranscriptLoading(false));
+  }, [stuTab, currentStudent?.id]);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 4000);
   };
 
-  const filteredStudents = props.students.filter(s =>
-    s.studentCode.includes(searchQuery) ||
-    s.nationalCode.includes(searchQuery) ||
-    (s.firstName + ' ' + s.lastName).includes(searchQuery)
-  );
+  const router = useRouter();
+  const pathname = usePathname();
+  const pg = props.pagination;
+  // جست‌وجوی دانشجو سمت سرور است (props.students فقط یک صفحه است)؛ جست‌وجوی استاد محلی
+  const [staffQuery, setStaffQuery] = useState('');
+  const [staffVisible, setStaffVisible] = useState(100);
+  const nav = (patch: Record<string, string>) => {
+    const cur = { q: pg?.q ?? '', status: pg?.status ?? 'ALL', degree: String(pg?.degree ?? 0), page: '1', ...patch };
+    const p = new URLSearchParams();
+    if (cur.q) p.set('q', cur.q);
+    if (cur.status && cur.status !== 'ALL') p.set('status', cur.status);
+    if (cur.degree && cur.degree !== '0') p.set('degree', cur.degree);
+    if (cur.page && cur.page !== '1') p.set('page', cur.page);
+    router.push(`${pathname}?${p.toString()}`);
+  };
 
   const filteredStaff = props.staffList.filter(s =>
-    s.staffCode.includes(searchQuery) ||
-    s.nationalCode.includes(searchQuery) ||
-    (s.firstName + ' ' + s.lastName).includes(searchQuery)
+    !staffQuery ||
+    s.staffCode.includes(staffQuery) ||
+    s.nationalCode.includes(staffQuery) ||
+    (s.firstName + ' ' + s.lastName).includes(staffQuery)
   );
 
   return (
@@ -165,6 +202,14 @@ export default function StudentsManagerClient(props: {
               }`}
             >
               اطلاعات اضافی / دانش‌آموختگان
+            </button>
+            <button
+              onClick={() => setStuTab('transcript')}
+              className={`px-3 py-1.5 font-bold rounded-t-md border-t border-x transition-colors ${
+                stuTab === 'transcript' ? 'bg-white border-slate-400 text-indigo-950 shadow-sm' : 'bg-emerald-50 border-transparent hover:bg-emerald-100 text-emerald-900'
+              }`}
+            >
+              📊 کارنامه و نمرات
             </button>
             <button
               onClick={() => setStuTab('list')}
@@ -258,13 +303,18 @@ export default function StudentsManagerClient(props: {
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>وضعیت تحصیلی:</span>
-                    <select defaultValue={currentStudent.status} className="col-span-2 bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-1 rounded font-bold">
-                      <option value="ACTIVE">مجاز به تحصیل (فعال)</option>
-                      <option value="GRADUATED">فارغ‌التحصیل</option>
-                      <option value="PROBATION">مشروط</option>
-                      <option value="WITHDRAWN">انصراف از تحصیل</option>
+                    <select key={currentStudent.id} defaultValue={currentStudent.status} className="col-span-2 bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-1 rounded font-bold">
+                      {Object.entries(STUDENT_STATUS_FA).map(([v, fa]) => (
+                        <option key={v} value={v}>{fa}</option>
+                      ))}
                     </select>
                   </div>
+                  {currentStudent.samaStatusCode && (
+                    <div className="grid grid-cols-3 gap-2 items-center text-[11px] text-slate-500">
+                      <span>وضعیت در سما:</span>
+                      <span className="col-span-2">کد {currentStudent.samaStatusCode} — {studentStatusFa(currentStudent.status, currentStudent.samaStatusCode)}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* ستون ۲ */}
@@ -287,9 +337,10 @@ export default function StudentsManagerClient(props: {
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-red-700 font-bold">* سهمیه نهایی:</span>
-                    <select defaultValue={currentStudent.quotaType} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded">
-                      <option value="NORMAL">منطقه ۱ / آزاد (کد ۱۶)</option>
-                      <option value="SHAHED_ISARGAR">سهمیه ستاد شاهد و ایثارگر (کد ۲۵)</option>
+                    <select key={currentStudent.id + '-q'} defaultValue={currentStudent.quotaType} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded">
+                      {Object.entries(QUOTA_FA).map(([v, fa]) => (
+                        <option key={v} value={v}>{fa}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
@@ -551,18 +602,90 @@ export default function StudentsManagerClient(props: {
             </div>
           )}
 
-          {/* ── تب ۵: لیست و جستجوی سریع دانشجویان ── */}
+          {/* ── تب ۵: کارنامه و نمرات (سما + سامانه) ── */}
+          {stuTab === 'transcript' && currentStudent && (
+            <div className="bg-white p-3 sm:p-4 border border-slate-400 rounded-b-md space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-extrabold text-slate-900">📊 کارنامهٔ {currentStudent.lastName} - {currentStudent.firstName} ({currentStudent.studentCode})</h3>
+                <span className="text-[11px] text-slate-500">{transcript ? `${transcript.length} درس` : ''}</span>
+              </div>
+              {transcriptLoading ? (
+                <p className="text-center text-slate-500 py-6">در حال بارگذاری کارنامه…</p>
+              ) : !transcript || transcript.length === 0 ? (
+                <p className="text-center text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">کارنامه‌ای برای این دانشجو یافت نشد (ممکن است نمرات در مرحلهٔ انتقال باشد).</p>
+              ) : (
+                <div className="overflow-x-auto border border-slate-300 rounded">
+                  <table className="w-full text-right text-[11px]">
+                    <thead className="bg-slate-100 border-b border-slate-300 font-bold">
+                      <tr>
+                        <th className="p-1.5">ترم</th>
+                        <th className="p-1.5">کد درس</th>
+                        <th className="p-1.5">عنوان درس</th>
+                        <th className="p-1.5 text-center">نمره</th>
+                        <th className="p-1.5 text-center">وضعیت</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {transcript.map((r, i) => (
+                        <tr key={i} className="border-b border-slate-200 hover:bg-slate-50">
+                          <td className="p-1.5 font-mono" dir="ltr">{r.termCode}</td>
+                          <td className="p-1.5 font-mono" dir="ltr">{r.courseCode}</td>
+                          <td className="p-1.5">{r.courseTitle}</td>
+                          <td className="p-1.5 text-center font-mono font-bold">{r.gradeValue ?? '—'}</td>
+                          <td className="p-1.5 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.gradeStatus === 'FINALIZED' ? 'bg-emerald-100 text-emerald-800' : r.gradeStatus === 'TEMPORARY' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>
+                              {r.gradeStatus}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── تب ۶: لیست و جستجوی سریع دانشجویان (صفحه‌بندی سمت سرور) ── */}
           {stuTab === 'list' && (
             <div className="bg-white p-4 border border-slate-400 rounded-b-md space-y-3">
-              <div className="flex items-center justify-between gap-3">
+              <form
+                className="flex flex-wrap items-center gap-2"
+                onSubmit={e => { e.preventDefault(); setSelectedStuIdx(0); nav({ q: searchQuery }); }}
+              >
                 <input
                   type="text"
-                  placeholder="🔍 جستجو بر اساس شماره دانشجویی، کد ملی یا نام دانشجو..."
+                  placeholder="🔍 جستجو: شماره دانشجویی، کد ملی یا نام..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   className="w-full max-w-md bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs"
                 />
-                <span className="text-xs text-slate-500">{filteredStudents.length} پرونده</span>
+                <button type="submit" className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold rounded">جستجو</button>
+                {(pg?.q || pg?.status !== 'ALL' || (pg?.degree ?? 0) > 0) && (
+                  <button type="button" onClick={() => { setSearchQuery(''); nav({ q: '', status: 'ALL', degree: '0' }); }} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs rounded">✖ پاک‌سازی فیلتر</button>
+                )}
+                <span className="text-xs text-slate-500 mr-auto">{(pg?.total ?? props.students.length).toLocaleString('fa-IR')} پرونده</span>
+              </form>
+
+              {/* چیپ‌های وضعیت */}
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                <button onClick={() => nav({ status: 'ALL' })} className={`px-2.5 py-1 rounded-full border font-bold ${(!pg || pg.status === 'ALL') ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 border-slate-300 hover:bg-slate-100'}`}>
+                  همه ({(props.statusCounts ?? []).reduce((a, c) => a + c.n, 0).toLocaleString('fa-IR')})
+                </button>
+                {(props.statusCounts ?? []).map(c => (
+                  <button key={c.status} onClick={() => nav({ status: c.status })} title={c.status}
+                    className={`px-2.5 py-1 rounded-full border font-bold ${pg?.status === c.status ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 border-slate-300 hover:bg-slate-100'}`}>
+                    {studentStatusFa(c.status)} <span className="opacity-70">({c.n.toLocaleString('fa-IR')})</span>
+                  </button>
+                ))}
+                <select
+                  value={pg?.degree ?? 0}
+                  onChange={e => nav({ degree: e.target.value })}
+                  className="mr-auto bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[11px]"
+                >
+                  <option value={0}>همه مقاطع</option>
+                  {(props.degrees ?? []).map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
+                </select>
               </div>
 
               <div className="overflow-x-auto border border-slate-300 rounded">
@@ -580,7 +703,7 @@ export default function StudentsManagerClient(props: {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredStudents.map((s, idx) => (
+                    {props.students.map((s) => (
                       <tr key={s.id} className="border-b border-slate-200 hover:bg-slate-50">
                         <td className="p-2 font-mono font-bold text-indigo-950" dir="ltr">{s.studentCode}</td>
                         <td className="p-2 font-bold">{s.firstName} {s.lastName}</td>
@@ -589,8 +712,8 @@ export default function StudentsManagerClient(props: {
                         <td className="p-2">{s.degreeLevel}</td>
                         <td className="p-2 font-mono">{s.entryYear}</td>
                         <td className="p-2">
-                          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                            {s.status === 'ACTIVE' ? 'فعال' : s.status}
+                          <span title={s.samaStatusCode ? `کد سما: ${s.samaStatusCode}` : s.status} className={`${studentStatusChip(s.status)} text-[10px] font-bold px-2 py-0.5 rounded-full`}>
+                            {studentStatusFa(s.status, s.samaStatusCode)}
                           </span>
                         </td>
                         <td className="p-2 text-left">
@@ -610,6 +733,16 @@ export default function StudentsManagerClient(props: {
                   </tbody>
                 </table>
               </div>
+
+              {/* صفحه‌بندی */}
+              {pg && pg.totalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 text-xs">
+                  <button disabled={pg.page <= 1} onClick={() => nav({ page: String(pg.page - 1) })} className="px-3 py-1.5 bg-white border border-slate-300 rounded font-bold disabled:opacity-40 hover:bg-slate-50">قبلی ◀</button>
+                  <span className="font-bold text-slate-700">صفحه {pg.page.toLocaleString('fa-IR')} از {pg.totalPages.toLocaleString('fa-IR')}</span>
+                  <button disabled={pg.page >= pg.totalPages} onClick={() => nav({ page: String(pg.page + 1) })} className="px-3 py-1.5 bg-white border border-slate-300 rounded font-bold disabled:opacity-40 hover:bg-slate-50">▶ بعدی</button>
+                </div>
+              )}
+              <p className="text-[10px] text-slate-400 text-center">ناوبری پرونده (قبلی/بعدی) در محدوده همین صفحه (۵۰ رکورد) است — برای پرونده خاص، جست‌وجو کنید.</p>
             </div>
           )}
 
@@ -876,8 +1009,8 @@ export default function StudentsManagerClient(props: {
                 <input
                   type="text"
                   placeholder="🔍 جستجو بر اساس کد پرسنلی، کد ملی یا نام استاد..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
+                  value={staffQuery}
+                  onChange={e => { setStaffQuery(e.target.value); setStaffVisible(100); }}
                   className="w-full max-w-md bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs"
                 />
                 <span className="text-xs text-slate-500">{filteredStaff.length} استاد</span>
@@ -897,14 +1030,14 @@ export default function StudentsManagerClient(props: {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredStaff.map((st, idx) => (
+                    {filteredStaff.slice(0, staffVisible).map((st, idx) => (
                       <tr key={st.id} className="border-b border-slate-200 hover:bg-slate-50">
                         <td className="p-2 font-mono font-bold text-slate-900" dir="ltr">{st.staffCode}</td>
                         <td className="p-2 font-bold">{st.firstName} {st.lastName}</td>
                         <td className="p-2 font-mono" dir="ltr">{st.nationalCode}</td>
-                        <td className="p-2 font-semibold text-indigo-950">{st.academicRank || 'استادیار'}</td>
-                        <td className="p-2">{st.degree || 'دکتری'}</td>
-                        <td className="p-2">{st.staffType || 'تمام‌وقت'}</td>
+                        <td className="p-2 font-semibold text-indigo-950">{st.academicRank}</td>
+                        <td className="p-2">{st.degree}</td>
+                        <td className="p-2">{st.staffType}</td>
                         <td className="p-2 text-left">
                           <button
                             onClick={() => {
@@ -922,6 +1055,13 @@ export default function StudentsManagerClient(props: {
                   </tbody>
                 </table>
               </div>
+              {filteredStaff.length > staffVisible && (
+                <div className="text-center">
+                  <button onClick={() => setStaffVisible(v => v + 200)} className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded text-xs font-bold">
+                    نمایش {Math.min(200, filteredStaff.length - staffVisible).toLocaleString('fa-IR')} نفر بعدی ({(filteredStaff.length - staffVisible).toLocaleString('fa-IR')} باقی‌مانده)
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

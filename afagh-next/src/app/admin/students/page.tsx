@@ -1,22 +1,51 @@
-import { desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { degree_level_configs, educational_regulations, majors, roles, staff, students, user_roles, users } from '@/db/schema';
+import { degree_level_configs, educational_regulations, majors, staff, students, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import StudentsManagerClient from './StudentsManagerClient';
 
 export const dynamic = 'force-dynamic';
 
-export default async function AdminStudentsPage() {
-  await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER']);
+const PER_PAGE = 50;
 
-  // خواندن کلیه دانشجویان با مشخصات سجلی و تحصیلی
-  const studentRows = await db
+export default async function AdminStudentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; page?: string; status?: string; degree?: string }>;
+}) {
+  await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER']);
+  const sp = await searchParams;
+  const q = (sp.q || '').trim().slice(0, 60);
+  const page = Math.max(1, parseInt(sp.page || '1', 10) || 1);
+  const statusFilter = (sp.status || 'ALL').toUpperCase();
+  const degreeFilter = parseInt(sp.degree || '0', 10) || 0;
+
+  // ── فیلترهای مشترک ──
+  const conds = [];
+  if (statusFilter !== 'ALL') conds.push(eq(students.status, statusFilter));
+  if (degreeFilter > 0) conds.push(eq(students.degreeLevelId, degreeFilter));
+  if (q) {
+    const like = `%${q}%`;
+    conds.push(
+      or(
+        ilike(students.studentCode, like),
+        ilike(users.nationalCode, like),
+        ilike(users.firstName, like),
+        ilike(users.lastName, like),
+      )!,
+    );
+  }
+  const where = conds.length ? and(...conds) : undefined;
+
+  // ── تعداد کل + یک صفحه (صفحه‌بندی سمت سرور — ۳۲هزار رکورد یکجا لود نمی‌شود) ──
+  const baseQuery = db
     .select({
       id: students.id,
       studentCode: students.studentCode,
       entryYear: students.entryYear,
       entryTerm: students.entryTerm,
       status: students.status,
+      samaStatusCode: students.samaStatusCode,
       quotaType: students.quotaType,
       currentTermNo: students.currentTermNo,
       nationalCode: users.nationalCode,
@@ -27,23 +56,51 @@ export default async function AdminStudentsPage() {
       majorCode: majors.majorCode,
       degreeLevel: degree_level_configs.title,
       degreeCode: degree_level_configs.code,
+      degreeLevelId: degree_level_configs.id,
       regulationTitle: educational_regulations.title,
     })
     .from(students)
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(majors, eq(majors.id, students.majorId))
     .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
-    .leftJoin(educational_regulations, eq(educational_regulations.id, students.regulationId))
-    .orderBy(desc(students.id));
+    .leftJoin(educational_regulations, eq(educational_regulations.id, students.regulationId));
 
-  // خواندن کلیه اساتید و پرسنل با رتبه علمی و مدرک
+  const [{ n: total }] = await db
+    .select({ n: count() })
+    .from(students)
+    .innerJoin(users, eq(users.id, students.userId))
+    .where(where as never);
+  const totalPages = Math.max(1, Math.ceil(Number(total) / PER_PAGE));
+  const safePage = Math.min(page, totalPages);
+
+  const studentRows = where
+    ? await baseQuery.where(where as never).orderBy(desc(students.id)).limit(PER_PAGE).offset((safePage - 1) * PER_PAGE)
+    : await baseQuery.orderBy(desc(students.id)).limit(PER_PAGE).offset((safePage - 1) * PER_PAGE);
+
+  // ── گزینه‌های فیلتر: مقاطع + شمارش وضعیت‌ها ──
+  const degrees = await db
+    .select({ id: degree_level_configs.id, title: degree_level_configs.title })
+    .from(degree_level_configs)
+    .orderBy(degree_level_configs.id);
+  const statusCounts = await db
+    .select({ status: students.status, n: count() })
+    .from(students)
+    .groupBy(students.status)
+    .orderBy(sql`${count()} DESC`);
+
+  // خواندن اساتید و پرسنل با رتبه علمی و مدرک — پایه و نوع همکاری از سما
   const staffRows = await db
     .select({
       id: staff.id,
       staffCode: staff.staffCode,
       staffType: staff.staffType,
       academicRank: staff.academicRank,
+      academicBase: staff.academicBase,
       degree: staff.degree,
+      cooperationType: staff.cooperationType,
+      employmentType: staff.employmentType,
+      personnelNo: staff.personnelNo,
+      fieldOfStudy: staff.fieldOfStudy,
       nationalCode: users.nationalCode,
       firstName: users.firstName,
       lastName: users.lastName,
@@ -58,7 +115,9 @@ export default async function AdminStudentsPage() {
       <div className="card !p-4 bg-white border-slate-300 shadow-sm flex items-center justify-between">
         <div>
           <h1 className="text-base font-extrabold text-slate-900">🎓 سامانه جامع مدیریت پذیرش و پرونده تحصیلی/پرسنلی</h1>
-          <p className="text-xs text-slate-500 mt-0.5">مشاهده مشخصات شناسنامه‌ای، تحصیلی، سهمیه، مقاطع و اطلاعات اساتید</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {Number(total).toLocaleString('fa-IR')} پرونده دانشجویی — جست‌وجو و صفحه‌بندی سمت سرور
+          </p>
         </div>
       </div>
 
@@ -73,15 +132,19 @@ export default async function AdminStudentsPage() {
           entryYear: s.entryYear,
           entryTerm: s.entryTerm || 1,
           status: s.status,
+          samaStatusCode: s.samaStatusCode,
           quotaType: s.quotaType || 'NORMAL',
           currentTermNo: s.currentTermNo || 1,
-          majorName: s.majorName || 'مهندسی کامپیوتر',
-          majorCode: s.majorCode || '۵۴۸',
-          degreeLevel: s.degreeLevel || 'کارشناسی پیوسته',
-          degreeCode: s.degreeCode || 'BS',
-          regulationTitle: s.regulationTitle || 'آیین‌نامه مصوب ۱۴۰۳',
+          majorName: s.majorName || '—',
+          majorCode: s.majorCode || '—',
+          degreeLevel: s.degreeLevel || '—',
+          degreeCode: s.degreeCode || '—',
+          regulationTitle: s.regulationTitle || '—',
           role: 'دانشجو',
         }))}
+        pagination={{ total: Number(total), page: safePage, per: PER_PAGE, totalPages, q, status: statusFilter, degree: degreeFilter }}
+        degrees={degrees}
+        statusCounts={statusCounts.map(r => ({ status: r.status, n: Number(r.n) }))}
         staffList={staffRows.map(st => ({
           id: st.id,
           staffCode: st.staffCode,
@@ -89,9 +152,9 @@ export default async function AdminStudentsPage() {
           firstName: st.firstName,
           lastName: st.lastName,
           mobile: st.mobile || '—',
-          academicRank: st.academicRank || 'استادیار',
-          degree: st.degree || 'دکتری تخصصی',
-          staffType: st.staffType || 'هیئت علمی تمام‌وقت',
+          academicRank: st.academicRank || st.academicBase || '—',
+          degree: st.degree || st.fieldOfStudy || '—',
+          staffType: st.cooperationType || st.employmentType || st.staffType || '—',
           role: 'استاد / هیئت علمی',
         }))}
       />

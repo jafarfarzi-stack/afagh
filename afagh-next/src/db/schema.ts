@@ -49,6 +49,19 @@ export const users = pgTable('users', {
   photoMime: varchar('photoMime', { length: 100 }),      // image/jpeg …
   photoFileName: varchar('photoFileName', { length: 255 }), // نام فایل عکس در سیستم قدیمی (ستون اکسل)
   photoUpdatedAt: timestamp('photoUpdatedAt'),
+  // ── توسعهٔ ثمین / چنددانشگاهی ──
+  firstNameEn: varchar('firstNameEn', { length: 100 }),        // نام انگلیسی (ثمین: first_name_en)
+  lastNameEn: varchar('lastNameEn', { length: 100 }),          // نام خانوادگی انگلیسی
+  passportNumber: varchar('passportNumber', { length: 20 }),   // گذرنامهٔ اتباع (ثمین: passport_number)
+  nationality: varchar('nationality', { length: 10 }),         // کد ملیت ثمین (ایران=120001)
+  religion: varchar('religion', { length: 10 }),               // کد دین ثمین
+  birthPlaceCode: varchar('birthPlaceCode', { length: 10 }),  // کد محل تولد (ثمین: birth_place)
+  issuePlaceCode: varchar('issuePlaceCode', { length: 10 }),  // کد محل صدور (ثمین: iden_issue_place)
+  postalCode: varchar('postalCode', { length: 10 }),          // کد پستی ۱۰ رقمی
+  isAlive: integer('isAlive').notNull().default(1),            // ثمین: is_alive
+  saminPersonPk: varchar('saminPersonPk', { length: 40 }),    // کلید فرد در مبدأ ثمین (person_pk_in_source)
+  saminIsVerified: integer('saminIsVerified'),                 // ثمین: is_verified
+  saminVerifyCheckDate: timestamp('saminVerifyCheckDate'),
   passwordHash: varchar('passwordHash', { length: 255 }).notNull(),
   isActive: integer('isActive').default(1),
   // ── فلگ «تغییر اجباری رمز در اولین ورود» (برای حساب‌های پذیرش‌شده با رمز پیش‌فرض) ──
@@ -190,9 +203,33 @@ export const students = pgTable('students', {
   entryTerm: integer('entryTerm').default(1),
   status: varchar('status', { length: 30 }).notNull().default('ACTIVE'),
   quotaType: varchar('quotaType', { length: 50 }).notNull().default('NORMAL'),
+  samaStatusCode: varchar('samaStatusCode', { length: 10 }), // کد خام «وضعيت دانشجو» سما (رهگیری/بازنگاشت)
   extraAllowedSemesters: integer('extraAllowedSemesters').notNull().default(0),
   extraAllowedProbations: integer('extraAllowedProbations').notNull().default(0),
-  currentTermNo: integer('currentTermNo').default(1)
+  currentTermNo: integer('currentTermNo').default(1),
+  // ── توسعهٔ چنددانشگاهی / ثمین ──
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id), // دانشگاه مالک رکورد
+  saminStudentPk: varchar('saminStudentPk', { length: 40 }), // کلید دانشجو در مبدأ ثمین
+  senderUniversityCode: varchar('senderUniversityCode', { length: 20 }), // کد فرستنده ثمین
+  nativeType: varchar('nativeType', { length: 10 }),         // بومی/غیربومی ثمین
+  ethnicity: varchar('ethnicity', { length: 10 }),
+  sanjeshFileNumber: varchar('sanjeshFileNumber', { length: 40 }),
+  sanjeshApplicantNumber: varchar('sanjeshApplicantNumber', { length: 40 }),
+  saminFieldCode: varchar('saminFieldCode', { length: 20 }), // کد متمرکز رشته ثمین
+  saminLocalFieldCode: varchar('saminLocalFieldCode', { length: 20 }),
+  acceptanceAllocation: varchar('acceptanceAllocation', { length: 30 }),
+  acceptanceType: varchar('acceptanceType', { length: 30 }),
+  studyingMode: varchar('studyingMode', { length: 20 }),
+  trainingMethod: varchar('trainingMethod', { length: 20 }),
+  isaarCode: varchar('isaarCode', { length: 20 }),
+  totalAverage: numeric('totalAverage', { precision: 4, scale: 2 }),
+  eduEndYear: integer('eduEndYear'),
+  eduEndSemester: integer('eduEndSemester'),
+  graduateDate: varchar('graduateDate', { length: 10 }),
+  totalTakenUnits: integer('totalTakenUnits'),
+  totalPassedUnits: integer('totalPassedUnits'),
+  totalFailedUnits: integer('totalFailedUnits'),
+  saminDescription: text('saminDescription')
 });
 
 export const staff = pgTable('staff', {
@@ -1575,6 +1612,66 @@ export const migration_audit_entries = pgTable('migration_audit_entries', {
   revertedAt: timestamp('revertedAt'),
   revertNote: text('revertNote'),
   createdByUserId: integer('createdByUserId'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  چنددانشگاهی + ثمین (سازمان امور دانشجویان)
+//  هر دانشگاه منحل‌شده با کد و کلید جدا؛ آینده با افزودن یک ردیف
+// ═══════════════════════════════════════════════════════════════════
+
+export const universities = pgTable('universities', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 30 }).notNull().unique(), // ZARINE, ALLAME, SHAMS, NAZHAND, AFAGH
+  title: varchar('title', { length: 150 }).notNull(),
+  kind: varchar('kind', { length: 20 }).notNull().default('DISSOLVED'), // OWN | DISSOLVED | MERGED
+  status: varchar('status', { length: 20 }).notNull().default('ACTIVE'), // ACTIVE | ARCHIVED
+  saminCode: varchar('saminCode', { length: 20 }), // کد ثمین sender_university
+  province: varchar('province', { length: 80 }),
+  dissolvedAt: varchar('dissolvedAt', { length: 10 }),
+  note: text('note'),
+  isActive: integer('isActive').notNull().default(1),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+export const samin_connections = pgTable('samin_connections', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').notNull().unique().references(() => universities.id, { onDelete: 'cascade' }),
+  apiBaseUrl: varchar('apiBaseUrl', { length: 255 }).notNull().default('https://apim.saorg.ir'),
+  authBaseUrl: varchar('authBaseUrl', { length: 255 }).notNull().default('https://apiauth.saorg.ir/oauth2/token'),
+  clientId: varchar('clientId', { length: 200 }),
+  clientSecretEnc: text('clientSecretEnc'), // AES-256-GCM
+  username: varchar('username', { length: 150 }),
+  passwordEnc: text('passwordEnc'),
+  tokenEnc: text('tokenEnc'),
+  tokenExpiresAt: timestamp('tokenExpiresAt'),
+  lastSyncAt: timestamp('lastSyncAt'),
+  isEnabled: integer('isEnabled').notNull().default(1),
+  updatedAt: timestamp('updatedAt').defaultNow()
+});
+
+export const samin_staging = pgTable('samin_staging', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').notNull().references(() => universities.id, { onDelete: 'cascade' }),
+  entityCode: varchar('entityCode', { length: 20 }).notNull(), // 2001/1000/...
+  personPkInSource: varchar('personPkInSource', { length: 40 }),
+  studentPkInSource: varchar('studentPkInSource', { length: 40 }),
+  payload: jsonb('payload').notNull(), // JSON کامل ثمین
+  status: varchar('status', { length: 20 }).notNull().default('PENDING'), // PENDING|READY|SENT|ACCEPTED|FAILED
+  traceId: integer('traceId'),
+  errorMessage: text('errorMessage'),
+  createdAt: timestamp('createdAt').defaultNow(),
+  sentAt: timestamp('sentAt')
+}, (t) => ({ uq: unique('uq_samin_staging').on(t.universityId, t.entityCode, t.personPkInSource) }));
+
+export const samin_sync_logs = pgTable('samin_sync_logs', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').notNull().references(() => universities.id, { onDelete: 'cascade' }),
+  entityCode: varchar('entityCode', { length: 20 }).notNull(),
+  traceId: integer('traceId'),
+  status: varchar('status', { length: 20 }).notNull(), // ACCEPTED|REJECTED|PENDING...
+  summaryResult: jsonb('summaryResult'),
+  rawResponse: text('rawResponse'),
   createdAt: timestamp('createdAt').defaultNow()
 });
 

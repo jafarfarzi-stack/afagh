@@ -173,7 +173,7 @@ export function prepare(entity: Entity, tables: Table[], fileName: string): Prep
       const code = get(['کد ترم', 'کدترم', 'term_code', 'code']);
       const title = get(['عنوان ترم', 'نام ترم', 'title']) || `ترم ${code}`;
       const isCurrent = boolFa(get(['ترم جاری', 'جاری', 'is_current']));
-      if (!code || !/^\d{3,4}$/.test(code)) return err(`کد ترم نامعتبر: ${code}`);
+      if (!code || !/^\d{3,5}$/.test(code)) return err(`کد ترم نامعتبر: ${code}`);
       rows.push({ termCode: code, title, isCurrent });
     }
 
