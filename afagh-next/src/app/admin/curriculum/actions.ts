@@ -17,7 +17,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import {
   course_offerings, course_rules, courses, curriculum_approvals, curriculum_courses,
-  curriculum_tracks, curriculum_versions, degree_level_configs, enrollments, majors,
+  curriculum_tracks, curriculum_versions, degree_level_configs, departments, enrollments, majors,
   staff,
 } from '@/db/schema';
 import { requireRole, type SessionUser } from '@/lib/auth';
@@ -102,6 +102,7 @@ async function loadVersionData(versionId: number) {
       isElective: curriculum_courses.isElective,
       isGraduationRequired: curriculum_courses.isGraduationRequired,
       recommendedSemester: curriculum_courses.recommendedSemester,
+      minGrade: curriculum_courses.minGrade,                    // کف قبولی خاص نسخه (numeric → number|null)
       autoCorequisiteAllowed: curriculum_courses.autoCorequisiteAllowed,
     })
     .from(curriculum_courses)
@@ -127,6 +128,7 @@ async function loadVersionData(versionId: number) {
       isElective: r.isElective ?? 0,
       isGraduationRequired: r.isGraduationRequired ?? 0,
       recommendedSemester: r.recommendedSemester,
+      minGrade: r.minGrade != null ? Number(r.minGrade) : null,
       autoCorequisiteAllowed: r.autoCorequisiteAllowed ?? 0,
     })),
     rules: rulesRows.map((r) => {
@@ -301,6 +303,84 @@ export async function listCourseBankAction(): Promise<CourseBankResult> {
   } catch (err: any) {
     console.error('listCourseBankAction:', err);
     return { ok: false, error: 'خطا در بارگیری بانک دروس' };
+  }
+}
+
+/** فهرست گروه‌های آموزشی — برای فرم «تعریف درس جدید در بانک» (معادل فیلد «گروه آموزشی» سامانهٔ قدیم) */
+export type DepartmentListResult =
+  | { ok: true; data: { id: number; name: string }[] }
+  | { ok: false; error: string };
+
+export async function listDepartmentsAction(): Promise<DepartmentListResult> {
+  await requireRole(EDITORS);
+  try {
+    const rows = await db
+      .select({ id: departments.id, name: departments.name })
+      .from(departments)
+      .orderBy(asc(departments.name));
+    return { ok: true, data: rows };
+  } catch (err: any) {
+    console.error('listDepartmentsAction:', err);
+    return { ok: false, error: 'خطا در بارگیری گروه‌های آموزشی' };
+  }
+}
+
+export interface CreateBankCourseInput {
+  code: string;
+  title: string;
+  theoreticalUnits: number;
+  practicalUnits: number;
+  courseType?: string;
+  gradingType?: 'NUMERIC' | 'PASS_FAIL';
+  affectsGpa?: number;
+  departmentId?: number | null;
+}
+
+/**
+ * تعریف درس جدید از صفر در بانک دروس (معادل «معرفی درس جدید» سامانهٔ قدیم).
+ * بانک سراسری است و به نسخه گره نخورده؛ پیش‌نیاز/هم‌نیاز هر درس در سطح
+ * کاتالوگ (course_rules هر نسخه) تعریف می‌شود نه روی رکورد بانک.
+ */
+export async function createCourseBankAction(input: CreateBankCourseInput): Promise<Act<{ message: string; data: { id: number } }>> {
+  await requireRole(EDITORS);
+  try {
+    const code = (input.code ?? '').trim();
+    const title = (input.title ?? '').trim();
+    const theo = Number(input.theoreticalUnits ?? 0);
+    const prac = Number(input.practicalUnits ?? 0);
+    if (!code || !title) return { ok: false, error: 'کد درس و نام درس الزامی است.' };
+    if (!(theo >= 0) || !(prac >= 0) || theo + prac <= 0) return { ok: false, error: 'واحد نظری/عملی نامعتبر است (مجموع باید بیشتر از صفر باشد).' };
+    const [dup] = await db.select({ id: courses.id }).from(courses).where(eq(courses.code, code)).limit(1);
+    if (dup) return { ok: false, error: `کد درس تکراری است: ${code}` };
+    let departmentId: number | null = null;
+    if (input.departmentId != null) {
+      const [dept] = await db.select({ id: departments.id }).from(departments).where(eq(departments.id, input.departmentId)).limit(1);
+      if (!dept) return { ok: false, error: 'گروه آموزشی انتخاب‌شده یافت نشد.' };
+      departmentId = dept.id;
+    }
+    const [row] = await db.insert(courses).values({
+      code,
+      title,
+      theoreticalUnits: String(theo),
+      practicalUnits: String(prac),
+      units: String(theo + prac),
+      courseType: (input.courseType ?? '').trim() || 'تخصصی',
+      gradingType: input.gradingType === 'PASS_FAIL' ? 'PASS_FAIL' : 'NUMERIC',
+      affectsGpa: input.affectsGpa === 0 ? 0 : 1,
+      departmentId,
+    }).returning({ id: courses.id });
+    await db.transaction(async (tx) => {
+      await appendAudit(tx, {
+        actorUserId: (await requireRole(EDITORS)).id,
+        action: 'COURSE_BANK_CREATED', entityType: PHASE, entityId: row.id,
+        details: JSON.stringify({ code, title, units: theo + prac, departmentId }),
+      });
+    });
+    revalidateCurriculumPaths();
+    return { ok: true, message: `درس «${title}» در بانک تعریف شد (${theo + prac} واحد).`, data: { id: row.id } };
+  } catch (err: any) {
+    console.error('createCourseBankAction:', err);
+    return { ok: false, error: err.message || 'خطا در تعریف درس جدید' };
   }
 }
 
