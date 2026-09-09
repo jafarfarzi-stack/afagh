@@ -335,6 +335,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
 
 /** خروجی CSV — ورق‌زدن همه صفحات تا سقف ۵۰۰۰ ردیف */
 export async function exportReport(kind: string, f: ReportFilters): Promise<{ header: string[]; lines: string[][] }> {
+  await requireRole(ROLES);
   const first = await runReport(kind, { ...f, page: 1 });
   const all = [...first.rows];
   for (let p = 2; p <= first.totalPages && all.length < 5000; p++) {

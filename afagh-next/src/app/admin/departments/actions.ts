@@ -32,6 +32,7 @@ export type DeptRow = {
 
 /** فهرست گروه‌ها با مدیر، تعداد اعضا، دروس و رشته‌ها */
 export async function listDepartments(): Promise<DeptRow[]> {
+  await requireRole(['ADMIN', 'VICE_EDU']);
   const rows = await db
     .select({
       id: departments.id,
@@ -102,6 +103,7 @@ export type StaffPick = {
 
 /** فهرست اعضای هیئت علمی/کارکنان برای انتخاب مدیر یا عضو */
 export async function listStaffPicks(): Promise<StaffPick[]> {
+  await requireRole(['ADMIN', 'VICE_EDU']);
   const rows = await db
     .select({
       id: staff.id,
@@ -134,6 +136,7 @@ export async function listStaffPicks(): Promise<StaffPick[]> {
 }
 
 export async function listFaculties() {
+  await requireRole(['ADMIN', 'VICE_EDU']);
   return db.select({ id: faculties.id, name: faculties.name, code: faculties.facultyCode }).from(faculties).orderBy(faculties.name);
 }
 
@@ -327,6 +330,7 @@ export async function setStaffDepartmentAction(fd: FormData): Promise<{ ok: bool
 
 /** دروسی که هنوز به هیچ گروهی وصل نیستند (بی‌صاحب می‌مانند و در پنل مدیر گروه دیده نمی‌شوند) */
 export async function countOrphanCourses(): Promise<number> {
+  await requireRole(['ADMIN', 'VICE_EDU']);
   const [r] = await db.select({ c: sql<number>`count(*)::int` }).from(courses).where(isNull(courses.departmentId));
   return r?.c ?? 0;
 }

@@ -63,8 +63,15 @@ try {
     VALUES ($1,'تست','ب','x',1) RETURNING id`, [NC_B])).rows;
 
   const [deg] = (await q(owner, `SELECT id FROM degree_level_configs ORDER BY id LIMIT 1`)).rows;
-  const [reg] = (await q(owner, `SELECT id FROM educational_regulations ORDER BY id LIMIT 1`)).rows;
-  if (!deg || !reg) throw new Error('seed-base اجرا نشده؟ (degree/regulation خالی)');
+  if (!deg) throw new Error('seed-base اجرا نشده؟ (مقاطع خالی)');
+  // آیین‌نامه: seed-base عمداً آیین‌نامهٔ demo نمی‌سازد (فقط ۶ سند تجمیعی معتبر
+  // با ETL/cleanup-regulations ساخته می‌شوند). پس فیکسچر را خودِ آزمون می‌سازد
+  // تا اثبات RLS به دادهٔ seed وابسته نباشد.
+  let reg = (await q(owner, `SELECT id FROM educational_regulations ORDER BY id LIMIT 1`)).rows[0] ?? null;
+  if (!reg) {
+    reg = (await q(owner, `INSERT INTO educational_regulations (title, "degreeLevelId", "effectiveFromYear", "rulesConfig")
+      VALUES ($1,$2,1403,$3) RETURNING id`, ['آیین‌نامهٔ تست RLS', deg.id, '{}'])).rows[0];
+  }
 
   const [sA] = (await q(owner, `INSERT INTO students ("userId","studentCode","degreeLevelId","regulationId","entryYear","status")
     VALUES ($1,$2,$3,$4,1404,'ACTIVE') RETURNING id`, [uA.id, `T${tag}A`, deg.id, reg.id])).rows;

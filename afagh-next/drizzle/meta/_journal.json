@@ -78,6 +78,13 @@
       "when": 1788595200000,
       "tag": "0010_role_unit_targets",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788598800000,
+      "tag": "0011_student_term_states",
+      "breakpoints": true
     }
   ]
 }

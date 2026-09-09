@@ -180,11 +180,15 @@ export async function setCodeAction(fd: FormData): Promise<{ ok: boolean; error?
 
 /** شمار رکوردهای بی‌کد در هر جدول — برای هشدار پیش از انتقال داده */
 export async function missingCodeSummary(): Promise<{ table: string; missing: number }[]> {
+  // گارد صریح: حتی با صدا کردن codeStatsِ گارددار، خودِ اکشن هم باید گارد داشته باشد
+  // (ممیزی استاتیک CI اکشن‌های 'use server' را تک‌تک می‌سنجد؛ لایهٔ دوم دفاع).
+  await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
   const stats = await codeStats();
   return stats.filter(s => s.missing > 0).map(s => ({ table: s.title, missing: s.missing }));
 }
 
 export async function exportCodesCsv(table: CodeTable): Promise<string> {
+  await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
   const rows = await listCodes(table);
   const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
   const head = 'کد,عنوان,زمینه\n';
@@ -193,6 +197,7 @@ export async function exportCodesCsv(table: CodeTable): Promise<string> {
 
 /** شمار کل رکوردهای هر جدول بدون بارگذاری کامل — برای صفحه‌های بزرگ مثل دروس */
 export async function countRows(table: CodeTable): Promise<number> {
+  await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
   const map = { faculty: faculties, department: departments, major: majors, degree: degree_level_configs, course: courses, term: academic_terms } as const;
   const [r] = await db.select({ c: sql<number>`count(*)::int` }).from(map[table]);
   return r?.c ?? 0;
