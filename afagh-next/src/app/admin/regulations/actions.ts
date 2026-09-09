@@ -17,6 +17,16 @@ export async function saveRegulationAction(data: {
 }) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
 
+  // گارد سال شمسی معتبر: جلوگیری از ورود کدهای سما (مثل ۱۲۳۰/۱۳۳۰) به‌جای سال
+  const from = Number(data.effectiveFromYear);
+  const to = data.effectiveToYear != null && (data.effectiveToYear as unknown as string) !== '' ? Number(data.effectiveToYear) : null;
+  if (!Number.isInteger(from) || from < 1350 || from > 1500) {
+    return { ok: false, error: `سال شروع اعتبار باید سال شمسی معتبر (۱۳۵۰ تا ۱۵۰۰) باشد؛ مقدار «${data.effectiveFromYear}» پذیرفته نیست.` };
+  }
+  if (to != null && (!Number.isInteger(to) || to < from || to > 1500)) {
+    return { ok: false, error: `سال پایان اعتبار باید بین سال شروع (${from}) و ۱۵۰۰ باشد.` };
+  }
+
   try {
     const configStr = JSON.stringify(data.rulesConfig);
 
@@ -26,8 +36,8 @@ export async function saveRegulationAction(data: {
         .set({
           title: data.title,
           degreeLevelId: data.degreeLevelId,
-          effectiveFromYear: data.effectiveFromYear,
-          effectiveToYear: data.effectiveToYear || null,
+          effectiveFromYear: from,
+          effectiveToYear: to,
           rulesConfig: configStr,
         })
         .where(eq(educational_regulations.id, data.id));
@@ -35,8 +45,8 @@ export async function saveRegulationAction(data: {
       await db.insert(educational_regulations).values({
         title: data.title,
         degreeLevelId: data.degreeLevelId,
-        effectiveFromYear: data.effectiveFromYear,
-        effectiveToYear: data.effectiveToYear || null,
+        effectiveFromYear: from,
+        effectiveToYear: to,
         rulesConfig: configStr,
       });
     }
