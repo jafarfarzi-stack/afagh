@@ -1,7 +1,7 @@
 import { and, count, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { degree_level_configs, departments, educational_regulations, faculties, legacy_code_maps, majors, staff, students, users } from '@/db/schema';
-import type { RegulationPick } from './StudentsManagerClient';
+import type { RegulationPick } from './types';
 import { requireRole } from '@/lib/auth';
 import { normalizeFa, normCol } from '@/lib/persian-search';
 import { getSetting } from '@/lib/settings';
