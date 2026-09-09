@@ -711,14 +711,14 @@ export default function StudentsManagerClient(props: {
                 disabled={selectedStuIdx === 0}
                 className="px-2 py-1 bg-white border border-slate-400 rounded hover:bg-slate-50 disabled:opacity-40"
               >
-                ◀ قبلی
+                قبلی ▶
               </button>
               <button
                 onClick={() => selectedStuIdx < props.students.length - 1 && setSelectedStuIdx(selectedStuIdx + 1)}
                 disabled={selectedStuIdx === props.students.length - 1}
                 className="px-2 py-1 bg-white border border-slate-400 rounded hover:bg-slate-50 disabled:opacity-40"
               >
-                بعدی ▶
+                ◀ بعدی
               </button>
               <span className="text-[11px] text-slate-500 mr-2 font-mono">
                 پرونده {selectedStuIdx + 1} از {props.students.length}
@@ -1222,7 +1222,17 @@ export default function StudentsManagerClient(props: {
               </div>
 
               <div className="overflow-x-auto border border-slate-300 rounded">
-                <table className="w-full text-right text-xs">
+                <table className="w-full table-fixed text-right text-xs">
+                  <colgroup>
+                    <col style={{ width: 150 }} />
+                    <col style={{ width: 140 }} />
+                    <col />
+                    <col style={{ width: 120 }} />
+                    <col />
+                    <col style={{ width: 100 }} />
+                    <col style={{ width: 90 }} />
+                    <col style={{ width: 120 }} />
+                  </colgroup>
                   <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold">
                     <tr>
                       <th className="p-2 text-right whitespace-nowrap">عملیات</th>
@@ -1262,7 +1272,7 @@ export default function StudentsManagerClient(props: {
                           </button>
                         </td>
                         <td className="p-2 font-mono font-bold text-indigo-950 whitespace-nowrap" dir="ltr">{s.studentCode}</td>
-                        <td className="p-2 font-bold whitespace-nowrap">{s.firstName} {s.lastName}</td>
+                        <td className="p-2 font-bold break-words">{s.firstName} {s.lastName}</td>
                         <td className="p-2 font-mono whitespace-nowrap" dir="ltr">{s.nationalCode}</td>
                         <td className="p-2">{s.majorName}</td>
                         <td className="p-2 whitespace-nowrap">{s.degreeLevel}</td>
@@ -1540,7 +1550,17 @@ export default function StudentsManagerClient(props: {
               </div>
 
               <div className="overflow-x-auto border border-slate-300 rounded">
-                <table className="w-full text-right text-xs">
+                <table className="w-full table-fixed text-right text-xs">
+                  <colgroup>
+                    <col style={{ width: 150 }} />
+                    <col style={{ width: 90 }} />
+                    <col />
+                    <col style={{ width: 120 }} />
+                    <col />
+                    <col style={{ width: 110 }} />
+                    <col style={{ width: 90 }} />
+                    <col style={{ width: 110 }} />
+                  </colgroup>
                   <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold">
                     <tr>
                       <th className="p-2 text-right whitespace-nowrap">عملیات</th>
@@ -1573,7 +1593,7 @@ export default function StudentsManagerClient(props: {
                           </button>
                         </td>
                         <td className="p-2 font-mono font-bold text-slate-900 whitespace-nowrap" dir="ltr">{st.staffCode}</td>
-                        <td className="p-2 font-bold whitespace-nowrap">{st.firstName} {st.lastName}</td>
+                        <td className="p-2 font-bold break-words">{st.firstName} {st.lastName}</td>
                         <td className="p-2 font-mono whitespace-nowrap" dir="ltr">{st.nationalCode}</td>
                         <td className="p-2">{st.departmentName && st.departmentName !== '—' ? st.departmentName : '—'}</td>
                         <td className="p-2 font-semibold text-indigo-950 whitespace-nowrap">{st.academicRank}</td>

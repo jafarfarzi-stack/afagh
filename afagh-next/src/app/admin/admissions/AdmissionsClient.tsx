@@ -363,7 +363,15 @@ export default function AdmissionsClient({
               <span className="text-xs text-slate-400 font-mono">{stagingTable.visible.length} از {stagingList.length} رکورد</span>
             </div>
 
-            <table className="w-full text-right text-xs">
+            <table className="w-full table-fixed text-right text-xs">
+              <colgroup>
+                <col style={{ width: 120 }} />
+                <col />
+                <col style={{ width: 110 }} />
+                <col />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 130 }} />
+              </colgroup>
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold">
                   {STAGING_COLS.map(c => (

@@ -47,7 +47,23 @@ export default function FinanceTable({ students }: { students: FinanceStudent[] 
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-right text-sm">
+      <table className="w-full table-fixed text-right text-sm">
+        <colgroup>
+          <col style={{ width: 160 }} />
+          <col style={{ width: 110 }} />
+          <col />
+          <col style={{ width: 100 }} />
+          <col style={{ width: 70 }} />
+          <col style={{ width: 120 }} />
+          <col style={{ width: 120 }} />
+          <col style={{ width: 120 }} />
+          <col style={{ width: 120 }} />
+          <col style={{ width: 120 }} />
+          <col style={{ width: 120 }} />
+          <col style={{ width: 120 }} />
+          <col style={{ width: 120 }} />
+          <col style={{ width: 90 }} />
+        </colgroup>
         <thead>
           <tr className="border-b border-slate-200 text-xs text-slate-500">
             {COLS.map(c => (

@@ -36,7 +36,15 @@ export default function StaffTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-right text-xs">
+      <table className="w-full table-fixed text-right text-xs">
+        <colgroup>
+          <col style={{ width: 150 }} />
+          <col style={{ width: 100 }} />
+          <col style={{ width: 130 }} />
+          <col style={{ width: 130 }} />
+          <col />
+          <col style={{ width: 110 }} />
+        </colgroup>
         <thead>
           <tr className="text-slate-500">
             {COLS.map(c => (

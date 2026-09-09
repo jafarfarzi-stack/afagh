@@ -107,10 +107,13 @@ export function ClientTh<T>({
   return (
     <th className={`p-2 align-top ${col.className ?? ''}`}>
       {col.sortable === false ? (
-        <span>{col.label}</span>
+        <span className="whitespace-nowrap">{col.label}</span>
       ) : (
-        <button onClick={onSort} title="مرتب‌سازی" className={`font-bold hover:text-indigo-700 ${active ? 'text-indigo-700' : ''}`}>
-          {col.label} {active ? (sortDir === 'asc' ? '▲' : '▼') : <span className="opacity-30">⇅</span>}
+        <button onClick={onSort} title="مرتب‌سازی" className={`font-bold hover:text-indigo-700 whitespace-nowrap ${active ? 'text-indigo-700' : ''}`}>
+          {col.label}{' '}
+          <span className="inline-block w-4 text-center">
+            {active ? (sortDir === 'asc' ? '▲' : '▼') : <span className="opacity-30">⇅</span>}
+          </span>
         </button>
       )}
       {col.filterable !== false && (
@@ -119,7 +122,7 @@ export function ClientTh<T>({
           onChange={e => onFilter(e.target.value)}
           onClick={e => e.stopPropagation()}
           placeholder="فیلتر…"
-          className="mt-1 block w-full max-w-28 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] font-normal"
+          className="mt-1 block h-7 w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] font-normal"
         />
       )}
     </th>
@@ -218,7 +221,7 @@ export function ExportButtons({
 
 /** سرستون سروری: کلیک = nav با sort=key:dir */
 export function ServerTh({
-  label, sortKey, activeKey, dir, onSort, filter, onFilter, onApply, filterPlaceholder,
+  label, sortKey, activeKey, dir, onSort, filter, onFilter, onApply, filterPlaceholder, className,
 }: {
   label: string;
   sortKey: string;
@@ -229,12 +232,16 @@ export function ServerTh({
   onFilter?: (v: string) => void;
   onApply?: () => void;
   filterPlaceholder?: string;
+  className?: string;
 }) {
   const active = activeKey === sortKey;
   return (
-    <th className="p-2 align-top whitespace-nowrap">
+    <th className={`p-2 align-top ${className ?? ''}`}>
       <button onClick={onSort} title="مرتب‌سازی" className={`font-bold hover:text-indigo-700 whitespace-nowrap ${active ? 'text-indigo-700' : ''}`}>
-        {label} {active ? (dir === 'asc' ? '▲' : '▼') : <span className="opacity-30">⇅</span>}
+        {label}{' '}
+        <span className="inline-block w-4 text-center">
+          {active ? (dir === 'asc' ? '▲' : '▼') : <span className="opacity-30">⇅</span>}
+        </span>
       </button>
       {onFilter && (
         <input
@@ -242,7 +249,7 @@ export function ServerTh({
           onChange={e => onFilter(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onApply?.(); } }}
           placeholder={filterPlaceholder ?? 'فیلتر…'}
-          className="mt-1 block w-full max-w-28 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] font-normal whitespace-normal"
+          className="mt-1 block h-7 w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] font-normal"
         />
       )}
     </th>
