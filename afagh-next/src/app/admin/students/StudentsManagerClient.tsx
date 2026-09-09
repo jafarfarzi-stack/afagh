@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { getTranscript, getTranscriptRegulation, setStudentRegulationAction, type TranscriptRow } from './actions';
 import type { RegulationConfig } from '@/lib/regulations-engine';
+import { ClientTh, ServerTh, useClientTable, type ColumnDef } from '@/components/DataTable';
 import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, quotaFa, studentStatusChip, studentStatusFa } from '@/lib/student-labels';
 
 export type StudentItem = {
@@ -52,6 +53,12 @@ export type Pagination = {
   q: string;
   status: string;
   degree: number;
+  sort?: string;
+  f_code?: string;
+  f_name?: string;
+  f_nc?: string;
+  f_major?: string;
+  f_year?: string;
 };
 
 export type StaffItem = {
@@ -565,21 +572,54 @@ export default function StudentsManagerClient(props: {
   const [staffQuery, setStaffQuery] = useState('');
   const [staffVisible, setStaffVisible] = useState(100);
   const nav = (patch: Record<string, string>) => {
-    const cur = { q: pg?.q ?? '', status: pg?.status ?? 'ALL', degree: String(pg?.degree ?? 0), page: '1', ...patch };
+    const cur = {
+      q: pg?.q ?? '', status: pg?.status ?? 'ALL', degree: String(pg?.degree ?? 0), page: '1',
+      sort: pg?.sort ?? '', f_code: pg?.f_code ?? '', f_name: pg?.f_name ?? '', f_nc: pg?.f_nc ?? '',
+      f_major: pg?.f_major ?? '', f_year: pg?.f_year ?? '', ...patch,
+    };
     const p = new URLSearchParams();
     if (cur.q) p.set('q', cur.q);
     if (cur.status && cur.status !== 'ALL') p.set('status', cur.status);
     if (cur.degree && cur.degree !== '0') p.set('degree', cur.degree);
     if (cur.page && cur.page !== '1') p.set('page', cur.page);
+    if (cur.sort) p.set('sort', cur.sort);
+    if (cur.f_code) p.set('f_code', cur.f_code);
+    if (cur.f_name) p.set('f_name', cur.f_name);
+    if (cur.f_nc) p.set('f_nc', cur.f_nc);
+    if (cur.f_major) p.set('f_major', cur.f_major);
+    if (cur.f_year) p.set('f_year', cur.f_year);
     router.push(`${pathname}?${p.toString()}`);
   };
+  // سورت ستونی دانشجویان (سروری): key -> asc -> desc -> بدون سورت
+  const [stuSortKey, stuSortDir] = (pg?.sort ?? '').split(':') as [string, string?];
+  const toggleStuSort = (key: string) => {
+    if (stuSortKey !== key) nav({ sort: `${key}:asc` });
+    else if (stuSortDir === 'asc') nav({ sort: `${key}:desc` });
+    else nav({ sort: '' });
+  };
+  // فیلترهای ستونی (لوکال + اعمال با Enter)
+  const [stuFilters, setStuFilters] = useState({ f_code: pg?.f_code ?? '', f_name: pg?.f_name ?? '', f_nc: pg?.f_nc ?? '', f_major: pg?.f_major ?? '', f_year: pg?.f_year ?? '' });
+  const applyStuFilters = () => nav({ f_code: stuFilters.f_code.trim(), f_name: stuFilters.f_name.trim(), f_nc: stuFilters.f_nc.trim(), f_major: stuFilters.f_major.trim(), f_year: stuFilters.f_year.trim() });
 
-  const filteredStaff = props.staffList.filter(s =>
+  const staffQueryFiltered = props.staffList.filter(s =>
     !staffQuery ||
     s.staffCode.includes(staffQuery) ||
     s.nationalCode.includes(staffQuery) ||
     (s.firstName + ' ' + s.lastName).includes(staffQuery)
   );
+
+  // جدول اساتید: سورت + فیلتر هر ستون (کلاینتی — کل لیست دست مرورگر است)
+  const STAFF_COLS: ColumnDef<StaffItem>[] = [
+    { key: 'staffCode', label: 'کد استاد', get: s => s.staffCode },
+    { key: 'name', label: 'نام و نام خانوادگی', get: s => `${s.firstName} ${s.lastName}` },
+    { key: 'nationalCode', label: 'کد ملی', get: s => s.nationalCode },
+    { key: 'department', label: 'گروه آموزشی', get: s => s.departmentName && s.departmentName !== '—' ? s.departmentName : '' },
+    { key: 'rank', label: 'مرتبه علمی', get: s => s.academicRank },
+    { key: 'degree', label: 'مدرک', get: s => s.degree },
+    { key: 'coop', label: 'نوع همکاری', get: s => s.staffType },
+  ];
+  const staffTable = useClientTable(staffQueryFiltered, STAFF_COLS);
+  const filteredStaff = staffTable.visible;
 
   return (
     <div className="space-y-4 font-sans text-xs text-slate-900">
@@ -1154,8 +1194,8 @@ export default function StudentsManagerClient(props: {
                   className="w-full max-w-md bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs"
                 />
                 <button type="submit" className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold rounded">جستجو</button>
-                {(pg?.q || pg?.status !== 'ALL' || (pg?.degree ?? 0) > 0) && (
-                  <button type="button" onClick={() => { setSearchQuery(''); nav({ q: '', status: 'ALL', degree: '0' }); }} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs rounded">✖ پاک‌سازی فیلتر</button>
+                {(pg?.q || pg?.status !== 'ALL' || (pg?.degree ?? 0) > 0 || pg?.sort || pg?.f_code || pg?.f_name || pg?.f_nc || pg?.f_major || pg?.f_year) && (
+                  <button type="button" onClick={() => { setSearchQuery(''); setStuFilters({ f_code: '', f_name: '', f_nc: '', f_major: '', f_year: '' }); nav({ q: '', status: 'ALL', degree: '0', sort: '', f_code: '', f_name: '', f_nc: '', f_major: '', f_year: '' }); }} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs rounded">✖ پاک‌سازی فیلتر</button>
                 )}
                 <span className="text-xs text-slate-500 mr-auto">{(pg?.total ?? props.students.length).toLocaleString('fa-IR')} پرونده</span>
               </form>
@@ -1185,14 +1225,25 @@ export default function StudentsManagerClient(props: {
                 <table className="w-full text-right text-xs">
                   <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold">
                     <tr>
-                      <th className="p-2">شماره دانشجویی</th>
-                      <th className="p-2">نام و نام خانوادگی</th>
-                      <th className="p-2">کد ملی</th>
-                      <th className="p-2">رشته</th>
-                      <th className="p-2">مقطع</th>
-                      <th className="p-2">سال ورود</th>
-                      <th className="p-2">وضعیت</th>
+                      <ServerTh label="شماره دانشجویی" sortKey="studentCode" activeKey={stuSortKey || null} dir={(stuSortDir as 'asc' | 'desc') ?? 'asc'} onSort={() => toggleStuSort('studentCode')} filter={stuFilters.f_code} onFilter={v => setStuFilters(f => ({ ...f, f_code: v }))} onApply={applyStuFilters} />
+                      <ServerTh label="نام و نام خانوادگی" sortKey="name" activeKey={stuSortKey || null} dir={(stuSortDir as 'asc' | 'desc') ?? 'asc'} onSort={() => toggleStuSort('name')} filter={stuFilters.f_name} onFilter={v => setStuFilters(f => ({ ...f, f_name: v }))} onApply={applyStuFilters} />
+                      <ServerTh label="کد ملی" sortKey="nc" activeKey={stuSortKey || null} dir={(stuSortDir as 'asc' | 'desc') ?? 'asc'} onSort={() => toggleStuSort('nc')} filter={stuFilters.f_nc} onFilter={v => setStuFilters(f => ({ ...f, f_nc: v }))} onApply={applyStuFilters} />
+                      <ServerTh label="رشته" sortKey="major" activeKey={stuSortKey || null} dir={(stuSortDir as 'asc' | 'desc') ?? 'asc'} onSort={() => toggleStuSort('major')} filter={stuFilters.f_major} onFilter={v => setStuFilters(f => ({ ...f, f_major: v }))} onApply={applyStuFilters} />
+                      <ServerTh label="مقطع" sortKey="degree" activeKey={stuSortKey || null} dir={(stuSortDir as 'asc' | 'desc') ?? 'asc'} onSort={() => toggleStuSort('degree')} />
+                      <ServerTh label="سال ورود" sortKey="year" activeKey={stuSortKey || null} dir={(stuSortDir as 'asc' | 'desc') ?? 'asc'} onSort={() => toggleStuSort('year')} filter={stuFilters.f_year} onFilter={v => setStuFilters(f => ({ ...f, f_year: v }))} onApply={applyStuFilters} />
+                      <ServerTh label="وضعیت" sortKey="status" activeKey={stuSortKey || null} dir={(stuSortDir as 'asc' | 'desc') ?? 'asc'} onSort={() => toggleStuSort('status')} />
                       <th className="p-2 text-left">عملیات</th>
+                    </tr>
+                    <tr>
+                      <td colSpan={8} className="p-1.5 bg-slate-50">
+                        <button
+                          onClick={applyStuFilters}
+                          className="px-3 py-1 bg-indigo-700 hover:bg-indigo-800 text-white text-[11px] font-bold rounded"
+                        >
+                          اعمال فیلتر ستون‌ها (Enter)
+                        </button>
+                        <span className="mr-2 text-[10px] text-slate-400">فیلتر هر ستون را بنویسید و Enter بزنید</span>
+                      </td>
                     </tr>
                   </thead>
                   <tbody>
@@ -1492,13 +1543,17 @@ export default function StudentsManagerClient(props: {
                 <table className="w-full text-right text-xs">
                   <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold">
                     <tr>
-                      <th className="p-2">کد استاد</th>
-                      <th className="p-2">نام و نام خانوادگی</th>
-                      <th className="p-2">کد ملی</th>
-                      <th className="p-2">گروه آموزشی</th>
-                      <th className="p-2">مرتبه علمی</th>
-                      <th className="p-2">مدرک</th>
-                      <th className="p-2">نوع همکاری</th>
+                      {STAFF_COLS.map(c => (
+                        <ClientTh
+                          key={c.key}
+                          col={c}
+                          sortKey={staffTable.sortKey}
+                          sortDir={staffTable.sortDir}
+                          filter={staffTable.filters[c.key] ?? ''}
+                          onSort={() => staffTable.toggleSort(c.key)}
+                          onFilter={v => { staffTable.setFilter(c.key, v); setStaffVisible(100); }}
+                        />
+                      ))}
                       <th className="p-2 text-left">عملیات</th>
                     </tr>
                   </thead>

@@ -13,7 +13,7 @@ const PER_PAGE = 50;
 export default async function AdminStudentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string; status?: string; degree?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; status?: string; degree?: string; sort?: string; f_code?: string; f_name?: string; f_nc?: string; f_major?: string; f_year?: string }>;
 }) {
   await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER']);
   const sp = await searchParams;
@@ -21,6 +21,13 @@ export default async function AdminStudentsPage({
   const page = Math.max(1, parseInt(sp.page || '1', 10) || 1);
   const statusFilter = (sp.status || 'ALL').toUpperCase();
   const degreeFilter = parseInt(sp.degree || '0', 10) || 0;
+  // سورت ستونی: key:dir (whitelist) + فیلترهای ستونی
+  const sortRaw = (sp.sort || '').trim();
+  const fCode = (sp.f_code || '').trim().slice(0, 20);
+  const fName = (sp.f_name || '').trim().slice(0, 60);
+  const fNc = (sp.f_nc || '').trim().slice(0, 20);
+  const fMajor = (sp.f_major || '').trim().slice(0, 60);
+  const fYear = (sp.f_year || '').trim().slice(0, 4);
 
   // ── فیلترهای مشترک ──
   const conds = [];
@@ -37,7 +44,29 @@ export default async function AdminStudentsPage({
       )!,
     );
   }
+  if (fCode) conds.push(ilike(students.studentCode, `%${fCode}%`));
+  if (fName) conds.push(or(ilike(users.firstName, `%${fName}%`), ilike(users.lastName, `%${fName}%`))!);
+  if (fNc) conds.push(ilike(users.nationalCode, `%${fNc}%`));
+  if (fMajor) conds.push(ilike(majors.name, `%${fMajor}%`));
+  if (/^\d{4}$/.test(fYear)) conds.push(eq(students.entryYear, Number(fYear)));
   const where = conds.length ? and(...conds) : undefined;
+
+  // ── مرتب‌سازی ستونی (پیش‌فرض: جدیدترین) ──
+  const SORTABLE: Record<string, 'studentCode' | 'name' | 'nc' | 'major' | 'degree' | 'year' | 'status'> = {
+    studentCode: 'studentCode', name: 'name', nc: 'nc', major: 'major', degree: 'degree', year: 'year', status: 'status',
+  };
+  const [sortKeyRaw, sortDirRaw] = sortRaw.split(':');
+  const sortKey = SORTABLE[sortKeyRaw] ?? null;
+  const sortDir = sortDirRaw === 'desc' ? 'desc' : 'asc';
+  const orderBy = !sortKey
+    ? [desc(students.id)]
+    : sortKey === 'studentCode' ? (sortDir === 'asc' ? [students.studentCode] : [desc(students.studentCode)])
+    : sortKey === 'name' ? (sortDir === 'asc' ? [users.lastName, users.firstName] : [desc(users.lastName), desc(users.firstName)])
+    : sortKey === 'nc' ? (sortDir === 'asc' ? [users.nationalCode] : [desc(users.nationalCode)])
+    : sortKey === 'major' ? (sortDir === 'asc' ? [majors.name] : [desc(majors.name)])
+    : sortKey === 'degree' ? (sortDir === 'asc' ? [degree_level_configs.title] : [desc(degree_level_configs.title)])
+    : sortKey === 'year' ? (sortDir === 'asc' ? [students.entryYear] : [desc(students.entryYear)])
+    : (sortDir === 'asc' ? [students.status] : [desc(students.status)]);
 
   // ── تعداد کل + یک صفحه (صفحه‌بندی سمت سرور — ۳۲هزار رکورد یکجا لود نمی‌شود) ──
   const baseQuery = db
@@ -91,8 +120,8 @@ export default async function AdminStudentsPage({
   const safePage = Math.min(page, totalPages);
 
   const studentRows = where
-    ? await baseQuery.where(where as never).orderBy(desc(students.id)).limit(PER_PAGE).offset((safePage - 1) * PER_PAGE)
-    : await baseQuery.orderBy(desc(students.id)).limit(PER_PAGE).offset((safePage - 1) * PER_PAGE);
+    ? await baseQuery.where(where as never).orderBy(...(orderBy as never[])).limit(PER_PAGE).offset((safePage - 1) * PER_PAGE)
+    : await baseQuery.orderBy(...(orderBy as never[])).limit(PER_PAGE).offset((safePage - 1) * PER_PAGE);
 
   // ── فهرست آیین‌نامه‌ها برای تغییر آیین‌نامه دانشجو در پرونده ──
   let regulationPicks: RegulationPick[] = [];
@@ -220,7 +249,7 @@ export default async function AdminStudentsPage({
           regulationTitle: s.regulationTitle || '—',
           role: 'دانشجو',
         }))}
-        pagination={{ total: Number(total), page: safePage, per: PER_PAGE, totalPages, q, status: statusFilter, degree: degreeFilter }}
+        pagination={{ total: Number(total), page: safePage, per: PER_PAGE, totalPages, q, status: statusFilter, degree: degreeFilter, sort: sortKey ? `${sortKey}:${sortDir}` : '', f_code: fCode, f_name: fName, f_nc: fNc, f_major: fMajor, f_year: fYear }}
         degrees={degrees}
         statusCounts={statusCounts.map(r => ({ status: r.status, n: Number(r.n) }))}
         staffList={staffRows.map(st => ({
