@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { getTranscript, type TranscriptRow } from './actions';
+import { getTranscript, setStudentRegulationAction, type TranscriptRow } from './actions';
 import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, quotaFa, studentStatusChip, studentStatusFa } from '@/lib/student-labels';
 
 export type StudentItem = {
@@ -37,8 +37,11 @@ export type StudentItem = {
   studyingMode?: string | null;
   trainingMethod?: string | null;
   graduateDate?: string | null;
+  regulationId?: number | null;
   role: string;
 };
+
+export type RegulationPick = { id: number; title: string; degreeLevelId: number };
 
 export type Pagination = {
   total: number;
@@ -507,6 +510,7 @@ export function codeLabel(map: Record<string, string> | undefined, v: string | n
 export default function StudentsManagerClient(props: {
   logoUrl?: string | null;
   codeLabels?: CodeLabels | null;
+  regulations?: RegulationPick[];
   students: StudentItem[];
   staffList: StaffItem[];
   pagination?: Pagination;
@@ -790,7 +794,25 @@ export default function StudentsManagerClient(props: {
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>آیین‌نامه ملاک:</span>
-                    <input type="text" defaultValue={currentStudent.regulationTitle} className="col-span-2 bg-slate-100 border border-slate-300 px-2 py-1 rounded font-semibold text-indigo-950" />
+                    <div className="col-span-2 flex gap-1.5">
+                      <select
+                        value={currentStudent.regulationId ?? 0}
+                        onChange={e => {
+                          const rid = Number(e.target.value);
+                          if (!rid || !currentStudent) return;
+                          setStudentRegulationAction(currentStudent.id, rid).then(r => {
+                            showToast(r.ok ? 'آیین‌نامه دانشجو تغییر کرد.' : (r.error || 'انجام نشد.'));
+                            if (r.ok) router.refresh();
+                          }).catch(() => showToast('انجام نشد.'));
+                        }}
+                        className="flex-1 bg-white border border-slate-300 px-2 py-1 rounded font-semibold text-indigo-950"
+                      >
+                        <option value={0} disabled>{currentStudent.regulationTitle}</option>
+                        {(props.regulations ?? []).map(r => (
+                          <option key={r.id} value={r.id}>{r.title}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -1,9 +1,29 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { academic_terms, course_offerings, courses, enrollments, legacy_code_maps, legacy_grades, student_term_states, students } from '@/db/schema';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth';
+
+/** تغییر آیین‌نامه ملاک دانشجو (از پرونده یا مرکز آیین‌نامه‌ها) */
+export async function setStudentRegulationAction(
+  studentId: number, regulationId: number,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireRole(['ADMIN', 'EDU_EXPERT']);
+  } catch {
+    return { ok: false, error: 'دسترسی لازم را ندارید.' };
+  }
+  if (!studentId || !regulationId) return { ok: false, error: 'دانشجو یا آیین‌نامه نامعتبر است.' };
+  try {
+    await db.update(students).set({ regulationId }).where(eq(students.id, studentId));
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'ثبت نشد.' };
+  }
+  revalidatePath('/admin/students');
+  return { ok: true };
+}
 
 export type TranscriptRow = {
   termCode: string;

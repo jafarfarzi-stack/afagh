@@ -232,21 +232,45 @@ async function ensureDegree(maghta) {
   degrees.set(code, id);
   return id;
 }
+// ── پریست‌های اجرایی آیین‌نامه (آینهٔ regulations-types.ts — mjs نمی‌تواند TS را import کند) ──
+// 1402: قبولی ۱۰/مشروطی ۱۲/۱۲تا۲۰ واحد/۱۷+→۲۴واحد/سنوات ۴و۸
+// 1393 (کدهای 93/94/912/914/915): ۱۲تا۲۰/مشروطی ۲و۳/سنوات ۴و۸
+// maghta: 1/5/9/10 = کاردانی و ناپیوسته (سقف مشروطی ۲) در برابر پیوسته (۳)
+function regPreset(which, maghta) {
+  const short = ['1', '5', '9', '10'].includes(String(maghta));
+  const minUnits = which === '1391' ? 14 : 12;
+  const maxSem = which === '1391' ? (short ? 5 : 10) : (short ? 4 : 8);
+  const maxProb = short ? 2 : 3;
+  return {
+    regular_term_rules: { min_units: minUnits, max_units: 20, probation_max_units: 14, honors_min_gpa: 17.0, honors_max_units: 24 },
+    summer_term_rules: { default_max_units: 6, graduating_max_units: 8 },
+    graduating_term_rules: { can_take_with_probation: true, max_units: 24, auto_corequisite_allowed: true },
+    probation_and_tenure: { probation_gpa_threshold: 12.0, max_consecutive_probations: maxProb, max_total_probations: maxProb, max_study_semesters: maxSem },
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 10.0 },
+  };
+}
+const REG_KIND_1393 = new Set(['93', '94', '912', '914', '915']);
 async function ensureRegulation(degreeId, maghta, regKind) {
   const kind = String(regKind ?? '0').trim() || '0';
   const key = `${degreeId}|${kind}`;
   if (regulations.has(key)) return regulations.get(key);
-  const title = kind === '0'
-    ? `آیین‌نامه مهاجرتی سما (مقطع ${maghta})`
-    : `آیین‌نامه آموزشی سما (کد ${kind}، مقطع ${maghta})`;
-  let row = (await q(`SELECT id FROM educational_regulations WHERE title = $1 AND "degreeLevelId" = $2`, [title, degreeId]))[0];
-  if (!row && kind === '0') {
-    row = (await q(`SELECT id FROM educational_regulations WHERE "degreeLevelId" = $1 ORDER BY id LIMIT 1`, [degreeId]))[0];
+  const is1393 = REG_KIND_1393.has(kind);
+  const title = is1393
+    ? `آیین‌نامه آموزشی سما (کد ${kind}، مقطع ${maghta})`
+    : `آیین‌نامه مهاجرتی سما (مقطع ${maghta})`;
+  // پریست اجرایی متناسب: کد سما → ۱۳۹۳، پیش‌فرض (۰) → ۱۴۰۲ جاری
+  const config = JSON.stringify(is1393 ? regPreset('1393', maghta) : regPreset('1402', maghta));
+  const effYear = is1393 ? 1393 : 1402;
+  let row = (await q(`SELECT id, "rulesConfig" FROM educational_regulations WHERE title = $1 AND "degreeLevelId" = $2`, [title, degreeId]))[0];
+  if (!row && !is1393) {
+    row = (await q(`SELECT id, "rulesConfig" FROM educational_regulations WHERE "degreeLevelId" = $1 ORDER BY id LIMIT 1`, [degreeId]))[0];
   }
   if (!row && !DRY) {
-    const effYear = /^9[0-9]$/.test(kind) ? 1300 + Number(kind) : /^91[0-9]$/.test(kind) ? 1300 + Number(kind.slice(1)) : 1330;
     row = (await q(`INSERT INTO educational_regulations (title, "degreeLevelId", "effectiveFromYear", "rulesConfig")
-      VALUES ($1,$2,$3,'{}') RETURNING id`, [title, degreeId, effYear]))[0];
+      VALUES ($1,$2,$3,$4) RETURNING id`, [title, degreeId, effYear, config]))[0];
+  } else if (row && !DRY && (!row.rulesConfig || row.rulesConfig === '{}')) {
+    // backfill: ردیف‌های قدیمی با پیکربندی خالی را اجرایی کن
+    await pool.query(`UPDATE educational_regulations SET "rulesConfig" = $2 WHERE id = $1`, [row.id, config]);
   }
   const id = row ? Number(row.id) : -1;
   regulations.set(key, id);

@@ -1,6 +1,7 @@
 import { and, count, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { degree_level_configs, departments, educational_regulations, faculties, legacy_code_maps, majors, staff, students, users } from '@/db/schema';
+import type { RegulationPick } from './StudentsManagerClient';
 import { requireRole } from '@/lib/auth';
 import { getSetting } from '@/lib/settings';
 import StudentsManagerClient from './StudentsManagerClient';
@@ -71,6 +72,7 @@ export default async function AdminStudentsPage({
       degreeLevel: degree_level_configs.title,
       degreeCode: degree_level_configs.code,
       degreeLevelId: degree_level_configs.id,
+      regulationId: students.regulationId,
       regulationTitle: educational_regulations.title,
     })
     .from(students)
@@ -91,6 +93,16 @@ export default async function AdminStudentsPage({
   const studentRows = where
     ? await baseQuery.where(where as never).orderBy(desc(students.id)).limit(PER_PAGE).offset((safePage - 1) * PER_PAGE)
     : await baseQuery.orderBy(desc(students.id)).limit(PER_PAGE).offset((safePage - 1) * PER_PAGE);
+
+  // ── فهرست آیین‌نامه‌ها برای تغییر آیین‌نامه دانشجو در پرونده ──
+  let regulationPicks: RegulationPick[] = [];
+  try {
+    const regs = await db
+      .select({ id: educational_regulations.id, title: educational_regulations.title, degreeLevelId: educational_regulations.degreeLevelId })
+      .from(educational_regulations)
+      .orderBy(educational_regulations.effectiveFromYear, educational_regulations.id);
+    regulationPicks = regs.map(r => ({ id: r.id, title: r.title, degreeLevelId: r.degreeLevelId }));
+  } catch { /* جدول خالی */ }
 
   // ── گزینه‌های فیلتر: مقاطع + شمارش وضعیت‌ها ──
   const degrees = await db
@@ -173,6 +185,7 @@ export default async function AdminStudentsPage({
       <StudentsManagerClient
         logoUrl={await getSetting('UNIVERSITY_LOGO').catch(() => '')}
         codeLabels={codeLabels}
+        regulations={regulationPicks}
         students={studentRows.map(s => ({
           id: s.id,
           studentCode: s.studentCode,
@@ -203,6 +216,7 @@ export default async function AdminStudentsPage({
           majorCode: s.majorCode || '—',
           degreeLevel: s.degreeLevel || '—',
           degreeCode: s.degreeCode || '—',
+          regulationId: s.regulationId,
           regulationTitle: s.regulationTitle || '—',
           role: 'دانشجو',
         }))}
