@@ -348,6 +348,7 @@ export const curriculum_versions = pgTable('curriculum_versions', {
   effectiveTo: varchar('effectiveTo', { length: 10 }),
   totalRequiredUnits: numeric('totalRequiredUnits', { precision: 5, scale: 1 }).notNull().default('0'),
   maxUnitsPerTerm: integer('maxUnitsPerTerm'),                          // override سقف واحد ترم (NULL = از degree_level_configs)
+  minRoleUnits: text('minRoleUnits'),                                  // سهم واحد هر نقش، JSON مثل {"GENERAL":22,"CORE":25} (NULL = تعیین‌نشده)
   // آخرین رویداد تأیید (append-only). به‌دلیل ارجاع دوریِ (versions ↔ approvals)
   // در Drizzle عمداً بدون .references تعریف شده؛ FK واقعی در مهاجرت 0002 است.
   approvalId: integer('approvalId'),

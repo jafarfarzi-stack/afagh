@@ -12,7 +12,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   getCurriculumOverviewAction, getCurriculumVersionDetailAction, listCourseBankAction,
   listDepartmentsAction, createCourseBankAction, setCoursePrerequisiteAction, setCourseCorequisiteAction,
-  setCoursePassingGradeAction, syncRolesFromBankAction,
+  setCoursePassingGradeAction, syncRolesFromBankAction, markGraduationRequiredBulkAction,
   createCurriculumVersionAction, addCourseToCurriculumAction, bulkAddCoursesAction,
   removeCourseFromCurriculumAction, updateCourseInCurriculumAction, updateCurriculumMetaAction,
   assignCourseToSemesterAction, validateCurriculumAction,
@@ -20,6 +20,7 @@ import {
   publishCurriculumAction, archiveCurriculumAction, createCurriculumRevisionAction,
 } from './actions';
 import { describeLogicNode, type LogicNode } from '@/lib/curriculum-types';
+import { parseRoleUnitTargets } from '@/lib/curriculum-validator';
 import { roleFromBankType } from '@/lib/bank-roles';
 import { SUMMER_SEMESTER, isSummerSemester, planSemesters, termCountForDegree } from '@/lib/term-plan';
 
@@ -108,6 +109,74 @@ const ROLE_LABELS: Record<string, string> = {
   CORE: 'پایه', MAJOR: 'اصلی', ELECTIVE: 'اختیاری', GENERAL: 'عمومی',
   THESIS: 'پایان‌نامه', INTERNSHIP: 'کارآموزی', WORKSHOP: 'کارگاه',
 };
+
+/** ویرایشگر سهم واحد هر نقش (مقرر نسخه) — state داخلی با key ریست می‌شود */
+function RoleTargetsEditor({ initial, unitsByRole, totalRequired, disabled, onSave }: {
+  initial: Record<string, number>;
+  unitsByRole: Map<string, number>;
+  totalRequired: number;
+  disabled: boolean;
+  onSave: (targets: Record<string, number>) => void;
+}) {
+  const [draft, setDraft] = useState<Record<string, string>>(() =>
+    Object.fromEntries(Object.keys(ROLE_LABELS).map(r => [r, initial[r] != null ? String(initial[r]) : ''])));
+  const sum = Object.keys(ROLE_LABELS).reduce((s, r) => s + (Number(draft[r]) || 0), 0);
+  const diff = totalRequired - sum;
+  return (
+    <form
+      onSubmit={e => {
+        e.preventDefault();
+        const t: Record<string, number> = {};
+        for (const r of Object.keys(ROLE_LABELS)) {
+          const raw = (draft[r] ?? '').trim();
+          const n = Number(raw);
+          if (raw !== '' && Number.isFinite(n) && n >= 0) t[r] = n;
+        }
+        onSave(t);
+      }}
+      className="space-y-3"
+    >
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+        {Object.entries(ROLE_LABELS).map(([role, label]) => {
+          const have = unitsByRole.get(role) ?? 0;
+          const want = Number(draft[role]) || 0;
+          const filled = (draft[role] ?? '').trim() !== '';
+          const short = filled && have < want;
+          return (
+            <label key={role} className={`rounded-xl border p-2 space-y-1 ${short ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-slate-50/50'}`}>
+              <span className="block text-[11px] font-black text-slate-800 text-center">{label}</span>
+              <input
+                type="number" min={0} inputMode="numeric"
+                value={draft[role] ?? ''}
+                disabled={disabled}
+                onChange={e => setDraft(d => ({ ...d, [role]: e.target.value }))}
+                placeholder="—"
+                className="w-full border border-slate-300 rounded-lg px-2 py-1 text-center font-black bg-white disabled:opacity-50"
+              />
+              <span className={`block text-[10px] font-bold text-center ${short ? 'text-amber-700' : 'text-slate-500'}`}>
+                موجود {faNum(have)} واحد{short && ` (کسری ${faNum(want - have)})`}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] font-black text-slate-700">
+          جمع سهم‌ها: {faNum(sum)} واحد · واحد الزامی نسخه: {faNum(totalRequired)} واحد
+          {diff !== 0 && (
+            <span className="text-amber-700"> · اختلاف {faNum(Math.abs(diff))} واحد ({diff > 0 ? 'کمتر از سقف' : 'بیشتر از سقف'})</span>
+          )}
+        </p>
+        <button
+          type="submit" disabled={disabled}
+          className="px-3 py-2 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-[11px] disabled:opacity-50"
+        >
+          💾 ذخیره سهم‌ها و اعتبارسنجی مجدد
+        </button>
+      </div>
+    </form>
+  );
+}
 
 
 type CurriculumTab = 'CATALOG' | 'COURSES' | 'SEMESTERS' | 'VERIFY' | 'TRANSFER';
@@ -363,6 +432,12 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
     if (ok) reloadDetail(selectedVersionId);
   };
 
+  const handleMarkGradReq = async () => {
+    if (selectedVersionId == null) return;
+    const ok = await run(() => markGraduationRequiredBulkAction(selectedVersionId));
+    if (ok) reloadDetail(selectedVersionId);
+  };
+
   const handleCreateBankCourse = async () => {
     const f = newCourseForm;
     if (!f.code.trim() || !f.title.trim()) { showToast('کد درس و نام درس الزامی است.', 'error'); return; }
@@ -615,6 +690,24 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
       .map(([role, v]) => ({ role, ...v }))
       .sort((a, b) => (order.indexOf(a.role) === -1 ? 99 : order.indexOf(a.role)) - (order.indexOf(b.role) === -1 ? 99 : order.indexOf(b.role)));
   })();
+
+  // ── سهم واحد مقرر هر نقش (ستون minRoleUnits نسخه) + واحد موجود هر نقش ──
+  const roleTargets = useMemo(
+    () => parseRoleUnitTargets((detail?.version as { minRoleUnits?: unknown } | undefined)?.minRoleUnits),
+    [detail?.version]
+  );
+  const unitsByRole = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of detail?.courses ?? []) m.set(c.roleType, (m.get(c.roleType) ?? 0) + Number(c.units || 0));
+    return m;
+  }, [detail?.courses]);
+  const roleTargetsKey = `${detail?.version.id ?? 0}:${JSON.stringify(roleTargets)}`;
+
+  const handleSaveRoleTargets = async (targets: Record<string, number>) => {
+    if (selectedVersionId == null) return;
+    const ok = await run(() => updateCurriculumMetaAction(selectedVersionId, { minRoleUnits: targets }));
+    if (ok) handleValidate();
+  };
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 p-3 sm:p-6 space-y-5" dir="rtl">
@@ -888,6 +981,25 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
           </div>
           )}
 
+          {/* Role unit targets — تب: بررسی و خاتمه */}
+          {activeTab === 'VERIFY' && detail && (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3">
+              <h4 className="font-extrabold text-slate-900 text-sm">🎯 سهم واحد هر نقش (مقرر این نسخه)</h4>
+              <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
+                برای هر نوع درس، حداقل واحد لازم را بنویسید (مثلاً عمومی ۲۲، پایه ۲۵)؛ جمع سهم‌ها معمولاً باید با «واحد الزامی» نسخه ({faNum(detail.version.totalRequiredUnits)} واحد) بخواند.
+                ولیدیتور در چک ROLE_UNITS_COVERAGE هر سهم را با واحد موجود می‌سنجد.
+              </p>
+              <RoleTargetsEditor
+                key={roleTargetsKey}
+                initial={roleTargets}
+                unitsByRole={unitsByRole}
+                totalRequired={Number(detail.version.totalRequiredUnits ?? 0)}
+                disabled={!isDraft || busy}
+                onSave={handleSaveRoleTargets}
+              />
+            </div>
+          )}
+
           {/* Checks — تب: بررسی و خاتمه */}
           {activeTab === 'VERIFY' && detail && (
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3">
@@ -955,6 +1067,16 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
                           🔄 همگام‌سازی نقش از بانک
                         </button>
                       )}
+                      {detail.courses.length > 0 && (
+                        <button
+                          onClick={handleMarkGradReq}
+                          disabled={busy}
+                          title="همهٔ دروس الزامی (تیک «الزامی در ترم») و نقش‌های تخصصی/پایه به‌عنوان «شرط فارغ‌التحصیلی» علامت می‌خورند؛ مواردی که قبلاً علامت خورده‌اند دست‌نخورده می‌مانند"
+                          className="px-3 py-2 rounded-lg bg-teal-100 hover:bg-teal-200 text-teal-900 font-extrabold text-[11px] disabled:opacity-50"
+                        >
+                          🎓 شرط فارغ‌التحصیلی برای دروس الزامی
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
@@ -975,7 +1097,7 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
                       <th className="p-2.5 border border-slate-800">نقش</th>
                       <th className="p-2.5 border border-slate-800">ترم پیشنهادی</th>
                       <th className="p-2.5 border border-slate-800">الزامی در ترم</th>
-                      <th className="p-2.5 border border-slate-800">الزام پایان‌نامه</th>
+                      <th className="p-2.5 border border-slate-800" title="درس‌هایی که گذراندن‌شان برای فارغ‌التحصیلی اجباری است؛ موتور تطبیق فارغ‌التحصیلی فقط همین‌ها را چک می‌کند">شرط فارغ‌التحصیلی</th>
                       <th className="p-2.5 border border-slate-800">پیش‌نیاز / هم‌نیاز</th>
                       <th className="p-2.5 border border-slate-800">عملیات</th>
                     </tr>
@@ -1084,25 +1206,38 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
                           <th className="p-2.5 border border-slate-800">نوع درس</th>
                           <th className="p-2.5 border border-slate-800">تعداد درس (جمع ۲)</th>
                           <th className="p-2.5 border border-slate-800">مجموع واحد</th>
+                          <th className="p-2.5 border border-slate-800" title="سهم واحد مقرر این نقش — در تب «بررسی و خاتمه» تنظیم می‌شود">سهم مقرر</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {typeSummary.map(r => (
-                          <tr key={r.role} className="text-center">
-                            <td className="p-2 border border-slate-200 font-extrabold">{ROLE_LABELS[r.role] ?? r.role}</td>
-                            <td className="p-2 border border-slate-200 font-black">{faNum(r.count)}</td>
-                            <td className="p-2 border border-slate-200 font-black">{faNum(r.units)}</td>
-                          </tr>
-                        ))}
+                        {typeSummary.map(r => {
+                          const target = roleTargets[r.role];
+                          const short = target != null && r.units < target;
+                          return (
+                            <tr key={r.role} className={`text-center ${short ? 'bg-amber-50' : ''}`}>
+                              <td className="p-2 border border-slate-200 font-extrabold">{ROLE_LABELS[r.role] ?? r.role}</td>
+                              <td className="p-2 border border-slate-200 font-black">{faNum(r.count)}</td>
+                              <td className={`p-2 border border-slate-200 font-black ${short ? 'text-amber-700' : ''}`}>
+                                {faNum(r.units)}{short && ` (کسری ${faNum(target - r.units)})`}
+                              </td>
+                              <td className="p-2 border border-slate-200 font-black text-slate-500">{target != null ? `${faNum(target)} واحد` : '—'}</td>
+                            </tr>
+                          );
+                        })}
                         <tr className="text-center bg-indigo-50 font-black">
                           <td className="p-2 border border-indigo-200">جمع کل</td>
                           <td className="p-2 border border-indigo-200">{faNum(detail.courses.length)} درس</td>
                           <td className="p-2 border border-indigo-200">{faNum(totalPlannedUnits)} از {faNum(detail.version.totalRequiredUnits)} واحد الزامی</td>
+                          <td className="p-2 border border-indigo-200">
+                            {Object.keys(roleTargets).length > 0
+                              ? `${faNum(Object.values(roleTargets).reduce((s, v) => s + v, 0))} واحد مقرر`
+                              : 'تعیین‌نشده'}
+                          </td>
                         </tr>
                       </tbody>
                     </table>
                   </div>
-                  <p className="text-[10px] text-slate-400 font-bold">حداقل‌های مقرر هر نقش در تب «بررسی و خاتمه» (COURSE_TYPES_COMPLETE) کنترل می‌شود.</p>
+                  <p className="text-[10px] text-slate-400 font-bold">حداقل تعداد هر نقش (COURSE_TYPES_COMPLETE) و سهم واحد هر نقش (ROLE_UNITS_COVERAGE) در تب «بررسی و خاتمه» کنترل می‌شود.</p>
                 </div>
               )}
 

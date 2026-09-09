@@ -12,7 +12,7 @@
 // خطاها: هرگز throw خام به Client نمی‌رود؛ { ok:false, error } فارسی.
 // ════════════════════════════════════════════════════════════════════════
 
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import {
@@ -26,7 +26,7 @@ import {
   assertTransition, canEditStatus, nextRevisionCode, normalizeLogicNode,
   type CheckResult, type CurriculumVersionStatus, type LogicNode,
 } from '@/lib/curriculum-types';
-import { validateCurriculumCore, hasBlockingErrors } from '@/lib/curriculum-validator';
+import { validateCurriculumCore, hasBlockingErrors, parseRoleUnitTargets } from '@/lib/curriculum-validator';
 import { roleFromBankType } from '@/lib/bank-roles';
 
 /**
@@ -163,6 +163,7 @@ async function buildCheckInput(data: Awaited<ReturnType<typeof loadVersionData>>
   if (deg && (deg.isGraduate === 1 || deg.code?.includes('MASTER') || deg.code?.includes('PHD') || deg.title?.includes('ارشد') || deg.title?.includes('دکترا'))) {
     minRoleCounts = { ...minRoleCounts, THESIS: 1 };
   }
+  const parsedTargets = parseRoleUnitTargets((data.version as { minRoleUnits?: unknown }).minRoleUnits);
   return {
     totalRequiredUnits: Number(data.version.totalRequiredUnits ?? 0),
     maxUnitsPerTerm,
@@ -172,6 +173,7 @@ async function buildCheckInput(data: Awaited<ReturnType<typeof loadVersionData>>
     rules: data.rules,
     existingCodes: data.existingCodes,
     minRoleCounts,
+    minRoleUnits: Object.keys(parsedTargets).length > 0 ? parsedTargets : undefined,
   };
 }
 
@@ -496,6 +498,8 @@ export async function updateCurriculumMetaAction(
     entryYearFrom?: number; entryYearTo?: number | null;
     effectiveFrom?: string | null; effectiveTo?: string | null;
     totalRequiredUnits?: number; maxUnitsPerTerm?: number | null;
+    /** سهم واحد مقرر هر نقش، مثل {GENERAL: 22, CORE: 25} — خالی/{} یعنی پاک‌سازی */
+    minRoleUnits?: Record<string, number> | null;
   }
 ) {
   await requireRole(EDITORS);
@@ -514,6 +518,9 @@ export async function updateCurriculumMetaAction(
       effectiveTo: patch.effectiveTo !== undefined ? patch.effectiveTo : v.effectiveTo,
       totalRequiredUnits: patch.totalRequiredUnits != null ? String(patch.totalRequiredUnits) : v.totalRequiredUnits,
       maxUnitsPerTerm: patch.maxUnitsPerTerm !== undefined ? patch.maxUnitsPerTerm : v.maxUnitsPerTerm,
+      minRoleUnits: patch.minRoleUnits !== undefined
+        ? (patch.minRoleUnits && Object.keys(patch.minRoleUnits).length > 0 ? JSON.stringify(parseRoleUnitTargets(patch.minRoleUnits)) : null)
+        : v.minRoleUnits,
       updatedAt: new Date(),
     }).where(eq(curriculum_versions.id, versionId));
     await db.transaction(async (tx) => {
@@ -647,6 +654,47 @@ export async function syncRolesFromBankAction(versionId: number): Promise<Act<{ 
   } catch (err: any) {
     console.error('syncRolesFromBankAction:', err);
     return { ok: false, error: err.message || 'خطا در همگام‌سازی نقش‌ها' };
+  }
+}
+
+/**
+ * علامت‌زدن گروهی «شرط فارغ‌التحصیلی»: همهٔ دروس الزامی (isRequired=1) یا
+ * نقش‌های CORE/MAJOR که هنوز علامت نخورده‌اند → isGraduationRequired=1.
+ * فقط ۰→۱ می‌رود؛ چیزی که قبلاً علامت خورده دست‌نخورده می‌ماند.
+ */
+export async function markGraduationRequiredBulkAction(versionId: number): Promise<Act<{ message: string; data: { updated: number; total: number } }>> {
+  await requireRole(EDITORS);
+  try {
+    await assertEditable(versionId);
+    const rows = await db
+      .select({ courseId: curriculum_courses.courseId, isGraduationRequired: curriculum_courses.isGraduationRequired })
+      .from(curriculum_courses)
+      .where(and(
+        eq(curriculum_courses.curriculumVersionId, versionId),
+        or(eq(curriculum_courses.isRequired, 1), inArray(curriculum_courses.roleType, ['CORE', 'MAJOR'])),
+      ));
+    let updated = 0;
+    for (const r of rows) {
+      if (r.isGraduationRequired === 1) continue;
+      await db.update(curriculum_courses).set({ isGraduationRequired: 1 })
+        .where(and(eq(curriculum_courses.curriculumVersionId, versionId), eq(curriculum_courses.courseId, r.courseId)));
+      updated++;
+    }
+    await db.transaction(async (tx) => {
+      await appendAudit(tx, {
+        actorUserId: (await requireRole(EDITORS)).id,
+        action: 'CURRICULUM_GRADREQ_MARKED', entityType: PHASE, entityId: versionId,
+        details: JSON.stringify({ updated, total: rows.length }),
+      });
+    });
+    revalidateCurriculumPaths();
+    if (rows.length === 0) {
+      return { ok: true, message: 'هیچ درس الزامی (یا CORE/MAJOR) در این نسخه نیست؛ اول نقش/الزامی دروس را مشخص کنید.', data: { updated: 0, total: 0 } };
+    }
+    return { ok: true, message: `شرط فارغ‌التحصیلی برای ${updated} درس از ${rows.length} درس الزامی علامت خورد.`, data: { updated, total: rows.length } };
+  } catch (err: any) {
+    console.error('markGraduationRequiredBulkAction:', err);
+    return { ok: false, error: err.message || 'خطا در علامت‌زدن گروهی' };
   }
 }
 
