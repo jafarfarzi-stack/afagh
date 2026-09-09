@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { getTranscript, setStudentRegulationAction, type TranscriptRow } from './actions';
+import { getTranscript, getTranscriptRegulation, setStudentRegulationAction, type TranscriptRow } from './actions';
+import type { RegulationConfig } from '@/lib/regulations-engine';
 import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, quotaFa, studentStatusChip, studentStatusFa } from '@/lib/student-labels';
 
 export type StudentItem = {
@@ -118,9 +119,35 @@ export type TranscriptSummary = {
   totalTaken: number;
   totalPassed: number;
   gpa: number | null;
+  /** آستانه‌های آیین‌نامه‌ای که با آن حساب شده (برای نمایش در سربرگ) */
+  passGrade: number;
+  probThreshold: number;
 };
 
-function summarizeTerm(rows: TranscriptRow[]): { taken: number; passed: number; failed: number; wsum: number; wunits: number } {
+/** آستانه‌های اجرایی آیین‌نامه ملاک (پیش‌فرض: قبولی ۱۰، مشروطی ۱۲) */
+export type RegThresholds = { pass: number; prob: number; exclFailed: boolean };
+export function regThresholds(cfg: RegulationConfig | null | undefined): RegThresholds {
+  const pass = Number(cfg?.grading_and_gpa?.default_passing_grade ?? 10);
+  const prob = Number(cfg?.probation_and_tenure?.probation_gpa_threshold ?? 12);
+  return {
+    pass: Number.isFinite(pass) ? pass : 10,
+    prob: Number.isFinite(prob) ? prob : 12,
+    exclFailed: cfg?.grading_and_gpa?.failed_course_gpa_policy === 'EXCLUDE_IF_PASSED',
+  };
+}
+
+/** درس‌هایی که دست‌کم یک بار قبول شده‌اند (برای سیاست حذف مردودی از معدل کل) */
+function passedCourseSet(rows: TranscriptRow[], pass: number): Set<string> {
+  const set = new Set<string>();
+  for (const r of rows) {
+    const g = numOrNull(r.gradeValue);
+    if (r.gradeStatus === 'EXEMPT' || r.gradeStatus === 'PASSED_NO_GRADE') set.add(r.courseCode);
+    else if (g !== null && g >= pass && (r.gradeStatus === 'FINALIZED' || r.gradeStatus === 'TEMPORARY')) set.add(r.courseCode);
+  }
+  return set;
+}
+
+function summarizeTerm(rows: TranscriptRow[], pass = 10): { taken: number; passed: number; failed: number; wsum: number; wunits: number } {
   let taken = 0, passed = 0, wsum = 0, wunits = 0;
   for (const r of rows) {
     const u = numOrNull(r.units) ?? 0;
@@ -128,7 +155,8 @@ function summarizeTerm(rows: TranscriptRow[]): { taken: number; passed: number; 
     if (r.gradeStatus === 'PENDING') continue;
     taken += u;
     if (r.gradeStatus === 'EXEMPT' || r.gradeStatus === 'PASSED_NO_GRADE') passed += u;
-    else if (g !== null && g >= 10) passed += u;
+    else if (g !== null && g >= pass) passed += u;
+    // معدل نیمسال: حقیقت تاریخی همان نیمسال — همه نمرات نهایی (ماده ۶ آیین‌نامه ۱۴۰۲)
     if (g !== null && (r.gradeStatus === 'FINALIZED' || r.gradeStatus === 'TEMPORARY')) {
       wsum += g * u;
       wunits += u;
@@ -137,7 +165,24 @@ function summarizeTerm(rows: TranscriptRow[]): { taken: number; passed: number; 
   return { taken, passed, failed: Math.max(0, taken - passed), wsum, wunits };
 }
 
-export function groupTranscript(rows: TranscriptRow[]): TranscriptSummary {
+/** جمع معدل کل با سیاست نمره مردودی آیین‌نامه */
+function summarizeTotal(rows: TranscriptRow[], th: RegThresholds): { wsum: number; wunits: number } {
+  const passedSet = th.exclFailed ? passedCourseSet(rows, th.pass) : null;
+  let wsum = 0, wunits = 0;
+  for (const r of rows) {
+    const u = numOrNull(r.units) ?? 0;
+    const g = numOrNull(r.gradeValue);
+    if (g === null || (r.gradeStatus !== 'FINALIZED' && r.gradeStatus !== 'TEMPORARY')) continue;
+    // EXCLUDE_IF_PASSED: مردودی درسی که بعداً قبول شده از معدل کل حذف می‌شود
+    if (passedSet && g < th.pass && passedSet.has(r.courseCode)) continue;
+    wsum += g * u;
+    wunits += u;
+  }
+  return { wsum, wunits };
+}
+
+export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | null): TranscriptSummary {
+  const th = regThresholds(cfg);
   const map = new Map<string, TranscriptRow[]>();
   for (const r of rows) {
     const k = r.termCode || '—';
@@ -147,29 +192,38 @@ export function groupTranscript(rows: TranscriptRow[]): TranscriptSummary {
   const terms: TermGroup[] = [...map.entries()]
     .sort((a, b) => a[0].localeCompare(b[0], 'en'))
     .map(([termCode, rs]) => {
-      const s = summarizeTerm(rs);
+      const s = summarizeTerm(rs, th.pass);
       const gpa = s.wunits ? s.wsum / s.wunits : null;
       const fileProb = rs.find(r => r.termProbation !== null)?.termProbation ?? null;
       return {
         termCode, termTitle: rs[0]?.termTitle ?? null,
         termStatusTitle: rs.find(r => r.termStatusTitle)?.termStatusTitle ?? null,
-        probation: fileProb ?? (gpa !== null && gpa < 12),
+        probation: fileProb ?? (gpa !== null && gpa < th.prob),
         rows: rs,
         taken: s.taken, passed: s.passed, failed: s.failed, points: s.wsum,
         gpa,
         cumTaken: 0, cumPassed: 0, cumFailed: 0, cumPoints: 0, cumGpa: null,
       };
     });
-  // جمع تجمیعی «کل» تا پایان هر نیمسال
+  // جمع تجمیعی «کل» تا پایان هر نیمسال (معدل کل با سیاست نمره مردودی آیین‌نامه)
+  const passedSet = th.exclFailed ? passedCourseSet(rows, th.pass) : null;
   let ct = 0, cp = 0, cw = 0, cwu = 0;
   for (const t of terms) {
-    const s = summarizeTerm(t.rows);
-    ct += s.taken; cp += s.passed; cw += s.wsum; cwu += s.wunits;
+    const s = summarizeTerm(t.rows, th.pass);
+    ct += s.taken; cp += s.passed;
+    for (const r of t.rows) {
+      const u = numOrNull(r.units) ?? 0;
+      const g = numOrNull(r.gradeValue);
+      if (g === null || (r.gradeStatus !== 'FINALIZED' && r.gradeStatus !== 'TEMPORARY')) continue;
+      if (passedSet && g < th.pass && passedSet.has(r.courseCode)) continue;
+      cw += g * u; cwu += u;
+    }
     t.cumTaken = ct; t.cumPassed = cp; t.cumFailed = Math.max(0, ct - cp);
     t.cumPoints = cw; t.cumGpa = cwu ? cw / cwu : null;
   }
-  const all = summarizeTerm(rows);
-  return { terms, totalTaken: all.taken, totalPassed: all.passed, gpa: all.wunits ? all.wsum / all.wunits : null };
+  const all = summarizeTerm(rows, th.pass);
+  const tot = summarizeTotal(rows, th);
+  return { terms, totalTaken: all.taken, totalPassed: all.passed, gpa: tot.wunits ? tot.wsum / tot.wunits : null, passGrade: th.pass, probThreshold: th.prob };
 }
 
 export const faNum = (n: number | null | undefined, digits = 2): string =>
@@ -243,8 +297,10 @@ export function courseTypeGroup(t: string | null | undefined): string {
 }
 
 export type TypeBreakdown = { type: string; units: number; gpa: number | null };
-export function breakdownByType(rows: TranscriptRow[]): TypeBreakdown[] {
+export function breakdownByType(rows: TranscriptRow[], cfg?: RegulationConfig | null): TypeBreakdown[] {
+  const th = regThresholds(cfg);
   const order = ['عمومی', 'پایه', 'اصلی-تخصصی', 'اختیاری', 'جبرانی', 'پایان‌نامه'];
+  const passedSet = th.exclFailed ? passedCourseSet(rows, th.pass) : null;
   const acc = new Map<string, { units: number; wsum: number; wunits: number }>();
   for (const r of rows) {
     const g = courseTypeGroup(r.courseType);
@@ -252,8 +308,11 @@ export function breakdownByType(rows: TranscriptRow[]): TypeBreakdown[] {
     const a = acc.get(g)!;
     const u = numOrNull(r.units) ?? 0;
     const gv = numOrNull(r.gradeValue);
-    if (r.gradeStatus !== 'PENDING' && (gv === null || gv >= 10)) a.units += u;
-    if (gv !== null && (r.gradeStatus === 'FINALIZED' || r.gradeStatus === 'TEMPORARY')) { a.wsum += gv * u; a.wunits += u; }
+    if (r.gradeStatus !== 'PENDING' && (gv === null || gv >= th.pass)) a.units += u;
+    if (gv !== null && (r.gradeStatus === 'FINALIZED' || r.gradeStatus === 'TEMPORARY')) {
+      if (passedSet && gv < th.pass && passedSet.has(r.courseCode)) continue;
+      a.wsum += gv * u; a.wunits += u;
+    }
   }
   return order.map(t => {
     const a = acc.get(t);
@@ -261,79 +320,21 @@ export function breakdownByType(rows: TranscriptRow[]): TypeBreakdown[] {
   });
 }
 
-const escHtml = (s: string | null | undefined): string =>
-  String(s ?? '—').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-/** چاپ کارنامهٔ رسمی با فرمت سما در پنجرهٔ جدا */
-export function printOfficialTranscript(student: StudentItem, summary: TranscriptSummary, logoUrl?: string | null, codeLabels?: CodeLabels | null): void {
-  const acceptL = (v: string | null | undefined) => {
-    if (!v || v === '—') return '—';
-    return codeLabels?.accept[v] || codeLabels?.acceptByTarget[v] || v;
+/**
+ * چاپ مستقیم همان نمای روی صفحه (WYSIWYG) — با کلاس چاپ سراسری:
+ * همه‌چیز پنهان می‌شود جز .transcript-print-area (تکنیک visibility).
+ */
+export function doPrintTranscript(): void {
+  if (typeof document === 'undefined') return;
+  document.body.classList.add('printing-transcript');
+  const done = () => {
+    document.body.classList.remove('printing-transcript');
+    window.removeEventListener('afterprint', done);
   };
-  const periodL = (v: string | null | undefined) => codeLabel(codeLabels?.period, v);
-  const quotaL = (v: string | null | undefined) => codeLabel(codeLabels?.quota, v);
-  const periodV = periodL(student.trainingMethod) !== '—' ? periodL(student.trainingMethod) : (student.studyingMode || '—');
-  const quotaReg = quotaL(student.acceptanceAllocation) !== '—' ? quotaL(student.acceptanceAllocation) : quotaFa(student.quotaType);
-  const info: [string, string][] = [
-    ['نام خانوادگی و نام', `${student.lastName} ${student.firstName}`],
-    ['شماره دانشجویی', student.studentCode],
-    ['نام پدر', student.fatherName || '—'],
-    ['شماره شناسنامه', student.birthCertNo || '—'],
-    ['محل صدور', student.placeOfIssue || '—'],
-    ['کد ملی', student.nationalCode],
-    ['تاریخ تولد', dateToJalali(student.birthDate)],
-    ['مقطع', student.degreeLevel],
-    ['نوع دوره', periodV],
-    ['دانشکده', student.facultyName || '—'],
-    ['رشته تحصیلی', student.majorName],
-    ['نحوه ورود', acceptL(student.acceptanceType)],
-    ['شیوه آموزشی', student.studyingMode || '—'],
-    ['سهمیه قبولی', quotaFa(student.quotaType)],
-    ['سهمیه نهایی', quotaFa(student.quotaType)],
-    ['سهمیه ثبت‌نامی', quotaReg],
-    ['ملیت', student.nationality === '120001' ? 'ایرانی' : student.nationality || '—'],
-    ['استاد راهنما', '—'],
-  ];
-  const probation = summary.terms.filter(t => t.probation).length;
-  const termCell = (t: TermGroup) => {
-    const rows = t.rows.map(r => `<tr><td>${escHtml(r.courseCode)}</td><td class="t">${escHtml(r.courseTitle)}</td><td>${faNum(numOrNull(r.units), 1)}</td><td><b>${r.gradeValue ?? '—'}</b></td><td>${escHtml(r.gradeStatusTitle || gradeStatusFa(r.gradeStatus))}</td></tr>`).join('');
-    const stTxt = t.termStatusTitle || '—';
-    const prTxt = t.probation ? 'مشروط' : 'عادی';
-    return `<td class="term"><div class="th">نیمسال ${escHtml(t.termCode)}<br><span>وضعیت نیمسال: ${escHtml(stTxt)} — ${prTxt}</span></div>
-<table class="inner"><thead><tr><th>کد درس</th><th>نام درس</th><th>واحد</th><th>نمره</th><th>وضع</th></tr></thead><tbody>${rows}</tbody></table>
-<div class="sum"><b>نیمسال</b> — اخذشده: <b>${faNum(t.taken, 0)}</b> گذرانده: <b>${faNum(t.passed, 0)}</b> مردودی: <b>${faNum(t.failed, 0)}</b><br>معدل: <b>${faNum(t.gpa)}</b> امتیاز: <b>${faNum(t.points, 1)}</b><br><b>کل</b> — اخذشده: <b>${faNum(t.cumTaken, 0)}</b> گذرانده: <b>${faNum(t.cumPassed, 0)}</b> مردودی: <b>${faNum(t.cumFailed, 0)}</b><br>معدل: <b>${faNum(t.cumGpa)}</b> امتیاز: <b>${faNum(t.cumPoints, 1)}</b> موثر: <b>${faNum(t.cumPassed, 0)}</b></div></td>`;
-  };
-  const chunks: TermGroup[][] = [];
-  for (let i = 0; i < summary.terms.length; i += 3) chunks.push(summary.terms.slice(i, i + 3));
-  const breakdown = breakdownByType(summary.terms.flatMap(t => t.rows));
-  const infoRows: string[] = [];
-  for (let i = 0; i < info.length; i += 3) {
-    const cells = info.slice(i, i + 3).map(([k, v]) => `<td><b>${k}:</b> ${escHtml(v)}</td>`).join('');
-    infoRows.push(`<tr>${cells}</tr>`);
-  }
-  const html = `<!DOCTYPE html><html dir="rtl" lang="fa"><head><meta charset="utf-8"><title>کارنامه ${escHtml(student.studentCode)}</title>
-<style>*{box-sizing:border-box}body{font-family:Tahoma,Arial,sans-serif;font-size:10px;color:#000;margin:10px}.frame{border:3px double #000;padding:4px}table{border-collapse:collapse;width:100%}.head td{border:1px solid #000;padding:3px 6px}.info td{border:1px solid #000;padding:2px 5px;font-size:9.5px;width:33.33%}.terms td.term{border:1px solid #000;vertical-align:top;width:33.33%;padding:0;break-inside:avoid}.th{background:#eee;border-bottom:1px solid #000;font-weight:bold;text-align:center;font-size:10px;padding:3px}.th span{font-weight:normal;font-size:9px}.inner th,.inner td{border:1px solid #666;padding:1px 2px;text-align:center;font-size:8.5px;line-height:1.7}.inner th{background:#e8e8e8}.t{text-align:right}.sum{font-size:9px;padding:3px 5px;background:#f6f6f6;border-top:2px solid #000}.foot{font-size:10px;margin-top:6px}.foot td{padding:2px 6px}.sign{display:flex;justify-content:space-between;margin-top:30px;font-size:10px}.sign div{text-align:center}.bd th,.bd td{border:1px solid #000;padding:3px;text-align:center;font-size:10px}@media print{body{margin:6mm}@page{size:A4}}</style>
-</head><body><div class="frame">
-<table class="head"><tr><td style="width:28%;text-align:center">تاریخ تهیه: ${todayJalali()}<br>صفحه ۱</td><td style="text-align:center"><b>باسمه تعالی</b><br>اداره کل امور آموزشی<br><b>کارنامه کل</b><br>موسسه آموزش عالی غیرانتفاعی - غیردولتی آفاق${student.photoKey ? ' <span style="font-size:9px">[عکس دانشجو]</span>' : ''}</td><td style="width:15%;text-align:center">${logoUrl ? `<img src="${escHtml(logoUrl)}" style="max-width:60px;max-height:60px">` : '[ارم دانشگاه]'}</td></tr></table>
-<table class="info"><tbody>${infoRows.join('')}</tbody></table>
-<table class="terms"><tbody>${chunks.map(ch => `<tr>${ch.map(termCell).join('')}</tr>`).join('')}</tbody></table>
-<table class="foot"><tbody>
-<tr><td>تعداد نیمسال مشروط: <b>${probation.toLocaleString('fa-IR')}</b></td><td>وضعیت کلی دانشجو: <b>${escHtml(studentStatusFa(student.status, student.samaStatusCode))}</b></td><td>تاریخ شروع تحصیل: <b>${student.entryYear}</b></td><td>تاریخ توقف تحصیل: <b>${escHtml(student.graduateDate || '—')}</b></td></tr>
-<tr><td colspan="2">معدل کل به عدد: <b>${faNum(summary.gpa)}</b></td><td colspan="2">معدل کل به حروف: <b>${escHtml(faWords(summary.gpa))}</b></td></tr>
-<tr><td colspan="4" style="text-align:center">این کارنامه بدون مهر و امضا فقط برای اطلاع دانشجو صادر شده است و ارزش دیگری ندارد</td></tr>
-</tbody></table>
-<div class="sign"><div>امضاء رئیس خدمات آموزش</div><div>امضاء و مهر اداره کل آموزش</div><div>امضاء و مهر امور آموزشی دانشگاه منتخب</div></div></div>
-<div style="page-break-before:always"></div>
-<p><b>جدول وضعیت دروس گذرانده (کاتالوگ رشته)</b></p>
-<table class="bd"><thead><tr><th>نوع درس</th>${breakdown.map(b => `<th>${b.type}</th>`).join('')}<th>مجموع</th></tr></thead><tbody>
-<tr><td><b>تعداد واحد</b></td>${breakdown.map(b => `<td>${faNum(b.units, 1)}</td>`).join('')}<td><b>${faNum(summary.totalPassed, 1)}</b></td></tr>
-<tr><td><b>معدل</b></td>${breakdown.map(b => `<td>${faNum(b.gpa)}</td>`).join('')}<td><b>${faNum(summary.gpa)}</b></td></tr>
-</tbody></table>
-<script>window.onload=()=>{window.print();}</script></body></html>`;
-  const w = window.open('', '_blank', 'width=1000,height=750');
-  if (!w) return;
-  w.document.write(html);
-  w.document.close();
+  window.addEventListener('afterprint', done);
+  window.print();
+  // fallback اگر afterprint نیامد (بستن دستی دیالوگ)
+  setTimeout(done, 3000);
 }
 
 /** نمای رسمی کارنامه با فرمت سما: ۳ نیمسال کنار هم + سربرگ/پانوشت + صفحه دوم تفکیکی */
@@ -535,6 +536,8 @@ export default function StudentsManagerClient(props: {
   const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<TranscriptRow[] | null>(null);
   const [transcriptLoading, setTranscriptLoading] = useState(false);
+  // پیکربندی اجرایی آیین‌نامه ملاک دانشجو (مبنای قبولی/مشروطی کارنامه)
+  const [regConfig, setRegConfig] = useState<RegulationConfig | null>(null);
   // نمای کارنامه: رسمی (پیش‌فرض) یا جدول سادهٔ نمرات
   const [transcriptView, setTranscriptView] = useState<'official' | 'simple'>('official');
 
@@ -545,7 +548,9 @@ export default function StudentsManagerClient(props: {
     if (stuTab !== 'transcript' || !currentStudent) return;
     setTranscriptLoading(true);
     setTranscript(null);
+    setRegConfig(null);
     getTranscript(currentStudent.id).then(r => setTranscript(r)).catch(() => setTranscript([])).finally(() => setTranscriptLoading(false));
+    getTranscriptRegulation(currentStudent.id).then(r => setRegConfig(r?.config ?? null)).catch(() => setRegConfig(null));
   }, [stuTab, currentStudent?.id]);
 
   const showToast = (msg: string) => {
@@ -1059,7 +1064,7 @@ export default function StudentsManagerClient(props: {
 
           {/* ── تب ۵: کارنامهٔ رسمی + جدول نمرات ── */}
           {stuTab === 'transcript' && currentStudent && (
-            <div className="bg-white p-3 sm:p-4 border border-slate-400 rounded-b-md space-y-3">
+            <div className="transcript-print-area bg-white p-3 sm:p-4 border border-slate-400 rounded-b-md space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-extrabold text-slate-900">📊 کارنامهٔ {currentStudent.lastName} - {currentStudent.firstName} ({currentStudent.studentCode})</h3>
                 <div className="flex items-center gap-1.5">
@@ -1078,13 +1083,19 @@ export default function StudentsManagerClient(props: {
                   </button>
                   {transcript && transcript.length > 0 && (
                     <button
-                      onClick={() => printOfficialTranscript(currentStudent, groupTranscript(transcript), props.logoUrl, props.codeLabels)}
+                      onClick={() => doPrintTranscript()}
                       className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-700 text-white hover:bg-emerald-800"
                     >
-                      🖨️ مشاهده / چاپ
+                      🖨️ چاپ کارنامه
                     </button>
                   )}
                 </div>
+                {transcript && transcript.length > 0 && (
+                  <p className="text-[10px] text-slate-500">
+                    ⚖️ مبنای محاسبه: <b>{currentStudent.regulationTitle}</b>
+                    {(() => { const th = regThresholds(regConfig); return ` (قبولی ${faNum(th.pass, 0)} — مشروطی زیر ${faNum(th.prob, 0)}${th.exclFailed ? ' — حذف مردودی قبول‌شده از معدل کل' : ''})`; })()}
+                  </p>
+                )}
               </div>
               {transcriptLoading ? (
                 <p className="text-center text-slate-500 py-6">در حال بارگذاری کارنامه…</p>

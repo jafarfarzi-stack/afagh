@@ -2,7 +2,16 @@
 // تایپ‌ها و الگوهای پیش‌فرض آیین‌نامه‌های آموزشی (Pure Types & Presets)
 // ════════════════════════════════════════════════════════════════════════════
 
+export interface LevelOverride {
+  min_units?: number;
+  max_consecutive_probations?: number;
+  max_total_probations?: number;
+  max_study_semesters?: number;
+}
+
 export interface RegulationConfig {
+  /** تفاوت‌های مقطعی که در نمرات یکسان‌اند (فقط نیمسال/سنوات): SHORT=کاردانی و ناپیوسته، LONG=پیوسته */
+  levels?: { SHORT?: LevelOverride; LONG?: LevelOverride };
   regular_term_rules: {
     min_units: number;
     max_units: number;
@@ -137,55 +146,97 @@ export const DEFAULT_BACHELOR_REGULATION_1390: RegulationConfig = {
  * ════════════════════════════════════════════════════════════════════
  */
 
+/**
+ * گروه مقطع برای تفاوت‌های نیمسال/سنوات (نمرات در همه یکسان است):
+ * SHORT = کاردانی (پیوسته/ناپیوسته) و کارشناسی ناپیوسته (سما: 1/5/9/10، سید AD)
+ * LONG = کارشناسی پیوسته (سما: 2 و بقیه، سید BS) — MS/PHD گروه خودشان را دارند.
+ */
+export type LevelGroup = 'SHORT' | 'LONG' | 'MS' | 'PHD';
+
+export function maghtaGroup(maghtaOrCode: string | number | null | undefined): LevelGroup {
+  const m = String(maghtaOrCode ?? '').trim().replace(/^SAMA-/i, '').toUpperCase();
+  if (m === '3' || m === 'MS') return 'MS';
+  if (['4', '6', '7', '8'].includes(m) || m === 'PHD') return 'PHD';
+  if (['1', '5', '9', '10'].includes(m) || m === 'AD') return 'SHORT';
+  return 'LONG';
+}
+
 /** true = کاردانی (پیوسته/ناپیوسته) یا کارشناسی ناپیوسته (سقف مشروطی ۲) */
-function isNonContinuous(maghta: string | number): boolean {
-  const m = String(maghta);
-  return ['1', '5', '9', '10'].includes(m);
+export function isNonContinuous(maghta: string | number): boolean {
+  return maghtaGroup(maghta) === 'SHORT';
 }
 
-function reg1402For(maghta: string | number): RegulationConfig {
-  const short = isNonContinuous(maghta);
+/**
+ * اعمال تفاوت‌های مقطعی روی پیکربندی تجمیعی (فقط نیمسال/سنوات؛ نمرات مشترک‌اند).
+ * خروجی: کپی جدید با probation_and_tenure و min_units به‌روزشده.
+ */
+export function applyLevelConfig(config: RegulationConfig, group: LevelGroup): RegulationConfig {
+  const ov = group === 'SHORT' ? config.levels?.SHORT : group === 'LONG' ? config.levels?.LONG : undefined;
+  if (!ov) return config;
   return {
+    ...config,
+    regular_term_rules: { ...config.regular_term_rules, ...(ov.min_units != null ? { min_units: ov.min_units } : {}) },
+    probation_and_tenure: {
+      ...config.probation_and_tenure,
+      ...(ov.max_consecutive_probations != null ? { max_consecutive_probations: ov.max_consecutive_probations } : {}),
+      ...(ov.max_total_probations != null ? { max_total_probations: ov.max_total_probations } : {}),
+      ...(ov.max_study_semesters != null ? { max_study_semesters: ov.max_study_semesters } : {}),
+    },
+  };
+}
+
+function reg1402(): RegulationConfig {
+  return {
+    levels: {
+      SHORT: { max_consecutive_probations: 2, max_total_probations: 2, max_study_semesters: 4 },
+      LONG: { max_consecutive_probations: 3, max_total_probations: 3, max_study_semesters: 8 },
+    },
     regular_term_rules: { min_units: 12, max_units: 20, probation_max_units: 14, honors_min_gpa: 17.0, honors_max_units: 24 },
     summer_term_rules: { default_max_units: 6, graduating_max_units: 8 },
     graduating_term_rules: { can_take_with_probation: true, max_units: 24, auto_corequisite_allowed: true },
     probation_and_tenure: {
       probation_gpa_threshold: 12.0,
-      max_consecutive_probations: short ? 2 : 3,
-      max_total_probations: short ? 2 : 3,
-      max_study_semesters: short ? 4 : 8,
+      max_consecutive_probations: 3,
+      max_total_probations: 3,
+      max_study_semesters: 8,
     },
     grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 10.0 },
   };
 }
 
-function reg1393For(maghta: string | number): RegulationConfig {
-  const short = isNonContinuous(maghta);
+function reg1393(): RegulationConfig {
   return {
+    levels: {
+      SHORT: { max_consecutive_probations: 2, max_total_probations: 2, max_study_semesters: 4 },
+      LONG: { max_consecutive_probations: 3, max_total_probations: 3, max_study_semesters: 8 },
+    },
     regular_term_rules: { min_units: 12, max_units: 20, probation_max_units: 14, honors_min_gpa: 17.0, honors_max_units: 24 },
     summer_term_rules: { default_max_units: 6, graduating_max_units: 8 },
     graduating_term_rules: { can_take_with_probation: true, max_units: 24, auto_corequisite_allowed: true },
     probation_and_tenure: {
       probation_gpa_threshold: 12.0,
-      max_consecutive_probations: short ? 2 : 3,
-      max_total_probations: short ? 2 : 3,
-      max_study_semesters: short ? 4 : 8,
+      max_consecutive_probations: 3,
+      max_total_probations: 3,
+      max_study_semesters: 8,
     },
     grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 10.0 },
   };
 }
 
-function reg1391For(maghta: string | number): RegulationConfig {
-  const short = isNonContinuous(maghta);
+function reg1391(): RegulationConfig {
   return {
+    levels: {
+      SHORT: { min_units: 14, max_consecutive_probations: 2, max_total_probations: 2, max_study_semesters: 5 },
+      LONG: { min_units: 14, max_consecutive_probations: 3, max_total_probations: 3, max_study_semesters: 10 },
+    },
     regular_term_rules: { min_units: 14, max_units: 20, probation_max_units: 14, honors_min_gpa: 17.0, honors_max_units: 24 },
     summer_term_rules: { default_max_units: 6, graduating_max_units: 8 },
     graduating_term_rules: { can_take_with_probation: true, max_units: 24, auto_corequisite_allowed: true },
     probation_and_tenure: {
       probation_gpa_threshold: 12.0,
-      max_consecutive_probations: short ? 2 : 3,
-      max_total_probations: short ? 2 : 3,
-      max_study_semesters: short ? 5 : 10,
+      max_consecutive_probations: 3,
+      max_total_probations: 3,
+      max_study_semesters: 10,
     },
     // تبصره ۱۳۹۱: با گذراندن با ۱۴+ نمره قبلی حذف می‌شود؛ جبرانی در معدل حساب می‌شود
     grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 10.0 },
@@ -201,6 +252,22 @@ function reg1391For(maghta: string | number): RegulationConfig {
  * - دکتری تخصصی: ۶ تا ۸ نیمسال تمام‌وقت، ۳۶ واحد، قبولی ۱۴، معدل کل ۱۶
  *   (شرط ورود به جامع)، رساله کیفی خارج از معدل، تغییر رشته/انتقال ممنوع.
  */
+/** ماقبل ۱۳۹۱: بدون حذف نمره مردودی (KEEP_ALWAYS) — اعداد احتیاطی مشابه ۱۳۹۱ */
+function regPre1391(): RegulationConfig {
+  return {
+    regular_term_rules: { min_units: 12, max_units: 20, probation_max_units: 14, honors_min_gpa: 17.0, honors_max_units: 24 },
+    summer_term_rules: { default_max_units: 6, graduating_max_units: 8 },
+    graduating_term_rules: { can_take_with_probation: true, max_units: 24, auto_corequisite_allowed: true },
+    probation_and_tenure: {
+      probation_gpa_threshold: 12.0,
+      max_consecutive_probations: 3,
+      max_total_probations: 3,
+      max_study_semesters: 10,
+    },
+    grading_and_gpa: { failed_course_gpa_policy: 'KEEP_ALWAYS', default_passing_grade: 10.0 },
+  };
+}
+
 function reg1394MasterFor(): RegulationConfig {
   return {
     regular_term_rules: { min_units: 8, max_units: 14, probation_max_units: 10, honors_min_gpa: 17.0, honors_max_units: 16 },
@@ -231,7 +298,7 @@ function reg1394PhdFor(): RegulationConfig {
   };
 }
 
-export const REGULATION_PRESETS = { reg1402For, reg1393For, reg1391For, reg1394MasterFor, reg1394PhdFor, isNonContinuous };
+export const REGULATION_PRESETS = { reg1402, reg1393, reg1391, regPre1391, reg1394MasterFor, reg1394PhdFor, isNonContinuous, maghtaGroup, applyLevelConfig };
 
 export const DEFAULT_MASTER_REGULATION_1403: RegulationConfig = {
   regular_term_rules: {

@@ -106,18 +106,11 @@ try {
   }
   console.log(`  ✓ مقاطع (${DEGREES.length})`);
 
-  // آیین‌نامه‌ها — یک ردیف برای هر مقطع
-  for (const [title, code] of DEGREES) {
-    const regTitle = `آیین‌نامهٔ آموزشی مصوب ۱۴۰۳ — ${title}`;
-    const [existing] = await q(`SELECT id FROM educational_regulations WHERE title = $1 LIMIT 1`, [regTitle]);
-    if (!existing) {
-      await q(
-        `INSERT INTO educational_regulations (title, "degreeLevelId", "effectiveFromYear", "rulesConfig")
-         VALUES ($1,$2,1403,$3)`,
-        [regTitle, degreeIds[code], JSON.stringify(REGULATION)]);
-    }
-  }
-  console.log(`  ✓ آیین‌نامه‌ها (${DEGREES.length})`);
+  // آیین‌نامه‌ها عمداً seed نمی‌شوند: فقط ۶ سند تجمیعی (۱۴۰۲/۱۳۹۳/۱۳۹۱/۱۳۹۴ ارشد/
+  // دکتری/ماقبل ۱۳۹۱) معتبر است که ETL یا اسکریپت cleanup-regulations می‌سازد.
+  // (seed قبلی «مصوب ۱۴۰۳ — X» لیست را شلوغ می‌کرد.)
+  console.log(`  … آیین‌نامه‌ها seed نمی‌شوند (فقط اسناد تجمیعی)`);
+  void REGULATION;
 
   // دانشکده/گروه/رشته
   for (const [facName, facCode, depName, depCode, majors] of STRUCTURE) {

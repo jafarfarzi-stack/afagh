@@ -16,7 +16,7 @@ body { @apply bg-slate-100 text-slate-800; }
    همان ناحیه روی کاغذ می‌رود؛ نوارها، دکمه‌ها و بخش‌های print:hidden حذف می‌شوند.
    ───────────────────────────────────────────────────────────── */
 @media print {
-  @page { size: A4 portrait; margin: 10mm; }
+  @page { size: A4 portrait; margin: 8mm; }
   html, body { background: #ffffff !important; color: #000000 !important; }
   header, footer, nav, aside, [role="navigation"], button, .print\:hidden { display: none !important; }
   .print-area {
@@ -24,6 +24,17 @@ body { @apply bg-slate-100 text-slate-800; }
     position: absolute !important;
     left: 0 !important; top: 0 !important; width: 100% !important;
     margin: 0 !important; box-shadow: none !important; background: #fff !important;
+  }
+  /* ── چاپ WYSIWYG کارنامه: فقط .transcript-print-area روی کاغذ می‌رود ──
+     تکنیک visibility (نه display) تا تودرتویی عمیق کامپوننت مشکلی نسازد. */
+  body.printing-transcript * { visibility: hidden; }
+  body.printing-transcript .transcript-print-area,
+  body.printing-transcript .transcript-print-area * { visibility: visible; }
+  body.printing-transcript .transcript-print-area {
+    position: absolute !important;
+    top: 0 !important; right: 0 !important; left: 0 !important;
+    margin: 0 !important; border: none !important; border-radius: 0 !important;
+    print-color-adjust: exact; -webkit-print-color-adjust: exact;
   }
 }
 

@@ -232,48 +232,50 @@ async function ensureDegree(maghta) {
   degrees.set(code, id);
   return id;
 }
-// ── پریست‌های اجرایی آیین‌نامه (آینهٔ regulations-types.ts — mjs نمی‌تواند TS را import کند) ──
-// 1402: قبولی ۱۰/مشروطی ۱۲/۱۲تا۲۰ واحد/۱۷+→۲۴واحد/سنوات ۴و۸
-// 1393 (کدهای 93/94/912/914/915): ۱۲تا۲۰/مشروطی ۲و۳/سنوات ۴و۸
-// 1394 ارشد (maghta=3): قبولی ۱۲/معدل ۱۴/مشروطی ۲/حداقل ۸ واحد/سنوات ۴
-// 1394 دکتری (maghta=4/6/7/8): قبولی ۱۴/معدل ۱۶/سنوات ۶تا۸
-// maghta: 1/5/9/10 = کاردانی و ناپیوسته (سقف مشروطی ۲) در برابر پیوسته (۳)
-function regPreset(which, maghta) {
-  const m = String(maghta);
-  if (m === '3') {
-    return {
-      source: 'SAMA-ETL', regulation: '1394-MASTER',
-      regular_term_rules: { min_units: 8, max_units: 14, probation_max_units: 10, honors_min_gpa: 17.0, honors_max_units: 16 },
-      summer_term_rules: { default_max_units: 4, graduating_max_units: 6 },
-      graduating_term_rules: { can_take_with_probation: true, max_units: 14, auto_corequisite_allowed: true },
-      probation_and_tenure: { probation_gpa_threshold: 14.0, max_consecutive_probations: 2, max_total_probations: 2, max_study_semesters: 4 },
-      grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 12.0 },
-    };
-  }
-  if (['4', '6', '7', '8'].includes(m)) {
-    return {
-      source: 'SAMA-ETL', regulation: '1394-PHD',
-      regular_term_rules: { min_units: 6, max_units: 12, probation_max_units: 8, honors_min_gpa: 17.0, honors_max_units: 12 },
-      summer_term_rules: { default_max_units: 4, graduating_max_units: 4 },
-      graduating_term_rules: { can_take_with_probation: false, max_units: 12, auto_corequisite_allowed: false },
-      probation_and_tenure: { probation_gpa_threshold: 16.0, max_consecutive_probations: 2, max_total_probations: 2, max_study_semesters: 8 },
-      grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 14.0 },
-    };
-  }
-  const short = ['1', '5', '9', '10'].includes(m);
-  const minUnits = which === '1391' ? 14 : 12;
-  const maxSem = which === '1391' ? (short ? 5 : 10) : (short ? 4 : 8);
-  const maxProb = short ? 2 : 3;
+// ── آیین‌نامه‌های تجمیعی (آینهٔ regulations-types.ts) ──
+// نمرات در همه مقاطع یکسان است؛ فقط نیمسال/سنوات در levels می‌آید.
+// ۶ ردیف نهایی: ۱۴۰۲، ۱۳۹۳، ۱۳۹۱، ۱۳۹۴ ارشد، ۱۳۹۴ دکتری، ماقبل ۱۳۹۱.
+const REG_TITLES = {
+  R1402: 'آیین‌نامه ۱۴۰۲ — کاردانی و کارشناسی',
+  R1393: 'آیین‌نامه ۱۳۹۳',
+  R1391: 'آیین‌نامه ۱۳۹۱',
+  R1394MS: 'آیین‌نامه ۱۳۹۴ — کارشناسی ارشد',
+  R1394PHD: 'آیین‌نامه ۱۳۹۴ — دکتری تخصصی',
+  RPRE: 'آیین‌نامه ماقبل ۱۳۹۱',
+};
+const REG_KIND_1393 = new Set(['93', '94', '912', '914', '915']);
+function regLevels(minUnits, shortProb, longProb, shortSem, longSem) {
   return {
-    source: 'SAMA-ETL', regulation: which,
-    regular_term_rules: { min_units: minUnits, max_units: 20, probation_max_units: 14, honors_min_gpa: 17.0, honors_max_units: 24 },
-    summer_term_rules: { default_max_units: 6, graduating_max_units: 8 },
-    graduating_term_rules: { can_take_with_probation: true, max_units: 24, auto_corequisite_allowed: true },
-    probation_and_tenure: { probation_gpa_threshold: 12.0, max_consecutive_probations: maxProb, max_total_probations: maxProb, max_study_semesters: maxSem },
-    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 10.0 },
+    SHORT: { min_units: minUnits, max_consecutive_probations: shortProb, max_total_probations: shortProb, max_study_semesters: shortSem },
+    LONG: { min_units: minUnits, max_consecutive_probations: longProb, max_total_probations: longProb, max_study_semesters: longSem },
   };
 }
-const REG_KIND_1393 = new Set(['93', '94', '912', '914', '915']);
+function regConfig(which) {
+  const base = {
+    source: 'SAMA-ETL', regulation: which,
+    summer_term_rules: { default_max_units: 6, graduating_max_units: 8 },
+    graduating_term_rules: { can_take_with_probation: true, max_units: 24, auto_corequisite_allowed: true },
+  };
+  if (which === '1394MS') return { ...base,
+    regular_term_rules: { min_units: 8, max_units: 14, probation_max_units: 10, honors_min_gpa: 17.0, honors_max_units: 16 },
+    probation_and_tenure: { probation_gpa_threshold: 14.0, max_consecutive_probations: 2, max_total_probations: 2, max_study_semesters: 4 },
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 12.0 } };
+  if (which === '1394PHD') return { ...base, graduating_term_rules: { can_take_with_probation: false, max_units: 12, auto_corequisite_allowed: false },
+    regular_term_rules: { min_units: 6, max_units: 12, probation_max_units: 8, honors_min_gpa: 17.0, honors_max_units: 12 },
+    probation_and_tenure: { probation_gpa_threshold: 16.0, max_consecutive_probations: 2, max_total_probations: 2, max_study_semesters: 8 },
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 14.0 } };
+  if (which === 'PRE1391') return { ...base,
+    regular_term_rules: { min_units: 12, max_units: 20, probation_max_units: 14, honors_min_gpa: 17.0, honors_max_units: 24 },
+    probation_and_tenure: { probation_gpa_threshold: 12.0, max_consecutive_probations: 3, max_total_probations: 3, max_study_semesters: 10 },
+    grading_and_gpa: { failed_course_gpa_policy: 'KEEP_ALWAYS', default_passing_grade: 10.0 } };
+  const minU = which === '1391' ? 14 : 12;
+  const sem = which === '1391' ? [5, 10] : [4, 8];
+  return { ...base,
+    levels: regLevels(minU, 2, 3, sem[0], sem[1]),
+    regular_term_rules: { min_units: minU, max_units: 20, probation_max_units: 14, honors_min_gpa: 17.0, honors_max_units: 24 },
+    probation_and_tenure: { probation_gpa_threshold: 12.0, max_consecutive_probations: 3, max_total_probations: 3, max_study_semesters: sem[1] },
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 10.0 } };
+}
 // فقط ردیف‌های مدیریتی ETL بازنویسی می‌شوند (خالی یا تگ SAMA-ETL) — دستی‌ها محفوظ
 function shouldRefreshRegulation(rulesConfig) {
   if (!rulesConfig || rulesConfig === '{}') return true;
@@ -282,27 +284,29 @@ function shouldRefreshRegulation(rulesConfig) {
     return j && j.source === 'SAMA-ETL';
   } catch { return false; }
 }
+// مقطع نماینده برای degreeLevelId ردیف تجمیعی (فقط لنگر FK؛ мотор گروه را از مدرک دانشجو می‌فهمد)
+function repDegreeId(wantCodes) {
+  for (const c of wantCodes) if (degrees.get(c)) return degrees.get(c);
+  const first = [...degrees.values()][0];
+  return first ?? -1;
+}
 async function ensureRegulation(degreeId, maghta, regKind) {
   const kind = String(regKind ?? '0').trim() || '0';
   const key = `${degreeId}|${kind}`;
   if (regulations.has(key)) return regulations.get(key);
-  const is1393 = REG_KIND_1393.has(kind);
-  const title = is1393
-    ? `آیین‌نامه آموزشی سما (کد ${kind}، مقطع ${maghta})`
-    : `آیین‌نامه مهاجرتی سما (مقطع ${maghta})`;
-  // پریست اجرایی متناسب: کد سما → ۱۳۹۳، پیش‌فرض (۰) → ۱۴۰۲ جاری
-  const config = JSON.stringify(is1393 ? regPreset('1393', maghta) : regPreset('1402', maghta));
-  const effYear = is1393 ? 1393 : 1402;
-  let row = (await q(`SELECT id, "rulesConfig" FROM educational_regulations WHERE title = $1 AND "degreeLevelId" = $2`, [title, degreeId]))[0];
-  if (!row && !is1393) {
-    row = (await q(`SELECT id, "rulesConfig" FROM educational_regulations WHERE "degreeLevelId" = $1 ORDER BY id LIMIT 1`, [degreeId]))[0];
-  }
+  const m = String(maghta);
+  let which, title, repId, effYear;
+  if (m === '3') { which = '1394MS'; title = REG_TITLES.R1394MS; repId = repDegreeId(['SAMA-3']); effYear = 1394; }
+  else if (['4', '6', '7', '8'].includes(m)) { which = '1394PHD'; title = REG_TITLES.R1394PHD; repId = repDegreeId(['SAMA-4', 'SAMA-6', 'SAMA-7', 'SAMA-8']); effYear = 1394; }
+  else if (REG_KIND_1393.has(kind)) { which = '1393'; title = REG_TITLES.R1393; repId = repDegreeId(['SAMA-2']); effYear = 1393; }
+  else { which = '1402'; title = REG_TITLES.R1402; repId = repDegreeId(['SAMA-2']); effYear = 1402; }
+  if (repId < 0) repId = degreeId;
+  const config = JSON.stringify(regConfig(which));
+  let row = (await q(`SELECT id, "rulesConfig" FROM educational_regulations WHERE title = $1`, [title]))[0];
   if (!row && !DRY) {
     row = (await q(`INSERT INTO educational_regulations (title, "degreeLevelId", "effectiveFromYear", "rulesConfig")
-      VALUES ($1,$2,$3,$4) RETURNING id`, [title, degreeId, effYear, config]))[0];
+      VALUES ($1,$2,$3,$4) RETURNING id`, [title, repId, effYear, config]))[0];
   } else if (row && !DRY && shouldRefreshRegulation(row.rulesConfig)) {
-    // backfill: ردیف‌های سما با پیکربندی خالی یا قدیمی (تگ SAMA-ETL) به‌روز می‌شوند؛
-    // ردیف‌های دستی مرکز آیین‌نامه‌ها (بدون تگ) دست نمی‌خورند
     await pool.query(`UPDATE educational_regulations SET "rulesConfig" = $2 WHERE id = $1`, [row.id, config]);
   }
   const id = row ? Number(row.id) : -1;
