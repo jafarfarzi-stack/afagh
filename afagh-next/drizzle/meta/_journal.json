@@ -85,6 +85,13 @@
       "when": 1788598800000,
       "tag": "0011_student_term_states",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788602400000,
+      "tag": "0012_curriculum_created_at",
+      "breakpoints": true
     }
   ]
 }

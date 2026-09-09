@@ -2,7 +2,8 @@ import { requireRole } from '@/lib/auth';
 import { db } from '@/db';
 import { departments, faculties, majors } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { getCurriculumOverviewAction } from './actions';
+import { getCurriculumOverviewAction, getCurriculumVersionDetailAction } from './actions';
+import type { VersionDetail } from './types';
 import CurriculumManagerClient from './CurriculumManagerClient';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +16,12 @@ export const dynamic = 'force-dynamic';
  * غنی‌سازی فاز ۷الف (نام دانشکده/گروه، واحد الزامیِ آخرین نسخهٔ غیرپیش‌نویس،
  * گرایش‌ها) در همین‌جا انجام و به‌همراه خطای صریحِ بارگذاری به Client داده می‌شود.
  */
-export default async function AdminCurriculumPage() {
+export default async function AdminCurriculumPage({
+  searchParams,
+}: {
+  /** ?tab=SEMESTERS → تب آغازین · ?version=۱۲ → نسخهٔ انتخابی (پیوندپذیری + تست مستقل هر تب) */
+  searchParams: Promise<{ tab?: string | string[]; version?: string | string[] }>;
+}) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
   const overview = await getCurriculumOverviewAction();
   if (!overview.ok) {
@@ -39,6 +45,14 @@ export default async function AdminCurriculumPage() {
     .leftJoin(faculties, eq(faculties.id, departments.facultyId));
 
   const ov = overview.data;
+  const sp = await searchParams;
+  const tabParam = Array.isArray(sp.tab) ? sp.tab[0] : sp.tab;
+  // فقط شمارهٔ نسخه‌ای که واقعاً در دامنهٔ کاربر است پذیرفته می‌شود
+  const versionParam = Number(Array.isArray(sp.version) ? sp.version[0] : sp.version);
+  const versionId = Number.isInteger(versionParam) && ov.versions.some(v => v.id === versionParam) ? versionParam : null;
+  // پیوند مستقیم نسخه: جزئیات همان‌جا سمت سرور خوانده می‌شود تا نخستین رندر کامل باشد
+  // (بی‌ضرر: effect سمت کلاینت همان داده را دوباره تازه می‌کند.)
+  const detailRes = versionId != null ? await getCurriculumVersionDetailAction(versionId) : null;
   const majorItems = ov.majors.map((m) => {
     const dept = deptRows.find((d) => d.majorId === m.id);
     const trackTitles = ov.tracks.filter((t) => t.majorId === m.id).map((t) => t.title);
@@ -58,6 +72,9 @@ export default async function AdminCurriculumPage() {
 
   return (
     <CurriculumManagerClient
+      tab={tabParam}
+      version={versionId}
+      detail={detailRes?.ok ? (detailRes.data as unknown as VersionDetail) : null}
       initial={{
         majors: majorItems,
         versions: ov.versions.map((v) => ({
