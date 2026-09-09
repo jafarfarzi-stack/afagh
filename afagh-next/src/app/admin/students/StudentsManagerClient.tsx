@@ -21,9 +21,22 @@ export type StudentItem = {
   currentTermNo: number;
   majorName: string;
   majorCode: string;
+  facultyName?: string;
   degreeLevel: string;
   degreeCode: string;
   regulationTitle: string;
+  fatherName?: string;
+  birthCertNo?: string;
+  birthDate?: string | null;
+  placeOfBirth?: string;
+  placeOfIssue?: string;
+  nationality?: string | null;
+  photoKey?: string | null;
+  acceptanceType?: string | null;
+  acceptanceAllocation?: string | null;
+  studyingMode?: string | null;
+  trainingMethod?: string | null;
+  graduateDate?: string | null;
   role: string;
 };
 
@@ -76,7 +89,15 @@ export type TermGroup = {
   rows: TranscriptRow[];
   taken: number;
   passed: number;
+  failed: number;
+  points: number;
   gpa: number | null;
+  /** جمع تجمیعی تا پایان این نیمسال (سطر «کل» سما) */
+  cumTaken: number;
+  cumPassed: number;
+  cumFailed: number;
+  cumPoints: number;
+  cumGpa: number | null;
 };
 
 export type TranscriptSummary = {
@@ -86,7 +107,7 @@ export type TranscriptSummary = {
   gpa: number | null;
 };
 
-function summarizeTerm(rows: TranscriptRow[]): { taken: number; passed: number; wsum: number; wunits: number } {
+function summarizeTerm(rows: TranscriptRow[]): { taken: number; passed: number; failed: number; wsum: number; wunits: number } {
   let taken = 0, passed = 0, wsum = 0, wunits = 0;
   for (const r of rows) {
     const u = numOrNull(r.units) ?? 0;
@@ -100,7 +121,7 @@ function summarizeTerm(rows: TranscriptRow[]): { taken: number; passed: number; 
       wunits += u;
     }
   }
-  return { taken, passed, wsum, wunits };
+  return { taken, passed, failed: Math.max(0, taken - passed), wsum, wunits };
 }
 
 export function groupTranscript(rows: TranscriptRow[]): TranscriptSummary {
@@ -114,8 +135,21 @@ export function groupTranscript(rows: TranscriptRow[]): TranscriptSummary {
     .sort((a, b) => a[0].localeCompare(b[0], 'en'))
     .map(([termCode, rs]) => {
       const s = summarizeTerm(rs);
-      return { termCode, termTitle: rs[0]?.termTitle ?? null, rows: rs, taken: s.taken, passed: s.passed, gpa: s.wunits ? s.wsum / s.wunits : null };
+      return {
+        termCode, termTitle: rs[0]?.termTitle ?? null, rows: rs,
+        taken: s.taken, passed: s.passed, failed: s.failed, points: s.wsum,
+        gpa: s.wunits ? s.wsum / s.wunits : null,
+        cumTaken: 0, cumPassed: 0, cumFailed: 0, cumPoints: 0, cumGpa: null,
+      };
     });
+  // جمع تجمیعی «کل» تا پایان هر نیمسال
+  let ct = 0, cp = 0, cw = 0, cwu = 0;
+  for (const t of terms) {
+    const s = summarizeTerm(t.rows);
+    ct += s.taken; cp += s.passed; cw += s.wsum; cwu += s.wunits;
+    t.cumTaken = ct; t.cumPassed = cp; t.cumFailed = Math.max(0, ct - cp);
+    t.cumPoints = cw; t.cumGpa = cwu ? cw / cwu : null;
+  }
   const all = summarizeTerm(rows);
   return { terms, totalTaken: all.taken, totalPassed: all.passed, gpa: all.wunits ? all.wsum / all.wunits : null };
 }
@@ -123,122 +157,298 @@ export function groupTranscript(rows: TranscriptRow[]): TranscriptSummary {
 export const faNum = (n: number | null | undefined, digits = 2): string =>
   n == null ? '—' : n.toLocaleString('fa-IR', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
 
+/** میلادی → جلالی (برای تاریخ تهیه/تولد در کارنامه) */
+export function g2j(gy: number, gm: number, gd: number): [number, number, number] {
+  const breaks = [-61, 9, 38, 199, 426, 686, 756, 818, 1111, 1181, 1210, 1635, 2060, 2097, 2192, 2262, 2324, 2394, 2456, 3178];
+  let jl = 0, jm = 0, jd = 0;
+  const g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+  let jy = gy <= 1600 ? 0 : 979;
+  gy -= gy <= 1600 ? 621 : 1600;
+  const gy2 = gm > 2 ? gy + 1 : gy;
+  let days = 365 * gy + ~~((gy2 + 3) / 4) - ~~((gy2 + 99) / 100) + ~~((gy2 + 399) / 400) - 80 + gd + g_d_m[gm - 1];
+  jy += 33 * ~~(days / 12053);
+  days %= 12053;
+  jy += 4 * ~~(days / 1461);
+  days %= 1461;
+  if (days > 365) { jy += ~~((days - 1) / 365); days = (days - 1) % 365; }
+  const jm0 = days < 186 ? 1 + ~~(days / 31) : 7 + ~~((days - 186) / 30);
+  const jd0 = days < 186 ? 1 + (days % 31) : 1 + ((days - 186) % 30);
+  jl = jy; jm = jm0; jd = jd0;
+  void breaks;
+  return [jl, jm, jd];
+}
+
+export function todayJalali(): string {
+  const d = new Date();
+  const [jy, jm, jd] = g2j(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  return `${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`;
+}
+
+export function dateToJalali(v: string | null | undefined): string {
+  if (!v) return '—';
+  const m = String(v).match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!m) return String(v).slice(0, 10);
+  const [jy, jm, jd] = g2j(+m[1], +m[2], +m[3]);
+  return `${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`;
+}
+
+/** معدل به حروف فارسی (مثل «هفده و بیست و شش صدم») */
+const FA_ONES = ['صفر', 'یک', 'دو', 'سه', 'چهار', 'پنج', 'شش', 'هفت', 'هشت', 'نه', 'ده', 'یازده', 'دوازده', 'سیزده', 'چهارده', 'پانزده', 'شانزده', 'هفده', 'هجده', 'نوزده', 'بیست'];
+export function faWords(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  const neg = n < 0 ? 'منفی ' : '';
+  const a = Math.abs(Math.round(n * 100) / 100);
+  const ip = Math.floor(a);
+  const fp = Math.round((a - ip) * 100);
+  const ipW = ip <= 20 ? FA_ONES[ip] : String(ip);
+  if (!fp) return `${neg}${ipW}`;
+  const fpW = fp <= 20 ? FA_ONES[fp] : fp < 100 ? `${FA_ONES[Math.floor(fp / 10) * 10 <= 20 ? Math.floor(fp / 10) * 10 : 20]} و ${FA_ONES[fp % 10]}` : String(fp);
+  return `${neg}${ipW} و ${fpW} صدم`;
+}
+
+/** نرمال‌سازی نوع درس به ۶ ستون جدول سما */
+export function courseTypeGroup(t: string | null | undefined): string {
+  const s = (t || '').replace(/ي/g, 'ی').replace(/ك/g, 'ک');
+  if (/پایان.?نامه|thesis/i.test(s)) return 'پایان‌نامه';
+  if (/جبران/i.test(s)) return 'جبرانی';
+  if (/اختیار/i.test(s)) return 'اختیاری';
+  if (/پایه/i.test(s)) return 'پایه';
+  if (/اصلی|تخصص/i.test(s)) return 'اصلی-تخصصی';
+  if (/عموم/i.test(s)) return 'عمومی';
+  return 'اختیاری';
+}
+
+export type TypeBreakdown = { type: string; units: number; gpa: number | null };
+export function breakdownByType(rows: TranscriptRow[]): TypeBreakdown[] {
+  const order = ['عمومی', 'پایه', 'اصلی-تخصصی', 'اختیاری', 'جبرانی', 'پایان‌نامه'];
+  const acc = new Map<string, { units: number; wsum: number; wunits: number }>();
+  for (const r of rows) {
+    const g = courseTypeGroup(r.courseType);
+    if (!acc.has(g)) acc.set(g, { units: 0, wsum: 0, wunits: 0 });
+    const a = acc.get(g)!;
+    const u = numOrNull(r.units) ?? 0;
+    const gv = numOrNull(r.gradeValue);
+    if (r.gradeStatus !== 'PENDING' && (gv === null || gv >= 10)) a.units += u;
+    if (gv !== null && (r.gradeStatus === 'FINALIZED' || r.gradeStatus === 'TEMPORARY')) { a.wsum += gv * u; a.wunits += u; }
+  }
+  return order.map(t => {
+    const a = acc.get(t);
+    return { type: t, units: a?.units ?? 0, gpa: a && a.wunits ? a.wsum / a.wunits : null };
+  });
+}
+
 const escHtml = (s: string | null | undefined): string =>
   String(s ?? '—').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-/** چاپ کارنامهٔ رسمی در پنجرهٔ جدا (بدون نیاز به CSS سراسری چاپ) */
-export function printOfficialTranscript(student: StudentItem, summary: TranscriptSummary): void {
-  const infoRows = [
-    ['نام و نام خانوادگی', `${student.lastName} ${student.firstName}`],
+/** چاپ کارنامهٔ رسمی با فرمت سما در پنجرهٔ جدا */
+export function printOfficialTranscript(student: StudentItem, summary: TranscriptSummary, logoUrl?: string | null): void {
+  const info: [string, string][] = [
+    ['نام خانوادگی و نام', `${student.lastName} ${student.firstName}`],
     ['شماره دانشجویی', student.studentCode],
+    ['نام پدر', student.fatherName || '—'],
+    ['شماره شناسنامه', student.birthCertNo || '—'],
+    ['محل صدور', student.placeOfIssue || '—'],
     ['کد ملی', student.nationalCode],
-    ['رشته', student.majorName],
+    ['تاریخ تولد', dateToJalali(student.birthDate)],
     ['مقطع', student.degreeLevel],
-    ['سال ورود', String(student.entryYear)],
-    ['سهمیه', quotaFa(student.quotaType)],
-    ['وضعیت', studentStatusFa(student.status, student.samaStatusCode)],
+    ['نوع دوره', student.studyingMode || student.trainingMethod || '—'],
+    ['دانشکده', student.facultyName || '—'],
+    ['رشته تحصیلی', student.majorName],
+    ['نحوه ورود', student.acceptanceType || '—'],
+    ['شیوه آموزشی', student.trainingMethod || student.studyingMode || '—'],
+    ['سهمیه قبولی', quotaFa(student.quotaType)],
+    ['سهمیه نهایی', quotaFa(student.quotaType)],
+    ['سهمیه ثبت‌نامی', student.acceptanceAllocation || quotaFa(student.quotaType)],
+    ['ملیت', student.nationality === '120001' ? 'ایرانی' : student.nationality || '—'],
+    ['استاد راهنما', '—'],
   ];
-  const termTables = summary.terms.map(t => {
-    const rows = t.rows.map((r, i) => `<tr><td>${(i + 1).toLocaleString('fa-IR')}</td><td>${escHtml(r.courseCode)}</td><td class="t">${escHtml(r.courseTitle)}</td><td>${faNum(numOrNull(r.units), 1)}</td><td><b>${r.gradeValue ?? '—'}</b></td><td>${escHtml(r.gradeStatusTitle || gradeStatusFa(r.gradeStatus))}</td></tr>`).join('');
-    return `<h3>نیمسال ${escHtml(t.termCode)}${t.termTitle ? ` — ${escHtml(t.termTitle)}` : ''}</h3>
-<table><thead><tr><th>ردیف</th><th>کد درس</th><th>عنوان درس</th><th>واحد</th><th>نمره</th><th>وضعیت</th></tr></thead><tbody>${rows}</tbody>
-<tfoot><tr><td colspan="3">جمع نیمسال</td><td>${faNum(t.taken, 1)} / ${faNum(t.passed, 1)}</td><td>${faNum(t.gpa)}</td><td>معدل</td></tr></tfoot></table>`;
-  }).join('');
+  const probation = summary.terms.filter(t => t.gpa !== null && t.gpa < 12).length;
+  const termCell = (t: TermGroup) => {
+    const rows = t.rows.map(r => `<tr><td>${escHtml(r.courseCode)}</td><td class="t">${escHtml(r.courseTitle)}</td><td>${faNum(numOrNull(r.units), 1)}</td><td><b>${r.gradeValue ?? '—'}</b></td><td>${escHtml(r.gradeStatusTitle || gradeStatusFa(r.gradeStatus))}</td></tr>`).join('');
+    return `<td class="term"><div class="th">نیمسال ${escHtml(t.termCode)}<br><span>وضعیت دانشجو: ${escHtml(studentStatusFa(student.status, student.samaStatusCode))}</span></div>
+<table class="inner"><thead><tr><th>کد درس</th><th>نام درس</th><th>واحد</th><th>نمره</th><th>وضع</th></tr></thead><tbody>${rows}</tbody></table>
+<div class="sum"><b>نیمسال</b> — اخذشده: <b>${faNum(t.taken, 0)}</b> گذرانده: <b>${faNum(t.passed, 0)}</b> مردودی: <b>${faNum(t.failed, 0)}</b><br>معدل: <b>${faNum(t.gpa)}</b> امتیاز: <b>${faNum(t.points, 1)}</b><br><b>کل</b> — اخذشده: <b>${faNum(t.cumTaken, 0)}</b> گذرانده: <b>${faNum(t.cumPassed, 0)}</b> مردودی: <b>${faNum(t.cumFailed, 0)}</b><br>معدل: <b>${faNum(t.cumGpa)}</b> امتیاز: <b>${faNum(t.cumPoints, 1)}</b> موثر: <b>${faNum(t.cumPassed, 0)}</b></div></td>`;
+  };
+  const chunks: TermGroup[][] = [];
+  for (let i = 0; i < summary.terms.length; i += 3) chunks.push(summary.terms.slice(i, i + 3));
+  const breakdown = breakdownByType(summary.terms.flatMap(t => t.rows));
   const html = `<!DOCTYPE html><html dir="rtl" lang="fa"><head><meta charset="utf-8"><title>کارنامه ${escHtml(student.studentCode)}</title>
-<style>body{font-family:Tahoma,Arial,sans-serif;font-size:12px;color:#111;margin:24px}h1,h2{text-align:center;margin:4px}h2{font-size:15px}h3{background:#eee;padding:6px 10px;border:1px solid #999;margin:18px 0 0;font-size:13px}table{width:100%;border-collapse:collapse;margin-top:6px}th,td{border:1px solid #555;padding:5px 6px;text-align:center}th{background:#ddd}.t{text-align:right}thead th{font-size:12px}tfoot td{font-weight:bold;background:#f4f4f4}.info{margin:12px 0}.info td{width:25%;text-align:right}.sign{display:flex;justify-content:space-between;margin-top:48px}.sign div{text-align:center}@media print{body{margin:8mm}}</style>
-</head><body><h1>دانشگاه آفاق</h1><h2>ادارهٔ کل امور آموزشی — کارنامهٔ تحصیلی دانشجو</h2>
-<table class="info"><tbody>${[0, 1, 2, 3].map(i => `<tr><td><b>${infoRows[i * 2][0]}:</b> ${escHtml(infoRows[i * 2][1])}</td><td><b>${infoRows[i * 2 + 1][0]}:</b> ${escHtml(infoRows[i * 2 + 1][1])}</td></tr>`).join('')}</tbody></table>
-${termTables}
-<h3>جمع کل</h3><table><tbody><tr><td><b>واحدهای اخذشده:</b> ${faNum(summary.totalTaken, 1)}</td><td><b>واحدهای گذرانده:</b> ${faNum(summary.totalPassed, 1)}</td><td><b>معدل کل:</b> ${faNum(summary.gpa)}</td></tr></tbody></table>
-<div class="sign"><div>کارشناس آموزش<br><br>امضا و مهر</div><div>مدیر آموزش<br><br>امضا و مهر</div></div>
+<style>*{box-sizing:border-box}body{font-family:Tahoma,Arial,sans-serif;font-size:10px;color:#000;margin:10px}table{border-collapse:collapse;width:100%}.head td{border:1px solid #000;padding:3px 6px}.info td{border:1px solid #000;padding:3px 6px;font-size:10px}.terms td.term{border:1px solid #000;vertical-align:top;width:33.33%;padding:0}.th{background:#eee;border-bottom:1px solid #000;font-weight:bold;text-align:center;font-size:10px;padding:3px}.th span{font-weight:normal;font-size:9px}.inner th,.inner td{border:1px solid #666;padding:2px 3px;text-align:center;font-size:9px}.inner th{background:#e8e8e8}.t{text-align:right}.sum{font-size:9px;padding:3px 5px;background:#f6f6f6;border-top:2px solid #000}.foot{font-size:10px;margin-top:6px}.foot td{padding:2px 6px}.sign{display:flex;justify-content:space-between;margin-top:30px;font-size:10px}.sign div{text-align:center}.bd th,.bd td{border:1px solid #000;padding:3px;text-align:center;font-size:10px}@media print{body{margin:6mm}@page{size:A4}}</style>
+</head><body>
+<table class="head"><tr><td style="width:30%;text-align:center"><b>باسمه تعالی</b><br>اداره کل امور آموزشی<br><b>کارنامه کل</b><br>تاریخ تهیه: ${todayJalali()}</td><td style="text-align:center">موسسه آموزش عالی غیرانتفاعی - غیردولتی آفاق${student.photoKey ? '<br><span style="font-size:9px">[عکس دانشجو]</span>' : ''}</td><td style="width:15%;text-align:center">${logoUrl ? `<img src="${escHtml(logoUrl)}" style="max-width:60px;max-height:60px">` : '[ارم دانشگاه]'}</td></tr></table>
+<table class="info"><tbody>${info.map(([k, v]) => `<tr><td><b>${k}:</b> ${escHtml(v)}</td></tr>`).join('')}</tbody></table>
+<table class="terms"><tbody>${chunks.map(ch => `<tr>${ch.map(termCell).join('')}</tr>`).join('')}</tbody></table>
+<table class="foot"><tbody>
+<tr><td>تعداد نیمسال مشروط: <b>${probation.toLocaleString('fa-IR')}</b></td><td>وضعیت کلی دانشجو: <b>${escHtml(studentStatusFa(student.status, student.samaStatusCode))}</b></td><td>تاریخ شروع تحصیل: <b>${student.entryYear}</b></td><td>تاریخ توقف تحصیل: <b>${escHtml(student.graduateDate || '—')}</b></td></tr>
+<tr><td colspan="2">معدل کل به عدد: <b>${faNum(summary.gpa)}</b></td><td colspan="2">معدل کل به حروف: <b>${escHtml(faWords(summary.gpa))}</b></td></tr>
+<tr><td colspan="4" style="text-align:center">این کارنامه بدون مهر و امضا فقط برای اطلاع دانشجو صادر شده است و ارزش دیگری ندارد</td></tr>
+</tbody></table>
+<div class="sign"><div>امضاء رئیس خدمات آموزش</div><div>امضاء و مهر اداره کل آموزش</div><div>امضاء و مهر امور آموزشی دانشگاه منتخب</div></div>
+<div style="page-break-before:always"></div>
+<p><b>جدول وضعیت دروس گذرانده (کاتالوگ رشته)</b></p>
+<table class="bd"><thead><tr><th>نوع درس</th>${breakdown.map(b => `<th>${b.type}</th>`).join('')}<th>مجموع</th></tr></thead><tbody>
+<tr><td><b>تعداد واحد</b></td>${breakdown.map(b => `<td>${faNum(b.units, 1)}</td>`).join('')}<td><b>${faNum(summary.totalPassed, 1)}</b></td></tr>
+<tr><td><b>معدل</b></td>${breakdown.map(b => `<td>${faNum(b.gpa)}</td>`).join('')}<td><b>${faNum(summary.gpa)}</b></td></tr>
+</tbody></table>
 <script>window.onload=()=>{window.print();}</script></body></html>`;
-  const w = window.open('', '_blank', 'width=900,height=700');
+  const w = window.open('', '_blank', 'width=1000,height=750');
   if (!w) return;
   w.document.write(html);
   w.document.close();
 }
 
-/** نمای رسمی کارنامه داخل صفحه (همان ساختار نسخهٔ چاپی) */
-function OfficialTranscriptView({ student, summary }: { student: StudentItem; summary: TranscriptSummary }) {
+/** نمای رسمی کارنامه با فرمت سما: ۳ نیمسال کنار هم + سربرگ/پانوشت + صفحه دوم تفکیکی */
+function OfficialTranscriptView({ student, summary, logoUrl }: { student: StudentItem; summary: TranscriptSummary; logoUrl?: string | null }) {
+  const probation = summary.terms.filter(t => t.gpa !== null && t.gpa < 12).length;
   const info: [string, string][] = [
-    ['نام و نام خانوادگی', `${student.lastName} ${student.firstName}`],
+    ['نام خانوادگی و نام', `${student.lastName} ${student.firstName}`],
     ['شماره دانشجویی', student.studentCode],
+    ['نام پدر', student.fatherName || '—'],
+    ['شماره شناسنامه', student.birthCertNo || '—'],
+    ['محل صدور', student.placeOfIssue || '—'],
     ['کد ملی', student.nationalCode],
-    ['رشته', student.majorName],
+    ['تاریخ تولد', dateToJalali(student.birthDate)],
     ['مقطع', student.degreeLevel],
-    ['سال ورود', String(student.entryYear)],
-    ['سهمیه', quotaFa(student.quotaType)],
-    ['وضعیت', studentStatusFa(student.status, student.samaStatusCode)],
+    ['نوع دوره', student.studyingMode || student.trainingMethod || '—'],
+    ['دانشکده', student.facultyName || '—'],
+    ['رشته تحصیلی', student.majorName],
+    ['نحوه ورود', student.acceptanceType || '—'],
+    ['شیوه آموزشی', student.trainingMethod || student.studyingMode || '—'],
+    ['سهمیه قبولی', quotaFa(student.quotaType)],
+    ['سهمیه نهایی', quotaFa(student.quotaType)],
+    ['سهمیه ثبت‌نامی', student.acceptanceAllocation || quotaFa(student.quotaType)],
+    ['ملیت', student.nationality === '120001' ? 'ایرانی' : student.nationality || '—'],
+    ['استاد راهنما', '—'],
   ];
-  return (
-    <div className="border border-slate-400 rounded overflow-hidden">
-      <div className="bg-slate-900 text-white text-center py-2.5 px-3">
-        <p className="font-extrabold text-sm">دانشگاه آفاق</p>
-        <p className="text-[11px] text-slate-300">ادارهٔ کل امور آموزشی — کارنامهٔ تحصیلی دانشجو</p>
+  // گروه‌بندی ۳تایی نیمسال‌ها (مثل سما)
+  const chunks: TermGroup[][] = [];
+  for (let i = 0; i < summary.terms.length; i += 3) chunks.push(summary.terms.slice(i, i + 3));
+  const breakdown = breakdownByType(summary.terms.flatMap(t => t.rows));
+
+  const termCell = (t: TermGroup) => (
+    <td key={t.termCode} className="align-top border-l border-slate-400 p-0" style={{ width: '33.33%' }}>
+      <div className="bg-slate-100 border-b border-slate-300 px-1 py-1 font-extrabold text-[10px] text-center">
+        نیمسال <span className="font-mono" dir="ltr">{t.termCode}</span>
+        <span className="block font-normal text-slate-500">وضعیت دانشجو: {studentStatusFa(student.status, student.samaStatusCode)}</span>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-slate-200 text-[11px]">
+      <table className="w-full text-[9px]">
+        <thead>
+          <tr className="border-b border-slate-300 text-slate-500">
+            <th className="p-1">کد درس</th>
+            <th className="p-1">نام درس</th>
+            <th className="p-1">واحد</th>
+            <th className="p-1">نمره</th>
+            <th className="p-1">وضع</th>
+          </tr>
+        </thead>
+        <tbody>
+          {t.rows.map((r, i) => (
+            <tr key={i} className="border-b border-slate-100">
+              <td className="p-1 font-mono text-center" dir="ltr">{r.courseCode}</td>
+              <td className="p-1">{r.courseTitle}</td>
+              <td className="p-1 text-center font-mono">{r.units ?? '—'}</td>
+              <td className="p-1 text-center font-mono font-bold">{r.gradeValue ?? '—'}</td>
+              <td className="p-1 text-center" title={r.gradeStatusTitle || gradeStatusFa(r.gradeStatus)}>{r.gradeStatusTitle || gradeStatusFa(r.gradeStatus)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="border-t-2 border-slate-400 text-[9px] px-1 py-1 space-y-0.5 bg-slate-50">
+        <p><b>نیمسال</b> — اخذشده: <b className="font-mono">{faNum(t.taken, 0)}</b> گذرانده: <b className="font-mono">{faNum(t.passed, 0)}</b> مردودی: <b className="font-mono">{faNum(t.failed, 0)}</b></p>
+        <p>معدل: <b className="font-mono">{faNum(t.gpa)}</b> امتیاز: <b className="font-mono">{faNum(t.points, 1)}</b></p>
+        <p className="border-t border-slate-300 pt-0.5"><b>کل</b> — اخذشده: <b className="font-mono">{faNum(t.cumTaken, 0)}</b> گذرانده: <b className="font-mono">{faNum(t.cumPassed, 0)}</b> مردودی: <b className="font-mono">{faNum(t.cumFailed, 0)}</b></p>
+        <p>معدل: <b className="font-mono">{faNum(t.cumGpa)}</b> امتیاز: <b className="font-mono">{faNum(t.cumPoints, 1)}</b> موثر: <b className="font-mono">{faNum(t.cumPassed, 0)}</b></p>
+      </div>
+    </td>
+  );
+
+  return (
+    <div className="border-2 border-slate-700 text-slate-900 bg-white">
+      {/* سربرگ سما */}
+      <div className="flex items-start justify-between border-b-2 border-slate-700 px-3 py-2">
+        <div className="text-[10px] text-center">
+          <p className="font-bold">باسمه تعالی</p>
+          <p>اداره کل امور آموزشی</p>
+          <p className="font-extrabold">کارنامه کل</p>
+          <p className="mt-1">تاریخ تهیه: <b className="font-mono">{todayJalali()}</b></p>
+        </div>
+        <div className="text-center">
+          <p className="text-[10px]">موسسه آموزش عالی غیرانتفاعی - غیردولتی آفاق</p>
+          {student.photoKey ? (
+            <div className="mx-auto mt-1 w-14 h-[70px] bg-slate-100 border border-slate-300 text-[8px] text-slate-400 flex items-center justify-center">عکس دانشجو</div>
+          ) : null}
+        </div>
+        <div className="w-16 h-16 flex items-center justify-center">
+          {logoUrl ? <img src={logoUrl} alt="ارم دانشگاه" className="max-w-16 max-h-16 object-contain" /> : <span className="text-[9px] text-slate-400 border border-dashed border-slate-300 rounded p-1">ارم دانشگاه</span>}
+        </div>
+      </div>
+      {/* مشخصات */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-px bg-slate-300 border-b-2 border-slate-700 text-[10px]">
         {info.map(([k, v]) => (
-          <div key={k} className="bg-white px-2 py-1.5">
-            <span className="text-slate-500">{k}: </span>
-            <span className="font-bold">{v || '—'}</span>
+          <div key={k} className="bg-white px-2 py-1 flex justify-between gap-1">
+            <span className="font-bold whitespace-nowrap">{k}:</span>
+            <span className="text-left">{v}</span>
           </div>
         ))}
       </div>
-      {summary.terms.map(t => (
-        <div key={t.termCode}>
-          <div className="bg-slate-100 border-y border-slate-300 px-3 py-1.5 font-extrabold text-[12px]">
-            نیمسال <span className="font-mono" dir="ltr">{t.termCode}</span>
-            {t.termTitle && <span className="font-normal text-slate-500"> — {t.termTitle}</span>}
-          </div>
-          <table className="w-full text-right text-[11px]">
-            <thead className="bg-white text-slate-500 border-b border-slate-200">
-              <tr>
-                <th className="p-1.5 w-10 text-center">ردیف</th>
-                <th className="p-1.5">کد درس</th>
-                <th className="p-1.5">عنوان درس</th>
-                <th className="p-1.5 text-center">واحد</th>
-                <th className="p-1.5 text-center">نمره</th>
-                <th className="p-1.5 text-center">وضعیت</th>
-              </tr>
-            </thead>
-            <tbody>
-              {t.rows.map((r, i) => (
-                <tr key={i} className="border-b border-slate-100">
-                  <td className="p-1.5 text-center text-slate-400">{(i + 1).toLocaleString('fa-IR')}</td>
-                  <td className="p-1.5 font-mono" dir="ltr">{r.courseCode}</td>
-                  <td className="p-1.5">{r.courseTitle}</td>
-                  <td className="p-1.5 text-center font-mono">{r.units ?? '—'}</td>
-                  <td className="p-1.5 text-center font-mono font-bold">{r.gradeValue ?? '—'}</td>
-                  <td className="p-1.5 text-center">
-                    {r.gradeStatusTitle && <span className="ml-1 font-bold">{r.gradeStatusTitle}</span>}
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${gradeStatusChip(r.gradeStatus)}`}>
-                      {gradeStatusFa(r.gradeStatus)}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="bg-slate-50 font-bold border-t border-slate-300">
-                <td colSpan={3} className="p-1.5">جمع نیمسال (اخذشده / گذرانده)</td>
-                <td className="p-1.5 text-center font-mono">{faNum(t.taken, 1)} / {faNum(t.passed, 1)}</td>
-                <td className="p-1.5 text-center">معدل: <span className="font-mono">{faNum(t.gpa)}</span></td>
-                <td />
-              </tr>
-            </tfoot>
-          </table>
+      {/* نیمسال‌ها ۳تایی */}
+      <table className="w-full border-collapse">
+        <tbody>
+          {chunks.map((ch, i) => (
+            <tr key={i} className="border-b-2 border-slate-700">{ch.map(termCell)}</tr>
+          ))}
+        </tbody>
+      </table>
+      {/* پانوشت */}
+      <div className="border-t-2 border-slate-700 px-3 py-2 text-[10px] space-y-1">
+        <div className="flex flex-wrap gap-x-6">
+          <span>تعداد نیمسال مشروط: <b className="font-mono">{probation.toLocaleString('fa-IR')}</b></span>
+          <span>وضعیت کلی دانشجو: <b>{studentStatusFa(student.status, student.samaStatusCode)}</b></span>
+          <span>تاریخ شروع تحصیل: <b className="font-mono">{student.entryYear}</b></span>
+          <span>تاریخ توقف تحصیل: <b className="font-mono">{student.graduateDate || '—'}</b></span>
         </div>
-      ))}
-      <div className="bg-indigo-950 text-white px-3 py-2 flex flex-wrap gap-x-6 gap-y-1 text-[12px] font-bold">
-        <span>واحدهای اخذشده: <span className="font-mono">{faNum(summary.totalTaken, 1)}</span></span>
-        <span>واحدهای گذرانده: <span className="font-mono">{faNum(summary.totalPassed, 1)}</span></span>
-        <span>معدل کل: <span className="font-mono">{faNum(summary.gpa)}</span></span>
+        <div className="flex flex-wrap gap-x-6">
+          <span>معدل کل به عدد: <b className="font-mono">{faNum(summary.gpa)}</b></span>
+          <span>معدل کل به حروف: <b>{faWords(summary.gpa)}</b></span>
+        </div>
+        <p className="text-center text-slate-600">این کارنامه بدون مهر و امضا فقط برای اطلاع دانشجو صادر شده است و ارزش دیگری ندارد</p>
+        <div className="flex justify-between pt-2">
+          <span>امضاء رئیس خدمات آموزش</span>
+          <span>امضاء و مهر اداره کل آموزش</span>
+          <span>امضاء و مهر امور آموزشی دانشگاه منتخب</span>
+        </div>
+      </div>
+      {/* صفحه دوم: جدول وضعیت دروس گذرانده */}
+      <div className="border-t-2 border-slate-700 px-3 py-2">
+        <p className="font-extrabold text-[11px] mb-1">جدول وضعیت دروس گذرانده (کاتالوگ رشته)</p>
+        <table className="w-full text-[10px] border border-slate-400">
+          <thead>
+            <tr className="bg-slate-100 border-b border-slate-300">
+              <th className="p-1 border-l border-slate-300">نوع درس</th>
+              {breakdown.map(b => <th key={b.type} className="p-1 border-l border-slate-300">{b.type}</th>)}
+              <th className="p-1">مجموع</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-slate-200">
+              <td className="p-1 font-bold border-l border-slate-300">تعداد واحد</td>
+              {breakdown.map(b => <td key={b.type} className="p-1 text-center font-mono border-l border-slate-300">{faNum(b.units, 1)}</td>)}
+              <td className="p-1 text-center font-mono font-bold">{faNum(summary.totalPassed, 1)}</td>
+            </tr>
+            <tr>
+              <td className="p-1 font-bold border-l border-slate-300">معدل</td>
+              {breakdown.map(b => <td key={b.type} className="p-1 text-center font-mono border-l border-slate-300">{faNum(b.gpa)}</td>)}
+              <td className="p-1 text-center font-mono font-bold">{faNum(summary.gpa)}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   );
 }
 
 export default function StudentsManagerClient(props: {
+  logoUrl?: string | null;
   students: StudentItem[];
   staffList: StaffItem[];
   pagination?: Pagination;
@@ -788,7 +998,7 @@ export default function StudentsManagerClient(props: {
                   </button>
                   {transcript && transcript.length > 0 && (
                     <button
-                      onClick={() => printOfficialTranscript(currentStudent, groupTranscript(transcript))}
+                      onClick={() => printOfficialTranscript(currentStudent, groupTranscript(transcript), props.logoUrl)}
                       className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-700 text-white hover:bg-emerald-800"
                     >
                       🖨️ مشاهده / چاپ
@@ -833,7 +1043,7 @@ export default function StudentsManagerClient(props: {
                   </table>
                 </div>
               ) : (
-                <OfficialTranscriptView student={currentStudent} summary={groupTranscript(transcript)} />
+                <OfficialTranscriptView student={currentStudent} summary={groupTranscript(transcript)} logoUrl={props.logoUrl} />
               )}
             </div>
           )}

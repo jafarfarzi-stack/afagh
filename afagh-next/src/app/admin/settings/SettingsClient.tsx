@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState, useTransition } from 'react';
-import { resetSettingAction, saveSettingsAction } from '@/lib/settings-actions';
+import { resetSettingAction, saveSettingsAction, uploadLogoAction } from '@/lib/settings-actions';
 import { SECRET_MASK, type SettingView } from '@/lib/settings-shared';
 
 interface Props {
@@ -14,6 +14,36 @@ const SOURCE_BADGE: Record<string, { text: string; cls: string }> = {
   env: { text: 'از ENV', cls: 'bg-sky-100 text-sky-800 border-sky-300' },
   default: { text: 'پیش‌فرض', cls: 'bg-slate-100 text-slate-600 border-slate-300' },
 };
+
+/** بارگذار ارم دانشگاه با پیش‌نمایش */
+function LogoUploader({ current, pending, flash }: { current: string; pending: boolean; flash: (ok: boolean, text: string) => void }) {
+  const [busy, start] = useTransition();
+  return (
+    <div className="flex items-center gap-3 w-full">
+      <div className="w-16 h-16 shrink-0 rounded-lg border border-slate-300 bg-slate-50 flex items-center justify-center overflow-hidden">
+        {current ? <img src={current} alt="ارم فعلی" className="max-w-full max-h-full object-contain" /> : <span className="text-[10px] text-slate-400">بدون ارم</span>}
+      </div>
+      <form
+        className="flex items-center gap-2"
+        onSubmit={e => {
+          e.preventDefault();
+          const fd = new FormData(e.currentTarget);
+          if (!fd.get('logo') || (fd.get('logo') as File).size === 0) return flash(false, 'فایلی انتخاب نشده است.');
+          start(async () => {
+            const res = await uploadLogoAction(fd);
+            flash(res.ok, res.message);
+            if (res.ok) window.location.reload();
+          });
+        }}
+      >
+        <input type="file" name="logo" accept="image/png,image/jpeg,image/webp" disabled={pending || busy} className="text-xs" />
+        <button disabled={pending || busy} className="shrink-0 text-xs px-3 py-2 rounded-lg bg-indigo-700 text-white font-bold disabled:opacity-50">
+          {busy ? 'در حال بارگذاری…' : 'بارگذاری ارم'}
+        </button>
+      </form>
+    </div>
+  );
+}
 
 export default function SettingsClient({ settings, groups }: Props) {
   const [activeGroup, setActiveGroup] = useState<string>(groups[0]);
@@ -129,7 +159,9 @@ export default function SettingsClient({ settings, groups }: Props) {
                 </div>
 
                 <div className="md:flex-1 flex items-center gap-2">
-                  {s.type === 'boolean' ? (
+                  {s.type === 'image' ? (
+                    <LogoUploader current={values[s.key] ?? ''} pending={pending} flash={flash} />
+                  ) : s.type === 'boolean' ? (
                     <select
                       disabled={s.envOnly || pending}
                       value={values[s.key] ?? 'false'}

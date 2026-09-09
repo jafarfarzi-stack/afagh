@@ -16,7 +16,7 @@ import { system_settings } from '@/db/schema';
 //  چون پیش از برقراری اتصال به دیتابیس لازم‌اند.
 // ════════════════════════════════════════════════════════════════════
 
-export type SettingType = 'text' | 'url' | 'number' | 'boolean' | 'secret';
+export type SettingType = 'text' | 'url' | 'number' | 'boolean' | 'secret' | 'image';
 
 export interface SettingDef {
   key: string;
@@ -46,6 +46,7 @@ export const SETTING_GROUPS = [
 export const SETTING_DEFS: SettingDef[] = [
   // ── عمومی ──
   { key: 'UNIVERSITY_NAME', env: 'AFAGH_UNIVERSITY_NAME', group: 'عمومی و نشانی‌ها', label: 'نام دانشگاه', type: 'text', default: 'دانشگاه آفاق' },
+  { key: 'UNIVERSITY_LOGO', env: 'AFAGH_UNIVERSITY_LOGO', group: 'عمومی و نشانی‌ها', label: 'ارم دانشگاه (لوگو)', type: 'image', default: '', help: 'نمایش در سربرگ کارنامه و مدارک رسمی — PNG/JPG تا ۲ مگابایت' },
   { key: 'PUBLIC_BASE_URL', env: 'AFAGH_PUBLIC_BASE_URL', group: 'عمومی و نشانی‌ها', label: 'نشانی عمومی سامانه', type: 'url', default: 'http://localhost:8080', help: 'مبنای لینک‌های استعلام مدرک، QR کارت ورود به جلسه و ایمیل‌ها' },
   { key: 'SUPPORT_EMAIL', env: 'AFAGH_SUPPORT_EMAIL', group: 'عمومی و نشانی‌ها', label: 'ایمیل پشتیبانی', type: 'text', default: 'support@example.ac.ir' },
   { key: 'SUPPORT_PHONE', env: 'AFAGH_SUPPORT_PHONE', group: 'عمومی و نشانی‌ها', label: 'تلفن پشتیبانی', type: 'text', default: '' },

@@ -2,6 +2,7 @@ import { and, count, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { degree_level_configs, departments, educational_regulations, faculties, majors, staff, students, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { getSetting } from '@/lib/settings';
 import StudentsManagerClient from './StudentsManagerClient';
 
 export const dynamic = 'force-dynamic';
@@ -52,6 +53,19 @@ export default async function AdminStudentsPage({
       firstName: users.firstName,
       lastName: users.lastName,
       mobile: users.mobile,
+      fatherName: users.fatherName,
+      birthCertNo: users.birthCertNo,
+      birthDate: users.birthDate,
+      placeOfBirth: users.placeOfBirth,
+      placeOfIssue: users.placeOfIssue,
+      nationality: users.nationality,
+      photoKey: users.photoKey,
+      acceptanceType: students.acceptanceType,
+      acceptanceAllocation: students.acceptanceAllocation,
+      studyingMode: students.studyingMode,
+      trainingMethod: students.trainingMethod,
+      graduateDate: students.graduateDate,
+      facultyName: faculties.name,
       majorName: majors.name,
       majorCode: majors.majorCode,
       degreeLevel: degree_level_configs.title,
@@ -62,6 +76,7 @@ export default async function AdminStudentsPage({
     .from(students)
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(majors, eq(majors.id, students.majorId))
+    .leftJoin(faculties, eq(faculties.id, majors.facultyId))
     .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
     .leftJoin(educational_regulations, eq(educational_regulations.id, students.regulationId));
 
@@ -135,6 +150,7 @@ export default async function AdminStudentsPage({
       </div>
 
       <StudentsManagerClient
+        logoUrl={await getSetting('UNIVERSITY_LOGO').catch(() => '')}
         students={studentRows.map(s => ({
           id: s.id,
           studentCode: s.studentCode,
@@ -148,6 +164,19 @@ export default async function AdminStudentsPage({
           samaStatusCode: s.samaStatusCode,
           quotaType: s.quotaType || 'NORMAL',
           currentTermNo: s.currentTermNo || 1,
+          fatherName: s.fatherName || '—',
+          birthCertNo: s.birthCertNo || '—',
+          birthDate: s.birthDate ? String(s.birthDate) : null,
+          placeOfBirth: s.placeOfBirth || '—',
+          placeOfIssue: s.placeOfIssue || '—',
+          nationality: s.nationality || '120001',
+          photoKey: s.photoKey,
+          acceptanceType: s.acceptanceType,
+          acceptanceAllocation: s.acceptanceAllocation,
+          studyingMode: s.studyingMode,
+          trainingMethod: s.trainingMethod,
+          graduateDate: s.graduateDate,
+          facultyName: s.facultyName || '—',
           majorName: s.majorName || '—',
           majorCode: s.majorCode || '—',
           degreeLevel: s.degreeLevel || '—',

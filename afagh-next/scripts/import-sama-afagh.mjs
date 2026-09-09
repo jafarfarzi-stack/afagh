@@ -231,15 +231,24 @@ async function ensureDegree(maghta) {
   degrees.set(code, id);
   return id;
 }
-async function ensureRegulation(degreeId, maghta) {
-  if (regulations.has(degreeId)) return regulations.get(degreeId);
-  let row = (await q(`SELECT id FROM educational_regulations WHERE "degreeLevelId" = $1 ORDER BY id LIMIT 1`, [degreeId]))[0];
+async function ensureRegulation(degreeId, maghta, regKind) {
+  const kind = String(regKind ?? '0').trim() || '0';
+  const key = `${degreeId}|${kind}`;
+  if (regulations.has(key)) return regulations.get(key);
+  const title = kind === '0'
+    ? `آیین‌نامه مهاجرتی سما (مقطع ${maghta})`
+    : `آیین‌نامه آموزشی سما (کد ${kind}، مقطع ${maghta})`;
+  let row = (await q(`SELECT id FROM educational_regulations WHERE title = $1 AND "degreeLevelId" = $2`, [title, degreeId]))[0];
+  if (!row && kind === '0') {
+    row = (await q(`SELECT id FROM educational_regulations WHERE "degreeLevelId" = $1 ORDER BY id LIMIT 1`, [degreeId]))[0];
+  }
   if (!row && !DRY) {
+    const effYear = /^9[0-9]$/.test(kind) ? 1300 + Number(kind) : /^91[0-9]$/.test(kind) ? 1300 + Number(kind.slice(1)) : 1330;
     row = (await q(`INSERT INTO educational_regulations (title, "degreeLevelId", "effectiveFromYear", "rulesConfig")
-      VALUES ($1,$2,1330,'{}') RETURNING id`, [`آیین‌نامه مهاجرتی سما (مقطع ${maghta})`, degreeId]))[0];
+      VALUES ($1,$2,$3,'{}') RETURNING id`, [title, degreeId, effYear]))[0];
   }
   const id = row ? Number(row.id) : -1;
-  regulations.set(Number(degreeId), id);
+  regulations.set(key, id);
   return id;
 }
 async function ensureFaculty(code) {
@@ -324,8 +333,12 @@ async function phasePre() {
   for (const d of degRows) degrees.set(d.code, Number(d.id));
   const facRows = await q(`SELECT id, "facultyCode" FROM faculties`);
   for (const f of facRows) if (f.facultyCode) faculties.set(f.facultyCode, Number(f.id));
-  const regRows = await q(`SELECT id, "degreeLevelId" FROM educational_regulations`);
-  for (const r of regRows) if (!regulations.has(Number(r.degreeLevelId))) regulations.set(Number(r.degreeLevelId), Number(r.id));
+  const regRows = await q(`SELECT id, title, "degreeLevelId" FROM educational_regulations`);
+  for (const r of regRows) {
+    const m = String(r.title || '').match(/کد (\S+?)، مقطع/);
+    const key = `${Number(r.degreeLevelId)}|${m ? m[1] : '0'}`;
+    if (!regulations.has(key)) regulations.set(key, Number(r.id));
+  }
   console.log(`کش: ${degrees.size} مقطع، ${faculties.size} دانشکده، ${regulations.size} آیین‌نامه`);
 }
 
@@ -501,6 +514,7 @@ async function phaseStudents(files, lookups) {
     const maghta = (c[7] || '').trim() || '0';
     const reshte = (c[8] || '').trim();
     const status = (c[4] || '').trim();
+    const regKind = (c[88] || '').trim() || '0';
     const tc = (c[5] || '').trim();
     let entryYear = 1400, entryTerm = 1;
     if (/^\d{5}$/.test(tc)) { entryYear = Number(tc.slice(0, 4)); entryTerm = Number(tc.slice(4)); }
@@ -515,7 +529,7 @@ async function phaseStudents(files, lookups) {
     const sahmn = (c[40] || '').trim();
     const accept = (s[16] || '').trim();
     stuJobs.push({
-      stno, maghta, reshte, status, entryYear, entryTerm,
+      stno, maghta, reshte, status, entryYear, entryTerm, regKind,
       quota: mapQuota(sahmn),
       isaar: [...SHAHED_SAHM, ...STAFF_SAHM].some(x => x === sahmn) ? sahmn : null,
       alloc: lookups.sahmiye.get(sahmn) || null,
@@ -565,7 +579,7 @@ async function phaseStudents(files, lookups) {
       const userId = u && ncToId.get(u.nationalCode);
       if (!userId) { stats.invalid++; continue; }
       const degId = await ensureDegree(j.maghta);
-      const regId = await ensureRegulation(degId, j.maghta);
+      const regId = await ensureRegulation(degId, j.maghta, j.regKind);
       const mj = majorsByCode.get(j.reshte);
       if (!mj && j.reshte) stats.unmatchedMajor.add(j.reshte);
       stuRows.push({
@@ -879,6 +893,16 @@ async function phaseCodemap(files) {
       stats.total++;
       const r = await pool.query(`INSERT INTO legacy_code_maps ("sourceCode", domain, "legacyCode", "targetId", status)
         VALUES ($1,'DEGREE',$2,$3,'CONFIRMED') ON CONFLICT ("sourceCode", domain, "legacyCode") DO NOTHING`, [SOURCE, code.slice(5), id]);
+      stats.inserted += r.rowCount;
+    }
+    // نگاشت (مقطع، RegulationKind) → آیین‌نامه در میز تطبیق
+    for (const [key, id] of regulations) {
+      const [degId, kind] = String(key).split('|');
+      if (kind === undefined || kind === '0') continue;
+      stats.total++;
+      const r = await pool.query(`INSERT INTO legacy_code_maps ("sourceCode", domain, "legacyCode", "targetId", note, status)
+        VALUES ($1,'REGULATION',$2,$3,$4,'CONFIRMED') ON CONFLICT ("sourceCode", domain, "legacyCode") DO NOTHING`,
+        [SOURCE, `${degId}:${kind}`, id, JSON.stringify({ degreeLevelId: Number(degId), regulationKind: kind })]);
       stats.inserted += r.rowCount;
     }
     // ── اعمال واقعی عنوان مقطع‌ها از مقطعها.txt روی degree_level_configs ──

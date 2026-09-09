@@ -11,6 +11,7 @@ export type TranscriptRow = {
   courseCode: string;
   courseTitle: string;
   units: string | null;
+  courseType: string | null;
   gradeValue: string | null;
   gradeStatus: string;
   /** عین عنوان ستون «عنوان» فایل وضع نمره (از میز تطبیق GRADE_STATUS) */
@@ -57,6 +58,7 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
       courseCode: courses.code,
       courseTitle: courses.title,
       units: courses.units,
+      courseType: courses.courseType,
       gradeValue: enrollments.gradeValue,
       gradeStatus: enrollments.gradeStatus,
       offeringType: course_offerings.offeringType,
@@ -79,6 +81,7 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
       courseCode: r.courseCode,
       courseTitle: r.courseTitle,
       units: r.units ? String(r.units) : null,
+      courseType: r.courseType,
       gradeValue: r.gradeValue ? String(r.gradeValue) : null,
       gradeStatus: r.gradeStatus,
       gradeStatusTitle: exactTitle(markStatOf(r.legacyRaw)),
@@ -106,6 +109,7 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
     courseCode: r.courseCode,
     courseTitle: r.courseTitle || `درس ${r.courseCode}`,
     units: r.units ? String(r.units) : null,
+    courseType: null,
     gradeValue: r.gradeValue ? String(r.gradeValue) : null,
     gradeStatus: r.gradeStatus,
     gradeStatusTitle: exactTitle(markStatOf(r.raw)),
