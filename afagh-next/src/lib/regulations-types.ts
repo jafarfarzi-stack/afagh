@@ -192,7 +192,46 @@ function reg1391For(maghta: string | number): RegulationConfig {
   };
 }
 
-export const REGULATION_PRESETS = { reg1402For, reg1393For, reg1391For, isNonContinuous };
+/**
+ * آیین‌نامه دوره‌های تحصیلی مصوب ۳۰/۱۰/۱۳۹۶ (جلسه ۸۸۹) — ورودی ۹۷-۹۸ به بعد.
+ * - ارشد: مدت ۴ نیمسال (+۲ تمدید)، ۲۸ تا ۳۲ واحد (۴-۶ پایان‌نامه)، حداقل ۸ واحد
+ *   در نیمسال، قبولی درس ۱۲، معدل نیمسال ۱۴، مشروطی زیر ۱۴ (سقف ۲)، تغییر
+ *   رشته/انتقال ممنوع، پایان‌نامه کیفی و خارج از معدل، فارغ‌التحصیلی با معدل
+ *   کل ۱۴ + دفاع موفق.
+ * - دکتری تخصصی: ۶ تا ۸ نیمسال تمام‌وقت، ۳۶ واحد، قبولی ۱۴، معدل کل ۱۶
+ *   (شرط ورود به جامع)، رساله کیفی خارج از معدل، تغییر رشته/انتقال ممنوع.
+ */
+function reg1394MasterFor(): RegulationConfig {
+  return {
+    regular_term_rules: { min_units: 8, max_units: 14, probation_max_units: 10, honors_min_gpa: 17.0, honors_max_units: 16 },
+    summer_term_rules: { default_max_units: 4, graduating_max_units: 6 },
+    graduating_term_rules: { can_take_with_probation: true, max_units: 14, auto_corequisite_allowed: true },
+    probation_and_tenure: {
+      probation_gpa_threshold: 14.0,
+      max_consecutive_probations: 2,
+      max_total_probations: 2,
+      max_study_semesters: 4,
+    },
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 12.0 },
+  };
+}
+
+function reg1394PhdFor(): RegulationConfig {
+  return {
+    regular_term_rules: { min_units: 6, max_units: 12, probation_max_units: 8, honors_min_gpa: 17.0, honors_max_units: 12 },
+    summer_term_rules: { default_max_units: 4, graduating_max_units: 4 },
+    graduating_term_rules: { can_take_with_probation: false, max_units: 12, auto_corequisite_allowed: false },
+    probation_and_tenure: {
+      probation_gpa_threshold: 16.0,
+      max_consecutive_probations: 2,
+      max_total_probations: 2,
+      max_study_semesters: 8,
+    },
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 14.0 },
+  };
+}
+
+export const REGULATION_PRESETS = { reg1402For, reg1393For, reg1391For, reg1394MasterFor, reg1394PhdFor, isNonContinuous };
 
 export const DEFAULT_MASTER_REGULATION_1403: RegulationConfig = {
   regular_term_rules: {
