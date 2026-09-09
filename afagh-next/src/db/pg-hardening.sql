@@ -39,6 +39,11 @@ DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'afagh_app') THEN
     CREATE ROLE afagh_app LOGIN PASSWORD '__AFAGH_APP_PASSWORD__' NOSUPERUSER NOBYPASSRLS;
+  ELSE
+    -- P0-1: چرخش رمز باید واقعاً اعمال شود. پیش از این اگر نقش از قبل بود، رمزِ
+    -- .env روی نقش نمی‌نشست؛ یعنی «رمز را عوض کردیم» فقط روی کاغذ بود و
+    -- اپلیکیشن با رمز قدسی (یا ضعیفِ پیشین) به دیتابیس وصل می‌شد/می‌شد و شکست.
+    ALTER ROLE afagh_app WITH LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD '__AFAGH_APP_PASSWORD__';
   END IF;
 END $$;
 -- __AFAGH_DB__ توسط scripts/hardening.mjs از DATABASE_URL پر می‌شود

@@ -28,13 +28,14 @@ if (!isProd && !APP_PASSWORD) {
 // در پروداکشن مقدار نمونه/ضعیف/کوتاه کل استقرار را متوقف می‌کند.
 const policy = checkSecret('AFAGH_APP_DB_PASSWORD', appPassword, {
   allowWeak: !isProd || process.env.ALLOW_WEAK_SECRETS === '1',
+  failOnShort: false, // کوتاه‌اما‌غیرقابل‌حدس = هشدار؛ نمونه/ضعیف = خطا
 });
 if (!policy.ok) {
   console.error('❌ ' + policy.reason);
   console.error('   رمز قوی بسازید:  node scripts/lib/secret-policy.mjs --gen');
   console.error('   یا با اسکریپت نصب: ./deploy-debian.sh  (رمز تصادفی در .env می‌نویسد)');
   process.exit(1);
-} else if (policy.weak) {
+} else if (policy.weak || policy.short) {
   console.warn('⚠ ' + policy.reason);
 } else {
   console.log(`✓ رمز نقش afagh_app با سیاست پروداکشن سازگار است (طول ${appPassword.length})`);

@@ -18,9 +18,12 @@ const WEAK_DB_SECRETS = [
   'postgres', 'password', '123456', 'secret', 'minioadmin', 'admin123', 'test',
 ];
 const PLACEHOLDER_PREFIX = /^(change_?me|replace_?me|set_?me|fill_?me|todo|your_?password|xxx+|yyy+)/i;
-const MIN_LEN = 24;
+const MIN_LEN = 24;   // توصیهٔ سیاست پروداکشن
+const MIN_HARD_LEN = 12; // زیر این، هر لایه‌ای باید رد کند
 
-export type SecretVerdict = { ok: true; weak?: boolean } | { ok: false; reason: string };
+export type SecretVerdict =
+  | { ok: true; weak?: boolean; short?: boolean; reason?: string }
+  | { ok: false; reason: string };
 
 export function checkDbSecret(name: string, value: string | undefined, allowWeak = false): SecretVerdict {
   const v = (value ?? '').trim();
@@ -35,7 +38,13 @@ export function checkDbSecret(name: string, value: string | undefined, allowWeak
       ? { ok: true, weak: true }
       : { ok: false, reason: `${name} یکی از پیش‌فرض‌های ضعیفِ شناخته‌شده است — در پروداکشن پذیرفته نمی‌شود` };
   }
-  if (v.length < MIN_LEN) return { ok: false, reason: `${name} کوتاه است (${v.length}؛ حداقل ${MIN_LEN})` };
+  if (v.length < MIN_HARD_LEN) {
+    return { ok: false, reason: `${name} بیش از حد کوتاه است (${v.length} کاراکتر؛ کف مطلق ${MIN_HARD_LEN})` };
+  }
+  if (v.length < MIN_LEN) {
+    // کوتاه اما غیرقابل‌حدس → هشدار (فیکسچرهای تست و نصب‌های دستی را نکوبد)
+    return { ok: true, short: true, reason: `${name} کوتاه‌تر از توصیهٔ سیاست است (${v.length}<${MIN_LEN})` };
+  }
   return { ok: true };
 }
 
@@ -74,5 +83,6 @@ export function assertProdSecrets(): void {
       );
     }
     if (r.weak) console.warn('[db] ⚠ سکرت ضعیف با ALLOW_WEAK_SECRETS=1 پذیرفته شد — فقط برای توسعه/دمو.');
+    if (r.short) console.warn(`[db] ⚠ ${r.reason} — برای پروداکشن بلندترش کنید.`);
   }
 }

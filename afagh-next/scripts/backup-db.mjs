@@ -68,6 +68,22 @@ async function serverMajor() {
   }
 }
 
+/** چند جدول public در دیتابیس هست؟ (برای داوری اندازهٔ dump) */
+async function countPublicTables() {
+  try {
+    const { default: pg } = await import('pg');
+    const c = new pg.Client({ connectionString: PG_URL });
+    await c.connect();
+    const r = await c.query(
+      "select count(*)::int n from information_schema.tables where table_schema='public' and table_type='BASE TABLE'",
+    );
+    await c.end();
+    return r.rows[0].n;
+  } catch {
+    return -1; // نامعلوم → سخت‌گیری حجم را بی‌مقدمه فعال نگه نداریم
+  }
+}
+
 if (!PG_URL) {
   console.error('❌ DATABASE_URL لازم است.');
   process.exit(1);
@@ -122,15 +138,21 @@ try {
 // ۱) فهرست‌پذیری با pg_restore (ساختار واقعاً قابل بازگردانی است؟)
 // ۲) حداقل اندازه (dump خالی ≈ چند بایت؛ دیتابیس این پروژه صدها کیلوبایت+)
 // ۳) فایل کنارآمد sha256 تا «verify-backup» و بازبینی دیسک/NAS ممکن باشد
+// حجم آرشیو تنها وقتی نشانهٔ خرابی است که دیتابیس واقعاً جدول داشته باشد:
+// در نخستین استقرار (و در CI) دیتابیس خالی است و dump سالمِ آن عمداً کوچک است.
+const publicTables = await countPublicTables();
 try {
   const listing = execFileSync('pg_restore', ['--list', file], { encoding: 'buffer', maxBuffer: 64 << 20 });
   const bytes = statSync(file).size;
-  if (bytes < 4096) throw new Error(`حجم غیرمنتظرهٔ کم: ${bytes} بایت`);
-  if (listing.length < 64) throw new Error('pg_restore --list خروجی ندارد (آرشیو خراب است)');
+  if (publicTables > 0 && bytes < 4096) throw new Error(`حجم غیرمنتظرهٔ کم برای ${publicTables} جدول: ${bytes} بایت`);
+  if (publicTables > 0 && listing.length < 64) throw new Error('pg_restore --list خروجی ندارد (آرشیو خراب است)');
   const sha = createHash('sha256').update(readFileSync(file)).digest('hex');
   writeFileSync(file + '.sha256', `${sha}  ${path.basename(file)}\n`, { mode: 0o600 });
   writeFileSync(path.join(OUT_DIR, 'LATEST'), path.basename(file) + '\n');
-  console.log(`✅ پشتیبان پیش از استقرار: ${file} (${(bytes / 1048576).toFixed(2)}MB، sha256 ${sha.slice(0, 12)}…)`);
+  console.log(
+    `✅ پشتیبان پیش از استقرار: ${file} (${(bytes / 1048576).toFixed(2)}MB، sha256 ${sha.slice(0, 12)}…)` +
+    (publicTables === 0 ? ' · دیتابیس خالی بود — اندازهٔ کوچک طبیعی است' : ''),
+  );
 } catch (err) {
   console.error('❌ پشتیبان ساخته شد ولی راستی‌آزمایی نشد — همان بی‌اتکا بودن است؛ استقرار متوقف شد:', err.message);
   try { rmSync(file, { force: true }); } catch {}

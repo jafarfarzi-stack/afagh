@@ -22,6 +22,8 @@ export const POLICY = {
   minLenDb: 24,
   /** حداقل طول MinIO root password (S3 signature فقط به بلندای کافی نیاز دارد) */
   minLenObject: 16,
+  /** کف مطلق: زیر این، هر لایه‌ای باید رد کند */
+  minHardLen: 12,
   /** طول رمزهای تصادفی که خودمان می‌سازیم */
   generatedLen: 32,
   /** مقدار نمونه/جای‌نگهدار در فایل‌های مثال (پیش‌شونده: CHANGE_ME_ANYTHING هم رد) */
@@ -39,7 +41,7 @@ export const POLICY = {
  * بررسی یک سکرت.
  * @returns { ok: boolean, reason?: string }
  */
-export function checkSecret(name, value, { minLen = POLICY.minLenDb, allowWeak = false } = {}) {
+export function checkSecret(name, value, { minLen = POLICY.minLenDb, allowWeak = false, failOnShort = true } = {}) {
   const v = String(value ?? '');
   if (!v.trim()) return { ok: false, reason: `${name} خالی است — در .env مقدار تصادفی قوی بگذارید (make env)` };
   if (POLICY.placeholder.test(v.trim())) {
@@ -53,8 +55,15 @@ export function checkSecret(name, value, { minLen = POLICY.minLenDb, allowWeak =
     if (allowWeak) return { ok: true, weak: true, reason: `${name} پیش‌فرض ضعیف توسعه است (ALLOW_WEAK_SECRETS=1)` };
     return { ok: false, reason: `${name} یکی از پیش‌فرض‌های ضعیف شناخته‌شده است («${v}») — در پروداکشن پذیرفته نمی‌شود` };
   }
+  if (v.length < POLICY.minHardLen) {
+    return { ok: false, reason: `${name} بیش از حد کوتاه است (${v.length} کاراکتر؛ کف مطلق ${POLICY.minHardLen})` };
+  }
   if (v.length < minLen) {
-    return { ok: false, reason: `${name} کوتاه است (${v.length} کاراکتر؛ حداقل ${minLen})` };
+    // دروازهٔ اپراتور (make check-env / deploy-debian.sh): خطا.
+    // لایهٔ اجرایی (hardening، بوت اپ): هشدار — تا فیکسچرهای CI و نصب‌های
+    // دستیِ کوتاه‌اما‌غیرقابل‌حدس را نکوبد؛ رمز قابل‌حدس/نمونه در هر دو لایه خطاست.
+    if (failOnShort) return { ok: false, reason: `${name} کوتاه است (${v.length} کاراکتر؛ حداقل ${minLen})` };
+    return { ok: true, short: true, reason: `${name} کوتاه‌تر از توصیهٔ سیاست است (${v.length}<${minLen}) — برای پروداکشن بلندترش کنید` };
   }
   if (/(.)\1{3,}/.test(v)) return { ok: false, reason: `${name} تکرار چهارتایی کاراکتر دارد («aaaa») — ضعیف است` };
   return { ok: true };
@@ -64,7 +73,8 @@ export function checkSecret(name, value, { minLen = POLICY.minLenDb, allowWeak =
 export function checkProdEnv(env, { allowWeak = false } = {}) {
   const errs = [];
   const one = (name, minLen) => {
-    const r = checkSecret(name, env[name], { minLen, allowWeak });
+    // دروازهٔ پروداکشنِ اپراتور: کوتاه‌بودن هم خطاست
+    const r = checkSecret(name, env[name], { minLen, allowWeak, failOnShort: true });
     if (!r.ok) errs.push(r.reason);
   };
   one('POSTGRES_PASSWORD', POLICY.minLenDb);

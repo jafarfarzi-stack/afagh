@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { assertProdSecrets, checkDbSecret } from '../src/lib/secret-guard';
+import { checkSecret } from '../scripts/lib/secret-policy.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -115,7 +116,21 @@ t('پیش‌فرض‌های ضعیف compose («afagh-app-pass» و…) رد م�
   assert.match(r.out, /afagh-app-pass/);
 });
 
-t('رمز کوتاه یا با تکرار چهارتایی رد می‌شود؛ خالی همیشه رد است', () => {
+t('دروازهٔ اپراتور: کوتاه‌بودن خطاست؛ لایهٔ اجرایی همان را هشدار می‌دهد', () => {
+  // سیاستِ CLI (make check-env) با failOnShort پیش‌فرض = خطا
+  const cli = runPolicy(writeEnv('len.env', {
+    POSTGRES_PASSWORD: gen(), AFAGH_APP_DB_PASSWORD: 'abcdefghijklmno', MINIO_ROOT_PASSWORD: gen(),
+  }));
+  assert.equal(cli.code, 1, 'کوتاه در دروازهٔ اپراتور باید خطا باشد');
+  assert.match(cli.out, /کوتاه است/);
+  // اما همان مقدار در لایهٔ اجرایی (hardening) فقط هشدار است — فیکسچرهای CI می‌بازند اگر نباشد
+  const h = read(path.join(NEXT, 'scripts/hardening.mjs'));
+  assert.match(h, /failOnShort: false/);
+  const g = read(path.join(NEXT, 'src/lib/secret-guard.ts'));
+  assert.match(g, /MIN_HARD_LEN = 12/);
+});
+
+t('رمز زیر کف مطلق یا با تکرار چهارتایی در هر لایه‌ای رد می‌شود؛ خالی همیشه رد است', () => {
   assert.equal(runPolicy(writeEnv('s.env', {
     POSTGRES_PASSWORD: 'afagh-app-pass-12', AFAGH_APP_DB_PASSWORD: 'abcdefghijklmno', MINIO_ROOT_PASSWORD: 'abcdefghijklmno',
   })).code, 1);
