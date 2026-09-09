@@ -330,11 +330,11 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
     if (selectedVersionId == null || bankSelected.size === 0) return;
     const items = [...bankSelected].map(courseId => ({
       courseId,
-      roleType: bulkRoleType,
-      recommendedSemester: addCourseForm.recommendedSemester ? Number(addCourseForm.recommendedSemester) : null,
+      roleType: addCourseForm.roleType,
+      recommendedSemester: null,
     }));
     const ok = await run(() => bulkAddCoursesAction(selectedVersionId, items));
-    if (ok) { closeAddCourse(); reloadDetail(selectedVersionId); }
+    if (ok) { closeAddCourse(); reloadDetail(selectedVersionId); setActiveTab('SEMESTERS'); }
   };
 
   const handleCreateBankCourse = async () => {
@@ -1359,23 +1359,16 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
               {bankSelected.size > 0 && (
                 <p className="text-[10px] font-black text-indigo-700">{faNum(bankSelected.size)} درس انتخاب شد.</p>
               )}
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block font-bold text-slate-700">
-                  نقش:
-                  <select value={addCourseForm.roleType} onChange={e => setAddCourseForm({ ...addCourseForm, roleType: e.target.value })}
-                    className="mt-1 w-full border border-slate-300 rounded-lg p-2 font-bold bg-white">
-                    {Object.entries(ROLE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                  </select>
-                </label>
-                <label className="block font-bold text-slate-700">
-                  ترم پیشنهادی:
-                  <select value={addCourseForm.recommendedSemester} onChange={e => setAddCourseForm({ ...addCourseForm, recommendedSemester: e.target.value })}
-                    className="mt-1 w-full border border-slate-300 rounded-lg p-2 font-bold bg-white">
-                    <option value="">نامشخص</option>
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map(s => <option key={s} value={s}>ترم {faNum(s)}</option>)}
-                  </select>
-                </label>
-              </div>
+              <label className="block font-bold text-slate-700">
+                نقش دروس منتخب:
+                <select value={addCourseForm.roleType} onChange={e => { setAddCourseForm({ ...addCourseForm, roleType: e.target.value }); setBulkRoleType(e.target.value); }}
+                  className="mt-1 w-full border border-slate-300 rounded-lg p-2 font-bold bg-white">
+                  {Object.entries(ROLE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </label>
+              <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
+                دروس بدون ترم افزوده می‌شوند؛ ترم‌بندی هر درس در مرحلهٔ بعد — تب «📅 ترم‌بندی چارت» — جلوی هر درس با یک انتخاب انجام می‌شود.
+              </p>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={closeAddCourse} className="px-4 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-bold text-xs">انصراف</button>
