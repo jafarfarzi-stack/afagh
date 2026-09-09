@@ -2,9 +2,29 @@
 
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { academic_terms, course_offerings, courses, enrollments, legacy_code_maps, legacy_grades, student_term_states, students } from '@/db/schema';
+import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, student_term_states, students } from '@/db/schema';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth';
+
+/** پیکربندی اجرایی آیین‌نامه ملاک دانشجو برای محاسبات کارنامه */
+export async function getTranscriptRegulation(studentId: number): Promise<{
+  title: string | null;
+  config: import('@/lib/regulations-engine').RegulationConfig;
+} | null> {
+  await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER']);
+  const { getRegulationConfig, DEFAULT_BACHELOR_REGULATION_1403 } = await import('@/lib/regulations-engine');
+  const [stu] = await db
+    .select({ regulationId: students.regulationId, degreeLevelId: students.degreeLevelId })
+    .from(students)
+    .where(eq(students.id, studentId))
+    .limit(1);
+  if (!stu) return null;
+  const [reg] = stu.regulationId
+    ? await db.select({ title: educational_regulations.title }).from(educational_regulations).where(eq(educational_regulations.id, stu.regulationId)).limit(1)
+    : [];
+  const config = await getRegulationConfig(stu.regulationId, stu.degreeLevelId).catch(() => DEFAULT_BACHELOR_REGULATION_1403);
+  return { title: reg?.title ?? null, config };
+}
 
 /** تغییر آیین‌نامه ملاک دانشجو (از پرونده یا مرکز آیین‌نامه‌ها) */
 export async function setStudentRegulationAction(
