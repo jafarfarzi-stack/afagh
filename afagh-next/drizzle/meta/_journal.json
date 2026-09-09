@@ -64,6 +64,13 @@
       "when": 1788588000000,
       "tag": "0008_student_sama_status",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788591600000,
+      "tag": "0009_degree_term_count",
+      "breakpoints": true
     }
   ]
 }
