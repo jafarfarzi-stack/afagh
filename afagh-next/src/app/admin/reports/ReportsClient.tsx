@@ -204,9 +204,9 @@ export default function ReportsClient({ opts }: { opts: FilterOptions }) {
             </div>
             {res.totalPages > 1 && (
               <div className="flex items-center justify-center gap-2 p-3 text-xs border-t border-slate-200">
-                <button disabled={res.page <= 1} onClick={() => runReport(kind, { ...filters, page: res.page - 1 }).then(setRes)} className="px-3 py-1.5 bg-white border border-slate-300 rounded font-bold disabled:opacity-40">قبلی ◀</button>
+                <button disabled={res.page <= 1} onClick={() => runReport(kind, { ...filters, page: res.page - 1 }).then(setRes)} className="px-3 py-1.5 bg-white border border-slate-300 rounded font-bold disabled:opacity-40">قبلی ▶</button>
                 <span className="font-bold">صفحه {res.page.toLocaleString('fa-IR')} از {res.totalPages.toLocaleString('fa-IR')} ({res.total.toLocaleString('fa-IR')} رکورد)</span>
-                <button disabled={res.page >= res.totalPages} onClick={() => runReport(kind, { ...filters, page: res.page + 1 }).then(setRes)} className="px-3 py-1.5 bg-white border border-slate-300 rounded font-bold disabled:opacity-40">▶ بعدی</button>
+                <button disabled={res.page >= res.totalPages} onClick={() => runReport(kind, { ...filters, page: res.page + 1 }).then(setRes)} className="px-3 py-1.5 bg-white border border-slate-300 rounded font-bold disabled:opacity-40">◀ بعدی</button>
               </div>
             )}
           </>

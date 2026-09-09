@@ -742,7 +742,7 @@ export default function StudentsManagerClient(props: {
 
           {/* ── تب ادغام‌شده: اطلاعات دانشجو (۴ بخش) — بخش ۱: اطلاعات دانشجویان ── */}
           {stuTab === 'info_combined' && currentStudent && (
-            <div className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
+            <div key={`stu-a-${currentStudent.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* ستون ۱ */}
                 <div className="space-y-1.5 border border-slate-300 p-2.5 rounded bg-slate-50/50">
@@ -866,7 +866,7 @@ export default function StudentsManagerClient(props: {
 
           {/* ── بخش ۲: اطلاعات تکمیلی دانشجو ── */}
           {stuTab === 'info_combined' && currentStudent && (
-            <div className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
+            <div key={`stu-b-${currentStudent.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* کادر عکس پرسنلی */}
                 <div className="border border-slate-300 p-3 rounded bg-slate-50 flex flex-col items-center justify-center space-y-2">
@@ -976,7 +976,7 @@ export default function StudentsManagerClient(props: {
 
           {/* ── بخش ۳: سایر اطلاعات ── */}
           {stuTab === 'info_combined' && currentStudent && (
-            <div className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
+            <div key={`stu-c-${currentStudent.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               {/* بخش خوابگاه و آدرس */}
               <div className="border border-slate-300 p-2.5 rounded bg-slate-50 space-y-1.5">
                 <div className="grid grid-cols-3 gap-2 items-center">
@@ -1020,7 +1020,7 @@ export default function StudentsManagerClient(props: {
 
           {/* ── بخش ۴: اطلاعات اضافی و دانش‌آموختگان ── */}
           {stuTab === 'info_combined' && currentStudent && (
-            <div className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
+            <div key={`stu-d-${currentStudent.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               {/* زیرتب‌ها */}
               <div className="flex items-center gap-2 border-b border-slate-300 pb-2">
                 <button
@@ -1104,7 +1104,7 @@ export default function StudentsManagerClient(props: {
 
           {/* ── تب ۵: کارنامهٔ رسمی + جدول نمرات ── */}
           {stuTab === 'transcript' && currentStudent && (
-            <div className="transcript-print-area bg-white p-3 sm:p-4 border border-slate-400 rounded-b-md space-y-3">
+            <div key={`stu-tr-${currentStudent.id}`} className="transcript-print-area bg-white p-3 sm:p-4 border border-slate-400 rounded-b-md space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-extrabold text-slate-900">📊 کارنامهٔ {currentStudent.lastName} - {currentStudent.firstName} ({currentStudent.studentCode})</h3>
                 <div className="flex items-center gap-1.5">
@@ -1225,6 +1225,7 @@ export default function StudentsManagerClient(props: {
                 <table className="w-full text-right text-xs">
                   <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold">
                     <tr>
+                      <th className="p-2 text-right whitespace-nowrap">عملیات</th>
                       <ServerTh label="شماره دانشجویی" sortKey="studentCode" activeKey={stuSortKey || null} dir={(stuSortDir as 'asc' | 'desc') ?? 'asc'} onSort={() => toggleStuSort('studentCode')} filter={stuFilters.f_code} onFilter={v => setStuFilters(f => ({ ...f, f_code: v }))} onApply={applyStuFilters} />
                       <ServerTh label="نام و نام خانوادگی" sortKey="name" activeKey={stuSortKey || null} dir={(stuSortDir as 'asc' | 'desc') ?? 'asc'} onSort={() => toggleStuSort('name')} filter={stuFilters.f_name} onFilter={v => setStuFilters(f => ({ ...f, f_name: v }))} onApply={applyStuFilters} />
                       <ServerTh label="کد ملی" sortKey="nc" activeKey={stuSortKey || null} dir={(stuSortDir as 'asc' | 'desc') ?? 'asc'} onSort={() => toggleStuSort('nc')} filter={stuFilters.f_nc} onFilter={v => setStuFilters(f => ({ ...f, f_nc: v }))} onApply={applyStuFilters} />
@@ -1232,7 +1233,6 @@ export default function StudentsManagerClient(props: {
                       <ServerTh label="مقطع" sortKey="degree" activeKey={stuSortKey || null} dir={(stuSortDir as 'asc' | 'desc') ?? 'asc'} onSort={() => toggleStuSort('degree')} />
                       <ServerTh label="سال ورود" sortKey="year" activeKey={stuSortKey || null} dir={(stuSortDir as 'asc' | 'desc') ?? 'asc'} onSort={() => toggleStuSort('year')} filter={stuFilters.f_year} onFilter={v => setStuFilters(f => ({ ...f, f_year: v }))} onApply={applyStuFilters} />
                       <ServerTh label="وضعیت" sortKey="status" activeKey={stuSortKey || null} dir={(stuSortDir as 'asc' | 'desc') ?? 'asc'} onSort={() => toggleStuSort('status')} />
-                      <th className="p-2 text-left">عملیات</th>
                     </tr>
                     <tr>
                       <td colSpan={8} className="p-1.5 bg-slate-50">
@@ -1249,28 +1249,28 @@ export default function StudentsManagerClient(props: {
                   <tbody>
                     {props.students.map((s) => (
                       <tr key={s.id} className="border-b border-slate-200 hover:bg-slate-50">
-                        <td className="p-2 font-mono font-bold text-indigo-950" dir="ltr">{s.studentCode}</td>
-                        <td className="p-2 font-bold">{s.firstName} {s.lastName}</td>
-                        <td className="p-2 font-mono" dir="ltr">{s.nationalCode}</td>
-                        <td className="p-2">{s.majorName}</td>
-                        <td className="p-2">{s.degreeLevel}</td>
-                        <td className="p-2 font-mono">{s.entryYear}</td>
-                        <td className="p-2">
-                          <span title={s.samaStatusCode ? `کد سما: ${s.samaStatusCode}` : s.status} className={`${studentStatusChip(s.status)} text-[10px] font-bold px-2 py-0.5 rounded-full`}>
-                            {studentStatusFa(s.status, s.samaStatusCode)}
-                          </span>
-                        </td>
-                        <td className="p-2 text-left">
+                        <td className="p-2 text-right whitespace-nowrap">
                           <button
                             onClick={() => {
                               const realIdx = props.students.findIndex(x => x.id === s.id);
                               setSelectedStuIdx(realIdx >= 0 ? realIdx : 0);
                               setStuTab('info_combined');
                             }}
-                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-[11px] px-2.5 py-1 rounded font-bold"
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-[11px] px-2.5 py-1 rounded font-bold whitespace-nowrap"
                           >
                             مشاهده پرونده 🔍
                           </button>
+                        </td>
+                        <td className="p-2 font-mono font-bold text-indigo-950 whitespace-nowrap" dir="ltr">{s.studentCode}</td>
+                        <td className="p-2 font-bold whitespace-nowrap">{s.firstName} {s.lastName}</td>
+                        <td className="p-2 font-mono whitespace-nowrap" dir="ltr">{s.nationalCode}</td>
+                        <td className="p-2">{s.majorName}</td>
+                        <td className="p-2 whitespace-nowrap">{s.degreeLevel}</td>
+                        <td className="p-2 font-mono whitespace-nowrap">{s.entryYear}</td>
+                        <td className="p-2 whitespace-nowrap">
+                          <span title={s.samaStatusCode ? `کد سما: ${s.samaStatusCode}` : s.status} className={`${studentStatusChip(s.status)} text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap`}>
+                            {studentStatusFa(s.status, s.samaStatusCode)}
+                          </span>
                         </td>
                       </tr>
                     ))}
@@ -1281,9 +1281,9 @@ export default function StudentsManagerClient(props: {
               {/* صفحه‌بندی */}
               {pg && pg.totalPages > 1 && (
                 <div className="flex items-center justify-center gap-2 text-xs">
-                  <button disabled={pg.page <= 1} onClick={() => nav({ page: String(pg.page - 1) })} className="px-3 py-1.5 bg-white border border-slate-300 rounded font-bold disabled:opacity-40 hover:bg-slate-50">قبلی ◀</button>
+                  <button disabled={pg.page <= 1} onClick={() => nav({ page: String(pg.page - 1) })} className="px-3 py-1.5 bg-white border border-slate-300 rounded font-bold disabled:opacity-40 hover:bg-slate-50">قبلی ▶</button>
                   <span className="font-bold text-slate-700">صفحه {pg.page.toLocaleString('fa-IR')} از {pg.totalPages.toLocaleString('fa-IR')}</span>
-                  <button disabled={pg.page >= pg.totalPages} onClick={() => nav({ page: String(pg.page + 1) })} className="px-3 py-1.5 bg-white border border-slate-300 rounded font-bold disabled:opacity-40 hover:bg-slate-50">▶ بعدی</button>
+                  <button disabled={pg.page >= pg.totalPages} onClick={() => nav({ page: String(pg.page + 1) })} className="px-3 py-1.5 bg-white border border-slate-300 rounded font-bold disabled:opacity-40 hover:bg-slate-50">◀ بعدی</button>
                 </div>
               )}
               <p className="text-[10px] text-slate-400 text-center">ناوبری پرونده (قبلی/بعدی) در محدوده همین صفحه (۵۰ رکورد) است — برای پرونده خاص، جست‌وجو کنید.</p>
@@ -1361,7 +1361,7 @@ export default function StudentsManagerClient(props: {
 
           {/* ── بخش ۱ استاد: اطلاعات آموزشی (ادغام‌شده) ── */}
           {profTab === 'info_combined' && currentStaff && (
-            <div className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
+            <div key={`prof-a-${currentStaff.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 
                 {/* کادرهای عکس و امضای الکترونیک استاد */}
@@ -1441,7 +1441,7 @@ export default function StudentsManagerClient(props: {
 
           {/* ── بخش ۲ استاد: اطلاعات استخدامی ── */}
           {profTab === 'info_combined' && currentStaff && (
-            <div className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
+            <div key={`prof-b-${currentStaff.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               <div className="space-y-2 border border-slate-300 p-3 rounded bg-slate-50 max-w-2xl mx-auto">
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span className="font-bold">مدرک تحصیلی:</span>
@@ -1483,7 +1483,7 @@ export default function StudentsManagerClient(props: {
 
           {/* ── بخش ۳ استاد: اطلاعات فردی ── */}
           {profTab === 'info_combined' && currentStaff && (
-            <div className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
+            <div key={`prof-c-${currentStaff.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5 border border-slate-300 p-2.5 rounded bg-slate-50">
                   <div className="grid grid-cols-3 gap-2 items-center">
@@ -1543,6 +1543,7 @@ export default function StudentsManagerClient(props: {
                 <table className="w-full text-right text-xs">
                   <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold">
                     <tr>
+                      <th className="p-2 text-right whitespace-nowrap">عملیات</th>
                       {STAFF_COLS.map(c => (
                         <ClientTh
                           key={c.key}
@@ -1554,31 +1555,30 @@ export default function StudentsManagerClient(props: {
                           onFilter={v => { staffTable.setFilter(c.key, v); setStaffVisible(100); }}
                         />
                       ))}
-                      <th className="p-2 text-left">عملیات</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredStaff.slice(0, staffVisible).map((st, idx) => (
                       <tr key={st.id} className="border-b border-slate-200 hover:bg-slate-50">
-                        <td className="p-2 font-mono font-bold text-slate-900" dir="ltr">{st.staffCode}</td>
-                        <td className="p-2 font-bold">{st.firstName} {st.lastName}</td>
-                        <td className="p-2 font-mono" dir="ltr">{st.nationalCode}</td>
-                        <td className="p-2">{st.departmentName && st.departmentName !== '—' ? st.departmentName : '—'}</td>
-                        <td className="p-2 font-semibold text-indigo-950">{st.academicRank}</td>
-                        <td className="p-2">{st.degree}</td>
-                        <td className="p-2">{st.staffType}</td>
-                        <td className="p-2 text-left">
+                        <td className="p-2 text-right whitespace-nowrap">
                           <button
                             onClick={() => {
                               const realIdx = props.staffList.findIndex(x => x.id === st.id);
                               setSelectedProfIdx(realIdx >= 0 ? realIdx : 0);
                               setProfTab('info_combined');
                             }}
-                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-[11px] px-2.5 py-1 rounded font-bold"
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-[11px] px-2.5 py-1 rounded font-bold whitespace-nowrap"
                           >
                             مشاهده پرونده 🔍
                           </button>
                         </td>
+                        <td className="p-2 font-mono font-bold text-slate-900 whitespace-nowrap" dir="ltr">{st.staffCode}</td>
+                        <td className="p-2 font-bold whitespace-nowrap">{st.firstName} {st.lastName}</td>
+                        <td className="p-2 font-mono whitespace-nowrap" dir="ltr">{st.nationalCode}</td>
+                        <td className="p-2">{st.departmentName && st.departmentName !== '—' ? st.departmentName : '—'}</td>
+                        <td className="p-2 font-semibold text-indigo-950 whitespace-nowrap">{st.academicRank}</td>
+                        <td className="p-2 whitespace-nowrap">{st.degree}</td>
+                        <td className="p-2 whitespace-nowrap">{st.staffType}</td>
                       </tr>
                     ))}
                   </tbody>
