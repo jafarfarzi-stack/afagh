@@ -1,6 +1,6 @@
 import { and, count, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { degree_level_configs, educational_regulations, majors, staff, students, users } from '@/db/schema';
+import { degree_level_configs, departments, educational_regulations, faculties, majors, staff, students, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import StudentsManagerClient from './StudentsManagerClient';
 
@@ -89,6 +89,7 @@ export default async function AdminStudentsPage({
     .orderBy(sql`${count()} DESC`);
 
   // خواندن اساتید و پرسنل با رتبه علمی و مدرک — پایه و نوع همکاری از سما
+  // گروه/دانشکده/رشته/دانشگاه مستقیم از دیتابیس (نه placeholder)
   const staffRows = await db
     .select({
       id: staff.id,
@@ -100,7 +101,17 @@ export default async function AdminStudentsPage({
       cooperationType: staff.cooperationType,
       employmentType: staff.employmentType,
       personnelNo: staff.personnelNo,
+      hireDate: staff.hireDate,
+      bankAccountNo: staff.bankAccountNo,
+      isActive: staff.isActive,
       fieldOfStudy: staff.fieldOfStudy,
+      fieldMain: staff.fieldMain,
+      lastDegreeUniversity: staff.lastDegreeUniversity,
+      lastDegreeCountryCode: staff.lastDegreeCountryCode,
+      departmentName: departments.name,
+      departmentCode: departments.departmentCode,
+      facultyName: faculties.name,
+      facultyCode: faculties.facultyCode,
       nationalCode: users.nationalCode,
       firstName: users.firstName,
       lastName: users.lastName,
@@ -108,6 +119,8 @@ export default async function AdminStudentsPage({
     })
     .from(staff)
     .innerJoin(users, eq(users.id, staff.userId))
+    .leftJoin(departments, eq(departments.id, staff.departmentId))
+    .leftJoin(faculties, eq(faculties.id, staff.facultyId))
     .orderBy(desc(staff.id));
 
   return (
@@ -155,6 +168,19 @@ export default async function AdminStudentsPage({
           academicRank: st.academicRank || st.academicBase || '—',
           degree: st.degree || st.fieldOfStudy || '—',
           staffType: st.cooperationType || st.employmentType || st.staffType || '—',
+          departmentName: st.departmentName || '—',
+          departmentCode: st.departmentCode,
+          facultyName: st.facultyName || '—',
+          facultyCode: st.facultyCode,
+          fieldOfStudy: st.fieldOfStudy,
+          fieldMain: st.fieldMain,
+          lastDegreeUniversity: st.lastDegreeUniversity,
+          lastDegreeCountryCode: st.lastDegreeCountryCode,
+          personnelNo: st.personnelNo,
+          hireDate: st.hireDate,
+          bankAccountNo: st.bankAccountNo,
+          academicBase: st.academicBase,
+          isActive: st.isActive == null ? 1 : st.isActive,
           role: 'استاد / هیئت علمی',
         }))}
       />

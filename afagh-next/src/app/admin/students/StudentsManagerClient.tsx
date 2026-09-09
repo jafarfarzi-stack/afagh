@@ -49,6 +49,18 @@ export type StaffItem = {
   staffType: string;
   role: string;
   departmentName?: string;
+  departmentCode?: string | null;
+  facultyName?: string;
+  facultyCode?: string | null;
+  fieldOfStudy?: string | null;
+  fieldMain?: string | null;
+  lastDegreeUniversity?: string | null;
+  lastDegreeCountryCode?: string | null;
+  personnelNo?: string | null;
+  hireDate?: string | null;
+  bankAccountNo?: string | null;
+  academicBase?: string | null;
+  isActive?: number | null;
 };
 
 /* ── کارنامه رسمی: گروه‌بندی ترم + معدل ── */
@@ -1039,37 +1051,36 @@ export default function StudentsManagerClient(props: {
 
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-red-700 font-bold">* دانشکده:</span>
-                    <input type="text" defaultValue="دانشکده مهندسی و علوم کامپیوتر (کد ۳)" className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-semibold" />
+                    <input type="text" defaultValue={currentStaff.facultyName && currentStaff.facultyName !== '—' ? `${currentStaff.facultyName}${currentStaff.facultyCode ? ` (کد ${currentStaff.facultyCode})` : ''}` : '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-semibold" />
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-red-700 font-bold">* گروه آموزشی:</span>
-                    <input type="text" defaultValue="گروه نرم‌افزار و هوش مصنوعی (کد ۱۲)" className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
+                    <input type="text" defaultValue={currentStaff.departmentName && currentStaff.departmentName !== '—' ? `${currentStaff.departmentName}${currentStaff.departmentCode ? ` (کد ${currentStaff.departmentCode})` : ''}` : '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-red-700 font-bold">* وضعیت کلی:</span>
-                    <select className="col-span-2 bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-1 rounded font-bold">
-                      <option>فعال / اشتغال به تدریس (کد ۱)</option>
-                      <option>مرخصی تحصیلی / فرصت مطالعاتی</option>
-                      <option>غیرفعال</option>
+                    <select defaultValue={currentStaff.isActive === 0 ? 'غیرفعال' : 'فعال'} className="col-span-2 bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-1 rounded font-bold">
+                      <option value="فعال">فعال / اشتغال به تدریس</option>
+                      <option value="غیرفعال">غیرفعال</option>
                     </select>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>رشته و گرایش تخصصی:</span>
-                    <input type="text" defaultValue="مهندسی نرم‌افزار و معماری سیستم‌ها" className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
+                    <input type="text" defaultValue={currentStaff.fieldOfStudy || currentStaff.fieldMain || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>آخرین دانشگاه دانش‌آموختگی:</span>
-                    <input type="text" defaultValue="دانشگاه تهران" className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
+                    <input type="text" defaultValue={currentStaff.lastDegreeUniversity || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>کشور اخذ آخرین مدرک:</span>
-                    <input type="text" defaultValue="ایران" className="bg-white border border-slate-300 px-2 py-1 rounded" />
-                    <span>معدل: <b className="font-mono">۱۸.۹۰</b></span>
+                    <input type="text" defaultValue={currentStaff.lastDegreeCountryCode || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded" />
+                    <span>رشته: <b>{currentStaff.fieldMain || '—'}</b></span>
                   </div>
                 </div>
               </div>
@@ -1098,12 +1109,12 @@ export default function StudentsManagerClient(props: {
                 </div>
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span>شماره مستخدم:</span>
-                  <input type="text" defaultValue="EMP-84920" className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
+                  <input type="text" defaultValue={currentStaff.personnelNo || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
                 </div>
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span>تاریخ استخدام:</span>
-                  <input type="text" defaultValue="۱۳۹۶/۰۶/۰۱" className="bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
-                  <span>تاریخ آخرین ارتقا: ۱۳۹۹/۰۸/۱۵</span>
+                  <input type="text" defaultValue={currentStaff.hireDate || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
+                  <span>پایه: <b className="font-mono">{currentStaff.academicBase || '—'}</b></span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span>سمت اجرایی:</span>
@@ -1111,12 +1122,12 @@ export default function StudentsManagerClient(props: {
                 </div>
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span>شماره حساب بانکی:</span>
-                  <input type="text" defaultValue="IR65-0170-0000-0012-3456-7890" className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono text-left" dir="ltr" />
+                  <input type="text" defaultValue={currentStaff.bankAccountNo || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono text-left" dir="ltr" />
                 </div>
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span>پایه استادی:</span>
-                  <input type="number" defaultValue="۷" className="w-24 bg-white border border-slate-300 px-2 py-1 rounded font-mono font-bold text-center" />
-                  <span>نوع بانک: بانک تجارت</span>
+                  <input type="text" defaultValue={currentStaff.academicBase || '—'} className="w-24 bg-white border border-slate-300 px-2 py-1 rounded font-mono font-bold text-center" />
+                  <span>وضعیت: <b>{currentStaff.isActive === 0 ? 'غیرفعال' : 'فعال'}</b></span>
                 </div>
               </div>
             </div>
@@ -1187,6 +1198,7 @@ export default function StudentsManagerClient(props: {
                       <th className="p-2">کد استاد</th>
                       <th className="p-2">نام و نام خانوادگی</th>
                       <th className="p-2">کد ملی</th>
+                      <th className="p-2">گروه آموزشی</th>
                       <th className="p-2">مرتبه علمی</th>
                       <th className="p-2">مدرک</th>
                       <th className="p-2">نوع همکاری</th>
@@ -1199,6 +1211,7 @@ export default function StudentsManagerClient(props: {
                         <td className="p-2 font-mono font-bold text-slate-900" dir="ltr">{st.staffCode}</td>
                         <td className="p-2 font-bold">{st.firstName} {st.lastName}</td>
                         <td className="p-2 font-mono" dir="ltr">{st.nationalCode}</td>
+                        <td className="p-2">{st.departmentName && st.departmentName !== '—' ? st.departmentName : '—'}</td>
                         <td className="p-2 font-semibold text-indigo-950">{st.academicRank}</td>
                         <td className="p-2">{st.degree}</td>
                         <td className="p-2">{st.staffType}</td>
