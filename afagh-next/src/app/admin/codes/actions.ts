@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { academic_terms, courses, degree_level_configs, departments, faculties, majors } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { faIncludes, normalizeFa } from '@/lib/persian-search';
 import { CODE_TABLES, type CodeRow, type CodeStat, type CodeTable, type FormOptions } from './tables';
 
 /**
@@ -27,7 +28,7 @@ const dupSet = (rows: { code: string | null }[]) => {
 
 export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
   await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
-  const t = q.trim();
+  const t = normalizeFa(q).slice(0, 60);
   let raw: { id: number; code: string | null; title: string; context: string | null }[] = [];
 
   if (table === 'faculty') {
@@ -95,7 +96,7 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
   const dups = dupSet(raw);
   const rows = raw.map(r => ({ ...r, duplicate: !!r.code && dups.has(r.code) }));
   if (!t) return rows;
-  return rows.filter(r => r.title.includes(t) || (r.code ?? '').includes(t) || (r.context ?? '').includes(t));
+  return rows.filter(r => faIncludes(r.title, t) || (r.code ?? '').includes(t) || faIncludes(r.context, t));
 }
 
 /** خلاصهٔ سلامت کدها برای همهٔ جدول‌ها — کارت‌های بالای صفحه */

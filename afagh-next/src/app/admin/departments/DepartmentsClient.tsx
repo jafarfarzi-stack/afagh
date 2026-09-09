@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { faIncludes, normalizeFa } from '@/lib/persian-search';
 import type { DeptRow, StaffPick } from './actions';
 
 type Res = { ok: boolean; error?: string; moved?: number };
@@ -63,9 +64,9 @@ export default function DepartmentsClient({
     });
 
   const filtered = useMemo(() => {
-    const t = q.trim();
+    const t = normalizeFa(q);
     if (!t) return depts;
-    return depts.filter(d => d.name.includes(t) || d.facultyName.includes(t) || (d.headName ?? '').includes(t) || (d.code ?? '').includes(t));
+    return depts.filter(d => faIncludes(d.name, t) || faIncludes(d.facultyName, t) || faIncludes(d.headName, t) || (d.code ?? '').includes(t));
   }, [depts, q]);
 
   const noHead = depts.filter(d => !d.headStaffId && d.isActive).length;
@@ -336,8 +337,8 @@ function HeadPicker({
   const [q, setQ] = useState('');
 
   const list = useMemo(() => {
-    const t = q.trim();
-    const base = t ? staffPicks.filter(s => s.name.includes(t) || (s.staffCode ?? '').includes(t)) : staffPicks;
+    const t = normalizeFa(q);
+    const base = t ? staffPicks.filter(s => faIncludes(s.name, t) || (s.staffCode ?? '').includes(t)) : staffPicks;
     return base.slice(0, 40);
   }, [staffPicks, q]);
 
@@ -403,9 +404,9 @@ function MembersPanel({
   const [q, setQ] = useState('');
   const members = staffPicks.filter(s => s.deptId === dept.id);
   const candidates = useMemo(() => {
-    const t = q.trim();
+    const t = normalizeFa(q);
     if (!t) return [];
-    return staffPicks.filter(s => s.deptId !== dept.id && (s.name.includes(t) || (s.staffCode ?? '').includes(t))).slice(0, 20);
+    return staffPicks.filter(s => s.deptId !== dept.id && (faIncludes(s.name, t) || (s.staffCode ?? '').includes(t))).slice(0, 20);
   }, [staffPicks, q, dept.id]);
 
   return (

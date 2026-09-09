@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
+import { faIncludes, normalizeFa } from '@/lib/persian-search';
 import { ADD_LABEL, CREATE_ELSEWHERE, NEW_FIELDS, type CodeRow, type CodeStat, type CodeTable, type FormOptions } from './tables';
 import Link from 'next/link';
 
@@ -90,12 +91,12 @@ export default function CodesClient({
   }, [table]);
 
   const filtered = useMemo(() => {
-    const t = q.trim();
+    const t = normalizeFa(q);
     return rows.filter(r => {
       if (only === 'MISSING' && r.code) return false;
       if (only === 'DUP' && !r.duplicate) return false;
       if (!t) return true;
-      return r.title.includes(t) || (r.code ?? '').includes(t) || (r.context ?? '').includes(t);
+      return faIncludes(r.title, t) || (r.code ?? '').includes(t) || faIncludes(r.context, t);
     });
   }, [rows, q, only]);
 

@@ -8,6 +8,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import { faIncludes } from '@/lib/persian-search';
 
 export type SortDir = 'asc' | 'desc';
 
@@ -62,7 +63,7 @@ export function useClientTable<T>(rows: T[], columns: ColumnDef<T>[]) {
           const col = byKey.get(k);
           if (!col) return true;
           const v = col.get(r);
-          return String(v ?? '').includes(filters[k]);
+          return faIncludes(String(v ?? ''), filters[k]);
         }),
       );
     }

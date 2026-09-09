@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { degree_level_configs, departments, educational_regulations, faculties, legacy_code_maps, majors, staff, students, users } from '@/db/schema';
 import type { RegulationPick } from './StudentsManagerClient';
 import { requireRole } from '@/lib/auth';
+import { normalizeFa, normCol } from '@/lib/persian-search';
 import { getSetting } from '@/lib/settings';
 import StudentsManagerClient from './StudentsManagerClient';
 
@@ -35,19 +36,23 @@ export default async function AdminStudentsPage({
   if (degreeFilter > 0) conds.push(eq(students.degreeLevelId, degreeFilter));
   if (q) {
     const like = `%${q}%`;
+    const faLike = `%${normalizeFa(q)}%`;
     conds.push(
       or(
         ilike(students.studentCode, like),
         ilike(users.nationalCode, like),
-        ilike(users.firstName, like),
-        ilike(users.lastName, like),
+        ilike(normCol(users.firstName), faLike),
+        ilike(normCol(users.lastName), faLike),
       )!,
     );
   }
   if (fCode) conds.push(ilike(students.studentCode, `%${fCode}%`));
-  if (fName) conds.push(or(ilike(users.firstName, `%${fName}%`), ilike(users.lastName, `%${fName}%`))!);
+  if (fName) {
+    const faLike = `%${normalizeFa(fName)}%`;
+    conds.push(or(ilike(normCol(users.firstName), faLike), ilike(normCol(users.lastName), faLike))!);
+  }
   if (fNc) conds.push(ilike(users.nationalCode, `%${fNc}%`));
-  if (fMajor) conds.push(ilike(majors.name, `%${fMajor}%`));
+  if (fMajor) conds.push(ilike(normCol(majors.name), `%${normalizeFa(fMajor)}%`));
   if (/^\d{4}$/.test(fYear)) conds.push(eq(students.entryYear, Number(fYear)));
   const where = conds.length ? and(...conds) : undefined;
 
