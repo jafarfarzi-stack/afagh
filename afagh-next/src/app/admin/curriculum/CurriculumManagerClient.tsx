@@ -156,10 +156,10 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
   const [activeTab, setActiveTab] = useState<CurriculumTab>('CATALOG');
   const [transferMajorId, setTransferMajorId] = useState(0);
 
-  const showToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
+  const showToast = useCallback((text: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ text, type });
     setTimeout(() => setToast(null), 4200);
-  };
+  }, []);
 
   const selectedVersion = versions.find(v => v.id === selectedVersionId) ?? null;
   const majorVersions = versions.filter(v => v.majorId === selectedMajorId);
