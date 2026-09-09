@@ -354,6 +354,11 @@ DROP POLICY IF EXISTS student_cards_self_read ON "student_cards";
 CREATE POLICY student_cards_self_read ON "student_cards" FOR SELECT TO afagh_app
   USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
 
+ALTER TABLE "student_term_states" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS student_term_states_self_read ON "student_term_states";
+CREATE POLICY student_term_states_self_read ON "student_term_states" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
 ALTER TABLE "clearance_checklist" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS clearance_checklist_self_read ON "clearance_checklist";
 CREATE POLICY clearance_checklist_self_read ON "clearance_checklist" FOR SELECT TO afagh_app

@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { addCodeAction, autoSuggestAction, confirmSuggestionsAction, saveMapAction } from './actions';
+import { addCodeAction, autoSuggestAction, confirmSuggestionsAction, saveMapAction, setNewCodeAction } from './actions';
 import { ImportReport, Msg, ReportBox, Stat, Uploader, fmt } from './ui';
+import { norm } from '@/lib/migration/normalize';
 
 type DomainDef = { id: string; title: string; hint: string };
 type MapRow = {
@@ -45,6 +46,15 @@ export default function CodeMapTab({ domains, sourceCode }: { domains: DomainDef
     setMaps(m => m.map(x => x.id === row.id ? { ...x, targetCode: targetCode || null, status: targetCode ? 'CONFIRMED' : 'UNMAPPED' } : x));
     const res = await saveMapAction({ id: row.id, targetCode: targetCode || null });
     if (!res.ok) { setMsg({ kind: 'err', text: res.error ?? 'ذخیره نشد.' }); }
+    load();
+  }
+
+  /** ثبت «کد جدید» آزاد: کدی که قرار است جای کد قدیمی را در سامانهٔ جدید بگیرد */
+  async function onRewrite(row: MapRow, value: string) {
+    if ((value.trim() || null) === (row.targetCode ?? null)) return;   // بدون تغییر
+    const res = await setNewCodeAction({ id: row.id, newCode: value });
+    if (!res.ok) setMsg({ kind: 'err', text: res.error ?? 'ذخیره نشد.' });
+    else setMsg({ kind: 'ok', text: value.trim() ? `کد «${row.legacyCode}» هنگام انتقال با «${value.trim()}» جایگزین می‌شود.` : `جایگزینی کد «${row.legacyCode}» لغو شد.` });
     load();
   }
 
@@ -125,6 +135,14 @@ export default function CodeMapTab({ domains, sourceCode }: { domains: DomainDef
         </div>
 
         {cur && <p className="text-[11px] text-slate-400">{cur.hint}{curStat ? ` — ${fmt(curStat.total)} کد در این دامنه` : ''}</p>}
+        <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-2 text-[11px] leading-6 text-slate-600">
+          این جدول دو کار جدا انجام می‌دهد:
+          <b> «معادل در سامانهٔ جدید»</b> یعنی این کد قدیمی به کدام رکوردِ <i>موجود</i> اشاره دارد (برای پیدا کردن)؛
+          <b> «کد جدید»</b> یعنی خودِ کد هنگام انتقال بازنویسی شود — مثلاً درس «۱۲۳۴» از این پس «CE-101» ثبت شود،
+          حتی اگر آن رکورد را همین انتقال بسازد. کافی است کد دلخواه را بنویسید و از کادر خارج شوید.
+          جایگزینی فقط روی ردیف‌های <b>تأییدشده</b> و در صورت روشن‌بودن گزینه‌اش در سربرگ «دادهٔ پایه» انجام می‌شود؛
+          کد قدیمی برای ردِ حسابرسی همیشه اینجا می‌ماند.
+        </div>
         {msg && <Msg kind={msg.kind === 'ok' ? 'ok' : msg.kind === 'err' ? 'err' : 'info'}>{msg.text}</Msg>}
       </div>
 
@@ -155,12 +173,14 @@ export default function CodeMapTab({ domains, sourceCode }: { domains: DomainDef
           <thead>
             <tr className="text-slate-500">
               <th className="p-2">کد قدیمی</th><th className="p-2">عنوان قدیمی</th>
-              <th className="p-2">معادل در سامانهٔ جدید</th><th className="p-2">اطمینان</th>
+              <th className="p-2">معادل در سامانهٔ جدید</th>
+              <th className="p-2">🔁 کد جدید (جایگزین می‌شود)</th>
+              <th className="p-2">اطمینان</th>
               <th className="p-2">وضعیت</th><th className="p-2"></th>
             </tr>
           </thead>
           <tbody>
-            {shown.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-slate-400">کدی برای نمایش نیست — یک فایل وارد کنید یا دستی اضافه کنید.</td></tr>}
+            {shown.length === 0 && <tr><td colSpan={7} className="p-4 text-center text-slate-400">کدی برای نمایش نیست — یک فایل وارد کنید یا دستی اضافه کنید.</td></tr>}
             {shown.map(m => (
               <tr key={m.id} className="border-t border-slate-100">
                 <td className="p-2 font-mono" dir="ltr">{m.legacyCode}</td>
@@ -170,6 +190,14 @@ export default function CodeMapTab({ domains, sourceCode }: { domains: DomainDef
                     <option value="">— انتخاب کنید —</option>
                     {options.map(o => <option key={o.code} value={o.code}>{o.title} ({o.code})</option>)}
                   </select>
+                </td>
+                <td className="p-2">
+                  <input
+                    className={'input w-32 py-1 font-mono text-xs ' + (m.targetCode && norm(m.targetCode) !== norm(m.legacyCode) ? 'border-indigo-300 bg-indigo-50' : '')}
+                    dir="ltr" placeholder="بدون تغییر" defaultValue={m.targetCode ?? ''} key={`${m.id}:${m.targetCode ?? ''}`}
+                    onBlur={e => onRewrite(m, e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                  />
                 </td>
                 <td className="p-2 text-slate-500">{Number(m.confidence ?? 0) > 0 ? `${fmt(Math.round(Number(m.confidence)))}٪` : '—'}</td>
                 <td className="p-2"><span className={'badge ' + (STATUS_CLS[m.status] ?? '')}>{STATUS_FA[m.status] ?? m.status}</span></td>

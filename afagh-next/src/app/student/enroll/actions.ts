@@ -20,7 +20,8 @@ import {
   students,
 } from '@/db/schema';
 import { getStudentByUser, requireRole } from '@/lib/auth';
-import { enqueueSubmit, ensureWorker, rateLimitSubmit } from '@/lib/waitingRoom';
+import { enqueueSubmit, ensureWorker, rateLimitSubmit, redisAvailable } from '@/lib/waitingRoom';
+import { processQueuedSubmit, type SubmitResult } from '@/lib/enroll-engine';
 
 async function ctx() {
   const user = await requireRole(['STUDENT']);
@@ -245,20 +246,44 @@ export async function autoFillCartFromChartAction(): Promise<{
   };
 }
 
-/** ورود به اتاق انتظار — پاسخ فوری با شمارهٔ نوبت (§۱۰۱۶ + §۶۹۰۶) */
-export async function submitCartAction(acceptSameDayRisk = false): Promise<{ queued: boolean; ticketId: string; position: number; limited?: boolean }> {
+/**
+ * ورود به اتاق انتظار — پاسخ فوری با شمارهٔ نوبت (§۱۰۱۶ + §۶۹۰۶).
+ *
+ * اگر Redis پایین باشد، صف وجود ندارد. در آن حالت *ثبت را رها نمی‌کنیم*:
+ * همین‌جا مستقیم روی دیتابیس پردازش می‌شود (`direct`). همهٔ قواعد سخت —
+ * سقف واحد، پیش‌نیاز، ظرفیت، تداخل کلاس و امتحان، بدهی مالی — داخل همان
+ * `processQueuedSubmit` و روی دیتابیس اعمال می‌شوند؛ صف فقط برای مهار هجوم
+ * همزمان است، نه برای درستیِ ثبت. پیش از این، قطعی Redis یعنی «هیچ دانشجویی
+ * نمی‌تواند انتخاب واحد کند».
+ */
+export async function submitCartAction(acceptSameDayRisk = false): Promise<{
+  queued: boolean; ticketId: string; position: number; limited?: boolean;
+  direct?: boolean; result?: SubmitResult;
+}> {
   const { user, me } = await ctx();
-  ensureWorker(); // کارگر صف در همین فرایند Next فعال است
 
   // سپر نرخ (§۲۰۷۷): بیش از ۵ درخواست ثبت در ثانیه → رد سریع
   if (!(await rateLimitSubmit(user.id))) {
     return { queued: false, ticketId: '', position: 0, limited: true };
   }
 
+  if (!(await redisAvailable())) {
+    const result = await processQueuedSubmit(user.id, me.id, acceptSameDayRisk);
+    return { queued: false, direct: true, ticketId: '', position: 0, result };
+  }
+
+  ensureWorker(); // کارگر صف در همین فرایند Next فعال است
+
   // فاز ۱۰: اگر کاربر دو امتحانِ هم‌روز (شیفت‌های متفاوت) را با «تأیید عواقب» پذیرفت،
   // همین پرچم در بلیت صف می‌ماند تا در کارگر صف، در ردیف ثبت‌نام ذخیره شود.
-  const { ticket, position } = await enqueueSubmit(user.id, me.id, acceptSameDayRisk);
-  return { queued: true, ticketId: ticket.id, position };
+  try {
+    const { ticket, position } = await enqueueSubmit(user.id, me.id, acceptSameDayRisk);
+    return { queued: true, ticketId: ticket.id, position };
+  } catch {
+    // Redis وسط کار افتاد → همان مسیر مستقیم
+    const result = await processQueuedSubmit(user.id, me.id, acceptSameDayRisk);
+    return { queued: false, direct: true, ticketId: '', position: 0, result };
+  }
 }
 
 /** پیش‌نمایش تداخل امتحانی سبد (قبل از ثبت): HARD = قطعی (همان روز + هم‌ساعت)، SOFT = نرم (هم‌روز، ساعت متفاوت) */

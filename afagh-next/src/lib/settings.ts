@@ -16,7 +16,7 @@ import { system_settings } from '@/db/schema';
 //  چون پیش از برقراری اتصال به دیتابیس لازم‌اند.
 // ════════════════════════════════════════════════════════════════════
 
-export type SettingType = 'text' | 'url' | 'number' | 'boolean' | 'secret';
+export type SettingType = 'text' | 'url' | 'number' | 'boolean' | 'secret' | 'image';
 
 export interface SettingDef {
   key: string;
@@ -46,6 +46,7 @@ export const SETTING_GROUPS = [
 export const SETTING_DEFS: SettingDef[] = [
   // ── عمومی ──
   { key: 'UNIVERSITY_NAME', env: 'AFAGH_UNIVERSITY_NAME', group: 'عمومی و نشانی‌ها', label: 'نام دانشگاه', type: 'text', default: 'دانشگاه آفاق' },
+  { key: 'UNIVERSITY_LOGO', env: 'AFAGH_UNIVERSITY_LOGO', group: 'عمومی و نشانی‌ها', label: 'ارم دانشگاه (لوگو)', type: 'image', default: '', help: 'نمایش در سربرگ کارنامه و مدارک رسمی — PNG/JPG تا ۲ مگابایت' },
   { key: 'PUBLIC_BASE_URL', env: 'AFAGH_PUBLIC_BASE_URL', group: 'عمومی و نشانی‌ها', label: 'نشانی عمومی سامانه', type: 'url', default: 'http://localhost:8080', help: 'مبنای لینک‌های استعلام مدرک، QR کارت ورود به جلسه و ایمیل‌ها' },
   { key: 'SUPPORT_EMAIL', env: 'AFAGH_SUPPORT_EMAIL', group: 'عمومی و نشانی‌ها', label: 'ایمیل پشتیبانی', type: 'text', default: 'support@example.ac.ir' },
   { key: 'SUPPORT_PHONE', env: 'AFAGH_SUPPORT_PHONE', group: 'عمومی و نشانی‌ها', label: 'تلفن پشتیبانی', type: 'text', default: '' },
@@ -123,6 +124,14 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'WORKFLOW_WEBHOOK_URL', env: 'WORKFLOW_WEBHOOK_URL', group: 'گردش کار و حق‌التدریس', label: 'وب‌هوک رویدادهای گردش کار', type: 'url', default: '', help: 'خالی = فقط هندلرهای داخلی. در صورت پر بودن، خلاصهٔ هر رویداد به این نشانی POST می‌شود' },
   { key: 'REQ_TRACKING_PREFIX', env: 'REQ_TRACKING_PREFIX', group: 'گردش کار و حق‌التدریس', label: 'پیشوند کد رهگیری درخواست‌ها', type: 'text', default: 'REQ' },
   { key: 'FA_YEAR', env: 'FA_YEAR', group: 'گردش کار و حق‌التدریس', label: 'سال مالی/تحصیلی (شمسی)', type: 'text', default: '', help: 'خالی = محاسبهٔ خودکار از تاریخ روز؛ برای سال تحصیلی خاص عدد وارد کنید (مثلاً ۱۴۰۵)' },
+  // نرخ پایهٔ ساعتی قرارداد حق‌التدریس. تا امروز این کلید در فهرست تنظیمات
+  // *نبود* و contract-engine آن را صدا می‌زد؛ getSetting برای کلید ناشناخته
+  // پرتاب می‌کند، پس مقدار پیش‌فرضِ کنارِ فراخوان هرگز اجرا نمی‌شد و صفحهٔ
+  // «قرارداد من» برای هر استاد خطای ۵۰۰ می‌داد.
+  { key: 'PREVIOUS_TICKET_TOKEN_SECRET', env: 'PREVIOUS_TICKET_TOKEN_SECRET', group: 'زیرساخت (فقط ENV)', label: 'کلید پیشین امضای بلیت (چرخش کلید)', type: 'secret', default: '', envOnly: true, help: 'هنگام تعویض کلید امضا، کلید قبلی اینجا می‌ماند تا بلیت‌های صادرشده تا پایان ترم معتبر بمانند' },
+  { key: 'CONTRACT_TAX_PERCENT', env: 'AFAGH_CONTRACT_TAX_PERCENT', group: 'گردش کار و حق‌التدریس', label: 'درصد کسر مالیات قرارداد', type: 'number', default: '10' },
+  { key: 'CONTRACT_INSURANCE_PERCENT', env: 'AFAGH_CONTRACT_INSURANCE_PERCENT', group: 'گردش کار و حق‌التدریس', label: 'درصد کسر بیمهٔ قرارداد', type: 'number', default: '7' },
+  { key: 'HOURLY_RATE_TMN', env: 'AFAGH_HOURLY_RATE_TMN', group: 'گردش کار و حق‌التدریس', label: 'نرخ پایهٔ هر ساعت تدریس (تومان)', type: 'number', default: '850000', help: 'مبنای برآورد مبلغ قرارداد حق‌التدریس، وقتی نرخ اختصاصیِ مرتبهٔ علمی در جدول نرخ‌ها ثبت نشده باشد' },
   { key: 'PAYROLL_TERM_SESSIONS', env: 'PAYROLL_TERM_SESSIONS', group: 'گردش کار و حق‌التدریس', label: 'جلسات مبنای ترم (حق‌التدریس)', type: 'number', default: '16', help: 'مبنای تناسب کسر غیبت، وقتی برای کلاس هیچ جلسه‌ای ثبت نشده باشد' },
   { key: 'PAYROLL_MIDTERM_PERCENT', env: 'PAYROLL_MIDTERM_PERCENT', group: 'گردش کار و حق‌التدریس', label: 'درصد علی‌الحساب میان‌ترم', type: 'number', default: '40' },
   { key: 'PAYROLL_CROWDED_THRESHOLD', env: 'PAYROLL_CROWDED_THRESHOLD', group: 'گردش کار و حق‌التدریس', label: 'حدنصاب کلاس پرجمعیت (نفر)', type: 'number', default: '40' },

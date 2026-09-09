@@ -334,7 +334,7 @@ export async function getSchedulingWorkspaceAction(termId?: number): Promise<Sch
         inspectSchedulingHardConflicts(resolvedTermId),
         db.select().from(academic_terms).where(eq(academic_terms.id, resolvedTermId)).limit(1).then(rows => rows[0] ?? null),
       ]);
-      hardConflictCount = inspect.hardConflicts.length;
+      hardConflictCount = inspect.total;
       [approvedOfferings, makeupSessions, allocatedRoomIds] = await Promise.all([
         listApprovedOfferings(resolvedTermId),
         listMakeupSessions(resolvedTermId),
@@ -436,10 +436,10 @@ export async function transitionSchedulingPhaseAction(termId: number, to: 'ALLOC
     const user = await requireRole(EDITORS);
     if (to === 'PUBLISHED') {
       const insp = await inspectSchedulingHardConflicts(termId);
-      if (insp.hardConflicts.length > 0) {
+      if (insp.total > 0) {
         return {
           ok: false,
-          error: `انتشار برنامه متوقف شد: ${insp.hardConflicts.length} قید سخت (تداخل استاد/سالن/ظرفیت) باقی است. نمونه: ${insp.hardConflicts[0]?.message ?? ''}`,
+          error: `انتشار برنامه متوقف شد: ${insp.total} قید سخت (تداخل استاد/سالن/ظرفیت) باقی است. نمونه: ${insp.hardConflicts[0]?.message ?? ''}`,
         };
       }
     }

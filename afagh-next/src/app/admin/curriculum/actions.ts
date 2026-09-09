@@ -12,12 +12,12 @@
 // خطاها: هرگز throw خام به Client نمی‌رود؛ { ok:false, error } فارسی.
 // ════════════════════════════════════════════════════════════════════════
 
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import {
   course_offerings, course_rules, courses, curriculum_approvals, curriculum_courses,
-  curriculum_tracks, curriculum_versions, degree_level_configs, enrollments, majors,
+  curriculum_tracks, curriculum_versions, degree_level_configs, departments, enrollments, majors,
   staff,
 } from '@/db/schema';
 import { requireRole, type SessionUser } from '@/lib/auth';
@@ -26,7 +26,8 @@ import {
   assertTransition, canEditStatus, nextRevisionCode, normalizeLogicNode,
   type CheckResult, type CurriculumVersionStatus, type LogicNode,
 } from '@/lib/curriculum-types';
-import { validateCurriculumCore, hasBlockingErrors } from '@/lib/curriculum-validator';
+import { validateCurriculumCore, hasBlockingErrors, parseRoleUnitTargets } from '@/lib/curriculum-validator';
+import { roleFromBankType } from '@/lib/bank-roles';
 
 /**
  * نتیجهٔ استاندارد اکشن (الگوی فاز ۳+).
@@ -102,6 +103,7 @@ async function loadVersionData(versionId: number) {
       isElective: curriculum_courses.isElective,
       isGraduationRequired: curriculum_courses.isGraduationRequired,
       recommendedSemester: curriculum_courses.recommendedSemester,
+      minGrade: curriculum_courses.minGrade,                    // کف قبولی خاص نسخه (numeric → number|null)
       autoCorequisiteAllowed: curriculum_courses.autoCorequisiteAllowed,
     })
     .from(curriculum_courses)
@@ -127,6 +129,7 @@ async function loadVersionData(versionId: number) {
       isElective: r.isElective ?? 0,
       isGraduationRequired: r.isGraduationRequired ?? 0,
       recommendedSemester: r.recommendedSemester,
+      minGrade: r.minGrade != null ? Number(r.minGrade) : null,
       autoCorequisiteAllowed: r.autoCorequisiteAllowed ?? 0,
     })),
     rules: rulesRows.map((r) => {
@@ -151,14 +154,16 @@ async function buildCheckInput(data: Awaited<ReturnType<typeof loadVersionData>>
   let maxUnitsPerTerm: number | null = data.version.maxUnitsPerTerm;
   let minRoleCounts: Partial<Record<string, number>> = { ...DEFAULT_MIN_ROLES };
   const [deg] = await db
-    .select({ code: degree_level_configs.code, title: degree_level_configs.title, maxUnitsPerTerm: degree_level_configs.maxUnitsPerTerm })
+    .select({ code: degree_level_configs.code, title: degree_level_configs.title, maxUnitsPerTerm: degree_level_configs.maxUnitsPerTerm, isGraduate: degree_level_configs.isGraduate })
     .from(degree_level_configs)
     .where(eq(degree_level_configs.id, data.version.degreeLevelId))
     .limit(1);
   if (maxUnitsPerTerm == null) maxUnitsPerTerm = deg?.maxUnitsPerTerm ?? 20;
-  if (deg && (deg.code?.includes('MASTER') || deg.code?.includes('PHD') || deg.title?.includes('ارشد') || deg.title?.includes('دکتری'))) {
+  // پایان‌نامه برای تحصیلات تکمیلی الزامی است: اول پرچم isGraduate، وگرنه حدس عنوان/کد (سازگار با قبل)
+  if (deg && (deg.isGraduate === 1 || deg.code?.includes('MASTER') || deg.code?.includes('PHD') || deg.title?.includes('ارشد') || deg.title?.includes('دکترا'))) {
     minRoleCounts = { ...minRoleCounts, THESIS: 1 };
   }
+  const parsedTargets = parseRoleUnitTargets((data.version as { minRoleUnits?: unknown }).minRoleUnits);
   return {
     totalRequiredUnits: Number(data.version.totalRequiredUnits ?? 0),
     maxUnitsPerTerm,
@@ -168,6 +173,7 @@ async function buildCheckInput(data: Awaited<ReturnType<typeof loadVersionData>>
     rules: data.rules,
     existingCodes: data.existingCodes,
     minRoleCounts,
+    minRoleUnits: Object.keys(parsedTargets).length > 0 ? parsedTargets : undefined,
   };
 }
 
@@ -223,7 +229,10 @@ function revalidateCurriculumPaths() {
 // ─────────────────────────── خواندن (برای Thin Client فاز ۷) ───────────────────────────
 
 export interface CurriculumOverviewData {
-  majors: { id: number; code: string | null; name: string; degreeLevelId: number; degreeTitle: string | null }[];
+  majors: {
+    id: number; code: string | null; name: string; degreeLevelId: number; degreeTitle: string | null;
+    degreeCode: string | null; degreeTermCount: number | null; degreeIsGraduate: number | null;
+  }[];
   versions: {
     id: number; majorId: number; degreeLevelId: number; trackId: number | null;
     versionCode: string; title: string; status: string;
@@ -257,6 +266,9 @@ export async function getCurriculumOverviewAction(): Promise<CurriculumOverviewR
       db.select({
         id: majors.id, code: majors.majorCode, name: majors.name,
         degreeLevelId: majors.degreeLevelId, degreeTitle: degree_level_configs.title,
+        degreeCode: degree_level_configs.code,
+        degreeTermCount: degree_level_configs.termCount,
+        degreeIsGraduate: degree_level_configs.isGraduate,
       }).from(majors)
         .leftJoin(degree_level_configs, eq(degree_level_configs.id, majors.degreeLevelId))
         .orderBy(asc(majors.name)),
@@ -301,6 +313,84 @@ export async function listCourseBankAction(): Promise<CourseBankResult> {
   } catch (err: any) {
     console.error('listCourseBankAction:', err);
     return { ok: false, error: 'خطا در بارگیری بانک دروس' };
+  }
+}
+
+/** فهرست گروه‌های آموزشی — برای فرم «تعریف درس جدید در بانک» (معادل فیلد «گروه آموزشی» سامانهٔ قدیم) */
+export type DepartmentListResult =
+  | { ok: true; data: { id: number; name: string }[] }
+  | { ok: false; error: string };
+
+export async function listDepartmentsAction(): Promise<DepartmentListResult> {
+  await requireRole(EDITORS);
+  try {
+    const rows = await db
+      .select({ id: departments.id, name: departments.name })
+      .from(departments)
+      .orderBy(asc(departments.name));
+    return { ok: true, data: rows };
+  } catch (err: any) {
+    console.error('listDepartmentsAction:', err);
+    return { ok: false, error: 'خطا در بارگیری گروه‌های آموزشی' };
+  }
+}
+
+export interface CreateBankCourseInput {
+  code: string;
+  title: string;
+  theoreticalUnits: number;
+  practicalUnits: number;
+  courseType?: string;
+  gradingType?: 'NUMERIC' | 'PASS_FAIL';
+  affectsGpa?: number;
+  departmentId?: number | null;
+}
+
+/**
+ * تعریف درس جدید از صفر در بانک دروس (معادل «معرفی درس جدید» سامانهٔ قدیم).
+ * بانک سراسری است و به نسخه گره نخورده؛ پیش‌نیاز/هم‌نیاز هر درس در سطح
+ * کاتالوگ (course_rules هر نسخه) تعریف می‌شود نه روی رکورد بانک.
+ */
+export async function createCourseBankAction(input: CreateBankCourseInput): Promise<Act<{ message: string; data: { id: number } }>> {
+  await requireRole(EDITORS);
+  try {
+    const code = (input.code ?? '').trim();
+    const title = (input.title ?? '').trim();
+    const theo = Number(input.theoreticalUnits ?? 0);
+    const prac = Number(input.practicalUnits ?? 0);
+    if (!code || !title) return { ok: false, error: 'کد درس و نام درس الزامی است.' };
+    if (!(theo >= 0) || !(prac >= 0) || theo + prac <= 0) return { ok: false, error: 'واحد نظری/عملی نامعتبر است (مجموع باید بیشتر از صفر باشد).' };
+    const [dup] = await db.select({ id: courses.id }).from(courses).where(eq(courses.code, code)).limit(1);
+    if (dup) return { ok: false, error: `کد درس تکراری است: ${code}` };
+    let departmentId: number | null = null;
+    if (input.departmentId != null) {
+      const [dept] = await db.select({ id: departments.id }).from(departments).where(eq(departments.id, input.departmentId)).limit(1);
+      if (!dept) return { ok: false, error: 'گروه آموزشی انتخاب‌شده یافت نشد.' };
+      departmentId = dept.id;
+    }
+    const [row] = await db.insert(courses).values({
+      code,
+      title,
+      theoreticalUnits: String(theo),
+      practicalUnits: String(prac),
+      units: String(theo + prac),
+      courseType: (input.courseType ?? '').trim() || 'تخصصی',
+      gradingType: input.gradingType === 'PASS_FAIL' ? 'PASS_FAIL' : 'NUMERIC',
+      affectsGpa: input.affectsGpa === 0 ? 0 : 1,
+      departmentId,
+    }).returning({ id: courses.id });
+    await db.transaction(async (tx) => {
+      await appendAudit(tx, {
+        actorUserId: (await requireRole(EDITORS)).id,
+        action: 'COURSE_BANK_CREATED', entityType: PHASE, entityId: row.id,
+        details: JSON.stringify({ code, title, units: theo + prac, departmentId }),
+      });
+    });
+    revalidateCurriculumPaths();
+    return { ok: true, message: `درس «${title}» در بانک تعریف شد (${theo + prac} واحد).`, data: { id: row.id } };
+  } catch (err: any) {
+    console.error('createCourseBankAction:', err);
+    return { ok: false, error: err.message || 'خطا در تعریف درس جدید' };
   }
 }
 
@@ -408,6 +498,8 @@ export async function updateCurriculumMetaAction(
     entryYearFrom?: number; entryYearTo?: number | null;
     effectiveFrom?: string | null; effectiveTo?: string | null;
     totalRequiredUnits?: number; maxUnitsPerTerm?: number | null;
+    /** سهم واحد مقرر هر نقش، مثل {GENERAL: 22, CORE: 25} — خالی/{} یعنی پاک‌سازی */
+    minRoleUnits?: Record<string, number> | null;
   }
 ) {
   await requireRole(EDITORS);
@@ -426,6 +518,9 @@ export async function updateCurriculumMetaAction(
       effectiveTo: patch.effectiveTo !== undefined ? patch.effectiveTo : v.effectiveTo,
       totalRequiredUnits: patch.totalRequiredUnits != null ? String(patch.totalRequiredUnits) : v.totalRequiredUnits,
       maxUnitsPerTerm: patch.maxUnitsPerTerm !== undefined ? patch.maxUnitsPerTerm : v.maxUnitsPerTerm,
+      minRoleUnits: patch.minRoleUnits !== undefined
+        ? (patch.minRoleUnits && Object.keys(patch.minRoleUnits).length > 0 ? JSON.stringify(parseRoleUnitTargets(patch.minRoleUnits)) : null)
+        : v.minRoleUnits,
       updatedAt: new Date(),
     }).where(eq(curriculum_versions.id, versionId));
     await db.transaction(async (tx) => {
@@ -525,6 +620,84 @@ export async function bulkAddCoursesAction(versionId: number, items: AddCourseIn
   }
 }
 
+/**
+ * همگام‌سازی نقش دروس نسخه از روی نوع بانک (lib/bank-roles — تنها منبع نگاشت).
+ * برای ردیف‌هایی که با نقش پیش‌فرض اشتباه ثبت شده‌اند (مثلاً همه CORE)؛ فقط DRAFT.
+ */
+export async function syncRolesFromBankAction(versionId: number): Promise<Act<{ message: string; data: { updated: number } }>> {
+  await requireRole(EDITORS);
+  try {
+    await assertEditable(versionId);
+    const rows = await db
+      .select({ courseId: curriculum_courses.courseId, roleType: curriculum_courses.roleType, courseType: courses.courseType })
+      .from(curriculum_courses)
+      .innerJoin(courses, eq(courses.id, curriculum_courses.courseId))
+      .where(eq(curriculum_courses.curriculumVersionId, versionId));
+    let updated = 0;
+    for (const r of rows) {
+      const mapped = roleFromBankType(r.courseType);
+      if (mapped !== r.roleType) {
+        await db.update(curriculum_courses).set({ roleType: mapped })
+          .where(and(eq(curriculum_courses.curriculumVersionId, versionId), eq(curriculum_courses.courseId, r.courseId)));
+        updated++;
+      }
+    }
+    await db.transaction(async (tx) => {
+      await appendAudit(tx, {
+        actorUserId: (await requireRole(EDITORS)).id,
+        action: 'CURRICULUM_ROLES_SYNCED', entityType: PHASE, entityId: versionId,
+        details: JSON.stringify({ updated, total: rows.length }),
+      });
+    });
+    revalidateCurriculumPaths();
+    return { ok: true, message: updated > 0 ? `نقش ${updated} درس از روی نوع بانک اصلاح شد.` : 'همهٔ نقش‌ها از قبل با بانک هماهنگ بودند.', data: { updated } };
+  } catch (err: any) {
+    console.error('syncRolesFromBankAction:', err);
+    return { ok: false, error: err.message || 'خطا در همگام‌سازی نقش‌ها' };
+  }
+}
+
+/**
+ * علامت‌زدن گروهی «شرط فارغ‌التحصیلی»: همهٔ دروس الزامی (isRequired=1) یا
+ * نقش‌های CORE/MAJOR که هنوز علامت نخورده‌اند → isGraduationRequired=1.
+ * فقط ۰→۱ می‌رود؛ چیزی که قبلاً علامت خورده دست‌نخورده می‌ماند.
+ */
+export async function markGraduationRequiredBulkAction(versionId: number): Promise<Act<{ message: string; data: { updated: number; total: number } }>> {
+  await requireRole(EDITORS);
+  try {
+    await assertEditable(versionId);
+    const rows = await db
+      .select({ courseId: curriculum_courses.courseId, isGraduationRequired: curriculum_courses.isGraduationRequired })
+      .from(curriculum_courses)
+      .where(and(
+        eq(curriculum_courses.curriculumVersionId, versionId),
+        or(eq(curriculum_courses.isRequired, 1), inArray(curriculum_courses.roleType, ['CORE', 'MAJOR'])),
+      ));
+    let updated = 0;
+    for (const r of rows) {
+      if (r.isGraduationRequired === 1) continue;
+      await db.update(curriculum_courses).set({ isGraduationRequired: 1 })
+        .where(and(eq(curriculum_courses.curriculumVersionId, versionId), eq(curriculum_courses.courseId, r.courseId)));
+      updated++;
+    }
+    await db.transaction(async (tx) => {
+      await appendAudit(tx, {
+        actorUserId: (await requireRole(EDITORS)).id,
+        action: 'CURRICULUM_GRADREQ_MARKED', entityType: PHASE, entityId: versionId,
+        details: JSON.stringify({ updated, total: rows.length }),
+      });
+    });
+    revalidateCurriculumPaths();
+    if (rows.length === 0) {
+      return { ok: true, message: 'هیچ درس الزامی (یا CORE/MAJOR) در این نسخه نیست؛ اول نقش/الزامی دروس را مشخص کنید.', data: { updated: 0, total: 0 } };
+    }
+    return { ok: true, message: `شرط فارغ‌التحصیلی برای ${updated} درس از ${rows.length} درس الزامی علامت خورد.`, data: { updated, total: rows.length } };
+  } catch (err: any) {
+    console.error('markGraduationRequiredBulkAction:', err);
+    return { ok: false, error: err.message || 'خطا در علامت‌زدن گروهی' };
+  }
+}
+
 export async function removeCourseFromCurriculumAction(versionId: number, courseId: number): Promise<Act<{ message: string }>> {
   await requireRole(EDITORS);
   try {
@@ -617,13 +790,13 @@ export async function assignCourseToSemesterAction(versionId: number, courseId: 
   await requireRole(EDITORS);
   try {
     await assertEditable(versionId);
-    if (semesterNo != null && (semesterNo < 1 || semesterNo > 8)) {
-      return { ok: false, error: 'شماره ترم باید بین ۱ تا ۸ باشد (۰/خالی = نامشخص).' };
+    if (semesterNo != null && (semesterNo < 1 || semesterNo > 9)) {
+      return { ok: false, error: 'شماره ترم باید بین ۱ تا ۹ باشد (۹ = تابستان، خالی = نامشخص).' };
     }
     await db.update(curriculum_courses).set({ recommendedSemester: semesterNo })
       .where(and(eq(curriculum_courses.curriculumVersionId, versionId), eq(curriculum_courses.courseId, courseId)));
     revalidateCurriculumPaths();
-    return { ok: true, message: semesterNo ? `درس به ترم ${semesterNo} تخصیص یافت.` : 'ترم درس آزاد شد.' };
+    return { ok: true, message: semesterNo ? (semesterNo === 9 ? 'درس به ترم تابستان تخصیص یافت.' : `درس به ترم ${semesterNo} تخصیص یافت.`) : 'ترم درس آزاد شد.' };
   } catch (err: any) {
     console.error('assignCourseToSemesterAction:', err);
     return { ok: false, error: err.message || 'خطا در تخصیص ترم' };
@@ -635,8 +808,8 @@ export async function bulkAssignSemestersAction(versionId: number, assignments: 
   try {
     await assertEditable(versionId);
     for (const a of assignments) {
-      if (a.semesterNo != null && (a.semesterNo < 1 || a.semesterNo > 8)) {
-        return { ok: false, error: `ترم نامعتبر برای درس ${a.courseId}: باید بین ۱ تا ۸ باشد.` };
+      if (a.semesterNo != null && (a.semesterNo < 1 || a.semesterNo > 9)) {
+        return { ok: false, error: `ترم نامعتبر برای درس ${a.courseId}: باید بین ۱ تا ۹ باشد (۹ = تابستان).` };
       }
       await db.update(curriculum_courses).set({ recommendedSemester: a.semesterNo })
         .where(and(eq(curriculum_courses.curriculumVersionId, versionId), eq(curriculum_courses.courseId, a.courseId)));

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ClientTh, useClientTable, type ColumnDef } from '@/components/DataTable';
 import {
   importStagedStudentsAction,
   registerManualStudentAction,
@@ -89,6 +90,17 @@ export default function AdmissionsClient({
   // Tab 1: Sanjesh Staging — خالی شروع می‌شود (نمونه فقط به‌صورت «قالب» قابل مشاهده است)
   const [rawText, setRawText] = useState<string>('');
   const [stagingList, setStagingList] = useState<StagingItem[]>(initialStaging);
+
+  // جدول داوطلبان: سورت + فیلتر هر ستون
+  const STAGING_COLS: ColumnDef<StagingItem>[] = [
+    { key: 'nationalCode', label: 'کد ملی', get: s => s.nationalCode },
+    { key: 'fullName', label: 'نام و نام خانوادگی', get: s => s.fullName ?? '' },
+    { key: 'sanjeshCode', label: 'کد رشته سنجش', get: s => s.rawSanjeshData?.sanjeshCode ?? '' },
+    { key: 'major', label: 'رشته تطبیق‌یافته دانشگاه', get: s => s.mappedMajorName ?? '' },
+    { key: 'quota', label: 'سهمیه پذیرش', get: s => s.quotaType ?? '' },
+    { key: 'status', label: 'وضعیت تطبیق', get: s => s.status ?? '' },
+  ];
+  const stagingTable = useClientTable(stagingList, STAGING_COLS);
   const [mappingsList, setMappingsList] = useState<SanjeshMappingItem[]>(initialMappings);
   const [isStaging, setIsStaging] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -348,29 +360,42 @@ export default function AdmissionsClient({
               <h3 className="text-xs font-black text-slate-800">
                 جدول رکوردهای پردازش‌شده در صف بازبینی (Admissions Staging Grid)
               </h3>
-              <span className="text-xs text-slate-400 font-mono">{stagingList.length} رکورد</span>
+              <span className="text-xs text-slate-400 font-mono">{stagingTable.visible.length} از {stagingList.length} رکورد</span>
             </div>
 
-            <table className="w-full text-right text-xs">
+            <table className="w-full table-fixed text-right text-xs">
+              <colgroup>
+                <col style={{ width: 120 }} />
+                <col />
+                <col style={{ width: 110 }} />
+                <col />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 130 }} />
+              </colgroup>
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold">
-                  <th className="p-3">کد ملی</th>
-                  <th className="p-3">نام و نام خانوادگی</th>
-                  <th className="p-3">کد رشته سنجش</th>
-                  <th className="p-3">رشته تطبیق‌یافته دانشگاه</th>
-                  <th className="p-3">سهمیه پذیرش</th>
-                  <th className="p-3">وضعیت تطبیق</th>
+                  {STAGING_COLS.map(c => (
+                    <ClientTh
+                      key={c.key}
+                      col={c}
+                      sortKey={stagingTable.sortKey}
+                      sortDir={stagingTable.sortDir}
+                      filter={stagingTable.filters[c.key] ?? ''}
+                      onSort={() => stagingTable.toggleSort(c.key)}
+                      onFilter={v => stagingTable.setFilter(c.key, v)}
+                    />
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {stagingList.length === 0 && (
+                {stagingTable.visible.length === 0 && (
                   <tr>
                     <td colSpan={6} className="p-8 text-center text-slate-400">
                       هیچ رکوردی در صف Staging موجود نیست. بر روی «پردازش و تطبیق خودکار» کلیک کنید.
                     </td>
                   </tr>
                 )}
-                {stagingList.map(st => {
+                {stagingTable.visible.map(st => {
                   const isResolved = st.status === 'RESOLVED' || st.status === 'IMPORTED';
                   const isPending = st.status === 'PENDING_MAPPING';
 

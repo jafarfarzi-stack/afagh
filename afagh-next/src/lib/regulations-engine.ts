@@ -18,6 +18,8 @@ import {
   DEFAULT_BACHELOR_REGULATION_1403,
   DEFAULT_BACHELOR_REGULATION_1390,
   DEFAULT_MASTER_REGULATION_1403,
+  applyLevelConfig,
+  maghtaGroup,
 } from './regulations-types';
 
 export * from './regulations-types';
@@ -128,7 +130,19 @@ export async function getRegulationConfig(regulationId?: number | null, degreeLe
       if (!reg?.rulesConfig) continue;
       const parsed = JSON.parse(reg.rulesConfig);
       if (parsed && typeof parsed === 'object' && parsed.grading_and_gpa) {
-        return { ...DEFAULT_BACHELOR_REGULATION_1403, ...parsed };
+        const merged: RegulationConfig = { ...DEFAULT_BACHELOR_REGULATION_1403, ...parsed };
+        // تفاوت‌های مقطعی (فقط نیمسال/سنوات) از levels اعمال می‌شود
+        if (merged.levels && degreeLevelId) {
+          try {
+            const [deg] = await db
+              .select({ code: degree_level_configs.code })
+              .from(degree_level_configs)
+              .where(eq(degree_level_configs.id, degreeLevelId))
+              .limit(1);
+            if (deg?.code) return applyLevelConfig(merged, maghtaGroup(deg.code));
+          } catch { /* fallback بدون levels */ }
+        }
+        return merged;
       }
     }
   } catch (err) {

@@ -117,17 +117,23 @@ export default function ProfessorAttendanceClient({
   const [makeupHistory, setMakeupHistory] = useState<MakeupSessionRecord[]>(initialMakeupHistory);
 
   // Current offering & session
+  // ⚠ حالت خالی: استادی که هنوز هیچ درسی به او تخصیص نیافته، offerings خالی دارد.
+  //   پیش از این «currentOffering.sessions» روی undefined صدا زده می‌شد و کل صفحه
+  //   با TypeError کرش می‌کرد (۵۰۰). حالا خروجی می‌تواند null باشد و پایین‌تر
+  //   یک حالت خالی تمیز رندر می‌شود.
   const currentOffering = useMemo(() => {
-    return offerings.find(o => o.id === selectedOfferingId) || offerings[0];
+    return offerings.find(o => o.id === selectedOfferingId) ?? offerings[0] ?? null;
   }, [offerings, selectedOfferingId]);
 
   const currentSession = useMemo(() => {
-    return currentOffering.sessions.find(s => s.sessionNo === selectedSessionNo) || currentOffering.sessions[0];
+    const sessions = currentOffering?.sessions ?? [];
+    return sessions.find(s => s.sessionNo === selectedSessionNo) ?? sessions[0] ?? null;
   }, [currentOffering, selectedSessionNo]);
 
   // Compute total prior absences for each student across all completed sessions
   const studentPriorAbsentsMap = useMemo(() => {
     const map: { [studentId: number]: number } = {};
+    if (!currentOffering) return map;
     currentOffering.students.forEach(st => { map[st.id] = 0; });
 
     currentOffering.sessions.forEach(sess => {
@@ -422,6 +428,24 @@ export default function ProfessorAttendanceClient({
   };
 
   // Statistics for the active session
+  // ── حالت خالی (بدون درس تخصیص‌یافته یا بدون جلسهٔ تولیدشده) ──
+  // همهٔ هوک‌ها بالاتر اجرا شده‌اند، پس این return زودهنگام قانون ترتیب هوک‌ها را نمی‌شکند.
+  if (!currentOffering || !currentSession) {
+    return (
+      <div className="space-y-5" dir="rtl">
+        <div className="card p-8 text-center space-y-3">
+          <div className="text-4xl">📋</div>
+          <h2 className="text-lg font-bold">درسی برای حضوروغیاب یافت نشد</h2>
+          <p className="text-sm text-gray-400 leading-7">
+            {offerings.length === 0
+              ? `جناب ${profDisplayName}، در نیمسال جاری هیچ درسی به شما تخصیص نیافته است. پس از تخصیص درس توسط مدیر گروه، کارتابل حضوروغیاب همین‌جا فعال می‌شود.`
+              : 'برای این درس هنوز هیچ جلسه‌ای تولید نشده است؛ پس از تعیین برنامهٔ هفتگی، جلسات به‌صورت خودکار ساخته می‌شوند.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const students = currentOffering.students;
   const totalStudents = students.length;
   const presentCount = students.filter(s => {

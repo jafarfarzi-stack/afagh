@@ -122,12 +122,15 @@ step "۲/۷ تنظیمات و رمزهای پروداکشن"
 ENV_FILE="$ROOT/.env"
 rnd() { tr -dc 'A-Za-z0-9' </dev/urandom | head -c "${1:-28}"; }
 if [ ! -f "$ENV_FILE" ]; then
-  PGPW="$(rnd 32)"; MINIOPW="$(rnd 32)"
+  PGPW="$(rnd 32)"; APPDBPW="$(rnd 32)"; MINIOPW="$(rnd 32)"
   HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
   cat > "$ENV_FILE" <<EOF
 # ساخته‌شده توسط deploy-debian.sh در $(date '+%Y-%m-%d %H:%M') — این فایل را جای امنی نگه دارید
 APP_PORT=8080
 POSTGRES_PASSWORD=$PGPW
+# P0-3: رمز نقش محدود afagh_app — قبلاً اصلاً تولید نمی‌شد و compose به
+# پیش‌فرض ناامن «afagh-app-pass» می‌افتاد. hardening.mjs همین مقدار را روی نقش اعمال می‌کند.
+AFAGH_APP_DB_PASSWORD=$APPDBPW
 PG_HOST_PORT=5432
 REDIS_HOST_PORT=6379
 MINIO_ROOT_USER=afagh
@@ -146,6 +149,18 @@ EOF
   ok "‎.env ساخته شد با رمزهای تصادفی (chmod 600)"
 else
   ok "‎.env موجود بود — دست‌نخورده ماند"
+  # P0-3: backfill برای استقرارهای قدیمی که AFAGH_APP_DB_PASSWORD ندارند
+  # (قبلاً این متغیر تولید نمی‌شد و اتصال app-role به پیش‌فرض ناامن می‌افتاد)
+  if ! grep -q '^AFAGH_APP_DB_PASSWORD=' "$ENV_FILE" || [ -z "$(grep '^AFAGH_APP_DB_PASSWORD=' "$ENV_FILE" | cut -d= -f2-)" ]; then
+    APPDBPW="$(rnd 32)"
+    if grep -q '^AFAGH_APP_DB_PASSWORD=' "$ENV_FILE"; then
+      sed -i "s/^AFAGH_APP_DB_PASSWORD=.*/AFAGH_APP_DB_PASSWORD=$APPDBPW/" "$ENV_FILE"
+    else
+      echo "AFAGH_APP_DB_PASSWORD=$APPDBPW" >> "$ENV_FILE"
+    fi
+    chmod 600 "$ENV_FILE"
+    ok "AFAGH_APP_DB_PASSWORD تصادفی ساخته و به .env اضافه شد"
+  fi
 fi
 if [ -n "$APP_PORT_ARG" ]; then
   sed -i "s/^APP_PORT=.*/APP_PORT=$APP_PORT_ARG/" "$ENV_FILE"
@@ -161,6 +176,22 @@ if [ -n "$BASE_URL_ARG" ]; then
 fi
 set -a; . "$ENV_FILE"; set +a
 APP_PORT="${APP_PORT:-8080}"
+
+# P0-3: fail-fast روی سکرت‌های ناامن — این اسکریپت فقط پروداکشن است (root + Debian)،
+# پس هیچ بهانه‌ای برای مقادیر پیش‌فرض/نمونه پذیرفته نیست.
+weak_secret() { # $1=value — خروجی ۰ یعنی ضعیف/نمونه
+  case "$1" in
+    ""|afagh|afagh-app-pass|afagh_app|afagh-secret|CHANGE_ME*|changeme*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+weak_secret "${POSTGRES_PASSWORD:-}" && die "POSTGRES_PASSWORD ناامن است — در .env مقدار تصادفی قوی بگذارید یا .env را حذف کنید تا دوباره ساخته شود"
+weak_secret "${AFAGH_APP_DB_PASSWORD:-}" && die "AFAGH_APP_DB_PASSWORD ناامن است — در .env مقدار تصادفی قوی بگذارید یا .env را حذف کنید تا دوباره ساخته شود"
+weak_secret "${MINIO_ROOT_PASSWORD:-}" && die "MINIO_ROOT_PASSWORD ناامن است — در .env مقدار تصادفی قوی بگذارید یا .env را حذف کنید تا دوباره ساخته شود"
+[ "${#POSTGRES_PASSWORD}" -ge 16 ] || die "POSTGRES_PASSWORD کوتاه است (حداقل ۱۶ کاراکتر)"
+[ "${#AFAGH_APP_DB_PASSWORD}" -ge 16 ] || die "AFAGH_APP_DB_PASSWORD کوتاه است (حداقل ۱۶ کاراکتر)"
+[ "${#MINIO_ROOT_PASSWORD}" -ge 8 ] || die "MINIO_ROOT_PASSWORD کوتاه است (حداقل ۸ کاراکتر)"
+ok "سکرت‌ها بررسی شدند (بدون مقدار پیش‌فرض/نمونه)"
 
 if ss -ltn "sport = :$APP_PORT" 2>/dev/null | grep -q LISTEN; then
   warn "پورت $APP_PORT روی هاست اشغال است — اگر مربوط به همین سامانه نیست، آزادش کنید"
