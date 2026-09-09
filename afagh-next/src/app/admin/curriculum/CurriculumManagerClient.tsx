@@ -8,7 +8,7 @@
 // و زنجیرهٔ حسابرسی. UI فقط «نمایش وضعیت واقعی» و «فراخوانی اکشن» است.
 // ════════════════════════════════════════════════════════════════════════
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   getCurriculumOverviewAction, getCurriculumVersionDetailAction, listCourseBankAction,
   listDepartmentsAction, createCourseBankAction, setCoursePrerequisiteAction, setCourseCorequisiteAction,
@@ -103,6 +103,13 @@ const ROLE_LABELS: Record<string, string> = {
   THESIS: 'پایان‌نامه', INTERNSHIP: 'کارآموزی', WORKSHOP: 'کارگاه',
 };
 
+// نگاشت نوع درس بانک → نقش کاتالوگ (پیش‌فرض هر ردیف؛ قابل تغییر تکی)
+const BANK_TYPE_TO_ROLE: Record<string, string> = {
+  'عمومی': 'GENERAL', 'پایه': 'CORE', 'تخصصی': 'MAJOR', 'اصلی': 'MAJOR',
+  'اختیاری': 'ELECTIVE', 'جبرانی': 'ELECTIVE',
+};
+const roleFromBankType = (t: string | null | undefined) => BANK_TYPE_TO_ROLE[(t ?? '').trim()] ?? 'CORE';
+
 type CurriculumTab = 'CATALOG' | 'COURSES' | 'SEMESTERS' | 'VERIFY' | 'TRANSFER';
 
 const TABS: { key: CurriculumTab; icon: string; label: string }[] = [
@@ -133,7 +140,9 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
   const [bank, setBank] = useState<BankCourse[]>([]);
   const [bankLoading, setBankLoading] = useState(false);
   const [bankQuery, setBankQuery] = useState('');
+  const [codePrefix, setCodePrefix] = useState('');
   const [bankSelected, setBankSelected] = useState<Set<number>>(new Set());
+  const [bankRoles, setBankRoles] = useState<Record<number, string>>({});
   const [bulkRoleType, setBulkRoleType] = useState('CORE');
 
   const [modal, setModal] = useState<null | 'NEW_VERSION' | 'ADD_COURSE' | 'NEW_COURSE' | 'RULES' | 'REJECT'>(null);
@@ -155,6 +164,8 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
   const [ruleForm, setRuleForm] = useState({ pre: [] as string[], preOp: 'AND' as 'AND' | 'OR', co: [] as string[], coOp: 'AND' as 'AND' | 'OR', minGrade: '' });
   const [activeTab, setActiveTab] = useState<CurriculumTab>('CATALOG');
   const [transferMajorId, setTransferMajorId] = useState(0);
+  const [facultyFilter, setFacultyFilter] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
 
   const showToast = useCallback((text: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ text, type });
@@ -186,7 +197,9 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
   const closeAddCourse = () => {
     setModal(null);
     setBankQuery('');
+    setCodePrefix('');
     setBankSelected(new Set());
+    setBankRoles({});
   };
 
   // بارگذاری جزئیات با تغییر نسخهٔ انتخابی
@@ -318,9 +331,10 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
   // ── ویرایش دروس (فقط DRAFT؛ اکشن خودش گیت می‌زند) ──
   const handleAddCourse = async () => {
     if (selectedVersionId == null || !addCourseForm.courseId) return;
+    const picked = bank.find(b => b.id === Number(addCourseForm.courseId));
     const ok = await run(() => addCourseToCurriculumAction(selectedVersionId, {
       courseId: Number(addCourseForm.courseId),
-      roleType: addCourseForm.roleType,
+      roleType: picked ? roleForBank(picked) : addCourseForm.roleType,
       recommendedSemester: addCourseForm.recommendedSemester ? Number(addCourseForm.recommendedSemester) : null,
     }));
     if (ok) { setModal(null); setAddCourseForm({ courseId: '', roleType: 'CORE', recommendedSemester: '' }); reloadDetail(selectedVersionId); }
@@ -328,11 +342,14 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
 
   const handleBulkAddCourses = async () => {
     if (selectedVersionId == null || bankSelected.size === 0) return;
-    const items = [...bankSelected].map(courseId => ({
-      courseId,
-      roleType: addCourseForm.roleType,
-      recommendedSemester: null,
-    }));
+    const items = [...bankSelected].map(courseId => {
+      const b = bank.find(x => x.id === courseId);
+      return {
+        courseId,
+        roleType: b ? roleForBank(b) : addCourseForm.roleType,
+        recommendedSemester: null,
+      };
+    });
     const ok = await run(() => bulkAddCoursesAction(selectedVersionId, items));
     if (ok) { closeAddCourse(); reloadDetail(selectedVersionId); setActiveTab('SEMESTERS'); }
   };
@@ -479,6 +496,26 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
     reloadDetail(selectedVersionId);
   };
 
+  // ── فیلتر درختی رشته: دانشکده → گروه → رشته ──
+  const faculties = useMemo(() => [...new Set(majors.map(m => m.facultyName).filter(Boolean) as string[])].sort((a,b)=>a.localeCompare(b,'fa')), [majors]);
+  const departments = useMemo(() => {
+    const pool = facultyFilter ? majors.filter(m => m.facultyName === facultyFilter) : majors;
+    return [...new Set(pool.map(m => m.departmentName).filter(Boolean) as string[])].sort((a,b)=>a.localeCompare(b,'fa'));
+  }, [majors, facultyFilter]);
+  const filteredMajors = useMemo(() => majors.filter(m =>
+    (!facultyFilter || m.facultyName === facultyFilter) &&
+    (!deptFilter || m.departmentName === deptFilter)
+  ), [majors, facultyFilter, deptFilter]);
+
+  useEffect(() => {
+    // اگر رشتهٔ انتخابی بعد از فیلتر مخفی شد، به اولین رشتهٔ قابل‌نمایش سوییچ کن
+    if (filteredMajors.length > 0 && !filteredMajors.some(m => m.id === selectedMajorId)) {
+      setSelectedMajorId(filteredMajors[0].id);
+      setSelectedVersionId(null);
+      setDetail(null);
+    }
+  }, [filteredMajors, selectedMajorId]);
+
   // ── رندر ──
   const courseCodeOf = new Map((detail?.courses ?? []).map(c => [c.courseId, c.code]));
   const isDraft = (detail?.version.status ?? selectedVersion?.status) === 'DRAFT';
@@ -495,6 +532,44 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
   });
   const semesterUnitTotal = (list: CourseRow[] | undefined) => (list ?? []).reduce((s, c) => s + Number(c.units || 0), 0);
   const totalPlannedUnits = (detail?.courses ?? []).reduce((s, c) => s + Number(c.units || 0), 0);
+
+  // ── فیلتر بانک: جستجو + پیشوند کد رشته ──
+  const bankFiltered = bank.filter(b => {
+    const q = bankQuery.trim();
+    const p = codePrefix.trim();
+    const okQ = !q || String(b.id).includes(q) || b.code.includes(q) || b.title.includes(q);
+    const okP = !p || b.code.startsWith(p);
+    return okQ && okP;
+  });
+  const bankVisible = bankFiltered.slice(0, 60);
+  const allFilteredSelected = bankFiltered.length > 0 && bankFiltered.every(b => bankSelected.has(b.id));
+  const roleForBank = (b: { id: number; courseType: string }) => bankRoles[b.id] ?? roleFromBankType(b.courseType);
+  const toggleSelectAllBank = () => {
+    const ids = bankFiltered.map(b => b.id);
+    if (allFilteredSelected) {
+      setBankSelected(prev => { const next = new Set(prev); ids.forEach(id => next.delete(id)); return next; });
+      setBankRoles(prev => { const next = { ...prev }; ids.forEach(id => { delete next[id]; }); return next; });
+    } else {
+      setBankSelected(prev => new Set([...prev, ...ids]));
+      setBankRoles(prev => { const next = { ...prev }; bankFiltered.forEach(b => { if (!(b.id in next)) next[b.id] = roleFromBankType(b.courseType); }); return next; });
+      const last = bankFiltered[bankFiltered.length - 1];
+      if (last) setAddCourseForm(f => ({ ...f, courseId: String(last.id) }));
+    }
+  };
+
+  // ── جمع‌بندی نوع درس نسخه (معادل «نمایش اطلاعات نوع درس» مدل قدیم: جمع ۲) ──
+  const typeSummary = (() => {
+    const m = new Map<string, { count: number; units: number }>();
+    for (const c of detail?.courses ?? []) {
+      const e = m.get(c.roleType) ?? { count: 0, units: 0 };
+      e.count += 1; e.units += Number(c.units || 0);
+      m.set(c.roleType, e);
+    }
+    const order = Object.keys(ROLE_LABELS);
+    return [...m.entries()]
+      .map(([role, v]) => ({ role, ...v }))
+      .sort((a, b) => (order.indexOf(a.role) === -1 ? 99 : order.indexOf(a.role)) - (order.indexOf(b.role) === -1 ? 99 : order.indexOf(b.role)));
+  })();
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 p-3 sm:p-6 space-y-5" dir="rtl">
@@ -529,21 +604,52 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
 
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
           <div>
-            <label className="text-indigo-200 font-bold block mb-1">رشته / مقطع:</label>
+            <label className="text-indigo-200 font-bold block mb-1">دانشکده:</label>
+            <select
+              value={facultyFilter}
+              onChange={e => { setFacultyFilter(e.target.value); setDeptFilter(''); }}
+              className="w-full bg-slate-900/90 text-white border border-indigo-400/50 rounded-lg px-2.5 py-2 font-bold"
+            >
+              <option value="">همه دانشکده‌ها</option>
+              {faculties.map(f => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-indigo-200 font-bold block mb-1">گروه آموزشی:</label>
+            <select
+              value={deptFilter}
+              onChange={e => setDeptFilter(e.target.value)}
+              className="w-full bg-slate-900/90 text-white border border-indigo-400/50 rounded-lg px-2.5 py-2 font-bold"
+            >
+              <option value="">همه گروه‌ها</option>
+              {departments.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-indigo-200 font-bold block mb-1">رشته / مقطع {filteredMajors.length !== majors.length ? `(${faNum(filteredMajors.length)} از ${faNum(majors.length)})` : `(${faNum(majors.length)})`}:</label>
             <select
               value={selectedMajorId}
               onChange={e => { setSelectedMajorId(Number(e.target.value)); setSelectedVersionId(null); setDetail(null); }}
               className="w-full bg-slate-900/90 text-white border border-indigo-400/50 rounded-lg px-2.5 py-2 font-bold"
             >
-              {majors.map(m => (
+              {filteredMajors.map(m => (
                 <option key={m.id} value={m.id}>
-                  {m.name} — {m.degreeTitle ?? '—'}{m.facultyName ? ` (${m.facultyName}${m.departmentName ? ` / ${m.departmentName}` : ''})` : ''}
+                  {m.code} — {m.name} — {m.degreeTitle ?? '—'}{m.facultyName ? ` (${m.facultyName}${m.departmentName ? ` / ${m.departmentName}` : ''})` : ''}
                 </option>
               ))}
+              {filteredMajors.length === 0 && <option value={selectedMajorId}>— موردی با این فیلتر یافت نشد —</option>}
             </select>
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          <div>
             {(() => { const m = majors.find(x => x.id === selectedMajorId); if (!m) return null; return (
-              <p className="text-[10px] text-indigo-300 mt-1.5 font-bold">
-                {m.facultyName ?? '—'} · {m.departmentName ?? '—'} · {faNum(m.minUnits ?? 0)} واحد الزامی
+              <p className="text-[10px] text-indigo-300 font-bold leading-relaxed">
+                کد {m.code} · {m.facultyName ?? '—'} · {m.departmentName ?? '—'} · {faNum(m.minUnits ?? 0)} واحد الزامی
                 {m.tracks && m.tracks.length > 0 ? ` · گرایش: ${m.tracks.join('، ')}` : ''}
               </p>
             ); })()}
@@ -906,6 +1012,39 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
                   </tbody>
                 </table>
               </div>
+
+              {/* جمع‌بندی نوع درس — معادل «نمایش اطلاعات نوع درس» مدل قدیم (جمع ۲) */}
+              {detail.courses.length > 0 && (
+                <div className="pt-3 border-t border-slate-200 space-y-2">
+                  <h5 className="font-extrabold text-slate-900 text-xs">📊 جمع‌بندی نوع درس (ثبت‌شده در این نسخه)</h5>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-900 text-white text-center">
+                          <th className="p-2.5 border border-slate-800">نوع درس</th>
+                          <th className="p-2.5 border border-slate-800">تعداد درس (جمع ۲)</th>
+                          <th className="p-2.5 border border-slate-800">مجموع واحد</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {typeSummary.map(r => (
+                          <tr key={r.role} className="text-center">
+                            <td className="p-2 border border-slate-200 font-extrabold">{ROLE_LABELS[r.role] ?? r.role}</td>
+                            <td className="p-2 border border-slate-200 font-black">{faNum(r.count)}</td>
+                            <td className="p-2 border border-slate-200 font-black">{faNum(r.units)}</td>
+                          </tr>
+                        ))}
+                        <tr className="text-center bg-indigo-50 font-black">
+                          <td className="p-2 border border-indigo-200">جمع کل</td>
+                          <td className="p-2 border border-indigo-200">{faNum(detail.courses.length)} درس</td>
+                          <td className="p-2 border border-indigo-200">{faNum(totalPlannedUnits)} از {faNum(detail.version.totalRequiredUnits)} واحد الزامی</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-bold">حداقل‌های مقرر هر نقش در تب «بررسی و خاتمه» (COURSE_TYPES_COMPLETE) کنترل می‌شود.</p>
+                </div>
+              )}
 
               {/* Rules */}
               {(detail.rules.length > 0) && (
@@ -1310,64 +1449,108 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
       {/* ── Modal: Add course from bank ── */}
       {modal === 'ADD_COURSE' && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg p-5 space-y-3">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl p-5 space-y-3">
             <h3 className="font-extrabold text-slate-900 text-sm">➕ افزودن درس از بانک دروس</h3>
             <div className="space-y-2 text-xs">
-              <label className="block font-bold text-slate-700">
-                جستجو در بانک دروس (کد یا عنوان):
-                <div className="mt-1 flex gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block font-bold text-slate-700">
+                  جستجو (کد یا عنوان):
                   <input
                     value={bankQuery}
                     onChange={e => setBankQuery(e.target.value)}
                     placeholder="مثلاً ریاضی یا 101…"
-                    className="w-full border border-slate-300 rounded-lg p-2 font-bold"
+                    className="mt-1 w-full border border-slate-300 rounded-lg p-2 font-bold"
                   />
-                  <button
-                    type="button"
-                    onClick={() => { setBank([]); }}
-                    className="px-3 rounded-lg bg-indigo-100 text-indigo-900 font-extrabold text-[10px] shrink-0"
-                  >
-                    {bankLoading ? '…' : 'به‌روزرسانی'}
-                  </button>
-                </div>
-              </label>
+                </label>
+                <label className="block font-bold text-slate-700">
+                  پیشوند کد رشته (مثل 99):
+                  <div className="mt-1 flex gap-2">
+                    <input
+                      value={codePrefix}
+                      onChange={e => setCodePrefix(e.target.value)}
+                      placeholder="مثلاً 99…"
+                      dir="ltr"
+                      className="w-full border border-slate-300 rounded-lg p-2 font-bold font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setBank([]); }}
+                      className="px-3 rounded-lg bg-indigo-100 text-indigo-900 font-extrabold text-[10px] shrink-0"
+                    >
+                      {bankLoading ? '…' : 'به‌روزرسانی'}
+                    </button>
+                  </div>
+                </label>
+              </div>
               {bank.length > 0 && (
-                <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
-                  {bank
-                    .filter(b => !bankQuery.trim() || String(b.id).includes(bankQuery.trim()) || b.code.includes(bankQuery.trim()) || b.title.includes(bankQuery.trim()))
-                    .slice(0, 60)
-                    .map(b => (
-                      <label key={b.id} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-indigo-50 cursor-pointer text-[11px] font-bold">
+                <>
+                  <div className="flex items-center justify-between gap-2 rounded-lg bg-indigo-50/70 border border-indigo-100 px-2.5 py-1.5">
+                    <label className="flex items-center gap-2 font-black text-indigo-900 cursor-pointer text-[11px]">
+                      <input
+                        type="checkbox"
+                        className="accent-indigo-700 w-4 h-4"
+                        checked={allFilteredSelected}
+                        onChange={toggleSelectAllBank}
+                      />
+                      انتخاب همه ({faNum(bankFiltered.length)} درس)
+                    </label>
+                    <span className="text-[10px] font-black text-indigo-700">{faNum(bankSelected.size)} انتخاب شد</span>
+                  </div>
+                  <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
+                    {bankVisible.map(b => (
+                      <div key={b.id} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-indigo-50 text-[11px] font-bold">
                         <input
                           type="checkbox"
                           className="accent-indigo-700 w-3.5 h-3.5 shrink-0"
                           checked={bankSelected.has(b.id)}
                           onChange={e => {
                             const next = new Set(bankSelected);
-                            if (e.target.checked) { next.add(b.id); setAddCourseForm(f => ({ ...f, courseId: String(b.id) })); }
-                            else next.delete(b.id);
+                            if (e.target.checked) {
+                              next.add(b.id);
+                              setAddCourseForm(f => ({ ...f, courseId: String(b.id) }));
+                              setBankRoles(prev => (b.id in prev ? prev : { ...prev, [b.id]: roleFromBankType(b.courseType) }));
+                            } else {
+                              next.delete(b.id);
+                              setBankRoles(prev => { const nx = { ...prev }; delete nx[b.id]; return nx; });
+                            }
                             setBankSelected(next);
                           }}
                         />
                         <span className="font-mono text-indigo-900 shrink-0">{b.code}</span>
-                        <span className="truncate">{b.title}</span>
+                        <span className="truncate flex-1">{b.title}</span>
                         <span className="text-slate-400 shrink-0">({faNum(b.units)} واحد)</span>
-                      </label>
+                        <select
+                          value={roleForBank(b)}
+                          onChange={e => setBankRoles(prev => ({ ...prev, [b.id]: e.target.value }))}
+                          title={`نوع بانک: ${b.courseType}`}
+                          className="border border-slate-300 rounded px-1 py-0.5 font-bold text-[10px] bg-white shrink-0"
+                        >
+                          {Object.entries(ROLE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}{roleFromBankType(b.courseType) === k ? ' •' : ''}</option>)}
+                        </select>
+                      </div>
                     ))}
-                </div>
-              )}
-              {bankSelected.size > 0 && (
-                <p className="text-[10px] font-black text-indigo-700">{faNum(bankSelected.size)} درس انتخاب شد.</p>
+                    {bankFiltered.length > bankVisible.length && (
+                      <div className="px-2.5 py-1.5 text-[10px] text-slate-400 font-bold text-center">
+                        … و {faNum(bankFiltered.length - bankVisible.length)} مورد دیگر — فیلتر را دقیق‌تر کنید
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
               <label className="block font-bold text-slate-700">
-                نقش دروس منتخب:
-                <select value={addCourseForm.roleType} onChange={e => { setAddCourseForm({ ...addCourseForm, roleType: e.target.value }); setBulkRoleType(e.target.value); }}
+                نقش دروس منتخب (اعمال به همه):
+                <select value={addCourseForm.roleType} onChange={e => {
+                    const v = e.target.value;
+                    setAddCourseForm({ ...addCourseForm, roleType: v });
+                    setBulkRoleType(v);
+                    setBankRoles(prev => { const next = { ...prev }; bankSelected.forEach(id => { next[id] = v; }); return next; });
+                  }}
                   className="mt-1 w-full border border-slate-300 rounded-lg p-2 font-bold bg-white">
                   {Object.entries(ROLE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </label>
               <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
-                دروس بدون ترم افزوده می‌شوند؛ ترم‌بندی هر درس در مرحلهٔ بعد — تب «📅 ترم‌بندی چارت» — جلوی هر درس با یک انتخاب انجام می‌شود.
+                نوع هر ردیف به‌صورت پیش‌فرض از بانک خوانده می‌شود (•) و تکی قابل تغییر است. دروس بدون ترم افزوده می‌شوند؛ ترم‌بندی در مرحلهٔ بعد — تب «📅 ترم‌بندی چارت».
               </p>
             </div>
             <div className="flex justify-end gap-2 pt-2">
