@@ -27,6 +27,7 @@ import {
   type CheckResult, type CurriculumVersionStatus, type LogicNode,
 } from '@/lib/curriculum-types';
 import { validateCurriculumCore, hasBlockingErrors } from '@/lib/curriculum-validator';
+import { roleFromBankType } from '@/lib/bank-roles';
 
 /**
  * نتیجهٔ استاندارد اکشن (الگوی فاز ۳+).
@@ -602,6 +603,43 @@ export async function bulkAddCoursesAction(versionId: number, items: AddCourseIn
   } catch (err: any) {
     console.error('bulkAddCoursesAction:', err);
     return { ok: false, error: err.message || 'خطا در افزودن گروهی دروس' };
+  }
+}
+
+/**
+ * همگام‌سازی نقش دروس نسخه از روی نوع بانک (lib/bank-roles — تنها منبع نگاشت).
+ * برای ردیف‌هایی که با نقش پیش‌فرض اشتباه ثبت شده‌اند (مثلاً همه CORE)؛ فقط DRAFT.
+ */
+export async function syncRolesFromBankAction(versionId: number): Promise<Act<{ message: string; data: { updated: number } }>> {
+  await requireRole(EDITORS);
+  try {
+    await assertEditable(versionId);
+    const rows = await db
+      .select({ courseId: curriculum_courses.courseId, roleType: curriculum_courses.roleType, courseType: courses.courseType })
+      .from(curriculum_courses)
+      .innerJoin(courses, eq(courses.id, curriculum_courses.courseId))
+      .where(eq(curriculum_courses.curriculumVersionId, versionId));
+    let updated = 0;
+    for (const r of rows) {
+      const mapped = roleFromBankType(r.courseType);
+      if (mapped !== r.roleType) {
+        await db.update(curriculum_courses).set({ roleType: mapped })
+          .where(and(eq(curriculum_courses.curriculumVersionId, versionId), eq(curriculum_courses.courseId, r.courseId)));
+        updated++;
+      }
+    }
+    await db.transaction(async (tx) => {
+      await appendAudit(tx, {
+        actorUserId: (await requireRole(EDITORS)).id,
+        action: 'CURRICULUM_ROLES_SYNCED', entityType: PHASE, entityId: versionId,
+        details: JSON.stringify({ updated, total: rows.length }),
+      });
+    });
+    revalidateCurriculumPaths();
+    return { ok: true, message: updated > 0 ? `نقش ${updated} درس از روی نوع بانک اصلاح شد.` : 'همهٔ نقش‌ها از قبل با بانک هماهنگ بودند.', data: { updated } };
+  } catch (err: any) {
+    console.error('syncRolesFromBankAction:', err);
+    return { ok: false, error: err.message || 'خطا در همگام‌سازی نقش‌ها' };
   }
 }
 

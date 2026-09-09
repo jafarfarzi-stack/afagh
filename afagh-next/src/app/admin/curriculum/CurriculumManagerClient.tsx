@@ -12,7 +12,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   getCurriculumOverviewAction, getCurriculumVersionDetailAction, listCourseBankAction,
   listDepartmentsAction, createCourseBankAction, setCoursePrerequisiteAction, setCourseCorequisiteAction,
-  setCoursePassingGradeAction,
+  setCoursePassingGradeAction, syncRolesFromBankAction,
   createCurriculumVersionAction, addCourseToCurriculumAction, bulkAddCoursesAction,
   removeCourseFromCurriculumAction, updateCourseInCurriculumAction, updateCurriculumMetaAction,
   assignCourseToSemesterAction, validateCurriculumAction,
@@ -20,6 +20,7 @@ import {
   publishCurriculumAction, archiveCurriculumAction, createCurriculumRevisionAction,
 } from './actions';
 import { describeLogicNode, type LogicNode } from '@/lib/curriculum-types';
+import { roleFromBankType } from '@/lib/bank-roles';
 
 // ─────────────────────────── Types ───────────────────────────
 
@@ -103,12 +104,6 @@ const ROLE_LABELS: Record<string, string> = {
   THESIS: 'پایان‌نامه', INTERNSHIP: 'کارآموزی', WORKSHOP: 'کارگاه',
 };
 
-// نگاشت نوع درس بانک → نقش کاتالوگ (پیش‌فرض هر ردیف؛ قابل تغییر تکی)
-const BANK_TYPE_TO_ROLE: Record<string, string> = {
-  'عمومی': 'GENERAL', 'پایه': 'CORE', 'تخصصی': 'MAJOR', 'اصلی': 'MAJOR',
-  'اختیاری': 'ELECTIVE', 'جبرانی': 'ELECTIVE',
-};
-const roleFromBankType = (t: string | null | undefined) => BANK_TYPE_TO_ROLE[(t ?? '').trim()] ?? 'CORE';
 
 type CurriculumTab = 'CATALOG' | 'COURSES' | 'SEMESTERS' | 'VERIFY' | 'TRANSFER';
 
@@ -354,6 +349,13 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
     });
     const ok = await run(() => bulkAddCoursesAction(selectedVersionId, items));
     if (ok) { closeAddCourse(); reloadDetail(selectedVersionId); setActiveTab('SEMESTERS'); }
+  };
+
+  const handleSyncRoles = async () => {
+    if (selectedVersionId == null) return;
+    if (!window.confirm('نقش همهٔ دروس این نسخه از روی «نوع درس» بانک بازخوانی می‌شود و تغییرات دستی نقش‌ها از بین می‌رود. ادامه می‌دهید؟')) return;
+    const ok = await run(() => syncRolesFromBankAction(selectedVersionId));
+    if (ok) reloadDetail(selectedVersionId);
   };
 
   const handleCreateBankCourse = async () => {
@@ -912,12 +914,24 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
                     ✨ تعریف درس جدید
                   </button>
                   {isDraft && (
-                    <button
-                      onClick={() => setModal('ADD_COURSE')}
-                      className="px-3 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-[11px]"
-                    >
-                      ➕ افزودن درس از بانک
-                    </button>
+                    <>
+                      <button
+                        onClick={() => setModal('ADD_COURSE')}
+                        className="px-3 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-[11px]"
+                      >
+                        ➕ افزودن درس از بانک
+                      </button>
+                      {detail.courses.length > 0 && (
+                        <button
+                          onClick={handleSyncRoles}
+                          disabled={busy}
+                          title="نقش همهٔ دروس نسخه از روی ستون «نوع درس» بانک بازخوانی می‌شود (تغییرات دستی بازنویسی می‌شود)"
+                          className="px-3 py-2 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-extrabold text-[11px] disabled:opacity-50"
+                        >
+                          🔄 همگام‌سازی نقش از بانک
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
