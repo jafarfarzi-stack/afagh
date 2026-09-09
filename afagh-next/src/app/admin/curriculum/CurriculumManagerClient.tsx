@@ -164,6 +164,8 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
   const [ruleForm, setRuleForm] = useState({ pre: [] as string[], preOp: 'AND' as 'AND' | 'OR', co: [] as string[], coOp: 'AND' as 'AND' | 'OR', minGrade: '' });
   const [activeTab, setActiveTab] = useState<CurriculumTab>('CATALOG');
   const [transferMajorId, setTransferMajorId] = useState(0);
+  const [dragCourseId, setDragCourseId] = useState<number | null>(null);
+  const [dropTarget, setDropTarget] = useState<number | 'pool' | null>(null);
   const [facultyFilter, setFacultyFilter] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
 
@@ -470,6 +472,25 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
     if (selectedVersionId == null) return;
     await run(() => assignCourseToSemesterAction(selectedVersionId, courseId, semesterNo));
     reloadDetail(selectedVersionId);
+  };
+
+  // ── درگ‌اندراپ ترم‌بندی (بومی، بدون کتابخانه) ──
+  const onCourseDragStart = (e: React.DragEvent, courseId: number) => {
+    if (!isDraft) { e.preventDefault(); return; }
+    e.dataTransfer.setData('text/plain', String(courseId));
+    e.dataTransfer.effectAllowed = 'move';
+    setDragCourseId(courseId);
+  };
+  const onCourseDragEnd = () => { setDragCourseId(null); setDropTarget(null); };
+  const onDropToSemester = (e: React.DragEvent, sem: number | null) => {
+    e.preventDefault();
+    setDropTarget(null);
+    const id = Number(e.dataTransfer.getData('text/plain'));
+    setDragCourseId(null);
+    if (!id || selectedVersionId == null || !isDraft) return;
+    const cur = detail?.courses.find(c => c.courseId === id)?.recommendedSemester ?? null;
+    if (cur === sem) return;
+    handleAssignSemester(id, sem);
   };
 
   const handleUpdateMaxUnits = async (value: number) => {
@@ -1109,8 +1130,15 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
                   const list = semesterCourses.get(sem) ?? [];
                   const units = semesterUnitTotal(list);
                   const over = detail.version.maxUnitsPerTerm != null && units > (detail.version.maxUnitsPerTerm as number);
+                  const isDropHere = isDraft && dropTarget === sem;
                   return (
-                    <div key={sem} className={`rounded-xl border p-3 space-y-2 ${over ? 'border-rose-300 bg-rose-50' : 'border-emerald-200 bg-emerald-50/50'}`}>
+                    <div
+                      key={sem}
+                      onDragOver={isDraft ? (e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDropTarget(sem); }) : undefined}
+                      onDragLeave={isDraft ? (() => setDropTarget(cur => (cur === sem ? null : cur))) : undefined}
+                      onDrop={isDraft ? (e => onDropToSemester(e, sem)) : undefined}
+                      className={`rounded-xl border-2 p-3 space-y-2 transition-colors ${over ? 'border-rose-300 bg-rose-50' : 'border-emerald-200 bg-emerald-50/50'} ${isDropHere ? '!border-indigo-500 !bg-indigo-50 shadow-lg' : ''}`}
+                    >
                       <div className="flex items-center justify-between">
                         <span className="font-black text-emerald-950 text-xs">ترم {faNum(sem)}</span>
                         <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${over ? 'bg-rose-200 text-rose-900' : 'bg-emerald-200 text-emerald-900'}`}>
@@ -1118,10 +1146,18 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
                         </span>
                       </div>
                       {over && <div className="text-[10px] font-bold text-rose-700">⚠️ بیش از سقف ترم!</div>}
-                      {list.length === 0 && <div className="text-[10px] text-slate-400 font-bold py-2 text-center">— بدون درس —</div>}
-                      <div className="space-y-1.5">
+                      {list.length === 0 && <div className="text-[10px] text-slate-400 font-bold py-2 text-center">{isDropHere ? '⬇ رها کنید' : '— بدون درس —'}</div>}
+                      <div className="space-y-1.5 min-h-[28px]">
                         {list.map(c => (
-                          <div key={c.courseId} className="flex items-center justify-between gap-1 bg-white rounded-lg px-2 py-1 border border-emerald-100 text-[11px]">
+                          <div
+                            key={c.courseId}
+                            draggable={isDraft}
+                            onDragStart={e => onCourseDragStart(e, c.courseId)}
+                            onDragEnd={onCourseDragEnd}
+                            title={isDraft ? 'بکشید و در ترم موردنظر رها کنید' : c.title}
+                            className={`flex items-center justify-between gap-1 bg-white rounded-lg px-2 py-1 border border-emerald-100 text-[11px] ${isDraft ? 'cursor-grab active:cursor-grabbing' : ''} ${dragCourseId === c.courseId ? 'opacity-40' : ''}`}
+                          >
+                            {isDraft && <span className="text-slate-300 shrink-0 select-none">⠿</span>}
                             <span className="font-mono text-indigo-900 text-[10px]">{c.code}</span>
                             <span className="truncate font-bold flex-1">{c.title}</span>
                             <span className="text-slate-400 text-[10px]">{faNum(c.units)}</span>
@@ -1142,15 +1178,28 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
                 })}
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+              <div
+                onDragOver={isDraft ? (e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDropTarget('pool'); }) : undefined}
+                onDragLeave={isDraft ? (() => setDropTarget(cur => (cur === 'pool' ? null : cur))) : undefined}
+                onDrop={isDraft ? (e => onDropToSemester(e, null)) : undefined}
+                className={`rounded-xl border-2 bg-slate-50 p-3 space-y-2 transition-colors ${isDraft && dropTarget === 'pool' ? '!border-indigo-500 !bg-indigo-50 shadow-lg' : 'border-slate-200'}`}
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-black text-slate-800 text-xs">🌫️ دروس بدون ترم (نامشخص) — {faNum(unassignedCourses.length)} درس</span>
-                  <span className="text-[10px] text-slate-400 font-bold">با انتخاب «ترم» از منوی هر درس، به ترمبندی اضافه میشود</span>
+                  <span className="text-[10px] text-slate-400 font-bold">{isDraft ? 'بکشید و روی ترم موردنظر رها کنید — یا از منوی هر درس ترم بدهید' : 'با انتخاب «ترم» از منوی هر درس، به ترمبندی اضافه میشود'}</span>
                 </div>
-                {unassignedCourses.length === 0 && <div className="text-[10px] text-slate-400 font-bold py-2 text-center">همهٔ دروس ترمبندی شدهاند. ✓</div>}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                {unassignedCourses.length === 0 && <div className="text-[10px] text-slate-400 font-bold py-2 text-center">{isDraft && dropTarget === 'pool' ? '⬇ اینجا رها کنید تا از ترم خارج شود' : 'همهٔ دروس ترمبندی شدهاند. ✓'}</div>}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 min-h-[28px]">
                   {unassignedCourses.map(c => (
-                    <div key={c.courseId} className="flex items-center gap-2 bg-white rounded-lg px-2 py-1.5 border border-slate-200 text-[11px]">
+                    <div
+                      key={c.courseId}
+                      draggable={isDraft}
+                      onDragStart={e => onCourseDragStart(e, c.courseId)}
+                      onDragEnd={onCourseDragEnd}
+                      title={isDraft ? 'بکشید و روی ترم موردنظر رها کنید' : c.title}
+                      className={`flex items-center gap-2 bg-white rounded-lg px-2 py-1.5 border border-slate-200 text-[11px] ${isDraft ? 'cursor-grab active:cursor-grabbing' : ''} ${dragCourseId === c.courseId ? 'opacity-40' : ''}`}
+                    >
+                      {isDraft && <span className="text-slate-300 shrink-0 select-none">⠿</span>}
                       <span className="font-mono text-indigo-900 text-[10px]">{c.code}</span>
                       <span className="truncate font-bold flex-1">{c.title}</span>
                       <span className="text-slate-400 text-[10px]">{faNum(c.units)} واحد</span>
