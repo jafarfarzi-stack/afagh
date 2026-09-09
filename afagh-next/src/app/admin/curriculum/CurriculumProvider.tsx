@@ -10,7 +10,11 @@ import React, { useCallback, useEffect, useMemo, useState, type ReactNode } from
 import { CurriculumCtx } from './curriculum-context';
 import { allBankSelected, buildRuleTree, semesterUnitTotal, departmentNames, facultyNames, filterBankCourses, filterMajorsByTree, groupBySemester, isOverflowSemester, leafCourseCodesOf, resolveTab, termGrid, typeSummaryRows, unitsByRoleMap, validateMinGrade, visibleBank, overflowSemesters } from './curriculum-core';
 import type { BankCourse, CurriculumTab, CurriculumWorkspace, MajorItem, VersionDetail, VersionRow } from './types';
-import { addCourseToCurriculumAction, approveCurriculumAction, archiveCurriculumAction, assignCourseToSemesterAction, bulkAddCoursesAction, createCourseBankAction, createCurriculumRevisionAction, createCurriculumVersionAction, getCurriculumOverviewAction, getCurriculumVersionDetailAction, listCourseBankAction, listDepartmentsAction, markGraduationRequiredBulkAction, publishCurriculumAction, rejectCurriculumAction, removeCourseFromCurriculumAction, setCourseCorequisiteAction, setCoursePassingGradeAction, setCoursePrerequisiteAction, submitCurriculumForApprovalAction, syncRolesFromBankAction, updateCourseInCurriculumAction, updateCurriculumMetaAction, validateCurriculumAction } from './actions';
+import { getCurriculumOverviewAction, getCurriculumVersionDetailAction, listCourseBankAction, listDepartmentsAction } from './actions/read';
+import { createCurriculumRevisionAction, createCurriculumVersionAction, updateCurriculumMetaAction } from './actions/versions';
+import { addCourseToCurriculumAction, assignCourseToSemesterAction, bulkAddCoursesAction, createCourseBankAction, markGraduationRequiredBulkAction, removeCourseFromCurriculumAction, syncRolesFromBankAction, updateCourseInCurriculumAction } from './actions/courses';
+import { setCourseCorequisiteAction, setCoursePassingGradeAction, setCoursePrerequisiteAction } from './actions/rules';
+import { approveCurriculumAction, archiveCurriculumAction, publishCurriculumAction, rejectCurriculumAction, submitCurriculumForApprovalAction, validateCurriculumAction } from './actions/lifecycle';
 import { describeLogicNode } from '@/lib/curriculum-types';
 import { parseRoleUnitTargets } from '@/lib/curriculum-validator';
 import { roleFromBankType } from '@/lib/bank-roles';

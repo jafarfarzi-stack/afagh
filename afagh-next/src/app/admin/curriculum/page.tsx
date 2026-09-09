@@ -2,7 +2,7 @@ import { requireRole } from '@/lib/auth';
 import { db } from '@/db';
 import { departments, faculties, majors } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { getCurriculumOverviewAction, getCurriculumVersionDetailAction } from './actions';
+import { getCurriculumOverviewAction, getCurriculumVersionDetailAction } from './actions/read';
 import type { VersionDetail } from './types';
 import CurriculumManagerClient from './CurriculumManagerClient';
 
