@@ -18,6 +18,8 @@ export default function CodesClient({
   createAction,
   deleteAction,
   options,
+  getDegreeAction,
+  updateDegreeAction,
 }: {
   stats: CodeStat[];
   initialTable: CodeTable;
@@ -27,6 +29,8 @@ export default function CodesClient({
   createAction: (fd: FormData) => Promise<Res & { id?: number }>;
   deleteAction: (fd: FormData) => Promise<Res>;
   options: FormOptions;
+  getDegreeAction?: (id: number) => Promise<Record<string, string> | null>;
+  updateDegreeAction?: (fd: FormData) => Promise<Res>;
 }) {
   const [table, setTable] = useState<CodeTable>(initialTable);
   const [rows, setRows] = useState<CodeRow[]>(initialRows);
@@ -38,6 +42,7 @@ export default function CodesClient({
   const [dirty, setDirty] = useState<Record<number, string>>({});
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const cur = stats.find(s => s.id === table);
   const newFields = NEW_FIELDS[table] ?? [];
@@ -46,6 +51,7 @@ export default function CodesClient({
   // با عوض‌شدن جدول، فرمِ باز را ببند و مقادیر پیش‌فرض را بگذار
   useEffect(() => {
     setAdding(false);
+    setEditingId(null);
     setForm(Object.fromEntries((NEW_FIELDS[table] ?? []).map(f => [f.name, f.def ?? ''])));
   }, [table]);
 
@@ -54,15 +60,44 @@ export default function CodesClient({
       const fd = new FormData();
       fd.set('table', table);
       for (const f of newFields) fd.set(f.name, form[f.name] ?? '');
+      if (editingId != null && table === 'degree' && updateDegreeAction) {
+        fd.set('id', String(editingId));
+        const r = await updateDegreeAction(fd);
+        if (r.ok) {
+          setMsg({ kind: 'ok', text: 'مقطع به‌روزرسانی شد.' });
+          setAdding(false);
+          setEditingId(null);
+          setForm(Object.fromEntries(newFields.map(f => [f.name, f.def ?? ''])));
+          setRows(await listAction(table, ''));
+        } else {
+          setMsg({ kind: 'err', text: r.error ?? 'به‌روزرسانی نشد.' });
+        }
+        return;
+      }
       const r = await createAction(fd);
       if (r.ok) {
         setMsg({ kind: 'ok', text: 'رکورد تازه ثبت شد. برای دیده‌شدن در فهرست‌های دیگر، صفحه را تازه کنید.' });
         setAdding(false);
+        setEditingId(null);
         setForm(Object.fromEntries(newFields.map(f => [f.name, f.def ?? ''])));
         setRows(await listAction(table, ''));
       } else {
         setMsg({ kind: 'err', text: r.error ?? 'ثبت نشد.' });
       }
+    });
+
+  const startEditDegree = (row: CodeRow) =>
+    start(async () => {
+      if (!getDegreeAction) return;
+      const d = await getDegreeAction(row.id);
+      if (!d) {
+        setMsg({ kind: 'err', text: 'خواندن مقطع ناموفق بود.' });
+        return;
+      }
+      setForm(Object.fromEntries(newFields.map(f => [f.name, d[f.name] ?? f.def ?? ''])));
+      setEditingId(row.id);
+      setAdding(true);
+      setMsg({ kind: 'ok', text: `در حال ویرایش مقطع «${row.title}» — برای انصراف، «انصراف» را بزنید.` });
     });
 
   const remove = (row: CodeRow) =>
@@ -188,7 +223,7 @@ export default function CodesClient({
           </span>
           {cur?.creatable && (
             <button
-              onClick={() => setAdding(a => !a)}
+              onClick={() => { if (adding) setEditingId(null); setAdding(a => !a); }}
               className={'rounded-lg px-3 py-1.5 text-xs font-bold ' + (adding ? 'bg-slate-200 text-slate-700' : 'bg-emerald-600 text-white hover:bg-emerald-700')}
             >
               {adding ? 'انصراف' : `➕ ${ADD_LABEL[table] ?? 'افزودن'}`}
@@ -242,7 +277,7 @@ export default function CodesClient({
               >
                 ثبت
               </button>
-              <button onClick={() => setAdding(false)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600">انصراف</button>
+              <button onClick={() => { setAdding(false); setEditingId(null); }} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600">انصراف</button>
               <span className="text-[11px] text-slate-500">
                 کد را همان‌طور بنویسید که در فایل‌های اکسل مبدأ آمده — تطبیق انتقال داده اول با کد انجام می‌شود.
               </span>
@@ -294,6 +329,16 @@ export default function CodesClient({
                             className="rounded bg-indigo-600 px-2 py-1 text-[11px] font-bold text-white disabled:opacity-50"
                           >
                             ذخیره
+                          </button>
+                        )}
+                        {table === 'degree' && cur?.editable && getDegreeAction && (
+                          <button
+                            disabled={pending}
+                            onClick={() => startEditDegree(r)}
+                            title="ویرایش همهٔ فیلدهای مقطع (نمره‌ها، سقف واحد، تعداد ترم، تکمیلی)"
+                            className="rounded border border-indigo-200 px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+                          >
+                            ویرایش
                           </button>
                         )}
                         {cur?.creatable && (

@@ -88,6 +88,14 @@ export const NEW_FIELDS: Partial<Record<CodeTable, NewField[]>> = {
     { name: 'defaultPassingGrade', label: 'نمرهٔ قبولی', kind: 'number', def: '10', hint: 'حد نصاب قبولی در هر درس' },
     { name: 'conditionalGpaThreshold', label: 'معدل مشروطی', kind: 'number', def: '12', hint: 'زیر این معدل، دانشجو مشروط می‌شود' },
     { name: 'maxUnitsPerTerm', label: 'سقف واحد هر ترم', kind: 'number', def: '20' },
+    { name: 'termCount', label: 'تعداد ترم تحصیل', kind: 'number', required: true, def: '8', hint: 'کاردانی/ناپیوسته/ارشد: ۴ · کارشناسی پیوسته: ۸ · چارت ترم‌بندی با همین ساخته می‌شود' },
+    {
+      name: 'isGraduate', label: 'تحصیلات تکمیلی؟', kind: 'select', required: true, def: '0',
+      choices: [
+        { value: '0', label: 'نه — کاردانی/کارشناسی' },
+        { value: '1', label: 'بله — ارشد/دکترا' },
+      ],
+    },
   ],
   faculty: [
     { name: 'name', label: 'نام دانشکده', kind: 'text', required: true },

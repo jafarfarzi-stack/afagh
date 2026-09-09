@@ -98,10 +98,17 @@ try {
 
   // مقاطع
   const degreeIds = {};
+  // تعداد ترم چارت + تکمیلی‌بودن هر مقطع — [termCount, isGraduate].
+  // COALESCE یعنی: اگر کاربر در مرکز کدها دستی عوض کرده باشد، seed هر استقرار بازنویسی نمی‌کند.
+  const DEGREE_CHART_DEFAULTS = { BS: [8, 0], MS: [4, 1], AD: [4, 0], PHD: [4, 1] };
   for (const [title, code, passing, gpa, maxUnits] of DEGREES) {
+    const [termCount, isGraduate] = DEGREE_CHART_DEFAULTS[code] ?? [null, null];
     const [row] = await q(
-      `INSERT INTO degree_level_configs (title, code, "defaultPassingGrade", "conditionalGpaThreshold", "maxUnitsPerTerm")
-       VALUES ($1,$2,$3,$4,$5) ON CONFLICT (code) DO UPDATE SET title = EXCLUDED.title RETURNING id`, [title, code, passing, gpa, maxUnits]);
+      `INSERT INTO degree_level_configs (title, code, "defaultPassingGrade", "conditionalGpaThreshold", "maxUnitsPerTerm", "termCount", "isGraduate")
+       VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (code) DO UPDATE SET title = EXCLUDED.title,
+       "termCount" = COALESCE(degree_level_configs."termCount", EXCLUDED."termCount"),
+       "isGraduate" = COALESCE(degree_level_configs."isGraduate", EXCLUDED."isGraduate") RETURNING id`,
+      [title, code, passing, gpa, maxUnits, termCount, isGraduate]);
     degreeIds[code] = row.id;
   }
   console.log(`  ✓ مقاطع (${DEGREES.length})`);

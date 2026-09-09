@@ -68,9 +68,18 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
 
   if (table === 'degree') {
     raw = (await db
-      .select({ id: degree_level_configs.id, code: degree_level_configs.code, title: degree_level_configs.title })
+      .select({
+        id: degree_level_configs.id, code: degree_level_configs.code, title: degree_level_configs.title,
+        termCount: degree_level_configs.termCount, isGraduate: degree_level_configs.isGraduate,
+      })
       .from(degree_level_configs)
-      .orderBy(asc(degree_level_configs.title))).map(r => ({ ...r, context: null }));
+      .orderBy(asc(degree_level_configs.title))).map(r => ({
+        ...r,
+        context: [
+          r.termCount != null ? `${r.termCount} ترمه` : 'ترم: استنتاجی',
+          r.isGraduate === 1 ? 'تکمیلی' : null,
+        ].filter(Boolean).join(' · ') || null,
+      }));
   }
 
   if (table === 'course') {
@@ -256,12 +265,20 @@ export async function createCodeRowAction(fd: FormData): Promise<{ ok: boolean; 
       if (pass < 0 || pass > 20) return { ok: false, error: 'نمرهٔ قبولی باید بین ۰ تا ۲۰ باشد.' };
       if (cond < 0 || cond > 20) return { ok: false, error: 'معدل مشروطی باید بین ۰ تا ۲۰ باشد.' };
       if (maxU < 1 || maxU > 60) return { ok: false, error: 'سقف واحد ترم باید بین ۱ تا ۶۰ باشد.' };
+      const termCount = num(fd, 'termCount');
+      if (termCount == null || !Number.isInteger(termCount) || termCount < 1 || termCount > 12) {
+        return { ok: false, error: 'تعداد ترم تحصیل باید عدد صحیح بین ۱ تا ۱۲ باشد.' };
+      }
+      const gradRaw = str(fd, 'isGraduate');
+      if (gradRaw !== '0' && gradRaw !== '1') return { ok: false, error: 'وضعیت تحصیلات تکمیلی نامعتبر است.' };
 
       const [row] = await db.insert(degree_level_configs).values({
         title, code,
         defaultPassingGrade: pass.toFixed(2),
         conditionalGpaThreshold: cond.toFixed(2),
         maxUnitsPerTerm: maxU,
+        termCount,
+        isGraduate: Number(gradRaw),
       }).returning({ id: degree_level_configs.id });
       revalidatePath('/admin/codes');
       return { ok: true, id: row.id };
@@ -345,6 +362,70 @@ export async function createCodeRowAction(fd: FormData): Promise<{ ok: boolean; 
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, error: `ثبت نشد: ${msg}` };
   }
+}
+
+export type DegreeDetail = {
+  id: number; title: string; code: string;
+  defaultPassingGrade: string; conditionalGpaThreshold: string;
+  maxUnitsPerTerm: number | null; termCount: number | null; isGraduate: number | null;
+} | null;
+
+/** خواندن یک مقطع برای فرم ویرایش — همان فیلدهای فرم ساخت */
+export async function getDegreeRowAction(id: number): Promise<DegreeDetail> {
+  await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
+  if (!id) return null;
+  const [r] = await db.select({
+    id: degree_level_configs.id, title: degree_level_configs.title, code: degree_level_configs.code,
+    defaultPassingGrade: degree_level_configs.defaultPassingGrade,
+    conditionalGpaThreshold: degree_level_configs.conditionalGpaThreshold,
+    maxUnitsPerTerm: degree_level_configs.maxUnitsPerTerm,
+    termCount: degree_level_configs.termCount, isGraduate: degree_level_configs.isGraduate,
+  }).from(degree_level_configs).where(eq(degree_level_configs.id, id)).limit(1);
+  return r ?? null;
+}
+
+/** ویرایش مقطع — همهٔ فیلدهای فرم ساخت؛ کد با همان قاعدهٔ یکتاییِ ویرایش کد */
+export async function updateDegreeRowAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  await requireRole(['ADMIN', 'VICE_EDU']);
+  const id = Number(fd.get('id') || 0);
+  if (!id) return { ok: false, error: 'رکورد نامعتبر است.' };
+  const [exists] = await db.select({ id: degree_level_configs.id }).from(degree_level_configs).where(eq(degree_level_configs.id, id)).limit(1);
+  if (!exists) return { ok: false, error: 'مقطع یافت نشد.' };
+
+  const title = str(fd, 'title');
+  const code = latinDigits(str(fd, 'code'));
+  if (!title) return { ok: false, error: 'عنوان مقطع را وارد کنید.' };
+  if (!code) return { ok: false, error: 'کد مقطع نمی‌تواند خالی باشد.' };
+  const clashCode = await db.select({ t: degree_level_configs.title }).from(degree_level_configs)
+    .where(and(eq(degree_level_configs.code, code), ne(degree_level_configs.id, id))).limit(1);
+  if (clashCode.length) return { ok: false, error: `کد «${code}» قبلاً برای «${clashCode[0].t}» ثبت شده.` };
+  const clashTitle = await db.select({ c: degree_level_configs.code }).from(degree_level_configs)
+    .where(and(eq(degree_level_configs.title, title), ne(degree_level_configs.id, id))).limit(1);
+  if (clashTitle.length) return { ok: false, error: `مقطع «${title}» از قبل هست (کد ${clashTitle[0].c}).` };
+
+  const pass = num(fd, 'defaultPassingGrade') ?? 10;
+  const cond = num(fd, 'conditionalGpaThreshold') ?? 12;
+  const maxU = num(fd, 'maxUnitsPerTerm') ?? 20;
+  if (pass < 0 || pass > 20) return { ok: false, error: 'نمرهٔ قبولی باید بین ۰ تا ۲۰ باشد.' };
+  if (cond < 0 || cond > 20) return { ok: false, error: 'معدل مشروطی باید بین ۰ تا ۲۰ باشد.' };
+  if (maxU < 1 || maxU > 60) return { ok: false, error: 'سقف واحد ترم باید بین ۱ تا ۶۰ باشد.' };
+  const termCount = num(fd, 'termCount');
+  if (termCount == null || !Number.isInteger(termCount) || termCount < 1 || termCount > 12) {
+    return { ok: false, error: 'تعداد ترم تحصیل باید عدد صحیح بین ۱ تا ۱۲ باشد.' };
+  }
+  const gradRaw = str(fd, 'isGraduate');
+  if (gradRaw !== '0' && gradRaw !== '1') return { ok: false, error: 'وضعیت تحصیلات تکمیلی نامعتبر است.' };
+
+  await db.update(degree_level_configs).set({
+    title, code,
+    defaultPassingGrade: pass.toFixed(2),
+    conditionalGpaThreshold: cond.toFixed(2),
+    maxUnitsPerTerm: maxU,
+    termCount,
+    isGraduate: Number(gradRaw),
+  }).where(eq(degree_level_configs.id, id));
+  revalidatePath('/admin/codes');
+  return { ok: true };
 }
 
 /**

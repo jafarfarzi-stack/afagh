@@ -90,7 +90,11 @@ export const degree_level_configs = pgTable('degree_level_configs', {
   code: varchar('code', { length: 30 }).notNull().unique(),
   defaultPassingGrade: numeric('defaultPassingGrade', { precision: 4, scale: 2 }).notNull().default('10.00'),
   conditionalGpaThreshold: numeric('conditionalGpaThreshold', { precision: 4, scale: 2 }).notNull().default('12.00'),
-  maxUnitsPerTerm: integer('maxUnitsPerTerm').default(20)
+  maxUnitsPerTerm: integer('maxUnitsPerTerm').default(20),
+  /** تعداد ترم تحصیل چارت این مقطع (کاردانی/ناپیوسته/ارشد: ۴ · پیوسته: ۸) — NULL = استنتاج از عنوان/کد */
+  termCount: integer('termCount'),
+  /** تحصیلات تکمیلی (ارشد/دکترا) یا نه — ۱/۰ (NULL هم یعنی نه؛ بدون default تا backfill با COALESCE درست کار کند) */
+  isGraduate: integer('isGraduate'),
 });
 
 export const faculties = pgTable('faculties', {
@@ -366,7 +370,7 @@ export const curriculum_courses = pgTable('curriculum_courses', {
   isRequired: integer('isRequired').default(1),
   isElective: integer('isElective').default(0),
   isGraduationRequired: integer('isGraduationRequired').default(0),     // شرط الزامی فارغ‌التحصیلی
-  recommendedSemester: integer('recommendedSemester'),                   // ۱..۸ (NULL = آزاد/نامشخص)
+  recommendedSemester: integer('recommendedSemester'),                   // ۱..۸ + ۹=تابستان (NULL = آزاد/نامشخص)
   minGrade: numeric('minGrade', { precision: 4, scale: 2 }),             // کف قبولیِ خاص این درس در این نسخه
   autoCorequisiteAllowed: integer('autoCorequisiteAllowed').default(0)   // «هم‌نیاز خودکار ترم آخر» (آیین‌نامه)
 }, (t) => ({

@@ -154,12 +154,13 @@ async function buildCheckInput(data: Awaited<ReturnType<typeof loadVersionData>>
   let maxUnitsPerTerm: number | null = data.version.maxUnitsPerTerm;
   let minRoleCounts: Partial<Record<string, number>> = { ...DEFAULT_MIN_ROLES };
   const [deg] = await db
-    .select({ code: degree_level_configs.code, title: degree_level_configs.title, maxUnitsPerTerm: degree_level_configs.maxUnitsPerTerm })
+    .select({ code: degree_level_configs.code, title: degree_level_configs.title, maxUnitsPerTerm: degree_level_configs.maxUnitsPerTerm, isGraduate: degree_level_configs.isGraduate })
     .from(degree_level_configs)
     .where(eq(degree_level_configs.id, data.version.degreeLevelId))
     .limit(1);
   if (maxUnitsPerTerm == null) maxUnitsPerTerm = deg?.maxUnitsPerTerm ?? 20;
-  if (deg && (deg.code?.includes('MASTER') || deg.code?.includes('PHD') || deg.title?.includes('ارشد') || deg.title?.includes('دکتری'))) {
+  // پایان‌نامه برای تحصیلات تکمیلی الزامی است: اول پرچم isGraduate، وگرنه حدس عنوان/کد (سازگار با قبل)
+  if (deg && (deg.isGraduate === 1 || deg.code?.includes('MASTER') || deg.code?.includes('PHD') || deg.title?.includes('ارشد') || deg.title?.includes('دکترا'))) {
     minRoleCounts = { ...minRoleCounts, THESIS: 1 };
   }
   return {
@@ -226,7 +227,10 @@ function revalidateCurriculumPaths() {
 // ─────────────────────────── خواندن (برای Thin Client فاز ۷) ───────────────────────────
 
 export interface CurriculumOverviewData {
-  majors: { id: number; code: string | null; name: string; degreeLevelId: number; degreeTitle: string | null }[];
+  majors: {
+    id: number; code: string | null; name: string; degreeLevelId: number; degreeTitle: string | null;
+    degreeCode: string | null; degreeTermCount: number | null; degreeIsGraduate: number | null;
+  }[];
   versions: {
     id: number; majorId: number; degreeLevelId: number; trackId: number | null;
     versionCode: string; title: string; status: string;
@@ -260,6 +264,9 @@ export async function getCurriculumOverviewAction(): Promise<CurriculumOverviewR
       db.select({
         id: majors.id, code: majors.majorCode, name: majors.name,
         degreeLevelId: majors.degreeLevelId, degreeTitle: degree_level_configs.title,
+        degreeCode: degree_level_configs.code,
+        degreeTermCount: degree_level_configs.termCount,
+        degreeIsGraduate: degree_level_configs.isGraduate,
       }).from(majors)
         .leftJoin(degree_level_configs, eq(degree_level_configs.id, majors.degreeLevelId))
         .orderBy(asc(majors.name)),
@@ -735,13 +742,13 @@ export async function assignCourseToSemesterAction(versionId: number, courseId: 
   await requireRole(EDITORS);
   try {
     await assertEditable(versionId);
-    if (semesterNo != null && (semesterNo < 1 || semesterNo > 8)) {
-      return { ok: false, error: 'شماره ترم باید بین ۱ تا ۸ باشد (۰/خالی = نامشخص).' };
+    if (semesterNo != null && (semesterNo < 1 || semesterNo > 9)) {
+      return { ok: false, error: 'شماره ترم باید بین ۱ تا ۹ باشد (۹ = تابستان، خالی = نامشخص).' };
     }
     await db.update(curriculum_courses).set({ recommendedSemester: semesterNo })
       .where(and(eq(curriculum_courses.curriculumVersionId, versionId), eq(curriculum_courses.courseId, courseId)));
     revalidateCurriculumPaths();
-    return { ok: true, message: semesterNo ? `درس به ترم ${semesterNo} تخصیص یافت.` : 'ترم درس آزاد شد.' };
+    return { ok: true, message: semesterNo ? (semesterNo === 9 ? 'درس به ترم تابستان تخصیص یافت.' : `درس به ترم ${semesterNo} تخصیص یافت.`) : 'ترم درس آزاد شد.' };
   } catch (err: any) {
     console.error('assignCourseToSemesterAction:', err);
     return { ok: false, error: err.message || 'خطا در تخصیص ترم' };
@@ -753,8 +760,8 @@ export async function bulkAssignSemestersAction(versionId: number, assignments: 
   try {
     await assertEditable(versionId);
     for (const a of assignments) {
-      if (a.semesterNo != null && (a.semesterNo < 1 || a.semesterNo > 8)) {
-        return { ok: false, error: `ترم نامعتبر برای درس ${a.courseId}: باید بین ۱ تا ۸ باشد.` };
+      if (a.semesterNo != null && (a.semesterNo < 1 || a.semesterNo > 9)) {
+        return { ok: false, error: `ترم نامعتبر برای درس ${a.courseId}: باید بین ۱ تا ۹ باشد (۹ = تابستان).` };
       }
       await db.update(curriculum_courses).set({ recommendedSemester: a.semesterNo })
         .where(and(eq(curriculum_courses.curriculumVersionId, versionId), eq(curriculum_courses.courseId, a.courseId)));

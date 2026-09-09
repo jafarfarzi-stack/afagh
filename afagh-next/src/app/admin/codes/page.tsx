@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requireRole } from '@/lib/auth';
-import { codeFormOptions, codeStats, createCodeRowAction, deleteCodeRowAction, listCodes, setCodeAction } from './actions';
+import { codeFormOptions, codeStats, createCodeRowAction, deleteCodeRowAction, getDegreeRowAction, listCodes, setCodeAction, updateDegreeRowAction } from './actions';
 import type { CodeTable } from './tables';
 import CodesClient from './CodesClient';
 
@@ -21,6 +21,26 @@ export default async function CodesPage() {
   async function listAction(table: CodeTable, q: string) {
     'use server';
     return listCodes(table, q);
+  }
+
+  async function getDegreeAction(id: number) {
+    'use server';
+    const r = await getDegreeRowAction(id);
+    if (!r) return null;
+    return {
+      title: r.title,
+      code: r.code,
+      defaultPassingGrade: String(r.defaultPassingGrade ?? ''),
+      conditionalGpaThreshold: String(r.conditionalGpaThreshold ?? ''),
+      maxUnitsPerTerm: r.maxUnitsPerTerm != null ? String(r.maxUnitsPerTerm) : '',
+      termCount: r.termCount != null ? String(r.termCount) : '',
+      isGraduate: r.isGraduate != null ? String(r.isGraduate) : '0',
+    };
+  }
+
+  async function updateDegreeAction(fd: FormData) {
+    'use server';
+    return updateDegreeRowAction(fd);
   }
 
   return (
@@ -62,6 +82,8 @@ export default async function CodesPage() {
         createAction={createCodeRowAction}
         deleteAction={deleteCodeRowAction}
         options={options}
+        getDegreeAction={getDegreeAction}
+        updateDegreeAction={updateDegreeAction}
       />
 
       <p className="text-center text-xs text-slate-400">

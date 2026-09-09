@@ -21,6 +21,7 @@ import {
 } from './actions';
 import { describeLogicNode, type LogicNode } from '@/lib/curriculum-types';
 import { roleFromBankType } from '@/lib/bank-roles';
+import { SUMMER_SEMESTER, isSummerSemester, planSemesters, termCountForDegree } from '@/lib/term-plan';
 
 // ─────────────────────────── Types ───────────────────────────
 
@@ -30,6 +31,10 @@ export interface MajorItem {
   name: string;
   degreeLevelId: number | null;
   degreeTitle: string | null;
+  /** کد مقطع + تعداد ترم چارت + تکمیلی‌بودن — از degree_level_configs (قابل ویرایش در مرکز کدها) */
+  degreeCode?: string | null;
+  degreeTermCount?: number | null;
+  degreeIsGraduate?: number | null;
   /** غنی‌سازی صفحهٔ سرور (ادغام فاز ۷الف): دانشکده/گروه/واحد الزامی/گرایش‌ها */
   departmentName?: string;
   facultyName?: string;
@@ -556,6 +561,23 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
   const semesterUnitTotal = (list: CourseRow[] | undefined) => (list ?? []).reduce((s, c) => s + Number(c.units || 0), 0);
   const totalPlannedUnits = (detail?.courses ?? []).reduce((s, c) => s + Number(c.units || 0), 0);
 
+  // ── چارت ترمی بر اساس مقطع: تعداد ترم از DB، وگرنه استنتاج ──
+  const degreeMajor = majors.find(m => m.id === (selectedVersion?.majorId ?? selectedMajorId));
+  const chartTermCount = termCountForDegree({
+    termCount: degreeMajor?.degreeTermCount,
+    code: degreeMajor?.degreeCode,
+    title: degreeMajor?.degreeTitle,
+  });
+  const planTerms = planSemesters(chartTermCount);
+  const semLabel = (sem: number | null | undefined) =>
+    sem == null ? 'نامشخص' : isSummerSemester(sem) ? 'تابستان' : `ترم ${faNum(sem)}`;
+  // ترم‌های خارج از چارت که در داده هست (مثلاً نسخهٔ کاردانی با درس در ترم ۵..۸) گم نمی‌شوند
+  const overflowTerms = [...semesterCourses.keys()]
+    .filter(t => t !== SUMMER_SEMESTER && !planTerms.includes(t))
+    .sort((a, b) => a - b);
+  const gridTerms = [...planTerms, ...overflowTerms, SUMMER_SEMESTER];
+  const isOverflowTerm = (sem: number) => !planTerms.includes(sem) && !isSummerSemester(sem);
+
   // ── فیلتر بانک: جستجو + پیشوند کد رشته ──
   const bankFiltered = bank.filter(b => {
     const q = bankQuery.trim();
@@ -672,7 +694,9 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
           <div>
             {(() => { const m = majors.find(x => x.id === selectedMajorId); if (!m) return null; return (
               <p className="text-[10px] text-indigo-300 font-bold leading-relaxed">
-                کد {m.code} · {m.facultyName ?? '—'} · {m.departmentName ?? '—'} · {faNum(m.minUnits ?? 0)} واحد الزامی
+                کد {m.code} · {m.facultyName ?? '—'} · {m.departmentName ?? '—'} · {m.degreeTitle ?? '—'}
+                {m.degreeIsGraduate === 1 ? ' (تکمیلی)' : ''} · چارت {faNum(termCountForDegree({ termCount: m.degreeTermCount, code: m.degreeCode, title: m.degreeTitle }))} ترمه
+                {' '}· {faNum(m.minUnits ?? 0)} واحد الزامی
                 {m.tracks && m.tracks.length > 0 ? ` · گرایش: ${m.tracks.join('، ')}` : ''}
               </p>
             ); })()}
@@ -986,10 +1010,11 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
                               className="border border-slate-300 rounded px-1.5 py-1 font-bold bg-white"
                             >
                               <option value="">نامشخص</option>
-                              {[1, 2, 3, 4, 5, 6, 7, 8].map(s => <option key={s} value={s}>ترم {faNum(s)}</option>)}
+                              {planTerms.map(s => <option key={s} value={s}>ترم {faNum(s)}</option>)}
+                              <option value={SUMMER_SEMESTER}>تابستان</option>
                             </select>
                           ) : (
-                            <span className="font-bold">{c.recommendedSemester ? `ترم ${faNum(c.recommendedSemester)}` : 'نامشخص'}</span>
+                            <span className="font-bold">{semLabel(c.recommendedSemester)}</span>
                           )}
                         </td>
                         <td className="p-2 border border-slate-200 text-center">
@@ -1124,7 +1149,8 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
                 <div>
                   <h4 className="font-extrabold text-slate-900 text-sm">🗺️ ترمبندی چارت — {selectedVersion.title}</h4>
                   <p className="text-[11px] text-slate-500 font-bold mt-0.5">
-                    تخصیص درس به ترم تحصیلی؛ موتور انتخاب واحد و تطبیق فارغالتحصیلی بر اساس همین ترمبندی عمل میکنند.
+                    چارت {faNum(chartTermCount)} ترمه (مقطع: {degreeMajor?.degreeTitle ?? '—'}{degreeMajor?.degreeIsGraduate === 1 ? ' · تکمیلی' : ''}) + تابستان؛
+                    موتور انتخاب واحد و تطبیق فارغالتحصیلی بر اساس همین ترمبندی عمل میکنند.
                   </p>
                 </div>
                 <div className="text-[11px] bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 font-black text-indigo-900">
@@ -1140,22 +1166,30 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => {
+                {gridTerms.map(sem => {
                   const list = semesterCourses.get(sem) ?? [];
                   const units = semesterUnitTotal(list);
                   const over = detail.version.maxUnitsPerTerm != null && units > (detail.version.maxUnitsPerTerm as number);
                   const isDropHere = isDraft && dropTarget === sem;
+                  const summer = isSummerSemester(sem);
+                  const overflow = isOverflowTerm(sem);
+                  const cardCls = summer
+                    ? 'border-amber-300 bg-amber-50/70'
+                    : over ? 'border-rose-300 bg-rose-50' : 'border-emerald-200 bg-emerald-50/50';
                   return (
                     <div
                       key={sem}
                       onDragOver={isDraft ? (e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDropTarget(sem); }) : undefined}
                       onDragLeave={isDraft ? (() => setDropTarget(cur => (cur === sem ? null : cur))) : undefined}
                       onDrop={isDraft ? (e => onDropToSemester(e, sem)) : undefined}
-                      className={`rounded-xl border-2 p-3 space-y-2 transition-colors ${over ? 'border-rose-300 bg-rose-50' : 'border-emerald-200 bg-emerald-50/50'} ${isDropHere ? '!border-indigo-500 !bg-indigo-50 shadow-lg' : ''}`}
+                      className={`rounded-xl border-2 p-3 space-y-2 transition-colors ${cardCls} ${isDropHere ? '!border-indigo-500 !bg-indigo-50 shadow-lg' : ''}`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-black text-emerald-950 text-xs">ترم {faNum(sem)}</span>
-                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${over ? 'bg-rose-200 text-rose-900' : 'bg-emerald-200 text-emerald-900'}`}>
+                        <span className="font-black text-emerald-950 text-xs">
+                          {summer ? '☀️ تابستان' : `ترم ${faNum(sem)}`}
+                          {overflow && <span className="mr-1 rounded bg-slate-200 px-1.5 py-0.5 text-[9px] text-slate-600">خارج چارت</span>}
+                        </span>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${over ? 'bg-rose-200 text-rose-900' : summer ? 'bg-amber-200 text-amber-900' : 'bg-emerald-200 text-emerald-900'}`}>
                           {faNum(units)} واحد
                         </span>
                       </div>
@@ -1224,7 +1258,8 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
                           className="border border-slate-300 rounded px-1 py-0.5 font-bold text-[10px] bg-white"
                         >
                           <option value="">ترم…</option>
-                          {[1, 2, 3, 4, 5, 6, 7, 8].map(s => <option key={s} value={s}>ترم {faNum(s)}</option>)}
+                          {planTerms.map(s => <option key={s} value={s}>ترم {faNum(s)}</option>)}
+                          <option value={SUMMER_SEMESTER}>تابستان</option>
                         </select>
                       ) : (
                         <span className="text-[10px] text-slate-400 font-bold">نامشخص</span>

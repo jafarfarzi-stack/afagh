@@ -9,6 +9,7 @@
 // ════════════════════════════════════════════════════════════════════════
 
 import type { CheckResult, LogicNode } from './curriculum-types';
+import { SUMMER_SEMESTER } from './term-plan';
 
 /** ورودی خالص ارزیابی — Actions داده را از DB بارگیری و پاس می‌دهند */
 export interface CurriculumCheckInput {
@@ -212,9 +213,10 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
     }
     for (const [sem, info] of [...bySemester.entries()].sort((a, b) => a[0] - b[0])) {
       if (info.units > input.maxUnitsPerTerm) {
+        const semLabel = sem === SUMMER_SEMESTER ? 'تابستان' : sem;
         results.push(warn(
           'SEMESTER_LOAD',
-          `بار ترم ${sem} (${info.units} واحد) از سقف مجاز (${input.maxUnitsPerTerm} واحد) بیشتر است.`,
+          `بار ترم ${semLabel} (${info.units} واحد) از سقف مجاز (${input.maxUnitsPerTerm} واحد) بیشتر است.`,
           info.codes
         ));
       }
