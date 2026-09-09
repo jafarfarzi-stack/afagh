@@ -8,7 +8,8 @@ STAMP := $(shell date +%Y-%m-%d_%H-%M)
 
 .DEFAULT_GOAL := help
 .PHONY: help up up-https build build-lowmem rebuild down stop restart logs logs-all ps health \
-        migrate backup restore psql redis-cli shell update fresh clean env check-env swap mem
+        migrate backup verify-backup drill copy-backups-to-host restore restore-dump admin \
+        psql redis-cli shell update fresh clean env check-env swap mem
 
 help: ## نمایش همین راهنما
 	@echo ""
@@ -22,23 +23,13 @@ env: ## ساخت فایل .env از روی نمونه (در صورت نبود)
 	@test -f .env && echo "✓ .env موجود است"
 	@echo "⚠ سه سکرت POSTGRES_PASSWORD / AFAGH_APP_DB_PASSWORD / MINIO_ROOT_PASSWORD را از CHANGE_ME_* به مقادیر تصادفی تغییر دهید"
 
-# P0-3: fail-fast روی سکرت‌های ناامن پیش از بالا آوردن سامانه.
-# روی CHANGE_ME*/خالی همیشه خطا؛ روی پیش‌فرض‌های ضعیفِ compose هم خطا،
-# مگر برای توسعهٔ محلی با ALLOW_WEAK_SECRETS=1 (مثلاً: ALLOW_WEAK_SECRETS=1 make up).
-check-env: env ## بررسی سکرت‌های .env (fail-fast روی مقادیر ناامن)
-	@bash -c 'set -a; . ./.env 2>/dev/null; set +a; \
-	fail(){ echo "X سکرت ناامن: $$1"; exit 1; }; \
-	for pair in "POSTGRES_PASSWORD:$${POSTGRES_PASSWORD:-}" "AFAGH_APP_DB_PASSWORD:$${AFAGH_APP_DB_PASSWORD:-}" "MINIO_ROOT_PASSWORD:$${MINIO_ROOT_PASSWORD:-}"; do \
-	  name="$${pair%%:*}"; val="$${pair#*:}"; \
-	  case "$$val" in ""|CHANGE_ME*|changeme*) fail "$$name (نمونه/خالی — در .env مقدار قوی بگذارید)";; esac; \
-	done; \
-	if [ "$${ALLOW_WEAK_SECRETS:-0}" != "1" ]; then \
-	  for pair in "POSTGRES_PASSWORD:$${POSTGRES_PASSWORD:-}" "AFAGH_APP_DB_PASSWORD:$${AFAGH_APP_DB_PASSWORD:-}" "MINIO_ROOT_PASSWORD:$${MINIO_ROOT_PASSWORD:-}"; do \
-	    name="$${pair%%:*}"; val="$${pair#*:}"; \
-	    case "$$val" in afagh|afagh-app-pass|afagh_app|afagh-secret) fail "$$name (پیش‌فرض ضعیف «$$val» — عوضش کنید یا با ALLOW_WEAK_SECRETS=1 ادامه دهید)";; esac; \
-	  done; \
-	fi; \
-	echo "✓ سکرت‌ها بررسی شدند"'
+# P0-1: fail-fast روی سکرت‌های ناامن پیش از بالا آوردن سامانه.
+# سیاست از یک جای واحد خوانده می‌شود: afagh-next/scripts/lib/secret-policy.mjs
+# (طول حداقل، مقدار نمونه، پیش‌فرض‌های ضعیفِ شناخته‌شده). گیت CI هم همین را می‌زند.
+# توسعهٔ محلی: ALLOW_WEAK_SECRETS=1 make up
+check-env: env ## بررسی سکرت‌های .env (سیاست پروداکشن — fail-fast)
+	@node afagh-next/scripts/lib/secret-policy.mjs --check .env
+
 
 up: check-env ## بالا آوردن کل سامانه (بیلد در صورت نیاز)
 	$(DC) up -d --build
@@ -88,15 +79,33 @@ health: ## بررسی سلامت سامانه
 migrate: ## اجرای دوبارهٔ مهاجرت دیتابیس (بعد از تغییر schema)
 	$(DC) run --rm migrator
 
-backup: ## پشتیبان‌گیری از PostgreSQL در پوشهٔ backups/
-	@mkdir -p backups
-	$(DC) exec -T postgres pg_dump -U afagh -d afagh_db > backups/afagh_$(STAMP).sql
-	@echo "✓ backups/afagh_$(STAMP).sql"
+backup: ## پشتیبان فشرده + امضای sha256 در volume ماندگار (afagh_backups)
+	$(DC) run --rm --no-deps -e AFAGH_BACKUP_DIR=/backups -e AFAGH_BACKUP_KEEP=$${AFAGH_BACKUP_KEEP:-14} migrator node scripts/backup-db.mjs
+	@echo "✓ پشتیبان در volume afagh_backups — برای بردن به بیرون: make copy-backups-to-host"
 
-restore: ## بازگردانی پشتیبان:  make restore FILE=backups/afagh_....sql
-	@test -n "$(FILE)" || (echo "استفاده: make restore FILE=backups/afagh_....sql"; exit 1)
+verify-backup: ## راستی‌آزمایی آخرین پشتیبان (sha256 + pg_restore --list)
+	$(DC) run --rm --no-deps -e AFAGH_BACKUP_DIR=/backups migrator node scripts/verify-backup.mjs
+
+drill: ## DR drill: بازگردانی پشتیبان در دیتابیس موقت + مقایسهٔ ردیف‌ها و RLS
+	$(DC) run --rm --no-deps -e AFAGH_BACKUP_DIR=/backups migrator node scripts/verify-backup.mjs --restore-db afagh_drill
+
+copy-backups-to-host: ## کپی پشتیبان‌ها از volume به دیسک میزبان (برای NAS/آفلاین)
+	@mkdir -p $${DEST:-backups}
+	@$(DC) run --rm --no-deps migrator sh -c 'cd /backups && tar cf - .' | tar xf - -C $${DEST:-backups}
+	@echo "✓ پشتیبان‌ها در $${DEST:-backups}/ (حداقل یکی را بیرون از سرور نگه دارید)"
+
+restore: ## بازگردانی پشتیبانِ plain SQL:  make restore FILE=backups/afagh_....sql
+	@test -n "$(FILE)" || (echo "استفاده: make restore FILE=backups/afagh_....sql" ; exit 1)
 	cat $(FILE) | $(DC) exec -T postgres psql -U afagh -d afagh_db
-	@echo "✓ بازگردانی انجام شد"
+	@echo "✓ بازگردانی انجام شد — پس از آن make verify-backup و ری‌استارت app را بزنید"
+
+restore-dump: ## بازگردانی پشتیبان فشرده (dump):  make restore-dump FILE=backups/afagh_....dump
+	@test -n "$(FILE)" || (echo "استفاده: make restore-dump FILE=backups/afagh_....dump" ; exit 1)
+	cat $(FILE) | $(DC) exec -T postgres pg_restore -U afagh -d afagh_db --clean --if-exists --no-owner
+	@echo "✓ بازگردانی dump انجام شد"
+
+admin: ## ساخت/چرخش حساب مدیر اولیه (رمز تصادفی + تغییر اجباری در اولین ورود)
+	$(DC) run --rm --no-deps migrator node scripts/create-admin.mjs --show
 
 psql: ## کنسول تعاملی PostgreSQL
 	$(DC) exec postgres psql -U afagh -d afagh_db

@@ -56,9 +56,14 @@ docker compose up -d --build          # یا:  make up
 | `make up-https` | اجرا پشت **Caddy** با گواهی HTTPS خودکار (نیازمند `DOMAIN` در `.env`) |
 | `make ps` / `make health` | وضعیت سرویس‌ها و تست HTTP |
 | `make logs` | لاگ زندهٔ سرویس وب |
-| `make backup` | پشتیبان PostgreSQL در `backups/afagh_<تاریخ>.sql` |
-| `make restore FILE=…` | بازگردانی پشتیبان |
-| `make migrate` | اجرای دوبارهٔ مهاجرت schema |
+| `make backup` | پشتیبان فشرده (`pg_dump -Fc`) + امضای sha256 در **volume ماندگار** `afagh_backups` |
+| `make verify-backup` | راستی‌آزمایی آخرین پشتیبان (امضا + `pg_restore --list`) |
+| `make drill` | DR drill: بازگردانی پشتیبان در دیتابیس موقت + مقایسهٔ شمار ردیف‌ها و فعال بودن RLS |
+| `make copy-backups-to-host DEST=/mnt/nas/afagh` | کپی پشتیبان‌ها از volume به دیسک میزبان/NAS |
+| `make restore FILE=…` / `make restore-dump FILE=…` | بازگردانی پشتیبان (SQL ساده / dump فشرده) |
+| `make admin` | ساخت یا چرخش حساب مدیر اولیه (رمز تصادفی، تغییر اجباری در اولین ورود) |
+| `make check-env` | بررسی سه سکرت با سیاست پروداکشن (`afagh-next/scripts/lib/secret-policy.mjs`) |
+| `make migrate` | اجرای دوبارهٔ مهاجرت نسخه‌دار (پشتیبان → `drizzle/*.sql` → verify) |
 | `make update` | `git pull` + بیلد + ری‌استارت |
 | `make fresh` | ⚠️ حذف کامل داده و نصب از صفر |
 | `make psql` / `make shell` | کنسول دیتابیس / ورود به کانتینر اپ |
@@ -202,11 +207,28 @@ tar xzf afagh-v1.0.0.tar.gz && cd afagh
 1. **بررسی پیش‌نیازها** و سلامت PostgreSQL/Redis
 2. **PostgreSQL**: نقش `afagh` + دیتابیس `afagh_db` (در صورت نبود)
 3. **npm install** هر دو پروژه
-4. **Drizzle push** → ۷۳ جدول/۵۱۰ ستون + **pg-hardening.sql** → ایندکس‌ها، **RLS با ۱۱ سیاست** و نقش فقط-خواندنی `afagh_app`
+4. **مهاجرت نسخه‌دار** (`scripts/migrate-db.mjs` — پشتیبان → `drizzle/*.sql` → راستی‌آزمایی دفتر)
+   → ۷۳ جدول/۵۱۰ ستون + **pg-hardening.sql** → ایندکس‌ها، **RLS** و نقش فقط-خواندنی `afagh_app`
+   (پروداکشن دیگر `drizzle-kit push --force` نمی‌زند؛ مسیر CI و ایمیج یکی است — P0-3)
 5. **مهاجرت دمو**: دیتای فاز صفر (SQLite داخل پکیج) → PostgreSQL (ON CONFLICT → بی‌خطر)
 6. **گرم‌کردن Redis** (ظرفیت کلاس‌ها §۱۰۰۶) + **بیلد پروداکشن Next.js**
 
-## حساب‌های دمو (رمز همه: `123456`)
+## ورود اولیه در پروداکشن
+
+در ایمیج تولید، حساب‌های دمو در زمان build **قفل** هستند (`NEXT_PUBLIC_AFAGH_DEMO_LOCK=1`)؛
+پس نصب پروداکشن هیچ رمز ثابتی ندارد و «ورود با 123456» هم کار نمی‌کند. حساب مدیر
+اولیه در انتهای `deploy-debian.sh` (یا با `make admin`) ساخته می‌شود:
+
+```bash
+make admin                      # رمز تصادفی + تغییر اجباری در اولین ورود
+sudo cat bootstrap-credential.txt     # تنها جای نوشتن رمز (chmod 600)
+sudo rm bootstrap-credential.txt      # بعد از اولین ورود
+```
+
+نک‌های امنیتی این مسیر: رمز در هیچ لاگی چاپ نمی‌شود، نشست‌های قبلی همان کاربر
+باطل می‌شود، و `mustChangePassword=1` گذاشته می‌شود.
+
+## حساب‌های دمو (فقط نصب محلی/دمو — رمز همه: `123456`)
 
 | نقش | کد ملی | مقصد |
 |---|---|---|

@@ -8,6 +8,8 @@
  *
  *  - بدون `--baseline`  : همهٔ مهاجرت‌های اعمال‌نشده از صفر (یا از آخرین مهاجرت)
  *                         اجرا می‌شوند — برای محیط‌های جدید (CI، Production).
+ *                         اگر دیتابیس از قبل جدول داشته باشد و دفتر مهاجرتش خالی
+ *                         باشد، baseline خودکار انجام می‌شود (P0-3).
  *  - با `--baseline`     : برای دیتابیس‌های موجود که اسکیما را قبلاً با
  *                         `drizzle-kit push` ساخته‌اند — مهاجرت‌های فعلی فقط
  *                         «اعمال‌شده» ثبت می‌شوند (بدون اجرای SQL) تا از این پس
@@ -81,6 +83,32 @@ if (BASELINE) {
   console.log('   از این پس تغییرات اسکیما فقط از راه drizzle/*.sql وارد می‌شوند.');
   await c.end();
   process.exit(0);
+}
+
+// ── ۳-ب) P0-3: دیتابیس‌های قدیمی که اسکیما را با `drizzle-kit push` ساخته‌اند ──
+// دفتر مهاجرت خالی است ولی جدول‌ها موجودند → اگر مهاجرت‌ها را از اول اجرا کنیم،
+// روی اسکیماى موجود می‌شکنند (CREATE TABLE تکراری). پس همین‌ها را «اعمال‌شده»
+// ثبت می‌کنیم (فقط نوشتن hash؛ هیچ SQL اجرا نمی‌شود) و از این پس تغییرات فقط
+// از راه drizzle/*.sql وارد می‌شود. با AFAGH_MIGRATE_NO_AUTO_BASELINE=1 خاموش.
+{
+  const { rows } = await c.query('SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations');
+  if (rows[0].n === 0) {
+    const t = await c.query(
+      "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='users' LIMIT 1");
+    if (t.rows.length) {
+      if (process.env.AFAGH_MIGRATE_NO_AUTO_BASELINE === '1') {
+        console.error('❌ جدول‌ها موجودند ولی دفتر مهاجرت خالی است — یا --baseline بزنید یا AFAGH_MIGRATE_NO_AUTO_BASELINE را بردارید.');
+        await c.end(); process.exit(6);
+      }
+      let marked = 0;
+      for (const f of files) {
+        await c.query('INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ($1,$2)', [f.hash, f.when]);
+        marked++;
+      }
+      console.log(`⚠ دیتابیس از پیش موجود بود و دفتر مهاجرت نداشت → ${marked} مهاجرت پیشین به‌عنوان اعمال‌شده ثبت شد (baseline خودکار).`);
+      console.log('   از این پس مهاجرت‌ها deterministic و قابل audit پیش می‌روند.');
+    }
+  }
 }
 
 // ── ۴) اعمال مهاجرت‌های نسخه‌دار (تراکنشی، فقط pending) ──

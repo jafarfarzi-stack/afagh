@@ -41,7 +41,9 @@ BEGIN
     CREATE ROLE afagh_app LOGIN PASSWORD '__AFAGH_APP_PASSWORD__' NOSUPERUSER NOBYPASSRLS;
   END IF;
 END $$;
-GRANT CONNECT ON DATABASE afagh_db TO afagh_app;
+-- __AFAGH_DB__ توسط scripts/hardening.mjs از DATABASE_URL پر می‌شود
+-- (پیش از این «afagh_db» هاردکد بود و هر نصبی با نام دیتابیس دیگر در گام سخت‌سازی می‌شکست)
+GRANT CONNECT ON DATABASE "__AFAGH_DB__" TO afagh_app;
 GRANT USAGE ON SCHEMA public TO afagh_app;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO afagh_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO afagh_app;

@@ -46,14 +46,21 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# ترتیب: پشتیبان → push → پچ‌ها → دادهٔ پایه → سخت‌سازی (+اعتبارسنجی)
+# ترتیب (P0-2 و P0-3 — بازبینی پروداکشن):
+#   مهاجرت نسخه‌دار (که نخستین کارش پشتیبان fail-closed است) → پچ‌ها → دادهٔ پایه
+#   → سخت‌سازی و RLS → راستی‌آزمایی پشتیبان.
+# چرا نه `drizzle-kit push --force`؟ push «اسکیمای فعلی کد» را روی دیتابیس می‌ریزد:
+#   · غیرتعیینی و غیرقابل audit است (برای ERP مالی/آموزشی قابل قبول نیست)؛
+#   · می‌تواند ستون/ایندکسی را که در schema.ts نیامده حذف کند؛
+#   · با همان مسیری که CI تست می‌کند فرق داشت. از این دور، پروداکشن دقیقاً همان
+#   scripts/migrate-db.mjs را می‌زند که CI می‌زند (drizzle/*.sql با دفتر مهاجرت).
 # اگر هر مرحله شکست بخورد، exit-code غیرصفر → اپ (depends_on مخصوص) استارت نمی‌شود.
 CMD ["sh", "-c", "set -e; \
-  echo '=== گام ۱/۵: پشتیبان پیش از استقرار ==='; node scripts/backup-db.mjs; \
-  echo '=== گام ۲/۵: همگام‌سازی اسکیما (drizzle push) ==='; npx drizzle-kit push --force; \
-  echo '=== گام ۳/۵: پچ‌های اسکیما ==='; node scripts/apply-patches.mjs; \
-  echo '=== گام ۴/۵: دادهٔ پایه ==='; node scripts/seed-base.mjs; \
-  echo '=== گام ۵/۵: سخت‌سازی و RLS ==='; node scripts/hardening.mjs; \
+  echo '=== گام ۱/۵: پشتیبان + مهاجرت نسخه‌دار (drizzle/*.sql) ==='; node scripts/migrate-db.mjs; \
+  echo '=== گام ۲/۵: پچ‌های اسکیما ==='; node scripts/apply-patches.mjs; \
+  echo '=== گام ۳/۵: دادهٔ پایه ==='; node scripts/seed-base.mjs; \
+  echo '=== گام ۴/۵: سخت‌سازی و RLS ==='; node scripts/hardening.mjs; \
+  echo '=== گام ۵/۵: راستی‌آزمایی پشتیبان ==='; node scripts/verify-backup.mjs; \
   echo '=== ✅ migrator با موفقیت تمام شد ==='"]
 
 # ── بیلد ──
@@ -65,8 +72,12 @@ ARG NODE_MAX_OLD_SPACE=2048
 # آرگومان‌های اضافهٔ «next build» — مثلاً «--webpack» اگر Turbopack روی سرور
 # شما حافظهٔ زیادی گرفت:  docker compose build --build-arg NEXT_BUILD_ARGS=--webpack
 ARG NEXT_BUILD_ARGS=""
+# P0-4: حساب‌های دمو (رمز شناخته‌شدهٔ ۱۲۳۴۵۶) فقط در ایمیجی زنده می‌شوند که
+# صریحاً بخواهیم:  docker build --build-arg AFAGH_DEMO_LOCK=0 …
+# پیش‌فرض = قفل (کد دمو در بیلد تولید اساساً غیرفعال است).
+ARG AFAGH_DEMO_LOCK=1
 ENV NODE_ENV=production \
-    NEXT_PUBLIC_AFAGH_DEMO_LOCK=1 \
+    NEXT_PUBLIC_AFAGH_DEMO_LOCK=${AFAGH_DEMO_LOCK} \
     NODE_OPTIONS=--max-old-space-size=${NODE_MAX_OLD_SPACE} \
     NEXT_SKIP_TYPE_CHECK=1 \
     AFAGH_STANDALONE=1

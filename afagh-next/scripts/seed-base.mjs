@@ -208,7 +208,16 @@ try {
     console.error('⚠️  هشدار (ساخت کلیدهای پویش):', err.message);
   }
 
-  console.log('\n🎉 دادهٔ پایه آماده است — اکنون با حساب دمو (مثلاً 1010101010) دوباره وارد شوید؛ پروندهٔ دانشجویی خودکار ساخته می‌شود.');
+  // P0-4: در پروداکشن نباید به اپراتور «با حساب دمو وارد شو» گفت — آن حساب‌ها در
+  // ایمیج تولید قفل‌اند و رمز ثابت هم هیچ‌وقت قابل قبول نیست.
+  const demoPossible = process.env.NODE_ENV !== 'production' ||
+    (process.env.AFAGH_DEMO_MODE === '1' && process.env.AFAGH_ALLOW_INSECURE_DEMO === 'true'
+      && process.env.NEXT_PUBLIC_AFAGH_DEMO_LOCK !== '1');
+  console.log(demoPossible
+    ? '\n🎉 دادهٔ پایه آماده است — محیط دمو فعال است: با حساب دمو (مثلاً 1010101010) وارد شوید.'
+    : '\n🎉 دادهٔ پایه آماده است — حساب دمو ساخته/فعال نمی‌شود (پروداکشن).\n' +
+      '   برای ورود اولیه، حساب مدیر بسازید:  node scripts/create-admin.mjs --show\n' +
+      '   (یا روی سرور:  make admin) — رمز تصادفی است و در اولین ورود باید عوض شود.');
 } catch (err) {
   console.error('❌ خطا:', err.message);
   process.exitCode = 1;

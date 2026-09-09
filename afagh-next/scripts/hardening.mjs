@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
+import { checkSecret } from './lib/secret-policy.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const sqlFile = path.join(__dirname, '..', 'src', 'db', 'pg-hardening.sql');
@@ -21,12 +22,34 @@ if (!isProd && !APP_PASSWORD) {
   console.warn('⚠ توسعه: رمز پیش‌فرض afagh_app برای نقش afagh_app استفاده می‌شود (فقط محلی).');
 }
 
+// ── P0-1: سیاست رمز — پیش از آنکه مقدار روی نقش اعمال شود بررسی می‌شود ──
+// تا پیش از این، هر مقدارِ غیرخالی پذیرفته می‌شد؛ یعنی «afagh-app-pass» هم
+// بهعنوان رمز نقش afagh_app روی دیتابیس نوشته می‌شد. حالا fail-closed:
+// در پروداکشن مقدار نمونه/ضعیف/کوتاه کل استقرار را متوقف می‌کند.
+const policy = checkSecret('AFAGH_APP_DB_PASSWORD', appPassword, {
+  allowWeak: !isProd || process.env.ALLOW_WEAK_SECRETS === '1',
+});
+if (!policy.ok) {
+  console.error('❌ ' + policy.reason);
+  console.error('   رمز قوی بسازید:  node scripts/lib/secret-policy.mjs --gen');
+  console.error('   یا با اسکریپت نصب: ./deploy-debian.sh  (رمز تصادفی در .env می‌نویسد)');
+  process.exit(1);
+} else if (policy.weak) {
+  console.warn('⚠ ' + policy.reason);
+} else {
+  console.log(`✓ رمز نقش afagh_app با سیاست پروداکشن سازگار است (طول ${appPassword.length})`);
+}
+
 const client = new pg.Client({ connectionString: PG_URL });
 
 try {
   await client.connect();
   console.log('در حال اعمال سخت‌سازی دیتابیس، ایندکس‌ها و نقش امنیتی afagh_app...');
-  await client.query(sql.replaceAll('__AFAGH_APP_PASSWORD__', appPassword));
+  // نام دیتابیس از DATABASE_URL (پیش‌فرض: afagh_db) — تا hardening به نام دیتابیس
+  // در SQL گره خورده نباشد؛ هر استقرار با نام دیگری قبلاً اینجا می‌شکست.
+  let dbName = 'afagh_db';
+  try { dbName = new URL(PG_URL).pathname.replace(/^\//, '') || 'afagh_db'; } catch {}
+  await client.query(sql.replaceAll('__AFAGH_APP_PASSWORD__', appPassword).replaceAll('__AFAGH_DB__', dbName));
   console.log('✅ سخت‌سازی دیتابیس و نقش afagh_app با موفقیت ایجاد و اعمال شد.');
 
   // ═══ اعتبارسنجی پس از اعمال: کل ماتریس RLS باید فعال باشد، وگرنه استقرار ناموفق است ═══

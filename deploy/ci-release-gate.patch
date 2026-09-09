@@ -1,0 +1,59 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index be6ed75..c73315c 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -61,6 +61,12 @@ jobs:
+       - run: node scripts/rls-test.mjs
+       # اثبات P1 (بازبینی): مسابقهٔ همزمانی — تأیید/وصول فقط یک برنده دارد
+       - run: node scripts/concurrency-test.mjs
++      # P0-2 (بازبینی پروداکشن): پشتیبان‌گیری فقط «کد» نیست — همین‌جا واقعی گرفته و
++      # در دیتابیس دیگری بازگردانی و مقایسه می‌شود (pg_dump/pg_restore روی رانر هست).
++      - name: DR drill — پشتیبان → بازگردانی → مقایسهٔ ردیف‌ها و RLS
++        run: |
++          AFAGH_BACKUP_DIR="$RUNNER_TEMP/backups" node scripts/backup-db.mjs
++          AFAGH_BACKUP_DIR="$RUNNER_TEMP/backups" node scripts/verify-backup.mjs --restore-db afagh_drill
+       # گام ۲ سند: اتاق انتظار ZSET — جایگاه O(log N) با Redis واقعی
+       - run: npx tsx scripts/waiting-room-zset.test.mts
+ 
+@@ -74,3 +80,41 @@ jobs:
+         with: { node-version: 22, cache: npm, cache-dependency-path: afagh-erp/package-lock.json }
+       - run: npm ci
+       - run: find src -name '*.js' -exec node --check {} \;
++
++  # ── دروازهٔ انتشار (P1) ──
++  # دو چیز این‌جا سخت‌گیرتر از CI معمولی است:
++  #   ۱) npm audit: قطعی رجیستری = شکست (در PR فقط هشدار است)
++  #   ۲) docker compose config: ثابت می‌کند فایل compose با سیاست جدید سکرت‌ها
++  #      (رمزهای اجباری، volume پشتیبان) واقعاً قابل‌رندر است — هم با .env سالم
++  #      و هم رد شدنِ صریح وقتی .env نیست.
++  # فقط روی push به main (و اجرای دستی) اجرا می‌شود تا PRها را قفل نکند.
++  release-gate:
++    name: دروازهٔ انتشار — ممیزی سخت‌گیر و اعتبارسنجی compose
++    if: github.event_name == 'push'
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-node@v4
++        with: { node-version: 22, cache: npm, cache-dependency-path: afagh-next/package-lock.json }
++      - run: npm ci
++        working-directory: afagh-next
++      - name: npm audit (حالت سخت‌گیر — بدون عبور در قطعی رجیستری)
++        working-directory: afagh-next
++        env: { AFAGH_REQUIRE_REAL_AUDIT: '1' }
++        run: node scripts/ci-audit.mjs
++      - name: compose — با .env قوی باید قابل‌رندر باشد
++        run: |
++          {
++            echo "POSTGRES_PASSWORD=$(node afagh-next/scripts/lib/secret-policy.mjs --gen)"
++            echo "AFAGH_APP_DB_PASSWORD=$(node afagh-next/scripts/lib/secret-policy.mjs --gen)"
++            echo "MINIO_ROOT_PASSWORD=$(node afagh-next/scripts/lib/secret-policy.mjs --gen)"
++          } > .env.ci
++          docker compose --env-file .env.ci config -q
++          echo "✓ compose با سه سکرت قوی رندر شد"
++      - name: compose — بدون .env باید صریح رد شود (P0-1)
++        run: |
++          if docker compose --env-file /dev/null config -q 2>/tmp/compose.err; then
++            echo "✗ compose بدون سکرت‌ها رندر شد — گارد P0-1 کار نمی‌کند"; exit 1
++          fi
++          grep -q "POSTGRES_PASSWORD تنظیم نشده" /tmp/compose.err || { echo "✗ پیام خطا منتظر نبود:"; cat /tmp/compose.err; exit 1; }
++          echo "✓ بدون POSTGRES_PASSWORD، compose بالا نمی‌آید (پیام درست)"

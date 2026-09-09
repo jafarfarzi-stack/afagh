@@ -3,12 +3,18 @@
 #
 #      docker compose up -d --build
 #
-#  بدون هیچ تنظیم اضافه کار می‌کند؛ برای سفارشی‌سازی یک فایل .env کنار
-#  همین فایل بسازید (نمونه: .env.prod.example). هر متغیری که تعریف نکنید،
-#  مقدار پیش‌فرض زیر استفاده می‌شود.
+#  ⚠ از دور «Release Hardening» سه رمز دیتابیس/شیء *اجباری* است (P0-1):
+#      make env          ← ساخت .env از نمونه (chmod 600)
+#      سپس مقادیر CHANGE_ME را عوض کنید (یا همه‌کاری: ./deploy-debian.sh)
+#  بقیهٔ متغیرها پیش‌فرض دارند. برای توسعهٔ محلی با همان مقادیر نمونه:
+#      ALLOW_WEAK_SECRETS=1 make up
 #
-#  ⚠ P0-3: پیش‌فرض‌های زیر فقط برای توسعهٔ محلی‌اند — در پروداکشن `make up`
-#  (گارد check-env) و `deploy-debian.sh` روی این مقادیر fail می‌دهند.
+#  ⚠ سیاست پروداکشن (گیت CI «دروازهٔ انتشار» همین را چک می‌کند):
+#     · رمز دیتابیس/شیء بدون پیش‌فرض‌اند و compose بدون .env رد می‌شود
+#     · پشتیبانِ پیش‌از‌مهاجرت در volume afagh_backups می‌ماند و راستی‌آزمایی می‌شود
+#     · اسکیما فقط با مهاجرت نسخه‌دار (drizzle/*.sql) جلو می‌رود، نه drizzle-kit push
+#     · حساب مدیر اولیه با رمز تصادفی و تغییر اجباری ساخته می‌شود (make admin)
+#
 #  قرارداد .env: پروداکشن = ریشهٔ ریپو (.env کنار همین فایل)؛
 #  توسعهٔ محلی = afagh-next/.env (ساختهٔ install-docker.ps1/.sh) که فقط
 #  زیرساخت dev در afagh-next/docker-compose.yml را تغذیه می‌کند.
@@ -36,11 +42,14 @@ name: afagh
 x-app-env: &app-env
   # زیرساخت (فقط از همین‌جا خوانده می‌شود)
   # مالک اسکیما — فقط migrator/seed/hardening از این استفاده می‌کند
-  DATABASE_URL: postgres://afagh:${POSTGRES_PASSWORD:-afagh}@postgres:5432/afagh_db
+  # ⚠ P0-1: هیچ پیش‌فرضی ندارد؛ compose بدون .env بالا نمی‌آید (قدیم «afagh»
+  #   پیش‌فرض بود و هر `docker compose up` بی‌دقت، دیتابیس با رمز قابل‌حدس می‌ساخت).
+  #   راه توسعهٔ محلی:  make env && ALLOW_WEAK_SECRETS=1 make up
+  DATABASE_URL: postgres://afagh:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD تنظیم نشده — «make env» را بزنید و در .env مقدار تصادفی قوی بگذارید (سیاستِ scripts/lib/secret-policy.mjs)}@postgres:5432/afagh_db
   # اتصال اپ با نقش محدود afagh_app (RLS فعال — توسط hardening.mjs ساخته می‌شود)
-  DATABASE_URL_APP: postgres://afagh_app:${AFAGH_APP_DB_PASSWORD:-afagh-app-pass}@postgres:5432/afagh_db
-  AFAGH_APP_DB_PASSWORD: ${AFAGH_APP_DB_PASSWORD:-afagh-app-pass}
-  # ⟵ با اجرای hardening.mjs، رمز afagh_app روی این مقدار همگام می‌شود
+  DATABASE_URL_APP: postgres://afagh_app:${AFAGH_APP_DB_PASSWORD:?AFAGH_APP_DB_PASSWORD تنظیم نشده — رمز نقش afagh_app؛ با «./deploy-debian.sh» خودکار ساخته می‌شود}@postgres:5432/afagh_db
+  AFAGH_APP_DB_PASSWORD: ${AFAGH_APP_DB_PASSWORD:?AFAGH_APP_DB_PASSWORD تنظیم نشده — رمز نقش afagh_app}
+  # ⟵ hardening.mjs همین مقدار را روی نقش اعمال می‌کند و پیش از آن سیاست رمز را می‌سنجد
   # حالت دمو: ۱ = حساب‌های دمو فعال؛ در production حتماً ۰ (پیش‌فرض خاموش)
   AFAGH_DEMO_MODE: ${AFAGH_DEMO_MODE:-0}
   # حوزهٔ مجوز سطح-شیء برای کارشناس مالی: all (پیش‌فرض) | department (فقط دانشجوی گروه خود)
@@ -117,7 +126,7 @@ services:
     logging: *default-logging
     environment:
       POSTGRES_USER: afagh
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-afagh}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD تنظیم نشده (make env)}
       POSTGRES_DB: afagh_db
       # برای نمایش صحیح متن فارسی در مرتب‌سازی و جست‌وجو
       LANG: C.UTF-8
@@ -179,6 +188,11 @@ services:
     volumes:
       # M-2: کلیدهای پویش‌ها (cron.env) برای scheduler تولید و به اشتراک گذاشته می‌شود
       - afagh_cron_secrets:/secrets
+      # P0-2: پشتیبان پیش از استقرار باید زنده بماند. پیش از این /backups فقط داخل
+      #   فایل‌سیستم کانتینر یک‌بارمصرف migrator بود و با `down` حذف می‌شد.
+      #   برای بردن پشتیبان بیرون از سرور، مسیر میزبان را بدهید:
+      #     AFAGH_BACKUP_DIR=/var/backups/afagh  (و این volume را bind کنید)
+      - afagh_backups:/backups
     depends_on:
       postgres:
         condition: service_healthy
@@ -194,6 +208,9 @@ services:
         NODE_MAX_OLD_SPACE: ${NODE_MAX_OLD_SPACE:-2048}
         # آرگومان اضافهٔ next build — مثلاً NEXT_BUILD_ARGS=--webpack
         NEXT_BUILD_ARGS: ${NEXT_BUILD_ARGS:-}
+        # P0-4: حساب‌های دمو با رمز شناخته‌شده در ایمیج تولید قفل‌اند. فقط برای
+        # ایمیج نمایشی باز کنید:  AFAGH_DEMO_LOCK=0 make build
+        AFAGH_DEMO_LOCK: ${AFAGH_DEMO_LOCK:-1}
     image: afagh-app:latest
     container_name: afagh_app
     restart: unless-stopped
@@ -242,5 +259,7 @@ volumes:
   afagh_pg:
   afagh_redis:
   afagh_minio:
+  # P0-2: پوشهٔ ماندگار پشتیبان‌ها (pg_dump -Fc + امضای sha256 + فایل LATEST)
+  afagh_backups:
   # M-2: کلیدهای پویش‌های زمان‌بندی‌شده (تولید migrator، مصرف scheduler)
   afagh_cron_secrets:

@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { Pool } from 'pg';
 import { observePoolErrors } from './pool-errors';
+import { assertProdSecrets } from '@/lib/secret-guard';
 import * as schema from './schema';
 
 // ── گارد production: در پروداکشن متغیرهای زیرساخت باید تعیین شوند، نه با پیش‌فرض ──
@@ -16,6 +17,11 @@ const requireEnvInProd = (name: string, url: string) => {
   }
   return process.env[name] || url;
 };
+
+// 🔒 P0-1: پیش از ساختن هر استخر اتصال، سیاست سکرت پروداکشن بررسی می‌شود.
+// (قدیم اگر کسی compose/check-env را دور می‌زد، اپ با «afagh-app-pass» هم بالا می‌آمد
+//  و RLS روی نقشی با رمز قابل‌حدس می‌نشست.)
+assertProdSecrets();
 
 // اتصال تنبل (lazy) — در زمان build فایل‌های استاتیک، به دیتابیس وصل نمی‌شود
 const globalForDb = globalThis as unknown as { pool?: Pool; appPool?: Pool };
