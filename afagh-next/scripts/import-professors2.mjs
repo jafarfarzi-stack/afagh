@@ -144,6 +144,8 @@ function mapMarital(s) {
   return { code: /^\d+$/.test(t) ? Number(t) : null, title: null };
 }
 const PAYEH_RANK = { '1': 'مربی', '2': 'استادیار', '3': 'دانشیار', '4': 'استاد', '5': 'استاد ممتاز' };
+// TimeStat سما = طريقه همکاری (از تطبیق TimeStat×طريقه‌همکاری اساتید2 یاد شده)
+const TIMESTAT_COOP = { '1': 'حق التدریس', '2': 'تمام وقت', '3': 'مدعو', '6': 'عضو هیات علمی مدعو' };
 const EMP_MAP = { '1': 'رسمی', '2': 'پیمانی', '3': 'حق التدریس', '4': 'مدعو' };
 const synthNC = (code) => ('9' + String(code).replace(/\D/g, '').padStart(9, '0')).slice(-10);
 
@@ -300,7 +302,7 @@ try {
     if (fieldMain && fieldMain.length > 200) fieldMain = fieldMain.slice(0, 200);
     const empRaw = clean(c[5]);
     const employment = EMP_MAP[empRaw] || (/^[\u0600-\u06FF]/.test(empRaw) ? norm(empRaw).slice(0, 50) : null);
-    const coop = norm(c[9]) && /^[12]$/.test(clean(c[9])) ? null : null; // TimeStat کدگذاری نامشخص — نادیده
+    const coop = TIMESTAT_COOP[clean(c[9])] || null; // TimeStat → طريقه همکاری
     const active = mapActive(c[6]);
     const payeh = /^\d+$/.test(clean(c[53])) ? clean(c[53]) : null;
     const rank = (payeh && PAYEH_RANK[payeh]) || null;
@@ -359,17 +361,17 @@ try {
         "fieldOfStudy"=COALESCE($12,"fieldOfStudy"),"fieldMain"=COALESCE($13,"fieldMain"),
         "maritalStatusCode"=COALESCE($14,"maritalStatusCode"),"maritalStatus"=COALESCE($15,"maritalStatus"),
         "academicBase"=COALESCE($16,"academicBase"),"bankAccountNo"=COALESCE($17,"bankAccountNo"),
-        phone=COALESCE($18,phone) WHERE id=$1`,
+        phone=COALESCE($18,phone),"cooperationType"=COALESCE($19,"cooperationType") WHERE id=$1`,
         [ex.id, userId, facultyId, deptId, active, staffType, degree, personnel, employment, rank, hireDate,
-         fieldStudy, fieldMain, marital.code, marital.title, payeh, bankAcc, phone]);
+         fieldStudy, fieldMain, marital.code, marital.title, payeh, bankAcc, phone, coop]);
       stats.updatedStaff++;
     } else {
       await pool.query(`INSERT INTO staff ("userId","staffCode","facultyId","departmentId","isActive","staffType",
           degree,"personnelNo","employmentType","academicRank","hireDate","fieldOfStudy","fieldMain",
-          "maritalStatusCode","maritalStatus","academicBase","bankAccountNo",phone)
-        VALUES ($1,$2,$3,$4,COALESCE($5,1),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+          "maritalStatusCode","maritalStatus","academicBase","bankAccountNo",phone,"cooperationType")
+        VALUES ($1,$2,$3,$4,COALESCE($5,1),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
         [userId, code, facultyId, deptId, active, staffType, degree, personnel, employment, rank, hireDate,
-         fieldStudy, fieldMain, marital.code, marital.title, payeh, bankAcc, phone]);
+         fieldStudy, fieldMain, marital.code, marital.title, payeh, bankAcc, phone, coop]);
       stats.createdStaff++;
     }
     if (profRoleId) {

@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from '@/db';
-import { academic_terms, course_offerings, courses, enrollments, legacy_code_maps, legacy_grades, students } from '@/db/schema';
+import { academic_terms, course_offerings, courses, enrollments, legacy_code_maps, legacy_grades, student_term_states, students } from '@/db/schema';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth';
 
@@ -17,6 +17,9 @@ export type TranscriptRow = {
   /** عین عنوان ستون «عنوان» فایل وضع نمره (از میز تطبیق GRADE_STATUS) */
   gradeStatusTitle: string | null;
   offeringType: string | null;
+  /** وضعیت همان نیمسال (از وضعيت نيمسال دانشجويان) + مشروطی فایل */
+  termStatusTitle: string | null;
+  termProbation: boolean | null;
 };
 
 /** نقشه کد عددی وضع نمره → عین عنوان فایل مرجع */
@@ -48,6 +51,20 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
   const [stu] = await db.select({ id: students.id, code: students.studentCode }).from(students).where(eq(students.id, studentId)).limit(1);
   if (!stu) return [];
   const titleMap = await gradeStatusTitleMap();
+  // وضعیت نیمسال‌ها (عنوان + مشروطی فایل) — یک کوئری برای همه ترم‌ها
+  const termStates = new Map<string, { title: string | null; probation: boolean | null }>();
+  try {
+    const stRows = await db
+      .select({ termCode: student_term_states.termCode, title: student_term_states.statusTitle, probation: student_term_states.isProbation })
+      .from(student_term_states)
+      .where(eq(student_term_states.studentId, studentId));
+    for (const r of stRows) {
+      termStates.set(r.termCode, {
+        title: r.title,
+        probation: r.probation == null ? null : Number(r.probation) === 1,
+      });
+    }
+  } catch { /* جدول هنوز ساخته نشده باشد */ }
   const exactTitle = (markStat: string | null): string | null =>
     markStat ? titleMap.get(markStat) ?? null : null;
   // enrollments (سامانه جدید — از سما) + اتصال raw وضع نمره از legacy
@@ -75,18 +92,23 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
     .where(eq(enrollments.studentId, studentId))
     .orderBy(desc(academic_terms.termCode), courses.code);
   if (ens.length) {
-    return ens.map(r => ({
-      termCode: r.termCode,
-      termTitle: r.termTitle,
-      courseCode: r.courseCode,
-      courseTitle: r.courseTitle,
-      units: r.units ? String(r.units) : null,
-      courseType: r.courseType,
-      gradeValue: r.gradeValue ? String(r.gradeValue) : null,
-      gradeStatus: r.gradeStatus,
-      gradeStatusTitle: exactTitle(markStatOf(r.legacyRaw)),
-      offeringType: r.offeringType,
-    }));
+    return ens.map(r => {
+      const ts = termStates.get(r.termCode);
+      return {
+        termCode: r.termCode,
+        termTitle: r.termTitle,
+        courseCode: r.courseCode,
+        courseTitle: r.courseTitle,
+        units: r.units ? String(r.units) : null,
+        courseType: r.courseType,
+        gradeValue: r.gradeValue ? String(r.gradeValue) : null,
+        gradeStatus: r.gradeStatus,
+        gradeStatusTitle: exactTitle(markStatOf(r.legacyRaw)),
+        offeringType: r.offeringType,
+        termStatusTitle: ts?.title ?? null,
+        termProbation: ts?.probation ?? null,
+      };
+    });
   }
   // fallback: legacy_grades (اگر هنوز promote نشده)
   const legs = await db
@@ -103,16 +125,21 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
     .where(eq(legacy_grades.studentCode, stu.code))
     .orderBy(desc(legacy_grades.termCode), legacy_grades.courseCode)
     .limit(500);
-  return legs.map(r => ({
-    termCode: r.termCode,
-    termTitle: null,
-    courseCode: r.courseCode,
-    courseTitle: r.courseTitle || `درس ${r.courseCode}`,
-    units: r.units ? String(r.units) : null,
-    courseType: null,
-    gradeValue: r.gradeValue ? String(r.gradeValue) : null,
-    gradeStatus: r.gradeStatus,
-    gradeStatusTitle: exactTitle(markStatOf(r.raw)),
-    offeringType: null,
-  }));
+  return legs.map(r => {
+    const ts = termStates.get(r.termCode);
+    return {
+      termCode: r.termCode,
+      termTitle: null,
+      courseCode: r.courseCode,
+      courseTitle: r.courseTitle || `درس ${r.courseCode}`,
+      units: r.units ? String(r.units) : null,
+      courseType: null,
+      gradeValue: r.gradeValue ? String(r.gradeValue) : null,
+      gradeStatus: r.gradeStatus,
+      gradeStatusTitle: exactTitle(markStatOf(r.raw)),
+      offeringType: null,
+      termStatusTitle: ts?.title ?? null,
+      termProbation: ts?.probation ?? null,
+    };
+  });
 }

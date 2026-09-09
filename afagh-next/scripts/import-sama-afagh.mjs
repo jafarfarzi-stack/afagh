@@ -33,7 +33,7 @@ for (let i = 0; i < raw.length; i++) {
 }
 const DIR = args.dir || 'E:\\git\\information afagh';
 const SOURCE = (args.source || 'AFAGH').toUpperCase();
-const STEPS = (args.steps || 'pre,terms,majors,groups,courses,links,students,grades,codemap').split(',').map(s => s.trim());
+const STEPS = (args.steps || 'pre,terms,majors,groups,courses,links,students,grades,stterm,codemap').split(',').map(s => s.trim());
 const LIMIT = args.limit ? Number(args.limit) : 0;
 const DRY = args.dry === 'true';
 const dbUrl = args.db || process.env.DATABASE_URL || 'postgres://afagh:afagh@localhost:5432/afagh_db';
@@ -146,6 +146,7 @@ async function detectFiles(dir) {
     else if (has('كد','نام') && has('مقطع','گروه_اموزشي') && has('تعداد_واحد')) found.tatbigh = p;
     else if (has('GroupA','Daneshkadeh') && has('Code','Oldcode')) found.tatbighMap = p;
     else if (has('Code','Name','PlaceCode') && h.includes('Admin')) found.groups = p;
+    else if (H.startsWith('Code\tTitle\tisActiveInTerm')) found.termstatus = p;
   }
   if (cands.students.length) {
     cands.students.sort((a, b) => b.size - a.size);
@@ -1016,6 +1017,88 @@ async function phaseCourseGroupLink(file) {
   await logRun('course_dept_link', 'تطبيق کد دروس.txt', stats);
 }
 
+async function phaseStterm(files, file) {
+  console.log('\n── وضعیت نیمسال دانشجویان ──');
+  const stats = { total: 0, upserted: 0, noStudent: 0, noTerm: 0, invalid: 0 };
+  if (!DRY) {
+    await pool.query(`CREATE TABLE IF NOT EXISTS student_term_states (
+      id SERIAL PRIMARY KEY, "studentId" INTEGER NOT NULL REFERENCES students(id),
+      "termId" INTEGER NOT NULL REFERENCES academic_terms(id),
+      "termCode" VARCHAR(10) NOT NULL, "statusCode" VARCHAR(10),
+      "statusTitle" VARCHAR(150), "isProbation" INTEGER,
+      "termAvg" NUMERIC(4,2),
+      CONSTRAINT uq_student_term_states UNIQUE ("studentId","termId"))`);
+  }
+  // مرجع عنوان وضعیت‌ها
+  const titleByCode = new Map();
+  if (files.termstatus) {
+    for await (const { cols } of tsvRows(files.termstatus)) {
+      const code = (cols[0] || '').trim();
+      const title = normTxt(cols[1]);
+      if (/^\d+$/.test(code) && title && !titleByCode.has(code)) titleByCode.set(code, title.slice(0, 150));
+    }
+    console.log(`  مرجع وضعیت نیمسال: ${titleByCode.size} کد`);
+  }
+  // نقشه‌های دانشجو/ترم
+  if (!studentsByCode.size && !DRY) {
+    const rows = await q(`SELECT id, "studentCode" FROM students WHERE "universityId" = $1`, [universityId]);
+    for (const r of rows) studentsByCode.set(r.studentCode, { id: Number(r.id) });
+  }
+  if (!termsByCode.size && !DRY) {
+    for (const r of await q(`SELECT id, "termCode" FROM academic_terms`)) termsByCode.set(r.termCode, { id: Number(r.id) });
+  }
+  const parseProb = (s) => {
+    const t = String(s || '').trim().toLowerCase();
+    if (t === 'true' || t === '1') return 1;
+    if (t === 'false' || t === '0') return 0;
+    return null;
+  };
+  const batch = [];
+  const flush = async () => {
+    if (!batch.length || DRY) { batch.length = 0; return; }
+    const vals = [];
+    const ph = batch.map((r, i) => {
+      const o = i * 7;
+      vals.push(r.s, r.t, r.tc, r.sc, r.st, r.pb, r.avg);
+      return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7})`;
+    }).join(',');
+    const res = await pool.query(`INSERT INTO student_term_states ("studentId","termId","termCode","statusCode","statusTitle","isProbation","termAvg")
+      VALUES ${ph} ON CONFLICT ("studentId","termId") DO UPDATE SET
+        "statusCode" = COALESCE(EXCLUDED."statusCode", student_term_states."statusCode"),
+        "statusTitle" = COALESCE(EXCLUDED."statusTitle", student_term_states."statusTitle"),
+        "isProbation" = COALESCE(EXCLUDED."isProbation", student_term_states."isProbation"),
+        "termAvg" = COALESCE(EXCLUDED."termAvg", student_term_states."termAvg")`, vals);
+    stats.upserted += res.rowCount;
+    batch.length = 0;
+  };
+  let n = 0;
+  for await (const { cols } of tsvRows(file)) {
+    // TermCode Stno StTermStatus SusStatus TermAvg ... Mashroot ... CurrentMaghta
+    const stno = (cols[1] || '').trim();
+    const term = (cols[0] || '').trim();
+    if (!/^\d+$/.test(stno) || !/^\d{3,5}$/.test(term)) { stats.invalid++; continue; }
+    stats.total++; n++;
+    const s = studentsByCode.get(stno);
+    const t = termsByCode.get(term);
+    if (!s) { stats.noStudent++; continue; }
+    if (!t) { stats.noTerm++; continue; }
+    const sc = (cols[2] || '').trim() || null;
+    const avgRaw = parseFloat((cols[4] || '').trim());
+    batch.push({
+      s: s.id, t: t.id, tc: term, sc,
+      st: (sc && titleByCode.get(sc)) || null,
+      pb: parseProb(cols[8]),
+      avg: Number.isFinite(avgRaw) && avgRaw >= 0 && avgRaw <= 20 ? avgRaw : null,
+    });
+    if (batch.length >= 1000) await flush();
+    if (n % 100000 === 0) console.log(`  stterm… ${n}`);
+    if (LIMIT && n >= LIMIT) break;
+  }
+  await flush();
+  console.log(`وضعیت نیمسال: total=${stats.total} upserted=${stats.upserted} noStudent=${stats.noStudent} noTerm=${stats.noTerm} invalid=${stats.invalid}`);
+  await logRun('termstate', 'وضعيت نيمسال دانشجويان.txt (SAMA)', stats);
+}
+
 async function phaseTatbigh(file) {
   console.log('\n── دروس (تطبیق — tatbigh dars.txt) ──');
   const stats = { total: 0, inserted: 0, updated: 0, invalid: 0, linked: 0, unlinkedGroup: new Set() };
@@ -1108,7 +1191,7 @@ try {
   const files = await detectFiles(DIR);
   console.log('فایل‌ها:', Object.fromEntries(Object.entries(files).map(([k, v]) => [k, typeof v === 'string' ? v.split('\\').pop() : v])));
   if (files.studentsSubsetSkipped) console.log(`(زیرمجموعه نادیده گرفته شد: ${files.studentsSubsetSkipped.split('\\').pop()})`);
-  for (const s of ['pre', 'terms', 'majors', 'groups', 'courses', 'links', 'students', 'grades', 'codemap']) {
+  for (const s of ['pre', 'terms', 'majors', 'groups', 'courses', 'links', 'students', 'grades', 'stterm', 'codemap']) {
     if (!STEPS.includes(s)) continue;
     if (s === 'pre') await phasePre();
     if (s === 'terms') { if (!files.terms) throw new Error('فایل ترم‌ها پیدا نشد'); await phaseTerms(files.terms); }
@@ -1132,12 +1215,17 @@ try {
       if (files.sahmiye) for await (const { cols } of tsvRows(files.sahmiye)) {
         if (/^-?\d+$/.test((cols[0] || '').trim())) lookups.sahmiye.set((cols[0] || '').trim(), (cols[3] || '').trim() || null);
       }
+      // نحوه ورود: عنوان ستون Title (نه کد وزارت) تا مستقیم در کارنامه بنشیند
       if (files.accept) for await (const { cols } of tsvRows(files.accept)) {
-        if (/^-?\d+$/.test((cols[0] || '').trim())) lookups.accept.set((cols[0] || '').trim(), (cols[5] || '').trim() || null);
+        if (/^-?\d+$/.test((cols[0] || '').trim())) lookups.accept.set((cols[0] || '').trim(), normTxt(cols[1]).slice(0, 30) || null);
       }
       await phaseStudents(files, lookups);
     }
     if (s === 'grades') { if (!files.grades) throw new Error('فایل نمرات پیدا نشد'); await phaseGrades(files); }
+    if (s === 'stterm') {
+      if (files.stterm) await phaseStterm(files, files.stterm);
+      else console.log('\n── وضعیت نیمسال: فایل وضعيت نيمسال دانشجويان.txt یافت نشد — رد شد');
+    }
     if (s === 'codemap') await phaseCodemap(files);
   }
   console.log('\n🎉 کامل شد.');

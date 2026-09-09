@@ -1,6 +1,6 @@
 import { and, count, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { degree_level_configs, departments, educational_regulations, faculties, majors, staff, students, users } from '@/db/schema';
+import { degree_level_configs, departments, educational_regulations, faculties, legacy_code_maps, majors, staff, students, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { getSetting } from '@/lib/settings';
 import StudentsManagerClient from './StudentsManagerClient';
@@ -103,6 +103,22 @@ export default async function AdminStudentsPage({
     .groupBy(students.status)
     .orderBy(sql`${count()} DESC`);
 
+  // ── برچسب کدهای سما (نحوه ورود/نوع دوره/سهمیه) از میز تطبیق برای کارنامه ──
+  const codeMaps = await db
+    .select({ domain: legacy_code_maps.domain, code: legacy_code_maps.legacyCode, target: legacy_code_maps.targetCode, title: legacy_code_maps.legacyTitle })
+    .from(legacy_code_maps)
+    .where(sql`${legacy_code_maps.domain} IN ('ACCEPT_TYPE','PERIOD_TYPE','QUOTA')`);
+  const codeLabels: { accept: Record<string, string>; acceptByTarget: Record<string, string>; period: Record<string, string>; quota: Record<string, string> } = { accept: {}, acceptByTarget: {}, period: {}, quota: {} };
+  for (const r of codeMaps) {
+    if (!r.code || !r.title) continue;
+    if (r.domain === 'ACCEPT_TYPE') {
+      codeLabels.accept[r.code] = r.title;
+      if (r.target) codeLabels.acceptByTarget[r.target] = r.title;
+    }
+    else if (r.domain === 'PERIOD_TYPE') codeLabels.period[r.code] = r.title;
+    else if (r.domain === 'QUOTA') codeLabels.quota[r.code] = r.title;
+  }
+
   // خواندن اساتید و پرسنل با رتبه علمی و مدرک — پایه و نوع همکاری از سما
   // گروه/دانشکده/رشته/دانشگاه مستقیم از دیتابیس (نه placeholder)
   const staffRows = await db
@@ -131,6 +147,11 @@ export default async function AdminStudentsPage({
       firstName: users.firstName,
       lastName: users.lastName,
       mobile: users.mobile,
+      birthDate: users.birthDate,
+      address: users.address,
+      email: users.email,
+      phone: staff.phone,
+      maritalStatus: staff.maritalStatus,
     })
     .from(staff)
     .innerJoin(users, eq(users.id, staff.userId))
@@ -151,6 +172,7 @@ export default async function AdminStudentsPage({
 
       <StudentsManagerClient
         logoUrl={await getSetting('UNIVERSITY_LOGO').catch(() => '')}
+        codeLabels={codeLabels}
         students={studentRows.map(s => ({
           id: s.id,
           studentCode: s.studentCode,
@@ -166,7 +188,7 @@ export default async function AdminStudentsPage({
           currentTermNo: s.currentTermNo || 1,
           fatherName: s.fatherName || '—',
           birthCertNo: s.birthCertNo || '—',
-          birthDate: s.birthDate ? String(s.birthDate) : null,
+          birthDate: s.birthDate instanceof Date ? s.birthDate.toISOString().slice(0, 10) : (s.birthDate ? String(s.birthDate).slice(0, 10) : null),
           placeOfBirth: s.placeOfBirth || '—',
           placeOfIssue: s.placeOfIssue || '—',
           nationality: s.nationality || '120001',
@@ -197,6 +219,12 @@ export default async function AdminStudentsPage({
           academicRank: st.academicRank || st.academicBase || '—',
           degree: st.degree || st.fieldOfStudy || '—',
           staffType: st.cooperationType || st.employmentType || st.staffType || '—',
+          cooperationType: st.cooperationType,
+          birthDate: st.birthDate instanceof Date ? st.birthDate.toISOString().slice(0, 10) : (st.birthDate ? String(st.birthDate).slice(0, 10) : null),
+          phone: st.phone,
+          address: st.address,
+          email: st.email,
+          maritalStatus: st.maritalStatus,
           departmentName: st.departmentName || '—',
           departmentCode: st.departmentCode,
           facultyName: st.facultyName || '—',

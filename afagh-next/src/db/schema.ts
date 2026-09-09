@@ -232,6 +232,22 @@ export const students = pgTable('students', {
   saminDescription: text('saminDescription')
 });
 
+/**
+ * وضعیت هر دانشجو در هر نیمسال — از «وضعيت نيمسال دانشجويان.txt» سما.
+ * بالای هر نیمسال کارنامه همین نمایش داده می‌شود (نه وضعیت کلی دانشجو):
+ * عنوان وضعیت (در حال تحصیل/مرخصی/میهمان/…) + مشروط/عادی از Mashroot.
+ */
+export const student_term_states = pgTable('student_term_states', {
+  id: serial('id').primaryKey(),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  termId: integer('termId').notNull().references(() => academic_terms.id),
+  termCode: varchar('termCode', { length: 10 }).notNull(),
+  statusCode: varchar('statusCode', { length: 10 }),
+  statusTitle: varchar('statusTitle', { length: 150 }),
+  isProbation: integer('isProbation'),
+  termAvg: numeric('termAvg', { precision: 4, scale: 2 }),
+}, (t) => ({ uq: unique('uq_student_term_states').on(t.studentId, t.termId) }));
+
 export const staff = pgTable('staff', {
   id: serial('id').primaryKey(),
   userId: integer('userId').notNull().unique().references(() => users.id),

@@ -15,6 +15,7 @@
     "db:hardening": "node scripts/hardening.mjs",
     "db:base": "node scripts/seed-base.mjs",
     "db:permissions": "node scripts/seed-permissions.mjs",
+    "audit:verify": "tsx scripts/verify-audit.ts",
     "test:rls": "node scripts/rls-test.mjs",
     "test:concurrency": "node scripts/concurrency-test.mjs"
   },
