@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 /**
  * ══════════════════════════════════════════════════════════════════════
- *  بازسازی کامل پروندهٔ اساتید — فقط از «ostadan.txt» (اساتيد.txt سما، ۱۱۳ ستون)
+ *  بازسازی کامل پروندهٔ اساتید — فقط از «ostadan.txt» (اساتيد.txt سما، ۸۰ ستون)
  *
  *  یافته‌های نگاشت (از تطبیق دادهٔ واقعی):
  *  - Code(0) = کد استاد (کلید)؛ Title(1) = «نام‌خانوادگی-نام»
  *  - GroupCode(2) → departments.departmentCode ؛ Daneshkadeh(3) → faculties.facultyCode
  *  - madrak(8) → «مدرک استاد.txt» (Code→Title) ؛ Degree(4) کدگذاری جدا (نادیده)
- *  - Sex: 1=زن 2=مرد (معکوس استاندارد — از تطبیق لقب/جنسیت اساتید2 یاد گرفته شد)
- *  - isActive: 1=True→فعال، 2/False/0→غیرفعال
- *  - RESHTE(33): کد رشته (→ رشته ها.txt) یا نام مستقیم → fieldMain
- *  - CourseStudyTitle(78) → fieldOfStudy ؛ PositionTitle(73) → staffType
- *  - NationalCode(60) وگرنه IDNO(35) اگر ۱۰رقمی
- *  - سطرهای تکه‌شدهٔ باینری عکس (ستون pic) با شرط cols>=100 حذف می‌شوند؛
+ *  - Sex(19): 1=زن 2=مرد (معکوس استاندارد — از تطبیق لقب/جنسیت اساتید2 یاد گرفته شد)
+ *  - isActive(6): 1=True→فعال، 2/False/0→غیرفعال
+ *  - RESHTE(9): کد رشته (→ رشته ها.txt) یا نام مستقیم → fieldMain
+ *  - CourseStudyTitle(49) → fieldOfStudy ؛ PositionTitle(44) → staffType
+ *  - NationalCode(31) وگرنه IDNO(11) اگر ۱۰رقمی
+ *  - سطرهای تکه‌شدهٔ باینری عکس (ستون pic) با شرط cols>=60 حذف می‌شوند؛
  *    تکراری‌های Code با غنی‌ترین سطر ادغام می‌شود (dedupe).
  *
  *  استفاده:
@@ -239,7 +239,7 @@ try {
   let scanned = 0, frag = 0;
   for await (const { cols } of tsvRows(FILE)) {
     scanned++;
-    if (cols.length < 100) { frag++; continue; }
+    if (cols.length < 60) { frag++; continue; }
     const code = clean(cols[0]);
     const title = clean(cols[1]);
     if (!/^\d+$/.test(code) || code === '0' || !title || title.length < 2) continue;
@@ -255,7 +255,7 @@ try {
     for (const [code, r] of best) {
       if (i++ >= 8) break;
       const c = r.cols;
-      console.log(`[DRY] code=${code} title=${norm(c[1]).slice(0, 40)} | grp=${clean(c[2])} fac=${clean(c[3])} | NC=${clean(c[60]) || clean(c[35])} | sex=${clean(c[43])}`);
+      console.log(`[DRY] code=${code} title=${norm(c[1]).slice(0, 40)} | grp=${clean(c[2])} fac=${clean(c[3])} | NC=${clean(c[31]) || clean(c[11])} | sex=${clean(c[19])}`);
     }
   }
   if (!DRY) {
@@ -272,7 +272,7 @@ try {
     const c = r.cols;
     if (LIMIT && stats.total >= LIMIT) break;
     stats.total++;
-    const { first, last } = splitTitle(c[1], c[79], c[80]);
+    const { first, last } = splitTitle(c[1], c[73], c[74]);
     // گروه/دانشکده از روی کد
     const grpCode = /^\d+$/.test(clean(c[2])) ? clean(c[2]) : null;
     const facCode = /^\d+$/.test(clean(c[3])) ? clean(c[3]) : null;
@@ -294,27 +294,27 @@ try {
       degree = degreeByCode.get(madrak) || null;
       if (!degree) stats.degMiss.add(madrak);
     } else if (madrak && !/^(false|true|0)$/i.test(madrak)) degree = norm(madrak).slice(0, 50);
-    // رشته از RESHTE(33): کد → رشته ها، یا نام مستقیم
-    const reshte = clean(c[33]);
+    // رشته از RESHTE(9): کد → رشته ها، یا نام مستقیم
+    const reshte = clean(c[9]);
     let fieldMain = null;
     if (/^\d+$/.test(reshte) && reshte !== '0') fieldMain = (reshteByCode.get(reshte) || null);
     else if (reshte && !/^(false|true|0)$/i.test(reshte)) fieldMain = norm(reshte).slice(0, 200);
     if (fieldMain && fieldMain.length > 200) fieldMain = fieldMain.slice(0, 200);
     const empRaw = clean(c[5]);
     const employment = EMP_MAP[empRaw] || (/^[\u0600-\u06FF]/.test(empRaw) ? norm(empRaw).slice(0, 50) : null);
-    const coop = TIMESTAT_COOP[clean(c[9])] || null; // TimeStat → طريقه همکاری
+    const coop = null; // TIMESTAT column not present in current file (80 cols)
     const active = mapActive(c[6]);
-    const payeh = /^\d+$/.test(clean(c[53])) ? clean(c[53]) : null;
+    const payeh = /^\d+$/.test(clean(c[28])) ? clean(c[28]) : null;
     const rank = (payeh && PAYEH_RANK[payeh]) || null;
-    const marital = mapMarital(c[49]);
-    const ncRaw = clean(c[60]);
-    const idno = clean(c[35]);
+    const marital = mapMarital(c[25]);
+    const ncRaw = clean(c[31]);
+    const idno = clean(c[11]);
     let nc = /^\d{10}$/.test(ncRaw) ? ncRaw : (/^\d{10}$/.test(idno) ? idno : null);
     if (!nc) { nc = synthNC(code); stats.ncFallback++; }
-    const personnel = clean(c[55]) || clean(c[81]) || null;
-    const bankAcc = clean(c[54]) || clean(c[74]) || null;
+    const personnel = clean(c[52]) || null;
+    const bankAcc = clean(c[45]) || null;
     const hireDate = /^\d{4}\/\d{1,2}\/\d{1,2}/.test(clean(c[7])) ? clean(c[7]).slice(0, 10) : null;
-    const father = norm(c[34]) || norm(c[97]) || null;
+    const father = norm(c[68]) || null;
     if (DRY) continue;
     // ── کاربر ──
     const clash = (await q(`SELECT id FROM users WHERE "nationalCode"=$1`, [nc]))[0];
@@ -325,26 +325,26 @@ try {
       if (owner) { nc = synthNC(code); stats.ncFallback++; }
     }
     const u = (await q(`SELECT id FROM users WHERE "nationalCode"=$1`, [nc]))[0];
-    const mobile = normMobile(c[46]);
-    const email = /@/.test(clean(c[48])) ? clean(c[48]).slice(0, 150) : null;
-    const birthDate = faDate(c[36]);
+    const mobile = normMobile(c[22]);
+    const email = /@/.test(clean(c[24])) ? clean(c[24]).slice(0, 150) : null;
+    const birthDate = faDate(c[12]);
     if (u) {
       userId = u.id;
       await pool.query(`UPDATE users SET "firstName"=$2,"lastName"=$3,mobile=COALESCE($4,mobile),email=COALESCE($5,email),
         "birthCertNo"=COALESCE($6,"birthCertNo"),"birthDate"=COALESCE($7,"birthDate"),"fatherName"=COALESCE($8,"fatherName"),
         gender=COALESCE($9,gender),address=COALESCE($10,address),"placeOfBirth"=COALESCE($11,"placeOfBirth"),
-        "placeOfIssue"=COALESCE($12,"placeOfIssue"),"firstNameEn"=COALESCE($13,"firstNameEn"),"lastNameEn"=COALESCE($14,"lastNameEn"),"isActive"=1 WHERE id=$1`,
-        [userId, first.slice(0, 100), last.slice(0, 100), mobile, email, clean(c[35]) || null, birthDate, father,
-         mapGender(c[43]), norm(c[47]).slice(0, 300) || null, norm(c[37]) || null, norm(c[38]) || null,
-         norm(c[102]) || null, norm(c[103]) || null]);
+        "firstNameEn"=COALESCE($12,"firstNameEn"),"lastNameEn"=COALESCE($13,"lastNameEn"),"isActive"=1 WHERE id=$1`,
+        [userId, first.slice(0, 100), last.slice(0, 100), mobile, email, clean(c[11]) || null, birthDate, father,
+         mapGender(c[19]), norm(c[23]).slice(0, 300) || null, norm(c[13]) || null,
+         norm(c[73]) || null, norm(c[74]) || null]);
       stats.updatedUser++;
     } else {
       const ins = (await pool.query(`INSERT INTO users ("nationalCode","firstName","lastName",mobile,email,"birthCertNo","birthDate",
-          "fatherName",gender,address,"placeOfBirth","placeOfIssue","firstNameEn","lastNameEn","passwordHash","isActive","mustChangePassword")
+          "fatherName",gender,address,"placeOfBirth","firstNameEn","lastNameEn","passwordHash","isActive","mustChangePassword")
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,1,1) ON CONFLICT ("nationalCode") DO NOTHING RETURNING id`,
-        [nc, first.slice(0, 100), last.slice(0, 100), mobile, email, clean(c[35]) || null, birthDate, father,
-         mapGender(c[43]), norm(c[47]).slice(0, 300) || null, norm(c[37]) || null, norm(c[38]) || null,
-         norm(c[102]) || null, norm(c[103]) || null, 'MIGRATED:' + code]))[0];
+        [nc, first.slice(0, 100), last.slice(0, 100), mobile, email, clean(c[11]) || null, birthDate, father,
+         mapGender(c[19]), norm(c[23]).slice(0, 300) || null, norm(c[13]) || null,
+         norm(c[73]) || null, norm(c[74]) || null, 'MIGRATED:' + code]))[0];
       if (ins) {
         userId = ins.id;
       } else {
@@ -355,9 +355,9 @@ try {
       stats.createdUser++;
     }
     // ── پروندهٔ کارمندی: بازنویسی کامل ──
-    const fieldStudy = norm(c[78]).slice(0, 200) || null;
-    const staffType = norm(c[73]).slice(0, 50) || null;
-    const phone = clean(c[44]).slice(0, 20) || null;
+    const fieldStudy = norm(c[49]).slice(0, 200) || null;
+    const staffType = norm(c[44]).slice(0, 50) || null;
+    const phone = clean(c[20]).slice(0, 20) || null;
     const ex = (await q(`SELECT id FROM staff WHERE "staffCode"=$1`, [code]))[0];
     if (ex) {
       await pool.query(`UPDATE staff SET "userId"=$2,"facultyId"=COALESCE($3,"facultyId"),"departmentId"=COALESCE($4,"departmentId"),

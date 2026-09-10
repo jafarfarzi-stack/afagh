@@ -546,16 +546,16 @@ async function phaseStudents(files, lookups) {
     const dash = rawName.lastIndexOf('-');
     const lastName = (dash > 0 ? rawName.slice(0, dash) : rawName).trim().slice(0, 100) || 'نامشخص';
     const firstName = (dash > 0 ? rawName.slice(dash + 1) : '').trim().slice(0, 100) || 'نامشخص';
-    let nc = (s[8] || '').trim();
+    let nc = (s[7] || '').trim();
     if (!/^\d{10}$/.test(nc)) { nc = ''; stats.badNC++; }
     else if (checkNationalCode(nc) !== 'ok') stats.ncChecksumWarn++;
     const nationalCode = nc || ('S' + stno.padStart(9, '0')).slice(-10);
     if (seenNC.has(nationalCode)) { stats.dupNC++; continue; }
     seenNC.set(nationalCode, stno);
     const sex = (c[3] || '').trim();
-    const mobile = (s[39] || '').replace(/\D/g, '');
-    const email = (s[14] || '').trim();
-    const post = ((s[12] || '') + (s[84] || '')).replace(/\D/g, '').slice(0, 10);
+    const mobile = (s[35] || '').replace(/\D/g, '');
+    const email = (s[13] || '').trim();
+    const post = (s[11] || '').replace(/\D/g, '').slice(0, 10);
     const nat = (c[51] || '').trim();
     const isIr = (c[70] || '').trim();
     userRows.push({
@@ -567,13 +567,13 @@ async function phaseStudents(files, lookups) {
       birthDate: faDate((c[19] || '').trim()),
       fatherName: normTxt(c[10]).slice(0, 100) || null,
       gender: sex === '1' ? 'MALE' : sex === '2' ? 'FEMALE' : null,
-      address: (normTxt(c[28]) || normTxt(s[9])).slice(0, 300) || null,
+      address: (normTxt(c[28]) || normTxt(s[8])).slice(0, 300) || null,
       firstNameEn: ((c[91] || '').trim() || (c[57] || '').trim()).slice(0, 100) || null,
       lastNameEn: (c[92] || '').trim().slice(0, 100) || null,
       nationality: (nat === '1' || isIr === '1') ? '120001' : null,
       religion: (c[76] || '').trim().slice(0, 10) || null,
       postalCode: post || null,
-      passportNumber: (s[24] || '').trim().slice(0, 20) || null,
+      passportNumber: (s[20] || '').trim().slice(0, 20) || null,
       isAlive: (['6', '20'].includes((c[4] || '').trim())) ? 0 : 1,
     });
     // students job
@@ -593,7 +593,7 @@ async function phaseStudents(files, lookups) {
     const stop = (c[38] || '').trim();
     const faregh = (c[56] || '').trim();
     const sahmn = (c[40] || '').trim();
-    const accept = (s[16] || '').trim();
+    const accept = (s[14] || '').trim();
     stuJobs.push({
       stno, maghta, reshte, status, entryYear, entryTerm, regKind,
       quota: mapQuota(sahmn),
@@ -603,7 +603,7 @@ async function phaseStudents(files, lookups) {
       studyingMode: (c[6] || '').trim().slice(0, 20) || null,
       trainingMethod: (c[78] || '').trim().slice(0, 20) || null,
       nativeType: (c[17] || '').trim().slice(0, 10) || null,
-      ethnicity: (s[80] || '').trim().slice(0, 10) || null,
+      ethnicity: (s[73] || '').trim().slice(0, 10) || null,
       totalAverage: avg,
       graduateDate: /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(stop) ? stop : null,
       eduEndYear: /^\d{5}$/.test(faregh) ? Number(faregh.slice(0, 4)) : null,
