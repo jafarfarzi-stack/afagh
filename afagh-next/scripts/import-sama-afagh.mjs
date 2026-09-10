@@ -535,7 +535,7 @@ async function phaseStudents(files, lookups) {
     }
     console.log(`تکمیلی: ${n} ردیف عددی، ${stats.mergedSupp} ادغام شد، ${stats.suppOrphans} بی‌همتا`);
   }
-  // ۳) ساخت ردیف‌های users + students (حذف تکرار کد ملی — هر کد ملی یک user/یک student)
+  // ۳) ساخت ردیف‌های users + students — هر کد ملی یک user، هر stno یک student (چند مقطعی پشتیبانی می‌شود)
   const userRows = [];
   const stuJobs = [];
   stats.dupNC = 0;
@@ -610,10 +610,14 @@ async function phaseStudents(files, lookups) {
       localField: reshte.slice(0, 20) || null,
     });
   }
-  // ۴) درج users (bulk)
+  // ۴) درج users (bulk) — یک user به‌ازای هر کد ملی (چند stno می‌توانند یک user داشته باشند)
   const ncToId = new Map();
-  for (let i = 0; i < userRows.length && !DRY; i += 500) {
-    const ch = userRows.slice(i, i + 500);
+  const seenUserNC = new Set();
+  const userRowsUnique = [];
+  for (const u of userRows) { if (!seenUserNC.has(u.nationalCode)) { seenUserNC.add(u.nationalCode); userRowsUnique.push(u); } }
+  stats.dupNC = userRows.length - userRowsUnique.length;
+  for (let i = 0; i < userRowsUnique.length && !DRY; i += 500) {
+    const ch = userRowsUnique.slice(i, i + 500);
     const vals = [];
     const ph = ch.map((r, j) => {
       const o = j * 18;
@@ -633,7 +637,7 @@ async function phaseStudents(files, lookups) {
         for (const r of ex) { ncToId.set(r.nationalCode, r.id); stats.existingUsers++; }
       }
     }
-    if ((i / 500) % 20 === 0) console.log(`  users… ${Math.min(i + 500, userRows.length)}/${userRows.length}`);
+    if ((i / 500) % 20 === 0) console.log(`  users… ${Math.min(i + 500, userRowsUnique.length)}/${userRowsUnique.length} (یکتا؛ از ${userRows.length} ردیف stno)`);
   }
   // ۵) درج students (bulk)
   if (!DRY) {
