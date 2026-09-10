@@ -97,7 +97,7 @@ try {
     userId = ins.rows[0].id;
   }
   if (existing.rows.length) {
-    await c.query('update users set "passwordHash"=$1, "mustChangePassword"=$2, isActive=1 where id=$3',
+    await c.query('update users set "passwordHash"=$1, "mustChangePassword"=$2, "isActive"=1 where id=$3',
       [await hashPassword(password), forceChange ? 1 : 0, userId]);
   }
   await c.query('insert into user_roles ("userId","roleId") values ($1,$2) on conflict do nothing', [userId, roleRow.rows[0].id]);
