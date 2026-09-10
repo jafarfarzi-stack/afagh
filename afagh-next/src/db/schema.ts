@@ -198,7 +198,7 @@ export const educational_regulations = pgTable('educational_regulations', {
 
 export const students = pgTable('students', {
   id: serial('id').primaryKey(),
-  userId: integer('userId').notNull().unique().references(() => users.id),
+  userId: integer('userId').notNull().references(() => users.id),
   studentCode: varchar('studentCode', { length: 14 }).notNull().unique(),
   majorId: integer('majorId').references(() => majors.id),
   degreeLevelId: integer('degreeLevelId').notNull().references(() => degree_level_configs.id),

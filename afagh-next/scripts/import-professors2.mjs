@@ -341,7 +341,7 @@ try {
     } else {
       const ins = (await pool.query(`INSERT INTO users ("nationalCode","firstName","lastName",mobile,email,"birthCertNo","birthDate",
           "fatherName",gender,address,"placeOfBirth","firstNameEn","lastNameEn","passwordHash","isActive","mustChangePassword")
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,1,1) ON CONFLICT ("nationalCode") DO NOTHING RETURNING id`,
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,1,1) ON CONFLICT ("nationalCode") DO NOTHING RETURNING id`,
         [nc, first.slice(0, 100), last.slice(0, 100), mobile, email, clean(c[11]) || null, birthDate, father,
          mapGender(c[19]), norm(c[23]).slice(0, 300) || null, norm(c[13]) || null,
          norm(c[73]) || null, norm(c[74]) || null, 'MIGRATED:' + code]))[0];
