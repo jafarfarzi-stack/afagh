@@ -498,7 +498,7 @@ async function phaseMajors(file) {
   }
   await flush();
   const rows = await q(`SELECT id, "majorCode", "standardCode" FROM majors`);
-  for (const r of rows) if (r.majorCode) majorsByCode.set(r.majorCode, { id: r.id, standardCode: r.standardCode });
+  for (const r of rows) if (r.majorCode) majorsByCode.set(String(r.majorCode), { id: r.id, standardCode: r.standardCode });
   console.log(`رشته‌ها: total=${stats.total} inserted=${stats.inserted} existing=${stats.existing} invalid=${stats.invalid} (majors در DB: ${majorsByCode.size})`);
   await logRun('major', 'reshtelist (SAMA)', stats);
 }
@@ -513,7 +513,7 @@ async function phaseStudents(files, lookups) {
   // اگر majorsByCode خالی است (مثلاً مرحلهٔ students به‌تنهایی اجرا شده)، از DB پر کن
   if (!majorsByCode.size && !DRY) {
     const mRows = await q(`SELECT id, "majorCode", "standardCode" FROM majors`);
-    for (const r of mRows) if (r.majorCode) majorsByCode.set(r.majorCode, { id: r.id, standardCode: r.standardCode });
+    for (const r of mRows) if (r.majorCode) majorsByCode.set(String(r.majorCode), { id: r.id, standardCode: r.standardCode });
     console.log(`رشته‌ها از DB بارگذاری شد: ${majorsByCode.size} رشته`);
   }
   // ۱) فایل اصلی
@@ -713,7 +713,7 @@ async function phaseStudents(files, lookups) {
     const fixRes = await q(`UPDATE students SET "majorId" = m.id
       FROM majors m WHERE students."majorId" IS NULL AND students."universityId" = $1
       AND students."saminLocalFieldCode" IS NOT NULL AND students."saminLocalFieldCode" != ''
-      AND students."saminLocalFieldCode" = m."majorCode"`, [universityId]);
+      AND students."saminLocalFieldCode"::text = m."majorCode"::text`, [universityId]);
     if (fixRes.rowCount) console.log(`  majorId فیکس شد: ${fixRes.rowCount} دانشجو`);
   }
   stats.unmatchedMajor = [...stats.unmatchedMajor];
