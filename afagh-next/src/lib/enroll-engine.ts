@@ -11,6 +11,7 @@ import { chargeTermTuition, getEquivFixedMode } from './tuition-engine';
 import { shouldChargeFixed } from './tuition-rules';
 import { resolveStudentCurriculum } from './curriculum-apply';
 import { selectEffectiveRules } from './curriculum-resolution';
+import { computeGradeStatus } from '@/lib/grade-utils';
 
 // ═══ خط لولهٔ اعتبارسنجی — سند §۱۰۰۸ ═══
 // هر درخواست انتخاب واحد از ۵ فیلتر می‌گذرد:
@@ -473,7 +474,7 @@ export async function applyCourseTransfer(input: {
     status: 'REGISTERED',
     workflowRequestId: input.workflowRequestId ?? null,
     gradeValue: grade === null ? null : String(grade),
-    gradeStatus: grade === null ? 'PENDING' : 'FINALIZED',
+    gradeStatus: computeGradeStatus(grade),
   };
 
   const row = existing

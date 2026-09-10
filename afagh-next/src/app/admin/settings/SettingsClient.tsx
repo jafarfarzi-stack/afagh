@@ -74,7 +74,7 @@ function BackupRestorePanel({ flash }: { flash: (ok: boolean, text: string) => v
       if (!confirm('آیا از بازیابی دیتابیس مطمئنید؟ تمام داده‌های فعلی جایگزین می‌شوند.')) return;
       startTransition(async () => {
         const r = await restoreDatabaseAction(text);
-        if (r.ok) flash(true, `بازیابی انجام شد (${r.statement} دستور اجرا شد)`);
+        if (r.ok) flash(true, `بازیابی انجام شد (${r.statements} دستور اجرا شد)`);
         else flash(false, r.error || 'خطای بازیابی');
       });
     };

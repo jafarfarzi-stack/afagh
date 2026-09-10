@@ -60,6 +60,8 @@ export type TranscriptRow = {
   /** وضعیت همان نیمسال (از وضعيت نيمسال دانشجويان) + مشروطی فایل */
   termStatusTitle: string | null;
   termProbation: boolean | null;
+  /** آیین‌نامه اعمال‌شده روی این درس (فقط وقتی نمره مردودی حذف شده باشد) */
+  _excludedByRegulation?: string;
 };
 
 /** نقشه کد عددی وضع نمره → عین عنوان فایل مرجع */

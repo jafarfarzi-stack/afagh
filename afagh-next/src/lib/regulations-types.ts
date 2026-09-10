@@ -35,8 +35,10 @@ export interface RegulationConfig {
     max_study_semesters: number; // سقف سنوات عادی (۸ لیسانس، ۴ ارشد)
   };
   grading_and_gpa: {
-    failed_course_gpa_policy: 'EXCLUDE_IF_PASSED' | 'KEEP_ALWAYS'; // حذف نمره ردی پس از قبولی یا ابقا
-    default_passing_grade: number; // کف قبولی عادی (۱۰ برای لیسانس، ۱۲ برای ارشد)
+    failed_course_gpa_policy: 'EXCLUDE_IF_PASSED' | 'EXCLUDE_IF_PASSED_1391' | 'KEEP_ALWAYS';
+    default_passing_grade: number; // کف قبولی عادی (۱۰ لیسانس، ۱۲ ارشد، ۱۴ دکتری)
+    retakeMinGrade?: number;       // حد نصاب قبولی مجدد (پیش‌فرض = default_passing_grade)
+    regulationLabel?: string;      // برچسب نمایشی: "آیین‌نامه ۱۳۹۳"
   };
   quota_overrides?: {
     [quotaName: string]: {
@@ -72,10 +74,11 @@ export const DEFAULT_BACHELOR_REGULATION_1403: RegulationConfig = {
     max_total_probations: 4,
     max_study_semesters: 8,
   },
-  grading_and_gpa: {
-    failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', // آیین‌نامه مصوب ۱۳۹۷ به بعد
-    default_passing_grade: 10.0,
-  },
+    grading_and_gpa: {
+      failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', // آیین‌نامه مصوب ۱۳۹۷ به بعد
+      default_passing_grade: 10.0,
+      regulationLabel: 'آیین‌نامه ۱۴۰۲',
+    },
   quota_overrides: {
     SHAHED_ISARGAR: {
       summer_term_rules: {
@@ -115,10 +118,11 @@ export const DEFAULT_BACHELOR_REGULATION_1390: RegulationConfig = {
     max_total_probations: 4,
     max_study_semesters: 10,
   },
-  grading_and_gpa: {
-    failed_course_gpa_policy: 'KEEP_ALWAYS', // آیین‌نامه سال ۱۳۹۰: نمره ردی همیشه در معدل کل باقی می‌ماند
-    default_passing_grade: 10.0,
-  },
+    grading_and_gpa: {
+      failed_course_gpa_policy: 'KEEP_ALWAYS', // آیین‌نامه سال ۱۳۹۰: نمره ردی همیشه در معدل کل باقی می‌ماند
+      default_passing_grade: 10.0,
+      regulationLabel: 'آیین‌نامه ماقبل ۱۳۹۱',
+    },
   quota_overrides: {
     SHAHED_ISARGAR: {
       summer_term_rules: {
@@ -200,7 +204,7 @@ function reg1402(): RegulationConfig {
       max_total_probations: 3,
       max_study_semesters: 8,
     },
-    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 10.0 },
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 10.0, retakeMinGrade: 10, regulationLabel: 'آیین‌نامه ۱۴۰۲' },
   };
 }
 
@@ -219,7 +223,7 @@ function reg1393(): RegulationConfig {
       max_total_probations: 3,
       max_study_semesters: 8,
     },
-    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 10.0 },
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 10.0, retakeMinGrade: 10, regulationLabel: 'آیین‌نامه ۱۳۹۳' },
   };
 }
 
@@ -238,8 +242,8 @@ function reg1391(): RegulationConfig {
       max_total_probations: 3,
       max_study_semesters: 10,
     },
-    // تبصره ۱۳۹۱: با گذراندن با ۱۴+ نمره قبلی حذف می‌شود؛ جبرانی در معدل حساب می‌شود
-    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 10.0 },
+    // تبصره ۱۳۹۱: با گذراندن با ۱۴+ نمره قبلی حذف می‌شود؛ حذف از نیمسال + کل
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED_1391', default_passing_grade: 10.0, retakeMinGrade: 14, regulationLabel: 'آیین‌نامه ۱۳۹۱' },
   };
 }
 
@@ -264,7 +268,7 @@ function regPre1391(): RegulationConfig {
       max_total_probations: 3,
       max_study_semesters: 10,
     },
-    grading_and_gpa: { failed_course_gpa_policy: 'KEEP_ALWAYS', default_passing_grade: 10.0 },
+    grading_and_gpa: { failed_course_gpa_policy: 'KEEP_ALWAYS', default_passing_grade: 10.0, regulationLabel: 'آیین‌نامه ماقبل ۱۳۹۱' },
   };
 }
 
@@ -279,7 +283,7 @@ function reg1394MasterFor(): RegulationConfig {
       max_total_probations: 2,
       max_study_semesters: 4,
     },
-    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 12.0 },
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 12.0, retakeMinGrade: 12, regulationLabel: 'آیین‌نامه ۱۳۹۴ ارشد' },
   };
 }
 
@@ -294,7 +298,7 @@ function reg1394PhdFor(): RegulationConfig {
       max_total_probations: 2,
       max_study_semesters: 8,
     },
-    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 14.0 },
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 14.0, retakeMinGrade: 14, regulationLabel: 'آیین‌نامه ۱۳۹۴ دکتری' },
   };
 }
 
@@ -326,5 +330,7 @@ export const DEFAULT_MASTER_REGULATION_1403: RegulationConfig = {
   grading_and_gpa: {
     failed_course_gpa_policy: 'EXCLUDE_IF_PASSED',
     default_passing_grade: 12.0, // کف قبولی ارشد
+    retakeMinGrade: 12,
+    regulationLabel: 'آیین‌نامه ۱۳۹۴ ارشد',
   },
 };

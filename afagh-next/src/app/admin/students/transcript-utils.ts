@@ -14,24 +14,39 @@ export const numOrNull = (v: string | null | undefined): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 /** آستانه‌های اجرایی آیین‌نامه ملاک (پیش‌فرض: قبولی ۱۰، مشروطی ۱۲) */
-export type RegThresholds = { pass: number; prob: number; exclFailed: boolean };
+export type RegThresholds = {
+  pass: number;
+  prob: number;
+  exclFailed: boolean;        // حذف مردودی از کل (EXCLUDE_IF_PASSED یا EXCLUDE_IF_PASSED_1391)
+  exclFromTerm: boolean;      // حذف مردودی از نیمسال (فقط EXCLUDE_IF_PASSED_1391)
+  retakeMinGrade: number;     // حد نصاب قبولی مجدد
+  regulationLabel?: string;   // برچسب آیین‌نامه
+};
 export function regThresholds(cfg: RegulationConfig | null | undefined): RegThresholds {
-  const pass = Number(cfg?.grading_and_gpa?.default_passing_grade ?? 10);
-  const prob = Number(cfg?.probation_and_tenure?.probation_gpa_threshold ?? 12);
+  const passRaw = cfg?.grading_and_gpa?.default_passing_grade;
+  const probRaw = cfg?.probation_and_tenure?.probation_gpa_threshold;
+  const retakeRaw = cfg?.grading_and_gpa?.retakeMinGrade;
+  const pass = passRaw != null ? Number(passRaw) : 10;
+  const prob = probRaw != null ? Number(probRaw) : 12;
+  const policy = cfg?.grading_and_gpa?.failed_course_gpa_policy;
+  const retakeMin = retakeRaw != null ? Number(retakeRaw) : pass;
   return {
     pass: Number.isFinite(pass) ? pass : 10,
     prob: Number.isFinite(prob) ? prob : 12,
-    exclFailed: cfg?.grading_and_gpa?.failed_course_gpa_policy === 'EXCLUDE_IF_PASSED',
+    exclFailed: policy === 'EXCLUDE_IF_PASSED' || policy === 'EXCLUDE_IF_PASSED_1391',
+    exclFromTerm: policy === 'EXCLUDE_IF_PASSED_1391',
+    retakeMinGrade: Number.isFinite(retakeMin) ? retakeMin : 10,
+    regulationLabel: cfg?.grading_and_gpa?.regulationLabel,
   };
 }
 
 /** درس‌هایی که دست‌کم یک بار قبول شده‌اند (برای سیاست حذف مردودی از معدل کل) */
-export function passedCourseSet(rows: TranscriptRow[], pass: number): Set<string> {
+export function passedCourseSet(rows: TranscriptRow[], retakeMinGrade: number): Set<string> {
   const set = new Set<string>();
   for (const r of rows) {
     const g = numOrNull(r.gradeValue);
     if (r.gradeStatus === 'EXEMPT' || r.gradeStatus === 'PASSED_NO_GRADE') set.add(r.courseCode);
-    else if (g !== null && g >= pass && (r.gradeStatus === 'FINALIZED' || r.gradeStatus === 'TEMPORARY')) set.add(r.courseCode);
+    else if (g !== null && g >= retakeMinGrade && r.gradeStatus === 'FINALIZED') set.add(r.courseCode);
   }
   return set;
 }
@@ -45,8 +60,8 @@ export function summarizeTerm(rows: TranscriptRow[], pass = 10): { taken: number
     taken += u;
     if (r.gradeStatus === 'EXEMPT' || r.gradeStatus === 'PASSED_NO_GRADE') passed += u;
     else if (g !== null && g >= pass) passed += u;
-    // معدل نیمسال: حقیقت تاریخی همان نیمسال — همه نمرات نهایی (ماده ۶ آیین‌نامه ۱۴۰۲)
-    if (g !== null && (r.gradeStatus === 'FINALIZED' || r.gradeStatus === 'TEMPORARY')) {
+    // معدل نیمسال: فقط نمرات FINALIZED (TEMPORARY در معدل حساب نمی‌شود)
+    if (g !== null && r.gradeStatus === 'FINALIZED') {
       wsum += g * u;
       wunits += u;
     }
@@ -56,12 +71,12 @@ export function summarizeTerm(rows: TranscriptRow[], pass = 10): { taken: number
 
 /** جمع معدل کل با سیاست نمره مردودی آیین‌نامه */
 export function summarizeTotal(rows: TranscriptRow[], th: RegThresholds): { wsum: number; wunits: number } {
-  const passedSet = th.exclFailed ? passedCourseSet(rows, th.pass) : null;
+  const passedSet = th.exclFailed ? passedCourseSet(rows, th.retakeMinGrade) : null;
   let wsum = 0, wunits = 0;
   for (const r of rows) {
     const u = numOrNull(r.units) ?? 0;
     const g = numOrNull(r.gradeValue);
-    if (g === null || (r.gradeStatus !== 'FINALIZED' && r.gradeStatus !== 'TEMPORARY')) continue;
+    if (g === null || r.gradeStatus !== 'FINALIZED') continue;
     // EXCLUDE_IF_PASSED: مردودی درسی که بعداً قبول شده از معدل کل حذف می‌شود
     if (passedSet && g < th.pass && passedSet.has(r.courseCode)) continue;
     wsum += g * u;
@@ -72,6 +87,7 @@ export function summarizeTotal(rows: TranscriptRow[], th: RegThresholds): { wsum
 
 export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | null): TranscriptSummary {
   const th = regThresholds(cfg);
+  const passedSet = th.exclFailed ? passedCourseSet(rows, th.retakeMinGrade) : null;
   const map = new Map<string, TranscriptRow[]>();
   for (const r of rows) {
     const k = r.termCode || '—';
@@ -81,21 +97,31 @@ export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | 
   const terms: TermGroup[] = [...map.entries()]
     .sort((a, b) => a[0].localeCompare(b[0], 'en'))
     .map(([termCode, rs]) => {
-      const s = summarizeTerm(rs, th.pass);
+      // اعمال حذف مردودی از نیمسال (فقط EXCLUDE_IF_PASSED_1391)
+      let effectiveRows = rs;
+      if (th.exclFromTerm && passedSet) {
+        effectiveRows = rs.map(r => {
+          const g = numOrNull(r.gradeValue);
+          if (g !== null && g < th.pass && passedSet.has(r.courseCode) && r.gradeStatus === 'FINALIZED') {
+            return { ...r, _excludedByRegulation: th.regulationLabel || 'آیین‌نامه ۱۳۹۱' };
+          }
+          return r;
+        });
+      }
+      const s = summarizeTerm(effectiveRows, th.pass);
       const gpa = s.wunits ? s.wsum / s.wunits : null;
       const fileProb = rs.find(r => r.termProbation !== null)?.termProbation ?? null;
       return {
         termCode, termTitle: rs[0]?.termTitle ?? null,
         termStatusTitle: rs.find(r => r.termStatusTitle)?.termStatusTitle ?? null,
         probation: fileProb ?? (gpa !== null && gpa < th.prob),
-        rows: rs,
+        rows: effectiveRows,
         taken: s.taken, passed: s.passed, failed: s.failed, points: s.wsum,
         gpa,
         cumTaken: 0, cumPassed: 0, cumFailed: 0, cumPoints: 0, cumGpa: null,
       };
     });
   // جمع تجمیعی «کل» تا پایان هر نیمسال (معدل کل با سیاست نمره مردودی آیین‌نامه)
-  const passedSet = th.exclFailed ? passedCourseSet(rows, th.pass) : null;
   let ct = 0, cp = 0, cw = 0, cwu = 0;
   for (const t of terms) {
     const s = summarizeTerm(t.rows, th.pass);
@@ -103,7 +129,7 @@ export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | 
     for (const r of t.rows) {
       const u = numOrNull(r.units) ?? 0;
       const g = numOrNull(r.gradeValue);
-      if (g === null || (r.gradeStatus !== 'FINALIZED' && r.gradeStatus !== 'TEMPORARY')) continue;
+      if (g === null || r.gradeStatus !== 'FINALIZED') continue;
       if (passedSet && g < th.pass && passedSet.has(r.courseCode)) continue;
       cw += g * u; cwu += u;
     }
@@ -199,7 +225,7 @@ export type TypeBreakdown = { type: string; units: number; gpa: number | null };
 export function breakdownByType(rows: TranscriptRow[], cfg?: RegulationConfig | null): TypeBreakdown[] {
   const th = regThresholds(cfg);
   const order = ['عمومی', 'پایه', 'اصلی-تخصصی', 'اختیاری', 'جبرانی', 'پایان‌نامه'];
-  const passedSet = th.exclFailed ? passedCourseSet(rows, th.pass) : null;
+  const passedSet = th.exclFailed ? passedCourseSet(rows, th.retakeMinGrade) : null;
   const acc = new Map<string, { units: number; wsum: number; wunits: number }>();
   for (const r of rows) {
     const g = courseTypeGroup(r.courseType);
@@ -208,7 +234,7 @@ export function breakdownByType(rows: TranscriptRow[], cfg?: RegulationConfig | 
     const u = numOrNull(r.units) ?? 0;
     const gv = numOrNull(r.gradeValue);
     if (r.gradeStatus !== 'PENDING' && (gv === null || gv >= th.pass)) a.units += u;
-    if (gv !== null && (r.gradeStatus === 'FINALIZED' || r.gradeStatus === 'TEMPORARY')) {
+    if (gv !== null && r.gradeStatus === 'FINALIZED') {
       if (passedSet && gv < th.pass && passedSet.has(r.courseCode)) continue;
       a.wsum += gv * u; a.wunits += u;
     }

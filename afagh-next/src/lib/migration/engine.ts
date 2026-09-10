@@ -7,6 +7,7 @@ import {
   majors, migration_runs, staff, student_ledger, students, users,
 } from '@/db/schema';
 import { boolFa, checkNationalCode, dateFa, norm, num } from './normalize';
+import { computeGradeStatus } from '@/lib/grade-utils';
 import { COURSE_ALIASES, parseCourseRow } from './course-row';
 import {
   DEPARTMENT_ALIASES, FACULTY_ALIASES, MAJOR_ALIASES, PROFESSOR_ALIASES,
@@ -185,7 +186,7 @@ export function prepare(entity: Entity, tables: Table[], fileName: string): Prep
       const gsRaw = get(['وضعیت نمره', 'grade_status']) || 'قطعی';
       if (!sc || !cc || !tc) return err('شماره دانشجویی، کد درس و کد ترم الزامی است.');
       if (grade != null && (grade < 0 || grade > 20)) return err(`نمره خارج از بازه: ${grade}`);
-      rows.push({ studentCode: sc, courseCode: cc, termCode: tc, gradeValue: grade, gradeStatus: grade == null ? 'PENDING' : (GRADE_STATUS[gsRaw] ?? 'FINALIZED') });
+      rows.push({ studentCode: sc, courseCode: cc, termCode: tc, gradeValue: grade, gradeStatus: computeGradeStatus(grade) });
     }
 
     if (entity === 'ledger') {

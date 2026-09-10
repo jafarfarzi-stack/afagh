@@ -55,10 +55,10 @@ eq('اعشار', numOrNull('12.5'), 12.5);
 eq('Infinity رد می‌شود', numOrNull('1e999'), null);
 
 console.log('۲)regThresholds — آستانه‌های آیین‌نامه');
-eq('بدون کانفیگ: قبولی ۱۰ و مشروطی ۱۲', regThresholds(null), { pass: 10, prob: 12, exclFailed: false });
-eq('مقادیر آیین‌نامه', regThresholds({ grading_and_gpa: { default_passing_grade: 8, failed_course_gpa_policy: 'EXCLUDE_IF_PASSED' }, probation_and_tenure: { probation_gpa_threshold: 14 } } as never),
-  { pass: 8, prob: 14, exclFailed: true });
-eq('مقدار غیرعددی → پیش‌فرض', regThresholds({ grading_and_gpa: { default_passing_grade: 'بیست' } } as never), { pass: 10, prob: 12, exclFailed: false });
+eq('بدون کانفیگ: قبولی ۱۰ و مشروطی ۱۲', regThresholds(null), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10 });
+eq('مقادیر آیین‌نامه', regThresholds({ grading_and_gpa: { default_passing_grade: 8, failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', retakeMinGrade: 8 }, probation_and_tenure: { probation_gpa_threshold: 14 } } as never),
+  { pass: 8, prob: 14, exclFailed: true, exclFromTerm: false, retakeMinGrade: 8 });
+eq('مقدار غیرعددی → پیش‌فرض', regThresholds({ grading_and_gpa: { default_passing_grade: 'بیست' } } as never), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10 });
 eq('صفرِ مشروع شمرده می‌شود', regThresholds({ grading_and_gpa: { default_passing_grade: 0 } } as never).pass, 0);
 
 console.log('۳)passedCourseSet — درس‌های قبولی‌شده (برای حذف مردودی از معدل کل)');
@@ -71,7 +71,7 @@ const pRows = [
   R({ code: 'F', g: 12, st: 'PENDING' }),
   R({ code: 'B', g: 14, st: 'FINALIZED' }), // جبرانیِ قبول‌شدهٔ همان درس
 ];
-eq('قبولی‌ها: نمره ≥ حد + معاف/قبول بدون نمره', [...passedCourseSet(pRows, 10)].sort(), ['A', 'B', 'C', 'D', 'E']);
+eq('قبولی‌ها: فقط FINALIZED ≥ حد + معاف/قبول بدون نمره', [...passedCourseSet(pRows, 10)].sort(), ['A', 'B', 'C', 'D']);
 eq('آستانهٔ بالاتر مجموعه را کوچک می‌کند، ولی معاف‌ها می‌مانند', [...passedCourseSet(pRows, 15)].sort(), ['A', 'C', 'D']);
 eq('مردودیِ پس از قبولی، درس را در مجموعه نگه می‌دارد', passedCourseSet(pRows, 10).has('B'), true);
 
@@ -94,9 +94,9 @@ const rRows = [
   R({ code: 'X', units: 3, g: 15, st: 'FINALIZED' }), // ترم بعد جبران شد
   R({ code: 'Y', units: 2, g: 7, st: 'FINALIZED' }),  // هرگز قبول نشد
 ];
-eq('EXCLUDE_IF_PASSED: مردودیِ جبران‌شده حذف می‌شود', summarizeTotal(rRows, { pass: 10, prob: 12, exclFailed: true }), { wsum: 59, wunits: 5 });
-eq('KEEP_ALL: هر دو تلاش در معدل می‌آید', summarizeTotal(rRows, { pass: 10, prob: 12, exclFailed: false }), { wsum: 83, wunits: 8 });
-eq('نمرهٔ PENDING در معدل کل نیست', summarizeTotal([R({ g: 19, st: 'PENDING' })], { pass: 10, prob: 12, exclFailed: false }), { wsum: 0, wunits: 0 });
+eq('EXCLUDE_IF_PASSED: مردودیِ جبران‌شده حذف می‌شود', summarizeTotal(rRows, { pass: 10, prob: 12, exclFailed: true, exclFromTerm: false, retakeMinGrade: 10 }), { wsum: 59, wunits: 5 });
+eq('KEEP_ALL: هر دو تلاش در معدل می‌آید', summarizeTotal(rRows, { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10 }), { wsum: 83, wunits: 8 });
+eq('نمرهٔ PENDING در معدل کل نیست', summarizeTotal([R({ g: 19, st: 'PENDING' })], { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10 }), { wsum: 0, wunits: 0 });
 
 console.log('۶)groupTranscript — گروه‌بندی ترم، تجمیعی و مشروطی');
 const gRows = [

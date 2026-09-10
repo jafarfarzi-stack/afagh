@@ -196,7 +196,14 @@ const PASSNG_MS = new Set(['12', '18', '23', '27', '40', '50', '53', '54']);
 const FAILNG_MS = new Set(['2', '22', '51', '24']);
 const TEMP_MS = new Set(['10', '13', '19']);
 const DROP_MS = new Set(['4', '5', '6', '7', '8', '9', '14', '15', '20', '28', '29', '200', '201', '300', '931', '941', '951', '-91', '-1', '-3', '-4', '-5', '-6', '55', '52']);
-const REG_DELETED = new Set(['2', '7', '-1', '-2', '16']); // LessonRegisterStatus.isDeleted (رزرو برای آینده)
+const REG_DELETED = new Set(['2', '7', '-1', '-2', '16']); // LessonRegisterStatus.isDeleted
+
+/** محاسبه خودکار وضعیت نمره — موتور سیستم (نه فایل خام) */
+function computeGradeStatus(value) {
+  if (value == null || isNaN(value)) return 'PENDING';
+  return 'FINALIZED';
+}
+
 function mapGrade(ms, mark) {
   ms = String(ms ?? '').trim();
   const hasMark = mark !== null && mark !== undefined && String(mark).trim() !== '' && !isNaN(Number(String(mark).trim()));
@@ -204,13 +211,12 @@ function mapGrade(ms, mark) {
   const validVal = val !== null && val >= 0 && val <= 20 ? val : null;
   let gradeStatus;
   if (EXEMPT_MS.has(ms)) gradeStatus = 'EXEMPT';
-  else if (validVal !== null) gradeStatus = TEMP_MS.has(ms) ? 'TEMPORARY' : 'FINALIZED';
+  else if (validVal !== null) gradeStatus = computeGradeStatus(validVal);
   else if (PASSNG_MS.has(ms)) gradeStatus = 'PASSED_NO_GRADE';
   else if (FAILNG_MS.has(ms)) gradeStatus = 'FAILED_NO_GRADE';
-  else if (TEMP_MS.has(ms)) gradeStatus = 'TEMPORARY';
   else gradeStatus = 'PENDING';
   const enroll = validVal !== null || !DROP_MS.has(ms);
-  return { gradeStatus, gradeValue: validVal, enroll };
+  return { gradeStatus, gradeValue: validVal, enroll, rawMs: ms };
 }
 
 // ── کش‌ها ──
@@ -226,11 +232,14 @@ let universityId = null;
 async function ensureDegree(maghta) {
   const code = 'SAMA-' + String(maghta || '0');
   if (degrees.has(code)) return degrees.get(code);
+  // حد نصاب قبولی بر اساس مقطع: کارشناسی=۱۰، ارشد=۱۲، دکتری=۱۴
+  const passingMap = { '1': 10, '2': 12, '3': 14, '4': 14, '6': 14, '7': 14, '8': 14 };
+  const passGrade = passingMap[String(maghta)] || 10;
   let row = (await q(`SELECT id FROM degree_level_configs WHERE code = $1`, [code]))[0];
   if (!row && !DRY) {
     row = (await q(`INSERT INTO degree_level_configs (title, code, "defaultPassingGrade", "conditionalGpaThreshold", "maxUnitsPerTerm")
-      VALUES ($1,$2,10.00,12.00,20) ON CONFLICT (code) DO NOTHING RETURNING id`,
-      [`مقطع سما ${maghta} (نیاز به تطبیق عنوان)`, code]))[0]
+      VALUES ($1,$2,$3,$3,20) ON CONFLICT (code) DO NOTHING RETURNING id`,
+      [`مقطع سما ${maghta}`, code, passGrade]))[0]
       || (await q(`SELECT id FROM degree_level_configs WHERE code = $1`, [code]))[0];
   }
   const id = row ? Number(row.id) : -1;
@@ -264,22 +273,26 @@ function regConfig(which) {
   if (which === '1394MS') return { ...base,
     regular_term_rules: { min_units: 8, max_units: 14, probation_max_units: 10, honors_min_gpa: 17.0, honors_max_units: 16 },
     probation_and_tenure: { probation_gpa_threshold: 14.0, max_consecutive_probations: 2, max_total_probations: 2, max_study_semesters: 4 },
-    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 12.0 } };
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 12.0, retakeMinGrade: 12, regulationLabel: 'آیین‌نامه ۱۳۹۴ ارشد' } };
   if (which === '1394PHD') return { ...base, graduating_term_rules: { can_take_with_probation: false, max_units: 12, auto_corequisite_allowed: false },
     regular_term_rules: { min_units: 6, max_units: 12, probation_max_units: 8, honors_min_gpa: 17.0, honors_max_units: 12 },
     probation_and_tenure: { probation_gpa_threshold: 16.0, max_consecutive_probations: 2, max_total_probations: 2, max_study_semesters: 8 },
-    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 14.0 } };
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 14.0, retakeMinGrade: 14, regulationLabel: 'آیین‌نامه ۱۳۹۴ دکتری' } };
   if (which === 'PRE1391') return { ...base,
     regular_term_rules: { min_units: 12, max_units: 20, probation_max_units: 14, honors_min_gpa: 17.0, honors_max_units: 24 },
     probation_and_tenure: { probation_gpa_threshold: 12.0, max_consecutive_probations: 3, max_total_probations: 3, max_study_semesters: 10 },
-    grading_and_gpa: { failed_course_gpa_policy: 'KEEP_ALWAYS', default_passing_grade: 10.0 } };
-  const minU = which === '1391' ? 14 : 12;
-  const sem = which === '1391' ? [5, 10] : [4, 8];
+    grading_and_gpa: { failed_course_gpa_policy: 'KEEP_ALWAYS', default_passing_grade: 10.0, regulationLabel: 'آیین‌نامه ماقبل ۱۳۹۱' } };
+  if (which === '1391') return { ...base,
+    levels: regLevels(14, 2, 3, 5, 10),
+    regular_term_rules: { min_units: 14, max_units: 20, probation_max_units: 14, honors_min_gpa: 17.0, honors_max_units: 24 },
+    probation_and_tenure: { probation_gpa_threshold: 12.0, max_consecutive_probations: 3, max_total_probations: 3, max_study_semesters: 10 },
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED_1391', default_passing_grade: 10.0, retakeMinGrade: 14, regulationLabel: 'آیین‌نامه ۱۳۹۱' } };
+  // 1393 یا پیش‌فرض
   return { ...base,
-    levels: regLevels(minU, 2, 3, sem[0], sem[1]),
-    regular_term_rules: { min_units: minU, max_units: 20, probation_max_units: 14, honors_min_gpa: 17.0, honors_max_units: 24 },
-    probation_and_tenure: { probation_gpa_threshold: 12.0, max_consecutive_probations: 3, max_total_probations: 3, max_study_semesters: sem[1] },
-    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 10.0 } };
+    levels: regLevels(12, 2, 3, 4, 8),
+    regular_term_rules: { min_units: 12, max_units: 20, probation_max_units: 14, honors_min_gpa: 17.0, honors_max_units: 24 },
+    probation_and_tenure: { probation_gpa_threshold: 12.0, max_consecutive_probations: 3, max_total_probations: 3, max_study_semesters: 8 },
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 10.0, retakeMinGrade: 10, regulationLabel: 'آیین‌نامه ۱۳۹۳' } };
 }
 // فقط ردیف‌های مدیریتی ETL بازنویسی می‌شوند (خالی یا تگ SAMA-ETL) — دستی‌ها محفوظ
 function shouldRefreshRegulation(rulesConfig) {
@@ -295,17 +308,24 @@ function repDegreeId(wantCodes) {
   const first = [...degrees.values()][0];
   return first ?? -1;
 }
-async function ensureRegulation(degreeId, maghta, regKind) {
-  const kind = String(regKind ?? '0').trim() || '0';
-  const key = `${degreeId}|${kind}`;
-  if (regulations.has(key)) return regulations.get(key);
+async function ensureRegulation(degreeId, maghta, entryYear) {
   const m = String(maghta);
-  let which, title, repId, effYear;
-  if (m === '3') { which = '1394MS'; title = REG_TITLES.R1394MS; repId = repDegreeId(['SAMA-3']); effYear = 1394; }
-  else if (['4', '6', '7', '8'].includes(m)) { which = '1394PHD'; title = REG_TITLES.R1394PHD; repId = repDegreeId(['SAMA-4', 'SAMA-6', 'SAMA-7', 'SAMA-8']); effYear = 1394; }
-  else if (REG_KIND_1393.has(kind)) { which = '1393'; title = REG_TITLES.R1393; repId = repDegreeId(['SAMA-2']); effYear = 1393; }
-  else { which = '1402'; title = REG_TITLES.R1402; repId = repDegreeId(['SAMA-2']); effYear = 1402; }
+  // تعیین آیین‌نامه بر اساس سال ورود
+  let which;
+  if (m === '3') which = '1394MS';              // ارشد
+  else if (['4', '6', '7', '8'].includes(m)) which = '1394PHD'; // دکتری
+  else if (entryYear < 1391) which = 'PRE1391'; // ماقبل ۹۱
+  else if (entryYear <= 1392) which = '1391';   // ۹۱ و ۹۲
+  else if (entryYear <= 1401) which = '1393';   // ۹۳ تا ۱۴۰۱
+  else which = '1402';                           // ۱۴۰۲ به بعد
+
+  const key = `${degreeId}|${which}`;
+  if (regulations.has(key)) return regulations.get(key);
+
+  const title = REG_TITLES['R' + which] || `آیین‌نامه ${which}`;
+  let repId = repDegreeId([`SAMA-${m}`]);
   if (repId < 0) repId = degreeId;
+  const effYear = which === '1394MS' || which === '1394PHD' ? 1394 : Number(which);
   const config = JSON.stringify(regConfig(which));
   let row = (await q(`SELECT id, "rulesConfig" FROM educational_regulations WHERE title = $1`, [title]))[0];
   if (!row && !DRY) {
@@ -679,7 +699,7 @@ async function phaseStudents(files, lookups) {
       const userId = u && ncToId.get(u.nationalCode);
       if (!userId) { stats.invalid++; continue; }
       const degId = await ensureDegree(j.maghta);
-      const regId = await ensureRegulation(degId, j.maghta, j.regKind);
+      const regId = await ensureRegulation(degId, j.maghta, j.entryYear);
       const mj = majorsByCode.get(j.reshte);
       if (!mj && j.reshte) stats.unmatchedMajor.add(j.reshte);
       stuRows.push({

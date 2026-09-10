@@ -39,7 +39,7 @@ body { @apply bg-slate-100 text-slate-800; }
 }
 
 /* ── چاپ کارنامه: صفحه‌بندی صحیح + ارتفاع یکسان نیمسال‌ها ── */
-.transcript-print-area table.term-grid { table-layout: fixed; width: 100%; }
+.transcript-print-area table.term-grid { table-layout: fixed; width: 100%; border-collapse: collapse; }
 .transcript-print-area table.term-grid > tbody > tr > td { vertical-align: top; }
 .transcript-print-area table.term-grid > tbody > tr {
   page-break-inside: avoid;
@@ -48,11 +48,20 @@ body { @apply bg-slate-100 text-slate-800; }
 .transcript-print-area table.term-grid > tbody > tr + tr {
   page-break-before: auto;
 }
+.transcript-print-area .term-block { page-break-inside: avoid; break-inside: avoid; }
+.transcript-print-area .page-break-before { page-break-before: always; break-before: page; }
 @media print {
-  .transcript-print-area table.term-grid { table-layout: fixed; width: 100%; }
+  @page { size: A4 portrait; margin: 10mm 8mm; }
+  .transcript-print-area {
+    border: 2px solid #000 !important;
+    print-color-adjust: exact; -webkit-print-color-adjust: exact;
+  }
+  .transcript-print-area table.term-grid { table-layout: fixed; width: 100%; border-collapse: collapse; }
   .transcript-print-area table.term-grid > tbody > tr { page-break-inside: avoid; break-inside: avoid; }
   .transcript-print-area .term-block { page-break-inside: avoid; break-inside: avoid; }
   .transcript-print-area .page-break-before { page-break-before: always; break-before: page; }
+  .transcript-print-area table { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .transcript-print-area th, .transcript-print-area td { border-color: #94a3b8 !important; }
 }
 
 /* ─────────────────────────────────────────────────────────────

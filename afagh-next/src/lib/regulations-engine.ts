@@ -500,6 +500,7 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
   const config = (await getRegulationConfig(stu.regulationId, stu.degreeLevelId)) || DEFAULT_BACHELOR_REGULATION_1403;
   const policy = config?.grading_and_gpa?.failed_course_gpa_policy ?? 'EXCLUDE_IF_PASSED';
   const passingGrade = config?.grading_and_gpa?.default_passing_grade || 10;
+  const retakeMinGrade = config?.grading_and_gpa?.retakeMinGrade ?? passingGrade;
 
   const rows = await db
     .select({
@@ -519,12 +520,12 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .where(and(eq(enrollments.studentId, studentId), eq(enrollments.gradeStatus, 'FINALIZED')));
 
-  // نقشه‌برداری دروس پاس‌شده
+  // نقشه‌برداری دروس پاس‌شده (برای حذف مردودی: حد نصاب قبولی مجدد)
   const passedCourses = new Set<string>();
   for (const r of rows) {
     const g = parseGrade(r.gradeValue);
-    if (g === null) continue; // نمرهٔ خالی/نامعتبر = ثبت‌نشده
-    const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= passingGrade;
+    if (g === null) continue;
+    const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= retakeMinGrade;
     if (passed) {
       passedCourses.add(r.code);
     }
@@ -550,7 +551,7 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
     }
 
     // اعمال مصوبه حذف نمره مردودی پس از قبولی
-    if (policy === 'EXCLUDE_IF_PASSED' && !passed && passedCourses.has(r.code)) {
+    if ((policy === 'EXCLUDE_IF_PASSED' || policy === 'EXCLUDE_IF_PASSED_1391') && !passed && passedCourses.has(r.code)) {
       excludedCount++;
       continue; // حذف از صورت و مخرج معدل کل
     }

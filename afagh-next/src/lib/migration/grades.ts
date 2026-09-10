@@ -5,6 +5,7 @@ import {
   academic_terms, course_offerings, courses, enrollments, legacy_grades, students,
 } from '@/db/schema';
 import { norm, num } from './normalize';
+import { computeGradeStatus } from '@/lib/grade-utils';
 import { iterate, missingHeaders, pickTable, type Table } from './tabular';
 import { resolverFor, upsertLegacyCode } from './codemap';
 import { auditInsert, auditUpdate, type AuditCtx } from './audit';
@@ -52,7 +53,7 @@ export function parseGrade(raw: string, statusRaw: string, statusMap: Map<string
   const n = num(r);
   if (n != null && r !== '') {
     if (n < 0 || n > 20) return { value: null, status: 'PENDING', note: `نمرهٔ خارج از بازهٔ ۰..۲۰: ${r}` };
-    return { value: n, status: mappedStatus ?? 'FINALIZED' };
+    return { value: n, status: computeGradeStatus(n) };
   }
   const q = QUALITATIVE[r.toLowerCase()];
   if (q) return { value: q.value, status: mappedStatus ?? q.status };

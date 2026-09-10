@@ -44,20 +44,20 @@ export default function OfficialTranscriptView({ student, summary, logoUrl, code
   for (let i = 0; i < summary.terms.length; i += 3) chunks.push(summary.terms.slice(i, i + 3));
   const breakdown = breakdownByType(summary.terms.flatMap(t => t.rows));
 
+  const termLabel = (code: string) => code.endsWith('3') ? 'نیمسال تابستان' : 'نیمسال';
   const termCell = (t: TermGroup) => (
     <td key={t.termCode} className="align-top border-l border-slate-400 p-0 term-block" style={{ width: '33.33%' }}>
       <div className="bg-slate-100 border-b border-slate-300 px-1 py-1 font-extrabold text-[10px] text-center">
-        نیمسال <span className="font-mono" dir="ltr">{t.termCode}</span>
+        {termLabel(t.termCode)} <span className="font-mono" dir="ltr">{t.termCode}</span>
         <span className="block font-normal text-slate-700">وضعیت نیمسال: {t.termStatusTitle || '—'} — <b className={t.probation ? 'text-red-700' : 'text-emerald-700'}>{t.probation ? 'مشروط' : 'عادی'}</b></span>
       </div>
       <table className="w-full text-[9px]" style={{ tableLayout: 'fixed' }}>
         <colgroup>
-          <col style={{ width: '13%' }} />
-          <col style={{ width: '33%' }} />
-          <col style={{ width: '10%' }} />
-          <col style={{ width: '10%' }} />
-          <col style={{ width: '14%' }} />
-          <col style={{ width: '20%' }} />
+          <col style={{ width: '15%' }} />
+          <col style={{ width: '40%' }} />
+          <col style={{ width: '12%' }} />
+          <col style={{ width: '12%' }} />
+          <col style={{ width: '21%' }} />
         </colgroup>
         <thead>
           <tr className="border-b border-slate-300 text-slate-500">
@@ -66,18 +66,21 @@ export default function OfficialTranscriptView({ student, summary, logoUrl, code
             <th className="p-1">واحد</th>
             <th className="p-1">نمره</th>
             <th className="p-1">وضع</th>
-            <th className="p-1">نوع</th>
           </tr>
         </thead>
         <tbody>
           {t.rows.map((r, i) => (
             <tr key={i} className="border-b border-slate-100">
               <td className="p-1 font-mono text-center" dir="ltr">{r.courseCode}</td>
-              <td className="p-1 leading-tight">{r.courseTitle}</td>
+              <td className="p-1 leading-tight">
+                {r.courseTitle}
+                {r._excludedByRegulation && (
+                  <span className="block text-[7px] text-amber-600 font-bold">({r._excludedByRegulation} اعمال شد)</span>
+                )}
+              </td>
               <td className="p-1 text-center font-mono">{r.units ?? '—'}</td>
               <td className="p-1 text-center font-mono font-bold">{r.gradeValue ?? '—'}</td>
-              <td className="p-1 text-center" title={r.gradeStatusTitle || gradeStatusFa(r.gradeStatus)}>{r.gradeStatusTitle || gradeStatusFa(r.gradeStatus)}</td>
-              <td className="p-1 text-center text-slate-500">{r.courseType || '—'}</td>
+              <td className="p-1 text-center text-[8px]" title={r.gradeStatusTitle || gradeStatusFa(r.gradeStatus)}>{r.gradeStatusTitle || gradeStatusFa(r.gradeStatus)}</td>
             </tr>
           ))}
         </tbody>
@@ -148,7 +151,7 @@ export default function OfficialTranscriptView({ student, summary, logoUrl, code
         </div>
       </div>
       {/* صفحه دوم: جدول وضعیت دروس گذرانده */}
-      <div className="border-t-2 border-slate-700 px-3 py-2">
+      <div className="border-t-2 border-slate-700 px-3 py-2 page-break-before">
         <p className="font-extrabold text-[11px] mb-1">جدول وضعیت دروس گذرانده (کاتالوگ رشته)</p>
         <table className="w-full text-[10px] border border-slate-400">
           <thead>
