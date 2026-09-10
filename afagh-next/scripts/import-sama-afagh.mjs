@@ -1324,7 +1324,8 @@ try {
   }
   console.log('\n🎉 کامل شد.');
 } catch (err) {
-  console.error('❌ خطا:', err.message);
+  console.error('❌ خطا:', err?.message || err);
+  if (err?.stack) console.error(err.stack);
   process.exitCode = 1;
 } finally {
   await pool.end();
