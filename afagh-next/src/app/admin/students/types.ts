@@ -38,6 +38,9 @@ export type StudentItem = {
   trainingMethod?: string | null;
   graduateDate?: string | null;
   regulationId?: number | null;
+  firstNameEn?: string | null;
+  lastNameEn?: string | null;
+  passportNumber?: string | null;
   role: string;
 };
 

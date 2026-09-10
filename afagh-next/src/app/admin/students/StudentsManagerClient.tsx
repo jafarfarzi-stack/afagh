@@ -272,7 +272,7 @@ export default function StudentsManagerClient(props: {
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>نام پدر:</span>
-                    <input type="text" defaultValue="محمد" className="bg-white border border-slate-300 px-2 py-1 rounded" />
+                    <input type="text" defaultValue={currentStudent.fatherName || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded" />
                     <div className="flex items-center gap-1">
                       <span>جنس:</span>
                       <select className="bg-white border border-slate-300 px-1 py-1 rounded">
@@ -283,10 +283,10 @@ export default function StudentsManagerClient(props: {
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-red-700 font-bold">* تاریخ تولد:</span>
-                    <input type="text" defaultValue="۱۳۸۳/۰۵/۱۴" className="bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
+                    <input type="text" defaultValue={currentStudent.birthDate || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
                     <div className="flex items-center gap-1">
                       <span>ش. شناسنامه:</span>
-                      <input type="text" defaultValue="۳۴۱۶" className="bg-white border border-slate-300 px-1 py-1 rounded font-mono w-full" />
+                      <input type="text" defaultValue={currentStudent.birthCertNo || '—'} className="bg-white border border-slate-300 px-1 py-1 rounded font-mono w-full" />
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
@@ -295,8 +295,8 @@ export default function StudentsManagerClient(props: {
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>محل صدور:</span>
-                    <input type="text" defaultValue="تهران" className="bg-white border border-slate-300 px-2 py-1 rounded" />
-                    <span>محل تولد: تهران</span>
+                    <input type="text" defaultValue={currentStudent.placeOfIssue || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded" />
+                    <span>محل تولد: {currentStudent.placeOfBirth || '—'}</span>
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>وضعیت تحصیلی:</span>
@@ -318,10 +318,14 @@ export default function StudentsManagerClient(props: {
                 <div className="space-y-1.5 border border-slate-300 p-2.5 rounded bg-slate-50/50">
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-red-700 font-bold">* نوع دوره:</span>
-                    <select className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-semibold">
-                      <option>روزانه (کد ۱)</option>
-                      <option>نوبت دوم / شبانه (کد ۲)</option>
-                      <option>غیرانتفاعی (کد ۴)</option>
+                    <select key={currentStudent.id + '-sm'} defaultValue={currentStudent.studyingMode || ''} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-semibold">
+                      <option value="">—</option>
+                      <option value="روزانه">روزانه</option>
+                      <option value="شبانه">نوبت دوم / شبانه</option>
+                      <option value="غیرانتفاعی">غیرانتفاعی</option>
+                      <option value="پیام نور">پیام نور</option>
+                      <option value="مجازی">مجازی</option>
+                      <option value="بین‌الملل">بین‌الملل</option>
                     </select>
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
@@ -348,10 +352,13 @@ export default function StudentsManagerClient(props: {
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-red-700 font-bold">* نحوه ورود:</span>
-                    <select className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded">
-                      <option>سنجش و آزمون سراسری (کد ۳)</option>
-                      <option>پذیرش بر اساس سوابق تحصیلی</option>
-                      <option>انتقال و میهمانی</option>
+                    <select key={currentStudent.id + '-at'} defaultValue={currentStudent.acceptanceType || ''} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded">
+                      <option value="">—</option>
+                      <option value="سنجش و آزمون سراسری">سنجش و آزمون سراسری</option>
+                      <option value="پذیرش بر اساس سوابق تحصیلی">پذیرش بر اساس سوابق تحصیلی</option>
+                      <option value="انتقال و میهمانی">انتقال و میهمانی</option>
+                      <option value="بین‌الملل">بین‌الملل</option>
+                      <option value="میهمان">میهمان</option>
                     </select>
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
@@ -407,7 +414,7 @@ export default function StudentsManagerClient(props: {
                   <div className="grid grid-cols-2 gap-2">
                     <div className="flex items-center gap-2">
                       <span className="w-24">استاد راهنما:</span>
-                      <input type="text" defaultValue="دکتر محمد رضایی (کد ۱۰۱)" className="bg-yellow-100 border border-slate-300 px-2 py-1 rounded w-full font-bold" />
+                      <input type="text" defaultValue="" className="bg-yellow-100 border border-slate-300 px-2 py-1 rounded w-full font-bold" placeholder="—" />
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="w-24">وضعیت نظام وظیفه:</span>
@@ -429,29 +436,29 @@ export default function StudentsManagerClient(props: {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="w-24">نوع بورسیه:</span>
-                      <input type="text" defaultValue="بدون بورس (آزاد)" className="bg-white border border-slate-300 px-2 py-1 rounded w-full" />
+                      <input type="text" defaultValue="" className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="—" />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <div className="flex items-center gap-2">
                       <span className="w-24">Full Name:</span>
-                      <input type="text" defaultValue="Ali Rezaei" className="bg-white border border-slate-300 px-2 py-1 rounded w-full font-mono text-left" dir="ltr" />
+                      <input type="text" defaultValue={[currentStudent.firstNameEn, currentStudent.lastNameEn].filter(Boolean).join(' ') || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded w-full font-mono text-left" dir="ltr" readOnly />
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="w-24">Father Name:</span>
-                      <input type="text" defaultValue="Mohammad" className="bg-white border border-slate-300 px-2 py-1 rounded w-full font-mono text-left" dir="ltr" />
+                      <input type="text" defaultValue={currentStudent.fatherName || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded w-full font-mono text-left" dir="ltr" readOnly />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <div className="flex items-center gap-2">
                       <span className="w-24">شماره پاسپورت:</span>
-                      <input type="text" placeholder="—" className="bg-white border border-slate-300 px-2 py-1 rounded w-full font-mono" />
+                      <input type="text" defaultValue={currentStudent.passportNumber || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded w-full font-mono" readOnly />
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="w-24">شماره بین‌المللی:</span>
-                      <input type="text" placeholder="—" className="bg-white border border-slate-300 px-2 py-1 rounded w-full font-mono" />
+                      <span className="w-24">تاریخ فارغ‌التحصیلی:</span>
+                      <input type="text" defaultValue={currentStudent.graduateDate || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded w-full font-mono" readOnly />
                     </div>
                   </div>
 
