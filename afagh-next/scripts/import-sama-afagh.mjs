@@ -522,6 +522,26 @@ async function phaseStudents(files, lookups) {
     main.set(stno, cols);
   }
   console.log(`فایل اصلی: ${stats.total} ردیف معتبر (${stats.badCode} کد نامعتبر، ${stats.invalid} بدون نام)`);
+  // ۱-ب) فایل دوم دانشجویی (students1.txt) → مرج: stno جدید اضافه، فیلد خالی با مقدار پر می‌شود
+  // کلید هر دو فایل شماره دانشجویی (stno) است — نه کدملی
+  if (files.studentsSubsetSkipped) {
+    let n2 = 0, added2 = 0, filled2 = 0;
+    for await (const { cols } of tsvRows(files.studentsSubsetSkipped)) {
+      const stno = (cols[0] || '').trim();
+      if (!/^\d{7,14}$/.test(stno)) continue;
+      const name = normTxt(cols[2]);
+      if (!name) continue;
+      n2++;
+      const m = main.get(stno);
+      if (!m) { main.set(stno, cols); stats.total++; added2++; }
+      else {
+        for (let i = 0; i < cols.length; i++) {
+          if (!(m[i] || '').trim() && (cols[i] || '').trim()) { m[i] = cols[i]; filled2++; }
+        }
+      }
+    }
+    console.log(`فایل دوم: ${n2} ردیف معتبر، ${added2} شماره جدید، ${filled2} فیلد خالی پر شد`);
+  }
   // ۲) فایل تکمیلی → ادغام (فقط ۱۵ ستون اول قابل اعتماد است: قبل از Pic)
   if (files.supp) {
     let n = 0;
