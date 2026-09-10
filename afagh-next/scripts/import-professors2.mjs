@@ -341,11 +341,17 @@ try {
     } else {
       const ins = (await pool.query(`INSERT INTO users ("nationalCode","firstName","lastName",mobile,email,"birthCertNo","birthDate",
           "fatherName",gender,address,"placeOfBirth","placeOfIssue","firstNameEn","lastNameEn","passwordHash","isActive","mustChangePassword")
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,1,1) RETURNING id`,
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,1,1) ON CONFLICT ("nationalCode") DO NOTHING RETURNING id`,
         [nc, first.slice(0, 100), last.slice(0, 100), mobile, email, clean(c[35]) || null, birthDate, father,
          mapGender(c[43]), norm(c[47]).slice(0, 300) || null, norm(c[37]) || null, norm(c[38]) || null,
          norm(c[102]) || null, norm(c[103]) || null, 'MIGRATED:' + code]))[0];
-      userId = ins.id;
+      if (ins) {
+        userId = ins.id;
+      } else {
+        const existing = (await q(`SELECT id FROM users WHERE "nationalCode"=$1`, [nc]))[0];
+        userId = existing ? existing.id : null;
+      }
+      if (!userId) { stats.ncFallback++; continue; }
       stats.createdUser++;
     }
     // ── پروندهٔ کارمندی: بازنویسی کامل ──
