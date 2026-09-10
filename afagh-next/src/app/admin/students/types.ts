@@ -22,6 +22,7 @@ export type StudentItem = {
   majorCode: string;
   facultyName?: string;
   degreeLevel: string;
+  degreeLevelId: number;
   degreeCode: string;
   regulationTitle: string;
   fatherName?: string;

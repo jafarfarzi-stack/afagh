@@ -249,6 +249,7 @@ export default async function AdminStudentsPage({
           majorName: s.majorName || '—',
           majorCode: s.majorCode || '—',
           degreeLevel: s.degreeLevel || '—',
+          degreeLevelId: s.degreeLevelId ?? 0,
           degreeCode: s.degreeCode || '—',
           regulationId: s.regulationId,
           regulationTitle: s.regulationTitle || '—',

@@ -325,12 +325,18 @@ export default function StudentsManagerClient(props: {
                     </select>
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
+                    <span className="text-red-700 font-bold">* مقطع:</span>
+                    <select key={currentStudent.id + '-dl'} defaultValue={currentStudent.degreeLevelId} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-semibold">
+                      {(props.degrees ?? []).map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-red-700 font-bold">* کد و نام رشته:</span>
-                    <input type="text" defaultValue={`۵۴۸ — ${currentStudent.majorName}`} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-bold" />
+                    <input type="text" defaultValue={`${currentStudent.majorCode} — ${currentStudent.majorName}`} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-bold" readOnly />
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>دانشکده:</span>
-                    <input type="text" defaultValue="دانشکده فنی و مهندسی (کد ۱۲)" className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
+                    <input type="text" defaultValue={currentStudent.facultyName || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" readOnly />
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-red-700 font-bold">* سهمیه نهایی:</span>
