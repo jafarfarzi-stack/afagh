@@ -538,7 +538,6 @@ async function phaseStudents(files, lookups) {
   // ۳) ساخت ردیف‌های users + students (حذف تکرار کد ملی — هر کد ملی یک user/یک student)
   const userRows = [];
   const stuJobs = [];
-  const seenNC = new Map(); // nationalCode -> stno (اولین)
   stats.dupNC = 0;
   for (const [stno, c] of main) {
     const s = c._supp || [];
@@ -550,8 +549,8 @@ async function phaseStudents(files, lookups) {
     if (!/^\d{10}$/.test(nc)) { nc = ''; stats.badNC++; }
     else if (checkNationalCode(nc) !== 'ok') stats.ncChecksumWarn++;
     const nationalCode = nc || ('S' + stno.padStart(9, '0')).slice(-10);
-    if (seenNC.has(nationalCode)) { stats.dupNC++; continue; }
-    seenNC.set(nationalCode, stno);
+    // NOTE: we no longer dedup by nationalCode — a student can have multiple stnos (kardani → karshenasi)
+    // User dedup is handled by ON CONFLICT ("nationalCode") DO NOTHING; student dedup by ON CONFLICT ("studentCode") DO NOTHING
     const sex = (c[3] || '').trim();
     const mobile = (s[35] || '').replace(/\D/g, '');
     const email = (s[13] || '').trim();
@@ -658,14 +657,8 @@ async function phaseStudents(files, lookups) {
         fieldCode: mj && mj.standardCode ? mj.standardCode.slice(0, 20) : null,
       });
     }
-    // حذف آنهایی که userId قبلاً دانشجو دارد (از run قبلی یا دادهٔ قدیمی)
-    if (!DRY && stuRows.length) {
-      const exUserIds = new Set((await q(`SELECT "userId" FROM students WHERE "userId" = ANY($1)`, [stuRows.map(r => r.userId)])) .map(r => String(r.userId)));
-      const before = stuRows.length;
-      const filtered = stuRows.filter(r => !exUserIds.has(String(r.userId)));
-      if (filtered.length !== before) { console.log(`  students: ${before - filtered.length} ردیف با userId تکراری حذف شد`); stats.existingStudents += before - filtered.length; }
-      stuRows.length = 0; stuRows.push(...filtered);
-    }
+    // NOTE: we no longer filter by userId — a person can have multiple student records (kardani → karshenasi)
+    // Student dedup is handled by ON CONFLICT ("studentCode") DO NOTHING
     for (let i = 0; i < stuRows.length; i += 500) {
       const ch = stuRows.slice(i, i + 500);
       const vals = [];
