@@ -510,6 +510,12 @@ async function phaseStudents(files, lookups) {
     universityId = Number(u.id);
   }
   console.log('\n── دانشجویان (ادغام اصلی + تکمیلی) ──');
+  // اگر majorsByCode خالی است (مثلاً مرحلهٔ students به‌تنهایی اجرا شده)، از DB پر کن
+  if (!majorsByCode.size && !DRY) {
+    const mRows = await q(`SELECT id, "majorCode", "standardCode" FROM majors`);
+    for (const r of mRows) if (r.majorCode) majorsByCode.set(r.majorCode, { id: r.id, standardCode: r.standardCode });
+    console.log(`رشته‌ها از DB بارگذاری شد: ${majorsByCode.size} رشته`);
+  }
   // ۱) فایل اصلی
   const main = new Map();
   const stats = { total: 0, invalid: 0, badCode: 0, mergedSupp: 0, suppOrphans: 0, insertedUsers: 0, existingUsers: 0, insertedStudents: 0, existingStudents: 0, badNC: 0, ncChecksumWarn: 0, unmatchedMajor: new Set(), unknownMaghta: new Set(), unknownStatus: new Set(), idMin: null, idMax: null };
@@ -703,6 +709,12 @@ async function phaseStudents(files, lookups) {
     }
     const rows = await q(`SELECT id, "studentCode", "userId" FROM students WHERE "universityId" = $1`, [universityId]);
     for (const r of rows) studentsByCode.set(r.studentCode, { id: r.id, userId: r.userId });
+    // فیکس دانشجویان موجود با majorId خالی — از روی saminLocalFieldCode مچ کن
+    const fixRes = await q(`UPDATE students SET "majorId" = m.id
+      FROM majors m WHERE students."majorId" IS NULL AND students."universityId" = $1
+      AND students."saminLocalFieldCode" IS NOT NULL AND students."saminLocalFieldCode" != ''
+      AND students."saminLocalFieldCode" = m."majorCode"`, [universityId]);
+    if (fixRes.rowCount) console.log(`  majorId فیکس شد: ${fixRes.rowCount} دانشجو`);
   }
   stats.unmatchedMajor = [...stats.unmatchedMajor];
   stats.unknownMaghta = [...stats.unknownMaghta];
