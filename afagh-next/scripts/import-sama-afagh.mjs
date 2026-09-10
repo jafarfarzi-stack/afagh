@@ -463,7 +463,11 @@ async function phaseMajors(file) {
     }).join(',');
     const res = await pool.query(`INSERT INTO majors (name, "degreeLevelId", "departmentId", "majorCode", "facultyId",
         "minUnits", "standardCode", "establishedDate", "terminatedDate", "isActive", "headStaffCode", "expertName", "lastCouncilDate")
-      VALUES ${ph} ON CONFLICT ("majorCode") DO NOTHING RETURNING id`, vals);
+      VALUES ${ph} ON CONFLICT ("majorCode") DO UPDATE SET
+        "facultyId" = COALESCE(majors."facultyId", EXCLUDED."facultyId"),
+        "departmentId" = COALESCE(majors."departmentId", EXCLUDED."departmentId"),
+        name = CASE WHEN majors.name LIKE '%سما%' OR majors.name IS NULL OR majors.name = '' THEN EXCLUDED.name ELSE majors.name END
+      RETURNING id`, vals);
     stats.inserted += res.rows.length;
     stats.existing += batch.length - res.rows.length;
     batch.length = 0;

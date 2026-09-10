@@ -38,6 +38,23 @@ body { @apply bg-slate-100 text-slate-800; }
   }
 }
 
+/* ── چاپ کارنامه: صفحه‌بندی صحیح + ارتفاع یکسان نیمسال‌ها ── */
+.transcript-print-area table.term-grid { table-layout: fixed; width: 100%; }
+.transcript-print-area table.term-grid > tbody > tr > td { vertical-align: top; }
+.transcript-print-area table.term-grid > tbody > tr {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+.transcript-print-area table.term-grid > tbody > tr + tr {
+  page-break-before: auto;
+}
+@media print {
+  .transcript-print-area table.term-grid { table-layout: fixed; width: 100%; }
+  .transcript-print-area table.term-grid > tbody > tr { page-break-inside: avoid; break-inside: avoid; }
+  .transcript-print-area .term-block { page-break-inside: avoid; break-inside: avoid; }
+  .transcript-print-area .page-break-before { page-break-before: always; break-before: page; }
+}
+
 /* ─────────────────────────────────────────────────────────────
    ریسپانسیو موبایل — پایهٔ سراسری برای همهٔ کارتابل‌ها
    در صفحه‌های باریک: جدول‌ها خوانا می‌مانند و ظرف‌های اسکرول،
