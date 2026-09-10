@@ -122,9 +122,14 @@ function detectFiles(dir) {
   }
 
   if (cands.students.length) {
-    cands.students.sort((a, b) => b.size - a.size);
+    cands.students.sort((a, b) => {
+      const a1 = /students1/i.test(a.name) ? 1 : 0;
+      const b1 = /students1/i.test(b.name) ? 1 : 0;
+      if (a1 !== b1) return b1 - a1;
+      return b.size - a.size;
+    });
     found.students = cands.students[0].p;
-    if (cands.students[1]) found.studentsSubsetSkipped = cands.students[1].name;
+    if (cands.students[1]) found.studentsSubsetSkipped = cands.students[1].p;
   }
   return found;
 }
