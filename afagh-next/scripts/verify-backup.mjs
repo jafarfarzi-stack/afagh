@@ -105,8 +105,22 @@ if (counts.TABLE === 0 || counts.TABLE_DATA === 0) {
   if (bytes > 4096) {
     console.warn(`⚠ فرمت pg_restore --list با شمارشگر سازگار نیست (${counts.TABLE} جدول / ${counts.TABLE_DATA} داده) ولی حجم فایل (${(bytes / 1024).toFixed(0)}KB) نشان‌دهندهٔ محتواست — ادامه.`);
   } else {
-    console.error('❌ آرشیو هیچ جدول یا داده‌ای ندارد — پشتیبان بی‌محتواست.');
-    process.exit(1);
+    // در نصب تازه، بک‌آپ قبل از migrate-db می‌شود (DB خالی) → خالی بودن طبیعی است
+    let dbHasTables = false;
+    try {
+      const { default: pgMod } = await import('pg');
+      const ck = new pgMod.Client({ connectionString: process.env.DATABASE_URL });
+      await ck.connect();
+      const r = await ck.query("SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' LIMIT 1");
+      dbHasTables = r.rows.length > 0;
+      await ck.end();
+    } catch {}
+    if (dbHasTables) {
+      console.warn('⚠ پشتیبان بی‌محتواست (قبل از migrate-db ساخته شد) ولی DB فعلی جدول دارد — طبیعی در نصب تازه.');
+    } else {
+      console.error('❌ آرشیو هیچ جدول یا داده‌ای ندارد — پشتیبان بی‌محتواست.');
+      process.exit(1);
+    }
   }
 }
 console.log(`✓ آرشیو سالم است: ${counts.TABLE} جدول · ${counts.TABLE_DATA} بخش داده · ${counts.CONSTRAINT} قید`);

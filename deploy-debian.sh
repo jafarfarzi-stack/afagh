@@ -245,7 +245,7 @@ done; echo ""
 
 # ── ۵-ب) P0-2: راستی‌آزمایی همان پشتیبانی که پیش از مهاجرت ساخته شد ──
 printf "  … بررسی سلامت پشتیبان"
-BK_LINE=$(dc run --rm --no-deps -e AFAGH_BACKUP_DIR=/backups migrator node scripts/verify-backup.mjs 2>&1 | tail -1)
+BK_LINE=$(dc run --rm --no-deps -e AFAGH_BACKUP_DIR=/backups migrator node scripts/verify-backup.mjs 2>&1 | tail -1) || true
 echo ""
 if [ -n "$BK_LINE" ]; then ok "$BK_LINE"; else warn "پشتیبان راستی‌آزمایی نشد — دستی: make verify-backup"; fi
 

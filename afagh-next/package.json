@@ -16,6 +16,9 @@
     "db:base": "node scripts/seed-base.mjs",
     "db:cleanup-regulations": "node scripts/cleanup-regulations.mjs",
     "db:permissions": "node scripts/seed-permissions.mjs",
+    "db:import": "node scripts/import-university.mjs",
+    "db:import:sama": "node scripts/import-sama-afagh.mjs",
+    "db:import:professors": "node scripts/import-professors2.mjs",
     "audit:verify": "tsx scripts/verify-audit.ts",
     "test:rls": "node scripts/rls-test.mjs",
     "test:concurrency": "node scripts/concurrency-test.mjs"
