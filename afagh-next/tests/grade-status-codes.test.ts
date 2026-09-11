@@ -14,6 +14,8 @@ import {
   GRADE_STATUS_FLAGS,
   gradeStatusCodeOf,
   gradeStatusCodeTitle,
+  gradeStatusCodeAffectsGpa,
+  gradeStatusCodeCountsUnit,
   gradeStatusLegend,
   gradeStatusLegendLine,
   isGradePassed,
@@ -162,6 +164,27 @@ console.log('\n— تعیین قبول/رد با قاعدهٔ موتور آیی�
   ok(isGradePassed('', 'NUMERIC', 10) === null, 'نمرهٔ خالی سنجیده نمی‌شود');
   ok(isGradePassed(null, 'NUMERIC', 10) === null, 'نمرهٔ null سنجیده نمی‌شود');
   ok(isGradePassed('غیبت', 'NUMERIC', 10) === null, 'نمرهٔ متنی سنجیده نمی‌شود');
+}
+
+console.log('\n— پرچم «اثر در معدل» خودِ کد وضع (درس جبرانی) —');
+{
+  const flags = (code: string) => JSON.stringify(GRADE_STATUS_FLAGS[code]);
+
+  // همان دو کدی که تعریف درس جبرانی انتخاب می‌کند
+  ok(gradeStatusCodeAffectsGpa(flags('11')) === true, 'کد ۱۱ «جبرانی- بااحتساب درمعدل» در معدل اثر دارد');
+  ok(gradeStatusCodeAffectsGpa(flags('12')) === false, 'کد ۱۲ «جبرانی بدون احتساب در معدل-قبول» در معدل اثر ندارد');
+  // واحد گذرانده از معدل جدا است: کد ۱۲ واحد دارد ولی معدل نه
+  ok(gradeStatusCodeCountsUnit(flags('12')) === true, 'کد ۱۲ واحد گذرانده حساب می‌شود');
+  ok(gradeStatusCodeCountsUnit(flags('2')) === false, 'کد ۲ (مردود) واحد گذرانده ندارد');
+  ok(gradeStatusCodeAffectsGpa(flags('1')) === true, 'کد ۱ (درس عادی قبول) در معدل اثر دارد');
+  ok(gradeStatusCodeAffectsGpa(flags('20')) === false, 'کد ۲۰ (غیبت) در معدل اثر ندارد');
+
+  // «نمی‌دانم» → فراخوان به قاعدهٔ قبلی خودش برمی‌گردد، رکورد حذف نمی‌شود
+  ok(gradeStatusCodeAffectsGpa(null) === null, 'بدون پرچم → null (قاعدهٔ قبلی درس)');
+  ok(gradeStatusCodeAffectsGpa('') === null, 'پرچم خالی → null');
+  ok(gradeStatusCodeAffectsGpa('{خراب') === null, 'JSON خراب → null (نه خطا)');
+  ok(gradeStatusCodeAffectsGpa('{"gpa":"بله"}') === null, 'gpa غیربولی → null');
+  ok(gradeStatusCodeCountsUnit(null) === null, 'unitPassed بدون پرچم → null');
 }
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);

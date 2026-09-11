@@ -305,3 +305,40 @@ export function isGradePassed(
   if (gradingType === 'DESCRIPTIVE') return n === 1;
   return n >= passingGrade;
 }
+
+/**
+ * آیا این کد وضع نمره در معدل اثر دارد؟
+ *
+ * پرچم‌های هر کد از فایل مرجع قدیمی مهاجرت شده‌اند و در
+ * `grade_status_codes.legacyFlags` (JSON) نشسته‌اند. این همان چیزی است که
+ * درس جبرانی را از درس عادی جدا می‌کند: کد ۱۱ «جبرانی- بااحتساب درمعدل»
+ * `gpa: true` دارد و کد ۱۲ «جبرانی بدون احتساب در معدل-قبول» `gpa: false`.
+ *
+ * `null` یعنی «نمی‌دانم» (پرچمی مهاجرت نشده / JSON خراب) — در این حالت
+ * فراخوان باید به قاعدهٔ قبلی خود برگردد، نه اینکه رکورد را حذف کند.
+ */
+export function gradeStatusCodeAffectsGpa(legacyFlags: string | null | undefined): boolean | null {
+  if (!legacyFlags) return null;
+  try {
+    const f = JSON.parse(legacyFlags) as { gpa?: unknown };
+    if (typeof f?.gpa === 'boolean') return f.gpa;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * آیا این کد وضع نمره «واحد گذرانده» حساب می‌شود؟
+ * همان قاعدهٔ بالا برای `unitPassed` (کد ۱۲ واحد دارد ولی معدل نه).
+ */
+export function gradeStatusCodeCountsUnit(legacyFlags: string | null | undefined): boolean | null {
+  if (!legacyFlags) return null;
+  try {
+    const f = JSON.parse(legacyFlags) as { unitPassed?: unknown };
+    if (typeof f?.unitPassed === 'boolean') return f.unitPassed;
+    return null;
+  } catch {
+    return null;
+  }
+}
