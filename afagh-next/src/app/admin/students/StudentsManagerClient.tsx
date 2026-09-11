@@ -633,7 +633,7 @@ export default function StudentsManagerClient(props: {
           {/* ── تب ۵: کارنامهٔ رسمی + جدول نمرات ── */}
           {stuTab === 'transcript' && currentStudent && (
             <div key={`stu-tr-${currentStudent.id}`} className="transcript-print-area bg-white p-3 sm:p-4 border border-slate-400 rounded-b-md space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
                 <h3 className="font-extrabold text-slate-900">📊 کارنامهٔ {currentStudent.lastName} - {currentStudent.firstName} ({currentStudent.studentCode})</h3>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] text-slate-500 ml-1">{transcript ? `${transcript.length} درس` : ''}</span>

@@ -16,7 +16,7 @@ body { @apply bg-slate-100 text-slate-800; }
    همان ناحیه روی کاغذ می‌رود؛ نوارها، دکمه‌ها و بخش‌های print:hidden حذف می‌شوند.
    ───────────────────────────────────────────────────────────── */
 @media print {
-  @page { size: A4 portrait; margin: 8mm; }
+  @page { size: A4 portrait; margin: 10mm 8mm; }
   html, body { background: #ffffff !important; color: #000000 !important; }
   header, footer, nav, aside, [role="navigation"], button, .print\:hidden { display: none !important; }
   .print-area {
@@ -33,12 +33,18 @@ body { @apply bg-slate-100 text-slate-800; }
   body.printing-transcript .transcript-print-area {
     position: absolute !important;
     top: 0 !important; right: 0 !important; left: 0 !important;
-    margin: 0 !important; border: none !important; border-radius: 0 !important;
+    margin: 0 !important; border: 2px solid #000 !important; border-radius: 0 !important;
     print-color-adjust: exact; -webkit-print-color-adjust: exact;
   }
+  .transcript-print-area table.term-grid { table-layout: fixed; width: 100%; border-collapse: collapse; }
+  .transcript-print-area table.term-grid > tbody > tr { page-break-inside: avoid; break-inside: avoid; }
+  .transcript-print-area .term-block { page-break-inside: avoid; break-inside: avoid; }
+  .transcript-print-area .page-break-before { page-break-before: always; break-before: page; }
+  .transcript-print-area table { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .transcript-print-area th, .transcript-print-area td { border-color: #94a3b8 !important; }
 }
 
-/* ── چاپ کارنامه: صفحه‌بندی صحیح + ارتفاع یکسان نیمسال‌ها ── */
+/* ── چاپ کارنامه: صفحه‌بندی صحیح + ارتفاع یکسان نیمسال‌ها (پایه، خارج از چاپ هم بی‌ضرر) ── */
 .transcript-print-area table.term-grid { table-layout: fixed; width: 100%; border-collapse: collapse; }
 .transcript-print-area table.term-grid > tbody > tr > td { vertical-align: top; }
 .transcript-print-area table.term-grid > tbody > tr {
@@ -50,19 +56,7 @@ body { @apply bg-slate-100 text-slate-800; }
 }
 .transcript-print-area .term-block { page-break-inside: avoid; break-inside: avoid; }
 .transcript-print-area .page-break-before { page-break-before: always; break-before: page; }
-@media print {
-  @page { size: A4 portrait; margin: 10mm 8mm; }
-  .transcript-print-area {
-    border: 2px solid #000 !important;
-    print-color-adjust: exact; -webkit-print-color-adjust: exact;
-  }
-  .transcript-print-area table.term-grid { table-layout: fixed; width: 100%; border-collapse: collapse; }
-  .transcript-print-area table.term-grid > tbody > tr { page-break-inside: avoid; break-inside: avoid; }
-  .transcript-print-area .term-block { page-break-inside: avoid; break-inside: avoid; }
-  .transcript-print-area .page-break-before { page-break-before: always; break-before: page; }
-  .transcript-print-area table { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-  .transcript-print-area th, .transcript-print-area td { border-color: #94a3b8 !important; }
-}
+
 
 /* ─────────────────────────────────────────────────────────────
    ریسپانسیو موبایل — پایهٔ سراسری برای همهٔ کارتابل‌ها
