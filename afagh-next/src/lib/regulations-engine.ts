@@ -501,6 +501,7 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
   const policy = config?.grading_and_gpa?.failed_course_gpa_policy ?? 'EXCLUDE_IF_PASSED';
   const passingGrade = config?.grading_and_gpa?.default_passing_grade || 10;
   const retakeMinGrade = config?.grading_and_gpa?.retakeMinGrade ?? passingGrade;
+  const dedupeRepeated = config?.grading_and_gpa?.dedupeRepeatedCourses === true;
 
   const rows = await db
     .select({
@@ -531,6 +532,18 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
     }
   }
 
+  // dedupeRepeatedCourses: برای هر کد درس، فقط بالاترین نمرهٔ FINALIZED نگه داشته می‌شود
+  const bestByCode = new Map<string, (typeof rows)[number]>();
+  if (dedupeRepeated) {
+    for (const r of rows) {
+      const g = parseGrade(r.gradeValue);
+      if (g === null) continue;
+      const cur = bestByCode.get(r.code);
+      const curG = cur ? parseGrade(cur.gradeValue) : null;
+      if (!cur || curG === null || g > curG) bestByCode.set(r.code, r);
+    }
+  }
+
   const acc = new GpaAccumulator();
   let passedUnits = 0;
   let excludedCount = 0;
@@ -540,6 +553,9 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
     if (g === null) continue;
     const u = parseUnits(r.units);
     const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= passingGrade;
+
+    // dedupeRepeatedCourses فعال: تلاش‌های غیربهترینِ همان درس نه در واحدهای گذرانده و نه در معدل شمرده می‌شوند
+    if (dedupeRepeated && bestByCode.get(r.code) !== r) { excludedCount++; continue; }
 
     if (passed) {
       passedUnits = round2(passedUnits + u);

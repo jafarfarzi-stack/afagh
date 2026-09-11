@@ -21,6 +21,7 @@ export type RegThresholds = {
   exclFromTerm: boolean;      // حذف مردودی از نیمسال (فقط EXCLUDE_IF_PASSED_1391)
   retakeMinGrade: number;     // حد نصاب قبولی مجدد
   regulationLabel?: string;   // برچسب آیین‌نامه
+  dedupeRepeated: boolean;    // فقط بهترین نمرهٔ هر کد درس در معدل کل شمرده شود (سوییچ ادمین)
 };
 export function regThresholds(cfg: RegulationConfig | null | undefined): RegThresholds {
   const passRaw = cfg?.grading_and_gpa?.default_passing_grade;
@@ -37,6 +38,7 @@ export function regThresholds(cfg: RegulationConfig | null | undefined): RegThre
     exclFromTerm: policy === 'EXCLUDE_IF_PASSED_1391',
     retakeMinGrade: Number.isFinite(retakeMin) ? retakeMin : 10,
     regulationLabel: cfg?.grading_and_gpa?.regulationLabel,
+    dedupeRepeated: cfg?.grading_and_gpa?.dedupeRepeatedCourses === true,
   };
 }
 
@@ -69,14 +71,31 @@ export function summarizeTerm(rows: TranscriptRow[], pass = 10): { taken: number
   return { taken, passed, failed: Math.max(0, taken - passed), wsum, wunits };
 }
 
+/** برای هر کد درس، تنها رکورد با بالاترین نمرهٔ FINALIZED را نگه می‌دارد (برای dedupeRepeatedCourses) */
+export function bestFinalizedRowPerCourse(rows: TranscriptRow[]): Map<string, TranscriptRow> {
+  const best = new Map<string, TranscriptRow>();
+  for (const r of rows) {
+    if (r.gradeStatus !== 'FINALIZED') continue;
+    const g = numOrNull(r.gradeValue);
+    if (g === null) continue;
+    const cur = best.get(r.courseCode);
+    const curG = cur ? numOrNull(cur.gradeValue) : null;
+    if (!cur || curG === null || g > curG) best.set(r.courseCode, r);
+  }
+  return best;
+}
+
 /** جمع معدل کل با سیاست نمره مردودی آیین‌نامه */
 export function summarizeTotal(rows: TranscriptRow[], th: RegThresholds): { wsum: number; wunits: number } {
   const passedSet = th.exclFailed ? passedCourseSet(rows, th.retakeMinGrade) : null;
+  const bestRow = th.dedupeRepeated ? bestFinalizedRowPerCourse(rows) : null;
   let wsum = 0, wunits = 0;
   for (const r of rows) {
     const u = numOrNull(r.units) ?? 0;
     const g = numOrNull(r.gradeValue);
     if (g === null || r.gradeStatus !== 'FINALIZED') continue;
+    // dedupeRepeatedCourses: اگر این تلاش بهترین نمرهٔ همین درس نیست، از معدل کل کنار گذاشته می‌شود
+    if (bestRow && bestRow.get(r.courseCode) !== r) continue;
     // EXCLUDE_IF_PASSED: مردودی درسی که بعداً قبول شده از معدل کل حذف می‌شود
     if (passedSet && g < th.pass && passedSet.has(r.courseCode)) continue;
     wsum += g * u;

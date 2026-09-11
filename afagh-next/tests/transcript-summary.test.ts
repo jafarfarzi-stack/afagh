@@ -10,7 +10,7 @@
  *   faNum / faWords / g2j / dateToJalali / todayJalali / codeLabel
  */
 import {
-  breakdownByType, codeLabel, courseTypeGroup, dateToJalali, faIntWords, faNum, faWords,
+  breakdownByType, bestFinalizedRowPerCourse, codeLabel, courseTypeGroup, dateToJalali, faIntWords, faNum, faWords,
   g2j, groupTranscript, numOrNull, passedCourseSet, regThresholds, summarizeTerm,
   summarizeTotal, todayJalali,
 } from '../src/app/admin/students/transcript-utils.ts';
@@ -55,10 +55,10 @@ eq('اعشار', numOrNull('12.5'), 12.5);
 eq('Infinity رد می‌شود', numOrNull('1e999'), null);
 
 console.log('۲)regThresholds — آستانه‌های آیین‌نامه');
-eq('بدون کانفیگ: قبولی ۱۰ و مشروطی ۱۲', regThresholds(null), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10 });
-eq('مقادیر آیین‌نامه', regThresholds({ grading_and_gpa: { default_passing_grade: 8, failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', retakeMinGrade: 8 }, probation_and_tenure: { probation_gpa_threshold: 14 } } as never),
-  { pass: 8, prob: 14, exclFailed: true, exclFromTerm: false, retakeMinGrade: 8 });
-eq('مقدار غیرعددی → پیش‌فرض', regThresholds({ grading_and_gpa: { default_passing_grade: 'بیست' } } as never), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10 });
+eq('بدون کانفیگ: قبولی ۱۰ و مشروطی ۱۲', regThresholds(null), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false });
+eq('مقادیر آیین‌نامه', regThresholds({ grading_and_gpa: { default_passing_grade: 8, failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', retakeMinGrade: 8, dedupeRepeatedCourses: true }, probation_and_tenure: { probation_gpa_threshold: 14 } } as never),
+  { pass: 8, prob: 14, exclFailed: true, exclFromTerm: false, retakeMinGrade: 8, dedupeRepeated: true });
+eq('مقدار غیرعددی → پیش‌فرض', regThresholds({ grading_and_gpa: { default_passing_grade: 'بیست' } } as never), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false });
 eq('صفرِ مشروع شمرده می‌شود', regThresholds({ grading_and_gpa: { default_passing_grade: 0 } } as never).pass, 0);
 
 console.log('۳)passedCourseSet — درس‌های قبولی‌شده (برای حذف مردودی از معدل کل)');
@@ -94,9 +94,29 @@ const rRows = [
   R({ code: 'X', units: 3, g: 15, st: 'FINALIZED' }), // ترم بعد جبران شد
   R({ code: 'Y', units: 2, g: 7, st: 'FINALIZED' }),  // هرگز قبول نشد
 ];
-eq('EXCLUDE_IF_PASSED: مردودیِ جبران‌شده حذف می‌شود', summarizeTotal(rRows, { pass: 10, prob: 12, exclFailed: true, exclFromTerm: false, retakeMinGrade: 10 }), { wsum: 59, wunits: 5 });
-eq('KEEP_ALL: هر دو تلاش در معدل می‌آید', summarizeTotal(rRows, { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10 }), { wsum: 83, wunits: 8 });
-eq('نمرهٔ PENDING در معدل کل نیست', summarizeTotal([R({ g: 19, st: 'PENDING' })], { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10 }), { wsum: 0, wunits: 0 });
+eq('EXCLUDE_IF_PASSED: مردودیِ جبران‌شده حذف می‌شود', summarizeTotal(rRows, { pass: 10, prob: 12, exclFailed: true, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false }), { wsum: 59, wunits: 5 });
+eq('KEEP_ALL: هر دو تلاش در معدل می‌آید', summarizeTotal(rRows, { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false }), { wsum: 83, wunits: 8 });
+eq('نمرهٔ PENDING در معدل کل نیست', summarizeTotal([R({ g: 19, st: 'PENDING' })], { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false }), { wsum: 0, wunits: 0 });
+
+console.log('۵ب) dedupeRepeatedCourses — اخذ مجدد درسِ ازقبل‌قبول‌شده برای ارتقای معدل (سوییچ ادمین)');
+const zRows = [
+  R({ code: 'Z', units: 4, g: 12, st: 'FINALIZED' }), // بار اول: قبول با ۱۲
+  R({ code: 'Z', units: 4, g: 18, st: 'FINALIZED' }), // بار دوم: ارتقا به ۱۸
+];
+eq('پیش‌فرض (dedupeRepeated=false): هر دو تلاش دوبار در معدل می‌آید — رفتار فعلی بدون تغییر',
+  summarizeTotal(zRows, { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false }), { wsum: 120, wunits: 8 });
+eq('dedupeRepeated=true: فقط بالاترین نمره (۱۸) و واحدش یک‌بار حساب می‌شود',
+  summarizeTotal(zRows, { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: true }), { wsum: 72, wunits: 4 });
+eq('dedupeRepeated روی bestFinalizedRowPerCourse رکورد ۱۸ را انتخاب می‌کند',
+  bestFinalizedRowPerCourse(zRows).get('Z')?.gradeValue, '18');
+// ترکیب با EXCLUDE_IF_PASSED: مردودی جبران‌شده هم حذف می‌شود و از دو تلاشِ قبول‌شده هم فقط بهترین می‌ماند
+const wRows = [
+  R({ code: 'W', units: 3, g: 8, st: 'FINALIZED' }),  // مردود
+  R({ code: 'W', units: 3, g: 11, st: 'FINALIZED' }), // جبران
+  R({ code: 'W', units: 3, g: 17, st: 'FINALIZED' }), // ارتقای بعدی
+];
+eq('dedupeRepeated + EXCLUDE_IF_PASSED با هم: فقط بهترین تلاش (۱۷) می‌ماند',
+  summarizeTotal(wRows, { pass: 10, prob: 12, exclFailed: true, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: true }), { wsum: 51, wunits: 3 });
 
 console.log('۶)groupTranscript — گروه‌بندی ترم، تجمیعی و مشروطی');
 const gRows = [

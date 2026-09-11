@@ -968,6 +968,37 @@ export default function RegulationsClient(props: {
                     ۱۰ برای کاردانی و کارشناسی، ۱۲ برای ارشد، ۱۴ برای دکتری
                   </span>
                 </div>
+
+                <div className="pt-2 border-t border-indigo-200/70 mt-1">
+                  <label className="flex items-start gap-2.5 cursor-pointer p-3 rounded-xl bg-white border border-slate-200 hover:border-indigo-300">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 accent-indigo-700 w-4 h-4 shrink-0"
+                      checked={formConfig.grading_and_gpa.dedupeRepeatedCourses === true}
+                      onChange={e =>
+                        setFormConfig({
+                          ...formConfig,
+                          grading_and_gpa: {
+                            ...formConfig.grading_and_gpa,
+                            dedupeRepeatedCourses: e.target.checked,
+                          },
+                        })
+                      }
+                    />
+                    <span>
+                      <span className="block font-bold text-xs text-slate-800">
+                        فقط بهترین نمرهٔ درس تکراری در معدل کل شمرده شود
+                      </span>
+                      <span className="block text-[11px] text-slate-500 leading-relaxed mt-0.5">
+                        اگر دانشجو درسی را که <b>قبلاً هم قبول شده</b> دوباره برای ارتقای معدل اخذ
+                        کند، با فعال‌کردن این گزینه فقط <b>بالاترین</b> نمره‌ی آن درس (و واحدش
+                        یک‌بار) در معدل کل حساب می‌شود؛ در غیر این صورت هر بار اخذ، جدا در معدل
+                        کل ضرب می‌شود (رفتار پیش‌فرض فعلی). این گزینه مستقل از سیاست حذف نمره
+                        مردودی بالاست و فقط روی درسی که <u>هر دو بار قبول شده</u> اثر دارد.
+                      </span>
+                    </span>
+                  </label>
+                </div>
               </div>
             </div>
           )}
