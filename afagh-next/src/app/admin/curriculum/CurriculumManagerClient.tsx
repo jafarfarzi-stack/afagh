@@ -19,6 +19,7 @@ import {
   submitCurriculumForApprovalAction, approveCurriculumAction, rejectCurriculumAction,
   publishCurriculumAction, archiveCurriculumAction, createCurriculumRevisionAction,
 } from './actions';
+import { listCodes } from '@/app/admin/codes/actions';
 import { describeLogicNode, type LogicNode } from '@/lib/curriculum-types';
 import { parseRoleUnitTargets } from '@/lib/curriculum-validator';
 import { roleFromBankType } from '@/lib/bank-roles';
@@ -226,7 +227,10 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
   const [rejectNote, setRejectNote] = useState('');
   const [newCourseForm, setNewCourseForm] = useState({
     code: '', title: '', theo: 3, prac: 0, courseType: 'تخصصی', grading: 'NUMERIC', gpa: true, departmentId: '',
+    // کد وضع نمرهٔ درس در صورت قبولی / مردودی (خالی = کد مرجع ۱/۲)
+    passStatus: '', failStatus: '',
   });
+  const [gradeStatusCodes, setGradeStatusCodes] = useState<{ id: number; code: string | null; title: string }[]>([]);
   const [depts, setDepts] = useState<{ id: number; name: string }[]>([]);
   const [deptsLoading, setDeptsLoading] = useState(false);
   const [ruleCourseId, setRuleCourseId] = useState<number | null>(null);
@@ -289,6 +293,12 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
       else showToast(r.error, 'error');
     });
   }, [modal, bank.length, bankLoading, showToast]);
+
+  // کدهای وضع نمره (هنگام نیاز برای تعریف درس جدید) — وضع نمره به درس وابسته است
+  useEffect(() => {
+    if (modal !== 'NEW_COURSE' || gradeStatusCodes.length > 0) return;
+    listCodes('gradeStatus').then(rows => setGradeStatusCodes(rows.map(r => ({ id: r.id, code: r.code, title: r.title }))));
+  }, [modal, gradeStatusCodes.length]);
 
   // گروه‌های آموزشی (هنگام نیاز برای تعریف درس جدید)
   useEffect(() => {
@@ -455,6 +465,8 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
         gradingType: f.grading === 'PASS_FAIL' ? 'PASS_FAIL' : 'NUMERIC',
         affectsGpa: f.gpa ? 1 : 0,
         departmentId: f.departmentId ? Number(f.departmentId) : null,
+        passGradeStatusCodeId: f.passStatus ? Number(f.passStatus) : null,
+        failGradeStatusCodeId: f.failStatus ? Number(f.failStatus) : null,
       });
       if (!r.ok) { showToast(r.error, 'error'); return; }
       showToast(r.message, 'success');
@@ -464,7 +476,7 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
       setAddCourseForm(af => ({ ...af, courseId: String(newId) }));
       setBankSelected(new Set([newId]));
       setModal(null);
-      setNewCourseForm({ code: '', title: '', theo: 3, prac: 0, courseType: 'تخصصی', grading: 'NUMERIC', gpa: true, departmentId: '' });
+      setNewCourseForm({ code: '', title: '', theo: 3, prac: 0, courseType: 'تخصصی', grading: 'NUMERIC', gpa: true, departmentId: '', passStatus: '', failStatus: '' });
     } finally {
       setBusy(false);
     }
@@ -1592,6 +1604,27 @@ export default function CurriculumManagerClient({ initial }: { initial: Curricul
                   موثر بر معدل
                 </label>
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block font-bold text-slate-700">
+                  وضع نمره در صورت قبولی:
+                  <select value={newCourseForm.passStatus} onChange={e => setNewCourseForm({ ...newCourseForm, passStatus: e.target.value })}
+                    className="mt-1 w-full border border-slate-300 rounded-lg p-2 font-bold bg-white">
+                    <option value="">پیش‌فرض (کد ۱ — درس عادی قبول)</option>
+                    {gradeStatusCodes.map(o => <option key={o.id} value={o.id}>{o.code} — {o.title}</option>)}
+                  </select>
+                </label>
+                <label className="block font-bold text-slate-700">
+                  وضع نمره در صورت مردودی:
+                  <select value={newCourseForm.failStatus} onChange={e => setNewCourseForm({ ...newCourseForm, failStatus: e.target.value })}
+                    className="mt-1 w-full border border-slate-300 rounded-lg p-2 font-bold bg-white">
+                    <option value="">پیش‌فرض (کد ۲ — درس عادی مردود)</option>
+                    {gradeStatusCodes.map(o => <option key={o.id} value={o.id}>{o.code} — {o.title}</option>)}
+                  </select>
+                </label>
+              </div>
+              <p className="text-[10px] text-slate-400 font-bold leading-relaxed">
+                برای درس جبرانیِ بدون احتساب در معدل، کد مخصوص همان درس را انتخاب کنید (مثلاً ۱۲ و ۲۲)؛ کد وضع هنگام قفل نمرات خودکار روی رکورد می‌نشیند.
+              </p>
               {deptsLoading && <p className="text-[10px] text-slate-400 font-bold">در حال بارگیری گروه‌ها…</p>}
             </div>
             <div className="flex justify-end gap-2 pt-2">

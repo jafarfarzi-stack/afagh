@@ -304,6 +304,15 @@ export const courses = pgTable('courses', {
   degreeLevelId: integer('degreeLevelId').references(() => degree_level_configs.id),
   gradingType: varchar('gradingType', { length: 20 }).default('NUMERIC'),
   affectsGpa: integer('affectsGpa').default(1),
+  /**
+   * کد وضع نمرهٔ این درس در صورت قبولی / مردودی (همان فیلد تعریف درس در
+   * سیستم قدیمی). وضع نمره به *درس* وابسته است: درس جبرانیِ بدون احتساب در
+   * معدل کد ۱۲/۲۲ می‌گیرد، نه ۱/۲. با این دو فیلد، کد وضع هنگام ثبت نمره
+   * خودکار روی رکورد می‌نشیند و دیگر دستی تعیین نمی‌شود.
+   * NULL = از کد مرجعِ وضعیت داخلی استفاده شود.
+   */
+  passGradeStatusCodeId: integer('passGradeStatusCodeId'),
+  failGradeStatusCodeId: integer('failGradeStatusCodeId'),
   // ── موتور برنامه‌ریزی درسی ──
   clusterId: integer('clusterId').references(() => equivalence_clusters.id), // NULL = درس مستقل
   offeringScope: varchar('offeringScope', { length: 20 }).default('DEPARTMENTAL'), // DEPARTMENTAL | GENERAL_SERVICE (کارتابل دوگانه)
@@ -556,12 +565,50 @@ export const enrollments = pgTable('enrollments', {
   hasEvaluated: integer('hasEvaluated').notNull().default(0),
   gradeValue: numeric('gradeValue', { precision: 4, scale: 2 }),
   gradeStatus: varchar('gradeStatus', { length: 20 }).notNull().default('PENDING'),
+  /**
+   * کد وضعیت نمرهٔ سیستم قدیمی (Master Data) — همان عددی که در ستون «وضع»
+   * کارنامه چاپ می‌شود. gradeStatus وضعیت *داخلی* سامانه است و این، کد
+   * تاریخیِ رکورد؛ با هم یعنی نمرهٔ مهاجرت‌شده هویت قدیمی‌اش را از دست
+   * نمی‌دهد و گزارش‌ها می‌توانند بر اساس کد وضعیت هم گرفته شوند.
+   */
+  gradeStatusCodeId: integer('gradeStatusCodeId'),
   isDirectedReading: integer('isDirectedReading').default(0),
   registeredAt: timestamp('registeredAt').defaultNow(),
   absenceMarkedAt: timestamp('absenceMarkedAt'),
   /** تأییدیهٔ دیجیتال دانشجو برای داشتن دو امتحان هم‌روز (شیفت‌های متفاوت) — فاز ۱۰ */
   hasAcceptedSameDayExam: integer('hasAcceptedSameDayExam').notNull().default(0)
 }, (t) => ({ uq: unique('uq_enrollments').on(t.studentId, t.offeringId) }));
+
+/**
+ * مرجع کدهای وضعیت نمره (Master Data).
+ *
+ * سه چیز عمداً از هم جدا نگه داشته می‌شوند:
+ *   code           → کد عددی سیستم قدیمی («۱»، «۵۳»، «۱-») یا کد داخلی («N0»)
+ *   internalStatus → وضعیت محاسباتی سامانهٔ جدید (FINALIZED/TEMPORARY/…)
+ *   title          → عنوان قابل نمایش (راهنمای پایین کارنامه)
+ * پس اگر عنوان فارسی عوض شود، دادهٔ تاریخی و محاسبات خراب نمی‌شوند.
+ */
+export const grade_status_codes = pgTable('grade_status_codes', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 12 }).notNull(),
+  title: varchar('title', { length: 200 }).notNull(),
+  /** اگر کد مرجع با کد خام فایل قدیمی تفاوت داشت (مثلاً صفر پیشرو) */
+  legacyCode: varchar('legacyCode', { length: 12 }),
+  internalStatus: varchar('internalStatus', { length: 20 }).notNull(),
+  description: text('description'),
+  /**
+   * پرچم‌های اثرِ کد در فایل مرجع قدیمی (JSON):
+   * gpa, unitPassed, assumedPassed, totalSum, showInTranscript, keepAfterRetake
+   * — تا قاعدهٔ محاسباتیِ هر کد هم همراه داده مهاجرت شود و از بین نرود.
+   */
+  legacyFlags: text('legacyFlags'),
+  /** LEGACY = کد عددی سیستم قدیمی، INTERNAL = وضعیت فقط-جدید */
+  origin: varchar('origin', { length: 10 }).notNull().default('LEGACY'),
+  isActive: integer('isActive').notNull().default(1),
+  sortOrder: integer('sortOrder').notNull().default(0),
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+}, (t) => ({ uq: unique('uq_grade_status_codes').on(t.code) }));
 
 export const grade_appeals = pgTable('grade_appeals', {
   id: serial('id').primaryKey(),

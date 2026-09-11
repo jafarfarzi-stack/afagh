@@ -344,6 +344,9 @@ export interface CreateBankCourseInput {
   gradingType?: 'NUMERIC' | 'PASS_FAIL';
   affectsGpa?: number;
   departmentId?: number | null;
+  /** کد وضع نمرهٔ این درس در صورت قبولی / مردودی (خالی = کد مرجع ۱/۲) */
+  passGradeStatusCodeId?: number | null;
+  failGradeStatusCodeId?: number | null;
 }
 
 /**
@@ -378,6 +381,10 @@ export async function createCourseBankAction(input: CreateBankCourseInput): Prom
       gradingType: input.gradingType === 'PASS_FAIL' ? 'PASS_FAIL' : 'NUMERIC',
       affectsGpa: input.affectsGpa === 0 ? 0 : 1,
       departmentId,
+      // وضع نمره به درس وابسته است: درس جبرانیِ بدون احتساب در معدل کد ۱۲/۲۲
+      // می‌گیرد، نه ۱/۲. این دو کد هنگام قفل نمرات خودکار اعمال می‌شوند.
+      passGradeStatusCodeId: input.passGradeStatusCodeId ?? null,
+      failGradeStatusCodeId: input.failGradeStatusCodeId ?? null,
     }).returning({ id: courses.id });
     await db.transaction(async (tx) => {
       await appendAudit(tx, {

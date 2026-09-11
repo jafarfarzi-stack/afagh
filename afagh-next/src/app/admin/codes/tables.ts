@@ -5,7 +5,7 @@
  * دارند؛ اکسپورت آرایه/تایپ از آن‌ها بیلد را می‌شکند.
  */
 
-export type CodeTable = 'faculty' | 'department' | 'major' | 'degree' | 'course' | 'term';
+export type CodeTable = 'faculty' | 'department' | 'major' | 'degree' | 'course' | 'term' | 'gradeStatus';
 
 export type CodeRow = {
   id: number;
@@ -38,6 +38,10 @@ export const CODE_TABLES: { id: CodeTable; title: string; hint: string; editable
   // ترم: افزودنی هست ولی کدش ویرایش نمی‌شود — کد ترم در انتخاب واحد، نمره،
   // شهریه و کارنامه ریشه دوانده و تغییرش تاریخ تحصیلی را به هم می‌ریزد.
   { id: 'term', title: 'ترم‌ها', hint: 'کد ترم — مثلاً ۴۰۳۱ · افزودنی، ولی کد ثبت‌شده تغییر نمی‌کند', editable: false, creatable: true },
+  // کد وضعیت نمره: دادهٔ مرجع مهاجرت‌شده از سیستم قدیمی. کدش هرگز ویرایش
+  // نمی‌شود چون رکوردهای نمره (enrollments.gradeStatusCodeId) و کد خام فایل
+  // نمرات قدیمی به همان کد وصل‌اند؛ عنوان از فایل مرجع/میز تطبیق می‌آید.
+  { id: 'gradeStatus', title: 'کدهای وضعیت نمره', hint: 'کد وضع نمرهٔ سیستم قدیمی — همان کدی که در ستون «وضع» کارنامه چاپ می‌شود', editable: false, creatable: false },
 ];
 
 /** برای جدول‌هایی که ساختِ رکورد از این صفحه ممکن نیست، کاربر را کجا بفرستیم */

@@ -1,8 +1,10 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
-import { academic_terms, course_offerings, courses, degree_level_configs, educational_regulations, enrollments, majors } from '@/db/schema';
+import { academic_terms, course_offerings, courses, degree_level_configs, educational_regulations, enrollments, grade_status_codes, majors } from '@/db/schema';
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA } from '@/lib/regulations-engine';
+import { ensureGradeStatusCodes, gradeStatusCodeMaps } from '@/lib/grade-status-catalog';
+import { gradeStatusCodeOf, gradeStatusLegendLine } from '@/lib/grade-status-codes';
 import PrintButton from '../PrintButton';
 
 export const dynamic = 'force-dynamic';
@@ -56,6 +58,8 @@ export default async function StudentTranscriptPage() {
         status: enrollments.status,
         grade: enrollments.gradeValue,
         gradeStatus: enrollments.gradeStatus,
+        gradeStatusCodeId: enrollments.gradeStatusCodeId,
+        statusCode: grade_status_codes.code,
         ev: enrollments.hasEvaluated,
         termId: course_offerings.termId,
         termTitle: academic_terms.title,
@@ -66,9 +70,15 @@ export default async function StudentTranscriptPage() {
       .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
       .innerJoin(courses, eq(courses.id, course_offerings.courseId))
       .innerJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
+      .leftJoin(grade_status_codes, eq(grade_status_codes.id, enrollments.gradeStatusCodeId))
       .where(eq(enrollments.studentId, me.id))
       .orderBy(asc(academic_terms.termCode), desc(enrollments.id))
   );
+
+  // مرجع کدهای وضع نمره — ستون «نتیجه نهایی» کد چاپ می‌کند و راهنمای کدها
+  // در یک خط پایین سند می‌آید (تا کارنامه طولانی نشود)
+  await ensureGradeStatusCodes();
+  const statusMaps = await gradeStatusCodeMaps();
 
   // دسته‌بندی دروس بر اساس ترم‌ها
   const termsMap = new Map<number, { title: string; code: string; isCurrent: boolean; rows: typeof allRows }>();
@@ -314,17 +324,25 @@ export default async function StudentTranscriptPage() {
                               <span className="text-slate-400">—</span>
                             )}
                           </td>
-                          <td className="p-1.5 text-center font-bold">
-                            {isEquiv && (
-                              <span className="text-teal-700 text-[11px]">قبولی در معادسازی پذیرفته شده</span>
-                            )}
-                            {!isEquiv && isPassed && <span className="text-emerald-700">قبول</span>}
-                            {!isEquiv && isFailed && <span className="text-red-700">مردود</span>}
-                            {isPending && (
-                              <span className="text-slate-500 font-normal">
-                                {row.status === 'PENDING_COUNCIL' ? 'در انتظار شورا' : 'در حال گذراندن'}
-                              </span>
-                            )}
+                          <td className="p-1.5 text-center font-bold" dir="ltr">
+                            {/* کد وضع نمرهٔ خودِ رکورد — همان کدی که سیستم قدیمی
+                                ثبت کرده و تعریف درس تعیین می‌کند؛ حدس از نمره نه */}
+                            {(() => {
+                              // ترتیب پارامترها: وضعیت داخلی، سپس کد قدیمی
+                              const sc = gradeStatusCodeOf(row.gradeStatus, row.statusCode);
+                              if (!sc) {
+                                return isPending ? (
+                                  <span className="text-slate-500 font-normal" dir="rtl">
+                                    {row.status === 'PENDING_COUNCIL' ? 'در انتظار شورا' : 'در حال گذراندن'}
+                                  </span>
+                                ) : <span className="text-slate-400">—</span>;
+                              }
+                              return (
+                                <span className={isFailed ? 'text-red-700' : 'text-emerald-700'} title={statusMaps.titleOf(sc) ?? ''}>
+                                  {sc}
+                                </span>
+                              );
+                            })()}
                           </td>
                         </tr>
                       );
@@ -384,6 +402,14 @@ export default async function StudentTranscriptPage() {
             </div>
           )}
         </div>
+
+        {/* راهنمای کدهای وضع نمره — یک خط، جدا با ویرگول، تا سند طولانی نشود */}
+        {(() => {
+          const legend = gradeStatusLegendLine(allRows.map(r => r.statusCode), statusMaps.titleOf);
+          return legend ? (
+            <p className="mt-3 text-[9px] leading-4 text-slate-500" dir="rtl">{legend}</p>
+          ) : null;
+        })()}
 
         {/* ۵. متن حقوقی سند و محل امضا و مهرهای رسمی */}
         <div className="mt-6 pt-3 border-t border-slate-400 text-[10px] text-slate-600 space-y-4">

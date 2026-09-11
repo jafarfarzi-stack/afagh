@@ -7,6 +7,7 @@ import {
 import { withUserRls } from '@/db';
 import { atomicSeat, nextWaitlistPosition, releaseSeat, warmupCapacities } from './waitingRoom';
 import { EQUIV_SEMESTER_UNITS, evaluateStudentRegulationStatus, parseGrade, parseUnits } from './regulations-engine';
+import { applyGradeStatusCodesForOffering } from './grade-status-catalog';
 import { chargeTermTuition, getEquivFixedMode } from './tuition-engine';
 import { shouldChargeFixed } from './tuition-rules';
 import { resolveStudentCurriculum } from './curriculum-apply';
@@ -625,6 +626,13 @@ export async function applyEquivalenceBatch(input: {
         await db.update(enrollments).set(payload).where(eq(enrollments.id, existing.id));
       } else {
         await db.insert(enrollments).values({ studentId: input.studentId, offeringId: offering.id, isDirectedReading: 0, ...payload });
+      }
+      // کد وضع نمره از تعریف خودِ درس (قبولی/مردودی) — درس جبرانیِ بدون احتساب
+      // در معدل کد ۱۲/۲۲ می‌گیرد، نه ۱/۲. خطای آن معادل‌سازی را شکست نمی‌دهد.
+      try {
+        await applyGradeStatusCodesForOffering(offering.id);
+      } catch (e) {
+        console.error('applyGradeStatusCodesForOffering failed', { offeringId: offering.id, e });
       }
       registered.push({ courseTitle: r.course.title, termTitle: term.title, grade: r.grade, units: r.units });
     }

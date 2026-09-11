@@ -12,7 +12,9 @@ import {
   courses,
   academic_terms,
   student_requests,
+  grade_status_codes,
 } from '@/db/schema';
+import { gradeStatusCodeAffectsGpa, gradeStatusCodeCountsUnit } from '@/lib/grade-status-codes';
 import {
   RegulationConfig,
   DEFAULT_BACHELOR_REGULATION_1403,
@@ -224,10 +226,13 @@ export async function evaluateStudentRegulationStatus(
         gradingType: courses.gradingType,
         affectsGpa: courses.affectsGpa,
         code: courses.code,
+        // پرچم‌های خودِ کد وضع نمره — «اثر در معدل» به کد وضع وابسته است
+        statusFlags: grade_status_codes.legacyFlags,
       })
       .from(enrollments)
       .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
       .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+      .leftJoin(grade_status_codes, eq(grade_status_codes.id, enrollments.gradeStatusCodeId))
       .where(eq(enrollments.studentId, studentId)),
   ]);
 
@@ -252,7 +257,9 @@ export async function evaluateStudentRegulationStatus(
     const u = parseUnits(e.units);
     const isPassed = e.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= passingGrade;
 
-    if (isPassed) {
+    // واحد گذرانده: پرچم خودِ کد وضع (unitPassed) بر قاعدهٔ قبولی مقدم است
+    const unitByCode = gradeStatusCodeCountsUnit(e.statusFlags);
+    if (unitByCode === null ? isPassed : unitByCode) {
       passedUnits = round2(passedUnits + u);
     }
 
@@ -268,7 +275,11 @@ export async function evaluateStudentRegulationStatus(
     }
 
     // محاسبه معدل به ازای هر ترم (معادل‌سازی excluded)
-    if (!isEquivalence && e.termId && (e.affectsGpa === 1 || e.affectsGpa == null) && e.gradingType !== 'DESCRIPTIVE') {
+    // کد وضع «بدون احتساب در معدل» (مثل درس جبرانی با کد ۱۲) از معدل ترم هم
+    // بیرون می‌ماند — پرچم کد بر «موثر بر معدل» خودِ درس مقدم است.
+    if (!isEquivalence && e.termId && (e.affectsGpa === 1 || e.affectsGpa == null)
+        && e.gradingType !== 'DESCRIPTIVE'
+        && gradeStatusCodeAffectsGpa(e.statusFlags) !== false) {
       const acc = termMap.get(e.termId) ?? new GpaAccumulator();
       acc.add(g, u);
       termMap.set(e.termId, acc);
@@ -513,10 +524,13 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
       gradingType: courses.gradingType,
       affectsGpa: courses.affectsGpa,
       termId: course_offerings.termId,
+      // پرچم‌های خودِ کد وضع نمره — «اثر در معدل» به کد وضع وابسته است، نه فقط به درس
+      statusFlags: grade_status_codes.legacyFlags,
     })
     .from(enrollments)
     .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+    .leftJoin(grade_status_codes, eq(grade_status_codes.id, enrollments.gradeStatusCodeId))
     .where(and(eq(enrollments.studentId, studentId), eq(enrollments.gradeStatus, 'FINALIZED')));
 
   // نقشه‌برداری دروس پاس‌شده
@@ -540,12 +554,21 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
     const u = parseUnits(r.units);
     const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= passingGrade;
 
-    if (passed) {
+    // واحد گذرانده: پرچم خودِ کد وضع (unitPassed) بر قاعدهٔ قبولی مقدم است —
+    // کد ۱۲ «جبرانی بدون احتساب در معدل-قبول» واحد دارد ولی معدل ندارد.
+    const unitByCode = gradeStatusCodeCountsUnit(r.statusFlags);
+    if (unitByCode === null ? passed : unitByCode) {
       passedUnits = round2(passedUnits + u);
     }
 
     // دروس توصیفی یا بی‌تاثیر در معدل وارد مخرج و صورت نمی‌شوند
     if (r.gradingType === 'DESCRIPTIVE' || r.affectsGpa === 0) {
+      continue;
+    }
+
+    // کد وضع نمرهٔ «بدون احتساب در معدل» (مثل درس جبرانی با کد ۱۲) از معدل
+    // بیرون می‌ماند حتی اگر خودِ درس موثر بر معدل باشد — پرچم کد مقدم است.
+    if (gradeStatusCodeAffectsGpa(r.statusFlags) === false) {
       continue;
     }
 
