@@ -2,9 +2,7 @@
 
 import { pool } from '@/db';
 import { S3, ARCHIVE_BUCKET, ensureBucket } from '@/lib/objectStore';
-import { Readable } from 'stream';
-import { pipeline } from 'stream/promises';
-import { PassThrough } from 'stream';
+import { requireRole } from '@/lib/auth';
 
 const DB_URL = process.env.DATABASE_URL || '';
 
@@ -69,6 +67,7 @@ async function dumpTable(table: string): Promise<string> {
 
 /** دامپ کل دیتابیس */
 export async function backupDatabaseAction(): Promise<{ ok: boolean; sql?: string; error?: string; tables?: number }> {
+  await requireRole(['ADMIN']);
   try {
     const tables = await getUserTables();
     const parts: string[] = [
@@ -91,6 +90,7 @@ export async function backupDatabaseAction(): Promise<{ ok: boolean; sql?: strin
 // ═══ پشتیبان MinIO ═══
 
 export async function listMinioObjectsAction(): Promise<{ ok: boolean; objects?: { key: string; size: number; lastModified: Date }[]; error?: string }> {
+  await requireRole(['ADMIN']);
   try {
     await ensureBucket();
     const exists = await S3.bucketExists(ARCHIVE_BUCKET);
@@ -114,6 +114,7 @@ export async function listMinioObjectsAction(): Promise<{ ok: boolean; objects?:
 }
 
 export async function downloadMinioObjectAction(key: string): Promise<{ ok: boolean; data?: string; name?: string; error?: string }> {
+  await requireRole(['ADMIN']);
   try {
     const stream = await S3.getObject(ARCHIVE_BUCKET, key);
     const chunks: Buffer[] = [];
@@ -131,6 +132,7 @@ export async function downloadMinioObjectAction(key: string): Promise<{ ok: bool
 // ═══ بازیابی ═══
 
 export async function restoreDatabaseAction(sql: string): Promise<{ ok: boolean; error?: string; statements?: number }> {
+  await requireRole(['ADMIN']);
   try {
     const statements: string[] = [];
     let current = '';
@@ -158,6 +160,7 @@ export async function restoreDatabaseAction(sql: string): Promise<{ ok: boolean;
 }
 
 export async function restoreMinioObjectAction(key: string, dataBase64: string): Promise<{ ok: boolean; error?: string }> {
+  await requireRole(['ADMIN']);
   try {
     await ensureBucket();
     const buf = Buffer.from(dataBase64, 'base64');
@@ -176,6 +179,7 @@ export async function restoreMinioObjectAction(key: string, dataBase64: string):
 // ═══ آمار ═══
 
 export async function getBackupStatsAction(): Promise<{ ok: boolean; stats?: { tables: number; totalRows: number; dbSize: string; minioObjects: number; minioSize: string }; error?: string }> {
+  await requireRole(['ADMIN']);
   try {
     const tables = await getUserTables();
     let totalRows = 0;
