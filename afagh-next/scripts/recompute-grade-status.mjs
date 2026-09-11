@@ -144,12 +144,17 @@ async function main() {
 
   // ── ۳. راستی‌آزمایی: مقایسه وضع نمره خام سما با محاسبه سیستم ──
   console.log('\n── مرحله ۳: راستی‌آزمایی — مقایسه وضع نمره سما با سیستم ──');
+  // ستون raw از نوع text است، نه jsonb — قبل از ->> باید cast شود؛ چون بعضی
+  // ردیف‌های قدیمی ممکن است JSON معتبر نباشند، با pg_input_is_valid (PG16+)
+  // فقط ردیف‌هایی که واقعاً JSON سالم دارند بازیابی می‌شوند، بدون کرش کل کوئری.
   const verifyRows = await q(`
     SELECT lg."studentCode", lg."termCode", lg."courseCode",
            lg."gradeValue", lg."gradeStatus" as file_status,
-           lg.raw->>'markStat' as raw_mark_stat
+           (lg.raw::jsonb)->>'markStat' as raw_mark_stat
     FROM legacy_grades lg
-    WHERE lg.raw->>'markStat' IS NOT NULL
+    WHERE lg.raw IS NOT NULL
+      AND pg_input_is_valid(lg.raw, 'jsonb')
+      AND (lg.raw::jsonb)->>'markStat' IS NOT NULL
     LIMIT 5000
   `);
   let verifyMatch = 0, verifyDiff = 0;
