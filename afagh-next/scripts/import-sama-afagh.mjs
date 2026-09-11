@@ -750,7 +750,7 @@ async function phaseGrades(files) {
       if (legacyBatch.length >= 1000) await flushLegacy();
     } else stats.legacyDup++;
     if (g.enroll) {
-      enrollJobs.push({ stno, term, course, group: /^\d+$/.test((cols[4] || '').trim()) ? Number((cols[4] || '').trim()) : 1, val: g.gradeValue, status: g.gradeStatus });
+      enrollJobs.push({ stno, term, course, group: /^\d+$/.test((cols[4] || '').trim()) ? Number((cols[4] || '').trim()) : 1, val: g.gradeValue, status: g.gradeStatus, ms });
     } else stats.enrollSkip++;
     if (n % 100000 === 0) console.log(`  grades… ${n}`);
     if (LIMIT && n >= LIMIT) break;
@@ -799,6 +799,12 @@ async function phaseGrades(files) {
     stats.offeringsNew += res.rows.length;
   }
   console.log(`ارائه‌ها: distinct=${offKeys.size} new=${stats.offeringsNew} noTerm=${stats.noTerm}`);
+  // کد وضعیت نمره (Master Data) — تا رکورد نمره همان کد قدیمی را نگه دارد
+  const gradeStatusIds = new Map(); // کد عددی قدیمی → id در grade_status_codes
+  try {
+    for (const r of await q(`SELECT id, code FROM grade_status_codes`)) gradeStatusIds.set(String(r.code), Number(r.id));
+    if (!gradeStatusIds.size) console.log('  ⚠️ grade_status_codes خالی است — enrollments بدون کد وضعیت ثبت می‌شوند (npm run db:grade-status-codes)');
+  } catch { console.log('  ⚠️ جدول grade_status_codes ساخته نشده — ستون کد وضعیت پر نمی‌شود'); }
   // ثبت‌نام‌ها (bulk)
   let done = 0;
   for (let i = 0; i < enrollJobs.length; i += 1000) {
@@ -812,15 +818,15 @@ async function phaseGrades(files) {
       if (!t) continue;
       const offId = offMap.get(`${t.id}|${coursesByCode.get(j.course)}|${j.group}`);
       if (!offId) continue;
-      rows.push({ s: s.id, o: offId, v: j.val, gs: j.status, at: t.startDate || new Date() });
+      rows.push({ s: s.id, o: offId, v: j.val, gs: j.status, at: t.startDate || new Date(), gsc: gradeStatusIds.get(String(j.ms ?? '').trim()) ?? null });
     }
     if (!rows.length) continue;
     const ph = rows.map((r, k) => {
-      const o = k * 6;
-      vals.push(r.s, r.o, r.v, r.gs, r.v !== null ? 1 : 0, r.at);
-      return `($${o + 1},$${o + 2},'REGISTERED',$${o + 3},$${o + 4},$${o + 5},$${o + 6})`;
+      const o = k * 7;
+      vals.push(r.s, r.o, r.v, r.gs, r.v !== null ? 1 : 0, r.at, r.gsc);
+      return `($${o + 1},$${o + 2},'REGISTERED',$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7})`;
     }).join(',');
-    const res = await pool.query(`INSERT INTO enrollments ("studentId","offeringId",status,"gradeValue","gradeStatus","hasEvaluated","registeredAt")
+    const res = await pool.query(`INSERT INTO enrollments ("studentId","offeringId",status,"gradeValue","gradeStatus","hasEvaluated","registeredAt","gradeStatusCodeId")
       VALUES ${ph} ON CONFLICT ("studentId","offeringId") DO NOTHING`, vals);
     stats.enrollIns += res.rowCount;
     done += ch.length;
@@ -832,7 +838,7 @@ async function phaseGrades(files) {
 
 async function phaseCodemap(files) {
   console.log('\n── میز تطبیق کدها ──');
-  const stats = { total: 0, inserted: 0 };
+  const stats = { total: 0, inserted: 0, titleFromReference: 0 };
   const put = async (domain, code, title, targetCode, note, status = 'CONFIRMED') => {
     stats.total++;
     if (DRY) return;
@@ -842,6 +848,16 @@ async function phaseCodemap(files) {
       VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT ("sourceCode", domain, "legacyCode") DO NOTHING`,
       [SOURCE, domain, code, safeTitle, targetCode || null, safeNote, status]);
     stats.inserted += r.rowCount;
+    // ردیف از قبل وجود داشت؟ اگر آن ردیف را خودِ سامانه با عنوان پیش‌فرض seed
+    // کرده باشد (note.seeded — مثلاً کدهای وضع نمره برای راهنمای کارنامه)،
+    // عنوان دقیقِ فایل مرجع جایگزین می‌شود. عنوان‌هایی که کاربر یا واردسازی
+    // قبلیِ خودِ فایل مرجع نوشته هرگز بازنویسی نمی‌شوند.
+    if (!r.rowCount && safeTitle) {
+      const u = await pool.query(`UPDATE legacy_code_maps SET "legacyTitle" = $4, "updatedAt" = now()
+        WHERE "sourceCode" = $1 AND domain = $2 AND "legacyCode" = $3 AND note LIKE '%"seeded"%'`,
+        [SOURCE, domain, code, safeTitle]);
+      stats.titleFromReference += u.rowCount;
+    }
   };
   const readLookup = async (file, mapFn) => {
     if (!file) return;

@@ -2,9 +2,11 @@
 
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, student_term_states, students } from '@/db/schema';
+import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_grades, student_term_states, students } from '@/db/schema';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth';
+import { gradeStatusCodeOf } from '@/lib/grade-status-codes';
+import { ensureGradeStatusCodes, gradeStatusCodeMaps, gradeStatusTitles } from '@/lib/grade-status-catalog';
 
 /** پیکربندی اجرایی آیین‌نامه ملاک دانشجو برای محاسبات کارنامه */
 export async function getTranscriptRegulation(studentId: number): Promise<{
@@ -54,28 +56,21 @@ export type TranscriptRow = {
   courseType: string | null;
   gradeValue: string | null;
   gradeStatus: string;
-  /** عین عنوان ستون «عنوان» فایل وضع نمره (از میز تطبیق GRADE_STATUS) */
+  /**
+   * کد وضعیت نمره — همان چیزی که در ستون «وضع» کارنامه چاپ می‌شود.
+   * ترتیب اعتبار: کد متصل به رکورد (gradeStatusCodeId) ← کد خام قدیمی
+   * (markStat) ← کد مرجعِ وضعیت داخلی. راهنمای کدها پایین کارنامه می‌آید.
+   */
+  gradeStatusCode: string;
+  /** شناسهٔ ردیف مرجع در grade_status_codes (اگر به رکورد متصل باشد) */
+  gradeStatusCodeId: number | null;
+  /** عنوان کد وضعیت (عنوان دقیق فایل قدیمی بر عنوان مرجع مقدم است) */
   gradeStatusTitle: string | null;
   offeringType: string | null;
   /** وضعیت همان نیمسال (از وضعيت نيمسال دانشجويان) + مشروطی فایل */
   termStatusTitle: string | null;
   termProbation: boolean | null;
 };
-
-/** نقشه کد عددی وضع نمره → عین عنوان فایل مرجع */
-async function gradeStatusTitleMap(): Promise<Map<string, string>> {
-  const map = new Map<string, string>();
-  try {
-    const rows = await db
-      .select({ code: legacy_code_maps.legacyCode, title: legacy_code_maps.legacyTitle })
-      .from(legacy_code_maps)
-      .where(eq(legacy_code_maps.domain, 'GRADE_STATUS'));
-    for (const r of rows) {
-      if (r.code && r.title && !map.has(r.code)) map.set(r.code, r.title);
-    }
-  } catch { /* میز تطبیق خالی باشد، fallback اعمال می‌شود */ }
-  return map;
-}
 
 function markStatOf(raw: string | null): string | null {
   if (!raw) return null;
@@ -90,7 +85,11 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
   await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER']);
   const [stu] = await db.select({ id: students.id, code: students.studentCode }).from(students).where(eq(students.id, studentId)).limit(1);
   if (!stu) return [];
-  const titleMap = await gradeStatusTitleMap();
+  // جدول مرجع کدهای وضع نمره (Master Data) — idempotent ساخته/همگام می‌شود تا
+  // راهنمای پایین کارنامه همیشه کامل باشد، حتی پیش از واردسازی فایل مرجع.
+  await ensureGradeStatusCodes();
+  const codeMaps = await gradeStatusCodeMaps();
+  const titleMap = await gradeStatusTitles();
   // وضعیت نیمسال‌ها (عنوان + مشروطی فایل) — یک کوئری برای همه ترم‌ها
   const termStates = new Map<string, { title: string | null; probation: boolean | null }>();
   try {
@@ -105,8 +104,22 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
       });
     }
   } catch { /* جدول هنوز ساخته نشده باشد */ }
-  const exactTitle = (markStat: string | null): string | null =>
-    markStat ? titleMap.get(markStat) ?? null : null;
+  /**
+   * کد + عنوان وضعیت یک ردیف.
+   * اعتبار: ردیف مرجعِ متصل به نمره (gradeStatusCodeId) ← کد خام قدیمی
+   * (markStat فایل نمرات) ← کد مرجعِ وضعیت داخلی. عنوان دقیقِ فایل قدیمی
+   * (میز تطبیق) بر عنوان مرجع مقدم است.
+   */
+  const resolveStatus = (codeId: number | null, markStat: string | null, internal: string) => {
+    const linked = codeId != null ? codeMaps.byId.get(codeId) ?? null : null;
+    const code = linked?.code || (markStat ?? '') || codeMaps.canonicalByStatus.get(internal) || gradeStatusCodeOf(internal, null);
+    const row = linked ?? codeMaps.byCode.get(code) ?? null;
+    return {
+      code,
+      codeId: row?.id ?? null,
+      title: row?.title ?? titleMap.get(code) ?? null,
+    };
+  };
   // enrollments (سامانه جدید — از سما) + اتصال raw وضع نمره از legacy
   const ens = await db
     .select({
@@ -118,6 +131,7 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
       courseType: courses.courseType,
       gradeValue: enrollments.gradeValue,
       gradeStatus: enrollments.gradeStatus,
+      gradeStatusCodeId: enrollments.gradeStatusCodeId,
       offeringType: course_offerings.offeringType,
       legacyRaw: sql<string | null>`lg.raw`,
     })
@@ -134,6 +148,7 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
   if (ens.length) {
     return ens.map(r => {
       const ts = termStates.get(r.termCode);
+      const st = resolveStatus(r.gradeStatusCodeId, markStatOf(r.legacyRaw), r.gradeStatus);
       return {
         termCode: r.termCode,
         termTitle: r.termTitle,
@@ -143,7 +158,9 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
         courseType: r.courseType,
         gradeValue: r.gradeValue ? String(r.gradeValue) : null,
         gradeStatus: r.gradeStatus,
-        gradeStatusTitle: exactTitle(markStatOf(r.legacyRaw)),
+        gradeStatusCode: st.code,
+        gradeStatusCodeId: st.codeId,
+        gradeStatusTitle: st.title,
         offeringType: r.offeringType,
         termStatusTitle: ts?.title ?? null,
         termProbation: ts?.probation ?? null,
@@ -167,6 +184,7 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
     .limit(500);
   return legs.map(r => {
     const ts = termStates.get(r.termCode);
+    const st = resolveStatus(null, markStatOf(r.raw), r.gradeStatus);
     return {
       termCode: r.termCode,
       termTitle: null,
@@ -176,7 +194,9 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
       courseType: null,
       gradeValue: r.gradeValue ? String(r.gradeValue) : null,
       gradeStatus: r.gradeStatus,
-      gradeStatusTitle: exactTitle(markStatOf(r.raw)),
+      gradeStatusCode: st.code,
+      gradeStatusCodeId: st.codeId,
+      gradeStatusTitle: st.title,
       offeringType: null,
       termStatusTitle: ts?.title ?? null,
       termProbation: ts?.probation ?? null,

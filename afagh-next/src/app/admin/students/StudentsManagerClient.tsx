@@ -7,6 +7,7 @@ import { getTranscript, getTranscriptRegulation, setStudentRegulationAction, typ
 import type { RegulationConfig } from '@/lib/regulations-engine';
 import { ClientTh, ServerTh, useClientTable, type ColumnDef } from '@/components/DataTable';
 import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, quotaFa, studentStatusChip, studentStatusFa } from '@/lib/student-labels';
+import { gradeStatusCodeTitle, gradeStatusLegendLine } from '@/lib/grade-status-codes';
 
 export type StudentItem = {
   id: number;
@@ -380,15 +381,41 @@ function OfficialTranscriptView({ student, summary, logoUrl, codeLabels }: { stu
   for (let i = 0; i < summary.terms.length; i += 3) chunks.push(summary.terms.slice(i, i + 3));
   const breakdown = breakdownByType(summary.terms.flatMap(t => t.rows));
 
+  // ── راهنمای کدهای «وضع» نمره ──
+  // ستون وضع فقط «کد» می‌گیرد (عنوان بلند جدول سه‌ستونی را به هم می‌ریخت)؛
+  // توضیح کدها یک‌جا و *در یک خط* پایین کارنامه می‌آید تا سند طولانی نشود.
+  // عنوان دقیقِ سیستم قدیمی (جدول مرجع/میز تطبیق) بر عنوان مرجع مقدم است.
+  const allRows = summary.terms.flatMap(t => t.rows);
+  const titleByCode = new Map<string, string>();
+  for (const r of allRows) {
+    if (r.gradeStatusCode && r.gradeStatusTitle && !titleByCode.has(r.gradeStatusCode)) {
+      titleByCode.set(r.gradeStatusCode, r.gradeStatusTitle);
+    }
+  }
+  const statusLegendLine = gradeStatusLegendLine(
+    allRows.map(r => r.gradeStatusCode),
+    code => titleByCode.get(code) ?? null,
+    '', // برچسب در خودِ JSX چاپ می‌شود
+  );
+
   const termCell = (t: TermGroup) => (
     <td key={t.termCode} className="align-top border-l border-slate-400 p-0" style={{ width: '33.33%' }}>
       <div className="bg-slate-100 border-b border-slate-300 px-1 py-1 font-extrabold text-[10px] text-center">
         نیمسال <span className="font-mono" dir="ltr">{t.termCode}</span>
         <span className="block font-normal text-slate-700">وضعیت نیمسال: {t.termStatusTitle || '—'} — <b className={t.probation ? 'text-red-700' : 'text-emerald-700'}>{t.probation ? 'مشروط' : 'عادی'}</b></span>
       </div>
-      <table className="w-full text-[9px]">
+      <table className="w-full table-fixed text-[9px]">
+        {/* عرض ستون‌ها ثابت: هیچ مقدار بلندی (مثل عنوان وضع نمره) نمی‌تواند
+            ستون را باز کند و چیدمان سه نیمسال کنار هم را به هم بریزد */}
+        <colgroup>
+          <col style={{ width: '20%' }} />
+          <col />
+          <col style={{ width: '10%' }} />
+          <col style={{ width: '14%' }} />
+          <col style={{ width: '11%' }} />
+        </colgroup>
         <thead>
-          <tr className="border-b border-slate-300 text-slate-500">
+          <tr className="border-b border-slate-300 text-slate-500 whitespace-nowrap">
             <th className="p-1">کد درس</th>
             <th className="p-1">نام درس</th>
             <th className="p-1">واحد</th>
@@ -399,11 +426,18 @@ function OfficialTranscriptView({ student, summary, logoUrl, codeLabels }: { stu
         <tbody>
           {t.rows.map((r, i) => (
             <tr key={i} className="border-b border-slate-100">
-              <td className="p-1 font-mono text-center" dir="ltr">{r.courseCode}</td>
-              <td className="p-1">{r.courseTitle}</td>
+              <td className="p-1 font-mono text-center overflow-hidden" dir="ltr"><span className="block truncate">{r.courseCode}</span></td>
+              <td className="p-1 overflow-hidden" title={r.courseTitle}><span className="block truncate">{r.courseTitle}</span></td>
               <td className="p-1 text-center font-mono">{r.units ?? '—'}</td>
               <td className="p-1 text-center font-mono font-bold">{r.gradeValue ?? '—'}</td>
-              <td className="p-1 text-center" title={r.gradeStatusTitle || gradeStatusFa(r.gradeStatus)}>{r.gradeStatusTitle || gradeStatusFa(r.gradeStatus)}</td>
+              {/* فقط کد وضع نمره — راهنمای کدها پایین کارنامه است */}
+              <td
+                className="p-1 text-center font-mono font-bold"
+                dir="ltr"
+                title={gradeStatusCodeTitle(r.gradeStatusCode, r.gradeStatus, r.gradeStatusTitle)}
+              >
+                {r.gradeStatusCode || '—'}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -454,6 +488,20 @@ function OfficialTranscriptView({ student, summary, logoUrl, codeLabels }: { stu
           ))}
         </tbody>
       </table>
+      {/* راهنمای کدهای ستون «وضع» — یک خط، با ویرگول، تا کارنامه طولانی نشود */}
+      {statusLegendLine && (
+        <div className="border-t-2 border-slate-700 px-3 py-1.5 text-[9px] leading-5">
+          <p className="font-bold text-slate-800">
+            <span className="font-extrabold">راهنمای کد وضعیت نمره: </span>
+            <span className="font-mono">{statusLegendLine}</span>
+          </p>
+          <p className="text-slate-500">
+            کدهای عددی = کدهای وضعیت نمرهٔ سیستم قدیمی؛ کدهای با پیشوند
+            <b className="font-mono" dir="ltr"> N </b>
+            = وضعیت‌های داخلی سامانهٔ جدید.
+          </p>
+        </div>
+      )}
       {/* پانوشت */}
       <div className="border-t-2 border-slate-700 px-3 py-2 text-[10px] space-y-1">
         <div className="flex flex-wrap gap-x-6">
@@ -1162,7 +1210,15 @@ export default function StudentsManagerClient(props: {
                           <td className="p-1.5">{r.courseTitle}</td>
                           <td className="p-1.5 text-center font-mono">{r.units ?? '—'}</td>
                           <td className="p-1.5 text-center font-mono font-bold">{r.gradeValue ?? '—'}</td>
-                  <td className="p-1.5 text-center">
+                  <td className="p-1.5 text-center whitespace-nowrap">
+                    {/* کد وضع نمره (همان کد کارنامهٔ رسمی) + عنوان برای خوانایی روی صفحه */}
+                    <span
+                      className="inline-block min-w-[2rem] px-1 py-0.5 ml-1 rounded bg-slate-200 text-slate-800 font-mono text-[10px] font-bold"
+                      dir="ltr"
+                      title={gradeStatusCodeTitle(r.gradeStatusCode, r.gradeStatus, r.gradeStatusTitle)}
+                    >
+                      {r.gradeStatusCode || '—'}
+                    </span>
                     {r.gradeStatusTitle && <span className="ml-1 font-bold">{r.gradeStatusTitle}</span>}
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${gradeStatusChip(r.gradeStatus)}`}>
                       {gradeStatusFa(r.gradeStatus)}

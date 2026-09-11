@@ -182,3 +182,39 @@ BEGIN
       ON departments ("departmentCode") WHERE "departmentCode" IS NOT NULL;
   END IF;
 END $$;
+
+-- ── مرجع کدهای وضعیت نمره (Master Data) ──
+--    کد عددیِ سیستم قدیمی، وضعیت داخلی سامانهٔ جدید و عنوان نمایشی هر سه
+--    جدا نگه داشته می‌شوند: کارنامه «کد» چاپ می‌کند و راهنمای کدها پایین
+--    سند می‌آید، پس عنوانِ بلند دیگر ستون «وضع» را باز نمی‌کند و جدول‌های
+--    سه‌ستونی نیمسال‌ها به هم نمی‌ریزند.
+CREATE TABLE IF NOT EXISTS grade_status_codes (
+  id SERIAL PRIMARY KEY,
+  code varchar(12) NOT NULL,
+  title varchar(200) NOT NULL,
+  "legacyCode" varchar(12),
+  "internalStatus" varchar(20) NOT NULL,
+  description text,
+  "legacyFlags" text,
+  origin varchar(10) NOT NULL DEFAULT 'LEGACY',
+  "isActive" integer NOT NULL DEFAULT 1,
+  "sortOrder" integer NOT NULL DEFAULT 0,
+  "createdAt" timestamp DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" timestamp DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE grade_status_codes ADD COLUMN IF NOT EXISTS "legacyFlags" text;
+CREATE UNIQUE INDEX IF NOT EXISTS "uq_grade_status_codes" ON grade_status_codes (code);
+CREATE INDEX IF NOT EXISTS "grade_status_codes_internal_idx" ON grade_status_codes ("internalStatus");
+
+-- ستون کد وضعیت روی رکورد نمره: هویت قدیمی نمرهٔ مهاجرت‌شده حفظ می‌شود و
+-- گزارش‌ها می‌توانند بر اساس کد وضعیت کار کنند (نه فقط وضعیت داخلی).
+ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS "gradeStatusCodeId" integer;
+CREATE INDEX IF NOT EXISTS "enrollments_gradeStatusCodeId_idx" ON enrollments ("gradeStatusCodeId");
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'enrollments_gradeStatusCodeId_fkey') THEN
+    ALTER TABLE enrollments
+      ADD CONSTRAINT "enrollments_gradeStatusCodeId_fkey"
+      FOREIGN KEY ("gradeStatusCodeId") REFERENCES grade_status_codes(id) ON DELETE SET NULL;
+  END IF;
+END $$;
