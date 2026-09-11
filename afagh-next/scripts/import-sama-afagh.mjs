@@ -853,9 +853,13 @@ async function phaseCodemap(files) {
     // عنوان دقیقِ فایل مرجع جایگزین می‌شود. عنوان‌هایی که کاربر یا واردسازی
     // قبلیِ خودِ فایل مرجع نوشته هرگز بازنویسی نمی‌شوند.
     if (!r.rowCount && safeTitle) {
-      const u = await pool.query(`UPDATE legacy_code_maps SET "legacyTitle" = $4, "updatedAt" = now()
-        WHERE "sourceCode" = $1 AND domain = $2 AND "legacyCode" = $3 AND note LIKE '%"seeded"%'`,
-        [SOURCE, domain, code, safeTitle]);
+      // note هم بازنویسی می‌شود تا برچسب «seeded» پاک شود؛ وگرنه همگام‌سازی
+      // جدول مرجع (grade_status_codes) این عنوان را «پیش‌فرض خودمان» می‌پندارد
+      // و هرگز در راهنمای کارنامه نمی‌نشاند.
+      const u = await pool.query(`UPDATE legacy_code_maps
+           SET "legacyTitle" = $4, note = COALESCE($5, note), "updatedAt" = now()
+         WHERE "sourceCode" = $1 AND domain = $2 AND "legacyCode" = $3 AND note LIKE '%"seeded"%'`,
+        [SOURCE, domain, code, safeTitle, safeNote]);
       stats.titleFromReference += u.rowCount;
     }
   };
