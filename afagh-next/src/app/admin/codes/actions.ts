@@ -3,7 +3,7 @@
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { academic_terms, courses, degree_level_configs, departments, faculties, majors } from '@/db/schema';
+import { academic_terms, courses, degree_level_configs, departments, faculties, grade_status_codes, majors } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { faIncludes, normalizeFa } from '@/lib/persian-search';
 import { CODE_TABLES, type CodeRow, type CodeStat, type CodeTable, type FormOptions } from './tables';
@@ -102,6 +102,35 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
       .orderBy(asc(academic_terms.termCode))).map(r => ({ ...r, context: null }));
   }
 
+  if (table === 'gradeStatus') {
+    raw = (await db
+      .select({
+        id: grade_status_codes.id, code: grade_status_codes.code, title: grade_status_codes.title,
+        internalStatus: grade_status_codes.internalStatus, origin: grade_status_codes.origin,
+        flags: grade_status_codes.legacyFlags,
+      })
+      .from(grade_status_codes)
+      .orderBy(asc(grade_status_codes.sortOrder), asc(grade_status_codes.code)))
+      .map(r => {
+        let effect: string | null = null;
+        try {
+          const f = r.flags ? JSON.parse(r.flags) : null;
+          if (f) {
+            effect = [
+              f.gpa ? 'اثر در معدل' : null,
+              f.unitPassed ? 'واحد گذرانده' : null,
+              f.assumedPassed ? 'پاس‌شده' : null,
+              f.keepAfterRetake ? 'عدم حذف با قبولی مجدد' : null,
+            ].filter(Boolean).join(' · ') || null;
+          }
+        } catch { /* پرچم خراب — فقط عنوان و وضعیت نشان داده می‌شود */ }
+        return {
+          id: r.id, code: r.code, title: r.title,
+          context: [r.internalStatus, r.origin === 'INTERNAL' ? 'داخلی سامانهٔ جدید' : null, effect].filter(Boolean).join(' · ') || null,
+        };
+      });
+  }
+
   const dups = dupSet(raw);
   const rows = raw.map(r => ({ ...r, duplicate: !!r.code && dups.has(r.code) }));
   if (!t) return rows;
@@ -193,7 +222,7 @@ export async function exportCodesCsv(table: CodeTable): Promise<string> {
 
 /** شمار کل رکوردهای هر جدول بدون بارگذاری کامل — برای صفحه‌های بزرگ مثل دروس */
 export async function countRows(table: CodeTable): Promise<number> {
-  const map = { faculty: faculties, department: departments, major: majors, degree: degree_level_configs, course: courses, term: academic_terms } as const;
+  const map = { faculty: faculties, department: departments, major: majors, degree: degree_level_configs, course: courses, term: academic_terms, gradeStatus: grade_status_codes } as const;
   const [r] = await db.select({ c: sql<number>`count(*)::int` }).from(map[table]);
   return r?.c ?? 0;
 }
