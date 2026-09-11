@@ -220,17 +220,26 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
     }
 
     // ── وضعیت نمرات ترم ──
+    // بر اساس «کد وضعیت» گزارش می‌شود، نه فقط وضعیت داخلی: کد عددی سیستم
+    // قدیمی (از جدول مرجع grade_status_codes) ستون اول است تا آمار با
+    // کارنامهٔ چاپی و با گزارش‌های سیستم قدیمی قابل تطبیق باشد.
+    // رکوردهای بی‌کد (هنوز پشتیبان‌گیری نشده) با «—» و وضعیت داخلی می‌آیند.
     case 'grade-status': {
       const data = await db.execute<Record<string, unknown>>(sql`
-        SELECT e."gradeStatus" AS st, COUNT(*)::int AS n,
+        SELECT COALESCE(g.code, '—') AS code,
+          COALESCE(g.title, e."gradeStatus") AS st,
+          COUNT(*)::int AS n,
           ROUND(AVG(CASE WHEN ${NUM} THEN e."gradeValue"::numeric END), 2) AS avg
         FROM enrollments e JOIN course_offerings o ON o.id = e."offeringId" JOIN academic_terms t ON t.id = o."termId"
-        WHERE t."termCode" = ${term} GROUP BY 1 ORDER BY 2 DESC`);
+          LEFT JOIN grade_status_codes g ON g.id = e."gradeStatusCodeId"
+        WHERE t."termCode" = ${term} GROUP BY 1, 2 ORDER BY 3 DESC`);
       const total = data.rows.reduce((a, x) => a + Number(x.n), 0);
+      const coded = data.rows.filter(x => String(x.code) !== '—').reduce((a, x) => a + Number(x.n), 0);
       return {
-        columns: [{ key: 'st', title: 'وضعیت نمره' }, { key: 'n', title: 'تعداد' }, { key: 'avg', title: 'میانگین نمرات' }],
+        columns: [{ key: 'code', title: 'کد وضع' }, { key: 'st', title: 'وضعیت نمره' }, { key: 'n', title: 'تعداد' }, { key: 'avg', title: 'میانگین نمرات' }],
         rows: data.rows, total, page: 1, per: data.rows.length || 1, totalPages: 1,
-        summary: `${total.toLocaleString('fa-IR')} رکورد نمره در ترم ${term}`,
+        summary: `${total.toLocaleString('fa-IR')} رکورد نمره در ترم ${term}` +
+          (coded === total ? '' : ` — ${coded.toLocaleString('fa-IR')} رکورد کد وضعیت دارد (باقی: npm run db:grade-status-codes)`),
       };
     }
 
