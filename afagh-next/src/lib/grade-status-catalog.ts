@@ -1,8 +1,13 @@
 import 'server-only';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { grade_status_codes, legacy_code_maps } from '@/db/schema';
-import { GRADE_STATUS_CODES } from './grade-status-codes';
+import { course_offerings, courses, enrollments, grade_status_codes, legacy_code_maps } from '@/db/schema';
+import { getRegulationConfig } from '@/lib/regulations-engine';
+import { GRADE_STATUS_CODES, isGradePassed, outcomeGradeStatusCodeId } from './grade-status-codes';
+import type { OutcomeCodeConfig } from './grade-status-codes';
+
+export { isGradePassed, outcomeGradeStatusCodeId };
+export type { OutcomeCodeConfig };
 
 /**
  * ═══════════════════════════════════════════════════════════════════
@@ -174,4 +179,80 @@ export async function gradeStatusTitles(): Promise<Map<string, string>> {
     }
   } catch { /* میز تطبیق خالی/ناساخته — عنوان‌های مرجع استفاده می‌شوند */ }
   return map;
+}
+
+/**
+ * کد وضع نمرهٔ ثبت‌نام‌های *بی‌کد* یک ارائه را از تعریف درس پر می‌کند.
+ *
+ * فراخوانی: هنگام قفل نهایی نمرات (و هرجا نمره قطعی می‌شود).
+ *
+ * قاعدهٔ مهم: رکوردی که از قبل کد دارد دست‌نخورده می‌ماند. کد قدیمیِ یک
+ * رکورد مهاجرت‌شده (مثلاً ۶ «حذف اضطراری» یا ۲۰ «غیبت») سند تاریخی است و
+ * نباید با کدِ محاسبه‌شده از نمره جایگزین شود — دانشجوی غایب با نمرهٔ بالا
+ * «قبول» نمی‌شود.
+ *
+ * @returns تعداد رکوردهای به‌روزشده
+ */
+export async function applyGradeStatusCodesForOffering(offeringId: number): Promise<number> {
+  await ensureGradeStatusCodes();
+
+  const [off] = await db
+    .select({
+      courseId: course_offerings.courseId,
+      gradingType: courses.gradingType,
+      degreeLevelId: courses.degreeLevelId,
+      passGradeStatusCodeId: courses.passGradeStatusCodeId,
+      failGradeStatusCodeId: courses.failGradeStatusCodeId,
+    })
+    .from(course_offerings)
+    .leftJoin(courses, eq(courses.id, course_offerings.courseId))
+    .where(eq(course_offerings.id, offeringId))
+    .limit(1);
+  if (!off) return 0;
+
+  const cfg: OutcomeCodeConfig = {
+    passGradeStatusCodeId: off.passGradeStatusCodeId ?? null,
+    failGradeStatusCodeId: off.failGradeStatusCodeId ?? null,
+  };
+  // نگاشت کد → شناسهٔ ردیف مرجع (برای کد مرجع ۱/۲ وقتی درس کد تنظیم ندارد)
+  const ids: Record<string, number | null> = {};
+  for (const r of (await gradeStatusCodeMaps()).rows) ids[String(r.code ?? '').trim()] = r.id;
+  // اگر درس هیچ کدی تنظیم نکرده و کد مرجع هم موجود نیست، کاری برای کردن نیست
+  if (!cfg.passGradeStatusCodeId && !cfg.failGradeStatusCodeId && !ids['1'] && !ids['2']) return 0;
+
+  const config = await getRegulationConfig(null, off.degreeLevelId ?? null);
+  const passingGrade = config.grading_and_gpa.default_passing_grade || 10;
+
+  // فقط رکوردهای بی‌کد — کدِ از قبل نشسته (مهاجرتی یا دستی) سند تاریخی است
+  const rows = await db
+    .select({ id: enrollments.id, gradeValue: enrollments.gradeValue })
+    .from(enrollments)
+    .where(and(
+      eq(enrollments.offeringId, offeringId),
+      sql`${enrollments.gradeStatusCodeId} IS NULL`,
+    ));
+
+  // دسته‌بندی بر پایهٔ کد مقصد تا به‌جای N به‌روزرسانی، یکی به ازای هر کد بزنیم
+  const byCode = new Map<number, number[]>();
+  for (const r of rows) {
+    const passed = isGradePassed(r.gradeValue, off.gradingType ?? null, passingGrade);
+    if (passed === null) continue;
+    const codeId = outcomeGradeStatusCodeId(passed, cfg, ids);
+    if (!codeId) continue;
+    const list = byCode.get(codeId);
+    if (list) list.push(r.id);
+    else byCode.set(codeId, [r.id]);
+  }
+
+  let updated = 0;
+  for (const [codeId, enrollmentIds] of byCode) {
+    if (enrollmentIds.length === 0) continue;
+    const res = await db
+      .update(enrollments)
+      .set({ gradeStatusCodeId: codeId })
+      .where(and(inArray(enrollments.id, enrollmentIds), sql`${enrollments.gradeStatusCodeId} IS DISTINCT FROM ${codeId}`))
+      .returning({ id: enrollments.id });
+    updated += res.length;
+  }
+  return updated;
 }

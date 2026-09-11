@@ -257,3 +257,51 @@ export function gradeStatusLegendLine(
   if (!groups.length) return '';
   return prefix + groups.map(g => `${g.codes.join('/')}=${g.title}`).join('، ');
 }
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ *  کد وضع نمرهٔ وابسته به درس (قبولی / مردودی)
+ * ═══════════════════════════════════════════════════════════════════════
+ *  وضع نمره به *درس* وابسته است: در تعریف درس سیستم قدیمی دو فیلد «وضع نمره
+ *  در صورت قبولی» و «در صورت مردودی» وجود دارد، چون درس جبرانیِ بدون احتساب
+ *  در معدل کد ۱۲/۲۲ می‌گیرد و نه ۱/۲. این دو تابع خالص‌اند (بدون DB) تا هم
+ *  سمت سرور هنگام قفل نمرات و هم در تست واحد استفاده شوند.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+
+export type OutcomeCodeConfig = {
+  passGradeStatusCodeId: number | null;
+  failGradeStatusCodeId: number | null;
+};
+
+/**
+ * کد وضع نمره برای یک نتیجهٔ قبول/رد.
+ *
+ * اولویت: کد تنظیم‌شدهٔ خودِ درس؛ در نبود آن، کد مرجعِ «درس عادی» (۱ یا ۲).
+ * `ids` نگاشت کد → شناسهٔ ردیف جدول مرجع است.
+ */
+export function outcomeGradeStatusCodeId(
+  passed: boolean,
+  cfg: OutcomeCodeConfig | null | undefined,
+  ids: Record<string, number | null>,
+): number | null {
+  const explicit = passed ? cfg?.passGradeStatusCodeId : cfg?.failGradeStatusCodeId;
+  if (explicit) return explicit;
+  return ids[passed ? '1' : '2'] ?? null;
+}
+
+/**
+ * تعیین قبول/رد یک نمره با همان قاعدهٔ موتور آیین‌نامه:
+ * نمرهٔ توصیفی با مقدار ۱ قبول است، عددی با رسیدن به حدنصاب.
+ * `null` یعنی نمرهٔ قابل سنجش نیست (خالی/متنی) و نباید کدی بخورد.
+ */
+export function isGradePassed(
+  gradeValue: unknown,
+  gradingType: string | null,
+  passingGrade: number,
+): boolean | null {
+  const n = typeof gradeValue === 'number' ? gradeValue : Number(String(gradeValue ?? '').trim());
+  if (!Number.isFinite(n) || String(gradeValue ?? '').trim() === '') return null;
+  if (gradingType === 'DESCRIPTIVE') return n === 1;
+  return n >= passingGrade;
+}

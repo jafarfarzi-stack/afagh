@@ -16,6 +16,8 @@ import {
   gradeStatusCodeTitle,
   gradeStatusLegend,
   gradeStatusLegendLine,
+  isGradePassed,
+  outcomeGradeStatusCodeId,
 } from '../src/lib/grade-status-codes';
 
 let pass = 0, fail = 0;
@@ -133,6 +135,33 @@ console.log('\n— عینِ فایل مرجع «وضع نمره»: ۴۷ کد، �
   ok(f2.gpa === true && f2.unitPassed === false && f2.keepAfterRetake === false, 'کد ۲: اثر در معدل، بدون واحد گذرانده');
   ok(f20.gpa === false && f20.totalSum === false, 'کد ۲۰: بدون اثر در معدل و جمع کل');
   ok(GRADE_STATUS_FLAGS['N1'] === undefined, 'کد داخلی پرچم قدیمی ندارد');
+}
+
+console.log('\n— کد وضع نمرهٔ وابسته به درس (قبولی / مردودی) —');
+{
+  // درس جبرانیِ بدون احتساب در معدل: ۱۲ در صورت قبولی، ۲۲ در صورت مردودی
+  const compensatory = { passGradeStatusCodeId: 12, failGradeStatusCodeId: 22 };
+  const ids: Record<string, number | null> = { '1': 101, '2': 102, '12': 112, '22': 122 };
+
+  ok(outcomeGradeStatusCodeId(true, compensatory, ids) === 12, 'درس جبرانی در صورت قبولی کد تنظیم‌شدهٔ خودش (۱۲) را می‌گیرد');
+  ok(outcomeGradeStatusCodeId(false, compensatory, ids) === 22, 'درس جبرانی در صورت مردودی کد تنظیم‌شدهٔ خودش (۲۲) را می‌گیرد');
+  ok(outcomeGradeStatusCodeId(true, null, ids) === 101, 'درس بدون تنظیم، در صورت قبولی کد مرجع ۱ را می‌گیرد');
+  ok(outcomeGradeStatusCodeId(false, null, ids) === 102, 'درس بدون تنظیم، در صورت مردودی کد مرجع ۲ را می‌گیرد');
+  ok(outcomeGradeStatusCodeId(false, { passGradeStatusCodeId: 12, failGradeStatusCodeId: null }, ids) === 102,
+    'اگر فقط کد قبولی تنظیم شده باشد، مردودی به کد مرجع برمی‌گردد');
+  ok(outcomeGradeStatusCodeId(true, null, {}) === null, 'در نبود هر دو کد، هیچ کدی تحمیل نمی‌شود');
+}
+
+console.log('\n— تعیین قبول/رد با قاعدهٔ موتور آیین‌نامه —');
+{
+  ok(isGradePassed('12.00', 'NUMERIC', 10) === true, 'نمرهٔ ۱۲ با حدنصاب ۱۰ قبول است');
+  ok(isGradePassed('9.75', 'NUMERIC', 10) === false, 'نمرهٔ ۹.۷۵ با حدنصاب ۱۰ مردود است');
+  ok(isGradePassed('10', 'NUMERIC', 10) === true, 'نمرهٔ دقیقاً حدنصاب قبول است');
+  ok(isGradePassed('1', 'DESCRIPTIVE', 10) === true, 'نمرهٔ توصیفی ۱ قبول است');
+  ok(isGradePassed('2', 'DESCRIPTIVE', 10) === false, 'نمرهٔ توصیفی ۲ مردود است');
+  ok(isGradePassed('', 'NUMERIC', 10) === null, 'نمرهٔ خالی سنجیده نمی‌شود');
+  ok(isGradePassed(null, 'NUMERIC', 10) === null, 'نمرهٔ null سنجیده نمی‌شود');
+  ok(isGradePassed('غیبت', 'NUMERIC', 10) === null, 'نمرهٔ متنی سنجیده نمی‌شود');
 }
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);

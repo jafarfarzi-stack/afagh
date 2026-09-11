@@ -106,7 +106,33 @@ async function main() {
          AND g.code = substring(lg.raw from '"markStat"\\s*:\\s*"([^"]*)"')
     `);
 
-    //    ب) باقی‌مانده (نمرات ثبت‌شده در سامانهٔ جدید) → کد مرجعِ وضعیت داخلی
+    //    ب) ردیف‌های بدون markStat: کد وضع از *تعریف خودِ درس* (قبولی/مردودی).
+    //       وضع نمره به درس وابسته است — درس جبرانیِ بدون احتساب در معدل کد
+    //       ۱۲/۲۲ می‌گیرد، نه ۱/۲. حدنصاب از مقطع درس، و در نبود آن ۱۰.
+    const courseLink = await pool.query(`
+      WITH cand AS (
+        SELECT e.id,
+               CASE WHEN c."gradingType" = 'DESCRIPTIVE' THEN (e."gradeValue")::numeric = 1
+                    ELSE (e."gradeValue")::numeric >= COALESCE((d."defaultPassingGrade")::numeric, 10)
+               END AS passed,
+               c."passGradeStatusCodeId" AS pass_id,
+               c."failGradeStatusCodeId" AS fail_id
+          FROM enrollments e
+          JOIN course_offerings o ON o.id = e."offeringId"
+          JOIN courses c ON c.id = o."courseId"
+          LEFT JOIN degree_level_configs d ON d.id = c."degreeLevelId"
+         WHERE e."gradeStatusCodeId" IS NULL
+           AND (c."passGradeStatusCodeId" IS NOT NULL OR c."failGradeStatusCodeId" IS NOT NULL)
+           AND e."gradeValue" ~ '^[0-9]+(\\.[0-9]+)?$'
+      )
+      UPDATE enrollments e
+         SET "gradeStatusCodeId" = CASE WHEN c.passed THEN c.pass_id ELSE c.fail_id END
+        FROM cand c
+       WHERE e.id = c.id
+         AND (CASE WHEN c.passed THEN c.pass_id ELSE c.fail_id END) IS NOT NULL
+    `);
+
+    //    ج) باقی‌مانده → کد مرجعِ وضعیت داخلی
     const internalLink = await pool.query(`
       WITH canon AS (
         SELECT DISTINCT ON ("internalStatus") id, "internalStatus"
@@ -120,7 +146,7 @@ async function main() {
     const [{ left }] = (await pool.query(
       `SELECT count(*)::int left FROM enrollments WHERE "gradeStatusCodeId" IS NULL`,
     )).rows;
-    console.log(`🔗 enrollments: ${legacyLink.rowCount} با کد قدیمی + ${internalLink.rowCount} با کد مرجعِ وضعیت داخلی وصل شد؛ بی‌کد: ${left}`);
+    console.log(`🔗 enrollments: ${legacyLink.rowCount} با کد قدیمی + ${courseLink.rowCount} از تعریف درس + ${internalLink.rowCount} با کد مرجعِ وضعیت داخلی وصل شد؛ بی‌کد: ${left}`);
   } finally {
     await pool.end();
   }

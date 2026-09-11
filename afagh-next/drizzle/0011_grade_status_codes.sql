@@ -31,3 +31,21 @@ BEGIN
       FOREIGN KEY ("gradeStatusCodeId") REFERENCES "grade_status_codes"("id") ON DELETE SET NULL;
   END IF;
 END $$;
+--> statement-breakpoint
+ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "passGradeStatusCodeId" integer;
+--> statement-breakpoint
+ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "failGradeStatusCodeId" integer;
+--> statement-breakpoint
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'courses_passGradeStatusCodeId_fkey') THEN
+    ALTER TABLE "courses"
+      ADD CONSTRAINT "courses_passGradeStatusCodeId_fkey"
+      FOREIGN KEY ("passGradeStatusCodeId") REFERENCES "grade_status_codes"("id") ON DELETE SET NULL;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'courses_failGradeStatusCodeId_fkey') THEN
+    ALTER TABLE "courses"
+      ADD CONSTRAINT "courses_failGradeStatusCodeId_fkey"
+      FOREIGN KEY ("failGradeStatusCodeId") REFERENCES "grade_status_codes"("id") ON DELETE SET NULL;
+  END IF;
+END $$;

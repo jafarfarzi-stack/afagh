@@ -218,3 +218,23 @@ BEGIN
       FOREIGN KEY ("gradeStatusCodeId") REFERENCES grade_status_codes(id) ON DELETE SET NULL;
   END IF;
 END $$;
+
+-- ── کد وضع نمرهٔ هر درس در صورت قبولی / مردودی ──
+--    وضع نمره به *درس* وابسته است: درس جبرانیِ بدون احتساب در معدل کد ۱۲/۲۲
+--    می‌گیرد، نه ۱/۲. با این دو فیلد کد وضع هنگام ثبت نمره خودکار اعمال
+--    می‌شود (همان فیلد «وضع نمره در صورت قبولی/مردودی» تعریف درس قدیمی).
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS "passGradeStatusCodeId" integer;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS "failGradeStatusCodeId" integer;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'courses_passGradeStatusCodeId_fkey') THEN
+    ALTER TABLE courses
+      ADD CONSTRAINT "courses_passGradeStatusCodeId_fkey"
+      FOREIGN KEY ("passGradeStatusCodeId") REFERENCES grade_status_codes(id) ON DELETE SET NULL;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'courses_failGradeStatusCodeId_fkey') THEN
+    ALTER TABLE courses
+      ADD CONSTRAINT "courses_failGradeStatusCodeId_fkey"
+      FOREIGN KEY ("failGradeStatusCodeId") REFERENCES grade_status_codes(id) ON DELETE SET NULL;
+  END IF;
+END $$;

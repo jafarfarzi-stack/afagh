@@ -26,6 +26,7 @@ import {
 import { getStaffByUser, isDemoMode, requireRole } from '@/lib/auth';
 import { sendSms } from '@/lib/messaging';
 import { ensureGradePersistence, resolveStudentRow } from '@/lib/demo-grades-seed';
+import { applyGradeStatusCodesForOffering } from '@/lib/grade-status-catalog';
 import type { StudentGradeField } from './types';
 import { SCORE_FIELDS } from './grades-core';
 
@@ -296,6 +297,11 @@ export async function finalizeSignedAction(
       .update(enrollments)
       .set({ gradeStatus: 'FINALIZED' })
       .where(eq(enrollments.offeringId, payload.offeringId));
+
+    // کد وضع نمره خودکار اعمال می‌شود: از تعریف خودِ درس (کدِ صورت قبولی /
+    // صورت مردودی) خوانده می‌شود، چون وضع نمره به درس وابسته است — درس
+    // جبرانیِ بدون احتساب در معدل کد ۱۲/۲۲ می‌گیرد، نه ۱/۲.
+    await applyGradeStatusCodesForOffering(payload.offeringId);
 
     revalidatePath('/professor/grades');
     revalidatePath('/student');

@@ -304,6 +304,15 @@ export const courses = pgTable('courses', {
   degreeLevelId: integer('degreeLevelId').references(() => degree_level_configs.id),
   gradingType: varchar('gradingType', { length: 20 }).default('NUMERIC'),
   affectsGpa: integer('affectsGpa').default(1),
+  /**
+   * کد وضع نمرهٔ این درس در صورت قبولی / مردودی (همان فیلد تعریف درس در
+   * سیستم قدیمی). وضع نمره به *درس* وابسته است: درس جبرانیِ بدون احتساب در
+   * معدل کد ۱۲/۲۲ می‌گیرد، نه ۱/۲. با این دو فیلد، کد وضع هنگام ثبت نمره
+   * خودکار روی رکورد می‌نشیند و دیگر دستی تعیین نمی‌شود.
+   * NULL = از کد مرجعِ وضعیت داخلی استفاده شود.
+   */
+  passGradeStatusCodeId: integer('passGradeStatusCodeId'),
+  failGradeStatusCodeId: integer('failGradeStatusCodeId'),
   // ── موتور برنامه‌ریزی درسی ──
   clusterId: integer('clusterId').references(() => equivalence_clusters.id), // NULL = درس مستقل
   offeringScope: varchar('offeringScope', { length: 20 }).default('DEPARTMENTAL'), // DEPARTMENTAL | GENERAL_SERVICE (کارتابل دوگانه)

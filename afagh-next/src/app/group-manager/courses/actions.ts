@@ -6,6 +6,17 @@ import { db } from '@/db';
 import { courses } from '@/db/schema';
 import { back, courseInDept, num, requireDepHead, str } from '@/lib/group-manager';
 
+/**
+ * مقدار عددیِ اختیاری از فرم. رشتهٔ خالی یعنی «تنظیم‌نشده» (null) و نه صفر —
+ * صفر خودش یک کد وضع معتبر است («نامشخص»).
+ */
+function optNum(v: FormDataEntryValue | null): number | null {
+  const s = String(v ?? '').trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
 export async function createCourseAction(fd: FormData) {
   const { staff: me, deptId } = await requireDepHead();
   const code = str(fd, 'code'), title = str(fd, 'title');
@@ -18,6 +29,9 @@ export async function createCourseAction(fd: FormData) {
   await db.insert(courses).values({
     code, title, theoreticalUnits: String(theo), practicalUnits: String(prac), units: String(theo + prac),
     courseType: type, gradingType: grading, affectsGpa: fd.get('gpa') ? 1 : 0, departmentId: deptId,
+    // کد وضع نمرهٔ این درس در صورت قبولی / مردودی (خالی = کد مرجع ۱/۲)
+    passGradeStatusCodeId: optNum(fd.get('passStatus')),
+    failGradeStatusCodeId: optNum(fd.get('failStatus')),
   });
   revalidatePath('/group-manager/courses');
   back('/group-manager/courses', 'msg', 'درس «' + title + '» تعریف شد (' + (theo + prac) + ' واحد).');
@@ -33,6 +47,9 @@ export async function updateCourseAction(fd: FormData) {
     code, title, theoreticalUnits: String(theo), practicalUnits: String(prac), units: String(theo + prac),
     courseType: str(fd, 'type') || 'تخصصی', gradingType: str(fd, 'grading') || 'NUMERIC',
     affectsGpa: fd.get('gpa') ? 1 : 0,
+    // کد وضع نمرهٔ درس در صورت قبولی / مردودی — هنگام قفل نمرات خودکار اعمال می‌شود
+    passGradeStatusCodeId: optNum(fd.get('passStatus')),
+    failGradeStatusCodeId: optNum(fd.get('failStatus')),
   }).where(eq(courses.id, id));
   revalidatePath('/group-manager/courses');
   back('/group-manager/courses', 'msg', 'درس «' + title + '» به‌روزرسانی شد.');

@@ -35,6 +35,7 @@ import {
 import { getNumber } from '@/lib/settings';
 import { createLogger } from '@/lib/logger';
 import { auditChain, type AuditTx } from '@/lib/audit-chain';
+import { applyGradeStatusCodesForOffering } from '@/lib/grade-status-catalog';
 import { decideAppealOutcome, scoreFromComponents, validateCheckIns } from '@/lib/exam-core';
 import type { ExamCheckIn, ExamCheckInInput } from '@/lib/exam-core';
 import type { RubricWeights } from '@/app/professor/grades/types';
@@ -520,7 +521,7 @@ export async function submitExamGrades(
   const { offeringId, instructorId, rubric, entries } = px;
   if (!entries.length) throw new Error('ردیف نمره‌ای ارسال نشده است.');
 
-  return db.transaction(async tx => {
+  const result = await db.transaction(async tx => {
     const [delivery] = await tx
       .select({
         id: instructor_deliveries.id,
@@ -584,6 +585,23 @@ export async function submitExamGrades(
     log.info('exam_grades_submitted', { offeringId, count: entries.length });
     return { ok: true, count: entries.length, gradesHash };
   });
+
+  // کد وضع نمره خودکار از تعریف درس (قبولی/مردودی) — بعد از commit، تا خطای
+  // احتمالیِ آن ثبت نمرات را برگرداند نکند.
+  await applyStatusCodesQuietly(offeringId);
+  return result;
+}
+
+/**
+ * کد وضع نمرهٔ یک ارائه را بر پایهٔ تعریف درس (قبولی/مردودی) بازنویسی می‌کند.
+ * بعد از commit صدا زده می‌شود تا خطای احتمالیِ آن، ثبت نمرات را برگرداند نکند.
+ */
+async function applyStatusCodesQuietly(offeringId: number) {
+  try {
+    await applyGradeStatusCodesForOffering(offeringId);
+  } catch (e) {
+    log.warn('grade_status_codes_apply_failed', { offeringId, error: String(e) });
+  }
 }
 
 // ─────────────────────────── مرحلهٔ ۷: اعتراض ───────────────────────────
