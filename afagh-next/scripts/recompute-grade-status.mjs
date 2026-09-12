@@ -169,7 +169,7 @@ async function main() {
     JOIN courses c ON c.id = co."courseId"
     JOIN academic_terms at2 ON at2.id = co."termId"
     LEFT JOIN legacy_grades lg ON lg."studentCode" = s."studentCode"
-      AND lg."termCode" = at2."termCode" AND lg."courseCode" = c."courseCode"
+      AND lg."termCode" = at2."termCode" AND lg."courseCode" = c."code"
     WHERE e."gradeStatus" IS NOT NULL
   `);
   let enrollChanged = 0;
