@@ -45,6 +45,20 @@ export default function OfficialTranscriptView({ student, summary, logoUrl, code
   const breakdown = breakdownByType(summary.terms.flatMap(t => t.rows));
 
   const termLabel = (code: string) => code.endsWith('3') ? 'نیمسال تابستان' : 'نیمسال';
+  // راهنمای کد وضع نمره (فقط ردیف‌هایی که کد خام سما دارند؛ متن کامل در پایین کارنامه یک‌بار می‌آید)
+  const statusLegend = new Map<string, string>();
+  for (const t of summary.terms) for (const r of t.rows) {
+    if (r.gradeStatusCode && r.gradeStatusTitle && !statusLegend.has(r.gradeStatusCode)) {
+      statusLegend.set(r.gradeStatusCode, r.gradeStatusTitle);
+    }
+  }
+  const statusCell = (r: TermGroup['rows'][number]) => {
+    if (r.gradeStatusCode && r.gradeStatusTitle) {
+      // به‌جای متن کامل (که ستون را به‌هم می‌ریزد) فقط کد؛ توضیح کامل در راهنمای پایین کارنامه
+      return <span title={r.gradeStatusTitle} className="font-mono font-bold">{r.gradeStatusCode}</span>;
+    }
+    return gradeStatusFa(r.gradeStatus);
+  };
   const termCell = (t: TermGroup) => (
     <td key={t.termCode} className="align-top border-l border-slate-400 p-0 term-block" style={{ width: '33.33%' }}>
       <div className="bg-slate-100 border-b border-slate-300 px-1 py-1 font-extrabold text-[10px] text-center">
@@ -80,7 +94,7 @@ export default function OfficialTranscriptView({ student, summary, logoUrl, code
               </td>
               <td className="p-1 text-center font-mono">{r.units ?? '—'}</td>
               <td className="p-1 text-center font-mono font-bold">{r.gradeValue ?? '—'}</td>
-              <td className="p-1 text-center text-[8px]" title={r.gradeStatusTitle || gradeStatusFa(r.gradeStatus)}>{r.gradeStatusTitle || gradeStatusFa(r.gradeStatus)}</td>
+              <td className="p-1 text-center text-[8px]">{statusCell(r)}</td>
             </tr>
           ))}
         </tbody>
@@ -131,6 +145,17 @@ export default function OfficialTranscriptView({ student, summary, logoUrl, code
           ))}
         </tbody>
       </table>
+      {/* راهنمای کد وضع نمره — فقط اگر کدی در کارنامه استفاده شده باشد */}
+      {statusLegend.size > 0 && (
+        <div className="border-t-2 border-slate-700 px-3 py-1.5 text-[9px] bg-slate-50 leading-relaxed">
+          <b>راهنمای کد وضع نمره:</b>{' '}
+          {[...statusLegend.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([code, title]) => (
+            <span key={code} className="inline-block ml-3">
+              <b className="font-mono">{code}</b> = {title}
+            </span>
+          ))}
+        </div>
+      )}
       {/* پانوشت */}
       <div className="border-t-2 border-slate-700 px-3 py-2 text-[10px] space-y-1">
         <div className="flex flex-wrap gap-x-6">

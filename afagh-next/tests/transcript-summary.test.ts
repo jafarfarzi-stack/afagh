@@ -41,6 +41,7 @@ const R = (o: Seed): TranscriptRow => ({
   gradeValue: o.g === undefined ? null : o.g === null ? null : String(o.g),
   gradeStatus: o.st ?? 'FINALIZED',
   gradeStatusTitle: null,
+  gradeStatusCode: null,
   offeringType: null,
   termStatusTitle: null,
   termProbation: o.prob ?? null,

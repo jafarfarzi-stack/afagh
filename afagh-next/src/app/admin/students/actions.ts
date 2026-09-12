@@ -56,6 +56,8 @@ export type TranscriptRow = {
   gradeStatus: string;
   /** عین عنوان ستون «عنوان» فایل وضع نمره (از میز تطبیق GRADE_STATUS) */
   gradeStatusTitle: string | null;
+  /** کد خام وضع نمره (markStat) — برای نمایش کوتاه در جدول + راهنمای کد در پایین کارنامه */
+  gradeStatusCode: string | null;
   offeringType: string | null;
   /** وضعیت همان نیمسال (از وضعيت نيمسال دانشجويان) + مشروطی فایل */
   termStatusTitle: string | null;
@@ -146,6 +148,7 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
         gradeValue: r.gradeValue ? String(r.gradeValue) : null,
         gradeStatus: r.gradeStatus,
         gradeStatusTitle: exactTitle(markStatOf(r.legacyRaw)),
+        gradeStatusCode: markStatOf(r.legacyRaw),
         offeringType: r.offeringType,
         termStatusTitle: ts?.title ?? null,
         termProbation: ts?.probation ?? null,
@@ -179,6 +182,7 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
       gradeValue: r.gradeValue ? String(r.gradeValue) : null,
       gradeStatus: r.gradeStatus,
       gradeStatusTitle: exactTitle(markStatOf(r.raw)),
+      gradeStatusCode: markStatOf(r.raw),
       offeringType: null,
       termStatusTitle: ts?.title ?? null,
       termProbation: ts?.probation ?? null,
