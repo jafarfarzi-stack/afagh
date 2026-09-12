@@ -162,10 +162,14 @@ async function main() {
   console.log('\n── مرحله ۲: بازمحاسبه gradeStatus در enrollments (از raw SAMA) ──');
   const enrollRows = await q(`
     SELECT e.id, e."gradeValue", e."gradeStatus" as old_status,
-           lg.raw, lg."studentCode", lg."termCode", lg."courseCode"
+           lg.raw
     FROM enrollments e
-    LEFT JOIN legacy_grades lg ON lg."studentCode" = e."studentCode"
-      AND lg."termCode" = e."termCode" AND lg."courseCode" = e."courseCode"
+    JOIN students s ON s.id = e."studentId"
+    JOIN course_offerings co ON co.id = e."offeringId"
+    JOIN courses c ON c.id = co."courseId"
+    JOIN academic_terms at2 ON at2.id = co."termId"
+    LEFT JOIN legacy_grades lg ON lg."studentCode" = s."studentCode"
+      AND lg."termCode" = at2."termCode" AND lg."courseCode" = c."courseCode"
     WHERE e."gradeStatus" IS NOT NULL
   `);
   let enrollChanged = 0;
