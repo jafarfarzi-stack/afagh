@@ -30,7 +30,7 @@ const q = async (text, params) => (await pool.query(text, params)).rows;
 
 // ── بارگذاری کد وضع نمره از codemap ──
 async function loadGradeStatusMap() {
-  const rows = await q(`SELECT code, label FROM codemaps WHERE category = 'GRADE_STATUS'`);
+  const rows = await q(`SELECT code, "label" FROM legacy_code_maps WHERE domain = 'GRADE_STATUS'`);
   const map = new Map();
   for (const r of rows) map.set(String(r.code), String(r.label));
   return map;
