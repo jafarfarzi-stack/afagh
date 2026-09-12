@@ -309,23 +309,25 @@ function repDegreeId(wantCodes) {
   return first ?? -1;
 }
 async function ensureRegulation(degreeId, maghta, entryYear) {
-  const m = String(maghta);
+  const m = String(maghta || '0').trim();
+  const ey = Number(entryYear) || 1400;
   // تعیین آیین‌نامه بر اساس سال ورود
   let which;
   if (m === '3') which = '1394MS';              // ارشد
   else if (['4', '6', '7', '8'].includes(m)) which = '1394PHD'; // دکتری
-  else if (entryYear < 1391) which = 'PRE1391'; // ماقبل ۹۱
-  else if (entryYear <= 1392) which = '1391';   // ۹۱ و ۹۲
-  else if (entryYear <= 1401) which = '1393';   // ۹۳ تا ۱۴۰۱
-  else which = '1402';                           // ۱۴۰۲ به بعد
+  else if (ey < 1391) which = 'PRE1391'; // ماقبل ۹۱
+  else if (ey <= 1392) which = '1391';   // ۹۱ و ۹۲
+  else if (ey <= 1401) which = '1393';   // ۹۳ تا ۱۴۰۱
+  else which = '1402';                   // ۱۴۰۲ به بعد
 
   const key = `${degreeId}|${which}`;
   if (regulations.has(key)) return regulations.get(key);
 
   const title = REG_TITLES['R' + which] || `آیین‌نامه ${which}`;
   let repId = repDegreeId([`SAMA-${m}`]);
-  if (repId < 0) repId = degreeId;
-  const effYear = which === '1394MS' || which === '1394PHD' ? 1394 : Number(which);
+  if (!repId || repId < 0) repId = degreeId;
+  if (!repId || repId < 0) repId = 1;
+  const effYear = which === '1394MS' || which === '1394PHD' ? 1394 : (Number(which) || 1402);
   const config = JSON.stringify(regConfig(which));
   let row = (await q(`SELECT id, "rulesConfig" FROM educational_regulations WHERE title = $1`, [title]))[0];
   if (!row && !DRY) {
