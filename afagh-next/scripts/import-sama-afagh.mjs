@@ -210,12 +210,13 @@ function mapGrade(ms, mark) {
   const val = hasMark ? Number(String(mark).trim()) : null;
   const validVal = val !== null && val >= 0 && val <= 20 ? val : null;
   let gradeStatus;
-  if (EXEMPT_MS.has(ms)) gradeStatus = 'EXEMPT';
+  if (EXEMPT_MS.has(ms)) gradeStatus = 'FINALIZED'; // معاف — وضعیت قطعی
   else if (validVal !== null) gradeStatus = computeGradeStatus(validVal);
-  else if (PASSNG_MS.has(ms)) gradeStatus = 'PASSED_NO_GRADE';
-  else if (FAILNG_MS.has(ms)) gradeStatus = 'FAILED_NO_GRADE';
+  else if (PASSNG_MS.has(ms)) gradeStatus = 'FINALIZED'; // قبول بدون نمره — وضعیت قطعی
+  else if (FAILNG_MS.has(ms)) gradeStatus = 'FINALIZED'; // مردود بدون نمره — وضعیت قطعی
+  else if (DROP_MS.has(ms)) gradeStatus = 'FINALIZED';   // حذف/انصراف/حذف آیین‌نامه — وضعیت قطعی
   else gradeStatus = 'PENDING';
-  const enroll = validVal !== null || !DROP_MS.has(ms);
+  const enroll = true; // همه دروس (شامل حذف/انصراف/حذف آیین‌نامه) باید در enrollment ثبت شوند
   return { gradeStatus, gradeValue: validVal, enroll, rawMs: ms };
 }
 

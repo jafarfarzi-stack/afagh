@@ -570,6 +570,8 @@ export const enrollments = pgTable('enrollments', {
   isDirectedReading: integer('isDirectedReading').default(0),
   registeredAt: timestamp('registeredAt').defaultNow(),
   absenceMarkedAt: timestamp('absenceMarkedAt'),
+  /** کد وضعیت نمرهٔ سما هنگام نهایی‌سازی (از curriculum_courses.passGradeStatusCode / failGradeStatusCode) */
+  samaGradeStatusCode: varchar('samaGradeStatusCode', { length: 10 }),
   /** تأییدیهٔ دیجیتال دانشجو برای داشتن دو امتحان هم‌روز (شیفت‌های متفاوت) — فاز ۱۰ */
   hasAcceptedSameDayExam: integer('hasAcceptedSameDayExam').notNull().default(0)
 }, (t) => ({ uq: unique('uq_enrollments').on(t.studentId, t.offeringId) }));
@@ -584,6 +586,29 @@ export const grade_appeals = pgTable('grade_appeals', {
   status: varchar('status', { length: 20 }).default('OPEN'),
   createdAt: timestamp('createdAt').defaultNow()
 });
+
+/** تاریخچهٔ تغییرات نمره — هر تغییر یک ردیف (append-only audit trail) */
+export const grade_change_log = pgTable('grade_change_log', {
+  id: serial('id').primaryKey(),
+  enrollmentId: integer('enrollmentId').notNull().references(() => enrollments.id),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  offeringId: integer('offeringId').notNull().references(() => course_offerings.id),
+  action: varchar('action', { length: 30 }).notNull(),  // DRAFT|TEMPORARY|FINALIZED|APPEAL|ADMIN_OVERRIDE
+  oldGradeValue: varchar('oldGradeValue', { length: 20 }),
+  newGradeValue: varchar('newGradeValue', { length: 20 }),
+  oldGradeStatus: varchar('oldGradeStatus', { length: 20 }),
+  newGradeStatus: varchar('newGradeStatus', { length: 20 }),
+  oldSamaStatusCode: varchar('oldSamaStatusCode', { length: 10 }),
+  newSamaStatusCode: varchar('newSamaStatusCode', { length: 10 }),
+  reason: text('reason'),
+  actorUserId: integer('actorUserId').references(() => users.id),
+  actorRole: varchar('actorRole', { length: 30 }),  // PROFESSOR|ADMIN|GRADUATEAFFAIRS
+  createdAt: timestamp('createdAt').defaultNow(),
+}, (t) => ({
+  enrollmentIdx: index('idx_grade_change_log_enrollment').on(t.enrollmentId),
+  studentIdx: index('idx_grade_change_log_student').on(t.studentId),
+  createdIdx: index('idx_grade_change_log_created').on(t.createdAt),
+}));
 
 export const grade_submission_otps = pgTable('grade_submission_otps', {
   id: serial('id').primaryKey(),

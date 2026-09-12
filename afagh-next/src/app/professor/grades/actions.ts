@@ -26,6 +26,8 @@ import {
 import { getStaffByUser, isDemoMode, requireRole } from '@/lib/auth';
 import { sendSms } from '@/lib/messaging';
 import { ensureGradePersistence, resolveStudentRow } from '@/lib/demo-grades-seed';
+import { logGradeChange, logBulkGradeChange } from '@/lib/grade-change-log';
+import { resolveSamaGradeStatusCode } from '@/lib/resolve-sama-code';
 import type { StudentGradeField } from './types';
 import { SCORE_FIELDS } from './grades-core';
 
