@@ -1,12 +1,176 @@
 'use client';
 
 import React, { useMemo, useState, useTransition } from 'react';
-import { resetSettingAction, saveSettingsAction } from '@/lib/settings-actions';
+import { resetSettingAction, saveSettingsAction, uploadLogoAction } from '@/lib/settings-actions';
+import { backupDatabaseAction, listMinioObjectsAction, downloadMinioObjectAction, restoreDatabaseAction, restoreMinioObjectAction, getBackupStatsAction } from './backup-actions';
 import { SECRET_MASK, type SettingView } from '@/lib/settings-shared';
 
 interface Props {
   settings: SettingView[];
   groups: string[];
+}
+
+function BackupRestorePanel({ flash }: { flash: (ok: boolean, text: string) => void }) {
+  const [busy, startTransition] = useTransition();
+  const [stats, setStats] = useState<{ tables: number; totalRows: number; dbSize: string; minioObjects: number; minioSize: string } | null>(null);
+  const [minioList, setMinioList] = useState<{ key: string; size: number }[] | null>(null);
+
+  const loadStats = () => {
+    startTransition(async () => {
+      const r = await getBackupStatsAction();
+      if (r.ok && r.stats) setStats(r.stats);
+      else flash(false, r.error || 'خطا');
+    });
+  };
+
+  const handleBackupDb = () => {
+    startTransition(async () => {
+      const r = await backupDatabaseAction();
+      if (!r.ok) return flash(false, r.error || 'خطا');
+      const blob = new Blob([r.sql || ''], { type: 'text/sql;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `afagh-backup-${new Date().toISOString().slice(0, 10)}.sql`;
+      a.click();
+      URL.revokeObjectURL(url);
+      flash(true, `پشتیبان دیتابیس دانلود شد (${r.tables} جدول)`);
+    });
+  };
+
+  const handleListMinio = () => {
+    startTransition(async () => {
+      const r = await listMinioObjectsAction();
+      if (r.ok) setMinioList(r.objects || []);
+      else flash(false, r.error || 'خطا');
+    });
+  };
+
+  const handleDownloadMinioFile = (key: string) => {
+    startTransition(async () => {
+      const r = await downloadMinioObjectAction(key);
+      if (!r.ok) return flash(false, r.error || 'خطا');
+      const binary = atob(r.data || '');
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes]);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = r.name || key.split('/').pop() || 'file';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  };
+
+  const handleRestoreDb = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.sql,.txt';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      if (!confirm('آیا از بازیابی دیتابیس مطمئنید؟ تمام داده‌های فعلی جایگزین می‌شوند.')) return;
+      startTransition(async () => {
+        const r = await restoreDatabaseAction(text);
+        if (r.ok) flash(true, `بازیابی انجام شد (${r.statements} دستور اجرا شد)`);
+        else flash(false, r.error || 'خطای بازیابی');
+      });
+    };
+    input.click();
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* آمار */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-black text-slate-800">آمار سیستم</h3>
+          <button onClick={loadStats} disabled={busy} className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50">
+            {busy ? 'در حال بارگذاری…' : 'بروزرسانی آمار'}
+          </button>
+        </div>
+        {stats ? (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-center">
+            {[
+              { label: 'جداول', value: stats.tables },
+              { label: 'کل ردیف‌ها', value: stats.totalRows.toLocaleString('fa-IR') },
+              { label: 'حجم دیتابیس', value: stats.dbSize },
+              { label: 'فایل‌های آرشیو', value: stats.minioObjects },
+              { label: 'حجم آرشیو', value: stats.minioSize },
+            ].map(s => (
+              <div key={s.label} className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                <div className="text-lg font-black text-indigo-700">{s.value}</div>
+                <div className="text-[11px] text-slate-500 mt-1">{s.label}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">برای مشاهده آمار، «بروزرسانی آمار» را بزنید.</p>
+        )}
+      </div>
+
+      {/* پشتیبان‌گیری دیتابیس */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <h3 className="font-black text-slate-800 mb-3">پشتیبان‌گیری دیتابیس</h3>
+        <p className="text-sm text-slate-600 mb-4">
+          یک فایل SQL حاوی تمام جداول و داده‌ها دانلود می‌شود. برای بازیابی:
+          <code className="mx-1 text-xs bg-slate-100 px-1 rounded">psql -U afagh -d afagh_db -f backup.sql</code>
+        </p>
+        <button onClick={handleBackupDb} disabled={busy} className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 disabled:opacity-50">
+          {busy ? 'در حال پشتیبان‌گیری…' : 'دانلود پشتیبان دیتابیس (SQL)'}
+        </button>
+      </div>
+
+      {/* بازیابی دیتابیس */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <h3 className="font-black text-slate-800 mb-3">بازیابی دیتابیس</h3>
+        <p className="text-sm text-rose-600 mb-4">
+          ⚠️ بازیابی تمام داده‌های فعلی را جایگزین می‌کند. ابتدا پشتیبان بگیرید.
+        </p>
+        <button onClick={handleRestoreDb} disabled={busy} className="px-5 py-2.5 rounded-xl bg-rose-600 text-white font-bold text-sm hover:bg-rose-700 disabled:opacity-50">
+          انتخاب فایل SQL و بازیابی
+        </button>
+      </div>
+
+      {/* فایل‌های آرشیو */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-black text-slate-800">فایل‌های آرشیو (MinIO)</h3>
+          <button onClick={handleListMinio} disabled={busy} className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50">
+            {busy ? 'در حال بارگذاری…' : 'نمایش فایل‌ها'}
+          </button>
+        </div>
+        {minioList && (
+          <div className="max-h-64 overflow-y-auto">
+            {minioList.length === 0 ? (
+              <p className="text-sm text-slate-400">فایلی وجود ندارد.</p>
+            ) : (
+              <table className="w-full text-xs">
+                <thead><tr className="border-b border-slate-200">
+                  <th className="text-right py-2 px-2 font-bold">کلید</th>
+                  <th className="text-left py-2 px-2 font-bold">حجم</th>
+                  <th className="py-2 px-2"></th>
+                </tr></thead>
+                <tbody>
+                  {minioList.map(o => (
+                    <tr key={o.key} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="py-1.5 px-2 font-mono text-slate-700 truncate max-w-[300px]" title={o.key}>{o.key}</td>
+                      <td className="py-1.5 px-2 text-left text-slate-500">{o.size < 1024 ? o.size + ' B' : o.size < 1048576 ? (o.size / 1024).toFixed(1) + ' KB' : (o.size / 1048576).toFixed(1) + ' MB'}</td>
+                      <td className="py-1.5 px-2">
+                        <button onClick={() => handleDownloadMinioFile(o.key)} className="text-indigo-600 hover:underline">دانلود</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 const SOURCE_BADGE: Record<string, { text: string; cls: string }> = {
@@ -15,8 +179,39 @@ const SOURCE_BADGE: Record<string, { text: string; cls: string }> = {
   default: { text: 'پیش‌فرض', cls: 'bg-slate-100 text-slate-600 border-slate-300' },
 };
 
+/** بارگذار ارم دانشگاه با پیش‌نمایش */
+function LogoUploader({ current, pending, flash }: { current: string; pending: boolean; flash: (ok: boolean, text: string) => void }) {
+  const [busy, start] = useTransition();
+  return (
+    <div className="flex items-center gap-3 w-full">
+      <div className="w-16 h-16 shrink-0 rounded-lg border border-slate-300 bg-slate-50 flex items-center justify-center overflow-hidden">
+        {current ? <img src={current} alt="ارم فعلی" className="max-w-full max-h-full object-contain" /> : <span className="text-[10px] text-slate-400">بدون ارم</span>}
+      </div>
+      <form
+        className="flex items-center gap-2"
+        onSubmit={e => {
+          e.preventDefault();
+          const fd = new FormData(e.currentTarget);
+          if (!fd.get('logo') || (fd.get('logo') as File).size === 0) return flash(false, 'فایلی انتخاب نشده است.');
+          start(async () => {
+            const res = await uploadLogoAction(fd);
+            flash(res.ok, res.message);
+            if (res.ok) window.location.reload();
+          });
+        }}
+      >
+        <input type="file" name="logo" accept="image/png,image/jpeg,image/webp" disabled={pending || busy} className="text-xs" />
+        <button disabled={pending || busy} className="shrink-0 text-xs px-3 py-2 rounded-lg bg-indigo-700 text-white font-bold disabled:opacity-50">
+          {busy ? 'در حال بارگذاری…' : 'بارگذاری ارم'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 export default function SettingsClient({ settings, groups }: Props) {
   const [activeGroup, setActiveGroup] = useState<string>(groups[0]);
+  const [showBackup, setShowBackup] = useState(false);
   const [values, setValues] = useState<Record<string, string>>(
     () => Object.fromEntries(settings.map(s => [s.key, s.value])),
   );
@@ -93,9 +288,9 @@ export default function SettingsClient({ settings, groups }: Props) {
           return (
             <button
               key={g}
-              onClick={() => setActiveGroup(g)}
+              onClick={() => { setActiveGroup(g); setShowBackup(false); }}
               className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${
-                activeGroup === g
+                activeGroup === g && !showBackup
                   ? 'bg-indigo-700 text-white border-indigo-700'
                   : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
               }`}
@@ -104,8 +299,21 @@ export default function SettingsClient({ settings, groups }: Props) {
             </button>
           );
         })}
+        <button
+          onClick={() => setShowBackup(true)}
+          className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${
+            showBackup
+              ? 'bg-emerald-600 text-white border-emerald-600'
+              : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50'
+          }`}
+        >
+          پشتیبان‌گیری و بازیابی
+        </button>
       </div>
 
+      {showBackup ? (
+        <BackupRestorePanel flash={flash} />
+      ) : (
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="divide-y divide-slate-100">
           {byGroup.map(s => {
@@ -129,7 +337,9 @@ export default function SettingsClient({ settings, groups }: Props) {
                 </div>
 
                 <div className="md:flex-1 flex items-center gap-2">
-                  {s.type === 'boolean' ? (
+                  {s.type === 'image' ? (
+                    <LogoUploader current={values[s.key] ?? ''} pending={pending} flash={flash} />
+                  ) : s.type === 'boolean' ? (
                     <select
                       disabled={s.envOnly || pending}
                       value={values[s.key] ?? 'false'}
@@ -184,6 +394,7 @@ export default function SettingsClient({ settings, groups }: Props) {
           </button>
         </div>
       </div>
+      )}
 
       <p className="text-xs text-slate-500 leading-6">
         نکته: مقادیر گروه «زیرساخت» پیش از اتصال به دیتابیس لازم‌اند، بنابراین فقط از طریق فایل

@@ -9,6 +9,7 @@
 // ════════════════════════════════════════════════════════════════════════
 
 import type { CheckResult, LogicNode } from './curriculum-types';
+import { SUMMER_SEMESTER } from './term-plan';
 
 /** ورودی خالص ارزیابی — Actions داده را از DB بارگیری و پاس می‌دهند */
 export interface CurriculumCheckInput {
@@ -21,6 +22,11 @@ export interface CurriculumCheckInput {
   versionCode?: string;
   /** حداقل تعداد مقرر از هر نقش (خالی = چک ترکیب نقش‌ها اجرا نمی‌شود) */
   minRoleCounts?: Partial<Record<string, number>>;
+  /**
+   * سهم واحد مقرر هر نقش در این نسخه، مثل {GENERAL: 22, CORE: 25} (خالی/تعریف‌نشده = چک سهم واحد اجرا نمی‌شود).
+   * جمع سهم‌ها معمولاً باید با totalRequiredUnits بخواند؛ خود جمع اجباری نیست، فقط هر سهم جداگانه کنترل می‌شود.
+   */
+  minRoleUnits?: Partial<Record<string, number>>;
   /** دروسِ نسخه به‌همراه مشخصات بانک (units: واحد مؤثر — override نسخه یا درس) */
   courses: {
     courseId: number;
@@ -43,6 +49,27 @@ export interface CurriculumCheckInput {
   }[];
   /** کدهای موجود در بانک دروس (courses.code) */
   existingCodes: Set<string>;
+}
+
+/**
+ * پارس امن سهم واحد نقش‌ها (ستون minRoleUnits نسخه: رشتهٔ JSON یا آبجکت).
+ * کلیدها بزرگ و فقط حروف/زیرخط‌خط؛ مقادیر عدد متناهی ≥ ۰. ورودی نامعتبر → {}.
+ * هم سرور (buildCheckInput) و هم کلاینت (فرم سهم‌ها) از همین تابع استفاده می‌کنند.
+ */
+export function parseRoleUnitTargets(raw: unknown): Record<string, number> {
+  try {
+    const obj = typeof raw === 'string' ? (raw.trim() ? JSON.parse(raw) : null) : raw;
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return {};
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+      const key = String(k).trim().toUpperCase();
+      const n = Number(v);
+      if (/^[A-Z_]{2,20}$/.test(key) && Number.isFinite(n) && n >= 0) out[key] = n;
+    }
+    return out;
+  } catch {
+    return {};
+  }
 }
 
 const err = (check: string, message: string, affected: (string | number)[] = []): CheckResult => ({
@@ -212,9 +239,10 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
     }
     for (const [sem, info] of [...bySemester.entries()].sort((a, b) => a[0] - b[0])) {
       if (info.units > input.maxUnitsPerTerm) {
+        const semLabel = sem === SUMMER_SEMESTER ? 'تابستان' : sem;
         results.push(warn(
           'SEMESTER_LOAD',
-          `بار ترم ${sem} (${info.units} واحد) از سقف مجاز (${input.maxUnitsPerTerm} واحد) بیشتر است.`,
+          `بار ترم ${semLabel} (${info.units} واحد) از سقف مجاز (${input.maxUnitsPerTerm} واحد) بیشتر است.`,
           info.codes
         ));
       }
@@ -237,6 +265,28 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
         results.push(warn(
           'COURSE_TYPES_COMPLETE',
           `نقش «${roleFa[role] ?? role}» فقط ${count} درس دارد؛ حداقل مقرر ${min} درس است.`,
+          input.courses.filter((c) => c.roleType === role).map((c) => c.code)
+        ));
+      }
+    }
+  }
+
+  // ── ۸ب) سهم واحد نقش‌ها: هر سهم مقرر نسخه باید با واحد تأمین‌شده پوشش داده شود ──
+  if (input.minRoleUnits && Object.keys(input.minRoleUnits).length > 0) {
+    const unitsByRole = new Map<string, number>();
+    for (const c of input.courses) {
+      unitsByRole.set(c.roleType, (unitsByRole.get(c.roleType) ?? 0) + (Number(c.units) || 0));
+    }
+    const roleFa: Record<string, string> = {
+      CORE: 'پایه', MAJOR: 'اصلی', ELECTIVE: 'اختیاری', GENERAL: 'عمومی',
+      THESIS: 'پایان‌نامه', INTERNSHIP: 'کارآموزی', WORKSHOP: 'کارگاه',
+    };
+    for (const [role, min] of Object.entries(input.minRoleUnits)) {
+      const have = unitsByRole.get(role) ?? 0;
+      if (have < (min ?? 0)) {
+        results.push(warn(
+          'ROLE_UNITS_COVERAGE',
+          `سهم واحد نقش «${roleFa[role] ?? role}»: فقط ${have} واحد تأمین شده؛ مقرر ${min} واحد است.`,
           input.courses.filter((c) => c.roleType === role).map((c) => c.code)
         ));
       }

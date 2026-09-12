@@ -39,9 +39,16 @@ DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'afagh_app') THEN
     CREATE ROLE afagh_app LOGIN PASSWORD '__AFAGH_APP_PASSWORD__' NOSUPERUSER NOBYPASSRLS;
+  ELSE
+    -- P0-1: چرخش رمز باید واقعاً اعمال شود. پیش از این اگر نقش از قبل بود، رمزِ
+    -- .env روی نقش نمی‌نشست؛ یعنی «رمز را عوض کردیم» فقط روی کاغذ بود و
+    -- اپلیکیشن با رمز قدسی (یا ضعیفِ پیشین) به دیتابیس وصل می‌شد/می‌شد و شکست.
+    ALTER ROLE afagh_app WITH LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD '__AFAGH_APP_PASSWORD__';
   END IF;
 END $$;
-GRANT CONNECT ON DATABASE afagh_db TO afagh_app;
+-- __AFAGH_DB__ توسط scripts/hardening.mjs از DATABASE_URL پر می‌شود
+-- (پیش از این «afagh_db» هاردکد بود و هر نصبی با نام دیتابیس دیگر در گام سخت‌سازی می‌شکست)
+GRANT CONNECT ON DATABASE "__AFAGH_DB__" TO afagh_app;
 GRANT USAGE ON SCHEMA public TO afagh_app;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO afagh_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO afagh_app;
@@ -352,6 +359,11 @@ CREATE POLICY student_loans_self_read ON "student_loans" FOR SELECT TO afagh_app
 ALTER TABLE "student_cards" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS student_cards_self_read ON "student_cards";
 CREATE POLICY student_cards_self_read ON "student_cards" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "student_term_states" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS student_term_states_self_read ON "student_term_states";
+CREATE POLICY student_term_states_self_read ON "student_term_states" FOR SELECT TO afagh_app
   USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
 
 ALTER TABLE "clearance_checklist" ENABLE ROW LEVEL SECURITY;

@@ -8,7 +8,8 @@ STAMP := $(shell date +%Y-%m-%d_%H-%M)
 
 .DEFAULT_GOAL := help
 .PHONY: help up up-https build build-lowmem rebuild down stop restart logs logs-all ps health \
-        migrate backup restore psql redis-cli shell update fresh clean env swap mem
+        migrate backup verify-backup drill copy-backups-to-host restore restore-dump admin \
+        psql redis-cli shell update fresh clean env check-env swap mem
 
 help: ## نمایش همین راهنما
 	@echo ""
@@ -20,12 +21,21 @@ help: ## نمایش همین راهنما
 env: ## ساخت فایل .env از روی نمونه (در صورت نبود)
 	@test -f .env || (cp .env.prod.example .env && chmod 600 .env && echo "✓ فایل .env ساخته شد — رمزها را عوض کنید")
 	@test -f .env && echo "✓ .env موجود است"
+	@echo "⚠ سه سکرت POSTGRES_PASSWORD / AFAGH_APP_DB_PASSWORD / MINIO_ROOT_PASSWORD را از CHANGE_ME_* به مقادیر تصادفی تغییر دهید"
 
-up: env ## بالا آوردن کل سامانه (بیلد در صورت نیاز)
+# P0-1: fail-fast روی سکرت‌های ناامن پیش از بالا آوردن سامانه.
+# سیاست از یک جای واحد خوانده می‌شود: afagh-next/scripts/lib/secret-policy.mjs
+# (طول حداقل، مقدار نمونه، پیش‌فرض‌های ضعیفِ شناخته‌شده). گیت CI هم همین را می‌زند.
+# توسعهٔ محلی: ALLOW_WEAK_SECRETS=1 make up
+check-env: env ## بررسی سکرت‌های .env (سیاست پروداکشن — fail-fast)
+	@node afagh-next/scripts/lib/secret-policy.mjs --check .env
+
+
+up: check-env ## بالا آوردن کل سامانه (بیلد در صورت نیاز)
 	$(DC) up -d --build
 	@echo "✓ سامانه روی http://localhost:$${APP_PORT:-8080} در حال اجراست"
 
-up-https: env ## اجرا پشت Caddy با HTTPS خودکار (نیازمند DOMAIN در .env)
+up-https: check-env ## اجرا پشت Caddy با HTTPS خودکار (نیازمند DOMAIN در .env)
 	$(DC) $(HTTPS) up -d --build
 
 build: ## فقط ساخت ایمیج‌ها
@@ -69,15 +79,33 @@ health: ## بررسی سلامت سامانه
 migrate: ## اجرای دوبارهٔ مهاجرت دیتابیس (بعد از تغییر schema)
 	$(DC) run --rm migrator
 
-backup: ## پشتیبان‌گیری از PostgreSQL در پوشهٔ backups/
-	@mkdir -p backups
-	$(DC) exec -T postgres pg_dump -U afagh -d afagh_db > backups/afagh_$(STAMP).sql
-	@echo "✓ backups/afagh_$(STAMP).sql"
+backup: ## پشتیبان فشرده + امضای sha256 در volume ماندگار (afagh_backups)
+	$(DC) run --rm --no-deps -e AFAGH_BACKUP_DIR=/backups -e AFAGH_BACKUP_KEEP=$${AFAGH_BACKUP_KEEP:-14} migrator node scripts/backup-db.mjs
+	@echo "✓ پشتیبان در volume afagh_backups — برای بردن به بیرون: make copy-backups-to-host"
 
-restore: ## بازگردانی پشتیبان:  make restore FILE=backups/afagh_....sql
-	@test -n "$(FILE)" || (echo "استفاده: make restore FILE=backups/afagh_....sql"; exit 1)
+verify-backup: ## راستی‌آزمایی آخرین پشتیبان (sha256 + pg_restore --list)
+	$(DC) run --rm --no-deps -e AFAGH_BACKUP_DIR=/backups migrator node scripts/verify-backup.mjs
+
+drill: ## DR drill: بازگردانی پشتیبان در دیتابیس موقت + مقایسهٔ ردیف‌ها و RLS
+	$(DC) run --rm --no-deps -e AFAGH_BACKUP_DIR=/backups migrator node scripts/verify-backup.mjs --restore-db afagh_drill
+
+copy-backups-to-host: ## کپی پشتیبان‌ها از volume به دیسک میزبان (برای NAS/آفلاین)
+	@mkdir -p $${DEST:-backups}
+	@$(DC) run --rm --no-deps migrator sh -c 'cd /backups && tar cf - .' | tar xf - -C $${DEST:-backups}
+	@echo "✓ پشتیبان‌ها در $${DEST:-backups}/ (حداقل یکی را بیرون از سرور نگه دارید)"
+
+restore: ## بازگردانی پشتیبانِ plain SQL:  make restore FILE=backups/afagh_....sql
+	@test -n "$(FILE)" || (echo "استفاده: make restore FILE=backups/afagh_....sql" ; exit 1)
 	cat $(FILE) | $(DC) exec -T postgres psql -U afagh -d afagh_db
-	@echo "✓ بازگردانی انجام شد"
+	@echo "✓ بازگردانی انجام شد — پس از آن make verify-backup و ری‌استارت app را بزنید"
+
+restore-dump: ## بازگردانی پشتیبان فشرده (dump):  make restore-dump FILE=backups/afagh_....dump
+	@test -n "$(FILE)" || (echo "استفاده: make restore-dump FILE=backups/afagh_....dump" ; exit 1)
+	cat $(FILE) | $(DC) exec -T postgres pg_restore -U afagh -d afagh_db --clean --if-exists --no-owner
+	@echo "✓ بازگردانی dump انجام شد"
+
+admin: ## ساخت/چرخش حساب مدیر اولیه (رمز تصادفی + تغییر اجباری در اولین ورود)
+	$(DC) run --rm --no-deps migrator node scripts/create-admin.mjs --show
 
 psql: ## کنسول تعاملی PostgreSQL
 	$(DC) exec postgres psql -U afagh -d afagh_db

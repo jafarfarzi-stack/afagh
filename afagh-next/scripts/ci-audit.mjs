@@ -14,6 +14,11 @@
  *   • خطای endpoint (503/5xx/خروجی نامعتبرِ endpoint) پس از ۳ تلاش → ⚠️ هشدار + exit 0
  *     (عمدی و مستند: دروازهٔ «کد» برقرار است؛ فقط خرابی زیرساختِ رجیستری تحمل می‌شود)
  *   • هر خطای دیگر (خروجی نامعتبر، ناسازگاری نصب، …) → exit 1 (fail-closed)
+ *
+ *  دو سطح (پیشنهاد بازبینی پروداکشن — P1):
+ *   • دروازهٔ PR  : پیش‌فرض همین است — قطعی رجیستری فقط هشدار، تا CI قفل نشود.
+ *   • دروازهٔ انتشار: `AFAGH_REQUIRE_REAL_AUDIT=1` → قطعی رجیستری = شکست.
+ *     پیش از هر برچسب (tag) و پیش از نصب روی سرور دانشگاه این باید سبز باشد.
  * ════════════════════════════════════════════════════════════════════════
  */
 import { execFile } from 'node:child_process';
@@ -64,7 +69,14 @@ for (let attempt = 1; attempt <= 3; attempt++) {
 }
 
 if (!json) {
+  const strict = (process.env.AFAGH_REQUIRE_REAL_AUDIT || '').trim() === '1';
+  if (strict) {
+    console.error('❌ دروازهٔ انتشار (AFAGH_REQUIRE_REAL_AUDIT=1): endpoint ممیزی پس از ۳ تلاش در دسترس نبود.');
+    console.error('   در حالت سخت‌گیر، «نگرفتنه» مجاز نیست — بعد از پایداری رجیستری دوباره اجرا کنید.');
+    process.exit(1);
+  }
   console.warn('⚠️  endpoint ممیزی پس از ۳ تلاش در دسترس نبود — این اجرا نادیده گرفته شد (مستند در ci-audit.mjs).');
+  console.warn('   برای دروازهٔ انتشار:  AFAGH_REQUIRE_REAL_AUDIT=1 node scripts/ci-audit.mjs');
   process.exit(0);
 }
 

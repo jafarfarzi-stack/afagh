@@ -24,3 +24,7 @@ SHA256SUMS.txt
 .env
 backups/
 caddy_data/
+
+# ── تولید خودکار next dev (afagh-next/AGENTS.md و CLAUDE.md) ──
+afagh-next/AGENTS.md
+afagh-next/CLAUDE.md

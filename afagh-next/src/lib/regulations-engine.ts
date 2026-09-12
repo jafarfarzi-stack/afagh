@@ -18,6 +18,8 @@ import {
   DEFAULT_BACHELOR_REGULATION_1403,
   DEFAULT_BACHELOR_REGULATION_1390,
   DEFAULT_MASTER_REGULATION_1403,
+  applyLevelConfig,
+  maghtaGroup,
 } from './regulations-types';
 
 export * from './regulations-types';
@@ -128,7 +130,19 @@ export async function getRegulationConfig(regulationId?: number | null, degreeLe
       if (!reg?.rulesConfig) continue;
       const parsed = JSON.parse(reg.rulesConfig);
       if (parsed && typeof parsed === 'object' && parsed.grading_and_gpa) {
-        return { ...DEFAULT_BACHELOR_REGULATION_1403, ...parsed };
+        const merged: RegulationConfig = { ...DEFAULT_BACHELOR_REGULATION_1403, ...parsed };
+        // تفاوت‌های مقطعی (فقط نیمسال/سنوات) از levels اعمال می‌شود
+        if (merged.levels && degreeLevelId) {
+          try {
+            const [deg] = await db
+              .select({ code: degree_level_configs.code })
+              .from(degree_level_configs)
+              .where(eq(degree_level_configs.id, degreeLevelId))
+              .limit(1);
+            if (deg?.code) return applyLevelConfig(merged, maghtaGroup(deg.code));
+          } catch { /* fallback بدون levels */ }
+        }
+        return merged;
       }
     }
   } catch (err) {
@@ -486,6 +500,8 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
   const config = (await getRegulationConfig(stu.regulationId, stu.degreeLevelId)) || DEFAULT_BACHELOR_REGULATION_1403;
   const policy = config?.grading_and_gpa?.failed_course_gpa_policy ?? 'EXCLUDE_IF_PASSED';
   const passingGrade = config?.grading_and_gpa?.default_passing_grade || 10;
+  const retakeMinGrade = config?.grading_and_gpa?.retakeMinGrade ?? passingGrade;
+  const dedupeRepeated = config?.grading_and_gpa?.dedupeRepeatedCourses === true;
 
   const rows = await db
     .select({
@@ -505,14 +521,26 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .where(and(eq(enrollments.studentId, studentId), eq(enrollments.gradeStatus, 'FINALIZED')));
 
-  // نقشه‌برداری دروس پاس‌شده
+  // نقشه‌برداری دروس پاس‌شده (برای حذف مردودی: حد نصاب قبولی مجدد)
   const passedCourses = new Set<string>();
   for (const r of rows) {
     const g = parseGrade(r.gradeValue);
-    if (g === null) continue; // نمرهٔ خالی/نامعتبر = ثبت‌نشده
-    const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= passingGrade;
+    if (g === null) continue;
+    const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= retakeMinGrade;
     if (passed) {
       passedCourses.add(r.code);
+    }
+  }
+
+  // dedupeRepeatedCourses: برای هر کد درس، فقط بالاترین نمرهٔ FINALIZED نگه داشته می‌شود
+  const bestByCode = new Map<string, (typeof rows)[number]>();
+  if (dedupeRepeated) {
+    for (const r of rows) {
+      const g = parseGrade(r.gradeValue);
+      if (g === null) continue;
+      const cur = bestByCode.get(r.code);
+      const curG = cur ? parseGrade(cur.gradeValue) : null;
+      if (!cur || curG === null || g > curG) bestByCode.set(r.code, r);
     }
   }
 
@@ -526,6 +554,9 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
     const u = parseUnits(r.units);
     const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= passingGrade;
 
+    // dedupeRepeatedCourses فعال: تلاش‌های غیربهترینِ همان درس نه در واحدهای گذرانده و نه در معدل شمرده می‌شوند
+    if (dedupeRepeated && bestByCode.get(r.code) !== r) { excludedCount++; continue; }
+
     if (passed) {
       passedUnits = round2(passedUnits + u);
     }
@@ -536,7 +567,7 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
     }
 
     // اعمال مصوبه حذف نمره مردودی پس از قبولی
-    if (policy === 'EXCLUDE_IF_PASSED' && !passed && passedCourses.has(r.code)) {
+    if ((policy === 'EXCLUDE_IF_PASSED' || policy === 'EXCLUDE_IF_PASSED_1391') && !passed && passedCourses.has(r.code)) {
       excludedCount++;
       continue; // حذف از صورت و مخرج معدل کل
     }

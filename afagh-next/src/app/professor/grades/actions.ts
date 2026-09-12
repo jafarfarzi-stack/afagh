@@ -26,6 +26,8 @@ import {
 import { getStaffByUser, isDemoMode, requireRole } from '@/lib/auth';
 import { sendSms } from '@/lib/messaging';
 import { ensureGradePersistence, resolveStudentRow } from '@/lib/demo-grades-seed';
+import { logGradeChange, logBulkGradeChange } from '@/lib/grade-change-log';
+import { resolveSamaGradeStatusCode } from '@/lib/resolve-sama-code';
 import type { StudentGradeField } from './types';
 import { SCORE_FIELDS } from './grades-core';
 
@@ -140,6 +142,18 @@ export async function saveGradeAction(
           target: [enrollments.studentId, enrollments.offeringId],
           set: { gradeValue, gradeStatus: 'DRAFT' },
         });
+
+      // ثبت تکی در audit log
+      const [enr] = await db.select({ id: enrollments.id }).from(enrollments)
+        .where(and(eq(enrollments.studentId, row.student.id), eq(enrollments.offeringId, payload.offeringId))).limit(1);
+      if (enr) {
+        await logGradeChange({
+          enrollmentId: enr.id, studentId: row.student.id, offeringId: payload.offeringId,
+          action: 'DRAFT', newGradeValue: gradeValue, newGradeStatus: 'DRAFT',
+          actorUserId: user.id, actorRole: 'PROFESSOR',
+        });
+      }
+
       persisted = true;
     }
 
@@ -187,6 +201,9 @@ export async function submitTemporaryAction(
       .update(enrollments)
       .set({ gradeStatus: 'TEMPORARY' })
       .where(eq(enrollments.offeringId, payload.offeringId));
+
+    // ثبت تغییرات در audit log
+    await logBulkGradeChange(payload.offeringId, 'TEMPORARY', user.id, 'PROFESSOR', 'ثبت موقت نمرات توسط استاد');
 
     revalidatePath('/professor/grades');
     return { ok: true, persisted: true };
@@ -276,7 +293,7 @@ export async function finalizeSignedAction(
 
     // 🔒 هش زنجیره‌ای واقعی: از خودِ نمرات ذخیره‌شده (ضد دستکاری)
     const grades = await db
-      .select({ studentId: enrollments.studentId, gradeValue: enrollments.gradeValue, gradeStatus: enrollments.gradeStatus })
+      .select({ id: enrollments.id, studentId: enrollments.studentId, gradeValue: enrollments.gradeValue, gradeStatus: enrollments.gradeStatus })
       .from(enrollments)
       .where(eq(enrollments.offeringId, payload.offeringId))
       .orderBy(enrollments.studentId);
@@ -292,10 +309,30 @@ export async function finalizeSignedAction(
       .update(course_offerings)
       .set({ gradesFinalizedAt: now, gradesHash })
       .where(eq(course_offerings.id, payload.offeringId));
-    await db
-      .update(enrollments)
-      .set({ gradeStatus: 'FINALIZED' })
-      .where(eq(enrollments.offeringId, payload.offeringId));
+
+    // نهایی‌سازی + محاسبه کد وضعیت سما برای هر دانشجو
+    for (const g of grades) {
+      const samaCode = await resolveSamaGradeStatusCode(g.studentId, payload.offeringId, g.gradeValue);
+      await db
+        .update(enrollments)
+        .set({ gradeStatus: 'FINALIZED', samaGradeStatusCode: samaCode })
+        .where(eq(enrollments.id, g.id));
+
+      await logGradeChange({
+        enrollmentId: g.id,
+        studentId: g.studentId,
+        offeringId: payload.offeringId,
+        action: 'FINALIZED',
+        oldGradeValue: g.gradeValue,
+        newGradeValue: g.gradeValue,
+        oldGradeStatus: g.gradeStatus,
+        newGradeStatus: 'FINALIZED',
+        newSamaStatusCode: samaCode,
+        actorUserId: user.id,
+        actorRole: 'PROFESSOR',
+        reason: 'نهایی‌سازی نمرات با OTP',
+      });
+    }
 
     revalidatePath('/professor/grades');
     revalidatePath('/student');
@@ -353,10 +390,24 @@ export async function resolveAppealAction(
     if (payload.decision === 'ACCEPTED') {
       const row = await resolveStudentRow(payload.offeringId, payload.studentCode);
       if (row) {
+        const newGradeStr = String(Number(payload.newGrade.toFixed(2)));
+        const [enr] = await db.select({ id: enrollments.id, gradeValue: enrollments.gradeValue }).from(enrollments)
+          .where(and(eq(enrollments.studentId, row.student.id), eq(enrollments.offeringId, payload.offeringId))).limit(1);
+
         await db
           .update(enrollments)
-          .set({ gradeValue: String(Number(payload.newGrade.toFixed(2))), gradeStatus: 'TEMPORARY' })
+          .set({ gradeValue: newGradeStr, gradeStatus: 'TEMPORARY' })
           .where(and(eq(enrollments.studentId, row.student.id), eq(enrollments.offeringId, payload.offeringId)));
+
+        if (enr) {
+          await logGradeChange({
+            enrollmentId: enr.id, studentId: row.student.id, offeringId: payload.offeringId,
+            action: 'APPEAL', oldGradeValue: enr.gradeValue, newGradeValue: newGradeStr,
+            oldGradeStatus: 'TEMPORARY', newGradeStatus: 'TEMPORARY',
+            reason: `پذیرش اعتراض: ${payload.reply}`,
+            actorRole: 'PROFESSOR',
+          });
+        }
       }
     }
 

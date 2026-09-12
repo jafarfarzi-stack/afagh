@@ -487,40 +487,113 @@ export interface HardConflict {
  *  - ROOM_OVERLAP:       یک سالن در دو کلاس هم‌زمان
  * پیام‌ها از داده ساخته می‌شوند (نه ثابت).
  */
-export function detectHardConflicts(rows: HardConflictEntry[]): HardConflict[] {
+/** سقف پیش‌فرض تعداد تداخل‌های *فهرست‌شده* (شمارش کامل جداگانه برمی‌گردد) */
+export const HARD_CONFLICT_LIST_LIMIT = 500;
+
+export interface HardConflictReport {
+  /** حداکثر `limit` مورد — برای نمایش به کاربر */
+  conflicts: HardConflict[];
+  /** شمار واقعی همهٔ تداخل‌ها (بدون سقف) */
+  total: number;
+  /** آیا فهرست بریده شده است؟ */
+  truncated: boolean;
+}
+
+/**
+ * یافتن قیدهای سختِ برنامهٔ درسی.
+ *
+ * ⚠️ چرا این تابع بازنویسی شد: نسخهٔ قبلی همهٔ جفت‌های ممکن را می‌سنجید
+ * (O(n²)) و برای *هر* جفتِ متداخل یک شیء با پیام متنی می‌ساخت. روی داده‌ای
+ * در مقیاس واقعی (۳۳۰۰ ارائهٔ درس در یک ترم) این کار حافظهٔ Node را تمام
+ * می‌کرد و **کل سرور** — نه فقط این صفحه — با «heap out of memory» می‌مرد.
+ *
+ * حالا:
+ *   • مقایسه فقط درون سطل‌های «روز+سالن» و «روز+استاد» انجام می‌شود (تداخل
+ *     تعریفاً جز در این دو حالت ممکن نیست)، با جاروی خطی روی زمان شروع؛
+ *   • شمارش کامل با شمارندهٔ عددی است (بدون تخصیص حافظه)، ولی فقط `limit`
+ *     مورد نخست به‌صورت شیء ساخته می‌شود.
+ * خروجی از نظر معنا با نسخهٔ قبل یکسان است: همان جفت‌ها، همان نوع‌ها.
+ */
+export function analyzeHardConflicts(
+  rows: HardConflictEntry[],
+  limit: number = HARD_CONFLICT_LIST_LIMIT,
+): HardConflictReport {
   const out: HardConflict[] = [];
+  let total = 0;
+  const push = (c: () => HardConflict) => {
+    total++;
+    if (out.length < limit) out.push(c());
+  };
+
+  // ── ۱) سرریز ظرفیت: مستقل از بقیه، خطی ──
   for (const r of rows) {
     if (r.capacity > 0 && r.enrolledCount > r.capacity) {
-      out.push({
+      push(() => ({
         kind: 'CAPACITY_OVERFLOW',
         offeringIds: [r.offeringId],
         message: `«${r.courseCode}» گروه ${r.groupNumber}: ${r.enrolledCount} ثبت‌نامی در کلاس با ظرفیت ${r.capacity}`,
-      });
+      }));
     }
   }
-  for (let i = 0; i < rows.length; i++) {
-    for (let j = i + 1; j < rows.length; j++) {
-      const a = rows[i], b = rows[j];
-      if (a.dayOfWeek !== b.dayOfWeek) continue;
-      if (!overlaps(a.startMinutes, a.endMinutes, b.startMinutes, b.endMinutes)) continue;
-      const profShared = a.professorIds.some(p => b.professorIds.includes(p));
-      if (profShared) {
-        out.push({
-          kind: 'PROFESSOR_OVERLAP',
-          offeringIds: [a.offeringId, b.offeringId],
-          message: `تداخل استاد: «${a.courseCode}» گروه ${a.groupNumber} با «${b.courseCode}» گروه ${b.groupNumber}`,
-        });
-      }
-      if (a.roomId != null && a.roomId === b.roomId) {
-        out.push({
-          kind: 'ROOM_OVERLAP',
-          offeringIds: [a.offeringId, b.offeringId],
-          message: `تداخل سالن: «${a.courseCode}» گروه ${a.groupNumber} با «${b.courseCode}» گروه ${b.groupNumber}`,
-        });
+
+  // ── ۲) تداخل‌های زمانی، فقط درون سطل‌های هم‌روزِ هم‌سالن / هم‌استاد ──
+  // ترتیب خروجی مثل قبل بر پایهٔ جایگاه ردیف در ورودی است (idx).
+  type Item = { idx: number; r: HardConflictEntry };
+  const buckets = new Map<string, Item[]>();
+  const add = (key: string, it: Item) => {
+    const b = buckets.get(key);
+    if (b) b.push(it); else buckets.set(key, [it]);
+  };
+  rows.forEach((r, idx) => {
+    if (r.roomId != null) add(`R|${r.dayOfWeek}|${r.roomId}`, { idx, r });
+    for (const p of r.professorIds) add(`P|${r.dayOfWeek}|${p}`, { idx, r });
+  });
+
+  // برای اینکه یک جفتِ «هم‌استادِ چنداستادی» دوبار شمرده نشود
+  const seenProfPair = new Set<number>();
+  const pairKey = (i: number, j: number) => (i < j ? i * 1e7 + j : j * 1e7 + i);
+
+  for (const [key, items] of buckets) {
+    if (items.length < 2) continue;
+    const isRoom = key.charCodeAt(0) === 82; // 'R'
+    items.sort((a, b) => a.r.startMinutes - b.r.startMinutes || a.idx - b.idx);
+    for (let i = 0; i < items.length; i++) {
+      const a = items[i];
+      for (let j = i + 1; j < items.length; j++) {
+        const b = items[j];
+        // مرتب‌شده بر اساس شروع: از اولین ردیفی که دیرتر از پایان a شروع شود، بقیه هم متداخل نیستند
+        if (b.r.startMinutes >= a.r.endMinutes) break;
+        if (!overlaps(a.r.startMinutes, a.r.endMinutes, b.r.startMinutes, b.r.endMinutes)) continue;
+        const [x, y] = a.idx < b.idx ? [a, b] : [b, a];
+        if (isRoom) {
+          push(() => ({
+            kind: 'ROOM_OVERLAP',
+            offeringIds: [x.r.offeringId, y.r.offeringId],
+            message: `تداخل سالن: «${x.r.courseCode}» گروه ${x.r.groupNumber} با «${y.r.courseCode}» گروه ${y.r.groupNumber}`,
+          }));
+        } else {
+          const k = pairKey(x.idx, y.idx);
+          if (seenProfPair.has(k)) continue;
+          seenProfPair.add(k);
+          push(() => ({
+            kind: 'PROFESSOR_OVERLAP',
+            offeringIds: [x.r.offeringId, y.r.offeringId],
+            message: `تداخل استاد: «${x.r.courseCode}» گروه ${x.r.groupNumber} با «${y.r.courseCode}» گروه ${y.r.groupNumber}`,
+          }));
+        }
       }
     }
   }
-  return out;
+
+  return { conflicts: out, total, truncated: total > out.length };
+}
+
+/** نسخهٔ سازگار با کد قبلی — فهرستِ سقف‌دار (برای شمار دقیق از analyzeHardConflicts استفاده کنید) */
+export function detectHardConflicts(
+  rows: HardConflictEntry[],
+  limit: number = HARD_CONFLICT_LIST_LIMIT,
+): HardConflict[] {
+  return analyzeHardConflicts(rows, limit).conflicts;
 }
 
 // ─────────────────────────── تاریخ جلسات ───────────────────────────

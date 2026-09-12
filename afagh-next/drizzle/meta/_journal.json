@@ -36,6 +36,76 @@
       "when": 1788570000000,
       "tag": "0004_realism",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788573600000,
+      "tag": "0005_multitenant_samin",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788580800000,
+      "tag": "0006_align_missing_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788584400000,
+      "tag": "0007_staff_missing_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788588000000,
+      "tag": "0008_student_sama_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788591600000,
+      "tag": "0009_degree_term_count",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788595200000,
+      "tag": "0010_role_unit_targets",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788598800000,
+      "tag": "0011_student_term_states",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788602400000,
+      "tag": "0012_curriculum_created_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788606000000,
+      "tag": "0013_remove_student_userId_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788609600000,
+      "tag": "0014_curriculum_course_grade_status_codes",
+      "breakpoints": true
     }
   ]
 }

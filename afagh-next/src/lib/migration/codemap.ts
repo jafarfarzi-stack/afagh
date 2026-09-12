@@ -271,3 +271,72 @@ export async function mappingStats(sourceCode: string): Promise<{ domain: MapDom
     };
   });
 }
+
+// ═══════════════════════════════════════════════════════════════════
+//  جایگزینی کد قدیمی با کد جدید در لحظهٔ انتقال (Code Rewrite)
+//
+//  سناریوی واقعی: کد درس/رشته/گروه در سیستم قدیمی «۱۲۳۴» است ولی دانشگاه
+//  می‌خواهد در سامانهٔ جدید «CE-101» ثبت شود. تا امروز میز «تطبیق کدها» فقط
+//  برای *پیدا کردن* رکورد متناظر استفاده می‌شد؛ حالا اگر ستون «کد جدید»
+//  (targetCode) پر و ردیف CONFIRMED باشد، همان کد جدید نوشته می‌شود و کد
+//  قدیمی صرفاً به‌عنوان ردِ حسابرسی در legacy_code_maps می‌ماند.
+// ═══════════════════════════════════════════════════════════════════
+
+export type CodeRewriter = {
+  /** کد نهاییِ ثبت در سامانهٔ جدید (اگر نگاشت تأییدشده نبود، همان کد قدیمی) */
+  apply: (legacyCode: string) => string;
+  /** آیا برای این کد جایگزینی انجام شد؟ */
+  changed: (legacyCode: string) => boolean;
+  /** فهرست جایگزینی‌های به‌کاررفته — برای نمایش در گزارش انتقال */
+  used: () => { from: string; to: string }[];
+  /** تعداد نگاشت‌های در دسترس در این دامنه */
+  size: number;
+};
+
+/**
+ * سازندهٔ جایگزین‌کنندهٔ کد برای یک دامنه.
+ *
+ * فقط ردیف‌های CONFIRMED با targetCodeِ ناتهی اعمال می‌شوند تا پیشنهادهای
+ * خودکارِ تأییدنشده هرگز کد واقعی داده را عوض نکنند.
+ */
+export async function codeRewriterFor(sourceCode: string, domain: MapDomain): Promise<CodeRewriter> {
+  const rows = await db.select({
+    legacyCode: legacy_code_maps.legacyCode,
+    targetCode: legacy_code_maps.targetCode,
+  }).from(legacy_code_maps).where(and(
+    eq(legacy_code_maps.sourceCode, sourceCode),
+    eq(legacy_code_maps.domain, domain),
+    eq(legacy_code_maps.status, 'CONFIRMED'),
+  ));
+
+  const map = new Map<string, string>();
+  for (const r of rows) {
+    const to = (r.targetCode ?? '').trim();
+    if (!to) continue;                       // نگاشت بدون «کد جدید» = فقط تطبیق، نه جایگزینی
+    const from = norm(r.legacyCode);
+    if (!from || from === norm(to)) continue; // جایگزینی بی‌اثر
+    map.set(from, to);
+  }
+
+  const hits = new Map<string, string>();
+  return {
+    size: map.size,
+    apply(legacyCode: string) {
+      const to = map.get(norm(legacyCode));
+      if (!to) return legacyCode;
+      hits.set(legacyCode, to);
+      return to;
+    },
+    changed(legacyCode: string) {
+      return map.has(norm(legacyCode));
+    },
+    used() {
+      return [...hits.entries()].map(([from, to]) => ({ from, to }));
+    },
+  };
+}
+
+/** جایگزین‌کنندهٔ خنثی — وقتی کاربر گزینهٔ «جایگزینی کدها» را خاموش کرده است */
+export function noopRewriter(): CodeRewriter {
+  return { apply: c => c, changed: () => false, used: () => [], size: 0 };
+}

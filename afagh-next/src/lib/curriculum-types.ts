@@ -259,7 +259,7 @@ export interface CurriculumCourse {
   isRequired: number;                // 0/1
   isElective: number;                // 0/1
   isGraduationRequired: number;      // 0/1 — شرط الزامی فارغ‌التحصیلی
-  recommendedSemester: number | null; // ۱..۸ (NULL = آزاد/نامشخص)
+  recommendedSemester: number | null; // ۱..۸ + ۹=تابستان (NULL = آزاد/نامشخص)
   minGrade: number | null;           // کف قبولیِ خاص این درس در این نسخه
   autoCorequisiteAllowed: number;    // 0/1 — «هم‌نیاز خودکار در ترم آخر» (از آیین‌نامه)
 }

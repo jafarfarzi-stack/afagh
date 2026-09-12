@@ -361,6 +361,12 @@ export default function EnrollClient(props: {
       setMsg('سرعت درخواست‌ها بیش از حد مجاز است — چند لحظه صبر کنید (سپر نرخ).');
       return;
     }
+    // اتاق انتظار در دسترس نبود و ثبت مستقیم انجام شد → همین نتیجه را نشان بده
+    if (res.direct && res.result) {
+      setResult(res.result);
+      router.refresh();
+      return;
+    }
     if (!res.queued) {
       setMsg('ورود به صف ناموفق بود.');
       return;
@@ -378,6 +384,7 @@ export default function EnrollClient(props: {
     setBusy(false);
     setSubmittingRisk(false);
     if (res.limited) { setMsg('سرعت درخواست‌ها بیش از حد مجاز است — چند لحظه صبر کنید (سپر نرخ).'); return; }
+    if (res.direct && res.result) { setResult(res.result); router.refresh(); return; }
     if (!res.queued) { setMsg('ورود به صف ناموفق بود.'); return; }
     setQueuePos(res.position);
   }

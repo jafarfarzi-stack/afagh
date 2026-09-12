@@ -1,7 +1,7 @@
 // ثابت‌های مشترک تنظیمات — قابل استفاده در کامپوننت‌های کلاینت (بدون وابستگی سروری)
 export const SECRET_MASK = '••••••••';
 
-export type SettingType = 'text' | 'url' | 'number' | 'boolean' | 'secret';
+export type SettingType = 'text' | 'url' | 'number' | 'boolean' | 'secret' | 'image';
 export type SettingSource = 'db' | 'env' | 'default';
 
 export interface SettingView {
