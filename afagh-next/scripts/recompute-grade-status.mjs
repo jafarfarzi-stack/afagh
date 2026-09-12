@@ -28,9 +28,26 @@ const dbUrl = args.db || process.env.DATABASE_URL || 'postgres://afagh:81tZELgWW
 const pool = new Pool({ connectionString: dbUrl, max: 5 });
 const q = async (text, params) => (await pool.query(text, params)).rows;
 
-// ── computeGradeStatus (نسخه JS تابع grade-utils.ts) ──
-function computeGradeStatus(value) {
-  if (value == null || isNaN(value)) return 'PENDING';
+// ── بارگذاری کد وضع نمره از codemap ──
+async function loadGradeStatusMap() {
+  const rows = await q(`SELECT code, label FROM codemaps WHERE category = 'GRADE_STATUS'`);
+  const map = new Map();
+  for (const r of rows) map.set(String(r.code), String(r.label));
+  return map;
+}
+
+// ── تعیین وضعیت نمره از دیتای خام سما (markStat) ──
+function statusFromMarkStat(markStat, gsMap) {
+  const code = String(markStat ?? '').trim();
+  if (!code) return 'PENDING';
+  const label = gsMap.get(code) || code;
+  const l = label.toLowerCase();
+  const c = code.toLowerCase();
+  // کدهای PENDING / موقت / در انتظار
+  if (l.includes('موقت') || l.includes('pending') || l.includes('انتظار') ||
+      l.includes('آزمایشی') || l.includes('provisional') || l.includes('تایید نشده') ||
+      c === '0' || c === 'mo't') return 'PENDING';
+  // بقیه همه FINALIZED
   return 'FINALIZED';
 }
 
@@ -70,23 +87,55 @@ async function main() {
   console.log(`  حالت: ${DRY ? 'پیش‌نمایش (DRY)' : COMMIT ? 'اجرا (COMMIT)' : VERIFY_ONLY ? 'فقط مقایسه' : 'پیش‌نمایش'}`);
   console.log('═══════════════════════════════════════════════════════');
 
-  // ── ۱. بازمحاسبه gradeStatus در legacy_grades ──
-  console.log('\n── مرحله ۱: بازمحاسبه gradeStatus در legacy_grades ──');
+  // ── ۱. بازمحاسبه gradeStatus در legacy_grades (از دیتای خام سما) ──
+  console.log('\n── مرحله ۱: بازمحاسبه gradeStatus در legacy_grades (از raw SAMA) ──');
+  const gsMap = await loadGradeStatusMap();
+  console.log(`  کدهای وضع نمره: ${gsMap.size} مورد`);
+  for (const [k, v] of gsMap) console.log(`    ${k} → ${v}`);
+
+  // نمایش توزیع markStat در دیتای خام
+  const markStatDist = await q(`
+    SELECT (lg.raw::jsonb)->>'markStat' as mark_stat, COUNT(*) as cnt
+    FROM legacy_grades lg
+    WHERE lg.raw IS NOT NULL AND pg_input_is_valid(lg.raw, 'jsonb')
+    GROUP BY 1 ORDER BY 2 DESC LIMIT 20
+  `);
+  console.log('  توزیع markStat در raw:');
+  for (const r of markStatDist) {
+    const label = gsMap.get(String(r.mark_stat)) || '?';
+    console.log(`    ${r.mark_stat} (${label}): ${r.cnt}`);
+  }
+
   const legacyRows = await q(`
-    SELECT lg.id, lg."gradeValue", lg."gradeStatus" as old_status, lg."studentCode"
+    SELECT lg.id, lg."gradeValue", lg."gradeStatus" as old_status, lg."studentCode",
+           lg.raw
     FROM legacy_grades lg
   `);
   let legacyChanged = 0;
   const legacyBatch = [];
+  let legacyNoRaw = 0;
   for (const r of legacyRows) {
-    const val = r.gradeValue != null ? Number(r.gradeValue) : null;
-    const newStatus = computeGradeStatus(val);
+    let newStatus;
+    if (r.raw) {
+      try {
+        const rawObj = typeof r.raw === 'string' ? JSON.parse(r.raw) : r.raw;
+        newStatus = statusFromMarkStat(rawObj.markStat, gsMap);
+      } catch {
+        // raw خراب → از مقدار عددی
+        const val = r.gradeValue != null ? Number(r.gradeValue) : null;
+        newStatus = val != null && !isNaN(val) ? 'FINALIZED' : 'PENDING';
+      }
+    } else {
+      legacyNoRaw++;
+      const val = r.gradeValue != null ? Number(r.gradeValue) : null;
+      newStatus = val != null && !isNaN(val) ? 'FINALIZED' : 'PENDING';
+    }
     if (newStatus !== r.old_status) {
       legacyChanged++;
       legacyBatch.push({ id: r.id, old: r.old_status, new: newStatus });
     }
   }
-  console.log(`  legacy_grades: ${legacyRows.length} ردیف بررسی شد — ${legacyChanged} تغییر`);
+  console.log(`  legacy_grades: ${legacyRows.length} ردیف بررسی شد — ${legacyChanged} تغییر (بدون raw: ${legacyNoRaw})`);
 
   if (legacyBatch.length > 0) {
     console.log('  نمونه تغییرات:');
@@ -109,24 +158,40 @@ async function main() {
     console.log(`  ✅ ${legacyChanged} ردیف legacy_grades به‌روزرسانی شد`);
   }
 
-  // ── ۲. بازمحاسبه gradeStatus در enrollments ──
-  console.log('\n── مرحله ۲: بازمحاسبه gradeStatus در enrollments ──');
+  // ── ۲. بازمحاسبه gradeStatus در enrollments (از raw SAMA از طریق legacy_grades) ──
+  console.log('\n── مرحله ۲: بازمحاسبه gradeStatus در enrollments (از raw SAMA) ──');
   const enrollRows = await q(`
-    SELECT e.id, e."gradeValue", e."gradeStatus" as old_status
+    SELECT e.id, e."gradeValue", e."gradeStatus" as old_status,
+           lg.raw, lg."studentCode", lg."termCode", lg."courseCode"
     FROM enrollments e
+    LEFT JOIN legacy_grades lg ON lg."studentCode" = e."studentCode"
+      AND lg."termCode" = e."termCode" AND lg."courseCode" = e."courseCode"
     WHERE e."gradeStatus" IS NOT NULL
   `);
   let enrollChanged = 0;
   const enrollBatch = [];
+  let enrollNoRaw = 0;
   for (const r of enrollRows) {
-    const val = r.gradeValue != null ? Number(r.gradeValue) : null;
-    const newStatus = computeGradeStatus(val);
+    let newStatus;
+    if (r.raw) {
+      try {
+        const rawObj = typeof r.raw === 'string' ? JSON.parse(r.raw) : r.raw;
+        newStatus = statusFromMarkStat(rawObj.markStat, gsMap);
+      } catch {
+        const val = r.gradeValue != null ? Number(r.gradeValue) : null;
+        newStatus = val != null && !isNaN(val) ? 'FINALIZED' : 'PENDING';
+      }
+    } else {
+      enrollNoRaw++;
+      const val = r.gradeValue != null ? Number(r.gradeValue) : null;
+      newStatus = val != null && !isNaN(val) ? 'FINALIZED' : 'PENDING';
+    }
     if (newStatus !== r.old_status) {
       enrollChanged++;
       enrollBatch.push({ id: r.id, old: r.old_status, new: newStatus });
     }
   }
-  console.log(`  enrollments: ${enrollRows.length} ردیف بررسی شد — ${enrollChanged} تغییر`);
+  console.log(`  enrollments: ${enrollRows.length} ردیف بررسی شد — ${enrollChanged} تغییر (بدون raw: ${enrollNoRaw})`);
 
   if (!DRY && !VERIFY_ONLY && enrollChanged > 0) {
     for (let i = 0; i < enrollBatch.length; i += 500) {
@@ -142,34 +207,40 @@ async function main() {
     console.log(`  ✅ ${enrollChanged} ردیف enrollments به‌روزرسانی شد`);
   }
 
-  // ── ۳. راستی‌آزمایی: مقایسه وضع نمره خام سما با محاسبه سیستم ──
-  console.log('\n── مرحله ۳: راستی‌آزمایی — مقایسه وضع نمره سما با سیستم ──');
-  // ستون raw از نوع text است، نه jsonb — قبل از ->> باید cast شود؛ چون بعضی
-  // ردیف‌های قدیمی ممکن است JSON معتبر نباشند، با pg_input_is_valid (PG16+)
-  // فقط ردیف‌هایی که واقعاً JSON سالم دارند بازیابی می‌شوند، بدون کرش کل کوئری.
+  // ── ۳. راستی‌آزمایی: مقایسه وضع نمره فعلی با محاسبه‌شده از raw ──
+  console.log('\n── مرحله ۳: راستی‌آزمایی — مقایسه وضعیت فعلی vs محاسبه از raw ──');
   const verifyRows = await q(`
     SELECT lg."studentCode", lg."termCode", lg."courseCode",
-           lg."gradeValue", lg."gradeStatus" as file_status,
-           (lg.raw::jsonb)->>'markStat' as raw_mark_stat
+           lg."gradeValue", lg."gradeStatus" as current_status,
+           lg.raw
     FROM legacy_grades lg
     WHERE lg.raw IS NOT NULL
-      AND pg_input_is_valid(lg.raw, 'jsonb')
-      AND (lg.raw::jsonb)->>'markStat' IS NOT NULL
     LIMIT 5000
   `);
   let verifyMatch = 0, verifyDiff = 0;
   const diffs = [];
   for (const r of verifyRows) {
-    const val = r.gradeValue != null ? Number(r.gradeValue) : null;
-    const systemStatus = computeGradeStatus(val);
-    if (systemStatus === r.file_status) verifyMatch++;
+    let computedStatus;
+    try {
+      const rawObj = typeof r.raw === 'string' ? JSON.parse(r.raw) : r.raw;
+      computedStatus = statusFromMarkStat(rawObj.markStat, gsMap);
+    } catch {
+      const val = r.gradeValue != null ? Number(r.gradeValue) : null;
+      computedStatus = val != null && !isNaN(val) ? 'FINALIZED' : 'PENDING';
+    }
+    if (computedStatus === r.current_status) verifyMatch++;
     else {
       verifyDiff++;
       if (diffs.length < 20) {
+        let markStat = null;
+        try {
+          const rawObj = typeof r.raw === 'string' ? JSON.parse(r.raw) : r.raw;
+          markStat = rawObj.markStat;
+        } catch {}
         diffs.push({
           stno: r.studentCode, term: r.termCode, course: r.courseCode,
-          grade: r.gradeValue, markStat: r.raw_mark_stat,
-          file: r.file_status, system: systemStatus,
+          grade: r.gradeValue, markStat,
+          current: r.current_status, computed: computedStatus,
         });
       }
     }
@@ -178,7 +249,7 @@ async function main() {
   if (diffs.length > 0) {
     console.log('  نمونه اختلافات:');
     for (const d of diffs) {
-      console.log(`    ${d.stno}|${d.term}|${d.course}: نمره=${d.grade} markStat=${d.markStat} — فایل=${d.file} سیستم=${d.system}`);
+      console.log(`    ${d.stno}|${d.term}|${d.course}: نمره=${d.grade} markStat=${d.markStat} — فعلی=${d.current} محاسبه=${d.computed}`);
     }
   }
 
