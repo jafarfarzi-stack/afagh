@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { getTranscript, getTranscriptRegulation, setStudentRegulationAction, type TranscriptRow } from './actions';
+import { getTranscript, getTranscriptRegulation, resetUserPasswordAction, setStudentRegulationAction, setUserActiveAction, type TranscriptRow } from './actions';
 import type { RegulationConfig } from '@/lib/regulations-engine';
 import { ClientTh, ServerTh, useClientTable, type ColumnDef } from '@/components/DataTable';
 import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, studentStatusChip, studentStatusFa} from '@/lib/student-labels';
@@ -76,6 +76,30 @@ export default function StudentsManagerClient(props: {
   const [auditLogModalOpen, setAuditLogModalOpen] = useState(false);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [auditLogsLoading, setAuditLogsLoading] = useState(false);
+
+  // ── مدیریت حساب وب کاربر (فعال/غیرفعال + تغییر رمز — فقط ADMIN) ──
+  const [pwModalFor, setPwModalFor] = useState<{ userId: number; name: string } | null>(null);
+  const [pwInput, setPwInput] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
+  const handleToggleActive = async (userId: number | null | undefined, next: boolean, name: string) => {
+    if (!userId) { showToast('شناسه کاربری این پرونده یافت نشد.'); return; }
+    if (!confirm(`دسترسی وب «${name}» ${next ? 'فعال' : 'غیرفعال'} شود؟`)) return;
+    const r = await setUserActiveAction(userId, next).catch(() => ({ ok: false, error: 'خطا در ارتباط با سرور.' }));
+    showToast(r.ok ? (next ? '✅ دسترسی وب فعال شد.' : '⛔ دسترسی وب غیرفعال شد.') : (r.error || 'انجام نشد.'));
+    if (r.ok) router.refresh();
+  };
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pwModalFor) return;
+    setPwSaving(true);
+    try {
+      const r = await resetUserPasswordAction(pwModalFor.userId, pwInput);
+      showToast(r.ok ? `✅ رمز «${pwModalFor.name}» تغییر کرد (در اولین ورود باید عوض شود).` : (r.error || 'انجام نشد.'));
+      if (r.ok) { setPwModalFor(null); setPwInput(''); router.refresh(); }
+    } finally {
+      setPwSaving(false);
+    }
+  };
 
   const openEditGrade = (row: TranscriptRow) => {
     setGradeEditTarget(row);
@@ -349,15 +373,20 @@ export default function StudentsManagerClient(props: {
                     <input type="text" defaultValue={currentStudent.fatherName || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded" />
                     <div className="flex items-center gap-1">
                       <span>جنس:</span>
-                      <select className="bg-white border border-slate-300 px-1 py-1 rounded">
-                        <option>مرد</option>
-                        <option>زن</option>
+                      <select
+                        key={`gender-${currentStudent.id}`}
+                        defaultValue={currentStudent.gender === 'FEMALE' ? 'زن' : currentStudent.gender === 'MALE' ? 'مرد' : ''}
+                        className="bg-white border border-slate-300 px-1 py-1 rounded"
+                      >
+                        <option value="">—</option>
+                        <option value="مرد">مرد</option>
+                        <option value="زن">زن</option>
                       </select>
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-red-700 font-bold">* تاریخ تولد:</span>
-                    <input type="text" defaultValue={currentStudent.birthDate || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
+                    <input type="text" defaultValue={dateToJalali(currentStudent.birthDate)} className="bg-white border border-slate-300 px-2 py-1 rounded font-mono" title={currentStudent.birthDate ? `میلادی: ${currentStudent.birthDate}` : undefined} />
                     <div className="flex items-center gap-1">
                       <span>ش. شناسنامه:</span>
                       <input type="text" defaultValue={currentStudent.birthCertNo || '—'} className="bg-white border border-slate-300 px-1 py-1 rounded font-mono w-full" />
@@ -437,7 +466,7 @@ export default function StudentsManagerClient(props: {
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>شماره همراه:</span>
-                    <input type="text" defaultValue={currentStudent.mobile || '۰۹۳۳۱۰۱۰۱۰۱'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
+                    <input type="text" defaultValue={currentStudent.mobile && currentStudent.mobile !== '—' ? currentStudent.mobile : ''} placeholder="—" className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>آیین‌نامه ملاک:</span>
@@ -459,6 +488,29 @@ export default function StudentsManagerClient(props: {
                           <option key={r.id} value={r.id}>{r.title}</option>
                         ))}
                       </select>
+                    </div>
+                  </div>
+                  {/* ── حساب وب دانشجو: فعال/غیرفعال + تغییر رمز (فقط ADMIN) ── */}
+                  <div className="grid grid-cols-3 gap-2 items-center border-t border-slate-200 pt-2 mt-2">
+                    <span className="font-bold">🔐 حساب وب:</span>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full text-center ${currentStudent.isActive === 0 ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                      {currentStudent.isActive === 0 ? '⛔ غیرفعال' : '✅ فعال'}
+                    </span>
+                    <div className="flex gap-1.5 justify-end">
+                      <button
+                        onClick={() => handleToggleActive(currentStudent.userId, currentStudent.isActive === 0, `${currentStudent.firstName} ${currentStudent.lastName}`)}
+                        className={`px-2.5 py-1 rounded text-[11px] font-bold border ${currentStudent.isActive === 0 ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100'}`}
+                        title="فعال/غیرفعال‌سازی ورود به وب (فقط مدیر سیستم)"
+                      >
+                        {currentStudent.isActive === 0 ? 'فعال‌سازی وب' : 'غیرفعال‌سازی وب'}
+                      </button>
+                      <button
+                        onClick={() => { setPwModalFor({ userId: currentStudent.userId ?? 0, name: `${currentStudent.firstName} ${currentStudent.lastName}` }); setPwInput(''); }}
+                        className="px-2.5 py-1 rounded text-[11px] font-bold bg-slate-700 text-white hover:bg-slate-800"
+                        title="تغییر رمز عبور دانشجو (فقط مدیر سیستم)"
+                      >
+                        🔑 تغییر رمز
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1192,6 +1244,29 @@ export default function StudentsManagerClient(props: {
                     <span>آدرس محل سکونت:</span>
                     <input type="text" defaultValue={currentStaff.address || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
                   </div>
+                  {/* ── حساب وب استاد: فعال/غیرفعال + تغییر رمز (فقط ADMIN) ── */}
+                  <div className="grid grid-cols-3 gap-2 items-center border-t border-slate-200 pt-2 mt-1">
+                    <span className="font-bold">🔐 حساب وب:</span>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full text-center ${(currentStaff.userIsActive ?? 1) === 0 ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                      {(currentStaff.userIsActive ?? 1) === 0 ? '⛔ غیرفعال' : '✅ فعال'}
+                    </span>
+                    <div className="flex gap-1.5 justify-end">
+                      <button
+                        onClick={() => handleToggleActive(currentStaff.userId, (currentStaff.userIsActive ?? 1) === 0, `${currentStaff.firstName} ${currentStaff.lastName}`)}
+                        className="px-2 py-1 rounded text-[11px] font-bold bg-white border border-slate-300 hover:bg-slate-100"
+                        title="فعال/غیرفعال‌سازی ورود به وب (فقط مدیر سیستم)"
+                      >
+                        {(currentStaff.userIsActive ?? 1) === 0 ? 'فعال‌سازی وب' : 'غیرفعال‌سازی وب'}
+                      </button>
+                      <button
+                        onClick={() => { setPwModalFor({ userId: currentStaff.userId ?? 0, name: `${currentStaff.firstName} ${currentStaff.lastName}` }); setPwInput(''); }}
+                        className="px-2 py-1 rounded text-[11px] font-bold bg-slate-700 text-white hover:bg-slate-800"
+                        title="تغییر رمز عبور استاد (فقط مدیر سیستم)"
+                      >
+                        🔑 تغییر رمز
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1595,6 +1670,38 @@ export default function StudentsManagerClient(props: {
                 بستن
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── مودال تغییر رمز کاربر (فقط ADMIN) ── */}
+      {pwModalFor && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-slate-800 text-white px-5 py-3.5 flex items-center justify-between">
+              <h3 className="font-extrabold text-sm">🔑 تغییر رمز «{pwModalFor.name}»</h3>
+              <button type="button" onClick={() => setPwModalFor(null)} className="text-slate-300 hover:text-white text-lg leading-none">✕</button>
+            </div>
+            <form onSubmit={handleResetPassword} className="p-5 space-y-3 text-xs">
+              <p className="text-slate-600">رمز جدید را وارد کنید (۴ تا ۶۴ کاراکتر). کاربر در اولین ورود ملزم به تغییر رمز می‌شود.</p>
+              <input
+                type="text"
+                required
+                minLength={4}
+                maxLength={64}
+                dir="ltr"
+                placeholder="رمز جدید"
+                value={pwInput}
+                onChange={e => setPwInput(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-slate-500 focus:outline-hidden"
+              />
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                <button type="button" onClick={() => setPwModalFor(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
+                <button type="submit" disabled={pwSaving} className="px-5 py-2 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-400 text-white font-bold rounded-lg">
+                  {pwSaving ? 'در حال ثبت…' : '💾 ثبت رمز جدید'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

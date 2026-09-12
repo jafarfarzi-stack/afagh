@@ -606,21 +606,34 @@ async function phaseStudents(files, lookups) {
     // NOTE: we no longer dedup by nationalCode — a student can have multiple stnos (kardani → karshenasi)
     // User dedup is handled by ON CONFLICT ("nationalCode") DO NOTHING; student dedup by ON CONFLICT ("studentCode") DO NOTHING
     const sex = (c[3] || '').trim();
-    const mobile = (s[35] || '').replace(/\D/g, '');
+    // موبایل: MobileNO(35) بعد CurrentTell(16) بعد TempTellNo(34) — فقط ۰۹xxxxxxxxx معتبر
+    const normMob = (v) => {
+      let d = String(v || '').replace(/\D/g, '');
+      if (/^989\d{9}$/.test(d)) d = '0' + d.slice(3);
+      else if (/^9\d{9}$/.test(d)) d = '0' + d;
+      return /^\d{10,11}$/.test(d) ? d : null;
+    };
+    const mobile = normMob(s[35]) || normMob(s[16]) || normMob(s[34]) || normMob(c[18]) || null;
     const email = (s[13] || '').trim();
     const post = (s[11] || '').replace(/\D/g, '').slice(0, 10);
     const nat = (c[51] || '').trim();
     const isIr = (c[70] || '').trim();
+    // MS(54): محل صدور/تولد در فایل سما (تک‌ستونه، هر دو را پر می‌کند تا پنل «—» نشان ندهد)
+    const msPlace = normTxt(c[54]).slice(0, 150) || null;
     userRows.push({
       stno, nationalCode,
       firstName, lastName,
-      mobile: /^\d{10,11}$/.test(mobile) ? mobile : null,
+      mobile,
       email: email.includes('@') ? email.slice(0, 150) : null,
       birthCertNo: (c[12] || '').trim().slice(0, 20) || null,
       birthDate: faDate((c[19] || '').trim()),
       fatherName: normTxt(c[10]).slice(0, 100) || null,
-      gender: sex === '1' ? 'MALE' : sex === '2' ? 'FEMALE' : null,
-      address: (normTxt(c[28]) || normTxt(s[8])).slice(0, 300) || null,
+      // SEX سما (دانشجو هم مثل استاد): 1=زن، 2=مرد — باگ قبلی معکوس بود
+      // (شاهد: SEX=2 «قربان قليلو-امين» مذکر، SEX=1 «اکبري-ليلا» مونث)
+      gender: sex === '1' ? 'FEMALE' : sex === '2' ? 'MALE' : null,
+      address: (normTxt(c[28]) || normTxt(s[8]) || normTxt(s[33])).slice(0, 300) || null,
+      placeOfBirth: msPlace,
+      placeOfIssue: msPlace,
       firstNameEn: ((c[91] || '').trim() || (c[57] || '').trim()).slice(0, 100) || null,
       lastNameEn: (c[92] || '').trim().slice(0, 100) || null,
       nationality: (nat === '1' || isIr === '1') ? '120001' : null,
@@ -674,14 +687,14 @@ async function phaseStudents(files, lookups) {
     const ch = userRowsUnique.slice(i, i + 500);
     const vals = [];
     const ph = ch.map((r, j) => {
-      const o = j * 18;
+      const o = j * 20;
       vals.push(r.nationalCode, r.firstName, r.lastName, r.mobile, r.email, r.birthCertNo, r.birthDate,
         r.fatherName, r.gender, r.address, r.firstNameEn, r.lastNameEn, r.nationality, r.religion,
-        r.postalCode, r.passportNumber, r.isAlive, 'MIGRATED:' + randomBytes(8).toString('hex'));
-      return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7},$${o + 8},$${o + 9},$${o + 10},$${o + 11},$${o + 12},$${o + 13},$${o + 14},$${o + 15},$${o + 16},$${o + 17},$${o + 18},1,1)`;
+        r.postalCode, r.passportNumber, r.isAlive, r.placeOfBirth, r.placeOfIssue, 'MIGRATED:' + randomBytes(8).toString('hex'));
+      return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7},$${o + 8},$${o + 9},$${o + 10},$${o + 11},$${o + 12},$${o + 13},$${o + 14},$${o + 15},$${o + 16},$${o + 17},$${o + 18},$${o + 19},$${o + 20},1,1)`;
     }).join(',');
     const res = await pool.query(`INSERT INTO users ("nationalCode","firstName","lastName",mobile,email,"birthCertNo","birthDate",
-        "fatherName",gender,address,"firstNameEn","lastNameEn",nationality,religion,"postalCode","passportNumber","isAlive","passwordHash","isActive","mustChangePassword")
+        "fatherName",gender,address,"firstNameEn","lastNameEn",nationality,religion,"postalCode","passportNumber","isAlive","placeOfBirth","placeOfIssue","passwordHash","isActive","mustChangePassword")
       VALUES ${ph} ON CONFLICT ("nationalCode") DO NOTHING RETURNING id, "nationalCode"`, vals);
     for (const r of res.rows) { ncToId.set(r.nationalCode, r.id); stats.insertedUsers++; if (stats.idMin === null || r.id < stats.idMin) stats.idMin = r.id; if (stats.idMax === null || r.id > stats.idMax) stats.idMax = r.id; }
     if (res.rows.length < ch.length) {

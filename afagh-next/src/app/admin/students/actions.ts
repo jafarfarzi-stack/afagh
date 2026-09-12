@@ -2,9 +2,9 @@
 
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, student_term_states, students } from '@/db/schema';
+import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, student_term_states, students, users } from '@/db/schema';
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { requireRole } from '@/lib/auth';
+import { hashPassword, requireRole } from '@/lib/auth';
 
 /** پیکربندی اجرایی آیین‌نامه ملاک دانشجو برای محاسبات کارنامه */
 export async function getTranscriptRegulation(studentId: number): Promise<{
@@ -199,4 +199,45 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
       termProbation: ts?.probation ?? null,
     };
   });
+}
+
+/** فعال/غیرفعال‌سازی دسترسی وب کاربر (دانشجو / استاد / کاربر) — فقط ADMIN */
+export async function setUserActiveAction(
+  userId: number, active: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireRole(['ADMIN']);
+  } catch {
+    return { ok: false, error: 'فقط مدیر سیستم (ADMIN) اجازه فعال/غیرفعال‌سازی کاربر را دارد.' };
+  }
+  if (!userId) return { ok: false, error: 'کاربر نامعتبر است.' };
+  try {
+    await db.update(users).set({ isActive: active ? 1 : 0 }).where(eq(users.id, userId));
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'ثبت نشد.' };
+  }
+  revalidatePath('/admin/students');
+  return { ok: true };
+}
+
+/** تغییر رمز عبور کاربر توسط مدیر (حداقل ۴ رقم/حرف) — فقط ADMIN */
+export async function resetUserPasswordAction(
+  userId: number, newPassword: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireRole(['ADMIN']);
+  } catch {
+    return { ok: false, error: 'فقط مدیر سیستم (ADMIN) اجازه تغییر رمز کاربران را دارد.' };
+  }
+  const pw = String(newPassword || '').trim();
+  if (!userId) return { ok: false, error: 'کاربر نامعتبر است.' };
+  if (pw.length < 4 || pw.length > 64) return { ok: false, error: 'رمز باید بین ۴ تا ۶۴ کاراکتر باشد.' };
+  try {
+    const passwordHash = await hashPassword(pw);
+    await db.update(users).set({ passwordHash, mustChangePassword: 1 }).where(eq(users.id, userId));
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'ثبت نشد.' };
+  }
+  revalidatePath('/admin/students');
+  return { ok: true };
 }

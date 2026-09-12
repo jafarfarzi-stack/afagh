@@ -150,16 +150,26 @@ const EMP_MAP = { '1': 'رسمی', '2': 'پیمانی', '3': 'حق التدری�
 const synthNC = (code) => ('9' + String(code).replace(/\D/g, '').padStart(9, '0')).slice(-10);
 
 // نام «خانوادگی-نام» → [family, name]
+/// اولویت با Title فارسی است؛ ستون‌های EnglishFirst/LastName فقط برای
+/// فیلدهای firstNameEn/lastNameEn هستند و هرگز نباید جای نام فارسی بنشینند.
+/// (باگ قبلی: اگر انگلیسی پر بود، Title فارسی نادیده گرفته می‌شد و نام
+///  اساتید انگلیسی در پنل می‌افتاد.)
 function splitTitle(t, c79, c80) {
-  let family = norm(c80) || null, first = norm(c79) || null;
   const parts = norm(t).split('-').map(s => s.trim()).filter(Boolean);
-  if (parts.length >= 2 && (!family || !first)) {
-    family = family || parts[0];
-    first = first || parts.slice(1).join(' ');
-  } else if (parts.length === 1 && !family && !first) {
+  let family = null, first = null;
+  if (parts.length >= 2) {
+    family = parts[0];
+    first = parts.slice(1).join(' ');
+  } else if (parts.length === 1 && parts[0] && parts[0] !== 'نامشخص' && parts[0] !== 'ارزيابي') {
     family = parts[0];
   }
-  return { first: first || family || 'نامشخص', last: family || first || 'نامشخص' };
+  // فقط وقتی Title خالی/نامشخص است از انگلیسی به‌عنوان fallback استفاده کن
+  // (آن هم transliterate نشده باقی می‌ماند تا در بازبینی دستی اصلاح شود)
+  if (!family) family = norm(c80) || null;
+  if (!first) first = norm(c79) || family || null;
+  if (!family) family = first || 'نامشخص';
+  if (!first) first = family || 'نامشخص';
+  return { first: first || 'نامشخص', last: family || 'نامشخص' };
 }
 
 // ── کش‌ها ──

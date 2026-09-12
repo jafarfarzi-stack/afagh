@@ -28,6 +28,9 @@ export type StudentItem = {
   fatherName?: string;
   birthCertNo?: string;
   birthDate?: string | null;
+  gender?: string | null;
+  isActive?: number | null;
+  userId?: number | null;
   placeOfBirth?: string;
   placeOfIssue?: string;
   nationality?: string | null;
@@ -92,6 +95,8 @@ export type StaffItem = {
   maritalStatus?: string | null;
   academicBase?: string | null;
   isActive?: number | null;
+  userId?: number | null;
+  userIsActive?: number | null;
 };
 
 export type TermGroup = {
