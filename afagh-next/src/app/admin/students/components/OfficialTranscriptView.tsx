@@ -5,11 +5,26 @@
 //  (این همان چیزی است که دکمهٔ چاپ هم عیناً چاپ می‌کند — WYSIWYG.)
 // ═══════════════════════════════════════════════════════════════════════
 import type { StudentItem, TermGroup, TranscriptSummary, CodeLabels } from '../types';
+import type { TranscriptRow } from '../actions';
 import { gradeStatusFa, quotaFa, studentStatusFa } from '@/lib/student-labels';
 import { breakdownByType, codeLabel, dateToJalali, faNum, faWords, todayJalali } from '../transcript-utils';
 
 /** نمای رسمی کارنامه با فرمت سما: ۳ نیمسال کنار هم + سربرگ/پانوشت + صفحه دوم تفکیکی */
-export default function OfficialTranscriptView({ student, summary, logoUrl, codeLabels }: { student: StudentItem; summary: TranscriptSummary; logoUrl?: string | null; codeLabels?: CodeLabels | null }) {
+export default function OfficialTranscriptView({
+  student,
+  summary,
+  logoUrl,
+  codeLabels,
+  canEditGrades,
+  onEditGrade,
+}: {
+  student: StudentItem;
+  summary: TranscriptSummary;
+  logoUrl?: string | null;
+  codeLabels?: CodeLabels | null;
+  canEditGrades?: boolean;
+  onEditGrade?: (row: TranscriptRow) => void;
+}) {
   const lbl = {
     accept: (v: string | null | undefined) => {
       if (!v || v === '—') return '—';
@@ -84,7 +99,14 @@ export default function OfficialTranscriptView({ student, summary, logoUrl, code
         </thead>
         <tbody>
           {t.rows.map((r, i) => (
-            <tr key={i} className="border-b border-slate-100">
+            <tr
+              key={i}
+              className={`border-b border-slate-100 ${canEditGrades && onEditGrade ? 'hover:bg-amber-100/60 cursor-pointer' : ''}`}
+              onClick={() => {
+                if (canEditGrades && onEditGrade) onEditGrade(r);
+              }}
+              title={canEditGrades && onEditGrade ? 'برای ویرایش یا ثبت نمره کلیک کنید' : undefined}
+            >
               <td className="p-1 font-mono text-center" dir="ltr">{r.courseCode}</td>
               <td className="p-1 leading-tight">
                 {r.courseTitle}

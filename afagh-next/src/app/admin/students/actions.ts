@@ -11,7 +11,7 @@ export async function getTranscriptRegulation(studentId: number): Promise<{
   title: string | null;
   config: import('@/lib/regulations-engine').RegulationConfig;
 } | null> {
-  await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER']);
+  await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'GRADUATEAFFAIRS']);
   const { getRegulationConfig, DEFAULT_BACHELOR_REGULATION_1403 } = await import('@/lib/regulations-engine');
   const [stu] = await db
     .select({ regulationId: students.regulationId, degreeLevelId: students.degreeLevelId })
@@ -31,7 +31,7 @@ export async function setStudentRegulationAction(
   studentId: number, regulationId: number,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    await requireRole(['ADMIN', 'EDU_EXPERT']);
+    await requireRole(['ADMIN', 'EDU_EXPERT', 'GRADUATEAFFAIRS']);
   } catch {
     return { ok: false, error: 'دسترسی لازم را ندارید.' };
   }
@@ -46,6 +46,8 @@ export async function setStudentRegulationAction(
 }
 
 export type TranscriptRow = {
+  enrollmentId?: number | null;
+  offeringId?: number | null;
   termCode: string;
   termTitle: string | null;
   courseCode: string;
@@ -56,7 +58,7 @@ export type TranscriptRow = {
   gradeStatus: string;
   /** عین عنوان ستون «عنوان» فایل وضع نمره (از میز تطبیق GRADE_STATUS) */
   gradeStatusTitle: string | null;
-  /** کد خام وضع نمره (markStat) — برای نمایش کوتاه در جدول + راهنمای کد در پایین کارنامه */
+  /** کد خام وضع نمره (markStat) یا samaGradeStatusCode — برای نمایش کوتاه در جدول + راهنمای کد در پایین کارنامه */
   gradeStatusCode: string | null;
   offeringType: string | null;
   /** وضعیت همان نیمسال (از وضعيت نيمسال دانشجويان) + مشروطی فایل */
@@ -91,7 +93,7 @@ function markStatOf(raw: string | null): string | null {
 }
 
 export async function getTranscript(studentId: number): Promise<TranscriptRow[]> {
-  await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER']);
+  await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'GRADUATEAFFAIRS']);
   const [stu] = await db.select({ id: students.id, code: students.studentCode }).from(students).where(eq(students.id, studentId)).limit(1);
   if (!stu) return [];
   const titleMap = await gradeStatusTitleMap();
@@ -114,6 +116,8 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
   // enrollments (سامانه جدید — از سما) + اتصال raw وضع نمره از legacy
   const ens = await db
     .select({
+      enrollmentId: enrollments.id,
+      offeringId: enrollments.offeringId,
       termCode: academic_terms.termCode,
       termTitle: academic_terms.title,
       courseCode: courses.code,
@@ -123,6 +127,7 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
       gradeValue: enrollments.gradeValue,
       gradeStatus: enrollments.gradeStatus,
       offeringType: course_offerings.offeringType,
+      samaGradeStatusCode: enrollments.samaGradeStatusCode,
       legacyRaw: sql<string | null>`lg.raw`,
     })
     .from(enrollments)
@@ -138,7 +143,10 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
   if (ens.length) {
     return ens.map(r => {
       const ts = termStates.get(r.termCode);
+      const code = markStatOf(r.legacyRaw) ?? r.samaGradeStatusCode ?? null;
       return {
+        enrollmentId: r.enrollmentId,
+        offeringId: r.offeringId,
         termCode: r.termCode,
         termTitle: r.termTitle,
         courseCode: r.courseCode,
@@ -147,8 +155,8 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
         courseType: r.courseType,
         gradeValue: r.gradeValue ? String(r.gradeValue) : null,
         gradeStatus: r.gradeStatus,
-        gradeStatusTitle: exactTitle(markStatOf(r.legacyRaw)),
-        gradeStatusCode: markStatOf(r.legacyRaw),
+        gradeStatusTitle: exactTitle(code),
+        gradeStatusCode: code,
         offeringType: r.offeringType,
         termStatusTitle: ts?.title ?? null,
         termProbation: ts?.probation ?? null,
@@ -172,7 +180,10 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
     .limit(500);
   return legs.map(r => {
     const ts = termStates.get(r.termCode);
+    const code = markStatOf(r.raw);
     return {
+      enrollmentId: null,
+      offeringId: null,
       termCode: r.termCode,
       termTitle: null,
       courseCode: r.courseCode,
@@ -181,8 +192,8 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
       courseType: null,
       gradeValue: r.gradeValue ? String(r.gradeValue) : null,
       gradeStatus: r.gradeStatus,
-      gradeStatusTitle: exactTitle(markStatOf(r.raw)),
-      gradeStatusCode: markStatOf(r.raw),
+      gradeStatusTitle: exactTitle(code),
+      gradeStatusCode: code,
       offeringType: null,
       termStatusTitle: ts?.title ?? null,
       termProbation: ts?.probation ?? null,

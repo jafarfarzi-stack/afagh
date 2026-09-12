@@ -8,7 +8,7 @@ import GraduationClient from './GraduationClient';
 export const dynamic = 'force-dynamic';
 
 export default async function AdminGraduationPage() {
-  await requireRole(['ADMIN']);
+  await requireRole(['ADMIN', 'GRADUATEAFFAIRS']);
   await ensureClearanceDepartments();
 
   const [rows, stats, departments, alumni, services] = await Promise.all([

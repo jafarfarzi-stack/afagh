@@ -16,7 +16,8 @@ export default async function AdminStudentsPage({
 }: {
   searchParams: Promise<{ q?: string; page?: string; status?: string; degree?: string; sort?: string; f_code?: string; f_name?: string; f_nc?: string; f_major?: string; f_year?: string }>;
 }) {
-  await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER']);
+  const user = await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'GRADUATEAFFAIRS']);
+  const canEditGrades = user.roles.some(r => r === 'ADMIN' || r === 'GRADUATEAFFAIRS');
   const sp = await searchParams;
   const q = (sp.q || '').trim().slice(0, 60);
   const page = Math.max(1, parseInt(sp.page || '1', 10) || 1);
@@ -295,6 +296,7 @@ export default async function AdminStudentsPage({
           isActive: st.isActive == null ? 1 : st.isActive,
           role: 'استاد / هیئت علمی',
         }))}
+        canEditGrades={canEditGrades}
       />
     </div>
   );

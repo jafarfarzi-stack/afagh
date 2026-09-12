@@ -12,10 +12,10 @@ import {
 } from '@/lib/graduation-engine';
 import { allRequests, resolveRequest } from '@/lib/alumni';
 
-// ═══ کنش‌های میز کار فارغ‌التحصیلی (نقش ADMIN) ═══
+// ═══ کنش‌های میز کار فارغ‌التحصیلی (نقش ADMIN و GRADUATEAFFAIRS) ═══
 
 async function guard() {
-  return requireRole(['ADMIN']);
+  return requireRole(['ADMIN', 'GRADUATEAFFAIRS']);
 }
 
 const fail = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : 'خطای نامشخص' });

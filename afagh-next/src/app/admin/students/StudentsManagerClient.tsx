@@ -12,6 +12,7 @@ import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, studentSta
 import type { StudentItem, RegulationPick, Pagination, StaffItem, CodeLabels} from './types';
 import { regThresholds, groupTranscript, faNum, dateToJalali} from './transcript-utils';
 import OfficialTranscriptView from './components/OfficialTranscriptView';
+import { adminSetGradeAction, getStudentGradeAuditLog } from '@/app/admin/grades/actions';
 
 /**
  * چاپ مستقیم همان نمای روی صفحه (WYSIWYG) — با کلاس چاپ سراسری:
@@ -39,6 +40,7 @@ export default function StudentsManagerClient(props: {
   pagination?: Pagination;
   degrees?: { id: number; title: string }[];
   statusCounts?: { status: string; n: number }[];
+  canEditGrades?: boolean;
 }) {
   // انتخاب بخش اصلی (دانشجویان / اساتید / عملیات سریع)
   const [mainView, setMainView] = useState<'students' | 'professors' | 'quick_menu'>('students');
@@ -62,6 +64,78 @@ export default function StudentsManagerClient(props: {
   const [regConfig, setRegConfig] = useState<RegulationConfig | null>(null);
   // نمای کارنامه: رسمی (پیش‌فرض) یا جدول سادهٔ نمرات
   const [transcriptView, setTranscriptView] = useState<'official' | 'simple'>('official');
+
+  // مودال ثبت / اصلاح نمره
+  const [gradeEditTarget, setGradeEditTarget] = useState<TranscriptRow | null>(null);
+  const [gradeEditModalOpen, setGradeEditModalOpen] = useState(false);
+  const [gradeValueInput, setGradeValueInput] = useState<string>('');
+  const [gradeReasonInput, setGradeReasonInput] = useState<string>('');
+  const [gradeSaving, setGradeSaving] = useState(false);
+
+  // مودال تاریخچه لاگ تغییرات نمره
+  const [auditLogModalOpen, setAuditLogModalOpen] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditLogsLoading, setAuditLogsLoading] = useState(false);
+
+  const openEditGrade = (row: TranscriptRow) => {
+    setGradeEditTarget(row);
+    setGradeValueInput(row.gradeValue ?? '');
+    setGradeReasonInput('');
+    setGradeEditModalOpen(true);
+  };
+
+  const handleSaveGrade = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentStudent || !gradeEditTarget) return;
+    const num = gradeValueInput.trim() === '' ? null : Number(gradeValueInput.trim());
+    if (num !== null && (isNaN(num) || num < 0 || num > 20)) {
+      showToast('نمره باید بین ۰ تا ۲۰ باشد.');
+      return;
+    }
+    if (!gradeReasonInput.trim()) {
+      showToast('لطفاً دلیل تغییر را وارد کنید.');
+      return;
+    }
+    setGradeSaving(true);
+    try {
+      const res = await adminSetGradeAction({ ok: false }, {
+        enrollmentId: gradeEditTarget.enrollmentId,
+        offeringId: gradeEditTarget.offeringId,
+        studentId: currentStudent.id,
+        studentCode: currentStudent.studentCode,
+        termCode: gradeEditTarget.termCode,
+        courseCode: gradeEditTarget.courseCode,
+        gradeValue: num,
+        reason: gradeReasonInput.trim(),
+      });
+      if (res.ok) {
+        showToast(res.message || 'نمره با موفقیت ثبت شد.');
+        setGradeEditModalOpen(false);
+        setTranscriptLoading(true);
+        getTranscript(currentStudent.id).then(r => setTranscript(r)).catch(() => setTranscript([])).finally(() => setTranscriptLoading(false));
+      } else {
+        showToast(res.error || 'خطا در ثبت نمره.');
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'خطا در ارتباط با سرور.');
+    } finally {
+      setGradeSaving(false);
+    }
+  };
+
+  const openAuditLogs = async () => {
+    if (!currentStudent) return;
+    setAuditLogModalOpen(true);
+    setAuditLogsLoading(true);
+    try {
+      const logs = await getStudentGradeAuditLog(currentStudent.id);
+      setAuditLogs(logs);
+    } catch {
+      setAuditLogs([]);
+    } finally {
+      setAuditLogsLoading(false);
+    }
+  };
 
   const currentStudent = props.students[selectedStuIdx] || props.students[0];
   const currentStaff = props.staffList[selectedProfIdx] || props.staffList[0];
@@ -649,6 +723,47 @@ export default function StudentsManagerClient(props: {
                   >
                     📋 جدول نمرات
                   </button>
+                  {props.canEditGrades && (
+                    <>
+                      <button
+                        onClick={() => {
+                          if (transcript && transcript.length > 0) {
+                            openEditGrade(transcript[0]);
+                          } else {
+                            setGradeEditTarget({
+                              termCode: '',
+                              termTitle: null,
+                              courseCode: '',
+                              courseTitle: '',
+                              units: null,
+                              courseType: null,
+                              gradeValue: null,
+                              gradeStatus: 'PENDING',
+                              gradeStatusTitle: null,
+                              gradeStatusCode: null,
+                              offeringType: null,
+                              termStatusTitle: null,
+                              termProbation: null,
+                            });
+                            setGradeValueInput('');
+                            setGradeReasonInput('');
+                            setGradeEditModalOpen(true);
+                          }
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-600 text-white hover:bg-amber-700"
+                        title="ثبت یا اصلاح نمره توسط آموزش / فارغ‌التحصیلان"
+                      >
+                        ✏️ ثبت / تغییر نمره
+                      </button>
+                      <button
+                        onClick={openAuditLogs}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-700 text-white hover:bg-slate-800"
+                        title="مشاهده لاگ ممیزی و تاریخچه تغییرات نمرات دانشجو"
+                      >
+                        📜 لاگ ممیزی نمرات
+                      </button>
+                    </>
+                  )}
                   {transcript && transcript.length > 0 && (
                     <button
                       onClick={() => doPrintTranscript()}
@@ -680,6 +795,7 @@ export default function StudentsManagerClient(props: {
                         <th className="p-1.5 text-center">واحد</th>
                         <th className="p-1.5 text-center">نمره</th>
                         <th className="p-1.5 text-center">وضعیت</th>
+                        {props.canEditGrades && <th className="p-1.5 text-center">عملیات</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -696,13 +812,31 @@ export default function StudentsManagerClient(props: {
                       {gradeStatusFa(r.gradeStatus)}
                     </span>
                   </td>
+                  {props.canEditGrades && (
+                    <td className="p-1.5 text-center">
+                      <button
+                        onClick={() => openEditGrade(r)}
+                        className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-300"
+                        title="ویرایش یا اصلاح نمره"
+                      >
+                        ✏️ ویرایش
+                      </button>
+                    </td>
+                  )}
                 </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <OfficialTranscriptView student={currentStudent} summary={groupTranscript(transcript)} logoUrl={props.logoUrl} codeLabels={props.codeLabels} />
+                <OfficialTranscriptView
+                  student={currentStudent}
+                  summary={groupTranscript(transcript)}
+                  logoUrl={props.logoUrl}
+                  codeLabels={props.codeLabels}
+                  canEditGrades={props.canEditGrades}
+                  onEditGrade={openEditGrade}
+                />
               )}
             </div>
           )}
@@ -1264,6 +1398,203 @@ export default function StudentsManagerClient(props: {
                 <p className="text-[11px] text-slate-500 mt-0.5">مدیریت چارت، انتقال کاتالوگ و سقف واحدها</p>
               </div>
             </Link>
+          </div>
+        </div>
+      )}
+
+      {/* ── مودال ثبت / اصلاح نمره (ادمین و کارشناس فارغ‌التحصیلان) ── */}
+      {gradeEditModalOpen && currentStudent && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-amber-700 text-white px-5 py-3.5 flex items-center justify-between">
+              <h3 className="font-extrabold text-sm flex items-center gap-2">
+                <span>✏️</span> ثبت و اصلاح نمره (آموزش / فارغ‌التحصیلان)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setGradeEditModalOpen(false)}
+                className="text-amber-100 hover:text-white text-lg leading-none"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleSaveGrade} className="p-5 space-y-4 text-xs">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1 text-slate-800">
+                <p><b>دانشجو:</b> {currentStudent.firstName} {currentStudent.lastName} ({currentStudent.studentCode})</p>
+                <p><b>رشته:</b> {currentStudent.majorName} — <b>مقطع:</b> {currentStudent.degreeLevel}</p>
+                {gradeEditTarget?.courseTitle ? (
+                  <p><b>درس:</b> {gradeEditTarget.courseTitle} (<span className="font-mono">{gradeEditTarget.courseCode}</span>) — <b>ترم:</b> <span className="font-mono">{gradeEditTarget.termCode}</span></p>
+                ) : transcript && transcript.length > 0 ? (
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">انتخاب درس از کارنامه:</label>
+                    <select
+                      className="w-full bg-white border border-slate-300 rounded p-1.5 text-xs font-mono"
+                      value={gradeEditTarget?.courseCode ? `${gradeEditTarget.termCode}|${gradeEditTarget.courseCode}` : ''}
+                      onChange={e => {
+                        const [tCode, cCode] = e.target.value.split('|');
+                        const found = transcript.find(r => r.termCode === tCode && r.courseCode === cCode);
+                        if (found) {
+                          setGradeEditTarget(found);
+                          setGradeValueInput(found.gradeValue ?? '');
+                        }
+                      }}
+                    >
+                      {transcript.map((r, i) => (
+                        <option key={i} value={`${r.termCode}|${r.courseCode}`}>
+                          {r.termCode} — {r.courseCode} ({r.courseTitle}) — نمره: {r.gradeValue ?? '—'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+                <p><b>نمره فعلی:</b> <span className="font-mono font-bold text-indigo-700">{gradeEditTarget?.gradeValue ?? 'ثبت نشده'}</span> ({gradeEditTarget?.gradeStatusTitle || (gradeEditTarget?.gradeStatus ? gradeStatusFa(gradeEditTarget.gradeStatus) : '—')})</p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  نمره جدید (۰ تا ۲۰):
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="20"
+                  required
+                  placeholder="مثال: ۱۶.۵۰"
+                  value={gradeValueInput}
+                  onChange={e => setGradeValueInput(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  دلیل تغییر و مستند قانونی (الزامی):
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="مثال: حکم کمیسیون موارد خاص به شماره ۱۲۳۴ یا اصلاح نمره طبق صورتجلسه شورای آموزشی"
+                  value={gradeReasonInput}
+                  onChange={e => setGradeReasonInput(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 rounded p-2.5 text-[11px] text-slate-600 space-y-1">
+                <p>🔒 <b>قوانین ممیزی:</b></p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  <li>این عملیات مستقیماً در لاگ ممیزی نمرات (<span className="font-mono">grade_change_log</span>) با نام کاربری، نقش و زمان دقیق ثبت می‌شود.</li>
+                  <li>کد وضعیت سما (<span className="font-mono">samaGradeStatusCode</span>) متناسب با حدنصاب قبولی رشته به‌طور خودکار محاسبه و درج می‌گردد.</li>
+                  <li>نمره به‌صورت قطعی (<span className="font-mono">FINALIZED</span>) منظور می‌شود.</li>
+                </ul>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setGradeEditModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  disabled={gradeSaving}
+                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white font-bold rounded-lg transition-colors flex items-center gap-1.5"
+                >
+                  {gradeSaving ? 'در حال ثبت…' : '💾 ثبت نمره و لاگ ممیزی'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── مودال لاگ ممیزی تغییرات نمره (Audit Trail) ── */}
+      {auditLogModalOpen && currentStudent && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
+          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full border border-slate-300 overflow-hidden max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-slate-800 text-white px-5 py-3.5 flex items-center justify-between">
+              <h3 className="font-extrabold text-sm flex items-center gap-2">
+                <span>📜</span> تاریخچه و لاگ ممیزی نمرات (Audit Trail)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setAuditLogModalOpen(false)}
+                className="text-slate-300 hover:text-white text-lg leading-none"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4 border-b border-slate-200 bg-slate-50 text-xs flex flex-wrap items-center justify-between gap-2">
+              <p><b>دانشجو:</b> {currentStudent.firstName} {currentStudent.lastName} — <b>شماره دانشجویی:</b> <span className="font-mono">{currentStudent.studentCode}</span></p>
+              <span className="text-[11px] text-slate-500 font-mono">{auditLogs.length} رکورد ثبت‌شده</span>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1 text-xs">
+              {auditLogsLoading ? (
+                <p className="text-center text-slate-500 py-8">در حال بارگذاری سوابق ممیزی…</p>
+              ) : auditLogs.length === 0 ? (
+                <p className="text-center text-slate-500 py-8 bg-slate-50 rounded-lg border border-slate-200">هیچ لاگ تغییری برای نمرات این دانشجو در سامانه ثبت نشده است.</p>
+              ) : (
+                <div className="border border-slate-300 rounded-lg overflow-x-auto">
+                  <table className="w-full text-right text-[11px]">
+                    <thead className="bg-slate-100 border-b border-slate-300 font-bold">
+                      <tr>
+                        <th className="p-2">#</th>
+                        <th className="p-2">تاریخ و زمان</th>
+                        <th className="p-2">اقدام‌کننده</th>
+                        <th className="p-2">عملیات</th>
+                        <th className="p-2 text-center">نمره قبلی → جدید</th>
+                        <th className="p-2 text-center">کد وضعیت سما</th>
+                        <th className="p-2">دلیل ثبت‌شده</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditLogs.map((log, idx) => (
+                        <tr key={log.id || idx} className="border-b border-slate-200 hover:bg-slate-50">
+                          <td className="p-2 font-mono text-slate-500">{idx + 1}</td>
+                          <td className="p-2 font-mono text-slate-700" dir="ltr">
+                            {log.createdAt ? new Date(log.createdAt).toLocaleString('fa-IR') : '—'}
+                          </td>
+                          <td className="p-2">
+                            <span className="font-bold">{log.actorFirstName || log.actorLastName ? `${log.actorFirstName ?? ''} ${log.actorLastName ?? ''}`.trim() : `کاربر #${log.actorUserId ?? 'سیستم'}`}</span>
+                            <span className="block text-[10px] text-slate-500 font-mono">[{log.actorRole || 'SYSTEM'}]</span>
+                          </td>
+                          <td className="p-2">
+                            <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-slate-200 text-slate-800">
+                              {log.action}
+                            </span>
+                          </td>
+                          <td className="p-2 text-center font-mono font-bold">
+                            <span className="text-slate-500">{log.oldGradeValue ?? '—'}</span>
+                            <span className="mx-1 text-slate-400">←</span>
+                            <span className="text-indigo-700">{log.newGradeValue ?? '—'}</span>
+                          </td>
+                          <td className="p-2 text-center font-mono">
+                            <span className="text-slate-500">{log.oldSamaStatusCode ?? '—'}</span>
+                            <span className="mx-1 text-slate-400">←</span>
+                            <span className="text-emerald-700 font-bold">{log.newSamaStatusCode ?? '—'}</span>
+                          </td>
+                          <td className="p-2 text-slate-700 max-w-xs truncate" title={log.reason ?? undefined}>
+                            {log.reason ?? '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setAuditLogModalOpen(false)}
+                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition-colors"
+              >
+                بستن
+              </button>
+            </div>
           </div>
         </div>
       )}
