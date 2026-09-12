@@ -46,7 +46,7 @@ function statusFromMarkStat(markStat, gsMap) {
   // کدهای PENDING / موقت / در انتظار
   if (l.includes('موقت') || l.includes('pending') || l.includes('انتظار') ||
       l.includes('آزمایشی') || l.includes('provisional') || l.includes('تایید نشده') ||
-      c === '0' || c === 'mo't') return 'PENDING';
+      c === '0' || c === "mo't") return 'PENDING';
   // بقیه همه FINALIZED
   return 'FINALIZED';
 }
