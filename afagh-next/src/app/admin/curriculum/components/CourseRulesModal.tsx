@@ -3,6 +3,7 @@
 // مودال: پیش‌نیاز/هم‌نیاز و کف نمرهٔ یک درس
 import { useCurriculum } from '../curriculum-context';
 import { faNum, leafCourseCodesOf, leafTotalOf } from '../curriculum-core';
+import { GRADE_STATUS_CODES, gradeStatusOptionLabel } from '@/lib/grade-status-codes';
 
 export default function CourseRulesModal() {
   const {
@@ -84,6 +85,37 @@ export default function CourseRulesModal() {
                   placeholder="مثلاً ۱۲" dir="ltr"
                   className="mt-1 w-full border border-slate-300 rounded-lg p-2 font-bold" />
               </label>
+            </div>
+            <div className="rounded-xl border border-slate-200 p-3 space-y-2">
+              <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
+                کد وضع نمرهٔ سما (میز تطبیق GRADE_STATUS) که هنگام قبولی/مردودیِ دانشجو در همین درس
+                ثبت می‌شود. چون همین درس ممکن است در کاتالوگ دیگری «جبرانی» ارائه شود، این تنظیم
+                فقط مخصوص همین نسخه است، نه سراسری. خالی = پیش‌فرض سیستم (کد ۱ قبولی / ۲ مردودی).
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label className="block font-bold text-slate-700 text-[11px]">
+                  کد وضع در صورت قبولی:
+                  <select value={ruleForm.passGradeStatusCode}
+                    onChange={e => setRuleForm({ ...ruleForm, passGradeStatusCode: e.target.value })}
+                    className="mt-1 w-full border border-slate-300 rounded-lg p-2 font-bold bg-white">
+                    <option value="">پیش‌فرض سیستم (کد ۱)</option>
+                    {GRADE_STATUS_CODES.filter(g => g.passed).map(g => (
+                      <option key={g.code} value={g.code}>{gradeStatusOptionLabel(g)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block font-bold text-slate-700 text-[11px]">
+                  کد وضع در صورت مردودی:
+                  <select value={ruleForm.failGradeStatusCode}
+                    onChange={e => setRuleForm({ ...ruleForm, failGradeStatusCode: e.target.value })}
+                    className="mt-1 w-full border border-slate-300 rounded-lg p-2 font-bold bg-white">
+                    <option value="">پیش‌فرض سیستم (کد ۲)</option>
+                    {GRADE_STATUS_CODES.filter(g => !g.passed).map(g => (
+                      <option key={g.code} value={g.code}>{gradeStatusOptionLabel(g)}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => { setModal(null); setRuleCourseId(null); }} className="px-4 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-bold text-xs">انصراف</button>

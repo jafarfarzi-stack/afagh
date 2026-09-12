@@ -83,6 +83,8 @@ export async function addCourseToCurriculumAction(versionId: number, item: AddCo
       isGraduationRequired: item.isGraduationRequired ?? 0,
       minGrade: item.minGrade != null ? String(item.minGrade) : null,
       autoCorequisiteAllowed: item.autoCorequisiteAllowed ?? 0,
+      passGradeStatusCode: item.passGradeStatusCode ?? null,
+      failGradeStatusCode: item.failGradeStatusCode ?? null,
     });
     await db.transaction(async (tx) => {
       await appendAudit(tx, {
@@ -119,6 +121,8 @@ export async function bulkAddCoursesAction(versionId: number, items: AddCourseIn
         isGraduationRequired: it.isGraduationRequired ?? 0,
         minGrade: it.minGrade != null ? String(it.minGrade) : null,
         autoCorequisiteAllowed: it.autoCorequisiteAllowed ?? 0,
+        passGradeStatusCode: it.passGradeStatusCode ?? null,
+        failGradeStatusCode: it.failGradeStatusCode ?? null,
       });
       added++;
     }
@@ -279,6 +283,7 @@ export async function updateCourseInCurriculumAction(
     roleType?: string; units?: number | null; theoryUnits?: number | null; practicalUnits?: number | null;
     isRequired?: number; isElective?: number; isGraduationRequired?: number;
     minGrade?: number | null; autoCorequisiteAllowed?: number;
+    passGradeStatusCode?: string | null; failGradeStatusCode?: string | null;
   }
 ): Promise<Act<{ message: string }>> {
   await requireRole(EDITORS);
@@ -299,6 +304,8 @@ export async function updateCourseInCurriculumAction(
       isGraduationRequired: patch.isGraduationRequired ?? row.isGraduationRequired,
       minGrade: patch.minGrade !== undefined ? (patch.minGrade != null ? String(patch.minGrade) : null) : row.minGrade,
       autoCorequisiteAllowed: patch.autoCorequisiteAllowed ?? row.autoCorequisiteAllowed,
+      passGradeStatusCode: patch.passGradeStatusCode !== undefined ? patch.passGradeStatusCode : row.passGradeStatusCode,
+      failGradeStatusCode: patch.failGradeStatusCode !== undefined ? patch.failGradeStatusCode : row.failGradeStatusCode,
     }).where(and(
       eq(curriculum_courses.curriculumVersionId, versionId),
       eq(curriculum_courses.courseId, courseId),

@@ -52,6 +52,9 @@ export interface CourseRow {
   isGraduationRequired: number;
   recommendedSemester: number | null;
   minGrade: number | null;
+  /** کد وضع نمرهٔ سما برای قبولی/مردودی، مختص همین درس در همین نسخه — null = پیش‌فرض سیستم */
+  passGradeStatusCode: string | null;
+  failGradeStatusCode: string | null;
 }
 
 export interface RuleRow { courseId: number; ruleType: string; logicTree: LogicNode; }

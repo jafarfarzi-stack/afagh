@@ -105,6 +105,8 @@ export async function loadVersionData(versionId: number) {
       recommendedSemester: curriculum_courses.recommendedSemester,
       minGrade: curriculum_courses.minGrade,                    // کف قبولی خاص نسخه (numeric → number|null)
       autoCorequisiteAllowed: curriculum_courses.autoCorequisiteAllowed,
+      passGradeStatusCode: curriculum_courses.passGradeStatusCode,
+      failGradeStatusCode: curriculum_courses.failGradeStatusCode,
     })
     .from(curriculum_courses)
     .innerJoin(courses, eq(courses.id, curriculum_courses.courseId))
@@ -131,6 +133,8 @@ export async function loadVersionData(versionId: number) {
       recommendedSemester: r.recommendedSemester,
       minGrade: r.minGrade != null ? Number(r.minGrade) : null,
       autoCorequisiteAllowed: r.autoCorequisiteAllowed ?? 0,
+      passGradeStatusCode: r.passGradeStatusCode,
+      failGradeStatusCode: r.failGradeStatusCode,
     })),
     rules: rulesRows.map((r) => {
       let tree: LogicNode;
@@ -336,6 +340,9 @@ export interface AddCourseInput {
   isRequired?: number; isElective?: number; isGraduationRequired?: number;
   minGrade?: number | null;
   autoCorequisiteAllowed?: number;
+  /** کد وضع نمرهٔ سما (میز تطبیق GRADE_STATUS) برای قبولی/مردودی در همین تخصیص درس؛ null = پیش‌فرض سیستم (۱/۲) */
+  passGradeStatusCode?: string | null;
+  failGradeStatusCode?: string | null;
 }
 
 

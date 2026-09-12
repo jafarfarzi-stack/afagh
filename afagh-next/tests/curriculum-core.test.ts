@@ -32,7 +32,7 @@ type Seed = { code?: string; units?: number; role?: string; sem?: number | null 
 const C = (o: Seed) => ({
   courseId: 1, code: o.code ?? 'C1', title: 'درس', units: o.units ?? 3, roleType: o.role ?? 'CORE',
   isRequired: 1, isElective: 0, isGraduationRequired: 0, recommendedSemester: 'sem' in o ? o.sem ?? null : 1,
-  minGrade: null,
+  minGrade: null, passGradeStatusCode: null, failGradeStatusCode: null,
 });
 
 console.log('۱) رقم و تاریخ فارسی');

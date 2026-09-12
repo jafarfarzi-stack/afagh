@@ -373,6 +373,17 @@ export const curriculum_courses = pgTable('curriculum_courses', {
   isGraduationRequired: integer('isGraduationRequired').default(0),     // شرط الزامی فارغ‌التحصیلی
   recommendedSemester: integer('recommendedSemester'),                   // ۱..۸ + ۹=تابستان (NULL = آزاد/نامشخص)
   minGrade: numeric('minGrade', { precision: 4, scale: 2 }),             // کف قبولیِ خاص این درس در این نسخه
+  /**
+   * کد وضع نمرهٔ سما (از میز تطبیق GRADE_STATUS) که باید هنگام قبولی/مردودیِ
+   * دانشجو در همین تخصیص درس ثبت شود — چون وضع نهایی به خودِ تعریف درس در
+   * این کاتالوگ بستگی دارد، نه یک قاعدهٔ سراسری: مثلاً همین درس در یک کاتالوگ
+   * می‌تواند «درس عادی - قبول» (کد ۱) باشد و در کاتالوگ دیگر (وقتی به‌عنوان
+   * درس جبرانی/کمبود ارائه می‌شود) «جبرانی بدون احتساب در معدل - قبول»
+   * (کد ۱۲)، با حد نصاب قبولی متفاوت (minGrade بالا). NULL = پیش‌فرض سیستم
+   * (کد ۱ برای قبولی، کد ۲ برای مردودی).
+   */
+  passGradeStatusCode: varchar('passGradeStatusCode', { length: 10 }),
+  failGradeStatusCode: varchar('failGradeStatusCode', { length: 10 }),
   autoCorequisiteAllowed: integer('autoCorequisiteAllowed').default(0)   // «هم‌نیاز خودکار ترم آخر» (آیین‌نامه)
 }, (t) => ({
   uqCourse: unique('uq_curriculum_courses_version_course').on(t.curriculumVersionId, t.courseId),

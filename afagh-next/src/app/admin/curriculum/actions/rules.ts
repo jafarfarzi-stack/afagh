@@ -11,7 +11,7 @@ import { course_rules, curriculum_courses } from '@/db/schema';
 import { appendAudit } from '@/lib/audit';
 import { requireRole } from '@/lib/auth';
 import { normalizeLogicNode } from '@/lib/curriculum-types';
-import { EDITORS, PHASE, assertEditable, revalidateCurriculumPaths } from './shared';
+import { EDITORS, PHASE, assertEditable, revalidateCurriculumPaths, type Act } from './shared';
 
 // ─────────────────────────── قواعد (پیش‌نیاز/هم‌نیاز/نمره) — D2 ───────────────────────────
 
@@ -105,5 +105,33 @@ export async function setCoursePassingGradeAction(versionId: number, courseId: n
     return { ok: false, error: err.message || 'خطا در ثبت کف نمره' };
   }
 }
+
+/**
+ * کد وضع نمرهٔ سما (میز تطبیق GRADE_STATUS) برای قبولی/مردودیِ همین تخصیص
+ * درس در همین نسخهٔ کاتالوگ. چون یک درس می‌تواند در یک کاتالوگ عادی و در
+ * کاتالوگ دیگر جبرانی باشد، این مقدار سراسری نیست — روی خودِ ردیف
+ * curriculum_courses ذخیره می‌شود. null = پیش‌فرض سیستم (کد ۱ قبولی / ۲ مردودی).
+ */
+export async function setCourseGradeStatusCodesAction(
+  versionId: number,
+  courseId: number,
+  passGradeStatusCode: string | null,
+  failGradeStatusCode: string | null,
+): Promise<Act<{ message: string }>> {
+  await requireRole(EDITORS);
+  try {
+    await assertEditable(versionId);
+    await db.update(curriculum_courses).set({
+      passGradeStatusCode: passGradeStatusCode || null,
+      failGradeStatusCode: failGradeStatusCode || null,
+    }).where(and(eq(curriculum_courses.curriculumVersionId, versionId), eq(curriculum_courses.courseId, courseId)));
+    revalidateCurriculumPaths();
+    return { ok: true, message: 'کد وضع نمرهٔ قبولی/مردودی این درس ثبت شد.' };
+  } catch (err: any) {
+    console.error('setCourseGradeStatusCodesAction:', err);
+    return { ok: false, error: err.message || 'خطا در ثبت کد وضع نمره' };
+  }
+}
+
 
 // ─────────────────────────── اعتبارسنجی و چرخهٔ حیات ───────────────────────────

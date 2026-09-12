@@ -13,7 +13,7 @@ import type { BankCourse, CurriculumTab, CurriculumWorkspace, MajorItem, Version
 import { getCurriculumOverviewAction, getCurriculumVersionDetailAction, listCourseBankAction, listDepartmentsAction } from './actions/read';
 import { createCurriculumRevisionAction, createCurriculumVersionAction, updateCurriculumMetaAction } from './actions/versions';
 import { addCourseToCurriculumAction, assignCourseToSemesterAction, bulkAddCoursesAction, createCourseBankAction, markGraduationRequiredBulkAction, removeCourseFromCurriculumAction, syncRolesFromBankAction, updateCourseInCurriculumAction } from './actions/courses';
-import { setCourseCorequisiteAction, setCoursePassingGradeAction, setCoursePrerequisiteAction } from './actions/rules';
+import { setCourseCorequisiteAction, setCourseGradeStatusCodesAction, setCoursePassingGradeAction, setCoursePrerequisiteAction } from './actions/rules';
 import { approveCurriculumAction, archiveCurriculumAction, publishCurriculumAction, rejectCurriculumAction, submitCurriculumForApprovalAction, validateCurriculumAction } from './actions/lifecycle';
 import { describeLogicNode } from '@/lib/curriculum-types';
 import { parseRoleUnitTargets } from '@/lib/curriculum-validator';
@@ -59,7 +59,7 @@ function useCurriculumWorkspace(
   const [depts, setDepts] = useState<{ id: number; name: string }[]>([]);
   const [deptsLoading, setDeptsLoading] = useState(false);
   const [ruleCourseId, setRuleCourseId] = useState<number | null>(null);
-  const [ruleForm, setRuleForm] = useState({ pre: [] as string[], preOp: 'AND' as 'AND' | 'OR', co: [] as string[], coOp: 'AND' as 'AND' | 'OR', minGrade: '' });
+  const [ruleForm, setRuleForm] = useState({ pre: [] as string[], preOp: 'AND' as 'AND' | 'OR', co: [] as string[], coOp: 'AND' as 'AND' | 'OR', minGrade: '', passGradeStatusCode: '', failGradeStatusCode: '' });
   const [activeTab, setActiveTab] = useState<CurriculumTab>(resolveTab(initialTab));
   const [transferMajorId, setTransferMajorId] = useState(0);
   const [dragCourseId, setDragCourseId] = useState<number | null>(null);
@@ -309,6 +309,8 @@ function useCurriculumWorkspace(
       pre: leafCourseCodesOf(pre?.logicTree), preOp: pre?.logicTree.operator ?? 'AND',
       co: leafCourseCodesOf(co?.logicTree), coOp: co?.logicTree.operator ?? 'AND',
       minGrade: course?.minGrade != null ? String(course.minGrade) : '',
+      passGradeStatusCode: course?.passGradeStatusCode ?? '',
+      failGradeStatusCode: course?.failGradeStatusCode ?? '',
     });
     setRuleCourseId(courseId);
     setModal('RULES');
@@ -333,6 +335,16 @@ function useCurriculumWorkspace(
     if (chk.changed) {
       const okMin = await run(() => setCoursePassingGradeAction(selectedVersionId, ruleCourseId, chk.value));
       if (!okMin) return;
+    }
+    const statusChanged = (ruleForm.passGradeStatusCode || null) !== (ruleCourse?.passGradeStatusCode ?? null)
+      || (ruleForm.failGradeStatusCode || null) !== (ruleCourse?.failGradeStatusCode ?? null);
+    if (statusChanged) {
+      const okStatus = await run(() => setCourseGradeStatusCodesAction(
+        selectedVersionId, ruleCourseId,
+        ruleForm.passGradeStatusCode || null,
+        ruleForm.failGradeStatusCode || null,
+      ));
+      if (!okStatus) return;
     }
     setModal(null);
     setRuleCourseId(null);
