@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, student_term_states, students, users } from '@/db/schema';
+import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, roles, staff, student_term_states, students, user_roles, users } from '@/db/schema';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { hashPassword, requireRole } from '@/lib/auth';
 
@@ -220,6 +220,20 @@ export async function setUserActiveAction(
   return { ok: true };
 }
 
+/** مشخص کردن نقش‌های یک حساب بر اساس ردیف‌های دانشجوی/کارمند — ردیف‌های جاافتادهٔ user_roles ساخته می‌شوند */
+async function ensureAccountRoles(userId: number): Promise<void> {
+  const [stu] = await db.select({ id: students.id }).from(students).where(eq(students.userId, userId)).limit(1);
+  const [stf] = await db.select({ id: staff.id }).from(staff).where(eq(staff.userId, userId)).limit(1);
+  for (const code of [stu ? 'STUDENT' : null, stf ? 'PROFESSOR' : null].filter(Boolean) as string[]) {
+    const [r] = await db.select({ id: roles.id }).from(roles).where(eq(roles.code, code)).limit(1);
+    if (r) {
+      await db.insert(user_roles).values({ userId, roleId: r.id })
+        .onConflictDoNothing({ target: [user_roles.userId, user_roles.roleId] })
+        .catch(() => {});
+    }
+  }
+}
+
 /** تغییر رمز عبور کاربر توسط مدیر (حداقل ۴ رقم/حرف) — فقط ADMIN */
 export async function resetUserPasswordAction(
   userId: number, newPassword: string,
@@ -235,11 +249,79 @@ export async function resetUserPasswordAction(
   try {
     const passwordHash = await hashPassword(pw);
     await db.update(users).set({ passwordHash, mustChangePassword: 1 }).where(eq(users.id, userId));
+    await ensureAccountRoles(userId);
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'ثبت نشد.' };
   }
   revalidatePath('/admin/students');
   return { ok: true };
+}
+
+/** بازنشانی گروهی رمز حساب‌های دانشجویان/اساتید (+ ساخت نقش‌های جاافتاده) — فقط ADMIN */
+export async function bulkResetPasswordsAction(
+  scope: 'student' | 'professor', newPassword: string,
+): Promise<{ ok: boolean; error?: string; count?: number }> {
+  try {
+    await requireRole(['ADMIN']);
+  } catch {
+    return { ok: false, error: 'فقط مدیر سیستم (ADMIN) اجازه این عملیات را دارد.' };
+  }
+  const pw = String(newPassword || '').trim();
+  if (pw.length < 4 || pw.length > 64) return { ok: false, error: 'رمز باید بین ۴ تا ۶۴ کاراکتر باشد.' };
+  const scopeWhere = scope === 'professor'
+    ? `EXISTS (SELECT 1 FROM staff st WHERE st."userId" = users.id)`
+    : `EXISTS (SELECT 1 FROM students st WHERE st."userId" = users.id)`;
+  const roleCode = scope === 'professor' ? 'PROFESSOR' : 'STUDENT';
+  try {
+    const hash = await hashPassword(pw);
+    const upd = await db.execute(sql`
+      UPDATE users SET "passwordHash" = ${hash}, "mustChangePassword" = 1
+      WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)}
+    `);
+    const count = Number((upd as any)?.rowCount ?? 0);
+    // ساخت نقش برای حساب‌های گروهی که ردیف user_roles ندارند
+    await db.execute(sql`
+      INSERT INTO user_roles ("userId", "roleId")
+      SELECT u.id, r.id FROM users u
+      JOIN roles r ON r.code = ${roleCode}
+      WHERE ${sql.raw(scopeWhere)}
+        AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur."userId" = u.id AND ur."roleId" = r.id)
+      ON CONFLICT ("userId", "roleId") DO NOTHING
+    `);
+    return { ok: true, count };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'انجام نشد.' };
+  } finally {
+    revalidatePath('/admin/students');
+  }
+}
+
+/** بازسازی نقش‌های جاافتاده برای همهٔ حساب‌ها (دانشجو=STUDENT، کارمند=PROFESSOR) — فقط ADMIN */
+export async function backfillRolesAction(): Promise<{ ok: boolean; error?: string; inserted?: number }> {
+  try {
+    await requireRole(['ADMIN']);
+  } catch {
+    return { ok: false, error: 'فقط مدیر سیستم (ADMIN) اجازه این عملیات را دارد.' };
+  }
+  try {
+    let inserted = 0;
+    for (const [code, srcTable] of [['STUDENT', 'students'], ['PROFESSOR', 'staff']] as const) {
+      const ins = await db.execute(sql`
+        INSERT INTO user_roles ("userId", "roleId")
+        SELECT u.id, r.id FROM users u
+        JOIN roles r ON r.code = ${code}
+        WHERE ${sql.raw(`EXISTS (SELECT 1 FROM ${srcTable} st WHERE st."userId" = u.id)`)}
+          AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur."userId" = u.id AND ur."roleId" = r.id)
+        ON CONFLICT ("userId", "roleId") DO NOTHING
+      `);
+      inserted += Number((ins as any)?.rowCount ?? 0);
+    }
+    return { ok: true, inserted };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'انجام نشد.' };
+  } finally {
+    revalidatePath('/admin/students');
+  }
 }
 
 /** فیلدهای قابل‌ذخیرهٔ پروندهٔ دانشجو (هم‌گام با تفاوت‌های types.ts) */

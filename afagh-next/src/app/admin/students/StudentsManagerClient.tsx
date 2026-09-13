@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { getTranscript, getTranscriptRegulation, resetUserPasswordAction, setStudentRegulationAction, setUserActiveAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
+import { backfillRolesAction, bulkResetPasswordsAction, getTranscript, getTranscriptRegulation, resetUserPasswordAction, setStudentRegulationAction, setUserActiveAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
 import type { RegulationConfig } from '@/lib/regulations-engine';
 import { ClientTh, ServerTh, useClientTable, type ColumnDef } from '@/components/DataTable';
 import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, studentStatusChip, studentStatusFa} from '@/lib/student-labels';
@@ -80,6 +80,11 @@ export default function StudentsManagerClient(props: {
   // ── مدیریت حساب وب کاربر (فعال/غیرفعال + تغییر رمز — فقط ADMIN) ──
   const [pwModalFor, setPwModalFor] = useState<{ userId: number; name: string } | null>(null);
   const [pwInput, setPwInput] = useState('');
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkScope, setBulkScope] = useState<'student' | 'professor'>('student');
+  const [bulkPass, setBulkPass] = useState('');
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkBackfill, setBulkBackfill] = useState(false);
   const [pwSaving, setPwSaving] = useState(false);
   const handleToggleActive = async (userId: number | null | undefined, next: boolean, name: string) => {
     if (!userId) { showToast('شناسه کاربری این پرونده یافت نشد.'); return; }
@@ -98,6 +103,28 @@ export default function StudentsManagerClient(props: {
       if (r.ok) { setPwModalFor(null); setPwInput(''); router.refresh(); }
     } finally {
       setPwSaving(false);
+    }
+  };
+
+  const handleBulkReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBulkSaving(true);
+    try {
+      const r = await bulkResetPasswordsAction(bulkScope, bulkPass);
+      if (!r.ok) { showToast(r.error || 'انجام نشد.'); return; }
+      let extra = '';
+      if (bulkBackfill) {
+        const b = await backfillRolesAction();
+        extra = b.ok ? ` | نقش‌ها: +${(b.inserted ?? 0).toLocaleString('fa-IR')}` : ` | نقش‌ها: ${b.error || 'خطا'}`;
+      }
+      showToast(`✅ رمز ${(r.count ?? 0).toLocaleString('fa-IR')} حساب ${bulkScope === 'student' ? 'دانشجویی' : 'استادی'} تغییر کرد (ورود اول اجباری به تغییر).${extra}`);
+      setBulkOpen(false);
+      setBulkPass('');
+      router.refresh();
+    } catch (err: any) {
+      showToast(err?.message || 'خطا در ارتباط با سرور.');
+    } finally {
+      setBulkSaving(false);
     }
   };
 
@@ -1079,6 +1106,17 @@ export default function StudentsManagerClient(props: {
                 <span className="text-xs text-slate-500 mr-auto">{(pg?.total ?? props.students.length).toLocaleString('fa-IR')} پرونده</span>
               </form>
 
+              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-200">
+                <button
+                  onClick={() => { setBulkOpen(true); setBulkScope('student'); setBulkPass(''); }}
+                  className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold"
+                  title="تعیین یک رمز واحد برای همهٔ دانشجویان/اساتید فعال وب (فقط مدیر سیستم)"
+                >
+                  🔑 بازنشانی گروهی رمز
+                </button>
+                <span className="text-[10px] text-slate-500">در اولین ورود، اجباری به تغییر رمز — به‌همراه ساخت خودکار نقش‌های جاافتاده</span>
+              </div>
+
               {/* چیپ‌های وضعیت */}
               <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
                 <button onClick={() => nav({ status: 'ALL' })} className={`px-2.5 py-1 rounded-full border font-bold ${(!pg || pg.status === 'ALL') ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 border-slate-300 hover:bg-slate-100'}`}>
@@ -1840,6 +1878,55 @@ export default function StudentsManagerClient(props: {
       )}
 
       {/* ── مودال تغییر رمز کاربر (فقط ADMIN) ── */}
+      {bulkOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-slate-800 text-white px-5 py-3.5 flex items-center justify-between">
+              <h3 className="font-extrabold text-sm">🔑 بازنشانی گروهی رمز</h3>
+              <button type="button" onClick={() => setBulkOpen(false)} className="text-slate-300 hover:text-white text-lg leading-none">✕</button>
+            </div>
+            <form onSubmit={handleBulkReset} className="p-5 space-y-3 text-xs">
+              <div className="flex items-center gap-3">
+                <label className="text-slate-600 font-bold">گروه:</label>
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input type="radio" name="bulkScope" checked={bulkScope === 'student'} onChange={() => setBulkScope('student')} className="accent-slate-800" />
+                  دانشجویان (فعال وب)
+                </label>
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input type="radio" name="bulkScope" checked={bulkScope === 'professor'} onChange={() => setBulkScope('professor')} className="accent-slate-800" />
+                  اساتید (فعال وب)
+                </label>
+              </div>
+              <div>
+                <label className="text-slate-600 font-bold block mb-1">رمز جدید (۴ تا ۶۴ کاراکتر):</label>
+                <input
+                  type="text"
+                  required
+                  minLength={4}
+                  maxLength={64}
+                  dir="ltr"
+                  placeholder="رمز جدید همهٔ این گروه"
+                  value={bulkPass}
+                  onChange={e => setBulkPass(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-slate-500 focus:outline-hidden"
+                />
+              </div>
+              <label className="flex items-center gap-1.5 cursor-pointer pt-1">
+                <input type="checkbox" checked={bulkBackfill} onChange={e => setBulkBackfill(e.target.checked)} className="w-4 h-4 accent-slate-800 rounded" />
+                <span>همچنین نقش‌های جاافتادهٔ همهٔ حساب‌ها را بساز (ترمیم norole)</span>
+              </label>
+              <p className="text-[10px] text-slate-500">این عملیات بی‌بازگشت است؛ رمز جاری همهٔ حساب‌های این گروه باطل می‌شود.</p>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                <button type="button" onClick={() => setBulkOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
+                <button type="submit" disabled={bulkSaving} className="px-5 py-2 bg-red-700 hover:bg-red-800 disabled:bg-slate-400 text-white font-bold rounded-lg">
+                  {bulkSaving ? 'در حال اجرا…' : '⚠ اعمال به همه'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {pwModalFor && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
