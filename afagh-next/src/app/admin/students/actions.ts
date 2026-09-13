@@ -258,6 +258,52 @@ export async function resetUserPasswordAction(
   return { ok: true };
 }
 
+/** بازنشانی گروهی رمز حساب‌های دانشجویان/اساتید به کد ملی — فقط ADMIN */
+export async function bulkResetToNationalCodeAction(
+  scope: 'student' | 'professor',
+): Promise<{ ok: boolean; error?: string; count?: number }> {
+  try {
+    await requireRole(['ADMIN']);
+  } catch {
+    return { ok: false, error: 'فقط مدیر سیستم (ADMIN) اجازه این عملیات را دارد.' };
+  }
+  const scopeWhere = scope === 'professor'
+    ? `EXISTS (SELECT 1 FROM staff st WHERE st."userId" = users.id)`
+    : `EXISTS (SELECT 1 FROM students st WHERE st."userId" = users.id)`;
+  const roleCode = scope === 'professor' ? 'PROFESSOR' : 'STUDENT';
+  try {
+    const usersToReset = await db.execute(sql<{ id: number; nationalCode: string }>`
+      SELECT id, "nationalCode" FROM users
+      WHERE "isActive" = 1 AND "nationalCode" IS NOT NULL AND LENGTH("nationalCode") = 10 AND ${sql.raw(scopeWhere)}
+    `);
+    const rows = (usersToReset as any).rows ?? usersToReset;
+    let count = 0;
+    for (const row of rows) {
+      if (!row.nationalCode) continue;
+      const hash = await hashPassword(String(row.nationalCode));
+      await db.execute(sql`
+        UPDATE users SET "passwordHash" = ${hash}, "mustChangePassword" = 1
+        WHERE id = ${row.id}
+      `);
+      count++;
+    }
+    // ساخت نقش برای حساب‌های گروهی که ردیف user_roles ندارند
+    await db.execute(sql`
+      INSERT INTO user_roles ("userId", "roleId")
+      SELECT u.id, r.id FROM users u
+      JOIN roles r ON r.code = ${roleCode}
+      WHERE ${sql.raw(scopeWhere)}
+        AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur."userId" = u.id AND ur."roleId" = r.id)
+      ON CONFLICT ("userId", "roleId") DO NOTHING
+    `);
+    return { ok: true, count };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'انجام نشد.' };
+  } finally {
+    revalidatePath('/admin/students');
+  }
+}
+
 /** بازنشانی گروهی رمز حساب‌های دانشجویان/اساتید (+ ساخت نقش‌های جاافتاده) — فقط ADMIN */
 export async function bulkResetPasswordsAction(
   scope: 'student' | 'professor', newPassword: string,

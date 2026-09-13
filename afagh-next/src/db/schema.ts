@@ -95,6 +95,8 @@ export const degree_level_configs = pgTable('degree_level_configs', {
   termCount: integer('termCount'),
   /** تحصیلات تکمیلی (ارشد/دکترا) یا نه — ۱/۰ (NULL هم یعنی نه؛ بدون default تا backfill با COALESCE درست کار کند) */
   isGraduate: integer('isGraduate'),
+  /** دانشگاه مالک این کاربر */
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const faculties = pgTable('faculties', {
@@ -123,7 +125,9 @@ export const departments = pgTable('departments', {
    * دروسش برای همهٔ رشته‌ها ارائه می‌شود.
    */
   kind: varchar('kind', { length: 20 }).default('ACADEMIC'),
-  isActive: integer('isActive').default(1)
+  isActive: integer('isActive').default(1),
+  /** دانشگاه مالک این گروه */
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const majors = pgTable('majors', {
@@ -313,7 +317,9 @@ export const staff = pgTable('staff', {
   birthCity: varchar('birthCity', { length: 100 }),       // شهر محل تولد
   bankAccountNo: varchar('bankAccountNo', { length: 50 }), // شماره حساب
   phone: varchar('phone', { length: 20 }),                 // تلفن ثابت
-  canManageServicePool: integer('canManageServicePool').default(0) // مدیر گروه خدماتی-سراسری (تربیت بدنی/زبان)
+  canManageServicePool: integer('canManageServicePool').default(0), // مدیر گروه خدماتی-سراسری (تربیت بدنی/زبان)
+  /** دانشگاه مالک این پرونده */
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 /** خوشهٔ دروس هم‌ارز (مثل «ریاضی عمومی ۱» و «ریاضیات پایه» — یک محتوا، چند کد) */
@@ -340,7 +346,9 @@ export const courses = pgTable('courses', {
   // ── موتور برنامه‌ریزی درسی ──
   clusterId: integer('clusterId').references(() => equivalence_clusters.id), // NULL = درس مستقل
   offeringScope: varchar('offeringScope', { length: 20 }).default('DEPARTMENTAL'), // DEPARTMENTAL | GENERAL_SERVICE (کارتابل دوگانه)
-  locationType: varchar('locationType', { length: 20 }).default('IN_CAMPUS')        // IN_CAMPUS | OUT_CAMPUS (مهارتی/ورزشی خارج دانشگاه)
+  locationType: varchar('locationType', { length: 20 }).default('IN_CAMPUS'),        // IN_CAMPUS | OUT_CAMPUS (مهارتی/ورزشی خارج دانشگاه)
+  /** دانشگاه مالک این درس */
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 /** گرایش‌های برنامهٔ درسی (مثلاً «هوش مصنوعی و رباتیک») — جایگزین tracks[] Mock در Client قدیم (D4) */

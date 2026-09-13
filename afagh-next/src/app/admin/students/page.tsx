@@ -1,6 +1,6 @@
 import { and, count, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { degree_level_configs, departments, educational_regulations, faculties, legacy_code_maps, majors, roles, staff, students, user_roles, users } from '@/db/schema';
+import { degree_level_configs, departments, educational_regulations, faculties, legacy_code_maps, majors, roles, staff, students, universities, user_roles, users } from '@/db/schema';
 import type { RegulationPick } from './types';
 import { requireRole } from '@/lib/auth';
 import { normalizeFa, normCol } from '@/lib/persian-search';
@@ -14,16 +14,24 @@ const PER_PAGE = 50;
 export default async function AdminStudentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string; status?: string; degree?: string; sort?: string; f_code?: string; f_name?: string; f_nc?: string; f_major?: string; f_year?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; status?: string; degree?: string; sort?: string; f_code?: string; f_name?: string; f_nc?: string; f_major?: string; f_year?: string; university?: string }>;
 }) {
   const user = await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'GRADUATEAFFAIRS']);
   const canEditGrades = user.roles.some(r => r === 'ADMIN' || r === 'GRADUATEAFFAIRS');
   const sp = await searchParams;
+
+  // ── فهرست دانشگاه‌ها ──
+  const allUniversities = await db.select().from(universities).where(eq(universities.isActive, 1)).orderBy(universities.id);
+  const universityParam = (sp.university || '').trim();
+  const currentUniversity = universityParam
+    ? allUniversities.find(u => u.code === universityParam) ?? allUniversities[0]
+    : allUniversities[0];
+  const currentUniversityId = currentUniversity?.id ?? null;
+
   const q = (sp.q || '').trim().slice(0, 60);
   const page = Math.max(1, parseInt(sp.page || '1', 10) || 1);
   const statusFilter = (sp.status || 'ALL').toUpperCase();
   const degreeFilter = parseInt(sp.degree || '0', 10) || 0;
-  // سورت ستونی: key:dir (whitelist) + فیلترهای ستونی
   const sortRaw = (sp.sort || '').trim();
   const fCode = (sp.f_code || '').trim().slice(0, 20);
   const fName = (sp.f_name || '').trim().slice(0, 60);
@@ -33,6 +41,7 @@ export default async function AdminStudentsPage({
 
   // ── فیلترهای مشترک ──
   const conds = [];
+  if (currentUniversityId) conds.push(eq(students.universityId, currentUniversityId));
   if (statusFilter !== 'ALL') conds.push(eq(students.status, statusFilter));
   if (degreeFilter > 0) conds.push(eq(students.degreeLevelId, degreeFilter));
   if (q) {
@@ -248,6 +257,7 @@ export default async function AdminStudentsPage({
     .innerJoin(users, eq(users.id, staff.userId))
     .leftJoin(departments, eq(departments.id, staff.departmentId))
     .leftJoin(faculties, eq(faculties.id, staff.facultyId))
+    .where(currentUniversityId ? eq(staff.universityId, currentUniversityId) : undefined)
     .orderBy(desc(staff.id));
 
   const [head] = await db.select().from(roles).where(eq(roles.code, 'DEP_HEAD')).limit(1);
@@ -349,7 +359,7 @@ export default async function AdminStudentsPage({
           regulationTitle: s.regulationTitle || '—',
           role: 'دانشجو',
         }))}
-        pagination={{ total: Number(total), page: safePage, per: PER_PAGE, totalPages, q, status: statusFilter, degree: degreeFilter, sort: sortKey ? `${sortKey}:${sortDir}` : '', f_code: fCode, f_name: fName, f_nc: fNc, f_major: fMajor, f_year: fYear }}
+        pagination={{ total: Number(total), page: safePage, per: PER_PAGE, totalPages, q, status: statusFilter, degree: degreeFilter, sort: sortKey ? `${sortKey}:${sortDir}` : '', f_code: fCode, f_name: fName, f_nc: fNc, f_major: fMajor, f_year: fYear, university: currentUniversity?.code ?? 'AFAGH' }}
         degrees={degrees}
         statusCounts={statusCounts.map(r => ({ status: r.status, n: Number(r.n) }))}
         staffList={staffRows.map(st => ({
@@ -388,6 +398,8 @@ export default async function AdminStudentsPage({
         canEditGrades={canEditGrades}
         rolesAll={roleRows}
         userRoleIds={staffUserRoleIds}
+        universities={allUniversities.map(u => ({ id: u.id, code: u.code, title: u.title, kind: u.kind }))}
+        currentUniversityCode={currentUniversity?.code ?? 'AFAGH'}
       />
     </div>
   );

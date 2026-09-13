@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { backfillRolesAction, bulkResetPasswordsAction, createStaffExpertAction, getTranscript, getTranscriptRegulation, resetUserPasswordAction, saveUserRolesAction, setStudentRegulationAction, setUserActiveAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
+import { backfillRolesAction, bulkResetPasswordsAction, bulkResetToNationalCodeAction, createStaffExpertAction, getTranscript, getTranscriptRegulation, resetUserPasswordAction, saveUserRolesAction, setStudentRegulationAction, setUserActiveAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
 import type { RegulationConfig } from '@/lib/regulations-engine';
 import { ClientTh, ServerTh, useClientTable, type ColumnDef } from '@/components/DataTable';
 import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, studentStatusChip, studentStatusFa} from '@/lib/student-labels';
@@ -43,6 +43,8 @@ export default function StudentsManagerClient(props: {
   canEditGrades?: boolean;
   rolesAll?: { id: number; code: string; title: string; isSystem: number | boolean | null }[];
   userRoleIds?: Record<number, number[]>;
+  universities?: { id: number; code: string; title: string; kind: string }[];
+  currentUniversityCode?: string;
 }) {
   // انتخاب بخش اصلی (دانشجویان / اساتید / عملیات سریع)
   const [mainView, setMainView] = useState<'students' | 'professors' | 'quick_menu'>('students');
@@ -87,6 +89,7 @@ export default function StudentsManagerClient(props: {
   const [bulkPass, setBulkPass] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkBackfill, setBulkBackfill] = useState(false);
+  const [bulkMode, setBulkMode] = useState<'password' | 'national_code'>('password');
   // ── ثبت استاد/کارکن جدید (مودال) ──
   const [createStaffOpen, setCreateStaffOpen] = useState(false);
   const [createStaffBusy, setCreateStaffBusy] = useState(false);
@@ -136,14 +139,20 @@ export default function StudentsManagerClient(props: {
     e.preventDefault();
     setBulkSaving(true);
     try {
-      const r = await bulkResetPasswordsAction(bulkScope, bulkPass);
+      let r;
+      if (bulkMode === 'national_code') {
+        r = await bulkResetToNationalCodeAction(bulkScope);
+      } else {
+        r = await bulkResetPasswordsAction(bulkScope, bulkPass);
+      }
       if (!r.ok) { showToast(r.error || 'انجام نشد.'); return; }
       let extra = '';
       if (bulkBackfill) {
         const b = await backfillRolesAction();
         extra = b.ok ? ` | نقش‌ها: +${(b.inserted ?? 0).toLocaleString('fa-IR')}` : ` | نقش‌ها: ${b.error || 'خطا'}`;
       }
-      showToast(`✅ رمز ${(r.count ?? 0).toLocaleString('fa-IR')} حساب ${bulkScope === 'student' ? 'دانشجویی' : 'استادی'} تغییر کرد (ورود اول اجباری به تغییر).${extra}`);
+      const modeLabel = bulkMode === 'national_code' ? 'به کد ملی' : 'جدید';
+      showToast(`✅ رمز ${modeLabel} ${(r.count ?? 0).toLocaleString('fa-IR')} حساب ${bulkScope === 'student' ? 'دانشجویی' : 'استادی'} بازنشانی شد (ورود اول اجباری به تغییر).${extra}`);
       setBulkOpen(false);
       setBulkPass('');
       router.refresh();
@@ -330,9 +339,12 @@ export default function StudentsManagerClient(props: {
     const cur = {
       q: pg?.q ?? '', status: pg?.status ?? 'ALL', degree: String(pg?.degree ?? 0), page: '1',
       sort: pg?.sort ?? '', f_code: pg?.f_code ?? '', f_name: pg?.f_name ?? '', f_nc: pg?.f_nc ?? '',
-      f_major: pg?.f_major ?? '', f_year: pg?.f_year ?? '', ...patch,
+      f_major: pg?.f_major ?? '', f_year: pg?.f_year ?? '',
+      university: pg?.university ?? props.currentUniversityCode ?? 'AFAGH',
+      ...patch,
     };
     const p = new URLSearchParams();
+    if (cur.university) p.set('university', cur.university);
     if (cur.q) p.set('q', cur.q);
     if (cur.status && cur.status !== 'ALL') p.set('status', cur.status);
     if (cur.degree && cur.degree !== '0') p.set('degree', cur.degree);
@@ -383,6 +395,18 @@ export default function StudentsManagerClient(props: {
       {/* ─── نوار سوئیچ بین بخش دانشجویان، اساتید و منوی عملیات سریع ─── */}
       <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-800 text-white p-2.5 px-4 rounded-xl shadow-md border border-slate-700">
         <div className="flex items-center gap-2">
+          {props.universities && props.universities.length > 1 && (
+            <select
+              value={props.currentUniversityCode ?? 'AFAGH'}
+              onChange={e => nav({ university: e.target.value })}
+              className="bg-indigo-700 hover:bg-indigo-600 text-white border border-indigo-500 rounded-lg px-2 py-1.5 text-xs font-bold cursor-pointer"
+              title="انتخاب دانشگاه — همهٔ اطلاعات نمایش‌داده‌شده بر اساس این انتخاب فیلتر می‌شود"
+            >
+              {props.universities.map(u => (
+                <option key={u.code} value={u.code}>{u.title}{u.kind === 'DISSOLVED' ? ' (منحله)' : ''}</option>
+              ))}
+            </select>
+          )}
           <button
             onClick={() => setMainView('students')}
             className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
@@ -2016,20 +2040,40 @@ export default function StudentsManagerClient(props: {
                   اساتید (فعال وب)
                 </label>
               </div>
-              <div>
-                <label className="text-slate-600 font-bold block mb-1">رمز جدید (۴ تا ۶۴ کاراکتر):</label>
-                <input
-                  type="text"
-                  required
-                  minLength={4}
-                  maxLength={64}
-                  dir="ltr"
-                  placeholder="رمز جدید همهٔ این گروه"
-                  value={bulkPass}
-                  onChange={e => setBulkPass(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-slate-500 focus:outline-hidden"
-                />
+              <div className="space-y-1.5">
+                <label className="text-slate-600 font-bold block mb-1">نوع بازنشانی:</label>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="bulkMode" checked={bulkMode === 'national_code'} onChange={() => setBulkMode('national_code')} className="accent-red-600" />
+                    <span className="font-bold text-red-700">🔄 بازنشانی به کد ملی</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="bulkMode" checked={bulkMode === 'password'} onChange={() => setBulkMode('password')} className="accent-slate-800" />
+                    <span>رمز دلخواه</span>
+                  </label>
+                </div>
               </div>
+              {bulkMode === 'password' ? (
+                <div>
+                  <label className="text-slate-600 font-bold block mb-1">رمز جدید (۴ تا ۶۴ کاراکتر):</label>
+                  <input
+                    type="text"
+                    required
+                    minLength={4}
+                    maxLength={64}
+                    dir="ltr"
+                    placeholder="رمز جدید همهٔ این گروه"
+                    value={bulkPass}
+                    onChange={e => setBulkPass(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-slate-500 focus:outline-hidden"
+                  />
+                </div>
+              ) : (
+                <div className="rounded-lg bg-amber-50 border border-amber-300 p-3 text-amber-800 leading-relaxed">
+                  <b>⚠ بازنشانی به کد ملی</b>
+                  <p className="text-[10px] mt-1">رمز همهٔ حساب‌های این گروه به <b>کد ملی</b> خودشان تغییر می‌کند. در اولین ورود ملزم به تغییر رمز خواهند بود.</p>
+                </div>
+              )}
               <label className="flex items-center gap-1.5 cursor-pointer pt-1">
                 <input type="checkbox" checked={bulkBackfill} onChange={e => setBulkBackfill(e.target.checked)} className="w-4 h-4 accent-slate-800 rounded" />
                 <span>همچنین نقش‌های جاافتادهٔ همهٔ حساب‌ها را بساز (ترمیم norole)</span>

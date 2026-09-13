@@ -99,6 +99,7 @@ export type Pagination = {
   f_nc?: string;
   f_major?: string;
   f_year?: string;
+  university?: string;
 };
 
 export type StaffItem = {
