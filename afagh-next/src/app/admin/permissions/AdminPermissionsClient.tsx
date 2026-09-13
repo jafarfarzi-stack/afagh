@@ -87,6 +87,24 @@ export default function AdminPermissionsClient({ initial }: { initial: Permissio
     });
   };
 
+  /** تیک/برداشتن کلِ ماتریس برای یک نقش (مستقل از فیلتر بخش) — همان «همهٔ دسترسی‌ها» */
+  const toggleAllMatrix = (role: { id: number; code: string; title: string }, on: boolean) => {
+    if (on && !confirm(`همهٔ ${faNum(permissions.length)} مجوز ماتریس به نقش «${role.title}» داده شود؟`)) return;
+    if (!on && !confirm(`تمامی مجوزهای نقش «${role.title}» برداشته شود؟ (شامل مجوزهای سیستمی — ممکن است همین صفحه هم برای این نقش غیرفعال شود)`)) return;
+    setDraft(prev => {
+      const cur = new Set(prev[role.id] ?? []);
+      for (const p of permissions) {
+        if (role.code === 'ADMIN' && p.code === ADMIN_LOCKED_CODE) continue;
+        if (on) cur.add(p.code);
+        else cur.delete(p.code);
+      }
+      return { ...prev, [role.id]: [...cur].sort() };
+    });
+  };
+
+  const roleAllOn = (roleId: number) => permissions.every(p => draft[roleId]?.includes(p.code));
+  const roleHasAny = (roleId: number) => (draft[roleId] ?? []).length > 0;
+
   const filteredPermissions = useMemo(
     () => permissions.filter(p => selectedCategory === 'ALL' || p.category === selectedCategory),
     [permissions, selectedCategory],
@@ -357,7 +375,14 @@ export default function AdminPermissionsClient({ initial }: { initial: Permissio
                         onClick={() => toggleColumn(r.id, r.code, !allOn)}
                         className="mt-1 text-[10px] underline text-indigo-200 hover:text-white"
                       >
-                        {allOn ? 'برداشتن همه' : 'انتخاب همه'}
+                        {allOn ? 'برداشتن همه (این بخش)' : 'انتخاب همه (این بخش)'}
+                      </button>
+                      <button
+                        onClick={() => toggleAllMatrix(r, !roleAllOn(r.id))}
+                        title="همهٔ مجوزهای کل ماتریس، مستقل از فیلتر بخش‌ها"
+                        className={`mt-1 block w-full border rounded px-1 text-[10px] font-bold ${roleAllOn(r.id) ? 'bg-amber-400 text-slate-950 hover:bg-amber-300' : 'bg-transparent text-amber-300 border-amber-400/60 hover:bg-amber-400/20'}`}
+                      >
+                        {roleAllOn(r.id) ? '✔ همهٔ ماتریس (گرفتن!)' : '☑ همهٔ ماتریس'}
                       </button>
                       {!r.isSystem && r.userCount === 0 && (
                         <button
