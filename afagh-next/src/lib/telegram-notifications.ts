@@ -1,25 +1,33 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { users, students, enrollments, course_offerings, courses, notification_channels } from '@/db/schema';
-import { sendTelegramToUser } from '@/lib/telegram-bot';
+import { sendToUser, type MessengerChannel } from '@/lib/messenger-bot';
 import { notifyUserMultichannel, type Channel } from '@/lib/messaging';
 import { getSetting } from '@/lib/settings';
 import { createLogger } from '@/lib/logger';
 import { toJalaliFromDate } from '@/lib/calendar';
 
-const log = createLogger({ mod: 'telegram.notifications' });
+const log = createLogger({ mod: 'messenger.notifications' });
 
 // ═══════════════════════════════════════════════════════════════
-//  اعلان‌های خودکار تلگرام — اتصال به موتورهای موجود
+//  اعلان‌های خودکار پیام‌رسان‌ها — تلگرام / بله / سروش / ایتا / ای‌گپ
 //
 //  این ماژول توابعی را فراهم می‌کند که توسط motorهای مختلف
 //  (enroll-engine, regulations-engine, و...) فراخوانی شوند
-//  تا پیام‌های تلگرامی خودکار ارسال شوند.
+//  تا پیام‌های خودکار ارسال شوند.
 // ═══════════════════════════════════════════════════════════════
 
 function jalaliStr(date: Date = new Date()): string {
   const j = toJalaliFromDate(date);
   return `${j.jy}/${String(j.jm).padStart(2, '0')}/${String(j.jd).padStart(2, '0')}`;
+}
+
+/** ارسال پیام به همهٔ پیام‌رسان‌های فعال کاربر */
+async function notifyAllChannels(userId: number, text: string): Promise<void> {
+  const channels: MessengerChannel[] = ['TELEGRAM', 'BALE', 'SOROUSH', 'EITAA', 'EGAP'];
+  for (const ch of channels) {
+    try { await sendToUser(ch, userId, text); } catch { /* ادامه بده */ }
+  }
 }
 
 // ─────────────────────── انتخاب واحد ───────────────────────
@@ -45,9 +53,9 @@ export async function notifyEnrollmentDone(input: {
   text += `\nتاریخ: ${jalaliStr()}\nبرای مشاهده جزئیات /enrollment را ارسال کنید.`;
 
   try {
-    await sendTelegramToUser(input.userId, text);
+    await notifyAllChannels(input.userId, text);
   } catch (e) {
-    log.error('notify_enrollment_telegram_failed', { userId: input.userId, error: (e as Error).message });
+    log.error('notify_enrollment_failed', { userId: input.userId, error: (e as Error).message });
   }
 }
 
@@ -70,7 +78,7 @@ export async function notifyGradeSubmitted(input: {
   text += `\nبرای مشاهده همه نمرات /grades را ارسال کنید.`;
 
   try {
-    await sendTelegramToUser(input.userId, text);
+    await notifyAllChannels(input.userId, text);
   } catch (e) {
     log.error('notify_grade_telegram_failed', { userId: input.userId, error: (e as Error).message });
   }
@@ -96,7 +104,7 @@ export async function notifyProbationWarning(input: {
   text += `\nلطفاً جهت پیگیری به اداره آموزش مراجعه فرمایید.`;
 
   try {
-    await sendTelegramToUser(input.userId, text);
+    await notifyAllChannels(input.userId, text);
   } catch (e) {
     log.error('notify_probation_telegram_failed', { userId: input.userId, error: (e as Error).message });
   }
@@ -120,7 +128,7 @@ export async function notifyYearsWarning(input: {
   text += `\nبرای پیگیری با اداره آموزش تماس بگیرید.`;
 
   try {
-    await sendTelegramToUser(input.userId, text);
+    await notifyAllChannels(input.userId, text);
   } catch (e) {
     log.error('notify_years_telegram_failed', { userId: input.userId, error: (e as Error).message });
   }
@@ -138,7 +146,7 @@ export async function notifyAcademicAnnouncement(input: {
   text += `\n\nتاریخ: ${jalaliStr()}`;
 
   try {
-    await sendTelegramToUser(input.userId, text);
+    await notifyAllChannels(input.userId, text);
   } catch (e) {
     log.error('notify_announcement_telegram_failed', { userId: input.userId, error: (e as Error).message });
   }
@@ -165,8 +173,8 @@ export async function broadcastAcademicAnnouncement(input: {
   for (const r of rows) {
     if (!r.address) continue;
     try {
-      const ok = await sendTelegramToUser(r.userId, text);
-      ok ? sent++ : failed++;
+      await notifyAllChannels(r.userId, text);
+      sent++;
     } catch {
       failed++;
     }
@@ -200,7 +208,7 @@ export async function notifyRequestStatus(input: {
   text += `\nتاریخ: ${jalaliStr()}`;
 
   try {
-    await sendTelegramToUser(input.userId, text);
+    await notifyAllChannels(input.userId, text);
   } catch (e) {
     log.error('notify_request_telegram_failed', { userId: input.userId, error: (e as Error).message });
   }
@@ -219,7 +227,7 @@ export async function notifyCourseDropped(input: {
   text += `\nتاریخ: ${jalaliStr()}`;
 
   try {
-    await sendTelegramToUser(input.userId, text);
+    await notifyAllChannels(input.userId, text);
   } catch (e) {
     log.error('notify_drop_telegram_failed', { userId: input.userId, error: (e as Error).message });
   }
@@ -238,7 +246,7 @@ export async function notifyWaitlistPromoted(input: {
   text += `\nتاریخ: ${jalaliStr()}\nبرای مشاهده /enrollment را ارسال کنید.`;
 
   try {
-    await sendTelegramToUser(input.userId, text);
+    await notifyAllChannels(input.userId, text);
   } catch (e) {
     log.error('notify_waitlist_telegram_failed', { userId: input.userId, error: (e as Error).message });
   }
@@ -267,7 +275,7 @@ export async function notifyFinanceReminder(input: {
   text += `\nتاریخ: ${jalaliStr()}`;
 
   try {
-    await sendTelegramToUser(input.userId, text);
+    await notifyAllChannels(input.userId, text);
   } catch (e) {
     log.error('notify_finance_telegram_failed', { userId: input.userId, error: (e as Error).message });
   }

@@ -16,11 +16,12 @@ import { createLogger } from '@/lib/logger';
 
 const log = createLogger({ mod: 'messaging' });
 
-export const CHANNELS = ['INAPP', 'SMS', 'TELEGRAM', 'BALE', 'EITAA'] as const;
+export const CHANNELS = ['INAPP', 'SMS', 'TELEGRAM', 'BALE', 'EITAA', 'SOROUSH', 'EGAP'] as const;
 export type Channel = typeof CHANNELS[number];
 
 export const CHANNEL_LABEL: Record<string, string> = {
   INAPP: 'پیام درون‌سامانه', SMS: 'پیامک', TELEGRAM: 'تلگرام', BALE: 'بله', EITAA: 'ایتا',
+  SOROUSH: 'سروش', EGAP: 'ای‌گپ',
 };
 
 export type DeliveryResult = {
@@ -102,6 +103,8 @@ export async function sendSms(to: string, text: string): Promise<DeliveryResult>
 async function messengerConfig(channel: Channel) {
   if (channel === 'TELEGRAM') return { token: await getSetting('TELEGRAM_TOKEN'), base: (await getSetting('TELEGRAM_API_BASE')) || 'https://api.telegram.org', style: 'BOT' as const };
   if (channel === 'BALE') return { token: await getSetting('BALE_TOKEN'), base: (await getSetting('BALE_API_BASE')) || 'https://tapi.bale.ai', style: 'BOT' as const };
+  if (channel === 'SOROUSH') return { token: await getSetting('SOROUSH_TOKEN'), base: (await getSetting('SOROUSH_API_BASE')) || 'https://api.soroush.app', style: 'BOT' as const };
+  if (channel === 'EGAP') return { token: await getSetting('EGAP_TOKEN'), base: (await getSetting('EGAP_API_BASE')) || 'https://egap.ai/api', style: 'BOT' as const };
   return { token: await getSetting('EITAA_TOKEN'), base: (await getSetting('EITAA_API_BASE')) || 'https://eitaayar.ir/api', style: 'EITAA' as const };
 }
 
