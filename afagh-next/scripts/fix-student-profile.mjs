@@ -79,12 +79,15 @@ try {
         if (!/^\d{7,14}$/.test(stno)) continue;
         const e = want.get(stno) || {};
         if (f === 'students1.txt') {
+          if (!e.advisorCode && normTxt(cols[16])) e.advisorCode = normTxt(cols[16]).slice(0, 50);
           const nezam = normTxt(cols[33]);
           if (nezam) e.militaryStatus = nezam.slice(0, 50);
           if (!e.militaryExemptionNo && normTxt(cols[52])) e.militaryExemptionNo = normTxt(cols[52]).slice(0, 50);
           if (normTxt(cols[54]) && !e.diplomaPlace) e.diplomaPlace = normTxt(cols[54]).slice(0, 200); // MS گاهی محل اخذ دیپلم
           if (!e.insertDate && normTxt(cols[95])) e.insertDate = normTxt(cols[95]);
           if (!e.insertTime && normTxt(cols[96])) e.insertTime = normTxt(cols[96]);
+          const tt = normTxt(cols[89]);
+          if (!e.tuitionType && tt && tt !== '0') e.tuitionType = tt.slice(0, 50);
           const nat = normTxt(cols[51]);
           if (!e.nationality) e.nationality = nat === '120001' || nat === '1' ? '120001' : (nat || null);
         } else {
@@ -144,7 +147,8 @@ try {
               s."militaryExemptionNo", s."studentCardStatus", s."archiveNo", s."parvandehNo",
               s."dormName", s."dormRoom", s."hasDorm", s."guardianJobTitle", s."guardianPhone",
               s."guardianAddress", s."guardianEmail", s."diplomaType", s."diplomaPlace",
-              s."diplomaYear", s."diplomaGrade", s."pishdPlace", s."pishdYear", s."pishdGrade"
+              s."diplomaYear", s."diplomaGrade", s."pishdPlace", s."pishdYear", s."pishdGrade",
+              s."tuitionType", s."insertDate", s."insertTime"
        FROM students s JOIN users u ON u.id = s."userId" WHERE s."studentCode" = $1 LIMIT 1`,
       [stno],
     );
@@ -164,6 +168,7 @@ try {
       'studentCardStatus', 'archiveNo', 'parvandehNo', 'dormName', 'dormRoom', 'guardianJobTitle',
       'guardianPhone', 'guardianAddress', 'guardianEmail', 'diplomaType', 'diplomaPlace',
       'diplomaYear', 'diplomaGrade', 'pishdPlace', 'pishdYear', 'pishdGrade',
+      'tuitionType', 'insertDate', 'insertTime',
     ];
     for (const k of sMap) {
       if (w[k] != null && !r[k]) { sSets.push(`"${k}" = $${si++}`); sVals.push(w[k]); stats.filled++; }
