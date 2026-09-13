@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
 
   // اگر setup=1 باشد، وب‌هوک تنظیم می‌شود
   if (setup === '1') {
-    const baseUrl = (process.env.PUBLIC_BASE_URL || req.nextUrl.origin).replace(/\/+$/, '');
+    const baseUrl = (process.env.PUBLIC_BASE_URL || process.env.AFAGH_PUBLIC_BASE_URL || req.nextUrl.origin).replace(/\/+$/, '');
     const webhookUrl = `${baseUrl}/api/telegram/webhook`;
     const result = await setTelegramWebhook(webhookUrl);
     log.info('webhook_setup', { url: webhookUrl, ...result });
