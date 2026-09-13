@@ -12,6 +12,7 @@ import {
   courses,
   academic_terms,
   student_requests,
+  users,
 } from '@/db/schema';
 import {
   RegulationConfig,
@@ -396,6 +397,30 @@ export async function checkAndTriggerCommissionEvents(studentId: number): Promis
   }
 
   if (!blockReason) return { blocked: false };
+
+  // اعلان تلگرامی خودکار — مشروطی یا سنوات
+  try {
+    const [userRow] = await db.select({ userId: users.id }).from(users)
+      .innerJoin(students, eq(students.userId, users.id))
+      .where(eq(students.id, studentId)).limit(1);
+    if (userRow?.userId) {
+      const { notifyProbationWarning, notifyYearsWarning } = await import('./telegram-notifications');
+      if (summary.totalProbations >= maxAllowedProbations) {
+        await notifyProbationWarning({
+          userId: userRow.userId,
+          semesterGpa: summary.lastTermGpa ?? 0,
+          totalGpa: summary.lastTermGpa ?? 0,
+        });
+      } else if (summary.completedSemesters >= maxAllowedSemesters) {
+        await notifyYearsWarning({
+          userId: userRow.userId,
+          currentTermNo: summary.completedSemesters,
+          maxTerms: maxAllowedSemesters,
+          remainingTerms: Math.max(0, maxAllowedSemesters - summary.completedSemesters),
+        });
+      }
+    }
+  } catch { /* ارسال تلگرام هرگز نباید فرایند اصلی را متوقف کند */ }
 
   // شناسهٔ فرایند «کمیسیون موارد خاص» از تنظیمات خوانده می‌شود (بدون مقدار سخت‌کد)
   const [processCode, sajjadUrl] = await Promise.all([

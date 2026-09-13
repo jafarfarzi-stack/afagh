@@ -70,6 +70,8 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'EITAA_CHANNEL', env: 'EITAA_CHANNEL_ID', group: 'پیامک و ربات‌های پیام‌رسان', label: 'شناسهٔ کانال ایتا', type: 'text', default: '' },
   { key: 'TELEGRAM_TOKEN', env: 'TELEGRAM_BOT_TOKEN', group: 'پیامک و ربات‌های پیام‌رسان', label: 'توکن ربات تلگرام', type: 'secret', default: '' },
   { key: 'TELEGRAM_CHANNEL', env: 'TELEGRAM_CHANNEL_ID', group: 'پیامک و ربات‌های پیام‌رسان', label: 'شناسهٔ کانال تلگرام', type: 'text', default: '' },
+  { key: 'TELEGRAM_WEBHOOK_SECRET', env: 'TELEGRAM_WEBHOOK_SECRET', group: 'پیامک و ربات‌های پیام‌رسان', label: 'کلید وب‌هوک تلگرام', type: 'secret', default: '', help: 'تنظیم وب‌هوک: GET /api/telegram/webhook?setup=1' },
+  { key: 'TELEGRAM_BOT_ENABLED', env: 'TELEGRAM_BOT_ENABLED', group: 'پیامک و ربات‌های پیام‌رسان', label: 'فعال‌سازی بات تعاملی تلگرام', type: 'boolean', default: 'true', help: 'فعال‌سازی دستورات تعاملی (/start, /status, /grades, /help)' },
   { key: 'SMS_BASE_URL', env: 'SMS_BASE_URL', group: 'پیامک و ربات‌های پیام‌رسان', label: 'نشانی سرویس پیامک', type: 'url', default: '', help: 'خالی = نشانی پیش‌فرض همان سرویس‌دهنده. برای CUSTOM از جای‌گاه‌های {to} {text} {sender} {key} استفاده کنید' },
   { key: 'TELEGRAM_API_BASE', env: 'TELEGRAM_API_BASE', group: 'پیامک و ربات‌های پیام‌رسان', label: 'نشانی API تلگرام', type: 'url', default: 'https://api.telegram.org' },
   { key: 'BALE_API_BASE', env: 'BALE_API_BASE', group: 'پیامک و ربات‌های پیام‌رسان', label: 'نشانی API بله', type: 'url', default: 'https://tapi.bale.ai' },

@@ -373,6 +373,13 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
     userId, eventCode: 'ENROLLMENT_DONE',
     payload: JSON.stringify({ registered: out.registered, waitlisted: out.waitlisted }),
   }));
+
+  // اعلان تلگرامی خودکار
+  try {
+    const { notifyEnrollmentDone } = await import('./telegram-notifications');
+    await notifyEnrollmentDone({ userId, registered: out.registered, waitlisted: out.waitlisted });
+  } catch { /* ارسال تلگرام هرگز نباید انتخاب واحد را متوقف کند */ }
+
   return out;
 }
 
