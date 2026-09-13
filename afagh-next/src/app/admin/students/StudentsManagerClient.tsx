@@ -99,6 +99,19 @@ export default function StudentsManagerClient(props: {
   const [roleSaving, setRoleSaving] = useState(false);
   const [roleMsg, setRoleMsg] = useState('');
   const roleTitle = (r: { id: number; code: string; title: string }) => (r.title && r.title.trim()) || r.code;
+  const staffIsAdmin = (st: StaffItem) => (st.staffType ?? '').includes('اداری') || (st.staffType ?? '').includes('کارشناس');
+  const staffIsEdu = (st: StaffItem) => (st.staffType ?? '').includes('هیئت') || (st.staffType ?? '').includes('مربی') || (st.staffType ?? '').includes('استاد');
+  const staffEngageLabel = (st: StaffItem) => {
+    if (staffIsAdmin(st) && staffIsEdu(st)) return 'فعال / اشتغال به تدریس و کار اداری';
+    if (staffIsAdmin(st)) return 'فعال / اشتغال به کار اداری';
+    return 'فعال / اشتغال به تدریس';
+  };
+  const openRoleModalFor = (st: StaffItem) => {
+    if (!st.userId) { showToast('شناسه کاربری این پرونده یافت نشد.'); return; }
+    setRoleMsg('');
+    setRoleSel(new Set(props.userRoleIds?.[st.userId] ?? []));
+    setRoleModalFor({ userId: st.userId, name: `${st.firstName} ${st.lastName}` });
+  };
   const handleToggleActive = async (userId: number | null | undefined, next: boolean, name: string) => {
     if (!userId) { showToast('شناسه کاربری این پرونده یافت نشد.'); return; }
     if (!confirm(`دسترسی وب «${name}» ${next ? 'فعال' : 'غیرفعال'} شود؟`)) return;
@@ -1340,6 +1353,17 @@ export default function StudentsManagerClient(props: {
                 {currentStaff ? `${currentStaff.firstName} ${currentStaff.lastName}` : '—'}
               </b>
               <span className="mr-auto"></span>
+              {currentStaff && currentStaff.userId ? (
+                <button
+                  onClick={() => openRoleModalFor(currentStaff)}
+                  className="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold whitespace-nowrap"
+                  title={(`نقش‌های «${currentStaff.firstName} ${currentStaff.lastName}»: ${((props.userRoleIds?.[currentStaff.userId ?? 0] ?? []).map(id => roleTitle(props.rolesAll?.find(r => r.id === id) ?? { id, code: '؟', title: '' }))).join('، ') || 'هیچ'}`)}
+                >
+                  {((props.userRoleIds?.[currentStaff.userId ?? 0] ?? []).length > 0)
+                    ? `⚙ ${(props.userRoleIds?.[currentStaff.userId ?? 0] ?? []).length} نقش`
+                    : '⚙ نقش‌ها'}
+                </button>
+              ) : null}
               <button
                 onClick={() => { setCsf({ nc: '', fn: '', ln: '', father: '', bcn: '', gender: '', mobile: '', email: '', code: '', type: '' }); setCreateStaffMsg(''); setCreateStaffOpen(true); }}
                 className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold"
@@ -1405,7 +1429,7 @@ export default function StudentsManagerClient(props: {
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-red-700 font-bold">* وضعیت کلی:</span>
                     <select defaultValue={currentStaff.isActive === 0 ? 'غیرفعال' : 'فعال'} className="col-span-2 bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-1 rounded font-bold">
-                      <option value="فعال">فعال / اشتغال به تدریس</option>
+                      <option value="فعال">{staffEngageLabel(currentStaff)}</option>
                       <option value="غیرفعال">غیرفعال</option>
                     </select>
                   </div>
@@ -2128,6 +2152,7 @@ export default function StudentsManagerClient(props: {
                   <select value={csf.type} onChange={e => setCsf({ ...csf, type: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-hidden">
                     <option value="اداری">اداری / کارشناس</option>
                     <option value="هیئت علمی">استاد / هیئت علمی</option>
+                    <option value="هیئت علمی-اداری">استاد و کارمند اداری (هیئت علمی + اداری)</option>
                     <option value="مربی">مربی</option>
                   </select>
                 </label>

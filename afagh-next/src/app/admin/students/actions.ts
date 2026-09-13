@@ -361,6 +361,12 @@ export async function createStaffExpertAction(input: {
       userId: u.id, staffCode: sc,
       staffType: String(input.staffType || '').trim() || 'اداری',
     }).onConflictDoNothing();
+    // اگر نوع سمت آموزشی است، همین‌جا نقش «استاد» را می‌دهیم تا بدون نقش نماند
+    const stType = String(input.staffType || '').trim();
+    if (stType.includes('هیئت') || stType.includes('مربی') || stType.includes('استاد')) {
+      const [prof] = await db.select({ id: roles.id }).from(roles).where(eq(roles.code, 'PROFESSOR')).limit(1);
+      if (prof) await db.insert(user_roles).values({ userId: u.id, roleId: prof.id }).onConflictDoNothing();
+    }
     revalidatePath('/admin/students');
     revalidatePath('/admin/staff');
     return { ok: true, userId: u.id };

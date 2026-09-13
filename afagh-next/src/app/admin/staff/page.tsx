@@ -107,6 +107,11 @@ async function createStaffExpertAction(input: {
       staffType: String(input.staffType || '').trim() || 'اداری',
       departmentId: input.departmentId || null,
     }).onConflictDoNothing();
+    const stType = String(input.staffType || '').trim();
+    if (stType.includes('هیئت') || stType.includes('مربی') || stType.includes('استاد')) {
+      const [prof] = await db.select({ id: roles.id }).from(roles).where(eq(roles.code, 'PROFESSOR')).limit(1);
+      if (prof) await db.insert(user_roles).values({ userId: u.id, roleId: prof.id }).onConflictDoNothing();
+    }
     revalidatePath('/admin/staff');
     return { ok: true, userId: u.id };
   } catch (e: unknown) {
