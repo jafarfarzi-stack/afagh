@@ -33,12 +33,13 @@ export default function ReportsClient({ opts }: { opts: FilterOptions }) {
   const [entryYear, setEntryYear] = useState(0);
   const [q, setQ] = useState('');
   const [miss, setMiss] = useState('national');
+  const [universityId, setUniversityId] = useState(0);
   const [res, setRes] = useState<ReportResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const card = CARDS.find(c => c.kind === kind);
-  const filters = { term, degreeId, facultyId, majorId, entryYear, q: q.trim(), miss, page: 1 };
+  const filters = { term, degreeId, facultyId, majorId, entryYear, q: q.trim(), miss, page: 1, universityId };
 
   const run = async (page = 1) => {
     setLoading(true);
@@ -101,6 +102,15 @@ export default function ReportsClient({ opts }: { opts: FilterOptions }) {
       {!card?.soon && (
         <div className="bg-white border border-slate-300 rounded-xl p-3 shadow-sm">
           <div className="flex flex-wrap items-center gap-2 text-xs">
+            {opts.universities.length > 1 && (
+              <label className="flex items-center gap-1">
+                <span className="font-bold text-slate-600">دانشگاه:</span>
+                <select value={universityId} onChange={e => setUniversityId(Number(e.target.value))} className="bg-indigo-50 border border-indigo-300 rounded px-2 py-1.5 font-bold">
+                  <option value={0}>همه</option>
+                  {opts.universities.map(u => <option key={u.id} value={u.id}>{u.title}{u.kind === 'DISSOLVED' ? ' (منحله)' : ''}</option>)}
+                </select>
+              </label>
+            )}
             {card?.needsTerm && (
               <label className="flex items-center gap-1">
                 <span className="font-bold text-slate-600">ترم:</span>

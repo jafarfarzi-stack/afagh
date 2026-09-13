@@ -17,6 +17,7 @@ export type ReportFilters = {
   q?: string;
   miss?: string;
   page?: number;
+  universityId?: number;
 };
 
 export type ReportColumn = { key: string; title: string };
@@ -37,6 +38,7 @@ export type FilterOptions = {
   majors: { id: number; name: string; code: string | null }[];
   entryYears: number[];
   latestTerm: string;
+  universities: { id: number; code: string; title: string; kind: string }[];
 };
 
 export async function getFilterOptions(): Promise<FilterOptions> {
@@ -63,6 +65,9 @@ export async function getFilterOptions(): Promise<FilterOptions> {
     majors: majors.rows,
     entryYears: years.rows.map(r => Number(r.y)),
     latestTerm: terms.rows[0]?.code ?? '',
+    universities: (await db.execute<{ id: number; code: string; title: string; kind: string }>(
+      sql`SELECT id, code, title, kind FROM universities WHERE "isActive" = 1 ORDER BY id`
+    )).rows,
   };
 }
 
@@ -76,6 +81,7 @@ function faStatus(s: unknown): string {
 function studentWhere(f: ReportFilters, alias = 's') {
   const a = sql.identifier(alias);
   const c = [];
+  if (f.universityId) c.push(sql`${a}."universityId" = ${f.universityId}`);
   if (f.degreeId) c.push(sql`${a}."degreeLevelId" = ${f.degreeId}`);
   if (f.facultyId) c.push(sql`m."facultyId" = ${f.facultyId}`);
   if (f.majorId) c.push(sql`${a}."majorId" = ${f.majorId}`);
@@ -157,9 +163,11 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
 
     // ── خلاصه وضعیت تحصیلی ──
     case 'status-summary': {
+      const uniCond = f.universityId ? sql`WHERE s."universityId" = ${f.universityId}` : sql``;
       const data = await db.execute<Record<string, unknown>>(sql`
         SELECT s.status AS st, d.title AS degree, COUNT(*)::int AS n
         FROM students s LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
+        ${uniCond}
         GROUP BY s.status, d.title ORDER BY 1, 2`);
       const rows = data.rows.map(x => ({ st: faStatus(x.st), degree: x.degree, n: x.n }));
       const total = rows.reduce((a, x) => a + Number(x.n), 0);
@@ -172,9 +180,11 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
 
     // ── به تفکیک دانشکده ──
     case 'by-faculty': {
+      const uniCond = f.universityId ? sql`WHERE s."universityId" = ${f.universityId}` : sql``;
       const data = await db.execute<Record<string, unknown>>(sql`
         SELECT COALESCE(fc.name, '— بدون دانشکده —') AS faculty, s.status AS st, COUNT(*)::int AS n
         FROM students s LEFT JOIN majors m ON m.id = s."majorId" LEFT JOIN faculties fc ON fc.id = m."facultyId"
+        ${uniCond}
         GROUP BY fc.name, s.status ORDER BY 1, 2`);
       const acc = new Map<string, Record<string, unknown>>();
       for (const r of data.rows) {
@@ -221,11 +231,13 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
 
     // ── وضعیت نمرات ترم ──
     case 'grade-status': {
+      const uniCond = f.universityId ? sql`AND s."universityId" = ${f.universityId}` : sql``;
       const data = await db.execute<Record<string, unknown>>(sql`
         SELECT e."gradeStatus" AS st, COUNT(*)::int AS n,
           ROUND(AVG(CASE WHEN ${NUM} THEN e."gradeValue"::numeric END), 2) AS avg
         FROM enrollments e JOIN course_offerings o ON o.id = e."offeringId" JOIN academic_terms t ON t.id = o."termId"
-        WHERE t."termCode" = ${term} GROUP BY 1 ORDER BY 2 DESC`);
+        JOIN students s ON s.id = e."studentId"
+        WHERE t."termCode" = ${term} ${uniCond} GROUP BY 1 ORDER BY 2 DESC`);
       const total = data.rows.reduce((a, x) => a + Number(x.n), 0);
       return {
         columns: [{ key: 'st', title: 'وضعیت نمره' }, { key: 'n', title: 'تعداد' }, { key: 'avg', title: 'میانگین نمرات' }],
