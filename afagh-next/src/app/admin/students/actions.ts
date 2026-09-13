@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, roles, staff, student_term_states, students, user_roles, users } from '@/db/schema';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { hashPassword, requireRole } from '@/lib/auth';
+import { getSessionUser } from '@/lib/auth';
 
 /** پیکربندی اجرایی آیین‌نامه ملاک دانشجو برای محاسبات کارنامه */
 export async function getTranscriptRegulation(studentId: number): Promise<{
@@ -366,6 +367,42 @@ export async function createStaffExpertAction(input: {
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'ثبت نشد.' };
   }
+}
+
+/** تنظیم نقش‌های یک کاربر (کارشناس/استاد) — فقط ADMIN؛ از تب اساتید در پنل دانشجویان */
+export async function saveUserRolesAction(userId: number, roleIds: number[]): Promise<{ ok: boolean; error?: string; added?: number; removed?: number }> {
+  try {
+    await requireRole(['ADMIN']);
+  } catch {
+    return { ok: false, error: 'فقط مدیر سیستم (ADMIN) می‌تواند نقش‌ها را تغییر دهد.' };
+  }
+  if (!userId || !Number.isInteger(userId)) return { ok: false, error: 'کاربر نامعتبر است.' };
+  const me = await getSessionUser();
+  const want = new Set(roleIds.map(Number).filter(Number.isInteger));
+  const have = new Set((await db.select({ roleId: user_roles.roleId }).from(user_roles).where(eq(user_roles.userId, userId))).map(x => x.roleId));
+  // 🔒 گارد قفل‌شدن: مدیر ارشد نباید نقش ADMIN خودش را بردارد
+  if (want.size < have.size) {
+    const [adm] = await db.select({ id: roles.id }).from(roles).where(eq(roles.code, 'ADMIN')).limit(1);
+    if (adm && me?.id === userId && have.has(adm.id) && !want.has(adm.id)) {
+      return { ok: false, error: 'نقش «مدیر ارشد» را نمی‌توان از خودتان برداشت (خطر قفل‌شدن سامانه).' };
+    }
+  }
+  let added = 0;
+  let removed = 0;
+  for (const rid of [...want]) {
+    if (!have.has(rid)) {
+      await db.insert(user_roles).values({ userId, roleId: rid }).onConflictDoNothing().catch(() => {});
+      added++;
+    }
+  }
+  for (const rid of [...have]) {
+    if (!want.has(rid)) {
+      await db.delete(user_roles).where(and(eq(user_roles.userId, userId), eq(user_roles.roleId, rid)));
+      removed++;
+    }
+  }
+  revalidatePath('/admin/students');
+  return { ok: true, added, removed };
 }
 
 /** فیلدهای قابل‌ذخیرهٔ پروندهٔ دانشجو (هم‌گام با تفاوت‌های types.ts) */

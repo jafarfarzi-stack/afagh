@@ -1,6 +1,6 @@
-import { and, count, desc, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { degree_level_configs, departments, educational_regulations, faculties, legacy_code_maps, majors, staff, students, users } from '@/db/schema';
+import { degree_level_configs, departments, educational_regulations, faculties, legacy_code_maps, majors, roles, staff, students, user_roles, users } from '@/db/schema';
 import type { RegulationPick } from './types';
 import { requireRole } from '@/lib/auth';
 import { normalizeFa, normCol } from '@/lib/persian-search';
@@ -250,6 +250,14 @@ export default async function AdminStudentsPage({
     .leftJoin(faculties, eq(faculties.id, staff.facultyId))
     .orderBy(desc(staff.id));
 
+  const [head] = await db.select().from(roles).where(eq(roles.code, 'DEP_HEAD')).limit(1);
+  const roleRows = await db.select({ id: roles.id, code: roles.code, title: roles.title, isSystem: roles.isSystem }).from(roles).orderBy(roles.id);
+  const staffUserIds = staffRows.map(r => r.userId).filter(Number.isInteger);
+  const urRows = staffUserIds.length ? await db.select().from(user_roles).where(inArray(user_roles.userId, staffUserIds)) : [];
+  const staffUserRoleIds: Record<number, number[]> = {};
+  for (const r of staffRows) if (r.userId) staffUserRoleIds[r.userId] = [];
+  for (const ur of urRows) (staffUserRoleIds[ur.userId] ??= []).push(ur.roleId);
+
   return (
     <div className="space-y-4">
       <div className="card !p-4 bg-white border-slate-300 shadow-sm flex items-center justify-between">
@@ -378,6 +386,8 @@ export default async function AdminStudentsPage({
           role: 'استاد / هیئت علمی',
         }))}
         canEditGrades={canEditGrades}
+        rolesAll={roleRows}
+        userRoleIds={staffUserRoleIds}
       />
     </div>
   );

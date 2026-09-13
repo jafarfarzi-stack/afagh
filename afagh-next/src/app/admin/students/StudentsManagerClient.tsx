@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { backfillRolesAction, bulkResetPasswordsAction, createStaffExpertAction, getTranscript, getTranscriptRegulation, resetUserPasswordAction, setStudentRegulationAction, setUserActiveAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
+import { backfillRolesAction, bulkResetPasswordsAction, createStaffExpertAction, getTranscript, getTranscriptRegulation, resetUserPasswordAction, saveUserRolesAction, setStudentRegulationAction, setUserActiveAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
 import type { RegulationConfig } from '@/lib/regulations-engine';
 import { ClientTh, ServerTh, useClientTable, type ColumnDef } from '@/components/DataTable';
 import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, studentStatusChip, studentStatusFa} from '@/lib/student-labels';
@@ -41,6 +41,8 @@ export default function StudentsManagerClient(props: {
   degrees?: { id: number; title: string }[];
   statusCounts?: { status: string; n: number }[];
   canEditGrades?: boolean;
+  rolesAll?: { id: number; code: string; title: string; isSystem: number | boolean | null }[];
+  userRoleIds?: Record<number, number[]>;
 }) {
   // انتخاب بخش اصلی (دانشجویان / اساتید / عملیات سریع)
   const [mainView, setMainView] = useState<'students' | 'professors' | 'quick_menu'>('students');
@@ -91,6 +93,12 @@ export default function StudentsManagerClient(props: {
   const [createStaffMsg, setCreateStaffMsg] = useState('');
   const [csf, setCsf] = useState({ nc: '', fn: '', ln: '', father: '', bcn: '', gender: '', mobile: '', email: '', code: '', type: '' });
   const [pwSaving, setPwSaving] = useState(false);
+  // ── تخصیص نقش (کارشناس/استاد/… — فقط ADMIN) ──
+  const [roleModalFor, setRoleModalFor] = useState<{ userId: number; name: string } | null>(null);
+  const [roleSel, setRoleSel] = useState<Set<number>>(new Set());
+  const [roleSaving, setRoleSaving] = useState(false);
+  const [roleMsg, setRoleMsg] = useState('');
+  const roleTitle = (r: { id: number; code: string; title: string }) => (r.title && r.title.trim()) || r.code;
   const handleToggleActive = async (userId: number | null | undefined, next: boolean, name: string) => {
     if (!userId) { showToast('شناسه کاربری این پرونده یافت نشد.'); return; }
     if (!confirm(`دسترسی وب «${name}» ${next ? 'فعال' : 'غیرفعال'} شود؟`)) return;
@@ -130,6 +138,25 @@ export default function StudentsManagerClient(props: {
       showToast(err?.message || 'خطا در ارتباط با سرور.');
     } finally {
       setBulkSaving(false);
+    }
+  };
+
+  const handleSaveRoles = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!roleModalFor) return;
+    setRoleSaving(true);
+    setRoleMsg('');
+    try {
+      const r = await saveUserRolesAction(roleModalFor.userId, [...roleSel]);
+      if (!r.ok) { setRoleMsg(`⚠ ${r.error || 'ذخیره نشد.'}`); return; }
+      setRoleMsg(`✅ ${(r.added ?? 0).toLocaleString('fa-IR')} نقش اضافه، ${(r.removed ?? 0).toLocaleString('fa-IR')} نقش حذف شد.`);
+      setRoleModalFor(null);
+      showToast(`نقش‌های «${roleModalFor.name}» ذخیره شد.`);
+      router.refresh();
+    } catch (err: any) {
+      setRoleMsg(`⚠ ${err?.message || 'خطا در ارتباط با سرور.'}`);
+    } finally {
+      setRoleSaving(false);
     }
   };
 
@@ -1505,6 +1532,21 @@ export default function StudentsManagerClient(props: {
                       >
                         🔑 تغییر رمز
                       </button>
+                      {currentStaff.userId ? (
+                        <button
+                          onClick={() => {
+                            const uid = currentStaff.userId;
+                            if (!uid) { showToast('شناسه کاربری یافت نشد.'); return; }
+                            setRoleMsg('');
+                            setRoleSel(new Set(props.userRoleIds?.[uid] ?? []));
+                            setRoleModalFor({ userId: uid, name: `${currentStaff.firstName} ${currentStaff.lastName}` });
+                          }}
+                          className="px-2 py-1 rounded text-[11px] font-bold bg-indigo-700 text-white hover:bg-indigo-800"
+                          title={(`نقش‌های فعلی: ${(((props.userRoleIds?.[currentStaff.userId] ?? [])).map(id => roleTitle(props.rolesAll?.find(r => r.id === id) ?? { id, code: '؟', title: '' }))).join('، ') || 'هیچ'}`)}
+                        >
+                          {(props.userRoleIds?.[currentStaff.userId] ?? []).length > 0 ? `⚙ ${(props.userRoleIds?.[currentStaff.userId] ?? []).length} نقش` : '⚙ نقش‌ها'}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -1973,6 +2015,55 @@ export default function StudentsManagerClient(props: {
                 <button type="button" onClick={() => setBulkOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
                 <button type="submit" disabled={bulkSaving} className="px-5 py-2 bg-red-700 hover:bg-red-800 disabled:bg-slate-400 text-white font-bold rounded-lg">
                   {bulkSaving ? 'در حال اجرا…' : '⚠ اعمال به همه'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {roleModalFor && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-slate-800 text-white px-5 py-3.5 flex items-center justify-between">
+              <h3 className="font-extrabold text-sm">⚙ نقش‌های «{roleModalFor.name}»</h3>
+              <button type="button" onClick={() => setRoleModalFor(null)} className="text-slate-300 hover:text-white text-lg leading-none">✕</button>
+            </div>
+            <form onSubmit={handleSaveRoles} className="p-5 space-y-3 text-xs">
+              <p className="text-[10.5px] text-slate-500 leading-relaxed">
+                نقش‌های تعریف‌شده را تیک بزنید/بردارید (کارشناس مالی، کارشناس آموزش، مدیر گروه، …). برای تعریف نقش جدید به صفحهٔ{' '}
+                <a href="/admin/permissions" className="font-bold text-indigo-700 underline">مدیریت سطوح دسترسی و نقش‌ها</a> بروید.
+              </p>
+              {props.rolesAll && props.rolesAll.length > 0 ? (
+                <div className="max-h-72 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
+                  {props.rolesAll.map(r => (
+                    <label key={r.id} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={roleSel.has(r.id)}
+                        onChange={e => {
+                          const next = new Set(roleSel);
+                          if (e.target.checked) next.add(r.id); else next.delete(r.id);
+                          setRoleSel(next);
+                        }}
+                        className="accent-indigo-600"
+                      />
+                      <span className="font-bold flex-1">{roleTitle(r)}</span>
+                      <span className="font-mono text-[10px] text-slate-400" dir="ltr">{r.code}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg bg-amber-50 border border-amber-300 p-3 text-amber-800 leading-relaxed">
+                  هنوز نقشی تعریف نشده است. ابتدا در{' '}
+                  <a href="/admin/permissions" className="font-bold underline">مدیریت سطوح دسترسی و نقش‌ها</a> نقش‌های موردنیاز مثل «کارشناس مالی» و «کارشناس آموزش» را بسازید، بعد همین‌جا تخصیص دهید.
+                </div>
+              )}
+              {roleMsg && <p className="text-xs font-bold break-words">{roleMsg}</p>}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                <button type="button" onClick={() => setRoleModalFor(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
+                <button type="submit" disabled={roleSaving} className="px-5 py-2 bg-indigo-700 hover:bg-indigo-800 disabled:bg-slate-400 text-white font-bold rounded-lg">
+                  {roleSaving ? 'در حال ثبت…' : '💾 ثبت نقش‌ها'}
                 </button>
               </div>
             </form>
