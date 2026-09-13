@@ -340,6 +340,126 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
         [sql`s.status = 'TRANSFERRED'`], f,
       );
 
+    // ── گزارش شهریه / تراکنش‌های مالی ترم ──
+    case 'tuition': {
+      const uniCond = f.universityId ? sql`AND s."universityId" = ${f.universityId}` : sql``;
+      const termCond = term ? sql`AND t."termCode" = ${term}` : sql``;
+      const data = await db.execute<Record<string, unknown>>(sql`
+        SELECT s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
+          m.name AS major, d.title AS degree,
+          COALESCE(SUM(CASE WHEN sl."transactionType" = 'CREDIT' THEN sl.amount ELSE 0 END), 0)::int AS credit,
+          COALESCE(SUM(CASE WHEN sl."transactionType" = 'DEBIT' THEN sl.amount ELSE 0 END), 0)::int AS debit,
+          COALESCE(SUM(CASE WHEN sl."transactionType" = 'CREDIT' THEN sl.amount ELSE -sl.amount END), 0)::int AS balance,
+          COUNT(sl.id)::int AS txCount
+        FROM students s JOIN users u ON u.id = s."userId"
+          LEFT JOIN majors m ON m.id = s."majorId"
+          LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
+          LEFT JOIN student_ledger sl ON sl."studentId" = s.id
+          LEFT JOIN academic_terms t ON t.id = sl."termId"
+        WHERE s.status = 'ACTIVE' ${uniCond} ${termCond}
+        GROUP BY s."studentCode", u."firstName", u."lastName", m.name, d.title
+        ORDER BY balance DESC`);
+      const total = data.rows.length;
+      const totalCredit = data.rows.reduce((a, x) => a + Number(x.credit), 0);
+      const totalDebit = data.rows.reduce((a, x) => a + Number(x.debit), 0);
+      return {
+        columns: [
+          { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
+          { key: 'major', title: 'رشته' }, { key: 'degree', title: 'مقطع' },
+          { key: 'credit', title: 'بدهکار' }, { key: 'debit', title: 'بستانکار' },
+          { key: 'balance', title: 'مانده' }, { key: 'txCount', title: 'تراکنش' },
+        ],
+        rows: data.rows, total, page: 1, per: total || 1, totalPages: 1,
+        summary: `جمع بدهکار: ${totalCredit.toLocaleString('fa-IR')} — بستانکار: ${totalDebit.toLocaleString('fa-IR')}`,
+      };
+    }
+
+    // ── گزارش پاسخ‌های طرح پایش ──
+    case 'payesh': {
+      const termCond = term ? sql`AND t."termCode" = ${term}` : sql``;
+      const data = await db.execute<Record<string, unknown>>(sql`
+        SELECT f.id AS fid, f.title AS form_title,
+          q.id AS qid, q.text AS question,
+          COUNT(r.id)::int AS responses,
+          CASE WHEN q.type = 'SCALE' THEN ROUND(AVG(CASE WHEN qo.value IS NOT NULL THEN qo.value END), 1)::text ELSE NULL END AS avg_score
+        FROM evaluation_periods p
+          JOIN evaluation_forms f ON f."periodId" = p.id
+          JOIN evaluation_questions q ON q."formId" = f.id
+          LEFT JOIN question_options qo ON qo."questionId" = q.id
+          LEFT JOIN evaluation_responses r ON r."questionId" = q.id AND r."selectedOptionId" = qo.id
+          LEFT JOIN course_offerings o ON o.id = r."offeringId"
+          LEFT JOIN academic_terms t ON t.id = o."termId"
+        WHERE 1=1 ${termCond}
+        GROUP BY f.id, f.title, q.id, q.text, q.type
+        ORDER BY f.id, q.id`);
+      const total = data.rows.length;
+      return {
+        columns: [
+          { key: 'form_title', title: 'فرم' }, { key: 'question', title: 'سؤال' },
+          { key: 'responses', title: 'پاسخ‌ها' }, { key: 'avg_score', title: 'میانگین نمره' },
+        ],
+        rows: data.rows, total, page: 1, per: total || 1, totalPages: 1,
+        summary: `${total.toLocaleString('fa-IR')} سؤال پایش`,
+      };
+    }
+
+    // ── دانشجویان واجد شرایط آزمون جامع ──
+    case 'jame': {
+      const uniCond = f.universityId ? sql`AND s."universityId" = ${f.universityId}` : sql``;
+      const data = await db.execute<Record<string, unknown>>(sql`
+        SELECT s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
+          m.name AS major, d.title AS degree, s."entryYear" AS y,
+          COUNT(DISTINCT e."offeringId")::int AS courses_passed,
+          ROUND(AVG(CASE WHEN e."gradeStatus" = 'FINALIZED' AND e."gradeValue" ~ '^[0-9]+(\\.[0-9]+)?$' THEN e."gradeValue"::numeric END), 2) AS avg
+        FROM students s JOIN users u ON u.id = s."userId"
+          LEFT JOIN majors m ON m.id = s."majorId"
+          LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
+          LEFT JOIN enrollments e ON e."studentId" = s.id AND e."gradeStatus" = 'FINALIZED' AND e."gradeValue" ~ '^[0-9]+(\\.[0-9]+)?$' AND e."gradeValue"::numeric >= 12
+        WHERE s.status = 'ACTIVE' ${uniCond}
+        GROUP BY s."studentCode", u."firstName", u."lastName", m.name, d.title, s."entryYear"
+        HAVING COUNT(DISTINCT e."offeringId") >= 10
+        ORDER BY avg DESC`);
+      const total = data.rows.length;
+      return {
+        columns: [
+          { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
+          { key: 'major', title: 'رشته' }, { key: 'degree', title: 'مقطع' },
+          { key: 'y', title: 'ورودی' }, { key: 'courses_passed', title: 'درس قبول' },
+          { key: 'avg', title: 'میانگین' },
+        ],
+        rows: data.rows, total, page: 1, per: total || 1, totalPages: 1,
+        summary: `${total.toLocaleString('fa-IR')} دانشجو واجد شرایط جامع`,
+      };
+    }
+
+    // ── مدارک دانشجو ──
+    case 'docs': {
+      const uniCond = f.universityId ? sql`AND s."universityId" = ${f.universityId}` : sql``;
+      const data = await db.execute<Record<string, unknown>>(sql`
+        SELECT s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
+          m.name AS major, d.title AS degree, s.status AS st,
+          COUNT(sd.id)::int AS doc_count,
+          COUNT(DISTINCT sd."categoryId")::int AS cat_count
+        FROM students s JOIN users u ON u.id = s."userId"
+          LEFT JOIN majors m ON m.id = s."majorId"
+          LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
+          LEFT JOIN student_documents sd ON sd."personUserId" = u.id
+        WHERE s.status = 'ACTIVE' ${uniCond}
+        GROUP BY s."studentCode", u."firstName", u."lastName", m.name, d.title, s.status
+        ORDER BY doc_count ASC`);
+      const total = data.rows.length;
+      const noDoc = data.rows.filter(r => Number(r.doc_count) === 0).length;
+      return {
+        columns: [
+          { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
+          { key: 'major', title: 'رشته' }, { key: 'degree', title: 'مقطع' },
+          { key: 'doc_count', title: 'تعداد مدرک' }, { key: 'cat_count', title: 'دسته مدرک' },
+        ],
+        rows: data.rows, total, page: 1, per: total || 1, totalPages: 1,
+        summary: `${total.toLocaleString('fa-IR')} پرونده فعال — ${noDoc.toLocaleString('fa-IR')} بدون مدرک`,
+      };
+    }
+
     default:
       return { columns: [], rows: [], total: 0, page: 1, per: PER, totalPages: 1 };
   }

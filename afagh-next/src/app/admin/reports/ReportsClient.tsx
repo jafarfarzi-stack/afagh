@@ -18,10 +18,10 @@ const CARDS: Card[] = [
   { kind: 'entries', icon: '📥', title: 'ورودی‌های جدید' },
   { kind: 'noshow', icon: '🚫', title: 'عدم مراجعه‌ها' },
   { kind: 'transfers', icon: '🔀', title: 'میهمان / انتقالی' },
-  { kind: 'tuition', icon: '💰', title: 'گزارش بهای دانشجویان در ترم', soon: true },
-  { kind: 'payesh', icon: '🗂️', title: 'گزارش پاسخ‌های طرح پایش', soon: true },
-  { kind: 'jame', icon: '🧮', title: 'دانشجویان واجد شرایط آزمون جامع', soon: true },
-  { kind: 'docs', icon: '📎', title: 'مدارک دانشجو', soon: true },
+  { kind: 'tuition', icon: '💰', title: 'گزارش شهریه / تراکنش مالی' },
+  { kind: 'payesh', icon: '🗂️', title: 'گزارش پاسخ‌های طرح پایش' },
+  { kind: 'jame', icon: '🧮', title: 'دانشجویان واجد شرایط آزمون جامع' },
+  { kind: 'docs', icon: '📎', title: 'مدارک دانشجویان' },
 ];
 
 export default function ReportsClient({ opts }: { opts: FilterOptions }) {
