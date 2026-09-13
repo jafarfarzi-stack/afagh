@@ -182,3 +182,37 @@ BEGIN
       ON departments ("departmentCode") WHERE "departmentCode" IS NOT NULL;
   END IF;
 END $$;
+
+-- ── پروندهٔ تکمیلی دانشجو از سما (خوابگاه، ولی، مدرک، نظام وظیفه و…) — هم‌گام با schema.ts ──
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "advisorCode" varchar(50);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "documentStatus" varchar(100);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "scholarshipType" varchar(100);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "militaryStatus" varchar(50);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "militaryExemptionNo" varchar(50);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "studentCardStatus" varchar(50);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "archiveNo" varchar(50);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "parvandehNo" varchar(100);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "dormName" varchar(150);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "dormRoom" varchar(50);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "hasDorm" integer DEFAULT 0;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "guardianJobTitle" varchar(100);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "guardianPhone" varchar(30);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "guardianAddress" varchar(300);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "guardianEmail" varchar(150);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "diplomaType" varchar(50);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "diplomaPlace" varchar(200);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "diplomaYear" varchar(10);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "diplomaGrade" varchar(20);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "pishdPlace" varchar(200);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "pishdYear" varchar(10);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "pishdGrade" varchar(20);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "tuitionType" varchar(50);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "tuitionPayer" integer DEFAULT 0;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "englishExamType" varchar(50);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "englishScore" varchar(20);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "insertDate" varchar(20);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "insertTime" varchar(20);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "certIssued3m" integer DEFAULT 0;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "documentDeficiency" varchar(200);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "unitsRemaining" integer;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS "eqSemesters" integer DEFAULT 0;

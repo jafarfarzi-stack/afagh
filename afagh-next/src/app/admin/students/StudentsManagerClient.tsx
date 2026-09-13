@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { getTranscript, getTranscriptRegulation, resetUserPasswordAction, setStudentRegulationAction, setUserActiveAction, type TranscriptRow } from './actions';
+import { getTranscript, getTranscriptRegulation, resetUserPasswordAction, setStudentRegulationAction, setUserActiveAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
 import type { RegulationConfig } from '@/lib/regulations-engine';
 import { ClientTh, ServerTh, useClientTable, type ColumnDef } from '@/components/DataTable';
 import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, studentStatusChip, studentStatusFa} from '@/lib/student-labels';
@@ -172,6 +172,53 @@ export default function StudentsManagerClient(props: {
     getTranscript(currentStudent.id).then(r => setTranscript(r)).catch(() => setTranscript([])).finally(() => setTranscriptLoading(false));
     getTranscriptRegulation(currentStudent.id).then(r => setRegConfig(r?.config ?? null)).catch(() => setRegConfig(null));
   }, [stuTab, currentStudent?.id]);
+
+  // ── فرم ویرایش پروندهٔ دانشجو (هویت + تکمیلی سما) — فقط ADMIN ──
+  const [profile, setProfile] = useState<Record<string, string | number | null>>({});
+  const [profileSaving, setProfileSaving] = useState(false);
+  const syncProfile = (s: StudentItem) => {
+    setProfile({
+      fatherName: s.fatherName || '', birthCertNo: s.birthCertNo || '',
+      placeOfBirth: s.placeOfBirth || '', placeOfIssue: s.placeOfIssue || '',
+      gender: s.gender || '', mobile: s.mobile || '', email: s.email || '',
+      postalCode: s.postalCode || '', address: s.address || '',
+      passportNumber: s.passportNumber || '',
+      advisorCode: s.advisorCode || '', documentStatus: s.documentStatus || '',
+      scholarshipType: s.scholarshipType || '', militaryStatus: s.militaryStatus || '',
+      militaryExemptionNo: s.militaryExemptionNo || '', studentCardStatus: s.studentCardStatus || '',
+      archiveNo: s.archiveNo || '', parvandehNo: s.parvandehNo || '',
+      dormName: s.dormName || '', dormRoom: s.dormRoom || '', hasDorm: s.hasDorm ?? 0,
+      guardianJobTitle: s.guardianJobTitle || '', guardianPhone: s.guardianPhone || '',
+      guardianAddress: s.guardianAddress || '', guardianEmail: s.guardianEmail || '',
+      diplomaType: s.diplomaType || '', diplomaPlace: s.diplomaPlace || '',
+      diplomaYear: s.diplomaYear || '', diplomaGrade: s.diplomaGrade || '',
+      pishdPlace: s.pishdPlace || '', pishdYear: s.pishdYear || '', pishdGrade: s.pishdGrade || '',
+      tuitionType: s.tuitionType || '', tuitionPayer: s.tuitionPayer ?? 0,
+      englishExamType: s.englishExamType || '', englishScore: s.englishScore || '',
+      certIssued3m: s.certIssued3m ?? 0, documentDeficiency: s.documentDeficiency || '',
+      unitsRemaining: s.unitsRemaining ?? '', eqSemesters: s.eqSemesters ?? 0,
+    });
+  };
+  useEffect(() => {
+    if (currentStudent) syncProfile(currentStudent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStudent?.id]);
+  const pf = (k: string, v: string | number) => setProfile(p => ({ ...p, [k]: v }));
+  const saveProfile = async (keys: string[]) => {
+    if (!currentStudent) return;
+    setProfileSaving(true);
+    try {
+      const patch: Record<string, string | number | null> = {};
+      for (const k of keys) if (profile[k] !== undefined) patch[k] = profile[k] ?? '';
+      const r = await updateStudentProfileAction(currentStudent.id, patch as StudentProfilePatch);
+      showToast(r.ok ? '✅ پروندهٔ دانشجو ذخیره شد.' : (r.error || 'انجام نشد.'));
+      if (r.ok) router.refresh();
+    } catch (err: any) {
+      showToast(err?.message || 'خطا در ارتباط با سرور.');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -370,17 +417,17 @@ export default function StudentsManagerClient(props: {
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>نام پدر:</span>
-                    <input type="text" defaultValue={currentStudent.fatherName || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded" />
+                    <input type="text" value={profile.fatherName ?? ''} onChange={e => pf('fatherName', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded" />
                     <div className="flex items-center gap-1">
                       <span>جنس:</span>
                       <select
-                        key={`gender-${currentStudent.id}`}
-                        defaultValue={currentStudent.gender === 'FEMALE' ? 'زن' : currentStudent.gender === 'MALE' ? 'مرد' : ''}
+                        value={profile.gender ?? ''}
+                        onChange={e => pf('gender', e.target.value)}
                         className="bg-white border border-slate-300 px-1 py-1 rounded"
                       >
                         <option value="">—</option>
-                        <option value="مرد">مرد</option>
-                        <option value="زن">زن</option>
+                        <option value="MALE">مرد</option>
+                        <option value="FEMALE">زن</option>
                       </select>
                     </div>
                   </div>
@@ -389,7 +436,7 @@ export default function StudentsManagerClient(props: {
                     <input type="text" defaultValue={dateToJalali(currentStudent.birthDate)} className="bg-white border border-slate-300 px-2 py-1 rounded font-mono" title={currentStudent.birthDate ? `میلادی: ${currentStudent.birthDate}` : undefined} />
                     <div className="flex items-center gap-1">
                       <span>ش. شناسنامه:</span>
-                      <input type="text" defaultValue={currentStudent.birthCertNo || '—'} className="bg-white border border-slate-300 px-1 py-1 rounded font-mono w-full" />
+                      <input type="text" value={profile.birthCertNo ?? ''} onChange={e => pf('birthCertNo', e.target.value)} className="bg-white border border-slate-300 px-1 py-1 rounded font-mono w-full" />
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
@@ -398,8 +445,11 @@ export default function StudentsManagerClient(props: {
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>محل صدور:</span>
-                    <input type="text" defaultValue={currentStudent.placeOfIssue || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded" />
-                    <span>محل تولد: {currentStudent.placeOfBirth || '—'}</span>
+                    <input type="text" value={profile.placeOfIssue ?? ''} onChange={e => pf('placeOfIssue', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded" />
+                    <div className="flex items-center gap-1">
+                      <span>محل تولد:</span>
+                      <input type="text" value={profile.placeOfBirth ?? ''} onChange={e => pf('placeOfBirth', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" />
+                    </div>
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>وضعیت تحصیلی:</span>
@@ -466,7 +516,7 @@ export default function StudentsManagerClient(props: {
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>شماره همراه:</span>
-                    <input type="text" defaultValue={currentStudent.mobile && currentStudent.mobile !== '—' ? currentStudent.mobile : ''} placeholder="—" className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
+                    <input type="text" value={profile.mobile ?? ''} onChange={e => pf('mobile', e.target.value)} placeholder="—" className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>آیین‌نامه ملاک:</span>
@@ -515,6 +565,17 @@ export default function StudentsManagerClient(props: {
                   </div>
                 </div>
               </div>
+              <div className="pt-2 border-t border-slate-300 flex items-center gap-2">
+                <button
+                  onClick={() => saveProfile(['fatherName', 'birthCertNo', 'placeOfBirth', 'placeOfIssue', 'gender', 'mobile', 'nationality'])}
+                  disabled={profileSaving}
+                  className="px-3 py-1.5 rounded bg-emerald-700 text-white font-bold text-xs hover:bg-emerald-800 disabled:opacity-50"
+                  title="ذخیرهٔ تغییرات هویت این دانشجو (فقط مدیر سیستم)"
+                >
+                  💾 ذخیرهٔ اطلاعات هویت
+                </button>
+                {profileSaving && <span className="text-slate-500">در حال ذخیره…</span>}
+              </div>
             </div>
           )}
 
@@ -540,14 +601,16 @@ export default function StudentsManagerClient(props: {
                   <div className="grid grid-cols-2 gap-2">
                     <div className="flex items-center gap-2">
                       <span className="w-24">استاد راهنما:</span>
-                      <input type="text" defaultValue="" className="bg-yellow-100 border border-slate-300 px-2 py-1 rounded w-full font-bold" placeholder="—" />
+                      <input type="text" value={profile.advisorCode ?? ''} onChange={e => pf('advisorCode', e.target.value)} className="bg-yellow-100 border border-slate-300 px-2 py-1 rounded w-full font-bold" placeholder="کد/نام استاد راهنما —" />
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="w-24">وضعیت نظام وظیفه:</span>
-                      <select className="bg-white border border-slate-300 px-2 py-1 rounded w-full">
-                        <option>معافیت تحصیلی فعال</option>
-                        <option>کارت پایان خدمت</option>
-                        <option>معافیت دائم</option>
+                      <select value={profile.militaryStatus ?? ''} onChange={e => pf('militaryStatus', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full">
+                        <option value="">—</option>
+                        <option value="معافیت تحصیلی فعال">معافیت تحصیلی فعال</option>
+                        <option value="کارت پایان خدمت">کارت پایان خدمت</option>
+                        <option value="معافیت دائم">معافیت دائم</option>
+                        <option value="در حال تحصیل (معافیت موقت)">در حال تحصیل (معافیت موقت)</option>
                       </select>
                     </div>
                   </div>
@@ -555,14 +618,15 @@ export default function StudentsManagerClient(props: {
                   <div className="grid grid-cols-2 gap-2">
                     <div className="flex items-center gap-2">
                       <span className="w-24">وضعیت مدارک:</span>
-                      <select className="bg-white border border-slate-300 px-2 py-1 rounded w-full">
-                        <option>تکمیل و تأییدشده ✓</option>
-                        <option>دارای نقص مدرک</option>
+                      <select value={profile.documentStatus ?? ''} onChange={e => pf('documentStatus', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full">
+                        <option value="">—</option>
+                        <option value="تکمیل و تأییدشده ✓">تکمیل و تأییدشده ✓</option>
+                        <option value="دارای نقص مدرک">دارای نقص مدرک</option>
                       </select>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="w-24">نوع بورسیه:</span>
-                      <input type="text" defaultValue="" className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="—" />
+                      <input type="text" value={profile.scholarshipType ?? ''} onChange={e => pf('scholarshipType', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="—" />
                     </div>
                   </div>
 
@@ -590,7 +654,12 @@ export default function StudentsManagerClient(props: {
 
                   <div className="flex items-center gap-3 pt-1 border-t border-slate-200">
                     <label className="flex items-center gap-1.5 cursor-pointer font-bold">
-                      <input type="checkbox" defaultChecked className="w-4 h-4 text-emerald-600 rounded" />
+                      <input
+                        type="checkbox"
+                        checked={profile.nationality === '120001'}
+                        onChange={e => pf('nationality', e.target.checked ? '120001' : '')}
+                        className="w-4 h-4 text-emerald-600 rounded"
+                      />
                       <span>تابعیت ایرانی دارد</span>
                     </label>
                     <span className="text-slate-500">سال‌های استفاده از آموزش رایگان:</span>
@@ -604,25 +673,40 @@ export default function StudentsManagerClient(props: {
                 <div className="flex items-center gap-3">
                   <span className="font-bold text-slate-800">وضعیت نمره آزمون زبان انگلیسی:</span>
                   <span>نوع آزمون:</span>
-                  <select className="bg-white border border-slate-300 px-2 py-1 rounded">
-                    <option>MSRT</option>
-                    <option>Tolimo</option>
-                    <option>IELTS</option>
-                    <option>TOEFL</option>
+                  <select value={profile.englishExamType ?? ''} onChange={e => pf('englishExamType', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded">
+                    <option value="">—</option>
+                    <option value="MSRT">MSRT</option>
+                    <option value="Tolimo">Tolimo</option>
+                    <option value="IELTS">IELTS</option>
+                    <option value="TOEFL">TOEFL</option>
                   </select>
                   <span>نمره آزمون:</span>
-                  <input type="text" defaultValue="۷۸" className="w-20 bg-white border border-slate-300 px-2 py-1 rounded font-mono text-center font-bold" />
+                  <input type="text" value={profile.englishScore ?? ''} onChange={e => pf('englishScore', e.target.value)} className="w-20 bg-white border border-slate-300 px-2 py-1 rounded font-mono text-center font-bold" placeholder="—" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200 text-[11px] text-slate-600">
                   <div className="bg-white p-1.5 border border-slate-200 rounded">
                     <span>اولین ثبت‌کننده: </span>
-                    <b className="text-slate-800">کارشناس ثبت‌نام (خانم نجفی)</b> | ساعت: ۱۳:۱۵ | تاریخ: ۱۴۰۳/۰۶/۲۵
+                    <b className="text-slate-800">{(profile.insertDate || profile.insertTime) ? 'سما' : '—'}</b>
+                    {(profile.insertDate || profile.insertTime) && (
+                      <span> | ساعت: {profile.insertTime || '—'} | تاریخ: {profile.insertDate || '—'}</span>
+                    )}
                   </div>
                   <div className="bg-white p-1.5 border border-slate-200 rounded">
                     <span>آخرین تغییرات: </span>
-                    <b className="text-slate-800">مدیر آموزش</b> | ساعت: ۱۰:۴۵ | تاریخ: ۱۴۰۵/۰۶/۰۸
+                    <b className="text-slate-800">—</b>
                   </div>
+                </div>
+                <div className="pt-1 border-t border-slate-200 flex items-center gap-2">
+                  <button
+                    onClick={() => saveProfile(['advisorCode', 'militaryStatus', 'documentStatus', 'scholarshipType', 'englishExamType', 'englishScore'])}
+                    disabled={profileSaving}
+                    className="px-3 py-1 rounded bg-emerald-700 text-white font-bold text-xs hover:bg-emerald-800 disabled:opacity-50"
+                    title="ذخیرهٔ اطلاعات تکمیلی این دانشجو (فقط مدیر سیستم)"
+                  >
+                    💾 ذخیرهٔ اطلاعات تکمیلی
+                  </button>
+                  {profileSaving && <span className="text-slate-500">در حال ذخیره…</span>}
                 </div>
               </div>
             </div>
@@ -635,21 +719,21 @@ export default function StudentsManagerClient(props: {
               <div className="border border-slate-300 p-2.5 rounded bg-slate-50 space-y-1.5">
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span>نام خوابگاه و شماره اتاق:</span>
-                  <input type="text" defaultValue="خوابگاه شهید چمران" className="bg-yellow-100 border border-slate-300 px-2 py-1 rounded font-bold" />
-                  <input type="text" defaultValue="اتاق ۲۰۴" className="bg-white border border-slate-300 px-2 py-1 rounded text-center" />
+                  <input type="text" value={profile.dormName ?? ''} onChange={e => pf('dormName', e.target.value)} className="bg-yellow-100 border border-slate-300 px-2 py-1 rounded font-bold" placeholder="—" />
+                  <input type="text" value={profile.dormRoom ?? ''} onChange={e => pf('dormRoom', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded text-center" placeholder="—" />
                 </div>
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span>عنوان و شغل ولی/قیم:</span>
-                  <input type="text" defaultValue="کارمند" className="bg-white border border-slate-300 px-2 py-1 rounded" />
+                  <input type="text" value={profile.guardianJobTitle ?? ''} onChange={e => pf('guardianJobTitle', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded" placeholder="—" />
                   <div className="flex items-center gap-1">
                     <span>تلفن ولی:</span>
-                    <input type="text" defaultValue="۰۲۱-۶۶۵۴۳۲۱۰" className="bg-white border border-slate-300 px-2 py-1 rounded font-mono w-full" />
+                    <input type="text" value={profile.guardianPhone ?? ''} onChange={e => pf('guardianPhone', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded font-mono w-full" placeholder="—" />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span>کد پستی و ایمیل:</span>
-                  <input type="text" defaultValue="14156-83491" className="bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
-                  <input type="email" defaultValue="ali.rezaei@student.afagh.ac.ir" className="bg-white border border-slate-300 px-2 py-1 rounded font-mono text-left" dir="ltr" />
+                  <input type="text" value={profile.postalCode ?? ''} onChange={e => pf('postalCode', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded font-mono" placeholder="—" />
+                  <input type="email" value={profile.email ?? ''} onChange={e => pf('email', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded font-mono text-left" dir="ltr" placeholder="ایمیل دانشجو" />
                 </div>
               </div>
 
@@ -657,17 +741,51 @@ export default function StudentsManagerClient(props: {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="border border-slate-300 p-2.5 rounded bg-slate-50 space-y-1">
                   <h4 className="font-bold text-slate-800 border-b pb-1">سوابق دوره پیش‌دانشگاهی / دیپلم:</h4>
-                  <p>محل اخذ: دبیرستان البرز تهران</p>
-                  <p>سال اخذ: ۱۴۰۳ | معدل کتبی دیپلم: <b className="text-emerald-800">۱۸.۷۵</b></p>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500">محل اخذ دیپلم:</span>
+                    <input type="text" value={profile.diplomaPlace ?? ''} onChange={e => pf('diplomaPlace', e.target.value)} className="bg-white border border-slate-300 px-2 py-0.5 rounded flex-1" placeholder="—" />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500">سال اخذ:</span>
+                    <input type="text" value={profile.diplomaYear ?? ''} onChange={e => pf('diplomaYear', e.target.value)} className="bg-white border border-slate-300 px-2 py-0.5 rounded w-16 font-mono" placeholder="—" />
+                    <span className="text-slate-500">معدل کتبی دیپلم:</span>
+                    <b className="text-emerald-800">{profile.diplomaGrade || '—'}</b>
+                    <input type="text" value={profile.diplomaGrade ?? ''} onChange={e => pf('diplomaGrade', e.target.value)} className="bg-white border border-slate-300 px-2 py-0.5 rounded w-14 font-mono" placeholder="—" />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500">پیش‌دانشگاهی:</span>
+                    <input type="text" value={profile.pishdPlace ?? ''} onChange={e => pf('pishdPlace', e.target.value)} className="bg-white border border-slate-300 px-2 py-0.5 rounded flex-1" placeholder="محل —" />
+                    <input type="text" value={profile.pishdYear ?? ''} onChange={e => pf('pishdYear', e.target.value)} className="bg-white border border-slate-300 px-2 py-0.5 rounded w-16 font-mono" placeholder="سال" />
+                    <input type="text" value={profile.pishdGrade ?? ''} onChange={e => pf('pishdGrade', e.target.value)} className="bg-white border border-slate-300 px-2 py-0.5 rounded w-14 font-mono" placeholder="معدل" />
+                  </div>
                 </div>
                 <div className="border border-slate-300 p-2.5 rounded bg-slate-50 space-y-1">
                   <h4 className="font-bold text-slate-800 border-b pb-1">اطلاعات وضعیت شهریه‌پرداز:</h4>
-                  <p>نوع دوره: روزانه (آموزش رایگان دولتی)</p>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500">نوع دوره:</span>
+                    <input type="text" value={profile.tuitionType ?? ''} onChange={e => pf('tuitionType', e.target.value)} className="bg-white border border-slate-300 px-2 py-0.5 rounded flex-1" placeholder="روزانه (آموزش رایگان دولتی) —" />
+                  </div>
                   <label className="flex items-center gap-1.5 font-bold mt-1">
-                    <input type="checkbox" className="w-4 h-4 text-emerald-600 rounded" />
+                    <input
+                      type="checkbox"
+                      checked={(profile.tuitionPayer ?? 0) === 1}
+                      onChange={e => pf('tuitionPayer', e.target.checked ? 1 : 0)}
+                      className="w-4 h-4 text-emerald-600 rounded"
+                    />
                     <span>دانشجوی شهریه‌پرداز است (نوبت دوم/پردیس)</span>
                   </label>
                 </div>
+              </div>
+              <div className="pt-1 border-t border-slate-300 flex items-center gap-2">
+                <button
+                  onClick={() => saveProfile(['dormName', 'dormRoom', 'guardianJobTitle', 'guardianPhone', 'postalCode', 'email', 'diplomaPlace', 'diplomaYear', 'diplomaGrade', 'pishdPlace', 'pishdYear', 'pishdGrade', 'tuitionType', 'tuitionPayer'])}
+                  disabled={profileSaving}
+                  className="px-3 py-1.5 rounded bg-emerald-700 text-white font-bold text-xs hover:bg-emerald-800 disabled:opacity-50"
+                  title="ذخیرهٔ سایر اطلاعات این دانشجو (فقط مدیر سیستم)"
+                >
+                  💾 ذخیرهٔ سایر اطلاعات
+                </button>
+                {profileSaving && <span className="text-slate-500">در حال ذخیره…</span>}
               </div>
             </div>
           )}
@@ -696,19 +814,66 @@ export default function StudentsManagerClient(props: {
               </div>
 
               {stuSubTab === 'extra' && (
-                <div className="grid grid-cols-2 gap-3 border border-slate-300 p-3 rounded bg-slate-50">
-                  <div className="space-y-1.5">
-                    <p>نوع دیپلم پایه: ریاضی و فیزیک (نظری)</p>
-                    <p>کد صحت مدارک: ۹۸۴۲۱۰-SHAT</p>
-                    <p>ابطال نظام وظیفه: در حال تحصیل (معافیت موقت)</p>
-                    <p>تعداد صدور گواهی ۳ ماهه: ۰ فقره</p>
-                    <p>شماره پرونده شمس: AF-2026-9481</p>
+                <div className="space-y-2 border border-slate-300 p-3 rounded bg-slate-50">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-40">نوع دیپلم پایه:</span>
+                        <input type="text" value={profile.diplomaType ?? ''} onChange={e => pf('diplomaType', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="—" />
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-40">کد صحت مدارک / آرشیو:</span>
+                        <input type="text" value={profile.archiveNo ?? ''} onChange={e => pf('archiveNo', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="—" />
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-40">ابطال نظام وظیفه:</span>
+                        <input type="text" value={profile.militaryStatus ?? ''} onChange={e => pf('militaryStatus', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="در حال تحصیل (معافیت موقت)" />
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-40">شمارهٔ معافیت:</span>
+                        <input type="text" value={profile.militaryExemptionNo ?? ''} onChange={e => pf('militaryExemptionNo', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="—" />
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-40">تعداد صدور گواهی ۳ ماهه:</span>
+                        <input type="number" value={profile.certIssued3m ?? 0} onChange={e => pf('certIssued3m', Number(e.target.value) || 0)} className="bg-white border border-slate-300 px-2 py-1 rounded w-20 font-mono" />
+                        <span>فقره</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-40">شمارهٔ پرونده:</span>
+                        <input type="text" value={profile.parvandehNo ?? ''} onChange={e => pf('parvandehNo', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="—" />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-40">تعداد ترم معادل‌سازی:</span>
+                        <input type="number" value={profile.eqSemesters ?? 0} onChange={e => pf('eqSemesters', Number(e.target.value) || 0)} className="bg-white border border-slate-300 px-2 py-1 rounded w-20 font-mono" />
+                        <span>ترم</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-40">وضعیت صدور کارت دانشجویی:</span>
+                        <input type="text" value={profile.studentCardStatus ?? ''} onChange={e => pf('studentCardStatus', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="صادر و تحویل شده" />
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-40">نواقص پرونده:</span>
+                        <input type="text" value={profile.documentDeficiency ?? ''} onChange={e => pf('documentDeficiency', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="فاقد نقص پرونده" />
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-40">واحد مانده تا فارغ‌التحصیلی:</span>
+                        <input type="number" value={profile.unitsRemaining ?? ''} onChange={e => pf('unitsRemaining', e.target.value === '' ? '' : Number(e.target.value) || 0)} className="bg-white border border-slate-300 px-2 py-1 rounded w-20 font-mono" />
+                        <span>واحد</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <p>تعداد ترم معادل‌سازی: ۰ ترم</p>
-                    <p>وضعیت صدور کارت دانشجویی: <b className="text-emerald-700">صادر و تحویل شده</b></p>
-                    <p>نواقص پرونده: <b className="text-emerald-700">فاقد نقص پرونده</b></p>
-                    <p>واحد مانده تا فارغ‌التحصیلی: ۱۱۸ واحد</p>
+                  <div className="pt-1 border-t border-slate-200 flex items-center gap-2">
+                    <button
+                      onClick={() => saveProfile(['diplomaType', 'archiveNo', 'militaryStatus', 'militaryExemptionNo', 'certIssued3m', 'parvandehNo', 'eqSemesters', 'studentCardStatus', 'documentDeficiency', 'unitsRemaining'])}
+                      disabled={profileSaving}
+                      className="px-3 py-1.5 rounded bg-emerald-700 text-white font-bold text-xs hover:bg-emerald-800 disabled:opacity-50"
+                      title="ذخیرهٔ اطلاعات اضافی این دانشجو (فقط مدیر سیستم)"
+                    >
+                      💾 ذخیرهٔ اطلاعات اضافی
+                    </button>
+                    {profileSaving && <span className="text-slate-500">در حال ذخیره…</span>}
                   </div>
                 </div>
               )}

@@ -241,3 +241,108 @@ export async function resetUserPasswordAction(
   revalidatePath('/admin/students');
   return { ok: true };
 }
+
+/** فیلدهای قابل‌ذخیرهٔ پروندهٔ دانشجو (هم‌گام با تفاوت‌های types.ts) */
+export type StudentProfilePatch = {
+  fatherName?: string | null;
+  birthCertNo?: string | null;
+  placeOfBirth?: string | null;
+  placeOfIssue?: string | null;
+  gender?: string | null;
+  mobile?: string | null;
+  email?: string | null;
+  postalCode?: string | null;
+  address?: string | null;
+  passportNumber?: string | null;
+  nationality?: string | null;
+  advisorCode?: string | null;
+  documentStatus?: string | null;
+  scholarshipType?: string | null;
+  militaryStatus?: string | null;
+  militaryExemptionNo?: string | null;
+  studentCardStatus?: string | null;
+  archiveNo?: string | null;
+  parvandehNo?: string | null;
+  dormName?: string | null;
+  dormRoom?: string | null;
+  hasDorm?: number | null;
+  guardianJobTitle?: string | null;
+  guardianPhone?: string | null;
+  guardianAddress?: string | null;
+  guardianEmail?: string | null;
+  diplomaType?: string | null;
+  diplomaPlace?: string | null;
+  diplomaYear?: string | null;
+  diplomaGrade?: string | null;
+  pishdPlace?: string | null;
+  pishdYear?: string | null;
+  pishdGrade?: string | null;
+  tuitionType?: string | null;
+  tuitionPayer?: number | null;
+  englishExamType?: string | null;
+  englishScore?: string | null;
+  certIssued3m?: number | null;
+  documentDeficiency?: string | null;
+  unitsRemaining?: number | null;
+  eqSemesters?: number | null;
+};
+
+/** ذخیرهٔ تغییرات پروندهٔ دانشجو (هویت + تکمیلی سما) توسط ادمین — فقط ADMIN */
+export async function updateStudentProfileAction(
+  studentId: number, patch: StudentProfilePatch,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireRole(['ADMIN']);
+  } catch {
+    return { ok: false, error: 'فقط مدیر سیستم (ADMIN) اجازه ویرایش پروندهٔ دانشجو را دارد.' };
+  }
+  if (!studentId || !patch || typeof patch !== 'object') return { ok: false, error: 'شناسهٔ دانشجو یا مقادیر نامعتبر است.' };
+  const clean = (v: unknown, max: number) => {
+    if (v == null) return undefined;
+    const s = String(v).trim();
+    return s === '' ? null : s.slice(0, max);
+  };
+  const cleanNum = (v: unknown) => {
+    if (v == null) return undefined;
+    const n = Number(v);
+    return isNaN(n) ? null : n;
+  };
+  const [row] = await db.select({ userId: students.userId }).from(students).where(eq(students.id, studentId)).limit(1);
+  if (!row) return { ok: false, error: 'دانشجو یافت نشد.' };
+  try {
+    const userSet: Record<string, unknown> = {};
+    const us = [
+      ['fatherName', 100], ['birthCertNo', 20], ['placeOfBirth', 150], ['placeOfIssue', 150],
+      ['gender', 10], ['mobile', 11], ['email', 150], ['postalCode', 10], ['address', 300],
+      ['passportNumber', 20], ['nationality', 10],
+    ] as const;
+    for (const [k, max] of us) {
+      if (k in patch) { const v = clean((patch as Record<string, unknown>)[k], max); if (v !== undefined) userSet[k] = v; }
+    }
+    if (Object.keys(userSet).length) {
+      await db.update(users).set(userSet as never).where(eq(users.id, row.userId));
+    }
+    const stuSet: Record<string, unknown> = {};
+    const ss = [
+      'advisorCode', 'documentStatus', 'scholarshipType', 'militaryStatus', 'militaryExemptionNo',
+      'studentCardStatus', 'archiveNo', 'parvandehNo', 'dormName', 'dormRoom', 'guardianJobTitle',
+      'guardianPhone', 'guardianAddress', 'guardianEmail', 'diplomaType', 'diplomaPlace',
+      'diplomaYear', 'diplomaGrade', 'pishdPlace', 'pishdYear', 'pishdGrade', 'tuitionType',
+      'englishExamType', 'englishScore', 'documentDeficiency',
+    ] as const;
+    for (const k of ss) {
+      if (k in patch) { const v = clean((patch as Record<string, unknown>)[k], 300); if (v !== undefined) stuSet[k] = v; }
+    }
+    const ns = ['hasDorm', 'tuitionPayer', 'certIssued3m', 'unitsRemaining', 'eqSemesters'] as const;
+    for (const k of ns) {
+      if (k in patch) { const v = cleanNum((patch as Record<string, unknown>)[k]); if (v !== undefined) stuSet[k] = v; }
+    }
+    if (Object.keys(stuSet).length) {
+      await db.update(students).set(stuSet as never).where(eq(students.id, studentId));
+    }
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'ثبت نشد.' };
+  }
+  revalidatePath('/admin/students');
+  return { ok: true };
+}

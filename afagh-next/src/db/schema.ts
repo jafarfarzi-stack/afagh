@@ -233,7 +233,40 @@ export const students = pgTable('students', {
   totalTakenUnits: integer('totalTakenUnits'),
   totalPassedUnits: integer('totalPassedUnits'),
   totalFailedUnits: integer('totalFailedUnits'),
-  saminDescription: text('saminDescription')
+  saminDescription: text('saminDescription'),
+  // ── پروندهٔ تکمیلی سما (student2.txt + students1.txt): خوابگاه، ولی، مدرک، نظام وظیفه و... ──
+  advisorCode: varchar('advisorCode', { length: 50 }),             // ADVISORDONCODE سما
+  documentStatus: varchar('documentStatus', { length: 100 }),       // وضعیت مدارک (دستی)
+  scholarshipType: varchar('scholarshipType', { length: 100 }),     // کد بورسیهٔ سما (ScholarshipRef)
+  militaryStatus: varchar('militaryStatus', { length: 50 }),        // وضعیت نظام وظیفه (NEZAM/Moafiat سما)
+  militaryExemptionNo: varchar('militaryExemptionNo', { length: 50 }), // شمارهٔ معافیت (MoafiatNumber/NezamNo)
+  studentCardStatus: varchar('studentCardStatus', { length: 50 }),  // وضعیت کارت دانشجویی (StCardPrinted)
+  archiveNo: varchar('archiveNo', { length: 50 }),                  // کد آرشیو سما
+  parvandehNo: varchar('parvandehNo', { length: 100 }),             // شمارهٔ پروندهٔ سما
+  dormName: varchar('dormName', { length: 150 }),                   // نام خوابگاه (SuiteName)
+  dormRoom: varchar('dormRoom', { length: 50 }),                    // شمارهٔ اتاق (RoomNumber)
+  hasDorm: integer('hasDorm').default(0),                            // HasKhabgah سما (1/0)
+  guardianJobTitle: varchar('guardianJobTitle', { length: 100 }),   // عنوان و شغل ولی (ValiJobTitle)
+  guardianPhone: varchar('guardianPhone', { length: 30 }),          // تلفن ولی (ValiTellNo)
+  guardianAddress: varchar('guardianAddress', { length: 300 }),      // نشانی ولی (ValiAddress)
+  guardianEmail: varchar('guardianEmail', { length: 150 }),         // ایمیل ولی (ParentEmail)
+  diplomaType: varchar('diplomaType', { length: 50 }),              // نوع دیپلم پایه (UPDiplomTypeCode خام)
+  diplomaPlace: varchar('diplomaPlace', { length: 200 }),           // محل اخذ دیپلم (FoghedipPlace)
+  diplomaYear: varchar('diplomaYear', { length: 10 }),              // سال اخذ دیپلم (FoghedipYear)
+  diplomaGrade: varchar('diplomaGrade', { length: 20 }),            // معدل کتبی دیپلم (FoghedipMoadel)
+  pishdPlace: varchar('pishdPlace', { length: 200 }),               // محل اخذ پیش‌دانشگاهی (PishdPlace)
+  pishdYear: varchar('pishdYear', { length: 10 }),                  // سال پیش‌دانشگاهی (PishdYear)
+  pishdGrade: varchar('pishdGrade', { length: 20 }),                // معدل پیش‌دانشگاهی (PishdMoadel)
+  tuitionType: varchar('tuitionType', { length: 50 }),              // نوع دوره/شهریه (COURSTYPE خام)
+  tuitionPayer: integer('tuitionPayer').default(0),                 // دانشجوی شهریه‌پرداز (دستی 1/0)
+  englishExamType: varchar('englishExamType', { length: 50 }),      // نوع آزمون زبان (MSRT/IELTS/…)
+  englishScore: varchar('englishScore', { length: 20 }),            // نمرهٔ آزمون زبان
+  insertDate: varchar('insertDate', { length: 20 }),                // تاریخ ثبت در سما (LogInsertDate)
+  insertTime: varchar('insertTime', { length: 20 }),                // ساعت ثبت در سما (LogInsertTime)
+  certIssued3m: integer('certIssued3m').default(0),                 // تعداد گواهی ۳ ماههٔ صادره
+  documentDeficiency: varchar('documentDeficiency', { length: 200 }), // نواقص پرونده
+  unitsRemaining: integer('unitsRemaining'),                        // واحد مانده تا فارغ‌التحصیلی
+  eqSemesters: integer('eqSemesters').default(0),                   // تعداد ترم معادل‌سازی
 });
 
 /**
