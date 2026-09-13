@@ -3,12 +3,12 @@ import { handleMessengerUpdate, setupMessengerWebhook } from '@/lib/messenger-bo
 import { createLogger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
-const log = createLogger({ mod: 'egap.webhook' });
+const log = createLogger({ mod: 'igap.webhook' });
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    await handleMessengerUpdate('EGAP', body);
+    await handleMessengerUpdate('IGAP', body);
     return NextResponse.json({ ok: true });
   } catch (e) {
     log.error('webhook_error', { error: (e as Error).message });
@@ -20,10 +20,10 @@ export async function GET(req: NextRequest) {
   const setup = req.nextUrl.searchParams.get('setup');
   if (setup === '1') {
     const baseUrl = (process.env.PUBLIC_BASE_URL || process.env.AFAGH_PUBLIC_BASE_URL || req.nextUrl.origin).replace(/\/+$/, '');
-    const webhookUrl = `${baseUrl}/api/egap/webhook`;
-    const result = await setupMessengerWebhook('EGAP', webhookUrl);
+    const webhookUrl = `${baseUrl}/api/igap/webhook`;
+    const result = await setupMessengerWebhook('IGAP', webhookUrl);
     log.info('webhook_setup', { url: webhookUrl, ...result });
-    return NextResponse.json({ setup: true, messenger: 'EGAP', url: webhookUrl, ...result });
+    return NextResponse.json({ setup: true, messenger: 'IGAP', url: webhookUrl, ...result });
   }
-  return NextResponse.json({ status: 'ok', messenger: 'EGAP', message: 'وب‌هوک ای‌گپ فعال است.' });
+  return NextResponse.json({ status: 'ok', messenger: 'IGAP', message: 'وب‌هوک ای‌گپ فعال است.' });
 }

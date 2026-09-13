@@ -14,7 +14,7 @@ const log = createLogger({ mod: 'messenger.webhook' });
  *   /api/bale/webhook       → بله
  *   /api/soroush/webhook    → سروش
  *   /api/eitaa/webhook      → ایتا
- *   /api/egap/webhook       → ای‌گپ
+ *   /api/igap/webhook       → ای‌گپ
  *
  * تنظیم وب‌هوک:
  *   GET /api/{messenger}/webhook?setup=1
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   const messenger = path.includes('/bale/') ? 'BALE'
     : path.includes('/soroush/') ? 'SOROUSH'
     : path.includes('/eitaa/') ? 'EITAA'
-    : path.includes('/egap/') ? 'EGAP'
+    : path.includes('/igap/') ? 'IGAP'
     : 'TELEGRAM';
 
   try {
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
   const messenger = path.includes('/bale/') ? 'BALE'
     : path.includes('/soroush/') ? 'SOROUSH'
     : path.includes('/eitaa/') ? 'EITAA'
-    : path.includes('/egap/') ? 'EGAP'
+    : path.includes('/igap/') ? 'IGAP'
     : 'TELEGRAM';
 
   const setup = req.nextUrl.searchParams.get('setup');

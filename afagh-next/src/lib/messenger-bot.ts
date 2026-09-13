@@ -16,7 +16,7 @@ const log = createLogger({ mod: 'messenger-bot' });
 //  همهٔ این‌ها از یک هستهٔ مشترک استفاده می‌کنند.
 // ═══════════════════════════════════════════════════════════════
 
-export type MessengerChannel = 'TELEGRAM' | 'BALE' | 'SOROUSH' | 'EITAA' | 'EGAP';
+export type MessengerChannel = 'TELEGRAM' | 'BALE' | 'SOROUSH' | 'EITAA' | 'IGAP';
 
 // ──────── پیکربندی API هر پیام‌رسان ────────
 
@@ -32,7 +32,7 @@ const MESSENGER_CONFIGS: Record<MessengerChannel, MessengerConfig> = {
   BALE:     { tokenKey: 'BALE_TOKEN',     baseKey: 'BALE_API_BASE',     defaultBase: 'https://tapi.bale.ai',      style: 'BOT' },
   SOROUSH:  { tokenKey: 'SOROUSH_TOKEN',  baseKey: 'SOROUSH_API_BASE',  defaultBase: 'https://api.soroush.app',   style: 'BOT' },
   EITAA:    { tokenKey: 'EITAA_TOKEN',    baseKey: 'EITAA_API_BASE',    defaultBase: 'https://eitaayar.ir/api',    style: 'EITAA' },
-  EGAP:     { tokenKey: 'EGAP_TOKEN',     baseKey: 'EGAP_API_BASE',     defaultBase: 'https://egap.ai/api',        style: 'BOT' },
+  IGAP:     { tokenKey: 'IGAP_TOKEN',     baseKey: 'IGAP_API_BASE',     defaultBase: 'https://igap.ai/api',        style: 'BOT' },
 };
 
 async function getConfig(channel: MessengerChannel) {

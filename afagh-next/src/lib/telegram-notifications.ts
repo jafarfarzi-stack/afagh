@@ -24,7 +24,7 @@ function jalaliStr(date: Date = new Date()): string {
 
 /** ارسال پیام به همهٔ پیام‌رسان‌های فعال کاربر */
 async function notifyAllChannels(userId: number, text: string): Promise<void> {
-  const channels: MessengerChannel[] = ['TELEGRAM', 'BALE', 'SOROUSH', 'EITAA', 'EGAP'];
+  const channels: MessengerChannel[] = ['TELEGRAM', 'BALE', 'SOROUSH', 'EITAA', 'IGAP'];
   for (const ch of channels) {
     try { await sendToUser(ch, userId, text); } catch { /* ادامه بده */ }
   }
