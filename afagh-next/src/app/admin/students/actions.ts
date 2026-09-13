@@ -324,6 +324,50 @@ export async function backfillRolesAction(): Promise<{ ok: boolean; error?: stri
   }
 }
 
+/** ثبت حساب کاربری جدید «استاد/کارکن» (مثل کارشناس اداری یا همکار آموزشی) — فقط ADMIN */
+export async function createStaffExpertAction(input: {
+  nationalCode: string; firstName: string; lastName: string;
+  fatherName?: string; birthCertNo?: string; gender?: string; mobile?: string;
+  email?: string; staffCode?: string; staffType?: string;
+}): Promise<{ ok: boolean; error?: string; userId?: number }> {
+  try {
+    await requireRole(['ADMIN']);
+  } catch {
+    return { ok: false, error: 'فقط مدیر سیستم (ADMIN) می‌تواند حساب ایجاد کند.' };
+  }
+  const nc = String(input.nationalCode || '').trim();
+  const fn = String(input.firstName || '').trim();
+  const ln = String(input.lastName || '').trim();
+  const sc = String(input.staffCode || '').trim() || nc;
+  if (!nc || !fn || !ln) return { ok: false, error: 'کد ملی، نام و نام خانوادگی الزامی است.' };
+  if (!/^\d{10}$/.test(nc)) return { ok: false, error: 'کد ملی باید ۱۰ رقم باشد.' };
+  try {
+    const dupNc = await db.select({ id: users.id }).from(users).where(eq(users.nationalCode, nc)).limit(1);
+    if (dupNc.length) return { ok: false, error: 'کاربری با این کد ملی از قبل وجود دارد.' };
+    const dupSc = await db.select({ id: staff.id }).from(staff).where(eq(staff.staffCode, sc)).limit(1);
+    if (dupSc.length) return { ok: false, error: 'کد پرسنلی تکراری است.' };
+    const passwordHash = await hashPassword(nc); // ورود اولیه با کد ملی؛ اجباری به تغییر
+    const [u] = await db.insert(users).values({
+      nationalCode: nc, firstName: fn, lastName: ln,
+      fatherName: String(input.fatherName || '').trim() || null,
+      birthCertNo: String(input.birthCertNo || '').trim() || null,
+      gender: String(input.gender || '').trim() || null,
+      mobile: String(input.mobile || '').trim() || null,
+      email: String(input.email || '').trim() || null,
+      passwordHash, isActive: 1, mustChangePassword: 1,
+    }).returning({ id: users.id });
+    await db.insert(staff).values({
+      userId: u.id, staffCode: sc,
+      staffType: String(input.staffType || '').trim() || 'اداری',
+    }).onConflictDoNothing();
+    revalidatePath('/admin/students');
+    revalidatePath('/admin/staff');
+    return { ok: true, userId: u.id };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'ثبت نشد.' };
+  }
+}
+
 /** فیلدهای قابل‌ذخیرهٔ پروندهٔ دانشجو (هم‌گام با تفاوت‌های types.ts) */
 export type StudentProfilePatch = {
   fatherName?: string | null;

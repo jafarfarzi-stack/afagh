@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { backfillRolesAction, bulkResetPasswordsAction, getTranscript, getTranscriptRegulation, resetUserPasswordAction, setStudentRegulationAction, setUserActiveAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
+import { backfillRolesAction, bulkResetPasswordsAction, createStaffExpertAction, getTranscript, getTranscriptRegulation, resetUserPasswordAction, setStudentRegulationAction, setUserActiveAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
 import type { RegulationConfig } from '@/lib/regulations-engine';
 import { ClientTh, ServerTh, useClientTable, type ColumnDef } from '@/components/DataTable';
 import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, studentStatusChip, studentStatusFa} from '@/lib/student-labels';
@@ -85,6 +85,11 @@ export default function StudentsManagerClient(props: {
   const [bulkPass, setBulkPass] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkBackfill, setBulkBackfill] = useState(false);
+  // ── ثبت استاد/کارکن جدید (مودال) ──
+  const [createStaffOpen, setCreateStaffOpen] = useState(false);
+  const [createStaffBusy, setCreateStaffBusy] = useState(false);
+  const [createStaffMsg, setCreateStaffMsg] = useState('');
+  const [csf, setCsf] = useState({ nc: '', fn: '', ln: '', father: '', bcn: '', gender: '', mobile: '', email: '', code: '', type: '' });
   const [pwSaving, setPwSaving] = useState(false);
   const handleToggleActive = async (userId: number | null | undefined, next: boolean, name: string) => {
     if (!userId) { showToast('شناسه کاربری این پرونده یافت نشد.'); return; }
@@ -125,6 +130,28 @@ export default function StudentsManagerClient(props: {
       showToast(err?.message || 'خطا در ارتباط با سرور.');
     } finally {
       setBulkSaving(false);
+    }
+  };
+
+  const handleCreateStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateStaffBusy(true);
+    setCreateStaffMsg('');
+    try {
+      const r = await createStaffExpertAction({
+        nationalCode: csf.nc, firstName: csf.fn, lastName: csf.ln,
+        fatherName: csf.father, birthCertNo: csf.bcn, gender: csf.gender || undefined,
+        mobile: csf.mobile, email: csf.email, staffCode: csf.code, staffType: csf.type,
+      });
+      if (!r.ok) { setCreateStaffMsg(`⚠ ${r.error || 'ثبت نشد.'}`); return; }
+      setCreateStaffMsg('✅ حساب ساخته شد؛ نقش‌های کارشناس را می‌توانید از ستون «نقش‌ها» بدهید.');
+      setCsf({ nc: '', fn: '', ln: '', father: '', bcn: '', gender: '', mobile: '', email: '', code: '', type: '' });
+      setCreateStaffOpen(false);
+      router.refresh();
+    } catch (err: any) {
+      setCreateStaffMsg(`⚠ ${err?.message || 'خطا در ارتباط با سرور.'}`);
+    } finally {
+      setCreateStaffBusy(false);
     }
   };
 
@@ -258,6 +285,7 @@ export default function StudentsManagerClient(props: {
   // جست‌وجوی دانشجو سمت سرور است (props.students فقط یک صفحه است)؛ جست‌وجوی استاد محلی
   const [staffQuery, setStaffQuery] = useState('');
   const [staffVisible, setStaffVisible] = useState(100);
+  const [staffTypeFilter, setStaffTypeFilter] = useState('ALL');
   const nav = (patch: Record<string, string>) => {
     const cur = {
       q: pg?.q ?? '', status: pg?.status ?? 'ALL', degree: String(pg?.degree ?? 0), page: '1',
@@ -289,10 +317,11 @@ export default function StudentsManagerClient(props: {
   const applyStuFilters = () => nav({ f_code: stuFilters.f_code.trim(), f_name: stuFilters.f_name.trim(), f_nc: stuFilters.f_nc.trim(), f_major: stuFilters.f_major.trim(), f_year: stuFilters.f_year.trim() });
 
   const staffQueryFiltered = props.staffList.filter(s =>
-    !staffQuery ||
+    (!staffQuery ||
     s.staffCode.includes(staffQuery) ||
     s.nationalCode.includes(staffQuery) ||
-    (s.firstName + ' ' + s.lastName).includes(staffQuery)
+    (s.firstName + ' ' + s.lastName).includes(staffQuery)) &&
+    (staffTypeFilter === 'ALL' || (staffTypeFilter === 'EDU' && (s.staffType ?? '').includes('هیئت')) || (staffTypeFilter === 'ADMIN' && (s.staffType ?? '').includes('اداری')) || (staffTypeFilter === 'OTHER' && s.staffType && !(s.staffType as string).includes('هیئت') && !(s.staffType as string).includes('اداری')))
   );
 
   // جدول اساتید: سورت + فیلتر هر ستون (کلاینتی — کل لیست دست مرورگر است)
@@ -1283,6 +1312,14 @@ export default function StudentsManagerClient(props: {
               <b className="text-slate-900 bg-white px-3 py-1 border border-slate-300 rounded font-bold">
                 {currentStaff ? `${currentStaff.firstName} ${currentStaff.lastName}` : '—'}
               </b>
+              <span className="mr-auto"></span>
+              <button
+                onClick={() => { setCsf({ nc: '', fn: '', ln: '', father: '', bcn: '', gender: '', mobile: '', email: '', code: '', type: '' }); setCreateStaffMsg(''); setCreateStaffOpen(true); }}
+                className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold"
+                title="ثبت حساب کاربری استاد یا کارکن جدید (کارشناس/همکار اداری) — فقط مدیر سیستم"
+              >
+                ＋ استاد / کارمند جدید
+              </button>
             </div>
           </div>
 
@@ -1478,7 +1515,7 @@ export default function StudentsManagerClient(props: {
           {/* ── تب ۴ استاد: لیست اساتید ── */}
           {profTab === 'list' && (
             <div className="bg-white p-4 border border-slate-400 rounded-b-md space-y-3">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
                 <input
                   type="text"
                   placeholder="🔍 جستجو بر اساس کد پرسنلی، کد ملی یا نام استاد..."
@@ -1486,7 +1523,21 @@ export default function StudentsManagerClient(props: {
                   onChange={e => { setStaffQuery(e.target.value); setStaffVisible(100); }}
                   className="w-full max-w-md bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs"
                 />
-                <span className="text-xs text-slate-500">{filteredStaff.length} استاد</span>
+                <div className="flex items-center gap-2">
+                  <select value={staffTypeFilter} onChange={e => { setStaffTypeFilter(e.target.value); setStaffVisible(100); }} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 text-xs">
+                    <option value="ALL">همهٔ سمت‌ها</option>
+                    <option value="EDU">استاد / هیئت علمی</option>
+                    <option value="ADMIN">کارشناس / اداری</option>
+                    <option value="OTHER">سایر سمت‌ها</option>
+                  </select>
+                  <button
+                    onClick={() => { setCsf({ nc: '', fn: '', ln: '', father: '', bcn: '', gender: '', mobile: '', email: '', code: '', type: '' }); setCreateStaffMsg(''); setCreateStaffOpen(true); }}
+                    className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold whitespace-nowrap"
+                  >
+                    ＋ استاد / کارمند جدید
+                  </button>
+                  <span className="text-xs text-slate-500">{filteredStaff.length} استاد و کارکن</span>
+                </div>
               </div>
 
               <div className="overflow-x-auto border border-slate-300 rounded">
@@ -1557,7 +1608,7 @@ export default function StudentsManagerClient(props: {
           {/* دکمه‌های استاندارد پایین فرم استاد (Ins اضافه / F2 ذخیره / F4 ویرایش / حذف / انصراف / خروج) */}
           <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-300">
             <div className="flex items-center gap-2">
-              <button onClick={() => showToast('➕ فرم استاد جدید باز شد (Ins)')} className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-bold rounded shadow flex items-center gap-1">
+              <button onClick={() => { setCsf({ nc: '', fn: '', ln: '', father: '', bcn: '', gender: '', mobile: '', email: '', code: '', type: '' }); setCreateStaffMsg(''); setCreateStaffOpen(true); }} className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-bold rounded shadow flex items-center gap-1">
                 <span>➕</span> <span>اضافه (Ins)</span>
               </button>
               <button onClick={() => showToast('✅ اطلاعات استاد با موفقیت ذخیره شد (F2)')} className="px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded shadow flex items-center gap-1">
@@ -1594,7 +1645,9 @@ export default function StudentsManagerClient(props: {
               onClick={() => {
                 setMainView('professors');
                 setProfTab('info_combined');
-                showToast('فرم معرفی استاد جدید باز شد');
+                setCsf({ nc: '', fn: '', ln: '', father: '', bcn: '', gender: '', mobile: '', email: '', code: '', type: '' });
+                setCreateStaffMsg('');
+                setCreateStaffOpen(true);
               }}
               className="p-4 bg-gradient-to-b from-white to-slate-100 border-2 border-dashed border-indigo-400 hover:border-indigo-600 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-3 text-right group"
             >
@@ -1920,6 +1973,79 @@ export default function StudentsManagerClient(props: {
                 <button type="button" onClick={() => setBulkOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
                 <button type="submit" disabled={bulkSaving} className="px-5 py-2 bg-red-700 hover:bg-red-800 disabled:bg-slate-400 text-white font-bold rounded-lg">
                   {bulkSaving ? 'در حال اجرا…' : '⚠ اعمال به همه'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {createStaffOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-slate-800 text-white px-5 py-3.5 flex items-center justify-between">
+              <h3 className="font-extrabold text-sm">＋ ثبت استاد / کارمند جدید</h3>
+              <button type="button" onClick={() => setCreateStaffOpen(false)} className="text-slate-300 hover:text-white text-lg leading-none">✕</button>
+            </div>
+            <form onSubmit={handleCreateStaff} className="p-5 space-y-3 text-xs">
+              <p className="text-[10.5px] text-slate-500 leading-relaxed">
+                حساب کاربری ساخته می‌شود (ورود اولیه با <b>کد ملی</b> + تغییر اجباری رمز). پس از ثبت، از <b>ستون «نقش‌ها»</b> در همین صفحه یا صفحهٔ استاد و کارکنان، تخصص هر کارشناس را تعیین کنید.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-red-700 font-bold">* کد ملی</span>
+                  <input dir="ltr" value={csf.nc} onChange={e => setCsf({ ...csf, nc: e.target.value })} required className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono focus:ring-2 focus:ring-slate-500 focus:outline-hidden" placeholder="۱۰ رقم" />
+                </label>
+                <label className="block">
+                  <span className="text-indigo-900 font-bold">* نام</span>
+                  <input value={csf.fn} onChange={e => setCsf({ ...csf, fn: e.target.value })} required className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-hidden" />
+                </label>
+                <label className="block">
+                  <span className="text-indigo-900 font-bold">* نام خانوادگی</span>
+                  <input value={csf.ln} onChange={e => setCsf({ ...csf, ln: e.target.value })} required className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-hidden" />
+                </label>
+                <label className="block">
+                  <span>نام پدر</span>
+                  <input value={csf.father} onChange={e => setCsf({ ...csf, father: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-hidden" />
+                </label>
+                <label className="block">
+                  <span>شماره شناسنامه</span>
+                  <input value={csf.bcn} onChange={e => setCsf({ ...csf, bcn: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-hidden" />
+                </label>
+                <label className="block">
+                  <span>جنسیت</span>
+                  <select value={csf.gender} onChange={e => setCsf({ ...csf, gender: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-hidden">
+                    <option value="">—</option>
+                    <option>مرد</option>
+                    <option>زن</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span>موبایل</span>
+                  <input dir="ltr" value={csf.mobile} onChange={e => setCsf({ ...csf, mobile: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono focus:ring-2 focus:ring-slate-500 focus:outline-hidden" />
+                </label>
+                <label className="block">
+                  <span>ایمیل</span>
+                  <input dir="ltr" value={csf.email} onChange={e => setCsf({ ...csf, email: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono focus:ring-2 focus:ring-slate-500 focus:outline-hidden" />
+                </label>
+                <label className="block">
+                  <span>کد پرسنلی</span>
+                  <input dir="ltr" value={csf.code} onChange={e => setCsf({ ...csf, code: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono focus:ring-2 focus:ring-slate-500 focus:outline-hidden" placeholder="پیش‌فرض: کد ملی" />
+                </label>
+                <label className="block">
+                  <span>نوع سمت</span>
+                  <select value={csf.type} onChange={e => setCsf({ ...csf, type: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-hidden">
+                    <option value="اداری">اداری / کارشناس</option>
+                    <option value="هیئت علمی">استاد / هیئت علمی</option>
+                    <option value="مربی">مربی</option>
+                  </select>
+                </label>
+              </div>
+              {createStaffMsg && <p className="text-xs font-bold leading-relaxed break-words">{createStaffMsg}</p>}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                <button type="button" onClick={() => setCreateStaffOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
+                <button type="submit" disabled={createStaffBusy} className="px-5 py-2 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-400 text-white font-bold rounded-lg">
+                  {createStaffBusy ? 'در حال ثبت…' : '＋ ثبت حساب جدید'}
                 </button>
               </div>
             </form>
