@@ -453,6 +453,11 @@ DROP POLICY IF EXISTS user_roles_self_read ON "user_roles";
 CREATE POLICY user_roles_self_read ON "user_roles" FOR SELECT TO afagh_app
   USING ("userId" = nullif(current_setting('app.user_id', true), '')::int);
 
+ALTER TABLE "grade_change_log" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS grade_change_log_self_read ON "grade_change_log";
+CREATE POLICY grade_change_log_self_read ON "grade_change_log" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
 ALTER TABLE "legacy_code_maps" ENABLE ROW LEVEL SECURITY;
 -- targetId عمومی/داخلی است و کاربرد نقش اپ ندارد → برای نقش اپ «هیچ» (deny-all صریح)
 DROP POLICY IF EXISTS legacy_code_maps_deny_all ON "legacy_code_maps";

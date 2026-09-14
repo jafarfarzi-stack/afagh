@@ -62,6 +62,7 @@ try {
     'professor_class_attendance','professor_exam_attendance','electronic_documents','payroll_statements',
     'exam_minutes','physical_access_logs','request_step_logs','request_parallel_checkpoints', // ۲۸ حساس
     'professor_availability_notes','professor_availabilities',
+    'grade_change_log',
     'system_settings','integrations_config','audit_logs','api_audit_logs','admissions_staging',
     'sanjesh_mappings','evaluation_responses','verification_otps','step_api_actions','document_signatures', // ۱۰ deny-all
   ];
