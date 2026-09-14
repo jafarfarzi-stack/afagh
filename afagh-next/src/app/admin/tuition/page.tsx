@@ -1,6 +1,6 @@
 import { asc } from 'drizzle-orm';
 import { db } from '@/db';
-import { degree_level_configs, tuition_fee_rules } from '@/db/schema';
+import { degree_level_configs, tuition_rules } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { getSetting } from '@/lib/settings';
 import { normalizeEquivFixedMode } from '@/lib/tuition-rules';
@@ -12,7 +12,7 @@ export default async function TuitionRulesPage() {
   await requireRole(['ADMIN', 'FINANCE_EXPERT', 'FINANCE']);
 
   const [rules, degrees, equivModeRaw] = await Promise.all([
-    db.select().from(tuition_fee_rules).orderBy(asc(tuition_fee_rules.id)),
+    db.select().from(tuition_rules).orderBy(asc(tuition_rules.id)),
     db.select().from(degree_level_configs).orderBy(asc(degree_level_configs.id)),
     getSetting('EQUIV_FIXED_TUITION_MODE'),
   ]);
@@ -24,9 +24,9 @@ export default async function TuitionRulesPage() {
         degreeLevelId: r.degreeLevelId,
         termType: r.termType,
         offeringType: r.offeringType,
-        fixedTuition: Number(r.fixedTuition),
-        perUnitTuition: Number(r.perUnitTuition),
-        effectiveFromYear: r.effectiveFromYear,
+        fixedTuition: Number(r.fixedAmount),
+        perUnitTuition: Number(r.perUnitTheory),
+        effectiveFromYear: r.entryYearFrom,
         isActive: r.isActive === 1,
         note: r.note,
       }))}

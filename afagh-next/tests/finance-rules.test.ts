@@ -159,6 +159,17 @@ eq('ورودی نامعلوم با بازهٔ ورودی نمی‌خواند', f
 }
 eq('بدون فرمول سازگار → null', pickFormula(
   [{ ...baseFormula, degreeLevelId: 9 }], { degreeLevelId: 2, majorId: 5, entryYear: 1403 }), null);
+{
+  // سلسله‌مراتب یکپارچه: مقطع بر رشته مقدم است حتی اگر رشته priority کوچک‌تری داشته باشد
+  const fr = [
+    { ...baseFormula, id: 20, degreeLevelId: null, majorId: 5, priority: 1 },
+    { ...baseFormula, id: 21, degreeLevelId: 2, majorId: null, priority: 100 },
+    { ...baseFormula, id: 22, degreeLevelId: 2, majorId: 5, priority: 100 },
+  ];
+  eq('مقطع+رشتهٔ منطبق خاص‌ترین است', pickFormula(fr, { degreeLevelId: 2, majorId: 5, entryYear: 1403 })?.id, 22);
+  eq('بدون قاعدهٔ مقطع+رشته، مقطع بر رشتهٔ با priority کمتر می‌چربد',
+    pickFormula(fr.filter((f) => f.id !== 22), { degreeLevelId: 2, majorId: 5, entryYear: 1403 })?.id, 21);
+}
 
 // ── ۶. تفکیک واحدها و شهریهٔ فرمول ───────────────────────────
 section('واحدها و شهریهٔ فرمول');

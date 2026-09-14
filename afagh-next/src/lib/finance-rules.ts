@@ -17,7 +17,12 @@
 //
 //  این ماژول هیچ import ندارد تا بدون دیتابیس و بدون Next قابل آزمون باشد.
 //  دسترسی به دیتابیس در finance-engine.ts است.
+//
+//  تنها استثنا: انتخاب قاعدهٔ شهریه از بازوی خالص src/lib/tuition-resolver.ts
+//  می‌آید (آن نیز هیچ وابستگی ندارد) تا هر دو موتور شهریه یک انتخاب داشته باشند.
 // ══════════════════════════════════════════════════════════════════════
+
+import { resolveTuitionRule, type TuitionRuleLike } from './tuition-resolver';
 
 /** تبدیل امن مقدار numeric/رشته/تهی به عدد */
 export function toNum(value: unknown): number {
@@ -324,21 +329,39 @@ export function formulaMatches(f: FormulaLike, ctx: FormulaContext): boolean {
 /**
  * انتخاب فرمول تخصیص.
  *
- * معیار: نخست تطابق، سپس اولویتِ عددِ کوچک‌تر، سپس شناسهٔ کوچک‌تر.
- * گره‌شکنی با شناسه عمدی است تا نتیجه مستقل از ترتیب بازگشت دیتابیس باشد.
+ * از نسخهٔ یکپارچه، با همان resolver شهریه انتخاب می‌شود (سلسله‌مراتب:
+ * مقطع > رشته > بازهٔ ورودی). در این مرتب‌سازی ساختاری، `priority` دیگر
+ * معیار اصلی نیست — فقط گره‌شکنِ مساوی‌هاست؛ «مقطع» همیشه بر «رشته» مقدم
+ * است حتی اگر رشته، priority کوچک‌تری داشته باشد. گره‌شکن نهایی id کوچک‌تر
+ * است تا نتیجه مستقل از ترتیب بازگشت دیتابیس باشد.
  */
 export function pickFormula<T extends FormulaLike>(
   formulas: T[],
   ctx: FormulaContext
 ): T | null {
-  const matched = (formulas || []).filter((f) => formulaMatches(f, ctx));
-  if (matched.length === 0) return null;
-  return matched.reduce((best, f) => {
-    const bp = toNum(best.priority);
-    const fp = toNum(f.priority);
-    if (fp !== bp) return fp < bp ? f : best;
-    return f.id < best.id ? f : best;
+  const canonical: TuitionRuleLike[] = (formulas || []).map((f) => ({
+    id: f.id,
+    degreeLevelId: f.degreeLevelId,
+    majorId: f.majorId,
+    termType: null,
+    offeringType: null,
+    entryYearFrom: f.entryYearFrom,
+    entryYearTo: f.entryYearTo,
+    fixedAmount: f.fixedAmount,
+    perUnitTheory: f.perUnitTheory,
+    perUnitPractical: f.perUnitPractical,
+    perUnitGeneral: f.perUnitGeneral,
+    priority: toNum(f.priority ?? 100),
+    isActive: f.isActive,
+  }));
+
+  const best = resolveTuitionRule(canonical, {
+    degreeLevelId: ctx.degreeLevelId,
+    majorId: ctx.majorId,
+    entryYear: ctx.entryYear,
   });
+  if (!best) return null;
+  return (formulas || []).find((f) => f.id === best.id) ?? null;
 }
 
 /** سطل‌های واحد یک درس */

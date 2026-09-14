@@ -3,38 +3,58 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, course_offerings, courses, enrollments, student_ledger,
-  students, tuition_fee_rules,
+  students, tuition_rules,
 } from '@/db/schema';
 
 /**
  * موتور شهریهٔ آفاق — بدون هیچ نرخ سخت‌کد.
  *
- * نرخ‌ها از جدول `tuition_fee_rules` خوانده می‌شوند و بر اساس سه کلید انتخاب
- * می‌گردند: مقطع، نوع ترم (NORMAL/SUMMER/EQUIVALENCE) و نوع گذراندن درس
- * (offeringType مثل NORMAL/TRANSFER). «خاص‌ترین» قاعدهٔ منطبق برنده است، پس
- * معادل‌سازی می‌تواند شهریهٔ ثابت و نرخ هر واحد کاملاً جداگانه داشته باشد:
- *   - شهریهٔ ثابت: یک‌بار به ازای نوع ترم
- *   - شهریهٔ متغیر: به ازای هر واحد، بر اساس نوع گذراندن همان درس
+ * نرخ‌ها از جدول یکپارچهٔ `tuition_rules` خوانده می‌شوند (جایگزین هر دو جدول
+ * قدیمی tuition_fee_rules و tuition_formulas). انتخاب قاعده با resolver یکتا
+ * در tuition-resolver.ts انجام می‌شود با سلسله‌مراتب:
+ *   مقطع > رشته > نوع ترم > نوع گذراندن درس > بازهٔ ورودی.
+ * این‌جا فقط «نوع ترم» (NORMAL/SUMMER/EQUIVALENCE) و «نوع گذراندن درس» و
+ * «ورودی دانشجو» به‌همراه مقطع/رشتهٔ دانشجو به آن داده می‌شود:
+ *   - شهریهٔ ثابت: یک‌بار به ازای نوع ترم (termLevelOnly — بدون قاعدهٔ مخصوص نوع درس)
+ *   - شهریهٔ متغیر: به ازای هر واحد، بر اساس نوع گذراندن درس (نظری/عملی/عمومی)
  */
 
 // منطق خالص انتخاب قاعده در ماژول جداگانه است تا بدون دیتابیس قابل تست باشد
 export { pickFeeRule, termTypeOf, toNum } from './tuition-rules';
 export type { EquivFixedMode } from './tuition-rules';
 export type { TermType, ResolvedRule, FeeRuleParams, FeeRuleLike } from './tuition-rules';
-import { pickFeeRule, normalizeEquivFixedMode, termTypeOf, toNum,
+import { normalizeEquivFixedMode, termTypeOf, toNum,
   type EquivFixedMode, type FeeRuleParams, type ResolvedRule, type TermType } from './tuition-rules';
+import { resolveTuitionRule } from './tuition-resolver';
+import { bucketCourseUnits } from './finance-rules';
 import { getSetting } from './settings';
 
-type FeeRuleRow = typeof tuition_fee_rules.$inferSelect;
+type FeeRuleRow = typeof tuition_rules.$inferSelect;
 
 /** خواندن همهٔ قواعد فعال شهریه (یک کوئری) */
 export async function loadActiveFeeRules(): Promise<FeeRuleRow[]> {
-  return db.select().from(tuition_fee_rules).where(eq(tuition_fee_rules.isActive, 1));
+  return db.select().from(tuition_rules).where(eq(tuition_rules.isActive, 1));
 }
 
 /** همان انتخاب خاص‌ترین قاعده، با خواندن قواعد از دیتابیس */
 export async function resolveFeeRule(params: FeeRuleParams): Promise<ResolvedRule | null> {
-  return pickFeeRule(await loadActiveFeeRules(), params);
+  const best = resolveTuitionRule(await loadActiveFeeRules(), {
+    degreeLevelId: params.degreeLevelId,
+    majorId: params.majorId ?? null,
+    entryYear: params.entryYear ?? null,
+    termType: params.termType ?? null,
+    offeringType: params.offeringType ?? null,
+    termLevelOnly: params.termLevelOnly,
+  });
+  if (!best) return null;
+  return {
+    id: best.id,
+    fixedTuition: toNum(best.fixedAmount),
+    perUnitTuition: toNum(best.perUnitTheory),
+    degreeLevelId: best.degreeLevelId,
+    termType: best.termType ?? null,
+    offeringType: best.offeringType ?? null,
+  };
 }
 
 export interface TuitionLine {
@@ -72,15 +92,18 @@ export async function computeTermTuition(
   const [term] = await db.select().from(academic_terms).where(eq(academic_terms.id, termId)).limit(1);
   const termType = term ? termTypeOf(term) : 'NORMAL';
   const degreeLevelId = stu?.degreeLevelId ?? null;
+  const majorId = stu?.majorId ?? null;
   const entryYear = stu?.entryYear ?? null;
 
   // قواعد شهریه یک‌بار خوانده می‌شوند تا به ازای هر درس کوئری تکراری نزنیم
   const feeRules = await loadActiveFeeRules();
 
-  // شهریهٔ ثابت — یک‌بار به ازای نوع ترم؛ فقط از قواعد سطح ترم (بدون offeringType)
-  const fixedRule = pickFeeRule(feeRules, { degreeLevelId, termType, entryYear, termLevelOnly: true });
+  // شهریهٔ ثابت — یک‌بار به ازای نوع ترم؛ فقط قواعد سطح ترم (بدون offeringType)
+  const fixedRule = resolveTuitionRule(feeRules, {
+    degreeLevelId, majorId, termType, entryYear, termLevelOnly: true,
+  });
   const includeFixed = opts?.includeFixed !== false;
-  const fixedTuition = includeFixed ? (fixedRule?.fixedTuition ?? 0) : 0;
+  const fixedTuition = includeFixed ? toNum(fixedRule?.fixedAmount ?? 0) : 0;
 
   // دروس ثبت‌شدهٔ دانشجو در این ترم + نوع گذراندن هر درس
   const rows = await db
@@ -88,6 +111,9 @@ export async function computeTermTuition(
       courseCode: courses.code,
       courseTitle: courses.title,
       units: courses.units,
+      theoreticalUnits: courses.theoreticalUnits,
+      practicalUnits: courses.practicalUnits,
+      courseType: courses.courseType,
       offeringType: course_offerings.offeringType,
     })
     .from(enrollments)
@@ -99,9 +125,18 @@ export async function computeTermTuition(
   let variableTuition = 0;
   for (const r of rows) {
     const units = toNum(r.units);
-    const rule = pickFeeRule(feeRules, { degreeLevelId, termType, offeringType: r.offeringType, entryYear });
-    const perUnit = rule?.perUnitTuition ?? fixedRule?.perUnitTuition ?? 0;
-    const amount = Math.round(units * perUnit);
+    const rule = resolveTuitionRule(feeRules, {
+      degreeLevelId, majorId, termType, entryYear, offeringType: r.offeringType,
+    });
+    const src = rule ?? fixedRule;
+    // نرخ هر واحد بر حسب نوع درس (نظری/عملی/عمومی) + سطل‌بندی واحدهای درس
+    const buckets = bucketCourseUnits(r);
+    const amount = Math.round(
+      buckets.theory * toNum(src?.perUnitTheory ?? 0) +
+      buckets.practical * toNum(src?.perUnitPractical ?? 0) +
+      buckets.general * toNum(src?.perUnitGeneral ?? 0),
+    );
+    const perUnit = units > 0 ? Math.round(amount / units) : 0;
     variableTuition += amount;
     lines.push({
       courseCode: r.courseCode,

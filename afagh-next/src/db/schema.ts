@@ -2131,3 +2131,35 @@ export const tuition_formulas = pgTable('tuition_formulas', {
   note: text('note'),
   updatedAt: timestamp('updatedAt').defaultNow()
 });
+
+/**
+ * جدول یکپارچهٔ قواعد شهریه — جایگزین `tuition_fee_rules` و `tuition_formulas`.
+ *
+ * هر قاعده می‌تواند بر اساس پنج کلید محدود شود (تهی = همه):
+ *   مقطع (degreeLevelId) ← اولویت اول، رشته (majorId) ← اولویت دوم،
+ *   نوع ترم (termType)، نوع گذراندن درس (offeringType)، بازهٔ ورودی (entryYearFrom/To).
+ *
+ * انتخاب قاعده با resolver یکتا در `src/lib/tuition-resolver.ts` انجام می‌شود
+ * با سلسله‌مراتب: مقطع > رشته > نوع ترم > نوع درس > بازهٔ ورودی، و گره‌شکن‌های
+ * priority (کوچک‌تر برنده؛ فقط بین قواعد همانگروه)، تازگی entryYearFrom و سپس id.
+ */
+export const tuition_rules = pgTable('tuition_rules', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 40 }),
+  title: varchar('title', { length: 150 }),
+  degreeLevelId: integer('degreeLevelId').references(() => degree_level_configs.id),
+  majorId: integer('majorId').references(() => majors.id),
+  termType: varchar('termType', { length: 20 }),
+  offeringType: varchar('offeringType', { length: 30 }),
+  entryYearFrom: integer('entryYearFrom'),
+  entryYearTo: integer('entryYearTo'),
+  fixedAmount: numeric('fixedAmount', { precision: 12, scale: 0 }).notNull().default('0'),
+  perUnitTheory: numeric('perUnitTheory', { precision: 12, scale: 0 }).notNull().default('0'),
+  perUnitPractical: numeric('perUnitPractical', { precision: 12, scale: 0 }).notNull().default('0'),
+  perUnitGeneral: numeric('perUnitGeneral', { precision: 12, scale: 0 }).notNull().default('0'),
+  /** عدد کوچک‌تر = اولویت بالاتر — فقط بین قواعدِ هم‌سطحِ ساختاری */
+  priority: integer('priority').notNull().default(100),
+  isActive: integer('isActive').notNull().default(1),
+  note: text('note'),
+  updatedAt: timestamp('updatedAt').defaultNow()
+});
