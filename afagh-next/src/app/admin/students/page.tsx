@@ -21,9 +21,12 @@ export default async function AdminStudentsPage({
   const sp = await searchParams;
 
   // ── فهرست دانشگاه‌ها ──
-  const allUniversities = await db.select().from(universities).where(eq(universities.isActive, 1)).orderBy(universities.id);
+  let allUniversities: { id: number; code: string; title: string; kind: string }[] = [];
+  try {
+    allUniversities = await db.select().from(universities).where(eq(universities.isActive, 1)).orderBy(universities.id);
+  } catch { /* جدول universities ممکن است هنوز ساخته نشده باشد */ }
   const universityParam = (sp.university || '').trim();
-  const currentUniversity = universityParam
+  const currentUniversity = universityParam && !universityParam.startsWith('_')
     ? allUniversities.find(u => u.code === universityParam) ?? allUniversities[0]
     : allUniversities[0];
   const currentUniversityId = currentUniversity?.id ?? null;
