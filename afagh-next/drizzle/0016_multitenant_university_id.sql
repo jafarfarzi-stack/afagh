@@ -40,6 +40,9 @@ EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 --> statement-breakpoint
 -- ── backfill: رکوردهای موجود → AFAGH ──
+-- (ستون students از 0005 آمده؛ این خط فقط برای امنیت اگر 0005 ناقص اعمال شده باشد)
+ALTER TABLE "students" ADD COLUMN IF NOT EXISTS "universityId" integer;
+--> statement-breakpoint
 UPDATE "users" SET "universityId" = (SELECT id FROM "universities" WHERE "code" = 'AFAGH') WHERE "universityId" IS NULL;
 --> statement-breakpoint
 UPDATE "staff" SET "universityId" = (SELECT id FROM "universities" WHERE "code" = 'AFAGH') WHERE "universityId" IS NULL;

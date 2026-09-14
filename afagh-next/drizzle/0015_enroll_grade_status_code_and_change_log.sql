@@ -2,8 +2,9 @@
 -- ۱) ستون samaGradeStatusCode در enrollments: کد وضعیت سما هنگام نهایی‌سازی
 -- ۲) جدول grade_change_log: ثبت هر تغییر نمره با actor + دلیل
 
+--> statement-breakpoint
 ALTER TABLE "enrollments" ADD COLUMN IF NOT EXISTS "samaGradeStatusCode" varchar(10);
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "grade_change_log" (
   "id" serial PRIMARY KEY,
   "enrollmentId" integer NOT NULL REFERENCES "enrollments"("id"),
@@ -21,7 +22,9 @@ CREATE TABLE IF NOT EXISTS "grade_change_log" (
   "actorRole" varchar(30),                 -- PROFESSOR|ADMIN|GRADUATEAFFAIRS
   "createdAt" timestamp DEFAULT now()
 );
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_grade_change_log_enrollment" ON "grade_change_log"("enrollmentId");
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_grade_change_log_student" ON "grade_change_log"("studentId");
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_grade_change_log_created" ON "grade_change_log"("createdAt");
