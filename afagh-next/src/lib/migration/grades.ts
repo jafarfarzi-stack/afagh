@@ -54,7 +54,9 @@ export function parseGrade(raw: string, statusRaw: string, statusMap: Map<string
   const n = num(r);
   if (n != null && r !== '') {
     if (n < 0 || n > 20) return { value: null, status: 'PENDING', note: `نمرهٔ خارج از بازهٔ ۰..۲۰: ${r}` };
-    return { value: n, status: computeGradeStatus(n) };
+    // اگر کد وضعیت از میز تطبیق تعریف شده باشد، مقدم بر محاسبهٔ خودکار است
+    // (مثلاً کد ۷ = حذف آموزشی حتی اگر نمره عددی داشته باشد)
+    return { value: n, status: mappedStatus ?? computeGradeStatus(n) };
   }
   const q = QUALITATIVE[r.toLowerCase()];
   if (q) return { value: q.value, status: mappedStatus ?? q.status };

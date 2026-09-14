@@ -20,6 +20,7 @@ export const GRADE_STATUS_CODES: GradeStatusCode[] = [
   { code: '2', title: 'درس عادي - مردود', passed: false, affectsGpa: true },
   { code: '3', title: 'در معادل سازي پذيرفته شده با احتساب در معدل کل', passed: true, affectsGpa: true },
   { code: '4', title: 'در معادل سازي پذيرفته نشده', passed: false, affectsGpa: false },
+  { code: '7', title: 'حذف آموزشی', passed: false, affectsGpa: false },
   { code: '10', title: 'نمره گزارش نشده', passed: false, affectsGpa: false },
   { code: '11', title: 'جبراني - با احتساب در معدل', passed: true, affectsGpa: true },
   { code: '12', title: 'جبراني بدون احتساب در معدل - قبول', passed: true, affectsGpa: false },
