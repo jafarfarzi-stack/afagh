@@ -5,6 +5,8 @@ import { getSetting } from '@/lib/settings';
 import { saveUserChannel } from '@/lib/messaging';
 import { toJalaliFromDate } from '@/lib/calendar';
 import { createLogger } from '@/lib/logger';
+import { verifyPassword } from '@/lib/auth';
+import { rateLimit } from '@/lib/rateLimit';
 
 const log = createLogger({ mod: 'messenger-bot' });
 
@@ -93,9 +95,12 @@ async function getUserRoles(userId: number): Promise<string[]> {
 }
 
 // ──────── وضعیت مکالمه ────────
-
-type ConversationState = 'idle' | 'awaiting_national_code';
-const pendingConversations = new Map<string, ConversationState>();
+// ⚠️ امنیت اتصال حساب: صرفِ دانستن کد ملی برای هویت‌سنجی کافی نیست — کد ملی
+// در ایران محرمانه نیست (روی مدارک متعدد هست/قابل‌حدس‌زدن است). اتصال حساب
+// باید هم‌تراز امنیتی ورود وب باشد: کد ملی + رمز عبور واقعی + rate-limit.
+type ConversationState = 'idle' | 'awaiting_national_code' | 'awaiting_password';
+type ConversationEntry = { state: ConversationState; nationalCode?: string };
+const pendingConversations = new Map<string, ConversationEntry>();
 
 function convKey(channel: MessengerChannel, chatId: string) { return `${channel}:${chatId}`; }
 
@@ -120,8 +125,9 @@ export async function handleMessengerUpdate(channel: MessengerChannel, body: Rec
   else if (text.startsWith('/enrollment') || text.startsWith('/register')) await handleEnrollment(channel, chatId);
   else if (text.startsWith('/unlink')) await handleUnlink(channel, chatId);
   else {
-    const state = pendingConversations.get(key);
-    if (state === 'awaiting_national_code') await handleNationalCodeInput(channel, chatId, text);
+    const entry = pendingConversations.get(key);
+    if (entry?.state === 'awaiting_national_code') await handleNationalCodeInput(channel, chatId, text);
+    else if (entry?.state === 'awaiting_password') await handlePasswordInput(channel, chatId, text, entry.nationalCode ?? '');
     else await sendMessage(channel, chatId, 'دستور ناشناخته. برای راهنما /help را ارسال کنید.');
   }
 }
@@ -131,10 +137,6 @@ export async function handleMessengerUpdate(channel: MessengerChannel, body: Rec
 async function handleStart(channel: MessengerChannel, chatId: string, text: string) {
   const key = convKey(channel, chatId);
   const parts = text.split(/\s+/);
-  if (parts.length > 1) {
-    await handleLinkWithCode(channel, chatId, parts[1]);
-    return;
-  }
 
   const user = await findUserByChatId(channel, chatId);
   if (user) {
@@ -146,39 +148,64 @@ async function handleStart(channel: MessengerChannel, chatId: string, text: stri
     return;
   }
 
-  pendingConversations.set(key, 'awaiting_national_code');
+  if (parts.length > 1) {
+    // «/start <کدملی>» فقط کد ملی را پیش‌پر می‌کند؛ رمز عبور همچنان در پیام بعدی لازم است.
+    const code = parts[1].replace(/\D/g, '');
+    if (code.length === 10) {
+      pendingConversations.set(key, { state: 'awaiting_password', nationalCode: code });
+      await sendMessage(channel, chatId, '🔒 برای اتصال حساب، رمز عبور خود (همان رمز ورود به سامانه) را ارسال کنید.');
+      return;
+    }
+  }
+
+  pendingConversations.set(key, { state: 'awaiting_national_code' });
   await sendMessage(channel, chatId,
-    'سلام! به بات دانشگاه آفاق خوش آمدید.\n\nبرای اتصال حساب، کد ملی ۱۰ رقمی خود را ارسال کنید:'
+    'سلام! به بات دانشگاه آفاق خوش آمدید.\n\nبرای اتصال حساب، ابتدا کد ملی یا شمارهٔ دانشجویی خود را ارسال کنید:'
   );
 }
 
 async function handleNationalCodeInput(channel: MessengerChannel, chatId: string, text: string) {
   const key = convKey(channel, chatId);
-  pendingConversations.delete(key);
   const code = text.replace(/\D/g, '');
-  if (code.length !== 10) {
-    await sendMessage(channel, chatId, 'کد ملی باید ۱۰ رقم باشد.\n/start');
+  if (code.length < 8) {
+    await sendMessage(channel, chatId, 'کد ملی/شمارهٔ دانشجویی نامعتبر است. دوباره ارسال کنید یا /start بزنید.');
     return;
   }
-  await handleLinkWithCode(channel, chatId, code);
+  pendingConversations.set(key, { state: 'awaiting_password', nationalCode: code });
+  await sendMessage(channel, chatId, '🔒 حالا رمز عبور خود (همان رمز ورود به سامانه) را ارسال کنید.\n(توصیه می‌شود پس از اتصال، همین پیام را از چت حذف کنید.)');
 }
 
-async function handleLinkWithCode(channel: MessengerChannel, chatId: string, nationalCode: string) {
-  const code = nationalCode.replace(/\D/g, '');
-  if (code.length !== 10) {
-    await sendMessage(channel, chatId, 'کد ملی نامعتبر است.');
+/**
+ * تأیید نهایی اتصال حساب — کد ملی/شمارهٔ دانشجویی + رمز عبور واقعی، هم‌تراز
+ * امنیتی ورود وب. rate-limit بر پایهٔ chatId (نه IP، چون همهٔ درخواست‌های
+ * webhook از IP سرور پیام‌رسان می‌آیند، نه کاربر نهایی).
+ */
+async function handlePasswordInput(channel: MessengerChannel, chatId: string, password: string, nationalCode: string) {
+  const key = convKey(channel, chatId);
+  pendingConversations.delete(key);
+
+  const rl = await rateLimit(`bot-link:${channel}:${chatId}`, 5, 10 * 60);
+  if (!rl.ok) {
+    await sendMessage(channel, chatId, `تلاش بیش از حد برای اتصال حساب. ${Math.ceil(rl.retryAfterSec / 60)} دقیقهٔ دیگر با /start دوباره تلاش کنید.`);
     return;
   }
 
-  const [user] = await db.select().from(users).where(eq(users.nationalCode, code)).limit(1);
+  let [user] = await db.select().from(users).where(eq(users.nationalCode, nationalCode)).limit(1);
   if (!user) {
-    await sendMessage(channel, chatId, 'کاربری با این کد ملی یافت نشد.');
-    return;
+    const [st] = await db.select({ u: users }).from(students)
+      .innerJoin(users, eq(users.id, students.userId))
+      .where(eq(students.studentCode, nationalCode)).limit(1);
+    if (st) user = st.u;
   }
-  if (!user.isActive) {
-    await sendMessage(channel, chatId, 'حساب شما غیرفعال است.');
-    return;
-  }
+
+  // پیام یکسان برای «کاربر نیست» و «رمز غلط است» تا کسی نتواند با آزمون‌وخطا
+  // موجودیت یک کد ملی را حدس بزند (شمارش کاربر معتبر).
+  const genericFail = async () => {
+    await sendMessage(channel, chatId, '❌ کد ملی/شمارهٔ دانشجویی یا رمز عبور نادرست است. برای تلاش مجدد /start بزنید.');
+  };
+
+  if (!user || !user.isActive) { await genericFail(); return; }
+  if (!(await verifyPassword(password, user.passwordHash))) { await genericFail(); return; }
 
   await saveUserChannel(user.id, channel, chatId);
   const userRoles = await getUserRoles(user.id);
@@ -187,7 +214,7 @@ async function handleLinkWithCode(channel: MessengerChannel, chatId: string, nat
   log.info('account_linked', { channel, userId: user.id, chatId, role: roleLabel });
 
   await sendMessage(channel, chatId,
-    `حساب شما متصل شد!\n\nنام: ${user.firstName} ${user.lastName}\nنقش: ${roleLabel}\n\nدستورات:\n/status — وضعیت کلی\n/grades — نمرات\n/enrollment — انتخاب واحد\n/help — راهنما`
+    `✅ حساب شما متصل شد!\n\nنام: ${user.firstName} ${user.lastName}\nنقش: ${roleLabel}\n\nدستورات:\n/status — وضعیت کلی\n/grades — نمرات\n/enrollment — انتخاب واحد\n/help — راهنما`
   );
 }
 
@@ -195,7 +222,7 @@ async function handleHelp(channel: MessengerChannel, chatId: string) {
   await sendMessage(channel, chatId,
     'راهنمای بات دانشگاه آفاق\n\n' +
     'دستورات:\n' +
-    '/start — اتصال حساب (با کد ملی)\n' +
+    '/start — اتصال حساب (با کد ملی + رمز عبور)\n' +
     '/status — وضعیت کلی\n' +
     '/grades — نمرات آخرین ترم\n' +
     '/enrollment — وضعیت انتخاب واحد\n' +
