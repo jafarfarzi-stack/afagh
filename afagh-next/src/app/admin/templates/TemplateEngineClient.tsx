@@ -658,7 +658,7 @@ export default function TemplateEngineClient({ settings }: { settings: Integrati
 
                     {/* Channel Selector */}
                     <div className="flex flex-wrap gap-1.5">
-                      {(['SMS', 'BALE', 'EITAA', 'TELEGRAM'] as NotificationChannel[]).map(ch => (
+                      {(['SMS', 'BALE', 'EITAA', 'TELEGRAM', 'SOROUSH'] as NotificationChannel[]).map(ch => (
                         <button
                           key={ch}
                           onClick={() => setTestChannel(ch)}
@@ -668,7 +668,7 @@ export default function TemplateEngineClient({ settings }: { settings: Integrati
                               : 'bg-white text-slate-700 border border-slate-300'
                           }`}
                         >
-                          {ch === 'SMS' ? '📲 پیامک' : ch === 'BALE' ? '🟢 بله' : ch === 'EITAA' ? '🟠 ایتا' : '🔵 تلگرام'}
+                          {ch === 'SMS' ? '📲 پیامک' : ch === 'BALE' ? '🟢 بله' : ch === 'EITAA' ? '🟠 ایتا' : ch === 'TELEGRAM' ? '🔵 تلگرام' : '🟣 سروش'}
                         </button>
                       ))}
                     </div>
