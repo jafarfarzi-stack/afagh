@@ -239,7 +239,7 @@ export default function StudentsManagerClient(props: {
         showToast(res.message || 'نمره با موفقیت ثبت شد.');
         setGradeEditModalOpen(false);
         setTranscriptLoading(true);
-        getTranscript(currentStudent.id).then(r => setTranscript(r)).catch(() => setTranscript([])).finally(() => setTranscriptLoading(false));
+getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.length, 'rows'); setTranscript(r); }).catch(e => { console.error('[transcript] ERROR', e); setTranscript([]); }).finally(() => setTranscriptLoading(false));
       } else {
         showToast(res.error || 'خطا در ثبت نمره.');
       }
@@ -272,7 +272,7 @@ export default function StudentsManagerClient(props: {
     setTranscriptLoading(true);
     setTranscript(null);
     setRegConfig(null);
-    getTranscript(currentStudent.id).then(r => setTranscript(r)).catch(() => setTranscript([])).finally(() => setTranscriptLoading(false));
+    getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.length, 'rows'); setTranscript(r); }).catch(e => { console.error('[transcript] ERROR', e); setTranscript([]); }).finally(() => setTranscriptLoading(false));
     getTranscriptRegulation(currentStudent.id).then(r => setRegConfig(r?.config ?? null)).catch(() => setRegConfig(null));
   }, [stuTab, currentStudent?.id]);
 
