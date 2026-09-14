@@ -31,6 +31,7 @@ const QUALITATIVE: Record<string, { value: number | null; status: string }> = {
   'تطبیق': { value: null, status: 'EXEMPT' },
   'حذف': { value: null, status: 'DROPPED' },
   'حذف پزشکی': { value: null, status: 'DROPPED' },
+  'حذف آموزشی': { value: null, status: 'DROPPED' },
   'ناتمام': { value: null, status: 'PENDING' },
   'الف': { value: 18, status: 'FINALIZED' },
   'ب': { value: 15, status: 'FINALIZED' },
@@ -283,15 +284,17 @@ export async function applyGrades(
 
     if (existing.length) {
       if (!opts.overwrite) { res.skipped++; continue; }
-      const after = { gradeValue, gradeStatus: l.gradeStatus, hasEvaluated: gradeValue != null ? 1 : 0 };
+      const enrollmentStatus = l.gradeStatus === 'DROPPED' ? 'DROPPED' : existing[0].gradeStatus;
+      const after = { gradeValue, gradeStatus: l.gradeStatus, status: enrollmentStatus, hasEvaluated: gradeValue != null ? 1 : 0 };
       await db.update(enrollments).set(after).where(eq(enrollments.id, existing[0].id));
       await auditUpdate(ctx, 'enrollments', existing[0].id, {
         gradeValue: existing[0].gradeValue, gradeStatus: existing[0].gradeStatus, hasEvaluated: existing[0].hasEvaluated,
       }, after);
       res.updated++;
     } else {
+      const enrollmentStatus = l.gradeStatus === 'DROPPED' ? 'DROPPED' : 'REGISTERED';
       const [ne] = await db.insert(enrollments).values({
-        studentId: sid, offeringId: off.id, status: 'REGISTERED',
+        studentId: sid, offeringId: off.id, status: enrollmentStatus,
         gradeValue, gradeStatus: l.gradeStatus, hasEvaluated: gradeValue != null ? 1 : 0,
       }).onConflictDoNothing().returning({ id: enrollments.id });
       if (ne?.id) await auditInsert(ctx, 'enrollments', ne.id, { gradeValue, gradeStatus: l.gradeStatus });
