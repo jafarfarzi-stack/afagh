@@ -841,9 +841,7 @@ async function phaseGrades(files) {
     await pool.query(`INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units)
       VALUES ${ph} ON CONFLICT (code) DO NOTHING`, vals);
   }
-  if (missingCourses.length) {
-    for (const r of await q(`SELECT id, code FROM courses`)) coursesByCode.set(r.code, r.id);
-  }
+  for (const r of await q(`SELECT id, code FROM courses`)) coursesByCode.set(r.code, r.id);
   stats.coursesNew = missingCourses.length;
   console.log(`دروس placeholder: ${stats.coursesNew} (کل دروس: ${coursesByCode.size})`);
   // ارائه‌ها (TRANSFER)
@@ -882,9 +880,11 @@ async function phaseGrades(files) {
     for (const j of ch) {
       const s = studentsByCode.get(j.stno);
       const t = termsByCode.get(j.term);
+      const cid = coursesByCode.get(j.course);
       if (!s) { stats.noStudent++; continue; }
-      if (!t) continue;
-      const offId = offMap.get(`${t.id}|${coursesByCode.get(j.course)}|${j.group}`);
+      if (!t) { stats.noTerm++; continue; }
+      if (!cid) { stats.noCourse = (stats.noCourse || 0) + 1; continue; }
+      const offId = offMap.get(`${t.id}|${cid}|${j.group}`);
       if (!offId) continue;
       rows.push({ s: s.id, o: offId, v: j.val, gs: j.status, at: t.startDate || new Date() });
     }
