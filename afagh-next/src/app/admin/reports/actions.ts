@@ -81,7 +81,7 @@ function faStatus(s: unknown): string {
 function studentWhere(f: ReportFilters, alias = 's') {
   const a = sql.identifier(alias);
   const c = [];
-  if (f.universityId) c.push(sql`${a}."universityId" = ${f.universityId}`);
+  if (f.universityId) c.push(sql`(${a}."universityId" = ${f.universityId} OR ${a}."universityId" IS NULL)`);
   if (f.degreeId) c.push(sql`${a}."degreeLevelId" = ${f.degreeId}`);
   if (f.facultyId) c.push(sql`m."facultyId" = ${f.facultyId}`);
   if (f.majorId) c.push(sql`${a}."majorId" = ${f.majorId}`);
@@ -163,7 +163,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
 
     // ── خلاصه وضعیت تحصیلی ──
     case 'status-summary': {
-      const uniCond = f.universityId ? sql`WHERE s."universityId" = ${f.universityId}` : sql``;
+      const uniCond = f.universityId ? sql`WHERE (s."universityId" = ${f.universityId} OR s."universityId" IS NULL)` : sql``;
       const data = await db.execute<Record<string, unknown>>(sql`
         SELECT s.status AS st, d.title AS degree, COUNT(*)::int AS n
         FROM students s LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
@@ -180,7 +180,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
 
     // ── به تفکیک دانشکده ──
     case 'by-faculty': {
-      const uniCond = f.universityId ? sql`WHERE s."universityId" = ${f.universityId}` : sql``;
+      const uniCond = f.universityId ? sql`WHERE (s."universityId" = ${f.universityId} OR s."universityId" IS NULL)` : sql``;
       const data = await db.execute<Record<string, unknown>>(sql`
         SELECT COALESCE(fc.name, '— بدون دانشکده —') AS faculty, s.status AS st, COUNT(*)::int AS n
         FROM students s LEFT JOIN majors m ON m.id = s."majorId" LEFT JOIN faculties fc ON fc.id = m."facultyId"
@@ -231,7 +231,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
 
     // ── وضعیت نمرات ترم ──
     case 'grade-status': {
-      const uniCond = f.universityId ? sql`AND s."universityId" = ${f.universityId}` : sql``;
+      const uniCond = f.universityId ? sql`AND (s."universityId" = ${f.universityId} OR s."universityId" IS NULL)` : sql``;
       const data = await db.execute<Record<string, unknown>>(sql`
         SELECT e."gradeStatus" AS st, COUNT(*)::int AS n,
           ROUND(AVG(CASE WHEN ${NUM} THEN e."gradeValue"::numeric END), 2) AS avg
@@ -342,7 +342,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
 
     // ── گزارش شهریه / تراکنش‌های مالی ترم ──
     case 'tuition': {
-      const uniCond = f.universityId ? sql`AND s."universityId" = ${f.universityId}` : sql``;
+      const uniCond = f.universityId ? sql`AND (s."universityId" = ${f.universityId} OR s."universityId" IS NULL)` : sql``;
       const termCond = term ? sql`AND t."termCode" = ${term}` : sql``;
       const data = await db.execute<Record<string, unknown>>(sql`
         SELECT s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
@@ -405,7 +405,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
 
     // ── دانشجویان واجد شرایط آزمون جامع ──
     case 'jame': {
-      const uniCond = f.universityId ? sql`AND s."universityId" = ${f.universityId}` : sql``;
+      const uniCond = f.universityId ? sql`AND (s."universityId" = ${f.universityId} OR s."universityId" IS NULL)` : sql``;
       const data = await db.execute<Record<string, unknown>>(sql`
         SELECT s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
           m.name AS major, d.title AS degree, s."entryYear" AS y,
@@ -434,7 +434,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
 
     // ── مدارک دانشجو ──
     case 'docs': {
-      const uniCond = f.universityId ? sql`AND s."universityId" = ${f.universityId}` : sql``;
+      const uniCond = f.universityId ? sql`AND (s."universityId" = ${f.universityId} OR s."universityId" IS NULL)` : sql``;
       const data = await db.execute<Record<string, unknown>>(sql`
         SELECT s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
           m.name AS major, d.title AS degree, s.status AS st,
