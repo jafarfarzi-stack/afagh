@@ -97,6 +97,17 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/grade-status-codes',
+    icon: '🏷️',
+    title: 'کدهای وضعیت نمره دروس',
+    desc: 'ویرایش کد قبولی/مردودی هر درس در هر نسخه برنامه درسی',
+    roles: EDU,
+    accent: 'from-amber-950 to-orange-950 border-amber-700/50',
+    iconBg: 'bg-amber-700/80 border-amber-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/regulations',
     icon: '⚖️',
     title: 'مرکز مدیریت آیین‌نامه‌ها',
