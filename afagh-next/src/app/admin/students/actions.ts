@@ -144,7 +144,8 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
   if (ens.length) {
     return ens.map(r => {
       const ts = termStates.get(r.termCode);
-      const code = markStatOf(r.legacyRaw) ?? r.samaGradeStatusCode ?? null;
+      // اولویت: samaGradeStatusCode از enrollments (به‌روز توسط ادمین) و سپس markStat قدیمی
+      const code = r.samaGradeStatusCode ?? markStatOf(r.legacyRaw) ?? null;
       return {
         enrollmentId: r.enrollmentId,
         offeringId: r.offeringId,
