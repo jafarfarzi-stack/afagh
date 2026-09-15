@@ -29,7 +29,7 @@ Subsistem Scheduling دارای **Backend و Solver واقعی، قابلیت ت
 | ۱ | **Curriculum Version** (نسخهٔ برنامه) | ✅ موجود و کامل | `schema.ts:255` (حالت + CHECK) | **حفظ** |
 | ۲ | **Curriculum Course** (درسانتساب با roleType) | ✅ موجود | `schema.ts:280` + CHECK نقش‌ها | **حفظ** |
 | ۳ | **Track / گرایش** | ✅ موجود | `schema.ts:232` (جایگزین Mock قدیم) | **حفظ** |
-| ۴ | **Lifecycle** (DRAFT→…→ARCHIVED) | ✅ موتور + Actions | `curriculum-types.ts` + `admin/curriculum/actions.ts` (۲۱ اکشن) | **تکمیل** |
+| ۴ | **Lifecycle** (DRAFT→…→ARCHIVED) | ✅ موتور + Actions | `curriculum-types.ts` + `admin/curriculum/actions/` (۲۵ اکشن در ۵ فایل) | **تکمیل** |
 | ۵ | **Approval/Audit** (append-only + امضا) | ✅ موجود | `schema.ts:304` + `curriculum_approvals` + `signature_otps` | **تکمیل** |
 | ۶ | **Prerequisite/Corequisite** | ✅ Rule Engine | `course_rules.logicTree` + `curriculum-validator.ts:126-196` (دور/ارجاع/ترتیب) | **سخت‌سازی** |
 | ۷ | **Category Units** (کنترل واحد به‌تفکیک نقش) | ⚠️ **ناقص** | فقط `UNITS_COVER_MIN` (`curriculum-validator.ts:117`) که **فقط جمع CORE+MAJOR** را با `totalRequiredUnits` می‌سنجد؛ **هیچ چک مینیمم GENERAL / ELECTIVE / THESIS / INTERNSHIP / WORKSHOP وجود ندارد**؛ `COURSE_TYPES_COMPLETE` (خط ۲۳۸) فقط **WARN** است | **اصلاح — نیازمه Migration ندارد** (فقط منطق) |

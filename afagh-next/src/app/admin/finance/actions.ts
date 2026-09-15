@@ -5,7 +5,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   loan_products, payment_cheques, student_discounts, student_ledger, student_loans,
-  student_sponsorships, tuition_discount_types, tuition_formulas, tuition_sponsors,
+  student_sponsorships, tuition_discount_types, tuition_rules, tuition_sponsors,
 } from '@/db/schema';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { assertServerActionOrigin, requireStudentScope } from '@/lib/security';
@@ -853,9 +853,9 @@ export async function saveFormulaAction(input: {
   };
 
   if (input.id) {
-    await db.update(tuition_formulas).set(values).where(eq(tuition_formulas.id, input.id));
+    await db.update(tuition_rules).set(values).where(eq(tuition_rules.id, input.id));
   } else {
-    await db.insert(tuition_formulas).values(values);
+    await db.insert(tuition_rules).values(values);
   }
 
   revalidatePath('/admin/finance/rules');
@@ -866,7 +866,7 @@ export async function deleteFormulaAction(id: number): Promise<{ ok: boolean; er
   await requireRole(FINANCE);
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
-  await db.delete(tuition_formulas).where(eq(tuition_formulas.id, id));
+  await db.delete(tuition_rules).where(eq(tuition_rules.id, id));
   revalidatePath('/admin/finance/rules');
   return { ok: true };
 }

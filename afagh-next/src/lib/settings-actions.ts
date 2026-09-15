@@ -41,6 +41,41 @@ export async function saveSettingsAction(values: Record<string, string>): Promis
   return { ok: true, message: `${n} تنظیم ذخیره شد.` };
 }
 
+/**
+ * بارگذاری ارم دانشگاه (UNIVERSITY_LOGO) — PNG/JPG تا ۲MB در public/uploads.
+ * در داکر این مسیر باید volume باشد تا با rebuild نپرد.
+ */
+export async function uploadLogoAction(fd: FormData): Promise<SettingsActionResult> {
+  try {
+    await requireRole(['ADMIN']);
+  } catch {
+    return { ok: false, message: 'دسترسی لازم را ندارید.' };
+  }
+  const file = fd.get('logo');
+  if (!file || typeof file === 'string') return { ok: false, message: 'فایلی انتخاب نشده است.' };
+  const allowed = ['image/png', 'image/jpeg', 'image/webp'];
+  if (!allowed.includes(file.type)) return { ok: false, message: 'فقط PNG/JPG/WebP مجاز است.' };
+  if (file.size > 2 * 1024 * 1024) return { ok: false, message: 'حجم فایل بیش از ۲ مگابایت است.' };
+  const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+  const { mkdir, writeFile } = await import('node:fs/promises');
+  const { join } = await import('node:path');
+  const dir = join(process.cwd(), 'public', 'uploads');
+  await mkdir(dir, { recursive: true });
+  const buf = Buffer.from(await file.arrayBuffer());
+  await writeFile(join(dir, `logo.${ext}`), buf);
+  // پسوند قبلی متفاوت بود؟ پاکش کن تا فقط یک لوگو بماند
+  for (const e of ['png', 'jpg', 'webp']) {
+    if (e === ext) continue;
+    try {
+      const { unlink } = await import('node:fs/promises');
+      await unlink(join(dir, `logo.${e}`));
+    } catch { /* نبود */ }
+  }
+  await saveSettings({ UNIVERSITY_LOGO: `/uploads/logo.${ext}` });
+  revalidatePath('/admin/settings');
+  return { ok: true, message: 'ارم دانشگاه بارگذاری شد.' };
+}
+
 /** بازگرداندن یک کلید به مقدار ENV/پیش‌فرض */
 export async function resetSettingAction(key: string): Promise<SettingsActionResult> {
   try {

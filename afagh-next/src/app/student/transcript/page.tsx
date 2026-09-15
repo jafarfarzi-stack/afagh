@@ -298,7 +298,7 @@ export default async function StudentTranscriptPage() {
                             )}
                           </td>
                           <td className="p-1.5 border-l border-slate-200 text-center text-slate-700">
-                            {row.courseType === 'GENERAL' ? 'عمومی' : row.courseType === 'BASIC' ? 'پایه' : 'تخصصی'}
+                            {row.courseType || '—'}
                           </td>
                           <td className="p-1.5 border-l border-slate-200 text-center font-mono">{thU}</td>
                           <td className="p-1.5 border-l border-slate-200 text-center font-mono">{prU}</td>

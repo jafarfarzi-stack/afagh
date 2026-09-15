@@ -1,0 +1,21 @@
+-- 0007 — تکمیل ستون‌های staff که در DB زنده جا افتاده بود (schema.ts:213)
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "title" varchar(50);
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "facultyId" integer;
+DO $$ BEGIN ALTER TABLE "staff" ADD CONSTRAINT "staff_facultyId_faculties_id_fk" FOREIGN KEY ("facultyId") REFERENCES "faculties"("id") ON DELETE no action ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN null; END $$;
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "isActive" integer DEFAULT 1;
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "cooperationType" varchar(50);
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "personnelNo" varchar(50);
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "employmentType" varchar(50);
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "hireDate" varchar(10);
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "lastDegreeYear" integer;
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "fieldOfStudy" varchar(200);
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "maritalStatusCode" integer;
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "maritalStatus" varchar(20);
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "lastDegreeCountryCode" varchar(10);
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "lastDegreeUniversity" varchar(200);
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "academicBase" varchar(20);
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "birthProvince" varchar(100);
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "birthCity" varchar(100);
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "bankAccountNo" varchar(50);
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "phone" varchar(20);
+ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "canManageServicePool" integer DEFAULT 0;

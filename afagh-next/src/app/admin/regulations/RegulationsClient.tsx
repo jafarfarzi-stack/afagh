@@ -33,6 +33,30 @@ export interface RegulationItem {
 const faNum = (n: any) =>
   n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
 
+/**
+ * نرمال‌سازی rulesConfig پیش از نشستن در فرم.
+ *
+ * ⚠ آیین‌نامه‌هایی که با seed-base یا نسخه‌های قدیمی‌تر ساخته شده‌اند ممکن است
+ * بعضی بخش‌ها (مثلاً grading_and_gpa یا probation_and_tenure) را نداشته باشند.
+ * فرم به این کلیدها مستقیم دسترسی می‌گیرد و نبودشان کل صفحه را با
+ * «Cannot read properties of undefined» کرش می‌کرد (۵۰۰). اینجا هر بخش گمشده
+ * از قالب پیش‌فرض پر می‌شود و مقادیر واقعی آیین‌نامه دست‌نخورده می‌مانند.
+ */
+function normalizeConfig(cfg: Partial<RegulationConfig> | null | undefined): RegulationConfig {
+  const base = JSON.parse(JSON.stringify(DEFAULT_BACHELOR_REGULATION_1403)) as RegulationConfig;
+  if (!cfg || typeof cfg !== 'object') return base;
+  const src = JSON.parse(JSON.stringify(cfg)) as Record<string, any>;
+  const out = base as unknown as Record<string, any>;
+  for (const key of Object.keys(src)) {
+    const v = src[key];
+    out[key] =
+      v && typeof v === 'object' && !Array.isArray(v) && out[key] && typeof out[key] === 'object'
+        ? { ...out[key], ...v }
+        : v;
+  }
+  return out as unknown as RegulationConfig;
+}
+
 export default function RegulationsClient(props: {
   regulations: RegulationItem[];
   degreeLevels: DegreeLevelItem[];
@@ -63,7 +87,7 @@ export default function RegulationsClient(props: {
   const [formFromYear, setFormFromYear] = useState(selectedReg.effectiveFromYear);
   const [formToYear, setFormToYear] = useState<number | null>(selectedReg.effectiveToYear);
   const [formConfig, setFormConfig] = useState<RegulationConfig>(
-    JSON.parse(JSON.stringify(selectedReg.rulesConfig))
+    normalizeConfig(selectedReg.rulesConfig)
   );
 
   const [saving, setSaving] = useState(false);
@@ -76,7 +100,7 @@ export default function RegulationsClient(props: {
     setFormDegreeLevelId(reg.degreeLevelId);
     setFormFromYear(reg.effectiveFromYear);
     setFormToYear(reg.effectiveToYear);
-    setFormConfig(JSON.parse(JSON.stringify(reg.rulesConfig)));
+    setFormConfig(normalizeConfig(reg.rulesConfig));
     setMsg(null);
   };
 
@@ -287,13 +311,13 @@ export default function RegulationsClient(props: {
                       <span>ورودی {faNum(reg.effectiveFromYear)} به بعد</span>
                       <span
                         className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                          reg.rulesConfig.grading_and_gpa.failed_course_gpa_policy ===
+                          reg.rulesConfig?.grading_and_gpa?.failed_course_gpa_policy ===
                           'EXCLUDE_IF_PASSED'
                             ? 'bg-emerald-100 text-emerald-800'
                             : 'bg-amber-100 text-amber-800'
                         }`}
                       >
-                        {reg.rulesConfig.grading_and_gpa.failed_course_gpa_policy ===
+                        {reg.rulesConfig?.grading_and_gpa?.failed_course_gpa_policy ===
                         'EXCLUDE_IF_PASSED'
                           ? 'حذف نمره ردی'
                           : 'ابقای نمره ردی'}
@@ -943,6 +967,37 @@ export default function RegulationsClient(props: {
                   <span className="text-[11px] text-slate-500">
                     ۱۰ برای کاردانی و کارشناسی، ۱۲ برای ارشد، ۱۴ برای دکتری
                   </span>
+                </div>
+
+                <div className="pt-2 border-t border-indigo-200/70 mt-1">
+                  <label className="flex items-start gap-2.5 cursor-pointer p-3 rounded-xl bg-white border border-slate-200 hover:border-indigo-300">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 accent-indigo-700 w-4 h-4 shrink-0"
+                      checked={formConfig.grading_and_gpa.dedupeRepeatedCourses === true}
+                      onChange={e =>
+                        setFormConfig({
+                          ...formConfig,
+                          grading_and_gpa: {
+                            ...formConfig.grading_and_gpa,
+                            dedupeRepeatedCourses: e.target.checked,
+                          },
+                        })
+                      }
+                    />
+                    <span>
+                      <span className="block font-bold text-xs text-slate-800">
+                        فقط بهترین نمرهٔ درس تکراری در معدل کل شمرده شود
+                      </span>
+                      <span className="block text-[11px] text-slate-500 leading-relaxed mt-0.5">
+                        اگر دانشجو درسی را که <b>قبلاً هم قبول شده</b> دوباره برای ارتقای معدل اخذ
+                        کند، با فعال‌کردن این گزینه فقط <b>بالاترین</b> نمره‌ی آن درس (و واحدش
+                        یک‌بار) در معدل کل حساب می‌شود؛ در غیر این صورت هر بار اخذ، جدا در معدل
+                        کل ضرب می‌شود (رفتار پیش‌فرض فعلی). این گزینه مستقل از سیاست حذف نمره
+                        مردودی بالاست و فقط روی درسی که <u>هر دو بار قبول شده</u> اثر دارد.
+                      </span>
+                    </span>
+                  </label>
                 </div>
               </div>
             </div>

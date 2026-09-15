@@ -9,7 +9,7 @@
 | نگاشت Drizzle — ۷۳ جدول / ۵۱۰ ستون | `src/db/schema.ts` | §۲۲۴۳ |
 | سخت‌سازی PG: ایندکس، پارتیشن ترمی، RLS، آرشیو سرد، VACUUM | `src/db/pg-hardening.sql` | §۲۰۹۳–۲۲۲۹، §۲۱۷۰ |
 | احراز هویت scrypt سازگار با فاز صفر (salt:hash) + نشست ۲روزه | `src/lib/auth.ts` | — |
-| سه داشبورد ایزوله دانشجو/استاد/ادمین + گیت نقش در middleware و layout | `src/app/{student,professor,admin}` | §۲۸۶۵، §۲۶۶۴ |
+| سه داشبورد ایزوله دانشجو/استاد/ادمین + گیت نقش در proxy و layout | `src/app/{student,professor,admin}` | §۲۸۶۵، §۲۶۶۴ |
 | امضای الکترونیک سه‌وضعیتی IDLE→OTP_SENT→SIGNED با OTP پنج‌رقمی، انقضای ۲ دقیقه، قفل ۵ تلاش، ممیزی زنجیره‌ای | `src/components/ElectronicSignature.tsx` + `src/app/professor/documents/actions.ts` | §۲۹۲۶–۲۹۹۰ |
 | انتخاب واحد زنده: تایمر ۱۵ دقیقه‌ای سبد، خطاهای سخت (مالی/وضعیت/سقف ۲۰ واحد)، خطای نرم تداخل زمانی → ارجاع کمیسیون، اتاق انتظار | `src/app/student/enroll/` | §۲۲۴۳ |
 | مهاجرت SQLite→PG (نام ستون‌ها ۱:۱، ریست serial) | `scripts/migrate-sqlite-to-pg.mjs` | §۳۷۰۰ اجرای موازی |

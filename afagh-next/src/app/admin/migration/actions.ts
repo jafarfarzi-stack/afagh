@@ -6,6 +6,7 @@ import { db } from '@/db';
 import { legacy_code_maps, legacy_grades, legacy_sources, legacy_tuition_formulas } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { autoSuggestDomain, targetOptions, type MapDomain } from '@/lib/migration/codemap';
+import { norm } from '@/lib/migration/normalize';
 import {
   acceptLegacyBalance, applyFormulasToRules, resolutionStats, runTuitionCompare,
   type CompareSummary, type OpeningBalanceResult,
@@ -72,6 +73,61 @@ export async function saveMapAction(input: {
     confidence: '100', status: 'CONFIRMED', note: input.note ?? row.note,
     updatedByUserId: user.id, updatedAt: new Date(),
   }).where(eq(legacy_code_maps.id, input.id));
+  revalidatePath('/admin/migration');
+  return { ok: true };
+}
+
+/**
+ * ثبت «کد جدید» به‌صورت آزاد برای یک کد قدیمی.
+ *
+ * تفاوتش با saveMapAction: آنجا باید رکورد مقصد از قبل در سامانه وجود داشته
+ * باشد. اینجا دانشگاه می‌خواهد کدِ خودِ رکورد عوض شود (مثلاً درس «۱۲۳۴» از
+ * این پس «CE-101» باشد) — رکوردی که چه‌بسا همین انتقال آن را می‌سازد.
+ * این کد در لحظهٔ ثبت نهایی جایگزین کد قدیمی می‌شود.
+ */
+export async function setNewCodeAction(input: {
+  id: number; newCode: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const user = await guard();
+  const [row] = await db.select().from(legacy_code_maps).where(eq(legacy_code_maps.id, input.id)).limit(1);
+  if (!row) return { ok: false, error: 'ردیف یافت نشد.' };
+
+  const code = norm(input.newCode).replace(/\s+/g, '');
+  if (!code) {
+    // خالی‌کردن کد جدید = لغو جایگزینی (نگاشت به رکورد موجود دست نمی‌خورد)
+    await db.update(legacy_code_maps).set({
+      targetCode: null, targetTitle: null, targetId: null, confidence: '0',
+      status: 'UNMAPPED', updatedByUserId: user.id, updatedAt: new Date(),
+    }).where(eq(legacy_code_maps.id, input.id));
+    revalidatePath('/admin/migration');
+    return { ok: true };
+  }
+  if (!/^[A-Za-z0-9][A-Za-z0-9_\-./]{0,49}$/.test(code)) {
+    return { ok: false, error: 'کد جدید فقط حروف لاتین، رقم و نویسه‌های _ - . / (حداکثر ۵۰ نویسه) و شروع با حرف یا رقم.' };
+  }
+  if (norm(code) === norm(row.legacyCode)) {
+    return { ok: false, error: 'کد جدید با کد قدیمی یکسان است — جایگزینی بی‌اثر خواهد بود.' };
+  }
+
+  // دو کد قدیمیِ متفاوت نباید به یک کد جدید برسند؛ وگرنه دو رکورد در هم ادغام می‌شوند.
+  const sameTarget = await db.select({ id: legacy_code_maps.id, legacyCode: legacy_code_maps.legacyCode })
+    .from(legacy_code_maps).where(and(
+      eq(legacy_code_maps.sourceCode, row.sourceCode),
+      eq(legacy_code_maps.domain, row.domain),
+      eq(legacy_code_maps.targetCode, code),
+      eq(legacy_code_maps.status, 'CONFIRMED'),
+    ));
+  const clash = sameTarget.find(x => x.id !== input.id);
+  if (clash) {
+    return { ok: false, error: `کد جدید «${code}» قبلاً برای کد قدیمی «${clash.legacyCode}» ثبت شده — دو کد قدیمی نمی‌توانند به یک کد جدید تبدیل شوند.` };
+  }
+
+  await db.update(legacy_code_maps).set({
+    targetCode: code, targetTitle: row.legacyTitle ?? null, targetId: null,
+    confidence: '100', status: 'CONFIRMED',
+    updatedByUserId: user.id, updatedAt: new Date(),
+  }).where(eq(legacy_code_maps.id, input.id));
+  log.info('code rewrite set', { id: input.id, domain: row.domain, from: row.legacyCode, to: code });
   revalidatePath('/admin/migration');
   return { ok: true };
 }

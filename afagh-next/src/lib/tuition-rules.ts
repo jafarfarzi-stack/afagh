@@ -5,7 +5,13 @@
  *   ۱) قابل تست مستقیم است (بدون DB)؛
  *   ۲) موتور شهریه می‌تواند قواعد را یک‌بار بخواند و برای هر درس فقط
  *      همین تابع خالص را صدا بزند (بدون کوئری تکراری).
+ *
+ * از نسخهٔ یکپارچه، خودِ انتخاب قاعده در src/lib/tuition-resolver.ts است
+ * (سلسله‌مراتب: مقطع > رشته > نوع ترم > نوع درس > بازهٔ ورودی) و تابع‌های
+ * اینجا برای سازگاری با شکل قدیمی ردیف‌ها (fixedTuition/perUnitTuition)
+ * آن را فراخوانی می‌کنند.
  */
+import { resolveTuitionRule, type TuitionRuleLike } from './tuition-resolver';
 
 export type TermType = 'NORMAL' | 'SUMMER' | 'EQUIVALENCE';
 
@@ -23,6 +29,8 @@ export interface FeeRuleParams {
   termType: TermType | string | null;
   offeringType?: string | null;
   entryYear?: number | null;
+  /** کلید دوم اولویت: رشته (برابر majorId دانشجو) — برای قواعد یکپارچهٔ دارای رشته */
+  majorId?: number | null;
   /**
    * فقط قواعدِ بدون offeringType در نظر گرفته می‌شوند. این برای «شهریهٔ ثابت»
    * ضروری است: شهریهٔ ثابت به ازای نوع ترم است و نباید از قاعده‌ای بیاید که
@@ -35,11 +43,13 @@ export interface FeeRuleParams {
 export interface FeeRuleLike {
   id: number;
   degreeLevelId: number | null;
+  majorId?: number | null;
   termType: string | null;
   offeringType: string | null;
   fixedTuition: unknown;
   perUnitTuition: unknown;
   effectiveFromYear: number | null;
+  priority?: number | null;
 }
 
 export const toNum = (v: unknown): number => {
@@ -76,42 +86,43 @@ export function termTypeOf(term: {
 }
 
 /**
- * انتخاب خاص‌ترین قاعدهٔ منطبق.
- * خاص‌بودن = تعداد کلیدهای غیرخالی بیشتر (مقطع، نوع ترم، نوع درس).
- * تساوی → جدیدترین effectiveFromYear و سپس id بزرگ‌تر.
+ * انتخاب خاص‌ترین قاعدهٔ منطبق (پیاده‌سازی از نسخهٔ یکپارچه با سلسله‌مراتب
+ * مقطع > رشته > نوع ترم > نوع درس > بازهٔ ورودی). رشتهٔ ورودی از این‌پس
+ * (params.majorId) روی ردیف‌های دارای majorId اثر می‌گذارد.
  */
 export function pickFeeRule<T extends FeeRuleLike>(rows: T[], params: FeeRuleParams): ResolvedRule | null {
-  const matches = rows.filter((r) => {
-    // قاعدهٔ مقید به مقطع فقط برای همان مقطع است
-    if (r.degreeLevelId != null && r.degreeLevelId !== params.degreeLevelId) return false;
-    if (r.termType && params.termType && r.termType !== params.termType) return false;
-    if (params.termLevelOnly && r.offeringType) return false;
-    if (r.offeringType && params.offeringType && r.offeringType !== params.offeringType) return false;
-    if (r.effectiveFromYear != null && params.entryYear != null && r.effectiveFromYear > params.entryYear) return false;
-    return true;
+  const canonical: TuitionRuleLike[] = rows.map((r) => ({
+    id: r.id,
+    degreeLevelId: r.degreeLevelId,
+    majorId: r.majorId ?? null,
+    termType: r.termType,
+    offeringType: r.offeringType,
+    entryYearFrom: r.effectiveFromYear,
+    entryYearTo: null,
+    fixedAmount: r.fixedTuition,
+    perUnitTheory: r.perUnitTuition,
+    perUnitPractical: r.perUnitTuition,
+    perUnitGeneral: r.perUnitTuition,
+    priority: r.priority ?? 100,
+  }));
+
+  const best = resolveTuitionRule(canonical, {
+    degreeLevelId: params.degreeLevelId,
+    majorId: params.majorId ?? null,
+    entryYear: params.entryYear ?? null,
+    termType: params.termType ?? null,
+    offeringType: params.offeringType ?? null,
+    termLevelOnly: params.termLevelOnly,
   });
+  if (!best) return null;
 
-  if (matches.length === 0) return null;
-
-  const specificity = (r: T) =>
-    (r.degreeLevelId != null ? 1 : 0) + (r.termType ? 1 : 0) + (r.offeringType ? 1 : 0);
-
-  const sorted = [...matches].sort((a, b) => {
-    const s = specificity(b) - specificity(a);
-    if (s !== 0) return s;
-    const y = (b.effectiveFromYear ?? 0) - (a.effectiveFromYear ?? 0);
-    if (y !== 0) return y;
-    return b.id - a.id;
-  });
-
-  const best = sorted[0];
   return {
     id: best.id,
-    fixedTuition: toNum(best.fixedTuition),
-    perUnitTuition: toNum(best.perUnitTuition),
+    fixedTuition: toNum(best.fixedAmount),
+    perUnitTuition: toNum(best.perUnitTheory),
     degreeLevelId: best.degreeLevelId,
-    termType: best.termType,
-    offeringType: best.offeringType,
+    termType: best.termType ?? null,
+    offeringType: best.offeringType ?? null,
   };
 }
 

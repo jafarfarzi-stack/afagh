@@ -120,8 +120,22 @@ function onFinalized(requestId, action) {
     if (action === 'APPROVE' && req.relatedEnrollmentId) {
       const enr = db.prepare(`SELECT * FROM enrollments WHERE id = ?`).get(req.relatedEnrollmentId);
       if (enr && enr.status === 'PENDING_COUNCIL') {
-        db.prepare(`UPDATE enrollments SET status = 'REGISTERED' WHERE id = ?`).run(enr.id);
-        db.prepare(`UPDATE course_offerings SET enrolledCount = enrolledCount + 1 WHERE id = ?`).run(enr.offeringId);
+        // ظرفیت اتمیک (P0-1): تأیید شورا نباید overbooking بسازد.
+        const seat = db.prepare(`UPDATE course_offerings SET enrolledCount = enrolledCount + 1 WHERE id = ? AND enrolledCount < capacity`).run(enr.offeringId);
+        if (seat.changes === 1) {
+          db.prepare(`UPDATE enrollments SET status = 'REGISTERED' WHERE id = ?`).run(enr.id);
+        } else {
+          // کلاس پر است → لیست انتظار واقعی؛ اگر آن هم پر بود، در انتظار شورا می‌ماند
+          const capRow = db.prepare(`SELECT waitlistCapacity FROM course_offerings WHERE id = ?`).get(enr.offeringId);
+          const wlCount = db.prepare(`SELECT COUNT(*) AS c FROM enrollments WHERE offeringId = ? AND status = 'WAITLISTED'`).get(enr.offeringId).c;
+          if (wlCount < Number(capRow.waitlistCapacity || 0)) {
+            db.prepare(`UPDATE enrollments SET status = 'WAITLISTED', waitlistPosition = ? WHERE id = ?`).run(wlCount + 1, enr.id);
+            notifyUser(stu.userId, 'COUNCIL_WAITLISTED', {});
+          } else {
+            notifyUser(stu.userId, 'COUNCIL_APPROVED_FULL', {});
+          }
+          return;
+        }
         const off = db.prepare(`
           SELECT c.title, o.termId, c.units FROM course_offerings o
           JOIN courses c ON c.id = o.courseId WHERE o.id = ?`).get(enr.offeringId);

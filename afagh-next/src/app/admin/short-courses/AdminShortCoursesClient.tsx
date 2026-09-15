@@ -381,14 +381,16 @@ export default function AdminShortCoursesClient({
             </div>
 
             <div className="text-xs text-slate-500 font-bold">
-              شهریه دوره: <span className="text-indigo-950 font-black">{formatPrice(currentCourse.tuitionPrice)}</span>
+              شهریه دوره: <span className="text-indigo-950 font-black">{formatPrice(currentCourse?.tuitionPrice ?? 0)}</span>
             </div>
           </div>
 
           {/* Learners Table */}
-          {currentCourse.learners.length === 0 ? (
+          {!currentCourse || currentCourse.learners.length === 0 ? (
             <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-slate-500 text-xs font-bold">
-              هنوز فراگیری در این دوره ثبت‌نام نکرده است.
+              {!currentCourse
+                ? 'هنوز هیچ دورهٔ کوتاه‌مدتی تعریف نشده است — از تب «تعریف دورهٔ جدید» شروع کنید.'
+                : 'هنوز فراگیری در این دوره ثبت‌نام نکرده است.'}
             </div>
           ) : (
             <div className="overflow-x-auto">

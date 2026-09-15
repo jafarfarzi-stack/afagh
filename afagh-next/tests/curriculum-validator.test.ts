@@ -9,6 +9,7 @@
 import {
   validateCurriculumCore,
   hasBlockingErrors,
+  parseRoleUnitTargets,
   type CurriculumCheckInput,
 } from '../src/lib/curriculum-validator.ts';
 
@@ -195,6 +196,23 @@ eq('همه دارای ترم → بدون یافته', hasCheck(okUnits, 'SEMEST
 const empty = validateCurriculumCore({ ...baseInput(), courses: [], rules: [] });
 eq('نسخهٔ خالی: دور ندارد', hasCheck(empty, 'PREREQ_CYCLE_FREE'), false);
 eq('نسخهٔ خالی: ارجاع ندارد', hasCheck(empty, 'PREREQ_REFERENCES_VALID'), false);
+
+// سهم واحد نقش‌ها (ROLE_UNITS_COVERAGE) + پارس امن اهداف
+eq('پارس JSON رشته‌ای', JSON.stringify(parseRoleUnitTargets('{"GENERAL":22,"CORE":25}')), '{"GENERAL":22,"CORE":25}');
+eq('پارس آبجکت (کلید کوچک + مقدار رشته‌ای)', JSON.stringify(parseRoleUnitTargets({ general: 9, CORE: '25' })), '{"GENERAL":9,"CORE":25}');
+eq('کلید نامعتبر/مقدار منفی حذف', JSON.stringify(parseRoleUnitTargets({ 'X;DROP': 5, CORE: -3, MAJOR: 10 })), '{"MAJOR":10}');
+eq('رشتهٔ نامعتبر → {}', JSON.stringify(parseRoleUnitTargets('ناقص{')), '{}');
+eq('null → {}', JSON.stringify(parseRoleUnitTargets(null)), '{}');
+
+const noTargets = validateCurriculumCore(baseInput());
+eq('بدون سهم مقرر → چکی صادر نمی‌شود', hasCheck(noTargets, 'ROLE_UNITS_COVERAGE'), false);
+
+const shortGeneral = validateCurriculumCore(baseInput({ minRoleUnits: { GENERAL: 9, CORE: 4, MAJOR: 3 } }));
+eq('کسری عمومی (۳ از ۹) → WARN', hasCheck(shortGeneral, 'ROLE_UNITS_COVERAGE', 'WARN'), true);
+
+const allMet = validateCurriculumCore(baseInput({ minRoleUnits: { GENERAL: 3, CORE: 4, MAJOR: 3, THESIS: 6, ELECTIVE: 2 } }));
+eq('همه سهم‌ها تأمین → بدون یافته', hasCheck(allMet, 'ROLE_UNITS_COVERAGE'), false);
+eq('کسری واحد، مانع تأیید نیست (WARN)', hasBlockingErrors(shortGeneral.filter(r => r.check === 'ROLE_UNITS_COVERAGE')), false);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

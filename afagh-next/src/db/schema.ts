@@ -43,6 +43,25 @@ export const users = pgTable('users', {
   fatherName: varchar('fatherName', { length: 100 }),          // نام پدر
   gender: varchar('gender', { length: 10 }),                   // جنسیت: MALE / FEMALE
   address: varchar('address', { length: 300 }),                // نشانی پستی
+  // ── عکس پرسنلی/دانشجویی (مهاجرت از سیستم قدیمی + کارت دانشجویی و کارت ورود به جلسه) ──
+  // خودِ فایل در Object Storage می‌ماند (سند §۲۴۳۸: «فقط کلید در دیتابیس»).
+  photoKey: varchar('photoKey', { length: 500 }),        // کلید شیء در باکت
+  photoMime: varchar('photoMime', { length: 100 }),      // image/jpeg …
+  photoFileName: varchar('photoFileName', { length: 255 }), // نام فایل عکس در سیستم قدیمی (ستون اکسل)
+  photoUpdatedAt: timestamp('photoUpdatedAt'),
+  // ── توسعهٔ ثمین / چنددانشگاهی ──
+  firstNameEn: varchar('firstNameEn', { length: 100 }),        // نام انگلیسی (ثمین: first_name_en)
+  lastNameEn: varchar('lastNameEn', { length: 100 }),          // نام خانوادگی انگلیسی
+  passportNumber: varchar('passportNumber', { length: 20 }),   // گذرنامهٔ اتباع (ثمین: passport_number)
+  nationality: varchar('nationality', { length: 10 }),         // کد ملیت ثمین (ایران=120001)
+  religion: varchar('religion', { length: 10 }),               // کد دین ثمین
+  birthPlaceCode: varchar('birthPlaceCode', { length: 10 }),  // کد محل تولد (ثمین: birth_place)
+  issuePlaceCode: varchar('issuePlaceCode', { length: 10 }),  // کد محل صدور (ثمین: iden_issue_place)
+  postalCode: varchar('postalCode', { length: 10 }),          // کد پستی ۱۰ رقمی
+  isAlive: integer('isAlive').notNull().default(1),            // ثمین: is_alive
+  saminPersonPk: varchar('saminPersonPk', { length: 40 }),    // کلید فرد در مبدأ ثمین (person_pk_in_source)
+  saminIsVerified: integer('saminIsVerified'),                 // ثمین: is_verified
+  saminVerifyCheckDate: timestamp('saminVerifyCheckDate'),
   passwordHash: varchar('passwordHash', { length: 255 }).notNull(),
   isActive: integer('isActive').default(1),
   // ── فلگ «تغییر اجباری رمز در اولین ورود» (برای حساب‌های پذیرش‌شده با رمز پیش‌فرض) ──
@@ -71,7 +90,13 @@ export const degree_level_configs = pgTable('degree_level_configs', {
   code: varchar('code', { length: 30 }).notNull().unique(),
   defaultPassingGrade: numeric('defaultPassingGrade', { precision: 4, scale: 2 }).notNull().default('10.00'),
   conditionalGpaThreshold: numeric('conditionalGpaThreshold', { precision: 4, scale: 2 }).notNull().default('12.00'),
-  maxUnitsPerTerm: integer('maxUnitsPerTerm').default(20)
+  maxUnitsPerTerm: integer('maxUnitsPerTerm').default(20),
+  /** تعداد ترم تحصیل چارت این مقطع (کاردانی/ناپیوسته/ارشد: ۴ · پیوسته: ۸) — NULL = استنتاج از عنوان/کد */
+  termCount: integer('termCount'),
+  /** تحصیلات تکمیلی (ارشد/دکترا) یا نه — ۱/۰ (NULL هم یعنی نه؛ بدون default تا backfill با COALESCE درست کار کند) */
+  isGraduate: integer('isGraduate'),
+  /** دانشگاه مالک این کاربر */
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const faculties = pgTable('faculties', {
@@ -86,7 +111,23 @@ export const departments = pgTable('departments', {
   name: varchar('name', { length: 150 }).notNull(),
   facultyId: integer('facultyId').notNull().references(() => faculties.id),
   // ── کد گروه آموزشی از دیتابیس قدیمی (فایل reshtelist—ستون «گروه آموزشی») ──
-  departmentCode: varchar('departmentCode', { length: 10 })
+  departmentCode: varchar('departmentCode', { length: 10 }),
+  /**
+   * مدیر گروه — از میان پرونده‌های کارمندی/هیئت علمی انتخاب می‌شود.
+   * عمداً اینجا (روی گروه) ذخیره می‌شود نه روی staff، چون مدیر گروهِ «دروس
+   * عمومی و مشترک» معمولاً عضو همان گروه نیست؛ او استادی از یک گروه دیگر
+   * است که سرپرستی گروه عمومی را هم دارد. یک نفر می‌تواند مدیر چند گروه باشد.
+   */
+  headStaffId: integer('headStaffId'),
+  /**
+   * نوع گروه: ACADEMIC = گروه آموزشیِ رشته‌دار · GENERAL = گروه دروس عمومی و
+   * مشترک (معارف، تربیت بدنی، زبان، ریاضی عمومی…) که رشتهٔ مستقل ندارد ولی
+   * دروسش برای همهٔ رشته‌ها ارائه می‌شود.
+   */
+  kind: varchar('kind', { length: 20 }).default('ACADEMIC'),
+  isActive: integer('isActive').default(1),
+  /** دانشگاه مالک این گروه */
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const majors = pgTable('majors', {
@@ -103,6 +144,7 @@ export const majors = pgTable('majors', {
   terminatedDate: varchar('terminatedDate', { length: 10 }),            // تاریخ خاتمه (شمسی)
   isActive: integer('isActive').default(1),                             // فعال/غیرفعال
   headStaffCode: varchar('headStaffCode', { length: 20 }),              // کد استادی مدیر گروه
+  headName: varchar('headName', { length: 150 }),                       // نام مدیر گروه (ستون جدای فایل قدیمی)
   expertName: varchar('expertName', { length: 150 }),                   // نام کارشناس رشته
   lastCouncilDate: varchar('lastCouncilDate', { length: 10 }),           // آخرین جلسه شورای گسترش (شمسی)
   /** رشتهٔ دارای دانشجوی شاغلِ زیاد — اولویت شیفت عصر در امتحانات (فاز ۹) */
@@ -160,7 +202,7 @@ export const educational_regulations = pgTable('educational_regulations', {
 
 export const students = pgTable('students', {
   id: serial('id').primaryKey(),
-  userId: integer('userId').notNull().unique().references(() => users.id),
+  userId: integer('userId').notNull().references(() => users.id),
   studentCode: varchar('studentCode', { length: 14 }).notNull().unique(),
   majorId: integer('majorId').references(() => majors.id),
   degreeLevelId: integer('degreeLevelId').notNull().references(() => degree_level_configs.id),
@@ -169,10 +211,83 @@ export const students = pgTable('students', {
   entryTerm: integer('entryTerm').default(1),
   status: varchar('status', { length: 30 }).notNull().default('ACTIVE'),
   quotaType: varchar('quotaType', { length: 50 }).notNull().default('NORMAL'),
+  samaStatusCode: varchar('samaStatusCode', { length: 10 }), // کد خام «وضعيت دانشجو» سما (رهگیری/بازنگاشت)
   extraAllowedSemesters: integer('extraAllowedSemesters').notNull().default(0),
   extraAllowedProbations: integer('extraAllowedProbations').notNull().default(0),
-  currentTermNo: integer('currentTermNo').default(1)
+  currentTermNo: integer('currentTermNo').default(1),
+  // ── توسعهٔ چنددانشگاهی / ثمین ──
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id), // دانشگاه مالک رکورد
+  saminStudentPk: varchar('saminStudentPk', { length: 40 }), // کلید دانشجو در مبدأ ثمین
+  senderUniversityCode: varchar('senderUniversityCode', { length: 20 }), // کد فرستنده ثمین
+  nativeType: varchar('nativeType', { length: 10 }),         // بومی/غیربومی ثمین
+  ethnicity: varchar('ethnicity', { length: 10 }),
+  sanjeshFileNumber: varchar('sanjeshFileNumber', { length: 40 }),
+  sanjeshApplicantNumber: varchar('sanjeshApplicantNumber', { length: 40 }),
+  saminFieldCode: varchar('saminFieldCode', { length: 20 }), // کد متمرکز رشته ثمین
+  saminLocalFieldCode: varchar('saminLocalFieldCode', { length: 20 }),
+  acceptanceAllocation: varchar('acceptanceAllocation', { length: 30 }),
+  acceptanceType: varchar('acceptanceType', { length: 30 }),
+  studyingMode: varchar('studyingMode', { length: 20 }),
+  trainingMethod: varchar('trainingMethod', { length: 20 }),
+  isaarCode: varchar('isaarCode', { length: 20 }),
+  totalAverage: numeric('totalAverage', { precision: 4, scale: 2 }),
+  eduEndYear: integer('eduEndYear'),
+  eduEndSemester: integer('eduEndSemester'),
+  graduateDate: varchar('graduateDate', { length: 10 }),
+  totalTakenUnits: integer('totalTakenUnits'),
+  totalPassedUnits: integer('totalPassedUnits'),
+  totalFailedUnits: integer('totalFailedUnits'),
+  saminDescription: text('saminDescription'),
+  // ── پروندهٔ تکمیلی سما (student2.txt + students1.txt): خوابگاه، ولی، مدرک، نظام وظیفه و... ──
+  advisorCode: varchar('advisorCode', { length: 50 }),             // ADVISORDONCODE سما
+  documentStatus: varchar('documentStatus', { length: 100 }),       // وضعیت مدارک (دستی)
+  scholarshipType: varchar('scholarshipType', { length: 100 }),     // کد بورسیهٔ سما (ScholarshipRef)
+  militaryStatus: varchar('militaryStatus', { length: 50 }),        // وضعیت نظام وظیفه (NEZAM/Moafiat سما)
+  militaryExemptionNo: varchar('militaryExemptionNo', { length: 50 }), // شمارهٔ معافیت (MoafiatNumber/NezamNo)
+  studentCardStatus: varchar('studentCardStatus', { length: 50 }),  // وضعیت کارت دانشجویی (StCardPrinted)
+  archiveNo: varchar('archiveNo', { length: 50 }),                  // کد آرشیو سما
+  parvandehNo: varchar('parvandehNo', { length: 100 }),             // شمارهٔ پروندهٔ سما
+  dormName: varchar('dormName', { length: 150 }),                   // نام خوابگاه (SuiteName)
+  dormRoom: varchar('dormRoom', { length: 50 }),                    // شمارهٔ اتاق (RoomNumber)
+  hasDorm: integer('hasDorm').default(0),                            // HasKhabgah سما (1/0)
+  guardianJobTitle: varchar('guardianJobTitle', { length: 100 }),   // عنوان و شغل ولی (ValiJobTitle)
+  guardianPhone: varchar('guardianPhone', { length: 30 }),          // تلفن ولی (ValiTellNo)
+  guardianAddress: varchar('guardianAddress', { length: 300 }),      // نشانی ولی (ValiAddress)
+  guardianEmail: varchar('guardianEmail', { length: 150 }),         // ایمیل ولی (ParentEmail)
+  diplomaType: varchar('diplomaType', { length: 50 }),              // نوع دیپلم پایه (UPDiplomTypeCode خام)
+  diplomaPlace: varchar('diplomaPlace', { length: 200 }),           // محل اخذ دیپلم (FoghedipPlace)
+  diplomaYear: varchar('diplomaYear', { length: 10 }),              // سال اخذ دیپلم (FoghedipYear)
+  diplomaGrade: varchar('diplomaGrade', { length: 20 }),            // معدل کتبی دیپلم (FoghedipMoadel)
+  pishdPlace: varchar('pishdPlace', { length: 200 }),               // محل اخذ پیش‌دانشگاهی (PishdPlace)
+  pishdYear: varchar('pishdYear', { length: 10 }),                  // سال پیش‌دانشگاهی (PishdYear)
+  pishdGrade: varchar('pishdGrade', { length: 20 }),                // معدل پیش‌دانشگاهی (PishdMoadel)
+  tuitionType: varchar('tuitionType', { length: 50 }),              // نوع دوره/شهریه (COURSTYPE خام)
+  tuitionPayer: integer('tuitionPayer').default(0),                 // دانشجوی شهریه‌پرداز (دستی 1/0)
+  englishExamType: varchar('englishExamType', { length: 50 }),      // نوع آزمون زبان (MSRT/IELTS/…)
+  englishScore: varchar('englishScore', { length: 20 }),            // نمرهٔ آزمون زبان
+  insertDate: varchar('insertDate', { length: 20 }),                // تاریخ ثبت در سما (LogInsertDate)
+  insertTime: varchar('insertTime', { length: 20 }),                // ساعت ثبت در سما (LogInsertTime)
+  certIssued3m: integer('certIssued3m').default(0),                 // تعداد گواهی ۳ ماههٔ صادره
+  documentDeficiency: varchar('documentDeficiency', { length: 200 }), // نواقص پرونده
+  unitsRemaining: integer('unitsRemaining'),                        // واحد مانده تا فارغ‌التحصیلی
+  eqSemesters: integer('eqSemesters').default(0),                   // تعداد ترم معادل‌سازی
 });
+
+/**
+ * وضعیت هر دانشجو در هر نیمسال — از «وضعيت نيمسال دانشجويان.txt» سما.
+ * بالای هر نیمسال کارنامه همین نمایش داده می‌شود (نه وضعیت کلی دانشجو):
+ * عنوان وضعیت (در حال تحصیل/مرخصی/میهمان/…) + مشروط/عادی از Mashroot.
+ */
+export const student_term_states = pgTable('student_term_states', {
+  id: serial('id').primaryKey(),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  termId: integer('termId').notNull().references(() => academic_terms.id),
+  termCode: varchar('termCode', { length: 10 }).notNull(),
+  statusCode: varchar('statusCode', { length: 10 }),
+  statusTitle: varchar('statusTitle', { length: 150 }),
+  isProbation: integer('isProbation'),
+  termAvg: numeric('termAvg', { precision: 4, scale: 2 }),
+}, (t) => ({ uq: unique('uq_student_term_states').on(t.studentId, t.termId) }));
 
 export const staff = pgTable('staff', {
   id: serial('id').primaryKey(),
@@ -192,6 +307,7 @@ export const staff = pgTable('staff', {
   hireDate: varchar('hireDate', { length: 10 }),          // تاريخ استخدام (شمسی)
   lastDegreeYear: integer('lastDegreeYear'),              // سال اخذ آخرين مدرک تحصيلي
   fieldOfStudy: varchar('fieldOfStudy', { length: 200 }), // رشته و گرايش
+  fieldMain: varchar('fieldMain', { length: 200 }),       // «رشته» (ستون جدا از «رشته و گرايش» در فایل قدیمی)
   maritalStatusCode: integer('maritalStatusCode'),        // کد وضعيت تاهل
   maritalStatus: varchar('maritalStatus', { length: 20 }),// وضعيت تاهل: مجرد/متاهل
   lastDegreeCountryCode: varchar('lastDegreeCountryCode', { length: 10 }), // کد کشور آخرين مدرک
@@ -201,7 +317,9 @@ export const staff = pgTable('staff', {
   birthCity: varchar('birthCity', { length: 100 }),       // شهر محل تولد
   bankAccountNo: varchar('bankAccountNo', { length: 50 }), // شماره حساب
   phone: varchar('phone', { length: 20 }),                 // تلفن ثابت
-  canManageServicePool: integer('canManageServicePool').default(0) // مدیر گروه خدماتی-سراسری (تربیت بدنی/زبان)
+  canManageServicePool: integer('canManageServicePool').default(0), // مدیر گروه خدماتی-سراسری (تربیت بدنی/زبان)
+  /** دانشگاه مالک این پرونده */
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 /** خوشهٔ دروس هم‌ارز (مثل «ریاضی عمومی ۱» و «ریاضیات پایه» — یک محتوا، چند کد) */
@@ -220,12 +338,17 @@ export const courses = pgTable('courses', {
   units: numeric('units', { precision: 3, scale: 1 }).notNull(),
   courseType: varchar('courseType', { length: 50 }),
   departmentId: integer('departmentId').references(() => departments.id),
+  // مقطعِ ارائهٔ درس (کارشناسی/ارشد/…) — NULL = مشترک بین مقاطع.
+  // در مهاجرت از سیستم قدیمی از ستون «مقطع» فایل اکسل پر می‌شود.
+  degreeLevelId: integer('degreeLevelId').references(() => degree_level_configs.id),
   gradingType: varchar('gradingType', { length: 20 }).default('NUMERIC'),
   affectsGpa: integer('affectsGpa').default(1),
   // ── موتور برنامه‌ریزی درسی ──
   clusterId: integer('clusterId').references(() => equivalence_clusters.id), // NULL = درس مستقل
   offeringScope: varchar('offeringScope', { length: 20 }).default('DEPARTMENTAL'), // DEPARTMENTAL | GENERAL_SERVICE (کارتابل دوگانه)
-  locationType: varchar('locationType', { length: 20 }).default('IN_CAMPUS')        // IN_CAMPUS | OUT_CAMPUS (مهارتی/ورزشی خارج دانشگاه)
+  locationType: varchar('locationType', { length: 20 }).default('IN_CAMPUS'),        // IN_CAMPUS | OUT_CAMPUS (مهارتی/ورزشی خارج دانشگاه)
+  /** دانشگاه مالک این درس */
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 /** گرایش‌های برنامهٔ درسی (مثلاً «هوش مصنوعی و رباتیک») — جایگزین tracks[] Mock در Client قدیم (D4) */
@@ -266,6 +389,7 @@ export const curriculum_versions = pgTable('curriculum_versions', {
   effectiveTo: varchar('effectiveTo', { length: 10 }),
   totalRequiredUnits: numeric('totalRequiredUnits', { precision: 5, scale: 1 }).notNull().default('0'),
   maxUnitsPerTerm: integer('maxUnitsPerTerm'),                          // override سقف واحد ترم (NULL = از degree_level_configs)
+  minRoleUnits: text('minRoleUnits'),                                  // سهم واحد هر نقش، JSON مثل {"GENERAL":22,"CORE":25} (NULL = تعیین‌نشده)
   // آخرین رویداد تأیید (append-only). به‌دلیل ارجاع دوریِ (versions ↔ approvals)
   // در Drizzle عمداً بدون .references تعریف شده؛ FK واقعی در مهاجرت 0002 است.
   approvalId: integer('approvalId'),
@@ -288,8 +412,19 @@ export const curriculum_courses = pgTable('curriculum_courses', {
   isRequired: integer('isRequired').default(1),
   isElective: integer('isElective').default(0),
   isGraduationRequired: integer('isGraduationRequired').default(0),     // شرط الزامی فارغ‌التحصیلی
-  recommendedSemester: integer('recommendedSemester'),                   // ۱..۸ (NULL = آزاد/نامشخص)
+  recommendedSemester: integer('recommendedSemester'),                   // ۱..۸ + ۹=تابستان (NULL = آزاد/نامشخص)
   minGrade: numeric('minGrade', { precision: 4, scale: 2 }),             // کف قبولیِ خاص این درس در این نسخه
+  /**
+   * کد وضع نمرهٔ سما (از میز تطبیق GRADE_STATUS) که باید هنگام قبولی/مردودیِ
+   * دانشجو در همین تخصیص درس ثبت شود — چون وضع نهایی به خودِ تعریف درس در
+   * این کاتالوگ بستگی دارد، نه یک قاعدهٔ سراسری: مثلاً همین درس در یک کاتالوگ
+   * می‌تواند «درس عادی - قبول» (کد ۱) باشد و در کاتالوگ دیگر (وقتی به‌عنوان
+   * درس جبرانی/کمبود ارائه می‌شود) «جبرانی بدون احتساب در معدل - قبول»
+   * (کد ۱۲)، با حد نصاب قبولی متفاوت (minGrade بالا). NULL = پیش‌فرض سیستم
+   * (کد ۱ برای قبولی، کد ۲ برای مردودی).
+   */
+  passGradeStatusCode: varchar('passGradeStatusCode', { length: 10 }),
+  failGradeStatusCode: varchar('failGradeStatusCode', { length: 10 }),
   autoCorequisiteAllowed: integer('autoCorequisiteAllowed').default(0)   // «هم‌نیاز خودکار ترم آخر» (آیین‌نامه)
 }, (t) => ({
   uqCourse: unique('uq_curriculum_courses_version_course').on(t.curriculumVersionId, t.courseId),
@@ -476,6 +611,8 @@ export const enrollments = pgTable('enrollments', {
   isDirectedReading: integer('isDirectedReading').default(0),
   registeredAt: timestamp('registeredAt').defaultNow(),
   absenceMarkedAt: timestamp('absenceMarkedAt'),
+  /** کد وضعیت نمرهٔ سما هنگام نهایی‌سازی (از curriculum_courses.passGradeStatusCode / failGradeStatusCode) */
+  samaGradeStatusCode: varchar('samaGradeStatusCode', { length: 10 }),
   /** تأییدیهٔ دیجیتال دانشجو برای داشتن دو امتحان هم‌روز (شیفت‌های متفاوت) — فاز ۱۰ */
   hasAcceptedSameDayExam: integer('hasAcceptedSameDayExam').notNull().default(0)
 }, (t) => ({ uq: unique('uq_enrollments').on(t.studentId, t.offeringId) }));
@@ -490,6 +627,29 @@ export const grade_appeals = pgTable('grade_appeals', {
   status: varchar('status', { length: 20 }).default('OPEN'),
   createdAt: timestamp('createdAt').defaultNow()
 });
+
+/** تاریخچهٔ تغییرات نمره — هر تغییر یک ردیف (append-only audit trail) */
+export const grade_change_log = pgTable('grade_change_log', {
+  id: serial('id').primaryKey(),
+  enrollmentId: integer('enrollmentId').notNull().references(() => enrollments.id),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  offeringId: integer('offeringId').notNull().references(() => course_offerings.id),
+  action: varchar('action', { length: 30 }).notNull(),  // DRAFT|TEMPORARY|FINALIZED|APPEAL|ADMIN_OVERRIDE
+  oldGradeValue: varchar('oldGradeValue', { length: 20 }),
+  newGradeValue: varchar('newGradeValue', { length: 20 }),
+  oldGradeStatus: varchar('oldGradeStatus', { length: 20 }),
+  newGradeStatus: varchar('newGradeStatus', { length: 20 }),
+  oldSamaStatusCode: varchar('oldSamaStatusCode', { length: 10 }),
+  newSamaStatusCode: varchar('newSamaStatusCode', { length: 10 }),
+  reason: text('reason'),
+  actorUserId: integer('actorUserId').references(() => users.id),
+  actorRole: varchar('actorRole', { length: 30 }),  // PROFESSOR|ADMIN|GRADUATEAFFAIRS
+  createdAt: timestamp('createdAt').defaultNow(),
+}, (t) => ({
+  enrollmentIdx: index('idx_grade_change_log_enrollment').on(t.enrollmentId),
+  studentIdx: index('idx_grade_change_log_student').on(t.studentId),
+  createdIdx: index('idx_grade_change_log_created').on(t.createdAt),
+}));
 
 export const grade_submission_otps = pgTable('grade_submission_otps', {
   id: serial('id').primaryKey(),
@@ -1554,6 +1714,66 @@ export const migration_audit_entries = pgTable('migration_audit_entries', {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+//  چنددانشگاهی + ثمین (سازمان امور دانشجویان)
+//  هر دانشگاه منحل‌شده با کد و کلید جدا؛ آینده با افزودن یک ردیف
+// ═══════════════════════════════════════════════════════════════════
+
+export const universities = pgTable('universities', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 30 }).notNull().unique(), // ZARINE, ALLAME, SHAMS, NAZHAND, AFAGH
+  title: varchar('title', { length: 150 }).notNull(),
+  kind: varchar('kind', { length: 20 }).notNull().default('DISSOLVED'), // OWN | DISSOLVED | MERGED
+  status: varchar('status', { length: 20 }).notNull().default('ACTIVE'), // ACTIVE | ARCHIVED
+  saminCode: varchar('saminCode', { length: 20 }), // کد ثمین sender_university
+  province: varchar('province', { length: 80 }),
+  dissolvedAt: varchar('dissolvedAt', { length: 10 }),
+  note: text('note'),
+  isActive: integer('isActive').notNull().default(1),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+export const samin_connections = pgTable('samin_connections', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').notNull().unique().references(() => universities.id, { onDelete: 'cascade' }),
+  apiBaseUrl: varchar('apiBaseUrl', { length: 255 }).notNull().default('https://apim.saorg.ir'),
+  authBaseUrl: varchar('authBaseUrl', { length: 255 }).notNull().default('https://apiauth.saorg.ir/oauth2/token'),
+  clientId: varchar('clientId', { length: 200 }),
+  clientSecretEnc: text('clientSecretEnc'), // AES-256-GCM
+  username: varchar('username', { length: 150 }),
+  passwordEnc: text('passwordEnc'),
+  tokenEnc: text('tokenEnc'),
+  tokenExpiresAt: timestamp('tokenExpiresAt'),
+  lastSyncAt: timestamp('lastSyncAt'),
+  isEnabled: integer('isEnabled').notNull().default(1),
+  updatedAt: timestamp('updatedAt').defaultNow()
+});
+
+export const samin_staging = pgTable('samin_staging', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').notNull().references(() => universities.id, { onDelete: 'cascade' }),
+  entityCode: varchar('entityCode', { length: 20 }).notNull(), // 2001/1000/...
+  personPkInSource: varchar('personPkInSource', { length: 40 }),
+  studentPkInSource: varchar('studentPkInSource', { length: 40 }),
+  payload: jsonb('payload').notNull(), // JSON کامل ثمین
+  status: varchar('status', { length: 20 }).notNull().default('PENDING'), // PENDING|READY|SENT|ACCEPTED|FAILED
+  traceId: integer('traceId'),
+  errorMessage: text('errorMessage'),
+  createdAt: timestamp('createdAt').defaultNow(),
+  sentAt: timestamp('sentAt')
+}, (t) => ({ uq: unique('uq_samin_staging').on(t.universityId, t.entityCode, t.personPkInSource) }));
+
+export const samin_sync_logs = pgTable('samin_sync_logs', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').notNull().references(() => universities.id, { onDelete: 'cascade' }),
+  entityCode: varchar('entityCode', { length: 20 }).notNull(),
+  traceId: integer('traceId'),
+  status: varchar('status', { length: 20 }).notNull(), // ACCEPTED|REJECTED|PENDING...
+  summaryResult: jsonb('summaryResult'),
+  rawResponse: text('rawResponse'),
+  createdAt: timestamp('createdAt').defaultNow()
+});
+
+// ═══════════════════════════════════════════════════════════════════
 //  ماژول ۱۲: فارغ‌التحصیلی، صدور مدارک و پورتال دانش‌آموختگان
 //  الگو: «رویدادمحور» — دانشجو هیچ درخواستی باز نمی‌کند؛ با قطعی‌شدن
 //  آخرین نمره، سیستم خودش پرونده را باز و مراحل را جلو می‌برد.
@@ -1910,4 +2130,75 @@ export const tuition_formulas = pgTable('tuition_formulas', {
   isActive: integer('isActive').notNull().default(1),
   note: text('note'),
   updatedAt: timestamp('updatedAt').defaultNow()
+});
+
+/**
+ * جدول یکپارچهٔ قواعد شهریه — جایگزین `tuition_fee_rules` و `tuition_formulas`.
+ *
+ * هر قاعده می‌تواند بر اساس پنج کلید محدود شود (تهی = همه):
+ *   مقطع (degreeLevelId) ← اولویت اول، رشته (majorId) ← اولویت دوم،
+ *   نوع ترم (termType)، نوع گذراندن درس (offeringType)، بازهٔ ورودی (entryYearFrom/To).
+ *
+ * انتخاب قاعده با resolver یکتا در `src/lib/tuition-resolver.ts` انجام می‌شود
+ * با سلسله‌مراتب: مقطع > رشته > نوع ترم > نوع درس > بازهٔ ورودی، و گره‌شکن‌های
+ * priority (کوچک‌تر برنده؛ فقط بین قواعد همانگروه)، تازگی entryYearFrom و سپس id.
+ */
+export const tuition_rules = pgTable('tuition_rules', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 40 }),
+  title: varchar('title', { length: 150 }),
+  degreeLevelId: integer('degreeLevelId').references(() => degree_level_configs.id),
+  majorId: integer('majorId').references(() => majors.id),
+  termType: varchar('termType', { length: 20 }),
+  offeringType: varchar('offeringType', { length: 30 }),
+  entryYearFrom: integer('entryYearFrom'),
+  entryYearTo: integer('entryYearTo'),
+  fixedAmount: numeric('fixedAmount', { precision: 12, scale: 0 }).notNull().default('0'),
+  perUnitTheory: numeric('perUnitTheory', { precision: 12, scale: 0 }).notNull().default('0'),
+  perUnitPractical: numeric('perUnitPractical', { precision: 12, scale: 0 }).notNull().default('0'),
+  perUnitGeneral: numeric('perUnitGeneral', { precision: 12, scale: 0 }).notNull().default('0'),
+  /** عدد کوچک‌تر = اولویت بالاتر — فقط بین قواعدِ هم‌سطحِ ساختاری */
+  priority: integer('priority').notNull().default(100),
+  isActive: integer('isActive').notNull().default(1),
+  note: text('note'),
+  updatedAt: timestamp('updatedAt').defaultNow()
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  جداول مapping وضعیت نمرات قدیمی (legacy status mappings) — مهاجرت از سما
+// ════════════════════════════════════════════════════════════════════════════
+export const legacyStatusMappings = pgTable('legacy_status_mappings', {
+  id: text('id').primaryKey(),
+  systemSource: varchar('systemSource', { length: 50 }).notNull().default('SAMA'),
+  sourceCode: varchar('sourceCode', { length: 50 }).notNull(),
+  sourceTitle: varchar('sourceTitle', { length: 150 }).notNull(),
+  targetStatusCode: varchar('targetStatusCode', { length: 50 }).notNull(),
+  targetTitle: varchar('targetTitle', { length: 150 }).notNull(),
+  symbol: varchar('symbol', { length: 20 }).notNull(),
+  isPassed: boolean('isPassed').notNull().default(false),
+  isEffectiveInGpa: boolean('isEffectiveInGpa').notNull().default(false),
+  isEffectiveInTermGpa: boolean('isEffectiveInTermGpa').notNull().default(false),
+  countsTowardsTenure: boolean('countsTowardsTenure').notNull().default(true),
+  requiresCommissionApproval: boolean('requiresCommissionApproval').notNull().default(false),
+  displayOrder: integer('displayOrder').notNull().default(0),
+  isActive: boolean('isActive').notNull().default(true),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  جداول mapping موجودیت‌های قدیمی (legacy entity mappings) — مهاجرت از سما
+// ════════════════════════════════════════════════════════════════════════════
+export const legacyEntityMappings = pgTable('legacy_entity_mappings', {
+  id: text('id').primaryKey(),
+  systemSource: varchar('systemSource', { length: 50 }).notNull().default('SAMA_AFAGH'),
+  entityType: varchar('entityType', { length: 50 }).notNull(),
+  sourceCode: varchar('sourceCode', { length: 50 }).notNull(),
+  sourceTitle: varchar('sourceTitle', { length: 150 }).notNull(),
+  targetIdentifier: varchar('targetIdentifier', { length: 100 }).notNull(),
+  targetTitle: varchar('targetTitle', { length: 150 }).notNull(),
+  metadata: jsonb('metadata'),
+  isActive: boolean('isActive').notNull().default(true),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
 });

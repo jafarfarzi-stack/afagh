@@ -4,7 +4,7 @@ import { db } from '@/db';
 import { asc } from 'drizzle-orm';
 import {
   degree_level_configs, loan_products, majors, tuition_discount_types,
-  tuition_formulas, tuition_sponsors,
+  tuition_rules, tuition_sponsors,
 } from '@/db/schema';
 import RulesClient from './RulesClient';
 
@@ -18,7 +18,7 @@ export default async function FinanceRulesPage() {
   const [discountTypes, sponsors, formulas, degreeRows, loanRows, majorRows] = await Promise.all([
     db.select().from(tuition_discount_types).orderBy(asc(tuition_discount_types.title)),
     db.select().from(tuition_sponsors).orderBy(asc(tuition_sponsors.title)),
-    db.select().from(tuition_formulas).orderBy(asc(tuition_formulas.priority), asc(tuition_formulas.id)),
+    db.select().from(tuition_rules).orderBy(asc(tuition_rules.priority), asc(tuition_rules.id)),
     db.select({ id: degree_level_configs.id, title: degree_level_configs.title })
       .from(degree_level_configs).orderBy(asc(degree_level_configs.title)),
     db.select().from(loan_products).orderBy(asc(loan_products.title)),
@@ -52,7 +52,7 @@ export default async function FinanceRulesPage() {
           settlementMethod: s.settlementMethod, isActive: s.isActive === 1, note: s.note,
         }))}
         formulas={formulas.map((f) => ({
-          id: f.id, code: f.code, title: f.title,
+          id: f.id, code: f.code ?? '', title: f.title ?? '',
           degreeLevelId: f.degreeLevelId, majorId: f.majorId,
           entryYearFrom: f.entryYearFrom, entryYearTo: f.entryYearTo,
           fixedAmount: Number(f.fixedAmount), perUnitTheory: Number(f.perUnitTheory),

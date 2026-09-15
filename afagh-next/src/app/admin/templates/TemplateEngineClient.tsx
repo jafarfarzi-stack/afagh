@@ -148,6 +148,7 @@ export interface IntegrationSettingsProps {
     baleToken: string; baleChannel: string;
     eitaaToken: string; eitaaChannel: string;
     telegramToken: string; telegramChannel: string;
+    soroushToken: string; soroushChannel: string;
     smsProvider: string; smsApiKey: string; smsSender: string;
   };
   pay: { provider: string; terminalId: string; merchantId: string; merchantKey: string; callbackUrl: string; sandbox: boolean; wagePercent: string };
@@ -189,6 +190,10 @@ export default function TemplateEngineClient({ settings }: { settings: Integrati
     telegramEnabled: Boolean(settings.bots.telegramToken),
     telegramToken: settings.bots.telegramToken,
     telegramChannelId: settings.bots.telegramChannel,
+
+    soroushEnabled: Boolean(settings.bots.soroushToken),
+    soroushToken: settings.bots.soroushToken,
+    soroushChannelId: settings.bots.soroushChannel,
 
     smsProvider: settings.bots.smsProvider,
     smsApiKey: settings.bots.smsApiKey,
@@ -326,6 +331,8 @@ export default function TemplateEngineClient({ settings }: { settings: Integrati
         EITAA_CHANNEL: botConfig.eitaaChannelId,
         TELEGRAM_TOKEN: botConfig.telegramEnabled ? botConfig.telegramToken : '',
         TELEGRAM_CHANNEL: botConfig.telegramChannelId,
+        SOROUSH_TOKEN: botConfig.soroushEnabled ? botConfig.soroushToken : '',
+        SOROUSH_CHANNEL: botConfig.soroushChannelId,
         SMS_PROVIDER: botConfig.smsProvider,
         SMS_API_KEY: botConfig.smsApiKey,
         SMS_SENDER: botConfig.smsSenderNumber,
@@ -651,7 +658,7 @@ export default function TemplateEngineClient({ settings }: { settings: Integrati
 
                     {/* Channel Selector */}
                     <div className="flex flex-wrap gap-1.5">
-                      {(['SMS', 'BALE', 'EITAA', 'TELEGRAM'] as NotificationChannel[]).map(ch => (
+                      {(['SMS', 'BALE', 'EITAA', 'TELEGRAM', 'SOROUSH'] as NotificationChannel[]).map(ch => (
                         <button
                           key={ch}
                           onClick={() => setTestChannel(ch)}
@@ -661,7 +668,7 @@ export default function TemplateEngineClient({ settings }: { settings: Integrati
                               : 'bg-white text-slate-700 border border-slate-300'
                           }`}
                         >
-                          {ch === 'SMS' ? '📲 پیامک' : ch === 'BALE' ? '🟢 بله' : ch === 'EITAA' ? '🟠 ایتا' : '🔵 تلگرام'}
+                          {ch === 'SMS' ? '📲 پیامک' : ch === 'BALE' ? '🟢 بله' : ch === 'EITAA' ? '🟠 ایتا' : ch === 'TELEGRAM' ? '🔵 تلگرام' : '🟣 سروش'}
                         </button>
                       ))}
                     </div>
@@ -699,7 +706,7 @@ export default function TemplateEngineClient({ settings }: { settings: Integrati
         <div className="card space-y-5">
           <div className="border-b border-slate-200 pb-3">
             <h2 className="text-base font-black text-slate-900">
-              🤖 پیکربندی بات‌های پیام‌رسان‌های ایرانی و پیامک (Bale, Eitaa, Telegram & SMS)
+              🤖 پیکربندی بات‌های پیام‌رسان‌های ایرانی و پیامک (Bale, Eitaa, Telegram, Soroush & SMS)
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
               تنظیم کلیدهای دسترسی API، وب‌هوک‌ها و ارسال مستقیم اعلانات، غیبت‌ها، نمرات و یادآوری‌ها به حساب کاربری دانشجویان و اساتید
@@ -830,6 +837,49 @@ export default function TemplateEngineClient({ settings }: { settings: Integrati
                   type="text"
                   value={botConfig.telegramChannelId}
                   onChange={e => setBotConfig({ ...botConfig, telegramChannelId: e.target.value })}
+                  className="w-full border border-slate-300 rounded-xl p-2 font-mono text-xs bg-white"
+                  dir="ltr"
+                />
+              </div>
+            </div>
+
+            {/* Soroush Bot */}
+            <div className="p-4 rounded-2xl border-2 border-violet-300 bg-violet-50/30 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-violet-700 text-white flex items-center justify-center font-black">
+                    س
+                  </span>
+                  <div>
+                    <h3 className="font-black text-slate-900 text-sm">پیام‌رسان سروش (Soroush Bot API)</h3>
+                    <span className="text-[10px] text-violet-700 font-bold">سازگار با API رسمی بات سروش‌پلاس</span>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={botConfig.soroushEnabled}
+                  onChange={e => setBotConfig({ ...botConfig, soroushEnabled: e.target.checked })}
+                  className="w-5 h-5 accent-violet-600 rounded"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-700 block">توکن بات سروش (Soroush Bot Token):</label>
+                <input
+                  type="text"
+                  value={botConfig.soroushToken}
+                  onChange={e => setBotConfig({ ...botConfig, soroushToken: e.target.value })}
+                  className="w-full border border-slate-300 rounded-xl p-2 font-mono text-xs bg-white"
+                  dir="ltr"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-700 block">کانال رسمی اطلاع‌رسانی آفاق در سروش:</label>
+                <input
+                  type="text"
+                  value={botConfig.soroushChannelId}
+                  onChange={e => setBotConfig({ ...botConfig, soroushChannelId: e.target.value })}
                   className="w-full border border-slate-300 rounded-xl p-2 font-mono text-xs bg-white"
                   dir="ltr"
                 />

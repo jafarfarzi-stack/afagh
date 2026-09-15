@@ -133,5 +133,19 @@ eq('ONCE: فقط روی اولین نیمسال', shouldChargeFixed('ONCE', true
 eq('PER_TERM: به ازای هر نیمسال (رفتار قبلی)', countFixed('PER_TERM'), 3);
 eq('NONE: هرگز شهریهٔ ثابت نمی‌گیرد', countFixed('NONE'), 0);
 
+console.log('\n۱۰) اولویت‌بندی مقطع پیش از رشته (resolver یکپارچه)');
+// ۱: فقط رشتهٔ ۵ (priority ۱) | ۲: فقط مقطع ۲ | ۳: مقطع ۲ + رشتهٔ ۵ | ۴: مقطع ۲ + رشتهٔ ۶
+const dmRules = [
+  { id: 1, degreeLevelId: null, majorId: 5, termType: null, offeringType: null, fixedTuition: '100', perUnitTuition: '10', effectiveFromYear: null, priority: 1 },
+  { id: 2, degreeLevelId: 2, majorId: null, termType: null, offeringType: null, fixedTuition: '200', perUnitTuition: '20', effectiveFromYear: null, priority: 100 },
+  { id: 3, degreeLevelId: 2, majorId: 5, termType: null, offeringType: null, fixedTuition: '300', perUnitTuition: '30', effectiveFromYear: null, priority: 100 },
+  { id: 4, degreeLevelId: 2, majorId: 6, termType: null, offeringType: null, fixedTuition: '400', perUnitTuition: '40', effectiveFromYear: null, priority: 100 },
+];
+eq('مقطع+رشتهٔ منطبق خاص‌ترین است', pickFeeRule(dmRules, { degreeLevelId: 2, majorId: 5, termType: 'NORMAL' })?.id, 3);
+const dm2 = dmRules.filter(r => r.id !== 3);
+eq('مقطع بر رشته می‌چربد حتی با priority بالاتر', pickFeeRule(dm2, { degreeLevelId: 2, majorId: 5, termType: 'NORMAL' })?.id, 2);
+eq('مقطع دیگر → قاعدهٔ مقطع رد و تنها بدون‌مقطع می‌ماند', pickFeeRule(dm2, { degreeLevelId: 3, majorId: 5, termType: 'NORMAL' })?.id, 1);
+eq('رشتهٔ دیگرِ همان مقطع → قاعدهٔ آن رشته', pickFeeRule(dmRules, { degreeLevelId: 2, majorId: 6, termType: 'NORMAL' })?.id, 4);
+
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

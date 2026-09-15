@@ -5,7 +5,7 @@ import {
   academic_terms, course_offerings, courses, enrollments, loan_products,
   majors, degree_level_configs, payment_cheques, student_discounts, student_ledger,
   student_loans, student_sponsorships, students, tuition_discount_types,
-  tuition_formulas, tuition_sponsors, users,
+  tuition_rules, tuition_sponsors, users,
 } from '@/db/schema';
 import { computeTermTuition } from './tuition-engine';
 import { getSetting } from './settings';
@@ -471,7 +471,7 @@ export async function getStudentFinance(studentId: number): Promise<StudentFinan
 // ══════════════════════════════════════════════════════════════════════
 
 export interface FormulaTuition {
-  formula: (typeof tuition_formulas.$inferSelect) | null;
+  formula: (typeof tuition_rules.$inferSelect) | null;
   buckets: { theory: number; practical: number; general: number };
   fixed: number;
   variable: number;
@@ -479,10 +479,11 @@ export interface FormulaTuition {
 }
 
 /**
- * محاسبهٔ شهریهٔ یک ترم از فرمول تخصیص.
+ * محاسبهٔ شهریهٔ یک ترم از فرمول تخصیص (قواعد یکپارچهٔ tuition_rules).
  *
- * اگر هیچ فرمولی با مقطع/رشته/ورودی دانشجو نخواند، null برمی‌گردد —
- * کارشناس مالی باید فرمول بسازد، نه اینکه سامانه عددی از خود بسازد.
+ * اگر هیچ قاعده‌ای با مقطع/رشته/ورودی دانشجو نخواند، null برمی‌گردد —
+ * کارشناس مالی باید قاعده بسازد، نه اینکه سامانه عددی از خود بسازد.
+ * انتخاب قاعده از resolver یکتا می‌آید (مقطع بر رشته مقدم است).
  */
 export async function computeFormulaTuition(
   studentId: number,
@@ -501,8 +502,8 @@ export async function computeFormulaTuition(
   };
   if (!student) return empty;
 
-  const formulas = await db.select().from(tuition_formulas)
-    .where(eq(tuition_formulas.isActive, 1));
+  const formulas = await db.select().from(tuition_rules)
+    .where(eq(tuition_rules.isActive, 1));
 
   const formula = pickFormula(formulas, {
     degreeLevelId: student.degreeLevelId,
@@ -528,7 +529,7 @@ export async function computeFormulaTuition(
 }
 
 export async function listFormulas() {
-  return db.select().from(tuition_formulas).orderBy(asc(tuition_formulas.priority), asc(tuition_formulas.id));
+  return db.select().from(tuition_rules).orderBy(asc(tuition_rules.priority), asc(tuition_rules.id));
 }
 
 // ══════════════════════════════════════════════════════════════════════
