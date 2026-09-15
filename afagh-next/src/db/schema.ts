@@ -2163,3 +2163,42 @@ export const tuition_rules = pgTable('tuition_rules', {
   note: text('note'),
   updatedAt: timestamp('updatedAt').defaultNow()
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+//  جداول مapping وضعیت نمرات قدیمی (legacy status mappings) — مهاجرت از سما
+// ════════════════════════════════════════════════════════════════════════════
+export const legacyStatusMappings = pgTable('legacy_status_mappings', {
+  id: text('id').primaryKey(),
+  systemSource: varchar('systemSource', { length: 50 }).notNull().default('SAMA'),
+  sourceCode: varchar('sourceCode', { length: 50 }).notNull(),
+  sourceTitle: varchar('sourceTitle', { length: 150 }).notNull(),
+  targetStatusCode: varchar('targetStatusCode', { length: 50 }).notNull(),
+  targetTitle: varchar('targetTitle', { length: 150 }).notNull(),
+  symbol: varchar('symbol', { length: 20 }).notNull(),
+  isPassed: boolean('isPassed').notNull().default(false),
+  isEffectiveInGpa: boolean('isEffectiveInGpa').notNull().default(false),
+  isEffectiveInTermGpa: boolean('isEffectiveInTermGpa').notNull().default(false),
+  countsTowardsTenure: boolean('countsTowardsTenure').notNull().default(true),
+  requiresCommissionApproval: boolean('requiresCommissionApproval').notNull().default(false),
+  displayOrder: integer('displayOrder').notNull().default(0),
+  isActive: boolean('isActive').notNull().default(true),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  جداول mapping موجودیت‌های قدیمی (legacy entity mappings) — مهاجرت از سما
+// ════════════════════════════════════════════════════════════════════════════
+export const legacyEntityMappings = pgTable('legacy_entity_mappings', {
+  id: text('id').primaryKey(),
+  systemSource: varchar('systemSource', { length: 50 }).notNull().default('SAMA_AFAGH'),
+  entityType: varchar('entityType', { length: 50 }).notNull(),
+  sourceCode: varchar('sourceCode', { length: 50 }).notNull(),
+  sourceTitle: varchar('sourceTitle', { length: 150 }).notNull(),
+  targetIdentifier: varchar('targetIdentifier', { length: 100 }).notNull(),
+  targetTitle: varchar('targetTitle', { length: 150 }).notNull(),
+  metadata: jsonb('metadata'),
+  isActive: boolean('isActive').notNull().default(true),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});

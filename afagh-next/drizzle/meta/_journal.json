@@ -127,6 +127,13 @@
       "when": 1788620400000,
       "tag": "0017_unified_tuition_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788624000000,
+      "tag": "0018_legacy_mappings",
+      "breakpoints": true
     }
   ]
 }
