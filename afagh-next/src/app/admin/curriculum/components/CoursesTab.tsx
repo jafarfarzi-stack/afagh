@@ -5,6 +5,7 @@ import { useCurriculum } from '../curriculum-context';
 import { ROLE_LABELS, faDate, faNum, semLabel } from '../curriculum-core';
 import { describeLogicNode } from '@/lib/curriculum-types';
 import { SUMMER_SEMESTER } from '@/lib/term-plan';
+import { GRADE_STATUS_CODES, gradeStatusOptionLabel, gradeStatusTitleOf } from '@/lib/grade-status-codes';
 
 export default function CoursesTab() {
   const {
@@ -16,6 +17,7 @@ export default function CoursesTab() {
     handleMarkGradReq,
     handleRemoveCourse,
     handleSyncRoles,
+    handleUpdateGradeStatusCodes,
     handleUpdateGradReq,
     handleUpdateRequired,
     handleUpdateRole,
@@ -92,6 +94,8 @@ export default function CoursesTab() {
                   <th className="p-2.5 border border-slate-800">ترم پیشنهادی</th>
                   <th className="p-2.5 border border-slate-800">الزامی در ترم</th>
                   <th className="p-2.5 border border-slate-800" title="درس‌هایی که گذراندن‌شان برای فارغ‌التحصیلی اجباری است؛ موتور تطبیق فارغ‌التحصیلی فقط همین‌ها را چک می‌کند">شرط فارغ‌التحصیلی</th>
+                  <th className="p-2.5 border border-slate-800" title="کد وضعیت سما هنگام قبولی (از curriculum_courses.passGradeStatusCode)">کد قبولی</th>
+                  <th className="p-2.5 border border-slate-800" title="کد وضعیت سما هنگام مردودی (از curriculum_courses.failGradeStatusCode)">کد مردودی</th>
                   <th className="p-2.5 border border-slate-800">پیش‌نیاز / هم‌نیاز</th>
                   <th className="p-2.5 border border-slate-800">عملیات</th>
                 </tr>
@@ -150,6 +154,44 @@ export default function CoursesTab() {
                         onChange={e => handleUpdateGradReq(c.courseId, e.target.checked ? 1 : 0)}
                         className="accent-indigo-700 w-4 h-4"
                       />
+                    </td>
+                    <td className="p-2 border border-slate-200 text-center">
+                      {isDraft ? (
+                        <select
+                          value={c.passGradeStatusCode ?? ''}
+                          onChange={e => handleUpdateGradeStatusCodes(c.courseId, e.target.value || null, c.failGradeStatusCode)}
+                          className="border border-slate-300 rounded px-1 py-0.5 text-[10px] font-bold bg-white max-w-[140px]"
+                          title={gradeStatusTitleOf(c.passGradeStatusCode) ?? 'پیش‌فرض: 1 (قبول عادی)'}
+                        >
+                          <option value="">پیش‌فرض (1)</option>
+                          {GRADE_STATUS_CODES.filter(g => g.passed).map(g => (
+                            <option key={g.code} value={g.code}>{gradeStatusOptionLabel(g)}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="font-mono font-bold text-[11px]" title={gradeStatusTitleOf(c.passGradeStatusCode) ?? undefined}>
+                          {c.passGradeStatusCode || '1'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-2 border border-slate-200 text-center">
+                      {isDraft ? (
+                        <select
+                          value={c.failGradeStatusCode ?? ''}
+                          onChange={e => handleUpdateGradeStatusCodes(c.courseId, c.passGradeStatusCode, e.target.value || null)}
+                          className="border border-slate-300 rounded px-1 py-0.5 text-[10px] font-bold bg-white max-w-[140px]"
+                          title={gradeStatusTitleOf(c.failGradeStatusCode) ?? 'پیش‌فرض: 2 (مردود عادی)'}
+                        >
+                          <option value="">پیش‌فرض (2)</option>
+                          {GRADE_STATUS_CODES.filter(g => !g.passed).map(g => (
+                            <option key={g.code} value={g.code}>{gradeStatusOptionLabel(g)}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="font-mono font-bold text-[11px]" title={gradeStatusTitleOf(c.failGradeStatusCode) ?? undefined}>
+                          {c.failGradeStatusCode || '2'}
+                        </span>
+                      )}
                     </td>
                     <td className="p-2 border border-slate-200 text-center">
                       <div className="text-[10px] font-bold text-slate-600 leading-relaxed max-w-44">

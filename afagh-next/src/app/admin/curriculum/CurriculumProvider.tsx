@@ -415,6 +415,12 @@ function useCurriculumWorkspace(
     reloadDetail(selectedVersionId);
   };
 
+  const handleUpdateGradeStatusCodes = async (courseId: number, passCode: string | null, failCode: string | null) => {
+    if (selectedVersionId == null) return;
+    await run(() => setCourseGradeStatusCodesAction(selectedVersionId, courseId, passCode, failCode));
+    reloadDetail(selectedVersionId);
+  };
+
   // ── فیلتر درختی رشته: دانشکده → گروه → رشته ──
   const faculties = useMemo(() => facultyNames(majors), [majors]);
   const departments = useMemo(() => departmentNames(majors, facultyFilter), [majors, facultyFilter]);
@@ -529,6 +535,7 @@ function useCurriculumWorkspace(
     handleSyncRoles,
     handleTransferToMajor,
     handleUpdateGradReq,
+    handleUpdateGradeStatusCodes,
     handleUpdateMaxUnits,
     handleUpdateRequired,
     handleUpdateRole,
