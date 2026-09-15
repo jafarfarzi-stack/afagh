@@ -9,8 +9,9 @@
 'use server';
 
 import { db } from '@/db';
-import { curriculum_courses, curriculum_versions, students, course_offerings, courses } from '@/db/schema';
+import { curriculum_courses, students, course_offerings } from '@/db/schema';
 import { and, eq } from 'drizzle-orm';
+import { resolveStudentCurriculum } from './curriculum-apply';
 
 const DEFAULT_PASS_CODE = '1';
 const DEFAULT_FAIL_CODE = '2';
@@ -33,9 +34,9 @@ export async function resolveSamaGradeStatusCode(
   const numGrade = Number(gradeValue);
   if (!Number.isFinite(numGrade)) return null;
 
-  // ۱) پیدا کردن دانشجو + نسخهٔ برنامهٔ درسی
+  // ۱) پیدا کردن دانشجو
   const [student] = await db
-    .select({ degreeLevelId: students.degreeLevelId, entryYear: students.entryYear })
+    .select({ id: students.id })
     .from(students)
     .where(eq(students.id, studentId))
     .limit(1);
@@ -49,14 +50,8 @@ export async function resolveSamaGradeStatusCode(
     .limit(1);
   if (!offering) return null;
 
-  // ۳) پیدا کردن نسخهٔ برنامهٔ درسی معتبر برای این مقطع/سال ورود
-  const [version] = await db
-    .select({ id: curriculum_versions.id })
-    .from(curriculum_versions)
-    .where(and(
-      eq(curriculum_versions.degreeLevelId, student.degreeLevelId),
-    ))
-    .limit(1);
+  // ۳) پیدا کردن نسخهٔ صحیح برنامهٔ درسی (با فیلتر رشته/مقطع/سال ورود/وضعیت)
+  const { version } = await resolveStudentCurriculum(studentId);
   if (!version) {
     // نسخه‌ای نیست → پیش‌فرض
     return numGrade >= 10 ? DEFAULT_PASS_CODE : DEFAULT_FAIL_CODE;
