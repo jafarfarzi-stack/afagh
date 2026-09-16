@@ -1,7 +1,7 @@
 import React from 'react';
 import MergedOfferingsClient from './MergedOfferingsClient';
 import { getMergedOfferingsAction } from './actions';
-import { getClassroomsAction } from '../actions';
+import { getClassroomsAction } from '../actions1';
 
 /**
  * صفحه مدیریت و نظارت بر ادغام دروس و تخصیص فضاها (Server Component)
