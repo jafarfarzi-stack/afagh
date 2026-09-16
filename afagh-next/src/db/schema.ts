@@ -2192,3 +2192,43 @@ export const tuition_rules = pgTable('tuition_rules', {
   note: text('note'),
   updatedAt: timestamp('updatedAt').defaultNow()
 });
+
+// ══════════════════════════════════════════════════════════════════════
+//  فاز ۱+۲: ضریب افزایشی نیمسال + مبالغ موضوعی (سیستم مالی مشابه سما)
+// ══════════════════════════════════════════════════════════════════════
+
+/** ضریب افزایشی شهریه به ازای هر نیمسال — مشابه سما */
+export const tuition_coefficients = pgTable('tuition_coefficients', {
+  id: serial('id').primaryKey(),
+  termId: integer('termId').notNull().references(() => academic_terms.id).unique(),
+  variableCoefficient: numeric('variable_coefficient', { precision: 4, scale: 2 }).notNull().default('1.00'),
+  fixedCoefficient: numeric('fixed_coefficient', { precision: 4, scale: 2 }).notNull().default('1.00'),
+  note: text('note'),
+  updatedAt: timestamp('updated_at').defaultNow()
+});
+
+/** کاتالوگ انواع مبالغ موضوعی شهریه */
+export const subject_fee_types = pgTable('subject_fee_types', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 40 }).notNull().unique(),
+  title: varchar('title', { length: 150 }).notNull(),
+  kind: varchar('kind', { length: 20 }).notNull().default('ADDITIVE'),
+  fixedAmount: numeric('fixed_amount', { precision: 12, scale: 0 }).notNull().default('0'),
+  variablePercent: numeric('variable_percent', { precision: 5, scale: 2 }).notNull().default('0'),
+  appliesTo: varchar('applies_to', { length: 20 }).notNull().default('BOTH'),
+  isActive: integer('is_active').notNull().default(1),
+  note: text('note'),
+  createdAt: timestamp('created_at').defaultNow()
+});
+
+/** تخصیص مبلغ موضوعی به دانشجو */
+export const student_subject_fees = pgTable('student_subject_fees', {
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').notNull().references(() => students.id),
+  termId: integer('term_id').notNull().references(() => academic_terms.id),
+  subjectFeeTypeId: integer('subject_fee_type_id').notNull().references(() => subject_fee_types.id),
+  amount: numeric('amount', { precision: 12, scale: 0 }).notNull().default('0'),
+  isActive: integer('is_active').notNull().default(1),
+  note: text('note'),
+  createdAt: timestamp('created_at').defaultNow()
+}, (t) => ({ uq: unique('uq_student_subject_fees').on(t.studentId, t.termId, t.subjectFeeTypeId) }));

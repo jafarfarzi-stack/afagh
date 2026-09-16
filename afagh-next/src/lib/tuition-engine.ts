@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, course_offerings, courses, enrollments, student_ledger,
-  students, tuition_rules,
+  students, tuition_rules, tuition_coefficients, subject_fee_types, student_subject_fees,
 } from '@/db/schema';
 
 /**
@@ -17,6 +17,9 @@ import {
  * «ورودی دانشجو» به‌همراه مقطع/رشتهٔ دانشجو به آن داده می‌شود:
  *   - شهریهٔ ثابت: یک‌بار به ازای نوع ترم (termLevelOnly — بدون قاعدهٔ مخصوص نوع درس)
  *   - شهریهٔ متغیر: به ازای هر واحد، بر اساس نوع گذراندن درس (نظری/عملی/عمومی)
+ *
+ * فاز ۱: ضریب افزایشی نیمسال (tuition_coefficients)
+ * فاز ۲: مبالغ موضوعی (subject_fee_types + student_subject_fees)
  */
 
 // منطق خالص انتخاب قاعده در ماژول جداگانه است تا بدون دیتابیس قابل تست باشد
@@ -66,21 +69,118 @@ export interface TuitionLine {
   amount: number;
 }
 
+export interface SubjectFeeLine {
+  code: string;
+  title: string;
+  kind: string;
+  amount: number;
+}
+
 export interface TermTuition {
   studentId: number;
   termId: number;
   termType: TermType;
   fixedTuition: number;
   variableTuition: number;
+  /** ضریب افزایشی نیمسال (۱.۰۰ = بدون تغییر) */
+  fixedCoefficient: number;
+  variableCoefficient: number;
+  /** مبالغ موضوعی (افزایشی - کاهشی) */
+  subjectFees: SubjectFeeLine[];
+  subjectFeesTotal: number;
+  fixedTuitionAfterCoeff: number;
+  variableTuitionAfterCoeff: number;
   totalTuition: number;
   lines: TuitionLine[];
   fixedRuleId: number | null;
+}
+
+/**
+ * خواندن ضریب افزایشی نیمسال از دیتابیس.
+ * اگر ضریبی تعریف نشده باشد، ۱.۰۰ برمی‌گرداند (بدون تغییر).
+ */
+async function getCoefficientForTerm(termId: number): Promise<{ fixed: number; variable: number }> {
+  const [row] = await db
+    .select()
+    .from(tuition_coefficients)
+    .where(eq(tuition_coefficients.termId, termId))
+    .limit(1);
+  if (!row) return { fixed: 1, variable: 1 };
+  return {
+    fixed: toNum(row.fixedCoefficient) || 1,
+    variable: toNum(row.variableCoefficient) || 1,
+  };
+}
+
+/**
+ * محاسبه مبالغ موضوعی یک دانشجو در یک ترم.
+ * این مبالغ جداگانه از شهریه محاسبه شده و به آن اضافه/کسر می‌شوند.
+ */
+async function computeSubjectFees(studentId: number, termId: number, variableTuition: number, fixedTuition: number): Promise<{
+  lines: SubjectFeeLine[];
+  total: number;
+}> {
+  // خواندن فعال‌های دانشجو در این ترم
+  const rows = await db
+    .select({
+      code: subject_fee_types.code,
+      title: subject_fee_types.title,
+      kind: subject_fee_types.kind,
+      fixedAmount: subject_fee_types.fixedAmount,
+      variablePercent: subject_fee_types.variablePercent,
+      appliesTo: subject_fee_types.appliesTo,
+      studentAmount: student_subject_fees.amount,
+      sfIsActive: student_subject_fees.isActive,
+    })
+    .from(student_subject_fees)
+    .innerJoin(subject_fee_types, eq(subject_fee_types.id, student_subject_fees.subjectFeeTypeId))
+    .where(and(
+      eq(student_subject_fees.studentId, studentId),
+      eq(student_subject_fees.termId, termId),
+      eq(student_subject_fees.isActive, 1),
+      eq(subject_fee_types.isActive, 1),
+    ));
+
+  const lines: SubjectFeeLine[] = [];
+  let total = 0;
+
+  for (const r of rows) {
+    // محاسبه مبلغ: اگر دانشجو مبلغ دستی دارد، از آن استفاده می‌کنیم
+    let amount = toNum(r.studentAmount);
+    if (amount === 0) {
+      // محاسبه خودکار از قاعده نوع
+      const fixedPart = toNum(r.fixedAmount);
+      let variablePart = 0;
+      if (toNum(r.variablePercent) > 0) {
+        const base = r.appliesTo === 'FIXED' ? fixedTuition :
+                     r.appliesTo === 'VARIABLE' ? variableTuition :
+                     fixedTuition + variableTuition;
+        variablePart = Math.round((toNum(r.variablePercent) / 100) * base);
+      }
+      amount = fixedPart + variablePart;
+    }
+
+    // DEDUCTIVE = کاهشی (منفی)
+    const sign = r.kind === 'DEDUCTIVE' ? -1 : 1;
+    const finalAmount = sign * amount;
+
+    lines.push({
+      code: r.code,
+      title: r.title,
+      kind: r.kind,
+      amount: finalAmount,
+    });
+    total += finalAmount;
+  }
+
+  return { lines, total };
 }
 
 /** نوع ترم را از رکورد ترم می‌خواند (با بازگشت امن به NORMAL) */
 /**
  * محاسبهٔ شهریهٔ یک ترم برای یک دانشجو:
  *   ثابت (بر اساس نوع ترم) + مجموع(واحد × نرخ هر واحد بر اساس نوع گذراندن درس)
+ *   + ضریب افزایشی نیمسال + مبالغ موضوعی
  */
 export async function computeTermTuition(
   studentId: number,
@@ -148,13 +248,27 @@ export async function computeTermTuition(
     });
   }
 
+  // ═══ فاز ۱: اعمال ضریب افزایشی نیمسال ═══
+  const coeff = await getCoefficientForTerm(termId);
+  const fixedTuitionAfterCoeff = Math.round(fixedTuition * coeff.fixed);
+  const variableTuitionAfterCoeff = Math.round(variableTuition * coeff.variable);
+
+  // ═══ فاز ۲: محاسبه مبالغوضوعی ═══
+  const subjectFees = await computeSubjectFees(studentId, termId, variableTuitionAfterCoeff, fixedTuitionAfterCoeff);
+
   return {
     studentId,
     termId,
     termType,
     fixedTuition,
     variableTuition,
-    totalTuition: fixedTuition + variableTuition,
+    fixedCoefficient: coeff.fixed,
+    variableCoefficient: coeff.variable,
+    subjectFees: subjectFees.lines,
+    subjectFeesTotal: subjectFees.total,
+    fixedTuitionAfterCoeff,
+    variableTuitionAfterCoeff,
+    totalTuition: fixedTuitionAfterCoeff + variableTuitionAfterCoeff + subjectFees.total,
     lines,
     fixedRuleId: includeFixed ? (fixedRule?.id ?? null) : null,
   };
@@ -187,11 +301,15 @@ export async function chargeTermTuition(
   if (amount === 0 && !existing) return { charged: 0, totalTuition: t.totalTuition };
 
   const [term] = await db.select({ title: academic_terms.title }).from(academic_terms).where(eq(academic_terms.id, termId)).limit(1);
-  const desc = `شهریهٔ ترم «${term?.title ?? termId}» — ثابت ${t.fixedTuition.toLocaleString('fa-IR')} + متغیر ${t.variableTuition.toLocaleString('fa-IR')}`;
+  const coeffNote = (t.fixedCoefficient !== 1 || t.variableCoefficient !== 1)
+    ? ` [ضریب: ثابت×${t.fixedCoefficient}، متغیر×${t.variableCoefficient}]`
+    : '';
+  const subjectNote = t.subjectFeesTotal !== 0
+    ? ` + موضوعی ${t.subjectFeesTotal > 0 ? '+' : ''}${t.subjectFeesTotal.toLocaleString('fa-IR')}`
+    : '';
+  const desc = `شهریهٔ ترم «${term?.title ?? termId}» — ثابت ${t.fixedTuitionAfterCoeff.toLocaleString('fa-IR')} + متغیر ${t.variableTuitionAfterCoeff.toLocaleString('fa-IR')}${subjectNote}${coeffNote}`;
 
   // نکته: اگر amount صفر شد ولی شارژ قبلی وجود دارد، باید «صفر» شود.
-  // (پیش‌تر در این حالت زودهنگام return می‌شد و با تغییر سیاست به NONE یا
-  //  حذف قاعدهٔ شهریه، شارژ قدیمی دست‌نخورده و نادرست باقی می‌ماند.)
   if (existing) {
     await db.update(student_ledger)
       .set({ amount: String(amount), description: desc })
