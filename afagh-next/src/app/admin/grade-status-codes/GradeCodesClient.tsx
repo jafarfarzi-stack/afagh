@@ -325,6 +325,59 @@ export default function GradeCodesClient() {
               </div>
             )}
 
+            {/* فرم ویرایش درس */}
+            {editingBank && (
+              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-3">
+                <h3 className="font-extrabold text-indigo-900 text-sm">✏️ ویرایش درس: {editingBank.code} — {editingBank.title}</h3>
+                <form action={saveBankCourse} className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <input type="hidden" name="id" value={editingBank.id} />
+                  <div className="col-span-2">
+                    <label className="block font-bold text-slate-600 mb-1">عنوان درس</label>
+                    <input name="title" defaultValue={editingBank.title} className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold bg-white" />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-600 mb-1">واحد نظری</label>
+                    <input name="theoreticalUnits" type="number" step="0.5" min="0" defaultValue={editingBank.theoreticalUnits} className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold bg-white" />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-600 mb-1">واحد عملی</label>
+                    <input name="practicalUnits" type="number" step="0.5" min="0" defaultValue={editingBank.practicalUnits} className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold bg-white" />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-600 mb-1">نوع درس</label>
+                    <select name="courseType" defaultValue={editingBank.courseType ?? ''} className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold bg-white">
+                      <option value="">انتخاب...</option>
+                      {COURSE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-600 mb-1">گروه آموزشی</label>
+                    <select name="departmentId" defaultValue={editingBank.departmentId ?? ''} className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold bg-white">
+                      <option value="">بدون گروه</option>
+                      {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-600 mb-1">وضعیت نمره</label>
+                    <select name="gradingType" defaultValue={editingBank.gradingType ?? 'NUMERIC'} className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold bg-white">
+                      <option value="NUMERIC">نمره‌ای (NUMERIC)</option>
+                      <option value="PASS_FAIL">قبول/مردود (PASS_FAIL)</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2 pt-5">
+                    <input type="checkbox" name="affectsGpa" defaultChecked={editingBank.affectsGpa === 1} className="w-4 h-4 accent-amber-600" />
+                    <label className="font-bold text-slate-600">تاثیر در معدل</label>
+                  </div>
+                  <div className="col-span-2 sm:col-span-4 flex gap-2">
+                    <button type="submit" disabled={bankSaving} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-xs font-bold disabled:opacity-50">
+                      {bankSaving ? 'در حال ذخیره...' : 'ذخیره تغییرات'}
+                    </button>
+                    <button type="button" onClick={() => setEditingBank(null)} className="border border-slate-300 px-4 py-2 rounded-lg text-xs font-bold">انصراف</button>
+                  </div>
+                </form>
+              </div>
+            )}
+
             {/* جدول بانک دروس */}
             <div className="overflow-x-auto">
               {bankLoading && <div className="p-4 text-center text-xs text-slate-400 font-bold">بارگذاری...</div>}
@@ -387,59 +440,6 @@ export default function GradeCodesClient() {
                 </table>
               )}
             </div>
-
-            {/* فرم ویرایش درس */}
-            {editingBank && (
-              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-3">
-                <h3 className="font-extrabold text-indigo-900 text-sm">✏️ ویرایش درس: {editingBank.code} — {editingBank.title}</h3>
-                <form action={saveBankCourse} className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                  <input type="hidden" name="id" value={editingBank.id} />
-                  <div className="col-span-2">
-                    <label className="block font-bold text-slate-600 mb-1">عنوان درس</label>
-                    <input name="title" defaultValue={editingBank.title} className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold bg-white" />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-600 mb-1">واحد نظری</label>
-                    <input name="theoreticalUnits" type="number" step="0.5" min="0" defaultValue={editingBank.theoreticalUnits} className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold bg-white" />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-600 mb-1">واحد عملی</label>
-                    <input name="practicalUnits" type="number" step="0.5" min="0" defaultValue={editingBank.practicalUnits} className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold bg-white" />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-600 mb-1">نوع درس</label>
-                    <select name="courseType" defaultValue={editingBank.courseType ?? ''} className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold bg-white">
-                      <option value="">انتخاب...</option>
-                      {COURSE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-600 mb-1">گروه آموزشی</label>
-                    <select name="departmentId" defaultValue={editingBank.departmentId ?? ''} className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold bg-white">
-                      <option value="">بدون گروه</option>
-                      {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-600 mb-1">وضعیت نمره</label>
-                    <select name="gradingType" defaultValue={editingBank.gradingType ?? 'NUMERIC'} className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold bg-white">
-                      <option value="NUMERIC">نمره‌ای (NUMERIC)</option>
-                      <option value="PASS_FAIL">قبول/مردود (PASS_FAIL)</option>
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-2 pt-5">
-                    <input type="checkbox" name="affectsGpa" defaultChecked={editingBank.affectsGpa === 1} className="w-4 h-4 accent-amber-600" />
-                    <label className="font-bold text-slate-600">تاثیر در معدل</label>
-                  </div>
-                  <div className="col-span-2 sm:col-span-4 flex gap-2">
-                    <button type="submit" disabled={bankSaving} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-xs font-bold disabled:opacity-50">
-                      {bankSaving ? 'در حال ذخیره...' : 'ذخیره تغییرات'}
-                    </button>
-                    <button type="button" onClick={() => setEditingBank(null)} className="border border-slate-300 px-4 py-2 rounded-lg text-xs font-bold">انصراف</button>
-                  </div>
-                </form>
-              </div>
-            )}
           </div>
         )}
 
