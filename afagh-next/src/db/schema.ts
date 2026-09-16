@@ -1988,7 +1988,7 @@ export const issued_degrees = pgTable('issued_degrees', {
   revokedAt: timestamp('revokedAt'),
   revokeReason: text('revokeReason'),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
-}); (پورتال آلومنای) */
+}); /** پروفایل دانش‌آموخته (پورتال آلومنای) */
 export const alumni_profiles = pgTable('alumni_profiles', {
   id: serial('id').primaryKey(),
   studentId: integer('studentId').notNull().references(() => students.id),
