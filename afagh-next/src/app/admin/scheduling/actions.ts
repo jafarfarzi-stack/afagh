@@ -654,7 +654,3 @@ export async function getSchedulingHealthAction(termId: number): Promise<{ ok: t
   }
 }
 
-// ── Re-exports from actions1 (مدیریت کلاس‌ها) ──
-export { getClassroomsAction, upsertClassroomAction, evaluateClassroomAssignmentAction } from './actions1';
-export type { ClassroomRecord } from './actions1';
-
