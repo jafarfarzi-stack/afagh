@@ -99,9 +99,9 @@ export const ADMIN_MODULES: AdminModule[] = [
   {
     href: '/admin/grade-status-codes',
     icon: '🏷️',
-    title: 'کدهای وضعیت نمره دروس',
-    desc: 'ویرایش کد قبولی/مردودی هر درس در هر نسخه برنامه درسی',
-    roles: EDU,
+    title: 'مدیریت دروس و کدهای وضعیت نمره',
+    desc: 'تعریف، ویرایش و کدگذاری وضعیت نمره دروس بانک و چارت',
+    roles: ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'],
     accent: 'from-amber-950 to-orange-950 border-amber-700/50',
     iconBg: 'bg-amber-700/80 border-amber-500/50',
     inNav: true,

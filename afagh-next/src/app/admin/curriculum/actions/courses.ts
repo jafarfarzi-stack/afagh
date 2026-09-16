@@ -62,6 +62,41 @@ export async function createCourseBankAction(input: CreateBankCourseInput): Prom
   }
 }
 
+export interface UpdateBankCourseInput {
+  title?: string;
+  theoreticalUnits?: number;
+  practicalUnits?: number;
+  courseType?: string;
+  gradingType?: 'NUMERIC' | 'PASS_FAIL';
+  affectsGpa?: number;
+  departmentId?: number | null;
+}
+
+export async function updateCourseBankAction(courseId: number, input: UpdateBankCourseInput): Promise<Act<{ message: string }>> {
+  await requireRole(EDITORS);
+  try {
+    const [existing] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
+    if (!existing) return { ok: false, error: 'درس یافت نشد.' };
+    const patch: Record<string, unknown> = {};
+    if (input.title != null) patch.title = input.title.trim();
+    if (input.theoreticalUnits != null) patch.theoreticalUnits = String(input.theoreticalUnits);
+    if (input.practicalUnits != null) patch.practicalUnits = String(input.practicalUnits);
+    if (input.courseType != null) patch.courseType = input.courseType;
+    if (input.gradingType != null) patch.gradingType = input.gradingType;
+    if (input.affectsGpa != null) patch.affectsGpa = input.affectsGpa ? 1 : 0;
+    if (input.departmentId !== undefined) patch.departmentId = input.departmentId || null;
+    // محاسبه واحد کل
+    const theo = Number(input.theoreticalUnits ?? existing.theoreticalUnits ?? 0);
+    const prac = Number(input.practicalUnits ?? existing.practicalUnits ?? 0);
+    patch.units = String(theo + prac);
+    await db.update(courses).set(patch).where(eq(courses.id, courseId));
+    revalidateCurriculumPaths();
+    return { ok: true, message: `درس «${existing.title}» به‌روزرسانی شد.` };
+  } catch (err: any) {
+    console.error('updateCourseBankAction:', err);
+    return { ok: false, error: err.message || 'خطا در به‌روزرسانی درس' };
+  }
+}
 
 export async function addCourseToCurriculumAction(versionId: number, item: AddCourseInput): Promise<Act<{ message: string }>> {
   await requireRole(EDITORS);
