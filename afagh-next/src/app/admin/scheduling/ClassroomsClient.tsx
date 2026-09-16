@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useTransition } from 'react';
-import { ClassroomRecord, upsertClassroomAction, evaluateClassroomAssignmentAction } from './actions1';
+import { ClassroomRecord, upsertClassroomAction, evaluateClassroomAssignmentAction } from './actions';
 
 export default function ClassroomsClient({
   initialClassrooms,

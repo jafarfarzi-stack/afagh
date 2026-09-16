@@ -1,6 +1,6 @@
 import React from 'react';
 import ClassroomsClient from '../ClassroomsClient';
-import { getClassroomsAction } from '../actions1';
+import { getClassroomsAction } from '../actions';
 
 /**
  * صفحه مدیریت کلاس‌ها و فضاهای فیزیکی دانشگاه (Server Component)
