@@ -97,6 +97,19 @@ export const degree_level_configs = pgTable('degree_level_configs', {
   isGraduate: integer('isGraduate'),
   /** دانشگاه مالک این کاربر */
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  /** حالت نمایش نمره در کارنامه: NUMERIC | QUALITATIVE | BOTH */
+  transcriptDisplayMode: varchar('transcriptDisplayMode', { length: 20 }).default('NUMERIC'),
+});
+
+/** آستانه‌های نمره کیفی (عالی/خیلی خوب/خوب/مردود) بر اساس مقطع */
+export const grade_thresholds = pgTable('grade_thresholds', {
+  id: serial('id').primaryKey(),
+  degreeLevelId: integer('degreeLevelId').notNull().references(() => degree_level_configs.id),
+  label: varchar('label', { length: 50 }).notNull(),
+  minValue: numeric('minValue', { precision: 4, scale: 2 }).notNull(),
+  maxValue: numeric('maxValue', { precision: 4, scale: 2 }).notNull(),
+  passed: integer('passed').notNull().default(1),
+  sortOrder: integer('sortOrder').notNull().default(0),
 });
 
 export const faculties = pgTable('faculties', {

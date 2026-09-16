@@ -41,7 +41,7 @@ const LOCATION_TYPES = [
 ];
 
 export default function GradeCodesClient() {
-  const [tab, setTab] = useState<'bank' | 'grade'>('bank');
+  const [tab, setTab] = useState<'bank' | 'grade' | 'qual'>('bank');
 
   // ─── بانک دروس ───
   const [bankCourses, setBankCourses] = useState<BankCourse[]>([]);
@@ -65,6 +65,13 @@ export default function GradeCodesClient() {
   const [saving, setSaving] = useState<number | null>(null);
   const [toast, setToast] = useState('');
   const [q, setQ] = useState('');
+
+  // ─── نمره کیفی ───
+  type Threshold = { label: string; minValue: string; maxValue: string; passed: boolean };
+  const [qualDegreeLevel, setQualDegreeLevel] = useState<number | null>(null);
+  const [qualThresholds, setQualThresholds] = useState<Threshold[]>([]);
+  const [qualDisplayMode, setQualDisplayMode] = useState<string>('NUMERIC');
+  const [qualSaving, setQualSaving] = useState(false);
 
   // ─── بارگذاری اولیه ───
   const loadBank = useCallback(async (search?: string) => {
@@ -112,6 +119,52 @@ export default function GradeCodesClient() {
     const t = setTimeout(() => loadBank(bankQ), 300);
     return () => clearTimeout(t);
   }, [bankQ, loadBank]);
+
+  // ─── بارگیری آستانه‌های نمره کیفی ───
+  const loadThresholds = useCallback(async (degreeLevelId: number) => {
+    try {
+      const r = await fetch(`/api/admin/grade-thresholds?degreeLevelId=${degreeLevelId}`);
+      const d = await r.json();
+      if (d.ok) {
+        setQualThresholds(d.thresholds.map((t: { label: string; minValue: string; maxValue: string; passed: number }) => ({
+          label: t.label, minValue: t.minValue, maxValue: t.maxValue, passed: t.passed === 1,
+        })));
+        setQualDisplayMode(d.transcriptDisplayMode || 'NUMERIC');
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (qualDegreeLevel) loadThresholds(qualDegreeLevel);
+  }, [qualDegreeLevel, loadThresholds]);
+
+  const saveThresholds = async () => {
+    if (!qualDegreeLevel) return;
+    setQualSaving(true);
+    try {
+      const r = await fetch('/api/admin/grade-thresholds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          degreeLevelId: qualDegreeLevel,
+          transcriptDisplayMode: qualDisplayMode,
+          thresholds: qualThresholds,
+        }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        setToast('آستانه‌ها ذخیره شد');
+        setTimeout(() => setToast(''), 2000);
+      } else {
+        setToast(d.error || 'خطا');
+        setTimeout(() => setToast(''), 3000);
+      }
+    } catch {
+      setToast('خطا در ارتباط');
+      setTimeout(() => setToast(''), 3000);
+    }
+    setQualSaving(false);
+  };
 
   // ─── ذخیره درس (ایجاد/ویرایش) ───
   const saveCourse = async (fd: FormData) => {
@@ -232,6 +285,9 @@ export default function GradeCodesClient() {
           </button>
           <button onClick={() => setTab('grade')} className={`flex-1 px-4 py-3 text-sm font-extrabold transition-colors ${tab === 'grade' ? 'bg-amber-50 text-amber-900 border-b-2 border-amber-600' : 'text-slate-500 hover:bg-slate-50'}`}>
             🏷️ کدهای وضعیت نمره در چارت
+          </button>
+          <button onClick={() => setTab('qual')} className={`flex-1 px-4 py-3 text-sm font-extrabold transition-colors ${tab === 'qual' ? 'bg-amber-50 text-amber-900 border-b-2 border-amber-600' : 'text-slate-500 hover:bg-slate-50'}`}>
+            🎓 نمره کیفی (عالی/خوب/مردود)
           </button>
         </div>
 
@@ -388,6 +444,86 @@ export default function GradeCodesClient() {
             <div className="rounded-xl bg-amber-50/80 p-3.5 text-xs text-amber-900 border border-amber-200">
               💡 <b>راهنما:</b> کد قبولی و مردودی هر درس را از لیست کشویی انتخاب کنید. تغییرات فوراً ذخیره می‌شوند.
             </div>
+          </div>
+        )}
+
+        {/* ═══ تب نمره کیفی ═══ */}
+        {tab === 'qual' && (
+          <div className="p-4 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">مقطع تحصیلی</label>
+                <select value={qualDegreeLevel ?? ''} onChange={e => setQualDegreeLevel(Number(e.target.value) || null)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white">
+                  <option value="">انتخاب مقطع...</option>
+                  {degreeLevels.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">حالت نمایش در کارنامه</label>
+                <select value={qualDisplayMode} onChange={e => setQualDisplayMode(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white">
+                  <option value="NUMERIC">فقط عدد (مثلاً ۱۸.۵)</option>
+                  <option value="QUALITATIVE">فقط کیفی (مثلاً عالی)</option>
+                  <option value="BOTH">هر دو (مثلاً عالی ۱۸.۵)</option>
+                </select>
+              </div>
+            </div>
+
+            {qualDegreeLevel && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-extrabold text-slate-900 text-sm">🎓 آستانه‌های نمره کیفی</h3>
+                  <button onClick={() => setQualThresholds([...qualThresholds, { label: '', minValue: '0', maxValue: '20', passed: true }])} className="text-xs bg-amber-600 text-white px-3 py-1.5 rounded-lg font-bold">
+                    + افزودن ردیف
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-900 text-white text-center">
+                        <th className="p-2 border border-slate-800 w-10">ردیف</th>
+                        <th className="p-2 border border-slate-800">برچسب (مثلاً عالی)</th>
+                        <th className="p-2 border border-slate-800">حداقل نمره</th>
+                        <th className="p-2 border border-slate-800">حداکثر نمره</th>
+                        <th className="p-2 border border-slate-800">قبول؟</th>
+                        <th className="p-2 border border-slate-800">عملیات</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {qualThresholds.map((t, idx) => (
+                        <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+                          <td className="p-1.5 border border-slate-200 text-center text-slate-500">{idx + 1}</td>
+                          <td className="p-1.5 border border-slate-200">
+                            <input value={t.label} onChange={e => { const n = [...qualThresholds]; n[idx].label = e.target.value; setQualThresholds(n); }} className="w-full border border-slate-300 rounded px-2 py-1 text-xs font-bold" placeholder="مثلاً عالی" />
+                          </td>
+                          <td className="p-1.5 border border-slate-200">
+                            <input type="number" step="0.25" min="0" max="20" value={t.minValue} onChange={e => { const n = [...qualThresholds]; n[idx].minValue = e.target.value; setQualThresholds(n); }} className="w-full border border-slate-300 rounded px-2 py-1 text-xs font-bold text-center" />
+                          </td>
+                          <td className="p-1.5 border border-slate-200">
+                            <input type="number" step="0.25" min="0" max="20" value={t.maxValue} onChange={e => { const n = [...qualThresholds]; n[idx].maxValue = e.target.value; setQualThresholds(n); }} className="w-full border border-slate-300 rounded px-2 py-1 text-xs font-bold text-center" />
+                          </td>
+                          <td className="p-1.5 border border-slate-200 text-center">
+                            <input type="checkbox" checked={t.passed} onChange={e => { const n = [...qualThresholds]; n[idx].passed = e.target.checked; setQualThresholds(n); }} className="w-4 h-4 accent-emerald-600" />
+                          </td>
+                          <td className="p-1.5 border border-slate-200 text-center">
+                            <button onClick={() => setQualThresholds(qualThresholds.filter((_, i) => i !== idx))} className="text-red-500 hover:underline font-bold text-xs">حذف</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <button onClick={saveThresholds} disabled={qualSaving || !qualThresholds.length} className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
+                  {qualSaving ? 'در حال ذخیره...' : 'ذخیره آستانه‌ها'}
+                </button>
+
+                <div className="rounded-xl bg-blue-50/80 p-3.5 text-xs text-blue-900 border border-blue-200">
+                  💡 <b>راهنما:</b> برای هر مقطع، آستانه‌های نمره کیفی را تعریف کنید. نمرات عددی دانشجویان بر اساس این آستانه‌ها به درجه کیفی تبدیل می‌شوند.
+                  <br />مثال: ارشد — عالی (۱۸-۲۰)، خیلی خوب (۱۶-۱۷.۹۹)، خوب (۱۴-۱۵.۹۹)، مردود (۰-۱۳.۹۹)
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
