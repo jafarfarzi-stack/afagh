@@ -194,65 +194,8 @@ export async function supplyGroupDrafts(actorUserId: number | null, px: SupplyIn
       groups: inserted.length,
       offeringIds: inserted.map(o => o.id),
     });
-    return { ok: true };
+    return { ok: true, created: inserted.length, offeringIds: inserted.map(o => o.id) };
   });
-}
-
-// ── Type exports for scheduling sub-modules (classrooms, instructors, merged-offerings) ──
-
-export interface ClassroomCapacityInput {
-  classroomId: string;
-  roomCode: string;
-  teachingCapacity: number;
-  examCapacity: number;
-  isExamArea: boolean;
-}
-
-export interface InstructorAssignmentInput {
-  instructorStaffCode: string;
-  instructorName: string;
-  offeringId: string;
-  courseCode: string;
-  courseTitle: string;
-  termId: string;
-}
-
-export interface MergedOfferingGroupInput {
-  groupId: string;
-  groupTitle: string;
-  memberOfferings: Array<{
-    offeringId: string;
-    courseTitle: string;
-    enrolledCount: number;
-  }>;
-}
-
-/** کلاس موتور برنامه‌ریزی — متدهای استاتیک برای محاسبات */
-export class SchedulingEngine {
-  static validateTeachingCapacity(
-    classroom: ClassroomCapacityInput,
-    totalEnrolledStudents: number,
-  ): { isAllowed: boolean; deficit: number; message: string } {
-    if (totalEnrolledStudents > classroom.teachingCapacity) {
-      const deficit = totalEnrolledStudents - classroom.teachingCapacity;
-      return { isAllowed: false, deficit, message: `ظرفیت آموزشی کلاس ${classroom.roomCode} (${classroom.teachingCapacity}) برای ${totalEnrolledStudents} دانشجو ناکافی است. کسری: ${deficit}` };
-    }
-    return { isAllowed: true, deficit: 0, message: '' };
-  }
-
-  static validateExamCapacity(
-    classroom: ClassroomCapacityInput,
-    totalEnrolledStudents: number,
-  ): { isAllowed: boolean; deficit: number; message: string } {
-    if (!classroom.isExamArea) {
-      return { isAllowed: false, deficit: totalEnrolledStudents, message: `کلاس ${classroom.roomCode} منطقه امتحانی نیست.` };
-    }
-    if (totalEnrolledStudents > classroom.examCapacity) {
-      const deficit = totalEnrolledStudents - classroom.examCapacity;
-      return { isAllowed: false, deficit, message: `ظرفیت امتحانی کلاس ${classroom.roomCode} (${classroom.examCapacity}) برای ${totalEnrolledStudents} دانشجو ناکافی است. کسری: ${deficit}` };
-    }
-    return { isAllowed: true, deficit: 0, message: '' };
-  }
 }
 
 // ─────────────────────────── فاز تخصیص: سبدبندی از استخر خدمات ───────────────────────────
