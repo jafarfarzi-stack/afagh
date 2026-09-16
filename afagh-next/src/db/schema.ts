@@ -349,6 +349,18 @@ export const courses = pgTable('courses', {
   locationType: varchar('locationType', { length: 20 }).default('IN_CAMPUS'),        // IN_CAMPUS | OUT_CAMPUS (مهارتی/ورزشی خارج دانشگاه)
   /** دانشگاه مالک این درس */
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  // ── فیلدهای سما (اطلاعات تکمیلی درس) ──
+  courseNature: varchar('courseNature', { length: 50 }),            // ماهیت درس: نظری/عملی/نظری-عملی/پروژه/رساله/کارآموزی/...
+  englishName: varchar('englishName', { length: 200 }),             // نام انگلیسی درس
+  description: text('description'),                                  // توضیحات درس
+  weeklyTheoryHours: numeric('weeklyTheoryHours', { precision: 3, scale: 1 }),  // ساعت هفتگی نظری
+  weeklyPracticalHours: numeric('weeklyPracticalHours', { precision: 3, scale: 1 }), // ساعت هفتگی عملی
+  isThesis: integer('isThesis').default(0),                         // آیا پایان‌نامه است (0/1)
+  hasProject: integer('hasProject').default(0),                     // آیا پروژه دارد (0/1)
+  internshipUnits: numeric('internshipUnits', { precision: 3, scale: 1 }).default('0'), // واحد کارآموزی
+  minPassedMark: numeric('minPassedMark', { precision: 4, scale: 2 }), // حداقل نمره قبولی
+  defaultAcceptMarkState: varchar('defaultAcceptMarkState', { length: 10 }), // کد وضعیت پیش‌فرض قبولی سما
+  defaultRejectMarkState: varchar('defaultRejectMarkState', { length: 10 }), // کد وضعیت پیش‌فرض مردودی سما
 });
 
 /** گرایش‌های برنامهٔ درسی (مثلاً «هوش مصنوعی و رباتیک») — جایگزین tracks[] Mock در Client قدیم (D4) */

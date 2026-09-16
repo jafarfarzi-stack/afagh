@@ -1252,11 +1252,11 @@ async function phaseTatbigh(file) {
     if (DRY) { batch.length = 0; return; }
     const vals = [];
     const ph = batch.map((r, i) => {
-      const o = i * 7;
-      vals.push(r.code, r.title, r.theory, r.practical, r.units, r.type, r.deptId);
-      return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5},$${o+6},$${o+7})`;
+      const o = i * 16;
+      vals.push(r.code, r.title, r.theory, r.practical, r.units, r.type, r.deptId, r.englishName, r.minPassedMark, r.thHour, r.ohHour, r.defaultAccept, r.defaultReject, r.description, r.isThesis, r.hasProject);
+      return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5},$${o+6},$${o+7},$${o+8},$${o+9},$${o+10},$${o+11},$${o+12},$${o+13},$${o+14},$${o+15},$${o+16})`;
     }).join(',');
-    const res = await pool.query(`INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units, "courseType", "departmentId")
+    const res = await pool.query(`INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units, "courseType", "departmentId", "englishName", "minPassedMark", "weeklyTheoryHours", "weeklyPracticalHours", "defaultAcceptMarkState", "defaultRejectMarkState", description, "isThesis", "hasProject")
       VALUES ${ph}
       ON CONFLICT (code) DO UPDATE SET
         title = EXCLUDED.title,
@@ -1264,7 +1264,16 @@ async function phaseTatbigh(file) {
         "practicalUnits" = EXCLUDED."practicalUnits",
         units = EXCLUDED.units,
         "courseType" = COALESCE(EXCLUDED."courseType", courses."courseType"),
-        "departmentId" = COALESCE(courses."departmentId", EXCLUDED."departmentId")
+        "departmentId" = COALESCE(courses."departmentId", EXCLUDED."departmentId"),
+        "englishName" = COALESCE(EXCLUDED."englishName", courses."englishName"),
+        "minPassedMark" = COALESCE(EXCLUDED."minPassedMark", courses."minPassedMark"),
+        "weeklyTheoryHours" = COALESCE(EXCLUDED."weeklyTheoryHours", courses."weeklyTheoryHours"),
+        "weeklyPracticalHours" = COALESCE(EXCLUDED."weeklyPracticalHours", courses."weeklyPracticalHours"),
+        "defaultAcceptMarkState" = COALESCE(EXCLUDED."defaultAcceptMarkState", courses."defaultAcceptMarkState"),
+        "defaultRejectMarkState" = COALESCE(EXCLUDED."defaultRejectMarkState", courses."defaultRejectMarkState"),
+        description = COALESCE(EXCLUDED.description, courses.description),
+        "isThesis" = COALESCE(EXCLUDED."isThesis", courses."isThesis"),
+        "hasProject" = COALESCE(EXCLUDED."hasProject", courses."hasProject")
       RETURNING xmax = 0 AS inserted`, vals);
     // xmax=0 means inserted, else updated — but simpler: count via rowCount and assume
     stats.inserted += res.rowCount;
@@ -1289,10 +1298,20 @@ async function phaseTatbigh(file) {
       if (hit) { deptId = hit; stats.linked++; }
       else { stats.unlinkedGroup.add(groupName); }
     }
+    // فیلدهای جدید سما
+    const englishName = normTxt(cols[18]) || null;                 // EName
+    const minPassedMark = parseFloat((cols[17] || '').trim()) || null; // MinPassedMark
+    const thHour = parseFloat((cols[22] || '').trim()) || null;       // ThHour (ساعت هفتگی نظری)
+    const ohHour = parseFloat((cols[23] || '').trim()) || null;       // OhHour (ساعت هفتگی عملی)
+    const defaultAccept = (cols[24] || '').trim() || null;            // DefaultAcceptMarkState
+    const defaultReject = (cols[25] || '').trim() || null;            // DefaultRejectMarkState
+    const description = normTxt(cols[38]) || null;                    // LessonDescription
+    const isThesis = (cols[37] || '').trim() === '1' ? 1 : 0;       // IsThesis
+    const hasProject = (cols[42] || '').trim() === '1' ? 1 : 0;     // HaveProject
     const equivRaw = (cols[14] || '').trim();
     if (equivRaw) equivJobs.push({ code, equivRaw });
     stats.total++;
-    batch.push({ code: code.slice(0,20), title: title.slice(0,150), theory, practical, units, type: courseType, deptId });
+    batch.push({ code: code.slice(0,20), title: title.slice(0,150), theory, practical, units, type: courseType, deptId, englishName, minPassedMark, thHour, ohHour, defaultAccept, defaultReject, description, isThesis, hasProject });
     coursesByCode.set(code, -1); // mark as known for later placeholder avoidance
     if (batch.length >= 500) await flush();
   }

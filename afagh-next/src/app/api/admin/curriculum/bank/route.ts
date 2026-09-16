@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { db } from '@/db';
-import { courses, departments } from '@/db/schema';
+import { courses, departments, degree_level_configs, equivalence_clusters } from '@/db/schema';
 import { eq, ilike, or, asc } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
@@ -29,9 +29,28 @@ export async function GET(req: NextRequest) {
       affectsGpa: courses.affectsGpa,
       departmentId: courses.departmentId,
       departmentName: departments.name,
+      degreeLevelId: courses.degreeLevelId,
+      degreeLevelTitle: degree_level_configs.title,
+      clusterId: courses.clusterId,
+      clusterTitle: equivalence_clusters.clusterTitle,
+      offeringScope: courses.offeringScope,
+      locationType: courses.locationType,
+      courseNature: courses.courseNature,
+      englishName: courses.englishName,
+      description: courses.description,
+      weeklyTheoryHours: courses.weeklyTheoryHours,
+      weeklyPracticalHours: courses.weeklyPracticalHours,
+      isThesis: courses.isThesis,
+      hasProject: courses.hasProject,
+      internshipUnits: courses.internshipUnits,
+      minPassedMark: courses.minPassedMark,
+      defaultAcceptMarkState: courses.defaultAcceptMarkState,
+      defaultRejectMarkState: courses.defaultRejectMarkState,
     })
     .from(courses)
     .leftJoin(departments, eq(courses.departmentId, departments.id))
+    .leftJoin(degree_level_configs, eq(courses.degreeLevelId, degree_level_configs.id))
+    .leftJoin(equivalence_clusters, eq(courses.clusterId, equivalence_clusters.id))
     .where(where)
     .orderBy(asc(courses.code));
   return NextResponse.json({ ok: true, courses: rows });
@@ -47,13 +66,29 @@ export async function PATCH(req: NextRequest) {
 
   const body = await req.json();
   const patch: Record<string, unknown> = {};
+  if (body.title != null) patch.title = body.title;
   if (body.theoreticalUnits != null) patch.theoreticalUnits = String(body.theoreticalUnits);
   if (body.practicalUnits != null) patch.practicalUnits = String(body.practicalUnits);
   if (body.courseType != null) patch.courseType = body.courseType;
   if (body.gradingType != null) patch.gradingType = body.gradingType;
   if (body.affectsGpa != null) patch.affectsGpa = body.affectsGpa ? 1 : 0;
   if (body.departmentId !== undefined) patch.departmentId = body.departmentId || null;
-  if (body.title != null) patch.title = body.title;
+  if (body.degreeLevelId !== undefined) patch.degreeLevelId = body.degreeLevelId || null;
+  if (body.clusterId !== undefined) patch.clusterId = body.clusterId || null;
+  if (body.offeringScope != null) patch.offeringScope = body.offeringScope;
+  if (body.locationType != null) patch.locationType = body.locationType;
+  // فیلدهای جدید سما
+  if (body.courseNature != null) patch.courseNature = body.courseNature || null;
+  if (body.englishName != null) patch.englishName = body.englishName || null;
+  if (body.description != null) patch.description = body.description || null;
+  if (body.weeklyTheoryHours != null) patch.weeklyTheoryHours = String(body.weeklyTheoryHours);
+  if (body.weeklyPracticalHours != null) patch.weeklyPracticalHours = String(body.weeklyPracticalHours);
+  if (body.isThesis != null) patch.isThesis = body.isThesis ? 1 : 0;
+  if (body.hasProject != null) patch.hasProject = body.hasProject ? 1 : 0;
+  if (body.internshipUnits != null) patch.internshipUnits = String(body.internshipUnits);
+  if (body.minPassedMark != null) patch.minPassedMark = String(body.minPassedMark);
+  if (body.defaultAcceptMarkState != null) patch.defaultAcceptMarkState = body.defaultAcceptMarkState || null;
+  if (body.defaultRejectMarkState != null) patch.defaultRejectMarkState = body.defaultRejectMarkState || null;
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ ok: false, error: 'فیلدی برای ویرایش ارسال نشد.' }, { status: 400 });
@@ -94,10 +129,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: `کد درس تکراری است: ${code}` }, { status: 409 });
   }
   const departmentId = Number(body.departmentId || 0) || null;
-  if (departmentId) {
-    const [dept] = await db.select({ id: departments.id }).from(departments).where(eq(departments.id, departmentId)).limit(1);
-    if (!dept) return NextResponse.json({ ok: false, error: 'گروه آموزشی یافت نشد.' }, { status: 400 });
-  }
+  const degreeLevelId = Number(body.degreeLevelId || 0) || null;
+  const clusterId = Number(body.clusterId || 0) || null;
   const [row] = await db.insert(courses).values({
     code,
     title,
@@ -108,6 +141,22 @@ export async function POST(req: NextRequest) {
     gradingType: body.gradingType === 'PASS_FAIL' ? 'PASS_FAIL' : 'NUMERIC',
     affectsGpa: body.affectsGpa ? 1 : 1,
     departmentId,
+    degreeLevelId,
+    clusterId,
+    offeringScope: String(body.offeringScope || 'DEPARTMENTAL'),
+    locationType: String(body.locationType || 'IN_CAMPUS'),
+    // فیلدهای جدید سما
+    courseNature: body.courseNature || null,
+    englishName: body.englishName || null,
+    description: body.description || null,
+    weeklyTheoryHours: body.weeklyTheoryHours ? String(body.weeklyTheoryHours) : null,
+    weeklyPracticalHours: body.weeklyPracticalHours ? String(body.weeklyPracticalHours) : null,
+    isThesis: body.isThesis ? 1 : 0,
+    hasProject: body.hasProject ? 1 : 0,
+    internshipUnits: body.internshipUnits ? String(body.internshipUnits) : '0',
+    minPassedMark: body.minPassedMark ? String(body.minPassedMark) : null,
+    defaultAcceptMarkState: body.defaultAcceptMarkState || null,
+    defaultRejectMarkState: body.defaultRejectMarkState || null,
   }).returning({ id: courses.id });
   revalidatePath('/admin/grade-status-codes');
   return NextResponse.json({ ok: true, data: { id: row.id } });
