@@ -92,11 +92,15 @@ ENV NODE_ENV=production \
     PORT=8080 \
     HOSTNAME=0.0.0.0
 RUN groupadd --gid 1001 nodejs && useradd --uid 1001 --gid nodejs --create-home nextjs
+RUN mkdir -p /app/public/uploads && chown nextjs:nodejs /app/public/uploads
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+RUN chown -R nextjs:nodejs /app/public/uploads
+COPY --chown=nextjs:nodejs docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 USER nextjs
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
   CMD node -e "fetch('http://127.0.0.1:8080/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["node", "server.js"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

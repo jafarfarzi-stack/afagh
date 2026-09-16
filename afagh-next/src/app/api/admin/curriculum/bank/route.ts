@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { db } from '@/db';
 import { courses, departments, degree_level_configs, equivalence_clusters } from '@/db/schema';
-import { eq, ilike, or, asc } from 'drizzle-orm';
+import { eq, ilike, or, asc, sql, count } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
 const ALLOWED = ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'];
+const PAGE_SIZE = 100;
 
 export async function GET(req: NextRequest) {
   const user = await getSessionUser();
@@ -13,9 +14,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز.' }, { status: 403 });
   }
   const q = req.nextUrl.searchParams.get('q') || '';
+  const page = Math.max(1, Number(req.nextUrl.searchParams.get('page') || '1'));
+  const limit = Math.min(500, Math.max(1, Number(req.nextUrl.searchParams.get('limit') || String(PAGE_SIZE))));
+  const offset = (page - 1) * limit;
+
   const where = q
     ? or(ilike(courses.code, `%${q}%`), ilike(courses.title, `%${q}%`))
     : undefined;
+
+  const [{ total }] = await db.select({ total: count() }).from(courses).where(where);
+
   const rows = await db
     .select({
       id: courses.id,
@@ -56,8 +64,10 @@ export async function GET(req: NextRequest) {
     .leftJoin(degree_level_configs, eq(courses.degreeLevelId, degree_level_configs.id))
     .leftJoin(equivalence_clusters, eq(courses.clusterId, equivalence_clusters.id))
     .where(where)
-    .orderBy(asc(courses.code));
-  return NextResponse.json({ ok: true, courses: rows });
+    .orderBy(asc(courses.code))
+    .limit(limit)
+    .offset(offset);
+  return NextResponse.json({ ok: true, courses: rows, total, page, limit });
 }
 
 export async function PATCH(req: NextRequest) {

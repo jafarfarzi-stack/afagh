@@ -233,8 +233,8 @@ let universityId = null;
 async function ensureDegree(maghta) {
   const code = 'SAMA-' + String(maghta || '0');
   if (degrees.has(code)) return degrees.get(code);
-  // حد نصاب قبولی بر اساس مقطع: کارشناسی=۱۰، ارشد=۱۲، دکتری=۱۴
-  const passingMap = { '1': 10, '2': 12, '3': 14, '4': 14, '6': 14, '7': 14, '8': 14 };
+  // حد نصاب قبولی بر اساس مقطع: کاردانی/کارشناسی=۱۰، ارشد=۱۲، دکتری=۱۶
+  const passingMap = { '1': 10, '2': 12, '3': 16, '4': 16, '6': 16, '7': 16, '8': 16 };
   const passGrade = passingMap[String(maghta)] || 10;
   let row = (await q(`SELECT id FROM degree_level_configs WHERE code = $1`, [code]))[0];
   if (!row && !DRY) {

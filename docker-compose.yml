@@ -216,6 +216,8 @@ services:
     restart: unless-stopped
     logging: *default-logging
     environment: *app-env
+    volumes:
+      - afagh_uploads:/app/public/uploads
     ports: ['${APP_PORT:-8080}:8080']
     depends_on:
       postgres:
@@ -259,6 +261,7 @@ volumes:
   afagh_pg:
   afagh_redis:
   afagh_minio:
+  afagh_uploads:
   # P0-2: پوشهٔ ماندگار پشتیبان‌ها (pg_dump -Fc + امضای sha256 + فایل LATEST)
   afagh_backups:
   # M-2: کلیدهای پویش‌های زمان‌بندی‌شده (تولید migrator، مصرف scheduler)

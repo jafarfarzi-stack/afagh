@@ -30,3 +30,12 @@ INSERT INTO "grade_thresholds" ("degreeLevelId", "label", "minValue", "maxValue"
 -- حالت نمایش کارنامه
 ALTER TABLE "degree_level_configs" ADD COLUMN IF NOT EXISTS "transcriptDisplayMode" varchar(20) DEFAULT 'NUMERIC';
 -- مقادیر: NUMERIC (فقط عدد), QUALITATIVE (فقط کیفی), BOTH (هر دو)
+
+-- پیش‌فرض حداقل نمره قبولی بر اساس مقطع
+-- کاردانی/کارشناسی: ۱۰ | ارشد: ۱۲ | دکتری: ۱۶
+UPDATE "degree_level_configs" SET "defaultPassingGrade" = '10.00' WHERE "code" IN ('SAMA-1', 'KARSHENASI', 'KARDANI', 'KARSHENASI_PYVASTEH');
+UPDATE "degree_level_configs" SET "defaultPassingGrade" = '12.00' WHERE "code" IN ('SAMA-2', 'ARSHAD');
+UPDATE "degree_level_configs" SET "defaultPassingGrade" = '16.00' WHERE "code" IN ('SAMA-3', 'SAMA-4', 'SAMA-6', 'SAMA-7', 'SAMA-8', 'DOCTORA');
+-- اگر کد خاصی نداشت، بر اساس عنوان
+UPDATE "degree_level_configs" SET "defaultPassingGrade" = '12.00' WHERE "title" LIKE '%ارشد%' AND "defaultPassingGrade" = '10.00';
+UPDATE "degree_level_configs" SET "defaultPassingGrade" = '16.00' WHERE ("title" LIKE '%دکترا%' OR "title" LIKE '%دکتری%') AND "defaultPassingGrade" = '10.00';

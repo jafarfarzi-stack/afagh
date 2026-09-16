@@ -28,6 +28,28 @@ type BankCourse = {
 type Department = { id: number; name: string };
 type DegreeLevel = { id: number; title: string };
 type Cluster = { id: number; clusterTitle: string };
+type MajorSimple = { id: number; name: string };
+
+type OfferedCourse = {
+  id: number; courseId: number; courseCode: string; courseTitle: string;
+  units: string | null; roleType: string; recommendedSemester: number | null;
+  minGrade: string | null; passGradeStatusCode: string | null; failGradeStatusCode: string | null;
+  isRequired: number | null; isElective: number | null;
+  versionId: number; versionCode: string; versionTitle: string; status: string;
+  majorId: number; majorName: string;
+  degreeLevelId: number | null; degreeLevelTitle: string | null;
+  entryYearFrom: number; entryYearTo: number | null;
+};
+
+type Props = {
+  initialBankCourses: BankCourse[];
+  initialTotal: number;
+  initialDepartments: Department[];
+  initialDegreeLevels: DegreeLevel[];
+  initialClusters: Cluster[];
+  initialOfferedCourses: OfferedCourse[];
+  initialMajors: MajorSimple[];
+};
 
 const COURSE_TYPES = ['عمومی', 'پایه', 'تخصصی', 'اختیاری'];
 const COURSE_NATURES = ['نظری', 'عملی', 'نظری-عملی', 'کارگاهی', 'کارآموزی', 'پروژه', 'پایان‌نامه', 'رساله', 'معرفی به استاد', 'خودخوان'];
@@ -40,16 +62,26 @@ const LOCATION_TYPES = [
   { value: 'OUT_CAMPUS', label: 'خارج دانشگاه' },
 ];
 
-export default function GradeCodesClient() {
-  const [tab, setTab] = useState<'bank' | 'grade' | 'qual'>('bank');
+export default function GradeCodesClient({
+  initialBankCourses,
+  initialTotal,
+  initialDepartments,
+  initialDegreeLevels,
+  initialClusters,
+  initialOfferedCourses,
+  initialMajors,
+}: Props) {
+  const [tab, setTab] = useState<'bank' | 'grade' | 'qual' | 'offered'>('bank');
 
   // ─── بانک دروس ───
-  const [bankCourses, setBankCourses] = useState<BankCourse[]>([]);
+  const [bankCourses, setBankCourses] = useState<BankCourse[]>(initialBankCourses);
   const [bankQ, setBankQ] = useState('');
   const [bankLoading, setBankLoading] = useState(false);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [degreeLevels, setDegreeLevels] = useState<DegreeLevel[]>([]);
-  const [clusters, setClusters] = useState<Cluster[]>([]);
+  const [bankTotal, setBankTotal] = useState(initialTotal);
+  const [bankPage, setBankPage] = useState(1);
+  const [departments, setDepartments] = useState<Department[]>(initialDepartments);
+  const [degreeLevels, setDegreeLevels] = useState<DegreeLevel[]>(initialDegreeLevels);
+  const [clusters, setClusters] = useState<Cluster[]>(initialClusters);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<BankCourse | null>(null);
   const [bankMsg, setBankMsg] = useState('');
@@ -73,25 +105,30 @@ export default function GradeCodesClient() {
   const [qualDisplayMode, setQualDisplayMode] = useState<string>('NUMERIC');
   const [qualSaving, setQualSaving] = useState(false);
 
+  // ─── دروس ارائه‌شده ───
+  const [offeredCourses, setOfferedCourses] = useState<OfferedCourse[]>(initialOfferedCourses);
+  const [offeredMajors, setOfferedMajors] = useState<MajorSimple[]>(initialMajors);
+  const [offeredMajorFilter, setOfferedMajorFilter] = useState<number | null>(null);
+  const [offeredDegreeFilter, setOfferedDegreeFilter] = useState<number | null>(null);
+  const [offeredQ, setOfferedQ] = useState('');
+  const [offeredLoading, setOfferedLoading] = useState(false);
+
   // ─── بارگذاری اولیه ───
-  const loadBank = useCallback(async (search?: string) => {
+  const loadBank = useCallback(async (search?: string, page?: number) => {
     setBankLoading(true);
     try {
-      const r = await fetch(`/api/admin/curriculum/bank?q=${encodeURIComponent(search || '')}`);
+      const p = page || 1;
+      const r = await fetch(`/api/admin/curriculum/bank?q=${encodeURIComponent(search || '')}&page=${p}&limit=100`);
       const d = await r.json();
       setBankCourses(d.courses ?? []);
+      setBankTotal(d.total ?? 0);
+      setBankPage(p);
     } catch { setBankCourses([]); }
     setBankLoading(false);
   }, []);
 
   useEffect(() => {
-    loadBank();
-    fetch('/api/admin/curriculum/departments').then(r => r.json()).then(d => setDepartments(d.departments ?? [])).catch(() => {});
-    fetch('/api/admin/curriculum/degree-levels').then(r => r.json()).then(d => setDegreeLevels(d.degreeLevels ?? [])).catch(() => {});
-    fetch('/api/admin/curriculum/clusters').then(r => r.json()).then(d => setClusters(d.clusters ?? [])).catch(() => {});
-  }, [loadBank]);
-
-  useEffect(() => {
+    // فقط فیلترها را ریست می‌کنیم، اولین صفحه از سرور آمده
     fetch('/api/admin/curriculum/majors').then(r => r.json()).then(d => setMajors(d.majors ?? [])).catch(() => {});
   }, []);
 
@@ -116,9 +153,29 @@ export default function GradeCodesClient() {
   }, [selectedVersion, loadCourses]);
 
   useEffect(() => {
-    const t = setTimeout(() => loadBank(bankQ), 300);
+    const t = setTimeout(() => loadBank(bankQ, 1), 300);
     return () => clearTimeout(t);
   }, [bankQ, loadBank]);
+
+  // ─── بارگیری دروس ارائه‌شده ───
+  const loadOffered = useCallback(async (search?: string, majorId?: number | null, degreeId?: number | null) => {
+    setOfferedLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (search) params.set('q', search);
+      if (majorId) params.set('majorId', String(majorId));
+      if (degreeId) params.set('degreeLevelId', String(degreeId));
+      const r = await fetch(`/api/admin/curriculum/offered?${params}`);
+      const d = await r.json();
+      setOfferedCourses(d.courses ?? []);
+    } catch { setOfferedCourses([]); }
+    setOfferedLoading(false);
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => loadOffered(offeredQ, offeredMajorFilter, offeredDegreeFilter), 300);
+    return () => clearTimeout(t);
+  }, [offeredQ, offeredMajorFilter, offeredDegreeFilter, loadOffered]);
 
   // ─── بارگیری آستانه‌های نمره کیفی ───
   const loadThresholds = useCallback(async (degreeLevelId: number) => {
@@ -288,6 +345,9 @@ export default function GradeCodesClient() {
           </button>
           <button onClick={() => setTab('qual')} className={`flex-1 px-4 py-3 text-sm font-extrabold transition-colors ${tab === 'qual' ? 'bg-amber-50 text-amber-900 border-b-2 border-amber-600' : 'text-slate-500 hover:bg-slate-50'}`}>
             🎓 نمره کیفی (عالی/خوب/مردود)
+          </button>
+          <button onClick={() => setTab('offered')} className={`flex-1 px-4 py-3 text-sm font-extrabold transition-colors ${tab === 'offered' ? 'bg-amber-50 text-amber-900 border-b-2 border-amber-600' : 'text-slate-500 hover:bg-slate-50'}`}>
+            📅 دروس ارائه‌شده در نیمسال
           </button>
         </div>
 
@@ -524,6 +584,98 @@ export default function GradeCodesClient() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ═══ تب دروس ارائه‌شده ═══ */}
+        {tab === 'offered' && (
+          <div className="p-4 space-y-4">
+            {/* فیلترها */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">جستجو (کد/عنوان درس)</label>
+                <input value={offeredQ} onChange={e => setOfferedQ(e.target.value)} placeholder="مثلاً ۱۰۰۰۱ یا ریاضی" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">رشته</label>
+                <select value={offeredMajorFilter ?? ''} onChange={e => setOfferedMajorFilter(Number(e.target.value) || null)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white">
+                  <option value="">همه رشته‌ها</option>
+                  {offeredMajors.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">مقطع</label>
+                <select value={offeredDegreeFilter ?? ''} onChange={e => setOfferedDegreeFilter(Number(e.target.value) || null)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white">
+                  <option value="">همه مقاطع</option>
+                  {degreeLevels.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
+                </select>
+              </div>
+              <div className="flex items-end">
+                <span className="text-xs text-slate-500 font-bold">{offeredCourses.length} درس یافت شد</span>
+              </div>
+            </div>
+
+            {offeredLoading && <div className="text-center py-8 text-amber-600 font-bold text-sm">⏳ در حال بارگذاری...</div>}
+
+            {!offeredLoading && offeredCourses.length === 0 && (
+              <div className="text-center py-12 text-slate-400 text-sm">درس ارائه‌شده‌ای یافت نشد.</div>
+            )}
+
+            {/* جدول — گروه‌بندی شده بر اساس رشته/نسخه */}
+            {!offeredLoading && offeredCourses.length > 0 && (() => {
+              const groups = new Map<string, { title: string; courses: OfferedCourse[] }>();
+              for (const c of offeredCourses) {
+                const key = `${c.majorName} — ${c.versionCode}`;
+                if (!groups.has(key)) groups.set(key, { title: `${c.majorName} (${c.versionCode}) — ${c.degreeLevelTitle ?? '?'} — ورودی ${c.entryYearFrom}${c.entryYearTo ? `-${c.entryYearTo}` : ''}`, courses: [] });
+                groups.get(key)!.courses.push(c);
+              }
+              return [...groups.values()].map((g, gi) => (
+                <div key={gi} className="border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="bg-slate-900 text-white px-4 py-2.5 text-xs font-extrabold flex items-center justify-between">
+                    <span>{g.title}</span>
+                    <span className="bg-amber-600/30 text-amber-200 px-2 py-0.5 rounded-full text-[10px]">{g.courses.length} درس</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-100 text-center">
+                          <th className="p-1.5 border border-slate-200">نیمسال</th>
+                          <th className="p-1.5 border border-slate-200">کد</th>
+                          <th className="p-1.5 border border-slate-200 text-right">عنوان درس</th>
+                          <th className="p-1.5 border border-slate-200">واحد</th>
+                          <th className="p-1.5 border border-slate-200">نوع</th>
+                          <th className="p-1.5 border border-slate-200">الزامی</th>
+                          <th className="p-1.5 border border-slate-200">کف نمره</th>
+                          <th className="p-1.5 border border-slate-200">وضعیت قبولی</th>
+                          <th className="p-1.5 border border-slate-200">وضعیت مردودی</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {g.courses.map((c, idx) => (
+                          <tr key={c.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+                            <td className="p-1.5 border border-slate-200 text-center font-bold text-amber-700">{c.recommendedSemester ?? '—'}</td>
+                            <td className="p-1.5 border border-slate-200 text-center font-mono">{c.courseCode}</td>
+                            <td className="p-1.5 border border-slate-200 text-right font-bold">{c.courseTitle}</td>
+                            <td className="p-1.5 border border-slate-200 text-center">{c.units ?? '—'}</td>
+                            <td className="p-1.5 border border-slate-200 text-center">
+                              <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">{c.roleType}</span>
+                            </td>
+                            <td className="p-1.5 border border-slate-200 text-center">{c.isRequired ? '✓' : ''}</td>
+                            <td className="p-1.5 border border-slate-200 text-center font-bold">{c.minGrade ?? 'پیش‌فرض'}</td>
+                            <td className="p-1.5 border border-slate-200 text-center">
+                              {c.passGradeStatusCode ? <span className="bg-emerald-50 text-emerald-700 px-1 rounded">{c.passGradeStatusCode}</span> : '—'}
+                            </td>
+                            <td className="p-1.5 border border-slate-200 text-center">
+                              {c.failGradeStatusCode ? <span className="bg-red-50 text-red-700 px-1 rounded">{c.failGradeStatusCode}</span> : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ));
+            })()}
           </div>
         )}
       </div>
