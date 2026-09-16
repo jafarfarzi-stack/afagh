@@ -46,6 +46,10 @@ export async function GET(req: NextRequest) {
       minPassedMark: courses.minPassedMark,
       defaultAcceptMarkState: courses.defaultAcceptMarkState,
       defaultRejectMarkState: courses.defaultRejectMarkState,
+      courseIsActive: courses.courseIsActive,
+      emergencyWithdrawal: courses.emergencyWithdrawal,
+      coRequisites: courses.coRequisites,
+      facesHours: courses.facesHours,
     })
     .from(courses)
     .leftJoin(departments, eq(courses.departmentId, departments.id))
@@ -89,6 +93,10 @@ export async function PATCH(req: NextRequest) {
   if (body.minPassedMark != null) patch.minPassedMark = String(body.minPassedMark);
   if (body.defaultAcceptMarkState != null) patch.defaultAcceptMarkState = body.defaultAcceptMarkState || null;
   if (body.defaultRejectMarkState != null) patch.defaultRejectMarkState = body.defaultRejectMarkState || null;
+  if (body.courseIsActive != null) patch.courseIsActive = body.courseIsActive ? 1 : 0;
+  if (body.emergencyWithdrawal != null) patch.emergencyWithdrawal = body.emergencyWithdrawal ? 1 : 0;
+  if (body.coRequisites != null) patch.coRequisites = body.coRequisites || null;
+  if (body.facesHours != null) patch.facesHours = String(body.facesHours);
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ ok: false, error: 'فیلدی برای ویرایش ارسال نشد.' }, { status: 400 });
@@ -157,6 +165,10 @@ export async function POST(req: NextRequest) {
     minPassedMark: body.minPassedMark ? String(body.minPassedMark) : null,
     defaultAcceptMarkState: body.defaultAcceptMarkState || null,
     defaultRejectMarkState: body.defaultRejectMarkState || null,
+    courseIsActive: body.courseIsActive != null ? (body.courseIsActive ? 1 : 0) : 1,
+    emergencyWithdrawal: body.emergencyWithdrawal ? 1 : 0,
+    coRequisites: body.coRequisites || null,
+    facesHours: body.facesHours ? String(body.facesHours) : null,
   }).returning({ id: courses.id });
   revalidatePath('/admin/grade-status-codes');
   return NextResponse.json({ ok: true, data: { id: row.id } });

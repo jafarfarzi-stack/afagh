@@ -1339,6 +1339,52 @@ async function phaseTatbigh(file) {
   await logRun('course', 'tatbigh dars.txt (SAMA)', stats);
 }
 
+// ═══ فاز خواندن DOROS.txt — کدهای وضعیت نمره قبولی/مردودی ═══
+async function phaseDoros(file) {
+  console.log('\n── دروس: کدهای وضعیت نمره (DOROS.txt) ──');
+  const stats = { total: 0, updated: 0 };
+  // ابتدا coursesByCode را رفرش کن
+  if (coursesByCode.size <= 1) {
+    for (const r of await q(`SELECT id, code FROM courses`)) coursesByCode.set(r.code, Number(r.id));
+  }
+  // خواندن DOROS: برای هر درس، ردیفی با LessonSubType=3 (عملی) را ترجیح بده
+  // چون ردیف‌های عملی DefaultAcceptMarkState/DefaultRejectMarkState دارند
+  const updates = new Map(); // code -> { accept, reject }
+  for await (const { cols } of tsvRows(file)) {
+    const code = (cols[2] || '').trim();
+    const accept = (cols[7] || '').trim() || null;
+    const reject = (cols[8] || '').trim() || null;
+    if (!code || (!accept && !reject)) continue;
+    const subType = (cols[3] || '').trim();
+    // اگر قبلاً ردیفی با subType=3 داشتیم، آن را نگه دار
+    if (updates.has(code)) {
+      const existing = updates.get(code);
+      if (subType === '3' || (!existing.accept && accept)) {
+        updates.set(code, { accept, reject });
+      }
+    } else {
+      updates.set(code, { accept, reject });
+    }
+    stats.total++;
+  }
+  // اعمال آپدیت‌ها روی DB
+  if (!DRY && updates.size > 0) {
+    for (const [code, { accept, reject }] of updates) {
+      const courseId = coursesByCode.get(code);
+      if (!courseId || courseId === -1) continue;
+      try {
+        await pool.query(
+          `UPDATE courses SET "defaultAcceptMarkState" = $1, "defaultRejectMarkState" = $2 WHERE id = $3 AND ("defaultAcceptMarkState" IS NULL OR "defaultAcceptMarkState" = '')`,
+          [accept, reject, courseId]
+        );
+        stats.updated++;
+      } catch {}
+    }
+  }
+  console.log(`DOROS: scanned=${stats.total} updated=${stats.updated}`);
+  await logRun('course_doros', 'DOROS.txt (SAMA grade codes)', { scanned: stats.total, updated: stats.updated });
+}
+
 // ═══ اجرا ═══
 try {
   console.log(`SAMA→Afagh ETL | source=${SOURCE} | dir=${DIR} | steps=${STEPS.join(',')} | limit=${LIMIT || '∞'} | ${DRY ? 'DRY-RUN' : 'LIVE'}`);
@@ -1357,6 +1403,8 @@ try {
     if (s === 'courses') {
       if (files.tatbigh) await phaseTatbigh(files.tatbigh);
       else console.log('\n── دروس: فایل tatbigh dars.txt یافت نشد — از روی placeholder ادامه داده می‌شود');
+      // خواندن کدهای وضعیت نمره از DOROS.txt
+      if (files.curriculum) await phaseDoros(files.curriculum);
     }
     if (s === 'links') {
       if (files.tatbighMap) await phaseCourseGroupLink(files.tatbighMap);

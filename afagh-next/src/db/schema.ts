@@ -361,6 +361,10 @@ export const courses = pgTable('courses', {
   minPassedMark: numeric('minPassedMark', { precision: 4, scale: 2 }), // حداقل نمره قبولی
   defaultAcceptMarkState: varchar('defaultAcceptMarkState', { length: 10 }), // کد وضعیت پیش‌فرض قبولی سما
   defaultRejectMarkState: varchar('defaultRejectMarkState', { length: 10 }), // کد وضعیت پیش‌فرض مردودی سما
+  courseIsActive: integer('courseIsActive').default(1),                // فعال/غیرفعال
+  emergencyWithdrawal: integer('emergencyWithdrawal').default(0),       // حذف اضطراری مجاز
+  coRequisites: varchar('coRequisites', { length: 200 }),              // همنیاز (کدها جداشده با کاما)
+  facesHours: numeric('facesHours', { precision: 3, scale: 1 }),       // ساعات چهره‌به‌چهره
 });
 
 /** گرایش‌های برنامهٔ درسی (مثلاً «هوش مصنوعی و رباتیک») — جایگزین tracks[] Mock در Client قدیم (D4) */

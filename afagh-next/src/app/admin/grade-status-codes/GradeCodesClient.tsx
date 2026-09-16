@@ -22,6 +22,7 @@ type BankCourse = {
   weeklyTheoryHours: string | null; weeklyPracticalHours: string | null;
   isThesis: number | null; hasProject: number | null; internshipUnits: string | null;
   minPassedMark: string | null; defaultAcceptMarkState: string | null; defaultRejectMarkState: string | null;
+  courseIsActive: number | null; emergencyWithdrawal: number | null; coRequisites: string | null; facesHours: string | null;
 };
 
 type Department = { id: number; name: string };
@@ -141,6 +142,10 @@ export default function GradeCodesClient() {
         minPassedMark: Number(fd.get('minPassedMark') || 0) || null,
         defaultAcceptMarkState: String(fd.get('defaultAcceptMarkState') || '') || null,
         defaultRejectMarkState: String(fd.get('defaultRejectMarkState') || '') || null,
+        courseIsActive: fd.get('courseIsActive') === 'on' ? 1 : 0,
+        emergencyWithdrawal: fd.get('emergencyWithdrawal') === 'on' ? 1 : 0,
+        coRequisites: String(fd.get('coRequisites') || '') || null,
+        facesHours: Number(fd.get('facesHours') || 0) || null,
       };
 
       const isEdit = !!editingCourse;
@@ -266,6 +271,8 @@ export default function GradeCodesClient() {
                       <th className="p-2 border border-slate-800">نوع</th>
                       <th className="p-2 border border-slate-800">گروه</th>
                       <th className="p-2 border border-slate-800">مقطع</th>
+                      <th className="p-2 border border-slate-800" title="کد وضعیت قبولی پیش‌فرض">کد قبولی</th>
+                      <th className="p-2 border border-slate-800" title="کد وضعیت مردودی پیش‌فرض">کد مردودی</th>
                       <th className="p-2 border border-slate-800">عملیات</th>
                     </tr>
                   </thead>
@@ -282,6 +289,16 @@ export default function GradeCodesClient() {
                         <td className="p-1.5 border border-slate-200 text-center text-[10px]">{c.courseType || '—'}</td>
                         <td className="p-1.5 border border-slate-200 text-center text-[10px]">{c.departmentName || '—'}</td>
                         <td className="p-1.5 border border-slate-200 text-center text-[10px]">{c.degreeLevelTitle || '—'}</td>
+                        <td className="p-1.5 border border-slate-200 text-center text-[10px]">
+                          {c.defaultAcceptMarkState ? (
+                            <span className="bg-emerald-50 text-emerald-700 px-1 rounded font-bold" title="کد قبولی">{c.defaultAcceptMarkState}</span>
+                          ) : '—'}
+                        </td>
+                        <td className="p-1.5 border border-slate-200 text-center text-[10px]">
+                          {c.defaultRejectMarkState ? (
+                            <span className="bg-red-50 text-red-700 px-1 rounded font-bold" title="کد مردودی">{c.defaultRejectMarkState}</span>
+                          ) : '—'}
+                        </td>
                         <td className="p-1.5 border border-slate-200 text-center">
                           <button onClick={() => openEditCourse(c)} className="text-indigo-600 hover:underline font-bold">ویرایش</button>
                         </td>
@@ -523,6 +540,24 @@ export default function GradeCodesClient() {
                   <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
                     <input type="checkbox" name="hasProject" defaultChecked={editingCourse?.hasProject === 1} className="w-4 h-4 accent-amber-600" /> پروژه
                   </label>
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                    <input type="checkbox" name="emergencyWithdrawal" defaultChecked={editingCourse?.emergencyWithdrawal === 1} className="w-4 h-4 accent-amber-600" /> حذف اضطراری
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                    <input type="checkbox" name="courseIsActive" defaultChecked={editingCourse ? editingCourse.courseIsActive !== 0 : true} className="w-4 h-4 accent-emerald-600" /> فعال
+                  </label>
+                </div>
+              </div>
+
+              {/* ردیف ۷: همنیاز + ساعات چهره‌به‌چهره */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">همنیاز (کدها با کاما)</label>
+                  <input name="coRequisites" defaultValue={editingCourse?.coRequisites ?? ''} placeholder="مثلاً 10001,10002" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">ساعات چهره‌به‌چهره</label>
+                  <input name="facesHours" type="number" step="0.5" min="0" defaultValue={editingCourse?.facesHours ?? ''} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white" />
                 </div>
               </div>
 

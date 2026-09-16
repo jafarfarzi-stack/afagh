@@ -14,3 +14,7 @@ ALTER TABLE "courses" ADD COLUMN "internshipUnits" numeric(3, 1) DEFAULT '0';
 ALTER TABLE "courses" ADD COLUMN "minPassedMark" numeric(4, 2);
 ALTER TABLE "courses" ADD COLUMN "defaultAcceptMarkState" varchar(10);
 ALTER TABLE "courses" ADD COLUMN "defaultRejectMarkState" varchar(10);
+ALTER TABLE "courses" ADD COLUMN "courseIsActive" integer DEFAULT 1;
+ALTER TABLE "courses" ADD COLUMN "emergencyWithdrawal" integer DEFAULT 0;
+ALTER TABLE "courses" ADD COLUMN "coRequisites" varchar(200);
+ALTER TABLE "courses" ADD COLUMN "facesHours" numeric(3, 1);
