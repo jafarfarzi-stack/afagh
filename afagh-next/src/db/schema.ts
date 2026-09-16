@@ -66,6 +66,7 @@ export const users = pgTable('users', {
   isActive: integer('isActive').default(1),
   // ── فلگ «تغییر اجباری رمز در اولین ورود» (برای حساب‌های پذیرش‌شده با رمز پیش‌فرض) ──
   mustChangePassword: integer('mustChangePassword').default(0),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow()
 });
 
@@ -110,13 +111,15 @@ export const grade_thresholds = pgTable('grade_thresholds', {
   maxValue: numeric('maxValue', { precision: 4, scale: 2 }).notNull(),
   passed: integer('passed').notNull().default(1),
   sortOrder: integer('sortOrder').notNull().default(0),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const faculties = pgTable('faculties', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 150 }).notNull(),
   // ── کد دانشکده از دیتابیس قدیمی/سازمان (فایل reshtelist—ستون «کد دانشکده») ──
-  facultyCode: varchar('facultyCode', { length: 10 })
+  facultyCode: varchar('facultyCode', { length: 10 }),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const departments = pgTable('departments', {
@@ -161,7 +164,8 @@ export const majors = pgTable('majors', {
   expertName: varchar('expertName', { length: 150 }),                   // نام کارشناس رشته
   lastCouncilDate: varchar('lastCouncilDate', { length: 10 }),           // آخرین جلسه شورای گسترش (شمسی)
   /** رشتهٔ دارای دانشجوی شاغلِ زیاد — اولویت شیفت عصر در امتحانات (فاز ۹) */
-  isWorkingClassMajority: boolean('isWorkingClassMajority').notNull().default(false)
+  isWorkingClassMajority: boolean('isWorkingClassMajority').notNull().default(false),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const sanjesh_mappings = pgTable('sanjesh_mappings', {
@@ -169,7 +173,8 @@ export const sanjesh_mappings = pgTable('sanjesh_mappings', {
   sanjeshCode: varchar('sanjeshCode', { length: 50 }).notNull(),
   internalMajorId: integer('internalMajorId').references(() => majors.id),
   sanjeshQuota: varchar('sanjeshQuota', { length: 50 }),
-  internalQuotaCode: integer('internalQuotaCode')
+  internalQuotaCode: integer('internalQuotaCode'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const admissions_staging = pgTable('admissions_staging', {
@@ -189,7 +194,8 @@ export const admissions_staging = pgTable('admissions_staging', {
   paidAmount: integer('paidAmount').default(0),
   onboardingStatus: varchar('onboardingStatus', { length: 30 }).default('IMPORTED'),
   studentId: integer('studentId'),
-  decisionNote: text('decisionNote')
+  decisionNote: text('decisionNote'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const student_id_formulas = pgTable('student_id_formulas', {
@@ -197,7 +203,8 @@ export const student_id_formulas = pgTable('student_id_formulas', {
   degreeLevelId: integer('degreeLevelId').references(() => degree_level_configs.id),
   entryYear: integer('entryYear'),
   formula: varchar('formula', { length: 255 }).notNull(),
-  currentSequence: integer('currentSequence').default(0)
+  currentSequence: integer('currentSequence').default(0),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({
   // جلوگیری از رقابت روی شمارنده: هر مقطع فقط یک ردیف فرمول — مبنای onConflictDoNothing
   uqDegreeLevel: unique('student_id_formulas_degreeLevelId_unique').on(t.degreeLevelId)
@@ -210,6 +217,7 @@ export const educational_regulations = pgTable('educational_regulations', {
   effectiveFromYear: integer('effectiveFromYear').notNull(),
   effectiveToYear: integer('effectiveToYear'),
   rulesConfig: text('rulesConfig').notNull(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow()
 });
 
@@ -300,6 +308,7 @@ export const student_term_states = pgTable('student_term_states', {
   statusTitle: varchar('statusTitle', { length: 150 }),
   isProbation: integer('isProbation'),
   termAvg: numeric('termAvg', { precision: 4, scale: 2 }),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ uq: unique('uq_student_term_states').on(t.studentId, t.termId) }));
 
 export const staff = pgTable('staff', {
@@ -339,7 +348,8 @@ export const staff = pgTable('staff', {
 export const equivalence_clusters = pgTable('equivalence_clusters', {
   id: serial('id').primaryKey(),
   clusterTitle: varchar('clusterTitle', { length: 100 }).notNull(),
-  isGeneralService: integer('isGeneralService').default(0)
+  isGeneralService: integer('isGeneralService').default(0),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const courses = pgTable('courses', {
@@ -388,7 +398,8 @@ export const curriculum_tracks = pgTable('curriculum_tracks', {
   majorId: integer('majorId').notNull().references(() => majors.id),
   title: varchar('title', { length: 100 }).notNull(),
   code: varchar('code', { length: 20 }),              // کد سازمانی گرایش
-  isActive: integer('isActive').default(1)
+  isActive: integer('isActive').default(1),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({
   uqTrack: unique('uq_curriculum_tracks_major_title').on(t.majorId, t.title),
 }));
@@ -425,6 +436,7 @@ export const curriculum_versions = pgTable('curriculum_versions', {
   // در Drizzle عمداً بدون .references تعریف شده؛ FK واقعی در مهاجرت 0002 است.
   approvalId: integer('approvalId'),
   createdByStaffId: integer('createdByStaffId').references(() => staff.id),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow(),
   updatedAt: timestamp('updatedAt').defaultNow()
 }, (t) => ({
@@ -456,7 +468,8 @@ export const curriculum_courses = pgTable('curriculum_courses', {
    */
   passGradeStatusCode: varchar('passGradeStatusCode', { length: 10 }),
   failGradeStatusCode: varchar('failGradeStatusCode', { length: 10 }),
-  autoCorequisiteAllowed: integer('autoCorequisiteAllowed').default(0)   // «هم‌نیاز خودکار ترم آخر» (آیین‌نامه)
+  autoCorequisiteAllowed: integer('autoCorequisiteAllowed').default(0),   // «هم‌نیاز خودکار ترم آخر» (آیین‌نامه)
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({
   uqCourse: unique('uq_curriculum_courses_version_course').on(t.curriculumVersionId, t.courseId),
   semIdx: index('curriculum_courses_semester_idx').on(t.curriculumVersionId, t.recommendedSemester),
@@ -476,6 +489,7 @@ export const curriculum_approvals = pgTable('curriculum_approvals', {
   approvedByStaffId: integer('approvedByStaffId').notNull().references(() => staff.id),
   approvedByUserId: integer('approvedByUserId').notNull().references(() => users.id),
   decisionNote: text('decisionNote'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   approvedAt: timestamp('approvedAt').defaultNow(),
   signatureDocumentId: integer('signatureDocumentId').references(() => electronic_documents.id)
 }, (t) => ({
@@ -488,11 +502,13 @@ export const course_rules = pgTable('course_rules', {
   syllabusId: integer('syllabusId').references(() => curriculum_versions.id), // نام ستون حفظ شده (تصمیم D2) — مقیّدسازی قاعده به نسخهٔ برنامه
   ruleType: varchar('ruleType', { length: 20 }).notNull(), // PREREQ | COREQ | UNIT_BOUNDARY | EQUIV_OVERRIDE
   logicTree: text('logicTree').notNull(),
-  customPassingGrade: numeric('customPassingGrade', { precision: 4, scale: 2 })
+  customPassingGrade: numeric('customPassingGrade', { precision: 4, scale: 2 }),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const academic_terms = pgTable('academic_terms', {
   id: serial('id').primaryKey(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   termCode: varchar('termCode', { length: 10 }).notNull().unique(),
   title: varchar('title', { length: 100 }).notNull(),
   termType: varchar('termType', { length: 20 }).notNull().default('NORMAL'), // NORMAL | SUMMER | EQUIVALENCE
@@ -517,7 +533,8 @@ export const classrooms = pgTable('classrooms', {
   rowsCount: integer('rowsCount'),
   colsCount: integer('colsCount'),
   // ── متعلق به کدام دانشکده است (زونینگ در برنامه‌ریزی درسی) ──
-  facultyId: integer('facultyId').references(() => faculties.id)
+  facultyId: integer('facultyId').references(() => faculties.id),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const course_offerings = pgTable('course_offerings', {
@@ -544,7 +561,8 @@ export const course_offerings = pgTable('course_offerings', {
   // ── فاز تأمین/تخصیص درس‌های مشترک (موتور برنامه‌ریزی درسی) ──
   ownerDepartmentId: integer('ownerDepartmentId').references(() => departments.id), // گروه سازندهٔ کلاس
   isSharedService: integer('isSharedService').default(0),                            // 1 = استخر خدمات عمومی (فاز تأمین)
-  equivalenceClusterId: integer('equivalenceClusterId').references(() => equivalence_clusters.id) // استخر ظرفیت مشترک
+  equivalenceClusterId: integer('equivalenceClusterId').references(() => equivalence_clusters.id), // استخر ظرفیت مشترک
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ termCourseGroupIdx: index('offerings_term_course_group_idx').on(t.termId, t.courseId, t.groupNumber) }));
 
 export const offering_professors = pgTable('offering_professors', {
@@ -552,7 +570,8 @@ export const offering_professors = pgTable('offering_professors', {
   offeringId: integer('offeringId').notNull().references(() => course_offerings.id),
   staffId: integer('staffId').notNull().references(() => staff.id),
   role: varchar('role', { length: 50 }).notNull().default('MAIN_LECTURER'),
-  sharePercentage: numeric('sharePercentage', { precision: 5, scale: 2 }).default('100.00')
+  sharePercentage: numeric('sharePercentage', { precision: 5, scale: 2 }).default('100.00'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const schedules = pgTable('schedules', {
@@ -563,7 +582,8 @@ export const schedules = pgTable('schedules', {
   examDate: date('examDate'),
   startTime: time('startTime').notNull(),
   endTime: time('endTime').notNull(),
-  roomId: integer('roomId').references(() => classrooms.id)
+  roomId: integer('roomId').references(() => classrooms.id),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const professor_availabilities = pgTable('professor_availabilities', {
@@ -574,7 +594,8 @@ export const professor_availabilities = pgTable('professor_availabilities', {
   startTime: time('startTime'),
   endTime: time('endTime'),
   /** وضعیت پنل استاد: PREF (اولویت) / AVAIL (قابل حضور) — UNAVAIL یعنی ردیف ذخیره نمی‌شود */
-  status: varchar('status', { length: 10 }).default('AVAIL')
+  status: varchar('status', { length: 10 }).default('AVAIL'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -590,7 +611,8 @@ export const term_scheduling_states = pgTable('term_scheduling_states', {
   allocationEndsAt: timestamp('allocationEndsAt'),
   reviewEndsAt: timestamp('reviewEndsAt'),
   publishedAt: timestamp('publishedAt'),
-  publishedByStaffId: integer('publishedByStaffId').references(() => staff.id)
+  publishedByStaffId: integer('publishedByStaffId').references(() => staff.id),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 /**
@@ -605,7 +627,8 @@ export const scheduling_room_grants = pgTable('scheduling_room_grants', {
   ownerDepartmentId: integer('ownerDepartmentId').notNull().references(() => departments.id),
   status: varchar('status', { length: 10 }).notNull().default('ALLOCATED'), // ALLOCATED | RELEASED
   releasedAt: timestamp('releasedAt'),
-  releasedByStaffId: integer('releasedByStaffId').references(() => staff.id)
+  releasedByStaffId: integer('releasedByStaffId').references(() => staff.id),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ roomShiftUniq: unique('uq_scheduling_room_shift').on(t.termId, t.classroomId, t.shift) }));
 
 /** اتصال «کلاس ساخته‌شده در فاز تأمین» به گروه‌های متقاضی در فاز تخصیص */
@@ -615,6 +638,7 @@ export const scheduling_allocations = pgTable('scheduling_allocations', {
   offeringId: integer('offeringId').notNull().references(() => course_offerings.id),
   departmentId: integer('departmentId').notNull().references(() => departments.id),
   allocatedByStaffId: integer('allocatedByStaffId').references(() => staff.id),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow()
 }, (t) => ({
   offerDeptUniq: unique('uq_scheduling_allocation').on(t.offeringId, t.departmentId),
@@ -626,6 +650,7 @@ export const cart_items = pgTable('cart_items', {
   studentId: integer('studentId').notNull().references(() => students.id),
   offeringId: integer('offeringId').notNull().references(() => course_offerings.id),
   createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   UNIQUE: text('UNIQUE')
 });
 
@@ -645,7 +670,8 @@ export const enrollments = pgTable('enrollments', {
   /** کد وضعیت نمرهٔ سما هنگام نهایی‌سازی (از curriculum_courses.passGradeStatusCode / failGradeStatusCode) */
   samaGradeStatusCode: varchar('samaGradeStatusCode', { length: 10 }),
   /** تأییدیهٔ دیجیتال دانشجو برای داشتن دو امتحان هم‌روز (شیفت‌های متفاوت) — فاز ۱۰ */
-  hasAcceptedSameDayExam: integer('hasAcceptedSameDayExam').notNull().default(0)
+  hasAcceptedSameDayExam: integer('hasAcceptedSameDayExam').notNull().default(0),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ uq: unique('uq_enrollments').on(t.studentId, t.offeringId) }));
 
 export const grade_appeals = pgTable('grade_appeals', {
@@ -656,6 +682,7 @@ export const grade_appeals = pgTable('grade_appeals', {
   oldGrade: numeric('oldGrade', { precision: 4, scale: 2 }),
   newGrade: numeric('newGrade', { precision: 4, scale: 2 }),
   status: varchar('status', { length: 20 }).default('OPEN'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow()
 });
 
@@ -675,6 +702,7 @@ export const grade_change_log = pgTable('grade_change_log', {
   reason: text('reason'),
   actorUserId: integer('actorUserId').references(() => users.id),
   actorRole: varchar('actorRole', { length: 30 }),  // PROFESSOR|ADMIN|GRADUATEAFFAIRS
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow(),
 }, (t) => ({
   enrollmentIdx: index('idx_grade_change_log_enrollment').on(t.enrollmentId),
@@ -691,6 +719,7 @@ export const grade_submission_otps = pgTable('grade_submission_otps', {
   isUsed: integer('isUsed').default(0),
   attempts: integer('attempts').default(0),
   lockedAt: timestamp('lockedAt'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow()
 });
 
@@ -700,6 +729,7 @@ export const transcript_snapshots = pgTable('transcript_snapshots', {
   termId: integer('termId').notNull().references(() => academic_terms.id),
   snapshotJson: text('snapshotJson').notNull(),
   snapshotHash: text('snapshotHash').notNull(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow(),
   UNIQUE: text('UNIQUE')
 }, (t) => ({ uq: unique('uq_transcript_snapshots').on(t.studentId, t.termId) }));
@@ -710,13 +740,15 @@ export const evaluation_periods = pgTable('evaluation_periods', {
   title: varchar('title', { length: 150 }).notNull(),
   startDate: timestamp('startDate').notNull(),
   endDate: timestamp('endDate').notNull(),
-  isActive: integer('isActive').default(0)
+  isActive: integer('isActive').default(0),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const evaluation_forms = pgTable('evaluation_forms', {
   id: serial('id').primaryKey(),
   title: varchar('title', { length: 150 }).notNull(),
-  targetType: varchar('targetType', { length: 50 })
+  targetType: varchar('targetType', { length: 50 }),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const evaluation_questions = pgTable('evaluation_questions', {
@@ -799,7 +831,8 @@ export const process_definitions = pgTable('process_definitions', {
   outputTemplate: varchar('outputTemplate', { length: 50 }),
   feeAmount: integer('feeAmount').default(0),
   isActive: integer('isActive').default(1),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const process_steps = pgTable('process_steps', {
@@ -814,7 +847,8 @@ export const process_steps = pgTable('process_steps', {
   timeoutAction: varchar('timeoutAction', { length: 30 }).default('ESCALATE'), // ESCALATE, AUTO_APPROVE, AUTO_REJECT, NOTIFY
   timeoutEscalateToRole: varchar('timeoutEscalateToRole', { length: 50 }),
   integrationId: integer('integrationId').references(() => integrations_config.id),
-  apiConfig: text('apiConfig')
+  apiConfig: text('apiConfig'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const process_transitions = pgTable('process_transitions', {
@@ -841,7 +875,8 @@ export const student_requests = pgTable('student_requests', {
   certificateNumber: varchar('certificateNumber', { length: 50 }),
   issuedAt: timestamp('issuedAt'),
   createdAt: timestamp('createdAt').defaultNow(),
-  updatedAt: timestamp('updatedAt').defaultNow()
+  updatedAt: timestamp('updatedAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const request_step_logs = pgTable('request_step_logs', {
@@ -857,7 +892,8 @@ export const request_step_logs = pgTable('request_step_logs', {
   note: text('note'),
   durationMinutes: integer('durationMinutes'),
   slaStatus: varchar('slaStatus', { length: 30 }), // ON_TIME, WARNING, SLA_BREACHED, ESCALATED
-  satisfactionScore: integer('satisfactionScore')
+  satisfactionScore: integer('satisfactionScore'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const request_parallel_checkpoints = pgTable('request_parallel_checkpoints', {
@@ -877,7 +913,8 @@ export const term_financial_rules = pgTable('term_financial_rules', {
   degreeLevelId: integer('degreeLevelId').notNull().references(() => degree_level_configs.id),
   fixedTuition: numeric('fixedTuition', { precision: 12, scale: 0 }).notNull(),
   perUnitTuition: numeric('perUnitTuition', { precision: 12, scale: 0 }).default('0'),
-  advancePaymentRequired: numeric('advancePaymentRequired', { precision: 12, scale: 0 }).notNull()
+  advancePaymentRequired: numeric('advancePaymentRequired', { precision: 12, scale: 0 }).notNull(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 /**
@@ -903,6 +940,7 @@ export const tuition_fee_rules = pgTable('tuition_fee_rules', {
   effectiveFromYear: integer('effectiveFromYear'),      // NULL = بدون محدودیت ورودی
   isActive: integer('isActive').notNull().default(1),
   note: text('note'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   updatedAt: timestamp('updatedAt').defaultNow()
 });
 
@@ -914,6 +952,7 @@ export const student_ledger = pgTable('student_ledger', {
   amount: numeric('amount', { precision: 12, scale: 0 }).notNull(),
   description: text('description'),
   referenceId: integer('referenceId'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow()
 });
 
@@ -923,6 +962,7 @@ export const financial_clearances = pgTable('financial_clearances', {
   termId: integer('termId').notNull().references(() => academic_terms.id),
   isCleared: integer('isCleared').default(0),
   clearedAt: timestamp('clearedAt'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   UNIQUE: text('UNIQUE')
 }, (t) => ({ uq: unique('uq_financial_clearances').on(t.studentId, t.termId) }));
 
@@ -932,7 +972,8 @@ export const exam_halls = pgTable('exam_halls', {
   totalCapacity: integer('totalCapacity').notNull(),
   rowsCount: integer('rowsCount'),
   colsCount: integer('colsCount'),
-  buildingName: varchar('buildingName', { length: 100 })
+  buildingName: varchar('buildingName', { length: 100 }),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const exam_sessions = pgTable('exam_sessions', {
@@ -941,7 +982,8 @@ export const exam_sessions = pgTable('exam_sessions', {
   examDate: varchar('examDate', { length: 10 }).notNull(),
   startTime: varchar('startTime', { length: 5 }).notNull(),
   endTime: varchar('endTime', { length: 5 }).notNull(),
-  UNIQUE: text('UNIQUE')
+  UNIQUE: text('UNIQUE'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ uq: unique('uq_exam_sessions').on(t.termId, t.examDate, t.startTime) }));
 
 /** زون‌بندی تقویم امتحانات هر ترم (فاز ۹): ارشد = کل ۳ هفته؛ عمومی = هفتهٔ اول؛ تخصصی = هفتهٔ ۲–۳ */
@@ -955,7 +997,8 @@ export const exam_calendar_configs = pgTable('exam_calendar_configs', {
   specializedStart: varchar('specializedStart', { length: 10 }).notNull(),
   specializedEnd: varchar('specializedEnd', { length: 10 }).notNull(),
   updatedByUserId: integer('updatedByUserId').references(() => users.id),
-  updatedAt: timestamp('updatedAt').defaultNow()
+  updatedAt: timestamp('updatedAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ uq: unique('uq_exam_calendar_configs_term').on(t.termId) }));
 
 export const seat_allocations = pgTable('seat_allocations', {
@@ -965,7 +1008,8 @@ export const seat_allocations = pgTable('seat_allocations', {
   hallId: integer('hallId').notNull().references(() => exam_halls.id),
   seatNumber: integer('seatNumber').notNull(),
   blockKey: varchar('blockKey', { length: 120 }),
-  UNIQUE: text('UNIQUE')
+  UNIQUE: text('UNIQUE'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ uq: unique('uq_seat_allocations').on(t.sessionId, t.hallId, t.seatNumber) }));
 
 export const invigilators = pgTable('invigilators', {
@@ -978,7 +1022,8 @@ export const invigilators = pgTable('invigilators', {
   hoursWorked: numeric('hoursWorked', { precision: 4, scale: 2 }).default('2.0'),
   calculatedPayment: numeric('calculatedPayment', { precision: 12, scale: 0 }).default('0'),
   paymentStatus: varchar('paymentStatus', { length: 20 }).default('UNPAID'),
-  paidAt: timestamp('paidAt')
+  paidAt: timestamp('paidAt'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const exam_remuneration_rates = pgTable('exam_remuneration_rates', {
@@ -986,7 +1031,8 @@ export const exam_remuneration_rates = pgTable('exam_remuneration_rates', {
   role: varchar('role', { length: 50 }).notNull(),
   roleTitle: varchar('roleTitle', { length: 100 }).notNull(),
   ratePerHour: numeric('ratePerHour', { precision: 12, scale: 0 }).notNull(),
-  effectiveYear: integer('effectiveYear').default(1405)
+  effectiveYear: integer('effectiveYear').default(1405),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const professor_exam_attendance = pgTable('professor_exam_attendance', {
@@ -998,7 +1044,8 @@ export const professor_exam_attendance = pgTable('professor_exam_attendance', {
   penaltyApplied: integer('penaltyApplied').default(0),
   penaltyAmount: numeric('penaltyAmount', { precision: 12, scale: 0 }).default('0'),
   notes: text('notes'),
-  recordedAt: timestamp('recordedAt').defaultNow()
+  recordedAt: timestamp('recordedAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const exam_minutes = pgTable('exam_minutes', {
@@ -1015,7 +1062,8 @@ export const exam_minutes = pgTable('exam_minutes', {
   notes: text('notes'),
   summaryHash: varchar('summaryHash', { length: 255 }),
   /** لحظهٔ تحویل برگه‌های این سالن به مخزن — دقیقاً یک‌بار (گلوله همان لوله) */
-  vaultReceivedAt: timestamp('vaultReceivedAt')
+  vaultReceivedAt: timestamp('vaultReceivedAt'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const teaching_rates = pgTable('teaching_rates', {
@@ -1023,13 +1071,15 @@ export const teaching_rates = pgTable('teaching_rates', {
   academicRank: varchar('academicRank', { length: 50 }),
   degree: varchar('degree', { length: 50 }),
   baseRatePerUnit: numeric('baseRatePerUnit', { precision: 12, scale: 0 }).notNull(),
-  effectiveYear: integer('effectiveYear')
+  effectiveYear: integer('effectiveYear'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const teaching_coefficients = pgTable('teaching_coefficients', {
   id: serial('id').primaryKey(),
   ruleName: varchar('ruleName', { length: 100 }).notNull(),
-  multiplier: numeric('multiplier', { precision: 3, scale: 2 }).notNull()
+  multiplier: numeric('multiplier', { precision: 3, scale: 2 }).notNull(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const payroll_calculation_rules = pgTable('payroll_calculation_rules', {
@@ -1042,7 +1092,8 @@ export const payroll_calculation_rules = pgTable('payroll_calculation_rules', {
   flatFee: numeric('flatFee', { precision: 12, scale: 0 }),
   title: varchar('title', { length: 150 }),
   isActive: integer('isActive').default(1),
-  updatedAt: timestamp('updatedAt').defaultNow()
+  updatedAt: timestamp('updatedAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const professor_term_contracts = pgTable('professor_term_contracts', {
@@ -1051,7 +1102,8 @@ export const professor_term_contracts = pgTable('professor_term_contracts', {
   termId: integer('termId').notNull().references(() => academic_terms.id),
   contractType: varchar('contractType', { length: 50 }),
   baseDutyUnits: numeric('baseDutyUnits', { precision: 4, scale: 2 }).default('0'),
-  taxRate: numeric('taxRate', { precision: 4, scale: 2 })
+  taxRate: numeric('taxRate', { precision: 4, scale: 2 }),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const payroll_statements = pgTable('payroll_statements', {
@@ -1068,7 +1120,8 @@ export const payroll_statements = pgTable('payroll_statements', {
   midtermPaidAt: timestamp('midtermPaidAt'),
   finalPaidAmount: numeric('finalPaidAmount', { precision: 12, scale: 0 }).default('0'),
   finalPaidAt: timestamp('finalPaidAt'),
-  computedAt: timestamp('computedAt').defaultNow()
+  computedAt: timestamp('computedAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const class_sessions = pgTable('class_sessions', {
@@ -1080,7 +1133,8 @@ export const class_sessions = pgTable('class_sessions', {
   status: varchar('status', { length: 20 }).notNull().default('SCHEDULED'),
   isMakeUpSession: integer('isMakeUpSession').default(0),
   replacedSessionId: integer('replacedSessionId').references((): AnyPgColumn => class_sessions.id),
-  sessionNo: integer('sessionNo')
+  sessionNo: integer('sessionNo'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const student_class_attendance = pgTable('student_class_attendance', {
@@ -1088,7 +1142,8 @@ export const student_class_attendance = pgTable('student_class_attendance', {
   sessionId: integer('sessionId').notNull().references(() => class_sessions.id),
   enrollmentId: integer('enrollmentId').notNull().references(() => enrollments.id),
   status: varchar('status', { length: 10 }).notNull(),
-  UNIQUE: text('UNIQUE')
+  UNIQUE: text('UNIQUE'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const professor_class_attendance = pgTable('professor_class_attendance', {
@@ -1099,7 +1154,8 @@ export const professor_class_attendance = pgTable('professor_class_attendance', 
   recordedIpAddress: varchar('recordedIpAddress', { length: 50 }),
   deviceUserAgent: text('deviceUserAgent'),
   status: varchar('status', { length: 20 }).notNull().default('VALID'),
-  recordedAt: timestamp('recordedAt').defaultNow()
+  recordedAt: timestamp('recordedAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const physical_access_logs = pgTable('physical_access_logs', {
@@ -1120,7 +1176,8 @@ export const electronic_documents = pgTable('electronic_documents', {
   documentHash: varchar('documentHash', { length: 255 }).notNull(),
   signatureStatus: varchar('signatureStatus', { length: 20 }).default('PENDING'),
   signedAt: timestamp('signedAt'),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 /** کد یکبارمصرف امضای دیجیتال اسناد (قرارداد، تأیید نمرات و…) — فقط هش ذخیره می‌شود */
@@ -1174,14 +1231,16 @@ export const military_service_records = pgTable('military_service_records', {
   exemptionStartDate: date('exemptionStartDate'),
   sakhaTrackingCode: varchar('sakhaTrackingCode', { length: 50 }),
   pendingExtraSemesters: integer('pendingExtraSemesters'),
-  lastSyncAt: timestamp('lastSyncAt')
+  lastSyncAt: timestamp('lastSyncAt'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const document_categories = pgTable('document_categories', {
   id: serial('id').primaryKey(),
   title: varchar('title', { length: 100 }).notNull(),
   scope: varchar('scope', { length: 20 }).default('STUDENT'),
-  accessRoles: text('accessRoles')
+  accessRoles: text('accessRoles'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const document_types = pgTable('document_types', {
@@ -1191,7 +1250,8 @@ export const document_types = pgTable('document_types', {
   title: varchar('title', { length: 100 }).notNull(),
   targetAudience: varchar('targetAudience', { length: 10 }).default('BOTH'),
   isRequired: integer('isRequired').default(1),
-  needsVerification: integer('needsVerification').default(1)
+  needsVerification: integer('needsVerification').default(1),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const student_documents = pgTable('student_documents', {
@@ -1206,7 +1266,8 @@ export const student_documents = pgTable('student_documents', {
   verificationStatus: varchar('verificationStatus', { length: 20 }).default('PENDING'),
   verifiedBy: integer('verifiedBy'),
   rejectionReason: text('rejectionReason'),
-  uploadedAt: timestamp('uploadedAt').defaultNow()
+  uploadedAt: timestamp('uploadedAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const kyc_verifications = pgTable('kyc_verifications', {
@@ -1224,7 +1285,8 @@ export const kyc_verifications = pgTable('kyc_verifications', {
   ipAddress: varchar('ipAddress', { length: 50 }),
   deviceInfo: text('deviceInfo'),
   completedAt: timestamp('completedAt'),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const notification_templates = pgTable('notification_templates', {
@@ -1232,7 +1294,8 @@ export const notification_templates = pgTable('notification_templates', {
   eventCode: varchar('eventCode', { length: 50 }).notNull().unique(),
   channel: varchar('channel', { length: 20 }),
   templateText: text('templateText').notNull(),
-  isActive: integer('isActive').default(1)
+  isActive: integer('isActive').default(1),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const notifications = pgTable('notifications', {
@@ -1259,14 +1322,16 @@ export const audit_logs = pgTable('audit_logs', {
 
 export const system_settings = pgTable('system_settings', {
   key: varchar('key', { length: 60 }).primaryKey(),
-  value: text('value').notNull()
+  value: text('value').notNull(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const document_templates = pgTable('document_templates', {
   id: serial('id').primaryKey(),
   code: varchar('code', { length: 50 }).notNull().unique(),
   title: varchar('title', { length: 150 }).notNull(),
-  templateText: text('templateText').notNull()
+  templateText: text('templateText').notNull(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const doc_sign_otps = pgTable('doc_sign_otps', {
@@ -1305,7 +1370,8 @@ export const short_term_courses = pgTable('short_term_courses', {
   passingGrade: numeric('passingGrade', { precision: 4, scale: 2 }).default('12.00'),
   maxAbsences: integer('maxAbsences').default(3),
   status: varchar('status', { length: 20 }).default('OPEN'), // OPEN, IN_PROGRESS, COMPLETED, ARCHIVED
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const short_term_learners = pgTable('short_term_learners', {
@@ -1315,7 +1381,8 @@ export const short_term_learners = pgTable('short_term_learners', {
   fullName: varchar('fullName', { length: 150 }).notNull(),
   fullNameEn: varchar('fullNameEn', { length: 150 }),
   email: varchar('email', { length: 150 }),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const short_term_discounts = pgTable('short_term_discounts', {
@@ -1327,7 +1394,8 @@ export const short_term_discounts = pgTable('short_term_discounts', {
   maxUsage: integer('maxUsage').default(100),
   usedCount: integer('usedCount').default(0),
   isActive: integer('isActive').default(1),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const short_term_registrations = pgTable('short_term_registrations', {
@@ -1346,7 +1414,8 @@ export const short_term_registrations = pgTable('short_term_registrations', {
   isPassed: integer('isPassed').default(0),
   certificateIssued: integer('certificateIssued').default(0),
   certificateId: integer('certificateId'),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const short_term_certificates = pgTable('short_term_certificates', {
@@ -1364,7 +1433,8 @@ export const short_term_certificates = pgTable('short_term_certificates', {
   totalHours: integer('totalHours').notNull(),
   issueDate: varchar('issueDate', { length: 20 }).notNull(),
   isRevoked: integer('isRevoked').default(0),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 // ============================================================================
@@ -1379,7 +1449,8 @@ export const student_cards = pgTable('student_cards', {
   rfidSerialNumber: varchar('rfidSerialNumber', { length: 100 }),
   issuedAt: timestamp('issuedAt'),
   expiresAt: timestamp('expiresAt'),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 // ============================================================================
@@ -1395,7 +1466,8 @@ export const exam_attendances = pgTable('exam_attendances', {
   verifiedByStaffId: integer('verifiedByStaffId').references(() => staff.id),
   hasTemporaryPermit: integer('hasTemporaryPermit').default(0), // دارای مجوز موقت / تعهد کتبی
   checkInTime: timestamp('checkInTime'),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const exam_invigilators = pgTable('exam_invigilators', {
@@ -1406,7 +1478,8 @@ export const exam_invigilators = pgTable('exam_invigilators', {
   clockInTime: timestamp('clockInTime'),
   clockOutTime: timestamp('clockOutTime'),
   isBilledToPayroll: integer('isBilledToPayroll').default(0),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const exam_course_packets = pgTable('exam_course_packets', {
@@ -1420,7 +1493,8 @@ export const exam_course_packets = pgTable('exam_course_packets', {
   receivedByVaultManagerId: integer('receivedByVaultManagerId').references(() => staff.id),
   handoverCompletedAt: timestamp('handoverCompletedAt'),
   discrepancyNote: text('discrepancyNote'),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const notification_logs = pgTable('notification_logs', {
@@ -1432,7 +1506,8 @@ export const notification_logs = pgTable('notification_logs', {
   deliveryStatus: varchar('deliveryStatus', { length: 20 }).default('PENDING'), // DELIVERED, FAILED, SEEN, PENDING
   providerResponse: text('providerResponse'),
   sentAt: timestamp('sentAt').defaultNow(),
-  deliveredAt: timestamp('deliveredAt')
+  deliveredAt: timestamp('deliveredAt'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 // ============================================================================
@@ -1448,7 +1523,8 @@ export const course_exam_sessions = pgTable('course_exam_sessions', {
   totalDeliveredSheets: integer('totalDeliveredSheets').notNull().default(0),
   isFullyCollected: integer('isFullyCollected').default(0),
   notificationSentAt: timestamp('notificationSentAt'),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const instructor_deliveries = pgTable('instructor_deliveries', {
@@ -1463,7 +1539,8 @@ export const instructor_deliveries = pgTable('instructor_deliveries', {
   status: varchar('status', { length: 30 }).default('PENDING_GRADING'), // PENDING_GRADING, GRADES_SUBMITTED, ARCHIVED
   papersReturnedToArchive: integer('papersReturnedToArchive').default(0),
   archiveManagerId: integer('archiveManagerId').references(() => staff.id),
-  returnedAt: timestamp('returnedAt')
+  returnedAt: timestamp('returnedAt'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 // ============================================================================
@@ -1480,7 +1557,8 @@ export const instructor_advances = pgTable('instructor_advances', {
   approvedByFinanceId: integer('approvedByFinanceId').references(() => staff.id),
   paidAt: timestamp('paidAt'),
   isDeductedFromFinalPayroll: integer('isDeductedFromFinalPayroll').default(0),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const instructor_financial_profiles = pgTable('instructor_financial_profiles', {
@@ -1492,7 +1570,8 @@ export const instructor_financial_profiles = pgTable('instructor_financial_profi
   taxRatePercent: integer('taxRatePercent').default(10), // ۱۰٪ مالیات تکلیفی
   insuranceType: varchar('insuranceType', { length: 50 }).default('TAMIN_DAILY'),
   taminBranchCode: varchar('taminBranchCode', { length: 50 }),
-  updatedAt: timestamp('updatedAt').defaultNow()
+  updatedAt: timestamp('updatedAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const instructor_attendance_days = pgTable('instructor_attendance_days', {
@@ -1502,7 +1581,8 @@ export const instructor_attendance_days = pgTable('instructor_attendance_days', 
   sessionsHeldCount: integer('sessionsHeldCount').default(1),
   insuranceCalculated: integer('insuranceCalculated').default(1),
   syncedWithTamin: integer('syncedWithTamin').default(0),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 // ============================================================================
@@ -1529,7 +1609,8 @@ export const virtual_classrooms = pgTable('virtual_classrooms', {
   isRunning: integer('isRunning').default(0),
   currentAttendanceCount: integer('currentAttendanceCount').default(0),
   moodleCourseId: integer('moodleCourseId'),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const virtual_class_recordings = pgTable('virtual_class_recordings', {
@@ -1539,7 +1620,8 @@ export const virtual_class_recordings = pgTable('virtual_class_recordings', {
   recordingUrl: varchar('recordingUrl', { length: 500 }).notNull(),
   durationMinutes: integer('durationMinutes').notNull().default(90),
   recordedAt: timestamp('recordedAt').defaultNow(),
-  viewsCount: integer('viewsCount').default(0)
+  viewsCount: integer('viewsCount').default(0),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 // ═══ سامانهٔ مهاجرت داده از سیستم قدیمی (ETL) ═══
@@ -1714,7 +1796,8 @@ export const legacy_import_batches = pgTable('legacy_import_batches', {
   createdByUserId: integer('createdByUserId'),
   createdAt: timestamp('createdAt').defaultNow(),
   processedAt: timestamp('processedAt'),
-  rolledBackAt: timestamp('rolledBackAt')
+  rolledBackAt: timestamp('rolledBackAt'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const legacy_import_rows = pgTable('legacy_import_rows', {
@@ -1724,7 +1807,8 @@ export const legacy_import_rows = pgTable('legacy_import_rows', {
   rawData: jsonb('rawData').notNull(),                        // کل سطر اکسل، خام
   validationStatus: varchar('validationStatus', { length: 20 }).notNull().default('PENDING'), // PENDING|IMPORTED|ERROR|SKIPPED
   errorMessage: text('errorMessage'),
-  processedAt: timestamp('processedAt')
+  processedAt: timestamp('processedAt'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 // ── دفتر واگرد: هر نوشتن روی جدول‌های عملیاتی اینجا سند می‌خورد ──
@@ -1741,7 +1825,8 @@ export const migration_audit_entries = pgTable('migration_audit_entries', {
   revertedAt: timestamp('revertedAt'),
   revertNote: text('revertNote'),
   createdByUserId: integer('createdByUserId'),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1821,7 +1906,8 @@ export const clearance_departments = pgTable('clearance_departments', {
   responsibleRoleCode: varchar('responsibleRoleCode', { length: 40 }),
   sortOrder: integer('sortOrder').notNull().default(100),
   isActive: integer('isActive').notNull().default(1),
-  hint: text('hint')
+  hint: text('hint'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 /** پروندهٔ فارغ‌التحصیلی هر دانشجو (یک ردیف به‌ازای هر دانشجو) */
@@ -1863,7 +1949,8 @@ export const graduation_audits = pgTable('graduation_audits', {
   note: text('note'),
   startedAt: timestamp('startedAt').defaultNow(),
   lastEventAt: timestamp('lastEventAt').defaultNow(),
-  completedAt: timestamp('completedAt')
+  completedAt: timestamp('completedAt'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ uq: unique('uq_graduation_audits_student').on(t.studentId) }));
 
 /** چک‌لیست تسویه‌حساب موازی (یک ردیف به‌ازای هر دپارتمان برای هر دانشجو) */
@@ -1879,7 +1966,8 @@ export const clearance_checklist = pgTable('clearance_checklist', {
   resolvedBy: integer('resolvedBy'),
   resolvedAt: timestamp('resolvedAt'),
   notifiedAt: timestamp('notifiedAt'),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ uq: unique('uq_clearance_checklist').on(t.studentId, t.department) }));
 
 /** مدارک صادرشده: گواهینامهٔ موقت، دانشنامه، ریزنمرات رسمی */
@@ -1898,10 +1986,9 @@ export const issued_degrees = pgTable('issued_degrees', {
   deliveredAt: timestamp('deliveredAt'),
   deliveredTo: varchar('deliveredTo', { length: 150 }),
   revokedAt: timestamp('revokedAt'),
-  revokeReason: text('revokeReason')
-});
-
-/** پروفایل دانش‌آموخته (پورتال آلومنای) */
+  revokeReason: text('revokeReason'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+}); (پورتال آلومنای) */
 export const alumni_profiles = pgTable('alumni_profiles', {
   id: serial('id').primaryKey(),
   studentId: integer('studentId').notNull().references(() => students.id),
@@ -1912,7 +1999,8 @@ export const alumni_profiles = pgTable('alumni_profiles', {
   contactMobile: varchar('contactMobile', { length: 11 }),
   linkedinUrl: varchar('linkedinUrl', { length: 300 }),
   allowContact: integer('allowContact').notNull().default(1),
-  updatedAt: timestamp('updatedAt').defaultNow()
+  updatedAt: timestamp('updatedAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ uq: unique('uq_alumni_profiles_student').on(t.studentId) }));
 
 /** درخواست‌های خدمات دانش‌آموختگان (ریزنمرات رسمی، آزادسازی مدرک، تأییدیه ترجمه) */
@@ -1931,7 +2019,8 @@ export const alumni_requests = pgTable('alumni_requests', {
   handledBy: integer('handledBy'),
   adminNote: text('adminNote'),
   createdAt: timestamp('createdAt').defaultNow(),
-  updatedAt: timestamp('updatedAt').defaultNow()
+  updatedAt: timestamp('updatedAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 // ═══ کانال‌های اعلان بیرونی (پیامک و پیام‌رسان‌ها) ═══
@@ -2002,7 +2091,8 @@ export const analytics_snapshots = pgTable('analytics_snapshots', {
   rowCount: integer('rowCount'),                                 // برای پایش حجم گزارش
   durationMs: integer('durationMs'),                             // هزینهٔ محاسبهٔ آخرین بار
   computedAt: timestamp('computedAt').notNull().defaultNow(),
-  expiresAt: timestamp('expiresAt')
+  expiresAt: timestamp('expiresAt'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 // ══════════════════════════════════════════════════════════════════════
@@ -2030,6 +2120,7 @@ export const tuition_discount_types = pgTable('tuition_discount_types', {
   requiresDocument: integer('requiresDocument').notNull().default(0),
   isActive: integer('isActive').notNull().default(1),
   note: text('note'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow()
 });
 
@@ -2049,7 +2140,8 @@ export const student_discounts = pgTable('student_discounts', {
   documentUrl: text('documentUrl'),
   approvedBy: integer('approvedBy').references(() => users.id),
   approvedAt: timestamp('approvedAt'),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 /** بنیادها و نهادهای حامی — کمیتهٔ امداد، بنیاد شهید، خیرین و … */
@@ -2062,7 +2154,8 @@ export const tuition_sponsors = pgTable('tuition_sponsors', {
   settlementMethod: varchar('settlementMethod', { length: 30 }).notNull().default('DIRECT'),
   isActive: integer('isActive').notNull().default(1),
   note: text('note'),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 /** تعهد پرداخت یک بنیاد بابت شهریهٔ یک دانشجو */
@@ -2078,7 +2171,8 @@ export const student_sponsorships = pgTable('student_sponsorships', {
   referenceNo: varchar('referenceNo', { length: 80 }),
   status: varchar('status', { length: 20 }).notNull().default('PENDING'), // PENDING | CONFIRMED | REJECTED | PAID
   note: text('note'),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 /** چک‌های دریافتی از دانشجو — مبنای یادآوری پیش از سررسید */
@@ -2097,7 +2191,8 @@ export const payment_cheques = pgTable('payment_cheques', {
   remindedAt: timestamp('remindedAt'),
   clearedAt: timestamp('clearedAt'),
   note: text('note'),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 /** وام‌های دانشجویی */
@@ -2121,7 +2216,8 @@ export const loan_products = pgTable('loan_products', {
   requiresApproval: integer('requiresApproval').notNull().default(1),
   isActive: integer('isActive').notNull().default(1),
   note: text('note'),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const student_loans = pgTable('student_loans', {
@@ -2137,7 +2233,8 @@ export const student_loans = pgTable('student_loans', {
   status: varchar('status', { length: 20 }).notNull().default('ACTIVE'), // ACTIVE | SETTLED | CANCELLED
   ledgerTxnId: integer('ledgerTxnId'),
   note: text('note'),
-  createdAt: timestamp('createdAt').defaultNow()
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 /**
@@ -2160,7 +2257,8 @@ export const tuition_formulas = pgTable('tuition_formulas', {
   priority: integer('priority').notNull().default(100),
   isActive: integer('isActive').notNull().default(1),
   note: text('note'),
-  updatedAt: timestamp('updatedAt').defaultNow()
+  updatedAt: timestamp('updatedAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 /**
@@ -2192,7 +2290,8 @@ export const tuition_rules = pgTable('tuition_rules', {
   priority: integer('priority').notNull().default(100),
   isActive: integer('isActive').notNull().default(1),
   note: text('note'),
-  updatedAt: timestamp('updatedAt').defaultNow()
+  updatedAt: timestamp('updatedAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 // ══════════════════════════════════════════════════════════════════════
@@ -2206,7 +2305,8 @@ export const tuition_coefficients = pgTable('tuition_coefficients', {
   variableCoefficient: numeric('variable_coefficient', { precision: 4, scale: 2 }).notNull().default('1.00'),
   fixedCoefficient: numeric('fixed_coefficient', { precision: 4, scale: 2 }).notNull().default('1.00'),
   note: text('note'),
-  updatedAt: timestamp('updated_at').defaultNow()
+  updatedAt: timestamp('updated_at').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 /** کاتالوگ انواع مبالغ موضوعی شهریه */
@@ -2220,7 +2320,8 @@ export const subject_fee_types = pgTable('subject_fee_types', {
   appliesTo: varchar('applies_to', { length: 20 }).notNull().default('BOTH'),
   isActive: integer('is_active').notNull().default(1),
   note: text('note'),
-  createdAt: timestamp('created_at').defaultNow()
+  createdAt: timestamp('created_at').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 /** تخصیص مبلغ موضوعی به دانشجو */
@@ -2232,5 +2333,6 @@ export const student_subject_fees = pgTable('student_subject_fees', {
   amount: numeric('amount', { precision: 12, scale: 0 }).notNull().default('0'),
   isActive: integer('is_active').notNull().default(1),
   note: text('note'),
-  createdAt: timestamp('created_at').defaultNow()
+  createdAt: timestamp('created_at').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ uq: unique('uq_student_subject_fees').on(t.studentId, t.termId, t.subjectFeeTypeId) }));
