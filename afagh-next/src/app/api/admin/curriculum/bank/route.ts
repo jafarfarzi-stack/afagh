@@ -58,6 +58,7 @@ export async function GET(req: NextRequest) {
       emergencyWithdrawal: courses.emergencyWithdrawal,
       coRequisites: courses.coRequisites,
       facesHours: courses.facesHours,
+      equivalentCourseCodes: courses.equivalentCourseCodes,
     })
     .from(courses)
     .leftJoin(departments, eq(courses.departmentId, departments.id))
@@ -107,6 +108,7 @@ export async function PATCH(req: NextRequest) {
   if (body.emergencyWithdrawal != null) patch.emergencyWithdrawal = body.emergencyWithdrawal ? 1 : 0;
   if (body.coRequisites != null) patch.coRequisites = body.coRequisites || null;
   if (body.facesHours != null) patch.facesHours = String(body.facesHours);
+  if (body.equivalentCourseCodes != null) patch.equivalentCourseCodes = body.equivalentCourseCodes || null;
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ ok: false, error: 'فیلدی برای ویرایش ارسال نشد.' }, { status: 400 });
@@ -179,6 +181,7 @@ export async function POST(req: NextRequest) {
     emergencyWithdrawal: body.emergencyWithdrawal ? 1 : 0,
     coRequisites: body.coRequisites || null,
     facesHours: body.facesHours ? String(body.facesHours) : null,
+    equivalentCourseCodes: body.equivalentCourseCodes || null,
   }).returning({ id: courses.id });
   revalidatePath('/admin/grade-status-codes');
   return NextResponse.json({ ok: true, data: { id: row.id } });

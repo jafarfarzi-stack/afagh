@@ -378,6 +378,8 @@ export const courses = pgTable('courses', {
   emergencyWithdrawal: integer('emergencyWithdrawal').default(0),       // حذف اضطراری مجاز
   coRequisites: varchar('coRequisites', { length: 200 }),              // همنیاز (کدها جداشده با کاما)
   facesHours: numeric('facesHours', { precision: 3, scale: 1 }),       // ساعات چهره‌به‌چهره
+  /** کدهای دروس هم‌ارز (جداشده با کاما) — مثال: '101,102,103' */
+  equivalentCourseCodes: text('equivalentCourseCodes'),
 });
 
 /** گرایش‌های برنامهٔ درسی (مثلاً «هوش مصنوعی و رباتیک») — جایگزین tracks[] Mock در Client قدیم (D4) */

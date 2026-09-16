@@ -51,6 +51,7 @@ export default async function GradeStatusCodesPage() {
       emergencyWithdrawal: courses.emergencyWithdrawal,
       coRequisites: courses.coRequisites,
       facesHours: courses.facesHours,
+      equivalentCourseCodes: courses.equivalentCourseCodes,
     })
       .from(courses)
       .leftJoin(departments, eq(courses.departmentId, departments.id))

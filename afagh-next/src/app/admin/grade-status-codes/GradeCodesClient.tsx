@@ -23,6 +23,7 @@ type BankCourse = {
   isThesis: number | null; hasProject: number | null; internshipUnits: string | null;
   minPassedMark: string | null; defaultAcceptMarkState: string | null; defaultRejectMarkState: string | null;
   courseIsActive: number | null; emergencyWithdrawal: number | null; coRequisites: string | null; facesHours: string | null;
+  equivalentCourseCodes: string | null;
 };
 
 type Department = { id: number; name: string };
@@ -256,6 +257,7 @@ export default function GradeCodesClient({
         emergencyWithdrawal: fd.get('emergencyWithdrawal') === 'on' ? 1 : 0,
         coRequisites: String(fd.get('coRequisites') || '') || null,
         facesHours: Number(fd.get('facesHours') || 0) || null,
+        equivalentCourseCodes: String(fd.get('equivalentCourseCodes') || '') || null,
       };
 
       const isEdit = !!editingCourse;
@@ -847,6 +849,12 @@ export default function GradeCodesClient({
                   <label className="block text-xs font-bold text-slate-600 mb-1">ساعات چهره‌به‌چهره</label>
                   <input name="facesHours" type="number" step="0.5" min="0" defaultValue={editingCourse?.facesHours ?? ''} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white" />
                 </div>
+              </div>
+
+              {/* ردیف ۷.۵: دروس هم‌ارز */}
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">دروس هم‌ارز (کدها با کاما)</label>
+                <input name="equivalentCourseCodes" defaultValue={editingCourse?.equivalentCourseCodes ?? ''} placeholder="مثلاً 101,102,103" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white" />
               </div>
 
               {/* ردیف ۷: توضیحات */}

@@ -1335,6 +1335,19 @@ async function phaseTatbigh(file) {
       }
     }
     if (eqIns) console.log(`  هم‌ارزی دروس: ${eqIns} رکورد`);
+    // ذخیرهٔ کدهای هم‌ارز به‌صورت متنی روی خودِ درس (برای نمایش سریع در UI)
+    let eqUpdated = 0;
+    for (const j of equivJobs) {
+      const parts = j.equivRaw.split(/[,&|]+/).map(s => s.trim()).filter(s => /^\d+$/.test(s));
+      if (!parts.length) continue;
+      const courseId = coursesByCode.get(j.code);
+      if (!courseId || courseId === -1) continue;
+      try {
+        await pool.query(`UPDATE courses SET "equivalentCourseCodes" = $1 WHERE id = $2`, [parts.join(','), courseId]);
+        eqUpdated++;
+      } catch {}
+    }
+    if (eqUpdated) console.log(`  هم‌ارزی روی درس: ${eqUpdated} درس به‌روزرسانی شد`);
   }
   await logRun('course', 'tatbigh dars.txt (SAMA)', stats);
 }
