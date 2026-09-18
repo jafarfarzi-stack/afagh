@@ -1273,8 +1273,13 @@ async function phaseStterm(files, file) {
   const batch = [];
   const flush = async () => {
     if (!batch.length || DRY) { batch.length = 0; return; }
+    // حذف تکراری‌های درون‌بچی (هم‌آوا برای یک دانشجو+ترم چند ردیف دارد) — آخری می‌ماند
+    const seen = new Map();
+    for (const r of batch) seen.set(`${r.s}|${r.t}`, r);
+    const uniq = [...seen.values()];
+    if (uniq.length < batch.length) stats.deduped = (stats.deduped || 0) + (batch.length - uniq.length);
     const vals = [];
-    const ph = batch.map((r, i) => {
+    const ph = uniq.map((r, i) => {
       const o = i * 8;
       vals.push(r.s, r.t, r.tc, r.sc, r.st, r.pb, r.avg, universityId);
       return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7},$${o + 8})`;
