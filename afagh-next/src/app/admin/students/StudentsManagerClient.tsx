@@ -13,6 +13,7 @@ import type { StudentItem, RegulationPick, Pagination, StaffItem, CodeLabels} fr
 import { regThresholds, groupTranscript, faNum, dateToJalali} from './transcript-utils';
 import OfficialTranscriptView from './components/OfficialTranscriptView';
 import { adminSetGradeAction, getStudentGradeAuditLog } from '@/app/admin/grades/actions';
+import { setUniversityCookie } from '@/app/admin/university-actions';
 
 /**
  * چاپ مستقیم همان نمای روی صفحه (WYSIWYG) — با کلاس چاپ سراسری:
@@ -398,7 +399,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
           {props.universities && props.universities.length > 1 && (
             <select
               value={props.currentUniversityCode ?? 'AFAGH'}
-              onChange={e => nav({ university: e.target.value })}
+              onChange={e => { setUniversityCookie(e.target.value); nav({ university: e.target.value }); }}
               className="bg-indigo-700 hover:bg-indigo-600 text-white border border-indigo-500 rounded-lg px-2 py-1.5 text-xs font-bold cursor-pointer"
               title="انتخاب دانشگاه — همهٔ اطلاعات نمایش‌داده‌شده بر اساس این انتخاب فیلتر می‌شود"
             >
