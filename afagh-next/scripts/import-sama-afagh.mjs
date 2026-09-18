@@ -432,7 +432,21 @@ async function phasePre() {
   console.log(`کش: ${degrees.size} مقطع، ${faculties.size} دانشکده، ${regulations.size} آیین‌نامه`);
 }
 
+// ── تضمین universityId برای اجراهای تک‌مرحله‌ای ──
+// هر process جدید universityId=null دارد؛ اگر مرحله pre در همین اجرا نبود،
+// از روی SOURCE از DB می‌خوانیم تا INSERTها هرگز NULL نشوند.
+// این همان چیزی است که استفاده مجدد برای ALLAME/SHAMS/ZARINE را ممکن می‌کند:
+//   node scripts/import-sama-afagh.mjs --dir ... --source ALLAME --steps pre,terms,...
+async function ensureUniversity() {
+  if (universityId) return universityId;
+  const u = (await q(`SELECT id FROM universities WHERE code = $1`, [SOURCE]))[0];
+  if (!u) throw new Error(`دانشگاه ${SOURCE} در جدول universities نیست — اول --steps pre را اجرا کنید`);
+  universityId = Number(u.id);
+  return universityId;
+}
+
 async function phaseTerms(file) {
+  await ensureUniversity();
   console.log('\n── ترم‌ها ──');
   const stats = { total: 0, inserted: 0, existing: 0, invalid: 0, maxNormal: '' };
   const batch = [];
@@ -478,6 +492,7 @@ async function phaseTerms(file) {
 }
 
 async function phaseMajors(file) {
+  await ensureUniversity();
   console.log('\n── رشته‌ها ──');
   const stats = { total: 0, inserted: 0, existing: 0, invalid: 0, unmatchedDegree: new Set() };
   const batch = [];
@@ -807,6 +822,7 @@ async function phaseStudents(files, lookups) {
 }
 
 async function phaseGrades(files) {
+  await ensureUniversity();
   console.log('\n── نمرات (legacy خام + دروس + ارائه + ثبت‌نام) ──');
   const stats = { total: 0, legacyIns: 0, legacyDup: 0, enrollIns: 0, enrollSkip: 0, noStudent: 0, noTerm: 0, coursesNew: 0, offeringsNew: 0, badMark: 0 };
   if (!universityId) {
@@ -947,6 +963,7 @@ async function phaseGrades(files) {
 }
 
 async function phaseCodemap(files) {
+  await ensureUniversity();
   console.log('\n── میز تطبیق کدها ──');
   const stats = { total: 0, inserted: 0 };
   const put = async (domain, code, title, targetCode, note, status = 'CONFIRMED') => {
@@ -1114,6 +1131,7 @@ async function phaseCodemap(files) {
 }
 
 async function phaseGroups(file) {
+  await ensureUniversity();
   console.log('\n── گروه‌های آموزشی (گروههای آموزشی.txt) ──');
   const stats = { total: 0, inserted: 0, existing: 0, invalid: 0, facNew: 0 };
   // حذف گروه‌های بی‌کدِ خالی قبل از درج (به درخواست: حذف کن) — FKها اول آزاد شوند
@@ -1161,6 +1179,7 @@ async function phaseGroups(file) {
 }
 
 async function phaseCourseGroupLink(file) {
+  await ensureUniversity();
   console.log('\n── تطبیق دروس→گروه (تطبيق کد دروس.txt) ──');
   const stats = { total: 0, linked: 0, noDept: 0, noCourse: new Set(), badGroup: new Set() };
   // کش کد گروه→deptId
@@ -1195,6 +1214,7 @@ async function phaseCourseGroupLink(file) {
 }
 
 async function phaseStterm(files, file) {
+  await ensureUniversity();
   console.log('\n── وضعیت نیمسال دانشجویان ──');
   const stats = { total: 0, upserted: 0, noStudent: 0, noTerm: 0, invalid: 0 };
   if (!DRY) {
@@ -1277,6 +1297,7 @@ async function phaseStterm(files, file) {
 }
 
 async function phaseTatbigh(file) {
+  await ensureUniversity();
   console.log('\n── دروس (تطبیق — tatbigh dars.txt) ──');
   const stats = { total: 0, inserted: 0, updated: 0, invalid: 0, linked: 0, unlinkedGroup: new Set() };
   // کش گروه→departmentId (نام دقیق گروه آموزشی)
@@ -1396,6 +1417,7 @@ async function phaseTatbigh(file) {
 
 // ═══ فاز خواندن DOROS.txt — کدهای وضعیت نمره قبولی/مردودی ═══
 async function phaseDoros(file) {
+  await ensureUniversity();
   console.log('\n── دروس: کدهای وضعیت نمره (DOROS.txt) ──');
   const stats = { total: 0, updated: 0 };
   // ابتدا coursesByCode را رفرش کن
