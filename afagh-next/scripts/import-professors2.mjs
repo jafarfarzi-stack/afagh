@@ -156,7 +156,7 @@ const PAYEH_RANK = { '1': 'مربی', '2': 'استادیار', '3': 'دانشی�
 // TimeStat سما = طريقه همکاری (از تطبیق TimeStat×طريقه‌همکاری اساتید2 یاد شده)
 const TIMESTAT_COOP = { '1': 'حق التدریس', '2': 'تمام وقت', '3': 'مدعو', '6': 'عضو هیات علمی مدعو' };
 const EMP_MAP = { '1': 'رسمی', '2': 'پیمانی', '3': 'حق التدریس', '4': 'مدعو' };
-const synthNC = (code) => ('9' + String(code).replace(/\D/g, '').padStart(9, '0')).slice(-10);
+const synthNC = (code) => ('S' + (SOURCE[0] || 'X') + String(code).replace(/\D/g, '').slice(-8).padStart(8, '0'));
 
 // نام «خانوادگی-نام» → [family, name]
 /// اولویت با Title فارسی است؛ ستون‌های EnglishFirst/LastName فقط برای

@@ -77,8 +77,10 @@ function checkNationalCode(code) {
 const normTxt = (s) => String(s ?? '').replace(/\x00/g, '').replace(/\s+/g, ' ').trim();
 
 // ── نرمال‌سازی کد ترم به فرمت ۵ رقمی (YYYY+T): زرینه ۳ رقمی (871) ← 13871 ──
+// شمس (هم‌آوا) مستثناست: کدهایش تقویم جدا دارد (101 ترتیبی، 971 سالی، 1401 چهاررقمی) — دست‌نخورده می‌ماند
 function normTerm(tc) {
   const t = String(tc || '').trim();
+  if (SOURCE === 'SHAMS') return t;
   if (/^\d{3}$/.test(t)) {
     const yy = Number(t.slice(0, 2));
     return (yy >= 70 ? '13' : '14') + t; // 951 ← 13951 ، 871 ← 13871
@@ -483,8 +485,8 @@ async function phaseTerms(file) {
   const codes = [];
   for await (const { cols } of tsvRows(file)) {
     const code = normTerm(cols[0]);
-    // کد ترم: ۵ رقمی (آفاق/علامه: 13962) یا ۳ رقمی (زرینه: 871 ← 13871)
-    if (!/^\d{5}$/.test(code)) { stats.invalid++; continue; }
+    // کد ترم: ۵ رقمی سما (13962)؛ زرینه نرمال می‌شود؛ شمس خام می‌ماند (101، 971، 1401)
+    if (!/^\d{3,5}$/.test(code)) { stats.invalid++; continue; }
     codes.push({ code, type: (cols[14] || '').trim(), b: (cols[1] || '').trim(), e: (cols[2] || '').trim() });
     stats.total++;
   }
@@ -653,7 +655,8 @@ async function phaseStudents(files, lookups) {
     let nc = (s[7] || '').trim();
     if (!/^\d{10}$/.test(nc)) { nc = ''; stats.badNC++; }
     else if (checkNationalCode(nc) !== 'ok') stats.ncChecksumWarn++;
-    const nationalCode = nc || ('S' + stno.padStart(9, '0')).slice(-10);
+    // کد مصنوعی یکتا در سطح دانشگاه: SA/SL/SZ/SH/SN + ۸ رقم آخر شماره (جلوگیری از تداخل بین دانشگاه‌ها)
+    const nationalCode = nc || ('S' + (SOURCE[0] || 'X') + String(stno).slice(-8).padStart(8, '0'));
     // NOTE: we no longer dedup by nationalCode — a student can have multiple stnos (kardani → karshenasi)
     // User dedup is handled by ON CONFLICT ("nationalCode") DO NOTHING; student dedup by ON CONFLICT ("studentCode") DO NOTHING
     const sex = (c[3] || '').trim();
@@ -881,7 +884,7 @@ async function phaseGrades(files) {
     const stno = (cols[0] || '').trim();
     const term = normTerm(cols[1]);
     const course = (cols[2] || '').trim();
-    if (!/^\d+$/.test(stno) || !/^\d{5}$/.test(term) || !course) { stats.total++; continue; }
+    if (!/^\d+$/.test(stno) || !/^\d{3,5}$/.test(term) || !course) { stats.total++; continue; }
     stats.total++; n++;
     const mark = (cols[5] || '').trim();
     const ms = (cols[6] || '').trim();
@@ -1290,7 +1293,7 @@ async function phaseStterm(files, file) {
     // TermCode Stno StTermStatus SusStatus TermAvg ... Mashroot ... CurrentMaghta
     const stno = (cols[1] || '').trim();
     const term = normTerm(cols[0]);
-    if (!/^\d+$/.test(stno) || !/^\d{5}$/.test(term)) { stats.invalid++; continue; }
+    if (!/^\d+$/.test(stno) || !/^\d{3,5}$/.test(term)) { stats.invalid++; continue; }
     stats.total++; n++;
     const s = studentsByCode.get(stno);
     const t = termsByCode.get(term);
