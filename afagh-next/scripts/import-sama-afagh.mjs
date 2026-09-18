@@ -1380,9 +1380,18 @@ async function phaseTatbigh(file) {
     }
     // فیلدهای جدید سما
     const englishName = normTxt(cols[18]) || null;                 // EName
-    const minPassedMark = parseFloat((cols[17] || '').trim()) || null; // MinPassedMark
-    const thHour = parseFloat((cols[22] || '').trim()) || null;       // ThHour (ساعت هفتگی نظری)
-    const ohHour = parseFloat((cols[23] || '').trim()) || null;       // OhHour (ساعت هفتگی عملی)
+    const clamp = (v, max, tag) => {
+      if (!Number.isFinite(v)) return null;
+      if (Math.abs(v) > max) {
+        stats.clamped = stats.clamped || new Set();
+        if (stats.clamped.size < 20) stats.clamped.add(`${code}:${tag}=${v}`);
+        return Math.sign(v) * max;
+      }
+      return v;
+    };
+    const minPassedMark = clamp(parseFloat((cols[17] || '').trim()), 99.99, 'min'); // MinPassedMark numeric(4,2)
+    const thHour = clamp(parseFloat((cols[22] || '').trim()), 99.9, 'th');       // ThHour numeric(3,1) — بعضی دانشگاه‌ها ساعت کل زده‌اند
+    const ohHour = clamp(parseFloat((cols[23] || '').trim()), 99.9, 'oh');       // OhHour numeric(3,1)
     const defaultAccept = (cols[24] || '').trim() || null;            // DefaultAcceptMarkState
     const defaultReject = (cols[25] || '').trim() || null;            // DefaultRejectMarkState
     const description = normTxt(cols[38]) || null;                    // LessonDescription
@@ -1399,6 +1408,7 @@ async function phaseTatbigh(file) {
   // refresh coursesByCode
   for (const r of await q(`SELECT id, code FROM courses`)) coursesByCode.set(r.code, Number(r.id));
   console.log(`دروس: total=${stats.total} upserted=${stats.inserted} invalid=${stats.invalid} linked=${stats.linked} (courses در DB: ${coursesByCode.size})`);
+  if (stats.clamped?.size) console.log(`  ⚠ ساعت/حدنصاب خارج از بازه clamp شد (${stats.clamped.size}): ${[...stats.clamped].slice(0, 10).join('، ')}`);
   if (stats.unlinkedGroup.size) console.log(`  گروه‌های بی‌تطبیق tatbigh: ${[...stats.unlinkedGroup].slice(0,10).join('، ')}`);
   // هم‌ارزی‌ها را به legacy_code_maps بریز (برای گزارش و تطبیق آینده)
   if (equivJobs.length && !DRY) {
