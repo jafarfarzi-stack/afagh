@@ -60,10 +60,19 @@ const LIMIT = args.limit ? Number(args.limit) : 0;
 const DRY = args.dry === 'true';
 const PURGE = args['no-purge'] !== 'true';
 const KEEP_DEMO = args['keep-demo'] || null;
+const SOURCE = (args.source || 'AFAGH').toUpperCase();
 const dbUrl = args.db || process.env.DATABASE_URL || 'postgres://afagh:afagh@localhost:5432/afagh_db';
 
 const pool = new Pool({ connectionString: dbUrl, max: 5 });
 const q = async (text, params) => (await pool.query(text, params)).rows;
+let universityId = null;
+async function ensureUniversity() {
+  if (universityId) return universityId;
+  const u = (await q(`SELECT id FROM universities WHERE code = $1`, [SOURCE]))[0];
+  if (!u) throw new Error(`دانشگاه ${SOURCE} در جدول universities نیست — اول --steps pre اسکریپت سما را اجرا کنید`);
+  universityId = Number(u.id);
+  return universityId;
+}
 
 // ── خواندن جریانی TSV ──
 const dec1256 = new TextDecoder('windows-1256');
@@ -161,7 +170,14 @@ function splitTitle(t, c79, c80) {
     family = parts[0];
     first = parts.slice(1).join(' ');
   } else if (parts.length === 1 && parts[0] && parts[0] !== 'نامشخص' && parts[0] !== 'ارزيابي') {
-    family = parts[0];
+    // بدون خط‌تیره (مثل علامه): کلمه آخر = نام، بقیه = نام خانوادگی
+    const words = parts[0].split(/\s+/).filter(Boolean);
+    if (words.length >= 2) {
+      first = words[words.length - 1];
+      family = words.slice(0, -1).join(' ');
+    } else {
+      family = parts[0];
+    }
   }
   // فقط وقتی Title خالی/نامشخص است از انگلیسی به‌عنوان fallback استفاده کن
   // (آن هم transliterate نشده باقی می‌ماند تا در بازبینی دستی اصلاح شود)
@@ -180,12 +196,13 @@ const facultyByCode = new Map();// facultyCode -> id
 const degreeByCode = new Map(); // مدرک استاد Code -> Title
 const reshteByCode = new Map(); // رشته ها Code -> Title
 async function loadCaches() {
-  for (const r of await q(`SELECT id, name, "facultyCode" FROM faculties`)) {
+  await ensureUniversity();
+  for (const r of await q(`SELECT id, name, "facultyCode" FROM faculties WHERE "universityId" = $1`, [universityId])) {
     const k = norm(r.name);
     if (k && !facultyByName.has(k)) facultyByName.set(k, Number(r.id));
     if (r.facultyCode) facultyByCode.set(String(r.facultyCode).trim(), Number(r.id));
   }
-  for (const r of await q(`SELECT id, name, "facultyId", "departmentCode" FROM departments`)) {
+  for (const r of await q(`SELECT id, name, "facultyId", "departmentCode" FROM departments WHERE "universityId" = $1`, [universityId])) {
     const k = norm(r.name);
     if (k) {
       if (!deptByName.has(k)) deptByName.set(k, []);
@@ -212,7 +229,8 @@ async function loadRefFile(kind) {
 
 // ── مرحله ۱: حذف دموها (فقط یکی می‌ماند) ──
 async function purgeDemos() {
-  const demos = await q(`SELECT id, "staffCode", "userId" FROM staff WHERE "staffCode" !~ '^\\d+$' ORDER BY id`);
+  await ensureUniversity();
+  const demos = await q(`SELECT id, "staffCode", "userId" FROM staff WHERE "staffCode" !~ '^\\d+$' AND "universityId" = $1 ORDER BY id`, [universityId]);
   if (!demos.length) { console.log('دمویی برای حذف نیست.'); return; }
   let keeper = null;
   if (KEEP_DEMO) keeper = demos.find(d => d.staffCode === KEEP_DEMO) || null;
@@ -275,7 +293,10 @@ try {
     await loadRefFile('reshte');
   }
   let profRoleId = null;
-  if (!DRY) profRoleId = (await q(`SELECT id FROM roles WHERE code='PROFESSOR'`))[0]?.id ?? null;
+  if (!DRY) {
+    await ensureUniversity();
+    profRoleId = (await q(`SELECT id FROM roles WHERE code='PROFESSOR'`))[0]?.id ?? null;
+  }
 
   const stats = { total: 0, createdUser: 0, updatedUser: 0, createdStaff: 0, updatedStaff: 0, grpMiss: new Set(), facMiss: new Set(), ncFallback: 0, degMiss: new Set() };
   for (const [code, r] of best) {
@@ -291,8 +312,8 @@ try {
     let facultyId = (facCode && facultyByCode.get(facCode)) ?? null;
     if (facCode && facultyId == null) {
       if (!DRY) {
-        const ins = (await q(`INSERT INTO faculties (name, "facultyCode") VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING id`, [`دانشکده ${facCode} (سما)`, facCode]))[0]
-          || (await q(`SELECT id FROM faculties WHERE "facultyCode"=$1`, [facCode]))[0];
+        const ins = (await q(`INSERT INTO faculties (name, "facultyCode", "universityId") VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id`, [`دانشکده ${facCode} (سما)`, facCode, universityId]))[0]
+          || (await q(`SELECT id FROM faculties WHERE "facultyCode"=$1 AND "universityId"=$2`, [facCode, universityId]))[0];
         if (ins) { facultyId = Number(ins.id); facultyByCode.set(facCode, facultyId); }
       }
       if (facultyId == null) stats.facMiss.add(facCode);
@@ -350,11 +371,11 @@ try {
       stats.updatedUser++;
     } else {
       const ins = (await pool.query(`INSERT INTO users ("nationalCode","firstName","lastName",mobile,email,"birthCertNo","birthDate",
-          "fatherName",gender,address,"placeOfBirth","firstNameEn","lastNameEn","passwordHash","isActive","mustChangePassword")
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,1,1) ON CONFLICT ("nationalCode") DO NOTHING RETURNING id`,
+          "fatherName",gender,address,"placeOfBirth","firstNameEn","lastNameEn","passwordHash","isActive","mustChangePassword","universityId")
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,1,1,$15) ON CONFLICT ("nationalCode") DO NOTHING RETURNING id`,
         [nc, first.slice(0, 100), last.slice(0, 100), mobile, email, clean(c[11]) || null, birthDate, father,
          mapGender(c[19]), norm(c[23]).slice(0, 300) || null, norm(c[13]) || null,
-         norm(c[73]) || null, norm(c[74]) || null, 'MIGRATED:' + code]))[0];
+         norm(c[73]) || null, norm(c[74]) || null, 'MIGRATED:' + code, universityId]))[0];
       if (ins) {
         userId = ins.id;
       } else {
@@ -368,7 +389,7 @@ try {
     const fieldStudy = norm(c[49]).slice(0, 200) || null;
     const staffType = norm(c[44]).slice(0, 50) || null;
     const phone = clean(c[20]).slice(0, 20) || null;
-    const ex = (await q(`SELECT id FROM staff WHERE "staffCode"=$1`, [code]))[0];
+    const ex = (await q(`SELECT id FROM staff WHERE "staffCode"=$1 AND "universityId"=$2`, [code, universityId]))[0];
     if (ex) {
       await pool.query(`UPDATE staff SET "userId"=$2,"facultyId"=COALESCE($3,"facultyId"),"departmentId"=COALESCE($4,"departmentId"),
         "isActive"=COALESCE($5,"isActive",1),"staffType"=COALESCE($6,"staffType"),degree=COALESCE($7,degree),
@@ -384,10 +405,10 @@ try {
     } else {
       await pool.query(`INSERT INTO staff ("userId","staffCode","facultyId","departmentId","isActive","staffType",
           degree,"personnelNo","employmentType","academicRank","hireDate","fieldOfStudy","fieldMain",
-          "maritalStatusCode","maritalStatus","academicBase","bankAccountNo",phone,"cooperationType")
-        VALUES ($1,$2,$3,$4,COALESCE($5,1),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+          "maritalStatusCode","maritalStatus","academicBase","bankAccountNo",phone,"cooperationType","universityId")
+        VALUES ($1,$2,$3,$4,COALESCE($5,1),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
         [userId, code, facultyId, deptId, active, staffType, degree, personnel, employment, rank, hireDate,
-         fieldStudy, fieldMain, marital.code, marital.title, payeh, bankAcc, phone, coop]);
+         fieldStudy, fieldMain, marital.code, marital.title, payeh, bankAcc, phone, coop, universityId]);
       stats.createdStaff++;
     }
     if (profRoleId) {
