@@ -238,9 +238,9 @@ async function ensureDegree(maghta) {
   const passGrade = passingMap[String(maghta)] || 10;
   let row = (await q(`SELECT id FROM degree_level_configs WHERE code = $1`, [code]))[0];
   if (!row && !DRY) {
-    row = (await q(`INSERT INTO degree_level_configs (title, code, "defaultPassingGrade", "conditionalGpaThreshold", "maxUnitsPerTerm")
-      VALUES ($1,$2,$3,$3,20) ON CONFLICT (code) DO NOTHING RETURNING id`,
-      [`مقطع سما ${maghta}`, code, passGrade]))[0]
+    row = (await q(`INSERT INTO degree_level_configs (title, code, "defaultPassingGrade", "conditionalGpaThreshold", "maxUnitsPerTerm", "universityId")
+      VALUES ($1,$2,$3,$3,20,$4) ON CONFLICT (code) DO NOTHING RETURNING id`,
+      [`مقطع سما ${maghta}`, code, passGrade, universityId]))[0]
       || (await q(`SELECT id FROM degree_level_configs WHERE code = $1`, [code]))[0];
   }
   const id = row ? Number(row.id) : -1;
@@ -332,8 +332,8 @@ async function ensureRegulation(degreeId, maghta, entryYear) {
   const config = JSON.stringify(regConfig(which));
   let row = (await q(`SELECT id, "rulesConfig" FROM educational_regulations WHERE title = $1`, [title]))[0];
   if (!row && !DRY) {
-    row = (await q(`INSERT INTO educational_regulations (title, "degreeLevelId", "effectiveFromYear", "rulesConfig")
-      VALUES ($1,$2,$3,$4) RETURNING id`, [title, repId, effYear, config]))[0];
+    row = (await q(`INSERT INTO educational_regulations (title, "degreeLevelId", "effectiveFromYear", "rulesConfig", "universityId")
+      VALUES ($1,$2,$3,$4,$5) RETURNING id`, [title, repId, effYear, config, universityId]))[0];
   } else if (row && !DRY && shouldRefreshRegulation(row.rulesConfig)) {
     await pool.query(`UPDATE educational_regulations SET "rulesConfig" = $2 WHERE id = $1`, [row.id, config]);
   }
@@ -346,7 +346,7 @@ async function ensureFaculty(code) {
   if (faculties.has(code)) return faculties.get(code);
   let row = (await q(`SELECT id FROM faculties WHERE "facultyCode" = $1`, [code]))[0];
   if (!row && !DRY) {
-    row = (await q(`INSERT INTO faculties (name, "facultyCode") VALUES ($1,$2) RETURNING id`, [`دانشکده ${code} (سما)`, code]))[0];
+    row = (await q(`INSERT INTO faculties (name, "facultyCode", "universityId") VALUES ($1,$2,$3) RETURNING id`, [`دانشکده ${code} (سما)`, code, universityId]))[0];
   }
   const id = row ? Number(row.id) : null;
   faculties.set(code, id);
@@ -369,15 +369,15 @@ async function ensureDepartment(facId, groupA, facultyCode) {
     row = (await q(`SELECT id FROM departments WHERE "facultyId" = $1 AND name = $2`, [facId, `گروه ${code}`]))[0];
     if (row) { deptByFacAndCode.set(key, Number(row.id)); return Number(row.id); }
     if (!DRY) {
-      row = (await q(`INSERT INTO departments (name, "facultyId", "departmentCode") VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id`, [`گروه ${code}`, facId, `F${facultyCode}-${code}`]))[0]
-        || (await q(`INSERT INTO departments (name, "facultyId") VALUES ($1,$2) RETURNING id`, [`گروه ${code}`, facId]))[0];
+      row = (await q(`INSERT INTO departments (name, "facultyId", "departmentCode", "universityId") VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id`, [`گروه ${code}`, facId, `F${facultyCode}-${code}`, universityId]))[0]
+        || (await q(`INSERT INTO departments (name, "facultyId", "universityId") VALUES ($1,$2,$3) RETURNING id`, [`گروه ${code}`, facId, universityId]))[0];
     }
     const id = row ? Number(row.id) : null;
     deptByFacAndCode.set(key, id);
     return id;
   }
   if (!DRY) {
-    row = (await q(`INSERT INTO departments (name, "facultyId", "departmentCode") VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id`, [`گروه ${code}`, facId, code]))[0]
+    row = (await q(`INSERT INTO departments (name, "facultyId", "departmentCode", "universityId") VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id`, [`گروه ${code}`, facId, code, universityId]))[0]
       || (await q(`SELECT id FROM departments WHERE "departmentCode" = $1`, [code]))[0];
   }
   const id = row ? Number(row.id) : null;
@@ -440,11 +440,11 @@ async function phaseTerms(file) {
     if (!batch.length || DRY) { batch.length = 0; return; }
     const vals = [];
     const ph = batch.map((r, i) => {
-      const o = i * 7;
-      vals.push(r.code, r.title, r.type, r.isCurrent, r.isSummer, r.start, r.end);
-      return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7})`;
+      const o = i * 8;
+      vals.push(r.code, r.title, r.type, r.isCurrent, r.isSummer, r.start, r.end, universityId);
+      return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7},$${o + 8})`;
     }).join(',');
-    const res = await pool.query(`INSERT INTO academic_terms ("termCode", title, "termType", "isCurrent", "isSummer", "startDate", "endDate")
+    const res = await pool.query(`INSERT INTO academic_terms ("termCode", title, "termType", "isCurrent", "isSummer", "startDate", "endDate", "universityId")
       VALUES ${ph} ON CONFLICT ("termCode") DO NOTHING RETURNING id, "termCode"`, vals);
     for (const r of res.rows) { termsByCode.set(r.termCode, { id: r.id }); stats.inserted++; }
     stats.existing += batch.length - res.rows.length;
@@ -485,12 +485,12 @@ async function phaseMajors(file) {
     if (!batch.length || DRY) { batch.length = 0; return; }
     const vals = [];
     const ph = batch.map((r, i) => {
-      const o = i * 13;
-      vals.push(r.name, r.degId, r.depId, r.code, r.facId, r.minUnits, r.std, r.est, r.term, r.active, r.head, r.expert, r.council);
-      return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7},$${o + 8},$${o + 9},$${o + 10},$${o + 11},$${o + 12},$${o + 13})`;
+      const o = i * 14;
+      vals.push(r.name, r.degId, r.depId, r.code, r.facId, r.minUnits, r.std, r.est, r.term, r.active, r.head, r.expert, r.council, universityId);
+      return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7},$${o + 8},$${o + 9},$${o + 10},$${o + 11},$${o + 12},$${o + 13},$${o + 14})`;
     }).join(',');
     const res = await pool.query(`INSERT INTO majors (name, "degreeLevelId", "departmentId", "majorCode", "facultyId",
-        "minUnits", "standardCode", "establishedDate", "terminatedDate", "isActive", "headStaffCode", "expertName", "lastCouncilDate")
+        "minUnits", "standardCode", "establishedDate", "terminatedDate", "isActive", "headStaffCode", "expertName", "lastCouncilDate", "universityId")
       VALUES ${ph} ON CONFLICT ("majorCode") DO UPDATE SET
         "facultyId" = COALESCE(majors."facultyId", EXCLUDED."facultyId"),
         "departmentId" = COALESCE(majors."departmentId", EXCLUDED."departmentId"),
@@ -547,15 +547,27 @@ async function phaseStudents(files, lookups) {
   // ۱) فایل اصلی
   const main = new Map();
   const stats = { total: 0, invalid: 0, badCode: 0, mergedSupp: 0, suppOrphans: 0, insertedUsers: 0, existingUsers: 0, insertedStudents: 0, existingStudents: 0, badNC: 0, ncChecksumWarn: 0, unmatchedMajor: new Set(), unknownMaghta: new Set(), unknownStatus: new Set(), idMin: null, idMax: null };
+  stats.dupStnoSameFile = 0;
   for await (const { cols } of tsvRows(files.students)) {
     const stno = (cols[0] || '').trim();
     if (!/^\d{7,14}$/.test(stno)) { stats.badCode++; continue; }
     const name = normTxt(cols[2]);
     if (!name) { stats.invalid++; continue; }
     stats.total++;
-    main.set(stno, cols);
+    const prev = main.get(stno);
+    if (prev && normTxt(prev[2]) !== name) {
+      // یک شماره، دو اسم متفاوت = دو نفر متفاوت (خطای سما) — با پسوند نگه دار
+      stats.dupStnoSameFile++;
+      let k = 2;
+      while (main.has(`${stno}-${k}`)) k++;
+      main.set(`${stno}-${k}`, cols);
+      console.log(`  ⚠ تکراری در فایل اصلی: ${stno} «${normTxt(prev[2])}» vs «${name}» → ${stno}-${k}`);
+    } else if (!prev) {
+      main.set(stno, cols);
+    }
+    // اگر اسم یکسان بود، رکورد تکراری نادیده گرفته می‌شود (همان شخص)
   }
-  console.log(`فایل اصلی: ${stats.total} ردیف معتبر (${stats.badCode} کد نامعتبر، ${stats.invalid} بدون نام)`);
+  console.log(`فایل اصلی: ${stats.total} ردیف معتبر (${stats.badCode} کد نامعتبر، ${stats.invalid} بدون نام${stats.dupStnoSameFile ? `، ${stats.dupStnoSameFile} شماره تکراری` : ''})`);
   // ۱-ب) فایل دوم دانشجویی (students1.txt) → مرج: stno جدید اضافه، فیلد خالی با مقدار پر می‌شود
   // کلید هر دو فایل شماره دانشجویی (stno) است — نه کدملی
   if (files.studentsSubsetSkipped) {
@@ -568,6 +580,14 @@ async function phaseStudents(files, lookups) {
       n2++;
       const m = main.get(stno);
       if (!m) { main.set(stno, cols); stats.total++; added2++; }
+      else if (normTxt(m[2]) !== name) {
+        // فایل دوم: همان شماره ولی اسم متفاوت = نفر دوم — با پسوند
+        let k = 2;
+        while (main.has(`${stno}-${k}`)) k++;
+        main.set(`${stno}-${k}`, cols);
+        stats.total++; added2++;
+        console.log(`  ⚠ تکراری بین دو فایل: ${stno} «${normTxt(m[2])}» vs «${name}» → ${stno}-${k}`);
+      }
       else {
         for (let i = 0; i < cols.length; i++) {
           if (!(m[i] || '').trim() && (cols[i] || '').trim()) { m[i] = cols[i]; filled2++; }
@@ -687,14 +707,14 @@ async function phaseStudents(files, lookups) {
     const ch = userRowsUnique.slice(i, i + 500);
     const vals = [];
     const ph = ch.map((r, j) => {
-      const o = j * 20;
+      const o = j * 21;
       vals.push(r.nationalCode, r.firstName, r.lastName, r.mobile, r.email, r.birthCertNo, r.birthDate,
         r.fatherName, r.gender, r.address, r.firstNameEn, r.lastNameEn, r.nationality, r.religion,
-        r.postalCode, r.passportNumber, r.isAlive, r.placeOfBirth, r.placeOfIssue, 'MIGRATED:' + randomBytes(8).toString('hex'));
-      return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7},$${o + 8},$${o + 9},$${o + 10},$${o + 11},$${o + 12},$${o + 13},$${o + 14},$${o + 15},$${o + 16},$${o + 17},$${o + 18},$${o + 19},$${o + 20},1,1)`;
+        r.postalCode, r.passportNumber, r.isAlive, r.placeOfBirth, r.placeOfIssue, 'MIGRATED:' + randomBytes(8).toString('hex'), universityId);
+      return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7},$${o + 8},$${o + 9},$${o + 10},$${o + 11},$${o + 12},$${o + 13},$${o + 14},$${o + 15},$${o + 16},$${o + 17},$${o + 18},$${o + 19},$${o + 20},1,1,$${o + 21})`;
     }).join(',');
     const res = await pool.query(`INSERT INTO users ("nationalCode","firstName","lastName",mobile,email,"birthCertNo","birthDate",
-        "fatherName",gender,address,"firstNameEn","lastNameEn",nationality,religion,"postalCode","passportNumber","isAlive","placeOfBirth","placeOfIssue","passwordHash","isActive","mustChangePassword")
+        "fatherName",gender,address,"firstNameEn","lastNameEn",nationality,religion,"postalCode","passportNumber","isAlive","placeOfBirth","placeOfIssue","passwordHash","isActive","mustChangePassword","universityId")
       VALUES ${ph} ON CONFLICT ("nationalCode") DO NOTHING RETURNING id, "nationalCode"`, vals);
     for (const r of res.rows) { ncToId.set(r.nationalCode, r.id); stats.insertedUsers++; if (stats.idMin === null || r.id < stats.idMin) stats.idMin = r.id; if (stats.idMax === null || r.id > stats.idMax) stats.idMax = r.id; }
     if (res.rows.length < ch.length) {
@@ -709,17 +729,39 @@ async function phaseStudents(files, lookups) {
   // ۵) درج students (bulk)
   if (!DRY) {
     const userByStno = new Map(userRows.map(u => [u.stno, u]));
+    // تشخیص شماره دانشجویی تکراری با کدملی متفاوت (خطای داده سما) — پسوند + گزارش
+    const stnoToNC = new Map(); // stno -> Set(nationalCode)
+    for (const u of userRows) {
+      if (!stnoToNC.has(u.stno)) stnoToNC.set(u.stno, new Set());
+      stnoToNC.get(u.stno).add(u.nationalCode);
+    }
+    stats.dupStno = 0;
+    const stnoSuffix = new Map(); // stno+nc -> final stno
+    for (const [stno, ncs] of stnoToNC) {
+      if (ncs.size > 1) {
+        stats.dupStno++;
+        let k = 0;
+        for (const nc of ncs) {
+          stnoSuffix.set(`${stno}|${nc}`, k === 0 ? stno : `${stno}-${k + 1}`);
+          k++;
+        }
+        console.log(`  ⚠ شماره تکراری ${stno}: ${[...ncs].join('، ')}`);
+      }
+    }
+    if (stats.dupStno) console.log(`  شماره‌های تکراری: ${stats.dupStno} مورد (پسوند زده شد)`);
     const stuRows = [];
     for (const j of stuJobs) {
       const u = userByStno.get(j.stno);
       const userId = u && ncToId.get(u.nationalCode);
       if (!userId) { stats.invalid++; continue; }
+      // اگر این stno تکراری است، کد نهایی پسونددار را استفاده کن
+      const finalStno = (u && stnoSuffix.get(`${j.stno}|${u.nationalCode}`)) || j.stno;
       const degId = await ensureDegree(j.maghta);
       const regId = await ensureRegulation(degId, j.maghta, j.entryYear);
       const mj = majorsByCode.get(j.reshte);
       if (!mj && j.reshte) stats.unmatchedMajor.add(j.reshte);
       stuRows.push({
-        userId, stno: j.stno, majorId: mj ? mj.id : null, degId, regId,
+        userId, stno: finalStno, majorId: mj ? mj.id : null, degId, regId,
         entryYear: j.entryYear, entryTerm: j.entryTerm, status: mapStudentStatus(j.status),
         quota: j.quota, universityId, totalAverage: j.totalAverage, graduateDate: j.graduateDate,
         nativeType: j.nativeType, ethnicity: j.ethnicity, alloc: j.alloc, acceptType: j.acceptType,
@@ -837,8 +879,8 @@ async function phaseGrades(files) {
   for (let i = 0; i < missingCourses.length; i += 500) {
     const ch = missingCourses.slice(i, i + 500);
     const vals = [];
-    const ph = ch.map((c, j) => { vals.push(c, `درس مهاجرتی ${c}`); return `($${j * 2 + 1},$${j * 2 + 2},0,0,0)`; }).join(',');
-    await pool.query(`INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units)
+    const ph = ch.map((c, j) => { vals.push(c, `درس مهاجرتی ${c}`, universityId); return `($${j * 3 + 1},$${j * 3 + 2},0,0,0,$${j * 3 + 3})`; }).join(',');
+    await pool.query(`INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units, "universityId")
       VALUES ${ph} ON CONFLICT (code) DO NOTHING`, vals);
   }
   for (const r of await q(`SELECT id, code FROM courses`)) coursesByCode.set(r.code, r.id);
@@ -864,8 +906,8 @@ async function phaseGrades(files) {
   for (let i = 0; i < needOff.length; i += 500) {
     const ch = needOff.slice(i, i + 500);
     const vals = [];
-    const ph = ch.map((o, j) => { vals.push(o.termId, o.courseId, o.group); return `($${j * 3 + 1},$${j * 3 + 2},$${j * 3 + 3},999,0,'TRANSFER',1)`; }).join(',');
-    const res = await pool.query(`INSERT INTO course_offerings ("termId","courseId","groupNumber",capacity,"enrolledCount","offeringType","isActive")
+    const ph = ch.map((o, j) => { vals.push(o.termId, o.courseId, o.group, universityId); return `($${j * 4 + 1},$${j * 4 + 2},$${j * 4 + 3},999,0,'TRANSFER',1,$${j * 4 + 4})`; }).join(',');
+    const res = await pool.query(`INSERT INTO course_offerings ("termId","courseId","groupNumber",capacity,"enrolledCount","offeringType","isActive","universityId")
       VALUES ${ph} RETURNING id,"termId","courseId","groupNumber"`, vals);
     for (const r of res.rows) offMap.set(`${r.termId}|${r.courseId}|${r.groupNumber}`, r.id);
     stats.offeringsNew += res.rows.length;
@@ -890,11 +932,11 @@ async function phaseGrades(files) {
     }
     if (!rows.length) continue;
     const ph = rows.map((r, k) => {
-      const o = k * 6;
-      vals.push(r.s, r.o, r.v, r.gs, r.v !== null ? 1 : 0, r.at);
-      return `($${o + 1},$${o + 2},'REGISTERED',$${o + 3},$${o + 4},$${o + 5},$${o + 6})`;
+      const o = k * 7;
+      vals.push(r.s, r.o, r.v, r.gs, r.v !== null ? 1 : 0, r.at, universityId);
+      return `($${o + 1},$${o + 2},'REGISTERED',$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7})`;
     }).join(',');
-    const res = await pool.query(`INSERT INTO enrollments ("studentId","offeringId",status,"gradeValue","gradeStatus","hasEvaluated","registeredAt")
+    const res = await pool.query(`INSERT INTO enrollments ("studentId","offeringId",status,"gradeValue","gradeStatus","hasEvaluated","registeredAt","universityId")
       VALUES ${ph} ON CONFLICT ("studentId","offeringId") DO NOTHING`, vals);
     stats.enrollIns += res.rowCount;
     done += ch.length;
@@ -1109,7 +1151,7 @@ async function phaseGroups(file) {
     }
     // دانشکده-کد تکراری نیست → بساز
     if (!DRY) {
-      row = (await q(`INSERT INTO departments (name, "facultyId", "departmentCode", kind, "isActive") VALUES ($1,$2,$3,'ACADEMIC',1) ON CONFLICT DO NOTHING RETURNING id`, [name.slice(0,150), facId, code]))[0]
+      row = (await q(`INSERT INTO departments (name, "facultyId", "departmentCode", kind, "isActive", "universityId") VALUES ($1,$2,$3,'ACADEMIC',1,$4) ON CONFLICT DO NOTHING RETURNING id`, [name.slice(0,150), facId, code, universityId]))[0]
         || (await q(`SELECT id FROM departments WHERE "departmentCode"=$1`, [code]))[0];
       if (row) { stats.inserted++; deptByFacAndCode.set(`${facId}|${code}`, Number(row.id)); deptByFacAndCode.set(`CODE:${code}`, Number(row.id)); deptByFacAndCode.set(`NAME:${name}`, Number(row.id)); }
     } else stats.inserted++;
@@ -1193,11 +1235,11 @@ async function phaseStterm(files, file) {
     if (!batch.length || DRY) { batch.length = 0; return; }
     const vals = [];
     const ph = batch.map((r, i) => {
-      const o = i * 7;
-      vals.push(r.s, r.t, r.tc, r.sc, r.st, r.pb, r.avg);
-      return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7})`;
+      const o = i * 8;
+      vals.push(r.s, r.t, r.tc, r.sc, r.st, r.pb, r.avg, universityId);
+      return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7},$${o + 8})`;
     }).join(',');
-    const res = await pool.query(`INSERT INTO student_term_states ("studentId","termId","termCode","statusCode","statusTitle","isProbation","termAvg")
+    const res = await pool.query(`INSERT INTO student_term_states ("studentId","termId","termCode","statusCode","statusTitle","isProbation","termAvg","universityId")
       VALUES ${ph} ON CONFLICT ("studentId","termId") DO UPDATE SET
         "statusCode" = COALESCE(EXCLUDED."statusCode", student_term_states."statusCode"),
         "statusTitle" = COALESCE(EXCLUDED."statusTitle", student_term_states."statusTitle"),
@@ -1252,11 +1294,11 @@ async function phaseTatbigh(file) {
     if (DRY) { batch.length = 0; return; }
     const vals = [];
     const ph = batch.map((r, i) => {
-      const o = i * 16;
-      vals.push(r.code, r.title, r.theory, r.practical, r.units, r.type, r.deptId, r.englishName, r.minPassedMark, r.thHour, r.ohHour, r.defaultAccept, r.defaultReject, r.description, r.isThesis, r.hasProject);
-      return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5},$${o+6},$${o+7},$${o+8},$${o+9},$${o+10},$${o+11},$${o+12},$${o+13},$${o+14},$${o+15},$${o+16})`;
+      const o = i * 17;
+      vals.push(r.code, r.title, r.theory, r.practical, r.units, r.type, r.deptId, r.englishName, r.minPassedMark, r.thHour, r.ohHour, r.defaultAccept, r.defaultReject, r.description, r.isThesis, r.hasProject, universityId);
+      return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5},$${o+6},$${o+7},$${o+8},$${o+9},$${o+10},$${o+11},$${o+12},$${o+13},$${o+14},$${o+15},$${o+16},$${o+17})`;
     }).join(',');
-    const res = await pool.query(`INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units, "courseType", "departmentId", "englishName", "minPassedMark", "weeklyTheoryHours", "weeklyPracticalHours", "defaultAcceptMarkState", "defaultRejectMarkState", description, "isThesis", "hasProject")
+    const res = await pool.query(`INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units, "courseType", "departmentId", "englishName", "minPassedMark", "weeklyTheoryHours", "weeklyPracticalHours", "defaultAcceptMarkState", "defaultRejectMarkState", description, "isThesis", "hasProject", "universityId")
       VALUES ${ph}
       ON CONFLICT (code) DO UPDATE SET
         title = EXCLUDED.title,
@@ -1404,7 +1446,7 @@ try {
   const files = await detectFiles(DIR);
   console.log('فایل‌ها:', Object.fromEntries(Object.entries(files).map(([k, v]) => [k, typeof v === 'string' ? v.split('\\').pop() : v])));
   if (files.studentsSubsetSkipped) console.log(`(زیرمجموعه نادیده گرفته شد: ${files.studentsSubsetSkipped.split('\\').pop()})`);
-  for (const s of ['pre', 'terms', 'majors', 'groups', 'courses', 'links', 'students', 'grades', 'stterm', 'codemap']) {
+  for (const s of ['pre', 'terms', 'groups', 'majors', 'courses', 'links', 'students', 'grades', 'stterm', 'codemap']) {
     if (!STEPS.includes(s)) continue;
     if (s === 'pre') await phasePre();
     if (s === 'terms') { if (!files.terms) throw new Error('فایل ترم‌ها پیدا نشد'); await phaseTerms(files.terms); }
