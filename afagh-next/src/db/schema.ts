@@ -224,7 +224,7 @@ export const educational_regulations = pgTable('educational_regulations', {
 export const students = pgTable('students', {
   id: serial('id').primaryKey(),
   userId: integer('userId').notNull().references(() => users.id),
-  studentCode: varchar('studentCode', { length: 14 }).notNull().unique(),
+  studentCode: varchar('studentCode', { length: 14 }).notNull(),
   majorId: integer('majorId').references(() => majors.id),
   degreeLevelId: integer('degreeLevelId').notNull().references(() => degree_level_configs.id),
   regulationId: integer('regulationId').notNull().references(() => educational_regulations.id),
@@ -292,7 +292,10 @@ export const students = pgTable('students', {
   documentDeficiency: varchar('documentDeficiency', { length: 200 }), // نواقص پرونده
   unitsRemaining: integer('unitsRemaining'),                        // واحد مانده تا فارغ‌التحصیلی
   eqSemesters: integer('eqSemesters').default(0),                   // تعداد ترم معادل‌سازی
-});
+}, (t) => [
+  // شماره دانشجویی در هر دانشگاه یکتاست (نه سراسری) — سما هر دانشگاه شماره‌گذاری جدا دارد
+  unique('uq_students_uni_code').on(t.universityId, t.studentCode),
+]);
 
 /**
  * وضعیت هر دانشجو در هر نیمسال — از «وضعيت نيمسال دانشجويان.txt» سما.
@@ -314,7 +317,7 @@ export const student_term_states = pgTable('student_term_states', {
 export const staff = pgTable('staff', {
   id: serial('id').primaryKey(),
   userId: integer('userId').notNull().unique().references(() => users.id),
-  staffCode: varchar('staffCode', { length: 20 }).notNull().unique(),
+  staffCode: varchar('staffCode', { length: 20 }).notNull(),
   departmentId: integer('departmentId').references(() => departments.id),
   staffType: varchar('staffType', { length: 50 }),
   academicRank: varchar('academicRank', { length: 50 }),
@@ -342,7 +345,10 @@ export const staff = pgTable('staff', {
   canManageServicePool: integer('canManageServicePool').default(0), // مدیر گروه خدماتی-سراسری (تربیت بدنی/زبان)
   /** دانشگاه مالک این پرونده */
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
-});
+}, (t) => [
+  // کد استاد در هر دانشگاه یکتاست (نه سراسری)
+  unique('uq_staff_uni_code').on(t.universityId, t.staffCode),
+]);
 
 /** خوشهٔ دروس هم‌ارز (مثل «ریاضی عمومی ۱» و «ریاضیات پایه» — یک محتوا، چند کد) */
 export const equivalence_clusters = pgTable('equivalence_clusters', {
@@ -354,7 +360,7 @@ export const equivalence_clusters = pgTable('equivalence_clusters', {
 
 export const courses = pgTable('courses', {
   id: serial('id').primaryKey(),
-  code: varchar('code', { length: 20 }).notNull().unique(),
+  code: varchar('code', { length: 20 }).notNull(),
   title: varchar('title', { length: 150 }).notNull(),
   theoreticalUnits: numeric('theoreticalUnits', { precision: 3, scale: 1 }).default('0'),
   practicalUnits: numeric('practicalUnits', { precision: 3, scale: 1 }).default('0'),
@@ -390,7 +396,10 @@ export const courses = pgTable('courses', {
   facesHours: numeric('facesHours', { precision: 3, scale: 1 }),       // ساعات چهره‌به‌چهره
   /** کدهای دروس هم‌ارز (جداشده با کاما) — مثال: '101,102,103' */
   equivalentCourseCodes: text('equivalentCourseCodes'),
-});
+}, (t) => [
+  // کد درس در هر دانشگاه یکتاست (نه سراسری) — سما هر دانشگاه کدگذاری جدا دارد
+  unique('uq_courses_uni_code').on(t.universityId, t.code),
+]);
 
 /** گرایش‌های برنامهٔ درسی (مثلاً «هوش مصنوعی و رباتیک») — جایگزین tracks[] Mock در Client قدیم (D4) */
 export const curriculum_tracks = pgTable('curriculum_tracks', {

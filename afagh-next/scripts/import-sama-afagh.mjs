@@ -556,7 +556,7 @@ async function phaseMajors(file) {
     if (batch.length >= 200) await flush();
   }
   await flush();
-  const rows = await q(`SELECT id, "majorCode", "standardCode" FROM majors`);
+  const rows = await q(`SELECT id, "majorCode", "standardCode" FROM majors WHERE "universityId" = $1`, [universityId]);
   for (const r of rows) if (r.majorCode) majorsByCode.set(String(r.majorCode), { id: r.id, standardCode: r.standardCode });
   console.log(`رشته‌ها: total=${stats.total} inserted=${stats.inserted} existing=${stats.existing} invalid=${stats.invalid} (majors در DB: ${majorsByCode.size})`);
   await logRun('major', 'reshtelist (SAMA)', stats);
@@ -571,7 +571,7 @@ async function phaseStudents(files, lookups) {
   console.log('\n── دانشجویان (ادغام اصلی + تکمیلی) ──');
   // اگر majorsByCode خالی است (مثلاً مرحلهٔ students به‌تنهایی اجرا شده)، از DB پر کن
   if (!majorsByCode.size && !DRY) {
-    const mRows = await q(`SELECT id, "majorCode", "standardCode" FROM majors`);
+    const mRows = await q(`SELECT id, "majorCode", "standardCode" FROM majors WHERE "universityId" = $1`, [universityId]);
     for (const r of mRows) if (r.majorCode) majorsByCode.set(String(r.majorCode), { id: r.id, standardCode: r.standardCode });
     console.log(`رشته‌ها از DB بارگذاری شد: ${majorsByCode.size} رشته`);
   }
@@ -817,7 +817,7 @@ async function phaseStudents(files, lookups) {
       const res = await pool.query(`INSERT INTO students ("userId","studentCode","majorId","degreeLevelId","regulationId",
           "entryYear","entryTerm",status,"quotaType","universityId","totalAverage","graduateDate","nativeType",ethnicity,
           "acceptanceAllocation","acceptanceType","isaarCode","studyingMode","trainingMethod","eduEndYear","eduEndSemester","saminLocalFieldCode","saminFieldCode")
-        VALUES ${ph} ON CONFLICT ("studentCode") DO NOTHING RETURNING id`, vals);
+        VALUES ${ph} ON CONFLICT ("universityId","studentCode") DO NOTHING RETURNING id`, vals);
       stats.insertedStudents += res.rows.length;
       stats.existingStudents += ch.length - res.rows.length;
       if ((i / 500) % 20 === 0) console.log(`  students… ${Math.min(i + 500, stuRows.length)}/${stuRows.length}`);
@@ -855,7 +855,7 @@ async function phaseGrades(files) {
     for (const r of rows) studentsByCode.set(r.studentCode, { id: Number(r.id), name: `${r.lastName}-${r.firstName}` });
   }
   if (!coursesByCode.size && !DRY) {
-    for (const r of await q(`SELECT id, code FROM courses`)) coursesByCode.set(r.code, Number(r.id));
+    for (const r of await q(`SELECT id, code FROM courses WHERE "universityId" = $1`, [universityId])) coursesByCode.set(r.code, Number(r.id));
   }
   const seenLegacy = new Set();
   const lessonCodes = new Set();
@@ -914,9 +914,9 @@ async function phaseGrades(files) {
     const vals = [];
     const ph = ch.map((c, j) => { vals.push(c, `درس مهاجرتی ${c}`, universityId); return `($${j * 3 + 1},$${j * 3 + 2},0,0,0,$${j * 3 + 3})`; }).join(',');
     await pool.query(`INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units, "universityId")
-      VALUES ${ph} ON CONFLICT (code) DO NOTHING`, vals);
+      VALUES ${ph} ON CONFLICT ("universityId",code) DO NOTHING`, vals);
   }
-  for (const r of await q(`SELECT id, code FROM courses`)) coursesByCode.set(r.code, r.id);
+  for (const r of await q(`SELECT id, code FROM courses WHERE "universityId" = $1`, [universityId])) coursesByCode.set(r.code, r.id);
   stats.coursesNew = missingCourses.length;
   console.log(`دروس placeholder: ${stats.coursesNew} (کل دروس: ${coursesByCode.size})`);
   // ارائه‌ها (TRANSFER)
@@ -1338,7 +1338,7 @@ async function phaseTatbigh(file) {
     }).join(',');
     const res = await pool.query(`INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units, "courseType", "departmentId", "englishName", "minPassedMark", "weeklyTheoryHours", "weeklyPracticalHours", "defaultAcceptMarkState", "defaultRejectMarkState", description, "isThesis", "hasProject", "universityId")
       VALUES ${ph}
-      ON CONFLICT (code) DO UPDATE SET
+      ON CONFLICT ("universityId",code) DO UPDATE SET
         title = EXCLUDED.title,
         "theoreticalUnits" = EXCLUDED."theoreticalUnits",
         "practicalUnits" = EXCLUDED."practicalUnits",
@@ -1406,7 +1406,7 @@ async function phaseTatbigh(file) {
   }
   await flush();
   // refresh coursesByCode
-  for (const r of await q(`SELECT id, code FROM courses`)) coursesByCode.set(r.code, Number(r.id));
+  for (const r of await q(`SELECT id, code FROM courses WHERE "universityId" = $1`, [universityId])) coursesByCode.set(r.code, Number(r.id));
   console.log(`دروس: total=${stats.total} upserted=${stats.inserted} invalid=${stats.invalid} linked=${stats.linked} (courses در DB: ${coursesByCode.size})`);
   if (stats.clamped?.size) console.log(`  ⚠ ساعت/حدنصاب خارج از بازه clamp شد (${stats.clamped.size}): ${[...stats.clamped].slice(0, 10).join('، ')}`);
   if (stats.unlinkedGroup.size) console.log(`  گروه‌های بی‌تطبیق tatbigh: ${[...stats.unlinkedGroup].slice(0,10).join('، ')}`);
@@ -1449,7 +1449,7 @@ async function phaseDoros(file) {
   const stats = { total: 0, updated: 0 };
   // ابتدا coursesByCode را رفرش کن
   if (coursesByCode.size <= 1) {
-    for (const r of await q(`SELECT id, code FROM courses`)) coursesByCode.set(r.code, Number(r.id));
+    for (const r of await q(`SELECT id, code FROM courses WHERE "universityId" = $1`, [universityId])) coursesByCode.set(r.code, Number(r.id));
   }
   // خواندن DOROS: برای هر درس، ردیفی با LessonSubType=3 (عملی) را ترجیح بده
   // چون ردیف‌های عملی DefaultAcceptMarkState/DefaultRejectMarkState دارند
