@@ -353,13 +353,17 @@ async function ensureRegulation(degreeId, maghta, entryYear) {
 }
 async function ensureFaculty(code) {
   code = String(code ?? '').trim() || '0';
-  if (faculties.has(code)) return faculties.get(code);
-  let row = (await q(`SELECT id FROM faculties WHERE "facultyCode" = $1`, [code]))[0];
+  await ensureUniversity();
+  const fkey = `${universityId}|${code}`;
+  if (faculties.has(fkey)) return faculties.get(fkey);
+  let row = (await q(`SELECT id FROM faculties WHERE "facultyCode" = $1 AND "universityId" = $2`, [code, universityId]))[0];
   if (!row && !DRY) {
     row = (await q(`INSERT INTO faculties (name, "facultyCode", "universityId") VALUES ($1,$2,$3) RETURNING id`, [`دانشکده ${code} (سما)`, code, universityId]))[0];
   }
   const id = row ? Number(row.id) : null;
-  faculties.set(code, id);
+  faculties.set(fkey, id);
+  // سازگاری عقب‌رو برای کدهای قدیمی بدون پیشوند (فقط خواندن)
+  if (!faculties.has(code)) faculties.set(code, id);
   return id;
 }
 
@@ -372,8 +376,9 @@ async function ensureDepartment(facId, groupA, facultyCode) {
   // اگر همین دانشکده همین کد را دارد
   let row = (await q(`SELECT id FROM departments WHERE "facultyId" = $1 AND "departmentCode" = $2`, [facId, code]))[0];
   if (row) { deptByFacAndCode.set(key, Number(row.id)); return Number(row.id); }
-  // اگر دانشکده دیگر همین کد را گرفته باشد — کد یکتاست، بدون کد بساز (مثل seed-base)
-  const owner = (await q(`SELECT id FROM departments WHERE "departmentCode" = $1`, [code]))[0];
+  // اگر همین دانشگاهِ دانشکده دیگر همین کد را گرفته باشد — کد یکتاست، بدون کد بساز (مثل seed-base)
+  // (کدِ دانشگاه دیگر تداخلی ندارد — هر دانشگاه فضای کد خودش را دارد)
+  const owner = (await q(`SELECT d.id FROM departments d JOIN faculties f ON f.id = d."facultyId" WHERE d."departmentCode" = $1 AND f."universityId" = $2`, [code, universityId]))[0];
   if (owner) {
     // سعی: آیا گروه هم‌نام در همین دانشکده داریم؟
     row = (await q(`SELECT id FROM departments WHERE "facultyId" = $1 AND name = $2`, [facId, `گروه ${code}`]))[0];
@@ -388,7 +393,7 @@ async function ensureDepartment(facId, groupA, facultyCode) {
   }
   if (!DRY) {
     row = (await q(`INSERT INTO departments (name, "facultyId", "departmentCode", "universityId") VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id`, [`گروه ${code}`, facId, code, universityId]))[0]
-      || (await q(`SELECT id FROM departments WHERE "departmentCode" = $1`, [code]))[0];
+      || (await q(`SELECT id FROM departments WHERE "facultyId" = $1 AND "departmentCode" = $2`, [facId, code]))[0];
   }
   const id = row ? Number(row.id) : null;
   deptByFacAndCode.set(key, id);
@@ -431,8 +436,8 @@ async function phasePre() {
   // نقشه‌های آماده
   const degRows = await q(`SELECT id, code FROM degree_level_configs`);
   for (const d of degRows) degrees.set(d.code, Number(d.id));
-  const facRows = await q(`SELECT id, "facultyCode" FROM faculties`);
-  for (const f of facRows) if (f.facultyCode) faculties.set(f.facultyCode, Number(f.id));
+  const facRows = await q(`SELECT id, "facultyCode", "universityId" FROM faculties`);
+  for (const f of facRows) if (f.facultyCode) faculties.set(`${f.universityId}|${f.facultyCode}`, Number(f.id));
   const regRows = await q(`SELECT id, title, "degreeLevelId" FROM educational_regulations`);
   for (const r of regRows) {
     const m = String(r.title || '').match(/کد (\S+?)، مقطع/);
@@ -1148,7 +1153,7 @@ async function phaseGroups(file) {
   const stats = { total: 0, inserted: 0, existing: 0, invalid: 0, facNew: 0 };
   // حذف گروه‌های بی‌کدِ خالی قبل از درج (به درخواست: حذف کن) — FKها اول آزاد شوند
   if (!DRY) {
-    const toDel = (await q(`SELECT id FROM departments WHERE "departmentCode" IS NULL AND name ~ '^\\s*\\d+\\s*$'`)).map(r=>r.id);
+    const toDel = (await q(`SELECT d.id FROM departments d JOIN faculties f ON f.id = d."facultyId" WHERE d."departmentCode" IS NULL AND d.name ~ '^\\s*\\d+\\s*$' AND f."universityId" = $1`, [universityId])).map(r=>r.id);
     if (toDel.length){
       await pool.query(`UPDATE staff SET "departmentId"=NULL WHERE "departmentId"=ANY($1)`,[toDel]);
       await pool.query(`UPDATE courses SET "departmentId"=NULL WHERE "departmentId"=ANY($1)`,[toDel]);
@@ -1166,8 +1171,8 @@ async function phaseGroups(file) {
     const facId = await ensureFaculty(place);
     if (!facId) { stats.invalid++; continue; }
     const facCode = place;
-    // جستجو با کد جهانی
-    let row = (await q(`SELECT id, name FROM departments WHERE "departmentCode"=$1`, [code]))[0];
+    // جستجو با کد در همین دانشگاه (کدها بین دانشگاه‌ها مشترک‌اند)
+    let row = (await q(`SELECT d.id, d.name FROM departments d JOIN faculties f ON f.id = d."facultyId" WHERE d."departmentCode"=$1 AND f."universityId"=$2`, [code, universityId]))[0];
     if (row) {
       stats.existing++;
       // اگر نام فرق دارد، به‌روز کن (فقط اگر placeholder بود)
@@ -1182,7 +1187,7 @@ async function phaseGroups(file) {
     // دانشکده-کد تکراری نیست → بساز
     if (!DRY) {
       row = (await q(`INSERT INTO departments (name, "facultyId", "departmentCode", kind, "isActive", "universityId") VALUES ($1,$2,$3,'ACADEMIC',1,$4) ON CONFLICT DO NOTHING RETURNING id`, [name.slice(0,150), facId, code, universityId]))[0]
-        || (await q(`SELECT id FROM departments WHERE "departmentCode"=$1`, [code]))[0];
+        || (await q(`SELECT id FROM departments WHERE "facultyId"=$1 AND "departmentCode"=$2`, [facId, code]))[0];
       if (row) { stats.inserted++; deptByFacAndCode.set(`${facId}|${code}`, Number(row.id)); deptByFacAndCode.set(`CODE:${code}`, Number(row.id)); deptByFacAndCode.set(`NAME:${name}`, Number(row.id)); }
     } else stats.inserted++;
   }
@@ -1194,10 +1199,10 @@ async function phaseCourseGroupLink(file) {
   await ensureUniversity();
   console.log('\n── تطبیق دروس→گروه (تطبيق کد دروس.txt) ──');
   const stats = { total: 0, linked: 0, noDept: 0, noCourse: new Set(), badGroup: new Set() };
-  // کش کد گروه→deptId
-  if (![...deptByFacAndCode.keys()].some(k=>k.startsWith('CODE:'))) {
-    for (const r of await q(`SELECT id, "departmentCode" FROM departments WHERE "departmentCode" IS NOT NULL`)) deptByFacAndCode.set(`CODE:${r.departmentCode}`, Number(r.id));
-  }
+  // کش کد گروه→deptId (محدود به همین دانشگاه — کلیدهای CODE: بازنویسی می‌شوند)
+  await ensureUniversity();
+  for (const k of [...deptByFacAndCode.keys()]) if (k.startsWith('CODE:')) deptByFacAndCode.delete(k);
+  for (const r of await q(`SELECT d.id, d."departmentCode" FROM departments d JOIN faculties f ON f.id = d."facultyId" WHERE d."departmentCode" IS NOT NULL AND f."universityId" = $1`, [universityId])) deptByFacAndCode.set(`CODE:${r.departmentCode}`, Number(r.id));
   const updates = []; // {code, deptId}
   for await (const { cols } of tsvRows(file)) {
     const code = (cols[0] || '').trim();
