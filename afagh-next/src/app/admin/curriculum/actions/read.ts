@@ -54,9 +54,12 @@ export async function getCurriculumOverviewAction(): Promise<CurriculumOverviewR
 export async function listCourseBankAction(): Promise<CourseBankResult> {
   await requireRole(EDITORS);
   try {
+    const { getCurrentUniversity } = await import('@/lib/university-scope');
+    const uni = await getCurrentUniversity().catch(() => null);
     const rows = await db
       .select({ id: courses.id, code: courses.code, title: courses.title, units: courses.units, courseType: courses.courseType })
       .from(courses)
+      .where(uni ? eq(courses.universityId, uni.id) : undefined)
       .orderBy(asc(courses.code));
     return {
       ok: true,

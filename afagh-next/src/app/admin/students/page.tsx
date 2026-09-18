@@ -1,8 +1,9 @@
-import { and, count, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { degree_level_configs, departments, educational_regulations, faculties, legacy_code_maps, majors, roles, staff, students, universities, user_roles, users } from '@/db/schema';
 import type { RegulationPick } from './types';
 import { requireRole } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import { normalizeFa, normCol } from '@/lib/persian-search';
 import { getSetting } from '@/lib/settings';
 import StudentsManagerClient from './StudentsManagerClient';
@@ -25,10 +26,12 @@ export default async function AdminStudentsPage({
   try {
     allUniversities = await db.select().from(universities).where(eq(universities.isActive, 1)).orderBy(universities.id);
   } catch { /* جدول universities ممکن است هنوز ساخته نشده باشد */ }
+  // اولویت: پارام صریح ?university= → کوکی سوییچر سراسری → AFAGH
   const universityParam = (sp.university || '').trim();
-  const currentUniversity = universityParam && !universityParam.startsWith('_')
-    ? allUniversities.find(u => u.code === universityParam) ?? allUniversities[0]
-    : allUniversities[0];
+  let cookieUni = '';
+  try { cookieUni = (await getCurrentUniversity()).code; } catch { /* پیش‌فرض */ }
+  const wantCode = (universityParam && !universityParam.startsWith('_') ? universityParam : cookieUni) || 'AFAGH';
+  const currentUniversity = allUniversities.find(u => u.code === wantCode) ?? allUniversities[0];
   const currentUniversityId = currentUniversity?.id ?? null;
 
   const q = (sp.q || '').trim().slice(0, 60);
@@ -44,7 +47,7 @@ export default async function AdminStudentsPage({
 
   // ── فیلترهای مشترک ──
   const conds = [];
-  if (currentUniversityId) conds.push(or(eq(students.universityId, currentUniversityId), isNull(students.universityId))!);
+  if (currentUniversityId) conds.push(eq(students.universityId, currentUniversityId));
   if (statusFilter !== 'ALL') conds.push(eq(students.status, statusFilter));
   if (degreeFilter > 0) conds.push(eq(students.degreeLevelId, degreeFilter));
   if (q) {
@@ -260,7 +263,7 @@ export default async function AdminStudentsPage({
     .innerJoin(users, eq(users.id, staff.userId))
     .leftJoin(departments, eq(departments.id, staff.departmentId))
     .leftJoin(faculties, eq(faculties.id, staff.facultyId))
-    .where(currentUniversityId ? or(eq(staff.universityId, currentUniversityId), isNull(staff.universityId)) : undefined)
+    .where(currentUniversityId ? eq(staff.universityId, currentUniversityId) : undefined)
     .orderBy(desc(staff.id));
 
   const [head] = await db.select().from(roles).where(eq(roles.code, 'DEP_HEAD')).limit(1);

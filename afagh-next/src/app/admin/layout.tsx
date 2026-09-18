@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { requireRole } from '@/lib/auth';
 import { logoutAction } from '../login/actions';
 import AdminNav from './AdminNav';
+import UniversitySwitcher from './UniversitySwitcher';
+import { getCurrentUniversity, listUniversities } from '@/lib/university-scope';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRole([
@@ -15,6 +17,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     'DEP_HEAD',
     'VICE_EDU',
   ]);
+  const unis = await listUniversities();
+  const curUni = await getCurrentUniversity();
   return (
     <div className="min-h-screen bg-slate-100">
       <header className="bg-indigo-950 text-white shadow-md">
@@ -28,11 +32,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <p className="text-xs text-indigo-300">{user.name} · نقش‌ها: {user.roles.join('، ')}</p>
             </div>
           </div>
-          <form action={logoutAction}>
-            <button className="text-xs bg-indigo-900/80 hover:bg-indigo-900 text-indigo-200 border border-indigo-700/60 px-3 py-1.5 rounded-lg transition-colors font-medium">
-              خروج
-            </button>
-          </form>
+          <div className="flex items-center gap-2">
+            <UniversitySwitcher
+              universities={unis.map(u => ({ code: u.code, title: u.title, kind: u.kind }))}
+              currentCode={curUni.code}
+            />
+            <form action={logoutAction}>
+              <button className="text-xs bg-indigo-900/80 hover:bg-indigo-900 text-indigo-200 border border-indigo-700/60 px-3 py-1.5 rounded-lg transition-colors font-medium">
+                خروج
+              </button>
+            </form>
+          </div>
         </div>
         <AdminNav roles={user.roles} />
       </header>
