@@ -76,6 +76,16 @@ function checkNationalCode(code) {
 // NUL بایت خطای invalid byte sequence for encoding "UTF8": 0x00 می‌دهد
 const normTxt = (s) => String(s ?? '').replace(/\x00/g, '').replace(/\s+/g, ' ').trim();
 
+// ── نرمال‌سازی کد ترم به فرمت ۵ رقمی (YYYY+T): زرینه ۳ رقمی (871) ← 13871 ──
+function normTerm(tc) {
+  const t = String(tc || '').trim();
+  if (/^\d{3}$/.test(t)) {
+    const yy = Number(t.slice(0, 2));
+    return (yy >= 70 ? '13' : '14') + t; // 951 ← 13951 ، 871 ← 13871
+  }
+  return t;
+}
+
 // ── خواندن جریانی TSV با دیکد win1256 (امن برای بایت‌های باینری عکس) ──
 const dec1256 = new TextDecoder('windows-1256');
 async function* tsvRows(path, { skipHeader = true } = {}) {
@@ -467,7 +477,8 @@ async function phaseTerms(file) {
   // اول کل کدها را بخوان تا جاری (بیشترین NORMAL) مشخص شود
   const codes = [];
   for await (const { cols } of tsvRows(file)) {
-    const code = (cols[0] || '').trim();
+    const code = normTerm(cols[0]);
+    // کد ترم: ۵ رقمی (آفاق/علامه: 13962) یا ۳ رقمی (زرینه: 871 ← 13871)
     if (!/^\d{5}$/.test(code)) { stats.invalid++; continue; }
     codes.push({ code, type: (cols[14] || '').trim(), b: (cols[1] || '').trim(), e: (cols[2] || '').trim() });
     stats.total++;
@@ -685,6 +696,7 @@ async function phaseStudents(files, lookups) {
     const tc = (c[5] || '').trim();
     let entryYear = 1400, entryTerm = 1;
     if (/^\d{5}$/.test(tc)) { entryYear = Number(tc.slice(0, 4)); entryTerm = Number(tc.slice(4)); }
+    else if (/^\d{3}$/.test(tc)) { const ntc = normTerm(tc); entryYear = Number(ntc.slice(0, 4)); entryTerm = Number(ntc.slice(4)); }
     else {
       const sd = (c[37] || '').trim().match(/^(\d{4})\//);
       if (sd) entryYear = Number(sd[1]);
@@ -862,9 +874,9 @@ async function phaseGrades(files) {
   for await (const { cols } of tsvRows(files.grades)) {
     // Stno TermCode LessonCode OldLessonCode LessonGroup Mark MarkStat SusCode Lastupdate ... TheoryMark OperativeMark DonMark DonMarkStat DonStatus DonCode ...
     const stno = (cols[0] || '').trim();
-    const term = (cols[1] || '').trim();
+    const term = normTerm(cols[1]);
     const course = (cols[2] || '').trim();
-    if (!/^\d+$/.test(stno) || !/^\d{3,5}$/.test(term) || !course) { stats.total++; continue; }
+    if (!/^\d+$/.test(stno) || !/^\d{5}$/.test(term) || !course) { stats.total++; continue; }
     stats.total++; n++;
     const mark = (cols[5] || '').trim();
     const ms = (cols[6] || '').trim();
@@ -1272,8 +1284,8 @@ async function phaseStterm(files, file) {
   for await (const { cols } of tsvRows(file)) {
     // TermCode Stno StTermStatus SusStatus TermAvg ... Mashroot ... CurrentMaghta
     const stno = (cols[1] || '').trim();
-    const term = (cols[0] || '').trim();
-    if (!/^\d+$/.test(stno) || !/^\d{3,5}$/.test(term)) { stats.invalid++; continue; }
+    const term = normTerm(cols[0]);
+    if (!/^\d+$/.test(stno) || !/^\d{5}$/.test(term)) { stats.invalid++; continue; }
     stats.total++; n++;
     const s = studentsByCode.get(stno);
     const t = termsByCode.get(term);
