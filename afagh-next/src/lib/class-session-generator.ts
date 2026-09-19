@@ -25,7 +25,7 @@ import {
 } from '@/db/schema';
 import { auditChain, type AuditTx } from '@/lib/audit-chain';
 import {
-  computeSessionDates, detectHardConflicts, toMinutes,
+  analyzeHardConflicts, computeSessionDates, toMinutes,
   type HardConflict, type HardConflictEntry,
 } from '@/lib/scheduling-core';
 
@@ -183,10 +183,11 @@ export async function generateClassSessionsForTerm(
         capacity: s.roomId != null ? (roomCap.get(s.roomId) ?? 0) : 0,
       };
     });
-    const hardConflicts = detectHardConflicts(entries);
-    if ((px.failOnHardConflict ?? true) && hardConflicts.length > 0) {
+    const conflictReport = analyzeHardConflicts(entries);
+    const hardConflicts = conflictReport.conflicts;
+    if ((px.failOnHardConflict ?? true) && conflictReport.total > 0) {
       throw new Error(
-        `زمان‌بندی کنونی ${hardConflicts.length} تداخل سخت دارد؛ پیش از تولید جلسات رفع کنید. مثال: ${hardConflicts[0].message}`,
+        `زمان‌بندی کنونی ${conflictReport.total} تداخل سخت دارد؛ پیش از تولید جلسات رفع کنید. مثال: ${hardConflicts[0].message}`,
       );
     }
 
@@ -269,9 +270,16 @@ export async function generateClassSessionsForTerm(
   });
 }
 
-/** تشخیص قیود سخت روی زمان‌بندی واقعی یک ترم (بدون تغییر) */
+/**
+ * تشخیص قیود سخت روی زمان‌بندی واقعی یک ترم.
+ *
+ * `hardConflicts` سقف‌دار است (برای نمایش)؛ `total` شمار واقعی. پیش از این،
+ * فهرست بی‌سقف بود و روی ترم‌های بزرگ حافظهٔ سرور را تمام می‌کرد.
+ */
 export async function inspectSchedulingHardConflicts(termId: number): Promise<{
   hardConflicts: HardConflict[];
+  total: number;
+  truncated: boolean;
   rowCount: number;
 }> {
   const schedRows = await loadTermSchedules(db, termId);
@@ -293,7 +301,8 @@ export async function inspectSchedulingHardConflicts(termId: number): Promise<{
       capacity: s.roomId != null ? (roomCap.get(s.roomId) ?? 0) : 0,
     };
   });
-  return { hardConflicts: detectHardConflicts(entries), rowCount: entries.length };
+  const rep = analyzeHardConflicts(entries);
+  return { hardConflicts: rep.conflicts, total: rep.total, truncated: rep.truncated, rowCount: entries.length };
 }
 
 /** خلاصهٔ جلسات موجود یک ترم (برای داشبورد صفحه) */

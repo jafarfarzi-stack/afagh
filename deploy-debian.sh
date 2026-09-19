@@ -49,7 +49,7 @@ done
 echo -e "\n${B}════════ استقرار سامانه جامع آفاق (Debian + Docker) ════════${N}"
 
 # ── ۰) بررسی سیستم ────────────────────────────────────────────────
-step "۰/۷ بررسی سیستم"
+step "۰/۸ بررسی سیستم"
 . /etc/os-release 2>/dev/null || die "/etc/os-release پیدا نشد — این اسکریپت مخصوص Debian است"
 CODENAME="${VERSION_CODENAME:-trixie}"
 if [ "${ID:-}" != "debian" ]; then
@@ -78,7 +78,7 @@ AVAIL_GB=$(df -BG --output=avail "$ROOT" | tail -1 | tr -dc '0-9')
 [ "${AVAIL_GB:-0}" -ge 5 ] || warn "فضای دیسک کم است (${AVAIL_GB}GB) — بیلد ایمیج حدود ۳ گیگ می‌خواهد"
 
 # ── ۱) نصب Docker ────────────────────────────────────────────────
-step "۱/۷ Docker Engine + Compose plugin"
+step "۱/۸ Docker Engine + Compose plugin"
 if [ "$SKIP_DOCKER" = "1" ]; then
   warn "رد شد (--skip-docker-install)"
 elif command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
@@ -118,16 +118,19 @@ if [ "$UPDATE" = "1" ]; then
 fi
 
 # ── ۳) فایل تنظیمات و رمزها ──────────────────────────────────────
-step "۲/۷ تنظیمات و رمزهای پروداکشن"
+step "۲/۸ تنظیمات و رمزهای پروداکشن"
 ENV_FILE="$ROOT/.env"
 rnd() { tr -dc 'A-Za-z0-9' </dev/urandom | head -c "${1:-28}"; }
 if [ ! -f "$ENV_FILE" ]; then
-  PGPW="$(rnd 32)"; MINIOPW="$(rnd 32)"
+  PGPW="$(rnd 32)"; APPDBPW="$(rnd 32)"; MINIOPW="$(rnd 32)"
   HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
   cat > "$ENV_FILE" <<EOF
 # ساخته‌شده توسط deploy-debian.sh در $(date '+%Y-%m-%d %H:%M') — این فایل را جای امنی نگه دارید
 APP_PORT=8080
 POSTGRES_PASSWORD=$PGPW
+# P0-3: رمز نقش محدود afagh_app — قبلاً اصلاً تولید نمی‌شد و compose به
+# پیش‌فرض ناامن «afagh-app-pass» می‌افتاد. hardening.mjs همین مقدار را روی نقش اعمال می‌کند.
+AFAGH_APP_DB_PASSWORD=$APPDBPW
 PG_HOST_PORT=5432
 REDIS_HOST_PORT=6379
 MINIO_ROOT_USER=afagh
@@ -146,6 +149,18 @@ EOF
   ok "‎.env ساخته شد با رمزهای تصادفی (chmod 600)"
 else
   ok "‎.env موجود بود — دست‌نخورده ماند"
+  # P0-3: backfill برای استقرارهای قدیمی که AFAGH_APP_DB_PASSWORD ندارند
+  # (قبلاً این متغیر تولید نمی‌شد و اتصال app-role به پیش‌فرض ناامن می‌افتاد)
+  if ! grep -q '^AFAGH_APP_DB_PASSWORD=' "$ENV_FILE" || [ -z "$(grep '^AFAGH_APP_DB_PASSWORD=' "$ENV_FILE" | cut -d= -f2-)" ]; then
+    APPDBPW="$(rnd 32)"
+    if grep -q '^AFAGH_APP_DB_PASSWORD=' "$ENV_FILE"; then
+      sed -i "s/^AFAGH_APP_DB_PASSWORD=.*/AFAGH_APP_DB_PASSWORD=$APPDBPW/" "$ENV_FILE"
+    else
+      echo "AFAGH_APP_DB_PASSWORD=$APPDBPW" >> "$ENV_FILE"
+    fi
+    chmod 600 "$ENV_FILE"
+    ok "AFAGH_APP_DB_PASSWORD تصادفی ساخته و به .env اضافه شد"
+  fi
 fi
 if [ -n "$APP_PORT_ARG" ]; then
   sed -i "s/^APP_PORT=.*/APP_PORT=$APP_PORT_ARG/" "$ENV_FILE"
@@ -162,6 +177,30 @@ fi
 set -a; . "$ENV_FILE"; set +a
 APP_PORT="${APP_PORT:-8080}"
 
+# P0-3: fail-fast روی سکرت‌های ناامن — این اسکریپت فقط پروداکشن است (root + Debian)،
+# پس هیچ بهانه‌ای برای مقادیر پیش‌فرض/نمونه پذیرفته نیست.
+weak_secret() { # $1=value — خروجی ۰ یعنی ضعیف/نمونه
+  case "$1" in
+    ""|afagh|afagh-app-pass|afagh_app|afagh-app-password|afagh-secret|postgres|password|password123|123456|secret|minioadmin|admin|admin123|test|CHANGE_ME*|change_me*|changeme*|replace_me*|todo*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+repeat_secret() { # $1=value — چهار تکرار پشت‌سرهم («aaaa») = ضعیف
+  echo "$1" | grep -Eq '(.)\1{3,}'
+}
+weak_secret "${POSTGRES_PASSWORD:-}" && die "POSTGRES_PASSWORD ناامن است — در .env مقدار تصادفی قوی بگذارید یا .env را حذف کنید تا دوباره ساخته شود"
+weak_secret "${AFAGH_APP_DB_PASSWORD:-}" && die "AFAGH_APP_DB_PASSWORD ناامن است — در .env مقدار تصادفی قوی بگذارید یا .env را حذف کنید تا دوباره ساخته شود"
+weak_secret "${MINIO_ROOT_PASSWORD:-}" && die "MINIO_ROOT_PASSWORD ناامن است — در .env مقدار تصادفی قوی بگذارید یا .env را حذف کنید تا دوباره ساخته شود"
+# P0-1: حداقل طول‌ها با سیاست repo یکی است (scripts/lib/secret-policy.mjs):
+#   رمزهای دیتابیس ≥۲۴ · رمز MinIO ≥۱۶ — و هیچ‌کدام نباید تکرار چهارتایی داشته باشند.
+[ "${#POSTGRES_PASSWORD}" -ge 24 ] || die "POSTGRES_PASSWORD کوتاه است (حداقل ۲۴ کاراکتر؛ make env یا رمز تصادفی)"
+[ "${#AFAGH_APP_DB_PASSWORD}" -ge 24 ] || die "AFAGH_APP_DB_PASSWORD کوتاه است (حداقل ۲۴ کاراکتر — رمز نقش afagh_app که به RLS گره خورده)"
+[ "${#MINIO_ROOT_PASSWORD}" -ge 16 ] || die "MINIO_ROOT_PASSWORD کوتاه است (حداقل ۱۶ کاراکتر)"
+for pair in "POSTGRES_PASSWORD:${POSTGRES_PASSWORD}" "AFAGH_APP_DB_PASSWORD:${AFAGH_APP_DB_PASSWORD}" "MINIO_ROOT_PASSWORD:${MINIO_ROOT_PASSWORD}"; do
+  repeat_secret "${pair#*:}" && die "${pair%%:*} تکرار چهارتایی کاراکتر دارد — رمز تصادفی بسازید (rnd در همین اسکریپت)"
+done
+ok "سکرت‌ها با سیاست پروداکشن بررسی شدند (طول، عدم نمونه، عدم پیش‌فرض ضعیف)"
+
 if ss -ltn "sport = :$APP_PORT" 2>/dev/null | grep -q LISTEN; then
   warn "پورت $APP_PORT روی هاست اشغال است — اگر مربوط به همین سامانه نیست، آزادش کنید"
 fi
@@ -169,7 +208,7 @@ fi
 dc() { docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"; }
 
 # ── ۴) بیلد و اجرا ───────────────────────────────────────────────
-step "۳/۷ ساخت ایمیج‌ها و اجرای سرویس‌ها"
+step "۳/۸ ساخت ایمیج‌ها و اجرای سرویس‌ها"
 if [ "$FRESH" = "1" ]; then
   warn "حالت --fresh: حذف کانتینرها و کل داده"
   dc down -v --remove-orphans >/dev/null 2>&1 || true
@@ -185,7 +224,7 @@ dc up -d || die "بالا آوردن سرویس‌ها ناموفق بود"
 ok "سرویس‌ها اجرا شدند (پروژهٔ docker: $PROJECT)"
 
 # ── ۵) انتظار برای آماده شدن ─────────────────────────────────────
-step "۴/۷ بررسی سلامت سرویس‌ها"
+step "۴/۸ بررسی سلامت سرویس‌ها"
 printf "  … PostgreSQL"
 for _ in $(seq 1 60); do docker exec afagh_pg pg_isready -U afagh -d afagh_db >/dev/null 2>&1 && break; printf "."; sleep 2; done; echo ""
 docker exec afagh_pg pg_isready -U afagh -d afagh_db >/dev/null 2>&1 && ok "PostgreSQL سالم" || die "PostgreSQL بالا نیامد — dc logs postgres"
@@ -204,8 +243,32 @@ for _ in $(seq 1 60); do
 done; echo ""
 [ "$APP_OK" = "1" ] && ok "سامانه روی پورت ${APP_PORT} پاسخ می‌دهد (HTTP 200)" || die "سامانه بالا نیامد — docker logs afagh_app"
 
+# ── ۵-ب) P0-2: راستی‌آزمایی همان پشتیبانی که پیش از مهاجرت ساخته شد ──
+printf "  … بررسی سلامت پشتیبان"
+BK_LINE=$(dc run --rm --no-deps -e AFAGH_BACKUP_DIR=/backups migrator node scripts/verify-backup.mjs 2>&1 | tail -1) || true
+echo ""
+if [ -n "$BK_LINE" ]; then ok "$BK_LINE"; else warn "پشتیبان راستی‌آزمایی نشد — دستی: make verify-backup"; fi
+
+# ── ۵-پ) P0-4: حساب مدیر اولیه با رمز تصادفی (دیگر رمز ثابت چاپ نمی‌شود) ──
+step "۵/۸ حساب مدیر اولیه (P0-4)"
+ADMIN_NC="${ADMIN_NATIONAL_CODE:-1000000001}"
+CRED_FILE="$ROOT/bootstrap-credential.txt"
+HAS_ADMIN=$(docker exec afagh_pg psql -U afagh -d afagh_db -tAc \
+  "select 1 from users u join user_roles ur on ur.\"userId\"=u.id join roles r on r.id=ur.\"roleId\" where r.code='ADMIN' limit 1" 2>/dev/null || echo "")
+if [ -n "$HAS_ADMIN" ]; then
+  ok "حساب مدیر از قبل وجود دارد — رمز تازه‌ای ساخته نشد (برای چرخش: make admin)"
+else
+  umask 077
+  if dc run --rm --no-deps migrator node scripts/create-admin.mjs --national-code "$ADMIN_NC" --show > "$CRED_FILE" 2>/dev/null; then
+    chmod 600 "$CRED_FILE"
+    ok "حساب مدیر اولیه ساخته شد · رمز فقط در فایل $CRED_FILE (chmod 600) — در ترمینال چاپ نشد"
+  else
+    rm -f "$CRED_FILE"; warn "ساخت حساب مدیر ناموفق بود — دستی: make admin"
+  fi
+fi
+
 # ── ۶) دادهٔ نمونه (اختیاری) ─────────────────────────────────────
-step "۵/۷ دادهٔ نمونه"
+step "۶/۸ دادهٔ نمونه"
 if [ "$WITH_DEMO" = "1" ]; then
   if [ -f "$ROOT/afagh-erp/data/afagh.db" ]; then
     docker run --rm --network "${PROJECT}_default" \
@@ -222,25 +285,28 @@ else
 fi
 
 # ── ۷) فایروال و جمع‌بندی ────────────────────────────────────────
-step "۶/۷ فایروال"
+step "۷/۸ فایروال"
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
   ufw allow "${APP_PORT}/tcp" >/dev/null 2>&1 && ok "پورت ${APP_PORT} در ufw باز شد" || warn "باز کردن پورت در ufw ناموفق بود"
 else
   warn "ufw فعال نیست — اگر فایروال دیگری دارید، پورت ${APP_PORT} را باز کنید"
 fi
 
-step "۷/۷ استقرار کامل شد"
+step "۸/۸ استقرار کامل شد"
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 cat <<EOF
 
   ${B}سامانه در دسترس است:${N}
       http://${IP:-SERVER_IP}:${APP_PORT}        (و http://localhost:${APP_PORT} روی خود سرور)
 
-  ورود اولیه — رمز: 123456
-      مدیر    0000000001   →  /admin
-      استاد   0011111111   →  /professor
-      دانشجو  31412001     →  /student
-      (رمز مدیر را بلافاصله پس از اولین ورود عوض کنید)
+  ${B}ورود اولیه (بدون رمز ثابت):${N}
+      کد ملی مدیر: ${ADMIN_NC}  →  /admin
+      رمز: در فایل bootstrap-credential.txt کنار همین اسکریپت
+             sudo cat $ROOT/bootstrap-credential.txt
+      در اولین ورود، تغییر رمز اجباری است؛ پس از آن این فایل را پاک کنید:
+             sudo rm $ROOT/bootstrap-credential.txt
+      (حساب‌های دمو با رمز 123456 در ایمیج تولید قفل‌اند؛ برای جعبهٔ نمایشی:
+             در .env  AFAGH_DEMO_LOCK=0 و AFAGH_DEMO_MODE=1 و سپس make build)
 
   ${B}پیکربندی سرویس‌های بیرونی:${N}
       پنل مدیر ← «⚙️ پیکربندی سامانه» — نشانی و کلید BigBlueButton/Moodle، پیامک،
@@ -253,7 +319,10 @@ cat <<EOF
       ری‌استارت   : make restart
       توقف       : make down
       به‌روزرسانی : sudo ./deploy-debian.sh --update   (یا make update)
-      پشتیبان PG : make backup         → backups/afagh_<تاریخ>.sql
+      پشتیبان PG : make backup         → volume afagh_backups (ماندگار + sha256)
+      آزمون بازیابی: make drill        → بازگردانی در دیتابیس موقت + مقایسه
+      خروج از سرور : make copy-backups-to-host DEST=/mnt/nas/afagh
+      چرخش رمز مدیر: make admin
       HTTPS دامنه: DOMAIN را در .env بگذارید و make up-https
       همهٔ میان‌بُرها: make help
 

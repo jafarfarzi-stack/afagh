@@ -1,10 +1,10 @@
 import Link from 'next/link';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/db';
-import { asc } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import {
-  degree_level_configs, loan_products, majors, tuition_discount_types,
-  tuition_formulas, tuition_sponsors,
+  academic_terms, degree_level_configs, loan_products, majors, subject_fee_types,
+  tuition_coefficients, tuition_discount_types, tuition_rules, tuition_sponsors,
 } from '@/db/schema';
 import RulesClient from './RulesClient';
 
@@ -15,14 +15,32 @@ const FINANCE = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'];
 export default async function FinanceRulesPage() {
   await requireRole(FINANCE);
 
-  const [discountTypes, sponsors, formulas, degreeRows, loanRows, majorRows] = await Promise.all([
+  const [discountTypes, sponsors, formulas, degreeRows, loanRows, majorRows, coeffRows, subjectFeeRows, termRows] = await Promise.all([
     db.select().from(tuition_discount_types).orderBy(asc(tuition_discount_types.title)),
     db.select().from(tuition_sponsors).orderBy(asc(tuition_sponsors.title)),
-    db.select().from(tuition_formulas).orderBy(asc(tuition_formulas.priority), asc(tuition_formulas.id)),
+    db.select().from(tuition_rules).orderBy(asc(tuition_rules.priority), asc(tuition_rules.id)),
     db.select({ id: degree_level_configs.id, title: degree_level_configs.title })
       .from(degree_level_configs).orderBy(asc(degree_level_configs.title)),
     db.select().from(loan_products).orderBy(asc(loan_products.title)),
     db.select({ id: majors.id, title: majors.name }).from(majors).orderBy(asc(majors.name)),
+    db.select({
+      id: tuition_coefficients.id,
+      termId: tuition_coefficients.termId,
+      variableCoefficient: tuition_coefficients.variableCoefficient,
+      fixedCoefficient: tuition_coefficients.fixedCoefficient,
+      note: tuition_coefficients.note,
+      updatedAt: tuition_coefficients.updatedAt,
+      termTitle: academic_terms.title,
+      termCode: academic_terms.termCode,
+    }).from(tuition_coefficients)
+      .leftJoin(academic_terms, eq(academic_terms.id, tuition_coefficients.termId))
+      .orderBy(tuition_coefficients.id),
+    db.select().from(subject_fee_types).orderBy(asc(subject_fee_types.code)),
+    db.select({
+      id: academic_terms.id,
+      termCode: academic_terms.termCode,
+      termTitle: academic_terms.title,
+    }).from(academic_terms).orderBy(asc(academic_terms.termCode)),
   ]);
 
   return (
@@ -31,7 +49,7 @@ export default async function FinanceRulesPage() {
         <div>
           <h1 className="font-extrabold text-slate-800 text-base sm:text-lg">⚙️ تعاریف موتور مالی</h1>
           <p className="text-xs text-slate-500 mt-1">
-            انواع تخفیف شهریه، بنیادهای حامی و فرمول‌های تخصیص — هیچ‌کدام در کد سخت‌کد نیستند
+            انواع تخفیف شهریه، بنیادهای حامی، فرمول‌ها، ضریب افزایشی نیمسال و مبالغ موضوعی
           </p>
         </div>
         <Link href="/admin/finance" className="rounded-lg bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700">
@@ -52,7 +70,7 @@ export default async function FinanceRulesPage() {
           settlementMethod: s.settlementMethod, isActive: s.isActive === 1, note: s.note,
         }))}
         formulas={formulas.map((f) => ({
-          id: f.id, code: f.code, title: f.title,
+          id: f.id, code: f.code ?? '', title: f.title ?? '',
           degreeLevelId: f.degreeLevelId, majorId: f.majorId,
           entryYearFrom: f.entryYearFrom, entryYearTo: f.entryYearTo,
           fixedAmount: Number(f.fixedAmount), perUnitTheory: Number(f.perUnitTheory),
@@ -70,6 +88,18 @@ export default async function FinanceRulesPage() {
         }))}
         degrees={degreeRows}
         majorsOptions={majorRows}
+        coefficients={coeffRows.map((c) => ({
+          id: c.id, termId: c.termId,
+          variableCoefficient: Number(c.variableCoefficient),
+          fixedCoefficient: Number(c.fixedCoefficient),
+          note: c.note, termTitle: c.termTitle, termCode: c.termCode,
+        }))}
+        subjectFeeTypes={subjectFeeRows.map((s) => ({
+          id: s.id, code: s.code, title: s.title, kind: s.kind,
+          fixedAmount: Number(s.fixedAmount), variablePercent: Number(s.variablePercent),
+          appliesTo: s.appliesTo, isActive: s.isActive === 1, note: s.note,
+        }))}
+        terms={termRows}
       />
     </div>
   );

@@ -16,7 +16,7 @@ import { system_settings } from '@/db/schema';
 //  چون پیش از برقراری اتصال به دیتابیس لازم‌اند.
 // ════════════════════════════════════════════════════════════════════
 
-export type SettingType = 'text' | 'url' | 'number' | 'boolean' | 'secret';
+export type SettingType = 'text' | 'url' | 'number' | 'boolean' | 'secret' | 'image';
 
 export interface SettingDef {
   key: string;
@@ -46,6 +46,7 @@ export const SETTING_GROUPS = [
 export const SETTING_DEFS: SettingDef[] = [
   // ── عمومی ──
   { key: 'UNIVERSITY_NAME', env: 'AFAGH_UNIVERSITY_NAME', group: 'عمومی و نشانی‌ها', label: 'نام دانشگاه', type: 'text', default: 'دانشگاه آفاق' },
+  { key: 'UNIVERSITY_LOGO', env: 'AFAGH_UNIVERSITY_LOGO', group: 'عمومی و نشانی‌ها', label: 'ارم دانشگاه (لوگو)', type: 'image', default: '', help: 'نمایش در سربرگ کارنامه و مدارک رسمی — PNG/JPG تا ۲ مگابایت' },
   { key: 'PUBLIC_BASE_URL', env: 'AFAGH_PUBLIC_BASE_URL', group: 'عمومی و نشانی‌ها', label: 'نشانی عمومی سامانه', type: 'url', default: 'http://localhost:8080', help: 'مبنای لینک‌های استعلام مدرک، QR کارت ورود به جلسه و ایمیل‌ها' },
   { key: 'SUPPORT_EMAIL', env: 'AFAGH_SUPPORT_EMAIL', group: 'عمومی و نشانی‌ها', label: 'ایمیل پشتیبانی', type: 'text', default: 'support@example.ac.ir' },
   { key: 'SUPPORT_PHONE', env: 'AFAGH_SUPPORT_PHONE', group: 'عمومی و نشانی‌ها', label: 'تلفن پشتیبانی', type: 'text', default: '' },
@@ -67,12 +68,24 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'BALE_CHANNEL', env: 'BALE_CHANNEL_ID', group: 'پیامک و ربات‌های پیام‌رسان', label: 'شناسهٔ کانال بله', type: 'text', default: '' },
   { key: 'EITAA_TOKEN', env: 'EITAA_BOT_TOKEN', group: 'پیامک و ربات‌های پیام‌رسان', label: 'توکن ربات ایتا', type: 'secret', default: '' },
   { key: 'EITAA_CHANNEL', env: 'EITAA_CHANNEL_ID', group: 'پیامک و ربات‌های پیام‌رسان', label: 'شناسهٔ کانال ایتا', type: 'text', default: '' },
+  { key: 'SOROUSH_TOKEN', env: 'SOROUSH_BOT_TOKEN', group: 'پیامک و ربات‌های پیام‌رسان', label: 'توکن ربات سروش', type: 'secret', default: '' },
+  { key: 'SOROUSH_CHANNEL', env: 'SOROUSH_CHANNEL_ID', group: 'پیامک و ربات‌های پیام‌رسان', label: 'شناسهٔ کانال سروش', type: 'text', default: '' },
+  { key: 'IGAP_TOKEN', env: 'IGAP_BOT_TOKEN', group: 'پیامک و ربات‌های پیام‌رسان', label: 'توکن ربات ای‌گپ', type: 'secret', default: '' },
+  { key: 'IGAP_CHANNEL', env: 'IGAP_CHANNEL_ID', group: 'پیامک و ربات‌های پیام‌رسان', label: 'شناسهٔ کانال ای‌گپ', type: 'text', default: '' },
   { key: 'TELEGRAM_TOKEN', env: 'TELEGRAM_BOT_TOKEN', group: 'پیامک و ربات‌های پیام‌رسان', label: 'توکن ربات تلگرام', type: 'secret', default: '' },
   { key: 'TELEGRAM_CHANNEL', env: 'TELEGRAM_CHANNEL_ID', group: 'پیامک و ربات‌های پیام‌رسان', label: 'شناسهٔ کانال تلگرام', type: 'text', default: '' },
+  { key: 'TELEGRAM_WEBHOOK_SECRET', env: 'TELEGRAM_WEBHOOK_SECRET', group: 'پیامک و ربات‌های پیام‌رسان', label: 'کلید وب‌هوک تلگرام', type: 'secret', default: '', help: 'تنظیم وب‌هوک: GET /api/telegram/webhook?setup=1' },
+  { key: 'TELEGRAM_BOT_ENABLED', env: 'TELEGRAM_BOT_ENABLED', group: 'پیامک و ربات‌های پیام‌رسان', label: 'فعال‌سازی بات تعاملی تلگرام', type: 'boolean', default: 'true', help: 'فعال‌سازی دستورات تعاملی (/start, /status, /grades, /help)' },
+  { key: 'SOROUSH_BOT_ENABLED', env: 'SOROUSH_BOT_ENABLED', group: 'پیامک و ربات‌های پیام‌رسان', label: 'فعال‌سازی بات تعاملی سروش', type: 'boolean', default: 'false' },
+  { key: 'BALE_BOT_ENABLED', env: 'BALE_BOT_ENABLED', group: 'پیامک و ربات‌های پیام‌رسان', label: 'فعال‌سازی بات تعاملی بله', type: 'boolean', default: 'false' },
+  { key: 'EITAA_BOT_ENABLED', env: 'EITAA_BOT_ENABLED', group: 'پیامک و ربات‌های پیام‌رسان', label: 'فعال‌سازی بات تعاملی ایتا', type: 'boolean', default: 'false' },
+  { key: 'IGAP_BOT_ENABLED', env: 'IGAP_BOT_ENABLED', group: 'پیامک و ربات‌های پیام‌رسان', label: 'فعال‌سازی بات تعاملی ای‌گپ', type: 'boolean', default: 'false' },
   { key: 'SMS_BASE_URL', env: 'SMS_BASE_URL', group: 'پیامک و ربات‌های پیام‌رسان', label: 'نشانی سرویس پیامک', type: 'url', default: '', help: 'خالی = نشانی پیش‌فرض همان سرویس‌دهنده. برای CUSTOM از جای‌گاه‌های {to} {text} {sender} {key} استفاده کنید' },
   { key: 'TELEGRAM_API_BASE', env: 'TELEGRAM_API_BASE', group: 'پیامک و ربات‌های پیام‌رسان', label: 'نشانی API تلگرام', type: 'url', default: 'https://api.telegram.org' },
   { key: 'BALE_API_BASE', env: 'BALE_API_BASE', group: 'پیامک و ربات‌های پیام‌رسان', label: 'نشانی API بله', type: 'url', default: 'https://tapi.bale.ai' },
   { key: 'EITAA_API_BASE', env: 'EITAA_API_BASE', group: 'پیامک و ربات‌های پیام‌رسان', label: 'نشانی API ایتا', type: 'url', default: 'https://eitaayar.ir/api' },
+  { key: 'SOROUSH_API_BASE', env: 'SOROUSH_API_BASE', group: 'پیامک و ربات‌های پیام‌رسان', label: 'نشانی API سروش', type: 'url', default: 'https://api.soroush.app' },
+  { key: 'IGAP_API_BASE', env: 'IGAP_API_BASE', group: 'پیامک و ربات‌های پیام‌رسان', label: 'نشانی API ای‌گپ', type: 'url', default: 'https://igap.ai/api' },
   { key: 'NOTIFY_CHANNELS', env: 'NOTIFY_CHANNELS', group: 'پیامک و ربات‌های پیام‌رسان', label: 'کانال‌های اعلان به کاربر', type: 'text', default: 'INAPP,SMS', help: 'با ویرگول: INAPP، SMS، TELEGRAM، BALE، EITAA' },
   { key: 'NOTIFY_ENABLED', env: 'NOTIFY_ENABLED', group: 'پیامک و ربات‌های پیام‌رسان', label: 'ارسال اعلان بیرونی (پیامک/پیام‌رسان)', type: 'boolean', default: 'true' },
   { key: 'NOTIFY_SIGNATURE', env: 'NOTIFY_SIGNATURE', group: 'پیامک و ربات‌های پیام‌رسان', label: 'امضای انتهای پیام', type: 'text', default: 'دانشگاه آفاق' },
@@ -123,6 +136,14 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'WORKFLOW_WEBHOOK_URL', env: 'WORKFLOW_WEBHOOK_URL', group: 'گردش کار و حق‌التدریس', label: 'وب‌هوک رویدادهای گردش کار', type: 'url', default: '', help: 'خالی = فقط هندلرهای داخلی. در صورت پر بودن، خلاصهٔ هر رویداد به این نشانی POST می‌شود' },
   { key: 'REQ_TRACKING_PREFIX', env: 'REQ_TRACKING_PREFIX', group: 'گردش کار و حق‌التدریس', label: 'پیشوند کد رهگیری درخواست‌ها', type: 'text', default: 'REQ' },
   { key: 'FA_YEAR', env: 'FA_YEAR', group: 'گردش کار و حق‌التدریس', label: 'سال مالی/تحصیلی (شمسی)', type: 'text', default: '', help: 'خالی = محاسبهٔ خودکار از تاریخ روز؛ برای سال تحصیلی خاص عدد وارد کنید (مثلاً ۱۴۰۵)' },
+  // نرخ پایهٔ ساعتی قرارداد حق‌التدریس. تا امروز این کلید در فهرست تنظیمات
+  // *نبود* و contract-engine آن را صدا می‌زد؛ getSetting برای کلید ناشناخته
+  // پرتاب می‌کند، پس مقدار پیش‌فرضِ کنارِ فراخوان هرگز اجرا نمی‌شد و صفحهٔ
+  // «قرارداد من» برای هر استاد خطای ۵۰۰ می‌داد.
+  { key: 'PREVIOUS_TICKET_TOKEN_SECRET', env: 'PREVIOUS_TICKET_TOKEN_SECRET', group: 'زیرساخت (فقط ENV)', label: 'کلید پیشین امضای بلیت (چرخش کلید)', type: 'secret', default: '', envOnly: true, help: 'هنگام تعویض کلید امضا، کلید قبلی اینجا می‌ماند تا بلیت‌های صادرشده تا پایان ترم معتبر بمانند' },
+  { key: 'CONTRACT_TAX_PERCENT', env: 'AFAGH_CONTRACT_TAX_PERCENT', group: 'گردش کار و حق‌التدریس', label: 'درصد کسر مالیات قرارداد', type: 'number', default: '10' },
+  { key: 'CONTRACT_INSURANCE_PERCENT', env: 'AFAGH_CONTRACT_INSURANCE_PERCENT', group: 'گردش کار و حق‌التدریس', label: 'درصد کسر بیمهٔ قرارداد', type: 'number', default: '7' },
+  { key: 'HOURLY_RATE_TMN', env: 'AFAGH_HOURLY_RATE_TMN', group: 'گردش کار و حق‌التدریس', label: 'نرخ پایهٔ هر ساعت تدریس (تومان)', type: 'number', default: '850000', help: 'مبنای برآورد مبلغ قرارداد حق‌التدریس، وقتی نرخ اختصاصیِ مرتبهٔ علمی در جدول نرخ‌ها ثبت نشده باشد' },
   { key: 'PAYROLL_TERM_SESSIONS', env: 'PAYROLL_TERM_SESSIONS', group: 'گردش کار و حق‌التدریس', label: 'جلسات مبنای ترم (حق‌التدریس)', type: 'number', default: '16', help: 'مبنای تناسب کسر غیبت، وقتی برای کلاس هیچ جلسه‌ای ثبت نشده باشد' },
   { key: 'PAYROLL_MIDTERM_PERCENT', env: 'PAYROLL_MIDTERM_PERCENT', group: 'گردش کار و حق‌التدریس', label: 'درصد علی‌الحساب میان‌ترم', type: 'number', default: '40' },
   { key: 'PAYROLL_CROWDED_THRESHOLD', env: 'PAYROLL_CROWDED_THRESHOLD', group: 'گردش کار و حق‌التدریس', label: 'حدنصاب کلاس پرجمعیت (نفر)', type: 'number', default: '40' },

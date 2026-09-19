@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { electronic_documents } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
+import { headedDepartments } from '@/lib/group-manager';
 import { logoutAction } from '../login/actions';
 
 export default async function ProfessorLayout({ children }: { children: React.ReactNode }) {
@@ -10,6 +11,12 @@ export default async function ProfessorLayout({ children }: { children: React.Re
   const me = await getStaffByUser(user.id);
   const pending = me ? await db.select({ id: electronic_documents.id }).from(electronic_documents).where(eq(electronic_documents.staffId, me.id)) : [];
   const pendingCount = pending.length;
+
+  // ── ادغام کارتابل استاد و مدیر گروه ──
+  // استادی که مدیر یک یا چند گروه است نباید دو حساب/دو ورود جدا داشته باشد؛
+  // پنل گروه از همین‌جا یک کلیک فاصله دارد. نام گروه‌ها را هم نشان می‌دهیم تا
+  // مدیرِ «دروس عمومی» بداند سرپرستی کدام گروه با اوست.
+  const headed = user.roles.includes('DEP_HEAD') && me ? await headedDepartments(me.id, me.departmentId ?? null) : [];
 
   return (
     <div className="min-h-screen bg-slate-50" dir="rtl">
@@ -25,6 +32,16 @@ export default async function ProfessorLayout({ children }: { children: React.Re
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {headed.length > 0 && (
+              <Link
+                href="/group-manager"
+                className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-xs font-bold text-white transition"
+                title={'مدیر گروه: ' + headed.map(d => d.name).join('، ')}
+              >
+                🏛️ پنل مدیر گروه
+                {headed.length === 1 ? ` (${headed[0].name})` : ` (${headed.length.toLocaleString('fa-IR')} گروه)`}
+              </Link>
+            )}
             <form action={logoutAction}>
               <button className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition">
                 خروج از سامانه

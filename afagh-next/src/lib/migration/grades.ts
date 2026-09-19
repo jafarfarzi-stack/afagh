@@ -5,6 +5,7 @@ import {
   academic_terms, course_offerings, courses, enrollments, legacy_grades, students,
 } from '@/db/schema';
 import { norm, num } from './normalize';
+import { computeGradeStatus } from '@/lib/grade-utils';
 import { iterate, missingHeaders, pickTable, type Table } from './tabular';
 import { resolverFor, upsertLegacyCode } from './codemap';
 import { auditInsert, auditUpdate, type AuditCtx } from './audit';
@@ -30,6 +31,7 @@ const QUALITATIVE: Record<string, { value: number | null; status: string }> = {
   'تطبیق': { value: null, status: 'EXEMPT' },
   'حذف': { value: null, status: 'DROPPED' },
   'حذف پزشکی': { value: null, status: 'DROPPED' },
+  'حذف آموزشی': { value: null, status: 'DROPPED' },
   'ناتمام': { value: null, status: 'PENDING' },
   'الف': { value: 18, status: 'FINALIZED' },
   'ب': { value: 15, status: 'FINALIZED' },
@@ -52,7 +54,9 @@ export function parseGrade(raw: string, statusRaw: string, statusMap: Map<string
   const n = num(r);
   if (n != null && r !== '') {
     if (n < 0 || n > 20) return { value: null, status: 'PENDING', note: `نمرهٔ خارج از بازهٔ ۰..۲۰: ${r}` };
-    return { value: n, status: mappedStatus ?? 'FINALIZED' };
+    // اگر کد وضعیت از میز تطبیق تعریف شده باشد، مقدم بر محاسبهٔ خودکار است
+    // (مثلاً کد ۷ = حذف آموزشی حتی اگر نمره عددی داشته باشد)
+    return { value: n, status: mappedStatus ?? computeGradeStatus(n) };
   }
   const q = QUALITATIVE[r.toLowerCase()];
   if (q) return { value: q.value, status: mappedStatus ?? q.status };
@@ -282,15 +286,17 @@ export async function applyGrades(
 
     if (existing.length) {
       if (!opts.overwrite) { res.skipped++; continue; }
-      const after = { gradeValue, gradeStatus: l.gradeStatus, hasEvaluated: gradeValue != null ? 1 : 0 };
+      const enrollmentStatus = l.gradeStatus === 'DROPPED' ? 'DROPPED' : existing[0].gradeStatus;
+      const after = { gradeValue, gradeStatus: l.gradeStatus, status: enrollmentStatus, hasEvaluated: gradeValue != null ? 1 : 0 };
       await db.update(enrollments).set(after).where(eq(enrollments.id, existing[0].id));
       await auditUpdate(ctx, 'enrollments', existing[0].id, {
         gradeValue: existing[0].gradeValue, gradeStatus: existing[0].gradeStatus, hasEvaluated: existing[0].hasEvaluated,
       }, after);
       res.updated++;
     } else {
+      const enrollmentStatus = l.gradeStatus === 'DROPPED' ? 'DROPPED' : 'REGISTERED';
       const [ne] = await db.insert(enrollments).values({
-        studentId: sid, offeringId: off.id, status: 'REGISTERED',
+        studentId: sid, offeringId: off.id, status: enrollmentStatus,
         gradeValue, gradeStatus: l.gradeStatus, hasEvaluated: gradeValue != null ? 1 : 0,
       }).onConflictDoNothing().returning({ id: enrollments.id });
       if (ne?.id) await auditInsert(ctx, 'enrollments', ne.id, { gradeValue, gradeStatus: l.gradeStatus });

@@ -4,7 +4,12 @@ import DepartmentPlanningClient from './DepartmentPlanningClient';
 
 export const dynamic = 'force-dynamic';
 
-export default async function DepartmentPlanningPage() {
+export default async function DepartmentPlanningPage({
+  searchParams,
+}: {
+  /** ?tab=SCENARIOS → تب آغازین (اعتبارسنجی با resolveTab در هسته انجام می‌شود) */
+  searchParams: Promise<{ tab?: string | string[] }>;
+}) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
   const workspace = await getSchedulingWorkspaceAction();
   if (!workspace.ok) {
@@ -18,5 +23,7 @@ export default async function DepartmentPlanningPage() {
       </div>
     );
   }
-  return <DepartmentPlanningClient initial={workspace} />;
+  const sp = await searchParams;
+  const tab = Array.isArray(sp.tab) ? sp.tab[0] : sp.tab;
+  return <DepartmentPlanningClient initial={workspace} tab={tab} />;
 }

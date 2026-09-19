@@ -2,9 +2,13 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireRole } from '@/lib/auth';
 import { getStudentFinance, computeFormulaTuition } from '@/lib/finance-engine';
+import { computeTermTuition } from '@/lib/tuition-engine';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import PrintButton from '@/components/PrintButton';
 import FinanceStudentClient from './FinanceStudentClient';
+import { db } from '@/db';
+import { eq } from 'drizzle-orm';
+import { student_subject_fees, subject_fee_types } from '@/db/schema';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,6 +60,22 @@ export default async function StudentFinancePage({ params }: { params: Promise<{
   const formulaCalc = currentTerm
     ? await computeFormulaTuition(studentId, currentTerm.id)
     : null;
+
+  // محاسبه شهریه با ضریب و مبالغ موضوعی برای ترم جاری
+  const enhancedTuition = currentTerm
+    ? await computeTermTuition(studentId, currentTerm.id)
+    : null;
+
+  // خواندن مبالغ موضوعی ترم جاری
+  const subjectFees = currentTerm ? await db
+    .select({
+      typeTitle: subject_fee_types.title,
+      typeKind: subject_fee_types.kind,
+      amount: student_subject_fees.amount,
+    })
+    .from(student_subject_fees)
+    .innerJoin(subject_fee_types, eq(subject_fee_types.id, student_subject_fees.subjectFeeTypeId))
+    .where(eq(student_subject_fees.studentId, studentId)) : [];
 
   const { student, totals, transcript } = fin;
 
@@ -117,6 +137,41 @@ export default async function StudentFinancePage({ params }: { params: Promise<{
               <p className="text-[11px] text-slate-500">جمع پرداخت/وام/چک وصولی</p>
             </div>
           </div>
+
+          {/* جزئیات ترم جاری با ضریب و مبالغ موضوعی */}
+          {enhancedTuition && (enhancedTuition.fixedCoefficient !== 1 || enhancedTuition.variableCoefficient !== 1 || enhancedTuition.subjectFeesTotal !== 0) && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <h4 className="mb-2 text-xs font-bold text-amber-800">شهریهٔ ترم جاری با ضریب افزایشی</h4>
+              <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+                <div><span className="text-slate-500">شهریه خام: </span><span className="font-medium">{fa(enhancedTuition.fixedTuition + enhancedTuition.variableTuition)}</span></div>
+                {enhancedTuition.fixedCoefficient !== 1 && (
+                  <div><span className="text-slate-500">ضریب ثابت: </span><span className="font-medium text-amber-700">×{enhancedTuition.fixedCoefficient}</span></div>
+                )}
+                {enhancedTuition.variableCoefficient !== 1 && (
+                  <div><span className="text-slate-500">ضریب متغیر: </span><span className="font-medium text-amber-700">×{enhancedTuition.variableCoefficient}</span></div>
+                )}
+                {enhancedTuition.subjectFeesTotal !== 0 && (
+                  <div><span className="text-slate-500">مبالغ موضوعی: </span><span className={`font-medium ${enhancedTuition.subjectFeesTotal > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>{enhancedTuition.subjectFeesTotal > 0 ? '+' : ''}{fa(enhancedTuition.subjectFeesTotal)}</span></div>
+                )}
+              </div>
+              {enhancedTuition.subjectFees.length > 0 && (
+                <div className="mt-2 border-t border-amber-200 pt-2">
+                  <p className="mb-1 text-[10px] font-bold text-amber-700">اقلام موضوعی:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {enhancedTuition.subjectFees.map((sf, i) => (
+                      <span key={i} className={`rounded px-1.5 py-0.5 text-[10px] ${sf.kind === 'ADDITIVE' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>
+                        {sf.title}: {sf.amount > 0 ? '+' : ''}{fa(sf.amount)} ریال
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <p className="mt-2 text-[11px] text-amber-700">
+                شهریه نهایی ترم جاری: <span className="font-bold">{fa(enhancedTuition.totalTuition)} ریال</span>
+              </p>
+            </div>
+          )}
+
           <div className="mt-3 rounded-lg bg-slate-50 p-3 text-center">
             <p className={`text-xl font-extrabold ${totals.balance > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
               {fa(Math.abs(totals.balance))} ریال
@@ -278,6 +333,17 @@ export default async function StudentFinancePage({ params }: { params: Promise<{
           variable: formulaCalc.variable,
           total: formulaCalc.total,
           termId: currentTerm?.id ?? null,
+        } : null}
+        enhancedTuition={enhancedTuition ? {
+          fixedTuition: enhancedTuition.fixedTuition,
+          variableTuition: enhancedTuition.variableTuition,
+          fixedCoefficient: enhancedTuition.fixedCoefficient,
+          variableCoefficient: enhancedTuition.variableCoefficient,
+          fixedTuitionAfterCoeff: enhancedTuition.fixedTuitionAfterCoeff,
+          variableTuitionAfterCoeff: enhancedTuition.variableTuitionAfterCoeff,
+          subjectFees: enhancedTuition.subjectFees,
+          subjectFeesTotal: enhancedTuition.subjectFeesTotal,
+          totalTuition: enhancedTuition.totalTuition,
         } : null}
       />
     </div>

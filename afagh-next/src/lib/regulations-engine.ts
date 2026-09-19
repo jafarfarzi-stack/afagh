@@ -12,12 +12,15 @@ import {
   courses,
   academic_terms,
   student_requests,
+  users,
 } from '@/db/schema';
 import {
   RegulationConfig,
   DEFAULT_BACHELOR_REGULATION_1403,
   DEFAULT_BACHELOR_REGULATION_1390,
   DEFAULT_MASTER_REGULATION_1403,
+  applyLevelConfig,
+  maghtaGroup,
 } from './regulations-types';
 
 export * from './regulations-types';
@@ -128,7 +131,19 @@ export async function getRegulationConfig(regulationId?: number | null, degreeLe
       if (!reg?.rulesConfig) continue;
       const parsed = JSON.parse(reg.rulesConfig);
       if (parsed && typeof parsed === 'object' && parsed.grading_and_gpa) {
-        return { ...DEFAULT_BACHELOR_REGULATION_1403, ...parsed };
+        const merged: RegulationConfig = { ...DEFAULT_BACHELOR_REGULATION_1403, ...parsed };
+        // تفاوت‌های مقطعی (فقط نیمسال/سنوات) از levels اعمال می‌شود
+        if (merged.levels && degreeLevelId) {
+          try {
+            const [deg] = await db
+              .select({ code: degree_level_configs.code })
+              .from(degree_level_configs)
+              .where(eq(degree_level_configs.id, degreeLevelId))
+              .limit(1);
+            if (deg?.code) return applyLevelConfig(merged, maghtaGroup(deg.code));
+          } catch { /* fallback بدون levels */ }
+        }
+        return merged;
       }
     }
   } catch (err) {
@@ -383,6 +398,30 @@ export async function checkAndTriggerCommissionEvents(studentId: number): Promis
 
   if (!blockReason) return { blocked: false };
 
+  // اعلان تلگرامی خودکار — مشروطی یا سنوات
+  try {
+    const [userRow] = await db.select({ userId: users.id }).from(users)
+      .innerJoin(students, eq(students.userId, users.id))
+      .where(eq(students.id, studentId)).limit(1);
+    if (userRow?.userId) {
+      const { notifyProbationWarning, notifyYearsWarning } = await import('./telegram-notifications');
+      if (summary.totalProbations >= maxAllowedProbations) {
+        await notifyProbationWarning({
+          userId: userRow.userId,
+          semesterGpa: summary.lastTermGpa ?? 0,
+          totalGpa: summary.lastTermGpa ?? 0,
+        });
+      } else if (summary.completedSemesters >= maxAllowedSemesters) {
+        await notifyYearsWarning({
+          userId: userRow.userId,
+          currentTermNo: summary.completedSemesters,
+          maxTerms: maxAllowedSemesters,
+          remainingTerms: Math.max(0, maxAllowedSemesters - summary.completedSemesters),
+        });
+      }
+    }
+  } catch { /* ارسال تلگرام هرگز نباید فرایند اصلی را متوقف کند */ }
+
   // شناسهٔ فرایند «کمیسیون موارد خاص» از تنظیمات خوانده می‌شود (بدون مقدار سخت‌کد)
   const [processCode, sajjadUrl] = await Promise.all([
     getSetting('COMMISSION_PROCESS_CODE'),
@@ -486,6 +525,8 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
   const config = (await getRegulationConfig(stu.regulationId, stu.degreeLevelId)) || DEFAULT_BACHELOR_REGULATION_1403;
   const policy = config?.grading_and_gpa?.failed_course_gpa_policy ?? 'EXCLUDE_IF_PASSED';
   const passingGrade = config?.grading_and_gpa?.default_passing_grade || 10;
+  const retakeMinGrade = config?.grading_and_gpa?.retakeMinGrade ?? passingGrade;
+  const dedupeRepeated = config?.grading_and_gpa?.dedupeRepeatedCourses === true;
 
   const rows = await db
     .select({
@@ -499,20 +540,41 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
       gradingType: courses.gradingType,
       affectsGpa: courses.affectsGpa,
       termId: course_offerings.termId,
+      courseMinMark: courses.minPassedMark,
     })
     .from(enrollments)
     .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .where(and(eq(enrollments.studentId, studentId), eq(enrollments.gradeStatus, 'FINALIZED')));
 
-  // نقشه‌برداری دروس پاس‌شده
+  // حدنصاب هر درس: اول minPassedMark خود درس، بعد پیش‌فرض آیین‌نامه
+  // (مثلاً ارشد ۱۲، دکتری ۱۴ — نه همیشه ۱۰)
+  const thresholdOf = (r: (typeof rows)[number]) => {
+    const m = r.courseMinMark != null ? Number(r.courseMinMark) : NaN;
+    return Number.isFinite(m) && m >= 0 && m <= 20 ? m : passingGrade;
+  };
+
+  // نقشه‌برداری دروس پاس‌شده (برای حذف مردودی: حد نصاب قبولی مجدد)
+  // حدنصاب هر درس از خودش می‌آید (minPassedMark)، نه سراسری
   const passedCourses = new Set<string>();
   for (const r of rows) {
     const g = parseGrade(r.gradeValue);
-    if (g === null) continue; // نمرهٔ خالی/نامعتبر = ثبت‌نشده
-    const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= passingGrade;
+    if (g === null) continue;
+    const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= thresholdOf(r);
     if (passed) {
       passedCourses.add(r.code);
+    }
+  }
+
+  // dedupeRepeatedCourses: برای هر کد درس، فقط بالاترین نمرهٔ FINALIZED نگه داشته می‌شود
+  const bestByCode = new Map<string, (typeof rows)[number]>();
+  if (dedupeRepeated) {
+    for (const r of rows) {
+      const g = parseGrade(r.gradeValue);
+      if (g === null) continue;
+      const cur = bestByCode.get(r.code);
+      const curG = cur ? parseGrade(cur.gradeValue) : null;
+      if (!cur || curG === null || g > curG) bestByCode.set(r.code, r);
     }
   }
 
@@ -524,7 +586,10 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
     const g = parseGrade(r.gradeValue);
     if (g === null) continue;
     const u = parseUnits(r.units);
-    const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= passingGrade;
+    const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= thresholdOf(r);
+
+    // dedupeRepeatedCourses فعال: تلاش‌های غیربهترینِ همان درس نه در واحدهای گذرانده و نه در معدل شمرده می‌شوند
+    if (dedupeRepeated && bestByCode.get(r.code) !== r) { excludedCount++; continue; }
 
     if (passed) {
       passedUnits = round2(passedUnits + u);
@@ -536,7 +601,7 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
     }
 
     // اعمال مصوبه حذف نمره مردودی پس از قبولی
-    if (policy === 'EXCLUDE_IF_PASSED' && !passed && passedCourses.has(r.code)) {
+    if ((policy === 'EXCLUDE_IF_PASSED' || policy === 'EXCLUDE_IF_PASSED_1391') && !passed && passedCourses.has(r.code)) {
       excludedCount++;
       continue; // حذف از صورت و مخرج معدل کل
     }

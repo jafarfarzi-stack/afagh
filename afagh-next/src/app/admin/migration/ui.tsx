@@ -35,7 +35,7 @@ export function Msg({ kind, children }: { kind: 'err' | 'ok' | 'warn' | 'info'; 
   return <div className={`rounded-xl p-3 text-xs leading-6 ${cls}`}>{children}</div>;
 }
 
-export type InspectField = { key: string; title: string; required: boolean; detectedIndex: number; detectedHeader: string | null };
+export type InspectField = { key: string; title: string; required: boolean; hint?: string; detectedIndex: number; detectedHeader: string | null };
 export type InspectSheet = { sheet: string; headers: string[]; rowCount: number; fields: InspectField[]; missingRequired: string[]; sample: string[][] };
 export type InspectResult = { fileName: string; kind: string; sheets: InspectSheet[]; best: string | null };
 
@@ -114,15 +114,28 @@ export function Uploader({
     }
   }
 
+  // چیدمان عمدی: دکمه‌ها **زیرِ** انتخاب فایل و در تمام عرض.
+  // پیش‌تر همه در یک ردیف ۱۲ستونی بودند و چون این کامپوننت خودش داخل یک
+  // ستون باریک قرار می‌گیرد، چهار دکمه در فضای بسیار کم فشرده و عملاً از
+  // دید کاربر خارج می‌شدند («دکمهٔ بارگذاری نمی‌بینم»).
   return (
-    <div className="grid gap-2 md:grid-cols-12 md:items-center">
-      <label className="md:col-span-3 text-xs font-bold text-slate-600">{label}</label>
-      <input
-        ref={fileRef} type="file" className="input md:col-span-5"
-        accept=".xlsx,.xlsm,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
-        onChange={e => { setName(e.target.files?.[0]?.name ?? ''); setInspect(null); setMap({}); }}
-      />
-      <div className="md:col-span-4 flex flex-wrap gap-2">
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {label && <label className="shrink-0 text-xs font-bold text-slate-600">{label}</label>}
+        <input
+          ref={fileRef} type="file" className="input min-w-0 flex-1"
+          accept=".xlsx,.xlsm,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+          onChange={e => { setName(e.target.files?.[0]?.name ?? ''); setInspect(null); setMap({}); }}
+        />
+      </div>
+
+      {name && (
+        <p className="rounded-lg bg-emerald-50 px-2 py-1 text-[11px] text-emerald-800">
+          فایل انتخاب‌شده: <span dir="ltr" className="font-mono">{name}</span> — حالا یکی از دکمه‌های زیر را بزنید.
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-stretch gap-2">
         {mappable && (
           <button className="btn-ghost whitespace-nowrap" disabled={!!busy} onClick={doInspect}>
             {busy === 'inspect' ? '…' : '🔎 بررسی ستون‌ها'}
@@ -130,9 +143,9 @@ export function Uploader({
         )}
         {actions.map(a => (
           <button key={a.id} disabled={!!busy}
-            className={(a.primary ? 'btn-primary' : 'btn-ghost') + ' flex-1 whitespace-nowrap'}
+            className={(a.primary ? 'btn-primary' : 'btn-ghost') + ' whitespace-nowrap px-4 font-bold'}
             onClick={() => run(a)}>
-            {busy === a.id ? '…' : a.title}
+            {busy === a.id ? '… در حال پردازش' : a.title}
           </button>
         ))}
         {templateKind && (
@@ -141,10 +154,9 @@ export function Uploader({
           </a>
         )}
       </div>
-      {name && <p className="md:col-span-12 text-[11px] text-slate-400" dir="ltr">{name}</p>}
 
       {curSheet && (
-        <div className="md:col-span-12 space-y-2 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
+        <div className="space-y-2 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-bold text-slate-700">نگاشت ستون‌ها</span>
             {inspect!.sheets.length > 1 && (
@@ -162,9 +174,9 @@ export function Uploader({
           )}
           <div className="grid gap-2 md:grid-cols-3">
             {curSheet.fields.map(f2 => (
-              <label key={f2.key} className="flex items-center gap-2 text-[11px]">
+              <label key={f2.key} className="flex items-center gap-2 text-[11px]" title={f2.hint ?? ''}>
                 <span className={'w-28 shrink-0 ' + (f2.required ? 'font-bold text-slate-700' : 'text-slate-500')}>
-                  {f2.title}{f2.required ? ' *' : ''}
+                  {f2.title}{f2.required ? ' *' : ''}{f2.hint ? ' ⓘ' : ''}
                 </span>
                 <select
                   className={'input flex-1 py-1 text-[11px] ' + ((map[f2.key] ?? -1) < 0 && f2.required ? 'border-red-300' : '')}

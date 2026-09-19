@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { issueCardAction, revokeCardAction } from './actions';
+import { normalizeFa, faIncludes } from '@/lib/persian-search';
 
 export type CardRow = {
   studentId: number;
@@ -41,9 +42,9 @@ export default function StudentCardsClient({ rows }: { rows: CardRow[] }) {
   const [message, setMessage] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
-    const q = query.trim();
+    const q = normalizeFa(query);
     if (!q) return rows;
-    return rows.filter(r => r.studentCode.includes(q) || r.fullName.includes(q));
+    return rows.filter(r => r.studentCode.includes(q) || faIncludes(r.fullName, q));
   }, [rows, query]);
 
   const notify = (m: string) => {

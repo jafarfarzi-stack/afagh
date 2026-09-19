@@ -40,6 +40,13 @@ type FormulaInfo = {
   buckets: { theory: number; practical: number; general: number };
   fixed: number; variable: number; total: number; termId: number | null;
 };
+type EnhancedTuition = {
+  fixedTuition: number; variableTuition: number;
+  fixedCoefficient: number; variableCoefficient: number;
+  fixedTuitionAfterCoeff: number; variableTuitionAfterCoeff: number;
+  subjectFees: { code: string; title: string; kind: string; amount: number }[];
+  subjectFeesTotal: number; totalTuition: number;
+};
 
 const fa = (n: number) => Number(n || 0).toLocaleString('fa-IR');
 
@@ -62,6 +69,7 @@ export default function FinanceStudentClient(props: {
   loans: LoanRow[];
   loanProducts: LoanProduct[];
   formula: FormulaInfo | null;
+  enhancedTuition: EnhancedTuition | null;
 }) {
   const { studentId, terms } = props;
   const [tab, setTab] = useState<'discount' | 'sponsor' | 'cheque' | 'loan' | 'ledger'>('discount');
@@ -554,6 +562,40 @@ export default function FinanceStudentClient(props: {
       {/* ═══ فرمول تخصیص و پرداخت ═══ */}
       {tab === 'ledger' && (
         <div className="space-y-4">
+          {/* شهریه با ضریب و مبالغ موضوعی */}
+          {props.enhancedTuition && (props.enhancedTuition.fixedCoefficient !== 1 || props.enhancedTuition.variableCoefficient !== 1 || props.enhancedTuition.subjectFeesTotal !== 0) && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <h4 className="mb-2 text-xs font-bold text-amber-800">شهریهٔ ترم جاری با ضریب افزایشی و مبالغ موضوعی</h4>
+              <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-3">
+                <div><span className="text-slate-500">شهریه ثابت خام: </span><span className="font-medium">{fa(props.enhancedTuition.fixedTuition)}</span></div>
+                {props.enhancedTuition.fixedCoefficient !== 1 && (
+                  <div><span className="text-slate-500">ضریب ثابت: </span><span className="font-medium text-amber-700">×{props.enhancedTuition.fixedCoefficient} = {fa(props.enhancedTuition.fixedTuitionAfterCoeff)}</span></div>
+                )}
+                <div><span className="text-slate-500">شهریه متغیر خام: </span><span className="font-medium">{fa(props.enhancedTuition.variableTuition)}</span></div>
+                {props.enhancedTuition.variableCoefficient !== 1 && (
+                  <div><span className="text-slate-500">ضریب متغیر: </span><span className="font-medium text-amber-700">×{props.enhancedTuition.variableCoefficient} = {fa(props.enhancedTuition.variableTuitionAfterCoeff)}</span></div>
+                )}
+                <div><span className="text-slate-500">مبالغ موضوعی: </span><span className={`font-medium ${props.enhancedTuition.subjectFeesTotal > 0 ? 'text-rose-700' : props.enhancedTuition.subjectFeesTotal < 0 ? 'text-emerald-700' : 'text-slate-700'}`}>{props.enhancedTuition.subjectFeesTotal > 0 ? '+' : ''}{fa(props.enhancedTuition.subjectFeesTotal)}</span></div>
+                <div className="col-span-2 sm:col-span-3 border-t border-amber-200 pt-2 mt-1">
+                  <span className="text-slate-500">شهریه نهایی: </span>
+                  <span className="font-bold text-amber-800">{fa(props.enhancedTuition.totalTuition)} ریال</span>
+                </div>
+              </div>
+              {props.enhancedTuition.subjectFees.length > 0 && (
+                <div className="mt-2 border-t border-amber-200 pt-2">
+                  <p className="mb-1 text-[10px] font-bold text-amber-700">اقلام موضوعی:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {props.enhancedTuition.subjectFees.map((sf, i) => (
+                      <span key={i} className={`rounded px-1.5 py-0.5 text-[10px] ${sf.kind === 'ADDITIVE' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>
+                        {sf.title}: {sf.amount > 0 ? '+' : ''}{fa(sf.amount)} ریال
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="rounded-lg border border-slate-200 p-3">
             <h4 className="mb-2 text-xs font-bold text-slate-800">فرمول تخصیص منطبق</h4>
             {!props.formula || !props.formula.formulaTitle ? (

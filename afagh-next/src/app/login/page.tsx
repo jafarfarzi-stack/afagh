@@ -21,6 +21,10 @@ export default function LoginPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    // اعتبارسنجی داخل submit، نه صرفاً غیرفعال‌کردن دکمه — چون در برخی مرورگرهای
+    // قدیمی رویداد onChange برای autofill/برخی روش‌های تایپ ممکن است به‌درستی
+    // شلیک نشود و دکمه‌ی صرفاً وابسته به state برای همیشه غیرفعال بماند.
+    if (!code.trim() || !pass) { setErr('کد ملی و رمز عبور را وارد کنید.'); return; }
     setBusy(true); setErr('');
     const res = await loginAndReport(code, pass).catch(() => null);
     if (!res) {
@@ -47,10 +51,10 @@ export default function LoginPage() {
           <h1 className="text-lg font-bold">سامانه جامع آفاق</h1>
           <p className="text-xs text-slate-500">ورود با کد ملی و رمز عبور</p>
         </div>
-        <input className="input text-left" dir="ltr" placeholder="کد ملی" value={code} onChange={e => setCode(e.target.value)} />
-        <input className="input text-left" dir="ltr" type="password" placeholder="رمز عبور" value={pass} onChange={e => setPass(e.target.value)} />
+        <input className="input text-left" dir="ltr" placeholder="کد ملی" value={code} onChange={e => setCode(e.target.value)} name="code" autoComplete="username" />
+        <input className="input text-left" dir="ltr" type="password" placeholder="رمز عبور" value={pass} onChange={e => setPass(e.target.value)} name="password" autoComplete="current-password" />
         {err && <p className="rounded-xl bg-red-50 p-2 text-center text-sm text-red-700">{err}</p>}
-        <button className="btn-primary w-full" disabled={busy || !code || !pass}>{busy ? 'در حال ورود…' : 'ورود'}</button>
+        <button className="btn-primary w-full" disabled={busy}>{busy ? 'در حال ورود…' : 'ورود'}</button>
       </form>
     </main>
   );

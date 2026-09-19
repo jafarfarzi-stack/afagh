@@ -6,6 +6,8 @@ import { ENTITIES } from '@/lib/migration/engine';
 import { MAP_DOMAINS } from '@/lib/migration/codemap';
 import { listCompareRuns } from '@/lib/migration/tuition';
 import { gradeStats } from '@/lib/migration/grades';
+import Link from 'next/link';
+import { missingCodeSummary } from '../codes/actions';
 import MigrationClient from './MigrationClient';
 
 export const dynamic = 'force-dynamic';
@@ -23,6 +25,11 @@ export default async function MigrationPage() {
     gradeStats(DEFAULT_SOURCE),
   ]);
 
+  // کدهای ناقص را *پیش از* بارگذاری فایل نشان می‌دهیم: تطبیق اول با کد است و
+  // رکورد بی‌کد فقط با نام تطبیق می‌خورد — جایی که نام تکراری باشد، ردیف وصل
+  // نمی‌شود. دیدن این هشدار بعد از انتقال دیر است.
+  const missingCodes = await missingCodeSummary();
+
   const sources = sourcesRaw.length ? sourcesRaw : [{ code: DEFAULT_SOURCE, title: 'سیستم قدیمی (پیش‌فرض)' }];
 
   return (
@@ -36,6 +43,16 @@ export default async function MigrationPage() {
           هیچ داده‌ای بدون مرحلهٔ بازبینی روی سامانه نوشته نمی‌شود.
         </p>
       </div>
+
+      {missingCodes.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs leading-6 text-amber-900">
+          🔑 <b>پیش از انتقال، کدها را کامل کنید.</b> این جدول‌ها رکورد بدون کد دارند:{' '}
+          {missingCodes.map(m => `${m.table} (${m.missing.toLocaleString('fa-IR')})`).join('، ')}.
+          تطبیق اول با کد انجام می‌شود؛ رکورد بی‌کد فقط با نام تطبیق می‌خورد و اگر نام تکراری باشد، آن ردیف وصل
+          نمی‌شود و خطا می‌گیرد.{' '}
+          <Link href="/admin/codes" className="font-bold underline">رفتن به مرکز کدها</Link>
+        </div>
+      )}
 
       <MigrationClient
         entities={ENTITIES}

@@ -28,6 +28,16 @@ type Formula = {
   fixedAmount: number; perUnitTheory: number; perUnitPractical: number; perUnitGeneral: number;
   priority: number; isActive: boolean; note: string | null;
 };
+type Coefficient = {
+  id: number; termId: number; variableCoefficient: number; fixedCoefficient: number;
+  note: string | null; termTitle: string | null; termCode: string | null;
+};
+type SubjectFeeType = {
+  id: number; code: string; title: string; kind: string;
+  fixedAmount: number; variablePercent: number; appliesTo: string;
+  isActive: boolean; note: string | null;
+};
+type Term = { id: number; termCode: string; termTitle: string };
 
 const fa = (n: number) => Number(n || 0).toLocaleString('fa-IR');
 const inputCls =
@@ -45,12 +55,17 @@ export default function RulesClient(props: {
   loanProducts: LoanProduct[];
   degrees: { id: number; title: string }[];
   majorsOptions: { id: number; title: string }[];
+  coefficients: Coefficient[];
+  subjectFeeTypes: SubjectFeeType[];
+  terms: Term[];
 }) {
-  const [tab, setTab] = useState<'discount' | 'sponsor' | 'formula' | 'loan'>('discount');
+  const [tab, setTab] = useState<'discount' | 'sponsor' | 'formula' | 'loan' | 'coefficient' | 'subjectFee'>('discount');
   const [editingDiscount, setEditingDiscount] = useState<DiscountType | null>(null);
   const [editingSponsor, setEditingSponsor] = useState<Sponsor | null>(null);
   const [editingFormula, setEditingFormula] = useState<Formula | null>(null);
   const [editingLoan, setEditingLoan] = useState<LoanProduct | null>(null);
+  const [editingCoefficient, setEditingCoefficient] = useState<Coefficient | null>(null);
+  const [editingSubjectFee, setEditingSubjectFee] = useState<SubjectFeeType | null>(null);
   const [pending, startTransition] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -72,6 +87,8 @@ export default function RulesClient(props: {
     { id: 'sponsor', label: '🏛️ بنیادهای حامی' },
     { id: 'formula', label: '🧮 فرمول تخصیص' },
     { id: 'loan', label: '💰 وام‌ها' },
+    { id: 'coefficient', label: '📈 ضریب افزایشی نیمسال' },
+    { id: 'subjectFee', label: '🏷️ مبالغ موضوعی' },
   ] as const;
 
   return (
@@ -502,6 +519,313 @@ export default function RulesClient(props: {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ═══ ضریب افزایشی نیمسال ═══ */}
+      {tab === 'coefficient' && (
+        <CoefficientTab
+          coefficients={props.coefficients}
+          terms={props.terms}
+          editing={editingCoefficient}
+          setEditing={setEditingCoefficient}
+          pending={pending}
+          run={run}
+        />
+      )}
+
+      {/* ═══ مبالغ موضوعی ═══ */}
+      {tab === 'subjectFee' && (
+        <SubjectFeeTab
+          subjectFeeTypes={props.subjectFeeTypes}
+          editing={editingSubjectFee}
+          setEditing={setEditingSubjectFee}
+          pending={pending}
+          run={run}
+        />
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  تب ضریب افزایشی نیمسال
+// ═══════════════════════════════════════════════════════════════
+
+function CoefficientTab(props: {
+  coefficients: Coefficient[];
+  terms: Term[];
+  editing: Coefficient | null;
+  setEditing: (c: Coefficient | null) => void;
+  pending: boolean;
+  run: (fn: () => Promise<{ ok: boolean; error?: string }>, okText: string, after?: () => void) => void;
+}) {
+  const [form, setForm] = useState({
+    termId: '',
+    variableCoefficient: '1.00',
+    fixedCoefficient: '1.00',
+    note: '',
+  });
+
+  const usedTermIds = new Set(props.coefficients.map((c) => c.termId));
+  const availableTerms = props.terms.filter((t) => !usedTermIds.has(t.id) || t.id === props.editing?.termId);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget as HTMLFormElement);
+    const termId = Number(f.get('termId'));
+    const data = {
+      termId,
+      variableCoefficient: Number(f.get('variableCoefficient')) || 1,
+      fixedCoefficient: Number(f.get('fixedCoefficient')) || 1,
+      note: String(f.get('note') || ''),
+    };
+    props.run(
+      async () => {
+        const res = await fetch('/admin/finance/coefficients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        const r = await res.json();
+        return r;
+      },
+      props.editing ? 'ضریب به‌روز شد' : 'ضریب اضافه شد',
+      () => { props.setEditing(null); (e.currentTarget as HTMLFormElement).reset(); }
+    );
+  };
+
+  const handleDelete = (id: number) => {
+    props.run(
+      async () => {
+        const res = await fetch(`/admin/finance/coefficients?id=${id}`, { method: 'DELETE' });
+        return res.json();
+      },
+      'ضریب حذف شد'
+    );
+  };
+
+  return (
+    <div className="card space-y-4">
+      <form
+        key={props.editing?.id ?? 'new-coeff'}
+        onSubmit={handleSubmit}
+        className="rounded-lg border border-slate-200 p-3"
+      >
+        <h4 className="mb-2 text-xs font-bold text-slate-800">
+          {props.editing ? `ویرایش ضریب ترم «${props.editing.termTitle || props.editing.termCode}»` : 'افزودن ضریب افزایشی نیمسال'}
+        </h4>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+          <label className={labelCls}>
+            نیمسال *
+            <select name="termId" defaultValue={props.editing?.termId ?? ''} className={inputCls} disabled={!!props.editing}>
+              <option value="">— انتخاب —</option>
+              {availableTerms.map((t) => (
+                <option key={t.id} value={t.id}>{t.termTitle}</option>
+              ))}
+            </select>
+          </label>
+          <label className={labelCls}>
+            ضریب شهریه متغیر *
+            <input name="variableCoefficient" type="number" min={0.5} max={5} step={0.01}
+              defaultValue={props.editing?.variableCoefficient ?? 1.00} className={inputCls} />
+          </label>
+          <label className={labelCls}>
+            ضریب شهریه ثابت *
+            <input name="fixedCoefficient" type="number" min={0.5} max={5} step={0.01}
+              defaultValue={props.editing?.fixedCoefficient ?? 1.00} className={inputCls} />
+          </label>
+          <label className={labelCls}>یادداشت<input name="note" defaultValue={props.editing?.note ?? ''} className={inputCls} /></label>
+        </div>
+        <p className="mt-1 text-[11px] text-slate-500">
+          ضریب ۱.۰۰ = بدون تغییر. مثلاً ۱.۱۰ = افزایش ۱۰٪ نسبت به نیمسال قبل.
+        </p>
+        <div className="mt-3 flex gap-2">
+          <button type="submit" disabled={props.pending} className={btnCls}>
+            {props.editing ? 'ذخیرهٔ تغییرات' : 'افزودن'}
+          </button>
+          {props.editing && (
+            <button type="button" onClick={() => props.setEditing(null)} className={ghostBtn}>انصراف</button>
+          )}
+        </div>
+      </form>
+
+      {props.coefficients.length === 0 ? (
+        <p className="py-4 text-center text-xs text-slate-500">
+          هنوز ضریب افزایشی برای هیچ نیمسالی تعریف نشده است. ضریب پیش‌فرض ۱.۰۰ (بدون تغییر) اعمال می‌شود.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-right text-xs">
+            <thead>
+              <tr className="border-b border-slate-200 text-[11px] text-slate-500">
+                <th className="p-2">نیمسال</th><th className="p-2">ضریب متغیر</th><th className="p-2">ضریب ثابت</th>
+                <th className="p-2">یادداشت</th><th className="p-2">عملیات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.coefficients.map((c) => (
+                <tr key={c.id} className="border-b border-slate-100 last:border-0">
+                  <td className="p-2 font-medium text-slate-800">{c.termTitle || c.termCode || `ترم ${c.termId}`}</td>
+                  <td className="p-2">{c.variableCoefficient.toFixed(2)}</td>
+                  <td className="p-2">{c.fixedCoefficient.toFixed(2)}</td>
+                  <td className="p-2 text-slate-500">{c.note || '—'}</td>
+                  <td className="p-2">
+                    <div className="flex gap-1">
+                      <button onClick={() => props.setEditing(c)} className={ghostBtn}>ویرایش</button>
+                      <button disabled={props.pending} onClick={() => handleDelete(c.id)} className={ghostBtn}>حذف</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  تب مبالغ موضوعی
+// ═══════════════════════════════════════════════════════════════
+
+function SubjectFeeTab(props: {
+  subjectFeeTypes: SubjectFeeType[];
+  editing: SubjectFeeType | null;
+  setEditing: (s: SubjectFeeType | null) => void;
+  pending: boolean;
+  run: (fn: () => Promise<{ ok: boolean; error?: string }>, okText: string, after?: () => void) => void;
+}) {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget as HTMLFormElement);
+    const data = {
+      id: props.editing?.id,
+      code: String(f.get('code') || ''),
+      title: String(f.get('title') || ''),
+      kind: String(f.get('kind') || 'ADDITIVE'),
+      fixedAmount: Number(f.get('fixedAmount')) || 0,
+      variablePercent: Number(f.get('variablePercent')) || 0,
+      appliesTo: String(f.get('appliesTo') || 'BOTH'),
+      isActive: f.get('isActive') === 'on',
+      note: String(f.get('note') || ''),
+    };
+    props.run(
+      async () => {
+        const res = await fetch('/admin/finance/subject-fees', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        return res.json();
+      },
+      props.editing ? 'نوع مبلغ به‌روز شد' : 'نوع مبلغ اضافه شد',
+      () => { props.setEditing(null); (e.currentTarget as HTMLFormElement).reset(); }
+    );
+  };
+
+  const handleDelete = (id: number) => {
+    props.run(
+      async () => {
+        const res = await fetch(`/admin/finance/subject-fees?id=${id}`, { method: 'DELETE' });
+        return res.json();
+      },
+      'نوع مبلغ حذف شد'
+    );
+  };
+
+  return (
+    <div className="card space-y-4">
+      <form
+        key={props.editing?.id ?? 'new-subject-fee'}
+        onSubmit={handleSubmit}
+        className="rounded-lg border border-slate-200 p-3"
+      >
+        <h4 className="mb-2 text-xs font-bold text-slate-800">
+          {props.editing ? `ویرایش: ${props.editing.title}` : 'افزودن نوع مبلغ موضوعی'}
+        </h4>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <label className={labelCls}>کد *<input name="code" required defaultValue={props.editing?.code} placeholder="INSURANCE" className={inputCls} /></label>
+          <label className={`${labelCls} sm:col-span-2`}>عنوان *<input name="title" required defaultValue={props.editing?.title} placeholder="هزینه بیمه دانشجویی" className={inputCls} /></label>
+          <label className={labelCls}>
+            نوع
+            <select name="kind" defaultValue={props.editing?.kind || 'ADDITIVE'} className={inputCls}>
+              <option value="ADDITIVE">افزایشی (+)</option>
+              <option value="DEDUCTIVE">کاهشی (-)</option>
+            </select>
+          </label>
+          <label className={labelCls}>مبلغ ثابت (ریال)<input name="fixedAmount" type="number" min={0} defaultValue={props.editing?.fixedAmount ?? 0} className={inputCls} /></label>
+          <label className={labelCls}>درصد از شهریه متغیر<input name="variablePercent" type="number" min={0} max={100} step={0.5} defaultValue={props.editing?.variablePercent ?? 0} className={inputCls} /></label>
+          <label className={labelCls}>
+            روی چه بخشی اثر بگذارد
+            <select name="appliesTo" defaultValue={props.editing?.appliesTo || 'BOTH'} className={inputCls}>
+              <option value="BOTH">هر دو (ثابت + متغیر)</option>
+              <option value="FIXED">فقط شهریه ثابت</option>
+              <option value="VARIABLE">فقط شهریه متغیر</option>
+            </select>
+          </label>
+          <label className={`${labelCls} sm:col-span-2`}>یادداشت<input name="note" defaultValue={props.editing?.note ?? ''} className={inputCls} /></label>
+          <label className="flex items-end gap-1.5 pb-1.5 text-[11px] text-slate-700">
+            <input type="checkbox" name="isActive" defaultChecked={props.editing?.isActive ?? true} className="accent-emerald-700" />
+            فعال
+          </label>
+        </div>
+        <p className="mt-1 text-[11px] text-slate-500">
+          مثال: هزینه بیمه = ۵۰,۰۰۰ ریال ثابت. حق نظارت = ۲٪ از شهریه متغیر.
+        </p>
+        <div className="mt-3 flex gap-2">
+          <button type="submit" disabled={props.pending} className={btnCls}>
+            {props.editing ? 'ذخیرهٔ تغییرات' : 'افزودن'}
+          </button>
+          {props.editing && (
+            <button type="button" onClick={() => props.setEditing(null)} className={ghostBtn}>انصراف</button>
+          )}
+        </div>
+      </form>
+
+      {props.subjectFeeTypes.length === 0 ? (
+        <p className="py-4 text-center text-xs text-slate-500">
+          هنوز هیچ نوع مبلغ موضوعی تعریف نشده است. نمونه: هزینه بیمه، حق نظارت، هزینه کارگاه.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-right text-xs">
+            <thead>
+              <tr className="border-b border-slate-200 text-[11px] text-slate-500">
+                <th className="p-2">کد</th><th className="p-2">عنوان</th><th className="p-2">نوع</th>
+                <th className="p-2">مبلغ ثابت</th><th className="p-2">درصد متغیر</th><th className="p-2">اعمال روی</th>
+                <th className="p-2">وضعیت</th><th className="p-2">عملیات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.subjectFeeTypes.map((s) => (
+                <tr key={s.id} className="border-b border-slate-100 last:border-0">
+                  <td className="p-2 text-slate-500">{s.code}</td>
+                  <td className="p-2 font-medium text-slate-800">{s.title}</td>
+                  <td className="p-2">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] ${s.kind === 'ADDITIVE' ? 'bg-amber-50 text-amber-700' : 'bg-sky-50 text-sky-700'}`}>
+                      {s.kind === 'ADDITIVE' ? 'افزایشی' : 'کاهشی'}
+                    </span>
+                  </td>
+                  <td className="p-2">{fa(s.fixedAmount)}</td>
+                  <td className="p-2">{s.variablePercent > 0 ? `${s.variablePercent}٪` : '—'}</td>
+                  <td className="p-2 text-slate-600">{s.appliesTo === 'BOTH' ? 'ثابت+متغیر' : s.appliesTo === 'FIXED' ? 'ثابت' : 'متغیر'}</td>
+                  <td className="p-2">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] ${s.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                      {s.isActive ? 'فعال' : 'غیرفعال'}
+                    </span>
+                  </td>
+                  <td className="p-2">
+                    <div className="flex gap-1">
+                      <button onClick={() => props.setEditing(s)} className={ghostBtn}>ویرایش</button>
+                      <button disabled={props.pending} onClick={() => handleDelete(s.id)} className={ghostBtn}>حذف</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

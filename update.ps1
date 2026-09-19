@@ -3,15 +3,18 @@
   بروز کردن سامانه آفاق از گیت‌هاب + بیلد + اجرای دوباره (ویندوز)
       .\update.ps1              دریافت آخرین کد، بیلد و اجرا
       .\update.ps1 -SkipBuild   فقط دریافت کد (بدون بیلد/اجرا)
+      .\update.ps1 -BranchName main   انتخاب شاخه (پیش‌فرض: main)
 #>
-param([switch]$SkipBuild)
+param([switch]$SkipBuild, [string]$BranchName)
 
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 
 $Root   = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $Next   = Join-Path $Root 'afagh-next'
-$Branch = 'arena/01a05c13-afagh'
+# شاخهٔ به‌روزرسانی: پیش‌فرض «main» است (خط رسمی انتشار).
+# اگر روی شاخهٔ دیگری کار می‌کنید:  .\update.ps1 -BranchName arena/xxxx-afagh
+$Branch = if ($BranchName) { $BranchName } else { 'main' }
 
 function Ok($t)   { Write-Host "  [OK]  $t" -ForegroundColor Green }
 function Warn($t) { Write-Host "  [!]   $t" -ForegroundColor Yellow }

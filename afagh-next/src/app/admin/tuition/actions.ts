@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db';
-import { academic_terms, term_financial_rules, tuition_fee_rules } from '@/db/schema';
+import { academic_terms, term_financial_rules, tuition_rules } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { mapLegacyFeeRules, normalizeEquivFixedMode, termTypeOf } from '@/lib/tuition-rules';
 import { saveSettings } from '@/lib/settings';
@@ -31,7 +31,7 @@ const numOr = (v: unknown, d = 0): number => {
   return Number.isFinite(n) && n >= 0 ? Math.round(n) : d;
 };
 
-/** ایجاد یا به‌روزرسانی یک قاعدهٔ شهریه */
+/** ایجاد یا به‌روزرسانی یک قاعدهٔ شهریه (جدول یکپارچهٔ tuition_rules) */
 export async function saveFeeRuleAction(input: FeeRuleInput): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
 
@@ -45,18 +45,21 @@ export async function saveFeeRuleAction(input: FeeRuleInput): Promise<{ ok: bool
     degreeLevelId: input.degreeLevelId ? Number(input.degreeLevelId) : null,
     termType: clean(input.termType),
     offeringType: clean(input.offeringType),
-    fixedTuition: String(fixedTuition),
-    perUnitTuition: String(perUnitTuition),
-    effectiveFromYear: input.effectiveFromYear ? Number(input.effectiveFromYear) : null,
+    // در جدول یکپارچه، «شهریهٔ هر واحد» در هر سه سطل (نظری/عملی/عمومی) یکسان می‌نشیند
+    fixedAmount: String(fixedTuition),
+    perUnitTheory: String(perUnitTuition),
+    perUnitPractical: String(perUnitTuition),
+    perUnitGeneral: String(perUnitTuition),
+    entryYearFrom: input.effectiveFromYear ? Number(input.effectiveFromYear) : null,
     isActive: input.isActive === false ? 0 : 1,
     note: clean(input.note),
     updatedAt: new Date(),
   };
 
   if (input.id) {
-    await db.update(tuition_fee_rules).set(row).where(eq(tuition_fee_rules.id, Number(input.id)));
+    await db.update(tuition_rules).set(row).where(eq(tuition_rules.id, Number(input.id)));
   } else {
-    await db.insert(tuition_fee_rules).values(row);
+    await db.insert(tuition_rules).values(row);
   }
 
   revalidatePath('/admin/tuition');
@@ -66,23 +69,23 @@ export async function saveFeeRuleAction(input: FeeRuleInput): Promise<{ ok: bool
 /** حذف یک قاعدهٔ شهریه */
 export async function deleteFeeRuleAction(id: number): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
-  await db.delete(tuition_fee_rules).where(eq(tuition_fee_rules.id, Number(id)));
+  await db.delete(tuition_rules).where(eq(tuition_rules.id, Number(id)));
   revalidatePath('/admin/tuition');
   return { ok: true };
 }
 
 /**
- * درون‌ریزی قواعد مالی قدیمی (`term_financial_rules`) در موتور جدید (`tuition_fee_rules`).
+ * درون‌ریزی قواعد مالی قدیمی (`term_financial_rules`) در موتور جدید (`tuition_rules`).
  *
  * چرا لازم است: ماژول مهاجرت داده‌ها جدول قدیمی را پر می‌کند، ولی موتور شهریه از
- * جدول جدید می‌خواند. بدون این پل، پس از مهاجرت هیچ قاعده‌ای وجود ندارد و شهریه
+ * جدول یکپارچه می‌خواند. بدون این پل، پس از مهاجرت هیچ قاعده‌ای وجود ندارد و شهریه
  * بی‌صدا «صفر» محاسبه می‌شود.
  *
  * رفتار:
  *  - قواعد به ازای (مقطع، نوع ترم) جمع می‌شوند و نرخ آخرین ترم برنده است؛
- *  - `effectiveFromYear` خالی می‌ماند: در موتور جدید این فیلد با «سال ورودی
- *    دانشجو» مقایسه می‌شود، ولی جدول قدیمی بُعد ورودی ندارد. پر کردنش از روی
- *    سال ترم باعث می‌شد دانشجویان ورودی قدیمی‌تر نرخ را از دست بدهند؛
+ *  - `entryYearFrom` خالی می‌ماند: در موتور جدید این فیلد با «سال ورودی دانشجو»
+ *    مقایسه می‌شود، ولی جدول قدیمی بُعد ورودی ندارد. پر کردنش از روی سال ترم باعث
+ *    می‌شد دانشجویان ورودی قدیمی‌تر نرخ را از دست بدهند؛
  *  - قواعد تکراری (همان مقطع+نوع ترم+سال) دوباره ساخته نمی‌شوند → اجرایش بی‌خطر و تکرارپذیر است؛
  *  - `offeringType` خالی می‌ماند، چون جدول قدیمی این تفکیک را ندارد؛ نرخ خاص
  *    معادل‌سازی (TRANSFER) را مدیر باید خودش در همین صفحه تعریف کند.
@@ -126,30 +129,34 @@ export async function importLegacyFeeRulesAction(): Promise<{
     // بررسی تکراری: NULL باید با isNull سنجیده شود. (eq(col, -1) هرگز مطابقت
     // نمی‌کند و باعث درج قاعدهٔ تکراری در هر اجرا می‌شد.)
     const exists = await db
-      .select({ id: tuition_fee_rules.id })
-      .from(tuition_fee_rules)
+      .select({ id: tuition_rules.id })
+      .from(tuition_rules)
       .where(
         and(
           d.degreeLevelId == null
-            ? isNull(tuition_fee_rules.degreeLevelId)
-            : eq(tuition_fee_rules.degreeLevelId, d.degreeLevelId),
-          eq(tuition_fee_rules.termType, d.termType),
-          isNull(tuition_fee_rules.offeringType),
+            ? isNull(tuition_rules.degreeLevelId)
+            : eq(tuition_rules.degreeLevelId, d.degreeLevelId),
+          eq(tuition_rules.termType, d.termType),
+          isNull(tuition_rules.offeringType),
           d.effectiveFromYear == null
-            ? isNull(tuition_fee_rules.effectiveFromYear)
-            : eq(tuition_fee_rules.effectiveFromYear, d.effectiveFromYear),
+            ? isNull(tuition_rules.entryYearFrom)
+            : eq(tuition_rules.entryYearFrom, d.effectiveFromYear),
         ),
       )
       .limit(1);
     if (exists.length) { skipped++; continue; }
 
-    await db.insert(tuition_fee_rules).values({
+    await db.insert(tuition_rules).values({
       degreeLevelId: d.degreeLevelId,
+      majorId: null,
       termType: d.termType,
       offeringType: null,
-      fixedTuition: String(d.fixedTuition),
-      perUnitTuition: String(d.perUnitTuition),
-      effectiveFromYear: d.effectiveFromYear,
+      entryYearFrom: d.effectiveFromYear,
+      entryYearTo: null,
+      fixedAmount: String(d.fixedTuition),
+      perUnitTheory: String(d.perUnitTuition),
+      perUnitPractical: String(d.perUnitTuition),
+      perUnitGeneral: String(d.perUnitTuition),
       isActive: 1,
       note: d.note,
       updatedAt: new Date(),

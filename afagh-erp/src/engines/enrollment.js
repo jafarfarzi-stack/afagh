@@ -216,13 +216,17 @@ function submitEnrollment(studentId, offeringIds, { allowCouncil = false } = {})
 
       const hasSoftError = clashes.length > 0 || examClashes.length > 0 || !!prereqFail;
 
-      // ── فیلتر ۲: ظرفیت (اتمیک)
-      const row = db.prepare(`SELECT enrolledCount, capacity, waitlistCapacity FROM course_offerings WHERE id = ?`).get(off.id);
-      const isFull = row.enrolledCount >= row.capacity;
-      const wlFull = row.enrolledCount + (row.waitlistCapacity ? 1 : 0) >= row.capacity + row.waitlistCapacity;
-
       if (hasSoftError && allowCouncil) {
         // ── خطای نرم → ثبت PENDING_COUNCIL + پرونده گردش کار (شورای آموزشی)
+        // توجه: این مسیر صندلی مصرف نمی‌کند؛ ظرفیت فقط پس از تأیید شورا (workflow.js) کم می‌شود.
+        const dupCouncil = db.prepare(`
+          SELECT id FROM enrollments
+          WHERE studentId = ? AND offeringId = ? AND status IN ('REGISTERED','WAITLISTED','PENDING_COUNCIL')`)
+          .get(studentId, off.id);
+        if (dupCouncil) {
+          result.hardErrors.push(`درس «${off.title}» قبلاً برای شما ثبت شده است.`);
+          continue;
+        }
         const workflow = require('./workflow');
         const reasons = [];
         if (prereqFail) reasons.push(`عدم پیش‌نیاز: ${prereqFail.join('، ')}`);
@@ -244,20 +248,47 @@ function submitEnrollment(studentId, offeringIds, { allowCouncil = false } = {})
         continue;
       }
 
-      if (isFull && !wlFull) {
-        // لیست انتظار — رتبه بر اساس زمان ثبت (عدالت)
-        const pos = db.prepare(`SELECT COUNT(*) AS c FROM enrollments WHERE offeringId = ? AND status = 'WAITLISTED'`).get(off.id).c + 1;
-        db.prepare(`INSERT INTO enrollments (studentId, offeringId, status, waitlistPosition) VALUES (?,?, 'WAITLISTED', ?)`).run(studentId, off.id, pos);
-        result.waitlisted.push({ offeringId: off.id, title: off.title, position: pos });
-        continue;
-      }
-      if (isFull && wlFull) {
-        result.hardErrors.push(`درس «${off.title}»: ظرفیت و لیست انتظار تکمیل است.`);
+      // ── فیلتر ۲: ظرفیت اتمیک (P0-1) ──
+      // الگوی قبلی (SELECT سپس UPDATE بدون شرط) تحت همزمانی overbooking می‌داد.
+      // الگوی جدید: UPDATE شرطی اتمیک؛ فقط یک نویسنده برنده می‌شود (changes===1).
+      const dupSame = db.prepare(`
+        SELECT id FROM enrollments
+        WHERE studentId = ? AND offeringId = ? AND status IN ('REGISTERED','WAITLISTED','PENDING_COUNCIL')`)
+        .get(studentId, off.id);
+      if (dupSame) {
+        result.hardErrors.push(`درس «${off.title}» قبلاً برای شما ثبت شده است.`);
         continue;
       }
 
-      db.prepare(`UPDATE course_offerings SET enrolledCount = enrolledCount + 1 WHERE id = ?`).run(off.id);
-      db.prepare(`INSERT INTO enrollments (studentId, offeringId, status) VALUES (?,?, 'REGISTERED')`).run(studentId, off.id);
+      const seat = db.prepare(`UPDATE course_offerings SET enrolledCount = enrolledCount + 1 WHERE id = ? AND enrolledCount < capacity`).run(off.id);
+      if (seat.changes === 1) {
+        // صندلی رزرو شد — ثبت قطعی
+        try {
+          db.prepare(`INSERT INTO enrollments (studentId, offeringId, status) VALUES (?,?, 'REGISTERED')`).run(studentId, off.id);
+        } catch (e) {
+          // اگر INSERT به هر دلیل شکست خورد، صندلی را پس بده تا ظرفیت نشت نکند
+          db.prepare(`UPDATE course_offerings SET enrolledCount = MAX(enrolledCount - 1, 0) WHERE id = ?`).run(off.id);
+          if (String((e && e.message) || '').includes('UNIQUE')) {
+            result.hardErrors.push(`درس «${off.title}» قبلاً برای شما ثبت شده است.`);
+          } else {
+            throw e;
+          }
+          continue;
+        }
+      } else {
+        // ظرفیت پر است → لیست انتظار با شمارش واقعی (نه فرمول روی enrolledCount)
+        const capRow = db.prepare(`SELECT capacity, waitlistCapacity FROM course_offerings WHERE id = ?`).get(off.id);
+        const wlCap = Number(capRow.waitlistCapacity || 0);
+        const wlCount = db.prepare(`SELECT COUNT(*) AS c FROM enrollments WHERE offeringId = ? AND status = 'WAITLISTED'`).get(off.id).c;
+        if (wlCount < wlCap) {
+          const pos = wlCount + 1;
+          db.prepare(`INSERT INTO enrollments (studentId, offeringId, status, waitlistPosition) VALUES (?,?, 'WAITLISTED', ?)`).run(studentId, off.id, pos);
+          result.waitlisted.push({ offeringId: off.id, title: off.title, position: pos });
+          continue;
+        }
+        result.hardErrors.push(`درس «${off.title}»: ظرفیت و لیست انتظار تکمیل است.`);
+        continue;
+      }
 
       // ── Silent Billing: هزینه متغیر در پس‌زمینه به دفتر کل اضافه می‌شود (بدون مسدودسازی)
       const fin = db.prepare(`SELECT perUnitTuition FROM term_financial_rules WHERE termId = ? AND degreeLevelId = ?`).get(term.id, student.degreeLevelId);

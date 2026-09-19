@@ -19,6 +19,7 @@
  * ══════════════════════════════════════════════════════════════════
  */
 import pg from 'pg';
+import { seedPermissions } from './seed-permissions.mjs';
 import { createRequire } from 'node:module';
 
 const { Pool } = pg;
@@ -88,42 +89,65 @@ try {
   }
   console.log(`  ✓ نقش‌ها (${ROLES.length})`);
 
+  // ── کاتالوگ مجوزها + نگاشت پیش‌فرض نقش→مجوز (ماتریس RBAC) ──
+  //  بدون این بخش، جدول‌های permissions/role_permissions روی نصب تازه خالی
+  //  می‌مانند و صفحهٔ «ماتریس دسترسی‌ها» هیچ دادهٔ واقعی برای نمایش ندارد.
+  //  منطق در scripts/seed-permissions.mjs است تا روی سرورِ در حال کار هم
+  //  بتوان جداگانه (بدون بازتولید کلیدهای cron) اجرایش کرد.
+  await seedPermissions(q, { log: (m) => console.log(m) });
+
   // مقاطع
   const degreeIds = {};
+  // تعداد ترم چارت + تکمیلی‌بودن هر مقطع — [termCount, isGraduate].
+  // COALESCE یعنی: اگر کاربر در مرکز کدها دستی عوض کرده باشد، seed هر استقرار بازنویسی نمی‌کند.
+  const DEGREE_CHART_DEFAULTS = { BS: [8, 0], MS: [4, 1], AD: [4, 0], PHD: [4, 1] };
   for (const [title, code, passing, gpa, maxUnits] of DEGREES) {
+    const [termCount, isGraduate] = DEGREE_CHART_DEFAULTS[code] ?? [null, null];
     const [row] = await q(
-      `INSERT INTO degree_level_configs (title, code, "defaultPassingGrade", "conditionalGpaThreshold", "maxUnitsPerTerm")
-       VALUES ($1,$2,$3,$4,$5) ON CONFLICT (code) DO UPDATE SET title = EXCLUDED.title RETURNING id`, [title, code, passing, gpa, maxUnits]);
+      `INSERT INTO degree_level_configs (title, code, "defaultPassingGrade", "conditionalGpaThreshold", "maxUnitsPerTerm", "termCount", "isGraduate")
+       VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (code) DO UPDATE SET title = EXCLUDED.title,
+       "termCount" = COALESCE(degree_level_configs."termCount", EXCLUDED."termCount"),
+       "isGraduate" = COALESCE(degree_level_configs."isGraduate", EXCLUDED."isGraduate") RETURNING id`,
+      [title, code, passing, gpa, maxUnits, termCount, isGraduate]);
     degreeIds[code] = row.id;
   }
   console.log(`  ✓ مقاطع (${DEGREES.length})`);
 
-  // آیین‌نامه‌ها — یک ردیف برای هر مقطع
-  for (const [title, code] of DEGREES) {
-    const regTitle = `آیین‌نامهٔ آموزشی مصوب ۱۴۰۳ — ${title}`;
-    const [existing] = await q(`SELECT id FROM educational_regulations WHERE title = $1 LIMIT 1`, [regTitle]);
-    if (!existing) {
-      await q(
-        `INSERT INTO educational_regulations (title, "degreeLevelId", "effectiveFromYear", "rulesConfig")
-         VALUES ($1,$2,1403,$3)`,
-        [regTitle, degreeIds[code], JSON.stringify(REGULATION)]);
-    }
-  }
-  console.log(`  ✓ آیین‌نامه‌ها (${DEGREES.length})`);
+  // آیین‌نامه‌ها عمداً seed نمی‌شوند: فقط ۶ سند تجمیعی (۱۴۰۲/۱۳۹۳/۱۳۹۱/۱۳۹۴ ارشد/
+  // دکتری/ماقبل ۱۳۹۱) معتبر است که ETL یا اسکریپت cleanup-regulations می‌سازد.
+  // (seed قبلی «مصوب ۱۴۰۳ — X» لیست را شلوغ می‌کرد.)
+  console.log(`  … آیین‌نامه‌ها seed نمی‌شوند (فقط اسناد تجمیعی)`);
+  void REGULATION;
 
   // دانشکده/گروه/رشته
   for (const [facName, facCode, depName, depCode, majors] of STRUCTURE) {
-    let [fac] = await q(`SELECT id FROM faculties WHERE "facultyCode" = $1 LIMIT 1`, [facCode]);
+    // ⚠️ q1 یک «ردیف» برمی‌گرداند نه آرایه — با [x] = ... باز نمی‌شود.
+    //    (نسخهٔ قبلی این‌جا `[fac] = await q1(...)` داشت و به‌محض فعال‌شدن مسیرِ
+    //     تعارض، خطای «undefined is not iterable» می‌داد.)
+    let fac = await q1(`SELECT id FROM faculties WHERE "facultyCode" = $1 LIMIT 1`, [facCode]);
     if (!fac) {
-      [fac] = await q(`INSERT INTO faculties (name, "facultyCode") VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING id`, [facName, facCode]);
-      if (!fac) [fac] = await q1(`SELECT id FROM faculties WHERE "facultyCode" = $1 LIMIT 1`, [facCode]);
+      fac = await q1(`INSERT INTO faculties (name, "facultyCode") VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING id`, [facName, facCode]);
+      if (!fac) fac = await q1(`SELECT id FROM faculties WHERE "facultyCode" = $1 LIMIT 1`, [facCode]);
+      if (!fac) fac = await q1(`SELECT id FROM faculties WHERE name = $1 LIMIT 1`, [facName]);
     }
     if (!fac) throw new Error(`ساخت دانشکده «${facName}» ممکن نشد`);
 
-    let [dep] = await q(`SELECT id FROM departments WHERE "facultyId" = $1 AND "departmentCode" = $2 LIMIT 1`, [fac.id, depCode]);
+    // ── گروه آموزشی ──
+    // «کد گروه» در کل سامانه یکتاست (ایندکس departments_departmentCode_uq).
+    // روی سرورِ دارای دادهٔ واقعی ممکن است همین کد را از قبل گروهی *در دانشکدهٔ
+    // دیگر* گرفته باشد. در آن حالت نباید گروه واقعی مشتری را تصاحب کنیم و نباید
+    // هم کرش کنیم: گروهِ پایه را با همان نام و بدون کد می‌سازیم و هشدار می‌دهیم.
+    let dep = await q1(`SELECT id FROM departments WHERE "facultyId" = $1 AND "departmentCode" = $2 LIMIT 1`, [fac.id, depCode]);
+    if (!dep) dep = await q1(`SELECT id FROM departments WHERE "facultyId" = $1 AND name = $2 LIMIT 1`, [fac.id, depName]);
     if (!dep) {
-      [dep] = await q(`INSERT INTO departments (name, "facultyId", "departmentCode") VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id`, [depName, fac.id, depCode]);
-      if (!dep) [dep] = await q1(`SELECT id FROM departments WHERE "facultyId" = $1 AND "departmentCode" = $2 LIMIT 1`, [fac.id, depCode]);
+      const owner = await q1(`SELECT id, "facultyId" FROM departments WHERE "departmentCode" = $1 LIMIT 1`, [depCode]);
+      if (owner) {
+        console.warn(`  ⚠ کد گروه «${depCode}» از قبل متعلق به گروه دیگری است — «${depName}» بدون کد ساخته شد؛ در /admin/codes کد بدهید.`);
+        dep = await q1(`INSERT INTO departments (name, "facultyId") VALUES ($1,$2) RETURNING id`, [depName, fac.id]);
+      } else {
+        dep = await q1(`INSERT INTO departments (name, "facultyId", "departmentCode") VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id`, [depName, fac.id, depCode]);
+        if (!dep) dep = await q1(`SELECT id FROM departments WHERE "departmentCode" = $1 LIMIT 1`, [depCode]);
+      }
     }
     if (!dep) throw new Error(`ساخت گروه «${depName}» ممکن نشد`);
 
@@ -184,7 +208,16 @@ try {
     console.error('⚠️  هشدار (ساخت کلیدهای پویش):', err.message);
   }
 
-  console.log('\n🎉 دادهٔ پایه آماده است — اکنون با حساب دمو (مثلاً 1010101010) دوباره وارد شوید؛ پروندهٔ دانشجویی خودکار ساخته می‌شود.');
+  // P0-4: در پروداکشن نباید به اپراتور «با حساب دمو وارد شو» گفت — آن حساب‌ها در
+  // ایمیج تولید قفل‌اند و رمز ثابت هم هیچ‌وقت قابل قبول نیست.
+  const demoPossible = process.env.NODE_ENV !== 'production' ||
+    (process.env.AFAGH_DEMO_MODE === '1' && process.env.AFAGH_ALLOW_INSECURE_DEMO === 'true'
+      && process.env.NEXT_PUBLIC_AFAGH_DEMO_LOCK !== '1');
+  console.log(demoPossible
+    ? '\n🎉 دادهٔ پایه آماده است — محیط دمو فعال است: با حساب دمو (مثلاً 1010101010) وارد شوید.'
+    : '\n🎉 دادهٔ پایه آماده است — حساب دمو ساخته/فعال نمی‌شود (پروداکشن).\n' +
+      '   برای ورود اولیه، حساب مدیر بسازید:  node scripts/create-admin.mjs --show\n' +
+      '   (یا روی سرور:  make admin) — رمز تصادفی است و در اولین ورود باید عوض شود.');
 } catch (err) {
   console.error('❌ خطا:', err.message);
   process.exitCode = 1;

@@ -2,40 +2,118 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 import { navModules } from '@/lib/admin-modules';
+import { normalizeFa, faIncludes } from '@/lib/persian-search';
+import type { UniTheme } from '@/lib/university-theme';
 
 /**
- * ناوبری افقی کارتابل مدیریت — فقط نقش‌های مجاز.
- * روی خود صفحهٔ داشبورد (/admin) پنهان می‌شود چون شبکهٔ کارت‌ها همان
- * ناوبری است؛ در زیرصفحه‌ها برای جابه‌جایی سریع می‌ماند.
+ * منوی کشویی سمت راست کارتابل مدیریت — جایگزین نوار افقی قبلی.
+ * دکمهٔ ثابت بالا-راست + پنل لغزنده از راست با جست‌وجو؛ فقط نقش‌های مجاز.
  */
-export default function AdminNav({ roles }: { roles: string[] }) {
+export default function AdminNav({ roles, theme }: { roles: string[]; theme?: UniTheme }) {
+  const th: UniTheme = theme ?? {
+    header: 'bg-indigo-950', badge: 'bg-indigo-900/90 hover:bg-indigo-900 border-indigo-600/60',
+    ring: 'border-indigo-700/60', soft: 'bg-indigo-900/80 text-indigo-200',
+    navPanel: 'bg-indigo-950 border-indigo-700/50', navBorder: 'border-indigo-800/60',
+    navHover: 'hover:bg-indigo-900/70', navActive: 'bg-indigo-700 font-bold',
+    navMuted: 'text-indigo-400',
+    navInput: 'bg-indigo-900/70 border-indigo-700/60 placeholder:text-indigo-400 focus:border-indigo-400',
+  };
   const pathname = usePathname();
-  if (pathname === '/admin') return null;
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+
+  // با عوض‌شدن مسیر، کشو بسته شود
+  useEffect(() => { setOpen(false); }, [pathname]);
+  // Escape ببندد
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open ]);
+
+  const modules = useMemo(() => navModules(roles), [roles]);
+  const filtered = useMemo(() => {
+    const t = normalizeFa(q);
+    if (!t) return modules;
+    return modules.filter(m => faIncludes(m.title, t) || faIncludes(m.desc, t));
+  }, [modules, q]);
 
   return (
-    <nav className="mx-auto flex max-w-6xl flex-wrap gap-2 sm:gap-x-3 gap-y-1.5 px-4 pb-2.5 text-xs sm:text-sm font-medium">
-      <Link
-        href="/admin"
-        className="px-3 py-1.5 rounded-lg bg-indigo-900/60 border border-indigo-700/50 hover:bg-indigo-900 transition-colors whitespace-nowrap"
+    <>
+      {/* دکمهٔ ثابت بالا-راست */}
+      <button
+        onClick={() => setOpen(true)}
+        aria-label="باز کردن منوی مدیریت"
+        className={`fixed top-3 right-3 z-40 flex items-center gap-1.5 rounded-xl ${th.badge} px-3 py-2 text-xs font-bold text-white shadow-lg backdrop-blur transition-colors`}
       >
-        🏠 داشبورد
-      </Link>
-      {navModules(roles).map(m => (
-        <Link
-          key={m.href}
-          href={m.href}
-          className="px-3 py-1.5 rounded-lg hover:bg-indigo-900/70 transition-colors whitespace-nowrap"
-        >
-          {m.icon} {m.title}
-        </Link>
-      ))}
-      <Link
-        href="/manual"
-        className="px-3 py-1.5 rounded-lg hover:bg-emerald-800/80 bg-emerald-700/70 border border-emerald-500/50 text-white font-bold transition-colors whitespace-nowrap"
-      >
-        📖 راهنمای کاربری و PDF
-      </Link>
-    </nav>
+        <span className="text-base leading-none">☰</span>
+        منو
+      </button>
+
+      {open && (
+        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="منوی مدیریت">
+          {/* پس‌زمینه */}
+          <div className="absolute inset-0 bg-slate-950/60" onClick={() => setOpen(false)} />
+          {/* پنل سمت راست */}
+          <aside className={`absolute top-0 right-0 h-full w-80 max-w-[85vw] ${th.navPanel} text-white shadow-2xl flex flex-col border-l`}>
+            <div className={`flex items-center justify-between p-3 border-b ${th.navBorder}`}>
+              <p className="font-extrabold text-sm">🧭 منوی مدیریت</p>
+              <button
+                onClick={() => setOpen(false)}
+                aria-label="بستن منو"
+                className={`rounded-lg px-2 py-1 text-lg leading-none ${th.navHover}`}
+              >
+                ×
+              </button>
+            </div>
+            <div className={`p-3 border-b ${th.navBorder}`}>
+              <input
+                autoFocus
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                placeholder="جست‌وجوی ماژول…"
+                className={`w-full rounded-lg border px-3 py-1.5 text-xs focus:outline-none ${th.navInput}`}
+              />
+            </div>
+            <nav className="flex-1 overflow-y-auto p-2 space-y-0.5 text-[13px]">
+              <Link
+                href="/admin"
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-colors ${pathname === '/admin' ? th.navActive : th.navHover}`}
+              >
+                <span>🏠</span> داشبورد
+              </Link>
+              {filtered.map(m => {
+                const active = pathname === m.href || pathname.startsWith(m.href + '/');
+                return (
+                  <Link
+                    key={m.href}
+                    href={m.href}
+                    title={m.desc}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-colors ${active ? th.navActive : th.navHover}`}
+                  >
+                    <span>{m.icon}</span>
+                    <span className="flex-1">{m.title}</span>
+                  </Link>
+                );
+              })}
+              {filtered.length === 0 && (
+                <p className={`px-3 py-4 text-center text-xs ${th.navMuted}`}>ماژولی یافت نشد.</p>
+              )}
+            </nav>
+            <div className={`p-2 border-t ${th.navBorder}`}>
+              <Link
+                href="/manual"
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] bg-emerald-700/70 hover:bg-emerald-700 border border-emerald-500/40 font-bold transition-colors"
+              >
+                <span>📖</span> راهنمای کاربری و PDF
+              </Link>
+            </div>
+          </aside>
+        </div>
+      )}
+    </>
   );
 }
