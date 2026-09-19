@@ -16,6 +16,9 @@ import { type CourseBankResult, type CurriculumOverviewResult, type CurriculumVe
 export async function getCurriculumOverviewAction(): Promise<CurriculumOverviewResult> {
   await requireRole(EDITORS);
   try {
+    const { getCurrentUniversity } = await import('@/lib/university-scope');
+    const uni = await getCurrentUniversity().catch(() => null);
+    const uw = uni ? eq(majors.universityId, uni.id) : undefined;
     const [majorRows, versionRows, trackRows] = await Promise.all([
       db.select({
         id: majors.id, code: majors.majorCode, name: majors.name,
@@ -25,6 +28,7 @@ export async function getCurriculumOverviewAction(): Promise<CurriculumOverviewR
         degreeIsGraduate: degree_level_configs.isGraduate,
       }).from(majors)
         .leftJoin(degree_level_configs, eq(degree_level_configs.id, majors.degreeLevelId))
+        .where(uw)
         .orderBy(asc(majors.name)),
       db.select({
         id: curriculum_versions.id,
@@ -38,8 +42,12 @@ export async function getCurriculumOverviewAction(): Promise<CurriculumOverviewR
         entryYearTo: curriculum_versions.entryYearTo,
         totalRequiredUnits: curriculum_versions.totalRequiredUnits,
         courseCount: sql<number>`(select count(*) from ${curriculum_courses} where ${curriculum_courses.curriculumVersionId} = ${curriculum_versions.id})`,
-      }).from(curriculum_versions).orderBy(desc(curriculum_versions.id)),
-      db.select().from(curriculum_tracks).orderBy(asc(curriculum_tracks.title)),
+      }).from(curriculum_versions)
+        .where(uni ? eq(curriculum_versions.universityId, uni.id) : undefined)
+        .orderBy(desc(curriculum_versions.id)),
+      db.select().from(curriculum_tracks)
+        .where(uni ? eq(curriculum_tracks.universityId, uni.id) : undefined)
+        .orderBy(asc(curriculum_tracks.title)),
     ]);
     return { ok: true, data: { majors: majorRows, versions: versionRows, tracks: trackRows } };
   } catch (err: any) {
@@ -77,9 +85,12 @@ export async function listCourseBankAction(): Promise<CourseBankResult> {
 export async function listDepartmentsAction(): Promise<DepartmentListResult> {
   await requireRole(EDITORS);
   try {
+    const { getCurrentUniversity } = await import('@/lib/university-scope');
+    const uni = await getCurrentUniversity().catch(() => null);
     const rows = await db
       .select({ id: departments.id, name: departments.name })
       .from(departments)
+      .where(uni ? eq(departments.universityId, uni.id) : undefined)
       .orderBy(asc(departments.name));
     return { ok: true, data: rows };
   } catch (err: any) {

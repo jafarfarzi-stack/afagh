@@ -88,9 +88,13 @@ async function createStaffExpertAction(input: {
   if (!nc || !fn || !ln) return { ok: false, error: 'کد ملی، نام و نام خانوادگی الزامی است.' };
   if (!/^\d{10}$/.test(nc)) return { ok: false, error: 'کد ملی باید ۱۰ رقم باشد.' };
   try {
+    const { getCurrentUniversity } = await import('@/lib/university-scope');
+    const uni = await getCurrentUniversity().catch(() => null);
     const dupNc = await db.select({ id: users.id }).from(users).where(eq(users.nationalCode, nc)).limit(1);
     if (dupNc.length) return { ok: false, error: 'کاربری با این کد ملی از قبل وجود دارد.' };
-    const dupSc = await db.select({ id: staff.id }).from(staff).where(eq(staff.staffCode, sc)).limit(1);
+    const dupSc = uni
+      ? await db.select({ id: staff.id }).from(staff).where(and(eq(staff.staffCode, sc), eq(staff.universityId, uni.id))).limit(1)
+      : await db.select({ id: staff.id }).from(staff).where(eq(staff.staffCode, sc)).limit(1);
     if (dupSc.length) return { ok: false, error: 'کد پرسنلی تکراری است.' };
     const passwordHash = await hashPassword(nc); // ورود اولیه با کد ملی؛ اجباری به تغییر
     const [u] = await db.insert(users).values({
@@ -101,11 +105,13 @@ async function createStaffExpertAction(input: {
       mobile: String(input.mobile || '').trim() || null,
       email: String(input.email || '').trim() || null,
       passwordHash, isActive: 1, mustChangePassword: 1,
+      universityId: uni?.id ?? null,
     }).returning({ id: users.id });
     await db.insert(staff).values({
       userId: u.id, staffCode: sc,
       staffType: String(input.staffType || '').trim() || 'اداری',
       departmentId: input.departmentId || null,
+      universityId: uni?.id ?? null,
     }).onConflictDoNothing();
     const stType = String(input.staffType || '').trim();
     if (stType.includes('هیئت') || stType.includes('مربی') || stType.includes('استاد')) {
@@ -121,12 +127,16 @@ async function createStaffExpertAction(input: {
 
 export default async function StaffPage() {
   await requireRole(['ADMIN']);
+  const { getCurrentUniversity } = await import('@/lib/university-scope');
+  const uni = await getCurrentUniversity().catch(() => null);
+  const uw = uni ? eq(staff.universityId, uni.id) : undefined;
   const [head] = await db.select().from(roles).where(eq(roles.code, 'DEP_HEAD')).limit(1);
   const rows = await db
     .select({ userId: users.id, code: users.nationalCode, name: users.firstName, family: users.lastName, staffCode: staff.staffCode, dept: departments.name, rank: staff.academicRank, type: staff.staffType })
     .from(staff)
     .innerJoin(users, eq(users.id, staff.userId))
     .leftJoin(departments, eq(departments.id, staff.departmentId))
+    .where(uw)
     .orderBy(staff.id);
   const headRoles = head ? await db.select().from(user_roles).where(eq(user_roles.roleId, head.id)) : [];
   const heads = new Set(headRoles.map(h => h.userId));
@@ -150,7 +160,7 @@ export default async function StaffPage() {
   const userRoleIds: Record<number, number[]> = {};
   for (const r of rows) userRoleIds[r.userId] = [];
   for (const ur of urRows) (userRoleIds[ur.userId] ??= []).push(ur.roleId);
-  const depts = await db.select({ id: departments.id, name: departments.name }).from(departments).orderBy(departments.name);
+  const depts = await db.select({ id: departments.id, name: departments.name }).from(departments).where(uni ? eq(departments.universityId, uni.id) : undefined).orderBy(departments.name);
 
   return (
     <div className="card">

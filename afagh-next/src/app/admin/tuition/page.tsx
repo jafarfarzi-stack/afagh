@@ -1,6 +1,7 @@
-import { asc } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { degree_level_configs, tuition_rules } from '@/db/schema';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import { requireRole } from '@/lib/auth';
 import { getSetting } from '@/lib/settings';
 import { normalizeEquivFixedMode } from '@/lib/tuition-rules';
@@ -11,9 +12,11 @@ export const dynamic = 'force-dynamic';
 export default async function TuitionRulesPage() {
   await requireRole(['ADMIN', 'FINANCE_EXPERT', 'FINANCE']);
 
+  const uni = await getCurrentUniversity().catch(() => null);
+  const uw = (t: any) => (uni ? eq(t.universityId, uni.id) : undefined);
   const [rules, degrees, equivModeRaw] = await Promise.all([
-    db.select().from(tuition_rules).orderBy(asc(tuition_rules.id)),
-    db.select().from(degree_level_configs).orderBy(asc(degree_level_configs.id)),
+    db.select().from(tuition_rules).where(uw(tuition_rules)).orderBy(asc(tuition_rules.id)),
+    db.select().from(degree_level_configs).where(uw(degree_level_configs)).orderBy(asc(degree_level_configs.id)),
     getSetting('EQUIV_FIXED_TUITION_MODE'),
   ]);
 

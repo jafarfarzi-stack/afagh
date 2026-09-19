@@ -13,7 +13,6 @@ import type { StudentItem, RegulationPick, Pagination, StaffItem, CodeLabels} fr
 import { regThresholds, groupTranscript, faNum, dateToJalali} from './transcript-utils';
 import OfficialTranscriptView from './components/OfficialTranscriptView';
 import { adminSetGradeAction, getStudentGradeAuditLog } from '@/app/admin/grades/actions';
-import { setUniversityCookie } from '@/app/admin/university-actions';
 
 /**
  * چاپ مستقیم همان نمای روی صفحه (WYSIWYG) — با کلاس چاپ سراسری:
@@ -394,20 +393,12 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
     <div className="space-y-4 font-sans text-xs text-slate-900">
       
       {/* ─── نوار سوئیچ بین بخش دانشجویان، اساتید و منوی عملیات سریع ─── */}
+      {/* سوییچر دانشگاه فقط در سربرگ سراسری است (UniversitySwitcher) — اینجا تکراری بود و حذف شد */}
       <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-800 text-white p-2.5 px-4 rounded-xl shadow-md border border-slate-700">
         <div className="flex items-center gap-2">
-          {props.universities && props.universities.length > 1 && (
-            <select
-              value={props.currentUniversityCode ?? 'AFAGH'}
-              onChange={e => { setUniversityCookie(e.target.value); nav({ university: e.target.value }); }}
-              className="bg-indigo-700 hover:bg-indigo-600 text-white border border-indigo-500 rounded-lg px-2 py-1.5 text-xs font-bold cursor-pointer"
-              title="انتخاب دانشگاه — همهٔ اطلاعات نمایش‌داده‌شده بر اساس این انتخاب فیلتر می‌شود"
-            >
-              {props.universities.map(u => (
-                <option key={u.code} value={u.code}>{u.title}{u.kind === 'DISSOLVED' ? ' (منحله)' : ''}</option>
-              ))}
-            </select>
-          )}
+          <span className="text-xs font-bold text-slate-300">
+            {props.universities?.find(u => u.code === (props.currentUniversityCode ?? 'AFAGH'))?.title ?? ''}
+          </span>
           <button
             onClick={() => setMainView('students')}
             className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${

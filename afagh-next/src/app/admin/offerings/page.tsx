@@ -46,7 +46,11 @@ const toLocalInput = (d: Date | null) =>
 
 export default async function OfferingsPage() {
   await requireRole(['ADMIN']);
-  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1)).limit(1);
+  const { getCurrentUniversity } = await import('@/lib/university-scope');
+  const uni = await getCurrentUniversity().catch(() => null);
+  const [term] = await db.select().from(academic_terms)
+    .where(and(eq(academic_terms.isCurrent, 1), uni ? eq(academic_terms.universityId, uni.id) : undefined))
+    .limit(1);
   const win = windowStatus(term);
   const offs = term
     ? await db
@@ -55,8 +59,10 @@ export default async function OfferingsPage() {
         .where(and(eq(course_offerings.termId, term.id), eq(course_offerings.isActive, 1)))
         .orderBy(courses.code)
     : [];
-  const degrees = await db.select().from(degree_level_configs);
-  const majorRows = await db.select().from(majors);
+  const degrees = await db.select().from(degree_level_configs)
+    .where(uni ? eq(degree_level_configs.universityId, uni.id) : undefined);
+  const majorRows = await db.select().from(majors)
+    .where(uni ? eq(majors.universityId, uni.id) : undefined);
   const degTitle = (id: number) => degrees.find(d => d.id === id)?.title ?? String(id);
   const majorTitle = (id: number) => majorRows.find(m => m.id === id)?.name ?? String(id);
 
