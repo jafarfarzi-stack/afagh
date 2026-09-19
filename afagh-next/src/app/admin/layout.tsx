@@ -3,7 +3,7 @@ import { requireRole } from '@/lib/auth';
 import { logoutAction } from '../login/actions';
 import AdminNav from './AdminNav';
 import UniversitySwitcher from './UniversitySwitcher';
-import { getCurrentUniversity, listUniversities } from '@/lib/university-scope';
+import { getCurrentUniversity, listUniversities, uniTheme } from '@/lib/university-scope';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRole([
@@ -19,26 +19,28 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   ]);
   const unis = await listUniversities();
   const curUni = await getCurrentUniversity();
+  const th = uniTheme(curUni.code);
   return (
-    <div className="min-h-screen bg-slate-100">
-      <header className="bg-indigo-950 text-white shadow-md">
+    <div className="min-h-screen bg-slate-100" data-uni={curUni.code}>
+      <header className={`${th.header} text-white shadow-md transition-colors`}>
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 p-3.5 px-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-700 flex items-center justify-center font-bold text-sm shadow-inner">
-              آ
+            <div className={`w-8 h-8 rounded-lg ${th.badge} flex items-center justify-center font-bold text-sm shadow-inner`}>
+              {curUni.title.slice(0, 1)}
             </div>
             <div>
-              <p className="font-extrabold text-sm tracking-wide">داشبورد مدیریت جامع دانشگاه آفاق</p>
-              <p className="text-xs text-indigo-300">{user.name} · نقش‌ها: {user.roles.join('، ')}</p>
+              <p className="font-extrabold text-sm tracking-wide">داشبورد مدیریت جامع {curUni.title}</p>
+              <p className="text-xs opacity-80">{user.name} · نقش‌ها: {user.roles.join('، ')}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <UniversitySwitcher
               universities={unis.map(u => ({ code: u.code, title: u.title, kind: u.kind }))}
               currentCode={curUni.code}
+              buttonClass={th.badge}
             />
             <form action={logoutAction}>
-              <button className="text-xs bg-indigo-900/80 hover:bg-indigo-900 text-indigo-200 border border-indigo-700/60 px-3 py-1.5 rounded-lg transition-colors font-medium">
+              <button className={`text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}>
                 خروج
               </button>
             </form>

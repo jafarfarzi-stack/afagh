@@ -53,6 +53,7 @@ export default async function StudentTranscriptPage() {
         courseType: courses.courseType,
         gradingType: courses.gradingType,
         affectsGpa: courses.affectsGpa,
+        courseMinMark: courses.minPassedMark,
         status: enrollments.status,
         grade: enrollments.gradeValue,
         gradeStatus: enrollments.gradeStatus,
@@ -273,12 +274,15 @@ export default async function StudentTranscriptPage() {
                   <tbody>
                     {termItem.rows.map((row, rIdx) => {
                       const isDescriptive = row.gradingType === 'DESCRIPTIVE' || Number(row.grade) === 1 || row.affectsGpa === 0;
+                      // حدنصاب هر درس (minPassedMark) وگرنه ۱۰ — نه هاردکپی سراسری
+                      const _cm = row.courseMinMark != null ? Number(row.courseMinMark) : NaN;
+                      const passMark = Number.isFinite(_cm) && _cm >= 0 && _cm <= 20 ? _cm : 10;
                       const isPassed = isDescriptive
-                        ? (Number(row.grade) === 1 || (row.grade != null && Number(row.grade) >= 10))
-                        : (row.grade != null && Number(row.grade) >= 10);
+                        ? (Number(row.grade) === 1 || (row.grade != null && Number(row.grade) >= passMark))
+                        : (row.grade != null && Number(row.grade) >= passMark);
                       const isFailed = isDescriptive
                         ? (row.grade != null && Number(row.grade) === 0)
-                        : (row.grade != null && Number(row.grade) < 10);
+                        : (row.grade != null && Number(row.grade) < passMark);
                       const isPending = row.grade == null;
                       const isEquiv = row.status === 'EQUIV_PASSED';
                       const totalU = Number(row.units || 0);

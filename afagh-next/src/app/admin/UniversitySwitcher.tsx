@@ -5,10 +5,11 @@ import { useState } from 'react';
 import { setUniversityCookie } from './university-actions';
 
 export default function UniversitySwitcher({
-  universities, currentCode,
+  universities, currentCode, buttonClass,
 }: {
   universities: { code: string; title: string; kind: string }[];
   currentCode: string;
+  buttonClass?: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -26,7 +27,7 @@ export default function UniversitySwitcher({
           router.refresh();
         }
       }}
-      className="bg-indigo-700 hover:bg-indigo-600 text-white border border-indigo-500 rounded-lg px-2 py-1.5 text-xs font-bold cursor-pointer disabled:opacity-60"
+      className={`${buttonClass ?? 'bg-indigo-700 hover:bg-indigo-600 border-indigo-500'} text-white border rounded-lg px-2 py-1.5 text-xs font-bold cursor-pointer disabled:opacity-60`}
       title="دانشگاه فعال — همهٔ لیست‌ها (دانشجو، دروس، اساتید) بر اساس این انتخاب فیلتر می‌شود"
     >
       {universities.map(u => (
