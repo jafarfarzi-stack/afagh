@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { setUniversityCookie } from './university-actions';
-import { uniDot } from '@/lib/university-scope';
+import { uniDot } from '@/lib/university-theme';
 
 export default function UniversitySwitcher({
   universities, currentCode, buttonClass,

@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { navModules } from '@/lib/admin-modules';
 import { normalizeFa, faIncludes } from '@/lib/persian-search';
-import type { UniTheme } from '@/lib/university-scope';
+import type { UniTheme } from '@/lib/university-theme';
 
 /**
  * منوی کشویی سمت راست کارتابل مدیریت — جایگزین نوار افقی قبلی.
