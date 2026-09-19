@@ -4,12 +4,20 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { navModules } from '@/lib/admin-modules';
+import type { UniTheme } from '@/lib/university-scope';
 
 /**
  * منوی کشویی سمت راست کارتابل مدیریت — جایگزین نوار افقی قبلی.
  * دکمهٔ ثابت بالا-راست + پنل لغزنده از راست با جست‌وجو؛ فقط نقش‌های مجاز.
  */
-export default function AdminNav({ roles }: { roles: string[] }) {
+export default function AdminNav({ roles, theme }: { roles: string[]; theme?: UniTheme }) {
+  const th = theme ?? {
+    navPanel: 'bg-indigo-950 border-indigo-700/50', navBorder: '${th.navBorder}',
+    navHover: 'hover:bg-indigo-900/70', navActive: 'bg-indigo-700 font-bold',
+    navMuted: 'text-indigo-400',
+    navInput: 'bg-indigo-900/70 border-indigo-700/60 ${th.navInput} placeholder:text-current',
+    badge: '${th.badge}',
+  } as UniTheme;
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -48,8 +56,8 @@ export default function AdminNav({ roles }: { roles: string[] }) {
           {/* پس‌زمینه */}
           <div className="absolute inset-0 bg-slate-950/60" onClick={() => setOpen(false)} />
           {/* پنل سمت راست */}
-          <aside className="absolute top-0 right-0 h-full w-80 max-w-[85vw] bg-indigo-950 text-white shadow-2xl flex flex-col border-l border-indigo-700/50">
-            <div className="flex items-center justify-between p-3 border-b border-indigo-800/60">
+          <aside className="absolute top-0 right-0 h-full w-80 max-w-[85vw] ${th.navPanel} text-white shadow-2xl flex flex-col border-l">
+            <div className="flex items-center justify-between p-3 border-b ${th.navBorder}">
               <p className="font-extrabold text-sm">🧭 منوی مدیریت</p>
               <button
                 onClick={() => setOpen(false)}
@@ -59,7 +67,7 @@ export default function AdminNav({ roles }: { roles: string[] }) {
                 ×
               </button>
             </div>
-            <div className="p-3 border-b border-indigo-800/60">
+            <div className="p-3 border-b ${th.navBorder}">
               <input
                 autoFocus
                 value={q}
@@ -71,7 +79,7 @@ export default function AdminNav({ roles }: { roles: string[] }) {
             <nav className="flex-1 overflow-y-auto p-2 space-y-0.5 text-[13px]">
               <Link
                 href="/admin"
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-colors ${pathname === '/admin' ? 'bg-indigo-700 font-bold' : 'hover:bg-indigo-900/70'}`}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-colors ${pathname === '/admin' ? th.navActive : th.navHover}`}
               >
                 <span>🏠</span> داشبورد
               </Link>
@@ -82,7 +90,7 @@ export default function AdminNav({ roles }: { roles: string[] }) {
                     key={m.href}
                     href={m.href}
                     title={m.desc}
-                    className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-colors ${active ? 'bg-indigo-700 font-bold' : 'hover:bg-indigo-900/70'}`}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-colors ${active ? th.navActive : th.navHover}`}
                   >
                     <span>{m.icon}</span>
                     <span className="flex-1">{m.title}</span>
@@ -93,7 +101,7 @@ export default function AdminNav({ roles }: { roles: string[] }) {
                 <p className="px-3 py-4 text-center text-xs text-indigo-400">ماژولی یافت نشد.</p>
               )}
             </nav>
-            <div className="p-2 border-t border-indigo-800/60">
+            <div className="p-2 border-t ${th.navBorder}">
               <Link
                 href="/manual"
                 className="flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] bg-emerald-700/70 hover:bg-emerald-700 border border-emerald-500/40 font-bold transition-colors"

@@ -46,7 +46,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </form>
           </div>
         </div>
-        <AdminNav roles={user.roles} />
+        <AdminNav roles={user.roles} theme={th} />
       </header>
       <main className="mx-auto max-w-6xl p-3 sm:p-5 pb-16">{children}</main>
     </div>
