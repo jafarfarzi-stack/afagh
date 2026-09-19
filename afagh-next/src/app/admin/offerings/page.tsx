@@ -59,8 +59,8 @@ export default async function OfferingsPage() {
         .where(and(eq(course_offerings.termId, term.id), eq(course_offerings.isActive, 1)))
         .orderBy(courses.code)
     : [];
-  const degrees = await db.select().from(degree_level_configs)
-    .where(uni ? eq(degree_level_configs.universityId, uni.id) : undefined);
+  // مقاطع مرجع ملی‌اند (فیلتر نمی‌شوند)؛ رشته‌ها per-uni هستند
+  const degrees = await db.select().from(degree_level_configs);
   const majorRows = await db.select().from(majors)
     .where(uni ? eq(majors.universityId, uni.id) : undefined);
   const degTitle = (id: number) => degrees.find(d => d.id === id)?.title ?? String(id);

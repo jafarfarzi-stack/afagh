@@ -540,18 +540,27 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
       gradingType: courses.gradingType,
       affectsGpa: courses.affectsGpa,
       termId: course_offerings.termId,
+      courseMinMark: courses.minPassedMark,
     })
     .from(enrollments)
     .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .where(and(eq(enrollments.studentId, studentId), eq(enrollments.gradeStatus, 'FINALIZED')));
 
+  // حدنصاب هر درس: اول minPassedMark خود درس، بعد پیش‌فرض آیین‌نامه
+  // (مثلاً ارشد ۱۲، دکتری ۱۴ — نه همیشه ۱۰)
+  const thresholdOf = (r: (typeof rows)[number]) => {
+    const m = r.courseMinMark != null ? Number(r.courseMinMark) : NaN;
+    return Number.isFinite(m) && m >= 0 && m <= 20 ? m : passingGrade;
+  };
+
   // نقشه‌برداری دروس پاس‌شده (برای حذف مردودی: حد نصاب قبولی مجدد)
+  // حدنصاب هر درس از خودش می‌آید (minPassedMark)، نه سراسری
   const passedCourses = new Set<string>();
   for (const r of rows) {
     const g = parseGrade(r.gradeValue);
     if (g === null) continue;
-    const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= retakeMinGrade;
+    const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= thresholdOf(r);
     if (passed) {
       passedCourses.add(r.code);
     }
@@ -577,7 +586,7 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
     const g = parseGrade(r.gradeValue);
     if (g === null) continue;
     const u = parseUnits(r.units);
-    const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= passingGrade;
+    const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= thresholdOf(r);
 
     // dedupeRepeatedCourses فعال: تلاش‌های غیربهترینِ همان درس نه در واحدهای گذرانده و نه در معدل شمرده می‌شوند
     if (dedupeRepeated && bestByCode.get(r.code) !== r) { excludedCount++; continue; }

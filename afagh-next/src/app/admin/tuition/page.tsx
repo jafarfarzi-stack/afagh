@@ -13,10 +13,9 @@ export default async function TuitionRulesPage() {
   await requireRole(['ADMIN', 'FINANCE_EXPERT', 'FINANCE']);
 
   const uni = await getCurrentUniversity().catch(() => null);
-  const uw = (t: any) => (uni ? eq(t.universityId, uni.id) : undefined);
   const [rules, degrees, equivModeRaw] = await Promise.all([
-    db.select().from(tuition_rules).where(uw(tuition_rules)).orderBy(asc(tuition_rules.id)),
-    db.select().from(degree_level_configs).where(uw(degree_level_configs)).orderBy(asc(degree_level_configs.id)),
+    db.select().from(tuition_rules).where(uni ? eq(tuition_rules.universityId, uni.id) : undefined).orderBy(asc(tuition_rules.id)),
+    db.select().from(degree_level_configs).orderBy(asc(degree_level_configs.id)),
     getSetting('EQUIV_FIXED_TUITION_MODE'),
   ]);
 
