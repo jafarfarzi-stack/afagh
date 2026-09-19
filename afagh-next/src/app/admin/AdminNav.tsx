@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { navModules } from '@/lib/admin-modules';
+import { normalizeFa, faIncludes } from '@/lib/persian-search';
 import type { UniTheme } from '@/lib/university-scope';
 
 /**
@@ -35,9 +36,9 @@ export default function AdminNav({ roles, theme }: { roles: string[]; theme?: Un
 
   const modules = useMemo(() => navModules(roles), [roles]);
   const filtered = useMemo(() => {
-    const t = q.trim();
+    const t = normalizeFa(q);
     if (!t) return modules;
-    return modules.filter(m => m.title.includes(t) || m.desc.includes(t));
+    return modules.filter(m => faIncludes(m.title, t) || faIncludes(m.desc, t));
   }, [modules, q]);
 
   return (

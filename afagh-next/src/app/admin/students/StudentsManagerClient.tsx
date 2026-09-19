@@ -1927,7 +1927,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
       {/* ── مودال لاگ ممیزی تغییرات نمره (Audit Trail) ── */}
       {auditLogModalOpen && currentStudent && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
-          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full border border-slate-300 overflow-hidden max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full border border-slate-300 overflow-hidden max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
             <div className="bg-slate-800 text-white px-5 py-3.5 flex items-center justify-between">
               <h3 className="font-extrabold text-sm flex items-center gap-2">
                 <span>📜</span> تاریخچه و لاگ ممیزی نمرات (Audit Trail)
@@ -1958,6 +1958,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                         <th className="p-2">تاریخ و زمان</th>
                         <th className="p-2">اقدام‌کننده</th>
                         <th className="p-2">عملیات</th>
+                        <th className="p-2">درس</th>
                         <th className="p-2 text-center">نمره قبلی → جدید</th>
                         <th className="p-2 text-center">کد وضعیت سما</th>
                         <th className="p-2">دلیل ثبت‌شده</th>
@@ -1979,6 +1980,11 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                               {log.action}
                             </span>
                           </td>
+                          <td className="p-2">
+                            <span className="font-mono font-bold">{log.courseCode ?? '—'}</span>
+                            <span className="block text-[10px] text-slate-600 truncate max-w-[160px]" title={log.courseTitle ?? undefined}>{log.courseTitle ?? (log.termCode ? `ترم ${log.termCode}` : '—')}</span>
+                            {log.termCode && <span className="block text-[10px] text-slate-400 font-mono">{log.termCode}{log.termTitle ? ` — ${log.termTitle}` : ''}</span>}
+                          </td>
                           <td className="p-2 text-center font-mono font-bold">
                             <span className="text-slate-500">{log.oldGradeValue ?? '—'}</span>
                             <span className="mx-1 text-slate-400">←</span>
@@ -1999,7 +2005,8 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                 </div>
               )}
             </div>
-            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+              <a href="/admin/grades/audit" className="text-xs font-bold text-indigo-700 hover:text-indigo-900 underline">📋 مشاهدهٔ همهٔ لاگ‌های نمرات (سراسری)</a>
               <button
                 type="button"
                 onClick={() => setAuditLogModalOpen(false)}

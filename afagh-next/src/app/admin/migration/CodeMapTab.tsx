@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { addCodeAction, autoSuggestAction, confirmSuggestionsAction, saveMapAction, setNewCodeAction } from './actions';
 import { ImportReport, Msg, ReportBox, Stat, Uploader, fmt } from './ui';
 import { norm } from '@/lib/migration/normalize';
+import { normalizeFa, faIncludes } from '@/lib/persian-search';
 
 type DomainDef = { id: string; title: string; hint: string };
 type MapRow = {
@@ -88,9 +89,12 @@ export default function CodeMapTab({ domains, sourceCode }: { domains: DomainDef
 
   const cur = domains.find(d => d.id === domain);
   const curStat = stats.find(s => s.domain === domain);
-  const shown = maps.filter(m =>
-    (filter === 'ALL' || m.status === filter) &&
-    (!q.trim() || (m.legacyCode + ' ' + (m.legacyTitle ?? '') + ' ' + (m.targetTitle ?? '')).includes(q.trim())));
+  const shown = maps.filter(m => {
+    if (filter !== 'ALL' && m.status !== filter) return false;
+    const t = normalizeFa(q);
+    if (!t) return true;
+    return m.legacyCode.includes(t) || faIncludes(m.legacyTitle, t) || faIncludes(m.targetTitle, t);
+  });
 
   return (
     <div className="space-y-4">

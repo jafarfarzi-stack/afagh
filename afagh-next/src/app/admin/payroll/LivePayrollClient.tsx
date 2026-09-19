@@ -5,6 +5,7 @@ import {
   payrollComputeAction, payrollConfigAction, payrollExportAction,
   payrollMidtermAction, payrollPayslipAction, payrollSettleAction,
 } from './actions';
+import { normalizeFa, faIncludes } from '@/lib/persian-search';
 
 // ═══ میز کار حق‌التدریس — دادهٔ واقعی از موتور مالی ═══
 
@@ -53,11 +54,11 @@ export default function LivePayrollClient({
   };
 
   const filtered = useMemo(() => {
-    const q = query.trim();
+    const q = normalizeFa(query);
     return list.filter(x => {
       if (onlyOpen && x.status === 'FINAL_SETTLED') return false;
       if (!q) return true;
-      return `${x.name} ${x.staffCode ?? ''} ${x.rank ?? ''}`.includes(q);
+      return faIncludes(`${x.name} ${x.staffCode ?? ''} ${x.rank ?? ''}`, q);
     });
   }, [list, query, onlyOpen]);
 

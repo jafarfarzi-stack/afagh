@@ -7,6 +7,7 @@ import {
   refreshListAction, resolveAlumniRequestAction, resumeAction, saveDepartmentAction, scanAction,
   setClearanceAction, startClearanceAction, waiveSajjadAction,
 } from './actions';
+import { normalizeFa, faIncludes } from '@/lib/persian-search';
 
 // ═══ میز کار فارغ‌التحصیلی و صدور مدارک ═══
 
@@ -109,10 +110,10 @@ export default function GraduationClient({
   };
 
   const filtered = useMemo(() => {
-    const t = q.trim();
+    const t = normalizeFa(q);
     return rows.filter(r =>
       (filter === 'ALL' || r.workflowStatus === filter) &&
-      (!t || r.studentCode.includes(t) || r.fullName.includes(t)));
+      (!t || r.studentCode.includes(t) || faIncludes(r.fullName, t)));
   }, [rows, filter, q]);
 
   const open = (id: number) => start(async () => {

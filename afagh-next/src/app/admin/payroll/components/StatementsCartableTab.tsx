@@ -9,6 +9,7 @@
  */
 import { faNum } from '../payrollData';
 import type { PayrollState, PayrollApi } from '../payrollReducer';
+import { normalizeFa, faIncludes } from '@/lib/persian-search';
 
 interface Props {
   state: PayrollState;
@@ -149,9 +150,9 @@ export default function StatementsCartableTab({ state, api }: Props) {
                   .filter(r => {
                     if (contractFilter !== 'ALL' && r.contractType !== contractFilter) return false;
                     if (statusFilter !== 'ALL' && r.status !== statusFilter) return false;
-                    if (searchQuery.trim()) {
-                      const q = searchQuery.trim().toLowerCase();
-                      return r.name.toLowerCase().includes(q) || r.staffCode.includes(q) || r.nationalCode.includes(q);
+                    if (normalizeFa(searchQuery)) {
+                      const q = normalizeFa(searchQuery);
+                      return faIncludes(r.name, q) || r.staffCode.includes(q) || r.nationalCode.includes(q);
                     }
                     return true;
                   })

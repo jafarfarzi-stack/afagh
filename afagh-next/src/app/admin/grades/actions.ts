@@ -262,6 +262,7 @@ export async function getEnrollmentGradeHistory(enrollmentId: number) {
 
 /**
  * واکشی کلیه لاگ‌های تغییر نمرهٔ یک دانشجو (برای ادمین و کارشناس فارغ‌التحصیلان)
+ * + نام درس/کد درس/ترم تا در modal مشخص باشد کدام درس عوض شده.
  */
 export async function getStudentGradeAuditLog(studentId: number) {
   await requireRole(['ADMIN', 'GRADUATEAFFAIRS', 'EDU_EXPERT']);
@@ -283,9 +284,62 @@ export async function getStudentGradeAuditLog(studentId: number) {
       createdAt: grade_change_log.createdAt,
       actorFirstName: users.firstName,
       actorLastName: users.lastName,
+      courseCode: courses.code,
+      courseTitle: courses.title,
+      termCode: academic_terms.termCode,
+      termTitle: academic_terms.title,
     })
     .from(grade_change_log)
     .leftJoin(users, eq(users.id, grade_change_log.actorUserId))
+    .leftJoin(course_offerings, eq(course_offerings.id, grade_change_log.offeringId))
+    .leftJoin(courses, eq(courses.id, course_offerings.courseId))
+    .leftJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
     .where(eq(grade_change_log.studentId, studentId))
     .orderBy(desc(grade_change_log.createdAt));
+}
+
+/** لاگ سراسری (همهٔ دانشجویان) — برای صفحهٔ «همهٔ لاگ‌های نمرات» */
+export async function getAllGradeAuditLogs(opts?: { limit?: number; offset?: number; q?: string }) {
+  await requireRole(['ADMIN', 'GRADUATEAFFAIRS', 'EDU_EXPERT']);
+  const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 200);
+  const offset = Math.max(opts?.offset ?? 0, 0);
+  // q: فیلتر روی نام درس/کددرس/شماره‌دانشجویی/نام دانشجو (ساده - LIKE)
+  const { sql } = await import('drizzle-orm');
+  const q = opts?.q?.trim() ?? '';
+  const rows = await db
+    .select({
+      id: grade_change_log.id,
+      enrollmentId: grade_change_log.enrollmentId,
+      offeringId: grade_change_log.offeringId,
+      studentId: grade_change_log.studentId,
+      action: grade_change_log.action,
+      oldGradeValue: grade_change_log.oldGradeValue,
+      newGradeValue: grade_change_log.newGradeValue,
+      reason: grade_change_log.reason,
+      actorUserId: grade_change_log.actorUserId,
+      actorRole: grade_change_log.actorRole,
+      createdAt: grade_change_log.createdAt,
+      actorFirstName: users.firstName,
+      actorLastName: users.lastName,
+      courseCode: courses.code,
+      courseTitle: courses.title,
+      termCode: academic_terms.termCode,
+    })
+    .from(grade_change_log)
+    .leftJoin(users, eq(users.id, grade_change_log.actorUserId))
+    .leftJoin(course_offerings, eq(course_offerings.id, grade_change_log.offeringId))
+    .leftJoin(courses, eq(courses.id, course_offerings.courseId))
+    .leftJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
+    .orderBy(desc(grade_change_log.createdAt))
+    .limit(limit)
+    .offset(offset);
+  // فیلتر کلاینتی ساده اگر q داده شد (برای اینکه LIKE فارسی نرمال هم بخورد، فعلاً exact)
+  if (!q) return rows;
+  const nq = q.toLowerCase();
+  return rows.filter(r =>
+    (r.courseCode ?? '').toLowerCase().includes(nq) ||
+    (r.courseTitle ?? '').toLowerCase().includes(nq) ||
+    (r.termCode ?? '').includes(nq) ||
+    String(r.studentId).includes(nq),
+  );
 }

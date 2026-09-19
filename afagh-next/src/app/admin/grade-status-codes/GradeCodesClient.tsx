@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { GRADE_STATUS_CODES, gradeStatusOptionLabel, gradeStatusTitleOf } from '@/lib/grade-status-codes';
+import { normalizeFa, faIncludes } from '@/lib/persian-search';
 
 type Major = { id: number; code: string; name: string };
 type Version = { id: number; versionCode: string; title: string; status: string; majorId: number; entryYearFrom: number; entryYearTo: number | null };
@@ -315,9 +316,9 @@ export default function GradeCodesClient({
   };
 
   const filtered = courses.filter(c => {
-    if (!q.trim()) return true;
-    const t = q.trim();
-    return c.code.includes(t) || c.title.includes(t);
+    const t = normalizeFa(q);
+    if (!t) return true;
+    return c.code.includes(t) || faIncludes(c.title, t);
   });
 
   const openNewCourse = () => { setEditingCourse(null); setModalOpen(true); };
