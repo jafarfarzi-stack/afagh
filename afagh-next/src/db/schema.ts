@@ -518,7 +518,7 @@ export const course_rules = pgTable('course_rules', {
 export const academic_terms = pgTable('academic_terms', {
   id: serial('id').primaryKey(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
-  termCode: varchar('termCode', { length: 10 }).notNull().unique(),
+    termCode: varchar('termCode', { length: 10 }).notNull(),
   title: varchar('title', { length: 100 }).notNull(),
   termType: varchar('termType', { length: 20 }).notNull().default('NORMAL'), // NORMAL | SUMMER | EQUIVALENCE
   isCurrent: integer('isCurrent').default(0),
@@ -531,7 +531,10 @@ export const academic_terms = pgTable('academic_terms', {
   gradeEntryDeadline: timestamp('gradeEntryDeadline'),
   appealWindowDays: integer('appealWindowDays').default(3),
   professorAppealSlaDays: integer('professorAppealSlaDays').default(5)
-});
+}, (t) => [
+  // کد ترم در هر دانشگاه یکتاست (نه سراسری) — شمس و نژند کدهای مشترک دارند (891 و...)
+  unique('uq_terms_uni_code').on(t.universityId, t.termCode),
+]);
 
 export const classrooms = pgTable('classrooms', {
   id: serial('id').primaryKey(),

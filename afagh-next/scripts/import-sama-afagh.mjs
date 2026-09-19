@@ -476,7 +476,7 @@ async function phaseTerms(file) {
       return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7},$${o + 8})`;
     }).join(',');
     const res = await pool.query(`INSERT INTO academic_terms ("termCode", title, "termType", "isCurrent", "isSummer", "startDate", "endDate", "universityId")
-      VALUES ${ph} ON CONFLICT ("termCode") DO NOTHING RETURNING id, "termCode"`, vals);
+      VALUES ${ph} ON CONFLICT ("universityId","termCode") DO NOTHING RETURNING id, "termCode"`, vals);
     for (const r of res.rows) { termsByCode.set(r.termCode, { id: r.id }); stats.inserted++; }
     stats.existing += batch.length - res.rows.length;
     batch.length = 0;
@@ -503,7 +503,7 @@ async function phaseTerms(file) {
     if (batch.length >= 200) await flush();
   }
   await flush();
-  const rows = await q(`SELECT id, "termCode", "startDate" FROM academic_terms`);
+  const rows = await q(`SELECT id, "termCode", "startDate" FROM academic_terms WHERE "universityId" = $1`, [universityId]);
   for (const r of rows) termsByCode.set(r.termCode, { id: r.id, startDate: r.startDate });
   console.log(`ترم‌ها: total=${stats.total} inserted=${stats.inserted} existing=${stats.existing} invalid=${stats.invalid} جاری=${stats.maxNormal}`);
   await logRun('term', 'semsters.txt (SAMA)', stats);
@@ -851,7 +851,7 @@ async function phaseGrades(files) {
   }
   // نقشه‌های آماده
   if (!termsByCode.size && !DRY) {
-    for (const r of await q(`SELECT id, "termCode", "startDate" FROM academic_terms`)) termsByCode.set(r.termCode, { id: Number(r.id), startDate: r.startDate });
+    for (const r of await q(`SELECT id, "termCode", "startDate" FROM academic_terms WHERE "universityId" = $1`, [universityId])) termsByCode.set(r.termCode, { id: Number(r.id), startDate: r.startDate });
   }
   if (!studentsByCode.size && !DRY) {
     const rows = await q(`SELECT s.id, s."studentCode", u."firstName", u."lastName" FROM students s JOIN users u ON u.id = s."userId" WHERE s."universityId" = $1`, [universityId]);
@@ -1262,7 +1262,7 @@ async function phaseStterm(files, file) {
     for (const r of rows) studentsByCode.set(r.studentCode, { id: Number(r.id) });
   }
   if (!termsByCode.size && !DRY) {
-    for (const r of await q(`SELECT id, "termCode" FROM academic_terms`)) termsByCode.set(r.termCode, { id: Number(r.id) });
+    for (const r of await q(`SELECT id, "termCode" FROM academic_terms WHERE "universityId" = $1`, [universityId])) termsByCode.set(r.termCode, { id: Number(r.id) });
   }
   const parseProb = (s) => {
     const t = String(s || '').trim().toLowerCase();
