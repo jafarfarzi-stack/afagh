@@ -24,10 +24,30 @@ for (let i = 0; i < rawArgs.length; i++) {
   }
 }
 
-const DIR = args.dir || (existsSync('/data/برنامه هفتگي.txt') ? '/data' : 'E:\\git\\information afagh');
+function findCandidateDir() {
+  if (args.dir) return args.dir;
+  const candidates = [
+    '/data',
+    '/data/information afagh',
+    '/data/information-afagh',
+    '/root/information afagh',
+    '/root/information-afagh',
+    '/root/afagh/information afagh',
+    join(process.cwd(), '..', 'information afagh'),
+    join(process.cwd(), 'information afagh'),
+    'E:\\git\\information afagh',
+  ];
+  for (const c of candidates) {
+    if (existsSync(c)) return c;
+  }
+  return candidates[0];
+}
+
+const DIR = findCandidateDir();
 
 function findInDir(dir, pattern) {
   try {
+    if (!existsSync(dir)) return null;
     for (const n of readdirSync(dir)) {
       const p = join(dir, n);
       try { if (!statSync(p).isFile()) continue; } catch { continue; }
@@ -37,14 +57,37 @@ function findInDir(dir, pattern) {
   return null;
 }
 
-const FILE = args.file || findInDir(DIR, /برنامه\s*هفتگ[يی]/i) || join(DIR, 'برنامه هفتگي.txt');
+function resolveScheduleFile() {
+  if (args.file) return args.file;
+  // جستجو در پوشه انتخاب‌شده
+  const foundInDir = findInDir(DIR, /برنامه\s*هفتگ[يی]/i);
+  if (foundInDir) return foundInDir;
+
+  // بررسی مستقیم در دایرکتوری‌های کاندید
+  const candidates = [
+    '/data/برنامه هفتگي.txt',
+    '/data/برنامه هفتگی.txt',
+    join(process.cwd(), '..', 'information afagh', 'برنامه هفتگي.txt'),
+    join(process.cwd(), '..', 'information afagh', 'برنامه هفتگی.txt'),
+  ];
+  for (const c of candidates) {
+    if (existsSync(c)) return c;
+  }
+  return join(DIR, 'برنامه هفتگي.txt');
+}
+
+const FILE = resolveScheduleFile();
 const DRY = args.dry === 'true';
 const LIMIT = args.limit ? parseInt(args.limit, 10) : 0;
 const UNI_ID = args.uni ? parseInt(args.uni, 10) : 1;
 
 async function run() {
   if (!existsSync(FILE)) {
-    logger.error(`فایل برنامه هفتگی یافت نشد: ${FILE}`);
+    logger.error(
+      `فایل برنامه هفتگی یافت نشد: ${FILE}\nلطفاً با سوییچ --dir یا --file مسیر دقیق را مشخص کنید:\n` +
+      `مثال: node scripts/migration-v2/offerings/sync-offerings.mjs --dir "/مسیر/پوشه/داده‌ها"\n` +
+      `یا:   node scripts/migration-v2/offerings/sync-offerings.mjs --file "/مسیر/کامل/برنامه هفتگي.txt"`
+    );
     process.exit(1);
   }
 
