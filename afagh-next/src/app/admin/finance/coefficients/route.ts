@@ -2,13 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { tuition_coefficients, academic_terms } from '@/db/schema';
-import { requireRole } from '@/lib/auth';
+import { getSessionUser } from '@/lib/auth';
 
 const FINANCE = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'];
 
+async function checkFinanceAuth() {
+  const user = await getSessionUser();
+  if (!user || !user.roles.some(r => FINANCE.includes(r) || r === 'ADMIN')) {
+    return null;
+  }
+  return user;
+}
+
 export async function GET() {
-  const auth = await requireRole(FINANCE);
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 403 });
+  const auth = await checkFinanceAuth();
+  if (!auth) return NextResponse.json({ error: 'دسترسی غیرمجاز' }, { status: 403 });
 
   const rows = await db
     .select({
@@ -29,8 +37,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireRole(FINANCE);
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 403 });
+  const auth = await checkFinanceAuth();
+  if (!auth) return NextResponse.json({ error: 'دسترسی غیرمجاز' }, { status: 403 });
 
   const body = await req.json();
   const { termId, variableCoefficient, fixedCoefficient, note } = body;
@@ -80,8 +88,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const auth = await requireRole(FINANCE);
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 403 });
+  const auth = await checkFinanceAuth();
+  if (!auth) return NextResponse.json({ error: 'دسترسی غیرمجاز' }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
   const id = Number(searchParams.get('id'));

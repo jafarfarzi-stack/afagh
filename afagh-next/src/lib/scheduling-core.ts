@@ -438,7 +438,7 @@ export function sessionDatesFor(
 ): { sessionNo: number; date: Date }[] {
   if (dayOfWeek < 1 || dayOfWeek > 6) return [];
   const base = new Date(termStart.getTime());
-  base.setHours(0, 0, 0, 0);
+  base.setUTCHours(0, 0, 0, 0);
   const offsetDays = dayOfWeek - 1; // شنبه = 0
   const first = new Date(base.getTime() + offsetDays * 86400000);
   const out: { sessionNo: number; date: Date }[] = [];

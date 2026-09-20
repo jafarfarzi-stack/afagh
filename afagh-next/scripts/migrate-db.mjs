@@ -37,9 +37,14 @@ const BASELINE = process.argv.includes('--baseline');
 // ── ۱) پشتیبان پیش از استقرار (fail-closed: اگر پشتیبان نشد، توقف) ──
 const backup = spawnSync(process.execPath, [path.join(HERE, 'backup-db.mjs')], { stdio: 'inherit' });
 if (backup.status !== 0) {
-  // پشتیبان‌گیری غیربحرانی شد: اگر pg_dump نسخه نداشت یا دایرکتوری نبود،
-  // مهاجرت را متوقف نمی‌کنیم (Dockerfile هم با || echo ادامه می‌دهد).
-  console.warn('⚠ پشتیبان‌گیری ناموفق — مهاجرت ادامه می‌یابد (غیربحرانی).');
+  // فقط برای محیط توسعهٔ محلی که pg_dump با سرور ناسازگار است (override صریح).
+  // در پایپ‌لاین تولیدی هرگز تنظیم نمی‌شود — fail-closed حفظ می‌شود.
+  if (process.env.AFAGH_MIGRATE_NO_BACKUP === '1') {
+    console.warn('⚠ AFAGH_MIGRATE_NO_BACKUP=1 — پشتیبان رد شد (فقط توسعهٔ محلی).');
+  } else {
+    console.error('❌ پشتیبان‌گیری ناموفق — مهاجرت متوقف شد.');
+    process.exit(3);
+  }
 }
 
 // ── ۲) خواندن دفترچهٔ مهاجرت‌ها ──

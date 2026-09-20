@@ -13,7 +13,7 @@ type Course = {
 };
 
 type BankCourse = {
-  id: number; code: string; title: string; theoreticalUnits: string; practicalUnits: string;
+  id: number; code: string; title: string; theoreticalUnits: string | null; practicalUnits: string | null;
   units: string; courseType: string | null; gradingType: string | null; affectsGpa: number | null;
   departmentId: number | null; departmentName: string | null;
   degreeLevelId: number | null; degreeLevelTitle: string | null;

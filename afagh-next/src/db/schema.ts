@@ -27,8 +27,79 @@ export const role_permissions = pgTable('role_permissions', {
   permissionId: integer('permissionId').notNull().references(() => permissions.id)
 }, (t) => ({ pk: primaryKey({ columns: [t.roleId, t.permissionId] }) }));
 
+// ══════════════════════════════════════════════════════════════════════
+//  هستهٔ هویت مستقل (Identity Core / Persons / Multi-University)
+// ══════════════════════════════════════════════════════════════════════
+
+export const persons = pgTable('persons', {
+  id: serial('id').primaryKey(),
+  canonicalFirstName: varchar('canonicalFirstName', { length: 100 }),
+  canonicalLastName: varchar('canonicalLastName', { length: 100 }),
+  canonicalFatherName: varchar('canonicalFatherName', { length: 100 }),
+  canonicalNationalCode: varchar('canonicalNationalCode', { length: 10 }),
+  canonicalBirthDate: date('canonicalBirthDate'),
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+}, (t) => [
+  unique('uq_persons_national_code').on(t.canonicalNationalCode),
+]);
+
+export const person_source_identities = pgTable('person_source_identities', {
+  id: serial('id').primaryKey(),
+  personId: integer('personId').references(() => persons.id),
+  universityId: integer('universityId').notNull().references((): AnyPgColumn => universities.id),
+  studentId: integer('studentId').references((): AnyPgColumn => students.id),
+  sourceStudentCode: varchar('sourceStudentCode', { length: 50 }).notNull(),
+  sourceNationalCode: varchar('sourceNationalCode', { length: 10 }),
+  sourceFirstName: varchar('sourceFirstName', { length: 100 }),
+  sourceLastName: varchar('sourceLastName', { length: 100 }),
+  sourceFatherName: varchar('sourceFatherName', { length: 100 }),
+  sourceBirthDate: date('sourceBirthDate'),
+  normalizedFirstName: varchar('normalizedFirstName', { length: 100 }),
+  normalizedLastName: varchar('normalizedLastName', { length: 100 }),
+  normalizedFatherName: varchar('normalizedFatherName', { length: 100 }),
+  identityStatus: varchar('identityStatus', { length: 40 }).notNull().default('UNRESOLVED'),
+  matchMethod: varchar('matchMethod', { length: 60 }),
+  matchConfidence: numeric('matchConfidence', { precision: 5, scale: 4 }),
+  isPrimarySource: integer('isPrimarySource').notNull().default(0),
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+}, (t) => [
+  unique('uq_person_source_identity').on(t.universityId, t.sourceStudentCode),
+  index('idx_person_source_identity_person').on(t.personId),
+  index('idx_person_source_identity_national').on(t.sourceNationalCode),
+  index('idx_person_source_identity_student').on(t.studentId),
+]);
+
+export const identity_resolution_reviews = pgTable('identity_resolution_reviews', {
+  id: serial('id').primaryKey(),
+  sourceIdentityId: integer('sourceIdentityId').notNull().references(() => person_source_identities.id, { onDelete: 'cascade' }),
+  candidatePersonId: integer('candidatePersonId').references(() => persons.id),
+  candidateSourceIdentityId: integer('candidateSourceIdentityId').references(() => person_source_identities.id),
+  resolution: varchar('resolution', { length: 40 }).notNull(),
+  matchMethod: varchar('matchMethod', { length: 60 }),
+  confidence: numeric('confidence', { precision: 5, scale: 4 }),
+  sourceNationalCode: varchar('sourceNationalCode', { length: 10 }),
+  candidateNationalCode: varchar('candidateNationalCode', { length: 10 }),
+  sourceStudentCode: varchar('sourceStudentCode', { length: 50 }),
+  candidateStudentCode: varchar('candidateStudentCode', { length: 50 }),
+  sourceUniversityId: integer('sourceUniversityId'),
+  candidateUniversityId: integer('candidateUniversityId'),
+  reason: text('reason'),
+  reviewStatus: varchar('reviewStatus', { length: 30 }).notNull().default('PENDING'),
+  reviewedBy: integer('reviewedBy'),
+  reviewedAt: timestamp('reviewedAt'),
+  createdAt: timestamp('createdAt').defaultNow(),
+}, (t) => [
+  index('idx_identity_reviews_source').on(t.sourceIdentityId),
+  index('idx_identity_reviews_candidate').on(t.candidatePersonId),
+  index('idx_identity_reviews_status').on(t.reviewStatus),
+  index('idx_identity_reviews_resolution').on(t.resolution),
+]);
+
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
+  personId: integer('personId').references(() => persons.id),
   nationalCode: varchar('nationalCode', { length: 10 }).notNull().unique(),
   firstName: varchar('firstName', { length: 100 }).notNull(),
   lastName: varchar('lastName', { length: 100 }).notNull(),
@@ -223,6 +294,7 @@ export const educational_regulations = pgTable('educational_regulations', {
 
 export const students = pgTable('students', {
   id: serial('id').primaryKey(),
+  personId: integer('personId').references(() => persons.id),
   userId: integer('userId').notNull().references(() => users.id),
   studentCode: varchar('studentCode', { length: 14 }).notNull(),
   majorId: integer('majorId').references(() => majors.id),
@@ -311,6 +383,18 @@ export const student_term_states = pgTable('student_term_states', {
   statusTitle: varchar('statusTitle', { length: 150 }),
   isProbation: integer('isProbation'),
   termAvg: numeric('termAvg', { precision: 4, scale: 2 }),
+  // ── فیلدهای تکمیلی Migration V2 جهت حفظ تفکیک داده مبدأ، نرمال‌شده و محاسبه آیین‌نامه ──
+  sourceStatusCode: varchar('sourceStatusCode', { length: 20 }),
+  sourceStatusTitle: varchar('sourceStatusTitle', { length: 150 }),
+  sourceTermAvg: numeric('sourceTermAvg', { precision: 4, scale: 2 }),
+  normalizedStatusCode: varchar('normalizedStatusCode', { length: 20 }),
+  normalizedStatusTitle: varchar('normalizedStatusTitle', { length: 150 }),
+  normalizedTermAvg: numeric('normalizedTermAvg', { precision: 4, scale: 2 }),
+  sourceProbation: integer('sourceProbation'),
+  calculatedProbation: integer('calculatedProbation'),
+  sourceCompletedUnits: numeric('sourceCompletedUnits', { precision: 4, scale: 1 }),
+  sourcePassedUnits: numeric('sourcePassedUnits', { precision: 4, scale: 1 }),
+  sourceAttemptedUnits: numeric('sourceAttemptedUnits', { precision: 4, scale: 1 }),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ uq: unique('uq_student_term_states').on(t.studentId, t.termId) }));
 
@@ -518,9 +602,11 @@ export const course_rules = pgTable('course_rules', {
 export const academic_terms = pgTable('academic_terms', {
   id: serial('id').primaryKey(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
-    termCode: varchar('termCode', { length: 10 }).notNull(),
+  termCode: varchar('termCode', { length: 10 }).notNull(),
   title: varchar('title', { length: 100 }).notNull(),
-  termType: varchar('termType', { length: 20 }).notNull().default('NORMAL'), // NORMAL | SUMMER | EQUIVALENCE
+  termType: varchar('termType', { length: 20 }).notNull().default('NORMAL'), // NORMAL | SUMMER | EQUIVALENCE | SPECIAL
+  sortOrder: integer('sortOrder'), // رتبه ترتیبی زمانی دقیق (مثلاً ۱۴۰۱۵ قبل از ۱۴۰۲۱)
+  academicYear: integer('academicYear'), // سال تحصیلی پایه (مثلاً ۱۴۰۱)
   isCurrent: integer('isCurrent').default(0),
   isSummer: integer('isSummer').default(0),
   isEnrollmentOpen: integer('isEnrollmentOpen').default(0),
