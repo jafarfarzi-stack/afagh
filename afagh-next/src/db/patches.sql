@@ -308,3 +308,7 @@ ALTER TABLE IF EXISTS "student_term_states" ADD COLUMN IF NOT EXISTS "calculated
 ALTER TABLE IF EXISTS "student_term_states" ADD COLUMN IF NOT EXISTS "sourceCompletedUnits" numeric(4, 1);
 ALTER TABLE IF EXISTS "student_term_states" ADD COLUMN IF NOT EXISTS "sourcePassedUnits" numeric(4, 1);
 ALTER TABLE IF EXISTS "student_term_states" ADD COLUMN IF NOT EXISTS "sourceAttemptedUnits" numeric(4, 1);
+
+ALTER TABLE IF EXISTS "degree_level_configs" ADD COLUMN IF NOT EXISTS "termCount" integer;
+ALTER TABLE IF EXISTS "degree_level_configs" ADD COLUMN IF NOT EXISTS "isGraduate" integer;
+

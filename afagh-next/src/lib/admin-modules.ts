@@ -119,6 +119,17 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/regulation-check',
+    icon: '🔍',
+    title: 'بررسی کدهای وضعیت نمره',
+    desc: 'تشخیص و اصلاح خودکار کدهای وضعیت نمره سما بر اساس آیین‌نامه',
+    roles: ['ADMIN'],
+    accent: 'from-red-950 to-rose-950 border-red-700/50',
+    iconBg: 'bg-red-700/80 border-red-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/scheduling',
     icon: '🗓️',
     title: 'برنامه‌ریزی درسی مدیر گروه',

@@ -69,18 +69,23 @@ export type TranscriptRow = {
   _excludedByRegulation?: string;
 };
 
-/** نقشه کد عددی وضع نمره → عین عنوان فایل مرجع */
+/** نقشه کد عددی وضع نمره → عین عنوان فایل مرجع (DB اول، ثابت سراسری fallback) */
 async function gradeStatusTitleMap(): Promise<Map<string, string>> {
+  const { GRADE_STATUS_CODES } = await import('@/lib/grade-status-codes');
   const map = new Map<string, string>();
+  for (const g of GRADE_STATUS_CODES) {
+    if (!map.has(g.code)) map.set(g.code, g.title);
+  }
   try {
     const rows = await db
       .select({ code: legacy_code_maps.legacyCode, title: legacy_code_maps.legacyTitle })
       .from(legacy_code_maps)
       .where(eq(legacy_code_maps.domain, 'GRADE_STATUS'));
     for (const r of rows) {
-      if (r.code && r.title && !map.has(r.code)) map.set(r.code, r.title);
+      // عین عنوان فایل مرجع دانشگاه (اگر داشت) بر ثابت سراسری مقدم است
+      if (r.code && r.title) map.set(r.code, r.title);
     }
-  } catch { /* میز تطبیق خالی باشد، fallback اعمال می‌شود */ }
+  } catch { /* میز تطبیق خالی باشد، ثابت سراسری کافی است */ }
   return map;
 }
 

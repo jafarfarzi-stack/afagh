@@ -26,12 +26,8 @@ export default async function AdminStudentsPage({
   try {
     allUniversities = await db.select().from(universities).where(eq(universities.isActive, 1)).orderBy(universities.id);
   } catch { /* جدول universities ممکن است هنوز ساخته نشده باشد */ }
-  // اولویت: پارام صریح ?university= → کوکی سوییچر سراسری → AFAGH
-  const universityParam = (sp.university || '').trim();
-  let cookieUni = '';
-  try { cookieUni = (await getCurrentUniversity()).code; } catch { /* پیش‌فرض */ }
-  const wantCode = (universityParam && !universityParam.startsWith('_') ? universityParam : cookieUni) || 'AFAGH';
-  const currentUniversity = allUniversities.find(u => u.code === wantCode) ?? allUniversities[0];
+  // اولویت قطعی: کوکی دانشگاه فعال (سوییچر سراسری)
+  const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
 
   const q = (sp.q || '').trim().slice(0, 60);
@@ -286,6 +282,7 @@ export default async function AdminStudentsPage({
       </div>
 
       <StudentsManagerClient
+        key={currentUniversity?.code ?? 'AFAGH'}
         logoUrl={await getSetting('UNIVERSITY_LOGO').catch(() => '')}
         codeLabels={codeLabels}
         regulations={regulationPicks}

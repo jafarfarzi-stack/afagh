@@ -6,13 +6,14 @@
  */
 'use server';
 
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { academic_terms, course_offerings, courses, enrollments, grade_change_log, legacy_grades, users } from '@/db/schema';
+import { academic_terms, course_offerings, courses, educational_regulations, enrollments, grade_change_log, legacy_grades, students, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { logGradeChange } from '@/lib/grade-change-log';
-import { resolveSamaGradeStatusCode } from '@/lib/resolve-sama-code';
+import { resolveSamaGradeStatusCode, syncStudentCourseRegulations } from '@/lib/resolve-sama-code';
+import { gradeStatusTitleOf } from '@/lib/grade-status-codes';
 
 export interface AdminGradeState {
   ok: boolean;
@@ -37,6 +38,7 @@ export async function adminSetGradeAction(
     termCode?: string | null;
     courseCode?: string | null;
     gradeValue: number | null;
+    customSamaStatusCode?: string | null;
     reason: string;
   }
 ): Promise<AdminGradeState> {
@@ -144,8 +146,9 @@ export async function adminSetGradeAction(
       return { ok: false, error: 'شناسه ارائه درس یا درس و ترم مربوطه یافت نشد.' };
     }
 
-    // محاسبه کد وضعیت سما
-    const samaCode = await resolveSamaGradeStatusCode(payload.studentId, targetOfferingId, payload.gradeValue);
+    // محاسبه کد وضعیت سما: اولویت با کد دستی تعیین‌شده توسط ادمین، در غیر اینصورت حل هوشمند از روی درس و آیین‌نامه
+    const samaCode = payload.customSamaStatusCode?.trim() ||
+      await resolveSamaGradeStatusCode(payload.studentId, targetOfferingId, payload.gradeValue);
 
     if (existingEnrollment) {
       await db
@@ -220,6 +223,23 @@ export async function adminSetGradeAction(
       } catch {
         // نادیده‌گیری خطای تطابق سوابق قدیمی
       }
+    }
+
+    // همگام‌سازی زنجیره‌ای آیین‌نامه برای تمام دفعات اخذ این درس توسط دانشجو
+    try {
+      const [offRow] = await db
+        .select({ courseId: course_offerings.courseId })
+        .from(course_offerings)
+        .where(eq(course_offerings.id, targetOfferingId))
+        .limit(1);
+      if (offRow?.courseId) {
+        await syncStudentCourseRegulations(payload.studentId, offRow.courseId, {
+          actorUserId: user.id,
+          actorRole: role,
+        });
+      }
+    } catch {
+      // نادیده‌گیری خطای همگام‌سازی زنجیره‌ای در عملیات مستقیم ادمین
     }
 
     revalidatePath('/admin/students');
@@ -342,4 +362,185 @@ export async function getAllGradeAuditLogs(opts?: { limit?: number; offset?: num
     (r.termCode ?? '').includes(nq) ||
     String(r.studentId).includes(nq),
   );
+}
+
+/**
+ * پیش‌نمایش کد وضعیت سما برای نمرهٔ ورودی در کلاینت
+ */
+export async function resolveSamaCodeForGradeAction(
+  studentId: number,
+  offeringId: number,
+  gradeValue: number | null,
+): Promise<{ code: string | null; title: string }> {
+  const code = await resolveSamaGradeStatusCode(studentId, offeringId, gradeValue);
+  const title = gradeStatusTitleOf(code) || 'نامشخص';
+  return { code, title };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  بازمحاسبه دسته‌ای کدهای وضعیت سما بر اساس آیین‌نامه
+// ═══════════════════════════════════════════════════════════════════
+
+export interface MismatchRow {
+  enrollmentId: number;
+  studentId: number;
+  studentCode: string;
+  studentName: string;
+  courseCode: string;
+  courseTitle: string;
+  termCode: string;
+  gradeValue: string | null;
+  currentCode: string | null;
+  correctCode: string | null;
+  correctTitle: string;
+  originalCode: string | null; // کد اصلی وارداتی سما
+  regulationTitle: string | null;
+}
+
+/**
+ * بررسی همه enrollmentها و برگرداندن لیست نمراتی که کد وضعیتشان نادرست است
+ */
+export async function scanMismatchedSamaCodes(): Promise<MismatchRow[]> {
+  await requireRole(['ADMIN']);
+
+  const allEnrs = await db
+    .select({
+      enrollmentId: enrollments.id,
+      studentId: enrollments.studentId,
+      studentCode: students.studentCode,
+      courseId: course_offerings.courseId,
+      offeringId: enrollments.offeringId,
+      termCode: academic_terms.termCode,
+      gradeValue: enrollments.gradeValue,
+      gradeStatus: enrollments.gradeStatus,
+      currentCode: enrollments.samaGradeStatusCode,
+      originalCode: enrollments.originalSamaCode,
+      regTitle: educational_regulations.title,
+    })
+    .from(enrollments)
+    .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+    .innerJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
+    .innerJoin(students, eq(students.id, enrollments.studentId))
+    .leftJoin(educational_regulations, eq(educational_regulations.id, students.regulationId))
+    .where(eq(enrollments.gradeStatus, 'FINALIZED'))
+    .orderBy(students.studentCode, academic_terms.termCode);
+
+  const mismatches: MismatchRow[] = [];
+
+  // پردازش دسته‌ای برای جلوگیری از overload سرور
+  const BATCH = 20;
+  for (let i = 0; i < allEnrs.length; i += BATCH) {
+    const batch = allEnrs.slice(i, i + BATCH);
+    const results = await Promise.all(
+      batch.map(async (enr) => {
+        const correctCode = await resolveSamaGradeStatusCode(enr.studentId, enr.offeringId, enr.gradeValue);
+        const cur = enr.currentCode?.trim() || null;
+        if (cur !== correctCode) {
+          return {
+            enrollmentId: enr.enrollmentId,
+            studentId: enr.studentId,
+            studentCode: enr.studentCode,
+            studentName: '',
+            courseCode: '',
+            courseTitle: '',
+            termCode: enr.termCode,
+            gradeValue: enr.gradeValue,
+            currentCode: cur,
+            correctCode,
+            correctTitle: gradeStatusTitleOf(correctCode) || 'نامشخص',
+            originalCode: enr.originalCode?.trim() || null,
+            regulationTitle: enr.regTitle,
+          } as MismatchRow;
+        }
+        return null;
+      })
+    );
+    for (const r of results) {
+      if (r) mismatches.push(r);
+    }
+  }
+
+  // گرفتن نام و نام درس برای رکوردهای mismatch
+  if (mismatches.length > 0) {
+    const enrIds = mismatches.map(m => m.enrollmentId);
+    const details = await db
+      .select({
+        enrollmentId: enrollments.id,
+        studentName: sql<string>`(${users.firstName} || ' ' || ${users.lastName})`,
+        courseCode: courses.code,
+        courseTitle: courses.title,
+      })
+      .from(enrollments)
+      .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+      .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+      .innerJoin(students, eq(students.id, enrollments.studentId))
+      .innerJoin(users, eq(users.id, students.userId))
+      .where(inArray(enrollments.id, enrIds));
+
+    const detailMap = new Map(details.map(d => [d.enrollmentId, d]));
+    for (const m of mismatches) {
+      const d = detailMap.get(m.enrollmentId);
+      if (d) {
+        m.studentName = d.studentName;
+        m.courseCode = d.courseCode;
+        m.courseTitle = d.courseTitle;
+      }
+    }
+  }
+
+  return mismatches;
+}
+
+/**
+ * اعمال کدهای صحیح روی نمرات نادرست (بچ اصلاح)
+ */
+export async function applyCorrectedSamaCodes(enrollmentIds: number[]): Promise<{ applied: number }> {
+  await requireRole(['ADMIN']);
+  let applied = 0;
+
+  for (const eid of enrollmentIds) {
+    const [enr] = await db
+      .select({
+        id: enrollments.id,
+        studentId: enrollments.studentId,
+        offeringId: enrollments.offeringId,
+        gradeValue: enrollments.gradeValue,
+        currentCode: enrollments.samaGradeStatusCode,
+        originalCode: enrollments.originalSamaCode,
+      })
+      .from(enrollments)
+      .where(eq(enrollments.id, eid))
+      .limit(1);
+    if (!enr) continue;
+
+    const correctCode = await resolveSamaGradeStatusCode(enr.studentId, enr.offeringId, enr.gradeValue);
+    const cur = enr.currentCode?.trim() || null;
+    if (cur === correctCode) continue;
+
+    await db
+      .update(enrollments)
+      .set({
+        samaGradeStatusCode: correctCode,
+        originalSamaCode: enr.originalCode ?? enr.currentCode,
+      })
+      .where(eq(enrollments.id, eid));
+
+    await logGradeChange({
+      enrollmentId: eid,
+      studentId: enr.studentId,
+      offeringId: enr.offeringId,
+      action: 'ADMIN_OVERRIDE',
+      oldGradeValue: enr.gradeValue,
+      newGradeValue: enr.gradeValue,
+      oldGradeStatus: 'FINALIZED',
+      newGradeStatus: 'FINALIZED',
+      oldSamaStatusCode: cur,
+      newSamaStatusCode: correctCode,
+      reason: `بازمحاسبه خودکار کد وضعیت سما بر اساس آیین‌نامه (قبلی: ${cur})`,
+    });
+    applied++;
+  }
+
+  revalidatePath('/admin/regulation-check');
+  return { applied };
 }

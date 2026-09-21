@@ -767,6 +767,8 @@ export const enrollments = pgTable('enrollments', {
   absenceMarkedAt: timestamp('absenceMarkedAt'),
   /** کد وضعیت نمرهٔ سما هنگام نهایی‌سازی (از curriculum_courses.passGradeStatusCode / failGradeStatusCode) */
   samaGradeStatusCode: varchar('samaGradeStatusCode', { length: 10 }),
+  /** کد اصلی اولیه سما (هنگام واردات داده) — برای مقایسه بعدی با موتور آیین‌نامه حفظ می‌شود */
+  originalSamaCode: varchar('originalSamaCode', { length: 10 }),
   /** تأییدیهٔ دیجیتال دانشجو برای داشتن دو امتحان هم‌روز (شیفت‌های متفاوت) — فاز ۱۰ */
   hasAcceptedSameDayExam: integer('hasAcceptedSameDayExam').notNull().default(0),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
@@ -2434,3 +2436,51 @@ export const student_subject_fees = pgTable('student_subject_fees', {
   createdAt: timestamp('created_at').defaultNow(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ uq: unique('uq_student_subject_fees').on(t.studentId, t.termId, t.subjectFeeTypeId) }));
+
+// ══════════════════════════════════════════════════════════════════════
+//  کدینگ‌های جغرافیایی پایه (کشور، استان، شهر، بخش)
+// ══════════════════════════════════════════════════════════════════════
+
+export const geo_countries = pgTable('geo_countries', {
+  code: varchar('code', { length: 20 }).primaryKey(),
+  title: varchar('title', { length: 150 }).notNull(),
+  standardCode: varchar('standardCode', { length: 50 }),
+  ministryCode: varchar('ministryCode', { length: 50 }),
+  createdAt: timestamp('createdAt').defaultNow(),
+});
+
+export const geo_provinces = pgTable('geo_provinces', {
+  code: varchar('code', { length: 20 }).primaryKey(),
+  title: varchar('title', { length: 150 }).notNull(),
+  standardCode: varchar('standardCode', { length: 50 }),
+  sanjeshCode: varchar('sanjeshCode', { length: 50 }),
+  ministryCode: varchar('ministryCode', { length: 50 }),
+  createdAt: timestamp('createdAt').defaultNow(),
+});
+
+export const geo_cities = pgTable('geo_cities', {
+  id: serial('id').primaryKey(),
+  provinceCode: varchar('provinceCode', { length: 20 }).notNull().references(() => geo_provinces.code),
+  code: varchar('code', { length: 20 }).notNull(),
+  title: varchar('title', { length: 150 }).notNull(),
+  standardCode: varchar('standardCode', { length: 50 }),
+  ministryCode: varchar('ministryCode', { length: 50 }),
+  createdAt: timestamp('createdAt').defaultNow(),
+}, (t) => ({
+  uq: unique('uq_geo_cities_province_code').on(t.provinceCode, t.code),
+  idxCityCode: index('idx_geo_cities_code').on(t.code),
+  idxCityProv: index('idx_geo_cities_province').on(t.provinceCode),
+}));
+
+export const geo_districts = pgTable('geo_districts', {
+  id: serial('id').primaryKey(),
+  provinceCode: varchar('provinceCode', { length: 20 }).notNull(),
+  cityCode: varchar('cityCode', { length: 20 }).notNull(),
+  code: varchar('code', { length: 20 }).notNull(),
+  title: varchar('title', { length: 150 }).notNull(),
+  ministryCode: varchar('ministryCode', { length: 50 }),
+  createdAt: timestamp('createdAt').defaultNow(),
+}, (t) => ({
+  uq: unique('uq_geo_districts_hierarchy').on(t.provinceCode, t.cityCode, t.code),
+  idxDistCode: index('idx_geo_districts_code').on(t.code),
+}));

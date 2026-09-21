@@ -12,7 +12,8 @@ import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, studentSta
 import type { StudentItem, RegulationPick, Pagination, StaffItem, CodeLabels} from './types';
 import { regThresholds, groupTranscript, faNum, dateToJalali} from './transcript-utils';
 import OfficialTranscriptView from './components/OfficialTranscriptView';
-import { adminSetGradeAction, getStudentGradeAuditLog } from '@/app/admin/grades/actions';
+import { adminSetGradeAction, getStudentGradeAuditLog, resolveSamaCodeForGradeAction } from '@/app/admin/grades/actions';
+import { GRADE_STATUS_CODES } from '@/lib/grade-status-codes';
 
 /**
  * چاپ مستقیم همان نمای روی صفحه (WYSIWYG) — با کلاس چاپ سراسری:
@@ -75,6 +76,8 @@ export default function StudentsManagerClient(props: {
   const [gradeValueInput, setGradeValueInput] = useState<string>('');
   const [gradeReasonInput, setGradeReasonInput] = useState<string>('');
   const [gradeSaving, setGradeSaving] = useState(false);
+  const [autoSamaCode, setAutoSamaCode] = useState<{ code: string | null; title: string }>({ code: null, title: 'در حال محاسبه...' });
+  const [selectedSamaCode, setSelectedSamaCode] = useState<string>('AUTO');
 
   // مودال تاریخچه لاگ تغییرات نمره
   const [auditLogModalOpen, setAuditLogModalOpen] = useState(false);
@@ -208,6 +211,7 @@ export default function StudentsManagerClient(props: {
     setGradeEditTarget(row);
     setGradeValueInput(row.gradeValue ?? '');
     setGradeReasonInput('');
+    setSelectedSamaCode('AUTO');
     setGradeEditModalOpen(true);
   };
 
@@ -233,6 +237,7 @@ export default function StudentsManagerClient(props: {
         termCode: gradeEditTarget.termCode,
         courseCode: gradeEditTarget.courseCode,
         gradeValue: num,
+        customSamaStatusCode: selectedSamaCode === 'AUTO' ? null : selectedSamaCode,
         reason: gradeReasonInput.trim(),
       });
       if (res.ok) {
@@ -266,6 +271,21 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
 
   const currentStudent = props.students[selectedStuIdx] || props.students[0];
   const currentStaff = props.staffList[selectedProfIdx] || props.staffList[0];
+
+  useEffect(() => {
+    if (!gradeEditModalOpen || !currentStudent || !gradeEditTarget?.offeringId) return;
+    const num = gradeValueInput.trim() === '' ? null : Number(gradeValueInput.trim());
+    if (num !== null && (isNaN(num) || num < 0 || num > 20)) return;
+    let active = true;
+    resolveSamaCodeForGradeAction(currentStudent.id, gradeEditTarget.offeringId, num)
+      .then(res => {
+        if (active) setAutoSamaCode(res);
+      })
+      .catch(() => {
+        if (active) setAutoSamaCode({ code: null, title: 'خطا در محاسبه' });
+      });
+    return () => { active = false; };
+  }, [gradeEditModalOpen, currentStudent?.id, gradeEditTarget?.offeringId, gradeValueInput]);
 
   useEffect(() => {
     if (stuTab !== 'transcript' || !currentStudent) return;
@@ -340,11 +360,9 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
       q: pg?.q ?? '', status: pg?.status ?? 'ALL', degree: String(pg?.degree ?? 0), page: '1',
       sort: pg?.sort ?? '', f_code: pg?.f_code ?? '', f_name: pg?.f_name ?? '', f_nc: pg?.f_nc ?? '',
       f_major: pg?.f_major ?? '', f_year: pg?.f_year ?? '',
-      university: pg?.university ?? props.currentUniversityCode ?? 'AFAGH',
       ...patch,
     };
     const p = new URLSearchParams();
-    if (cur.university) p.set('university', cur.university);
     if (cur.q) p.set('q', cur.q);
     if (cur.status && cur.status !== 'ALL') p.set('status', cur.status);
     if (cur.degree && cur.degree !== '0') p.set('degree', cur.degree);
@@ -1878,6 +1896,36 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                   onChange={e => setGradeValueInput(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
                 />
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block font-bold text-slate-700 text-xs">کد وضعیت نمره سما:</label>
+                  <span className="text-[11px] text-slate-500 font-mono">
+                    کد فعلی: {gradeEditTarget?.gradeStatusCode || '—'} {gradeEditTarget?.gradeStatusTitle ? `(${gradeEditTarget.gradeStatusTitle})` : ''}
+                  </span>
+                </div>
+                <select
+                  value={selectedSamaCode}
+                  onChange={e => setSelectedSamaCode(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                >
+                  <option value="AUTO">
+                    {`⚡ خودکار طبق تعریف درس و آیین‌نامه: [کد ${autoSamaCode.code || '—'}] ${autoSamaCode.title}`}
+                  </option>
+                  <optgroup label="انتخاب دستی کد وضعیت سما">
+                    {GRADE_STATUS_CODES.map(c => (
+                      <option key={c.code} value={c.code}>
+                        [{c.code}] {c.title} {!c.affectsGpa ? '(بدون احتساب در معدل)' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+                <p className="text-[10px] text-slate-500">
+                  {selectedSamaCode === 'AUTO'
+                    ? '💡 کد به‌صورت هوشمند ابتدا از جدول دروس (courses) و سپس طبق آیین‌نامهٔ آموزشی دانشجو حل می‌شود.'
+                    : '⚠️ شما به‌صورت دستی کد وضعیت این نمره را تعیین کرده‌اید.'}
+                </p>
               </div>
 
               <div>

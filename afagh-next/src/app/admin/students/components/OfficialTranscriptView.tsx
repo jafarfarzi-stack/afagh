@@ -40,6 +40,7 @@ export default function OfficialTranscriptView({
     ['نام پدر', student.fatherName || '—'],
     ['شماره شناسنامه', student.birthCertNo || '—'],
     ['محل صدور', student.placeOfIssue || '—'],
+    ['محل تولد', student.placeOfBirth || '—'],
     ['کد ملی', student.nationalCode],
     ['تاریخ تولد', dateToJalali(student.birthDate)],
     ['مقطع', student.degreeLevel],
@@ -63,14 +64,19 @@ export default function OfficialTranscriptView({
   // راهنمای کد وضع نمره (فقط ردیف‌هایی که کد خام سما دارند؛ متن کامل در پایین کارنامه یک‌بار می‌آید)
   const statusLegend = new Map<string, string>();
   for (const t of summary.terms) for (const r of t.rows) {
-    if (r.gradeStatusCode && r.gradeStatusTitle && !statusLegend.has(r.gradeStatusCode)) {
-      statusLegend.set(r.gradeStatusCode, r.gradeStatusTitle);
+    if (r.gradeStatusCode && !statusLegend.has(r.gradeStatusCode)) {
+      statusLegend.set(r.gradeStatusCode, r.gradeStatusTitle || r.gradeStatusCode);
     }
   }
   const statusCell = (r: TermGroup['rows'][number]) => {
-    if (r.gradeStatusCode && r.gradeStatusTitle) {
-      // به‌جای متن کامل (که ستون را به‌هم می‌ریزد) فقط کد؛ توضیح کامل در راهنمای پایین کارنامه
-      return <span title={r.gradeStatusTitle} className="font-mono font-bold">{r.gradeStatusCode}</span>;
+    // کد سما همیشه نمایش داده می‌شود (نشان بده ولی بر اساس نوع کد احتساب نکن)؛
+    // عنوان کامل در tooltip + راهنمای پایین کارنامه. اگر عنوان نداشت، خود کد.
+    if (r.gradeStatusCode) {
+      return (
+        <span title={r.gradeStatusTitle || r.gradeStatusCode} className="font-mono font-bold">
+          {r.gradeStatusCode}
+        </span>
+      );
     }
     return gradeStatusFa(r.gradeStatus);
   };

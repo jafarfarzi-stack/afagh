@@ -41,6 +41,15 @@ export default function UniversitySwitcher({
     setBusy(true);
     try {
       await setUniversityCookie(code);
+      if (typeof window !== 'undefined') {
+        const sp = new URLSearchParams(window.location.search);
+        if (sp.has('university')) sp.delete('university');
+        if (sp.has('page') && sp.get('page') !== '1') sp.set('page', '1');
+        const qs = sp.toString();
+        const nextUrl = `${window.location.pathname}${qs ? `?${qs}` : ''}`;
+        window.location.href = nextUrl;
+        return;
+      }
     } finally {
       setBusy(false);
       setOpen(false);

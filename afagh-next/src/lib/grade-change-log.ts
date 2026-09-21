@@ -9,7 +9,7 @@ import { db } from '@/db';
 import { grade_change_log, enrollments } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
-export type GradeAction = 'DRAFT' | 'TEMPORARY' | 'FINALIZED' | 'APPEAL' | 'ADMIN_OVERRIDE';
+export type GradeAction = 'DRAFT' | 'TEMPORARY' | 'FINALIZED' | 'APPEAL' | 'ADMIN_OVERRIDE' | 'REGULATION_CASCADE';
 export type ActorRole = 'PROFESSOR' | 'ADMIN' | 'GRADUATEAFFAIRS';
 
 export interface LogGradeChangeParams {

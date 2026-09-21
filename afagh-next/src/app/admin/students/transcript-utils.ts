@@ -6,6 +6,25 @@
 import type { TermGroup, TranscriptSummary } from './types';
 import type { TranscriptRow } from './actions';
 import type { RegulationConfig } from '@/lib/regulations-engine';
+import {
+  GRADE_STATUS_CODES,
+  NON_GPA_CODES,
+  NON_TERM_GPA_CODES,
+  isPassedStatusCode,
+  isDroppedStatusCode,
+} from '@/lib/grade-status-codes';
+
+/** true اگر این ردیف کارنامه نباید در معدل کل دانشگاه اثر کند (مثل ۱۲: جبرانی بدون احتساب) */
+export const isNonGpaRow = (r: Pick<TranscriptRow, 'gradeStatusCode'>): boolean => {
+  const c = r.gradeStatusCode?.trim();
+  return !!c && NON_GPA_CODES.has(c);
+};
+
+/** true اگر این ردیف کارنامه نباید در معدل نیمسال اثر کند */
+export const isNonTermGpaRow = (r: Pick<TranscriptRow, 'gradeStatusCode'>): boolean => {
+  const c = r.gradeStatusCode?.trim();
+  return !!c && NON_TERM_GPA_CODES.has(c);
+};
 
 /* ── کارنامه رسمی: گروه‌بندی ترم + معدل ── */
 export const numOrNull = (v: string | null | undefined): number | null => {
@@ -48,27 +67,45 @@ export function passedCourseSet(rows: TranscriptRow[], retakeMinGrade: number): 
   for (const r of rows) {
     const g = numOrNull(r.gradeValue);
     if (r.gradeStatus === 'EXEMPT' || r.gradeStatus === 'PASSED_NO_GRADE') set.add(r.courseCode);
+    else if (isPassedStatusCode(r.gradeStatusCode)) set.add(r.courseCode);
     else if (g !== null && g >= retakeMinGrade && r.gradeStatus === 'FINALIZED') set.add(r.courseCode);
   }
   return set;
 }
 
 export function summarizeTerm(rows: TranscriptRow[], pass = 10): { taken: number; passed: number; failed: number; wsum: number; wunits: number } {
-  let taken = 0, passed = 0, wsum = 0, wunits = 0;
+  let taken = 0, passed = 0, failed = 0, wsum = 0, wunits = 0;
   for (const r of rows) {
     const u = numOrNull(r.units) ?? 0;
     const g = numOrNull(r.gradeValue);
+    const code = r.gradeStatusCode?.trim() || null;
+    const dropped = isDroppedStatusCode(code);
+
     if (r.gradeStatus === 'PENDING') continue;
+
+    // دروس حذف‌شده (پزشکی، شورا، اضطراری و ...) در جدول ترم نمایش داده می‌شوند ولی در واحدهای ترم/مردودی/معدل احتساب نمی‌شوند
+    if (dropped) continue;
+
     taken += u;
-    if (r.gradeStatus === 'EXEMPT' || r.gradeStatus === 'PASSED_NO_GRADE') passed += u;
-    else if (g !== null && g >= pass) passed += u;
-    // معدل نیمسال: فقط نمرات FINALIZED (TEMPORARY در معدل حساب نمی‌شود)
-    if (g !== null && r.gradeStatus === 'FINALIZED') {
+
+    const isPassed = r.gradeStatus === 'EXEMPT' ||
+                     r.gradeStatus === 'PASSED_NO_GRADE' ||
+                     isPassedStatusCode(code) ||
+                     (g !== null && g >= pass);
+
+    if (isPassed) {
+      passed += u;
+    } else {
+      failed += u;
+    }
+
+    // معدل نیمسال: فقط نمرات FINALIZED که طبق کد وضع نمره در معدل نیمسال اثر دارند
+    if (g !== null && r.gradeStatus === 'FINALIZED' && !isNonTermGpaRow(r)) {
       wsum += g * u;
       wunits += u;
     }
   }
-  return { taken, passed, failed: Math.max(0, taken - passed), wsum, wunits };
+  return { taken, passed, failed, wsum, wunits };
 }
 
 /** برای هر کد درس، تنها رکورد با بالاترین نمرهٔ FINALIZED را نگه می‌دارد (برای dedupeRepeatedCourses) */
@@ -94,6 +131,8 @@ export function summarizeTotal(rows: TranscriptRow[], th: RegThresholds): { wsum
     const u = numOrNull(r.units) ?? 0;
     const g = numOrNull(r.gradeValue);
     if (g === null || r.gradeStatus !== 'FINALIZED') continue;
+    // کدهای سمای بدون احتساب در معدل کل یا حذف‌شده کنار گذاشته می‌شوند
+    if (isNonGpaRow(r) || isDroppedStatusCode(r.gradeStatusCode)) continue;
     // dedupeRepeatedCourses: اگر این تلاش بهترین نمرهٔ همین درس نیست، از معدل کل کنار گذاشته می‌شود
     if (bestRow && bestRow.get(r.courseCode) !== r) continue;
     // EXCLUDE_IF_PASSED: مردودی درسی که بعداً قبول شده از معدل کل حذف می‌شود
@@ -129,11 +168,14 @@ export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | 
       }
       const s = summarizeTerm(effectiveRows, th.pass);
       const gpa = s.wunits ? s.wsum / s.wunits : null;
+      const isSummer = termCode.endsWith('3') || (rs[0]?.termTitle?.includes('تابستان') ?? false);
+      const isEquiv = termCode.endsWith('5') || termCode.toUpperCase().includes('EQ') || (rs[0]?.termTitle?.includes('معادل') ?? false);
+      const canHaveProbation = !isSummer && !isEquiv;
       const fileProb = rs.find(r => r.termProbation !== null)?.termProbation ?? null;
       return {
         termCode, termTitle: rs[0]?.termTitle ?? null,
         termStatusTitle: rs.find(r => r.termStatusTitle)?.termStatusTitle ?? null,
-        probation: fileProb ?? (gpa !== null && gpa < th.prob),
+        probation: canHaveProbation ? (fileProb ?? (gpa !== null && gpa < th.prob)) : false,
         rows: effectiveRows,
         taken: s.taken, passed: s.passed, failed: s.failed, points: s.wsum,
         gpa,
@@ -149,6 +191,7 @@ export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | 
       const u = numOrNull(r.units) ?? 0;
       const g = numOrNull(r.gradeValue);
       if (g === null || r.gradeStatus !== 'FINALIZED') continue;
+      if (isNonGpaRow(r) || isDroppedStatusCode(r.gradeStatusCode)) continue;
       if (passedSet && g < th.pass && passedSet.has(r.courseCode)) continue;
       cw += g * u; cwu += u;
     }
@@ -247,13 +290,19 @@ export function breakdownByType(rows: TranscriptRow[], cfg?: RegulationConfig | 
   const passedSet = th.exclFailed ? passedCourseSet(rows, th.retakeMinGrade) : null;
   const acc = new Map<string, { units: number; wsum: number; wunits: number }>();
   for (const r of rows) {
+    const code = r.gradeStatusCode?.trim() || null;
+    if (isDroppedStatusCode(code)) continue;
     const g = courseTypeGroup(r.courseType);
     if (!acc.has(g)) acc.set(g, { units: 0, wsum: 0, wunits: 0 });
     const a = acc.get(g)!;
     const u = numOrNull(r.units) ?? 0;
     const gv = numOrNull(r.gradeValue);
-    if (r.gradeStatus !== 'PENDING' && (gv === null || gv >= th.pass)) a.units += u;
-    if (gv !== null && r.gradeStatus === 'FINALIZED') {
+    const isPassed = r.gradeStatus === 'EXEMPT' ||
+                     r.gradeStatus === 'PASSED_NO_GRADE' ||
+                     isPassedStatusCode(code) ||
+                     (gv === null || gv >= th.pass);
+    if (r.gradeStatus !== 'PENDING' && isPassed) a.units += u;
+    if (gv !== null && r.gradeStatus === 'FINALIZED' && !isNonGpaRow(r)) {
       if (passedSet && gv < th.pass && passedSet.has(r.courseCode)) continue;
       a.wsum += gv * u; a.wunits += u;
     }

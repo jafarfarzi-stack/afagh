@@ -22,6 +22,12 @@ import {
   applyLevelConfig,
   maghtaGroup,
 } from './regulations-types';
+import { GRADE_STATUS_CODES, isPassedStatusCode } from './grade-status-codes';
+
+/** کدهای وضع نمرهٔ سما که در معدل اثر ندارند (مثل ۱۲: جبرانی بدون احتساب) */
+const NON_GPA_SAMA_CODES = new Set(
+  GRADE_STATUS_CODES.filter(g => !g.affectsGpa).map(g => g.code),
+);
 
 export * from './regulations-types';
 
@@ -220,6 +226,9 @@ export async function evaluateStudentRegulationStatus(
         gradeStatus: enrollments.gradeStatus,
         status: enrollments.status,
         termId: course_offerings.termId,
+        termCode: academic_terms.termCode,
+        isSummerTerm: academic_terms.isSummer,
+        termTitle: academic_terms.title,
         offeringType: course_offerings.offeringType,
         units: courses.units,
         gradingType: courses.gradingType,
@@ -228,6 +237,7 @@ export async function evaluateStudentRegulationStatus(
       })
       .from(enrollments)
       .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+      .leftJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
       .innerJoin(courses, eq(courses.id, course_offerings.courseId))
       .where(eq(enrollments.studentId, studentId)),
   ]);
@@ -245,8 +255,15 @@ export async function evaluateStudentRegulationStatus(
   let passedUnits = 0;
   let equivalenceUnits = 0;
   const termMap = new Map<number, GpaAccumulator>();
+  const termMeta = new Map<number, { isSummer: boolean; isEquiv: boolean; termCode: string }>();
 
   for (const e of studentEnrollments) {
+    if (e.termId && !termMeta.has(e.termId)) {
+      const isSummerSem = e.isSummerTerm === 1 || (e.termCode ? e.termCode.endsWith('3') : false) || (e.termTitle ? e.termTitle.includes('تابستان') : false);
+      const isEquivSem = (e.termCode ? (e.termCode.endsWith('5') || e.termCode.toUpperCase().includes('EQ')) : false) || (e.termTitle ? e.termTitle.includes('معادل') : false);
+      termMeta.set(e.termId, { isSummer: isSummerSem, isEquiv: isEquivSem, termCode: e.termCode || '' });
+    }
+
     if (e.gradeStatus !== 'FINALIZED') continue;
     const g = parseGrade(e.gradeValue);
     if (g === null) continue; // نمرهٔ ثبت‌نشده/خالی هرگز صفر حساب نمی‌شود
@@ -281,6 +298,7 @@ export async function evaluateStudentRegulationStatus(
   const isGraduating = isSummer ? remainingUnits <= (config.summer_term_rules.graduating_max_units || 8) : remainingUnits <= (config.graduating_term_rules.max_units || 24);
 
   // محاسبه مشروطی‌ها و معدل آخرین ترم
+  // طبق آیین‌نامه رسمی دانشگاه‌های ایران، نیمسال تابستان و معادل‌سازی هرگز مشروطی به بار نمی‌آورند
   let totalProbations = 0;
   let lastTermGpa: number | null = null;
   const sortedTermIds = Array.from(termMap.keys()).sort((a, b) => b - a);
@@ -289,7 +307,9 @@ export async function evaluateStudentRegulationStatus(
     lastTermGpa = termMap.get(sortedTermIds[0])!.rounded();
   }
 
-  for (const [, acc] of termMap.entries()) {
+  for (const [tId, acc] of termMap.entries()) {
+    const meta = termMeta.get(tId);
+    if (meta?.isSummer || meta?.isEquiv) continue; // نیمسال تابستان و معادل‌سازی مشروطی ندارد
     // مقایسهٔ مشروطی روی معدل دقیق انجام می‌شود، نه معدل گردشده
     const termGpa = acc.exact();
     if (termGpa !== null && termGpa < probationGpaThreshold) {
@@ -297,9 +317,17 @@ export async function evaluateStudentRegulationStatus(
     }
   }
 
-  const lastTermExact = sortedTermIds.length > 0 ? termMap.get(sortedTermIds[0])!.exact() : null;
-  const isProbatedLastTerm = lastTermExact !== null && lastTermExact < probationGpaThreshold;
-  const isHonorsLastTerm = lastTermExact !== null && lastTermExact >= config.regular_term_rules.honors_min_gpa;
+  // برای تعیین سقف واحد مجاز در ترم‌های عادی، ملاک آخرین ترم عادی دانشجو است (نه دوره تابستان)
+  const regularTermIds = sortedTermIds.filter(tId => {
+    const meta = termMeta.get(tId);
+    return !meta?.isSummer && !meta?.isEquiv;
+  });
+  const relevantLastTermExact = isSummer
+    ? (sortedTermIds.length > 0 ? termMap.get(sortedTermIds[0])!.exact() : null)
+    : (regularTermIds.length > 0 ? termMap.get(regularTermIds[0])!.exact() : null);
+
+  const isProbatedLastTerm = relevantLastTermExact !== null && relevantLastTermExact < probationGpaThreshold;
+  const isHonorsLastTerm = relevantLastTermExact !== null && relevantLastTermExact >= config.regular_term_rules.honors_min_gpa;
 
   // محاسبه سقف واحد مجاز (Effective Max Units)
   let effectiveMaxUnits = config.regular_term_rules.max_units;
@@ -537,6 +565,7 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
       units: courses.units,
       gradeValue: enrollments.gradeValue,
       gradeStatus: enrollments.gradeStatus,
+      samaGradeStatusCode: enrollments.samaGradeStatusCode,
       gradingType: courses.gradingType,
       affectsGpa: courses.affectsGpa,
       termId: course_offerings.termId,
@@ -545,7 +574,10 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
     .from(enrollments)
     .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-    .where(and(eq(enrollments.studentId, studentId), eq(enrollments.gradeStatus, 'FINALIZED')));
+    .where(and(
+      eq(enrollments.studentId, studentId),
+      inArray(enrollments.gradeStatus, ['FINALIZED', 'EXEMPT', 'PASSED_NO_GRADE'])
+    ));
 
   // حدنصاب هر درس: اول minPassedMark خود درس، بعد پیش‌فرض آیین‌نامه
   // (مثلاً ارشد ۱۲، دکتری ۱۴ — نه همیشه ۱۰)
@@ -559,8 +591,8 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
   const passedCourses = new Set<string>();
   for (const r of rows) {
     const g = parseGrade(r.gradeValue);
-    if (g === null) continue;
-    const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= thresholdOf(r);
+    const isSpecialPass = r.gradeStatus === 'EXEMPT' || r.gradeStatus === 'PASSED_NO_GRADE' || isPassedStatusCode(r.samaGradeStatusCode);
+    const passed = isSpecialPass || (r.gradingType === 'DESCRIPTIVE' ? g === 1 : (g !== null && g >= thresholdOf(r)));
     if (passed) {
       passedCourses.add(r.code);
     }
@@ -595,8 +627,11 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
       passedUnits = round2(passedUnits + u);
     }
 
-    // دروس توصیفی یا بی‌تاثیر در معدل وارد مخرج و صورت نمی‌شوند
-    if (r.gradingType === 'DESCRIPTIVE' || r.affectsGpa === 0) {
+    // دروس توصیفی، بی‌تاثیر در معدل، یا با کد سمای بدون احتساب (مثل ۱۲: جبرانی
+    // بدون احتساب در معدل) وارد مخرج و صورت معدل نمی‌شوند — ولی واحد قبولی
+    // (بالا) همچنان در passedUnits شمرده شده است.
+    const samaCode = r.samaGradeStatusCode?.trim() || null;
+    if (r.gradingType === 'DESCRIPTIVE' || r.affectsGpa === 0 || (samaCode && NON_GPA_SAMA_CODES.has(samaCode))) {
       continue;
     }
 
