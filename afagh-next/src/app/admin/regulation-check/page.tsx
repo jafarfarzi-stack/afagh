@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { scanMismatchedSamaCodes, applyCorrectedSamaCodes } from '../grades/actions';
-import type { MismatchRow } from '../grades/actions';
+import { scanMismatchedSamaCodes, applyCorrectedSamaCodes, scanGraduatedWithoutGrades } from '../grades/actions';
+import type { MismatchRow, StatusMismatchRow } from '../grades/actions';
 
 export default function RegulationCheckPage() {
   const [rows, setRows] = useState<MismatchRow[]>([]);
@@ -11,6 +11,23 @@ export default function RegulationCheckPage() {
   const [fixing, startFix] = useTransition();
   const [msg, setMsg] = useState('');
   const [filter, setFilter] = useState('');
+  const [statusRows, setStatusRows] = useState<StatusMismatchRow[]>([]);
+  const [statusScanning, startStatusScan] = useTransition();
+  const [statusMsg, setStatusMsg] = useState('');
+
+  const doStatusScan = () => {
+    setStatusMsg('');
+    setStatusRows([]);
+    startStatusScan(async () => {
+      try {
+        const result = await scanGraduatedWithoutGrades();
+        setStatusRows(result.rows);
+        setStatusMsg(result.rows.length === 0 ? 'مغایرتی یافت نشد.' : `${result.rows.length} فارغ‌التحصیل بدون سابقه نمره پیدا شد.`);
+      } catch (e: any) {
+        setStatusMsg('خطا: ' + (e?.message || 'نامشخص'));
+      }
+    });
+  };
 
   const doScan = () => {
     setMsg('');
@@ -205,6 +222,54 @@ export default function RegulationCheckPage() {
           دکمه «اسکن همه نمرات» را بزنید تا کدهای وضعیت بررسی شوند.
         </div>
       )}
+
+      {/* ── مغایرت وضعیت: فارغ‌التحصیل بدون نمره ── */}
+      <div className="border-t-2 border-slate-700 pt-4 mt-6 space-y-3">
+        <h2 className="text-base font-extrabold text-slate-800">مغایرت وضعیت فارغ‌التحصیلی</h2>
+        <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-xs text-amber-800">
+          <b>توضیح:</b> وضعیت فارغ‌التحصیلی از داده ثبتی می‌آید و مستقل از نمرات است.
+          اگر برای فارغ‌التحصیلی نه نمره نهایی و نه سابقه legacy ثبت شده باشد،
+          یعنی جزئیات نمراتش در اکسپورت سما جا مانده (مثل انتقالی با سوابق) و باید پیگیری شود.
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={doStatusScan}
+            disabled={statusScanning}
+            className="px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white font-bold rounded shadow disabled:opacity-50"
+          >
+            {statusScanning ? 'در حال بررسی...' : 'اسکن فارغ‌التحصیلان بدون نمره'}
+          </button>
+          {statusMsg && (
+            <div className={`p-2 rounded text-xs font-bold ${statusMsg.includes('خطا') ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-green-100 text-green-800 border border-green-300'}`}>
+              {statusMsg}
+            </div>
+          )}
+        </div>
+        {statusRows.length > 0 && (
+          <div className="border border-slate-300 rounded-lg overflow-x-auto">
+            <table className="w-full text-[11px] text-right">
+              <thead className="bg-slate-100 border-b border-slate-300 font-bold">
+                <tr>
+                  <th className="p-2">کد دانشجویی</th>
+                  <th className="p-2">نام</th>
+                  <th className="p-2">تاریخ فراغت</th>
+                  <th className="p-2">آیین‌نامه</th>
+                </tr>
+              </thead>
+              <tbody>
+                {statusRows.map(r => (
+                  <tr key={r.studentId} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="p-2 font-mono">{r.studentCode}</td>
+                    <td className="p-2">{r.studentName}</td>
+                    <td className="p-2 font-mono">{r.graduateDate || '—'}</td>
+                    <td className="p-2 text-[10px] text-slate-500">{r.regulationTitle || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -6,9 +6,14 @@
  *      درس (placeholder) ← ارائه (TRANSFER, group از raw یا ۱) ← ثبت‌نام
  *  — وضعیت ثبت‌نام برای دروس حذفی (gradeStatus=DROPPED یا markStat حذف) → 'DROPPED'
  *  — idempotent: ON CONFLICT DO NOTHING / شرط «نداشتن ثبت‌نام»
+ *  — تطبیق دانشگاه‌محور (سیاست مصوب: کلید یکتا universityId+studentCode؛
+ *    کد تکراری با اسم متفاوت = نفر متفاوت): هر ردیف legacy فقط به دانشجوی
+ *    همان دانشگاه (sourceCode→universities.code) وصل می‌شود؛ بدون دانشگاه
+ *    معتبر، ردیف رد و گزارش می‌شود تا اشتباهی به دانشگاه دیگر نچسبد.
  *
  *  استفاده:
  *    node scripts/backfill-enrollments.mjs [--db url] [--source AFAGH] [--dry]
+ *    node scripts/backfill-enrollments.mjs --source '*' [--dry]
  *    node scripts/backfill-enrollments.mjs --studentCode 4001156006 [--dry]
  * ══════════════════════════════════════════════════════════════════════
  */
@@ -69,34 +74,37 @@ async function main() {
 
   const rows = await q(
     `SELECT lg.id, lg."studentCode", lg."termCode", lg."courseCode", lg."gradeValue",
-            lg."gradeStatus", lg.raw, lg."courseTitle", lg."batchId"
+            lg."gradeStatus", lg.raw, lg."courseTitle", lg."batchId", lg."sourceCode"
        FROM legacy_grades lg
       WHERE ${whereSrc}${stuCond}`,
     SOURCE !== '*' ? [...stuParam, SOURCE] : stuParam,
   );
 
-  const students = new Map((await q(`SELECT id, "studentCode" FROM students`)).map(r => [r.studentCode, r.id]));
-  const terms = new Map((await q(`SELECT id, "termCode", "startDate" FROM academic_terms`)).map(r => [r.termCode, r.id]));
-  const courses = new Map((await q(`SELECT id, code FROM courses`)).map(r => [r.code, r.id]));
+  const uniByCode = new Map((await q(`SELECT id, code FROM universities`)).map(r => [String(r.code || '').toUpperCase(), r.id]));
+  const students = new Map((await q(`SELECT id, "studentCode", "universityId" FROM students`)).map(r => [`${r.universityId}|${r.studentCode}`, r.id]));
+  const terms = new Map((await q(`SELECT id, "termCode", "startDate", "universityId" FROM academic_terms`)).map(r => [`${r.universityId}|${r.termCode}`, r.id]));
+  const courses = new Map((await q(`SELECT id, code, "universityId" FROM courses`)).map(r => [`${r.universityId}|${r.code}`, r.id]));
   const termStart = new Map((await q(`SELECT id, "startDate" FROM academic_terms`)).map(r => [r.id, r.startDate]));
 
-  const stats = { total: rows.length, ok: 0, noStudent: 0, noTerm: 0, courseCreated: 0, offeringCreated: 0, enrollCreated: 0, enrollSkipped: 0, errors: [] };
+  const stats = { total: rows.length, ok: 0, noUniversity: 0, noStudent: 0, noTerm: 0, courseCreated: 0, offeringCreated: 0, enrollCreated: 0, enrollSkipped: 0, errors: [] };
 
   for (const r of rows) {
-    const sid = students.get(r.studentCode);
-    const tid = terms.get(r.termCode);
+    const uid = uniByCode.get(String(r.sourceCode || '').toUpperCase());
+    if (!uid) { stats.noUniversity++; continue; }
+    const sid = students.get(`${uid}|${r.studentCode}`);
+    const tid = terms.get(`${uid}|${r.termCode}`);
     if (!sid) { stats.noStudent++; continue; }
     if (!tid) { stats.noTerm++; continue; }
 
-    let cid = courses.get(r.courseCode);
+    let cid = courses.get(`${uid}|${r.courseCode}`);
     if (!cid && !DRY) {
       const ins = await q(
-        `INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units)
-         VALUES ($1,$2,0,0,0) ON CONFLICT (code) DO NOTHING RETURNING id`,
-        [r.courseCode, r.courseTitle || `درس مهاجرتی ${r.courseCode}`],
+        `INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units, "universityId")
+         VALUES ($1,$2,0,0,0,$3) ON CONFLICT ("universityId",code) DO NOTHING RETURNING id`,
+        [r.courseCode, r.courseTitle || `درس مهاجرتی ${r.courseCode}`, uid],
       );
-      if (ins.length) { stats.courseCreated++; courses.set(r.courseCode, ins[0].id); cid = ins[0].id; }
-      else { cid = courses.get(r.courseCode); if (!cid) { stats.errors.push(`درس ${r.courseCode} ساخته نشد`); continue; } }
+      if (ins.length) { stats.courseCreated++; courses.set(`${uid}|${r.courseCode}`, ins[0].id); cid = ins[0].id; }
+      else { cid = courses.get(`${uid}|${r.courseCode}`); if (!cid) { stats.errors.push(`درس ${r.courseCode} ساخته نشد`); continue; } }
     }
     if (!cid) { stats.errors.push(`درس ${r.courseCode} ندارد`); continue; }
 
@@ -108,9 +116,9 @@ async function main() {
     let offId = off.length ? off[0].id : null;
     if (!offId && !DRY) {
       const ins = await q(
-        `INSERT INTO course_offerings ("termId","courseId","groupNumber",capacity,"enrolledCount","offeringType","isActive")
-         VALUES ($1,$2,$3,999,0,'TRANSFER',1) RETURNING id`,
-        [tid, cid, group],
+        `INSERT INTO course_offerings ("termId","courseId","groupNumber",capacity,"enrolledCount","offeringType","isActive","universityId")
+         VALUES ($1,$2,$3,999,0,'TRANSFER',1,$4) RETURNING id`,
+        [tid, cid, group, uid],
       );
       if (ins.length) { stats.offeringCreated++; offId = ins[0].id; }
       else { stats.errors.push(`ارائه برای ${r.courseCode}/${r.termCode} ساخته نشد`); continue; }
@@ -129,9 +137,9 @@ async function main() {
     const enrStatus = dropped ? 'DROPPED' : 'REGISTERED';
     const gv = r.gradeValue == null ? null : String(r.gradeValue);
     const ins = await q(
-      `INSERT INTO enrollments ("studentId","offeringId",status,"gradeValue","gradeStatus","hasEvaluated","registeredAt","samaGradeStatusCode")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT ("studentId","offeringId") DO NOTHING RETURNING id`,
-      [sid, offId, enrStatus, gv, r.gradeStatus, gv != null ? 1 : 0, termStart.get(tid) || new Date(), rawMs],
+      `INSERT INTO enrollments ("studentId","offeringId",status,"gradeValue","gradeStatus","hasEvaluated","registeredAt","samaGradeStatusCode","originalSamaCode","universityId")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,$9) ON CONFLICT ("studentId","offeringId") DO NOTHING RETURNING id`,
+      [sid, offId, enrStatus, gv, r.gradeStatus, gv != null ? 1 : 0, termStart.get(tid) || new Date(), rawMs, uid],
     );
     if (ins.length) {
       stats.ok++; stats.enrollCreated++;
@@ -143,7 +151,7 @@ async function main() {
 
   console.log(JSON.stringify({
     source: SOURCE, student: STUDENT || 'همه', dry: DRY,
-    total: stats.total, ok: stats.ok, noStudent: stats.noStudent, noTerm: stats.noTerm,
+    total: stats.total, ok: stats.ok, noUniversity: stats.noUniversity, noStudent: stats.noStudent, noTerm: stats.noTerm,
     courseCreated: stats.courseCreated, offeringCreated: stats.offeringCreated,
     enrollCreated: stats.enrollCreated, enrollSkipped: stats.enrollSkipped, errors: stats.errors.slice(0, 20),
   }, null, 2));

@@ -27,12 +27,13 @@ export async function getTranscriptRegulation(studentId: number): Promise<{
   return { title: reg?.title ?? null, config };
 }
 
-/** تغییر آیین‌نامه ملاک دانشجو (از پرونده یا مرکز آیین‌نامه‌ها) */
+/** تغییر آیین‌نامه ملاک دانشجو (از پرونده یا مرکز آیین‌نامه‌ها) + بازمحاسبه کدهای وضعیت همه نمرات */
 export async function setStudentRegulationAction(
   studentId: number, regulationId: number,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; scanned?: number; updated?: number }> {
+  let user: { id: number; roles: string[] };
   try {
-    await requireRole(['ADMIN', 'EDU_EXPERT', 'GRADUATEAFFAIRS']);
+    user = await requireRole(['ADMIN', 'EDU_EXPERT', 'GRADUATEAFFAIRS']);
   } catch {
     return { ok: false, error: 'دسترسی لازم را ندارید.' };
   }
@@ -42,8 +43,71 @@ export async function setStudentRegulationAction(
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'ثبت نشد.' };
   }
+  const actorRole = user.roles.includes('ADMIN')
+    ? 'ADMIN' as const
+    : user.roles.includes('GRADUATEAFFAIRS')
+      ? 'GRADUATEAFFAIRS' as const
+      : undefined;
+
+  // بازمحاسبه کد وضعیت همه نمرات نهایی دانشجو با آیین‌نامه جدید
+  const { resolveSamaGradeStatusCode, syncStudentCourseRegulations } = await import('@/lib/resolve-sama-code');
+  const { logGradeChange } = await import('@/lib/grade-change-log');
+  const { isPassedStatusCode } = await import('@/lib/grade-status-codes');
+  let scanned = 0;
+  let updated = 0;
+  try {
+    const enrs = await db
+      .select({
+        enrollmentId: enrollments.id,
+        offeringId: enrollments.offeringId,
+        courseId: course_offerings.courseId,
+        gradeValue: enrollments.gradeValue,
+        currentCode: enrollments.samaGradeStatusCode,
+      })
+      .from(enrollments)
+      .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+      .where(and(eq(enrollments.studentId, studentId), eq(enrollments.gradeStatus, 'FINALIZED')));
+    scanned = enrs.length;
+    for (const enr of enrs) {
+      const cur = enr.currentCode?.trim() || null;
+      // کد قبولی خاص (مثل ۱۲ جبرانی) که دستی یا تعریفی ثبت شده حفظ شود
+      if (cur && cur !== '1' && isPassedStatusCode(cur)) continue;
+      const correct = await resolveSamaGradeStatusCode(studentId, enr.offeringId, enr.gradeValue);
+      if (correct === cur) continue;
+      await db
+        .update(enrollments)
+        .set({
+          samaGradeStatusCode: correct,
+          originalSamaCode: sql`COALESCE(${enrollments.originalSamaCode}, ${enrollments.samaGradeStatusCode})`,
+        })
+        .where(eq(enrollments.id, enr.enrollmentId));
+      await logGradeChange({
+        enrollmentId: enr.enrollmentId,
+        studentId,
+        offeringId: enr.offeringId,
+        action: 'REGULATION_CASCADE',
+        oldGradeValue: enr.gradeValue,
+        newGradeValue: enr.gradeValue,
+        oldGradeStatus: 'FINALIZED',
+        newGradeStatus: 'FINALIZED',
+        oldSamaStatusCode: cur,
+        newSamaStatusCode: correct,
+        reason: 'بازبینی خودکار کد وضعیت پس از تغییر آیین‌نامه ملاک دانشجو',
+        actorUserId: user.id,
+        actorRole,
+      });
+      updated++;
+    }
+    // اطمینان زنجیره‌ای هر درس (اثر معدل مردودی پس از قبولی بعدی)
+    const courseIds = [...new Set(enrs.map(e => e.courseId))];
+    for (const cid of courseIds) {
+      try {
+        await syncStudentCourseRegulations(studentId, cid, { actorUserId: user.id, actorRole });
+      } catch { /* ادامه با بقیه دروس */ }
+    }
+  } catch { /* آیین‌نامه عوض شده؛ خطای بازبینی کدها را گزارش نمی‌کنیم */ }
   revalidatePath('/admin/students');
-  return { ok: true };
+  return { ok: true, scanned, updated };
 }
 
 export type TranscriptRow = {
@@ -147,7 +211,7 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
     .where(eq(enrollments.studentId, studentId))
     .orderBy(desc(academic_terms.termCode), courses.code);
   if (ens.length) {
-    return ens.map(r => {
+    const rows: TranscriptRow[] = ens.map(r => {
       const ts = termStates.get(r.termCode);
       // اولویت: samaGradeStatusCode از enrollments (به‌روز توسط ادمین) و سپس markStat قدیمی
       const code = r.samaGradeStatusCode ?? markStatOf(r.legacyRaw) ?? null;
@@ -169,6 +233,50 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
         termProbation: ts?.probation ?? null,
       };
     });
+    // دروس حذف‌شده‌ای که enrollment ندارند (مثل حذف آموزشی کد ۷) فقط برای نمایش به کارنامه اضافه می‌شوند؛
+    // حذف در حذف و اضافه (کد ۱-) در کارنامه نمی‌آید. این ردیف‌ها در جمع واحد/معدل اثر ندارند.
+    try {
+      const { isDroppedStatusCode } = await import('@/lib/grade-status-codes');
+      const seen = new Set(ens.map(e => `${e.termCode}|${e.courseCode}`));
+      const legs = await db
+        .select({
+          termCode: legacy_grades.termCode,
+          courseCode: legacy_grades.courseCode,
+          courseTitle: legacy_grades.courseTitle,
+          units: legacy_grades.units,
+          gradeValue: legacy_grades.gradeValue,
+          gradeStatus: legacy_grades.gradeStatus,
+          raw: legacy_grades.raw,
+        })
+        .from(legacy_grades)
+        .where(eq(legacy_grades.studentCode, stu.code))
+        .limit(1000);
+      for (const l of legs) {
+        if (seen.has(`${l.termCode}|${l.courseCode}`)) continue;
+        const code = markStatOf(l.raw);
+        if (!code || code === '-1' || !isDroppedStatusCode(code)) continue;
+        const ts = termStates.get(l.termCode);
+        rows.push({
+          enrollmentId: null,
+          offeringId: null,
+          termCode: l.termCode,
+          termTitle: null,
+          courseCode: l.courseCode,
+          courseTitle: l.courseTitle || `درس ${l.courseCode}`,
+          units: l.units ? String(l.units) : null,
+          courseType: null,
+          gradeValue: l.gradeValue ? String(l.gradeValue) : null,
+          gradeStatus: l.gradeStatus,
+          gradeStatusTitle: exactTitle(code),
+          gradeStatusCode: code,
+          offeringType: null,
+          termStatusTitle: ts?.title ?? null,
+          termProbation: ts?.probation ?? null,
+        });
+      }
+      rows.sort((a, b) => b.termCode.localeCompare(a.termCode, 'en') || a.courseCode.localeCompare(b.courseCode, 'en'));
+    } catch { /* بدون ردیف حذف، همان نمرات ثبت‌شده برمی‌گردد */ }
+    return rows;
   }
   // fallback: legacy_grades (اگر هنوز promote نشده)
   const legs = await db

@@ -6,7 +6,7 @@
  */
 'use server';
 
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { academic_terms, course_offerings, courses, educational_regulations, enrollments, grade_change_log, legacy_grades, students, users } from '@/db/schema';
@@ -543,4 +543,43 @@ export async function applyCorrectedSamaCodes(enrollmentIds: number[]): Promise<
 
   revalidatePath('/admin/regulation-check');
   return { applied };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  مغایرت وضعیت: فارغ‌التحصیل بدون هیچ سابقه نمره
+// ═══════════════════════════════════════════════════════════════════
+
+export interface StatusMismatchRow {
+  studentId: number;
+  studentCode: string;
+  studentName: string;
+  graduateDate: string | null;
+  regulationTitle: string | null;
+}
+
+/**
+ * دانشجویان با وضعیت GRADUATED که نه enrollment نهایی و نه legacy_grades دارند.
+ * (وضعیت از ثبتی آمده ولی جزئیات نمرات در اکسپورت سما جا مانده — مثل انتقالی با سوابق)
+ */
+export async function scanGraduatedWithoutGrades(limit = 200): Promise<{ total: number; rows: StatusMismatchRow[] }> {
+  await requireRole(['ADMIN']);
+  const rows = await db
+    .select({
+      studentId: students.id,
+      studentCode: students.studentCode,
+      studentName: sql<string>`(${users.firstName} || ' ' || ${users.lastName})`,
+      graduateDate: students.graduateDate,
+      regulationTitle: educational_regulations.title,
+    })
+    .from(students)
+    .leftJoin(educational_regulations, eq(educational_regulations.id, students.regulationId))
+    .leftJoin(users, eq(users.id, students.userId))
+    .leftJoin(
+      enrollments,
+      and(eq(enrollments.studentId, students.id), eq(enrollments.gradeStatus, 'FINALIZED')),
+    )
+    .leftJoin(legacy_grades, eq(legacy_grades.studentCode, students.studentCode))
+    .where(and(eq(students.status, 'GRADUATED'), isNull(enrollments.id), isNull(legacy_grades.id)))
+    .limit(limit);
+  return { total: rows.length, rows };
 }

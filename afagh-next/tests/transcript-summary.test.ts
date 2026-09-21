@@ -30,7 +30,7 @@ const close = (name: string, got: number | null, want: number | null) => {
 };
 
 /** سازندهٔ ردیف کارنامه (بقیهٔ ستون‌ها خالی) */
-type Seed = { term?: string; code?: string; units?: number | string | null; type?: string | null; g?: number | string | null; st?: string; prob?: boolean | null; title?: string | null };
+type Seed = { term?: string; code?: string; units?: number | string | null; type?: string | null; g?: number | string | null; st?: string; prob?: boolean | null; title?: string | null; sc?: string | null };
 const R = (o: Seed): TranscriptRow => ({
   termCode: o.term ?? '4021',
   termTitle: 'نیمسال اول ۱۴۰۲–۱۴۰۳',
@@ -41,7 +41,7 @@ const R = (o: Seed): TranscriptRow => ({
   gradeValue: o.g === undefined ? null : o.g === null ? null : String(o.g),
   gradeStatus: o.st ?? 'FINALIZED',
   gradeStatusTitle: null,
-  gradeStatusCode: null,
+  gradeStatusCode: o.sc ?? null,
   offeringType: null,
   termStatusTitle: null,
   termProbation: o.prob ?? null,
@@ -56,10 +56,11 @@ eq('اعشار', numOrNull('12.5'), 12.5);
 eq('Infinity رد می‌شود', numOrNull('1e999'), null);
 
 console.log('۲)regThresholds — آستانه‌های آیین‌نامه');
-eq('بدون کانفیگ: قبولی ۱۰ و مشروطی ۱۲', regThresholds(null), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false });
-eq('مقادیر آیین‌نامه', regThresholds({ grading_and_gpa: { default_passing_grade: 8, failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', retakeMinGrade: 8, dedupeRepeatedCourses: true }, probation_and_tenure: { probation_gpa_threshold: 14 } } as never),
-  { pass: 8, prob: 14, exclFailed: true, exclFromTerm: false, retakeMinGrade: 8, dedupeRepeated: true });
-eq('مقدار غیرعددی → پیش‌فرض', regThresholds({ grading_and_gpa: { default_passing_grade: 'بیست' } } as never), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false });
+eq('بدون کانفیگ: قبولی ۱۰ و مشروطی ۱۲', regThresholds(null), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false, minUnits: 0 });
+eq('مقادیر آیین‌نامه', regThresholds({ grading_and_gpa: { default_passing_grade: 8, failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', retakeMinGrade: 8, dedupeRepeatedCourses: true }, probation_and_tenure: { probation_gpa_threshold: 14 }, regular_term_rules: { min_units: 12 } } as never),
+  { pass: 8, prob: 14, exclFailed: true, exclFromTerm: false, retakeMinGrade: 8, dedupeRepeated: true, minUnits: 12 });
+eq('مقدار غیرعددی → پیش‌فرض', regThresholds({ grading_and_gpa: { default_passing_grade: 'بیست' } } as never), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false, minUnits: 0 });
+eq('حدنصاب واحد از آیین‌نامه (ارشد: ۸)', regThresholds({ regular_term_rules: { min_units: 8 } } as never).minUnits, 8);
 eq('صفرِ مشروع شمرده می‌شود', regThresholds({ grading_and_gpa: { default_passing_grade: 0 } } as never).pass, 0);
 
 console.log('۳)passedCourseSet — درس‌های قبولی‌شده (برای حذف مردودی از معدل کل)');
@@ -95,9 +96,9 @@ const rRows = [
   R({ code: 'X', units: 3, g: 15, st: 'FINALIZED' }), // ترم بعد جبران شد
   R({ code: 'Y', units: 2, g: 7, st: 'FINALIZED' }),  // هرگز قبول نشد
 ];
-eq('EXCLUDE_IF_PASSED: مردودیِ جبران‌شده حذف می‌شود', summarizeTotal(rRows, { pass: 10, prob: 12, exclFailed: true, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false }), { wsum: 59, wunits: 5 });
-eq('KEEP_ALL: هر دو تلاش در معدل می‌آید', summarizeTotal(rRows, { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false }), { wsum: 83, wunits: 8 });
-eq('نمرهٔ PENDING در معدل کل نیست', summarizeTotal([R({ g: 19, st: 'PENDING' })], { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false }), { wsum: 0, wunits: 0 });
+eq('EXCLUDE_IF_PASSED: مردودیِ جبران‌شده حذف می‌شود', summarizeTotal(rRows, { pass: 10, prob: 12, exclFailed: true, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false, minUnits: 0 }), { wsum: 59, wunits: 5 });
+eq('KEEP_ALL: هر دو تلاش در معدل می‌آید', summarizeTotal(rRows, { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false, minUnits: 0 }), { wsum: 83, wunits: 8 });
+eq('نمرهٔ PENDING در معدل کل نیست', summarizeTotal([R({ g: 19, st: 'PENDING' })], { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false, minUnits: 0 }), { wsum: 0, wunits: 0 });
 
 console.log('۵ب) dedupeRepeatedCourses — اخذ مجدد درسِ ازقبل‌قبول‌شده برای ارتقای معدل (سوییچ ادمین)');
 const zRows = [
@@ -105,9 +106,9 @@ const zRows = [
   R({ code: 'Z', units: 4, g: 18, st: 'FINALIZED' }), // بار دوم: ارتقا به ۱۸
 ];
 eq('پیش‌فرض (dedupeRepeated=false): هر دو تلاش دوبار در معدل می‌آید — رفتار فعلی بدون تغییر',
-  summarizeTotal(zRows, { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false }), { wsum: 120, wunits: 8 });
+  summarizeTotal(zRows, { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false, minUnits: 0 }), { wsum: 120, wunits: 8 });
 eq('dedupeRepeated=true: فقط بالاترین نمره (۱۸) و واحدش یک‌بار حساب می‌شود',
-  summarizeTotal(zRows, { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: true }), { wsum: 72, wunits: 4 });
+  summarizeTotal(zRows, { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: true, minUnits: 0 }), { wsum: 72, wunits: 4 });
 eq('dedupeRepeated روی bestFinalizedRowPerCourse رکورد ۱۸ را انتخاب می‌کند',
   bestFinalizedRowPerCourse(zRows).get('Z')?.gradeValue, '18');
 // ترکیب با EXCLUDE_IF_PASSED: مردودی جبران‌شده هم حذف می‌شود و از دو تلاشِ قبول‌شده هم فقط بهترین می‌ماند
@@ -117,7 +118,7 @@ const wRows = [
   R({ code: 'W', units: 3, g: 17, st: 'FINALIZED' }), // ارتقای بعدی
 ];
 eq('dedupeRepeated + EXCLUDE_IF_PASSED با هم: فقط بهترین تلاش (۱۷) می‌ماند',
-  summarizeTotal(wRows, { pass: 10, prob: 12, exclFailed: true, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: true }), { wsum: 51, wunits: 3 });
+  summarizeTotal(wRows, { pass: 10, prob: 12, exclFailed: true, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: true, minUnits: 0 }), { wsum: 51, wunits: 3 });
 
 console.log('۶)groupTranscript — گروه‌بندی ترم، تجمیعی و مشروطی');
 const gRows = [
@@ -139,7 +140,7 @@ close('معدل کل نهایی = معدل تجمیعی آخرین نیمسال'
 close('معدل کل از هر دو نیمسال (بدون سیاست حذف)', sum.gpa, 106 / 8);
 eq('جمع کل واحدها (واحدِ اخذه/گذرانده، بدون PENDING)', [sum.totalTaken, sum.totalPassed], [8, 6]);
 eq('آستانه‌ها در خروجی هست', [sum.passGrade, sum.probThreshold], [10, 12]);
-eq('کارنامهٔ خالی: نه ترم، نه معدل', groupTranscript([]), { terms: [], totalTaken: 0, totalPassed: 0, gpa: null, passGrade: 10, probThreshold: 12 });
+eq('کارنامهٔ خالی: نه ترم، نه معدل', groupTranscript([]), { terms: [], totalTaken: 0, totalPassed: 0, gpa: null, passGrade: 10, probThreshold: 12, minUnits: 0 });
 eq('نیمسالِ بی‌کد با «—» برچسب می‌خورد', groupTranscript([R({ term: '', code: 'Z', units: 1, g: 5 })]).terms[0].termCode, '—');
 eq('نیمسال بی‌کد مشروط می‌شود (معدل ۵)', groupTranscript([R({ term: '', code: 'Z', units: 1, g: 5 })]).terms[0].probation, true);
 eq('عنوان نیمسال از اولین ردیف', groupTranscript(gRows).terms[0].termTitle, 'نیمسال اول ۱۴۰۲–۱۴۰۳');
@@ -221,6 +222,38 @@ eq('نبود در نقشه → خودِ کد', codeLabel({ '1': 'مشغول' }, 
 eq('نقشهٔ تعریف‌نشده → خودِ کد', codeLabel(undefined, '7'), '7');
 eq('خط تیرهٔ ورودی → خط تیره', codeLabel({ '—': 'x' }, '—'), '—');
 eq('ورودی خالی → خط تیره', codeLabel({}, null), '—');
+
+console.log('۱۲)حدنصاب واحد مشروطی + ردیف‌های حذف در کارنامه');
+const cfg12 = { regular_term_rules: { min_units: 12 }, probation_and_tenure: { probation_gpa_threshold: 12 }, grading_and_gpa: { default_passing_grade: 10 } } as never;
+// ترم ۱۱ واحدی با معدل زیر ۱۲ → مشروط نیست (نمونه: ۱۳۹۱۱ معصومی با ۱۱ واحد و معدل ۱۱٫۵۵)
+const lowRows = [
+  R({ term: '13911', code: 'A', units: 2, g: 10 }),
+  R({ term: '13911', code: 'B', units: 2, g: 13 }),
+  R({ term: '13911', code: 'C', units: 3, g: 10 }),
+  R({ term: '13911', code: 'D', units: 1, g: 13 }),
+  R({ term: '13911', code: 'E', units: 2, g: 12 }),
+  R({ term: '13911', code: 'F', units: 1, g: 14 }),
+];
+const lowSum = groupTranscript(lowRows, cfg12);
+eq('واحد اخذشده ۱۱ (زیر حد ۱۲)', lowSum.terms[0].taken, 11);
+eq('معدل زیر ۱۲ ولی چون واحد به حد نرسیده مشروط نیست', lowSum.terms[0].probation, false);
+// همان نمرات با یک درس ۱ واحدی بیشتر (۱۲ واحد) → مشروط می‌شود
+const fullSum = groupTranscript([...lowRows, R({ term: '13911', code: 'G', units: 1, g: 10 })], cfg12);
+eq('با ۱۲ واحد و معدل زیر ۱۲ مشروط می‌شود', fullSum.terms[0].probation, true);
+// مشروطی فایل هم با واحد زیر حد خنثی می‌شود (آیین‌نامه بر فایل مقدم است)
+const fileSum = groupTranscript(lowRows.map(r => ({ ...r, termProbation: true })), cfg12);
+eq('فایل مشروط ولی واحد زیر حد → عادی', fileSum.terms[0].probation, false);
+// بدون حدنصاب در کانفیگ (رفتار قبلی): همان ۱۱ واحد مشروط می‌شود
+eq('بدون min_units در کانفیگ، قاعده قدیمی (فقط معدل) می‌ماند', groupTranscript(lowRows).terms[0].probation, true);
+// ردیف حذف شورا (کد ۷) در کارنامه می‌ماند ولی در واحد/معدل نیست
+const dropSum = groupTranscript([...lowRows, R({ term: '13911', code: 'D7', units: 2, g: null, st: 'PENDING', sc: '7' })], cfg12);
+eq('ردیف حذف آموزشی (۷) در جدول ترم نمایش داده می‌شود', dropSum.terms[0].rows.some(r => r.courseCode === 'D7'), true);
+eq('ردیف حذف در واحد اخذشده حساب نمی‌شود', dropSum.terms[0].taken, 11);
+// حذف در حذف و اضافه (کد ۱-) در کارنامه نمی‌آید
+const addDropSum = groupTranscript([...lowRows, R({ term: '13911', code: 'M1', units: 3, g: null, st: 'PENDING', sc: '-1' })], cfg12);
+eq('ردیف ۱- در جدول ترم نیست', addDropSum.terms[0].rows.some(r => r.courseCode === 'M1'), false);
+// ترمی که فقط ردیف ۱- دارد کلا از کارنامه حذف می‌شود
+eq('ترمِ فقط-۱- از کارنامه حذف می‌شود', groupTranscript([R({ term: '13912', code: 'M1', units: 3, g: null, st: 'PENDING', sc: '-1' })], cfg12).terms.length, 0);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

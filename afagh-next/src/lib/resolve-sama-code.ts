@@ -54,17 +54,19 @@ function getRegulationFailExcludeCode(
   }
 
   const regPolicy = regCfg?.grading_and_gpa?.failed_course_gpa_policy;
-  if (regPolicy === 'EXCLUDE_IF_PASSED') {
-    return '931'; // آیین‌نامه ۱۳۹۳
-  }
   if (regPolicy === 'EXCLUDE_IF_PASSED_1391') {
     return '-91'; // آیین‌نامه ۱۳۹۱
   }
+  // کد ۹۴۱ مخصوص مقطع ارشد/آیین‌نامه ۱۳۹۴ است — قبل از سیاست عمومی بررسی می‌شود
+  // تا سیاست EXCLUDE_IF_PASSED آن را به اشتباه ۹۳۱ نکند
   if (studentRegTitle?.includes('۹۴') || studentRegTitle?.includes('94')) {
     return '941'; // آیین‌نامه ۱۳۹۴ ارشد
   }
   if (studentRegTitle?.includes('۹۵') || studentRegTitle?.includes('95')) {
     return '951'; // آیین‌نامه ۱۳۹۵ دکتری
+  }
+  if (regPolicy === 'EXCLUDE_IF_PASSED') {
+    return '931'; // آیین‌نامه ۱۳۹۳
   }
   return null;
 }
@@ -338,6 +340,15 @@ export async function syncStudentCourseRegulations(
 
     // نکته: رکوردِ تازه‌ویرایش‌شده هم باید توسط آیین‌نامه کنترل شود تا کد دستی اشتباه باقی نماند
 
+    // کدهای خاص دانشجویی/اداری نباید توسط آیین‌نامه دستکاری شوند:
+    // معادل‌سازی (۳،۱۶،۱۷،۳۲)، معرفی به استاد (۴۰)، پیش‌دانشگاهی (۴۴)، خودخوان (۵۰،۵۱،۵۳)،
+    // حذف‌ها، پزشکی، غیبت موجه و کدهای نامشخص. فقط کدهای عمومی (۱،۲،۵،۱۱)،
+    // کدهای نوع درس (۱۲،۲۲،۲۳،۲۴) و کدهای آیین‌نامه‌ای (۹۳۱،-۹۱،۹۴۱،۹۵۱) قابل بازمحاسبه‌اند.
+    const oldCode = current.samaGradeStatusCode?.trim() || null;
+    if (oldCode && ['3', '4', '6', '7', '14', '16', '17', '18', '32', '40', '44', '50', '51', '53', '52', '300', '400', '-1', '-5', '-4', '-3', '0', '8', '9', '10', '13', '15', '19', '20', '28', '29', '36', '46'].includes(oldCode)) {
+      continue;
+    }
+
     // اگر درس کد رد خاصی در جدول دروس دارد که ۲ نیست (مانند ۲۲ یا ۵۱)، آن را تغییر ندهیم
     const curCustomFail = course.defaultReject?.trim() || null;
     if (curCustomFail && curCustomFail !== '2' && curCustomFail !== '931' && curCustomFail !== '-91' && curCustomFail !== '941') {
@@ -353,8 +364,9 @@ export async function syncStudentCourseRegulations(
       }
     }
 
-    const newCode = hasLaterPass ? (targetExcludeCode || DEFAULT_FAIL_CODE) : DEFAULT_FAIL_CODE;
-    const oldCode = current.samaGradeStatusCode?.trim() || null;
+    // اگر غیبت غیرموجه (۵) بوده و قبولی بعدی ندارد، وضعیت ۵ حفظ می‌شود؛ در غیر اینصورت ۲
+    const defaultFail = oldCode === '5' ? '5' : DEFAULT_FAIL_CODE;
+    const newCode = hasLaterPass ? (targetExcludeCode || defaultFail) : defaultFail;
 
     if (newCode !== oldCode) {
       await db

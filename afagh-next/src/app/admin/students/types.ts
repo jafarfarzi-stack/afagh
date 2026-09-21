@@ -165,6 +165,8 @@ export type TranscriptSummary = {
   /** آستانه‌های آیین‌نامه‌ای که با آن حساب شده (برای نمایش در سربرگ) */
   passGrade: number;
   probThreshold: number;
+  /** حدنصاب واحد ترم برای احتساب مشروطی (۰ = بدون حد) */
+  minUnits: number;
 };
 
 export type CodeLabels = {

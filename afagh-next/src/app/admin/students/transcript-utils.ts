@@ -41,6 +41,7 @@ export type RegThresholds = {
   retakeMinGrade: number;     // حد نصاب قبولی مجدد
   regulationLabel?: string;   // برچسب آیین‌نامه
   dedupeRepeated: boolean;    // فقط بهترین نمرهٔ هر کد درس در معدل کل شمرده شود (سوییچ ادمین)
+  minUnits: number;           // حدنصاب واحد ترم برای احتساب مشروطی (۰ = آیین‌نامه حد ندارد، رفتار قبلی)
 };
 export function regThresholds(cfg: RegulationConfig | null | undefined): RegThresholds {
   const passRaw = cfg?.grading_and_gpa?.default_passing_grade;
@@ -50,6 +51,8 @@ export function regThresholds(cfg: RegulationConfig | null | undefined): RegThre
   const prob = probRaw != null ? Number(probRaw) : 12;
   const policy = cfg?.grading_and_gpa?.failed_course_gpa_policy;
   const retakeMin = retakeRaw != null ? Number(retakeRaw) : pass;
+  const minRaw = cfg?.regular_term_rules?.min_units ?? cfg?.levels?.LONG?.min_units ?? cfg?.levels?.SHORT?.min_units;
+  const minUnits = minRaw != null ? Number(minRaw) : 0;
   return {
     pass: Number.isFinite(pass) ? pass : 10,
     prob: Number.isFinite(prob) ? prob : 12,
@@ -58,6 +61,7 @@ export function regThresholds(cfg: RegulationConfig | null | undefined): RegThre
     retakeMinGrade: Number.isFinite(retakeMin) ? retakeMin : 10,
     regulationLabel: cfg?.grading_and_gpa?.regulationLabel,
     dedupeRepeated: cfg?.grading_and_gpa?.dedupeRepeatedCourses === true,
+    minUnits: Number.isFinite(minUnits) && minUnits > 0 ? minUnits : 0,
   };
 }
 
@@ -154,9 +158,12 @@ export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | 
   }
   const terms: TermGroup[] = [...map.entries()]
     .sort((a, b) => a[0].localeCompare(b[0], 'en'))
-    .map(([termCode, rs]) => {
+    .flatMap(([termCode, rs]) => {
+      // حذف در حذف و اضافه (کد ۱-) در کارنامه رسمی نمایش داده نمی‌شود (در سوابق نمرات هست)
+      const visibleRows = rs.filter(r => (r.gradeStatusCode?.trim() ?? '') !== '-1');
+      if (visibleRows.length === 0) return [];
       // اعمال حذف مردودی از نیمسال (فقط EXCLUDE_IF_PASSED_1391)
-      let effectiveRows = rs;
+      let effectiveRows = visibleRows;
       if (th.exclFromTerm && passedSet) {
         effectiveRows = rs.map(r => {
           const g = numOrNull(r.gradeValue);
@@ -168,19 +175,22 @@ export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | 
       }
       const s = summarizeTerm(effectiveRows, th.pass);
       const gpa = s.wunits ? s.wsum / s.wunits : null;
-      const isSummer = termCode.endsWith('3') || (rs[0]?.termTitle?.includes('تابستان') ?? false);
-      const isEquiv = termCode.endsWith('5') || termCode.toUpperCase().includes('EQ') || (rs[0]?.termTitle?.includes('معادل') ?? false);
+      const termTitle = rs.find(r => r.termTitle)?.termTitle ?? null;
+      const isSummer = termCode.endsWith('3') || (termTitle?.includes('تابستان') ?? false);
+      const isEquiv = termCode.endsWith('5') || termCode.toUpperCase().includes('EQ') || (termTitle?.includes('معادل') ?? false);
       const canHaveProbation = !isSummer && !isEquiv;
+      // حدنصاب واحد: اگر واحد اخذشدهٔ ترم (پس از حذف‌ها) از کف آیین‌نامه کمتر باشد، مشروطی احتساب نمی‌شود
+      const unitsOk = th.minUnits > 0 ? s.taken >= th.minUnits : true;
       const fileProb = rs.find(r => r.termProbation !== null)?.termProbation ?? null;
-      return {
-        termCode, termTitle: rs[0]?.termTitle ?? null,
+      return [{
+        termCode, termTitle,
         termStatusTitle: rs.find(r => r.termStatusTitle)?.termStatusTitle ?? null,
-        probation: canHaveProbation ? (fileProb ?? (gpa !== null && gpa < th.prob)) : false,
+        probation: canHaveProbation && unitsOk ? (fileProb ?? (gpa !== null && gpa < th.prob)) : false,
         rows: effectiveRows,
         taken: s.taken, passed: s.passed, failed: s.failed, points: s.wsum,
         gpa,
         cumTaken: 0, cumPassed: 0, cumFailed: 0, cumPoints: 0, cumGpa: null,
-      };
+      }];
     });
   // جمع تجمیعی «کل» تا پایان هر نیمسال (معدل کل با سیاست نمره مردودی آیین‌نامه)
   let ct = 0, cp = 0, cw = 0, cwu = 0;
@@ -200,7 +210,7 @@ export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | 
   }
   const all = summarizeTerm(rows, th.pass);
   const tot = summarizeTotal(rows, th);
-  return { terms, totalTaken: all.taken, totalPassed: all.passed, gpa: tot.wunits ? tot.wsum / tot.wunits : null, passGrade: th.pass, probThreshold: th.prob };
+  return { terms, totalTaken: all.taken, totalPassed: all.passed, gpa: tot.wunits ? tot.wsum / tot.wunits : null, passGrade: th.pass, probThreshold: th.prob, minUnits: th.minUnits };
 }
 
 export const faNum = (n: number | null | undefined, digits = 2): string =>

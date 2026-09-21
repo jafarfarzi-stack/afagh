@@ -54,6 +54,7 @@ export const GRADE_STATUS_CODES: GradeStatusCode[] = [
   { code: '32', title: 'جبراني-معادلسازي', passed: true, affectsGpa: false, affectsTermGpa: false, isDropped: false },
   { code: '40', title: 'معرفي به استاد', passed: true, affectsGpa: true, affectsTermGpa: true, isDropped: false },
   { code: '44', title: 'دروس پيش‌دانشگاهي/جبراني بدون احتساب', passed: true, affectsGpa: false, affectsTermGpa: false, isDropped: false },
+  { code: '46', title: 'دروس پيش‌دانشگاهي/جبراني بدون احتساب - مردود', passed: false, affectsGpa: false, affectsTermGpa: false, isDropped: false },
   { code: '50', title: 'خودخوان - قبول', passed: true, affectsGpa: true, affectsTermGpa: true, isDropped: false },
   { code: '51', title: 'خودخوان - مردود', passed: false, affectsGpa: true, affectsTermGpa: true, isDropped: false },
   { code: '52', title: 'تخلف در امتحان', passed: false, affectsGpa: false, affectsTermGpa: false, isDropped: false },

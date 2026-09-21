@@ -656,8 +656,9 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                         onChange={e => {
                           const rid = Number(e.target.value);
                           if (!rid || !currentStudent) return;
+                          showToast('⏳ در حال تغییر آیین‌نامه و بازمحاسبه کدهای نمرات...');
                           setStudentRegulationAction(currentStudent.id, rid).then(r => {
-                            showToast(r.ok ? 'آیین‌نامه دانشجو تغییر کرد.' : (r.error || 'انجام نشد.'));
+                            showToast(r.ok ? `آیین‌نامه تغییر کرد — ${r.scanned ?? 0} نمره بررسی، ${r.updated ?? 0} کد اصلاح شد.` : (r.error || 'انجام نشد.'));
                             if (r.ok) router.refresh();
                           }).catch(() => showToast('انجام نشد.'));
                         }}
@@ -1123,7 +1124,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                 {transcript && transcript.length > 0 && (
                   <p className="text-[10px] text-slate-500">
                     ⚖️ مبنای محاسبه: <b>{currentStudent.regulationTitle}</b>
-                    {(() => { const th = regThresholds(regConfig); return ` (قبولی ${faNum(th.pass, 0)} — مشروطی زیر ${faNum(th.prob, 0)}${th.exclFailed ? ' — حذف مردودی قبول‌شده از معدل کل' : ''})`; })()}
+                    {(() => { const th = regThresholds(regConfig); return ` (قبولی ${faNum(th.pass, 0)} — مشروطی زیر ${faNum(th.prob, 0)}${th.minUnits > 0 ? ` — حدنصاب واحد ترم ${faNum(th.minUnits, 0)}` : ''}${th.exclFailed ? ' — حذف مردودی قبول‌شده از معدل کل' : ''})`; })()}
                   </p>
                 )}
               </div>
@@ -1178,7 +1179,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
               ) : (
                 <OfficialTranscriptView
                   student={currentStudent}
-                  summary={groupTranscript(transcript)}
+                  summary={groupTranscript(transcript, regConfig)}
                   logoUrl={props.logoUrl}
                   codeLabels={props.codeLabels}
                   canEditGrades={props.canEditGrades}

@@ -1,0 +1,10 @@
+import fs from 'fs';
+const lines = fs.readFileSync('grade-engine-changes-SHAMS.csv', 'utf8').trim().split('\n');
+const header = lines[0];
+const parse = (l) => l.split(',').map(s => s.replace(/^"|"$/g, ''));
+const rows = lines.slice(1).map(parse);
+const to941 = rows.filter(c => c[7] === '941');
+console.log('1->941 rows:', to941.length);
+console.log('students:', [...new Set(to941.map(c => c[2]))].slice(0, 30).join(','));
+const phd = to941.filter(c => /^94/.test(c[2]));
+console.log('of which PhD-code students (94...):', phd.length);
