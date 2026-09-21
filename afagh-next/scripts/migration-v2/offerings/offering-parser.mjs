@@ -18,19 +18,19 @@ import {
  * نامک‌های پذیرفته‌شده برای هر فیلد در فایل‌های ورودی
  */
 export const OFFERING_ALIASES = {
-  termCode: ['کد ترم', 'ترم', 'نیمسال', 'دوره', 'term', 'term_code', 'semester'],
-  courseCode: ['کد درس', 'درس', 'شماره درس', 'کددرس', 'course_code', 'lesson_code', 'code'],
-  courseTitle: ['نام درس', 'عنوان درس', 'نام', 'course_title', 'lesson_name', 'title'],
-  groupNumber: ['گروه', 'مشخصه', 'کد گروه', 'گروه درس', 'شماره گروه', 'group', 'group_number', 'section'],
-  capacity: ['ظرفیت', 'ظرفیت کلاس', 'capacity', 'cap'],
-  professorCode: ['کد استاد', 'کد مدرس', 'شماره استادی', 'شماره پرسنلی', 'professor_code', 'staff_code', 'don_code'],
-  professorName: ['نام استاد', 'استاد', 'مدرس', 'نام مدرس', 'professor_name', 'instructor'],
-  schedule: ['زمان کلاس', 'برنامه هفتگی', 'روز و ساعت', 'ساعت تشکیل', 'برنامه کلاس', 'schedule', 'weekly_schedule'],
-  classroom: ['محل تشکیل', 'کلاس', 'اتاق', 'شماره کلاس', 'نام کلاس', 'classroom', 'room', 'room_name'],
-  genderRestriction: ['جنسیت', 'محدودیت جنسیت', 'تفکیک جنسیتی', 'gender', 'gender_restriction'],
-  offeringType: ['نوع ارائه', 'نحوه ارائه', 'نوع گروه', 'offering_type'],
-  examDate: ['تاریخ امتحان', 'تاریخ آزمون', 'امتحان', 'exam_date'],
-  examTime: ['ساعت امتحان', 'ساعت آزمون', 'زمان امتحان', 'exam_time'],
+  termCode: ['termCode', 'کد ترم', 'ترم', 'نیمسال', 'دوره', 'term', 'term_code', 'semester', 'TermCode'],
+  courseCode: ['courseCode', 'کد درس', 'درس', 'شماره درس', 'کددرس', 'course_code', 'lesson_code', 'code', 'LessonCode'],
+  courseTitle: ['courseTitle', 'نام درس', 'عنوان درس', 'نام', 'course_title', 'lesson_name', 'title', 'LessonName'],
+  groupNumber: ['groupNumber', 'گروه', 'مشخصه', 'کد گروه', 'گروه درس', 'شماره گروه', 'group', 'group_number', 'section', 'LessonGroup'],
+  capacity: ['capacity', 'ظرفیت', 'ظرفیت کلاس', 'cap'],
+  professorCode: ['professorCode', 'کد استاد', 'کد مدرس', 'شماره استادی', 'شماره پرسنلی', 'professor_code', 'staff_code', 'don_code', 'DonCode'],
+  professorName: ['professorName', 'نام استاد', 'استاد', 'مدرس', 'نام مدرس', 'professor_name', 'instructor'],
+  schedule: ['schedule', 'زمان کلاس', 'برنامه هفتگی', 'روز و ساعت', 'ساعت تشکیل', 'برنامه کلاس', 'weekly_schedule'],
+  classroom: ['classroom', 'classroomName', 'محل تشکیل', 'کلاس', 'اتاق', 'شماره کلاس', 'نام کلاس', 'room', 'room_name'],
+  genderRestriction: ['genderRestriction', 'جنسیت', 'محدودیت جنسیت', 'تفکیک جنسیتی', 'gender', 'gender_restriction'],
+  offeringType: ['offeringType', 'نوع ارائه', 'نحوه ارائه', 'نوع گروه', 'offering_type'],
+  examDate: ['examDate', 'تاریخ امتحان', 'تاریخ آزمون', 'امتحان', 'exam_date'],
+  examTime: ['examTime', 'ساعت امتحان', 'ساعت آزمون', 'زمان امتحان', 'exam_time'],
 };
 
 /**
@@ -179,12 +179,16 @@ export function parseOfferingRow(source) {
   }
 
   // تجزیه زمان‌بندی هفتگی
-  const rawSchedule = readField(source, OFFERING_ALIASES.schedule);
   let schedules = [];
-  if (rawSchedule) {
-    schedules = parseScheduleString(rawSchedule);
-    if (schedules.length === 0) {
-      warnings.push(`متن برنامه کلاسی «${rawSchedule}» قابل تجزیه به روز و ساعت نبود.`);
+  if (Array.isArray(source.schedules)) {
+    schedules = source.schedules;
+  } else {
+    const rawSchedule = readField(source, OFFERING_ALIASES.schedule);
+    if (rawSchedule) {
+      schedules = parseScheduleString(rawSchedule);
+      if (schedules.length === 0) {
+        warnings.push(`متن برنامه کلاسی «${rawSchedule}» قابل تجزیه به روز و ساعت نبود.`);
+      }
     }
   }
 

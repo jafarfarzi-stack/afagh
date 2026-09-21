@@ -3,18 +3,33 @@
 --  ماهیت درس، نام انگلیسی، توضیحات، ساعت هفتگی، پایان‌نامه، پروژه، کارآموزی
 -- ═══════════════════════════════════════════════════════════════════
 
-ALTER TABLE "courses" ADD COLUMN "courseNature" varchar(50);
-ALTER TABLE "courses" ADD COLUMN "englishName" varchar(200);
-ALTER TABLE "courses" ADD COLUMN "description" text;
-ALTER TABLE "courses" ADD COLUMN "weeklyTheoryHours" numeric(3, 1);
-ALTER TABLE "courses" ADD COLUMN "weeklyPracticalHours" numeric(3, 1);
-ALTER TABLE "courses" ADD COLUMN "isThesis" integer DEFAULT 0;
-ALTER TABLE "courses" ADD COLUMN "hasProject" integer DEFAULT 0;
-ALTER TABLE "courses" ADD COLUMN "internshipUnits" numeric(3, 1) DEFAULT '0';
-ALTER TABLE "courses" ADD COLUMN "minPassedMark" numeric(4, 2);
-ALTER TABLE "courses" ADD COLUMN "defaultAcceptMarkState" varchar(10);
-ALTER TABLE "courses" ADD COLUMN "defaultRejectMarkState" varchar(10);
-ALTER TABLE "courses" ADD COLUMN "courseIsActive" integer DEFAULT 1;
-ALTER TABLE "courses" ADD COLUMN "emergencyWithdrawal" integer DEFAULT 0;
-ALTER TABLE "courses" ADD COLUMN "coRequisites" varchar(200);
-ALTER TABLE "courses" ADD COLUMN "facesHours" numeric(3, 1);
+--> statement-breakpoint
+ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "courseNature" varchar(50);
+--> statement-breakpoint
+ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "englishName" varchar(200);
+--> statement-breakpoint
+ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "description" text;
+--> statement-breakpoint
+ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "weeklyTheoryHours" numeric(3, 1);
+--> statement-breakpoint
+ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "weeklyPracticalHours" numeric(3, 1);
+--> statement-breakpoint
+ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "isThesis" integer DEFAULT 0;
+--> statement-breakpoint
+ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "hasProject" integer DEFAULT 0;
+--> statement-breakpoint
+ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "internshipUnits" numeric(3, 1) DEFAULT '0';
+--> statement-breakpoint
+ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "minPassedMark" numeric(4, 2);
+--> statement-breakpoint
+ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "defaultAcceptMarkState" varchar(10);
+--> statement-breakpoint
+ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "defaultRejectMarkState" varchar(10);
+--> statement-breakpoint
+ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "courseIsActive" integer DEFAULT 1;
+--> statement-breakpoint
+ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "emergencyWithdrawal" integer DEFAULT 0;
+--> statement-breakpoint
+ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "coRequisites" varchar(200);
+--> statement-breakpoint
+ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "facesHours" numeric(3, 1);

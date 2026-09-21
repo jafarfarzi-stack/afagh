@@ -360,7 +360,8 @@ async function ensureFaculty(code) {
   if (faculties.has(fkey)) return faculties.get(fkey);
   let row = (await q(`SELECT id FROM faculties WHERE "facultyCode" = $1 AND "universityId" = $2`, [code, universityId]))[0];
   if (!row && !DRY) {
-    row = (await q(`INSERT INTO faculties (name, "facultyCode", "universityId") VALUES ($1,$2,$3) RETURNING id`, [`دانشکده ${code} (سما)`, code, universityId]))[0];
+    row = (await q(`INSERT INTO faculties (name, "facultyCode", "universityId") VALUES ($1,$2,$3) ON CONFLICT ("universityId", "facultyCode") DO NOTHING RETURNING id`, [`دانشکده ${code} (سما)`, code, universityId]))[0]
+      || (await q(`SELECT id FROM faculties WHERE "facultyCode" = $1 AND "universityId" = $2`, [code, universityId]))[0];
   }
   const id = row ? Number(row.id) : null;
   faculties.set(fkey, id);
@@ -524,7 +525,7 @@ async function phaseMajors(file) {
     }).join(',');
     const res = await pool.query(`INSERT INTO majors (name, "degreeLevelId", "departmentId", "majorCode", "facultyId",
         "minUnits", "standardCode", "establishedDate", "terminatedDate", "isActive", "headStaffCode", "expertName", "lastCouncilDate", "universityId")
-      VALUES ${ph} ON CONFLICT ("majorCode") DO UPDATE SET
+      VALUES ${ph} ON CONFLICT ("universityId", "majorCode") DO UPDATE SET
         "facultyId" = COALESCE(majors."facultyId", EXCLUDED."facultyId"),
         "departmentId" = COALESCE(majors."departmentId", EXCLUDED."departmentId"),
         name = CASE WHEN majors.name LIKE '%سما%' OR majors.name IS NULL OR majors.name = '' THEN EXCLUDED.name ELSE majors.name END

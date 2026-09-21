@@ -15,53 +15,64 @@ import { parseSamaScheduleSlot } from './schedule-parser.mjs';
 
 /**
  * بارگذاری کش‌های مرجع دانشگاه (ترم‌ها، دروس، اساتید، کلاس‌ها)
+ * با سازگاری منعطف با اسکیماهای دارای یا فاقد universityId
  * @param {number} universityId 
  * @param {any} [client]
  */
 export async function loadUniversityContext(universityId, client = null) {
   const runner = client ? (q, p) => client.query(q, p) : (q, p) => query(q, p);
 
-  // ۱. ترم‌ها بر اساس termCode
-  const termsRes = await runner(
-    `SELECT id, "termCode" FROM academic_terms WHERE "universityId" = $1`,
-    [universityId]
+  // بررسی پویای وجود ستون universityId در جداول مربوطه
+  const colCheck = await runner(
+    `SELECT table_name 
+     FROM information_schema.columns 
+     WHERE column_name = 'universityId' 
+       AND table_name IN ('academic_terms', 'courses', 'staff', 'classrooms', 'course_offerings', 'schedules', 'offering_professors')`
   );
+  const tablesWithUni = new Set(colCheck.rows.map(r => r.table_name));
+
+  // ۱. ترم‌ها بر اساس termCode
+  const termsSql = tablesWithUni.has('academic_terms')
+    ? `SELECT id, "termCode" FROM academic_terms WHERE "universityId" = $1`
+    : `SELECT id, "termCode" FROM academic_terms`;
+  const termsRes = await runner(termsSql, tablesWithUni.has('academic_terms') ? [universityId] : []);
   const termsByCode = new Map();
   for (const r of termsRes.rows) {
     termsByCode.set(String(r.termCode).trim(), r.id);
   }
 
   // ۲. دروس بر اساس code
-  const coursesRes = await runner(
-    `SELECT id, code FROM courses WHERE "universityId" = $1`,
-    [universityId]
-  );
+  const coursesSql = tablesWithUni.has('courses')
+    ? `SELECT id, code FROM courses WHERE "universityId" = $1`
+    : `SELECT id, code FROM courses`;
+  const coursesRes = await runner(coursesSql, tablesWithUni.has('courses') ? [universityId] : []);
   const coursesByCode = new Map();
   for (const r of coursesRes.rows) {
     coursesByCode.set(String(r.code).trim(), r.id);
   }
 
   // ۳. اساتید بر اساس staffCode
-  const staffRes = await runner(
-    `SELECT id, "staffCode" FROM staff WHERE "universityId" = $1`,
-    [universityId]
-  );
+  const staffSql = tablesWithUni.has('staff')
+    ? `SELECT id, "staffCode" FROM staff WHERE "universityId" = $1`
+    : `SELECT id, "staffCode" FROM staff`;
+  const staffRes = await runner(staffSql, tablesWithUni.has('staff') ? [universityId] : []);
   const staffByCode = new Map();
   for (const r of staffRes.rows) {
     staffByCode.set(String(r.staffCode).trim(), r.id);
   }
 
   // ۴. کلاس‌ها بر اساس name
-  const roomsRes = await runner(
-    `SELECT id, name FROM classrooms WHERE "universityId" = $1`,
-    [universityId]
-  );
+  const roomsSql = tablesWithUni.has('classrooms')
+    ? `SELECT id, name FROM classrooms WHERE "universityId" = $1`
+    : `SELECT id, name FROM classrooms`;
+  const roomsRes = await runner(roomsSql, tablesWithUni.has('classrooms') ? [universityId] : []);
   const roomsByName = new Map();
   for (const r of roomsRes.rows) {
     roomsByName.set(String(r.name).trim(), r.id);
   }
 
   return {
+    tablesWithUni,
     termsByCode,
     coursesByCode,
     staffByCode,
@@ -75,9 +86,10 @@ export async function loadUniversityContext(universityId, client = null) {
  * @param {number} universityId 
  * @param {Map<string, number>} roomsByName 
  * @param {any} client 
+ * @param {boolean} hasUniColumn
  * @returns {Promise<number|null>}
  */
-export async function getOrCreateClassroom(roomName, universityId, roomsByName, client) {
+export async function getOrCreateClassroom(roomName, universityId, roomsByName, client, hasUniColumn = true) {
   if (!roomName) return null;
   const name = String(roomName).trim();
   if (!name || name === '0' || name === '-1') return null;
@@ -87,12 +99,12 @@ export async function getOrCreateClassroom(roomName, universityId, roomsByName, 
   }
 
   // درج کلاس درس جدید با ظرفیت پیش‌فرض ۵۰
-  const res = await client.query(
-    `INSERT INTO classrooms (name, capacity, "universityId")
-     VALUES ($1, 50, $2)
-     RETURNING id`,
-    [name, universityId]
-  );
+  const insertSql = hasUniColumn
+    ? `INSERT INTO classrooms (name, capacity, "universityId") VALUES ($1, 50, $2) RETURNING id`
+    : `INSERT INTO classrooms (name, capacity) VALUES ($1, 50) RETURNING id`;
+  const insertParams = hasUniColumn ? [name, universityId] : [name];
+
+  const res = await client.query(insertSql, insertParams);
   const newId = res.rows[0].id;
   roomsByName.set(name, newId);
   return newId;
@@ -107,7 +119,7 @@ export async function getOrCreateClassroom(roomName, universityId, roomsByName, 
  * @returns {Promise<{ action: 'CREATED'|'UPDATED'|'SKIPPED', offeringId?: number, reason?: string }>}
  */
 export async function importSingleOffering(parsedOffering, universityId, context, client) {
-  const { termsByCode, coursesByCode, staffByCode, roomsByName } = context;
+  const { tablesWithUni = new Set(), termsByCode, coursesByCode, staffByCode, roomsByName } = context;
 
   const termId = termsByCode.get(parsedOffering.canonicalTermCode) || termsByCode.get(parsedOffering.termCode);
   if (!termId) {
@@ -124,14 +136,22 @@ export async function importSingleOffering(parsedOffering, universityId, context
     professorId = staffByCode.get(parsedOffering.professorCode) || null;
   }
 
+  const hasUniOffering = tablesWithUni.has('course_offerings');
   // بررسی وجود قبلی ارائه
-  const existingRes = await client.query(
-    `SELECT id, "professorId", capacity, "offeringType"
-     FROM course_offerings
-     WHERE "universityId" = $1 AND "termId" = $2 AND "courseId" = $3 AND "groupNumber" = $4
-     LIMIT 1`,
-    [universityId, termId, courseId, parsedOffering.groupNumber]
-  );
+  const existingSql = hasUniOffering
+    ? `SELECT id, "professorId", capacity, "offeringType"
+       FROM course_offerings
+       WHERE "universityId" = $1 AND "termId" = $2 AND "courseId" = $3 AND "groupNumber" = $4
+       LIMIT 1`
+    : `SELECT id, "professorId", capacity, "offeringType"
+       FROM course_offerings
+       WHERE "termId" = $1 AND "courseId" = $2 AND "groupNumber" = $3
+       LIMIT 1`;
+  const existingParams = hasUniOffering
+    ? [universityId, termId, courseId, parsedOffering.groupNumber]
+    : [termId, courseId, parsedOffering.groupNumber];
+
+  const existingRes = await client.query(existingSql, existingParams);
 
   let offeringId = null;
   let action = 'CREATED';
@@ -168,33 +188,51 @@ export async function importSingleOffering(parsedOffering, universityId, context
     }
   } else {
     // درج ارائه درس جدید
-    const insRes = await client.query(
-      `INSERT INTO course_offerings
-       ("termId", "courseId", "professorId", "groupNumber", capacity, "genderRestriction", "offeringType", "isActive", "universityId")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8)
-       RETURNING id`,
-      [
-        termId,
-        courseId,
-        professorId,
-        parsedOffering.groupNumber,
-        parsedOffering.capacity,
-        parsedOffering.genderRestriction,
-        parsedOffering.offeringType,
-        universityId,
-      ]
-    );
+    const insSql = hasUniOffering
+      ? `INSERT INTO course_offerings
+         ("termId", "courseId", "professorId", "groupNumber", capacity, "genderRestriction", "offeringType", "isActive", "universityId")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8)
+         RETURNING id`
+      : `INSERT INTO course_offerings
+         ("termId", "courseId", "professorId", "groupNumber", capacity, "genderRestriction", "offeringType", "isActive")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 1)
+         RETURNING id`;
+    const insParams = hasUniOffering
+      ? [
+          termId,
+          courseId,
+          professorId,
+          parsedOffering.groupNumber,
+          parsedOffering.capacity,
+          parsedOffering.genderRestriction,
+          parsedOffering.offeringType,
+          universityId,
+        ]
+      : [
+          termId,
+          courseId,
+          professorId,
+          parsedOffering.groupNumber,
+          parsedOffering.capacity,
+          parsedOffering.genderRestriction,
+          parsedOffering.offeringType,
+        ];
+    const insRes = await client.query(insSql, insParams);
     offeringId = insRes.rows[0].id;
   }
 
   // ثبت استاد در جدول offering_professors
   if (professorId) {
-    await client.query(
-      `INSERT INTO offering_professors ("offeringId", "staffId", role, "sharePercentage", "universityId")
-       VALUES ($1, $2, 'MAIN_LECTURER', '100.00', $3)
-       ON CONFLICT DO NOTHING`,
-      [offeringId, professorId, universityId]
-    );
+    const hasUniProf = tablesWithUni.has('offering_professors');
+    const profSql = hasUniProf
+      ? `INSERT INTO offering_professors ("offeringId", "staffId", role, "sharePercentage", "universityId")
+         VALUES ($1, $2, 'MAIN_LECTURER', '100.00', $3)
+         ON CONFLICT DO NOTHING`
+      : `INSERT INTO offering_professors ("offeringId", "staffId", role, "sharePercentage")
+         VALUES ($1, $2, 'MAIN_LECTURER', '100.00')
+         ON CONFLICT DO NOTHING`;
+    const profParams = hasUniProf ? [offeringId, professorId, universityId] : [offeringId, professorId];
+    await client.query(profSql, profParams);
   }
 
   // ثبت جلسات کلاسی در schedules
@@ -205,26 +243,41 @@ export async function importSingleOffering(parsedOffering, universityId, context
       [offeringId]
     );
 
+    const hasUniSched = tablesWithUni.has('schedules');
+    const hasUniRoom = tablesWithUni.has('classrooms');
+
     for (const slot of parsedOffering.schedules) {
       let roomId = null;
       const roomHint = slot.roomHint || slot.roomCode || parsedOffering.classroomName;
       if (roomHint) {
-        roomId = await getOrCreateClassroom(roomHint, universityId, roomsByName, client);
+        roomId = await getOrCreateClassroom(roomHint, universityId, roomsByName, client, hasUniRoom);
       }
 
-      await client.query(
-        `INSERT INTO schedules ("offeringId", "scheduleType", "dayOfWeek", "startTime", "endTime", "roomId", "universityId")
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          offeringId,
-          slot.scheduleType || 'CLASS',
-          slot.dayOfWeek,
-          slot.startTime,
-          slot.endTime,
-          roomId,
-          universityId,
-        ]
-      );
+      const schedSql = hasUniSched
+        ? `INSERT INTO schedules ("offeringId", "scheduleType", "dayOfWeek", "startTime", "endTime", "roomId", "universityId")
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`
+        : `INSERT INTO schedules ("offeringId", "scheduleType", "dayOfWeek", "startTime", "endTime", "roomId")
+           VALUES ($1, $2, $3, $4, $5, $6)`;
+      const schedParams = hasUniSched
+        ? [
+            offeringId,
+            slot.scheduleType || 'CLASS',
+            slot.dayOfWeek,
+            slot.startTime,
+            slot.endTime,
+            roomId,
+            universityId,
+          ]
+        : [
+            offeringId,
+            slot.scheduleType || 'CLASS',
+            slot.dayOfWeek,
+            slot.startTime,
+            slot.endTime,
+            roomId,
+          ];
+
+      await client.query(schedSql, schedParams);
     }
   }
 
@@ -273,20 +326,30 @@ export async function importOfferingsBatch(rawRows, universityId, options = {}) 
     return stats;
   }
 
-  await withTransaction(async (client) => {
-    const context = await loadUniversityContext(universityId, client);
+  // بارگذاری یک‌باره کاتالوگ دانشگاه
+  const context = await loadUniversityContext(universityId);
 
-    for (const item of parsedList) {
-      const outcome = await importSingleOffering(item, universityId, context, client);
-      if (outcome.action === 'CREATED') stats.created++;
-      else if (outcome.action === 'UPDATED') stats.updated++;
-      else {
-        stats.skipped++;
-        const r = outcome.reason || 'نامشخص';
-        stats.reasons[r] = (stats.reasons[r] || 0) + 1;
+  const CHUNK_SIZE = 200;
+  for (let c = 0; c < parsedList.length; c += CHUNK_SIZE) {
+    const chunk = parsedList.slice(c, c + CHUNK_SIZE);
+    await withTransaction(async (client) => {
+      for (const item of chunk) {
+        const outcome = await importSingleOffering(item, universityId, context, client);
+        if (outcome.action === 'CREATED') stats.created++;
+        else if (outcome.action === 'UPDATED') stats.updated++;
+        else {
+          stats.skipped++;
+          const r = outcome.reason || 'نامشخص';
+          stats.reasons[r] = (stats.reasons[r] || 0) + 1;
+        }
       }
+    });
+
+    const processedSoFar = Math.min(c + CHUNK_SIZE, parsedList.length);
+    if (processedSoFar % 1000 === 0 || processedSoFar === parsedList.length) {
+      logger.info(`پیشرفت واردسازی: ${processedSoFar} از ${parsedList.length} ردیف پردازش شد (ایجاد: ${stats.created}، به‌روزرسانی: ${stats.updated}، ردشده: ${stats.skipped})`);
     }
-  });
+  }
 
   logger.info('اتمام موفق واردسازی ارائه‌ها.', stats);
   return stats;

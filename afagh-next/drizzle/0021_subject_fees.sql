@@ -6,7 +6,8 @@
 -- student_subject_fees: تخصیص مبلغ موضوعی به دانشجو
 -- ═══════════════════════════════════════════════════════════════
 
-CREATE TABLE subject_fee_types (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS subject_fee_types (
   id serial PRIMARY KEY,
   code varchar(40) NOT NULL UNIQUE,
   title varchar(150) NOT NULL,
@@ -20,8 +21,8 @@ CREATE TABLE subject_fee_types (
   note text,
   created_at timestamp DEFAULT now()
 );
-
-CREATE TABLE student_subject_fees (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS student_subject_fees (
   id serial PRIMARY KEY,
   student_id integer NOT NULL REFERENCES students(id),
   term_id integer NOT NULL REFERENCES academic_terms(id),
@@ -32,6 +33,13 @@ CREATE TABLE student_subject_fees (
   created_at timestamp DEFAULT now(),
   UNIQUE(student_id, term_id, subject_fee_type_id)
 );
-
-COMMENT ON TABLE subject_fee_types IS 'کاتالوگ انواع مبالغ موضوعی شهریه (بیمه، کارگاه، نظارت و غیره)';
-COMMENT ON TABLE student_subject_fees IS 'تخصیص مبالغ موضوعی به دانشجویان';
+--> statement-breakpoint
+DO $$ BEGIN
+  COMMENT ON TABLE subject_fee_types IS 'کاتالوگ انواع مبالغ موضوعی شهریه (بیمه، کارگاه، نظارت و غیره)';
+EXCEPTION WHEN others THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+  COMMENT ON TABLE student_subject_fees IS 'تخصیص مبالغ موضوعی به دانشجویان';
+EXCEPTION WHEN others THEN null;
+END $$;

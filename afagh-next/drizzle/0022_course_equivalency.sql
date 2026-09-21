@@ -1,2 +1,3 @@
 -- افزودن فیلد هم‌ارزی دروس: کدهای دروس هم‌ارز جداشده با کاما
-ALTER TABLE courses ADD COLUMN "equivalentCourseCodes" text;
+--> statement-breakpoint
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS "equivalentCourseCodes" text;

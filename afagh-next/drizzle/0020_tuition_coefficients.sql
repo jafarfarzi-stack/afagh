@@ -7,15 +7,28 @@
 --   شهریه_نهایی_متغیر = شهریه_خام_متغیر × ضریب_متغیر
 -- ═══════════════════════════════════════════════════════════════
 
-CREATE TABLE tuition_coefficients (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS tuition_coefficients (
   id serial PRIMARY KEY,
-  term_id integer NOT NULL REFERENCES academic_terms(id) UNIQUE,
+  "termId" integer REFERENCES academic_terms(id) UNIQUE,
+  "term_id" integer REFERENCES academic_terms(id),
   variable_coefficient numeric(4,2) NOT NULL DEFAULT 1.00,
   fixed_coefficient numeric(4,2) NOT NULL DEFAULT 1.00,
   note text,
   updated_at timestamp DEFAULT now()
 );
-
-COMMENT ON TABLE tuition_coefficients IS 'ضرایب افزایشی شهریه به ازای هر نیمسال (مشابه سما)';
-COMMENT ON COLUMN tuition_coefficients.variable_coefficient IS 'ضریب افزایش شهریه متغیر (پیش‌فرض ۱.۰۰ = بدون تغییر)';
-COMMENT ON COLUMN tuition_coefficients.fixed_coefficient IS 'ضریب افزایش شهریه ثابت (پیش‌فرض ۱.۰۰ = بدون تغییر)';
+--> statement-breakpoint
+DO $$ BEGIN
+  COMMENT ON TABLE tuition_coefficients IS 'ضرایب افزایشی شهریه به ازای هر نیمسال (مشابه سما)';
+EXCEPTION WHEN others THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+  COMMENT ON COLUMN tuition_coefficients.variable_coefficient IS 'ضریب افزایش شهریه متغیر (پیش‌فرض ۱.۰۰ = بدون تغییر)';
+EXCEPTION WHEN others THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+  COMMENT ON COLUMN tuition_coefficients.fixed_coefficient IS 'ضریب افزایش شهریه ثابت (پیش‌فرض ۱.۰۰ = بدون تغییر)';
+EXCEPTION WHEN others THEN null;
+END $$;

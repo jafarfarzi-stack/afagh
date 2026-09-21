@@ -127,6 +127,76 @@
       "when": 1788620400000,
       "tag": "0017_unified_tuition_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788624000000,
+      "tag": "0018_course_sama_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788627600000,
+      "tag": "0019_grade_thresholds",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788631200000,
+      "tag": "0020_tuition_coefficients",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788634800000,
+      "tag": "0021_subject_fees",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1788638400000,
+      "tag": "0022_course_equivalency",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1788642000000,
+      "tag": "0023_multitenant_university_id_all_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788645600000,
+      "tag": "0024_uni_scoped_uniques",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1788649200000,
+      "tag": "0025_terms_uni_scoped",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1788652800000,
+      "tag": "0026_migration_v2_identity_academic_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1788656400000,
+      "tag": "0027_multitenant_faculties_majors_fixes",
+      "breakpoints": true
     }
   ]
 }

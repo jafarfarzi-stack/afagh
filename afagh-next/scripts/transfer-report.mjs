@@ -75,18 +75,18 @@ async function main() {
   // 3. دانشجویان با legacy ولی بدون enrollment
   console.log('\n[3] دانشجویان دارای legacy ولی بدون هیچ enrollment (منتقل‌نشده — باید 0 باشد)');
   const notMigrated = await q(`
-    SELECT s."studentCode", s."universityId", u.code AS uni_code, s.id,
-      (SELECT count(*)::int FROM legacy_grades lg WHERE lg."studentCode"=s."studentCode") AS lg_cnt,
-      (SELECT count(*)::int FROM enrollments e WHERE e."studentId"=s.id) AS en_cnt
-    FROM students s JOIN universities u ON u.id=s."universityId"
-    WHERE (SELECT count(*) FROM legacy_grades lg WHERE lg."studentCode"=s."studentCode")>0
-      AND (SELECT count(*) FROM enrollments e WHERE e."studentId"=s.id)=0
+    SELECT s."studentCode", s."universityId", u.code AS uni_code, s.id
+    FROM students s 
+    JOIN universities u ON u.id=s."universityId"
+    WHERE EXISTS (SELECT 1 FROM legacy_grades lg WHERE lg."sourceCode"=u.code AND lg."studentCode"=s."studentCode")
+      AND NOT EXISTS (SELECT 1 FROM enrollments e WHERE e."studentId"=s.id)
     LIMIT 20
   `);
   const notMigratedTotal = (await q(`
     SELECT count(*)::int AS c FROM students s
-    WHERE (SELECT count(*) FROM legacy_grades lg WHERE lg."studentCode"=s."studentCode")>0
-      AND (SELECT count(*) FROM enrollments e WHERE e."studentId"=s.id)=0
+    JOIN universities u ON u.id=s."universityId"
+    WHERE EXISTS (SELECT 1 FROM legacy_grades lg WHERE lg."sourceCode"=u.code AND lg."studentCode"=s."studentCode")
+      AND NOT EXISTS (SELECT 1 FROM enrollments e WHERE e."studentId"=s.id)
   `))[0].c;
   console.log(` تعداد: ${fmt(notMigratedTotal)}`);
   if (notMigrated.length) {
@@ -99,11 +99,19 @@ async function main() {
   // 4. legacy بی‌صاحب
   console.log('\n[4] ردیف‌های legacy که هیچ students هم‌کد ندارد (کد دانشجویی ناشناس)');
   const orphans = await q(`
-    SELECT lg."studentCode", count(*)::int AS cnt
-    FROM legacy_grades lg LEFT JOIN students s ON s."studentCode"=lg."studentCode"
-    WHERE s.id IS NULL GROUP BY lg."studentCode" ORDER BY cnt DESC LIMIT 20
+    SELECT lg."studentCode", lg."sourceCode", count(*)::int AS cnt
+    FROM legacy_grades lg
+    JOIN universities u ON u.code = lg."sourceCode"
+    LEFT JOIN students s ON s."universityId" = u.id AND s."studentCode" = lg."studentCode"
+    WHERE s.id IS NULL GROUP BY lg."studentCode", lg."sourceCode" ORDER BY cnt DESC LIMIT 20
   `);
-  const orphanRows = (await q(`SELECT count(*)::int AS c FROM legacy_grades lg LEFT JOIN students s ON s."studentCode"=lg."studentCode" WHERE s.id IS NULL`))[0].c;
+  const orphanRows = (await q(`
+    SELECT count(*)::int AS c
+    FROM legacy_grades lg
+    JOIN universities u ON u.code = lg."sourceCode"
+    LEFT JOIN students s ON s."universityId" = u.id AND s."studentCode" = lg."studentCode"
+    WHERE s.id IS NULL
+  `))[0].c;
   console.log(` تعداد ردیف بی‌صاحب: ${fmt(orphanRows)} / ${fmt(totLegacyRows)}  —  تعداد کد بی‌صاحب: ${fmt(orphans.length)} (نمونه 20)`);
   if (orphans.length) {
     console.log(pad('studentCode',14) + 'cnt');

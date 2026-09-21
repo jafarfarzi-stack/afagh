@@ -84,6 +84,20 @@ END $$;
 --> statement-breakpoint
 UPDATE "admissions_staging" SET "universityId" = (SELECT id FROM "universities" WHERE "code" = 'AFAGH') WHERE "universityId" IS NULL;
 
+--> statement-breakpoint
+ALTER TABLE "majors" ADD COLUMN IF NOT EXISTS "universityId" integer;
+--> statement-breakpoint
+DO $$ BEGIN
+	ALTER TABLE "majors" ADD CONSTRAINT "majors_universityId_universities_id_fk" FOREIGN KEY ("universityId") REFERENCES "universities"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+UPDATE "majors" m SET "universityId" = f."universityId" FROM "faculties" f WHERE m."facultyId" = f."id" AND m."universityId" IS NULL;
+--> statement-breakpoint
+UPDATE "majors" m SET "universityId" = d."universityId" FROM "departments" d WHERE m."departmentId" = d."id" AND m."universityId" IS NULL;
+--> statement-breakpoint
+UPDATE "majors" SET "universityId" = (SELECT id FROM "universities" WHERE "code" = 'AFAGH') WHERE "universityId" IS NULL;
+
 -- ══════════════════════════════════════════════════════════════════════
 --  ۲. برنامهٔ درسی (از طریق curriculum_versions.majorId → majors.universityId)
 -- ══════════════════════════════════════════════════════════════════════
@@ -484,7 +498,7 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 --> statement-breakpoint
-UPDATE "tuition_coefficients" tc SET "universityId" = at."universityId" FROM "academic_terms" at WHERE tc."termId" = at."id" AND tc."universityId" IS NULL;
+UPDATE "tuition_coefficients" tc SET "universityId" = at."universityId" FROM "academic_terms" at WHERE (tc."termId" = at."id" OR tc."term_id" = at."id") AND tc."universityId" IS NULL;
 --> statement-breakpoint
 UPDATE "tuition_coefficients" SET "universityId" = (SELECT id FROM "universities" WHERE "code" = 'AFAGH') WHERE "universityId" IS NULL;
 
@@ -506,7 +520,7 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 --> statement-breakpoint
-UPDATE "student_subject_fees" ssf SET "universityId" = s."universityId" FROM "students" s WHERE ssf."studentId" = s."id" AND ssf."universityId" IS NULL;
+UPDATE "student_subject_fees" ssf SET "universityId" = s."universityId" FROM "students" s WHERE (ssf."student_id" = s."id") AND ssf."universityId" IS NULL;
 --> statement-breakpoint
 UPDATE "student_subject_fees" SET "universityId" = (SELECT id FROM "universities" WHERE "code" = 'AFAGH') WHERE "universityId" IS NULL;
 
