@@ -17,7 +17,7 @@ die()  { bad "$1"; exit 1; }
 echo -e "${B}════════ نصب کامل سامانه جامع آفاق ══════${N}"
 
 # ── ۰) پیش‌نیازها ──
-step "۰/۶ بررسی پیش‌نیازها"
+step "۰/۷ بررسی پیش‌نیازها"
 command -v node >/dev/null || die "Node.js نصب نیست (≥۱۸ لازم است)"
 NODE_MAJOR=$(node -e 'console.log(process.versions.node.split(".")[0])')
 [ "$NODE_MAJOR" -ge 18 ] || die "نسخهٔ Node باید ≥۱۸ باشد (فعلی: $(node -v))"
@@ -30,7 +30,7 @@ if [ "$USE_DOCKER" = "1" ]; then
   (cd afagh-next && docker compose up -d) || die "docker compose ناموفق"
   ok "کانتینرها بالا شدند (اولین بار ممکن است چند دقیقه image بکشد)"
 else
-  step "۱/۶ سرویس‌های محلی"
+  step "۱/۷ سرویس‌های محلی"
   (echo >/dev/tcp/127.0.0.1/5432) 2>/dev/null && ok "PostgreSQL :5432" || die "PostgreSQL رو نیست — یا روشن کنید یا AFAGH_USE_DOCKER=1 بزنید"
   (echo >/dev/tcp/127.0.0.1/6379) 2>/dev/null && ok "Redis :6379" || die "Redis رو نیست — apt install redis-server && service redis-server start"
   (echo >/dev/tcp/127.0.0.1/9000) 2>/dev/null && ok "MinIO :9000" || {
@@ -43,7 +43,7 @@ wait_port 5432 || die "PostgreSQL آماده نشد"
 wait_port 6379 || die "Redis آماده نشد"
 
 # ── ۲) نقش‌ها و دیتابیس PostgreSQL (idempotent) ──
-step "۲/۶ دیتابیس PostgreSQL (نقش‌ها + afagh_db)"
+step "۲/۷ دیتابیس PostgreSQL (نقش‌ها + afagh_db)"
 if sudo -n true 2>/dev/null && sudo -u postgres psql -tAc "SELECT 1" >/dev/null 2>&1; then
   sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='afagh'" | grep -q 1 || \
     sudo -u postgres psql -c "CREATE ROLE afagh LOGIN PASSWORD 'afagh' SUPERUSER CREATEDB;" >/dev/null
@@ -64,12 +64,12 @@ export PGPASSWORD=afagh
 PSQL="psql -h 127.0.0.1 -U afagh -d afagh_db"
 
 # ── ۳) نصب وابستگی‌ها ──
-step "۳/۶ نصب وابستگی‌های Node"
+step "۳/۷ نصب وابستگی‌های Node"
 (cd afagh-erp && npm install --no-audit --no-fund >/dev/null) && ok "afagh-erp (فاز صفر)"
 (cd afagh-next && npm install --no-audit --no-fund >/dev/null) && ok "afagh-next (کالبد)"
 
 # ── ۴) اسکیمای PostgreSQL + سخت‌سازی + مهاجرت دمو ──
-step "۴/۶ اسکیما + RLS + دادهٔ دمو"
+step "۴/۷ اسکیما + RLS + دادهٔ دمو"
 cd afagh-next
 [ -f .env ] || cp .env.example .env
 set -a; . ./.env; set +a
@@ -84,12 +84,20 @@ fi
 cd ..
 
 # ── ۵) Redis و بیلد ──
-step "۵/۶ گرم‌کردن Redis + بیلد پروداکشن"
+step "۵/۷ گرم‌کردن Redis + بیلد پروداکشن"
 (cd afagh-next && set -a && . ./.env && set +a && node scripts/warm-redis.mjs) && ok "ظرفیت کلاس‌ها در Redis (§۱۰۰۶)"
 (cd afagh-next && set -a && . ./.env && set +a && npm run build >/dev/null 2>&1) && ok "بیلد Next.js پروداکشن" || die "بیلد ناموفق"
 
-# ── ۶) جمع‌بندی ──
-step "۶/۶ تمام شد ✓"
+# ── ۶) پایپ‌لاین پس‌ازایمپورت (idempotent: بک‌فیل ثبت‌نام‌ها + کدهای دروس/آیین‌نامه + موتور نمرات) ──
+step "۶/۷ پایپ‌لاین پس‌ازایمپورت"
+(cd afagh-next && set -a && . ./.env && set +a && node scripts/post-import-pipeline.mjs) \
+  && ok "پایپ‌لاین نمرات/ثبت‌نام کامل شد" || {
+  echo -e "  ${Y}پایپ‌لاین ناموفق بود — نصب ادامه می‌یابد؛ بعداً دستی اجرا کنید:${N}"
+  echo "    (cd afagh-next && node scripts/post-import-pipeline.mjs)"
+}
+
+# ── ۷) جمع‌بندی ──
+step "۷/۷ تمام شد ✓"
 echo -e """
 ${G}نصب کامل شد.${N} اجرا:   ${B}./start.sh${N}   سپس:
   • کالبد مدرن  → http://localhost:8080   (مدیر 0000000001 / 123456)

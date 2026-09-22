@@ -11,6 +11,11 @@
 #    bash deploy/import-sama.sh /path/to/information-afagh --steps pre,terms,majors,students,grades,codemap
 #    bash deploy/import-sama.sh /path/to/information-afagh --steps professors2   # فقط غنی‌سازی اساتید
 #    bash deploy/import-sama.sh /path/to/information-afagh --dry        # فقط شبیه‌سازی، بدون نوشتن
+#    bash deploy/import-sama.sh /path/to/information-afagh --no-pipeline  # بدون پایپ‌لاین پس‌ازایمپورت
+#
+#  پس از ETL، پایپ‌لاین پس‌ازایمپورت به‌صورت خودکار اجرا می‌شود
+#  (بک‌فیل ثبت‌نام‌ها + کدهای دروس/آیین‌نامه + اصلاح SHAMS + موتور نمرات —
+#  همه idempotent؛ ریشه در afagh-next/scripts/post-import-pipeline.mjs).
 #
 #  ترتیب اجراْ داخلِ کانتینرِ afagh-migrator (همان ایمیجی که اسکیما و
 #  RLS را ساخته) روی شبکهٔ afagh_default انجام می‌شود؛ نیازی به نصب
@@ -35,10 +40,12 @@ SOURCE_DIR="$(cd "$SOURCE_DIR" && pwd)"
 shift || true
 STEPS="pre,terms,majors,courses,students,grades,codemap"
 DRY=""
+NO_PIPELINE=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --steps) STEPS="${2}"; shift 2 ;;
     --dry)   DRY="--dry"; shift ;;
+    --no-pipeline) NO_PIPELINE="1"; shift ;;
     *) echo "آگومان ناشناخته: $1" >&2; exit 1 ;;
   esac
 done
@@ -88,6 +95,7 @@ fi
 echo "═ انتقال دادهٔ سما → آفاق ═"
 echo "  پوشهٔ داده: $SOURCE_DIR"
 echo "  مراحل:      $STEPS ${DRY:+[DRY-RUN]}"
+echo "  پایپ‌لاین:  ${NO_PIPELINE:+غیرفعال (--no-pipeline)}${NO_PIPELINE:-خودکار پس از ETL}"
 echo "  پستگرس:     $PG_CONTAINER روی $NETWORK (هاست $PG_HOST)"
 echo ""
 
@@ -128,6 +136,26 @@ if [ -f "$SOURCE_DIR/اساتید2.txt" ]; then
     -e DATABASE_URL="postgres://afagh:${PGPW}@${PG_HOST}:5432/afagh_db" \
     "$IMAGE" \
     node scripts/import-professors2.mjs --dir /data ${DRY} || echo "⚠ غنی‌سازی اساتید ناقص بود — لاگ بالا را ببینید"
+fi
+
+# ── پایپ‌لاین پس‌ازایمپورت (خودکار؛ idempotent) ──
+# در حالت --dry هم با --dry اجرا می‌شود تا شبیه‌سازی کامل باشد؛
+# با --no-pipeline یا حالت professors2 رد می‌شود.
+if [ -z "$NO_PIPELINE" ] && [ "$STEPS" != "professors2" ]; then
+  echo ""
+  echo "── پایپ‌لاین پس‌ازایمپورت (بک‌فیل + کدها + موتور نمرات) ──"
+  docker run --rm \
+    --network "$NETWORK" \
+    -v "$ROOT/afagh-next/scripts:/app/scripts:ro" \
+    -e DATABASE_URL="postgres://afagh:${PGPW}@${PG_HOST}:5432/afagh_db" \
+    "$IMAGE" \
+    node scripts/post-import-pipeline.mjs ${DRY} || {
+      echo "⚠ پایپ‌لاین پس‌ازایمپورت ناقص بود — لاگ بالا را ببینید؛ دستی:" >&2
+      echo "  node afagh-next/scripts/post-import-pipeline.mjs ${DRY}" >&2
+    }
+elif [ "$STEPS" = "professors2" ]; then
+  echo ""
+  echo "(حالت professors2: پایپ‌لاین پس‌ازایمپورت اجرا نشد — فقط غنی‌سازی اساتید)"
 fi
 
 echo ""
