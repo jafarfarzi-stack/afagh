@@ -4,8 +4,8 @@ import { groupTranscript } from '../src/app/admin/students/transcript-utils.js';
 import { termChronologicalValue } from '../src/lib/term-chronology.js';
 
 const { Pool } = pg;
-const pool = new Pool({ 
-  connectionString: 'postgres://afagh:afagh@localhost:5432/afagh_db',
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgres://afagh:afagh@localhost:5432/afagh_db',
   max: 10,
 });
 

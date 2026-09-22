@@ -1,6 +1,6 @@
 import pg from 'pg';
 const { Pool } = pg;
-const pool = new Pool({ connectionString: 'postgres://afagh:afagh@localhost:5432/afagh_db' });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL || 'postgres://afagh:afagh@localhost:5432/afagh_db' });
 
 const DROP_LIST = ['4','5','6','7','8','9','14','15','20','28','29','200','201','300','931','941','951','-91','-1','-3','-4','-5','-6','55','52'];
 

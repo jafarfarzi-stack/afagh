@@ -286,26 +286,31 @@ function regConfig(which) {
   if (which === '1394MS') return { ...base,
     regular_term_rules: { min_units: 8, max_units: 14, probation_max_units: 10, honors_min_gpa: 17.0, honors_max_units: 16 },
     probation_and_tenure: { probation_gpa_threshold: 14.0, max_consecutive_probations: 2, max_total_probations: 2, max_study_semesters: 4 },
-    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 12.0, retakeMinGrade: 12, regulationLabel: 'آیین‌نامه ۱۳۹۴ ارشد' } };
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', failed_sama_status_code: '941', default_passing_grade: 12.0, retakeMinGrade: 12, regulationLabel: 'آیین‌نامه ۱۳۹۴ ارشد' } };
   if (which === '1394PHD') return { ...base, graduating_term_rules: { can_take_with_probation: false, max_units: 12, auto_corequisite_allowed: false },
     regular_term_rules: { min_units: 6, max_units: 12, probation_max_units: 8, honors_min_gpa: 17.0, honors_max_units: 12 },
     probation_and_tenure: { probation_gpa_threshold: 16.0, max_consecutive_probations: 2, max_total_probations: 2, max_study_semesters: 8 },
-    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 14.0, retakeMinGrade: 14, regulationLabel: 'آیین‌نامه ۱۳۹۴ دکتری' } };
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', failed_sama_status_code: '941', default_passing_grade: 14.0, retakeMinGrade: 14, regulationLabel: 'آیین‌نامه ۱۳۹۴ دکتری' } };
   if (which === 'PRE1391') return { ...base,
     regular_term_rules: { min_units: 12, max_units: 20, probation_max_units: 14, honors_min_gpa: 17.0, honors_max_units: 24 },
     probation_and_tenure: { probation_gpa_threshold: 12.0, max_consecutive_probations: 3, max_total_probations: 3, max_study_semesters: 10 },
-    grading_and_gpa: { failed_course_gpa_policy: 'KEEP_ALWAYS', default_passing_grade: 10.0, regulationLabel: 'آیین‌نامه ماقبل ۱۳۹۱' } };
+    grading_and_gpa: { failed_course_gpa_policy: 'KEEP_ALWAYS', failed_sama_status_code: '2', default_passing_grade: 10.0, regulationLabel: 'آیین‌نامه ماقبل ۱۳۹۱' } };
   if (which === '1391') return { ...base,
     levels: regLevels(14, 2, 3, 5, 10),
     regular_term_rules: { min_units: 14, max_units: 20, probation_max_units: 14, honors_min_gpa: 17.0, honors_max_units: 24 },
     probation_and_tenure: { probation_gpa_threshold: 12.0, max_consecutive_probations: 3, max_total_probations: 3, max_study_semesters: 10 },
-    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED_1391', default_passing_grade: 10.0, retakeMinGrade: 14, regulationLabel: 'آیین‌نامه ۱۳۹۱' } };
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED_1391', failed_sama_status_code: '-91', default_passing_grade: 10.0, retakeMinGrade: 14, regulationLabel: 'آیین‌نامه ۱۳۹۱' } };
+  if (which === '1402') return { ...base,
+    levels: regLevels(12, 2, 3, 4, 8),
+    regular_term_rules: { min_units: 12, max_units: 20, probation_max_units: 14, honors_min_gpa: 17.0, honors_max_units: 24 },
+    probation_and_tenure: { probation_gpa_threshold: 12.0, max_consecutive_probations: 3, max_total_probations: 3, max_study_semesters: 8 },
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', failed_sama_status_code: '931', default_passing_grade: 10.0, retakeMinGrade: 10, regulationLabel: 'آیین‌نامه ۱۴۰۲' } };
   // 1393 یا پیش‌فرض
   return { ...base,
     levels: regLevels(12, 2, 3, 4, 8),
     regular_term_rules: { min_units: 12, max_units: 20, probation_max_units: 14, honors_min_gpa: 17.0, honors_max_units: 24 },
     probation_and_tenure: { probation_gpa_threshold: 12.0, max_consecutive_probations: 3, max_total_probations: 3, max_study_semesters: 8 },
-    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 10.0, retakeMinGrade: 10, regulationLabel: 'آیین‌نامه ۱۳۹۳' } };
+    grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', failed_sama_status_code: '931', default_passing_grade: 10.0, retakeMinGrade: 10, regulationLabel: 'آیین‌نامه ۱۳۹۳' } };
 }
 // فقط ردیف‌های مدیریتی ETL بازنویسی می‌شوند (خالی یا تگ SAMA-ETL) — دستی‌ها محفوظ
 function shouldRefreshRegulation(rulesConfig) {
