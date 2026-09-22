@@ -85,6 +85,8 @@ async function main() {
   const terms = new Map((await q(`SELECT id, "termCode", "startDate", "universityId" FROM academic_terms`)).map(r => [`${r.universityId}|${r.termCode}`, r.id]));
   const courses = new Map((await q(`SELECT id, code, "universityId" FROM courses`)).map(r => [`${r.universityId}|${r.code}`, r.id]));
   const termStart = new Map((await q(`SELECT id, "startDate" FROM academic_terms`)).map(r => [r.id, r.startDate]));
+  const offerings = new Map((await q(`SELECT id, "termId", "courseId", "groupNumber" FROM course_offerings`)).map(r => [`${r.termId}|${r.courseId}|${r.groupNumber}`, r.id]));
+  const existingEnrollments = new Set((await q(`SELECT "studentId", "offeringId" FROM enrollments`)).map(r => `${r.studentId}|${r.offeringId}`));
 
   const stats = { total: rows.length, ok: 0, noUniversity: 0, noStudent: 0, noTerm: 0, courseCreated: 0, offeringCreated: 0, enrollCreated: 0, enrollSkipped: 0, errors: [] };
 
@@ -109,27 +111,23 @@ async function main() {
     if (!cid) { stats.errors.push(`درس ${r.courseCode} ندارد`); continue; }
 
     const group = groupOf(r.raw, 1);
-    let off = await q(
-      `SELECT id FROM course_offerings WHERE "termId"=$1 AND "courseId"=$2 AND "groupNumber"=$3 LIMIT 1`,
-      [tid, cid, group],
-    );
-    let offId = off.length ? off[0].id : null;
+    let offId = offerings.get(`${tid}|${cid}|${group}`);
     if (!offId && !DRY) {
       const ins = await q(
         `INSERT INTO course_offerings ("termId","courseId","groupNumber",capacity,"enrolledCount","offeringType","isActive","universityId")
          VALUES ($1,$2,$3,999,0,'TRANSFER',1,$4) RETURNING id`,
         [tid, cid, group, uid],
       );
-      if (ins.length) { stats.offeringCreated++; offId = ins[0].id; }
+      if (ins.length) {
+        stats.offeringCreated++;
+        offId = ins[0].id;
+        offerings.set(`${tid}|${cid}|${group}`, offId);
+      }
       else { stats.errors.push(`ارائه برای ${r.courseCode}/${r.termCode} ساخته نشد`); continue; }
     }
     if (!offId) { stats.errors.push(`ارائه برای ${r.courseCode}/${r.termCode} نیست`); continue; }
 
-    const has = await q(
-      `SELECT id FROM enrollments WHERE "studentId"=$1 AND "offeringId"=$2 LIMIT 1`,
-      [sid, offId],
-    );
-    if (has.length) { stats.enrollSkipped++; continue; }
+    if (existingEnrollments.has(`${sid}|${offId}`)) { stats.enrollSkipped++; continue; }
     if (DRY) { stats.ok++; continue; }
 
     const rawMs = markStatOf(r.raw);
@@ -143,6 +141,7 @@ async function main() {
     );
     if (ins.length) {
       stats.ok++; stats.enrollCreated++;
+      existingEnrollments.add(`${sid}|${offId}`);
       await q(`UPDATE legacy_grades SET "compareStatus"='SAME', "compareNote"='بازسازی خودکار', "appliedAt"=now() WHERE id=$1`, [r.id]);
     } else {
       stats.enrollSkipped++;
