@@ -545,7 +545,13 @@ async function phaseMajors(file) {
     const title = normTxt(cols[1]);
     if (!code || code === '0' || !title || title === 'نامشخص') { stats.invalid++; continue; }
     stats.total++;
-    const degId = await ensureDegree((cols[2] || '').trim() || '0');
+    // شمس: مقطع فایل قابل اعتماد نیست — از روی کد رشته بازنویسی می‌شود (جایگزین fix-shams-degrees)
+    let maghtaCode = (cols[2] || '').trim() || '0';
+    if (SOURCE === 'SHAMS') {
+      if (['1161', '1162', '1261', '1221', '1171', '1181'].includes(code)) maghtaCode = '2';
+      else if (code === '1163') maghtaCode = '1';
+    }
+    const degId = await ensureDegree(maghtaCode);
     const facId = await ensureFaculty((cols[3] || '').trim());
     const facCode = (cols[3] || '').trim() || '0';
     const groupA = (cols[4] || '').trim();
@@ -703,8 +709,13 @@ async function phaseStudents(files, lookups) {
       isAlive: (['6', '20'].includes((c[4] || '').trim())) ? 0 : 1,
     });
     // students job
-    const maghta = (c[7] || '').trim() || '0';
     const reshte = (c[8] || '').trim();
+    let maghta = (c[7] || '').trim() || '0';
+    // شمس: مقطع فایل قابل اعتماد نیست — از روی کد رشته بازنویسی می‌شود (جایگزین fix-shams-degrees)
+    if (SOURCE === 'SHAMS') {
+      if (['1161', '1162', '1261', '1221', '1171', '1181'].includes(reshte)) maghta = '2';
+      else if (reshte === '1163') maghta = '1';
+    }
     const status = (c[4] || '').trim();
     const regKind = (c[88] || '').trim() || '0';
     const tc = (c[5] || '').trim();
@@ -908,7 +919,7 @@ async function phaseGrades(files) {
       if (legacyBatch.length >= 1000) await flushLegacy();
     } else stats.legacyDup++;
     if (g.enroll) {
-      enrollJobs.push({ stno, term, course, group: /^\d+$/.test((cols[4] || '').trim()) ? Number((cols[4] || '').trim()) : 1, val: g.gradeValue, status: g.gradeStatus });
+      enrollJobs.push({ stno, term, course, group: /^\d+$/.test((cols[4] || '').trim()) ? Number((cols[4] || '').trim()) : 1, val: g.gradeValue, status: g.gradeStatus, ms });
     } else stats.enrollSkip++;
     if (n % 100000 === 0) console.log(`  grades… ${n}`);
     if (LIMIT && n >= LIMIT) break;
@@ -921,8 +932,8 @@ async function phaseGrades(files) {
   for (let i = 0; i < missingCourses.length; i += 500) {
     const ch = missingCourses.slice(i, i + 500);
     const vals = [];
-    const ph = ch.map((c, j) => { vals.push(c, `درس مهاجرتی ${c}`, universityId); return `($${j * 3 + 1},$${j * 3 + 2},0,0,0,$${j * 3 + 3})`; }).join(',');
-    await pool.query(`INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units, "universityId")
+    const ph = ch.map((c, j) => { vals.push(c, `درس مهاجرتی ${c}`, universityId); return `($${j * 3 + 1},$${j * 3 + 2},0,0,0,'1','2',$${j * 3 + 3})`; }).join(',');
+    await pool.query(`INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units, "defaultAcceptMarkState", "defaultRejectMarkState", "universityId")
       VALUES ${ph} ON CONFLICT ("universityId",code) DO NOTHING`, vals);
   }
   for (const r of await q(`SELECT id, code FROM courses WHERE "universityId" = $1`, [universityId])) coursesByCode.set(r.code, r.id);
@@ -970,21 +981,36 @@ async function phaseGrades(files) {
       if (!cid) { stats.noCourse = (stats.noCourse || 0) + 1; continue; }
       const offId = offMap.get(`${t.id}|${cid}|${j.group}`);
       if (!offId) continue;
-      rows.push({ s: s.id, o: offId, v: j.val, gs: j.status, at: t.startDate || new Date() });
+      // وضعیت ثبت‌نام مثل بک‌فیل: دروس حذفی → DROPPED (جایگزین backfill-enrollments برای ایمپورت تازه)
+      const dropped = j.status === 'DROPPED' || DROP_MS.has(String(j.ms ?? ''));
+      const samaMs = (j.ms ?? '').trim() || null;
+      rows.push({ s: s.id, o: offId, v: j.val, gs: j.status, st: dropped ? 'DROPPED' : 'REGISTERED', ms: samaMs, at: t.startDate || new Date() });
     }
     if (!rows.length) continue;
     const ph = rows.map((r, k) => {
-      const o = k * 7;
-      vals.push(r.s, r.o, r.v, r.gs, r.v !== null ? 1 : 0, r.at, universityId);
-      return `($${o + 1},$${o + 2},'REGISTERED',$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7})`;
+      const o = k * 10;
+      vals.push(r.s, r.o, r.st, r.v, r.gs, r.v !== null ? 1 : 0, r.at, r.ms, r.ms, universityId);
+      return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7},$${o + 8},$${o + 9},$${o + 10})`;
     }).join(',');
-    const res = await pool.query(`INSERT INTO enrollments ("studentId","offeringId",status,"gradeValue","gradeStatus","hasEvaluated","registeredAt","universityId")
+    const res = await pool.query(`INSERT INTO enrollments ("studentId","offeringId",status,"gradeValue","gradeStatus","hasEvaluated","registeredAt","samaGradeStatusCode","originalSamaCode","universityId")
       VALUES ${ph} ON CONFLICT ("studentId","offeringId") DO NOTHING`, vals);
     stats.enrollIns += res.rowCount;
     done += ch.length;
     if ((i / 1000) % 50 === 0) console.log(`  enrollments… ${done}/${enrollJobs.length}`);
   }
   console.log(`ثبت‌نام‌ها: ins=${stats.enrollIns} noStudent=${stats.noStudent}`);
+  // علامت‌گذاری ردیف‌های legacy که ثبت‌نام گرفتند (جایگزین backfill-enrollments برای ایمپورت تازه)
+  const lg = await pool.query(`
+    UPDATE legacy_grades lg SET "compareStatus" = 'SAME', "compareNote" = 'ایمپورت مستقیم', "appliedAt" = now()
+    FROM students s, academic_terms t, courses c, course_offerings co, enrollments e
+    WHERE lg."sourceCode" = $1 AND s."studentCode" = lg."studentCode" AND s."universityId" = $2
+      AND t."termCode" = lg."termCode" AND t."universityId" = $2
+      AND c.code = lg."courseCode" AND c."universityId" = $2
+      AND co."termId" = t.id AND co."courseId" = c.id
+      AND co."groupNumber" = CASE WHEN (lg.raw::json->>'group') ~ '^\\d+$' THEN (lg.raw::json->>'group')::int ELSE 1 END
+      AND e."studentId" = s.id AND e."offeringId" = co.id
+      AND (lg."compareStatus" IS NULL OR lg."compareStatus" <> 'SAME')`, [SOURCE, universityId]);
+  console.log(`legacy علامت‌گذاری شد: ${lg.rowCount}`);
   await logRun('enrollment', 'grades (SAMA)', stats);
 }
 
