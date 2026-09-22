@@ -12,8 +12,15 @@ async function main() {
       return;
     }
     const uid = uni.id;
-    const sama2 = (await client.query(`SELECT id FROM degree_level_configs WHERE code = 'SAMA-2'`)).rows[0].id;
-    const sama1 = (await client.query(`SELECT id FROM degree_level_configs WHERE code = 'SAMA-1'`)).rows[0].id;
+    const r2 = (await client.query(`SELECT id FROM degree_level_configs WHERE code = 'SAMA-2'`)).rows[0];
+    const r1 = (await client.query(`SELECT id FROM degree_level_configs WHERE code = 'SAMA-1'`)).rows[0];
+    if (!r1 || !r2) {
+      console.log('SAMA-1 / SAMA-2 degree configs not found yet — skipped');
+      await client.query('COMMIT');
+      return;
+    }
+    const sama2 = r2.id;
+    const sama1 = r1.id;
 
     const m1 = await client.query(`
       UPDATE majors SET "degreeLevelId" = $1
