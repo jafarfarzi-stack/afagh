@@ -88,7 +88,7 @@ ALTER TABLE "request_parallel_checkpoints" ENABLE ROW LEVEL SECURITY;
 --    app role هرگز نباید این‌ها را ببیند (کلیدهای cron، اعتبارنامه‌ها، لاگ‌ها،
 --    دادهٔ خام پذیرش، پاسخ‌های ارزشیابی بدون کلید کاربر).
 REVOKE SELECT ON "system_settings", "integrations_config", "audit_logs", "api_audit_logs",
-             "admissions_staging", "sanjesh_mappings", "evaluation_responses",
+             "admissions_staging", "person_source_identities", "sanjesh_mappings", "evaluation_responses",
              "verification_otps", "step_api_actions", "document_signatures",
              "curriculum_approvals"
   FROM afagh_app;
@@ -97,6 +97,7 @@ ALTER TABLE "integrations_config" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "audit_logs" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "api_audit_logs" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "admissions_staging" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "person_source_identities" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "sanjesh_mappings" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "evaluation_responses" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "verification_otps" ENABLE ROW LEVEL SECURITY;

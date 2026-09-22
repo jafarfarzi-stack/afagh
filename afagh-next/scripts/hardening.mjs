@@ -64,7 +64,7 @@ try {
     'professor_availability_notes','professor_availabilities',
     'grade_change_log',
     'system_settings','integrations_config','audit_logs','api_audit_logs','admissions_staging',
-    'sanjesh_mappings','evaluation_responses','verification_otps','step_api_actions','document_signatures', // ۱۰ deny-all
+    'person_source_identities','sanjesh_mappings','evaluation_responses','verification_otps','step_api_actions','document_signatures', // ۱۱ deny-all
   ];
   const checks = await client.query(
     `SELECT c.relname AS table_name, c.relrowsecurity AS rls_enabled
