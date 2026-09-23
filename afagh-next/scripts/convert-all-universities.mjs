@@ -91,9 +91,9 @@ async function main() {
   }
 
   if (!SKIP_PIPELINE) {
-    const a = ['scripts/post-import-pipeline.mjs'];
+    const a = ['scripts/post-import-pipeline.mjs', '--skip-backfill', '--skip-courses', '--skip-regs', '--skip-shams'];
     if (DRY) a.push('--dry');
-    await run('پایپ‌لاین پس‌ازایمپورت (هر ۵ دانشگاه)', 'node', a, { DATABASE_URL: DB });
+    await run('پایپ‌لاین پس‌ازایمپورت (فقط موتور نمرات)', 'node', a, { DATABASE_URL: DB });
   } else {
     console.log('(پایپ‌لاین رد شد)');
   }
