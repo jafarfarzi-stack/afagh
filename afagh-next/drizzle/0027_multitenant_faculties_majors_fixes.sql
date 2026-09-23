@@ -21,6 +21,8 @@ UPDATE "degree_level_configs" SET "universityId" = (SELECT id FROM "universities
 --> statement-breakpoint
 ALTER TABLE "faculties" DROP CONSTRAINT IF EXISTS "faculties_facultycode_unique";
 --> statement-breakpoint
+ALTER TABLE "faculties" DROP CONSTRAINT IF EXISTS "faculties_facultyCode_unique";
+--> statement-breakpoint
 DROP INDEX IF EXISTS "faculties_facultyCode_uq";
 --> statement-breakpoint
 DO $$ BEGIN
@@ -38,6 +40,8 @@ END $$;
 
 --> statement-breakpoint
 ALTER TABLE "majors" DROP CONSTRAINT IF EXISTS "majors_majorcode_unique";
+--> statement-breakpoint
+ALTER TABLE "majors" DROP CONSTRAINT IF EXISTS "majors_majorCode_unique";
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "majors" ADD CONSTRAINT "uq_majors_uni_code" UNIQUE ("universityId","majorCode");
