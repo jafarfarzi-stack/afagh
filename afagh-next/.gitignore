@@ -6,3 +6,10 @@ node_modules/
 AGENTS.md
 CLAUDE.md
 .afagh-admin-credential
+
+# لاگ‌ها و گزارش‌های موقت ETL/ممیزی — برخی حاوی کد دانشجویی‌اند
+*.err
+convert-live*.log
+grade-engine-changes-*.csv
+grade-engine-run-audit-report.json
+backfill-afagh-live.err
