@@ -168,7 +168,7 @@ async function detectFiles(dir) {
       return b.size - a.size;
     });
     found.students = cands.students[0].p;
-    if (cands.students[1]) found.studentsSubsetSkipped = cands.students[1].p;
+    if (cands.students[1]) { found.studentsSubsetSkipped = cands.students[1].p; found.supp2 = cands.students[1].p; }
   }
   return found;
 }
@@ -613,11 +613,11 @@ async function phaseStudents(files, lookups) {
     // اگر اسم یکسان بود، رکورد تکراری نادیده گرفته می‌شود (همان شخص)
   }
   console.log(`فایل اصلی: ${stats.total} ردیف معتبر (${stats.badCode} کد نامعتبر، ${stats.invalid} بدون نام${stats.dupStnoSameFile ? `، ${stats.dupStnoSameFile} شماره تکراری` : ''})`);
-  // ۱-ب) فایل دوم دانشجویی (students1.txt) → مرج: stno جدید اضافه، فیلد خالی با مقدار پر می‌شود
-  // کلید هر دو فایل شماره دانشجویی (stno) است — نه کدملی
-  if (files.studentsSubsetSkipped) {
+  // ۱-ب) فایل دانشجویی دوم/سوم (students1.txt + student2.txt) → جوین مساوی: هر stno جدید اضافه، فیلد خالی پر می‌شود
+  // کلید هر فایل شماره دانشجویی (stno) است — نه کدملی؛ هر ۳ فایل به‌صورت مساوی جوین می‌شوند
+  if (files.supp2 || files.studentsSubsetSkipped) {
     let n2 = 0, added2 = 0, filled2 = 0;
-    for await (const { cols } of tsvRows(files.studentsSubsetSkipped)) {
+    for await (const { cols } of tsvRows(files.supp2 || files.studentsSubsetSkipped)) {
       const stno = (cols[0] || '').trim();
       if (!/^\d{7,14}$/.test(stno)) continue;
       const name = normTxt(cols[2]);
