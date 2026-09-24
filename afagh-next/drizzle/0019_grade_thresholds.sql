@@ -14,6 +14,17 @@ CREATE TABLE IF NOT EXISTS "grade_thresholds" (
   "sortOrder" integer NOT NULL DEFAULT 0
 );
 --> statement-breakpoint
+-- پیش‌نیاز: سطرهای مقطع پایه (id=1 کارشناسی، id=2 کارشناسی‌ارشد) که grade_thresholds
+-- با ارجاع سخت‌کد به آن‌ها وابسته است. در نصب تازه، seed-base (گام بعد از مهاجرت‌ها)
+-- هنوز اجرا نشده و این جدول خالی است؛ این‌جا فقط همان دو id لازم را می‌سازیم.
+-- seed-base بعداً با ON CONFLICT (code) DO UPDATE روی همین ردیف‌ها آپدیت می‌کند،
+-- پس idها (که با ترتیب درجِ seed-base یکی‌اند: BS سپس MS) دست‌نخورده می‌مانند.
+INSERT INTO "degree_level_configs" (title, code, "defaultPassingGrade", "conditionalGpaThreshold", "maxUnitsPerTerm")
+VALUES
+  ('کارشناسی پیوسته', 'BS', '10.00', '12.00', 20),
+  ('کارشناسی ارشد', 'MS', '12.00', '14.00', 12)
+ON CONFLICT (code) DO NOTHING;
+--> statement-breakpoint
 INSERT INTO "grade_thresholds" ("degreeLevelId", "label", "minValue", "maxValue", "passed", "sortOrder") VALUES
   (1, 'عالی',     18.00, 20.00, 1, 1),
   (1, 'خیلی خوب', 16.00, 17.99, 1, 2),

@@ -498,7 +498,13 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 --> statement-breakpoint
-UPDATE "tuition_coefficients" tc SET "universityId" = at."universityId" FROM "academic_terms" at WHERE (tc."termId" = at."id" OR tc."term_id" = at."id") AND tc."universityId" IS NULL;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tuition_coefficients' AND column_name='term_id') THEN
+    UPDATE "tuition_coefficients" tc SET "universityId" = at."universityId" FROM "academic_terms" at WHERE (tc."termId" = at."id" OR tc."term_id" = at."id") AND tc."universityId" IS NULL;
+  ELSE
+    UPDATE "tuition_coefficients" tc SET "universityId" = at."universityId" FROM "academic_terms" at WHERE tc."termId" = at."id" AND tc."universityId" IS NULL;
+  END IF;
+END $$;
 --> statement-breakpoint
 UPDATE "tuition_coefficients" SET "universityId" = (SELECT id FROM "universities" WHERE "code" = 'AFAGH') WHERE "universityId" IS NULL;
 
