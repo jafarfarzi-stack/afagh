@@ -32,8 +32,8 @@ ENV NODE_ENV=production
 #    پس کلاینت ۱۶ را از مخزن رسمی PGDG نصب می‌کنیم. اگر شبکه در دسترس نبود،
 #    به کلاینت توزیع برمی‌گردیم تا بیلد نشکند؛ backup-db خودش تشخیص می‌دهد.
 RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates curl gnupg; \
+    apt-get update || true; \
+    apt-get install -y --no-install-recommends ca-certificates curl gnupg || true; \
     ( install -d /usr/share/postgresql-common/pgdg \
       && curl -fsSL --retry 3 --max-time 30 \
            https://www.postgresql.org/media/keys/ACCC4CF8.asc \
@@ -42,7 +42,7 @@ RUN set -eux; \
            > /etc/apt/sources.list.d/pgdg.list \
       && apt-get update \
       && apt-get install -y --no-install-recommends postgresql-client-16 ) \
-    || apt-get install -y --no-install-recommends postgresql-client; \
+    || apt-get install -y --no-install-recommends postgresql-client || true; \
     rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
