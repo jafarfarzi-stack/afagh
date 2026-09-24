@@ -336,7 +336,14 @@ try {
     const coop = null; // TIMESTAT column not present in current file (80 cols)
     const active = mapActive(c[6]);
     const payeh = /^\d+$/.test(clean(c[28])) ? clean(c[28]) : null;
-    const rank = (payeh && PAYEH_RANK[payeh]) || null;
+    // پایه (عددی) و مرتبه (متنی) جدا هستند — مرتبه از PositionTitle (c[44]) می‌آید نه از پایه
+    let rank = null;
+    const rawRank = clean(c[44]);
+    if (PAYEH_RANK[rawRank]) rank = PAYEH_RANK[rawRank];
+    else if (rawRank && !/^(false|true|0)$/i.test(rawRank)) rank = norm(rawRank).slice(0, 50) || null;
+    if (!rank) rank = (payeh && PAYEH_RANK[payeh]) || null; // fallback قدیمی اگر PositionTitle خالی بود
+    // اگر مدرک دکتری است و هنوز مربی مانده، حداقل استادیار
+    if (rank === 'مربی' && degree && /دکتری/.test(degree)) rank = 'استادیار';
     const marital = mapMarital(c[25]);
     const ncRaw = clean(c[31]);
     const idno = clean(c[11]);
