@@ -183,21 +183,12 @@ BEGIN
   END IF;
 END $$;
 
--- ── قیدهای یکتایی تک‌ستونی (برای seed-base.mjs که ON CONFLICT (column) دارد) ──
---  0027 آنها را حذف کرد و constraint مرکّب جایگزین کرد؛ seed-base نیاز به
---  یکتایی تک‌ستونی دارد تا ON CONFLICT (column) کار کند (و ambiguity با constraint
---  مرکّب را از بین ببرد).
+-- ── قید یکتایی system_settings.key (برای seed-base.mjs که ON CONFLICT (key) دارد) ──
+--  بقیهٔ یکتایی‌های تک‌ستونی (faculties/departments/majors) عمداً بازگردانده نمی‌شوند
+--  چون 0027 آنها را به UNIQUE(universityId, code) تبدیل کرد تا کد رشته/گروه
+--  بین دانشگاه‌های مختلف تکراری باشد (مثلاً یک کد در AFAGH و ZARINE).
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'faculties_facultyCode_unique') THEN
-    ALTER TABLE faculties ADD CONSTRAINT faculties_facultyCode_unique UNIQUE ("facultyCode");
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'departments_departmentCode_unique') THEN
-    ALTER TABLE departments ADD CONSTRAINT departments_departmentCode_unique UNIQUE ("departmentCode");
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'majors_majorCode_unique') THEN
-    ALTER TABLE majors ADD CONSTRAINT majors_majorCode_unique UNIQUE ("majorCode");
-  END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'system_settings_key_unique') THEN
     ALTER TABLE system_settings ADD CONSTRAINT system_settings_key_unique UNIQUE ("key");
   END IF;
