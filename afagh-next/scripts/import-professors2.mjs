@@ -11,6 +11,8 @@
  *  - isActive(6): 1=True→فعال، 2/False/0→غیرفعال
  *  - RESHTE(9): کد رشته (→ رشته ها.txt) یا نام مستقیم → fieldMain
  *  - CourseStudyTitle(49) → fieldOfStudy ؛ PositionTitle(44) → staffType
+ *  - مرتبه علمي واقعی از «اساتید2.txt» (ستون ۱۲، join روی Code استاد) → academicRank؛
+ *    دکترِ باقی‌مانده در «مربی» → استادیار؛ Payeh(28) → academicBase فقط عددی (پایه جدا از مرتبه)
  *  - NationalCode(31) وگرنه IDNO(11) اگر ۱۰رقمی
  *  - سطرهای تکه‌شدهٔ باینری عکس (ستون pic) با شرط cols>=60 حذف می‌شوند؛
  *    تکراری‌های Code با غنی‌ترین سطر ادغام می‌شود (dedupe).
@@ -152,6 +154,7 @@ function mapMarital(s) {
   if (t === '0') return { code: 0, title: 'مجرد' };
   return { code: /^\d+$/.test(t) ? Number(t) : null, title: null };
 }
+// fallback فقط وقتی «اساتید2.txt» برای آن کد مرتبه‌ای ندارد
 const PAYEH_RANK = { '1': 'مربی', '2': 'استادیار', '3': 'دانشیار', '4': 'استاد', '5': 'استاد ممتاز' };
 // TimeStat سما = طريقه همکاری (از تطبیق TimeStat×طريقه‌همکاری اساتید2 یاد شده)
 const TIMESTAT_COOP = { '1': 'حق التدریس', '2': 'تمام وقت', '3': 'مدعو', '6': 'عضو هیات علمی مدعو' };
@@ -195,6 +198,19 @@ const deptByCode = new Map();   // departmentCode -> id
 const facultyByCode = new Map();// facultyCode -> id
 const degreeByCode = new Map(); // مدرک استاد Code -> Title
 const reshteByCode = new Map(); // رشته ها Code -> Title
+const id2RankByCode = new Map(); // اساتید2.txt Code -> مرتبه علمي (ستون ۱۲)
+async function loadRank2() {
+  const p = findInDir(DIR, b => /اساتید2/.test(b));
+  if (!p) { console.log('مرجع «اساتید2.txt» یافت نشد — مرتبه بدون داده'); return; }
+  for await (const { cols } of tsvRows(p)) {
+    const code = clean(cols[0]);
+    if (!/^\d+$/.test(code)) continue;
+    const r = norm(cols[12] || '');
+    if (!r || r === 'نامشخص') continue;
+    if (!id2RankByCode.has(code)) id2RankByCode.set(code, r.slice(0, 50));
+  }
+  console.log(`مرجع مرتبه (اساتید2.txt): ${id2RankByCode.size} کد (${p.split(/[\\/]/).pop()})`);
+}
 async function loadCaches() {
   await ensureUniversity();
   for (const r of await q(`SELECT id, name, "facultyCode" FROM faculties WHERE "universityId" = $1`, [universityId])) {
@@ -291,6 +307,7 @@ try {
     await loadCaches();
     await loadRefFile('degree');
     await loadRefFile('reshte');
+    await loadRank2();
   }
   let profRoleId = null;
   if (!DRY) {
@@ -336,12 +353,11 @@ try {
     const coop = null; // TIMESTAT column not present in current file (80 cols)
     const active = mapActive(c[6]);
     const payeh = /^\d+$/.test(clean(c[28])) ? clean(c[28]) : null;
-    // پایه (عددی) و مرتبه (متنی) جدا هستند — مرتبه از PositionTitle (c[44]) می‌آید نه از پایه
-    let rank = null;
-    const rawRank = clean(c[44]);
-    if (PAYEH_RANK[rawRank]) rank = PAYEH_RANK[rawRank];
-    else if (rawRank && !/^(false|true|0)$/i.test(rawRank)) rank = norm(rawRank).slice(0, 50) || null;
-    if (!rank) rank = (payeh && PAYEH_RANK[payeh]) || null; // fallback قدیمی اگر PositionTitle خالی بود
+    // پایه (عددی) و مرتبه (متنی) جدا هستند.
+    // مرتبه علمي واقعی از «اساتید2.txt» (ستون ۱۲) و join روی Code استاد می‌آید؛
+    // AdjectiveCode/PositionTitle «سمت» هستند نه مرتبه و دیگر در این ستون نمی‌آیند.
+    let rank = id2RankByCode.get(code) || null;
+    if (!rank && payeh) rank = PAYEH_RANK[payeh] || null; // fallback فقط وقتی فایل مرتبه برای این کد چیزی ندارد
     // اگر مدرک دکتری است و هنوز مربی مانده، حداقل استادیار
     if (rank === 'مربی' && degree && /دکتری/.test(degree)) rank = 'استادیار';
     const marital = mapMarital(c[25]);
@@ -401,7 +417,7 @@ try {
       await pool.query(`UPDATE staff SET "userId"=$2,"facultyId"=COALESCE($3,"facultyId"),"departmentId"=COALESCE($4,"departmentId"),
         "isActive"=COALESCE($5,"isActive",1),"staffType"=COALESCE($6,"staffType"),degree=COALESCE($7,degree),
         "personnelNo"=COALESCE($8,"personnelNo"),"employmentType"=COALESCE($9,"employmentType"),
-        "academicRank"=COALESCE($10,"academicRank"),"hireDate"=COALESCE($11,"hireDate"),
+        "academicRank"=$10,"hireDate"=COALESCE($11,"hireDate"),
         "fieldOfStudy"=COALESCE($12,"fieldOfStudy"),"fieldMain"=COALESCE($13,"fieldMain"),
         "maritalStatusCode"=COALESCE($14,"maritalStatusCode"),"maritalStatus"=COALESCE($15,"maritalStatus"),
         "academicBase"=COALESCE($16,"academicBase"),"bankAccountNo"=COALESCE($17,"bankAccountNo"),
