@@ -28,7 +28,7 @@
 import { Pool } from 'pg';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { norm, isFamilyParticle, hasFamilySuffix, HARDCODED, COMPOUND_PREFIX, VALID_COMPOUND_FN_PREFIXES, buildDictionary, resolveName, solve } from './lib/name-resolver.mjs';
+import { norm, isFamilyParticle, hasFamilySuffix, HARDCODED, buildDictionary, resolveName, solve } from './lib/name-resolver.mjs';
 
 // ── آرگومان‌ها ──
 const raw = process.argv.slice(2);
