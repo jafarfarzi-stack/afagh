@@ -354,7 +354,6 @@ export default async function StudentTranscriptPage() {
                   </table>
                 </div>
 
-                {/* خلاصه وضعیت آماری انتهای هر ترم */}
                 <div className="bg-slate-100 p-2 border-t border-slate-700 flex items-center justify-between font-bold text-[10px] text-slate-800 mt-auto">
                   <div className="flex gap-2">
                     <span>اخذ: <b className="font-mono">{termUnits}</b></span>
@@ -369,7 +368,6 @@ export default async function StudentTranscriptPage() {
           })}
         </div>
 
-        {/* ۴. جدول وضعیت تجمیعی کل دوره تحصیلی */}
         <div className="border-2 border-slate-800 mt-6 overflow-hidden">
           <div className="bg-slate-800 text-white px-3 py-1 font-bold text-center text-xs">
             خلاصه وضعیت تحصیلی کل دوره تا تاریخ صدور کارنامه
