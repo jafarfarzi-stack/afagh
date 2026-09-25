@@ -3,8 +3,10 @@
  * انتقال «پروندهٔ تکمیلی» دانشجو از سما به DB موجود (فقط فیلدهای خالی):
  *   خوابگاه/اتاق (SuiteName/RoomNumber)، ولی (ValiJobTitle/ValiTellNo/ValiAddress/ParentEmail)،
  *   دیپلم (FoghedipPlace/Year/Moadel + UPDiplomTypeCode خام)، پیش‌دانشگاهی (Pishd*)،
- *   کارت دانشجویی (StCardPrinted)، نظام وظیفه (NEZAM/MoafiatNumber/NezamNo)،
- *   پرونده/آرشیو (ParvandehNumber/ArchiveCode)، ایمیل/کدپستی/آدرس/گذرنامه/ملیت (users).
+ *   کارت دانشجویی (StCardPrinted)، نظام وظیفه (NEZAM→عنوان UI + MoafiatNumber/NezamNo)،
+ *   پرونده/آرشیو (ParvandehNumber/ArchiveCode)، ایمیل/کدپستی/آدرس/گذرنامه/ملیت/موبایل/تولد (users).
+ *   اسکوپ دانشگاه (--uni، پیش‌فرض 1) چون کدهای دانشجویی بین دانشگاه‌ها تکراری‌اند.
+ *   MS نام شهر است نه محل دیپلم — نگاشت نمی‌شود.
  *
  * استفاده در سرور:
  *   node scripts/fix-student-profile.mjs --dir "E:\git\information afagh"           # خشک
@@ -27,6 +29,7 @@ for (let i = 0; i < raw.length; i++) {
 const DIR = args.dir || 'E:\\git\\information afagh';
 const APPLY = args.apply === 'true';
 const LIMIT = args.limit ? Number(args.limit) : 0;
+const UNI = args.uni ? Number(args.uni) : 1; // اسکوپ دانشگاه (کدهای دانشجویی بین دانشگاه‌ها تکراری‌اند)
 const dbUrl = args.db || process.env.DATABASE_URL || 'postgres://afagh:afagh@localhost:5432/afagh_db';
 const pool = new Pool({ connectionString: dbUrl, max: 5 });
 
@@ -69,6 +72,31 @@ const cardStatusFa = (s) => {
   if (t === 'false' || t === '0') return 'چاپ نشده';
   return t || null;
 };
+// NEZAM سما (students1 col33) → عنوان‌های ثابت دراپ‌داون UI؛ بقیه کدها خالی می‌مانند
+const NEZAM_TITLE = { '4': 'معافیت دائم', '5': 'کارت پایان خدمت', '6': 'کارت پایان خدمت', '7': 'معافیت تحصیلی فعال', '8': 'معافیت دائم' };
+function jalaliToGregorian(jy, jm, jd) {
+  jy += 1595;
+  let days = -355668 + 365 * jy + ~~(jy / 33) * 8 + ~~(((jy % 33) + 3) / 4) + jd + (jm < 7 ? (jm - 1) * 31 : (jm - 7) * 30 + 186);
+  let gy = 400 * ~~(days / 146097);
+  days %= 146097;
+  if (days > 36524) { days--; gy += 100 * ~~(days / 36524); days %= 36524; if (days >= 365) days++; }
+  gy += 4 * ~~(days / 1461);
+  days %= 1461;
+  if (days > 365) { gy += ~~((days - 365) / 366); days = 365 - (days - 365); }
+  let gd = days + 1;
+  const leap = (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0;
+  const sal = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  let gm = 0;
+  for (; gm < 12 && gd > sal[gm]; gm++) gd -= sal[gm];
+  return new Date(Date.UTC(gy, gm, gd));
+}
+function faDate(s) {
+  const m = String(s || '').trim().match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (!m) return null;
+  const y = +m[1], mo = +m[2], d = +m[3];
+  if (y < 1300 || y > 1450 || mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return jalaliToGregorian(y, mo, d);
+}
 
 try {
   const want = new Map(); // stno -> {fieldName: value}
@@ -81,9 +109,11 @@ try {
         if (f === 'students1.txt') {
           if (!e.advisorCode && normTxt(cols[16])) e.advisorCode = normTxt(cols[16]).slice(0, 50);
           const nezam = normTxt(cols[33]);
-          if (nezam) e.militaryStatus = nezam.slice(0, 50);
+          if (!e.militaryStatus && NEZAM_TITLE[nezam]) e.militaryStatus = NEZAM_TITLE[nezam];
+          else if (nezam && nezam !== '0' && !NEZAM_TITLE[nezam]) e._nezamUnmapped = nezam;
           if (!e.militaryExemptionNo && normTxt(cols[52])) e.militaryExemptionNo = normTxt(cols[52]).slice(0, 50);
-          if (normTxt(cols[54]) && !e.diplomaPlace) e.diplomaPlace = normTxt(cols[54]).slice(0, 200); // MS گاهی محل اخذ دیپلم
+          // توجه: ستون MS (نام شهر مثل ارومیه) محل اخذ دیپلم نیست — نگاشت نمی‌شود
+          if (!e.birthDate && normTxt(cols[19])) { const bd = faDate(cols[19]); if (bd) e.birthDate = bd; }
           if (!e.insertDate && normTxt(cols[95])) e.insertDate = normTxt(cols[95]);
           if (!e.insertTime && normTxt(cols[96])) e.insertTime = normTxt(cols[96]);
           const tt = normTxt(cols[89]);
@@ -117,7 +147,6 @@ try {
           if (!e.studentCardStatus) e.studentCardStatus = cardStatusFa(cols[21]);
           if (!e.militaryExemptionNo && normTxt(cols[17])) e.militaryExemptionNo = normTxt(cols[17]).slice(0, 50);
           if (!e.militaryExemptionNo && normTxt(cols[74])) e.militaryExemptionNo = normTxt(cols[74]).slice(0, 50);
-          if (normTxt(cols[74]) && !e.militaryStatus) e.militaryStatus = normTxt(cols[74]).slice(0, 50);
           if (!e.archiveNo && normTxt(cols[19])) e.archiveNo = normTxt(cols[19]).slice(0, 50);
           if (!e.parvandehNo && normTxt(cols[71])) e.parvandehNo = normTxt(cols[71]).slice(0, 100);
           if (!e.mobile) {
@@ -136,21 +165,22 @@ try {
   }
   console.log(`نقشهٔ ترمیم پرونده: ${want.size} شماره دانشجویی`);
 
-  const stats = { checked: 0, noStudent: 0, filled: 0, changedUsers: 0, filledUsers: 0 };
+  const stats = { checked: 0, noStudent: 0, filled: 0, changedUsers: 0, filledUsers: 0, birthFilled: 0, nezamUnmapped: {} };
   let shown = 0;
   for (const [stno, w] of want) {
     stats.checked++;
+    if (w._nezamUnmapped) stats.nezamUnmapped[w._nezamUnmapped] = (stats.nezamUnmapped[w._nezamUnmapped] || 0) + 1;
     const rows = await pool.query(
       `SELECT s.id, u.id AS "userId",
-              u.email, u."postalCode", u.address, u."passportNumber", u.nationality, u.mobile,
+              u.email, u."postalCode", u.address, u."passportNumber", u.nationality, u.mobile, u."birthDate",
               s."advisorCode", s."documentStatus", s."scholarshipType", s."militaryStatus",
               s."militaryExemptionNo", s."studentCardStatus", s."archiveNo", s."parvandehNo",
               s."dormName", s."dormRoom", s."hasDorm", s."guardianJobTitle", s."guardianPhone",
               s."guardianAddress", s."guardianEmail", s."diplomaType", s."diplomaPlace",
               s."diplomaYear", s."diplomaGrade", s."pishdPlace", s."pishdYear", s."pishdGrade",
               s."tuitionType", s."insertDate", s."insertTime"
-       FROM students s JOIN users u ON u.id = s."userId" WHERE s."studentCode" = $1 LIMIT 1`,
-      [stno],
+       FROM students s JOIN users u ON u.id = s."userId" WHERE s."studentCode" = $1 AND s."universityId" = $2 LIMIT 1`,
+      [stno, UNI],
     );
     const r = rows.rows[0];
     if (!r) { stats.noStudent++; continue; }
@@ -162,6 +192,7 @@ try {
     for (const [k, col] of uMap) {
       if (w[k] && !r[col]) { uSets.push(`"${col}" = $${ui++}`); uVals.push(w[k]); stats.filledUsers++; }
     }
+    if (w.birthDate && !r.birthDate) { uSets.push(`"birthDate" = $${ui++}`); uVals.push(w.birthDate); stats.birthFilled++; }
     const sSets = []; const sVals = []; let si = 1;
     const sMap = [
       'advisorCode', 'documentStatus', 'scholarshipType', 'militaryStatus', 'militaryExemptionNo',
@@ -185,7 +216,7 @@ try {
     }
     if (LIMIT && stats.checked >= LIMIT) break;
   }
-  console.log(`\nخلاصه: بررسی=${stats.checked} | بدون دانشجو=${stats.noStudent} | فیلد تکمیلی دانشجو پر=${stats.filled} | فیلد هویت(users) پر=${stats.filledUsers}` + (APPLY ? ` | ✅ اعمال شد (${stats.changedUsers} کاربر)` : ' | (خشک — برای اجرا --apply بدهید)'));
+  console.log(`\nخلاصه (دانشگاه ${UNI}): بررسی=${stats.checked} | بدون دانشجو=${stats.noStudent} | فیلد تکمیلی دانشجو پر=${stats.filled} | فیلد هویت(users) پر=${stats.filledUsers} | تولد پر=${stats.birthFilled} | NEZAM بی‌نگاشت=${JSON.stringify(stats.nezamUnmapped)}` + (APPLY ? ` | ✅ اعمال شد (${stats.changedUsers} کاربر)` : ' | (خشک — برای اجرا --apply بدهید)'));
 } catch (err) {
   console.error('❌ خطا:', err?.message || err);
   process.exitCode = 1;

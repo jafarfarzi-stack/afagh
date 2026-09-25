@@ -352,6 +352,8 @@ async function processUniversity(universityId, uniName, isDryRun) {
 
 async function main() {
   const isDryRun = process.argv.includes('--dry');
+  const uniArgIdx = process.argv.indexOf('--uni');
+  const onlyUni = uniArgIdx >= 0 ? Number(process.argv[uniArgIdx + 1]) : 0;
   console.log(`=== RUNNING GRADE ENGINE LIVE FOR ALL UNIVERSITIES (DRY: ${isDryRun}) ===\n`);
 
   const unis = [
@@ -360,7 +362,7 @@ async function main() {
     { id: 3, name: 'ALLAME' },
     { id: 4, name: 'SHAMS' },
     { id: 5, name: 'NAZHAND' },
-  ];
+  ].filter(u => !onlyUni || u.id === onlyUni);
 
   const fullReport = {};
 
