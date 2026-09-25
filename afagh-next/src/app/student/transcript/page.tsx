@@ -293,8 +293,9 @@ export default async function StudentTranscriptPage() {
                           {termItem.normalized.displayYear} / {termItem.normalized.semester}
                         </span>
                       </div>
+                    </div>
 
-                  {/* جدول دروس */}
+                    {/* جدول دروس */}
                   <table className="w-full text-right text-[11px] border-collapse">
                     <thead>
                       <tr className="bg-slate-100 border-b border-slate-700 font-bold text-slate-800">
