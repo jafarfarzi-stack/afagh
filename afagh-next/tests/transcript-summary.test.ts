@@ -245,10 +245,20 @@ const fileSum = groupTranscript(lowRows.map(r => ({ ...r, termProbation: true })
 eq('فایل مشروط ولی واحد زیر حد → عادی', fileSum.terms[0].probation, false);
 // بدون حدنصاب در کانفیگ (رفتار قبلی): همان ۱۱ واحد مشروط می‌شود
 eq('بدون min_units در کانفیگ، قاعده قدیمی (فقط معدل) می‌ماند', groupTranscript(lowRows).terms[0].probation, true);
-// ردیف حذف شورا (کد ۷) در کارنامه می‌ماند ولی در واحد/معدل نیست
-const dropSum = groupTranscript([...lowRows, R({ term: '13911', code: 'D7', units: 2, g: null, st: 'PENDING', sc: '7' })], cfg12);
-eq('ردیف حذف آموزشی (۷) در جدول ترم نمایش داده می‌شود', dropSum.terms[0].rows.some(r => r.courseCode === 'D7'), true);
-eq('ردیف حذف در واحد اخذشده حساب نمی‌شود', dropSum.terms[0].taken, 11);
+// ردیف حذف شورا (کد ۷) و غیبت امتحان (کد ۵) در کارنامه می‌مانند:
+// در «اخذشده» حساب می‌شوند ولی نه در «گذرانده/موثر»، نه مردودی و نه معدل.
+const dropSum = groupTranscript([
+  ...lowRows,
+  R({ term: '13911', code: 'D7', units: 2, g: null, st: 'FINALIZED', sc: '7' }),
+  R({ term: '13911', code: 'D5', units: 1, g: null, st: 'FINALIZED', sc: '5' }),
+], cfg12);
+eq('ردیف حذف شورا (۷) در جدول ترم نمایش داده می‌شود', dropSum.terms[0].rows.some(r => r.courseCode === 'D7'), true);
+eq('ردیف غیبت امتحان (۵) در جدول ترم نمایش داده می‌شود', dropSum.terms[0].rows.some(r => r.courseCode === 'D5'), true);
+eq('اخذشده = ۱۱ (دروس) + ۲ (۷) + ۱ (۵) = ۱۴', dropSum.terms[0].taken, 14);
+eq('گذرانده/موثر بدون ۷ و ۵', dropSum.terms[0].passed, 11);
+eq('مردودی بدون ۷ و ۵', dropSum.terms[0].failed, 0);
+eq('امتیاز (مجموع نمره×واحد) بدون ۷ و ۵', dropSum.terms[0].points, 127);
+close('معدل کل بدون ۷/۵', dropSum.terms[0].gpa, 127 / 11);
 // حذف در حذف و اضافه (کد ۱-) در کارنامه نمی‌آید
 const addDropSum = groupTranscript([...lowRows, R({ term: '13911', code: 'M1', units: 3, g: null, st: 'PENDING', sc: '-1' })], cfg12);
 eq('ردیف ۱- در جدول ترم نیست', addDropSum.terms[0].rows.some(r => r.courseCode === 'M1'), false);

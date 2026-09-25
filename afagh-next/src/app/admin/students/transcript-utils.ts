@@ -84,13 +84,19 @@ export function summarizeTerm(rows: TranscriptRow[], pass = 10): { taken: number
     const g = numOrNull(r.gradeValue);
     const code = r.gradeStatusCode?.trim() || null;
     const dropped = isDroppedStatusCode(code);
+    // وضع ۷ (حذف توسط شورای آموزشی) و ۵ (غیبت در جلسه امتحان):
+    // در «اخذشده» حساب می‌شوند ولی نه در «گذرانده/موثر» و نه در معدل.
+    const takenOnly = code === '7' || code === '5';
 
     if (r.gradeStatus === 'PENDING') continue;
 
-    // دروس حذف‌شده (پزشکی، شورا، اضطراری و ...) در جدول ترم نمایش داده می‌شوند ولی در واحدهای ترم/مردودی/معدل احتساب نمی‌شوند
-    if (dropped) continue;
+    // دروس حذف‌شده (پزشکی، اضطراری و ...) در جدول ترم نمایش داده می‌شوند ولی در واحدهای ترم/مردودی/معدل احتساب نمی‌شوند؛
+    // به‌جز وضع ۷ (حذف شورا) که باید در «اخذشده» بیاید.
+    if (dropped && !takenOnly) continue;
 
     taken += u;
+    // اخذشده‌ی خالص: نه گذرانده، نه مردودی، نه معدل (نمرهٔ آن در هیچ معدلی اثر ندارد)
+    if (takenOnly) continue;
 
     const isPassed = r.gradeStatus === 'EXEMPT' ||
                      r.gradeStatus === 'PASSED_NO_GRADE' ||
@@ -193,10 +199,10 @@ export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | 
       }];
     });
   // جمع تجمیعی «کل» تا پایان هر نیمسال (معدل کل با سیاست نمره مردودی آیین‌نامه)
-  let ct = 0, cp = 0, cw = 0, cwu = 0;
+  let ct = 0, cp = 0, cf = 0, cw = 0, cwu = 0;
   for (const t of terms) {
     const s = summarizeTerm(t.rows, th.pass);
-    ct += s.taken; cp += s.passed;
+    ct += s.taken; cp += s.passed; cf += s.failed;
     for (const r of t.rows) {
       const u = numOrNull(r.units) ?? 0;
       const g = numOrNull(r.gradeValue);
@@ -205,7 +211,7 @@ export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | 
       if (passedSet && g < th.pass && passedSet.has(r.courseCode)) continue;
       cw += g * u; cwu += u;
     }
-    t.cumTaken = ct; t.cumPassed = cp; t.cumFailed = Math.max(0, ct - cp);
+    t.cumTaken = ct; t.cumPassed = cp; t.cumFailed = cf;
     t.cumPoints = cw; t.cumGpa = cwu ? cw / cwu : null;
   }
   const all = summarizeTerm(rows, th.pass);
