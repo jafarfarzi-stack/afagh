@@ -50,7 +50,7 @@ function jalaliToGregorian(jy, jm, jd) {
   if (days > 36524) { days--; gy += 100 * ~~(days / 36524); days %= 36524; if (days >= 365) days++; }
   gy += 4 * ~~(days / 1461);
   days %= 1461;
-  if (days > 365) { gy += ~~((days - 365) / 366); days = 365 - (days - 365); }
+  if (days > 365) { days -= 366; gy += 1; while (days > 364) { days -= 365; gy += 1; } }
   let gd = days + 1;
   const leap = (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0;
   const sal = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];

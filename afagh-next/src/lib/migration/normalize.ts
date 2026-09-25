@@ -80,8 +80,9 @@ export function jalaliToGregorian(jy: number, jm: number, jd: number): { gy: num
   gy += 4 * ~~(days / 1461);
   days %= 1461;
   if (days > 365) {
-    gy += ~~((days - 365) / 366);
-    days = 365 - (days - 365);
+    days -= 366;
+    gy += 1;
+    while (days > 364) { days -= 365; gy += 1; }
   }
   let gd = days + 1;
   const leap = (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0;

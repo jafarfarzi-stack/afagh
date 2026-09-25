@@ -30,6 +30,7 @@ const DIR = args.dir || 'E:\\git\\information afagh';
 const APPLY = args.apply === 'true';
 const LIMIT = args.limit ? Number(args.limit) : 0;
 const UNI = args.uni ? Number(args.uni) : 1; // اسکوپ دانشگاه (کدهای دانشجویی بین دانشگاه‌ها تکراری‌اند)
+const FIXBD = args['fix-bd'] === 'true'; // ترمیم تولد‌های خرابِ نوشته‌شده توسط نسخهٔ قبلی (فقط وقتی مقدار DB دقیقاً برابر خروجی باگدار باشد)
 const dbUrl = args.db || process.env.DATABASE_URL || 'postgres://afagh:afagh@localhost:5432/afagh_db';
 const pool = new Pool({ connectionString: dbUrl, max: 5 });
 
@@ -82,6 +83,23 @@ function jalaliToGregorian(jy, jm, jd) {
   if (days > 36524) { days--; gy += 100 * ~~(days / 36524); days %= 36524; if (days >= 365) days++; }
   gy += 4 * ~~(days / 1461);
   days %= 1461;
+  if (days > 365) { days -= 366; gy += 1; while (days > 364) { days -= 365; gy += 1; } }
+  let gd = days + 1;
+  const leap = (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0;
+  const sal = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  let gm = 0;
+  for (; gm < 12 && gd > sal[gm]; gm++) gd -= sal[gm];
+  return new Date(Date.UTC(gy, gm, gd));
+}
+/** نسخهٔ قدیمیِ باگدار — فقط برای شناسایی مقادیر خرابِ قبلاً نوشته‌شده در DB (--fix-bd) */
+function buggyJalaliToGregorian(jy, jm, jd) {
+  jy += 1595;
+  let days = -355668 + 365 * jy + ~~(jy / 33) * 8 + ~~(((jy % 33) + 3) / 4) + jd + (jm < 7 ? (jm - 1) * 31 : (jm - 7) * 30 + 186);
+  let gy = 400 * ~~(days / 146097);
+  days %= 146097;
+  if (days > 36524) { days--; gy += 100 * ~~(days / 36524); days %= 36524; if (days >= 365) days++; }
+  gy += 4 * ~~(days / 1461);
+  days %= 1461;
   if (days > 365) { gy += ~~((days - 365) / 366); days = 365 - (days - 365); }
   let gd = days + 1;
   const leap = (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0;
@@ -89,6 +107,13 @@ function jalaliToGregorian(jy, jm, jd) {
   let gm = 0;
   for (; gm < 12 && gd > sal[gm]; gm++) gd -= sal[gm];
   return new Date(Date.UTC(gy, gm, gd));
+}
+function buggyFaDate(s) {
+  const m = String(s || '').trim().match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (!m) return null;
+  const y = +m[1], mo = +m[2], d = +m[3];
+  if (y < 1300 || y > 1450 || mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return buggyJalaliToGregorian(y, mo, d);
 }
 function faDate(s) {
   const m = String(s || '').trim().match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
@@ -113,7 +138,7 @@ try {
           else if (nezam && nezam !== '0' && !NEZAM_TITLE[nezam]) e._nezamUnmapped = nezam;
           if (!e.militaryExemptionNo && normTxt(cols[52])) e.militaryExemptionNo = normTxt(cols[52]).slice(0, 50);
           // توجه: ستون MS (نام شهر مثل ارومیه) محل اخذ دیپلم نیست — نگاشت نمی‌شود
-          if (!e.birthDate && normTxt(cols[19])) { const bd = faDate(cols[19]); if (bd) e.birthDate = bd; }
+          if (!e.birthDate && normTxt(cols[19])) { const bd = faDate(cols[19]); if (bd) { e.birthDate = bd; e.birthDateCorrupt = buggyFaDate(cols[19]); } }
           if (!e.insertDate && normTxt(cols[95])) e.insertDate = normTxt(cols[95]);
           if (!e.insertTime && normTxt(cols[96])) e.insertTime = normTxt(cols[96]);
           const tt = normTxt(cols[89]);
@@ -165,7 +190,7 @@ try {
   }
   console.log(`نقشهٔ ترمیم پرونده: ${want.size} شماره دانشجویی`);
 
-  const stats = { checked: 0, noStudent: 0, filled: 0, changedUsers: 0, filledUsers: 0, birthFilled: 0, nezamUnmapped: {} };
+  const stats = { checked: 0, noStudent: 0, filled: 0, changedUsers: 0, filledUsers: 0, birthFilled: 0, birthFixed: 0, nezamUnmapped: {} };
   let shown = 0;
   for (const [stno, w] of want) {
     stats.checked++;
@@ -193,6 +218,16 @@ try {
       if (w[k] && !r[col]) { uSets.push(`"${col}" = $${ui++}`); uVals.push(w[k]); stats.filledUsers++; }
     }
     if (w.birthDate && !r.birthDate) { uSets.push(`"birthDate" = $${ui++}`); uVals.push(w.birthDate); stats.birthFilled++; }
+    else if (FIXBD && w.birthDate && r.birthDate) {
+      // ترمیم تولد خراب: فقط وقتی مقدار DB دقیقاً برابر خروجی الگوریتم باگدار قدیمی باشد
+      const dbDay = new Date(r.birthDate);
+      const dbStr = isNaN(dbDay) ? null : dbDay.toISOString().slice(0, 10);
+      const wantStr = w.birthDate.toISOString().slice(0, 10);
+      const badStr = w.birthDateCorrupt ? w.birthDateCorrupt.toISOString().slice(0, 10) : null;
+      if (dbStr && dbStr !== wantStr && badStr && dbStr === badStr) {
+        uSets.push(`"birthDate" = $${ui++}`); uVals.push(w.birthDate); stats.birthFixed++;
+      }
+    }
     const sSets = []; const sVals = []; let si = 1;
     const sMap = [
       'advisorCode', 'documentStatus', 'scholarshipType', 'militaryStatus', 'militaryExemptionNo',
@@ -216,7 +251,7 @@ try {
     }
     if (LIMIT && stats.checked >= LIMIT) break;
   }
-  console.log(`\nخلاصه (دانشگاه ${UNI}): بررسی=${stats.checked} | بدون دانشجو=${stats.noStudent} | فیلد تکمیلی دانشجو پر=${stats.filled} | فیلد هویت(users) پر=${stats.filledUsers} | تولد پر=${stats.birthFilled} | NEZAM بی‌نگاشت=${JSON.stringify(stats.nezamUnmapped)}` + (APPLY ? ` | ✅ اعمال شد (${stats.changedUsers} کاربر)` : ' | (خشک — برای اجرا --apply بدهید)'));
+  console.log(`\nخلاصه (دانشگاه ${UNI}): بررسی=${stats.checked} | بدون دانشجو=${stats.noStudent} | فیلد تکمیلی دانشجو پر=${stats.filled} | فیلد هویت(users) پر=${stats.filledUsers} | تولد پر=${stats.birthFilled} | تولد خراب ترمیم=${stats.birthFixed} | NEZAM بی‌نگاشت=${JSON.stringify(stats.nezamUnmapped)}` + (APPLY ? ` | ✅ اعمال شد (${stats.changedUsers} کاربر)` : ' | (خشک — برای اجرا --apply بدهید)'));
 } catch (err) {
   console.error('❌ خطا:', err?.message || err);
   process.exitCode = 1;

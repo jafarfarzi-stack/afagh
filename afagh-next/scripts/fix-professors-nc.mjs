@@ -74,6 +74,8 @@ function findInDir(dir, test) {
 const clean = (s) => String(s ?? '').replace(/\x00/g, '').replace(/\s+/g, ' ').trim();
 const norm = (s) => clean(s).replace(/ي/g, 'ی').replace(/ك/g, 'ک').replace(/ة/g, 'ه');
 const isNC10 = (s) => /^\d{10}$/.test(clean(s));
+// کد ملی placeholder (۱۱۱۱۱۱۱۱۱۱، ۰۰۰۰۰۰۰۰۰۰ و…) — از فایل قابل اعتماد نیست
+const isPhNC = (s) => /^(\d)\1{9}$/.test(s) || /^(0123456789|1234567890|9876543210)$/.test(s);
 const isJDate = (s) => /^(\d{4})\/(\d{1,2})\/(\d{1,2})/.test(clean(s));
 function jalaliToGregorian(jy, jm, jd) {
   jy += 1595;
@@ -83,7 +85,7 @@ function jalaliToGregorian(jy, jm, jd) {
   if (days > 36524) { days--; gy += 100 * ~~(days / 36524); days %= 36524; if (days >= 365) days++; }
   gy += 4 * ~~(days / 1461);
   days %= 1461;
-  if (days > 365) { gy += ~~((days - 365) / 366); days = 365 - (days - 365); }
+  if (days > 365) { days -= 366; gy += 1; while (days > 364) { days -= 365; gy += 1; } }
   let gd = days + 1;
   const leap = (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0;
   const sal = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -158,7 +160,7 @@ try {
       u.id AS "userId", u."nationalCode", u."birthDate", u."firstName", u."lastName"
     FROM staff s JOIN users u ON u.id = s."userId" WHERE s."universityId" = $1`, [UNI]);
   console.log(`DB staff: ${staffRows.length}`);
-  const ncOwner = new Map((await q(`SELECT id, "nationalCode" FROM users WHERE "nationalCode" IS NOT NULL`)).map(r => [r.nationalCode, r.id]));
+  const ncOwner = new Map((await q(`SELECT id, "nationalCode", "firstName", "lastName" FROM users WHERE "nationalCode" IS NOT NULL`)).map(r => [r.nationalCode, { id: r.id, name: `${r.firstName || ''} ${r.lastName || ''}`.trim() }]));
   const deptByCode = new Map((await q(`SELECT id, "departmentCode", "facultyId", name FROM departments WHERE "universityId"=$1 AND "departmentCode" IS NOT NULL`, [UNI])).map(r => [String(r.departmentCode).trim(), r]));
   const deptByName = new Map();
   for (const r of await q(`SELECT id, name, "facultyId" FROM departments WHERE "universityId"=$1`, [UNI])) {
@@ -167,8 +169,9 @@ try {
     if (k) deptByName.get(k).push(r);
   }
 
-  const stats = { ncReplaced: 0, ncClash: 0, ncNoFile: 0, bdReplaced: 0, bdNoFile: 0, facRenamed: 0, deptLinked: 0, deptMiss: 0, noFile: 0 };
+  const stats = { ncReplaced: 0, ncClash: 0, ncFilePlaceholder: 0, ncNoFile: 0, bdReplaced: 0, bdNoFile: 0, facRenamed: 0, deptLinked: 0, deptMiss: 0, noFile: 0 };
   const show = [];
+  const clashList = [];
   const facRenamePlan = [];
   if (facTitles.size) {
     const facs = await q(`SELECT id, name, "facultyCode" FROM faculties WHERE "universityId"=$1`, [UNI]);
@@ -187,15 +190,18 @@ try {
     const fileBD = o?.bd || r?.bd || null; // تعارض: ostadan ملاک (۱ مورد شناخته‌شده)
 
     // کد ملی
-    if (fileNC && st.nationalCode !== fileNC) {
+    if (fileNC && isPhNC(fileNC)) { stats.ncFilePlaceholder++; }
+    else if (fileNC && st.nationalCode !== fileNC) {
       const owner = ncOwner.get(fileNC);
-      if (owner && owner !== st.userId) { stats.ncClash++; if (show.length < 15) show.push(`${code}: NC clash ${fileNC} (user ${owner}) — رد شد`); }
-      else {
+      if (owner && owner.id !== st.userId) {
+        stats.ncClash++;
+        clashList.push({ code, db: st.nationalCode, file: fileNC, ownerId: owner.id });
+      } else {
         stats.ncReplaced++;
         if (show.length < 15) show.push(`${code}: NC ${st.nationalCode} → ${fileNC}`);
         if (APPLY) {
           await pool.query(`UPDATE users SET "nationalCode"=$2 WHERE id=$1`, [st.userId, fileNC]);
-          ncOwner.delete(st.nationalCode); ncOwner.set(fileNC, st.userId);
+          ncOwner.delete(st.nationalCode); ncOwner.set(fileNC, { id: st.userId, name: code });
         }
       }
     } else if (!fileNC && /^S/i.test(st.nationalCode || '')) stats.ncNoFile++;
@@ -227,7 +233,27 @@ try {
 
   console.log(`\n── نمونه تغییرات ( ${show.length} ) ──`);
   for (const s of show) console.log('  ' + s);
-  console.log(`\nخلاصه (uni ${UNI}): NC جایگزین=${stats.ncReplaced} تداخل=${stats.ncClash} بدون‌فایل=${stats.ncNoFile} | تولد جایگزین=${stats.bdReplaced} بدون‌فایل=${stats.bdNoFile} | دانشکده rename=${stats.facRenamed} | گروه لینک=${stats.deptLinked} miss=${stats.deptMiss} | بی‌فایل=${stats.noFile}` + (APPLY ? ' | ✅ اعمال شد' : ' | (خشک)'));
+  // گزارش تداخل‌های کد ملی (مالکِ کد در DB کیست؟)
+  if (clashList.length) {
+    const freq = {};
+    for (const c of clashList) freq[c.file] = (freq[c.file] || 0) + 1;
+    const top = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    console.log(`\nNCهای فایل در تداخل (تکراری‌ها): ${top.map(([k, v]) => `${k}×${v}`).join('، ')}`);
+    const ownerIds = [...new Set(clashList.map(c => c.ownerId))];
+    const owners = new Map((await q(
+      `SELECT u.id, u."firstName", u."lastName", (s.id IS NOT NULL) AS "isStaff"
+       FROM users u LEFT JOIN staff s ON s."userId" = u.id WHERE u.id = ANY($1)`,
+      [ownerIds],
+    )).map(r => [r.id, r]));
+    let staffOwners = 0;
+    for (const c of clashList) if (owners.get(c.ownerId)?.isStaff) staffOwners++;
+    console.log(`مالکِ کد در DB: استاف=${staffOwners} / غیراستاف=${clashList.length - staffOwners} (از ${ownerIds.length} کد یکتا)`);
+    for (const c of clashList.slice(0, 12)) {
+      const o = owners.get(c.ownerId);
+      console.log(`  کد ${c.code}: DB=${c.db} | فایل=${c.file} ← مالک: ${o ? o.name || '(بدون نام)' : c.ownerId}${o?.isStaff ? ' [استاف]' : ''}`);
+    }
+  }
+  console.log(`\nخلاصه (uni ${UNI}): NC جایگزین=${stats.ncReplaced} تداخل=${stats.ncClash} placeholderفایل=${stats.ncFilePlaceholder} بدون‌فایل=${stats.ncNoFile} | تولد جایگزین=${stats.bdReplaced} بدون‌فایل=${stats.bdNoFile} | دانشکده rename=${stats.facRenamed} | گروه لینک=${stats.deptLinked} miss=${stats.deptMiss} | بی‌فایل=${stats.noFile}` + (APPLY ? ' | ✅ اعمال شد' : ' | (خشک)'));
 } catch (err) {
   console.error('❌ خطا:', err?.message || err);
   process.exitCode = 1;
