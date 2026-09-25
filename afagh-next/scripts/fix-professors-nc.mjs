@@ -101,6 +101,26 @@ function faDateStr(s) {
   const g = jalaliToGregorian(y, mo, d);
   return `${g.gy}-${String(g.gm).padStart(2, '0')}-${String(g.gd).padStart(2, '0')}`;
 }
+/** خروجی الگوریتم باگدار قدیمی (با rollback روزِ منفی مثل JS Date) — برای شناسایی امضای خرابی در DB */
+function buggyFaDay(s) {
+  const m = clean(s).match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (!m) return null;
+  let jy = +m[1] + 1595;
+  const mo = +m[2], d = +m[3];
+  let days = -355668 + 365 * jy + ~~(jy / 33) * 8 + ~~(((jy % 33) + 3) / 4) + d + (mo < 7 ? (mo - 1) * 31 : (mo - 7) * 30 + 186);
+  let gy = 400 * ~~(days / 146097);
+  days %= 146097;
+  if (days > 36524) { days--; gy += 100 * ~~(days / 36524); days %= 36524; if (days >= 365) days++; }
+  gy += 4 * ~~(days / 1461);
+  days %= 1461;
+  if (days > 365) { gy += ~~((days - 365) / 366); days = 365 - (days - 365); }
+  let gd = days + 1;
+  const leap = (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0;
+  const sal = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  let gm = 0;
+  for (; gm < 12 && gd > sal[gm]; gm++) gd -= sal[gm];
+  return new Date(Date.UTC(gy, gm, gd)).toISOString().slice(0, 10);
+}
 
 try {
   const ostadan = findInDir(DIR, b => /^ostadan$/i.test(b)) || findInDir(DIR, b => /ostadan/i.test(b));
@@ -122,6 +142,7 @@ try {
       score,
       nc: isNC10(cols[31]) ? clean(cols[31]) : null,
       bd: isJDate(cols[12]) ? faDateStr(cols[12]) : null,
+      bdRaw: isJDate(cols[12]) ? clean(cols[12]) : null,
       grp: /^\d+$/.test(clean(cols[2])) ? clean(cols[2]) : null,
       fac: /^\d+$/.test(clean(cols[3])) ? clean(cols[3]) : null,
     });
@@ -137,6 +158,7 @@ try {
       R.set(code, {
         nc: isNC10(cols[26]) ? clean(cols[26]) : null,
         bd: isJDate(cols[18]) ? faDateStr(cols[18]) : null,
+        bdRaw: isJDate(cols[18]) ? clean(cols[18]) : null,
         grpName: norm(cols[6]) || null,
       });
     }
@@ -169,7 +191,7 @@ try {
     if (k) deptByName.get(k).push(r);
   }
 
-  const stats = { ncReplaced: 0, ncClash: 0, ncFilePlaceholder: 0, ncNoFile: 0, bdReplaced: 0, bdNoFile: 0, facRenamed: 0, deptLinked: 0, deptMiss: 0, noFile: 0 };
+  const stats = { ncReplaced: 0, ncClash: 0, ncFilePlaceholder: 0, ncNoFile: 0, bdReplaced: 0, bdFilled: 0, bdCorrupt: 0, bdDiffOther: 0, bdNoFile: 0, facRenamed: 0, deptLinked: 0, deptMiss: 0, noFile: 0 };
   const show = [];
   const clashList = [];
   const facRenamePlan = [];
@@ -188,6 +210,7 @@ try {
     if (!o && !r) { stats.noFile++; continue; }
     const fileNC = o?.nc || r?.nc || null;
     const fileBD = o?.bd || r?.bd || null; // تعارض: ostadan ملاک (۱ مورد شناخته‌شده)
+    const fileBDRaw = o?.bdRaw || r?.bdRaw || null;
 
     // کد ملی
     if (fileNC && isPhNC(fileNC)) { stats.ncFilePlaceholder++; }
@@ -209,8 +232,12 @@ try {
     // تولد
     const dbBD = st.birthDate ? new Date(st.birthDate).toISOString().slice(0, 10) : null;
     if (fileBD && dbBD !== fileBD) {
+      const sig = fileBDRaw ? buggyFaDay(fileBDRaw) : null;
+      if (!dbBD) stats.bdFilled++;
+      else if (sig && dbBD === sig) stats.bdCorrupt++;
+      else stats.bdDiffOther++;
       stats.bdReplaced++;
-      if (show.length < 25) show.push(`${code}: BD ${dbBD || '—'} → ${fileBD}`);
+      if (show.length < 25) show.push(`${code}: BD ${dbBD || '—'} → ${fileBD}${dbBD && sig && dbBD === sig ? ' [امضای باگدار ✓]' : ''}`);
       if (APPLY) await pool.query(`UPDATE users SET "birthDate"=$2 WHERE id=$1`, [st.userId, fileBD]);
     } else if (!fileBD && !dbBD) stats.bdNoFile++;
 
@@ -241,19 +268,28 @@ try {
     console.log(`\nNCهای فایل در تداخل (تکراری‌ها): ${top.map(([k, v]) => `${k}×${v}`).join('، ')}`);
     const ownerIds = [...new Set(clashList.map(c => c.ownerId))];
     const owners = new Map((await q(
-      `SELECT u.id, u."firstName", u."lastName", (s.id IS NOT NULL) AS "isStaff"
+      `SELECT u.id, u."firstName", u."lastName", s."staffCode", (s.id IS NOT NULL) AS "isStaff"
        FROM users u LEFT JOIN staff s ON s."userId" = u.id WHERE u.id = ANY($1)`,
       [ownerIds],
     )).map(r => [r.id, r]));
-    let staffOwners = 0;
-    for (const c of clashList) if (owners.get(c.ownerId)?.isStaff) staffOwners++;
-    console.log(`مالکِ کد در DB: استاف=${staffOwners} / غیراستاف=${clashList.length - staffOwners} (از ${ownerIds.length} کد یکتا)`);
-    for (const c of clashList.slice(0, 12)) {
+    // طبقه‌بندی: آیا فایل همان NC را به مالک هم داده؟ (یک شخص با دو کد) / مالک فایل NC دیگری دارد؟
+    const cls = { selfCode: 0, fileShares: 0, ownerOtherFileNC: 0, ownerNoFile: 0 };
+    const lines = [];
+    for (const c of clashList) {
       const o = owners.get(c.ownerId);
-      console.log(`  کد ${c.code}: DB=${c.db} | فایل=${c.file} ← مالک: ${o ? o.name || '(بدون نام)' : c.ownerId}${o?.isStaff ? ' [استاف]' : ''}`);
+      const ownerCode = o?.staffCode != null ? String(o.staffCode).trim() : null;
+      const ownerFileNC = ownerCode ? (O.get(ownerCode)?.nc || R.get(ownerCode)?.nc || null) : null;
+      let tag;
+      if (ownerCode && ownerCode === c.code) { cls.selfCode++; tag = 'کداستافیک=خودکد'; }
+      else if (ownerFileNC && ownerFileNC === c.file) { cls.fileShares++; tag = `فایل همین NC را به ${ownerCode} هم داده`; }
+      else if (ownerFileNC) { cls.ownerOtherFileNC++; tag = `مالک(${ownerCode}) در فایل NC=${ownerFileNC} دارد`; }
+      else { cls.ownerNoFile++; tag = `مالک(${ownerCode || '?'}) در فایل نیست`; }
+      if (lines.length < 15) lines.push(`  کد ${c.code}: DB=${c.db} | فایل=${c.file} ← ${tag}`);
     }
+    console.log(`طبقه‌بندی ${clashList.length} تداخل: اشتراک‌فایل=${cls.fileShares} مالک‌فایل‌متفاوت=${cls.ownerOtherFileNC} مالک‌بدون‌فایل=${cls.ownerNoFile} خودکد=${cls.selfCode}`);
+    for (const l of lines) console.log(l);
   }
-  console.log(`\nخلاصه (uni ${UNI}): NC جایگزین=${stats.ncReplaced} تداخل=${stats.ncClash} placeholderفایل=${stats.ncFilePlaceholder} بدون‌فایل=${stats.ncNoFile} | تولد جایگزین=${stats.bdReplaced} بدون‌فایل=${stats.bdNoFile} | دانشکده rename=${stats.facRenamed} | گروه لینک=${stats.deptLinked} miss=${stats.deptMiss} | بی‌فایل=${stats.noFile}` + (APPLY ? ' | ✅ اعمال شد' : ' | (خشک)'));
+  console.log(`\nخلاصه (uni ${UNI}): NC جایگزین=${stats.ncReplaced} تداخل=${stats.ncClash} placeholderفایل=${stats.ncFilePlaceholder} بدون‌فایل=${stats.ncNoFile} | تولد جایگزین=${stats.bdReplaced} (خالی=${stats.bdFilled} امضای‌باگدار=${stats.bdCorrupt} مغایرت_دیگر=${stats.bdDiffOther}) بدون‌فایل=${stats.bdNoFile} | دانشکده rename=${stats.facRenamed} | گروه لینک=${stats.deptLinked} miss=${stats.deptMiss} | بی‌فایل=${stats.noFile}` + (APPLY ? ' | ✅ اعمال شد' : ' | (خشک)'));
 } catch (err) {
   console.error('❌ خطا:', err?.message || err);
   process.exitCode = 1;
