@@ -26,10 +26,10 @@ export function norm(s) {
 
 // ── پارتیکل‌ها و پسوند‌های خانوادگی ──
 const PARTICLE_RE = /^(زاده|پور|نژاد|فر|وند|لو|لی|اصل|پناه|نیا|طلب|خواه|پرور|منش|یار|فرد|آباد|کندی|باشی|اوغلی|بالو|سابق|جو|دوست|مقدم)$/;
-const isFamilyParticle = (w) => PARTICLE_RE.test(norm(w));
+export const isFamilyParticle = (w) => PARTICLE_RE.test(norm(w));
 
 const SUFFIX_RE = /(زاده|پور|لو|لی|وند|نژاد|فر|یان|پناه|نیا|طلب|خواه|پرور|منش|یار|فرد|آباد|کندی|باشی|اوغلی|بالو|اصل|سابق|مقدم|دوست|جو|انزابی|کیانی|احمدی|قمری|مولودی|علولی|مرادی|رحمانی|جمشیدی|جلالی|حبیبی|سرکاری|خرازی)$/;
-const hasFamilySuffix = (w) => SUFFIX_RE.test(norm(w));
+export const hasFamilySuffix = (w) => SUFFIX_RE.test(norm(w));
 
 // Compound-name leading words ("سید علی", "میر هاشم", "نجم الدین", ...)
 const COMPOUND_PREFIX = new Set(['سید', 'میر', 'ملک', 'حاجی', 'آقا', 'نجم', 'عبد', 'غلام', 'ضیاء', 'نور', 'جمال']);
