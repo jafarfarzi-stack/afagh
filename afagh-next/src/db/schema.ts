@@ -337,6 +337,7 @@ export const students = pgTable('students', {
   scholarshipType: varchar('scholarshipType', { length: 100 }),     // کد بورسیهٔ سما (ScholarshipRef)
   militaryStatus: varchar('militaryStatus', { length: 50 }),        // وضعیت نظام وظیفه (NEZAM/Moafiat سما)
   militaryExemptionNo: varchar('militaryExemptionNo', { length: 50 }), // شمارهٔ معافیت (MoafiatNumber/NezamNo)
+  homeTell: varchar('homeTell', { length: 20 }),              // تلفن ثابت منزل (HOMETELL سما — students1 col18)
   studentCardStatus: varchar('studentCardStatus', { length: 50 }),  // وضعیت کارت دانشجویی (StCardPrinted)
   archiveNo: varchar('archiveNo', { length: 50 }),                  // کد آرشیو سما
   parvandehNo: varchar('parvandehNo', { length: 100 }),             // شمارهٔ پروندهٔ سما

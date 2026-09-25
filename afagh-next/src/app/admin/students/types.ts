@@ -51,6 +51,7 @@ export type StudentItem = {
   scholarshipType?: string | null;
   militaryStatus?: string | null;
   militaryExemptionNo?: string | null;
+  homeTell?: string | null;
   studentCardStatus?: string | null;
   archiveNo?: string | null;
   parvandehNo?: string | null;

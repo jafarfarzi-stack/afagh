@@ -14,6 +14,33 @@ import { regThresholds, groupTranscript, faNum, dateToJalali} from './transcript
 import OfficialTranscriptView from './components/OfficialTranscriptView';
 import { adminSetGradeAction, getStudentGradeAuditLog, resolveSamaCodeForGradeAction } from '@/app/admin/grades/actions';
 import { GRADE_STATUS_CODES } from '@/lib/grade-status-codes';
+import { normalizeFa } from '@/lib/persian-search';
+
+// ── لوک‌آپ‌های سما: کد خام ← عنوان فارسی (فایل‌های «دوره.txt»، «شيوه آموزش.txt»، «نحوه ورود به دانشگاه.txt») ──
+const COURSE_TYPE_FA: Record<string, string> = {
+  '0': 'نامشخص', '1': 'روزانه', '2': 'شبانه', '3': 'نیمه حضوری', '4': 'غیرانتفاعی',
+  '5': 'دانشجویان خارجی', '6': 'روزانه - موارد خاص', '7': 'پیام نور',
+  '8': 'دوره‌های آموزش عالی آزاد', '10': 'مجازی', '202': 'مهمانی',
+};
+const TRAINING_METHOD_FA: Record<string, string> = {
+  '0': 'نامشخص', '1': 'آموزشی', '2': 'آموزشی - تغییر رشته دارای مغایرت', '3': 'آموزشی و پژوهشی',
+  '4': 'آموزشی پژوهشی', '8': 'آموزشی - تغییر رشته', '11': 'پژوهش محور',
+};
+// نحوهٔ ورود (فایل «نحوه ورود به دانشگاه.txt» کد ۰..۱۷ — عنوان‌ها نرمال‌شده با normalizeFa)
+const ACCEPT_TYPE_FA: [string, string][] = [
+  ['0', 'نامشخص'], ['1', 'قبولی کنکور سراسری'], ['2', 'دانشجوی علامه خویی'], ['3', 'دانشجوی زرینه خوی'],
+  ['4', 'دانشجوی شمس خوی'], ['5', 'بدون آزمون - سوابق تحصیلی'], ['6', 'کنکور سراسری'], ['7', 'دانشجوی نژند'],
+  ['8', 'انتقال از خارج'], ['9', 'استعداد درخشان'], ['10', 'ممتاز'], ['11', 'نفر اول دوره قبلی'],
+  ['12', 'مهمان از دانشگاه دیگر'], ['13', 'انتقالی'], ['14', 'کنکور فنی و حرفه‌ای'],
+  ['15', 'کنکور کاردانی به کارشناسی ناپیوسته'], ['16', 'آموزش عالی آزاد'],
+  ['17', 'صرفاً بر اساس سوابق تحصیلی (کاردانی به کارشناسی)'],
+];
+/** عنوان نرمال‌شدهٔ نحوهٔ ورود — مقدار DB را هم نرمال می‌کند تا گزینهٔ متناظر پیدا شود */
+const acceptTypeTitle = (raw?: string | null) => {
+  const n = normalizeFa(raw || '');
+  if (!n) return '';
+  return ACCEPT_TYPE_FA.find(([, t]) => normalizeFa(t) === n)?.[1] || raw || '';
+};
 
 /**
  * چاپ مستقیم همان نمای روی صفحه (WYSIWYG) — با کلاس چاپ سراسری:
@@ -308,7 +335,8 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
       passportNumber: s.passportNumber || '',
       advisorCode: s.advisorCode || '', documentStatus: s.documentStatus || '',
       scholarshipType: s.scholarshipType || '', militaryStatus: s.militaryStatus || '',
-      militaryExemptionNo: s.militaryExemptionNo || '', studentCardStatus: s.studentCardStatus || '',
+      militaryExemptionNo: s.militaryExemptionNo || '', homeTell: s.homeTell || '',
+      studentCardStatus: s.studentCardStatus || '',
       archiveNo: s.archiveNo || '', parvandehNo: s.parvandehNo || '',
       dormName: s.dormName || '', dormRoom: s.dormRoom || '', hasDorm: s.hasDorm ?? 0,
       guardianJobTitle: s.guardianJobTitle || '', guardianPhone: s.guardianPhone || '',
@@ -603,13 +631,14 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                     <span className="text-red-700 font-bold">* نوع دوره:</span>
                     <select key={currentStudent.id + '-sm'} defaultValue={currentStudent.studyingMode || ''} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-semibold">
                       <option value="">—</option>
-                      <option value="روزانه">روزانه</option>
-                      <option value="شبانه">نوبت دوم / شبانه</option>
-                      <option value="غیرانتفاعی">غیرانتفاعی</option>
-                      <option value="پیام نور">پیام نور</option>
-                      <option value="مجازی">مجازی</option>
-                      <option value="بین‌الملل">بین‌الملل</option>
+                      {Object.entries(COURSE_TYPE_FA).map(([v, fa]) => <option key={v} value={v}>{fa}</option>)}
                     </select>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 items-center">
+                    <span>شیوه آموزشی:</span>
+                    <span className="col-span-2 bg-slate-100 border border-slate-200 px-2 py-1 rounded font-semibold text-slate-700">
+                      {TRAINING_METHOD_FA[currentStudent.trainingMethod || ''] || currentStudent.trainingMethod || '—'}
+                    </span>
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-red-700 font-bold">* مقطع:</span>
@@ -635,18 +664,18 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-red-700 font-bold">* نحوه ورود:</span>
-                    <select key={currentStudent.id + '-at'} defaultValue={currentStudent.acceptanceType || ''} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded">
+                    <select key={currentStudent.id + '-at'} defaultValue={acceptTypeTitle(currentStudent.acceptanceType)} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded">
                       <option value="">—</option>
-                      <option value="سنجش و آزمون سراسری">سنجش و آزمون سراسری</option>
-                      <option value="پذیرش بر اساس سوابق تحصیلی">پذیرش بر اساس سوابق تحصیلی</option>
-                      <option value="انتقال و میهمانی">انتقال و میهمانی</option>
-                      <option value="بین‌الملل">بین‌الملل</option>
-                      <option value="میهمان">میهمان</option>
+                      {ACCEPT_TYPE_FA.map(([c, fa]) => fa !== 'نامشخص' && <option key={c} value={fa}>{fa}</option>)}
                     </select>
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>شماره همراه:</span>
                     <input type="text" value={profile.mobile ?? ''} onChange={e => pf('mobile', e.target.value)} placeholder="—" className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 items-center">
+                    <span>شماره ثابت منزل:</span>
+                    <input type="text" value={profile.homeTell ?? ''} onChange={e => pf('homeTell', e.target.value)} placeholder="—" className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>آیین‌نامه ملاک:</span>
@@ -698,7 +727,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
               </div>
               <div className="pt-2 border-t border-slate-300 flex items-center gap-2">
                 <button
-                  onClick={() => saveProfile(['fatherName', 'birthCertNo', 'placeOfBirth', 'placeOfIssue', 'gender', 'mobile', 'nationality'])}
+                  onClick={() => saveProfile(['fatherName', 'birthCertNo', 'placeOfBirth', 'placeOfIssue', 'gender', 'mobile', 'homeTell', 'nationality'])}
                   disabled={profileSaving}
                   className="px-3 py-1.5 rounded bg-emerald-700 text-white font-bold text-xs hover:bg-emerald-800 disabled:opacity-50"
                   title="ذخیرهٔ تغییرات هویت این دانشجو (فقط مدیر سیستم)"
@@ -738,9 +767,23 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                       <span className="w-24">وضعیت نظام وظیفه:</span>
                       <select value={profile.militaryStatus ?? ''} onChange={e => pf('militaryStatus', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full">
                         <option value="">—</option>
-                        <option value="معافیت تحصیلی فعال">معافیت تحصیلی فعال</option>
+                        <option value="خانم است و وضعیت نظام وظیفه ندارد">خانم است و وضعیت نظام وظیفه ندارد</option>
+                        <option value="مشمول است و دفترچه دارد">مشمول است و دفترچه دارد</option>
+                        <option value="مشمول است ولی دفترچه ندارد">مشمول است ولی دفترچه ندارد</option>
+                        <option value="معافیت پزشکی یا کفالت">معافیت پزشکی یا کفالت</option>
                         <option value="کارت پایان خدمت">کارت پایان خدمت</option>
+                        <option value="سرباز ترخیصی">سرباز ترخیصی</option>
+                        <option value="معافیت تحصیلی فعال">معافیت تحصیلی فعال</option>
                         <option value="معافیت دائم">معافیت دائم</option>
+                        <option value="کارمند آموزش و پرورش">کارمند آموزش و پرورش</option>
+                        <option value="کارمند">کارمند</option>
+                        <option value="دانشجوی سال آخر مقطع قبل">دانشجوی سال آخر مقطع قبل</option>
+                        <option value="فارغ‌التحصیل بدون غیبت">فارغ‌التحصیل بدون غیبت</option>
+                        <option value="دانشجوی انصرافی">دانشجوی انصرافی</option>
+                        <option value="متولد ماقبل ۱۳۵۲">متولد ماقبل ۱۳۵۲</option>
+                        <option value="کارکنان متعهد خدمت ارگان‌ها">کارکنان متعهد خدمت ارگان‌ها</option>
+                        <option value="مشمول نیست">مشمول نیست</option>
+                        <option value="فاقد معافیت">فاقد معافیت</option>
                         <option value="در حال تحصیل (معافیت موقت)">در حال تحصیل (معافیت موقت)</option>
                       </select>
                     </div>

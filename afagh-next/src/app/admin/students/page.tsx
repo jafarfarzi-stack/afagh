@@ -122,6 +122,7 @@ export default async function AdminStudentsPage({
       scholarshipType: students.scholarshipType,
       militaryStatus: students.militaryStatus,
       militaryExemptionNo: students.militaryExemptionNo,
+      homeTell: students.homeTell,
       studentCardStatus: students.studentCardStatus,
       archiveNo: students.archiveNo,
       parvandehNo: students.parvandehNo,

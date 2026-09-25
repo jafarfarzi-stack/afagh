@@ -74,8 +74,26 @@ const cardStatusFa = (s) => {
   if (t === 'false' || t === '0') return 'چاپ نشده';
   return t || null;
 };
-// NEZAM سما (students1 col33) → عنوان‌های ثابت دراپ‌داون UI؛ بقیه کدها خالی می‌مانند
-const NEZAM_TITLE = { '4': 'معافیت دائم', '5': 'کارت پایان خدمت', '6': 'کارت پایان خدمت', '7': 'معافیت تحصیلی فعال', '8': 'معافیت دائم' };
+// NEZAM سما (students1 col33) → عنوان‌های ثابت دراپ‌داون UI (مطابق «وضعيت نظام وظيفه.txt» + نگاشت قبلی)
+const NEZAM_TITLE = {
+  '1': 'خانم است و وضعیت نظام وظیفه ندارد',
+  '2': 'مشمول است و دفترچه دارد',
+  '3': 'مشمول است ولی دفترچه ندارد',
+  '4': 'معافیت دائم',
+  '5': 'کارت پایان خدمت',
+  '6': 'سرباز ترخیصی',
+  '7': 'معافیت تحصیلی فعال',
+  '8': 'معافیت دائم',
+  '9': 'کارمند آموزش و پرورش',
+  '10': 'کارمند',
+  '11': 'دانشجوی انصرافی',
+  '12': 'دانشجوی سال آخر مقطع قبل',
+  '13': 'فارغ‌التحصیل بدون غیبت',
+  '14': 'متولد ماقبل ۱۳۵۲',
+  '15': 'کارکنان متعهد خدمت ارگان‌ها',
+  '16': 'مشمول نیست',
+  '17': 'فاقد معافیت',
+};
 function jalaliToGregorian(jy, jm, jd) {
   jy += 1595;
   let days = -355668 + 365 * jy + ~~(jy / 33) * 8 + ~~(((jy % 33) + 3) / 4) + jd + (jm < 7 ? (jm - 1) * 31 : (jm - 7) * 30 + 186);
@@ -137,7 +155,14 @@ try {
           const nezam = normTxt(cols[33]);
           if (!e.militaryStatus && NEZAM_TITLE[nezam]) e.militaryStatus = NEZAM_TITLE[nezam];
           else if (nezam && nezam !== '0' && !NEZAM_TITLE[nezam]) e._nezamUnmapped = nezam;
+          if (nezam === '0' && !e.militaryStatus) e.militaryStatus = null; // نامشخص → خالی بماند
           if (!e.militaryExemptionNo && normTxt(cols[52])) e.militaryExemptionNo = normTxt(cols[52]).slice(0, 50);
+          if (!e.homeTell && normTxt(cols[18])) e.homeTell = normTxt(cols[18]).slice(0, 20);
+          if (!e.address && normTxt(cols[28])) e.address = normTxt(cols[28]).slice(0, 300);
+          const ct = normTxt(cols[6]);
+          if (!e.studyingMode && ct && ct !== '0') e.studyingMode = ct.slice(0, 20); // COURSTYPE ← نوع دوره
+          const tm = normTxt(cols[78]);
+          if (!e.trainingMethod && tm && tm !== '0') e.trainingMethod = tm.slice(0, 20); // TraningMethodId ← شیوه آموزشی
           // توجه: ستون MS (نام شهر مثل ارومیه) محل اخذ دیپلم نیست — نگاشت نمی‌شود
           if (!e.birthDate && normTxt(cols[19])) { const bd = faDate(cols[19]); if (bd) { e.birthDate = bd; e.birthDateCorrupt = buggyFaDate(cols[19]); } }
           if (!e.insertDate && normTxt(cols[95])) e.insertDate = normTxt(cols[95]);
@@ -206,7 +231,8 @@ try {
               s."dormName", s."dormRoom", s."hasDorm", s."guardianJobTitle", s."guardianPhone",
               s."guardianAddress", s."guardianEmail", s."diplomaType", s."diplomaPlace",
               s."diplomaYear", s."diplomaGrade", s."pishdPlace", s."pishdYear", s."pishdGrade",
-              s."tuitionType", s."insertDate", s."insertTime"
+              s."tuitionType", s."insertDate", s."insertTime",
+              s."homeTell", s."studyingMode", s."trainingMethod"
        FROM students s JOIN users u ON u.id = s."userId" WHERE s."studentCode" = $1 AND s."universityId" = $2 LIMIT 1`,
       [stno, UNI],
     );
@@ -234,6 +260,7 @@ try {
     const sSets = []; const sVals = []; let si = 1;
     const sMap = [
       'advisorCode', 'documentStatus', 'scholarshipType', 'militaryStatus', 'militaryExemptionNo',
+      'homeTell', 'studyingMode', 'trainingMethod',
       'studentCardStatus', 'archiveNo', 'parvandehNo', 'dormName', 'dormRoom', 'guardianJobTitle',
       'guardianPhone', 'guardianAddress', 'guardianEmail', 'diplomaType', 'diplomaPlace',
       'diplomaYear', 'diplomaGrade', 'pishdPlace', 'pishdYear', 'pishdGrade',

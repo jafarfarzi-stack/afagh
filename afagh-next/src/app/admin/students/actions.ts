@@ -589,6 +589,7 @@ export type StudentProfilePatch = {
   scholarshipType?: string | null;
   militaryStatus?: string | null;
   militaryExemptionNo?: string | null;
+  homeTell?: string | null;
   studentCardStatus?: string | null;
   archiveNo?: string | null;
   parvandehNo?: string | null;
@@ -653,7 +654,7 @@ export async function updateStudentProfileAction(
     }
     const stuSet: Record<string, unknown> = {};
     const ss = [
-      'advisorCode', 'documentStatus', 'scholarshipType', 'militaryStatus', 'militaryExemptionNo',
+      'advisorCode', 'documentStatus', 'scholarshipType', 'militaryStatus', 'militaryExemptionNo', 'homeTell',
       'studentCardStatus', 'archiveNo', 'parvandehNo', 'dormName', 'dormRoom', 'guardianJobTitle',
       'guardianPhone', 'guardianAddress', 'guardianEmail', 'diplomaType', 'diplomaPlace',
       'diplomaYear', 'diplomaGrade', 'pishdPlace', 'pishdYear', 'pishdGrade', 'tuitionType',

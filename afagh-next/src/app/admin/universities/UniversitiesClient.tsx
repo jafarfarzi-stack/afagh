@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { upsertUniversity, saveSaminConnection, deleteUniversity, uploadUniversityLogoAction, deleteUniversityLogoAction } from './actions';
 
 type Uni = { id: number; code: string; title: string; kind: string; status: string; saminCode: string | null; province: string | null; dissolvedAt: string | null; isActive: number; logoUrl: string | null };
@@ -8,7 +8,10 @@ type Conn = { universityId: number; apiBaseUrl: string; authBaseUrl: string; cli
 
 export default function UniversitiesClient({ universities, connections }: { universities: Uni[]; connections: Conn[] }) {
   const [editing, setEditing] = useState<Uni | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
   const [msg, setMsg] = useState('');
+  const addCodeRef = useRef<HTMLInputElement>(null);
+  const openAdd = () => { setEditing(null); setShowAdd(true); setTimeout(() => addCodeRef.current?.focus(), 0); };
 
   const connMap = new Map(connections.map(c => [c.universityId, c]));
 
@@ -17,6 +20,12 @@ export default function UniversitiesClient({ universities, connections }: { univ
       {msg && <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs p-2 rounded">{msg}</div>}
 
       <div className="card overflow-x-auto">
+        <div className="flex items-center justify-between px-1 py-0.5">
+          <span className="text-xs text-slate-500">{universities.length} دانشگاه</span>
+          <button onClick={() => { if (editing) setEditing(null); setShowAdd(s => !s); if (!showAdd) setTimeout(() => addCodeRef.current?.focus(), 0); }} className="bg-indigo-700 hover:bg-indigo-800 text-white px-3 py-1.5 rounded shadow text-xs font-bold">
+            ➕ {showAdd ? 'بستن فرم افزودن' : 'افزودن دانشگاه جدید'}
+          </button>
+        </div>
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-slate-50 border-b text-slate-600">
@@ -59,24 +68,26 @@ export default function UniversitiesClient({ universities, connections }: { univ
         </table>
       </div>
 
-      <div className="card space-y-3">
-        <h3 className="font-bold text-sm">{editing ? 'ویرایش دانشگاه' : 'افزودن دانشگاه جدید'}</h3>
-        <form action={async (fd) => { try { await upsertUniversity(fd); setEditing(null); setMsg('ذخیره شد'); } catch (e: any) { setMsg(e.message); } }} className="grid grid-cols-2 gap-2 text-xs">
-          <input type="hidden" name="id" value={editing?.id || ''} />
-          <input name="code" placeholder="کد (ZARINE)" defaultValue={editing?.code || ''} className="border rounded px-2 py-1.5" required />
-          <input name="title" placeholder="عنوان" defaultValue={editing?.title || ''} className="border rounded px-2 py-1.5" required />
-          <select name="kind" defaultValue={editing?.kind || 'DISSOLVED'} className="border rounded px-2 py-1.5">
-            <option value="OWN">خودمان</option>
-            <option value="DISSOLVED">منحل‌شده</option>
-            <option value="MERGED">ادغامی</option>
-          </select>
-          <input name="saminCode" placeholder="کد ثمین sender_university" defaultValue={editing?.saminCode || ''} className="border rounded px-2 py-1.5" />
-          <div className="col-span-2 flex gap-2">
-            <button type="submit" className="bg-indigo-600 text-white px-4 py-1.5 rounded text-xs">ذخیره</button>
-            {editing && <button type="button" onClick={() => setEditing(null)} className="border px-3 py-1.5 rounded text-xs">انصراف</button>}
-          </div>
-        </form>
-      </div>
+      {(showAdd || editing) && (
+        <div className="card space-y-3 border-indigo-300">
+          <h3 className="font-bold text-sm">{editing ? `ویرایش دانشگاه ${editing.title}` : 'افزودن دانشگاه جدید'}</h3>
+          <form action={async (fd) => { try { await upsertUniversity(fd); setEditing(null); setShowAdd(false); setMsg('ذخیره شد'); } catch (e: any) { setMsg(e.message); } }} className="grid grid-cols-2 gap-2 text-xs">
+            <input type="hidden" name="id" value={editing?.id || ''} />
+            <input ref={addCodeRef} name="code" placeholder="کد (ZARINE)" defaultValue={editing?.code || ''} className="border rounded px-2 py-1.5" required />
+            <input name="title" placeholder="عنوان" defaultValue={editing?.title || ''} className="border rounded px-2 py-1.5" required />
+            <select name="kind" defaultValue={editing?.kind || 'DISSOLVED'} className="border rounded px-2 py-1.5">
+              <option value="OWN">خودمان</option>
+              <option value="DISSOLVED">منحل‌شده</option>
+              <option value="MERGED">ادغامی</option>
+            </select>
+            <input name="saminCode" placeholder="کد ثمین sender_university" defaultValue={editing?.saminCode || ''} className="border rounded px-2 py-1.5" />
+            <div className="col-span-2 flex gap-2">
+              <button type="submit" className="bg-indigo-600 text-white px-4 py-1.5 rounded text-xs">ذخیره</button>
+              <button type="button" onClick={() => { setEditing(null); setShowAdd(false); }} className="border px-3 py-1.5 rounded text-xs">انصراف</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
