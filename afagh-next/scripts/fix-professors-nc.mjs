@@ -192,6 +192,7 @@ try {
   }
 
   const stats = { ncReplaced: 0, ncClash: 0, ncFilePlaceholder: 0, ncNoFile: 0, bdReplaced: 0, bdFilled: 0, bdCorrupt: 0, bdDiffOther: 0, bdNoFile: 0, facRenamed: 0, deptLinked: 0, deptMiss: 0, noFile: 0 };
+  const missInfo = new Map(); // grpName -> {n, codes, fac} برای گزارش گروه‌های بدون تطبیق
   const show = [];
   const clashList = [];
   const facRenamePlan = [];
@@ -248,7 +249,19 @@ try {
         stats.deptLinked++;
         if (show.length < 30) show.push(`${code}: dept → ${cands[0].name} (id ${cands[0].id})`);
         if (APPLY) await pool.query(`UPDATE staff SET "departmentId"=$2 WHERE id=$1`, [st.id, cands[0].id]);
-      } else stats.deptMiss++;
+      } else {
+        stats.deptMiss++;
+        const k = r.grpName || '(بدون گروه در فایل)';
+        if (!missInfo.has(k)) missInfo.set(k, { n: 0, codes: [], fac: st.facultyId });
+        const mi = missInfo.get(k); mi.n++;
+        if (mi.codes.length < 8) mi.codes.push(code);
+      }
+    } else if (st.departmentId == null && !r?.grpName) {
+      stats.deptMiss++;
+      const k = '(بدون گروه در فایل)';
+      if (!missInfo.has(k)) missInfo.set(k, { n: 0, codes: [], fac: null });
+      const mi = missInfo.get(k); mi.n++;
+      if (mi.codes.length < 8) mi.codes.push(code);
     }
   }
 
@@ -288,6 +301,12 @@ try {
     }
     console.log(`طبقه‌بندی ${clashList.length} تداخل: اشتراک‌فایل=${cls.fileShares} مالک‌فایل‌متفاوت=${cls.ownerOtherFileNC} مالک‌بدون‌فایل=${cls.ownerNoFile} خودکد=${cls.selfCode}`);
     for (const l of lines) console.log(l);
+  }
+  if (missInfo.size) {
+    console.log('\nگروه‌های بدون تطبیق (departmentId خالی):');
+    for (const [k, v] of [...missInfo].sort((a, b) => b[1].n - a[1].n)) {
+      console.log(`  «${k}» ×${v.n} | کدها: ${v.codes.join(', ')} | facultyId=${v.fac ?? '—'}`);
+    }
   }
   console.log(`\nخلاصه (uni ${UNI}): NC جایگزین=${stats.ncReplaced} تداخل=${stats.ncClash} placeholderفایل=${stats.ncFilePlaceholder} بدون‌فایل=${stats.ncNoFile} | تولد جایگزین=${stats.bdReplaced} (خالی=${stats.bdFilled} امضای‌باگدار=${stats.bdCorrupt} مغایرت_دیگر=${stats.bdDiffOther}) بدون‌فایل=${stats.bdNoFile} | دانشکده rename=${stats.facRenamed} | گروه لینک=${stats.deptLinked} miss=${stats.deptMiss} | بی‌فایل=${stats.noFile}` + (APPLY ? ' | ✅ اعمال شد' : ' | (خشک)'));
 } catch (err) {
