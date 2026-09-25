@@ -352,7 +352,6 @@ export default async function StudentTranscriptPage() {
                       })}
                     </tbody>
                   </table>
-                </div>
 
                 <div className="bg-slate-100 p-2 border-t border-slate-700 flex items-center justify-between font-bold text-[10px] text-slate-800 mt-auto">
                   <div className="flex gap-2">
