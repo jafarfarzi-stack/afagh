@@ -366,6 +366,7 @@ export default async function StudentTranscriptPage() {
             );
           })}
         </div>
+      </div>
 
         <div className="border-2 border-slate-800 mt-6 overflow-hidden">
           <div className="bg-slate-800 text-white px-3 py-1 font-bold text-center text-xs">
@@ -433,5 +434,6 @@ export default async function StudentTranscriptPage() {
 
       </div>
     </div>
-  );
+  </div>
+);
 }
