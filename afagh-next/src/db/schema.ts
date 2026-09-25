@@ -1941,6 +1941,7 @@ export const universities = pgTable('universities', {
   kind: varchar('kind', { length: 20 }).notNull().default('DISSOLVED'), // OWN | DISSOLVED | MERGED
   status: varchar('status', { length: 20 }).notNull().default('ACTIVE'), // ACTIVE | ARCHIVED
   saminCode: varchar('saminCode', { length: 20 }), // کد ثمین sender_university
+  logoUrl: varchar('logoUrl', { length: 255 }), // ارم اختصاصی هر دانشگاه (کارنامه/مدارک)؛ خالی = ارم سراسری تنظیمات
   province: varchar('province', { length: 80 }),
   dissolvedAt: varchar('dissolvedAt', { length: 10 }),
   note: text('note'),

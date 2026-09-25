@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { upsertUniversity, saveSaminConnection, deleteUniversity } from './actions';
+import { upsertUniversity, saveSaminConnection, deleteUniversity, uploadUniversityLogoAction, deleteUniversityLogoAction } from './actions';
 
-type Uni = { id: number; code: string; title: string; kind: string; status: string; saminCode: string | null; province: string | null; dissolvedAt: string | null; isActive: number };
+type Uni = { id: number; code: string; title: string; kind: string; status: string; saminCode: string | null; province: string | null; dissolvedAt: string | null; isActive: number; logoUrl: string | null };
 type Conn = { universityId: number; apiBaseUrl: string; authBaseUrl: string; clientId: string | null; username: string | null; isEnabled: number; lastSyncAt: string | null; hasSecret: boolean };
 
 export default function UniversitiesClient({ universities, connections }: { universities: Uni[]; connections: Conn[] }) {
@@ -22,6 +22,7 @@ export default function UniversitiesClient({ universities, connections }: { univ
             <tr className="bg-slate-50 border-b text-slate-600">
               <th className="px-2 py-2 text-right">کد</th>
               <th className="px-2 py-2 text-right">عنوان</th>
+              <th className="px-2 py-2 text-right">ارم</th>
               <th className="px-2 py-2 text-right">نوع</th>
               <th className="px-2 py-2 text-right">کد ثمین</th>
               <th className="px-2 py-2 text-right">اتصال ثمین</th>
@@ -35,6 +36,7 @@ export default function UniversitiesClient({ universities, connections }: { univ
                 <tr key={u.id} className="border-b hover:bg-slate-50">
                   <td className="px-2 py-2 font-mono font-bold">{u.code}</td>
                   <td className="px-2 py-2">{u.title}</td>
+                  <td className="px-2 py-2"><LogoCell uni={u} onMsg={setMsg} /></td>
                   <td className="px-2 py-2">{u.kind === 'OWN' ? 'خودمان' : 'منحل‌شده'}</td>
                   <td className="px-2 py-2 font-mono text-[11px]">{u.saminCode || '—'}</td>
                   <td className="px-2 py-2">
@@ -76,6 +78,33 @@ export default function UniversitiesClient({ universities, connections }: { univ
         </form>
       </div>
     </div>
+  );
+}
+
+function LogoCell({ uni, onMsg }: { uni: Uni; onMsg: (s: string) => void }) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <span className="flex items-center gap-1">
+        {uni.logoUrl
+          ? <img src={uni.logoUrl} alt={`ارم ${uni.code}`} className="max-w-10 max-h-10 object-contain border rounded bg-white" />
+          : <span className="text-slate-400">—</span>}
+        <button onClick={() => setOpen(true)} className="text-indigo-600 hover:underline">{uni.logoUrl ? 'تعویض' : 'بارگذاری'}</button>
+      </span>
+    );
+  }
+  return (
+    <span className="flex flex-wrap gap-1 items-center">
+      <form action={async (fd) => { try { await uploadUniversityLogoAction(fd); onMsg(`ارم ${uni.code} ذخیره شد`); setOpen(false); } catch (e: any) { onMsg(e.message); } }} className="flex gap-1 items-center">
+        <input type="hidden" name="universityId" value={uni.id} />
+        <input type="file" name="logo" accept="image/png,image/jpeg,image/webp" className="text-[11px] max-w-40" required />
+        <button type="submit" className="bg-indigo-600 text-white px-2 py-0.5 rounded text-[11px]">ذخیره</button>
+      </form>
+      {uni.logoUrl && (
+        <button onClick={async () => { try { await deleteUniversityLogoAction(uni.id); onMsg(`ارم ${uni.code} حذف شد (بازگشت به ارم سراسری)`); } catch (e: any) { onMsg(e.message); } }} className="text-red-600 hover:underline text-[11px]">حذف</button>
+      )}
+      <button type="button" onClick={() => setOpen(false)} className="border px-2 py-0.5 rounded text-[11px]">×</button>
+    </span>
   );
 }
 

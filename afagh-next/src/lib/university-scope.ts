@@ -8,7 +8,7 @@ export type { UniTheme } from './university-theme';
 /** نام کوکی دانشگاه فعال — همهٔ صفحه‌های ادمین همین را می‌خوانند */
 export const UNIVERSITY_COOKIE = 'afagh_uni';
 
-export type UniScope = { id: number; code: string; title: string; kind: string };
+export type UniScope = { id: number; code: string; title: string; kind: string; logoUrl: string | null };
 
 /**
  * دانشگاه فعال کاربر: کوکی → اعتبارسنجی در DB → پیش‌فرض AFAGH.
@@ -20,9 +20,10 @@ export async function getCurrentUniversity(): Promise<UniScope> {
     all = (await db.select({
       id: universities.id, code: universities.code,
       title: universities.title, kind: universities.kind,
+      logoUrl: universities.logoUrl,
     }).from(universities).orderBy(universities.id)) as UniScope[];
   } catch { /* جدول هنوز ساخته نشده */ }
-  if (!all.length) return { id: 1, code: 'AFAGH', title: 'دانشگاه آفاق', kind: 'OWN' };
+  if (!all.length) return { id: 1, code: 'AFAGH', title: 'دانشگاه آفاق', kind: 'OWN', logoUrl: null };
   const want = (await cookies()).get(UNIVERSITY_COOKIE)?.value?.trim();
   const hit = want ? all.find(u => u.code === want) : undefined;
   return hit ?? all[0];
@@ -34,8 +35,9 @@ export async function listUniversities(): Promise<UniScope[]> {
     return (await db.select({
       id: universities.id, code: universities.code,
       title: universities.title, kind: universities.kind,
+      logoUrl: universities.logoUrl,
     }).from(universities).orderBy(universities.id)) as UniScope[];
   } catch {
-    return [{ id: 1, code: 'AFAGH', title: 'دانشگاه آفاق', kind: 'OWN' }];
+    return [{ id: 1, code: 'AFAGH', title: 'دانشگاه آفاق', kind: 'OWN', logoUrl: null }];
   }
 }

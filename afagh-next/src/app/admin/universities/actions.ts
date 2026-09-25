@@ -49,3 +49,46 @@ export async function deleteUniversity(id: number) {
   await db.delete(universities).where(eq(universities.id, id));
   revalidatePath('/admin/universities');
 }
+
+/**
+ * بارگذاری ارم اختصاصی یک دانشگاه — PNG/JPG/WebP تا ۲MB در public/uploads/logo-uni-<id>.<ext>
+ * در کارنامه/مدارک همان دانشگاه استفاده می‌شود؛ اگر خالی باشد ارم سراسری تنظیمات نمایش داده می‌شود.
+ */
+export async function uploadUniversityLogoAction(formData: FormData) {
+  await requireRole(['ADMIN']);
+  const universityId = Number(formData.get('universityId'));
+  if (!universityId) throw new Error('دانشگاه نامشخص');
+  const [uni] = await db.select().from(universities).where(eq(universities.id, universityId)).limit(1);
+  if (!uni) throw new Error('دانشگاه یافت نشد');
+  const file = formData.get('logo');
+  if (!file || typeof file === 'string') throw new Error('فایلی انتخاب نشده است.');
+  const allowed = ['image/png', 'image/jpeg', 'image/webp'];
+  if (!allowed.includes(file.type)) throw new Error('فقط PNG/JPG/WebP مجاز است.');
+  if (file.size > 2 * 1024 * 1024) throw new Error('حجم فایل بیش از ۲ مگابایت است.');
+  const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+  const { mkdir, writeFile, unlink } = await import('node:fs/promises');
+  const { join } = await import('node:path');
+  const dir = join(process.cwd(), 'public', 'uploads');
+  await mkdir(dir, { recursive: true });
+  const buf = Buffer.from(await file.arrayBuffer());
+  await writeFile(join(dir, `logo-uni-${universityId}.${ext}`), buf);
+  for (const e of ['png', 'jpg', 'webp']) {
+    if (e === ext) continue;
+    try { await unlink(join(dir, `logo-uni-${universityId}.${e}`)); } catch { /* نبود */ }
+  }
+  await db.update(universities).set({ logoUrl: `/uploads/logo-uni-${universityId}.${ext}` }).where(eq(universities.id, universityId));
+  revalidatePath('/admin/universities');
+}
+
+/** حذف ارم اختصاصی دانشگاه (بازگشت به ارم سراسری) */
+export async function deleteUniversityLogoAction(universityId: number) {
+  await requireRole(['ADMIN']);
+  if (!universityId) throw new Error('دانشگاه نامشخص');
+  const { unlink } = await import('node:fs/promises');
+  const { join } = await import('node:path');
+  for (const e of ['png', 'jpg', 'webp']) {
+    try { await unlink(join(process.cwd(), 'public', 'uploads', `logo-uni-${universityId}.${e}`)); } catch { /* نبود */ }
+  }
+  await db.update(universities).set({ logoUrl: null }).where(eq(universities.id, universityId));
+  revalidatePath('/admin/universities');
+}

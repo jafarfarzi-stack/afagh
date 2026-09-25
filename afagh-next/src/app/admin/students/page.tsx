@@ -283,7 +283,7 @@ export default async function AdminStudentsPage({
 
       <StudentsManagerClient
         key={currentUniversity?.code ?? 'AFAGH'}
-        logoUrl={await getSetting('UNIVERSITY_LOGO').catch(() => '')}
+        logoUrl={currentUniversity?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => ''))}
         codeLabels={codeLabels}
         regulations={regulationPicks}
         students={studentRows.map(s => ({
