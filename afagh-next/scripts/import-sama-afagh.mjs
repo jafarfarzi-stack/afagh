@@ -18,6 +18,7 @@
 import { readdirSync, statSync, createReadStream } from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { norm, resolveName } from './lib/name-resolver.mjs';
 import pg from 'pg';
 
 const { Pool } = pg;
@@ -589,9 +590,11 @@ async function phaseStudents(files, lookups) {
     for (const r of mRows) if (r.majorCode) majorsByCode.set(String(r.majorCode), { id: r.id, standardCode: r.standardCode });
     console.log(`رشته‌ها از DB بارگذاری شد: ${majorsByCode.size} رشته`);
   }
+  // دیکشنری نام (برای گارد لحظهٔ واردات: split بدون جداکننده)
+  const dict = await buildDictionary(pool);
   // ۱) فایل اصلی
   const main = new Map();
-  const stats = { total: 0, invalid: 0, badCode: 0, mergedSupp: 0, suppOrphans: 0, insertedUsers: 0, existingUsers: 0, insertedStudents: 0, existingStudents: 0, badNC: 0, ncChecksumWarn: 0, unmatchedMajor: new Set(), unknownMaghta: new Set(), unknownStatus: new Set(), idMin: null, idMax: null };
+  const stats = { total: 0, invalid: 0, badCode: 0, mergedSupp: 0, suppOrphans: 0, insertedUsers: 0, existingUsers: 0, insertedStudents: 0, existingStudents: 0, badNC: 0, ncChecksumWarn: 0, unmatchedMajor: new Set(), unknownMaghta: new Set(), unknownStatus: new Set(), unresolvedName: 0, idMin: null, idMax: null };
   stats.dupStnoSameFile = 0;
   for await (const { cols } of tsvRows(files.students)) {
     const stno = (cols[0] || '').trim();
@@ -661,9 +664,24 @@ async function phaseStudents(files, lookups) {
   for (const [stno, c] of main) {
     const s = c._supp || [];
     const rawName = normTxt(c[2]);
+    const normedName = norm(rawName);
     const dash = rawName.lastIndexOf('-');
-    const lastName = (dash > 0 ? rawName.slice(0, dash) : rawName).trim().slice(0, 100) || 'نامشخص';
-    const firstName = (dash > 0 ? rawName.slice(dash + 1) : '').trim().slice(0, 100) || 'نامشخص';
+    let lastName, firstName;
+    if (dash > 0) {
+      lastName = rawName.slice(0, dash).trim().slice(0, 100);
+      firstName = rawName.slice(dash + 1).trim().slice(0, 100);
+    } else {
+      // گارد: نام بدون جداکننده — با resolver مشترک split می‌شود؛
+      // اگر نام کوچک واقعی قابل استخراج نباشد، firstName='' (نه «نامشخص»)
+      const r = resolveName(normedName, universityId, dict);
+      if (r && r.fn !== 'نامشخص') {
+        firstName = r.fn; lastName = r.ln;
+      } else {
+        firstName = ''; lastName = rawName;
+        stats.unresolvedName++;
+        if (stats.unresolvedName <= 20) console.log(`  ⚠ ردیف بدون نام کوچک: ${stno} «${rawName}»`);
+      }
+    }
     let nc = (s[7] || '').trim();
     if (!/^\d{10}$/.test(nc)) { nc = ''; stats.badNC++; }
     else if (checkNationalCode(nc) !== 'ok') stats.ncChecksumWarn++;
@@ -853,7 +871,7 @@ async function phaseStudents(files, lookups) {
   }
   stats.unmatchedMajor = [...stats.unmatchedMajor];
   stats.unknownMaghta = [...stats.unknownMaghta];
-  console.log(`دانشجویان: users ins=${stats.insertedUsers} exist=${stats.existingUsers} | students ins=${stats.insertedStudents} exist=${stats.existingStudents} invalid=${stats.invalid} badNC=${stats.badNC} checksumWarn=${stats.ncChecksumWarn}`);
+  console.log(`دانشجویان: users ins=${stats.insertedUsers} exist=${stats.existingUsers} | students ins=${stats.insertedStudents} exist=${stats.existingStudents} invalid=${stats.invalid} badNC=${stats.badNC} checksumWarn=${stats.ncChecksumWarn} unresolvedName=${stats.unresolvedName}`);
   console.log(`رشته‌های بی‌تطبیق: ${JSON.stringify(stats.unmatchedMajor)}`);
   await logRun('student', 'studentraw+supp (SAMA)', stats);
 }

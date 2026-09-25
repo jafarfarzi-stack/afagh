@@ -1,5 +1,6 @@
 import { requireRole } from '@/lib/auth';
 import { getExamWorkspaceAction } from './actions';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import ExamPlanningClient from './ExamPlanningClient';
 
 export const dynamic = 'force-dynamic';
@@ -7,10 +8,13 @@ export const dynamic = 'force-dynamic';
 export default async function AdminExamsPage() {
   await requireRole(['ADMIN', 'EDU_EXPERT', 'VAULT_MANAGER']);
 
-  const workspace = await getExamWorkspaceAction();
+  const currentUniversity = await getCurrentUniversity();
+  const currentUniversityId = currentUniversity?.id ?? null;
+  /* TODO: filter by universityId */
+
+  const workspace = await getExamWorkspaceAction(currentUniversityId ?? undefined);
   if (!workspace.ok) {
-    return (
-      <div dir="rtl" className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
+    return ( className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
         <div className="bg-white rounded-2xl shadow-sm border border-rose-200 p-6 max-w-md text-center space-y-2">
           <div className="text-2xl">⚠️</div>
           <h2 className="font-extrabold text-slate-900">بارگذاری کارتابل امتحانات ناموفق بود</h2>

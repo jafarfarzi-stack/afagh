@@ -5,6 +5,7 @@ import {
   curriculum_courses, curriculum_versions, majors,
 } from '@/db/schema';
 import { eq, asc, count } from 'drizzle-orm';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import GradeCodesClient from './GradeCodesClient';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +15,11 @@ const PAGE_SIZE = 100;
 export default async function GradeStatusCodesPage() {
   await requireRole(['ADMIN', 'EDU_EXPERT', 'VICE_EDU']);
 
-  const [{ total }] = await db.select({ total: count() }).from(courses);
+  const currentUniversity = await getCurrentUniversity();
+  const currentUniversityId = currentUniversity?.id ?? null;
+  const whereCond = currentUniversityId ? eq(courses.universityId, currentUniversityId) : undefined;
+
+  const [{ total }] = await db.select({ total: count() }).from(courses).where(whereCond);
 
   const [bankCourses, departmentsList, degreeLevels, clusters, offeredCourses, majorsList] = await Promise.all([
     // بانک دروس
@@ -57,6 +62,7 @@ export default async function GradeStatusCodesPage() {
       .leftJoin(departments, eq(courses.departmentId, departments.id))
       .leftJoin(degree_level_configs, eq(courses.degreeLevelId, degree_level_configs.id))
       .leftJoin(equivalence_clusters, eq(courses.clusterId, equivalence_clusters.id))
+      .where(whereCond)
       .orderBy(asc(courses.code))
       .limit(PAGE_SIZE),
     // گروه‌ها
@@ -95,6 +101,7 @@ export default async function GradeStatusCodesPage() {
       .innerJoin(courses, eq(curriculum_courses.courseId, courses.id))
       .innerJoin(majors, eq(curriculum_versions.majorId, majors.id))
       .leftJoin(degree_level_configs, eq(curriculum_versions.degreeLevelId, degree_level_configs.id))
+      .where(whereCond)
       .orderBy(asc(majors.name), asc(curriculum_versions.versionCode), asc(curriculum_courses.recommendedSemester), asc(courses.code))
       .limit(PAGE_SIZE),
     // رشته‌ها

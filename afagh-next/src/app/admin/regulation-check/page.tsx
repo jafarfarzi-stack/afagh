@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { scanMismatchedSamaCodes, applyCorrectedSamaCodes, scanGraduatedWithoutGrades } from '../grades/actions';
+import { scanMismatchedSamaCodes, applyCorrectedSamaCodes, scanGraduatedWithoutGrades, getUniversityId } from '../grades/actions';
 import type { MismatchRow, StatusMismatchRow } from '../grades/actions';
 
 export default function RegulationCheckPage() {
+  const [universityId, setUniversityId] = useState<number | null>(null);
   const [rows, setRows] = useState<MismatchRow[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [scanning, startScan] = useTransition();
@@ -15,12 +16,15 @@ export default function RegulationCheckPage() {
   const [statusScanning, startStatusScan] = useTransition();
   const [statusMsg, setStatusMsg] = useState('');
 
-  const doStatusScan = () => {
+  const fetchUniId = async () => { const r = await getUniversityId(); setUniversityId(r.universityId); };
+
+  const doStatusScan = async () => {
     setStatusMsg('');
     setStatusRows([]);
+    await fetchUniId();
     startStatusScan(async () => {
       try {
-        const result = await scanGraduatedWithoutGrades();
+        const result = await scanGraduatedWithoutGrades(200, universityId ?? undefined);
         setStatusRows(result.rows);
         setStatusMsg(result.rows.length === 0 ? 'مغایرتی یافت نشد.' : `${result.rows.length} فارغ‌التحصیل بدون سابقه نمره پیدا شد.`);
       } catch (e: any) {
@@ -29,13 +33,14 @@ export default function RegulationCheckPage() {
     });
   };
 
-  const doScan = () => {
+  const doScan = async () => {
     setMsg('');
     setRows([]);
     setSelected(new Set());
+    await fetchUniId();
     startScan(async () => {
       try {
-        const result = await scanMismatchedSamaCodes();
+        const result = await scanMismatchedSamaCodes(universityId ?? undefined);
         setRows(result);
         setMsg(result.length === 0 ? 'همه کدها صحیح هستند.' : `${result.length} نمره با کد نادرست پیدا شد.`);
       } catch (e: any) {
@@ -44,12 +49,13 @@ export default function RegulationCheckPage() {
     });
   };
 
-  const doFix = () => {
+  const doFix = async () => {
     const ids = [...selected];
     if (ids.length === 0) { setMsg('ابتدا نمراتی را انتخاب کنید.'); return; }
+    await fetchUniId();
     startFix(async () => {
       try {
-        const result = await applyCorrectedSamaCodes(ids);
+        const result = await applyCorrectedSamaCodes(ids, universityId ?? undefined);
         setMsg(`${result.applied} نمره اصلاح شد.`);
         setSelected(new Set());
         doScan();
@@ -59,12 +65,13 @@ export default function RegulationCheckPage() {
     });
   };
 
-  const doFixAll = () => {
+  const doFixAll = async () => {
     const ids = rows.map(r => r.enrollmentId);
     if (ids.length === 0) return;
+    await fetchUniId();
     startFix(async () => {
       try {
-        const result = await applyCorrectedSamaCodes(ids);
+        const result = await applyCorrectedSamaCodes(ids, universityId ?? undefined);
         setMsg(`${result.applied} نمره اصلاح شد.`);
         setSelected(new Set());
         doScan();

@@ -41,7 +41,7 @@ export type FilterOptions = {
   universities: { id: number; code: string; title: string; kind: string }[];
 };
 
-export async function getFilterOptions(): Promise<FilterOptions> {
+export async function getFilterOptions({ universityId }: { universityId?: number } = {}): Promise<FilterOptions> {
   await requireRole(ROLES);
   const terms = await db.execute<{ code: string; title: string | null }>(
     sql`SELECT "termCode" AS code, title FROM academic_terms ORDER BY "termCode" DESC`,
@@ -56,7 +56,7 @@ export async function getFilterOptions(): Promise<FilterOptions> {
     sql`SELECT id, name, "majorCode" AS code FROM majors ORDER BY name`,
   );
   const years = await db.execute<{ y: number }>(
-    sql`SELECT DISTINCT "entryYear" AS y FROM students ORDER BY 1 DESC`,
+    sql`SELECT DISTINCT "entryYear" AS y FROM students ${universityId ? sql`WHERE "universityId" = ${universityId}` : sql``} ORDER BY 1 DESC`,
   );
   return {
     terms: terms.rows,

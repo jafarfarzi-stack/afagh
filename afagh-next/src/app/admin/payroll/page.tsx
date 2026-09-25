@@ -1,5 +1,6 @@
 import { requireRole } from '@/lib/auth';
 import { currentTerm, getOverview } from '@/lib/payroll-engine';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import LivePayrollClient from './LivePayrollClient';
 import PayrollEngineClient from './PayrollEngineClient';
 
@@ -16,13 +17,16 @@ export default async function PayrollPage(props: { searchParams: Promise<{ tab?:
   const user = await requireRole(['ADMIN', 'EDU_EXPERT', 'FINANCE_EXPERT', 'FINANCE']);
   const isFinance = user.roles.some(r => r === 'FINANCE_EXPERT' || r === 'FINANCE');
 
+  const currentUniversity = await getCurrentUniversity();
+  const currentUniversityId = currentUniversity?.id ?? null;
+
   const sp = await props.searchParams;
   const tab: Tab = sp?.tab === 'simulator' ? 'simulator' : 'live';
 
   if (tab === 'simulator') return <PayrollEngineClient />;
 
   const term = await currentTerm();
-  const overview = term ? await getOverview(term.id) : null;
+  const overview = term ? await getOverview(term.id, currentUniversityId ?? undefined) : null;
 
   return (
     <div className="space-y-4 p-4" dir="rtl">

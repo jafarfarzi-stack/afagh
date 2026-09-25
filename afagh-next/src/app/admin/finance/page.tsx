@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requireRole } from '@/lib/auth';
 import { listFinanceStudents, listFinanceFilterOptions } from '@/lib/finance-engine';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import FinanceTable from './FinanceTable';
 
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,9 @@ export default async function FinanceWorklistPage(props: {
 }) {
   await requireRole(FINANCE);
 
+  const currentUniversity = await getCurrentUniversity();
+  const currentUniversityId = currentUniversity?.id ?? null;
+
   const sp = (await props.searchParams) || {};
   const majorId = Number(sp.majorId) || null;
   const degreeLevelId = Number(sp.degreeLevelId) || null;
@@ -29,8 +33,8 @@ export default async function FinanceWorklistPage(props: {
   const onlyDebtors = sp.debtors === '1';
 
   const [options, students] = await Promise.all([
-    listFinanceFilterOptions(),
-    listFinanceStudents({ majorId, degreeLevelId, entryYear, search, onlyDebtors, limit: 1000 }),
+    listFinanceFilterOptions({ universityId: currentUniversityId }),
+    listFinanceStudents({ majorId, degreeLevelId, entryYear, search, onlyDebtors, limit: 1000, universityId: currentUniversityId }),
   ]);
 
   const totals = students.reduce(

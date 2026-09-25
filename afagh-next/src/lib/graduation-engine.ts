@@ -870,9 +870,10 @@ export async function getDossier(auditId: number) {
   };
 }
 
-export async function listDossiers(filter: { status?: string; q?: string } = {}) {
+export async function listDossiers(filter: { status?: string; q?: string; universityId?: number } = {}) {
   const conds = [];
   if (filter.status && filter.status !== 'ALL') conds.push(eq(graduation_audits.workflowStatus, filter.status));
+  if (filter.universityId) conds.push(eq(students.universityId, filter.universityId));
   const rows = await db.select({
     id: graduation_audits.id, studentId: graduation_audits.studentId,
     workflowStatus: graduation_audits.workflowStatus, gpa: graduation_audits.gpa,
@@ -904,10 +905,14 @@ export async function listDossiers(filter: { status?: string; q?: string } = {})
   return q ? out.filter(r => r.studentCode.includes(q) || r.fullName.includes(q)) : out;
 }
 
-export async function pipelineStats() {
+export async function pipelineStats({ universityId }: { universityId?: number } = {}) {
+  const whereCond = universityId ? eq(students.universityId, universityId) : undefined;
   const rows = await db.select({
     status: graduation_audits.workflowStatus, n: sql<number>`count(*)::int`,
-  }).from(graduation_audits).groupBy(graduation_audits.workflowStatus);
+  }).from(graduation_audits)
+    .innerJoin(students, eq(students.id, graduation_audits.studentId))
+    .where(whereCond)
+    .groupBy(graduation_audits.workflowStatus);
   const map = new Map(rows.map(r => [r.status, Number(r.n)]));
   const [issued] = await db.select({ n: sql<number>`count(*)::int` }).from(issued_degrees);
   const [undelivered] = await db.select({ n: sql<number>`count(*)::int` }).from(issued_degrees).where(eq(issued_degrees.isDelivered, 0));

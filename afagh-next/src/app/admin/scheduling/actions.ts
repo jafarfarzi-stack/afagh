@@ -293,7 +293,7 @@ export type SchedulingWorkspaceResult =
   | { ok: false; error: string };
 
 /** دادهٔ اولیهٔ واقعی صفحه (جایگزین INITIAL_* های Mock) */
-export async function getSchedulingWorkspaceAction(termId?: number): Promise<SchedulingWorkspaceResult> {
+export async function getSchedulingWorkspaceAction(termId?: number, universityId?: number): Promise<SchedulingWorkspaceResult> {
   try {
     await requireRole(EDITORS);
     const [terms, programs, classrooms, professors, deptRows] = await Promise.all([

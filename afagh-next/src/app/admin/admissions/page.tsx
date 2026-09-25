@@ -11,6 +11,7 @@ import {
 import { requireRole } from '@/lib/auth';
 import { ensureDefaultSanjeshMappings } from '@/lib/admissions-engine';
 import { ensureDefaultIntegrations } from '@/lib/api-integrations';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import AdmissionsClient from './AdmissionsClient';
 
 export const dynamic = 'force-dynamic';
@@ -19,6 +20,10 @@ export default async function AdminAdmissionsPage() {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
   await ensureDefaultSanjeshMappings();
   await ensureDefaultIntegrations();
+
+  const currentUniversity = await getCurrentUniversity();
+  const currentUniversityId = currentUniversity?.id ?? null;
+  /* TODO: filter by universityId */
 
   const allMajors = await db.select().from(majors).orderBy(majors.id);
   const allLevels = await db.select().from(degree_level_configs).orderBy(degree_level_configs.id);

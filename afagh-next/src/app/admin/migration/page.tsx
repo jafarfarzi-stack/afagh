@@ -9,6 +9,7 @@ import { gradeStats } from '@/lib/migration/grades';
 import Link from 'next/link';
 import { missingCodeSummary } from '../codes/actions';
 import MigrationClient from './MigrationClient';
+import { getCurrentUniversity } from '@/lib/university-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,10 @@ const DEFAULT_SOURCE = 'LEGACY';
 
 export default async function MigrationPage() {
   await requireRole(['ADMIN']);
+
+  const currentUniversity = await getCurrentUniversity();
+  const currentUniversityId = currentUniversity?.id ?? null;
+  /* TODO: filter by universityId */
 
   const [sourcesRaw, formulas, compareRuns, finCount, gStats] = await Promise.all([
     db.select({ code: legacy_sources.code, title: legacy_sources.title }).from(legacy_sources).orderBy(legacy_sources.code),

@@ -171,7 +171,7 @@ export type ExamWorkspaceResult =
   | { ok: false; error: string };
 
 /** کارتابل واقعی صفحهٔ اداری امتحانات (جایگزین Mock های ۲۶۵۷ خطی) */
-export async function getExamWorkspaceAction(termId?: number): Promise<ExamWorkspaceResult> {
+export async function getExamWorkspaceAction(termId?: number, universityId?: number): Promise<ExamWorkspaceResult> {
   try {
     await requireRole(EDITORS);
     const terms = await listRealTerms();

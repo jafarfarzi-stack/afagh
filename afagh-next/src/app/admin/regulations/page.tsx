@@ -2,6 +2,7 @@ import { db } from '@/db';
 import { degree_level_configs, educational_regulations } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { eq } from 'drizzle-orm';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import RegulationsClient, { DegreeLevelItem, RegulationItem } from './RegulationsClient';
 import {
   DEFAULT_BACHELOR_REGULATION_1403,
@@ -13,6 +14,10 @@ export const dynamic = 'force-dynamic';
 
 export default async function AdminRegulationsPage() {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
+
+  const currentUniversity = await getCurrentUniversity();
+  const currentUniversityId = currentUniversity?.id ?? null;
+  /* TODO: filter by universityId */
 
   let degreeLevelsList: DegreeLevelItem[] = [];
   try {

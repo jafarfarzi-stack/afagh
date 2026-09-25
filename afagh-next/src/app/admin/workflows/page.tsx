@@ -11,6 +11,7 @@ import {
 } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { ensureDefaultProcesses } from '@/lib/workflow-engine';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import { getWorkflowAnalytics } from '@/lib/workflow-analytics';
 import { getExecutiveRealtimeOps } from '@/lib/executive-analytics';
 import AdminWorkflowsClient from './AdminWorkflowsClient';
@@ -21,6 +22,10 @@ export default async function AdminWorkflowsPage() {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
   await ensureDbSchemaPatches();
   await ensureDefaultProcesses();
+
+  const currentUniversity = await getCurrentUniversity();
+  const currentUniversityId = currentUniversity?.id ?? null;
+  /* TODO: filter by universityId */
 
   const now = new Date();
 

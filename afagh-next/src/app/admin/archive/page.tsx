@@ -2,6 +2,7 @@ import { desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { document_categories, document_types, student_documents, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import ArchiveClient from './ArchiveClient';
 
 export const dynamic = 'force-dynamic';
@@ -11,6 +12,10 @@ const stColor: Record<string, string> = { PENDING: 'bg-slate-100 text-slate-700'
 
 export default async function ArchivePage() {
   await requireRole(['ADMIN', 'ARCHIVE_EXPERT']);
+
+  const currentUniversity = await getCurrentUniversity();
+  const currentUniversityId = currentUniversity?.id ?? null;
+  /* TODO: filter by universityId */
 
   const rows = await db
     .select({

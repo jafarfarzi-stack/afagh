@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { degree_level_configs, majors, student_cards, students, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { getNumber, getSetting } from '@/lib/settings';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import StudentCardsClient from './StudentCardsClient';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,10 @@ const fa = (n: unknown) => String(n ?? '—').replace(/\d/g, d => '۰۱۲۳۴۵�
  */
 export default async function AdminStudentCardsPage() {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
+
+  const currentUniversity = await getCurrentUniversity();
+  const currentUniversityId = currentUniversity?.id ?? null;
+  /* TODO: filter by universityId */
 
   const rows = await db
     .select({

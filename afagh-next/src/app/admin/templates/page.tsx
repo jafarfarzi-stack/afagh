@@ -1,6 +1,7 @@
 import { requireRole } from '@/lib/auth';
 import { getBool, getSetting } from '@/lib/settings';
 import { SECRET_MASK } from '@/lib/settings-shared';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import TemplateEngineClient, { type IntegrationSettingsProps } from './TemplateEngineClient';
 
 export const dynamic = 'force-dynamic';
@@ -10,6 +11,10 @@ const mask = (v: string) => (v ? SECRET_MASK : '');
 
 export default async function AdminTemplatesPage() {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
+
+  const currentUniversity = await getCurrentUniversity();
+  const currentUniversityId = currentUniversity?.id ?? null;
+  /* TODO: filter by universityId */
 
   const [
     bbbUrl, bbbSecret, moodleUrl, moodleToken, autoRecord,

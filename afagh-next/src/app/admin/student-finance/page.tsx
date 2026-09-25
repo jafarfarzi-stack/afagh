@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { requireRole } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +18,10 @@ const fa = (n: number) => Math.round(n).toLocaleString('fa-IR');
 
 export default async function StudentFinancePage() {
   await requireRole(['ADMIN', 'FINANCE_EXPERT', 'FINANCE']);
+
+  const currentUniversity = await getCurrentUniversity();
+  const currentUniversityId = currentUniversity?.id ?? null;
+  /* TODO: filter by universityId */
 
   // ── جمع کل شارژ/وصول و تعداد تراکنش‌ها ──
   const [tot] = (

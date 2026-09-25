@@ -1,5 +1,6 @@
 import { requireRole } from '@/lib/auth';
 import { cacheStatus, facilitiesReport, managementOverview } from '@/lib/bi-engine';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import BiRefreshButtons from './BiRefreshButtons';
 
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,10 @@ const fmtAge = (s: number | null) => (s == null ? '—' : s < 60 ? `${s} ثان�
  */
 export default async function AdminBiPage() {
   await requireRole(['ADMIN']);
+
+  const currentUniversity = await getCurrentUniversity();
+  const currentUniversityId = currentUniversity?.id ?? null;
+  /* TODO: filter by universityId */
 
   const [overview, facilities, cache] = await Promise.all([managementOverview(), facilitiesReport(), cacheStatus()]);
 

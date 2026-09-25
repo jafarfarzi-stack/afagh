@@ -1,12 +1,17 @@
 import { requireRole } from '@/lib/auth';
 import { getFilterOptions } from './actions';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import ReportsClient from './ReportsClient';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminReportsPage() {
   await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER']);
-  const opts = await getFilterOptions();
+
+  const currentUniversity = await getCurrentUniversity();
+  const currentUniversityId = currentUniversity?.id ?? null;
+
+  const opts = await getFilterOptions({ universityId: currentUniversityId });
 
   return (
     <div className="space-y-4">

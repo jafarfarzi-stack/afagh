@@ -7,6 +7,8 @@ const pool = new Pool({
 async function main() {
   const rem = await pool.query(`SELECT count(*) FROM users WHERE "firstName" = 'نامشخص'`);
   console.log('Remaining users with firstName = نامشخص:', rem.rows[0].count);
+  const empty = await pool.query(`SELECT count(*) FROM users WHERE "firstName" = ''`);
+  console.log('Remaining users with firstName = (empty):', empty.rows[0].count);
 
   const sampleCodes = ['9319918009', '9119918061', '8819919073', '8819919071', '8819919068', '40011264001', '400202001'];
   const samples = await pool.query(`

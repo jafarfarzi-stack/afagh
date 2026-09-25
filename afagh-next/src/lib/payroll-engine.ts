@@ -214,7 +214,7 @@ export async function currentTerm(termId?: number) {
  * بارگذاری کل دادهٔ لازم برای محاسبهٔ فیش همهٔ اساتید یک ترم.
  * تعداد کوئری‌ها ثابت است (۷) و به تعداد اساتید بستگی ندارد.
  */
-export async function loadTermPayrollData(termId: number): Promise<TermData> {
+export async function loadTermPayrollData(termId: number, universityId?: number): Promise<TermData> {
   const [term, coefs, rules, contracts, staffRows, offeringRows, sessionRows, gradeRows, docRows, statementRows] =
     await Promise.all([
       db.select().from(academic_terms).where(eq(academic_terms.id, termId)).limit(1).then(r => r[0] ?? null),
@@ -649,14 +649,14 @@ export async function computeTermPayroll(actorUserId?: number | null, termId?: n
 
 // ─────────────────── داشبورد مالی ───────────────────
 
-export async function getOverview(termId?: number): Promise<{
+export async function getOverview(termId?: number, universityId?: number): Promise<{
   term: string;
   list: PayrollOverviewItem[];
   totals: { budget: number; paid: number; remaining: number; staffCount: number };
 }> {
   const term = await currentTerm(termId);
   if (!term) throw new Error('ترم جاری مشخص نیست.');
-  const data = await loadTermPayrollData(term.id);
+  const data = await loadTermPayrollData(term.id, universityId);
 
   const list: PayrollOverviewItem[] = [];
   for (const staffId of Array.from(data.offeringsByStaff.keys())) {

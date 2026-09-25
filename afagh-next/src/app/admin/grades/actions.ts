@@ -14,6 +14,7 @@ import { requireRole } from '@/lib/auth';
 import { logGradeChange } from '@/lib/grade-change-log';
 import { resolveSamaGradeStatusCode, syncStudentCourseRegulations } from '@/lib/resolve-sama-code';
 import { gradeStatusTitleOf } from '@/lib/grade-status-codes';
+import { getCurrentUniversity } from '@/lib/university-scope';
 
 export interface AdminGradeState {
   ok: boolean;
@@ -400,9 +401,11 @@ export interface MismatchRow {
 /**
  * بررسی همه enrollmentها و برگرداندن لیست نمراتی که کد وضعیتشان نادرست است
  */
-export async function scanMismatchedSamaCodes(): Promise<MismatchRow[]> {
+export async function scanMismatchedSamaCodes(universityId?: number): Promise<MismatchRow[]> {
   await requireRole(['ADMIN']);
 
+  const whereParts: SQL[] = [eq(enrollments.gradeStatus, 'FINALIZED')];
+  if (universityId) whereParts.push(eq(students.universityId, universityId));
   const allEnrs = await db
     .select({
       enrollmentId: enrollments.id,
@@ -422,7 +425,7 @@ export async function scanMismatchedSamaCodes(): Promise<MismatchRow[]> {
     .innerJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
     .innerJoin(students, eq(students.id, enrollments.studentId))
     .leftJoin(educational_regulations, eq(educational_regulations.id, students.regulationId))
-    .where(eq(enrollments.gradeStatus, 'FINALIZED'))
+    .where(and(...whereParts))
     .orderBy(students.studentCode, academic_terms.termCode);
 
   const mismatches: MismatchRow[] = [];
@@ -494,7 +497,7 @@ export async function scanMismatchedSamaCodes(): Promise<MismatchRow[]> {
 /**
  * اعمال کدهای صحیح روی نمرات نادرست (بچ اصلاح)
  */
-export async function applyCorrectedSamaCodes(enrollmentIds: number[]): Promise<{ applied: number }> {
+export async function applyCorrectedSamaCodes(enrollmentIds: number[], universityId?: number): Promise<{ applied: number }> {
   await requireRole(['ADMIN']);
   let applied = 0;
 
@@ -509,7 +512,8 @@ export async function applyCorrectedSamaCodes(enrollmentIds: number[]): Promise<
         originalCode: enrollments.originalSamaCode,
       })
       .from(enrollments)
-      .where(eq(enrollments.id, eid))
+      .innerJoin(students, eq(students.id, enrollments.studentId))
+      .where(and(eq(enrollments.id, eid), universityId ? eq(students.universityId, universityId) : sql`true`))
       .limit(1);
     if (!enr) continue;
 
@@ -561,8 +565,10 @@ export interface StatusMismatchRow {
  * دانشجویان با وضعیت GRADUATED که نه enrollment نهایی و نه legacy_grades دارند.
  * (وضعیت از ثبتی آمده ولی جزئیات نمرات در اکسپورت سما جا مانده — مثل انتقالی با سوابق)
  */
-export async function scanGraduatedWithoutGrades(limit = 200): Promise<{ total: number; rows: StatusMismatchRow[] }> {
+export async function scanGraduatedWithoutGrades(limit = 200, universityId?: number): Promise<{ total: number; rows: StatusMismatchRow[] }> {
   await requireRole(['ADMIN']);
+  const whereParts = [eq(students.status, 'GRADUATED'), isNull(enrollments.id), isNull(legacy_grades.id)];
+  if (universityId) whereParts.push(eq(students.universityId, universityId));
   const rows = await db
     .select({
       studentId: students.id,
@@ -579,7 +585,14 @@ export async function scanGraduatedWithoutGrades(limit = 200): Promise<{ total: 
       and(eq(enrollments.studentId, students.id), eq(enrollments.gradeStatus, 'FINALIZED')),
     )
     .leftJoin(legacy_grades, eq(legacy_grades.studentCode, students.studentCode))
-    .where(and(eq(students.status, 'GRADUATED'), isNull(enrollments.id), isNull(legacy_grades.id)))
+    .where(and(...whereParts))
     .limit(limit);
   return { total: rows.length, rows };
+}
+
+/** بازگرداندن دانشگاه فعال کاربر (برای کامپوننت‌های کلاینت) */
+export async function getUniversityId(): Promise<{ universityId: number | null }> {
+  await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'GRADUATEAFFAIRS', 'FINANCE_EXPERT', 'FINANCE', 'VICE_EDU']);
+  const u = await getCurrentUniversity();
+  return { universityId: u?.id ?? null };
 }

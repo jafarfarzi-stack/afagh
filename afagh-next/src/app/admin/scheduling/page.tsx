@@ -1,5 +1,6 @@
 import { requireRole } from '@/lib/auth';
 import { getSchedulingWorkspaceAction } from './actions';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import DepartmentPlanningClient from './DepartmentPlanningClient';
 
 export const dynamic = 'force-dynamic';
@@ -11,7 +12,12 @@ export default async function DepartmentPlanningPage({
   searchParams: Promise<{ tab?: string | string[] }>;
 }) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
-  const workspace = await getSchedulingWorkspaceAction();
+
+  const currentUniversity = await getCurrentUniversity();
+  const currentUniversityId = currentUniversity?.id ?? null;
+  /* TODO: filter by universityId */
+
+  const workspace = await getSchedulingWorkspaceAction(currentUniversityId ?? undefined);
   if (!workspace.ok) {
     return (
       <div dir="rtl" className="min-h-screen bg-slate-100 flex items-center justify-center p-6">

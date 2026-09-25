@@ -2,6 +2,7 @@ import { requireRole } from '@/lib/auth';
 import { db } from '@/db';
 import { departments, faculties, majors } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import { getCurriculumOverviewAction, getCurriculumVersionDetailAction } from './actions/read';
 import type { VersionDetail } from './types';
 import CurriculumManagerClient from './CurriculumManagerClient';
@@ -23,6 +24,11 @@ export default async function AdminCurriculumPage({
   searchParams: Promise<{ tab?: string | string[]; version?: string | string[] }>;
 }) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
+
+  const currentUniversity = await getCurrentUniversity();
+  const currentUniversityId = currentUniversity?.id ?? null;
+  /* TODO: filter by universityId */
+
   const overview = await getCurriculumOverviewAction();
   if (!overview.ok) {
     return (

@@ -2,6 +2,7 @@ import { desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { short_term_certificates, short_term_courses, short_term_discounts, short_term_learners, short_term_registrations } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import AdminShortCoursesClient, { AdminCourseItem } from './AdminShortCoursesClient';
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +17,10 @@ export const dynamic = 'force-dynamic';
  */
 export default async function AdminShortCoursesPage() {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
+
+  const currentUniversity = await getCurrentUniversity();
+  const currentUniversityId = currentUniversity?.id ?? null;
+  /* TODO: filter by universityId */
 
   const courses = await db.select().from(short_term_courses).orderBy(desc(short_term_courses.id));
   const discounts = await db.select().from(short_term_discounts).orderBy(short_term_discounts.id);

@@ -57,6 +57,7 @@ export interface FinanceListFilters {
   /** فقط دانشجویان بدهکار */
   onlyDebtors?: boolean;
   limit?: number;
+  universityId?: number | null;
 }
 
 /**
@@ -67,12 +68,14 @@ export interface FinanceListFilters {
  * کارشناس بداند چه مبلغی در راه است.
  */
 export async function listFinanceStudents(
-  filters: FinanceListFilters = {}
+  filters: FinanceListFilters = {}, universityId?: number
 ): Promise<FinanceStudentRow[]> {
   const where: SQL[] = [];
   if (filters.majorId) where.push(eq(students.majorId, filters.majorId));
   if (filters.degreeLevelId) where.push(eq(students.degreeLevelId, filters.degreeLevelId));
   if (filters.entryYear) where.push(eq(students.entryYear, filters.entryYear));
+  const effectiveUniversityId = universityId ?? filters.universityId;
+  if (effectiveUniversityId) where.push(eq(students.universityId, effectiveUniversityId));
 
   if (filters.search && filters.search.trim()) {
     const needle = `%${filters.search.trim()}%`;
@@ -251,7 +254,7 @@ export async function listFinanceStudents(
 }
 
 /** گزینه‌های فیلتر کارتابل — رشته، مقطع و ورودی‌های موجود در دیتابیس */
-export async function listFinanceFilterOptions(): Promise<{
+export async function listFinanceFilterOptions({ universityId }: { universityId?: number } = {}): Promise<{
   majors: { id: number; title: string }[];
   degrees: { id: number; title: string }[];
   entryYears: number[];
@@ -260,7 +263,8 @@ export async function listFinanceFilterOptions(): Promise<{
     db.select({ id: majors.id, title: majors.name }).from(majors).orderBy(asc(majors.name)),
     db.select({ id: degree_level_configs.id, title: degree_level_configs.title })
       .from(degree_level_configs).orderBy(asc(degree_level_configs.title)),
-    db.selectDistinct({ entryYear: students.entryYear }).from(students),
+    db.selectDistinct({ entryYear: students.entryYear }).from(students)
+      .where(universityId ? eq(students.universityId, universityId) : undefined),
   ]);
 
   const entryYears = yearRows
