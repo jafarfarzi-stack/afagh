@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 /**
  * انتقال «پروندهٔ تکمیلی» دانشجو از سما به DB موجود (فقط فیلدهای خالی):
  *   خوابگاه/اتاق (SuiteName/RoomNumber)، ولی (ValiJobTitle/ValiTellNo/ValiAddress/ParentEmail)،
@@ -31,6 +31,7 @@ const APPLY = args.apply === 'true';
 const LIMIT = args.limit ? Number(args.limit) : 0;
 const UNI = args.uni ? Number(args.uni) : 1; // اسکوپ دانشگاه (کدهای دانشجویی بین دانشگاه‌ها تکراری‌اند)
 const FIXBD = args['fix-bd'] === 'true'; // ترمیم تولد‌های خرابِ نوشته‌شده توسط نسخهٔ قبلی (فقط وقتی مقدار DB دقیقاً برابر خروجی باگدار باشد)
+const FIXNC = args['fix-nc'] === 'true'; // جایگزینی کد ملی مصنوعی SA... با مقدار واقعی ستون ۱۲ فایل
 const dbUrl = args.db || process.env.DATABASE_URL || 'postgres://afagh:afagh@localhost:5432/afagh_db';
 const pool = new Pool({ connectionString: dbUrl, max: 5 });
 
@@ -144,6 +145,8 @@ try {
           const tt = normTxt(cols[89]);
           if (!e.tuitionType && tt && tt !== '0') e.tuitionType = tt.slice(0, 50);
           const nat = normTxt(cols[51]);
+           const nc12 = normTxt(cols[12]); // ستون ۱۲ = کد ملی (تأیید شده: با users.nationalCode واقعی هم‌خوانی)
+           if (!e.nationalCode) e.nationalCode = nc12 || null;
           if (!e.nationality) e.nationality = nat === '120001' || nat === '1' ? '120001' : (nat || null);
         } else {
           // student2.txt ← تکمیلی (کلید stno در ستون ۰ — برش می‌خورد)
@@ -190,7 +193,7 @@ try {
   }
   console.log(`نقشهٔ ترمیم پرونده: ${want.size} شماره دانشجویی`);
 
-  const stats = { checked: 0, noStudent: 0, filled: 0, changedUsers: 0, filledUsers: 0, birthFilled: 0, birthFixed: 0, nezamUnmapped: {} };
+  const stats = { checked: 0, noStudent: 0, filled: 0, changedUsers: 0, filledUsers: 0, birthFilled: 0, birthFixed: 0, nezamUnmapped: {}, ncReplaced: 0, ncNulled: 0, ncMissingFile: 0 };
   let shown = 0;
   for (const [stno, w] of want) {
     stats.checked++;
@@ -241,6 +244,18 @@ try {
     }
     if (w.hasDorm != null && r.hasDorm == null) { sSets.push(`"hasDorm" = $${si++}`); sVals.push(w.hasDorm); }
 
+    // کد ملی مصنوعی → جایگزینی با مقدار واقعی فایل (ستون ۱۲)
+    if (FIXNC && w.nationalCode != null) {
+      const curNC = r.nationalCode;
+      const synthetic = !curNC || /^S/.test(curNC) || curNC === '1111111111';
+      if (synthetic) {
+        const ncVal = String(w.nationalCode).trim();
+        const real = /^\d{10}$/.test(ncVal) ? ncVal : null;
+        if (real) { stats.ncReplaced++; if (shown < 8 && APPLY) show.push(`${stno}: nationalCode → ${real}`); if (APPLY) await pool.query(`UPDATE users SET "nationalCode"=$1 WHERE id=$2`, [real, r.userId]); }
+        else { stats.ncNulled++; if (shown < 8 && APPLY) show.push(`${stno}: nationalCode → NULL (فایل مقدار ندارد)`); if (APPLY) await pool.query(`UPDATE users SET "nationalCode"=$1 WHERE id=$2`, [null, r.userId]); }
+      }
+    }
+
     if (shown < 8 && (uSets.length || sSets.length)) {
       console.log(`  ${stno}: ${sSets.map(s => s.split('=')[0].trim()).join(', ') || uSets.map(s => s.split('=')[0].trim()).join(', ')}`);
       shown++;
@@ -251,7 +266,7 @@ try {
     }
     if (LIMIT && stats.checked >= LIMIT) break;
   }
-  console.log(`\nخلاصه (دانشگاه ${UNI}): بررسی=${stats.checked} | بدون دانشجو=${stats.noStudent} | فیلد تکمیلی دانشجو پر=${stats.filled} | فیلد هویت(users) پر=${stats.filledUsers} | تولد پر=${stats.birthFilled} | تولد خراب ترمیم=${stats.birthFixed} | NEZAM بی‌نگاشت=${JSON.stringify(stats.nezamUnmapped)}` + (APPLY ? ` | ✅ اعمال شد (${stats.changedUsers} کاربر)` : ' | (خشک — برای اجرا --apply بدهید)'));
+  console.log(`\nخلاصه (دانشگاه ${UNI}): بررسی=${stats.checked} | بدون دانشجو=${stats.noStudent} | فیلد تکمیلی دانشجو پر=${stats.filled} | فیلد هویت(users) پر=${stats.filledUsers} | تولد پر=${stats.birthFilled} | تولد خراب ترمیم=${stats.birthFixed} | تغییر ملی=${stats.ncReplaced} خالی=${stats.ncNulled} بدون‌فایل=${stats.ncMissingFile}` + (APPLY ? ` | ✅ اعمال شد (${stats.changedUsers} کاربر)` : ' | (خشک — برای اجرا --apply بدهید)'));
 } catch (err) {
   console.error('❌ خطا:', err?.message || err);
   process.exitCode = 1;
