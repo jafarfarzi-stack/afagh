@@ -100,13 +100,13 @@ function faDate(s) {
 
 try {
   const want = new Map(); // stno -> {fieldName: value}
-  for (const f of ['students1.txt', 'student2.txt']) {
+  for (const f of ['students1.txt', 'studentraw data.txt', 'student2.txt']) {
     try {
       for await (const { header, cols } of tsvRows(join(DIR, f))) {
         const stno = (cols[0] || '').trim();
         if (!/^\d{7,14}$/.test(stno)) continue;
         const e = want.get(stno) || {};
-        if (f === 'students1.txt') {
+        if (f === 'students1.txt' || f === 'studentraw data.txt') {
           if (!e.advisorCode && normTxt(cols[16])) e.advisorCode = normTxt(cols[16]).slice(0, 50);
           const nezam = normTxt(cols[33]);
           if (!e.militaryStatus && NEZAM_TITLE[nezam]) e.militaryStatus = NEZAM_TITLE[nezam];
