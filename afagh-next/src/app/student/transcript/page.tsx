@@ -3,6 +3,7 @@ import { academic_terms, course_offerings, courses, degree_level_configs, educat
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA } from '@/lib/regulations-engine';
+import { normalizeTermCode, sortTermsForTranscript, groupTermsByAcademicYear } from '@/lib/scheduling-core';
 import PrintButton from '../PrintButton';
 
 export const dynamic = 'force-dynamic';
@@ -86,6 +87,19 @@ export default async function StudentTranscriptPage() {
   }
 
   const termsList = Array.from(termsMap.values());
+
+  // نرمال‌سازی و مرتب‌سازی ترم‌ها برای کارنامه
+  // ۱. معادل‌سازی‌ها اول می‌آیند
+  // ۲. بعد ترم‌های تحصیلی بر اساس سال و نیمسال
+  const sortedTerms = sortTermsForTranscript(
+    termsList.map(t => ({ termCode: t.code, title: t.title, isCurrent: t.isCurrent, rows: t.rows }))
+  );
+
+  // گروه‌بندی بر اساس سال تحصیلی برای نمایش
+  const academicYears = groupTermsByAcademicYear(
+    sortedTerms,
+    t => t.rows
+  );
 
   // محاسبه رسمی معدل کل بر اساس موتور آیین‌نامه‌ها
   let officialGpaData = { gpa: 0, totalUnits: 0, passedUnits: 0, excludedCount: 0, policy: 'EXCLUDE_IF_PASSED' };
@@ -202,60 +216,83 @@ export default async function StudentTranscriptPage() {
           </table>
         </div>
 
-        {/* ۳. ریزنمرات به تفکیک نیمسال‌های تحصیلی */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {termsList.length === 0 && (
-            <div className="col-span-full p-8 text-center text-slate-400 border border-dashed border-slate-300">
-              هنوز درسی در پرونده کارنامه ثبت نشده است.
+        {/* ۳. ریزنمرات به تفکیک سال‌های تحصیلی و نیمسال‌ها */}
+        {academicYears.length === 0 && (
+          <div className="col-span-full p-8 text-center text-slate-400 border border-dashed border-slate-300">
+            هنوز درسی در پرونده کارنامه ثبت نشده است.
+          </div>
+        )}
+
+        {academicYears.map(yearGroup => (
+          <div key={yearGroup.academicYear} className="col-span-full space-y-3">
+            {/* هدر سال تحصیلی */}
+            <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-800 text-white rounded-xl px-4 py-2.5 font-extrabold text-sm border border-indigo-700">
+              📅 سال تحصیلی {yearGroup.displayYear}
             </div>
-          )}
+            
+            {/* ترم‌های این سال */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {yearGroup.terms.map((termItem, idx) => {
+                let termUnits = 0;
+                let termPassed = 0;
+                let termGradedUnits = 0;
+                let termWeightedScore = 0;
 
-          {termsList.map((termItem, idx) => {
-            let termUnits = 0;
-            let termPassed = 0;
-            let termGradedUnits = 0;
-            let termWeightedScore = 0;
+                for (const r of termItem.rows) {
+                  const u = Number(r.units || 0);
+                  termUnits += u;
 
-            for (const r of termItem.rows) {
-              const u = Number(r.units || 0);
-              termUnits += u;
+                  const isDescriptive = r.gradingType === 'DESCRIPTIVE' || Number(r.grade) === 1 || r.affectsGpa === 0;
 
-              const isDescriptive = r.gradingType === 'DESCRIPTIVE' || Number(r.grade) === 1 || r.affectsGpa === 0;
-
-              if (isDescriptive) {
-                if (Number(r.grade) === 1 || (r.grade != null && Number(r.grade) >= 10)) {
-                  termPassed += u;
+                  if (isDescriptive) {
+                    if (Number(r.grade) === 1 || (r.grade != null && Number(r.grade) >= 10)) {
+                      termPassed += u;
+                    }
+                  } else {
+                    if (r.grade != null && Number(r.grade) >= 10) {
+                      termPassed += u;
+                    }
+                    if (r.grade != null && Number(r.grade) >= 0 && Number(r.grade) <= 20) {
+                      termGradedUnits += u;
+                      termWeightedScore += Number(r.grade) * u;
+                    }
+                  }
                 }
-              } else {
-                if (r.grade != null && Number(r.grade) >= 10) {
-                  termPassed += u;
-                }
-                if (r.grade != null && Number(r.grade) >= 0 && Number(r.grade) <= 20) {
-                  termGradedUnits += u;
-                  termWeightedScore += Number(r.grade) * u;
-                }
-              }
-            }
 
-            const termGpa = termGradedUnits > 0 ? (termWeightedScore / termGradedUnits).toFixed(2) : '—';
-            const isA = termGradedUnits > 0 && Number(termGpa) >= 17;
-            const isProbation = termGradedUnits > 0 && Number(termGpa) < 12;
+                const termGpa = termGradedUnits > 0 ? (termWeightedScore / termGradedUnits).toFixed(2) : '—';
+                const isA = termGradedUnits > 0 && Number(termGpa) >= 17;
+                const isProbation = termGradedUnits > 0 && Number(termGpa) < 12;
 
-            return (
-              <div key={idx} className="border border-slate-700 overflow-hidden flex flex-col justify-between bg-white">
-                <div>
-                  {/* هدر نیمسال */}
-                  <div className="bg-slate-200/90 px-3 py-1.5 flex items-center justify-between border-b border-slate-700 font-bold">
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-950 text-xs">📚 {termItem.title}</span>
-                      {termItem.isCurrent && (
-                        <span className="text-[10px] bg-emerald-700 text-white font-bold px-1.5 py-0.2 rounded">
-                          جاری
+                // نمایش عنوان ترم: برای معادل‌سازی نوع را نشان بده، برای نرمال نیمسال
+                const termDisplayTitle = termItem.normalized.termType === 'EQUIVALENCE' 
+                  ? `معادل‌سازی ${termItem.normalized.semester}`
+                  : termItem.normalized.displaySemester;
+
+                return (
+                  <div key={`${yearGroup.academicYear}-${idx}`} className="border border-slate-700 overflow-hidden flex flex-col justify-between bg-white">
+                    <div>
+                      {/* هدر نیمسال */}
+                      <div className="bg-slate-200/90 px-3 py-1.5 flex items-center justify-between border-b border-slate-700 font-bold">
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-950 text-xs">
+                            📚 {termDisplayTitle}
+                            {termItem.normalized.termType === 'EQUIVALENCE' && (
+                              <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1 py-0.2 rounded">معادل‌سازی</span>
+                            )}
+                            {termItem.normalized.termType === 'SUMMER' && (
+                              <span className="text-[9px] bg-sky-100 text-sky-800 font-bold px-1 py-0.2 rounded">تابستان</span>
+                            )}
+                          </span>
+                          {termItem.isCurrent && (
+                            <span className="text-[10px] bg-emerald-700 text-white font-bold px-1.5 py-0.2 rounded">
+                              جاری
+                            </span>
+                          )}
+                        </div>
+                        <span className="font-mono text-slate-700 text-[10px]" dir="ltr">
+                          {termItem.normalized.displayYear} / {termItem.normalized.semester}
                         </span>
-                      )}
-                    </div>
-                    <span className="font-mono text-slate-700 text-[10px]" dir="ltr">{termItem.code}</span>
-                  </div>
+                      </div>
 
                   {/* جدول دروس */}
                   <table className="w-full text-right text-[11px] border-collapse">

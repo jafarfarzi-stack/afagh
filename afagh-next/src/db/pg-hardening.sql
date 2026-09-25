@@ -397,15 +397,43 @@ DROP POLICY IF EXISTS alumni_requests_self_read ON "alumni_requests";
 CREATE POLICY alumni_requests_self_read ON "alumni_requests" FOR SELECT TO afagh_app
   USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
 
-ALTER TABLE "exam_invigilators" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS exam_invigilators_self_read ON "exam_invigilators";
-CREATE POLICY exam_invigilators_self_read ON "exam_invigilators" FOR SELECT TO afagh_app
-  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+-- Exam tables — university-scoped RLS
+ALTER TABLE "exam_sessions" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS exam_sessions_uni ON "exam_sessions";
+CREATE POLICY exam_sessions_uni ON "exam_sessions" FOR SELECT TO afagh_app
+  USING ("universityId" = nullif(current_setting('app.university_id', true), '')::int);
+
+ALTER TABLE "exam_halls" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS exam_halls_uni ON "exam_halls";
+CREATE POLICY exam_halls_uni ON "exam_halls" FOR SELECT TO afagh_app
+  USING ("universityId" = nullif(current_setting('app.university_id', true), '')::int);
+
+ALTER TABLE "exam_calendar_configs" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS exam_cal_uni ON "exam_calendar_configs";
+CREATE POLICY exam_cal_uni ON "exam_calendar_configs" FOR SELECT TO afagh_app
+  USING ("universityId" = nullif(current_setting('app.university_id', true), '')::int);
 
 ALTER TABLE "invigilators" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS invigilators_self_read ON "invigilators";
 CREATE POLICY invigilators_self_read ON "invigilators" FOR SELECT TO afagh_app
-  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+      AND "universityId" = nullif(current_setting('app.university_id', true), '')::int);
+
+ALTER TABLE "exam_invigilators" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS exam_invigilators_self_read ON "exam_invigilators";
+CREATE POLICY exam_invigilators_self_read ON "exam_invigilators" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+      AND "universityId" = nullif(current_setting('app.university_id', true), '')::int);
+
+ALTER TABLE "seat_allocations" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS seat_alloc_uni ON "seat_allocations";
+CREATE POLICY seat_alloc_uni ON "seat_allocations" FOR SELECT TO afagh_app
+  USING ("universityId" = nullif(current_setting('app.university_id', true), '')::int);
+
+ALTER TABLE "exam_remuneration_rates" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS exam_remun_uni ON "exam_remuneration_rates";
+CREATE POLICY exam_remun_uni ON "exam_remuneration_rates" FOR SELECT TO afagh_app
+  USING ("universityId" = nullif(current_setting('app.university_id', true), '')::int);
 
 ALTER TABLE "offering_professors" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS offering_professors_self_read ON "offering_professors";

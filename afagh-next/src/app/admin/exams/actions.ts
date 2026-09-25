@@ -15,10 +15,16 @@ import {
   exam_halls, exam_sessions, invigilators, schedules, staff, users,
 } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import * as engine from '@/lib/exam-engine';
 import { jalaliDateOf } from '@/lib/scheduling-core';
 
 const EDITORS = ['ADMIN', 'EDU_EXPERT'];
+
+/** ست کردن university_id در سشن دیتابیس برای RLS */
+async function setUniversityContext(universityId: number) {
+  await db.execute(sql`SET LOCAL app.university_id = ${universityId}`);
+}
 
 // ─────────────────────────── helpers (غیر export — گارد CI) ───────────────────────────
 
@@ -30,11 +36,14 @@ async function listRealTerms() {
 }
 
 /** سشن‌های واقعی ترم + مراقبین هر سشن + آمار حضور */
-async function loadSessions(termId: number) {
+async function loadSessions(termId: number, universityId?: number) {
+  const where = universityId
+    ? and(eq(exam_sessions.termId, termId), eq(exam_sessions.universityId, universityId))
+    : eq(exam_sessions.termId, termId);
   const sessions = await db
     .select()
     .from(exam_sessions)
-    .where(eq(exam_sessions.termId, termId))
+    .where(where)
     .orderBy(asc(exam_sessions.examDate), asc(exam_sessions.startTime));
 
   if (sessions.length === 0) return [];
@@ -88,7 +97,8 @@ async function loadSessions(termId: number) {
 }
 
 /** دروس امتحانی: schedules با scheduleType='EXAM' + جزئیات + بستهٔ اوراق */
-async function loadExamCourses(termId: number) {
+async function loadExamCourses(termId: number, universityId?: number) {
+  const uniFilter = universityId ? eq(exam_halls.universityId, universityId) : undefined;
   const rows = await db
     .select({
       offeringId: course_offerings.id,
@@ -116,7 +126,7 @@ async function loadExamCourses(termId: number) {
     .leftJoin(users, eq(users.id, staff.userId))
     .leftJoin(exam_halls, eq(exam_halls.id, schedules.roomId))
     .leftJoin(course_exam_sessions, eq(course_exam_sessions.courseOfferingId, course_offerings.id))
-    .where(and(eq(schedules.scheduleType, 'EXAM'), sql`${schedules.examDate} is not null`, eq(course_offerings.termId, termId)))
+    .where(and(eq(schedules.scheduleType, 'EXAM'), sql`${schedules.examDate} is not null`, eq(course_offerings.termId, termId), uniFilter))
     .orderBy(courses.code);
 
   return rows.map(r => ({
@@ -138,7 +148,8 @@ async function loadExamCourses(termId: number) {
   }));
 }
 
-async function loadHalls() {
+async function loadHalls(universityId?: number) {
+  const where = universityId ? eq(exam_halls.universityId, universityId) : undefined;
   const rows = await db
     .select({
       id: exam_halls.id,
@@ -149,6 +160,7 @@ async function loadHalls() {
       colsCount: exam_halls.colsCount,
     })
     .from(exam_halls)
+    .where(where)
     .orderBy(asc(exam_halls.id));
   return rows;
 }
@@ -181,7 +193,7 @@ export async function getExamWorkspaceAction(termId?: number, universityId?: num
     let courses: Awaited<ReturnType<typeof loadExamCourses>> = [];
     let concurrentCount = 0;
     if (resolvedTermId != null) {
-      [sessions, courses] = await Promise.all([loadSessions(resolvedTermId), loadExamCourses(resolvedTermId)]);
+      [sessions, courses] = await Promise.all([loadSessions(resolvedTermId, universityId), loadExamCourses(resolvedTermId, universityId)]);
       const seen = new Map<string, number>();
       for (const c of courses) {
         if (!c.examDate || !c.startTime) continue;
@@ -190,7 +202,7 @@ export async function getExamWorkspaceAction(termId?: number, universityId?: num
       }
       concurrentCount = Array.from(seen.values()).filter(n => n > 1).length;
     }
-    const halls = await loadHalls();
+    const halls = await loadHalls(universityId);
 
     return {
       ok: true,
