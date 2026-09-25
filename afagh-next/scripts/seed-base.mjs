@@ -120,13 +120,16 @@ try {
   void REGULATION;
 
   // دانشکده/گروه/رشته
+  // چنددانشگاهی: از این پس همهٔ ساختار پایه متعلق به دانشگاه AFAGH است
+  // (قید یکتایی majors/departments/faculties از 0027 به (universityId, code) تغییر کرده).
+  const afaghId = (await q1(`SELECT id FROM universities WHERE code = 'AFAGH'`))?.id ?? 1;
   for (const [facName, facCode, depName, depCode, majors] of STRUCTURE) {
     // ⚠️ q1 یک «ردیف» برمی‌گرداند نه آرایه — با [x] = ... باز نمی‌شود.
     //    (نسخهٔ قبلی این‌جا `[fac] = await q1(...)` داشت و به‌محض فعال‌شدن مسیرِ
     //     تعارض، خطای «undefined is not iterable» می‌داد.)
     let fac = await q1(`SELECT id FROM faculties WHERE "facultyCode" = $1 LIMIT 1`, [facCode]);
     if (!fac) {
-      fac = await q1(`INSERT INTO faculties (name, "facultyCode") VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING id`, [facName, facCode]);
+      fac = await q1(`INSERT INTO faculties (name, "facultyCode", "universityId") VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id`, [facName, facCode, afaghId]);
       if (!fac) fac = await q1(`SELECT id FROM faculties WHERE "facultyCode" = $1 LIMIT 1`, [facCode]);
       if (!fac) fac = await q1(`SELECT id FROM faculties WHERE name = $1 LIMIT 1`, [facName]);
     }
@@ -143,9 +146,9 @@ try {
       const owner = await q1(`SELECT id, "facultyId" FROM departments WHERE "departmentCode" = $1 LIMIT 1`, [depCode]);
       if (owner) {
         console.warn(`  ⚠ کد گروه «${depCode}» از قبل متعلق به گروه دیگری است — «${depName}» بدون کد ساخته شد؛ در /admin/codes کد بدهید.`);
-        dep = await q1(`INSERT INTO departments (name, "facultyId") VALUES ($1,$2) RETURNING id`, [depName, fac.id]);
+        dep = await q1(`INSERT INTO departments (name, "facultyId", "universityId") VALUES ($1,$2,$3) RETURNING id`, [depName, fac.id, afaghId]);
       } else {
-        dep = await q1(`INSERT INTO departments (name, "facultyId", "departmentCode") VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id`, [depName, fac.id, depCode]);
+        dep = await q1(`INSERT INTO departments (name, "facultyId", "departmentCode", "universityId") VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id`, [depName, fac.id, depCode, afaghId]);
         if (!dep) dep = await q1(`SELECT id FROM departments WHERE "departmentCode" = $1 LIMIT 1`, [depCode]);
       }
     }
@@ -154,10 +157,22 @@ try {
     for (const [majName, majCode, degreeCode] of majors) {
       const levelId = degreeIds[degreeCode];
       if (!levelId) continue;
+      // ردیف‌های قدیمی (قبل از 0027) دانشگاه‌شان NULL است؛ اگر همین رشته با همین کد
+      // هنوز برای AFAGH ثبت نشده، همان ردیف را به AFAGH نسبت می‌دهیم (نه ردیف تکراری).
       await q(
-        `INSERT INTO majors (name, "degreeLevelId", "departmentId", "facultyId", "majorCode", "isActive")
-         VALUES ($1,$2,$3,$4,$5,1) ON CONFLICT ("majorCode") DO UPDATE SET name = EXCLUDED.name`,
-        [majName, levelId, dep.id, fac.id, majCode]);
+        `UPDATE majors SET "universityId" = $1
+         WHERE "universityId" IS NULL AND "majorCode" = $2 AND "name" = $3
+           AND NOT EXISTS (SELECT 1 FROM majors m2 WHERE m2."universityId" = $1 AND m2."majorCode" = $2)`,
+        [afaghId, majCode, majName]);
+      // 0027: قید یکتای majors اکنون (universityId, majorCode) است.
+      // حفاظت نام مشابه import-sama: نام واقعیِ واردشده (مثلاً از سما) بازنویسی نمی‌شود.
+      await q(
+        `INSERT INTO majors (name, "degreeLevelId", "departmentId", "facultyId", "majorCode", "isActive", "universityId")
+         VALUES ($1,$2,$3,$4,$5,1,$6) ON CONFLICT ("universityId", "majorCode") DO UPDATE SET
+           "departmentId" = COALESCE(majors."departmentId", EXCLUDED."departmentId"),
+           "facultyId" = COALESCE(majors."facultyId", EXCLUDED."facultyId"),
+           name = CASE WHEN majors.name LIKE '%سما%' OR majors.name IS NULL OR majors.name = '' THEN EXCLUDED.name ELSE majors.name END`,
+        [majName, levelId, dep.id, fac.id, majCode, afaghId]);
     }
   }
   console.log(`  ✓ دانشکده/گروه/رشته (${STRUCTURE.length} دانشکده)`);
