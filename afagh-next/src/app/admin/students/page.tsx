@@ -171,11 +171,20 @@ export default async function AdminStudentsPage({
     .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
     .leftJoin(educational_regulations, eq(educational_regulations.id, students.regulationId));
 
-  const [{ n: total }] = await db
-    .select({ n: count() })
-    .from(students)
-    .innerJoin(users, eq(users.id, students.userId))
-    .where(where as never);
+  // ── تعداد کل: فقط join هایی که فیلتر واقعاً استفاده می‌کند (سرعت بارگذاری) ──
+  // قبل از این، count همیشه users (۳۷هزار ردیف) را join می‌کرد حتی بدون فیلتر نام/کدملی؛
+  // و با فیلتر f_major حتی خطا می‌داد چون majors در count join نشده بود.
+  const countNeedUsers = Boolean(q || fName || fNc);
+  const countNeedMajors = Boolean(fMajor);
+  const countBase = db.select({ n: count() }).from(students);
+  const countRow = countNeedUsers
+    ? countNeedMajors
+      ? await countBase.innerJoin(users, eq(users.id, students.userId)).leftJoin(majors, eq(majors.id, students.majorId)).where(where as never)
+      : await countBase.innerJoin(users, eq(users.id, students.userId)).where(where as never)
+    : countNeedMajors
+      ? await countBase.leftJoin(majors, eq(majors.id, students.majorId)).where(where as never)
+      : await countBase.where(where as never);
+  const total = Number(countRow[0]?.n ?? 0);
   const totalPages = Math.max(1, Math.ceil(Number(total) / PER_PAGE));
   const safePage = Math.min(page, totalPages);
 
@@ -193,7 +202,7 @@ export default async function AdminStudentsPage({
     regulationPicks = regs.map(r => ({ id: r.id, title: r.title, degreeLevelId: r.degreeLevelId }));
   } catch { /* جدول خالی */ }
 
-  // ── گزینه‌های فیلتر: مقاطع + شمارش وضعیت‌ها ──
+  // ── گزینه‌های فیلتر: مقاطع + شمارش وضعیت‌ها (محدود به دانشگاه جاری — قبلاً همهٔ دانشگاه‌ها را یکی می‌کرد) ──
   const degrees = await db
     .select({ id: degree_level_configs.id, title: degree_level_configs.title })
     .from(degree_level_configs)
@@ -201,6 +210,7 @@ export default async function AdminStudentsPage({
   const statusCounts = await db
     .select({ status: students.status, n: count() })
     .from(students)
+    .where(currentUniversityId ? eq(students.universityId, currentUniversityId) : undefined)
     .groupBy(students.status)
     .orderBy(sql`${count()} DESC`);
 
