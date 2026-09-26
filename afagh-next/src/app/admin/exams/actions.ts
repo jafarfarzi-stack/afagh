@@ -28,10 +28,12 @@ async function setUniversityContext(universityId: number) {
 
 // ─────────────────────────── helpers (غیر export — گارد CI) ───────────────────────────
 
-async function listRealTerms() {
+async function listRealTerms(universityId?: number) {
+  const where = universityId ? eq(academic_terms.universityId, universityId) : undefined;
   return db
     .select({ id: academic_terms.id, code: academic_terms.termCode, title: academic_terms.title, isCurrent: academic_terms.isCurrent })
     .from(academic_terms)
+    .where(where)
     .orderBy(desc(academic_terms.id));
 }
 
@@ -98,7 +100,8 @@ async function loadSessions(termId: number, universityId?: number) {
 
 /** دروس امتحانی: schedules با scheduleType='EXAM' + جزئیات + بستهٔ اوراق */
 async function loadExamCourses(termId: number, universityId?: number) {
-  const uniFilter = universityId ? eq(exam_halls.universityId, universityId) : undefined;
+  // فیلتر دانشگاه از روی ارائهٔ درس (نه سالن) تا ردیف‌های بدون سالن حذف نشوند
+  const uniFilter = universityId ? eq(course_offerings.universityId, universityId) : undefined;
   const rows = await db
     .select({
       offeringId: course_offerings.id,
@@ -186,7 +189,7 @@ export type ExamWorkspaceResult =
 export async function getExamWorkspaceAction(termId?: number, universityId?: number): Promise<ExamWorkspaceResult> {
   try {
     await requireRole(EDITORS);
-    const terms = await listRealTerms();
+    const terms = await listRealTerms(universityId);
     const resolvedTermId = termId ?? terms.find(t => t.isCurrent === 1)?.id ?? terms[0]?.id ?? null;
 
     let sessions: Awaited<ReturnType<typeof loadSessions>> = [];
@@ -282,7 +285,7 @@ export type ExamPlanningData = {
 export type ExamPlanningResult = { ok: true; data: ExamPlanningData } | { ok: false; error: string };
 
 /** کارتابل برنامه‌ریزی: زون‌بندی + رادار ظرفیت + خوشه‌های هم‌ارز */
-export async function getExamPlanningAction(termId: number): Promise<ExamPlanningResult> {
+export async function getExamPlanningAction(termId: number, universityId?: number): Promise<ExamPlanningResult> {
   await requireRole(EDITORS);
   try {
     const [zoning, radar, clusters] = await Promise.all([
@@ -290,7 +293,8 @@ export async function getExamPlanningAction(termId: number): Promise<ExamPlannin
       planning.examCapacityRadar(termId),
       planning.listEquivClusters(termId),
     ]);
-    const halls = await db.select().from(exam_halls).orderBy(asc(exam_halls.id));
+    const hallWhere = universityId ? eq(exam_halls.universityId, universityId) : undefined;
+    const halls = await db.select().from(exam_halls).where(hallWhere).orderBy(asc(exam_halls.id));
     return {
       ok: true,
       data: {

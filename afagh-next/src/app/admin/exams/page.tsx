@@ -10,7 +10,6 @@ export default async function AdminExamsPage() {
 
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
-  /* TODO: filter by universityId */
 
   const workspace = await getExamWorkspaceAction(currentUniversityId ?? undefined);
   if (!workspace.ok) {
@@ -25,5 +24,5 @@ export default async function AdminExamsPage() {
     );
   }
 
-  return <ExamPlanningClient initial={workspace.data} />;
+  return <ExamPlanningClient initial={workspace.data} universityId={currentUniversityId ?? undefined} />;
 }

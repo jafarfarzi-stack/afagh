@@ -78,7 +78,7 @@ function jalaliToIso(v: string): string {
   }
 }
 
-export default function ExamPlanningClient({ initial }: { initial: ExamWorkspace }) {
+export default function ExamPlanningClient({ initial, universityId }: { initial: ExamWorkspace; universityId?: number }) {
   const [terms, setTerms] = useState(initial.terms);
   const [selectedTermId, setSelectedTermId] = useState<number>(initial.selectedTermId ?? 0);
   const [sessions, setSessions] = useState(initial.sessions);
@@ -115,7 +115,7 @@ export default function ExamPlanningClient({ initial }: { initial: ExamWorkspace
   const reload = useCallback(async (termId: number) => {
     setIsLoading(true);
     try {
-      const w = await getExamWorkspaceAction(termId);
+      const w = await getExamWorkspaceAction(termId, universityId);
       if (!w.ok) { showToast(w.error, 'error'); return; }
       setTerms(w.data.terms);
       setSessions(w.data.sessions);
@@ -125,10 +125,10 @@ export default function ExamPlanningClient({ initial }: { initial: ExamWorkspace
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [universityId]);
 
   const reloadPlanning = useCallback(async (termId: number) => {
-    const w = await getExamPlanningAction(termId);
+    const w = await getExamPlanningAction(termId, universityId);
     if (!w.ok) { showToast(w.error, 'error'); return; }
     setPlanning(w.data);
     if (w.data.zoning) {
