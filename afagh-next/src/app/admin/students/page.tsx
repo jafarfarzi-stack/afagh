@@ -378,10 +378,10 @@ export default async function AdminStudentsPage({
         statusCounts={statusCounts.map(r => ({ status: r.status, n: Number(r.n) }))}
         staffList={staffRows.map(st => ({
           id: st.id,
-          staffCode: st.staffCode,
-          nationalCode: st.nationalCode,
-          firstName: st.firstName,
-          lastName: st.lastName,
+          staffCode: st.staffCode ?? '',
+          nationalCode: st.nationalCode ?? '',
+          firstName: st.firstName ?? '',
+          lastName: st.lastName ?? '',
           mobile: st.mobile || '—',
           academicRank: st.academicRank || st.academicBase || '—',
           degree: st.degree || st.fieldOfStudy || '—',

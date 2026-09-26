@@ -14,7 +14,7 @@ import { regThresholds, groupTranscript, faNum, dateToJalali} from './transcript
 import OfficialTranscriptView from './components/OfficialTranscriptView';
 import { adminSetGradeAction, getStudentGradeAuditLog, resolveSamaCodeForGradeAction } from '@/app/admin/grades/actions';
 import { GRADE_STATUS_CODES } from '@/lib/grade-status-codes';
-import { normalizeFa } from '@/lib/persian-search';
+import { normalizeFa, faIncludes } from '@/lib/persian-search';
 
 // ── لوک‌آپ‌های سما: کد خام ← عنوان فارسی (فایل‌های «دوره.txt»، «شيوه آموزش.txt»، «نحوه ورود به دانشگاه.txt») ──
 const COURSE_TYPE_FA: Record<string, string> = {
@@ -416,17 +416,17 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
 
   const staffQueryFiltered = props.staffList.filter(s =>
     (!staffQuery ||
-    s.staffCode.includes(staffQuery) ||
-    s.nationalCode.includes(staffQuery) ||
-    (s.firstName + ' ' + s.lastName).includes(staffQuery)) &&
+    faIncludes(s.staffCode ?? '', staffQuery) ||
+    faIncludes(s.nationalCode ?? '', staffQuery) ||
+    faIncludes(`${s.firstName ?? ''} ${s.lastName ?? ''}`, staffQuery)) &&
     (staffTypeFilter === 'ALL' || (staffTypeFilter === 'EDU' && (s.staffType ?? '').includes('هیئت')) || (staffTypeFilter === 'ADMIN' && (s.staffType ?? '').includes('اداری')) || (staffTypeFilter === 'OTHER' && s.staffType && !(s.staffType as string).includes('هیئت') && !(s.staffType as string).includes('اداری')))
   );
 
   // جدول اساتید: سورت + فیلتر هر ستون (کلاینتی — کل لیست دست مرورگر است)
   const STAFF_COLS: ColumnDef<StaffItem>[] = [
-    { key: 'staffCode', label: 'کد استاد', get: s => s.staffCode },
-    { key: 'name', label: 'نام و نام خانوادگی', get: s => `${s.firstName} ${s.lastName}` },
-    { key: 'nationalCode', label: 'کد ملی', get: s => s.nationalCode },
+    { key: 'staffCode', label: 'کد استاد', get: s => s.staffCode ?? '' },
+    { key: 'name', label: 'نام و نام خانوادگی', get: s => `${s.firstName ?? ''} ${s.lastName ?? ''}`.trim() },
+    { key: 'nationalCode', label: 'کد ملی', get: s => s.nationalCode ?? '' },
     { key: 'department', label: 'گروه آموزشی', get: s => s.departmentName && s.departmentName !== '—' ? s.departmentName : '' },
     { key: 'rank', label: 'مرتبه علمی', get: s => s.academicRank },
     { key: 'degree', label: 'مدرک', get: s => s.degree },
