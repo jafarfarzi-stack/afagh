@@ -290,8 +290,8 @@ export async function getExamPlanningAction(termId: number, universityId?: numbe
   try {
     const [zoning, radar, clusters] = await Promise.all([
       planning.getExamZoningRow(termId),
-      planning.examCapacityRadar(termId),
-      planning.listEquivClusters(termId),
+      planning.examCapacityRadar(termId, universityId),
+      planning.listEquivClusters(termId, universityId),
     ]);
     const hallWhere = universityId ? eq(exam_halls.universityId, universityId) : undefined;
     const halls = await db.select().from(exam_halls).where(hallWhere).orderBy(asc(exam_halls.id));
@@ -316,10 +316,10 @@ export async function upsertExamZoningAction(termId: number, zoning: {
   globalStart: string; globalEnd: string;
   generalStart: string; generalEnd: string;
   specializedStart: string; specializedEnd: string;
-}) {
+}, universityId?: number) {
   try {
     const user = await requireRole(EDITORS);
-    const out = await planning.saveExamZoning(user.id, termId, zoning);
+    const out = await planning.saveExamZoning(user.id, termId, zoning, universityId);
     revalidatePath('/admin/exams');
     return out.ok ? { ok: true, message: 'بازه‌های تقویم امتحانات ذخیره شد.' } : { ok: false, error: out.error ?? 'خطا' };
   } catch (e: any) {
@@ -332,7 +332,7 @@ export type ScheduleExamResult =
   | { ok: true; message: string }
   | { ok: false; error: string; status?: 'OVERFLOW'; splitOptions?: { label: string; shifts: number; seatsPerShift: number }[] };
 export async function scheduleExamSlotAction(px: {
-  termId: number; offeringId: number; examDate: string; startTime: string; endTime: string;
+  termId: number; offeringId: number; examDate: string; startTime: string; endTime: string; universityId?: number;
 }): Promise<ScheduleExamResult> {
   try {
     const user = await requireRole(EDITORS);
@@ -347,7 +347,7 @@ export async function scheduleExamSlotAction(px: {
 /** امتحان تجمیعی خوشهٔ هم‌ارز — یک آزمون واحد برای همهٔ دروس هم‌ارز */
 export type UnifiedClusterResult = { ok: true; message: string } | { ok: false; error: string; status?: 'OVERFLOW'; splitOptions?: { label: string; shifts: number; seatsPerShift: number }[] };
 export async function scheduleUnifiedClusterAction(px: {
-  termId: number; clusterId: number; examDate: string; startTime: string; endTime: string;
+  termId: number; clusterId: number; examDate: string; startTime: string; endTime: string; universityId?: number;
 }): Promise<UnifiedClusterResult> {
   try {
     const user = await requireRole(EDITORS);
@@ -361,10 +361,10 @@ export async function scheduleUnifiedClusterAction(px: {
 
 /** ۴ پیشنهاد طلایی زمان امتحان (ظرفیت گیت + امتیاز عصرِ ارشد/شاغل) */
 export type SuggestSlotsResult = { ok: true; data: { examDate: string; startTime: string; endTime: string; score: number; reasons: string[]; booked: number; available: number }[] } | { ok: false; error: string };
-export async function suggestExamSlotsAction(termId: number, offeringId: number): Promise<SuggestSlotsResult> {
+export async function suggestExamSlotsAction(termId: number, offeringId: number, universityId?: number): Promise<SuggestSlotsResult> {
   await requireRole(EDITORS);
   try {
-    const suggestions = await planning.suggestExamSlots(termId, offeringId);
+    const suggestions = await planning.suggestExamSlots(termId, offeringId, universityId);
     return { ok: true, data: suggestions };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? 'خطا در محاسبهٔ پیشنهادهای زمان امتحان.' };
@@ -373,10 +373,10 @@ export async function suggestExamSlotsAction(termId: number, offeringId: number)
 
 /** فاز ۱۰ — تولید/بازتولید تخصیص صندلی همهٔ سشن‌های ترم (سالن + شماره + بلوک) */
 export type GenerateSeatsResult = { ok: true; message: string; data: { ok: boolean; sessionCount: number; allocated: number; perSession: { sessionId: number; examDate: string; startTime: string; allocated: number; hallsUsed: number }[] } } | { ok: false; error: string };
-export async function generateSeatAllocationsAction(termId: number): Promise<GenerateSeatsResult> {
+export async function generateSeatAllocationsAction(termId: number, universityId?: number): Promise<GenerateSeatsResult> {
   try {
     const user = await requireRole(EDITORS);
-    const out = await planning.generateSeatAllocations(user.id, termId);
+    const out = await planning.generateSeatAllocations(user.id, termId, universityId);
     revalidatePath('/admin/exams');
     revalidatePath('/student/exam-card');
     return {

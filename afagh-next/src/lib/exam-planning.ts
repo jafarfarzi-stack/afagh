@@ -31,6 +31,18 @@ async function advisoryLock(tx: AuditTx, ns: string, a: number, b = 0) {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${ns}:${a}:${b}`}, 0))`);
 }
 
+/** دانشگاه مالک یک ترم (ترم‌ها per-uni هستند: uq_terms_uni_code) */
+export async function termUniversityId(termId: number): Promise<number | null> {
+  const [t] = await db.select({ universityId: academic_terms.universityId }).from(academic_terms).where(eq(academic_terms.id, termId)).limit(1);
+  return t?.universityId ?? null;
+}
+
+/** دانشگاه مالک یک ارائهٔ درسی */
+async function offeringUniversityId(offeringId: number): Promise<number | null> {
+  const [o] = await db.select({ universityId: course_offerings.universityId }).from(course_offerings).where(eq(course_offerings.id, offeringId)).limit(1);
+  return o?.universityId ?? null;
+}
+
 /** شیفت‌های استاندارد امتحان (منبع تاریخ) — شروع + ۲ ساعت */
 export const STANDARD_EXAM_SHIFTS: { startTime: string; endTime: string }[] = [
   { startTime: '08:00', endTime: '10:00' },
@@ -75,9 +87,10 @@ export async function getExamZoningRow(termId: number): Promise<ExamZoning | nul
 }
 
 /** ذخیره/به‌روزرسانی زون‌بندی با اعتبارسنجی ترتیب بازه‌ها */
-export async function saveExamZoning(actorUserId: number, termId: number, z: ExamZoning): Promise<{ ok: boolean; error?: string }> {
+export async function saveExamZoning(actorUserId: number, termId: number, z: ExamZoning, universityId?: number): Promise<{ ok: boolean; error?: string }> {
   const v = validateZoning(z);
   if (!v.ok) return { ok: false, error: v.error };
+  const uni = universityId ?? await termUniversityId(termId);
   return db.transaction(async tx => {
     await advisoryLock(tx, 'exam_zone', termId);
     const [term] = await tx.select().from(academic_terms).where(eq(academic_terms.id, termId)).limit(1);
@@ -89,6 +102,7 @@ export async function saveExamZoning(actorUserId: number, termId: number, z: Exa
         generalStart: normJalali(z.generalStart), generalEnd: normJalali(z.generalEnd),
         specializedStart: normJalali(z.specializedStart), specializedEnd: normJalali(z.specializedEnd),
         updatedByUserId: actorUserId, updatedAt: new Date(),
+        ...(uni != null ? { universityId: uni } : {}),
       }).where(eq(exam_calendar_configs.id, row.id));
     } else {
       await tx.insert(exam_calendar_configs).values({
@@ -97,6 +111,7 @@ export async function saveExamZoning(actorUserId: number, termId: number, z: Exa
         generalStart: normJalali(z.generalStart), generalEnd: normJalali(z.generalEnd),
         specializedStart: normJalali(z.specializedStart), specializedEnd: normJalali(z.specializedEnd),
         updatedByUserId: actorUserId,
+        ...(uni != null ? { universityId: uni } : {}),
       });
     }
     await auditChain(tx, actorUserId, 'EXAM_ZONING_UPDATED', 'academic_term', termId, { zoning: z });
@@ -117,15 +132,18 @@ export interface CapacitySlot {
   splitOptions: { label: string; shifts: number; seatsPerShift: number }[];
 }
 
-/** رادار ظرفیت: به‌ازای هر (تاریخ شمسی، شیفت) — تقاضا در برابر صندلی‌های کل سالن‌های امتحانی */
-export async function examCapacityRadar(termId: number): Promise<CapacitySlot[]> {
+/** رادار ظرفیت: به‌ازای هر (تاریخ شمسی، شیفت) — تقاضا در برابر صندلی‌های سالن‌های امتحانی همان دانشگاه */
+export async function examCapacityRadar(termId: number, universityId?: number): Promise<CapacitySlot[]> {
+  const uni = universityId ?? await termUniversityId(termId);
+  const hallWhere = uni != null ? eq(exam_halls.universityId, uni) : undefined;
+  const offUni = uni != null ? eq(course_offerings.universityId, uni) : undefined;
   const [halls, rows] = await Promise.all([
-    db.select().from(exam_halls),
+    db.select().from(exam_halls).where(hallWhere),
     db
       .select({ examDate: schedules.examDate, startTime: schedules.startTime, endTime: schedules.endTime, demand: course_offerings.enrolledCount })
       .from(schedules)
       .innerJoin(course_offerings, eq(course_offerings.id, schedules.offeringId))
-      .where(and(eq(schedules.scheduleType, 'EXAM'), eq(course_offerings.termId, termId))),
+      .where(and(eq(schedules.scheduleType, 'EXAM'), eq(course_offerings.termId, termId), offUni)),
   ]);
   const available = halls.reduce((s, h) => s + Number(h.totalCapacity), 0);
   const bySlot = new Map<string, CapacitySlot>();
@@ -201,14 +219,17 @@ export async function examCourseProfile(offeringId: number): Promise<ExamCourseP
 }
 
 /** همهٔ رزروهای امتحانی یک ترم به‌صورت { تاریخ شمسی|شیفت → تقاضا } — بدون SQL مقایسهٔ تاریخ */
-async function examBookingsMap(termId: number): Promise<{ totalAvailable: number; bySlot: Map<string, number> }> {
+async function examBookingsMap(termId: number, universityId?: number): Promise<{ totalAvailable: number; bySlot: Map<string, number> }> {
+  const uni = universityId ?? await termUniversityId(termId);
+  const hallWhere = uni != null ? eq(exam_halls.universityId, uni) : undefined;
+  const offUni = uni != null ? eq(course_offerings.universityId, uni) : undefined;
   const [halls, rows] = await Promise.all([
-    db.select().from(exam_halls),
+    db.select().from(exam_halls).where(hallWhere),
     db
       .select({ examDate: schedules.examDate, startTime: schedules.startTime, demand: course_offerings.enrolledCount })
       .from(schedules)
       .innerJoin(course_offerings, eq(course_offerings.id, schedules.offeringId))
-      .where(and(eq(schedules.scheduleType, 'EXAM'), eq(course_offerings.termId, termId))),
+      .where(and(eq(schedules.scheduleType, 'EXAM'), eq(course_offerings.termId, termId), offUni)),
   ]);
   const totalAvailable = halls.reduce((s, h) => s + Number(h.totalCapacity), 0);
   const bySlot = new Map<string, number>();
@@ -228,40 +249,46 @@ export type ScheduleOutcome =
   | { ok: false; error: string; status?: 'OVERFLOW'; splitOptions?: { label: string; shifts: number; seatsPerShift: number }[] };
 
 /** نوشتن ردیف exam_sessions (بلوک فیزیکی، شمسی) — upsert امن داخل تراکنش */
-async function upsertExamBlock(tx: AuditTx, termId: number, examDate: string, startTime: string, endTime: string) {
+async function upsertExamBlock(tx: AuditTx, termId: number, examDate: string, startTime: string, endTime: string, universityId?: number) {
+  const uni = universityId ?? null;
+  const lookup = uni != null
+    ? and(eq(exam_sessions.termId, termId), eq(exam_sessions.examDate, examDate), eq(exam_sessions.startTime, startTime), eq(exam_sessions.universityId, uni))
+    : and(eq(exam_sessions.termId, termId), eq(exam_sessions.examDate, examDate), eq(exam_sessions.startTime, startTime));
   const [blk] = await tx
     .select({ id: exam_sessions.id })
     .from(exam_sessions)
-    .where(and(eq(exam_sessions.termId, termId), eq(exam_sessions.examDate, examDate), eq(exam_sessions.startTime, startTime)))
+    .where(lookup)
     .limit(1);
   if (blk) {
     await tx.update(exam_sessions).set({ endTime }).where(eq(exam_sessions.id, blk.id));
   } else {
-    await tx.insert(exam_sessions).values({ termId, examDate, startTime, endTime });
+    await tx.insert(exam_sessions).values({ termId, examDate, startTime, endTime, ...(uni != null ? { universityId: uni } : {}) });
   }
 }
 
 /** نوشتن ردیف تقویمی درس (schedules — type EXAM؛ examDate میلادی) */
-async function writeScheduleRow(tx: AuditTx, offeringId: number, examDate: string, startTime: string, endTime: string) {
+async function writeScheduleRow(tx: AuditTx, offeringId: number, examDate: string, startTime: string, endTime: string, universityId?: number) {
+  const uni = universityId ?? null;
   const [sched] = await tx
     .select({ id: schedules.id })
     .from(schedules)
     .where(and(eq(schedules.offeringId, offeringId), eq(schedules.scheduleType, 'EXAM')))
     .limit(1);
   if (sched) {
-    await tx.update(schedules).set({ examDate, startTime, endTime }).where(eq(schedules.id, sched.id));
+    await tx.update(schedules).set({ examDate, startTime, endTime, ...(uni != null ? { universityId: uni } : {}) }).where(eq(schedules.id, sched.id));
   } else {
-    await tx.insert(schedules).values({ offeringId, scheduleType: 'EXAM', examDate, startTime, endTime });
+    await tx.insert(schedules).values({ offeringId, scheduleType: 'EXAM', examDate, startTime, endTime, ...(uni != null ? { universityId: uni } : {}) });
   }
   await tx.delete(course_exam_sessions).where(eq(course_exam_sessions.courseOfferingId, offeringId));
 }
 
 export async function scheduleExamForOffering(
   actorUserId: number,
-  px: { termId: number; offeringId: number; examDate: string; startTime: string; endTime: string },
+  px: { termId: number; offeringId: number; examDate: string; startTime: string; endTime: string; universityId?: number },
 ): Promise<ScheduleOutcome> {
   const profile = await examCourseProfile(px.offeringId);
   if (!profile) return { ok: false, error: 'درس/ارائه یافت نشد.' };
+  const uni = px.universityId ?? await offeringUniversityId(px.offeringId) ?? await termUniversityId(px.termId) ?? null;
   const zoning = await getExamZoningRow(px.termId);
   if (!zoning) return { ok: false, error: 'ابتدا بازه‌های تقویم امتحانات (زون‌بندی) را تعریف کنید.' };
   if (!slotAllowedInZone(zoning, profile.level, profile.kind, px.examDate)) {
@@ -274,7 +301,7 @@ export async function scheduleExamForOffering(
 
   return db.transaction(async tx => {
     await advisoryLock(tx, 'exam_slot', px.offeringId, px.termId);
-    const { totalAvailable, bySlot } = await examBookingsMap(px.termId);
+    const { totalAvailable, bySlot } = await examBookingsMap(px.termId, uni ?? undefined);
     const key = normJalali(px.examDate) + '|' + px.startTime.slice(0, 5);
     const bookedOthers = Math.max((bySlot.get(key) ?? 0) - profile.enrolledCount, 0);
     const verdict: SplitVerdict = validateAndSplitExam(bookedOthers + profile.enrolledCount, totalAvailable);
@@ -282,10 +309,11 @@ export async function scheduleExamForOffering(
       return { ok: false, error: verdict.message, status: 'OVERFLOW' as const, splitOptions: verdict.splitOptions };
     }
 
-    await upsertExamBlock(tx, px.termId, normJalali(px.examDate), px.startTime, px.endTime);
-    await writeScheduleRow(tx, px.offeringId, toIsoDate(parseJalaliDate(px.examDate)), px.startTime, px.endTime);
+    await upsertExamBlock(tx, px.termId, normJalali(px.examDate), px.startTime, px.endTime, uni ?? undefined);
+    await writeScheduleRow(tx, px.offeringId, toIsoDate(parseJalaliDate(px.examDate)), px.startTime, px.endTime, uni ?? undefined);
     await tx.insert(course_exam_sessions).values({
       courseOfferingId: px.offeringId, totalExpectedSheets: profile.enrolledCount,
+      ...(uni != null ? { universityId: uni } : {}),
     });
 
     await auditChain(tx, actorUserId, 'EXAM_SLOT_SCHEDULED', 'course_offering', px.offeringId, {
@@ -305,7 +333,9 @@ export interface ClusterRow {
   scheduledSlot: { examDate: string; startTime: string; endTime: string } | null;
 }
 
-export async function listEquivClusters(termId: number): Promise<ClusterRow[]> {
+export async function listEquivClusters(termId: number, universityId?: number): Promise<ClusterRow[]> {
+  const uni = universityId ?? await termUniversityId(termId);
+  const offUni = uni != null ? eq(course_offerings.universityId, uni) : undefined;
   const rows = await db
     .select({
       clusterId: equivalence_clusters.id,
@@ -321,7 +351,7 @@ export async function listEquivClusters(termId: number): Promise<ClusterRow[]> {
     .innerJoin(courses, eq(courses.clusterId, equivalence_clusters.id))
     .innerJoin(course_offerings, eq(course_offerings.courseId, courses.id))
     .leftJoin(schedules, and(eq(schedules.offeringId, course_offerings.id), eq(schedules.scheduleType, 'EXAM')))
-    .where(eq(course_offerings.termId, termId))
+    .where(and(eq(course_offerings.termId, termId), offUni))
     .orderBy(asc(equivalence_clusters.id), asc(courses.code));
   const map = new Map<number, ClusterRow>();
   for (const r of rows) {
@@ -339,20 +369,22 @@ export async function listEquivClusters(termId: number): Promise<ClusterRow[]> {
 /** امتحان تجمیعی: یک تاریخ/شیفت واحد برای همهٔ دروس هم‌ارزِ خوشه (آزمون واحد ≡ سؤال واحد) */
 export async function scheduleUnifiedCluster(
   actorUserId: number,
-  px: { termId: number; clusterId: number; examDate: string; startTime: string; endTime: string },
+  px: { termId: number; clusterId: number; examDate: string; startTime: string; endTime: string; universityId?: number },
 ): Promise<ScheduleOutcome> {
+  const uni = px.universityId ?? await termUniversityId(px.termId) ?? null;
+  const offUni = uni != null ? eq(course_offerings.universityId, uni) : undefined;
   const offerings = await db
     .select({ id: course_offerings.id, code: courses.code, enrolledCount: course_offerings.enrolledCount })
     .from(course_offerings)
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-    .where(and(eq(courses.clusterId, px.clusterId), eq(course_offerings.termId, px.termId)));
+    .where(and(eq(courses.clusterId, px.clusterId), eq(course_offerings.termId, px.termId), offUni));
   if (offerings.length === 0) return { ok: false, error: 'هیچ ارائه‌ای برای این خوشه در ترم جاری نیست.' };
   const [cluster] = await db.select().from(equivalence_clusters).where(eq(equivalence_clusters.id, px.clusterId)).limit(1);
   if (!cluster) return { ok: false, error: 'خوشهٔ هم‌ارزی یافت نشد.' };
 
   return db.transaction(async tx => {
     await advisoryLock(tx, 'exam_cluster', px.clusterId, px.termId);
-    const { totalAvailable, bySlot } = await examBookingsMap(px.termId);
+    const { totalAvailable, bySlot } = await examBookingsMap(px.termId, uni ?? undefined);
     const demand = offerings.reduce((s, o) => s + Number(o.enrolledCount ?? 0), 0);
     const key = normJalali(px.examDate) + '|' + px.startTime.slice(0, 5);
     const bookedOthers = Math.max((bySlot.get(key) ?? 0) - demand, 0);
@@ -361,10 +393,10 @@ export async function scheduleUnifiedCluster(
       return { ok: false, error: verdict.message, status: 'OVERFLOW' as const, splitOptions: verdict.splitOptions };
     }
 
-    await upsertExamBlock(tx, px.termId, normJalali(px.examDate), px.startTime, px.endTime);
+    await upsertExamBlock(tx, px.termId, normJalali(px.examDate), px.startTime, px.endTime, uni ?? undefined);
     for (const o of offerings) {
-      await writeScheduleRow(tx, o.id, toIsoDate(parseJalaliDate(px.examDate)), px.startTime, px.endTime);
-      await tx.insert(course_exam_sessions).values({ courseOfferingId: o.id, totalExpectedSheets: Number(o.enrolledCount ?? 0) });
+      await writeScheduleRow(tx, o.id, toIsoDate(parseJalaliDate(px.examDate)), px.startTime, px.endTime, uni ?? undefined);
+      await tx.insert(course_exam_sessions).values({ courseOfferingId: o.id, totalExpectedSheets: Number(o.enrolledCount ?? 0), ...(uni != null ? { universityId: uni } : {}) });
     }
 
     await auditChain(tx, actorUserId, 'EXAM_CLUSTER_UNIFIED', 'equivalence_cluster', px.clusterId, {
@@ -390,7 +422,7 @@ export interface SlotSuggestion {
 }
 
 /** ۴ پیشنهاد طلایی — ظرفیت گیت می‌کند، امتیاز (عصر/ارشد/شاغل) مرتب می‌کند */
-export async function suggestExamSlots(termId: number, offeringId: number): Promise<SlotSuggestion[]> {
+export async function suggestExamSlots(termId: number, offeringId: number, universityId?: number): Promise<SlotSuggestion[]> {
   const profile = await examCourseProfile(offeringId);
   if (!profile) return [];
   const zoning = await getExamZoningRow(termId);
@@ -404,7 +436,7 @@ export async function suggestExamSlots(termId: number, offeringId: number): Prom
     dates.push(jalaliDateOf(d));
   }
 
-  const { totalAvailable, bySlot } = await examBookingsMap(termId);
+  const { totalAvailable, bySlot } = await examBookingsMap(termId, universityId);
   const out: SlotSuggestion[] = [];
   for (const date of dates) {
     for (const shift of STANDARD_EXAM_SHIFTS) {
@@ -439,11 +471,15 @@ export interface SeatAllocationSummary {
 }
 
 /** تولید/بازتولید تخصیص صندلی برای همهٔ سشن‌های ترم (فقط REGISTERED) */
-export async function generateSeatAllocations(actorUserId: number, termId: number): Promise<SeatAllocationSummary> {
+export async function generateSeatAllocations(actorUserId: number, termId: number, universityId?: number): Promise<SeatAllocationSummary> {
+  const uni = universityId ?? await termUniversityId(termId) ?? null;
+  const sessUni = uni != null ? eq(exam_sessions.universityId, uni) : undefined;
+  const offUni = uni != null ? eq(course_offerings.universityId, uni) : undefined;
+  const hallWhere = uni != null ? eq(exam_halls.universityId, uni) : undefined;
   return db.transaction(async tx => {
     await advisoryLock(tx, 'exam_seats', termId);
-    const sessions = await tx.select().from(exam_sessions).where(eq(exam_sessions.termId, termId)).orderBy(asc(exam_sessions.examDate), asc(exam_sessions.startTime));
-    const halls = await tx.select({ id: exam_halls.id, capacity: exam_halls.totalCapacity }).from(exam_halls);
+    const sessions = await tx.select().from(exam_sessions).where(and(eq(exam_sessions.termId, termId), sessUni)).orderBy(asc(exam_sessions.examDate), asc(exam_sessions.startTime));
+    const halls = await tx.select({ id: exam_halls.id, capacity: exam_halls.totalCapacity }).from(exam_halls).where(hallWhere);
     const hallList = halls.map(h => ({ id: h.id, capacity: Number(h.capacity) }));
     const perSession: SeatAllocationSummary['perSession'] = [];
     let totalAllocated = 0;
@@ -454,7 +490,7 @@ export async function generateSeatAllocations(actorUserId: number, termId: numbe
         .select({ offeringId: schedules.offeringId, examDate: schedules.examDate, startTime: schedules.startTime })
         .from(schedules)
         .innerJoin(course_offerings, eq(course_offerings.id, schedules.offeringId))
-        .where(and(eq(schedules.scheduleType, 'EXAM'), eq(course_offerings.termId, termId)));
+        .where(and(eq(schedules.scheduleType, 'EXAM'), eq(course_offerings.termId, termId), offUni));
       const matched = schedRows
         .filter(r => {
           const jd = jalaliOfDateCol(r.examDate);
@@ -474,6 +510,7 @@ export async function generateSeatAllocations(actorUserId: number, termId: numbe
         if (plan.length > 0) {
           await tx.insert(seat_allocations).values(plan.map(p => ({
             enrollmentId: p.enrollmentId, sessionId: s.id, hallId: p.hallId, seatNumber: p.seatNumber, blockKey: p.blockKey,
+            ...(uni != null ? { universityId: uni } : {}),
           })));
         }
         allocated = plan.length;

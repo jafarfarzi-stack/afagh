@@ -127,6 +127,12 @@ try {
     // ⚠️ q1 یک «ردیف» برمی‌گرداند نه آرایه — با [x] = ... باز نمی‌شود.
     //    (نسخهٔ قبلی این‌جا `[fac] = await q1(...)` داشت و به‌محض فعال‌شدن مسیرِ
     //     تعارض، خطای «undefined is not iterable» می‌داد.)
+    // ردیف قدیمی NULL را به AFAGH نسبت بده (الگوی majors) — بدون ساخت تکراری.
+    await q(
+      `UPDATE faculties SET "universityId" = $1
+       WHERE "universityId" IS NULL AND "facultyCode" = $2
+         AND NOT EXISTS (SELECT 1 FROM faculties f2 WHERE f2."universityId" = $1 AND f2."facultyCode" = $2)`,
+      [afaghId, facCode]);
     let fac = await q1(`SELECT id FROM faculties WHERE "facultyCode" = $1 LIMIT 1`, [facCode]);
     if (!fac) {
       fac = await q1(`INSERT INTO faculties (name, "facultyCode", "universityId") VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id`, [facName, facCode, afaghId]);
@@ -134,6 +140,13 @@ try {
       if (!fac) fac = await q1(`SELECT id FROM faculties WHERE name = $1 LIMIT 1`, [facName]);
     }
     if (!fac) throw new Error(`ساخت دانشکده «${facName}» ممکن نشد`);
+
+    // ردیف قدیمی گروه (NULL) را هم به AFAGH نسبت بده — پیش از SELECT تا ردیف واقعی برگردد.
+    await q(
+      `UPDATE departments SET "universityId" = $1
+       WHERE "universityId" IS NULL AND "facultyId" = $2 AND "departmentCode" = $3
+         AND NOT EXISTS (SELECT 1 FROM departments d2 WHERE d2."universityId" = $1 AND d2."departmentCode" = $3)`,
+      [afaghId, fac.id, depCode]);
 
     // ── گروه آموزشی ──
     // «کد گروه» در کل سامانه یکتاست (ایندکس departments_departmentCode_uq).

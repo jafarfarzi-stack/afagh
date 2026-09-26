@@ -186,14 +186,14 @@ export default function ExamPlanningClient({ initial, universityId }: { initial:
         generalStart: isoToJalali(zoneForm.generalStart), generalEnd: isoToJalali(zoneForm.generalEnd),
         specializedStart: isoToJalali(zoneForm.specializedStart), specializedEnd: isoToJalali(zoneForm.specializedEnd),
       };
-      const r = await upsertExamZoningAction(selectedTermId, zJalali);
+      const r = await upsertExamZoningAction(selectedTermId, zJalali, universityId);
       showToast(r.ok ? r.message : r.error ?? 'خطا', r.ok ? 'success' : 'error');
       if (r.ok) reloadPlanning(selectedTermId);
     } finally { setBusyPlanning(false); }
   };
 
   const handleSuggestSlots = async (offeringId: number) => {
-    const r = await suggestExamSlotsAction(selectedTermId, offeringId);
+    const r = await suggestExamSlotsAction(selectedTermId, offeringId, universityId);
     if (!r.ok) { showToast(r.error, 'error'); return; }
     setSuggestions(prev => ({ ...prev, [offeringId]: r.data }));
   };
@@ -204,7 +204,7 @@ export default function ExamPlanningClient({ initial, universityId }: { initial:
     const end = addHours(d.start);
     setBusyPlanning(true);
     try {
-      const r = await scheduleExamSlotAction({ termId: selectedTermId, offeringId, examDate: isoToJalali(d.date), startTime: d.start, endTime: end });
+      const r = await scheduleExamSlotAction({ termId: selectedTermId, offeringId, examDate: isoToJalali(d.date), startTime: d.start, endTime: end, universityId });
       showToast(r.ok ? r.message : r.error, r.ok ? 'success' : 'error');
       if (!r.ok && (r as any).status === 'OVERFLOW' && (r as any).splitOptions?.length) {
         showToast(`💡 ${(r as any).splitOptions.map((o: any) => o.label).join(' یا ')}`, 'error');
@@ -219,7 +219,7 @@ export default function ExamPlanningClient({ initial, universityId }: { initial:
     if (!d?.date || !d?.start) { showToast('تاریخ و ساعت شروع امتحان تجمیعی را وارد کنید.', 'error'); return; }
     setBusyPlanning(true);
     try {
-      const r = await scheduleUnifiedClusterAction({ termId: selectedTermId, clusterId, examDate: isoToJalali(d.date), startTime: d.start, endTime: addHours(d.start) });
+      const r = await scheduleUnifiedClusterAction({ termId: selectedTermId, clusterId, examDate: isoToJalali(d.date), startTime: d.start, endTime: addHours(d.start), universityId });
       showToast(r.ok ? r.message : r.error, r.ok ? 'success' : 'error');
       if (r.ok) { reload(selectedTermId); reloadPlanning(selectedTermId); }
     } finally { setBusyPlanning(false); }
@@ -229,7 +229,7 @@ export default function ExamPlanningClient({ initial, universityId }: { initial:
   const handleGenerateSeats = async () => {
     setBusyPlanning(true);
     try {
-      const r = await generateSeatAllocationsAction(selectedTermId);
+      const r = await generateSeatAllocationsAction(selectedTermId, universityId);
       showToast(r.ok ? r.message : r.error ?? 'خطا', r.ok ? 'success' : 'error');
       if (r.ok) reload(selectedTermId);
     } finally { setBusyPlanning(false); }
