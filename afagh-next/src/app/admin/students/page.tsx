@@ -22,7 +22,7 @@ export default async function AdminStudentsPage({
   const sp = await searchParams;
 
   // ── فهرست دانشگاه‌ها ──
-  let allUniversities: { id: number; code: string; title: string; kind: string }[] = [];
+  let allUniversities: { id: number; code: string; title: string; kind: string; saminCode: string | null }[] = [];
   try {
     allUniversities = await db.select().from(universities).where(eq(universities.isActive, 1)).orderBy(universities.id);
   } catch { /* جدول universities ممکن است هنوز ساخته نشده باشد */ }
@@ -155,6 +155,8 @@ export default async function AdminStudentsPage({
       studyingMode: students.studyingMode,
       trainingMethod: students.trainingMethod,
       graduateDate: students.graduateDate,
+      universityId: students.universityId,
+      senderUniversityCode: students.senderUniversityCode,
       facultyName: faculties.name,
       majorName: majors.name,
       majorCode: majors.majorCode,
@@ -325,6 +327,8 @@ export default async function AdminStudentsPage({
           studyingMode: s.studyingMode,
           trainingMethod: s.trainingMethod,
           graduateDate: s.graduateDate,
+          universityId: s.universityId,
+          senderUniversityCode: s.senderUniversityCode,
           firstNameEn: s.firstNameEn || '—',
           lastNameEn: s.lastNameEn || '—',
           passportNumber: s.passportNumber || '—',
@@ -412,7 +416,7 @@ export default async function AdminStudentsPage({
         canEditGrades={canEditGrades}
         rolesAll={roleRows}
         userRoleIds={staffUserRoleIds}
-        universities={allUniversities.map(u => ({ id: u.id, code: u.code, title: u.title, kind: u.kind }))}
+        universities={allUniversities.map(u => ({ id: u.id, code: u.code, title: u.title, kind: u.kind, saminCode: u.saminCode }))}
         currentUniversityCode={currentUniversity?.code ?? 'AFAGH'}
       />
     </div>

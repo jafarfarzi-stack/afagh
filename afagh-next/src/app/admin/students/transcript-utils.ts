@@ -227,6 +227,56 @@ export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | 
 export const faNum = (n: number | null | undefined, digits = 2): string =>
   n == null ? '—' : n.toLocaleString('fa-IR', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
 
+/** ارقام لاتین → فارسی (برای سال/کد ترم؛ بدون جداکنندهٔ هزارگان) */
+export const faDigits = (v: string | number): string =>
+  String(v).replace(/[0-9]/g, d => '۰۱۲۳۴۵۶۷۸۹'[+d]);
+
+/**
+ * عنوان نمایشی نیمسال برای سربرگ کارنامهٔ سما («نیمسال اول ۱۴۰۳-۱۴۰۴»).
+ * اگر عنوان واقعی از فایل آمده همان می‌ماند؛ فقط کدهای خامی مثل «ترم 14002»
+ * یا «14002» (سال ۴رقمی/۳رقمی + شمارهٔ نیمسال) به فارسی ساخته می‌شوند.
+ */
+export function termDisplayTitle(termCode: string, termTitle: string | null): string {
+  const t = (termTitle || '').trim();
+  if (t && !/^(ترم\s*)?\d{4,6}$/.test(t)) return t;
+  const code = (termCode || '').trim();
+  const m = code.match(/^(\d{3,4})(\d)$/);
+  if (m) {
+    const y = m[1].length === 4 ? +m[1] : 1000 + +m[1];
+    const s = +m[2];
+    const range = `${faDigits(y)}-${faDigits(y + 1)}`;
+    if (s === 1) return `نیمسال اول ${range}`;
+    if (s === 2) return `نیمسال دوم ${range}`;
+    if (s === 3) return `تابستان ${range}`;
+    if (s === 5) return `معادل‌سازی ${range}`;
+  }
+  if (/EQ/i.test(code)) return `معادل‌سازی ${faDigits(code)}`;
+  return code.endsWith('3') ? 'نیمسال تابستان' : 'نیمسال';
+}
+
+/**
+ * تاریخ شروع تحصیل از سال+ترم ورودی (ترم ۱: اول مهر، ترم ۲: اول بهمن).
+ * چون فقط سال و شماره ترم ذخیره می‌شود، روز/ماه قراردادی است.
+ */
+export function entryDateFa(entryYear: number | null | undefined, entryTerm: number | null | undefined): string {
+  if (entryYear == null || !Number.isFinite(Number(entryYear))) return '—';
+  const y = Number(entryYear);
+  const md = Number(entryTerm) === 2 ? '11/01' : '07/01';
+  return faDigits(`${y}/${md}`);
+}
+/**
+ * نمرهٔ عددی پایان‌نامه → برچسب کیفی برای چاپ («عالی» تا «مردود»).
+ * مقیاس پیش‌فرض: ۱۸–۲۰ عالی، ۱۵–۱۸ خیلی خوب، ۱۲–۱۵ خوب، حد قبولی–۱۲ قابل قبول.
+ */
+export function thesisQualitativeLabel(g: number | null, pass = 10): string {
+  if (g === null || !Number.isFinite(g)) return '—';
+  if (g >= 18) return 'عالی';
+  if (g >= 15) return 'خیلی خوب';
+  if (g >= 12) return 'خوب';
+  if (g >= pass) return 'قابل قبول';
+  return 'مردود';
+}
+
 /** میلادی → جلالی (برای تاریخ تهیه/تولد در کارنامه) */
 export function g2j(gy: number, gm: number, gd: number): [number, number, number] {
   const breaks = [-61, 9, 38, 199, 426, 686, 756, 818, 1111, 1181, 1210, 1635, 2060, 2097, 2192, 2262, 2324, 2394, 2456, 3178];

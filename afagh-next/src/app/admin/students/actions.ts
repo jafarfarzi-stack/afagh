@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, roles, staff, student_term_states, students, user_roles, users } from '@/db/schema';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, notInArray, sql } from 'drizzle-orm';
 import { hashPassword, requireRole } from '@/lib/auth';
 import { getSessionUser } from '@/lib/auth';
 
@@ -25,6 +25,56 @@ export async function getTranscriptRegulation(studentId: number): Promise<{
     : [];
   const config = await getRegulationConfig(stu.regulationId, stu.degreeLevelId).catch(() => DEFAULT_BACHELOR_REGULATION_1403);
   return { title: reg?.title ?? null, config };
+}
+
+/**
+ * آمار هم‌رشته‌ای‌های ورودی برای پانوشت کارنامه سما
+ * («رتبهٔ معدل کل در رشته ورودی / میانگین معدل و واحد هم‌رشته‌ای‌ها»).
+ * هم‌رشته‌ای = همان رشته + همان سال ورود (+ همان ترم ورود در حالت ترم) + همان دانشگاه.
+ * رتبه ۱ = بالاترین معدل. دانشجویان «عدم مراجعه / انصراف / اخراج» دخیل نیستند.
+ * فقط دانشجویان دارای معدل (>۰ واحد موثر) شمرده می‌شوند.
+ */
+export async function getCohortStats(studentId: number, scope: 'year' | 'term' = 'year'): Promise<{
+  scope: 'year' | 'term';
+  rank: number | null;
+  total: number;
+  avgGpa: number | null;
+  avgPassed: number | null;
+} | null> {
+  await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'GRADUATEAFFAIRS']);
+  const [me] = await db
+    .select({ id: students.id, majorId: students.majorId, entryYear: students.entryYear, entryTerm: students.entryTerm, universityId: students.universityId })
+    .from(students)
+    .where(eq(students.id, studentId))
+    .limit(1);
+  if (!me || me.majorId == null || me.entryYear == null) return null;
+  const conds = [
+    eq(students.majorId, me.majorId),
+    eq(students.entryYear, me.entryYear),
+    // عدم مراجعه / انصراف / اخراج در رتبه دخیل نیستند
+    notInArray(students.status, ['NO_SHOW', 'WITHDRAWN', 'EXPELLED']),
+  ];
+  if (scope === 'term' && me.entryTerm != null) conds.push(eq(students.entryTerm, me.entryTerm));
+  if (me.universityId != null) conds.push(eq(students.universityId, me.universityId));
+  const cohort = await db
+    .select({ id: students.id })
+    .from(students)
+    .where(and(...conds));
+  if (cohort.length === 0) return null;
+  const { calculateOfficialGPA } = await import('@/lib/regulations-engine');
+  const gpas: { id: number; gpa: number; passed: number }[] = [];
+  for (const s of cohort) {
+    try {
+      const r = await calculateOfficialGPA(s.id);
+      if (r.totalUnits > 0 && r.gpa > 0) gpas.push({ id: s.id, gpa: r.gpa, passed: r.passedUnits });
+    } catch { /* این دانشجو در آمار نمی‌آید */ }
+  }
+  if (gpas.length === 0) return null;
+  const mine = gpas.find(g => g.id === studentId);
+  const rank = mine ? 1 + gpas.filter(g => g.gpa > mine.gpa).length : null;
+  const avgGpa = gpas.reduce((a, g) => a + g.gpa, 0) / gpas.length;
+  const avgPassed = gpas.reduce((a, g) => a + g.passed, 0) / gpas.length;
+  return { scope, rank, total: gpas.length, avgGpa, avgPassed };
 }
 
 /** تغییر آیین‌نامه ملاک دانشجو (از پرونده یا مرکز آیین‌نامه‌ها) + بازمحاسبه کدهای وضعیت همه نمرات */

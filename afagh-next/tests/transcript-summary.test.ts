@@ -10,9 +10,9 @@
  *   faNum / faWords / g2j / dateToJalali / todayJalali / codeLabel
  */
 import {
-  breakdownByType, bestFinalizedRowPerCourse, codeLabel, courseTypeGroup, dateToJalali, faIntWords, faNum, faWords,
+  breakdownByType, bestFinalizedRowPerCourse, codeLabel, courseTypeGroup, dateToJalali, faDigits, faIntWords, faNum, faWords,
   g2j, groupTranscript, numOrNull, passedCourseSet, regThresholds, summarizeTerm,
-  summarizeTotal, todayJalali,
+  summarizeTotal, termDisplayTitle, thesisQualitativeLabel, todayJalali, entryDateFa,
 } from '../src/app/admin/students/transcript-utils.ts';
 import type { TranscriptRow } from '../src/app/admin/students/actions.ts';
 
@@ -291,6 +291,25 @@ const addDropSum = groupTranscript([...lowRows, R({ term: '13911', code: 'M1', u
 eq('ردیف ۱- در جدول ترم نیست', addDropSum.terms[0].rows.some(r => r.courseCode === 'M1'), false);
 // ترمی که فقط ردیف ۱- دارد کلا از کارنامه حذف می‌شود
 eq('ترمِ فقط-۱- از کارنامه حذف می‌شود', groupTranscript([R({ term: '13912', code: 'M1', units: 3, g: null, st: 'PENDING', sc: '-1' })], cfg12).terms.length, 0);
+
+console.log('۱۳)عنوان فارسی نیمسال + نمرهٔ کیفی پایان‌نامه');
+eq('ارقام فارسی بدون جداکننده', faDigits('1400-1401'), '۱۴۰۰-۱۴۰۱');
+eq('عنوان واقعی فایل دست نمی‌خورد', termDisplayTitle('14002', 'نیمسال اول ۱۴۰۰-۱۴۰۱'), 'نیمسال اول ۱۴۰۰-۱۴۰۱');
+eq('کد خام ۵رقمی ترم ۲', termDisplayTitle('14002', 'ترم 14002'), 'نیمسال دوم ۱۴۰۰-۱۴۰۱');
+eq('کد خام بدون عنوان', termDisplayTitle('14001', null), 'نیمسال اول ۱۴۰۰-۱۴۰۱');
+eq('تابستان', termDisplayTitle('14003', '14003'), 'تابستان ۱۴۰۰-۱۴۰۱');
+eq('معادل‌سازی', termDisplayTitle('14005', null), 'معادل‌سازی ۱۴۰۰-۱۴۰۱');
+eq('کد ۴رقمی (۴۰۲۱ → ۱۴۰۲)', termDisplayTitle('4021', null), 'نیمسال اول ۱۴۰۲-۱۴۰۳');
+eq('کد نامعتبر همان می‌ماند', termDisplayTitle('ABC', null), 'نیمسال');
+eq('کیفی: ۱۹ عالی', thesisQualitativeLabel(19), 'عالی');
+eq('کیفی: ۱۶ خیلی خوب', thesisQualitativeLabel(16), 'خیلی خوب');
+eq('کیفی: ۱۳ خوب', thesisQualitativeLabel(13), 'خوب');
+eq('کیفی: ۱۱ قابل قبول', thesisQualitativeLabel(11), 'قابل قبول');
+eq('کیفی: ۸ مردود', thesisQualitativeLabel(8), 'مردود');
+eq('کیفی: بی‌نمره خط تیره', thesisQualitativeLabel(null), '—');
+eq('شروع تحصیل ترم ۱ → اول مهر', entryDateFa(1403, 1), '۱۴۰۳/۰۷/۰۱');
+eq('شروع تحصیل ترم ۲ → اول بهمن', entryDateFa(1403, 2), '۱۴۰۳/۱۱/۰۱');
+eq('شروع تحصیل بدون سال خط تیره', entryDateFa(null, 1), '—');
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

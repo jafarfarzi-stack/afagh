@@ -82,6 +82,10 @@ export type StudentItem = {
   email?: string | null;
   postalCode?: string | null;
   address?: string | null;
+  /** دانشگاه مالک رکورد (برای تشخیص مبدا/منحله در کارنامه) */
+  universityId?: number | null;
+  /** کد فرستندهٔ ثمین (لینک به دانشگاه مبدا) */
+  senderUniversityCode?: string | null;
 };
 
 export type RegulationPick = { id: number; title: string; degreeLevelId: number };
@@ -181,4 +185,49 @@ export type CodeLabels = {
   acceptByTarget: Record<string, string>;
   period: Record<string, string>;
   quota: Record<string, string>;
+};
+
+/** گزینه‌های چاپ کارنامه (معادل تیک‌های «تنظیمات چاپ» سما) */
+export type TranscriptPrintOptions = {
+  showLegend: boolean;        // توضیح وضع نمرات
+  showBreakdown: boolean;     // جدول وضعیت دروس گذرانده (صفحهٔ دوم)
+  showRank: boolean;          // رتبه در رشته ورودی و میانگین کل (محاسبهٔ جدا)
+  showNationality: boolean;   // ملیت دانشجو
+  showPhoto: boolean;         // عکس دانشجو
+  showLogo: boolean;          // آرم دانشگاه
+  showAcceptance: boolean;    // نحوه ورود
+  showStudyMode: boolean;     // شیوه آموزشی
+  thesisQualitative: boolean; // نمرهٔ پایان‌نامه/رساله به‌صورت کیفی
+};
+
+export const DEFAULT_PRINT_OPTIONS: TranscriptPrintOptions = {
+  showLegend: true,
+  showBreakdown: true,
+  showRank: false,
+  showNationality: true,
+  showPhoto: true,
+  showLogo: true,
+  showAcceptance: true,
+  showStudyMode: true,
+  thesisQualitative: false,
+};
+
+/** دانشگاه مبدا دانشجو برای درج در کارنامه */
+export type OriginUniversity = {
+  title: string;
+  /** true یعنی دانشگاه منحله است و باید برجسته شود */
+  dissolved: boolean;
+};
+
+/** آمار هم‌رشته‌ای‌های ورودی (رتبه/میانگین — مثل پانوشت سما) */
+export type CohortStats = {
+  scope: 'year' | 'term';
+  /** رتبهٔ معدل کل دانشجو در رشته ورودی (۱ = اول) */
+  rank: number | null;
+  /** تعداد دانشجویان هم‌رشته ورودی شمارش‌شده */
+  total: number;
+  /** میانگین معدل هم‌رشته‌ای‌ها */
+  avgGpa: number | null;
+  /** میانگین واحد گذراندهٔ هم‌رشته‌ای‌ها */
+  avgPassed: number | null;
 };

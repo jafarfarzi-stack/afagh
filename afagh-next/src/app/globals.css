@@ -36,8 +36,7 @@ body { @apply bg-slate-100 text-slate-800; }
     margin: 0 !important; border: 2px solid #000 !important; border-radius: 0 !important;
     print-color-adjust: exact; -webkit-print-color-adjust: exact;
   }
-  .transcript-print-area table.term-grid { table-layout: fixed; width: 100%; border-collapse: collapse; }
-  .transcript-print-area table.term-grid > tbody > tr { page-break-inside: avoid; break-inside: avoid; }
+  .transcript-print-area .tr-term-row { break-inside: avoid; page-break-inside: avoid; }
   .transcript-print-area .term-block { page-break-inside: avoid; break-inside: avoid; }
   .transcript-print-area .page-break-before { page-break-before: always; break-before: page; }
   .transcript-print-area table { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
@@ -58,19 +57,29 @@ body { @apply bg-slate-100 text-slate-800; }
     content: 'صفحه ' counter(page) ' از ' counter(pages);
     display: block; text-align: center; font-size: 8pt; color: #475569; margin-top: 4pt;
   }
+  /* ── چاپ عمودی: نیمسال‌ها تک‌ستونه زیر هم ── */
+  body.printing-portrait .transcript-print-area .tr-term-row { grid-template-columns: minmax(0, 1fr); }
+  body.printing-portrait .transcript-print-area .tr-term-row > .term-block + .term-block { border-inline-start: none; border-top: 1px solid #94a3b8; }
 }
 
-/* ── چاپ کارنامه: صفحه‌بندی صحیح + ارتفاع یکسان نیمسال‌ها (پایه، خارج از چاپ هم بی‌ضرر) ── */
-.transcript-print-area table.term-grid { table-layout: fixed; width: 100%; border-collapse: collapse; }
-.transcript-print-area table.term-grid > tbody > tr > td { vertical-align: top; }
-.transcript-print-area table.term-grid > tbody > tr {
+/* ── چاپ کارنامه: گرید ۳ستونهٔ هم‌ارتفاع (پانوشت نیمسال‌های یک ردیف هم‌تراز) ── */
+.transcript-print-area .term-grid { width: 100%; }
+.transcript-print-area .tr-term-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 2px solid #334155;
   page-break-inside: avoid;
   break-inside: avoid;
 }
-.transcript-print-area table.term-grid > tbody > tr + tr {
-  page-break-before: auto;
+.transcript-print-area .term-block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  page-break-inside: avoid;
+  break-inside: avoid;
 }
-.transcript-print-area .term-block { page-break-inside: avoid; break-inside: avoid; }
+.transcript-print-area .tr-term-row > .term-block + .term-block { border-inline-start: 1px solid #94a3b8; }
+.transcript-print-area .tr-term-footer { margin-top: auto; }
 .transcript-print-area .page-break-before { page-break-before: always; break-before: page; }
 
 

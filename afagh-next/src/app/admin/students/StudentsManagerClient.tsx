@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { backfillRolesAction, bulkResetPasswordsAction, bulkResetToNationalCodeAction, createStaffExpertAction, getTranscript, getTranscriptRegulation, resetUserPasswordAction, saveUserRolesAction, setStudentRegulationAction, setUserActiveAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
+import { backfillRolesAction, bulkResetPasswordsAction, bulkResetToNationalCodeAction, createStaffExpertAction, getCohortStats, getTranscript, getTranscriptRegulation, resetUserPasswordAction, saveUserRolesAction, setStudentRegulationAction, setUserActiveAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
 import type { RegulationConfig } from '@/lib/regulations-engine';
 import { ClientTh, ServerTh, useClientTable, type ColumnDef } from '@/components/DataTable';
 import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, studentStatusChip, studentStatusFa} from '@/lib/student-labels';
 
 // ── هستهٔ خالص و قرارداد داده از ماژول‌های جدا (ریفکتور دور ۱۱) ──
-import type { StudentItem, RegulationPick, Pagination, StaffItem, CodeLabels} from './types';
+import type { StudentItem, RegulationPick, Pagination, StaffItem, CodeLabels, TranscriptPrintOptions, OriginUniversity, CohortStats} from './types';
+import { DEFAULT_PRINT_OPTIONS } from './types';
 import { regThresholds, groupTranscript, faNum, dateToJalali} from './transcript-utils';
 import OfficialTranscriptView from './components/OfficialTranscriptView';
 import { adminSetGradeAction, getStudentGradeAuditLog, resolveSamaCodeForGradeAction } from '@/app/admin/grades/actions';
@@ -78,7 +79,7 @@ export default function StudentsManagerClient(props: {
   canEditGrades?: boolean;
   rolesAll?: { id: number; code: string; title: string; isSystem: number | boolean | null }[];
   userRoleIds?: Record<number, number[]>;
-  universities?: { id: number; code: string; title: string; kind: string }[];
+  universities?: { id: number; code: string; title: string; kind: string; saminCode?: string | null }[];
   currentUniversityCode?: string;
 }) {
   // انتخاب بخش اصلی (دانشجویان / اساتید / عملیات سریع)
@@ -103,6 +104,11 @@ export default function StudentsManagerClient(props: {
   const [regConfig, setRegConfig] = useState<RegulationConfig | null>(null);
   // نمای کارنامه: رسمی (پیش‌فرض) یا جدول سادهٔ نمرات
   const [transcriptView, setTranscriptView] = useState<'official' | 'simple'>('official');
+  // گزینه‌های چاپ کارنامه (تیک‌های تنظیمات چاپ سما) + آمار رتبهٔ هم‌رشته‌ای
+  const [printOptions, setPrintOptions] = useState<TranscriptPrintOptions>(DEFAULT_PRINT_OPTIONS);
+  const [rankScope, setRankScope] = useState<'year' | 'term'>('year');
+  const [cohortStats, setCohortStats] = useState<CohortStats | null>(null);
+  const [cohortLoading, setCohortLoading] = useState(false);
 
   // مودال ثبت / اصلاح نمره
   const [gradeEditTarget, setGradeEditTarget] = useState<TranscriptRow | null>(null);
@@ -305,6 +311,37 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
 
   const currentStudent = props.students[selectedStuIdx] || props.students[0];
   const currentStaff = props.staffList[selectedProfIdx] || props.staffList[0];
+
+  /** دانشگاه مبدا دانشجو برای درج در کارنامه (برجسته اگر منحله باشد) */
+  const originUniversity: OriginUniversity | null = (() => {
+    const st = currentStudent;
+    const list = props.universities ?? [];
+    if (!st) return null;
+    const byId = new Map(list.map(u => [u.id, u]));
+    const mine = st.universityId != null ? byId.get(st.universityId) : undefined;
+    if (mine && mine.kind === 'DISSOLVED') return { title: mine.title, dissolved: true };
+    const sender = (st.senderUniversityCode || '').trim();
+    if (sender) {
+      const hit = list.find(u => u.saminCode === sender || u.code === sender);
+      if (hit && hit.code !== (props.currentUniversityCode ?? 'AFAGH')) {
+        return { title: hit.title, dissolved: hit.kind === 'DISSOLVED' };
+      }
+    }
+    return null;
+  })();
+
+  // آمار رتبهٔ هم‌رشته‌ای فقط وقتی تیک «رتبه» روشن است (محاسبهٔ سنگین، کش به‌ازای دانشجو+بازه)
+  useEffect(() => {
+    if (!printOptions.showRank || !currentStudent) { setCohortStats(null); return; }
+    let active = true;
+    setCohortLoading(true);
+    setCohortStats(null);
+    getCohortStats(currentStudent.id, rankScope)
+      .then(r => { if (active) setCohortStats(r); })
+      .catch(() => { if (active) setCohortStats(null); })
+      .finally(() => { if (active) setCohortLoading(false); });
+    return () => { active = false; };
+  }, [printOptions.showRank, rankScope, currentStudent?.id]);
 
   useEffect(() => {
     if (!gradeEditModalOpen || !currentStudent || !gradeEditTarget?.offeringId) return;
@@ -1164,10 +1201,20 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                   )}
                   {transcript && transcript.length > 0 && (
                     <button
-                      onClick={() => doPrintTranscript()}
+                      onClick={() => doPrintTranscript('landscape')}
                       className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-700 text-white hover:bg-emerald-800"
+                      title="چاپ کارنامه در کاغذ افقی (فرمت سما: ۳ نیمسال کنار هم)"
                     >
-                      🖨️ چاپ کارنامه
+                      🖨️ چاپ افقی
+                    </button>
+                  )}
+                  {transcript && transcript.length > 0 && (
+                    <button
+                      onClick={() => doPrintTranscript('portrait')}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-teal-700 text-white hover:bg-teal-800"
+                      title="چاپ کارنامه در کاغذ عمودی (نیمسال‌ها زیر هم)"
+                    >
+                      🖨️ چاپ عمودی
                     </button>
                   )}
                 </div>
@@ -1176,6 +1223,48 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                     ⚖️ مبنای محاسبه: <b>{currentStudent.regulationTitle}</b>
                     {(() => { const th = regThresholds(regConfig); return ` (قبولی ${faNum(th.pass, 0)} — مشروطی زیر ${faNum(th.prob, 0)}${th.minUnits > 0 ? ` — حدنصاب واحد ترم ${faNum(th.minUnits, 0)}` : ''}${th.exclFailed ? ' — حذف مردودی قبول‌شده از معدل کل' : ''})`; })()}
                   </p>
+                )}
+                {/* ── تنظیمات چاپ کارنامه (تیک‌های سما) — در چاپ نمی‌آید ── */}
+                {transcript && transcript.length > 0 && transcriptView === 'official' && (
+                  <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-200 pt-2 print:hidden">
+                    <span className="text-[11px] font-bold text-slate-500">⚙️ تنظیمات چاپ:</span>
+                    {([
+                      ['showLegend', 'توضیح وضع نمرات'],
+                      ['showBreakdown', 'جدول وضعیت دروس'],
+                      ['showRank', 'رتبه هم‌رشته‌ای'],
+                      ['showNationality', 'ملیت'],
+                      ['showPhoto', 'عکس'],
+                      ['showLogo', 'آرم دانشگاه'],
+                      ['showAcceptance', 'نحوه ورود'],
+                      ['showStudyMode', 'شیوه آموزشی'],
+                      ['thesisQualitative', 'پایان‌نامه کیفی'],
+                    ] as [keyof TranscriptPrintOptions, string][]).map(([k, label]) => (
+                      <label
+                        key={k}
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold border cursor-pointer ${printOptions[k] ? 'bg-indigo-50 border-indigo-300 text-indigo-900' : 'bg-slate-50 border-slate-300 text-slate-500'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={printOptions[k]}
+                          onChange={e => setPrintOptions(o => ({ ...o, [k]: e.target.checked }))}
+                          className="w-3.5 h-3.5 accent-indigo-700"
+                        />
+                        {label}
+                      </label>
+                    ))}
+                    {printOptions.showRank && (
+                      <select
+                        value={rankScope}
+                        onChange={e => setRankScope(e.target.value as 'year' | 'term')}
+                        className="px-2 py-0.5 rounded-lg text-[11px] font-bold border border-indigo-300 bg-indigo-50 text-indigo-900"
+                        title="بازهٔ رتبه: هم‌ورودی‌های یک سال یا یک ترم"
+                      >
+                        <option value="year">هم‌ورودی سال</option>
+                        <option value="term">هم‌ورودی ترم</option>
+                      </select>
+                    )}
+                    {cohortLoading && <span className="text-[11px] text-indigo-700">⏳ محاسبه رتبه…</span>}
+                  </div>
                 )}
               </div>
               {transcriptLoading ? (
@@ -1234,6 +1323,10 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                   codeLabels={props.codeLabels}
                   canEditGrades={props.canEditGrades}
                   onEditGrade={openEditGrade}
+                  printOptions={printOptions}
+                  originUniversity={originUniversity}
+                  cohortStats={printOptions.showRank ? cohortStats : null}
+                  cohortLoading={cohortLoading && printOptions.showRank}
                 />
               )}
             </div>

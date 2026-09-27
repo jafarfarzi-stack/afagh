@@ -4,10 +4,11 @@
 //  نمای رسمی کارنامه با فرمت سما: ۳ نیمسال کنار هم + سربرگ/پانوشت + صفحهٔ دوم
 //  (این همان چیزی است که دکمهٔ چاپ هم عیناً چاپ می‌کند — WYSIWYG.)
 // ═══════════════════════════════════════════════════════════════════════
-import type { StudentItem, TermGroup, TranscriptSummary, CodeLabels } from '../types';
+import type { StudentItem, TermGroup, TranscriptSummary, CodeLabels, TranscriptPrintOptions, OriginUniversity, CohortStats } from '../types';
+import { DEFAULT_PRINT_OPTIONS } from '../types';
 import type { TranscriptRow } from '../actions';
 import { gradeStatusFa, quotaFa, studentStatusFa } from '@/lib/student-labels';
-import { breakdownByType, codeLabel, dateToJalali, faNum, faWords, todayJalali } from '../transcript-utils';
+import { breakdownByType, codeLabel, courseTypeGroup, dateToJalali, entryDateFa, faNum, faWords, numOrNull, termDisplayTitle, thesisQualitativeLabel, todayJalali } from '../transcript-utils';
 
 /** نمای رسمی کارنامه با فرمت سما: ۳ نیمسال کنار هم + سربرگ/پانوشت + صفحه دوم تفکیکی */
 export default function OfficialTranscriptView({
@@ -17,6 +18,10 @@ export default function OfficialTranscriptView({
   codeLabels,
   canEditGrades,
   onEditGrade,
+  printOptions = DEFAULT_PRINT_OPTIONS,
+  originUniversity = null,
+  cohortStats = null,
+  cohortLoading = false,
 }: {
   student: StudentItem;
   summary: TranscriptSummary;
@@ -24,6 +29,10 @@ export default function OfficialTranscriptView({
   codeLabels?: CodeLabels | null;
   canEditGrades?: boolean;
   onEditGrade?: (row: TranscriptRow) => void;
+  printOptions?: TranscriptPrintOptions;
+  originUniversity?: OriginUniversity | null;
+  cohortStats?: CohortStats | null;
+  cohortLoading?: boolean;
 }) {
   const lbl = {
     accept: (v: string | null | undefined) => {
@@ -59,20 +68,25 @@ export default function OfficialTranscriptView({
     ['نوع دوره', lbl.period(student.trainingMethod) !== '—' ? lbl.period(student.trainingMethod) : (student.studyingMode || '—')],
     ['دانشکده', student.facultyName || '—'],
     ['رشته تحصیلی', student.majorName],
-    ['نحوه ورود', lbl.accept(student.acceptanceType)],
-    ['شیوه آموزشی', student.studyingMode || '—'],
+    ...(printOptions.showAcceptance ? [['نحوه ورود', lbl.accept(student.acceptanceType)] as [string, string]] : []),
+    ...(originUniversity ? [[
+      'دانشگاه مبدا',
+      originUniversity.dissolved ? `${originUniversity.title} (منحله)` : originUniversity.title,
+    ] as [string, string]] : []),
+    ...(printOptions.showStudyMode ? [['شیوه آموزشی', student.studyingMode || '—'] as [string, string]] : []),
     ['سهمیه قبولی', quotaFa(student.quotaType)],
     ['سهمیه نهایی', quotaFa(student.quotaType)],
     ['سهمیه ثبت‌نامی', lbl.quota(student.acceptanceAllocation) !== '—' ? lbl.quota(student.acceptanceAllocation) : quotaFa(student.quotaType)],
-    ['ملیت', student.nationality === '120001' ? 'ایرانی' : student.nationality || '—'],
+    ...(printOptions.showNationality ? [[
+      'ملیت',
+      student.nationality === '120001' ? 'ایرانی' : (!student.nationality || student.nationality === 'unknown' ? '—' : student.nationality),
+    ] as [string, string]] : []),
     ['استاد راهنما', '—'],
   ];
   // گروه‌بندی ۳تایی نیمسال‌ها (مثل سما)
   const chunks: TermGroup[][] = [];
   for (let i = 0; i < summary.terms.length; i += 3) chunks.push(summary.terms.slice(i, i + 3));
   const breakdown = breakdownByType(summary.terms.flatMap(t => t.rows));
-
-  const termLabel = (code: string) => code.endsWith('3') ? 'نیمسال تابستان' : 'نیمسال';
   // راهنمای کد وضع نمره (فقط ردیف‌هایی که کد خام سما دارند؛ متن کامل در پایین کارنامه یک‌بار می‌آید)
   const statusLegend = new Map<string, string>();
   for (const t of summary.terms) for (const r of t.rows) {
@@ -92,10 +106,17 @@ export default function OfficialTranscriptView({
     }
     return gradeStatusFa(r.gradeStatus);
   };
+  /** سلول نمره: اگر تیک «پایان‌نامه کیفی» روشن و درس پایان‌نامه/رساله است، برچسب کیفی */
+  const gradeCell = (r: TermGroup['rows'][number]) => {
+    if (printOptions.thesisQualitative && courseTypeGroup(r.courseType) === 'پایان‌نامه') {
+      return <span className="font-sans">{thesisQualitativeLabel(numOrNull(r.gradeValue), summary.passGrade)}</span>;
+    }
+    return r.gradeValue ?? '—';
+  };
   const termCell = (t: TermGroup) => (
-    <td key={t.termCode} className="align-top border-l border-slate-400 p-0 term-block" style={{ width: '33.33%' }}>
+    <section key={t.termCode} className="term-block min-w-0">
       <div className="bg-slate-100 border-b border-slate-300 px-1 py-1 font-extrabold text-[10px] text-center">
-        {t.termTitle || `${termLabel(t.termCode)} ${t.termCode}`}
+        {termDisplayTitle(t.termCode, t.termTitle)}
         <span className="block font-normal text-slate-700">وضعیت دانشجو: {t.termStatusTitle || '—'} — <b className={t.probation ? 'text-red-700' : 'text-emerald-700'}>{t.probation ? 'مشروط' : 'عادی'}</b></span>
       </div>
       <table className="tr-term-table w-full text-[9px]" style={{ tableLayout: 'fixed' }}>
@@ -133,7 +154,7 @@ export default function OfficialTranscriptView({
                 )}
               </td>
               <td className="p-1 text-center font-mono">{r.units ?? '—'}</td>
-              <td className="p-1 text-center font-mono font-bold">{r.gradeValue ?? '—'}</td>
+              <td className="p-1 text-center font-mono font-bold">{gradeCell(r)}</td>
               <td className="p-1 text-center text-[8px]">{statusCell(r)}</td>
             </tr>
           ))}
@@ -145,7 +166,7 @@ export default function OfficialTranscriptView({
         <p className="border-t border-slate-300 pt-0.5"><b>کل</b> — اخذشده: <b className="font-mono">{faNum(t.cumTaken, 0)}</b> گذرانده: <b className="font-mono">{faNum(t.cumPassed, 0)}</b> مردودی: <b className="font-mono">{faNum(t.cumFailed, 0)}</b></p>
         <p>معدل: <b className="font-mono">{faNum(t.cumGpa)}</b> امتیاز: <b className="font-mono">{faNum(t.cumPoints, 1)}</b> موثر: <b className="font-mono">{faNum(t.cumEffectiveUnits, 0)}</b></p>
       </div>
-    </td>
+    </section>
   );
 
   return (
@@ -160,12 +181,12 @@ export default function OfficialTranscriptView({
         </div>
         <div className="text-center">
           <p className="text-[10px]">موسسه آموزش عالی غیرانتفاعی - غیردولتی آفاق</p>
-          {student.photoKey ? (
+          {printOptions.showPhoto && student.photoKey ? (
             <div className="mx-auto mt-1 w-14 h-[70px] bg-slate-100 border border-slate-300 text-[8px] text-slate-400 flex items-center justify-center">عکس دانشجو</div>
           ) : null}
         </div>
         <div className="w-16 h-16 flex items-center justify-center">
-          {logoUrl ? <img src={logoUrl} alt="ارم دانشگاه" className="max-w-16 max-h-16 object-contain" /> : <span className="text-[9px] text-slate-400 border border-dashed border-slate-300 rounded p-1">ارم دانشگاه</span>}
+          {printOptions.showLogo ? (logoUrl ? <img src={logoUrl} alt="ارم دانشگاه" className="max-w-16 max-h-16 object-contain" /> : <span className="text-[9px] text-slate-400 border border-dashed border-slate-300 rounded p-1">ارم دانشگاه</span>) : null}
         </div>
       </div>
       {/* مشخصات — در چاپ همیشه ۳ ستونه (مثل سما) */}
@@ -177,16 +198,14 @@ export default function OfficialTranscriptView({
           </div>
         ))}
       </div>
-      {/* نیمسال‌ها ۳تایی */}
-      <table className="w-full border-collapse term-grid">
-        <tbody>
-          {chunks.map((ch, i) => (
-            <tr key={i} className="border-b-2 border-slate-700">{ch.map(termCell)}</tr>
-          ))}
-        </tbody>
-      </table>
-      {/* راهنمای کد وضع نمره — فقط اگر کدی در کارنامه استفاده شده باشد */}
-      {statusLegend.size > 0 && (
+      {/* نیمسال‌ها ۳تایی — گرید هم‌ارتفاع تا پانوشت نیمسال‌های یک ردیف هم‌تراز شود */}
+      <div className="term-grid">
+        {chunks.map((ch, i) => (
+          <div key={i} className="tr-term-row">{ch.map(termCell)}</div>
+        ))}
+      </div>
+      {/* راهنمای کد وضع نمره — فقط اگر تیک سما روشن و کدی در کارنامه استفاده شده باشد */}
+      {printOptions.showLegend && statusLegend.size > 0 && (
         <div className="border-t-2 border-slate-700 px-3 py-1.5 text-[9px] bg-slate-50 leading-relaxed">
           <b>توضیح وضع نمرات:</b>{' '}
           {[...statusLegend.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([code, title]) => (
@@ -201,7 +220,7 @@ export default function OfficialTranscriptView({
         <div className="flex flex-wrap gap-x-6">
           <span>تعداد نیمسال مشروط: <b className="font-mono">{probation.toLocaleString('fa-IR')}</b></span>
           <span>وضعیت کلی دانشجو: <b>{studentStatusFa(student.status, student.samaStatusCode)}</b></span>
-          <span>تاریخ شروع تحصیل: <b className="font-mono">{student.entryYear}</b></span>
+          <span>تاریخ شروع تحصیل: <b className="font-mono">{entryDateFa(student.entryYear, student.entryTerm)}</b></span>
           <span>تاریخ توقف تحصیل: <b className="font-mono">{student.graduateDate || '—'}</b></span>
         </div>
         <div className="flex flex-wrap gap-x-6">
@@ -212,6 +231,14 @@ export default function OfficialTranscriptView({
         <div className="flex flex-wrap gap-x-6">
           <span>تعداد نیمسال‌ها: در حال تحصیل (<b className="font-mono">{faNum(termKindCounts.regular, 0)}</b>) ترم تابستان (<b className="font-mono">{faNum(termKindCounts.summer, 0)}</b>){termKindCounts.equiv > 0 ? <> معادل‌سازی (<b className="font-mono">{faNum(termKindCounts.equiv, 0)}</b>)</> : null}</span>
         </div>
+        {originUniversity?.dissolved && (
+          <div className="flex flex-wrap gap-x-6">
+            <span>توضیح: این دانشجو از دانشگاه منحلهٔ <b>{originUniversity.title}</b> منتقل شده است.</span>
+          </div>
+        )}
+        {printOptions.thesisQualitative && (
+          <p className="text-slate-500 text-[9px]">توضیح: نمرهٔ دروس پایان‌نامه/رساله به‌صورت کیفی درج شده است.</p>
+        )}
         <p className="text-center text-slate-500 text-[9px]">سیستم مدیریت آموزش دانشگاه‌ها — آفاق · شماره دانشجویی <b className="font-mono">{student.studentCode}</b> · تاریخ تهیه <b className="font-mono">{todayJalali()}</b></p>
         <div className="tr-page-footer" aria-hidden="true" />
         <div className="flex justify-between pt-2">
@@ -221,6 +248,7 @@ export default function OfficialTranscriptView({
         </div>
       </div>
       {/* صفحه دوم: جدول وضعیت دروس گذرانده */}
+      {printOptions.showBreakdown && (
       <div className="border-t-2 border-slate-700 px-3 py-2 page-break-before">
         <p className="font-extrabold text-[11px] mb-1">جدول وضعیت دروس گذرانده (کاتالوگ رشته)</p>
         <table className="w-full text-[10px] border border-slate-400">
@@ -245,6 +273,17 @@ export default function OfficialTranscriptView({
           </tbody>
         </table>
       </div>
+      )}
+      {/* رتبه در رشته ورودی و میانگین هم‌رشته‌ای‌ها (تیک سما) */}
+      {printOptions.showRank && (
+        <div className="border-t border-slate-300 px-3 py-1.5 text-[10px] bg-slate-50 leading-relaxed">
+          <div className="flex flex-wrap gap-x-6">
+            <span>رتبهٔ معدل کل دانشجو در رشته ورودی{cohortStats ? (cohortStats.scope === 'term' ? ' (هم‌ورودی ترم)' : ' (هم‌ورودی سال)') : ''}: <b className="font-mono">{cohortLoading ? '…' : (cohortStats && cohortStats.rank != null ? `${faNum(cohortStats.rank, 0)} / ${faNum(cohortStats.total, 0)}` : '—')}</b></span>
+            <span>میانگین معدل دانشجویان هم‌رشته ورودی: <b className="font-mono">{cohortLoading ? '…' : faNum(cohortStats?.avgGpa)}</b></span>
+            <span>میانگین واحد گذرانده دانشجویان هم‌رشته ورودی: <b className="font-mono">{cohortLoading ? '…' : faNum(cohortStats?.avgPassed, 1)}</b></span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
