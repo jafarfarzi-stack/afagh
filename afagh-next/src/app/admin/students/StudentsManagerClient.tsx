@@ -112,6 +112,7 @@ export default function StudentsManagerClient(props: {
   const [rankScope, setRankScope] = useState<'year' | 'term'>('year');
   const [cohortStats, setCohortStats] = useState<CohortStats | null>(null);
   const [cohortLoading, setCohortLoading] = useState(false);
+  const [cohortError, setCohortError] = useState(false);
 
   // مودال ثبت / اصلاح نمره
   const [gradeEditTarget, setGradeEditTarget] = useState<TranscriptRow | null>(null);
@@ -335,13 +336,14 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
 
   // آمار رتبهٔ هم‌رشته‌ای فقط وقتی تیک «رتبه» روشن است (محاسبهٔ سنگین، کش به‌ازای دانشجو+بازه)
   useEffect(() => {
-    if (!printOptions.showRank || !currentStudent) { setCohortStats(null); return; }
+    if (!printOptions.showRank || !currentStudent) { setCohortStats(null); setCohortError(false); return; }
     let active = true;
     setCohortLoading(true);
+    setCohortError(false);
     setCohortStats(null);
     getCohortStats(currentStudent.id, rankScope)
-      .then(r => { if (active) setCohortStats(r); })
-      .catch(() => { if (active) setCohortStats(null); })
+      .then(r => { if (active) { setCohortStats(r); if (!r) setCohortError(true); } })
+      .catch(() => { if (active) { setCohortStats(null); setCohortError(true); } })
       .finally(() => { if (active) setCohortLoading(false); });
     return () => { active = false; };
   }, [printOptions.showRank, rankScope, currentStudent?.id]);
@@ -1267,6 +1269,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                       </select>
                     )}
                     {cohortLoading && <span className="text-[11px] text-indigo-700">⏳ محاسبه رتبه…</span>}
+                    {cohortError && !cohortLoading && <span className="text-[11px] text-red-700 font-bold">⚠ رتبه محاسبه نشد — تیک را بردارید و دوباره بزنید</span>}
                   </div>
                 )}
               </div>

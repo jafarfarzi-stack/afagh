@@ -69,7 +69,10 @@ export async function getCohortStats(studentId: number, scope: 'year' | 'term' =
       if (r.totalUnits > 0 && r.gpa > 0) gpas.push({ id: s.id, gpa: r.gpa, passed: r.passedUnits });
     } catch { /* این دانشجو در آمار نمی‌آید */ }
   }
-  if (gpas.length === 0) return null;
+  if (gpas.length === 0) {
+    console.warn(`[cohort] no GPA for major=${me.majorId} entryYear=${me.entryYear} scope=${scope} (cohort=${cohort.length})`);
+    return null;
+  }
   const mine = gpas.find(g => g.id === studentId);
   const rank = mine ? 1 + gpas.filter(g => g.gpa > mine.gpa).length : null;
   const avgGpa = gpas.reduce((a, g) => a + g.gpa, 0) / gpas.length;
