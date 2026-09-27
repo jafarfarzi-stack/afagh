@@ -84,14 +84,14 @@ export function summarizeTerm(rows: TranscriptRow[], pass = 10): { taken: number
     const g = numOrNull(r.gradeValue);
     const code = r.gradeStatusCode?.trim() || null;
     const dropped = isDroppedStatusCode(code);
-    // وضع ۷ (حذف توسط شورای آموزشی) و ۵ (غیبت در جلسه امتحان):
+    // وضع ۷ (حذف توسط شورای آموزشی)، ۶ (حذف اضطراری) و ۵ (غیبت در جلسه امتحان):
     // در «اخذشده» حساب می‌شوند ولی نه در «گذرانده/موثر» و نه در معدل.
-    const takenOnly = code === '7' || code === '5';
+    const takenOnly = code === '7' || code === '6' || code === '5';
 
     if (r.gradeStatus === 'PENDING') continue;
 
-    // دروس حذف‌شده (پزشکی، اضطراری و ...) در جدول ترم نمایش داده می‌شوند ولی در واحدهای ترم/مردودی/معدل احتساب نمی‌شوند؛
-    // به‌جز وضع ۷ (حذف شورا) که باید در «اخذشده» بیاید.
+    // دروس حذف‌شده (پزشکی و ...) در جدول ترم نمایش داده می‌شوند ولی در واحدهای ترم/مردودی/معدل احتساب نمی‌شوند؛
+    // به‌جز وضع ۷ (حذف شورا) و ۶ (حذف اضطراری) که باید در «اخذشده» بیایند.
     if (dropped && !takenOnly) continue;
 
     taken += u;
