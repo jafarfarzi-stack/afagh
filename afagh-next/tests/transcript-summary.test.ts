@@ -12,7 +12,7 @@
 import {
   breakdownByType, bestFinalizedRowPerCourse, codeLabel, courseTypeGroup, dateToJalali, faDigits, faIntWords, faNum, faWords,
   g2j, groupTranscript, numOrNull, passedCourseSet, regThresholds, summarizeTerm,
-  summarizeTotal, termDisplayTitle, thesisQualitativeLabel, todayJalali, entryDateFa,
+  summarizeTotal, termDisplayTitle, thesisLegend, thesisQualitativeLabel, todayJalali, entryDateFa,
 } from '../src/app/admin/students/transcript-utils.ts';
 import type { TranscriptRow } from '../src/app/admin/students/actions.ts';
 
@@ -310,6 +310,8 @@ eq('کیفی: بی‌نمره خط تیره', thesisQualitativeLabel(null), '—
 eq('شروع تحصیل ترم ۱ → اول مهر', entryDateFa(1403, 1), '۱۴۰۳/۰۷/۰۱');
 eq('شروع تحصیل ترم ۲ → اول بهمن', entryDateFa(1403, 2), '۱۴۰۳/۱۱/۰۱');
 eq('شروع تحصیل بدون سال خط تیره', entryDateFa(null, 1), '—');
+eq('راهنمای کیفی پیش‌فرض', thesisLegend(10), 'مردود (کمتر از ۱۰) · قابل قبول (۱۰ تا ۱۱٫۹۹) · خوب (۱۲ تا ۱۴٫۹۹) · خیلی خوب (۱۵ تا ۱۷٫۹۹) · عالی (۱۸ تا ۲۰)');
+eq('راهنمای کیفی با حد قبولی ۱۲ (بدون قابل قبول)', thesisLegend(12), 'مردود (کمتر از ۱۲) · خوب (۱۲ تا ۱۴٫۹۹) · خیلی خوب (۱۵ تا ۱۷٫۹۹) · عالی (۱۸ تا ۲۰)');
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

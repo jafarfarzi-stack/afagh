@@ -8,7 +8,7 @@ import type { StudentItem, TermGroup, TranscriptSummary, CodeLabels, TranscriptP
 import { DEFAULT_PRINT_OPTIONS } from '../types';
 import type { TranscriptRow } from '../actions';
 import { gradeStatusFa, quotaFa, studentStatusFa } from '@/lib/student-labels';
-import { breakdownByType, codeLabel, courseTypeGroup, dateToJalali, entryDateFa, faNum, faWords, numOrNull, termDisplayTitle, thesisQualitativeLabel, todayJalali } from '../transcript-utils';
+import { breakdownByType, codeLabel, courseTypeGroup, dateToJalali, entryDateFa, faNum, faWords, numOrNull, termDisplayTitle, thesisLegend, thesisQualitativeLabel, todayJalali } from '../transcript-utils';
 
 /** نمای رسمی کارنامه با فرمت سما: ۳ نیمسال کنار هم + سربرگ/پانوشت + صفحه دوم تفکیکی */
 export default function OfficialTranscriptView({
@@ -210,7 +210,7 @@ export default function OfficialTranscriptView({
           <b>توضیح وضع نمرات:</b>{' '}
           {[...statusLegend.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([code, title]) => (
             <span key={code} className="inline-block ml-3">
-              <b className="font-mono">{code}</b> = {title}
+              <b className="font-mono">{code}</b>={title}
             </span>
           ))}
         </div>
@@ -237,7 +237,7 @@ export default function OfficialTranscriptView({
           </div>
         )}
         {printOptions.thesisQualitative && (
-          <p className="text-slate-500 text-[9px]">توضیح: نمرهٔ دروس پایان‌نامه/رساله به‌صورت کیفی درج شده است.</p>
+          <p className="text-slate-500 text-[9px]">توضیح: نمرهٔ دروس پایان‌نامه/رساله به‌صورت کیفی درج شده است ({thesisLegend(summary.passGrade)}).</p>
         )}
         <p className="text-center text-slate-500 text-[9px]">سیستم مدیریت آموزش دانشگاه‌ها — آفاق · شماره دانشجویی <b className="font-mono">{student.studentCode}</b> · تاریخ تهیه <b className="font-mono">{todayJalali()}</b></p>
         <div className="tr-page-footer" aria-hidden="true" />

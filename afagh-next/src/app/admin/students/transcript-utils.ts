@@ -265,6 +265,20 @@ export function entryDateFa(entryYear: number | null | undefined, entryTerm: num
   return faDigits(`${y}/${md}`);
 }
 /**
+ * رشتهٔ راهنمای دامنه‌های کیفی پایان‌نامه برای خط «توضیح وضع نمرات» سما.
+ * (سازگار با thesisQualitativeLabel؛ اگر حد قبولی ≥۱۲ باشد «قابل قبول» ندارد)
+ */
+export function thesisLegend(pass = 10): string {
+  const f0 = (n: number) => faNum(n, 0);
+  const f2 = (n: number) => faNum(n);
+  const parts = [`مردود (کمتر از ${f0(pass)})`];
+  if (pass < 12) parts.push(`قابل قبول (${f0(pass)} تا ${f2(11.99)})`);
+  parts.push(`خوب (${f0(Math.max(12, pass))} تا ${f2(14.99)})`);
+  parts.push(`خیلی خوب (${f0(15)} تا ${f2(17.99)})`);
+  parts.push(`عالی (${f0(18)} تا ${f0(20)})`);
+  return parts.join(' · ');
+}
+/**
  * نمرهٔ عددی پایان‌نامه → برچسب کیفی برای چاپ («عالی» تا «مردود»).
  * مقیاس پیش‌فرض: ۱۸–۲۰ عالی، ۱۵–۱۸ خیلی خوب، ۱۲–۱۵ خوب، حد قبولی–۱۲ قابل قبول.
  */
