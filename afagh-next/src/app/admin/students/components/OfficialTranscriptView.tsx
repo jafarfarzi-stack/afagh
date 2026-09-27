@@ -102,7 +102,7 @@ export default function OfficialTranscriptView({
     if (r.gradeStatusCode) {
       return (
         <span title={r.gradeStatusTitle || r.gradeStatusCode} className="font-mono font-bold">
-          {r.gradeStatusCode}
+          {faDigits(r.gradeStatusCode)}
         </span>
       );
     }
@@ -148,7 +148,7 @@ export default function OfficialTranscriptView({
               }}
               title={canEditGrades && onEditGrade ? 'برای ویرایش یا ثبت نمره کلیک کنید' : undefined}
             >
-              <td className="p-1 font-mono text-center" dir="ltr">{r.courseCode}</td>
+              <td className="p-1 font-mono text-center" dir="ltr">{faDigits(r.courseCode)}</td>
               <td className="tr-course-title p-1 leading-tight">
                 {r.courseTitle}
                 {r._excludedByRegulation && (
@@ -209,6 +209,16 @@ export default function OfficialTranscriptView({
       </div>
           </td></tr>
         </thead>
+        {/* امضاها در tfoot است تا زیر همهٔ صفحات چاپ تکرار شود (از جمله صفحهٔ آخر) */}
+        <tfoot>
+          <tr><td className="tr-doc-cell">
+            <div className="tr-signatures flex justify-between px-3 py-2 text-[10px]">
+              <span>امضاء رئیس خدمات آموزش</span>
+              <span>امضاء و مهر اداره کل آموزش</span>
+              <span>امضاء و مهر امور آموزشی دانشگاه منتخب</span>
+            </div>
+          </td></tr>
+        </tfoot>
         <tbody>
       {/* نیمسال‌ها ۳تایی — گرید هم‌ارتفاع تا پانوشت نیمسال‌های یک ردیف هم‌تراز شود */}
       {chunks.map((ch, i) => (
@@ -255,11 +265,6 @@ export default function OfficialTranscriptView({
           <p className="text-slate-500 text-[9px]">توضیح: نمرهٔ دروس پایان‌نامه/رساله به‌صورت کیفی درج شده است ({thesisLegend(summary.passGrade)}).</p>
         )}
         <p className="text-center text-slate-500 text-[9px]">سیستم مدیریت آموزش دانشگاه‌ها — آفاق · شماره دانشجویی <b className="font-mono">{faDigits(student.studentCode)}</b> · تاریخ تهیه <b className="font-mono">{todayJalali()}</b></p>
-        <div className="flex justify-between pt-2">
-          <span>امضاء رئیس خدمات آموزش</span>
-          <span>امضاء و مهر اداره کل آموزش</span>
-          <span>امضاء و مهر امور آموزشی دانشگاه منتخب</span>
-        </div>
       </div>
       </td></tr>
       {/* صفحه دوم: جدول وضعیت دروس گذرانده — در جریان طبیعی صفحه می‌آید، تکه نمی‌شود */}

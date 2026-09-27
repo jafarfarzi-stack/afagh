@@ -90,6 +90,9 @@ body { @apply bg-slate-100 text-slate-800; }
   /* جدول سند کارنامه: سربرگ thead در همهٔ صفحات چاپ تکرار می‌شود */
   .transcript-print-area table.tr-doc { width: 100%; border: 0; border-collapse: collapse; }
   .transcript-print-area table.tr-doc > thead { display: table-header-group; }
+  .transcript-print-area table.tr-doc > tfoot { display: table-footer-group; }
+  .transcript-print-area table.tr-doc > tfoot > tr { break-inside: avoid; page-break-inside: avoid; }
+  .transcript-print-area .tr-signatures { border-top: 2px solid #334155; }
   .transcript-print-area table.tr-doc td.tr-doc-cell { padding: 0; border: 0; vertical-align: top; }
   .transcript-print-area table.tr-doc > tbody > tr.tr-doc-row { break-inside: avoid; page-break-inside: avoid; }
   .transcript-print-area .tr-term-row { break-inside: avoid; page-break-inside: avoid; }
