@@ -1,3 +1,53 @@
+/* ── فونت فارسی چاپ (Vazirmatn محلی؛ آفلاین هم کار می‌کند) ── */
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('/fonts/vazirmatn-arabic-400.woff2') format('woff2');
+  unicode-range: U+0600-06FF, U+0750-077F, U+200C-200E, U+FB50-FDFF, U+FE70-FEFC;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('/fonts/vazirmatn-latin-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+2000-206F;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url('/fonts/vazirmatn-arabic-500.woff2') format('woff2');
+  unicode-range: U+0600-06FF, U+0750-077F, U+200C-200E, U+FB50-FDFF, U+FE70-FEFC;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url('/fonts/vazirmatn-latin-500.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+2000-206F;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('/fonts/vazirmatn-arabic-700.woff2') format('woff2');
+  unicode-range: U+0600-06FF, U+0750-077F, U+200C-200E, U+FB50-FDFF, U+FE70-FEFC;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('/fonts/vazirmatn-latin-700.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+2000-206F;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -57,12 +107,17 @@ body { @apply bg-slate-100 text-slate-800; }
     content: 'صفحه ' counter(page) ' از ' counter(pages);
     display: block; text-align: center; font-size: 8pt; color: #475569; margin-top: 4pt;
   }
-  /* ── چاپ عمودی: نیمسال‌ها تک‌ستونه زیر هم ── */
-  body.printing-portrait .transcript-print-area .tr-term-row { grid-template-columns: minmax(0, 1fr); }
-  body.printing-portrait .transcript-print-area .tr-term-row > .term-block + .term-block { border-inline-start: none; border-top: 1px solid #94a3b8; }
+  /* ── چاپ عمودی: همان ۳ ستونه ولی فشرده‌تر تا در عرض بگنجد ── */
+  body.printing-portrait .transcript-print-area .tr-root { font-size: 8pt; }
+  body.printing-portrait .transcript-print-area .tr-info-grid { font-size: 7.5pt; }
+  body.printing-portrait .transcript-print-area .tr-term-table { font-size: 7pt; }
+  body.printing-portrait .transcript-print-area .tr-term-table th,
+  body.printing-portrait .transcript-print-area .tr-term-table td { padding: 1pt 1.5pt !important; }
+  body.printing-portrait .transcript-print-area .tr-term-footer { font-size: 7pt; }
 }
 
 /* ── چاپ کارنامه: گرید ۳ستونهٔ هم‌ارتفاع (پانوشت نیمسال‌های یک ردیف هم‌تراز) ── */
+.transcript-print-area .tr-root { font-family: 'Vazirmatn', Tahoma, 'Segoe UI', Arial, sans-serif; }
 .transcript-print-area .term-grid { width: 100%; }
 .transcript-print-area .tr-term-row {
   display: grid;

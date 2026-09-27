@@ -56,7 +56,7 @@ export function doPrintTranscript(orientation: 'landscape' | 'portrait' = 'lands
   const pageStyle = document.createElement('style');
   pageStyle.id = 'transcript-page-size';
   pageStyle.textContent = orientation === 'portrait'
-    ? '@media print { @page { size: A4 portrait; margin: 10mm 9mm; } }'
+    ? '@media print { @page { size: A4 portrait; margin: 8mm 8mm; } }'
     : '@media print { @page { size: A4 landscape; margin: 8mm 10mm; } }';
   document.head.appendChild(pageStyle);
   const done = () => {
