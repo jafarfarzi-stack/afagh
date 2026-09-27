@@ -12,7 +12,8 @@ import { getBool, getNumber, getSetting } from '@/lib/settings';
 import { executeIrandocCheck } from '@/lib/api-integrations';
 import { createLogger } from '@/lib/logger';
 import { deliveriesForUser, notifyUserMultichannel } from '@/lib/messaging';
-import { GpaAccumulator, parseGrade, parseUnits, round2 } from '@/lib/regulations-engine';
+import { GpaAccumulator, getRegulationConfig, parseGrade, parseUnits, round2 } from '@/lib/regulations-engine';
+import { isPassedStatusCode } from '@/lib/grade-status-codes';
 import { resolveStudentCurriculum, resolutionReasonMessage } from '@/lib/curriculum-apply';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -104,7 +105,7 @@ export type AuditResult = {
 export async function auditStudent(studentId: number): Promise<AuditResult | null> {
   const [row] = await db.select({
     id: students.id, studentCode: students.studentCode, majorId: students.majorId,
-    entryYear: students.entryYear, degreeLevelId: students.degreeLevelId,
+    entryYear: students.entryYear, degreeLevelId: students.degreeLevelId, regulationId: students.regulationId,
     firstName: users.firstName, lastName: users.lastName,
     majorName: majors.name, degreeCode: degree_level_configs.code,
     passingGrade: degree_level_configs.defaultPassingGrade,
@@ -115,28 +116,43 @@ export async function auditStudent(studentId: number): Promise<AuditResult | nul
     .where(eq(students.id, studentId)).limit(1);
   if (!row) return null;
 
-  const passing = Number(row.passingGrade ?? 10);
+  // کف قبولی از آیین‌نامهٔ ملاک دانشجو (مثل موتور رسمی)، وگرنه پیش‌فرض مقطع
+  let passing = Number(row.passingGrade ?? 10);
+  try {
+    const regCfg = await getRegulationConfig(row.regulationId, row.degreeLevelId);
+    const rp = Number(regCfg?.grading_and_gpa?.default_passing_grade);
+    if (Number.isFinite(rp)) passing = rp;
+  } catch { /* پیش‌فرض مقطع می‌ماند */ }
   const minGpa = await getNumber('GRAD_MIN_GPA', 12);
 
-  // دروس گذرانده‌شده
+  // فقط سوابق نهایی/معاف/قبول‌بدون‌نمره — نمرات موقت (PENDING) نه «گذرانده»‌اند نه در معدل
   const taken = await db.select({
     courseId: course_offerings.courseId,
     code: courses.code, title: courses.title, units: courses.units,
     affectsGpa: courses.affectsGpa,
+    courseMinMark: courses.minPassedMark,
     gradeValue: enrollments.gradeValue, gradeStatus: enrollments.gradeStatus,
+    samaGradeStatusCode: enrollments.samaGradeStatusCode,
   }).from(enrollments)
     .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-    .where(eq(enrollments.studentId, studentId));
+    .where(and(
+      eq(enrollments.studentId, studentId),
+      inArray(enrollments.gradeStatus, ['FINALIZED', 'EXEMPT', 'PASSED_NO_GRADE']),
+    ));
 
+  const thresholdOf = (t: (typeof taken)[number]): number => {
+    const m = t.courseMinMark != null ? Number(t.courseMinMark) : NaN;
+    return Number.isFinite(m) && m >= 0 && m <= 20 ? m : passing;
+  };
   const passedIds = new Set<number>();
   let passedUnits = 0;
   const acc = new GpaAccumulator(); // حساب صحیح؛ بدون خطای ممیز شناور
   for (const t of taken) {
     const g = parseGrade(t.gradeValue); // نمرهٔ خالی/NaN = ثبت‌نشده، نه صفر
     const u = parseUnits(t.units);
-    const qualitativePass = ['PASSED_NO_GRADE', 'EXEMPT'].includes(String(t.gradeStatus ?? ''));
-    const ok = qualitativePass || (g != null && g >= passing);
+    const isSpecialPass = t.gradeStatus === 'EXEMPT' || t.gradeStatus === 'PASSED_NO_GRADE' || isPassedStatusCode(t.samaGradeStatusCode);
+    const ok = isSpecialPass || (g != null && g >= thresholdOf(t));
     if (!ok) continue;
     passedIds.add(t.courseId);
     passedUnits = round2(passedUnits + u);

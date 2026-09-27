@@ -39,6 +39,8 @@ export interface RegulationConfig {
     default_passing_grade: number; // کف قبولی عادی (۱۰ لیسانس، ۱۲ ارشد، ۱۴ دکتری)
     retakeMinGrade?: number;       // حد نصاب قبولی مجدد (پیش‌فرض = default_passing_grade)
     regulationLabel?: string;      // برچسب نمایشی: "آیین‌نامه ۱۳۹۳"
+    /** کد سفارشی سما برای مردودیِ حذف‌شده (خالی = خودکار ۹۳۱/-۹۱/۹۴۱/۹۵۱) */
+    failed_sama_status_code?: string;
     /**
      * درسِ تکرارشده‌ای که قبلاً هم قبول شده (اخذ مجدد برای ارتقای معدل):
      * وقتی true باشد، فقط بالاترین نمرهٔ همان کد درس در معدل کل شمرده می‌شود

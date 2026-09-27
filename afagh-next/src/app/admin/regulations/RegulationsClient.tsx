@@ -8,6 +8,7 @@ import {
   DEFAULT_BACHELOR_REGULATION_1403,
   DEFAULT_BACHELOR_REGULATION_1390,
   DEFAULT_MASTER_REGULATION_1403,
+  REGULATION_PRESETS,
 } from '@/lib/regulations-types';
 
 export interface DegreeLevelItem {
@@ -448,7 +449,22 @@ export default function RegulationsClient(props: {
                   </label>
                   <select
                     value={formDegreeLevelId}
-                    onChange={e => setFormDegreeLevelId(Number(e.target.value))}
+                    onChange={e => {
+                      const id = Number(e.target.value);
+                      setFormDegreeLevelId(id);
+                      // آیین‌نامهٔ تازه (ذخیره‌نشده): قالب پیش‌فرض هم‌زمان با مقطع عوض شود
+                      if (!selectedRegId || selectedRegId <= 0) {
+                        const lv = props.degreeLevels.find(d => d.id === id);
+                        const t = `${lv?.title || ''} ${lv?.levelName || ''}`;
+                        if (/ارشد/i.test(t)) {
+                          setFormConfig(JSON.parse(JSON.stringify(DEFAULT_MASTER_REGULATION_1403)));
+                        } else if (/دکتر|phd/i.test(t)) {
+                          setFormConfig(JSON.parse(JSON.stringify(REGULATION_PRESETS.reg1394PhdFor())));
+                        } else {
+                          setFormConfig(JSON.parse(JSON.stringify(DEFAULT_BACHELOR_REGULATION_1403)));
+                        }
+                      }
+                    }}
                     className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white"
                   >
                     {props.degreeLevels.map(d => (
@@ -485,9 +501,9 @@ export default function RegulationsClient(props: {
                 </div>
               </div>
 
-              {/* Presets Button Bar */}
+              {/* Presets Button Bar — الگوهای آماده به تفکیک مقطع */}
               <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2">
-                <span className="text-xs font-bold text-slate-500">بارگذاری الگوی آماده:</span>
+                <span className="text-xs font-bold text-slate-500">کارشناسی/کاردانی:</span>
                 <button
                   type="button"
                   onClick={() =>
@@ -500,12 +516,50 @@ export default function RegulationsClient(props: {
                 <button
                   type="button"
                   onClick={() =>
+                    setFormConfig(JSON.parse(JSON.stringify(REGULATION_PRESETS.reg1402())))
+                  }
+                  className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg font-medium"
+                >
+                  الگوی ۱۴۰۲ (حذف نمره ردی)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFormConfig(JSON.parse(JSON.stringify(REGULATION_PRESETS.reg1393())))
+                  }
+                  className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg font-medium"
+                >
+                  الگوی ۱۳۹۳ (حذف نمره ردی)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFormConfig(JSON.parse(JSON.stringify(REGULATION_PRESETS.reg1391())))
+                  }
+                  className="text-xs bg-amber-100 hover:bg-amber-200 text-amber-900 px-3 py-1.5 rounded-lg font-medium"
+                  title="تبصره ۱۳۹۱: مردودی فقط با قبولی ۱۴+ حذف می‌شود"
+                >
+                  الگوی ۱۳۹۱ (تبصره ۱۴)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFormConfig(JSON.parse(JSON.stringify(REGULATION_PRESETS.regPre1391())))
+                  }
+                  className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg font-medium"
+                >
+                  الگوی ماقبل ۱۳۹۱ (ابقای نمره ردی)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
                     setFormConfig(JSON.parse(JSON.stringify(DEFAULT_BACHELOR_REGULATION_1390)))
                   }
                   className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg font-medium"
                 >
                   الگوی کارشناسی ۱۳۹۰ (ابقای نمره ردی)
                 </button>
+                <span className="text-xs font-bold text-slate-500">ارشد:</span>
                 <button
                   type="button"
                   onClick={() =>
@@ -514,6 +568,25 @@ export default function RegulationsClient(props: {
                   className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg font-medium"
                 >
                   الگوی کارشناسی ارشد (کف ۱۲، مرز ۱۴)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFormConfig(JSON.parse(JSON.stringify(REGULATION_PRESETS.reg1394MasterFor())))
+                  }
+                  className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg font-medium"
+                >
+                  الگوی ارشد ۱۳۹۴ (کف ۱۲، مرز ۱۴)
+                </button>
+                <span className="text-xs font-bold text-slate-500">دکتری:</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFormConfig(JSON.parse(JSON.stringify(REGULATION_PRESETS.reg1394PhdFor())))
+                  }
+                  className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg font-medium"
+                >
+                  الگوی دکتری ۱۳۹۴ (کف ۱۴، مرز ۱۶)
                 </button>
               </div>
             </div>
@@ -967,6 +1040,84 @@ export default function RegulationsClient(props: {
                   <span className="text-[11px] text-slate-500">
                     ۱۰ برای کاردانی و کارشناسی، ۱۲ برای ارشد، ۱۴ برای دکتری
                   </span>
+                </div>
+
+                <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      حد نصاب قبولی مجدد (تبصره ۱۳۹۱):
+                    </label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={formConfig.grading_and_gpa.retakeMinGrade ?? ''}
+                      placeholder="خالی = همان کف قبولی"
+                      onChange={e =>
+                        setFormConfig({
+                          ...formConfig,
+                          grading_and_gpa: {
+                            ...formConfig.grading_and_gpa,
+                            retakeMinGrade: e.target.value === '' ? undefined : Number(e.target.value),
+                          },
+                        })
+                      }
+                      className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-mono"
+                    />
+                    <span className="text-[11px] text-slate-500">
+                      فقط تبصره ۱۳۹۱: مردودی قبلی فقط با قبولی ۱۴+ حذف می‌شود.
+                    </span>
+                    {formConfig.grading_and_gpa.failed_course_gpa_policy === 'EXCLUDE_IF_PASSED_1391' &&
+                      formConfig.grading_and_gpa.retakeMinGrade == null && (
+                        <span className="block text-[11px] text-amber-700 font-bold">
+                          ⚠ سیاست ۱۳۹۱ انتخاب شده ولی حد نصاب خالی است (فعلاً همان کف قبولی اعمال می‌شود).
+                        </span>
+                      )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      کد سفارشی سما برای مردودی حذف‌شده (اختیاری):
+                    </label>
+                    <input
+                      type="text"
+                      value={formConfig.grading_and_gpa.failed_sama_status_code ?? ''}
+                      placeholder="خالی = خودکار (۹۳۱/۹۴۱/۹۵۱/‎-۹۱)"
+                      onChange={e =>
+                        setFormConfig({
+                          ...formConfig,
+                          grading_and_gpa: {
+                            ...formConfig.grading_and_gpa,
+                            failed_sama_status_code: e.target.value.trim() || undefined,
+                          },
+                        })
+                      }
+                      className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-mono"
+                      dir="ltr"
+                    />
+                    <span className="text-[11px] text-slate-500">
+                      اگر پر شود، به‌جای کد خودکار آیین‌نامه روی مردودیِ جبران‌شده می‌نشیند.
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    برچسب نمایشی آیین‌نامه (در کارنامه چاپ می‌شود):
+                  </label>
+                  <input
+                    type="text"
+                    value={formConfig.grading_and_gpa.regulationLabel ?? ''}
+                    placeholder="مثلاً آیین‌نامه ۱۳۹۳"
+                    onChange={e =>
+                      setFormConfig({
+                        ...formConfig,
+                        grading_and_gpa: {
+                          ...formConfig.grading_and_gpa,
+                          regulationLabel: e.target.value.trim() || undefined,
+                        },
+                      })
+                    }
+                    className="w-full sm:w-1/2 p-2.5 rounded-xl border border-slate-300 text-xs font-medium"
+                  />
                 </div>
 
                 <div className="pt-2 border-t border-indigo-200/70 mt-1">

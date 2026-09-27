@@ -293,7 +293,7 @@ export async function finalizeSignedAction(
 
     // 🔒 هش زنجیره‌ای واقعی: از خودِ نمرات ذخیره‌شده (ضد دستکاری)
     const grades = await db
-      .select({ id: enrollments.id, studentId: enrollments.studentId, gradeValue: enrollments.gradeValue, gradeStatus: enrollments.gradeStatus })
+      .select({ id: enrollments.id, studentId: enrollments.studentId, gradeValue: enrollments.gradeValue, gradeStatus: enrollments.gradeStatus, samaGradeStatusCode: enrollments.samaGradeStatusCode })
       .from(enrollments)
       .where(eq(enrollments.offeringId, payload.offeringId))
       .orderBy(enrollments.studentId);
@@ -312,7 +312,7 @@ export async function finalizeSignedAction(
 
     // نهایی‌سازی + محاسبه کد وضعیت سما برای هر دانشجو
     for (const g of grades) {
-      const samaCode = await resolveSamaGradeStatusCode(g.studentId, payload.offeringId, g.gradeValue);
+      const samaCode = await resolveSamaGradeStatusCode(g.studentId, payload.offeringId, g.gradeValue, g.samaGradeStatusCode ?? null);
       await db
         .update(enrollments)
         .set({ gradeStatus: 'FINALIZED', samaGradeStatusCode: samaCode })

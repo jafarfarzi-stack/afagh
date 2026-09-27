@@ -38,7 +38,8 @@ export type RegThresholds = {
   prob: number;
   exclFailed: boolean;        // حذف مردودی از کل (EXCLUDE_IF_PASSED یا EXCLUDE_IF_PASSED_1391)
   exclFromTerm: boolean;      // حذف مردودی از نیمسال (فقط EXCLUDE_IF_PASSED_1391)
-  retakeMinGrade: number;     // حد نصاب قبولی مجدد
+  retakeMinGrade: number;     // حد نصاب قبولی مجدد (فقط تبصره ۱۳۹۱)
+  is1391: boolean;            // سیاست تبصره ۱۳۹۱ فعال است
   regulationLabel?: string;   // برچسب آیین‌نامه
   dedupeRepeated: boolean;    // فقط بهترین نمرهٔ هر کد درس در معدل کل شمرده شود (سوییچ ادمین)
   minUnits: number;           // حدنصاب واحد ترم برای احتساب مشروطی (۰ = آیین‌نامه حد ندارد، رفتار قبلی)
@@ -59,23 +60,27 @@ export function regThresholds(cfg: RegulationConfig | null | undefined): RegThre
     exclFailed: policy === 'EXCLUDE_IF_PASSED' || policy === 'EXCLUDE_IF_PASSED_1391',
     exclFromTerm: policy === 'EXCLUDE_IF_PASSED_1391',
     retakeMinGrade: Number.isFinite(retakeMin) ? retakeMin : 10,
+    is1391: policy === 'EXCLUDE_IF_PASSED_1391',
     regulationLabel: cfg?.grading_and_gpa?.regulationLabel,
     dedupeRepeated: cfg?.grading_and_gpa?.dedupeRepeatedCourses === true,
     minUnits: Number.isFinite(minUnits) && minUnits > 0 ? minUnits : 0,
   };
 }
 
-/** درس‌هایی که دست‌کم یک بار قبول شده‌اند (برای سیاست حذف مردودی از معدل کل) */
-export function passedCourseSet(rows: TranscriptRow[], retakeMinGrade: number): Set<string> {
+/** درس‌هایی که دست‌کم یک بار با حد نصاب لازم قبول شده‌اند (برای سیاست حذف مردودی از معدل کل) */
+export function passedCourseSet(rows: TranscriptRow[], minGrade: number): Set<string> {
   const set = new Set<string>();
   for (const r of rows) {
     const g = numOrNull(r.gradeValue);
     if (r.gradeStatus === 'EXEMPT' || r.gradeStatus === 'PASSED_NO_GRADE') set.add(r.courseCode);
     else if (isPassedStatusCode(r.gradeStatusCode)) set.add(r.courseCode);
-    else if (g !== null && g >= retakeMinGrade && r.gradeStatus === 'FINALIZED') set.add(r.courseCode);
+    else if (g !== null && g >= minGrade && r.gradeStatus === 'FINALIZED') set.add(r.courseCode);
   }
   return set;
 }
+
+/** حد نصاب «قبول مجدد» برای حذف مردودی: فقط تبصره ۱۳۹۱ از retakeMinGrade استفاده می‌کند */
+export const retakeBar = (th: RegThresholds): number => (th.is1391 ? th.retakeMinGrade : th.pass);
 
 export function summarizeTerm(rows: TranscriptRow[], pass = 10): { taken: number; passed: number; failed: number; wsum: number; wunits: number; dropped: number } {
   let taken = 0, passed = 0, failed = 0, wsum = 0, wunits = 0, dropUnits = 0;
@@ -135,7 +140,7 @@ export function bestFinalizedRowPerCourse(rows: TranscriptRow[]): Map<string, Tr
 
 /** جمع معدل کل با سیاست نمره مردودی آیین‌نامه */
 export function summarizeTotal(rows: TranscriptRow[], th: RegThresholds): { wsum: number; wunits: number } {
-  const passedSet = th.exclFailed ? passedCourseSet(rows, th.retakeMinGrade) : null;
+  const passedSet = th.exclFailed ? passedCourseSet(rows, retakeBar(th)) : null;
   const bestRow = th.dedupeRepeated ? bestFinalizedRowPerCourse(rows) : null;
   let wsum = 0, wunits = 0;
   for (const r of rows) {
@@ -156,7 +161,7 @@ export function summarizeTotal(rows: TranscriptRow[], th: RegThresholds): { wsum
 
 export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | null): TranscriptSummary {
   const th = regThresholds(cfg);
-  const passedSet = th.exclFailed ? passedCourseSet(rows, th.retakeMinGrade) : null;
+  const passedSet = th.exclFailed ? passedCourseSet(rows, retakeBar(th)) : null;
   const map = new Map<string, TranscriptRow[]>();
   for (const r of rows) {
     const k = r.termCode || '—';
@@ -380,7 +385,7 @@ export type TypeBreakdown = { type: string; units: number; gpa: number | null };
 export function breakdownByType(rows: TranscriptRow[], cfg?: RegulationConfig | null): TypeBreakdown[] {
   const th = regThresholds(cfg);
   const order = ['عمومی', 'پایه', 'اصلی-تخصصی', 'اختیاری', 'جبرانی', 'پایان‌نامه'];
-  const passedSet = th.exclFailed ? passedCourseSet(rows, th.retakeMinGrade) : null;
+  const passedSet = th.exclFailed ? passedCourseSet(rows, retakeBar(th)) : null;
   const acc = new Map<string, { units: number; wsum: number; wunits: number }>();
   for (const r of rows) {
     const code = r.gradeStatusCode?.trim() || null;

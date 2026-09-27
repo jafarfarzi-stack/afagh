@@ -33,7 +33,7 @@ import {
 } from '@/db/schema';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { resolveStudentCurriculum } from './curriculum-apply';
-import { isPassedStatusCode } from './grade-status-codes';
+import { isPassedStatusCode, REGULATION_FROZEN_CODES } from './grade-status-codes';
 import { logGradeChange } from './grade-change-log';
 
 const DEFAULT_PASS_CODE = '1';
@@ -78,11 +78,14 @@ export async function resolveSamaGradeStatusCode(
   studentId: number,
   offeringId: number,
   gradeValue: string | number | null,
+  currentCode?: string | null,
 ): Promise<string | null> {
-  if (gradeValue == null || gradeValue === '') return null;
+  // بدون نمره چیزی برای حل نیست — کد فعلی حفظ می‌شود (نه پاک‌سازی!)
+  if (gradeValue == null || gradeValue === '') return (currentCode || '').trim() || null;
 
   const numGrade = Number(gradeValue);
-  if (!Number.isFinite(numGrade)) return null;
+  // نمرهٔ غیرعددی هم چیزی را عوض نمی‌کند — کد فعلی حفظ می‌شود
+  if (!Number.isFinite(numGrade)) return (currentCode || '').trim() || null;
 
   // ۱) پیدا کردن دانشجو و آیین‌نامهٔ مربوطه
   const [student] = await db
@@ -179,6 +182,9 @@ export async function resolveSamaGradeStatusCode(
     }
     return courseDefaultPass || DEFAULT_PASS_CODE;
   } else {
+    // کد فعلیِ منجمد (۵/۶/۷/۲۲) هرگز با منطق آیین‌نامه عوض نمی‌شود
+    const frozen = (currentCode || '').trim();
+    if (frozen && REGULATION_FROZEN_CODES.has(frozen)) return frozen;
     // اولویت ۱: اگر درس کد رد خاصی در جدول دروس داشته باشد (مثل ۲۲ برای جبرانی مردود، ۵۱ برای خودخوان)
     if (courseDefaultFail && courseDefaultFail !== '2') {
       return courseDefaultFail;
@@ -342,10 +348,13 @@ export async function syncStudentCourseRegulations(
 
     // کدهای خاص دانشجویی/اداری نباید توسط آیین‌نامه دستکاری شوند:
     // معادل‌سازی (۳،۱۶،۱۷،۳۲)، معرفی به استاد (۴۰)، پیش‌دانشگاهی (۴۴)، خودخوان (۵۰،۵۱،۵۳)،
-    // حذف‌ها، پزشکی، غیبت موجه و کدهای نامشخص. فقط کدهای عمومی (۱،۲،۵،۱۱)،
-    // کدهای نوع درس (۱۲،۲۲،۲۳،۲۴) و کدهای آیین‌نامه‌ای (۹۳۱،-۹۱،۹۴۱،۹۵۱) قابل بازمحاسبه‌اند.
+    // حذف‌ها (۶،۷،۸،۹،۱۴)، غیبت (۵)، جبرانی مردود بدون احتساب (۲۲) و کدهای نامشخص.
+    // به‌ویژه ۵ (غیبت)، ۶ (اضطراری)، ۷ (شورا) و ۲۲ (جبرانی مردود) در آیین‌نامه ۹۳
+    // و جدیدترها هرگز تغییر نمی‌کنند — حتی اگر بعداً همان درس پاس شود؛ وگرنه
+    // نمرهٔ بی‌اثر قبلی (مثلاً با ۹۳۱ که در معدل ترم اثر دارد) معدل را به‌هم می‌ریزد.
+    // فقط کدهای عمومی (۱،۲،۱۱)، کدهای نوع درس (۱۲،۲۳،۲۴) و کدهای آیین‌نامه‌ای (۹۳۱،-۹۱،۹۴۱،۹۵۱) قابل بازمحاسبه‌اند.
     const oldCode = current.samaGradeStatusCode?.trim() || null;
-    if (oldCode && ['3', '4', '6', '7', '14', '16', '17', '18', '32', '40', '44', '50', '51', '53', '52', '300', '400', '-1', '-5', '-4', '-3', '0', '8', '9', '10', '13', '15', '19', '20', '28', '29', '36', '46'].includes(oldCode)) {
+    if (oldCode && ['3', '4', '5', '6', '7', '14', '16', '17', '18', '22', '32', '40', '44', '50', '51', '53', '52', '300', '400', '-1', '-5', '-4', '-3', '0', '8', '9', '10', '13', '15', '19', '20', '28', '29', '36', '46'].includes(oldCode)) {
       continue;
     }
 
@@ -364,8 +373,9 @@ export async function syncStudentCourseRegulations(
       }
     }
 
-    // اگر غیبت غیرموجه (۵) بوده و قبولی بعدی ندارد، وضعیت ۵ حفظ می‌شود؛ در غیر اینصورت ۲
-    const defaultFail = oldCode === '5' ? '5' : DEFAULT_FAIL_CODE;
+    // نوبت مردود بدون قبولی بعدی به کد مردودی عمومی برمی‌گردد.
+    // (کدهای محافظت‌شدهٔ ۵/۶/۷/۲۲ بالاتر ادامه پیدا نمی‌کنند و به اینجا نمی‌رسند.)
+    const defaultFail = DEFAULT_FAIL_CODE;
     const newCode = hasLaterPass ? (targetExcludeCode || defaultFail) : defaultFail;
 
     if (newCode !== oldCode) {

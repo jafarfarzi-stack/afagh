@@ -149,7 +149,7 @@ export async function adminSetGradeAction(
 
     // محاسبه کد وضعیت سما: اولویت با کد دستی تعیین‌شده توسط ادمین، در غیر اینصورت حل هوشمند از روی درس و آیین‌نامه
     const samaCode = payload.customSamaStatusCode?.trim() ||
-      await resolveSamaGradeStatusCode(payload.studentId, targetOfferingId, payload.gradeValue);
+      await resolveSamaGradeStatusCode(payload.studentId, targetOfferingId, payload.gradeValue, existingEnrollment?.samaGradeStatusCode ?? null);
 
     if (existingEnrollment) {
       await db
@@ -436,7 +436,7 @@ export async function scanMismatchedSamaCodes(universityId?: number): Promise<Mi
     const batch = allEnrs.slice(i, i + BATCH);
     const results = await Promise.all(
       batch.map(async (enr) => {
-        const correctCode = await resolveSamaGradeStatusCode(enr.studentId, enr.offeringId, enr.gradeValue);
+        const correctCode = await resolveSamaGradeStatusCode(enr.studentId, enr.offeringId, enr.gradeValue, enr.currentCode ?? null);
         const cur = enr.currentCode?.trim() || null;
         if (cur !== correctCode) {
           return {
@@ -517,7 +517,7 @@ export async function applyCorrectedSamaCodes(enrollmentIds: number[], universit
       .limit(1);
     if (!enr) continue;
 
-    const correctCode = await resolveSamaGradeStatusCode(enr.studentId, enr.offeringId, enr.gradeValue);
+    const correctCode = await resolveSamaGradeStatusCode(enr.studentId, enr.offeringId, enr.gradeValue, enr.currentCode ?? null);
     const cur = enr.currentCode?.trim() || null;
     if (cur === correctCode) continue;
 

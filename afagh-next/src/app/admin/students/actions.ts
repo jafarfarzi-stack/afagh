@@ -105,7 +105,7 @@ export async function setStudentRegulationAction(
   // بازمحاسبه کد وضعیت همه نمرات نهایی دانشجو با آیین‌نامه جدید
   const { resolveSamaGradeStatusCode, syncStudentCourseRegulations } = await import('@/lib/resolve-sama-code');
   const { logGradeChange } = await import('@/lib/grade-change-log');
-  const { isPassedStatusCode } = await import('@/lib/grade-status-codes');
+  const { isPassedStatusCode, REGULATION_FROZEN_CODES } = await import('@/lib/grade-status-codes');
   let scanned = 0;
   let updated = 0;
   try {
@@ -125,7 +125,9 @@ export async function setStudentRegulationAction(
       const cur = enr.currentCode?.trim() || null;
       // کد قبولی خاص (مثل ۱۲ جبرانی) که دستی یا تعریفی ثبت شده حفظ شود
       if (cur && cur !== '1' && isPassedStatusCode(cur)) continue;
-      const correct = await resolveSamaGradeStatusCode(studentId, enr.offeringId, enr.gradeValue);
+      // کدهای منجمد (۵/۶/۷/۲۲) هرگز با آبشار آیین‌نامه عوض نمی‌شوند
+      if (cur && REGULATION_FROZEN_CODES.has(cur)) continue;
+      const correct = await resolveSamaGradeStatusCode(studentId, enr.offeringId, enr.gradeValue, cur);
       if (correct === cur) continue;
       await db
         .update(enrollments)

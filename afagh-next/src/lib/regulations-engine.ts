@@ -111,8 +111,48 @@ export class GpaAccumulator {
 }
 
 /**
- * بازیابی یا ایجاد پیش‌فرض آیین‌نامه برای یک دانشجو یا مقطع
+ * بازیابی یا ایجاد پیش‌فرض آیین‌نامه برای یک دانشجو یا مقطع.
+ * نرمال‌سازی سید/رکوردهای قدیمی با کلیدهای تخت فاز صفر به اسکیمای تودرتو
+ * (seed اولیه failed_course_gpa_policy و probation_gpa_threshold را در ریشه می‌نوشت؛
+ * بدون این نگاشت، رکورد نامعتبر دانسته شده و پیش‌فرض هاردکد برمی‌گشت).
  */
+export function normalizeLegacyRegulationConfig(parsed: unknown): Record<string, unknown> & { grading_and_gpa?: Record<string, unknown>; probation_and_tenure?: Record<string, unknown>; regular_term_rules?: Record<string, unknown> } {
+  if (!parsed || typeof parsed !== 'object') return parsed as Record<string, unknown>;
+  const p = parsed as Record<string, unknown>;
+  if (p.grading_and_gpa && typeof p.grading_and_gpa === 'object') return p as never;
+  const out: Record<string, unknown> = { ...p };
+  const num = (v: unknown): number | undefined => {
+    const n = v != null ? Number(v) : NaN;
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const gpa: Record<string, unknown> = {};
+  if (typeof p.failed_course_gpa_policy === 'string') gpa.failed_course_gpa_policy = p.failed_course_gpa_policy;
+  const dpg = num(p.default_passing_grade);
+  if (dpg !== undefined) gpa.default_passing_grade = dpg;
+  const rmg = num(p.retakeMinGrade);
+  if (rmg !== undefined) gpa.retakeMinGrade = rmg;
+  if (Object.keys(gpa).length) { out.grading_and_gpa = gpa; }
+  const tenure: Record<string, unknown> = {};
+  const pgt = num(p.probation_gpa_threshold);
+  if (pgt !== undefined) tenure.probation_gpa_threshold = pgt;
+  const mtp = num((p as Record<string, unknown>).max_total_probations ?? p.max_allowed_probations);
+  if (mtp !== undefined) tenure.max_total_probations = mtp;
+  const mss = num(p.max_study_semesters);
+  if (mss !== undefined) tenure.max_study_semesters = mss;
+  if (Object.keys(tenure).length) { out.probation_and_tenure = tenure; }
+  const rules = out.regular_term_rules;
+  if (rules && typeof rules === 'object') {
+    const r = rules as Record<string, unknown>;
+    const merged: Record<string, unknown> = { ...r };
+    const gmax = num((r as Record<string, unknown>).gpaA_MaxUnits);
+    if (gmax !== undefined) merged.honors_max_units = gmax;
+    const gthr = num((p as Record<string, unknown>).gpaA_threshold);
+    if (gthr !== undefined) merged.honors_min_gpa = gthr;
+    out.regular_term_rules = merged;
+  }
+  return out as never;
+}
+
 export async function getRegulationConfig(regulationId?: number | null, degreeLevelId?: number | null): Promise<RegulationConfig> {
   if (!regulationId && !degreeLevelId) return DEFAULT_BACHELOR_REGULATION_1403;
 
@@ -135,7 +175,9 @@ export async function getRegulationConfig(regulationId?: number | null, degreeLe
 
     for (const reg of [preferred, fallback]) {
       if (!reg?.rulesConfig) continue;
-      const parsed = JSON.parse(reg.rulesConfig);
+      const parsed = normalizeLegacyRegulationConfig(
+        typeof reg.rulesConfig === 'string' ? JSON.parse(reg.rulesConfig) : reg.rulesConfig,
+      ) as unknown as RegulationConfig;
       if (parsed && typeof parsed === 'object' && parsed.grading_and_gpa) {
         const merged: RegulationConfig = { ...DEFAULT_BACHELOR_REGULATION_1403, ...parsed };
         // تفاوت‌های مقطعی (فقط نیمسال/سنوات) از levels اعمال می‌شود
@@ -586,13 +628,16 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
     return Number.isFinite(m) && m >= 0 && m <= 20 ? m : passingGrade;
   };
 
-  // نقشه‌برداری دروس پاس‌شده (برای حذف مردودی: حد نصاب قبولی مجدد)
-  // حدنصاب هر درس از خودش می‌آید (minPassedMark)، نه سراسری
+  // نقشه‌برداری دروسِ واجدِ حذف مردودی قبلی:
+  // سیاست عادی: هر قبولی (با کف عادی همان درس) مردودی قبلی را حذف می‌کند؛
+  // تبصره ۱۳۹۱: فقط قبولیِ مجدد با حد نصاب retakeMinGrade (مثلاً ۱۴) حذف می‌کند.
+  const is1391 = policy === 'EXCLUDE_IF_PASSED_1391';
   const passedCourses = new Set<string>();
   for (const r of rows) {
     const g = parseGrade(r.gradeValue);
     const isSpecialPass = r.gradeStatus === 'EXEMPT' || r.gradeStatus === 'PASSED_NO_GRADE' || isPassedStatusCode(r.samaGradeStatusCode);
-    const passed = isSpecialPass || (r.gradingType === 'DESCRIPTIVE' ? g === 1 : (g !== null && g >= thresholdOf(r)));
+    const bar = is1391 ? retakeMinGrade : thresholdOf(r);
+    const passed = isSpecialPass || (r.gradingType === 'DESCRIPTIVE' ? g === 1 : (g !== null && g >= bar));
     if (passed) {
       passedCourses.add(r.code);
     }

@@ -34,7 +34,8 @@ export default async function StudentTranscriptPage() {
   try {
     if (reg?.rulesConfig) {
       const cfg = typeof reg.rulesConfig === 'string' ? JSON.parse(reg.rulesConfig) : reg.rulesConfig;
-      if (cfg.failed_course_gpa_policy === 'KEEP_ALWAYS') {
+      const policy = cfg?.grading_and_gpa?.failed_course_gpa_policy ?? cfg?.failed_course_gpa_policy;
+      if (policy === 'KEEP_ALWAYS') {
         regPolicy = 'نگهداری همیشه نمره ردی در معدل (مصوب ۱۳۸۶ تا ۱۳۹۵)';
       } else {
         regPolicy = 'حذف نمره مردودی از معدل کل پس از قبولی (مصوب ۱۳۹۶ به بعد)';

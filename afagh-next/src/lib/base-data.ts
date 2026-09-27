@@ -44,18 +44,14 @@ const BASE_DEGREES = [
   { title: 'دکتری حرفه‌ای', code: 'PHD', defaultPassingGrade: '14.00', conditionalGpaThreshold: '16.00', maxUnitsPerTerm: 12 },
 ];
 
-/** آیین‌نامهٔ مصوب ۱۴۰۳ — عین seed فاز صفر */
+/** آیین‌نامهٔ مصوب ۱۴۰۳ — اسکیمای تودرتوی canonical (خوانا برای getRegulationConfig) */
 const REGULATION_1403 = {
-  regular_term_rules: { minUnits: 12, maxUnits: 20, probationMaxUnits: 14, gpaA_MaxUnits: 24 },
-  summer_term_rules: { defaultMaxUnits: 6, graduatingMaxUnits: 8 },
-  graduating_term_rules: { canTakeWithProbation: true, maxUnits: 24 },
-  quota_overrides: { SHAHED_ISARGAR: { summer_term_rules: { defaultMaxUnits: 8 }, probationMaxUnits: 14 } },
-  failed_course_gpa_policy: 'EXCLUDE_IF_PASSED',
-  unexcused_absence_policy: 'ZERO',
-  probation_gpa_threshold: 12,
-  max_allowed_probations: 3,
-  max_study_semesters: 8,
-  gpaA_threshold: 17,
+  regular_term_rules: { min_units: 12, max_units: 20, probation_max_units: 14, honors_min_gpa: 17, honors_max_units: 24 },
+  summer_term_rules: { default_max_units: 6, graduating_max_units: 8 },
+  graduating_term_rules: { can_take_with_probation: true, max_units: 24 },
+  quota_overrides: { SHAHED_ISARGAR: { summer_term_rules: { default_max_units: 8 }, probation_max_units: 14 } },
+  probation_and_tenure: { probation_gpa_threshold: 12, max_consecutive_probations: 3, max_total_probations: 3, max_study_semesters: 8 },
+  grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', default_passing_grade: 10, retakeMinGrade: 10, regulationLabel: 'آیین‌نامه ۱۴۰۳' },
 };
 
 /** دانشکده/گروه/رشته — کد رشته‌ها هماهنگ با DEFAULT_SANJESH_MAPPINGS (admissions-engine) */

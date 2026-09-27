@@ -110,3 +110,10 @@ export function isDroppedStatusCode(code: string | null | undefined): boolean {
   if (!code) return false;
   return DROPPED_CODES.has(code.trim());
 }
+
+/**
+ * کدهای وضعی که منطق آیین‌نامه (۹۳ به بعد) هرگز نباید بازنویسی کند —
+ * حتی اگر همان درس بعداً پاس شود: ۵ (غیبت)، ۶ (اضطراری)، ۷ (شورا)، ۲۲ (جبرانی مردود).
+ * بازنویسی این‌ها به ۹۳۱/۹۴۱ (که در معدل ترم اثر دارند) معدل را به‌هم می‌ریزد.
+ */
+export const REGULATION_FROZEN_CODES: ReadonlySet<string> = new Set(['5', '6', '7', '22']);

@@ -184,8 +184,9 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
 
   // دروس همین ترم که قبلاً ثبت شده‌اند (تکراری نگیریم)
   const current = await db
-    .select({ offeringId: enrollments.offeringId, courseId: course_offerings.courseId })
+    .select({ offeringId: enrollments.offeringId, courseId: course_offerings.courseId, units: courses.units })
     .from(enrollments).innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+    .innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .where(and(eq(enrollments.studentId, studentId), eq(course_offerings.termId, term.id), inArray(enrollments.status, ['REGISTERED', 'PENDING_COUNCIL'])));
   const already = new Set(current.map(c => c.offeringId));
 
@@ -208,10 +209,13 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
     console.warn('Failed to evaluate regulation status, falling back to default max units:', err);
   }
 
-  const totalUnits = offs.filter(o => !already.has(o.id)).reduce((s, o) => s + Number(o.units), 0);
+  // سقف روی «جمع ترم» اعمال می‌شود: ثبت‌شدهٔ قبلی + سبد جدید (نه فقط سبد جدید)
+  const currentUnits = current.reduce((s, c) => s + parseUnits(c.units), 0);
+  const newUnits = offs.filter(o => !already.has(o.id)).reduce((s, o) => s + Number(o.units), 0);
+  const totalUnits = currentUnits + newUnits;
   if (totalUnits > allowedMaxUnits) {
     out.ok = false;
-    out.hardErrors.push(`سقف مجاز انتخاب واحد طبق آیین‌نامه آموزشی (${allowedMaxUnits} واحد) رعایت نشده است (مجموع انتخابی: ${totalUnits} واحد).`);
+    out.hardErrors.push(`سقف مجاز انتخاب واحد طبق آیین‌نامه آموزشی (${allowedMaxUnits} واحد) رعایت نشده است (ثبت‌شده: ${currentUnits} + جدید: ${newUnits} = مجموع ${totalUnits} واحد).`);
   }
 
   // ── فیلتر ۵: تداخل کلاس (خطای نرم) ──

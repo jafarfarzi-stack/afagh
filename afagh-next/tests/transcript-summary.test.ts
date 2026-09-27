@@ -57,10 +57,11 @@ eq('اعشار', numOrNull('12.5'), 12.5);
 eq('Infinity رد می‌شود', numOrNull('1e999'), null);
 
 console.log('۲)regThresholds — آستانه‌های آیین‌نامه');
-eq('بدون کانفیگ: قبولی ۱۰ و مشروطی ۱۲', regThresholds(null), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false, minUnits: 0 });
+eq('بدون کانفیگ: قبولی ۱۰ و مشروطی ۱۲', regThresholds(null), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, is1391: false, dedupeRepeated: false, minUnits: 0, is1391: false });
 eq('مقادیر آیین‌نامه', regThresholds({ grading_and_gpa: { default_passing_grade: 8, failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', retakeMinGrade: 8, dedupeRepeatedCourses: true }, probation_and_tenure: { probation_gpa_threshold: 14 }, regular_term_rules: { min_units: 12 } } as never),
-  { pass: 8, prob: 14, exclFailed: true, exclFromTerm: false, retakeMinGrade: 8, dedupeRepeated: true, minUnits: 12 });
-eq('مقدار غیرعددی → پیش‌فرض', regThresholds({ grading_and_gpa: { default_passing_grade: 'بیست' } } as never), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false, minUnits: 0 });
+  { pass: 8, prob: 14, exclFailed: true, exclFromTerm: false, retakeMinGrade: 8, is1391: false, dedupeRepeated: true, minUnits: 12 });
+eq('مقدار غیرعددی → پیش‌فرض', regThresholds({ grading_and_gpa: { default_passing_grade: 'بیست' } } as never), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, is1391: false, dedupeRepeated: false, minUnits: 0, is1391: false });
+eq('تبصره ۱۳۹۱ پرچم می‌خورد', regThresholds({ grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED_1391', retakeMinGrade: 14 } } as never).is1391, true);
 eq('حدنصاب واحد از آیین‌نامه (ارشد: ۸)', regThresholds({ regular_term_rules: { min_units: 8 } } as never).minUnits, 8);
 eq('صفرِ مشروع شمرده می‌شود', regThresholds({ grading_and_gpa: { default_passing_grade: 0 } } as never).pass, 0);
 
@@ -97,9 +98,13 @@ const rRows = [
   R({ code: 'X', units: 3, g: 15, st: 'FINALIZED' }), // ترم بعد جبران شد
   R({ code: 'Y', units: 2, g: 7, st: 'FINALIZED' }),  // هرگز قبول نشد
 ];
-eq('EXCLUDE_IF_PASSED: مردودیِ جبران‌شده حذف می‌شود', summarizeTotal(rRows, { pass: 10, prob: 12, exclFailed: true, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false, minUnits: 0 }), { wsum: 59, wunits: 5 });
-eq('KEEP_ALL: هر دو تلاش در معدل می‌آید', summarizeTotal(rRows, { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false, minUnits: 0 }), { wsum: 83, wunits: 8 });
-eq('نمرهٔ PENDING در معدل کل نیست', summarizeTotal([R({ g: 19, st: 'PENDING' })], { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false, minUnits: 0 }), { wsum: 0, wunits: 0 });
+eq('EXCLUDE_IF_PASSED: مردودیِ جبران‌شده حذف می‌شود', summarizeTotal(rRows, { pass: 10, prob: 12, exclFailed: true, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false, minUnits: 0, is1391: false }), { wsum: 59, wunits: 5 });
+eq('KEEP_ALL: هر دو تلاش در معدل می‌آید', summarizeTotal(rRows, { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false, minUnits: 0, is1391: false }), { wsum: 83, wunits: 8 });
+eq('نمرهٔ PENDING در معدل کل نیست', summarizeTotal([R({ g: 19, st: 'PENDING' })], { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false, minUnits: 0, is1391: false }), { wsum: 0, wunits: 0 });
+// تبصره ۱۳۹۱: جبران با ۱۱ (زیر ۱۴) مردودی قبلی را حذف نمی‌کند؛ با ۱۵ حذف می‌کند
+const tRows1391 = [R({ code: 'V', units: 3, g: 8, st: 'FINALIZED' }), R({ code: 'V', units: 3, g: 11, st: 'FINALIZED' })];
+eq('۱۳۹۱ با جبران ۱۱: هر دو تلاش می‌ماند', summarizeTotal(tRows1391, { pass: 10, prob: 12, exclFailed: true, exclFromTerm: true, retakeMinGrade: 14, dedupeRepeated: false, minUnits: 0, is1391: true }), { wsum: 57, wunits: 6 });
+eq('همان سوابق با سیاست عادی: مردودی حذف می‌شود', summarizeTotal(tRows1391, { pass: 10, prob: 12, exclFailed: true, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false, minUnits: 0, is1391: false }), { wsum: 33, wunits: 3 });
 
 console.log('۵ب) dedupeRepeatedCourses — اخذ مجدد درسِ ازقبل‌قبول‌شده برای ارتقای معدل (سوییچ ادمین)');
 const zRows = [
@@ -107,9 +112,9 @@ const zRows = [
   R({ code: 'Z', units: 4, g: 18, st: 'FINALIZED' }), // بار دوم: ارتقا به ۱۸
 ];
 eq('پیش‌فرض (dedupeRepeated=false): هر دو تلاش دوبار در معدل می‌آید — رفتار فعلی بدون تغییر',
-  summarizeTotal(zRows, { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false, minUnits: 0 }), { wsum: 120, wunits: 8 });
+  summarizeTotal(zRows, { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: false, minUnits: 0, is1391: false }), { wsum: 120, wunits: 8 });
 eq('dedupeRepeated=true: فقط بالاترین نمره (۱۸) و واحدش یک‌بار حساب می‌شود',
-  summarizeTotal(zRows, { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: true, minUnits: 0 }), { wsum: 72, wunits: 4 });
+  summarizeTotal(zRows, { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: true, minUnits: 0, is1391: false }), { wsum: 72, wunits: 4 });
 eq('dedupeRepeated روی bestFinalizedRowPerCourse رکورد ۱۸ را انتخاب می‌کند',
   bestFinalizedRowPerCourse(zRows).get('Z')?.gradeValue, '18');
 // ترکیب با EXCLUDE_IF_PASSED: مردودی جبران‌شده هم حذف می‌شود و از دو تلاشِ قبول‌شده هم فقط بهترین می‌ماند
@@ -119,7 +124,7 @@ const wRows = [
   R({ code: 'W', units: 3, g: 17, st: 'FINALIZED' }), // ارتقای بعدی
 ];
 eq('dedupeRepeated + EXCLUDE_IF_PASSED با هم: فقط بهترین تلاش (۱۷) می‌ماند',
-  summarizeTotal(wRows, { pass: 10, prob: 12, exclFailed: true, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: true, minUnits: 0 }), { wsum: 51, wunits: 3 });
+  summarizeTotal(wRows, { pass: 10, prob: 12, exclFailed: true, exclFromTerm: false, retakeMinGrade: 10, dedupeRepeated: true, minUnits: 0, is1391: false }), { wsum: 51, wunits: 3 });
 
 console.log('۶)groupTranscript — گروه‌بندی ترم، تجمیعی و مشروطی');
 const gRows = [
