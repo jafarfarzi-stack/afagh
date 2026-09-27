@@ -9,6 +9,7 @@
  *   breakdownByType / courseTypeGroup (تفکیک جدول سما)
  *   faNum / faWords / g2j / dateToJalali / todayJalali / codeLabel
  */
+import { studyModeFa } from '../src/lib/student-labels.ts';
 import {
   breakdownByType, bestFinalizedRowPerCourse, codeLabel, courseTypeGroup, dateToJalali, faDigits, faIntWords, faNum, faWords,
   g2j, groupTranscript, numOrNull, passedCourseSet, regThresholds, summarizeTerm,
@@ -316,6 +317,14 @@ eq('رشتهٔ عددی فارسی می‌شود', faStr('12.75'), '۱۲٫۷۵')
 eq('واحد صحیح بدون اعشار اضافه', faStr('3.0', 1), '۳');
 eq('رشتهٔ غیرعددی دست نمی‌خورد', faStr('قبول'), 'قبول');
 eq('رشتهٔ خالی خط تیره', faStr(''), '—');
+
+console.log('۱۴)نگاشت شیوه آموزش سما');
+eq('کد ۴ → آموزشی پژوهشی', studyModeFa('4'), 'آموزشی پژوهشی');
+eq('کد ۱ → آموزشی', studyModeFa('1'), 'آموزشی');
+eq('کد ۱۱ → پژوهش محور', studyModeFa('11'), 'پژوهش محور');
+eq('کد دوره در همین ستون: ۷ → پیام نور', studyModeFa('7'), 'پیام نور');
+eq('خالی → خط تیره', studyModeFa(''), '—');
+eq('نامشخص می‌ماند', studyModeFa('99'), '99');
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

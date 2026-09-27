@@ -7,7 +7,7 @@
 import type { StudentItem, TermGroup, TranscriptSummary, CodeLabels, TranscriptPrintOptions, OriginUniversity, CohortStats } from '../types';
 import { DEFAULT_PRINT_OPTIONS } from '../types';
 import type { TranscriptRow } from '../actions';
-import { gradeStatusFa, quotaFa, studentStatusFa } from '@/lib/student-labels';
+import { gradeStatusFa, quotaFa, studentStatusFa, studyModeFa } from '@/lib/student-labels';
 import { breakdownByType, codeLabel, courseTypeGroup, dateToJalali, entryDateFa, faDigits, faNum, faStr, faWords, numOrNull, termDisplayTitle, thesisLegend, thesisQualitativeLabel, todayJalali } from '../transcript-utils';
 
 /** نمای رسمی کارنامه با فرمت سما: ۳ نیمسال کنار هم + سربرگ/پانوشت + صفحه دوم تفکیکی */
@@ -73,7 +73,7 @@ export default function OfficialTranscriptView({
       'دانشگاه مبدا',
       originUniversity.dissolved ? `${originUniversity.title} (منحله)` : originUniversity.title,
     ] as [string, string]] : []),
-    ...(printOptions.showStudyMode ? [['شیوه آموزشی', student.studyingMode || '—'] as [string, string]] : []),
+    ...(printOptions.showStudyMode ? [['شیوه آموزشی', studyModeFa(student.studyingMode)] as [string, string]] : []),
     ['سهمیه قبولی', quotaFa(student.quotaType)],
     ['سهمیه نهایی', quotaFa(student.quotaType)],
     ['سهمیه ثبت‌نامی', lbl.quota(student.acceptanceAllocation) !== '—' ? lbl.quota(student.acceptanceAllocation) : quotaFa(student.quotaType)],
@@ -173,12 +173,10 @@ export default function OfficialTranscriptView({
 
   return (
     <div dir="rtl" className="tr-root border-2 border-slate-700 text-slate-900 bg-white">
-      {/* سربرگ جاری صفحات بعد (فقط در چاپ، از صفحهٔ دوم به بعد) */}
-      <div className="tr-running-head" aria-hidden="true">
-        <span>موسسه آموزش عالی غیرانتفاعی - غیردولتی آفاق — کارنامه کل</span>
-        <span>{student.lastName} {student.firstName} · {faDigits(student.studentCode)} · {student.majorName}</span>
-        <span>تاریخ تهیه: {todayJalali()}</span>
-      </div>
+      {/* کل کادر بالا (سربرگ + مشخصات) در thead است تا در همهٔ صفحات چاپ تکرار شود */}
+      <table className="tr-doc">
+        <thead>
+          <tr><td className="tr-doc-cell">
       {/* سربرگ سما */}
       <div className="flex items-start justify-between border-b-2 border-slate-700 px-3 py-2">
         <div className="text-[10px] text-center">
@@ -209,14 +207,18 @@ export default function OfficialTranscriptView({
           <div key={`filler-${i}`} className="bg-white px-2 py-1" aria-hidden="true" />
         ))}
       </div>
+          </td></tr>
+        </thead>
+        <tbody>
       {/* نیمسال‌ها ۳تایی — گرید هم‌ارتفاع تا پانوشت نیمسال‌های یک ردیف هم‌تراز شود */}
-      <div className="term-grid">
-        {chunks.map((ch, i) => (
-          <div key={i} className="tr-term-row">{ch.map(termCell)}</div>
-        ))}
-      </div>
+      {chunks.map((ch, i) => (
+        <tr key={i} className="tr-doc-row"><td className="tr-doc-cell">
+          <div className="tr-term-row">{ch.map(termCell)}</div>
+        </td></tr>
+      ))}
       {/* راهنمای کد وضع نمره — فقط اگر تیک سما روشن و کدی در کارنامه استفاده شده باشد */}
       {printOptions.showLegend && statusLegend.size > 0 && (
+        <tr><td className="tr-doc-cell">
         <div className="border-t-2 border-slate-700 px-3 py-1.5 text-[9px] bg-slate-50 leading-relaxed">
           <b>توضیح وضع نمرات:</b>{' '}
           {[...statusLegend.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([code, title]) => (
@@ -225,8 +227,10 @@ export default function OfficialTranscriptView({
             </span>
           ))}
         </div>
+        </td></tr>
       )}
       {/* پانوشت */}
+      <tr><td className="tr-doc-cell">
       <div className="border-t-2 border-slate-700 px-3 py-2 text-[10px] space-y-1">
         <div className="flex flex-wrap gap-x-6">
           <span>تعداد نیمسال مشروط: <b className="font-mono">{probation.toLocaleString('fa-IR')}</b></span>
@@ -257,8 +261,10 @@ export default function OfficialTranscriptView({
           <span>امضاء و مهر امور آموزشی دانشگاه منتخب</span>
         </div>
       </div>
+      </td></tr>
       {/* صفحه دوم: جدول وضعیت دروس گذرانده — در جریان طبیعی صفحه می‌آید، تکه نمی‌شود */}
       {printOptions.showBreakdown && (
+      <tr><td className="tr-doc-cell">
       <div className="tr-breakdown border-t-2 border-slate-700 px-3 py-2">
         <p className="font-extrabold text-[11px] mb-1">جدول وضعیت دروس گذرانده (کاتالوگ رشته)</p>
         <table className="w-full text-[10px] border border-slate-400">
@@ -283,9 +289,11 @@ export default function OfficialTranscriptView({
           </tbody>
         </table>
       </div>
+      </td></tr>
       )}
       {/* رتبه در رشته ورودی و میانگین هم‌رشته‌ای‌ها (تیک سما) */}
       {printOptions.showRank && (
+        <tr><td className="tr-doc-cell">
         <div className="border-t border-slate-300 px-3 py-1.5 text-[10px] bg-slate-50 leading-relaxed">
           <div className="flex flex-wrap gap-x-6">
             <span>رتبهٔ معدل کل دانشجو در رشته ورودی{cohortStats ? (cohortStats.scope === 'term' ? ' (هم‌ورودی ترم)' : ' (هم‌ورودی سال)') : ''}: <b className="font-mono">{cohortLoading ? '…' : (cohortStats && cohortStats.rank != null ? `${faNum(cohortStats.rank, 0)} / ${faNum(cohortStats.total, 0)}` : '—')}</b></span>
@@ -293,7 +301,10 @@ export default function OfficialTranscriptView({
             <span>میانگین واحد گذرانده دانشجویان هم‌رشته ورودی: <b className="font-mono">{cohortLoading ? '…' : faNum(cohortStats?.avgPassed, 1)}</b></span>
           </div>
         </div>
+        </td></tr>
       )}
+        </tbody>
+      </table>
     </div>
   );
 }

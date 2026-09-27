@@ -110,3 +110,30 @@ export function quotaFa(q: string | null | undefined): string {
   if (!q) return 'عادی';
   return QUOTA_FA[q] ?? q;
 }
+
+/**
+ * شیوه آموزش سما (ستون studyingMode) — از فایل «شيوه آموزش.txt».
+ * در داده، گاهی کدهای «دوره» هم در همین ستون آمده، پس با همان جدول نگاشت می‌شود.
+ */
+export const STUDY_MODE_FA: Record<string, string> = {
+  '0': 'نامشخص',
+  '1': 'آموزشی',
+  '2': 'آموزشی - تغییر رشته دارای مغایرت',
+  '3': 'آموزشی و پژوهشی',
+  '4': 'آموزشی پژوهشی',
+  '8': 'آموزشی - تغییر رشته',
+  '11': 'پژوهش محور',
+  // کدهای دوره (فایل «دوره.txt») که گاهی در همین ستون ثبت شده‌اند
+  '5': 'دانشجویان خارجی',
+  '6': 'روزانه - موارد خاص',
+  '7': 'پیام نور',
+  '10': 'مجازی',
+  '202': 'مهمانی',
+};
+
+export function studyModeFa(v: string | null | undefined): string {
+  if (v == null) return '—';
+  const t = v.trim();
+  if (!t) return '—';
+  return STUDY_MODE_FA[t] ?? t;
+}

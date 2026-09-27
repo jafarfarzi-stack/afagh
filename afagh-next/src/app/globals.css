@@ -87,16 +87,11 @@ body { @apply bg-slate-100 text-slate-800; }
     margin: 0 !important; border-radius: 0 !important;
     print-color-adjust: exact; -webkit-print-color-adjust: exact;
   }
-  /* سربرگ جاری صفحات بعد (صفحهٔ اول: سربرگ کامل داخل متن است) */
-  .transcript-print-area .tr-running-head { display: none; }
-  body.printing-transcript #transcript-print-root .transcript-print-area .tr-running-head {
-    position: running(trRunningHead);
-    display: flex; width: 100%;
-    justify-content: space-between; align-items: center; gap: 8pt;
-    font-size: 8pt; color: #0f172a;
-    font-family: 'Vazirmatn', Tahoma, 'Segoe UI', Arial, sans-serif;
-    border-bottom: 1pt solid #0f172a; padding-bottom: 2pt;
-  }
+  /* جدول سند کارنامه: سربرگ thead در همهٔ صفحات چاپ تکرار می‌شود */
+  .transcript-print-area table.tr-doc { width: 100%; border: 0; border-collapse: collapse; }
+  .transcript-print-area table.tr-doc > thead { display: table-header-group; }
+  .transcript-print-area table.tr-doc td.tr-doc-cell { padding: 0; border: 0; vertical-align: top; }
+  .transcript-print-area table.tr-doc > tbody > tr.tr-doc-row { break-inside: avoid; page-break-inside: avoid; }
   .transcript-print-area .tr-term-row { break-inside: avoid; page-break-inside: avoid; }
   .transcript-print-area .term-block { page-break-inside: avoid; break-inside: avoid; }
   .transcript-print-area .page-break-before { page-break-before: always; break-before: page; }
@@ -126,7 +121,6 @@ body { @apply bg-slate-100 text-slate-800; }
 
 /* ── چاپ کارنامه: گرید ۳ستونهٔ هم‌ارتفاع (پانوشت نیمسال‌های یک ردیف هم‌تراز) ── */
 .transcript-print-area .tr-root { font-family: 'Vazirmatn', Tahoma, 'Segoe UI', Arial, sans-serif; }
-.transcript-print-area .tr-running-head { display: none; }
 .transcript-print-area .term-grid { width: 100%; }
 .transcript-print-area .tr-term-row {
   display: grid;

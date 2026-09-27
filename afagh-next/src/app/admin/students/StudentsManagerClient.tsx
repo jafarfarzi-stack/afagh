@@ -65,9 +65,7 @@ export function doPrintTranscript(orientation: 'landscape' | 'portrait' = 'lands
   const size = orientation === 'portrait' ? 'A4 portrait' : 'A4 landscape';
   pageStyle.textContent =
     `@media print { @page { size: ${size}; margin: ${margins};` +
-    ' @top-center { content: element(trRunningHead); vertical-align: middle; }' +
-    ' @bottom-center { content: \'صفحه \' counter(page) \' از \' counter(pages); font-size: 8pt; color: #475569; font-family: "Vazirmatn", Tahoma, sans-serif; } }' +
-    ' @page :first { @top-center { content: none; } } }';
+    ' @bottom-center { content: \'صفحه \' counter(page) \' از \' counter(pages); font-size: 8pt; color: #475569; font-family: "Vazirmatn", Tahoma, sans-serif; } } }';
   document.head.appendChild(pageStyle);
   const done = () => {
     document.body.classList.remove('printing-transcript', 'printing-portrait');
