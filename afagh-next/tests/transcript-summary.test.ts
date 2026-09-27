@@ -9,7 +9,7 @@
  *   breakdownByType / courseTypeGroup (تفکیک جدول سما)
  *   faNum / faWords / g2j / dateToJalali / todayJalali / codeLabel
  */
-import { studyModeFa } from '../src/lib/student-labels.ts';
+import { courseTypeFa, studyModeFa } from '../src/lib/student-labels.ts';
 import {
   breakdownByType, bestFinalizedRowPerCourse, codeLabel, courseTypeGroup, dateToJalali, faDigits, faIntWords, faNum, faWords,
   g2j, groupTranscript, numOrNull, passedCourseSet, regThresholds, summarizeTerm,
@@ -324,7 +324,11 @@ eq('کد ۱ → آموزشی', studyModeFa('1'), 'آموزشی');
 eq('کد ۱۱ → پژوهش محور', studyModeFa('11'), 'پژوهش محور');
 eq('کد دوره در همین ستون: ۷ → پیام نور', studyModeFa('7'), 'پیام نور');
 eq('خالی → خط تیره', studyModeFa(''), '—');
+eq('مقدار خراب بلند → خط تیره', studyModeFa('70045052-ae10-4de9-8'), '—');
 eq('نامشخص می‌ماند', studyModeFa('99'), '99');
+eq('نوع دوره ۴ → غیرانتفاعی', courseTypeFa('4'), 'غیرانتفاعی');
+eq('نوع دوره ۲۰۲ → مهمانی', courseTypeFa('202'), 'مهمانی');
+eq('نوع دوره خالی → خط تیره', courseTypeFa(null), '—');
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

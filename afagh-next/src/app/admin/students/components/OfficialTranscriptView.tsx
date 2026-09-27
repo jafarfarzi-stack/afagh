@@ -7,7 +7,7 @@
 import type { StudentItem, TermGroup, TranscriptSummary, CodeLabels, TranscriptPrintOptions, OriginUniversity, CohortStats } from '../types';
 import { DEFAULT_PRINT_OPTIONS } from '../types';
 import type { TranscriptRow } from '../actions';
-import { gradeStatusFa, quotaFa, studentStatusFa, studyModeFa } from '@/lib/student-labels';
+import { courseTypeFa, gradeStatusFa, quotaFa, studentStatusFa, studyModeFa } from '@/lib/student-labels';
 import { breakdownByType, codeLabel, courseTypeGroup, dateToJalali, entryDateFa, faDigits, faNum, faStr, faWords, numOrNull, termDisplayTitle, thesisLegend, thesisQualitativeLabel, todayJalali } from '../transcript-utils';
 
 /** نمای رسمی کارنامه با فرمت سما: ۳ نیمسال کنار هم + سربرگ/پانوشت + صفحه دوم تفکیکی */
@@ -65,7 +65,8 @@ export default function OfficialTranscriptView({
     ['کد ملی', faDigits(student.nationalCode)],
     ['تاریخ تولد', dateToJalali(student.birthDate)],
     ['مقطع', student.degreeLevel],
-    ['نوع دوره', lbl.period(student.trainingMethod) !== '—' ? lbl.period(student.trainingMethod) : (student.studyingMode || '—')],
+    // نوع دوره در ستون studyingMode است (COURSTYPE)؛ اول نگاشت مدیریتی، بعد جدول سما
+    ['نوع دوره', lbl.period(student.studyingMode) !== '—' ? lbl.period(student.studyingMode) : courseTypeFa(student.studyingMode)],
     ['دانشکده', student.facultyName || '—'],
     ['رشته تحصیلی', student.majorName],
     ...(printOptions.showAcceptance ? [['نحوه ورود', lbl.accept(student.acceptanceType)] as [string, string]] : []),
@@ -73,7 +74,7 @@ export default function OfficialTranscriptView({
       'دانشگاه مبدا',
       originUniversity.dissolved ? `${originUniversity.title} (منحله)` : originUniversity.title,
     ] as [string, string]] : []),
-    ...(printOptions.showStudyMode ? [['شیوه آموزشی', studyModeFa(student.studyingMode)] as [string, string]] : []),
+    ...(printOptions.showStudyMode ? [['شیوه آموزشی', studyModeFa(student.trainingMethod)] as [string, string]] : []),
     ['سهمیه قبولی', quotaFa(student.quotaType)],
     ['سهمیه نهایی', quotaFa(student.quotaType)],
     ['سهمیه ثبت‌نامی', lbl.quota(student.acceptanceAllocation) !== '—' ? lbl.quota(student.acceptanceAllocation) : quotaFa(student.quotaType)],

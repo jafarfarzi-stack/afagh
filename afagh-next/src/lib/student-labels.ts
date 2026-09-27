@@ -135,5 +135,32 @@ export function studyModeFa(v: string | null | undefined): string {
   if (v == null) return '—';
   const t = v.trim();
   if (!t) return '—';
+  // کدها حداکثر ۳ رقم‌اند (تا 202)؛ مقادیر بلندتر دادهٔ خراب‌اند
+  if (t.length > 3) return '—';
   return STUDY_MODE_FA[t] ?? t;
+}
+
+/**
+ * نوع دوره سما (ستون studyingMode که در عمل COURSTYPE است) — از فایل «دوره.txt».
+ */
+export const COURSE_TYPE_FA: Record<string, string> = {
+  '0': 'نامشخص',
+  '1': 'روزانه',
+  '2': 'شبانه',
+  '3': 'نیمه حضوری',
+  '4': 'غیرانتفاعی',
+  '5': 'دانشجویان خارجی',
+  '6': 'روزانه - موارد خاص',
+  '7': 'پیام نور',
+  '8': 'دوره‌های آموزش عالی آزاد',
+  '10': 'مجازی',
+  '202': 'مهمانی',
+};
+
+export function courseTypeFa(v: string | null | undefined): string {
+  if (v == null) return '—';
+  const t = v.trim();
+  if (!t) return '—';
+  if (t.length > 3) return '—';
+  return COURSE_TYPE_FA[t] ?? t;
 }
