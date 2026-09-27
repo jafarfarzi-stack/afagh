@@ -75,16 +75,27 @@ body { @apply bg-slate-100 text-slate-800; }
     left: 0 !important; top: 0 !important; width: 100% !important;
     margin: 0 !important; box-shadow: none !important; background: #fff !important;
   }
-  /* ── چاپ WYSIWYG کارنامه: فقط .transcript-print-area روی کاغذ می‌رود ──
-     تکنیک visibility (نه display) تا تودرتویی عمیق کامپوننت مشکلی نسازد. */
-  body.printing-transcript * { visibility: hidden; }
-  body.printing-transcript .transcript-print-area,
-  body.printing-transcript .transcript-print-area * { visibility: visible; }
-  body.printing-transcript .transcript-print-area {
-    position: absolute !important;
-    top: 0 !important; right: 0 !important; left: 0 !important;
-    margin: 0 !important; border: 2px solid #000 !important; border-radius: 0 !important;
+  /* ── چاپ WYSIWYG کارنامه: کپی ایزوله در ریشهٔ body چاپ می‌شود تا
+     چیدمان پنهانِ بقیهٔ صفحه صفحهٔ خالی نسازد ── */
+  #transcript-print-root { display: none; }
+  body.printing-transcript > *:not(#transcript-print-root) { display: none !important; }
+  body.printing-transcript #transcript-print-root {
+    display: block !important;
+    margin: 0 !important; background: #fff !important;
+  }
+  body.printing-transcript #transcript-print-root .transcript-print-area {
+    margin: 0 !important; border-radius: 0 !important;
     print-color-adjust: exact; -webkit-print-color-adjust: exact;
+  }
+  /* سربرگ جاری صفحات بعد (صفحهٔ اول: سربرگ کامل داخل متن است) */
+  .transcript-print-area .tr-running-head { display: none; }
+  body.printing-transcript #transcript-print-root .transcript-print-area .tr-running-head {
+    position: running(trRunningHead);
+    display: flex; width: 100%;
+    justify-content: space-between; align-items: center; gap: 8pt;
+    font-size: 8pt; color: #0f172a;
+    font-family: 'Vazirmatn', Tahoma, 'Segoe UI', Arial, sans-serif;
+    border-bottom: 1pt solid #0f172a; padding-bottom: 2pt;
   }
   .transcript-print-area .tr-term-row { break-inside: avoid; page-break-inside: avoid; }
   .transcript-print-area .term-block { page-break-inside: avoid; break-inside: avoid; }
@@ -103,10 +114,7 @@ body { @apply bg-slate-100 text-slate-800; }
   .transcript-print-area .tr-term-table tr { page-break-inside: avoid; break-inside: avoid; }
   .transcript-print-area .tr-course-title { overflow-wrap: break-word; word-break: break-word; }
   .transcript-print-area .tr-term-footer { font-size: 8pt; }
-  .transcript-print-area .tr-page-footer::after {
-    content: 'صفحه ' counter(page) ' از ' counter(pages);
-    display: block; text-align: center; font-size: 8pt; color: #475569; margin-top: 4pt;
-  }
+  .transcript-print-area .tr-breakdown { break-inside: avoid; page-break-inside: avoid; }
   /* ── چاپ عمودی: همان ۳ ستونه ولی فشرده‌تر تا در عرض بگنجد ── */
   body.printing-portrait .transcript-print-area .tr-root { font-size: 8pt; }
   body.printing-portrait .transcript-print-area .tr-info-grid { font-size: 7.5pt; }
@@ -118,6 +126,7 @@ body { @apply bg-slate-100 text-slate-800; }
 
 /* ── چاپ کارنامه: گرید ۳ستونهٔ هم‌ارتفاع (پانوشت نیمسال‌های یک ردیف هم‌تراز) ── */
 .transcript-print-area .tr-root { font-family: 'Vazirmatn', Tahoma, 'Segoe UI', Arial, sans-serif; }
+.transcript-print-area .tr-running-head { display: none; }
 .transcript-print-area .term-grid { width: 100%; }
 .transcript-print-area .tr-term-row {
   display: grid;

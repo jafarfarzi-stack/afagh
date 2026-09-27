@@ -44,24 +44,35 @@ const acceptTypeTitle = (raw?: string | null) => {
 };
 
 /**
- * چاپ مستقیم همان نمای روی صفحه (WYSIWYG) — با کلاس چاپ سراسری:
- * همه‌چیز پنهان می‌شود جز .transcript-print-area (تکنیک visibility).
- * جهت کاغذ فقط برای همین چاپ تزریق و پس از چاپ برداشته می‌شود
- * (افقی = فرمت سما با ۳ نیمسال کنار هم؛ عمودی = نیمسال‌ها تک‌ستونه).
+ * چاپ مستقیم همان نمای روی صفحه (WYSIWYG).
+ * برای اینکه چیدمان پنهانِ بقیهٔ صفحه صفحهٔ خالی نسازد، یک کپی از کارنامه
+ * در ریشهٔ body گذاشته می‌شود و هنگام چاپ فقط همان ریشه دیده می‌شود.
+ * جهت کاغذ + سربرگ/پاصفحه فقط برای همین چاپ تزریق و پس از چاپ برداشته می‌شود
+ * (افقی = فرمت سما با ۳ نیمسال کنار هم؛ عمودی = همان ۳ ستونه فشرده).
  */
 export function doPrintTranscript(orientation: 'landscape' | 'portrait' = 'landscape'): void {
   if (typeof document === 'undefined') return;
+  const src = document.querySelector('.transcript-print-area');
+  const holder = document.createElement('div');
+  holder.id = 'transcript-print-root';
+  if (src) holder.appendChild(src.cloneNode(true));
+  document.body.appendChild(holder);
   document.body.classList.add('printing-transcript');
   if (orientation === 'portrait') document.body.classList.add('printing-portrait');
   const pageStyle = document.createElement('style');
   pageStyle.id = 'transcript-page-size';
-  pageStyle.textContent = orientation === 'portrait'
-    ? '@media print { @page { size: A4 portrait; margin: 8mm 8mm; } }'
-    : '@media print { @page { size: A4 landscape; margin: 8mm 10mm; } }';
+  const margins = orientation === 'portrait' ? '8mm 8mm 13mm 8mm' : '8mm 10mm 13mm 10mm';
+  const size = orientation === 'portrait' ? 'A4 portrait' : 'A4 landscape';
+  pageStyle.textContent =
+    `@media print { @page { size: ${size}; margin: ${margins};` +
+    ' @top-center { content: element(trRunningHead); vertical-align: middle; }' +
+    ' @bottom-center { content: \'صفحه \' counter(page) \' از \' counter(pages); font-size: 8pt; color: #475569; font-family: "Vazirmatn", Tahoma, sans-serif; } }' +
+    ' @page :first { @top-center { content: none; } } }';
   document.head.appendChild(pageStyle);
   const done = () => {
     document.body.classList.remove('printing-transcript', 'printing-portrait');
     pageStyle.remove();
+    holder.remove();
     window.removeEventListener('afterprint', done);
   };
   window.addEventListener('afterprint', done);

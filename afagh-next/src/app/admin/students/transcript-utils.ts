@@ -231,6 +231,14 @@ export const faNum = (n: number | null | undefined, digits = 2): string =>
 export const faDigits = (v: string | number): string =>
   String(v).replace(/[0-9]/g, d => '۰۱۲۳۴۵۶۷۸۹'[+d]);
 
+/** رشتهٔ عددی خام سما (مثل '12.75') → فارسی با گردکردن (غیرعددی دست‌نخورده، خالی → خط تیره) */
+export const faStr = (v: string | null | undefined, digits = 2): string => {
+  if (v == null || v === '') return '—';
+  const n = Number(v);
+  if (!Number.isFinite(n)) return v;
+  return faNum(n, digits);
+};
+
 /**
  * عنوان نمایشی نیمسال برای سربرگ کارنامهٔ سما («نیمسال اول ۱۴۰۳-۱۴۰۴»).
  * اگر عنوان واقعی از فایل آمده همان می‌ماند؛ فقط کدهای خامی مثل «ترم 14002»

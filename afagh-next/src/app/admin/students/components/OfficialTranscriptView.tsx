@@ -8,7 +8,7 @@ import type { StudentItem, TermGroup, TranscriptSummary, CodeLabels, TranscriptP
 import { DEFAULT_PRINT_OPTIONS } from '../types';
 import type { TranscriptRow } from '../actions';
 import { gradeStatusFa, quotaFa, studentStatusFa } from '@/lib/student-labels';
-import { breakdownByType, codeLabel, courseTypeGroup, dateToJalali, entryDateFa, faNum, faWords, numOrNull, termDisplayTitle, thesisLegend, thesisQualitativeLabel, todayJalali } from '../transcript-utils';
+import { breakdownByType, codeLabel, courseTypeGroup, dateToJalali, entryDateFa, faDigits, faNum, faStr, faWords, numOrNull, termDisplayTitle, thesisLegend, thesisQualitativeLabel, todayJalali } from '../transcript-utils';
 
 /** نمای رسمی کارنامه با فرمت سما: ۳ نیمسال کنار هم + سربرگ/پانوشت + صفحه دوم تفکیکی */
 export default function OfficialTranscriptView({
@@ -57,12 +57,12 @@ export default function OfficialTranscriptView({
   })();
   const info: [string, string][] = [
     ['نام خانوادگی و نام', `${student.lastName} ${student.firstName}`],
-    ['شماره دانشجویی', student.studentCode],
+    ['شماره دانشجویی', faDigits(student.studentCode)],
     ['نام پدر', student.fatherName || '—'],
-    ['شماره شناسنامه', student.birthCertNo || '—'],
+    ['شماره شناسنامه', student.birthCertNo ? faDigits(student.birthCertNo) : '—'],
     ['محل صدور', student.placeOfIssue || '—'],
     ['محل تولد', student.placeOfBirth || '—'],
-    ['کد ملی', student.nationalCode],
+    ['کد ملی', faDigits(student.nationalCode)],
     ['تاریخ تولد', dateToJalali(student.birthDate)],
     ['مقطع', student.degreeLevel],
     ['نوع دوره', lbl.period(student.trainingMethod) !== '—' ? lbl.period(student.trainingMethod) : (student.studyingMode || '—')],
@@ -113,7 +113,7 @@ export default function OfficialTranscriptView({
     if (printOptions.thesisQualitative && courseTypeGroup(r.courseType) === 'پایان‌نامه') {
       return <span className="font-sans">{thesisQualitativeLabel(numOrNull(r.gradeValue), summary.passGrade)}</span>;
     }
-    return r.gradeValue ?? '—';
+    return faStr(r.gradeValue);
   };
   const termCell = (t: TermGroup) => (
     <section key={t.termCode} className="term-block min-w-0">
@@ -155,7 +155,7 @@ export default function OfficialTranscriptView({
                   <span className="block text-[7px] text-amber-600 font-bold">({r._excludedByRegulation} اعمال شد)</span>
                 )}
               </td>
-              <td className="p-1 text-center font-mono">{r.units ?? '—'}</td>
+              <td className="p-1 text-center font-mono">{r.units == null ? '—' : faStr(r.units, 1)}</td>
               <td className="p-1 text-center font-mono font-bold">{gradeCell(r)}</td>
               <td className="p-1 text-center text-[8px]">{statusCell(r)}</td>
             </tr>
@@ -173,6 +173,12 @@ export default function OfficialTranscriptView({
 
   return (
     <div dir="rtl" className="tr-root border-2 border-slate-700 text-slate-900 bg-white">
+      {/* سربرگ جاری صفحات بعد (فقط در چاپ، از صفحهٔ دوم به بعد) */}
+      <div className="tr-running-head" aria-hidden="true">
+        <span>موسسه آموزش عالی غیرانتفاعی - غیردولتی آفاق — کارنامه کل</span>
+        <span>{student.lastName} {student.firstName} · {faDigits(student.studentCode)} · {student.majorName}</span>
+        <span>تاریخ تهیه: {todayJalali()}</span>
+      </div>
       {/* سربرگ سما */}
       <div className="flex items-start justify-between border-b-2 border-slate-700 px-3 py-2">
         <div className="text-[10px] text-center">
@@ -226,7 +232,7 @@ export default function OfficialTranscriptView({
           <span>تعداد نیمسال مشروط: <b className="font-mono">{probation.toLocaleString('fa-IR')}</b></span>
           <span>وضعیت کلی دانشجو: <b>{studentStatusFa(student.status, student.samaStatusCode)}</b></span>
           <span>تاریخ شروع تحصیل: <b className="font-mono">{entryDateFa(student.entryYear, student.entryTerm)}</b></span>
-          <span>تاریخ توقف تحصیل: <b className="font-mono">{student.graduateDate || '—'}</b></span>
+          <span>تاریخ توقف تحصیل: <b className="font-mono">{student.graduateDate ? faDigits(student.graduateDate) : '—'}</b></span>
         </div>
         <div className="flex flex-wrap gap-x-6">
           <span>معدل کل به عدد: <b className="font-mono">{faNum(summary.gpa)}</b></span>
@@ -244,17 +250,16 @@ export default function OfficialTranscriptView({
         {printOptions.thesisQualitative && (
           <p className="text-slate-500 text-[9px]">توضیح: نمرهٔ دروس پایان‌نامه/رساله به‌صورت کیفی درج شده است ({thesisLegend(summary.passGrade)}).</p>
         )}
-        <p className="text-center text-slate-500 text-[9px]">سیستم مدیریت آموزش دانشگاه‌ها — آفاق · شماره دانشجویی <b className="font-mono">{student.studentCode}</b> · تاریخ تهیه <b className="font-mono">{todayJalali()}</b></p>
-        <div className="tr-page-footer" aria-hidden="true" />
+        <p className="text-center text-slate-500 text-[9px]">سیستم مدیریت آموزش دانشگاه‌ها — آفاق · شماره دانشجویی <b className="font-mono">{faDigits(student.studentCode)}</b> · تاریخ تهیه <b className="font-mono">{todayJalali()}</b></p>
         <div className="flex justify-between pt-2">
           <span>امضاء رئیس خدمات آموزش</span>
           <span>امضاء و مهر اداره کل آموزش</span>
           <span>امضاء و مهر امور آموزشی دانشگاه منتخب</span>
         </div>
       </div>
-      {/* صفحه دوم: جدول وضعیت دروس گذرانده */}
+      {/* صفحه دوم: جدول وضعیت دروس گذرانده — در جریان طبیعی صفحه می‌آید، تکه نمی‌شود */}
       {printOptions.showBreakdown && (
-      <div className="border-t-2 border-slate-700 px-3 py-2 page-break-before">
+      <div className="tr-breakdown border-t-2 border-slate-700 px-3 py-2">
         <p className="font-extrabold text-[11px] mb-1">جدول وضعیت دروس گذرانده (کاتالوگ رشته)</p>
         <table className="w-full text-[10px] border border-slate-400">
           <thead>

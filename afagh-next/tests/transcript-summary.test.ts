@@ -12,7 +12,7 @@
 import {
   breakdownByType, bestFinalizedRowPerCourse, codeLabel, courseTypeGroup, dateToJalali, faDigits, faIntWords, faNum, faWords,
   g2j, groupTranscript, numOrNull, passedCourseSet, regThresholds, summarizeTerm,
-  summarizeTotal, termDisplayTitle, thesisLegend, thesisQualitativeLabel, todayJalali, entryDateFa,
+  summarizeTotal, termDisplayTitle, thesisLegend, thesisQualitativeLabel, todayJalali, entryDateFa, faStr,
 } from '../src/app/admin/students/transcript-utils.ts';
 import type { TranscriptRow } from '../src/app/admin/students/actions.ts';
 
@@ -312,6 +312,10 @@ eq('شروع تحصیل ترم ۲ → اول بهمن', entryDateFa(1403, 2), '�
 eq('شروع تحصیل بدون سال خط تیره', entryDateFa(null, 1), '—');
 eq('راهنمای کیفی پیش‌فرض', thesisLegend(10), 'مردود (کمتر از ۱۰) · قابل قبول (۱۰ تا ۱۱٫۹۹) · خوب (۱۲ تا ۱۴٫۹۹) · خیلی خوب (۱۵ تا ۱۷٫۹۹) · عالی (۱۸ تا ۲۰)');
 eq('راهنمای کیفی با حد قبولی ۱۲ (بدون قابل قبول)', thesisLegend(12), 'مردود (کمتر از ۱۲) · خوب (۱۲ تا ۱۴٫۹۹) · خیلی خوب (۱۵ تا ۱۷٫۹۹) · عالی (۱۸ تا ۲۰)');
+eq('رشتهٔ عددی فارسی می‌شود', faStr('12.75'), '۱۲٫۷۵');
+eq('واحد صحیح بدون اعشار اضافه', faStr('3.0', 1), '۳');
+eq('رشتهٔ غیرعددی دست نمی‌خورد', faStr('قبول'), 'قبول');
+eq('رشتهٔ خالی خط تیره', faStr(''), '—');
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);
