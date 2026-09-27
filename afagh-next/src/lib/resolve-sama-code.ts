@@ -343,6 +343,9 @@ export async function syncStudentCourseRegulations(
   for (let i = 0; i < sortedRows.length; i++) {
     const current = sortedRows[i];
     if (passFlags[i]) continue; // رکوردهای قبولی دست‌نخورده می‌مانند
+    // فقط نوبت‌های نهایی‌شده بازمحاسبه می‌شوند — ردیف بدون نمره (در حال اخذ/PENDING)
+    // نباید کد حذف آیین‌نامه (۹۳۱/-۹۱/…) بگیرد، حتی اگر همان درس بعداً پاس شود
+    if (current.gradeStatus !== 'FINALIZED') continue;
 
     // نکته: رکوردِ تازه‌ویرایش‌شده هم باید توسط آیین‌نامه کنترل شود تا کد دستی اشتباه باقی نماند
 
