@@ -42,6 +42,22 @@ body { @apply bg-slate-100 text-slate-800; }
   .transcript-print-area .page-break-before { page-break-before: always; break-before: page; }
   .transcript-print-area table { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .transcript-print-area th, .transcript-print-area td { border-color: #94a3b8 !important; }
+  /* ── چیدمان چاپی سما (افقی): جدول مشخصات همیشه ۳ ستونه، سلول‌ها فشرده،
+     عنوان درس‌ها می‌شکنند تا ستون‌ها روی هم نیفتند، سرستون جدول هر نیمسال
+     در بالای هر صفحه تکرار می‌شود و شماره صفحه خودکار می‌خورد ── */
+  .transcript-print-area .tr-root { font-size: 9pt; line-height: 1.5; }
+  .transcript-print-area .tr-info-grid { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; font-size: 8.5pt; }
+  .transcript-print-area .tr-term-table { font-size: 8pt; }
+  .transcript-print-area .tr-term-table th,
+  .transcript-print-area .tr-term-table td { padding: 1.5pt 2pt !important; }
+  .transcript-print-area .tr-term-table thead { display: table-header-group; }
+  .transcript-print-area .tr-term-table tr { page-break-inside: avoid; break-inside: avoid; }
+  .transcript-print-area .tr-course-title { overflow-wrap: break-word; word-break: break-word; }
+  .transcript-print-area .tr-term-footer { font-size: 8pt; }
+  .transcript-print-area .tr-page-footer::after {
+    content: 'صفحه ' counter(page) ' از ' counter(pages);
+    display: block; text-align: center; font-size: 8pt; color: #475569; margin-top: 4pt;
+  }
 }
 
 /* ── چاپ کارنامه: صفحه‌بندی صحیح + ارتفاع یکسان نیمسال‌ها (پایه، خارج از چاپ هم بی‌ضرر) ── */

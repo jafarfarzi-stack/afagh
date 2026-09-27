@@ -84,9 +84,9 @@ const tRows = [
   R({ code: 'A3', units: 2, g: null, st: 'PENDING' }), // در حال اجرا: در واحد counted نیست
   R({ code: 'A4', units: 1, g: null, st: 'EXEMPT' }),   // معاف: فقط واحد قبولی
 ];
-eq('جمع‌های نیمسال', summarizeTerm(tRows), { taken: 6, passed: 4, failed: 2, wsum: 70, wunits: 5 });
+eq('جمع‌های نیمسال', summarizeTerm(tRows), { taken: 6, passed: 4, failed: 2, wsum: 70, wunits: 5, dropped: 0 });
 eq('معدل = مجموع نمره×واحد ÷ واحد نمره‌دار', 70 / 5, 14);
-eq('نیمسال بدون نمره → wunits صفر', summarizeTerm([R({ g: null, st: 'PENDING' })]), { taken: 0, passed: 0, failed: 0, wsum: 0, wunits: 0 });
+eq('نیمسال بدون نمره → wunits صفر', summarizeTerm([R({ g: null, st: 'PENDING' })]), { taken: 0, passed: 0, failed: 0, wsum: 0, wunits: 0, dropped: 0 });
 eq('واحدِ null صفر حساب می‌شود', summarizeTerm([R({ units: null, g: 15 })]).taken, 0);
 eq('با آستانهٔ ۱۹ حتی ۱۸ هم مردودی است', summarizeTerm(tRows, 19).passed, 1);
 
@@ -271,6 +271,21 @@ eq('گذرانده/موثر بدون ۶', ewSum.terms[0].passed, 11);
 eq('مردودی بدون ۶', ewSum.terms[0].failed, 0);
 eq('امتیاز (مجموع نمره×واحد) بدون ۶', ewSum.terms[0].points, 127);
 close('معدل ترم بدون ۶', ewSum.terms[0].gpa, 127 / 11);
+// سطرهای «حذف» و «موثر» سما:
+eq('واحد موثر نیمسال (مخرج معدل)', dropSum.terms[0].effectiveUnits, 11);
+eq('واحد موثر تجمیعی', dropSum.terms[0].cumEffectiveUnits, 11);
+eq('بدون حذف پزشکی، سطر حذف صفر است', dropSum.terms[0].droppedUnits, 0);
+// حذف پزشکی (کد ۱۴): در جدول می‌ماند ولی نه در اخذشده، بلکه در سطر «حذف»
+const medSum = groupTranscript([
+  ...lowRows,
+  R({ term: '13911', code: 'M14', units: 2, g: null, st: 'FINALIZED', sc: '14' }),
+], cfg12);
+eq('ردیف حذف پزشکی (۱۴) در جدول ترم نمایش داده می‌شود', medSum.terms[0].rows.some(r => r.courseCode === 'M14'), true);
+eq('اخذشده بدون حذف پزشکی', medSum.terms[0].taken, 11);
+eq('واحد حذف‌شده در سطر حذف', medSum.terms[0].droppedUnits, 2);
+eq('گذرانده بدون حذف پزشکی', medSum.terms[0].passed, 11);
+eq('مردودی بدون حذف پزشکی', medSum.terms[0].failed, 0);
+close('معدل ترم بدون حذف پزشکی', medSum.terms[0].gpa, 127 / 11);
 // حذف در حذف و اضافه (کد ۱-) در کارنامه نمی‌آید
 const addDropSum = groupTranscript([...lowRows, R({ term: '13911', code: 'M1', units: 3, g: null, st: 'PENDING', sc: '-1' })], cfg12);
 eq('ردیف ۱- در جدول ترم نیست', addDropSum.terms[0].rows.some(r => r.courseCode === 'M1'), false);

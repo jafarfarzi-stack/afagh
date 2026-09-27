@@ -77,8 +77,8 @@ export function passedCourseSet(rows: TranscriptRow[], retakeMinGrade: number): 
   return set;
 }
 
-export function summarizeTerm(rows: TranscriptRow[], pass = 10): { taken: number; passed: number; failed: number; wsum: number; wunits: number } {
-  let taken = 0, passed = 0, failed = 0, wsum = 0, wunits = 0;
+export function summarizeTerm(rows: TranscriptRow[], pass = 10): { taken: number; passed: number; failed: number; wsum: number; wunits: number; dropped: number } {
+  let taken = 0, passed = 0, failed = 0, wsum = 0, wunits = 0, dropUnits = 0;
   for (const r of rows) {
     const u = numOrNull(r.units) ?? 0;
     const g = numOrNull(r.gradeValue);
@@ -92,7 +92,8 @@ export function summarizeTerm(rows: TranscriptRow[], pass = 10): { taken: number
 
     // دروس حذف‌شده (پزشکی و ...) در جدول ترم نمایش داده می‌شوند ولی در واحدهای ترم/مردودی/معدل احتساب نمی‌شوند؛
     // به‌جز وضع ۷ (حذف شورا) و ۶ (حذف اضطراری) که باید در «اخذشده» بیایند.
-    if (dropped && !takenOnly) continue;
+    // واحد حذف‌شده‌ها جداگانه جمع می‌شود تا در سطر «حذف» سما چاپ شود.
+    if (dropped && !takenOnly) { dropUnits += u; continue; }
 
     taken += u;
     // اخذشده‌ی خالص: نه گذرانده، نه مردودی، نه معدل (نمرهٔ آن در هیچ معدلی اثر ندارد)
@@ -115,7 +116,7 @@ export function summarizeTerm(rows: TranscriptRow[], pass = 10): { taken: number
       wunits += u;
     }
   }
-  return { taken, passed, failed, wsum, wunits };
+  return { taken, passed, failed, wsum, wunits, dropped: dropUnits };
 }
 
 /** برای هر کد درس، تنها رکورد با بالاترین نمرهٔ FINALIZED را نگه می‌دارد (برای dedupeRepeatedCourses) */
@@ -195,7 +196,11 @@ export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | 
         rows: effectiveRows,
         taken: s.taken, passed: s.passed, failed: s.failed, points: s.wsum,
         gpa,
-        cumTaken: 0, cumPassed: 0, cumFailed: 0, cumPoints: 0, cumGpa: null,
+        /** واحدهای موثر در معدل نیمسال (مخرج معدل) — سطر «موثر» سما */
+        effectiveUnits: s.wunits,
+        /** واحدهای حذف‌شدهٔ احتساب‌نشده در اخذشده — سطر «حذف» سما */
+        droppedUnits: s.dropped,
+        cumTaken: 0, cumPassed: 0, cumFailed: 0, cumPoints: 0, cumGpa: null, cumEffectiveUnits: 0,
       }];
     });
   // جمع تجمیعی «کل» تا پایان هر نیمسال (معدل کل با سیاست نمره مردودی آیین‌نامه)
@@ -212,7 +217,7 @@ export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | 
       cw += g * u; cwu += u;
     }
     t.cumTaken = ct; t.cumPassed = cp; t.cumFailed = cf;
-    t.cumPoints = cw; t.cumGpa = cwu ? cw / cwu : null;
+    t.cumPoints = cw; t.cumGpa = cwu ? cw / cwu : null; t.cumEffectiveUnits = cwu;
   }
   const all = summarizeTerm(rows, th.pass);
   const tot = summarizeTotal(rows, th);

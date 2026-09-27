@@ -150,12 +150,18 @@ export type TermGroup = {
   failed: number;
   points: number;
   gpa: number | null;
+  /** واحدهای موثر در معدل نیمسال (مخرج معدل) — سطر «موثر» سما */
+  effectiveUnits: number;
+  /** واحدهای حذف‌شدهٔ احتساب‌نشده در اخذشده — سطر «حذف» سما */
+  droppedUnits: number;
   /** جمع تجمیعی تا پایان این نیمسال (سطر «کل» سما) */
   cumTaken: number;
   cumPassed: number;
   cumFailed: number;
   cumPoints: number;
   cumGpa: number | null;
+  /** واحدهای موثر تجمیعی در معدل کل (مخرج معدل کل با سیاست آیین‌نامه) — سطر «موثر» سما */
+  cumEffectiveUnits: number;
 };
 
 export type TranscriptSummary = {

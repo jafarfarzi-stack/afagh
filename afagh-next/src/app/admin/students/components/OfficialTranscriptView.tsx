@@ -34,6 +34,18 @@ export default function OfficialTranscriptView({
     quota: (v: string | null | undefined) => codeLabel(codeLabels?.quota, v),
   };
   const probation = summary.terms.filter(t => t.probation).length;
+  // شمار نیمسال‌ها به تفکیک نوع (مثل پانوشت سما) — همان قاعدهٔ groupTranscript
+  const termKindCounts = (() => {
+    let regular = 0, summer = 0, equiv = 0;
+    for (const t of summary.terms) {
+      const code = t.termCode || '';
+      const title = t.termTitle || '';
+      if (code.endsWith('5') || code.toUpperCase().includes('EQ') || title.includes('معادل')) equiv++;
+      else if (code.endsWith('3') || title.includes('تابستان')) summer++;
+      else regular++;
+    }
+    return { regular, summer, equiv };
+  })();
   const info: [string, string][] = [
     ['نام خانوادگی و نام', `${student.lastName} ${student.firstName}`],
     ['شماره دانشجویی', student.studentCode],
@@ -83,10 +95,10 @@ export default function OfficialTranscriptView({
   const termCell = (t: TermGroup) => (
     <td key={t.termCode} className="align-top border-l border-slate-400 p-0 term-block" style={{ width: '33.33%' }}>
       <div className="bg-slate-100 border-b border-slate-300 px-1 py-1 font-extrabold text-[10px] text-center">
-        {termLabel(t.termCode)} <span className="font-mono" dir="ltr">{t.termCode}</span>
-        <span className="block font-normal text-slate-700">وضعیت نیمسال: {t.termStatusTitle || '—'} — <b className={t.probation ? 'text-red-700' : 'text-emerald-700'}>{t.probation ? 'مشروط' : 'عادی'}</b></span>
+        {t.termTitle || `${termLabel(t.termCode)} ${t.termCode}`}
+        <span className="block font-normal text-slate-700">وضعیت دانشجو: {t.termStatusTitle || '—'} — <b className={t.probation ? 'text-red-700' : 'text-emerald-700'}>{t.probation ? 'مشروط' : 'عادی'}</b></span>
       </div>
-      <table className="w-full text-[9px]" style={{ tableLayout: 'fixed' }}>
+      <table className="tr-term-table w-full text-[9px]" style={{ tableLayout: 'fixed' }}>
         <colgroup>
           <col style={{ width: '15%' }} />
           <col style={{ width: '40%' }} />
@@ -114,7 +126,7 @@ export default function OfficialTranscriptView({
               title={canEditGrades && onEditGrade ? 'برای ویرایش یا ثبت نمره کلیک کنید' : undefined}
             >
               <td className="p-1 font-mono text-center" dir="ltr">{r.courseCode}</td>
-              <td className="p-1 leading-tight">
+              <td className="tr-course-title p-1 leading-tight">
                 {r.courseTitle}
                 {r._excludedByRegulation && (
                   <span className="block text-[7px] text-amber-600 font-bold">({r._excludedByRegulation} اعمال شد)</span>
@@ -127,17 +139,17 @@ export default function OfficialTranscriptView({
           ))}
         </tbody>
       </table>
-      <div className="border-t-2 border-slate-400 text-[9px] px-1 py-1 space-y-0.5 bg-slate-50">
+      <div className="tr-term-footer border-t-2 border-slate-400 text-[9px] px-1 py-1 space-y-0.5 bg-slate-50">
         <p><b>نیمسال</b> — اخذشده: <b className="font-mono">{faNum(t.taken, 0)}</b> گذرانده: <b className="font-mono">{faNum(t.passed, 0)}</b> مردودی: <b className="font-mono">{faNum(t.failed, 0)}</b></p>
-        <p>معدل: <b className="font-mono">{faNum(t.gpa)}</b> امتیاز: <b className="font-mono">{faNum(t.points, 1)}</b></p>
+        <p>معدل: <b className="font-mono">{faNum(t.gpa)}</b> امتیاز: <b className="font-mono">{faNum(t.points, 1)}</b> حذف: <b className="font-mono">{faNum(t.droppedUnits, 0)}</b></p>
         <p className="border-t border-slate-300 pt-0.5"><b>کل</b> — اخذشده: <b className="font-mono">{faNum(t.cumTaken, 0)}</b> گذرانده: <b className="font-mono">{faNum(t.cumPassed, 0)}</b> مردودی: <b className="font-mono">{faNum(t.cumFailed, 0)}</b></p>
-        <p>معدل: <b className="font-mono">{faNum(t.cumGpa)}</b> امتیاز: <b className="font-mono">{faNum(t.cumPoints, 1)}</b> موثر: <b className="font-mono">{faNum(t.cumPassed, 0)}</b></p>
+        <p>معدل: <b className="font-mono">{faNum(t.cumGpa)}</b> امتیاز: <b className="font-mono">{faNum(t.cumPoints, 1)}</b> موثر: <b className="font-mono">{faNum(t.cumEffectiveUnits, 0)}</b></p>
       </div>
     </td>
   );
 
   return (
-    <div className="border-2 border-slate-700 text-slate-900 bg-white">
+    <div dir="rtl" className="tr-root border-2 border-slate-700 text-slate-900 bg-white">
       {/* سربرگ سما */}
       <div className="flex items-start justify-between border-b-2 border-slate-700 px-3 py-2">
         <div className="text-[10px] text-center">
@@ -156,8 +168,8 @@ export default function OfficialTranscriptView({
           {logoUrl ? <img src={logoUrl} alt="ارم دانشگاه" className="max-w-16 max-h-16 object-contain" /> : <span className="text-[9px] text-slate-400 border border-dashed border-slate-300 rounded p-1">ارم دانشگاه</span>}
         </div>
       </div>
-      {/* مشخصات */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-px bg-slate-300 border-b-2 border-slate-700 text-[10px]">
+      {/* مشخصات — در چاپ همیشه ۳ ستونه (مثل سما) */}
+      <div className="tr-info-grid grid grid-cols-2 sm:grid-cols-3 gap-px bg-slate-300 border-b-2 border-slate-700 text-[10px]">
         {info.map(([k, v]) => (
           <div key={k} className="bg-white px-2 py-1 flex justify-between gap-1">
             <span className="font-bold whitespace-nowrap">{k}:</span>
@@ -176,7 +188,7 @@ export default function OfficialTranscriptView({
       {/* راهنمای کد وضع نمره — فقط اگر کدی در کارنامه استفاده شده باشد */}
       {statusLegend.size > 0 && (
         <div className="border-t-2 border-slate-700 px-3 py-1.5 text-[9px] bg-slate-50 leading-relaxed">
-          <b>راهنمای کد وضع نمره:</b>{' '}
+          <b>توضیح وضع نمرات:</b>{' '}
           {[...statusLegend.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([code, title]) => (
             <span key={code} className="inline-block ml-3">
               <b className="font-mono">{code}</b> = {title}
@@ -197,6 +209,11 @@ export default function OfficialTranscriptView({
           <span>معدل کل به حروف: <b>{faWords(summary.gpa)}</b></span>
         </div>
         <p className="text-center text-slate-600">این کارنامه بدون مهر و امضا فقط برای اطلاع دانشجو صادر شده است و ارزش دیگری ندارد</p>
+        <div className="flex flex-wrap gap-x-6">
+          <span>تعداد نیمسال‌ها: در حال تحصیل (<b className="font-mono">{faNum(termKindCounts.regular, 0)}</b>) ترم تابستان (<b className="font-mono">{faNum(termKindCounts.summer, 0)}</b>){termKindCounts.equiv > 0 ? <> معادل‌سازی (<b className="font-mono">{faNum(termKindCounts.equiv, 0)}</b>)</> : null}</span>
+        </div>
+        <p className="text-center text-slate-500 text-[9px]">سیستم مدیریت آموزش دانشگاه‌ها — آفاق · شماره دانشجویی <b className="font-mono">{student.studentCode}</b> · تاریخ تهیه <b className="font-mono">{todayJalali()}</b></p>
+        <div className="tr-page-footer" aria-hidden="true" />
         <div className="flex justify-between pt-2">
           <span>امضاء رئیس خدمات آموزش</span>
           <span>امضاء و مهر اداره کل آموزش</span>
