@@ -46,18 +46,21 @@ const acceptTypeTitle = (raw?: string | null) => {
 /**
  * چاپ مستقیم همان نمای روی صفحه (WYSIWYG) — با کلاس چاپ سراسری:
  * همه‌چیز پنهان می‌شود جز .transcript-print-area (تکنیک visibility).
- * کارنامهٔ سما ۳ نیمسال کنار هم است، پس فقط برای همین چاپ، کاغذ افقی (A4 landscape)
- * تزریق می‌شود و پس از چاپ برداشته می‌شود تا چاپ بقیهٔ فرم‌ها عمودی بماند.
+ * جهت کاغذ فقط برای همین چاپ تزریق و پس از چاپ برداشته می‌شود
+ * (افقی = فرمت سما با ۳ نیمسال کنار هم؛ عمودی = نیمسال‌ها تک‌ستونه).
  */
-export function doPrintTranscript(): void {
+export function doPrintTranscript(orientation: 'landscape' | 'portrait' = 'landscape'): void {
   if (typeof document === 'undefined') return;
   document.body.classList.add('printing-transcript');
+  if (orientation === 'portrait') document.body.classList.add('printing-portrait');
   const pageStyle = document.createElement('style');
   pageStyle.id = 'transcript-page-size';
-  pageStyle.textContent = '@media print { @page { size: A4 landscape; margin: 8mm 10mm; } }';
+  pageStyle.textContent = orientation === 'portrait'
+    ? '@media print { @page { size: A4 portrait; margin: 10mm 9mm; } }'
+    : '@media print { @page { size: A4 landscape; margin: 8mm 10mm; } }';
   document.head.appendChild(pageStyle);
   const done = () => {
-    document.body.classList.remove('printing-transcript');
+    document.body.classList.remove('printing-transcript', 'printing-portrait');
     pageStyle.remove();
     window.removeEventListener('afterprint', done);
   };

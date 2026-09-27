@@ -79,10 +79,12 @@ export default function OfficialTranscriptView({
     ['سهمیه ثبت‌نامی', lbl.quota(student.acceptanceAllocation) !== '—' ? lbl.quota(student.acceptanceAllocation) : quotaFa(student.quotaType)],
     ...(printOptions.showNationality ? [[
       'ملیت',
-      student.nationality === '120001' ? 'ایرانی' : (!student.nationality || student.nationality === 'unknown' ? '—' : student.nationality),
+      student.nationality === '120001' ? 'ایرانی' : (!student.nationality || /^\s*unknown\s*$/i.test(student.nationality) ? '—' : student.nationality),
     ] as [string, string]] : []),
     ['استاد راهنما', '—'],
   ];
+  // خانه‌های خالی ردیف آخر جدول مشخصات (تا نوار طوسیِ gap دیده نشود)
+  const infoFillers = (3 - (info.length % 3)) % 3;
   // گروه‌بندی ۳تایی نیمسال‌ها (مثل سما)
   const chunks: TermGroup[][] = [];
   for (let i = 0; i < summary.terms.length; i += 3) chunks.push(summary.terms.slice(i, i + 3));
@@ -196,6 +198,9 @@ export default function OfficialTranscriptView({
             <span className="font-bold whitespace-nowrap">{k}:</span>
             <span className="text-left">{v}</span>
           </div>
+        ))}
+        {Array.from({ length: infoFillers }).map((_, i) => (
+          <div key={`filler-${i}`} className="bg-white px-2 py-1" aria-hidden="true" />
         ))}
       </div>
       {/* نیمسال‌ها ۳تایی — گرید هم‌ارتفاع تا پانوشت نیمسال‌های یک ردیف هم‌تراز شود */}
