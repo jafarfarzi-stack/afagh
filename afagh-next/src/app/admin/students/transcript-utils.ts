@@ -10,6 +10,7 @@ import {
   GRADE_STATUS_CODES,
   NON_GPA_CODES,
   NON_TERM_GPA_CODES,
+  REGULATION_FROZEN_CODES,
   isPassedStatusCode,
   isDroppedStatusCode,
 } from '@/lib/grade-status-codes';
@@ -175,9 +176,12 @@ export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | 
       const visibleRows = rs.filter(r => (r.gradeStatusCode?.trim() ?? '') !== '-1');
       if (visibleRows.length === 0) return [];
       // اعمال حذف مردودی از نیمسال (فقط EXCLUDE_IF_PASSED_1391)
+      // کدهای منجمد (۵/۶/۷/۲۲) آیین‌نامه رویشان اثر ندارد: نه تغییر، نه برچسب
       let effectiveRows = visibleRows;
       if (th.exclFromTerm && passedSet) {
         effectiveRows = rs.map(r => {
+          const code = (r.gradeStatusCode || '').trim();
+          if (code && REGULATION_FROZEN_CODES.has(code)) return r;
           const g = numOrNull(r.gradeValue);
           if (g !== null && g < th.pass && passedSet.has(r.courseCode) && r.gradeStatus === 'FINALIZED') {
             return { ...r, _excludedByRegulation: th.regulationLabel || 'آیین‌نامه ۱۳۹۱' };

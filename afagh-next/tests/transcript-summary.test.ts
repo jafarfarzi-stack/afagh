@@ -297,6 +297,18 @@ const addDropSum = groupTranscript([...lowRows, R({ term: '13911', code: 'M1', u
 eq('ردیف ۱- در جدول ترم نیست', addDropSum.terms[0].rows.some(r => r.courseCode === 'M1'), false);
 // ترمی که فقط ردیف ۱- دارد کلا از کارنامه حذف می‌شود
 eq('ترمِ فقط-۱- از کارنامه حذف می‌شود', groupTranscript([R({ term: '13912', code: 'M1', units: 3, g: null, st: 'PENDING', sc: '-1' })], cfg12).terms.length, 0);
+// کدهای منجمد (۵/۶/۷/۲۲) در تبصره ۱۳۹۱ برچسب حذف نمی‌خورند، ولی مردودی عادی می‌خورد
+const cfg1391 = { grading_and_gpa: { default_passing_grade: 10, failed_course_gpa_policy: 'EXCLUDE_IF_PASSED_1391', retakeMinGrade: 14 } } as never;
+const fzSum = groupTranscript([
+  R({ term: '13901', code: 'FZ', units: 2, g: 5, st: 'FINALIZED', sc: '5' }),
+  R({ term: '13902', code: 'FZ', units: 2, g: 15, st: 'FINALIZED', sc: '1' }),
+  R({ term: '13901', code: 'NR', units: 3, g: 6, st: 'FINALIZED', sc: '2' }),
+  R({ term: '13902', code: 'NR', units: 3, g: 16, st: 'FINALIZED', sc: '1' }),
+], cfg1391);
+const fzRow = fzSum.terms[0].rows.find(r => r.courseCode === 'FZ');
+const nrRow = fzSum.terms[0].rows.find(r => r.courseCode === 'NR');
+eq('ردیف ۵ با قبولی بعدی برچسب آیین‌نامه نمی‌خورد', fzRow?._excludedByRegulation ?? null, null);
+eq('ردیف مردودی عادی با قبولی بعدی برچسب می‌خورد', !!nrRow?._excludedByRegulation, true);
 
 console.log('۱۳)عنوان فارسی نیمسال + نمرهٔ کیفی پایان‌نامه');
 eq('ارقام فارسی بدون جداکننده', faDigits('1400-1401'), '۱۴۰۰-۱۴۰۱');

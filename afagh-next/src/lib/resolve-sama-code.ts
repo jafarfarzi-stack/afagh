@@ -306,6 +306,7 @@ export async function syncStudentCourseRegulations(
       gradeValue: enrollments.gradeValue,
       gradeStatus: enrollments.gradeStatus,
       samaGradeStatusCode: enrollments.samaGradeStatusCode,
+      originalSamaCode: enrollments.originalSamaCode,
       termId: course_offerings.termId,
       termCode: academic_terms.termCode,
       termSortOrder: academic_terms.sortOrder,
@@ -357,6 +358,34 @@ export async function syncStudentCourseRegulations(
     // نمرهٔ بی‌اثر قبلی (مثلاً با ۹۳۱ که در معدل ترم اثر دارد) معدل را به‌هم می‌ریزد.
     // فقط کدهای عمومی (۱،۲،۱۱)، کدهای نوع درس (۱۲،۲۳،۲۴) و کدهای آیین‌نامه‌ای (۹۳۱،-۹۱،۹۴۱،۹۵۱) قابل بازمحاسبه‌اند.
     const oldCode = current.samaGradeStatusCode?.trim() || null;
+    const origCode = current.originalSamaCode?.trim() || null;
+    // خودترمیمی: اگر کد اصلی منجمد (۵/۶/۷/۲۲) بوده ولی کد فعلی (یا پاک‌شده)
+    // با منطق آیین‌نامه به کد دیگری رفته، به کد اصلی برگردان — برای همهٔ آیین‌نامه‌ها
+    if (origCode && REGULATION_FROZEN_CODES.has(origCode) && (!oldCode || !REGULATION_FROZEN_CODES.has(oldCode))) {
+      await db
+        .update(enrollments)
+        .set({ samaGradeStatusCode: origCode })
+        .where(eq(enrollments.id, current.enrollmentId));
+
+      await logGradeChange({
+        enrollmentId: current.enrollmentId,
+        studentId,
+        offeringId: current.offeringId,
+        action: 'REGULATION_CASCADE',
+        oldGradeValue: current.gradeValue,
+        newGradeValue: current.gradeValue,
+        oldGradeStatus: current.gradeStatus,
+        newGradeStatus: current.gradeStatus,
+        oldSamaStatusCode: oldCode,
+        newSamaStatusCode: origCode,
+        reason: `بازگردانی خودکار کد منجمد ${origCode} (کد ${oldCode ?? '—'} به‌اشتباه با آیین‌نامه نشسته بود)`,
+        actorUserId: options?.actorUserId,
+        actorRole: options?.actorRole,
+      });
+
+      updatedCount++;
+      continue;
+    }
     if (oldCode && ['3', '4', '5', '6', '7', '14', '16', '17', '18', '22', '32', '40', '44', '50', '51', '53', '52', '300', '400', '-1', '-5', '-4', '-3', '0', '8', '9', '10', '13', '15', '19', '20', '28', '29', '36', '46'].includes(oldCode)) {
       continue;
     }
