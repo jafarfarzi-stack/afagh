@@ -737,12 +737,20 @@ async function phaseStudents(files, lookups) {
     const status = (c[4] || '').trim();
     const regKind = (c[88] || '').trim() || '0';
     const tc = (c[5] || '').trim();
-    let entryYear = 1400, entryTerm = 1;
+    let entryYear = 1400, entryTerm = 1, entryDate = null;
     if (/^\d{5}$/.test(tc)) { entryYear = Number(tc.slice(0, 4)); entryTerm = Number(tc.slice(4)); }
     else if (/^\d{3}$/.test(tc)) { const ntc = normTerm(tc); entryYear = Number(ntc.slice(0, 4)); entryTerm = Number(ntc.slice(4)); }
     else {
-      const sd = (c[37] || '').trim().match(/^(\d{4})\//);
-      if (sd) entryYear = Number(sd[1]);
+      const sd = (c[37] || '').trim().match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
+      if (sd) {
+        entryYear = Number(sd[1]);
+        // Parse full date from c[37] (format: YYYY/MM/DD)
+        const month = Number(sd[2]);
+        const day = Number(sd[3]);
+        if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+          entryDate = new Date(Number(sd[1]), month - 1, day);
+        }
+      }
     }
     let avg = parseFloat((c[39] || '').trim());
     if (!(avg >= 0 && avg <= 20)) avg = null;
@@ -750,8 +758,13 @@ async function phaseStudents(files, lookups) {
     const faregh = (c[56] || '').trim();
     const sahmn = (c[40] || '').trim();
     const accept = (s[14] || '').trim();
+    // Graduation degree level (may differ from entry degree level - e.g., dropped from Bachelor to Associate)
+    // Assuming c[57] contains graduation degree level code, fallback to entry maghta
+    const graduateMaghta = (c[57] || '').trim() || maghta;
+    const graduateDegreeLevelId = graduateMaghta ? await lookups.maghta.get(graduateMaghta) : null;
+    const accept = (s[14] || '').trim();
     stuJobs.push({
-      stno, maghta, reshte, status, entryYear, entryTerm, regKind,
+      stno, maghta, reshte, status, entryYear, entryTerm, entryDate, regKind, graduateDegreeLevelId,
       quota: mapQuota(sahmn),
       isaar: [...SHAHED_SAHM, ...STAFF_SAHM].some(x => x === sahmn) ? sahmn : null,
       alloc: lookups.sahmiye.get(sahmn) || null,

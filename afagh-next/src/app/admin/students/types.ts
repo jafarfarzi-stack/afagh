@@ -40,6 +40,7 @@ export type StudentItem = {
   studyingMode?: string | null;
   trainingMethod?: string | null;
   graduateDate?: string | null;
+  graduateDegreeLevelId?: number | null;
   regulationId?: number | null;
   firstNameEn?: string | null;
   lastNameEn?: string | null;

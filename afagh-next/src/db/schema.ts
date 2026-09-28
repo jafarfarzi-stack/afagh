@@ -302,6 +302,8 @@ export const students = pgTable('students', {
   regulationId: integer('regulationId').notNull().references(() => educational_regulations.id),
   entryYear: integer('entryYear').notNull(),
   entryTerm: integer('entryTerm').default(1),
+  entryDate: date('entryDate'),
+  graduateDegreeLevelId: integer('graduateDegreeLevelId').references(() => degreeLevelConfigs.id),
   status: varchar('status', { length: 30 }).notNull().default('ACTIVE'),
   quotaType: varchar('quotaType', { length: 50 }).notNull().default('NORMAL'),
   samaStatusCode: varchar('samaStatusCode', { length: 10 }), // کد خام «وضعيت دانشجو» سما (رهگیری/بازنگاشت)
