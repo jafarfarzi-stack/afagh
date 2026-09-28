@@ -9,7 +9,7 @@ import { DEFAULT_PRINT_OPTIONS } from '../types';
 import type { TranscriptRow } from '../actions';
 import { courseTypeFa, gradeStatusFa, quotaFa, studentStatusFa, studyModeFa } from '@/lib/student-labels';
 import { breakdownByType, codeLabel, courseTypeGroup, dateToJalali, entryDateFa, faDigits, faNum, faStr, faWords, numOrNull, termDisplayTitle, thesisLegend, thesisQualitativeLabel, todayJalali } from '../transcript-utils';
-import { DEGREE_LEVEL_CONFIGS } from '@/lib/base-data';
+import { DEGREE_LEVEL_CONFIGS } from '@/lib/degree-configs';
 
 /** نمای رسمی کارنامه با فرمت سما: ۳ نیمسال کنار هم + سربرگ/پانوشت + صفحه دوم تفکیکی */
 export default function OfficialTranscriptView({
