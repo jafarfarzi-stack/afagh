@@ -33,7 +33,7 @@ import {
 } from '@/db/schema';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { resolveStudentCurriculum } from './curriculum-apply';
-import { isPassedStatusCode, REGULATION_FROZEN_CODES } from './grade-status-codes';
+import { isPassedStatusCode, REGULATION_FROZEN_CODES, resolveRetakeBar } from './grade-status-codes';
 import { logGradeChange } from './grade-change-log';
 
 const DEFAULT_PASS_CODE = '1';
@@ -195,7 +195,13 @@ export async function resolveSamaGradeStatusCode(
 
     // اولویت ۲: آیین‌نامه‌های حذف نمره مردودی (۹۳۱، -۹۱، ۹۴۱، ۹۵۱)
     // طبق دستور صریح: کد آیین‌نامه «فقط» در صورتی اعمال می‌شود که قبولی بعدی در ترم‌های بعد وجود داشته باشد
+    // (در تبصره ۱۳۹۱: فقط قبولی با حد نصاب retakeMinGrade)
     const targetExcludeCode = getRegulationFailExcludeCode(student.regTitle, regCfg);
+    const retakeNeed = resolveRetakeBar(
+      regCfg?.grading_and_gpa?.failed_course_gpa_policy,
+      regCfg?.grading_and_gpa?.retakeMinGrade,
+      passingGrade,
+    );
 
     if (targetExcludeCode) {
       const currentChrono = termChronologicalValue(offering.termCode, offering.termSortOrder);
@@ -227,7 +233,9 @@ export async function resolveSamaGradeStatusCode(
         if (e.gradeStatus !== 'FINALIZED') return false;
         const g = Number(e.gradeValue);
         if (!Number.isFinite(g)) return false;
-        return offering.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= passingGrade;
+        if (offering.gradingType === 'DESCRIPTIVE') return g === 1;
+        return g >= (retakeNeed ?? passingGrade);
+      });
       });
 
       if (hasLaterPass) {
@@ -297,6 +305,12 @@ export async function syncStudentCourseRegulations(
   const courseMin = course.minPassedMark != null ? Number(course.minPassedMark) : NaN;
   const regPass = regCfg?.grading_and_gpa?.default_passing_grade != null ? Number(regCfg.grading_and_gpa.default_passing_grade) : NaN;
   const passingGrade = Number.isFinite(courseMin) && courseMin > 0 ? courseMin : (Number.isFinite(regPass) && regPass > 0 ? regPass : 10);
+  // حد نصاب قبولی مجدد (فقط تبصره ۱۳۹۱): قبولی بعدیِ پایین‌تر از این، مردودی قبلی را حذف نمی‌کند
+  const retakeBar = resolveRetakeBar(
+    regCfg?.grading_and_gpa?.failed_course_gpa_policy,
+    regCfg?.grading_and_gpa?.retakeMinGrade,
+    passingGrade,
+  );
 
   // ۳) استخراج کلیه نوبت‌های اخذ این درس برای دانشجو
   const rows = await db
@@ -340,6 +354,23 @@ export async function syncStudentCourseRegulations(
 
   const passFlags = sortedRows.map(r => isPassed(r));
   let updatedCount = 0;
+
+  // قبولیِ واجد شرایط برای حذف مردودی قبلی (تبصره ۱۳۹۱: با حد نصاب retake)
+  const isQualifyingPass = (r: typeof sortedRows[number]): boolean => {
+    if (r.gradeStatus === 'EXEMPT' || r.gradeStatus === 'PASSED_NO_GRADE') return true;
+    if (isPassedStatusCode(r.samaGradeStatusCode)) return true;
+    if (r.gradeStatus !== 'FINALIZED') return false;
+    const g = Number(r.gradeValue);
+    if (!Number.isFinite(g)) return false;
+    if (course.gradingType === 'DESCRIPTIVE') return g === 1;
+    return g >= (retakeBar ?? passingGrade);
+  };
+  const hasQualifyingLaterPass = (i: number): boolean => {
+    for (let j = i + 1; j < sortedRows.length; j++) {
+      if (isQualifyingPass(sortedRows[j])) return true;
+    }
+    return false;
+  };
 
   for (let i = 0; i < sortedRows.length; i++) {
     const current = sortedRows[i];
@@ -396,14 +427,10 @@ export async function syncStudentCourseRegulations(
       continue;
     }
 
-    // آیا در نوبت‌های بعدی (ترم‌های آینده) قبولی وجود دارد؟
-    let hasLaterPass = false;
-    for (let j = i + 1; j < sortedRows.length; j++) {
-      if (passFlags[j]) {
-        hasLaterPass = true;
-        break;
-      }
-    }
+    // قبولی واجد شرایط حذف مردودی قبلی: در تبصره ۱۳۹۱ فقط قبولی با حد نصاب
+    // retakeMinGrade (مثلاً ۱۴)؛ در بقیه سیاست‌ها همان قبولی عادی.
+    // (بدون این قید، کدهای -۹۱ قدیمیِ زیر حد هم «بعداً پاس شده» حساب می‌شدند و می‌ماندند.)
+    const hasLaterPass = hasQualifyingLaterPass(i);
 
     // نوبت مردود بدون قبولی بعدی به کد مردودی عمومی برمی‌گردد.
     // (کدهای محافظت‌شدهٔ ۵/۶/۷/۲۲ بالاتر ادامه پیدا نمی‌کنند و به اینجا نمی‌رسند.)

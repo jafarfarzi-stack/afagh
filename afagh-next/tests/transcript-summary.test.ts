@@ -10,6 +10,7 @@
  *   faNum / faWords / g2j / dateToJalali / todayJalali / codeLabel
  */
 import { courseTypeFa, studyModeFa } from '../src/lib/student-labels.ts';
+import { REGULATION_FROZEN_CODES, resolveRetakeBar } from '../src/lib/grade-status-codes.ts';
 import {
   breakdownByType, bestFinalizedRowPerCourse, codeLabel, courseTypeGroup, dateToJalali, faDigits, faIntWords, faNum, faWords,
   g2j, groupTranscript, numOrNull, passedCourseSet, regThresholds, summarizeTerm,
@@ -346,6 +347,14 @@ eq('نامشخص می‌ماند', studyModeFa('99'), '99');
 eq('نوع دوره ۴ → غیرانتفاعی', courseTypeFa('4'), 'غیرانتفاعی');
 eq('نوع دوره ۲۰۲ → مهمانی', courseTypeFa('202'), 'مهمانی');
 eq('نوع دوره خالی → خط تیره', courseTypeFa(null), '—');
+
+console.log('۱۵)کدهای منجمد و حد نصاب قبولی مجدد');
+eq('۵/۶/۷/۲۲ منجمدند', ['5', '6', '7', '22'].every(c => REGULATION_FROZEN_CODES.has(c)), true);
+eq('۲ و ۹۳۱ و ۱ منجمد نیستند', ['2', '931', '1', '12'].some(c => REGULATION_FROZEN_CODES.has(c)), false);
+eq('تبصره ۱۳۹۱ با حد ۱۴', resolveRetakeBar('EXCLUDE_IF_PASSED_1391', 14, 10), 14);
+eq('تبصره ۱۳۹۱ بدون حد → کف قبولی', resolveRetakeBar('EXCLUDE_IF_PASSED_1391', null, 10), 10);
+eq('سیاست عادی → null (کف عادی)', resolveRetakeBar('EXCLUDE_IF_PASSED', 14, 10), null);
+eq('KEEP → null', resolveRetakeBar('KEEP_ALWAYS', 14, 10), null);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

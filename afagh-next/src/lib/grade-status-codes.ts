@@ -112,8 +112,31 @@ export function isDroppedStatusCode(code: string | null | undefined): boolean {
 }
 
 /**
- * کدهای وضعی که منطق آیین‌نامه (۹۳ به بعد) هرگز نباید بازنویسی کند —
- * حتی اگر همان درس بعداً پاس شود: ۵ (غیبت)، ۶ (اضطراری)، ۷ (شورا)، ۲۲ (جبرانی مردود).
- * بازنویسی این‌ها به ۹۳۱/۹۴۱ (که در معدل ترم اثر دارند) معدل را به‌هم می‌ریزد.
+ * حد نصاب «قبولی مجدد» برای حذف مردودی قبلی:
+ * فقط تبصره ۱۳۹۱ از retakeMinGrade استفاده می‌کند (وگرنه کف عادی همان درس).
+ * خروجی null یعنی همان کف قبولی عادی ملاک است.
  */
-export const REGULATION_FROZEN_CODES: ReadonlySet<string> = new Set(['5', '6', '7', '22']);
+export function resolveRetakeBar(
+  policy: string | null | undefined,
+  retakeMinGrade: number | null | undefined,
+  passingGrade: number,
+): number | null {
+  if (policy !== 'EXCLUDE_IF_PASSED_1391') return null;
+  const b = retakeMinGrade != null ? Number(retakeMinGrade) : NaN;
+  if (Number.isFinite(b) && (b as number) > 0) return b as number;
+  const p = Number(passingGrade);
+  return Number.isFinite(p) && p > 0 ? p : null;
+}
+
+/**
+ * کدهای وضعی که منطق آیین‌نامه هرگز نباید بازنویسی کند — حتی اگر همان درس
+ * بعداً پاس شود: حذف‌ها و انصراف‌ها (۶،۷،۸،۹،۱۴،۱۵،-۱،-۳،-۴،-۵،۲۰۰،۲۰۱،۴۰۰،۵۵)،
+ * غیبت (۵)، جبرانی مردود بدون احتساب (۲۲) و معادل‌سازی/خودخوان/نامشخص‌ها.
+ * بازنویسی این‌ها به ۹۳۱/-۹۱/۹۴۱/۹۵۱ (که در معدل ترم اثر دارند) معدل را به‌هم می‌ریزد.
+ * همین مجموعه در sync مبنای «دست‌نخورده ماندن» است.
+ */
+export const REGULATION_FROZEN_CODES: ReadonlySet<string> = new Set([
+  '3', '4', '5', '6', '7', '8', '9', '10', '13', '14', '15', '16', '17', '18', '19', '20',
+  '22', '28', '29', '32', '36', '40', '44', '46', '50', '51', '52', '53', '55',
+  '200', '201', '300', '400', '-1', '-3', '-4', '-5', '0',
+]);
