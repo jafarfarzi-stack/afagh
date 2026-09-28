@@ -36,7 +36,10 @@ const BASE_ROLES = [
   { code: 'VAULT_MANAGER', title: 'مسئول مخزن مدارک' },
 ];
 
-/** مقاطع — عین seed فاز صفر + کاردانی و دکتری حرفه‌ای */
+/** مقاطع — عین seed فاز صفر + کاردانی و دکتری حرفه‌ای
+ *  این آرایه برای استفاده در سمت کلاینت (Client-side) امن است
+ * و وابستگی به دیتابیس/pg/drizzle-orm ندارد
+ */
 export const DEGREE_LEVEL_CONFIGS = [
   { id: 1, title: 'کارشناسی پیوسته', code: 'BS', defaultPassingGrade: '10.00', conditionalGpaThreshold: '12.00', maxUnitsPerTerm: 20 },
   { id: 2, title: 'کارشناسی ارشد', code: 'MS', defaultPassingGrade: '12.00', conditionalGpaThreshold: '14.00', maxUnitsPerTerm: 12 },
@@ -45,12 +48,7 @@ export const DEGREE_LEVEL_CONFIGS = [
 ];
 
 /** @deprecated Use DEGREE_LEVEL_CONFIGS instead */
-export const BASE_DEGREES = [
-  { title: 'کارشناسی پیوسته', code: 'BS', defaultPassingGrade: '10.00', conditionalGpaThreshold: '12.00', maxUnitsPerTerm: 20 },
-  { title: 'کارشناسی ارشد', code: 'MS', defaultPassingGrade: '12.00', conditionalGpaThreshold: '14.00', maxUnitsPerTerm: 12 },
-  { title: 'کاردانی پیوسته', code: 'AD', defaultPassingGrade: '10.00', conditionalGpaThreshold: '12.00', maxUnitsPerTerm: 18 },
-  { title: 'دکتری حرفه‌ای', code: 'PHD', defaultPassingGrade: '14.00', conditionalGpaThreshold: '16.00', maxUnitsPerTerm: 12 },
-];
+export const BASE_DEGREES = DEGREE_LEVEL_CONFIGS;
 
 /** آیین‌نامهٔ مصوب ۱۴۰۳ — اسکیمای تودرتوی canonical (خوانا برای getRegulationConfig) */
 const REGULATION_1403 = {

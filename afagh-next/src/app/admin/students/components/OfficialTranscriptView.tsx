@@ -9,7 +9,7 @@ import { DEFAULT_PRINT_OPTIONS } from '../types';
 import type { TranscriptRow } from '../actions';
 import { courseTypeFa, gradeStatusFa, quotaFa, studentStatusFa, studyModeFa } from '@/lib/student-labels';
 import { breakdownByType, codeLabel, courseTypeGroup, dateToJalali, entryDateFa, faDigits, faNum, faStr, faWords, numOrNull, termDisplayTitle, thesisLegend, thesisQualitativeLabel, todayJalali } from '../transcript-utils';
-import { BASE_DEGREES } from '@/lib/base-data';
+import { DEGREE_LEVEL_CONFIGS } from '@/lib/base-data';
 
 /** نمای رسمی کارنامه با فرمت سما: ۳ نیمسال کنار هم + سربرگ/پانوشت + صفحه دوم تفکیکی */
 export default function OfficialTranscriptView({
@@ -247,7 +247,7 @@ export default function OfficialTranscriptView({
         <div className="flex flex-wrap gap-x-6">
           <span>تعداد نیمسال مشروط: <b className="font-mono">{probation.toLocaleString('fa-IR')}</b></span>
           <span>وضعیت کلی دانشجو: <b>{studentStatusFa(student.status, student.samaStatusCode)}</b></span>
-          <span>مقطع فارغ‌التحصیلی: <b>{student.graduateDegreeLevelId ? (() => { const d = BASE_DEGREES.find(d => d.id === student.graduateDegreeLevelId); return d ? d.title : '—'; })() : '—'}</b></span>
+          <span>مقطع فارغ‌التحصیلی: <b>{student.graduateDegreeLevelId ? (() => { const d = DEGREE_LEVEL_CONFIGS.find(d => d.id === student.graduateDegreeLevelId); return d ? d.title : '—'; })() : '—'}</b></span>
           <span>تاریخ شروع تحصیل: <b className="font-mono">{entryDateFa(student.entryYear, student.entryTerm)}</b></span>
           <span>تاریخ توقف تحصیل: <b className="font-mono">{student.graduateDate ? faDigits(student.graduateDate) : '—'}</b></span>
         </div>
