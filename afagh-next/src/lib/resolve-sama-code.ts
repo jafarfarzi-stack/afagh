@@ -236,7 +236,6 @@ export async function resolveSamaGradeStatusCode(
         if (offering.gradingType === 'DESCRIPTIVE') return g === 1;
         return g >= (retakeNeed ?? passingGrade);
       });
-      });
 
       if (hasLaterPass) {
         return targetExcludeCode;
