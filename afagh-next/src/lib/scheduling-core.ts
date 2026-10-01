@@ -16,37 +16,43 @@ import { d2j, j2d, toGregorian, toJalaliFromDate } from './calendar';
  * ════════════════════════════════════════════════════════════════════════════
  *  نرمال‌سازی و قالب‌بندی کد ترم (Term Code)
  * ────────────────────────────────────────────────────────────────────────
- *  کدهای ترم در دیتابیس دارای فرمت‌های مختلفی هستند:
- *  - ۵ رقمی استاندارد: ۱۳۹۲۱، ۱۳۹۲۲، ۱۳۹۲۳ (سال + نیمسال)
- *  - ۴ رقمی: ۱۳۹۰، ۱۳۹۱، ۱۳۹۲، ۱۳۹۳ (فقط سال، نیمسال ناشناس)
- *  - ۳ رقمی: ۹۲۱، ۹۲۲، ۹۲۳ (سال دو رقمی + نیمسال)
- *  - ۳ رقمی معادل‌سازی: ۱۰۱، ۱۰۲، ۱۰۳ (سال ۱۳۰۰ + نیمسال)
- *  - مختلط: ۱۳۹۱۴، ۱۳۹۲۰، ۱۳۸۹۰ و...
+ *  از مهاجرت ۲۰۲۶-۱۰-۰۱ دیتابیس کاننیکال است: همهٔ کدها ۵ رقمی‌اند
+ *  (۴ رقم سال + ۱ رقم نوع ترم) و termType ستون معتبر است، نه حدس از کد.
  *
- *  نرمال‌سازی: همه را به ۵ رقم می‌رسانیم (سال ۴ رقمی + نیمسال ۱ رقمی)
- *  - ۹۲۲ → ۱۳۹۲۲
- *  - ۱۳۹۲ → ۱۳۹۲۱ (فرض نیمسال اول) — اما چون در کارنامه اول می‌آید، به ۱۳۹۲۱ می‌شود
- *  - ۱۰۱ → ۱۳۱۰۱ (معادل‌سازی اول)
- *  - ۱۳۹۱۴ → ۱۳۹۱۴ (نظریاً سال ۱۳۹۱ نیمسال ۴؟ اما نیمسال فقط ۱،۲،۳ دارد. احتمالاً سال ۱۳۹۱ نیمسال ۴ که غلط است. به ۱۳۹۱۴ نگه می‌داریم)
+ *  استاندارد آفاق (رقم آخر = نوع ترم):
+ *  - ۱ → نیمسال اول (NORMAL)      مثال: 13921
+ *  - ۲ → نیمسال دوم (NORMAL)      مثال: 13922
+ *  - ۳ → نیمسال تابستان (SUMMER)  مثال: 13923
+ *  - بقیه ارقام → معادل‌سازی (EQUIVALENCE)  مثال: 13920، 13900
+ *
+ *  مسیرهای قدیمی (فقط برای سازگاری با دادهٔ خام legacy — در DB فعلی وجود ندارند):
+ *  - ۳ رقمی NYT (قرارداد شمس: دهه + رقم سال + ترم) → '13' + کد (891 → 13891)
+ *  - ۴ رقمی 14XY (قرارداد شمس برای ۱۴۰۰ به بعد) → سال ‎۱۴۰۰+X‎، ترم Y
+ *    (1401 → 14001، 1411 → 14011)
  *
  *  ترتیب در کارنامه:
- *  ۱. تمام ترم‌های معادل‌سازی (کد معادل‌سازی) اول می‌آیند
- *  ۲. بعد ترم‌های تحصیلی بر اساس کد نرمال‌شده (صعودی)
- *  ۳. ترم‌های تابستان (SUMMER) در سال خودشان قرار می‌گیرند
- *
- *  نمایش سال تحصیلی: از ۴ رقم اول کد نرمال‌شده، سال را استخراج می‌کنیم
- *  و به فرمت «۱۳۹۴-۱۳۹۵» تبدیل می‌کنیم (بزرگتر در چپ، کوچکتر در راست)
+ *  ۱. تمام ترم‌های معادل‌سازی اول می‌آیند (sortKey کوچک)
+ *  ۲. بعد ترم‌های تحصیلی بر اساس سال و نیمسال (صعودی)
  * ════════════════════════════════════════════════════════════════════════════
  */
 export interface NormalizedTerm {
   originalCode: string;
   normalizedCode: string;        // همیشه ۵ رقمی
   academicYear: number;          // ۴ رقم اول (مثال: ۱۳۹۲)
-  semester: number;              // رقم آخر (۱، ۲، ۳)
+  semester: number;              // رقم آخر (۱/۲ نرمال، ۳ تابستان، بقیه معادل‌سازی)
   termType: 'NORMAL' | 'SUMMER' | 'EQUIVALENCE' | 'UNKNOWN';
   sortKey: number;               // برای مرتب‌سازی: معادل‌سازی اول (۰xxxxx)، بعد نرمال (۱xxxxx)
   displayYear: string;           // «۱۳۹۴-۱۳۹۵»
   displaySemester: string;       // «نیمسال اول»، «نیمسال دوم»، «نیمسال تابستان»، «معادل‌سازی»
+}
+
+/**
+ * رقم آخر کد ترم → نوع ترم (استاندارد آفاق — با ستون termType دیتابیس یکسان است)
+ */
+export function termTypeFromDigit(d: number): NormalizedTerm['termType'] {
+  if (d === 1 || d === 2) return 'NORMAL';
+  if (d === 3) return 'SUMMER';
+  return 'EQUIVALENCE';
 }
 
 /**
@@ -57,82 +63,48 @@ export function normalizeTermCode(raw: string | number | null | undefined): Norm
   const s = String(raw).trim();
   if (!s) return null;
 
-  // تشخیص نوع ترم بر اساس panjang و الگوها
+  // نگاشت به ۵ رقم کاننیکال
   let normalized = '';
-  let academicYear = 0;
-  let semester = 0;
-  let termType: NormalizedTerm['termType'] = 'UNKNOWN';
-
   // --- ۵ رقمی: از قبل استاندارد است ---
   if (/^\d{5}$/.test(s)) {
     normalized = s;
-    academicYear = parseInt(s.slice(0, 4), 10);
-    semester = parseInt(s.slice(4, 5), 10);
   }
-  // --- ۴ رقمی: فقط سال، نیمسال ناشناس ---
-  else if (/^\d{4}$/.test(s)) {
-    academicYear = parseInt(s, 10);
-    // فرض: اگر این ترم در لیست نمرات است، احتمالاً نیمسال ۱ است (یا باید از title حدس زد)
-    // برای مرتب‌سازی، به عنوان سال کامل در نظر می‌گیریم
-    normalized = s + '0'; // placeholder، در مرتب‌سازی با semester=0 می‌آید
-    semester = 0;
-  }
-  // --- ۳ رقمی: می‌تواند ۹۲۱ (سال ۱۳۹۲ نیمسال ۱) باشد یا ۱۰۱ (معادل‌سازی) ---
+  // --- ۳ رقمی قدیمی (NYT، فقط دههٔ ۸ و ۹): پیشوند ۱۳ (مطابق مهاجرت) ---
+  // بقیه (مثل ۱۰۱ بچ معادل‌سازی) در DB جدید وجود ندارند → null
   else if (/^\d{3}$/.test(s)) {
-    const yearPart = parseInt(s.slice(0, 2), 10); // ۹۲ یا ۱۰
-    semester = parseInt(s.slice(2, 3), 10);
-    if (yearPart >= 90) {
-      // ۹۲۱ → ۱۳۹۲۱
-      academicYear = 1300 + yearPart;
-      normalized = String(academicYear) + semester;
-    } else {
-      // ۱۰۱ → ۱۳۱۰۱ (معادل‌سازی‌های قدیم)
-      academicYear = 1300 + yearPart;
-      normalized = String(academicYear) + semester;
-    }
+    if (!/^[89]/.test(s)) return null;
+    normalized = '13' + s;
   }
-  // --- موارد دیگر: سعی می‌کنیم ۵ رقم استخراج کنیم ---
+  // --- ۴ رقمی قدیمی شمس (14XY): سال ۱۴۰۰+X، ترم Y (مطابق مهاجرت) ---
+  else if (/^14\d{2}$/.test(s)) {
+    const x = parseInt(s.slice(2, 3), 10);
+    normalized = String(1400 + x) + s.slice(3, 4);
+  }
+  // --- موارد دیگر: استخراج رقم ---
   else {
-    // برای کدهای عجیب مثل ۱۳۹۱۴، ۱۳۹۲۰، ۱۳۸۹۰، ۱۴۵۵۵
-    // ۴ رقم اول را سال می‌گیریم، ۵ام را نیمسال
     const digits = s.replace(/\D/g, '');
-    if (digits.length >= 5) {
-      normalized = digits.slice(0, 5);
-      academicYear = parseInt(normalized.slice(0, 4), 10);
-      semester = parseInt(normalized.slice(4, 5), 10);
-    } else if (digits.length === 4) {
-      academicYear = parseInt(digits, 10);
-      normalized = digits + '0';
-      semester = 0;
+    if (digits.length >= 5) normalized = digits.slice(0, 5);
+    else if (digits.length === 3 && /^[89]/.test(digits)) normalized = '13' + digits;
+    else if (digits.length === 4 && /^14/.test(digits)) {
+      normalized = String(1400 + parseInt(digits.slice(2, 3), 10)) + digits.slice(3, 4);
     } else {
       return null; // نتوانستیم پارس کنیم
     }
   }
 
-  // تشخیص نوع ترم
-  if (semester === 3 && academicYear >= 1380) {
-    // نیمسال ۳ معمولاً تابستان است، اما ممکن است معادل‌سازی هم باشد
-    // معادل‌سازی معمولاً کدهای ۱۰۱، ۱۰۲، ۱۰۳، ۱۳۹۱۱، ۱۳۹۱۲... دارند
-    termType = 'SUMMER';
-  }
-  // معادل‌سازی‌ها: کدهای ۱۰۱-۱۰۸، ۱۳۹۱۱-۱۳۹۱۳، ۱۳۹۲۱-۱۳۹۲۳ (معادل‌سازی نه عادی)
-  // در داده‌ها termType='EQUIVALENCE' صریح است. در اینجا فقط از کد حدس می‌زنیم.
-  // اگر academicYear < 1380 یا کد ۱۰x باشد → معادل‌سازی
-  if (academicYear < 1380 || (academicYear >= 1310 && academicYear <= 1319 && semester >= 1 && semester <= 8)) {
-    termType = 'EQUIVALENCE';
-  }
+  const academicYear = parseInt(normalized.slice(0, 4), 10);
+  const semester = parseInt(normalized.slice(4, 5), 10);
+  // سال نامعتبر (مثل ۱۳۱۰ یا ۱۴۰ قدیم) را رد کن
+  if (academicYear < 1300 || academicYear > 1500) return null;
+  // نوع ترم فقط از رقم آخر — بدون حدس اضافه
+  const termType = termTypeFromDigit(semester);
 
   // کلید مرتب‌سازی:
   // معادل‌سازی‌ها اول (۰xxxxx)
-  // بعد ترم‌های نرمال با semester (۱xxxxx)
-  let sortKey = 0;
-  if (termType === 'EQUIVALENCE') {
-    sortKey = parseInt(normalized); // کوچک می‌مانند
-  } else if (semester === 0) {
-    sortKey = academicYear * 10 + 9; // سال کامل در انتهای همان سال
-  } else {
-    sortKey = 100000 + academicYear * 10 + semester; // ۱xxxxx
-  }
+  // بعد ترم‌های نرمال و تابستان (۱xxxxx)
+  const sortKey = termType === 'EQUIVALENCE'
+    ? parseInt(normalized)
+    : 100000 + academicYear * 10 + semester;
 
   // نمایش سال تحصیلی: «۱۳۹۴-۱۳۹۵»
   const displayYear = `${academicYear}-${academicYear + 1}`;
@@ -143,7 +115,6 @@ export function normalizeTermCode(raw: string | number | null | undefined): Norm
   else if (termType === 'SUMMER') displaySemester = 'نیمسال تابستان';
   else if (semester === 1) displaySemester = 'نیمسال اول';
   else if (semester === 2) displaySemester = 'نیمسال دوم';
-  else if (semester === 3) displaySemester = 'نیمسال تابستان';
   else displaySemester = 'نامشخص';
 
   return {
@@ -175,8 +146,12 @@ export function sortTermsForTranscript<T extends { termCode: string }>(terms: T[
 }
 
 /**
- * گروه‌بندی ترم‌ها بر اساس سال تحصیلی برای نمایش در کارنامه
+ * گروه‌بندی ترم‌ها برای نمایش در کارنامه.
+ * معادل‌سازی‌ها (سوابق پایه) در یک بلوک جدا در ابتدای کارنامه می‌آیند،
+ * بعد سال‌های تحصیلی به ترتیب نزولی (جدیدتر اول).
  */
+export const EQUIVALENCE_GROUP_YEAR = 0;
+
 export function groupTermsByAcademicYear<T extends { termCode: string }>(
   terms: T[],
   getRows: (t: T) => any[]
@@ -187,22 +162,36 @@ export function groupTermsByAcademicYear<T extends { termCode: string }>(
 }> {
   const sorted = sortTermsForTranscript(terms);
   const map = new Map<number, Array<T & { normalized: NormalizedTerm; rows: any[] }>>();
+  const equiv: Array<T & { normalized: NormalizedTerm; rows: any[] }> = [];
 
   for (const t of sorted) {
     const norm = normalizeTermCode(t.termCode);
     if (!norm) continue;
+    const item = { ...t, normalized: norm, rows: getRows(t) };
+    if (norm.termType === 'EQUIVALENCE') {
+      equiv.push(item); // معادل‌سازی‌ها جدا — اول کارنامه
+      continue;
+    }
     const year = norm.academicYear;
     if (!map.has(year)) map.set(year, []);
-    map.get(year)!.push({ ...t, normalized: norm, rows: getRows(t) });
+    map.get(year)!.push(item);
   }
 
   // سال‌ها را نزولی مرتب کنیم (جديدتر اول)
   const years = Array.from(map.keys()).sort((a, b) => b - a);
-  return years.map(y => ({
+  const groups = years.map(y => ({
     academicYear: y,
     displayYear: `${y}-${y + 1}`,
     terms: map.get(y)!,
   }));
+  if (equiv.length > 0) {
+    groups.unshift({
+      academicYear: EQUIVALENCE_GROUP_YEAR,
+      displayYear: 'سوابق و معادل‌سازی',
+      terms: equiv,
+    });
+  }
+  return groups;
 }
 export const GENDERS = ['MALE', 'FEMALE', 'MIXED'] as const;
 export type ClassGender = (typeof GENDERS)[number];

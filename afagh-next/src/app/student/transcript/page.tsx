@@ -3,7 +3,7 @@ import { academic_terms, course_offerings, courses, degree_level_configs, educat
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA } from '@/lib/regulations-engine';
-import { normalizeTermCode, sortTermsForTranscript, groupTermsByAcademicYear } from '@/lib/scheduling-core';
+import { sortTermsForTranscript, groupTermsByAcademicYear, EQUIVALENCE_GROUP_YEAR } from '@/lib/scheduling-core';
 import PrintButton from '../PrintButton';
 
 export const dynamic = 'force-dynamic';
@@ -226,9 +226,11 @@ export default async function StudentTranscriptPage() {
 
         {academicYears.map(yearGroup => (
           <div key={yearGroup.academicYear} className="col-span-full space-y-3">
-            {/* هدر سال تحصیلی */}
+            {/* هدر سال تحصیلی — بلوک معادل‌سازی اول کارنامه با عنوان خودش */}
             <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-800 text-white rounded-xl px-4 py-2.5 font-extrabold text-sm border border-indigo-700">
-              📅 سال تحصیلی {yearGroup.displayYear}
+              {yearGroup.academicYear === EQUIVALENCE_GROUP_YEAR
+                ? `📚 ${yearGroup.displayYear}`
+                : `📅 سال تحصیلی ${yearGroup.displayYear}`}
             </div>
             
             {/* ترم‌های این سال */}
@@ -264,9 +266,10 @@ export default async function StudentTranscriptPage() {
                 const isA = termGradedUnits > 0 && Number(termGpa) >= 17;
                 const isProbation = termGradedUnits > 0 && Number(termGpa) < 12;
 
-                // نمایش عنوان ترم: برای معادل‌سازی نوع را نشان بده، برای نرمال نیمسال
-                const termDisplayTitle = termItem.normalized.termType === 'EQUIVALENCE' 
-                  ? `معادل‌سازی ${termItem.normalized.semester}`
+                // نمایش عنوان ترم: برای معادل‌سازی عنوان ثبت‌شده در دیتابیس
+                // (مثل «سوابق پایه ۱۳۹۶»)، برای نرمال نیمسال
+                const termDisplayTitle = termItem.normalized.termType === 'EQUIVALENCE'
+                  ? (termItem.title || termItem.normalized.displaySemester)
                   : termItem.normalized.displaySemester;
 
                 return (
