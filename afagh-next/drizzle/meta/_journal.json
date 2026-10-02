@@ -225,6 +225,13 @@
       "when": 1790852400000,
       "tag": "0032_multitenant_missing_uni_columns",
       "breakpoints": false
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790940731253,
+      "tag": "0035_term_add_drop",
+      "breakpoints": true
     }
   ]
 }
