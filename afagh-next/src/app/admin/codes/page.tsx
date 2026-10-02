@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requireRole } from '@/lib/auth';
-import { codeFormOptions, codeStats, createCodeRowAction, deleteCodeRowAction, getDegreeRowAction, listCodes, setCodeAction, updateDegreeRowAction } from './actions';
+import { codeFormOptions, codeStats, createCodeRowAction, deleteCodeRowAction, getDegreeRowAction, getTermRowAction, listCodes, setCodeAction, updateDegreeRowAction, updateTermRowAction } from './actions';
 import type { CodeTable } from './tables';
 import CodesClient from './CodesClient';
 
@@ -44,6 +44,16 @@ export default async function CodesPage() {
     return updateDegreeRowAction(fd);
   }
 
+  async function getTermAction(id: number) {
+    'use server';
+    return getTermRowAction(id);
+  }
+
+  async function updateTermAction(fd: FormData) {
+    'use server';
+    return updateTermRowAction(fd);
+  }
+
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -85,6 +95,8 @@ export default async function CodesPage() {
         options={options}
         getDegreeAction={getDegreeAction}
         updateDegreeAction={updateDegreeAction}
+        getTermAction={getTermAction}
+        updateTermAction={updateTermAction}
       />
 
       <p className="text-center text-xs text-slate-400">

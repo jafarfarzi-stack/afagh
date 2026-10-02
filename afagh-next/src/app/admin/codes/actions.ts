@@ -1,10 +1,11 @@
 'use server';
 
-import { and, asc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { academic_terms, courses, degree_level_configs, departments, faculties, majors, universities } from '@/db/schema';
+import { academic_terms, courses, degree_level_configs, departments, exam_calendar_configs, faculties, majors, universities } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { normJalali } from '@/lib/exam-scheduler';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { faIncludes, normalizeFa } from '@/lib/persian-search';
 import { CODE_TABLES, type CodeRow, type CodeStat, type CodeTable, type FormOptions } from './tables';
@@ -30,6 +31,9 @@ type RawRow = {
   title: string;
   context: string | null;
   scope: string | null;
+  /** فقط برای ترم — تاریخ شروع/پایان (خوانده‌شده با to_char برای پایداری منطقهٔ زمانی) */
+  startDate?: string | null;
+  endDate?: string | null;
 };
 
 const dupSet = (rows: RawRow[]) => {
@@ -149,7 +153,9 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
   if (table === 'term') {
     raw = (await db
       .select({ id: academic_terms.id, code: academic_terms.termCode, title: academic_terms.title,
-        uni: universities.title, uid: academic_terms.universityId })
+        uni: universities.title, uid: academic_terms.universityId,
+        start: sql<string | null>`to_char(${academic_terms.startDate}, 'YYYY-MM-DD"T"HH24:MI')`,
+        end: sql<string | null>`to_char(${academic_terms.endDate}, 'YYYY-MM-DD"T"HH24:MI')` })
       .from(academic_terms)
       .leftJoin(universities, eq(universities.id, academic_terms.universityId))
       .where(activeUniId == null ? undefined : or(eq(academic_terms.universityId, activeUniId), isNull(academic_terms.universityId)))
@@ -157,13 +163,16 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
       .map(r => ({ id: r.id, code: r.code, title: r.title,
         context: r.uni ?? null,
         // کد ترم فقط درون یک دانشگاه یکتاست (uq_terms_uni_code)
-        scope: r.uid != null ? `u${r.uid}` : null }));
+        scope: r.uid != null ? `u${r.uid}` : null,
+        startDate: r.start, endDate: r.end }));
   }
 
   const dups = dupSet(raw);
   const rows: CodeRow[] = raw.map(r => ({
     id: r.id, code: r.code, title: r.title, context: r.context,
     duplicate: !!r.code && dups.has(scopeKey(r)),
+    startDate: r.startDate ?? null,
+    endDate: r.endDate ?? null,
   }));
   if (!t) return rows;
   return rows.filter(r => faIncludes(r.title, t) || (r.code ?? '').includes(t) || faIncludes(r.context, t));
@@ -491,6 +500,198 @@ export async function updateDegreeRowAction(fd: FormData): Promise<{ ok: boolean
     isGraduate: Number(gradRaw),
   }).where(eq(degree_level_configs.id, id));
   revalidatePath('/admin/codes');
+  return { ok: true };
+}
+
+// ────────────────────────── ویرایش ترم (زمان‌بندی تحصیلی) ──────────────────────────
+
+/** قالب یکسان خواندن timestampها برای ورودی datetime-local (بدون وابستگی به منطقهٔ زمانی سرور) */
+const DT_FMT = 'YYYY-MM-DD"T"HH24:MI';
+const dtRead = (c: typeof academic_terms.startDate) =>
+  sql<string | null>`to_char(${c}, ${DT_FMT})`;
+
+/**
+ * خواندن یک ترم برای فرم ویرایش — همهٔ زمان‌بندی‌ها: شروع/پایان ترم، انتخاب
+ * واحد، حذف و اضافه، مهلت نمره و اعتراض، پنجرهٔ کل امتحانات ( Jalali ).
+ */
+export async function getTermRowAction(id: number): Promise<Record<string, string> | null> {
+  await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
+  if (!id) return null;
+  const [r] = await db.select({
+    title: academic_terms.title,
+    termType: academic_terms.termType,
+    academicYear: academic_terms.academicYear,
+    startDate: dtRead(academic_terms.startDate),
+    endDate: dtRead(academic_terms.endDate),
+    enrollmentStartDate: dtRead(academic_terms.enrollmentStartDate),
+    enrollmentEndDate: dtRead(academic_terms.enrollmentEndDate),
+    addDropStartDate: dtRead(academic_terms.addDropStartDate),
+    addDropEndDate: dtRead(academic_terms.addDropEndDate),
+    gradeEntryDeadline: dtRead(academic_terms.gradeEntryDeadline),
+    appealWindowDays: academic_terms.appealWindowDays,
+    professorAppealSlaDays: academic_terms.professorAppealSlaDays,
+    isCurrent: academic_terms.isCurrent,
+    isEnrollmentOpen: academic_terms.isEnrollmentOpen,
+  }).from(academic_terms).where(eq(academic_terms.id, id)).limit(1);
+  if (!r) return null;
+  const [z] = await db.select({
+    globalStart: exam_calendar_configs.globalStart,
+    globalEnd: exam_calendar_configs.globalEnd,
+  }).from(exam_calendar_configs).where(eq(exam_calendar_configs.termId, id)).limit(1);
+
+  return {
+    title: r.title,
+    termType: r.termType,
+    academicYear: r.academicYear != null ? String(r.academicYear) : '',
+    startDate: r.startDate ?? '',
+    endDate: r.endDate ?? '',
+    enrollmentStartDate: r.enrollmentStartDate ?? '',
+    enrollmentEndDate: r.enrollmentEndDate ?? '',
+    addDropStartDate: r.addDropStartDate ?? '',
+    addDropEndDate: r.addDropEndDate ?? '',
+    gradeEntryDeadline: r.gradeEntryDeadline ?? '',
+    appealWindowDays: r.appealWindowDays != null ? String(r.appealWindowDays) : '3',
+    professorAppealSlaDays: r.professorAppealSlaDays != null ? String(r.professorAppealSlaDays) : '5',
+    isCurrent: r.isCurrent === 1 ? '1' : '0',
+    isEnrollmentOpen: r.isEnrollmentOpen === 1 ? '1' : '0',
+    examStartDate: z?.globalStart ?? '',
+    examEndDate: z?.globalEnd ?? '',
+  };
+}
+
+/** تبدیل مقدار datetime-local به timestamp دیتابیس (رشتهٔ خام — بدون Date و منطقهٔ زمانی) */
+const dtWrite = (v: string | null): SQL | null =>
+  v == null ? null : sql`${v}::timestamp`;
+
+export async function updateTermRowAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  const actor = await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
+  const id = Number(fd.get('id') || 0);
+  if (!id) return { ok: false, error: 'رکورد نامعتبر است.' };
+  const [term] = await db.select({
+    id: academic_terms.id, universityId: academic_terms.universityId,
+  }).from(academic_terms).where(eq(academic_terms.id, id)).limit(1);
+  if (!term) return { ok: false, error: 'ترم یافت نشد.' };
+
+  const title = str(fd, 'title');
+  if (!title) return { ok: false, error: 'عنوان ترم را وارد کنید.' };
+  const termType = str(fd, 'termType');
+  if (!['NORMAL', 'SUMMER', 'EQUIVALENCE', 'SPECIAL'].includes(termType)) {
+    return { ok: false, error: 'نوع ترم نامعتبر است.' };
+  }
+  const year = num(fd, 'academicYear');
+  if (year != null && (!Number.isInteger(year) || year < 1300 || year > 1500)) {
+    return { ok: false, error: 'سال تحصیلی باید عدد صحیح بین ۱۳۰۰ تا ۱۵۰۰ باشد (مثلاً 1403).' };
+  }
+
+  // زمان‌بندی‌های datetime-local: خالی = null
+  const DT_FIELDS = ['startDate', 'endDate', 'enrollmentStartDate', 'enrollmentEndDate',
+    'addDropStartDate', 'addDropEndDate', 'gradeEntryDeadline'] as const;
+  const vals: Record<string, string | null> = {};
+  for (const f of DT_FIELDS) {
+    const v = str(fd, f);
+    if (!v) { vals[f] = null; continue; }
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v)) {
+      return { ok: false, error: `مقدار «${f}» نامعتبر است.` };
+    }
+    vals[f] = v;
+  }
+  if (vals.startDate && vals.endDate && vals.endDate < vals.startDate) {
+    return { ok: false, error: 'پایان ترم قبل از شروع آن است.' };
+  }
+  if (vals.enrollmentStartDate && vals.enrollmentEndDate && vals.enrollmentEndDate < vals.enrollmentStartDate) {
+    return { ok: false, error: 'پایان انتخاب واحد قبل از شروع آن است.' };
+  }
+  if (vals.addDropStartDate && vals.addDropEndDate && vals.addDropEndDate < vals.addDropStartDate) {
+    return { ok: false, error: 'پایان حذف و اضافه قبل از شروع آن است.' };
+  }
+
+  const appeal = num(fd, 'appealWindowDays');
+  if (appeal == null || appeal < 0 || appeal > 365) {
+    return { ok: false, error: 'مهلت اعتراض دانشجو باید بین ۰ تا ۳۶۵ روز باشد.' };
+  }
+  const sla = num(fd, 'professorAppealSlaDays');
+  if (sla == null || sla < 0 || sla > 365) {
+    return { ok: false, error: 'مهلت پاسخ استاد باید بین ۰ تا ۳۶۵ روز باشد.' };
+  }
+  const isCur = str(fd, 'isCurrent') === '1' ? 1 : 0;
+  const isEnr = str(fd, 'isEnrollmentOpen') === '1' ? 1 : 0;
+
+  // پنجرهٔ امتحانات — تاریخ شمسی 'YYYY/M/D' در exam_calendar_configs (به شمسی ذخیره می‌شود)
+  const exS = str(fd, 'examStartDate');
+  const exE = str(fd, 'examEndDate');
+  if ((exS && !exE) || (!exS && exE)) {
+    return { ok: false, error: 'هر دو تاریخ شروع و پایان امتحانات را وارد کنید (یا هر دو را خالی بگذارید).' };
+  }
+  let zoning: { a: string; b: string } | null = null;
+  if (exS && exE) {
+    if (!/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(exS) || !/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(exE)) {
+      return { ok: false, error: 'تاریخ امتحانات باید شمسی باشد — مانند 1404/01/15.' };
+    }
+    const a = normJalali(exS);
+    const b = normJalali(exE);
+    if (b < a) return { ok: false, error: 'پایان امتحانات قبل از شروع آن است.' };
+    zoning = { a, b };
+  }
+
+  await db.update(academic_terms).set({
+    title, termType,
+    academicYear: year ?? null,
+    startDate: dtWrite(vals.startDate),
+    endDate: dtWrite(vals.endDate),
+    enrollmentStartDate: dtWrite(vals.enrollmentStartDate),
+    enrollmentEndDate: dtWrite(vals.enrollmentEndDate),
+    addDropStartDate: dtWrite(vals.addDropStartDate),
+    addDropEndDate: dtWrite(vals.addDropEndDate),
+    gradeEntryDeadline: dtWrite(vals.gradeEntryDeadline),
+    appealWindowDays: appeal,
+    professorAppealSlaDays: sla,
+    isCurrent: isCur,
+    isEnrollmentOpen: isEnr,
+  }).where(eq(academic_terms.id, id));
+
+  // «ترم جاری» و «باز بودن انتخاب واحد» در هر دانشگاه فقط یکی است — بقیه خاموش می‌شوند
+  const uniScope = term.universityId != null
+    ? eq(academic_terms.universityId, term.universityId)
+    : isNull(academic_terms.universityId);
+  if (isCur) {
+    await db.update(academic_terms).set({ isCurrent: 0 })
+      .where(and(eq(academic_terms.isCurrent, 1), uniScope, ne(academic_terms.id, id)));
+  }
+  if (isEnr) {
+    await db.update(academic_terms).set({ isEnrollmentOpen: 0 })
+      .where(and(eq(academic_terms.isEnrollmentOpen, 1), uniScope, ne(academic_terms.id, id)));
+  }
+
+  // پنجرهٔ امتحانات: upsert در exam_calendar_configs — بازه‌های عمومی/تخصصی
+  // قبلی داخل بازهٔ جدید clamp می‌شوند (تغییر جزئیات در ماژول امتحانات).
+  if (zoning) {
+    const [z] = await db.select().from(exam_calendar_configs)
+      .where(eq(exam_calendar_configs.termId, id)).limit(1);
+    const clamp = (v: string | null | undefined): string => {
+      if (!v) return zoning!.a;
+      return v < zoning!.a ? zoning!.a : v > zoning!.b ? zoning!.b : v;
+    };
+    if (z) {
+      await db.update(exam_calendar_configs).set({
+        globalStart: zoning.a, globalEnd: zoning.b,
+        generalStart: clamp(z.generalStart), generalEnd: clamp(z.generalEnd),
+        specializedStart: clamp(z.specializedStart), specializedEnd: clamp(z.specializedEnd),
+        updatedByUserId: actor.id, updatedAt: new Date(),
+      }).where(eq(exam_calendar_configs.id, z.id));
+    } else {
+      await db.insert(exam_calendar_configs).values({
+        termId: id,
+        globalStart: zoning.a, globalEnd: zoning.b,
+        generalStart: zoning.a, generalEnd: zoning.b,
+        specializedStart: zoning.a, specializedEnd: zoning.b,
+        universityId: term.universityId,
+        updatedByUserId: actor.id,
+      });
+    }
+  }
+
+  revalidatePath('/admin/codes');
+  revalidatePath('/admin/exams');
   return { ok: true };
 }
 

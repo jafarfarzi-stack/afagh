@@ -2,12 +2,38 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { faIncludes, normalizeFa } from '@/lib/persian-search';
-import { ADD_LABEL, CREATE_ELSEWHERE, NEW_FIELDS, type CodeRow, type CodeStat, type CodeTable, type FormOptions } from './tables';
+import { ADD_LABEL, CREATE_ELSEWHERE, EDIT_FIELDS, NEW_FIELDS, type CodeRow, type CodeStat, type CodeTable, type FormOptions } from './tables';
+import { jalaliDateOf, parseJalaliDate } from '@/lib/scheduling-core';
 import Link from 'next/link';
 
 type Res = { ok: boolean; error?: string };
 
 const PAGE = 200;
+
+/** 'YYYY-MM-DD' میلادی → 'YYYY/MM/DD' شمسی — برای فیلدهای نوع jdate */
+const isoToJalali = (v: string): string => {
+  if (!v) return '';
+  const [y, m, d] = v.split('-').map(Number);
+  if (!y || !m || !d) return '';
+  return jalaliDateOf(new Date(y, m - 1, d));
+};
+
+/** 'YYYY/MM/DD' شمسی → 'YYYY-MM-DD' میلادی — برای ورودی date */
+const jalaliToIso = (v: string): string => {
+  if (!v) return '';
+  try {
+    const d = parseJalaliDate(v);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  } catch {
+    return '';
+  }
+};
+
+/** 'YYYY-MM-DDTHH:mm' یا 'YYYY-MM-DD' → تاریخ شمسی برای نمایش در جدول */
+const fmtDateFa = (v?: string | null): string => {
+  if (!v) return '—';
+  return isoToJalali(v.slice(0, 10)) || v.slice(0, 10);
+};
 
 export default function CodesClient({
   stats,
@@ -20,6 +46,8 @@ export default function CodesClient({
   options,
   getDegreeAction,
   updateDegreeAction,
+  getTermAction,
+  updateTermAction,
 }: {
   stats: CodeStat[];
   initialTable: CodeTable;
@@ -31,6 +59,8 @@ export default function CodesClient({
   options: FormOptions;
   getDegreeAction?: (id: number) => Promise<Record<string, string> | null>;
   updateDegreeAction?: (fd: FormData) => Promise<Res>;
+  getTermAction?: (id: number) => Promise<Record<string, string> | null>;
+  updateTermAction?: (fd: FormData) => Promise<Res>;
 }) {
   const [table, setTable] = useState<CodeTable>(initialTable);
   const [rows, setRows] = useState<CodeRow[]>(initialRows);
@@ -46,8 +76,12 @@ export default function CodesClient({
   const [editingId, setEditingId] = useState<number | null>(null);
 
   const cur = stats.find(s => s.id === table);
+  const isTerm = table === 'term';
   const newFields = NEW_FIELDS[table] ?? [];
   const elsewhere = CREATE_ELSEWHERE[table];
+  // فرمِ ویرایش ممکن است از فرمِ ساخت متفاوت باشد (ترم: زمان‌بندی کامل)
+  const editFields = EDIT_FIELDS[table] ?? newFields;
+  const formFields = editingId != null ? editFields : newFields;
 
   // با عوض‌شدن جدول، فرمِ باز را ببند و مقادیر پیش‌فرض را بگذار
   useEffect(() => {
@@ -56,19 +90,39 @@ export default function CodesClient({
     setForm(Object.fromEntries((NEW_FIELDS[table] ?? []).map(f => [f.name, f.def ?? ''])));
   }, [table]);
 
+  const closeForm = () => {
+    setAdding(false);
+    setEditingId(null);
+    setForm(Object.fromEntries(newFields.map(f => [f.name, f.def ?? ''])));
+  };
+
   const submitNew = () =>
     start(async () => {
       const fd = new FormData();
       fd.set('table', table);
-      for (const f of newFields) fd.set(f.name, form[f.name] ?? '');
+      for (const f of formFields) {
+        // فیلد شمسی (jdate) با تبدیل میلادی→شمسی فرستاده می‌شود
+        const raw = form[f.name] ?? '';
+        fd.set(f.name, f.kind === 'jdate' && raw ? isoToJalali(raw) : raw);
+      }
       if (editingId != null && table === 'degree' && updateDegreeAction) {
         fd.set('id', String(editingId));
         const r = await updateDegreeAction(fd);
         if (r.ok) {
           setMsg({ kind: 'ok', text: 'مقطع به‌روزرسانی شد.' });
-          setAdding(false);
-          setEditingId(null);
-          setForm(Object.fromEntries(newFields.map(f => [f.name, f.def ?? ''])));
+          closeForm();
+          setRows(await listAction(table, ''));
+        } else {
+          setMsg({ kind: 'err', text: r.error ?? 'به‌روزرسانی نشد.' });
+        }
+        return;
+      }
+      if (editingId != null && table === 'term' && updateTermAction) {
+        fd.set('id', String(editingId));
+        const r = await updateTermAction(fd);
+        if (r.ok) {
+          setMsg({ kind: 'ok', text: 'زمان‌بندی ترم به‌روزرسانی شد.' });
+          closeForm();
           setRows(await listAction(table, ''));
         } else {
           setMsg({ kind: 'err', text: r.error ?? 'به‌روزرسانی نشد.' });
@@ -78,9 +132,7 @@ export default function CodesClient({
       const r = await createAction(fd);
       if (r.ok) {
         setMsg({ kind: 'ok', text: 'رکورد تازه ثبت شد. برای دیده‌شدن در فهرست‌های دیگر، صفحه را تازه کنید.' });
-        setAdding(false);
-        setEditingId(null);
-        setForm(Object.fromEntries(newFields.map(f => [f.name, f.def ?? ''])));
+        closeForm();
         setRows(await listAction(table, ''));
       } else {
         setMsg({ kind: 'err', text: r.error ?? 'ثبت نشد.' });
@@ -99,6 +151,24 @@ export default function CodesClient({
       setEditingId(row.id);
       setAdding(true);
       setMsg({ kind: 'ok', text: `در حال ویرایش مقطع «${row.title}» — برای انصراف، «انصراف» را بزنید.` });
+    });
+
+  const startEditTerm = (row: CodeRow) =>
+    start(async () => {
+      if (!getTermAction) return;
+      const d = await getTermAction(row.id);
+      if (!d) {
+        setMsg({ kind: 'err', text: 'خواندن ترم ناموفق بود.' });
+        return;
+      }
+      setForm(Object.fromEntries(editFields.map(f => {
+        const v = d[f.name] ?? f.def ?? '';
+        // فیلدهای شمسی (jdate) باید میلادی به ورودی date بروند
+        return [f.name, f.kind === 'jdate' ? jalaliToIso(v) : v];
+      })));
+      setEditingId(row.id);
+      setAdding(true);
+      setMsg({ kind: 'ok', text: `در حال ویرایش ترم «${row.title}» — برای انصراف، «انصراف» را بزنید.` });
     });
 
   const remove = (row: CodeRow) =>
@@ -196,7 +266,7 @@ export default function CodesClient({
                 {s.missing === 0 && s.duplicate === 0 && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700">✓ همه کد دارند</span>}
                 {!s.editable && (
                   <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-500">
-                    {s.creatable ? 'کد ثابت — فقط افزودن' : 'فقط خواندنی'}
+                    {s.id === 'term' ? 'کد ثابت · زمان‌بندی ویرایش‌پذیر' : s.creatable ? 'کد ثابت — فقط افزودن' : 'فقط خواندنی'}
                   </span>
                 )}
               </div>
@@ -238,7 +308,7 @@ export default function CodesClient({
           </span>
           {cur?.creatable && (
             <button
-              onClick={() => { if (adding) setEditingId(null); setAdding(a => !a); }}
+              onClick={() => (adding ? closeForm() : setAdding(true))}
               className={'rounded-lg px-3 py-1.5 text-xs font-bold ' + (adding ? 'bg-slate-200 text-slate-700' : 'bg-emerald-600 text-white hover:bg-emerald-700')}
             >
               {adding ? 'انصراف' : `➕ ${ADD_LABEL[table] ?? 'افزودن'}`}
@@ -251,11 +321,14 @@ export default function CodesClient({
           )}
         </div>
 
-        {/* فرم افزودن */}
-        {adding && cur?.creatable && (
-          <div className="border-b border-emerald-100 bg-emerald-50/60 p-3">
+        {/* فرم افزودن / ویرایش */}
+        {adding && (cur?.creatable || editingId != null) && (
+          <div className={'border-b p-3 ' + (editingId != null ? 'border-indigo-100 bg-indigo-50/60' : 'border-emerald-100 bg-emerald-50/60')}>
+            <div className="mb-2 text-[11px] font-bold text-slate-600">
+              {editingId != null ? `✏️ ویرایش ${cur?.title}` : `➕ ${ADD_LABEL[table] ?? 'افزودن'} جدید`}
+            </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {newFields.map(f => (
+              {formFields.map(f => (
                 <label key={f.name} className="block">
                   <span className="mb-1 block text-[11px] font-bold text-slate-700">
                     {f.label}{f.required && <span className="text-red-600"> *</span>}
@@ -271,6 +344,22 @@ export default function CodesClient({
                         <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
+                  ) : f.kind === 'date' ? (
+                    <input
+                      type="datetime-local"
+                      dir="ltr"
+                      value={form[f.name] ?? ''}
+                      onChange={e => setForm(v => ({ ...v, [f.name]: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs font-mono"
+                    />
+                  ) : f.kind === 'jdate' ? (
+                    <input
+                      type="date"
+                      dir="ltr"
+                      value={form[f.name] ?? ''}
+                      onChange={e => setForm(v => ({ ...v, [f.name]: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs font-mono"
+                    />
                   ) : (
                     <input
                       dir={f.kind === 'text' ? 'rtl' : 'ltr'}
@@ -290,11 +379,13 @@ export default function CodesClient({
                 onClick={submitNew}
                 className="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
               >
-                ثبت
+                {editingId != null ? 'ذخیرهٔ تغییرات' : 'ثبت'}
               </button>
-              <button onClick={() => { setAdding(false); setEditingId(null); }} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600">انصراف</button>
+              <button onClick={closeForm} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600">انصراف</button>
               <span className="text-[11px] text-slate-500">
-                کد را همان‌طور بنویسید که در فایل‌های اکسل مبدأ آمده — تطبیق انتقال داده اول با کد انجام می‌شود.
+                {table === 'term'
+                  ? 'تاریخ‌ها را وارد کنید؛ «ترم جاری» و «انتخاب واحد باز» در هر دانشگاه فقط برای یک ترم فعال می‌شود.'
+                  : 'کد را همان‌طور بنویسید که در فایل‌های اکسل مبدأ آمده — تطبیق انتقال داده اول با کد انجام می‌شود.'}
               </span>
             </div>
           </div>
@@ -319,6 +410,8 @@ export default function CodesClient({
                     زمینه{sortMark('context')}
                   </button>
                 </th>
+                {isTerm && <th className="w-28 p-2.5">شروع ترم</th>}
+                {isTerm && <th className="w-28 p-2.5">پایان ترم</th>}
                 <th className="w-32 p-2.5"></th>
               </tr>
             </thead>
@@ -347,6 +440,16 @@ export default function CodesClient({
                       {r.duplicate && <span className="mr-1 rounded bg-red-100 px-1 text-[10px] text-red-700">کد تکراری</span>}
                     </td>
                     <td className="p-2 text-slate-500">{r.context ?? '—'}</td>
+                    {isTerm && (
+                      <td className="p-2 font-mono text-[11px] text-slate-600" dir="ltr" title={r.startDate ?? 'بدون تاریخ'}>
+                        {fmtDateFa(r.startDate)}
+                      </td>
+                    )}
+                    {isTerm && (
+                      <td className="p-2 font-mono text-[11px] text-slate-600" dir="ltr" title={r.endDate ?? 'بدون تاریخ'}>
+                        {fmtDateFa(r.endDate)}
+                      </td>
+                    )}
                     <td className="p-2">
                       <div className="flex flex-wrap items-center gap-1">
                         {changed && (
@@ -368,6 +471,16 @@ export default function CodesClient({
                             ویرایش
                           </button>
                         )}
+                        {isTerm && getTermAction && (
+                          <button
+                            disabled={pending}
+                            onClick={() => startEditTerm(r)}
+                            title="ویرایش زمان‌بندی ترم: شروع/پایان، انتخاب واحد، حذف و اضافه، امتحانات، اعتراضات"
+                            className="rounded border border-indigo-200 px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+                          >
+                            ویرایش
+                          </button>
+                        )}
                         {cur?.creatable && (
                           <button
                             disabled={pending}
@@ -384,7 +497,7 @@ export default function CodesClient({
                 );
               })}
               {shown.length === 0 && (
-                <tr><td colSpan={4} className="p-6 text-center text-slate-400">ردیفی نیست.</td></tr>
+                <tr><td colSpan={isTerm ? 6 : 4} className="p-6 text-center text-slate-400">ردیفی نیست.</td></tr>
               )}
             </tbody>
           </table>

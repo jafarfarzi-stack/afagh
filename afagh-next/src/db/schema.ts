@@ -615,6 +615,8 @@ export const academic_terms = pgTable('academic_terms', {
   isEnrollmentOpen: integer('isEnrollmentOpen').default(0),
   enrollmentStartDate: timestamp('enrollmentStartDate'),
   enrollmentEndDate: timestamp('enrollmentEndDate'),
+  addDropStartDate: timestamp('addDropStartDate'), // شروع حذف و اضافه
+  addDropEndDate: timestamp('addDropEndDate'),     // پایان حذف و اضافه
   startDate: timestamp('startDate'),
   endDate: timestamp('endDate'),
   gradeEntryDeadline: timestamp('gradeEntryDeadline'),

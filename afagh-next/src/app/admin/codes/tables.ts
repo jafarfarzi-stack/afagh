@@ -15,6 +15,9 @@ export type CodeRow = {
   context: string | null;
   /** آیا این کد در همین جدول تکراری است؟ */
   duplicate: boolean;
+  /** فقط ترم: تاریخ شروع/پایان به قالب 'YYYY-MM-DDTHH:mm' یا null */
+  startDate?: string | null;
+  endDate?: string | null;
 };
 
 export type CodeStat = {
@@ -35,9 +38,9 @@ export const CODE_TABLES: { id: CodeTable; title: string; hint: string; editable
   { id: 'major', title: 'رشته‌ها و گرایش‌ها', hint: 'کد رشته — مقطع و گروه و دانشکده را مشخص می‌کند', editable: true, creatable: true },
   { id: 'degree', title: 'مقاطع تحصیلی', hint: 'کد مقطع — در فایل‌های دانشجو و درس به کار می‌رود', editable: true, creatable: true },
   { id: 'course', title: 'دروس', hint: 'کد درس — کلید یکتای کاتالوگ', editable: true, creatable: false },
-  // ترم: افزودنی هست ولی کدش ویرایش نمی‌شود — کد ترم در انتخاب واحد، نمره،
-  // شهریه و کارنامه ریشه دوانده و تغییرش تاریخ تحصیلی را به هم می‌ریزد.
-  { id: 'term', title: 'ترم‌ها', hint: 'کد ترم — مثلاً ۴۰۳۱ · افزودنی، ولی کد ثبت‌شده تغییر نمی‌کند', editable: false, creatable: true },
+  // ترم: کدش ثابت است (در انتخاب واحد، نمره، شهریه و کارنامه ریشه دوانده)، ولی
+  // زمان‌بندی ترم (شروع/پایان، انتخاب واحد، حذف و اضافه، امتحانات) ویرایش‌پذیر است.
+  { id: 'term', title: 'ترم‌ها', hint: 'کد ترم — مثلاً ۴۰۳۱ · کد ثابت، زمان‌بندی ترم ویرایش‌پذیر است', editable: false, creatable: true },
 ];
 
 /** برای جدول‌هایی که ساختِ رکورد از این صفحه ممکن نیست، کاربر را کجا بفرستیم */
@@ -54,7 +57,7 @@ export const ADD_LABEL: Partial<Record<CodeTable, string>> = {
   term: 'افزودن ترم',
 };
 
-export type FieldKind = 'text' | 'code' | 'number' | 'select';
+export type FieldKind = 'text' | 'code' | 'number' | 'select' | 'date' | 'jdate';
 
 export type NewField = {
   name: string;
@@ -119,5 +122,43 @@ export const NEW_FIELDS: Partial<Record<CodeTable, NewField[]>> = {
     { name: 'degreeLevelId', label: 'مقطع', kind: 'select', required: true, optionsFrom: 'degree' },
     { name: 'departmentId', label: 'گروه آموزشی', kind: 'select', optionsFrom: 'department', hint: 'دانشکده خودکار از روی گروه پر می‌شود' },
     { name: 'minUnits', label: 'حداقل واحد', kind: 'number' },
+  ],
+};
+
+const YES_NO = [
+  { value: '0', label: 'نه' },
+  { value: '1', label: 'بله' },
+];
+
+/**
+ * فرم «ویرایش» برای جدول‌هایی که فیلدهایشان با فرم ساخت فرق دارد (مثل ترم).
+ * فرم ساخت ترم فقط کد/عنوان/نوع است؛ ویرایش، زمان‌بندی کامل تحصیل را می‌گیرد.
+ */
+export const EDIT_FIELDS: Partial<Record<CodeTable, NewField[]>> = {
+  term: [
+    { name: 'title', label: 'عنوان ترم', kind: 'text', required: true, hint: 'مثلاً: نیم‌سال اول ۱۴۰۳-۱۴۰۴' },
+    {
+      name: 'termType', label: 'نوع ترم', kind: 'select', required: true,
+      choices: [
+        { value: 'NORMAL', label: 'عادی (نیم‌سال)' },
+        { value: 'SUMMER', label: 'تابستان' },
+        { value: 'EQUIVALENCE', label: 'معادل‌سازی' },
+        { value: 'SPECIAL', label: 'ویژه' },
+      ],
+    },
+    { name: 'academicYear', label: 'سال تحصیلی', kind: 'number', hint: 'مثلاً 1403 — مبنای گزارش‌ها و تقویم تحصیلی' },
+    { name: 'startDate', label: 'شروع ترم', kind: 'date' },
+    { name: 'endDate', label: 'پایان ترم', kind: 'date' },
+    { name: 'enrollmentStartDate', label: 'شروع انتخاب واحد', kind: 'date' },
+    { name: 'enrollmentEndDate', label: 'پایان انتخاب واحد', kind: 'date' },
+    { name: 'addDropStartDate', label: 'شروع حذف و اضافه', kind: 'date' },
+    { name: 'addDropEndDate', label: 'پایان حذف و اضافه', kind: 'date' },
+    { name: 'gradeEntryDeadline', label: 'مهلت ثبت نمره', kind: 'date' },
+    { name: 'examStartDate', label: 'شروع امتحانات', kind: 'jdate', hint: 'شمسی: 1404/01/15 — پنجرهٔ کل امتحانات (بازهٔ عمومی/تخصصی در ماژول امتحانات)' },
+    { name: 'examEndDate', label: 'پایان امتحانات', kind: 'jdate' },
+    { name: 'appealWindowDays', label: 'مهلت اعتراض دانشجو (روز)', kind: 'number', def: '3' },
+    { name: 'professorAppealSlaDays', label: 'مهلت پاسخ استاد (روز)', kind: 'number', def: '5' },
+    { name: 'isCurrent', label: 'ترم جاری؟', kind: 'select', def: '0', choices: YES_NO, hint: 'در هر دانشگاه فقط یک ترم جاری است — فعال‌کردن، بقیه را خاموش می‌کند' },
+    { name: 'isEnrollmentOpen', label: 'انتخاب واحد باز است؟', kind: 'select', def: '0', choices: YES_NO, hint: 'در هر دانشگاه فقط برای یک ترم باز است' },
   ],
 };
