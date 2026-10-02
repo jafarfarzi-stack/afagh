@@ -117,7 +117,6 @@ export const NEW_FIELDS: Partial<Record<CodeTable, NewField[]>> = {
   ],
   term: [
     { name: 'code', label: 'کد ترم', kind: 'code', required: true, hint: 'مثلاً 4031 = نیم‌سال اول سال ۱۴۰۳ · پس از ثبت قابل تغییر نیست' },
-    ...SAMIN_CODE_FIELDS,
     { name: 'title', label: 'عنوان ترم', kind: 'text', required: true, hint: 'مثلاً: نیم‌سال اول ۱۴۰۳-۱۴۰۴' },
     {
       name: 'termType', label: 'نوع ترم', kind: 'select', required: true, def: 'NORMAL',
@@ -163,8 +162,7 @@ export const EDIT_FIELDS: Partial<Record<CodeTable, NewField[]>> = {
         { value: 'SPECIAL', label: 'ویژه' },
       ],
     },
-    // کدهای ملی/وزارتی — کد ترم از این فرم ویرایش نمی‌شود ولی کدهای ثمینی بله
-    ...SAMIN_CODE_FIELDS,
+    // کدهای ملی/وزارتی مخصوص مقطع/رشته/گروه/درس هستند و در فرم ترم معنا ندارند
     { name: 'academicYear', label: 'سال تحصیلی', kind: 'number', hint: 'مثلاً 1403 — مبنای گزارش‌ها و تقویم تحصیلی' },
     { name: 'startDate', label: 'شروع ترم', kind: 'date' },
     { name: 'endDate', label: 'پایان ترم', kind: 'date' },

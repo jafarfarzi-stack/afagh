@@ -274,6 +274,13 @@
       "when": 1790961600000,
       "tag": "0041_finance_schema_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1790965200000,
+      "tag": "0042_pos_heartbeat_column_fix",
+      "breakpoints": true
     }
   ]
 }

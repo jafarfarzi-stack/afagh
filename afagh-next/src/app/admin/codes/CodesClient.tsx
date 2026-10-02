@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import { faIncludes, normalizeFa } from '@/lib/persian-search';
 import { ADD_LABEL, CREATE_ELSEWHERE, EDIT_FIELDS, NEW_FIELDS, type CodeRow, type CodeStat, type CodeTable, type FormOptions } from './tables';
 import { jalaliDateOf, parseJalaliDate } from '@/lib/scheduling-core';
+import JalaliDateTimeInput from '@/components/JalaliDateTimeInput';
 import Link from 'next/link';
 
 type Res = { ok: boolean; error?: string };
@@ -321,11 +322,19 @@ export default function CodesClient({
           )}
         </div>
 
-        {/* فرم افزودن / ویرایش */}
+        {/* فرم افزودن / ویرایش — به‌صورت پاپ‌آپ */}
         {adding && (cur?.creatable || editingId != null) && (
-          <div className={'border-b p-3 ' + (editingId != null ? 'border-indigo-100 bg-indigo-50/60' : 'border-emerald-100 bg-emerald-50/60')}>
-            <div className="mb-2 text-[11px] font-bold text-slate-600">
+          <div
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-3 backdrop-blur-[1px]"
+            onClick={closeForm}
+          >
+          <div
+            className="my-6 w-full max-w-4xl rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className={'mb-2 rounded-lg px-3 py-2 text-[11px] font-bold text-slate-700 ' + (editingId != null ? 'bg-indigo-50 text-indigo-700' : 'bg-emerald-50 text-emerald-700')}>
               {editingId != null ? `✏️ ویرایش ${cur?.title}` : `➕ ${ADD_LABEL[table] ?? 'افزودن'} جدید`}
+              <button onClick={closeForm} className="float-left rounded-lg border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-600">بستن</button>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {formFields.map(f => (
@@ -345,20 +354,16 @@ export default function CodesClient({
                       ))}
                     </select>
                   ) : f.kind === 'date' ? (
-                    <input
-                      type="datetime-local"
-                      dir="ltr"
+                    <JalaliDateTimeInput
                       value={form[f.name] ?? ''}
-                      onChange={e => setForm(v => ({ ...v, [f.name]: e.target.value }))}
-                      className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs font-mono"
+                      onChange={v => setForm(s => ({ ...s, [f.name]: v }))}
+                      withTime
                     />
                   ) : f.kind === 'jdate' ? (
-                    <input
-                      type="date"
-                      dir="ltr"
+                    <JalaliDateTimeInput
                       value={form[f.name] ?? ''}
-                      onChange={e => setForm(v => ({ ...v, [f.name]: e.target.value }))}
-                      className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs font-mono"
+                      onChange={v => setForm(s => ({ ...s, [f.name]: v }))}
+                      withTime={false}
                     />
                   ) : (
                     <input
@@ -388,6 +393,7 @@ export default function CodesClient({
                   : 'کد را همان‌طور بنویسید که در فایل‌های اکسل مبدأ آمده — تطبیق انتقال داده اول با کد انجام می‌شود.'}
               </span>
             </div>
+          </div>
           </div>
         )}
 
