@@ -37,6 +37,7 @@ export default function CodesClient({
   const [q, setQ] = useState('');
   const [only, setOnly] = useState<'ALL' | 'MISSING' | 'DUP'>('ALL');
   const [page, setPage] = useState(0);
+  const [sort, setSort] = useState<{ key: 'code' | 'title' | 'context'; dir: 1 | -1 } | null>(null);
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [dirty, setDirty] = useState<Record<number, string>>({});
@@ -127,13 +128,27 @@ export default function CodesClient({
 
   const filtered = useMemo(() => {
     const t = normalizeFa(q);
-    return rows.filter(r => {
+    const base = rows.filter(r => {
       if (only === 'MISSING' && r.code) return false;
       if (only === 'DUP' && !r.duplicate) return false;
       if (!t) return true;
       return faIncludes(r.title, t) || (r.code ?? '').includes(t) || faIncludes(r.context, t);
     });
-  }, [rows, q, only]);
+    if (!sort) return base;
+    const get = (r: CodeRow) => (sort.key === 'code' ? (r.code ?? '') : sort.key === 'title' ? r.title : (r.context ?? ''));
+    return [...base].sort((a, b) => get(a).localeCompare(get(b), 'fa', { numeric: true }) * sort.dir);
+  }, [rows, q, only, sort]);
+
+  const toggleSort = (key: 'code' | 'title' | 'context') => {
+    setPage(0);
+    setSort(s => {
+      if (!s || s.key !== key) return { key, dir: 1 };
+      if (s.dir === 1) return { key, dir: -1 };
+      return null;
+    });
+  };
+  const sortMark = (key: 'code' | 'title' | 'context') =>
+    sort?.key !== key ? ' ↕' : sort.dir === 1 ? ' ▲' : ' ▼';
 
   const shown = filtered.slice(page * PAGE, page * PAGE + PAGE);
   const pages = Math.ceil(filtered.length / PAGE);
@@ -289,9 +304,21 @@ export default function CodesClient({
           <table className="w-full text-right text-xs">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
-                <th className="w-40 p-2.5">کد</th>
-                <th className="p-2.5">عنوان</th>
-                <th className="p-2.5">زمینه</th>
+                <th className="w-40 p-2.5">
+                  <button onClick={() => toggleSort('code')} className="font-bold hover:text-indigo-600" title="مرتب‌سازی بر اساس کد">
+                    کد{sortMark('code')}
+                  </button>
+                </th>
+                <th className="p-2.5">
+                  <button onClick={() => toggleSort('title')} className="font-bold hover:text-indigo-600" title="مرتب‌سازی بر اساس عنوان">
+                    عنوان{sortMark('title')}
+                  </button>
+                </th>
+                <th className="p-2.5">
+                  <button onClick={() => toggleSort('context')} className="font-bold hover:text-indigo-600" title="مرتب‌سازی بر اساس زمینه">
+                    زمینه{sortMark('context')}
+                  </button>
+                </th>
                 <th className="w-32 p-2.5"></th>
               </tr>
             </thead>
