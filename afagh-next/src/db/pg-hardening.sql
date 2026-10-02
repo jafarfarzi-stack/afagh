@@ -342,6 +342,18 @@ DROP POLICY IF EXISTS payment_cheques_self_read ON "payment_cheques";
 CREATE POLICY payment_cheques_self_read ON "payment_cheques" FOR SELECT TO afagh_app
   USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
 
+-- ── جدول‌های مالی جدید (میگریشن 0041) ────────────────────────────────────
+-- گیت پوشش RLS هر جدولی که ستون studentId دارد را ملزم می‌کند RLS داشته باشد.
+ALTER TABLE "payment_transactions" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS payment_transactions_self_read ON "payment_transactions";
+CREATE POLICY payment_transactions_self_read ON "payment_transactions" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+ALTER TABLE "pos_transactions" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS pos_transactions_self_read ON "pos_transactions";
+CREATE POLICY pos_transactions_self_read ON "pos_transactions" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
 ALTER TABLE "student_discounts" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS student_discounts_self_read ON "student_discounts";
 CREATE POLICY student_discounts_self_read ON "student_discounts" FOR SELECT TO afagh_app

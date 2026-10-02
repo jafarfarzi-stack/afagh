@@ -15,6 +15,8 @@ export async function recordPayment(input: {
   termId: number | null;
   amount: number;
   description?: string;
+  /** دانشگاه صاحب رکورد — برای تفکیک چنددانشگاهی دفتر مالی */
+  universityId?: number | null;
 }): Promise<number> {
   const amount = Math.round(toNum(input.amount));
   if (amount <= 0) throw new Error('مبلغ پرداخت باید بزرگ‌تر از صفر باشد');
@@ -25,6 +27,7 @@ export async function recordPayment(input: {
     transactionType: 'PAYMENT',
     amount: String(amount),
     description: input.description || 'پرداخت شهریه',
+    universityId: input.universityId ?? null,
   }).returning({ id: student_ledger.id });
 
   return ins.id;
@@ -47,7 +50,7 @@ export async function clearCheque(chequeId: number): Promise<{ ok: boolean; reas
   try {
     return await db.transaction(async (tx) => {
       const lock = await tx.execute(sql`
-        SELECT id, "studentId", "termId", amount, "chequeNo", status
+        SELECT id, "studentId", "termId", "universityId", amount, "chequeNo", status
         FROM payment_cheques WHERE id = ${chequeId} FOR UPDATE`);
       const cheque = lock.rows[0] as any;
       if (!cheque) return { ok: false, reason: 'چک یافت نشد' };
@@ -61,6 +64,7 @@ export async function clearCheque(chequeId: number): Promise<{ ok: boolean; reas
         transactionType: 'PAYMENT',
         amount: String(cheque.amount),
         description: `وصول چک ${cheque.chequeNo || ''}`.trim(),
+        universityId: cheque.universityId ?? null,
       }).returning({ id: student_ledger.id });
 
       const upd = await tx.update(payment_cheques)

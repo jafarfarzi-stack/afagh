@@ -9,6 +9,7 @@ import FinanceStudentClient from './FinanceStudentClient';
 import { db } from '@/db';
 import { eq } from 'drizzle-orm';
 import { student_subject_fees, subject_fee_types } from '@/db/schema';
+import { getCurrentUniversity } from '@/lib/university-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,7 +53,10 @@ export default async function StudentFinancePage({ params }: { params: Promise<{
   const studentId = Number(id);
   if (!Number.isFinite(studentId)) notFound();
 
-  const fin = await getStudentFinance(studentId);
+  const currentUniversity = await getCurrentUniversity();
+const fin = await getStudentFinance(studentId, {
+    universityId: currentUniversity?.id,
+  });
   if (!fin) notFound();
 
   // فرمول تخصیص منطبق — برای هر ترم، تا کارشناس بداند مبنای محاسبه چیست

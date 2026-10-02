@@ -1,5 +1,5 @@
 import 'server-only';
-import { asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, degree_level_configs, loan_products, majors, payment_cheques,
@@ -39,8 +39,13 @@ export interface StudentFinanceDetail {
   totals: ReturnType<typeof transcriptTotals>;
 }
 
-/** همهٔ اقلام مالی یک دانشجو + کارنامهٔ ترم‌به‌ترم */
-export async function getStudentFinance(studentId: number): Promise<StudentFinanceDetail | null> {
+/** همهٔ اقلام مالی یک دانشجو + کارنامهٔ ترم‌به‌ترم
+ *  universityId: محدودکردن نتیجه به دانشگاه جاری (صفحات ادمین) — رکوردهای
+ *  legacy با universityId = NULL هم دیده می‌شوند (قرارداد بقیهٔ صفحات ادمین). */
+export async function getStudentFinance(
+  studentId: number,
+  opts: { universityId?: number } = {},
+): Promise<StudentFinanceDetail | null> {
   const [studentRow] = await db.select({
     studentId: students.id,
     userId: students.userId,
@@ -56,7 +61,14 @@ export async function getStudentFinance(studentId: number): Promise<StudentFinan
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(majors, eq(majors.id, students.majorId))
     .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
-    .where(eq(students.id, studentId))
+    .where(
+      opts.universityId === undefined
+        ? eq(students.id, studentId)
+        : and(
+            eq(students.id, studentId),
+            or(eq(students.universityId, opts.universityId), isNull(students.universityId)),
+          ),
+    )
     .limit(1);
 
   if (!studentRow) return null;
