@@ -1,5 +1,6 @@
 import pg from 'pg';
-import { groupTranscript, type TranscriptRow } from '../src/app/admin/students/transcript-utils';
+import { groupTranscript } from '../src/app/admin/students/transcript-utils';
+import type { TranscriptRow } from '../src/app/admin/students/actions';
 import { resolveSamaGradeStatusCode, syncStudentCourseRegulations } from '../src/lib/resolve-sama-code';
 import { termChronologicalValue } from '../src/lib/term-chronology';
 

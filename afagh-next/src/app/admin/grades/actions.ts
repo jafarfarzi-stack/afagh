@@ -6,7 +6,7 @@
  */
 'use server';
 
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { academic_terms, course_offerings, courses, educational_regulations, enrollments, grade_change_log, legacy_grades, students, users } from '@/db/schema';

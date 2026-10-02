@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/db';
 import { grade_change_log, course_offerings, courses, academic_terms, users, students } from '@/db/schema';
-import { desc, like, or, sql } from 'drizzle-orm';
+import { desc, eq, like, or, sql } from 'drizzle-orm';
 import { getCurrentUniversity } from '@/lib/university-scope';
 
 export const dynamic = 'force-dynamic';
