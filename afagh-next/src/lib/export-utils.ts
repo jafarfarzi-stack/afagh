@@ -77,8 +77,8 @@ export async function generateDOCX(data: ExportData): Promise<Blob> {
     sections: [{
       properties: { page: { margin: { top: 720, right: 720, bottom: 720, left: 720 } } },
       children: [
-        ...(title ? [new Paragraph({ children: [new TextRun({ text: title, bold: true, size: 32, color: '1F2937' })] }), alignment: AlignmentType.CENTER]) : []),
-        ...(subtitle ? [new Paragraph({ children: [new TextRun({ text: subtitle, size: 20, color: '6B7280' })] }), alignment: AlignmentType.CENTER]) : []),
+        ...(title ? [new Paragraph({ children: [new TextRun({ text: title, bold: true, size: 32, color: '1F2937' })], alignment: AlignmentType.CENTER })] : []),
+        ...(subtitle ? [new Paragraph({ children: [new TextRun({ text: subtitle, size: 20, color: '6B7280' })], alignment: AlignmentType.CENTER })] : []),
         new Paragraph({ children: [new TextRun({ text: `تاریخ تولید: ${new Date().toLocaleString('fa-IR')}`, size: 18, color: '9CA3AF' })], alignment: AlignmentType.CENTER }),
         new Paragraph({ text: '' }), // spacer
         new Table({ rows: tableRows, width: { size: 100, type: WidthType.PERCENTAGE } }),

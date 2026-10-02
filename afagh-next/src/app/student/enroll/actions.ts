@@ -333,6 +333,10 @@ export async function previewExamConflictsAction(): Promise<{
   return { ok: true, hard, soft };
 }
 
+import { emergencyDropAction } from '../actions';
+
+export { emergencyDropAction };
+
 export async function referCouncilAction(offeringId: number, reason?: string): Promise<{ ok: boolean; error?: string }> {
   const { user, me, term } = await ctx();
   if (!term) return { ok: false, error: 'ترم جاری یافت نشد.' };

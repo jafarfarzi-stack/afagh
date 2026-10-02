@@ -57,6 +57,7 @@ export default async function StudentTranscriptPage() {
         affectsGpa: courses.affectsGpa,
         courseMinMark: courses.minPassedMark,
         status: enrollments.status,
+        emergencyWithdrawal: enrollments.emergencyWithdrawal,
         grade: enrollments.gradeValue,
         gradeStatus: enrollments.gradeStatus,
         ev: enrollments.hasEvaluated,
@@ -309,6 +310,7 @@ export default async function StudentTranscriptPage() {
                         <th className="p-1 border-l border-slate-300 text-center w-12">واحد</th>
                         <th className="p-1 border-l border-slate-300 text-center w-14">نمره</th>
                         <th className="p-1 text-center w-16">نتیجه</th>
+                        <th className="p-1 text-center w-16">وضعیت</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -324,7 +326,16 @@ export default async function StudentTranscriptPage() {
                           : (row.grade != null && Number(row.grade) < passMark);
                         const isPending = row.grade == null;
                         const isEquiv = row.status === 'EQUIV_PASSED';
+                        const isEmergency = row.emergencyWithdrawal === 1;
                         const totalU = Number(row.units || 0);
+
+                        let statusDisplay = '';
+                        if (isEmergency) statusDisplay = <span className="text-rose-700">حذف اضطراری</span>;
+                        else if (isEquiv) statusDisplay = <span className="text-teal-700">معادل</span>;
+                        else if (isPassed) statusDisplay = <span className="text-emerald-700">قبول</span>;
+                        else if (isFailed) statusDisplay = <span className="text-red-700">مردود</span>;
+                        else if (isPending) statusDisplay = <span className="text-slate-500 font-normal">جاری</span>;
+                        else statusDisplay = <span className="text-slate-500">{statusFa[row.status] ?? row.status}</span>;
 
                         return (
                           <tr key={row.id} className="border-b border-slate-200 hover:bg-slate-50">
@@ -350,6 +361,9 @@ export default async function StudentTranscriptPage() {
                               {!isEquiv && isPassed && <span className="text-emerald-700">قبول</span>}
                               {!isEquiv && isFailed && <span className="text-red-700">مردود</span>}
                               {isPending && <span className="text-slate-500 font-normal">جاری</span>}
+                            </td>
+                            <td className="p-1 text-center font-bold text-[10px]">
+                              {statusDisplay}
                             </td>
                           </tr>
                         );

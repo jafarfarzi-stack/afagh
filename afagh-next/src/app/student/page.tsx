@@ -16,6 +16,7 @@ import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA } from '@/lib/regulations-engine';
 import Link from 'next/link';
+import { emergencyDropAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -100,6 +101,8 @@ export default async function StudentDashboardPage() {
           courseType: courses.courseType,
           group: course_offerings.groupNumber,
           professorId: course_offerings.professorId,
+          emergencyWithdrawal: enrollments.emergencyWithdrawal,
+          status: enrollments.status,
         })
         .from(enrollments)
         .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
@@ -108,7 +111,7 @@ export default async function StudentDashboardPage() {
           and(
             eq(enrollments.studentId, me.id),
             eq(course_offerings.termId, term.id),
-            inArray(enrollments.status, ['REGISTERED', 'FINALIZED', 'WAITLISTED', 'PENDING_COUNCIL'])
+            inArray(enrollments.status, ['REGISTERED', 'FINALIZED', 'WAITLISTED', 'PENDING_COUNCIL', 'DROPPED'])
           )
         )
     : [];
@@ -660,6 +663,65 @@ export default async function StudentDashboardPage() {
           </div>
         </div>
       </div>
+    </div>
+
+      {/* ========================================================================= */}
+      {/* 5. CURRENT TERM ENROLLMENTS WITH EMERGENCY DROP OPTION */}
+      {/* ========================================================================= */}
+      {currentEnrollments.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
+              <span>📋</span>
+              <span>دروس ثبت‌نام‌شده ترم جاری</span>
+            </h2>
+            <span className="text-xs text-slate-500 font-bold">بازگشت دستی پس از مهلت حذف و اضافه</span>
+          </div>
+          <div className="card bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {currentEnrollments.map((c, idx) => {
+                const sched = schedMap.get(c.offeringId);
+                const prof = c.professorId ? profMap.get(c.professorId) || 'نامشخص' : 'نامشخص';
+                const isEmergencyDropped = c.emergencyWithdrawal === 1 || c.status === 'DROPPED';
+                return (
+                  <div key={c.enrollmentId} className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900 text-sm">{c.title}</span>
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
+                        {c.units} واحد
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">استاد: {prof}</p>
+                    {sched?.exam && (
+                      <p className="text-[11px] text-slate-600">📝 امتحان: {toShamsi(sched.exam.examDate)} ساعت {sched.exam.startTime}</p>
+                    )}
+                    {isEmergencyDropped ? (
+                      <span className="text-xs text-center bg-rose-100 text-rose-800 px-3 py-1.5 rounded-xl font-bold flex items-center justify-center gap-1">
+                        <span>⚠️</span>
+                        <span>حذف اضطراری انجام شده</span>
+                      </span>
+                    ) : (
+                      <form action={async () => {
+                        'use server';
+                        const res = await emergencyDropAction(c.enrollmentId);
+                        if (!res.ok) alert(res.error || 'خطا در حذف اضطراری');
+                      }}>
+                        <button
+                          type="submit"
+                          className="w-full text-xs bg-rose-100 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-300 px-3 py-1.5 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5"
+                        >
+                          <span>⚠️</span>
+                          <span>حذف اضطراری</span>
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
