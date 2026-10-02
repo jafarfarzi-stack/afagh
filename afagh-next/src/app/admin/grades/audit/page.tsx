@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/auth';
 import { db } from '@/db';
 import { grade_change_log, course_offerings, courses, academic_terms, users, students } from '@/db/schema';
 import { desc, like, or, sql } from 'drizzle-orm';
+import { getCurrentUniversity } from '@/lib/university-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,7 @@ export default async function GradeAuditPage({ searchParams }: { searchParams: P
   const q = (sp.q ?? '').trim();
   const page = Math.max(parseInt(sp.page ?? '1', 10) || 1, 1);
   const offset = (page - 1) * PAGE_SIZE;
+  const uniId = (await getCurrentUniversity()).id;
 
   const rows = await db
     .select({
@@ -39,6 +41,13 @@ export default async function GradeAuditPage({ searchParams }: { searchParams: P
     .leftJoin(course_offerings, sql`${course_offerings.id} = ${grade_change_log.offeringId}`)
     .leftJoin(courses, sql`${courses.id} = ${course_offerings.courseId}`)
     .leftJoin(academic_terms, sql`${academic_terms.id} = ${course_offerings.termId}`)
+    .where(or(
+      eq(grade_change_log.universityId, uniId),
+      // لاگ‌های قدیمی بدون دانشگاه: تعلق را از روی دانشجو می‌سنجیم
+      sql`${grade_change_log.universityId} IS NULL
+        AND (${grade_change_log.studentId} IS NULL
+             OR ${grade_change_log.studentId} IN (SELECT id FROM students WHERE universityId = ${uniId}))`,
+    ))
     .orderBy(desc(grade_change_log.createdAt))
     .limit(PAGE_SIZE + 1)
     .offset(offset);

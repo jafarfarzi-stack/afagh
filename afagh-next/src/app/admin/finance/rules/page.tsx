@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/db';
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, isNull, or } from 'drizzle-orm';
 import {
   academic_terms, degree_level_configs, loan_products, majors, subject_fee_types,
   tuition_coefficients, tuition_discount_types, tuition_rules, tuition_sponsors,
 } from '@/db/schema';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import RulesClient from './RulesClient';
 
 export const dynamic = 'force-dynamic';
@@ -14,15 +15,28 @@ const FINANCE = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'];
 
 export default async function FinanceRulesPage() {
   await requireRole(FINANCE);
+  const uniId = (await getCurrentUniversity()).id;
 
   const [discountTypes, sponsors, formulas, degreeRows, loanRows, majorRows, coeffRows, subjectFeeRows, termRows] = await Promise.all([
-    db.select().from(tuition_discount_types).orderBy(asc(tuition_discount_types.title)),
-    db.select().from(tuition_sponsors).orderBy(asc(tuition_sponsors.title)),
-    db.select().from(tuition_rules).orderBy(asc(tuition_rules.priority), asc(tuition_rules.id)),
+    db.select().from(tuition_discount_types)
+      .where(or(eq(tuition_discount_types.universityId, uniId), isNull(tuition_discount_types.universityId)))
+      .orderBy(asc(tuition_discount_types.title)),
+    db.select().from(tuition_sponsors)
+      .where(or(eq(tuition_sponsors.universityId, uniId), isNull(tuition_sponsors.universityId)))
+      .orderBy(asc(tuition_sponsors.title)),
+    db.select().from(tuition_rules)
+      .where(or(eq(tuition_rules.universityId, uniId), isNull(tuition_rules.universityId)))
+      .orderBy(asc(tuition_rules.priority), asc(tuition_rules.id)),
     db.select({ id: degree_level_configs.id, title: degree_level_configs.title })
-      .from(degree_level_configs).orderBy(asc(degree_level_configs.title)),
-    db.select().from(loan_products).orderBy(asc(loan_products.title)),
-    db.select({ id: majors.id, title: majors.name }).from(majors).orderBy(asc(majors.name)),
+      .from(degree_level_configs)
+      .where(or(eq(degree_level_configs.universityId, uniId), isNull(degree_level_configs.universityId)))
+      .orderBy(asc(degree_level_configs.title)),
+    db.select().from(loan_products)
+      .where(or(eq(loan_products.universityId, uniId), isNull(loan_products.universityId)))
+      .orderBy(asc(loan_products.title)),
+    db.select({ id: majors.id, title: majors.name }).from(majors)
+      .where(or(eq(majors.universityId, uniId), isNull(majors.universityId)))
+      .orderBy(asc(majors.name)),
     db.select({
       id: tuition_coefficients.id,
       termId: tuition_coefficients.termId,
@@ -34,13 +48,18 @@ export default async function FinanceRulesPage() {
       termCode: academic_terms.termCode,
     }).from(tuition_coefficients)
       .leftJoin(academic_terms, eq(academic_terms.id, tuition_coefficients.termId))
+      .where(or(eq(tuition_coefficients.universityId, uniId), isNull(tuition_coefficients.universityId)))
       .orderBy(tuition_coefficients.id),
-    db.select().from(subject_fee_types).orderBy(asc(subject_fee_types.code)),
+    db.select().from(subject_fee_types)
+      .where(or(eq(subject_fee_types.universityId, uniId), isNull(subject_fee_types.universityId)))
+      .orderBy(asc(subject_fee_types.code)),
     db.select({
       id: academic_terms.id,
       termCode: academic_terms.termCode,
       termTitle: academic_terms.title,
-    }).from(academic_terms).orderBy(asc(academic_terms.termCode)),
+    }).from(academic_terms)
+      .where(or(eq(academic_terms.universityId, uniId), isNull(academic_terms.universityId)))
+      .orderBy(asc(academic_terms.termCode)),
   ]);
 
   return (
