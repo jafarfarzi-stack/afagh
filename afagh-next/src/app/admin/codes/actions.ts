@@ -1,6 +1,6 @@
 'use server';
 
-import { and, asc, eq, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { academic_terms, courses, degree_level_configs, departments, faculties, majors, universities } from '@/db/schema';
@@ -108,6 +108,14 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
         termCount: degree_level_configs.termCount, isGraduate: degree_level_configs.isGraduate,
       })
       .from(degree_level_configs)
+      // مقطع‌ها عملاً دانشگاه‌محور استفاده می‌شن (هر دانشگاه زیرمجموعهٔ خودش را دارد)
+      // ولی مالکیت‌شان به‌هم‌ریخته است (SAMAها همه به نام آفاق‌اند ولی ۴ دانشگاه
+      // استفاده‌شان می‌کنند). پس فیلتر = مال خود دانشگاه یا مشترک یا مورداستفادهٔ رشته‌هایش.
+      .where(activeUniId == null ? undefined : or(
+        eq(degree_level_configs.universityId, activeUniId),
+        isNull(degree_level_configs.universityId),
+        inArray(degree_level_configs.id, db.select({ id: majors.degreeLevelId }).from(majors).where(eq(majors.universityId, activeUniId))),
+      ))
       .orderBy(asc(degree_level_configs.title))).map(r => ({
         ...r,
         context: [
