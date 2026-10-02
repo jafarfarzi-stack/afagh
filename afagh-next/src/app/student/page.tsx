@@ -663,7 +663,6 @@ export default async function StudentDashboardPage() {
           </div>
         </div>
       </div>
-    </div>
 
       {/* ========================================================================= */}
       {/* 5. CURRENT TERM ENROLLMENTS WITH EMERGENCY DROP OPTION */}
