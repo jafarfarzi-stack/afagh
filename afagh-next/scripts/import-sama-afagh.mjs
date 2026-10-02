@@ -265,7 +265,7 @@ async function ensureDegree(maghta, prefix = 'SAMA-') {
   if (!row && !DRY) {
     const isHamava = prefix === 'HAMAVA-';
     const hd = isHamava ? HAMAVA_DEGREES[String(maghta)] : null;
-    const title = isHamava && hd ? hd.title : `مقطع سما ${maghta}`;
+    const title = isHamava ? (hd ? hd.title : `مقطع هم‌آوا ${maghta}`) : `مقطع سما ${maghta}`;
     const pg = isHamava && hd ? hd.pass : passGrade;
     row = (await q(`INSERT INTO degree_level_configs
       (title, code, "defaultPassingGrade", "conditionalGpaThreshold", "maxUnitsPerTerm", "termCount", "isGraduate", "universityId")
@@ -770,7 +770,9 @@ async function phaseStudents(files, lookups) {
     // Graduation degree level (may differ from entry degree level - e.g., dropped from Bachelor to Associate)
     // Assuming c[57] contains graduation degree level code, fallback to entry maghta
     const graduateMaghta = (c[57] || '').trim() || maghta;
-    const graduateDegreeLevelId = graduateMaghta ? await lookups.maghta.get(graduateMaghta) : null;
+    const graduateDegreeLevelId = graduateMaghta
+      ? await ensureDegree(graduateMaghta, SOURCE === 'SHAMS' ? 'HAMAVA-' : 'SAMA-')
+      : null;
     stuJobs.push({
       stno, maghta, reshte, status, entryYear, entryTerm, entryDate, regKind, graduateDegreeLevelId,
       quota: mapQuota(sahmn),
