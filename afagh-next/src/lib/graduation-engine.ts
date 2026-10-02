@@ -1023,7 +1023,7 @@ export async function submitThesisTitleAndSupervisor(input: {
         nationalCode: stu.nationalCode,
         trackingCode: '', // prior check doesn't need tracking code
         thesisTitle: input.titleFa,
-        maxAllowedThreshold: getNumber('GRAD_IRANDOC_MAX_SIMILARITY', 20),
+        maxAllowedThreshold: await getNumber('GRAD_IRANDOC_MAX_SIMILARITY', 20),
       });
       priorTracking = r.trackingCode || '';
       priorSim = r.similarityPercentage;
@@ -1076,7 +1076,7 @@ export async function submitProposal(input: {
         nationalCode: stu.nationalCode,
         trackingCode: '',
         thesisTitle: tp.titleFa,
-        maxAllowedThreshold: getNumber('GRAD_IRANDOC_MAX_SIMILARITY', 20),
+        maxAllowedThreshold: await getNumber('GRAD_IRANDOC_MAX_SIMILARITY', 20),
       });
       propSim = r.similarityPercentage;
     }
@@ -1112,7 +1112,7 @@ export async function approveProposalAndUploadIrandoc(input: {
   
   const tp = await getOrCreateThesisProgress(input.auditId);
 
-  if (!['SIMILARITY_PASSED', 'EXPERT_REVIEW'].includes(tp.proposalStatus)) {
+  if (!['SIMILARITY_PASSED', 'EXPERT_REVIEW'].includes(tp.proposalStatus ?? '')) {
     throw new Error('پروپوزال در وضعیت قابل تأیید نیست');
   }
 
@@ -1241,8 +1241,8 @@ export async function expertScheduleDefense(input: {
       id: classrooms.id, capacity: classrooms.capacity, facultyId: classrooms.facultyId,
     }).from(classrooms)
       .orderBy(desc(classrooms.capacity), asc(classrooms.name));
-    roomId = (facultyId != null ? rooms.find(r => r.facultyId === facultyId) : undefined)
-      ?? rooms.find(r => r.facultyId == null)
+    roomId = (facultyId != null ? rooms.find(r => r.facultyId === facultyId)?.id : undefined)
+      ?? rooms.find(r => r.facultyId == null)?.id
       ?? rooms[0]?.id
       ?? null;
   }
@@ -1354,12 +1354,12 @@ export async function runFinalIrandocCheck(input: {
   }).from(students).innerJoin(users, eq(users.id, students.userId))
     .where(eq(students.id, tp.studentId)).limit(1);
 
-  const title = input.title || tp.titleFa;
+  const title = input.title || tp.titleFa || '';
   const r = await executeIrandocCheck({
     nationalCode: stu?.nationalCode ?? '',
     trackingCode: input.trackingCode,
     thesisTitle: title,
-    maxAllowedThreshold: getNumber('GRAD_IRANDOC_MAX_SIMILARITY', 20),
+    maxAllowedThreshold: await getNumber('GRAD_IRANDOC_MAX_SIMILARITY', 20),
   });
 
   const passed = r.decision === 'AUTO_APPROVE';
