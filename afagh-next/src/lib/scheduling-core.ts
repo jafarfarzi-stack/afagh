@@ -94,8 +94,9 @@ export function normalizeTermCode(raw: string | number | null | undefined): Norm
 
   const academicYear = parseInt(normalized.slice(0, 4), 10);
   const semester = parseInt(normalized.slice(4, 5), 10);
-  // سال نامعتبر (مثل ۱۳۱۰ یا ۱۴۰ قدیم) را رد کن
-  if (academicYear < 1300 || academicYear > 1500) return null;
+  // سال نامعتبر (مثل ۱۳۱۰ یا ۱۴۰ قدیم، یا آیندهٔ دور مثل ۱۴۵۵) را رد کن
+  // سقف ۱۴۲۰: امسال ~۱۴۰۵ است و ترم‌ها حداکثر چند سال جلوتر ساخته می‌شن
+  if (academicYear < 1300 || academicYear > 1420) return null;
   // نوع ترم فقط از رقم آخر — بدون حدس اضافه
   const termType = termTypeFromDigit(semester);
 
