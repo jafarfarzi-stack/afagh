@@ -771,7 +771,6 @@ async function phaseStudents(files, lookups) {
     // Assuming c[57] contains graduation degree level code, fallback to entry maghta
     const graduateMaghta = (c[57] || '').trim() || maghta;
     const graduateDegreeLevelId = graduateMaghta ? await lookups.maghta.get(graduateMaghta) : null;
-    const accept = (s[14] || '').trim();
     stuJobs.push({
       stno, maghta, reshte, status, entryYear, entryTerm, entryDate, regKind, graduateDegreeLevelId,
       quota: mapQuota(sahmn),
