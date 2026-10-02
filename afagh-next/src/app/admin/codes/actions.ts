@@ -3,7 +3,7 @@
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { academic_terms, courses, degree_level_configs, departments, faculties, majors } from '@/db/schema';
+import { academic_terms, courses, degree_level_configs, departments, faculties, majors, universities } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { faIncludes, normalizeFa } from '@/lib/persian-search';
 import { CODE_TABLES, type CodeRow, type CodeStat, type CodeTable, type FormOptions } from './tables';
@@ -17,37 +17,63 @@ import { CODE_TABLES, type CodeRow, type CodeStat, type CodeTable, type FormOpti
  * رکوردها بی‌کد یا دارای کد تکراری‌اند.
  */
 
-const dupSet = (rows: { code: string | null }[]) => {
+/**
+ * ردیف خام داخلی — scope کلید یکتایی است (مثلاً دانشگاه).
+ * چرا: کد ترم و کد درس فقط «درون یک دانشگاه» یکتاست (uq_terms_uni_code و
+ * uq_courses_uni_code)، نه سراسری. شمارش سراسری ۲۷۰/۵۲۵ هشدار اشتباه می‌داد
+ * در حالی که تکراری واقعی صفر بود. scope=null یعنی سراسری (رشته، مقطع).
+ */
+type RawRow = {
+  id: number;
+  code: string | null;
+  title: string;
+  context: string | null;
+  scope: string | null;
+};
+
+const dupSet = (rows: RawRow[]) => {
   const seen = new Map<string, number>();
   for (const r of rows) {
     if (!r.code) continue;
-    seen.set(r.code, (seen.get(r.code) ?? 0) + 1);
+    const key = `${r.scope ?? ''}::${r.code}`;
+    seen.set(key, (seen.get(key) ?? 0) + 1);
   }
-  return new Set([...seen.entries()].filter(([, n]) => n > 1).map(([c]) => c));
+  return new Set([...seen.entries()].filter(([, n]) => n > 1).map(([k]) => k));
 };
+
+const scopeKey = (r: RawRow) => `${r.scope ?? ''}::${r.code}`;
 
 export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
   await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
   const t = normalizeFa(q).slice(0, 60);
-  let raw: { id: number; code: string | null; title: string; context: string | null }[] = [];
+  let raw: RawRow[] = [];
 
   if (table === 'faculty') {
     raw = (await db
-      .select({ id: faculties.id, code: faculties.facultyCode, title: faculties.name })
+      .select({ id: faculties.id, code: faculties.facultyCode, title: faculties.name,
+        uni: universities.title, uid: faculties.universityId })
       .from(faculties)
-      .orderBy(asc(faculties.name))).map(r => ({ ...r, context: null }));
+      .leftJoin(universities, eq(universities.id, faculties.universityId))
+      .orderBy(asc(faculties.name)))
+      .map(r => ({ id: r.id, code: r.code, title: r.title, context: r.uni ?? null,
+        scope: r.uid != null ? `u${r.uid}` : null }));
   }
 
   if (table === 'department') {
     raw = (await db
       .select({
         id: departments.id, code: departments.departmentCode, title: departments.name,
-        facName: faculties.name, facCode: faculties.facultyCode,
+        facName: faculties.name, facCode: faculties.facultyCode, facId: departments.facultyId,
+        uni: universities.title, uid: faculties.universityId,
       })
       .from(departments)
       .leftJoin(faculties, eq(faculties.id, departments.facultyId))
+      .leftJoin(universities, eq(universities.id, faculties.universityId))
       .orderBy(asc(faculties.name), asc(departments.name)))
-      .map(r => ({ id: r.id, code: r.code, title: r.title, context: r.facName ? `${r.facName}${r.facCode ? ` [${r.facCode}]` : ''}` : null }));
+      .map(r => ({ id: r.id, code: r.code, title: r.title,
+        context: [r.uni ?? null, r.facName ? `${r.facName}${r.facCode ? ` [${r.facCode}]` : ''}` : null].filter(Boolean).join(' · ') || null,
+        // گروه ذیل دانشکده است — تکراری واقعی یعنی کد تکراری در یک دانشکده
+        scope: r.facId != null ? `f${r.facId}` : null }));
   }
 
   if (table === 'major') {
@@ -63,6 +89,8 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
       .map(r => ({
         id: r.id, code: r.code, title: r.title,
         context: [r.deg, r.dept ? `${r.dept}${r.deptCode ? ` [${r.deptCode}]` : ''}` : null].filter(Boolean).join(' · ') || null,
+        // کد رشته سراسری یکتاست (majorCode unique) — تکراری واقعی است
+        scope: null,
       }));
   }
 
@@ -79,6 +107,8 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
           r.termCount != null ? `${r.termCount} ترمه` : 'ترم: استنتاجی',
           r.isGraduate === 1 ? 'تکمیلی' : null,
         ].filter(Boolean).join(' · ') || null,
+        // کد مقطع سراسری یکتاست — تکراری واقعی است
+        scope: null,
       }));
   }
 
@@ -87,23 +117,37 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
       .select({
         id: courses.id, code: courses.code, title: courses.title,
         dept: departments.name, deg: degree_level_configs.title,
+        uni: universities.title, uid: courses.universityId,
       })
       .from(courses)
       .leftJoin(departments, eq(departments.id, courses.departmentId))
       .leftJoin(degree_level_configs, eq(degree_level_configs.id, courses.degreeLevelId))
+      .leftJoin(universities, eq(universities.id, courses.universityId))
       .orderBy(asc(courses.code)))
-      .map(r => ({ id: r.id, code: r.code, title: r.title, context: [r.deg, r.dept].filter(Boolean).join(' · ') || null }));
+      .map(r => ({ id: r.id, code: r.code, title: r.title,
+        context: [r.uni ?? null, r.deg, r.dept].filter(Boolean).join(' · ') || null,
+        // کد درس فقط درون یک دانشگاه یکتاست (uq_courses_uni_code)
+        scope: r.uid != null ? `u${r.uid}` : null }));
   }
 
   if (table === 'term') {
     raw = (await db
-      .select({ id: academic_terms.id, code: academic_terms.termCode, title: academic_terms.title })
+      .select({ id: academic_terms.id, code: academic_terms.termCode, title: academic_terms.title,
+        uni: universities.title, uid: academic_terms.universityId })
       .from(academic_terms)
-      .orderBy(asc(academic_terms.termCode))).map(r => ({ ...r, context: null }));
+      .leftJoin(universities, eq(universities.id, academic_terms.universityId))
+      .orderBy(asc(academic_terms.termCode)))
+      .map(r => ({ id: r.id, code: r.code, title: r.title,
+        context: r.uni ?? null,
+        // کد ترم فقط درون یک دانشگاه یکتاست (uq_terms_uni_code)
+        scope: r.uid != null ? `u${r.uid}` : null }));
   }
 
   const dups = dupSet(raw);
-  const rows = raw.map(r => ({ ...r, duplicate: !!r.code && dups.has(r.code) }));
+  const rows: CodeRow[] = raw.map(r => ({
+    id: r.id, code: r.code, title: r.title, context: r.context,
+    duplicate: !!r.code && dups.has(scopeKey(r)),
+  }));
   if (!t) return rows;
   return rows.filter(r => faIncludes(r.title, t) || (r.code ?? '').includes(t) || faIncludes(r.context, t));
 }
