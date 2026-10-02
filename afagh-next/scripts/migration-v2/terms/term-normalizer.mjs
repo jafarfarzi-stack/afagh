@@ -118,13 +118,13 @@ export function normalizeTerm(rawCode, fallbackYear = null) {
       title = `نیمسال دوم ${pYear}-${pNextYear}`;
       break;
     case 3:
-      title = `تابستان ${pNextYear}`;
+      title = `تابستان ${pYear}-${pNextYear}`;
       break;
     case 5:
       title = `معادل‌سازی ${pYear}-${pNextYear}`;
       break;
     case 0:
-      title = `سوابق پایه ${pYear}`;
+      title = `معادل‌سازی ${pYear}-${pNextYear}`;
       break;
     default:
       title = `نیمسال ${toPersianDigits(semesterPart)} دوره ${pYear}`;

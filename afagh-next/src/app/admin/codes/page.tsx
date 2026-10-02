@@ -3,7 +3,6 @@ import { requireRole } from '@/lib/auth';
 import { codeFormOptions, codeStats, createCodeRowAction, deleteCodeRowAction, getDegreeRowAction, listCodes, setCodeAction, updateDegreeRowAction } from './actions';
 import type { CodeTable } from './tables';
 import CodesClient from './CodesClient';
-import { getCurrentUniversity } from '@/lib/university-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,10 +13,6 @@ export const dynamic = 'force-dynamic';
 export default async function CodesPage() {
   await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
   const initialTable: CodeTable = 'faculty';
-
-  const currentUniversity = await getCurrentUniversity();
-  const currentUniversityId = currentUniversity?.id ?? null;
-  /* TODO: filter by universityId */
 
   const [stats, initialRows, options] = await Promise.all([codeStats(), listCodes(initialTable), codeFormOptions()]);
 

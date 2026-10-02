@@ -1,10 +1,11 @@
 'use server';
 
-import { and, asc, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { academic_terms, courses, degree_level_configs, departments, faculties, majors, universities } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import { faIncludes, normalizeFa } from '@/lib/persian-search';
 import { CODE_TABLES, type CodeRow, type CodeStat, type CodeTable, type FormOptions } from './tables';
 
@@ -46,6 +47,9 @@ const scopeKey = (r: RawRow) => `${r.scope ?? ''}::${r.code}`;
 export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
   await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
   const t = normalizeFa(q).slice(0, 60);
+  // دانشگاه فعال از سوییچ سربرگ — همهٔ جدول‌های مرجع (جز مقطع که سراسری است)
+  // فقط رکوردهای همین دانشگاه را نشان می‌دهند تا سوییچ واقعاً کار کند.
+  const activeUniId = (await getCurrentUniversity())?.id ?? null;
   let raw: RawRow[] = [];
 
   if (table === 'faculty') {
@@ -54,6 +58,7 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
         uni: universities.title, uid: faculties.universityId })
       .from(faculties)
       .leftJoin(universities, eq(universities.id, faculties.universityId))
+      .where(activeUniId == null ? undefined : or(eq(faculties.universityId, activeUniId), isNull(faculties.universityId)))
       .orderBy(asc(faculties.name)))
       .map(r => ({ id: r.id, code: r.code, title: r.title, context: r.uni ?? null,
         scope: r.uid != null ? `u${r.uid}` : null }));
@@ -69,6 +74,7 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
       .from(departments)
       .leftJoin(faculties, eq(faculties.id, departments.facultyId))
       .leftJoin(universities, eq(universities.id, faculties.universityId))
+      .where(activeUniId == null ? undefined : or(eq(faculties.universityId, activeUniId), isNull(faculties.universityId)))
       .orderBy(asc(faculties.name), asc(departments.name)))
       .map(r => ({ id: r.id, code: r.code, title: r.title,
         context: [r.uni ?? null, r.facName ? `${r.facName}${r.facCode ? ` [${r.facCode}]` : ''}` : null].filter(Boolean).join(' · ') || null,
@@ -85,6 +91,7 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
       .from(majors)
       .leftJoin(degree_level_configs, eq(degree_level_configs.id, majors.degreeLevelId))
       .leftJoin(departments, eq(departments.id, majors.departmentId))
+      .where(activeUniId == null ? undefined : or(eq(majors.universityId, activeUniId), isNull(majors.universityId)))
       .orderBy(asc(majors.name)))
       .map(r => ({
         id: r.id, code: r.code, title: r.title,
@@ -123,6 +130,7 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
       .leftJoin(departments, eq(departments.id, courses.departmentId))
       .leftJoin(degree_level_configs, eq(degree_level_configs.id, courses.degreeLevelId))
       .leftJoin(universities, eq(universities.id, courses.universityId))
+      .where(activeUniId == null ? undefined : or(eq(courses.universityId, activeUniId), isNull(courses.universityId)))
       .orderBy(asc(courses.code)))
       .map(r => ({ id: r.id, code: r.code, title: r.title,
         context: [r.uni ?? null, r.deg, r.dept].filter(Boolean).join(' · ') || null,
@@ -136,6 +144,7 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
         uni: universities.title, uid: academic_terms.universityId })
       .from(academic_terms)
       .leftJoin(universities, eq(universities.id, academic_terms.universityId))
+      .where(activeUniId == null ? undefined : or(eq(academic_terms.universityId, activeUniId), isNull(academic_terms.universityId)))
       .orderBy(asc(academic_terms.termCode)))
       .map(r => ({ id: r.id, code: r.code, title: r.title,
         context: r.uni ?? null,
