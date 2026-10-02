@@ -18,9 +18,11 @@ import { FINANCE, clean, intOrNull, money, num } from './shared';
 export async function recordLedgerAction(input: {
   studentId: number;
   termId: number | null;
-  transactionType: 'PAYMENT' | 'CHARGE';
+  transactionType: 'PAYMENT' | 'CHARGE' | 'POS_PAYMENT';
   amount: number;
   description: string;
+  financialTermId?: number | null;
+  referenceId?: number;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
   const og = await assertServerActionOrigin();

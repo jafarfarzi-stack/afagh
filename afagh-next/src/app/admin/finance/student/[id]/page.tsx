@@ -305,7 +305,7 @@ export default async function StudentFinancePage({ params }: { params: Promise<{
         }))}
         sponsorships={fin.sponsorships.map((s) => ({
           id: s.id, sponsorTitle: s.sponsorTitle, coverageKind: s.coverageKind,
-          percent: Number(s.percent), amount: Number(s.amount),
+          percent: Math.max(Number(s.fixedPercent), Number(s.variablePercent)), amount: Number(s.amount),
           status: s.status, termId: s.termId, referenceNo: s.referenceNo,
         }))}
         cheques={fin.cheques.map((c) => ({

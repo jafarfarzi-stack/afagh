@@ -3,10 +3,11 @@
 import { db } from '@/db';
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import { student_ledger, students, users, financial_terms, academic_terms, financial_clearances } from '@/db/schema';
-import { requireRole, getCurrentUniversity } from '@/lib/auth';
+import { requireRole } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import { toNum } from '@/lib/finance-rules';
 
-const ROLES = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'] as const;
+const ROLES: string[] = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'];
 
 export async function GET(request: Request) {
   await requireRole(ROLES);

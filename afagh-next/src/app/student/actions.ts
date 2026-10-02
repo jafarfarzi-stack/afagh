@@ -148,3 +148,10 @@ export async function emergencyDropAction(enrollmentId: number): Promise<{ ok: b
   revalidatePath('/student');
   return { ok: true };
 }
+
+/** Wrapper برای فراخوانی از طریق <form action={...}> در Server Component */
+export async function emergencyDropFormAction(formData: FormData): Promise<void> {
+  const enrollmentId = Number(formData.get('enrollmentId'));
+  if (!enrollmentId) return;
+  await emergencyDropAction(enrollmentId);
+}

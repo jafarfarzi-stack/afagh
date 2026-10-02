@@ -80,7 +80,7 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
     const thresholdRaw = await import('../settings').then(m => m.getSetting('ENROLLMENT_DEBT_THRESHOLD'));
     const debtThreshold = Math.max(0, Number(thresholdRaw ?? 0));
     if (debtThreshold > 0) {
-      const [bal] = await db.execute(sql`
+      const balResult = await db.execute(sql`
         SELECT COALESCE(SUM(
           CASE WHEN "transactionType" IN ('CHARGE','TUITION_CHARGE') THEN amount
                WHEN "transactionType" IN ('PAYMENT','CREDIT','DISCOUNT','SPONSOR','LOAN','SUBJECT_FEE_DEDUCTIVE') THEN -amount
@@ -89,7 +89,7 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
         FROM student_ledger
         WHERE "studentId" = ${studentId} AND ("termId" = ${clearanceTermId} OR "financialTermId" = ${clearanceTermId})
       `);
-      const balance = Number(bal.rows[0]?.balance ?? 0);
+      const balance = Number(balResult.rows[0]?.balance ?? 0);
       if (balance > debtThreshold) {
         out.ok = false;
         out.hardErrors.push(`مانده بدهکاری شما (${balance.toLocaleString('fa-IR')} ریال) بیش از حد مجاز (${debtThreshold.toLocaleString('fa-IR')} ریال) است. ابتدا بدهکاری را کاهش دهید.`);

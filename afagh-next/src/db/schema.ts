@@ -2116,6 +2116,144 @@ export const graduation_audits = pgTable('graduation_audits', {
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ uq: unique('uq_graduation_audits_student').on(t.studentId) }));
 
+/** پیشرفت پایان‌نامه (فاز ۱ تا ۳) — برای مقاطع ارشد/دکتری */
+export const thesis_progress = pgTable('thesis_progress', {
+  id: serial('id').primaryKey(),
+  auditId: integer('auditId').notNull().references(() => graduation_audits.id),
+  studentId: integer('studentId').notNull().references(() => students.id),
+
+  // Phase 1: Supervisor & Title
+  supervisorId: integer('supervisorId').references(() => staff.id),
+  advisorId: integer('advisorId').references(() => staff.id),
+  titleFa: varchar('titleFa', { length: 300 }),
+  titleEn: varchar('titleEn', { length: 300 }),
+  keywords: text('keywords'),
+  abstract: text('abstract'),
+
+  // Irandoc prior-check
+  irandocPriorTracking: varchar('irandocPriorTracking', { length: 60 }),
+  irandocPriorSimilarity: numeric('irandocPriorSimilarity', { precision: 5, scale: 2 }),
+  irandocPriorStatus: varchar('irandocPriorStatus', { length: 30 }).default('PENDING'), // PENDING|PASSED|REJECTED|SKIPPED
+  irandocPriorCheckedAt: timestamp('irandocPriorCheckedAt'),
+
+  // Phase 2: Proposal
+  proposalFileId: integer('proposalFileId'),
+  proposalSubmittedAt: timestamp('proposalSubmittedAt'),
+  proposalSimilarity: numeric('proposalSimilarity', { precision: 5, scale: 2 }),
+  proposalStatus: varchar('proposalStatus', { length: 30 }).default('NOT_STARTED'), // NOT_STARTED|SUBMITTED|SIMILARITY_CHECK|SIMILARITY_PASSED|SIMILARITY_HIGH|EXPERT_REVIEW|APPROVED|REJECTED|PRIOR_REJECTED
+  proposalApprovedAt: timestamp('proposalApprovedAt'),
+  proposalApprovedBy: integer('proposalApprovedBy').references(() => users.id),
+
+  // Irandoc upload after approval
+  irandocUploadTracking: varchar('irandocUploadTracking', { length: 60 }),
+  irandocUploadStatus: varchar('irandocUploadStatus', { length: 30 }).default('PENDING'), // PENDING|UPLOADED|CERTIFICATE_ISSUED
+  irandocCertificateFileId: integer('irandocCertificateFileId'),
+  irandocUploadedAt: timestamp('irandocUploadedAt'),
+
+  // Phase 3: Progress Reports
+  lastProgressReportAt: timestamp('lastProgressReportAt'),
+  nextProgressReportDue: timestamp('nextProgressReportDue'),
+  progressReportCount: integer('progressReportCount').default(0),
+
+  // Defense Request
+  defenseRequestedAt: timestamp('defenseRequestedAt'),
+  defenseRequestStatus: varchar('defenseRequestStatus', { length: 30 }).default('NOT_REQUESTED'), // NOT_REQUESTED|SUPERVISOR_REVIEW|SUPERVISOR_REJECTED|EXPERT_REVIEW|SCHEDULED|CONDUCTED|PASSED|FAILED
+  defenseRoomId: integer('defenseRoomId').references(() => classrooms.id),
+  defenseScheduledAt: timestamp('defenseScheduledAt'),
+  defenseConductedAt: timestamp('defenseConductedAt'),
+  defenseResult: varchar('defenseResult', { length: 30 }), // PASSED|FAILED|CONDITIONAL
+  defenseNote: text('defenseNote'),
+
+  // Final Thesis
+  finalThesisFileId: integer('finalThesisFileId'),
+  finalThesisSubmittedAt: timestamp('finalThesisSubmittedAt'),
+  finalIrandocTracking: varchar('finalIrandocTracking', { length: 60 }),
+  finalIrandocSimilarity: numeric('finalIrandocSimilarity', { precision: 5, scale: 2 }),
+  finalIrandocStatus: varchar('finalIrandocStatus', { length: 30 }).default('PENDING'), // PENDING|PASSED|REJECTED
+  finalIrandocCheckedAt: timestamp('finalIrandocCheckedAt'),
+
+  // Jury
+  juryChairId: integer('juryChairId').references(() => staff.id),
+  jurySupervisorId: integer('jurySupervisorId').references(() => staff.id),
+  juryInternalId: integer('juryInternalId').references(() => staff.id),
+  juryExternalId: integer('juryExternalId').references(() => staff.id),
+
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+}, (t) => ({
+  uq: unique('uq_thesis_progress_audit').on(t.auditId),
+  idxStudent: index('idx_thesis_progress_student').on(t.studentId),
+  idxStatus: index('idx_thesis_progress_status').on(t.proposalStatus, t.defenseRequestStatus),
+}));
+
+/** گزارش‌های پیشرفت ۳/۶ ماهه */
+export const thesis_progress_reports = pgTable('thesis_progress_reports', {
+  id: serial('id').primaryKey(),
+  thesisProgressId: integer('thesisProgressId').notNull().references(() => thesis_progress.id, { onDelete: 'cascade' }),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  reportPeriodStart: date('reportPeriodStart').notNull(),
+  reportPeriodEnd: date('reportPeriodEnd').notNull(),
+  reportText: text('reportText').notNull(),
+  supervisorConfirmed: integer('supervisorConfirmed').default(0),
+  supervisorConfirmedAt: timestamp('supervisorConfirmedAt'),
+  fileId: integer('fileId'),
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+}, (t) => ({
+  uq: unique('uq_thesis_report_period').on(t.thesisProgressId, t.reportPeriodStart, t.reportPeriodEnd),
+}));
+
+/** استخر هیأت داوران دفاع (برای تخصیص خودکار) */
+export const defense_jury_pools = pgTable('defense_jury_pools', {
+  id: serial('id').primaryKey(),
+  departmentCode: varchar('departmentCode', { length: 40 }).notNull(),
+  majorId: integer('majorId').references(() => majors.id),
+  chairId: integer('chairId').references(() => staff.id),
+  internalIds: integer('internalIds').array().default(sql`'{}'`),
+  externalIds: integer('externalIds').array().default(sql`'{}'`),
+  roomId: integer('roomId').references(() => classrooms.id),
+  isActive: integer('isActive').default(1),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+});
+
+/** جلسات دفاع (برنامه‌ریزی شده) */
+export const defense_sessions = pgTable('defense_sessions', {
+  id: serial('id').primaryKey(),
+  thesisProgressId: integer('thesisProgressId').notNull().references(() => thesis_progress.id),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  scheduledAt: timestamp('scheduledAt').notNull(),
+  roomId: integer('roomId').references(() => classrooms.id),
+  chairId: integer('chairId').references(() => staff.id),
+  supervisorId: integer('supervisorId').references(() => staff.id),
+  internalId: integer('internalId').references(() => staff.id),
+  externalId: integer('externalId').references(() => staff.id),
+  status: varchar('status', { length: 30 }).default('SCHEDULED'), // SCHEDULED|CONDUCTED|CANCELLED|RESCHEDULED
+  result: varchar('result', { length: 30 }), // PASSED|FAILED|CONDITIONAL
+  minutes: text('minutes'),
+  createdAt: timestamp('createdAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+}, (t) => ({
+  uq: unique('uq_defense_session_progress').on(t.thesisProgressId),
+}));
+
+/** لاگ استعلام‌های ایرانداک */
+export const irandoc_logs = pgTable('irandoc_logs', {
+  id: serial('id').primaryKey(),
+  thesisProgressId: integer('thesisProgressId').references(() => thesis_progress.id),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  checkType: varchar('checkType', { length: 30 }).notNull(), // PRIOR|PROPOSAL|FINAL
+  trackingCode: varchar('trackingCode', { length: 60 }),
+  title: varchar('title', { length: 300 }),
+  similarityPercentage: numeric('similarityPercentage', { precision: 5, scale: 2 }),
+  decision: varchar('decision', { length: 30 }), // AUTO_APPROVE|MANUAL_REVIEW|REJECT
+  rawResponse: jsonb('rawResponse'),
+  checkedAt: timestamp('checkedAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+}, (t) => ({
+  idxStudentType: index('idx_irandoc_logs_student_type').on(t.studentId, t.checkType),
+}));
+
 /** چک‌لیست تسویه‌حساب موازی (یک ردیف به‌ازای هر دپارتمان برای هر دانشجو) */
 export const clearance_checklist = pgTable('clearance_checklist', {
   id: serial('id').primaryKey(),

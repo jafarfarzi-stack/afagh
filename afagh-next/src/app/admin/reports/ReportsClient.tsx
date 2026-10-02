@@ -22,6 +22,7 @@ const CARDS: Card[] = [
   { kind: 'payesh', icon: '🗂️', title: 'گزارش پاسخ‌های طرح پایش' },
   { kind: 'jame', icon: '🧮', title: 'دانشجویان واجد شرایط آزمون جامع' },
   { kind: 'docs', icon: '📎', title: 'مدارک دانشجویان' },
+  { kind: 'third-attempt', icon: '🔁', title: 'دروس بار سوم (مردودی دو بار)', needsTerm: true },
 ];
 
 export default function ReportsClient({ opts }: { opts: FilterOptions }) {
@@ -126,7 +127,7 @@ export default function ReportsClient({ opts }: { opts: FilterOptions }) {
                 {opts.degrees.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
               </select>
             </label>
-            {(kind === 'by-major' || kind === 'active-term' || kind === 'top') && (
+            {(kind === 'by-major' || kind === 'active-term' || kind === 'top' || kind === 'third-attempt') && (
               <label className="flex items-center gap-1">
                 <span className="font-bold text-slate-600">دانشکده:</span>
                 <select value={facultyId} onChange={e => setFacultyId(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-44">
@@ -135,7 +136,7 @@ export default function ReportsClient({ opts }: { opts: FilterOptions }) {
                 </select>
               </label>
             )}
-            {(kind === 'top' || kind === 'graduates' || kind === 'entries') && (
+            {(kind === 'top' || kind === 'graduates' || kind === 'entries' || kind === 'third-attempt') && (
               <label className="flex items-center gap-1">
                 <span className="font-bold text-slate-600">رشته:</span>
                 <select value={majorId} onChange={e => setMajorId(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-52">

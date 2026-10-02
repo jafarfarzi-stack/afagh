@@ -11,8 +11,8 @@ type Terminal = {
   gatewayId: number;
   terminalId: string;
   merchantId: string;
-  config: Record<string, unknown>;
-  lastHeartbeatAt: string | null;
+  config: unknown;
+  lastHeartbeatAt: Date | string | null;
   firmwareVersion: string | null;
 };
 

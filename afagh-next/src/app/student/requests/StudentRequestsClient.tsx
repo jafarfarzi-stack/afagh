@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { FormFieldSchema } from '@/lib/workflow-engine';
 import {
   submitSatisfactionRatingAction,
   submitStudentRequestAction,
@@ -75,6 +76,60 @@ interface StudentRequestsClientProps {
   myRequests: RequestItem[];
 }
 
+// ── گزینه‌های پویا (optionsEndpoint) ────────────────────────────────────────
+// فرم‌اسکیمای ذخیره‌شده در process_definitions می‌تواند به‌جای options آفلاین، یک
+// endpoint بدهد (مهاجرت‌های 0038 و 0039: رشته‌های فعال، ترم جاری، استادان راهنما).
+// تایپ پایهٔ FormFieldSchema در lib/workflow-engine این ویژگی را ندارد، پس اینجا
+// به‌صورت محلی اضافه می‌شود (فایل موتور عمداً دست‌نخورده ماند — گزارش پایانی).
+type SelectOption = { value: string; label: string };
+
+type DynField = FormFieldSchema & { optionsEndpoint?: string; multiple?: boolean };
+
+/** وضعیت هر فیلدِ پویا؛ `ep` نگه‌داری می‌شود تا با تعویض endpoint دادهٔ کهنه نشان داده نشود. */
+type DynState = { ep: string; status: 'loading' | 'ready' | 'error'; items: SelectOption[] };
+
+const asText = (v: unknown): string =>
+  v === null || v === undefined ? '' : String(v).trim();
+
+/** آرایه را از پاسخ API بیرون می‌کشد؛ پوشش‌های رایج envelope هم پذیرفته می‌شوند. */
+function toRows(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (raw && typeof raw === 'object') {
+    const o = raw as Record<string, unknown>;
+    for (const k of ['items', 'options', 'rows', 'data', 'results', 'list']) {
+      if (Array.isArray(o[k])) return o[k] as unknown[];
+    }
+  }
+  return [];
+}
+
+/**
+ * نرمال‌سازی پاسخ endpoint به {value,label} — دفاعی و تک‌مرحله‌ای:
+ *   [{value,label}] · [{id,name}] · [{id,code,title}] · [{id,label}] · {items:[…]} · …
+ * مقادیر تکراری و ردیف‌های بدون شناسه دور ریخته می‌شوند.
+ */
+function normalizeOptions(raw: unknown): SelectOption[] {
+  const out: SelectOption[] = [];
+  const seen = new Set<string>();
+  for (const row of toRows(raw)) {
+    if (!row || typeof row !== 'object') continue;
+    const o = row as Record<string, unknown>;
+    const value = asText(o.value ?? o.id ?? o.code ?? o.key);
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push({
+      value,
+      label: asText(o.label ?? o.name ?? o.title ?? o.text ?? o.fullName ?? o.displayName) || value,
+    });
+  }
+  return out;
+}
+
+/** آیا این فیلد باید گزینه‌هایش را از API بگیرد؟ (optionsEndpoint و بدون options آفلاین) */
+function usesRemoteOptions(f: DynField): boolean {
+  return f.type === 'select' && !!f.optionsEndpoint && !(f.options && f.options.length);
+}
+
 const statusFa: Record<string, string> = {
   SUBMITTED: 'ثبت‌شده و در صف بررسی',
   IN_REVIEW: 'در دست بررسی کارشناس',
@@ -131,15 +186,15 @@ export default function StudentRequestsClient({
   const selectedProcess = processes.find(p => p.code === selectedProcessCode) || processes[0];
 
   // برای «معادل‌سازی» پیوست کارنامهٔ ممهور الزامی است حتی اگر در فرم‌اسکیما نباشد
-  const effectiveSchema = useMemo(() => {
-    const base: any[] = selectedProcess?.formSchema || [];
+  const effectiveSchema = useMemo<DynField[]>(() => {
+    const base = (selectedProcess?.formSchema || []) as DynField[];
     if (selectedProcess?.code === 'COURSE_TRANSFER' && !base.some(f => f.type === 'file')) {
       return [
         ...base,
         {
           key: 'transcriptAttachment',
           label: 'پیوست کارنامهٔ ممهور دانشگاه قبلی',
-          type: 'file',
+          type: 'file' as const,
           required: true,
           helperText: 'تصویر کارنامهٔ ممهور (PDF/JPG/PNG تا ۱۰ مگابایت) — بدون پیوست، درخواست معادل‌سازی بررسی نمی‌شود.',
         },
@@ -147,6 +202,94 @@ export default function StudentRequestsClient({
     }
     return base;
   }, [selectedProcess]);
+
+  // ── گزینه‌های پویا: هر select که optionsEndpoint دارد، از API پر می‌شود ──────
+  const [dynOptions, setDynOptions] = useState<Record<string, DynState>>({});
+  const [optionsRetry, setOptionsRetry] = useState(0);
+
+  const dynFields = useMemo<DynField[]>(
+    () => (effectiveSchema || []).filter(usesRemoteOptions),
+    [effectiveSchema],
+  );
+
+  // کلید وابستگی افکت یک «رشته» است نه آرایه — آرایه در هر رندر تازه می‌شود و
+  // لوپ بی‌پایان fetch می‌ساخت.
+  const endpointsKey = useMemo(
+    () => dynFields.map(f => `${f.key}::${f.optionsEndpoint}`).join('|'),
+    [dynFields],
+  );
+
+  useEffect(() => {
+    if (!endpointsKey || dynFields.length === 0) {
+      setDynOptions(prev => (Object.keys(prev).length ? {} : prev));
+      return;
+    }
+
+    const controller = new AbortController();
+    let alive = true;
+
+    // گروه‌بندی: یک درخواست برای هر endpoint حتی اگر چند فیلد به آن اشاره کنند
+    // (استاد راهنما و استاد مشاور هر دو /api/admin/staff/supervisors هستند)
+    const groups = new Map<string, DynField[]>();
+    for (const f of dynFields) {
+      const ep = String(f.optionsEndpoint);
+      const g = groups.get(ep);
+      if (g) g.push(f);
+      else groups.set(ep, [f]);
+    }
+
+    setDynOptions(prev => {
+      const next: Record<string, DynState> = {};
+      for (const f of dynFields) {
+        const ep = String(f.optionsEndpoint);
+        const cur = prev[f.key];
+        // فقط اگر همان endpoint و قبلاً موفق بوده، دادهٔ آماده نگه داشته می‌شود
+        next[f.key] = cur && cur.ep === ep && cur.status === 'ready' ? cur : { ep, status: 'loading', items: [] };
+      }
+      return next;
+    });
+
+    const load = async () => {
+      await Promise.all(
+        Array.from(groups.entries()).map(async ([ep, fields]) => {
+          try {
+            const res = await fetch(ep, {
+              signal: controller.signal,
+              credentials: 'same-origin',
+              headers: { Accept: 'application/json' },
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const items = normalizeOptions(await res.json());
+            if (!alive) return;
+            setDynOptions(prev => {
+              // اگر کاربر در این فاصله فرآیند را عوض کرده، این نتیجه دیگر مال فرم جاری نیست
+              if (!fields.some(f => prev[f.key])) return prev;
+              const next = { ...prev };
+              for (const f of fields) next[f.key] = { ep, status: 'ready', items };
+              return next;
+            });
+          } catch (err) {
+            if (!alive || (err as Error)?.name === 'AbortError') return;
+            setDynOptions(prev => {
+              if (!fields.some(f => prev[f.key])) return prev;
+              const next = { ...prev };
+              for (const f of fields) next[f.key] = { ep, status: 'error', items: [] };
+              return next;
+            });
+          }
+        }),
+      );
+    };
+
+    void load();
+
+    return () => {
+      alive = false;
+      controller.abort();
+    };
+    // عمداً فقط این دو: تغییر «کد endpointها» یعنی تغییر منبع داده؛ خودِ dynFields
+    // یک آرایهٔ تازه‌سازی‌شده در هر رندر است و نمی‌تواند وابستگی باشد.
+  }, [endpointsKey, optionsRetry]);
 
   const handleFile = async (fieldKey: string, file: File | null) => {
     if (!file) return;
@@ -181,6 +324,14 @@ export default function StudentRequestsClient({
     for (const f of effectiveSchema) {
       if (f.type === 'file' && f.required && !formData[f.key]) {
         setSubmitError(`پیوست «${f.label}» الزامی است.`);
+        setIsSubmitting(false);
+        return;
+      }
+      // فیلد پویا هنوز گزینه نگرفته ⇒ ارسال نباید رد شود (وگرنه رکورد ناقص ثبت می‌شود)
+      if (f.required && usesRemoteOptions(f) && (dynOptions[f.key]?.status ?? 'loading') !== 'ready') {
+        setSubmitError(
+          `گزینه‌های فیلد «${f.label}» هنوز آماده نیست. چند لحظه صبر کنید یا دکمهٔ «تلاش دوباره» را بزنید.`,
+        );
         setIsSubmitting(false);
         return;
       }
@@ -365,7 +516,14 @@ export default function StudentRequestsClient({
               {/* فیلدهای پویا */}
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {effectiveSchema.map((field: any) => {
+                  {effectiveSchema.map((field: DynField) => {
+                    const remote = usesRemoteOptions(field);
+                    const remoteStatus: 'loading' | 'ready' | 'error' | null = remote
+                      ? (dynOptions[field.key]?.status ?? 'loading')
+                      : null;
+                    const options: SelectOption[] = remote
+                      ? (dynOptions[field.key]?.items ?? [])
+                      : (field.options ?? []);
                     return (
                       <div
                         key={field.key}
@@ -394,19 +552,47 @@ export default function StudentRequestsClient({
                             )}
                           </div>
                         ) : field.type === 'select' ? (
-                          <select
-                            required={field.required}
-                            value={formData[field.key] || field.defaultValue || ''}
-                            onChange={e => handleInputChange(field.key, e.target.value)}
-                            className="w-full p-2.5 text-xs rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition"
-                          >
-                            <option value="">-- انتخاب کنید --</option>
-                            {field.options?.map((opt: any) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
+                          <div className="space-y-1">
+                            <select
+                              required={field.required}
+                              disabled={remoteStatus === 'loading'}
+                              value={formData[field.key] || field.defaultValue || ''}
+                              onChange={e => handleInputChange(field.key, e.target.value)}
+                              className={`w-full p-2.5 text-xs rounded-xl border transition disabled:opacity-60 disabled:cursor-not-allowed ${
+                                remoteStatus === 'error'
+                                  ? 'border-red-300 bg-red-50 focus:bg-white focus:ring-2 focus:ring-red-500'
+                                  : 'border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500'
+                              }`}
+                            >
+                              <option value="">
+                                {remoteStatus === 'loading'
+                                  ? 'در حال بارگذاری...'
+                                  : remoteStatus === 'error'
+                                    ? 'فهرست گزینه‌ها بارگذاری نشد'
+                                    : '-- انتخاب کنید --'}
                               </option>
-                            ))}
-                          </select>
+                              {options.map((opt: SelectOption) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+
+                            {remoteStatus === 'error' && (
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-[11px] text-red-600 font-bold">
+                                  ⚠️ دریافت فهرست گزینه‌ها از سامانه ناموفق بود.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setOptionsRetry(n => n + 1)}
+                                  className="shrink-0 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-extrabold shadow transition"
+                                >
+                                  تلاش دوباره
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         ) : field.type === 'textarea' ? (
                           <textarea
                             rows={3}

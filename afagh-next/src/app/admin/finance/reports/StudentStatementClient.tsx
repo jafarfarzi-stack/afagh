@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { faIR } from 'date-fns/locale';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title, LineElement, PointElement } from 'chart.js';
 import { saveAs } from 'file-saver';
 
@@ -39,7 +38,7 @@ function generateCSV(data: StatementRow[], studentName: string, studentCode: str
     fa(d.subjectAdditive), fa(d.subjectDeductive), fa(d.sponsorship), fa(d.payments), fa(d.posPayments), fa(d.loans), fa(d.balance)
   ]);
   const titleRow = [`صورت حساب مالی - ${studentName} (${studentCode})`, '', '', '', '', '', '', '', '', '', '', '', ''];
-  const dateRow = [`تاریخ: ${new Date().toLocaleString('fa-IR', { locale: faIR })}`, '', '', '', '', '', '', '', '', '', '', '', ''];
+  const dateRow = [`تاریخ: ${new Date().toLocaleString('fa-IR')}`, '', '', '', '', '', '', '', '', '', '', '', ''];
   return [titleRow, dateRow, headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
 }
 
@@ -53,7 +52,7 @@ function generateText(data: StatementRow[], studentName: string, studentCode: st
     .map((v, i) => pad(v, colWidths[i])).join(' | ')).join('\n');
   const totals = ['جمع کل', '', fa(data.reduce((s, d) => s + d.tuitionFixed, 0)), fa(data.reduce((s, d) => s + d.tuitionVariable, 0)), fa(data.reduce((s, d) => s + d.discountFixed, 0)), fa(data.reduce((s, d) => s + d.discountVariable, 0)), fa(data.reduce((s, d) => s + d.subjectAdditive, 0)), fa(data.reduce((s, d) => s + d.subjectDeductive, 0)), fa(data.reduce((s, d) => s + d.sponsorship, 0)), fa(data.reduce((s, d) => s + d.payments, 0)), fa(data.reduce((s, d) => s + d.posPayments, 0)), fa(data.reduce((s, d) => s + d.loans, 0)), fa(data.reduce((s, d) => s + d.balance, 0))]
     .map((v, i) => pad(v, colWidths[i])).join(' | ');
-  return `صورت حساب مالی - ${studentName} (${studentCode})\nتاریخ: ${new Date().toLocaleString('fa-IR', { locale: faIR })}\n\n${headerLine}\n${sepLine}\n${body}\n${sepLine}\n${totals}`;
+  return `صورت حساب مالی - ${studentName} (${studentCode})\nتاریخ: ${new Date().toLocaleString('fa-IR')}\n\n${headerLine}\n${sepLine}\n${body}\n${sepLine}\n${totals}`;
 }
 
 export default function StudentStatementClient({ studentId, studentName, studentCode }: Props) {
@@ -130,8 +129,8 @@ export default function StudentStatementClient({ studentId, studentName, student
         .box.positive { background: #f0fdf4; color: #16a34a; }
         @media print { .no-print { display: none; } }
       </style></head><body>
-      <div class="header"><h1>صورت حساب مالی دانشجویی</h1><p>سیستم آفاق - پخش شده در ${new Date().toLocaleString('fa-IR', { locale: faIR })}</p></div>
-      <div class="info"><div>نام و نام خانوادگی: ${studentName}</div><div>شماره دانشجویی: ${studentCode}</div><div>تاریخ استخراج: ${new Date().toLocaleString('fa-IR', { locale: faIR })}</div></div>
+      <div class="header"><h1>صورت حساب مالی دانشجویی</h1><p>سیستم آفاق - پخش شده در ${new Date().toLocaleString('fa-IR')}</p></div>
+      <div class="info"><div>نام و نام خانوادگی: ${studentName}</div><div>شماره دانشجویی: ${studentCode}</div><div>تاریخ استخراج: ${new Date().toLocaleString('fa-IR')}</div></div>
       <table><thead><tr>
         <th>ترم</th><th>شهریه ثابت</th><th>شهریه متغیر</th><th>تخفیف ثابت</th><th>تخفیف متغیر</th><th>موضوعی افزایشی</th><th>موضوعی کاهشی</th><th>پوشش بنیاد</th><th>پرداخت آنلاین</th><th>پرداخت POS</th><th>وام</th><th>مانده</th>
       </tr></thead><tbody>

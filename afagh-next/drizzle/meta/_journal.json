@@ -239,6 +239,34 @@
       "when": 1790945225330,
       "tag": "0036_reference_ministry_codes",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790948800000,
+      "tag": "0037_enrollment_emergency_withdrawal",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1790952000000,
+      "tag": "0038_major_change_process",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790955200000,
+      "tag": "0039_proposal_tracking_process",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1790958400000,
+      "tag": "0040_thesis_progress_tracking",
+      "breakpoints": true
     }
   ]
 }

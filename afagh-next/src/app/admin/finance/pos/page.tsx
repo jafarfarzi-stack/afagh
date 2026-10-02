@@ -80,7 +80,7 @@ export default async function PosPage() {
                   </td>
                   <td className="py-2 text-slate-600">{tx.terminalTitle} ({tx.terminalCode})</td>
                   <td className="py-2 text-slate-600">{tx.studentCode} - {tx.studentName}</td>
-                  <td className="py-2 text-[11px] text-slate-500">{new Date(tx.createdAt).toLocaleString('fa-IR')}</td>
+                  <td className="py-2 text-[11px] text-slate-500">{new Date(tx.createdAt ?? 0).toLocaleString('fa-IR')}</td>
                 </tr>
               ))}
             </tbody>

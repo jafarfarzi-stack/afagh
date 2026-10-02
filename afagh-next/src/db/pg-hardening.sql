@@ -387,6 +387,92 @@ DROP POLICY IF EXISTS graduation_audits_self_read ON "graduation_audits";
 CREATE POLICY graduation_audits_self_read ON "graduation_audits" FOR SELECT TO afagh_app
   USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
 
+-- Thesis Progress Tracking RLS
+ALTER TABLE "thesis_progress" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS thesis_progress_self_read ON "thesis_progress";
+CREATE POLICY thesis_progress_self_read ON "thesis_progress" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+-- Professor (supervisor/advisor) can read thesis progress for their students
+DROP POLICY IF EXISTS thesis_progress_supervisor_read ON "thesis_progress";
+CREATE POLICY thesis_progress_supervisor_read ON "thesis_progress" FOR SELECT TO afagh_app
+  USING (("supervisorId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int))
+      OR ("advisorId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)));
+
+-- ── الگوی «مدیر/کارشناس همه را می‌بیند» ──
+--    کارشناس از روی دادهٔ واقعیِ نقش‌ها تشخیص داده می‌شود (user_roles ⋈ roles.code) —
+--    دقیقاً همان زنجیره‌ای که auth.ts:78-88 برای SessionUser.roles می‌خواند.
+--    دلیل این تغییر: app.user_role هیچ‌جا ست نمی‌شد (فقط همین فایل به آن اشاره داشت)
+--    → current_setting(...,true) مقدار NULL می‌داد → NULL IN (...) مقدار NULL
+--    → سیاست همیشه FALSE → مدیر/کارشناس صفر ردیف می‌دید.
+--    app.user_id تنها GUCی است که withUserRls (src/db/index.ts:102) در همان تراکنش
+--    می‌نویسد؛ نبودِ آن → uid NULL → EXISTS صفر → همچنان fail-closed.
+--    نکته: user_roles خودش RLS فعال دارد و سیاستش روی همین userId است، پس این
+--    زیرپرسمان فقط نقش‌های خودِ کاربر جاری را می‌بیند (بازگشتِ بی‌نهایت هم ندارد).
+DROP POLICY IF EXISTS thesis_progress_admin_read ON "thesis_progress";
+CREATE POLICY thesis_progress_admin_read ON "thesis_progress" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT')));
+
+ALTER TABLE "thesis_progress_reports" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS thesis_reports_self_read ON "thesis_progress_reports";
+CREATE POLICY thesis_reports_self_read ON "thesis_progress_reports" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+-- Supervisor can read/confirm reports
+DROP POLICY IF EXISTS thesis_reports_supervisor_read ON "thesis_progress_reports";
+CREATE POLICY thesis_reports_supervisor_read ON "thesis_progress_reports" FOR SELECT TO afagh_app
+  USING ("thesisProgressId" IN (SELECT "id" FROM "thesis_progress" WHERE "supervisorId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)));
+
+-- Admin/Expert can read all (همان الگوی نقش‌محور بالا — بدون GUC نقش)
+DROP POLICY IF EXISTS thesis_reports_admin_read ON "thesis_progress_reports";
+CREATE POLICY thesis_reports_admin_read ON "thesis_progress_reports" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT')));
+
+ALTER TABLE "defense_sessions" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS defense_sessions_self_read ON "defense_sessions";
+CREATE POLICY defense_sessions_self_read ON "defense_sessions" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+-- Jury members can read
+DROP POLICY IF EXISTS defense_sessions_jury_read ON "defense_sessions";
+CREATE POLICY defense_sessions_jury_read ON "defense_sessions" FOR SELECT TO afagh_app
+  USING ("chairId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+      OR "supervisorId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+      OR "internalId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+      OR "externalId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+-- Admin/Expert can read all (همان الگوی نقش‌محور — بدون GUC نقش)
+DROP POLICY IF EXISTS defense_sessions_admin_read ON "defense_sessions";
+CREATE POLICY defense_sessions_admin_read ON "defense_sessions" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT')));
+
+ALTER TABLE "irandoc_logs" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS irandoc_logs_self_read ON "irandoc_logs";
+CREATE POLICY irandoc_logs_self_read ON "irandoc_logs" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+-- Admin/Expert can read all (همان الگوی نقش‌محور — بدون GUC نقش)
+DROP POLICY IF EXISTS irandoc_logs_admin_read ON "irandoc_logs";
+CREATE POLICY irandoc_logs_admin_read ON "irandoc_logs" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT')));
+
+-- تنها سیاستِ این جدول: استخرِ داوران دادهٔ مرجع است و studentId ندارد، پس «ردیف خودِ
+-- کاربر» معنا ندارد → فقط مدیر/کارشناس (الگوی نقش‌محور). دانشجو/استاد صفر ردیف می‌بینند.
+ALTER TABLE "defense_jury_pools" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS defense_jury_pools_admin_read ON "defense_jury_pools";
+CREATE POLICY defense_jury_pools_admin_read ON "defense_jury_pools" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT')));
+
 ALTER TABLE "alumni_profiles" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS alumni_profiles_self_read ON "alumni_profiles";
 CREATE POLICY alumni_profiles_self_read ON "alumni_profiles" FOR SELECT TO afagh_app

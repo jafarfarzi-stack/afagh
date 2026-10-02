@@ -1,5 +1,5 @@
 import { toNum, toRial } from './numbers';
-import type { AppliedAmount } from './discounts';
+import type { AppliedAmount, DiscountKind } from './discounts';
 
 // ══════════════════════════════════════════════════════════════════════
 //  پوشش بنیادها (کمیتهٔ امداد، بنیاد شهید، خیرین)

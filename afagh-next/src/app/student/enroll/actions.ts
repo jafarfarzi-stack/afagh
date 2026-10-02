@@ -333,9 +333,9 @@ export async function previewExamConflictsAction(): Promise<{
   return { ok: true, hard, soft };
 }
 
-import { emergencyDropAction } from '../actions';
+import { emergencyDropAction, emergencyDropFormAction } from '../actions';
 
-export { emergencyDropAction };
+export { emergencyDropAction, emergencyDropFormAction };
 
 export async function referCouncilAction(offeringId: number, reason?: string): Promise<{ ok: boolean; error?: string }> {
   const { user, me, term } = await ctx();

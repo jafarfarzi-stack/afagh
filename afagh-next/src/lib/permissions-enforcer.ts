@@ -58,9 +58,9 @@ export async function hasPermission(userId: number, permissionCode: PermissionCo
 
 /** Get current user ID from session (server-side) */
 export async function getCurrentUserId(): Promise<number | null> {
-  const { getSession } = await import('@/lib/auth');
-  const session = await getSession();
-  return session?.userId ?? null;
+  const { getSessionUser } = await import('@/lib/auth');
+  const user = await getSessionUser();
+  return user?.id ?? null;
 }
 
 /** Server-side permission guard for API routes */

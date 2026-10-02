@@ -298,6 +298,58 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
       );
     }
 
+    // ── دروس بار سوم (مردودی دو بار قبلی) ──
+    // «بار سوم» یعنی ثبت‌نام جاری (هنوز نمره‌نخورده) در ترمی که فیلتر ترم انتخاب
+    // کرده، به‌علاوهٔ حداقل دو مردودی نهایی از **کل سابقه** (نه فقط همان ترم)؛
+    // شمارش سابقه در LATERAL انجام می‌شود تا فیلتر ترم فقط «اخذِ جاری» را محدود کند.
+    case 'third-attempt': {
+      const from = sql`FROM enrollments ce
+        JOIN course_offerings o ON o.id = ce."offeringId"
+        JOIN courses c ON c.id = o."courseId"
+        JOIN academic_terms t ON t.id = o."termId"
+        JOIN students s ON s.id = ce."studentId"
+        JOIN users u ON u.id = s."userId"
+        LEFT JOIN majors m ON m.id = s."majorId"
+        LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
+        JOIN LATERAL (
+          SELECT COUNT(*) FILTER (WHERE e."status" <> 'DROPPED')::int AS total_attempts,
+            COUNT(*) FILTER (WHERE e."gradeStatus" = 'FINALIZED' AND ${NUM} AND e."gradeValue"::numeric < 10)::int AS failed_count,
+            (ARRAY_AGG(e."gradeValue" ORDER BY t2."sortOrder" DESC NULLS LAST, t2."termCode" DESC, o2.id DESC)
+              FILTER (WHERE e."gradeStatus" = 'FINALIZED' AND ${NUM}))[1] AS last_grade
+          FROM enrollments e
+            JOIN course_offerings o2 ON o2.id = e."offeringId"
+            JOIN academic_terms t2 ON t2.id = o2."termId"
+          WHERE e."studentId" = ce."studentId" AND o2."courseId" = o."courseId"
+        ) h ON h.failed_count >= 2`;
+      const cols = sql`s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
+        m.name AS major, d.title AS degree, s."entryYear" AS y,
+        c.code AS course_code, c.title AS course_title,
+        h.total_attempts, h.failed_count, t."termCode" AS current_term, h.last_grade`;
+      const r = await paged(
+        [
+          { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
+          { key: 'major', title: 'رشته' }, { key: 'degree', title: 'مقطع' },
+          { key: 'y', title: 'ورودی' }, { key: 'course_code', title: 'کد درس' },
+          { key: 'course_title', title: 'نام درس' }, { key: 'total_attempts', title: 'تکل تلاش' },
+          { key: 'failed_count', title: 'تکرار مردودی' }, { key: 'current_term', title: 'ترم جاری' },
+          { key: 'last_grade', title: 'آخرین نمره' },
+        ],
+        from,
+        [
+          sql`s.status = 'ACTIVE'`,
+          sql`ce."status" IN ('REGISTERED', 'PENDING_COUNCIL', 'WAITLISTED')`,
+          ...(term ? [sql`t."termCode" = ${term}`] : []),
+          ...studentWhere(f),
+        ],
+        cols,
+        sql`ORDER BY failed_count DESC, last_grade ASC NULLS LAST`,
+        f,
+        sql`s."studentCode", u."firstName", u."lastName", m.name, d.title, s."entryYear", c.code, c.title, t."termCode", h.total_attempts, h.failed_count, h.last_grade`,
+      );
+      r.summary = `${r.total.toLocaleString('fa-IR')} درس بار سوم (مردودی از کل سابقه) — ${term ? `اخذ در ترم ${term}` : 'اخذ در همه ترم‌ها'}`;
+      return r;
+    }
+
     // ── دانش‌آموختگان / ورودی‌ها / عدم مراجعه / انتقالی ──
     case 'graduates':
       return studentListReport(

@@ -65,6 +65,7 @@ try {
     'grade_change_log',
     'system_settings','integrations_config','audit_logs','api_audit_logs','admissions_staging',
     'person_source_identities','sanjesh_mappings','evaluation_responses','verification_otps','step_api_actions','document_signatures', // ۱۱ deny-all
+    'thesis_progress','thesis_progress_reports','defense_sessions','irandoc_logs','defense_jury_pools',
   ];
   const checks = await client.query(
     `SELECT c.relname AS table_name, c.relrowsecurity AS rls_enabled
@@ -103,7 +104,7 @@ try {
         WHERE col.table_schema = 'public' AND col.table_name = c.relname
           AND col.column_name IN ('userId','studentId','staffId','personUserId','targetId',
                                   'contractId','enrollmentId','supervisorStaffId',
-                                  'actorStaffId','clearedByStaffId')
+                                  'actorStaffId','clearedByStaffId','chairId')
       )
     ORDER BY 1`);
   const unprotected = coverage.rows.filter(r => !r.rls_enabled).map(r => r.table_name);

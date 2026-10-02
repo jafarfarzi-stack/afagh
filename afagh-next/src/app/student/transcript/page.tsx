@@ -1,4 +1,5 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
+import type { ReactNode } from 'react';
 import { academic_terms, course_offerings, courses, degree_level_configs, educational_regulations, enrollments, majors } from '@/db/schema';
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
@@ -329,7 +330,7 @@ export default async function StudentTranscriptPage() {
                         const isEmergency = row.emergencyWithdrawal === 1;
                         const totalU = Number(row.units || 0);
 
-                        let statusDisplay = '';
+                        let statusDisplay: ReactNode = '';
                         if (isEmergency) statusDisplay = <span className="text-rose-700">حذف اضطراری</span>;
                         else if (isEquiv) statusDisplay = <span className="text-teal-700">معادل</span>;
                         else if (isPassed) statusDisplay = <span className="text-emerald-700">قبول</span>;

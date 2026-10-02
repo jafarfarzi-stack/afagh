@@ -152,7 +152,8 @@ export async function getStudentFinance(studentId: number): Promise<StudentFinan
       .filter((sp) => ['CONFIRMED', 'PAID'].includes(sp.row.status))
       .map((sp) => ({
         id: sp.row.id, termId: sp.row.termId, coverageKind: sp.row.coverageKind,
-        percent: sp.row.percent, amount: sp.row.amount, title: sp.sponsorTitle,
+        percent: Math.max(toNum(sp.row.fixedPercent), toNum(sp.row.variablePercent)),
+        amount: sp.row.amount, title: sp.sponsorTitle,
       })),
   });
 

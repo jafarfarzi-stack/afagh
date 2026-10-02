@@ -38,14 +38,17 @@ export async function addSponsorshipAction(input: {
     return await db.transaction(async (tx) => {
       // 🔒 وضعیت کاملاً سمت سرور: پوششِ بنیاد همیشه ابتدا PENDING است (تأیید ناظر بنیاد
       // یا کارشناس، جداگانه انجام می‌شود) — کلاینت حق تعیین وضعیت ندارد.
+      const pct = String(Math.min(Math.max(0, num(input.percent)), 100));
+      const appliesTo = input.appliesTo || 'BOTH';
       const [ins] = await tx.insert(student_sponsorships).values({
         studentId: input.studentId,
         termId: input.termId,
         sponsorId: input.sponsorId,
         coverageKind: input.coverageKind === 'FIXED' ? 'FIXED' : 'PERCENT',
-        percent: String(Math.min(Math.max(0, num(input.percent)), 100)),
+        fixedPercent: appliesTo === 'VARIABLE' ? '0' : pct,
+        variablePercent: appliesTo === 'FIXED' ? '0' : pct,
         amount: money(input.amount),
-        appliesTo: input.appliesTo || 'BOTH',
+        appliesTo,
         referenceNo: clean(input.referenceNo),
         status: 'PENDING',
       }).returning({ id: student_sponsorships.id });

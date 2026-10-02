@@ -119,7 +119,7 @@ export async function listFinanceStudents(
       studentId: student_sponsorships.studentId,
       termId: student_sponsorships.termId,
       coverageKind: student_sponsorships.coverageKind,
-      percent: student_sponsorships.percent,
+      percent: sql<string>`GREATEST(${student_sponsorships.fixedPercent}, ${student_sponsorships.variablePercent})`,
       amount: student_sponsorships.amount,
     }).from(student_sponsorships)
       .where(and(

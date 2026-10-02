@@ -1,7 +1,7 @@
 import { requireRole } from '@/lib/auth';
 import { getStudentFinance, listFinanceStudents } from '@/lib/finance-engine';
 import { getCurrentUniversity } from '@/lib/university-scope';
-import StudentStatementClient from './StudentStatementClient';
+import StudentStatementClient from '../StudentStatementClient';
 
 const FINANCE = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'] as never[];
 
@@ -64,5 +64,5 @@ export default async function StudentStatementPage(props: { searchParams: Promis
   const fin = await getStudentFinance(studentId);
   if (!fin) return <div className="card p-6 text-center text-slate-500">اطلاعات مالی یافت نشد</div>;
 
-  return <StudentStatementClient studentId={studentId} studentName={`${fin.student.firstName} ${fin.student.lastName}`} studentCode={fin.student.studentCode ?? ''} />;
+  return <StudentStatementClient studentId={studentId} studentName={fin.student.fullName} studentCode={fin.student.studentCode ?? ''} />;
 }

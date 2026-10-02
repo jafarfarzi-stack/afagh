@@ -3,8 +3,12 @@ import { registerWorkflowHandler } from '@/lib/workflow-events';
 import { applyCourseTransfer, applyEquivalenceBatch } from '@/lib/enroll-engine';
 import { issueEquivalenceForm } from '@/lib/equivalence-form';
 import { createLogger } from '@/lib/logger';
+import { db } from '@/db';
+import { students, majors, staff, classrooms, graduation_audits, thesis_progress, defense_jury_pools, defense_sessions } from '@/db/schema';
+import { eq, and } from 'drizzle-orm';
+import { revalidatePath } from 'next/cache';
 
-// ══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
 //  هندلرهای رویداد گردش کار — سمت «صاحبان اثر»
 //
 //  اینجا جایی است که منطق تجاریِ اختصاصی هر فرایند زندگی می‌کند. موتور BPM
@@ -14,6 +18,38 @@ import { createLogger } from '@/lib/logger';
 // ══════════════════════════════════════════════════════════════════════
 
 const log = createLogger({ mod: 'workflow.handlers' });
+
+/** تغییر رشته تحصیلی — به‌روزرسانی majorId دانشجو پس از تأیید نهایی */
+registerWorkflowHandler({
+  name: 'MAJOR_CHANGE_APPLY',
+  processCode: 'MAJOR_CHANGE',
+  events: ['WORKFLOW_FINAL_APPROVED'],
+  async run(ev) {
+    const targetMajorId = Number(ev.formData?.targetMajorId);
+    const termId = Number(ev.formData?.termId);
+    if (!targetMajorId || !termId) throw new Error('targetMajorId یا termId در فرم وجود ندارد.');
+
+    // بررسی وجود رشته مقصد
+    const [targetMajor] = await db.select().from(majors).where(eq(majors.id, targetMajorId)).limit(1);
+    if (!targetMajor) throw new Error('رشته مقصد یافت نشد.');
+
+    // به‌روزرسانی رشته دانشجو
+    await db.update(students)
+      .set({ majorId: targetMajorId })
+      .where(eq(students.id, ev.studentId));
+
+    log.info('major_change_applied', {
+      requestId: ev.requestId,
+      studentId: ev.studentId,
+      oldMajorId: ev.formData?.oldMajorId,
+      newMajorId: targetMajorId,
+      termId,
+    });
+
+    revalidatePath('/student');
+    revalidatePath('/admin');
+  },
+});
 
 /** تطبیق واحد و معادل‌سازی دروس → ثبت درس در کارنامه توسط موتور آموزش */
 registerWorkflowHandler({
@@ -45,7 +81,6 @@ registerWorkflowHandler({
         const form = await issueEquivalenceForm(ev.requestId);
         log.info('equivalence_form_issued', { requestId: ev.requestId, ok: form.ok, skipped: !!form.skipped, hash: form.hash ?? null });
       } catch (e) {
-        // صدور فرم نباید معادل‌سازیِ انجام‌شده را واگرد کند؛ فقط ثبت خطا
         log.error('equivalence_form_failed', { requestId: ev.requestId, error: (e as Error)?.message });
       }
       return;
@@ -66,6 +101,21 @@ registerWorkflowHandler({
       studentId: ev.studentId,
       enrollmentId: res.enrollmentId ?? null,
       createdOffering: res.createdOffering,
+    });
+  },
+});
+
+/** ثبت و پیگیری پروپزال/پایان‌نامه — لاگ تأیید نهایی */
+registerWorkflowHandler({
+  name: 'PROPOSAL_TRACKING_LOG',
+  processCode: 'PROPOSAL_TRACKING',
+  events: ['WORKFLOW_FINAL_APPROVED'],
+  async run(ev) {
+    log.info('proposal_tracking_approved', {
+      requestId: ev.requestId,
+      studentId: ev.studentId,
+      proposalTitle: ev.formData?.proposalTitle,
+      supervisorId: ev.formData?.supervisorId,
     });
   },
 });

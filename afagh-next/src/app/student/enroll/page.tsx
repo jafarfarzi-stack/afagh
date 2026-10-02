@@ -7,6 +7,7 @@ import {
   course_offerings,
   courses,
   enrollments,
+  majors,
   schedules,
   staff,
   users,
@@ -53,6 +54,7 @@ export default async function EnrollPage() {
           enrolled: course_offerings.enrolledCount,
           group: course_offerings.groupNumber,
           professorId: course_offerings.professorId,
+          offeringType: course_offerings.offeringType,
         })
         .from(course_offerings)
         .innerJoin(courses, eq(courses.id, course_offerings.courseId))
@@ -140,10 +142,13 @@ export default async function EnrollPage() {
   const currentFinTerm = finTerms[0];
 
   // بافت دانشجو برای resolver
+  const [majorRow] = me.majorId
+    ? await db.select({ facultyId: majors.facultyId }).from(majors).where(eq(majors.id, me.majorId)).limit(1)
+    : [null];
   const tuitionCtx: TuitionRuleContext = {
     degreeLevelId: me.degreeLevelId,
     majorId: me.majorId,
-    facultyId: me.facultyId,
+    facultyId: majorRow?.facultyId ?? null,
     entryYear: me.entryYear,
     termType: term?.termType ?? 'NORMAL',
     offeringType: 'NORMAL',

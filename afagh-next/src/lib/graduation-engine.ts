@@ -7,6 +7,7 @@ import {
   course_offerings, courses, degree_level_configs, enrollments, graduation_audits,
   issued_degrees, majors, notifications, students, student_ledger,
   curriculum_courses, curriculum_versions, users,
+  thesis_progress, thesis_progress_reports, defense_jury_pools, defense_sessions, irandoc_logs, staff, classrooms,
 } from '@/db/schema';
 import { getBool, getNumber, getSetting } from '@/lib/settings';
 import { executeIrandocCheck } from '@/lib/api-integrations';
@@ -973,4 +974,435 @@ function stepState(current: string, code: string): 'DONE' | 'CURRENT' | 'TODO' {
   if (si < ci) return 'DONE';
   if (si === ci) return current === 'ISSUED' ? 'DONE' : 'CURRENT';
   return 'TODO';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Thesis Progress Tracking (پیش‌نیاز: جدول thesis_progress migration)
+// ══════════════════════════════════════════════════════════════════
+
+/** ایجاد/دریافت رکورد پیشرفت پایان‌نامه برای یک پرونده فارغ‌التحصیلی */
+export async function getOrCreateThesisProgress(auditId: number) {
+  
+  const [existing] = await db.select().from(thesis_progress).where(eq(thesis_progress.auditId, auditId)).limit(1);
+  if (existing) return existing;
+
+  const [a] = await db.select().from(graduation_audits).where(eq(graduation_audits.id, auditId)).limit(1);
+  if (!a) throw new Error('Audit not found');
+
+  const [created] = await db.insert(thesis_progress).values({
+    auditId, studentId: a.studentId,
+    proposalStatus: 'NOT_STARTED',
+    defenseRequestStatus: 'NOT_REQUESTED',
+  }).returning();
+  return created;
+}
+
+/** فاز ۱: ثبت استاد راهنما و عنوان اولیه + استعلام پیشینه ایرانداک */
+export async function submitThesisTitleAndSupervisor(input: {
+  auditId: number;
+  supervisorId: number;
+  advisorId?: number;
+  titleFa: string;
+  titleEn?: string;
+  keywords?: string;
+  abstract?: string;
+}) {
+  
+  const tp = await getOrCreateThesisProgress(input.auditId);
+
+  // Irandoc prior-check قبل از نوشتن پروپوزال
+  let priorTracking = '', priorSim = 0, priorStatus = 'SKIPPED';
+  try {
+    const [stu] = await db.select({
+      nationalCode: users.nationalCode,
+    }).from(students).innerJoin(users, eq(users.id, students.userId))
+      .where(eq(students.id, tp.studentId)).limit(1);
+
+    if (stu?.nationalCode) {
+      const r = await executeIrandocCheck({
+        nationalCode: stu.nationalCode,
+        trackingCode: '', // prior check doesn't need tracking code
+        thesisTitle: input.titleFa,
+        maxAllowedThreshold: getNumber('GRAD_IRANDOC_MAX_SIMILARITY', 20),
+      });
+      priorTracking = r.trackingCode || '';
+      priorSim = r.similarityPercentage;
+      priorStatus = r.decision === 'AUTO_APPROVE' ? 'PASSED' : 'REJECTED';
+    }
+  } catch (e) {
+    log.warn('irandoc_prior_check_failed', { auditId: input.auditId, err: (e as Error).message });
+  }
+
+  const [updated] = await db.update(thesis_progress)
+    .set({
+      supervisorId: input.supervisorId,
+      advisorId: input.advisorId,
+      titleFa: input.titleFa,
+      titleEn: input.titleEn,
+      keywords: input.keywords,
+      abstract: input.abstract,
+      irandocPriorTracking: priorTracking,
+      irandocPriorSimilarity: String(priorSim),
+      irandocPriorStatus: priorStatus,
+      irandocPriorCheckedAt: new Date(),
+      proposalStatus: priorStatus === 'PASSED' ? 'NOT_STARTED' : 'PRIOR_REJECTED',
+      updatedAt: new Date(),
+    })
+    .where(eq(thesis_progress.id, tp.id))
+    .returning();
+
+  return { thesisProgress: updated, priorStatus, priorSim };
+}
+
+/** فاز ۲: آپلود پروپوزال → بررسی همانندجویی → تأیید کارشناس → آپلود ایرانداک */
+export async function submitProposal(input: {
+  auditId: number;
+  fileId: number; // object_store reference
+}) {
+  
+  const tp = await getOrCreateThesisProgress(input.auditId);
+
+  if (!tp.titleFa) throw new Error('ابتدا عنوان و استاد راهنما را ثبت کنید (فاز ۱)');
+  if (tp.irandocPriorStatus === 'REJECTED') throw new Error('پیشینه ایرانداک رد شده؛ ابتدا عنوان را تغییر دهید');
+
+  // محاسبه همانندجویی پروپوزال (نیاز به متن کامل یا Fitch - فعلاً شبیه‌سازی)
+  let propSim = 0;
+  try {
+    const [stu] = await db.select({ nationalCode: users.nationalCode })
+      .from(students).innerJoin(users, eq(users.id, students.userId))
+      .where(eq(students.id, tp.studentId)).limit(1);
+    if (stu?.nationalCode) {
+      const r = await executeIrandocCheck({
+        nationalCode: stu.nationalCode,
+        trackingCode: '',
+        thesisTitle: tp.titleFa,
+        maxAllowedThreshold: getNumber('GRAD_IRANDOC_MAX_SIMILARITY', 20),
+      });
+      propSim = r.similarityPercentage;
+    }
+  } catch (e) {
+    log.warn('proposal_similarity_failed', { auditId: input.auditId, err: (e as Error).message });
+  }
+
+  const [updated] = await db.update(thesis_progress)
+    .set({
+      proposalFileId: input.fileId,
+      proposalSubmittedAt: new Date(),
+      proposalSimilarity: String(propSim),
+      proposalStatus: propSim <= 20 ? 'SIMILARITY_PASSED' : 'SIMILARITY_HIGH',
+      updatedAt: new Date(),
+    })
+    .where(eq(thesis_progress.id, tp.id))
+    .returning();
+
+  // اگر مشابهت پایین است، مستقیماً به تأیید کارشناس می‌رود
+  if (propSim <= 20) {
+    // TODO: Notify EDU_EXPERT for review
+  }
+
+  return { thesisProgress: updated, similarity: propSim };
+}
+
+/** تأیید پروپوزال توسط کارشناس آموزش + آپلود به ایرانداک */
+export async function approveProposalAndUploadIrandoc(input: {
+  auditId: number;
+  approvedBy: number;
+  irandocTrackingCode: string;
+}) {
+  
+  const tp = await getOrCreateThesisProgress(input.auditId);
+
+  if (!['SIMILARITY_PASSED', 'EXPERT_REVIEW'].includes(tp.proposalStatus)) {
+    throw new Error('پروپوزال در وضعیت قابل تأیید نیست');
+  }
+
+  const [updated] = await db.update(thesis_progress)
+    .set({
+      proposalStatus: 'APPROVED',
+      proposalApprovedAt: new Date(),
+      proposalApprovedBy: input.approvedBy,
+      irandocUploadTracking: input.irandocTrackingCode,
+      irandocUploadStatus: 'UPLOADED',
+      irandocUploadedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(thesis_progress.id, tp.id))
+    .returning();
+
+  // TODO: Update graduation_audits.irandocStatus = 'PASSED' + advanceDossier
+  await advanceDossier(input.auditId);
+
+  return updated;
+}
+
+/** فاز ۳: درخواست دفاع + گزارش‌های پیشرفت */
+export async function requestDefense(input: {
+  auditId: number;
+}) {
+  
+  const tp = await getOrCreateThesisProgress(input.auditId);
+
+  if (tp.proposalStatus !== 'APPROVED') throw new Error('پروپوزال هنوز تأیید نشده');
+  if (tp.irandocUploadStatus !== 'UPLOADED') throw new Error('پروپوزال در ایرانداک آپلود نشده');
+
+  // محاسبه تاریخ رسیدن گزارش بعدی (۳ ماهه برای کارشناسی ارشد، ۶ ماهه برای دکتری)
+  const [a] = await db.select({ degreeLevelId: students.degreeLevelId })
+    .from(students).where(eq(students.id, tp.studentId)).limit(1);
+  const isPhD = a?.degreeLevelId === 4; // PHD code
+  const months = isPhD ? 6 : 3;
+  const nextDue = new Date();
+  nextDue.setMonth(nextDue.getMonth() + months);
+
+  const [updated] = await db.update(thesis_progress)
+    .set({
+      defenseRequestStatus: 'SUPERVISOR_REVIEW',
+      defenseRequestedAt: new Date(),
+      nextProgressReportDue: nextDue,
+      updatedAt: new Date(),
+    })
+    .where(eq(thesis_progress.id, tp.id))
+    .returning();
+
+  // TODO: Notify supervisor for approval
+  return updated;
+}
+
+/** تأیید استاد راهنما برای دفاع */
+export async function supervisorApproveDefense(input: {
+  auditId: number;
+  supervisorId: number;
+  approved: boolean;
+}) {
+  
+  const tp = await getOrCreateThesisProgress(input.auditId);
+
+  if (tp.defenseRequestStatus !== 'SUPERVISOR_REVIEW') throw new Error('درخواست دفاع در مرحله بررسی راهنما نیست');
+  if (tp.supervisorId !== input.supervisorId) throw new Error('تنها استاد راهنما می‌تواند تأیید کند');
+
+  const newStatus = input.approved ? 'EXPERT_REVIEW' : 'SUPERVISOR_REJECTED';
+  const [updated] = await db.update(thesis_progress)
+    .set({
+      defenseRequestStatus: newStatus,
+      updatedAt: new Date(),
+    })
+    .where(eq(thesis_progress.id, tp.id))
+    .returning();
+
+  if (input.approved) {
+    // TODO: Notify EDU_EXPERT
+  }
+  return updated;
+}
+
+/** تأیید کارشناس آموزش + تعیین اتاق و هیأت داوران (اتوماتیک از jury_pools) */
+export async function expertScheduleDefense(input: {
+  auditId: number;
+  expertId: number;
+  scheduledAt: Date;
+}) {
+  const tp = await getOrCreateThesisProgress(input.auditId);
+
+  if (tp.defenseRequestStatus !== 'EXPERT_REVIEW') throw new Error('درخواست دفاع در مرحله بررسی کارشناس نیست');
+
+  // انتخاب خودکار اتاق و داوران از pool مربوط به رشته
+  const [stu] = await db.select({ majorId: students.majorId })
+    .from(students).where(eq(students.id, tp.studentId)).limit(1);
+  const majorId = stu?.majorId ?? null;
+
+  // استخر داور: اول pool مخصوص رشته (majorId = رشتهٔ دانشجو)، وگرنه pool عمومی (majorId = NULL)
+  const poolRows = await db.select().from(defense_jury_pools)
+    .where(eq(defense_jury_pools.isActive, 1))
+    .orderBy(asc(defense_jury_pools.id));
+  const scopedPools = majorId != null ? poolRows.filter(p => p.majorId === majorId) : [];
+  const genericPools = poolRows.filter(p => p.majorId == null);
+  // pool دارای اتاق بر pool بدون اتاق مقدم است
+  const pickPool = (list: typeof poolRows) =>
+    list.find(p => p.roomId != null) ?? list[0];
+  const pool = pickPool(scopedPools) ?? pickPool(genericPools);
+
+  // اتاق: اول roomId خودِ pool — فقط اگر واقعاً در جدول classrooms وجود داشته باشد
+  let roomId: number | null = null;
+  if (pool?.roomId != null) {
+    const [poolRoom] = await db.select({ id: classrooms.id })
+      .from(classrooms).where(eq(classrooms.id, pool.roomId)).limit(1);
+    roomId = poolRoom?.id ?? null;
+  }
+
+  if (roomId == null) {
+    // Fallback: اتاقِ دانشکدهٔ دانشجو، وگرنه اتاق عمومی — همیشه بزرگ‌ترین ظرفیت
+    // (classrooms ستون isActive ندارد؛ فقط capacity/name/facultyId موجود است)
+    const [m] = majorId != null
+      ? await db.select({ facultyId: majors.facultyId })
+        .from(majors).where(eq(majors.id, majorId)).limit(1)
+      : [{ facultyId: null }];
+    const facultyId = m.facultyId ?? null;
+
+    const rooms = await db.select({
+      id: classrooms.id, capacity: classrooms.capacity, facultyId: classrooms.facultyId,
+    }).from(classrooms)
+      .orderBy(desc(classrooms.capacity), asc(classrooms.name));
+    roomId = (facultyId != null ? rooms.find(r => r.facultyId === facultyId) : undefined)
+      ?? rooms.find(r => r.facultyId == null)
+      ?? rooms[0]?.id
+      ?? null;
+  }
+
+  if (roomId == null) {
+    log.warn('defense_room_not_assigned', { auditId: input.auditId, poolId: pool?.id ?? null });
+  }
+
+  const [updated] = await db.update(thesis_progress)
+    .set({
+      defenseRequestStatus: 'SCHEDULED',
+      defenseScheduledAt: input.scheduledAt,
+      defenseRoomId: roomId,
+      juryChairId: pool?.chairId,
+      jurySupervisorId: tp.supervisorId,
+      juryInternalId: pool?.internalIds?.[0],
+      juryExternalId: pool?.externalIds?.[0],
+      updatedAt: new Date(),
+    })
+    .where(eq(thesis_progress.id, tp.id))
+    .returning();
+
+  // Create defense_sessions record
+  await db.insert(defense_sessions)
+    .values({
+      thesisProgressId: tp.id,
+      studentId: tp.studentId,
+      scheduledAt: input.scheduledAt,
+      roomId,
+      chairId: pool?.chairId,
+      supervisorId: tp.supervisorId,
+      internalId: pool?.internalIds?.[0],
+      externalId: pool?.externalIds?.[0],
+      status: 'SCHEDULED',
+    });
+
+  return updated;
+}
+
+/** ثبت نتیجه دفاع */
+export async function recordDefenseResult(input: {
+  auditId: number;
+  result: 'PASSED' | 'FAILED' | 'CONDITIONAL';
+  minutes?: string;
+  conductedAt: Date;
+}) {
+  
+  const tp = await getOrCreateThesisProgress(input.auditId);
+
+  const [updated] = await db.update(thesis_progress)
+    .set({
+      defenseRequestStatus: input.result === 'PASSED' ? 'PASSED' : 'FAILED',
+      defenseConductedAt: input.conductedAt,
+      defenseResult: input.result,
+      defenseNote: input.minutes,
+      updatedAt: new Date(),
+    })
+    .where(eq(thesis_progress.id, tp.id))
+    .returning();
+
+  // Update defense_sessions
+  await db.update(defense_sessions)
+    .set({ status: 'CONDUCTED', result: input.result, minutes: input.minutes })
+    .where(eq(defense_sessions.thesisProgressId, tp.id));
+
+  if (input.result === 'PASSED') {
+    // Advance to final thesis upload phase
+    // graduation_audits workflowStatus -> FINAL_THESIS_UPLOAD
+  }
+
+  return updated;
+}
+
+/** آپلود پایان‌نامه نهایی + استعلام ایرانداک نهایی */
+export async function submitFinalThesis(input: {
+  auditId: number;
+  fileId: number;
+}) {
+  
+  const tp = await getOrCreateThesisProgress(input.auditId);
+
+  if (tp.defenseRequestStatus !== 'PASSED') throw new Error('دفاع هنوز انجام نشده یا رد شده');
+
+  const [updated] = await db.update(thesis_progress)
+    .set({
+      finalThesisFileId: input.fileId,
+      finalThesisSubmittedAt: new Date(),
+      finalIrandocStatus: 'PENDING',
+      updatedAt: new Date(),
+    })
+    .where(eq(thesis_progress.id, tp.id))
+    .returning();
+
+  // TODO: Trigger Irandoc final check (async)
+  return updated;
+}
+
+/** بررسی نهایی ایرانداک (اجرای دستی یا خودکار) */
+export async function runFinalIrandocCheck(input: {
+  auditId: number;
+  trackingCode: string;
+  title?: string;
+}) {
+  
+  const tp = await getOrCreateThesisProgress(input.auditId);
+
+  const [stu] = await db.select({
+    nationalCode: users.nationalCode,
+  }).from(students).innerJoin(users, eq(users.id, students.userId))
+    .where(eq(students.id, tp.studentId)).limit(1);
+
+  const title = input.title || tp.titleFa;
+  const r = await executeIrandocCheck({
+    nationalCode: stu?.nationalCode ?? '',
+    trackingCode: input.trackingCode,
+    thesisTitle: title,
+    maxAllowedThreshold: getNumber('GRAD_IRANDOC_MAX_SIMILARITY', 20),
+  });
+
+  const passed = r.decision === 'AUTO_APPROVE';
+  const [updated] = await db.update(thesis_progress)
+    .set({
+      finalIrandocTracking: input.trackingCode,
+      finalIrandocSimilarity: String(r.similarityPercentage),
+      finalIrandocStatus: passed ? 'PASSED' : 'REJECTED',
+      finalIrandocCheckedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(thesis_progress.id, tp.id))
+    .returning();
+
+  if (passed) {
+    // Update graduation_audits -> READY_TO_ISSUE
+    await db.update(graduation_audits)
+      .set({ workflowStatus: 'READY_TO_ISSUE', lastEventAt: new Date() })
+      .where(eq(graduation_audits.id, input.auditId));
+  }
+
+  return { thesisProgress: updated, passed, similarity: r.similarityPercentage };
+}
+
+/** دریافت پیشرفت پایان‌نامه برای نمایش در پورتال دانشجو/استاد/ادمین */
+export async function getThesisProgress(auditId: number) {
+  
+  const tp = await getOrCreateThesisProgress(auditId);
+
+  const [supervisor] = tp.supervisorId ? await db.select({
+    id: staff.id, name: users.firstName, family: users.lastName
+  }).from(staff).innerJoin(users, eq(users.id, staff.userId)).where(eq(staff.id, tp.supervisorId)).limit(1) : [null];
+
+  const [advisor] = tp.advisorId ? await db.select({
+    id: staff.id, name: users.firstName, family: users.lastName
+  }).from(staff).innerJoin(users, eq(users.id, staff.userId)).where(eq(staff.id, tp.advisorId)).limit(1) : [null];
+
+  const [room] = tp.defenseRoomId ? await db.select({ name: classrooms.name }).from(classrooms).where(eq(classrooms.id, tp.defenseRoomId)).limit(1) : [null];
+
+  return {
+    ...tp,
+    supervisor: supervisor ? `${supervisor.name} ${supervisor.family}` : null,
+    advisor: advisor ? `${advisor.name} ${advisor.family}` : null,
+    defenseRoom: room?.name ?? null,
+  };
 }

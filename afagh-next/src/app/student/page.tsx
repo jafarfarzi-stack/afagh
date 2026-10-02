@@ -16,7 +16,7 @@ import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA } from '@/lib/regulations-engine';
 import Link from 'next/link';
-import { emergencyDropAction } from './actions';
+import { emergencyDropAction, emergencyDropFormAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -700,11 +700,8 @@ export default async function StudentDashboardPage() {
                         <span>حذف اضطراری انجام شده</span>
                       </span>
                     ) : (
-                      <form action={async () => {
-                        'use server';
-                        const res = await emergencyDropAction(c.enrollmentId);
-                        if (!res.ok) alert(res.error || 'خطا در حذف اضطراری');
-                      }}>
+                      <form action={emergencyDropFormAction}>
+                        <input type="hidden" name="enrollmentId" value={c.enrollmentId} />
                         <button
                           type="submit"
                           className="w-full text-xs bg-rose-100 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-300 px-3 py-1.5 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5"

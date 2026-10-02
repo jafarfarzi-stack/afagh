@@ -1,6 +1,6 @@
 'use server';
 
-import { and, asc, eq, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, ne, or, sql, type SQL, type SQLWrapper } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { academic_terms, courses, degree_level_configs, departments, exam_calendar_configs, faculties, majors, universities } from '@/db/schema';
@@ -551,7 +551,7 @@ export async function updateDegreeRowAction(fd: FormData): Promise<{ ok: boolean
 
 /** قالب یکسان خواندن timestampها برای ورودی datetime-local (بدون وابستگی به منطقهٔ زمانی سرور) */
 const DT_FMT = 'YYYY-MM-DD"T"HH24:MI';
-const dtRead = (c: typeof academic_terms.startDate) =>
+const dtRead = (c: SQLWrapper) =>
   sql<string | null>`to_char(${c}, ${DT_FMT})`;
 
 /**

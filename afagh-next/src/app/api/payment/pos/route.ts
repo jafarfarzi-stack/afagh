@@ -3,11 +3,12 @@
 import { db } from '@/db';
 import { eq, and } from 'drizzle-orm';
 import { pos_terminals, pos_transactions, students, users, financial_terms, academic_terms } from '@/db/schema';
-import { requireRole, getCurrentUniversity } from '@/lib/auth';
+import { requireRole, getSessionUser } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import { toNum } from '@/lib/finance-rules';
 import { recordLedgerAction } from '@/app/admin/finance/actions';
 
-const POS_ROLES = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'] as const;
+const POS_ROLES: string[] = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'];
 
 export async function getPosTerminals() {
   await requireRole(POS_ROLES);
@@ -54,9 +55,8 @@ export async function recordPosSale(input: PosSaleInput) {
 
   const operator = await requireRole(POS_ROLES).then(() => getCurrentUniversity()).catch(() => null);
   // Get current user ID from session
-  const { getSession } = await import('@/lib/auth');
-  const session = await getSession();
-  const operatorId = session?.userId ?? null;
+  const sessionUser = await getSessionUser();
+  const operatorId = sessionUser?.id ?? null;
 
   // Find terminal
   const terminal = await getPosTerminal(input.terminalCode);
@@ -173,7 +173,7 @@ export async function voidPosTransaction(terminalCode: string, stan: string, rea
   // Reverse in ledger
   await recordLedgerAction({
     studentId: posTxn.studentId,
-    termId: posTxn.termId ?? undefined,
+    termId: posTxn.termId ?? null,
     financialTermId: posTxn.financialTermId ?? undefined,
     transactionType: 'POS_PAYMENT',
     amount: -toNum(posTxn.amount),

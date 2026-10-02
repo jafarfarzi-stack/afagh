@@ -43,8 +43,8 @@ export interface TuitionRuleLike {
   perUnitTheory: unknown;
   perUnitPractical: unknown;
   perUnitGeneral: unknown;
-  minSummerUnits?: number | null;
-  percentUnderMin?: number | null;
+  minSummerUnits?: number | string | null;
+  percentUnderMin?: number | string | null;
   priority?: number | null;
   isActive?: number | null;
 }
