@@ -243,17 +243,34 @@ const coursesByCode = new Map();// lessonCode -> id
 const studentsByCode = new Map(); // STNO -> {id, name}
 let universityId = null;
 
-async function ensureDegree(maghta) {
-  const code = 'SAMA-' + String(maghta || '0');
+/**
+ * مقطع‌های هم‌آوا (شمس) — از فایل maghta.txt و تصویر مرجع.
+ * کد هم‌آوا ≠ کد سما است؛ نباید به SAMA-* نگاشت شود.
+ */
+const HAMAVA_DEGREES = {
+  '1': { title: 'کاردانی پیوسته', termCount: 4, isGraduate: 0, pass: 10 },
+  '2': { title: 'کاردانی ناپیوسته', termCount: 4, isGraduate: 0, pass: 10 },
+  '3': { title: 'کارشناسی ارشد', termCount: 4, isGraduate: 1, pass: 12 },
+  '4': { title: 'کارشناسی پیوسته', termCount: 8, isGraduate: 0, pass: 10 },
+  '5': { title: 'کارشناسی ناپیوسته', termCount: 4, isGraduate: 0, pass: 10 },
+};
+
+async function ensureDegree(maghta, prefix = 'SAMA-') {
+  const code = prefix + String(maghta || '0');
   if (degrees.has(code)) return degrees.get(code);
   // حد نصاب قبولی بر اساس مقطع: کاردانی/کارشناسی=۱۰، ارشد=۱۲، دکتری=۱۶
   const passingMap = { '1': 10, '2': 12, '3': 16, '4': 16, '6': 16, '7': 16, '8': 16 };
   const passGrade = passingMap[String(maghta)] || 10;
   let row = (await q(`SELECT id FROM degree_level_configs WHERE code = $1`, [code]))[0];
   if (!row && !DRY) {
-    row = (await q(`INSERT INTO degree_level_configs (title, code, "defaultPassingGrade", "conditionalGpaThreshold", "maxUnitsPerTerm", "universityId")
-      VALUES ($1,$2,$3,$3,20,$4) ON CONFLICT (code) DO NOTHING RETURNING id`,
-      [`مقطع سما ${maghta}`, code, passGrade, universityId]))[0]
+    const isHamava = prefix === 'HAMAVA-';
+    const hd = isHamava ? HAMAVA_DEGREES[String(maghta)] : null;
+    const title = isHamava && hd ? hd.title : `مقطع سما ${maghta}`;
+    const pg = isHamava && hd ? hd.pass : passGrade;
+    row = (await q(`INSERT INTO degree_level_configs
+      (title, code, "defaultPassingGrade", "conditionalGpaThreshold", "maxUnitsPerTerm", "termCount", "isGraduate", "universityId")
+      VALUES ($1,$2,$3,$3,20,$4,$5,$6) ON CONFLICT (code) DO NOTHING RETURNING id`,
+      [title, code, pg, isHamava && hd ? hd.termCount : null, isHamava && hd ? hd.isGraduate : null, universityId]))[0]
       || (await q(`SELECT id FROM degree_level_configs WHERE code = $1`, [code]))[0];
   }
   const id = row ? Number(row.id) : -1;
@@ -546,13 +563,9 @@ async function phaseMajors(file) {
     const title = normTxt(cols[1]);
     if (!code || code === '0' || !title || title === 'نامشخص') { stats.invalid++; continue; }
     stats.total++;
-    // شمس: مقطع فایل قابل اعتماد نیست — از روی کد رشته بازنویسی می‌شود (جایگزین fix-shams-degrees)
-    let maghtaCode = (cols[2] || '').trim() || '0';
-    if (SOURCE === 'SHAMS') {
-      if (['1161', '1162', '1261', '1221', '1171', '1181'].includes(code)) maghtaCode = '2';
-      else if (code === '1163') maghtaCode = '1';
-    }
-    const degId = await ensureDegree(maghtaCode);
+    // شمس (هم‌آوا): مقطع فایل معتبر است — مستقیم با پیشوند HAMAVA (نه SAMA)
+    const maghtaCode = (cols[2] || '').trim() || '0';
+    const degId = await ensureDegree(maghtaCode, SOURCE === 'SHAMS' ? 'HAMAVA-' : 'SAMA-');
     const facId = await ensureFaculty((cols[3] || '').trim());
     const facCode = (cols[3] || '').trim() || '0';
     const groupA = (cols[4] || '').trim();
@@ -728,12 +741,8 @@ async function phaseStudents(files, lookups) {
     });
     // students job
     const reshte = (c[8] || '').trim();
-    let maghta = (c[7] || '').trim() || '0';
-    // شمس: مقطع فایل قابل اعتماد نیست — از روی کد رشته بازنویسی می‌شود (جایگزین fix-shams-degrees)
-    if (SOURCE === 'SHAMS') {
-      if (['1161', '1162', '1261', '1221', '1171', '1181'].includes(reshte)) maghta = '2';
-      else if (reshte === '1163') maghta = '1';
-    }
+    // شمس (هم‌آوا): مقطع فایل معتبر است — مستقیم با پیشوند HAMAVA (نه SAMA)
+    const maghta = (c[7] || '').trim() || '0';
     const status = (c[4] || '').trim();
     const regKind = (c[88] || '').trim() || '0';
     const tc = (c[5] || '').trim();
@@ -839,7 +848,7 @@ async function phaseStudents(files, lookups) {
       if (!userId) { stats.invalid++; continue; }
       // اگر این stno تکراری است، کد نهایی پسونددار را استفاده کن
       const finalStno = (u && stnoSuffix.get(`${j.stno}|${u.nationalCode}`)) || j.stno;
-      const degId = await ensureDegree(j.maghta);
+      const degId = await ensureDegree(j.maghta, SOURCE === 'SHAMS' ? 'HAMAVA-' : 'SAMA-');
       const regId = await ensureRegulation(degId, j.maghta, j.entryYear);
       const mj = majorsByCode.get(j.reshte);
       if (!mj && j.reshte) stats.unmatchedMajor.add(j.reshte);
