@@ -87,7 +87,7 @@ async function main() {
 
     // 1. Resolve each enrollment
     for (const r of rowsBefore) {
-      if (r.gradeStatus === 'FINALIZED' && r.gradeValue != null) {
+      if (r.gradeStatus === 'FINALIZED' && r.gradeValue != null && r.offeringId != null) {
         const targetCode = await resolveSamaGradeStatusCode(stuId, r.offeringId, r.gradeValue);
         if (targetCode && targetCode !== r.gradeStatusCode) {
           console.log(`  * Enrollment ${r.enrollmentId} (${r.courseCode} ${r.courseTitle}, grade=${r.gradeValue}): Code ${r.gradeStatusCode} -> ${targetCode}`);
