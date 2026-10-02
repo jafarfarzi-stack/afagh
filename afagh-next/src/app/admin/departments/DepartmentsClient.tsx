@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { ClientTh, useClientTable, type ColumnDef } from '@/components/DataTable';
 import { faIncludes, normalizeFa } from '@/lib/persian-search';
 import type { DeptRow, StaffPick } from './actions';
 
@@ -68,6 +69,19 @@ export default function DepartmentsClient({
     if (!t) return depts;
     return depts.filter(d => faIncludes(d.name, t) || faIncludes(d.facultyName, t) || faIncludes(d.headName, t) || (d.code ?? '').includes(t));
   }, [depts, q]);
+
+  // ── مرتب‌سازی ستونی (کلیک روی سرستون: صعودی → نزولی → بدون سورت) ──
+  const COLS: ColumnDef<DeptRow>[] = [
+    { key: 'code', label: 'کد', get: d => d.code ?? '', filterable: false },
+    { key: 'name', label: 'گروه', get: d => d.name, filterable: false },
+    { key: 'faculty', label: 'دانشکده', get: d => d.facultyName, filterable: false },
+    { key: 'kind', label: 'نوع', get: d => KINDS[d.kind].label, filterable: false },
+    { key: 'head', label: 'مدیر گروه', get: d => d.headName ?? '', filterable: false },
+    { key: 'members', label: 'اعضا', get: d => d.members, numeric: true, filterable: false },
+    { key: 'courses', label: 'دروس', get: d => d.coursesCount, numeric: true, filterable: false },
+    { key: 'majors', label: 'رشته‌ها', get: d => d.majorsCount, numeric: true, filterable: false },
+  ];
+  const tbl = useClientTable(filtered, COLS);
 
   const noHead = depts.filter(d => !d.headStaffId && d.isActive).length;
   // کد سند اصالت است: تطبیق انتقال داده و تفکیک گروه‌های هم‌نام به آن تکیه دارد
@@ -155,19 +169,22 @@ export default function DepartmentsClient({
         <table className="w-full text-right text-xs">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
-              <th className="p-2.5">کد</th>
-              <th className="p-2.5">گروه</th>
-              <th className="p-2.5">دانشکده</th>
-              <th className="p-2.5">نوع</th>
-              <th className="p-2.5">مدیر گروه</th>
-              <th className="p-2.5">اعضا</th>
-              <th className="p-2.5">دروس</th>
-              <th className="p-2.5">رشته‌ها</th>
+              {COLS.map(c => (
+                <ClientTh
+                  key={c.key}
+                  col={c}
+                  sortKey={tbl.sortKey}
+                  sortDir={tbl.sortDir}
+                  filter={tbl.filters[c.key] ?? ''}
+                  onSort={() => tbl.toggleSort(c.key)}
+                  onFilter={v => tbl.setFilter(c.key, v)}
+                />
+              ))}
               <th className="p-2.5"></th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map(d => (
+            {tbl.visible.map(d => (
               <tr key={d.id} className={'border-t border-slate-100 ' + (d.isActive ? '' : 'opacity-50')}>
                 <td className="p-2.5" dir="ltr">
                   {d.code
@@ -208,7 +225,7 @@ export default function DepartmentsClient({
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && (
+            {tbl.visible.length === 0 && (
               <tr><td colSpan={9} className="p-6 text-center text-slate-400">گروهی یافت نشد.</td></tr>
             )}
           </tbody>

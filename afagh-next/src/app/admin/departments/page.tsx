@@ -13,17 +13,13 @@ import {
   updateDepartmentAction,
 } from './actions';
 import DepartmentsClient from './DepartmentsClient';
-import { getCurrentUniversity } from '@/lib/university-scope';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DepartmentsPage() {
   await requireRole(['ADMIN', 'VICE_EDU']);
 
-  const currentUniversity = await getCurrentUniversity();
-  const currentUniversityId = currentUniversity?.id ?? null;
-  /* TODO: filter by universityId */
-
+  // فیلتر دانشگاه داخل خود action ها انجام می‌شود (getCurrentUniversity در actions.ts)
   const [depts, staffPicks, faculties, orphans] = await Promise.all([
     listDepartments(),
     listStaffPicks(),

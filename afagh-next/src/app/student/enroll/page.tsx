@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms,
@@ -10,6 +10,8 @@ import {
   schedules,
   staff,
   users,
+  tuition_rules,
+  financial_terms,
 } from '@/db/schema';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { buildPrereqContext, formatPrereq } from '@/lib/enroll-engine';
@@ -17,6 +19,8 @@ import { evaluateStudentRegulationStatus, type StudentAcademicSummary } from '@/
 import { getSetting } from '@/lib/settings';
 import { toShamsi } from '@/lib/shamsi';
 import EnrollClient from './EnrollClient';
+import { resolveTuitionRule, type TuitionRuleContext } from '@/lib/tuition-resolver';
+import { toNum } from '@/lib/finance-rules';
 
 export const dynamic = 'force-dynamic';
 
@@ -125,6 +129,52 @@ export default async function EnrollPage() {
     if (lbl) prereqLabel.set(o.id, lbl);
   }
 
+  // محاسبه شهریه برای هر ارائه بر اساس قوانین جدید
+  // بارگذاری تمام قواعد شهریه فعال
+  const allTuitionRules = await db.select().from(tuition_rules).where(eq(tuition_rules.isActive, 1));
+  
+  // پیدا کردن ترم مالی جاری
+  const finTerms = await db.select().from(financial_terms)
+    .where(and(eq(financial_terms.universityId, me.universityId ?? 0), eq(financial_terms.isActive, 1)))
+    .orderBy(sql`sort_order ASC NULLS LAST`);
+  const currentFinTerm = finTerms[0];
+
+  // بافت دانشجو برای resolver
+  const tuitionCtx: TuitionRuleContext = {
+    degreeLevelId: me.degreeLevelId,
+    majorId: me.majorId,
+    facultyId: me.facultyId,
+    entryYear: me.entryYear,
+    termType: term?.termType ?? 'NORMAL',
+    offeringType: 'NORMAL',
+    clinicalPhase: 'NORMAL',
+    entryTermId: currentFinTerm?.id ?? null,
+    currentTermId: currentFinTerm?.id ?? null,
+    termLevelOnly: false,
+  };
+
+  // محاسبه شهریه برای هر درس
+  const tuitionMap = new Map<number, { fixed: number; variable: number; perUnit: number; total: number }>();
+  for (const o of rawOfferings) {
+    const ctx = { ...tuitionCtx, offeringType: o.offeringType || 'NORMAL' };
+    const rule = resolveTuitionRule(allTuitionRules, ctx);
+    if (rule) {
+      const rates = { 
+        fixed: toNum(rule.fixedAmount), 
+        theory: toNum(rule.perUnitTheory), 
+        practical: toNum(rule.perUnitPractical), 
+        general: toNum(rule.perUnitGeneral) 
+      };
+      // تعیین نوع درس (نظری/عملی/عمومی) - در اینجا ساده‌سازی شده
+      const perUnit = rates.theory; // پیش‌فرض: نظری
+      const fixed = rates.fixed;
+      const variable = perUnit * Number(o.units);
+      tuitionMap.set(o.id, { fixed, variable, perUnit, total: fixed + variable });
+    } else {
+      tuitionMap.set(o.id, { fixed: 0, variable: 0, perUnit: 0, total: 0 });
+    }
+  }
+
   // سبد جاری دانشجو
   const cart = await db.select().from(cart_items).where(eq(cart_items.studentId, me.id));
   const cartOfferingIds = cart.map(c => c.offeringId);
@@ -145,6 +195,7 @@ export default async function EnrollPage() {
 
   const offerings = rawOfferings.map(o => {
     const s = schedMap.get(o.id);
+    const tuition = tuitionMap.get(o.id) ?? { fixed: 0, variable: 0, perUnit: 0, total: 0 };
     return {
       ...o,
       units: Number(o.units),
@@ -152,6 +203,10 @@ export default async function EnrollPage() {
       prereq: prereqLabel.get(o.id) ?? null,
       classSchedules: s?.classes || [],
       examSchedule: s?.exam || null,
+      tuitionFixed: tuition.fixed,
+      tuitionVariable: tuition.variable,
+      tuitionPerUnit: tuition.perUnit,
+      tuitionTotal: tuition.total,
     };
   });
 

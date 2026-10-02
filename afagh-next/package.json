@@ -22,7 +22,10 @@
     "db:fix-names": "node scripts/fix-unknown-names.mjs",
     "audit:verify": "tsx scripts/verify-audit.ts",
     "test:rls": "node scripts/rls-test.mjs",
-    "test:concurrency": "node scripts/concurrency-test.mjs"
+    "test:concurrency": "node scripts/concurrency-test.mjs",
+    "db:growth-rates": "node scripts/compute-tuition-growth-rates.mjs",
+    "db:seed:pos": "node scripts/seed-pos.mjs",
+    "db:migrate:legacy-tuition": "node scripts/migrate-legacy-tuition.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

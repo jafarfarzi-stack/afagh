@@ -34,6 +34,9 @@ type RawRow = {
   /** فقط برای ترم — تاریخ شروع/پایان (خوانده‌شده با to_char برای پایداری منطقهٔ زمانی) */
   startDate?: string | null;
   endDate?: string | null;
+  /** کد استاندارد/کد وزارت — برای اتصال به ثمین */
+  standardCode?: string | null;
+  ministryCode?: string | null;
 };
 
 const dupSet = (rows: RawRow[]) => {
@@ -59,12 +62,14 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
   if (table === 'faculty') {
     raw = (await db
       .select({ id: faculties.id, code: faculties.facultyCode, title: faculties.name,
+        standardCode: faculties.standardCode, ministryCode: faculties.ministryCode,
         uni: universities.title, uid: faculties.universityId })
       .from(faculties)
       .leftJoin(universities, eq(universities.id, faculties.universityId))
       .where(activeUniId == null ? undefined : or(eq(faculties.universityId, activeUniId), isNull(faculties.universityId)))
       .orderBy(asc(faculties.name)))
       .map(r => ({ id: r.id, code: r.code, title: r.title, context: r.uni ?? null,
+        standardCode: r.standardCode ?? null, ministryCode: r.ministryCode ?? null,
         scope: r.uid != null ? `u${r.uid}` : null }));
   }
 
@@ -72,6 +77,7 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
     raw = (await db
       .select({
         id: departments.id, code: departments.departmentCode, title: departments.name,
+        standardCode: departments.standardCode, ministryCode: departments.ministryCode,
         facName: faculties.name, facCode: faculties.facultyCode, facId: departments.facultyId,
         uni: universities.title, uid: faculties.universityId,
       })
@@ -82,6 +88,7 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
       .orderBy(asc(faculties.name), asc(departments.name)))
       .map(r => ({ id: r.id, code: r.code, title: r.title,
         context: [r.uni ?? null, r.facName ? `${r.facName}${r.facCode ? ` [${r.facCode}]` : ''}` : null].filter(Boolean).join(' · ') || null,
+        standardCode: r.standardCode ?? null, ministryCode: r.ministryCode ?? null,
         // گروه ذیل دانشکده است — تکراری واقعی یعنی کد تکراری در یک دانشکده
         scope: r.facId != null ? `f${r.facId}` : null }));
   }
@@ -90,6 +97,7 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
     raw = (await db
       .select({
         id: majors.id, code: majors.majorCode, title: majors.name,
+        standardCode: majors.standardCode, ministryCode: majors.ministryCode,
         deg: degree_level_configs.title, dept: departments.name, deptCode: departments.departmentCode,
       })
       .from(majors)
@@ -100,6 +108,7 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
       .map(r => ({
         id: r.id, code: r.code, title: r.title,
         context: [r.deg, r.dept ? `${r.dept}${r.deptCode ? ` [${r.deptCode}]` : ''}` : null].filter(Boolean).join(' · ') || null,
+        standardCode: r.standardCode ?? null, ministryCode: r.ministryCode ?? null,
         // کد رشته سراسری یکتاست (majorCode unique) — تکراری واقعی است
         scope: null,
       }));
@@ -109,6 +118,7 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
     raw = (await db
       .select({
         id: degree_level_configs.id, code: degree_level_configs.code, title: degree_level_configs.title,
+        standardCode: degree_level_configs.standardCode, ministryCode: degree_level_configs.ministryCode,
         termCount: degree_level_configs.termCount, isGraduate: degree_level_configs.isGraduate,
       })
       .from(degree_level_configs)
@@ -135,6 +145,7 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
     raw = (await db
       .select({
         id: courses.id, code: courses.code, title: courses.title,
+        standardCode: courses.standardCode, ministryCode: courses.ministryCode,
         dept: departments.name, deg: degree_level_configs.title,
         uni: universities.title, uid: courses.universityId,
       })
@@ -146,6 +157,7 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
       .orderBy(asc(courses.code)))
       .map(r => ({ id: r.id, code: r.code, title: r.title,
         context: [r.uni ?? null, r.deg, r.dept].filter(Boolean).join(' · ') || null,
+        standardCode: r.standardCode ?? null, ministryCode: r.ministryCode ?? null,
         // کد درس فقط درون یک دانشگاه یکتاست (uq_courses_uni_code)
         scope: r.uid != null ? `u${r.uid}` : null }));
   }
@@ -153,6 +165,7 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
   if (table === 'term') {
     raw = (await db
       .select({ id: academic_terms.id, code: academic_terms.termCode, title: academic_terms.title,
+        standardCode: academic_terms.standardCode, ministryCode: academic_terms.ministryCode,
         uni: universities.title, uid: academic_terms.universityId,
         start: sql<string | null>`to_char(${academic_terms.startDate}, 'YYYY-MM-DD"T"HH24:MI')`,
         end: sql<string | null>`to_char(${academic_terms.endDate}, 'YYYY-MM-DD"T"HH24:MI')` })
@@ -162,6 +175,7 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
       .orderBy(asc(academic_terms.termCode)))
       .map(r => ({ id: r.id, code: r.code, title: r.title,
         context: r.uni ?? null,
+        standardCode: r.standardCode ?? null, ministryCode: r.ministryCode ?? null,
         // کد ترم فقط درون یک دانشگاه یکتاست (uq_terms_uni_code)
         scope: r.uid != null ? `u${r.uid}` : null,
         startDate: r.start, endDate: r.end }));
@@ -173,6 +187,8 @@ export async function listCodes(table: CodeTable, q = ''): Promise<CodeRow[]> {
     duplicate: !!r.code && dups.has(scopeKey(r)),
     startDate: r.startDate ?? null,
     endDate: r.endDate ?? null,
+    standardCode: r.standardCode ?? null,
+    ministryCode: r.ministryCode ?? null,
   }));
   if (!t) return rows;
   return rows.filter(r => faIncludes(r.title, t) || (r.code ?? '').includes(t) || faIncludes(r.context, t));
@@ -202,6 +218,12 @@ export async function setCodeAction(fd: FormData): Promise<{ ok: boolean; error?
   const code = String(fd.get('code') ?? '').trim();
   if (!id) return { ok: false, error: 'رکورد نامعتبر است.' };
 
+  // کدهای ملی/وزارتی (ثمین) — فقط وقتی فرم همین فیلدها را فرستاده باشد تغییر می‌کنند؛
+  // فرم‌های قدیمی‌تر (ذخیرهٔ کد از ردیف جدول) اصلاً نمی‌فرستند و ستون‌ها دست‌نخورده می‌مانند.
+  const extra: { standardCode?: string | null; ministryCode?: string | null } = {};
+  if (fd.has('standardCode')) extra.standardCode = latinDigits(str(fd, 'standardCode')) || null;
+  if (fd.has('ministryCode')) extra.ministryCode = latinDigits(str(fd, 'ministryCode')) || null;
+
   const clash = async (found: { id: number; title: string }[]) =>
     found.length ? { ok: false as const, error: `کد «${code}» قبلاً برای «${found[0].title}» ثبت شده — کد باید یکتا باشد.` } : null;
 
@@ -211,34 +233,38 @@ export async function setCodeAction(fd: FormData): Promise<{ ok: boolean; error?
         .where(and(eq(faculties.facultyCode, code), ne(faculties.id, id))).limit(1));
       if (c) return c;
     }
-    await db.update(faculties).set({ facultyCode: code || null }).where(eq(faculties.id, id));
+    await db.update(faculties).set({ facultyCode: code || null, ...extra }).where(eq(faculties.id, id));
   } else if (table === 'department') {
     if (code) {
       const c = await clash(await db.select({ id: departments.id, title: departments.name }).from(departments)
         .where(and(eq(departments.departmentCode, code), ne(departments.id, id))).limit(1));
       if (c) return c;
     }
-    await db.update(departments).set({ departmentCode: code || null }).where(eq(departments.id, id));
+    await db.update(departments).set({ departmentCode: code || null, ...extra }).where(eq(departments.id, id));
   } else if (table === 'major') {
     if (code) {
       const c = await clash(await db.select({ id: majors.id, title: majors.name }).from(majors)
         .where(and(eq(majors.majorCode, code), ne(majors.id, id))).limit(1));
       if (c) return c;
     }
-    await db.update(majors).set({ majorCode: code || null }).where(eq(majors.id, id));
+    await db.update(majors).set({ majorCode: code || null, ...extra }).where(eq(majors.id, id));
   } else if (table === 'degree') {
     // کد مقطع NOT NULL است — خالی‌کردنش مجاز نیست
     if (!code) return { ok: false, error: 'کد مقطع نمی‌تواند خالی باشد.' };
     const c = await clash(await db.select({ id: degree_level_configs.id, title: degree_level_configs.title }).from(degree_level_configs)
       .where(and(eq(degree_level_configs.code, code), ne(degree_level_configs.id, id))).limit(1));
     if (c) return c;
-    await db.update(degree_level_configs).set({ code }).where(eq(degree_level_configs.id, id));
+    await db.update(degree_level_configs).set({ code, ...extra }).where(eq(degree_level_configs.id, id));
   } else if (table === 'course') {
     if (!code) return { ok: false, error: 'کد درس نمی‌تواند خالی باشد.' };
     const c = await clash(await db.select({ id: courses.id, title: courses.title }).from(courses)
       .where(and(eq(courses.code, code), ne(courses.id, id))).limit(1));
     if (c) return c;
-    await db.update(courses).set({ code }).where(eq(courses.id, id));
+    await db.update(courses).set({ code, ...extra }).where(eq(courses.id, id));
+  } else if (table === 'term') {
+    // کد ترم از این صفحه ویرایش‌پذیر نیست — فقط کدهای ثمینی قابل ثبت‌اند
+    if (!Object.keys(extra).length) return { ok: false, error: 'کد این جدول از این صفحه قابل ویرایش نیست.' };
+    await db.update(academic_terms).set({ ...extra }).where(eq(academic_terms.id, id));
   } else {
     return { ok: false, error: 'کد این جدول از این صفحه قابل ویرایش نیست.' };
   }
@@ -261,8 +287,9 @@ export async function exportCodesCsv(table: CodeTable): Promise<string> {
   await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
   const rows = await listCodes(table);
   const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-  const head = 'کد,عنوان,زمینه\n';
-  return head + rows.map(r => [esc(r.code ?? ''), esc(r.title), esc(r.context ?? '')].join(',')).join('\n');
+  const head = 'کد,عنوان,زمینه,کد استاندارد,کد وزارت\n';
+  return head + rows.map(r => [esc(r.code ?? ''), esc(r.title), esc(r.context ?? ''),
+    esc(r.standardCode ?? ''), esc(r.ministryCode ?? '')].join(',')).join('\n');
 }
 
 /** شمار کل رکوردهای هر جدول بدون بارگذاری کامل — برای صفحه‌های بزرگ مثل دروس */
@@ -314,6 +341,9 @@ const latinDigits = (v: string) =>
   v.replace(/[۰-۹]/g, c => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(c)))
    .replace(/[٠-٩]/g, c => String('٠١٢٣٤٥٦٧٨٩'.indexOf(c)));
 
+/** کد استاندارد/کد وزارت (ثمین) — خالی یا غایب → null (ستون‌ها nullable) */
+const optCode = (fd: FormData, k: string): string | null => latinDigits(str(fd, k)) || null;
+
 /** افزودن رکورد مرجع تازه — مقطع، دانشکده یا رشته */
 export async function createCodeRowAction(fd: FormData): Promise<{ ok: boolean; error?: string; id?: number }> {
   await requireRole(['ADMIN', 'VICE_EDU']);
@@ -349,6 +379,8 @@ export async function createCodeRowAction(fd: FormData): Promise<{ ok: boolean; 
 
       const [row] = await db.insert(degree_level_configs).values({
         title, code,
+        standardCode: optCode(fd, 'standardCode'),
+        ministryCode: optCode(fd, 'ministryCode'),
         defaultPassingGrade: pass.toFixed(2),
         conditionalGpaThreshold: cond.toFixed(2),
         maxUnitsPerTerm: maxU,
@@ -368,7 +400,11 @@ export async function createCodeRowAction(fd: FormData): Promise<{ ok: boolean; 
         const d = await db.select({ n: faculties.name }).from(faculties).where(eq(faculties.facultyCode, code)).limit(1);
         if (d.length) return { ok: false, error: `کد «${code}» قبلاً برای «${d[0].n}» ثبت شده.` };
       }
-      const [row] = await db.insert(faculties).values({ name, facultyCode: code || null }).returning({ id: faculties.id });
+      const [row] = await db.insert(faculties).values({
+        name, facultyCode: code || null,
+        standardCode: optCode(fd, 'standardCode'),
+        ministryCode: optCode(fd, 'ministryCode'),
+      }).returning({ id: faculties.id });
       revalidatePath('/admin/codes');
       revalidatePath('/admin/departments');
       return { ok: true, id: row.id };
@@ -395,6 +431,8 @@ export async function createCodeRowAction(fd: FormData): Promise<{ ok: boolean; 
       const [row] = await db.insert(majors).values({
         name, degreeLevelId, departmentId, facultyId,
         majorCode: code || null,
+        standardCode: optCode(fd, 'standardCode'),
+        ministryCode: optCode(fd, 'ministryCode'),
         minUnits: minUnits && minUnits > 0 && minUnits <= 400 ? minUnits : null,
       }).returning({ id: majors.id });
       revalidatePath('/admin/codes');
@@ -420,6 +458,8 @@ export async function createCodeRowAction(fd: FormData): Promise<{ ok: boolean; 
       // مسئول آموزش آگاهانه در تنظیمات ترم فعال می‌کند، نه هنگام ساخت کد.
       const [row] = await db.insert(academic_terms).values({
         termCode: code, title, termType,
+        standardCode: optCode(fd, 'standardCode'),
+        ministryCode: optCode(fd, 'ministryCode'),
         isSummer: termType === 'SUMMER' ? 1 : 0,
         isCurrent: 0, isEnrollmentOpen: 0,
       }).returning({ id: academic_terms.id });
@@ -441,6 +481,7 @@ export async function createCodeRowAction(fd: FormData): Promise<{ ok: boolean; 
 
 export type DegreeDetail = {
   id: number; title: string; code: string;
+  standardCode: string | null; ministryCode: string | null;
   defaultPassingGrade: string; conditionalGpaThreshold: string;
   maxUnitsPerTerm: number | null; termCount: number | null; isGraduate: number | null;
 } | null;
@@ -451,6 +492,7 @@ export async function getDegreeRowAction(id: number): Promise<DegreeDetail> {
   if (!id) return null;
   const [r] = await db.select({
     id: degree_level_configs.id, title: degree_level_configs.title, code: degree_level_configs.code,
+    standardCode: degree_level_configs.standardCode, ministryCode: degree_level_configs.ministryCode,
     defaultPassingGrade: degree_level_configs.defaultPassingGrade,
     conditionalGpaThreshold: degree_level_configs.conditionalGpaThreshold,
     maxUnitsPerTerm: degree_level_configs.maxUnitsPerTerm,
@@ -493,6 +535,8 @@ export async function updateDegreeRowAction(fd: FormData): Promise<{ ok: boolean
 
   await db.update(degree_level_configs).set({
     title, code,
+    standardCode: optCode(fd, 'standardCode'),
+    ministryCode: optCode(fd, 'ministryCode'),
     defaultPassingGrade: pass.toFixed(2),
     conditionalGpaThreshold: cond.toFixed(2),
     maxUnitsPerTerm: maxU,
@@ -520,6 +564,8 @@ export async function getTermRowAction(id: number): Promise<Record<string, strin
   const [r] = await db.select({
     title: academic_terms.title,
     termType: academic_terms.termType,
+    standardCode: academic_terms.standardCode,
+    ministryCode: academic_terms.ministryCode,
     academicYear: academic_terms.academicYear,
     startDate: dtRead(academic_terms.startDate),
     endDate: dtRead(academic_terms.endDate),
@@ -542,6 +588,8 @@ export async function getTermRowAction(id: number): Promise<Record<string, strin
   return {
     title: r.title,
     termType: r.termType,
+    standardCode: r.standardCode ?? '',
+    ministryCode: r.ministryCode ?? '',
     academicYear: r.academicYear != null ? String(r.academicYear) : '',
     startDate: r.startDate ?? '',
     endDate: r.endDate ?? '',
@@ -635,6 +683,8 @@ export async function updateTermRowAction(fd: FormData): Promise<{ ok: boolean; 
 
   await db.update(academic_terms).set({
     title, termType,
+    standardCode: optCode(fd, 'standardCode'),
+    ministryCode: optCode(fd, 'ministryCode'),
     academicYear: year ?? null,
     startDate: dtWrite(vals.startDate),
     endDate: dtWrite(vals.endDate),

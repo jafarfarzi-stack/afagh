@@ -129,6 +129,31 @@ export default function RegulationsClient(props: {
     setSaving(false);
   };
 
+  // ── مرتب‌سازی فهرست نسخه‌های آیین‌نامه (کلیک: صعودی → نزولی → بدون سورت) ──
+  // این صفحه جدول ندارد؛ سرستون‌های کوچک بالای فهرستِ کناری همین کار را می‌کنند.
+  const [regSortKey, setRegSortKey] = useState<'title' | 'year' | 'degree' | null>(null);
+  const [regSortDir, setRegSortDir] = useState<'asc' | 'desc'>('asc');
+  const toggleRegSort = (key: 'title' | 'year' | 'degree') => {
+    if (regSortKey !== key) {
+      setRegSortKey(key);
+      setRegSortDir('asc');
+    } else if (regSortDir === 'asc') {
+      setRegSortDir('desc');
+    } else {
+      setRegSortKey(null);
+    }
+  };
+  const sortedRegulations = useMemo(() => {
+    if (!regSortKey) return props.regulations;
+    const dir = regSortDir === 'asc' ? 1 : -1;
+    return [...props.regulations].sort((a, b) => {
+      if (regSortKey === 'year') return (a.effectiveFromYear - b.effectiveFromYear) * dir;
+      if (regSortKey === 'degree')
+        return String(a.degreeLevelTitle ?? '').localeCompare(String(b.degreeLevelTitle ?? ''), 'fa') * dir;
+      return a.title.localeCompare(b.title, 'fa') * dir;
+    });
+  }, [props.regulations, regSortKey, regSortDir]);
+
   // ════════════════════════════════════════════════════════════════════════════
   // SIMULATOR STATE
   // ════════════════════════════════════════════════════════════════════════════
@@ -289,8 +314,36 @@ export default function RegulationsClient(props: {
             <h3 className="font-extrabold text-xs text-slate-500 uppercase tracking-wider mb-3">
               نسخه‌های فعال آیین‌نامه‌ها
             </h3>
+            {/* سرستون‌های مرتب‌سازی فهرست — کلیک: صعودی ▲ / نزولی ▼ / بدون سورت ↕ */}
+            <div className="mb-2 flex flex-wrap items-center gap-1 text-[11px]">
+              <span className="text-slate-400">مرتب‌سازی:</span>
+              {([
+                ['title', 'عنوان'],
+                ['year', 'ورودی'],
+                ['degree', 'مقطع'],
+              ] as const).map(([k, label]) => {
+                const active = regSortKey === k;
+                return (
+                  <button
+                    key={k}
+                    onClick={() => toggleRegSort(k)}
+                    title="مرتب‌سازی"
+                    className={`rounded-md border px-1.5 py-0.5 font-bold transition-all ${
+                      active
+                        ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                        : 'border-slate-200 bg-slate-50 text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {label}{' '}
+                    <span className="inline-block w-3 text-center">
+                      {active ? (regSortDir === 'asc' ? '▲' : '▼') : <span className="opacity-30">↕</span>}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
             <div className="space-y-2">
-              {props.regulations.map(reg => {
+              {sortedRegulations.map(reg => {
                 const isSelected = reg.id === selectedRegId;
                 return (
                   <button

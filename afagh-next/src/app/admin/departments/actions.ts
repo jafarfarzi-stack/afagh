@@ -1,10 +1,11 @@
 'use server';
 
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { courses, departments, faculties, majors, roles, staff, user_roles, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import { isHeadOfAny } from '@/lib/group-manager';
 
 const s = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
@@ -33,6 +34,8 @@ export type DeptRow = {
 /** فهرست گروه‌ها با مدیر، تعداد اعضا، دروس و رشته‌ها */
 export async function listDepartments(): Promise<DeptRow[]> {
   await requireRole(['ADMIN', 'VICE_EDU']);
+  // دانشگاه فعال — گروه‌های همین دانشگاه + رکوردهای سراسری (universityId=null)
+  const uniId = (await getCurrentUniversity()).id;
   const rows = await db
     .select({
       id: departments.id,
@@ -53,6 +56,7 @@ export async function listDepartments(): Promise<DeptRow[]> {
     .innerJoin(faculties, eq(faculties.id, departments.facultyId))
     .leftJoin(staff, eq(staff.id, departments.headStaffId))
     .leftJoin(users, eq(users.id, staff.userId))
+    .where(or(eq(departments.universityId, uniId), isNull(departments.universityId)))
     .orderBy(faculties.name, departments.name);
 
   const counts = await db
@@ -104,6 +108,8 @@ export type StaffPick = {
 /** فهرست اعضای هیئت علمی/کارکنان برای انتخاب مدیر یا عضو */
 export async function listStaffPicks(): Promise<StaffPick[]> {
   await requireRole(['ADMIN', 'VICE_EDU']);
+  // دانشگاه فعال — پرسنل همین دانشگاه + پرونده‌های سراسری (universityId=null)
+  const uniId = (await getCurrentUniversity()).id;
   const rows = await db
     .select({
       id: staff.id,
@@ -120,6 +126,7 @@ export async function listStaffPicks(): Promise<StaffPick[]> {
     .from(staff)
     .leftJoin(users, eq(users.id, staff.userId))
     .leftJoin(departments, eq(departments.id, staff.departmentId))
+    .where(or(eq(staff.universityId, uniId), isNull(staff.universityId)))
     .orderBy(users.lastName, users.firstName);
 
   return rows
@@ -137,7 +144,13 @@ export async function listStaffPicks(): Promise<StaffPick[]> {
 
 export async function listFaculties() {
   await requireRole(['ADMIN', 'VICE_EDU']);
-  return db.select({ id: faculties.id, name: faculties.name, code: faculties.facultyCode }).from(faculties).orderBy(faculties.name);
+  // دانشگاه فعال — دانشکده‌های همین دانشگاه + رکوردهای سراسری (universityId=null)
+  const uniId = (await getCurrentUniversity()).id;
+  return db
+    .select({ id: faculties.id, name: faculties.name, code: faculties.facultyCode })
+    .from(faculties)
+    .where(or(eq(faculties.universityId, uniId), isNull(faculties.universityId)))
+    .orderBy(faculties.name);
 }
 
 /** کد دانشکده — سند اصالت آن؛ تا الان هیچ رابطی برای ویرایشش نبود */

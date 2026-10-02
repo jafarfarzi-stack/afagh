@@ -1,7 +1,8 @@
-import { desc, eq, sql } from 'drizzle-orm';
+import { desc, eq, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { process_definitions, student_requests, students, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import { gridModules } from '@/lib/admin-modules';
 import { ensureWorker, waitingRoomStats, warmupCapacities } from '@/lib/waitingRoom';
 import { revalidatePath } from 'next/cache';
@@ -48,10 +49,54 @@ const stColor: Record<string, string> = {
   RETURNED: 'bg-purple-100 text-purple-800 border border-purple-300',
 };
 
-export default async function AdminHome() {
+/** سرستون کارتابل: کلیک = nav با ?sort=col&dir=asc|desc (سورت سمت سرور) */
+function InboxTh({
+  label, col, sortKey, sortDir, href,
+}: {
+  label: string;
+  col: string;
+  sortKey: string | null;
+  sortDir: 'asc' | 'desc';
+  href: (col: string) => string;
+}) {
+  const active = sortKey === col;
+  return (
+    <th className="p-2.5">
+      <Link
+        href={href(col)}
+        title="مرتب‌سازی"
+        className={`font-bold hover:text-indigo-700 whitespace-nowrap ${active ? 'text-indigo-700' : ''}`}
+      >
+        {label}{' '}
+        <span className="inline-block w-4 text-center">
+          {active ? (sortDir === 'asc' ? '▲' : '▼') : <span className="opacity-30">↕</span>}
+        </span>
+      </Link>
+    </th>
+  );
+}
+
+export default async function AdminHome({
+  searchParams,
+}: {
+  searchParams: Promise<{ sort?: string; dir?: string }>;
+}) {
+  const sp = await searchParams;
   const user = await requireRole(ALL_ADMIN_ROLES);
   const isEdu = user.roles.includes('ADMIN') || user.roles.includes('EDU_EXPERT');
   const mods = gridModules(user.roles);
+
+  // ── مرتب‌سازی ستونی کارتابل از URL (?sort=col&dir=asc|desc — پیش‌فرض: جدیدترین) ──
+  const SORTABLE: Record<string, 'track' | 'name' | 'status' | 'created' | 'proc'> = {
+    track: 'track', name: 'name', status: 'status', created: 'created', proc: 'proc',
+  };
+  const sortKey = SORTABLE[(sp.sort || '').trim()] ?? null;
+  const sortDir: 'asc' | 'desc' = sp.dir === 'desc' ? 'desc' : 'asc';
+  const sortHref = (col: string) => {
+    if (sortKey !== col) return `/admin?sort=${col}&dir=asc`;
+    if (sortDir === 'asc') return `/admin?sort=${col}&dir=desc`;
+    return '/admin';
+  };
 
   let total = 0;
   let counts: { status: string; n: number }[] = [];
@@ -61,11 +106,28 @@ export default async function AdminHome() {
   if (isEdu) {
     ensureWorker();
     wr = await waitingRoomStats();
+    // دانشگاه فعال — فقط درخواست‌های همین دانشگاه + رکوردهای سراسری (universityId=null)
+    const uniId = (await getCurrentUniversity()).id;
+    const uniScope = or(eq(student_requests.universityId, uniId), isNull(student_requests.universityId));
     counts = await db
       .select({ status: student_requests.status, n: sql<number>`count(*)::int` })
       .from(student_requests)
+      .where(uniScope)
       .groupBy(student_requests.status);
     total = counts.reduce((s, c) => s + c.n, 0);
+
+    const orderBy = !sortKey
+      ? [desc(student_requests.id)]
+      : sortKey === 'track'
+        ? (sortDir === 'asc' ? [student_requests.trackingCode] : [desc(student_requests.trackingCode)])
+        : sortKey === 'name'
+          ? (sortDir === 'asc' ? [users.lastName, users.firstName] : [desc(users.lastName), desc(users.firstName)])
+          : sortKey === 'status'
+            ? (sortDir === 'asc' ? [student_requests.status] : [desc(student_requests.status)])
+            : sortKey === 'created'
+              ? (sortDir === 'asc' ? [student_requests.createdAt] : [desc(student_requests.createdAt)])
+              : (sortDir === 'asc' ? [process_definitions.title] : [desc(process_definitions.title)]);
+
     inbox = await db
       .select({
         id: student_requests.id,
@@ -82,7 +144,8 @@ export default async function AdminHome() {
       .innerJoin(students, eq(students.id, student_requests.studentId))
       .innerJoin(users, eq(users.id, students.userId))
       .leftJoin(process_definitions, eq(process_definitions.id, student_requests.processId))
-      .orderBy(desc(student_requests.id))
+      .where(uniScope)
+      .orderBy(...(orderBy as never[]))
       .limit(20);
   }
 
@@ -168,11 +231,11 @@ export default async function AdminHome() {
               <table className="w-full text-right text-sm">
                 <thead>
                   <tr className="text-xs text-slate-500 border-b border-slate-200">
-                    <th className="p-2.5">کد رهگیری</th>
-                    <th className="p-2.5">دانشجو</th>
-                    <th className="p-2.5">موضوع / درس</th>
-                    <th className="p-2.5">وضعیت</th>
-                    <th className="p-2.5">زمان</th>
+                    <InboxTh label="کد رهگیری" col="track" sortKey={sortKey} sortDir={sortDir} href={sortHref} />
+                    <InboxTh label="دانشجو" col="name" sortKey={sortKey} sortDir={sortDir} href={sortHref} />
+                    <InboxTh label="موضوع / درس" col="proc" sortKey={sortKey} sortDir={sortDir} href={sortHref} />
+                    <InboxTh label="وضعیت" col="status" sortKey={sortKey} sortDir={sortDir} href={sortHref} />
+                    <InboxTh label="زمان" col="created" sortKey={sortKey} sortDir={sortDir} href={sortHref} />
                     <th className="p-2.5 text-left">اقدام شورا</th>
                   </tr>
                 </thead>

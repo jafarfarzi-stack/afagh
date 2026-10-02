@@ -160,6 +160,8 @@ export const degree_level_configs = pgTable('degree_level_configs', {
   id: serial('id').primaryKey(),
   title: varchar('title', { length: 100 }).notNull(),
   code: varchar('code', { length: 30 }).notNull().unique(),
+  standardCode: varchar('standardCode', { length: 50 }),    // کد استاندارد وزارت علوم
+  ministryCode: varchar('ministryCode', { length: 50 }),    // کد وزارت علوم
   defaultPassingGrade: numeric('defaultPassingGrade', { precision: 4, scale: 2 }).notNull().default('10.00'),
   conditionalGpaThreshold: numeric('conditionalGpaThreshold', { precision: 4, scale: 2 }).notNull().default('12.00'),
   maxUnitsPerTerm: integer('maxUnitsPerTerm').default(20),
@@ -190,6 +192,8 @@ export const faculties = pgTable('faculties', {
   name: varchar('name', { length: 150 }).notNull(),
   // ── کد دانشکده از دیتابیس قدیمی/سازمان (فایل reshtelist—ستون «کد دانشکده») ──
   facultyCode: varchar('facultyCode', { length: 10 }),
+  standardCode: varchar('standardCode', { length: 50 }),    // کد استاندارد وزارت علوم
+  ministryCode: varchar('ministryCode', { length: 50 }),    // کد وزارت علوم
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
@@ -199,6 +203,8 @@ export const departments = pgTable('departments', {
   facultyId: integer('facultyId').notNull().references(() => faculties.id),
   // ── کد گروه آموزشی از دیتابیس قدیمی (فایل reshtelist—ستون «گروه آموزشی») ──
   departmentCode: varchar('departmentCode', { length: 10 }),
+  standardCode: varchar('standardCode', { length: 50 }),    // کد استاندارد وزارت علوم
+  ministryCode: varchar('ministryCode', { length: 50 }),    // کد وزارت علوم
   /**
    * مدیر گروه — از میان پرونده‌های کارمندی/هیئت علمی انتخاب می‌شود.
    * عمداً اینجا (روی گروه) ذخیره می‌شود نه روی staff، چون مدیر گروهِ «دروس
@@ -227,6 +233,7 @@ export const majors = pgTable('majors', {
   facultyId: integer('facultyId').references(() => faculties.id),      // کد دانشکده
   minUnits: integer('minUnits'),                                        // حداقل واحد
   standardCode: varchar('standardCode', { length: 20 }),                // کد استاندارد رشته
+  ministryCode: varchar('ministryCode', { length: 50 }),                // کد وزارت علوم
   establishedDate: varchar('establishedDate', { length: 10 }),          // تاریخ تاسیس (شمسی)
   terminatedDate: varchar('terminatedDate', { length: 10 }),            // تاریخ خاتمه (شمسی)
   isActive: integer('isActive').default(1),                             // فعال/غیرفعال
@@ -405,6 +412,8 @@ export const staff = pgTable('staff', {
   id: serial('id').primaryKey(),
   userId: integer('userId').notNull().unique().references(() => users.id),
   staffCode: varchar('staffCode', { length: 20 }).notNull(),
+  standardCode: varchar('standardCode', { length: 50 }),    // کد استاندارد وزارت علوم
+  ministryCode: varchar('ministryCode', { length: 50 }),    // کد وزارت علوم
   departmentId: integer('departmentId').references(() => departments.id),
   staffType: varchar('staffType', { length: 50 }),
   academicRank: varchar('academicRank', { length: 50 }),
@@ -448,6 +457,8 @@ export const equivalence_clusters = pgTable('equivalence_clusters', {
 export const courses = pgTable('courses', {
   id: serial('id').primaryKey(),
   code: varchar('code', { length: 20 }).notNull(),
+  standardCode: varchar('standardCode', { length: 50 }),    // کد استاندارد وزارت علوم
+  ministryCode: varchar('ministryCode', { length: 50 }),    // کد وزارت علوم
   title: varchar('title', { length: 150 }).notNull(),
   theoreticalUnits: numeric('theoreticalUnits', { precision: 3, scale: 1 }).default('0'),
   practicalUnits: numeric('practicalUnits', { precision: 3, scale: 1 }).default('0'),
@@ -606,6 +617,8 @@ export const academic_terms = pgTable('academic_terms', {
   id: serial('id').primaryKey(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   termCode: varchar('termCode', { length: 10 }).notNull(),
+  standardCode: varchar('standardCode', { length: 50 }),    // کد استاندارد وزارت علوم
+  ministryCode: varchar('ministryCode', { length: 50 }),    // کد وزارت علوم
   title: varchar('title', { length: 100 }).notNull(),
   termType: varchar('termType', { length: 20 }).notNull().default('NORMAL'), // NORMAL | SUMMER | EQUIVALENCE | SPECIAL
   sortOrder: integer('sortOrder'), // رتبه ترتیبی زمانی دقیق (مثلاً ۱۴۰۱۵ قبل از ۱۴۰۲۱)
@@ -623,8 +636,30 @@ export const academic_terms = pgTable('academic_terms', {
   appealWindowDays: integer('appealWindowDays').default(3),
   professorAppealSlaDays: integer('professorAppealSlaDays').default(5)
 }, (t) => [
-  // کد ترم در هر دانشگاه یکتاست (نه سراسری) — شمس و نژند کدهای مشترک دارند (891 و...)
   unique('uq_terms_uni_code').on(t.universityId, t.termCode),
+]);
+
+/**
+ * نیمسال‌های مالی — مجزا از ترم‌های تحصیلی برای تطبیق با سیستم‌های سنتی (سما).
+ * کد ۵ رقمی (مثل ۱۴۰۱۱، ۱۴۰۲۱)، تاریخچه مضامین و اتصال به ترم تحصیلی مرجع.
+ */
+export const financial_terms = pgTable('financial_terms', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').notNull().references((): AnyPgColumn => universities.id),
+  termCode: varchar('termCode', { length: 10 }).notNull(), // ۵ رقمی: ۱۴۰۱۱، ۱۴۰۲۱...
+  title: varchar('title', { length: 100 }).notNull(),
+  academicTermId: integer('academicTermId').references(() => academic_terms.id), // ترم تحصیلی مرجع
+  startDate: timestamp('startDate').notNull(),
+  endDate: timestamp('endDate').notNull(),
+  isActive: integer('isActive').notNull().default(1),
+  isCurrent: integer('isCurrent').default(0),
+  sortOrder: integer('sortOrder'),
+  note: text('note'),
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+}, (t) => [
+  unique('uq_fin_terms_uni_code').on(t.universityId, t.termCode),
+  index('idx_fin_terms_academic').on(t.academicTermId),
 ]);
 
 export const classrooms = pgTable('classrooms', {
@@ -1015,12 +1050,15 @@ export const request_parallel_checkpoints = pgTable('request_parallel_checkpoint
 export const term_financial_rules = pgTable('term_financial_rules', {
   id: serial('id').primaryKey(),
   termId: integer('termId').notNull().references(() => academic_terms.id),
+  financialTermId: integer('financialTermId').references(() => financial_terms.id),
   degreeLevelId: integer('degreeLevelId').notNull().references(() => degree_level_configs.id),
   fixedTuition: numeric('fixedTuition', { precision: 12, scale: 0 }).notNull(),
   perUnitTuition: numeric('perUnitTuition', { precision: 12, scale: 0 }).default('0'),
   advancePaymentRequired: numeric('advancePaymentRequired', { precision: 12, scale: 0 }).notNull(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
-});
+}, (t) => [
+  index('idx_term_fin_rules_fin_term').on(t.financialTermId),
+]);
 
 /**
  * قواعد شهریهٔ قابل تنظیم (بدون مقدار سخت‌کد) — موتور شهریه از اینجا می‌خواند.
@@ -1049,17 +1087,34 @@ export const tuition_fee_rules = pgTable('tuition_fee_rules', {
   updatedAt: timestamp('updatedAt').defaultNow()
 });
 
+/** ۹ نوع تراکنش مالی دقیق (سازگار با سما) */
+export const TransactionType = {
+  TUITION_FIXED: 'TUITION_FIXED',       // شهریه ثابت
+  TUITION_VARIABLE: 'TUITION_VARIABLE', // شهریه متغیر
+  PAYMENT: 'PAYMENT',                   // پرداختی/فیش
+  DISCOUNT_FIXED: 'DISCOUNT_FIXED',     // تخفیف شهریه ثابت
+  DISCOUNT_VARIABLE: 'DISCOUNT_VARIABLE', // تخفیف شهریه متغیر
+  SUBJECT_ADDITIVE: 'SUBJECT_ADDITIVE',   // مبلغ موضوعی افزایشی
+  SUBJECT_DEDUCTIVE: 'SUBJECT_DEDUCTIVE', // مبلغ موضوعی کاهشی
+  SPONSORSHIP: 'SPONSORSHIP',           // مساعده/پوشش بنیاد
+  LOAN: 'LOAN',                         // وام
+} as const;
+
 export const student_ledger = pgTable('student_ledger', {
   id: serial('id').primaryKey(),
   studentId: integer('studentId').notNull().references(() => students.id),
   termId: integer('termId').references(() => academic_terms.id),
-  transactionType: varchar('transactionType', { length: 20 }).notNull(),
+  financialTermId: integer('financialTermId').references(() => financial_terms.id),
+  transactionType: varchar('transactionType', { length: 25 }).notNull(),
   amount: numeric('amount', { precision: 12, scale: 0 }).notNull(),
   description: text('description'),
   referenceId: integer('referenceId'),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow()
-});
+}, (t) => [
+  index('idx_student_ledger_fin_term').on(t.financialTermId),
+  check('ck_student_ledger_txn_type', sql`"transactionType" IN ('TUITION_FIXED','TUITION_VARIABLE','PAYMENT','POS_PAYMENT','DISCOUNT_FIXED','DISCOUNT_VARIABLE','SUBJECT_ADDITIVE','SUBJECT_DEDUCTIVE','SPONSORSHIP','LOAN')`),
+]);
 
 export const financial_clearances = pgTable('financial_clearances', {
   id: serial('id').primaryKey(),
@@ -2264,22 +2319,35 @@ export const tuition_sponsors = pgTable('tuition_sponsors', {
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
-/** تعهد پرداخت یک بنیاد بابت شهریهٔ یک دانشجو */
+/** تعهد پرداخت یک بنیاد بابت شهریهٔ یک دانشجو — با بازه زمانی و تفکیک ثابت/متغیر */
 export const student_sponsorships = pgTable('student_sponsorships', {
   id: serial('id').primaryKey(),
   studentId: integer('studentId').notNull().references(() => students.id),
-  termId: integer('termId').references(() => academic_terms.id),
+  termId: integer('termId').references(() => academic_terms.id), // ترم تحصیلی مرجع (برای جستجو)
+  financialTermId: integer('financialTermId').references(() => financial_terms.id), // ترم مالی مرجع
   sponsorId: integer('sponsorId').notNull().references(() => tuition_sponsors.id),
+  /** بازه زمانی اثربخشی (نیمسال‌های مالی) */
+  startTermId: integer('startTermId').references(() => financial_terms.id),
+  endTermId: integer('endTermId').references(() => financial_terms.id),
+  /** نوع پوشش: PERCENT = درصدی | FIXED = مبلغ ثابت */
   coverageKind: varchar('coverageKind', { length: 20 }).notNull().default('PERCENT'),
-  percent: numeric('percent', { precision: 5, scale: 2 }).notNull().default('0'),
+  /** درصد پوشش شهریه ثابت */
+  fixedPercent: numeric('fixed_percent', { precision: 5, scale: 2 }).notNull().default('0'),
+  /** درصد پوشش شهریه متغیر */
+  variablePercent: numeric('variable_percent', { precision: 5, scale: 2 }).notNull().default('0'),
+  /** مبلغ ثابت پوشش (اگر coverageKind = FIXED) */
   amount: numeric('amount', { precision: 12, scale: 0 }).notNull().default('0'),
+  /** روی کدام بخش شهریه اثر بگذارد: FIXED | VARIABLE | BOTH */
   appliesTo: varchar('appliesTo', { length: 20 }).notNull().default('BOTH'),
   referenceNo: varchar('referenceNo', { length: 80 }),
   status: varchar('status', { length: 20 }).notNull().default('PENDING'), // PENDING | CONFIRMED | REJECTED | PAID
   note: text('note'),
   createdAt: timestamp('createdAt').defaultNow(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
-});
+}, (t) => [
+  index('idx_student_sponsorships_fin_term').on(t.financialTermId),
+  index('idx_student_sponsorships_start_end').on(t.startTermId, t.endTermId),
+]);
 
 /** چک‌های دریافتی از دانشجو — مبنای یادآوری پیش از سررسید */
 export const payment_cheques = pgTable('payment_cheques', {
@@ -2300,6 +2368,154 @@ export const payment_cheques = pgTable('payment_cheques', {
   createdAt: timestamp('createdAt').defaultNow(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
+
+// ══════════════════════════════════════════════════════════════════════
+//  درگاه پرداخت آنلاین (POS) — پرداخت شهریه اینترنتی
+// ══════════════════════════════════════════════════════════════════════
+
+/** پیکربندی درگاه‌های پرداخت (زرین‌پال، ملت، سامان، پارسیان، پاسارگاد، ...) */
+export const payment_gateways = pgTable('payment_gateways', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').notNull().references((): AnyPgColumn => universities.id),
+  code: varchar('code', { length: 40 }).notNull(), // ZARINPAL, MELLAT, SAMAN, PARSIAN, PASARGAD, SADAD, ...
+  title: varchar('title', { length: 100 }).notNull(),
+  isActive: integer('isActive').notNull().default(1),
+  isSandbox: integer('isSandbox').notNull().default(1),
+  /** تنظیمات درگاه (JSON): merchantId, terminalId, callbackUrl, apiKey, pin, ... */
+  config: jsonb('config').notNull().default('{}'),
+  /** اولویت نمایش در لیست درگاه‌ها */
+  sortOrder: integer('sortOrder').default(0),
+  note: text('note'),
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+}, (t) => [
+  unique('uq_payment_gateway_uni_code').on(t.universityId, t.code),
+]);
+
+/** تراکنش‌های پرداخت آنلاین — ردیابی کامل از درخواست تا تایید/انصراف */
+export const payment_transactions = pgTable('payment_transactions', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').notNull().references((): AnyPgColumn => universities.id),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  termId: integer('termId').references(() => academic_terms.id),
+  financialTermId: integer('financialTermId').references(() => financial_terms.id),
+  gatewayId: integer('gatewayId').notNull().references(() => payment_gateways.id),
+  /** مرجع یکتا برای ارجاع به درگاه (Authority/RefId/Token) */
+  authority: varchar('authority', { length: 100 }).notNull(),
+  /** مبلغ به ریال */
+  amount: numeric('amount', { precision: 12, scale: 0 }).notNull(),
+  /** توضیحات (مثال: شهریه ترم ۱۴۰۲۱) */
+  description: text('description'),
+  /** وضعیت تراکنش در سیستم ما */
+  status: varchar('status', { length: 20 }).notNull().default('INITIATED'), // INITIATED | REDIRECTED | VERIFIED | FAILED | CANCELLED | EXPIRED
+  /** وضعیت برگشتی از درگاه (کد نتیجه) */
+  gatewayStatus: varchar('gateway_status', { length: 50 }),
+  /** مرجع تراکنش در بانک (RRN/STAN/TransId) */
+  bankRefId: varchar('bank_ref_id', { length: 50 }),
+  /** کارت번호 (ماسک‌شده) */
+  cardPan: varchar('card_pan', { length: 20 }),
+  /** پرداخت‌کننده (دانشجو/پدر/مادر/سایر) */
+  payerName: varchar('payer_name', { length: 100 }),
+  /** موبایل پرداخت‌کننده برای پیامک */
+  payerMobile: varchar('payer_mobile', { length: 15 }),
+  /** ایمیل پرداخت‌کننده */
+  payerEmail: varchar('payer_email', { length: 100 }),
+  /** IP آدرس برای امنیتی */
+  clientIp: varchar('client_ip', { length: 45 }),
+  /** User-Agent برای لاگ */
+  userAgent: text('user_agent'),
+  /** زمان انقضای Authority (برای چک کردن انقضا) */
+  expiresAt: timestamp('expires_at'),
+  /** زمان تایید نهایی */
+  verifiedAt: timestamp('verified_at'),
+  /** شناسه تراکنش در دفتر مالی (student_ledger) پس از تایید */
+  ledgerTxnId: integer('ledgerTxnId'),
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+}, (t) => [
+  unique('uq_payment_txn_authority').on(t.authority),
+  index('idx_payment_txn_student').on(t.studentId),
+  index('idx_payment_txn_term').on(t.termId),
+  index('idx_payment_txn_fin_term').on(t.financialTermId),
+  index('idx_payment_txn_status').on(t.status),
+  index('idx_payment_txn_gateway').on(t.gatewayId),
+]);
+
+// ══════════════════════════════════════════════════════════════════════
+//  ترمینال‌های POS حضوری (کارت‌خوان فیزیکی در دانشگاه)
+// ══════════════════════════════════════════════════════════════════════
+
+/** ترمینال‌های POS فیزیکی در واحدهای دانشگاه (صندوق، حسابداری، واحداً و...) */
+export const pos_terminals = pgTable('pos_terminals', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').notNull().references((): AnyPgColumn => universities.id),
+  code: varchar('code', { length: 40 }).notNull(), // کد یکتای ترمینال (مثال: POS-FIN-01)
+  title: varchar('title', { length: 100 }).notNull(), // نام نمایشی (مثال: ترمینال صندوق مرکزی)
+  location: varchar('location', { length: 200 }), // مکان فیزیکی (مثال: ساختمان مدیریت، طبقه ۱، اتاق ۱۰۱)
+  gatewayId: integer('gatewayId').notNull().references(() => payment_gateways.id), // درگاه متصل (بانک ملت، پارسیان، ...)
+  terminalId: varchar('terminal_id', { length: 50 }).notNull(), // Terminal ID (TID) صادره از بانک
+  merchantId: varchar('merchant_id', { length: 50 }).notNull(), // Merchant ID (MID) صادره از بانک
+  /** تنظیمات ترمینال (JSON): pinPadSerial, ipAddress, port, baudRate, ... */
+  config: jsonb('config').notNull().default('{}'),
+  isActive: integer('isActive').notNull().default(1),
+  /** آخرین اتصال موفق (heartbeat) */
+  lastHeartbeatAt: timestamp('last_heartbeat_at'),
+  /** نسخه فریموررم ترمینال */
+  firmwareVersion: varchar('firmware_version', { length: 50 }),
+  sortOrder: integer('sortOrder').default(0),
+  note: text('note'),
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+}, (t) => [
+  unique('uq_pos_terminal_uni_code').on(t.universityId, t.code),
+  unique('uq_pos_terminal_tid').on(t.terminalId),
+  index('idx_pos_terminal_gateway').on(t.gatewayId),
+]);
+
+/** تراکنش‌های POS حضوری — کارت‌خوان فیزیکی (Chip/PIN, Contactless, Magstripe) */
+export const pos_transactions = pgTable('pos_transactions', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').notNull().references((): AnyPgColumn => universities.id),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  termId: integer('termId').references(() => academic_terms.id),
+  financialTermId: integer('financialTermId').references(() => financial_terms.id),
+  terminalId: integer('terminalId').notNull().references(() => pos_terminals.id),
+  /** مرجع یکتا ترمینال (STAN/RRN/TraceNumber) */
+  stan: varchar('stan', { length: 20 }).notNull(),
+  rrn: varchar('rrn', { length: 20 }),
+  /** مبلغ به ریال */
+  amount: numeric('amount', { precision: 12, scale: 0 }).notNull(),
+  /** نوع تراکنش */
+  txnType: varchar('txn_type', { length: 20 }).notNull().default('SALE'), // SALE | REFUND | VOID | SETTLEMENT
+  /** روش ورود کارت */
+  entryMode: varchar('entry_mode', { length: 20 }).notNull(), // CHIP | CONTACTLESS | MAGSTRIPE | FALLBACK | MANUAL
+  /** وضعیت تراکنش */
+  status: varchar('status', { length: 20 }).notNull().default('APPROVED'), // APPROVED | DECLINED | ERROR | VOIDED | PENDING_SETTLEMENT
+  /** کد پاسخ بانک (Response Code) */
+  responseCode: varchar('response_code', { length: 10 }),
+  /** پیام پاسخ */
+  responseMessage: varchar('response_message', { length: 200 }),
+  /** کارت شماره (ماسک‌شده: 621986******1234) */
+  cardPan: varchar('card_pan', { length: 20 }),
+  /** نام کارت‌دار */
+  cardholderName: varchar('cardholder_name', { length: 100 }),
+  /** شناسه اپراتور/صندوق‌دار */
+  operatorId: integer('operator_id').references(() => users.id),
+  /** شناسه تراکنش در دفتر مالی (student_ledger) */
+  ledgerTxnId: integer('ledgerTxnId'),
+  /** توضیحات */
+  description: text('description'),
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+}, (t) => [
+  unique('uq_pos_txn_terminal_stan').on(t.terminalId, t.stan),
+  index('idx_pos_txn_student').on(t.studentId),
+  index('idx_pos_txn_term').on(t.termId),
+  index('idx_pos_txn_fin_term').on(t.financialTermId),
+  index('idx_pos_txn_status').on(t.status),
+  index('idx_pos_txn_rrn').on(t.rrn),
+  index('idx_pos_txn_operator').on(t.operatorId),
+]);
 
 /** وام‌های دانشجویی */
 /**
@@ -2370,13 +2586,15 @@ export const tuition_formulas = pgTable('tuition_formulas', {
 /**
  * جدول یکپارچهٔ قواعد شهریه — جایگزین `tuition_fee_rules` و `tuition_formulas`.
  *
- * هر قاعده می‌تواند بر اساس پنج کلید محدود شود (تهی = همه):
+ * هر قاعده می‌تواند بر اساس کلیدهای زیر محدود شود (تهی = همه):
  *   مقطع (degreeLevelId) ← اولویت اول، رشته (majorId) ← اولویت دوم،
- *   نوع ترم (termType)، نوع گذراندن درس (offeringType)، بازهٔ ورودی (entryYearFrom/To).
+ *   دانشکده (facultyId)، نوع ترم (termType)، نوع گذراندن درس (offeringType)،
+ *   بازهٔ ورودی (entryYearFrom/To)، نیمسال ورود/جاری (entryTermId/currentTermId - FK به financial_terms),
+ *   فاز بالینی (clinicalPhase: NORMAL | CLINICAL | INTERNSHIP).
  *
  * انتخاب قاعده با resolver یکتا در `src/lib/tuition-resolver.ts` انجام می‌شود
- * با سلسله‌مراتب: مقطع > رشته > نوع ترم > نوع درس > بازهٔ ورودی، و گره‌شکن‌های
- * priority (کوچک‌تر برنده؛ فقط بین قواعد همانگروه)، تازگی entryYearFrom و سپس id.
+ * با سلسله‌مراتب: مقطع > رشته > دانشکده > نوع ترم > نوع درس > فاز بالینی > بازهٔ ورودی > نیمسال ورود/جاری,
+ * و گره‌شکن‌های priority (کوچک‌تر برنده)، تازگی entryYearFrom، سپس id.
  */
 export const tuition_rules = pgTable('tuition_rules', {
   id: serial('id').primaryKey(),
@@ -2384,21 +2602,34 @@ export const tuition_rules = pgTable('tuition_rules', {
   title: varchar('title', { length: 150 }),
   degreeLevelId: integer('degreeLevelId').references(() => degree_level_configs.id),
   majorId: integer('majorId').references(() => majors.id),
+  facultyId: integer('facultyId').references(() => faculties.id),
   termType: varchar('termType', { length: 20 }),
   offeringType: varchar('offeringType', { length: 30 }),
   entryYearFrom: integer('entryYearFrom'),
   entryYearTo: integer('entryYearTo'),
+  entryTermId: integer('entryTermId').references(() => financial_terms.id),
+  currentTermId: integer('currentTermId').references(() => financial_terms.id),
+  clinicalPhase: varchar('clinicalPhase', { length: 20 }).default('NORMAL'), // NORMAL | CLINICAL | INTERNSHIP
   fixedAmount: numeric('fixedAmount', { precision: 12, scale: 0 }).notNull().default('0'),
   perUnitTheory: numeric('perUnitTheory', { precision: 12, scale: 0 }).notNull().default('0'),
   perUnitPractical: numeric('perUnitPractical', { precision: 12, scale: 0 }).notNull().default('0'),
   perUnitGeneral: numeric('perUnitGeneral', { precision: 12, scale: 0 }).notNull().default('0'),
+  /** حداقل واحد تابستان برای محاسبه درصد متعلقه (سما) */
+  minSummerUnits: integer('minSummerUnits'),
+  /** درصد متعلقه به واحد کمتر از حداقل (سما) */
+  percentUnderMin: numeric('percentUnderMin', { precision: 5, scale: 2 }),
   /** عدد کوچک‌تر = اولویت بالاتر — فقط بین قواعدِ هم‌سطحِ ساختاری */
   priority: integer('priority').notNull().default(100),
   isActive: integer('isActive').notNull().default(1),
   note: text('note'),
   updatedAt: timestamp('updatedAt').defaultNow(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
-});
+}, (t) => [
+  index('idx_tuition_rules_entry_term').on(t.entryTermId),
+  index('idx_tuition_rules_current_term').on(t.currentTermId),
+  index('idx_tuition_rules_faculty').on(t.facultyId),
+  index('idx_tuition_rules_clinical').on(t.clinicalPhase),
+]);
 
 // ══════════════════════════════════════════════════════════════════════
 //  فاز ۱+۲: ضریب افزایشی نیمسال + مبالغ موضوعی (سیستم مالی مشابه سما)
@@ -2407,13 +2638,18 @@ export const tuition_rules = pgTable('tuition_rules', {
 /** ضریب افزایشی شهریه به ازای هر نیمسال — مشابه سما */
 export const tuition_coefficients = pgTable('tuition_coefficients', {
   id: serial('id').primaryKey(),
-  termId: integer('termId').notNull().references(() => academic_terms.id).unique(),
+  termId: integer('termId').notNull().references(() => academic_terms.id),
+  financialTermId: integer('financialTermId').references(() => financial_terms.id),
   variableCoefficient: numeric('variable_coefficient', { precision: 4, scale: 2 }).notNull().default('1.00'),
   fixedCoefficient: numeric('fixed_coefficient', { precision: 4, scale: 2 }).notNull().default('1.00'),
   note: text('note'),
   updatedAt: timestamp('updated_at').defaultNow(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
-});
+}, (t) => [
+  unique('uq_tuition_coeff_term').on(t.termId),
+  unique('uq_tuition_coeff_fin_term').on(t.financialTermId),
+  index('idx_tuition_coeff_fin_term').on(t.financialTermId),
+]);
 
 /** کاتالوگ انواع مبالغ موضوعی شهریه */
 export const subject_fee_types = pgTable('subject_fee_types', {
@@ -2435,13 +2671,36 @@ export const student_subject_fees = pgTable('student_subject_fees', {
   id: serial('id').primaryKey(),
   studentId: integer('student_id').notNull().references(() => students.id),
   termId: integer('term_id').notNull().references(() => academic_terms.id),
+  financialTermId: integer('financial_term_id').references(() => financial_terms.id),
   subjectFeeTypeId: integer('subject_fee_type_id').notNull().references(() => subject_fee_types.id),
   amount: numeric('amount', { precision: 12, scale: 0 }).notNull().default('0'),
   isActive: integer('is_active').notNull().default(1),
   note: text('note'),
   createdAt: timestamp('created_at').defaultNow(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
-}, (t) => ({ uq: unique('uq_student_subject_fees').on(t.studentId, t.termId, t.subjectFeeTypeId) }));
+}, (t) => ({
+  uq: unique('uq_student_subject_fees').on(t.studentId, t.termId, t.subjectFeeTypeId),
+  uqFin: unique('uq_student_subject_fees_fin').on(t.studentId, t.financialTermId, t.subjectFeeTypeId),
+  idxFinTerm: index('idx_student_subject_fees_fin_term').on(t.financialTermId),
+}));
+
+// ══════════════════════════════════════════════════════════════════════
+//  نرخ رشد تجمعی شهریه (View) — محاسبه از tuition_coefficients
+//  معادل جداول نرخ رشد در راهنمای سما (صفحات ۲۳۱-۲۵۸)
+// ══════════════════════════════════════════════════════════════════════
+export const tuition_growth_rates = pgTable('tuition_growth_rates', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').notNull().references((): AnyPgColumn => universities.id),
+  entryTermId: integer('entryTermId').notNull().references(() => financial_terms.id),
+  currentTermId: integer('currentTermId').notNull().references(() => financial_terms.id),
+  variableGrowthRate: numeric('variable_growth_rate', { precision: 6, scale: 4 }).notNull(), // ضریب تجمعی متغیر
+  fixedGrowthRate: numeric('fixed_growth_rate', { precision: 6, scale: 4 }).notNull(),     // ضریب تجمعی ثابت
+  computedAt: timestamp('computed_at').defaultNow(),
+}, (t) => [
+  unique('uq_growth_rates_uni_entry_current').on(t.universityId, t.entryTermId, t.currentTermId),
+  index('idx_growth_rates_entry').on(t.entryTermId),
+  index('idx_growth_rates_current').on(t.currentTermId),
+]);
 
 // ══════════════════════════════════════════════════════════════════════
 //  کدینگ‌های جغرافیایی پایه (کشور، استان، شهر، بخش)

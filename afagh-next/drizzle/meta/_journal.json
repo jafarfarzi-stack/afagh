@@ -232,6 +232,13 @@
       "when": 1790940731253,
       "tag": "0035_term_add_drop",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790945225330,
+      "tag": "0036_reference_ministry_codes",
+      "breakpoints": true
     }
   ]
 }

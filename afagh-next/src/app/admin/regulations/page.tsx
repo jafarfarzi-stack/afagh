@@ -1,7 +1,7 @@
 import { db } from '@/db';
 import { degree_level_configs, educational_regulations } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
-import { eq } from 'drizzle-orm';
+import { eq, isNull, or } from 'drizzle-orm';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import RegulationsClient, { DegreeLevelItem, RegulationItem } from './RegulationsClient';
 import {
@@ -15,13 +15,15 @@ export const dynamic = 'force-dynamic';
 export default async function AdminRegulationsPage() {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
 
-  const currentUniversity = await getCurrentUniversity();
-  const currentUniversityId = currentUniversity?.id ?? null;
-  /* TODO: filter by universityId */
+  // دانشگاه فعال — آیین‌نامه و مقطع‌های همین دانشگاه + رکوردهای سراسری (universityId=null)
+  const uniId = (await getCurrentUniversity()).id;
 
   let degreeLevelsList: DegreeLevelItem[] = [];
   try {
-    const rawDegreeLevels = await db.select().from(degree_level_configs);
+    const rawDegreeLevels = await db
+      .select()
+      .from(degree_level_configs)
+      .where(or(eq(degree_level_configs.universityId, uniId), isNull(degree_level_configs.universityId)));
     degreeLevelsList = rawDegreeLevels.map(d => ({
       id: d.id,
       levelName: d.code,
@@ -48,7 +50,8 @@ export default async function AdminRegulationsPage() {
         createdAt: educational_regulations.createdAt,
       })
       .from(educational_regulations)
-      .leftJoin(degree_level_configs, eq(degree_level_configs.id, educational_regulations.degreeLevelId));
+      .leftJoin(degree_level_configs, eq(degree_level_configs.id, educational_regulations.degreeLevelId))
+      .where(or(eq(educational_regulations.universityId, uniId), isNull(educational_regulations.universityId)));
 
     if (rawRegulations && rawRegulations.length > 0) {
       regulationsList = rawRegulations.map(r => {

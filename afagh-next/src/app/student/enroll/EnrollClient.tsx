@@ -43,6 +43,10 @@ export type OfferingItem = {
   prereq?: string | null;
   classSchedules: ClassScheduleItem[];
   examSchedule: ExamScheduleItem | null;
+  tuitionFixed: number;
+  tuitionVariable: number;
+  tuitionPerUnit: number;
+  tuitionTotal: number;
 };
 
 export type CartItem = {
@@ -914,6 +918,13 @@ export default function EnrollClient(props: {
                     <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-bold">
                       {faNum(o.units)} واحد
                     </span>
+
+                    {/* شهریه */}
+                    {o.tuitionTotal > 0 && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">
+                        💰 {faNum(o.tuitionTotal)} ریال
+                      </span>
+                    )}
                   </div>
 
                   {/* زمان‌بندی کلاس و امتحان و شماره کلاس */}

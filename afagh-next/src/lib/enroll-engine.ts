@@ -169,9 +169,46 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
       ? 'حساب شما توسط کمیسیون موارد خاص مسدود است.'
       : 'وضعیت دانشجو برای انتخاب واحد فعال نیست (' + stu.status + ').');
   }
+
+  // بررسی تسویه‌حساب مالی: ابتدا ترم مالی، سپس ترم تحصیلی
+  // اگر financial_terms وجود دارد از آن استفاده می‌کنیم (سازگاری با سما)
+  let finTermId: number | null = null;
+  const finTerms = await db.select().from(financial_terms)
+    .where(and(eq(financial_terms.universityId, stu.universityId ?? 0), eq(financial_terms.isActive, 1)))
+    .orderBy(sql`sort_order ASC NULLS LAST`);
+  if (finTerms.length > 0) {
+    // ترم مالی جاری را پیدا می‌کنیم (بر اساس sortOrder یا termCode)
+    finTermId = finTerms[0].id;
+  }
+
+  const clearanceTermId = finTermId ?? term.id;
   const [fin] = await db.select().from(financial_clearances)
-    .where(and(eq(financial_clearances.studentId, studentId), eq(financial_clearances.termId, term.id)));
-  if (!fin || !fin.isCleared) { out.ok = false; out.hardErrors.push('تسویه‌حساب مالی این ترم ثبت نشده است.'); }
+    .where(and(eq(financial_clearances.studentId, studentId), eq(financial_clearances.termId, clearanceTermId)));
+  
+  if (!fin || !fin.isCleared) { 
+    out.ok = false; 
+    out.hardErrors.push('تسویه‌حساب مالی این ترم ثبت نشده است. برای انتخاب واحد باید بدهکاری‌تان تسویه شود.'); 
+  } else {
+    // بررسی مانده بدهی: اگر بدهکار است و بیش از آستانه مجاز، انتخاب واحد قفل می‌شود
+    const thresholdRaw = await import('./settings').then(m => m.getSetting('ENROLLMENT_DEBT_THRESHOLD'));
+    const debtThreshold = Math.max(0, Number(thresholdRaw ?? 0));
+    if (debtThreshold > 0) {
+      const [bal] = await db.execute(sql`
+        SELECT COALESCE(SUM(
+          CASE WHEN "transactionType" IN ('CHARGE','TUITION_CHARGE') THEN amount
+               WHEN "transactionType" IN ('PAYMENT','CREDIT','DISCOUNT','SPONSOR','LOAN','SUBJECT_FEE_DEDUCTIVE') THEN -amount
+               ELSE 0 END
+        ), 0) AS balance
+        FROM student_ledger
+        WHERE "studentId" = ${studentId} AND ("termId" = ${clearanceTermId} OR "financialTermId" = ${clearanceTermId})
+      `);
+      const balance = Number(bal.rows[0]?.balance ?? 0);
+      if (balance > debtThreshold) {
+        out.ok = false;
+        out.hardErrors.push(`مانده بدهکاری شما (${balance.toLocaleString('fa-IR')} ریال) بیش از حد مجاز (${debtThreshold.toLocaleString('fa-IR')} ریال) است. ابتدا بدهکاری را کاهش دهید.`);
+      }
+    }
+  }
 
   const cart = await db.select().from(cart_items).where(eq(cart_items.studentId, studentId));
   if (cart.length === 0) { out.ok = false; out.hardErrors.push('سبد خالی است.'); return out; }

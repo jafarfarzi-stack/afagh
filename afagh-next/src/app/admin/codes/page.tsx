@@ -31,6 +31,8 @@ export default async function CodesPage() {
     return {
       title: r.title,
       code: r.code,
+      standardCode: r.standardCode ?? '',
+      ministryCode: r.ministryCode ?? '',
       defaultPassingGrade: String(r.defaultPassingGrade ?? ''),
       conditionalGpaThreshold: String(r.conditionalGpaThreshold ?? ''),
       maxUnitsPerTerm: r.maxUnitsPerTerm != null ? String(r.maxUnitsPerTerm) : '',
