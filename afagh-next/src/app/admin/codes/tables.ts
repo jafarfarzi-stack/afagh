@@ -81,18 +81,18 @@ export type FormOptions = {
   department: { value: string; label: string }[];
 };
 
-/**
- * تعریف فرم «افزودن» برای هر جدول.
- *
- * چرا اینجا و نه در actions.ts: فایل‌های `'use server'` فقط اکسپورت تابع async
- * می‌پذیرند؛ اکسپورت این ثابت‌ها از آنجا بیلد را می‌شکند.
- */
 /** دو ستون ملی/وزارتی مشترک همهٔ جدول‌های مرجع — برای اتصال به ثمین */
 const SAMIN_CODE_FIELDS: NewField[] = [
   { name: 'standardCode', label: 'کد استاندارد', kind: 'code', hint: 'کد استاندارد وزارت علوم — برای اتصال به ثمین' },
   { name: 'ministryCode', label: 'کد وزارت', kind: 'code', hint: 'کد وزارت/وزارت علوم — برای اتصال به ثمین' },
 ];
 
+/**
+ * تعریف فرم «افزودن» برای هر جدول.
+ *
+ * چرا اینجا و نه در actions.ts: فایل‌های `'use server'` فقط اکسپورت تابع async
+ * می‌پذیرند؛ اکسپورت این ثابت‌ها از آنجا بیلد را می‌شکند.
+ */
 export const NEW_FIELDS: Partial<Record<CodeTable, NewField[]>> = {
   degree: [
     { name: 'title', label: 'عنوان مقطع', kind: 'text', required: true, hint: 'مثلاً: کارشناسی ارشد ناپیوسته' },

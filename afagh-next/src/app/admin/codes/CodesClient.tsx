@@ -438,6 +438,12 @@ export default function CodesClient({
                     <td className="p-2 font-medium text-slate-800">
                       {r.title}
                       {r.duplicate && <span className="mr-1 rounded bg-red-100 px-1 text-[10px] text-red-700">کد تکراری</span>}
+                      {(r.standardCode || r.ministryCode) && (
+                        <span className="mt-0.5 block text-[10px] font-normal text-slate-400">
+                          {[r.standardCode ? `استاندارد ${r.standardCode}` : null, r.ministryCode ? `وزارت ${r.ministryCode}` : null]
+                            .filter(Boolean).join(' · ')}
+                        </span>
+                      )}
                     </td>
                     <td className="p-2 text-slate-500">{r.context ?? '—'}</td>
                     {isTerm && (

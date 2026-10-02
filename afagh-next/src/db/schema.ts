@@ -811,6 +811,8 @@ export const enrollments = pgTable('enrollments', {
   originalSamaCode: varchar('originalSamaCode', { length: 10 }),
   /** تأییدیهٔ دیجیتال دانشجو برای داشتن دو امتحان هم‌روز (شیفت‌های متفاوت) — فاز ۱۰ */
   hasAcceptedSameDayExam: integer('hasAcceptedSameDayExam').notNull().default(0),
+  /** حذف اضطراری (پس از مهلت حذف و اضافه) — سند §۲۲۴۳ */
+  emergencyWithdrawal: integer('emergencyWithdrawal').notNull().default(0),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ uq: unique('uq_enrollments').on(t.studentId, t.offeringId) }));
 
