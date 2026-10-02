@@ -267,6 +267,13 @@
       "when": 1790958400000,
       "tag": "0040_thesis_progress_tracking",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1790961600000,
+      "tag": "0041_finance_schema_sync",
+      "breakpoints": true
     }
   ]
 }
