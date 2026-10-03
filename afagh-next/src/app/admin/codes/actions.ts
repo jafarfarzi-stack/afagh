@@ -520,7 +520,7 @@ export async function getCodeRowAction(table: CodeTable, id: number): Promise<Ed
   }
   if (table === 'course') {
     const [r] = await db.select({
-      title: courses.title, code: courses.courseCode, standardCode: courses.standardCode,
+      title: courses.title, code: courses.code, standardCode: courses.standardCode,
     }).from(courses).where(and(eq(courses.id, id), eq(courses.universityId, uniId))).limit(1);
     return r ? Object.fromEntries(Object.entries(r).map(([k, v]) => [k, str_(v)])) : null;
   }
