@@ -11,6 +11,9 @@ type Res = { ok: boolean; error?: string };
 
 const PAGE = 200;
 
+/** جدول‌هایی که با فرم عمومی ویرایش می‌شوند (دانشکده، گروه، رشته، درس) */
+const GENERIC_EDIT_TABLES: CodeTable[] = ['faculty', 'department', 'major', 'course'];
+
 /** 'YYYY-MM-DD' میلادی → 'YYYY/MM/DD' شمسی — برای فیلدهای نوع jdate */
 const isoToJalali = (v: string): string => {
   if (!v) return '';
@@ -36,6 +39,14 @@ const fmtDateFa = (v?: string | null): string => {
   return isoToJalali(v.slice(0, 10)) || v.slice(0, 10);
 };
 
+/** ارقام فارسی → لاتین (برای ساخت کد استاندارد از کد ترم) */
+const toLatinDigits = (v: string): string =>
+  v.replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06f0)).replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660));
+
+/** کد استاندارد وزارت برای ترم — پیش‌فرض از روی کد ترم (مثلاً 13831 → TERM-13831) */
+const defaultTermStandardCode = (code?: string | null): string =>
+  code ? `TERM-${toLatinDigits(code)}` : '';
+
 export default function CodesClient({
   stats,
   initialTable,
@@ -49,6 +60,8 @@ export default function CodesClient({
   updateDegreeAction,
   getTermAction,
   updateTermAction,
+  getCodeRowAction,
+  updateCodeRowAction,
 }: {
   stats: CodeStat[];
   initialTable: CodeTable;
@@ -62,6 +75,8 @@ export default function CodesClient({
   updateDegreeAction?: (fd: FormData) => Promise<Res>;
   getTermAction?: (id: number) => Promise<Record<string, string> | null>;
   updateTermAction?: (fd: FormData) => Promise<Res>;
+  getCodeRowAction?: (table: CodeTable, id: number) => Promise<Record<string, string> | null>;
+  updateCodeRowAction?: (fd: FormData) => Promise<Res>;
 }) {
   const [table, setTable] = useState<CodeTable>(initialTable);
   const [rows, setRows] = useState<CodeRow[]>(initialRows);
@@ -130,6 +145,19 @@ export default function CodesClient({
         }
         return;
       }
+      // ویرایش عمومی: رشته، گروه آموزشی، درس، دانشکده
+      if (editingId != null && updateCodeRowAction) {
+        fd.set('id', String(editingId));
+        const r = await updateCodeRowAction(fd);
+        if (r.ok) {
+          setMsg({ kind: 'ok', text: 'با موفقیت ویرایش شد.' });
+          closeForm();
+          setRows(await listAction(table, ''));
+        } else {
+          setMsg({ kind: 'err', text: r.error ?? 'به‌روزرسانی نشد.' });
+        }
+        return;
+      }
       const r = await createAction(fd);
       if (r.ok) {
         setMsg({ kind: 'ok', text: 'رکورد تازه ثبت شد. برای دیده‌شدن در فهرست‌های دیگر، صفحه را تازه کنید.' });
@@ -162,14 +190,31 @@ export default function CodesClient({
         setMsg({ kind: 'err', text: 'خواندن ترم ناموفق بود.' });
         return;
       }
-      setForm(Object.fromEntries(editFields.map(f => {
-        const v = d[f.name] ?? f.def ?? '';
-        // فیلدهای شمسی (jdate) باید میلادی به ورودی date بروند
+setForm(Object.fromEntries(editFields.map(f => {
+        let v = d[f.name] ?? f.def ?? '';
+        // اگر کد استاندارد وزارت خالی است، از کد ترم ساخته می‌شود (قابل تغییر)
+        if (f.name === 'standardCode' && !v) v = defaultTermStandardCode(row.code);
+        // فیلد شمسی (jdate) از 'YYYY/MM/DD' به 'YYYY-MM-DD' تبدیل می‌شود
         return [f.name, f.kind === 'jdate' ? jalaliToIso(v) : v];
       })));
       setEditingId(row.id);
       setAdding(true);
       setMsg({ kind: 'ok', text: `در حال ویرایش ترم «${row.title}» — برای انصراف، «انصراف» را بزنید.` });
+    });
+
+  /** ویرایش عمومی: دانشکده، گروه آموزشی، رشته، درس */
+  const startEditRow = (row: CodeRow) =>
+    start(async () => {
+      if (!getCodeRowAction) return;
+      const d = await getCodeRowAction(table, row.id);
+      if (!d) {
+        setMsg({ kind: 'err', text: 'خواندن اطلاعات سطر ناموفق بود.' });
+        return;
+      }
+      setForm(Object.fromEntries(editFields.map(f => [f.name, d[f.name] ?? f.def ?? ''])));
+      setEditingId(row.id);
+      setAdding(true);
+      setMsg({ kind: 'ok', text: `در حال ویرایش «${row.title}» — برای انصراف، «انصراف» را بزنید.` });
     });
 
   const remove = (row: CodeRow) =>
@@ -488,6 +533,16 @@ export default function CodesClient({
                             disabled={pending}
                             onClick={() => startEditTerm(r)}
                             title="ویرایش زمان‌بندی ترم: شروع/پایان، انتخاب واحد، حذف و اضافه، امتحانات، اعتراضات"
+                            className="rounded border border-indigo-200 px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+                          >
+                            ویرایش
+                          </button>
+                        )}
+                        {GENERIC_EDIT_TABLES.includes(table) && getCodeRowAction && (
+                          <button
+                            disabled={pending}
+                            onClick={() => startEditRow(r)}
+                            title="ویرایش مشخصات و کد استاندارد"
                             className="rounded border border-indigo-200 px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
                           >
                             ویرایش

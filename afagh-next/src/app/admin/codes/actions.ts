@@ -311,18 +311,24 @@ export async function countRows(table: CodeTable): Promise<number> {
 /** گزینه‌های والد برای فرم ساخت رشته */
 export async function codeFormOptions(): Promise<FormOptions> {
   await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
-  const [degs, deps] = await Promise.all([
+  const [degs, deps, facs] = await Promise.all([
     db.select({ id: degree_level_configs.id, title: degree_level_configs.title, code: degree_level_configs.code })
       .from(degree_level_configs).orderBy(asc(degree_level_configs.title)),
     db.select({ id: departments.id, name: departments.name, code: departments.departmentCode, fac: faculties.name })
       .from(departments).leftJoin(faculties, eq(faculties.id, departments.facultyId))
       .orderBy(asc(faculties.name), asc(departments.name)),
+    db.select({ id: faculties.id, name: faculties.name, code: faculties.facultyCode })
+      .from(faculties).orderBy(asc(faculties.name)),
   ]);
   return {
     degree: degs.map(d => ({ value: String(d.id), label: `${d.title} [${d.code}]` })),
     department: deps.map(d => ({
       value: String(d.id),
-      label: `${d.name}${d.code ? ` [${d.code}]` : ''}${d.fac ? ` — ${d.fac}` : ''}`,
+      label: `${d.name}${d.code ? ` [${d.code}]` : ''}${d.fac ? ` ? ${d.fac}` : ''}`,
+    })),
+    faculty: facs.map(f => ({
+      value: String(f.id),
+      label: `${f.name}${f.code ? ` [${f.code}]` : ''}`,
     })),
   };
 }
@@ -474,6 +480,136 @@ export async function createCodeRowAction(fd: FormData): Promise<{ ok: boolean; 
     if ((e as { code?: string })?.code === '23505') {
       return { ok: false, error: `کد «${code}» هم‌اکنون توسط رکورد دیگری گرفته شد — کد دیگری بگذارید.` };
     }
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: `ثبت نشد: ${msg}` };
+  }
+}
+
+/** سطرهای قابل ویرایش با فرم عمومی (گروه آموزشی، رشته، درس، دانشکده) */
+export type EditableCodeRow = Record<string, string> | null;
+
+/** خواندن یک سطر برای فرم ویرایش عمومی */
+export async function getCodeRowAction(table: CodeTable, id: number): Promise<EditableCodeRow> {
+  await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
+  if (!id) return null;
+  const uni = await getCurrentUniversity();
+  const uniId = uni?.id;
+  const str_ = (v: unknown) => (v == null ? '' : String(v));
+
+  if (table === 'faculty') {
+    const [r] = await db.select({
+      name: faculties.name, code: faculties.facultyCode,
+      standardCode: faculties.standardCode, ministryCode: faculties.ministryCode,
+    }).from(faculties).where(and(eq(faculties.id, id), eq(faculties.universityId, uniId))).limit(1);
+    return r ? Object.fromEntries(Object.entries(r).map(([k, v]) => [k, str_(v)])) : null;
+  }
+  if (table === 'department') {
+    const [r] = await db.select({
+      name: departments.name, code: departments.departmentCode,
+      facultyId: departments.facultyId, standardCode: departments.standardCode,
+    }).from(departments).where(and(eq(departments.id, id), eq(departments.universityId, uniId))).limit(1);
+    return r ? Object.fromEntries(Object.entries(r).map(([k, v]) => [k, str_(v)])) : null;
+  }
+  if (table === 'major') {
+    const [r] = await db.select({
+      name: majors.name, code: majors.majorCode, degreeLevelId: majors.degreeLevelId,
+      departmentId: majors.departmentId, minUnits: majors.minUnits,
+      standardCode: majors.standardCode,
+    }).from(majors).where(and(eq(majors.id, id), eq(majors.universityId, uniId))).limit(1);
+    return r ? Object.fromEntries(Object.entries(r).map(([k, v]) => [k, str_(v)])) : null;
+  }
+  if (table === 'course') {
+    const [r] = await db.select({
+      title: courses.title, code: courses.courseCode, standardCode: courses.standardCode,
+    }).from(courses).where(and(eq(courses.id, id), eq(courses.universityId, uniId))).limit(1);
+    return r ? Object.fromEntries(Object.entries(r).map(([k, v]) => [k, str_(v)])) : null;
+  }
+  return null;
+}
+
+/**
+ * ویرایش عمومی سطرهای کد (گروه/رشته/درس/دانشکده).
+ * فقط فیلدهای همین فرم نوشته می‌شوند و هر نوشتن به دانشگاهِ جاری محدود است.
+ */
+export async function updateCodeRowAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  await requireRole(['ADMIN', 'VICE_EDU']);
+  const table = str(fd, 'table') as CodeTable;
+  const id = Number(fd.get('id') || 0);
+  if (!id) return { ok: false, error: 'شناسهٔ سطر نامعتبر است.' };
+  const uni = await getCurrentUniversity();
+  const uniId = uni?.id;
+  if (uniId == null) return { ok: false, error: 'دانشگاه جاری مشخص نیست.' };
+
+  try {
+    if (table === 'faculty') {
+      const name = str(fd, 'name');
+      if (!name) return { ok: false, error: 'نام دانشکده را وارد کنید.' };
+      const dup = await db.select({ id: faculties.id }).from(faculties)
+        .where(and(eq(faculties.name, name), eq(faculties.universityId, uniId))).limit(1);
+      if (dup.length && dup[0].id !== id) return { ok: false, error: `دانشکدهٔ «${name}» از قبل ثبت شده.` };
+      const [r] = await db.update(faculties).set({
+        name,
+        standardCode: optCode(fd, 'standardCode'),
+      }).where(and(eq(faculties.id, id), eq(faculties.universityId, uniId))).returning({ id: faculties.id });
+      if (!r) return { ok: false, error: 'سطر یافت نشد (یا متعلق به دانشگاه دیگری است).' };
+      revalidatePath('/admin/codes');
+      revalidatePath('/admin/departments');
+      return { ok: true };
+    }
+
+    if (table === 'department') {
+      const name = str(fd, 'name');
+      if (!name) return { ok: false, error: 'نام گروه آموزشی را وارد کنید.' };
+      const facultyId = num(fd, 'facultyId');
+      if (!facultyId) return { ok: false, error: 'دانشکدهٔ گروه را انتخاب کنید.' };
+      const [r] = await db.update(departments).set({
+        name,
+        facultyId,
+        standardCode: optCode(fd, 'standardCode'),
+      }).where(and(eq(departments.id, id), eq(departments.universityId, uniId))).returning({ id: departments.id });
+      if (!r) return { ok: false, error: 'سطر یافت نشد (یا متعلق به دانشگاه دیگری است).' };
+      revalidatePath('/admin/codes');
+      revalidatePath('/admin/departments');
+      return { ok: true };
+    }
+
+    if (table === 'major') {
+      const name = str(fd, 'name');
+      const degreeLevelId = num(fd, 'degreeLevelId');
+      if (!name) return { ok: false, error: 'نام رشته را وارد کنید.' };
+      if (!degreeLevelId) return { ok: false, error: 'مقطع رشته را انتخاب کنید.' };
+      const departmentId = num(fd, 'departmentId') ?? null;
+      let facultyId: number | null = null;
+      if (departmentId) {
+        const [dep] = await db.select({ f: departments.facultyId }).from(departments)
+          .where(eq(departments.id, departmentId)).limit(1);
+        facultyId = dep?.f ?? null;
+      }
+      const minUnits = num(fd, 'minUnits');
+      const [r] = await db.update(majors).set({
+        name, degreeLevelId, departmentId, facultyId,
+        standardCode: optCode(fd, 'standardCode'),
+        minUnits: minUnits && minUnits > 0 && minUnits <= 400 ? minUnits : null,
+      }).where(and(eq(majors.id, id), eq(majors.universityId, uniId))).returning({ id: majors.id });
+      if (!r) return { ok: false, error: 'سطر یافت نشد (یا متعلق به دانشگاه دیگری است).' };
+      revalidatePath('/admin/codes');
+      return { ok: true };
+    }
+
+    if (table === 'course') {
+      const title = str(fd, 'title');
+      if (!title) return { ok: false, error: 'عنوان درس را وارد کنید.' };
+      const [r] = await db.update(courses).set({
+        title,
+        standardCode: optCode(fd, 'standardCode'),
+      }).where(and(eq(courses.id, id), eq(courses.universityId, uniId))).returning({ id: courses.id });
+      if (!r) return { ok: false, error: 'سطر یافت نشد (یا متعلق به دانشگاه دیگری است).' };
+      revalidatePath('/admin/codes');
+      return { ok: true };
+    }
+
+    return { ok: false, error: 'ویرایش این جدول از این صفحه ممکن نیست.' };
+  } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, error: `ثبت نشد: ${msg}` };
   }

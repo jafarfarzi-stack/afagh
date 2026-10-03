@@ -69,8 +69,8 @@ export type NewField = {
   required?: boolean;
   hint?: string;
   def?: string;
-  /** گزینه‌های select از سرور می‌آید (مقاطع یا گروه‌ها) */
-  optionsFrom?: 'degree' | 'department';
+  /** گزینه‌های select از سرور می‌آید (مقاطع، گروه‌ها یا دانشکده‌ها) */
+  optionsFrom?: 'degree' | 'department' | 'faculty';
   /** گزینه‌های ثابت — وقتی به دیتابیس وابسته نیستند */
   choices?: { value: string; label: string }[];
 };
@@ -79,12 +79,19 @@ export type NewField = {
 export type FormOptions = {
   degree: { value: string; label: string }[];
   department: { value: string; label: string }[];
+  faculty: { value: string; label: string }[];
 };
 
-/** دو ستون ملی/وزارتی مشترک همهٔ جدول‌های مرجع — برای اتصال به ثمین */
+/** کد استاندارد مشترک همهٔ جدول‌های مرجع — برای اتصال به ثمین.
+ *  فقط یک فیلد (نه دو تا): همان نقشی که «کد ترم» در دانشگاه دارد، با این
+ *  تفاوت که هر زمان قابل تغییر است. */
 const SAMIN_CODE_FIELDS: NewField[] = [
-  { name: 'standardCode', label: 'کد استاندارد', kind: 'code', hint: 'کد استاندارد وزارت علوم — برای اتصال به ثمین' },
-  { name: 'ministryCode', label: 'کد وزارت', kind: 'code', hint: 'کد وزارت/وزارت علوم — برای اتصال به ثمین' },
+  { name: 'standardCode', label: 'کد استاندارد', kind: 'code', hint: 'کد استاندارد وزارت علوم — اختیاری و در هر زمان قابل تغییر' },
+];
+
+/** فقط کد استاندارد (بدون کد وزارتی) — برای ترم که کد داخلی ندارد */
+const TERM_STANDARD_CODE_FIELD: NewField[] = [
+  { name: 'standardCode', label: 'کد استاندارد وزارت', kind: 'code', hint: 'کد استاندارد وزارت علوم برای این ترم — خودکار از کد ترم ساخته می‌شود، در صورت نیاز تغییرش دهید' },
 ];
 
 /**
@@ -117,6 +124,7 @@ export const NEW_FIELDS: Partial<Record<CodeTable, NewField[]>> = {
   ],
   term: [
     { name: 'code', label: 'کد ترم', kind: 'code', required: true, hint: 'مثلاً 4031 = نیم‌سال اول سال ۱۴۰۳ · پس از ثبت قابل تغییر نیست' },
+    ...TERM_STANDARD_CODE_FIELD,
     { name: 'title', label: 'عنوان ترم', kind: 'text', required: true, hint: 'مثلاً: نیم‌سال اول ۱۴۰۳-۱۴۰۴' },
     {
       name: 'termType', label: 'نوع ترم', kind: 'select', required: true, def: 'NORMAL',
@@ -151,6 +159,27 @@ const YES_NO = [
  * فرم ساخت ترم فقط کد/عنوان/نوع است؛ ویرایش، زمان‌بندی کامل تحصیل را می‌گیرد.
  */
 export const EDIT_FIELDS: Partial<Record<CodeTable, NewField[]>> = {
+  // ویرایش عمومی رشته/گروه/درس/دانشکده — همان فیلدهای فرم ساخت + کد استاندارد
+  faculty: [
+    { name: 'name', label: 'نام دانشکده', kind: 'text', required: true },
+    ...SAMIN_CODE_FIELDS,
+  ],
+  department: [
+    { name: 'name', label: 'نام گروه آموزشی', kind: 'text', required: true },
+    { name: 'facultyId', label: 'دانشکده', kind: 'select', required: true, optionsFrom: 'faculty' },
+    ...SAMIN_CODE_FIELDS,
+  ],
+  major: [
+    { name: 'name', label: 'نام رشته', kind: 'text', required: true },
+    { name: 'degreeLevelId', label: 'مقطع', kind: 'select', required: true, optionsFrom: 'degree' },
+    { name: 'departmentId', label: 'گروه آموزشی', kind: 'select', optionsFrom: 'department' },
+    { name: 'minUnits', label: 'حداقل واحد', kind: 'number' },
+    ...SAMIN_CODE_FIELDS,
+  ],
+  course: [
+    { name: 'title', label: 'عنوان درس', kind: 'text', required: true },
+    ...SAMIN_CODE_FIELDS,
+  ],
   term: [
     { name: 'title', label: 'عنوان ترم', kind: 'text', required: true, hint: 'مثلاً: نیم‌سال اول ۱۴۰۳-۱۴۰۴' },
     {
@@ -162,7 +191,8 @@ export const EDIT_FIELDS: Partial<Record<CodeTable, NewField[]>> = {
         { value: 'SPECIAL', label: 'ویژه' },
       ],
     },
-    // کدهای ملی/وزارتی مخصوص مقطع/رشته/گروه/درس هستند و در فرم ترم معنا ندارند
+    // کد استاندارد وزارت برای ترم باقی می‌ماند (خودکار پر می‌شود، در صورت نیاز قابل تغییر)
+    ...TERM_STANDARD_CODE_FIELD,
     { name: 'academicYear', label: 'سال تحصیلی', kind: 'number', hint: 'مثلاً 1403 — مبنای گزارش‌ها و تقویم تحصیلی' },
     { name: 'startDate', label: 'شروع ترم', kind: 'date' },
     { name: 'endDate', label: 'پایان ترم', kind: 'date' },
