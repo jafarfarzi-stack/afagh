@@ -25,13 +25,29 @@ import {
 import { getCurrentUniversity } from '@/lib/university-scope';
 
 // ═══ میز کار «برنامه‌ریزی و ثبت نتیجهٔ دفاع پایان‌نامه» ═══
-// نقش‌ها: کارشناس فارغ‌التحصیلی / کارشناس آموزش / مدیر سامانه.
+// کارشناسی (تأیید پروپوزال، تعیین وقت، ثبت نتیجه، استخر داوران):
+//   کارشناس فارغ‌التحصیلی / کارشناس آموزش / مدیر سامانه.
+// استاد راهنما (PROFESSOR) و مدیر گروه (DEP_HEAD) فقط تأیید/رد درخواست دفاعِ
+// پرونده‌های خودشان را انجام می‌دهند و در میز کار فقط همان پرونده‌ها را می‌بینند؛
+// ابزارهای کارشناسی (استخر داوران و …) به آن‌ها داده نمی‌شود.
 
 const PATH = '/admin/defense-scheduling';
 const fail = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : 'خطای نامشخص' });
 
+/**
+ * نقش‌های کارشناسی: تأیید پروپوزال + ایرانداک، تعیین وقت دفاع، ثبت نتیجه و
+ * مدیریت استخر هیأت داوران. استاد راهنما عمداً اینجا نیست.
+ */
+const EXPERT_ROLES = ['ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT'];
+/**
+ * خواندن میز دفاع: کارشناسان کل میز را می‌بینند؛ مدیر گروه و استاد راهنما فقط
+ * پروندهٔ راهنماییِ خودشان را. این فهرست باید با گاردِ `page.tsx` و با
+ * `roles` ماژول در `@/lib/admin-modules` یکی باشد.
+ */
+const BOARD_ROLES = [...EXPERT_ROLES, 'DEP_HEAD', 'PROFESSOR'];
+
 async function guard() {
-  return requireRole(['ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT']);
+  return requireRole(EXPERT_ROLES);
 }
 
 export type BoardRow = {
@@ -86,6 +102,8 @@ export type Board = {
   majors: { id: number; name: string }[];
   departments: { code: string; name: string }[];
   currentUserId: number;
+  /** فقط نقش‌های کارشناسی: ابزارهای مدیریتی میز (استخر داوران، تأیید پروپوزال، تعیین وقت، ثبت نتیجه) */
+  canManage: boolean;
 };
 
 const GROUP_ORDER = [
@@ -103,7 +121,7 @@ function pickPool(rows: PoolRow[], majorId: number | null) {
 
 /** تمام داده‌های نمایشی میز کار — منبع واحدِ صفحه و کنش‌ها */
 async function loadBoard(): Promise<Board> {
-  const user = await requireRole(['ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT']);
+  const user = await requireRole(BOARD_ROLES);
 
   const tpRows = await db
     .select({
@@ -225,12 +243,18 @@ async function loadBoard(): Promise<Board> {
     };
   });
 
+  // مدیر گروه (DEP_HEAD) هم مثل استاد راهنما فقط پروندهٔ دانشجویانِ خودش را می‌بیند:
+  // برای او «دیدن کل میز» و «مدیریت میز» یکی است — هیچ‌کدام نیست. به همین دلیل ابزارهای
+  // کارشناسی هم به او داده نمی‌شود و کارت‌های مدیریتی در رابط کاربری پنهان می‌مانند.
+  const canManage = user.roles.some(r => EXPERT_ROLES.includes(r));
+  const visible = canManage ? rows : rows.filter(r => r.supervisorUserId === user.id);
+
   const orderOf = (s: string | null) => {
     const i = GROUP_ORDER.indexOf(s ?? '');
     return i === -1 ? GROUP_ORDER.length : i;
   };
   const byStatus = new Map<string, BoardRow[]>();
-  for (const r of rows) {
+  for (const r of visible) {
     const key = r.proposalStatus ?? 'NOT_STARTED';
     byStatus.set(key, [...(byStatus.get(key) ?? []), r]);
   }
@@ -238,14 +262,17 @@ async function loadBoard(): Promise<Board> {
     .map(([status, list]) => ({ status, rows: list }))
     .sort((a, b) => orderOf(a.status) - orderOf(b.status) || a.status.localeCompare(b.status));
 
+  // ابزارهای کارشناسی (استخرها، فهرست کامل کارکنان، اتاق‌ها، رشته‌ها و گروه‌ها) به
+  // استاد راهنما و مدیر گروه داده نمی‌شود؛ پیش‌نمایش هیأت داورِ پروندهٔ خودش داخل سطرِ ردیف می‌ماند.
   return {
     groups,
-    pools,
-    rooms: roomRows.map(r => ({ id: r.id, name: r.name, capacity: r.capacity })),
-    staffOptions: staffRows.map(s => ({ id: s.id, name: `${s.firstName} ${s.lastName}`, rank: s.rank ?? s.type ?? '' })),
-    majors: majorRows.map(m => ({ id: m.id, name: m.name })),
-    departments: deptRows.filter(d => d.code).map(d => ({ code: d.code as string, name: d.name })),
+    pools: canManage ? pools : [],
+    rooms: canManage ? roomRows.map(r => ({ id: r.id, name: r.name, capacity: r.capacity })) : [],
+    staffOptions: canManage ? staffRows.map(s => ({ id: s.id, name: `${s.firstName} ${s.lastName}`, rank: s.rank ?? s.type ?? '' })) : [],
+    majors: canManage ? majorRows.map(m => ({ id: m.id, name: m.name })) : [],
+    departments: canManage ? deptRows.filter(d => d.code).map(d => ({ code: d.code as string, name: d.name })) : [],
     currentUserId: user.id,
+    canManage,
   };
 }
 
@@ -307,7 +334,8 @@ export async function recordDefenseResultAction(input: {
 /**
  * تأیید/رد درخواست دفاع از سوی استاد راهنما.
  * هویت با پروندهٔ کارکنانیِ خودِ کاربر جاری تطبیق داده می‌شود؛ موتور هم
- * مالکیت راهنما را دوباره بررسی می‌کند.
+ * مالکیت راهنما را دوباره بررسی می‌کند. کارشناس فارغ‌التحصیلی عمداً این کنش را
+ * ندارد (کارشناس، راهنمای پرونده نیست) و `loadBoard` برای او هم مثل استاد کار می‌کند.
  */
 export async function supervisorApproveDefenseAction(input: { auditId: number; approved: boolean }) {
   const user = await requireRole(['PROFESSOR', 'DEP_HEAD', 'ADMIN']);

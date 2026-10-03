@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS "signature_otps" (
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "signature_otps" ADD CONSTRAINT "signature_otps_staffId_staff_id_fk" FOREIGN KEY ("staffId") REFERENCES "staff"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 
 --> statement-breakpoint
@@ -44,12 +44,12 @@ CREATE TABLE IF NOT EXISTS "professor_availability_notes" (
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "professor_availability_notes" ADD CONSTRAINT "professor_availability_notes_staffId_staff_id_fk" FOREIGN KEY ("staffId") REFERENCES "staff"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "professor_availability_notes" ADD CONSTRAINT "professor_availability_notes_termId_academic_terms_id_fk" FOREIGN KEY ("termId") REFERENCES "academic_terms"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 --> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "uq_prof_avail_note" ON "professor_availability_notes" ("staffId","termId");

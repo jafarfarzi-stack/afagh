@@ -6,7 +6,8 @@ import UniversitySwitcher from './UniversitySwitcher';
 import { getCurrentUniversity, listUniversities, uniTheme } from '@/lib/university-scope';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const user = await requireRole([
+  // نقش‌های اصلی شاخهٔ /admin — همان گارد پیشین بدون تغییر.
+  const AREA_ROLES = [
     'ADMIN',
     'EDU_EXPERT',
     'ARCHIVE_EXPERT',
@@ -16,7 +17,19 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     'VAULT_MANAGER',
     'DEP_HEAD',
     'VICE_EDU',
-  ]);
+  ];
+  // ⚠ استثنای محدود: layout در App Router مسیر جاری را نمی‌بیند، پس نمی‌تواند
+  // گارد را به یک زیرمسیر خاص دوخته کرد. کم‌ضررترین حالت این است که این دو نقش
+  // شاخه را رد کنند و به کنش‌های خود برسند؛ اما تک‌تک صفحه‌ها `requireRole`
+  // مستقل دارند (تنها استثنا: `regulation-check` که گارد ندارد — گزارش شود).
+  //   • PROFESSOR           → فقط تأیید/رد درخواست دفاعِ پرونده‌های خودش
+  //   • GRADUATION_EXPERT  → تأیید پروپوزال، تعیین وقت، ثبت نتیجه، استخر داوران
+  const LIMITED_ROLES = ['PROFESSOR', 'GRADUATION_EXPERT'];
+
+  const user = await requireRole([...AREA_ROLES, ...LIMITED_ROLES]);
+  // انتخاب دانشگاه فعال، ابزار مدیریتی است؛ به دو نقش محدود بالا نشان داده نمی‌شود
+  // (کنشِ `setUniversityCookie` خودش گارد ندارد — گزارش شود).
+  const canSwitchUniversity = user.roles.some(r => AREA_ROLES.includes(r));
   const unis = await listUniversities();
   const curUni = await getCurrentUniversity();
   const th = uniTheme(curUni.code);
@@ -34,11 +47,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <UniversitySwitcher
-              universities={unis.map(u => ({ code: u.code, title: u.title, kind: u.kind }))}
-              currentCode={curUni.code}
-              buttonClass={th.badge}
-            />
+            {canSwitchUniversity && (
+              <UniversitySwitcher
+                universities={unis.map(u => ({ code: u.code, title: u.title, kind: u.kind }))}
+                currentCode={curUni.code}
+                buttonClass={th.badge}
+              />
+            )}
             <form action={logoutAction}>
               <button className={`text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}>
                 خروج

@@ -9,7 +9,7 @@ ALTER TABLE "departments" ADD COLUMN IF NOT EXISTS "departmentCode" varchar(10);
 ALTER TABLE "majors" ADD COLUMN IF NOT EXISTS "facultyId" integer;
 DO $$ BEGIN
   ALTER TABLE "majors" ADD CONSTRAINT "majors_facultyId_faculties_id_fk" FOREIGN KEY ("facultyId") REFERENCES "faculties"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 ALTER TABLE "majors" ADD COLUMN IF NOT EXISTS "minUnits" integer;
 ALTER TABLE "majors" ADD COLUMN IF NOT EXISTS "standardCode" varchar(20);

@@ -118,19 +118,25 @@ export default function DefenseSchedulingClient({ initial }: { initial: Board })
     }), 'استخر هیأت داوران ذخیره شد.');
 
   const total = board.groups.reduce((s, g) => s + g.rows.length, 0);
+  // فقط کارشناسان (board.canManage) ابزار مدیریت میز را می‌بینند؛ استاد راهنما و
+  // مدیر گروه نه زبانهٔ «استخر هیأت داوران» را می‌بینند نه پنل‌های کارشناسیِ هر ردیف.
+  // زبانهٔ فعال هم مشتق از همین پرچم است تا با نبودِ زبانهٔ استخر، شماره/ترتیبِ زبانه‌ها به‌هم نریزد.
+  const activeTab = board.canManage ? tab : 'BOARD';
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex rounded-xl border border-slate-300 overflow-hidden text-xs font-black">
           <button onClick={() => setTab('BOARD')}
-            className={`px-3 py-2 ${tab === 'BOARD' ? 'bg-indigo-700 text-white' : 'bg-white text-slate-600'}`}>
+            className={`px-3 py-2 ${activeTab === 'BOARD' ? 'bg-indigo-700 text-white' : 'bg-white text-slate-600'}`}>
             میز کار دفاع ({faNum(total)})
           </button>
-          <button onClick={() => setTab('POOLS')}
-            className={`px-3 py-2 ${tab === 'POOLS' ? 'bg-indigo-700 text-white' : 'bg-white text-slate-600'}`}>
-            استخر هیأت داوران ({faNum(board.pools.length)})
-          </button>
+          {board.canManage && (
+            <button onClick={() => setTab('POOLS')}
+              className={`px-3 py-2 ${activeTab === 'POOLS' ? 'bg-indigo-700 text-white' : 'bg-white text-slate-600'}`}>
+              استخر هیأت داوران ({faNum(board.pools.length)})
+            </button>
+          )}
         </div>
         <button onClick={refresh} disabled={pending}
           className="px-3 py-1.5 rounded-lg bg-slate-100 text-xs font-black disabled:opacity-50">به‌روزرسانی فهرست</button>
@@ -142,7 +148,7 @@ export default function DefenseSchedulingClient({ initial }: { initial: Board })
         </div>
       )}
 
-      {tab === 'BOARD' && (
+      {activeTab === 'BOARD' && (
         <div className="space-y-4">
           {total === 0 && (
             <div className="card p-5 text-xs text-slate-500 text-center">
@@ -157,6 +163,7 @@ export default function DefenseSchedulingClient({ initial }: { initial: Board })
               </div>
               {g.rows.map(r => (
                 <Row key={r.thesisProgressId} r={r} d={draftOf(r)} pending={pending}
+                  canManage={board.canManage}
                   isSupervisor={r.supervisorUserId != null && r.supervisorUserId === board.currentUserId}
                   onPatch={patch => setDraft(r.auditId, patch)}
                   onApprove={() => run(() => approveProposalAction({ auditId: r.auditId, irandocTrackingCode: draftOf(r).tracking }),
@@ -177,7 +184,7 @@ export default function DefenseSchedulingClient({ initial }: { initial: Board })
         </div>
       )}
 
-      {tab === 'POOLS' && (
+      {activeTab === 'POOLS' && (
         <div className="space-y-3">
           <div className="card p-4 flex flex-wrap items-center justify-between gap-2">
             <p className="text-[11px] text-slate-600 leading-5">
@@ -279,11 +286,12 @@ export default function DefenseSchedulingClient({ initial }: { initial: Board })
 }
 
 function Row({
-  r, d, pending, isSupervisor, onPatch, onApprove, onSupervisor, onSchedule, onResult,
+  r, d, pending, canManage, isSupervisor, onPatch, onApprove, onSupervisor, onSchedule, onResult,
 }: {
   r: BoardRow;
   d: Draft;
   pending: boolean;
+  canManage: boolean;
   isSupervisor: boolean;
   onPatch: (patch: Partial<Draft>) => void;
   onApprove: () => void;
@@ -328,7 +336,7 @@ function Row({
         )}
       </div>
 
-      {proposalOpen && (
+      {canManage && proposalOpen && (
         <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50/60 p-2.5 space-y-2">
           <div className="text-[11px] font-black text-emerald-900">تأیید پروپوزال + ثبت کد رهگیری بارگذاری در ایرانداک</div>
           <div className="flex flex-wrap gap-2 items-center">
@@ -359,7 +367,7 @@ function Row({
         </div>
       )}
 
-      {defense === 'EXPERT_REVIEW' && (
+      {canManage && defense === 'EXPERT_REVIEW' && (
         <div className="rounded-xl border-2 border-indigo-200 bg-indigo-50/60 p-2.5 space-y-2">
           <div className="text-[11px] font-black text-indigo-900">تعیین وقت دفاع</div>
           {r.pool && (
@@ -377,7 +385,7 @@ function Row({
         </div>
       )}
 
-      {defense === 'SCHEDULED' && (
+      {canManage && defense === 'SCHEDULED' && (
         <div className="rounded-xl border-2 border-sky-200 bg-sky-50/60 p-2.5 space-y-2">
           <div className="text-[11px] font-black text-sky-900">ثبت نتیجهٔ دفاع و صورت‌جلسه</div>
           <div className="flex flex-wrap gap-2 items-center">

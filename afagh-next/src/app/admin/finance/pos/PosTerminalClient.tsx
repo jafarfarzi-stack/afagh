@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { recordPosSale, voidPosTransaction, getPosTransactions } from '@/app/api/payment/pos/route';
+import { recordPosSale, voidPosTransaction, getPosTransactions } from '@/lib/pos-actions';
 
 type Terminal = {
   id: number;

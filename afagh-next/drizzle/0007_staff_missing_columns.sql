@@ -1,7 +1,7 @@
 -- 0007 — تکمیل ستون‌های staff که در DB زنده جا افتاده بود (schema.ts:213)
 ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "title" varchar(50);
 ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "facultyId" integer;
-DO $$ BEGIN ALTER TABLE "staff" ADD CONSTRAINT "staff_facultyId_faculties_id_fk" FOREIGN KEY ("facultyId") REFERENCES "faculties"("id") ON DELETE no action ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TABLE "staff" ADD CONSTRAINT "staff_facultyId_faculties_id_fk" FOREIGN KEY ("facultyId") REFERENCES "faculties"("id") ON DELETE no action ON UPDATE no action; EXCEPTION WHEN duplicate_object OR duplicate_table THEN null; END $$;
 ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "isActive" integer DEFAULT 1;
 ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "cooperationType" varchar(50);
 ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "personnelNo" varchar(50);

@@ -21,11 +21,6 @@ import { jalaliDateOf } from '@/lib/scheduling-core';
 
 const EDITORS = ['ADMIN', 'EDU_EXPERT'];
 
-/** ست کردن university_id در سشن دیتابیس برای RLS */
-async function setUniversityContext(universityId: number) {
-  await db.execute(sql`SET LOCAL app.university_id = ${universityId}`);
-}
-
 // ─────────────────────────── helpers (غیر export — گارد CI) ───────────────────────────
 
 async function listRealTerms(universityId?: number) {

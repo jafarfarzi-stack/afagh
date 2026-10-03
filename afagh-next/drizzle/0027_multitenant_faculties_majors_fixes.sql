@@ -13,7 +13,7 @@ ALTER TABLE "degree_level_configs" ADD COLUMN IF NOT EXISTS "universityId" integ
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "degree_level_configs" ADD CONSTRAINT "degree_level_configs_universityId_universities_id_fk" FOREIGN KEY ("universityId") REFERENCES "universities"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 --> statement-breakpoint
 UPDATE "degree_level_configs" SET "universityId" = (SELECT id FROM "universities" WHERE "code" = 'AFAGH') WHERE "universityId" IS NULL;
@@ -27,7 +27,7 @@ DROP INDEX IF EXISTS "faculties_facultyCode_uq";
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "faculties" ADD CONSTRAINT "uq_faculties_uni_code" UNIQUE ("universityId","facultyCode");
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 
 --> statement-breakpoint
@@ -35,7 +35,7 @@ DROP INDEX IF EXISTS "departments_departmentCode_uq";
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "departments" ADD CONSTRAINT "uq_departments_uni_code" UNIQUE ("universityId","departmentCode");
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 
 --> statement-breakpoint
@@ -45,7 +45,7 @@ ALTER TABLE "majors" DROP CONSTRAINT IF EXISTS "majors_majorCode_unique";
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "majors" ADD CONSTRAINT "uq_majors_uni_code" UNIQUE ("universityId","majorCode");
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 
 --> statement-breakpoint

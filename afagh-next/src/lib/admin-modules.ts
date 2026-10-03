@@ -8,6 +8,7 @@
  * نقش‌ها هم‌راستا با `homeFor` و گاردهای صفحات است:
  *   ADMIN, EDU_EXPERT, ARCHIVE_EXPERT, FINANCE_EXPERT, FINANCE,
  *   MILITARY_OFFICER, VAULT_MANAGER, DEP_HEAD, VICE_EDU
+ *   و برای «میز دفاع پایان‌نامه»: GRADUATION_EXPERT, PROFESSOR, DEP_HEAD
  */
 
 export interface AdminModule {
@@ -313,6 +314,17 @@ export const ADMIN_MODULES: AdminModule[] = [
     roles: ['ADMIN'],
     accent: 'from-indigo-950 to-violet-950 border-indigo-700/50',
     iconBg: 'bg-indigo-700/80 border-indigo-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
+    href: '/admin/defense-scheduling',
+    icon: '🛡️',
+    title: 'برنامه‌ریزی و ثبت نتیجهٔ دفاع پایان‌نامه',
+    desc: 'تأیید پروپوزال، تعیین وقت دفاع و ثبت نتیجه با هیأت داوران',
+    roles: ['ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'DEP_HEAD', 'PROFESSOR'],
+    accent: 'from-teal-950 to-cyan-950 border-teal-700/50',
+    iconBg: 'bg-teal-700/80 border-teal-500/50',
     inNav: true,
     inGrid: true,
   },

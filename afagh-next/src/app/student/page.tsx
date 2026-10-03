@@ -28,7 +28,6 @@ const statusFa: Record<string, string> = {
   WAITLISTED: 'اتاق انتظار',
   PENDING_COUNCIL: 'در انتظار شورا',
   DROPPED: 'حذف‌شده',
-  EMERGENCY_DROPPED: 'حذف اضطراری',
   ABSENT: 'غایب',
   REJECTED: 'مردود',
 };

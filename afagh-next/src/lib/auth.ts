@@ -399,6 +399,10 @@ export function homeFor(roles: string[]): string {
   if (roles.includes('VAULT_MANAGER')) return '/admin/exams';
   if (roles.includes('MILITARY_OFFICER')) return '/admin/students';
   if (roles.includes('ARCHIVE_EXPERT')) return '/admin/archive';
+  // کارشناس فارغ‌التحصیلی فقط «میز دفاع پایان‌نامه» را در شاخهٔ /admin می‌بیند؛
+  // فرستادنش به /admin که گاردِ دیگری دارد، حلقهٔ ریدایرکت می‌ساخت.
+  if (roles.includes('GRADUATION_EXPERT') && !roles.includes('ADMIN') && !roles.includes('EDU_EXPERT') && !roles.includes('VICE_EDU'))
+    return '/admin/defense-scheduling';
   return '/admin';
 }
 

@@ -14,7 +14,7 @@ ALTER TABLE "students" DROP CONSTRAINT IF EXISTS "students_studentcode_unique";
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "students" ADD CONSTRAINT "uq_students_uni_code" UNIQUE ("universityId","studentCode");
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 
 --> statement-breakpoint
@@ -22,7 +22,7 @@ ALTER TABLE "courses" DROP CONSTRAINT IF EXISTS "courses_code_unique";
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "courses" ADD CONSTRAINT "uq_courses_uni_code" UNIQUE ("universityId","code");
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 
 --> statement-breakpoint
@@ -32,5 +32,5 @@ ALTER TABLE "staff" DROP CONSTRAINT IF EXISTS "staff_staffcode_unique";
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "staff" ADD CONSTRAINT "uq_staff_uni_code" UNIQUE ("universityId","staffCode");
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;

@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS "samin_connections" (
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "samin_connections" ADD CONSTRAINT "samin_connections_universityId_universities_id_fk" FOREIGN KEY ("universityId") REFERENCES "universities"("id") ON DELETE cascade ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "samin_staging" (
@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS "samin_staging" (
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "samin_staging" ADD CONSTRAINT "samin_staging_universityId_universities_id_fk" FOREIGN KEY ("universityId") REFERENCES "universities"("id") ON DELETE cascade ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 --> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "uq_samin_staging" ON "samin_staging" USING btree ("universityId","entityCode","personPkInSource");
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS "samin_sync_logs" (
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "samin_sync_logs" ADD CONSTRAINT "samin_sync_logs_universityId_universities_id_fk" FOREIGN KEY ("universityId") REFERENCES "universities"("id") ON DELETE cascade ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 --> statement-breakpoint
 -- ── ستون‌های MUST ثمین روی users (nullable، غیرمخرب) ──
@@ -115,7 +115,7 @@ ALTER TABLE "students" ADD COLUMN IF NOT EXISTS "universityId" integer;
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "students" ADD CONSTRAINT "students_universityId_universities_id_fk" FOREIGN KEY ("universityId") REFERENCES "universities"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 --> statement-breakpoint
 ALTER TABLE "students" ADD COLUMN IF NOT EXISTS "saminStudentPk" varchar(40);

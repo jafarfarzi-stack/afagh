@@ -153,17 +153,17 @@ CREATE INDEX IF NOT EXISTS "idx_irandoc_logs_student_type" ON "irandoc_logs"("st
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "thesis_progress" ADD CONSTRAINT "uq_thesis_progress_audit" UNIQUE ("auditId");
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "thesis_progress_reports" ADD CONSTRAINT "uq_thesis_report_period" UNIQUE ("thesisProgressId","reportPeriodStart","reportPeriodEnd");
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "defense_sessions" ADD CONSTRAINT "uq_defense_session_progress" UNIQUE ("thesisProgressId");
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;

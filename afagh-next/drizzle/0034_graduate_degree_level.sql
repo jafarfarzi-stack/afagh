@@ -9,7 +9,7 @@ ALTER TABLE "students" ADD COLUMN IF NOT EXISTS "graduateDegreeLevelId" integer;
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "students" ADD CONSTRAINT "students_graduateDegreeLevelId_degree_level_configs_id_fk" FOREIGN KEY ("graduateDegreeLevelId") REFERENCES "degree_level_configs"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 
 -- Backfill: پیش‌فرض مقطع ورود (برای داده‌های قدیمی که مقطع فارغ‌التحصیلی ثبت نشده)

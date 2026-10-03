@@ -1,5 +1,5 @@
 import { requireRole } from '@/lib/auth';
-import { getPosTerminals, getPosTransactions } from '@/app/api/payment/pos/route';
+import { getPosTerminals, getPosTransactions } from '@/lib/pos-actions';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import PosTerminalClient from './PosTerminalClient';
 

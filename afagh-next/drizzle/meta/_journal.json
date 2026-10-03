@@ -73,210 +73,238 @@
       "breakpoints": true
     },
     {
-      "idx": 10,
+      "version": "7",
+      "when": 1788593400000,
+      "tag": "0010_curriculum_grade_status_codes",
+      "breakpoints": true,
+      "idx": 10
+    },
+    {
+      "idx": 11,
       "version": "7",
       "when": 1788595200000,
       "tag": "0010_role_unit_targets",
       "breakpoints": true
     },
     {
-      "idx": 11,
+      "idx": 12,
       "version": "7",
       "when": 1788598800000,
       "tag": "0011_student_term_states",
       "breakpoints": true
     },
     {
-      "idx": 12,
+      "idx": 13,
       "version": "7",
       "when": 1788602400000,
       "tag": "0012_curriculum_created_at",
       "breakpoints": true
     },
     {
-      "idx": 13,
+      "idx": 14,
       "version": "7",
       "when": 1788606000000,
       "tag": "0013_remove_student_userId_unique",
       "breakpoints": true
     },
     {
-      "idx": 14,
+      "idx": 15,
       "version": "7",
       "when": 1788609600000,
       "tag": "0014_curriculum_course_grade_status_codes",
       "breakpoints": true
     },
     {
-      "idx": 15,
+      "idx": 16,
       "version": "7",
       "when": 1788613200000,
       "tag": "0015_enroll_grade_status_code_and_change_log",
       "breakpoints": true
     },
     {
-      "idx": 16,
+      "idx": 17,
       "version": "7",
       "when": 1788616800000,
       "tag": "0016_multitenant_university_id",
       "breakpoints": true
     },
     {
-      "idx": 17,
+      "idx": 18,
       "version": "7",
       "when": 1788620400000,
       "tag": "0017_unified_tuition_rules",
       "breakpoints": true
     },
     {
-      "idx": 18,
+      "idx": 19,
       "version": "7",
       "when": 1788624000000,
       "tag": "0018_course_sama_fields",
       "breakpoints": true
     },
     {
-      "idx": 19,
+      "idx": 20,
       "version": "7",
       "when": 1788627600000,
       "tag": "0019_grade_thresholds",
       "breakpoints": true
     },
     {
-      "idx": 20,
+      "idx": 21,
       "version": "7",
       "when": 1788631200000,
       "tag": "0020_tuition_coefficients",
       "breakpoints": true
     },
     {
-      "idx": 21,
+      "idx": 22,
       "version": "7",
       "when": 1788634800000,
       "tag": "0021_subject_fees",
       "breakpoints": true
     },
     {
-      "idx": 22,
+      "idx": 23,
       "version": "7",
       "when": 1788638400000,
       "tag": "0022_course_equivalency",
       "breakpoints": true
     },
     {
-      "idx": 23,
+      "idx": 24,
       "version": "7",
       "when": 1788642000000,
       "tag": "0023_multitenant_university_id_all_tables",
       "breakpoints": true
     },
     {
-      "idx": 24,
+      "idx": 25,
       "version": "7",
       "when": 1788645600000,
       "tag": "0024_uni_scoped_uniques",
       "breakpoints": true
     },
     {
-      "idx": 25,
+      "idx": 26,
       "version": "7",
       "when": 1788649200000,
       "tag": "0025_terms_uni_scoped",
       "breakpoints": true
     },
     {
-      "idx": 26,
+      "idx": 27,
       "version": "7",
       "when": 1788652800000,
       "tag": "0026_migration_v2_identity_academic_core",
       "breakpoints": true
     },
     {
-      "idx": 27,
+      "idx": 28,
       "version": "7",
       "when": 1788656400000,
       "tag": "0027_multitenant_faculties_majors_fixes",
       "breakpoints": true
     },
     {
-      "idx": 28,
+      "version": "7",
+      "when": 1789978803000,
+      "tag": "0028_enroll_original_sama_code",
+      "breakpoints": true,
+      "idx": 29
+    },
+    {
+      "idx": 30,
       "version": "7",
       "when": 1790330858426,
       "tag": "0029_university_logo",
       "breakpoints": false
     },
     {
-      "idx": 29,
+      "idx": 31,
       "version": "7",
       "when": 1790331886192,
       "tag": "0030_student_home_tell",
       "breakpoints": false
     },
     {
-      "idx": 30,
+      "idx": 32,
       "version": "7",
       "when": 1790336078657,
       "tag": "0031_perf_indexes",
       "breakpoints": false
     },
     {
-      "idx": 31,
+      "idx": 33,
       "version": "7",
       "when": 1790852400000,
       "tag": "0032_multitenant_missing_uni_columns",
       "breakpoints": false
     },
     {
-      "idx": 32,
+      "version": "7",
+      "when": 1790856000000,
+      "tag": "0033_entry_date_students",
+      "breakpoints": true,
+      "idx": 34
+    },
+    {
+      "version": "7",
+      "when": 1790859600000,
+      "tag": "0034_graduate_degree_level",
+      "breakpoints": true,
+      "idx": 35
+    },
+    {
+      "idx": 36,
       "version": "7",
       "when": 1790940731253,
       "tag": "0035_term_add_drop",
       "breakpoints": true
     },
     {
-      "idx": 33,
+      "idx": 37,
       "version": "7",
       "when": 1790945225330,
       "tag": "0036_reference_ministry_codes",
       "breakpoints": true
     },
     {
-      "idx": 34,
+      "idx": 38,
       "version": "7",
       "when": 1790948800000,
       "tag": "0037_enrollment_emergency_withdrawal",
       "breakpoints": true
     },
     {
-      "idx": 35,
+      "idx": 39,
       "version": "7",
       "when": 1790952000000,
       "tag": "0038_major_change_process",
       "breakpoints": true
     },
     {
-      "idx": 36,
+      "idx": 40,
       "version": "7",
       "when": 1790955200000,
       "tag": "0039_proposal_tracking_process",
       "breakpoints": true
     },
     {
-      "idx": 37,
+      "idx": 41,
       "version": "7",
       "when": 1790958400000,
       "tag": "0040_thesis_progress_tracking",
       "breakpoints": true
     },
     {
-      "idx": 38,
+      "idx": 42,
       "version": "7",
       "when": 1790961600000,
       "tag": "0041_finance_schema_sync",
       "breakpoints": true
     },
     {
-      "idx": 39,
+      "idx": 43,
       "version": "7",
       "when": 1790965200000,
       "tag": "0042_pos_heartbeat_column_fix",

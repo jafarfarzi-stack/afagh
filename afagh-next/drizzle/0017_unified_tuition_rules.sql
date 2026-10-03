@@ -40,12 +40,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS "tuition_rules_code_key" ON "tuition_rules" ("
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "tuition_rules" ADD CONSTRAINT "tuition_rules_degreeLevelId_degree_level_configs_id_fk" FOREIGN KEY ("degreeLevelId") REFERENCES "degree_level_configs"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "tuition_rules" ADD CONSTRAINT "tuition_rules_majorId_majors_id_fk" FOREIGN KEY ("majorId") REFERENCES "majors"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 --> statement-breakpoint
 -- ── درون‌ریزی از tuition_formulas: کد F<id> + priority حفظ می‌شود ──

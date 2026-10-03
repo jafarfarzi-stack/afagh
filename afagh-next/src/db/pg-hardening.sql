@@ -495,43 +495,133 @@ DROP POLICY IF EXISTS alumni_requests_self_read ON "alumni_requests";
 CREATE POLICY alumni_requests_self_read ON "alumni_requests" FOR SELECT TO afagh_app
   USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
 
--- Exam tables — university-scoped RLS
+-- ══ جدول‌های امتحانات — RLS بر پایهٔ app.user_id (اصلاح ردهٔ app.university_id) ══
+--
+--  چرا این بازنویسی لازم بود (همان ردهٔ بند ۲٫۵ بالا، برای ۷ جدول امتحانی):
+--  • app.university_id برای نقش afagh_app هرگز ست نمی‌شود. تنها نقطهٔ ست‌کردنش
+--    src/app/admin/exams/actions.ts:26 است که روی استخرِ مالک (BYPASSRLS) اجرا می‌شود
+--    و آن‌جا اصلاً RLS اعمال نمی‌شود ⇒ «"universityId" = current_setting('app.university_id',true)»
+--    برای نقش اپ همیشه NULL بود ⇒ NULL = x ⇒ NULL ⇒ سیاست همیشه FALSE (دقیقاً همان باگی که
+--    در scripts/hardening.mjs:75-79 گزارش شده بود). آن تابع حتی فراخوانی‌نشده است (dead code).
+--  • app.user_role هم هیچ‌جا در اپ ست نمی‌شود (در کل این فایل فقط همین ۷ سیاست از آن
+--    استفاده می‌کردند و حذف شد).
+--  • تنها GUC قابل‌اتکا: app.user_id که withUserRls (src/db/index.ts:102) در همان تراکنش
+--    و روی همین نقشِ غیر-BYPASSRLS می‌نویسد. دانشگاهِ کاربر هم از دادهٔ خودش استخراج
+--    می‌شود (students/staff."universityId")، نه از یک GUC.
+--
+--  الگوهای به‌کاررفته (همه با DROP+CREATE ⇒ idempotent روی هر استقرار):
+--   ۱) نقش‌محور (مدیر/کارشناس همه را می‌بیند) — عین الگوی thesis_* بالا.
+--   ۲) کاتالوگ سراسری: "universityId" IS NULL (سطر جهانی/پیش‌فرض) یا دانشگاهِ خودِ کاربر.
+--   ۳) خودِ کاربر: دانشجو فقط صندلی/سشن خودش، مراقب فقط تخصیص خودش (همان joinهایی که
+--      پنل /proctor و کارت امتحان دانشجو می‌زنند ⇒ اگر روزی به withUserRls منتقل شد، کار می‌کند).
+--
+--  ⚠ بازگشتِ بی‌نهایت ندارد: زنجیرهٔ زیرپرسمان‌ها students ← enrollments ← seat_allocations
+--  و staff ← invigilators است و هیچ‌کدام به جدولِ سیاستِ بالا برنمی‌گردند؛
+--  user_roles هم سیاستِ خودش را روی "userId" = app.user_id دارد (پایین) ⇒ فقط نقش‌های خودِ
+--  کاربر دیده می‌شود، و roles اصلاً RLS ندارد.
+--  همهٔ این ۷ جدول فقط SELECT دارند (هیچ GRANT نوشتنی به afagh_app داده نشده) ⇒
+--  FOR SELECT بدون WITH CHECK؛ نوشتن از مسیر مالک (BYPASSRLS) انجام می‌شود.
+
+-- سشن‌های امتحان: مدیر/کارشناس همه؛ دانشجو فقط سشنِ صندلیِ خودش؛ مراقب فقط سشنِ تخصیصیِ خودش
 ALTER TABLE "exam_sessions" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS exam_sessions_uni ON "exam_sessions";
 CREATE POLICY exam_sessions_uni ON "exam_sessions" FOR SELECT TO afagh_app
-  USING ("universityId" = nullif(current_setting('app.university_id', true), '')::int);
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT'))
+      OR "id" IN (SELECT sa."sessionId" FROM "seat_allocations" sa
+                  JOIN "enrollments" e ON e."id" = sa."enrollmentId"
+                  JOIN "students" s ON s."id" = e."studentId"
+                  WHERE s."userId" = nullif(current_setting('app.user_id', true), '')::int)
+      OR "id" IN (SELECT iv."sessionId" FROM "invigilators" iv
+                  JOIN "staff" st ON st."id" = iv."staffId"
+                  WHERE st."userId" = nullif(current_setting('app.user_id', true), '')::int));
 
+-- سالن‌های امتحان — کاتالوگ (نام/ظرفیت، بدون دادهٔ شخصی): سطر جهانی + دانشگاهِ خودِ کاربر + مدیر
 ALTER TABLE "exam_halls" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS exam_halls_uni ON "exam_halls";
 CREATE POLICY exam_halls_uni ON "exam_halls" FOR SELECT TO afagh_app
-  USING ("universityId" = nullif(current_setting('app.university_id', true), '')::int);
+  USING ("universityId" IS NULL
+      OR "universityId" IN (SELECT "universityId" FROM "students"
+                            WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int
+                              AND "universityId" IS NOT NULL)
+      OR "universityId" IN (SELECT "universityId" FROM "staff"
+                            WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int
+                              AND "universityId" IS NOT NULL)
+      OR EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+                 WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                   AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT')));
 
+-- زون‌بندی تقویم — کاتالوگِ ترمی (تاریخ‌ها، بدون دادهٔ شخصی): سطر جهانی + دانشگاهِ کاربر + مدیر
 ALTER TABLE "exam_calendar_configs" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS exam_cal_uni ON "exam_calendar_configs";
 CREATE POLICY exam_cal_uni ON "exam_calendar_configs" FOR SELECT TO afagh_app
-  USING ("universityId" = nullif(current_setting('app.university_id', true), '')::int);
+  USING ("universityId" IS NULL
+      OR "universityId" IN (SELECT "universityId" FROM "students"
+                            WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int
+                              AND "universityId" IS NOT NULL)
+      OR "universityId" IN (SELECT "universityId" FROM "staff"
+                            WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int
+                              AND "universityId" IS NOT NULL)
+      OR EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+                 WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                   AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT')));
 
+-- مراقبانِ سالن: پروندهٔ پرسنلیِ خودِ کاربر (بدون قیدِ دانشگاه — کارمند یک دانشگاهِ واحد ندارد؛
+-- staff."userId" ستونِ درست است) یا نقش‌محور برای مدیر/کارشناس
 ALTER TABLE "invigilators" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS invigilators_self_read ON "invigilators";
 CREATE POLICY invigilators_self_read ON "invigilators" FOR SELECT TO afagh_app
-  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
-      AND "universityId" = nullif(current_setting('app.university_id', true), '')::int);
+  USING (EXISTS (SELECT 1 FROM "staff" s
+                  WHERE s."userId" = nullif(current_setting('app.user_id', true), '')::int
+                    AND s."id" = "staffId")
+      OR EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+                 WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                   AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT')));
 
+-- شیفت/ثبت‌ورود مراقب در آزمون — همان الگوی خودِ کاربر
 ALTER TABLE "exam_invigilators" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS exam_invigilators_self_read ON "exam_invigilators";
 CREATE POLICY exam_invigilators_self_read ON "exam_invigilators" FOR SELECT TO afagh_app
-  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
-      AND "universityId" = nullif(current_setting('app.university_id', true), '')::int);
+  USING (EXISTS (SELECT 1 FROM "staff" s
+                  WHERE s."userId" = nullif(current_setting('app.user_id', true), '')::int
+                    AND s."id" = "staffId")
+      OR EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+                 WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                   AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT')));
 
+-- صندلی‌ها: دانشجو فقط صندلیِ خودش (سیاستِ seat_self_read بالا هم همین را می‌دهد)،
+-- مراقب فقط صندلیِ سشنِ تخصیصیِ خودش (رستور پنل /proctor)، مدیر/کارشناس همه.
+-- قیدِ "universityId" عمداً اینجا نیست: صندلی دادهٔ شخصیِ دانشجوست و سطرِ NULL
+-- به معنای «عمومی» نیست ⇒ دسترسی از مسیر رابطه (enrollment/staff) تعریف می‌شود.
 ALTER TABLE "seat_allocations" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS seat_alloc_uni ON "seat_allocations";
 CREATE POLICY seat_alloc_uni ON "seat_allocations" FOR SELECT TO afagh_app
-  USING ("universityId" = nullif(current_setting('app.university_id', true), '')::int);
+  USING (EXISTS (SELECT 1 FROM "enrollments" e JOIN "students" s ON s."id" = e."studentId"
+                  WHERE e."id" = "enrollmentId"
+                    AND s."userId" = nullif(current_setting('app.user_id', true), '')::int)
+      OR "sessionId" IN (SELECT iv."sessionId" FROM "invigilators" iv
+                         JOIN "staff" st ON st."id" = iv."staffId"
+                         WHERE st."userId" = nullif(current_setting('app.user_id', true), '')::int)
+      OR EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+                 WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                   AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT')));
 
+-- نرخ‌های حق‌التدریس/امتحان — کاتالوگِ نرخ (غیرشخصی): سطر جهانی + دانشگاهِ کاربر + مدیر.
+-- (هیچ مسیرِ خواندنی در اپ ندارد؛ فقط scripts/exam-load-seed.mjs از نقش مالک می‌نویسد.)
 ALTER TABLE "exam_remuneration_rates" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS exam_remun_uni ON "exam_remuneration_rates";
 CREATE POLICY exam_remun_uni ON "exam_remuneration_rates" FOR SELECT TO afagh_app
-  USING ("universityId" = nullif(current_setting('app.university_id', true), '')::int);
+  USING ("universityId" IS NULL
+      OR "universityId" IN (SELECT "universityId" FROM "students"
+                            WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int
+                              AND "universityId" IS NOT NULL)
+      OR "universityId" IN (SELECT "universityId" FROM "staff"
+                            WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int
+                              AND "universityId" IS NOT NULL)
+      OR EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+                 WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                   AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT')));
 
 ALTER TABLE "offering_professors" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS offering_professors_self_read ON "offering_professors";

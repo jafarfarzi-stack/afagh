@@ -15,28 +15,28 @@ ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "universityId" integer;
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "users" ADD CONSTRAINT "users_universityId_universities_id_fk" FOREIGN KEY ("universityId") REFERENCES "universities"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 --> statement-breakpoint
 ALTER TABLE "staff" ADD COLUMN IF NOT EXISTS "universityId" integer;
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "staff" ADD CONSTRAINT "staff_universityId_universities_id_fk" FOREIGN KEY ("universityId") REFERENCES "universities"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 --> statement-breakpoint
 ALTER TABLE "departments" ADD COLUMN IF NOT EXISTS "universityId" integer;
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "departments" ADD CONSTRAINT "departments_universityId_universities_id_fk" FOREIGN KEY ("universityId") REFERENCES "universities"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 --> statement-breakpoint
 ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "universityId" integer;
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "courses" ADD CONSTRAINT "courses_universityId_universities_id_fk" FOREIGN KEY ("universityId") REFERENCES "universities"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 --> statement-breakpoint
 -- ── backfill: رکوردهای موجود → AFAGH ──

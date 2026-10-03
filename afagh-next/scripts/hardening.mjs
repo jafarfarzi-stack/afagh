@@ -64,8 +64,26 @@ try {
     'professor_availability_notes','professor_availabilities',
     'grade_change_log',
     'system_settings','integrations_config','audit_logs','api_audit_logs','admissions_staging',
-    'person_source_identities','sanjesh_mappings','evaluation_responses','verification_otps','step_api_actions','document_signatures', // ۱۱ deny-all
+    'person_source_identities','sanjesh_mappings','evaluation_responses','verification_otps','step_api_actions','document_signatures',
+    'curriculum_approvals', // ۱۲ deny-all (چرخهٔ تأیید برنامهٔ درسی: دفتر ممیزیِ فقط-مالک)
     'thesis_progress','thesis_progress_reports','defense_sessions','irandoc_logs','defense_jury_pools',
+    // ── ۲۷ جدولِ بخش ⑧ pg-hardening.sql که پیش‌تر در هیچ دروازه‌ای سنجیده نمی‌شدند ──
+    // مالی/هویتیِ دانشجو (studentId → دروازهٔ پوشش هم پشتیبانشان می‌کرد، ولی مستقیم نه):
+    'payment_cheques','payment_transactions','pos_transactions','student_discounts','student_sponsorships',
+    'student_loans','student_cards','student_term_states','clearance_checklist','issued_degrees',
+    'graduation_audits','alumni_profiles','alumni_requests',
+    // امتحانات. ✓ سیاست‌های ۷ جدولِ امتحانی در pg-hardening.sql بازنویسی شدند (بند ۲٫۵):
+    // app.university_id برای نقش afagh_app هرگز ست نمی‌شد (تنها ست‌کننده‌اش روی استخرِ مالکِ
+    // BYPASSRLS بود و حتی فراخوانی نمی‌شد) و app.user_role هم جایی ست نمی‌شد ⇒ آن سیاست‌ها عملاً
+    // همیشه FALSE بودند. اکنون همه با app.user_id نوشته شده‌اند — که withUserRls (src/db/index.ts:102)
+    // در همان تراکنش می‌نویسد: نقش‌محور با user_roles JOIN roles، وگرنه سطرِ خودِ کاربر یا دانشگاهِ او.
+    'exam_attendances','exam_sessions','exam_halls','exam_calendar_configs',
+    'invigilators','exam_invigilators','exam_remuneration_rates',
+    // کارکنان/آموزشی و اعلان‌ها (staffId / userId):
+    'offering_professors','staff_roles',
+    'notification_channels','notification_deliveries','notification_logs',
+    'user_roles',            // زیرپرسمانِ سیاست‌های نقش‌محورِ پایان‌نامه — خودش هم RLS دارد
+    'legacy_code_maps',      // deny-all صریح (USING(false))
   ];
   const checks = await client.query(
     `SELECT c.relname AS table_name, c.relrowsecurity AS rls_enabled
@@ -104,7 +122,11 @@ try {
         WHERE col.table_schema = 'public' AND col.table_name = c.relname
           AND col.column_name IN ('userId','studentId','staffId','personUserId','targetId',
                                   'contractId','enrollmentId','supervisorStaffId',
-                                  'actorStaffId','clearedByStaffId','chairId')
+                                  'actorStaffId','clearedByStaffId','chairId',
+                                  -- داوران/داورخوانِ دفاع (defense_sessions) و تأییدکننده‌ها:
+                                  'internalId','externalId',
+                                  -- curriculum_approvals (append-only، deny-all) و issued_degrees:
+                                  'approvedByStaffId','approvedByUserId','issuedByUserId')
       )
     ORDER BY 1`);
   const unprotected = coverage.rows.filter(r => !r.rls_enabled).map(r => r.table_name);

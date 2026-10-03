@@ -73,7 +73,7 @@ export async function dropCourseAction(enrollmentId: number): Promise<{ ok: bool
 
 /** حذف اضطراری (Emergency Drop) — پس از مهلت حذف و اضافه
  *  فقط برای دروسی که emergencyWithdrawal=1 در جدول courses دارند
- *  وضعیت در کارنامه: EMERGENCY_DROPPED
+ *  وضعیت در کارنامه: DROPPED به‌همراه پرچم emergencyWithdrawal=1 (وضعیت جداگانه‌ای وجود ندارد)
  */
 export async function emergencyDropAction(enrollmentId: number): Promise<{ ok: boolean; error?: string }> {
   const user = await requireRole(['STUDENT']);

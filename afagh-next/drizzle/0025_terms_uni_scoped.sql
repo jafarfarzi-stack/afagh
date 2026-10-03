@@ -10,5 +10,5 @@ ALTER TABLE "academic_terms" DROP CONSTRAINT IF EXISTS "academic_terms_termCode_
 --> statement-breakpoint
 DO $$ BEGIN
 	ALTER TABLE "academic_terms" ADD CONSTRAINT "uq_terms_uni_code" UNIQUE ("universityId","termCode");
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
