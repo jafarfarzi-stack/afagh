@@ -324,7 +324,7 @@ export async function codeFormOptions(): Promise<FormOptions> {
     degree: degs.map(d => ({ value: String(d.id), label: `${d.title} [${d.code}]` })),
     department: deps.map(d => ({
       value: String(d.id),
-      label: `${d.name}${d.code ? ` [${d.code}]` : ''}${d.fac ? ` ? ${d.fac}` : ''}`,
+      label: `${d.name}${d.code ? ` [${d.code}]` : ''}${d.fac ? ` · ${d.fac}` : ''}`,
     })),
     faculty: facs.map(f => ({
       value: String(f.id),
