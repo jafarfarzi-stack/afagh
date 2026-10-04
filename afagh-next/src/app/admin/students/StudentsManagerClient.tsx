@@ -427,6 +427,9 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
     const s = String(v ?? '');
     return !!s && !geoPlaceSet.has(normalizeFa(s));
   };
+  // کد دانشگاه از روی شناسه — برای استثناهای دانشگاهی نگاشت وضعیت سما
+  const uniCodeOf = (id: number | null | undefined) =>
+    props.universities?.find(u => u.id === id)?.code ?? null;
   const saveProfile = async (keys: string[]) => {
     if (!currentStudent) return;
     setProfileSaving(true);
@@ -700,7 +703,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                   {currentStudent.samaStatusCode && (
                     <div className="grid grid-cols-3 gap-2 items-center text-[11px] text-slate-500">
                       <span>وضعیت در سما:</span>
-                      <span className="col-span-2">کد {currentStudent.samaStatusCode} — {studentStatusFa(currentStudent.status, currentStudent.samaStatusCode)}</span>
+                      <span className="col-span-2">کد {currentStudent.samaStatusCode} — {studentStatusFa(currentStudent.status, currentStudent.samaStatusCode, uniCodeOf(currentStudent.universityId))}</span>
                     </div>
                   )}
                 </div>
@@ -1480,7 +1483,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                         <td className="p-2 font-mono whitespace-nowrap">{s.entryYear}</td>
                         <td className="p-2 whitespace-nowrap">
                           <span title={s.samaStatusCode ? `کد سما: ${s.samaStatusCode}` : s.status} className={`${studentStatusChip(s.status)} text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap`}>
-                            {studentStatusFa(s.status, s.samaStatusCode)}
+                            {studentStatusFa(s.status, s.samaStatusCode, uniCodeOf((s as { universityId?: number | null }).universityId))}
                           </span>
                         </td>
                       </tr>

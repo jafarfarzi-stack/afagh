@@ -19,6 +19,27 @@ export const SAMA_STATUS_TO_INTERNAL: Record<string, string> = {
   '20': 'DECEASED', '6': 'DECEASED',
 };
 
+/**
+ * استثنای دانشگاهی نگاشت بالا — کدهای محلی که در سمای آن دانشگاه معنای
+ * دیگری دارند. زرینه: کد 43 یعنی «عدم مراجعه» نه فارغ‌التحصیلی.
+ */
+export const SAMA_STATUS_UNI_OVERRIDE: Record<string, Record<string, string>> = {
+  ZARINE: { '43': 'NO_SHOW' },
+};
+
+export const SAMA_STATUS_UNI_TITLE_OVERRIDE: Record<string, Record<string, string>> = {
+  ZARINE: { '43': 'عدم مراجعه' },
+};
+
+/** کد سما → وضعیت داخلی با اعمال استثنای دانشگاه */
+export function samaStatusToInternal(code: string | null | undefined, uniCode?: string | null): string {
+  const c = String(code ?? '').trim();
+  if (!c) return 'UNKNOWN';
+  const uni = String(uniCode ?? '').trim().toUpperCase();
+  if (uni && SAMA_STATUS_UNI_OVERRIDE[uni]?.[c]) return SAMA_STATUS_UNI_OVERRIDE[uni][c];
+  return SAMA_STATUS_TO_INTERNAL[c] ?? 'UNKNOWN';
+}
+
 /** عنوان دقیق سما برای هر کد وضعیت (برای نمایش جزئیات) */
 export const SAMA_STATUS_TITLE: Record<string, string> = {
   '0': 'نامشخص', '1': 'در حال تحصیل', '2': 'فارغ‌التحصیل',
@@ -50,7 +71,11 @@ export const STUDENT_STATUS_FA: Record<string, string> = {
   DECEASED: 'فوت',
 };
 
-export function studentStatusFa(status: string | null | undefined, samaCode?: string | null): string {
+export function studentStatusFa(status: string | null | undefined, samaCode?: string | null, uniCode?: string | null): string {
+  const uni = String(uniCode ?? '').trim().toUpperCase();
+  if (samaCode && uni && SAMA_STATUS_UNI_TITLE_OVERRIDE[uni]?.[samaCode]) {
+    return SAMA_STATUS_UNI_TITLE_OVERRIDE[uni][samaCode];
+  }
   if (samaCode && SAMA_STATUS_TITLE[samaCode]) return SAMA_STATUS_TITLE[samaCode];
   if (!status) return 'نامشخص';
   return STUDENT_STATUS_FA[status] ?? status;
