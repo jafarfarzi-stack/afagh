@@ -103,6 +103,8 @@ x-app-env: &app-env
   SAJJAD_BASE_URL: ${SAJJAD_BASE_URL:-}
   SAJJAD_PORTAL_URL: ${SAJJAD_PORTAL_URL:-https://portal.saorg.ir}
   API_TIMEOUT_SECONDS: ${API_TIMEOUT_SECONDS:-10}
+  # رمزنگاری اسرار ثمین (AES-256-GCM، hex شصت‌وچهار کاراکتری) — فقط وقتی لازم است که اتصال ثمین ثبت شود
+  SAMIN_MASTER_KEY: ${SAMIN_MASTER_KEY:-}
 
 x-logging: &default-logging
   driver: json-file
