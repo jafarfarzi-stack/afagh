@@ -209,6 +209,17 @@ export default async function AdminStudentsPage({
     .select({ id: degree_level_configs.id, title: degree_level_configs.title })
     .from(degree_level_configs)
     .orderBy(degree_level_configs.id);
+  // ── محل تولد/صدور از geo (سراسری) — عنوان‌های یکتا با کد وزارت غیرخالی ──
+  let geoPlaces: { title: string; ministryCode: string | null }[] = [];
+  try {
+    const { getGeoCities } = await import('@/lib/geo-coding');
+    const seen = new Set<string>();
+    for (const c of await getGeoCities()) {
+      if (!c.title || seen.has(c.title)) continue;
+      seen.add(c.title);
+      if (c.ministryCode) geoPlaces.push({ title: c.title, ministryCode: c.ministryCode });
+    }
+  } catch { /* جدول خالی */ }
   const statusCounts = await db
     .select({ status: students.status, n: count() })
     .from(students)
@@ -379,6 +390,7 @@ export default async function AdminStudentsPage({
         }))}
         pagination={{ total: Number(total), page: safePage, per: PER_PAGE, totalPages, q, status: statusFilter, degree: degreeFilter, sort: sortKey ? `${sortKey}:${sortDir}` : '', f_code: fCode, f_name: fName, f_nc: fNc, f_major: fMajor, f_year: fYear, university: currentUniversity?.code ?? 'AFAGH' }}
         degrees={degrees}
+        geoPlaces={geoPlaces}
         statusCounts={statusCounts.map(r => ({ status: r.status, n: Number(r.n) }))}
         staffList={staffRows.map(st => ({
           id: st.id,

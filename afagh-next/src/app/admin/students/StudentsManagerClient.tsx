@@ -87,6 +87,8 @@ export default function StudentsManagerClient(props: {
   staffList: StaffItem[];
   pagination?: Pagination;
   degrees?: { id: number; title: string }[];
+  /** گزینه‌های محل تولد/صدور از geo (سراسری) — کد وزارت در سرور resolve می‌شود */
+  geoPlaces?: { title: string; ministryCode: string | null }[];
   statusCounts?: { status: string; n: number }[];
   canEditGrades?: boolean;
   rolesAll?: { id: number; code: string; title: string; isSystem: number | boolean | null }[];
@@ -413,6 +415,18 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStudent?.id]);
   const pf = (k: string, v: string | number) => setProfile(p => ({ ...p, [k]: v }));
+  // گزینه‌های محل تولد/صدور از geo — مقدار ذخیره‌شده همان عنوان است
+  const geoPlaceOptions: string[] = (props.geoPlaces ?? []).map(g => g.title).filter(Boolean);
+  const geoPlaceSet = new Set(geoPlaceOptions.map(t => normalizeFa(t)));
+  const geoValue = (v: string | number | null | undefined) => {
+    const s = String(v ?? '');
+    if (!s) return '';
+    return geoPlaceSet.has(normalizeFa(s)) ? (geoPlaceOptions.find(t => normalizeFa(t) === normalizeFa(s)) ?? s) : s;
+  };
+  const geoExtraOption = (v: string | number | null | undefined) => {
+    const s = String(v ?? '');
+    return !!s && !geoPlaceSet.has(normalizeFa(s));
+  };
   const saveProfile = async (keys: string[]) => {
     if (!currentStudent) return;
     setProfileSaving(true);
@@ -661,10 +675,18 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>محل صدور:</span>
-                    <input type="text" value={profile.placeOfIssue ?? ''} onChange={e => pf('placeOfIssue', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded" />
+                    <select value={geoValue(profile.placeOfIssue)} onChange={e => pf('placeOfIssue', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded" title="از فهرست geo — کد وزارت خودکار ثبت می‌شود">
+                      <option value="">—</option>
+                      {geoPlaceOptions.map(t => <option key={`i-${t}`} value={t}>{t}</option>)}
+                      {geoExtraOption(profile.placeOfIssue) && <option value={profile.placeOfIssue ?? ''}>{profile.placeOfIssue} (قدیمی)</option>}
+                    </select>
                     <div className="flex items-center gap-1">
                       <span>محل تولد:</span>
-                      <input type="text" value={profile.placeOfBirth ?? ''} onChange={e => pf('placeOfBirth', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" />
+                      <select value={geoValue(profile.placeOfBirth)} onChange={e => pf('placeOfBirth', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" title="از فهرست geo — کد وزارت خودکار ثبت می‌شود">
+                        <option value="">—</option>
+                        {geoPlaceOptions.map(t => <option key={`b-${t}`} value={t}>{t}</option>)}
+                        {geoExtraOption(profile.placeOfBirth) && <option value={profile.placeOfBirth ?? ''}>{profile.placeOfBirth} (قدیمی)</option>}
+                      </select>
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">

@@ -6,6 +6,7 @@ import { academic_terms, course_offerings, courses, educational_regulations, enr
 import { and, desc, eq, notInArray, sql } from 'drizzle-orm';
 import { hashPassword, requireRole } from '@/lib/auth';
 import { getSessionUser } from '@/lib/auth';
+import { resolveCityMinistry } from '@/lib/shared-coding';
 
 /** پیکربندی اجرایی آیین‌نامه ملاک دانشجو برای محاسبات کارنامه */
 export async function getTranscriptRegulation(studentId: number): Promise<{
@@ -703,6 +704,17 @@ export async function updateStudentProfileAction(
     ] as const;
     for (const [k, max] of us) {
       if (k in patch) { const v = clean((patch as Record<string, unknown>)[k], max); if (v !== undefined) userSet[k] = v; }
+    }
+    // محل تولد/صدور از دراپ‌داون geo می‌آید (عنوان) — کد وزارت شهر هم‌زمان
+    // در birthPlaceCode/issuePlaceCode می‌نشیند تا ثمین کد دقیق داشته باشد.
+    // اگر عنوان به دقیقاً یک شهر نخورد، کد قبلی دست‌نخورده می‌ماند.
+    if (typeof userSet.placeOfBirth === 'string') {
+      const hit = await resolveCityMinistry(userSet.placeOfBirth).catch(() => null);
+      if (hit) userSet.birthPlaceCode = hit.cityCode;
+    }
+    if (typeof userSet.placeOfIssue === 'string') {
+      const hit = await resolveCityMinistry(userSet.placeOfIssue).catch(() => null);
+      if (hit) userSet.issuePlaceCode = hit.cityCode;
     }
     if (Object.keys(userSet).length) {
       await db.update(users).set(userSet as never).where(eq(users.id, row.userId));

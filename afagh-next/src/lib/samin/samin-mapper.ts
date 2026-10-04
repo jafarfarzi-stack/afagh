@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { students, users } from '@/db/schema';
+import { mapMilitarySamaToMinistry, resolveCityMinistry, resolveCityMinistryByCode } from '@/lib/shared-coding';
 
 /**
  * تبدیل رکورد داخلی (users+students) به payload ثمین entity 1000
@@ -18,6 +19,15 @@ export async function buildSaminPayloadForStudent(studentId: number): Promise<Sa
   `) as unknown as any[];
 
   if (!row) return null;
+
+  // محل‌ها از geo حل می‌شوند: اول کد ثبت‌شده، بعد عنوان؛ آدرس هم بهترین‌تلاش
+  const birthGeo =
+    (await resolveCityMinistryByCode((row as any).birthPlaceCode).catch(() => null)) ??
+    (await resolveCityMinistry((row as any).placeOfBirth).catch(() => null));
+  const issueGeo =
+    (await resolveCityMinistryByCode((row as any).issuePlaceCode).catch(() => null)) ??
+    (await resolveCityMinistry((row as any).placeOfIssue).catch(() => null));
+  const addrGeo = await resolveCityMinistry((row as any).address).catch(() => null);
 
   // نگاشت ۱:۱ — فیلدهای الزامی ثمین باید پر باشند
   const nationalCode = (row as any).nationalCode || (row as any).NationalCode;
@@ -38,8 +48,8 @@ export async function buildSaminPayloadForStudent(studentId: number): Promise<Sa
     iden_number: (row as any).birthCertNo || '',
     iden_classified_number: (row as any).birthCertSeries || '',
     iden_serial_number: '',
-    birth_place: (row as any).birthPlaceCode || '',
-    iden_issue_place: (row as any).issuePlaceCode || '',
+    birth_place: birthGeo?.cityCode || '',
+    iden_issue_place: issueGeo?.cityCode || '',
     birth_date: (row as any).birthDate ? new Date((row as any).birthDate).toISOString().slice(0, 10).replace(/-/g, '/') : '',
     nationality: (row as any).nationality || '120001',
     temp_certificate_code: '',
@@ -49,14 +59,14 @@ export async function buildSaminPayloadForStudent(studentId: number): Promise<Sa
     graduate_state: mapGraduateState((row as any).status),
     native_type: (row as any).nativeType || '',
     ethnicity: (row as any).ethnicity || '',
-    military: '',
+    military: mapMilitarySamaToMinistry((row as any).militaryStatus) || '',
     father_name: (row as any).fatherName || '',
     gender: mapGender((row as any).gender),
     religion: (row as any).religion || '',
     marriage_status: '',
     address_country: '120001',
-    address_province: '',
-    address_city: '',
+    address_province: addrGeo?.provinceCode || '',
+    address_city: addrGeo?.cityCode || '',
     postalcode: (row as any).postalCode || '',
     email: (row as any).email || '',
     mobile: (row as any).mobile || '',
