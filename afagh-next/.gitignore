@@ -13,3 +13,9 @@ convert-live*.log
 grade-engine-changes-*.csv
 grade-engine-run-audit-report.json
 backfill-afagh-live.err
+
+# خروجیِ ابزارهای بازبینی (CSV معادل‌سازی درس و…) — حاوی دادهٔ دانشجویی
+outbox/
+
+# اسکریپت‌های یک‌بارمصرفِ اتصال که اعتبارنامهٔ سما را داخل کد دارند — هرگز commit نشوند
+conn-*.mts

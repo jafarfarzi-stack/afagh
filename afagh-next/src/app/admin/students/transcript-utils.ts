@@ -420,3 +420,26 @@ export function codeLabel(map: Record<string, string> | undefined, v: string | n
   if (!v || v === '—') return '—';
   return (map && map[v]) || v;
 }
+
+/* ── دامنهٔ دانشگاهیِ نمرات سیستم قدیمی (legacy_grades) ──
+ *
+ * جدول legacy_grades نه ستون universityId دارد و نه کلید مرکب با دانشگاه؛
+ * تنها مرزبندی‌اش «مبدأ» است (sourceCode) و قرارداد سراسریِ پروژه این است:
+ *     legacy_grades.sourceCode = universities.code
+ * (همین قرارداد را scripts/transfer-report.mjs و audit-all-unis-coverage.mjs
+ * برای گزارش‌گیری چنددانشگاهی به کار می‌برند و واردساز سما هم مبدأ را با
+ * کد دانشگاه می‌سازد). چون studentCode بین دانشگاه‌ها تصادف می‌کند
+ * (۱۴۹ تصادف شمس∩آفاق)، پیوستن بدون sourceCode کدِ وضعیتِ دانشگاه دیگر را
+ * روی کارنامه می‌نشاند.
+ */
+export function legacySourceCodeFor(universityCode: string | null | undefined): string | null {
+  const c = String(universityCode ?? '').trim().toUpperCase();
+  return /^[A-Z0-9_-]{2,50}$/.test(c) ? c : null;
+}
+
+/** ردیف‌های نمرهٔ قدیمیِ همین مبدأ — دفاع تکمیلی کنار فیلتر sourceCode در SQL */
+export function legacyRowOfSource<T extends { sourceCode?: string | null }>(rows: T[], sourceCode: string | null): T[] {
+  const want = legacySourceCodeFor(sourceCode);
+  if (!want) return [];
+  return rows.filter(r => legacySourceCodeFor(r.sourceCode) === want);
+}

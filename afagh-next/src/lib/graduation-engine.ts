@@ -13,8 +13,8 @@ import { getBool, getNumber, getSetting } from '@/lib/settings';
 import { executeIrandocCheck } from '@/lib/api-integrations';
 import { createLogger } from '@/lib/logger';
 import { deliveriesForUser, notifyUserMultichannel } from '@/lib/messaging';
-import { GpaAccumulator, getRegulationConfig, parseGrade, parseUnits, round2 } from '@/lib/regulations-engine';
-import { isPassedStatusCode } from '@/lib/grade-status-codes';
+import { getRegulationConfig } from '@/lib/regulations-engine';
+import { aggregateAuditTranscript } from '@/lib/gpa-aggregation';
 import { resolveStudentCurriculum, resolutionReasonMessage } from '@/lib/curriculum-apply';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -142,24 +142,19 @@ export async function auditStudent(studentId: number): Promise<AuditResult | nul
       inArray(enrollments.gradeStatus, ['FINALIZED', 'EXEMPT', 'PASSED_NO_GRADE']),
     ));
 
-  const thresholdOf = (t: (typeof taken)[number]): number => {
-    const m = t.courseMinMark != null ? Number(t.courseMinMark) : NaN;
-    return Number.isFinite(m) && m >= 0 && m <= 20 ? m : passing;
-  };
-  const passedIds = new Set<number>();
-  let passedUnits = 0;
-  const acc = new GpaAccumulator(); // حساب صحیح؛ بدون خطای ممیز شناور
-  for (const t of taken) {
-    const g = parseGrade(t.gradeValue); // نمرهٔ خالی/NaN = ثبت‌نشده، نه صفر
-    const u = parseUnits(t.units);
-    const isSpecialPass = t.gradeStatus === 'EXEMPT' || t.gradeStatus === 'PASSED_NO_GRADE' || isPassedStatusCode(t.samaGradeStatusCode);
-    const ok = isSpecialPass || (g != null && g >= thresholdOf(t));
-    if (!ok) continue;
-    passedIds.add(t.courseId);
-    passedUnits = round2(passedUnits + u);
-    if (g != null && t.affectsGpa !== 0) acc.add(g, u);
-  }
-  const gpa = acc.rounded();
+  /**
+   * تجمیع کارنامه در هستهٔ خالصِ `aggregateAuditTranscript` انجام می‌شود — همان
+   * هسته‌ای که `calculateOfficialGPA` هم صدا می‌زند. تا پیش از این، این حلقه
+   * نمرهٔ ردیف را فقط با `courses.affectsGpa` تصمیم می‌گرفت و کد سمای «قبولیِ
+   * بدون احتساب» (۱۲، ۱۶، ۱۷، ۱۸، ۲۳، ۳۲، ۴۴، ۵۳) را نادیده می‌گرفت؛ در نتیجه
+   * یک درس منتقل‌شده با کد درست، در «معدل رسمی» وارد نمی‌شد ولی اینجا وارد
+   * می‌شد و می‌توانست دانشجو را از زیر آستانهٔ GRAD_MIN_GPA بیرون بیندازد.
+   * واحدهای هر ردیفِ قبولی همچنان شمرده می‌شوند (درس منتقل‌شده واحد می‌دهد).
+   */
+  const core = aggregateAuditTranscript(taken, passing);
+  const passedIds = core.passedIds;
+  const passedUnits = core.passedUnits;
+  const gpa = core.gpa;
 
   // ── فاز ۵: نسخهٔ مصوب از طریق Resolution (فقط PUBLISHED/ARCHIVED) ──
   // پیش از این «جدیدترین نسخهٔ دارای پنجرهٔ منطبق» بدون توجه به وضعیت انتخاب

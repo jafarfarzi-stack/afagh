@@ -22,12 +22,21 @@ import {
   applyLevelConfig,
   maghtaGroup,
 } from './regulations-types';
-import { GRADE_STATUS_CODES, isPassedStatusCode } from './grade-status-codes';
+import {
+  GpaAccumulator,
+  aggregateOfficialGpaRows,
+  parseGrade,
+  parseUnits,
+  round2,
+} from './gpa-aggregation';
 
-/** کدهای وضع نمرهٔ سما که در معدل اثر ندارند (مثل ۱۲: جبرانی بدون احتساب) */
-const NON_GPA_SAMA_CODES = new Set(
-  GRADE_STATUS_CODES.filter(g => !g.affectsGpa).map(g => g.code),
-);
+/**
+ * ابزارهای عددی و انباشتگرِ معدل از ماژول خالصِ `gpa-aggregation` می‌آیند تا هر
+ * دو موتور (آیین‌نامه و فارغ‌التحصیلی) و تست واحد، یک پیاده‌سازی داشته باشند.
+ * اینجا باز-export می‌شوند تا قراردادِ قدیمیِ `from '@/lib/regulations-engine'`
+ * سالم بماند.
+ */
+export { GpaAccumulator, parseGrade, parseUnits, round2 } from './gpa-aggregation';
 
 export * from './regulations-types';
 
@@ -35,80 +44,11 @@ export * from './regulations-types';
 // موتور جامع آیین‌نامه‌های آموزشی (Afagh Regulation Engine)
 // ════════════════════════════════════════════════════════════════════════════
 
-// ───────────────────────────────────────────────────────────────────────────
-//  ابزارهای عددی: محاسبهٔ معدل با حساب صحیح (بدون خطای ممیز شناور)
-//
-//  نمره تا دو رقم اعشار و واحد تا یک رقم اعشار است؛ بنابراین همهٔ جمع‌ها روی
-//  اعداد صحیح مقیاس‌شده انجام و فقط در انتها یک تقسیم صورت می‌گیرد. با این کار
-//  خطای انباشتی نوع 0.1 + 0.2 = 0.30000000000000004 اصلاً به وجود نمی‌آید.
-// ───────────────────────────────────────────────────────────────────────────
-
-const GRADE_SCALE = 100; // نمره: دو رقم اعشار
-const UNIT_SCALE = 10;   // واحد: یک رقم اعشار
 /**
  * هر چند واحد معادل‌سازی = یک ترم کسر از سنوات.
- * 🔗 منبع واحد (M-3): enroll-engine از همین ثابت استفاده می‌کند — دیگر دو ثابت
- * جدا با ریسک ناسازگاری وجود ندارد.
+ * 🔗 منبع واحد (M-3): enroll-engine از همین ثابت استفاده می‌کند.
  */
 export const EQUIV_SEMESTER_UNITS = 20;
-
-/**
- * تبدیل امنِ مقدار نمره به عدد.
- * رشتهٔ خالی، فاصله، مقدار غیرعددی و NaN ⇒ null (یعنی «نمره‌ای ثبت نشده»)
- * تا هرگز به‌اشتباه صفر در معدل دانشجو اثر نگذارد.
- */
-export function parseGrade(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
-  const raw = typeof value === 'number' ? value : String(value).trim();
-  if (raw === '') return null;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : null;
-}
-
-/** تبدیل امنِ تعداد واحد؛ مقدار نامعتبر یا منفی ⇒ صفر */
-export function parseUnits(value: unknown): number {
-  const n = parseGrade(value);
-  if (n === null || n < 0) return 0;
-  return n;
-}
-
-/** گرد کردن نیم‌بالا روی دو رقم اعشار، بدون خطای ممیز شناور */
-export function round2(value: number): number {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-}
-
-/**
- * انباشتگر معدل: جمع‌ها روی اعداد صحیح مقیاس‌شده نگه‌داری می‌شوند.
- *   weighted = Σ (نمره×۱۰۰) × (واحد×۱۰)
- *   units    = Σ (واحد×۱۰)
- */
-export class GpaAccumulator {
-  private weighted = 0;
-  private unitsScaled = 0;
-
-  add(grade: number, units: number) {
-    const g = Math.round(grade * GRADE_SCALE);
-    const u = Math.round(units * UNIT_SCALE);
-    if (u <= 0) return;
-    this.weighted += g * u;
-    this.unitsScaled += u;
-  }
-
-  get hasUnits() { return this.unitsScaled > 0; }
-  get units() { return this.unitsScaled / UNIT_SCALE; }
-
-  /** معدل دقیق (بدون گرد کردن) برای مقایسه‌های آیین‌نامه‌ای مثل آستانهٔ مشروطی */
-  exact(): number | null {
-    if (this.unitsScaled <= 0) return null;
-    return this.weighted / (this.unitsScaled * GRADE_SCALE);
-  }
-
-  /** معدل گردشده روی دو رقم اعشار برای نمایش و ذخیره در دیتابیس */
-  rounded(): number | null {
-    if (this.unitsScaled <= 0) return null;
-    return Math.round((this.weighted * 100) / (this.unitsScaled * GRADE_SCALE)) / 100;
-  }
-}
 
 /**
  * بازیابی یا ایجاد پیش‌فرض آیین‌نامه برای یک دانشجو یا مقطع.
@@ -622,78 +562,20 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
     ));
 
   // حدنصاب هر درس: اول minPassedMark خود درس، بعد پیش‌فرض آیین‌نامه
-  // (مثلاً ارشد ۱۲، دکتری ۱۴ — نه همیشه ۱۰)
-  const thresholdOf = (r: (typeof rows)[number]) => {
-    const m = r.courseMinMark != null ? Number(r.courseMinMark) : NaN;
-    return Number.isFinite(m) && m >= 0 && m <= 20 ? m : passingGrade;
-  };
-
-  // نقشه‌برداری دروسِ واجدِ حذف مردودی قبلی:
-  // سیاست عادی: هر قبولی (با کف عادی همان درس) مردودی قبلی را حذف می‌کند؛
-  // تبصره ۱۳۹۱: فقط قبولیِ مجدد با حد نصاب retakeMinGrade (مثلاً ۱۴) حذف می‌کند.
-  const is1391 = policy === 'EXCLUDE_IF_PASSED_1391';
-  const passedCourses = new Set<string>();
-  for (const r of rows) {
-    const g = parseGrade(r.gradeValue);
-    const isSpecialPass = r.gradeStatus === 'EXEMPT' || r.gradeStatus === 'PASSED_NO_GRADE' || isPassedStatusCode(r.samaGradeStatusCode);
-    const bar = is1391 ? retakeMinGrade : thresholdOf(r);
-    const passed = isSpecialPass || (r.gradingType === 'DESCRIPTIVE' ? g === 1 : (g !== null && g >= bar));
-    if (passed) {
-      passedCourses.add(r.code);
-    }
-  }
-
-  // dedupeRepeatedCourses: برای هر کد درس، فقط بالاترین نمرهٔ FINALIZED نگه داشته می‌شود
-  const bestByCode = new Map<string, (typeof rows)[number]>();
-  if (dedupeRepeated) {
-    for (const r of rows) {
-      const g = parseGrade(r.gradeValue);
-      if (g === null) continue;
-      const cur = bestByCode.get(r.code);
-      const curG = cur ? parseGrade(cur.gradeValue) : null;
-      if (!cur || curG === null || g > curG) bestByCode.set(r.code, r);
-    }
-  }
-
-  const acc = new GpaAccumulator();
-  let passedUnits = 0;
-  let excludedCount = 0;
-
-  for (const r of rows) {
-    const g = parseGrade(r.gradeValue);
-    if (g === null) continue;
-    const u = parseUnits(r.units);
-    const passed = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= thresholdOf(r);
-
-    // dedupeRepeatedCourses فعال: تلاش‌های غیربهترینِ همان درس نه در واحدهای گذرانده و نه در معدل شمرده می‌شوند
-    if (dedupeRepeated && bestByCode.get(r.code) !== r) { excludedCount++; continue; }
-
-    if (passed) {
-      passedUnits = round2(passedUnits + u);
-    }
-
-    // دروس توصیفی، بی‌تاثیر در معدل، یا با کد سمای بدون احتساب (مثل ۱۲: جبرانی
-    // بدون احتساب در معدل) وارد مخرج و صورت معدل نمی‌شوند — ولی واحد قبولی
-    // (بالا) همچنان در passedUnits شمرده شده است.
-    const samaCode = r.samaGradeStatusCode?.trim() || null;
-    if (r.gradingType === 'DESCRIPTIVE' || r.affectsGpa === 0 || (samaCode && NON_GPA_SAMA_CODES.has(samaCode))) {
-      continue;
-    }
-
-    // اعمال مصوبه حذف نمره مردودی پس از قبولی
-    if ((policy === 'EXCLUDE_IF_PASSED' || policy === 'EXCLUDE_IF_PASSED_1391') && !passed && passedCourses.has(r.code)) {
-      excludedCount++;
-      continue; // حذف از صورت و مخرج معدل کل
-    }
-
-    acc.add(g, u);
-  }
+  // (مثلاً ارشد ۱۲، دکتری ۱۴ — نه همیشه ۱۰)، و سیاست حذف نمرهٔ مردودی — همه در
+  // هستهٔ خالصِ aggregateOfficialGpaRows هستند تا با auditStudent قابل مقایسه باشند.
+  const core = aggregateOfficialGpaRows(rows, {
+    passingGrade,
+    retakeMinGrade,
+    policy,
+    dedupeRepeated,
+  });
 
   return {
-    gpa: acc.rounded() ?? 0,
-    totalUnits: acc.units,
-    passedUnits,
-    excludedCount,
+    gpa: core.gpa,
+    totalUnits: core.totalUnits,
+    passedUnits: core.passedUnits,
+    excludedCount: core.excludedCount,
     policy,
   };
 }

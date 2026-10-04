@@ -77,6 +77,181 @@ function checkNationalCode(code) {
 // NUL بایت خطای invalid byte sequence for encoding "UTF8": 0x00 می‌دهد
 const normTxt = (s) => String(s ?? '').replace(/\x00/g, '').replace(/\s+/g, ' ').trim();
 
+// ══════════════════════════════════════════════════════════════════════
+//  کد ملی: تشخیص ستون با «نام» + اعتبارسنجی سخت
+// ══════════════════════════════════════════════════════════════════════
+//  چرا با نام و نه با اندیس: اندیس ستون NationalCode بین دانشگاه‌ها یکی نیست.
+//  اندیس ثابت ۷ برای همه دایرکتوری‌ها یعنی برای زرینه/الامه (که ستون ۷ آن‌ها
+//  Nationality است و همیشه مقدار ۰ دارد) ۱۰۰٪ کد ملی را از دست می‌داد.
+//  اندیس‌های واقعی که از هدر فایل‌های واقعی استخراج شده‌اند:
+//     ZARINE / ALLAMEH  →  NationalCode@8   (ستون ۷ = Nationality)
+//     NAZHAND / SHAMS   →  NationalCode@7
+//     AFAGH             →  NationalCode@7   (هدر روی سطر دوم است؛ سطر اول خالی است)
+//  پس: اول نام ستون، و فقط اگر هدر اصلاً قابل‌خواندن نبود → فول‌بک اندیسِ مستند.
+//  وگرنه index 7 کورکورانه، وگرنه اشتباه.
+
+// نام‌های ستونِ کد ملی (پس از یکسان‌سازی: کوچک، بدون نیم‌فاصله/فاصلهٔ اضافه، ي/ك عربی→ی/ک)
+const NC_HEADER_KEYS = ['nationalcode', 'nationalid', 'nationalno', 'nationalnumber'];
+// نام‌های فارسی پس از دیکد win1256
+const NC_HEADER_FA = new Set(['کدملي', 'کدملی', 'شماره ملی', 'کد ملی ایران']);
+// ── نباید هرگز «کد ملی» فرض شوند ──
+//  IDNO در فایل‌های studentraw/students1 «شمارهٔ شناسنامه» است (۲ تا ۴ رقمی: ۳۰۳۶، ۲۶۱۵، ۶۰۳، ۰).
+//  این ستون در هیچ‌کدام از دانشگاه‌ها کد ملی نیست و استفاده از آن کل users را خراب می‌کند.
+const NC_HEADER_DENY = new Set([
+  'idno', 'oldidno', 'idno2', 'idnumber', 'birthcertno', 'birthcertserial', 'serial',
+  'شماره شناسنامه', 'کد شناسنامه', 'شماره شناسنامه مدرسه',
+]);
+
+/** نام سرستون را برای مقایسه یکسان می‌کند */
+function normalizeHeaderName(h) {
+  return String(h ?? '')
+    .replace(/[\u200c\u200f\u00a0]/g, ' ')
+    .replace(/[\u064A\u0649\u06CD\u06D2]/g, 'ی')
+    .replace(/[\u0643\u06AA\u06AB]/g, 'ک')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+const isDeniedHeader = (rawName) => {
+  const n = normalizeHeaderName(rawName);
+  return NC_HEADER_DENY.has(n) || /idno/.test(n);
+};
+
+/** اندیس ستون کد ملی را از روی نام‌های سطر سرستون پیدا می‌کند؛ -1 یعنی «در این فایل نیست» */
+function findNcHeaderIndex(cells) {
+  const names = cells.map(normalizeHeaderName);
+  // ۱) تطابق دقیق (قوی‌ترین سیگنال)
+  for (const key of NC_HEADER_KEYS) {
+    const i = names.indexOf(key);
+    if (i >= 0 && !isDeniedHeader(cells[i])) return i;
+  }
+  // ۲) نام فارسی
+  for (let i = 0; i < names.length; i++) {
+    if (names[i] && NC_HEADER_FA.has(names[i]) && !isDeniedHeader(cells[i])) return i;
+  }
+  // ۳) تطابق شبیه‌سازی‌شده (مثل nationalCode2) — فقط اگر denied نباشد
+  for (let i = 0; i < names.length; i++) {
+    if (!names[i] || isDeniedHeader(cells[i])) continue;
+    if (/^national(code|id|no|number)[0-9_.]*$/.test(names[i])) return i;
+  }
+  return -1;
+}
+
+// ── فول‌بک اندیس ── فقط و فقط وقتی سطر سرستون فایل «قابل‌خواندن» نیست (نه یک نام، نه یک
+//    دادهٔ معتبر؛ یعنی فایل هدرِ قابل‌اتکا ندارد). مقدارها از هدر واقعی هر دانشگاه استخراج شده‌اند
+//    و برای دانشگاه ناشناخته اصلاً فول‌بکی وجود ندارد (کدملی آنجا اصلاً نوشته نمی‌شود، بهتر از
+//    نوشتنِ کدِ اشتباه است).
+const NC_INDEX_FALLBACK = { ZARINE: 8, ALLAMEH: 8, NAZHAND: 7, SHAMS: 7, AFAGH: 7 };
+
+/**
+ * سطر سرستون را می‌خواند و می‌گوید آیا «هدرِ قابل‌اتکا» است یا نه.
+ * بعضی فایل‌ها (AFAGH) سطر اولشان یک ردیفِ کاملاً خالی است و هدر واقعی سطر بعدی است.
+ */
+async function readHeaderInfo(path) {
+  const fd = await import('node:fs/promises').then(m => m.open(path, 'r'));
+  const b = Buffer.alloc(16384);
+  const { bytesRead } = await fd.read(b, 0, 16384, 0);
+  await fd.close();
+  const t = dec1256.decode(b.subarray(0, bytesRead));
+  let junk = null;
+  for (const raw of t.split('\n')) {
+    const line = raw.replace(/\r/g, '');
+    if (!line.trim()) continue;
+    const cells = line.split('\t').map(x => x.replace(/\x00/g, '').trim());
+    const nonBlank = cells.filter(x => x.length > 0).length;
+    if (nonBlank >= 3) return { cells, usable: true };        // هدرِ واقعی
+    if (!junk) junk = cells;                                    // سطر بی‌ربط (نام ستون نیست)
+  }
+  return { cells: junk || [], usable: false };
+}
+
+/**
+ * ستون کد ملی یک فایل را تعیین می‌کند.
+ * @param {{cells:string[],usable:boolean}} info
+ * @param {boolean} allowFallback — فقط برای فایل تکمیلیِ دانشجو (student2) اجازهٔ فول‌بک هست
+ */
+function resolveNcColumn(info, allowFallback = false) {
+  if (info && info.usable) {
+    const i = findNcHeaderIndex(info.cells);
+    return i >= 0
+      ? { idx: i, how: 'header', name: info.cells[i] }
+      : { idx: -1, how: 'header:no-nationalcode', name: null };
+  }
+  if (allowFallback) {
+    const fb = NC_INDEX_FALLBACK[SOURCE];
+    if (fb != null) return { idx: fb, how: `fallback-index(${SOURCE}=${fb})`, name: null };
+  }
+  return { idx: -1, how: 'none', name: null };
+}
+const describeNcCol = (nc) => (nc.idx < 0
+  ? `هیچ ستون کدملی (${nc.how})`
+  : `«${nc.name || nc.how}» در اندیس ${nc.idx} (${nc.how})`);
+
+// ── نرمال‌سازی کد ملی ──
+// ارقام فارسی/عربی → لاتین، سپس حذف هر چیزی که رقم نیست: NUL بایتِ جا‌مانده از ستون باینریِ
+// عکس، فاصله/نیم‌فاصله/NBSP، خط‌تیره و… . صفرِ ابتدایی حفظ می‌شود (هیچ تبدیلِ عددی انجام نمی‌شود).
+const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
+const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
+function normalizeNationalCode(raw) {
+  if (raw == null) return '';
+  let s = String(raw).replace(/\x00/g, '');
+  if (!s.trim()) return '';                    // فقط بایتِ خالی/NUL → «بی‌مقدار»
+  s = s.replace(/[۰-۹]/g, d => String(FA_DIGITS.indexOf(d)))
+       .replace(/[٠-٩]/g, d => String(AR_DIGITS.indexOf(d)))
+       .replace(/\D/g, '');                    // فقط رقم‌ها می‌مانند
+  return s;
+}
+// کدهای ساختگیِ متداول (مقایسه با scripts/migration-v2/identity/candidate-matcher.mjs و
+// scripts/fix-student-nc.mjs) — علاوه بر تکرارِ رقم‌ها، الگوهای متوالی هم رد می‌شوند
+const NC_SENTINELS = new Set(['0000000000', '1111111111', '0123456789', '1234567890']);
+
+/** اعتبارسنجی کامل: {ok, code, reason} — reason یکی از empty|format|sentinel|checksum|ok */
+function classifyNationalCode(raw) {
+  const code = normalizeNationalCode(raw);
+  if (!code) return { ok: false, code: '', reason: 'empty' };
+  if (!/^\d{10}$/.test(code)) return { ok: false, code: '', reason: 'format' };
+  if (NC_SENTINELS.has(code) || /^(\d)\1{9}$/.test(code)) return { ok: false, code: '', reason: 'sentinel' };
+  if (checkNationalCode(code) !== 'ok') return { ok: false, code: '', reason: 'checksum' };
+  return { ok: true, code, reason: 'ok' };
+}
+
+// ── کد ملی مصنوعی: تولید یکتا با برخوردسنجی ──
+// users."nationalCode" فقط varchar(10) است (src/db/schema.ts:103)، پس «پسوند اضافه‌کردن» ممکن نیست؛
+// به‌جای آن ۸ رقمِ بریده‌شدهٔ شماره با هشِ خودِ stno کامل جایگزین می‌شود (تکرارپذیر، مستقل از ترتیب خواندن).
+function fnv1a(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0; }
+  return h >>> 0;
+}
+const NC_PH_LEN = 10;
+function placeholderCandidate(stno, step) {
+  const pfx = 'S' + (SOURCE[0] || 'X');
+  if (step === 0) return pfx + String(stno).slice(-8).padStart(8, '0'); // رفتار قدیمی (سازگار با دادهٔ موجود)
+  const h = (fnv1a(String(stno)) + step * 0x9e3779b1) >>> 0;
+  const tail = Math.abs(h % 36 ** 8).toString(36).toUpperCase().padStart(8, '0').slice(-8);
+  return (pfx + tail).slice(0, NC_PH_LEN);
+}
+
+/**
+ * کد مصنوعیِ یکتا برای stno می‌سازد.
+ * @param {Map<string,Set<string>>} dbOwners کد → شماره‌های دانشجویی که در DB مالکش هستند
+ * @param {Set<string>} usedBatch کدهای مصنوعی‌ای که در همین اجرا مصرف شده‌اند
+ */
+function allocatePlaceholder(stno, dbOwners, usedBatch) {
+  for (let step = 0; step < 64; step++) {
+    const cand = placeholderCandidate(stno, step);
+    if (usedBatch.has(cand)) continue;                       // تداخل در همین اجرا
+    const owners = dbOwners.get(cand);
+    if (owners) {
+      // اگر DB مالکِ همین stno باشد → همان کدِ قبلیِ خودش است (idempotent) و بازاستفاده می‌شود
+      if (!(owners.size === 1 && owners.has(String(stno)))) continue;
+    }
+    usedBatch.add(cand);
+    return { code: cand, step };
+  }
+  return null;
+}
+
 // ── نرمال‌سازی کد ترم به فرمت ۵ رقمی (YYYY+T): زرینه ۳ رقمی (871) ← 13871 ──
 // شمس (هم‌آوا) مستثناست: کدهایش تقویم جدا دارد (101 ترتیبی، 971 سالی، 1401 چهاررقمی) — دست‌نخورده می‌ماند
 function normTerm(tc) {
@@ -133,15 +308,17 @@ async function readHeaderOnly(path) {
 // ── کشف فایل‌ها با امضای سرستون (مقاوم به نام فارسی) ──
 async function detectFiles(dir) {
   const found = {};
-  const cands = { students: [] };
+  const cands = { students: [], supp: [] };
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
     try { if (!statSync(p).isFile() || !/\.txt$/i.test(name)) continue; } catch { continue; }
     const h = await readHeaderOnly(p);
     const H = h.join('\t');
     const has = (...keys) => keys.every(k => h.includes(k));
-    if (H.startsWith('STNO\tOLDSTNO\tNAME\tSEX')) cands.students.push({ p, size: statSync(p).size });
-    else if (H.startsWith('Stno\tPriorReshteh')) found.supp = p;
+    if (H.startsWith('STNO\tOLDSTNO\tNAME\tSEX')) cands.students.push({ p, name, size: statSync(p).size });
+    // چند فایل می‌تواند با همین امضا باشد (student2/student3/…) — همه نگه داشته می‌شوند.
+    // قبلاً فقط آخرین تطبیق نگه داشته می‌شد و نتیجه به ترتیب خواندن دایرکتوری وابسته بود.
+    else if (H.startsWith('Stno\tPriorReshteh')) cands.supp.push({ p, name, size: statSync(p).size });
     else if (H.startsWith('Stno\tTermCode\tLessonCode')) found.grades = p;
     else if (H.startsWith('TermCode\tStno\tStTermStatus')) found.stterm = p;
     else if (H.startsWith('TermCode\tLessonCode\tLessonGroup')) found.schedule = p;
@@ -170,6 +347,12 @@ async function detectFiles(dir) {
     });
     found.students = cands.students[0].p;
     if (cands.students[1]) { found.studentsSubsetSkipped = cands.students[1].p; found.supp2 = cands.students[1].p; }
+  }
+  if (cands.supp.length) {
+    // ترتیب قطعی بر اساس نام فایل (نه ترتیب readdir) تا ادغام همیشه یکسان باشد
+    cands.supp.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    found.suppFiles = cands.supp.map(x => x.p);
+    found.supp = found.suppFiles[0]; // سازگاری با ارجاع‌های قبلی (found.supp)
   }
   return found;
 }
@@ -607,7 +790,7 @@ async function phaseStudents(files, lookups) {
   const dict = await buildDictionary(pool);
   // ۱) فایل اصلی
   const main = new Map();
-  const stats = { total: 0, invalid: 0, badCode: 0, mergedSupp: 0, suppOrphans: 0, insertedUsers: 0, existingUsers: 0, insertedStudents: 0, existingStudents: 0, badNC: 0, ncChecksumWarn: 0, unmatchedMajor: new Set(), unknownMaghta: new Set(), unknownStatus: new Set(), unresolvedName: 0, idMin: null, idMax: null };
+  const stats = { total: 0, invalid: 0, badCode: 0, mergedSupp: 0, suppOrphans: 0, insertedUsers: 0, existingUsers: 0, insertedStudents: 0, existingStudents: 0, badNC: 0, ncEmpty: 0, ncSentinel: 0, ncChecksum: 0, ncOk: 0, ncPlaceholder: 0, phCollision: 0, phCollisionMaxStep: 0, ncBySource: {}, unmatchedMajor: new Set(), unknownMaghta: new Set(), unknownStatus: new Set(), unresolvedName: 0, idMin: null, idMax: null };
   stats.dupStnoSameFile = 0;
   for await (const { cols } of tsvRows(files.students)) {
     const stno = (cols[0] || '').trim();
@@ -657,19 +840,68 @@ async function phaseStudents(files, lookups) {
     }
     console.log(`فایل دوم: ${n2} ردیف معتبر، ${added2} شماره جدید، ${filled2} فیلد خالی پر شد`);
   }
-  // ۲) فایل تکمیلی → ادغام (فقط ۱۵ ستون اول قابل اعتماد است: قبل از Pic)
-  if (files.supp) {
+  // ۲) فایل‌های تکمیلی → ادغام. ممکن است بیش از یک فایل با امضای «Stno/PriorReshteh» باشد؛
+  //    همه خوانده می‌شوند و «اولین مقدارِ غیرخالی به‌ازای هر ستون» برنده است
+  //    (قبلاً فقط یکی نگه داشته می‌شد و انتخاب به ترتیب خواندن دایرکتوری وابسته بود).
+  const suppFiles = (files.suppFiles && files.suppFiles.length) ? files.suppFiles : (files.supp ? [files.supp] : []);
+  const suppLayouts = [];
+  for (const p of suppFiles) {
+    const info = await readHeaderInfo(p);
+    // فایل تکمیلی دانشجو: تنها جایی که فول‌بک اندیسِ مستند اجازه دارد
+    const nc = resolveNcColumn(info, true);
+    suppLayouts.push({
+      p, name: String(p).split(/[\\/]/).pop(), sig: info.cells.join('\t'), nc,
+    });
+    stats[`ncCol_${suppLayouts[suppLayouts.length - 1].name}`] = `${nc.idx}|${nc.how}`;
+    console.log(`تکمیلی [${suppLayouts[suppLayouts.length - 1].name}]: ستون کد ملی ← ${describeNcCol(nc)} (${info.cells.length} ستون${info.usable ? '' : '، سرستون قابل‌خواندن ندارد'})`);
+  }
+  // فایل تکمیلی «مرجع» = اولین فایل. فقط فایل‌هایی که دقیقاً همان چیدمان ستون را دارند در
+  // m._supp ادغام می‌شوند، چون ادغام با اندیس بین دو چیدمان متفاوت ستون‌ها را جابه‌جا می‌کند.
+  // (کد ملی از تک‌تک فایل‌ها جداگانه و با اندیسِ رزولوشدهٔ همان فایل خوانده می‌شود.)
+  const primarySig = suppLayouts.length ? suppLayouts[0].sig : '';
+  for (const L of suppLayouts) {
     let n = 0;
-    for await (const { cols } of tsvRows(files.supp)) {
+    const sameLayout = L.sig === primarySig;
+    for await (const { cols } of tsvRows(L.p)) {
       const stno = (cols[0] || '').trim();
       if (!/^\d{7,14}$/.test(stno)) continue;
       n++;
       const m = main.get(stno);
-      if (m) { m._supp = cols; stats.mergedSupp++; }
-      else stats.suppOrphans++;
+      if (!m) { stats.suppOrphans++; continue; }
+      stats.mergedSupp++;
+      // کد ملی: از فایل خودش (اندیسِ رزولوشدهٔ همان فایل) — مستقل از چیدمان
+      if (L.nc.idx >= 0 && (cols[L.nc.idx] ?? '').toString().trim()) {
+        (m._ncByFile || (m._ncByFile = [])).push({ v: cols[L.nc.idx], file: L.name, idx: L.nc.idx });
+      }
+      if (!sameLayout) continue;
+      if (!m._supp) { m._supp = cols.slice(); continue; }
+      // «اولین مقدارِ غیرخالی» برنده است (نه آخرین ردیف، نه آخرین فایل)
+      for (let i = 0; i < Math.max(m._supp.length, cols.length); i++) {
+        if (!(m._supp[i] || '').trim() && (cols[i] || '').trim()) m._supp[i] = cols[i];
+      }
     }
-    console.log(`تکمیلی: ${n} ردیف عددی، ${stats.mergedSupp} ادغام شد، ${stats.suppOrphans} بی‌همتا`);
+    console.log(`تکمیلی [${L.name}]: ${n} ردیف عددی، ${sameLayout ? 'با چیدمان مرجع ادغام شد' : 'چیدمان متفاوت — فقط ستون کدملی خوانده شد'}`);
   }
+  // فایل اصلی هم می‌تواند ستون کد ملی داشته باشد (با نام خودش جست‌وجو می‌شود؛ نه با اندیس و نه از IDNO)
+  const mainNcInfo = resolveNcColumn(await readHeaderInfo(files.students), false);
+  const mainNcName = String(files.students).split(/[\\/]/).pop();
+  console.log(`فایل اصلی [${mainNcName}]: ستون کد ملی ← ${describeNcCol(mainNcInfo)}`);
+  stats[`ncCol_${mainNcName}`] = `${mainNcInfo.idx}|${mainNcInfo.how}`;
+
+  // کدهای مصنوعیِ موجود در DB: code → شماره‌های دانشجوییِ مالکش (برای برخوردسنجیِ بدون‌ابهام)
+  const phOwnersDb = new Map();
+  if (!DRY) {
+    const ph = await q(`SELECT u."nationalCode" AS code,
+        COALESCE(array_agg(DISTINCT s."studentCode") FILTER (WHERE s."studentCode" IS NOT NULL), '{}') AS stnos
+      FROM users u
+      LEFT JOIN students s ON s."userId" = u.id AND s."universityId" = $1
+      WHERE u."nationalCode" ~ '^S[A-Z0-9]{9}$'
+      GROUP BY u.id, u."nationalCode"`, [universityId]);
+    for (const r of ph) phOwnersDb.set(r.code, new Set(r.stnos || []));
+    console.log(`کدهای مصنوعی موجود در DB: ${phOwnersDb.size} (برای برخوردسنجی)`);
+  }
+  const phUsedBatch = new Set();
+
   // ۳) ساخت ردیف‌های users + students — هر کد ملی یک user، هر stno یک student (چند مقطعی پشتیبانی می‌شود)
   const userRows = [];
   const stuJobs = [];
@@ -695,11 +927,48 @@ async function phaseStudents(files, lookups) {
         if (stats.unresolvedName <= 20) console.log(`  ⚠ ردیف بدون نام کوچک: ${stno} «${rawName}»`);
       }
     }
-    let nc = (s[7] || '').trim();
-    if (!/^\d{10}$/.test(nc)) { nc = ''; stats.badNC++; }
-    else if (checkNationalCode(nc) !== 'ok') stats.ncChecksumWarn++;
-    // کد مصنوعی یکتا در سطح دانشگاه: SA/SL/SZ/SH/SN + ۸ رقم آخر شماره (جلوگیری از تداخل بین دانشگاه‌ها)
-    const nationalCode = nc || ('S' + (SOURCE[0] || 'X') + String(stno).slice(-8).padStart(8, '0'));
+    // ── کد ملی ──
+    // منبع اول: هر فایل تکمیلی با ستونِ «به‌نام» خودش (اولین مقدار معتبر برنده است).
+    // منبع دوم: فایل اصلی، فقط اگر خودش ستونی به نام NationalCode/NationalID داشته باشد.
+    // منبع سوم: کد مصنوعیِ یکتا (با برخوردسنجی) — فقط وقتی هیچ کد معتبری نبود.
+    let nc = '', ncFrom = null, ncBad = null;
+    for (const cand of (c._ncByFile || [])) {
+      const v = classifyNationalCode(cand.v);
+      if (v.ok) { nc = v.code; ncFrom = `${cand.file}#${cand.idx}`; break; }
+      if (!ncBad && v.reason !== 'empty') ncBad = v.reason;
+    }
+    if (!nc && mainNcInfo.idx >= 0) {
+      const v = classifyNationalCode(c[mainNcInfo.idx]);
+      if (v.ok) { nc = v.code; ncFrom = `${mainNcName}#${mainNcInfo.idx}`; }
+      else if (!ncBad && v.reason !== 'empty') ncBad = v.reason;
+    }
+    let nationalCode = nc;
+    if (nationalCode) {
+      stats.ncOk++;
+      stats.ncBySource[ncFrom] = (stats.ncBySource[ncFrom] || 0) + 1;
+    } else if (ncBad === 'format') stats.badNC++;
+    else if (ncBad === 'sentinel') stats.ncSentinel++;
+    else if (ncBad === 'checksum') stats.ncChecksum++;
+    else stats.ncEmpty++;
+    if (!nationalCode) {
+      // کد مصنوعی: پیشوند 'S'+حرف اول نام دانشگاه + ۸ رقم. دو stno که ۸ رقم آخرشان یکی است
+      // کد یکسان می‌گرفتند و ON CONFLICT("nationalCode") DO NOTHING یکی را بی‌صدا حذف می‌کرد و هر دو
+      // stno به یک users.id می‌رسیدند (یعنی رکورد دانشجویِ یک نفر به شخص دیگر می‌چسبید).
+      // اینجا قبل از مصرف، تداخل با همین اجرا و با DB بررسی و رفع می‌شود.
+      const ph = allocatePlaceholder(stno, phOwnersDb, phUsedBatch);
+      if (!ph) {
+        stats.invalid++;
+        console.log(`  ⚠ کد مصنوعی یافت نشد: ${stno}`);
+        continue;
+      }
+      nationalCode = ph.code;
+      stats.ncPlaceholder++;
+      if (ph.step > 0) {
+        stats.phCollision++;
+        if (ph.step > stats.phCollisionMaxStep) stats.phCollisionMaxStep = ph.step;
+        if (stats.phCollision <= 20) console.log(`  ⚠ تداخل کد مصنوعی: ${stno} → ${ph.code} (گام ${ph.step})`);
+      }
+    }
     // NOTE: we no longer dedup by nationalCode — a student can have multiple stnos (kardani → karshenasi)
     // User dedup is handled by ON CONFLICT ("nationalCode") DO NOTHING; student dedup by ON CONFLICT ("studentCode") DO NOTHING
     const sex = (c[3] || '').trim();
@@ -894,7 +1163,11 @@ async function phaseStudents(files, lookups) {
   }
   stats.unmatchedMajor = [...stats.unmatchedMajor];
   stats.unknownMaghta = [...stats.unknownMaghta];
-  console.log(`دانشجویان: users ins=${stats.insertedUsers} exist=${stats.existingUsers} | students ins=${stats.insertedStudents} exist=${stats.existingStudents} invalid=${stats.invalid} badNC=${stats.badNC} checksumWarn=${stats.ncChecksumWarn} unresolvedName=${stats.unresolvedName}`);
+  const ncSrcSummary = Object.entries(stats.ncBySource).sort().map(([k, v]) => `${k}×${v}`).join('، ') || '—';
+  const ncColSummary = Object.entries(stats).filter(([k]) => k.startsWith('ncCol_')).map(([k, v]) => `${k.slice(6)}=${v}`).join('، ') || '—';
+  console.log(`دانشجویان: users ins=${stats.insertedUsers} exist=${stats.existingUsers} | students ins=${stats.insertedStudents} exist=${stats.existingStudents} invalid=${stats.invalid} unresolvedName=${stats.unresolvedName}`);
+  console.log(`کد ملی: معتبر=${stats.ncOk} مصنوعی=${stats.ncPlaceholder} (تداخل‌یافته=${stats.phCollision}، بیشینه گام=${stats.phCollisionMaxStep}) | ردشده: خالی=${stats.ncEmpty} غیر۱۰رقمی=${stats.badNC} ساختگی=${stats.ncSentinel} checksum=${stats.ncChecksum} (همهٔ ردها کد مصنوعی گرفتند)`);
+  console.log(`ستون کد ملی: ${ncColSummary} ← منبعِ استفاده‌شده: ${ncSrcSummary}`);
   console.log(`رشته‌های بی‌تطبیق: ${JSON.stringify(stats.unmatchedMajor)}`);
   await logRun('student', 'studentraw+supp (SAMA)', stats);
 }

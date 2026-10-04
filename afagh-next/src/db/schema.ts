@@ -703,6 +703,34 @@ export const course_offerings = pgTable('course_offerings', {
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ termCourseGroupIdx: index('offerings_term_course_group_idx').on(t.termId, t.courseId, t.groupNumber) }));
 
+/** ────────────────────────────────────────────────────────────────────────
+ *  معادل‌سازی درس بین دو دانشگاه (کارنامهٔ فارغ‌التحصیلان دانشگاه مبدأ)
+ *  جهت A→B است: A مبدأ (معمولاً AFAGH)، B مقصد (دانشگاه محلی).
+ *  `decidedAt === NULL` یعنی پیشنهادِ ماشینی و در انتظار تأیید آدم.
+ *  `rejected = 1` یعنی آدم صریحاً «نه» گفته — آن تصمیم هم ماندگار است تا
+ *  ابزار هرگز دوباره همان پیشنهاد را نکند.
+ *  ──────────────────────────────────────────────────────────────────────── */
+export const course_equivalences = pgTable('course_equivalences', {
+  id: serial('id').primaryKey(),
+  universityIdA: integer('universityIdA').notNull().references(() => universities.id),
+  courseIdA: integer('courseIdA').notNull().references(() => courses.id),
+  universityIdB: integer('universityIdB').notNull().references(() => universities.id),
+  courseIdB: integer('courseIdB').notNull().references(() => courses.id),
+  /** CODE_EXACT | TITLE_EXACT | TITLE_WORD_CONTAINMENT | TITLE_FUZZY | MANUAL */
+  matchMethod: varchar('matchMethod', { length: 30 }).notNull(),
+  matchScore: numeric('matchScore', { precision: 5, scale: 4 }),
+  confidence: numeric('confidence', { precision: 4, scale: 3 }),
+  decidedBy: integer('decidedBy').references(() => users.id),
+  decidedAt: timestamp('decidedAt', { withTimezone: true }),
+  rejected: integer('rejected').notNull().default(0),
+  decidedReason: varchar('decidedReason', { length: 200 }),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  pair: unique('uq_course_equivalences_pair').on(t.universityIdA, t.courseIdA, t.universityIdB, t.courseIdB),
+  idxB: index('idx_course_equivalences_b').on(t.universityIdB, t.courseIdB),
+  idxPending: index('idx_course_equivalences_pending').on(t.universityIdA, t.courseIdA),
+}));
+
 export const offering_professors = pgTable('offering_professors', {
   id: serial('id').primaryKey(),
   offeringId: integer('offeringId').notNull().references(() => course_offerings.id),
@@ -814,6 +842,10 @@ export const enrollments = pgTable('enrollments', {
   /** حذف اضطراری (پس از مهلت حذف و اضافه) — سند §۲۲۴۳ */
   emergencyWithdrawal: integer('emergencyWithdrawal').notNull().default(0),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  /** دانشگاهی که این نمره در آن گرفته شده — برای نمراتِ منتقل‌شده از دانشگاه مبدأ. NULL = همین دانشگاه. */
+  sourceUniversityId: integer('sourceUniversityId').references((): AnyPgColumn => universities.id),
+  /** ردیف enrollments مبدأ — کلید idempotency: هر نمرهٔ خارجی فقط یک‌بار قابل اعمال است. */
+  sourceEnrollmentId: integer('sourceEnrollmentId').references((): AnyPgColumn => enrollments.id),
 }, (t) => ({ uq: unique('uq_enrollments').on(t.studentId, t.offeringId) }));
 
 export const grade_appeals = pgTable('grade_appeals', {

@@ -51,17 +51,40 @@ registerWorkflowHandler({
   },
 });
 
+/**
+ * دانشگاه مالکِ دانشجو — دامنهٔ اجباریِ موتور ثبت تطبیق واحد.
+ *
+ * ثبت درس تطبیق‌داده‌شده به «چارت درس» و «ترم جاری» گره می‌خورد و هر دو در
+ * پایگاه چنددانشگاهی فقط درون یک دانشگاه یکتا هستند؛ پس از فرم رویداد
+ * قابل استنباط نیست و باید از خودِ دانشجو خوانده شود. نبودِ آن یعنی خطای
+ * صریح (نه کوئری سراسری و نه ردیف اشتباهِ دانشگاه دیگر).
+ */
+async function requireStudentUniversityId(studentId: number): Promise<number> {
+  const [row] = await db
+    .select({ universityId: students.universityId })
+    .from(students)
+    .where(eq(students.id, studentId))
+    .limit(1);
+  const uid = Number(row?.universityId);
+  if (!row || !Number.isFinite(uid) || uid <= 0) {
+    throw new Error(`دانشگاه دانشجوی ${studentId} مشخص نیست؛ ثبت تطبیق واحد انجام نشد.`);
+  }
+  return uid;
+}
+
 /** تطبیق واحد و معادل‌سازی دروس → ثبت درس در کارنامه توسط موتور آموزش */
 registerWorkflowHandler({
   name: 'COURSE_TRANSFER_ENROLL',
   processCode: 'COURSE_TRANSFER',
   events: ['WORKFLOW_FINAL_APPROVED'],
   async run(ev) {
+    const universityId = await requireStudentUniversityId(ev.studentId);
     // حالت دسته‌ای (فرم هوشمند مدیر گروه): فهرست نگاشت‌ها در formData.items
     const items = Array.isArray(ev.formData?.items) ? ev.formData.items : null;
     if (items && items.length > 0) {
       const res = await applyEquivalenceBatch({
         studentId: ev.studentId,
+        universityId,
         items,
         previousUniversity: ev.formData?.previousUniversity,
         workflowRequestId: ev.requestId,
@@ -88,6 +111,7 @@ registerWorkflowHandler({
 
     const res = await applyCourseTransfer({
       studentId: ev.studentId,
+      universityId,
       targetCourseCode: ev.formData?.targetCourseCode,
       sourceCourseTitle: ev.formData?.sourceCourseTitle,
       sourceGrade: ev.formData?.sourceGrade ?? null,
