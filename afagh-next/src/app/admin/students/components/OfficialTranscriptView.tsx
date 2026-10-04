@@ -21,6 +21,7 @@ export default function OfficialTranscriptView({
   onEditGrade,
   printOptions = DEFAULT_PRINT_OPTIONS,
   originUniversity = null,
+  universityCode = null,
   cohortStats = null,
   cohortLoading = false,
 }: {
@@ -32,6 +33,8 @@ export default function OfficialTranscriptView({
   onEditGrade?: (row: TranscriptRow) => void;
   printOptions?: TranscriptPrintOptions;
   originUniversity?: OriginUniversity | null;
+  /** کد دانشگاه مالک رکورد (مثل ZARINE) — برای عنوان دقیق وضعیت سما */
+  universityCode?: string | null;
   cohortStats?: CohortStats | null;
   cohortLoading?: boolean;
 }) {
@@ -246,7 +249,7 @@ export default function OfficialTranscriptView({
       <div className="border-t-2 border-slate-700 px-3 py-2 text-[10px] space-y-1">
         <div className="flex flex-wrap gap-x-6">
           <span>تعداد نیمسال مشروط: <b className="font-mono">{probation.toLocaleString('fa-IR')}</b></span>
-          <span>وضعیت کلی دانشجو: <b>{studentStatusFa(student.status, student.samaStatusCode)}</b></span>
+          <span>وضعیت کلی دانشجو: <b>{studentStatusFa(student.status, student.samaStatusCode, universityCode)}</b></span>
           <span>مقطع فارغ‌التحصیلی: <b>{student.graduateDegreeLevelId ? (() => { const d = DEGREE_LEVEL_CONFIGS.find(d => d.id === student.graduateDegreeLevelId); return d ? d.title : '—'; })() : '—'}</b></span>
           <span>تاریخ شروع تحصیل: <b className="font-mono">{entryDateFa(student.entryYear, student.entryTerm)}</b></span>
           <span>تاریخ توقف تحصیل: <b className="font-mono">{student.graduateDate ? faDigits(student.graduateDate) : '—'}</b></span>

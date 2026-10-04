@@ -1365,6 +1365,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                   onEditGrade={openEditGrade}
                   printOptions={printOptions}
                   originUniversity={originUniversity}
+                  universityCode={uniCodeOf(currentStudent.universityId)}
                   cohortStats={printOptions.showRank ? cohortStats : null}
                   cohortLoading={cohortLoading && printOptions.showRank}
                 />
