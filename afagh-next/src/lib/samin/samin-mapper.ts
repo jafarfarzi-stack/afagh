@@ -23,6 +23,13 @@ function toEduYear(v: unknown): string {
   return s;
 }
 
+/** کد ملیت ثمین — در دیتا فقط خالی/0/120001 هست (همه ایرانی) */
+function mapNationality(v: unknown): string {
+  const s = String(v ?? '').trim();
+  if (!s || s === '0') return '120001';
+  return s;
+}
+
 /**
  * تبدیل رکورد داخلی (users+students) به payload ثمین entity 1000
  * مطابق APIM_SAORG_Samin_Student_WebServices_V0.6 صفحه ۸-۹
@@ -103,7 +110,7 @@ export async function buildSaminPayloadForStudent(studentId: number): Promise<Sa
     birth_place: birthGeo?.cityCode || '',
     iden_issue_place: issueGeo?.cityCode || '',
     birth_date: toJalaliDay((row as any).birthDate),
-    nationality: (row as any).nationality || '120001',
+    nationality: mapNationality((row as any).nationality),
     temp_certificate_code: '',
     final_certificate_code: '',
     military_edu_exemption_code: '',
@@ -210,7 +217,7 @@ export async function buildSaminPersonPayloadForStudent(
     iden_issue_place_code: issueGeo?.cityCode || '',
     birth_place_code: birthGeo?.cityCode || '',
     gender: mapGender((row as any).gender),
-    nationality: (row as any).nationality || '120001',
+    nationality: mapNationality((row as any).nationality),
     citizenship: '',
     is_alive: String((row as any).isAlive ?? 1),
     is_verified: (row as any).saminIsVerified ? '1' : '',
