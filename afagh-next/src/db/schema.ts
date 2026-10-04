@@ -2889,3 +2889,20 @@ export const geo_districts = pgTable('geo_districts', {
   uq: unique('uq_geo_districts_hierarchy').on(t.provinceCode, t.cityCode, t.code),
   idxDistCode: index('idx_geo_districts_code').on(t.code),
 }));
+
+/**
+ * کدینگ‌های مشترک وزارت (KODING سما) — مرجع سراسری دامنه‌های کوچک.
+ * دامنه‌ها: GENDER | MARITAL | RELIGION | ACADEMIC_RANK | STUDENT_STATUS | DEGREE
+ * سید از E:\GIT3\KODING در مهاجرت 0043؛ سراسری است (بدون universityId).
+ */
+export const ministry_shared_codes = pgTable('ministry_shared_codes', {
+  domain: varchar('domain', { length: 30 }).notNull(),
+  code: varchar('code', { length: 20 }).notNull(),
+  title: varchar('title', { length: 150 }).notNull(),
+  latinTitle: varchar('latinTitle', { length: 150 }),
+  standardCode: varchar('standardCode', { length: 50 }),
+  ministryCode: varchar('ministryCode', { length: 50 }),
+  createdAt: timestamp('createdAt').defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.domain, t.code] }),
+}));

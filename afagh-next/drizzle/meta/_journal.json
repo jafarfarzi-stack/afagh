@@ -309,6 +309,13 @@
       "when": 1790965200000,
       "tag": "0042_pos_heartbeat_column_fix",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1791043200000,
+      "tag": "0043_geo_reference_seed",
+      "breakpoints": true
     }
   ]
 }
