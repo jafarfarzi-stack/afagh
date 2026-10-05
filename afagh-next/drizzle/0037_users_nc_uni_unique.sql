@@ -13,4 +13,7 @@
 ALTER TABLE "users" DROP CONSTRAINT IF EXISTS "users_nationalCode_unique";
 
 --> statement-breakpoint
+ALTER TABLE "users" DROP CONSTRAINT IF EXISTS "uq_users_nc_uni";
+
+--> statement-breakpoint
 ALTER TABLE "users" ADD CONSTRAINT "uq_users_nc_uni" UNIQUE ("nationalCode", "universityId");
