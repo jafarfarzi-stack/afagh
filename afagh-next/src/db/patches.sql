@@ -324,9 +324,16 @@ ALTER TABLE IF EXISTS "degree_level_configs" ADD COLUMN IF NOT EXISTS "termCount
 ALTER TABLE IF EXISTS "degree_level_configs" ADD COLUMN IF NOT EXISTS "isGraduate" integer;
 
 -- ── دامنهٔ دانشگاه (universityId): دادهٔ قدیمی این ستون را ندارد و زیر فیلتر
---    دانشگاهِ فعال (curriculum/actions/read.ts) نامرئی می‌ماند — هم‌ترازِ
---    backfill بانکِ دروس. شناسهٔ ۱ = AFAGH (پیش‌فرض getCurrentUniversity). ──
-UPDATE "curriculum_versions" SET "universityId" = 1 WHERE "universityId" IS NULL;
-UPDATE "majors" SET "universityId" = 1 WHERE "universityId" IS NULL;
-UPDATE "departments" SET "universityId" = 1 WHERE "universityId" IS NULL;
+--    دانشگاهِ فعال (curriculum/actions/read.ts) نامرئی می‌ماند. فقط ردیف‌هایی
+--    جابه‌جا می‌شوند که کدشان زیر uni=1 آزاد باشد (برخورد با uq_*_uni_code
+--    کل تراکنش را برمی‌گرداند)؛ برخوردها دستی تصمیم می‌خواهند. ──
+UPDATE "majors" AS m SET "universityId" = 1 WHERE m."universityId" IS NULL
+  AND NOT EXISTS (SELECT 1 FROM "majors" x WHERE x."universityId" = 1 AND x."majorCode" = m."majorCode");
+
+UPDATE "departments" AS d SET "universityId" = 1 WHERE d."universityId" IS NULL
+  AND NOT EXISTS (SELECT 1 FROM "departments" x WHERE x."universityId" = 1 AND x."departmentCode" = d."departmentCode");
+
+-- نسخه‌های برنامهٔ درسی، دانشگاهِ رشتهٔ خودشان را ارث می‌برند (دادهٔ چنددانشگاهی)
+UPDATE "curriculum_versions" AS v SET "universityId" = COALESCE(m."universityId", 1)
+  FROM "majors" m WHERE m.id = v."majorId" AND v."universityId" IS NULL;
 
