@@ -2,11 +2,12 @@
 
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, roles, staff, student_term_states, students, user_roles, users } from '@/db/schema';
+import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, roles, staff, student_term_states, students, universities, user_roles, users } from '@/db/schema';
 import { and, desc, eq, notInArray, sql } from 'drizzle-orm';
 import { hashPassword, requireRole } from '@/lib/auth';
 import { getSessionUser } from '@/lib/auth';
 import { resolveCityMinistry } from '@/lib/shared-coding';
+import { legacyRowOfSource, legacySourceCodeFor } from './transcript-utils';
 
 /** پیکربندی اجرایی آیین‌نامه ملاک دانشجو برای محاسبات کارنامه */
 export async function getTranscriptRegulation(studentId: number): Promise<{
@@ -220,8 +221,21 @@ function markStatOf(raw: string | null): string | null {
 
 export async function getTranscript(studentId: number): Promise<TranscriptRow[]> {
   await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'GRADUATEAFFAIRS']);
-  const [stu] = await db.select({ id: students.id, code: students.studentCode }).from(students).where(eq(students.id, studentId)).limit(1);
+  const [stu] = await db
+    .select({ id: students.id, code: students.studentCode, universityCode: universities.code })
+    .from(students)
+    .leftJoin(universities, eq(universities.id, students.universityId))
+    .where(eq(students.id, studentId))
+    .limit(1);
   if (!stu) return [];
+  // دامنهٔ نمرات قدیمی: legacy_grades ستون دانشگاه ندارد و با sourceCode مرزبندی
+  // می‌شود (قرارداد: sourceCode = universities.code). بدون این دامنه، پیوستن
+  // روی studentCode کدِ وضعیتِ دانشگاهِ دیگر را روی کارنامه می‌نشاند ⇒ هیچ
+  // پیوستِ بی‌دامنه‌ای انجام نمی‌دهیم (حتی وقتی دانشگاه دانشجو NULL است).
+  const legacySource = legacySourceCodeFor(stu.universityCode);
+  if (!legacySource) {
+    console.warn(`[transcript] دانشگاه دانشجوی ${studentId} نامشخص — نمرات سیستم قدیمی نادیده گرفته شد.`);
+  }
   const titleMap = await gradeStatusTitleMap();
   // وضعیت نیمسال‌ها (عنوان + مشروطی فایل) — یک کوئری برای همه ترم‌ها
   const termStates = new Map<string, { title: string | null; probation: boolean | null }>();
@@ -255,6 +269,7 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
       offeringType: course_offerings.offeringType,
       samaGradeStatusCode: enrollments.samaGradeStatusCode,
       legacyRaw: sql<string | null>`lg.raw`,
+      legacySource: sql<string | null>`lg."sourceCode"`,
     })
     .from(enrollments)
     .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
@@ -262,15 +277,19 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
     .innerJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
     .leftJoin(
       sql`legacy_grades lg`,
-      sql`lg."studentCode" = ${stu.code} AND lg."termCode" = ${academic_terms.termCode} AND lg."courseCode" = ${courses.code}`,
+      legacySource
+        ? sql`lg."studentCode" = ${stu.code} AND lg."termCode" = ${academic_terms.termCode} AND lg."courseCode" = ${courses.code} AND lg."sourceCode" = ${legacySource}`
+        : sql`false`,
     )
     .where(eq(enrollments.studentId, studentId))
     .orderBy(desc(academic_terms.termCode), courses.code);
   if (ens.length) {
     const rows: TranscriptRow[] = ens.map(r => {
       const ts = termStates.get(r.termCode);
+      // فقط raw همین مبدأ حق مهر کد وضعیت را دارد (نه ردیف هم‌کدِ دانشگاه دیگر)
+      const ownRaw = legacyRowOfSource([{ sourceCode: r.legacySource }], legacySource).length ? r.legacyRaw : null;
       // اولویت: samaGradeStatusCode از enrollments (به‌روز توسط ادمین) و سپس markStat قدیمی
-      const code = r.samaGradeStatusCode ?? markStatOf(r.legacyRaw) ?? null;
+      const code = r.samaGradeStatusCode ?? markStatOf(ownRaw) ?? null;
       return {
         enrollmentId: r.enrollmentId,
         offeringId: r.offeringId,
@@ -294,19 +313,23 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
     try {
       const { isDroppedStatusCode } = await import('@/lib/grade-status-codes');
       const seen = new Set(ens.map(e => `${e.termCode}|${e.courseCode}`));
-      const legs = await db
-        .select({
-          termCode: legacy_grades.termCode,
-          courseCode: legacy_grades.courseCode,
-          courseTitle: legacy_grades.courseTitle,
-          units: legacy_grades.units,
-          gradeValue: legacy_grades.gradeValue,
-          gradeStatus: legacy_grades.gradeStatus,
-          raw: legacy_grades.raw,
-        })
-        .from(legacy_grades)
-        .where(eq(legacy_grades.studentCode, stu.code))
-        .limit(1000);
+      const legRows = legacySource
+        ? await db
+            .select({
+              sourceCode: legacy_grades.sourceCode,
+              termCode: legacy_grades.termCode,
+              courseCode: legacy_grades.courseCode,
+              courseTitle: legacy_grades.courseTitle,
+              units: legacy_grades.units,
+              gradeValue: legacy_grades.gradeValue,
+              gradeStatus: legacy_grades.gradeStatus,
+              raw: legacy_grades.raw,
+            })
+            .from(legacy_grades)
+            .where(and(eq(legacy_grades.studentCode, stu.code), eq(legacy_grades.sourceCode, legacySource)))
+            .limit(1000)
+        : [];
+      const legs = legacyRowOfSource(legRows, legacySource);
       for (const l of legs) {
         if (seen.has(`${l.termCode}|${l.courseCode}`)) continue;
         const code = markStatOf(l.raw);
@@ -334,21 +357,25 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
     } catch { /* بدون ردیف حذف، همان نمرات ثبت‌شده برمی‌گردد */ }
     return rows;
   }
-  // fallback: legacy_grades (اگر هنوز promote نشده)
-  const legs = await db
-    .select({
-      termCode: legacy_grades.termCode,
-      courseCode: legacy_grades.courseCode,
-      courseTitle: legacy_grades.courseTitle,
-      units: legacy_grades.units,
-      gradeValue: legacy_grades.gradeValue,
-      gradeStatus: legacy_grades.gradeStatus,
-      raw: legacy_grades.raw,
-    })
-    .from(legacy_grades)
-    .where(eq(legacy_grades.studentCode, stu.code))
-    .orderBy(desc(legacy_grades.termCode), legacy_grades.courseCode)
-    .limit(500);
+  // fallback: legacy_grades (اگر هنوز promote نشده) — فقط مبدأ همین دانشگاه
+  const fallbackRows = legacySource
+    ? await db
+        .select({
+          sourceCode: legacy_grades.sourceCode,
+          termCode: legacy_grades.termCode,
+          courseCode: legacy_grades.courseCode,
+          courseTitle: legacy_grades.courseTitle,
+          units: legacy_grades.units,
+          gradeValue: legacy_grades.gradeValue,
+          gradeStatus: legacy_grades.gradeStatus,
+          raw: legacy_grades.raw,
+        })
+        .from(legacy_grades)
+        .where(and(eq(legacy_grades.studentCode, stu.code), eq(legacy_grades.sourceCode, legacySource)))
+        .orderBy(desc(legacy_grades.termCode), legacy_grades.courseCode)
+        .limit(500)
+    : [];
+  const legs = legacyRowOfSource(fallbackRows, legacySource);
   return legs.map(r => {
     const ts = termStates.get(r.termCode);
     const code = markStatOf(r.raw);

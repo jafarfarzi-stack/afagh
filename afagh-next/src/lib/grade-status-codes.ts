@@ -75,6 +75,18 @@ export const NON_GPA_CODES = new Set(
   GRADE_STATUS_CODES.filter(g => !g.affectsGpa).map(g => g.code),
 );
 
+/**
+ * کدهای سمایی که «قبولی»‌اند ولی نمره‌شان در معدل اثر ندارد — زیرمجموعهٔ
+ * {@link NON_GPA_CODES}. همین زیرمجموعه «تعریف مرجع» است: ردیفی که چنین کدی
+ * دارد، واحدش قبولی است ولی نمره‌اش نه در صورت و نه در مخرج معدل کل می‌آید
+ * (معادل‌سازی/خودخوان/جبرانیِ بدون احتساب و پایان‌نامه).
+ * ⚠️ واحدهای این ردیف‌ها در هر دو موتور قبولی شمرده می‌شوند — عمدی: درس منتقل‌شده
+ * باید واحد بدهد حتی اگر نمره‌اش وارد معدل نشود.
+ */
+export const NON_GPA_PASS_CODES: ReadonlySet<string> = new Set(
+  GRADE_STATUS_CODES.filter(g => g.passed && !g.affectsGpa).map(g => g.code),
+);
+
 /** کدهای سمای بدون اثر در معدل نیمسال */
 export const NON_TERM_GPA_CODES = new Set(
   GRADE_STATUS_CODES.filter(g => !g.affectsTermGpa).map(g => g.code),
@@ -109,6 +121,40 @@ export function isPassedStatusCode(code: string | null | undefined): boolean {
 export function isDroppedStatusCode(code: string | null | undefined): boolean {
   if (!code) return false;
   return DROPPED_CODES.has(code.trim());
+}
+
+/** آیا کد، قبولیِ «بدون احتساب در معدل» است (۱۲، ۱۶، ۱۷، ۱۸، ۲۳، ۳۲، ۴۴، ۵۳)؟ */
+export function isNonGpaPassCode(code: string | null | undefined): boolean {
+  if (!code) return false;
+  return NON_GPA_PASS_CODES.has(code.trim());
+}
+
+/**
+ * ═══ قاعدهٔ مرجعِ ورودِ نمره به معدل ═══
+ *
+ * تنها تعریف «این ردیف نمره‌اش را به معدل نمی‌دهد» در کل پروژه. هر دو موتور
+ * (آیین‌نامه = calculateOfficialGPA و فارغ‌التحصیلی = auditStudent) همین تابع را
+ * صدا می‌زنند، پس «معدل رسمی» و «معدلِ دروازهٔ فارغ‌التحصیلی» دیگر نمی‌توانند
+ * برای یک ردیف یکی را بگویند و دیگری را نه.
+ *
+ * سه شرطِ AND — هر سه مستقل و معتبر:
+ *   ۱) کد سمای ردیف در {@link NON_GPA_CODES} نباشد (۱۲: جبرانی بدون احتساب، ...)
+ *   ۲) سوییچ دورهٔ درس `courses.affectsGpa` صفر نباشد (اهرم مستقل و مجاز)
+ *   ۳) درس توصیفی نباشد (نمرهٔ توصیفی = ۱ است، نه نمرهٔ ۲۰ مقیاسی)
+ *
+ * واحدهای ردیف از این قاعده مستقل‌اند: قبولیِ ردیف در passedUnits شمرده می‌شود
+ * حتی وقتی نمره‌اش وارد معدل نمی‌شود.
+ */
+export function rowCountsTowardGpa(row: {
+  samaGradeStatusCode?: string | null;
+  courseAffectsGpa?: number | null;
+  gradingType?: string | null;
+}): boolean {
+  if (row.gradingType === 'DESCRIPTIVE') return false;
+  if (row.courseAffectsGpa === 0) return false;
+  const code = row.samaGradeStatusCode?.trim() || null;
+  if (code && NON_GPA_CODES.has(code)) return false;
+  return true;
 }
 
 /**

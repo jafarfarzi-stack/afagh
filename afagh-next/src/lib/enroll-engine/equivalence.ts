@@ -5,6 +5,7 @@ import { parseGrade, parseUnits } from '../regulations-engine';
 import { chargeTermTuition, getEquivFixedMode } from '../tuition-engine';
 import { shouldChargeFixed } from '../tuition-rules';
 import { EQUIV_MIN_GRADE, EQUIV_TERM_UNITS } from './constants';
+import { NO_UNIVERSITY_MSG, resolveTargetCourse, type EnrollDb } from './transfer';
 
 // ══════════════════════════════════════════════════════════════════
 //  ثبت دسته‌ای معادل‌سازی — پس از تأیید مدیر گروه و مدیرکل آموزش
@@ -32,8 +33,52 @@ export type EquivalenceBatchResult = {
   rejected: { sourceTitle: string; reason: string }[];
 };
 
+/**
+ * ترم معادل‌سازی «۰۰EQn» متعلق به «همان دانشگاه» — ایدمپوتنت.
+ *
+ * ⚠️ `uq_terms_uni_code` روی (universityId, termCode) است و PostgreSQL NULL را
+ * DISTINCT می‌داند؛ پس درج بدون universityId در هر اجرا یک ردیف تکراری
+ * «۰۰EQ۱» می‌ساخت و آن ردیف در هیچ گزارش `universityId = n` دیده نمی‌شد.
+ * بنابراین: (۱) دامنه در WHERE، (۲) مهر دانشگاه در INSERT، (۳) هدف تعارض
+ * صریح روی همان دو ستون، و (۴) بررسی وجود + تراکنش برای اجرای هم‌زمان.
+ */
+export async function ensureEquivalenceTerm(
+  dbx: EnrollDb,
+  input: { universityId: number; termCode: string; title: string },
+): Promise<typeof academic_terms.$inferSelect | null> {
+  const uid = Number(input.universityId);
+  const scoped = and(eq(academic_terms.termCode, input.termCode), eq(academic_terms.universityId, uid));
+  const inScope = (r: typeof academic_terms.$inferSelect) =>
+    r.termCode === input.termCode && Number(r.universityId) === uid;
+
+  return dbx.transaction(async (tx) => {
+    const existing = await tx.select().from(academic_terms).where(scoped).limit(1);
+    const found = existing.find(inScope);
+    if (found) return found;
+
+    const [made] = await tx.insert(academic_terms).values({
+      universityId: uid,
+      termCode: input.termCode,
+      title: input.title,
+      termType: 'EQUIVALENCE',
+      isCurrent: 0,
+      isSummer: 0,
+      isEnrollmentOpen: 0,
+      startDate: new Date(2000, 0, 1),
+      endDate: new Date(2000, 5, 30),
+    }).onConflictDoNothing({ target: [academic_terms.universityId, academic_terms.termCode] }).returning();
+    if (made) return made;
+
+    // اجرای هم‌زمان: ردیف را همان‌جا و همان‌دامنه دوباره می‌خوانیم
+    const [again] = await tx.select().from(academic_terms).where(scoped).limit(1);
+    return again && inScope(again) ? again : null;
+  });
+}
+
 export async function applyEquivalenceBatch(input: {
   studentId: number;
+  /** دانشگاه مالکِ دانشجو/چارت مقصد — اجباری: بدون آن کوئری سراسری ممنوع است */
+  universityId: number;
   items: EquivalenceItem[];
   previousUniversity?: string;
   workflowRequestId?: number | null;
@@ -41,7 +86,11 @@ export async function applyEquivalenceBatch(input: {
   const registered: EquivalenceBatchResult['registered'] = [];
   const rejected: EquivalenceBatchResult['rejected'] = [];
 
-  // ۱) فیلتر نمره و تطبیق درس مقصد
+  if (!Number.isFinite(Number(input.universityId)) || Number(input.universityId) <= 0) {
+    return { ok: false, message: NO_UNIVERSITY_MSG, termsCreated: 0, registered, rejected };
+  }
+
+  // ۱) فیلتر نمره و تطبیق درس مقصد (فقط چارت دانشگاه خودِ دانشجو)
   type Ready = { course: typeof courses.$inferSelect; grade: number; units: number; sourceTitle: string };
   const ready: Ready[] = [];
   for (const it of input.items) {
@@ -50,9 +99,9 @@ export async function applyEquivalenceBatch(input: {
       rejected.push({ sourceTitle: it.sourceTitle, reason: grade === null ? 'نمره نامعتبر' : `نمرهٔ کمتر از ${EQUIV_MIN_GRADE} (غیرقابل معادل‌سازی)` });
       continue;
     }
-    const [course] = await db.select().from(courses).where(eq(courses.code, String(it.targetCourseCode ?? '').trim())).limit(1);
+    const course = await resolveTargetCourse(db, input.universityId, String(it.targetCourseCode ?? '').trim());
     if (!course) {
-      rejected.push({ sourceTitle: it.sourceTitle, reason: `درس مقصد «${it.targetCourseCode}» در چارت آفاق یافت نشد` });
+      rejected.push({ sourceTitle: it.sourceTitle, reason: `درس مقصد «${it.targetCourseCode}» در چارت دانشگاه یافت نشد` });
       continue;
     }
     const units = parseUnits(it.sourceUnits) || Number(course.units || 0);
@@ -83,24 +132,11 @@ export async function applyEquivalenceBatch(input: {
   const equivTermIds: number[] = [];
   for (let i = 0; i < chunks.length; i++) {
     const termCode = `00EQ${i + 1}`;
-    let [term] = await db.select().from(academic_terms).where(eq(academic_terms.termCode, termCode)).limit(1);
-    if (!term) {
-      const [made] = await db
-        .insert(academic_terms)
-        .values({
-          termCode,
-          title: `معادل‌سازی — نوبت ${i + 1}`,
-          termType: 'EQUIVALENCE',
-          isCurrent: 0,
-          isSummer: 0,
-          isEnrollmentOpen: 0,
-          startDate: new Date(2000, 0, 1),
-          endDate: new Date(2000, 5, 30),
-        })
-        .onConflictDoNothing()
-        .returning();
-      term = made ?? (await db.select().from(academic_terms).where(eq(academic_terms.termCode, termCode)).limit(1))[0];
-    }
+    const term = await ensureEquivalenceTerm(db, {
+      universityId: input.universityId,
+      termCode,
+      title: `معادل‌سازی — نوبت ${i + 1}`,
+    });
     if (!term) continue;
     termsCreated++;
     equivTermIds.push(term.id);

@@ -21,8 +21,54 @@ export type TransferApplyResult = {
   message: string;
 };
 
+/**
+ * لایهٔ دیتابیسِ قابل تزریق (`db` اصلی یا تراکنش) — تا منطق دامنهٔ این فایل
+ * بدون اتصال به PostgreSQL هم قابل Unit Test باشد.
+ */
+export type EnrollDb = {
+  select(fields?: unknown): any;
+  insert(table: unknown): any;
+  update(table: unknown): any;
+  transaction<T>(cb: (tx: EnrollDb) => Promise<T>): Promise<T>;
+};
+
+/** پیام خطای نبودِ دامنهٔ دانشگاه — هرگز به کوئری سراسری برنمی‌گردیم */
+export const NO_UNIVERSITY_MSG = 'دانشگاه دانشجو مشخص نیست؛ ثبت درس تطبیق‌داده‌شده بدون دامنهٔ دانشگاه ممکن نیست.';
+
+const uniEq = (id: number) => Number.isFinite(Number(id)) && Number(id) > 0;
+
+/**
+ * درس مقصد از چارت «همان دانشگاه».
+ *
+ * ⚠️ `courses.code` فقط درون یک دانشگاه یکتاست (uq_courses_uni_code روی
+ * (universityId, code)) و کدهای شمس با کدهای آفاق عددی تصادف می‌کنند؛
+ * بنابراین فیلتر دانشگاه اجباری است و «بی‌دامنه» یعنی اتصال به ردیف دانشگاه دیگر.
+ * علاوه بر فیلتر SQL، انتخاب نهایی هم دوباره دانشگاه را چک می‌کند (دفاع تکمیلی).
+ */
+export async function resolveTargetCourse(dbx: EnrollDb, universityId: number, code: string) {
+  const uid = Number(universityId);
+  const rows = await dbx.select().from(courses)
+    .where(and(eq(courses.code, code), eq(courses.universityId, uid)))
+    .limit(1);
+  return rows.find((r: { universityId: number | null }) => Number(r.universityId) === uid) ?? null;
+}
+
+/**
+ * ترم جاری «همان دانشگاه» — چون چند دانشگاه هم‌زمان ترم جاری دارند
+ * (SHAMS ۱۳۹۹۲ / AFAGH ۱۴۰۵۱ / ALLAME ۱۴۰۳۲)، انتخاب بی‌دامنه دلخواهی است.
+ */
+export async function resolveCurrentTerm(dbx: EnrollDb, universityId: number) {
+  const uid = Number(universityId);
+  const rows = await dbx.select().from(academic_terms)
+    .where(and(eq(academic_terms.isCurrent, 1), eq(academic_terms.universityId, uid)))
+    .limit(4);
+  return rows.find((r: { universityId: number | null }) => Number(r.universityId) === uid) ?? null;
+}
+
 export async function applyCourseTransfer(input: {
   studentId: number;
+  /** دانشگاه مالکِ دانشجو/چارت مقصد — اجباری: بدون آن کوئری سراسری ممنوع است */
+  universityId: number;
   targetCourseCode?: string;
   sourceCourseTitle?: string;
   sourceGrade?: string | number | null;
@@ -30,14 +76,16 @@ export async function applyCourseTransfer(input: {
   previousUniversity?: string;
   workflowRequestId?: number | null;
 }): Promise<TransferApplyResult> {
+  if (!uniEq(input.universityId)) return { ok: false, message: NO_UNIVERSITY_MSG };
+
   const code = String(input.targetCourseCode ?? '').trim();
   if (!code) return { ok: false, message: 'کد درس مقصد در فرم تطبیق واحد وارد نشده است.' };
 
-  const [course] = await db.select().from(courses).where(eq(courses.code, code)).limit(1);
+  const course = await resolveTargetCourse(db, input.universityId, code);
   if (!course) return { ok: false, message: `درس مقصد با کد «${code}» در چارت دانشگاه تعریف نشده است.` };
 
-  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1)).limit(1);
-  if (!term) return { ok: false, message: 'ترم جاری مشخص نیست؛ ثبت درس تطبیق‌شده ممکن نشد.' };
+  const term = await resolveCurrentTerm(db, input.universityId);
+  if (!term) return { ok: false, message: 'ترم جاری دانشگاه مشخص نیست؛ ثبت درس تطبیق‌شده ممکن نشد.' };
 
   // آفرینگ اختصاصی تطبیق واحد — از ظرفیت کلاس‌های عادی چیزی کم نمی‌کند
   let [offering] = await db
