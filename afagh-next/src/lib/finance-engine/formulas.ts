@@ -1,5 +1,5 @@
 import 'server-only';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { course_offerings, courses, enrollments, students, tuition_rules } from '@/db/schema';
 import { bucketCourseUnits, pickFormula, totalBuckets, tuitionFromFormula } from '../finance-rules';
@@ -58,7 +58,12 @@ export async function computeFormulaTuition(
   }).from(enrollments)
     .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-    .where(and(eq(enrollments.studentId, studentId), eq(course_offerings.termId, termId)));
+    // درسِ منتقل‌شده: شهریه‌اش در دانشگاه مبدأ پرداخت شده؛ در سطل‌بندی واحد نیاید.
+    .where(and(
+      eq(enrollments.studentId, studentId),
+      eq(course_offerings.termId, termId),
+      isNull(enrollments.sourceUniversityId),
+    ));
 
   const buckets = totalBuckets(offerings.map((o) => bucketCourseUnits(o)));
   const { fixed, variable, total } = tuitionFromFormula(formula, buckets);

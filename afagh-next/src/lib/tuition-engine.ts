@@ -1,5 +1,5 @@
 import 'server-only';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, course_offerings, courses, enrollments, student_ledger,
@@ -219,7 +219,13 @@ export async function computeTermTuition(
     .from(enrollments)
     .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-    .where(and(eq(enrollments.studentId, studentId), eq(course_offerings.termId, termId)));
+    // درسِ منتقل‌شده از دانشگاه دیگر: شهریه‌اش آنجا پرداخت شده و این ستون
+    // همان نشان است. هرگز دوباره شارژ نشود — نه متغیر، نه در سطل‌بندی واحد.
+    .where(and(
+      eq(enrollments.studentId, studentId),
+      eq(course_offerings.termId, termId),
+      isNull(enrollments.sourceUniversityId),
+    ));
 
   const lines: TuitionLine[] = [];
   let variableTuition = 0;
