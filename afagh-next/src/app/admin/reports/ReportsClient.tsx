@@ -138,15 +138,13 @@ export default function ReportsClient({ opts }: { opts: FilterOptions }) {
                 </select>
               </label>
             )}
-            {(kind === 'by-major' || kind === 'active-term' || kind === 'top' || kind === 'third-attempt') && (
-              <label className="flex items-center gap-1">
-                <span className="font-bold text-slate-600">گروه آموزشی:</span>
-                <select value={departmentId} onChange={e => setDepartmentId(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-44">
-                  <option value={0}>همه</option>
-                  {opts.departments.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
-                </select>
-              </label>
-            )}
+            <label className="flex items-center gap-1">
+              <span className="font-bold text-slate-600">گروه آموزشی:</span>
+              <select value={departmentId} onChange={e => setDepartmentId(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-44">
+                <option value={0}>همه</option>
+                {opts.departments.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select>
+            </label>
             {(kind === 'top' || kind === 'graduates' || kind === 'entries' || kind === 'third-attempt') && (
               <label className="flex items-center gap-1">
                 <span className="font-bold text-slate-600">رشته:</span>
