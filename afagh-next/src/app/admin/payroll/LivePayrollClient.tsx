@@ -189,7 +189,7 @@ export default function LivePayrollClient({
       </div>
 
       {activeTab === 'overview' ? (
-        <>
+        (<>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {card('بودجهٔ حق‌التدریس (خالص)', money(totals.budget))}
           {card('پرداخت‌شده', money(totals.paid))}
@@ -303,6 +303,7 @@ export default function LivePayrollClient({
           </table>
         </div>
       </>
+      )
     : null)}
 
     {slip ? (
