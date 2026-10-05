@@ -100,7 +100,7 @@ export const identity_resolution_reviews = pgTable('identity_resolution_reviews'
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   personId: integer('personId').references(() => persons.id),
-  nationalCode: varchar('nationalCode', { length: 10 }).notNull().unique(),
+  nationalCode: varchar('nationalCode', { length: 10 }).notNull(), // یکتا نیست: هویت = (دانشگاه + شماره دانشجویی)؛ یک شخص می‌تواند در دو دانشگاه دو حساب با یک کد ملی داشته باشد
   firstName: varchar('firstName', { length: 100 }).notNull(),
   lastName: varchar('lastName', { length: 100 }).notNull(),
   mobile: varchar('mobile', { length: 11 }),
@@ -139,7 +139,10 @@ export const users = pgTable('users', {
   mustChangePassword: integer('mustChangePassword').default(0),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow()
-});
+}, (t) => ({
+  // هویت حساب = (کد ملی + دانشگاه)؛ NULLها (ثبت‌نام ناقص) از یکتایی مستثنا هستند
+  uqNcUni: unique('uq_users_nc_uni').on(t.nationalCode, t.universityId),
+}));
 
 export const user_roles = pgTable('user_roles', {
   userId: integer('userId').notNull().references(() => users.id),
@@ -303,7 +306,7 @@ export const students = pgTable('students', {
   entryYear: integer('entryYear').notNull(),
   entryTerm: integer('entryTerm').default(1),
   entryDate: date('entryDate'),
-  graduateDegreeLevelId: integer('graduateDegreeLevelId').references(() => degreeLevelConfigs.id),
+  graduateDegreeLevelId: integer('graduateDegreeLevelId').references(() => degree_level_configs.id),
   status: varchar('status', { length: 30 }).notNull().default('ACTIVE'),
   quotaType: varchar('quotaType', { length: 50 }).notNull().default('NORMAL'),
   samaStatusCode: varchar('samaStatusCode', { length: 10 }), // کد خام «وضعيت دانشجو» سما (رهگیری/بازنگاشت)
@@ -618,6 +621,17 @@ export const academic_terms = pgTable('academic_terms', {
   startDate: timestamp('startDate'),
   endDate: timestamp('endDate'),
   gradeEntryDeadline: timestamp('gradeEntryDeadline'),
+  // ── زمان‌بندی نیمسال از فایل سما (zamanbandi) ──
+  addDropStartDate: timestamp('addDropStartDate'),       // حذف و اخذ از
+  addDropEndDate: timestamp('addDropEndDate'),           // حذف و اخذ تا
+  singleDropStartDate: timestamp('singleDropStartDate'), // حذف تک‌درس از
+  singleDropEndDate: timestamp('singleDropEndDate'),     // حذف تک‌درس تا
+  examStartDate: timestamp('examStartDate'),             // امتحانات از
+  examEndDate: timestamp('examEndDate'),                 // امتحانات تا
+  preRegStartDate: timestamp('preRegStartDate'),         // تاریخ پیش (پیش‌ثبت‌نام) از
+  preRegEndDate: timestamp('preRegEndDate'),             // تاریخ پیش (پیش‌ثبت‌نام) تا
+  guestRegStartDate: timestamp('guestRegStartDate'),     // ثبت‌نام میهمانی (تابستان) از
+  guestRegEndDate: timestamp('guestRegEndDate'),         // ثبت‌نام میهمانی (تابستان) تا
   appealWindowDays: integer('appealWindowDays').default(3),
   professorAppealSlaDays: integer('professorAppealSlaDays').default(5)
 }, (t) => [

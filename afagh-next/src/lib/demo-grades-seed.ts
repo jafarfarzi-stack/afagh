@@ -119,7 +119,7 @@ export async function ensureGradePersistence(meta: GradePersistenceMeta): Promis
           passwordHash: '!demo-nologin', // این حساب هرگز مستقیم وارد نمی‌شود
           isActive: 0,
         })
-        .onConflictDoNothing({ target: users.nationalCode })
+        .onConflictDoNothing()
         .returning();
       if (!u) [u] = await db.select().from(users).where(eq(users.nationalCode, syntheticNc)).limit(1);
     }

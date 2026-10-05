@@ -135,7 +135,7 @@ for (let b = 0; b < usersBatch.length; b += 500) {
   const chunk = usersBatch.slice(b, b + 500);
   for (const v of chunk) {
     await c.query(`INSERT INTO users ("nationalCode","firstName","lastName","passwordHash","isActive") VALUES ($1,$2,$3,$4,$5)
-      ON CONFLICT ("nationalCode") DO NOTHING`, v);
+      ON CONFLICT DO NOTHING`, v);
   }
 }
 for (let i = 0; i < STAFF; i++) {

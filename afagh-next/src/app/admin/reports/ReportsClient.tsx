@@ -29,9 +29,11 @@ export default function ReportsClient({ opts }: { opts: FilterOptions }) {
   const [term, setTerm] = useState(opts.latestTerm);
   const [degreeId, setDegreeId] = useState(0);
   const [facultyId, setFacultyId] = useState(0);
+  const [departmentId, setDepartmentId] = useState(0);
   const [majorId, setMajorId] = useState(0);
   const [entryYear, setEntryYear] = useState(0);
   const [q, setQ] = useState('');
+  const [nationalCode, setNationalCode] = useState('');
   const [miss, setMiss] = useState('national');
   const [universityId, setUniversityId] = useState(0);
   const [res, setRes] = useState<ReportResult | null>(null);
@@ -39,7 +41,7 @@ export default function ReportsClient({ opts }: { opts: FilterOptions }) {
   const [exporting, setExporting] = useState(false);
 
   const card = CARDS.find(c => c.kind === kind);
-  const filters = { term, degreeId, facultyId, majorId, entryYear, q: q.trim(), miss, page: 1, universityId };
+  const filters = { term, degreeId, facultyId, departmentId, majorId, entryYear, q: q.trim(), nationalCode: nationalCode.trim(), miss, page: 1, universityId };
 
   const run = async (page = 1) => {
     setLoading(true);
@@ -126,33 +128,43 @@ export default function ReportsClient({ opts }: { opts: FilterOptions }) {
                 {opts.degrees.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
               </select>
             </label>
-            {(kind === 'by-major' || kind === 'active-term' || kind === 'top') && (
-              <label className="flex items-center gap-1">
-                <span className="font-bold text-slate-600">دانشکده:</span>
-                <select value={facultyId} onChange={e => setFacultyId(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-44">
-                  <option value={0}>همه</option>
-                  {opts.faculties.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
-                </select>
-              </label>
-            )}
-            {(kind === 'top' || kind === 'graduates' || kind === 'entries') && (
-              <label className="flex items-center gap-1">
-                <span className="font-bold text-slate-600">رشته:</span>
-                <select value={majorId} onChange={e => setMajorId(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-52">
-                  <option value={0}>همه</option>
-                  {opts.majors.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
-                </select>
-              </label>
-            )}
-            {(kind === 'entries' || kind === 'graduates' || kind === 'top') && (
-              <label className="flex items-center gap-1">
-                <span className="font-bold text-slate-600">ورودی:</span>
-                <select value={entryYear} onChange={e => setEntryYear(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 font-mono" dir="ltr">
-                  <option value={0}>همه</option>
-                  {opts.entryYears.map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-              </label>
-            )}
+            <label className="flex items-center gap-1">
+              <span className="font-bold text-slate-600">دانشکده:</span>
+              <select value={facultyId} onChange={e => setFacultyId(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-44">
+                <option value={0}>همه</option>
+                {opts.faculties.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select>
+            </label>
+            <label className="flex items-center gap-1">
+              <span className="font-bold text-slate-600">گروه آموزشی:</span>
+              <select value={departmentId} onChange={e => setDepartmentId(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-44">
+                <option value={0}>همه</option>
+                {opts.departments.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select>
+            </label>
+            <label className="flex items-center gap-1">
+              <span className="font-bold text-slate-600">رشته:</span>
+              <select value={majorId} onChange={e => setMajorId(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-52">
+                <option value={0}>همه</option>
+                {opts.majors.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select>
+            </label>
+            <label className="flex items-center gap-1">
+              <span className="font-bold text-slate-600">ورودی:</span>
+              <select value={entryYear} onChange={e => setEntryYear(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 font-mono" dir="ltr">
+                <option value={0}>همه</option>
+                {opts.entryYears.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </label>
+            <label className="flex items-center gap-1">
+              <span className="font-bold text-slate-600">کد ملی:</span>
+              <input
+                value={nationalCode} onChange={e => setNationalCode(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && run(1)}
+                placeholder="کد ملی..."
+                className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 w-36 font-mono" dir="ltr"
+              />
+            </label>
             {kind === 'incomplete' && (
               <label className="flex items-center gap-1">
                 <span className="font-bold text-slate-600">نقص:</span>

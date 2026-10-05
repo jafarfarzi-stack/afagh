@@ -59,6 +59,8 @@ export function mapDemands(demands: SchedulingWorkspace['demands']): CourseDeman
     weekRecurrence: 'ALL',
     sessionsCountPerWeek: 1,
     examDate: '',
+    isSharedService: d.isSharedService,
+    offeringScope: d.offeringScope,
   }));
 }
 

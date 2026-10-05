@@ -194,7 +194,7 @@ async function importProfessors(file) {
       const [u] = await q(`INSERT INTO users ("nationalCode", "firstName", "lastName", mobile, email, "passwordHash",
           "fatherName", "birthCertNo", "birthDate", "placeOfBirth", "placeOfIssue", gender, address, "isActive", "mustChangePassword")
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,1)
-        ON CONFLICT ("nationalCode") DO UPDATE SET mobile = COALESCE(EXCLUDED.mobile, users.mobile), email = COALESCE(EXCLUDED.email, users.email)
+        ON CONFLICT DO UPDATE SET mobile = COALESCE(EXCLUDED.mobile, users.mobile), email = COALESCE(EXCLUDED.email, users.email)
         RETURNING id`, [nc, firstName || 'بدون‌نام', lastName, mobile || null, email || null, passwordHash,
         fatherName || null, certNo || null, birthDate || null, birthPlace || null, issuePlace || null,
         gender === '1' ? 'FEMALE' : gender === '2' ? 'MALE' : null, address || null, isActive]);
@@ -204,7 +204,7 @@ async function importProfessors(file) {
       // بدون کد ملی معتبر → فقط پروندهٔ استاد با شمارهٔ مستخدم (کاربر موقت با کد مصنوعی)
       const passwordHash = hashPassword('123456');
       const [u] = await q(`INSERT INTO users ("nationalCode", "firstName", "lastName", "passwordHash", "isActive", "mustChangePassword")
-        VALUES ($1,$2,$3,$4,$5,1) ON CONFLICT ("nationalCode") DO UPDATE SET "lastName" = EXCLUDED."lastName" RETURNING id`,
+        VALUES ($1,$2,$3,$4,$5,1) ON CONFLICT DO UPDATE SET "lastName" = EXCLUDED."lastName" RETURNING id`,
         ['S' + code.padStart(9, '0'), firstName || 'بدون‌نام', lastName || code, passwordHash, isActive]);
       userId = u.id;
       newUsers++;

@@ -98,6 +98,8 @@ export interface CourseDemand {
   sessionsCountPerWeek: number;
   examDate: string;
   examSchedulingMode?: 'AUTO_MATRIX' | 'MANUAL';
+  isSharedService?: boolean;
+  offeringScope?: string;
 }
 
 export interface DepartmentOffering {
@@ -174,6 +176,8 @@ export interface SchedulingWorkspace {
     capacity: number; groupNumber: number; professorId: number | null; isCoTaught: boolean;
     enrolledCount: number; programId: number; programTitle: string;
     cohortId: string; cohortTitle: string;
+    isSharedService: boolean;
+    offeringScope: string;
   }[];
   departments: { id: number; name: string }[];
   availabilities: { staffId: number; dayOfWeek: number | null; startTime: string | null; endTime: string | null; status: string | null }[];

@@ -148,7 +148,8 @@ export type PayrollTabType =
   | 'BASE_RATES'
   | 'MULTIPLIERS'
   | 'CONTRACTS'
-  | 'BANK_DISKETTE';
+  | 'BANK_DISKETTE'
+  | 'COEFFICIENTS_RULES';
 
 // ==========================================
 // INITIAL DATA

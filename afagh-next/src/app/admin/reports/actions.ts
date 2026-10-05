@@ -13,8 +13,10 @@ export type ReportFilters = {
   degreeId?: number;
   facultyId?: number;
   majorId?: number;
+  departmentId?: number;
   entryYear?: number;
   q?: string;
+  nationalCode?: string;
   miss?: string;
   page?: number;
   universityId?: number;
@@ -35,6 +37,7 @@ export type FilterOptions = {
   terms: { code: string; title: string | null }[];
   degrees: { id: number; title: string }[];
   faculties: { id: number; name: string }[];
+  departments: { id: number; name: string; code: string | null }[];
   majors: { id: number; name: string; code: string | null }[];
   entryYears: number[];
   latestTerm: string;
@@ -52,6 +55,9 @@ export async function getFilterOptions({ universityId }: { universityId?: number
   const faculties = await db.execute<{ id: number; name: string }>(
     sql`SELECT id, name FROM faculties ORDER BY id`,
   );
+  const departments = await db.execute<{ id: number; name: string; code: string | null }>(
+    sql`SELECT id, name, "departmentCode" AS code FROM departments ORDER BY name`,
+  );
   const majors = await db.execute<{ id: number; name: string; code: string | null }>(
     sql`SELECT id, name, "majorCode" AS code FROM majors ORDER BY name`,
   );
@@ -62,6 +68,7 @@ export async function getFilterOptions({ universityId }: { universityId?: number
     terms: terms.rows,
     degrees: degrees.rows,
     faculties: faculties.rows,
+    departments: departments.rows,
     majors: majors.rows,
     entryYears: years.rows.map(r => Number(r.y)),
     latestTerm: terms.rows[0]?.code ?? '',
@@ -84,8 +91,13 @@ function studentWhere(f: ReportFilters, alias = 's') {
   if (f.universityId) c.push(sql`(${a}."universityId" = ${f.universityId} OR ${a}."universityId" IS NULL)`);
   if (f.degreeId) c.push(sql`${a}."degreeLevelId" = ${f.degreeId}`);
   if (f.facultyId) c.push(sql`m."facultyId" = ${f.facultyId}`);
+  if (f.departmentId) c.push(sql`m."departmentId" = ${f.departmentId}`);
   if (f.majorId) c.push(sql`${a}."majorId" = ${f.majorId}`);
   if (f.entryYear) c.push(sql`${a}."entryYear" = ${f.entryYear}`);
+  if (f.nationalCode) {
+    const like = `%${f.nationalCode}%`;
+    c.push(sql`u."nationalCode" ILIKE ${like}`);
+  }
   if (f.q) {
     const like = `%${f.q}%`;
     c.push(sql`(${a}."studentCode" ILIKE ${like} OR u."firstName" ILIKE ${like} OR u."lastName" ILIKE ${like} OR u."nationalCode" ILIKE ${like})`);
@@ -145,7 +157,8 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
   switch (kind) {
     // ── دانشجویان فعال هر ترم ──
     case 'active-term': {
-      const conds = [sql`t."termCode" = ${term}`, ...studentWhere(f)];
+      const effectiveTerm = term || (await db.execute<{ code: string }>(sql`SELECT "termCode" AS code FROM academic_terms ORDER BY "termCode" DESC LIMIT 1`)).rows[0]?.code || '';
+      const conds = [sql`t."termCode" = ${effectiveTerm}`, ...studentWhere(f)];
       const from = sql`FROM enrollments e JOIN course_offerings o ON o.id = e."offeringId" JOIN academic_terms t ON t.id = o."termId" JOIN students s ON s.id = e."studentId" JOIN users u ON u.id = s."userId" LEFT JOIN majors m ON m.id = s."majorId" LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"`;
       const cols = sql`s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name, m.name AS major, d.title AS degree, COUNT(e.id)::int AS units, ROUND(AVG(CASE WHEN e."gradeStatus" = 'FINALIZED' AND ${NUM} THEN e."gradeValue"::numeric END), 2) AS avg`;
       const r = await paged(
@@ -157,7 +170,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
         from, conds, cols, sql`ORDER BY code`, f,
         sql`s."studentCode", u."firstName", u."lastName", m.name, d.title`,
       );
-      r.summary = `${r.total.toLocaleString('fa-IR')} دانشجو در ترم ${term}`;
+      r.summary = `${r.total.toLocaleString('fa-IR')} دانشجو در ترم ${effectiveTerm}`;
       return r;
     }
 
@@ -298,7 +311,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
       );
     }
 
-    // ── دانش‌آموختگان / ورودی‌ها / عدم مراجعه / انتقالی ──
+    // ── دانش‌آموختگان / ورودی‌ها / عدم مراجعه / انتقالی / میهمان ──
     case 'graduates':
       return studentListReport(
         [
@@ -330,15 +343,36 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
         ],
         [sql`s.status = 'NO_SHOW'`], f,
       );
-    case 'transfers':
-      return studentListReport(
-        [
+    case 'transfers': {
+      // Get transfer/guest students with the term they attended as guest/transfer
+      const uniCond = f.universityId ? sql`AND (s."universityId" = ${f.universityId} OR s."universityId" IS NULL)` : sql``;
+      const data = await db.execute<Record<string, unknown>>(sql`
+        SELECT s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
+          u."nationalCode" AS nc, m.name AS major, d.title AS degree, s."entryYear" AS y,
+          s.status AS st,
+          sts."termCode" AS guest_transfer_term,
+          sts."statusTitle" AS guest_transfer_status
+        FROM students s JOIN users u ON u.id = s."userId"
+          LEFT JOIN majors m ON m.id = s."majorId"
+          LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
+          LEFT JOIN student_term_states sts ON sts."studentId" = s.id
+            AND (sts."normalizedStatusTitle" ILIKE '%میهمان%' OR sts."normalizedStatusTitle" ILIKE '%انتقال%' OR sts."statusTitle" ILIKE '%میهمان%' OR sts."statusTitle" ILIKE '%انتقال%')
+        WHERE s.status IN ('TRANSFERRED', 'GUEST') ${uniCond}
+        ORDER BY s."studentCode"`);
+      const total = data.rows.length;
+      return {
+        columns: [
           { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
-          { key: 'major', title: 'رشته' }, { key: 'degree', title: 'مقطع' },
-          { key: 'y', title: 'ورودی' }, { key: 'st', title: 'وضعیت' },
+          { key: 'nc', title: 'کد ملی' }, { key: 'major', title: 'رشته' },
+          { key: 'degree', title: 'مقطع' }, { key: 'y', title: 'ورودی' },
+          { key: 'st', title: 'وضعیت کلی' }, { key: 'guest_transfer_term', title: 'ترم میهمانی/انتقال' },
+          { key: 'guest_transfer_status', title: 'وضعیت ترم' },
         ],
-        [sql`s.status = 'TRANSFERRED'`], f,
-      );
+        rows: data.rows.map(x => ({ ...x, st: faStatus(x.st) })),
+        total, page: 1, per: total || 1, totalPages: 1,
+        summary: `${total.toLocaleString('fa-IR')} دانشجو میهمان/انتقالی`,
+      };
+    }
 
     // ── گزارش شهریه / تراکنش‌های مالی ترم ──
     case 'tuition': {
@@ -376,6 +410,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
 
     // ── گزارش پاسخ‌های طرح پایش ──
     case 'payesh': {
+      const uniCond = f.universityId ? sql`AND o."universityId" = ${f.universityId}` : sql``;
       const termCond = term ? sql`AND t."termCode" = ${term}` : sql``;
       const data = await db.execute<Record<string, unknown>>(sql`
         SELECT f.id AS fid, f.title AS form_title,
@@ -389,7 +424,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
           LEFT JOIN evaluation_responses r ON r."questionId" = q.id AND r."selectedOptionId" = qo.id
           LEFT JOIN course_offerings o ON o.id = r."offeringId"
           LEFT JOIN academic_terms t ON t.id = o."termId"
-        WHERE 1=1 ${termCond}
+        WHERE 1=1 ${termCond} ${uniCond}
         GROUP BY f.id, f.title, q.id, q.text, q.type
         ORDER BY f.id, q.id`);
       const total = data.rows.length;

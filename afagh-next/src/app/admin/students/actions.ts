@@ -558,7 +558,7 @@ export async function createStaffExpertAction(input: {
   if (!nc || !fn || !ln) return { ok: false, error: 'کد ملی، نام و نام خانوادگی الزامی است.' };
   if (!/^\d{10}$/.test(nc)) return { ok: false, error: 'کد ملی باید ۱۰ رقم باشد.' };
   try {
-    const dupNc = await db.select({ id: users.id }).from(users).where(eq(users.nationalCode, nc)).limit(1);
+    const dupNc = await db.select({ id: users.id }).from(users).where(and(eq(users.nationalCode, nc), eq(users.universityId, 1))).limit(1);
     if (dupNc.length) return { ok: false, error: 'کاربری با این کد ملی از قبل وجود دارد.' };
     const dupSc = await db.select({ id: staff.id }).from(staff).where(eq(staff.staffCode, sc)).limit(1);
     if (dupSc.length) return { ok: false, error: 'کد پرسنلی تکراری است.' };

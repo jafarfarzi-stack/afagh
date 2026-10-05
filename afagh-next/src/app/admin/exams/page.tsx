@@ -11,7 +11,7 @@ export default async function AdminExamsPage() {
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
 
-  const workspace = await getExamWorkspaceAction(currentUniversityId ?? undefined);
+  const workspace = await getExamWorkspaceAction(undefined, currentUniversityId ?? undefined);
   if (!workspace.ok) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">

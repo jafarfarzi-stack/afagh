@@ -37,6 +37,7 @@ export interface ExamWorkspace {
   }[];
   halls: { id: number; name: string; buildingName: string | null; totalCapacity: number; rowsCount: number | null; colsCount: number | null }[];
   concurrentCount: number;
+  orphanSessionCount: number;
 }
 
 const ROLE_LABELS: Record<string, string> = {

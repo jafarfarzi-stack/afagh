@@ -9,8 +9,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { faNum, parseJalaliDates, PHASE_LABELS, TIME_SLOT_PRESETS, DEMAND_PAGE, NO_PROFESSOR, mapDemands, mapClassrooms, mapProfessors, mapCohorts, mapOfferings, buildRealScenario, computeProfUnits, slotAvailStatus, filterScenarioOfferings, filterContextDemands, inspectorSummary, nextGroupNumber, coTeachingWeights, resolveTab } from './planning-core';
 import type { PlanningTab, WeekRecurrence, ProgramShiftType, TimeSlot, CohortOption, ClassroomOption, ProfessorOption, CourseDemand, DepartmentOffering, AutoScheduleScenario, SchedulingWorkspace } from './types';
-import { getSchedulingWorkspaceAction, generateClassSessionsAction, supplyGroupDraftsAction, getSmartSuggestionsAction, getSchedulingHealthAction, transitionSchedulingPhaseAction } from './actions';
-import type { SmartSlot, SchedulingHealthReport, SchedulingWorkspaceResult } from './actions';
+import { getSchedulingWorkspaceAction, generateClassSessionsAction, supplyGroupDraftsAction, getSmartSuggestionsAction, getSchedulingHealthAction, transitionSchedulingPhaseAction, getCurriculumDemandsAction } from './actions';
+import type { SmartSlot, SchedulingHealthReport, SchedulingWorkspaceResult, CurriculumDemandsResult } from './actions';
 
 function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string | null) {
   // Global Planning Context — همه از دادهٔ واقعی سرور (getSchedulingWorkspaceAction)
@@ -75,6 +75,10 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
   const [health, setHealth] = useState<SchedulingHealthReport | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [ownedDeptId, setOwnedDeptId] = useState<number>(initial.departments[0]?.id ?? 0);
+
+  // Curriculum-based demands (filtered by selected program)
+  const [curriculumDemands, setCurriculumDemands] = useState<CourseDemand[]>([]);
+  const [isLoadingCurriculumDemands, setIsLoadingCurriculumDemands] = useState(false);
 
   // Modal: مشاهدهٔ فرم واقعی درٔ دسترس بودن استاد (ثبت‌شده توسط خودِ استاد)
   const [isProfAvailabilityModalOpen, setIsProfAvailabilityModalOpen] = useState<boolean>(false);
@@ -143,6 +147,28 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
       .catch(() => showToast('⚠️ بازخوانی کارتابل ناموفق بود.', 'warning'))
       .finally(() => setIsLoadingWorkspace(false));
   };
+
+  /** بارگذاری دروس چارت درسی برای رشته انتخاب‌شده */
+  const loadCurriculumDemands = async () => {
+    if (!selectedTermId || !selectedProgramId) return;
+    setIsLoadingCurriculumDemands(true);
+    try {
+      const res = await getCurriculumDemandsAction(selectedTermId, selectedProgramId);
+      if (!res.ok) { showToast(res.error, 'warning'); setCurriculumDemands([]); return; }
+      setCurriculumDemands(mapDemands(res.demands));
+    } catch {
+      showToast('⚠️ بارگذاری دروس چارت ناموفق بود.', 'warning');
+      setCurriculumDemands([]);
+    } finally {
+      setIsLoadingCurriculumDemands(false);
+    }
+  };
+
+  // بارگذاری دروس چارت عند تغییر رشته یا ترم
+  useEffect(() => {
+    loadCurriculumDemands();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTermId, selectedProgramId]);
 
   /** پیشنهاد هوشمند موتور برای یک درس (درٔ دسترس بودن واقعی استاد + اشغال سالن‌ها + زونینگ) */
   const handleSuggestForDemand = async (demandId: number) => {
@@ -385,9 +411,12 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
     [currentScenario, selectedProgramId, selectedCohortId, selectedWeekFilter],
   );
 
+  // استفاده از دروس چارت درسی در صورت وجود، وگرنه تمام تقاضاها
+  const demandsSource = useMemo(() => curriculumDemands.length > 0 ? curriculumDemands : courseDemands, [curriculumDemands, courseDemands]);
+
   const filteredDemands = useMemo(
-    () => filterContextDemands(courseDemands, { programId: selectedProgramId, cohortId: selectedCohortId }),
-    [courseDemands, selectedProgramId, selectedCohortId],
+    () => filterContextDemands(demandsSource, { programId: selectedProgramId, cohortId: selectedCohortId }),
+    [demandsSource, selectedProgramId, selectedCohortId],
   );
 
   // یک ترم واقعی چند هزار ارائهٔ درس دارد و هر ردیف این جدول سنگین است؛
@@ -465,8 +494,10 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
     inspectorProfId,
     inspectorStats,
     isGeneratingSessions,
+    isLoadingCurriculumDemands,
     isLoadingWorkspace,
     isProfAvailabilityModalOpen,
+    loadCurriculumDemands,
     makeupSessions,
     ownedDeptId,
     phaseBusy,

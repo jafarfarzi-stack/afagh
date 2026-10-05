@@ -688,7 +688,7 @@ async function phaseStudents(files, lookups) {
     // کد مصنوعی یکتا در سطح دانشگاه: SA/SL/SZ/SH/SN + ۸ رقم آخر شماره (جلوگیری از تداخل بین دانشگاه‌ها)
     const nationalCode = nc || ('S' + (SOURCE[0] || 'X') + String(stno).slice(-8).padStart(8, '0'));
     // NOTE: we no longer dedup by nationalCode — a student can have multiple stnos (kardani → karshenasi)
-    // User dedup is handled by ON CONFLICT ("nationalCode") DO NOTHING; student dedup by ON CONFLICT ("studentCode") DO NOTHING
+    // User dedup is handled by ON CONFLICT ("nationalCode","universityId") DO NOTHING; student dedup by ON CONFLICT ("studentCode") DO NOTHING
     const sex = (c[3] || '').trim();
     // موبایل: MobileNO(35) بعد CurrentTell(16) بعد TempTellNo(34) — فقط ۰۹xxxxxxxxx معتبر
     const normMob = (v) => {
@@ -798,12 +798,12 @@ async function phaseStudents(files, lookups) {
     }).join(',');
     const res = await pool.query(`INSERT INTO users ("nationalCode","firstName","lastName",mobile,email,"birthCertNo","birthDate",
         "fatherName",gender,address,"firstNameEn","lastNameEn",nationality,religion,"postalCode","passportNumber","isAlive","placeOfBirth","placeOfIssue","passwordHash","isActive","mustChangePassword","universityId")
-      VALUES ${ph} ON CONFLICT ("nationalCode") DO NOTHING RETURNING id, "nationalCode"`, vals);
+      VALUES ${ph} ON CONFLICT ("nationalCode","universityId") DO NOTHING RETURNING id, "nationalCode"`, vals);
     for (const r of res.rows) { ncToId.set(r.nationalCode, r.id); stats.insertedUsers++; if (stats.idMin === null || r.id < stats.idMin) stats.idMin = r.id; if (stats.idMax === null || r.id > stats.idMax) stats.idMax = r.id; }
     if (res.rows.length < ch.length) {
       const missing = ch.filter(r => !ncToId.has(r.nationalCode)).map(r => r.nationalCode);
       for (let k = 0; k < missing.length; k += 500) {
-        const ex = await q(`SELECT id,"nationalCode" FROM users WHERE "nationalCode" = ANY($1)`, [missing.slice(k, k + 500)]);
+        const ex = await q(`SELECT id,"nationalCode" FROM users WHERE "nationalCode" = ANY($1) AND "universityId" = $2`, [missing.slice(k, k + 500), universityId]);
         for (const r of ex) { ncToId.set(r.nationalCode, r.id); stats.existingUsers++; }
       }
     }

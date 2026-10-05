@@ -90,7 +90,9 @@ async function createStaffExpertAction(input: {
   try {
     const { getCurrentUniversity } = await import('@/lib/university-scope');
     const uni = await getCurrentUniversity().catch(() => null);
-    const dupNc = await db.select({ id: users.id }).from(users).where(eq(users.nationalCode, nc)).limit(1);
+    const dupNc = uni
+      ? await db.select({ id: users.id }).from(users).where(and(eq(users.nationalCode, nc), eq(users.universityId, uni.id))).limit(1)
+      : await db.select({ id: users.id }).from(users).where(eq(users.nationalCode, nc)).limit(1);
     if (dupNc.length) return { ok: false, error: 'کاربری با این کد ملی از قبل وجود دارد.' };
     const dupSc = uni
       ? await db.select({ id: staff.id }).from(staff).where(and(eq(staff.staffCode, sc), eq(staff.universityId, uni.id))).limit(1)

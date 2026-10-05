@@ -86,8 +86,9 @@ async function main() {
 
     // 1. Resolve each enrollment
     for (const r of rowsBefore) {
-      if (r.gradeStatus === 'FINALIZED' && r.gradeValue != null) {
-        const targetCode = await resolveSamaGradeStatusCode(stuId, r.offeringId, r.gradeValue);
+      if (r.gradeStatus === 'FINALIZED' && r.gradeValue != null && r.offeringId != null) {
+        const gradeVal = r.gradeValue as string | number | null;
+        const targetCode = await resolveSamaGradeStatusCode(stuId, r.offeringId, gradeVal);
         if (targetCode && targetCode !== r.gradeStatusCode) {
           console.log(`  * Enrollment ${r.enrollmentId} (${r.courseCode} ${r.courseTitle}, grade=${r.gradeValue}): Code ${r.gradeStatusCode} -> ${targetCode}`);
           await pool.query(`UPDATE enrollments SET "samaGradeStatusCode" = $1 WHERE id = $2`, [targetCode, r.enrollmentId]);

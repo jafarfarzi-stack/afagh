@@ -181,6 +181,8 @@ export type ExamWorkspaceResult =
         halls: Awaited<ReturnType<typeof loadHalls>>;
         /** سشن‌های هم‌زمان (تاریخ + ساعت شروع یکسان) — کاندیدای تداخل */
         concurrentCount: number;
+        /** سشن‌های فیزیکیِ بدون هیچ درس رزروشده (یتیم) — تقویم معیار = جدول دروس امتحانی (schedules نوع EXAM) */
+        orphanSessionCount: number;
       };
     }
   | { ok: false; error: string };
@@ -195,6 +197,7 @@ export async function getExamWorkspaceAction(termId?: number, universityId?: num
     let sessions: Awaited<ReturnType<typeof loadSessions>> = [];
     let courses: Awaited<ReturnType<typeof loadExamCourses>> = [];
     let concurrentCount = 0;
+    let orphanSessionCount = 0;
     if (resolvedTermId != null) {
       [sessions, courses] = await Promise.all([loadSessions(resolvedTermId, universityId), loadExamCourses(resolvedTermId, universityId)]);
       const seen = new Map<string, number>();
@@ -204,6 +207,13 @@ export async function getExamWorkspaceAction(termId?: number, universityId?: num
         seen.set(k, (seen.get(k) ?? 0) + 1);
       }
       concurrentCount = Array.from(seen.values()).filter(n => n > 1).length;
+      // تقویم معیار = دروس امتحانی (schedules)؛ سشن فیزیکیِ بدون درس = یتیم
+      const courseKeys = new Set(
+        courses.filter(c => c.examDate && c.startTime).map(c => `${c.examDate}|${String(c.startTime).slice(0, 5)}`),
+      );
+      orphanSessionCount = sessions.filter(
+        s => !courseKeys.has(`${s.examDate}|${String(s.startTime).slice(0, 5)}`),
+      ).length;
     }
     const halls = await loadHalls(universityId);
 
@@ -216,6 +226,7 @@ export async function getExamWorkspaceAction(termId?: number, universityId?: num
         courses,
         halls,
         concurrentCount,
+        orphanSessionCount,
       },
     };
   } catch (e: any) {

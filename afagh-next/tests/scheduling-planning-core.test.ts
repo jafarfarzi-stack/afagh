@@ -48,12 +48,14 @@ const rawDemand = {
   offeringId: 7, courseId: 11, courseDeptId: 3, code: '101', title: 'ریاضی', units: '3.00',
   courseType: 'اصلی', capacity: 40, groupNumber: 2, professorId: 5, isCoTaught: false,
   enrolledCount: 30, programId: 2, programTitle: 'کامپیوتر', cohortId: '1403', cohortTitle: 'ورودی ۱۴۰۳',
+  isSharedService: false,
+  offeringScope: 'DEPARTMENTAL',
 };
 const [d] = mapDemands([rawDemand]);
 eq('واحد رشته‌ای → عدد', d.units, 3);
-eq('واحد نامعتبر → صفر', mapDemands([{ ...rawDemand, units: '—' }])[0].units, 0);
-eq('نوع درس ناشناخته → عمومی', mapDemands([{ ...rawDemand, courseType: 'آزاد' }])[0].courseType, 'عمومی');
-eq('استاد null → صفر (نه undefined)', mapDemands([{ ...rawDemand, professorId: null }])[0].preferredProfId, 0);
+eq('واحد نامعتبر → صفر', mapDemands([{ ...rawDemand, units: '—', isSharedService: false, offeringScope: 'DEPARTMENTAL' }])[0].units, 0);
+eq('نوع درس ناشناخته → عمومی', mapDemands([{ ...rawDemand, courseType: 'آزاد', isSharedService: false, offeringScope: 'DEPARTMENTAL' }])[0].courseType, 'عمومی');
+eq('استاد null → صفر (نه undefined)', mapDemands([{ ...rawDemand, professorId: null, isSharedService: false, offeringScope: 'DEPARTMENTAL' }])[0].preferredProfId, 0);
 eq('پیش‌فرض‌های ایمن نشست', [d.requiredRoomType, d.groupsCount, d.weekRecurrence, d.examDate], ['THEORY', 1, 'ALL', '']);
 eq('کارت تهی هیچ‌وقت undefined نمی‌شود', NO_PROFESSOR.id, 0);
 const [co] = mapCohorts([{ entryYear: 1403, expectedStudents: 120 }]);

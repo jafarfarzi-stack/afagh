@@ -58,10 +58,10 @@ eq('اعشار', numOrNull('12.5'), 12.5);
 eq('Infinity رد می‌شود', numOrNull('1e999'), null);
 
 console.log('۲)regThresholds — آستانه‌های آیین‌نامه');
-eq('بدون کانفیگ: قبولی ۱۰ و مشروطی ۱۲', regThresholds(null), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, is1391: false, dedupeRepeated: false, minUnits: 0, is1391: false });
+eq('بدون کانفیگ: قبولی ۱۰ و مشروطی ۱۲', regThresholds(null), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, is1391: false, dedupeRepeated: false, minUnits: 0 });
 eq('مقادیر آیین‌نامه', regThresholds({ grading_and_gpa: { default_passing_grade: 8, failed_course_gpa_policy: 'EXCLUDE_IF_PASSED', retakeMinGrade: 8, dedupeRepeatedCourses: true }, probation_and_tenure: { probation_gpa_threshold: 14 }, regular_term_rules: { min_units: 12 } } as never),
   { pass: 8, prob: 14, exclFailed: true, exclFromTerm: false, retakeMinGrade: 8, is1391: false, dedupeRepeated: true, minUnits: 12 });
-eq('مقدار غیرعددی → پیش‌فرض', regThresholds({ grading_and_gpa: { default_passing_grade: 'بیست' } } as never), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, is1391: false, dedupeRepeated: false, minUnits: 0, is1391: false });
+eq('مقدار غیرعددی → پیش‌فرض', regThresholds({ grading_and_gpa: { default_passing_grade: 'بیست' } } as never), { pass: 10, prob: 12, exclFailed: false, exclFromTerm: false, retakeMinGrade: 10, is1391: false, dedupeRepeated: false, minUnits: 0 });
 eq('تبصره ۱۳۹۱ پرچم می‌خورد', regThresholds({ grading_and_gpa: { failed_course_gpa_policy: 'EXCLUDE_IF_PASSED_1391', retakeMinGrade: 14 } } as never).is1391, true);
 eq('حدنصاب واحد از آیین‌نامه (ارشد: ۸)', regThresholds({ regular_term_rules: { min_units: 8 } } as never).minUnits, 8);
 eq('صفرِ مشروع شمرده می‌شود', regThresholds({ grading_and_gpa: { default_passing_grade: 0 } } as never).pass, 0);

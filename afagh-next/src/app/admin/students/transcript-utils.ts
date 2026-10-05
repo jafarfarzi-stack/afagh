@@ -3,8 +3,9 @@
 //  معدل/مشروطی/تفکیک نوع درس + تبدیل تاریخ جلالی + رقم و حروف فارسی.
 //  همه قابل Unit Test → tests/transcript-summary.test.ts
 // ═══════════════════════════════════════════════════════════════════════
-import type { TermGroup, TranscriptSummary } from './types';
 import type { TranscriptRow } from './actions';
+import type { TermGroup, TranscriptSummary } from './types';
+export type { TranscriptRow } from './actions';
 import type { RegulationConfig } from '@/lib/regulations-engine';
 import {
   GRADE_STATUS_CODES,
