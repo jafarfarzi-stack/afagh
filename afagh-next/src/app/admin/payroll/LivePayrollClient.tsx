@@ -188,7 +188,7 @@ export default function LivePayrollClient({
         </button>
       </div>
 
-      {activeTab === 'overview' ? (
+      {activeTab === 'overview' && (
         <>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {card('بودجهٔ حق‌التدریس (خالص)', money(totals.budget))}
@@ -303,7 +303,7 @@ export default function LivePayrollClient({
           </table>
         </div>
         </>
-      : null)}
+      )}
 
     {slip ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setSlip(null)}>
