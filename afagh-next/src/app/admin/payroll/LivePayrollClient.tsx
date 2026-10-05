@@ -196,7 +196,7 @@ export default function LivePayrollClient({
           {card('تعداد اساتید', faNum(totals.staffCount), 'اساتید دارای قرارداد ترمی')}
         </div>
 
-        {config ? (
+        {config && (
           <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs leading-6">
             <div className="mb-2 font-bold">پیکربندی فعلی موتور (سال {faNum(config.year)})</div>
             <div>ضریب درس عملی ×{faNum(config.coefs.practical)} · ضریب مقطع ارشد ×{faNum(config.coefs.msLevel)} · ضریب کلاس جمعی ×{faNum(config.coefs.crowded)} (بالای {faNum(config.crowded)} نفر)</div>
@@ -207,7 +207,7 @@ export default function LivePayrollClient({
                 <li key={i}>{r.academicRank} / {r.degree} — {money(r.baseRatePerUnit)} (سال {faNum(r.effectiveYear)})</li>
               ))}
             </ul>
-            {config.rules.length ? (
+            {config.rules.length && (
               <>
                 <div className="mt-2 font-bold">فرمول‌های اختصاصی</div>
                 <ul>
@@ -216,9 +216,9 @@ export default function LivePayrollClient({
                   ))}
                 </ul>
               </>
-            ) : null}
+            )}
           </div>
-        ) : null}
+        )}
 
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <input
