@@ -323,3 +323,10 @@ ALTER TABLE IF EXISTS "student_term_states" ADD COLUMN IF NOT EXISTS "sourceAtte
 ALTER TABLE IF EXISTS "degree_level_configs" ADD COLUMN IF NOT EXISTS "termCount" integer;
 ALTER TABLE IF EXISTS "degree_level_configs" ADD COLUMN IF NOT EXISTS "isGraduate" integer;
 
+-- ── دامنهٔ دانشگاه (universityId): دادهٔ قدیمی این ستون را ندارد و زیر فیلتر
+--    دانشگاهِ فعال (curriculum/actions/read.ts) نامرئی می‌ماند — هم‌ترازِ
+--    backfill بانکِ دروس. شناسهٔ ۱ = AFAGH (پیش‌فرض getCurrentUniversity). ──
+UPDATE "curriculum_versions" SET "universityId" = 1 WHERE "universityId" IS NULL;
+UPDATE "majors" SET "universityId" = 1 WHERE "universityId" IS NULL;
+UPDATE "departments" SET "universityId" = 1 WHERE "universityId" IS NULL;
+

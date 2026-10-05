@@ -25,9 +25,12 @@ export async function createCurriculumVersionAction(input: CreateVersionInput): 
     const title = input.title?.trim() || `برنامهٔ ${majorRow.name} ${versionCode}`;
     await assertUniqueVersionCode(input.majorId, degreeLevelId, trackId, versionCode);
     const user = await requireRole(EDITORS);
+    const { getCurrentUniversity } = await import('@/lib/university-scope');
+    const uniId = (await getCurrentUniversity().catch(() => null))?.id ?? 1;
 
     return await db.transaction(async (tx) => {
       const [created] = await tx.insert(curriculum_versions).values({
+        universityId: uniId,
         majorId: input.majorId,
         degreeLevelId,
         trackId,
@@ -130,9 +133,12 @@ export async function createCurriculumRevisionAction(versionId: number): Promise
     const user = await requireRole(EDITORS);
     const newCode = nextRevisionCode(src.versionCode);
     await assertUniqueVersionCode(src.majorId, src.degreeLevelId, src.trackId, newCode);
+    const { getCurrentUniversity } = await import('@/lib/university-scope');
+    const uniId = (await getCurrentUniversity().catch(() => null))?.id ?? 1;
 
     return await db.transaction(async (tx) => {
       const [created] = await tx.insert(curriculum_versions).values({
+        universityId: src.universityId ?? uniId,
         majorId: src.majorId,
         degreeLevelId: src.degreeLevelId,
         trackId: src.trackId,
