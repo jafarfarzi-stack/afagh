@@ -395,14 +395,14 @@ try {
     } else {
       const ins = (await pool.query(`INSERT INTO users ("nationalCode","firstName","lastName",mobile,email,"birthCertNo","birthDate",
           "fatherName",gender,address,"placeOfBirth","firstNameEn","lastNameEn","passwordHash","isActive","mustChangePassword","universityId")
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,1,1,$15) ON CONFLICT ("nationalCode") DO NOTHING RETURNING id`,
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,1,1,$15) ON CONFLICT ("nationalCode","universityId") DO NOTHING RETURNING id`,
         [nc, first.slice(0, 100), last.slice(0, 100), mobile, email, clean(c[11]) || null, birthDate, father,
          mapGender(c[19]), norm(c[23]).slice(0, 300) || null, norm(c[13]) || null,
          norm(c[73]) || null, norm(c[74]) || null, 'MIGRATED:' + code, universityId]))[0];
       if (ins) {
         userId = ins.id;
       } else {
-        const existing = (await q(`SELECT id FROM users WHERE "nationalCode"=$1`, [nc]))[0];
+        const existing = (await q(`SELECT id FROM users WHERE "nationalCode"=$1 AND "universityId"=$2`, [nc, universityId]))[0];
         userId = existing ? existing.id : null;
       }
       if (!userId) { stats.ncFallback++; continue; }

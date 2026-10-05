@@ -34,6 +34,7 @@ import BaseRatesTab from './components/BaseRatesTab';
 import MultipliersTab from './components/MultipliersTab';
 import ContractsTab from './components/ContractsTab';
 import BankDisketteTab from './components/BankDisketteTab';
+import CoefficientsRulesTab from './components/CoefficientsRulesTab';
 
 export default function PayrollEngineClient() {
   const [state, dispatch] = useReducer(
@@ -337,6 +338,17 @@ export default function PayrollEngineClient() {
         >
           <span>💳 صدور دیسکت پرداخت بانکی (شبا)</span>
         </button>
+
+        <button
+          onClick={() => setActiveTab('COEFFICIENTS_RULES')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
+            activeTab === 'COEFFICIENTS_RULES'
+              ? 'bg-indigo-900 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <span>⚙️ ضرایب و قوانین محاسبه</span>
+        </button>
       </div>
 
       {/* ========================================================================= */}
@@ -353,6 +365,7 @@ export default function PayrollEngineClient() {
       {activeTab === 'MULTIPLIERS' && <MultipliersTab state={state} api={api} />}
       {activeTab === 'CONTRACTS' && <ContractsTab state={state} api={api} />}
       {activeTab === 'BANK_DISKETTE' && <BankDisketteTab state={state} api={api} />}
+      {activeTab === 'COEFFICIENTS_RULES' && <CoefficientsRulesTab state={state} api={api} />}
 
 
       {/* ========================================================================= */}

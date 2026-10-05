@@ -295,22 +295,27 @@ export async function login(nationalCode: string, password: string): Promise<{ o
   }
 
   const clean = nationalCode.trim();
-  let [u] = await db.select().from(users).where(eq(users.nationalCode, clean)).limit(1);
-  if (!u) {
+  // کد ملی در سطح دانشگاه یکتاست نه سراسری (یک شخص با دو دانشگاه دو حساب دارد) —
+  // همهٔ کاندیداها را به ترتیب id امتحان می‌کنیم؛ اولین تطبیق رمز برنده است.
+  let cands = await db.select().from(users).where(eq(users.nationalCode, clean)).orderBy(asc(users.id));
+  if (!cands.length) {
     // جستجو بر اساس شماره دانشجویی
-    const [st] = await db
+    cands = await db
       .select({ user: users })
       .from(students)
       .innerJoin(users, eq(users.id, students.userId))
       .where(eq(students.studentCode, clean))
-      .limit(1);
-    if (st) u = st.user;
+      .orderBy(asc(users.id))
+      .then((rows) => rows.map((r) => r.user));
   }
-  if (!u && isDemoMode() && DEMO_ACCOUNTS[clean]) {
-    u = (await ensureDemoUser(clean)) as any;
+  let u = null;
+  for (const cand of cands) {
+    if (cand.isActive && (await verifyPassword(password, cand.passwordHash))) { u = cand; break; }
   }
-  if (!u || !u.isActive) return { ok: false, error: 'کاربر یافت نشد.' };
-  if (!(await verifyPassword(password, u.passwordHash))) return { ok: false, error: 'رمز نادرست است.' };
+  if (!u) {
+    if (cands.some((c) => c.isActive)) return { ok: false, error: 'رمز نادرست است.' };
+    return { ok: false, error: 'کاربر یافت نشد.' };
+  }
   const token = randomBytes(32).toString('hex');
 
   // ── M-4: پاکسازی و چرخش نشست‌ها ──

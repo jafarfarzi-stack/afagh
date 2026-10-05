@@ -120,8 +120,10 @@ export async function registerManualStudentAction(data: {
   majorId: number;
   degreeLevelId: number;
   entryYear?: number;
+  entryTerm?: number;
   quotaType?: string;
   admissionType?: 'NORMAL' | 'TRANSFER' | 'INTERNATIONAL' | 'FREE_COURSE';
+  universityId: number;
 }) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
 

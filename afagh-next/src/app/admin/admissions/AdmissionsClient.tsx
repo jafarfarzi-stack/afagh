@@ -21,7 +21,18 @@ interface StagingItem {
   quotaType: string | null;
   studentId: number | null;
   mobile: string | null;
-  rawSanjeshData: any;
+  rawSanjeshData: {
+    firstName?: string;
+    lastName?: string;
+    sanjeshCode?: string;
+    quota?: string;
+    rank?: number;
+    mobile?: string;
+    examType?: string;
+    degreeLevel?: string;
+    majorGroup?: string;
+    universityCode?: string;
+  };
 }
 
 interface SanjeshMappingItem {
@@ -71,11 +82,11 @@ interface AdmissionsClientProps {
   apiLogs: ApiAuditItem[];
 }
 
-const SAMPLE_SANJESH_RAW = `0011223344, علیرضا, پیروزمند, 11204, منطقه ۱, 09121111111, 1420
-0022334455, نگین, شجاعی, 11205, منطقه ۲, 09122222222, 2150
-0033445566, سهراب, کیانی, 11301, منطقه ۱, 09123333333, 980
-0044556677, آناهیتا, کریمی, 99999, سهمیه ایثارگران, 09124444444, 4500
-0055667788, بابک, معتمدی, 11402, منطقه ۳, 09125555555, 3100`;
+const SAMPLE_SANJESH_RAW = `0011223344, علیرضا, پیروزمند, 11204, منطقه ۱, 09121111111, 1420, کنکور, کارشناسی, مهندسی, 1
+0022334455, نگین, شجاعی, 11205, منطقه ۲, 09122222222, 2150, کنکور, کارشناسی, مهندسی, 1
+0033445566, سهراب, کیانی, 11301, منطقه ۱, 09123333333, 980, کنکور, کارشناسی, مهندسی, 1
+0044556677, آناهیتا, کریمی, 99999, سهمیه ایثارگران, 09124444444, 4500, آزاد, کارشناسی ارشد, مدیریت, 2
+0055667788, بابک, معتمدی, 11402, منطقه ۳, 09125555555, 3100, کنکور, کارشناسی, علوم پایه, 1`;
 
 export default function AdmissionsClient({
   stagingList: initialStaging,
@@ -96,8 +107,12 @@ export default function AdmissionsClient({
     { key: 'nationalCode', label: 'کد ملی', get: s => s.nationalCode },
     { key: 'fullName', label: 'نام و نام خانوادگی', get: s => s.fullName ?? '' },
     { key: 'sanjeshCode', label: 'کد رشته سنجش', get: s => s.rawSanjeshData?.sanjeshCode ?? '' },
+    { key: 'examType', label: 'نوع آزمون', get: s => s.rawSanjeshData?.examType ?? '' },
+    { key: 'degreeLevel', label: 'مقطع تحصیلی', get: s => s.rawSanjeshData?.degreeLevel ?? '' },
+    { key: 'majorGroup', label: 'گروه رشته', get: s => s.rawSanjeshData?.majorGroup ?? '' },
     { key: 'major', label: 'رشته تطبیق‌یافته دانشگاه', get: s => s.mappedMajorName ?? '' },
-    { key: 'quota', label: 'سهمیه پذیرش', get: s => s.quotaType ?? '' },
+    { key: 'quota', label: 'سهمیه پذیرش', get: s => s.rawSanjeshData?.quota ?? s.quotaType ?? '' },
+    { key: 'universityCode', label: 'کد دانشگاه', get: s => s.rawSanjeshData?.universityCode ?? '' },
     { key: 'status', label: 'وضعیت تطبیق', get: s => s.status ?? '' },
   ];
   const stagingTable = useClientTable(stagingList, STAGING_COLS);
@@ -122,6 +137,7 @@ export default function AdmissionsClient({
     degreeLevelId: degreeLevels[0]?.id || 1,
     admissionType: 'NORMAL' as const,
     quotaType: 'NORMAL',
+    universityId: 1,
   });
   const [isManualSubmitting, setIsManualSubmitting] = useState(false);
 
@@ -197,6 +213,7 @@ export default function AdmissionsClient({
         degreeLevelId: degreeLevels[0]?.id || 1,
         admissionType: 'NORMAL',
         quotaType: 'NORMAL',
+        universityId: 1,
       });
       setTimeout(() => setFeedback(null), 5000);
     } else {
@@ -346,7 +363,7 @@ export default function AdmissionsClient({
               value={rawText}
               onChange={e => setRawText(e.target.value)}
               className="w-full p-3 font-mono text-xs rounded-xl border border-slate-300 bg-slate-50 focus:bg-white"
-              placeholder="0011223344, علیرضا, پیروزمند, 11204, منطقه ۱, 09121111111, 1420"
+              placeholder="کدملی, نام, نام‌خانوادگی, کد_سنجش, سهمیه, موبایل, رتبه, نوع_آزمون, مقطع, گروه_رشته, کد_دانشگاه"
             />
             <details className="text-[11px] text-slate-500">
               <summary className="cursor-pointer font-bold text-indigo-800">مشاهدهٔ قالب نمونهٔ فایل (ساختار ستون‌ها)</summary>
@@ -365,11 +382,15 @@ export default function AdmissionsClient({
 
             <table className="w-full table-fixed text-right text-xs">
               <colgroup>
-                <col style={{ width: 120 }} />
-                <col />
                 <col style={{ width: 110 }} />
+                <col style={{ width: 180 }} />
+                <col style={{ width: 110 }} />
+                <col style={{ width: 90 }} />
+                <col style={{ width: 90 }} />
+                <col style={{ width: 90 }} />
                 <col />
                 <col style={{ width: 120 }} />
+                <col style={{ width: 90 }} />
                 <col style={{ width: 130 }} />
               </colgroup>
               <thead>
@@ -390,7 +411,7 @@ export default function AdmissionsClient({
               <tbody>
                 {stagingTable.visible.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-slate-400">
+                    <td colSpan={10} className="p-8 text-center text-slate-400">
                       هیچ رکوردی در صف Staging موجود نیست. بر روی «پردازش و تطبیق خودکار» کلیک کنید.
                     </td>
                   </tr>
@@ -403,17 +424,21 @@ export default function AdmissionsClient({
                     <tr key={st.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
                       <td className="p-3 font-mono font-bold text-slate-800" dir="ltr">{st.nationalCode}</td>
                       <td className="p-3 font-semibold text-slate-900">{st.fullName}</td>
-                      <td className="p-3 font-mono text-indigo-900 font-bold">{st.rawSanjeshData?.sanjeshCode || '11204'}</td>
+                      <td className="p-3 font-mono text-indigo-900 font-bold">{st.rawSanjeshData?.sanjeshCode || ''}</td>
+                      <td className="p-3 text-slate-600 font-mono">{st.rawSanjeshData?.examType || ''}</td>
+                      <td className="p-3 text-slate-600">{st.rawSanjeshData?.degreeLevel || ''}</td>
+                      <td className="p-3 text-slate-600">{st.rawSanjeshData?.majorGroup || ''}</td>
                       <td className="p-3">
                         {isResolved ? (
-                          <span className="font-bold text-emerald-800">{st.mappedMajorName || 'مهندسی کامپیوتر'}</span>
+                          <span className="font-bold text-emerald-800">{st.mappedMajorName || '—'}</span>
                         ) : (
                           <span className="text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded border border-red-200">
                             ⚠️ تعریف‌نشده (نیاز به نگاشت)
                           </span>
                         )}
                       </td>
-                      <td className="p-3 text-slate-600">{st.quotaType || 'سهمیه عادی'}</td>
+                      <td className="p-3 text-slate-600">{st.rawSanjeshData?.quota || st.quotaType || 'سهمیه عادی'}</td>
+                      <td className="p-3 text-slate-600 font-mono">{st.rawSanjeshData?.universityCode || ''}</td>
                       <td className="p-3">
                         <span
                           className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${

@@ -99,3 +99,175 @@ export async function payrollConfigAction() {
     return fail(err);
   }
 }
+
+// ─────────────────────────────────────────────────────────────────
+// مدیریت ضرایب تدریس (teaching_coefficients)
+// ─────────────────────────────────────────────────────────────────
+
+export async function getTeachingCoefficientsAction() {
+  try {
+    await requireRole(['ADMIN', 'EDU_EXPERT']);
+    const { db } = await import('@/db');
+    const { teaching_coefficients } = await import('@/db/schema');
+    const rows = await db.select().from(teaching_coefficients);
+    return { ok: true as const, coefficients: rows };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function updateTeachingCoefficientAction(ruleName: string, multiplier: number) {
+  try {
+    const user = await requireRole(['ADMIN']);
+    const { db } = await import('@/db');
+    const { teaching_coefficients } = await import('@/db/schema');
+    const { eq } = await import('drizzle-orm');
+    
+    await db
+      .update(teaching_coefficients)
+      .set({ multiplier: String(multiplier) })
+      .where(eq(teaching_coefficients.ruleName, ruleName));
+    
+    revalidatePath('/admin/payroll');
+    return { ok: true as const };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function upsertTeachingCoefficientAction(ruleName: string, multiplier: number) {
+  try {
+    const user = await requireRole(['ADMIN']);
+    const { db } = await import('@/db');
+    const { teaching_coefficients } = await import('@/db/schema');
+    const { eq } = await import('drizzle-orm');
+    
+    const existing = await db
+      .select()
+      .from(teaching_coefficients)
+      .where(eq(teaching_coefficients.ruleName, ruleName))
+      .limit(1);
+    
+    if (existing.length > 0) {
+      await db
+        .update(teaching_coefficients)
+        .set({ multiplier: String(multiplier) })
+        .where(eq(teaching_coefficients.ruleName, ruleName));
+    } else {
+      await db.insert(teaching_coefficients).values({ ruleName, multiplier: String(multiplier) });
+    }
+    
+    revalidatePath('/admin/payroll');
+    return { ok: true as const };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// مدیریت قوانین محاسبه حق‌التدریس (payroll_calculation_rules)
+// ─────────────────────────────────────────────────────────────────
+
+export async function getPayrollCalculationRulesAction() {
+  try {
+    await requireRole(['ADMIN', 'EDU_EXPERT']);
+    const { db } = await import('@/db');
+    const { payroll_calculation_rules } = await import('@/db/schema');
+    const { eq } = await import('drizzle-orm');
+    const rows = await db
+      .select()
+      .from(payroll_calculation_rules)
+      .where(eq(payroll_calculation_rules.isActive, 1));
+    return { ok: true as const, rules: rows };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function createPayrollCalculationRuleAction(data: {
+  offeringType: string | null;
+  professorRole: string | null;
+  academicRank: string | null;
+  multiplierUnit: number | null;
+  multiplierPerStudent: number | null;
+  flatFee: number | null;
+  title: string;
+}) {
+  try {
+    const user = await requireRole(['ADMIN']);
+    const { db } = await import('@/db');
+    const { payroll_calculation_rules } = await import('@/db/schema');
+    
+    await db.insert(payroll_calculation_rules).values({
+      offeringType: data.offeringType,
+      professorRole: data.professorRole,
+      academicRank: data.academicRank,
+      multiplierUnit: data.multiplierUnit?.toString() ?? null,
+      multiplierPerStudent: data.multiplierPerStudent?.toString() ?? null,
+      flatFee: data.flatFee?.toString() ?? null,
+      title: data.title,
+      isActive: 1,
+    });
+    
+    revalidatePath('/admin/payroll');
+    return { ok: true as const };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function updatePayrollCalculationRuleAction(id: number, data: {
+  offeringType: string | null;
+  professorRole: string | null;
+  academicRank: string | null;
+  multiplierUnit: number | null;
+  multiplierPerStudent: number | null;
+  flatFee: number | null;
+  title: string;
+  isActive: number;
+}) {
+  try {
+    const user = await requireRole(['ADMIN']);
+    const { db } = await import('@/db');
+    const { payroll_calculation_rules } = await import('@/db/schema');
+    const { eq } = await import('drizzle-orm');
+    
+    await db
+      .update(payroll_calculation_rules)
+      .set({
+        offeringType: data.offeringType,
+        professorRole: data.professorRole,
+        academicRank: data.academicRank,
+        multiplierUnit: data.multiplierUnit?.toString() ?? null,
+        multiplierPerStudent: data.multiplierPerStudent?.toString() ?? null,
+        flatFee: data.flatFee?.toString() ?? null,
+        title: data.title,
+        isActive: data.isActive,
+        updatedAt: new Date(),
+      })
+      .where(eq(payroll_calculation_rules.id, id));
+    
+    revalidatePath('/admin/payroll');
+    return { ok: true as const };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function deletePayrollCalculationRuleAction(id: number) {
+  try {
+    const user = await requireRole(['ADMIN']);
+    const { db } = await import('@/db');
+    const { payroll_calculation_rules } = await import('@/db/schema');
+    const { eq } = await import('drizzle-orm');
+    
+    await db
+      .delete(payroll_calculation_rules)
+      .where(eq(payroll_calculation_rules.id, id));
+    
+    revalidatePath('/admin/payroll');
+    return { ok: true as const };
+  } catch (err) {
+    return fail(err);
+  }
+}

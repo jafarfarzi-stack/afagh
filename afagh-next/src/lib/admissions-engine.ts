@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { hashPassword } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import {
   admissions_staging,
   degree_level_configs,
@@ -15,14 +16,107 @@ import {
 
 // ============================================================================
 // نمونه داده‌های نگاشت اولیه سازمان سنجش (Default Sanjesh Mappings)
+// شامل رشته‌های رایج مهندسی، علوم پایه، انسانی، هنر، کشاورزی، دامپزشکی و پزشکی
 // ============================================================================
 
 export const DEFAULT_SANJESH_MAPPINGS = [
+  // مهندسی کامپیوتر و علوم کامپیوتر
   { sanjeshCode: '11204', majorName: 'مهندسی کامپیوتر - نرم‌افزار', majorCode: '412', quota: 'منطقه ۱' },
   { sanjeshCode: '11205', majorName: 'مهندسی کامپیوتر - هوش مصنوعی', majorCode: '414', quota: 'منطقه ۲' },
-  { sanjeshCode: '11301', majorName: 'مهندسی برق - مخابرات', majorCode: '310', quota: 'منطقه ۱' },
+  { sanjeshCode: '11206', majorName: 'مهندسی کامپیوتر - سخت‌افزار', majorCode: '413', quota: 'منطقه ۱' },
+  { sanjeshCode: '11207', majorName: 'مهندسی کامپیوتر - شبکه‌ها', majorCode: '415', quota: 'منطقه ۳' },
   { sanjeshCode: '11402', majorName: 'علوم کامپیوتر', majorCode: '201', quota: 'منطقه ۳' },
+  { sanjeshCode: '11403', majorName: 'علوم کامپیوتر - سخت‌افزار', majorCode: '202', quota: 'منطقه ۲' },
+
+  // مهندسی برق
+  { sanjeshCode: '11301', majorName: 'مهندسی برق - مخابرات', majorCode: '310', quota: 'منطقه ۱' },
+  { sanjeshCode: '11302', majorName: 'مهندسی برق - الکترونیک', majorCode: '311', quota: 'منطقه ۱' },
+  { sanjeshCode: '11303', majorName: 'مهندسی برق - قدرت', majorCode: '312', quota: 'منطقه ۲' },
+  { sanjeshCode: '11304', majorName: 'مهندسی برق - کنترل', majorCode: '313', quota: 'منطقه ۳' },
+
+  // مهندسی مکانیک
+  { sanjeshCode: '11601', majorName: 'مهندسی مکانیک -’état جامدات', majorCode: '510', quota: 'منطقه ۱' },
+  { sanjeshCode: '11602', majorName: 'مهندسی مکانیک - سوخت و احتراق', majorCode: '511', quota: 'منطقه ۲' },
+  { sanjeshCode: '11603', majorName: 'مهندسی مکانیک - تبدیل انرژی', majorCode: '512', quota: 'منطقه ۳' },
+  { sanjeshCode: '11604', majorName: 'مهندسی مکانیک - ساخت و تولید', majorCode: '513', quota: 'منطقه ۱' },
+
+  // مهندسی عمران
+  { sanjeshCode: '11701', majorName: 'مهندسی عمران - سازه', majorCode: '610', quota: 'منطقه ۱' },
+  { sanjeshCode: '11702', majorName: 'مهندسی عمران - خاک وFoundation', majorCode: '611', quota: 'منطقه ۲' },
+  { sanjeshCode: '11703', majorName: 'مهندسی عمران - 교통 و راه', majorCode: '612', quota: 'منطقه ۳' },
+  { sanjeshCode: '11704', majorName: 'مهندسی عمران - آب و محیط زیست', majorCode: '613', quota: 'منطقه ۱' },
+
+  // مهندسی شیمی و نفت
+  { sanjeshCode: '11801', majorName: 'مهندسی شیمی', majorCode: '710', quota: 'منطقه ۱' },
+  { sanjeshCode: '11802', majorName: 'مهندسی نفت - کاوش', majorCode: '720', quota: 'منطقه ۲' },
+  { sanjeshCode: '11803', majorName: 'مهندسی نفت - بهره‌برداری', majorCode: '721', quota: 'منطقه ۳' },
+  { sanjeshCode: '11804', majorName: 'مهندسی پتروشیمی', majorCode: '730', quota: 'منطقه ۱' },
+
+  // مهندسی صنایع و مدیریت
+  { sanjeshCode: '11901', majorName: 'مهندسی صنایع', majorCode: '810', quota: 'منطقه ۱' },
+  { sanjeshCode: '11902', majorName: 'مهندسی سیستم‌های صنعتی', majorCode: '811', quota: 'منطقه ۲' },
   { sanjeshCode: '11505', majorName: 'مدیریت کسب و کار (MBA)', majorCode: '601', quota: 'سهمیه آزاد' },
+  { sanjeshCode: '11506', majorName: 'مدیریت فناوری اطلاعات', majorCode: '602', quota: 'سهمیه آزاد' },
+  { sanjeshCode: '11507', majorName: 'مدیریت صنعتی', majorCode: '603', quota: 'سهمیه آزاد' },
+
+  // معماری و شهرسازی
+  { sanjeshCode: '12001', majorName: 'معماری', majorCode: '910', quota: 'منطقه ۱' },
+  { sanjeshCode: '12002', majorName: 'شهرسازی', majorCode: '920', quota: 'منطقه ۲' },
+  { sanjeshCode: '12003', majorName: 'معماری منظر', majorCode: '930', quota: 'منطقه ۳' },
+
+  // علوم پایه
+  { sanjeshCode: '12101', majorName: 'ریاضی - محض', majorCode: '101', quota: 'منطقه ۱' },
+  { sanjeshCode: '12102', majorName: 'ریاضی - کاربردی', majorCode: '102', quota: 'منطقه ۲' },
+  { sanjeshCode: '12103', majorName: 'فیزیک - محض', majorCode: '111', quota: 'منطقه ۱' },
+  { sanjeshCode: '12104', majorName: 'فیزیک - کاربردی', majorCode: '112', quota: 'منطقه ۲' },
+  { sanjeshCode: '12105', majorName: 'شیمی - محض', majorCode: '121', quota: 'منطقه ۱' },
+  { sanjeshCode: '12106', majorName: 'شیمی - کاربردی', majorCode: '122', quota: 'منطقه ۲' },
+  { sanjeshCode: '12107', majorName: 'زیست‌شناسی', majorCode: '131', quota: 'منطقه ۱' },
+  { sanjeshCode: '12108', majorName: 'علوم زمین', majorCode: '141', quota: 'منطقه ۳' },
+
+  // علوم انسانی و اجتماعی
+  { sanjeshCode: '12201', majorName: 'روانشناسی', majorCode: '2001', quota: 'منطقه ۱' },
+  { sanjeshCode: '12202', majorName: 'مشاوره', majorCode: '2002', quota: 'منطقه ۲' },
+  { sanjeshCode: '12203', majorName: 'علوم اجتماعی', majorCode: '2010', quota: 'منطقه ۱' },
+  { sanjeshCode: '12204', majorName: 'جامعه‌شناسی', majorCode: '2011', quota: 'منطقه ۲' },
+  { sanjeshCode: '12205', majorName: 'حقوق و علوم سیاسی', majorCode: '2020', quota: 'منطقه ۱' },
+  { sanjeshCode: '12206', majorName: 'مدیریت عمومی', majorCode: '2030', quota: 'منطقه ۲' },
+  { sanjeshCode: '12207', majorName: 'اقتصاد', majorCode: '2040', quota: 'منطقه ۱' },
+  { sanjeshCode: '12208', majorName: 'حسابداری', majorCode: '2050', quota: 'منطقه ۳' },
+
+  // هنر و معماری داخلی
+  { sanjeshCode: '12301', majorName: 'طراحی گرافیک', majorCode: '3010', quota: 'منطقه ۱' },
+  { sanjeshCode: '12302', majorName: 'طراحی صنعتی', majorCode: '3011', quota: 'منطقه ۲' },
+  { sanjeshCode: '12303', majorName: 'معماری داخلی', majorCode: '3020', quota: 'منطقه ۱' },
+  { sanjeshCode: '12304', majorName: 'نقاشی', majorCode: '3030', quota: 'منطقه ۳' },
+  { sanjeshCode: '12305', majorName: 'موسیقی', majorCode: '3040', quota: 'منطقه ۱' },
+
+  // کشاورزی و منابع طبیعی
+  { sanjeshCode: '12401', majorName: 'علوم باغبانی', majorCode: '4010', quota: 'منطقه ۱' },
+  { sanjeshCode: '12402', majorName: 'علوم земین و آب', majorCode: '4020', quota: 'منطقه ۲' },
+  { sanjeshCode: '12403', majorName: 'جنگلداری', majorCode: '4030', quota: 'منطقه ۳' },
+  { sanjeshCode: '12404', majorName: 'منابع طبیعی - محیط زیست', majorCode: '4040', quota: 'منطقه ۱' },
+  { sanjeshCode: '12405', majorName: 'مهندسی آبخیزداری', majorCode: '4050', quota: 'منطقه ۲' },
+
+  // دامپزشکی
+  { sanjeshCode: '12501', majorName: 'دامپزشکی', majorCode: '5010', quota: 'منطقه ۱' },
+
+  // پزشکی و پاراپزشکی
+  { sanjeshCode: '12601', majorName: 'پزشکی عمومی', majorCode: '6010', quota: 'منطقه ۱' },
+  { sanjeshCode: '12602', majorName: 'دندان‌پزشکی', majorCode: '6020', quota: 'منطقه ۱' },
+  { sanjeshCode: '12603', majorName: 'داروسازی', majorCode: '6030', quota: 'منطقه ۲' },
+  { sanjeshCode: '12604', majorName: 'پرستاری', majorCode: '6040', quota: 'منطقه ۱' },
+  { sanjeshCode: '12605', majorName: 'فیزيوتراپی', majorCode: '6050', quota: 'منطقه ۲' },
+  { sanjeshCode: '12606', majorName: 'تکنولوژی آزمایشگاه', majorCode: '6060', quota: 'منطقه ۳' },
+  { sanjeshCode: '12607', majorName: 'رادیولوژی', majorCode: '6070', quota: 'منطقه ۳' },
+  { sanjeshCode: '12608', majorName: 'انestesی', majorCode: '6080', quota: 'منطقه ۲' },
+
+  // سهمیه‌های خاص
+  { sanjeshCode: '99001', majorName: 'سهمیه ایثارگران', majorCode: '9901', quota: 'سهمیه ایثارگران' },
+  { sanjeshCode: '99002', majorName: 'سهمیه جانبازان', majorCode: '9902', quota: 'سهمیه جانبازان' },
+  { sanjeshCode: '99003', majorName: 'سهمیه آزاد', majorCode: '9903', quota: 'سهمیه آزاد' },
+  { sanjeshCode: '99004', majorName: 'سهمیه Arbeiter', majorCode: '9904', quota: 'سهمیه کارگری' },
+  { sanjeshCode: '99005', majorName: 'سهمیه Nomadic', majorCode: '9905', quota: 'سهمیه عشایری' },
 ];
 
 export async function ensureDefaultSanjeshMappings() {
@@ -167,6 +261,10 @@ export interface StagingParsedRow {
   quota: string;
   mobile?: string;
   rank?: number;
+  examType?: string;
+  degreeLevel?: string;
+  majorGroup?: string;
+  universityCode?: string;
 }
 
 const NATIONAL_CODE_RE = /^\d{10}$/;
@@ -189,11 +287,22 @@ export async function parseAndStageSanjeshData(rawText: string, entryYear = 1405
   let skippedDuplicates = 0;
 
   for (const line of lines) {
-    // پشتیبانی از فرمت‌های کاما، تب یا پایپ
-    const parts = line.split(/[,;\t|]+/).map(p => p.trim());
+    // پشتیبانی از فرمت‌های کاما، تب، پایپ، یا فاصله‌های متعدد
+    const parts = line.split(/[,;\t|]|\s{2,}/).map(p => p.trim()).filter(p => p.length > 0);
     if (parts.length < 4) continue;
 
-    const [nationalCode, firstName, lastName, sanjeshCode, quota, mobile, rank] = parts;
+    // انعطاف‌پذیری در موقعیت ستون‌ها: حداقل ۴ ستون اول ثابت، بقیه اختیاری
+    const nationalCode = parts[0];
+    const firstName = parts[1];
+    const lastName = parts[2];
+    const sanjeshCode = parts[3];
+    const quota = parts[4] || 'سهمیه عادی';
+    const mobile = parts[5];
+    const rank = parts[6] ? Number(parts[6]) : undefined;
+    const examType = parts[7];
+    const degreeLevel = parts[8];
+    const majorGroup = parts[9];
+    const universityCode = parts[10];
 
     // ── اعتبارسنجی کد ملی: ۱۰ رقم — خطوط نامعتبر بی‌صدا وارد سیستم نمی‌شوند ──
     if (!NATIONAL_CODE_RE.test(nationalCode)) {
@@ -222,10 +331,13 @@ export async function parseAndStageSanjeshData(rawText: string, entryYear = 1405
           firstName,
           lastName,
           sanjeshCode,
-          quota: quota || 'سهمیه عادی',
-          rank: rank ? Number(rank) : undefined,
-          // موبایل جعلی تصادفی تولید نمی‌شود؛ نبود موبایل → null (میدان اختیاری)
+          quota,
+          rank,
           mobile: mobile || undefined,
+          examType,
+          degreeLevel,
+          majorGroup,
+          universityCode,
         }),
         mappedMajorId,
         entryYear,
@@ -283,6 +395,7 @@ export async function importStagedToStudents(stagingIds: number[]) {
     const entryYear = row.entryYear || 1405;
     const quotaType = row.quotaType || 'NORMAL';
     const nationalCode = row.nationalCode;
+    const universityId = row.universityId ?? 0;
 
     let parsed: any = {};
     try {
@@ -291,11 +404,11 @@ export async function importStagedToStudents(stagingIds: number[]) {
 
     try {
       const result = await db.transaction(async tx => {
-        // ۱. بررسی یا ایجاد کاربر پلی‌مورفیک (Unified User)
+        // ۱. بررسی یا ایجاد کاربر پلی‌مورفیک (Unified User) — در سطح دانشگاه
         let [user] = await tx
           .select()
           .from(users)
-          .where(eq(users.nationalCode, nationalCode))
+          .where(and(eq(users.nationalCode, nationalCode), eq(users.universityId, universityId)))
           .limit(1);
 
         if (!user) {
@@ -312,6 +425,7 @@ export async function importStagedToStudents(stagingIds: number[]) {
               passwordHash,
               isActive: 1,
               mustChangePassword: 1,
+              universityId,
             })
             .returning();
         }
@@ -403,17 +517,21 @@ export async function registerManualStudent(params: {
   entryTerm?: number;
   quotaType?: string;
   admissionType?: 'NORMAL' | 'TRANSFER' | 'INTERNATIONAL' | 'FREE_COURSE';
+  universityId?: number;
 }) {
   const entryYear = params.entryYear || 1405;
 
   return db.transaction(async tx => {
     const [defaultReg] = await tx.select().from(educational_regulations).limit(1);
+    
+    // Get universityId from params or current user's university
+    const universityId = params.universityId ?? (await getCurrentUniversity())?.id ?? 1;
 
-    // ۱. ایجاد یا یافتن کاربر یکپارچه
+    // ۱. ایجاد یا یافتن کاربر یکپارچه — در سطح دانشگاه
     let [user] = await tx
       .select()
       .from(users)
-      .where(eq(users.nationalCode, params.nationalCode))
+      .where(and(eq(users.nationalCode, params.nationalCode), eq(users.universityId, universityId)))
       .limit(1);
 
     if (!user) {
@@ -428,6 +546,7 @@ export async function registerManualStudent(params: {
           passwordHash,
           isActive: 1,
           mustChangePassword: 1,
+          universityId,
         })
         .returning();
     }

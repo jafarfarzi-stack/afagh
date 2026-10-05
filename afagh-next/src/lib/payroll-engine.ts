@@ -79,6 +79,7 @@ export type StaffPayroll = {
 
 export type PayrollOverviewItem = StaffPayroll['staff'] & {
   rate: number;
+  dutyUnits: number;
   totalEquivalentUnits: number;
   totalEffectiveUnits: number;
   payableUnits: number;
@@ -669,6 +670,7 @@ export async function getOverview(termId?: number, universityId?: number): Promi
     list.push({
       ...calc.staff,
       rate: calc.rate,
+      dutyUnits: calc.dutyUnits,
       totalEquivalentUnits: calc.totalEquivalentUnits,
       totalEffectiveUnits: calc.totalEffectiveUnits,
       payableUnits: calc.payableUnits,
@@ -832,15 +834,149 @@ export async function settleFinal(staffId: number, actorUserId?: number | null, 
   return { ok: true, amount, gates };
 }
 
-/** خروجی واریز دسته‌جمعی (CSV بانکی) */
+/** خروجی واریز دسته‌جمعی (CSV بانکی ۳۰ ستونه) */
 export async function exportBatch(termId?: number) {
   const ov = await getOverview(termId);
-  const lines = ['شناسه پرسنلی,نام استاد,مبلغ قابل واریز (ریال),وضعیت'];
+  // ۳۰ ستون استاندارد دیسکت بانکی + جزئیات محاسبه حق‌التدریس
+  const headers = [
+    'ردیف',
+    'شناسه پرسنلی',
+    'کد ملی',
+    'نام استاد',
+    'مرتبه علمی',
+    'مدرک تحصیلی',
+    'نوع قرارداد',
+    'شماره حساب بانکی',
+    'نام بانک',
+    'شعبه بانک',
+    'شبا',
+    'مبلغ ناخالص حق‌التدریس (ریال)',
+    'کسر غیبت (ریال)',
+    'مالیات (ریال)',
+    'بیمه (ریال)',
+    'سایر کسورات (ریال)',
+    'مجموع کسورات (ریال)',
+    'مبلغ خالص قابل واریز (ریال)',
+    'واحدهای تدریس (معادل)',
+    'ساعات تدریس',
+    'ساعات غیبت',
+    'واحدهای موظفی (الزامی)',
+    'واحدهای مشمول محاسبه',
+    'ضریب درس عملی',
+    'ضریب مقطع ارشد',
+    'ضریب کلاس جمعی',
+    'نرخ پایه هر واحد (ریال)',
+    'نرخ موثر با ضرایب (ریال)',
+    'وضعیت فیش',
+    'پرداخت میان‌ترم (ریال)',
+    'پرداخت نهایی (ریال)',
+    'باقی‌مانده قابل پرداخت (ریال)',
+  ];
+  const lines = [headers.join(',')];
   let count = 0;
+
   for (const x of ov.list) {
     if (x.status === 'NOT_COMPUTED') continue;
+
+    // دریافت اطلاعات تکمیلی پرسنل (حساب بانکی، کد ملی، شعبه)
+    const staffDetail = await db
+      .select({
+        bankAccountNo: staff.bankAccountNo,
+        nationalCode: users.nationalCode,
+        staffCode: staff.staffCode,
+      })
+      .from(staff)
+      .innerJoin(users, eq(users.id, staff.userId))
+      .where(eq(staff.id, x.id))
+      .limit(1);
+
+    const detail = staffDetail[0] ?? {};
+    const bankAccountNo = detail.bankAccountNo ?? '';
+    const nationalCode = detail.nationalCode ?? '';
+    const staffCode = detail.staffCode ?? String(x.id);
+
+    // محاسبه ساعات تدریس و غیبت از ردیف‌های فیش
+    const slips = await getStaffPayslip(x.id, termId);
+    const calcRows = slips.calc?.rows ?? [];
+
+    let totalTeachingUnits = 0;
+    let totalTeachingHours = 0;
+    let totalAbsenceHours = 0;
+    let obligatoryUnits = x.dutyUnits ?? 0;
+    let includedUnits = x.payableUnits ?? 0;
+    let practicalCoef = 1;
+    let msCoef = 1;
+    let crowdedCoef = 1;
+    let baseRate = x.rate ?? 0;
+    let effectiveRate = baseRate;
+
+    // استخراج ضرایب از ردیف‌های محاسبه
+    for (const row of calcRows) {
+      totalTeachingUnits += Number(row.equivalentUnits ?? 0);
+      const sessionsHeld = Number(row.sessions?.held ?? 0);
+      const sessionHours = sessionsHeld * 2; // فرض: هر جلسه ۲ ساعته
+      totalTeachingHours += sessionHours;
+      totalAbsenceHours += Number(row.sessions?.netAbsences ?? 0) * 2;
+
+      // استخراج ضرایب از متن coefficients
+      const coefText = row.coefficients ?? '';
+      if (coefText.includes('عملی')) {
+        const match = coefText.match(/عملی\s*[×x]\s*([\d.]+)/);
+        if (match) practicalCoef = parseFloat(match[1]);
+      }
+      if (coefText.includes('ارشد')) {
+        const match = coefText.match(/ارشد\s*[×x]\s*([\d.]+)/);
+        if (match) msCoef = parseFloat(match[1]);
+      }
+      if (coefText.includes('جمعی')) {
+        const match = coefText.match(/جمعی\s*[×x]\s*([\d.]+)/);
+        if (match) crowdedCoef = parseFloat(match[1]);
+      }
+    }
+
+    // نرخ موثر = نرخ پایه × حاصل‌ضرب ضرایب
+    effectiveRate = Math.round(baseRate * practicalCoef * msCoef * crowdedCoef);
+
     const amt = x.status === 'FINAL_SETTLED' ? 0 : x.remaining;
-    lines.push(`"${x.staffCode ?? x.id}","${x.name}",${amt},${x.status}`);
+    const insurance = 0; // بیمه در مدل فعلی جداگانه محاسبه می‌شود (در InsuranceAdvancesTab)
+    const otherDeductions = 0;
+    const totalDeductions = x.tax + x.absenceDeductionRial + insurance + otherDeductions;
+
+    const row = [
+      String(count + 1),                    // ردیف
+      `"${staffCode}"`,                     // شناسه پرسنلی
+      `"${nationalCode}"`,                  // کد ملی
+      `"${x.name}"`,                        // نام استاد
+      `"${x.rank ?? ''}"`,                  // مرتبه علمی
+      `"${x.degree ?? ''}"`,                // مدرک تحصیلی
+      `"${x.contractType ?? ''}"`,          // نوع قرارداد
+      `"${bankAccountNo}"`,                 // شماره حساب بانکی
+      '""',                                 // نام بانک (نیاز به جدول بانکی جداگانه)
+      '""',                                 // شعبه بانک
+      '""',                                 // شبا
+      String(x.gross),                      // مبلغ ناخالص
+      String(x.absenceDeductionRial),       // کسر غیبت
+      String(x.tax),                        // مالیات
+      String(insurance),                    // بیمه
+      String(otherDeductions),              // سایر کسورات
+      String(totalDeductions),              // مجموع کسورات
+      String(amt),                          // مبلغ خالص قابل واریز
+      String(totalTeachingUnits.toFixed(2)), // واحدهای تدریس (معادل)
+      String(totalTeachingHours),           // ساعات تدریس
+      String(totalAbsenceHours),            // ساعات غیبت
+      String(obligatoryUnits.toFixed(2)),   // واحدهای موظفی (الزامی)
+      String(includedUnits.toFixed(2)),     // واحدهای مشمول محاسبه
+      String(practicalCoef.toFixed(2)),     // ضریب درس عملی
+      String(msCoef.toFixed(2)),            // ضریب مقطع ارشد
+      String(crowdedCoef.toFixed(2)),       // ضریب کلاس جمعی
+      String(baseRate),                     // نرخ پایه هر واحد
+      String(effectiveRate),                // نرخ موثر با ضرایب
+      `"${x.status}"`,                      // وضعیت فیش
+      String(x.midtermPaid),                // پرداخت میان‌ترم
+      String(x.finalPaid),                  // پرداخت نهایی
+      String(x.remaining),                  // باقی‌مانده قابل پرداخت
+    ];
+    lines.push(row.join(','));
     count++;
   }
   return { csv: lines.join('\n'), count, term: ov.term, totals: ov.totals };
