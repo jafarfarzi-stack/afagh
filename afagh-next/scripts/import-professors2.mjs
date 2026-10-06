@@ -26,6 +26,7 @@
  * ══════════════════════════════════════════════════════════════════════
  */
 import { createReadStream, existsSync, readdirSync, statSync } from 'node:fs';
+import { randomBytes, scryptSync } from 'node:crypto';
 import { join } from 'node:path';
 import pg from 'pg';
 
@@ -68,6 +69,19 @@ const dbUrl = args.db || process.env.DATABASE_URL || 'postgres://afagh:afagh@loc
 const pool = new Pool({ connectionString: dbUrl, max: 5 });
 const q = async (text, params) => (await pool.query(text, params)).rows;
 let universityId = null;
+
+/**
+ * هش رمز عبور با همان قرارداد src/lib/auth.ts (salt:hash و scrypt با N=16384).
+ * ⚠ قبلاً اینجا 'MIGRATED:'+کداستادی نوشته می‌شد که هش معتبر نیست و
+ *   verifyPassword همیشه false برمی‌گرداند → استاد با کد ملی وارد نمی‌شد.
+ *   رمز اولیه = کد ملی (mustChangePassword=1 در درج همین‌جا ست می‌شود).
+ */
+function hashPassword(password) {
+  const salt = randomBytes(16).toString('hex');
+  const buf = scryptSync(password, salt, 32, { N: 16384, r: 8, p: 1, maxmem: 256 * 1024 * 1024 });
+  return `${salt}:${buf.toString('hex')}`;
+}
+
 async function ensureUniversity() {
   if (universityId) return universityId;
   const u = (await q(`SELECT id FROM universities WHERE code = $1`, [SOURCE]))[0];
@@ -391,6 +405,9 @@ try {
         [userId, first.slice(0, 100), last.slice(0, 100), mobile, email, clean(c[11]) || null, birthDate, father,
          mapGender(c[19]), norm(c[23]).slice(0, 300) || null, norm(c[13]) || null,
          norm(c[73]) || null, norm(c[74]) || null]);
+      // خودترمیم: هش خرابِ ناشی از ایمپورت قبلی ('MIGRATED:…') قابل تأیید نیست → رمز = کد ملی
+      await pool.query(`UPDATE users SET "passwordHash"=$2, "mustChangePassword"=1
+        WHERE id=$1 AND "passwordHash" !~ '^[0-9a-f]{32}:[0-9a-f]{64}$'`, [userId, hashPassword(nc)]);
       stats.updatedUser++;
     } else {
       const ins = (await pool.query(`INSERT INTO users ("nationalCode","firstName","lastName",mobile,email,"birthCertNo","birthDate",
@@ -398,7 +415,7 @@ try {
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,1,1,$15) ON CONFLICT ("nationalCode","universityId") DO NOTHING RETURNING id`,
         [nc, first.slice(0, 100), last.slice(0, 100), mobile, email, clean(c[11]) || null, birthDate, father,
          mapGender(c[19]), norm(c[23]).slice(0, 300) || null, norm(c[13]) || null,
-         norm(c[73]) || null, norm(c[74]) || null, 'MIGRATED:' + code, universityId]))[0];
+         norm(c[73]) || null, norm(c[74]) || null, hashPassword(nc), universityId]))[0];
       if (ins) {
         userId = ins.id;
       } else {

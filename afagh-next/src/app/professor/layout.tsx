@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { electronic_documents } from '@/db/schema';
+import { electronic_documents, departments } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import { headedDepartments } from '@/lib/group-manager';
 import { logoutAction } from '../login/actions';
@@ -11,6 +11,13 @@ export default async function ProfessorLayout({ children }: { children: React.Re
   const me = await getStaffByUser(user.id);
   const pending = me ? await db.select({ id: electronic_documents.id }).from(electronic_documents).where(eq(electronic_documents.staffId, me.id)) : [];
   const pendingCount = pending.length;
+
+  // نام گروه آموزشی واقعی
+  let deptName = '—';
+  if (me?.departmentId) {
+    const [d] = await db.select({ name: departments.name }).from(departments).where(eq(departments.id, me.departmentId)).limit(1);
+    if (d) deptName = d.name;
+  }
 
   // ── ادغام کارتابل استاد و مدیر گروه ──
   // استادی که مدیر یک یا چند گروه است نباید دو حساب/دو ورود جدا داشته باشد؛
@@ -28,7 +35,7 @@ export default async function ProfessorLayout({ children }: { children: React.Re
             </div>
             <div>
               <p className="font-extrabold text-sm sm:text-base">کارتابل جامع اعضای هیئت علمی و اساتید</p>
-              <p className="text-xs text-slate-400">{user.name || 'دکتر جمیل احمدی'}{me ? ' · کد پرسنلی: ' + me.staffCode : ''}</p>
+              <p className="text-xs text-slate-400">{user.name || 'دکتر جمیل احمدی'}{me ? ' · کد پرسنلی: ' + me.staffCode : ''} · گروه: {deptName}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">

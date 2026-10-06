@@ -32,7 +32,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return calc.length === known.length && timingSafeEqual(calc, known);
 }
 
-export type SessionUser = { id: number; name: string; roles: string[]; mustChangePassword: boolean };
+export type SessionUser = { id: number; name: string; roles: string[]; mustChangePassword: boolean; universityId: number | null };
 
 export const SESSION_COOKIE = 'token';
 const SESSION_MAX_AGE = 2 * 86400; // دو روز
@@ -75,18 +75,28 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
   const rows = await db
-    .select({ id: users.id, firstName: users.firstName, lastName: users.lastName, role: roles.code, mustChangePassword: users.mustChangePassword })
+    .select({
+      id: users.id, firstName: users.firstName, lastName: users.lastName, role: roles.code,
+      mustChangePassword: users.mustChangePassword, isActive: users.isActive, universityId: users.universityId,
+    })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
     .leftJoin(user_roles, eq(user_roles.userId, users.id))
     .leftJoin(roles, eq(roles.id, user_roles.roleId))
     .where(and(eq(sessions.token, token), gt(sessions.expiresAt, new Date())));
   if (!rows.length) return null;
+  // ⛔ غیرفعال‌سازیِ «کامل» کاربر: نشستِ باز هم بی‌اعتبار است، نه فقط ورودِ بعدی.
+  //    اینجا همهٔ کانال‌های مبتنی بر کوکی (وب، کارتابل، اکشن‌ها و APIها) قطع می‌شوند.
+  if (rows[0].isActive !== 1) {
+    await db.delete(sessions).where(eq(sessions.token, token));
+    return null;
+  }
   return {
     id: rows[0].id,
     name: rows[0].firstName + ' ' + rows[0].lastName,
     roles: rows.map(r => r.role).filter(Boolean) as string[],
     mustChangePassword: rows[0].mustChangePassword === 1,
+    universityId: rows[0].universityId ?? null,
   };
 }
 

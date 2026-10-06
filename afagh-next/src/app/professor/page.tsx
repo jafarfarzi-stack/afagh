@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { academic_terms, course_offerings, courses, payroll_statements, professor_term_contracts } from '@/db/schema';
+import { academic_terms, course_offerings, courses, payroll_statements, professor_term_contracts, departments } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import VirtualClassroomWidget from '@/components/VirtualClassroomWidget';
 import { getTodayLiveClasses } from '@/lib/moodle-bbb';
+import { currentTermFor } from '@/lib/terms';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,13 +20,20 @@ export default async function ProfessorHome() {
 
   const liveSessions = await getTodayLiveClasses();
 
-  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
+  const term = await currentTermFor(me.universityId ?? user.universityId ?? null);
   const classes = term
     ? await db
         .select({ id: course_offerings.id, code: courses.code, title: courses.title, units: courses.units, enrolled: course_offerings.enrolledCount, capacity: course_offerings.capacity, group: course_offerings.groupNumber })
         .from(course_offerings).innerJoin(courses, eq(courses.id, course_offerings.courseId))
         .where(and(eq(course_offerings.professorId, me.id), eq(course_offerings.termId, term.id)))
     : [];
+
+  // نام گروه آموزشی واقعی
+  let deptName = '—';
+  if (me.departmentId) {
+    const [d] = await db.select({ name: departments.name }).from(departments).where(eq(departments.id, me.departmentId)).limit(1);
+    if (d) deptName = d.name;
+  }
 
   const pays = await db
     .select({ id: payroll_statements.id, net: payroll_statements.netAmount, status: payroll_statements.status, midterm: payroll_statements.midtermPaidAmount })
@@ -49,7 +57,7 @@ export default async function ProfessorHome() {
               خوش آمدید، استاد گرامی {user.name || 'دکتر جمیل احمدی'}
             </h1>
             <p className="text-xs text-indigo-200 mt-1">
-              کد پرسنلی: {faNum(me.staffCode)} · مرتبه علمی: {me.academicRank || 'استادیار'} · گروه مهندسی کامپیوتر
+              کد پرسنلی: {faNum(me.staffCode)} · مرتبه علمی: {me.academicRank || 'استادیار'} · گروه: {deptName}
             </p>
           </div>
 

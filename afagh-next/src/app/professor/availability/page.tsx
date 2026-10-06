@@ -3,23 +3,25 @@ import { db } from '@/db';
 import { academic_terms, departments, professor_term_contracts } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import ProfessorAvailabilityClient from './ProfessorAvailabilityClient';
+import { currentTermFor, termsFor } from '@/lib/terms';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ProfessorAvailabilityPage() {
   const user = await requireRole(['PROFESSOR']);
   const me = await getStaffByUser(user.id);
-  const terms = await db.select().from(academic_terms);
+  const uniId = me.universityId ?? user.universityId ?? null;
+  const terms = await termsFor(uniId);
+  const term = await currentTermFor(uniId);
 
   // اطلاعات واقعی از پروندهٔ استاف + گروه آموزشی
   const [dep] = me?.departmentId
     ? await db.select({ name: departments.name }).from(departments).where(eq(departments.id, me.departmentId)).limit(1)
     : [];
-  const currentTermRow = terms.find(t => t.isCurrent);
-  const [termContract] = currentTermRow
+  const [termContract] = term
     ? await db.select({ baseDutyUnits: professor_term_contracts.baseDutyUnits })
         .from(professor_term_contracts)
-        .where(and(eq(professor_term_contracts.staffId, me?.id ?? -1), eq(professor_term_contracts.termId, currentTermRow.id)))
+        .where(and(eq(professor_term_contracts.staffId, me?.id ?? -1), eq(professor_term_contracts.termId, term.id)))
         .limit(1)
     : [];
   const maxWeeklyUnits = Number(termContract?.baseDutyUnits ?? 0);

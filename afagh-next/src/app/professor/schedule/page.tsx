@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { academic_terms, course_offerings, courses, staff, users } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import ProfessorScheduleClient, { ProfessorScheduleOffering } from './ProfessorScheduleClient';
+import { currentTermFor } from '@/lib/terms';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,7 @@ export default async function ProfessorSchedulePage() {
     );
   }
 
-  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
+  const term = await currentTermFor(me.universityId ?? user.universityId ?? null);
   const termTitle = term?.title || 'نیمسال اول ۱۴۰۵–۱۴۰۶ (مهر ۱۴۰۵)';
 
   // Demo schedule offerings with comprehensive data matching schedule requirements

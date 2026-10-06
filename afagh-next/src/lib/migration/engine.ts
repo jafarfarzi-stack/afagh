@@ -4,7 +4,7 @@ import { db } from '@/db';
 import {
   academic_terms, course_offerings, courses, curriculum_tracks, degree_level_configs,
   departments, educational_regulations, enrollments, faculties, financial_clearances,
-  majors, migration_runs, staff, student_ledger, students, users,
+  majors, migration_runs, roles, staff, student_ledger, students, user_roles, users,
 } from '@/db/schema';
 import { boolFa, checkNationalCode, dateFa, norm, num } from './normalize';
 import { computeGradeStatus } from '@/lib/grade-utils';
@@ -689,6 +689,7 @@ export async function commit(
             nationalCode: nc, firstName: String(r.firstName), lastName: String(r.lastName),
             ...identityOf(r),
             passwordHash: hashDefault(nc),   // رمز اولیه = کد ملی
+            mustChangePassword: 1,           // اولین ورود → تغییر اجباری رمز
           }).returning({ id: users.id });
           userId = nu.id;
         }
@@ -711,6 +712,23 @@ export async function commit(
 
       if (userId == null) continue;
       await db.insert(staff).values({ userId, staffCode, ...staffFields }).onConflictDoNothing();
+
+      // 🔑 نقش «استاد»: بدون آن، ورود موفق است ولی کاربر به /login?e=norole
+      //    برمی‌گردد و اصلاً وارد کارتابل /professor نمی‌شود (homeFor در auth.ts).
+      let [profRole] = await db.select({ id: roles.id }).from(roles).where(eq(roles.code, 'PROFESSOR')).limit(1);
+      if (!profRole) {
+        const created = await db.insert(roles)
+          .values({ code: 'PROFESSOR', title: 'استاد', isSystem: 1 })
+          .onConflictDoNothing({ target: roles.code })
+          .returning({ id: roles.id });
+        profRole = created[0]
+          ?? (await db.select({ id: roles.id }).from(roles).where(eq(roles.code, 'PROFESSOR')).limit(1))[0];
+      }
+      if (profRole) {
+        await db.insert(user_roles).values({ userId, roleId: profRole.id })
+          .onConflictDoNothing({ target: [user_roles.userId, user_roles.roleId] })
+          .catch(() => {});
+      }
       inserted++;
     }
   }

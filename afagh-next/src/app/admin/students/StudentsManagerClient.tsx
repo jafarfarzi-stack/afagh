@@ -175,9 +175,9 @@ export default function StudentsManagerClient(props: {
   };
   const handleToggleActive = async (userId: number | null | undefined, next: boolean, name: string) => {
     if (!userId) { showToast('شناسه کاربری این پرونده یافت نشد.'); return; }
-    if (!confirm(`دسترسی وب «${name}» ${next ? 'فعال' : 'غیرفعال'} شود؟`)) return;
+    if (!confirm(`حسابِ کامل «${name}» ${next ? 'فعال' : 'غیرفعال'} شود؟ (شامل: ورود، کارتابل، برنامه‌ریزی، نشست‌ها و OTPها)`)) return;
     const r = await setUserActiveAction(userId, next).catch(() => ({ ok: false, error: 'خطا در ارتباط با سرور.' }));
-    showToast(r.ok ? (next ? '✅ دسترسی وب فعال شد.' : '⛔ دسترسی وب غیرفعال شد.') : (r.error || 'انجام نشد.'));
+    showToast(r.ok ? (next ? '✅ حساب کامل فعال شد.' : '⛔ حساب کامل غیرفعال شد (ورود/کارتابل/برنامه‌ریزی/نشست‌ها قطع شدند).') : (r.error || 'انجام نشد.'));
     if (r.ok) router.refresh();
   };
   const handleResetPassword = async (e: React.FormEvent) => {
@@ -793,9 +793,9 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                       <button
                         onClick={() => handleToggleActive(currentStudent.userId, currentStudent.isActive === 0, `${currentStudent.firstName} ${currentStudent.lastName}`)}
                         className={`px-2.5 py-1 rounded text-[11px] font-bold border ${currentStudent.isActive === 0 ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100'}`}
-                        title="فعال/غیرفعال‌سازی ورود به وب (فقط مدیر سیستم)"
+                        title="فعال/غیرفعال‌سازی کامل حساب (ورود، کارتابل، برنامه‌ریزی، نشست‌ها، OTPها) — فقط مدیر سیستم"
                       >
-                        {currentStudent.isActive === 0 ? 'فعال‌سازی وب' : 'غیرفعال‌سازی وب'}
+                        {currentStudent.isActive === 0 ? 'فعال‌سازی کامل' : 'غیرفعال‌سازی کامل'}
                       </button>
                       <button
                         onClick={() => { setPwModalFor({ userId: currentStudent.userId ?? 0, name: `${currentStudent.firstName} ${currentStudent.lastName}` }); setPwInput(''); }}
@@ -1764,9 +1764,9 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                       <button
                         onClick={() => handleToggleActive(currentStaff.userId, (currentStaff.userIsActive ?? 1) === 0, `${currentStaff.firstName} ${currentStaff.lastName}`)}
                         className="px-2 py-1 rounded text-[11px] font-bold bg-white border border-slate-300 hover:bg-slate-100"
-                        title="فعال/غیرفعال‌سازی ورود به وب (فقط مدیر سیستم)"
+                        title="فعال/غیرفعال‌سازی کامل حساب (ورود، کارتابل، برنامه‌ریزی، نشست‌ها، OTPها) — فقط مدیر سیستم"
                       >
-                        {(currentStaff.userIsActive ?? 1) === 0 ? 'فعال‌سازی وب' : 'غیرفعال‌سازی وب'}
+                        {(currentStaff.userIsActive ?? 1) === 0 ? 'فعال‌سازی کامل' : 'غیرفعال‌سازی کامل'}
                       </button>
                       <button
                         onClick={() => { setPwModalFor({ userId: currentStaff.userId ?? 0, name: `${currentStaff.firstName} ${currentStaff.lastName}` }); setPwInput(''); }}

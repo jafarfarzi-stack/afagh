@@ -2,8 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, roles, staff, student_term_states, students, universities, user_roles, users } from '@/db/schema';
-import { and, desc, eq, isNull, notInArray, or, sql } from 'drizzle-orm';
+import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, roles, staff, student_term_states, students, universities, user_roles, users, sessions, signature_otps, doc_sign_otps, grade_submission_otps } from '@/db/schema';
+import { and, desc, eq, inArray, isNull, notInArray, or, sql } from 'drizzle-orm';
 import { hashPassword, requireRole } from '@/lib/auth';
 import { getSessionUser } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
@@ -411,7 +411,10 @@ export async function getTranscript(studentId: number): Promise<TranscriptRow[]>
   });
 }
 
-/** فعال/غیرفعال‌سازی دسترسی وب کاربر (دانشجو / استاد / کاربر) — فقط ADMIN */
+/** فعال/غیرفعال‌سازی «کامل» حساب کاربر (دانشجو / استاد / کاربر) — فقط ADMIN
+ *  غیرفعال‌سازی = تمام نشست‌ها حذف می‌شوند، پرونده‌های استاف/دانشجو غیرفعال،
+ *  کدهای یک‌بار مصرف (OTP) معلق لغو می‌شوند. ورود وب، کارتابل، برنامه‌ریزی
+ *  و APIها برای این کاربر قطع می‌شود. */
 export async function setUserActiveAction(
   userId: number, active: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
@@ -422,7 +425,26 @@ export async function setUserActiveAction(
   }
   if (!userId) return { ok: false, error: 'کاربر نامعتبر است.' };
   try {
-    await db.update(users).set({ isActive: active ? 1 : 0 }).where(eq(users.id, userId));
+    await db.transaction(async (tx) => {
+      await tx.update(users).set({ isActive: active ? 1 : 0 }).where(eq(users.id, userId));
+      if (!active) {
+        // ۱) تمام نشست‌های فعال کاربر را حذف می‌کنیم (خارج از سامانه می‌شوند)
+        await tx.delete(sessions).where(eq(sessions.userId, userId));
+        // ۲) پرونده‌های استاف غیرفعال شوند تا در لیست‌های برنامه‌ریزی/مدیریت ناپدید شوند
+        await tx.update(staff).set({ isActive: 0 }).where(eq(staff.userId, userId));
+        // ۳) OTPهای معلقِ مرتبط با استاف‌های این کاربر را غیرفعال کنیم
+        const staffIds = await tx.select({ id: staff.id }).from(staff).where(eq(staff.userId, userId));
+        const sids = staffIds.map(s => s.id);
+        if (sids.length) {
+          await tx.delete(signature_otps).where(and(eq(signature_otps.isUsed, 0), inArray(signature_otps.staffId, sids)));
+          await tx.delete(doc_sign_otps).where(and(eq(doc_sign_otps.isUsed, 0), inArray(doc_sign_otps.staffId, sids)));
+          await tx.delete(grade_submission_otps).where(and(eq(grade_submission_otps.isUsed, 0), inArray(grade_submission_otps.staffId, sids)));
+        }
+      } else {
+        // فعال‌سازی: پرونده استاف دوباره فعال می‌شود
+        await tx.update(staff).set({ isActive: 1 }).where(eq(staff.userId, userId));
+      }
+    });
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'ثبت نشد.' };
   }

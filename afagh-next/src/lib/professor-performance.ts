@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { academic_terms, departments, staff, users } from '@/db/schema';
 import { getNumber, getSetting } from '@/lib/settings';
 import { managementOverview, type TrendPoint } from '@/lib/bi-engine';
+import { currentTermFor } from '@/lib/terms';
 
 // ══════════════════════════════════════════════════════════════════════
 //  کارنامهٔ عملکرد استاد (Professor Performance) — دادهٔ زنده
@@ -82,6 +83,7 @@ export async function getProfessorPerformance(staffId: number): Promise<Professo
       name: sql<string>`${users.firstName} || ' ' || ${users.lastName}`,
       rank: staff.academicRank,
       department: departments.name,
+      universityId: staff.universityId,
     })
     .from(staff)
     .innerJoin(users, eq(users.id, staff.userId))
@@ -90,7 +92,7 @@ export async function getProfessorPerformance(staffId: number): Promise<Professo
     .limit(1);
   if (!me) throw new Error('پروندهٔ پرسنلی یافت نشد.');
 
-  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1)).limit(1);
+  const term = await currentTermFor(me.universityId ?? null);
   if (!term) throw new Error('ترم جاری مشخص نیست.');
 
   const [slaTarget, evalTarget, holdTarget, incentivePercent] = await Promise.all([

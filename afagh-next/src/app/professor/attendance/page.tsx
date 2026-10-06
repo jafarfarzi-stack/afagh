@@ -7,6 +7,7 @@ import {
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import { jalaliDateOf } from '@/lib/scheduling-core';
 import ProfessorAttendanceClient, { AttendanceCourseOffering, ClassSessionItem, MakeupSessionRecord, StudentInfo } from './ProfessorAttendanceClient';
+import { currentTermFor } from '@/lib/terms';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +26,7 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
     );
   }
 
-  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
+  const term = await currentTermFor(me.universityId ?? user.universityId ?? null);
   const termTitle = term?.title ?? '';
   const sp = await searchParams;
   const defaultOfferingId = sp.offeringId ? Number(sp.offeringId) : undefined;

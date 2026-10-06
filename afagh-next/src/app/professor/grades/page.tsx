@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { academic_terms } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import ProfessorGradesClient, { GradingCourseOffering } from './ProfessorGradesClient';
+import { currentTermFor } from '@/lib/terms';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +25,7 @@ export default async function ProfessorGradesPage({
     );
   }
 
-  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
+  const term = await currentTermFor(me.universityId ?? user.universityId ?? null);
   const termTitle = term?.title || 'نیمسال اول ۱۴۰۵–۱۴۰۶ (مهر ۱۴۰۵)';
   const defaultOfferingId = sp.offeringId ? Number(sp.offeringId) : undefined;
 
