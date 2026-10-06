@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, isNull, or } from 'drizzle-orm';
 import { db } from '@/db';
 import { short_term_certificates, short_term_courses, short_term_discounts, short_term_learners, short_term_registrations } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
@@ -20,10 +20,13 @@ export default async function AdminShortCoursesPage() {
 
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
-  /* TODO: filter by universityId */
+  const uniScope = (col: any) =>
+    currentUniversityId ? or(eq(col, currentUniversityId), isNull(col)) : undefined;
 
-  const courses = await db.select().from(short_term_courses).orderBy(desc(short_term_courses.id));
-  const discounts = await db.select().from(short_term_discounts).orderBy(short_term_discounts.id);
+  const courses = await db.select().from(short_term_courses)
+    .where(uniScope(short_term_courses.universityId)).orderBy(desc(short_term_courses.id));
+  const discounts = await db.select().from(short_term_discounts)
+    .where(uniScope(short_term_discounts.universityId)).orderBy(short_term_discounts.id);
 
   // یک کوئری برای همهٔ ثبت‌نام‌ها + شرکت‌کننده + گواهینامه (بدون N+1)
   const registrations = await db
@@ -49,6 +52,7 @@ export default async function AdminShortCoursesPage() {
     .from(short_term_registrations)
     .innerJoin(short_term_learners, eq(short_term_learners.id, short_term_registrations.learnerId))
     .leftJoin(short_term_certificates, eq(short_term_certificates.registrationId, short_term_registrations.id))
+    .where(uniScope(short_term_registrations.universityId))
     .orderBy(short_term_registrations.id);
 
   const byCourse = new Map<number, AdminCourseItem['learners']>();

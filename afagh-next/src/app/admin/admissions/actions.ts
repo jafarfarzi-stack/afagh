@@ -10,8 +10,9 @@ import {
 } from '@/lib/admissions-engine';
 import { executeIrandocCheck } from '@/lib/api-integrations';
 import { db } from '@/db';
-import { admissions_staging, sanjesh_mappings, student_id_formulas } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { admissions_staging, majors, sanjesh_mappings, student_id_formulas } from '@/db/schema';
+import { and, eq, isNull, or } from 'drizzle-orm';
+import { getCurrentUniversity } from '@/lib/university-scope';
 
 export async function stageSanjeshDataAction(rawText: string, entryYear = 1405) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
@@ -48,19 +49,30 @@ export async function saveSanjeshMappingAction(sanjeshCode: string, internalMajo
   await requireRole(['ADMIN']);
 
   try {
+    const uni = await getCurrentUniversity().catch(() => null);
+    if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+    const uniScope = (c: any) => or(eq(c, uni.id), isNull(c));
+    // رشتهٔ داخلی باید متعلق به همین دانشگاه (یا سراسری) باشد
+    const [mj] = await db.select({ universityId: majors.universityId })
+      .from(majors).where(eq(majors.id, internalMajorId)).limit(1);
+    if (!mj) return { ok: false, error: 'رشتهٔ داخلی یافت نشد.' };
+    if (mj.universityId !== null && mj.universityId !== uni.id) {
+      return { ok: false, error: 'رشته متعلق به دانشگاه دیگری است.' };
+    }
     const [existing] = await db
       .select()
       .from(sanjesh_mappings)
-      .where(eq(sanjesh_mappings.sanjeshCode, sanjeshCode))
+      .where(and(eq(sanjesh_mappings.sanjeshCode, sanjeshCode), uniScope(sanjesh_mappings.universityId)))
       .limit(1);
 
     if (existing) {
       await db
         .update(sanjesh_mappings)
         .set({ internalMajorId, sanjeshQuota: quota || 'سهمیه عادی' })
-        .where(eq(sanjesh_mappings.id, existing.id));
+        .where(and(eq(sanjesh_mappings.id, existing.id), uniScope(sanjesh_mappings.universityId)));
     } else {
       await db.insert(sanjesh_mappings).values({
+        universityId: uni.id,
         sanjeshCode,
         internalMajorId,
         sanjeshQuota: quota || 'سهمیه عادی',
@@ -72,7 +84,7 @@ export async function saveSanjeshMappingAction(sanjeshCode: string, internalMajo
     await db
       .update(admissions_staging)
       .set({ mappedMajorId: internalMajorId, status: 'RESOLVED' })
-      .where(eq(admissions_staging.status, 'PENDING_MAPPING'));
+      .where(and(eq(admissions_staging.status, 'PENDING_MAPPING'), uniScope(admissions_staging.universityId)));
 
     revalidatePath('/admin/admissions');
     return { ok: true };
@@ -85,19 +97,23 @@ export async function saveStudentIdFormulaAction(degreeLevelId: number, formula:
   await requireRole(['ADMIN']);
 
   try {
+    const uni = await getCurrentUniversity().catch(() => null);
+    if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+    const uniScope = (c: any) => or(eq(c, uni.id), isNull(c));
     const [existing] = await db
       .select()
       .from(student_id_formulas)
-      .where(eq(student_id_formulas.degreeLevelId, degreeLevelId))
+      .where(and(eq(student_id_formulas.degreeLevelId, degreeLevelId), uniScope(student_id_formulas.universityId)))
       .limit(1);
 
     if (existing) {
       await db
         .update(student_id_formulas)
         .set({ formula })
-        .where(eq(student_id_formulas.id, existing.id));
+        .where(and(eq(student_id_formulas.id, existing.id), uniScope(student_id_formulas.universityId)));
     } else {
       await db.insert(student_id_formulas).values({
+        universityId: uni.id,
         degreeLevelId,
         entryYear: 1405,
         formula,
@@ -128,7 +144,10 @@ export async function registerManualStudentAction(data: {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
 
   try {
-    const res = await registerManualStudent(data);
+    // دانشگاه هدف همیشه دانشگاه فعال سرور است (ورودی کلاینت نادیده گرفته می‌شود)
+    const uni = await getCurrentUniversity().catch(() => null);
+    if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+    const res = await registerManualStudent({ ...data, universityId: uni.id });
     revalidatePath('/admin/admissions');
     revalidatePath('/admin/students');
     return { ok: true, student: res };

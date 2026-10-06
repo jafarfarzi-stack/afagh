@@ -217,6 +217,25 @@ export async function setCodeAction(fd: FormData): Promise<{ ok: boolean; error?
   const id = Number(fd.get('id') || 0);
   const code = String(fd.get('code') ?? '').trim();
   if (!id) return { ok: false, error: 'رکورد نامعتبر است.' };
+  // رکورد باید متعلق به دانشگاه فعال (یا سراسری) باشد
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+  const owned = async (tbl: any, idCol: any, uniCol: any): Promise<boolean> => {
+    const [r] = await db.select({ u: uniCol }).from(tbl).where(eq(idCol, id)).limit(1);
+    if (!r) return false;
+    return r.u === null || r.u === uni.id;
+  };
+  const tblOf: Record<string, any> = {
+    faculty: faculties, department: departments, major: majors,
+    degree: degree_level_configs, course: courses, term: academic_terms,
+  };
+  const uniColOf: Record<string, any> = {
+    faculty: faculties.universityId, department: departments.universityId, major: majors.universityId,
+    degree: degree_level_configs.universityId, course: courses.universityId, term: academic_terms.universityId,
+  };
+  if (tblOf[table] && !(await owned(tblOf[table], tblOf[table].id, uniColOf[table]))) {
+    return { ok: false, error: 'رکورد یافت نشد یا متعلق به دانشگاه دیگری است.' };
+  }
 
   // کدهای ملی/وزارتی (ثمین) — فقط وقتی فرم همین فیلدها را فرستاده باشد تغییر می‌کنند؛
   // فرم‌های قدیمی‌تر (ذخیرهٔ کد از ردیف جدول) اصلاً نمی‌فرستند و ستون‌ها دست‌نخورده می‌مانند.
@@ -296,7 +315,14 @@ export async function exportCodesCsv(table: CodeTable): Promise<string> {
 export async function countRows(table: CodeTable): Promise<number> {
   await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
   const map = { faculty: faculties, department: departments, major: majors, degree: degree_level_configs, course: courses, term: academic_terms } as const;
-  const [r] = await db.select({ c: sql<number>`count(*)::int` }).from(map[table]);
+  const uniCol = {
+    faculty: faculties.universityId, department: departments.universityId, major: majors.universityId,
+    degree: degree_level_configs.universityId, course: courses.universityId, term: academic_terms.universityId,
+  } as const;
+  const uni = await getCurrentUniversity().catch(() => null);
+  const t: any = map[table];
+  const [r] = await db.select({ c: sql<number>`count(*)::int` }).from(t)
+    .where(uni ? or(eq(uniCol[table] as any, uni.id), isNull(uniCol[table] as any)) : undefined);
   return r?.c ?? 0;
 }
 
@@ -311,14 +337,17 @@ export async function countRows(table: CodeTable): Promise<number> {
 /** گزینه‌های والد برای فرم ساخت رشته */
 export async function codeFormOptions(): Promise<FormOptions> {
   await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
+  const uni = await getCurrentUniversity().catch(() => null);
+  const scopeOf = (c: any) => (uni ? or(eq(c, uni.id), isNull(c)) : undefined);
   const [degs, deps, facs] = await Promise.all([
     db.select({ id: degree_level_configs.id, title: degree_level_configs.title, code: degree_level_configs.code })
-      .from(degree_level_configs).orderBy(asc(degree_level_configs.title)),
+      .from(degree_level_configs).where(scopeOf(degree_level_configs.universityId)).orderBy(asc(degree_level_configs.title)),
     db.select({ id: departments.id, name: departments.name, code: departments.departmentCode, fac: faculties.name })
       .from(departments).leftJoin(faculties, eq(faculties.id, departments.facultyId))
+      .where(scopeOf(departments.universityId))
       .orderBy(asc(faculties.name), asc(departments.name)),
     db.select({ id: faculties.id, name: faculties.name, code: faculties.facultyCode })
-      .from(faculties).orderBy(asc(faculties.name)),
+      .from(faculties).where(scopeOf(faculties.universityId)).orderBy(asc(faculties.name)),
   ]);
   return {
     degree: degs.map(d => ({ value: String(d.id), label: `${d.title} [${d.code}]` })),
@@ -626,6 +655,7 @@ export type DegreeDetail = {
 export async function getDegreeRowAction(id: number): Promise<DegreeDetail> {
   await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
   if (!id) return null;
+  const uni = await getCurrentUniversity().catch(() => null);
   const [r] = await db.select({
     id: degree_level_configs.id, title: degree_level_configs.title, code: degree_level_configs.code,
     standardCode: degree_level_configs.standardCode, ministryCode: degree_level_configs.ministryCode,
@@ -633,8 +663,12 @@ export async function getDegreeRowAction(id: number): Promise<DegreeDetail> {
     conditionalGpaThreshold: degree_level_configs.conditionalGpaThreshold,
     maxUnitsPerTerm: degree_level_configs.maxUnitsPerTerm,
     termCount: degree_level_configs.termCount, isGraduate: degree_level_configs.isGraduate,
+    universityId: degree_level_configs.universityId,
   }).from(degree_level_configs).where(eq(degree_level_configs.id, id)).limit(1);
-  return r ?? null;
+  if (!r) return null;
+  if (uni && r.universityId !== null && r.universityId !== uni.id) return null;
+  const { universityId: _u, ...rest } = r;
+  return rest;
 }
 
 /** ویرایش مقطع — همهٔ فیلدهای فرم ساخت؛ کد با همان قاعدهٔ یکتاییِ ویرایش کد */
@@ -642,8 +676,13 @@ export async function updateDegreeRowAction(fd: FormData): Promise<{ ok: boolean
   await requireRole(['ADMIN', 'VICE_EDU']);
   const id = Number(fd.get('id') || 0);
   if (!id) return { ok: false, error: 'رکورد نامعتبر است.' };
-  const [exists] = await db.select({ id: degree_level_configs.id }).from(degree_level_configs).where(eq(degree_level_configs.id, id)).limit(1);
+  const [exists] = await db.select({ id: degree_level_configs.id, universityId: degree_level_configs.universityId })
+    .from(degree_level_configs).where(eq(degree_level_configs.id, id)).limit(1);
   if (!exists) return { ok: false, error: 'مقطع یافت نشد.' };
+  const uniD = await getCurrentUniversity().catch(() => null);
+  if (uniD && exists.universityId !== null && exists.universityId !== uniD.id) {
+    return { ok: false, error: 'مقطع متعلق به دانشگاه دیگری است.' };
+  }
 
   const title = str(fd, 'title');
   const code = latinDigits(str(fd, 'code'));
@@ -678,7 +717,10 @@ export async function updateDegreeRowAction(fd: FormData): Promise<{ ok: boolean
     maxUnitsPerTerm: maxU,
     termCount,
     isGraduate: Number(gradRaw),
-  }).where(eq(degree_level_configs.id, id));
+  }).where(and(
+    eq(degree_level_configs.id, id),
+    uniD ? or(eq(degree_level_configs.universityId, uniD.id), isNull(degree_level_configs.universityId)) : undefined,
+  ));
   revalidatePath('/admin/codes');
   return { ok: true };
 }
@@ -697,6 +739,7 @@ const dtRead = (c: SQLWrapper) =>
 export async function getTermRowAction(id: number): Promise<Record<string, string> | null> {
   await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
   if (!id) return null;
+  const uniT = await getCurrentUniversity().catch(() => null);
   const [r] = await db.select({
     title: academic_terms.title,
     termType: academic_terms.termType,
@@ -714,8 +757,10 @@ export async function getTermRowAction(id: number): Promise<Record<string, strin
     professorAppealSlaDays: academic_terms.professorAppealSlaDays,
     isCurrent: academic_terms.isCurrent,
     isEnrollmentOpen: academic_terms.isEnrollmentOpen,
+    universityId: academic_terms.universityId,
   }).from(academic_terms).where(eq(academic_terms.id, id)).limit(1);
   if (!r) return null;
+  if (uniT && r.universityId !== null && r.universityId !== uniT.id) return null;
   const [z] = await db.select({
     globalStart: exam_calendar_configs.globalStart,
     globalEnd: exam_calendar_configs.globalEnd,
@@ -899,10 +944,23 @@ export async function deleteCodeRowAction(fd: FormData): Promise<{ ok: boolean; 
   // ترمی که انتخاب واحد یا نمره دارد را می‌گیرد.
   const target = { degree: degree_level_configs, faculty: faculties, major: majors, term: academic_terms } as const;
   if (!(table in target)) return { ok: false, error: 'حذف این جدول از این صفحه ممکن نیست.' };
+  // رکورد باید متعلق به دانشگاه فعال (یا سراسری) باشد
+  const uniDel = await getCurrentUniversity().catch(() => null);
+  if (uniDel) {
+    const t: any = target[table as keyof typeof target];
+    const [cur] = await db.select({ u: t.universityId }).from(t).where(eq(t.id, id)).limit(1);
+    if (!cur) return { ok: false, error: 'رکورد یافت نشد.' };
+    if (cur.u !== null && cur.u !== uniDel.id) {
+      return { ok: false, error: 'رکورد متعلق به دانشگاه دیگری است.' };
+    }
+  }
 
   try {
     await db.delete(target[table as keyof typeof target])
-      .where(eq(target[table as keyof typeof target].id, id));
+      .where(and(
+        eq(target[table as keyof typeof target].id, id),
+        uniDel ? or(eq((target[table as keyof typeof target] as any).universityId, uniDel.id), isNull((target[table as keyof typeof target] as any).universityId)) : undefined,
+      ));
     revalidatePath('/admin/codes');
     revalidatePath('/admin/departments');
     return { ok: true };

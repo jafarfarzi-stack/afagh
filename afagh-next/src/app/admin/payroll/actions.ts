@@ -109,7 +109,11 @@ export async function getTeachingCoefficientsAction() {
     await requireRole(['ADMIN', 'EDU_EXPERT']);
     const { db } = await import('@/db');
     const { teaching_coefficients } = await import('@/db/schema');
-    const rows = await db.select().from(teaching_coefficients);
+    const { or, eq, isNull } = await import('drizzle-orm');
+    const { getCurrentUniversity } = await import('@/lib/university-scope');
+    const uni = await getCurrentUniversity().catch(() => null);
+    const rows = await db.select().from(teaching_coefficients)
+      .where(uni ? or(eq(teaching_coefficients.universityId, uni.id), isNull(teaching_coefficients.universityId)) : undefined);
     return { ok: true as const, coefficients: rows };
   } catch (err) {
     return fail(err);
@@ -121,13 +125,20 @@ export async function updateTeachingCoefficientAction(ruleName: string, multipli
     const user = await requireRole(['ADMIN']);
     const { db } = await import('@/db');
     const { teaching_coefficients } = await import('@/db/schema');
-    const { eq } = await import('drizzle-orm');
-    
+    const { and, eq, isNull, or } = await import('drizzle-orm');
+    const { getCurrentUniversity } = await import('@/lib/university-scope');
+    const uni = await getCurrentUniversity().catch(() => null);
+    if (!uni) return fail(new Error('دانشگاه فعال نامشخص است.'));
+    const uniScope = or(eq(teaching_coefficients.universityId, uni.id), isNull(teaching_coefficients.universityId));
+    const [cur] = await db.select({ universityId: teaching_coefficients.universityId })
+      .from(teaching_coefficients).where(and(eq(teaching_coefficients.ruleName, ruleName), uniScope)).limit(1);
+    if (!cur) return fail(new Error('ضریب یافت نشد یا متعلق به دانشگاه دیگری است.'));
+
     await db
       .update(teaching_coefficients)
       .set({ multiplier: String(multiplier) })
-      .where(eq(teaching_coefficients.ruleName, ruleName));
-    
+      .where(and(eq(teaching_coefficients.ruleName, ruleName), uniScope));
+
     revalidatePath('/admin/payroll');
     return { ok: true as const };
   } catch (err) {
@@ -140,21 +151,25 @@ export async function upsertTeachingCoefficientAction(ruleName: string, multipli
     const user = await requireRole(['ADMIN']);
     const { db } = await import('@/db');
     const { teaching_coefficients } = await import('@/db/schema');
-    const { eq } = await import('drizzle-orm');
-    
+    const { and, eq, isNull, or } = await import('drizzle-orm');
+    const { getCurrentUniversity } = await import('@/lib/university-scope');
+    const uni = await getCurrentUniversity().catch(() => null);
+    if (!uni) return fail(new Error('دانشگاه فعال نامشخص است.'));
+    const uniScope = or(eq(teaching_coefficients.universityId, uni.id), isNull(teaching_coefficients.universityId));
+
     const existing = await db
       .select()
       .from(teaching_coefficients)
-      .where(eq(teaching_coefficients.ruleName, ruleName))
+      .where(and(eq(teaching_coefficients.ruleName, ruleName), uniScope))
       .limit(1);
-    
+
     if (existing.length > 0) {
       await db
         .update(teaching_coefficients)
         .set({ multiplier: String(multiplier) })
-        .where(eq(teaching_coefficients.ruleName, ruleName));
+        .where(and(eq(teaching_coefficients.ruleName, ruleName), uniScope));
     } else {
-      await db.insert(teaching_coefficients).values({ ruleName, multiplier: String(multiplier) });
+      await db.insert(teaching_coefficients).values({ universityId: uni.id, ruleName, multiplier: String(multiplier) });
     }
     
     revalidatePath('/admin/payroll');
@@ -173,11 +188,16 @@ export async function getPayrollCalculationRulesAction() {
     await requireRole(['ADMIN', 'EDU_EXPERT']);
     const { db } = await import('@/db');
     const { payroll_calculation_rules } = await import('@/db/schema');
-    const { eq } = await import('drizzle-orm');
+    const { and, eq, isNull, or } = await import('drizzle-orm');
+    const { getCurrentUniversity } = await import('@/lib/university-scope');
+    const uni = await getCurrentUniversity().catch(() => null);
     const rows = await db
       .select()
       .from(payroll_calculation_rules)
-      .where(eq(payroll_calculation_rules.isActive, 1));
+      .where(and(
+        eq(payroll_calculation_rules.isActive, 1),
+        uni ? or(eq(payroll_calculation_rules.universityId, uni.id), isNull(payroll_calculation_rules.universityId)) : undefined,
+      ));
     return { ok: true as const, rules: rows };
   } catch (err) {
     return fail(err);
@@ -197,8 +217,12 @@ export async function createPayrollCalculationRuleAction(data: {
     const user = await requireRole(['ADMIN']);
     const { db } = await import('@/db');
     const { payroll_calculation_rules } = await import('@/db/schema');
-    
+    const { getCurrentUniversity } = await import('@/lib/university-scope');
+    const uni = await getCurrentUniversity().catch(() => null);
+    if (!uni) return fail(new Error('دانشگاه فعال نامشخص است.'));
+
     await db.insert(payroll_calculation_rules).values({
+      universityId: uni.id,
       offeringType: data.offeringType,
       professorRole: data.professorRole,
       academicRank: data.academicRank,
@@ -230,8 +254,17 @@ export async function updatePayrollCalculationRuleAction(id: number, data: {
     const user = await requireRole(['ADMIN']);
     const { db } = await import('@/db');
     const { payroll_calculation_rules } = await import('@/db/schema');
-    const { eq } = await import('drizzle-orm');
-    
+    const { and, eq, isNull, or } = await import('drizzle-orm');
+    const { getCurrentUniversity } = await import('@/lib/university-scope');
+    const uni = await getCurrentUniversity().catch(() => null);
+    if (!uni) return fail(new Error('دانشگاه فعال نامشخص است.'));
+    const [cur] = await db.select({ universityId: payroll_calculation_rules.universityId })
+      .from(payroll_calculation_rules).where(eq(payroll_calculation_rules.id, id)).limit(1);
+    if (!cur) return fail(new Error('قانون یافت نشد.'));
+    if (cur.universityId !== null && cur.universityId !== uni.id) {
+      return fail(new Error('قانون متعلق به دانشگاه دیگری است.'));
+    }
+
     await db
       .update(payroll_calculation_rules)
       .set({
@@ -245,7 +278,10 @@ export async function updatePayrollCalculationRuleAction(id: number, data: {
         isActive: data.isActive,
         updatedAt: new Date(),
       })
-      .where(eq(payroll_calculation_rules.id, id));
+      .where(and(
+        eq(payroll_calculation_rules.id, id),
+        or(eq(payroll_calculation_rules.universityId, uni.id), isNull(payroll_calculation_rules.universityId)),
+      ));
     
     revalidatePath('/admin/payroll');
     return { ok: true as const };
@@ -259,11 +295,23 @@ export async function deletePayrollCalculationRuleAction(id: number) {
     const user = await requireRole(['ADMIN']);
     const { db } = await import('@/db');
     const { payroll_calculation_rules } = await import('@/db/schema');
-    const { eq } = await import('drizzle-orm');
-    
+    const { and, eq, isNull, or } = await import('drizzle-orm');
+    const { getCurrentUniversity } = await import('@/lib/university-scope');
+    const uni = await getCurrentUniversity().catch(() => null);
+    if (!uni) return fail(new Error('دانشگاه فعال نامشخص است.'));
+    const [cur] = await db.select({ universityId: payroll_calculation_rules.universityId })
+      .from(payroll_calculation_rules).where(eq(payroll_calculation_rules.id, id)).limit(1);
+    if (!cur) return fail(new Error('قانون یافت نشد.'));
+    if (cur.universityId !== null && cur.universityId !== uni.id) {
+      return fail(new Error('قانون متعلق به دانشگاه دیگری است.'));
+    }
+
     await db
       .delete(payroll_calculation_rules)
-      .where(eq(payroll_calculation_rules.id, id));
+      .where(and(
+        eq(payroll_calculation_rules.id, id),
+        or(eq(payroll_calculation_rules.universityId, uni.id), isNull(payroll_calculation_rules.universityId)),
+      ));
     
     revalidatePath('/admin/payroll');
     return { ok: true as const };

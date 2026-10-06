@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { exportReport, runReport, type FilterOptions, type ReportResult } from './actions';
+import { LINK_CARDS } from './r-collect-external';
 
-type Card = { kind: string; icon: string; title: string; needsTerm?: boolean; soon?: boolean };
+type Card = { kind: string; icon: string; title: string; needsTerm?: boolean; soon?: boolean; customs?: { key: string; title: string }[] };
 
 const CARDS: Card[] = [
   { kind: 'active-term', icon: '🧑‍🎓', title: 'گزارش دانشجویان فعال ترم', needsTerm: true },
@@ -22,10 +23,80 @@ const CARDS: Card[] = [
   { kind: 'payesh', icon: '🗂️', title: 'گزارش پاسخ‌های طرح پایش' },
   { kind: 'jame', icon: '🧮', title: 'دانشجویان واجد شرایط آزمون جامع' },
   { kind: 'docs', icon: '📎', title: 'مدارک دانشجویان' },
+
+  // ── موج ۲: ۵۰ گزارش خانواده‌ها (منطق در r-*.ts) ──
+  // آموزشی/مشروطی
+  { kind: 'probation-violations', icon: '⚠️', title: 'تخلفات مشروطی', needsTerm: true },
+  { kind: 'probation-chains', icon: '🔗', title: 'مشروطی متناوب و متوالی', needsTerm: true },
+  { kind: 'unit-cap-violations', icon: '📏', title: 'عدم رعایت سقف و کف واحد', needsTerm: true },
+  { kind: 'repeated-courses', icon: '🔁', title: 'دروس چندبار اخذشده' },
+  // آموزشی/برنامه و نمره
+  { kind: 'student-weekly-conflicts', icon: '🗓', title: 'تداخل برنامه هفتگی دانشجویان', needsTerm: true },
+  { kind: 'student-exam-conflicts', icon: '📝', title: 'تداخل برنامه امتحانی', needsTerm: true },
+  { kind: 'prereq-violations', icon: '⛓', title: 'عدم رعایت پیش‌نیاز/هم‌نیاز', needsTerm: true },
+  { kind: 'course-grade-status', icon: '📋', title: 'وضعیت درس و نمره', needsTerm: true, customs: [{ key: 'gradeStatus', title: 'وضع نمره' }, { key: 'samaCode', title: 'کد سما' }] },
+  { kind: 'enrollment-pick', icon: '🧾', title: 'انتخاب واحد دانشجویان', needsTerm: true },
+  // آموزشی/فهرست
+  { kind: 'offered-course-roster', icon: '👥', title: 'دانشجویان درس ارائه‌شده', needsTerm: true },
+  { kind: 'top-students', icon: '🏆', title: 'نفرات برتر (معدل کل)' },
+  { kind: 'no-photo', icon: '📷', title: 'دانشجویان فاقد عکس' },
+  { kind: 'graduates-info', icon: '🎓', title: 'اطلاعات دانش‌آموختگان' },
+  // وضعیت و عملیات
+  { kind: 'status-report', icon: '📊', title: 'وضعیت دانشجویان' },
+  { kind: 'major-change-report', icon: '🔀', title: 'تغییر رشته' },
+  { kind: 'status-change-report', icon: '🔄', title: 'تغییر وضعیت' },
+  { kind: 'gpa-refresh-preview', icon: '🧮', title: 'به‌روزرسانی معدل نیمسال' },
+  { kind: 'profile-refresh', icon: '👤', title: 'به‌روزرسانی نیمرخ تحصیلی' },
+  { kind: 'portal-export', icon: '📡', title: 'ارسال به پرتال' },
+  // امتحانات
+  { kind: 'exam-session-sheet', icon: '📄', title: 'صورت‌جلسه امتحان', needsTerm: true },
+  { kind: 'seat-numbers', icon: '💺', title: 'شماره صندلی', needsTerm: true },
+  { kind: 'final-exam-schedule', icon: '🗓', title: 'برنامه امتحانات پایان ترم', needsTerm: true },
+  { kind: 'grade-entry-report', icon: '✍️', title: 'ثبت نمره استادان', needsTerm: true },
+  { kind: 'grade-deadline', icon: '⏰', title: 'زمان‌بندی ثبت نمرات', needsTerm: true },
+  // کلاس‌ها
+  { kind: 'empty-rooms', icon: '🏚', title: 'کلاس‌های خالی', needsTerm: true },
+  { kind: 'weekly-timetable', icon: '🗓', title: 'برنامه هفتگی کلاس‌ها', needsTerm: true },
+  { kind: 'room-conflicts', icon: '⚠️', title: 'تداخل برنامه کلاس‌ها', needsTerm: true },
+  { kind: 'low-enrollment', icon: '📉', title: 'ظرفیت به حدنصاب نرسیده', needsTerm: true },
+  { kind: 'makeup-courses', icon: '🩹', title: 'دروس جبرانی/پیش‌دانشگاهی' },
+  // اساتید
+  { kind: 'staff-list', icon: '👨‍🏫', title: 'اساتید', needsTerm: true },
+  { kind: 'staff-courses', icon: '📚', title: 'استادان مدرس دروس', needsTerm: true },
+  { kind: 'staff-timetable', icon: '🗓', title: 'برنامه هفتگی اساتید', needsTerm: true },
+  { kind: 'attendance-list', icon: '📝', title: 'حضور و غیاب', needsTerm: true },
+  // مالی
+  { kind: 'tuition-tariff', icon: '💰', title: 'تعرفه تحصیلی' },
+  { kind: 'tuition-statement', icon: '🧾', title: 'صورت‌حساب شهریه', needsTerm: true },
+  // پژوهش
+  { kind: 'proposal-cap', icon: '🎓', title: 'ظرفیت پروپوزال استادان', soon: true },
+  { kind: 'pending-requests', icon: '⏳', title: 'درخواست‌های درانتظار' },
+  { kind: 'defenses', icon: '🎤', title: 'لیست دفاعیات' },
+  { kind: 'proposals', icon: '📄', title: 'پروپوزال' },
+  { kind: 'seminars', icon: '💬', title: 'سمینار', soon: true },
+  // شورا و مکاتبات
+  { kind: 'council-edu', icon: '🏛', title: 'شورای آموزشی' },
+  { kind: 'discipline', icon: '⚖', title: 'کمیته انضباطی', soon: true },
+  { kind: 'letter-templates', icon: '📄', title: 'قالب‌های مکاتبات' },
+  { kind: 'transcript-card', icon: '🎓', title: 'کارنامه دانشجویان' },
+  { kind: 'exam-entry-card', icon: '🎟', title: 'کارت ورود به جلسه', needsTerm: true },
+  { kind: 'student-card', icon: '🪪', title: 'کارت دانشجویی' },
+  { kind: 'study-cert', icon: '📜', title: 'گواهی اشتغال به تحصیل' },
+  { kind: 'edu-confirm', icon: '✅', title: 'تاییدیه تحصیلی' },
+  { kind: 'grad-cert', icon: '🎓', title: 'گواهی پایان تحصیلات' },
+  { kind: 'military-defer', icon: '🎖', title: 'معافیت تحصیلی' },
+  { kind: 'finance-worklist', icon: '🗂️', title: 'کارتابل مالی (مانده دانشجویان)', customs: [{ key: 'onlyDebtors', title: 'فقط بدهکار (1)' }] },
+  { kind: 'payroll-overview', icon: '💵', title: 'حق‌التدریس اساتید', needsTerm: true },
+  { kind: 'bi-teaching-quality', icon: '🎯', title: 'کیفیت تدریس اساتید (BI)' },
+  { kind: 'bi-facilities', icon: '🏫', title: 'امکانات کلاس‌ها (BI)' },
+  { kind: 'graduation-dossiers', icon: '🎓', title: 'پرونده‌های فراغت‌التحصیل', customs: [{ key: 'dossierStatus', title: 'وضعیت (کد)' }] },
+  { kind: 'grade-audit-log', icon: '📜', title: 'لاگ تغییرات نمرات' },
   { kind: 'third-attempt', icon: '🔁', title: 'دروس بار سوم (مردودی دو بار)', needsTerm: true },
 ];
 
-export default function ReportsClient({ opts }: { opts: FilterOptions }) {
+const NEW_KINDS = new Set(['finance-worklist', 'payroll-overview', 'bi-teaching-quality', 'bi-facilities', 'graduation-dossiers', 'grade-audit-log', 'probation-violations', 'probation-chains', 'unit-cap-violations', 'repeated-courses', 'student-weekly-conflicts', 'student-exam-conflicts', 'prereq-violations', 'course-grade-status', 'enrollment-pick', 'offered-course-roster', 'top-students', 'no-photo', 'graduates-info', 'status-report', 'major-change-report', 'status-change-report', 'gpa-refresh-preview', 'profile-refresh', 'portal-export', 'exam-session-sheet', 'seat-numbers', 'final-exam-schedule', 'grade-entry-report', 'grade-deadline', 'empty-rooms', 'weekly-timetable', 'room-conflicts', 'low-enrollment', 'makeup-courses', 'staff-list', 'staff-courses', 'staff-timetable', 'attendance-list', 'tuition-tariff', 'tuition-statement', 'pending-requests', 'defenses', 'proposals', 'council-edu', 'letter-templates', 'transcript-card', 'exam-entry-card', 'student-card', 'study-cert', 'edu-confirm', 'grad-cert', 'military-defer']);
+
+export default function ReportsClient({ opts, initialUniversityId, allowedKinds }: { opts: FilterOptions; initialUniversityId?: number; allowedKinds?: string[] | null }) {
   const [kind, setKind] = useState<string>('active-term');
   const [term, setTerm] = useState(opts.latestTerm);
   const [degreeId, setDegreeId] = useState(0);
@@ -36,13 +107,19 @@ export default function ReportsClient({ opts }: { opts: FilterOptions }) {
   const [q, setQ] = useState('');
   const [nationalCode, setNationalCode] = useState('');
   const [miss, setMiss] = useState('national');
-  const [universityId, setUniversityId] = useState(0);
+  const [universityId, setUniversityId] = useState(initialUniversityId ?? 0);
+  const [extra, setExtra] = useState<Record<string, string>>({});
   const [res, setRes] = useState<ReportResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
-  const card = CARDS.find(c => c.kind === kind);
-  const filters = { term, degreeId, facultyId, departmentId, majorId, entryYear, q: q.trim(), nationalCode: nationalCode.trim(), miss, page: 1, universityId };
+  const visibleCards = allowedKinds ? CARDS.filter(c => allowedKinds.includes(c.kind)) : CARDS;
+  const card = visibleCards.find(c => c.kind === kind);
+  useEffect(() => {
+    if (!visibleCards.some(c => c.kind === kind)) setKind(visibleCards[0]?.kind ?? 'active-term');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allowedKinds]);
+  const filters = { term, degreeId, facultyId, departmentId, majorId, entryYear, q: q.trim(), nationalCode: nationalCode.trim(), miss, page: 1, universityId, ...extra };
 
   const run = async (page = 1) => {
     setLoading(true);
@@ -83,7 +160,7 @@ export default function ReportsClient({ opts }: { opts: FilterOptions }) {
     <div className="space-y-4">
       {/* نوار دسته‌بندی به سبک سما */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-        {CARDS.map(c => (
+        {visibleCards.map(c => (
           <button
             key={c.kind}
             disabled={c.soon}
@@ -129,7 +206,7 @@ export default function ReportsClient({ opts }: { opts: FilterOptions }) {
                 {opts.degrees.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
               </select>
             </label>
-            {(kind === 'by-major' || kind === 'active-term' || kind === 'top' || kind === 'third-attempt') && (
+            {(kind === 'by-major' || kind === 'active-term' || kind === 'top' || kind === 'third-attempt' || NEW_KINDS.has(kind)) && (
               <label className="flex items-center gap-1">
                 <span className="font-bold text-slate-600">دانشکده:</span>
                 <select value={facultyId} onChange={e => setFacultyId(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-44">
@@ -145,7 +222,7 @@ export default function ReportsClient({ opts }: { opts: FilterOptions }) {
                 {opts.departments.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
               </select>
             </label>
-            {(kind === 'top' || kind === 'graduates' || kind === 'entries' || kind === 'third-attempt') && (
+            {(kind === 'top' || kind === 'graduates' || kind === 'entries' || kind === 'third-attempt' || NEW_KINDS.has(kind)) && (
               <label className="flex items-center gap-1">
                 <span className="font-bold text-slate-600">رشته:</span>
                 <select value={majorId} onChange={e => setMajorId(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-52">
@@ -154,7 +231,7 @@ export default function ReportsClient({ opts }: { opts: FilterOptions }) {
                 </select>
               </label>
             )}
-            {(kind === 'entries' || kind === 'graduates' || kind === 'top') && (
+            {(kind === 'entries' || kind === 'graduates' || kind === 'top' || NEW_KINDS.has(kind)) && (
               <label className="flex items-center gap-1">
                 <span className="font-bold text-slate-600">ورودی:</span>
                 <select value={entryYear} onChange={e => setEntryYear(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 font-mono" dir="ltr">
@@ -182,6 +259,16 @@ export default function ReportsClient({ opts }: { opts: FilterOptions }) {
                 </select>
               </label>
             )}
+            {(card?.customs ?? []).map(c => (
+              <label key={c.key} className="flex items-center gap-1">
+                <span className="font-bold text-slate-600">{c.title}:</span>
+                <input
+                  value={extra[c.key] ?? ''}
+                  onChange={e => setExtra({ ...extra, [c.key]: e.target.value })}
+                  className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 w-28"
+                />
+              </label>
+            ))}
             <input
               value={q} onChange={e => setQ(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && run(1)}
@@ -199,6 +286,15 @@ export default function ReportsClient({ opts }: { opts: FilterOptions }) {
           </div>
         </div>
       )}
+
+      {/* پیوند به صفحات تخصصی (خارج از مرکز گزارش) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+        {LINK_CARDS.map(l => (
+          <a key={l.kind} href={l.href} className="flex items-center gap-2 p-3 rounded-lg border-2 text-right font-bold text-[13px] bg-white border-slate-300 hover:border-indigo-300 hover:shadow">
+            <span className="text-2xl">{l.icon}</span><span>{l.title}</span>
+          </a>
+        ))}
+      </div>
 
       {/* نتیجه */}
       <div id="report-result" className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden">

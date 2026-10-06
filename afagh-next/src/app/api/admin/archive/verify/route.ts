@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { db } from '@/db';
 import { audit_logs, student_documents } from '@/db/schema';
 import { getSessionUser } from '@/lib/auth';
 import { assertSameOrigin } from '@/lib/security';
+import { getCurrentUniversity } from '@/lib/university-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,9 +23,20 @@ export async function POST(req: NextRequest) {
   const reason = typeof body?.reason === 'string' ? body.reason.slice(0, 500) : null;
   if (!docId) return NextResponse.json({ error: 'پارامتر ناقص' }, { status: 400 });
 
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return NextResponse.json({ error: 'دانشگاه فعال نامشخص است' }, { status: 400 });
+  const [doc] = await db.select({ universityId: student_documents.universityId })
+    .from(student_documents).where(eq(student_documents.id, docId)).limit(1);
+  if (!doc) return NextResponse.json({ error: 'not found' }, { status: 404 });
+  if (doc.universityId !== null && doc.universityId !== uni.id) {
+    return NextResponse.json({ error: 'سند متعلق به دانشگاه دیگری است' }, { status: 403 });
+  }
   const [updated] = await db.update(student_documents)
     .set({ verificationStatus: decision, verifiedBy: user.id, rejectionReason: decision === 'REJECTED' ? reason : null })
-    .where(eq(student_documents.id, docId))
+    .where(and(
+      eq(student_documents.id, docId),
+      or(eq(student_documents.universityId, uni.id), isNull(student_documents.universityId)),
+    ))
     .returning({ id: student_documents.id });
   if (!updated) return NextResponse.json({ error: 'not found' }, { status: 404 });
 

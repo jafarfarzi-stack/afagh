@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, isNull, or } from 'drizzle-orm';
 import { db } from '@/db';
 import { document_categories, document_types, student_documents, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
@@ -15,7 +15,7 @@ export default async function ArchivePage() {
 
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
-  /* TODO: filter by universityId */
+  const scopeOf = (c: any) => (currentUniversityId ? or(eq(c, currentUniversityId), isNull(c)) : undefined);
 
   const rows = await db
     .select({
@@ -33,10 +33,11 @@ export default async function ArchivePage() {
     .innerJoin(users, eq(users.id, student_documents.personUserId))
     .leftJoin(document_categories, eq(document_categories.id, student_documents.categoryId))
     .leftJoin(document_types, eq(document_types.id, student_documents.typeId))
+    .where(scopeOf(student_documents.universityId))
     .orderBy(desc(student_documents.id));
 
-  const cats = await db.select().from(document_categories);
-  const types = await db.select().from(document_types);
+  const cats = await db.select().from(document_categories).where(scopeOf(document_categories.universityId));
+  const types = await db.select().from(document_types).where(scopeOf(document_types.universityId));
 
   return (
     <div className="space-y-4">

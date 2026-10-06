@@ -11,11 +11,27 @@
  *   و برای «میز دفاع پایان‌نامه»: GRADUATION_EXPERT, PROFESSOR, DEP_HEAD
  */
 
+export type ModuleGroupKey =
+  | 'edu' | 'fin' | 'plan' | 'exam' | 'research' | 'reports' | 'archive' | 'settings';
+
+/** دسته‌های کلی فرانت‌اند — ترتیب نمایش در داشبورد */
+export const MODULE_GROUPS: { key: ModuleGroupKey; title: string; icon: string; desc: string }[] = [
+  { key: 'edu', title: 'آموزش', icon: '🎓', desc: 'دانشجویان، پذیرش، کاتالوگ، دروس و آیین‌نامه' },
+  { key: 'fin', title: 'مالی', icon: '💰', desc: 'حقوق، شهریه، دفتر مالی و صندوق' },
+  { key: 'plan', title: 'برنامه‌ریزی درسی', icon: '🗓️', desc: 'کارتابل مدیر گروه و فرآیندها' },
+  { key: 'exam', title: 'امتحانات', icon: '📝', desc: 'برنامه‌ریزی و مدیریت امتحانات' },
+  { key: 'research', title: 'پژوهش و فارغ‌التحصیلی', icon: '🔬', desc: 'دفاع، فارغ‌التحصیلی و مدارک' },
+  { key: 'reports', title: 'گزارش‌ها', icon: '📑', desc: 'مرکز گزارش‌ها و هوش تجاری' },
+  { key: 'archive', title: 'بایگانی و انضباط', icon: '🗄️', desc: 'اسناد، ثمین و موارد خاص' },
+  { key: 'settings', title: 'تنظیمات', icon: '⚙️', desc: 'دسترسی‌ها، دانشگاه‌ها، انتقال داده و پیکربندی' },
+];
+
 export interface AdminModule {
   href: string;
   icon: string;
   title: string;
   desc: string;
+  group?: ModuleGroupKey;
   /** نقش‌هایی که این ماژول را می‌بینند و می‌توانند باز کنند */
   roles: string[];
   /** گرادیان کارت در داشبورد */
@@ -47,6 +63,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🎓',
     title: 'پرونده جامع دانشجویان و پرسنل',
     desc: 'پرونده، مدارک، KYC و سوابق',
+    group: 'edu',
     roles: ['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER'],
     accent: 'from-slate-900 to-slate-950 border-slate-600/50',
     iconBg: 'bg-slate-700/80 border-slate-500/50',
@@ -58,6 +75,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '📥',
     title: 'پذیرش سنجش و فرمول‌ساز',
     desc: 'ثبت‌نام، سنجش و فرمول‌های پذیرش',
+    group: 'edu',
     roles: EDU,
     accent: 'from-sky-950 to-indigo-950 border-sky-700/50',
     iconBg: 'bg-sky-700/80 border-sky-500/50',
@@ -69,6 +87,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🔑',
     title: 'مرکز کدها',
     desc: 'تعریف و بازبینی کد دانشکده، گروه، رشته، مقطع و درس',
+    group: 'edu',
     roles: ['ADMIN', 'VICE_EDU', 'EDU_EXPERT'],
     accent: 'from-amber-950 to-slate-950 border-amber-700/50',
     iconBg: 'bg-amber-700/80 border-amber-500/50',
@@ -80,6 +99,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🏛️',
     title: 'گروه‌های آموزشی و مدیران گروه',
     desc: 'تعریف گروه، انتخاب مدیر گروه و اعضا',
+    group: 'edu',
     roles: ['ADMIN', 'VICE_EDU'],
     accent: 'from-cyan-950 to-slate-950 border-cyan-700/50',
     iconBg: 'bg-cyan-700/80 border-cyan-500/50',
@@ -91,6 +111,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '📚',
     title: 'کاتالوگ و سرفصل رشته‌ها',
     desc: 'طرح‌های آموزشی و سرفصل دروس',
+    group: 'edu',
     roles: EDU,
     accent: 'from-emerald-950 to-teal-950 border-emerald-700/50',
     iconBg: 'bg-emerald-700/80 border-emerald-500/50',
@@ -102,6 +123,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🏷️',
     title: 'مدیریت دروس و کدهای وضعیت نمره',
     desc: 'تعریف، ویرایش و کدگذاری وضعیت نمره دروس بانک و چارت',
+    group: 'edu',
     roles: ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'],
     accent: 'from-amber-950 to-orange-950 border-amber-700/50',
     iconBg: 'bg-amber-700/80 border-amber-500/50',
@@ -113,6 +135,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '⚖️',
     title: 'مرکز مدیریت آیین‌نامه‌ها',
     desc: 'تدوین و نسخه‌بندی آیین‌نامه‌های آموزشی',
+    group: 'edu',
     roles: EDU,
     accent: 'from-stone-900 to-amber-950 border-stone-600/50',
     iconBg: 'bg-stone-700/80 border-stone-500/50',
@@ -124,6 +147,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🔍',
     title: 'بررسی کدهای وضعیت نمره',
     desc: 'تشخیص و اصلاح خودکار کدهای وضعیت نمره سما بر اساس آیین‌نامه',
+    group: 'edu',
     roles: ['ADMIN'],
     accent: 'from-red-950 to-rose-950 border-red-700/50',
     iconBg: 'bg-red-700/80 border-red-500/50',
@@ -135,6 +159,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🗓️',
     title: 'برنامه‌ریزی درسی مدیر گروه',
     desc: 'ماتریس حضور، سناریوها و تقویم جلسات',
+    group: 'plan',
     roles: EDU,
     accent: 'from-slate-900 to-indigo-900 border-slate-700/50',
     iconBg: 'bg-slate-800 border-slate-600/50',
@@ -146,6 +171,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '📝',
     title: 'مدیریت و برنامه‌ریزی امتحانات',
     desc: 'موتور ضدتقلب، سالن‌ها و غیبت‌ها',
+    group: 'exam',
     roles: ['ADMIN', 'EDU_EXPERT', 'VAULT_MANAGER'],
     accent: 'from-indigo-900 to-indigo-950 border-indigo-700/50',
     iconBg: 'bg-indigo-700/80 border-indigo-500/50',
@@ -157,6 +183,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '📨',
     title: 'قالب‌های پیامک و ارتباطات',
     desc: 'طراحی متون آزاد، تگ‌های پویا و تست',
+    group: 'settings',
     roles: EDU,
     accent: 'from-teal-950 to-indigo-950 border-teal-700/50',
     iconBg: 'bg-teal-800/80 border-teal-500/50',
@@ -168,6 +195,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🗄️',
     title: 'بایگانی الکترونیک مدارک',
     desc: 'اسناد، تأیید و بازیابی مدارک',
+    group: 'archive',
     roles: ['ADMIN', 'ARCHIVE_EXPERT'],
     accent: 'from-zinc-900 to-slate-950 border-zinc-600/50',
     iconBg: 'bg-zinc-700/80 border-zinc-500/50',
@@ -179,6 +207,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '💼',
     title: 'حقوق و دستمزد',
     desc: 'حکم کارگزینی، فیش و تسویه مالی',
+    group: 'fin',
     roles: ['ADMIN', 'EDU_EXPERT', 'FINANCE_EXPERT', 'FINANCE'],
     accent: 'from-cyan-950 to-sky-950 border-cyan-700/50',
     iconBg: 'bg-cyan-700/80 border-cyan-500/50',
@@ -190,6 +219,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '💳',
     title: 'امور مالی دانشجویان',
     desc: 'شهریه، دفتر مالی و بدهی دانشجویان',
+    group: 'fin',
     roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'],
     accent: 'from-emerald-900 to-teal-950 border-emerald-600/50',
     iconBg: 'bg-emerald-700/80 border-emerald-500/50',
@@ -201,6 +231,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🗂️',
     title: 'کارتابل کارشناس مالی',
     desc: 'فهرست کامل دانشجویان، کارنامهٔ مالی، تخفیف، بنیاد، چک و وام',
+    group: 'fin',
     roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'],
     accent: 'from-teal-900 to-emerald-950 border-teal-600/50',
     iconBg: 'bg-teal-700/80 border-teal-500/50',
@@ -212,6 +243,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🧮',
     title: 'موتور شهریه',
     desc: 'قواعد شهریهٔ ثابت و متغیر بر اساس نوع ترم و نوع درس',
+    group: 'fin',
     roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'],
     accent: 'from-cyan-900 to-sky-950 border-cyan-600/50',
     iconBg: 'bg-cyan-700/80 border-cyan-500/50',
@@ -223,6 +255,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🏧',
     title: 'ترمینال‌های POS (پرداخت حضوری)',
     desc: 'ثبت پرداخت کارت‌خوان فیزیکی، ویدی، گزارش روزانه صندوق',
+    group: 'fin',
     roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'],
     accent: 'from-orange-900 to-amber-950 border-orange-600/50',
     iconBg: 'bg-orange-700/80 border-orange-500/50',
@@ -234,6 +267,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🪪',
     title: 'کارت دانشجویی',
     desc: 'صدور، چاپ و استعلام کارت',
+    group: 'edu',
     roles: EDU,
     accent: 'from-fuchsia-950 to-purple-950 border-fuchsia-700/50',
     iconBg: 'bg-fuchsia-700/80 border-fuchsia-500/50',
@@ -245,6 +279,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🏆',
     title: 'آموزش‌های آزاد و گواهینامه‌ها',
     desc: 'دوره‌های آزاد و صدور گواهینامه',
+    group: 'edu',
     roles: EDU,
     accent: 'from-amber-950 to-yellow-950 border-amber-700/50',
     iconBg: 'bg-amber-700/80 border-amber-500/50',
@@ -256,6 +291,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🔀',
     title: 'فرآیندها، SLA و کارتابل (BPM)',
     desc: 'موتور فرآیندها و پایش گلوگاه‌ها',
+    group: 'plan',
     roles: EDU,
     accent: 'from-purple-950 to-indigo-950 border-purple-700/50',
     iconBg: 'bg-purple-700/80 border-purple-500/50',
@@ -267,6 +303,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '📑',
     title: 'مرکز گزارش‌های آموزشی',
     desc: 'فعال ترم، خلاصه وضعیت، مشروطی، برترها + خروجی Excel',
+    group: 'reports',
     roles: ['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER'],
     accent: 'from-blue-950 to-indigo-950 border-blue-700/50',
     iconBg: 'bg-blue-700/80 border-blue-500/50',
@@ -278,6 +315,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '📄',
     title: 'صورت حساب مالی دانشجویان (۹ مشخصه)',
     desc: 'شهریه ثابت/متغیر، تخفیف، موضوعی، بنیاد، پرداخت آنلاین/POS، وام، مانده',
+    group: 'fin',
     roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'],
     accent: 'from-emerald-900 to-teal-950 border-emerald-600/50',
     iconBg: 'bg-emerald-700/80 border-emerald-500/50',
@@ -289,6 +327,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '📊',
     title: 'هوش تجاری ارزشیابی (BI)',
     desc: 'داشبوردها و تحلیل ارزشیابی',
+    group: 'reports',
     roles: ['ADMIN'],
     accent: 'from-blue-950 to-indigo-950 border-blue-700/50',
     iconBg: 'bg-blue-700/80 border-blue-500/50',
@@ -300,6 +339,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🛡️',
     title: 'ماتریس دسترسی‌ها (RBAC)',
     desc: 'نقش‌ها، مجوزها و کاربران',
+    group: 'settings',
     roles: ['ADMIN'],
     accent: 'from-rose-950 to-red-950 border-rose-700/50',
     iconBg: 'bg-rose-700/80 border-rose-500/50',
@@ -311,6 +351,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🎓',
     title: 'فارغ‌التحصیلی و مدارک',
     desc: 'تسویه‌حساب و صدور مدارک پایانی',
+    group: 'research',
     roles: ['ADMIN'],
     accent: 'from-indigo-950 to-violet-950 border-indigo-700/50',
     iconBg: 'bg-indigo-700/80 border-indigo-500/50',
@@ -322,6 +363,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🛡️',
     title: 'برنامه‌ریزی و ثبت نتیجهٔ دفاع پایان‌نامه',
     desc: 'تأیید پروپوزال، تعیین وقت دفاع و ثبت نتیجه با هیأت داوران',
+    group: 'research',
     roles: ['ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'DEP_HEAD', 'PROFESSOR'],
     accent: 'from-teal-950 to-cyan-950 border-teal-700/50',
     iconBg: 'bg-teal-700/80 border-teal-500/50',
@@ -333,6 +375,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🏛️',
     title: 'مدیریت دانشگاه‌ها (چندمستأجری)',
     desc: 'آفاق + منحل‌شده‌ها — کد و اتصال ثمین',
+    group: 'settings',
     roles: ['ADMIN'],
     accent: 'from-indigo-900 to-slate-950 border-indigo-700/50',
     iconBg: 'bg-indigo-700/80 border-indigo-500/50',
@@ -344,6 +387,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🔄',
     title: 'انتقال داده از سیستم قدیمی',
     desc: 'نگاشت کد، شهریه و نمرات (ETL)',
+    group: 'settings',
     roles: ['ADMIN'],
     accent: 'from-amber-900 to-orange-950 border-amber-700/50',
     iconBg: 'bg-amber-700/80 border-amber-500/50',
@@ -355,6 +399,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '📡',
     title: 'هاب ثمین — سازمان امور دانشجویان',
     desc: 'ارسال per-دانشگاه + رهگیری trace',
+    group: 'archive',
     roles: ['ADMIN'],
     accent: 'from-sky-900 to-cyan-950 border-sky-700/50',
     iconBg: 'bg-sky-700/80 border-sky-500/50',
@@ -366,6 +411,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '⚙️',
     title: 'پیکربندی سامانه',
     desc: 'تنظیمات سراسری و پارامترها',
+    group: 'settings',
     roles: ['ADMIN'],
     accent: 'from-slate-800 to-slate-950 border-slate-600/50',
     iconBg: 'bg-slate-700/80 border-slate-500/50',
@@ -388,4 +434,12 @@ export function navModules(roles: string[]): AdminModule[] {
 /** ماژول‌های قابل نمایش به‌صورت کارت در داشبورد برای کاربر */
 export function gridModules(roles: string[]): AdminModule[] {
   return ADMIN_MODULES.filter(m => m.inGrid && canSeeModule(roles, m));
+}
+
+/** ماژول‌های یک دسته برای کاربر — برای صفحهٔ کاشی‌های دسته */
+export function groupedModules(roles: string[]): { group: (typeof MODULE_GROUPS)[number]; modules: AdminModule[] }[] {
+  return MODULE_GROUPS.map(g => ({
+    group: g,
+    modules: ADMIN_MODULES.filter(m => m.inGrid && (m as { group?: ModuleGroupKey }).group === g.key && canSeeModule(roles, m)),
+  })).filter(g => g.modules.length > 0);
 }

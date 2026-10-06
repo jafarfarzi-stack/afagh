@@ -10,11 +10,30 @@ import {
 } from '@/lib/workflow-engine';
 import { eventsForRequest, retryPendingWorkflowEvents } from '@/lib/workflow-events';
 import { db } from '@/db';
-import { process_definitions, process_steps } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { process_definitions, process_steps, student_requests, students } from '@/db/schema';
+import { and, eq, isNull, or } from 'drizzle-orm';
+import { getCurrentUniversity } from '@/lib/university-scope';
+
+/** درخواست باید متعلق به دانشگاه فعال باشد */
+async function assertWorkflowRequestInUni(requestId: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+  const [r] = await db
+    .select({ reqUni: student_requests.universityId, stuUni: students.universityId })
+    .from(student_requests)
+    .leftJoin(students, eq(students.id, student_requests.studentId))
+    .where(eq(student_requests.id, requestId))
+    .limit(1);
+  if (!r) return { ok: false, error: 'درخواست یافت نشد.' };
+  const owner = r.reqUni ?? r.stuUni;
+  if (owner !== null && owner !== uni.id) return { ok: false, error: 'درخواست متعلق به دانشگاه دیگری است.' };
+  return { ok: true };
+}
 
 export async function adminApproveWorkflowStepAction(requestId: number, note?: string) {
   const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
+  const scope = await assertWorkflowRequestInUni(requestId);
+  if (!scope.ok) return { ok: false, error: scope.error };
 
   const res = await advanceWorkflowStep({
     requestId,
@@ -32,6 +51,8 @@ export async function adminApproveWorkflowStepAction(requestId: number, note?: s
 
 export async function adminRejectWorkflowStepAction(requestId: number, reason: string) {
   const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
+  const scope = await assertWorkflowRequestInUni(requestId);
+  if (!scope.ok) return { ok: false, error: scope.error };
 
   const res = await advanceWorkflowStep({
     requestId,
@@ -49,6 +70,8 @@ export async function adminRejectWorkflowStepAction(requestId: number, reason: s
 
 export async function adminReturnWorkflowStepAction(requestId: number, note: string) {
   const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
+  const scope = await assertWorkflowRequestInUni(requestId);
+  if (!scope.ok) return { ok: false, error: scope.error };
 
   const res = await advanceWorkflowStep({
     requestId,
@@ -66,6 +89,8 @@ export async function adminReturnWorkflowStepAction(requestId: number, note: str
 
 export async function adminEscalateWorkflowStepAction(requestId: number, note?: string) {
   const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
+  const scope = await assertWorkflowRequestInUni(requestId);
+  if (!scope.ok) return { ok: false, error: scope.error };
 
   const res = await advanceWorkflowStep({
     requestId,
@@ -129,7 +154,17 @@ export async function adminSaveProcessDefinitionAction(data: {
 
   let processId = data.id;
 
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return { ok: false as const, error: 'دانشگاه فعال نامشخص است.' };
+  const uniScope = or(eq(process_definitions.universityId, uni.id), isNull(process_definitions.universityId));
+
   if (processId) {
+    const [cur] = await db.select({ universityId: process_definitions.universityId })
+      .from(process_definitions).where(eq(process_definitions.id, processId)).limit(1);
+    if (!cur) return { ok: false as const, error: 'فرایند یافت نشد.' };
+    if (cur.universityId !== null && cur.universityId !== uni.id) {
+      return { ok: false as const, error: 'فرایند متعلق به دانشگاه دیگری است.' };
+    }
     await db
       .update(process_definitions)
       .set({
@@ -139,11 +174,12 @@ export async function adminSaveProcessDefinitionAction(data: {
         feeAmount: data.feeAmount,
         formSchema: JSON.stringify(data.formSchema),
       })
-      .where(eq(process_definitions.id, processId));
+      .where(and(eq(process_definitions.id, processId), uniScope));
   } else {
     const [inserted] = await db
       .insert(process_definitions)
       .values({
+        universityId: uni.id,
         code: data.code,
         title: data.title,
         category: data.category,
@@ -186,6 +222,8 @@ export async function adminSaveProcessDefinitionAction(data: {
 /** رویدادهای شلیک‌شدهٔ یک پرونده (اثر تجاری هندلرها) — برای شفافیت کارتابل */
 export async function adminRequestEventsAction(requestId: number) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
+  const scope = await assertWorkflowRequestInUni(requestId);
+  if (!scope.ok) return { ok: false as const, error: scope.error };
   const rows = await eventsForRequest(requestId);
   return {
     ok: true,

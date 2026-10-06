@@ -1,10 +1,11 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull, or } from 'drizzle-orm';
 import { db } from '@/db';
 import { educational_regulations, degree_level_configs } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import type { RegulationConfig } from '@/lib/regulations-engine';
 
 export async function saveRegulationAction(data: {
@@ -29,8 +30,16 @@ export async function saveRegulationAction(data: {
 
   try {
     const configStr = JSON.stringify(data.rulesConfig);
+    const uni = await getCurrentUniversity().catch(() => null);
+    if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
 
     if (data.id) {
+      const [cur] = await db.select({ universityId: educational_regulations.universityId })
+        .from(educational_regulations).where(eq(educational_regulations.id, data.id)).limit(1);
+      if (!cur) return { ok: false, error: 'آیین‌نامه یافت نشد.' };
+      if (cur.universityId !== null && cur.universityId !== uni.id) {
+        return { ok: false, error: 'آیین‌نامه متعلق به دانشگاه دیگری است.' };
+      }
       await db
         .update(educational_regulations)
         .set({
@@ -40,9 +49,13 @@ export async function saveRegulationAction(data: {
           effectiveToYear: to,
           rulesConfig: configStr,
         })
-        .where(eq(educational_regulations.id, data.id));
+        .where(and(
+          eq(educational_regulations.id, data.id),
+          or(eq(educational_regulations.universityId, uni.id), isNull(educational_regulations.universityId)),
+        ));
     } else {
       await db.insert(educational_regulations).values({
+        universityId: uni.id,
         title: data.title,
         degreeLevelId: data.degreeLevelId,
         effectiveFromYear: from,
@@ -65,7 +78,18 @@ export async function deleteRegulationAction(id: number) {
   await requireRole(['ADMIN']);
 
   try {
-    await db.delete(educational_regulations).where(eq(educational_regulations.id, id));
+    const uni = await getCurrentUniversity().catch(() => null);
+    if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+    const [cur] = await db.select({ universityId: educational_regulations.universityId })
+      .from(educational_regulations).where(eq(educational_regulations.id, id)).limit(1);
+    if (!cur) return { ok: false, error: 'آیین‌نامه یافت نشد.' };
+    if (cur.universityId !== null && cur.universityId !== uni.id) {
+      return { ok: false, error: 'آیین‌نامه متعلق به دانشگاه دیگری است.' };
+    }
+    await db.delete(educational_regulations).where(and(
+      eq(educational_regulations.id, id),
+      or(eq(educational_regulations.universityId, uni.id), isNull(educational_regulations.universityId)),
+    ));
     revalidatePath('/admin/regulations');
     return { ok: true, message: 'آیین‌نامه حذف شد.' };
   } catch (err: any) {

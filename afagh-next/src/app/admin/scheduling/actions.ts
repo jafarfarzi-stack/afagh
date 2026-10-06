@@ -12,7 +12,7 @@
 // هیچ UI جدیدی ساخته نشده؛ فقط دادهٔ واقعی جایگزین Mock می‌شود.
 // ════════════════════════════════════════════════════════════════════════
 
-import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import {
@@ -21,6 +21,7 @@ import {
   professor_availabilities, scheduling_room_grants, staff, students, term_scheduling_states, users,
 } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import { getSchedulingState, transitionSchedulingPhase, supplyGroupDrafts, allocateSections, allocateRoomQuotas, getSmartSuggestions } from '@/lib/scheduling-engine';
 import { runSchedulingHealthCheck, type HealthReport } from '@/lib/scheduling-health';
 import { generateClassSessionsForTerm, getTermSessionsSummary, inspectSchedulingHardConflicts } from '@/lib/class-session-generator';
@@ -32,11 +33,18 @@ const MANAGERS = EDITORS;
 // ─────────────────────────── helpers (غیر export — گارد CI) ───────────────────────────
 
 /** نیمسال‌های واقعی (id/title) برای انتخاب‌گر بالای صفحه */
-async function listRealTerms() {
+async function listRealTerms(universityId?: number) {
   return db
     .select({ id: academic_terms.id, code: academic_terms.termCode, title: academic_terms.title, isCurrent: academic_terms.isCurrent })
     .from(academic_terms)
+    .where(universityId ? or(eq(academic_terms.universityId, universityId), isNull(academic_terms.universityId)) : undefined)
     .orderBy(desc(academic_terms.id));
+}
+
+/** دانشگاه فعال سرور — معیار scope؛ پارامتر کلاینت فقط fallback */
+async function serverUniId(fallback?: number): Promise<number | undefined> {
+  const uni = await getCurrentUniversity().catch(() => null);
+  return uni?.id ?? fallback;
 }
 
 /** رشته‌ها = majors + دانشکده (فقط فعال) — فیلتر شده بر اساس universityId */
@@ -436,12 +444,13 @@ export type SchedulingWorkspaceResult =
 export async function getSchedulingWorkspaceAction(termId?: number, universityId?: number): Promise<SchedulingWorkspaceResult> {
   try {
     await requireRole(EDITORS);
+    const uid = await serverUniId(universityId);
     const [terms, programs, classrooms, professors, deptRows] = await Promise.all([
-      listRealTerms(),
-      listRealPrograms(universityId),
-      listRealClassrooms(universityId),
-      listRealProfessors(universityId),
-      db.select({ id: departments.id, name: departments.name }).from(departments).where(universityId ? eq(departments.universityId, universityId) : undefined).orderBy(departments.name),
+      listRealTerms(uid),
+      listRealPrograms(uid),
+      listRealClassrooms(uid),
+      listRealProfessors(uid),
+      db.select({ id: departments.id, name: departments.name }).from(departments).where(uid ? or(eq(departments.universityId, uid), isNull(departments.universityId)) : undefined).orderBy(departments.name),
     ]);
     const resolvedTermId = termId ?? terms.find(t => t.isCurrent === 1)?.id ?? terms[0]?.id ?? null;
 
@@ -459,26 +468,33 @@ export async function getSchedulingWorkspaceAction(termId?: number, universityId
 
     if (resolvedTermId != null) {
       [demands, phases, cohorts, availRows] = await Promise.all([
-        listRealDemands(resolvedTermId, universityId),
-        db.select({ termId: term_scheduling_states.termId, phase: term_scheduling_states.phase }).from(term_scheduling_states),
-        listRealCohorts(universityId),
+        listRealDemands(resolvedTermId, uid),
+        db.select({ termId: term_scheduling_states.termId, phase: term_scheduling_states.phase }).from(term_scheduling_states)
+          .where(uid ? or(eq(term_scheduling_states.universityId, uid), isNull(term_scheduling_states.universityId)) : undefined),
+        listRealCohorts(uid),
         db.select({
           staffId: professor_availabilities.staffId,
           dayOfWeek: professor_availabilities.dayOfWeek,
           startTime: professor_availabilities.startTime,
           endTime: professor_availabilities.endTime,
           status: professor_availabilities.status,
-        }).from(professor_availabilities).where(or(eq(professor_availabilities.termId, resolvedTermId), sql`${professor_availabilities.termId} is null`)),
+        }).from(professor_availabilities).where(and(
+          or(eq(professor_availabilities.termId, resolvedTermId), sql`${professor_availabilities.termId} is null`),
+          uid ? or(eq(professor_availabilities.universityId, uid), isNull(professor_availabilities.universityId)) : undefined,
+        )),
       ]);
       const [inspect, term] = await Promise.all([
         inspectSchedulingHardConflicts(resolvedTermId),
-        db.select().from(academic_terms).where(eq(academic_terms.id, resolvedTermId)).limit(1).then(rows => rows[0] ?? null),
+        db.select().from(academic_terms).where(and(
+          eq(academic_terms.id, resolvedTermId),
+          uid ? or(eq(academic_terms.universityId, uid), isNull(academic_terms.universityId)) : undefined,
+        )).limit(1).then(rows => rows[0] ?? null),
       ]);
       hardConflictCount = inspect.total;
       [approvedOfferings, makeupSessions, allocatedRoomIds] = await Promise.all([
-        listApprovedOfferings(resolvedTermId, universityId),
-        listMakeupSessions(resolvedTermId, universityId),
-        listAllocatedRoomIds(resolvedTermId, universityId),
+        listApprovedOfferings(resolvedTermId, uid),
+        listMakeupSessions(resolvedTermId, uid),
+        listAllocatedRoomIds(resolvedTermId, uid),
       ]);
       if (term) {
         termCalendar = {
@@ -543,7 +559,7 @@ export type CurriculumDemandsResult =
 export async function getCurriculumDemandsAction(termId: number, programId: number, universityId?: number): Promise<CurriculumDemandsResult> {
   try {
     await requireRole(EDITORS);
-    const demands = await listCurriculumDemands(termId, programId, universityId);
+    const demands = await listCurriculumDemands(termId, programId, await serverUniId(universityId));
     return { ok: true, demands };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? 'خطا در بارگذاری دروس چارت درسی.' };
@@ -610,21 +626,30 @@ export async function transitionSchedulingPhaseAction(termId: number, to: 'ALLOC
 export async function getSchedulingDashboardAction(termId?: number) {
   await requireRole(MANAGERS);
   try {
+    const uni = await getCurrentUniversity().catch(() => null);
+    const uid = uni?.id;
+    const scopeOf = (c: any) => (uid ? or(eq(c, uid), isNull(c)) : undefined);
     const [terms, rooms, profs, phases] = await Promise.all([
       db.select({ id: academic_terms.id, termCode: academic_terms.termCode, title: academic_terms.title, isCurrent: academic_terms.isCurrent, isSummer: academic_terms.isSummer, startDate: academic_terms.startDate })
-        .from(academic_terms).orderBy(desc(academic_terms.id)),
-      db.select().from(classrooms).orderBy(asc(classrooms.name)),
+        .from(academic_terms).where(scopeOf(academic_terms.universityId)).orderBy(desc(academic_terms.id)),
+      db.select().from(classrooms).where(scopeOf(classrooms.universityId)).orderBy(asc(classrooms.name)),
       db.select({ id: staff.id, staffCode: staff.staffCode, departmentId: staff.departmentId, title: staff.title, name: users.firstName, lastname: users.lastName, isActive: staff.isActive, departmentName: departments.name, facultyName: faculties.name })
         .from(staff)
         .innerJoin(users, eq(users.id, staff.userId))
         .leftJoin(departments, eq(departments.id, staff.departmentId))
         .leftJoin(faculties, eq(faculties.id, departments.facultyId))
+        .where(scopeOf(staff.universityId))
         .orderBy(asc(staff.staffCode)),
-      db.select().from(term_scheduling_states),
+      db.select().from(term_scheduling_states).where(scopeOf(term_scheduling_states.universityId)),
     ]);
 
-    const current = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1)).limit(1);
+    const current = uid
+      ? await db.select().from(academic_terms).where(and(eq(academic_terms.isCurrent, 1), scopeOf(academic_terms.universityId))).limit(1)
+      : await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1)).limit(1);
     const targetTermId = termId ?? current[0]?.id ?? terms[0]?.id ?? null;
+    if (termId != null && uid && !terms.some(t => t.id === termId)) {
+      return { ok: false, error: 'ترم متعلق به دانشگاه دیگری است.' };
+    }
     let offerings: any[] = [];
     let schedulesRows: any[] = [];
     let generatedCount = 0;
@@ -639,7 +664,7 @@ export async function getSchedulingDashboardAction(termId?: number) {
         })
         .from(course_offerings)
         .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-        .where(eq(course_offerings.termId, targetTermId))
+        .where(and(eq(course_offerings.termId, targetTermId), scopeOf(course_offerings.universityId)))
         .orderBy(asc(course_offerings.courseId), asc(course_offerings.groupNumber));
 
       const offeringIds = offerings.map((o) => o.id);
@@ -679,6 +704,13 @@ export async function getSchedulingDashboardAction(termId?: number) {
 export async function checkScheduleConflictsAction(termId: number) {
   await requireRole(MANAGERS);
   try {
+    const uni = await getCurrentUniversity().catch(() => null);
+    const uid = uni?.id;
+    const offScope = uid ? or(eq(course_offerings.universityId, uid), isNull(course_offerings.universityId)) : undefined;
+    // ترم باید متعلق به همین دانشگاه باشد
+    const [term] = await db.select({ id: academic_terms.id }).from(academic_terms)
+      .where(and(eq(academic_terms.id, termId), offScope ? or(eq(academic_terms.universityId, uid as number), isNull(academic_terms.universityId)) : undefined)).limit(1);
+    if (uid && !term) return { ok: false, error: 'ترم متعلق به دانشگاه دیگری است.' };
     const rows = await db
       .select({
         offeringId: schedules.offeringId,
@@ -693,20 +725,23 @@ export async function checkScheduleConflictsAction(termId: number) {
       .from(schedules)
       .innerJoin(course_offerings, eq(course_offerings.id, schedules.offeringId))
       .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-      .where(eq(course_offerings.termId, termId));
+      .where(and(eq(course_offerings.termId, termId), offScope));
 
     const profRows = await db
       .select({ offeringId: offering_professors.offeringId, staffId: offering_professors.staffId })
       .from(offering_professors)
       .innerJoin(course_offerings, eq(course_offerings.id, offering_professors.offeringId))
-      .where(eq(course_offerings.termId, termId));
+      .where(and(eq(course_offerings.termId, termId), offScope));
     const profByOffering = new Map<number, (number | null)[]>();
     for (const p of profRows) {
       if (!profByOffering.has(p.offeringId)) profByOffering.set(p.offeringId, []);
       profByOffering.get(p.offeringId)!.push(p.staffId);
     }
 
-    const roomRows = await db.select().from(classrooms);
+    const roomRows = uid
+      ? await db.select().from(classrooms)
+        .where(or(eq(classrooms.universityId, uid), isNull(classrooms.universityId)))
+      : await db.select().from(classrooms);
     const rooms: RoomCapacityInfo[] = roomRows.map((r) => ({ id: r.id, capacity: r.capacity, title: r.name }));
 
     const entries: ScheduleConflictInput[] = rows.map((r) => ({

@@ -1,5 +1,5 @@
 import { requireRole } from '@/lib/auth';
-import { getFilterOptions } from './actions';
+import { getFilterOptions, allowedReportKinds, ALL_REPORT_KINDS } from './actions';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import ReportsClient from './ReportsClient';
 
@@ -12,6 +12,7 @@ export default async function AdminReportsPage() {
   const currentUniversityId = currentUniversity?.id ?? null;
 
   const opts = await getFilterOptions({ universityId: currentUniversityId });
+  const allowed = await allowedReportKinds(ALL_REPORT_KINDS);
 
   return (
     <div className="space-y-4">
@@ -21,7 +22,7 @@ export default async function AdminReportsPage() {
           <p className="text-xs text-slate-500 mt-0.5">فعال ترم، خلاصه وضعیت، تفکیک دانشکده/رشته، مشروطی، برترها، تکمیلی... — همه صفحه‌بندی‌شده با خروجی Excel</p>
         </div>
       </div>
-      <ReportsClient opts={opts} />
+      <ReportsClient opts={opts} initialUniversityId={currentUniversityId ?? 0} allowedKinds={allowed} />
     </div>
   );
 }

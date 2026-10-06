@@ -1,6 +1,6 @@
 'use server';
 
-import { asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import {
@@ -33,6 +33,22 @@ import { getCurrentUniversity } from '@/lib/university-scope';
 
 const PATH = '/admin/defense-scheduling';
 const fail = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : 'خطای نامشخص' });
+
+/** پروندهٔ فارغ‌التحصیلی باید متعلق به دانشگاه فعال باشد */
+async function assertAuditInUni(auditId: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+  const [a] = await db
+    .select({ auditUni: graduation_audits.universityId, stuUni: students.universityId })
+    .from(graduation_audits)
+    .leftJoin(students, eq(students.id, graduation_audits.studentId))
+    .where(eq(graduation_audits.id, auditId))
+    .limit(1);
+  if (!a) return { ok: false, error: 'پرونده یافت نشد.' };
+  const owner = a.auditUni ?? a.stuUni;
+  if (owner !== null && owner !== uni.id) return { ok: false, error: 'پرونده متعلق به دانشگاه دیگری است.' };
+  return { ok: true };
+}
 
 /**
  * نقش‌های کارشناسی: تأیید پروپوزال + ایرانداک، تعیین وقت دفاع، ثبت نتیجه و
@@ -122,6 +138,9 @@ function pickPool(rows: PoolRow[], majorId: number | null) {
 /** تمام داده‌های نمایشی میز کار — منبع واحدِ صفحه و کنش‌ها */
 async function loadBoard(): Promise<Board> {
   const user = await requireRole(BOARD_ROLES);
+  const uni = await getCurrentUniversity().catch(() => null);
+  const uid = uni?.id;
+  const scopeOf = (c: any) => (uid ? or(eq(c, uid), isNull(c)) : undefined);
 
   const tpRows = await db
     .select({
@@ -153,14 +172,18 @@ async function loadBoard(): Promise<Board> {
     .innerJoin(graduation_audits, eq(graduation_audits.id, thesis_progress.auditId))
     .innerJoin(students, eq(students.id, thesis_progress.studentId))
     .innerJoin(users, eq(users.id, students.userId))
-    .where(sql`coalesce(${thesis_progress.proposalStatus}, 'NOT_STARTED') <> 'NOT_STARTED'
-             or coalesce(${thesis_progress.defenseRequestStatus}, 'NOT_REQUESTED') <> 'NOT_REQUESTED'`)
+    .where(and(
+      sql`coalesce(${thesis_progress.proposalStatus}, 'NOT_STARTED') <> 'NOT_STARTED'
+              or coalesce(${thesis_progress.defenseRequestStatus}, 'NOT_REQUESTED') <> 'NOT_REQUESTED'`,
+      scopeOf(students.universityId),
+    ))
     .orderBy(desc(thesis_progress.updatedAt));
 
   const staffRows = await db
     .select({ id: staff.id, userId: staff.userId, firstName: users.firstName, lastName: users.lastName, rank: staff.academicRank, type: staff.staffType })
     .from(staff)
     .innerJoin(users, eq(users.id, staff.userId))
+    .where(scopeOf(staff.universityId))
     .orderBy(users.lastName);
   const nameOf = (id: number | null | undefined) => {
     if (id == null) return null;
@@ -169,13 +192,16 @@ async function loadBoard(): Promise<Board> {
   };
   const staffMap = new Map(staffRows.map(s => [s.id, s]));
 
-  const roomRows = await db.select({ id: classrooms.id, name: classrooms.name, capacity: classrooms.capacity }).from(classrooms).orderBy(asc(classrooms.name));
+  const roomRows = await db.select({ id: classrooms.id, name: classrooms.name, capacity: classrooms.capacity })
+    .from(classrooms).where(scopeOf(classrooms.universityId)).orderBy(asc(classrooms.name));
   const roomOf = (id: number | null | undefined) => (id == null ? null : roomRows.find(r => r.id === id)?.name ?? null);
 
-  const majorRows = await db.select({ id: majors.id, name: majors.name }).from(majors).orderBy(asc(majors.name));
+  const majorRows = await db.select({ id: majors.id, name: majors.name }).from(majors)
+    .where(scopeOf(majors.universityId)).orderBy(asc(majors.name));
   const majorNameOf = (id: number | null) => (id == null ? null : majorRows.find(m => m.id === id)?.name ?? null);
 
-  const poolRows = await db.select().from(defense_jury_pools).orderBy(asc(defense_jury_pools.id));
+  const poolRows = await db.select().from(defense_jury_pools)
+    .where(scopeOf(defense_jury_pools.universityId)).orderBy(asc(defense_jury_pools.id));
   const pools: PoolRow[] = poolRows.map(p => ({
     id: p.id,
     departmentCode: p.departmentCode,
@@ -189,7 +215,8 @@ async function loadBoard(): Promise<Board> {
     isActive: p.isActive === 1,
   }));
 
-  const deptRows = await db.select({ code: departments.departmentCode, name: departments.name }).from(departments).orderBy(asc(departments.name));
+  const deptRows = await db.select({ code: departments.departmentCode, name: departments.name })
+    .from(departments).where(scopeOf(departments.universityId)).orderBy(asc(departments.name));
 
   const tpIds = tpRows.map(r => r.thesisProgressId);
   const sessions = tpIds.length
@@ -286,6 +313,8 @@ export async function boardAction() {
 export async function approveProposalAction(input: { auditId: number; irandocTrackingCode: string }) {
   const user = await guard();
   try {
+    const scope = await assertAuditInUni(Number(input.auditId));
+    if (!scope.ok) return { ok: false as const, error: scope.error };
     const code = (input.irandocTrackingCode ?? '').trim();
     if (code.length < 4) return { ok: false as const, error: 'کد رهگیری ایرانداک را کامل وارد کنید.' };
     await approveProposalAndUploadIrandoc({ auditId: Number(input.auditId), approvedBy: user.id, irandocTrackingCode: code });
@@ -299,6 +328,8 @@ export async function approveProposalAction(input: { auditId: number; irandocTra
 export async function scheduleDefenseAction(input: { auditId: number; scheduledAt: string }) {
   const user = await guard();
   try {
+    const scope = await assertAuditInUni(Number(input.auditId));
+    if (!scope.ok) return { ok: false as const, error: scope.error };
     const at = new Date(input.scheduledAt);
     if (Number.isNaN(at.getTime())) return { ok: false as const, error: 'تاریخ و ساعت دفاع را کامل انتخاب کنید.' };
     if (at.getTime() < Date.now() - 60_000) return { ok: false as const, error: 'زمان دفاع نمی‌تواند در گذشته باشد.' };
@@ -317,6 +348,8 @@ export async function recordDefenseResultAction(input: {
 }) {
   await guard();
   try {
+    const scope = await assertAuditInUni(Number(input.auditId));
+    if (!scope.ok) return { ok: false as const, error: scope.error };
     const at = new Date(input.conductedAt);
     if (Number.isNaN(at.getTime())) return { ok: false as const, error: 'تاریخ برگزاری دفاع را کامل انتخاب کنید.' };
     if (!['PASSED', 'FAILED', 'CONDITIONAL'].includes(input.result)) return { ok: false as const, error: 'نتیجهٔ دفاع نامعتبر است.' };
@@ -340,6 +373,8 @@ export async function recordDefenseResultAction(input: {
 export async function supervisorApproveDefenseAction(input: { auditId: number; approved: boolean }) {
   const user = await requireRole(['PROFESSOR', 'DEP_HEAD', 'ADMIN']);
   try {
+    const scope = await assertAuditInUni(Number(input.auditId));
+    if (!scope.ok) return { ok: false as const, error: scope.error };
     const me = await getStaffByUser(user.id);
     if (!me) throw new Error('پروندهٔ کارکنانی برای این حساب یافت نشد؛ تأیید دفاع فقط از سوی استاد راهنما ممکن است.');
     await supervisorApproveDefense({ auditId: Number(input.auditId), supervisorId: me.id, approved: !!input.approved });
@@ -378,7 +413,18 @@ export async function saveJuryPoolAction(input: {
       isActive: input.isActive === false ? 0 : 1,
     };
     if (input.id) {
-      await db.update(defense_jury_pools).set(values).where(eq(defense_jury_pools.id, Number(input.id)));
+      const uni = await getCurrentUniversity().catch(() => null);
+      if (!uni) return { ok: false as const, error: 'دانشگاه فعال نامشخص است.' };
+      const [cur] = await db.select({ universityId: defense_jury_pools.universityId })
+        .from(defense_jury_pools).where(eq(defense_jury_pools.id, Number(input.id))).limit(1);
+      if (!cur) return { ok: false as const, error: 'استخر یافت نشد.' };
+      if (cur.universityId !== null && cur.universityId !== uni.id) {
+        return { ok: false as const, error: 'استخر متعلق به دانشگاه دیگری است.' };
+      }
+      await db.update(defense_jury_pools).set(values).where(and(
+        eq(defense_jury_pools.id, Number(input.id)),
+        or(eq(defense_jury_pools.universityId, uni.id), isNull(defense_jury_pools.universityId)),
+      ));
     } else {
       const uni = await getCurrentUniversity();
       await db.insert(defense_jury_pools).values({ ...values, universityId: uni.id });
@@ -391,7 +437,18 @@ export async function saveJuryPoolAction(input: {
 export async function toggleJuryPoolAction(id: number, isActive: boolean) {
   await guard();
   try {
-    await db.update(defense_jury_pools).set({ isActive: isActive ? 1 : 0 }).where(eq(defense_jury_pools.id, Number(id)));
+    const uni = await getCurrentUniversity().catch(() => null);
+    if (!uni) return { ok: false as const, error: 'دانشگاه فعال نامشخص است.' };
+    const [cur] = await db.select({ universityId: defense_jury_pools.universityId })
+      .from(defense_jury_pools).where(eq(defense_jury_pools.id, Number(id))).limit(1);
+    if (!cur) return { ok: false as const, error: 'استخر یافت نشد.' };
+    if (cur.universityId !== null && cur.universityId !== uni.id) {
+      return { ok: false as const, error: 'استخر متعلق به دانشگاه دیگری است.' };
+    }
+    await db.update(defense_jury_pools).set({ isActive: isActive ? 1 : 0 }).where(and(
+      eq(defense_jury_pools.id, Number(id)),
+      or(eq(defense_jury_pools.universityId, uni.id), isNull(defense_jury_pools.universityId)),
+    ));
     revalidatePath(PATH);
     return { ok: true as const, board: await loadBoard() };
   } catch (e) { return fail(e); }

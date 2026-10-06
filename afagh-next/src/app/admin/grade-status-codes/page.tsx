@@ -4,7 +4,7 @@ import {
   courses, departments, degree_level_configs, equivalence_clusters,
   curriculum_courses, curriculum_versions, majors,
 } from '@/db/schema';
-import { eq, asc, count } from 'drizzle-orm';
+import { eq, asc, count, isNull, or } from 'drizzle-orm';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import GradeCodesClient from './GradeCodesClient';
 
@@ -18,6 +18,7 @@ export default async function GradeStatusCodesPage() {
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
   const whereCond = currentUniversityId ? eq(courses.universityId, currentUniversityId) : undefined;
+  const scopeOf = (c: any) => (currentUniversityId ? or(eq(c, currentUniversityId), isNull(c)) : undefined);
 
   const [{ total }] = await db.select({ total: count() }).from(courses).where(whereCond);
 
@@ -66,11 +67,14 @@ export default async function GradeStatusCodesPage() {
       .orderBy(asc(courses.code))
       .limit(PAGE_SIZE),
     // گروه‌ها
-    db.select({ id: departments.id, name: departments.name }).from(departments).orderBy(asc(departments.name)),
+    db.select({ id: departments.id, name: departments.name }).from(departments)
+      .where(scopeOf(departments.universityId)).orderBy(asc(departments.name)),
     // مقاطع
-    db.select({ id: degree_level_configs.id, title: degree_level_configs.title }).from(degree_level_configs).orderBy(asc(degree_level_configs.id)),
+    db.select({ id: degree_level_configs.id, title: degree_level_configs.title }).from(degree_level_configs)
+      .where(scopeOf(degree_level_configs.universityId)).orderBy(asc(degree_level_configs.id)),
     // خوشه‌ها
-    db.select({ id: equivalence_clusters.id, clusterTitle: equivalence_clusters.clusterTitle }).from(equivalence_clusters).orderBy(asc(equivalence_clusters.clusterTitle)),
+    db.select({ id: equivalence_clusters.id, clusterTitle: equivalence_clusters.clusterTitle }).from(equivalence_clusters)
+      .where(scopeOf(equivalence_clusters.universityId)).orderBy(asc(equivalence_clusters.clusterTitle)),
     // دروس ارائه‌شده در نیمسال (سمت سرور)
     db.select({
       id: curriculum_courses.id,
@@ -105,7 +109,8 @@ export default async function GradeStatusCodesPage() {
       .orderBy(asc(majors.name), asc(curriculum_versions.versionCode), asc(curriculum_courses.recommendedSemester), asc(courses.code))
       .limit(PAGE_SIZE),
     // رشته‌ها
-    db.select({ id: majors.id, name: majors.name }).from(majors).orderBy(asc(majors.name)),
+    db.select({ id: majors.id, name: majors.name }).from(majors)
+      .where(scopeOf(majors.universityId)).orderBy(asc(majors.name)),
   ]);
 
   return (

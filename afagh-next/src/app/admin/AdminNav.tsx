@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { navModules } from '@/lib/admin-modules';
+import { groupedModules, navModules } from '@/lib/admin-modules';
 import { normalizeFa, faIncludes } from '@/lib/persian-search';
 import type { UniTheme } from '@/lib/university-theme';
 
@@ -35,6 +35,8 @@ export default function AdminNav({ roles, theme }: { roles: string[]; theme?: Un
   }, [open ]);
 
   const modules = useMemo(() => navModules(roles), [roles]);
+  const grouped = useMemo(() => groupedModules(roles), [roles]);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const filtered = useMemo(() => {
     const t = normalizeFa(q);
     if (!t) return modules;
@@ -85,7 +87,34 @@ export default function AdminNav({ roles, theme }: { roles: string[]; theme?: Un
               >
                 <span>🏠</span> داشبورد
               </Link>
-              {filtered.map(m => {
+              {filtered.length > 0 && q.trim() === '' ? (
+                grouped.map(g => (
+                  <div key={g.group.key} className="mt-1">
+                    <button
+                      onClick={() => setCollapsed(p => ({ ...p, [g.group.key]: !p[g.group.key] }))}
+                      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 font-extrabold transition-colors ${th.navHover}`}
+                    >
+                      <span>{g.group.icon}</span>
+                      <span className="flex-1 text-right">{g.group.title}</span>
+                      <span className={`text-[10px] ${th.navMuted}`}>{collapsed[g.group.key] ? '◀' : '▼'}</span>
+                    </button>
+                    {!collapsed[g.group.key] && g.modules.map(m => {
+                      const active = pathname === m.href || pathname.startsWith(m.href + '/');
+                      return (
+                        <Link
+                          key={m.href}
+                          href={m.href}
+                          title={m.desc}
+                          className={`mr-3 flex items-center gap-2 rounded-lg px-3 py-1.5 transition-colors ${active ? th.navActive : th.navHover}`}
+                        >
+                          <span>{m.icon}</span>
+                          <span className="flex-1">{m.title}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ))
+              ) : filtered.map(m => {
                 const active = pathname === m.href || pathname.startsWith(m.href + '/');
                 return (
                   <Link

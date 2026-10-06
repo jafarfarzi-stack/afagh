@@ -1,10 +1,11 @@
 import { createHash } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { db } from '@/db';
-import { audit_logs, student_documents } from '@/db/schema';
+import { audit_logs, student_documents, users } from '@/db/schema';
 import { getSessionUser } from '@/lib/auth';
 import { assertSameOrigin } from '@/lib/security';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import { archiveKey, putArchiveObject, sha256 } from '@/lib/objectStore';
 
 export const dynamic = 'force-dynamic';
@@ -25,6 +26,19 @@ export async function POST(req: NextRequest) {
   const typeId = form.get('typeId') ? Number(form.get('typeId')) : null;
   if (!file || !studentUserId || !categoryId) return NextResponse.json({ error: 'پارامتر ناقص' }, { status: 400 });
 
+  // دانشگاه سند: دانشگاهِ کاربرِ هدف؛ ادمین فقط برای همین دانشگاه (یا سراسری) می‌تواند بارگذاری کند
+  const [targetUser] = await db.select({ universityId: users.universityId })
+    .from(users).where(eq(users.id, studentUserId)).limit(1);
+  if (!targetUser) return NextResponse.json({ error: 'کاربر یافت نشد' }, { status: 404 });
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (privileged) {
+    if (!uni) return NextResponse.json({ error: 'دانشگاه فعال نامشخص است' }, { status: 400 });
+    if (targetUser.universityId !== null && targetUser.universityId !== uni.id) {
+      return NextResponse.json({ error: 'کاربر متعلق به دانشگاه دیگری است' }, { status: 403 });
+    }
+  }
+  const docUniId = targetUser.universityId ?? uni?.id ?? null;
+
   const buf = Buffer.from(await file.arrayBuffer());
   if (buf.length > 10 * 1024 * 1024) return NextResponse.json({ error: 'حجم بیش از ۱۰MB' }, { status: 413 });
 
@@ -42,6 +56,7 @@ export async function POST(req: NextRequest) {
   const { size, etag } = await putArchiveObject(key, buf, file.type || 'application/octet-stream');
 
   const [row] = await db.insert(student_documents).values({
+    universityId: docUniId,
     personUserId: studentUserId, categoryId, typeId,
     fileName: file.name, fileUrl: key, mimeType: mime,
   }).returning({ id: student_documents.id });

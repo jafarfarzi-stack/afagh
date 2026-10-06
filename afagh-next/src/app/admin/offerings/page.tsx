@@ -17,6 +17,14 @@ async function saveWindowAction(formData: FormData) {
   const open = formData.get('isOpen') === 'on' || formData.get('isOpen') === 'true';
   const start = String(formData.get('start') || '');
   const end = String(formData.get('end') || '');
+  const { getCurrentUniversity } = await import('@/lib/university-scope');
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (uni) {
+    const [t] = await db.select({ universityId: academic_terms.universityId })
+      .from(academic_terms).where(eq(academic_terms.id, termId)).limit(1);
+    if (!t) return;
+    if (t.universityId !== null && t.universityId !== uni.id) return;
+  }
   await db.update(academic_terms).set({
     isEnrollmentOpen: open ? 1 : 0,
     enrollmentStartDate: start ? new Date(start) : null,
@@ -34,6 +42,14 @@ async function saveTargetingAction(formData: FormData) {
   const major = formData.get('major') ? Number(formData.get('major')) : null;
   const ys = formData.get('ys') ? Number(formData.get('ys')) : null;
   const ye = formData.get('ye') ? Number(formData.get('ye')) : null;
+  const { getCurrentUniversity } = await import('@/lib/university-scope');
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (uni) {
+    const [o] = await db.select({ universityId: course_offerings.universityId })
+      .from(course_offerings).where(eq(course_offerings.id, id)).limit(1);
+    if (!o) return;
+    if (o.universityId !== null && o.universityId !== uni.id) return;
+  }
   await db.update(course_offerings).set({
     targetDegreeLevelId: deg, targetMajorId: major, entryYearStart: ys, entryYearEnd: ye,
   }).where(eq(course_offerings.id, id));

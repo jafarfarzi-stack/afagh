@@ -8,7 +8,7 @@ import { assertServerActionOrigin, requireStudentScope } from '@/lib/security';
 import { clearCheque } from '@/lib/finance-engine';
 import { appendAudit } from '@/lib/audit';
 import { safeRials } from '@/lib/money';
-import { FINANCE, clean, revalidateStudent } from './shared';
+import { FINANCE, clean, revalidateStudent, requireStudentUni } from './shared';
 
 // ══════════════════════════════════════════════════════════════════════
 //  چک
@@ -32,6 +32,8 @@ export async function addChequeAction(input: {
   if (amount === null || amount <= 0) return { ok: false, error: 'مبلغ چک باید عدد صحیح و بزرگ‌تر از صفر باشد' };
   const sc = await requireStudentScope(input.studentId);
   if (!sc.ok) return { ok: false, error: sc.error };
+  const su = await requireStudentUni(input.studentId);
+  if (!su.ok) return { ok: false, error: su.error };
 
   const due = clean(input.dueDate);
   if (!due) return { ok: false, error: 'تاریخ سررسید الزامی است — بدون آن یادآوری ممکن نیست' };
@@ -45,6 +47,7 @@ export async function addChequeAction(input: {
   try {
     return await db.transaction(async (tx) => {
       const [ins] = await tx.insert(payment_cheques).values({
+        universityId: su.uniId,
         studentId: input.studentId,
         termId: input.termId,
         chequeNo,
@@ -78,6 +81,8 @@ export async function clearChequeAction(id: number): Promise<{ ok: boolean; erro
   // 🔒 Object-Level (بازبینی ۴): چکِ دانشجوی خارج از scope هرگز وصول نمی‌شود
   const sc = await requireStudentScope(row.studentId);
   if (!sc.ok) return { ok: false, error: sc.error };
+  const su = await requireStudentUni(row.studentId);
+  if (!su.ok) return { ok: false, error: su.error };
   const res = await clearCheque(id); // داخل finance-engine: تراکنش + FOR UPDATE + audit
   revalidateStudent(row.studentId);
   return res;
@@ -99,6 +104,8 @@ export async function setChequeStatusAction(
       // 🔒 Object-Level (بازبینی ۴): رکورد با id پیدا شد — حالا تعلق دانشجو سنجیده می‌شود
       const sc = await requireStudentScope(row.studentId);
       if (!sc.ok) return { ok: false, error: sc.error };
+      const su = await requireStudentUni(row.studentId);
+      if (!su.ok) return { ok: false, error: su.error };
       if (row.status === 'CLEARED') return { ok: false, error: 'چک وصول‌شده قابل تغییر وضعیت نیست' };
 
       const upd = await tx.update(payment_cheques)
@@ -134,6 +141,8 @@ export async function deleteChequeAction(id: number): Promise<{ ok: boolean; err
       // 🔒 Object-Level (بازبینی ۴): رکورد با id پیدا شد — حالا تعلق دانشجو سنجیده می‌شود
       const sc = await requireStudentScope(row.studentId);
       if (!sc.ok) return { ok: false, error: sc.error };
+      const su = await requireStudentUni(row.studentId);
+      if (!su.ok) return { ok: false, error: su.error };
       if (row.status === 'CLEARED') return { ok: false, error: 'چک وصول‌شده حذف نمی‌شود؛ در دفتر مالی ثبت شده است' };
 
       await tx.delete(payment_cheques).where(eq(payment_cheques.id, id));

@@ -9,7 +9,7 @@ import { assertServerActionOrigin, requireStudentScope } from '@/lib/security';
 import { toNum } from '@/lib/finance-rules';
 import { appendAudit } from '@/lib/audit';
 import { safeRials } from '@/lib/money';
-import { FINANCE, clean, money, num, revalidateStudent } from './shared';
+import { FINANCE, clean, money, num, revalidateStudent, requireStudentUni, assertRowUni, uniScopeOf, currentUni } from './shared';
 
 // ══════════════════════════════════════════════════════════════════════
 //  وام
@@ -34,6 +34,8 @@ export async function addLoanAction(input: {
   if (amount === null || amount <= 0) return { ok: false, error: 'مبلغ وام باید عدد صحیح و بزرگ‌تر از صفر باشد' };
   const sc = await requireStudentScope(input.studentId);
   if (!sc.ok) return { ok: false, error: sc.error };
+  const su = await requireStudentUni(input.studentId);
+  if (!su.ok) return { ok: false, error: su.error };
 
   const lender = clean(input.lender);
   if (!lender) return { ok: false, error: 'نام پرداخت‌کنندهٔ وام الزامی است' };
@@ -44,6 +46,9 @@ export async function addLoanAction(input: {
     const [product] = await db.select().from(loan_products)
       .where(eq(loan_products.id, input.loanProductId)).limit(1);
     if (!product) return { ok: false, error: 'نوع وام یافت نشد' };
+    if (product.universityId !== null && product.universityId !== su.uniId) {
+      return { ok: false, error: 'نوع وام متعلق به دانشگاه دیگری است' };
+    }
     if (product.maxAmount !== null && amount > toNum(product.maxAmount)) {
       return { ok: false, error: `مبلغ از سقف مجاز این وام (${toNum(product.maxAmount).toLocaleString('fa-IR')} ریال) بیشتر است` };
     }
@@ -56,6 +61,7 @@ export async function addLoanAction(input: {
   try {
     return await db.transaction(async (tx) => {
       const [ins] = await tx.insert(student_loans).values({
+        universityId: su.uniId,
         studentId: input.studentId,
         termId: input.termId,
         loanProductId: input.loanProductId || null,
@@ -97,6 +103,8 @@ export async function setLoanStatusAction(
       // 🔒 Object-Level (بازبینی ۴): رکورد با id پیدا شد — حالا تعلق دانشجو سنجیده می‌شود
       const sc = await requireStudentScope(row.studentId);
       if (!sc.ok) return { ok: false, error: sc.error };
+      const su = await requireStudentUni(row.studentId);
+      if (!su.ok) return { ok: false, error: su.error };
       if (row.status === 'SETTLED' || row.status === 'CANCELLED') return { ok: false, error: 'وام تسویه/ابطال‌شده قابل تغییر نیست.' };
 
       const upd = await tx.update(student_loans).set({ status })
@@ -131,6 +139,8 @@ export async function deleteLoanAction(id: number): Promise<{ ok: boolean; error
       // 🔒 Object-Level (بازبینی ۴): رکورد با id پیدا شد — حالا تعلق دانشجو سنجیده می‌شود
       const sc = await requireStudentScope(row.studentId);
       if (!sc.ok) return { ok: false, error: sc.error };
+      const su = await requireStudentUni(row.studentId);
+      if (!su.ok) return { ok: false, error: su.error };
       if (row.status === 'SETTLED') return { ok: false, error: 'وام تسویه‌شده حذف نمی‌شود (سابقهٔ مالی است).' };
 
       await tx.delete(student_loans).where(eq(student_loans.id, id));
@@ -203,12 +213,19 @@ export async function saveLoanProductAction(input: {
   };
 
   try {
+    const uni = await currentUni();
+    if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
     await db.transaction(async (tx) => {
       if (input.id) {
-        const upd = await tx.update(loan_products).set(values).where(eq(loan_products.id, input.id));
+        const own = await assertRowUni(loan_products, input.id);
+        if (!own.ok) throw new Error(own.error);
+        const upd = await tx.update(loan_products).set(values).where(and(
+          eq(loan_products.id, input.id),
+          uniScopeOf(loan_products.universityId, uni.id),
+        ));
         if (upd.rowCount !== 1) throw new Error('نهاد وام یافت نشد یا ویرایش همزمانی دارد');
       } else {
-        const [ins] = await tx.insert(loan_products).values(values).returning({ id: loan_products.id });
+        const [ins] = await tx.insert(loan_products).values({ ...values, universityId: uni.id }).returning({ id: loan_products.id });
         await appendAudit(tx, {
           actorUserId: user?.id ?? null,
           action: 'FINANCE_LOAN_PRODUCT_CREATED',
@@ -233,11 +250,16 @@ export async function deleteLoanProductAction(id: number): Promise<{ ok: boolean
   const used = await db.select({ id: student_loans.id }).from(student_loans)
     .where(eq(student_loans.loanProductId, id)).limit(1);
   if (used.length) return { ok: false, error: 'این نوع وام به دانشجو تخصیص یافته؛ به‌جای حذف، غیرفعالش کنید' };
+  const own = await assertRowUni(loan_products, id);
+  if (!own.ok) return { ok: false, error: own.error };
 
   const user = await getSessionUser();
   try {
     await db.transaction(async (tx) => {
-      const del = await tx.delete(loan_products).where(eq(loan_products.id, id));
+      const del = await tx.delete(loan_products).where(and(
+        eq(loan_products.id, id),
+        uniScopeOf(loan_products.universityId, own.uniId),
+      ));
       if (del.rowCount !== 1) throw new Error('نهاد وام یافت نشد');
       await appendAudit(tx, {
         actorUserId: user?.id ?? null,

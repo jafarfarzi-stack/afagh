@@ -6,7 +6,7 @@
  */
 'use server';
 
-import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { academic_terms, course_offerings, courses, educational_regulations, enrollments, grade_change_log, legacy_grades, students, users } from '@/db/schema';
@@ -54,6 +54,16 @@ export async function adminSetGradeAction(
     if (!payload.reason || payload.reason.trim().length < 3) {
       return { ok: false, error: 'دلیل تغییر الزامی است (حداقل ۳ نویسه).' };
     }
+    const uni = await getCurrentUniversity().catch(() => null);
+    if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+    const [stuRow] = await db.select({ universityId: students.universityId })
+      .from(students).where(eq(students.id, payload.studentId)).limit(1);
+    if (!stuRow) return { ok: false, error: 'دانشجو یافت نشد.' };
+    if (stuRow.universityId !== null && stuRow.universityId !== uni.id) {
+      return { ok: false, error: 'دانشجو متعلق به دانشگاه دیگری است.' };
+    }
+    const legacySource = (await import('@/app/admin/students/transcript-utils')).legacySourceCodeFor(uni.code);
+    const refScope = (c: any) => or(eq(c, uni.id), isNull(c));
 
     const gradeStr = payload.gradeValue !== null ? String(Number(payload.gradeValue.toFixed(2))) : null;
     const role = user.roles.includes('ADMIN') ? 'ADMIN' as const : 'GRADUATEAFFAIRS' as const;
@@ -75,11 +85,15 @@ export async function adminSetGradeAction(
           gradeValue: enrollments.gradeValue,
           gradeStatus: enrollments.gradeStatus,
           samaGradeStatusCode: enrollments.samaGradeStatusCode,
+          universityId: enrollments.universityId,
         })
         .from(enrollments)
         .where(eq(enrollments.id, payload.enrollmentId))
         .limit(1);
       if (e) {
+        if (e.universityId !== null && e.universityId !== uni.id) {
+          return { ok: false, error: 'ثبت‌نام متعلق به دانشگاه دیگری است.' };
+        }
         existingEnrollment = e;
         targetOfferingId = e.offeringId;
       }
@@ -93,19 +107,25 @@ export async function adminSetGradeAction(
           gradeValue: enrollments.gradeValue,
           gradeStatus: enrollments.gradeStatus,
           samaGradeStatusCode: enrollments.samaGradeStatusCode,
+          universityId: enrollments.universityId,
         })
         .from(enrollments)
         .where(and(eq(enrollments.studentId, payload.studentId), eq(enrollments.offeringId, targetOfferingId)))
         .limit(1);
       if (e) {
+        if (e.universityId !== null && e.universityId !== uni.id) {
+          return { ok: false, error: 'ثبت‌نام متعلق به دانشگاه دیگری است.' };
+        }
         existingEnrollment = e;
       }
     }
 
     // اگر ارائه پیدا نشد اما ترم و درس مشخص است، سعی در یافتن یا ساختن ارائه
     if (!targetOfferingId && payload.termCode && payload.courseCode) {
-      const [c] = await db.select({ id: courses.id }).from(courses).where(eq(courses.code, payload.courseCode)).limit(1);
-      const [t] = await db.select({ id: academic_terms.id }).from(academic_terms).where(eq(academic_terms.termCode, payload.termCode)).limit(1);
+      const [c] = await db.select({ id: courses.id }).from(courses)
+        .where(and(eq(courses.code, payload.courseCode), refScope(courses.universityId))).limit(1);
+      const [t] = await db.select({ id: academic_terms.id }).from(academic_terms)
+        .where(and(eq(academic_terms.termCode, payload.termCode), refScope(academic_terms.universityId))).limit(1);
       if (c && t) {
         let [off] = await db
           .select({ id: course_offerings.id })
@@ -116,6 +136,7 @@ export async function adminSetGradeAction(
           const [newOff] = await db
             .insert(course_offerings)
             .values({
+              universityId: uni.id,
               termId: t.id,
               courseId: c.id,
               groupNumber: 1,
@@ -159,7 +180,10 @@ export async function adminSetGradeAction(
           gradeStatus: 'FINALIZED',
           samaGradeStatusCode: samaCode,
         })
-        .where(eq(enrollments.id, existingEnrollment.id));
+        .where(and(
+          eq(enrollments.id, existingEnrollment.id),
+          or(eq(enrollments.universityId, uni.id), isNull(enrollments.universityId)),
+        ));
 
       await logGradeChange({
         enrollmentId: existingEnrollment.id,
@@ -180,6 +204,7 @@ export async function adminSetGradeAction(
       const [newEnr] = await db
         .insert(enrollments)
         .values({
+          universityId: uni.id,
           studentId: payload.studentId,
           offeringId: targetOfferingId,
           status: 'REGISTERED',
@@ -218,7 +243,8 @@ export async function adminSetGradeAction(
             and(
               eq(legacy_grades.studentCode, payload.studentCode),
               eq(legacy_grades.termCode, payload.termCode),
-              eq(legacy_grades.courseCode, payload.courseCode)
+              eq(legacy_grades.courseCode, payload.courseCode),
+              legacySource ? eq(legacy_grades.sourceCode, legacySource) : undefined,
             )
           );
       } catch {
@@ -256,6 +282,18 @@ export async function adminSetGradeAction(
  */
 export async function getEnrollmentGradeHistory(enrollmentId: number) {
   await requireRole(['ADMIN', 'GRADUATEAFFAIRS', 'PROFESSOR']);
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (uni) {
+    const [enr] = await db
+      .select({ reqUni: enrollments.universityId, stuUni: students.universityId })
+      .from(enrollments)
+      .leftJoin(students, eq(students.id, enrollments.studentId))
+      .where(eq(enrollments.id, enrollmentId))
+      .limit(1);
+    if (!enr) return [];
+    const owner = enr.reqUni ?? enr.stuUni;
+    if (owner !== null && owner !== uni.id) return [];
+  }
   return db
     .select({
       id: grade_change_log.id,
@@ -287,6 +325,13 @@ export async function getEnrollmentGradeHistory(enrollmentId: number) {
  */
 export async function getStudentGradeAuditLog(studentId: number) {
   await requireRole(['ADMIN', 'GRADUATEAFFAIRS', 'EDU_EXPERT']);
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (uni) {
+    const [s] = await db.select({ universityId: students.universityId })
+      .from(students).where(eq(students.id, studentId)).limit(1);
+    if (!s) return [];
+    if (s.universityId !== null && s.universityId !== uni.id) return [];
+  }
   return db
     .select({
       id: grade_change_log.id,
@@ -322,6 +367,7 @@ export async function getStudentGradeAuditLog(studentId: number) {
 /** لاگ سراسری (همهٔ دانشجویان) — برای صفحهٔ «همهٔ لاگ‌های نمرات» */
 export async function getAllGradeAuditLogs(opts?: { limit?: number; offset?: number; q?: string }) {
   await requireRole(['ADMIN', 'GRADUATEAFFAIRS', 'EDU_EXPERT']);
+  const uni = await getCurrentUniversity().catch(() => null);
   const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 200);
   const offset = Math.max(opts?.offset ?? 0, 0);
   // q: فیلتر روی نام درس/کددرس/شماره‌دانشجویی/نام دانشجو (ساده - LIKE)
@@ -351,6 +397,8 @@ export async function getAllGradeAuditLogs(opts?: { limit?: number; offset?: num
     .leftJoin(course_offerings, eq(course_offerings.id, grade_change_log.offeringId))
     .leftJoin(courses, eq(courses.id, course_offerings.courseId))
     .leftJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
+    .innerJoin(students, eq(students.id, grade_change_log.studentId))
+    .where(uni ? or(eq(students.universityId, uni.id), isNull(students.universityId)) : undefined)
     .orderBy(desc(grade_change_log.createdAt))
     .limit(limit)
     .offset(offset);
@@ -373,6 +421,14 @@ export async function resolveSamaCodeForGradeAction(
   offeringId: number,
   gradeValue: number | null,
 ): Promise<{ code: string | null; title: string }> {
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (uni) {
+    const [s] = await db.select({ universityId: students.universityId })
+      .from(students).where(eq(students.id, studentId)).limit(1);
+    if (!s || (s.universityId !== null && s.universityId !== uni.id)) {
+      return { code: null, title: 'نامشخص' };
+    }
+  }
   const code = await resolveSamaGradeStatusCode(studentId, offeringId, gradeValue);
   const title = gradeStatusTitleOf(code) || 'نامشخص';
   return { code, title };
@@ -411,8 +467,10 @@ const SCAN_LIMIT = 2000;
 export async function scanMismatchedSamaCodes(universityId?: number): Promise<{ rows: MismatchRow[]; scanned: number; truncated: boolean }> {
   await requireRole(['ADMIN']);
 
+  const serverUni = await getCurrentUniversity().catch(() => null);
+  const uid = serverUni?.id ?? universityId;
   const whereParts: SQL[] = [eq(enrollments.gradeStatus, 'FINALIZED')];
-  if (universityId) whereParts.push(eq(students.universityId, universityId));
+  if (uid) whereParts.push(eq(students.universityId, uid));
   const allEnrs = await db
     .select({
       enrollmentId: enrollments.id,
@@ -487,6 +545,8 @@ export async function scanMismatchedSamaCodes(universityId?: number): Promise<{ 
 export async function applyCorrectedSamaCodes(enrollmentIds: number[], universityId?: number): Promise<{ applied: number }> {
   await requireRole(['ADMIN']);
   let applied = 0;
+  const serverUni = await getCurrentUniversity().catch(() => null);
+  const uid = serverUni?.id ?? universityId;
 
   for (const eid of enrollmentIds) {
     const [enr] = await db
@@ -500,7 +560,7 @@ export async function applyCorrectedSamaCodes(enrollmentIds: number[], universit
       })
       .from(enrollments)
       .innerJoin(students, eq(students.id, enrollments.studentId))
-      .where(and(eq(enrollments.id, eid), universityId ? eq(students.universityId, universityId) : sql`true`))
+      .where(and(eq(enrollments.id, eid), uid ? eq(students.universityId, uid) : sql`true`))
       .limit(1);
     if (!enr) continue;
 
@@ -554,8 +614,10 @@ export interface StatusMismatchRow {
  */
 export async function scanGraduatedWithoutGrades(limit = 200, universityId?: number): Promise<{ total: number; rows: StatusMismatchRow[] }> {
   await requireRole(['ADMIN']);
+  const serverUni = await getCurrentUniversity().catch(() => null);
+  const uid = serverUni?.id ?? universityId;
   const whereParts = [eq(students.status, 'GRADUATED'), isNull(enrollments.id), isNull(legacy_grades.id)];
-  if (universityId) whereParts.push(eq(students.universityId, universityId));
+  if (uid) whereParts.push(eq(students.universityId, uid));
   const rows = await db
     .select({
       studentId: students.id,

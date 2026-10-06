@@ -21,7 +21,16 @@ export default async function StudentFinancePage() {
 
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
-  /* TODO: filter by universityId */
+  // دفتر مالی دانشگاه فعال: ردیف‌های همین دانشگاه + سراسری (universityId=null)
+  const ledgerScope = currentUniversityId
+    ? sql`where ("universityId" = ${currentUniversityId} or "universityId" is null)`
+    : sql``;
+  const studentScope = currentUniversityId
+    ? sql`and (st."universityId" = ${currentUniversityId} or st."universityId" is null)`
+    : sql``;
+  const requestScope = currentUniversityId
+    ? sql`and (r."universityId" = ${currentUniversityId} or r."universityId" is null)`
+    : sql``;
 
   // ── جمع کل شارژ/وصول و تعداد تراکنش‌ها ──
   const [tot] = (
@@ -30,7 +39,7 @@ export default async function StudentFinancePage() {
         coalesce(sum(case when "transactionType" in ('TUITION_CHARGE','CHARGE') then amount else 0 end),0)::float8 as charged,
         coalesce(sum(case when "transactionType" in ('PAYMENT','CREDIT') then amount else 0 end),0)::float8 as paid,
         count(*)::int as txns
-      from student_ledger`)
+      from student_ledger ${ledgerScope}`)
   ).rows as unknown as { charged: number; paid: number; txns: number }[];
 
   // ── ماندهٔ هر دانشجو و استخراج بدهکاران ──
@@ -41,11 +50,11 @@ export default async function StudentFinancePage() {
         select "studentId",
           sum(case when "transactionType" in ('TUITION_CHARGE','CHARGE') then -amount
                    when "transactionType" in ('PAYMENT','CREDIT') then amount else 0 end) as bal
-        from student_ledger group by "studentId"
+        from student_ledger ${ledgerScope} group by "studentId"
       ) b
       join students st on st.id = b."studentId"
       join users u on u.id = st."userId"
-      where b.bal < 0
+      where b.bal < 0 ${studentScope}
       order by b.bal asc
       limit 12`)
   ).rows as unknown as { bal: number; studentCode: string; firstName: string; lastName: string }[];
@@ -62,7 +71,7 @@ export default async function StudentFinancePage() {
       join users u on u.id = st."userId"
       left join process_definitions pd on pd.id = r."processId"
       where ps."roleCode" in ('FINANCE_EXPERT','FINANCE')
-        and r.status not in ('APPROVED','REJECTED','CANCELLED')
+        and r.status not in ('APPROVED','REJECTED','CANCELLED') ${requestScope} ${studentScope}
       order by r.id desc limit 10`)
   ).rows as unknown as { trackingCode: string; status: string; title: string | null; step: string; firstName: string; lastName: string }[];
 
@@ -74,6 +83,7 @@ export default async function StudentFinancePage() {
       from student_ledger l
       join students st on st.id = l."studentId"
       join users u on u.id = st."userId"
+      where 1=1 ${studentScope}
       order by l.id desc limit 10`)
   ).rows as unknown as {
     transactionType: string;

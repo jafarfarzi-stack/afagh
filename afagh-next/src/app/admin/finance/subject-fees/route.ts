@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull, or } from 'drizzle-orm';
 import { db } from '@/db';
 import { subject_fee_types, student_subject_fees } from '@/db/schema';
 import { getSessionUser } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 
 const FINANCE = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'];
 
@@ -17,8 +18,11 @@ async function checkFinanceAuth() {
 export async function GET() {
   const auth = await checkFinanceAuth();
   if (!auth) return NextResponse.json({ error: 'دسترسی غیرمجاز' }, { status: 403 });
+  const uni = await getCurrentUniversity().catch(() => null);
 
-  const rows = await db.select().from(subject_fee_types).orderBy(subject_fee_types.id);
+  const rows = await db.select().from(subject_fee_types)
+    .where(uni ? or(eq(subject_fee_types.universityId, uni.id), isNull(subject_fee_types.universityId)) : undefined)
+    .orderBy(subject_fee_types.id);
   return NextResponse.json(rows);
 }
 
@@ -39,6 +43,14 @@ export async function POST(req: NextRequest) {
 
   if (id) {
     // ویرایش
+    const uni = await getCurrentUniversity().catch(() => null);
+    if (!uni) return NextResponse.json({ error: 'دانشگاه فعال نامشخص است' }, { status: 400 });
+    const [row] = await db.select({ universityId: subject_fee_types.universityId })
+      .from(subject_fee_types).where(eq(subject_fee_types.id, id)).limit(1);
+    if (!row) return NextResponse.json({ error: 'رکورد یافت نشد' }, { status: 404 });
+    if (row.universityId !== null && row.universityId !== uni.id) {
+      return NextResponse.json({ error: 'رکورد متعلق به دانشگاه دیگری است' }, { status: 403 });
+    }
     await db.update(subject_fee_types).set({
       code, title,
       kind: kind || 'ADDITIVE',
@@ -47,12 +59,18 @@ export async function POST(req: NextRequest) {
       appliesTo: appliesTo || 'BOTH',
       isActive: isActive ? 1 : 0,
       note: note || null,
-    }).where(eq(subject_fee_types.id, id));
+    }).where(and(
+      eq(subject_fee_types.id, id),
+      or(eq(subject_fee_types.universityId, uni.id), isNull(subject_fee_types.universityId)),
+    ));
     return NextResponse.json({ ok: true, id });
   }
 
   // ایجاد
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return NextResponse.json({ error: 'دانشگاه فعال نامشخص است' }, { status: 400 });
   const [ins] = await db.insert(subject_fee_types).values({
+    universityId: uni.id,
     code, title,
     kind: kind || 'ADDITIVE',
     fixedAmount: String(fAmount || 0),
@@ -82,7 +100,18 @@ export async function DELETE(req: NextRequest) {
   if (assigned) {
     return NextResponse.json({ error: 'این نوع مبلغ به دانشجویان تخصیص یافته و قابل حذف نیست' }, { status: 400 });
   }
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return NextResponse.json({ error: 'دانشگاه فعال نامشخص است' }, { status: 400 });
+  const [row] = await db.select({ universityId: subject_fee_types.universityId })
+    .from(subject_fee_types).where(eq(subject_fee_types.id, id)).limit(1);
+  if (!row) return NextResponse.json({ error: 'رکورد یافت نشد' }, { status: 404 });
+  if (row.universityId !== null && row.universityId !== uni.id) {
+    return NextResponse.json({ error: 'رکورد متعلق به دانشگاه دیگری است' }, { status: 403 });
+  }
 
-  await db.delete(subject_fee_types).where(eq(subject_fee_types.id, id));
+  await db.delete(subject_fee_types).where(and(
+    eq(subject_fee_types.id, id),
+    or(eq(subject_fee_types.universityId, uni.id), isNull(subject_fee_types.universityId)),
+  ));
   return NextResponse.json({ ok: true });
 }

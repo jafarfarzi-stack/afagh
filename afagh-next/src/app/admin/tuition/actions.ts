@@ -1,10 +1,11 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, or } from 'drizzle-orm';
 import { db } from '@/db';
 import { academic_terms, term_financial_rules, tuition_rules } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import { mapLegacyFeeRules, normalizeEquivFixedMode, termTypeOf } from '@/lib/tuition-rules';
 import { saveSettings } from '@/lib/settings';
 
@@ -57,9 +58,22 @@ export async function saveFeeRuleAction(input: FeeRuleInput): Promise<{ ok: bool
   };
 
   if (input.id) {
-    await db.update(tuition_rules).set(row).where(eq(tuition_rules.id, Number(input.id)));
+    const uni = await getCurrentUniversity().catch(() => null);
+    if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+    const [row] = await db.select({ universityId: tuition_rules.universityId })
+      .from(tuition_rules).where(eq(tuition_rules.id, Number(input.id))).limit(1);
+    if (!row) return { ok: false, error: 'قاعده یافت نشد.' };
+    if (row.universityId !== null && row.universityId !== uni.id) {
+      return { ok: false, error: 'قاعده متعلق به دانشگاه دیگری است.' };
+    }
+    await db.update(tuition_rules).set(row).where(and(
+      eq(tuition_rules.id, Number(input.id)),
+      or(eq(tuition_rules.universityId, uni.id), isNull(tuition_rules.universityId)),
+    ));
   } else {
-    await db.insert(tuition_rules).values(row);
+    const uni = await getCurrentUniversity().catch(() => null);
+    if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+    await db.insert(tuition_rules).values({ ...row, universityId: uni.id });
   }
 
   revalidatePath('/admin/tuition');
@@ -69,7 +83,18 @@ export async function saveFeeRuleAction(input: FeeRuleInput): Promise<{ ok: bool
 /** حذف یک قاعدهٔ شهریه */
 export async function deleteFeeRuleAction(id: number): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
-  await db.delete(tuition_rules).where(eq(tuition_rules.id, Number(id)));
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+  const [row] = await db.select({ universityId: tuition_rules.universityId })
+    .from(tuition_rules).where(eq(tuition_rules.id, Number(id))).limit(1);
+  if (!row) return { ok: false, error: 'قاعده یافت نشد.' };
+  if (row.universityId !== null && row.universityId !== uni.id) {
+    return { ok: false, error: 'قاعده متعلق به دانشگاه دیگری است.' };
+  }
+  await db.delete(tuition_rules).where(and(
+    eq(tuition_rules.id, Number(id)),
+    or(eq(tuition_rules.universityId, uni.id), isNull(tuition_rules.universityId)),
+  ));
   revalidatePath('/admin/tuition');
   return { ok: true };
 }
@@ -98,6 +123,8 @@ export async function importLegacyFeeRulesAction(): Promise<{
 }> {
   await requireRole(FINANCE);
 
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
   const legacy = await db
     .select({
       id: term_financial_rules.id,
@@ -110,7 +137,11 @@ export async function importLegacyFeeRulesAction(): Promise<{
       isSummer: academic_terms.isSummer,
     })
     .from(term_financial_rules)
-    .innerJoin(academic_terms, eq(academic_terms.id, term_financial_rules.termId));
+    .innerJoin(academic_terms, eq(academic_terms.id, term_financial_rules.termId))
+    .where(and(
+      or(eq(term_financial_rules.universityId, uni.id), isNull(term_financial_rules.universityId)),
+      or(eq(academic_terms.universityId, uni.id), isNull(academic_terms.universityId)),
+    ));
 
   const drafts = mapLegacyFeeRules(
     legacy.map((r) => ({
@@ -133,6 +164,7 @@ export async function importLegacyFeeRulesAction(): Promise<{
       .from(tuition_rules)
       .where(
         and(
+          or(eq(tuition_rules.universityId, uni.id), isNull(tuition_rules.universityId)),
           d.degreeLevelId == null
             ? isNull(tuition_rules.degreeLevelId)
             : eq(tuition_rules.degreeLevelId, d.degreeLevelId),
@@ -147,6 +179,7 @@ export async function importLegacyFeeRulesAction(): Promise<{
     if (exists.length) { skipped++; continue; }
 
     await db.insert(tuition_rules).values({
+      universityId: uni.id,
       degreeLevelId: d.degreeLevelId,
       majorId: null,
       termType: d.termType,

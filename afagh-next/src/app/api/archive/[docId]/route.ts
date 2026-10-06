@@ -24,6 +24,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ doc
     if (!privileged && doc.personUserId !== user.id) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 });
     }
+    // کارشناس دانشگاه دیگر با شناسهٔ مستقیم به سند دسترسی ندارد
+    if (privileged && doc.personUserId !== user.id) {
+      const { getCurrentUniversity } = await import('@/lib/university-scope');
+      const uni = await getCurrentUniversity().catch(() => null);
+      if (!uni) return NextResponse.json({ error: 'دانشگاه فعال نامشخص است' }, { status: 400 });
+      const docUni = (doc as { universityId?: number | null }).universityId ?? null;
+      if (docUni !== null && docUni !== uni.id) {
+        return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+      }
+    }
 
     // ── سرو امن محتوا: فقط نوع‌های مجاز رندر می‌شوند؛ بقیه attachment+octet-stream ──
     // (ضد Stored-XSS: حتی اگر رکورد قدیمی/آلوده mimeType خطرناک ذخیره کرده باشد)

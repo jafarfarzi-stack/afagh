@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { departments, roles, staff, user_roles, users } from '@/db/schema';
@@ -13,8 +13,16 @@ async function toggleHeadAction(fd: FormData) {
   await requireRole(['ADMIN']);
   const userId = Number(fd.get('userId'));
   const assign = fd.get('assign') === '1';
+  const { getCurrentUniversity } = await import('@/lib/university-scope');
+  const uni = await getCurrentUniversity().catch(() => null);
   const [head] = await db.select().from(roles).where(eq(roles.code, 'DEP_HEAD')).limit(1);
   if (!head) return;
+  // کاربر باید متعلق به همین دانشگاه (یا سراسری) باشد
+  if (uni) {
+    const [u] = await db.select({ universityId: users.universityId }).from(users).where(eq(users.id, userId)).limit(1);
+    if (!u) return;
+    if (u.universityId !== null && u.universityId !== uni.id) return;
+  }
   if (assign) {
     const has = await db.select().from(user_roles).where(eq(user_roles.userId, userId));
     if (!has.some(h => h.roleId === head.id)) await db.insert(user_roles).values({ userId, roleId: head.id });
@@ -148,7 +156,8 @@ export default async function StaffPage() {
   const led = await db
     .select({ userId: staff.userId, deptName: departments.name })
     .from(departments)
-    .innerJoin(staff, eq(staff.id, departments.headStaffId));
+    .innerJoin(staff, eq(staff.id, departments.headStaffId))
+    .where(uni ? or(eq(departments.universityId, uni.id), isNull(departments.universityId)) : undefined);
   const ledBy = new Map<number, string[]>();
   for (const l of led) {
     if (l.userId == null) continue;

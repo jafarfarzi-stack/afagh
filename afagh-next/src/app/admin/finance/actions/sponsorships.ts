@@ -7,7 +7,7 @@ import { student_sponsorships, tuition_sponsors } from '@/db/schema';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { assertServerActionOrigin, requireStudentScope } from '@/lib/security';
 import { appendAudit } from '@/lib/audit';
-import { FINANCE, clean, money, num, revalidateStudent } from './shared';
+import { FINANCE, clean, money, num, revalidateStudent, requireStudentUni, assertRowUni, uniScopeOf, currentUni } from './shared';
 
 // ══════════════════════════════════════════════════════════════════════
 //  پوشش بنیادها
@@ -28,10 +28,15 @@ export async function addSponsorshipAction(input: {
   if (!og.ok) return { ok: false, error: og.error };
   const sc = await requireStudentScope(input.studentId);
   if (!sc.ok) return { ok: false, error: sc.error };
+  const su = await requireStudentUni(input.studentId);
+  if (!su.ok) return { ok: false, error: su.error };
 
   const [sponsor] = await db.select().from(tuition_sponsors)
     .where(eq(tuition_sponsors.id, input.sponsorId)).limit(1);
   if (!sponsor) return { ok: false, error: 'بنیاد یافت نشد' };
+  if (sponsor.universityId !== null && sponsor.universityId !== su.uniId) {
+    return { ok: false, error: 'بنیاد متعلق به دانشگاه دیگری است' };
+  }
 
   const user = await getSessionUser();
   try {
@@ -41,6 +46,7 @@ export async function addSponsorshipAction(input: {
       const pct = String(Math.min(Math.max(0, num(input.percent)), 100));
       const appliesTo = input.appliesTo || 'BOTH';
       const [ins] = await tx.insert(student_sponsorships).values({
+        universityId: su.uniId,
         studentId: input.studentId,
         termId: input.termId,
         sponsorId: input.sponsorId,
@@ -82,6 +88,8 @@ export async function setSponsorshipStatusAction(
       // 🔒 Object-Level (بازبینی ۴): رکورد با id پیدا شد — حالا تعلق دانشجو سنجیده می‌شود
       const sc = await requireStudentScope(row.studentId);
       if (!sc.ok) return { ok: false, error: sc.error };
+      const su = await requireStudentUni(row.studentId);
+      if (!su.ok) return { ok: false, error: su.error };
       const allowed = status === 'REJECTED' ? row.status === 'PENDING' : ['PENDING', 'CONFIRMED'].includes(row.status);
       if (!allowed) return { ok: false, error: 'انتقال نامعتبر: پوشش فقط از «در انتظار» تأیید/پرداخت می‌شود؛ «ردشده» پایانی است.' };
 
@@ -117,6 +125,8 @@ export async function deleteSponsorshipAction(id: number): Promise<{ ok: boolean
       // 🔒 Object-Level (بازبینی ۴): رکورد با id پیدا شد — حالا تعلق دانشجو سنجیده می‌شود
       const sc = await requireStudentScope(row.studentId);
       if (!sc.ok) return { ok: false, error: sc.error };
+      const su = await requireStudentUni(row.studentId);
+      if (!su.ok) return { ok: false, error: su.error };
       // 🔒 پوششِ اثر مالی‌دار (CONFIRMED/PAID) حذف‌ناپذیر است
       if (row.status === 'CONFIRMED' || row.status === 'PAID') {
         return { ok: false, error: 'پوشش تأییدشده/پرداخت‌شده در شهریه اثر دارد — قابل حذف نیست؛ ابتدا ردش کنید.' };
@@ -162,11 +172,18 @@ export async function saveSponsorAction(input: {
     isActive: input.isActive ? 1 : 0,
     note: clean(input.note),
   };
+  const uni = await currentUni();
+  if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
 
   if (input.id) {
-    await db.update(tuition_sponsors).set(values).where(eq(tuition_sponsors.id, input.id));
+    const own = await assertRowUni(tuition_sponsors, input.id);
+    if (!own.ok) return { ok: false, error: own.error };
+    await db.update(tuition_sponsors).set(values).where(and(
+      eq(tuition_sponsors.id, input.id),
+      uniScopeOf(tuition_sponsors.universityId, uni.id),
+    ));
   } else {
-    await db.insert(tuition_sponsors).values(values);
+    await db.insert(tuition_sponsors).values({ ...values, universityId: uni.id });
   }
 
   revalidatePath('/admin/finance/rules');
@@ -177,11 +194,16 @@ export async function deleteSponsorAction(id: number): Promise<{ ok: boolean; er
   await requireRole(FINANCE);
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
+  const own = await assertRowUni(tuition_sponsors, id);
+  if (!own.ok) return { ok: false, error: own.error };
   const used = await db.select({ id: student_sponsorships.id }).from(student_sponsorships)
     .where(eq(student_sponsorships.sponsorId, id)).limit(1);
   if (used.length) return { ok: false, error: 'این بنیاد پوشش ثبت‌شده دارد؛ به‌جای حذف، غیرفعالش کنید' };
 
-  await db.delete(tuition_sponsors).where(eq(tuition_sponsors.id, id));
+  await db.delete(tuition_sponsors).where(and(
+    eq(tuition_sponsors.id, id),
+    uniScopeOf(tuition_sponsors.universityId, own.uniId),
+  ));
   revalidatePath('/admin/finance/rules');
   return { ok: true };
 }

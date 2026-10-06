@@ -9,53 +9,646 @@
     "بایگانی دیجیتال",
     "فارغ‌التحصیلی و مدارک",
     "مدیریت سامانه",
-    "پنل شخصی"
+    "پنل شخصی",
+    "گزارش‌ها"
   ],
   "permissions": [
-    { "code": "students:verify_kyc", "title": "تأیید احراز هویت", "category": "ثبت‌نام و پذیرش (e-KYC)", "description": "تأیید مدارک هویتی و ثبت‌نام آنلاین دانشجو" },
-    { "code": "students:issue_card", "title": "صدور کارت دانشجویی", "category": "ثبت‌نام و پذیرش (e-KYC)", "description": "صدور و چاپ کارت دانشجویی هوشمند با QR" },
-    { "code": "students:view_dossier", "title": "مشاهدهٔ پروندهٔ دانشجو", "category": "ثبت‌نام و پذیرش (e-KYC)", "description": "مشاهدهٔ پروندهٔ تحصیلی و هویتی دانشجو" },
-    { "code": "admissions:import_sanjesh", "title": "ورود دادهٔ سنجش", "category": "ثبت‌نام و پذیرش (e-KYC)", "description": "بارگذاری و نگاشت فایل پذیرش سازمان سنجش" },
-
-    { "code": "finance:view_ledger", "title": "مشاهدهٔ دفتر مالی", "category": "امور مالی و شهریه", "description": "مشاهدهٔ تراز مالی، دفتر کل و بدهکاری دانشجویان" },
-    { "code": "finance:manage_tuition_rules", "title": "مدیریت قواعد شهریه", "category": "امور مالی و شهریه", "description": "تعریف فرمول شهریه، تخفیف‌ها و بنیادها" },
-    { "code": "finance:approve_advances", "title": "تأیید مساعده", "category": "امور مالی و شهریه", "description": "فعال‌سازی و تأیید مساعده و علی‌الحساب اساتید" },
-    { "code": "finance:settle_payroll", "title": "تسویهٔ حق‌التدریس", "category": "امور مالی و شهریه", "description": "تسویهٔ نهایی حق‌التدریس و صدور دیسکت بانکی" },
-    { "code": "finance:tamin_insurance", "title": "بیمه و مالیات", "category": "امور مالی و شهریه", "description": "مدیریت لیست بیمهٔ تأمین اجتماعی و کسور مالیاتی" },
-
-    { "code": "exams:plan_calendar", "title": "تقویم امتحانات", "category": "امتحانات و مخزن اوراق", "description": "زون‌بندی و تدوین تقویم امتحانات پایان نیمسال" },
-    { "code": "exams:manage_halls", "title": "سالن و صندلی", "category": "امتحانات و مخزن اوراق", "description": "برنامه‌ریزی سالن‌ها، شمارهٔ صندلی و مراقبین" },
-    { "code": "exams:vault_handover", "title": "تحویل مخزن", "category": "امتحانات و مخزن اوراق", "description": "شمارش و تأیید بسته‌های درسی مخزن قرنطینه" },
-    { "code": "exams:proctor_attendance", "title": "حضوروغیاب حوزه", "category": "امتحانات و مخزن اوراق", "description": "حضور و غیاب داوطلبان با اسکنر QR در سالن" },
-    { "code": "exams:temp_permit", "title": "مجوز ورود موقت", "category": "امتحانات و مخزن اوراق", "description": "صدور مجوز ورود موقت (تعهد) بدون کارت" },
-
-    { "code": "grades:enter_temporary", "title": "ثبت نمرهٔ موقت", "category": "آموزش و نمرات", "description": "ورود نمرات میان‌ترم و ثبت موقت" },
-    { "code": "grades:finalize_otp", "title": "نهایی‌سازی با OTP", "category": "آموزش و نمرات", "description": "قفل و نهایی‌سازی قطعی کارنامه با امضای OTP" },
-    { "code": "grades:resolve_appeals", "title": "رسیدگی به اعتراض", "category": "آموزش و نمرات", "description": "رسیدگی به فرجام‌خواهی و اعتراضات نمره" },
-    { "code": "edu:manage_enrollment", "title": "مدیریت انتخاب واحد", "category": "آموزش و نمرات", "description": "بازکردن/بستن انتخاب واحد، حذف‌واضافه و ترمیم ثبت‌نام" },
-
-    { "code": "curriculum:manage_versions", "title": "نسخه‌بندی سرفصل", "category": "برنامه‌ریزی درسی و سرفصل", "description": "تدوین و نسخه‌بندی چارت درسی و خوشه‌های هم‌ارز" },
-    { "code": "scheduling:manage_chart", "title": "چیدمان دروس", "category": "برنامه‌ریزی درسی و سرفصل", "description": "تعریف گروه‌های درسی و ماتریس زمان‌بندی نیمسال" },
-    { "code": "scheduling:assign_professors", "title": "انتساب اساتید", "category": "برنامه‌ریزی درسی و سرفصل", "description": "تخصیص استاد به گروه درسی و بررسی تعارض‌ها" },
-    { "code": "scheduling:approve_plan", "title": "تصویب برنامهٔ نیمسال", "category": "برنامه‌ریزی درسی و سرفصل", "description": "تأیید نهایی سناریوی چیدمان و انتشار برنامه" },
-
-    { "code": "archive:verify_papers", "title": "تأیید اوراق فیزیکی", "category": "بایگانی دیجیتال", "description": "تأیید دریافت فیزیکی اوراق امتحانی و آزادسازی مالی" },
-    { "code": "archive:view_documents", "title": "مشاهدهٔ اسناد محرمانه", "category": "بایگانی دیجیتال", "description": "مشاهدهٔ اسناد محرمانه و پرونده‌های بایگانی" },
-
-    { "code": "graduation:review_dossier", "title": "بررسی پروندهٔ فراغت", "category": "فارغ‌التحصیلی و مدارک", "description": "کنترل واحدهای گذرانده و تأیید شرایط فراغت از تحصیل" },
-    { "code": "graduation:issue_certificate", "title": "صدور مدرک", "category": "فارغ‌التحصیلی و مدارک", "description": "صدور دانشنامه/گواهی موقت با کد رهگیری استعلام" },
-
-    { "code": "system:manage_users", "title": "مدیریت کاربران", "category": "مدیریت سامانه", "description": "ایجاد کاربر، تخصیص نقش و غیرفعال‌سازی حساب" },
-    { "code": "system:manage_roles", "title": "مدیریت نقش و دسترسی", "category": "مدیریت سامانه", "description": "تعریف نقش سازمانی و ویرایش ماتریس دسترسی‌ها" },
-    { "code": "system:manage_settings", "title": "پیکربندی سامانه", "category": "مدیریت سامانه", "description": "تنظیمات عمومی، سرویس‌های بیرونی و قالب پیامک" },
-    { "code": "system:view_audit", "title": "مشاهدهٔ دفتر ممیزی", "category": "مدیریت سامانه", "description": "مطالعهٔ زنجیرهٔ ممیزی و گزارش‌های امنیتی" },
-
-    { "code": "portal:student_self", "title": "پورتال دانشجو", "category": "پنل شخصی", "description": "دسترسی به پورتال شخصی دانشجو (کارنامه، مالی، انتخاب واحد)" },
-    { "code": "portal:professor_self", "title": "پورتال استاد", "category": "پنل شخصی", "description": "دسترسی به پورتال شخصی استاد (کلاس‌ها، حضوروغیاب، قرارداد)" }
+    {
+      "code": "students:verify_kyc",
+      "title": "تأیید احراز هویت",
+      "category": "ثبت‌نام و پذیرش (e-KYC)",
+      "description": "تأیید مدارک هویتی و ثبت‌نام آنلاین دانشجو"
+    },
+    {
+      "code": "students:issue_card",
+      "title": "صدور کارت دانشجویی",
+      "category": "ثبت‌نام و پذیرش (e-KYC)",
+      "description": "صدور و چاپ کارت دانشجویی هوشمند با QR"
+    },
+    {
+      "code": "students:view_dossier",
+      "title": "مشاهدهٔ پروندهٔ دانشجو",
+      "category": "ثبت‌نام و پذیرش (e-KYC)",
+      "description": "مشاهدهٔ پروندهٔ تحصیلی و هویتی دانشجو"
+    },
+    {
+      "code": "admissions:import_sanjesh",
+      "title": "ورود دادهٔ سنجش",
+      "category": "ثبت‌نام و پذیرش (e-KYC)",
+      "description": "بارگذاری و نگاشت فایل پذیرش سازمان سنجش"
+    },
+    {
+      "code": "finance:view_ledger",
+      "title": "مشاهدهٔ دفتر مالی",
+      "category": "امور مالی و شهریه",
+      "description": "مشاهدهٔ تراز مالی، دفتر کل و بدهکاری دانشجویان"
+    },
+    {
+      "code": "finance:manage_tuition_rules",
+      "title": "مدیریت قواعد شهریه",
+      "category": "امور مالی و شهریه",
+      "description": "تعریف فرمول شهریه، تخفیف‌ها و بنیادها"
+    },
+    {
+      "code": "finance:approve_advances",
+      "title": "تأیید مساعده",
+      "category": "امور مالی و شهریه",
+      "description": "فعال‌سازی و تأیید مساعده و علی‌الحساب اساتید"
+    },
+    {
+      "code": "finance:settle_payroll",
+      "title": "تسویهٔ حق‌التدریس",
+      "category": "امور مالی و شهریه",
+      "description": "تسویهٔ نهایی حق‌التدریس و صدور دیسکت بانکی"
+    },
+    {
+      "code": "finance:tamin_insurance",
+      "title": "بیمه و مالیات",
+      "category": "امور مالی و شهریه",
+      "description": "مدیریت لیست بیمهٔ تأمین اجتماعی و کسور مالیاتی"
+    },
+    {
+      "code": "exams:plan_calendar",
+      "title": "تقویم امتحانات",
+      "category": "امتحانات و مخزن اوراق",
+      "description": "زون‌بندی و تدوین تقویم امتحانات پایان نیمسال"
+    },
+    {
+      "code": "exams:manage_halls",
+      "title": "سالن و صندلی",
+      "category": "امتحانات و مخزن اوراق",
+      "description": "برنامه‌ریزی سالن‌ها، شمارهٔ صندلی و مراقبین"
+    },
+    {
+      "code": "exams:vault_handover",
+      "title": "تحویل مخزن",
+      "category": "امتحانات و مخزن اوراق",
+      "description": "شمارش و تأیید بسته‌های درسی مخزن قرنطینه"
+    },
+    {
+      "code": "exams:proctor_attendance",
+      "title": "حضوروغیاب حوزه",
+      "category": "امتحانات و مخزن اوراق",
+      "description": "حضور و غیاب داوطلبان با اسکنر QR در سالن"
+    },
+    {
+      "code": "exams:temp_permit",
+      "title": "مجوز ورود موقت",
+      "category": "امتحانات و مخزن اوراق",
+      "description": "صدور مجوز ورود موقت (تعهد) بدون کارت"
+    },
+    {
+      "code": "grades:enter_temporary",
+      "title": "ثبت نمرهٔ موقت",
+      "category": "آموزش و نمرات",
+      "description": "ورود نمرات میان‌ترم و ثبت موقت"
+    },
+    {
+      "code": "grades:finalize_otp",
+      "title": "نهایی‌سازی با OTP",
+      "category": "آموزش و نمرات",
+      "description": "قفل و نهایی‌سازی قطعی کارنامه با امضای OTP"
+    },
+    {
+      "code": "grades:resolve_appeals",
+      "title": "رسیدگی به اعتراض",
+      "category": "آموزش و نمرات",
+      "description": "رسیدگی به فرجام‌خواهی و اعتراضات نمره"
+    },
+    {
+      "code": "edu:manage_enrollment",
+      "title": "مدیریت انتخاب واحد",
+      "category": "آموزش و نمرات",
+      "description": "بازکردن/بستن انتخاب واحد، حذف‌واضافه و ترمیم ثبت‌نام"
+    },
+    {
+      "code": "curriculum:manage_versions",
+      "title": "نسخه‌بندی سرفصل",
+      "category": "برنامه‌ریزی درسی و سرفصل",
+      "description": "تدوین و نسخه‌بندی چارت درسی و خوشه‌های هم‌ارز"
+    },
+    {
+      "code": "scheduling:manage_chart",
+      "title": "چیدمان دروس",
+      "category": "برنامه‌ریزی درسی و سرفصل",
+      "description": "تعریف گروه‌های درسی و ماتریس زمان‌بندی نیمسال"
+    },
+    {
+      "code": "scheduling:assign_professors",
+      "title": "انتساب اساتید",
+      "category": "برنامه‌ریزی درسی و سرفصل",
+      "description": "تخصیص استاد به گروه درسی و بررسی تعارض‌ها"
+    },
+    {
+      "code": "scheduling:approve_plan",
+      "title": "تصویب برنامهٔ نیمسال",
+      "category": "برنامه‌ریزی درسی و سرفصل",
+      "description": "تأیید نهایی سناریوی چیدمان و انتشار برنامه"
+    },
+    {
+      "code": "archive:verify_papers",
+      "title": "تأیید اوراق فیزیکی",
+      "category": "بایگانی دیجیتال",
+      "description": "تأیید دریافت فیزیکی اوراق امتحانی و آزادسازی مالی"
+    },
+    {
+      "code": "archive:view_documents",
+      "title": "مشاهدهٔ اسناد محرمانه",
+      "category": "بایگانی دیجیتال",
+      "description": "مشاهدهٔ اسناد محرمانه و پرونده‌های بایگانی"
+    },
+    {
+      "code": "graduation:review_dossier",
+      "title": "بررسی پروندهٔ فراغت",
+      "category": "فارغ‌التحصیلی و مدارک",
+      "description": "کنترل واحدهای گذرانده و تأیید شرایط فراغت از تحصیل"
+    },
+    {
+      "code": "graduation:issue_certificate",
+      "title": "صدور مدرک",
+      "category": "فارغ‌التحصیلی و مدارک",
+      "description": "صدور دانشنامه/گواهی موقت با کد رهگیری استعلام"
+    },
+    {
+      "code": "system:manage_users",
+      "title": "مدیریت کاربران",
+      "category": "مدیریت سامانه",
+      "description": "ایجاد کاربر، تخصیص نقش و غیرفعال‌سازی حساب"
+    },
+    {
+      "code": "system:manage_roles",
+      "title": "مدیریت نقش و دسترسی",
+      "category": "مدیریت سامانه",
+      "description": "تعریف نقش سازمانی و ویرایش ماتریس دسترسی‌ها"
+    },
+    {
+      "code": "system:manage_settings",
+      "title": "پیکربندی سامانه",
+      "category": "مدیریت سامانه",
+      "description": "تنظیمات عمومی، سرویس‌های بیرونی و قالب پیامک"
+    },
+    {
+      "code": "system:view_audit",
+      "title": "مشاهدهٔ دفتر ممیزی",
+      "category": "مدیریت سامانه",
+      "description": "مطالعهٔ زنجیرهٔ ممیزی و گزارش‌های امنیتی"
+    },
+    {
+      "code": "portal:student_self",
+      "title": "پورتال دانشجو",
+      "category": "پنل شخصی",
+      "description": "دسترسی به پورتال شخصی دانشجو (کارنامه، مالی، انتخاب واحد)"
+    },
+    {
+      "code": "portal:professor_self",
+      "title": "پورتال استاد",
+      "category": "پنل شخصی",
+      "description": "دسترسی به پورتال شخصی استاد (کلاس‌ها، حضوروغیاب، قرارداد)"
+    },
+    {
+      "code": "reports:active-term",
+      "title": "گزارش «گزارش دانشجویان فعال ترم»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «گزارش دانشجویان فعال ترم» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:status-summary",
+      "title": "گزارش «گزارش خلاصه وضعیت تحصیلی»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «گزارش خلاصه وضعیت تحصیلی» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:by-faculty",
+      "title": "گزارش «گزارش به تفکیک دانشکده»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «گزارش به تفکیک دانشکده» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:by-major",
+      "title": "گزارش «گزارش دانشجویان هر رشته»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «گزارش دانشجویان هر رشته» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:grade-status",
+      "title": "گزارش «دانشجویان برحسب وضعیت نمره»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «دانشجویان برحسب وضعیت نمره» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:probation",
+      "title": "گزارش «مشروطی‌های ترم»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «مشروطی‌های ترم» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:top",
+      "title": "گزارش «گزارش نمرات برتر هر رشته»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «گزارش نمرات برتر هر رشته» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:incomplete",
+      "title": "گزارش «تکمیلی دانشجویان (پرونده ناقص)»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «تکمیلی دانشجویان (پرونده ناقص)» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:graduates",
+      "title": "گزارش «دانش‌آموختگان»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «دانش‌آموختگان» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:entries",
+      "title": "گزارش «ورودی‌های جدید»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «ورودی‌های جدید» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:noshow",
+      "title": "گزارش «عدم مراجعه‌ها»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «عدم مراجعه‌ها» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:transfers",
+      "title": "گزارش «میهمان / انتقالی»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «میهمان / انتقالی» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:tuition",
+      "title": "گزارش «گزارش شهریه / تراکنش مالی»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «گزارش شهریه / تراکنش مالی» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:payesh",
+      "title": "گزارش «گزارش پاسخ‌های طرح پایش»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «گزارش پاسخ‌های طرح پایش» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:jame",
+      "title": "گزارش «دانشجویان واجد شرایط آزمون جامع»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «دانشجویان واجد شرایط آزمون جامع» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:docs",
+      "title": "گزارش «مدارک دانشجویان»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «مدارک دانشجویان» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:probation-violations",
+      "title": "گزارش «تخلفات مشروطی»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «تخلفات مشروطی» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:probation-chains",
+      "title": "گزارش «مشروطی متناوب و متوالی»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «مشروطی متناوب و متوالی» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:unit-cap-violations",
+      "title": "گزارش «عدم رعایت سقف و کف واحد»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «عدم رعایت سقف و کف واحد» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:repeated-courses",
+      "title": "گزارش «دروس چندبار اخذشده»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «دروس چندبار اخذشده» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:student-weekly-conflicts",
+      "title": "گزارش «تداخل برنامه هفتگی دانشجویان»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «تداخل برنامه هفتگی دانشجویان» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:student-exam-conflicts",
+      "title": "گزارش «تداخل برنامه امتحانی»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «تداخل برنامه امتحانی» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:prereq-violations",
+      "title": "گزارش «عدم رعایت پیش‌نیاز/هم‌نیاز»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «عدم رعایت پیش‌نیاز/هم‌نیاز» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:course-grade-status",
+      "title": "گزارش «وضعیت درس و نمره»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «وضعیت درس و نمره» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:enrollment-pick",
+      "title": "گزارش «انتخاب واحد دانشجویان»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «انتخاب واحد دانشجویان» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:offered-course-roster",
+      "title": "گزارش «دانشجویان درس ارائه‌شده»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «دانشجویان درس ارائه‌شده» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:top-students",
+      "title": "گزارش «نفرات برتر (معدل کل)»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «نفرات برتر (معدل کل)» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:no-photo",
+      "title": "گزارش «دانشجویان فاقد عکس»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «دانشجویان فاقد عکس» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:graduates-info",
+      "title": "گزارش «اطلاعات دانش‌آموختگان»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «اطلاعات دانش‌آموختگان» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:status-report",
+      "title": "گزارش «وضعیت دانشجویان»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «وضعیت دانشجویان» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:major-change-report",
+      "title": "گزارش «تغییر رشته»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «تغییر رشته» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:status-change-report",
+      "title": "گزارش «تغییر وضعیت»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «تغییر وضعیت» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:gpa-refresh-preview",
+      "title": "گزارش «به‌روزرسانی معدل نیمسال»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «به‌روزرسانی معدل نیمسال» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:profile-refresh",
+      "title": "گزارش «به‌روزرسانی نیمرخ تحصیلی»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «به‌روزرسانی نیمرخ تحصیلی» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:portal-export",
+      "title": "گزارش «ارسال به پرتال»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «ارسال به پرتال» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:exam-session-sheet",
+      "title": "گزارش «صورت‌جلسه امتحان»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «صورت‌جلسه امتحان» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:seat-numbers",
+      "title": "گزارش «شماره صندلی»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «شماره صندلی» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:final-exam-schedule",
+      "title": "گزارش «برنامه امتحانات پایان ترم»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «برنامه امتحانات پایان ترم» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:grade-entry-report",
+      "title": "گزارش «ثبت نمره استادان»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «ثبت نمره استادان» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:grade-deadline",
+      "title": "گزارش «زمان‌بندی ثبت نمرات»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «زمان‌بندی ثبت نمرات» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:empty-rooms",
+      "title": "گزارش «کلاس‌های خالی»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «کلاس‌های خالی» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:weekly-timetable",
+      "title": "گزارش «برنامه هفتگی کلاس‌ها»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «برنامه هفتگی کلاس‌ها» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:room-conflicts",
+      "title": "گزارش «تداخل برنامه کلاس‌ها»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «تداخل برنامه کلاس‌ها» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:low-enrollment",
+      "title": "گزارش «ظرفیت به حدنصاب نرسیده»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «ظرفیت به حدنصاب نرسیده» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:makeup-courses",
+      "title": "گزارش «دروس جبرانی/پیش‌دانشگاهی»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «دروس جبرانی/پیش‌دانشگاهی» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:staff-list",
+      "title": "گزارش «اساتید»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «اساتید» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:staff-courses",
+      "title": "گزارش «استادان مدرس دروس»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «استادان مدرس دروس» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:staff-timetable",
+      "title": "گزارش «برنامه هفتگی اساتید»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «برنامه هفتگی اساتید» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:attendance-list",
+      "title": "گزارش «حضور و غیاب»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «حضور و غیاب» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:tuition-tariff",
+      "title": "گزارش «تعرفه تحصیلی»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «تعرفه تحصیلی» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:tuition-statement",
+      "title": "گزارش «صورت‌حساب شهریه»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «صورت‌حساب شهریه» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:proposal-cap",
+      "title": "گزارش «ظرفیت پروپوزال استادان»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «ظرفیت پروپوزال استادان» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:pending-requests",
+      "title": "گزارش «درخواست‌های درانتظار»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «درخواست‌های درانتظار» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:defenses",
+      "title": "گزارش «لیست دفاعیات»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «لیست دفاعیات» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:proposals",
+      "title": "گزارش «پروپوزال»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «پروپوزال» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:seminars",
+      "title": "گزارش «سمینار»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «سمینار» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:council-edu",
+      "title": "گزارش «شورای آموزشی»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «شورای آموزشی» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:discipline",
+      "title": "گزارش «کمیته انضباطی»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «کمیته انضباطی» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:letter-templates",
+      "title": "گزارش «قالب‌های مکاتبات»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «قالب‌های مکاتبات» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:transcript-card",
+      "title": "گزارش «کارنامه دانشجویان»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «کارنامه دانشجویان» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:exam-entry-card",
+      "title": "گزارش «کارت ورود به جلسه»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «کارت ورود به جلسه» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:student-card",
+      "title": "گزارش «کارت دانشجویی»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «کارت دانشجویی» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:study-cert",
+      "title": "گزارش «گواهی اشتغال به تحصیل»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «گواهی اشتغال به تحصیل» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:edu-confirm",
+      "title": "گزارش «تاییدیه تحصیلی»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «تاییدیه تحصیلی» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:grad-cert",
+      "title": "گزارش «گواهی پایان تحصیلات»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «گواهی پایان تحصیلات» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:military-defer",
+      "title": "گزارش «معافیت تحصیلی»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «معافیت تحصیلی» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:finance-worklist",
+      "title": "گزارش «کارتابل مالی (مانده دانشجویان)»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «کارتابل مالی (مانده دانشجویان)» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:payroll-overview",
+      "title": "گزارش «حق‌التدریس اساتید»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «حق‌التدریس اساتید» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:bi-teaching-quality",
+      "title": "گزارش «کیفیت تدریس اساتید (BI)»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «کیفیت تدریس اساتید (BI)» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:bi-facilities",
+      "title": "گزارش «امکانات کلاس‌ها (BI)»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «امکانات کلاس‌ها (BI)» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:graduation-dossiers",
+      "title": "گزارش «پرونده‌های فراغت‌التحصیل»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «پرونده‌های فراغت‌التحصیل» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:grade-audit-log",
+      "title": "گزارش «لاگ تغییرات نمرات»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «لاگ تغییرات نمرات» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:third-attempt",
+      "title": "گزارش «دروس بار سوم (مردودی دو بار)»",
+      "category": "گزارش‌ها",
+      "description": "اجرا و خروجی گزارش «دروس بار سوم (مردودی دو بار)» در مرکز گزارش‌ها"
+    }
   ],
   "roleDefaults": {
     "ADMIN": "*",
-    "STUDENT": ["portal:student_self"],
+    "STUDENT": [
+      "portal:student_self"
+    ],
     "PROFESSOR": [
       "portal:professor_self",
       "grades:enter_temporary",

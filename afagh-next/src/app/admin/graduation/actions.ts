@@ -1,10 +1,11 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { eq } from 'drizzle-orm';
+import { eq, isNull, or } from 'drizzle-orm';
 import { db } from '@/db';
 import { clearance_departments } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import {
   advanceDossier, approveByHead, getDossier, holdDossier, issueDegree, listDossiers,
   markDelivered, pipelineStats, requestMinistryCode, runAutoClearance, runGraduationScan,
@@ -41,7 +42,8 @@ export async function scanStudentAction(studentIdsCsv: string) {
 
 export async function refreshListAction(filter: { status?: string; q?: string }) {
   await guard();
-  return { ok: true as const, rows: await listDossiers(filter), stats: await pipelineStats() };
+  const uni = await getCurrentUniversity().catch(() => null);
+  return { ok: true as const, rows: await listDossiers({ ...filter, universityId: uni?.id }), stats: await pipelineStats({ universityId: uni?.id }) };
 }
 
 export async function dossierAction(auditId: number) {
@@ -168,6 +170,7 @@ export async function saveDepartmentAction(input: {
 }) {
   await guard();
   try {
+    const uni = await getCurrentUniversity().catch(() => null);
     const code = input.code.trim().toUpperCase();
     if (!/^[A-Z0-9_]{2,40}$/.test(code)) return { ok: false as const, error: 'کد فقط حروف لاتین بزرگ/عدد/زیرخط.' };
     const values = {
@@ -176,16 +179,35 @@ export async function saveDepartmentAction(input: {
       sortOrder: Number(input.sortOrder ?? 100), isActive: input.isActive === false ? 0 : 1,
       hint: input.hint?.trim() || null,
     };
-    if (input.id) await db.update(clearance_departments).set(values).where(eq(clearance_departments.id, input.id));
-    else await db.insert(clearance_departments).values(values).onConflictDoUpdate({ target: clearance_departments.code, set: values });
+    if (input.id) {
+      if (uni) {
+        const [t] = await db.select({ universityId: clearance_departments.universityId }).from(clearance_departments).where(eq(clearance_departments.id, input.id)).limit(1);
+        if (!t) return { ok: false as const, error: 'دپارتمان یافت نشد.' };
+        if (t.universityId !== null && t.universityId !== uni.id) return { ok: false as const, error: 'دسترسی ندارید.' };
+      }
+      await db.update(clearance_departments).set(values).where(eq(clearance_departments.id, input.id));
+    } else {
+      if (uni) {
+        const [dup] = await db.select({ universityId: clearance_departments.universityId }).from(clearance_departments).where(eq(clearance_departments.code, code)).limit(1);
+        if (dup && dup.universityId !== null && dup.universityId !== uni.id) return { ok: false as const, error: 'این کد متعلق به دانشگاه دیگری است.' };
+      }
+      await db.insert(clearance_departments).values({ ...values, universityId: uni?.id ?? null }).onConflictDoUpdate({ target: clearance_departments.code, set: values });
+    }
     revalidatePath('/admin/graduation');
-    return { ok: true as const, departments: await db.select().from(clearance_departments) };
+    const uniScope = uni ? or(eq(clearance_departments.universityId, uni.id), isNull(clearance_departments.universityId)) : undefined;
+    return { ok: true as const, departments: await db.select().from(clearance_departments).where(uniScope) };
   } catch (e) { return fail(e); }
 }
 
 export async function deleteDepartmentAction(id: number) {
   await guard();
   try {
+    const uni = await getCurrentUniversity().catch(() => null);
+    if (uni) {
+      const [t] = await db.select({ universityId: clearance_departments.universityId }).from(clearance_departments).where(eq(clearance_departments.id, id)).limit(1);
+      if (!t) return { ok: false as const, error: 'دپارتمان یافت نشد.' };
+      if (t.universityId !== null && t.universityId !== uni.id) return { ok: false as const, error: 'دسترسی ندارید.' };
+    }
     await db.update(clearance_departments).set({ isActive: 0 }).where(eq(clearance_departments.id, id));
     revalidatePath('/admin/graduation');
     return { ok: true as const };

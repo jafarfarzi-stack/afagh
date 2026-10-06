@@ -5,15 +5,34 @@ import { db } from '@/db';
 import { course_offerings, enrollments, notifications, student_requests, students } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { assertServerActionOrigin } from '@/lib/security';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import { revalidatePath } from 'next/cache';
 
 // وضعیت‌هایی که درخواست در آن‌ها «قابل تصمیم» است (تایید/رد) — بقیه قابل پردازش مجدد نیستند
 const DECIDABLE_SQL = (t: any) => inArray(t, ['SUBMITTED', 'IN_REVIEW', 'DRAFT']);
 
+/** درخواست باید متعلق به دانشگاه فعال باشد (رد/تایید بین‌دانشگاهی ممنوع) */
+async function assertRequestInUni(requestId: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+  const [r] = await db
+    .select({ reqUni: student_requests.universityId, stuUni: students.universityId })
+    .from(student_requests)
+    .leftJoin(students, eq(students.id, student_requests.studentId))
+    .where(eq(student_requests.id, requestId))
+    .limit(1);
+  if (!r) return { ok: false, error: 'درخواست یافت نشد.' };
+  const owner = r.reqUni ?? r.stuUni;
+  if (owner !== null && owner !== uni.id) return { ok: false, error: 'درخواست متعلق به دانشگاه دیگری است.' };
+  return { ok: true };
+}
+
 export async function approveRequestAction(requestId: number) {
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
   const user = await requireRole(['ADMIN']);
+  const scope = await assertRequestInUni(requestId);
+  if (!scope.ok) return scope;
 
   try {
     const outcome = await db.transaction(async (tx) => {
@@ -85,6 +104,8 @@ export async function rejectRequestAction(requestId: number, reason?: string) {
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
   const user = await requireRole(['ADMIN']);
+  const scope = await assertRequestInUni(requestId);
+  if (!scope.ok) return scope;
 
   try {
     const outcome = await db.transaction(async (tx) => {

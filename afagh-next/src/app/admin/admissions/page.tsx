@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, isNull, or } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   admissions_staging,
@@ -23,16 +23,17 @@ export default async function AdminAdmissionsPage() {
 
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
-  /* TODO: filter by universityId */
+  const scopeOf = (c: any) => (currentUniversityId ? or(eq(c, currentUniversityId), isNull(c)) : undefined);
 
-  const allMajors = await db.select().from(majors).orderBy(majors.id);
-  const allLevels = await db.select().from(degree_level_configs).orderBy(degree_level_configs.id);
-  const allMappings = await db.select().from(sanjesh_mappings);
-  const allFormulas = await db.select().from(student_id_formulas);
+  const allMajors = await db.select().from(majors).where(scopeOf(majors.universityId)).orderBy(majors.id);
+  const allLevels = await db.select().from(degree_level_configs).where(scopeOf(degree_level_configs.universityId)).orderBy(degree_level_configs.id);
+  const allMappings = await db.select().from(sanjesh_mappings).where(scopeOf(sanjesh_mappings.universityId));
+  const allFormulas = await db.select().from(student_id_formulas).where(scopeOf(student_id_formulas.universityId));
 
   const rawStaging = await db
     .select()
     .from(admissions_staging)
+    .where(scopeOf(admissions_staging.universityId))
     .orderBy(desc(admissions_staging.id))
     .limit(50);
 

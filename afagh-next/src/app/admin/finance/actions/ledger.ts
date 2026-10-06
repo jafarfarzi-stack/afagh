@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { student_ledger, tuition_rules } from '@/db/schema';
 import { requireRole, getSessionUser } from '@/lib/auth';
@@ -9,7 +9,7 @@ import { assertServerActionOrigin, requireStudentScope } from '@/lib/security';
 import { computeFormulaTuition } from '@/lib/finance-engine';
 import { appendAudit } from '@/lib/audit';
 import { safeRials } from '@/lib/money';
-import { FINANCE, clean, intOrNull, money, num } from './shared';
+import { FINANCE, clean, intOrNull, money, num, requireStudentUni, assertRowUni, uniScopeOf, currentUni } from './shared';
 
 // ══════════════════════════════════════════════════════════════════════
 //  پرداخت و شارژ دفتر مالی
@@ -32,11 +32,14 @@ export async function recordLedgerAction(input: {
   if (amount === null || amount <= 0) return { ok: false, error: 'مبلغ باید عدد صحیح و بزرگ‌تر از صفر باشد' };
   const sc = await requireStudentScope(input.studentId);
   if (!sc.ok) return { ok: false, error: sc.error };
+  const su = await requireStudentUni(input.studentId);
+  if (!su.ok) return { ok: false, error: su.error };
 
   const user = await getSessionUser();
   try {
     return await db.transaction(async (tx) => {
       const [ins] = await tx.insert(student_ledger).values({
+        universityId: su.uniId,
         studentId: input.studentId,
         termId: input.termId,
         transactionType: input.transactionType,
@@ -68,6 +71,8 @@ export async function chargeByFormulaAction(input: {
 
   const sc = await requireStudentScope(input.studentId);
   if (!sc.ok) return { ok: false, error: sc.error };
+  const su = await requireStudentUni(input.studentId);
+  if (!su.ok) return { ok: false, error: su.error };
 
   const calc = await computeFormulaTuition(input.studentId, input.termId);
   if (!calc.formula) return { ok: false, error: 'هیچ فرمول تخصیصی با مقطع/رشته/ورودی این دانشجو نمی‌خواند' };
@@ -81,6 +86,7 @@ export async function chargeByFormulaAction(input: {
   try {
     return await db.transaction(async (tx) => {
       const [ins] = await tx.insert(student_ledger).values({
+        universityId: su.uniId,
         studentId: input.studentId,
         termId: input.termId,
         transactionType: 'TUITION_CHARGE',
@@ -158,11 +164,18 @@ export async function saveFormulaAction(input: {
     note: clean(input.note),
     updatedAt: new Date(),
   };
+  const uni = await currentUni();
+  if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
 
   if (input.id) {
-    await db.update(tuition_rules).set(values).where(eq(tuition_rules.id, input.id));
+    const own = await assertRowUni(tuition_rules, input.id);
+    if (!own.ok) return { ok: false, error: own.error };
+    await db.update(tuition_rules).set(values).where(and(
+      eq(tuition_rules.id, input.id),
+      uniScopeOf(tuition_rules.universityId, uni.id),
+    ));
   } else {
-    await db.insert(tuition_rules).values(values);
+    await db.insert(tuition_rules).values({ ...values, universityId: uni.id });
   }
 
   revalidatePath('/admin/finance/rules');
@@ -173,7 +186,12 @@ export async function deleteFormulaAction(id: number): Promise<{ ok: boolean; er
   await requireRole(FINANCE);
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
-  await db.delete(tuition_rules).where(eq(tuition_rules.id, id));
+  const own = await assertRowUni(tuition_rules, id);
+  if (!own.ok) return { ok: false, error: own.error };
+  await db.delete(tuition_rules).where(and(
+    eq(tuition_rules.id, id),
+    uniScopeOf(tuition_rules.universityId, own.uniId),
+  ));
   revalidatePath('/admin/finance/rules');
   return { ok: true };
 }

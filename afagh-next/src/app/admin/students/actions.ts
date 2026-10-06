@@ -3,9 +3,10 @@
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, roles, staff, student_term_states, students, universities, user_roles, users } from '@/db/schema';
-import { and, desc, eq, notInArray, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, notInArray, or, sql } from 'drizzle-orm';
 import { hashPassword, requireRole } from '@/lib/auth';
 import { getSessionUser } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import { resolveCityMinistry } from '@/lib/shared-coding';
 import { legacyRowOfSource, legacySourceCodeFor } from './transcript-utils';
 
@@ -93,8 +94,19 @@ export async function setStudentRegulationAction(
     return { ok: false, error: 'دسترسی لازم را ندارید.' };
   }
   if (!studentId || !regulationId) return { ok: false, error: 'دانشجو یا آیین‌نامه نامعتبر است.' };
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+  const [stuRow] = await db.select({ universityId: students.universityId })
+    .from(students).where(eq(students.id, studentId)).limit(1);
+  if (!stuRow) return { ok: false, error: 'دانشجو یافت نشد.' };
+  if (stuRow.universityId !== null && stuRow.universityId !== uni.id) {
+    return { ok: false, error: 'دانشجو متعلق به دانشگاه دیگری است.' };
+  }
   try {
-    await db.update(students).set({ regulationId }).where(eq(students.id, studentId));
+    await db.update(students).set({ regulationId }).where(and(
+      eq(students.id, studentId),
+      or(eq(students.universityId, uni.id), isNull(students.universityId)),
+    ));
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'ثبت نشد.' };
   }
@@ -468,10 +480,13 @@ export async function bulkResetToNationalCodeAction(
     ? `EXISTS (SELECT 1 FROM staff st WHERE st."userId" = users.id)`
     : `EXISTS (SELECT 1 FROM students st WHERE st."userId" = users.id)`;
   const roleCode = scope === 'professor' ? 'PROFESSOR' : 'STUDENT';
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+  const uniWhere = `(users."universityId" = ${uni.id} OR users."universityId" IS NULL)`;
   try {
     const usersToReset = await db.execute(sql<{ id: number; nationalCode: string }>`
       SELECT id, "nationalCode" FROM users
-      WHERE "isActive" = 1 AND "nationalCode" IS NOT NULL AND LENGTH("nationalCode") = 10 AND ${sql.raw(scopeWhere)}
+      WHERE "isActive" = 1 AND "nationalCode" IS NOT NULL AND LENGTH("nationalCode") = 10 AND ${sql.raw(scopeWhere)} AND ${sql.raw(uniWhere)}
     `);
     const rows = (usersToReset as any).rows ?? usersToReset;
     let count = 0;
@@ -490,6 +505,7 @@ export async function bulkResetToNationalCodeAction(
       SELECT u.id, r.id FROM users u
       JOIN roles r ON r.code = ${roleCode}
       WHERE ${sql.raw(scopeWhere)}
+        AND (u."universityId" = ${uni.id} OR u."universityId" IS NULL)
         AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur."userId" = u.id AND ur."roleId" = r.id)
       ON CONFLICT ("userId", "roleId") DO NOTHING
     `);
@@ -516,11 +532,14 @@ export async function bulkResetPasswordsAction(
     ? `EXISTS (SELECT 1 FROM staff st WHERE st."userId" = users.id)`
     : `EXISTS (SELECT 1 FROM students st WHERE st."userId" = users.id)`;
   const roleCode = scope === 'professor' ? 'PROFESSOR' : 'STUDENT';
+  const uni2 = await getCurrentUniversity().catch(() => null);
+  if (!uni2) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+  const uniWhere2 = `(users."universityId" = ${uni2.id} OR users."universityId" IS NULL)`;
   try {
     const hash = await hashPassword(pw);
     const upd = await db.execute(sql`
       UPDATE users SET "passwordHash" = ${hash}, "mustChangePassword" = 1
-      WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)}
+      WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)} AND ${sql.raw(uniWhere2)}
     `);
     const count = Number((upd as any)?.rowCount ?? 0);
     // ساخت نقش برای حساب‌های گروهی که ردیف user_roles ندارند
@@ -529,6 +548,7 @@ export async function bulkResetPasswordsAction(
       SELECT u.id, r.id FROM users u
       JOIN roles r ON r.code = ${roleCode}
       WHERE ${sql.raw(scopeWhere)}
+        AND (u."universityId" = ${uni2.id} OR u."universityId" IS NULL)
         AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur."userId" = u.id AND ur."roleId" = r.id)
       ON CONFLICT ("userId", "roleId") DO NOTHING
     `);
@@ -585,13 +605,16 @@ export async function createStaffExpertAction(input: {
   const sc = String(input.staffCode || '').trim() || nc;
   if (!nc || !fn || !ln) return { ok: false, error: 'کد ملی، نام و نام خانوادگی الزامی است.' };
   if (!/^\d{10}$/.test(nc)) return { ok: false, error: 'کد ملی باید ۱۰ رقم باشد.' };
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
   try {
-    const dupNc = await db.select({ id: users.id }).from(users).where(and(eq(users.nationalCode, nc), eq(users.universityId, 1))).limit(1);
+    const dupNc = await db.select({ id: users.id }).from(users).where(and(eq(users.nationalCode, nc), or(eq(users.universityId, uni.id), isNull(users.universityId)))).limit(1);
     if (dupNc.length) return { ok: false, error: 'کاربری با این کد ملی از قبل وجود دارد.' };
-    const dupSc = await db.select({ id: staff.id }).from(staff).where(eq(staff.staffCode, sc)).limit(1);
+    const dupSc = await db.select({ id: staff.id }).from(staff).where(and(eq(staff.staffCode, sc), or(eq(staff.universityId, uni.id), isNull(staff.universityId)))).limit(1);
     if (dupSc.length) return { ok: false, error: 'کد پرسنلی تکراری است.' };
     const passwordHash = await hashPassword(nc); // ورود اولیه با کد ملی؛ اجباری به تغییر
     const [u] = await db.insert(users).values({
+      universityId: uni.id,
       nationalCode: nc, firstName: fn, lastName: ln,
       fatherName: String(input.fatherName || '').trim() || null,
       birthCertNo: String(input.birthCertNo || '').trim() || null,
@@ -601,6 +624,7 @@ export async function createStaffExpertAction(input: {
       passwordHash, isActive: 1, mustChangePassword: 1,
     }).returning({ id: users.id });
     await db.insert(staff).values({
+      universityId: uni.id,
       userId: u.id, staffCode: sc,
       staffType: String(input.staffType || '').trim() || 'اداری',
     }).onConflictDoNothing();
@@ -710,6 +734,14 @@ export async function updateStudentProfileAction(
     return { ok: false, error: 'فقط مدیر سیستم (ADMIN) اجازه ویرایش پروندهٔ دانشجو را دارد.' };
   }
   if (!studentId || !patch || typeof patch !== 'object') return { ok: false, error: 'شناسهٔ دانشجو یا مقادیر نامعتبر است.' };
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+  const [row] = await db.select({ userId: students.userId, universityId: students.universityId })
+    .from(students).where(eq(students.id, studentId)).limit(1);
+  if (!row) return { ok: false, error: 'دانشجو یافت نشد.' };
+  if (row.universityId !== null && row.universityId !== uni.id) {
+    return { ok: false, error: 'دانشجو متعلق به دانشگاه دیگری است.' };
+  }
   const clean = (v: unknown, max: number) => {
     if (v == null) return undefined;
     const s = String(v).trim();
@@ -720,8 +752,6 @@ export async function updateStudentProfileAction(
     const n = Number(v);
     return isNaN(n) ? null : n;
   };
-  const [row] = await db.select({ userId: students.userId }).from(students).where(eq(students.id, studentId)).limit(1);
-  if (!row) return { ok: false, error: 'دانشجو یافت نشد.' };
   try {
     const userSet: Record<string, unknown> = {};
     const us = [
@@ -762,7 +792,10 @@ export async function updateStudentProfileAction(
       if (k in patch) { const v = cleanNum((patch as Record<string, unknown>)[k]); if (v !== undefined) stuSet[k] = v; }
     }
     if (Object.keys(stuSet).length) {
-      await db.update(students).set(stuSet as never).where(eq(students.id, studentId));
+      await db.update(students).set(stuSet as never).where(and(
+        eq(students.id, studentId),
+        or(eq(students.universityId, uni.id), isNull(students.universityId)),
+      ));
     }
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'ثبت نشد.' };

@@ -8,7 +8,7 @@ import { requireRole, getSessionUser } from '@/lib/auth';
 import { assertServerActionOrigin, requireStudentScope } from '@/lib/security';
 import { toNum } from '@/lib/finance-rules';
 import { appendAudit } from '@/lib/audit';
-import { FINANCE, clean, money, num, revalidateStudent } from './shared';
+import { FINANCE, clean, money, num, revalidateStudent, requireStudentUni, assertRowUni, uniScopeOf, currentUni } from './shared';
 
 // ══════════════════════════════════════════════════════════════════════
 //  تخفیف شهریه
@@ -28,10 +28,15 @@ export async function addDiscountAction(input: {
   if (!og.ok) return { ok: false, error: og.error };
   const sc = await requireStudentScope(input.studentId);
   if (!sc.ok) return { ok: false, error: sc.error };
+  const su = await requireStudentUni(input.studentId);
+  if (!su.ok) return { ok: false, error: su.error };
 
   const [type] = await db.select().from(tuition_discount_types)
     .where(eq(tuition_discount_types.id, input.discountTypeId)).limit(1);
   if (!type) return { ok: false, error: 'نوع تخفیف یافت نشد' };
+  if (type.universityId !== null && type.universityId !== su.uniId) {
+    return { ok: false, error: 'نوع تخفیف متعلق به دانشگاه دیگری است' };
+  }
 
   const percent = Math.min(Math.max(0, num(input.percent)), 100);
   if (type.maxPercent !== null && percent > toNum(type.maxPercent)) {
@@ -46,6 +51,7 @@ export async function addDiscountAction(input: {
   try {
     return await db.transaction(async (tx) => {
       const [ins] = await tx.insert(student_discounts).values({
+        universityId: su.uniId,
         studentId: input.studentId,
         termId: input.termId,
         discountTypeId: input.discountTypeId,
@@ -88,6 +94,8 @@ export async function setDiscountStatusAction(
       // 🔒 Object-Level (بازبینی ۴): رکورد با id پیدا شد — حالا تعلق دانشجو سنجیده می‌شود
       const sc = await requireStudentScope(row.studentId);
       if (!sc.ok) return { ok: false, error: sc.error };
+      const su = await requireStudentUni(row.studentId);
+      if (!su.ok) return { ok: false, error: su.error };
       // فقط PENDING قابل تصمیم است (تخفیف خودکار-تأیید یا قبلاً تصمیم‌گرفته، بازنویسی نمی‌شود)
       if (row.status !== 'PENDING') return { ok: false, error: 'این تخفیف قبلاً تصمیم‌گیری شده است (فقط «در انتظار» قابل تأیید/رد است).' };
 
@@ -128,6 +136,8 @@ export async function deleteDiscountAction(id: number): Promise<{ ok: boolean; e
       // 🔒 Object-Level (بازبینی ۴): رکورد با id پیدا شد — حالا تعلق دانشجو سنجیده می‌شود
       const sc = await requireStudentScope(row.studentId);
       if (!sc.ok) return { ok: false, error: sc.error };
+      const su = await requireStudentUni(row.studentId);
+      if (!su.ok) return { ok: false, error: su.error };
       // 🔒 سیاست حذف (بازبینی — Medium): تخفیفِ «اثر مالی‌دار» (APPROVED) هرگز حذف ناپذیر است؛
       // فقط باید رد شود (REJECTED) یا در حالت در انتظار است که قابل حذف است.
       if (row.status === 'APPROVED') {
@@ -193,11 +203,18 @@ export async function saveDiscountTypeAction(input: {
     isActive: input.isActive ? 1 : 0,
     note: clean(input.note),
   };
+  const uni = await currentUni();
+  if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
 
   if (input.id) {
-    await db.update(tuition_discount_types).set(values).where(eq(tuition_discount_types.id, input.id));
+    const own = await assertRowUni(tuition_discount_types, input.id);
+    if (!own.ok) return { ok: false, error: own.error };
+    await db.update(tuition_discount_types).set(values).where(and(
+      eq(tuition_discount_types.id, input.id),
+      uniScopeOf(tuition_discount_types.universityId, uni.id),
+    ));
   } else {
-    await db.insert(tuition_discount_types).values(values);
+    await db.insert(tuition_discount_types).values({ ...values, universityId: uni.id });
   }
 
   revalidatePath('/admin/finance/rules');
@@ -208,11 +225,16 @@ export async function deleteDiscountTypeAction(id: number): Promise<{ ok: boolea
   await requireRole(FINANCE);
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
+  const own = await assertRowUni(tuition_discount_types, id);
+  if (!own.ok) return { ok: false, error: own.error };
   const used = await db.select({ id: student_discounts.id }).from(student_discounts)
     .where(eq(student_discounts.discountTypeId, id)).limit(1);
   if (used.length) return { ok: false, error: 'این نوع تخفیف به دانشجو تخصیص یافته؛ به‌جای حذف، غیرفعالش کنید' };
 
-  await db.delete(tuition_discount_types).where(eq(tuition_discount_types.id, id));
+  await db.delete(tuition_discount_types).where(and(
+    eq(tuition_discount_types.id, id),
+    uniScopeOf(tuition_discount_types.universityId, own.uniId),
+  ));
   revalidatePath('/admin/finance/rules');
   return { ok: true };
 }

@@ -1,6 +1,7 @@
 import { db } from '@/db';
 import { samin_staging, samin_sync_logs, universities } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import { desc, eq, sql } from 'drizzle-orm';
 import SaminClient from './SaminClient';
 
@@ -9,7 +10,8 @@ export const dynamic = 'force-dynamic';
 export default async function SaminPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   await requireRole(['ADMIN']);
   const params = await searchParams;
-  const uniCode = params.uni || 'AFAGH';
+  const cookieUni = await getCurrentUniversity().catch(() => null);
+  const uniCode = params.uni || cookieUni?.code || 'AFAGH';
 
   const unis = await db.select().from(universities).orderBy(universities.code);
   const activeUni = unis.find(u => u.code === uniCode) || unis[0];

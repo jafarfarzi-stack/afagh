@@ -1,4 +1,4 @@
-import { desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db, ensureDbSchemaPatches } from '@/db';
 import {
   process_definitions,
@@ -25,7 +25,7 @@ export default async function AdminWorkflowsPage() {
 
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
-  /* TODO: filter by universityId */
+  const scopeOf = (c: any) => (currentUniversityId ? or(eq(c, currentUniversityId), isNull(c)) : undefined);
 
   const now = new Date();
 
@@ -36,6 +36,7 @@ export default async function AdminWorkflowsPage() {
     rawProcesses = await db
       .select()
       .from(process_definitions)
+      .where(scopeOf(process_definitions.universityId))
       .orderBy(process_definitions.id);
   } catch (_) {
     try {
@@ -47,7 +48,10 @@ export default async function AdminWorkflowsPage() {
   }
 
   try {
-    rawSteps = await db.select().from(process_steps).orderBy(process_steps.stepOrder);
+    const procIds = rawProcesses.map((p: any) => p.id).filter((v: any) => Number.isInteger(v));
+    rawSteps = procIds.length
+      ? await db.select().from(process_steps).where(inArray(process_steps.processId, procIds)).orderBy(process_steps.stepOrder)
+      : [];
   } catch (_) {
     try {
       const res = await db.execute(sql`SELECT id, process_id as "processId", title FROM process_steps ORDER BY id`);
@@ -106,11 +110,21 @@ export default async function AdminWorkflowsPage() {
     .innerJoin(students, eq(students.id, student_requests.studentId))
     .innerJoin(users, eq(users.id, students.userId))
     .innerJoin(process_definitions, eq(process_definitions.id, student_requests.processId))
+    .where(currentUniversityId ? or(
+      eq(student_requests.universityId, currentUniversityId),
+      eq(students.universityId, currentUniversityId),
+      and(isNull(student_requests.universityId), isNull(students.universityId)),
+    ) : undefined)
     .orderBy(desc(student_requests.id))
     .limit(50);
 
-  const allLogs = await db.select().from(request_step_logs);
-  const allCheckpoints = await db.select().from(request_parallel_checkpoints);
+  const reqIds = rawRequests.map(r => r.id).filter((v): v is number => Number.isInteger(v));
+  const allLogs = reqIds.length
+    ? await db.select().from(request_step_logs).where(inArray(request_step_logs.requestId, reqIds))
+    : [];
+  const allCheckpoints = reqIds.length
+    ? await db.select().from(request_parallel_checkpoints).where(inArray(request_parallel_checkpoints.requestId, reqIds))
+    : [];
 
   const inboxFormatted = rawRequests.map(r => {
     let parsedForm: any = {};

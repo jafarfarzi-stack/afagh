@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, isNull, or } from 'drizzle-orm';
 import { db } from '@/db';
 import { degree_level_configs, tuition_rules } from '@/db/schema';
 import { getCurrentUniversity } from '@/lib/university-scope';
@@ -15,7 +15,9 @@ export default async function TuitionRulesPage() {
   const uni = await getCurrentUniversity().catch(() => null);
   const [rules, degrees, equivModeRaw] = await Promise.all([
     db.select().from(tuition_rules).where(uni ? eq(tuition_rules.universityId, uni.id) : undefined).orderBy(asc(tuition_rules.id)),
-    db.select().from(degree_level_configs).orderBy(asc(degree_level_configs.id)),
+    db.select().from(degree_level_configs)
+      .where(uni ? or(eq(degree_level_configs.universityId, uni.id), isNull(degree_level_configs.universityId)) : undefined)
+      .orderBy(asc(degree_level_configs.id)),
     getSetting('EQUIV_FIXED_TUITION_MODE'),
   ]);
 

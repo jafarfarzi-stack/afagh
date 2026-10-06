@@ -7,7 +7,7 @@ import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import PrintButton from '@/components/PrintButton';
 import FinanceStudentClient from './FinanceStudentClient';
 import { db } from '@/db';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull, or } from 'drizzle-orm';
 import { student_subject_fees, subject_fee_types } from '@/db/schema';
 import { getCurrentUniversity } from '@/lib/university-scope';
 
@@ -71,6 +71,7 @@ const fin = await getStudentFinance(studentId, {
     : null;
 
   // خواندن مبالغ موضوعی ترم جاری
+  const uni = currentUniversity ?? await getCurrentUniversity().catch(() => null);
   const subjectFees = currentTerm ? await db
     .select({
       typeTitle: subject_fee_types.title,
@@ -79,7 +80,10 @@ const fin = await getStudentFinance(studentId, {
     })
     .from(student_subject_fees)
     .innerJoin(subject_fee_types, eq(subject_fee_types.id, student_subject_fees.subjectFeeTypeId))
-    .where(eq(student_subject_fees.studentId, studentId)) : [];
+    .where(and(
+      eq(student_subject_fees.studentId, studentId),
+      uni ? or(eq(student_subject_fees.universityId, uni.id), isNull(student_subject_fees.universityId)) : undefined,
+    )) : [];
 
   const { student, totals, transcript } = fin;
 

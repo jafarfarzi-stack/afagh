@@ -1,9 +1,10 @@
 'use server';
 
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { short_term_courses, short_term_discounts, short_term_learners, short_term_registrations } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import { issueShortTermCertificate, revokeCertificate } from '@/lib/verification';
 import { invalidateSettingsCache } from '@/lib/settings';
 import { createLogger } from '@/lib/logger';
@@ -24,10 +25,14 @@ export async function createShortCourseAction(input: {
   const instructorName = String(input.instructorName ?? '').trim();
   if (!code || !title || !instructorName) return fail('کد، عنوان و نام مدرس الزامی است.');
 
-  const [dup] = await db.select({ id: short_term_courses.id }).from(short_term_courses).where(eq(short_term_courses.code, code)).limit(1);
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return fail('دانشگاه فعال نامشخص است.');
+  const [dup] = await db.select({ id: short_term_courses.id }).from(short_term_courses)
+    .where(and(eq(short_term_courses.code, code), or(eq(short_term_courses.universityId, uni.id), isNull(short_term_courses.universityId)))).limit(1);
   if (dup) return fail(`کد دوره «${code}» پیش‌تر ثبت شده است.`);
 
   const [row] = await db.insert(short_term_courses).values({
+    universityId: uni.id,
     code, title,
     titleEn: String(input.titleEn ?? '').trim() || null,
     category: String(input.category ?? 'مهندسی و فناوری').trim(),
@@ -50,7 +55,15 @@ export async function addLearnerAction(input: {
   const fullName = String(input.fullName ?? '').trim();
   if (!mobile || !fullName) return fail('نام و شمارهٔ همراه الزامی است.');
 
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return fail('دانشگاه فعال نامشخص است.');
+  const [course] = await db.select({ universityId: short_term_courses.universityId })
+    .from(short_term_courses).where(eq(short_term_courses.id, Number(input.courseId))).limit(1);
+  if (!course) return fail('دوره یافت نشد.');
+  if (course.universityId !== null && course.universityId !== uni.id) return fail('دوره متعلق به دانشگاه دیگری است.');
+
   const [learner] = await db.insert(short_term_learners).values({
+    universityId: uni.id,
     mobile, fullName,
     fullNameEn: String(input.fullNameEn ?? '').trim() || null,
     nationalId: String(input.nationalId ?? '').trim() || null,
@@ -58,6 +71,7 @@ export async function addLearnerAction(input: {
 
   const trackingCode = `AFQ-${Date.now().toString(36).toUpperCase()}`;
   const [reg] = await db.insert(short_term_registrations).values({
+    universityId: uni.id,
     learnerId: learner.id,
     courseId: Number(input.courseId),
     trackingCode,
@@ -73,12 +87,15 @@ export async function updateRegistrationAction(input: {
   registrationId: number; attendanceCount?: number; finalGrade?: number | null;
 }) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return fail('دانشگاه فعال نامشخص است.');
   const [reg] = await db
-    .select({ id: short_term_registrations.id, courseId: short_term_registrations.courseId, totalSessions: short_term_registrations.totalSessions })
+    .select({ id: short_term_registrations.id, courseId: short_term_registrations.courseId, totalSessions: short_term_registrations.totalSessions, universityId: short_term_registrations.universityId })
     .from(short_term_registrations)
     .where(eq(short_term_registrations.id, Number(input.registrationId)))
     .limit(1);
   if (!reg) return fail('ثبت‌نام یافت نشد.');
+  if (reg.universityId !== null && reg.universityId !== uni.id) return fail('ثبت‌نام متعلق به دانشگاه دیگری است.');
 
   const [course] = await db.select({ passingGrade: short_term_courses.passingGrade, maxAbsences: short_term_courses.maxAbsences })
     .from(short_term_courses).where(eq(short_term_courses.id, reg.courseId)).limit(1);
@@ -105,7 +122,10 @@ export async function updateRegistrationAction(input: {
     patch.isPassed = finalGrade >= passing && absences <= maxAbsences ? 1 : 0;
   }
 
-  await db.update(short_term_registrations).set(patch).where(eq(short_term_registrations.id, reg.id));
+  await db.update(short_term_registrations).set(patch).where(and(
+    eq(short_term_registrations.id, reg.id),
+    or(eq(short_term_registrations.universityId, uni.id), isNull(short_term_registrations.universityId)),
+  ));
   const [after] = await db.select({ isPassed: short_term_registrations.isPassed, finalGrade: short_term_registrations.finalGrade, attendanceCount: short_term_registrations.attendanceCount })
     .from(short_term_registrations).where(eq(short_term_registrations.id, reg.id)).limit(1);
   return ok({ registrationId: reg.id, isPassed: after.isPassed === 1, finalGrade: Number(after.finalGrade ?? 0), attendanceCount: after.attendanceCount ?? 0 });
@@ -135,18 +155,30 @@ export async function revokeCertificateAction(certificateNumber: string) {
 /** به‌روزرسانی ظرفیت/وضعیت دوره */
 export async function updateCourseStatusAction(courseId: number, status: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED') {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
-  await db.update(short_term_courses).set({ status }).where(eq(short_term_courses.id, Number(courseId)));
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return fail('دانشگاه فعال نامشخص است.');
+  const [row] = await db.select({ universityId: short_term_courses.universityId })
+    .from(short_term_courses).where(eq(short_term_courses.id, Number(courseId))).limit(1);
+  if (!row) return fail('دوره یافت نشد.');
+  if (row.universityId !== null && row.universityId !== uni.id) return fail('دوره متعلق به دانشگاه دیگری است.');
+  await db.update(short_term_courses).set({ status }).where(and(
+    eq(short_term_courses.id, Number(courseId)),
+    or(eq(short_term_courses.universityId, uni.id), isNull(short_term_courses.universityId)),
+  ));
   return ok({ courseId: Number(courseId), status });
 }
 
 /** همگام‌سازی شمار ثبت‌نام‌شده‌ها با واقعیت جدول (بدون شمارش در Node) */
 export async function syncEnrolledCountsAction() {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return fail('دانشگاه فعال نامشخص است.');
   await db.execute(sql`
     update short_term_courses c
        set "enrolledCount" = coalesce(x.n, 0)
       from (select "courseId", count(*)::int n from short_term_registrations group by "courseId") x
      where x."courseId" = c.id
+       and (c."universityId" = ${uni.id} or c."universityId" is null)
   `);
   invalidateSettingsCache();
   return ok({ synced: true });
@@ -159,8 +191,12 @@ export async function syncEnrolledCountsAction() {
 /** فهرست کدهای تخفیف (بر اساس دورهٔ اختیاری) */
 export async function listDiscountCodesAction(courseId?: number) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
+  const uni = await getCurrentUniversity().catch(() => null);
   const rows = await db.select().from(short_term_discounts)
-    .where(courseId ? eq(short_term_discounts.courseId, Number(courseId)) : undefined)
+    .where(and(
+      courseId ? eq(short_term_discounts.courseId, Number(courseId)) : undefined,
+      uni ? or(eq(short_term_discounts.universityId, uni.id), isNull(short_term_discounts.universityId)) : undefined,
+    ))
     .orderBy(short_term_discounts.id);
   return ok(rows.map(r => ({
     id: r.id, code: r.code, courseId: r.courseId, discountPercent: r.discountPercent,
@@ -179,9 +215,18 @@ export async function createDiscountCodeAction(input: {
   if (!/^[A-Z0-9]{3,20}$/.test(code)) return fail('کد تخفیف باید ۳ تا ۲۰ کاراکتر انگلیسی/رقمی باشد.');
   if (!(percent >= 1 && percent <= 100)) return fail('درصد تخفیف باید بین ۱ تا ۱۰۰ باشد.');
   if (input.maxUsage != null && (!Number.isInteger(Number(input.maxUsage)) || Number(input.maxUsage) < 1)) return fail('سهمیهٔ مصرف باید عدد صحیح مثبت باشد.');
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return fail('دانشگاه فعال نامشخص است.');
+  if (input.courseId) {
+    const [c] = await db.select({ universityId: short_term_courses.universityId })
+      .from(short_term_courses).where(eq(short_term_courses.id, Number(input.courseId))).limit(1);
+    if (!c) return fail('دوره یافت نشد.');
+    if (c.universityId !== null && c.universityId !== uni.id) return fail('دوره متعلق به دانشگاه دیگری است.');
+  }
 
   try {
     const [row] = await db.insert(short_term_discounts).values({
+      universityId: uni.id,
       code,
       courseId: input.courseId ? Number(input.courseId) : null,
       discountPercent: percent,
@@ -199,9 +244,18 @@ export async function createDiscountCodeAction(input: {
 /** فعال/غیرفعال‌سازی کد تخفیف */
 export async function toggleDiscountCodeAction(discountId: number, isActive: boolean) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return fail('دانشگاه فعال نامشخص است.');
+  const [cur] = await db.select({ universityId: short_term_discounts.universityId })
+    .from(short_term_discounts).where(eq(short_term_discounts.id, Number(discountId))).limit(1);
+  if (!cur) return fail('کد تخفیف یافت نشد.');
+  if (cur.universityId !== null && cur.universityId !== uni.id) return fail('کد تخفیف متعلق به دانشگاه دیگری است.');
   const [row] = await db.update(short_term_discounts)
     .set({ isActive: isActive ? 1 : 0 })
-    .where(eq(short_term_discounts.id, Number(discountId)))
+    .where(and(
+      eq(short_term_discounts.id, Number(discountId)),
+      or(eq(short_term_discounts.universityId, uni.id), isNull(short_term_discounts.universityId)),
+    ))
     .returning({ id: short_term_discounts.id, isActive: short_term_discounts.isActive });
   if (!row) return fail('کد تخفیف یافت نشد.');
   return ok({ id: row.id, isActive: row.isActive });
@@ -215,9 +269,18 @@ export async function confirmPaymentAction(input: { registrationId: number; paym
   const refId = String(input.paymentRefId ?? '').trim();
   if (!regId || !refId || !(amount >= 0)) return fail('شناسهٔ ثبت‌نام، شمارهٔ پیگیری و مبلغ الزامی است.');
 
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return fail('دانشگاه فعال نامشخص است.');
+  const [cur] = await db.select({ universityId: short_term_registrations.universityId })
+    .from(short_term_registrations).where(eq(short_term_registrations.id, regId)).limit(1);
+  if (!cur) return fail('ثبت‌نام یافت نشد.');
+  if (cur.universityId !== null && cur.universityId !== uni.id) return fail('ثبت‌نام متعلق به دانشگاه دیگری است.');
   const [row] = await db.update(short_term_registrations)
     .set({ paymentStatus: 'PAID', amountPaid: amount, paymentRefId: refId })
-    .where(eq(short_term_registrations.id, regId))
+    .where(and(
+      eq(short_term_registrations.id, regId),
+      or(eq(short_term_registrations.universityId, uni.id), isNull(short_term_registrations.universityId)),
+    ))
     .returning({ id: short_term_registrations.id, trackingCode: short_term_registrations.trackingCode });
   if (!row) return fail('ثبت‌نام یافت نشد.');
   log.info('short_term_payment_confirmed', { registrationId: regId, amount, refId });

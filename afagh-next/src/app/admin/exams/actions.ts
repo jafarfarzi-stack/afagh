@@ -186,7 +186,10 @@ export type ExamWorkspaceResult =
 export async function getExamWorkspaceAction(termId?: number, universityId?: number): Promise<ExamWorkspaceResult> {
   try {
     await requireRole(EDITORS);
-    const terms = await listRealTerms(universityId);
+    // دانشگاه فعال سرور معیار است؛ پارامتر کلاینت فقط fallback
+    const serverUni = await getCurrentUniversity().catch(() => null);
+    const uid = serverUni?.id ?? universityId;
+    const terms = await listRealTerms(uid);
     const resolvedTermId = termId ?? terms.find(t => t.isCurrent === 1)?.id ?? terms[0]?.id ?? null;
 
     let sessions: Awaited<ReturnType<typeof loadSessions>> = [];
@@ -194,7 +197,7 @@ export async function getExamWorkspaceAction(termId?: number, universityId?: num
     let concurrentCount = 0;
     let orphanSessionCount = 0;
     if (resolvedTermId != null) {
-      [sessions, courses] = await Promise.all([loadSessions(resolvedTermId, universityId), loadExamCourses(resolvedTermId, universityId)]);
+      [sessions, courses] = await Promise.all([loadSessions(resolvedTermId, uid), loadExamCourses(resolvedTermId, uid)]);
       const seen = new Map<string, number>();
       for (const c of courses) {
         if (!c.examDate || !c.startTime) continue;
@@ -210,7 +213,7 @@ export async function getExamWorkspaceAction(termId?: number, universityId?: num
         s => !courseKeys.has(`${s.examDate}|${String(s.startTime).slice(0, 5)}`),
       ).length;
     }
-    const halls = await loadHalls(universityId);
+    const halls = await loadHalls(uid);
 
     return {
       ok: true,
@@ -294,12 +297,14 @@ export type ExamPlanningResult = { ok: true; data: ExamPlanningData } | { ok: fa
 export async function getExamPlanningAction(termId: number, universityId?: number): Promise<ExamPlanningResult> {
   await requireRole(EDITORS);
   try {
+    const serverUni = await getCurrentUniversity().catch(() => null);
+    const uid = serverUni?.id ?? universityId;
     const [zoning, radar, clusters] = await Promise.all([
       planning.getExamZoningRow(termId),
-      planning.examCapacityRadar(termId, universityId),
-      planning.listEquivClusters(termId, universityId),
+      planning.examCapacityRadar(termId, uid),
+      planning.listEquivClusters(termId, uid),
     ]);
-    const hallWhere = universityId ? eq(exam_halls.universityId, universityId) : undefined;
+    const hallWhere = uid ? eq(exam_halls.universityId, uid) : undefined;
     const halls = await db.select().from(exam_halls).where(hallWhere).orderBy(asc(exam_halls.id));
     return {
       ok: true,
@@ -325,7 +330,9 @@ export async function upsertExamZoningAction(termId: number, zoning: {
 }, universityId?: number) {
   try {
     const user = await requireRole(EDITORS);
-    const out = await planning.saveExamZoning(user.id, termId, zoning, universityId);
+    const serverUni = await getCurrentUniversity().catch(() => null);
+    const uid = serverUni?.id ?? universityId;
+    const out = await planning.saveExamZoning(user.id, termId, zoning, uid);
     revalidatePath('/admin/exams');
     return out.ok ? { ok: true, message: 'بازه‌های تقویم امتحانات ذخیره شد.' } : { ok: false, error: out.error ?? 'خطا' };
   } catch (e: any) {
@@ -342,7 +349,8 @@ export async function scheduleExamSlotAction(px: {
 }): Promise<ScheduleExamResult> {
   try {
     const user = await requireRole(EDITORS);
-    const out = await planning.scheduleExamForOffering(user.id, px);
+    const serverUni = await getCurrentUniversity().catch(() => null);
+    const out = await planning.scheduleExamForOffering(user.id, { ...px, universityId: serverUni?.id ?? px.universityId });
     revalidatePath('/admin/exams');
     return out;
   } catch (e: any) {
@@ -357,7 +365,8 @@ export async function scheduleUnifiedClusterAction(px: {
 }): Promise<UnifiedClusterResult> {
   try {
     const user = await requireRole(EDITORS);
-    const out = await planning.scheduleUnifiedCluster(user.id, px);
+    const serverUni = await getCurrentUniversity().catch(() => null);
+    const out = await planning.scheduleUnifiedCluster(user.id, { ...px, universityId: serverUni?.id ?? px.universityId });
     revalidatePath('/admin/exams');
     return out;
   } catch (e: any) {
@@ -370,7 +379,8 @@ export type SuggestSlotsResult = { ok: true; data: { examDate: string; startTime
 export async function suggestExamSlotsAction(termId: number, offeringId: number, universityId?: number): Promise<SuggestSlotsResult> {
   await requireRole(EDITORS);
   try {
-    const suggestions = await planning.suggestExamSlots(termId, offeringId, universityId);
+    const serverUni = await getCurrentUniversity().catch(() => null);
+    const suggestions = await planning.suggestExamSlots(termId, offeringId, serverUni?.id ?? universityId);
     return { ok: true, data: suggestions };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? 'خطا در محاسبهٔ پیشنهادهای زمان امتحان.' };
@@ -382,7 +392,8 @@ export type GenerateSeatsResult = { ok: true; message: string; data: { ok: boole
 export async function generateSeatAllocationsAction(termId: number, universityId?: number): Promise<GenerateSeatsResult> {
   try {
     const user = await requireRole(EDITORS);
-    const out = await planning.generateSeatAllocations(user.id, termId, universityId);
+    const serverUni = await getCurrentUniversity().catch(() => null);
+    const out = await planning.generateSeatAllocations(user.id, termId, serverUni?.id ?? universityId);
     revalidatePath('/admin/exams');
     revalidatePath('/student/exam-card');
     return {

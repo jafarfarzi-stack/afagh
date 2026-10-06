@@ -3,7 +3,7 @@ import { db } from '@/db';
 import { process_definitions, student_requests, students, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
-import { gridModules } from '@/lib/admin-modules';
+import { groupedModules } from '@/lib/admin-modules';
 import { ensureWorker, waitingRoomStats, warmupCapacities } from '@/lib/waitingRoom';
 import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
@@ -84,7 +84,7 @@ export default async function AdminHome({
   const sp = await searchParams;
   const user = await requireRole(ALL_ADMIN_ROLES);
   const isEdu = user.roles.includes('ADMIN') || user.roles.includes('EDU_EXPERT');
-  const mods = gridModules(user.roles);
+  const groups = groupedModules(user.roles);
 
   // ── مرتب‌سازی ستونی کارتابل از URL (?sort=col&dir=asc|desc — پیش‌فرض: جدیدترین) ──
   const SORTABLE: Record<string, 'track' | 'name' | 'status' | 'created' | 'proc'> = {
@@ -151,31 +151,29 @@ export default async function AdminHome({
 
   return (
     <div className="space-y-5">
-      {/* ═══ شبکهٔ کارت‌های ماژول‌ها — فقط ماژول‌های مجازِ نقش کاربر ═══ */}
+      {/* ═══ دسته‌های کلی — کلیک = صفحهٔ کاشی‌های همان دسته ═══ */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h1 className="font-extrabold text-slate-800 text-base sm:text-lg">ماژول‌های سامانه</h1>
-          <span className="text-xs text-slate-500">{mods.length} ماژول در دسترس نقش شما</span>
+          <h1 className="font-extrabold text-slate-800 text-base sm:text-lg">دسته‌بندی سامانه</h1>
+          <span className="text-xs text-slate-500">{groups.reduce((s, g) => s + g.modules.length, 0)} ماژول در دسترس نقش شما</span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-          {mods.map(m => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          {groups.map(g => (
             <Link
-              key={m.href}
-              href={m.href}
-              className={`group h-full p-4 rounded-2xl bg-gradient-to-br ${m.accent} text-white shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-start justify-between border`}
+              key={g.group.key}
+              href={`/admin/c/${g.group.key}`}
+              className="group h-full p-4 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-start justify-between"
             >
               <div className="flex items-start gap-3">
-                <div className={`w-11 h-11 shrink-0 rounded-xl ${m.iconBg} border flex items-center justify-center text-2xl shadow-inner group-hover:scale-110 transition-transform`}>
-                  {m.icon}
+                <div className="w-11 h-11 shrink-0 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                  {g.group.icon}
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-sm leading-6">{m.title}</h3>
-                  <p className="text-[11px] text-white/70 mt-1 leading-5">{m.desc}</p>
+                  <h3 className="font-extrabold text-sm leading-6 text-slate-800">{g.group.title}</h3>
+                  <p className="text-[11px] text-slate-500 mt-1 leading-5">{g.group.desc}</p>
+                  <p className="text-[10px] text-indigo-600 mt-1 font-bold">{g.modules.length} ماژول ←</p>
                 </div>
               </div>
-              <span className="text-white/50 font-extrabold text-sm group-hover:text-white group-hover:-translate-x-1 transition-all mt-1">
-                ←
-              </span>
             </Link>
           ))}
         </div>

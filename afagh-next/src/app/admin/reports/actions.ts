@@ -4,6 +4,18 @@ import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth';
 import { STUDENT_STATUS_FA } from '@/lib/student-labels';
+// ── ماژول‌های گزارش (هر خانواده یک فایل r-*.ts؛ اولین غیرnull برنده است) ──
+import { run as runClass } from './r-class';
+import { run as runCouncilLetters } from './r-council-letters';
+import { run as runEduProbation } from './r-edu-probation';
+import { run as runEduRoster } from './r-edu-roster';
+import { run as runEduSchedule } from './r-edu-schedule';
+import { run as runExam } from './r-exam';
+import { run as runFinance } from './r-finance';
+import { run as runStaff } from './r-staff';
+import { run as runStatusOps } from './r-status-ops';
+import { run as runThesis } from './r-thesis';
+import { run as runCollect } from './r-collect-external';
 
 const ROLES = ['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER'] as never[];
 const PER = 50;
@@ -20,6 +32,8 @@ export type ReportFilters = {
   miss?: string;
   page?: number;
   universityId?: number;
+  /** فیلترهای سفارشی ماژول‌ها (مثل gradeStatus/samaCode/onlyStale) */
+  [key: string]: string | number | boolean | undefined;
 };
 
 export type ReportColumn = { key: string; title: string };
@@ -85,7 +99,8 @@ function faStatus(s: unknown): string {
   return STUDENT_STATUS_FA[k] ?? k;
 }
 
-function studentWhere(f: ReportFilters, alias = 's') {
+/** هلپرهای مشترک گزارش‌ها — ماژول‌های r-*.ts از همین‌ها استفاده می‌کنند */
+export function studentWhere(f: ReportFilters, alias = 's') {
   const a = sql.identifier(alias);
   const c = [];
   if (f.universityId) c.push(sql`(${a}."universityId" = ${f.universityId} OR ${a}."universityId" IS NULL)`);
@@ -105,12 +120,12 @@ function studentWhere(f: ReportFilters, alias = 's') {
   return c;
 }
 
-function joinAnd(conds: ReturnType<typeof sql>[]) {
+export function joinAnd(conds: ReturnType<typeof sql>[]) {
   if (!conds.length) return sql``;
   return sql`WHERE ${sql.join(conds, sql` AND `)}`;
 }
 
-async function paged(
+export async function paged(
   columns: ReportColumn[],
   baseFrom: ReturnType<typeof sql>,
   whereConds: ReturnType<typeof sql>[],
@@ -136,10 +151,10 @@ async function paged(
   return { columns, rows: data.rows, total, page: safe, per: PER, totalPages };
 }
 
-const STU_FROM = sql`FROM students s JOIN users u ON u.id = s."userId" LEFT JOIN majors m ON m.id = s."majorId" LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId" LEFT JOIN faculties fc ON fc.id = m."facultyId"`;
-const STU_COLS = sql`s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name, u."nationalCode" AS nc, m.name AS major, d.title AS degree, s."entryYear" AS y, s.status AS st`;
+export const STU_FROM = sql`FROM students s JOIN users u ON u.id = s."userId" LEFT JOIN majors m ON m.id = s."majorId" LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId" LEFT JOIN faculties fc ON fc.id = m."facultyId"`;
+export const STU_COLS = sql`s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name, u."nationalCode" AS nc, m.name AS major, d.title AS degree, s."entryYear" AS y, s.status AS st`;
 
-async function studentListReport(
+export async function studentListReport(
   columns: ReportColumn[],
   extraConds: ReturnType<typeof sql>[],
   f: ReportFilters,
@@ -150,8 +165,47 @@ async function studentListReport(
   return r;
 }
 
+/** همهٔ kindهای گزارش (قدیم + موج ۲ + جمع‌آوری‌شده) — برای فیلتر مجازها در UI */
+export const ALL_REPORT_KINDS: string[] = [
+  'active-term', 'status-summary', 'by-faculty', 'by-major', 'grade-status', 'probation',
+  'top', 'incomplete', 'graduates', 'entries', 'noshow', 'transfers', 'tuition',
+  'payesh', 'jame', 'docs', 'third-attempt',
+  'probation-violations', 'probation-chains', 'unit-cap-violations', 'repeated-courses',
+  'student-weekly-conflicts', 'student-exam-conflicts', 'prereq-violations', 'course-grade-status',
+  'enrollment-pick', 'offered-course-roster', 'top-students', 'no-photo', 'graduates-info',
+  'status-report', 'major-change-report', 'status-change-report', 'gpa-refresh-preview',
+  'profile-refresh', 'portal-export', 'exam-session-sheet', 'seat-numbers', 'final-exam-schedule',
+  'grade-entry-report', 'grade-deadline', 'empty-rooms', 'weekly-timetable', 'room-conflicts',
+  'low-enrollment', 'makeup-courses', 'staff-list', 'staff-courses', 'staff-timetable',
+  'attendance-list', 'tuition-tariff', 'tuition-statement', 'pending-requests', 'defenses',
+  'proposals', 'council-edu', 'letter-templates', 'transcript-card', 'exam-entry-card',
+  'student-card', 'study-cert', 'edu-confirm', 'grad-cert', 'military-defer',
+  'finance-worklist', 'payroll-overview', 'bi-teaching-quality', 'bi-facilities',
+  'graduation-dossiers', 'grade-audit-log',
+];
+
+/** گیت ماتریس دسترسی برای هر گزارش: ADMIN آزاد، بقیه نیازمند reports:<kind> */
+export async function assertReportPermission(kind: string): Promise<void> {
+  const user = await requireRole(ROLES);
+  if (user.roles.includes('ADMIN')) return;
+  const { hasPermission } = await import('@/lib/permissions-enforcer');
+  if (!(await hasPermission(user.id, `reports:${kind}`))) {
+    throw new Error('دسترسی به این گزارش در ماتریس دسترسی‌ها داده نشده است.');
+  }
+}
+
+/** گزارش‌هایی که کاربر جاری مجاز است (برای فیلتر کارت‌ها) — ADMIN یعنی همه */
+export async function allowedReportKinds(kinds: string[]): Promise<string[] | null> {
+  const user = await requireRole(ROLES);
+  if (user.roles.includes('ADMIN')) return null;
+  const { getUserPermissions } = await import('@/lib/permissions-enforcer');
+  const perms = await getUserPermissions(user.id);
+  return kinds.filter(k => perms.has(`reports:${k}`));
+}
+
 export async function runReport(kind: string, f: ReportFilters): Promise<ReportResult> {
   await requireRole(ROLES);
+  await assertReportPermission(kind);
   const term = f.term || '';
 
   switch (kind) {
@@ -547,14 +601,30 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
       };
     }
 
-    default:
+    default: {
+      // واگذاری به ماژول‌های خانواده‌ها (r-*.ts) — اولین پاسخی که null نیست
+      const delegated =
+        (await runClass(kind, f)) ??
+        (await runCouncilLetters(kind, f)) ??
+        (await runEduProbation(kind, f)) ??
+        (await runEduRoster(kind, f)) ??
+        (await runEduSchedule(kind, f)) ??
+        (await runExam(kind, f)) ??
+        (await runFinance(kind, f)) ??
+        (await runStaff(kind, f)) ??
+        (await runStatusOps(kind, f)) ??
+        (await runThesis(kind, f)) ??
+        (await runCollect(kind, f));
+      if (delegated) return delegated;
       return { columns: [], rows: [], total: 0, page: 1, per: PER, totalPages: 1 };
+    }
   }
 }
 
 /** خروجی CSV — ورق‌زدن همه صفحات تا سقف ۵۰۰۰ ردیف */
 export async function exportReport(kind: string, f: ReportFilters): Promise<{ header: string[]; lines: string[][] }> {
   await requireRole(ROLES);
+  await assertReportPermission(kind);
   const first = await runReport(kind, { ...f, page: 1 });
   const all = [...first.rows];
   for (let p = 2; p <= first.totalPages && all.length < 5000; p++) {

@@ -1,5 +1,6 @@
 import { db } from '@/db';
 import { clearance_departments } from '@/db/schema';
+import { eq, isNull, or } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth';
 import { listDossiers, pipelineStats, ensureClearanceDepartments, WORKFLOW_STEPS } from '@/lib/graduation-engine';
 import { allRequests, serviceCatalog } from '@/lib/alumni';
@@ -18,7 +19,8 @@ export default async function AdminGraduationPage() {
   const [rows, stats, departments, alumni, services] = await Promise.all([
     listDossiers({ universityId: currentUniversityId }),
     pipelineStats({ universityId: currentUniversityId }),
-    db.select().from(clearance_departments),
+    db.select().from(clearance_departments)
+      .where(currentUniversityId ? or(eq(clearance_departments.universityId, currentUniversityId), isNull(clearance_departments.universityId)) : undefined),
     allRequests(),
     serviceCatalog(),
   ]);
