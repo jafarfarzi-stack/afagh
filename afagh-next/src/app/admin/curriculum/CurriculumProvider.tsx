@@ -113,9 +113,9 @@ function useCurriculumWorkspace(
     reloadDetail(selectedVersionId);
   }, [selectedVersionId, reloadDetail]);
 
-  // بانک دروس (هنگام نیاز برای افزودن)
+  // بانک دروس (هنگام نیاز برای افزودن — هم مودال افزودن، هم مودال ویرایش نسخه)
   useEffect(() => {
-    if (modal !== 'ADD_COURSE' || bank.length > 0 || bankLoading) return;
+    if ((modal !== 'ADD_COURSE' && modal !== 'EDIT_VERSION') || bank.length > 0 || bankLoading) return;
     setBankLoading(true);
     listCourseBankAction().then(r => {
       setBankLoading(false);
@@ -218,6 +218,7 @@ function useCurriculumWorkspace(
   // ── ویرایش مشخصات نسخه (فقط DRAFT؛ اکشن خودش گیت می‌زند) ──
   const openEditVersion = (v: { id: number; versionCode: string; title: string; entryYearFrom: number; entryYearTo: number | null; totalRequiredUnits: string }) => {
     setEditVersionId(v.id);
+    setSelectedVersionId(v.id);
     setEditVersionForm({
       versionCode: v.versionCode,
       title: v.title,
@@ -242,6 +243,21 @@ function useCurriculumWorkspace(
       maxUnitsPerTerm: f.maxUnitsPerTerm || null,
     }));
     if (ok) { setModal(null); setEditVersionId(null); reloadOverview(); reloadDetail(editVersionId); }
+  };
+
+  // ── افزودن گروهی درس بدون بستن مودال (برای مودال ویرایش نسخه) ──
+  const handleBulkAddCoursesKeepOpen = async () => {
+    if (selectedVersionId == null || bankSelected.size === 0) return;
+    const items = [...bankSelected].map(courseId => {
+      const b = bank.find(x => x.id === courseId);
+      return {
+        courseId,
+        roleType: b ? roleForBank(b) : addCourseForm.roleType,
+        recommendedSemester: null,
+      };
+    });
+    const ok = await run(() => bulkAddCoursesAction(selectedVersionId, items));
+    if (ok) { setBankSelected(new Set()); setBankRoles({}); reloadDetail(selectedVersionId); }
   };
 
   const handleTransferToMajor = async () => {
@@ -548,6 +564,7 @@ function useCurriculumWorkspace(
     dragCourseId,
     dropTarget,
     editVersionForm,
+    editVersionId,
     faculties,
     facultyFilter,
     filteredMajors,
@@ -557,6 +574,7 @@ function useCurriculumWorkspace(
     handleArchive,
     handleAssignSemester,
     handleBulkAddCourses,
+    handleBulkAddCoursesKeepOpen,
     handleCreateBankCourse,
     handleCreateRevision,
     handleCreateVersion,
