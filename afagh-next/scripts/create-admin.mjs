@@ -103,6 +103,10 @@ try {
   await c.query('insert into user_roles ("userId","roleId") values ($1,$2) on conflict do nothing', [userId, roleRow.rows[0].id]);
   // نشست‌های قبلی باطل شود تا رمز تازه تنها راه ورود باشد
   await c.query('delete from sessions where "userId"=$1', [userId]);
+  // پروندهٔ کارکنان (staff) — بدون آن، تأیید/انتشار برنامهٔ درسی و ثبت رویدادها خطا می‌دهد
+  await c.query(
+    `insert into staff ("userId","staffCode","staffType","isActive") values ($1,$2,'اداری',1)
+     on conflict ("userId") do nothing`, [userId, 'ADMIN-' + userId]);
 
   const body = [
     `# ساخته‌شده: ${new Date().toISOString()}`,
