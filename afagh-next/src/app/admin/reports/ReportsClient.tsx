@@ -112,6 +112,8 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds 
   const [res, setRes] = useState<ReportResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [err, setErr] = useState('');
+  const [showLinks, setShowLinks] = useState(false);
 
   const visibleCards = allowedKinds ? CARDS.filter(c => allowedKinds.includes(c.kind)) : CARDS;
   const card = visibleCards.find(c => c.kind === kind);
@@ -123,8 +125,14 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds 
 
   const run = async (page = 1) => {
     setLoading(true);
+    setErr('');
     try {
       setRes(await runReport(kind, { ...filters, page }));
+      setTimeout(() => {
+        document.getElementById('report-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : 'خطای نامشخص در اجرای گزارش');
     } finally {
       setLoading(false);
     }
@@ -133,6 +141,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds 
   const pick = (k: string) => {
     setKind(k);
     setRes(null);
+    setErr('');
     setTimeout(() => {
       const el = document.getElementById('report-result');
       void el;
@@ -141,6 +150,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds 
 
   const doExport = async () => {
     setExporting(true);
+    setErr('');
     try {
       const { header, lines } = await exportReport(kind, { ...filters, page: 1 });
       const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
@@ -151,6 +161,8 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds 
       a.download = `report-${kind}.csv`;
       a.click();
       URL.revokeObjectURL(a.href);
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : 'خطای نامشخص در خروجی');
     } finally {
       setExporting(false);
     }
@@ -287,18 +299,12 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds 
         </div>
       )}
 
-      {/* پیوند به صفحات تخصصی (خارج از مرکز گزارش) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-        {LINK_CARDS.map(l => (
-          <a key={l.kind} href={l.href} className="flex items-center gap-2 p-3 rounded-lg border-2 text-right font-bold text-[13px] bg-white border-slate-300 hover:border-indigo-300 hover:shadow">
-            <span className="text-2xl">{l.icon}</span><span>{l.title}</span>
-          </a>
-        ))}
-      </div>
-
+      {/* پیوند به صفحات تخصصی — جمع‌شونده در انتها تا مسیر اجرا→نتیجه تمیز بماند */}
       {/* نتیجه */}
-      <div id="report-result" className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden">
-        {!res ? (
+      <div id="report-result" className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden scroll-mt-4">
+        {err ? (
+          <p className="p-8 text-center text-rose-700 bg-rose-50 text-sm font-bold">خطا: {err}</p>
+        ) : !res ? (
           <p className="p-8 text-center text-slate-500 text-sm">
             گزارش «{card?.title}» را انتخاب و <b>اجرای گزارش</b> را بزنید.
           </p>
@@ -335,6 +341,26 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds 
               </div>
             )}
           </>
+        )}
+      </div>
+
+      {/* پیوند به صفحات تخصصی — جمع‌شونده در انتهای صفحه */}
+      <div className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden">
+        <button
+          onClick={() => setShowLinks(v => !v)}
+          className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-extrabold text-slate-600 hover:bg-slate-50"
+        >
+          <span>🔗 پیوندهای سریع به میزهای تخصصی ({LINK_CARDS.length})</span>
+          <span>{showLinks ? '▲ بستن' : '▼ نمایش'}</span>
+        </button>
+        {showLinks && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 p-3 pt-0">
+            {LINK_CARDS.map(l => (
+              <a key={l.kind} href={l.href} className="flex items-center gap-2 p-3 rounded-lg border-2 text-right font-bold text-[13px] bg-white border-slate-300 hover:border-indigo-300 hover:shadow">
+                <span className="text-2xl">{l.icon}</span><span>{l.title}</span>
+              </a>
+            ))}
+          </div>
         )}
       </div>
     </div>
