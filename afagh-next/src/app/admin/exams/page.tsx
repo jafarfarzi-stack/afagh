@@ -14,7 +14,7 @@ export default async function AdminExamsPage() {
   const workspace = await getExamWorkspaceAction(undefined, currentUniversityId ?? undefined);
   if (!workspace.ok) {
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
+      <div className="min-h-screen bg-sky-50/70 flex items-center justify-center p-6">
         <div className="bg-white rounded-2xl shadow-sm border border-rose-200 p-6 max-w-md text-center space-y-2">
           <div className="text-2xl">⚠️</div>
           <h2 className="font-extrabold text-slate-900">بارگذاری کارتابل امتحانات ناموفق بود</h2>

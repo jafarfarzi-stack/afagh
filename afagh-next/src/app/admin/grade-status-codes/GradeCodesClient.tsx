@@ -325,7 +325,7 @@ export default function GradeCodesClient({
   const openEditCourse = (c: BankCourse) => { setEditingCourse(c); setModalOpen(true); };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-3 sm:p-6 space-y-5" dir="rtl">
+    <div className="min-h-screen bg-sky-50/70 p-3 sm:p-6 space-y-5" dir="rtl">
       {/* هدر */}
       <div className="bg-gradient-to-l from-amber-900 to-orange-900 rounded-2xl p-5 text-white shadow-lg">
         <div className="flex items-center gap-3">

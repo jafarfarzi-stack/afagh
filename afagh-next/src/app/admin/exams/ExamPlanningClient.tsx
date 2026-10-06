@@ -258,7 +258,7 @@ export default function ExamPlanningClient({ initial, universityId }: { initial:
   ];
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-800 p-3 sm:p-6 space-y-5" dir="rtl">
+    <div className="min-h-screen bg-sky-50/70 text-slate-800 p-3 sm:p-6 space-y-5" dir="rtl">
       {toast && (
         <div className={`fixed top-4 left-4 right-4 sm:right-auto sm:left-6 z-50 p-4 rounded-xl shadow-2xl border text-sm font-bold ${
           toast.type === 'success' ? 'bg-emerald-900 text-emerald-100 border-emerald-700' : 'bg-rose-900 text-rose-100 border-rose-700'

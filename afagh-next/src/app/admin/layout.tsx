@@ -34,7 +34,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const curUni = await getCurrentUniversity();
   const th = uniTheme(curUni.code);
   return (
-    <div className="min-h-screen bg-slate-100" data-uni={curUni.code}>
+    <div className="min-h-screen bg-sky-50/70" data-uni={curUni.code}>
       <header className={`${th.header} text-white shadow-md transition-colors`}>
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 p-3.5 px-4">
           <div className="flex items-center gap-3">
@@ -42,7 +42,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               {curUni.title.slice(0, 1)}
             </div>
             <div>
-              <p className="font-extrabold text-sm tracking-wide">داشبورد مدیریت جامع {curUni.title}</p>
+              <Link href="/admin" title="بازگشت به صفحه اول (داشبورد)" className="hover:opacity-90 transition-opacity">
+                <p className="font-extrabold text-sm tracking-wide">داشبورد مدیریت جامع {curUni.title}</p>
+              </Link>
               <p className="text-xs opacity-80">{user.name} · نقش‌ها: {user.roles.join('، ')}</p>
             </div>
           </div>

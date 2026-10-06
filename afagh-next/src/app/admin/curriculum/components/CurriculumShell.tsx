@@ -18,7 +18,7 @@ import RejectModal from './RejectModal';
 
 export default function CurriculumShell() {
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-800 p-3 sm:p-6 space-y-5" dir="rtl">
+    <div className="min-h-screen bg-sky-50/70 text-slate-800 p-3 sm:p-6 space-y-5" dir="rtl">
       <CurriculumToast />
       <CurriculumHeader />
       <CurriculumTabsBar />
