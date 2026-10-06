@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { exportReport, runReport, type FilterOptions, type ReportResult } from './actions';
-import { LINK_CARDS } from './r-collect-external';
+import { LINK_CARDS } from './report-links';
 
 type Card = { kind: string; icon: string; title: string; needsTerm?: boolean; soon?: boolean; customs?: { key: string; title: string }[] };
 
