@@ -16,15 +16,14 @@ export default function RegulationCheckClient() {
   const [statusScanning, startStatusScan] = useTransition();
   const [statusMsg, setStatusMsg] = useState('');
 
-  const fetchUniId = async () => { const r = await getUniversityId(); setUniversityId(r.universityId); };
-
   const doStatusScan = async () => {
     setStatusMsg('');
     setStatusRows([]);
-    await fetchUniId();
+    const r = await getUniversityId();
+    setUniversityId(r.universityId);
     startStatusScan(async () => {
       try {
-        const result = await scanGraduatedWithoutGrades(200, universityId ?? undefined);
+        const result = await scanGraduatedWithoutGrades(200, r.universityId ?? undefined);
         setStatusRows(result.rows);
         setStatusMsg(result.rows.length === 0 ? 'مغایرتی یافت نشد.' : `${result.rows.length} فارغ‌التحصیل بدون سابقه نمره پیدا شد.`);
       } catch (e: any) {
@@ -37,12 +36,15 @@ export default function RegulationCheckClient() {
     setMsg('');
     setRows([]);
     setSelected(new Set());
-    await fetchUniId();
+    const r = await getUniversityId();
+    setUniversityId(r.universityId);
     startScan(async () => {
       try {
-        const result = await scanMismatchedSamaCodes(universityId ?? undefined);
-        setRows(result);
-        setMsg(result.length === 0 ? 'همه کدها صحیح هستند.' : `${result.length} نمره با کد نادرست پیدا شد.`);
+        const result = await scanMismatchedSamaCodes(r.universityId ?? undefined);
+        setRows(result.rows);
+        setMsg(result.rows.length === 0
+          ? `مغایرتی در ${result.scanned} نمرهٔ بررسی‌شده نیست.`
+          : `${result.rows.length} نمره با کد نادرست پیدا شد (از ${result.scanned} بررسی‌شده${result.truncated ? ' — اسکن محدود به ۲۰۰۰ ردیف اول است' : ''}).`);
       } catch (e: any) {
         setMsg('خطا: ' + (e?.message || 'نامشخص'));
       }
@@ -52,10 +54,11 @@ export default function RegulationCheckClient() {
   const doFix = async () => {
     const ids = [...selected];
     if (ids.length === 0) { setMsg('ابتدا نمراتی را انتخاب کنید.'); return; }
-    await fetchUniId();
+    const r = await getUniversityId();
+    setUniversityId(r.universityId);
     startFix(async () => {
       try {
-        const result = await applyCorrectedSamaCodes(ids, universityId ?? undefined);
+        const result = await applyCorrectedSamaCodes(ids, r.universityId ?? undefined);
         setMsg(`${result.applied} نمره اصلاح شد.`);
         setSelected(new Set());
         doScan();
@@ -68,10 +71,11 @@ export default function RegulationCheckClient() {
   const doFixAll = async () => {
     const ids = rows.map(r => r.enrollmentId);
     if (ids.length === 0) return;
-    await fetchUniId();
+    const r = await getUniversityId();
+    setUniversityId(r.universityId);
     startFix(async () => {
       try {
-        const result = await applyCorrectedSamaCodes(ids, universityId ?? undefined);
+        const result = await applyCorrectedSamaCodes(ids, r.universityId ?? undefined);
         setMsg(`${result.applied} نمره اصلاح شد.`);
         setSelected(new Set());
         doScan();

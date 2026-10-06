@@ -1681,16 +1681,22 @@ async function phaseTatbigh(file) {
     }
   }
   const batch = [];
+  // کش عنوان مقطع → id (ستون «مقطع» فایل تطبیق؛ خالی در اکثر دانشگاه‌ها به‌جز افاغ)
+  const degByName = new Map();
+  for (const r of await q(`SELECT id, title FROM degree_level_configs`)) {
+    const n = normTxt(r.title);
+    if (n && !degByName.has(n)) degByName.set(n, Number(r.id));
+  }
   const flush = async () => {
     if (!batch.length) return;
     if (DRY) { batch.length = 0; return; }
     const vals = [];
     const ph = batch.map((r, i) => {
-      const o = i * 17;
-      vals.push(r.code, r.title, r.theory, r.practical, r.units, r.type, r.deptId, r.englishName, r.minPassedMark, r.thHour, r.ohHour, r.defaultAccept, r.defaultReject, r.description, r.isThesis, r.hasProject, universityId);
-      return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5},$${o+6},$${o+7},$${o+8},$${o+9},$${o+10},$${o+11},$${o+12},$${o+13},$${o+14},$${o+15},$${o+16},$${o+17})`;
+      const o = i * 18;
+      vals.push(r.code, r.title, r.theory, r.practical, r.units, r.type, r.deptId, r.englishName, r.minPassedMark, r.thHour, r.ohHour, r.defaultAccept, r.defaultReject, r.description, r.isThesis, r.hasProject, universityId, r.degId);
+      return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5},$${o+6},$${o+7},$${o+8},$${o+9},$${o+10},$${o+11},$${o+12},$${o+13},$${o+14},$${o+15},$${o+16},$${o+17},$${o+18})`;
     }).join(',');
-    const res = await pool.query(`INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units, "courseType", "departmentId", "englishName", "minPassedMark", "weeklyTheoryHours", "weeklyPracticalHours", "defaultAcceptMarkState", "defaultRejectMarkState", description, "isThesis", "hasProject", "universityId")
+    const res = await pool.query(`INSERT INTO courses (code, title, "theoreticalUnits", "practicalUnits", units, "courseType", "departmentId", "englishName", "minPassedMark", "weeklyTheoryHours", "weeklyPracticalHours", "defaultAcceptMarkState", "defaultRejectMarkState", description, "isThesis", "hasProject", "universityId", "degreeLevelId")
       VALUES ${ph}
       ON CONFLICT ("universityId",code) DO UPDATE SET
         title = EXCLUDED.title,
@@ -1699,6 +1705,7 @@ async function phaseTatbigh(file) {
         units = EXCLUDED.units,
         "courseType" = COALESCE(EXCLUDED."courseType", courses."courseType"),
         "departmentId" = COALESCE(courses."departmentId", EXCLUDED."departmentId"),
+        "degreeLevelId" = COALESCE(courses."degreeLevelId", EXCLUDED."degreeLevelId"),
         "englishName" = COALESCE(EXCLUDED."englishName", courses."englishName"),
         "minPassedMark" = COALESCE(EXCLUDED."minPassedMark", courses."minPassedMark"),
         "weeklyTheoryHours" = COALESCE(EXCLUDED."weeklyTheoryHours", courses."weeklyTheoryHours"),
@@ -1724,6 +1731,9 @@ async function phaseTatbigh(file) {
     const theory = parseFloat((cols[5] || '0').trim()) || 0;
     const practical = parseFloat((cols[6] || '0').trim()) || 0;
     const courseType = normTxt(cols[7]).slice(0, 50) || null;
+    const degName = normTxt(cols[2]);
+    let degId = (degName && degName !== 'نامشخص') ? (degByName.get(degName) ?? null) : null;
+    if (degName && degName !== 'نامشخص' && degId == null) { stats.unlinkedDegree = stats.unlinkedDegree || new Set(); if (stats.unlinkedDegree.size < 20) stats.unlinkedDegree.add(degName); }
     const groupName = normTxt(cols[3]);
     let deptId = null;
     if (groupName && groupName !== 'نامشخص') {
@@ -1754,7 +1764,7 @@ async function phaseTatbigh(file) {
     const equivRaw = (cols[14] || '').trim();
     if (equivRaw) equivJobs.push({ code, equivRaw });
     stats.total++;
-    batch.push({ code: code.slice(0,20), title: title.slice(0,150), theory, practical, units, type: courseType, deptId, englishName, minPassedMark, thHour, ohHour, defaultAccept, defaultReject, description, isThesis, hasProject });
+    batch.push({ code: code.slice(0,20), title: title.slice(0,150), theory, practical, units, type: courseType, deptId, degId, englishName, minPassedMark, thHour, ohHour, defaultAccept, defaultReject, description, isThesis, hasProject });
     coursesByCode.set(code, -1); // mark as known for later placeholder avoidance
     if (batch.length >= 500) await flush();
   }
@@ -1764,6 +1774,7 @@ async function phaseTatbigh(file) {
   console.log(`دروس: total=${stats.total} upserted=${stats.inserted} invalid=${stats.invalid} linked=${stats.linked} (courses در DB: ${coursesByCode.size})`);
   if (stats.clamped?.size) console.log(`  ⚠ ساعت/حدنصاب خارج از بازه clamp شد (${stats.clamped.size}): ${[...stats.clamped].slice(0, 10).join('، ')}`);
   if (stats.unlinkedGroup.size) console.log(`  گروه‌های بی‌تطبیق tatbigh: ${[...stats.unlinkedGroup].slice(0,10).join('، ')}`);
+  if (stats.unlinkedDegree?.size) console.log(`  مقطع‌های بی‌تطبیق tatbigh: ${[...stats.unlinkedDegree].join('، ')}`);
   // هم‌ارزی‌ها را به legacy_code_maps بریز (برای گزارش و تطبیق آینده)
   if (equivJobs.length && !DRY) {
     let eqIns = 0;

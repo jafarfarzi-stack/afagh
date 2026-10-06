@@ -6,7 +6,7 @@
  */
 'use server';
 
-import { and, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { academic_terms, course_offerings, courses, educational_regulations, enrollments, grade_change_log, legacy_grades, students, users } from '@/db/schema';
@@ -401,7 +401,14 @@ export interface MismatchRow {
 /**
  * بررسی همه enrollmentها و برگرداندن لیست نمراتی که کد وضعیتشان نادرست است
  */
-export async function scanMismatchedSamaCodes(universityId?: number): Promise<MismatchRow[]> {
+/**
+ * بررسی نمرات و برگرداندن لیست نمراتی که کد وضعیتشان نادرست است.
+ * ⚠ اسکن محدود (SCAN_LIMIT) است: بارگذاری کل جدول (۶۷۱هزار ردیف × چند کوئری
+ * به‌ازای هر ردیف) اکشن سرور را می‌شکست («unexpected response»). خروجی شامل
+ * پرچم truncated است تا کاربر بداند همه پوشش داده نشده.
+ */
+const SCAN_LIMIT = 2000;
+export async function scanMismatchedSamaCodes(universityId?: number): Promise<{ rows: MismatchRow[]; scanned: number; truncated: boolean }> {
   await requireRole(['ADMIN']);
 
   const whereParts: SQL[] = [eq(enrollments.gradeStatus, 'FINALIZED')];
@@ -411,7 +418,10 @@ export async function scanMismatchedSamaCodes(universityId?: number): Promise<Mi
       enrollmentId: enrollments.id,
       studentId: enrollments.studentId,
       studentCode: students.studentCode,
+      studentName: sql<string>`(${users.firstName} || ' ' || ${users.lastName})`,
       courseId: course_offerings.courseId,
+      courseCode: courses.code,
+      courseTitle: courses.title,
       offeringId: enrollments.offeringId,
       termCode: academic_terms.termCode,
       gradeValue: enrollments.gradeValue,
@@ -422,18 +432,23 @@ export async function scanMismatchedSamaCodes(universityId?: number): Promise<Mi
     })
     .from(enrollments)
     .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+    .innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .innerJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
     .innerJoin(students, eq(students.id, enrollments.studentId))
+    .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(educational_regulations, eq(educational_regulations.id, students.regulationId))
     .where(and(...whereParts))
-    .orderBy(students.studentCode, academic_terms.termCode);
+    .orderBy(students.studentCode, academic_terms.termCode)
+    .limit(SCAN_LIMIT + 1);
 
+  const truncated = allEnrs.length > SCAN_LIMIT;
+  const sample = truncated ? allEnrs.slice(0, SCAN_LIMIT) : allEnrs;
   const mismatches: MismatchRow[] = [];
 
   // پردازش دسته‌ای برای جلوگیری از overload سرور
   const BATCH = 20;
-  for (let i = 0; i < allEnrs.length; i += BATCH) {
-    const batch = allEnrs.slice(i, i + BATCH);
+  for (let i = 0; i < sample.length; i += BATCH) {
+    const batch = sample.slice(i, i + BATCH);
     const results = await Promise.all(
       batch.map(async (enr) => {
         const correctCode = await resolveSamaGradeStatusCode(enr.studentId, enr.offeringId, enr.gradeValue, enr.currentCode ?? null);
@@ -443,9 +458,9 @@ export async function scanMismatchedSamaCodes(universityId?: number): Promise<Mi
             enrollmentId: enr.enrollmentId,
             studentId: enr.studentId,
             studentCode: enr.studentCode,
-            studentName: '',
-            courseCode: '',
-            courseTitle: '',
+            studentName: enr.studentName,
+            courseCode: enr.courseCode,
+            courseTitle: enr.courseTitle,
             termCode: enr.termCode,
             gradeValue: enr.gradeValue,
             currentCode: cur,
@@ -463,35 +478,7 @@ export async function scanMismatchedSamaCodes(universityId?: number): Promise<Mi
     }
   }
 
-  // گرفتن نام و نام درس برای رکوردهای mismatch
-  if (mismatches.length > 0) {
-    const enrIds = mismatches.map(m => m.enrollmentId);
-    const details = await db
-      .select({
-        enrollmentId: enrollments.id,
-        studentName: sql<string>`(${users.firstName} || ' ' || ${users.lastName})`,
-        courseCode: courses.code,
-        courseTitle: courses.title,
-      })
-      .from(enrollments)
-      .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
-      .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-      .innerJoin(students, eq(students.id, enrollments.studentId))
-      .innerJoin(users, eq(users.id, students.userId))
-      .where(inArray(enrollments.id, enrIds));
-
-    const detailMap = new Map(details.map(d => [d.enrollmentId, d]));
-    for (const m of mismatches) {
-      const d = detailMap.get(m.enrollmentId);
-      if (d) {
-        m.studentName = d.studentName;
-        m.courseCode = d.courseCode;
-        m.courseTitle = d.courseTitle;
-      }
-    }
-  }
-
-  return mismatches;
+  return { rows: mismatches, scanned: sample.length, truncated };
 }
 
 /**
