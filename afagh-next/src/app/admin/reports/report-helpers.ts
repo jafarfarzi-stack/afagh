@@ -46,7 +46,7 @@ export type FilterOptions = {
   universities: { id: number; code: string; title: string; kind: string }[];
 };
 
-export const NUM = sql`e."gradeValue" ~ '^[0-9]+(\\.[0-9]+)?$'`;
+export const NUM = sql`e."gradeValue"::text ~ '^[0-9]+(\\.[0-9]+)?$'`;
 
 export function faStatus(s: unknown): string {
   const k = String(s ?? '');

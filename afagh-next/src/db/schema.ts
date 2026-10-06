@@ -377,6 +377,21 @@ export const students = pgTable('students', {
   documentDeficiency: varchar('documentDeficiency', { length: 200 }), // نواقص پرونده
   unitsRemaining: integer('unitsRemaining'),                        // واحد مانده تا فارغ‌التحصیلی
   eqSemesters: integer('eqSemesters').default(0),                   // تعداد ترم معادل‌سازی
+  // ── گزارش سالانهٔ «سهام» (IRPHE) — ستون‌هایی که هیچ منبع دیگری نداشت ──
+  // سهام دو ستون جدا می‌خواهد که در سیستم ما قاطی شده بودند:
+  //   شیوه آموزش (حضوری/نیمه حضوری/غیر حضوری) ≠ نوع تحصیل (روزانه/شبانه/…)
+  teachingMode: varchar('teachingMode', { length: 50 }),      // شیوه آموزش سهام
+  studyType: varchar('studyType', { length: 50 }),            // نوع تحصیل سهام (روزانه/شبانه/فراگیر)
+  maritalStatus: varchar('maritalStatus', { length: 20 }),    // وضعیت تاهل: مجرد/متاهل
+  birthProvince: varchar('birthProvince', { length: 100 }),    // استان محل تولد (سهام جدا می‌خواهد)
+  birthCity: varchar('birthCity', { length: 100 }),            // شهر محل تولد
+  residenceProvince: varchar('residenceProvince', { length: 100 }), // استان محل سکونت دائمی
+  residenceCity: varchar('residenceCity', { length: 100 }),    // شهر محل سکونت دائمی
+  transferGuestStatus: varchar('transferGuestStatus', { length: 100 }), // وضعیت انتقال/مهمان
+  admissionMethod: varchar('admissionMethod', { length: 100 }),// روش پذیرش (متمرکز/نیمه متمرکز)
+  tuitionPaymentMethod: varchar('tuitionPaymentMethod', { length: 100 }), // نحوه پرداخت شهریه
+  entranceExamRank: varchar('entranceExamRank', { length: 20 }),// رتبه آزمون ورودی
+  foreignStudentId: varchar('foreignStudentId', { length: 30 }),// شناسه فراگير اتباع خارجی
 }, (t) => [
   // شماره دانشجویی در هر دانشگاه یکتاست (نه سراسری) — سما هر دانشگاه شماره‌گذاری جدا دارد
   unique('uq_students_uni_code').on(t.universityId, t.studentCode),
@@ -2950,3 +2965,48 @@ export const ministry_shared_codes = pgTable('ministry_shared_codes', {
 }, (t) => ({
   pk: primaryKey({ columns: [t.domain, t.code] }),
 }));
+
+// ══════════════════════════════════════════════════════════════════════
+//  گزارش سالانهٔ «سهام» (IRPHE — saham.irphe.ac.ir)
+// ══════════════════════════════════════════════════════════════════════
+
+/**
+ * کد ۱۲ رقمی «واحد/دانشکده» که سهام می‌خواهد. جدول از `faculties` جداست چون:
+ *  · faculties.standardCode در همهٔ ردیف‌ها خالی بود؛
+ *  · یک واحد می‌تواند چند «دانشکده» در سهام داشته باشد (حوزهٔ ستادی + …)؛
+ *  · کد باید در اکسل حتماً Text باشد (وگرنه صفرهای اول می‌پرند و ارسال رد می‌شود).
+ * مؤسسه‌های منحل هم سطر دارند؛ اگر دانشگاهی سطر فعال نداشته باشد، در
+ * خروجی از کد پیش‌فرض آفاق استفاده می‌شود.
+ */
+export const saham_institute_codes = pgTable('saham_institute_codes', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').notNull().references((): AnyPgColumn => universities.id),
+  facultyId: integer('facultyId').references((): AnyPgColumn => faculties.id),
+  title: varchar('title', { length: 150 }).notNull(),
+  code: varchar('code', { length: 20 }).notNull(),
+  provinceCode: varchar('provinceCode', { length: 20 }),
+  cityCode: varchar('cityCode', { length: 20 }),
+  isDefault: integer('isDefault').default(0),
+  isActive: integer('isActive').default(1),
+  createdAt: timestamp('createdAt').defaultNow(),
+}, (t) => [
+  unique('uq_saham_inst_code').on(t.universityId, t.code),
+  index('idx_saham_inst_fac').on(t.facultyId),
+]);
+
+/**
+ * نگاشت «مقدار داخلی ما → متنی که سهام می‌پذیرد». سهام مقادیر را *متنی* و
+ * با فهرست بسته می‌گیرد (codes.xlsx)، پس کدهای داخلی ما باید صریح نگاشت شوند.
+ * از رابط کاربری قابل ویرایش است.
+ */
+export const saham_value_maps = pgTable('saham_value_maps', {
+  id: serial('id').primaryKey(),
+  field: varchar('field', { length: 40 }).notNull(),
+  sourceValue: varchar('sourceValue', { length: 100 }).notNull(),
+  sahamTitle: varchar('sahamTitle', { length: 150 }).notNull(),
+  isActive: integer('isActive').default(1),
+  createdAt: timestamp('createdAt').defaultNow(),
+}, (t) => [
+  unique('uq_saham_value_map').on(t.field, t.sourceValue),
+  index('idx_saham_value_map_field').on(t.field),
+]);

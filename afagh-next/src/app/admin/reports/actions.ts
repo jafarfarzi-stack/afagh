@@ -440,11 +440,11 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
         SELECT s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
           m.name AS major, d.title AS degree, s."entryYear" AS y,
           COUNT(DISTINCT e."offeringId")::int AS courses_passed,
-          ROUND(AVG(CASE WHEN e."gradeStatus" = 'FINALIZED' AND e."gradeValue" ~ '^[0-9]+(\\.[0-9]+)?$' THEN e."gradeValue"::numeric END), 2) AS avg
+          ROUND(AVG(CASE WHEN e."gradeStatus" = 'FINALIZED' AND e."gradeValue"::text ~ '^[0-9]+(\\.[0-9]+)?$' THEN e."gradeValue"::numeric END), 2) AS avg
         FROM students s JOIN users u ON u.id = s."userId"
           LEFT JOIN majors m ON m.id = s."majorId"
           LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
-          LEFT JOIN enrollments e ON e."studentId" = s.id AND e."gradeStatus" = 'FINALIZED' AND e."gradeValue" ~ '^[0-9]+(\\.[0-9]+)?$' AND e."gradeValue"::numeric >= 12
+          LEFT JOIN enrollments e ON e."studentId" = s.id AND e."gradeStatus" = 'FINALIZED' AND e."gradeValue"::text ~ '^[0-9]+(\\.[0-9]+)?$' AND e."gradeValue"::numeric >= 12
         WHERE s.status = 'ACTIVE' ${uniCond}
         GROUP BY s."studentCode", u."firstName", u."lastName", m.name, d.title, s."entryYear"
         HAVING COUNT(DISTINCT e."offeringId") >= 10

@@ -44,7 +44,7 @@ const READ_ROLES = ['ADMIN', 'EDU_EXPERT'];
 const ADMIN_ROLE = ['ADMIN'];
 
 // نمرهٔ عددی (کپی الگوی actions.ts)
-const NUMERIC_GRADE = sql`e."gradeValue" ~ '^[0-9]+(\\.[0-9]+)?$'`;
+const NUMERIC_GRADE = sql`e."gradeValue"::text ~ '^[0-9]+(\\.[0-9]+)?$'`;
 
 function faStatus(s: unknown): string {
   const k = String(s ?? '');
@@ -374,8 +374,8 @@ export async function recomputeStudentTotals(idsInput: unknown): Promise<Mutatio
     FROM (
       SELECT s2.id AS sid,
         COALESCE(SUM(c.units) FILTER (WHERE e.status <> 'DROPPED'), 0)::int AS taken_u,
-        COALESCE(SUM(c.units) FILTER (WHERE e."gradeStatus" = 'FINALIZED' AND e."gradeValue" ~ '^[0-9]+(\\.[0-9]+)?$' AND e."gradeValue"::numeric >= 10), 0)::int AS passed_u,
-        ROUND(AVG(e."gradeValue"::numeric) FILTER (WHERE e."gradeStatus" = 'FINALIZED' AND e."gradeValue" ~ '^[0-9]+(\\.[0-9]+)?$'), 2) AS reavg
+        COALESCE(SUM(c.units) FILTER (WHERE e."gradeStatus" = 'FINALIZED' AND e."gradeValue"::text ~ '^[0-9]+(\\.[0-9]+)?$' AND e."gradeValue"::numeric >= 10), 0)::int AS passed_u,
+        ROUND(AVG(e."gradeValue"::numeric) FILTER (WHERE e."gradeStatus" = 'FINALIZED' AND e."gradeValue"::text ~ '^[0-9]+(\\.[0-9]+)?$'), 2) AS reavg
       FROM students s2
         LEFT JOIN enrollments e ON e."studentId" = s2.id
         LEFT JOIN course_offerings o ON o.id = e."offeringId"
