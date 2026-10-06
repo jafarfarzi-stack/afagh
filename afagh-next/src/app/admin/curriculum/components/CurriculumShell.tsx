@@ -10,6 +10,7 @@ import CurriculumTabsBar from './CurriculumTabsBar';
 import CatalogTab from './CatalogTab';
 import VersionDetailPanel from './VersionDetailPanel';
 import NewVersionModal from './NewVersionModal';
+import EditVersionModal from './EditVersionModal';
 import NewCourseModal from './NewCourseModal';
 import CourseRulesModal from './CourseRulesModal';
 import AddCourseModal from './AddCourseModal';
@@ -24,6 +25,7 @@ export default function CurriculumShell() {
       <CatalogTab />
       <VersionDetailPanel />
       <NewVersionModal />
+      <EditVersionModal />
       <NewCourseModal />
       <CourseRulesModal />
       <AddCourseModal />

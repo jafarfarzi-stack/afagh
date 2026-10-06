@@ -9,6 +9,7 @@ export default function CatalogTab() {
     activeTab,
     isDraft,
     majorVersions,
+    openEditVersion,
     selectedVersionId,
     setSelectedVersionId,
   } = useCurriculum();
@@ -52,14 +53,25 @@ export default function CatalogTab() {
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${st.cls}`}>{st.label}</span>
                     </td>
                     <td className="p-2.5 border border-slate-200">
-                      <button
-                        onClick={() => setSelectedVersionId(v.id)}
-                        className={`px-3 py-1.5 rounded-lg font-extrabold text-[11px] transition ${
-                          selectedVersionId === v.id ? 'bg-indigo-900 text-white' : 'bg-indigo-100 text-indigo-900 hover:bg-indigo-200'
-                        }`}
-                      >
-                        {selectedVersionId === v.id ? 'باز است' : 'باز کردن'}
-                      </button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => setSelectedVersionId(v.id)}
+                          className={`px-3 py-1.5 rounded-lg font-extrabold text-[11px] transition ${
+                            selectedVersionId === v.id ? 'bg-indigo-900 text-white' : 'bg-indigo-100 text-indigo-900 hover:bg-indigo-200'
+                          }`}
+                        >
+                          {selectedVersionId === v.id ? 'باز است' : 'باز کردن'}
+                        </button>
+                        {v.status === 'DRAFT' && (
+                          <button
+                            onClick={() => openEditVersion(v)}
+                            title="ویرایش کد/عنوان/ورودی/واحد الزامی/سقف ترم"
+                            className="px-3 py-1.5 rounded-lg font-extrabold text-[11px] transition bg-amber-100 text-amber-900 hover:bg-amber-200"
+                          >
+                            ✏️ ویرایش
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

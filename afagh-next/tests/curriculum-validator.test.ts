@@ -52,6 +52,21 @@ eq('affected شامل کد دروس الزامی است', (lowUnits.find(r => r.
 const onlyOptional = validateCurriculumCore(baseInput({ totalRequiredUnits: 7, courses: baseInput().courses.map(c => ({ ...c, isRequired: 0 })) }));
 eq('پوشش واحد: هیچ درس الزامی‌ای → ERROR', hasCheck(onlyOptional, 'UNITS_COVER_MIN', 'ERROR'), true);
 
+// برنامهٔ واقعی چندنقشی (پایه/اصلی/اختیاری/عمومی): دروس الزامیِ اصلی به‌تنهایی
+// کمتر از کل است ولی پوشش کلی کافی است → بدون خطا (رگرسیون باگ UNITS_COVER_MIN)
+const mixedRoles = validateCurriculumCore({
+  totalRequiredUnits: 142,
+  courses: [
+    { courseId: 1, code: 'BASE1', title: 'پایه', units: 22, roleType: 'BASE', isRequired: 1, isElective: 0, isGraduationRequired: 0, recommendedSemester: 1, autoCorequisiteAllowed: 0, clusterId: null },
+    { courseId: 2, code: 'CORE1', title: 'اصلی', units: 80, roleType: 'CORE', isRequired: 1, isElective: 0, isGraduationRequired: 1, recommendedSemester: 3, autoCorequisiteAllowed: 0, clusterId: null },
+    { courseId: 3, code: 'EL1', title: 'اختیاری', units: 16, roleType: 'ELECTIVE', isRequired: 0, isElective: 1, isGraduationRequired: 0, recommendedSemester: 5, autoCorequisiteAllowed: 0, clusterId: null },
+    { courseId: 4, code: 'GEN1', title: 'عمومی', units: 24, roleType: 'GENERAL', isRequired: 1, isElective: 0, isGraduationRequired: 0, recommendedSemester: 2, autoCorequisiteAllowed: 0, clusterId: null },
+  ],
+  rules: [],
+  existingCodes: new Set(['BASE1', 'CORE1', 'EL1', 'GEN1']),
+});
+eq('پوشش واحد: ۱۴۲ ارائه‌شده از ۱۴۲ لازم (با اختیاری) → بدون ERROR', hasCheck(mixedRoles, 'UNITS_COVER_MIN', 'ERROR'), false);
+
 // ۲) ارجاع به بانک دروس
 const badRef = validateCurriculumCore(baseInput({
   rules: [{ courseId: 2, ruleType: 'PREREQ', logicTree: { operator: 'AND', conditions: [{ course: 'ZZ999' }, { course: 'MA101' }] } }],

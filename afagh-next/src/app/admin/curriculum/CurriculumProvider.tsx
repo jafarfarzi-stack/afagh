@@ -43,13 +43,18 @@ function useCurriculumWorkspace(
   const [bankRoles, setBankRoles] = useState<Record<number, string>>({});
   const [bulkRoleType, setBulkRoleType] = useState('CORE');
 
-  const [modal, setModal] = useState<null | 'NEW_VERSION' | 'ADD_COURSE' | 'NEW_COURSE' | 'RULES' | 'REJECT'>(null);
+  const [modal, setModal] = useState<null | 'NEW_VERSION' | 'EDIT_VERSION' | 'ADD_COURSE' | 'NEW_COURSE' | 'RULES' | 'REJECT'>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // فرم‌ها
   const [newVersionForm, setNewVersionForm] = useState({
     versionCode: '', title: '', entryYearFrom: 1405, totalRequiredUnits: 140, maxUnitsPerTerm: 20, cloneFromId: '',
+  });
+  // فرم ویرایش مشخصات نسخه (فقط DRAFT — اکشن خودش گیت می‌زند)
+  const [editVersionId, setEditVersionId] = useState<number | null>(null);
+  const [editVersionForm, setEditVersionForm] = useState({
+    versionCode: '', title: '', entryYearFrom: 1405, entryYearTo: '', totalRequiredUnits: 140, maxUnitsPerTerm: 20,
   });
   const [addCourseForm, setAddCourseForm] = useState({ courseId: '', roleType: 'CORE', recommendedSemester: '' });
   const [rejectNote, setRejectNote] = useState('');
@@ -208,6 +213,35 @@ function useCurriculumWorkspace(
       cloneFromId: f.cloneFromId ? Number(f.cloneFromId) : undefined,
     }));
     if (ok) { setModal(null); setNewVersionForm({ versionCode: '', title: '', entryYearFrom: 1405, totalRequiredUnits: 140, maxUnitsPerTerm: 20, cloneFromId: '' }); reloadOverview(); }
+  };
+
+  // ── ویرایش مشخصات نسخه (فقط DRAFT؛ اکشن خودش گیت می‌زند) ──
+  const openEditVersion = (v: { id: number; versionCode: string; title: string; entryYearFrom: number; entryYearTo: number | null; totalRequiredUnits: string }) => {
+    setEditVersionId(v.id);
+    setEditVersionForm({
+      versionCode: v.versionCode,
+      title: v.title,
+      entryYearFrom: v.entryYearFrom,
+      entryYearTo: v.entryYearTo != null ? String(v.entryYearTo) : '',
+      totalRequiredUnits: Number(v.totalRequiredUnits) || 0,
+      maxUnitsPerTerm: (detail?.version.id === v.id ? detail.version.maxUnitsPerTerm : null) ?? 20,
+    });
+    setModal('EDIT_VERSION');
+  };
+
+  const handleUpdateVersion = async () => {
+    if (editVersionId == null) return;
+    const f = editVersionForm;
+    if (!f.versionCode.trim() || !f.entryYearFrom) { showToast('کد نسخه و سال ورودی الزامی است.', 'error'); return; }
+    const ok = await run(() => updateCurriculumMetaAction(editVersionId, {
+      versionCode: f.versionCode.trim(),
+      title: f.title.trim(),
+      entryYearFrom: f.entryYearFrom,
+      entryYearTo: f.entryYearTo.trim() ? Number(f.entryYearTo) : null,
+      totalRequiredUnits: f.totalRequiredUnits,
+      maxUnitsPerTerm: f.maxUnitsPerTerm || null,
+    }));
+    if (ok) { setModal(null); setEditVersionId(null); reloadOverview(); reloadDetail(editVersionId); }
   };
 
   const handleTransferToMajor = async () => {
@@ -513,6 +547,7 @@ function useCurriculumWorkspace(
     detailLoading,
     dragCourseId,
     dropTarget,
+    editVersionForm,
     faculties,
     facultyFilter,
     filteredMajors,
@@ -535,6 +570,7 @@ function useCurriculumWorkspace(
     handleSyncRoles,
     handleTransferToMajor,
     handleUpdateGradReq,
+    handleUpdateVersion,
     handleUpdateGradeStatusCodes,
     handleUpdateMaxUnits,
     handleUpdateRequired,
@@ -550,6 +586,7 @@ function useCurriculumWorkspace(
     onCourseDragEnd,
     onCourseDragStart,
     onDropToSemester,
+    openEditVersion,
     openRules,
     overflowTerms,
     planTerms,
@@ -585,6 +622,7 @@ function useCurriculumWorkspace(
     setDetailLoading,
     setDragCourseId,
     setDropTarget,
+    setEditVersionForm,
     setFacultyFilter,
     setMajors,
     setModal,

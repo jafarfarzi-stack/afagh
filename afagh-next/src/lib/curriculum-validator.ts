@@ -135,15 +135,21 @@ function hasCycle(nodes: Set<string>, edges: { prereq: string; dependent: string
 export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult[] {
   const results: CheckResult[] = [];
 
-  // ── ۱) پوشش واحد الزامی: مجموع واحدهای اصلی/تخصصی ≥ totalRequiredUnits ──
-  const coreSum = input.courses
-    .filter((c) => (c.roleType === 'CORE' || c.roleType === 'MAJOR') && c.isRequired === 1)
+  // ── ۱) پوشش واحد الزامی: نسخه باید دست‌کم به‌اندازهٔ کل واحد لازم، درس
+  // ارائه دهد (الزامی + مخزن اختیاری)، و دست‌کم یک درس الزامی داشته باشد.
+  // (مقایسهٔ قبلی فقط دروس اصلی/تخصصی را می‌شمرد و برای برنامه‌های دارای
+  // دروس پایه/عمومی/اختیاری همیشه خطای کاذب می‌داد.)
+  const requiredSum = input.courses
+    .filter((c) => c.isRequired === 1)
     .reduce((s, c) => s + c.units, 0);
-  if (coreSum < input.totalRequiredUnits) {
+  const offeredSum = input.courses.reduce((s, c) => s + c.units, 0);
+  if (requiredSum === 0 || offeredSum < input.totalRequiredUnits) {
     results.push(err(
       'UNITS_COVER_MIN',
-      `مجموع واحدهای دروس الزامیِ اصلی/تخصصی (${coreSum}) از کل واحدهای لازم برنامه (${input.totalRequiredUnits}) کمتر است.`,
-      input.courses.filter((c) => (c.roleType === 'CORE' || c.roleType === 'MAJOR') && c.isRequired === 1).map((c) => c.code)
+      requiredSum === 0
+        ? `هیچ درس الزامی‌ای در نسخه تعریف نشده است (کل واحدهای لازم برنامه: ${input.totalRequiredUnits}).`
+        : `مجموع واحدهای ارائه‌شده در نسخه (${offeredSum}) از کل واحدهای لازم برنامه (${input.totalRequiredUnits}) کمتر است.`,
+      input.courses.filter((c) => c.isRequired === 1).map((c) => c.code)
     ));
   }
 
