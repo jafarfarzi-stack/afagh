@@ -14,8 +14,8 @@
  * - جدول اختصاصی ثبت تغییرات انتخاب واحد وجود ندارد (فقط grade_change_log
  *   برای نمره و audit_logs عمومی)؛ گزارش انتخاب واحد فقط شمارشی است.
  */
-import type { ReportFilters, ReportResult } from './actions';
-import { joinAnd, paged, studentWhere } from './actions';
+import type { ReportFilters, ReportResult } from './report-helpers';
+import { joinAnd, paged, studentWhere } from './report-helpers';
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { requireRole } from '@/lib/auth';

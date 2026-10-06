@@ -1,5 +1,6 @@
 import { requireRole } from '@/lib/auth';
-import { getFilterOptions, allowedReportKinds, ALL_REPORT_KINDS } from './actions';
+import { getFilterOptions, allowedReportKinds } from './actions';
+import { ALL_REPORT_KINDS } from './report-helpers';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import ReportsClient from './ReportsClient';
 

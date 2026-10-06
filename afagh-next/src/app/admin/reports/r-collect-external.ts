@@ -2,7 +2,7 @@
 // LINK_CARDS: صفحات کاملی که تعاملی/عملیاتی‌اند و مستقل می‌مانند (کاشی لینک).
 // run(): فقط منطقی که به‌صورت server-side تمیز import می‌شود (lib موتورها /
 // server action خواندنی)؛ هرچه page-bound یا client است عمداً delegate نشده.
-import type { ReportFilters, ReportResult } from './actions';
+import type { ReportFilters, ReportResult } from './report-helpers';
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth';

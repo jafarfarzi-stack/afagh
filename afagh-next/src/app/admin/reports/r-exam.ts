@@ -1,5 +1,5 @@
-import type { ReportFilters, ReportResult } from './actions';
-import { paged, studentWhere, joinAnd } from './actions';
+import type { ReportFilters, ReportResult } from './report-helpers';
+import { paged, studentWhere, joinAnd } from './report-helpers';
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { requireRole } from '@/lib/auth';

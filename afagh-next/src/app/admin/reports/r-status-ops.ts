@@ -12,8 +12,8 @@
 //   (پورتال دانش‌آموختگان) و samin_staging (ثمین، نه پرتال) هستند → ارسال به
 //   پرتال = ساخت ردیف alumni_profiles برای فارغ‌التحصیلان بدون پروفایل.
 
-import type { ReportFilters, ReportResult } from './actions';
-import { paged, studentWhere, joinAnd, studentListReport } from './actions';
+import type { ReportFilters, ReportResult } from './report-helpers';
+import { paged, studentWhere, joinAnd, studentListReport } from './report-helpers';
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { requireRole } from '@/lib/auth';
