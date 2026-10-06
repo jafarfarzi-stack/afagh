@@ -96,6 +96,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
   await assertReportPermission(kind);
   const term = f.term || '';
 
+  try {
   switch (kind) {
     // ── دانشجویان فعال هر ترم ──
     case 'active-term': {
@@ -506,6 +507,11 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
       if (delegated) return delegated;
       return { columns: [], rows: [], total: 0, page: 1, per: PER, totalPages: 1 };
     }
+  }
+  } catch (e: unknown) {
+    // لاگ تشخیصی سمت سرور — استک کامل برای ریشه‌یابی خطاهای نامرئی کلاینت
+    console.error(`[runReport:${kind}]`, e instanceof Error ? (e.stack || e.message) : e);
+    throw e;
   }
 }
 
