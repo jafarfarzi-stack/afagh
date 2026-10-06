@@ -34,19 +34,27 @@ const ROLES = ['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER'] as n
 export async function getFilterOptions({ universityId }: { universityId?: number } = {}): Promise<FilterOptions> {
   await requireRole(ROLES);
   const terms = await db.execute<{ code: string; title: string | null }>(
-    sql`SELECT "termCode" AS code, title FROM academic_terms ORDER BY "termCode" DESC`,
+    universityId
+      ? sql`SELECT DISTINCT "termCode" AS code, MAX(title) AS title FROM academic_terms WHERE "universityId" = ${universityId} GROUP BY "termCode" ORDER BY "termCode" DESC`
+      : sql`SELECT DISTINCT "termCode" AS code, MAX(title) AS title FROM academic_terms GROUP BY "termCode" ORDER BY "termCode" DESC`,
   );
   const degrees = await db.execute<{ id: number; title: string }>(
-    sql`SELECT id, title FROM degree_level_configs ORDER BY id`,
+    sql`SELECT MIN(id) AS id, title FROM degree_level_configs GROUP BY title ORDER BY MIN(id)`,
   );
   const faculties = await db.execute<{ id: number; name: string }>(
-    sql`SELECT id, name FROM faculties ORDER BY id`,
+    universityId
+      ? sql`SELECT id, name FROM faculties WHERE "universityId" = ${universityId} OR "universityId" IS NULL ORDER BY id`
+      : sql`SELECT id, name FROM faculties ORDER BY id`,
   );
   const departments = await db.execute<{ id: number; name: string; code: string | null }>(
-    sql`SELECT id, name, "departmentCode" AS code FROM departments ORDER BY name`,
+    universityId
+      ? sql`SELECT id, name, "departmentCode" AS code FROM departments WHERE "universityId" = ${universityId} OR "universityId" IS NULL ORDER BY name`
+      : sql`SELECT id, name, "departmentCode" AS code FROM departments ORDER BY name`,
   );
   const majors = await db.execute<{ id: number; name: string; code: string | null }>(
-    sql`SELECT id, name, "majorCode" AS code FROM majors ORDER BY name`,
+    universityId
+      ? sql`SELECT id, name, "majorCode" AS code FROM majors WHERE "universityId" = ${universityId} OR "universityId" IS NULL ORDER BY name`
+      : sql`SELECT id, name, "majorCode" AS code FROM majors ORDER BY name`,
   );
   const years = await db.execute<{ y: number }>(
     sql`SELECT DISTINCT "entryYear" AS y FROM students ${universityId ? sql`WHERE "universityId" = ${universityId}` : sql``} ORDER BY 1 DESC`,
