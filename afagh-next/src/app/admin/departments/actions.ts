@@ -341,19 +341,27 @@ export async function setStaffDepartmentAction(fd: FormData): Promise<{ ok: bool
   return { ok: true };
 }
 
-/** دروسی که هنوز به هیچ گروهی وصل نیستند (بی‌صاحب می‌مانند و در پنل مدیر گروه دیده نمی‌شوند) */
+/** دروسی که هنوز به هیچ گروهی وصل نیستند (بی‌صاحب می‌مانند و در پنل مدیر گروه دیده نمی‌شوند) — محدود به دانشگاه فعال */
 export async function countOrphanCourses(): Promise<number> {
   await requireRole(['ADMIN', 'VICE_EDU']);
-  const [r] = await db.select({ c: sql<number>`count(*)::int` }).from(courses).where(isNull(courses.departmentId));
+  const uniId = (await getCurrentUniversity()).id;
+  const [r] = await db.select({ c: sql<number>`count(*)::int` }).from(courses)
+    .where(and(isNull(courses.departmentId), or(eq(courses.universityId, uniId), isNull(courses.universityId))));
   return r?.c ?? 0;
 }
 
-/** انتقال دسته‌جمعی دروس بی‌گروه به یک گروه (مثلاً «دروس عمومی») */
+/** انتقال دسته‌جمعی دروس بی‌گروه به یک گروه (مثلاً «دروس عمومی») — فقط دروس دانشگاه فعال، و فقط به گروه همین دانشگاه */
 export async function assignOrphanCoursesAction(fd: FormData): Promise<{ ok: boolean; error?: string; moved?: number }> {
   await requireRole(['ADMIN', 'VICE_EDU']);
+  const uniId = (await getCurrentUniversity()).id;
   const deptId = n(fd, 'deptId');
   if (!deptId) return { ok: false, error: 'گروه مقصد را انتخاب کنید.' };
-  const rows = await db.update(courses).set({ departmentId: deptId }).where(isNull(courses.departmentId)).returning({ id: courses.id });
+  const [dep] = await db.select({ universityId: departments.universityId }).from(departments).where(eq(departments.id, deptId)).limit(1);
+  if (!dep) return { ok: false, error: 'گروه مقصد یافت نشد.' };
+  if (dep.universityId !== null && dep.universityId !== uniId) return { ok: false, error: 'گروه مقصد متعلق به دانشگاه دیگری است.' };
+  const rows = await db.update(courses).set({ departmentId: deptId })
+    .where(and(isNull(courses.departmentId), or(eq(courses.universityId, uniId), isNull(courses.universityId))))
+    .returning({ id: courses.id });
   revalidatePath('/admin/departments');
   return { ok: true, moved: rows.length };
 }
