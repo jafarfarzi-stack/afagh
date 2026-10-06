@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ClientTh, useClientTable, type ColumnDef } from '@/components/DataTable';
 import { faIncludes, normalizeFa } from '@/lib/persian-search';
 import type { DeptRow, StaffPick } from './actions';
+import GroupContentPanel from './GroupContentPanel';
 
 type Res = { ok: boolean; error?: string; moved?: number };
 type Act = (fd: FormData) => Promise<Res>;
@@ -44,6 +45,7 @@ export default function DepartmentsClient({
   const [creating, setCreating] = useState(false);
   const [q, setQ] = useState('');
   const [memberOf, setMemberOf] = useState<DeptRow | null>(null);
+  const [contentOf, setContentOf] = useState<DeptRow | null>(null);
 
   /** چند گروه را یک نفر اداره می‌کند — برای نشان‌دادن «مدیر ۲ گروه» */
   const headCount = useMemo(() => {
@@ -222,6 +224,7 @@ export default function DepartmentsClient({
                 <td className="p-2.5 whitespace-nowrap">
                   <button onClick={() => { setEditing(d); setCreating(false); }} className="text-indigo-600 hover:underline">ویرایش</button>
                   <button onClick={() => setMemberOf(d)} className="mr-2 text-slate-500 hover:underline">اعضا</button>
+                  <button onClick={() => setContentOf(d)} className="mr-2 text-slate-500 hover:underline">📖 دروس/رشته‌ها</button>
                 </td>
               </tr>
             ))}
@@ -256,6 +259,9 @@ export default function DepartmentsClient({
             run(setStaffDeptAction, fd, 'عضویت به‌روزرسانی شد.');
           }}
         />
+      )}
+      {contentOf && (
+        <GroupContentPanel dept={contentOf} depts={depts} onClose={() => setContentOf(null)} />
       )}
     </div>
   );

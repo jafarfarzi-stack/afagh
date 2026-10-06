@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { db } from '@/db';
 import { curriculum_versions } from '@/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, or, isNull, and } from 'drizzle-orm';
+import { getCurrentUniversity } from '@/lib/university-scope';
 
 export async function GET(req: NextRequest) {
   const user = await getSessionUser();
@@ -11,6 +12,8 @@ export async function GET(req: NextRequest) {
   }
   const majorId = Number(req.nextUrl.searchParams.get('majorId'));
   if (!majorId) return NextResponse.json({ versions: [] });
+  const uni = await getCurrentUniversity().catch(() => null);
+  const uw = uni ? or(eq(curriculum_versions.universityId, uni.id), isNull(curriculum_versions.universityId)) : undefined;
   const rows = await db
     .select({
       id: curriculum_versions.id,
@@ -22,7 +25,7 @@ export async function GET(req: NextRequest) {
       entryYearTo: curriculum_versions.entryYearTo,
     })
     .from(curriculum_versions)
-    .where(eq(curriculum_versions.majorId, majorId))
+    .where(and(eq(curriculum_versions.majorId, majorId), uw))
     .orderBy(desc(curriculum_versions.entryYearFrom));
   return NextResponse.json({ versions: rows });
 }

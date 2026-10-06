@@ -6,6 +6,7 @@ import {
   courses, degree_level_configs
 } from '@/db/schema';
 import { eq, ilike, or, asc, sql, count, and, isNull } from 'drizzle-orm';
+import { getCurrentUniversity } from '@/lib/university-scope';
 
 const ALLOWED = ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'];
 
@@ -23,6 +24,12 @@ export async function GET(req: NextRequest) {
   if (majorId) conditions.push(eq(curriculum_versions.majorId, majorId));
   if (degreeLevelId) conditions.push(eq(curriculum_versions.degreeLevelId, degreeLevelId));
   if (versionId) conditions.push(eq(curriculum_courses.curriculumVersionId, versionId));
+  // دامنهٔ دانشگاه: ردیف‌های NULL هم «پایه/سراسری» حساب می‌شوند.
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (uni) {
+    conditions.push(or(eq(curriculum_versions.universityId, uni.id), isNull(curriculum_versions.universityId)));
+    conditions.push(or(eq(majors.universityId, uni.id), isNull(majors.universityId)));
+  }
   if (q) {
     conditions.push(or(
       ilike(courses.code, `%${q}%`),

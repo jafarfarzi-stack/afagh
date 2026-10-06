@@ -13,6 +13,7 @@ import {
   updateDepartmentAction,
 } from './actions';
 import DepartmentsClient from './DepartmentsClient';
+import OrphanCoursesPanel from './OrphanCoursesPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,6 +54,11 @@ export default async function DepartmentsPage() {
         setStaffDeptAction={setStaffDepartmentAction}
         assignOrphansAction={assignOrphanCoursesAction}
         setFacultyCodeAction={setFacultyCodeAction}
+      />
+
+      <OrphanCoursesPanel
+        depts={depts.map(d => ({ id: d.id, name: d.name }))}
+        total={orphans}
       />
 
       <p className="text-center text-xs text-slate-400">

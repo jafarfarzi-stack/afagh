@@ -15,8 +15,8 @@
  *  ترتیب پیشنهادی: pre → terms → majors → students → grades → codemap
  * ══════════════════════════════════════════════════════════════════════
  */
-import { readdirSync, statSync, createReadStream } from 'node:fs';
-import { join } from 'node:path';
+import { readdirSync, statSync, createReadStream, readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { norm, resolveName } from './lib/name-resolver.mjs';
 import pg from 'pg';
@@ -1687,6 +1687,23 @@ async function phaseTatbigh(file) {
     const n = normTxt(r.title);
     if (n && !degByName.has(n)) degByName.set(n, Number(r.id));
   }
+  // کد عددی «نوع درس» سما → نام (فایل‌های ۴۳ستونه کد دارند، افاغ نام دارد)
+  const SAMA_TYPEMAP = { 0: 'نامشخص', 1: 'عمومي', 2: 'پايه', 3: 'تخصصي', 4: 'اصلي', 5: 'کارورزي', 6: 'آزمايشگاه', 7: 'کارگاه', 8: 'پروژه', 9: 'تخصصي انتخابي', 10: 'اختياري', 11: 'مشترک', 13: 'الزامي مشترک', 14: 'اختصاصي', 16: 'تخصصي الزامي', 17: 'انتخابي', 18: 'الزامي', 19: 'اصلي تخصصي', 20: 'جبراني', 22: 'پايان‌نامه', 40: 'معرفي به استاد', 50: 'خودخوان' };
+  // کد مقطع سما → id مقطع (از maghta.txt همان پوشه؛ fallback به تطبیق نامی ستون مقطع)
+  const degByCode = new Map();
+  try {
+    const magPath = join(dirname(file), 'maghta.txt');
+    const mt = dec1256.decode(readFileSync(magPath)).replace(/^\uFEFF/, '');
+    for (const ln of mt.split('\n')) {
+      const cc = ln.split('\t');
+      const mc = (cc[0] || '').trim(), mtit = normTxt(cc[1]);
+      if (/^\d+$/.test(mc) && mtit && mtit !== 'نامشخص' && !degByCode.has(mc)) {
+        const did = degByName.get(mtit) ?? null;
+        if (did) degByCode.set(mc, did);
+      }
+    }
+    if (degByCode.size) console.log(`  نگاشت کد مقطع از maghta.txt: ${degByCode.size} کد`);
+  } catch { /* maghta.txt نیست (مثل افاغ با نام فارسی) — فقط تطبیق نامی */ }
   const flush = async () => {
     if (!batch.length) return;
     if (DRY) { batch.length = 0; return; }
@@ -1730,9 +1747,12 @@ async function phaseTatbigh(file) {
     const units = parseFloat((cols[4] || '0').trim()) || 0;
     const theory = parseFloat((cols[5] || '0').trim()) || 0;
     const practical = parseFloat((cols[6] || '0').trim()) || 0;
-    const courseType = normTxt(cols[7]).slice(0, 50) || null;
+    const rawType = normTxt(cols[7]);
+    const courseType = (/^\d+$/.test(rawType) ? (SAMA_TYPEMAP[Number(rawType)] ?? rawType) : rawType).slice(0, 50) || null;
     const degName = normTxt(cols[2]);
+    const degCode = (cols[8] || '').trim();
     let degId = (degName && degName !== 'نامشخص') ? (degByName.get(degName) ?? null) : null;
+    if (degId == null && /^\d+$/.test(degCode)) degId = degByCode.get(degCode) ?? null;
     if (degName && degName !== 'نامشخص' && degId == null) { stats.unlinkedDegree = stats.unlinkedDegree || new Set(); if (stats.unlinkedDegree.size < 20) stats.unlinkedDegree.add(degName); }
     const groupName = normTxt(cols[3]);
     let deptId = null;

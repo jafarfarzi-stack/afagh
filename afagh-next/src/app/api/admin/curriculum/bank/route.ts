@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { db } from '@/db';
 import { courses, departments, degree_level_configs, equivalence_clusters } from '@/db/schema';
-import { eq, ilike, or, asc, sql, count } from 'drizzle-orm';
+import { eq, ilike, or, and, asc, sql, count, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { getCurrentUniversity } from '@/lib/university-scope';
 
 const ALLOWED = ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'];
 const PAGE_SIZE = 100;
@@ -18,9 +19,14 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(500, Math.max(1, Number(req.nextUrl.searchParams.get('limit') || String(PAGE_SIZE))));
   const offset = (page - 1) * limit;
 
-  const where = q
+  // دامنهٔ دانشگاه: ردیف‌های NULL هم «پایه/سراسری» حساب می‌شوند.
+  const uni = await getCurrentUniversity().catch(() => null);
+  const uniScope = uni ? or(eq(courses.universityId, uni.id), isNull(courses.universityId)) : undefined;
+
+  const search = q
     ? or(ilike(courses.code, `%${q}%`), ilike(courses.title, `%${q}%`))
     : undefined;
+  const where = and(search, uniScope);
 
   const [{ total }] = await db.select({ total: count() }).from(courses).where(where);
 
@@ -78,6 +84,16 @@ export async function PATCH(req: NextRequest) {
   }
   const id = Number(req.nextUrl.searchParams.get('id'));
   if (!id) return NextResponse.json({ ok: false, error: 'شناسه درس نامعتبر.' }, { status: 400 });
+
+  // نگهبان دانشگاه: ویرایش درسِ دانشگاه دیگر ممنوع (NULL = سراسری، مجاز).
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (uni) {
+    const [target] = await db.select({ universityId: courses.universityId }).from(courses).where(eq(courses.id, id)).limit(1);
+    if (!target) return NextResponse.json({ ok: false, error: 'درس یافت نشد.' }, { status: 404 });
+    if (target.universityId != null && target.universityId !== uni.id) {
+      return NextResponse.json({ ok: false, error: 'این درس متعلق به دانشگاه دیگری است.' }, { status: 403 });
+    }
+  }
 
   const body = await req.json();
   const patch: Record<string, unknown> = {};
@@ -144,7 +160,12 @@ export async function POST(req: NextRequest) {
   if (theo + prac <= 0) {
     return NextResponse.json({ ok: false, error: 'مجموع واحد نظری و عملی باید بیشتر از صفر باشد.' }, { status: 400 });
   }
-  const [dup] = await db.select({ id: courses.id }).from(courses).where(eq(courses.code, code)).limit(1);
+  const uni = await getCurrentUniversity().catch(() => null);
+  const [dup] = await db.select({ id: courses.id }).from(courses).where(
+    uni
+      ? and(eq(courses.code, code), or(eq(courses.universityId, uni.id), isNull(courses.universityId)))
+      : eq(courses.code, code)
+  ).limit(1);
   if (dup) {
     return NextResponse.json({ ok: false, error: `کد درس تکراری است: ${code}` }, { status: 409 });
   }
@@ -154,6 +175,7 @@ export async function POST(req: NextRequest) {
   const [row] = await db.insert(courses).values({
     code,
     title,
+    universityId: uni ? uni.id : null,
     theoreticalUnits: String(theo),
     practicalUnits: String(prac),
     units: String(theo + prac),

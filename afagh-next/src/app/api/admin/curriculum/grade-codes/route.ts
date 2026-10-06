@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { db } from '@/db';
-import { curriculum_courses } from '@/db/schema';
+import { curriculum_courses, curriculum_versions } from '@/db/schema';
 import { and, eq } from 'drizzle-orm';
+import { getCurrentUniversity } from '@/lib/university-scope';
 
 export async function PATCH(req: NextRequest) {
   const user = await getSessionUser();
@@ -16,6 +17,16 @@ export async function PATCH(req: NextRequest) {
   }
   const body = await req.json();
   const { passGradeStatusCode, failGradeStatusCode } = body;
+
+  // نگهبان دانشگاه: نسخهٔ دانشگاه دیگر قابل ویرایش نیست (NULL = سراسری، مجاز).
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (uni) {
+    const [ver] = await db.select({ universityId: curriculum_versions.universityId }).from(curriculum_versions).where(eq(curriculum_versions.id, versionId)).limit(1);
+    if (!ver) return NextResponse.json({ ok: false, error: 'نسخه یافت نشد.' }, { status: 404 });
+    if (ver.universityId != null && ver.universityId !== uni.id) {
+      return NextResponse.json({ ok: false, error: 'این نسخه متعلق به دانشگاه دیگری است.' }, { status: 403 });
+    }
+  }
 
   await db
     .update(curriculum_courses)

@@ -350,7 +350,134 @@ export async function countOrphanCourses(): Promise<number> {
   return r?.c ?? 0;
 }
 
-/** انتقال دسته‌جمعی دروس بی‌گروه به یک گروه (مثلاً «دروس عمومی») — فقط دروس دانشگاه فعال، و فقط به گروه همین دانشگاه */
+export type GroupContent = {
+  courses: { id: number; code: string; title: string }[];
+  majors: { id: number; code: string | null; name: string }[];
+};
+
+/** دروس و رشته‌های یک گروه — برای نمایش مستقل محتوای هر گروه */
+export async function listGroupContent(deptId: number): Promise<GroupContent> {
+  await requireRole(['ADMIN', 'VICE_EDU']);
+  const uniId = (await getCurrentUniversity()).id;
+  const [dep] = await db.select({ universityId: departments.universityId }).from(departments).where(eq(departments.id, deptId)).limit(1);
+  if (!dep) return { courses: [], majors: [] };
+  if (dep.universityId !== null && dep.universityId !== uniId) return { courses: [], majors: [] };
+  const [cs, ms] = await Promise.all([
+    db.select({ id: courses.id, code: courses.code, title: courses.title }).from(courses)
+      .where(eq(courses.departmentId, deptId)).orderBy(courses.code),
+    db.select({ id: majors.id, code: majors.majorCode, name: majors.name }).from(majors)
+      .where(eq(majors.departmentId, deptId)).orderBy(majors.name),
+  ]);
+  return { courses: cs, majors: ms };
+}
+
+/** جدا کردن یک درس از گروهش (departmentId=NULL) — محدود به دانشگاه فعال */
+export async function unassignCourseAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  await requireRole(['ADMIN', 'VICE_EDU']);
+  const uniId = (await getCurrentUniversity()).id;
+  const id = n(fd, 'courseId');
+  if (!id) return { ok: false, error: 'درس نامعتبر است.' };
+  await db.update(courses).set({ departmentId: null })
+    .where(and(eq(courses.id, id), or(eq(courses.universityId, uniId), isNull(courses.universityId))));
+  revalidatePath('/admin/departments');
+  return { ok: true };
+}
+
+/** جدا کردن یک رشته از گروهش — محدود به دانشگاه فعال */
+export async function unassignMajorAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  await requireRole(['ADMIN', 'VICE_EDU']);
+  const uniId = (await getCurrentUniversity()).id;
+  const id = n(fd, 'majorId');
+  if (!id) return { ok: false, error: 'رشته نامعتبر است.' };
+  await db.update(majors).set({ departmentId: null })
+    .where(and(eq(majors.id, id), or(eq(majors.universityId, uniId), isNull(majors.universityId))));
+  revalidatePath('/admin/departments');
+  return { ok: true };
+}
+
+export type OrphanMajorRow = { id: number; code: string | null; name: string };
+
+/** رشته‌های بی‌گروه دانشگاه فعال — تعیین تکلیف در همین صفحه */
+export async function listOrphanMajors({ q, page, per }: { q?: string; page?: number; per?: number }): Promise<{ rows: OrphanMajorRow[]; total: number; page: number; per: number }> {
+  await requireRole(['ADMIN', 'VICE_EDU']);
+  const uniId = (await getCurrentUniversity()).id;
+  const p = Math.max(1, page || 1);
+  const n = Math.min(100, Math.max(1, per || 20));
+  const needle = String(q || '').trim();
+  const base = and(
+    isNull(majors.departmentId),
+    or(eq(majors.universityId, uniId), isNull(majors.universityId)),
+    needle ? or(sql`${majors.name} ILIKE ${'%' + needle + '%'}`, sql`${majors.majorCode} ILIKE ${'%' + needle + '%'}`) : undefined,
+  );
+  const [{ c: total }] = await db.select({ c: sql<number>`count(*)::int` }).from(majors).where(base);
+  const rows = await db.select({ id: majors.id, code: majors.majorCode, name: majors.name })
+    .from(majors).where(base).orderBy(majors.name).limit(n).offset((p - 1) * n);
+  return { rows, total: total ?? 0, page: p, per: n };
+}
+
+/** اتصال رشته‌های منتخب به یک گروه — فقط رشته‌های دانشگاه فعال، فقط گروه همین دانشگاه */
+export async function assignMajorsAction(fd: FormData): Promise<{ ok: boolean; error?: string; moved?: number }> {
+  await requireRole(['ADMIN', 'VICE_EDU']);
+  const uniId = (await getCurrentUniversity()).id;
+  const deptId = n(fd, 'deptId');
+  const ids = String(fd.get('majorIds') ?? '').split(',').map(x => Number(x)).filter(Number.isInteger);
+  if (!deptId) return { ok: false, error: 'گروه مقصد را انتخاب کنید.' };
+  if (!ids.length) return { ok: false, error: 'هیچ رشته‌ای انتخاب نشده است.' };
+  const [dep] = await db.select({ universityId: departments.universityId }).from(departments).where(eq(departments.id, deptId)).limit(1);
+  if (!dep) return { ok: false, error: 'گروه مقصد یافت نشد.' };
+  if (dep.universityId !== null && dep.universityId !== uniId) return { ok: false, error: 'گروه مقصد متعلق به دانشگاه دیگری است.' };
+  const rows = await db.update(majors).set({ departmentId: deptId })
+    .where(and(
+      isNull(majors.departmentId),
+      or(eq(majors.universityId, uniId), isNull(majors.universityId)),
+      sql`${majors.id} = ANY(${ids})`,
+    ))
+    .returning({ id: majors.id });
+  revalidatePath('/admin/departments');
+  return { ok: true, moved: rows.length };
+}
+
+export type OrphanCourseRow = { id: number; code: string; title: string; courseType: string | null };
+
+/** فهرست صفحه‌بندی‌شدهٔ دروس بی‌گروه دانشگاه فعال — برای تعیین تکلیف تکی/گروهی */
+export async function listOrphanCourses({ q, page, per }: { q?: string; page?: number; per?: number }): Promise<{ rows: OrphanCourseRow[]; total: number; page: number; per: number }> {
+  await requireRole(['ADMIN', 'VICE_EDU']);
+  const uniId = (await getCurrentUniversity()).id;
+  const p = Math.max(1, page || 1);
+  const n = Math.min(100, Math.max(1, per || 20));
+  const needle = String(q || '').trim();
+  const base = and(
+    isNull(courses.departmentId),
+    or(eq(courses.universityId, uniId), isNull(courses.universityId)),
+    needle ? or(sql`${courses.code} ILIKE ${'%' + needle + '%'}`, sql`${courses.title} ILIKE ${'%' + needle + '%'}`) : undefined,
+  );
+  const [{ c: total }] = await db.select({ c: sql<number>`count(*)::int` }).from(courses).where(base);
+  const rows = await db.select({ id: courses.id, code: courses.code, title: courses.title, courseType: courses.courseType })
+    .from(courses).where(base).orderBy(courses.code).limit(n).offset((p - 1) * n);
+  return { rows, total: total ?? 0, page: p, per: n };
+}
+
+/** اتصال دروس منتخب به یک گروه — فقط دروس دانشگاه فعال، فقط گروه همین دانشگاه */
+export async function assignCoursesAction(fd: FormData): Promise<{ ok: boolean; error?: string; moved?: number }> {
+  await requireRole(['ADMIN', 'VICE_EDU']);
+  const uniId = (await getCurrentUniversity()).id;
+  const deptId = n(fd, 'deptId');
+  const ids = String(fd.get('courseIds') ?? '').split(',').map(x => Number(x)).filter(Number.isInteger);
+  if (!deptId) return { ok: false, error: 'گروه مقصد را انتخاب کنید.' };
+  if (!ids.length) return { ok: false, error: 'هیچ درسی انتخاب نشده است.' };
+  const [dep] = await db.select({ universityId: departments.universityId }).from(departments).where(eq(departments.id, deptId)).limit(1);
+  if (!dep) return { ok: false, error: 'گروه مقصد یافت نشد.' };
+  if (dep.universityId !== null && dep.universityId !== uniId) return { ok: false, error: 'گروه مقصد متعلق به دانشگاه دیگری است.' };
+  const rows = await db.update(courses).set({ departmentId: deptId })
+    .where(and(
+      isNull(courses.departmentId),
+      or(eq(courses.universityId, uniId), isNull(courses.universityId)),
+      sql`${courses.id} = ANY(${ids})`,
+    ))
+    .returning({ id: courses.id });
+  revalidatePath('/admin/departments');
+  return { ok: true, moved: rows.length };
+}
 export async function assignOrphanCoursesAction(fd: FormData): Promise<{ ok: boolean; error?: string; moved?: number }> {
   await requireRole(['ADMIN', 'VICE_EDU']);
   const uniId = (await getCurrentUniversity()).id;
