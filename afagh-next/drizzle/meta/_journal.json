@@ -358,6 +358,13 @@
       "when": 1791561600000,
       "tag": "0046_saham_export_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1791648000000,
+      "tag": "0047_academic_terms_sync_current",
+      "breakpoints": true
     }
   ]
 }
