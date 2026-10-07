@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 import { requireRole } from '@/lib/auth';
 import { alumniOf } from '@/lib/alumni';
+import { getSiblingAccounts } from '@/lib/account-switch';
+import AccountSwitcher from '@/components/AccountSwitcher';
 import { logoutAction } from '../login/actions';
 import StudentNav, { StudentSidebar } from './StudentNav';
 
@@ -9,6 +11,9 @@ export default async function StudentLayout({ children }: { children: React.Reac
 
   // پس از صدور مدرک، حساب کاربر از پورتال دانشجویی به پورتال دانش‌آموختگان منتقل می‌شود
   if (await alumniOf(user.id)) redirect('/alumni');
+
+  // حساب‌های هم‌شخص (شماره دانشجویی/کد پرسنلی دیگرِ همین کدملی) برای بنر جابه‌جایی
+  const siblings = await getSiblingAccounts().catch(() => []);
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col" dir="rtl">
@@ -44,6 +49,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
       </header>
 
       {/* بدنه دو ستونه دسکتاپ: سایدبار سمت راست + محتوای اصلی */}
+      <AccountSwitcher siblings={siblings} />
       <div className="flex-1 max-w-7xl w-full mx-auto flex flex-col md:flex-row">
         {/* سایدبار عمودی سمت راست (دسکتاپ) */}
         <StudentSidebar user={{ name: user.name }} />

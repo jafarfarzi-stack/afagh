@@ -4,6 +4,8 @@ import { db } from '@/db';
 import { electronic_documents, departments } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import { headedDepartments } from '@/lib/group-manager';
+import { getSiblingAccounts } from '@/lib/account-switch';
+import AccountSwitcher from '@/components/AccountSwitcher';
 import { logoutAction } from '../login/actions';
 
 export default async function ProfessorLayout({ children }: { children: React.ReactNode }) {
@@ -25,8 +27,12 @@ export default async function ProfessorLayout({ children }: { children: React.Re
   // مدیرِ «دروس عمومی» بداند سرپرستی کدام گروه با اوست.
   const headed = user.roles.includes('DEP_HEAD') && me ? await headedDepartments(me.id, me.departmentId ?? null) : [];
 
+  // حساب‌های هم‌شخص (کد پرسنلی/دانشجویی دیگرِ همین کدملی) برای بنر جابه‌جایی
+  const siblings = await getSiblingAccounts().catch(() => []);
+
   return (
     <div className="min-h-screen bg-slate-50" dir="rtl">
+      <AccountSwitcher siblings={siblings} />
       <header className="bg-slate-900 text-white shadow-md border-b border-slate-800">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 p-4">
           <div className="flex items-center gap-3">

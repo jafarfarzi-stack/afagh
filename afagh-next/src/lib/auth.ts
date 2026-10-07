@@ -312,7 +312,7 @@ export type LoginCandidate = {
 };
 
 /** صدور نشست برای کاربرِ مشخص (پس از احراز هویت) — تنها محل ساخت sessions */
-async function issueSessionFor(userId: number): Promise<{ mustChange: boolean }> {
+export async function issueSessionFor(userId: number): Promise<{ mustChange: boolean }> {
   const [u] = await db.select({ mustChangePassword: users.mustChangePassword }).from(users).where(eq(users.id, userId)).limit(1);
   if (!u) throw new Error('کاربر یافت نشد.');
   const token = randomBytes(32).toString('hex');
