@@ -506,7 +506,7 @@ export const DEMO_AVAILABILITY_TERM = {
   isCurrent: true,
 };
 
-export const DEMO_LIVE_SESSIONS = [
+export const DEMO_LIVE_SESSIONS: import('./moodle-bbb').VirtualClassSession[] = [
   {
     courseId: 101,
     courseCode: 'CE-302',

@@ -40,6 +40,8 @@ interface Props {
   card: ExamCardData | null;
   /** SVG کیوآر واقعی و قابل اسکن توکن کارت — سمت سرور با موتور QR تولید می‌شود */
   ticketQr?: string;
+  /** حساب دمو: داده‌ها نمایشی است و هیچ ارزشیابی‌ای در پایگاه داده ثبت نمی‌شود */
+  demo?: boolean;
 }
 
 /**
@@ -67,7 +69,7 @@ function toShamsi(dStr: string | null | undefined): string {
   }
 }
 
-export default function ExamCardClient({ user, publicBaseUrl, examTicket, examTicketBlocked, card, ticketQr }: Props) {
+export default function ExamCardClient({ user, publicBaseUrl, examTicket, examTicketBlocked, card, ticketQr, demo = false }: Props) {
   const [courses, setCourses] = useState<StudentCourseEvaluationItem[]>(card?.courses ?? []);
   /** بدهی واقعی از دفتر کل مالی — نه یک عدد ثابت */
   const [financialDebt, setFinancialDebt] = useState<number>(card?.debt ?? 0);
@@ -315,6 +317,10 @@ export default function ExamCardClient({ user, publicBaseUrl, examTicket, examTi
                 {course.hasEvaluated ? (
                   <span className="px-3.5 py-1.5 rounded-xl bg-emerald-100 text-emerald-900 font-black text-xs flex items-center gap-1 border border-emerald-300">
                     <span>✓ ارزشیابی شد</span>
+                  </span>
+                ) : demo ? (
+                  <span className="px-3.5 py-1.5 rounded-xl bg-slate-100 text-slate-600 font-black text-xs border border-slate-300">
+                    ارزشیابی در حساب دمو ثبت نمی‌شود
                   </span>
                 ) : (
                   <button

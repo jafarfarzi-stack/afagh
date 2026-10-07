@@ -15,6 +15,9 @@ import {
 } from '@/db/schema';
 import { jalaliDateOf } from '@/lib/scheduling-core';
 import { getBbbConfig } from '@/lib/settings';
+import { demoKindForUser } from '@/lib/demo-accounts';
+import { DEMO_LIVE_SESSIONS as DEMO_STUDENT_LIVE_SESSIONS } from '@/lib/demo-student-data';
+import { DEMO_LIVE_SESSIONS as DEMO_PROFESSOR_LIVE_SESSIONS } from '@/lib/demo-professor-data';
 
 /** تاریخ جلالی امروز به شکل YYYY/MM/DD (هم‌راستا با ستون sessionDate) */
 function todayJalali(): string {
@@ -102,7 +105,14 @@ export async function getBigBlueButtonJoinUrl({
 export async function getTodayLiveClasses(opts?: {
   universityId?: number | null;
   staffId?: number | null;
+  viewerUserId?: number | null;
 }): Promise<VirtualClassSession[]> {
+  if (opts?.viewerUserId) {
+    const kind = await demoKindForUser(opts.viewerUserId);
+    if (kind === 'STUDENT') return DEMO_STUDENT_LIVE_SESSIONS;
+    if (kind === 'PROFESSOR') return DEMO_PROFESSOR_LIVE_SESSIONS;
+  }
+
   const cond: SQL[] = [];
   if (opts?.universityId) cond.push(eq(virtual_classrooms.universityId, opts.universityId));
   if (opts?.staffId) {

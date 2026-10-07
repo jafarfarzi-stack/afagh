@@ -5,10 +5,12 @@ import { getStudentByUser, requireRole } from '@/lib/auth';
 import { getStudentFinance } from '@/lib/finance-engine';
 import { toNum, transcriptTotals } from '@/lib/finance-rules';
 import { getTermScope } from '@/lib/term-scope';
+import { isDemoStudentUser } from '@/lib/demo-accounts';
 import { getSetting } from '@/lib/settings';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import PrintButton from '../PrintButton';
 import TermFilterChip from '../term-filter-chip';
+import { DemoFinance } from '../demo-sections';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +47,15 @@ export default async function StudentFinancePage() {
   const user = await requireRole(['STUDENT']);
   const me = await getStudentByUser(user.id);
   if (!me) return <p className="card p-6 text-center text-slate-500">پروندهٔ دانشجویی یافت نشد.</p>;
+
+  const demo = await isDemoStudentUser(user.id);
+  if (demo) {
+    const demoScope = await getTermScope(me.universityId);
+    const demoTerm = demoScope.selectedId
+      ? demoScope.terms.find(t => t.id === demoScope.selectedId) ?? null
+      : null;
+    return <DemoFinance filteredTermTitle={demoTerm?.title ?? null} />;
+  }
 
   const [fin, notifyRows, remindDaysRaw, scope] = await Promise.all([
     getStudentFinance(me.id),

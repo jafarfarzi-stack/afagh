@@ -5,6 +5,8 @@ import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA, getRegulationConfig } from '@/lib/regulations-engine';
 import { maskNationalCode } from '@/lib/verification';
+import { isDemoStudentUser } from '@/lib/demo-accounts';
+import { DEMO_STUDENT } from '@/lib/demo-student-data';
 import { COURSE_TYPE_FA } from '@/lib/student-labels';
 import { sortTermsForTranscript, groupTermsByAcademicYear, EQUIVALENCE_GROUP_YEAR } from '@/lib/scheduling-core';
 import { getTermScope } from '@/lib/term-scope';
@@ -34,6 +36,8 @@ export default async function StudentTranscriptPage() {
   const [level] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
   const [identity] = await db.select({ nationalCode: users.nationalCode }).from(users).where(eq(users.id, user.id)).limit(1);
 
+  const demo = await isDemoStudentUser(user.id);
+
   const termScope = await getTermScope(me.universityId);
   const filteredTerm = termScope.selectedId
     ? termScope.terms.find(t => t.id === termScope.selectedId) ?? null
@@ -57,6 +61,15 @@ export default async function StudentTranscriptPage() {
 
   const studyTypeRaw = (me.studyType || me.tuitionType || '').trim();
   const studyTypeFa = studyTypeRaw ? COURSE_TYPE_FA[studyTypeRaw] ?? studyTypeRaw : '—';
+
+  const shownNationalCode = demo ? DEMO_STUDENT.nationalCodeFa : maskNationalCode(identity?.nationalCode);
+  const shownLevel = level?.title || (demo ? DEMO_STUDENT.degreeTitle : '—');
+  const shownMajor = major?.name || (demo ? DEMO_STUDENT.majorName : '—');
+  const shownEntryYear = me.entryYear || (demo ? DEMO_STUDENT.entryYearFa : '—');
+  const shownStudyType = demo ? DEMO_STUDENT.studyTypeFa : studyTypeFa;
+  const shownRegulation = reg?.title
+    || regCfg.grading_and_gpa?.regulationLabel
+    || (demo ? DEMO_STUDENT.regulationTitle : 'آیین‌نامهٔ آموزشی دورهٔ تحصیلی');
 
   // خواندن کلیه سوابق دروس دانشجو از تمام ترم‌ها از مسیر امن RLS
   const allRows = await withUserRls(user.id, tx =>
@@ -220,22 +233,20 @@ export default async function StudentTranscriptPage() {
               </tr>
               <tr className="border-b border-slate-300">
                 <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">کد ملی:</td>
-                <td className="p-1.5 font-mono text-slate-900 border-l border-slate-300" dir="ltr">{maskNationalCode(identity?.nationalCode)}</td>
+                <td className="p-1.5 font-mono text-slate-900 border-l border-slate-300" dir="ltr">{shownNationalCode}</td>
                 <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">مقطع تحصیلی:</td>
-                <td className="p-1.5 font-semibold text-slate-900">{level?.title || '—'}</td>
+                <td className="p-1.5 font-semibold text-slate-900">{shownLevel}</td>
               </tr>
               <tr className="border-b border-slate-300">
                 <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">رشته تحصیلی:</td>
-                <td className="p-1.5 font-bold text-slate-900 border-l border-slate-300">{major?.name || '—'}</td>
+                <td className="p-1.5 font-bold text-slate-900 border-l border-slate-300">{shownMajor}</td>
                 <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">سال ورود / نوع دوره:</td>
-                <td className="p-1.5 font-semibold text-slate-900">{me.entryYear || '—'} / {studyTypeFa}</td>
+                <td className="p-1.5 font-semibold text-slate-900">{shownEntryYear} / {shownStudyType}</td>
               </tr>
               <tr>
                 <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">آیین‌نامه ملاک عمل:</td>
                 <td colSpan={3} className="p-1.5 font-semibold text-slate-900">
-                  <span className="text-indigo-950 font-bold">
-                    {reg?.title || regCfg.grading_and_gpa?.regulationLabel || 'آیین‌نامهٔ آموزشی دورهٔ تحصیلی'}
-                  </span>
+                  <span className="text-indigo-950 font-bold">{shownRegulation}</span>
                   <span className="text-slate-500 text-[10px] mr-2">({regPolicy})</span>
                 </td>
               </tr>

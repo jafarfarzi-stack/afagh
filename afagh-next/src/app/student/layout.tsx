@@ -5,6 +5,8 @@ import { getSiblingAccounts } from '@/lib/account-switch';
 import AccountSwitcher from '@/components/AccountSwitcher';
 import TermSwitcher from '@/components/TermSwitcher';
 import { getTermScope } from '@/lib/term-scope';
+import { isDemoStudentUser } from '@/lib/demo-accounts';
+import { DEMO_STUDENT } from '@/lib/demo-student-data';
 import { logoutAction } from '../login/actions';
 import StudentNav, { StudentSidebar } from './StudentNav';
 
@@ -17,6 +19,8 @@ export default async function StudentLayout({ children }: { children: React.Reac
   const me = await getStudentByUser(user.id);
 
   const termScope = await getTermScope(me?.universityId ?? null);
+  const demo = await isDemoStudentUser(user.id);
+  const sidebarStudentCode = demo ? DEMO_STUDENT.studentCode : me?.studentCode ?? null;
 
   // حساب‌های هم‌شخص (شماره دانشجویی/کد پرسنلی دیگرِ همین کدملی) برای بنر جابه‌جایی
   const siblings = await getSiblingAccounts().catch(() => []);
@@ -64,7 +68,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
       <AccountSwitcher siblings={siblings} />
       <div className="flex-1 max-w-7xl w-full mx-auto flex flex-col md:flex-row">
         {/* سایدبار عمودی سمت راست (دسکتاپ) */}
-        <StudentSidebar user={{ name: user.name, studentCode: me?.studentCode ?? null }} />
+        <StudentSidebar user={{ name: user.name, studentCode: sidebarStudentCode }} />
 
         {/* محتوای اصلی صفحه */}
         <main className="flex-1 min-w-0 p-3 sm:p-5 md:p-6 pb-24 md:pb-8">

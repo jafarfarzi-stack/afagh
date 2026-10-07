@@ -10,6 +10,7 @@ import {
   DEMO_LIVE_SESSIONS,
   DEMO_TERM_TITLE,
 } from '@/lib/demo-professor-data';
+import { DEMO_RECORDINGS } from '@/lib/demo-student-data';
 import { db } from '@/db';
 import {
   classrooms, course_offerings, courses, departments, electronic_documents,
@@ -37,7 +38,7 @@ export default async function ProfessorHome() {
   const universityId = me.universityId ?? user.universityId ?? null;
   const term = await currentTermFor(universityId);
 
-  const liveSessions = await getTodayLiveClasses({ universityId, staffId: me.id });
+  const liveSessions = await getTodayLiveClasses({ universityId, staffId: me.id, viewerUserId: user.id });
 
   const classes = term
     ? await db
@@ -242,6 +243,7 @@ export default async function ProfessorHome() {
       <VirtualClassroomWidget
         user={{ id: user.id, name: user.name, role: 'PROFESSOR' }}
         initialSessions={demo ? DEMO_LIVE_SESSIONS : liveSessions}
+        recordings={demo ? DEMO_RECORDINGS : undefined}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">

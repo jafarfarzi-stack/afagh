@@ -11,12 +11,14 @@ interface Props {
     role: 'PROFESSOR' | 'STUDENT';
   };
   initialSessions: VirtualClassSession[];
+  /** آرشیو ضبط‌ها — فقط برای حساب دمو مقدار ثابت دارد؛ برای بقیه از پایگاه داده می‌آید */
+  recordings?: { title: string; meta: string }[];
 }
 
 const faNum = (n: any) =>
   n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
 
-export default function VirtualClassroomWidget({ user, initialSessions }: Props) {
+export default function VirtualClassroomWidget({ user, initialSessions, recordings }: Props) {
   const [sessions, setSessions] = useState<VirtualClassSession[]>(initialSessions);
   const [isLaunching, setIsLaunching] = useState<string | null>(null);
   const [activeModalRoom, setActiveModalRoom] = useState<string | null>(null);
@@ -179,31 +181,29 @@ export default function VirtualClassroomWidget({ user, initialSessions }: Props)
             </div>
 
             <div className="space-y-2 text-xs">
-              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
-                <div>
-                  <span className="font-black block">جلسه ۸: حل تمرین و میان‌ترم</span>
-                  <span className="text-[10px] text-slate-400">مدت: ۹۰ دقیقه · کیفیت 1080p</span>
-                </div>
-                <button
-                  onClick={() => alert('در حال بازپخش ویدیوی جلسه...')}
-                  className="px-3 py-1.5 rounded-xl bg-indigo-900 text-white font-bold text-[11px]"
-                >
-                  پخش آنلاین ▶
-                </button>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
-                <div>
-                  <span className="font-black block">جلسه ۷: مفاهیم پایه و معماری سیستم</span>
-                  <span className="text-[10px] text-slate-400">مدت: ۸۵ دقیقه · کیفیت 1080p</span>
-                </div>
-                <button
-                  onClick={() => alert('در حال بازپخش ویدیوی جلسه...')}
-                  className="px-3 py-1.5 rounded-xl bg-indigo-900 text-white font-bold text-[11px]"
-                >
-                  پخش آنلاین ▶
-                </button>
-              </div>
+              {!recordings || recordings.length === 0 ? (
+                <p className="p-4 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-[11px] text-slate-500 font-bold">
+                  فهرست ویدیوهای ضبط‌شدهٔ این اتاق در سامانه ثبت نشده است.
+                </p>
+              ) : (
+                recordings.map(r => (
+                  <div
+                    key={r.title}
+                    className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between"
+                  >
+                    <div>
+                      <span className="font-black block">{r.title}</span>
+                      <span className="text-[10px] text-slate-400">{r.meta}</span>
+                    </div>
+                    <button
+                      onClick={() => alert('در حال بازپخش ویدیوی جلسه...')}
+                      className="px-3 py-1.5 rounded-xl bg-indigo-900 text-white font-bold text-[11px]"
+                    >
+                      پخش آنلاین ▶
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
 
             <div className="flex justify-end pt-2 border-t border-slate-200">

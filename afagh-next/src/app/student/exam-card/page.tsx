@@ -2,6 +2,8 @@ import { getSessionUser, getStudentByUser } from '@/lib/auth';
 import { getPublicBaseUrl } from '@/lib/settings';
 import { getExamCardData, issueExamTicketToken } from '@/lib/verification';
 import { getTermScope } from '@/lib/term-scope';
+import { isDemoStudentUser } from '@/lib/demo-accounts';
+import { demoExamCardData, demoTermFilterNotice } from '@/lib/demo-student-data';
 import { qrSvg } from '@/lib/qr';
 import ExamCardClient from './ExamCardClient';
 import { getExamCardDataForTerm } from './exam-card-term-data';
@@ -16,6 +18,35 @@ export default async function StudentExamCardPage() {
   const me = await getStudentByUser(user.id);
   const { terms, selectedId } = await getTermScope(me?.universityId ?? user.universityId);
   const selectedTerm = selectedId ? terms.find(t => t.id === selectedId) ?? null : null;
+
+  const demo = await isDemoStudentUser(user.id);
+
+  if (demo) {
+    return (
+      <div className="space-y-3">
+        {selectedTerm && (
+          <div className="print:hidden flex justify-start">
+            <TermFilterChip title={selectedTerm.title} universityId={me?.universityId ?? user.universityId} />
+          </div>
+        )}
+        {selectedTerm ? (
+          <p className="print:hidden rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+            {demoTermFilterNotice(selectedTerm.title)}
+          </p>
+        ) : (
+          <ExamCardClient
+            user={user}
+            publicBaseUrl={await getPublicBaseUrl()}
+            examTicket={null}
+            examTicketBlocked={null}
+            card={demoExamCardData(me?.id ?? user.id)}
+            ticketQr=""
+            demo
+          />
+        )}
+      </div>
+    );
+  }
 
   /**
    * توکن امضاشدهٔ کارت ورود به جلسه — از پایگاه داده ساخته می‌شود، نه از

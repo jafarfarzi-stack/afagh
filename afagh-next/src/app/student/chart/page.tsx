@@ -13,10 +13,12 @@ import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { currentTermFor } from '@/lib/terms';
 import { getTermScope } from '@/lib/term-scope';
+import { isDemoStudentUser } from '@/lib/demo-accounts';
 import TermFilterChip from '@/components/TermFilterChip';
 import TermAutoScroll from '@/components/TermAutoScroll';
 import { resolveApplicableCurriculum, type ResolvableVersion } from '@/lib/curriculum-resolution';
 import Link from 'next/link';
+import { DemoChart } from '../demo-sections';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,12 +67,18 @@ export default async function StudentCurriculumChartPage() {
   const me = await getStudentByUser(user.id);
   if (!me) return <p className="card p-6 text-center text-slate-500">پروندهٔ دانشجویی یافت نشد.</p>;
 
-  const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
-  const [level] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
+  const demo = await isDemoStudentUser(user.id);
   const termScope = await getTermScope(me.universityId);
   const filteredTerm = termScope.selectedId
     ? termScope.terms.find(t => t.id === termScope.selectedId) ?? null
     : null;
+
+  if (demo) {
+    return <DemoChart filteredTermTitle={filteredTerm?.title ?? null} />;
+  }
+
+  const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
+  const [level] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
   const term = filteredTerm ?? (await currentTermFor(me.universityId));
 
   const enrollmentRows = await withUserRls(user.id, tx =>
