@@ -246,15 +246,15 @@ export default async function StudentDashboardPage() {
                   {statusFa[me.status || 'ACTIVE'] || 'دانشجوی فعال'}
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white/15 text-emerald-100 border border-white/20">
-                  ترم {me.currentTermNo || 3} تحصیلی
+                  ترم {me.currentTermNo ?? '—'} تحصیلی
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-emerald-200 font-medium">
-                {major?.name || 'مهندسی کامپیوتر'} · {level?.title || 'کارشناسی پیوسته'} · ورودی سال {me.entryYear || 1403}
+                {major?.name || '—'} · {level?.title || '—'} · ورودی سال {me.entryYear ?? '—'}
               </p>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-emerald-300/90 pt-1 font-mono">
                 <span>شماره دانشجویی: <strong className="text-white font-bold font-mono" dir="ltr">{me.studentCode}</strong></span>
-                <span>کد ملی: <strong className="text-white font-bold font-mono" dir="ltr">{userRecord?.nationalCode || '0012345678'}</strong></span>
+                <span>کد ملی: <strong className="text-white font-bold font-mono" dir="ltr">{userRecord?.nationalCode || '—'}</strong></span>
               </div>
             </div>
           </div>
