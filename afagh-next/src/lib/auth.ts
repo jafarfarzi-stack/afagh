@@ -149,7 +149,7 @@ if (process.env.NODE_ENV === 'production' && DEMO_PASSWORD === '123456') {
   console.error('⚠ CRITICAL [demo] AFAGH_DEMO_PASSWORD در production همان مقدار پیش‌فرض «123456» است — فوراً عوضش کنید.');
 }
 
-const DEMO_ACCOUNTS: Record<string, { firstName: string; lastName: string; role: string; staffCode?: string; departmentCode?: string; isStudent?: boolean }> = {
+export const DEMO_ACCOUNTS: Record<string, { firstName: string; lastName: string; role: string; staffCode?: string; departmentCode?: string; isStudent?: boolean }> = {
   '0000000001': { firstName: 'مدیر', lastName: 'سامانه', role: 'ADMIN' },
   '0011111111': { firstName: 'محمد', lastName: 'رضایی', role: 'PROFESSOR', staffCode: 'F-101' },
   '0022222222': { firstName: 'زهرا', lastName: 'احمدی', role: 'PROFESSOR', staffCode: 'F-102' },
