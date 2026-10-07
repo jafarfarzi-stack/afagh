@@ -2,7 +2,7 @@ import { createHash, randomBytes, scrypt as _scrypt, timingSafeEqual } from 'cry
 import { promisify } from 'util';
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { and, asc, eq, gt, lt, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, lt, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { ensureBaseReferenceData } from '@/lib/base-data';
 import { clientIp, rateLimit } from '@/lib/rateLimit';
@@ -298,6 +298,15 @@ async function ensureDemoUser(nc: string) {
 /** حداکثر نشست فعال همزمان برای هر کاربر — قدیمی‌ترین‌ها حذف می‌شوند (M-4) */
 const MAX_SESSIONS_PER_USER = 8;
 
+/** نگاشت فایل مبدأ: کد استاد → کد ملی (فقط سرور). معکوسش برای گسترش کاندیداهای ورود. */
+import { STAFF_NC_MAP } from '@/lib/staff-nc-map.generated';
+const NC_TO_CODES = new Map<string, string[]>();
+for (const [code, nc] of Object.entries(STAFF_NC_MAP)) {
+  const arr = NC_TO_CODES.get(nc);
+  if (arr) arr.push(code);
+  else NC_TO_CODES.set(nc, [code]);
+}
+
 export type LoginCandidate = {
   id: number; name: string; staffCodes: string[]; universityTitle: string | null; roles: string[];
 };
@@ -394,6 +403,28 @@ export async function login(
       .orderBy(asc(users.id))
       .then((rows) => rows.map((r) => r.user));
     cands.push(...stuRows.filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true))));
+  }
+  // ── گسترش هم‌شخصی: اگر شناسه کدملی/کدپرسنلیِ یک نفرِ دوکده باشد،
+  // حساب‌های linked او هم کاندیدا می‌شوند؛ ورود به هر حساب فقط با رمزِ همان حساب.
+  // (مثلاً با کدملی 2754765824 و رمزِ 901101 وارد کارتابلِ 901101 می‌شوی.)
+  const linkedCodes = new Set<string>();
+  const ownNc = STAFF_NC_MAP[clean];
+  if (ownNc) for (const c of NC_TO_CODES.get(ownNc) ?? []) linkedCodes.add(c);
+  for (const c of NC_TO_CODES.get(clean) ?? []) linkedCodes.add(c);
+  if (linkedCodes.size) {
+    const linked = await db
+      .select({ user: users })
+      .from(staff)
+      .innerJoin(users, eq(users.id, staff.userId))
+      .where(inArray(staff.staffCode, [...linkedCodes]))
+      .orderBy(asc(users.id))
+      .then((rows) => rows.map((r) => r.user));
+    for (const c of linked) {
+      if (!seen.has(c.id)) {
+        seen.add(c.id);
+        cands.push(c);
+      }
+    }
   }
   const matched = [];
   for (const cand of cands) {
