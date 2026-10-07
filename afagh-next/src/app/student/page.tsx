@@ -1,6 +1,5 @@
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import {
-  academic_terms,
   classrooms,
   course_offerings,
   courses,
@@ -11,10 +10,14 @@ import {
   schedules,
   staff,
   users,
+  virtual_classrooms,
 } from '@/db/schema';
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA } from '@/lib/regulations-engine';
+import { resolveStudentCurriculum } from '@/lib/curriculum-apply';
+import { currentTermFor } from '@/lib/terms';
+import { getExamCardData } from '@/lib/verification';
 import Link from 'next/link';
 import { emergencyDropAction, emergencyDropFormAction } from './actions';
 
@@ -59,7 +62,10 @@ export default async function StudentDashboardPage() {
 
   const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
   const [level] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
-  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
+  const term = await currentTermFor(me.universityId);
+  const curriculum = await resolveStudentCurriculum(me.id);
+  const requiredUnitsTotal = curriculum.version ? Number(curriculum.version.totalRequiredUnits ?? 0) : 0;
+  const examCard = await getExamCardData(user.id);
   const [reg] = me.regulationId ? await db.select().from(educational_regulations).where(eq(educational_regulations.id, me.regulationId)).limit(1) : [null];
   const [userRecord] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
 
@@ -180,9 +186,31 @@ export default async function StudentDashboardPage() {
     }
   }
 
+  // جلسات کلاس مجازیِ دروس ترم جاری از جدول واقعی virtual_classrooms
+  const liveVirtualClasses = term && currentEnrollments.length > 0
+    ? await db
+        .select({
+          id: virtual_classrooms.id,
+          courseTitle: courses.title,
+          meetingId: virtual_classrooms.bbbMeetingId,
+          isRunning: virtual_classrooms.isRunning,
+          currentAttendanceCount: virtual_classrooms.currentAttendanceCount,
+          professorId: course_offerings.professorId,
+        })
+        .from(virtual_classrooms)
+        .innerJoin(course_offerings, eq(course_offerings.id, virtual_classrooms.courseOfferingId))
+        .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+        .where(
+          and(
+            eq(course_offerings.termId, term.id),
+            inArray(course_offerings.id, currentEnrollments.map(c => c.offeringId))
+          )
+        )
+    : [];
+
   // لیست آزمون‌های پیش‌رو با شماره صندلی
   const upcomingExams = currentEnrollments
-    .map((c, idx) => {
+    .map(c => {
       const s = schedMap.get(c.offeringId);
       return {
         code: c.code,
@@ -190,12 +218,13 @@ export default async function StudentDashboardPage() {
         group: c.group,
         units: c.units,
         professor: c.professorId ? profMap.get(c.professorId) || 'نامشخص' : 'نامشخص',
-        examDate: s?.exam?.examDate || '1405/10/18',
-        examTime: s?.exam ? `${s.exam.startTime} تا ${s.exam.endTime}` : '۰۸:۳۰ الی ۱۰:۳۰',
-        room: s?.exam?.room || 'سالن امتحانات مرکزی',
-        seatNumber: (idx + 1) * 6 + 12,
+        examDate: s?.exam?.examDate ?? null,
+        examTime: s?.exam ? `${s.exam.startTime} تا ${s.exam.endTime}` : null,
+        room: s?.exam?.room ?? null,
+        seatNumber: examCard?.courses.find(ec => ec.enrollmentId === c.enrollmentId)?.seatNumber ?? null,
       };
     })
+    .filter(ex => ex.examDate != null)
     .slice(0, 3);
 
   return (
@@ -234,15 +263,21 @@ export default async function StudentDashboardPage() {
           <div className="flex flex-wrap md:flex-col items-start md:items-end gap-2 text-xs">
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 font-bold">
               <span>💳 وضعیت مالی:</span>
-              <span className="text-white font-black">تسویه کامل (تراز ۰ ریال)</span>
+              <span className="text-white font-black">
+                {examCard
+                  ? examCard.isFinancialCleared
+                    ? 'تسویه کامل (تراز ۰ ریال)'
+                    : `بدهی ${examCard.debt.toLocaleString('fa-IR')} ریال`
+                  : 'نامشخص'}
+              </span>
             </div>
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-500/20 border border-teal-400/30 text-teal-200 font-bold">
               <span>🪪 نظام وظیفه (سخا):</span>
-              <span className="text-white font-black">دارای معافیت تحصیلی</span>
+              <span className="text-white font-black">{me.militaryStatus || 'ثبت نشده'}</span>
             </div>
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 font-bold">
               <span>🏛️ ترم جاری:</span>
-              <span className="text-white font-black">{term?.title || 'نیمسال اول ۱۴۰۵-۱۴۰۴'}</span>
+              <span className="text-white font-black">{term?.title || 'ثبت نشده'}</span>
             </div>
           </div>
         </div>
@@ -262,11 +297,11 @@ export default async function StudentDashboardPage() {
           </div>
           <div className="my-2">
             <div className="text-2xl sm:text-3xl font-black text-slate-900 font-mono">
-              {officialGpaResult.gpa != null ? officialGpaResult.gpa.toFixed(2) : '۱۸.۴۰'}
+              {officialGpaResult.gpa.toFixed(2)}
             </div>
-            <p className="text-[11px] text-emerald-600 font-bold mt-0.5 flex items-center gap-1">
-              <span>✓</span>
-              <span>وضعیت ممتاز و استعداد درخشان</span>
+            <p className="text-[11px] text-slate-500 font-bold mt-0.5 flex items-center gap-1">
+              <span>📚</span>
+              <span>{officialGpaResult.totalUnits.toLocaleString('fa-IR')} واحد در کارنامه</span>
             </p>
           </div>
           <Link
@@ -288,11 +323,21 @@ export default async function StudentDashboardPage() {
           </div>
           <div className="my-2">
             <div className="text-2xl sm:text-3xl font-black text-slate-900 font-mono">
-              {officialGpaResult.passedUnits || 42} <span className="text-sm font-bold text-slate-400">/ ۱۴۰</span>
+              {officialGpaResult.passedUnits.toLocaleString('fa-IR')}{' '}
+              <span className="text-sm font-bold text-slate-400">
+                {requiredUnitsTotal > 0 ? `/ ${requiredUnitsTotal.toLocaleString('fa-IR')}` : ''}
+              </span>
             </div>
-            <p className="text-[11px] text-slate-500 font-bold mt-0.5">
-              ۳۰٪ از کل چارت کارشناسی تکمیل شد
-            </p>
+            {requiredUnitsTotal > 0 ? (
+              <p className="text-[11px] text-slate-500 font-bold mt-0.5">
+                {Math.round((officialGpaResult.passedUnits / requiredUnitsTotal) * 100).toLocaleString('fa-IR')}٪ از چارت مصوب
+                ({level?.title || 'مقطع ثبت‌شده'}) تکمیل شد
+              </p>
+            ) : (
+              <p className="text-[11px] text-slate-500 font-bold mt-0.5">
+                مجموع واحد چارت مصوب برای این دانشجو تعریف نشده است
+              </p>
+            )}
           </div>
           <Link
             href="/student/chart"
@@ -313,10 +358,10 @@ export default async function StudentDashboardPage() {
           </div>
           <div className="my-2">
             <div className="text-2xl sm:text-3xl font-black text-slate-900 font-mono">
-              {currentUnitsTotal || 16} <span className="text-sm font-bold text-slate-400">واحد</span>
+              {currentUnitsTotal.toLocaleString('fa-IR')} <span className="text-sm font-bold text-slate-400">واحد</span>
             </div>
             <p className="text-[11px] text-emerald-700 font-bold mt-0.5">
-              {currentEnrollments.length || 5} عنوان درسی ثبت قطعی
+              {currentEnrollments.length.toLocaleString('fa-IR')} عنوان درسی ثبت‌شده در ترم جاری
             </p>
           </div>
           <Link
@@ -337,12 +382,30 @@ export default async function StudentDashboardPage() {
             </span>
           </div>
           <div className="my-2">
-            <div className="text-base sm:text-lg font-black text-emerald-800 flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>صادر و فعال شده</span>
+            <div
+              className={`text-base sm:text-lg font-black flex items-center gap-1.5 ${
+                examCard?.isFinancialCleared ? 'text-emerald-800' : 'text-amber-700'
+              }`}
+            >
+              <span
+                className={`w-2.5 h-2.5 rounded-full ${
+                  examCard?.isFinancialCleared ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                }`}
+              ></span>
+              <span>
+                {!examCard
+                  ? 'رکورد کارت ثبت نشده'
+                  : examCard.isFinancialCleared
+                    ? '✓ کارت صادر و فعال شد'
+                    : '🔒 کارت قفل است'}
+              </span>
             </div>
             <p className="text-[11px] text-slate-500 font-bold mt-0.5">
-              شماره صندلی‌ها در سالن مشخص شد
+              {!examCard
+                ? 'برای صدور کارت به امور آموزش مراجعه کنید'
+                : examCard.isFinancialCleared
+                  ? `شماره صندلی ${examCard.courses.filter(c => c.seatNumber != null).length.toLocaleString('fa-IR')} درس تخصیص یافته است`
+                  : `بدهی مالی: ${examCard.debt.toLocaleString('fa-IR')} ریال`}
             </p>
           </div>
           <Link
@@ -572,47 +635,46 @@ export default async function StudentDashboardPage() {
           </div>
 
           <div className="space-y-2.5">
-            <div className="p-3.5 rounded-xl bg-gradient-to-r from-sky-50 to-indigo-50/50 border border-sky-200 flex items-center justify-between gap-3">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                  <strong className="text-xs font-black text-slate-900">ریاضی عمومی ۱ (کلاس مجازی)</strong>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
-                    در حال برگزاری
-                  </span>
+            {liveVirtualClasses.length === 0 ? (
+              <p className="text-xs text-slate-500 text-center py-3">
+                جلسهٔ کلاس مجازی برای دروس ترم جاری شما ثبت نشده است.
+              </p>
+            ) : (
+              liveVirtualClasses.map((vc) => (
+                <div
+                  key={vc.id}
+                  className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 ${
+                    vc.isRunning
+                      ? 'bg-gradient-to-r from-sky-50 to-indigo-50/50 border-sky-200'
+                      : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${vc.isRunning ? 'bg-emerald-500 animate-ping' : 'bg-amber-400'}`}></span>
+                      <strong className="text-xs font-black text-slate-900">{vc.courseTitle}</strong>
+                      {vc.isRunning && (
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                          در حال برگزاری
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-600">
+                      استاد: {vc.professorId ? profMap.get(vc.professorId) || 'نامشخص' : 'نامشخص'} · اتاق مجازی: {vc.meetingId}
+                      {vc.isRunning && (vc.currentAttendanceCount ?? 0) > 0
+                        ? ` · ${Number(vc.currentAttendanceCount).toLocaleString('fa-IR')} شرکت‌کننده فعال`
+                        : ''}
+                    </p>
+                  </div>
+                  <Link
+                    href="/student/virtual-classes"
+                    className="px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-black text-xs shadow-xs transition active:scale-95 whitespace-nowrap"
+                  >
+                    ورود به کلاس
+                  </Link>
                 </div>
-                <p className="text-[11px] text-slate-600">
-                  استاد: دکتر جمیل احمدی · ساعت: ۰۸:۳۰ الی ۱۰:۳۰ (۲۸ شرکت‌کننده فعال)
-                </p>
-              </div>
-              <Link
-                href="/student/virtual-classes"
-                className="px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-black text-xs shadow-xs transition active:scale-95 whitespace-nowrap"
-              >
-                ورود به کلاس
-              </Link>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                  <strong className="text-xs font-black text-slate-900">مبانی برنامه‌نویسی و وب</strong>
-                  <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.5 rounded">
-                    شروع از ۱۰:۴۵
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-600">
-                  استاد: دکتر سارا رضایی · اتاق مجازی: AFAGH-ROOM-PROG103
-                </p>
-              </div>
-              <Link
-                href="/student/virtual-classes"
-                className="px-3 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs transition whitespace-nowrap"
-              >
-                مشاهده اتاق
-              </Link>
-            </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -639,26 +701,38 @@ export default async function StudentDashboardPage() {
           </div>
 
           <div className="space-y-2.5">
-            {upcomingExams.map((ex, idx) => (
-              <div
-                key={idx}
-                className="p-3 rounded-xl bg-slate-50 border border-slate-200 hover:bg-emerald-50/40 transition flex items-center justify-between gap-3 text-xs"
-              >
-                <div className="space-y-0.5">
-                  <div className="font-black text-slate-900">{ex.title}</div>
-                  <div className="text-[11px] text-slate-500 flex items-center gap-2">
-                    <span>📅 {toShamsi(ex.examDate)}</span>
-                    <span>⏰ {ex.examTime}</span>
-                    <span>🏛️ {ex.room}</span>
+            {upcomingExams.length === 0 ? (
+              <p className="text-xs text-slate-500 text-center py-3">
+                برای ترم جاری شما زمان‌بندی امتحانی ثبت نشده است.
+              </p>
+            ) : (
+              upcomingExams.map((ex, idx) => (
+                <div
+                  key={idx}
+                  className="p-3 rounded-xl bg-slate-50 border border-slate-200 hover:bg-emerald-50/40 transition flex items-center justify-between gap-3 text-xs"
+                >
+                  <div className="space-y-0.5">
+                    <div className="font-black text-slate-900">{ex.title}</div>
+                    <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                      <span>📅 {toShamsi(ex.examDate)}</span>
+                      {ex.examTime && <span>⏰ {ex.examTime}</span>}
+                      {ex.room && <span>🏛️ {ex.room}</span>}
+                    </div>
+                  </div>
+                  <div className="text-left font-mono">
+                    <span
+                      className={`px-2.5 py-1 rounded-lg font-black text-xs ${
+                        ex.seatNumber != null
+                          ? 'bg-indigo-950 text-white'
+                          : 'bg-slate-200 text-slate-600'
+                      }`}
+                    >
+                      {ex.seatNumber != null ? `صندلی ${ex.seatNumber}` : 'بدون صندلی'}
+                    </span>
                   </div>
                 </div>
-                <div className="text-left font-mono">
-                  <span className="px-2.5 py-1 rounded-lg bg-indigo-950 text-white font-black text-xs">
-                    صندلی {ex.seatNumber}
-                  </span>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

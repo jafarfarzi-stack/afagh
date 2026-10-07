@@ -7,6 +7,7 @@ import {
   short_term_courses, short_term_learners, short_term_registrations, student_cards, students, users,
 } from '@/db/schema';
 import { getNumber, getSetting } from '@/lib/settings';
+import { currentTermFor } from '@/lib/terms';
 import { studentLedgerBalance } from '@/lib/workflow-engine';
 import { createLogger } from '@/lib/logger';
 
@@ -551,6 +552,7 @@ export async function getExamCardData(userId: number): Promise<ExamCardData | nu
   const [stu] = await db
     .select({
       studentId: students.id, studentCode: students.studentCode, entryYear: students.entryYear,
+      universityId: students.universityId,
       firstName: users.firstName, lastName: users.lastName, nationalCode: users.nationalCode,
       majorName: majors.name,
     })
@@ -561,7 +563,7 @@ export async function getExamCardData(userId: number): Promise<ExamCardData | nu
     .limit(1);
   if (!stu) return null;
 
-  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1)).limit(1);
+  const term = await currentTermFor(stu.universityId);
   const balance = await studentLedgerBalance(undefined, stu.studentId);
   const debt = Math.max(0, -Math.round(balance));
 
