@@ -17,6 +17,8 @@ import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA } from '@/lib/regulations-engine';
 import { resolveStudentCurriculum } from '@/lib/curriculum-apply';
 import { currentTermFor } from '@/lib/terms';
+import { getTermScope } from '@/lib/term-scope';
+import TermFilterChip from '@/components/TermFilterChip';
 import { getExamCardData } from '@/lib/verification';
 import Link from 'next/link';
 import { emergencyDropAction, emergencyDropFormAction } from './actions';
@@ -62,7 +64,11 @@ export default async function StudentDashboardPage() {
 
   const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
   const [level] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
-  const term = await currentTermFor(me.universityId);
+  const termScope = await getTermScope(me.universityId);
+  const filteredTerm = termScope.selectedId
+    ? termScope.terms.find(t => t.id === termScope.selectedId) ?? null
+    : null;
+  const term = filteredTerm ?? (await currentTermFor(me.universityId));
   const curriculum = await resolveStudentCurriculum(me.id);
   const requiredUnitsTotal = curriculum.version ? Number(curriculum.version.totalRequiredUnits ?? 0) : 0;
   const examCard = await getExamCardData(user.id);
@@ -229,6 +235,9 @@ export default async function StudentDashboardPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in">
+      {filteredTerm && (
+        <TermFilterChip title={filteredTerm.title} universityId={me.universityId ?? null} />
+      )}
       {/* ========================================================================= */}
       {/* 1. STUDENT HERO & PROFILE SUMMARY BANNER */}
       {/* ========================================================================= */}
@@ -276,7 +285,7 @@ export default async function StudentDashboardPage() {
               <span className="text-white font-black">{me.militaryStatus || 'ثبت نشده'}</span>
             </div>
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 font-bold">
-              <span>🏛️ ترم جاری:</span>
+              <span>🏛️ {filteredTerm ? 'نیمسال انتخابی:' : 'ترم جاری:'}</span>
               <span className="text-white font-black">{term?.title || 'ثبت نشده'}</span>
             </div>
           </div>
@@ -351,7 +360,7 @@ export default async function StudentDashboardPage() {
         {/* Current Term Units */}
         <div className="card p-4 sm:p-5 bg-white border border-slate-200 rounded-2xl shadow-xs hover:shadow-md transition flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-slate-500">واحدهای ترم جاری</span>
+            <span className="text-xs font-black text-slate-500">{filteredTerm ? 'واحدهای نیمسال انتخابی' : 'واحدهای ترم جاری'}</span>
             <span className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center text-sm font-black">
               🛒
             </span>
@@ -361,7 +370,7 @@ export default async function StudentDashboardPage() {
               {currentUnitsTotal.toLocaleString('fa-IR')} <span className="text-sm font-bold text-slate-400">واحد</span>
             </div>
             <p className="text-[11px] text-emerald-700 font-bold mt-0.5">
-              {currentEnrollments.length.toLocaleString('fa-IR')} عنوان درسی ثبت‌شده در ترم جاری
+              {currentEnrollments.length.toLocaleString('fa-IR')} عنوان درسی ثبت‌شده در {filteredTerm ? 'نیمسال انتخابی' : 'ترم جاری'}
             </p>
           </div>
           <Link
@@ -637,7 +646,7 @@ export default async function StudentDashboardPage() {
           <div className="space-y-2.5">
             {liveVirtualClasses.length === 0 ? (
               <p className="text-xs text-slate-500 text-center py-3">
-                جلسهٔ کلاس مجازی برای دروس ترم جاری شما ثبت نشده است.
+                جلسهٔ کلاس مجازی برای دروس {filteredTerm ? 'نیمسال انتخابی' : 'ترم جاری'} شما ثبت نشده است.
               </p>
             ) : (
               liveVirtualClasses.map((vc) => (
@@ -703,7 +712,7 @@ export default async function StudentDashboardPage() {
           <div className="space-y-2.5">
             {upcomingExams.length === 0 ? (
               <p className="text-xs text-slate-500 text-center py-3">
-                برای ترم جاری شما زمان‌بندی امتحانی ثبت نشده است.
+                برای {filteredTerm ? 'نیمسال انتخابی' : 'ترم جاری'} شما زمان‌بندی امتحانی ثبت نشده است.
               </p>
             ) : (
               upcomingExams.map((ex, idx) => (
@@ -745,7 +754,7 @@ export default async function StudentDashboardPage() {
           <div className="flex items-center justify-between">
             <h2 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
               <span>📋</span>
-              <span>دروس ثبت‌نام‌شده ترم جاری</span>
+              <span>{filteredTerm ? 'دروس ثبت‌نام‌شده نیمسال انتخابی' : 'دروس ثبت‌نام‌شده ترم جاری'}</span>
             </h2>
             <span className="text-xs text-slate-500 font-bold">بازگشت دستی پس از مهلت حذف و اضافه</span>
           </div>

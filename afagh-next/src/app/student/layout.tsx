@@ -3,6 +3,8 @@ import { getStudentByUser, requireRole } from '@/lib/auth';
 import { alumniOf } from '@/lib/alumni';
 import { getSiblingAccounts } from '@/lib/account-switch';
 import AccountSwitcher from '@/components/AccountSwitcher';
+import TermSwitcher from '@/components/TermSwitcher';
+import { getTermScope } from '@/lib/term-scope';
 import { logoutAction } from '../login/actions';
 import StudentNav, { StudentSidebar } from './StudentNav';
 
@@ -13,6 +15,8 @@ export default async function StudentLayout({ children }: { children: React.Reac
   if (await alumniOf(user.id)) redirect('/alumni');
 
   const me = await getStudentByUser(user.id);
+
+  const termScope = await getTermScope(me?.universityId ?? null);
 
   // حساب‌های هم‌شخص (شماره دانشجویی/کد پرسنلی دیگرِ همین کدملی) برای بنر جابه‌جایی
   const siblings = await getSiblingAccounts().catch(() => []);
@@ -32,6 +36,12 @@ export default async function StudentLayout({ children }: { children: React.Reac
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <TermSwitcher
+              terms={termScope.terms}
+              selectedId={termScope.selectedId}
+              effectiveId={termScope.effectiveId}
+              universityId={me?.universityId ?? null}
+            />
             <a
               href="/Afagh_ERP_Comprehensive_User_Manual.pdf"
               target="_blank"

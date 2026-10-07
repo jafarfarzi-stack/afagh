@@ -3,7 +3,9 @@ import { requireRole } from '@/lib/auth';
 import { logoutAction } from '../login/actions';
 import AdminNav from './AdminNav';
 import UniversitySwitcher from './UniversitySwitcher';
+import TermSwitcher from '@/components/TermSwitcher';
 import { getCurrentUniversity, listUniversities, uniTheme } from '@/lib/university-scope';
+import { getTermScope } from '@/lib/term-scope';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   // نقش‌های اصلی شاخهٔ /admin — همان گارد پیشین بدون تغییر.
@@ -33,6 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const unis = await listUniversities();
   const curUni = await getCurrentUniversity();
   const th = uniTheme(curUni.code);
+  const termScope = await getTermScope(curUni.id);
   return (
     <div className="min-h-screen bg-sky-50/70" data-uni={curUni.code}>
       <header className={`${th.header} text-white shadow-md transition-colors`}>
@@ -49,6 +52,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <TermSwitcher
+              terms={termScope.terms}
+              selectedId={termScope.selectedId}
+              effectiveId={termScope.effectiveId}
+              universityId={curUni.id}
+            />
             {canSwitchUniversity && (
               <UniversitySwitcher
                 universities={unis.map(u => ({ code: u.code, title: u.title, kind: u.kind }))}

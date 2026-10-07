@@ -7,6 +7,8 @@ import { calculateOfficialGPA, getRegulationConfig } from '@/lib/regulations-eng
 import { maskNationalCode } from '@/lib/verification';
 import { COURSE_TYPE_FA } from '@/lib/student-labels';
 import { sortTermsForTranscript, groupTermsByAcademicYear, EQUIVALENCE_GROUP_YEAR } from '@/lib/scheduling-core';
+import { getTermScope } from '@/lib/term-scope';
+import TermFilterChip from '@/components/TermFilterChip';
 import PrintButton from '../PrintButton';
 
 export const dynamic = 'force-dynamic';
@@ -31,6 +33,11 @@ export default async function StudentTranscriptPage() {
   const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
   const [level] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
   const [identity] = await db.select({ nationalCode: users.nationalCode }).from(users).where(eq(users.id, user.id)).limit(1);
+
+  const termScope = await getTermScope(me.universityId);
+  const filteredTerm = termScope.selectedId
+    ? termScope.terms.find(t => t.id === termScope.selectedId) ?? null
+    : null;
 
   const regRows = me.degreeLevelId
     ? await db.select().from(educational_regulations).where(eq(educational_regulations.degreeLevelId, me.degreeLevelId))
@@ -83,8 +90,9 @@ export default async function StudentTranscriptPage() {
   );
 
   // دسته‌بندی دروس بر اساس ترم‌ها
+  const scopedRows = filteredTerm ? allRows.filter(r => r.termId === filteredTerm.id) : allRows;
   const termsMap = new Map<number, { title: string; code: string; isCurrent: boolean; rows: typeof allRows }>();
-  for (const row of allRows) {
+  for (const row of scopedRows) {
     if (!termsMap.has(row.termId)) {
       termsMap.set(row.termId, {
         title: row.termTitle,
@@ -147,6 +155,9 @@ export default async function StudentTranscriptPage() {
 
   return (
     <div className="space-y-4">
+      {filteredTerm && (
+        <TermFilterChip title={filteredTerm.title} universityId={me.universityId ?? null} />
+      )}
       {/* دکمه چاپ و عملیات بالای سند */}
       <div className="flex items-center justify-between bg-white p-3 px-4 rounded-xl shadow-sm border border-slate-200 print:hidden">
         <div className="flex items-center gap-2">
@@ -235,7 +246,9 @@ export default async function StudentTranscriptPage() {
         {/* ۳. ریزنمرات به تفکیک سال‌های تحصیلی و نیمسال‌ها */}
         {academicYears.length === 0 && (
           <div className="col-span-full p-8 text-center text-slate-400 border border-dashed border-slate-300">
-            هنوز درسی در پرونده کارنامه ثبت نشده است.
+            {filteredTerm
+              ? `برای نیمسال «${filteredTerm.title}» درسی در کارنامه ثبت نشده است.`
+              : 'هنوز درسی در پرونده کارنامه ثبت نشده است.'}
           </div>
         )}
 

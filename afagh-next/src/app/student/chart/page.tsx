@@ -12,6 +12,9 @@ import {
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { currentTermFor } from '@/lib/terms';
+import { getTermScope } from '@/lib/term-scope';
+import TermFilterChip from '@/components/TermFilterChip';
+import TermAutoScroll from '@/components/TermAutoScroll';
 import { resolveApplicableCurriculum, type ResolvableVersion } from '@/lib/curriculum-resolution';
 import Link from 'next/link';
 
@@ -64,7 +67,11 @@ export default async function StudentCurriculumChartPage() {
 
   const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
   const [level] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
-  const term = await currentTermFor(me.universityId);
+  const termScope = await getTermScope(me.universityId);
+  const filteredTerm = termScope.selectedId
+    ? termScope.terms.find(t => t.id === termScope.selectedId) ?? null
+    : null;
+  const term = filteredTerm ?? (await currentTermFor(me.universityId));
 
   const enrollmentRows = await withUserRls(user.id, tx =>
     tx
@@ -183,9 +190,17 @@ export default async function StudentCurriculumChartPage() {
     chartRows.filter(r => currentTermCourseIds.has(r.courseId)).map(r => r.recommendedSemester ?? 0)
   );
   const currentSemesterNo = currentSemesters.size > 0 ? Math.min(...currentSemesters) : null;
+  const highlightSemesters = filteredTerm ? currentSemesters : new Set<number>();
+  const highlightAnchor = filteredTerm && currentSemesters.size > 0
+    ? `afagh-term-sem-${Math.min(...currentSemesters)}`
+    : null;
 
   return (
     <div className="space-y-4">
+      <TermAutoScroll targetId={highlightAnchor} />
+      {filteredTerm && (
+        <TermFilterChip title={filteredTerm.title} universityId={me.universityId ?? null} />
+      )}
       {/* هدر راهنمای چارت */}
       <div className="card !p-4 bg-gradient-to-r from-emerald-800 to-teal-900 text-white border-0 shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -220,24 +235,43 @@ export default async function StudentCurriculumChartPage() {
         </div>
       ) : (
         <>
+          {filteredTerm && currentSemesters.size === 0 && (
+            <p className="card p-4 text-center text-xs text-slate-500">
+              در نیمسال «{filteredTerm.title}» هیچ درسی برای شما اخذ ثبت نشده است؛ بلوکی از چارت به این نیمسال برجسته نمی‌شود.
+            </p>
+          )}
           <div className="space-y-4">
             {semesterKeys.map((semKey) => {
               const sem = semesterGroups.get(semKey)!;
               const semUnits = sem.reduce((sum, c) => sum + Number(c.chartUnits ?? c.units ?? 0), 0);
               const isCurrentSemester = currentSemesters.has(semKey);
+              const isHighlighted = highlightSemesters.has(semKey);
               const title =
                 semKey === 0
                   ? 'دروس بدون ترم پیشنهادی'
                   : semesterTitle[semKey] ?? `ترم ${semKey}`;
 
               return (
-                <div key={semKey} className="card !p-4 bg-white border border-slate-200 shadow-sm space-y-3">
+                <div
+                  key={semKey}
+                  id={`afagh-term-sem-${semKey}`}
+                  className={`card !p-4 bg-white shadow-sm space-y-3 scroll-mt-24 ${
+                    isHighlighted
+                      ? 'border-2 border-emerald-500 ring-2 ring-emerald-200'
+                      : 'border border-slate-200'
+                  }`}
+                >
                   <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                     <div className="flex items-center gap-2">
                       <span className="font-extrabold text-slate-800 text-sm">{title}</span>
                       <span className="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono">
                         {semUnits} واحد
                       </span>
+                      {isHighlighted && (
+                        <span className="text-[10px] bg-emerald-600 text-white font-bold px-1.5 py-0.5 rounded">
+                          نیمسال انتخابی: {filteredTerm?.title}
+                        </span>
+                      )}
                     </div>
                     {isCurrentSemester && (
                       <Link

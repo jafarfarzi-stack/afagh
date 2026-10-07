@@ -15,6 +15,8 @@ import {
   financial_terms,
 } from '@/db/schema';
 import { getStudentByUser, requireRole } from '@/lib/auth';
+import { getTermScope } from '@/lib/term-scope';
+import TermFilterChip from '@/components/TermFilterChip';
 import { buildPrereqContext, formatPrereq } from '@/lib/enroll-engine';
 import { evaluateStudentRegulationStatus, type StudentAcademicSummary } from '@/lib/regulations-engine';
 import { getSetting } from '@/lib/settings';
@@ -32,7 +34,13 @@ export default async function EnrollPage() {
   const me = await getStudentByUser(user.id);
   if (!me) return <p className="card">پروندهٔ دانشجویی یافت نشد.</p>;
 
-  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
+  const termScope = await getTermScope(me.universityId);
+  const filteredTerm = termScope.selectedId
+    ? termScope.terms.find(t => t.id === termScope.selectedId) ?? null
+    : null;
+  const term = filteredTerm
+    ? ((await db.select().from(academic_terms).where(eq(academic_terms.id, filteredTerm.id)).limit(1))[0] ?? null)
+    : ((await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1)))[0] ?? null);
 
   let regulationStatus: StudentAcademicSummary | null = null;
   try {
@@ -230,14 +238,26 @@ export default async function EnrollPage() {
   });
 
   return (
-    <EnrollClient
-      sajjadPortalUrl={await getSetting('SAJJAD_PORTAL_URL')}
-      student={{ id: me.id, status: me.status }}
-      term={{ id: term?.id ?? null, title: term?.title ?? '', open: !!term?.isEnrollmentOpen, isSummer: !!term?.isSummer }}
-      offerings={offerings}
-      cart={cartList}
-      cartStartedAt={cart.length ? cart.map(c => c.createdAt?.getTime?.() ?? 0).filter(Boolean).sort((a, b) => a - b)[0] || null : null}
-      regulationStatus={regulationStatus}
-    />
+    <div className="space-y-4">
+      {filteredTerm && (
+        <>
+          <TermFilterChip title={filteredTerm.title} universityId={me.universityId ?? null} />
+          {offerings.length === 0 && (
+            <p className="card p-5 text-center text-xs text-slate-500">
+              برای نیمسال «{filteredTerm.title}» هیچ گروه درسی فعالی ثبت نشده است. برای ثبت انتخاب واحد، فیلتر نیمسال را پاک کنید و نیمسال جاری را انتخاب کنید.
+            </p>
+          )}
+        </>
+      )}
+      <EnrollClient
+        sajjadPortalUrl={await getSetting('SAJJAD_PORTAL_URL')}
+        student={{ id: me.id, status: me.status }}
+        term={{ id: term?.id ?? null, title: term?.title ?? '', open: !!term?.isEnrollmentOpen, isSummer: !!term?.isSummer }}
+        offerings={offerings}
+        cart={cartList}
+        cartStartedAt={cart.length ? cart.map(c => c.createdAt?.getTime?.() ?? 0).filter(Boolean).sort((a, b) => a - b)[0] || null : null}
+        regulationStatus={regulationStatus}
+      />
+    </div>
   );
 }

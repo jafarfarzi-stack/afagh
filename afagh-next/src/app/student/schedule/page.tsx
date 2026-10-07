@@ -14,6 +14,8 @@ import {
   users,
 } from '@/db/schema';
 import { getStudentByUser, requireRole } from '@/lib/auth';
+import { getTermScope } from '@/lib/term-scope';
+import TermFilterChip from '@/components/TermFilterChip';
 import Link from 'next/link';
 import ScheduleClient from './ScheduleClient';
 
@@ -26,7 +28,13 @@ export default async function StudentSchedulePage() {
   const me = await getStudentByUser(user.id);
   if (!me) return <p className="card p-6 text-center text-slate-500">پروندهٔ دانشجویی یافت نشد.</p>;
 
-  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
+  const termScope = await getTermScope(me.universityId);
+  const filteredTerm = termScope.selectedId
+    ? termScope.terms.find(t => t.id === termScope.selectedId) ?? null
+    : null;
+  const term = filteredTerm
+    ? ((await db.select().from(academic_terms).where(eq(academic_terms.id, filteredTerm.id)).limit(1))[0] ?? null)
+    : ((await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1)))[0] ?? null);
   const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
   const [degree] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
 
@@ -139,20 +147,32 @@ export default async function StudentSchedulePage() {
   });
 
   return (
-    <ScheduleClient
-      student={{
-        name: `${user.name}`,
-        studentCode: me.studentCode,
-        majorName: major?.name || 'مهندسی کامپیوتر',
-        degreeTitle: degree?.title || 'کارشناسی پیوسته',
-        currentTermNo: me.currentTermNo || 1,
-        entryYear: me.entryYear,
-      }}
-      term={{
-        title: term?.title || 'نیمسال اول ۱۴۰۵-۱۴۰۶',
-        termCode: term?.termCode || '1051',
-      }}
-      courses={coursesList}
-    />
+    <div className="space-y-4">
+      {filteredTerm && (
+        <>
+          <TermFilterChip title={filteredTerm.title} universityId={me.universityId ?? null} />
+          {coursesList.length === 0 && (
+            <p className="card p-5 text-center text-xs text-slate-500">
+              برای نیمسال «{filteredTerm.title}» هیچ درس ثبت‌نام‌شده‌ای برای شما وجود ندارد؛ بنابراین برنامهٔ هفتگی و زمان‌بندی امتحان نمایش داده نمی‌شود.
+            </p>
+          )}
+        </>
+      )}
+      <ScheduleClient
+        student={{
+          name: `${user.name}`,
+          studentCode: me.studentCode,
+          majorName: major?.name || 'مهندسی کامپیوتر',
+          degreeTitle: degree?.title || 'کارشناسی پیوسته',
+          currentTermNo: me.currentTermNo || 1,
+          entryYear: me.entryYear,
+        }}
+        term={{
+          title: term?.title ?? 'نیمسال نامشخص',
+          termCode: term?.termCode ?? '—',
+        }}
+        courses={coursesList}
+      />
+    </div>
   );
 }
