@@ -8,6 +8,7 @@ import { hashPassword, requireRole } from '@/lib/auth';
 import { getSessionUser } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { resolveCityMinistry } from '@/lib/shared-coding';
+import { toGregorian } from '@/lib/calendar';
 import { legacyRowOfSource, legacySourceCodeFor } from './transcript-utils';
 
 /** پیکربندی اجرایی آیین‌نامه ملاک دانشجو برای محاسبات کارنامه */
@@ -817,6 +818,101 @@ export async function updateStudentProfileAction(
       await db.update(students).set(stuSet as never).where(and(
         eq(students.id, studentId),
         or(eq(students.universityId, uni.id), isNull(students.universityId)),
+      ));
+    }
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'ثبت نشد.' };
+  }
+  revalidatePath('/admin/students');
+  return { ok: true };
+}
+
+/** وصلهٔ ویرایش پروندهٔ استاد/کارمند (فرم info_combined) — فقط ADMIN */
+export type StaffProfilePatch = {
+  firstName?: string; lastName?: string; nationalCode?: string;
+  mobile?: string; email?: string; address?: string; birthDate?: string;
+  academicRank?: string; degree?: string; cooperationType?: string; staffType?: string;
+  personnelNo?: string; hireDate?: string; bankAccountNo?: string; academicBase?: string;
+  fieldOfStudy?: string; lastDegreeUniversity?: string; lastDegreeCountryCode?: string;
+  maritalStatus?: string; phone?: string; isActive?: number;
+};
+
+/** ذخیرهٔ تغییرات پروندهٔ استاد/کارمند توسط ادمین — فقط ADMIN */
+export async function updateStaffProfileAction(
+  staffId: number, patch: StaffProfilePatch,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireRole(['ADMIN']);
+  } catch {
+    return { ok: false, error: 'فقط مدیر سیستم (ADMIN) اجازه ویرایش پروندهٔ استاد را دارد.' };
+  }
+  if (!staffId || !patch || typeof patch !== 'object') return { ok: false, error: 'شناسهٔ پرونده یا مقادیر نامعتبر است.' };
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+  const [row] = await db.select({ userId: staff.userId, universityId: staff.universityId })
+    .from(staff).where(eq(staff.id, staffId)).limit(1);
+  if (!row) return { ok: false, error: 'پرونده یافت نشد.' };
+  if (row.universityId !== null && row.universityId !== uni.id) {
+    return { ok: false, error: 'پرونده متعلق به دانشگاه دیگری است.' };
+  }
+  const clean = (v: unknown, max: number) => {
+    if (v == null) return undefined;
+    const s = String(v).trim();
+    if (s === '' || s === '—') return undefined;
+    return s.slice(0, max);
+  };
+  try {
+    // ── users ──
+    const userSet: Record<string, unknown> = {};
+    for (const [k, max] of [['firstName', 100], ['lastName', 100], ['mobile', 11], ['email', 150], ['address', 300]] as const) {
+      if (k in patch) { const v = clean((patch as Record<string, unknown>)[k], max); if (v !== undefined) userSet[k] = v; }
+    }
+    if ('nationalCode' in patch) {
+      const nc = clean(patch.nationalCode, 10);
+      if (nc !== undefined) {
+        if (!/^\d{10}$/.test(nc)) return { ok: false, error: 'کد ملی باید ۱۰ رقم باشد.' };
+        const clash = await db.select({ id: users.id }).from(users)
+          .where(and(eq(users.nationalCode, nc), eq(users.universityId, uni.id))).limit(1);
+        if (clash.length && clash[0].id !== row.userId) {
+          return { ok: false, error: 'این کد ملی متعلق به کاربر دیگری است.' };
+        }
+        userSet.nationalCode = nc;
+      }
+    }
+    if ('birthDate' in patch) {
+      const raw = clean(patch.birthDate, 10);
+      if (raw !== undefined) {
+        const m = raw.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+        if (!m) return { ok: false, error: 'قالب تاریخ تولد نامعتبر است (نمونه: ۱۳۶۰/۰۱/۰۱).' };
+        const fa = (s: string) => Number(String(s).replace(/[۰-۹]/g, (ch: string) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(ch))));
+        const jy = fa(m[1]); const jm = fa(m[2]); const jd = fa(m[3]);
+        if (jy < 1300 || jy > 1450 || jm < 1 || jm > 12 || jd < 1 || jd > 31) {
+          return { ok: false, error: 'تاریخ تولد خارج از بازهٔ مجاز است.' };
+        }
+        const g = toGregorian(jy, jm, jd);
+        userSet.birthDate = `${g.gy}-${String(g.gm).padStart(2, '0')}-${String(g.gd).padStart(2, '0')}`;
+      }
+    }
+    if (Object.keys(userSet).length) {
+      await db.update(users).set(userSet as never).where(eq(users.id, row.userId));
+    }
+    // ── staff ──
+    const staffSet: Record<string, unknown> = {};
+    for (const [k, max] of [
+      ['academicRank', 50], ['degree', 50], ['cooperationType', 50], ['staffType', 50],
+      ['personnelNo', 50], ['hireDate', 10], ['bankAccountNo', 50], ['academicBase', 20],
+      ['fieldOfStudy', 200], ['lastDegreeUniversity', 200], ['lastDegreeCountryCode', 10],
+      ['maritalStatus', 20], ['phone', 20],
+    ] as const) {
+      if (k in patch) { const v = clean((patch as Record<string, unknown>)[k], max); if (v !== undefined) staffSet[k] = v; }
+    }
+    if ('isActive' in patch && (patch.isActive === 0 || patch.isActive === 1)) {
+      staffSet.isActive = patch.isActive;
+    }
+    if (Object.keys(staffSet).length) {
+      await db.update(staff).set(staffSet as never).where(and(
+        eq(staff.id, staffId),
+        or(eq(staff.universityId, uni.id), isNull(staff.universityId)),
       ));
     }
   } catch (e: unknown) {

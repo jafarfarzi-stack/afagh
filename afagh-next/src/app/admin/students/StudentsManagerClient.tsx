@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { backfillRolesAction, bulkResetPasswordsAction, bulkResetToNationalCodeAction, createStaffExpertAction, getCohortStats, getTranscript, getTranscriptRegulation, resetUserPasswordAction, saveUserRolesAction, setStudentRegulationAction, setUserActiveAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
+import { backfillRolesAction, bulkResetPasswordsAction, bulkResetToNationalCodeAction, createStaffExpertAction, getCohortStats, getTranscript, getTranscriptRegulation, resetUserPasswordAction, saveUserRolesAction, setStudentRegulationAction, setUserActiveAction, updateStaffProfileAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
 import type { RegulationConfig } from '@/lib/regulations-engine';
 import { ClientTh, ServerTh, useClientTable, type ColumnDef } from '@/components/DataTable';
 import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, studentStatusChip, studentStatusFa} from '@/lib/student-labels';
@@ -179,6 +179,48 @@ export default function StudentsManagerClient(props: {
     const r = await setUserActiveAction(userId, next).catch(() => ({ ok: false, error: 'خطا در ارتباط با سرور.' }));
     showToast(r.ok ? (next ? '✅ حساب کامل فعال شد.' : '⛔ حساب کامل غیرفعال شد (ورود/کارتابل/برنامه‌ریزی/نشست‌ها قطع شدند).') : (r.error || 'انجام نشد.'));
     if (r.ok) router.refresh();
+  };
+  // ── ذخیرهٔ واقعی ویرایش پروندهٔ استاد (F2) — خواندن ورودی‌های data-f و ارسال به سرور ──
+  const staffFormRef = useRef<HTMLDivElement>(null);
+  const [staffSaving, setStaffSaving] = useState(false);
+  const handleSaveStaff = async () => {
+    const root = staffFormRef.current;
+    if (!currentStaff) { showToast('پروندهٔ استادی انتخاب نشده است.'); return; }
+    if (!root) { showToast('فرم ویرایش باز نیست.'); return; }
+    const get = (f: string) => (root.querySelector(`[data-f="${f}"]`) as HTMLInputElement | HTMLSelectElement | null)?.value ?? '';
+    const patch: Record<string, unknown> = {};
+    const put = (k: string, v: string) => {
+      const s = (v ?? '').trim();
+      if (s !== '' && s !== '—') patch[k] = s;
+    };
+    // نام: «نام خانوادگی - نام»
+    const full = get('fullname');
+    if (full.trim() !== '' && full.trim() !== '—') {
+      const parts = full.split('-').map(s => s.trim()).filter(Boolean);
+      if (parts.length >= 2) { patch.lastName = parts[0]; patch.firstName = parts.slice(1).join(' '); }
+    }
+    for (const k of ['nationalCode', 'mobile', 'email', 'address', 'birthDate', 'academicRank', 'degree', 'cooperationType', 'staffType', 'personnelNo', 'hireDate', 'bankAccountNo', 'academicBase', 'fieldOfStudy', 'lastDegreeUniversity', 'lastDegreeCountryCode', 'phone']) {
+      put(k, get(k));
+    }
+    const marriedEl = root.querySelector('input[name="prof_married"]:checked') as HTMLInputElement | null;
+    if (marriedEl) {
+      const label = marriedEl.parentElement?.textContent || '';
+      patch.maritalStatus = label.includes('متأهل') ? 'متأهل' : 'مجرد';
+    }
+    const st = get('status');
+    if (st === 'فعال') patch.isActive = 1;
+    else if (st === 'غیرفعال') patch.isActive = 0;
+    if (!Object.keys(patch).length) { showToast('تغییری برای ذخیره نیست.'); return; }
+    setStaffSaving(true);
+    try {
+      const r = await updateStaffProfileAction(currentStaff.id, patch as Parameters<typeof updateStaffProfileAction>[1]);
+      showToast(r.ok ? '✅ اطلاعات استاد با موفقیت ذخیره شد.' : (r.error || 'انجام نشد.'));
+      if (r.ok) router.refresh();
+    } catch {
+      showToast('خطا در ارتباط با سرور.');
+    } finally {
+      setStaffSaving(false);
+    }
   };
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1595,6 +1637,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
 
           {/* ── بخش ۱ استاد: اطلاعات آموزشی (ادغام‌شده) ── */}
           {profTab === 'info_combined' && currentStaff && (
+            <div ref={staffFormRef}>
             <div key={`prof-a-${currentStaff.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 
@@ -1627,7 +1670,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                 <div className="md:col-span-2 space-y-2 border border-slate-300 p-3 rounded bg-slate-50">
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-red-700 font-bold">* نام خانوادگی و نام:</span>
-                    <input type="text" defaultValue={`${currentStaff.lastName} - ${currentStaff.firstName}`} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-bold" />
+                    <input type="text" data-f="fullname" defaultValue={`${currentStaff.lastName} - ${currentStaff.firstName}`} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-bold" />
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 items-center">
@@ -1647,7 +1690,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
 
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-red-700 font-bold">* وضعیت کلی:</span>
-                    <select defaultValue={currentStaff.isActive === 0 ? 'غیرفعال' : 'فعال'} className="col-span-2 bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-1 rounded font-bold">
+                    <select data-f="status" defaultValue={currentStaff.isActive === 0 ? 'غیرفعال' : 'فعال'} className="col-span-2 bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-1 rounded font-bold">
                       <option value="فعال">{staffEngageLabel(currentStaff)}</option>
                       <option value="غیرفعال">غیرفعال</option>
                     </select>
@@ -1655,93 +1698,89 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
 
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>رشته و گرایش تخصصی:</span>
-                    <input type="text" defaultValue={currentStaff.fieldOfStudy || currentStaff.fieldMain || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
+                    <input type="text" data-f="fieldOfStudy" defaultValue={currentStaff.fieldOfStudy || currentStaff.fieldMain || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>آخرین دانشگاه دانش‌آموختگی:</span>
-                    <input type="text" defaultValue={currentStaff.lastDegreeUniversity || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
+                    <input type="text" data-f="lastDegreeUniversity" defaultValue={currentStaff.lastDegreeUniversity || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>کشور اخذ آخرین مدرک:</span>
-                    <input type="text" defaultValue={currentStaff.lastDegreeCountryCode || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded" />
+                    <input type="text" data-f="lastDegreeCountryCode" defaultValue={currentStaff.lastDegreeCountryCode || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded" />
                     <span>رشته: <b>{currentStaff.fieldMain || '—'}</b></span>
                   </div>
                 </div>
               </div>
             </div>
-          )}
 
           {/* ── بخش ۲ استاد: اطلاعات استخدامی ── */}
-          {profTab === 'info_combined' && currentStaff && (
             <div key={`prof-b-${currentStaff.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               <div className="space-y-2 border border-slate-300 p-3 rounded bg-slate-50 max-w-2xl mx-auto">
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span className="font-bold">مدرک تحصیلی:</span>
-                  <input type="text" defaultValue={currentStaff.degree || 'دکتری تخصصی (Ph.D)'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-bold" />
+                  <input type="text" data-f="degree" defaultValue={currentStaff.degree || 'دکتری تخصصی (Ph.D)'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-bold" />
                 </div>
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span className="font-bold">نوع همکاری:</span>
-                  <input type="text" defaultValue={currentStaff.cooperationType || currentStaff.staffType || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-semibold" />
+                  <input type="text" data-f="cooperationType" defaultValue={currentStaff.cooperationType || currentStaff.staffType || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-semibold" />
                 </div>
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span className="font-bold">مرتبه علمی:</span>
-                  <input type="text" defaultValue={currentStaff.academicRank || 'استادیار'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-bold text-indigo-950" />
+                  <input type="text" data-f="academicRank" defaultValue={currentStaff.academicRank || 'استادیار'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-bold text-indigo-950" />
                 </div>
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span>شماره مستخدم:</span>
-                  <input type="text" defaultValue={currentStaff.personnelNo || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
+                  <input type="text" data-f="personnelNo" defaultValue={currentStaff.personnelNo || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
                 </div>
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span>تاریخ استخدام:</span>
-                  <input type="text" defaultValue={currentStaff.hireDate || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
+                  <input type="text" data-f="hireDate" defaultValue={currentStaff.hireDate || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
                   <span>پایه: <b className="font-mono">{currentStaff.academicBase || '—'}</b></span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span>سمت اجرایی:</span>
-                  <input type="text" defaultValue={currentStaff.staffType && currentStaff.staffType !== '—' ? currentStaff.staffType : '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
+                  <input type="text" data-f="staffType" defaultValue={currentStaff.staffType && currentStaff.staffType !== '—' ? currentStaff.staffType : '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
                 </div>
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span>شماره حساب بانکی:</span>
-                  <input type="text" defaultValue={currentStaff.bankAccountNo || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono text-left" dir="ltr" />
+                  <input type="text" data-f="bankAccountNo" defaultValue={currentStaff.bankAccountNo || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono text-left" dir="ltr" />
                 </div>
-                <div className="grid grid-cols-3 gap-2 items-center">
-                  <span>پایه استادی:</span>
-                  <input type="text" defaultValue={currentStaff.academicBase || '—'} className="w-24 bg-white border border-slate-300 px-2 py-1 rounded font-mono font-bold text-center" />
-                  <span>وضعیت: <b>{currentStaff.isActive === 0 ? 'غیرفعال' : 'فعال'}</b></span>
+                  <div className="grid grid-cols-3 gap-2 items-center">
+                    <span>پایه استادی:</span>
+                    <input type="text" data-f="academicBase" defaultValue={currentStaff.academicBase || '—'} className="w-24 bg-white border border-slate-300 px-2 py-1 rounded font-mono font-bold text-center" />
+                    <span>وضعیت: <b>{currentStaff.isActive === 0 ? 'غیرفعال' : 'فعال'}</b></span>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
 
           {/* ── بخش ۳ استاد: اطلاعات فردی ── */}
-          {profTab === 'info_combined' && currentStaff && (
             <div key={`prof-c-${currentStaff.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5 border border-slate-300 p-2.5 rounded bg-slate-50">
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>کد ملی:</span>
-                    <input type="text" defaultValue={currentStaff.nationalCode} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono font-bold" />
+                    <input type="text" data-f="nationalCode" defaultValue={currentStaff.nationalCode} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono font-bold" />
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>تاریخ تولد:</span>
-                    <input type="text" defaultValue={dateToJalali(currentStaff.birthDate)} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
+                    <input type="text" data-f="birthDate" defaultValue={dateToJalali(currentStaff.birthDate)} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>تلفن همراه:</span>
-                    <input type="text" defaultValue={currentStaff.mobile && currentStaff.mobile !== '—' ? currentStaff.mobile : '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
+                    <input type="text" data-f="mobile" defaultValue={currentStaff.mobile && currentStaff.mobile !== '—' ? currentStaff.mobile : '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>تلفن دفتر / ثابت:</span>
-                    <input type="text" defaultValue={currentStaff.phone || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
+                    <input type="text" data-f="phone" defaultValue={currentStaff.phone || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
                   </div>
                 </div>
 
                 <div className="space-y-1.5 border border-slate-300 p-2.5 rounded bg-slate-50">
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>پست الکترونیکی:</span>
-                    <input type="email" defaultValue={currentStaff.email || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono text-left" dir="ltr" />
+                    <input type="email" data-f="email" defaultValue={currentStaff.email || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono text-left" dir="ltr" />
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>وضعیت تأهل:</span>
@@ -1752,7 +1791,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span>آدرس محل سکونت:</span>
-                    <input type="text" defaultValue={currentStaff.address || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
+                    <input type="text" data-f="address" defaultValue={currentStaff.address || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
                   </div>
                   {/* ── حساب وب استاد: فعال/غیرفعال + تغییر رمز (فقط ADMIN) ── */}
                   <div className="grid grid-cols-3 gap-2 items-center border-t border-slate-200 pt-2 mt-1">
@@ -1794,6 +1833,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                   </div>
                 </div>
               </div>
+            </div>
             </div>
           )}
 
@@ -1896,8 +1936,8 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
               <button onClick={() => { setCsf({ nc: '', fn: '', ln: '', father: '', bcn: '', gender: '', mobile: '', email: '', code: '', type: '' }); setCreateStaffMsg(''); setCreateStaffOpen(true); }} className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-bold rounded shadow flex items-center gap-1">
                 <span>➕</span> <span>اضافه (Ins)</span>
               </button>
-              <button onClick={() => showToast('✅ اطلاعات استاد با موفقیت ذخیره شد (F2)')} className="px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded shadow flex items-center gap-1">
-                <span>✔️</span> <span>F2 ذخیره</span>
+              <button onClick={handleSaveStaff} disabled={staffSaving} className="px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white font-bold rounded shadow flex items-center gap-1">
+                <span>✔️</span> <span>{staffSaving ? 'در حال ذخیره…' : 'F2 ذخیره'}</span>
               </button>
               <button onClick={() => showToast('حالت ویرایش فعال شد (F4)')} className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-400 font-bold rounded flex items-center gap-1">
                 <span>✏️</span> <span>F4 ویرایش</span>

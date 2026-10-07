@@ -15,6 +15,7 @@ import {
   staff,
   departments,
   students,
+  universities,
   user_roles,
   users,
 } from '@/db/schema';
@@ -297,51 +298,28 @@ async function ensureDemoUser(nc: string) {
 /** حداکثر نشست فعال همزمان برای هر کاربر — قدیمی‌ترین‌ها حذف می‌شوند (M-4) */
 const MAX_SESSIONS_PER_USER = 8;
 
-export async function login(nationalCode: string, password: string): Promise<{ ok: boolean; error?: string; mustChange?: boolean }> {
-  // ── M-1: محدودیت تلاش ورود (۵ تلاش / ۱۰ دقیقه به ازای هر IP) ──
-  const rl = await rateLimit(`login:${await clientIp()}`, 5, 10 * 60);
-  if (!rl.ok) {
-    return { ok: false, error: `تلاش‌های ورود بیش از حد مجاز شد. ${Math.ceil(rl.retryAfterSec / 60)} دقیقهٔ دیگر دوباره تلاش کنید.` };
-  }
+export type LoginCandidate = {
+  id: number; name: string; staffCodes: string[]; universityTitle: string | null; roles: string[];
+};
 
-  const clean = nationalCode.trim();
-  // کد ملی در سطح دانشگاه یکتاست نه سراسری (یک شخص با دو دانشگاه دو حساب دارد) —
-  // همهٔ کاندیداها را به ترتیب id امتحان می‌کنیم؛ اولین تطبیق رمز برنده است.
-  let cands = await db.select().from(users).where(eq(users.nationalCode, clean)).orderBy(asc(users.id));
-  if (!cands.length) {
-    // جستجو بر اساس شماره دانشجویی
-    cands = await db
-      .select({ user: users })
-      .from(students)
-      .innerJoin(users, eq(users.id, students.userId))
-      .where(eq(students.studentCode, clean))
-      .orderBy(asc(users.id))
-      .then((rows) => rows.map((r) => r.user));
-  }
-  let u = null;
-  for (const cand of cands) {
-    if (cand.isActive && (await verifyPassword(password, cand.passwordHash))) { u = cand; break; }
-  }
-  if (!u) {
-    if (cands.some((c) => c.isActive)) return { ok: false, error: 'رمز نادرست است.' };
-    return { ok: false, error: 'کاربر یافت نشد.' };
-  }
+/** صدور نشست برای کاربرِ مشخص (پس از احراز هویت) — تنها محل ساخت sessions */
+async function issueSessionFor(userId: number): Promise<{ mustChange: boolean }> {
+  const [u] = await db.select({ mustChangePassword: users.mustChangePassword }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!u) throw new Error('کاربر یافت نشد.');
   const token = randomBytes(32).toString('hex');
 
   // ── M-4: پاکسازی و چرخش نشست‌ها ──
-  //  ۱) حذف نشست‌های منقضی (هر ورود یک پاکسازی سبک)
-  //  ۲) سقف نشست فعال هر کاربر — قدیمی‌ترین‌ها حذف می‌شوند (چرخش)
   await db.delete(sessions).where(lt(sessions.expiresAt, new Date()));
   const [activeCnt] = await db
     .select({ c: sql<number>`count(*)::int` })
     .from(sessions)
-    .where(eq(sessions.userId, u.id));
+    .where(eq(sessions.userId, userId));
   const active = activeCnt?.c ?? 0;
   if (active >= MAX_SESSIONS_PER_USER) {
     const oldSessions = await db
       .select({ token: sessions.token })
       .from(sessions)
-      .where(eq(sessions.userId, u.id))
+      .where(eq(sessions.userId, userId))
       .orderBy(asc(sessions.expiresAt))
       .limit(active - MAX_SESSIONS_PER_USER + 1); // حداقل یکی، تا جایی برای نشست جدید باز شود
     for (const s of oldSessions) {
@@ -349,11 +327,110 @@ export async function login(nationalCode: string, password: string): Promise<{ o
     }
   }
 
-  await db.insert(sessions).values({ token, userId: u.id, expiresAt: new Date(Date.now() + SESSION_MAX_AGE * 1000) });
+  await db.insert(sessions).values({ token, userId, expiresAt: new Date(Date.now() + SESSION_MAX_AGE * 1000) });
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, token, await sessionCookieOptions());
   // حساب تازه‌پذیرش‌شده با رمز پیش‌فرض → اجبار به تغییر رمز در اولین ورود
-  return { ok: true, mustChange: u.mustChangePassword === 1 };
+  return { mustChange: u.mustChangePassword === 1 };
+}
+
+/** خلاصهٔ نمایشی حساب‌ها برای صفحهٔ «انتخاب حساب» (فقط حساب‌هایی که رمز درست بوده) */
+async function candidateSummaries(userIds: number[]): Promise<LoginCandidate[]> {
+  const out: LoginCandidate[] = [];
+  for (const id of userIds) {
+    const [u] = await db
+      .select({ id: users.id, firstName: users.firstName, lastName: users.lastName, universityId: users.universityId })
+      .from(users).where(eq(users.id, id)).limit(1);
+    if (!u) continue;
+    const sts = await db.select({ staffCode: staff.staffCode }).from(staff).where(eq(staff.userId, id));
+    const rls = await db.select({ code: roles.code }).from(user_roles)
+      .innerJoin(roles, eq(roles.id, user_roles.roleId)).where(eq(user_roles.userId, id));
+    let uniTitle: string | null = null;
+    if (u.universityId) {
+      const [t] = await db.select({ title: universities.title }).from(universities).where(eq(universities.id, u.universityId)).limit(1);
+      uniTitle = t?.title ?? null;
+    }
+    out.push({
+      id: u.id,
+      name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || '—',
+      staffCodes: sts.map((s) => s.staffCode),
+      universityTitle: uniTitle,
+      roles: rls.map((r) => r.code).filter(Boolean) as string[],
+    });
+  }
+  return out;
+}
+
+export async function login(
+  identifier: string, password: string,
+): Promise<{ ok: boolean; error?: string; mustChange?: boolean; needChoice?: boolean; token?: string; candidates?: LoginCandidate[] }> {
+  // ── M-1: محدودیت تلاش ورود (۵ تلاش / ۱۰ دقیقه به ازای هر IP) ──
+  const rl = await rateLimit(`login:${await clientIp()}`, 5, 10 * 60);
+  if (!rl.ok) {
+    return { ok: false, error: `تلاش‌های ورود بیش از حد مجاز شد. ${Math.ceil(rl.retryAfterSec / 60)} دقیقهٔ دیگر دوباره تلاش کنید.` };
+  }
+
+  const clean = identifier.trim();
+  // شناسه می‌تواند «کد ملی» یا «کد پرسنلی/کاربری» باشد.
+  // کد ملی در سطح دانشگاه یکتاست نه سراسری + یک نفر ممکن است چند حساب داشته باشد؛
+  // همهٔ کاندیداها را به ترتیب id امتحان می‌کنیم.
+  const byNc = await db.select().from(users).where(eq(users.nationalCode, clean)).orderBy(asc(users.id));
+  const byStaff = await db
+    .select({ user: users })
+    .from(staff)
+    .innerJoin(users, eq(users.id, staff.userId))
+    .where(eq(staff.staffCode, clean))
+    .orderBy(asc(users.id))
+    .then((rows) => rows.map((r) => r.user));
+  const seen = new Set<number>();
+  const cands = [...byNc, ...byStaff].filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true)));
+  if (!cands.length) {
+    // جستجو بر اساس شماره دانشجویی (سازگاری قبلی)
+    const stuRows = await db
+      .select({ user: users })
+      .from(students)
+      .innerJoin(users, eq(users.id, students.userId))
+      .where(eq(students.studentCode, clean))
+      .orderBy(asc(users.id))
+      .then((rows) => rows.map((r) => r.user));
+    cands.push(...stuRows.filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true))));
+  }
+  const matched = [];
+  for (const cand of cands) {
+    if (cand.isActive && (await verifyPassword(password, cand.passwordHash))) matched.push(cand);
+  }
+  if (!matched.length) {
+    if (cands.some((c) => c.isActive)) return { ok: false, error: 'رمز نادرست است.' };
+    return { ok: false, error: 'کاربر یافت نشد.' };
+  }
+  if (matched.length === 1) {
+    const { mustChange } = await issueSessionFor(matched[0].id);
+    return { ok: true, mustChange };
+  }
+  // یک شناسه، چند حسابِ هم‌رمز → کاربر خودش انتخاب می‌کند وارد کدام کارتابل شود.
+  const { signToken } = await import('@/lib/verification');
+  const token = await signToken({ uids: matched.map((m) => m.id).join(','), ident: clean }, 5 * 60);
+  const candidates = await candidateSummaries(matched.map((m) => m.id));
+  return { ok: false, needChoice: true, token, candidates };
+}
+
+/** انتخاب حساب پس از مرحلهٔ «چند حساب با یک شناسه» — توکن امضاشدهٔ ۵دقیقه‌ای */
+export async function chooseLoginAccount(
+  token: string, userId: number,
+): Promise<{ ok: boolean; error?: string; mustChange?: boolean }> {
+  const rl = await rateLimit(`choose:${await clientIp()}`, 10, 10 * 60);
+  if (!rl.ok) {
+    return { ok: false, error: 'تلاش بیش از حد مجاز. چند دقیقه دیگر دوباره تلاش کنید.' };
+  }
+  const { verifyTokenSignature } = await import('@/lib/verification');
+  const v = await verifyTokenSignature<{ uids: string; ident: string }>(token);
+  if (!v.ok) return { ok: false, error: 'نشست انتخاب حساب منقضی شده است. دوباره وارد شوید.' };
+  const allowed = String(v.payload.uids || '').split(',').map(Number).filter(Boolean);
+  if (!allowed.includes(userId)) return { ok: false, error: 'حساب معتبر نیست.' };
+  const [u] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!u || !u.isActive) return { ok: false, error: 'حساب غیرفعال است.' };
+  const { mustChange } = await issueSessionFor(userId);
+  return { ok: true, mustChange };
 }
 
 /** تغییر رمز عبور کاربر جاری (با تأیید رمز فعلی) — حلقهٔ «تغییر اجباری رمز» */
