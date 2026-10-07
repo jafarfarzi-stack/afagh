@@ -69,6 +69,7 @@ interface StudentRequestsClientProps {
     id: number;
     name: string;
     studentCode: string;
+    nationalCode: string | null;
     majorName: string;
     degreeTitle: string;
   };
@@ -898,7 +899,7 @@ export default function StudentRequestsClient({
                   <b>بدین‌وسیله گواهی می‌شود؛</b>
                 </p>
                 <p>
-                  دانشجو <b>{student.name}</b> با کد ملی <b className="font-mono">۱۰۱۰۱۰۱۰۱۰</b> و شماره دانشجویی <b className="font-mono">{student.studentCode}</b> در مقطع تحصیلی <b>{student.degreeTitle}</b> رشته <b>{student.majorName}</b> در نیمسال تحصیلی جاری (۱۴۰۵-۱۴۰۶) اشتغال به تحصیل داشته و وضعیت آموزشی ایشان فعال و مورد تأیید معاونت آموزشی و تحصیلات تکمیلی دانشگاه می‌باشد.
+                  دانشجو <b>{student.name}</b> با کد ملی <b className="font-mono" dir="ltr">{student.nationalCode || '—'}</b> و شماره دانشجویی <b className="font-mono">{student.studentCode}</b> در مقطع تحصیلی <b>{student.degreeTitle}</b> رشته <b>{student.majorName}</b> در نیمسال تحصیلی جاری (۱۴۰۵-۱۴۰۶) اشتغال به تحصیل داشته و وضعیت آموزشی ایشان فعال و مورد تأیید معاونت آموزشی و تحصیلات تکمیلی دانشگاه می‌باشد.
                 </p>
                 {viewingCertificate.formData?.recipientOrg && (
                   <p className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">

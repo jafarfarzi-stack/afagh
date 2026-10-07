@@ -1,9 +1,11 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
 import type { ReactNode } from 'react';
-import { academic_terms, course_offerings, courses, degree_level_configs, educational_regulations, enrollments, majors } from '@/db/schema';
+import { academic_terms, course_offerings, courses, degree_level_configs, educational_regulations, enrollments, majors, users } from '@/db/schema';
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
-import { calculateOfficialGPA } from '@/lib/regulations-engine';
+import { calculateOfficialGPA, getRegulationConfig } from '@/lib/regulations-engine';
+import { maskNationalCode } from '@/lib/verification';
+import { COURSE_TYPE_FA } from '@/lib/student-labels';
 import { sortTermsForTranscript, groupTermsByAcademicYear, EQUIVALENCE_GROUP_YEAR } from '@/lib/scheduling-core';
 import PrintButton from '../PrintButton';
 
@@ -28,20 +30,26 @@ export default async function StudentTranscriptPage() {
 
   const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
   const [level] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
-  const [reg] = me.regulationId ? await db.select().from(educational_regulations).where(eq(educational_regulations.id, me.regulationId)).limit(1) : [null];
+  const [identity] = await db.select({ nationalCode: users.nationalCode }).from(users).where(eq(users.id, user.id)).limit(1);
 
-  let regPolicy = 'حذف نمره ردی پس از قبولی (EXCLUDE_IF_PASSED)';
-  try {
-    if (reg?.rulesConfig) {
-      const cfg = typeof reg.rulesConfig === 'string' ? JSON.parse(reg.rulesConfig) : reg.rulesConfig;
-      const policy = cfg?.grading_and_gpa?.failed_course_gpa_policy ?? cfg?.failed_course_gpa_policy;
-      if (policy === 'KEEP_ALWAYS') {
-        regPolicy = 'نگهداری همیشه نمره ردی در معدل (مصوب ۱۳۸۶ تا ۱۳۹۵)';
-      } else {
-        regPolicy = 'حذف نمره مردودی از معدل کل پس از قبولی (مصوب ۱۳۹۶ به بعد)';
-      }
-    }
-  } catch (_) {}
+  const regRows = me.degreeLevelId
+    ? await db.select().from(educational_regulations).where(eq(educational_regulations.degreeLevelId, me.degreeLevelId))
+    : [];
+  const assignedReg = regRows.find(r => r.id === me.regulationId) ?? null;
+  const inWindow = (r: typeof assignedReg) =>
+    !!r && r.effectiveFromYear <= me.entryYear && (r.effectiveToYear == null || r.effectiveToYear >= me.entryYear);
+  const reg =
+    (inWindow(assignedReg) ? assignedReg : null) ??
+    regRows.filter(inWindow).sort((a, b) => b.effectiveFromYear - a.effectiveFromYear)[0] ??
+    assignedReg;
+
+  const regCfg = await getRegulationConfig(me.regulationId, me.degreeLevelId);
+  const regPolicy = regCfg.grading_and_gpa?.failed_course_gpa_policy === 'KEEP_ALWAYS'
+    ? 'نگهداری همیشه نمرهٔ ردی در معدل کل'
+    : 'حذف نمرهٔ مردودی از معدل کل پس از قبولی مجدد';
+
+  const studyTypeRaw = (me.studyType || me.tuitionType || '').trim();
+  const studyTypeFa = studyTypeRaw ? COURSE_TYPE_FA[studyTypeRaw] ?? studyTypeRaw : '—';
 
   // خواندن کلیه سوابق دروس دانشجو از تمام ترم‌ها از مسیر امن RLS
   const allRows = await withUserRls(user.id, tx =>
@@ -97,11 +105,15 @@ export default async function StudentTranscriptPage() {
     termsList.map(t => ({ termCode: t.code, title: t.title, isCurrent: t.isCurrent, rows: t.rows }))
   );
 
-  // گروه‌بندی بر اساس سال تحصیلی برای نمایش
-  const academicYears = groupTermsByAcademicYear(
+  const groupedYears = groupTermsByAcademicYear(
     sortedTerms,
     t => t.rows
   );
+  const equivalenceGroups = groupedYears.filter(g => g.academicYear === EQUIVALENCE_GROUP_YEAR);
+  const academicYears = [
+    ...equivalenceGroups,
+    ...groupedYears.filter(g => g.academicYear !== EQUIVALENCE_GROUP_YEAR).reverse(),
+  ];
 
   // محاسبه رسمی معدل کل بر اساس موتور آیین‌نامه‌ها
   let officialGpaData = { gpa: 0, totalUnits: 0, passedUnits: 0, excludedCount: 0, policy: 'EXCLUDE_IF_PASSED' };
@@ -197,20 +209,22 @@ export default async function StudentTranscriptPage() {
               </tr>
               <tr className="border-b border-slate-300">
                 <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">کد ملی:</td>
-                <td className="p-1.5 font-mono text-slate-900 border-l border-slate-300" dir="ltr">۱۰۱۰۱۰۱۰۱۰</td>
+                <td className="p-1.5 font-mono text-slate-900 border-l border-slate-300" dir="ltr">{maskNationalCode(identity?.nationalCode)}</td>
                 <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">مقطع تحصیلی:</td>
-                <td className="p-1.5 font-semibold text-slate-900">{level?.title || 'کارشناسی پیوسته'}</td>
+                <td className="p-1.5 font-semibold text-slate-900">{level?.title || '—'}</td>
               </tr>
               <tr className="border-b border-slate-300">
                 <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">رشته تحصیلی:</td>
-                <td className="p-1.5 font-bold text-slate-900 border-l border-slate-300">{major?.name || 'مهندسی کامپیوتر'}</td>
-                <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">سال ورود / دوره:</td>
-                <td className="p-1.5 font-semibold text-slate-900">{me.entryYear || '۱۴۰۳'} / روزانه</td>
+                <td className="p-1.5 font-bold text-slate-900 border-l border-slate-300">{major?.name || '—'}</td>
+                <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">سال ورود / نوع دوره:</td>
+                <td className="p-1.5 font-semibold text-slate-900">{me.entryYear || '—'} / {studyTypeFa}</td>
               </tr>
               <tr>
                 <td className="p-1.5 bg-slate-50 font-medium text-slate-600 border-l border-slate-300">آیین‌نامه ملاک عمل:</td>
                 <td colSpan={3} className="p-1.5 font-semibold text-slate-900">
-                  <span className="text-indigo-950 font-bold">{reg?.title || 'آیین‌نامه آموزشی دوره کارشناسی مصوب ۱۴۰۳'}</span>
+                  <span className="text-indigo-950 font-bold">
+                    {reg?.title || regCfg.grading_and_gpa?.regulationLabel || 'آیین‌نامهٔ آموزشی دورهٔ تحصیلی'}
+                  </span>
                   <span className="text-slate-500 text-[10px] mr-2">({regPolicy})</span>
                 </td>
               </tr>
@@ -229,9 +243,16 @@ export default async function StudentTranscriptPage() {
           <div key={yearGroup.academicYear} className="col-span-full space-y-3">
             {/* هدر سال تحصیلی — بلوک معادل‌سازی اول کارنامه با عنوان خودش */}
             <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-800 text-white rounded-xl px-4 py-2.5 font-extrabold text-sm border border-indigo-700">
-              {yearGroup.academicYear === EQUIVALENCE_GROUP_YEAR
-                ? `📚 ${yearGroup.displayYear}`
-                : `📅 سال تحصیلی ${yearGroup.displayYear}`}
+              {yearGroup.academicYear === EQUIVALENCE_GROUP_YEAR ? (
+                <span>📚 {yearGroup.displayYear}</span>
+              ) : (
+                <span>
+                  📅 سال تحصیلی{' '}
+                  <bdi dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">
+                    {yearGroup.displayYear}
+                  </bdi>
+                </span>
+              )}
             </div>
             
             {/* ترم‌های این سال */}
@@ -309,8 +330,7 @@ export default async function StudentTranscriptPage() {
                         <th className="p-1 border-l border-slate-300">نام درس</th>
                         <th className="p-1 border-l border-slate-300 text-center w-12">واحد</th>
                         <th className="p-1 border-l border-slate-300 text-center w-14">نمره</th>
-                        <th className="p-1 text-center w-16">نتیجه</th>
-                        <th className="p-1 text-center w-16">وضعیت</th>
+                        <th className="p-1 text-center w-24">نتیجه / وضعیت</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -329,13 +349,13 @@ export default async function StudentTranscriptPage() {
                         const isEmergency = row.emergencyWithdrawal === 1;
                         const totalU = Number(row.units || 0);
 
-                        let statusDisplay: ReactNode = '';
-                        if (isEmergency) statusDisplay = <span className="text-rose-700">حذف اضطراری</span>;
-                        else if (isEquiv) statusDisplay = <span className="text-teal-700">معادل</span>;
-                        else if (isPassed) statusDisplay = <span className="text-emerald-700">قبول</span>;
-                        else if (isFailed) statusDisplay = <span className="text-red-700">مردود</span>;
-                        else if (isPending) statusDisplay = <span className="text-slate-500 font-normal">جاری</span>;
-                        else statusDisplay = <span className="text-slate-500">{statusFa[row.status] ?? row.status}</span>;
+                        let resultDisplay: ReactNode = '';
+                        if (isEmergency) resultDisplay = <span className="text-rose-700">حذف اضطراری</span>;
+                        else if (isEquiv) resultDisplay = <span className="text-teal-700">معادل</span>;
+                        else if (isPending) resultDisplay = <span className="text-slate-500 font-normal">جاری</span>;
+                        else if (isFailed) resultDisplay = <span className="text-red-700">مردود</span>;
+                        else if (isPassed) resultDisplay = <span className="text-emerald-700">قبول</span>;
+                        else resultDisplay = <span className="text-slate-500">{statusFa[row.status] ?? row.status}</span>;
 
                         return (
                           <tr key={row.id} className="border-b border-slate-200 hover:bg-slate-50">
@@ -357,13 +377,7 @@ export default async function StudentTranscriptPage() {
                               )}
                             </td>
                             <td className="p-1 text-center font-bold text-[10px]">
-                              {isEquiv && <span className="text-teal-700">معادل</span>}
-                              {!isEquiv && isPassed && <span className="text-emerald-700">قبول</span>}
-                              {!isEquiv && isFailed && <span className="text-red-700">مردود</span>}
-                              {isPending && <span className="text-slate-500 font-normal">جاری</span>}
-                            </td>
-                            <td className="p-1 text-center font-bold text-[10px]">
-                              {statusDisplay}
+                              {resultDisplay}
                             </td>
                           </tr>
                         );

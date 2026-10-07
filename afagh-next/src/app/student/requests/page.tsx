@@ -7,6 +7,7 @@ import {
   request_parallel_checkpoints,
   request_step_logs,
   student_requests,
+  users,
 } from '@/db/schema';
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
@@ -24,6 +25,7 @@ export default async function StudentRequestsPage() {
 
   const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
   const [level] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
+  const [identity] = await db.select({ nationalCode: users.nationalCode }).from(users).where(eq(users.id, user.id)).limit(1);
 
   // دریافت فرآیندهای فعال سیستم
   const rawProcesses = await db
@@ -143,8 +145,9 @@ export default async function StudentRequestsPage() {
         id: me.id,
         name: user.name,
         studentCode: me.studentCode,
-        majorName: major?.name || 'مهندسی کامپیوتر',
-        degreeTitle: level?.title || 'کارشناسی پیوسته',
+        nationalCode: identity?.nationalCode ?? null,
+        majorName: major?.name || '—',
+        degreeTitle: level?.title || '—',
       }}
       processes={processesList}
       myRequests={myRequestsFormatted}

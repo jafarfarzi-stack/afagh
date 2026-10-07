@@ -19,7 +19,7 @@ export const NAV_ITEMS = [
   { href: '/student/thesis-proposal', label: 'پایان‌نامه و پروپوزال من', icon: '🔬', exact: false },
 ];
 
-export function StudentSidebar({ user }: { user: { name: string } }) {
+export function StudentSidebar({ user }: { user: { name: string; studentCode?: string | null } }) {
   const pathname = usePathname();
 
   return (
@@ -32,7 +32,9 @@ export function StudentSidebar({ user }: { user: { name: string } }) {
           </div>
           <div className="overflow-hidden">
             <h3 className="font-black text-slate-900 text-xs sm:text-sm truncate">{user.name}</h3>
-            <p className="text-[11px] text-slate-500 font-mono">شماره دانشجویی: 31412001</p>
+            <p className="text-[11px] text-slate-500 font-mono">
+              شماره دانشجویی: <span dir="ltr">{user.studentCode || '—'}</span>
+            </p>
           </div>
         </div>
       </div>
