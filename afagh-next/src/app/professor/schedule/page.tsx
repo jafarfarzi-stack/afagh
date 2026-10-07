@@ -5,6 +5,15 @@ import {
   professorScheduleRows,
   universityTitle,
 } from '@/lib/professor-data';
+import { isDemoProfessorUser } from '@/lib/demo-accounts';
+import {
+  DEMO_ACADEMIC_RANK,
+  DEMO_CONTRACT_TYPE,
+  DEMO_DEPARTMENT_NAME,
+  DEMO_SCHEDULE_OFFERINGS,
+  DEMO_TERM_TITLE,
+  DEMO_UNIVERSITY_TITLE,
+} from '@/lib/demo-professor-data';
 import ProfessorScheduleClient, { type ProfessorScheduleOffering } from './ProfessorScheduleClient';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +27,26 @@ export default async function ProfessorSchedulePage() {
       <div className="card text-center p-8">
         <p className="text-slate-600 font-bold">پروندهٔ هیئت علمی یافت نشد.</p>
       </div>
+    );
+  }
+
+  const demo = await isDemoProfessorUser(user.id);
+
+  if (demo) {
+    return (
+      <ProfessorScheduleClient
+        professor={{
+          id: me.id,
+          name: user.name,
+          staffCode: me.staffCode,
+          academicRank: DEMO_ACADEMIC_RANK,
+          contractType: DEMO_CONTRACT_TYPE,
+          departmentName: DEMO_DEPARTMENT_NAME,
+          universityTitle: DEMO_UNIVERSITY_TITLE,
+        }}
+        termTitle={DEMO_TERM_TITLE}
+        initialOfferings={DEMO_SCHEDULE_OFFERINGS}
+      />
     );
   }
 

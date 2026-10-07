@@ -3,6 +3,13 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { requestContractOtpAction, signContractAction, type ContractView } from './actions';
+import {
+  DEMO_CONTRACT_DOCUMENT_CODE,
+  DEMO_CONTRACT_DOCUMENT_VERSION,
+  DEMO_CONTRACT_PAYMENT_NOTE,
+  DEMO_CONTRACT_UNIVERSITY_SEAL_CODE,
+  DEMO_FACULTY_NAME,
+} from '@/lib/demo-professor-data';
 
 export type { ContractView };
 export type ContractCourseItem = ContractView['lines'][number];
@@ -10,13 +17,14 @@ export type ContractCourseItem = ContractView['lines'][number];
 export type ContractDetails = ContractView;
 
 interface Props {
+  demo?: boolean;
   initialContract: ContractDetails;
   universityTitle: string;
 }
 
 const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
 
-export default function ProfessorContractClient({ initialContract, universityTitle }: Props) {
+export default function ProfessorContractClient({ demo = false, initialContract, universityTitle }: Props) {
   const [contract, setContract] = useState<ContractDetails>(initialContract);
   const [showSignModal, setShowSignModal] = useState<boolean>(false);
   const [otpCode, setOtpCode] = useState<string>('');
@@ -165,8 +173,17 @@ export default function ProfessorContractClient({ initialContract, universityTit
 
           <div className="text-xs space-y-1 text-left font-bold text-slate-600">
             <p>فرم استاندارد آموزشی</p>
-            <p>کد سند: <span className="font-mono">{faNum(contract.contractNo)}</span></p>
-            <p>هش سند: <span className="font-mono">{contract.digitalHash ? faNum(contract.digitalHash.slice(0, 16)) : '—'}</span></p>
+            {demo ? (
+              <>
+                <p>کد سند: {DEMO_CONTRACT_DOCUMENT_CODE}</p>
+                <p>نسخه: {DEMO_CONTRACT_DOCUMENT_VERSION}</p>
+              </>
+            ) : (
+              <>
+                <p>کد سند: <span className="font-mono">{faNum(contract.contractNo)}</span></p>
+                <p>هش سند: <span className="font-mono">{contract.digitalHash ? faNum(contract.digitalHash.slice(0, 16)) : '—'}</span></p>
+              </>
+            )}
           </div>
         </div>
 
@@ -179,8 +196,11 @@ export default function ProfessorContractClient({ initialContract, universityTit
             <div className="space-y-1">
               <span className="font-extrabold text-indigo-950 block">طرف اول (کارفرما):</span>
               <p className="text-slate-700">
-                {universityTitle || 'دانشگاه'} به نمایندگی معاونت آموزشی و تحصیلات تکمیلی
-                {contract.departmentName ? ` و گروه آموزشی ${contract.departmentName}` : ''}.
+                {demo
+                  ? `${universityTitle} به نمایندگی معاونت آموزشی و تحصیلات تکمیلی و ریاست ${DEMO_FACULTY_NAME}.`
+                  : `${universityTitle || 'دانشگاه'} به نمایندگی معاونت آموزشی و تحصیلات تکمیلی${
+                      contract.departmentName ? ` و گروه آموزشی ${contract.departmentName}` : ''
+                    }.`}
               </p>
             </div>
             <div className="space-y-1">
@@ -272,7 +292,10 @@ export default function ProfessorContractClient({ initialContract, universityTit
           </div>
 
           <p className="text-xs text-slate-600 leading-5">
-            <b>شیوه پرداخت:</b> ۵۰٪ از مبلغ قرارداد پس از برگزاری موفق امتحانات میان‌ترم و ثبت حضور و غیاب منظم به عنوان پیش‌پرداخت، و ۵۰٪ باقیمانده پس از تحویل نهایی نمرات در سامانه یکپارچه و پاسخ‌دهی به کلیه اعتراضات دانشجویان تسویه خواهد شد.
+            <b>شیوه پرداخت:</b>{' '}
+            {demo
+              ? DEMO_CONTRACT_PAYMENT_NOTE
+              : '۵۰٪ از مبلغ قرارداد پس از برگزاری موفق امتحانات میان‌ترم و ثبت حضور و غیاب منظم به عنوان پیش‌پرداخت، و ۵۰٪ باقیمانده پس از تحویل نهایی نمرات در سامانه یکپارچه و پاسخ‌دهی به کلیه اعتراضات دانشجویان تسویه خواهد شد.'}
           </p>
         </div>
 
@@ -297,7 +320,9 @@ export default function ProfessorContractClient({ initialContract, universityTit
             <div className="h-16 flex items-center justify-center">
               <div className="px-4 py-2 border-2 border-dashed border-indigo-500 rounded-xl text-indigo-900 font-extrabold text-[11px] bg-indigo-50/50">
                 🏛️ مهر و امضای دیجیتال دانشگاه
-                <div className="text-[9px] font-mono text-slate-500">در انتظار تأیید اداره آموزش</div>
+                <div className="text-[9px] font-mono text-slate-500">
+                  {demo ? DEMO_CONTRACT_UNIVERSITY_SEAL_CODE : 'در انتظار تأیید اداره آموزش'}
+                </div>
               </div>
             </div>
           </div>

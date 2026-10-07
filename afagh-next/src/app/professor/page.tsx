@@ -1,5 +1,15 @@
 import Link from 'next/link';
 import { and, count, eq, inArray } from 'drizzle-orm';
+import { isDemoProfessorUser } from '@/lib/demo-accounts';
+import {
+  DEMO_ACADEMIC_RANK,
+  DEMO_DASHBOARD_CLASSES,
+  DEMO_DASHBOARD_CONTRACT,
+  DEMO_DASHBOARD_SUMMARY,
+  DEMO_DEPARTMENT_NAME,
+  DEMO_LIVE_SESSIONS,
+  DEMO_TERM_TITLE,
+} from '@/lib/demo-professor-data';
 import { db } from '@/db';
 import {
   classrooms, course_offerings, courses, departments, electronic_documents,
@@ -21,6 +31,8 @@ export default async function ProfessorHome() {
   const user = await requireRole(['PROFESSOR']);
   const me = await getStaffByUser(user.id);
   if (!me) return <p className="card">پروندهٔ هیئت علمی یافت نشد.</p>;
+
+  const demo = await isDemoProfessorUser(user.id);
 
   const universityId = me.universityId ?? user.universityId ?? null;
   const term = await currentTermFor(universityId);
@@ -104,6 +116,39 @@ export default async function ProfessorHome() {
 
   const DAYS = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه'];
 
+  const classCards = demo
+    ? DEMO_DASHBOARD_CLASSES.map(c => ({
+        key: `${c.id}-${c.roomLabel}-${c.timeLabel}`,
+        offeringId: c.id,
+        title: c.title,
+        code: c.code,
+        group: c.groupNumber,
+        units: c.units,
+        roomLine: `🏛️ ${c.roomLabel}`,
+        timeLine: c.timeLabel,
+        enrolled: c.enrolled,
+        capacity: c.capacity,
+        isCoTaught: c.isCoTaught,
+        coTeacherName: c.coTeacherName,
+      }))
+    : classes.map(c => ({
+        key: `${c.id}-${c.roomId ?? 'x'}-${c.startTime ?? 'x'}`,
+        offeringId: c.id,
+        title: c.title,
+        code: c.code,
+        group: c.group,
+        units: c.units,
+        roomLine: c.roomId ? `🏛️ ${roomName.get(c.roomId) ?? 'کلاس نامشخص'}` : 'زمان‌بندی ثبت نشده',
+        timeLine:
+          c.dayOfWeek != null
+            ? `${DAYS[c.dayOfWeek] ?? ''} ${String(c.startTime).slice(0, 5)} الی ${String(c.endTime).slice(0, 5)}`
+            : '',
+        enrolled: c.enrolled,
+        capacity: c.capacity,
+        isCoTaught: false,
+        coTeacherName: undefined as string | undefined,
+      }));
+
   return (
     <div className="space-y-6" dir="rtl">
 
@@ -111,15 +156,23 @@ export default async function ProfessorHome() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-400 text-slate-950">
-              {term ? term.title : 'نیمسال تحصیلی جاری برای دانشگاه شما تعیین نشده است'}
+              {demo
+                ? DEMO_TERM_TITLE
+                : term
+                  ? term.title
+                  : 'نیمسال تحصیلی جاری برای دانشگاه شما تعیین نشده است'}
             </span>
             <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight mt-2">
               خوش آمدید، استاد گرامی {user.name}
             </h1>
             <p className="text-xs text-indigo-200 mt-1">
               کد پرسنلی: {faNum(me.staffCode)}
-              {me.academicRank ? ` · مرتبه علمی: ${me.academicRank}` : ''}
-              {` · گروه: ${deptName ?? 'ثبت نشده'}`}
+              {demo
+                ? ` · مرتبه علمی: ${DEMO_ACADEMIC_RANK}`
+                : me.academicRank
+                  ? ` · مرتبه علمی: ${me.academicRank}`
+                  : ''}
+              {` · گروه: ${demo ? DEMO_DEPARTMENT_NAME : deptName ?? 'ثبت نشده'}`}
             </p>
           </div>
 
@@ -142,36 +195,53 @@ export default async function ProfessorHome() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
           <div className="bg-white/10 p-3 rounded-2xl border border-white/10">
             <span className="text-indigo-200 block mb-0.5">تعداد کلاس‌های ترم:</span>
-            <span className="font-extrabold text-white text-sm">{faNum(classes.length)} گروه درسی</span>
-          </div>
-          <div className="bg-white/10 p-3 rounded-2xl border border-white/10">
-            <span className="text-indigo-200 block mb-0.5">اعلام ساعات حضور ترم:</span>
-            <span className="font-extrabold text-sm text-emerald-300">
-              {availabilityCount > 0
-                ? `${faNum(availabilityCount)} بازهٔ زمانی ثبت شده`
-                : 'ثبت نشده'}
+            <span className="font-extrabold text-white text-sm">
+              {faNum(demo ? DEMO_DASHBOARD_SUMMARY.classCount : classes.length)}{' '}
+              {DEMO_DASHBOARD_SUMMARY.classCountLabel}
             </span>
           </div>
           <div className="bg-white/10 p-3 rounded-2xl border border-white/10">
-            <span className="text-indigo-200 block mb-0.5">قرارداد حق‌التدریس:</span>
+            <span className="text-indigo-200 block mb-0.5">
+              {demo ? DEMO_DASHBOARD_SUMMARY.availabilityLabel : 'اعلام ساعات حضور ترم:'}
+            </span>
+            <span className="font-extrabold text-sm text-emerald-300">
+              {demo
+                ? DEMO_DASHBOARD_SUMMARY.availabilityValue
+                : availabilityCount > 0
+                  ? `${faNum(availabilityCount)} بازهٔ زمانی ثبت شده`
+                  : 'ثبت نشده'}
+            </span>
+          </div>
+          <div className="bg-white/10 p-3 rounded-2xl border border-white/10">
+            <span className="text-indigo-200 block mb-0.5">
+              {demo ? DEMO_DASHBOARD_SUMMARY.contractLabel : 'قرارداد حق‌التدریس:'}
+            </span>
             <span className="font-extrabold text-amber-300 text-sm">
-              {signatureStatus === 'SIGNED'
-                ? 'امضا شده'
-                : signatureStatus === 'PENDING'
-                  ? 'در انتظار امضای الکترونیک'
-                  : 'سندی ثبت نشده'}
+              {demo
+                ? DEMO_DASHBOARD_SUMMARY.contractValue
+                : signatureStatus === 'SIGNED'
+                  ? 'امضا شده'
+                  : signatureStatus === 'PENDING'
+                    ? 'در انتظار امضای الکترونیک'
+                    : 'سندی ثبت نشده'}
             </span>
           </div>
           <div className="bg-white/10 p-3 rounded-2xl border border-white/10">
             <span className="text-indigo-200 block mb-0.5">مهلت نهایی‌سازی نمرات:</span>
-            <span className="font-extrabold text-white text-sm">{gradeDeadline ? faDate(gradeDeadline) : 'تعیین نشده'}</span>
+            <span className="font-extrabold text-white text-sm">
+              {demo
+                ? DEMO_DASHBOARD_SUMMARY.gradeDeadlineValue
+                : gradeDeadline
+                  ? faDate(gradeDeadline)
+                  : 'تعیین نشده'}
+            </span>
           </div>
         </div>
       </div>
 
       <VirtualClassroomWidget
         user={{ id: user.id, name: user.name, role: 'PROFESSOR' }}
-        initialSessions={liveSessions}
+        initialSessions={demo ? DEMO_LIVE_SESSIONS : liveSessions}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
@@ -241,7 +311,9 @@ export default async function ProfessorHome() {
         <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 md:col-span-2 space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-200">
             <div>
-              <h2 className="font-extrabold text-slate-900 text-base">کلاس‌های آموزشی {term ? term.title : ''}</h2>
+              <h2 className="font-extrabold text-slate-900 text-base">
+                کلاس‌های آموزشی {demo ? DEMO_TERM_TITLE : term ? term.title : ''}
+              </h2>
               <p className="text-xs text-slate-500 mt-0.5">فهرست دروس تخصیص‌یافته به همراه عملیات سریع</p>
             </div>
             <Link href="/professor/schedule" className="text-xs font-bold text-indigo-700 hover:underline">
@@ -250,34 +322,38 @@ export default async function ProfessorHome() {
           </div>
 
           <div className="space-y-3">
-            {classes.length === 0 ? (
+            {classCards.length === 0 ? (
               <div className="text-center p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-xs font-bold text-slate-500">
                 در این نیمسال هیچ درسی به شما تخصیص نیافته است.
               </div>
-            ) : classes.map(c => (
+            ) : classCards.map(c => (
               <div
-                key={`${c.id}-${c.roomId ?? 'x'}-${c.startTime ?? 'x'}`}
-                className="flex flex-col sm:flex-row items-start sm:items-center justify-between rounded-2xl bg-slate-50 p-3.5 border border-slate-200 gap-3"
+                key={c.key}
+                className={`flex flex-col sm:flex-row items-start sm:items-center justify-between rounded-2xl p-3.5 border gap-3 ${
+                  c.isCoTaught ? 'bg-purple-50/50 border-purple-200' : 'bg-slate-50 border-slate-200'
+                }`}
               >
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="font-extrabold text-sm text-slate-900">{c.title}</p>
-                    <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 font-bold text-[10px]">گروه {faNum(c.group)}</span>
+                    <p className={`font-extrabold text-sm ${c.isCoTaught ? 'text-purple-950' : 'text-slate-900'}`}>{c.title}</p>
+                    {c.isCoTaught ? (
+                      <span className="px-2 py-0.5 rounded bg-purple-200 text-purple-950 font-bold text-[10px]">👥 درس مشترک</span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 font-bold text-[10px]">گروه {faNum(c.group)}</span>
+                    )}
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5 font-bold">
-                    {c.code} · {faNum(c.units)} واحد
-                    {c.roomId ? ` · 🏛️ ${roomName.get(c.roomId) ?? 'کلاس نامشخص'}` : ' · زمان‌بندی ثبت نشده'}
-                    {c.dayOfWeek != null
-                      ? ` · ${DAYS[c.dayOfWeek] ?? ''} ${String(c.startTime).slice(0, 5)} الی ${String(c.endTime).slice(0, 5)}`
-                      : ''}
+                  <p className={`text-xs mt-0.5 font-bold ${c.isCoTaught ? 'text-purple-800' : 'text-slate-500'}`}>
+                    {c.code} · {faNum(c.units)} واحد · {c.roomLine}
+                    {c.timeLine ? ` · ${c.timeLine}` : ''}
+                    {c.isCoTaught && c.coTeacherName ? ` · با ${c.coTeacherName}` : ''}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="badge bg-sky-100 text-sky-800 font-bold text-xs">{faNum(c.enrolled)}/{faNum(c.capacity)} دانشجو</span>
-                  <Link href={`/professor/attendance?offeringId=${c.id}`} className="px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-900 font-bold text-xs hover:bg-emerald-200 transition">
+                  <span className={`badge font-bold text-xs ${c.isCoTaught ? 'bg-purple-100 text-purple-900' : 'bg-sky-100 text-sky-800'}`}>{faNum(c.enrolled)}/{faNum(c.capacity)} دانشجو</span>
+                  <Link href={`/professor/attendance?offeringId=${c.offeringId}`} className="px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-900 font-bold text-xs hover:bg-emerald-200 transition">
                     حضور و غیاب
                   </Link>
-                  <Link href={`/professor/grades?offeringId=${c.id}`} className="px-2.5 py-1 rounded-xl bg-indigo-100 text-indigo-900 font-bold text-xs hover:bg-indigo-200 transition">
+                  <Link href={`/professor/grades?offeringId=${c.offeringId}`} className="px-2.5 py-1 rounded-xl bg-indigo-100 text-indigo-900 font-bold text-xs hover:bg-indigo-200 transition">
                     ثبت نمره
                   </Link>
                 </div>
@@ -292,7 +368,45 @@ export default async function ProfessorHome() {
             <p className="text-xs text-slate-500 mt-0.5">محاسبه حق‌التدریس بر اساس احکام مصوب</p>
           </div>
 
-          {contract ? (
+          {demo ? (
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">شماره قرارداد:</span>
+                <span className="font-mono font-bold text-slate-900">{DEMO_DASHBOARD_CONTRACT.contractNo}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">وضعیت امضا:</span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold text-[10px]">
+                  {DEMO_DASHBOARD_CONTRACT.signatureStatus}
+                </span>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                <span className="text-slate-500">ساعات تدریس مصوب:</span>
+                <span className="font-bold text-indigo-950">{DEMO_DASHBOARD_CONTRACT.approvedHoursLabel}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">مبلغ ناخالص:</span>
+                <span className="font-bold text-slate-900">
+                  {faNum(DEMO_DASHBOARD_CONTRACT.grossAmount.toLocaleString('fa-IR'))} {DEMO_DASHBOARD_CONTRACT.currency}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">خالص پرداختی پیش‌بینی:</span>
+                <span className="font-extrabold text-emerald-700 text-sm">
+                  {faNum(DEMO_DASHBOARD_CONTRACT.netAmount.toLocaleString('fa-IR'))} {DEMO_DASHBOARD_CONTRACT.currency}
+                </span>
+              </div>
+
+              <div className="pt-2">
+                <Link
+                  href="/professor/contract"
+                  className="w-full block text-center py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-extrabold text-xs shadow transition"
+                >
+                  مشاهده فرم کامل و امضای دیجیتال ←
+                </Link>
+              </div>
+            </div>
+          ) : contract ? (
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">نوع قرارداد:</span>

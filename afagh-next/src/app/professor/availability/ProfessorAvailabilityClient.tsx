@@ -3,10 +3,12 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { loadAvailabilityAction, saveAvailabilityAction, type AvailabilityCell } from './actions';
+import { DEMO_AVAILABILITY_SUMMARY } from '@/lib/demo-professor-data';
 
 export type SlotStatus = 'PREF' | 'AVAIL' | 'UNAVAIL';
 
 interface Props {
+  demo?: boolean;
   professor: {
     id: number;
     name: string;
@@ -37,7 +39,7 @@ const DEFAULT_TIME_SLOTS = [
   { id: 6, label: '۱۷:۳۰ الی ۱۹:۳۰', startTime: '17:30', endTime: '19:30', isBreak: false },
 ];
 
-export default function ProfessorAvailabilityClient({ professor, terms }: Props) {
+export default function ProfessorAvailabilityClient({ demo = false, professor, terms }: Props) {
   const [selectedTermId, setSelectedTermId] = useState<number>(terms[0]?.id || 0);
   const [notes, setNotes] = useState<string>('');
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
@@ -385,16 +387,35 @@ export default function ProfessorAvailabilityClient({ professor, terms }: Props)
             </div>
 
             <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-slate-500">نیمسال ثبت‌شده:</span>
-                <span className="font-bold text-slate-800">{currentTerm?.title}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">بازه‌های ثبت‌شده:</span>
-                <span className="font-bold text-emerald-700">
-                  {faNum(Object.values(availability).reduce((s, row) => s + Object.values(row).filter(v => v !== 'UNAVAIL').length, 0))}
-                </span>
-              </div>
+              {demo ? (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">{DEMO_AVAILABILITY_SUMMARY.trackingCodeLabel}</span>
+                    <span className="font-mono font-bold text-slate-800">{DEMO_AVAILABILITY_SUMMARY.trackingCode}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">{DEMO_AVAILABILITY_SUMMARY.processStatusLabel}</span>
+                    <span className="font-bold text-emerald-700">{DEMO_AVAILABILITY_SUMMARY.processStatus}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">{DEMO_AVAILABILITY_SUMMARY.nextNoticeLabel}</span>
+                    <span className="font-bold text-indigo-700">{DEMO_AVAILABILITY_SUMMARY.nextNotice}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">نیمسال ثبت‌شده:</span>
+                    <span className="font-bold text-slate-800">{currentTerm?.title}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">بازه‌های ثبت‌شده:</span>
+                    <span className="font-bold text-emerald-700">
+                      {faNum(Object.values(availability).reduce((s, row) => s + Object.values(row).filter(v => v !== 'UNAVAIL').length, 0))}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="flex gap-2 pt-2">

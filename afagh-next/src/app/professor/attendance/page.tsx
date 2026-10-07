@@ -8,6 +8,17 @@ import { getStaffByUser, requireRole } from '@/lib/auth';
 import { jalaliDateOf } from '@/lib/scheduling-core';
 import ProfessorAttendanceClient, { AttendanceCourseOffering, ClassSessionItem, MakeupSessionRecord, StudentInfo } from './ProfessorAttendanceClient';
 import { currentTermFor } from '@/lib/terms';
+import { isDemoProfessorUser } from '@/lib/demo-accounts';
+import {
+  DEMO_ACADEMIC_RANK,
+  DEMO_ATTENDANCE_DEFAULT_OFFERING_ID,
+  DEMO_ATTENDANCE_PROFESSOR_FALLBACK_NAME,
+  DEMO_ATTENDANCE_ROOMS,
+  DEMO_ATTENDANCE_TODAY_JALALI,
+  DEMO_TERM_TITLE,
+  demoAttendanceMakeupHistory,
+  demoAttendanceOfferings,
+} from '@/lib/demo-professor-data';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,12 +37,37 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
     );
   }
 
-  const universityId = me.universityId ?? user.universityId ?? null;
-  const term = await currentTermFor(universityId);
-  const termTitle = term?.title ?? '';
   const sp = await searchParams;
   const defaultOfferingId = sp.offeringId ? Number(sp.offeringId) : undefined;
   const todayJalali = jalaliDateOf(new Date());
+  const demo = await isDemoProfessorUser(user.id);
+
+  if (demo) {
+    const demoName = user.name || DEMO_ATTENDANCE_PROFESSOR_FALLBACK_NAME;
+    return (
+      <ProfessorAttendanceClient
+        demo
+        professor={{
+          id: me.id,
+          name: demoName,
+          staffCode: me.staffCode,
+          academicRank: DEMO_ACADEMIC_RANK,
+        }}
+        termTitle={DEMO_TERM_TITLE}
+        initialOfferings={demoAttendanceOfferings()}
+        defaultOfferingId={
+          defaultOfferingId && sp.offeringId ? defaultOfferingId : DEMO_ATTENDANCE_DEFAULT_OFFERING_ID
+        }
+        initialMakeupHistory={demoAttendanceMakeupHistory(demoName)}
+        todayJalali={DEMO_ATTENDANCE_TODAY_JALALI}
+        rooms={DEMO_ATTENDANCE_ROOMS}
+      />
+    );
+  }
+
+  const universityId = me.universityId ?? user.universityId ?? null;
+  const term = await currentTermFor(universityId);
+  const termTitle = term?.title ?? '';
 
   const sharedOfferingIds = db
     .select({ id: offering_professors.offeringId })

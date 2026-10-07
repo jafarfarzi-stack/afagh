@@ -5,6 +5,8 @@ import { getStaffByUser, requireRole } from '@/lib/auth';
 import { currentTermFor } from '@/lib/terms';
 import { ensureContractDocument } from '@/lib/contract-engine';
 import { universityTitle } from '@/lib/professor-data';
+import { isDemoProfessorUser } from '@/lib/demo-accounts';
+import { DEMO_UNIVERSITY_TITLE, demoContractView } from '@/lib/demo-professor-data';
 import ProfessorContractClient, { type ContractView } from './ProfessorContractClient';
 
 export const dynamic = 'force-dynamic';
@@ -22,6 +24,24 @@ export default async function ProfessorContractPage() {
     );
   }
 
+  const [identity] = await db.select({ nationalCode: users.nationalCode }).from(users).where(eq(users.id, user.id)).limit(1);
+  const demo = await isDemoProfessorUser(user.id);
+
+  if (demo) {
+    return (
+      <ProfessorContractClient
+        demo
+        initialContract={demoContractView({
+          professorName: user.name,
+          nationalCode: identity?.nationalCode ?? '',
+          staffCode: me.staffCode,
+          academicRank: me.academicRank ?? '',
+        })}
+        universityTitle={DEMO_UNIVERSITY_TITLE}
+      />
+    );
+  }
+
   const universityId = me.universityId ?? user.universityId ?? null;
   const term = await currentTermFor(universityId);
   if (!term) {
@@ -33,7 +53,6 @@ export default async function ProfessorContractPage() {
     );
   }
 
-  const [identity] = await db.select({ nationalCode: users.nationalCode }).from(users).where(eq(users.id, user.id)).limit(1);
   const res = await ensureContractDocument(me.id, term.id, { name: user.name, nationalCode: identity?.nationalCode ?? '' });
   if (!res.ok) {
     return (

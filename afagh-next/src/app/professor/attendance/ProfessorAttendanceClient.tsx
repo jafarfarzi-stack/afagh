@@ -3,6 +3,17 @@
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { saveSessionAttendanceAction, scheduleMakeupSessionAction } from './actions';
+import {
+  DEMO_ATTENDANCE_DEFAULT_OFFERING_ID,
+  DEMO_ATTENDANCE_DEFAULT_ROOM_ID,
+  DEMO_ATTENDANCE_DEFAULT_SESSION_NO,
+  DEMO_ATTENDANCE_PROFESSOR_FALLBACK_NAME,
+  DEMO_BIOMETRIC_BANNER,
+  DEMO_MAKEUP_FALLBACK_END_TIME,
+  DEMO_MAKEUP_FALLBACK_START_TIME,
+  DEMO_MAKEUP_FORM_DEFAULTS,
+  demoMakeupSessionNo,
+} from '@/lib/demo-professor-data';
 
 export interface StudentInfo {
   id: number;
@@ -62,6 +73,7 @@ export interface MakeupSessionRecord {
 }
 
 interface Props {
+  demo?: boolean;
   professor: {
     id: number;
     name: string;
@@ -83,6 +95,7 @@ const MAKEUP_TIME_OPTIONS = ['۰۸:۰۰ الی ۱۰:۰۰', '۱۰:۰۰ الی ۱�
 
 
 export default function ProfessorAttendanceClient({
+  demo = false,
   professor,
   termTitle,
   initialOfferings,
@@ -91,19 +104,24 @@ export default function ProfessorAttendanceClient({
   todayJalali,
   rooms: realRooms,
 }: Props) {
-  const profDisplayName = professor?.name?.trim() || 'استاد محترم';
+  const profDisplayName = professor?.name?.trim()
+    || (demo ? DEMO_ATTENDANCE_PROFESSOR_FALLBACK_NAME : 'استاد محترم');
 
   const [offerings, setOfferings] = useState<AttendanceCourseOffering[]>(initialOfferings);
   const [selectedOfferingId, setSelectedOfferingId] = useState<number>(
     defaultOfferingId && initialOfferings.some(o => o.id === defaultOfferingId)
       ? defaultOfferingId
-      : initialOfferings[0]?.id ?? 0
+      : demo
+        ? initialOfferings[0]?.id || DEMO_ATTENDANCE_DEFAULT_OFFERING_ID
+        : initialOfferings[0]?.id ?? 0
   );
 
   const [selectedSessionNo, setSelectedSessionNo] = useState<number>(
-    initialOfferings.find(o => o.id === (defaultOfferingId ?? initialOfferings[0]?.id))?.sessions[0]?.sessionNo
-    ?? initialOfferings[0]?.sessions[0]?.sessionNo
-    ?? 0
+    demo
+      ? DEMO_ATTENDANCE_DEFAULT_SESSION_NO
+      : initialOfferings.find(o => o.id === (defaultOfferingId ?? initialOfferings[0]?.id))?.sessions[0]?.sessionNo
+        ?? initialOfferings[0]?.sessions[0]?.sessionNo
+        ?? 0
   );
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -111,14 +129,18 @@ export default function ProfessorAttendanceClient({
   const [showMakeupModal, setShowMakeupModal] = useState<boolean>(false);
   const [savingSession, setSavingSession] = useState(false);
   const [savingMakeup, setSavingMakeup] = useState(false);
-  const [selectedRoomOptionId, setSelectedRoomOptionId] = useState<number>(0);
-  const [makeupForm, setMakeupForm] = useState({
-    replacedSessionNo: 0,
-    sessionDate: '',
-    sessionTime: '',
-    topic: '',
-    reason: '',
-  });
+  const [selectedRoomOptionId, setSelectedRoomOptionId] = useState<number>(
+    demo ? DEMO_ATTENDANCE_DEFAULT_ROOM_ID : 0
+  );
+  const [makeupForm, setMakeupForm] = useState(demo
+    ? { ...DEMO_MAKEUP_FORM_DEFAULTS }
+    : {
+        replacedSessionNo: 0,
+        sessionDate: '',
+        sessionTime: '',
+        topic: '',
+        reason: '',
+      });
 
   // Log of make-up sessions requested / scheduled (واقعی از class_sessions)
   const [makeupHistory, setMakeupHistory] = useState<MakeupSessionRecord[]>(initialMakeupHistory);
@@ -353,7 +375,9 @@ export default function ProfessorAttendanceClient({
     const roomName = isDirect ? selectedRoom!.name : 'در انتظار تخصیص کلاس توسط آموزش';
 
     const maxSessionNo = currentOffering.sessions.reduce((m, s) => Math.max(m, s.sessionNo), 0);
-    const newSessionNo = maxSessionNo + 1;
+    const newSessionNo = demo
+      ? demoMakeupSessionNo(makeupForm.replacedSessionNo)
+      : maxSessionNo + 1;
 
     // 1. If direct room selected, add session directly to active sessions
     if (isDirect) {
@@ -361,8 +385,10 @@ export default function ProfessorAttendanceClient({
         id: Date.now(),
         sessionNo: newSessionNo,
         sessionDate: makeupForm.sessionDate,
-        startTime: makeupForm.sessionTime.split('الی')[0]?.trim() ?? '',
-        endTime: makeupForm.sessionTime.split('الی')[1]?.trim() ?? '',
+        startTime: makeupForm.sessionTime.split('الی')[0]?.trim()
+          || (demo ? DEMO_MAKEUP_FALLBACK_START_TIME : ''),
+        endTime: makeupForm.sessionTime.split('الی')[1]?.trim()
+          || (demo ? DEMO_MAKEUP_FALLBACK_END_TIME : ''),
         roomName: selectedRoom!.name,
         topic: makeupForm.topic,
         isHeld: false,
@@ -580,33 +606,53 @@ export default function ProfessorAttendanceClient({
               🧬
             </div>
             <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-white text-xs">تأیید حضور استاد در این جلسه:</span>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                    currentSession.professorCheck ? 'bg-emerald-500 text-white' : 'bg-slate-600 text-slate-200'
-                  }`}
-                >
-                  {currentSession.professorCheck ? '✓ ثبت شده' : 'ثبت نشده'}
-                </span>
-              </div>
-              <p className="text-indigo-200 text-[11px] leading-4">
-                {currentSession.professorCheck
-                  ? `روش تأیید: ${currentSession.professorCheck.verificationMethod} · زمان ثبت: ${
-                      currentSession.professorCheck.recordedAt ?? 'ثبت نشده'
-                    }`
-                  : 'برای این جلسه رکورد تأیید حضور استاد در پایگاه داده ثبت نشده است. پس از ثبت برگهٔ حضور، اطلاعات اینجا از سامانه نمایش داده می‌شود.'}
-              </p>
+              {demo ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-white text-xs">{DEMO_BIOMETRIC_BANNER.title}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500 text-white">
+                      {DEMO_BIOMETRIC_BANNER.statusLabel}
+                    </span>
+                  </div>
+                  <p className="text-indigo-200 text-[11px] leading-4">{DEMO_BIOMETRIC_BANNER.detail}</p>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-white text-xs">تأیید حضور استاد در این جلسه:</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                        currentSession.professorCheck ? 'bg-emerald-500 text-white' : 'bg-slate-600 text-slate-200'
+                      }`}
+                    >
+                      {currentSession.professorCheck ? '✓ ثبت شده' : 'ثبت نشده'}
+                    </span>
+                  </div>
+                  <p className="text-indigo-200 text-[11px] leading-4">
+                    {currentSession.professorCheck
+                      ? `روش تأیید: ${currentSession.professorCheck.verificationMethod} · زمان ثبت: ${
+                          currentSession.professorCheck.recordedAt ?? 'ثبت نشده'
+                        }`
+                      : 'برای این جلسه رکورد تأیید حضور استاد در پایگاه داده ثبت نشده است. پس از ثبت برگهٔ حضور، اطلاعات اینجا از سامانه نمایش داده می‌شود.'}
+                  </p>
+                </>
+              )}
             </div>
           </div>
 
-          {currentSession.professorCheck?.ipAddress && (
+          {demo ? (
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="px-2.5 py-1 rounded-lg bg-white/10 text-emerald-300 font-mono text-[11px] border border-white/10">
+                {DEMO_BIOMETRIC_BANNER.ipLabel}
+              </span>
+            </div>
+          ) : currentSession.professorCheck?.ipAddress ? (
             <div className="flex items-center gap-2 shrink-0">
               <span className="px-2.5 py-1 rounded-lg bg-white/10 text-emerald-300 font-mono text-[11px] border border-white/10" dir="ltr">
                 IP: {currentSession.professorCheck.ipAddress}
               </span>
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* Status Alert */}
@@ -648,7 +694,9 @@ export default function ProfessorAttendanceClient({
 
             {currentSession.professorStatus === 'VERIFIED_PRESENT' && (
               <p className="text-xs text-emerald-800 font-bold leading-5">
-                ✓ حضور شما در این جلسه آموزشی در پایگاه داده ثبت شده است.
+                {demo
+                  ? `✓ حضور شما در این جلسه آموزشی از طریق سیستم گیت تردد و منطق پیوستگی ثبت گردیده و ${DEMO_BIOMETRIC_BANNER.payrollNote}`
+                  : '✓ حضور شما در این جلسه آموزشی در پایگاه داده ثبت شده است.'}
               </p>
             )}
           </div>
@@ -767,7 +815,7 @@ export default function ProfessorAttendanceClient({
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               با تغییر جلسه در بالای صفحه، اطلاعات و وضعیت‌های همان جلسه نمایش داده می‌شود.
-              {recordedCount < totalStudents
+              {!demo && recordedCount < totalStudents
                 ? ` تا این لحظه برای ${faNum(recordedCount)} نفر از ${faNum(totalStudents)} دانشجو وضعیتی ثبت نشده است.`
                 : ''}
             </p>

@@ -6,6 +6,13 @@ import {
   professorScheduleRows,
   universityTitle,
 } from '@/lib/professor-data';
+import { isDemoProfessorUser } from '@/lib/demo-accounts';
+import {
+  DEMO_CERTIFICATE_UNIVERSITY_TITLE,
+  DEMO_PROFESSOR_FALLBACK_NAME,
+  DEMO_TERM_TITLE,
+  demoGradesOfferings,
+} from '@/lib/demo-professor-data';
 import { DEFAULT_RUBRIC } from './grades-core';
 import ProfessorGradesClient, { type GradingCourseOffering } from './ProfessorGradesClient';
 import type { GradeAppealItem, StudentGradeItem } from './types';
@@ -50,10 +57,29 @@ export default async function ProfessorGradesPage({
     );
   }
 
+  const defaultOfferingId = sp.offeringId ? Number(sp.offeringId) : undefined;
+  const demo = await isDemoProfessorUser(user.id);
+
+  if (demo) {
+    const demoName = user.name || DEMO_PROFESSOR_FALLBACK_NAME;
+    return (
+      <ProfessorGradesClient
+        professor={{
+          id: me.id,
+          name: demoName,
+          staffCode: me.staffCode,
+          universityTitle: DEMO_CERTIFICATE_UNIVERSITY_TITLE,
+        }}
+        termTitle={DEMO_TERM_TITLE}
+        initialOfferings={demoGradesOfferings(demoName, me.staffCode)}
+        defaultOfferingId={defaultOfferingId}
+      />
+    );
+  }
+
   const universityId = me.universityId ?? user.universityId ?? null;
   const term = await currentTermFor(universityId);
   const termTitle = term?.title ?? '';
-  const defaultOfferingId = sp.offeringId ? Number(sp.offeringId) : undefined;
 
   if (!term) {
     return (
