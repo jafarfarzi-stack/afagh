@@ -42,6 +42,7 @@ import {
 
 interface RosterTabProps {
   offering: GradingCourseOffering;
+  termTitle: string;
   lastAutoSaveTime: string;
   onRequestFinalizeOtp: () => Promise<{ ok: boolean; demoOtp?: string; error?: string }>; // مودال OTP در همین تب مدیریت می‌شود
   dispatch: GradesDispatch;
@@ -53,7 +54,7 @@ type OptimisticUpdate = {
   value: number | undefined;
 };
 
-export default function RosterTab({ offering, lastAutoSaveTime, onRequestFinalizeOtp, dispatch }: RosterTabProps) {
+export default function RosterTab({ offering, termTitle, lastAutoSaveTime, onRequestFinalizeOtp, dispatch }: RosterTabProps) {
   const [searchStudentQuery, setSearchStudentQuery] = useState('');
   const [saveState, saveAction, isSaving] = useActionState<SaveGradeState, SaveGradePayload>(saveGradeAction, { ok: true });
   // زمان آخرین ذخیرهٔ موفق از پاسخ واقعی سرور (نه تایمر محلی)
@@ -105,11 +106,11 @@ export default function RosterTab({ offering, lastAutoSaveTime, onRequestFinaliz
         offeringCode: offering.code,
         offeringTitle: offering.title,
         offeringUnits: offering.units,
-        termTitle: 'نیمسال جاری',
+        termTitle: termTitle,
         studentId: st.studentId,
         studentCode: st.studentCode,
         fullName: st.fullName,
-        entryYear: 1403,
+        entryYear: st.entryYear ?? 0,
         field,
         value: bounded === undefined ? null : bounded,
         rubricMax: rubricFieldMax(field, offering.rubric),
@@ -131,12 +132,31 @@ export default function RosterTab({ offering, lastAutoSaveTime, onRequestFinaliz
       offeringCode: offering.code,
       offeringTitle: offering.title,
       offeringUnits: offering.units,
-      termTitle: 'نیمسال جاری',
+      termTitle: termTitle,
       professorRank: '',
     });
   };
 
   const rows = filterStudents(optimisticStudents, searchStudentQuery);
+
+  if (optimisticStudents.length === 0) {
+    return (
+      <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-3">
+        <div>
+          <h3 className="font-black text-slate-900 text-base">ورود نمرات درس {offering.title} (گروه {faNum(offering.groupNumber)})</h3>
+          <p className="text-xs text-slate-500 mt-0.5">جدول نمرات بر اساس ثبت‌نام‌های فعال همین ارائه ساخته می‌شود.</p>
+        </div>
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center space-y-1">
+          <div className="text-3xl">📝</div>
+          <p className="font-black text-slate-700 text-sm">هنوز داده‌ای ثبت نشده است</p>
+          <p className="text-xs text-slate-500 leading-6">
+            برای این گروه درسی هیچ دانشجویی ثبت‌نام نشده است. پس از ثبت‌نام دانشجویان در این ارائه،
+            جدول ورود نمرات همین‌جا فعال می‌شود.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const renderScoreInput = (st: StudentGradeItem, field: StudentGradeField, max: number, color: 'indigo' | 'purple' | 'slate', locked: boolean) => {
     const cls = locked

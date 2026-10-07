@@ -1,6 +1,31 @@
 import 'server-only';
 import crypto from 'crypto';
+import { and, eq, exists, inArray, or, sql, type SQL } from 'drizzle-orm';
+import { db } from '@/db';
+import {
+  class_sessions,
+  course_offerings,
+  courses,
+  offering_professors,
+  schedules,
+  staff,
+  users,
+  virtual_class_recordings,
+  virtual_classrooms,
+} from '@/db/schema';
+import { jalaliDateOf } from '@/lib/scheduling-core';
 import { getBbbConfig } from '@/lib/settings';
+
+/** تاریخ جلالی امروز به شکل YYYY/MM/DD (هم‌راستا با ستون sessionDate) */
+function todayJalali(): string {
+  return jalaliDateOf(new Date());
+}
+
+/** اندیهٔ روز هفتهٔ جلالی: ۰ = شنبه … ۵ = پنج‌شنبه (هم‌راستا با schedules.dayOfWeek) */
+function jalaliWeekdayIndex(d: Date): number {
+  const g = d.getDay();
+  return (g + 1) % 6;
+}
 
 export interface VirtualClassSession {
   courseId: number;
@@ -61,45 +86,116 @@ export async function getBigBlueButtonJoinUrl({
 }
 
 /**
- * لیست جلسات آنلاین فعال امروز بر اساس چارت درسی
+ * لیست جلسات آنلاین امروز از جدول واقعی `virtual_classrooms`
+ *
+ * منبع داده: `virtual_classrooms` × `course_offerings` × `courses` × `staff`
+ * (نام مدرس) و شمارش ضبط‌ها از `virtual_class_recordings`.
+ * زمان شروع/پایان از `schedules` (ساعت کلاس همان روز هفته) خوانده می‌شود؛
+ * اگر برای روز جاری برنامه‌ای ثبت نشده باشد، ساعت‌ها «—» می‌مانند.
+ *
+ * اگر هیچ کلاس مجازی‌ای ثبت نشده باشد، آرایهٔ خالی برمی‌گردد تا رابط کاربری
+ * حالت خالی صادقانه نمایش دهد (نه دادهٔ ساختگی).
+ *
+ * `universityId`/`staffId` اختیاری‌اند و برای ایزوله‌سازی چنددانشگاهی استفاده
+ * می‌شوند: هر استاد/دانشجو فقط جلسات دانشگاه و کلاس‌های خودش را می‌بیند.
  */
-export async function getTodayLiveClasses(): Promise<VirtualClassSession[]> {
-  return [
-    {
-      courseId: 101,
-      courseCode: '۱۱۱۲۱۰۱',
-      courseTitle: 'ریاضی عمومی ۱ (کلاس مجازی)',
-      professorName: 'دکتر جمیل احمدی',
-      meetingId: 'AFAGH-ROOM-MATH101',
-      startTime: '۰۸:۳۰',
-      endTime: '۱۰:۳۰',
-      isRunning: true,
-      activeParticipantsCount: 28,
-      recordingsCount: 8,
-    },
-    {
-      courseId: 102,
-      courseCode: '۱۱۱۲۱۰۳',
-      courseTitle: 'مبانی برنامه‌نویسی و وب',
-      professorName: 'دکتر سارا رضایی',
-      meetingId: 'AFAGH-ROOM-PROG103',
-      startTime: '۱۰:۴۵',
-      endTime: '۱۲:۴۵',
-      isRunning: true,
-      activeParticipantsCount: 32,
-      recordingsCount: 10,
-    },
-    {
-      courseId: 103,
-      courseCode: '۱۱۱۲۲۰۱',
-      courseTitle: 'ساختمان داده‌ها و الگوریتم‌ها',
-      professorName: 'دکتر علی حسینی',
-      meetingId: 'AFAGH-ROOM-DATA201',
-      startTime: '۱۴:۰۰',
-      endTime: '۱۶:۰۰',
-      isRunning: false,
-      activeParticipantsCount: 0,
-      recordingsCount: 6,
-    },
-  ];
+export async function getTodayLiveClasses(opts?: {
+  universityId?: number | null;
+  staffId?: number | null;
+}): Promise<VirtualClassSession[]> {
+  const cond: SQL[] = [];
+  if (opts?.universityId) cond.push(eq(virtual_classrooms.universityId, opts.universityId));
+  if (opts?.staffId) {
+    const mine = or(
+      eq(course_offerings.professorId, opts.staffId),
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(offering_professors)
+          .where(
+            and(
+              eq(offering_professors.offeringId, course_offerings.id),
+              eq(offering_professors.staffId, opts.staffId),
+            ),
+          ),
+      ),
+    );
+    if (mine) cond.push(mine);
+  }
+
+  const rows = await db
+    .select({
+      classroomId: virtual_classrooms.id,
+      offeringId: virtual_classrooms.courseOfferingId,
+      meetingId: virtual_classrooms.bbbMeetingId,
+      courseCode: courses.code,
+      courseTitle: courses.title,
+      professorName: sql<string>`coalesce(${users.firstName} || ' ' || ${users.lastName}, '')`,
+      isRunning: virtual_classrooms.isRunning,
+      activeParticipantsCount: virtual_classrooms.currentAttendanceCount,
+    })
+    .from(virtual_classrooms)
+    .innerJoin(course_offerings, eq(course_offerings.id, virtual_classrooms.courseOfferingId))
+    .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+    .leftJoin(staff, eq(staff.id, course_offerings.professorId))
+    .leftJoin(users, eq(users.id, staff.userId))
+    .where(cond.length ? and(...cond) : undefined);
+
+  if (rows.length === 0) return [];
+
+  const offeringIds = rows.map(r => r.offeringId);
+  const classroomIds = rows.map(r => r.classroomId);
+
+  const [recordings, schedulesToday, sessionsToday] = await Promise.all([
+    db
+      .select({ classroomId: virtual_class_recordings.classroomId, n: sql<number>`count(*)::int` })
+      .from(virtual_class_recordings)
+      .where(inArray(virtual_class_recordings.classroomId, classroomIds))
+      .groupBy(virtual_class_recordings.classroomId),
+    db
+      .select({
+        offeringId: schedules.offeringId,
+        startTime: schedules.startTime,
+        endTime: schedules.endTime,
+      })
+      .from(schedules)
+      .where(
+        and(
+          inArray(schedules.offeringId, offeringIds),
+          eq(schedules.scheduleType, 'CLASS'),
+          eq(schedules.dayOfWeek, jalaliWeekdayIndex(new Date())),
+        ),
+      ),
+    db
+      .select({
+        offeringId: class_sessions.offeringId,
+        startTime: class_sessions.startTime,
+        endTime: class_sessions.endTime,
+      })
+      .from(class_sessions)
+      .where(and(inArray(class_sessions.offeringId, offeringIds), eq(class_sessions.sessionDate, todayJalali()))),
+  ]);
+
+  const recordingCount = new Map(recordings.map(r => [r.classroomId, Number(r.n)]));
+  const timeOf = new Map<number, { start: string; end: string }>();
+  for (const s of sessionsToday) {
+    timeOf.set(s.offeringId, { start: String(s.startTime).slice(0, 5), end: String(s.endTime).slice(0, 5) });
+  }
+  for (const s of schedulesToday) {
+    if (timeOf.has(s.offeringId)) continue;
+    timeOf.set(s.offeringId, { start: String(s.startTime).slice(0, 5), end: String(s.endTime).slice(0, 5) });
+  }
+
+  return rows.map(r => ({
+    courseId: r.offeringId,
+    courseCode: r.courseCode,
+    courseTitle: r.courseTitle,
+    professorName: r.professorName || '—',
+    meetingId: r.meetingId,
+    startTime: timeOf.get(r.offeringId)?.start ?? '—',
+    endTime: timeOf.get(r.offeringId)?.end ?? '—',
+    isRunning: (r.isRunning ?? 0) === 1,
+    activeParticipantsCount: Number(r.activeParticipantsCount ?? 0),
+    recordingsCount: recordingCount.get(r.classroomId) ?? 0,
+  }));
 }

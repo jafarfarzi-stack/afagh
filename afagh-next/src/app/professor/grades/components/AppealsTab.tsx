@@ -90,7 +90,7 @@ export default function AppealsTab({ offering, dispatch, onOpenAppeal }: Appeals
           کارتابل رسیدگی به اعتراضات دانشجویان (درس {offering.title})
         </h3>
         <p className="text-xs text-slate-500 mt-0.5">
-          مهلت رسیدگی استاد طبق آیین‌نامه: {faNum(5)} روز کاری از ثبت اعتراض.
+          مهلت رسیدگی استاد از تنظیمات ترم (میدان professorAppealSlaDays) خوانده می‌شود.
         </p>
       </div>
 

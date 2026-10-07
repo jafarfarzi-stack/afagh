@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { academic_terms, departments, professor_term_contracts } from '@/db/schema';
+import { departments, professor_term_contracts } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import ProfessorAvailabilityClient from './ProfessorAvailabilityClient';
 import { currentTermFor, termsFor } from '@/lib/terms';
@@ -10,18 +10,26 @@ export const dynamic = 'force-dynamic';
 export default async function ProfessorAvailabilityPage() {
   const user = await requireRole(['PROFESSOR']);
   const me = await getStaffByUser(user.id);
+
+  if (!me) {
+    return (
+      <div className="card text-center p-8">
+        <p className="text-slate-600 font-bold">پروندهٔ هیئت علمی یافت نشد.</p>
+      </div>
+    );
+  }
+
   const uniId = me.universityId ?? user.universityId ?? null;
   const terms = await termsFor(uniId);
   const term = await currentTermFor(uniId);
 
-  // اطلاعات واقعی از پروندهٔ استاف + گروه آموزشی
-  const [dep] = me?.departmentId
+  const [dep] = me.departmentId
     ? await db.select({ name: departments.name }).from(departments).where(eq(departments.id, me.departmentId)).limit(1)
     : [];
-  const [termContract] = term
+  const [termContract] = me && term
     ? await db.select({ baseDutyUnits: professor_term_contracts.baseDutyUnits })
         .from(professor_term_contracts)
-        .where(and(eq(professor_term_contracts.staffId, me?.id ?? -1), eq(professor_term_contracts.termId, term.id)))
+        .where(and(eq(professor_term_contracts.staffId, me.id), eq(professor_term_contracts.termId, term.id)))
         .limit(1)
     : [];
   const maxWeeklyUnits = Number(termContract?.baseDutyUnits ?? 0);
@@ -29,12 +37,12 @@ export default async function ProfessorAvailabilityPage() {
   return (
     <ProfessorAvailabilityClient
       professor={{
-        id: me?.id ?? 0,
+        id: me.id,
         name: user.name,
-        staffCode: me?.staffCode ?? '',
-        academicRank: me?.academicRank ?? '',
-        contractType: me?.cooperationType ?? (me?.employmentType ?? ''),
-        departmentName: dep?.name ?? '—',
+        staffCode: me.staffCode,
+        academicRank: me.academicRank ?? '',
+        contractType: me.cooperationType ?? me.employmentType ?? '',
+        departmentName: dep?.name ?? '',
         maxWeeklyUnits,
       }}
       terms={terms.map(t => ({

@@ -2,8 +2,9 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { electronic_documents, users } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
-import { currentTerm } from '@/lib/payroll-engine';
+import { currentTermFor } from '@/lib/terms';
 import { ensureContractDocument } from '@/lib/contract-engine';
+import { universityTitle } from '@/lib/professor-data';
 import ProfessorContractClient, { type ContractView } from './ProfessorContractClient';
 
 export const dynamic = 'force-dynamic';
@@ -21,11 +22,13 @@ export default async function ProfessorContractPage() {
     );
   }
 
-  const term = await currentTerm();
+  const universityId = me.universityId ?? user.universityId ?? null;
+  const term = await currentTermFor(universityId);
   if (!term) {
     return (
-      <div className="card text-center p-8">
-        <p className="text-slate-600 font-bold">ترم جاری تعیین نشده است — با کارشناس آموزش هماهنگ کنید.</p>
+      <div className="card text-center p-8 space-y-2">
+        <p className="text-slate-600 font-bold">نیمسال تحصیلی جاری برای دانشگاه شما تعیین نشده است.</p>
+        <p className="text-xs text-slate-500">پس از تعیین نیمسال جاری توسط اداره آموزش، فرم قرارداد تدریس همین‌جا ساخته می‌شود.</p>
       </div>
     );
   }
@@ -40,9 +43,22 @@ export default async function ProfessorContractPage() {
     );
   }
 
+  if (res.contract.lines.length === 0) {
+    return (
+      <div className="card text-center p-8 space-y-2">
+        <p className="text-slate-600 font-bold">در این نیمسال درسی به شما تخصیص نیافته است.</p>
+        <p className="text-xs text-slate-500">
+          تا زمانی که جدول دروس مصوب شما خالی باشد، مبلغ و ساعات قرارداد قابل محاسبه نیست.
+        </p>
+      </div>
+    );
+  }
+
   const [doc] = await db
     .select({ hash: electronic_documents.documentHash, signedAt: electronic_documents.signedAt })
     .from(electronic_documents).where(eq(electronic_documents.id, res.documentId)).limit(1);
+
+  const universityTitleText = await universityTitle(universityId);
 
   const contract: ContractView = {
     ...res.contract,
@@ -51,5 +67,10 @@ export default async function ProfessorContractPage() {
     digitalHash: doc?.hash ?? null,
   };
 
-  return <ProfessorContractClient initialContract={contract} />;
+  return (
+    <ProfessorContractClient
+      initialContract={contract}
+      universityTitle={universityTitleText ?? ''}
+    />
+  );
 }

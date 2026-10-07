@@ -1,5 +1,6 @@
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import { professorPanel } from '@/lib/bi-engine';
+import { currentTermFor } from '@/lib/terms';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,6 +54,17 @@ export default async function ProfessorEvaluationPage() {
     return <div className="p-6 text-rose-300" dir="rtl">پروندهٔ پرسنلی شما یافت نشد؛ با اداره کارگزینی تماس بگیرید.</div>;
   }
 
+  const universityId = me.universityId ?? user.universityId ?? null;
+  const myTerm = await currentTermFor(universityId);
+  if (!myTerm) {
+    return (
+      <div className="p-6 text-center space-y-2" dir="rtl">
+        <p className="text-rose-300 font-bold">نیمسال تحصیلی جاری برای دانشگاه شما تعیین نشده است.</p>
+        <p className="text-xs text-slate-400">کارنامهٔ ارزشیابی پس از تعیین نیمسال جاری در دسترس قرار می‌گیرد.</p>
+      </div>
+    );
+  }
+
   let panel;
   try {
     panel = await professorPanel(me.id);
@@ -60,10 +72,31 @@ export default async function ProfessorEvaluationPage() {
     return <div className="p-6 text-rose-300" dir="rtl">{(err as Error).message}</div>;
   }
 
+  const crossUniversity = panel.term !== myTerm.title;
+  const hasAnyData = panel.axes.length > 0 || panel.trend.length > 0 || panel.words.length > 0 || panel.respondents > 0;
+
   const maxWord = panel.words.reduce((m, w) => Math.max(m, w.c), 1);
 
   return (
     <div className="space-y-5 p-4" dir="rtl">
+      {crossUniversity && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-900">
+          ⚠ موتار ارزشیابی برای این صفحه ترم «{panel.term}» را نگه داشته است، در حالی که نیمسال جاری دانشگاه شما
+          «{myTerm.title}» است. پس از همگام‌سازی ترم موتور، داده‌های نیمسال جاری نمایش داده می‌شود.
+        </div>
+      )}
+
+      {!hasAnyData && (
+        <div className="card p-10 text-center space-y-2">
+          <div className="text-4xl">📈</div>
+          <h2 className="text-lg font-bold">هنوز داده‌ای ثبت نشده است</h2>
+          <p className="text-sm text-gray-500 leading-7">
+            تا این لحظه هیچ پرسش‌نامهٔ ارزشیابی تدریس برای شما اجرا نشده و هیچ پاسخی از دانشجویان ثبت نشده است.
+            پس از اجرای دورهٔ ارزشیابی توسط اداره آموزش، نمره و شاخص‌ها همین‌جا نمایش داده می‌شود.
+          </p>
+        </div>
+      )}
+
       <div className="rounded-3xl border border-indigo-700/50 bg-gradient-to-l from-indigo-950 via-slate-900 to-indigo-900 p-6 text-white shadow-xl">
         <h1 className="text-xl font-extrabold">📈 کارنامهٔ ارزشیابی من</h1>
         <p className="mt-1 text-sm text-indigo-200">
@@ -110,7 +143,7 @@ export default async function ProfessorEvaluationPage() {
           <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4">
             <h2 className="mb-3 font-bold text-white">📉 روند دوره‌ای</h2>
             {panel.trend.length === 0 ? (
-              <p className="text-sm text-slate-400">سابقهٔ ارزشیابی ثبت نشده است.</p>
+              <p className="text-sm text-slate-400">هنوز داده‌ای ثبت نشده است — سابقهٔ ارزشیابی برای شما وجود ندارد.</p>
             ) : (
               <div className="space-y-2">
                 {panel.trend.map((t, i) => (
@@ -135,7 +168,7 @@ export default async function ProfessorEvaluationPage() {
               واژه‌ها داخل خود PostgreSQL استخراج می‌شوند (بدون نام دانشجو) و نتیجه کش می‌شود.
             </p>
             {panel.words.length === 0 ? (
-              <p className="text-sm text-slate-400">نظر تشریحی‌ای ثبت نشده است.</p>
+              <p className="text-sm text-slate-400">هنوز داده‌ای ثبت نشده است — نظر تشریحی‌ای از دانشجویان ثبت نشده است.</p>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
                 {panel.words.map(w => (

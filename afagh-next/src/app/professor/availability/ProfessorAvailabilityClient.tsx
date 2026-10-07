@@ -137,6 +137,21 @@ export default function ProfessorAvailabilityClient({ professor, terms }: Props)
 
   const currentTerm = terms.find(t => t.id === selectedTermId) || terms[0];
 
+  if (terms.length === 0) {
+    return (
+      <div className="space-y-5" dir="rtl">
+        <div className="card p-10 text-center space-y-2">
+          <div className="text-4xl">🗓️</div>
+          <h2 className="text-lg font-bold">هنوز داده‌ای ثبت نشده است</h2>
+          <p className="text-sm text-gray-500 leading-7">
+            برای دانشگاه شما هیچ نیمسالی تعریف نشده است. پس از ثبت نیمسال‌ها توسط اداره آموزش،
+            فرم اعلام ساعات حضور برای همان نیمسال فعال می‌شود.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5" dir="rtl">
       
@@ -219,14 +234,22 @@ export default function ProfessorAvailabilityClient({ professor, terms }: Props)
           <div>
             <span className="text-indigo-200 font-bold block mb-1">مشخصات استاد:</span>
             <div className="font-extrabold text-white">
-              {professor.name} ({professor.academicRank} — {professor.contractType})
+              {professor.name}
+              {professor.academicRank || professor.contractType || professor.departmentName
+                ? ` (${[professor.academicRank, professor.contractType].filter(Boolean).join(' — ')})`
+                : ''}
             </div>
+            {professor.departmentName && (
+              <div className="text-[11px] text-indigo-200 mt-0.5">گروه آموزشی: {professor.departmentName}</div>
+            )}
           </div>
 
           <div>
             <span className="text-indigo-200 font-bold block mb-1">سقف موظفی تدریس در ترم:</span>
             <div className="font-extrabold text-amber-300">
-              {professor.maxWeeklyUnits > 0 ? `سقف موظفی: ${faNum(professor.maxWeeklyUnits)} واحد در هفته` : ''}
+              {professor.maxWeeklyUnits > 0
+                ? `سقف موظفی: ${faNum(professor.maxWeeklyUnits)} واحد در هفته`
+                : 'در قرارداد این ترم ثبت نشده'}
             </div>
           </div>
         </div>
@@ -237,7 +260,7 @@ export default function ProfessorAvailabilityClient({ professor, terms }: Props)
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
           <div>
             <h3 className="font-extrabold text-slate-900 text-base">
-              ماتریس اعلام ساعات حضور هفتگی برای {currentTerm?.title || 'نیمسال'}
+              ماتریس اعلام ساعات حضور هفتگی برای {currentTerm?.title}
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               روی هر خانه کلیک کنید تا وضعیت آن بین <b>🟩 اولویت اصلی (سبز)</b>، <b>🟨 در صورت نیاز (زرد)</b> و <b>🟥 عدم امکان حضور (قرمز)</b> تغییر کند.
@@ -363,16 +386,14 @@ export default function ProfessorAvailabilityClient({ professor, terms }: Props)
 
             <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-1.5">
               <div className="flex justify-between">
-                <span className="text-slate-500">کد رهگیری ثبت:</span>
-                <span className="font-mono font-bold text-slate-800">REQ-AVL-{Date.now().toString().slice(-6)}</span>
+                <span className="text-slate-500">نیمسال ثبت‌شده:</span>
+                <span className="font-bold text-slate-800">{currentTerm?.title}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">وضعیت فرآیند:</span>
-                <span className="font-bold text-emerald-700">تحویل به مدیر گروه آموزشی</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">اطلاع‌رسانی بعدی:</span>
-                <span className="font-bold text-indigo-700">اعلان انتشار برنامه هفتگی نهایی</span>
+                <span className="text-slate-500">بازه‌های ثبت‌شده:</span>
+                <span className="font-bold text-emerald-700">
+                  {faNum(Object.values(availability).reduce((s, row) => s + Object.values(row).filter(v => v !== 'UNAVAIL').length, 0))}
+                </span>
               </div>
             </div>
 

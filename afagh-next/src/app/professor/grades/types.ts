@@ -45,6 +45,7 @@ export interface StudentGradeItem {
   labProfScore?: number;
   calculatedFinalScore?: number;
   status: StudentGradeStatus;
+  entryYear?: number;
   note?: string;
 }
 

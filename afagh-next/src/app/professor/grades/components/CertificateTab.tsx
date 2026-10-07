@@ -12,16 +12,16 @@ interface CertificateTabProps {
   offering: GradingCourseOffering;
   termTitle: string;
   professorName: string;
+  universityTitle: string;
   dispatch: GradesDispatch;
 }
 
-export default function CertificateTab({ offering, termTitle, professorName, dispatch }: CertificateTabProps) {
+export default function CertificateTab({ offering, termTitle, professorName, universityTitle, dispatch }: CertificateTabProps) {
   const isPass = (g: number | undefined) => (g ?? 0) >= 10;
 
   const handleArchive = () => {
     dispatch({ type: 'ARCHIVE_CERTIFICATE' });
-    const dossierCode = 'AF-ARC-DOSSIER-' + offering.code + '-G' + offering.groupNumber + '-1405';
-    flashToast(dispatch, `📁 صورت‌جلسه رسمی آزمون با شناسه ${dossierCode} با موفقیت در بایگانی اسناد هیئت علمی دانشگاه آفاق ثبت و ذخیره گردید.`, 6000);
+    flashToast(dispatch, '📁 صورت‌جلسهٔ رسمی آزمون در پروندهٔ الکترونیک این درس علامت‌گذاری شد.', 6000);
   };
 
   return (
@@ -34,10 +34,10 @@ export default function CertificateTab({ offering, termTitle, professorName, dis
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-black text-slate-950">
-              دانشگاه غیرانتفاعی آفاق ارومیه — معاونت آموزشی و تحصیلات تکمیلی
+              {universityTitle || 'نام دانشگاه در سامانه ثبت نشده است'} — معاونت آموزشی و تحصیلات تکمیلی
             </h2>
             <p className="text-xs font-bold text-slate-600">
-              صورت‌جلسه رسمی و لیست نمرات نهایی پایان‌ترم · {termTitle}
+              صورت‌جلسه رسمی و لیست نمرات نهایی پایان‌ترم · {termTitle || 'نیمسال تعیین نشده'}
             </p>
           </div>
         </div>
@@ -83,7 +83,9 @@ export default function CertificateTab({ offering, termTitle, professorName, dis
         </div>
         <div>
           <span className="text-slate-500 block text-[11px]">وضعیت صورت‌جلسه:</span>
-          <strong className="text-emerald-800 text-xs font-black">قفل قطعی و نهایی‌شده ✓</strong>
+          <strong className="text-emerald-800 text-xs font-black">
+            {offering.isFinalized ? 'قفل قطعی و نهایی‌شده ✓' : 'پیش‌نویس — قفل نهایی نشده'}
+          </strong>
         </div>
       </div>
 
@@ -108,7 +110,14 @@ export default function CertificateTab({ offering, termTitle, professorName, dis
             </tr>
           </thead>
           <tbody>
-            {offering.students.map((st, idx) => {
+            {offering.students.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="p-6 border border-slate-300 text-center font-bold text-slate-500">
+                  هنوز داده‌ای ثبت نشده است
+                </td>
+              </tr>
+            ) : offering.students.map((st, idx) => {
+              const hasScore = st.calculatedFinalScore !== undefined;
               const finalScore = st.calculatedFinalScore ?? 0;
               return (
                 <tr key={st.studentId} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
@@ -125,9 +134,11 @@ export default function CertificateTab({ offering, termTitle, professorName, dis
                       {faNum(((st.midtermScore ?? 0) + (st.homeworkScore ?? 0) + (st.participationScore ?? 0) + (st.practicalScore ?? 0)).toFixed(2))}
                     </td>
                   )}
-                  <td className="p-2 border border-slate-300 text-center font-black text-slate-950">{faNum(Number(finalScore.toFixed(2)))}</td>
+                  <td className="p-2 border border-slate-300 text-center font-black text-slate-950">{hasScore ? faNum(Number(finalScore.toFixed(2))) : '—'}</td>
                   <td className="p-2 border border-slate-300 text-center">
-                    {isPass(finalScore) ? (
+                    {!hasScore ? (
+                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-bold text-[10px]">ثبت نشده</span>
+                    ) : isPass(finalScore) ? (
                       <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">قبول</span>
                     ) : (
                       <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 font-bold text-[10px]">مردود</span>
@@ -157,7 +168,7 @@ export default function CertificateTab({ offering, termTitle, professorName, dis
           <div className="mt-6 border-t border-dashed border-slate-400 pt-1 text-[10px] text-slate-400 font-bold">امضا و مهر</div>
         </div>
         <div className="text-center">
-          <div className="text-xs font-black text-slate-800">معاونت آموزشی دانشگاه آفاق</div>
+          <div className="text-xs font-black text-slate-800">معاونت آموزشی {universityTitle || 'دانشگاه'}</div>
           <div className="text-[10px] text-slate-500 font-bold">اداره آموزش و امور دانشجویی</div>
           <div className="mt-6 border-t border-dashed border-slate-400 pt-1 text-[10px] text-slate-400 font-bold">امضا و مهر</div>
         </div>

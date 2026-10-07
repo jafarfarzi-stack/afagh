@@ -12,7 +12,7 @@ export interface ProfessorScheduleOffering {
   groupNumber: number;
   enrolledCount: number;
   capacity: number;
-  dayOfWeek: number; // 0: شنبه ... 5: پنج‌شنبه
+  dayOfWeek: number | null; // 0: شنبه ... 5: پنج‌شنبه · null = زمان‌بندی ثبت نشده
   dayName: string;
   startTime: string;
   endTime: string;
@@ -32,6 +32,7 @@ interface Props {
     academicRank: string;
     contractType: string;
     departmentName: string;
+    universityTitle: string;
   };
   termTitle: string;
   initialOfferings: ProfessorScheduleOffering[];
@@ -53,11 +54,11 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
   const [offerings] = useState<ProfessorScheduleOffering[]>(initialOfferings);
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<'ALL' | 'EVEN' | 'ODD'>('ALL');
 
-  // KPI Calculations
   const totalUnits = offerings.reduce((s, o) => s + Number(o.units || 0), 0);
   const totalStudents = offerings.reduce((s, o) => s + Number(o.enrolledCount || 0), 0);
   const totalClasses = offerings.length;
-  const daysWithClass = new Set(offerings.map(o => o.dayOfWeek)).size;
+  const daysWithClass = new Set(offerings.filter(o => o.dayOfWeek != null).map(o => o.dayOfWeek)).size;
+  const unscheduled = offerings.filter(o => o.dayOfWeek == null || !o.startTime);
 
   const handlePrint = () => {
     window.print();
@@ -74,7 +75,9 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-400 text-slate-950 print:border print:border-black">
                 برنامه آموزشی مصوب
               </span>
-              <span className="text-xs text-indigo-200 print:text-slate-700">{termTitle}</span>
+              <span className="text-xs text-indigo-200 print:text-slate-700">
+                {termTitle || 'نیمسال تحصیلی جاری برای دانشگاه شما تعیین نشده است'}
+              </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
               🗓️ برنامه هفتگی تدریس و زمان‌بندی کلاس‌ها
@@ -198,9 +201,21 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
         </div>
 
         <div className="text-xs text-slate-500 font-medium hidden sm:block">
-          🏛️ کلاس‌ها در ساختمان دانشکده مهندسی و سالن‌های آزمایشگاهی متمرکز شده‌اند.
+          🏛️ محل برگزاری هر کلاس از جدول کلاس‌های دانشگاه خوانده می‌شود.
         </div>
       </div>
+
+      {totalClasses === 0 ? (
+        <div className="card text-center p-10 space-y-2">
+          <div className="text-4xl">📅</div>
+          <h2 className="font-extrabold text-slate-800 text-lg">هنوز داده‌ای ثبت نشده است</h2>
+          <p className="text-xs text-slate-500 leading-6">
+            در نیمسال جاری دانشگاه شما هیچ درسی به شما تخصیص نیافته است. پس از تخصیص درس توسط مدیر گروه،
+            برنامهٔ هفتگی به‌صورت خودکار از جدول زمان‌بندی همین‌جا نمایش داده می‌شود.
+          </p>
+        </div>
+      ) : (
+      <>
 
       {/* Weekly Schedule Grid */}
       <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
@@ -240,6 +255,7 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
 
                     {TIME_SLOTS.map(slot => {
                       const matched = dayOfferings.filter(o => {
+                        if (!o.startTime || !o.endTime) return false;
                         const isTime = o.startTime <= slot.startTime && o.endTime >= slot.endTime;
                         if (!isTime) return false;
                         if (selectedWeekFilter === 'EVEN' && o.weekType === 'ODD') return false;
@@ -312,6 +328,21 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
             </tbody>
           </table>
         </div>
+
+        {unscheduled.length > 0 && (
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-2">
+            <h4 className="text-xs font-extrabold text-amber-900">
+              دروسی که هنوز برایشان زمان‌بندی هفتگی ثبت نشده است
+            </h4>
+            <ul className="space-y-1 text-[11px] font-bold text-amber-900">
+              {unscheduled.map(o => (
+                <li key={o.id}>
+                  {o.code} · {o.title} (گروه {faNum(o.groupNumber)})
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       {/* Course Offerings List & Quick Links */}
@@ -362,10 +393,10 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
                     </span>
                   </td>
                   <td className="p-2 border border-slate-200 font-bold text-slate-800">
-                    {item.dayName} {faNum(item.startTime)} الی {faNum(item.endTime)}
+                    {item.dayName ? `${item.dayName} ${faNum(item.startTime)} الی ${faNum(item.endTime)}` : 'زمان‌بندی ثبت نشده'}
                   </td>
                   <td className="p-2 border border-slate-200 font-extrabold text-emerald-900">
-                    🏛️ {item.roomName} ({item.buildingName})
+                    {item.roomName ? `🏛️ ${item.roomName}${item.buildingName ? ` (${item.buildingName})` : ''}` : 'ثبت نشده'}
                   </td>
                   <td className="p-2 border border-slate-200 text-center font-bold">
                     {faNum(item.enrolledCount)} / {faNum(item.capacity)}
@@ -392,6 +423,8 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
           </table>
         </div>
       </div>
+      </>
+      )}
 
     </div>
   );

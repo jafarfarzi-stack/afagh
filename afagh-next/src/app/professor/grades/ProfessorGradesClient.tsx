@@ -33,6 +33,7 @@ interface Props {
     id: number;
     name: string;
     staffCode: string;
+    universityTitle: string;
   };
   termTitle: string;
   initialOfferings: GradingCourseOffering[];
@@ -94,7 +95,7 @@ export default function ProfessorGradesClient({
           <div>
             <div className="flex items-center gap-2">
               <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black">نیمسال جاری</span>
-              <span className="text-[11px] font-bold text-indigo-200">{termTitle}</span>
+              <span className="text-[11px] font-bold text-indigo-200">{termTitle || 'نیمسال تعیین نشده'}</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-black mt-2">مدیریت نمرات استاد {professor.name}</h1>
             <p className="text-xs text-indigo-200 font-bold mt-1">
@@ -175,6 +176,7 @@ export default function ProfessorGradesClient({
       {state.activeTab === 'ROSTER' && (
         <RosterTab
           offering={currentOffering}
+          termTitle={termTitle}
           lastAutoSaveTime={state.lastAutoSaveTime}
           onRequestFinalizeOtp={() => requestOtp(currentOffering.id)}
           dispatch={dispatch}
@@ -196,6 +198,7 @@ export default function ProfessorGradesClient({
           offering={currentOffering}
           termTitle={termTitle}
           professorName={professor.name}
+          universityTitle={professor.universityTitle}
           dispatch={dispatch}
         />
       )}

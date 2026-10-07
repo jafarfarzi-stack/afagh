@@ -1,7 +1,10 @@
 import Link from 'next/link';
-import { and, eq } from 'drizzle-orm';
+import { and, count, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
-import { academic_terms, course_offerings, courses, payroll_statements, professor_term_contracts, departments } from '@/db/schema';
+import {
+  classrooms, course_offerings, courses, departments, electronic_documents,
+  professor_availabilities, professor_term_contracts, payroll_statements, schedules,
+} from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import VirtualClassroomWidget from '@/components/VirtualClassroomWidget';
 import { getTodayLiveClasses } from '@/lib/moodle-bbb';
@@ -9,55 +12,114 @@ import { currentTermFor } from '@/lib/terms';
 
 export const dynamic = 'force-dynamic';
 
-const payFa: Record<string, string> = { DRAFT: 'پیش‌نویس', MID_TERM_PAID: 'پرداخت میان‌ترم', FINAL_SETTLED: 'تسویه نهایی' };
-
 const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
+
+const faDate = (d: Date | string | null | undefined) =>
+  d ? new Date(d).toLocaleDateString('fa-IR') : null;
 
 export default async function ProfessorHome() {
   const user = await requireRole(['PROFESSOR']);
   const me = await getStaffByUser(user.id);
   if (!me) return <p className="card">پروندهٔ هیئت علمی یافت نشد.</p>;
 
-  const liveSessions = await getTodayLiveClasses();
+  const universityId = me.universityId ?? user.universityId ?? null;
+  const term = await currentTermFor(universityId);
 
-  const term = await currentTermFor(me.universityId ?? user.universityId ?? null);
+  const liveSessions = await getTodayLiveClasses({ universityId, staffId: me.id });
+
   const classes = term
     ? await db
-        .select({ id: course_offerings.id, code: courses.code, title: courses.title, units: courses.units, enrolled: course_offerings.enrolledCount, capacity: course_offerings.capacity, group: course_offerings.groupNumber })
-        .from(course_offerings).innerJoin(courses, eq(courses.id, course_offerings.courseId))
+        .select({
+          id: course_offerings.id,
+          code: courses.code,
+          title: courses.title,
+          units: courses.units,
+          enrolled: course_offerings.enrolledCount,
+          capacity: course_offerings.capacity,
+          group: course_offerings.groupNumber,
+          roomId: schedules.roomId,
+          dayOfWeek: schedules.dayOfWeek,
+          startTime: schedules.startTime,
+          endTime: schedules.endTime,
+        })
+        .from(course_offerings)
+        .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+        .leftJoin(
+          schedules,
+          and(
+            eq(schedules.offeringId, course_offerings.id),
+            eq(schedules.scheduleType, 'CLASS'),
+          ),
+        )
         .where(and(eq(course_offerings.professorId, me.id), eq(course_offerings.termId, term.id)))
+        .orderBy(schedules.dayOfWeek, schedules.startTime)
     : [];
 
-  // نام گروه آموزشی واقعی
-  let deptName = '—';
-  if (me.departmentId) {
-    const [d] = await db.select({ name: departments.name }).from(departments).where(eq(departments.id, me.departmentId)).limit(1);
-    if (d) deptName = d.name;
-  }
+  const roomIds = [...new Set(classes.map(c => c.roomId).filter(Boolean))] as number[];
+  const rooms = roomIds.length
+    ? await db.select({ id: classrooms.id, name: classrooms.name }).from(classrooms).where(inArray(classrooms.id, roomIds))
+    : [];
+  const roomName = new Map(rooms.map(r => [r.id, r.name]));
 
-  const pays = await db
-    .select({ id: payroll_statements.id, net: payroll_statements.netAmount, status: payroll_statements.status, midterm: payroll_statements.midtermPaidAmount })
-    .from(payroll_statements)
-    .innerJoin(professor_term_contracts, eq(professor_term_contracts.id, payroll_statements.contractId))
-    .where(eq(professor_term_contracts.staffId, me.id));
+  const deptRows = me.departmentId
+    ? await db.select({ name: departments.name }).from(departments).where(eq(departments.id, me.departmentId)).limit(1)
+    : [];
+  const deptName = deptRows[0]?.name ?? null;
 
-  const totalNet = pays.reduce((s, p) => s + Number(p.net ?? 0), 0);
+  const [contractRows, availabilityRows, pays] = await Promise.all([
+    term
+      ? db.select({ id: professor_term_contracts.id, contractType: professor_term_contracts.contractType, baseDutyUnits: professor_term_contracts.baseDutyUnits })
+          .from(professor_term_contracts)
+          .where(and(eq(professor_term_contracts.staffId, me.id), eq(professor_term_contracts.termId, term.id)))
+          .limit(1)
+      : Promise.resolve([]),
+    term
+      ? db.select({ n: count() }).from(professor_availabilities)
+          .where(and(eq(professor_availabilities.staffId, me.id), eq(professor_availabilities.termId, term.id)))
+      : Promise.resolve([]),
+    db
+      .select({ id: payroll_statements.id, net: payroll_statements.netAmount, status: payroll_statements.status, midterm: payroll_statements.midtermPaidAmount })
+      .from(payroll_statements)
+      .innerJoin(professor_term_contracts, eq(professor_term_contracts.id, payroll_statements.contractId))
+      .where(eq(professor_term_contracts.staffId, me.id)),
+  ]);
+
+  const contract = contractRows[0] ?? null;
+
+  const termDocs = term
+    ? await db
+        .select({ id: electronic_documents.id, title: electronic_documents.title, signatureStatus: electronic_documents.signatureStatus, signedAt: electronic_documents.signedAt, documentHash: electronic_documents.documentHash, createdAt: electronic_documents.createdAt })
+        .from(electronic_documents)
+        .where(and(eq(electronic_documents.staffId, me.id), eq(electronic_documents.termId, term.id)))
+    : [];
+
+  const availabilityCount = Number(availabilityRows[0]?.n ?? 0);
+  const gradeDeadline = term?.gradeEntryDeadline ?? null;
+
+  const signatureStatus = termDocs.some(d => d.signatureStatus === 'SIGNED')
+    ? 'SIGNED'
+    : termDocs.length > 0
+      ? 'PENDING'
+      : 'NONE';
+
+  const DAYS = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه'];
 
   return (
     <div className="space-y-6" dir="rtl">
-      
-      {/* Welcome Banner */}
+
       <div className="bg-gradient-to-l from-indigo-950 via-indigo-900 to-slate-900 text-white rounded-3xl p-6 shadow-xl border border-indigo-700/50 space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-400 text-slate-950">
-              {term?.title || 'نیمسال تحصیلی جاری'}
+              {term ? term.title : 'نیمسال تحصیلی جاری برای دانشگاه شما تعیین نشده است'}
             </span>
             <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight mt-2">
-              خوش آمدید، استاد گرامی {user.name || 'دکتر جمیل احمدی'}
+              خوش آمدید، استاد گرامی {user.name}
             </h1>
             <p className="text-xs text-indigo-200 mt-1">
-              کد پرسنلی: {faNum(me.staffCode)} · مرتبه علمی: {me.academicRank || 'استادیار'} · گروه: {deptName}
+              کد پرسنلی: {faNum(me.staffCode)}
+              {me.academicRank ? ` · مرتبه علمی: ${me.academicRank}` : ''}
+              {` · گروه: ${deptName ?? 'ثبت نشده'}`}
             </p>
           </div>
 
@@ -77,34 +139,41 @@ export default async function ProfessorHome() {
           </div>
         </div>
 
-        {/* Quick Summary Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
           <div className="bg-white/10 p-3 rounded-2xl border border-white/10">
             <span className="text-indigo-200 block mb-0.5">تعداد کلاس‌های ترم:</span>
-            <span className="font-extrabold text-white text-sm">{faNum(classes.length > 0 ? classes.length : 5)} گروه درسی</span>
+            <span className="font-extrabold text-white text-sm">{faNum(classes.length)} گروه درسی</span>
           </div>
           <div className="bg-white/10 p-3 rounded-2xl border border-white/10">
-            <span className="text-indigo-200 block mb-0.5">وضعیت اعلام حضور ترم:</span>
-            <span className="font-extrabold text-emerald-300 text-sm">✓ ثبت و تایید شده</span>
+            <span className="text-indigo-200 block mb-0.5">اعلام ساعات حضور ترم:</span>
+            <span className="font-extrabold text-sm text-emerald-300">
+              {availabilityCount > 0
+                ? `${faNum(availabilityCount)} بازهٔ زمانی ثبت شده`
+                : 'ثبت نشده'}
+            </span>
           </div>
           <div className="bg-white/10 p-3 rounded-2xl border border-white/10">
             <span className="text-indigo-200 block mb-0.5">قرارداد حق‌التدریس:</span>
-            <span className="font-extrabold text-amber-300 text-sm">آماده امضای الکترونیک</span>
+            <span className="font-extrabold text-amber-300 text-sm">
+              {signatureStatus === 'SIGNED'
+                ? 'امضا شده'
+                : signatureStatus === 'PENDING'
+                  ? 'در انتظار امضای الکترونیک'
+                  : 'سندی ثبت نشده'}
+            </span>
           </div>
           <div className="bg-white/10 p-3 rounded-2xl border border-white/10">
             <span className="text-indigo-200 block mb-0.5">مهلت نهایی‌سازی نمرات:</span>
-            <span className="font-extrabold text-white text-sm">۴۸ ساعت پس از آزمون</span>
+            <span className="font-extrabold text-white text-sm">{gradeDeadline ? faDate(gradeDeadline) : 'تعیین نشده'}</span>
           </div>
         </div>
       </div>
 
-      {/* Virtual Classroom Widget (Moodle & BigBlueButton) */}
       <VirtualClassroomWidget
-        user={{ id: user.id, name: user.name || 'دکتر جمیل احمدی', role: 'PROFESSOR' }}
+        user={{ id: user.id, name: user.name, role: 'PROFESSOR' }}
         initialSessions={liveSessions}
       />
 
-      {/* Quick Action Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <Link
           href="/professor/schedule"
@@ -167,14 +236,12 @@ export default async function ProfessorHome() {
         </Link>
       </div>
 
-      {/* Main Dashboard Grid */}
       <div className="grid gap-6 md:grid-cols-3">
-        
-        {/* Classes List */}
+
         <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 md:col-span-2 space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-200">
             <div>
-              <h2 className="font-extrabold text-slate-900 text-base">کلاس‌های آموزشی {term?.title ?? ''}</h2>
+              <h2 className="font-extrabold text-slate-900 text-base">کلاس‌های آموزشی {term ? term.title : ''}</h2>
               <p className="text-xs text-slate-500 mt-0.5">فهرست دروس تخصیص‌یافته به همراه عملیات سریع</p>
             </div>
             <Link href="/professor/schedule" className="text-xs font-bold text-indigo-700 hover:underline">
@@ -183,112 +250,91 @@ export default async function ProfessorHome() {
           </div>
 
           <div className="space-y-3">
-            {/* Real or Demo Offering List */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between rounded-2xl bg-slate-50 p-3.5 border border-slate-200 gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="font-extrabold text-sm text-slate-900">سیستم‌های عامل</p>
-                  <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 font-bold text-[10px]">گروه ۱</span>
+            {classes.length === 0 ? (
+              <div className="text-center p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-xs font-bold text-slate-500">
+                در این نیمسال هیچ درسی به شما تخصیص نیافته است.
+              </div>
+            ) : classes.map(c => (
+              <div
+                key={`${c.id}-${c.roomId ?? 'x'}-${c.startTime ?? 'x'}`}
+                className="flex flex-col sm:flex-row items-start sm:items-center justify-between rounded-2xl bg-slate-50 p-3.5 border border-slate-200 gap-3"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-extrabold text-sm text-slate-900">{c.title}</p>
+                    <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 font-bold text-[10px]">گروه {faNum(c.group)}</span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5 font-bold">
+                    {c.code} · {faNum(c.units)} واحد
+                    {c.roomId ? ` · 🏛️ ${roomName.get(c.roomId) ?? 'کلاس نامشخص'}` : ' · زمان‌بندی ثبت نشده'}
+                    {c.dayOfWeek != null
+                      ? ` · ${DAYS[c.dayOfWeek] ?? ''} ${String(c.startTime).slice(0, 5)} الی ${String(c.endTime).slice(0, 5)}`
+                      : ''}
+                  </p>
                 </div>
-                <p className="text-xs text-slate-500 mt-0.5 font-bold">
-                  CE-302 · ۳ واحد نظری · 🏛️ کلاس ۳۰۱ (سمعی و بصری) · شنبه‌ها ۰۸:۰۰ الی ۱۰:۰۰
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="badge bg-sky-100 text-sky-800 font-bold text-xs">۳۸/۴۰ دانشجو</span>
-                <Link href="/professor/attendance?offeringId=101" className="px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-900 font-bold text-xs hover:bg-emerald-200 transition">
-                  حضور و غیاب
-                </Link>
-                <Link href="/professor/grades?offeringId=101" className="px-2.5 py-1 rounded-xl bg-indigo-100 text-indigo-900 font-bold text-xs hover:bg-indigo-200 transition">
-                  ثبت نمره
-                </Link>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between rounded-2xl bg-slate-50 p-3.5 border border-slate-200 gap-3">
-              <div>
                 <div className="flex items-center gap-2">
-                  <p className="font-extrabold text-sm text-slate-900">ساختمان داده‌ها و الگوریتم‌ها</p>
-                  <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 font-bold text-[10px]">گروه ۱</span>
+                  <span className="badge bg-sky-100 text-sky-800 font-bold text-xs">{faNum(c.enrolled)}/{faNum(c.capacity)} دانشجو</span>
+                  <Link href={`/professor/attendance?offeringId=${c.id}`} className="px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-900 font-bold text-xs hover:bg-emerald-200 transition">
+                    حضور و غیاب
+                  </Link>
+                  <Link href={`/professor/grades?offeringId=${c.id}`} className="px-2.5 py-1 rounded-xl bg-indigo-100 text-indigo-900 font-bold text-xs hover:bg-indigo-200 transition">
+                    ثبت نمره
+                  </Link>
                 </div>
-                <p className="text-xs text-slate-500 mt-0.5 font-bold">
-                  CE-204 · ۳ واحد نظری · 🏛️ کلاس ۳۰۲ · دوشنبه‌ها ۰۸:۰۰ الی ۱۰:۰۰
-                </p>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="badge bg-sky-100 text-sky-800 font-bold text-xs">۴۲/۴۵ دانشجو</span>
-                <Link href="/professor/attendance?offeringId=103" className="px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-900 font-bold text-xs hover:bg-emerald-200 transition">
-                  حضور و غیاب
-                </Link>
-                <Link href="/professor/grades?offeringId=103" className="px-2.5 py-1 rounded-xl bg-indigo-100 text-indigo-900 font-bold text-xs hover:bg-indigo-200 transition">
-                  ثبت نمره
-                </Link>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between rounded-2xl bg-purple-50/50 p-3.5 border border-purple-200 gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="font-extrabold text-sm text-purple-950">آزمایشگاه و مبانی سیستم‌های عامل</p>
-                  <span className="px-2 py-0.5 rounded bg-purple-200 text-purple-950 font-bold text-[10px]">👥 درس مشترک</span>
-                </div>
-                <p className="text-xs text-purple-800 mt-0.5 font-bold">
-                  CE-208 · ۱ واحد عملی · 🏛️ آزمایشگاه نرم‌افزار ۲ · دوشنبه‌ها ۱۳:۳۰ (هفته زوج) · با دکتر مریم رضایی
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="badge bg-purple-100 text-purple-900 font-bold text-xs">۲۲/۲۵ دانشجو</span>
-                <Link href="/professor/attendance?offeringId=104" className="px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-900 font-bold text-xs hover:bg-emerald-200 transition">
-                  حضور و غیاب
-                </Link>
-                <Link href="/professor/grades?offeringId=104" className="px-2.5 py-1 rounded-xl bg-indigo-100 text-indigo-900 font-bold text-xs hover:bg-indigo-200 transition">
-                  ثبت نمره
-                </Link>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
 
-        {/* Contract & Financial Summary Card */}
         <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-4">
           <div className="pb-3 border-b border-slate-200">
             <h2 className="font-extrabold text-slate-900 text-base">قرارداد و وضعیت مالی</h2>
             <p className="text-xs text-slate-500 mt-0.5">محاسبه حق‌التدریس بر اساس احکام مصوب</p>
           </div>
 
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">شماره قرارداد:</span>
-              <span className="font-mono font-bold text-slate-900">CON-1405-CE-082</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">وضعیت امضا:</span>
-              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold text-[10px]">
-                در انتظار امضای دیجیتال
-              </span>
-            </div>
-            <div className="flex items-center justify-between pt-2 border-t border-slate-200">
-              <span className="text-slate-500">ساعات تدریس مصوب:</span>
-              <span className="font-bold text-indigo-950">۲۲۴ ساعت در ترم</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">مبلغ ناخالص:</span>
-              <span className="font-bold text-slate-900">{faNum((190400000).toLocaleString('fa-IR'))} ریال</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">خالص پرداختی پیش‌بینی:</span>
-              <span className="font-extrabold text-emerald-700 text-sm">{faNum((158032000).toLocaleString('fa-IR'))} ریال</span>
-            </div>
+          {contract ? (
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">نوع قرارداد:</span>
+                <span className="font-bold text-slate-900">{contract.contractType ?? '—'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">وضعیت سند:</span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold text-[10px]">
+                  {signatureStatus === 'SIGNED' ? 'امضا شده' : signatureStatus === 'PENDING' ? 'در انتظار امضای دیجیتال' : 'ثبت نشده'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">سقف موظفی ترم:</span>
+                <span className="font-bold text-indigo-950">{Number(contract.baseDutyUnits ?? 0) > 0 ? `${faNum(contract.baseDutyUnits)} واحد` : 'ثبت نشده'}</span>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                <span className="text-slate-500">فیش‌های مالی ثبت‌شده:</span>
+                <span className="font-extrabold text-emerald-700 text-sm">{faNum(pays.length)} فیش</span>
+              </div>
 
-            <div className="pt-2">
+              <div className="pt-2">
+                <Link
+                  href="/professor/contract"
+                  className="w-full block text-center py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-extrabold text-xs shadow transition"
+                >
+                  مشاهده فرم کامل و امضای دیجیتال ←
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="text-center p-5 bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-xs font-bold text-slate-500">
+                برای نیمسال جاری دانشگاه شما قرارداد حق‌التدریسی ثبت نشده است.
+              </div>
               <Link
-                href="/professor/contract"
-                className="w-full block text-center py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-extrabold text-xs shadow transition"
+                href="/professor/documents"
+                className="w-full block text-center py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs transition"
               >
-                مشاهده فرم کامل و امضای دیجیتال ←
+                مشاهده اسناد الکترونیک من ←
               </Link>
             </div>
-          </div>
+          )}
         </div>
 
       </div>

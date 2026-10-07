@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { electronic_documents, users } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
-import { currentTerm } from '@/lib/payroll-engine';
+import { currentTermFor } from '@/lib/terms';
 import {
   attachProfessorIdentity, buildContractDraft, ensureContractDocument,
   issueContractOtp, signContract,
@@ -27,14 +27,22 @@ async function identityOf(userId: number): Promise<string> {
   return row?.nationalCode ?? '';
 }
 
+/**
+ * ترم جاری دانشگاه خودِ استاد — نه «اولین ترمی که isCurrent دارد».
+ * بدون این قید، استادِ دانشگاه دوم قراردادِ ترمِ دانشگاه دیگر را می‌دید.
+ */
+async function termForProfessor(me: { universityId: number | null }) {
+  return currentTermFor(me.universityId ?? null);
+}
+
 /** بارگذاری/ساخت قرارداد واقعی استاد (درس‌های واقعی، نرخ و درصدهای واقعی از تنظیمات) */
 export async function getContractAction(): Promise<ContractActionState> {
   try {
     const user = await requireRole(['PROFESSOR']);
     const me = await getStaffByUser(user.id);
     if (!me) return { ok: false, error: 'پروندهٔ هیئت علمی یافت نشد.' };
-    const term = await currentTerm();
-    if (!term) return { ok: false, error: 'ترم جاری تعیین نشده است.' };
+    const term = await termForProfessor(me);
+    if (!term) return { ok: false, error: 'ترم جاری دانشگاه شما تعیین نشده است.' };
 
     const res = await ensureContractDocument(me.id, term.id, { name: user.name, nationalCode: await identityOf(user.id) });
     if (!res.ok) return { ok: false, error: res.error };
@@ -55,8 +63,8 @@ export async function requestContractOtpAction(): Promise<{ ok: boolean; demoOtp
     const user = await requireRole(['PROFESSOR']);
     const me = await getStaffByUser(user.id);
     if (!me) return { ok: false, error: 'پروندهٔ هیئت علمی یافت نشد.' };
-    const term = await currentTerm();
-    if (!term) return { ok: false, error: 'ترم جاری تعیین نشده است.' };
+    const term = await termForProfessor(me);
+    if (!term) return { ok: false, error: 'ترم جاری دانشگاه شما تعیین نشده است.' };
     const res = await ensureContractDocument(me.id, term.id, { name: user.name, nationalCode: await identityOf(user.id) });
     if (!res.ok) return { ok: false, error: res.error };
     const otp = await issueContractOtp(me.id, res.documentId);
@@ -72,8 +80,8 @@ export async function signContractAction(otp: string): Promise<{ ok: boolean; er
     const user = await requireRole(['PROFESSOR']);
     const me = await getStaffByUser(user.id);
     if (!me) return { ok: false, error: 'پروندهٔ هیئت علمی یافت نشد.' };
-    const term = await currentTerm();
-    if (!term) return { ok: false, error: 'ترم جاری تعیین نشده است.' };
+    const term = await termForProfessor(me);
+    if (!term) return { ok: false, error: 'ترم جاری دانشگاه شما تعیین نشده است.' };
 
     const res = await ensureContractDocument(me.id, term.id, { name: user.name, nationalCode: await identityOf(user.id) });
     if (!res.ok) return { ok: false, error: res.error };

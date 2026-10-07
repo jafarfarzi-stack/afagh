@@ -29,6 +29,7 @@ export interface ClassSessionItem {
   replacedSessionNo?: number;
   professorStatus: 'VERIFIED_PRESENT' | 'ABSENT' | 'UPCOMING' | 'APPROVED_MAKEUP';
   verificationDetail: string;
+  professorCheck?: { verificationMethod: string; ipAddress: string | null; recordedAt: string | null } | null;
   studentStatuses: { [studentId: number]: StudentSessionAttendance };
 }
 
@@ -77,6 +78,8 @@ interface Props {
 
 const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
 
+const MAKEUP_TIME_OPTIONS = ['۰۸:۰۰ الی ۱۰:۰۰', '۱۰:۰۰ الی ۱۲:۰۰', '۱۲:۳۰ الی ۱۴:۰۰', '۱۳:۳۰ الی ۱۵:۳۰', '۱۵:۳۰ الی ۱۷:۳۰', '۱۷:۳۰ الی ۱۹:۳۰'];
+
 
 
 export default function ProfessorAttendanceClient({
@@ -88,29 +91,33 @@ export default function ProfessorAttendanceClient({
   todayJalali,
   rooms: realRooms,
 }: Props) {
-  const profDisplayName = professor?.name || 'دکتر جمیل احمدی';
+  const profDisplayName = professor?.name?.trim() || 'استاد محترم';
 
   const [offerings, setOfferings] = useState<AttendanceCourseOffering[]>(initialOfferings);
   const [selectedOfferingId, setSelectedOfferingId] = useState<number>(
     defaultOfferingId && initialOfferings.some(o => o.id === defaultOfferingId)
       ? defaultOfferingId
-      : initialOfferings[0]?.id || 101
+      : initialOfferings[0]?.id ?? 0
   );
 
-  const [selectedSessionNo, setSelectedSessionNo] = useState<number>(7);
+  const [selectedSessionNo, setSelectedSessionNo] = useState<number>(
+    initialOfferings.find(o => o.id === (defaultOfferingId ?? initialOfferings[0]?.id))?.sessions[0]?.sessionNo
+    ?? initialOfferings[0]?.sessions[0]?.sessionNo
+    ?? 0
+  );
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Make-up Session Creation Modal State
   const [showMakeupModal, setShowMakeupModal] = useState<boolean>(false);
   const [savingSession, setSavingSession] = useState(false);
   const [savingMakeup, setSavingMakeup] = useState(false);
-  const [selectedRoomOptionId, setSelectedRoomOptionId] = useState<number>(101);
+  const [selectedRoomOptionId, setSelectedRoomOptionId] = useState<number>(0);
   const [makeupForm, setMakeupForm] = useState({
-    replacedSessionNo: 4,
-    sessionDate: '۱۴۰۵/۰۹/۰۸',
-    sessionTime: '۱۳:۳۰ الی ۱۵:۳۰',
-    topic: 'جلسه جبرانی: مدیریت بن‌بست و الگوریتم‌های بانکدار در سیستم‌عامل',
-    reason: 'هم‌پوشانی با شرکت در سمینار تخصصی دانشگاه',
+    replacedSessionNo: 0,
+    sessionDate: '',
+    sessionTime: '',
+    topic: '',
+    reason: '',
   });
 
   // Log of make-up sessions requested / scheduled (واقعی از class_sessions)
@@ -324,7 +331,14 @@ export default function ProfessorAttendanceClient({
 
   // Professor Creates Make-up Session
   const handleCreateMakeupSession = async () => {
-    // Validate date: cannot be before current date
+    if (!makeupForm.sessionDate.trim() || !makeupForm.sessionTime.trim()) {
+      alert('تاریخ و ساعت برگزاری جلسهٔ جبرانی را وارد کنید.');
+      return;
+    }
+    if (!makeupForm.topic.trim()) {
+      alert('سرفصل جلسهٔ جبرانی را وارد کنید.');
+      return;
+    }
     if (makeupForm.sessionDate < todayJalali) {
       alert(`خطا: تاریخ جلسه جبرانی نمی‌تواند قبل از تاریخ جاری سامانه (${todayJalali}) باشد.`);
       return;
@@ -338,7 +352,8 @@ export default function ProfessorAttendanceClient({
     }
     const roomName = isDirect ? selectedRoom!.name : 'در انتظار تخصیص کلاس توسط آموزش';
 
-    const newSessionNo = 100 + makeupForm.replacedSessionNo;
+    const maxSessionNo = currentOffering.sessions.reduce((m, s) => Math.max(m, s.sessionNo), 0);
+    const newSessionNo = maxSessionNo + 1;
 
     // 1. If direct room selected, add session directly to active sessions
     if (isDirect) {
@@ -346,21 +361,17 @@ export default function ProfessorAttendanceClient({
         id: Date.now(),
         sessionNo: newSessionNo,
         sessionDate: makeupForm.sessionDate,
-        startTime: makeupForm.sessionTime.split('الی')[0]?.trim() || '۱۳:۳۰',
-        endTime: makeupForm.sessionTime.split('الی')[1]?.trim() || '۱۵:۳۰',
+        startTime: makeupForm.sessionTime.split('الی')[0]?.trim() ?? '',
+        endTime: makeupForm.sessionTime.split('الی')[1]?.trim() ?? '',
         roomName: selectedRoom!.name,
         topic: makeupForm.topic,
         isHeld: false,
         isMakeUp: true,
-        replacedSessionNo: makeupForm.replacedSessionNo,
+        replacedSessionNo: makeupForm.replacedSessionNo || undefined,
         professorStatus: 'APPROVED_MAKEUP',
         verificationDetail: `تخصیص مستقیم کلاس ${selectedRoom!.name} توسط استاد در ${todayJalali}`,
         studentStatuses: {},
       };
-
-      currentOffering.students.forEach(st => {
-        newSession.studentStatuses[st.id] = { status: 'PRESENT' };
-      });
 
       setOfferings(prev =>
         prev.map(off => {
@@ -396,15 +407,20 @@ export default function ProfessorAttendanceClient({
     const replacedSession = currentOffering.sessions.find(x => x.sessionNo === makeupForm.replacedSessionNo);
     const sTimes = makeupForm.sessionTime.split('الی').map(x => x.trim());
     const toAscii = (x: string) => x.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)));
-    const normTime = (x: string) => { const m = toAscii(x).match(/\d{1,2}:\d{2}/); return m ? m[0].padStart(5, '0') : '13:30'; };
+    const startTime = toAscii(sTimes[0] ?? '').match(/\d{1,2}:\d{2}/)?.[0]?.padStart(5, '0') ?? '';
+    const endTime = toAscii(sTimes[1] ?? '').match(/\d{1,2}:\d{2}/)?.[0]?.padStart(5, '0') ?? '';
+    if (!startTime || !endTime) {
+      alert('ساعت برگزاری را به شکل «HH:MM الی HH:MM» وارد کنید.');
+      return;
+    }
     setSavingMakeup(true);
     try {
       const res = await scheduleMakeupSessionAction({
         offeringId: selectedOfferingId,
         replacedSessionId: replacedSession?.id,
         sessionDate: toAscii(makeupForm.sessionDate),
-        startTime: normTime(sTimes[0] ?? '').replace(/\d{2}:(\d{2})/, '13:30').length > 0 ? normTime(sTimes[0] ?? '') : '13:30',
-        endTime: normTime(sTimes[1] ?? ''),
+        startTime,
+        endTime,
         roomName: isDirect ? roomName : '',
         isDirect,
       });
@@ -448,13 +464,14 @@ export default function ProfessorAttendanceClient({
 
   const students = currentOffering.students;
   const totalStudents = students.length;
+  const recordedCount = students.filter(s => currentSession.studentStatuses[s.id]).length;
   const presentCount = students.filter(s => {
     const st = currentSession.studentStatuses[s.id]?.status;
     return st === 'PRESENT' || st === 'LATE';
   }).length;
   const absentCount = students.filter(s => currentSession.studentStatuses[s.id]?.status === 'ABSENT').length;
   const excusedCount = students.filter(s => currentSession.studentStatuses[s.id]?.status === 'EXCUSED').length;
-  const attendanceRate = totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0;
+  const attendanceRate = recordedCount > 0 ? Math.round((presentCount / recordedCount) * 100) : null;
 
   return (
     <div className="space-y-5" dir="rtl">
@@ -478,7 +495,9 @@ export default function ProfessorAttendanceClient({
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-slate-950">
                 سامانه هوشمند حضور و غیاب و اثر انگشت
               </span>
-              <span className="text-xs text-indigo-200">{termTitle} · استاد: {profDisplayName}</span>
+              <span className="text-xs text-indigo-200">
+                  {termTitle || 'نیمسال تعیین نشده'} · استاد: {profDisplayName}
+                </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
               📋 ثبت حضور و غیاب کلاسی و مدیریت جلسات جبرانی
@@ -510,7 +529,7 @@ export default function ProfessorAttendanceClient({
               onChange={e => {
                 const newOffId = Number(e.target.value);
                 setSelectedOfferingId(newOffId);
-                const firstSess = offerings.find(o => o.id === newOffId)?.sessions[0]?.sessionNo || 1;
+                const firstSess = offerings.find(o => o.id === newOffId)?.sessions[0]?.sessionNo ?? 0;
                 setSelectedSessionNo(firstSess);
               }}
               className="w-full bg-slate-900/90 text-white border border-indigo-400/50 rounded-lg px-3 py-2 font-bold"
@@ -524,7 +543,9 @@ export default function ProfessorAttendanceClient({
           </div>
 
           <div>
-            <label className="text-indigo-200 font-bold block mb-1">۲. انتخاب جلسه آموزشی (۱ الی ۱۶):</label>
+            <label className="text-indigo-200 font-bold block mb-1">
+              ۲. انتخاب جلسه آموزشی ({faNum(currentOffering.sessions.length)} جلسه ثبت‌شده):
+            </label>
             <select
               value={selectedSessionNo}
               onChange={e => setSelectedSessionNo(Number(e.target.value))}
@@ -560,22 +581,32 @@ export default function ProfessorAttendanceClient({
             </div>
             <div className="space-y-0.5">
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-white text-xs">موتور تطبیق هوشمند تردد بیومتریک و پیوستگی کلاس‌ها:</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500 text-white">
-                  ✓ فعال (Chain Matching)
+                <span className="font-extrabold text-white text-xs">تأیید حضور استاد در این جلسه:</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    currentSession.professorCheck ? 'bg-emerald-500 text-white' : 'bg-slate-600 text-slate-200'
+                  }`}
+                >
+                  {currentSession.professorCheck ? '✓ ثبت شده' : 'ثبت نشده'}
                 </span>
               </div>
               <p className="text-indigo-200 text-[11px] leading-4">
-                اثر انگشت در گیت ورودی (ساعت ۰۷:۴۸) ثبت شده است. برای کلاس‌های متوالی پشت‌سرهم، سیستم به طور خودکار حضور شما را تایید کرده و نیازی به ثبت مکرر اثر انگشت نیست.
+                {currentSession.professorCheck
+                  ? `روش تأیید: ${currentSession.professorCheck.verificationMethod} · زمان ثبت: ${
+                      currentSession.professorCheck.recordedAt ?? 'ثبت نشده'
+                    }`
+                  : 'برای این جلسه رکورد تأیید حضور استاد در پایگاه داده ثبت نشده است. پس از ثبت برگهٔ حضور، اطلاعات اینجا از سامانه نمایش داده می‌شود.'}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="px-2.5 py-1 rounded-lg bg-white/10 text-emerald-300 font-mono text-[11px] border border-white/10">
-              IP: 192.168.10.45 (شبکه داخلی دانشگاه)
-            </span>
-          </div>
+          {currentSession.professorCheck?.ipAddress && (
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="px-2.5 py-1 rounded-lg bg-white/10 text-emerald-300 font-mono text-[11px] border border-white/10" dir="ltr">
+                IP: {currentSession.professorCheck.ipAddress}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Status Alert */}
@@ -617,7 +648,7 @@ export default function ProfessorAttendanceClient({
 
             {currentSession.professorStatus === 'VERIFIED_PRESENT' && (
               <p className="text-xs text-emerald-800 font-bold leading-5">
-                ✓ حضور شما در این جلسه آموزشی از طریق سیستم گیت تردد و منطق پیوستگی ثبت گردیده و در فیش حقوقی لحاظ شد.
+                ✓ حضور شما در این جلسه آموزشی در پایگاه داده ثبت شده است.
               </p>
             )}
           </div>
@@ -700,7 +731,9 @@ export default function ProfessorAttendanceClient({
           </div>
           <div>
             <div className="text-xs text-slate-500 font-bold">حاضرین این جلسه</div>
-            <div className="text-lg font-black text-emerald-700">{faNum(presentCount)} نفر ({faNum(attendanceRate)}٪)</div>
+            <div className="text-lg font-black text-emerald-700">
+              {faNum(presentCount)} نفر {attendanceRate != null ? `(${faNum(attendanceRate)}٪)` : ''}
+            </div>
           </div>
         </div>
 
@@ -734,6 +767,9 @@ export default function ProfessorAttendanceClient({
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               با تغییر جلسه در بالای صفحه، اطلاعات و وضعیت‌های همان جلسه نمایش داده می‌شود.
+              {recordedCount < totalStudents
+                ? ` تا این لحظه برای ${faNum(recordedCount)} نفر از ${faNum(totalStudents)} دانشجو وضعیتی ثبت نشده است.`
+                : ''}
             </p>
           </div>
 
@@ -759,9 +795,10 @@ export default function ProfessorAttendanceClient({
             </thead>
             <tbody>
               {students.map((st, idx) => {
-                const sessionAtt = currentSession.studentStatuses[st.id] || { status: 'PRESENT' };
+                const recorded = currentSession.studentStatuses[st.id];
+                const sessionAtt = recorded || { status: 'PRESENT' as const };
                 const priorAbsents = studentPriorAbsentsMap[st.id] || 0;
-                const totalAbsentsWithCurrent = priorAbsents + (sessionAtt.status === 'ABSENT' ? 1 : 0);
+                const totalAbsentsWithCurrent = priorAbsents + (recorded?.status === 'ABSENT' ? 1 : 0);
                 const is3AbsencesWarning = totalAbsentsWithCurrent >= 3;
 
                 return (
@@ -773,7 +810,7 @@ export default function ProfessorAttendanceClient({
                       {faNum(st.studentCode)}
                     </td>
                     <td className="p-3 border border-slate-200 font-extrabold text-slate-900">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <span>{st.fullName}</span>
                         {is3AbsencesWarning && (
                           <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 font-bold text-[10px] border border-rose-300">
@@ -793,7 +830,7 @@ export default function ProfessorAttendanceClient({
                           type="button"
                           onClick={() => setStudentStatus(st.id, 'PRESENT')}
                           className={`px-2.5 py-1.5 rounded-xl font-bold text-[11px] transition ${
-                            sessionAtt.status === 'PRESENT'
+                            recorded?.status === 'PRESENT'
                               ? 'bg-emerald-600 text-white shadow-xs'
                               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                           }`}
@@ -804,7 +841,7 @@ export default function ProfessorAttendanceClient({
                           type="button"
                           onClick={() => setStudentStatus(st.id, 'ABSENT')}
                           className={`px-2.5 py-1.5 rounded-xl font-bold text-[11px] transition ${
-                            sessionAtt.status === 'ABSENT'
+                            recorded?.status === 'ABSENT'
                               ? 'bg-rose-600 text-white shadow-xs'
                               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                           }`}
@@ -815,7 +852,7 @@ export default function ProfessorAttendanceClient({
                           type="button"
                           onClick={() => setStudentStatus(st.id, 'EXCUSED')}
                           className={`px-2.5 py-1.5 rounded-xl font-bold text-[11px] transition ${
-                            sessionAtt.status === 'EXCUSED'
+                            recorded?.status === 'EXCUSED'
                               ? 'bg-amber-500 text-slate-950 shadow-xs'
                               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                           }`}
@@ -826,7 +863,7 @@ export default function ProfessorAttendanceClient({
                           type="button"
                           onClick={() => setStudentStatus(st.id, 'LATE')}
                           className={`px-2.5 py-1.5 rounded-xl font-bold text-[11px] transition ${
-                            sessionAtt.status === 'LATE'
+                            recorded?.status === 'LATE'
                               ? 'bg-sky-600 text-white shadow-xs'
                               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                           }`}
@@ -834,7 +871,7 @@ export default function ProfessorAttendanceClient({
                           🔵 تاخیر
                         </button>
 
-                        {sessionAtt.status === 'LATE' && (
+                        {recorded?.status === 'LATE' && (
                           <div className="flex items-center gap-1 mr-1">
                             <input
                               type="number"
@@ -975,17 +1012,16 @@ export default function ProfessorAttendanceClient({
 
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">ساعت تشکیل:</label>
-                  <select
-                    value={makeupForm.sessionTime}
-                    onChange={e => setMakeupForm({ ...makeupForm, sessionTime: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl p-2.5 font-bold"
-                  >
-                    <option value="۱۳:۳۰ الی ۱۵:۳۰">۱۳:۳۰ الی ۱۵:۳۰ (شیفت بعدازظهر)</option>
-                    <option value="۱۵:۳۰ الی ۱۷:۳۰">۱۵:۳۰ الی ۱۷:۳۰ (شیفت عصر)</option>
-                    <option value="۱۷:۳۰ الی ۱۹:۳۰">۱۷:۳۰ الی ۱۹:۳۰ (شیفت غروب)</option>
-                    <option value="۰۸:۰۰ الی ۱۰:۰۰ (پنج‌شنبه)">۰۸:۰۰ الی ۱۰:۰۰ (پنج‌شنبه)</option>
-                    <option value="۱۰:۰۰ الی ۱۲:۰۰ (پنج‌شنبه)">۱۰:۰۰ الی ۱۲:۰۰ (پنج‌شنبه)</option>
-                  </select>
+<select
+                  value={makeupForm.sessionTime}
+                  onChange={e => setMakeupForm({ ...makeupForm, sessionTime: e.target.value })}
+                  className="w-full border border-slate-300 rounded-xl p-2.5 font-bold"
+                >
+                  <option value="">انتخاب بازهٔ ساعتی…</option>
+                  {MAKEUP_TIME_OPTIONS.map(t => (
+                    <option key={t} value={t}>{t.replace('الی', 'الی')}</option>
+                  ))}
+                </select>
                 </div>
               </div>
 

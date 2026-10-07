@@ -1,8 +1,8 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
-  academic_terms, class_sessions, classrooms, course_offerings, courses, enrollments,
-  professor_class_attendance, schedules, student_class_attendance, students, users,
+  class_sessions, classrooms, course_offerings, courses, enrollments,
+  offering_professors, professor_class_attendance, schedules, student_class_attendance, students, users,
 } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import { jalaliDateOf } from '@/lib/scheduling-core';
@@ -26,21 +26,30 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
     );
   }
 
-  const term = await currentTermFor(me.universityId ?? user.universityId ?? null);
+  const universityId = me.universityId ?? user.universityId ?? null;
+  const term = await currentTermFor(universityId);
   const termTitle = term?.title ?? '';
   const sp = await searchParams;
   const defaultOfferingId = sp.offeringId ? Number(sp.offeringId) : undefined;
   const todayJalali = jalaliDateOf(new Date());
 
-  const myOfferings = await db
-    .select({ offering: course_offerings, course: courses })
-    .from(course_offerings)
-    .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-    .where(and(
-      eq(course_offerings.professorId, me.id),
-      term ? eq(course_offerings.termId, term.id) : undefined,
-      eq(course_offerings.isActive, 1),
-    ));
+  const sharedOfferingIds = db
+    .select({ id: offering_professors.offeringId })
+    .from(offering_professors)
+    .where(eq(offering_professors.staffId, me.id));
+
+  const myOfferings = term
+    ? await db
+        .select({ offering: course_offerings, course: courses })
+        .from(course_offerings)
+        .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+        .where(and(
+          eq(course_offerings.termId, term.id),
+          universityId ? eq(course_offerings.universityId, universityId) : undefined,
+          eq(course_offerings.isActive, 1),
+          sql`(${course_offerings.professorId} = ${me.id} or ${course_offerings.id} in ${sharedOfferingIds})`,
+        ))
+    : [];
 
   const offeringIds = myOfferings.map(o => o.offering.id);
   const allSessions = offeringIds.length
@@ -55,7 +64,13 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
         .where(and(inArray(schedules.offeringId, offeringIds), eq(schedules.scheduleType, 'CLASS')))
     : [];
   const roomIds = [...new Set(scheduleRows.map(r => r.roomId).filter(Boolean))] as number[];
-  const rooms = roomIds.length ? await db.select().from(classrooms).where(inArray(classrooms.id, roomIds)) : [];
+  const scheduledRooms = roomIds.length
+    ? await db.select().from(classrooms).where(inArray(classrooms.id, roomIds))
+    : [];
+  // فهرست انتخاب کلاس برای جلسهٔ جبرانی: همهٔ کلاس‌های دانشگاه استاد
+  const rooms = universityId
+    ? await db.select().from(classrooms).where(eq(classrooms.universityId, universityId)).orderBy(classrooms.name)
+    : scheduledRooms;
 
   // دانشجویان هر ارائه (ثبت‌نامی‌های فعال)
   const enrollmentRows = offeringIds.length
@@ -85,7 +100,7 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
     ? await db.select().from(professor_class_attendance)
         .where(and(inArray(professor_class_attendance.sessionId, allSessions.map(s => s.id)), eq(professor_class_attendance.staffId, me.id)))
     : [];
-  const profAttSessions = new Set(profAttRows.map(r => r.sessionId));
+  const profAttBySession = new Map(profAttRows.map(r => [r.sessionId, r]));
 
   const initialOfferings: AttendanceCourseOffering[] = myOfferings.map(({ offering, course }) => {
     const sched = scheduleRows.find(r => r.offeringId === offering.id);
@@ -107,6 +122,10 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
         if (attMap) for (const [studentId, status] of attMap) {
           statuses[studentId] = { status: status as 'PRESENT' | 'LATE' | 'ABSENT' | 'EXCUSED' };
         }
+        const profCheck = profAttBySession.get(s.id);
+        const replaced = s.replacedSessionId
+          ? allSessions.find(x => x.id === s.replacedSessionId)?.sessionNo ?? undefined
+          : undefined;
         return {
           id: s.id,
           sessionNo: s.sessionNo ?? 0,
@@ -115,11 +134,18 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
           endTime: faDigits(s.endTime),
           roomName: room?.name ?? '',
           topic: `جلسهٔ ${s.sessionNo ?? '—'} — ${course.title}`,
-          isHeld: (attMap?.size ?? 0) > 0 || profAttSessions.has(s.id),
+          isHeld: (attMap?.size ?? 0) > 0 || !!profCheck,
           isMakeUp: (s.isMakeUpSession ?? 0) === 1,
-          replacedSessionNo: undefined,
-          professorStatus: profAttSessions.has(s.id) ? 'VERIFIED_PRESENT' : 'UPCOMING',
-          verificationDetail: profAttSessions.has(s.id) ? 'حضور استاد در این جلسه ثبت شده است.' : 'جلسه در انتظار برگزاری/ثبت',
+          replacedSessionNo: replaced,
+          professorStatus: profCheck ? 'VERIFIED_PRESENT' : 'UPCOMING',
+          verificationDetail: profCheck ? 'حضور استاد در این جلسه ثبت شده است.' : 'جلسه در انتظار برگزاری/ثبت',
+          professorCheck: profCheck
+            ? {
+                verificationMethod: profCheck.verificationMethod,
+                ipAddress: profCheck.recordedIpAddress,
+                recordedAt: profCheck.recordedAt ? profCheck.recordedAt.toLocaleString('fa-IR') : null,
+              }
+            : null,
           studentStatuses: statuses,
         };
       });
@@ -144,16 +170,23 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
     .filter(s => (s.isMakeUpSession ?? 0) === 1)
     .map(s => {
       const offering = myOfferings.find(o => o.offering.id === s.offeringId);
+      const replacedSessionNo = s.replacedSessionId
+        ? allSessions.find(x => x.id === s.replacedSessionId)?.sessionNo ?? 0
+        : 0;
+      const room = offering
+        ? scheduleRows.find(r => r.offeringId === offering.offering.id)?.roomId
+        : undefined;
+      const roomName = room ? rooms.find(r => r.id === room)?.name ?? '' : '';
       return {
         id: s.id,
         offeringId: s.offeringId,
         courseTitle: offering?.course.title ?? '',
         groupNumber: offering?.offering.groupNumber ?? 1,
         professorName: user.name,
-        replacedSessionNo: 0,
+        replacedSessionNo,
         sessionDate: faDigits(s.sessionDate),
         sessionTime: `${faDigits(s.startTime)} الی ${faDigits(s.endTime)}`,
-        roomName: '',
+        roomName,
         topic: `جلسهٔ جبرانی ${s.sessionNo ?? ''}`,
         reason: s.status === 'PROPOSED' ? 'در انتظار تأیید اداره آموزش' : 'ثبت مستقیم توسط استاد',
         status: s.status === 'PROPOSED' ? 'PENDING_EDUCATION' : 'APPROVED_DIRECT',

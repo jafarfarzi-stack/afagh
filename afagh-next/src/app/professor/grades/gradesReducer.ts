@@ -198,8 +198,8 @@ export function gradesReducer(state: GradesState, action: GradesAction): GradesS
     case 'SIGN_OFFERING': {
       const offering = state.offerings.find(o => o.id === state.selectedOfferingId);
       if (!offering || isOfferingFinalized(offering)) return state;
-      const nowStr = '۱۴۰۵/۰۹/۱۵ - ' + new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
-      const sigHash = 'AF-DS-1405-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+      const nowStr = new Date().toLocaleString('fa-IR');
+      const sigHash = computeGradesHash(offering);
 
       const updated = patchOffering(state, offering.id, off => {
         if (off.isCoTaught && off.coTaughtDetails) {
@@ -310,16 +310,14 @@ export function gradesReducer(state: GradesState, action: GradesAction): GradesS
     case 'ARCHIVE_CERTIFICATE': {
       const offering = state.offerings.find(o => o.id === state.selectedOfferingId);
       if (!offering) return state;
-      const dossierCode = 'AF-ARC-DOSSIER-' + offering.code + '-G' + offering.groupNumber + '-1405';
       return {
         ...state,
         offerings: patchOffering(state, offering.id, off => ({
           ...off,
           isArchived: true,
-          archivedAt: '۱۴۰۵/۰۹/۱۵ - ' + new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
-          archiveDossierId: dossierCode,
+          archivedAt: new Date().toLocaleString('fa-IR'),
         })),
-        toastMessage: `📁 صورت‌جلسه رسمی آزمون با شناسه ${dossierCode} با موفقیت در بایگانی اسناد هیئت علمی دانشگاه آفاق ثبت و ذخیره گردید.`,
+        toastMessage: '📁 صورت‌جلسهٔ رسمی آزمون در پروندهٔ الکترونیک این درس علامت‌گذاری شد.',
       };
     }
 

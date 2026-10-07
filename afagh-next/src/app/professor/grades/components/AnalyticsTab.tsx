@@ -14,7 +14,8 @@ interface AnalyticsTabProps {
 export default function AnalyticsTab({ offering }: AnalyticsTabProps) {
   const dist = computeDistribution(offering.students);
   const stats = computeClassStats(offering.students);
-  const total = offering.students.length || 1;
+  const gradedCount = offering.students.filter(s => s.calculatedFinalScore !== undefined).length;
+  const total = gradedCount || 1;
 
   const bars: { label: string; count: number; color: string; range: string }[] = [
     { label: 'عالی', count: dist.excellent, color: 'bg-emerald-500', range: '۱۷ تا ۲۰' },
@@ -45,7 +46,9 @@ export default function AnalyticsTab({ offering }: AnalyticsTabProps) {
           <div className="text-[11px] font-black text-rose-700 mt-1">تعداد مردود</div>
         </div>
         <div className="p-4 bg-sky-50 border border-sky-200 rounded-2xl text-center">
-          <div className="text-2xl font-black text-sky-800">{faNum(Number(stats.average.toFixed(2)))}</div>
+          <div className="text-2xl font-black text-sky-800">
+            {gradedCount > 0 ? faNum(Number(stats.average.toFixed(2))) : '—'}
+          </div>
           <div className="text-[11px] font-black text-sky-700 mt-1">میانگین کلاس</div>
         </div>
         <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center">
@@ -57,6 +60,11 @@ export default function AnalyticsTab({ offering }: AnalyticsTabProps) {
       {/* نمودار توزیع */}
       <div className="space-y-3">
         <div className="text-xs font-black text-slate-700">📊 توزیع فراوانی نمرات</div>
+        {gradedCount === 0 && (
+          <p className="text-xs font-bold text-slate-500 bg-slate-50 border border-dashed border-slate-300 rounded-xl p-4 text-center">
+            هنوز داده‌ای ثبت نشده است — هیچ نمره‌ای برای این درس وارد نشده، بنابراین توزیعی برای نمایش وجود ندارد.
+          </p>
+        )}
         {bars.map(b => (
           <div key={b.label} className="flex items-center gap-3">
             <div className="w-24 text-[11px] font-black text-slate-600">{b.label} <span className="text-slate-400 font-bold">({b.range})</span></div>
