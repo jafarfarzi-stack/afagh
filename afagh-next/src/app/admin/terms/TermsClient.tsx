@@ -9,6 +9,8 @@ import {
   type SyncResult,
 } from './actions';
 
+const HIDDEN_TERM_TYPES = ['EQUIVALENCE', 'SPECIAL'];
+
 type Uni = { id: number; code: string; title: string };
 
 type TermRow = {
@@ -60,20 +62,27 @@ export default function TermsClient({
   const [syncReport, setSyncReport] = useState<SyncResult | null>(null);
   const [picks, setPicks] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState<'single' | 'bulk' | 'sync' | null>(null);
+  const [teachingOnly, setTeachingOnly] = useState(false);
   const [, startTransition] = useTransition();
+
+  const visibleTerms = useMemo(
+    () => (teachingOnly ? terms.filter((t) => !HIDDEN_TERM_TYPES.includes(t.termType)) : terms),
+    [terms, teachingOnly],
+  );
+  const hiddenCount = terms.length - visibleTerms.length;
 
   const grouped = useMemo(() => {
     const map = new Map<number, TermRow[]>();
-    for (const t of terms) {
+    for (const t of visibleTerms) {
       if (t.universityId == null) continue;
       const list = map.get(t.universityId) ?? [];
       list.push(t);
       map.set(t.universityId, list);
     }
     return map;
-  }, [terms]);
+  }, [visibleTerms]);
 
-  const orphanTerms = useMemo(() => terms.filter((t) => t.universityId == null), [terms]);
+  const orphanTerms = useMemo(() => visibleTerms.filter((t) => t.universityId == null), [visibleTerms]);
 
   const uniLabel = (id: number) => {
     const u = universities.find((x) => x.id === id);
@@ -120,9 +129,27 @@ export default function TermsClient({
           قاعدهٔ سامانه: هر دانشگاه حداکثر یک نیمسال فعال دارد و با هر فعال‌سازی، پرچم بقیهٔ نیمسال‌های
           همان دانشگاه در یک تراکنش صفر می‌شود.
         </p>
+        <label className="flex items-center gap-2 text-[11px] text-slate-600">
+          <input
+            type="checkbox"
+            checked={teachingOnly}
+            onChange={(e) => {
+              setTeachingOnly(e.target.checked);
+              setPicks({});
+            }}
+            className="accent-slate-700"
+          />
+          فقط نیمسال‌های آموزشی
+          <span className="text-slate-400">
+            (معادل‌سازی و ویژه پنهان شوند — {hiddenCount.toLocaleString('fa-IR')} ردیف)
+          </span>
+        </label>
         <div className="flex flex-wrap gap-2 text-[11px]">
           <span className="px-2 py-1 rounded bg-slate-100 text-slate-700">
             کل نیمسال‌ها: <b className="tabular-nums">{terms.length.toLocaleString('fa-IR')}</b>
+          </span>
+          <span className="px-2 py-1 rounded bg-slate-100 text-slate-700">
+            نمایش‌داده‌شده: <b className="tabular-nums">{visibleTerms.length.toLocaleString('fa-IR')}</b>
           </span>
           <span className="px-2 py-1 rounded bg-indigo-100 text-indigo-800">
             پرچم فعال: <b className="tabular-nums">{activeCount.toLocaleString('fa-IR')}</b>

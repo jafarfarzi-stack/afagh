@@ -2,7 +2,7 @@ import { desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { academic_terms, universities } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
-import { termContainsToday } from '@/lib/term-scope';
+import { sortTermsChronologically, termContainsToday } from '@/lib/term-scope';
 import TermsClient from './TermsClient';
 
 export const dynamic = 'force-dynamic';
@@ -29,20 +29,22 @@ export default async function AdminTermsPage() {
       isCurrent: academic_terms.isCurrent,
     })
     .from(academic_terms)
-    .orderBy(desc(academic_terms.sortOrder), desc(academic_terms.termCode));
+    .orderBy(desc(academic_terms.id));
 
-  const terms = rows.map((r) => ({
-    id: r.id,
-    universityId: r.universityId,
-    termCode: r.termCode,
-    title: r.title,
-    termType: r.termType,
-    academicYear: r.academicYear,
-    startDate: r.startDate ? r.startDate.toISOString() : null,
-    endDate: r.endDate ? r.endDate.toISOString() : null,
-    isCurrent: r.isCurrent === 1,
-    containsToday: termContainsToday(r, today),
-  }));
+  const terms = sortTermsChronologically(
+    rows.map((r) => ({
+      id: r.id,
+      universityId: r.universityId,
+      termCode: r.termCode,
+      title: r.title,
+      termType: r.termType,
+      academicYear: r.academicYear,
+      startDate: r.startDate ? r.startDate.toISOString() : null,
+      endDate: r.endDate ? r.endDate.toISOString() : null,
+      isCurrent: r.isCurrent === 1,
+      containsToday: termContainsToday(r, today),
+    })),
+  );
 
   const activeCount = terms.filter((t) => t.isCurrent).length;
   const containingCount = terms.filter((t) => t.containsToday).length;
