@@ -7,7 +7,8 @@ import {
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import { jalaliDateOf } from '@/lib/scheduling-core';
 import ProfessorAttendanceClient, { AttendanceCourseOffering, ClassSessionItem, MakeupSessionRecord, StudentInfo } from './ProfessorAttendanceClient';
-import { currentTermFor } from '@/lib/terms';
+import { professorTermFilter } from '@/lib/professor-term-filter';
+import ProfessorTermFilterBanner from '../term-filter-banner';
 import { isDemoProfessorUser } from '@/lib/demo-accounts';
 import {
   DEMO_ACADEMIC_RANK,
@@ -41,32 +42,35 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
   const defaultOfferingId = sp.offeringId ? Number(sp.offeringId) : undefined;
   const todayJalali = jalaliDateOf(new Date());
   const demo = await isDemoProfessorUser(user.id);
+  const universityId = me.universityId ?? user.universityId ?? null;
+  const { term, selectedTerm } = await professorTermFilter(universityId);
 
   if (demo) {
     const demoName = user.name || DEMO_ATTENDANCE_PROFESSOR_FALLBACK_NAME;
     return (
-      <ProfessorAttendanceClient
-        demo
-        professor={{
-          id: me.id,
-          name: demoName,
-          staffCode: me.staffCode,
-          academicRank: DEMO_ACADEMIC_RANK,
-        }}
-        termTitle={DEMO_TERM_TITLE}
-        initialOfferings={demoAttendanceOfferings()}
-        defaultOfferingId={
-          defaultOfferingId && sp.offeringId ? defaultOfferingId : DEMO_ATTENDANCE_DEFAULT_OFFERING_ID
-        }
-        initialMakeupHistory={demoAttendanceMakeupHistory(demoName)}
-        todayJalali={DEMO_ATTENDANCE_TODAY_JALALI}
-        rooms={DEMO_ATTENDANCE_ROOMS}
-      />
+      <div className="space-y-3">
+        <ProfessorTermFilterBanner selectedTerm={selectedTerm} universityId={universityId} demo />
+        <ProfessorAttendanceClient
+          demo
+          professor={{
+            id: me.id,
+            name: demoName,
+            staffCode: me.staffCode,
+            academicRank: DEMO_ACADEMIC_RANK,
+          }}
+          termTitle={DEMO_TERM_TITLE}
+          initialOfferings={demoAttendanceOfferings()}
+          defaultOfferingId={
+            defaultOfferingId && sp.offeringId ? defaultOfferingId : DEMO_ATTENDANCE_DEFAULT_OFFERING_ID
+          }
+          initialMakeupHistory={demoAttendanceMakeupHistory(demoName)}
+          todayJalali={DEMO_ATTENDANCE_TODAY_JALALI}
+          rooms={DEMO_ATTENDANCE_ROOMS}
+        />
+      </div>
     );
   }
 
-  const universityId = me.universityId ?? user.universityId ?? null;
-  const term = await currentTermFor(universityId);
   const termTitle = term?.title ?? '';
 
   const sharedOfferingIds = db
@@ -238,14 +242,17 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
   };
 
   return (
-    <ProfessorAttendanceClient
-      professor={professorData}
-      termTitle={termTitle}
-      initialOfferings={initialOfferings}
-      defaultOfferingId={defaultOfferingId}
-      initialMakeupHistory={initialMakeupHistory}
-      todayJalali={todayJalali}
-      rooms={roomOptions}
-    />
+    <div className="space-y-3">
+      <ProfessorTermFilterBanner selectedTerm={selectedTerm} universityId={universityId} />
+      <ProfessorAttendanceClient
+        professor={professorData}
+        termTitle={termTitle}
+        initialOfferings={initialOfferings}
+        defaultOfferingId={defaultOfferingId}
+        initialMakeupHistory={initialMakeupHistory}
+        todayJalali={todayJalali}
+        rooms={roomOptions}
+      />
+    </div>
   );
 }

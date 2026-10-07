@@ -1,10 +1,10 @@
 import { getStaffByUser, requireRole } from '@/lib/auth';
-import { currentTermFor } from '@/lib/terms';
 import {
   professorDepartmentName,
   professorScheduleRows,
   universityTitle,
 } from '@/lib/professor-data';
+import { professorTermFilter } from '@/lib/professor-term-filter';
 import { isDemoProfessorUser } from '@/lib/demo-accounts';
 import {
   DEMO_ACADEMIC_RANK,
@@ -15,6 +15,7 @@ import {
   DEMO_UNIVERSITY_TITLE,
 } from '@/lib/demo-professor-data';
 import ProfessorScheduleClient, { type ProfessorScheduleOffering } from './ProfessorScheduleClient';
+import ProfessorTermFilterBanner from '../term-filter-banner';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,27 +32,30 @@ export default async function ProfessorSchedulePage() {
   }
 
   const demo = await isDemoProfessorUser(user.id);
+  const universityId = me.universityId ?? user.universityId ?? null;
+  const { term, selectedTerm } = await professorTermFilter(universityId);
 
   if (demo) {
     return (
-      <ProfessorScheduleClient
-        professor={{
-          id: me.id,
-          name: user.name,
-          staffCode: me.staffCode,
-          academicRank: DEMO_ACADEMIC_RANK,
-          contractType: DEMO_CONTRACT_TYPE,
-          departmentName: DEMO_DEPARTMENT_NAME,
-          universityTitle: DEMO_UNIVERSITY_TITLE,
-        }}
-        termTitle={DEMO_TERM_TITLE}
-        initialOfferings={DEMO_SCHEDULE_OFFERINGS}
-      />
+      <div className="space-y-3">
+        <ProfessorTermFilterBanner selectedTerm={selectedTerm} universityId={universityId} demo />
+        <ProfessorScheduleClient
+          professor={{
+            id: me.id,
+            name: user.name,
+            staffCode: me.staffCode,
+            academicRank: DEMO_ACADEMIC_RANK,
+            contractType: DEMO_CONTRACT_TYPE,
+            departmentName: DEMO_DEPARTMENT_NAME,
+            universityTitle: DEMO_UNIVERSITY_TITLE,
+          }}
+          termTitle={DEMO_TERM_TITLE}
+          initialOfferings={DEMO_SCHEDULE_OFFERINGS}
+        />
+      </div>
     );
   }
 
-  const universityId = me.universityId ?? user.universityId ?? null;
-  const term = await currentTermFor(universityId);
   const [departmentName, uniTitle] = await Promise.all([
     professorDepartmentName(me.departmentId),
     universityTitle(universityId),
@@ -72,10 +76,13 @@ export default async function ProfessorSchedulePage() {
   };
 
   return (
-    <ProfessorScheduleClient
-      professor={professorData}
-      termTitle={term?.title ?? ''}
-      initialOfferings={offerings}
-    />
+    <div className="space-y-3">
+      <ProfessorTermFilterBanner selectedTerm={selectedTerm} universityId={universityId} />
+      <ProfessorScheduleClient
+        professor={professorData}
+        termTitle={term?.title ?? ''}
+        initialOfferings={offerings}
+      />
+    </div>
   );
 }

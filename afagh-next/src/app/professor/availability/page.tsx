@@ -3,7 +3,9 @@ import { db } from '@/db';
 import { departments, professor_term_contracts } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import ProfessorAvailabilityClient from './ProfessorAvailabilityClient';
-import { currentTermFor, termsFor } from '@/lib/terms';
+import ProfessorTermFilterBanner from '../term-filter-banner';
+import { termsFor } from '@/lib/terms';
+import { professorTermFilter } from '@/lib/professor-term-filter';
 import { isDemoProfessorUser } from '@/lib/demo-accounts';
 import {
   DEMO_ACADEMIC_RANK,
@@ -31,27 +33,31 @@ export default async function ProfessorAvailabilityPage() {
 
   const uniId = demo ? DEMO_UNIVERSITY_ID : me.universityId ?? user.universityId ?? null;
   const terms = demo ? [] : await termsFor(uniId);
-  const term = await currentTermFor(uniId);
+  const { term, selectedTerm } = await professorTermFilter(uniId);
 
   if (demo) {
     return (
-      <ProfessorAvailabilityClient
-        demo
-        professor={{
-          id: me.id,
-          name: user.name,
-          staffCode: me.staffCode,
-          academicRank: DEMO_ACADEMIC_RANK,
-          contractType: DEMO_CONTRACT_TYPE,
-          departmentName: DEMO_DEPARTMENT_NAME,
-          maxWeeklyUnits: 12,
-        }}
-        terms={
-          term
-            ? [{ id: term.id, code: term.termCode, title: DEMO_AVAILABILITY_TERM.title, isCurrent: true }]
-            : [DEMO_AVAILABILITY_TERM]
-        }
-      />
+      <div className="space-y-3">
+        <ProfessorTermFilterBanner selectedTerm={selectedTerm} universityId={uniId} demo />
+        <ProfessorAvailabilityClient
+          demo
+          professor={{
+            id: me.id,
+            name: user.name,
+            staffCode: me.staffCode,
+            academicRank: DEMO_ACADEMIC_RANK,
+            contractType: DEMO_CONTRACT_TYPE,
+            departmentName: DEMO_DEPARTMENT_NAME,
+            maxWeeklyUnits: 12,
+          }}
+          terms={
+            term
+              ? [{ id: term.id, code: term.termCode, title: DEMO_AVAILABILITY_TERM.title, isCurrent: true }]
+              : [DEMO_AVAILABILITY_TERM]
+          }
+          initialTermId={selectedTerm?.id ?? null}
+        />
+      </div>
     );
   }
 
@@ -67,22 +73,26 @@ export default async function ProfessorAvailabilityPage() {
   const maxWeeklyUnits = Number(termContract?.baseDutyUnits ?? 0);
 
   return (
-    <ProfessorAvailabilityClient
-      professor={{
-        id: me.id,
-        name: user.name,
-        staffCode: me.staffCode,
-        academicRank: me.academicRank ?? '',
-        contractType: me.cooperationType ?? me.employmentType ?? '',
-        departmentName: dep?.name ?? '',
-        maxWeeklyUnits,
-      }}
-      terms={terms.map(t => ({
-        id: t.id,
-        code: t.termCode,
-        title: t.title,
-        isCurrent: Boolean(t.isCurrent),
-      }))}
-    />
+    <div className="space-y-3">
+      <ProfessorTermFilterBanner selectedTerm={selectedTerm} universityId={uniId} />
+      <ProfessorAvailabilityClient
+        professor={{
+          id: me.id,
+          name: user.name,
+          staffCode: me.staffCode,
+          academicRank: me.academicRank ?? '',
+          contractType: me.cooperationType ?? me.employmentType ?? '',
+          departmentName: dep?.name ?? '',
+          maxWeeklyUnits,
+        }}
+        terms={terms.map(t => ({
+          id: t.id,
+          code: t.termCode,
+          title: t.title,
+          isCurrent: Boolean(t.isCurrent),
+        }))}
+        initialTermId={selectedTerm?.id ?? null}
+      />
+    </div>
   );
 }

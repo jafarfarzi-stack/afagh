@@ -1,11 +1,11 @@
 import { getStaffByUser, requireRole } from '@/lib/auth';
-import { currentTermFor } from '@/lib/terms';
 import {
   coTaughtPartners,
   professorEnrollmentRows,
   professorScheduleRows,
   universityTitle,
 } from '@/lib/professor-data';
+import { professorTermFilter } from '@/lib/professor-term-filter';
 import { isDemoProfessorUser } from '@/lib/demo-accounts';
 import {
   DEMO_CERTIFICATE_UNIVERSITY_TITLE,
@@ -15,6 +15,7 @@ import {
 } from '@/lib/demo-professor-data';
 import { DEFAULT_RUBRIC } from './grades-core';
 import ProfessorGradesClient, { type GradingCourseOffering } from './ProfessorGradesClient';
+import ProfessorTermFilterBanner from '../term-filter-banner';
 import type { GradeAppealItem, StudentGradeItem } from './types';
 
 export const dynamic = 'force-dynamic';
@@ -59,26 +60,29 @@ export default async function ProfessorGradesPage({
 
   const defaultOfferingId = sp.offeringId ? Number(sp.offeringId) : undefined;
   const demo = await isDemoProfessorUser(user.id);
+  const universityId = me.universityId ?? user.universityId ?? null;
+  const { term, selectedTerm } = await professorTermFilter(universityId);
 
   if (demo) {
     const demoName = user.name || DEMO_PROFESSOR_FALLBACK_NAME;
     return (
-      <ProfessorGradesClient
-        professor={{
-          id: me.id,
-          name: demoName,
-          staffCode: me.staffCode,
-          universityTitle: DEMO_CERTIFICATE_UNIVERSITY_TITLE,
-        }}
-        termTitle={DEMO_TERM_TITLE}
-        initialOfferings={demoGradesOfferings(demoName, me.staffCode)}
-        defaultOfferingId={defaultOfferingId}
-      />
+      <div className="space-y-3">
+        <ProfessorTermFilterBanner selectedTerm={selectedTerm} universityId={universityId} demo />
+        <ProfessorGradesClient
+          professor={{
+            id: me.id,
+            name: demoName,
+            staffCode: me.staffCode,
+            universityTitle: DEMO_CERTIFICATE_UNIVERSITY_TITLE,
+          }}
+          termTitle={DEMO_TERM_TITLE}
+          initialOfferings={demoGradesOfferings(demoName, me.staffCode)}
+          defaultOfferingId={defaultOfferingId}
+        />
+      </div>
     );
   }
 
-  const universityId = me.universityId ?? user.universityId ?? null;
-  const term = await currentTermFor(universityId);
   const termTitle = term?.title ?? '';
 
   if (!term) {
@@ -193,11 +197,14 @@ export default async function ProfessorGradesPage({
   };
 
   return (
-    <ProfessorGradesClient
-      professor={professorData}
-      termTitle={termTitle}
-      initialOfferings={initialOfferings}
-      defaultOfferingId={defaultOfferingId}
-    />
+    <div className="space-y-3">
+      <ProfessorTermFilterBanner selectedTerm={selectedTerm} universityId={universityId} />
+      <ProfessorGradesClient
+        professor={professorData}
+        termTitle={termTitle}
+        initialOfferings={initialOfferings}
+        defaultOfferingId={defaultOfferingId}
+      />
+    </div>
   );
 }

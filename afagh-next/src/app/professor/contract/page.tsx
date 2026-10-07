@@ -2,12 +2,13 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { electronic_documents, users } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
-import { currentTermFor } from '@/lib/terms';
 import { ensureContractDocument } from '@/lib/contract-engine';
 import { universityTitle } from '@/lib/professor-data';
+import { professorTermFilter } from '@/lib/professor-term-filter';
 import { isDemoProfessorUser } from '@/lib/demo-accounts';
 import { DEMO_UNIVERSITY_TITLE, demoContractView } from '@/lib/demo-professor-data';
 import ProfessorContractClient, { type ContractView } from './ProfessorContractClient';
+import ProfessorTermFilterBanner from '../term-filter-banner';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,24 +27,27 @@ export default async function ProfessorContractPage() {
 
   const [identity] = await db.select({ nationalCode: users.nationalCode }).from(users).where(eq(users.id, user.id)).limit(1);
   const demo = await isDemoProfessorUser(user.id);
+  const universityId = me.universityId ?? user.universityId ?? null;
+  const { term, selectedTerm } = await professorTermFilter(universityId);
 
   if (demo) {
     return (
-      <ProfessorContractClient
-        demo
-        initialContract={demoContractView({
-          professorName: user.name,
-          nationalCode: identity?.nationalCode ?? '',
-          staffCode: me.staffCode,
-          academicRank: me.academicRank ?? '',
-        })}
-        universityTitle={DEMO_UNIVERSITY_TITLE}
-      />
+      <div className="space-y-3">
+        <ProfessorTermFilterBanner selectedTerm={selectedTerm} universityId={universityId} demo />
+        <ProfessorContractClient
+          demo
+          initialContract={demoContractView({
+            professorName: user.name,
+            nationalCode: identity?.nationalCode ?? '',
+            staffCode: me.staffCode,
+            academicRank: me.academicRank ?? '',
+          })}
+          universityTitle={DEMO_UNIVERSITY_TITLE}
+        />
+      </div>
     );
   }
 
-  const universityId = me.universityId ?? user.universityId ?? null;
-  const term = await currentTermFor(universityId);
   if (!term) {
     return (
       <div className="card text-center p-8 space-y-2">
@@ -56,19 +60,29 @@ export default async function ProfessorContractPage() {
   const res = await ensureContractDocument(me.id, term.id, { name: user.name, nationalCode: identity?.nationalCode ?? '' });
   if (!res.ok) {
     return (
-      <div className="card text-center p-8">
-        <p className="text-rose-700 font-bold">{res.error}</p>
+      <div className="space-y-3">
+        <ProfessorTermFilterBanner selectedTerm={selectedTerm} universityId={universityId} />
+        <div className="card text-center p-8">
+          <p className="text-rose-700 font-bold">{res.error}</p>
+        </div>
       </div>
     );
   }
 
   if (res.contract.lines.length === 0) {
     return (
-      <div className="card text-center p-8 space-y-2">
-        <p className="text-slate-600 font-bold">در این نیمسال درسی به شما تخصیص نیافته است.</p>
-        <p className="text-xs text-slate-500">
-          تا زمانی که جدول دروس مصوب شما خالی باشد، مبلغ و ساعات قرارداد قابل محاسبه نیست.
-        </p>
+      <div className="space-y-3">
+        <ProfessorTermFilterBanner selectedTerm={selectedTerm} universityId={universityId} />
+        <div className="card text-center p-8 space-y-2">
+          <p className="text-slate-600 font-bold">
+            {selectedTerm
+              ? `در نیمسال «${selectedTerm.title}» درسی به شما تخصیص نیافته است.`
+              : 'در این نیمسال درسی به شما تخصیص نیافته است.'}
+          </p>
+          <p className="text-xs text-slate-500">
+            تا زمانی که جدول دروس مصوب شما خالی باشد، مبلغ و ساعات قرارداد قابل محاسبه نیست.
+          </p>
+        </div>
       </div>
     );
   }
@@ -87,9 +101,12 @@ export default async function ProfessorContractPage() {
   };
 
   return (
-    <ProfessorContractClient
-      initialContract={contract}
-      universityTitle={universityTitleText ?? ''}
-    />
+    <div className="space-y-3">
+      <ProfessorTermFilterBanner selectedTerm={selectedTerm} universityId={universityId} />
+      <ProfessorContractClient
+        initialContract={contract}
+        universityTitle={universityTitleText ?? ''}
+      />
+    </div>
   );
 }

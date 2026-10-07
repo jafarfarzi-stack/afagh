@@ -24,6 +24,7 @@ interface Props {
     title: string;
     isCurrent: boolean;
   }[];
+  initialTermId?: number | null;
 }
 
 const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
@@ -39,8 +40,10 @@ const DEFAULT_TIME_SLOTS = [
   { id: 6, label: '۱۷:۳۰ الی ۱۹:۳۰', startTime: '17:30', endTime: '19:30', isBreak: false },
 ];
 
-export default function ProfessorAvailabilityClient({ demo = false, professor, terms }: Props) {
-  const [selectedTermId, setSelectedTermId] = useState<number>(terms[0]?.id || 0);
+export default function ProfessorAvailabilityClient({ demo = false, professor, terms, initialTermId }: Props) {
+  const [selectedTermId, setSelectedTermId] = useState<number>(
+    initialTermId && terms.some(t => t.id === initialTermId) ? initialTermId : terms[0]?.id || 0,
+  );
   const [notes, setNotes] = useState<string>('');
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);

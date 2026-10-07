@@ -6,6 +6,8 @@ import { getStaffByUser, requireRole } from '@/lib/auth';
 import { headedDepartments } from '@/lib/group-manager';
 import { getSiblingAccounts } from '@/lib/account-switch';
 import AccountSwitcher from '@/components/AccountSwitcher';
+import TermSwitcher from '@/components/TermSwitcher';
+import { getTermScope } from '@/lib/term-scope';
 import { logoutAction } from '../login/actions';
 
 export default async function ProfessorLayout({ children }: { children: React.ReactNode }) {
@@ -30,6 +32,10 @@ export default async function ProfessorLayout({ children }: { children: React.Re
   // حساب‌های هم‌شخص (کد پرسنلی/دانشجویی دیگرِ همین کدملی) برای بنر جابه‌جایی
   const siblings = await getSiblingAccounts().catch(() => []);
 
+  // استاد به یک دانشگاه تعلق دارد؛ فیلتر نیمسال فقط با همان دانشگاه اعتبارسنجی می‌شود
+  const universityId = me?.universityId ?? null;
+  const termScope = await getTermScope(universityId);
+
   return (
     <div className="min-h-screen bg-slate-50" dir="rtl">
       <AccountSwitcher siblings={siblings} />
@@ -45,6 +51,13 @@ export default async function ProfessorLayout({ children }: { children: React.Re
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <TermSwitcher
+              terms={termScope.terms}
+              selectedId={termScope.selectedId}
+              effectiveId={termScope.effectiveId}
+              universityId={universityId}
+              variant="dark"
+            />
             {headed.length > 0 && (
               <Link
                 href="/group-manager"

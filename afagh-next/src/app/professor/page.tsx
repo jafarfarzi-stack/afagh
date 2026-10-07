@@ -19,7 +19,8 @@ import {
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import VirtualClassroomWidget from '@/components/VirtualClassroomWidget';
 import { getTodayLiveClasses } from '@/lib/moodle-bbb';
-import { currentTermFor } from '@/lib/terms';
+import { professorTermFilter } from '@/lib/professor-term-filter';
+import ProfessorTermFilterBanner from './term-filter-banner';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,7 +37,7 @@ export default async function ProfessorHome() {
   const demo = await isDemoProfessorUser(user.id);
 
   const universityId = me.universityId ?? user.universityId ?? null;
-  const term = await currentTermFor(universityId);
+  const { term, selectedTerm } = await professorTermFilter(universityId);
 
   const liveSessions = await getTodayLiveClasses({ universityId, staffId: me.id, viewerUserId: user.id });
 
@@ -90,11 +91,13 @@ export default async function ProfessorHome() {
       ? db.select({ n: count() }).from(professor_availabilities)
           .where(and(eq(professor_availabilities.staffId, me.id), eq(professor_availabilities.termId, term.id)))
       : Promise.resolve([]),
-    db
-      .select({ id: payroll_statements.id, net: payroll_statements.netAmount, status: payroll_statements.status, midterm: payroll_statements.midtermPaidAmount })
-      .from(payroll_statements)
-      .innerJoin(professor_term_contracts, eq(professor_term_contracts.id, payroll_statements.contractId))
-      .where(eq(professor_term_contracts.staffId, me.id)),
+    term
+      ? db
+          .select({ id: payroll_statements.id, net: payroll_statements.netAmount, status: payroll_statements.status, midterm: payroll_statements.midtermPaidAmount })
+          .from(payroll_statements)
+          .innerJoin(professor_term_contracts, eq(professor_term_contracts.id, payroll_statements.contractId))
+          .where(and(eq(professor_term_contracts.staffId, me.id), eq(professor_term_contracts.termId, term.id)))
+      : Promise.resolve([]),
   ]);
 
   const contract = contractRows[0] ?? null;
@@ -152,6 +155,8 @@ export default async function ProfessorHome() {
 
   return (
     <div className="space-y-6" dir="rtl">
+
+      <ProfessorTermFilterBanner selectedTerm={selectedTerm} universityId={universityId} demo={demo} />
 
       <div className="bg-gradient-to-l from-indigo-950 via-indigo-900 to-slate-900 text-white rounded-3xl p-6 shadow-xl border border-indigo-700/50 space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -441,7 +446,9 @@ export default async function ProfessorHome() {
           ) : (
             <div className="space-y-3">
               <div className="text-center p-5 bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-xs font-bold text-slate-500">
-                برای نیمسال جاری دانشگاه شما قرارداد حق‌التدریسی ثبت نشده است.
+                {selectedTerm
+                  ? `برای نیمسال «${selectedTerm.title}» قرارداد حق‌التدریسی ثبت نشده است.`
+                  : 'برای نیمسال جاری دانشگاه شما قرارداد حق‌التدریسی ثبت نشده است.'}
               </div>
               <Link
                 href="/professor/documents"
