@@ -395,6 +395,8 @@ export const students = pgTable('students', {
 }, (t) => [
   // شماره دانشجویی در هر دانشگاه یکتاست (نه سراسری) — سما هر دانشگاه شماره‌گذاری جدا دارد
   unique('uq_students_uni_code').on(t.universityId, t.studentCode),
+  // جست‌وجوی ردیف‌های دانشجویی هر کاربر (ورود، نقش‌ها، بنر جابه‌جایی حساب)
+  index('idx_students_userid').on(t.userId),
 ]);
 
 /**
