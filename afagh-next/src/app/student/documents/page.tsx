@@ -1,7 +1,9 @@
 import { desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { document_categories, document_types, student_documents } from '@/db/schema';
-import { requireRole } from '@/lib/auth';
+import { getStudentByUser, requireRole } from '@/lib/auth';
+import { getTermScope } from '@/lib/term-scope';
+import TermFilterNote from '../term-filter-note';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,21 +12,29 @@ const stColor: Record<string, string> = { PENDING: 'bg-slate-100 text-slate-700'
 
 export default async function MyDocuments() {
   const user = await requireRole(['STUDENT']);
-  const rows = await db
-    .select({
-      id: student_documents.id, fileName: student_documents.fileName,
-      status: student_documents.verificationStatus, reason: student_documents.rejectionReason,
-      uploadedAt: student_documents.uploadedAt,
-      category: document_categories.title, type: document_types.title,
-    })
-    .from(student_documents)
-    .leftJoin(document_categories, eq(document_categories.id, student_documents.categoryId))
-    .leftJoin(document_types, eq(document_types.id, student_documents.typeId))
-    .where(eq(student_documents.personUserId, user.id))   // فقط مدارک خودم
-    .orderBy(desc(student_documents.id));
+  const me = await getStudentByUser(user.id);
+  const [rows, scope] = await Promise.all([
+    db
+      .select({
+        id: student_documents.id, fileName: student_documents.fileName,
+        status: student_documents.verificationStatus, reason: student_documents.rejectionReason,
+        uploadedAt: student_documents.uploadedAt,
+        category: document_categories.title, type: document_types.title,
+      })
+      .from(student_documents)
+      .leftJoin(document_categories, eq(document_categories.id, student_documents.categoryId))
+      .leftJoin(document_types, eq(document_types.id, student_documents.typeId))
+      .where(eq(student_documents.personUserId, user.id))   // فقط مدارک خودم
+      .orderBy(desc(student_documents.id)),
+    getTermScope(me?.universityId ?? user.universityId),
+  ]);
+  const selectedTerm = scope.selectedId
+    ? scope.terms.find(t => t.id === scope.selectedId) ?? null
+    : null;
 
   return (
     <div className="space-y-3">
+      {selectedTerm && <TermFilterNote title={selectedTerm.title} />}
       <div className="card">
         <h2 className="font-bold">مدارک من</h2>
         <p className="mt-1 text-xs text-slate-500">مشاهدهٔ فایل از طریق لینک امضاشدهٔ موقت؛ خود فایل در Object Storage نگهداری می‌شود.</p>

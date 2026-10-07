@@ -3,10 +3,12 @@ import { db } from '@/db';
 import { notifications } from '@/db/schema';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { getStudentFinance } from '@/lib/finance-engine';
-import { toNum } from '@/lib/finance-rules';
+import { toNum, transcriptTotals } from '@/lib/finance-rules';
+import { getTermScope } from '@/lib/term-scope';
 import { getSetting } from '@/lib/settings';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import PrintButton from '../PrintButton';
+import TermFilterChip from '../term-filter-chip';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,18 +46,34 @@ export default async function StudentFinancePage() {
   const me = await getStudentByUser(user.id);
   if (!me) return <p className="card p-6 text-center text-slate-500">پروندهٔ دانشجویی یافت نشد.</p>;
 
-  const [fin, notifyRows, remindDaysRaw] = await Promise.all([
+  const [fin, notifyRows, remindDaysRaw, scope] = await Promise.all([
     getStudentFinance(me.id),
     db.select().from(notifications)
       .where(eq(notifications.userId, user.id))
       .orderBy(desc(notifications.id))
       .limit(30),
     getSetting('CHEQUE_REMIND_DAYS'),
+    getTermScope(me.universityId),
   ]);
 
   if (!fin) return <p className="card p-6 text-center text-slate-500">اطلاعات مالی یافت نشد.</p>;
 
-  const { student, totals, transcript, cheques, loans } = fin;
+  const { student, cheques, loans } = fin;
+  const selectedTerm = scope.selectedId
+    ? scope.terms.find(t => t.id === scope.selectedId) ?? null
+    : null;
+
+  const transcript = selectedTerm
+    ? fin.transcript.filter(t => t.termId === selectedTerm.id)
+    : fin.transcript;
+  const totals = selectedTerm ? transcriptTotals(transcript) : fin.totals;
+  const visibleCheques = selectedTerm
+    ? cheques.filter(c => c.termId === selectedTerm.id)
+    : cheques;
+  const visibleLoans = selectedTerm
+    ? loans.filter(l => l.termId === selectedTerm.id)
+    : loans;
+
   const remindDays = Math.max(0, Math.round(toNum(remindDaysRaw) || 0));
   const nowMs = Date.now();
 
@@ -80,7 +98,12 @@ export default async function StudentFinancePage() {
           <h1 className="font-extrabold text-slate-800 text-base sm:text-lg">💳 امور مالی من</h1>
           <p className="text-xs text-slate-500 mt-1">کارنامهٔ مالی ترم‌به‌ترم، چک‌ها و وام‌ها</p>
         </div>
-        <PrintButton />
+        <div className="flex flex-wrap items-center gap-2">
+          {selectedTerm && (
+            <TermFilterChip title={selectedTerm.title} universityId={me.universityId} />
+          )}
+          <PrintButton />
+        </div>
       </div>
 
       {/* ═══ هشهاد سررسید چک — بیرون از بخش چاپی تا همیشه دیده شود ═══ */}
@@ -143,7 +166,9 @@ export default async function StudentFinancePage() {
         </div>
 
         <div className="card">
-          <h3 className="mb-2 border-b border-slate-100 pb-2 font-bold text-slate-800">جمع کل دوره</h3>
+          <h3 className="mb-2 border-b border-slate-100 pb-2 font-bold text-slate-800">
+            {selectedTerm ? `جمع کل نیمسال ${selectedTerm.title}` : 'جمع کل دوره'}
+          </h3>
           <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
             <div>
               <p className="text-lg font-bold text-slate-800">{fa(totals.charges)}</p>
@@ -178,9 +203,15 @@ export default async function StudentFinancePage() {
         </div>
 
         <div className="card">
-          <h3 className="mb-2 border-b border-slate-100 pb-2 font-bold text-slate-800">ریز ترم‌به‌ترم</h3>
+          <h3 className="mb-2 border-b border-slate-100 pb-2 font-bold text-slate-800">
+            {selectedTerm ? `ریز ترم‌به‌ترم — ${selectedTerm.title}` : 'ریز ترم‌به‌ترم'}
+          </h3>
           {transcript.length === 0 ? (
-            <p className="py-6 text-center text-xs text-slate-500">هیچ تراکنش مالی ثبت نشده است.</p>
+            <p className="py-6 text-center text-xs text-slate-500">
+              {selectedTerm
+                ? `برای نیمسال «${selectedTerm.title}» هیچ تراکنش مالی ثبت نشده است.`
+                : 'هیچ تراکنش مالی ثبت نشده است.'}
+            </p>
           ) : (
             <div className="space-y-3">
               {transcript.map((t) => (
@@ -227,7 +258,7 @@ export default async function StudentFinancePage() {
           )}
         </div>
 
-        {cheques.length > 0 && (
+        {visibleCheques.length > 0 && (
           <div className="card">
             <h3 className="mb-2 border-b border-slate-100 pb-2 font-bold text-slate-800">چک‌های شما</h3>
             <div className="overflow-x-auto">
@@ -239,7 +270,7 @@ export default async function StudentFinancePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {cheques.map((c) => (
+                  {visibleCheques.map((c) => (
                     <tr key={c.id} className="border-b border-slate-100 last:border-0">
                       <td className="p-2">{faDigits(c.chequeNo || '—')}</td>
                       <td className="p-2 text-slate-600">{c.bankName || '—'}</td>
@@ -262,7 +293,7 @@ export default async function StudentFinancePage() {
           </div>
         )}
 
-        {loans.length > 0 && (
+        {visibleLoans.length > 0 && (
           <div className="card">
             <h3 className="mb-2 border-b border-slate-100 pb-2 font-bold text-slate-800">وام‌های شما</h3>
             <div className="overflow-x-auto">
@@ -274,7 +305,7 @@ export default async function StudentFinancePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {loans.map((l) => (
+                  {visibleLoans.map((l) => (
                     <tr key={l.id} className="border-b border-slate-100 last:border-0">
                       <td className="p-2">{l.productTitle || '—'}</td>
                       <td className="p-2 text-slate-600">{l.lender}</td>

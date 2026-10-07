@@ -11,8 +11,10 @@ import {
 } from '@/db/schema';
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
+import { getTermScope } from '@/lib/term-scope';
 import { ensureDefaultProcesses } from '@/lib/workflow-engine';
 import StudentRequestsClient from './StudentRequestsClient';
+import TermFilterNote from '../term-filter-note';
 
 export const dynamic = 'force-dynamic';
 
@@ -95,6 +97,11 @@ export default async function StudentRequestsPage() {
   const allLogs = await db.select().from(request_step_logs);
   const allCheckpoints = await db.select().from(request_parallel_checkpoints);
 
+  const scope = await getTermScope(me.universityId);
+  const selectedTerm = scope.selectedId
+    ? scope.terms.find(t => t.id === scope.selectedId) ?? null
+    : null;
+
   const myRequestsFormatted = rawRequests.map(r => {
     let parsedForm: any = {};
     try {
@@ -140,17 +147,20 @@ export default async function StudentRequestsPage() {
   });
 
   return (
-    <StudentRequestsClient
-      student={{
-        id: me.id,
-        name: user.name,
-        studentCode: me.studentCode,
-        nationalCode: identity?.nationalCode ?? null,
-        majorName: major?.name || '—',
-        degreeTitle: level?.title || '—',
-      }}
-      processes={processesList}
-      myRequests={myRequestsFormatted}
-    />
+    <div className="space-y-3">
+      {selectedTerm && <TermFilterNote title={selectedTerm.title} />}
+      <StudentRequestsClient
+        student={{
+          id: me.id,
+          name: user.name,
+          studentCode: me.studentCode,
+          nationalCode: identity?.nationalCode ?? null,
+          majorName: major?.name || '—',
+          degreeTitle: level?.title || '—',
+        }}
+        processes={processesList}
+        myRequests={myRequestsFormatted}
+      />
+    </div>
   );
 }

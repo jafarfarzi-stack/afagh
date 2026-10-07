@@ -1,8 +1,11 @@
-import { getSessionUser } from '@/lib/auth';
+import { getSessionUser, getStudentByUser } from '@/lib/auth';
 import { getPublicBaseUrl } from '@/lib/settings';
 import { getExamCardData, issueExamTicketToken } from '@/lib/verification';
+import { getTermScope } from '@/lib/term-scope';
 import { qrSvg } from '@/lib/qr';
 import ExamCardClient from './ExamCardClient';
+import { getExamCardDataForTerm } from './exam-card-term-data';
+import TermFilterChip from '../term-filter-chip';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,13 +13,19 @@ export default async function StudentExamCardPage() {
   const user = await getSessionUser();
   if (!user) return null;
 
+  const me = await getStudentByUser(user.id);
+  const { terms, selectedId } = await getTermScope(me?.universityId ?? user.universityId);
+  const selectedTerm = selectedId ? terms.find(t => t.id === selectedId) ?? null : null;
+
   /**
    * توکن امضاشدهٔ کارت ورود به جلسه — از پایگاه داده ساخته می‌شود، نه از
    * شناسهٔ کاربر (توکن حدس‌زدنی یعنی هر کسی می‌تواند کارت دیگری را باز کند).
    * در صورت بدهی مالی یا نبود رکورد دانشجو، توکن صادر نمی‌شود و صفحه وضعیت
    * مسدود را نشان می‌دهد.
    */
-  const card = await getExamCardData(user.id);
+  const card = selectedTerm
+    ? await getExamCardDataForTerm(user.id, selectedTerm)
+    : await getExamCardData(user.id);
   const publicBaseUrl = await getPublicBaseUrl();
 
   let examTicket: { token: string; expiresAt: string } | null = null;
@@ -43,14 +52,32 @@ export default async function StudentExamCardPage() {
     }
   }
 
+  const noCourses = !!card && card.courses.length === 0;
+
   return (
-    <ExamCardClient
-      user={user}
-      publicBaseUrl={publicBaseUrl}
-      examTicket={examTicket}
-      examTicketBlocked={examTicketBlocked}
-      card={card}
-      ticketQr={ticketQr}
-    />
+    <div className="space-y-3">
+      {selectedTerm && (
+        <div className="print:hidden flex justify-start">
+          <TermFilterChip title={selectedTerm.title} universityId={me?.universityId ?? user.universityId} />
+        </div>
+      )}
+
+      {noCourses && (
+        <p className="print:hidden rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+          {selectedTerm
+            ? `برای نیمسال «${selectedTerm.title}» هیچ ثبت‌نامی برای شما ثبت نشده است؛ بنابراین برنامهٔ امتحان یا صندلیی نیز وجود ندارد.`
+            : 'برای نیمسال جاری هیچ ثبت‌نامی برای شما ثبت نشده است؛ بنابراین برنامهٔ امتحان یا صندلیی نیز وجود ندارد.'}
+        </p>
+      )}
+
+      <ExamCardClient
+        user={user}
+        publicBaseUrl={publicBaseUrl}
+        examTicket={examTicket}
+        examTicketBlocked={examTicketBlocked}
+        card={card}
+        ticketQr={ticketQr}
+      />
+    </div>
   );
 }
