@@ -48,6 +48,14 @@ export default async function ProfessorLayout({ children }: { children: React.Re
             <div>
               <p className="font-extrabold text-sm sm:text-base">کارتابل جامع اعضای هیئت علمی و اساتید</p>
               <p className="text-xs text-slate-400">{user.name}{me ? ' · کد پرسنلی: ' + me.staffCode : ''} · گروه: {deptName}</p>
+              {siblings.length > 0 && me?.staffCode ? (
+                <a
+                  href="#account-switch"
+                  className="mt-1 inline-flex items-center gap-1 rounded-lg border border-amber-400/60 bg-amber-400/15 px-2 py-0.5 text-[11px] font-bold text-amber-300 transition hover:bg-amber-400/25"
+                >
+                  🔀 کد فعال: {me.staffCode} · {siblings.length.toLocaleString('fa-IR')} کد دیگر — برای تعویض کلیک کنید
+                </a>
+              ) : null}
             </div>
           </div>
           <div className="flex items-center gap-3">
