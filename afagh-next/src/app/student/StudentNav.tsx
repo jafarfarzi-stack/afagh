@@ -77,7 +77,7 @@ export function StudentSidebar({ user }: { user: { name: string; studentCode?: s
       {/* Manual & Help link */}
       <div className="p-3 border-t border-slate-100 bg-slate-50/50 space-y-1">
         <Link
-          href="/help?tab=student"
+          href="/help/student"
           className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-emerald-800 hover:bg-emerald-50 transition"
         >
           <div className="flex items-center gap-2">

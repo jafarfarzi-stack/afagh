@@ -65,6 +65,19 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 buttonClass={th.badge}
               />
             )}
+            <Link
+              href="/help/admin"
+              className={`text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
+            >
+              📖 راهنما
+            </Link>
+            <a
+              href="/help/pdfs/admin.pdf"
+              download
+              className={`text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
+            >
+              📕 PDF
+            </a>
             <form action={logoutAction}>
               <button className={`text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}>
                 خروج

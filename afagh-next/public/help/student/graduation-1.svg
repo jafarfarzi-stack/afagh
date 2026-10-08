@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500" direction="rtl">
+<rect x="0" y="0" width="800" height="500" fill="#ffffff"/>
+<rect x="0" y="0" width="800" height="64" fill="#047857"/>
+<text x="760" y="30" text-anchor="end" font-size="20" font-weight="bold" fill="#ffffff" font-family="Tahoma">سامانه آفاق ـ راهنمای دانشجو</text>
+<text x="760" y="50" text-anchor="end" font-size="12" fill="#e2e8f0" font-family="Tahoma">فارغ‌التحصیلی</text>
+<rect x="600" y="84" width="160" height="330" rx="12" fill="#d1fae5" stroke="#047857" stroke-width="1.5"/>
+<rect x="618" y="104" width="124" height="14" rx="7" fill="#047857" opacity="0.55"/>
+<rect x="618" y="130" width="124" height="14" rx="7" fill="#047857" opacity="0.3"/>
+<rect x="618" y="156" width="124" height="14" rx="7" fill="#047857" opacity="0.3"/>
+<rect x="618" y="182" width="124" height="14" rx="7" fill="#047857" opacity="0.3"/>
+<rect x="618" y="208" width="124" height="14" rx="7" fill="#047857" opacity="0.2"/>
+<rect x="40" y="115" width="500" height="40" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/><circle cx="505" cy="135" r="10" fill="#cbd5e1"/><rect x="60" y="127" width="260" height="12" rx="6" fill="#94a3b8"/><rect x="40" y="167" width="500" height="40" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/><circle cx="505" cy="187" r="10" fill="#cbd5e1"/><rect x="60" y="179" width="242" height="12" rx="6" fill="#94a3b8"/><rect x="40" y="219" width="500" height="40" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/><circle cx="505" cy="239" r="10" fill="#cbd5e1"/><rect x="60" y="231" width="224" height="12" rx="6" fill="#94a3b8"/><rect x="40" y="271" width="500" height="40" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/><circle cx="505" cy="291" r="10" fill="#cbd5e1"/><rect x="60" y="283" width="206" height="12" rx="6" fill="#94a3b8"/><rect x="40" y="323" width="500" height="40" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/><circle cx="505" cy="343" r="10" fill="#cbd5e1"/><rect x="60" y="335" width="188" height="12" rx="6" fill="#94a3b8"/>
+<rect x="0" y="428" width="800" height="72" fill="#0f172a"/>
+<text x="400" y="456" text-anchor="middle" font-size="14" fill="#fbbf24" font-family="Tahoma">نقشه راهنما ـ تصویر موقت (student/graduation-1)</text>
+<text x="400" y="478" text-anchor="middle" font-size="11" fill="#cbd5e1" font-family="Tahoma">وضعیت تسویه‌حساب پنج‌گانه با تیک تأیید هر واحد</text>
+</svg>

@@ -1,163 +1,98 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { getSessionUser } from '@/lib/auth';
-import { HELP_TABS, TAB_KEYS, defaultTabForRoles, getHelpTab, isTabKey, type TabKey } from './content';
+import HelpSearch from '@/components/help/HelpSearch';
+import { allRoleGuides, buildHelpIndex, defaultGuideForRoles, isHelpRoleKey, visibleGuides } from './content/index';
 
-export const metadata = { title: 'راهنمای سامانه آفاق' };
+export const metadata = { title: 'مرکز راهنمای سامانه آفاق' };
 
-const TAB_STYLE: Record<string, { active: string; soft: string }> = {
-  emerald: { active: 'bg-emerald-700 text-white shadow', soft: 'bg-emerald-50 border-emerald-200' },
-  indigo: { active: 'bg-indigo-700 text-white shadow', soft: 'bg-indigo-50 border-indigo-200' },
-  teal: { active: 'bg-teal-700 text-white shadow', soft: 'bg-teal-50 border-teal-200' },
-  slate: { active: 'bg-slate-800 text-white shadow', soft: 'bg-slate-100 border-slate-300' },
-  amber: { active: 'bg-amber-500 text-slate-950 shadow', soft: 'bg-amber-50 border-amber-200' },
+const GUIDE_CARD: Record<string, string> = {
+  student: 'border-emerald-300 bg-emerald-50/60',
+  professor: 'border-indigo-300 bg-indigo-50/60',
+  'group-manager': 'border-teal-300 bg-teal-50/60',
+  admin: 'border-slate-400 bg-slate-100/70',
+  shared: 'border-amber-300 bg-amber-50/60',
 };
 
-function backHref(roles: string[]): string {
-  if (roles.includes('ADMIN')) return '/admin';
-  if (roles.includes('PROFESSOR')) return '/professor';
-  if (roles.includes('STUDENT')) return '/student';
-  return '/login';
-}
-
-export default async function HelpPage(props: { searchParams: Promise<{ tab?: string }> }) {
-  const sp = await props.searchParams;
+export default async function HelpLandingPage(props: { searchParams: Promise<{ tab?: string }> }) {
   const user = await getSessionUser().catch(() => null);
-  const roles = user?.roles ?? [];
-  const requested: TabKey | null = isTabKey(sp.tab) ? sp.tab : null;
-  const activeKey: TabKey = requested ?? defaultTabForRoles(roles);
-  const tab = getHelpTab(activeKey);
-  const st = TAB_STYLE[tab.color] ?? TAB_STYLE.slate;
+  if (!user) redirect('/login');
+  const sp = await props.searchParams;
+  if (sp.tab && isHelpRoleKey(sp.tab)) redirect(`/help/${sp.tab}`);
+
+  const roles = user.roles ?? [];
+  const guides = visibleGuides(roles);
+  const def = defaultGuideForRoles(roles);
+  const index = buildHelpIndex(guides);
+  const quick = guides.flatMap(g => g.quickTasks.map(q => ({ ...q, guideIcon: g.icon, guideTitle: g.title }))).slice(0, 8);
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 p-4 sm:p-8" dir="rtl">
-      <div className="max-w-5xl mx-auto space-y-6">
-        {/* هدر */}
-        <div className="bg-gradient-to-l from-indigo-950 via-slate-900 to-indigo-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-indigo-700/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="min-h-screen bg-slate-100 p-4 text-slate-900 sm:p-8" dir="rtl">
+      <div className="mx-auto max-w-5xl space-y-6">
+        <div className="flex flex-col gap-4 rounded-3xl border border-indigo-700/50 bg-gradient-to-l from-indigo-950 via-slate-900 to-indigo-900 p-6 text-white shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
           <div>
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-400 text-slate-950">
-              راهنمای نقش‌محور سامانه دانشگاهی آفاق
-            </span>
-            <h1 className="text-xl sm:text-3xl font-black mt-2">📖 مرکز راهنمای کاربران</h1>
-            <p className="text-xs sm:text-sm text-indigo-200 mt-1">
-              راهنمای هر نقش جدا است — تب نقش خودتان را انتخاب کنید. هر بخش لینک مستقیم به همان صفحه سامانه دارد.
-              {user ? ` (واردشده به‌نام ${user.name})` : ' (مهمان — برای لینک‌های داخلی ابتدا وارد شوید)'}
-            </p>
+            <span className="rounded-full bg-amber-400 px-3 py-1 text-xs font-bold text-slate-950">مرکز راهنمای سامانه دانشگاهی آفاق</span>
+            <h1 className="mt-2 text-xl font-black sm:text-3xl">📖 راهنمای قدم‌به‌قدم، مخصوص نقش شما</h1>
+            <p className="mt-1 text-xs text-indigo-200 sm:text-sm">واردشده به‌نام {user.name} · نقش پیشنهادی شما: {allRoleGuides().find(g => g.role === def)?.title}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <a
-              href={tab.pdf}
-              download
-              className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs shadow-lg flex items-center gap-2 transition"
-            >
-              <span>📥</span>
-              <span>دانلود PDF {tab.label}</span>
-            </a>
-            <Link
-              href={backHref(roles)}
-              className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition"
-            >
-              بازگشت
-            </Link>
-          </div>
+          <HelpSearch index={index} />
         </div>
 
-        {/* تب‌های نقش */}
-        <nav className="flex flex-wrap gap-2" aria-label="نقش‌ها">
-          {HELP_TABS.map(t => {
-            const active = t.key === activeKey;
-            const s = TAB_STYLE[t.color] ?? TAB_STYLE.slate;
-            return (
-              <Link
-                key={t.key}
-                href={`/help?tab=${t.key}`}
-                className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-black border transition flex items-center gap-2 ${
-                  active ? s.active + ' border-transparent' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
-                }`}
-                aria-current={active ? 'page' : undefined}
-              >
-                <span>{t.icon}</span>
-                <span>{t.label}</span>
+        <section aria-label="انتخاب نقش">
+          <h2 className="mb-2 text-sm font-black text-slate-700">نقش خودتان را انتخاب کنید</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {guides.map(g => (
+              <Link key={g.role} href={`/help/${g.role}`} className={`block rounded-2xl border-2 p-4 shadow-sm transition hover:shadow ${GUIDE_CARD[g.role] ?? 'border-slate-300 bg-white'}`}>
+                <div className="text-2xl">{g.icon}</div>
+                <h3 className="mt-1 text-sm font-black text-slate-900">{g.title}</h3>
+                <p className="mt-0.5 text-[11px] text-slate-600">{g.audience}</p>
               </Link>
-            );
-          })}
-        </nav>
+            ))}
+          </div>
+        </section>
 
-        {/* معرفی تب فعال */}
-        <div className={`rounded-2xl border p-4 sm:p-5 ${st.soft}`}>
-          <h2 className="font-black text-base sm:text-lg">
-            {tab.icon} {tab.label}
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-600 mt-1">{tab.subtitle}</p>
-        </div>
+        <section aria-label="کارهای پرتکرار" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <h2 className="text-sm font-black text-slate-800">⚡ کارهای پرتکرار</h2>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {quick.map(q => (
+              <Link key={`${q.role}:${q.topicSlug ?? q.href}`} href={`/help/${q.role}/${q.topicSlug ?? ''}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 py-2.5 hover:border-indigo-300 hover:bg-indigo-50/50">
+                <span>
+                  <span className="block text-[13px] font-bold text-slate-800">{q.guideIcon} {q.title}</span>
+                  <span className="block text-[11px] text-slate-500">{q.hint} · {q.guideTitle}</span>
+                </span>
+                <span className="shrink-0 text-slate-300">←</span>
+              </Link>
+            ))}
+          </div>
+        </section>
 
-        {/* دسترسی سریع به بخش‌ها */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {tab.sections.map(s => (
-            <a
-              key={s.id}
-              href={`#${s.id}`}
-              className="p-4 bg-white hover:bg-indigo-50/50 border border-slate-200 rounded-2xl shadow-sm hover:border-indigo-300 transition space-y-1 block"
-            >
-              <div className="text-xl">{s.icon}</div>
-              <h3 className="font-extrabold text-xs text-slate-900">{s.title}</h3>
-            </a>
-          ))}
-        </div>
-
-        {/* بخش‌ها */}
-        <div className="space-y-6">
-          {tab.sections.map(s => (
-            <section
-              key={s.id}
-              id={s.id}
-              className="p-6 bg-white border border-slate-200 rounded-2xl shadow-sm space-y-4 scroll-mt-4"
-            >
-              <h2 className="text-base sm:text-lg font-black text-indigo-950 border-b pb-2">
-                {s.icon} {s.title}
-              </h2>
-              {s.intro && <p className="text-xs sm:text-sm text-slate-700 leading-relaxed">{s.intro}</p>}
-              {s.steps && (
-                <ol className="list-decimal list-inside text-xs sm:text-sm space-y-1.5 text-slate-700 pr-2 leading-relaxed">
-                  {s.steps.map((st2, i) => (
-                    <li key={i}>{st2}</li>
-                  ))}
-                </ol>
-              )}
-              {s.note && (
-                <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-xl p-3 leading-relaxed">
-                  💡 {s.note}
-                </p>
-              )}
-              {s.links && (
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {s.links.map(l => (
-                    <Link
-                      key={l.href}
-                      href={l.href}
-                      className="px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-600 text-white text-xs font-bold transition"
-                      title={l.desc}
-                    >
-                      {l.label} ←
-                    </Link>
-                  ))}
+        <section aria-label="فهرست موضوعات" className="space-y-4">
+          {guides.map(g => (
+            <div key={g.role} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-black text-slate-900">{g.icon} {g.title}</h2>
+                <Link href={`/help/${g.role}`} className="rounded-xl bg-slate-800 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-slate-700">ورود به راهنما ←</Link>
+              </div>
+              {g.sections.map(s => (
+                <div key={s.key} className="mt-3">
+                  <h3 className="text-xs font-black text-slate-600">{s.icon} {s.title}</h3>
+                  <ul className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
+                    {s.topics.map(t => (
+                      <li key={t.slug}>
+                        <Link href={`/help/${g.role}/${t.slug}`} className="block rounded-xl border border-slate-100 px-3 py-2 text-[13px] font-bold text-indigo-800 hover:border-indigo-300 hover:bg-indigo-50/50">
+                          {t.title}
+                          <span className="block text-[11px] font-normal text-slate-500">{t.summary.slice(0, 70)}…</span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              )}
-            </section>
+              ))}
+            </div>
           ))}
-        </div>
+        </section>
 
-        {/* پاورقی تب‌ها */}
-        <div className="text-center text-[11px] text-slate-500 pb-4">
-          نقش دیگری هستید؟{' '}
-          {TAB_KEYS.filter(k => k !== activeKey).map(k => {
-            const t = HELP_TABS.find(x => x.key === k)!;
-            return (
-              <Link key={k} href={`/help?tab=${k}`} className="text-indigo-700 font-bold hover:underline mx-1">
-                {t.label}
-              </Link>
-            );
-          })}
-        </div>
+        <p className="pb-4 text-center text-[11px] text-slate-500">تعداد موضوعات نمایه‌شده: {index.length.toLocaleString('fa-IR')} · برای نسخهٔ چاپی هر نقش، وارد همان نقش شوید.</p>
       </div>
     </div>
   );

@@ -69,11 +69,18 @@ export default async function ProfessorLayout({ children }: { children: React.Re
               </Link>
             )}
             <Link
-              href="/help?tab=professor"
+              href="/help/professor"
               className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition"
             >
               📖 راهنمای استاد
             </Link>
+            <a
+              href="/help/pdfs/professor.pdf"
+              download
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition"
+            >
+              📕 PDF
+            </a>
             <form action={logoutAction}>
               <button className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition">
                 خروج از سامانه
