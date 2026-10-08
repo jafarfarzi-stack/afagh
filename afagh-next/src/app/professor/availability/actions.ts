@@ -7,7 +7,7 @@ import { professor_availabilities, professor_availability_notes } from '@/db/sch
 import { getStaffByUser, requireRole } from '@/lib/auth';
 
 export interface AvailabilityCell {
-  dayIndex: number; // 0..5 (شنبه..پنجشنبه)
+  dayIndex: number; // 0..6 (شنبه..جمعه)
   slotIndex: number; // 1..6
   status: 'PREF' | 'AVAIL' | 'UNAVAIL';
 }
@@ -35,14 +35,14 @@ export async function loadAvailabilityAction(termId: number): Promise<{ ok: bool
 
     const cells: AvailabilityCell[] = [];
     for (const r of rows) {
-      const dayIndex = r.dayOfWeek ?? -1;
-      if (dayIndex < 0 || dayIndex > 5) continue;
+      const dayIndex = (r.dayOfWeek ?? 0) - 1;
+      if (dayIndex < 0 || dayIndex > 6) continue;
       const slot = Object.entries(SLOT_TIMES).find(([, t]) => t && t.start === String(r.startTime).slice(0, 5) && t.end === String(r.endTime).slice(0, 5));
       if (!slot) continue;
       cells.push({ dayIndex, slotIndex: Number(slot[0]), status: (r.status as 'PREF' | 'AVAIL') || 'AVAIL' });
     }
     // سلول‌های ذخیره‌نشده → UNAVAIL (استاد باید فعال علامت بزند)
-    for (let d = 0; d < 6; d++) {
+    for (let d = 0; d < 7; d++) {
       for (let s = 1; s <= 6; s++) {
         if (s === 3) continue; // شیفت نیمروز ثابت است
         if (!cells.some(c => c.dayIndex === d && c.slotIndex === s)) cells.push({ dayIndex: d, slotIndex: s, status: 'UNAVAIL' });
@@ -64,7 +64,7 @@ export async function saveAvailabilityAction(termId: number, cells: Availability
     const t = Number(termId);
     if (!t) return { ok: false, error: 'ترم نامعتبر است.' };
     const valid = cells.filter(c =>
-      Number.isInteger(c.dayIndex) && c.dayIndex >= 0 && c.dayIndex <= 5 &&
+      Number.isInteger(c.dayIndex) && c.dayIndex >= 0 && c.dayIndex <= 6 &&
       Number.isInteger(c.slotIndex) && c.slotIndex >= 1 && c.slotIndex <= 6 &&
       ['PREF', 'AVAIL', 'UNAVAIL'].includes(c.status),
     );
@@ -76,7 +76,7 @@ export async function saveAvailabilityAction(termId: number, cells: Availability
       const toInsert = valid
         .filter(c => c.status !== 'UNAVAIL' && SLOT_TIMES[c.slotIndex])
         .map(c => ({
-          staffId: me.id, termId: t, dayOfWeek: c.dayIndex,
+          staffId: me.id, termId: t, dayOfWeek: c.dayIndex + 1,
           startTime: SLOT_TIMES[c.slotIndex]!.start as unknown as string,
           endTime: SLOT_TIMES[c.slotIndex]!.end as unknown as string,
           status: c.status,

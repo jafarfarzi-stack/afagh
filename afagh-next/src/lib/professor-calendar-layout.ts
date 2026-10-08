@@ -26,8 +26,8 @@ export function professorCalendarTimeToMinutes(value: string | null | undefined)
 export function professorCalendarDayIndex(dayOfWeek: number | null | undefined): number | null {
   if (dayOfWeek == null) return null;
   const d = Number(dayOfWeek);
-  if (!Number.isInteger(d) || d < 0 || d >= PROFESSOR_CALENDAR_DAY_COUNT) return null;
-  return d;
+  if (!Number.isInteger(d) || d < 1 || d > PROFESSOR_CALENDAR_DAY_COUNT) return null;
+  return d - 1;
 }
 
 export function professorCalendarEntryKey(row: ProfessorCalendarSchedulable): string {

@@ -120,6 +120,10 @@ export interface GenerateOfferingSessionsResult {
   termStart?: string | null;
 }
 
+export const GENERATE_SESSIONS_GENERIC_ERROR = 'خطای غیرمنتظره در تولید جلسات؛ لطفاً دوباره تلاش کنید و در صورت تکرار به آموزش اطلاع دهید.';
+
+const toSafeError = (message: unknown): string => String(message ?? '').slice(0, 300) || GENERATE_SESSIONS_GENERIC_ERROR;
+
 export async function generateOfferingSessionsAction(offeringId: number): Promise<GenerateOfferingSessionsResult> {
   try {
     const user = await requireRole(['PROFESSOR']);
@@ -171,20 +175,20 @@ export async function generateOfferingSessionsAction(offeringId: number): Promis
 
     const preview = await generateClassSessionsForTerm(user.id, offering.termId, { dryRun: true, failOnHardConflict: false });
     if (!preview.ok) {
-      return { ok: false, error: preview.error || 'تولید جلسات ناموفق بود.' };
+      return { ok: false, error: toSafeError(preview.error) };
     }
     const scoped = preview.hardConflicts.filter(h => h.offeringIds.includes(oid));
     if (scoped.length > 0) {
       return {
         ok: false,
-        error: `زمان‌بندی این درس ${scoped.length} تداخل سخت دارد؛ پیش از تولید جلسات با ادارهٔ آموزش رفع کنید. نمونه: ${scoped[0].message}`,
+        error: toSafeError(`زمان‌بندی این درس ${scoped.length} تداخل سخت دارد؛ پیش از تولید جلسات با ادارهٔ آموزش رفع کنید. نمونه: ${scoped[0].message}`),
         conflicts: scoped,
       };
     }
 
     const result = await generateClassSessionsForTerm(user.id, offering.termId, { failOnHardConflict: false });
     if (!result.ok) {
-      return { ok: false, error: result.error || 'تولید جلسات ناموفق بود.' };
+      return { ok: false, error: toSafeError(result.error) };
     }
     logger.info('offering_sessions_generated_by_professor', { offeringId: oid, termId: offering.termId, generated: result.generated });
     revalidatePath('/professor/attendance');
@@ -198,6 +202,7 @@ export async function generateOfferingSessionsAction(offeringId: number): Promis
       termStart: result.termStart,
     };
   } catch (err) {
-    return { ok: false, error: (err as Error)?.message || 'خطا در تولید جلسات.' };
+    console.error('generateOfferingSessionsAction failed', err);
+    return { ok: false, error: GENERATE_SESSIONS_GENERIC_ERROR };
   }
 }

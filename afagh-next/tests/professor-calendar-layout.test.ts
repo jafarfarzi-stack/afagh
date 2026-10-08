@@ -15,7 +15,7 @@ import {
 
 const row = (over: Partial<ProfessorCalendarSchedulable> = {}): ProfessorCalendarSchedulable => ({
   id: 1,
-  dayOfWeek: 0,
+  dayOfWeek: 1,
   startTime: '08:00',
   endTime: '10:00',
   weekType: 'ALL',
@@ -40,13 +40,14 @@ assert.equal(professorCalendarTimeToMinutes('24:00'), null);
 assert.equal(professorCalendarTimeToMinutes('10:99'), null);
 console.log('✓ time parsing');
 
-assert.equal(professorCalendarDayIndex(0), 0);
-assert.equal(professorCalendarDayIndex(6), 6);
+assert.equal(professorCalendarDayIndex(1), 0);
+assert.equal(professorCalendarDayIndex(7), 6);
 assert.equal(professorCalendarDayIndex(null), null);
-assert.equal(professorCalendarDayIndex(7), null);
+assert.equal(professorCalendarDayIndex(0), null);
+assert.equal(professorCalendarDayIndex(8), null);
 assert.equal(professorCalendarDayIndex(-1), null);
 assert.equal(professorCalendarDayIndex(1.5), null);
-console.log('✓ day mapping is 0-based Saturday..Friday, Friday is a real column');
+console.log('✓ day mapping is 1-based Saturday..Friday (1..7), Friday is a real column');
 
 const labels = professorCalendarHourLabels();
 assert.equal(labels.length, 13);
@@ -97,9 +98,9 @@ const triple = layoutProfessorCalendarDay([
 assert.ok(triple.every(p => p.columnCount === 3 && p.widthPercent === 33.33));
 assert.equal(new Set(triple.map(p => p.column)).size, 3);
 const separateDays = layoutProfessorCalendarWeek([
-  row({ id: 51, dayOfWeek: 0, startTime: '10:00', endTime: '12:00' }),
-  row({ id: 52, dayOfWeek: 0, startTime: '11:00', endTime: '13:00' }),
-  row({ id: 53, dayOfWeek: 6, startTime: '10:00', endTime: '12:00' }),
+  row({ id: 51, dayOfWeek: 1, startTime: '10:00', endTime: '12:00' }),
+  row({ id: 52, dayOfWeek: 1, startTime: '11:00', endTime: '13:00' }),
+  row({ id: 53, dayOfWeek: 7, startTime: '10:00', endTime: '12:00' }),
 ]);
 assert.equal(separateDays.get(0)!.length, 2);
 assert.equal(separateDays.get(6)!.length, 1);

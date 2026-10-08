@@ -109,7 +109,7 @@ export async function professorScheduleRows(staffId: number, termId: number, uni
       enrolledCount: Number(r.enrolledCount ?? 0),
       capacity: Number(r.capacity ?? 0),
       dayOfWeek,
-      dayName: dayOfWeek != null ? JALALI_DAY_NAMES[dayOfWeek] ?? '' : '',
+      dayName: dayOfWeek != null ? JALALI_DAY_NAMES[dayOfWeek - 1] ?? '' : '',
       startTime,
       endTime,
       roomName: r.roomName ?? '',

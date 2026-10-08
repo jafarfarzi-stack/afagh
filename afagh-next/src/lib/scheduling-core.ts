@@ -214,7 +214,7 @@ export type SchedulingPhase = (typeof SCHEDULING_PHASES)[number];
 export const MAX_GROUPS = 20;        // سقف گروه درسی (دروس عمومی تا ۲۰ گروه)
 export const MIN_CAPACITY = 5;
 export const MAX_CAPACITY = 500;
-export const DAYS_PER_WEEK = 6;      // شنبه تا پنجشنبه
+export const DAYS_PER_WEEK = 7;      // شنبه تا جمعه
 export const MINUTES_GRID = 30;      // گرید نیم‌ساعته برای پیشنهادها
 
 export interface GroupDraftInput {
@@ -223,7 +223,7 @@ export interface GroupDraftInput {
   gender: ClassGender;
   professorId: number;
   classroomId: number;
-  dayOfWeek: number;        // 1..6 (شنبه=1)
+  dayOfWeek: number;        // 1..7 (شنبه=1)
   startTime: string;        // "HH:MM"
   endTime: string;          // "HH:MM"
 }
@@ -491,7 +491,7 @@ export function shiftUtilization(usedMinutes: number, shiftMinutes: number): num
 export interface ScheduleConflictInput {
   offeringId: number;
   groupNumber: number | null;
-  dayOfWeek: number | null;          // 1..6 (شنبه=1) — null = بدون روز (ناقص)
+  dayOfWeek: number | null;          // 1..7 (شنبه=1) — null = بدون روز (ناقص)
   startTime: string;                 // HH:MM
   endTime: string;
   roomId: number | null;
@@ -607,7 +607,7 @@ export function hasHardConflicts(conflicts: ScheduleConflict[]): boolean {
 
 /**
  * تاریخ جلسات یک درس در ترم — خالص، بدون DB.
- * قرارداد: dayOfWeek: 1..6 (شنبه = 1)، termStart تاریخ اولین روز هفتهٔ اول است.
+ * قرارداد: dayOfWeek: 1..7 (شنبه = 1)، termStart تاریخ اولین روز هفتهٔ اول است.
  *   ALL  → ۱۶ جلسهٔ هفتگی
  *   EVEN → هفته‌های زوج (جلسات ۲، ۴، …، ۱۶ — ۸ جلسه)
  *   ODD  → هفته‌های فرد (جلسات ۱، ۳، …، ۱۵ — ۸ جلسه)
@@ -619,7 +619,7 @@ export function sessionDatesFor(
   scheduleType: 'ALL' | 'EVEN' | 'ODD',
   totalSessions = 16
 ): { sessionNo: number; date: Date }[] {
-  if (dayOfWeek < 1 || dayOfWeek > 6) return [];
+  if (dayOfWeek < 1 || dayOfWeek > 7) return [];
   const base = new Date(termStart.getTime());
   base.setUTCHours(0, 0, 0, 0);
   const offsetDays = dayOfWeek - 1; // شنبه = 0
@@ -650,7 +650,7 @@ export interface HardConflictEntry {
   /** استاد اصلی + استاد دوم (Co-Teaching از offering_professors) */
   professorIds: number[];
   roomId: number | null;
-  dayOfWeek: number;      // 1..6 (شنبه=1)
+  dayOfWeek: number;      // 1..7 (شنبه=1)
   startMinutes: number;
   endMinutes: number;
   enrolledCount: number;  // ثبت‌نام‌شدهٔ واقعی (یا پیش‌بینی تقاضا)
@@ -786,7 +786,7 @@ export type WeekRecurrence = 'ALL' | 'EVEN' | 'ODD';
 export interface SessionDateInput {
   /** شروع ترم (Date از academic_terms.startDate) */
   termStart: Date;
-  /** 1..6 (شنبه=1) */
+  /** 1..7 (شنبه=1) */
   dayOfWeek: number;
   /** تعداد جلسات (پیش‌فرض ۱۶) */
   sessionsCount: number;
@@ -822,7 +822,7 @@ export function computeSessionDates(
   px: SessionDateInput & { recurrence?: WeekRecurrence },
 ): GeneratedSession[] {
   const { termStart, dayOfWeek, sessionsCount, oddFirstWeek = true } = px;
-  if (dayOfWeek < 1 || dayOfWeek > 6) throw new Error('روز هفته باید ۱..۶ باشد (شنبه=1).');
+  if (dayOfWeek < 1 || dayOfWeek > 7) throw new Error('روز هفته باید ۱..۷ باشد (شنبه=1).');
   if (sessionsCount < 1 || sessionsCount > 60) throw new Error('تعداد جلسات باید ۱..۶۰ باشد.');
   const holidays = new Set((px.holidays ?? []).map(h => h.trim()).filter(Boolean));
   const start = new Date(termStart.getFullYear(), termStart.getMonth(), termStart.getDate());

@@ -95,6 +95,14 @@ interface Props {
 
 const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
 
+export const GENERATE_SESSIONS_FALLBACK_ERROR = 'خطای غیرمنتظره در تولید جلسات؛ لطفاً دوباره تلاش کنید و در صورت تکرار به آموزش اطلاع دهید.';
+
+export function sanitizeGenerateError(message: unknown): string {
+  const text = String(message ?? '').slice(0, 300);
+  if (/failed query|insert into|\$\d|syntax error|violates |relation "|column "/i.test(text)) return GENERATE_SESSIONS_FALLBACK_ERROR;
+  return text || GENERATE_SESSIONS_FALLBACK_ERROR;
+}
+
 const MAKEUP_TIME_OPTIONS = ['۰۸:۰۰ الی ۱۰:۰۰', '۱۰:۰۰ الی ۱۲:۰۰', '۱۲:۳۰ الی ۱۴:۰۰', '۱۳:۳۰ الی ۱۵:۳۰', '۱۵:۳۰ الی ۱۷:۳۰', '۱۷:۳۰ الی ۱۹:۳۰'];
 
 
@@ -191,7 +199,7 @@ export default function ProfessorAttendanceClient({
     try {
       const res = await generateOfferingSessionsAction(currentOffering.id);
       if (!res.ok) {
-        setGenerateResult(res.error || 'تولید جلسات ناموفق بود.');
+        setGenerateResult(sanitizeGenerateError(res.error));
         setGenerateConflicts((res.conflicts ?? []).map(c => ({ message: c.message })));
         return;
       }
@@ -206,7 +214,7 @@ export default function ProfessorAttendanceClient({
       setGenerateConflicts((res.conflicts ?? []).map(c => ({ message: c.message })));
       router.refresh();
     } catch {
-      setGenerateResult('خطا در ارتباط با سرور.');
+      setGenerateResult(GENERATE_SESSIONS_FALLBACK_ERROR);
     } finally {
       setGeneratingSessions(false);
     }

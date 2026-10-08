@@ -64,6 +64,9 @@ export type ProfessorScheduleLike = {
 /** کلاسی که ساعت و روز معتبر دارد = قابل نمایش در جدول هفتگی */
 export const hasProfessorSchedule = (row: ProfessorScheduleLike): boolean =>
   row.dayOfWeek != null &&
+  Number.isInteger(row.dayOfWeek) &&
+  (row.dayOfWeek as number) >= 1 &&
+  (row.dayOfWeek as number) <= 7 &&
   !Number.isNaN(toMinutes(row.startTime)) &&
   !Number.isNaN(toMinutes(row.endTime)) &&
   toMinutes(row.endTime) > toMinutes(row.startTime);

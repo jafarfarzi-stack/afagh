@@ -29,7 +29,7 @@ interface Props {
 
 const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
 
-const DAY_NAMES = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه'];
+const DAY_NAMES = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
 
 const DEFAULT_TIME_SLOTS = [
   { id: 1, label: '۰۸:۰۰ الی ۱۰:۰۰', startTime: '08:00', endTime: '10:00', isBreak: false },
@@ -54,7 +54,7 @@ export default function ProfessorAvailabilityClient({ demo = false, professor, t
   // ماتریس از پایگاه داده (professor_availability) — هرگز پیش‌فرض UI نیست
   const [availability, setAvailability] = useState<{ [d: number]: { [s: number]: SlotStatus } }>(() => {
     const initial: { [d: number]: { [s: number]: SlotStatus } } = {};
-    for (let d = 0; d < 6; d++) {
+    for (let d = 0; d < 7; d++) {
       initial[d] = {};
       for (let s = 1; s <= 6; s++) initial[d][s] = 'AVAIL';
     }
@@ -69,7 +69,7 @@ export default function ProfessorAvailabilityClient({ demo = false, professor, t
       if (cancelled) return;
       if (res.ok && res.cells) {
         const grid: { [d: number]: { [s: number]: SlotStatus } } = {};
-        for (let d = 0; d < 6; d++) {
+        for (let d = 0; d < 7; d++) {
           grid[d] = {};
           for (let s = 1; s <= 6; s++) grid[d][s] = 'AVAIL';
         }
@@ -100,7 +100,7 @@ export default function ProfessorAvailabilityClient({ demo = false, professor, t
 
   const applyPreset = (preset: 'ALL_PREF' | 'MORNING_ONLY' | 'AFTERNOON_ONLY' | 'EVEN_DAYS' | 'ODD_DAYS' | 'CLEAR') => {
     const updated: { [d: number]: { [s: number]: SlotStatus } } = {};
-    for (let d = 0; d < 6; d++) {
+    for (let d = 0; d < 7; d++) {
       updated[d] = {};
       for (let s = 1; s <= 6; s++) {
         if (preset === 'ALL_PREF') updated[d][s] = 'PREF';
@@ -118,7 +118,7 @@ export default function ProfessorAvailabilityClient({ demo = false, professor, t
     if (!selectedTermId) return;
     setSaving(true);
     const cells: AvailabilityCell[] = [];
-    for (let d = 0; d < 6; d++) {
+    for (let d = 0; d < 7; d++) {
       for (let s = 1; s <= 6; s++) {
         cells.push({ dayIndex: d, slotIndex: s, status: availability[d][s] });
       }

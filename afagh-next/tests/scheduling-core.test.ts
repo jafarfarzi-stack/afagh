@@ -53,7 +53,8 @@ throws('جنسیت نامعتبر', () => validateGroupDrafts([mk({ gender: 'COE
 throws('استاد صفر', () => validateGroupDrafts([mk({ professorId: 0 })], false), 'استاد');
 throws('کلاس صفر', () => validateGroupDrafts([mk({ classroomId: 0 })], false), 'کلاس فیزیکی');
 throws('روز صفر', () => validateGroupDrafts([mk({ dayOfWeek: 0 })], false), 'روز');
-throws('روز هفت', () => validateGroupDrafts([mk({ dayOfWeek: 7 })], false), 'روز');
+throws('روز هشت', () => validateGroupDrafts([mk({ dayOfWeek: 8 })], false), 'روز');
+eq('dayOfWeek 7 (Friday) validates', validateGroupDrafts([mk({ dayOfWeek: 7 })], false).length, 1);
 throws('پایان قبل از شروع', () => validateGroupDrafts([mk({ startTime: '10:00', endTime: '09:00' })], false), 'بازهٔ زمانی');
 throws('مدت ۵ ساعت', () => validateGroupDrafts([mk({ startTime: '08:00', endTime: '13:00' })], false), '۴ ساعت');
 throws('عبور از مرز شیفت (۱۰:۳۰–۱۳:۰۰)', () => validateGroupDrafts([mk({ startTime: '10:30', endTime: '13:00' })], false), 'مرز شیفت');
@@ -223,6 +224,11 @@ eq('تاریخ جلسهٔ ۱ = شنبه شروع', all[0].date.toISOString().sli
 const sun = sessionDatesFor(start, 2, 'ALL', 4);
 eq('یکشنبه = +۱ روز', sun[0].date.toISOString().slice(0, 10), '2025-09-21');
 
+const fri = sessionDatesFor(start, 7, 'ALL', 4);
+eq('Friday day 7 is valid', fri.length, 4);
+eq('Friday = +6 days', fri[0].date.toISOString().slice(0, 10), '2025-09-26');
+eq('Friday weekly step', (fri[1].date.getTime() - fri[0].date.getTime()) / 86400000, 7);
+
 // EVEN → فقط هفته‌های زوج (۸ جلسه، sessionNo های ۱..۸)
 const even = sessionDatesFor(start, 1, 'EVEN', 16);
 eq('EVEN → ۸ جلسه', even.length, 8);
@@ -293,7 +299,10 @@ console.log('\n۸) مولد تاریخ جلسات (شمسی، زوج/فرد، ت
   const odd = computeSessionDates({ termStart: start, dayOfWeek: 1, sessionsCount: 4, recurrence: 'ODD' });
   eq('هفتهٔ فرد: ۰۷/۰۴ (هفتهٔ اول)', odd[0].jalaliDate, '1405/07/04');
   throws('روز صفر', () => computeSessionDates({ termStart: start, dayOfWeek: 0, sessionsCount: 4 }), 'روز');
-  throws('روز هفت', () => computeSessionDates({ termStart: start, dayOfWeek: 7, sessionsCount: 4 }), 'روز');
+  const friJ = computeSessionDates({ termStart: start, dayOfWeek: 7, sessionsCount: 3 });
+  eq('Friday sessions count', friJ.length, 3);
+  eq('Friday first date', friJ[0].jalaliDate, '1405/07/03');
+  throws('day 8 invalid', () => computeSessionDates({ termStart: start, dayOfWeek: 8, sessionsCount: 4 }));
   throws('جلسات ۷۰', () => computeSessionDates({ termStart: start, dayOfWeek: 1, sessionsCount: 70 }), 'تعداد جلسات');
 
   // چهارشنبه (روز ۵): ۱۴۰۵/۰۶/۲۹ یکشنبه → اولین چهارشنبه = ۱۴۰۵/۰۷/۰۱

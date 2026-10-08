@@ -8,7 +8,7 @@
  *   `class_sessions` درج می‌شود — تراکنشی، idempotent و همراه audit.
  *
  * قواعد:
- *   ① فقط schedules با scheduleType='CLASS' و dayOfWeek معتبر (۱..۶)
+ *   ① فقط schedules با scheduleType='CLASS' و dayOfWeek معتبر (۱..۷)
  *   ② تعطیلات رسمی (لیست 'YYYY/MM/DD') از جلسات حذف می‌شود
  *   ③ اجرای مجدد: جلسات قبلیِ غیرجبرانیِ همان درس‌ها حذف و نو ساخته می‌شود
  *      (قفل توافقی pg_advisory_xact_lock روی termId — هم‌الگو با موتور)
@@ -218,13 +218,25 @@ export async function generateClassSessionsForTerm(
       status: string; sessionNo: number; isMakeUpSession: number;
     }[] = [];
     for (const s of schedRows) {
-      const dates = computeSessionDates({
-        termStart: term.startDate,
-        dayOfWeek: s.dayOfWeek,
-        sessionsCount,
-        holidays,
-        recurrence: s.recurrence,
-      });
+      if (s.dayOfWeek == null || !Number.isInteger(s.dayOfWeek) || s.dayOfWeek < 1 || s.dayOfWeek > 7) {
+        warnings.push(`برنامهٔ هفتگی offering ${s.offeringId} (درس ${s.courseCode}) روز هفتهٔ نامعتبر دارد و نادیده گرفته شد.`);
+        if (sessionsPerOffering[s.offeringId] == null) sessionsPerOffering[s.offeringId] = 0;
+        continue;
+      }
+      let dates;
+      try {
+        dates = computeSessionDates({
+          termStart: term.startDate,
+          dayOfWeek: s.dayOfWeek,
+          sessionsCount,
+          holidays,
+          recurrence: s.recurrence,
+        });
+      } catch {
+        warnings.push(`برنامهٔ هفتگی offering ${s.offeringId} (درس ${s.courseCode}) روز هفتهٔ نامعتبر دارد و نادیده گرفته شد.`);
+        if (sessionsPerOffering[s.offeringId] == null) sessionsPerOffering[s.offeringId] = 0;
+        continue;
+      }
       const existingSet = existing.get(s.offeringId) ?? new Set<number>();
       const kept = dates.filter(d => existingSet.has(d.sessionNo));
       skipped += kept.length;
@@ -244,7 +256,13 @@ export async function generateClassSessionsForTerm(
     }
 
     if (!px.dryRun && values.length > 0) {
-      await tx.insert(class_sessions).values(values);
+      try {
+        for (let i = 0; i < values.length; i += 400) {
+          await tx.insert(class_sessions).values(values.slice(i, i + 400));
+        }
+      } catch {
+        throw new Error('خطا در ذخیرهٔ جلسات تولیدشده؛ لطفاً دوباره تلاش کنید و در صورت تکرار به آموزش اطلاع دهید.');
+      }
     }
 
     const termStartStr = term.startDate.toISOString().slice(0, 10);
