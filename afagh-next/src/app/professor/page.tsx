@@ -15,7 +15,9 @@ import { db } from '@/db';
 import {
   departments, electronic_documents,
   professor_availabilities, professor_term_contracts, payroll_statements,
+  universities,
 } from '@/db/schema';
+import { getSetting } from '@/lib/settings';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import VirtualClassroomWidget from '@/components/VirtualClassroomWidget';
 import { getTodayLiveClasses } from '@/lib/moodle-bbb';
@@ -57,6 +59,11 @@ export default async function ProfessorHome() {
     ? await db.select({ name: departments.name }).from(departments).where(eq(departments.id, me.departmentId)).limit(1)
     : [];
   const deptName = deptRows[0]?.name ?? null;
+
+  const [uniRow] = universityId
+    ? await db.select({ title: universities.title, logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, universityId)).limit(1)
+    : [];
+  const universityLogoUrl = uniRow?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
 
   const [contractRows, availabilityRows, pays] = await Promise.all([
     term
@@ -327,6 +334,8 @@ export default async function ProfessorHome() {
           rows={weekTableRows}
           professorName={user.name}
           staffCode={me.staffCode}
+          universityTitle={uniRow?.title ?? null}
+          universityLogoUrl={universityLogoUrl}
         />
       )}
 

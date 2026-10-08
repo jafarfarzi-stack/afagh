@@ -42,6 +42,7 @@ interface Props {
   ticketQr?: string;
   /** حساب دمو: داده‌ها نمایشی است و هیچ ارزشیابی‌ای در پایگاه داده ثبت نمی‌شود */
   demo?: boolean;
+  universityLogoUrl?: string | null;
 }
 
 /**
@@ -69,7 +70,7 @@ function toShamsi(dStr: string | null | undefined): string {
   }
 }
 
-export default function ExamCardClient({ user, publicBaseUrl, examTicket, examTicketBlocked, card, ticketQr, demo = false }: Props) {
+export default function ExamCardClient({ user, publicBaseUrl, examTicket, examTicketBlocked, card, ticketQr, demo = false, universityLogoUrl }: Props) {
   const [courses, setCourses] = useState<StudentCourseEvaluationItem[]>(card?.courses ?? []);
   /** بدهی واقعی از دفتر کل مالی — نه یک عدد ثابت */
   const [financialDebt, setFinancialDebt] = useState<number>(card?.debt ?? 0);
@@ -357,9 +358,13 @@ export default function ExamCardClient({ user, publicBaseUrl, examTicket, examTi
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-slate-800 pb-3">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-2xl shadow-md">
-                آ
-              </div>
+              {universityLogoUrl ? (
+                <img src={universityLogoUrl} alt="" width={48} height={48} className="w-12 h-12 object-contain" />
+              ) : (
+                <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-2xl shadow-md">
+                  آ
+                </div>
+              )}
               <div>
                 <h2 className="font-black text-slate-900 text-base sm:text-lg">
                   کارت رسمی ورود به جلسه آزمون‌های پایان‌ترم دانشگاه آفاق

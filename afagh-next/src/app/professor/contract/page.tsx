@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { electronic_documents, users } from '@/db/schema';
+import { electronic_documents, universities, users } from '@/db/schema';
+import { getSetting } from '@/lib/settings';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import { ensureContractDocument } from '@/lib/contract-engine';
 import { universityTitle } from '@/lib/professor-data';
@@ -92,6 +93,10 @@ export default async function ProfessorContractPage() {
     .from(electronic_documents).where(eq(electronic_documents.id, res.documentId)).limit(1);
 
   const universityTitleText = await universityTitle(universityId);
+  const [uniLogoRow] = universityId
+    ? await db.select({ logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, universityId)).limit(1)
+    : [];
+  const universityLogoUrl = uniLogoRow?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
 
   const contract: ContractView = {
     ...res.contract,
@@ -106,6 +111,7 @@ export default async function ProfessorContractPage() {
       <ProfessorContractClient
         initialContract={contract}
         universityTitle={universityTitleText ?? ''}
+        universityLogoUrl={universityLogoUrl}
       />
     </div>
   );

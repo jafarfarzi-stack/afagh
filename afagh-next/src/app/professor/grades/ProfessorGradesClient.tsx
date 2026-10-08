@@ -34,6 +34,7 @@ interface Props {
     name: string;
     staffCode: string;
     universityTitle: string;
+    universityLogoUrl?: string | null;
   };
   termTitle: string;
   initialOfferings: GradingCourseOffering[];
@@ -199,6 +200,7 @@ export default function ProfessorGradesClient({
           termTitle={termTitle}
           professorName={professor.name}
           universityTitle={professor.universityTitle}
+          universityLogoUrl={professor.universityLogoUrl ?? null}
           dispatch={dispatch}
         />
       )}

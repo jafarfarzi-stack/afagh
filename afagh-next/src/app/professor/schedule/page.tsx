@@ -1,3 +1,7 @@
+import { eq } from 'drizzle-orm';
+import { db } from '@/db';
+import { universities } from '@/db/schema';
+import { getSetting } from '@/lib/settings';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import {
   groupIntoMerged,
@@ -53,6 +57,7 @@ export default async function ProfessorSchedulePage() {
             contractType: DEMO_CONTRACT_TYPE,
             departmentName: DEMO_DEPARTMENT_NAME,
             universityTitle: DEMO_UNIVERSITY_TITLE,
+            universityLogoUrl: null,
           }}
           termTitle={DEMO_TERM_TITLE}
           initialOfferings={DEMO_SCHEDULE_OFFERINGS}
@@ -65,6 +70,10 @@ export default async function ProfessorSchedulePage() {
     professorDepartmentName(me.departmentId),
     universityTitle(universityId),
   ]);
+  const [uniLogoRow] = universityId
+    ? await db.select({ logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, universityId)).limit(1)
+    : [];
+  const universityLogoUrl = uniLogoRow?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
 
   const scheduleRowsAll = term
     ? (await professorScheduleRows(me.id, term.id, universityId))
@@ -132,6 +141,7 @@ export default async function ProfessorSchedulePage() {
     contractType: me.cooperationType ?? me.employmentType ?? me.staffType ?? '',
     departmentName: departmentName ?? '',
     universityTitle: uniTitle ?? '',
+    universityLogoUrl,
   };
 
   return (

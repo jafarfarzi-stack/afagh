@@ -13,10 +13,11 @@ interface CertificateTabProps {
   termTitle: string;
   professorName: string;
   universityTitle: string;
+  universityLogoUrl?: string | null;
   dispatch: GradesDispatch;
 }
 
-export default function CertificateTab({ offering, termTitle, professorName, universityTitle, dispatch }: CertificateTabProps) {
+export default function CertificateTab({ offering, termTitle, professorName, universityTitle, universityLogoUrl, dispatch }: CertificateTabProps) {
   const isPass = (g: number | undefined) => (g ?? 0) >= 10;
 
   const handleArchive = () => {
@@ -29,9 +30,13 @@ export default function CertificateTab({ offering, termTitle, professorName, uni
       {/* سربرگ رسمی */}
       <div className="border-b-2 border-slate-900 pb-4 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-14 h-14 rounded-2xl bg-slate-950 text-white flex items-center justify-center font-black text-2xl shadow-md">
-            آ
-          </div>
+          {universityLogoUrl ? (
+            <img src={universityLogoUrl} alt="" width={56} height={56} className="w-14 h-14 object-contain" />
+          ) : (
+            <div className="w-14 h-14 rounded-2xl bg-slate-950 text-white flex items-center justify-center font-black text-2xl shadow-md">
+              آ
+            </div>
+          )}
           <div>
             <h2 className="text-base sm:text-lg font-black text-slate-950">
               {universityTitle || 'نام دانشگاه در سامانه ثبت نشده است'} — معاونت آموزشی و تحصیلات تکمیلی

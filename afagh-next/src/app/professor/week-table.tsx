@@ -12,9 +12,11 @@ type Props = {
   rows: ProfessorScheduleRow[];
   professorName?: string;
   staffCode?: string | number | null;
+  universityTitle?: string | null;
+  universityLogoUrl?: string | null;
 };
 
-export default function ProfessorWeekTable({ termTitle, selectedTermTitle, rows, professorName, staffCode }: Props) {
+export default function ProfessorWeekTable({ termTitle, selectedTermTitle, rows, professorName, staffCode, universityTitle, universityLogoUrl }: Props) {
   const scopeLabel = selectedTermTitle ? `نیمسال «${selectedTermTitle}»` : `نیمسال ${termTitle || 'جاری'}`;
   const offerings = professorUniqueOfferings(rows);
   const scheduled = rows.filter(r => r.hasSchedule);
@@ -60,8 +62,15 @@ export default function ProfessorWeekTable({ termTitle, selectedTermTitle, rows,
     <div className="print-area prof-week-print bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-4">
       <style>{'@media print { @page { size: A4 landscape; margin: 8mm 7mm; } }'}</style>
       <div className="prof-week-print-head hidden print:block">
-        <span className="font-extrabold">برنامه هفتگی تدریس{professorName ? ` — ${professorName}` : ''}{staffCode ? ` (کد پرسنلی ${faNum(staffCode)})` : ''}</span>
-        <span> · <bdi>{termTitle || 'نیمسال جاری'}</bdi> · همه جلسات (زوج و فرد) · تاریخ چاپ: <span suppressHydrationWarning>{printDate}</span></span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4mm' }}>
+          {universityLogoUrl ? (
+            <img src={universityLogoUrl} alt="" width={53} height={53} style={{ height: '14mm', width: 'auto', display: 'block' }} />
+          ) : null}
+          <div>
+            <div className="font-extrabold">{universityTitle ? `${universityTitle} — ` : ''}برنامه هفتگی تدریس{professorName ? ` — ${professorName}` : ''}{staffCode ? ` (کد پرسنلی ${faNum(staffCode)})` : ''}</div>
+            <div><bdi>{termTitle || 'نیمسال جاری'}</bdi> · همه جلسات (زوج و فرد) · تاریخ چاپ: <span suppressHydrationWarning>{printDate}</span></div>
+          </div>
+        </div>
       </div>
       <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-200 print:hidden">
         <div>

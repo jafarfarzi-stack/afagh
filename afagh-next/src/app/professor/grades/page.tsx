@@ -1,3 +1,7 @@
+import { eq } from 'drizzle-orm';
+import { db } from '@/db';
+import { universities } from '@/db/schema';
+import { getSetting } from '@/lib/settings';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import {
   coTaughtPartners,
@@ -221,12 +225,17 @@ export default async function ProfessorGradesPage({
   });
 
   const uniTitle = await universityTitle(universityId);
+  const [uniLogoRow] = universityId
+    ? await db.select({ logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, universityId)).limit(1)
+    : [];
+  const universityLogoUrl = uniLogoRow?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
 
   const professorData = {
     id: me.id,
     name: user.name,
     staffCode: me.staffCode,
     universityTitle: uniTitle ?? '',
+    universityLogoUrl,
   };
 
   return (

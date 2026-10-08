@@ -1,3 +1,7 @@
+import { eq } from 'drizzle-orm';
+import { db } from '@/db';
+import { universities } from '@/db/schema';
+import { getSetting } from '@/lib/settings';
 import { getSessionUser, getStudentByUser } from '@/lib/auth';
 import { getPublicBaseUrl } from '@/lib/settings';
 import { getExamCardData, issueExamTicketToken } from '@/lib/verification';
@@ -20,6 +24,11 @@ export default async function StudentExamCardPage() {
   const selectedTerm = selectedId ? terms.find(t => t.id === selectedId) ?? null : null;
 
   const demo = await isDemoStudentUser(user.id);
+  const universityId = me?.universityId ?? user.universityId ?? null;
+  const [uniLogoRow] = universityId
+    ? await db.select({ logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, universityId)).limit(1)
+    : [];
+  const universityLogoUrl = uniLogoRow?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
 
   if (demo) {
     return (
@@ -42,6 +51,7 @@ export default async function StudentExamCardPage() {
             card={demoExamCardData(me?.id ?? user.id)}
             ticketQr=""
             demo
+            universityLogoUrl={null}
           />
         )}
       </div>
@@ -108,6 +118,7 @@ export default async function StudentExamCardPage() {
         examTicketBlocked={examTicketBlocked}
         card={card}
         ticketQr={ticketQr}
+        universityLogoUrl={universityLogoUrl}
       />
     </div>
   );

@@ -30,6 +30,7 @@ export interface ProfessorCalendarEntry {
   enrolledCount?: number | null;
   capacity?: number | null;
   merged?: boolean;
+  professorName?: string;
 }
 
 const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
@@ -163,6 +164,7 @@ export default function ProfessorCalendarGrid({ entries }: { entries: ProfessorC
                             <div className="truncate">{e.title}{e.merged ? ' 🔗' : ''}</div>
                             <div className="truncate">{e.code} · گروه {faNum(e.groupNumber)} · 👥 {faNum(e.enrolledCount)}/{faNum(e.capacity)}</div>
                             <div className="truncate">{professorCalendarEntryTime(e)} · {e.roomName ? `🏛️ ${e.roomName}${e.buildingName ? ` · ${e.buildingName}` : ''}` : '🏛️ سالن ثبت نشده'}{e.weekType === 'EVEN' ? ' · هفته زوج' : e.weekType === 'ODD' ? ' · هفته فرد' : e.weekType === 'BOTH' ? ' · زوج و فرد' : ''}</div>
+                            {e.professorName ? <div className="truncate">استاد: {e.professorName}</div> : null}
                           </div>
                           <div className="prof-week-title print:hidden font-extrabold text-[11px] text-slate-900 leading-5 truncate" title={e.title}>
                             {e.title}
@@ -184,6 +186,14 @@ export default function ProfessorCalendarGrid({ entries }: { entries: ProfessorC
                               🔗 کلاس ادغامی
                             </div>
                           )}
+                          {e.professorName ? (
+                            <div
+                              className="prof-week-detail print:hidden mt-0.5 px-1 py-0.5 rounded bg-slate-100 text-slate-800 text-[10px] font-bold border border-slate-200 leading-4 truncate"
+                              title={`استاد: ${e.professorName}`}
+                            >
+                              استاد: {e.professorName}
+                            </div>
+                          ) : null}
                           {e.isCoTaught && (
                             <div className="prof-week-detail print:hidden mt-0.5 px-1 py-0.5 rounded bg-purple-100 text-purple-900 text-[10px] font-bold border border-purple-200 leading-4 truncate" title={e.coPartnerName ? `مشترک · ${e.coPartnerName}` : 'مشترک'}>
                               👥 مشترک{e.coPartnerName ? ` · ${e.coPartnerName}` : ''}

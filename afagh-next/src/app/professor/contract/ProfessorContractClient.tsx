@@ -20,11 +20,12 @@ interface Props {
   demo?: boolean;
   initialContract: ContractDetails;
   universityTitle: string;
+  universityLogoUrl?: string | null;
 }
 
 const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
 
-export default function ProfessorContractClient({ demo = false, initialContract, universityTitle }: Props) {
+export default function ProfessorContractClient({ demo = false, initialContract, universityTitle, universityLogoUrl }: Props) {
   const [contract, setContract] = useState<ContractDetails>(initialContract);
   const [showSignModal, setShowSignModal] = useState<boolean>(false);
   const [otpCode, setOtpCode] = useState<string>('');
@@ -159,9 +160,13 @@ export default function ProfessorContractClient({ demo = false, initialContract,
           </div>
 
           <div className="text-center space-y-1">
-            <div className="w-12 h-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center text-xl font-bold mx-auto mb-1">
-              🏛️
-            </div>
+            {universityLogoUrl ? (
+              <img src={universityLogoUrl} alt="" width={48} height={48} className="mx-auto mb-1 h-12 w-12 object-contain" />
+            ) : (
+              <div className="w-12 h-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center text-xl font-bold mx-auto mb-1">
+                🏛️
+              </div>
+            )}
             <h2 className="font-extrabold text-base sm:text-lg">جمهوری اسلامی ایران</h2>
             <h3 className="font-bold text-sm text-slate-700">
               وزارت علوم، تحقیقات و فناوری — {universityTitle || 'نام دانشگاه در سامانه ثبت نشده است'}
