@@ -1,66 +1,66 @@
-{
-  "name": "afagh-next",
-  "private": true,
-  "version": "1.0.0",
-  "scripts": {
-    "dev": "next dev -p 8080",
-    "build": "next build",
-    "typecheck": "tsc --noEmit",
-    "test": "tsx tests/tuition-rules.test.ts && tsx tests/finance-rules.test.ts && tsx tests/grades-reducer.test.ts && tsx tests/exam-core.test.ts && tsx tests/scheduling-core.test.ts && tsx tests/term-canonical.test.ts && tsx tests/exam-scheduler.test.ts && tsx tests/curriculum-domain.test.ts && tsx tests/curriculum-validator.test.ts && tsx tests/migration-course.test.ts && tsx tests/migration-reference.test.ts && tsx tests/migration-photos.test.ts && tsx tests/migration-real-headers.test.ts && tsx tests/migration-codes.test.ts && tsx tests/student-nc-repair.test.ts && tsx tests/duplicate-user-merge.test.ts && tsx tests/course-equivalence.test.ts && tsx tests/persian-search.test.ts && tsx tests/bank-roles.test.ts && tsx tests/term-plan.test.ts && tsx tests/scheduling-planning-core.test.ts && tsx tests/transcript-summary.test.ts && tsx tests/enroll-core.test.ts && tsx tests/curriculum-core.test.ts && tsx tests/curriculum-ui-render.test.tsx && tsx tests/release-hardening.test.ts && tsx tests/migration-v2-identity-terms.test.ts && tsx tests/migration-v2-offerings.test.ts && tsx tests/gpa-engine-parity.test.ts && tsx tests/apply-course-equivalences.test.ts && tsx tests/tuition-transfer-exclusion.test.ts && tsx tests/term-ordering.test.ts && tsx tests/professor-week-grid.test.ts && tsx tests/professor-calendar-layout.test.ts && tsx tests/help-search-normalize.test.ts && tsx tests/professor-attendance-display.test.ts && tsx tests/merged-courses.test.ts && tsx tests/student-schedule-entries.test.ts",
-    "start": "next start -p 8080",
-    "db:generate": "npx drizzle-kit generate",
-    "db:push": "npx drizzle-kit push",
-    "db:migrate": "node scripts/migrate-db.mjs",
-    "db:migrate-sqlite": "node scripts/migrate-sqlite-to-pg.mjs",
-    "db:hardening": "node scripts/hardening.mjs",
-    "db:base": "node scripts/seed-base.mjs",
-    "db:cleanup-regulations": "node scripts/cleanup-regulations.mjs",
-    "db:permissions": "node scripts/seed-permissions.mjs",
-    "db:import": "node scripts/import-university.mjs",
-    "db:import:sama": "node scripts/import-sama-afagh.mjs",
-    "db:import:professors": "node scripts/import-professors2.mjs",
-    "db:fix-names": "node scripts/fix-unknown-names.mjs",
-    "audit:verify": "tsx scripts/verify-audit.ts",
-    "test:rls": "node scripts/rls-test.mjs",
-    "test:concurrency": "node scripts/concurrency-test.mjs",
-    "db:growth-rates": "node scripts/compute-tuition-growth-rates.mjs",
-    "db:seed:pos": "node scripts/seed-pos.mjs",
-    "db:migrate:legacy-tuition": "node scripts/migrate-legacy-tuition.mjs"
-  },
-  "dependencies": {
-    "@types/qrcode": "^1.5.6",
-    "chart.js": "^4.5.1",
-    "docx": "^9.8.1",
-    "drizzle-orm": "^0.45.2",
-    "file-saver": "^2.0.5",
-    "ioredis": "^6.0.0",
-    "minio": "^8.0.7",
-    "next": "^16.3.4",
-    "pg": "^8.13.1",
-    "postcss": "^8.5.28",
-    "qrcode": "^1.5.4",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "server-only": "^0.0.1",
-    "xlsx": "^0.18.5"
-  },
-  "devDependencies": {
-    "@types/file-saver": "^2.0.7",
-    "@types/node": "^22.9.0",
-    "@types/pg": "^8.11.10",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "autoprefixer": "^10.4.20",
-    "drizzle-kit": "^0.31.10",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.15",
-    "tsx": "^4.23.13",
-    "typescript": "^5.9.3"
-  },
-  "optionalDependencies": {
-    "better-sqlite3": "^11.6.0"
-  },
-  "overrides": {
-    "postcss": "$postcss"
-  }
+﻿{
+    "name":  "afagh-next",
+    "private":  true,
+    "version":  "1.0.0",
+    "scripts":  {
+                    "dev":  "next dev -p 8080",
+                    "build":  "next build",
+                    "typecheck":  "tsc --noEmit",
+                    "test":  "tsx tests/tuition-rules.test.ts \u0026\u0026 tsx tests/finance-rules.test.ts \u0026\u0026 tsx tests/grades-reducer.test.ts \u0026\u0026 tsx tests/exam-core.test.ts \u0026\u0026 tsx tests/scheduling-core.test.ts \u0026\u0026 tsx tests/term-canonical.test.ts \u0026\u0026 tsx tests/exam-scheduler.test.ts \u0026\u0026 tsx tests/curriculum-domain.test.ts \u0026\u0026 tsx tests/curriculum-validator.test.ts \u0026\u0026 tsx tests/migration-course.test.ts \u0026\u0026 tsx tests/migration-reference.test.ts \u0026\u0026 tsx tests/migration-photos.test.ts \u0026\u0026 tsx tests/migration-real-headers.test.ts \u0026\u0026 tsx tests/migration-codes.test.ts \u0026\u0026 tsx tests/student-nc-repair.test.ts \u0026\u0026 tsx tests/duplicate-user-merge.test.ts \u0026\u0026 tsx tests/course-equivalence.test.ts \u0026\u0026 tsx tests/persian-search.test.ts \u0026\u0026 tsx tests/bank-roles.test.ts \u0026\u0026 tsx tests/term-plan.test.ts \u0026\u0026 tsx tests/scheduling-planning-core.test.ts \u0026\u0026 tsx tests/transcript-summary.test.ts \u0026\u0026 tsx tests/enroll-core.test.ts \u0026\u0026 tsx tests/curriculum-core.test.ts \u0026\u0026 tsx tests/curriculum-ui-render.test.tsx \u0026\u0026 tsx tests/release-hardening.test.ts \u0026\u0026 tsx tests/migration-v2-identity-terms.test.ts \u0026\u0026 tsx tests/migration-v2-offerings.test.ts \u0026\u0026 tsx tests/gpa-engine-parity.test.ts \u0026\u0026 tsx tests/apply-course-equivalences.test.ts \u0026\u0026 tsx tests/tuition-transfer-exclusion.test.ts \u0026\u0026 tsx tests/term-ordering.test.ts \u0026\u0026 tsx tests/professor-week-grid.test.ts \u0026\u0026 tsx tests/professor-calendar-layout.test.ts \u0026\u0026 tsx tests/help-search-normalize.test.ts \u0026\u0026 tsx tests/professor-attendance-display.test.ts \u0026\u0026 tsx tests/merged-courses.test.ts \u0026\u0026 tsx tests/student-schedule-entries.test.ts \u0026\u0026 tsx tests/enroll-submit-batch.test.ts \u0026\u0026 tsx tests/session-generation-scope.test.ts \u0026\u0026 tsx tests/professor-hotpaths-perf.test.ts \u0026\u0026 tsx tests/student-dashboard-helpers.test.ts \u0026\u0026 tsx tests/professor-attendance-roster.test.ts",
+                    "start":  "next start -p 8080",
+                    "db:generate":  "npx drizzle-kit generate",
+                    "db:push":  "npx drizzle-kit push",
+                    "db:migrate":  "node scripts/migrate-db.mjs",
+                    "db:migrate-sqlite":  "node scripts/migrate-sqlite-to-pg.mjs",
+                    "db:hardening":  "node scripts/hardening.mjs",
+                    "db:base":  "node scripts/seed-base.mjs",
+                    "db:cleanup-regulations":  "node scripts/cleanup-regulations.mjs",
+                    "db:permissions":  "node scripts/seed-permissions.mjs",
+                    "db:import":  "node scripts/import-university.mjs",
+                    "db:import:sama":  "node scripts/import-sama-afagh.mjs",
+                    "db:import:professors":  "node scripts/import-professors2.mjs",
+                    "db:fix-names":  "node scripts/fix-unknown-names.mjs",
+                    "audit:verify":  "tsx scripts/verify-audit.ts",
+                    "test:rls":  "node scripts/rls-test.mjs",
+                    "test:concurrency":  "node scripts/concurrency-test.mjs",
+                    "db:growth-rates":  "node scripts/compute-tuition-growth-rates.mjs",
+                    "db:seed:pos":  "node scripts/seed-pos.mjs",
+                    "db:migrate:legacy-tuition":  "node scripts/migrate-legacy-tuition.mjs"
+                },
+    "dependencies":  {
+                         "@types/qrcode":  "^1.5.6",
+                         "chart.js":  "^4.5.1",
+                         "docx":  "^9.8.1",
+                         "drizzle-orm":  "^0.45.2",
+                         "file-saver":  "^2.0.5",
+                         "ioredis":  "^6.0.0",
+                         "minio":  "^8.0.7",
+                         "next":  "^16.3.4",
+                         "pg":  "^8.13.1",
+                         "postcss":  "^8.5.28",
+                         "qrcode":  "^1.5.4",
+                         "react":  "^19.2.8",
+                         "react-dom":  "^19.2.8",
+                         "server-only":  "^0.0.1",
+                         "xlsx":  "^0.18.5"
+                     },
+    "devDependencies":  {
+                            "@types/file-saver":  "^2.0.7",
+                            "@types/node":  "^22.9.0",
+                            "@types/pg":  "^8.11.10",
+                            "@types/react":  "^18.3.12",
+                            "@types/react-dom":  "^18.3.1",
+                            "autoprefixer":  "^10.4.20",
+                            "drizzle-kit":  "^0.31.10",
+                            "postcss":  "^8.4.49",
+                            "tailwindcss":  "^3.4.15",
+                            "tsx":  "^4.23.13",
+                            "typescript":  "^5.9.3"
+                        },
+    "optionalDependencies":  {
+                                 "better-sqlite3":  "^11.6.0"
+                             },
+    "overrides":  {
+                      "postcss":  "$postcss"
+                  }
 }
