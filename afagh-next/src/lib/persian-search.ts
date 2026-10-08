@@ -47,3 +47,15 @@ export function faIncludes(haystack: string | null | undefined, needle: string |
   if (!n) return true;
   return normalizeFa(haystack).includes(n);
 }
+
+/**
+ * تبدیل ارقام فارسی (۰-۹) و عربی (٠-٩) به انگلیسی (0-9).
+ * کاربرد: شناسه‌های ورود (کد ملی/پرسنلی/دانشجویی) و گذرواژه — کاربر گاهی با
+ * کیبورد فارسی تایپ می‌کند و بدون این تبدیل، جست‌وجو ۰ ردیف برمی‌گرداند و
+ * ورود اول شکست می‌خورد («بعضاً باید دوباره کد/رمز بزنی»).
+ */
+export function toEnDigits(s: string | null | undefined): string {
+  return String(s ?? '')
+    .replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+}

@@ -300,6 +300,7 @@ const MAX_SESSIONS_PER_USER = 8;
 
 /** نگاشت فایل مبدأ: کد استاد → کد ملی (فقط سرور). معکوسش برای گسترش کاندیداهای ورود. */
 import { STAFF_NC_MAP } from '@/lib/staff-nc-map.generated';
+import { toEnDigits } from '@/lib/persian-search';
 const NC_TO_CODES = new Map<string, string[]>();
 for (const [code, nc] of Object.entries(STAFF_NC_MAP)) {
   const arr = NC_TO_CODES.get(nc);
@@ -379,7 +380,9 @@ export async function login(
     return { ok: false, error: `تلاش‌های ورود بیش از حد مجاز شد. ${Math.ceil(rl.retryAfterSec / 60)} دقیقهٔ دیگر دوباره تلاش کنید.` };
   }
 
-  const clean = identifier.trim();
+  // شناسه ممکن است با کیبورد فارسی تایپ شده باشد (ارقام ۰-۹)؛ همهٔ کدهای
+  // سیستمی انگلیسی‌اند پس اول نرمال می‌کنیم تا ورود اول شکست نخورد.
+  const clean = toEnDigits(identifier.trim());
   // شناسه می‌تواند «کد ملی» یا «کد پرسنلی/کاربری» باشد.
   // کد ملی در سطح دانشگاه یکتاست نه سراسری + یک نفر ممکن است چند حساب داشته باشد؛
   // همهٔ کاندیداها را به ترتیب id امتحان می‌کنیم.
@@ -427,8 +430,16 @@ export async function login(
     }
   }
   const matched = [];
+  // گذرواژه عیناً چک می‌شود؛ اگر با ارقام فارسی تایپ شده بود، فرم نرمال‌شده هم
+  // پذیرفته می‌شود (فقط پذیرش بیشتر، بدون تغییر هش‌های موجود).
+  const passwordVariants = [password];
+  const normPass = toEnDigits(password);
+  if (normPass !== password) passwordVariants.push(normPass);
   for (const cand of cands) {
-    if (cand.isActive && (await verifyPassword(password, cand.passwordHash))) matched.push(cand);
+    if (!cand.isActive) continue;
+    for (const pw of passwordVariants) {
+      if (await verifyPassword(pw, cand.passwordHash)) { matched.push(cand); break; }
+    }
   }
   if (!matched.length) {
     if (cands.some((c) => c.isActive)) return { ok: false, error: 'رمز نادرست است.' };
@@ -470,7 +481,12 @@ export async function changePassword(currentPassword: string, newPassword: strin
   if (!me) return { ok: false, error: 'برای تغییر رمز ابتدا وارد شوید.' };
   const [u] = await db.select().from(users).where(eq(users.id, me.id)).limit(1);
   if (!u) return { ok: false, error: 'کاربر یافت نشد.' };
-  if (!(await verifyPassword(currentPassword, u.passwordHash))) return { ok: false, error: 'رمز فعلی نادرست است.' };
+  if (!(await verifyPassword(currentPassword, u.passwordHash))) {
+    // اغماض حالت کیبورد: رمز فعلی با ارقام فارسی تایپ شده باشد
+    const normCur = toEnDigits(currentPassword);
+    if (normCur === currentPassword || !(await verifyPassword(normCur, u.passwordHash)))
+      return { ok: false, error: 'رمز فعلی نادرست است.' };
+  }
   const trimmed = newPassword.trim();
   if (trimmed.length < 8) return { ok: false, error: 'رمز جدید باید حداقل ۸ کاراکتر باشد.' };
   if (trimmed === currentPassword) return { ok: false, error: 'رمز جدید نباید با رمز فعلی یکسان باشد.' };
