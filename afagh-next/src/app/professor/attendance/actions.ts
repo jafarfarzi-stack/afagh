@@ -1,6 +1,6 @@
 'use server';
 
-import { and, eq, max, sql } from 'drizzle-orm';
+import { and, eq, inArray, max, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import {
@@ -37,15 +37,22 @@ export async function saveSessionAttendanceAction(sessionId: number, entries: At
     );
     if (clean.length === 0) return { ok: false, error: 'ردیف حضوری برای ذخیره وجود ندارد.' };
 
+    let inserted = 0;
     await db.transaction(async tx => {
       await tx.delete(student_class_attendance).where(eq(student_class_attendance.sessionId, Number(sessionId)));
+      const studentIds = [...new Set(clean.map(e => e.studentId))];
+      const enRows = studentIds.length > 0
+        ? await tx.select({ id: enrollments.id, studentId: enrollments.studentId }).from(enrollments)
+          .where(and(eq(enrollments.offeringId, session.offeringId), inArray(enrollments.studentId, studentIds)))
+        : [];
+      const enrollmentByStudent = new Map(enRows.map(r => [r.studentId, r.id]));
       const rows: (typeof student_class_attendance.$inferInsert)[] = [];
       for (const e of clean) {
-        const [en] = await tx.select({ id: enrollments.id }).from(enrollments)
-          .where(and(eq(enrollments.offeringId, session.offeringId), eq(enrollments.studentId, e.studentId))).limit(1);
-        if (en) rows.push({ sessionId: Number(sessionId), enrollmentId: en.id, status: e.status });
+        const enrollmentId = enrollmentByStudent.get(e.studentId);
+        if (enrollmentId !== undefined) rows.push({ sessionId: Number(sessionId), enrollmentId, status: e.status });
       }
       if (rows.length) await tx.insert(student_class_attendance).values(rows);
+      inserted = rows.length;
       // ثبت حضور استاد — همان جلسه (بدون تکرار)
       await tx.delete(professor_class_attendance).where(and(
         eq(professor_class_attendance.sessionId, Number(sessionId)),
@@ -58,7 +65,7 @@ export async function saveSessionAttendanceAction(sessionId: number, entries: At
     });
 
     revalidatePath('/professor/attendance');
-    return { ok: true, savedCount: clean.length };
+    return { ok: true, savedCount: inserted };
   } catch (err) {
     return { ok: false, error: (err as Error)?.message || 'خطا در ذخیرهٔ حضور و غیاب.' };
   }

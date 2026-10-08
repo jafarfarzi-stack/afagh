@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { generateOfferingSessionsAction, saveSessionAttendanceAction, scheduleMakeupSessionAction } from './actions';
@@ -95,6 +95,98 @@ interface Props {
 
 const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
 
+export type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'EXCUSED' | 'LATE';
+export type RosterStatusFilter = 'ALL' | AttendanceStatus | 'UNMARKED';
+export type RosterSortKey = 'ROW' | 'NAME' | 'CODE' | 'STATUS';
+export type RosterSortDir = 'ASC' | 'DESC';
+
+export function normalizeRosterText(s: string | null | undefined): string {
+  return String(s ?? '')
+    .replace(/[يى]/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/ة/g, 'ه')
+    .replace(/[ً-ٰٖ]/g, '')
+    .replace(/‌/g, ' ')
+    .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function rosterMatchesQuery(student: StudentInfo, query: string | null | undefined): boolean {
+  const q = normalizeRosterText(query);
+  if (!q) return true;
+  const compact = q.replace(/\s+/g, '');
+  const name = normalizeRosterText(student.fullName);
+  const code = normalizeRosterText(student.studentCode);
+  return (
+    name.includes(q) ||
+    code.includes(q) ||
+    name.replace(/\s+/g, '').includes(compact) ||
+    code.replace(/\s+/g, '').includes(compact)
+  );
+}
+
+export function filterRoster(
+  students: StudentInfo[],
+  statuses: { [studentId: number]: StudentSessionAttendance },
+  query: string | null | undefined,
+  statusFilter: RosterStatusFilter,
+): StudentInfo[] {
+  return students.filter(st => {
+    const rec = statuses[st.id];
+    if (statusFilter === 'UNMARKED') {
+      if (rec) return false;
+    } else if (statusFilter !== 'ALL' && rec?.status !== statusFilter) {
+      return false;
+    }
+    return rosterMatchesQuery(st, query);
+  });
+}
+
+const ROSTER_STATUS_RANK: { [k: string]: number } = { PRESENT: 0, LATE: 1, EXCUSED: 2, ABSENT: 3 };
+
+export function sortRoster(
+  students: StudentInfo[],
+  statuses: { [studentId: number]: StudentSessionAttendance },
+  sortKey: RosterSortKey,
+  sortDir: RosterSortDir,
+  baseOrder?: Map<number, number>,
+): StudentInfo[] {
+  const order = baseOrder ?? new Map(students.map((s, i): [number, number] => [s.id, i]));
+  const dir = sortDir === 'DESC' ? -1 : 1;
+  const ranked = (id: number) => {
+    const st = statuses[id]?.status;
+    return st === undefined ? 4 : (ROSTER_STATUS_RANK[st] ?? 4);
+  };
+  return [...students].sort((a, b) => {
+    let c = 0;
+    if (sortKey === 'NAME') c = normalizeRosterText(a.fullName).localeCompare(normalizeRosterText(b.fullName), 'fa');
+    else if (sortKey === 'CODE') c = normalizeRosterText(a.studentCode).localeCompare(normalizeRosterText(b.studentCode), 'fa', { numeric: true });
+    else if (sortKey === 'STATUS') c = ranked(a.id) - ranked(b.id);
+    else c = (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0);
+    if (c !== 0) return c * dir;
+    return (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0);
+  });
+}
+
+export function buildBulkStatuses(
+  students: StudentInfo[],
+  prev: { [studentId: number]: StudentSessionAttendance },
+  status: AttendanceStatus,
+): { [studentId: number]: StudentSessionAttendance } {
+  const next: { [studentId: number]: StudentSessionAttendance } = {};
+  students.forEach(st => {
+    next[st.id] = {
+      status,
+      lateMinutes: status === 'LATE' ? prev[st.id]?.lateMinutes || 15 : undefined,
+      note: prev[st.id]?.note,
+    };
+  });
+  return next;
+}
+
 export const GENERATE_SESSIONS_FALLBACK_ERROR = 'خطای غیرمنتظره در تولید جلسات؛ لطفاً دوباره تلاش کنید و در صورت تکرار به آموزش اطلاع دهید.';
 
 export function sanitizeGenerateError(message: unknown): string {
@@ -139,6 +231,29 @@ export default function ProfessorAttendanceClient({
         ?? 0
   );
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastKind, setToastKind] = useState<'success' | 'error'>('success');
+  const [rosterQuery, setRosterQuery] = useState('');
+  const [rosterStatusFilter, setRosterStatusFilter] = useState<RosterStatusFilter>('ALL');
+  const [rosterSortKey, setRosterSortKey] = useState<RosterSortKey>('ROW');
+  const [rosterSortDir, setRosterSortDir] = useState<RosterSortDir>('ASC');
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = (text: string, ms = 5000, kind: 'success' | 'error' = 'success') => {
+    if (toastTimer.current) {
+      clearTimeout(toastTimer.current);
+      toastTimer.current = null;
+    }
+    setToastKind(kind);
+    setToastMessage(text);
+    if (ms > 0) {
+      toastTimer.current = setTimeout(() => {
+        setToastMessage(null);
+        toastTimer.current = null;
+      }, ms);
+    }
+  };
+  useEffect(() => () => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+  }, []);
 
   // Make-up Session Creation Modal State
   const [showMakeupModal, setShowMakeupModal] = useState<boolean>(false);
@@ -176,6 +291,17 @@ export default function ProfessorAttendanceClient({
     const sessions = currentOffering?.sessions ?? [];
     return sessions.find(s => s.sessionNo === selectedSessionNo) ?? sessions[0] ?? null;
   }, [currentOffering, selectedSessionNo]);
+
+  const rosterBaseOrder = useMemo(
+    () => new Map<number, number>(((currentOffering?.students) ?? []).map((s, idx): [number, number] => [s.id, idx])),
+    [currentOffering],
+  );
+  const visibleStudents = useMemo(() => {
+    const list = currentOffering?.students ?? [];
+    const statuses = currentSession?.studentStatuses ?? {};
+    return sortRoster(filterRoster(list, statuses, rosterQuery, rosterStatusFilter), statuses, rosterSortKey, rosterSortDir, rosterBaseOrder);
+  }, [currentOffering, currentSession, rosterQuery, rosterStatusFilter, rosterSortKey, rosterSortDir, rosterBaseOrder]);
+  const rosterFilterActive = rosterQuery.trim() !== '' || rosterStatusFilter !== 'ALL';
 
   useEffect(() => {
     setOfferings(prev => {
@@ -352,7 +478,8 @@ export default function ProfessorAttendanceClient({
   };
 
   // Bulk status update
-  const markAll = (status: 'PRESENT' | 'ABSENT') => {
+  const markAll = (status: AttendanceStatus) => {
+    const count = offerings.find(o => o.id === selectedOfferingId)?.students.length ?? 0;
     setOfferings(prev =>
       prev.map(off => {
         if (off.id !== selectedOfferingId) return off;
@@ -360,25 +487,28 @@ export default function ProfessorAttendanceClient({
           ...off,
           sessions: off.sessions.map(sess => {
             if (sess.sessionNo !== selectedSessionNo) return sess;
-            const updatedMap: { [studentId: number]: StudentSessionAttendance } = {};
-            off.students.forEach(st => {
-              updatedMap[st.id] = { status, lateMinutes: undefined, note: sess.studentStatuses[st.id]?.note };
-            });
-            return { ...sess, studentStatuses: updatedMap };
+            return { ...sess, studentStatuses: buildBulkStatuses(off.students, sess.studentStatuses, status) };
           }),
         };
       })
     );
-    setToastMessage(status === 'PRESENT' ? 'تمامی دانشجویان این جلسه حاضر ثبت شدند.' : 'وضعیت دانشجویان بازنشانی گردید.');
-    setTimeout(() => setToastMessage(null), 3000);
+    if (status === 'PRESENT') showToast('تمامی دانشجویان این جلسه حاضر ثبت شدند.', 4000);
+    else if (status === 'ABSENT') showToast('وضعیت دانشجویان بازنشانی گردید.', 4000);
+    else {
+      const label = status === 'LATE' ? 'دارای تأخیر' : 'موجه';
+      showToast(`وضعیت همهٔ ${faNum(count)} دانشجو «${label}» ثبت شد؛ در صورت نیاز سطرها را جداگانه اصلاح کنید.`, 4000);
+    }
   };
 
   // Save current session — ذخیرهٔ واقعی در student_class_attendance (سرور)
   const handleSaveSession = async () => {
     if (!currentSession || currentSession.id <= 0) {
-      alert('جلسهٔ انتخابی هنوز در سرور ثبت نشده است.');
+      showToast('جلسهٔ انتخابی هنوز در سرور ثبت نشده است.', 0, 'error');
       return;
     }
+    if (savingSession) return;
+    const sessionNoLabel = faNum(currentSession.sessionNo);
+    const sessionDateLabel = faNum(currentSession.sessionDate);
     setSavingSession(true);
     try {
       const entries = Object.entries(currentSession.studentStatuses).map(([studentId, st]) => ({
@@ -388,7 +518,7 @@ export default function ProfessorAttendanceClient({
       }));
       const res = await saveSessionAttendanceAction(currentSession.id, entries);
       if (!res.ok) {
-        alert(res.error || 'خطا در ذخیرهٔ حضور و غیاب.');
+        showToast(res.error || 'خطا در ذخیرهٔ حضور و غیاب.', 0, 'error');
         return;
       }
       setOfferings(prev =>
@@ -403,13 +533,12 @@ export default function ProfessorAttendanceClient({
           };
         })
       );
-      setToastMessage(`✅ حضور و غیاب جلسه ${faNum(currentSession.sessionNo)} (مورخ ${faNum(currentSession.sessionDate)}) در پایگاه داده ثبت شد (${res.savedCount ?? entries.length} ردیف).`);
+      showToast(`حضور و غیاب جلسه ${sessionNoLabel} (مورخ ${sessionDateLabel}) در پایگاه داده ثبت شد (${faNum(res.savedCount ?? entries.length)} ردیف).`, 6000);
     } catch {
-      alert('خطا در ارتباط با سرور.');
+      showToast('خطا در ارتباط با سرور.', 0, 'error');
     } finally {
       setSavingSession(false);
     }
-    setTimeout(() => setToastMessage(null), 5000);
   };
 
   // Professor Creates Make-up Session
@@ -512,22 +641,21 @@ export default function ProfessorAttendanceClient({
         isDirect,
       });
       if (!res.ok) {
-        alert(res.error || 'ثبت جلسهٔ جبرانی ناموفق بود.');
+        showToast(res.error || 'ثبت جلسهٔ جبرانی ناموفق بود.', 0, 'error');
         return;
       }
       setMakeupHistory(prev => [{ ...record, id: res.sessionId ?? record.id }, ...prev]);
       setShowMakeupModal(false);
       if (isDirect) {
-        setToastMessage(`🎉 جلسه جبرانی در «${selectedRoom!.name}» برای تاریخ ${faNum(makeupForm.sessionDate)} ثبت شد و در فهرست جلسات درس قرار گرفت.`);
+        showToast(`🎉 جلسه جبرانی در «${selectedRoom!.name}» برای تاریخ ${faNum(makeupForm.sessionDate)} ثبت شد و در فهرست جلسات درس قرار گرفت.`, 8000);
       } else {
-        setToastMessage(`📩 درخواست جلسه جبرانی ثبت شد و در انتظار تأیید/تخصیص کلاس توسط ادارهٔ آموزش است.`);
+        showToast(`📩 درخواست جلسه جبرانی ثبت شد و در انتظار تأیید/تخصیص کلاس توسط ادارهٔ آموزش است.`, 8000);
       }
     } catch {
-      alert('خطا در ارتباط با سرور.');
+      showToast('خطا در ارتباط با سرور.', 0, 'error');
     } finally {
       setSavingMakeup(false);
     }
-    setTimeout(() => setToastMessage(null), 8000);
   };
 
   // Statistics for the active session
@@ -640,12 +768,14 @@ export default function ProfessorAttendanceClient({
       
       {/* Toast */}
       {toastMessage && (
-        <div className="p-4 bg-emerald-900 text-emerald-100 rounded-2xl shadow-xl border border-emerald-700 font-bold text-sm flex items-center justify-between animate-fadeIn">
+        <div role="status" className={toastKind === 'error'
+          ? 'p-4 bg-rose-900 text-rose-100 rounded-2xl shadow-xl border border-rose-700 font-bold text-sm flex items-center justify-between animate-fadeIn'
+          : 'p-4 bg-emerald-900 text-emerald-100 rounded-2xl shadow-xl border border-emerald-700 font-bold text-sm flex items-center justify-between animate-fadeIn'}>
           <div className="flex items-center gap-2">
-            <span>✅</span>
+            <span>{toastKind === 'error' ? '⛔' : '✅'}</span>
             <span>{toastMessage}</span>
           </div>
-          <button onClick={() => setToastMessage(null)} className="text-white/60 hover:text-white text-xs">✕</button>
+          <button onClick={() => { if (toastTimer.current) { clearTimeout(toastTimer.current); toastTimer.current = null; } setToastMessage(null); }} className="text-white/60 hover:text-white text-xs shrink-0">✕ بستن</button>
         </div>
       )}
 
@@ -959,10 +1089,60 @@ export default function ProfessorAttendanceClient({
 
           <button
             onClick={handleSaveSession}
-            className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-extrabold text-xs shadow transition flex items-center gap-1.5"
+            disabled={savingSession}
+            className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-wait text-white font-extrabold text-xs shadow transition flex items-center gap-1.5"
           >
-            <span>💾 ثبت و تایید نهایی جلسه {faNum(currentSession.sessionNo)}</span>
+            <span>{savingSession ? '⏳ در حال ذخیره…' : `💾 ثبت و تایید نهایی جلسه ${faNum(currentSession.sessionNo)}`}</span>
           </button>
+        </div>
+
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-3">
+          <input
+            type="text"
+            value={rosterQuery}
+            onChange={e => setRosterQuery(e.target.value)}
+            placeholder="جست‌وجوی نام یا شماره دانشجویی…"
+            className="flex-1 min-w-[200px] border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500"
+          />
+          <select
+            value={rosterStatusFilter}
+            onChange={e => setRosterStatusFilter(e.target.value as RosterStatusFilter)}
+            className="border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
+          >
+            <option value="ALL">همه وضعیت‌ها</option>
+            <option value="PRESENT">حاضر</option>
+            <option value="ABSENT">غایب</option>
+            <option value="LATE">تأخیر</option>
+            <option value="EXCUSED">موجه</option>
+            <option value="UNMARKED">ثبت‌نشده</option>
+          </select>
+          <select
+            value={rosterSortKey}
+            onChange={e => setRosterSortKey(e.target.value as RosterSortKey)}
+            className="border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
+          >
+            <option value="ROW">مرتب‌سازی: ردیف</option>
+            <option value="NAME">مرتب‌سازی: نام</option>
+            <option value="CODE">مرتب‌سازی: شماره دانشجویی</option>
+            <option value="STATUS">مرتب‌سازی: وضعیت</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => setRosterSortDir(d => (d === 'ASC' ? 'DESC' : 'ASC'))}
+            title={rosterSortDir === 'ASC' ? 'صعودی — برای نزولی کلیک کنید' : 'نزولی — برای صعودی کلیک کنید'}
+            className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-700 text-white text-xs font-bold transition"
+          >
+            {rosterSortDir === 'ASC' ? '▲ صعودی' : '▼ نزولی'}
+          </button>
+          {rosterFilterActive && (
+            <button
+              type="button"
+              onClick={() => { setRosterQuery(''); setRosterStatusFilter('ALL'); }}
+              className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition"
+            >
+              پاک‌کردن فیلتر ({faNum(visibleStudents.length)} از {faNum(totalStudents)})
+            </button>
+          )}
         </div>
 
         <div className="overflow-x-auto">
@@ -973,12 +1153,23 @@ export default function ProfessorAttendanceClient({
                 <th className="p-3 border border-slate-800 font-extrabold">شماره دانشجویی</th>
                 <th className="p-3 border border-slate-800 font-extrabold">نام و نام خانوادگی دانشجو</th>
                 <th className="p-3 border border-slate-800 font-extrabold">جمع غیبت در سایر جلسات</th>
-                <th className="p-3 border border-slate-800 font-extrabold min-w-[280px]">وضعیت حضور در این جلسه</th>
+                <th className="p-3 border border-slate-800 font-extrabold min-w-[280px]">
+                  <div className="flex flex-col items-center gap-1.5">
+                    <span>وضعیت حضور در این جلسه</span>
+                    <span className="flex items-center justify-center gap-1">
+                      <button type="button" title="ثبت «حاضر» برای همهٔ دانشجویان" onClick={() => markAll('PRESENT')} className="px-2 py-0.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold transition">همه حاضر</button>
+                      <button type="button" title="ثبت «غایب» برای همهٔ دانشجویان" onClick={() => markAll('ABSENT')} className="px-2 py-0.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold transition">همه غایب</button>
+                      <button type="button" title="ثبت «تأخیر» برای همهٔ دانشجویان" onClick={() => markAll('LATE')} className="px-2 py-0.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-[10px] font-bold transition">همه تأخیر</button>
+                      <button type="button" title="ثبت «موجه» برای همهٔ دانشجویان" onClick={() => markAll('EXCUSED')} className="px-2 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-bold transition">همه موجه</button>
+                    </span>
+                  </div>
+                </th>
                 <th className="p-3 border border-slate-800 font-extrabold">توضیح کلاسی</th>
               </tr>
             </thead>
             <tbody>
-              {students.map((st, idx) => {
+              {visibleStudents.map(st => {
+                const idx = rosterBaseOrder.get(st.id) ?? 0;
                 const recorded = currentSession.studentStatuses[st.id];
                 const sessionAtt = recorded || { status: 'PRESENT' as const };
                 const priorAbsents = studentPriorAbsentsMap[st.id] || 0;
@@ -1082,6 +1273,13 @@ export default function ProfessorAttendanceClient({
                   </tr>
                 );
               })}
+              {visibleStudents.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="p-6 border border-slate-200 text-center text-slate-500 font-bold">
+                    دانشجویی با این جست‌وجو/فیلتر یافت نشد.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
