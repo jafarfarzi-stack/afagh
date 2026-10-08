@@ -16,8 +16,14 @@ import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA } from '@/lib/regulations-engine';
 import { resolveStudentCurriculum } from '@/lib/curriculum-apply';
-import { currentTermFor } from '@/lib/terms';
 import { getTermScope } from '@/lib/term-scope';
+import {
+  buildDashboardScheduleMap,
+  buildProfNameMap,
+  distinctIds,
+  resolveDashboardTerm,
+  toShamsi,
+} from '@/lib/student-dashboard-helpers';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
 import TermFilterChip from '@/components/TermFilterChip';
 import { getExamCardData } from '@/lib/verification';
@@ -39,79 +45,70 @@ const statusFa: Record<string, string> = {
   REJECTED: 'مردود',
 };
 
-const DAY_NAMES = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
-
-function toShamsi(dStr: string | null | undefined): string {
-  if (!dStr) return '—';
-  if (dStr.startsWith('13') || dStr.startsWith('14') || dStr.startsWith('۱۴') || dStr.startsWith('۱۳')) {
-    return dStr;
-  }
-  try {
-    const d = new Date(dStr);
-    if (isNaN(d.getTime())) return dStr;
-    return new Intl.DateTimeFormat('fa-IR', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(d);
-  } catch {
-    return dStr;
-  }
-}
-
 export default async function StudentDashboardPage() {
   const user = await requireRole(['STUDENT']);
   const me = await getStudentByUser(user.id);
   if (!me) return <p className="card p-6 text-center text-slate-500">پروندهٔ دانشجویی یافت نشد.</p>;
 
-  const demo = await isDemoStudentUser(user.id);
-
-  const termScope = await getTermScope(me.universityId);
-  const filteredTerm = termScope.selectedId
-    ? termScope.terms.find(t => t.id === termScope.selectedId) ?? null
-    : null;
+  const [termScope, demo] = await Promise.all([
+    getTermScope(me.universityId),
+    isDemoStudentUser(user.id),
+  ]);
+  const { filteredTerm, term } = resolveDashboardTerm(termScope);
 
   if (demo) {
     return <DemoDashboard name={user.name} filteredTermTitle={filteredTerm?.title ?? null} />;
   }
 
-  const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
-  const [level] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
-  const term = filteredTerm ?? (await currentTermFor(me.universityId));
-  const curriculum = await resolveStudentCurriculum(me.id);
-  const requiredUnitsTotal = curriculum.version ? Number(curriculum.version.totalRequiredUnits ?? 0) : 0;
-  const examCard = await getExamCardData(user.id);
-  const [reg] = me.regulationId ? await db.select().from(educational_regulations).where(eq(educational_regulations.id, me.regulationId)).limit(1) : [null];
-  const [userRecord] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
+  const examTerm = term ? { id: term.id, title: term.title } : null;
 
-  // محاسبه کارنامه و معدل کل
-  const allRows = await withUserRls(user.id, tx =>
-    tx
-      .select({
-        id: enrollments.id,
-        code: courses.code,
-        title: courses.title,
-        units: courses.units,
-        practicalUnits: courses.practicalUnits,
-        courseType: courses.courseType,
-        gradingType: courses.gradingType,
-        affectsGpa: courses.affectsGpa,
-        status: enrollments.status,
-        grade: enrollments.gradeValue,
-        gradeStatus: enrollments.gradeStatus,
-        termId: course_offerings.termId,
-      })
-      .from(enrollments)
-      .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
-      .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-      .where(eq(enrollments.studentId, me.id))
-  );
-
-  const officialGpaResult = await calculateOfficialGPA(me.id);
-
-  // دروس ثبت‌نام‌شده ترم جاری
-  const currentEnrollments = term
-    ? await db
+  const [
+    majorRows,
+    levelRows,
+    curriculum,
+    examCard,
+    regRows,
+    userRows,
+    allRows,
+    officialGpaResult,
+    currentEnrollments,
+  ] = await Promise.all([
+    me.majorId
+      ? db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1)
+      : Promise.resolve([]),
+    me.degreeLevelId
+      ? db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1)
+      : Promise.resolve([]),
+    resolveStudentCurriculum(me.id),
+    getExamCardData(user.id, examTerm),
+    me.regulationId
+      ? db.select().from(educational_regulations).where(eq(educational_regulations.id, me.regulationId)).limit(1)
+      : Promise.resolve([]),
+    db.select().from(users).where(eq(users.id, user.id)).limit(1),
+    withUserRls(user.id, tx =>
+      tx
+        .select({
+          id: enrollments.id,
+          code: courses.code,
+          title: courses.title,
+          units: courses.units,
+          practicalUnits: courses.practicalUnits,
+          courseType: courses.courseType,
+          gradingType: courses.gradingType,
+          affectsGpa: courses.affectsGpa,
+          status: enrollments.status,
+          grade: enrollments.gradeValue,
+          gradeStatus: enrollments.gradeStatus,
+          termId: course_offerings.termId,
+        })
+        .from(enrollments)
+        .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+        .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+        .where(eq(enrollments.studentId, me.id))
+    ),
+    calculateOfficialGPA(me.id),
+    term
+      ? db
         .select({
           enrollmentId: enrollments.id,
           offeringId: enrollments.offeringId,
@@ -134,28 +131,34 @@ export default async function StudentDashboardPage() {
             inArray(enrollments.status, ['REGISTERED', 'FINALIZED', 'WAITLISTED', 'PENDING_COUNCIL', 'DROPPED'])
           )
         )
-    : [];
+      : Promise.resolve([]),
+  ]);
+
+  const major = majorRows[0] ?? null;
+  const level = levelRows[0] ?? null;
+  const requiredUnitsTotal = curriculum.version ? Number(curriculum.version.totalRequiredUnits ?? 0) : 0;
+  const reg = regRows[0] ?? null;
+  const userRecord = userRows[0] ?? null;
 
   const currentUnitsTotal = currentEnrollments.reduce((sum, c) => sum + Number(c.units || 0), 0);
 
-  // اسامی اساتید
-  const profUsers = await db
-    .select({
-      staffId: staff.id,
-      firstName: users.firstName,
-      lastName: users.lastName,
-    })
-    .from(staff)
-    .innerJoin(users, eq(users.id, staff.userId));
+  const offeringIds = distinctIds(currentEnrollments.map(c => c.offeringId));
+  const professorIds = distinctIds(currentEnrollments.map(c => c.professorId));
 
-  const profMap = new Map<number, string>();
-  for (const p of profUsers) {
-    profMap.set(p.staffId, `${p.firstName || ''} ${p.lastName || ''}`.trim());
-  }
-
-  // برنامه زمان‌بندی کلاس‌ها و امتحانات
-  const rawSchedules = term
-    ? await db
+  const [profUsers, rawSchedules, liveVirtualClasses] = await Promise.all([
+    professorIds.length > 0
+      ? db
+        .select({
+          staffId: staff.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        })
+        .from(staff)
+        .innerJoin(users, eq(users.id, staff.userId))
+        .where(inArray(staff.id, professorIds))
+      : Promise.resolve([]),
+    term && offeringIds.length > 0
+      ? db
         .select({
           offeringId: schedules.offeringId,
           scheduleType: schedules.scheduleType,
@@ -167,43 +170,17 @@ export default async function StudentDashboardPage() {
           buildingName: classrooms.buildingName,
         })
         .from(schedules)
+        .innerJoin(course_offerings, eq(course_offerings.id, schedules.offeringId))
         .leftJoin(classrooms, eq(classrooms.id, schedules.roomId))
-    : [];
-
-  const schedMap = new Map<
-    number,
-    {
-      classes: { dayOfWeek: number; dayName: string; startTime: string; endTime: string; room: string; building?: string }[];
-      exam?: { examDate: string; startTime: string; endTime: string; room?: string };
-    }
-  >();
-
-  for (const s of rawSchedules) {
-    if (!schedMap.has(s.offeringId)) schedMap.set(s.offeringId, { classes: [] });
-    const entry = schedMap.get(s.offeringId)!;
-
-    if (s.scheduleType === 'CLASS' && s.dayOfWeek != null) {
-      entry.classes.push({
-        dayOfWeek: s.dayOfWeek,
-        dayName: DAY_NAMES[s.dayOfWeek] || `روز ${s.dayOfWeek}`,
-        startTime: s.startTime.slice(0, 5),
-        endTime: s.endTime.slice(0, 5),
-        room: s.roomName || 'کلاس تئوری',
-        building: s.buildingName || undefined,
-      });
-    } else if (s.scheduleType === 'EXAM' && s.examDate) {
-      entry.exam = {
-        examDate: String(s.examDate),
-        startTime: s.startTime.slice(0, 5),
-        endTime: s.endTime.slice(0, 5),
-        room: s.roomName || 'سالن امتحانات مرکزی',
-      };
-    }
-  }
-
-  // جلسات کلاس مجازیِ دروس ترم جاری از جدول واقعی virtual_classrooms
-  const liveVirtualClasses = term && currentEnrollments.length > 0
-    ? await db
+        .where(
+          and(
+            eq(course_offerings.termId, term.id),
+            inArray(schedules.offeringId, offeringIds)
+          )
+        )
+      : Promise.resolve([]),
+    term && currentEnrollments.length > 0
+      ? db
         .select({
           id: virtual_classrooms.id,
           courseTitle: courses.title,
@@ -221,7 +198,12 @@ export default async function StudentDashboardPage() {
             inArray(course_offerings.id, currentEnrollments.map(c => c.offeringId))
           )
         )
-    : [];
+      : Promise.resolve([]),
+  ]);
+
+  const profMap = buildProfNameMap(profUsers);
+
+  const schedMap = buildDashboardScheduleMap(rawSchedules);
 
   // لیست آزمون‌های پیش‌رو با شماره صندلی
   const upcomingExams = currentEnrollments

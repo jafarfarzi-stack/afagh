@@ -548,7 +548,10 @@ export type ExamCardData = {
  * حالا درس‌ها از ثبت‌نام‌های واقعی، سالن/صندلی از تخصیص صندلی (و در نبود آن از
  * زمان‌بندی EXAM) و بدهی از دفتر کل مالی خوانده می‌شود.
  */
-export async function getExamCardData(userId: number): Promise<ExamCardData | null> {
+export async function getExamCardData(
+  userId: number,
+  resolvedTerm?: { id: number; title: string } | null,
+): Promise<ExamCardData | null> {
   const [stu] = await db
     .select({
       studentId: students.id, studentCode: students.studentCode, entryYear: students.entryYear,
@@ -563,7 +566,7 @@ export async function getExamCardData(userId: number): Promise<ExamCardData | nu
     .limit(1);
   if (!stu) return null;
 
-  const term = await currentTermFor(stu.universityId);
+  const term = resolvedTerm !== undefined ? resolvedTerm : await currentTermFor(stu.universityId);
   const balance = await studentLedgerBalance(undefined, stu.studentId);
   const debt = Math.max(0, -Math.round(balance));
 

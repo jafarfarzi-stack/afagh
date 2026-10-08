@@ -88,23 +88,22 @@ export default async function StudentSchedulePage() {
         )
     : [];
 
-  const profUsers = await db
-    .select({
-      staffId: staff.id,
-      firstName: users.firstName,
-      lastName: users.lastName,
-    })
-    .from(staff)
-    .innerJoin(users, eq(users.id, staff.userId));
-
-  const profMap = new Map<number, string>();
-  for (const p of profUsers) {
-    profMap.set(p.staffId, `${p.firstName || ''} ${p.lastName || ''}`.trim());
-  }
-
   const offeringIds = [...new Set(studentEnrollments.map(e => e.offeringId))];
-  const rawSchedules = term && offeringIds.length > 0
-    ? await db
+  const professorIds = [...new Set(studentEnrollments.map(e => e.professorId).filter((v): v is number => v != null))];
+  const [profUsers, rawSchedules] = await Promise.all([
+    professorIds.length > 0
+      ? db
+        .select({
+          staffId: staff.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        })
+        .from(staff)
+        .innerJoin(users, eq(users.id, staff.userId))
+        .where(inArray(staff.id, professorIds))
+      : Promise.resolve([]),
+    term && offeringIds.length > 0
+      ? db
         .select({
           offeringId: schedules.offeringId,
           scheduleType: schedules.scheduleType,
@@ -124,7 +123,13 @@ export default async function StudentSchedulePage() {
             inArray(schedules.offeringId, offeringIds)
           )
         )
-    : [];
+      : Promise.resolve([]),
+  ]);
+
+  const profMap = new Map<number, string>();
+  for (const p of profUsers) {
+    profMap.set(p.staffId, `${p.firstName || ''} ${p.lastName || ''}`.trim());
+  }
 
   const schedMap = new Map<
     number,
