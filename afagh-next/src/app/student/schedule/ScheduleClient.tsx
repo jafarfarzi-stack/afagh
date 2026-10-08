@@ -1,9 +1,28 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
+import ProfessorCalendarGrid, { type ProfessorCalendarEntry } from '../../professor/professor-calendar-grid';
+import {
+  collapseCalendarEntries,
+  filterProfessorCalendarByWeek,
+  professorCalendarDayIndex,
+  professorCalendarEntryKey,
+} from '@/lib/professor-calendar-layout';
 
-export interface EnrolledCourseItem {
+export type StudentGridWeekType = 'ALL' | 'EVEN' | 'ODD';
+
+export interface StudentGridClass {
+  dayOfWeek: number | null;
+  dayName: string;
+  startTime: string;
+  endTime: string;
+  room: string;
+  building: string;
+  weekType: StudentGridWeekType;
+}
+
+export interface StudentScheduleCourse {
   enrollmentId: number;
   offeringId: number;
   code: string;
@@ -13,14 +32,10 @@ export interface EnrolledCourseItem {
   group: number;
   status: string;
   professor: string;
-  classes: {
-    dayOfWeek: number;
-    dayName: string;
-    startTime: string;
-    endTime: string;
-    room: string;
-    building?: string;
-  }[];
+  enrolledCount: number | null;
+  capacity: number | null;
+  sharedScheduleGroupKey: string | null;
+  classes: StudentGridClass[];
   exam: {
     examDate: string;
     startTime: string;
@@ -29,11 +44,67 @@ export interface EnrolledCourseItem {
   } | null;
 }
 
+export type StudentCalendarEntry = ProfessorCalendarEntry & {
+  sharedScheduleGroupKey: string | null;
+  roomKey: string;
+};
+
+export function studentWeekLabel(weekType: StudentGridWeekType): string {
+  if (weekType === 'EVEN') return 'هفته زوج';
+  if (weekType === 'ODD') return 'هفته فرد';
+  return 'هر هفته';
+}
+
+export function studentStatusLabel(status: string | null | undefined): string {
+  const v = String(status ?? '').toUpperCase();
+  if (v === 'WAITLISTED') return 'ذخیره';
+  if (v === 'PENDING_COUNCIL') return 'در انتظار شورا';
+  return 'ثبت نهایی';
+}
+
+export function buildStudentCalendarEntries(courses: StudentScheduleCourse[]): StudentCalendarEntry[] {
+  const out: StudentCalendarEntry[] = [];
+  for (const c of courses) {
+    for (const cls of c.classes) {
+      if (professorCalendarDayIndex(cls.dayOfWeek) == null) continue;
+      const startTime = String(cls.startTime ?? '').slice(0, 5);
+      const endTime = String(cls.endTime ?? '').slice(0, 5);
+      if (!startTime || !endTime) continue;
+      const row = {
+        id: c.offeringId,
+        dayOfWeek: cls.dayOfWeek,
+        startTime,
+        endTime,
+        weekType: cls.weekType,
+      };
+      out.push({
+        key: professorCalendarEntryKey(row),
+        id: c.offeringId,
+        code: c.code,
+        title: c.title,
+        groupNumber: c.group,
+        dayOfWeek: cls.dayOfWeek,
+        startTime,
+        endTime,
+        roomName: cls.room || '',
+        buildingName: cls.building || '',
+        weekType: cls.weekType,
+        courseType: c.courseType,
+        professorName: c.professor,
+        enrolledCount: c.enrolledCount,
+        capacity: c.capacity,
+        sharedScheduleGroupKey: c.sharedScheduleGroupKey,
+        roomKey: cls.room || '',
+      });
+    }
+  }
+  return out;
+}
+
 const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
 
 function toShamsi(dStr: string | null | undefined): string {
   if (!dStr) return '—';
-  // If already in Persian format
   if (dStr.startsWith('13') || dStr.startsWith('14') || dStr.startsWith('۱۴') || dStr.startsWith('۱۳')) {
     return faNum(dStr);
   }
@@ -50,41 +121,10 @@ function toShamsi(dStr: string | null | undefined): string {
   }
 }
 
-const DAYS = [
-  { id: 0, name: 'شنبه' },
-  { id: 1, name: 'یکشنبه' },
-  { id: 2, name: 'دوشنبه' },
-  { id: 3, name: 'سه‌شنبه' },
-  { id: 4, name: 'چهارشنبه' },
-  { id: 5, name: 'پنج‌شنبه' },
-  { id: 6, name: 'جمعه' },
-];
-
-const TIME_SLOTS = [
-  { id: 1, label: '۰۸:۰۰ الی ۱۰:۰۰', start: '08:00', end: '10:00' },
-  { id: 2, label: '۱۰:۰۰ الی ۱۲:۰۰', start: '10:00', end: '12:00' },
-  { id: 3, label: '۱۲:۰۰ الی ۱۴:۰۰ (نماز و ناهار)', start: '12:00', end: '14:00' },
-  { id: 4, label: '۱۴:۰۰ الی ۱۶:۰۰', start: '14:00', end: '16:00' },
-  { id: 5, label: '۱۶:۰۰ الی ۱۸:۰۰', start: '16:00', end: '18:00' },
-];
-
-function checkTimeOverlap(startA: string, endA: string, startB: string, endB: string): boolean {
-  return startA < endB && endA > startB;
-}
-
-const COURSE_COLORS = [
-  'bg-blue-100 text-blue-900 border-blue-300',
-  'bg-emerald-100 text-emerald-900 border-emerald-300',
-  'bg-purple-100 text-purple-900 border-purple-300',
-  'bg-amber-100 text-amber-900 border-amber-300',
-  'bg-rose-100 text-rose-900 border-rose-300',
-  'bg-teal-100 text-teal-900 border-teal-300',
-  'bg-indigo-100 text-indigo-900 border-indigo-300',
-];
-
 export default function ScheduleClient({
   student,
   term,
+  university,
   courses,
 }: {
   student: {
@@ -99,11 +139,23 @@ export default function ScheduleClient({
     title: string;
     termCode: string;
   };
-  courses: EnrolledCourseItem[];
+  university: {
+    title: string;
+    logoUrl: string | null;
+  };
+  courses: StudentScheduleCourse[];
 }) {
-  const totalUnits = useMemo(() => courses.reduce((sum, c) => sum + c.units, 0), [courses]);
+  const [weekFilter, setWeekFilter] = useState<'ALL' | 'EVEN' | 'ODD'>('ALL');
 
-  // زمان‌بندی امتحانات به ترتیب تاریخ
+  const totalUnits = useMemo(() => courses.reduce((sum, c) => sum + c.units, 0), [courses]);
+  const entries = useMemo(() => buildStudentCalendarEntries(courses), [courses]);
+  const collapsed = useMemo(() => collapseCalendarEntries(entries), [entries]);
+  const visibleEntries = useMemo(
+    () => filterProfessorCalendarByWeek(collapsed, weekFilter),
+    [collapsed, weekFilter]
+  );
+  const unscheduled = useMemo(() => courses.filter(c => c.classes.length === 0), [courses]);
+
   const sortedExams = useMemo(() => {
     return courses
       .filter(c => c.exam != null)
@@ -121,21 +173,40 @@ export default function ScheduleClient({
       .sort((a, b) => a.examDate.localeCompare(b.examDate));
   }, [courses]);
 
+  const weekFilterLabel = weekFilter === 'EVEN' ? 'فقط هفته‌های زوج' : weekFilter === 'ODD' ? 'فقط هفته‌های فرد' : 'همه جلسات (زوج و فرد)';
+  const printDate = new Intl.DateTimeFormat('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+
   return (
-    <div className="space-y-5 text-slate-800 font-sans" dir="rtl">
-      {/* Action Bar (Print & Back) */}
+    <div className="print-area prof-week-print space-y-5 text-slate-800 font-sans" dir="rtl">
+      <style>{'@media print { @page { size: A4 landscape; margin: 8mm 7mm; } }'}</style>
+
+      <div className="prof-week-print-head hidden print:block">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8pt' }}>
+          {university.logoUrl ? (
+            <img src={university.logoUrl} alt="" style={{ height: '28pt', width: '28pt', objectFit: 'contain' }} />
+          ) : null}
+          <div>
+            <div className="font-extrabold">{university.title}</div>
+            <div>برنامه هفتگی — {student.name} (شماره دانشجویی <span dir="ltr">{faNum(student.studentCode)}</span> · {student.majorName} · {student.degreeTitle} ترم {faNum(student.currentTermNo)})</div>
+          </div>
+        </div>
+        <div>
+          <span>نیمسال: <bdi>{term.title}</bdi> (کد نیمسال: {faNum(term.termCode)})</span>
+          <span> · {weekFilterLabel} · تاریخ چاپ: <span suppressHydrationWarning>{printDate}</span></span>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm print:hidden">
         <div className="flex items-center gap-2">
           <Link
             href="/student/enroll"
             className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-xl font-bold transition-colors flex items-center gap-1"
           >
-            <span>🛒</span>
             <span>بازگشت به انتخاب واحد</span>
           </Link>
           <span className="text-xs text-slate-400">|</span>
           <span className="text-xs text-slate-600 font-bold">
-            تاییدیه رسمی انتخاب واحد — {term.title}
+            برنامه هفتگی — <bdi>{term.title}</bdi>
           </span>
         </div>
 
@@ -143,190 +214,139 @@ export default function ScheduleClient({
           onClick={() => window.print()}
           className="text-xs bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-2 rounded-xl font-extrabold transition-all shadow-md active:scale-95 flex items-center gap-1.5"
         >
-          <span>🖨️</span>
-          <span>چاپ تاییدیه تحصیلی و برنامه هفتگی</span>
+          <span>چاپ برنامه هفتگی</span>
         </button>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* سربرگ رسمی تاییدیه تحصیلی (Official University Letterhead)        */}
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      <div className="print-area bg-white rounded-2xl border-2 border-slate-300 p-5 sm:p-7 shadow-md space-y-5 print:border-none print:shadow-none print:p-0">
-        {/* هدر رسمی با آرم و بارکد */}
-        <div className="border-b-2 border-slate-800 pb-4 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-indigo-950 text-white flex items-center justify-center font-black text-2xl shadow-sm">
-              آ
-            </div>
-            <div>
-              <h1 className="text-base sm:text-lg font-black text-slate-900">
-                دانشگاه غیرانتفاعی آفاق ارومیه
-              </h1>
-              <p className="text-xs text-slate-600 font-bold mt-0.5">
-                معاونت آموزشی و تحصیلات تکمیلی — اداره کل آموزش
-              </p>
-            </div>
-          </div>
+      <div className="print:hidden grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 text-xs shadow-sm">
+        <div>
+          <span className="text-slate-500 block text-[11px]">نام و نام خانوادگی:</span>
+          <span className="font-extrabold text-slate-900 text-sm">{student.name}</span>
+        </div>
+        <div>
+          <span className="text-slate-500 block text-[11px]">شماره دانشجویی:</span>
+          <span className="font-extrabold text-slate-900 text-sm" dir="ltr">
+            {faNum(student.studentCode)}
+          </span>
+        </div>
+        <div>
+          <span className="text-slate-500 block text-[11px]">رشته تحصیلی:</span>
+          <span className="font-extrabold text-slate-900">{student.majorName}</span>
+        </div>
+        <div>
+          <span className="text-slate-500 block text-[11px]">مقطع و ترم تحصیلی:</span>
+          <span className="font-extrabold text-slate-900">
+            {student.degreeTitle} (ترم {faNum(student.currentTermNo)})
+          </span>
+        </div>
+      </div>
 
-          <div className="text-center">
-            <h2 className="text-sm sm:text-base font-black text-indigo-950 bg-indigo-50 border border-indigo-200 px-4 py-1.5 rounded-xl">
-              تاییدیه رسمی ثبت‌نام و برنامه هفتگی تحصیلی
-            </h2>
-            <p className="text-xs text-slate-500 font-bold mt-1">
-              {term.title} (کد نیمسال: {faNum(term.termCode)})
+      <div className="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-sm print:hidden">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-600">فیلتر نمایش هفته:</span>
+          <button
+            onClick={() => setWeekFilter('ALL')}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+              weekFilter === 'ALL' ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            همه جلسات (زوج و فرد)
+          </button>
+          <button
+            onClick={() => setWeekFilter('EVEN')}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+              weekFilter === 'EVEN' ? 'bg-cyan-700 text-white' : 'bg-cyan-50 text-cyan-800 hover:bg-cyan-100'
+            }`}
+          >
+            فقط هفته‌های زوج
+          </button>
+          <button
+            onClick={() => setWeekFilter('ODD')}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+              weekFilter === 'ODD' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+            }`}
+          >
+            فقط هفته‌های فرد
+          </button>
+        </div>
+        <span className="text-xs bg-indigo-50 text-indigo-900 border border-indigo-200 px-2.5 py-0.5 rounded-lg font-bold">
+          مجموع: {faNum(totalUnits)} واحد ({faNum(courses.length)} درس)
+        </span>
+      </div>
+
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+          <div>
+            <h3 className="font-extrabold text-slate-900 text-base">
+              جدول هفتگی تشکیل کلاس‌ها
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              شامل استاد، شماره کلاس فیزیکی و ساختمان هر گروه درسی
             </p>
           </div>
-
-          <div className="text-left text-xs font-mono text-slate-600 space-y-0.5">
-            <div>تاریخ صدور: {faNum('1405/06/15')}</div>
-            <div>شماره تاییدیه: {faNum('AF-1405-')}{faNum(student.studentCode)}</div>
-            <div className="text-[10px] text-emerald-700 font-bold font-sans">وضعیت: تایید قطعی آموزش ✓</div>
-          </div>
         </div>
 
-        {/* مشخصات هویتی و تحصیلی دانشجو */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
-          <div>
-            <span className="text-slate-500 block text-[11px]">نام و نام خانوادگی:</span>
-            <span className="font-extrabold text-slate-900 text-sm">{student.name}</span>
+        {courses.length === 0 ? (
+          <div className="text-center p-8 text-xs text-slate-500 font-bold leading-6">
+            درسی برای نمایش در برنامه هفتگی وجود ندارد.
           </div>
-          <div>
-            <span className="text-slate-500 block text-[11px]">شماره دانشجویی:</span>
-            <span className="font-extrabold text-slate-900 font-mono text-sm" dir="ltr">
-              {faNum(student.studentCode)}
-            </span>
+        ) : entries.length === 0 ? (
+          <div className="text-center p-6 bg-amber-50 rounded-2xl border border-dashed border-amber-300 text-xs font-bold text-amber-900 leading-6">
+            {faNum(courses.length)} درس در این نیمسال ثبت شده است، اما هیچ‌کدام روز و ساعتی در جدول زمان‌بندی ندارند؛ بنابراین جدول هفتگی خالی است. فهرست دروس در پایین همین صفحه آمده است.
           </div>
-          <div>
-            <span className="text-slate-500 block text-[11px]">رشته و گرایش تحصیلی:</span>
-            <span className="font-extrabold text-slate-900">{student.majorName}</span>
+        ) : visibleEntries.length === 0 ? (
+          <div className="text-center p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-xs font-bold text-slate-600 leading-6">
+            با فیلتر «{weekFilterLabel}» کلاسی برای نمایش وجود ندارد.
           </div>
-          <div>
-            <span className="text-slate-500 block text-[11px]">مقطع و ترم تحصیلی:</span>
-            <span className="font-extrabold text-slate-900">
-              {student.degreeTitle} (ترم {faNum(student.currentTermNo)})
-            </span>
+        ) : (
+          <ProfessorCalendarGrid entries={visibleEntries} />
+        )}
+
+        {unscheduled.length > 0 && (
+          <div className="print:hidden mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-2">
+            <h4 className="text-xs font-extrabold text-amber-900">
+              دروس بدون ساعت‌بندی ثبت‌شده ({faNum(unscheduled.length)} درس)
+            </h4>
+            <ul className="space-y-1 text-[11px] font-bold text-amber-900">
+              {unscheduled.map(o => (
+                <li key={o.offeringId}>
+                  {o.code} · {o.title} (گروه {faNum(o.group)} · {faNum(o.units)} واحد)
+                </li>
+              ))}
+            </ul>
           </div>
-        </div>
+        )}
+      </div>
 
-        {/* ══════════════════════════════════════════════════════════════════ */}
-        {/* جدول برنامه هفتگی کلاسی (Weekly Timetable Grid with Classrooms)  */}
-        {/* ══════════════════════════════════════════════════════════════════ */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5">
-              <span>📅</span>
-              <span>جدول زمان‌بندی و برنامهٔ هفتگی کلاس‌ها (به همراه شماره کلاس و ساختمان):</span>
-            </h3>
-            <span className="text-xs bg-indigo-50 text-indigo-900 border border-indigo-200 px-2.5 py-0.5 rounded-lg font-bold font-mono">
-              مجموع کل: {faNum(totalUnits)} واحد ({faNum(courses.length)} درس)
-            </span>
-          </div>
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
+        <h3 className="font-extrabold text-slate-900 text-sm">
+          فهرست دروس ثبت‌نام‌شده:
+        </h3>
 
-          <div className="overflow-x-auto rounded-xl border border-slate-300">
-            <table className="w-full text-center text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-100 text-slate-800 border-b border-slate-300">
-                  <th className="p-2.5 border-l border-slate-300 w-24 font-extrabold">ایام هفته</th>
-                  {TIME_SLOTS.map(slot => (
-                    <th key={slot.id} className="p-2 border-l border-slate-300 font-extrabold">
-                      <div>{slot.label}</div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {DAYS.map((day, dayIdx) => {
-                  return (
-                    <tr key={day.id} className="border-b border-slate-200 h-20 hover:bg-slate-50/50">
-                      {/* روز هفته */}
-                      <td className="p-2 border-l border-slate-300 font-extrabold bg-slate-50 text-slate-800">
-                        {day.name}
-                      </td>
-
-                      {/* ساعات کلاسی */}
-                      {TIME_SLOTS.map((slot, slotIdx) => {
-                        // یافتن کلاسی که در این روز و بازه زمانی برگزار می‌شود
-                        const matchingClasses: { course: EnrolledCourseItem; cls: EnrolledCourseItem['classes'][0]; colorIdx: number }[] = [];
-
-                        courses.forEach((c, cIdx) => {
-                          c.classes.forEach(cls => {
-                            if (cls.dayOfWeek === day.id) {
-                              if (checkTimeOverlap(cls.startTime, cls.endTime, slot.start, slot.end)) {
-                                matchingClasses.push({ course: c, cls, colorIdx: cIdx % COURSE_COLORS.length });
-                              }
-                            }
-                          });
-                        });
-
-                        return (
-                          <td key={slot.id} className="p-1 border-l border-slate-200 align-middle">
-                            {matchingClasses.length === 0 ? (
-                              <span className="text-slate-300 text-[11px]">—</span>
-                            ) : (
-                              <div className="space-y-1">
-                                {matchingClasses.map(({ course, cls, colorIdx }, mIdx) => (
-                                  <div
-                                    key={mIdx}
-                                    className={`p-2 rounded-xl border text-right shadow-sm ${COURSE_COLORS[colorIdx]}`}
-                                  >
-                                    <div className="font-extrabold text-xs text-slate-900 leading-tight">
-                                      {course.title}
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-1 text-[10px] mt-1 text-slate-700">
-                                      <span className="font-bold bg-white/80 px-1.5 py-0.5 rounded">
-                                        گروه {faNum(course.group)}
-                                      </span>
-                                      <span className="font-bold bg-white/80 px-1.5 py-0.5 rounded">
-                                        استاد: {course.professor}
-                                      </span>
-                                    </div>
-                                    {/* نمایش صریح شماره کلاس و ساختمان */}
-                                    <div className="mt-1 font-bold text-[11px] text-indigo-950 bg-white/90 px-2 py-0.5 rounded border border-indigo-200 flex items-center gap-1">
-                                      <span>🏛️</span>
-                                      <span>مکان: {cls.room}</span>
-                                      {cls.building && <span>({cls.building})</span>}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════════════════════════════ */}
-        {/* جدول فهرست دروس اخذ شده (List of Enrolled Courses)               */}
-        {/* ══════════════════════════════════════════════════════════════════ */}
-        <div className="space-y-2">
-          <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5">
-            <span>📋</span>
-            <span>فهرست دروس قطعی و ثبت‌نام‌شده:</span>
-          </h3>
-
-          <div className="overflow-x-auto rounded-xl border border-slate-300">
-            <table className="w-full text-right text-xs border-collapse">
-              <thead className="bg-slate-100 text-slate-800 border-b border-slate-300">
+        <div className="overflow-x-auto rounded-xl border border-slate-300">
+          <table className="w-full text-right text-xs border-collapse">
+            <thead className="bg-slate-100 text-slate-800 border-b border-slate-300">
+              <tr>
+                <th className="p-2 border-l border-slate-300 text-center w-12">ردیف</th>
+                <th className="p-2 border-l border-slate-300 text-center w-20">کد درس</th>
+                <th className="p-2 border-l border-slate-300">نام درس</th>
+                <th className="p-2 border-l border-slate-300 text-center w-16">گروه</th>
+                <th className="p-2 border-l border-slate-300 text-center w-14">واحد</th>
+                <th className="p-2 border-l border-slate-300">نوع درس</th>
+                <th className="p-2 border-l border-slate-300">استاد درس</th>
+                <th className="p-2 border-l border-slate-300">محل و زمان کلاس</th>
+                <th className="p-2 border-l border-slate-300 text-center">وضعیت</th>
+              </tr>
+            </thead>
+            <tbody>
+              {courses.length === 0 ? (
                 <tr>
-                  <th className="p-2 border-l border-slate-300 text-center w-12">ردیف</th>
-                  <th className="p-2 border-l border-slate-300 text-center w-20">کد درس</th>
-                  <th className="p-2 border-l border-slate-300">نام درس</th>
-                  <th className="p-2 border-l border-slate-300 text-center w-16">گروه</th>
-                  <th className="p-2 border-l border-slate-300 text-center w-14">واحد</th>
-                  <th className="p-2 border-l border-slate-300">نوع درس</th>
-                  <th className="p-2 border-l border-slate-300">استاد درس</th>
-                  <th className="p-2 border-l border-slate-300">محل و زمان کلاس</th>
-                  <th className="p-2 border-l border-slate-300 text-center">وضعیت</th>
+                  <td colSpan={9} className="p-4 text-center text-slate-400">
+                    درسی ثبت نشده است.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {courses.map((c, idx) => (
+              ) : (
+                courses.map((c, idx) => (
                   <tr key={c.offeringId} className="border-b border-slate-200 hover:bg-slate-50">
                     <td className="p-2 border-l border-slate-200 text-center font-bold">{faNum(idx + 1)}</td>
                     <td className="p-2 border-l border-slate-200 text-center font-mono" dir="ltr">
@@ -342,103 +362,78 @@ export default function ScheduleClient({
                     <td className="p-2 border-l border-slate-200 text-slate-600">{c.courseType}</td>
                     <td className="p-2 border-l border-slate-200 font-medium">{c.professor}</td>
                     <td className="p-2 border-l border-slate-200 text-slate-700">
-                      {c.classes.map((cls, i) => (
-                        <div key={i} className="text-[11px]">
-                          • {cls.dayName} ساعت {faNum(cls.startTime)} تا {faNum(cls.endTime)} — <b>{cls.room}</b>
-                        </div>
-                      ))}
+                      {c.classes.length === 0 ? (
+                        <span className="text-[11px] text-slate-400">زمان‌بندی ثبت نشده</span>
+                      ) : (
+                        c.classes.map((cls, i) => (
+                          <div key={i} className="text-[11px]">
+                            • {cls.dayName} ساعت {faNum(cls.startTime)} تا {faNum(cls.endTime)} — <b>{cls.room || 'کلاس تئوری'}</b>
+                            {cls.weekType !== 'ALL' ? ` (${studentWeekLabel(cls.weekType)})` : ''}
+                          </div>
+                        ))
+                      )}
                     </td>
                     <td className="p-2 border-l border-slate-200 text-center">
                       <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-                        ثبت نهایی ✓
+                        {studentStatusLabel(c.status)}
                       </span>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
+      </div>
 
-        {/* ══════════════════════════════════════════════════════════════════ */}
-        {/* جدول برنامه امتحانات پایان‌ترم (Final Exam Schedule)             */}
-        {/* ══════════════════════════════════════════════════════════════════ */}
-        <div className="space-y-2">
-          <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5">
-            <span>📝</span>
-            <span>برنامه زمان‌بندی و سالن امتحانات پایان‌ترم (به ترتیب تقویم آزمون):</span>
-          </h3>
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
+        <h3 className="font-extrabold text-slate-900 text-sm">
+          برنامه امتحانات پایان‌ترم (به ترتیب تاریخ):
+        </h3>
 
-          <div className="overflow-x-auto rounded-xl border border-slate-300">
-            <table className="w-full text-right text-xs border-collapse">
-              <thead className="bg-slate-100 text-slate-800 border-b border-slate-300">
+        <div className="overflow-x-auto rounded-xl border border-slate-300">
+          <table className="w-full text-right text-xs border-collapse">
+            <thead className="bg-slate-100 text-slate-800 border-b border-slate-300">
+              <tr>
+                <th className="p-2 border-l border-slate-300 text-center w-12">ردیف</th>
+                <th className="p-2 border-l border-slate-300 text-center w-28">تاریخ امتحان</th>
+                <th className="p-2 border-l border-slate-300 text-center w-28">ساعت آزمون</th>
+                <th className="p-2 border-l border-slate-300">عنوان درس</th>
+                <th className="p-2 border-l border-slate-300 text-center w-16">گروه</th>
+                <th className="p-2 border-l border-slate-300">استاد درس</th>
+                <th className="p-2 border-l border-slate-300">سالن آزمون</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedExams.length === 0 ? (
                 <tr>
-                  <th className="p-2 border-l border-slate-300 text-center w-12">ردیف</th>
-                  <th className="p-2 border-l border-slate-300 text-center w-28">تاریخ امتحان</th>
-                  <th className="p-2 border-l border-slate-300 text-center w-28">ساعت آزمون</th>
-                  <th className="p-2 border-l border-slate-300">عنوان درس</th>
-                  <th className="p-2 border-l border-slate-300 text-center w-16">گروه</th>
-                  <th className="p-2 border-l border-slate-300">استاد درس</th>
-                  <th className="p-2 border-l border-slate-300">سالن آزمون</th>
+                  <td colSpan={7} className="p-4 text-center text-slate-400">
+                    برنامه امتحانی برای دروس این ترم ثبت نشده است.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {sortedExams.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="p-4 text-center text-slate-400">
-                      برنامه امتحانی برای دروس این ترم ثبت نشده است.
+              ) : (
+                sortedExams.map((ex, idx) => (
+                  <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
+                    <td className="p-2 border-l border-slate-200 text-center font-bold">{faNum(idx + 1)}</td>
+                    <td className="p-2 border-l border-slate-200 text-center font-bold text-indigo-950 font-mono">
+                      {toShamsi(ex.examDate)}
+                    </td>
+                    <td className="p-2 border-l border-slate-200 text-center font-bold text-slate-800 font-mono">
+                      {faNum(ex.startTime)} الی {faNum(ex.endTime)}
+                    </td>
+                    <td className="p-2 border-l border-slate-200 font-extrabold text-slate-900">{ex.title}</td>
+                    <td className="p-2 border-l border-slate-200 text-center font-bold">
+                      گروه {faNum(ex.group)}
+                    </td>
+                    <td className="p-2 border-l border-slate-200">{ex.professor}</td>
+                    <td className="p-2 border-l border-slate-200 font-bold text-emerald-800">
+                      {ex.room}
                     </td>
                   </tr>
-                ) : (
-                  sortedExams.map((ex, idx) => (
-                    <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
-                      <td className="p-2 border-l border-slate-200 text-center font-bold">{faNum(idx + 1)}</td>
-                      <td className="p-2 border-l border-slate-200 text-center font-bold text-indigo-950 font-mono">
-                        {toShamsi(ex.examDate)}
-                      </td>
-                      <td className="p-2 border-l border-slate-200 text-center font-bold text-slate-800 font-mono">
-                        {faNum(ex.startTime)} الی {faNum(ex.endTime)}
-                      </td>
-                      <td className="p-2 border-l border-slate-200 font-extrabold text-slate-900">{ex.title}</td>
-                      <td className="p-2 border-l border-slate-200 text-center font-bold">
-                        گروه {faNum(ex.group)}
-                      </td>
-                      <td className="p-2 border-l border-slate-200">{ex.professor}</td>
-                      <td className="p-2 border-l border-slate-200 font-bold text-emerald-800">
-                        {ex.room}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* مهر رسمی و امضای دیجیتال اداره آموزش دانشگاه */}
-        <div className="pt-6 border-t border-slate-300 flex flex-wrap items-center justify-between gap-6 text-xs text-slate-700">
-          <div className="space-y-1">
-            <p className="font-bold">ملاحظات و قوانین آموزشی:</p>
-            <p className="text-[11px] text-slate-500 max-w-md">
-              ۱. حضور در جلسات کلاس درس الزامی بوده و غیبت بیش از ۳/۱۶ موجب حذف ماده درسی خواهد شد.
-              <br />
-              ۲. همراه داشتن این تاییدیه در ایام برگزاری امتحانات پایان‌ترم الزامی است.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-6">
-            <div className="text-center p-3 border-2 border-dashed border-indigo-300 rounded-xl bg-indigo-50/50">
-              <div className="text-[10px] text-indigo-800 font-bold">مهر الکترونیک و اصالت سند</div>
-              <div className="text-xs font-black text-indigo-950 mt-1 font-mono">🔒 AFAGH-VERIFIED-2026</div>
-              <div className="text-[9px] text-indigo-600 mt-0.5">اداره کل خدمات آموزشی آفاق</div>
-            </div>
-
-            <div className="text-center space-y-1">
-              <div className="font-bold text-slate-900">مسئول ثبت‌نام و آموزش</div>
-              <div className="w-28 h-10 border-b border-slate-400 mx-auto"></div>
-              <div className="text-[10px] text-slate-500">امضا و تایید سیستمی</div>
-            </div>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

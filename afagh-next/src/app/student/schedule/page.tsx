@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms,
@@ -6,22 +6,31 @@ import {
   course_offerings,
   courses,
   degree_level_configs,
-  educational_regulations,
   enrollments,
   majors,
   schedules,
   staff,
+  universities,
   users,
 } from '@/db/schema';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { getTermScope } from '@/lib/term-scope';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import TermFilterChip from '@/components/TermFilterChip';
-import Link from 'next/link';
-import ScheduleClient from './ScheduleClient';
+import ScheduleClient, { type StudentScheduleCourse } from './ScheduleClient';
 
 export const dynamic = 'force-dynamic';
 
 const DAY_NAMES = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
+
+type StudentWeekType = 'ALL' | 'EVEN' | 'ODD';
+
+function classWeekType(scheduleType: string | null | undefined): StudentWeekType {
+  const v = String(scheduleType ?? '').toUpperCase();
+  if (v === 'EVEN') return 'EVEN';
+  if (v === 'ODD') return 'ODD';
+  return 'ALL';
+}
 
 export default async function StudentSchedulePage() {
   const user = await requireRole(['STUDENT']);
@@ -38,7 +47,17 @@ export default async function StudentSchedulePage() {
   const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
   const [degree] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
 
-  // دریافت دروس ثبت‌نام‌شده و قطعی دانشجو در ترم جاری
+  const [studentUniversity] = me.universityId
+    ? await db
+        .select({ title: universities.title, logoUrl: universities.logoUrl })
+        .from(universities)
+        .where(eq(universities.id, me.universityId))
+        .limit(1)
+    : [null];
+  const currentUniversity = studentUniversity ? null : await getCurrentUniversity().catch(() => null);
+  const universityTitle = studentUniversity?.title ?? currentUniversity?.title ?? 'دانشگاه آفاق ارومیه';
+  const logoUrl = studentUniversity?.logoUrl ?? currentUniversity?.logoUrl ?? null;
+
   const studentEnrollments = term
     ? await db
         .select({
@@ -53,6 +72,9 @@ export default async function StudentSchedulePage() {
           courseType: courses.courseType,
           group: course_offerings.groupNumber,
           professorId: course_offerings.professorId,
+          enrolledCount: course_offerings.enrolledCount,
+          capacity: course_offerings.capacity,
+          sharedScheduleGroupKey: course_offerings.sharedScheduleGroupKey,
         })
         .from(enrollments)
         .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
@@ -66,7 +88,6 @@ export default async function StudentSchedulePage() {
         )
     : [];
 
-  // دریافت اطلاعات اساتید
   const profUsers = await db
     .select({
       staffId: staff.id,
@@ -81,8 +102,8 @@ export default async function StudentSchedulePage() {
     profMap.set(p.staffId, `${p.firstName || ''} ${p.lastName || ''}`.trim());
   }
 
-  // دریافت برنامه زمانی و اتاق‌های کلاسی
-  const rawSchedules = term
+  const offeringIds = [...new Set(studentEnrollments.map(e => e.offeringId))];
+  const rawSchedules = term && offeringIds.length > 0
     ? await db
         .select({
           offeringId: schedules.offeringId,
@@ -95,13 +116,20 @@ export default async function StudentSchedulePage() {
           buildingName: classrooms.buildingName,
         })
         .from(schedules)
+        .innerJoin(course_offerings, eq(course_offerings.id, schedules.offeringId))
         .leftJoin(classrooms, eq(classrooms.id, schedules.roomId))
+        .where(
+          and(
+            eq(course_offerings.termId, term.id),
+            inArray(schedules.offeringId, offeringIds)
+          )
+        )
     : [];
 
   const schedMap = new Map<
     number,
     {
-      classes: { dayOfWeek: number; dayName: string; startTime: string; endTime: string; room: string; building?: string }[];
+      classes: { dayOfWeek: number; dayName: string; startTime: string; endTime: string; room: string; building: string; weekType: StudentWeekType }[];
       exam?: { examDate: string; startTime: string; endTime: string; room?: string };
     }
   >();
@@ -110,26 +138,27 @@ export default async function StudentSchedulePage() {
     if (!schedMap.has(s.offeringId)) schedMap.set(s.offeringId, { classes: [] });
     const entry = schedMap.get(s.offeringId)!;
 
-    if (s.scheduleType === 'CLASS' && s.dayOfWeek != null) {
-      entry.classes.push({
-        dayOfWeek: s.dayOfWeek,
-        dayName: DAY_NAMES[s.dayOfWeek] || `روز ${s.dayOfWeek}`,
-        startTime: s.startTime.slice(0, 5),
-        endTime: s.endTime.slice(0, 5),
-        room: s.roomName || 'کلاس تئوری',
-        building: s.buildingName || undefined,
-      });
-    } else if (s.scheduleType === 'EXAM' && s.examDate) {
+    if (s.scheduleType === 'EXAM' && s.examDate) {
       entry.exam = {
         examDate: String(s.examDate),
         startTime: s.startTime.slice(0, 5),
         endTime: s.endTime.slice(0, 5),
         room: s.roomName || 'سالن امتحانات مرکزی',
       };
+    } else if (s.scheduleType !== 'EXAM' && s.dayOfWeek != null) {
+      entry.classes.push({
+        dayOfWeek: s.dayOfWeek,
+        dayName: DAY_NAMES[s.dayOfWeek] || `روز ${s.dayOfWeek}`,
+        startTime: s.startTime.slice(0, 5),
+        endTime: s.endTime.slice(0, 5),
+        room: s.roomName || '',
+        building: s.buildingName || '',
+        weekType: classWeekType(s.scheduleType),
+      });
     }
   }
 
-  const coursesList = studentEnrollments.map(e => {
+  const coursesList: StudentScheduleCourse[] = studentEnrollments.map(e => {
     const s = schedMap.get(e.offeringId);
     return {
       enrollmentId: e.enrollmentId,
@@ -141,7 +170,10 @@ export default async function StudentSchedulePage() {
       group: e.group,
       status: e.status,
       professor: e.professorId ? profMap.get(e.professorId) || 'نامشخص' : 'نامشخص',
-      classes: s?.classes || [],
+      enrolledCount: e.enrolledCount ?? null,
+      capacity: e.capacity ?? null,
+      sharedScheduleGroupKey: e.sharedScheduleGroupKey ?? null,
+      classes: (s?.classes || []).map(c => ({ ...c })),
       exam: s?.exam || null,
     };
   });
@@ -170,6 +202,10 @@ export default async function StudentSchedulePage() {
         term={{
           title: term?.title ?? 'نیمسال نامشخص',
           termCode: term?.termCode ?? '—',
+        }}
+        university={{
+          title: universityTitle,
+          logoUrl,
         }}
         courses={coursesList}
       />

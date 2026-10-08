@@ -128,8 +128,8 @@ export interface ProfessorCalendarCollapseRow {
   title?: string;
   groupNumber?: number;
   units?: number;
-  enrolledCount?: number;
-  capacity?: number;
+  enrolledCount?: number | null;
+  capacity?: number | null;
   roomName?: string | null;
   buildingName?: string | null;
   roomKey?: string | number | null;
