@@ -35,6 +35,12 @@ export async function getLoginShowcase(universityCode?: string | null): Promise<
       unis.find(u => u.code === 'AFAGH') ??
       unis[0];
 
+    // ارم سراسری (تنظیم UNIVERSITY_LOGO — همان که در فرم‌ها/کارنامه‌هاست)؛
+    // اگر دانشگاه ارم اختصاصی نداشت، همین نشان داده می‌شود تا لاگین بدون ارم نماند.
+    const { getSetting } = await import('@/lib/settings');
+    const globalLogo = await getSetting('UNIVERSITY_LOGO').catch(() => '');
+    const logoOf = (u: { logoUrl: string | null }) => u.logoUrl ?? (globalLogo || null);
+
     const scopeNotice = and(
       eq(login_notices.isActive, 1),
       or(isNull(login_notices.universityId), eq(login_notices.universityId, uni.id)),
@@ -62,8 +68,8 @@ export async function getLoginShowcase(universityCode?: string | null): Promise<
         .orderBy(asc(login_slides.sortOrder), asc(login_slides.id)),
     ]);
     return {
-      universities: unis.map(u => ({ ...u, logoUrl: u.logoUrl ?? null })),
-      university: { ...uni, logoUrl: uni.logoUrl ?? null },
+      universities: unis.map(u => ({ ...u, logoUrl: logoOf(u) })),
+      university: { ...uni, logoUrl: logoOf(uni) },
       notices: notices.filter(n => n.title).map(n => ({ ...n, kind: n.kind || 'info' })),
       slides: slides.filter(s => s.title),
     };

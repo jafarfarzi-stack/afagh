@@ -217,6 +217,7 @@ export default function LoginShowcaseClient({ universities, notices, slides }: {
         <div className="space-y-3">
           <p className="card text-xs leading-6 text-slate-500">
             نام و ارم هر دانشگاه در بالای صفحه ورود نمایش داده می‌شود. ارم را همین‌جا بارگذاری کنید؛
+            اگر دانشگاهی ارم اختصاصی نداشته باشد، ارم سراسری تنظیمات (UNIVERSITY_LOGO) نشان داده می‌شود.
             تغییر ساختاری نام/کد از <a href="/admin/universities" className="text-indigo-700 font-bold hover:underline">مدیریت دانشگاه‌ها</a> انجام می‌شود.
           </p>
           {universities.map(u => (

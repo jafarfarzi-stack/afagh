@@ -21,11 +21,12 @@ const NOTE_STYLE: Record<string, string> = {
 };
 
 export default async function HelpTopicPage(props: { params: Promise<{ role: string; slug: string }> }) {
-  const user = await getSessionUser().catch(() => null);
-  if (!user) redirect('/login');
   const { role, slug } = await props.params;
   if (!isHelpRoleKey(role)) notFound();
-  if (!canViewGuide(user.roles ?? [], role)) notFound();
+  // موضوع‌های عمومی بدون ورود هم باز می‌شوند (لینک راهنما در صفحه لاگین).
+  const user = await getSessionUser().catch(() => null);
+  if (!user && role !== 'shared') redirect('/login');
+  if (!canViewGuide(user?.roles ?? [], role)) notFound();
   const found = findTopic(role, slug);
   if (!found) notFound();
   const g = getRoleGuide(role);

@@ -16,7 +16,8 @@ const GUIDE_CARD: Record<string, string> = {
 
 export default async function HelpLandingPage(props: { searchParams: Promise<{ tab?: string }> }) {
   const user = await getSessionUser().catch(() => null);
-  if (!user) redirect('/login');
+  // مهمان (مثلاً از دکمه راهنمای صفحه ورود) مستقیم به راهنمای عمومی می‌رود
+  if (!user) redirect('/help/shared');
   const sp = await props.searchParams;
   if (sp.tab && isHelpRoleKey(sp.tab)) redirect(`/help/${sp.tab}`);
 

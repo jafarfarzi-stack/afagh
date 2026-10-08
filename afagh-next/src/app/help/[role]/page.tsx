@@ -13,11 +13,13 @@ export async function generateMetadata(props: { params: Promise<{ role: string }
 }
 
 export default async function HelpRolePage(props: { params: Promise<{ role: string }> }) {
-  const user = await getSessionUser().catch(() => null);
-  if (!user) redirect('/login');
   const { role } = await props.params;
   if (!isHelpRoleKey(role)) notFound();
-  if (!canViewGuide(user.roles ?? [], role)) notFound();
+  // راهنمای عمومی (ورود/گذرواژه/جابه‌جایی حساب) باید بدون ورود هم باز شود —
+  // وگرنه دکمه «راهنمای ورود» در صفحه لاگین به خودش برمی‌گردد.
+  const user = await getSessionUser().catch(() => null);
+  if (!user && role !== 'shared') redirect('/login');
+  if (!canViewGuide(user?.roles ?? [], role)) notFound();
   const g = getRoleGuide(role);
   const index = buildHelpIndex([g]);
 
