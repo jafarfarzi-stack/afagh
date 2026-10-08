@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { and, count, eq, inArray } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import { isDemoProfessorUser } from '@/lib/demo-accounts';
 import {
   DEMO_ACADEMIC_RANK,
@@ -13,13 +13,19 @@ import {
 import { DEMO_RECORDINGS } from '@/lib/demo-student-data';
 import { db } from '@/db';
 import {
-  classrooms, course_offerings, courses, departments, electronic_documents,
-  professor_availabilities, professor_term_contracts, payroll_statements, schedules,
+  departments, electronic_documents,
+  professor_availabilities, professor_term_contracts, payroll_statements,
 } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import VirtualClassroomWidget from '@/components/VirtualClassroomWidget';
 import { getTodayLiveClasses } from '@/lib/moodle-bbb';
 import { professorTermFilter } from '@/lib/professor-term-filter';
+import {
+  professorScheduleRows,
+  professorUniqueOfferings,
+  type ProfessorScheduleRow,
+} from '@/lib/professor-data';
+import ProfessorWeekTable from './week-table';
 import ProfessorTermFilterBanner from './term-filter-banner';
 
 export const dynamic = 'force-dynamic';
@@ -41,39 +47,7 @@ export default async function ProfessorHome() {
 
   const liveSessions = await getTodayLiveClasses({ universityId, staffId: me.id, viewerUserId: user.id });
 
-  const classes = term
-    ? await db
-        .select({
-          id: course_offerings.id,
-          code: courses.code,
-          title: courses.title,
-          units: courses.units,
-          enrolled: course_offerings.enrolledCount,
-          capacity: course_offerings.capacity,
-          group: course_offerings.groupNumber,
-          roomId: schedules.roomId,
-          dayOfWeek: schedules.dayOfWeek,
-          startTime: schedules.startTime,
-          endTime: schedules.endTime,
-        })
-        .from(course_offerings)
-        .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-        .leftJoin(
-          schedules,
-          and(
-            eq(schedules.offeringId, course_offerings.id),
-            eq(schedules.scheduleType, 'CLASS'),
-          ),
-        )
-        .where(and(eq(course_offerings.professorId, me.id), eq(course_offerings.termId, term.id)))
-        .orderBy(schedules.dayOfWeek, schedules.startTime)
-    : [];
-
-  const roomIds = [...new Set(classes.map(c => c.roomId).filter(Boolean))] as number[];
-  const rooms = roomIds.length
-    ? await db.select({ id: classrooms.id, name: classrooms.name }).from(classrooms).where(inArray(classrooms.id, roomIds))
-    : [];
-  const roomName = new Map(rooms.map(r => [r.id, r.name]));
+  const scheduleRows = term ? await professorScheduleRows(me.id, term.id, universityId) : [];
 
   const deptRows = me.departmentId
     ? await db.select({ name: departments.name }).from(departments).where(eq(departments.id, me.departmentId)).limit(1)
@@ -118,7 +92,7 @@ export default async function ProfessorHome() {
       ? 'PENDING'
       : 'NONE';
 
-  const DAYS = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه'];
+  const termTitle = demo ? DEMO_TERM_TITLE : term?.title ?? '';
 
   const classCards = demo
     ? DEMO_DASHBOARD_CLASSES.map(c => ({
@@ -135,23 +109,24 @@ export default async function ProfessorHome() {
         isCoTaught: c.isCoTaught,
         coTeacherName: c.coTeacherName,
       }))
-    : classes.map(c => ({
-        key: `${c.id}-${c.roomId ?? 'x'}-${c.startTime ?? 'x'}`,
+    : professorUniqueOfferings(scheduleRows).map(c => ({
+        key: `${c.id}`,
         offeringId: c.id,
         title: c.title,
         code: c.code,
-        group: c.group,
+        group: c.groupNumber,
         units: c.units,
-        roomLine: c.roomId ? `🏛️ ${roomName.get(c.roomId) ?? 'کلاس نامشخص'}` : 'زمان‌بندی ثبت نشده',
-        timeLine:
-          c.dayOfWeek != null
-            ? `${DAYS[c.dayOfWeek] ?? ''} ${String(c.startTime).slice(0, 5)} الی ${String(c.endTime).slice(0, 5)}`
-            : '',
-        enrolled: c.enrolled,
+        roomLine: c.roomName ? `🏛️ ${c.roomName}` : 'سالن ثبت نشده',
+        timeLine: c.hasSchedule ? `${c.dayName} ${c.startTime} الی ${c.endTime}` : 'ساعت‌بندی ثبت نشده',
+        enrolled: c.enrolledCount,
         capacity: c.capacity,
-        isCoTaught: false,
-        coTeacherName: undefined as string | undefined,
+        isCoTaught: c.isCoTaught,
+        coTeacherName: c.coPartnerName,
       }));
+
+  const realOfferings = professorUniqueOfferings(scheduleRows);
+  const realScheduledCount = scheduleRows.filter(r => r.hasSchedule).length;
+  const realUnscheduledCount = scheduleRows.filter(r => !r.hasSchedule).length;
 
   return (
     <div className="space-y-6" dir="rtl">
@@ -202,9 +177,14 @@ export default async function ProfessorHome() {
           <div className="bg-white/10 p-3 rounded-2xl border border-white/10">
             <span className="text-indigo-200 block mb-0.5">تعداد کلاس‌های ترم:</span>
             <span className="font-extrabold text-white text-sm">
-              {faNum(demo ? DEMO_DASHBOARD_SUMMARY.classCount : classes.length)}{' '}
+              {faNum(demo ? DEMO_DASHBOARD_SUMMARY.classCount : realOfferings.length)}{' '}
               {DEMO_DASHBOARD_SUMMARY.classCountLabel}
             </span>
+            {!demo && realUnscheduledCount > 0 && (
+              <span className="block mt-1 text-[10px] text-amber-200 font-bold">
+                {faNum(realScheduledCount)} جلسه زمان‌بندی‌شده · {faNum(realUnscheduledCount)} بدون ساعت
+              </span>
+            )}
           </div>
           <div className="bg-white/10 p-3 rounded-2xl border border-white/10">
             <span className="text-indigo-200 block mb-0.5">
@@ -313,13 +293,21 @@ export default async function ProfessorHome() {
         </Link>
       </div>
 
+      {!demo && (
+        <ProfessorWeekTable
+          termTitle={termTitle}
+          selectedTermTitle={selectedTerm?.title ?? null}
+          rows={scheduleRows}
+        />
+      )}
+
       <div className="grid gap-6 md:grid-cols-3">
 
         <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 md:col-span-2 space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-200">
             <div>
               <h2 className="font-extrabold text-slate-900 text-base">
-                کلاس‌های آموزشی {demo ? DEMO_TERM_TITLE : term ? term.title : ''}
+                کلاس‌های آموزشی {termTitle}
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">فهرست دروس تخصیص‌یافته به همراه عملیات سریع</p>
             </div>
@@ -331,7 +319,11 @@ export default async function ProfessorHome() {
           <div className="space-y-3">
             {classCards.length === 0 ? (
               <div className="text-center p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-xs font-bold text-slate-500">
-                در این نیمسال هیچ درسی به شما تخصیص نیافته است.
+                {demo
+                  ? 'در این نیمسال هیچ درسی به شما تخصیص نیافته است.'
+                  : selectedTerm
+                    ? `در نیمسال «${selectedTerm.title}» کلاسی برای شما ثبت نشده است.`
+                    : `در ${termTitle || 'نیمسال جاری'} کلاسی برای شما ثبت نشده است.`}
               </div>
             ) : classCards.map(c => (
               <div

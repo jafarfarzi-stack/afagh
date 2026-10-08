@@ -1,5 +1,6 @@
 import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db';
+import { hasProfessorSchedule, professorRangeMatch } from '@/lib/professor-week-grid';
 import {
   classrooms,
   course_offerings,
@@ -16,7 +17,7 @@ import {
   users,
 } from '@/db/schema';
 
-export const JALALI_DAY_NAMES = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه'];
+export const JALALI_DAY_NAMES = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
 
 export type ProfessorScheduleRow = {
   id: number;
@@ -37,6 +38,16 @@ export type ProfessorScheduleRow = {
   isCoTaught: boolean;
   coRole?: 'THEORY' | 'LAB';
   coPartnerName?: string;
+  /**
+   * آیا این ارائه ساعت و روز معتبر دارد و در نتیجه در جدول هفتگی دیده می‌شود؟
+   * تک‌منبعِ حقیقت برای هر دو بلوک داشبورد: جدول هفتگی و فهرست دروس.
+   */
+  hasSchedule: boolean;
+  /**
+   * ساعت این کلاس با هیچ بازهٔ ثابتِ جدول هفتگی هم‌پوشانی ندارد، پس داخل
+   * شبکهٔ جدول نمایش داده نمی‌شود و باید جداگانه فهرست شود.
+   */
+  outsideStandardSlots: boolean;
 };
 
 function mapCourseType(raw: string | null | undefined): ProfessorScheduleRow['courseType'] {
@@ -97,10 +108,7 @@ export async function professorScheduleRows(staffId: number, termId: number, uni
     })
     .from(course_offerings)
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-    .leftJoin(
-      schedules,
-      and(eq(schedules.offeringId, course_offerings.id), eq(schedules.scheduleType, 'CLASS')),
-    )
+    .leftJoin(schedules, eq(schedules.offeringId, course_offerings.id))
     .leftJoin(classrooms, eq(classrooms.id, schedules.roomId))
     .where(ownedOfferings(staffId, termId, universityId));
 
@@ -114,6 +122,10 @@ export async function professorScheduleRows(staffId: number, termId: number, uni
     if (seen.has(key)) continue;
     seen.add(key);
     const partner = partners.get(r.offeringId) ?? null;
+    const startTime = r.startTime ? String(r.startTime).slice(0, 5) : '';
+    const endTime = r.endTime ? String(r.endTime).slice(0, 5) : '';
+    const dayOfWeek = r.dayOfWeek ?? null;
+    const hasSchedule = hasProfessorSchedule({ dayOfWeek, startTime, endTime });
     out.push({
       id: r.offeringId,
       code: r.code,
@@ -123,19 +135,33 @@ export async function professorScheduleRows(staffId: number, termId: number, uni
       groupNumber: r.groupNumber,
       enrolledCount: Number(r.enrolledCount ?? 0),
       capacity: Number(r.capacity ?? 0),
-      dayOfWeek: r.dayOfWeek ?? null,
-      dayName: r.dayOfWeek != null ? JALALI_DAY_NAMES[r.dayOfWeek] ?? '' : '',
-      startTime: r.startTime ? String(r.startTime).slice(0, 5) : '',
-      endTime: r.endTime ? String(r.endTime).slice(0, 5) : '',
+      dayOfWeek,
+      dayName: dayOfWeek != null ? JALALI_DAY_NAMES[dayOfWeek] ?? '' : '',
+      startTime,
+      endTime,
       roomName: r.roomName ?? '',
       buildingName: r.buildingName ?? '',
       weekType: mapWeekType(r.scheduleType),
       isCoTaught: !!partner,
       coRole: partner ? (partner.role === 'PRACTICAL' || partner.role === 'LAB' ? 'LAB' : 'THEORY') : undefined,
       coPartnerName: partner?.name,
+      hasSchedule,
+      outsideStandardSlots: hasSchedule && professorRangeMatch(startTime, endTime).outsideStandardSlots,
     });
   }
 
+  return out;
+}
+
+/** ارائه‌های یکتای استاد در یک ترم، مستقل از تعداد ردیف‌های زمان‌بندی */
+export function professorUniqueOfferings(rows: ProfessorScheduleRow[]): ProfessorScheduleRow[] {
+  const out: ProfessorScheduleRow[] = [];
+  const seen = new Set<number>();
+  for (const r of rows) {
+    if (seen.has(r.id)) continue;
+    seen.add(r.id);
+    out.push(r);
+  }
   return out;
 }
 

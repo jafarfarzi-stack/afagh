@@ -2,6 +2,12 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import {
+  PROFESSOR_GRID_DAYS,
+  PROFESSOR_GRID_TIME_SLOTS,
+  hasProfessorSchedule,
+  professorRangeMatch,
+} from '@/lib/professor-week-grid';
 
 export interface ProfessorScheduleOffering {
   id: number;
@@ -12,7 +18,7 @@ export interface ProfessorScheduleOffering {
   groupNumber: number;
   enrolledCount: number;
   capacity: number;
-  dayOfWeek: number | null; // 0: شنبه ... 5: پنج‌شنبه · null = زمان‌بندی ثبت نشده
+  dayOfWeek: number | null; // 0: شنبه ... 6: جمعه · null = زمان‌بندی ثبت نشده
   dayName: string;
   startTime: string;
   endTime: string;
@@ -22,6 +28,8 @@ export interface ProfessorScheduleOffering {
   isCoTaught?: boolean;
   coRole?: 'THEORY' | 'LAB';
   coPartnerName?: string;
+  hasSchedule?: boolean;
+  outsideStandardSlots?: boolean;
 }
 
 interface Props {
@@ -40,25 +48,34 @@ interface Props {
 
 const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
 
-const DAY_NAMES = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه'];
+const uniqueIds = (rows: ProfessorScheduleOffering[]) =>
+  new Set(rows.map(r => r.id)).size;
 
-const TIME_SLOTS = [
-  { id: 1, label: '۰۸:۰۰ الی ۱۰:۰۰', startTime: '08:00', endTime: '10:00' },
-  { id: 2, label: '۱۰:۰۰ الی ۱۲:۰۰', startTime: '10:00', endTime: '12:00' },
-  { id: 3, label: '۱۳:۳۰ الی ۱۵:۳۰', startTime: '13:30', endTime: '15:30' },
-  { id: 4, label: '۱۵:۳۰ الی ۱۷:۳۰', startTime: '15:30', endTime: '17:30' },
-  { id: 5, label: '۱۷:۳۰ الی ۱۹:۳۰', startTime: '17:30', endTime: '19:30' },
-];
+const DAY_NAMES = PROFESSOR_GRID_DAYS;
+
+const TIME_SLOTS = PROFESSOR_GRID_TIME_SLOTS;
 
 export default function ProfessorScheduleClient({ professor, termTitle, initialOfferings }: Props) {
   const [offerings] = useState<ProfessorScheduleOffering[]>(initialOfferings);
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<'ALL' | 'EVEN' | 'ODD'>('ALL');
 
-  const totalUnits = offerings.reduce((s, o) => s + Number(o.units || 0), 0);
-  const totalStudents = offerings.reduce((s, o) => s + Number(o.enrolledCount || 0), 0);
-  const totalClasses = offerings.length;
-  const daysWithClass = new Set(offerings.filter(o => o.dayOfWeek != null).map(o => o.dayOfWeek)).size;
-  const unscheduled = offerings.filter(o => o.dayOfWeek == null || !o.startTime);
+  const isScheduled = (o: ProfessorScheduleOffering) =>
+    o.hasSchedule ?? hasProfessorSchedule({ dayOfWeek: o.dayOfWeek, startTime: o.startTime, endTime: o.endTime });
+
+  const uniqueOfferings = offerings.filter(
+    (o, idx) => offerings.findIndex(x => x.id === o.id) === idx,
+  );
+
+  const totalUnits = uniqueOfferings.reduce((s, o) => s + Number(o.units || 0), 0);
+  const totalStudents = uniqueOfferings.reduce((s, o) => s + Number(o.enrolledCount || 0), 0);
+  const totalClasses = uniqueOfferings.length;
+  const scheduledRows = offerings.filter(isScheduled);
+  const daysWithClass = new Set(scheduledRows.map(o => o.dayOfWeek as number)).size;
+  const unscheduled = offerings.filter(o => !isScheduled(o));
+  const outsideSlots = scheduledRows.filter(
+    o => o.outsideStandardSlots ?? professorRangeMatch(o.startTime, o.endTime).outsideStandardSlots,
+  );
+  const sessionsOf = (offeringId: number) => scheduledRows.filter(o => o.id === offeringId).length;
 
   const handlePrint = () => {
     window.print();
@@ -208,10 +225,12 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
       {totalClasses === 0 ? (
         <div className="card text-center p-10 space-y-2">
           <div className="text-4xl">📅</div>
-          <h2 className="font-extrabold text-slate-800 text-lg">هنوز داده‌ای ثبت نشده است</h2>
+          <h2 className="font-extrabold text-slate-800 text-lg">
+            {termTitle ? `در نیمسال «${termTitle}» کلاسی برای شما ثبت نشده است` : 'هنوز داده‌ای ثبت نشده است'}
+          </h2>
           <p className="text-xs text-slate-500 leading-6">
-            در نیمسال جاری دانشگاه شما هیچ درسی به شما تخصیص نیافته است. پس از تخصیص درس توسط مدیر گروه،
-            برنامهٔ هفتگی به‌صورت خودکار از جدول زمان‌بندی همین‌جا نمایش داده می‌شود.
+            در {termTitle ? `نیمسال «${termTitle}»` : 'نیمسال جاری دانشگاه شما'} هیچ درسی به شما تخصیص نیافته است.
+            پس از تخصیص درس توسط مدیر گروه، برنامهٔ هفتگی به‌صورت خودکار از جدول زمان‌بندی همین‌جا نمایش داده می‌شود.
           </p>
         </div>
       ) : (
@@ -230,6 +249,15 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
           </div>
         </div>
 
+        {scheduledRows.length === 0 && (
+          <div className="text-center p-6 bg-amber-50 rounded-2xl border border-dashed border-amber-300 text-xs font-bold text-amber-900 leading-6">
+            {faNum(totalClasses)} کلاس در {termTitle ? `نیمسال «${termTitle}»` : 'نیمسال جاری'} به شما تخصیص یافته است،
+            اما هیچ‌کدام ساعت و روزی در جدول زمان‌بندی ندارند؛ بنابراین جدول هفتگی خالی است.
+            فهرست دقیق کلاس‌ها در پایین همین صفحه آمده است.
+          </div>
+        )}
+
+        {scheduledRows.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-xs">
             <thead>
@@ -238,14 +266,13 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
                 {TIME_SLOTS.map(slot => (
                   <th key={slot.id} className="p-3 border border-slate-800 font-extrabold">
                     <div>{slot.label}</div>
-                    <div className="text-[10px] text-slate-300 font-normal mt-0.5">{slot.startTime} الی {slot.endTime}</div>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {DAY_NAMES.map((dayName, dayIdx) => {
-                const dayOfferings = offerings.filter(o => o.dayOfWeek === dayIdx);
+                const dayOfferings = scheduledRows.filter(o => o.dayOfWeek === dayIdx);
 
                 return (
                   <tr key={dayIdx} className={dayIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
@@ -255,9 +282,8 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
 
                     {TIME_SLOTS.map(slot => {
                       const matched = dayOfferings.filter(o => {
-                        if (!o.startTime || !o.endTime) return false;
-                        const isTime = o.startTime <= slot.startTime && o.endTime >= slot.endTime;
-                        if (!isTime) return false;
+                        const slotIds = professorRangeMatch(o.startTime, o.endTime).slotIds;
+                        if (!slotIds.includes(slot.id)) return false;
                         if (selectedWeekFilter === 'EVEN' && o.weekType === 'ODD') return false;
                         if (selectedWeekFilter === 'ODD' && o.weekType === 'EVEN') return false;
                         return true;
@@ -273,7 +299,7 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
                             <div className="space-y-1.5">
                               {matched.map(item => (
                                 <div
-                                  key={item.id}
+                                  key={`${item.id}-${item.startTime}-${slot.id}`}
                                   className={`p-2.5 rounded-xl border text-right transition shadow-xs ${
                                     item.courseType === 'عملی'
                                       ? 'bg-amber-50 border-amber-300 text-amber-950'
@@ -290,8 +316,11 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
                                   </div>
 
                                   <div className="text-[11px] font-bold text-slate-700 flex items-center justify-between mb-1">
-                                    <span>🏛️ {item.roomName}</span>
+                                    <span>{item.roomName ? `🏛️ ${item.roomName}` : '🏛️ سالن ثبت نشده'}</span>
                                     <span className="text-slate-500 text-[10px]">{item.buildingName}</span>
+                                  </div>
+                                  <div className="text-[10px] font-mono text-slate-600 mb-1">
+                                    {faNum(item.startTime)} الی {faNum(item.endTime)}
                                   </div>
 
                                   {/* Co-teaching indicator if applicable */}
@@ -328,16 +357,40 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
             </tbody>
           </table>
         </div>
+        )}
 
         {unscheduled.length > 0 && (
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-2">
             <h4 className="text-xs font-extrabold text-amber-900">
-              دروسی که هنوز برایشان زمان‌بندی هفتگی ثبت نشده است
+              کلاس‌های بدون ساعت‌بندی ثبت‌شده ({faNum(uniqueIds(unscheduled))} کلاس)
             </h4>
+            <p className="text-[11px] text-amber-800 leading-5">
+              این کلاس‌ها در نیمسال جاری به شما تخصیص یافته‌اند، اما هنوز روز و ساعتی برایشان
+              در جدول زمان‌بندی ثبت نشده است؛ به همین دلیل در جدول بالا دیده نمی‌شوند.
+            </p>
             <ul className="space-y-1 text-[11px] font-bold text-amber-900">
               {unscheduled.map(o => (
-                <li key={o.id}>
-                  {o.code} · {o.title} (گروه {faNum(o.groupNumber)})
+                <li key={`${o.id}-unscheduled`}>
+                  {o.code} · {o.title} (گروه {faNum(o.groupNumber)} · {faNum(o.units)} واحد)
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {outsideSlots.length > 0 && (
+          <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-4 space-y-2">
+            <h4 className="text-xs font-extrabold text-sky-900">
+              کلاس‌هایی که ساعتشان خارج از بازه‌های ثابت جدول است ({faNum(uniqueIds(outsideSlots))} کلاس)
+            </h4>
+            <p className="text-[11px] text-sky-800 leading-5">
+              ساعت ثبت‌شدهٔ این کلاس‌ها با هیچ‌یک از بازه‌های ثابت ستون‌های جدول (۰۸:۰۰ تا ۱۹:۳۰)
+              هم‌پوشانی کامل ندارد، بنابراین در شبکهٔ جدول جا نمی‌شوند. ساعت واقعی:
+            </p>
+            <ul className="space-y-1 text-[11px] font-bold text-sky-900">
+              {outsideSlots.map(o => (
+                <li key={`${o.id}-${o.startTime}-outside`}>
+                  {o.dayName} {faNum(o.startTime)} الی {faNum(o.endTime)} · {o.code} · {o.title} (گروه {faNum(o.groupNumber)})
                 </li>
               ))}
             </ul>
@@ -352,7 +405,7 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
             فهرست تفکیکی دروس تخصیص‌یافته به استاد در این نیمسال
           </h3>
           <span className="text-xs text-slate-500 font-bold">
-            مجموع {faNum(offerings.length)} کلاس فعال
+            مجموع {faNum(totalClasses)} کلاس · {faNum(scheduledRows.length)} جلسهٔ زمان‌بندی‌شده
           </span>
         </div>
 
@@ -373,7 +426,7 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
               </tr>
             </thead>
             <tbody>
-              {offerings.map((item, idx) => (
+              {uniqueOfferings.map((item, idx) => (
                 <tr key={item.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                   <td className="p-2 border border-slate-200 text-center font-bold text-slate-500">{faNum(idx + 1)}</td>
                   <td className="p-2 border border-slate-200 font-mono text-center font-bold text-indigo-900">{item.code}</td>
@@ -394,6 +447,11 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
                   </td>
                   <td className="p-2 border border-slate-200 font-bold text-slate-800">
                     {item.dayName ? `${item.dayName} ${faNum(item.startTime)} الی ${faNum(item.endTime)}` : 'زمان‌بندی ثبت نشده'}
+                    {sessionsOf(item.id) > 1 && (
+                      <div className="text-[10px] font-normal text-slate-500">
+                        {faNum(sessionsOf(item.id))} جلسه در هفته
+                      </div>
+                    )}
                   </td>
                   <td className="p-2 border border-slate-200 font-extrabold text-emerald-900">
                     {item.roomName ? `🏛️ ${item.roomName}${item.buildingName ? ` (${item.buildingName})` : ''}` : 'ثبت نشده'}
