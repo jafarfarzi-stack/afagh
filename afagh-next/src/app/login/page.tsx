@@ -1,115 +1,100 @@
-'use client';
+import Link from 'next/link';
+import LoginCard from './LoginCard';
+import ShowcaseSlider from './ShowcaseSlider';
+import { getLoginShowcase, type ShowcaseNotice } from '@/lib/login-showcase';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { homeForClient } from './roles';
-import { chooseLoginAccountAction, loginAndReport } from './actions';
+export const metadata = { title: 'ورود | سامانه جامع آفاق' };
+export const dynamic = 'force-dynamic';
 
-type Candidate = {
-  id: number; name: string; staffCodes: string[]; universityTitle: string | null; roles: string[];
+const NOTICE_STYLE: Record<string, string> = {
+  important: 'border-red-300 bg-red-50 text-red-900',
+  warning: 'border-amber-300 bg-amber-50 text-amber-900',
+  info: 'border-sky-200 bg-white/95 text-slate-700',
 };
+const NOTICE_ICON: Record<string, string> = { important: '📢', warning: '⚠️', info: 'ℹ️' };
 
-export default function LoginPage() {
-  const router = useRouter();
-  const [code, setCode] = useState('');
-  const [pass, setPass] = useState('');
-  const [err, setErr] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [choice, setChoice] = useState<{ token: string; candidates: Candidate[] } | null>(null);
+function NoticeCard({ n }: { n: ShowcaseNotice }) {
+  return (
+    <div className={`rounded-2xl border p-3.5 shadow-sm ${NOTICE_STYLE[n.kind] ?? NOTICE_STYLE.info}`}>
+      <p className="text-[13px] font-black flex items-center gap-1.5">
+        <span>{NOTICE_ICON[n.kind] ?? 'ℹ️'}</span>
+        <span>{n.title}</span>
+      </p>
+      {n.body ? <p className="mt-1 text-xs leading-6 opacity-90">{n.body}</p> : null}
+    </div>
+  );
+}
 
-  // پیام‌های بازگشتی (مثلاً کاربر بدون نقش) — بدون نیاز به useSearchParams
-  useEffect(() => {
-    const e = new URLSearchParams(window.location.search).get('e');
-    if (e === 'norole') setErr('ورود موفق بود، اما برای این حساب هیچ نقشی تعریف نشده است. با مدیر سامانه تماس بگیرید.');
-    if (e === 'expired') setErr('نشست شما منقضی شده است. دوباره وارد شوید.');
-  }, []);
-
-  function afterOk(mustChange?: boolean) {
-    if (mustChange) {
-      router.replace('/change-password');
-      router.refresh();
-      return;
-    }
-    // مسیر پس از ورود را سرور تعیین می‌کند؛ refresh لازم است تا کوکی تازه اعمال شود
-    router.replace(homeForClient());
-    router.refresh();
-  }
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    // اعتبارسنجی داخل submit، نه صرفاً غیرفعال‌کردن دکمه — چون در برخی مرورگرهای
-    // قدیمی رویداد onChange برای autofill/برخی روش‌های تایپ ممکن است به‌درستی
-    // شلیک نشود و دکمه‌ی صرفاً وابسته به state برای همیشه غیرفعال بماند.
-    if (!code.trim() || !pass) { setErr('کد (ملی یا پرسنلی) و رمز عبور را وارد کنید.'); return; }
-    setBusy(true); setErr(''); setChoice(null);
-    const res = await loginAndReport(code, pass).catch(() => null);
-    if (!res) {
-      setErr('ارتباط با سرور برقرار نشد. اگر پیش‌نمایش را داخل همین صفحه می‌بینید، آن را در تب جدید باز کنید و دوباره وارد شوید.');
-      setBusy(false); return;
-    }
-    if ((res as { needChoice?: boolean }).needChoice) {
-      const r = res as unknown as { token: string; candidates: Candidate[] };
-      setChoice({ token: r.token, candidates: r.candidates || [] });
-      setBusy(false); return;
-    }
-    if (!res.ok) { setErr(res.error || 'خطا'); setBusy(false); return; }
-    // حساب تازه‌پذیرش‌شده با رمز پیش‌فرض → ابتدا تغییر اجباری رمز
-    afterOk(res.mustChange);
-  }
-
-  async function pick(id: number) {
-    if (!choice) return;
-    setBusy(true); setErr('');
-    const res = await chooseLoginAccountAction(choice.token, id).catch(() => null);
-    if (!res) { setErr('ارتباط با سرور برقرار نشد.'); setBusy(false); return; }
-    if (!res.ok) { setErr(res.error || 'خطا'); setBusy(false); return; }
-    afterOk(res.mustChange);
-  }
+export default async function LoginPage(props: { searchParams: Promise<{ u?: string }> }) {
+  const sp = await props.searchParams;
+  const show = await getLoginShowcase(sp.u);
+  const important = show.notices.filter(n => n.kind === 'important');
+  const rest = show.notices.filter(n => n.kind !== 'important');
+  const uni = show.university;
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-4">
-      <form onSubmit={submit} className="card w-full max-w-sm space-y-4">
-        <div className="text-center">
-          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600 text-xl font-bold text-white">آ</div>
-          <h1 className="text-lg font-bold">سامانه جامع آفاق</h1>
-          <p className="text-xs text-slate-500">ورود با کد ملی / کد پرسنلی و رمز عبور</p>
-        </div>
-        {!choice ? (
-          <>
-            <input className="input text-left" dir="ltr" placeholder="کد ملی یا کد پرسنلی" value={code} onChange={e => setCode(e.target.value)} name="code" autoComplete="username" />
-            <input className="input text-left" dir="ltr" type="password" placeholder="رمز عبور" value={pass} onChange={e => setPass(e.target.value)} name="password" autoComplete="current-password" />
-            {err && <p className="rounded-xl bg-red-50 p-2 text-center text-sm text-red-700">{err}</p>}
-            <button className="btn-primary w-full" disabled={busy}>{busy ? 'در حال ورود…' : 'ورود'}</button>
-          </>
-        ) : (
-          <>
-            <p className="rounded-xl bg-amber-50 p-2 text-center text-sm font-bold text-amber-900">
-              این شناسه چند حساب دارد — وارد کدام کارتابل می‌شوید؟
-            </p>
-            <div className="space-y-2">
-              {choice.candidates.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => pick(c.id)}
-                  className="w-full rounded-xl border border-slate-200 bg-white p-3 text-right shadow-xs transition hover:border-emerald-500 hover:bg-emerald-50 disabled:opacity-60"
+    <main dir="rtl" className="min-h-screen bg-gradient-to-bl from-emerald-950 via-slate-900 to-teal-950 p-4 sm:p-8 flex items-center justify-center">
+      <div className="w-full max-w-6xl grid gap-6 lg:grid-cols-5 items-start">
+        {/* ── پنل معرفی / اسلایدر ── */}
+        <div className="space-y-4 lg:col-span-3">
+          <div className="flex items-center gap-4">
+            {uni.logoUrl ? (
+              <img src={uni.logoUrl} alt={uni.title} className="h-16 w-16 sm:h-20 sm:w-20 object-contain rounded-3xl bg-white p-2 shadow-2xl" />
+            ) : (
+              <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-3xl bg-emerald-500 flex items-center justify-center font-black text-3xl text-emerald-950 shadow-2xl">
+                آ
+              </div>
+            )}
+            <div>
+              <h1 className="text-white font-black text-lg sm:text-2xl leading-9">{uni.title}</h1>
+              <p className="text-emerald-200/80 text-xs sm:text-sm mt-0.5">سامانه جامع آموزشی، مالی و پژوهشی</p>
+            </div>
+          </div>
+
+          {show.universities.length > 1 && (
+            <div className="flex flex-wrap gap-1.5">
+              {show.universities.map(u => (
+                <Link
+                  key={u.code}
+                  href={`/login?u=${u.code}`}
+                  className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border transition ${
+                    u.code === uni.code
+                      ? 'bg-white text-emerald-950 border-white shadow'
+                      : 'bg-white/10 text-emerald-100 border-white/20 hover:bg-white/20'
+                  }`}
                 >
-                  <span className="block text-sm font-extrabold text-slate-900">{c.name}</span>
-                  <span className="mt-0.5 block text-xs text-slate-500">
-                    {c.staffCodes.length ? `کد پرسنلی: ${c.staffCodes.join('، ')}` : 'بدون کد پرسنلی'}
-                    {c.universityTitle ? ` · ${c.universityTitle}` : ''}
-                  </span>
-                </button>
+                  {u.title}
+                </Link>
               ))}
             </div>
-            {err && <p className="rounded-xl bg-red-50 p-2 text-center text-sm text-red-700">{err}</p>}
-            <button type="button" className="w-full text-center text-xs text-slate-500 hover:underline" disabled={busy} onClick={() => { setChoice(null); setErr(''); }}>
-              بازگشت به ورود
-            </button>
-          </>
-        )}
-      </form>
+          )}
+
+          <ShowcaseSlider slides={show.slides} />
+
+          {rest.length > 0 && (
+            <div className="space-y-2.5">
+              {rest.map(n => (
+                <NoticeCard key={n.id} n={n} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── ستون ورود ── */}
+        <div className="space-y-4 lg:col-span-2 lg:sticky lg:top-6">
+          {important.length > 0 && (
+            <div className="space-y-2.5">
+              {important.map(n => (
+                <NoticeCard key={n.id} n={n} />
+              ))}
+            </div>
+          )}
+          <LoginCard />
+          <p className="text-center text-[11px] text-emerald-200/60">
+            <Link href="/help?tab=shared" className="hover:underline">📖 راهنمای ورود و حساب‌ها</Link>
+          </p>
+        </div>
+      </div>
     </main>
   );
 }

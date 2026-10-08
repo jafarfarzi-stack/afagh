@@ -2486,6 +2486,37 @@ export const tuition_discount_types = pgTable('tuition_discount_types', {
   createdAt: timestamp('createdAt').defaultNow()
 });
 
+/** اطلاعیه‌های صفحه ورود — universityId خالی = سراسری (همه دانشگاه‌ها) */
+export const login_notices = pgTable('login_notices', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').references(() => universities.id, { onDelete: 'cascade' }),
+  title: varchar('title', { length: 150 }).notNull(),
+  body: text('body').notNull().default(''),
+  kind: varchar('kind', { length: 20 }).notNull().default('info'), // info | warning | important
+  isActive: integer('isActive').notNull().default(1),
+  sortOrder: integer('sortOrder').notNull().default(0),
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+}, (t) => [
+  index('idx_login_notices_scope').on(t.universityId, t.isActive, t.sortOrder),
+]);
+
+/** اسلایدهای صفحه ورود — universityId خالی = سراسری؛ imageUrl خالی = گرادیان پیش‌فرض */
+export const login_slides = pgTable('login_slides', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').references(() => universities.id, { onDelete: 'cascade' }),
+  title: varchar('title', { length: 150 }).notNull(),
+  subtitle: varchar('subtitle', { length: 255 }).notNull().default(''),
+  imageUrl: varchar('imageUrl', { length: 500 }).notNull().default(''),
+  linkUrl: varchar('linkUrl', { length: 500 }).notNull().default(''),
+  isActive: integer('isActive').notNull().default(1),
+  sortOrder: integer('sortOrder').notNull().default(0),
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+}, (t) => [
+  index('idx_login_slides_scope').on(t.universityId, t.isActive, t.sortOrder),
+]);
+
 /** تخفیف تخصیص‌یافته به یک دانشجو (برای یک ترم، یا NULL = همهٔ ترم‌ها) */
 export const student_discounts = pgTable('student_discounts', {
   id: serial('id').primaryKey(),

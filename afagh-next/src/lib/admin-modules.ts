@@ -407,6 +407,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/login-showcase',
+    icon: '🖼️',
+    title: 'ویترین صفحه ورود',
+    desc: 'اطلاعیه‌ها، اسلایدها و ارم دانشگاه‌ها',
+    group: 'settings',
+    roles: ['ADMIN'],
+    accent: 'from-emerald-900 to-teal-950 border-emerald-700/50',
+    iconBg: 'bg-emerald-700/80 border-emerald-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/settings',
     icon: '⚙️',
     title: 'پیکربندی سامانه',
