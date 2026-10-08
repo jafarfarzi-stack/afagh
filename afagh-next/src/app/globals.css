@@ -52,7 +52,12 @@
 @tailwind components;
 @tailwind utilities;
 
-body { @apply bg-slate-100 text-slate-800; }
+/* فونت فارسی روی <body> لنگر می‌شود، نه فقط به‌صورت ضمنی از پیش‌تنظیم تیلویند:
+   پیش‌تنظیم font-family را روی <html> می‌گذارد و اگر روزی preflight یا کلید
+   fontFamily.sans عوض شود، همهٔ صفحه‌ها — از جمله راهنماهای HTML مثل /manual —
+   بی‌سروصدا به Tahoma (فونتِ جانشین) می‌افتند. مقدار محاسبه‌شده دقیقاً همانِ
+   پیش‌تنظیم است (Vazirmatn, Tahoma, sans-serif) ⇒ بدون هیچ تغییر ظاهری. */
+body { @apply bg-slate-100 text-slate-800 font-sans; }
 .card { @apply bg-white rounded-2xl shadow-sm border border-slate-200 p-4; }
 .btn { @apply inline-flex items-center justify-center gap-1 rounded-xl px-4 py-2 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed; }
 .btn-primary { @apply btn bg-emerald-600 text-white hover:bg-emerald-700; }
