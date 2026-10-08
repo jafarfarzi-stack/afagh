@@ -8,7 +8,7 @@ import {
   schedules, student_class_attendance,
 } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
-import { generateClassSessionsForTerm } from '@/lib/class-session-generator';
+import { generateClassSessionsForOffering, generateClassSessionsForTerm } from '@/lib/class-session-generator';
 import { logger } from '@/lib/logger';
 import type { HardConflict } from '@/lib/scheduling-core';
 
@@ -193,7 +193,7 @@ export async function generateOfferingSessionsAction(offeringId: number): Promis
       };
     }
 
-    const result = await generateClassSessionsForTerm(user.id, offering.termId, { failOnHardConflict: false });
+    const result = await generateClassSessionsForOffering(user.id, offering.termId, oid, { failOnHardConflict: false });
     if (!result.ok) {
       return { ok: false, error: toSafeError(result.error) };
     }

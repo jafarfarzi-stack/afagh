@@ -7,7 +7,7 @@ import {
 import { withUserRls } from '@/db';
 import { atomicSeat, nextWaitlistPosition, releaseSeat, warmupCapacities } from '../waitingRoom';
 import { evaluateStudentRegulationStatus, parseUnits } from '../regulations-engine';
-import { buildPrereqContext, evaluateLogicTree } from './prereqs';
+import { buildPrereqContext, evaluateLogicTree, type PrereqContext } from './prereqs';
 
 // ═══ خط لولهٔ اعتبارسنجی — سند §۱۰۰۸ ═══
 // هر درخواست انتخاب واحد از ۵ فیلتر می‌گذرد:
@@ -27,6 +27,48 @@ export type SubmitResult = {
   softErrors: { offeringId: number; msg: string }[];
 };
 
+export type SubmitDeps = {
+  db?: any;
+  withUserRls?: <T>(userId: number, fn: (tx: any) => Promise<T>) => Promise<T>;
+  atomicSeat?: (offeringId: number) => Promise<number>;
+  releaseSeat?: (offeringId: number) => Promise<void>;
+  nextWaitlistPosition?: (offeringId: number) => Promise<number | null>;
+  warmupCapacities?: (force?: boolean) => Promise<number>;
+  claimSeats?: (ids: number[]) => Promise<Set<number>>;
+  readFresh?: (ids: number[]) => Promise<Map<number, { enrolled: number; capacity: number }>>;
+  compensateSeat?: (id: number) => Promise<void>;
+  evaluateRegulations?: (studentId: number, termId: number) => Promise<{ effectiveMaxUnits: number }>;
+  buildPrereq?: (studentId: number) => Promise<PrereqContext>;
+  getDebtThreshold?: () => Promise<number>;
+  notifyEnrollmentDone?: (args: { userId: number; registered: string[]; waitlisted: string[] }) => Promise<void>;
+};
+
+export function buildClaimSeatsQuery(exec: any, ids: number[]) {
+  return exec.update(course_offerings)
+    .set({ enrolledCount: sql`"enrolledCount" + 1` })
+    .where(and(inArray(course_offerings.id, ids), sql`"enrolledCount" < "capacity"`))
+    .returning({ id: course_offerings.id });
+}
+
+export async function claimSeatsBatch(exec: any, ids: number[]): Promise<Set<number>> {
+  if (ids.length === 0) return new Set<number>();
+  const rows = await buildClaimSeatsQuery(exec, ids) as { id: number }[];
+  return new Set(rows.map(r => Number(r.id)));
+}
+
+export async function readFreshCapacities(exec: any, ids: number[]): Promise<Map<number, { enrolled: number; capacity: number }>> {
+  if (ids.length === 0) return new Map();
+  const rows = await exec
+    .select({ id: course_offerings.id, enrolled: course_offerings.enrolledCount, capacity: course_offerings.capacity })
+    .from(course_offerings)
+    .where(inArray(course_offerings.id, ids)) as { id: number; enrolled: number; capacity: number }[];
+  return new Map(rows.map(r => [Number(r.id), { enrolled: Number(r.enrolled), capacity: Number(r.capacity) }]));
+}
+
+export async function compensateSeatDb(exec: any, id: number): Promise<void> {
+  await exec.execute(sql`UPDATE course_offerings SET "enrolledCount" = GREATEST("enrolledCount" - 1, 0) WHERE id = ${id}`).catch(() => {});
+}
+
 function overlaps(aS: string, aE: string, bS: string, bE: string, aD: number | null, bD: number | null) {
   if (aD == null || bD == null || aD !== bD) return false;
   return aS < bE && bS < aE;
@@ -41,14 +83,16 @@ function examOverlaps(a: { examDate: string | null; startTime: string; endTime: 
  * پردازش یک آیتم صف ثبت نهایی — بدون context درخواست (در کارگر صف اجرا می‌شود).
  * طبق §۶۹۰۶ فقط نتیجهٔ نهایی در PostgreSQL ثبت می‌شود؛ ظرفیت زنده در Redis می‌ماند.
  */
-export async function processQueuedSubmit(userId: number, studentId: number, acceptSameDayRisk = false): Promise<SubmitResult> {
+export async function processQueuedSubmit(userId: number, studentId: number, acceptSameDayRisk = false, deps: SubmitDeps = {}): Promise<SubmitResult> {
   const out: SubmitResult = { ok: true, registered: [], waitlisted: [], hardErrors: [], softErrors: [] };
+  const D: typeof db = deps.db ?? db;
+  const doRls = deps.withUserRls ?? withUserRls;
 
-  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
+  const [term] = await D.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
   if (!term || !term.isEnrollmentOpen) { out.ok = false; out.hardErrors.push('پنجرهٔ انتخاب واحد بسته است.'); return out; }
 
   // ── فیلتر ۱: مالی (§۱۰۰۸) + وضعیت دانشجو ──
-  const [stu] = await db.select().from(students).where(eq(students.id, studentId)).limit(1);
+  const [stu] = await D.select().from(students).where(eq(students.id, studentId)).limit(1);
   if (!stu) { out.ok = false; out.hardErrors.push('پروندهٔ دانشجویی یافت نشد.'); return out; }
   if (stu.status !== 'ACTIVE') {
     out.ok = false;
@@ -60,7 +104,7 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
   // بررسی تسویه‌حساب مالی: ابتدا ترم مالی، سپس ترم تحصیلی
   // اگر financial_terms وجود دارد از آن استفاده می‌کنیم (سازگاری با سما)
   let finTermId: number | null = null;
-  const finTerms = await db.select().from(financial_terms)
+  const finTerms = await D.select().from(financial_terms)
     .where(and(eq(financial_terms.universityId, stu.universityId ?? 0), eq(financial_terms.isActive, 1)))
     .orderBy(sql`sort_order ASC NULLS LAST`);
   if (finTerms.length > 0) {
@@ -69,18 +113,20 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
   }
 
   const clearanceTermId = finTermId ?? term.id;
-  const [fin] = await db.select().from(financial_clearances)
+  const [fin] = await D.select().from(financial_clearances)
     .where(and(eq(financial_clearances.studentId, studentId), eq(financial_clearances.termId, clearanceTermId)));
   
   if (!fin || !fin.isCleared) { 
     out.ok = false; 
     out.hardErrors.push('تسویه‌حساب مالی این ترم ثبت نشده است. برای انتخاب واحد باید بدهکاری‌تان تسویه شود.'); 
   } else {
-    // بررسی مانده بدهی: اگر بدهکار است و بیش از آستانه مجاز، انتخاب واحد قفل می‌شود
-    const thresholdRaw = await import('../settings').then(m => m.getSetting('ENROLLMENT_DEBT_THRESHOLD'));
-    const debtThreshold = Math.max(0, Number(thresholdRaw ?? 0));
+    const getThreshold = deps.getDebtThreshold ?? (async () => {
+      const thresholdRaw = await import('../settings').then(m => m.getSetting('ENROLLMENT_DEBT_THRESHOLD'));
+      return Math.max(0, Number(thresholdRaw ?? 0));
+    });
+    const debtThreshold = await getThreshold();
     if (debtThreshold > 0) {
-      const balResult = await db.execute(sql`
+      const balResult = await D.execute(sql`
         SELECT COALESCE(SUM(
           CASE WHEN "transactionType" IN ('CHARGE','TUITION_CHARGE') THEN amount
                WHEN "transactionType" IN ('PAYMENT','CREDIT','DISCOUNT','SPONSOR','LOAN','SUBJECT_FEE_DEDUCTIVE') THEN -amount
@@ -97,17 +143,17 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
     }
   }
 
-  const cart = await db.select().from(cart_items).where(eq(cart_items.studentId, studentId));
+  const cart = await D.select().from(cart_items).where(eq(cart_items.studentId, studentId));
   if (cart.length === 0) { out.ok = false; out.hardErrors.push('سبد خالی است.'); return out; }
 
   const ids = cart.map(c => c.offeringId);
-  const offs = await db
+  const offs = await D
     .select({ id: course_offerings.id, courseId: course_offerings.courseId, code: courses.code, title: courses.title, units: courses.units, capacity: course_offerings.capacity, enrolled: course_offerings.enrolledCount, waitCap: course_offerings.waitlistCapacity })
     .from(course_offerings).innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .where(inArray(course_offerings.id, ids));
 
   // دروس همین ترم که قبلاً ثبت شده‌اند (تکراری نگیریم)
-  const current = await db
+  const current = await D
     .select({ offeringId: enrollments.offeringId, courseId: course_offerings.courseId, units: courses.units })
     .from(enrollments).innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
@@ -127,7 +173,8 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
   // ── فیلتر ۳: سقف واحد بر اساس موتور آیین‌نامه‌ها (Regulation Engine) ──
   let allowedMaxUnits = MAX_UNITS;
   try {
-    const regStatus = await evaluateStudentRegulationStatus(studentId, term.id);
+    const evaluateRegs = deps.evaluateRegulations ?? evaluateStudentRegulationStatus;
+    const regStatus = await evaluateRegs(studentId, term.id);
     allowedMaxUnits = regStatus.effectiveMaxUnits;
   } catch (err) {
     console.warn('Failed to evaluate regulation status, falling back to default max units:', err);
@@ -143,9 +190,9 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
   }
 
   // ── فیلتر ۵: تداخل کلاس (خطای نرم) ──
-  const cartSched = await db.select().from(schedules).where(inArray(schedules.offeringId, ids));
+  const cartSched = await D.select().from(schedules).where(inArray(schedules.offeringId, ids));
   const regIds = [...already];
-  const regSched = regIds.length ? await db.select().from(schedules).where(inArray(schedules.offeringId, regIds)) : [];
+  const regSched = regIds.length ? await D.select().from(schedules).where(inArray(schedules.offeringId, regIds)) : [];
   const cartSet = new Set(ids);
   const classClash = new Set<number>();
   const classOnly = (s: typeof cartSched[number]) => s.scheduleType !== 'EXAM';
@@ -194,7 +241,8 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
   }
 
   // ── فیلتر ۴: پیش‌نیاز — درخت منطقی (§۱۰۱۲، خطای نرم) ──
-  const prereq = await buildPrereqContext(studentId);
+  const buildCtx = deps.buildPrereq ?? buildPrereqContext;
+  const prereq = await buildCtx(studentId);
   for (const o of offs) {
     if (already.has(o.id)) continue;
     const rule = prereq.ruleByCourse.get(o.courseId);
@@ -208,105 +256,138 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
 
   if (out.hardErrors.length) { out.ok = false; return out; }
 
-  // ── فیلتر ۲: ظرفیت اتمیک Redis (§۱۰۱۴) — گرم نبود؟ همین‌جا گرم کن ──
-  await warmupCapacities(false);
+  const doWarmup = deps.warmupCapacities ?? warmupCapacities;
+  await doWarmup(false);
 
   const softSet = new Set(out.softErrors.map(s => s.offeringId));
-  for (const o of offs) {
-    if (already.has(o.id) || softSet.has(o.id)) continue;
+  type SubmitPlan = {
+    o: (typeof offs)[number];
+    gotSeat: boolean;
+    redisSeatTaken: boolean;
+    waitlisted: boolean;
+    wlPos: number | null;
+    excluded: boolean;
+    failMessage: string | null;
+  };
+  const plans: SubmitPlan[] = offs
+    .filter(o => !already.has(o.id) && !softSet.has(o.id))
+    .map(o => ({ o, gotSeat: false, redisSeatTaken: false, waitlisted: false, wlPos: null, excluded: false, failMessage: null }));
 
-    const seat = await atomicSeat(o.id);
-    let gotSeat = seat === 1;
-    let waitlisted = false;
-    let wlPos: number | null = null;
-    let redisSeatTaken = seat === 1;
+  const doSeat = deps.atomicSeat ?? atomicSeat;
+  const doRelease = deps.releaseSeat ?? releaseSeat;
+  const doNextWl = deps.nextWaitlistPosition ?? nextWaitlistPosition;
+  const doClaim = deps.claimSeats ?? ((ids: number[]) => claimSeatsBatch(D, ids));
+  const doFresh = deps.readFresh ?? ((ids: number[]) => readFreshCapacities(D, ids));
+  const doCompensate = deps.compensateSeat ?? ((id: number) => compensateSeatDb(D, id));
 
-    if (seat === -2) {
-      // Redis در دسترس نیست → خوانش تازه از DB (نه دادهٔ قدیمی o.enrolled)
-      // سپس رزرو اتمیک شرطی تا دو کارگر همزمان overbooking نکنند.
-      const fresh = await db
-        .select({ enrolled: course_offerings.enrolledCount, capacity: course_offerings.capacity })
-        .from(course_offerings)
-        .where(eq(course_offerings.id, o.id))
-        .limit(1);
-      const f = fresh[0];
-      gotSeat = !!f && Number(f.enrolled) < Number(f.capacity);
-    }
-    if (!gotSeat && (o.waitCap ?? 0) > 0) { waitlisted = true; wlPos = await nextWaitlistPosition(o.id).catch(() => null); }
-
-    if (!gotSeat && !waitlisted) {
-      out.hardErrors.push('ظرفیت «' + o.title + '» تکمیل است.');
-      out.ok = false;
-      continue;
-    }
-
-    if (!waitlisted) {
-      // منبع حقیقت DB است (Redis ممکن است از DB عقب باشد):
-      // افزایش شرطی اتمیک؛ اگر ۰ سطر اثر گرفت یعنی واقعاً پر است.
-      const inc = await db.execute(
-        sql`UPDATE course_offerings SET "enrolledCount" = "enrolledCount" + 1 WHERE id = ${o.id} AND "enrolledCount" < "capacity"`
-      );
-      const affected = Number((inc as unknown as { rowCount?: unknown })?.rowCount ?? 0);
-      if (affected !== 1) {
-        // ظرفیت واقعی پر بود — صندلی Redis را پس بده و به لیست انتظار برو
-        if (redisSeatTaken) await releaseSeat(o.id).catch(() => {});
-        if ((o.waitCap ?? 0) > 0) {
-          waitlisted = true;
-          wlPos = await nextWaitlistPosition(o.id).catch(() => null);
-        } else {
-          out.hardErrors.push('ظرفیت «' + o.title + '» تکمیل است.');
-          out.ok = false;
-          continue;
-        }
-      }
-    }
-
-    // درج ثبت‌نام + خالی‌کردن سبد — تحت RLS (§۲۱۷۰): خط‌مشی enroll_self_ins فقط ردیف خودش
-    try {
-      await withUserRls(userId, tx => tx.insert(enrollments)
-      .values({
-        studentId, offeringId: o.id, status: waitlisted ? 'WAITLISTED' : 'REGISTERED',
-        waitlistPosition: waitlisted ? (wlPos ?? 1) : null,
-        // فاز ۱۰: تأییدیهٔ دیجیتال تداخل نرم (دو امتحان هم‌روز در شیفت‌های متفاوت)
-        hasAcceptedSameDayExam: acceptSameDayRisk && examSoft.has(o.id) ? 1 : 0,
-      })
-      .onConflictDoUpdate({
-        target: [enrollments.studentId, enrollments.offeringId],
-        set: {
-          status: waitlisted ? 'WAITLISTED' : 'REGISTERED',
-          waitlistPosition: waitlisted ? (wlPos ?? 1) : null,
-          hasAcceptedSameDayExam: acceptSameDayRisk && examSoft.has(o.id) ? 1 : 0,
-        },
-      }));
-    } catch (e) {
-      // جبران: اگر INSERT شکست خورد، شمارندهٔ DB و صندلی Redis نشت نکند
-      if (!waitlisted) {
-        await db.execute(sql`UPDATE course_offerings SET "enrolledCount" = GREATEST("enrolledCount" - 1, 0) WHERE id = ${o.id}`).catch(() => {});
-        if (redisSeatTaken) await releaseSeat(o.id).catch(() => {});
-      }
-      out.hardErrors.push('خطا در ثبت «' + o.title + '»: ' + String((e as Error)?.message ?? e));
-      out.ok = false;
-      continue;
-    }
-    if (!waitlisted) {
-      // شمارندهٔ DB بالاتر به‌صورت شرطی زیاد شد؛ این‌جا فقط نتیجه ثبت می‌شود.
-      out.registered.push(o.title);
+  const seatCodes = await Promise.all(plans.map(p => doSeat(p.o.id)));
+  const fresh = await doFresh(plans.filter((p, i) => seatCodes[i] === -2).map(p => p.o.id));
+  plans.forEach((p, i) => {
+    const code = seatCodes[i];
+    p.redisSeatTaken = code === 1;
+    if (code === 1) {
+      p.gotSeat = true;
+    } else if (code === -2) {
+      const f = fresh.get(p.o.id);
+      p.gotSeat = !!f && Number(f.enrolled) < Number(f.capacity);
     } else {
-      out.waitlisted.push(o.title);
+      p.gotSeat = false;
     }
-    await withUserRls(userId, tx => tx.delete(cart_items).where(and(eq(cart_items.studentId, studentId), eq(cart_items.offeringId, o.id))));
-  }
-
-  await withUserRls(userId, tx => tx.insert(notifications).values({
-    userId, eventCode: 'ENROLLMENT_DONE',
-    payload: JSON.stringify({ registered: out.registered, waitlisted: out.waitlisted }),
+    if (!p.gotSeat && (p.o.waitCap ?? 0) > 0) p.waitlisted = true;
+  });
+  await Promise.all(plans.filter(p => p.waitlisted).map(async p => {
+    p.wlPos = await doNextWl(p.o.id).catch(() => null);
   }));
 
-  // اعلان تلگرامی خودکار
+  const claimed = await doClaim(plans.filter(p => !p.waitlisted).map(p => p.o.id));
+  for (const p of plans) {
+    if (p.waitlisted) continue;
+    if (claimed.has(p.o.id)) continue;
+    if (p.redisSeatTaken) await doRelease(p.o.id).catch(() => {});
+    if ((p.o.waitCap ?? 0) > 0) {
+      p.waitlisted = true;
+      p.wlPos = await doNextWl(p.o.id).catch(() => null);
+    } else {
+      p.excluded = true;
+      p.failMessage = 'ظرفیت «' + p.o.title + '» تکمیل است.';
+    }
+  }
+
+  let txError: unknown = null;
   try {
+    await doRls(userId, async (tx: any) => {
+      for (const p of plans) {
+        if (p.excluded) continue;
+        await tx.execute(sql.raw('SAVEPOINT enroll_sp'));
+        try {
+          await tx.insert(enrollments)
+            .values({
+              studentId, offeringId: p.o.id, status: p.waitlisted ? 'WAITLISTED' : 'REGISTERED',
+              waitlistPosition: p.waitlisted ? (p.wlPos ?? 1) : null,
+              hasAcceptedSameDayExam: acceptSameDayRisk && examSoft.has(p.o.id) ? 1 : 0,
+            })
+            .onConflictDoUpdate({
+              target: [enrollments.studentId, enrollments.offeringId],
+              set: {
+                status: p.waitlisted ? 'WAITLISTED' : 'REGISTERED',
+                waitlistPosition: p.waitlisted ? (p.wlPos ?? 1) : null,
+                hasAcceptedSameDayExam: acceptSameDayRisk && examSoft.has(p.o.id) ? 1 : 0,
+              },
+            });
+        } catch (e) {
+          await tx.execute(sql.raw('ROLLBACK TO SAVEPOINT enroll_sp')).catch(() => {});
+          p.failMessage = 'خطا در ثبت «' + p.o.title + '»: ' + String((e as Error)?.message ?? e);
+          continue;
+        }
+        await tx.execute(sql.raw('RELEASE SAVEPOINT enroll_sp')).catch(() => {});
+      }
+      const winners = plans.filter(p => !p.excluded && !p.failMessage);
+      if (winners.length > 0) {
+        await tx.delete(cart_items).where(and(eq(cart_items.studentId, studentId), inArray(cart_items.offeringId, winners.map(p => p.o.id))));
+      }
+      await tx.insert(notifications).values({
+        userId, eventCode: 'ENROLLMENT_DONE',
+        payload: JSON.stringify({
+          registered: winners.filter(p => !p.waitlisted).map(p => p.o.title),
+          waitlisted: winners.filter(p => p.waitlisted).map(p => p.o.title),
+        }),
+      });
+    });
+  } catch (e) {
+    txError = e;
+  }
+  if (txError !== null) {
+    const msg = String((txError as Error)?.message ?? txError);
+    for (const p of plans) {
+      if (!p.excluded && !p.failMessage) p.failMessage = 'خطا در ثبت «' + p.o.title + '»: ' + msg;
+    }
+  }
+  for (const p of plans) {
+    if (p.failMessage && !p.excluded && !p.waitlisted) {
+      await doCompensate(p.o.id);
+      if (p.redisSeatTaken) await doRelease(p.o.id).catch(() => {});
+    }
+  }
+  for (const p of plans) {
+    if (p.failMessage) {
+      out.hardErrors.push(p.failMessage);
+      out.ok = false;
+      continue;
+    }
+    if (!p.waitlisted) {
+      out.registered.push(p.o.title);
+    } else {
+      out.waitlisted.push(p.o.title);
+    }
+  }
+
+  const notifyDone = deps.notifyEnrollmentDone ?? (async (args: { userId: number; registered: string[]; waitlisted: string[] }) => {
     const { notifyEnrollmentDone } = await import('../telegram-notifications');
-    await notifyEnrollmentDone({ userId, registered: out.registered, waitlisted: out.waitlisted });
-  } catch { /* ارسال تلگرام هرگز نباید انتخاب واحد را متوقف کند */ }
+    await notifyEnrollmentDone(args);
+  });
+  try {
+    await notifyDone({ userId, registered: out.registered, waitlisted: out.waitlisted });
+  } catch {}
 
   return out;
 }

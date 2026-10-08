@@ -288,6 +288,149 @@ export async function generateClassSessionsForTerm(
   });
 }
 
+export async function generateClassSessionsForOffering(
+  actorUserId: number | null,
+  termId: number,
+  offeringId: number,
+  px: GenerateSessionsInput = {},
+  exec?: { transaction: <T>(cb: (tx: any) => Promise<T>) => Promise<T> },
+): Promise<GenerateSessionsResult> {
+  const sessionsCount = px.sessionsCount ?? 16;
+  const holidays = px.holidays ?? [];
+  const runTx = exec ?? db;
+
+  return runTx.transaction(async (tx: any) => {
+    await advisoryLock(tx, 'sess_gen', termId);
+
+    const [term] = await tx.select().from(academic_terms).where(eq(academic_terms.id, termId)).limit(1);
+    if (!term) throw new Error('نیمسال تحصیلی یافت نشد.');
+    if (!term.startDate) {
+      throw new Error('تاریخ شروع نیمسال (startDate) ثبت نشده است؛ ابتدا تقویم ترم را تعریف کنید.');
+    }
+
+    const schedRows = await loadTermSchedules(tx, termId);
+    const targetRows = schedRows.filter(s => s.offeringId === offeringId);
+    if (targetRows.length === 0) {
+      return {
+        ok: false, generated: 0, skipped: 0, warnings: [], error: 'برای این درس هیچ برنامهٔ هفتگی (schedule) ثبت نشده است.',
+        offerings: 0, sessionsPerOffering: {}, hardConflicts: [], termStart: null,
+      };
+    }
+
+    const profByOffering = await loadProfessorsByOffering(tx, termId);
+    const roomCap = await loadRoomCapacities(tx);
+
+    const entries: HardConflictEntry[] = schedRows.map(s => {
+      const profs = profByOffering.get(s.offeringId) ?? [];
+      if (s.professorId != null && !profs.includes(s.professorId)) profs.unshift(s.professorId);
+      return {
+        offeringId: s.offeringId,
+        groupNumber: s.groupNumber,
+        courseCode: s.courseCode,
+        professorIds: profs,
+        roomId: s.roomId,
+        dayOfWeek: s.dayOfWeek,
+        startMinutes: toMinutes(s.startTime),
+        endMinutes: toMinutes(s.endTime),
+        enrolledCount: s.enrolledCount,
+        capacity: s.roomId != null ? (roomCap.get(s.roomId) ?? 0) : 0,
+      };
+    });
+    const conflictReport = analyzeHardConflicts(entries);
+    const hardConflicts = conflictReport.conflicts;
+    if ((px.failOnHardConflict ?? true) && conflictReport.total > 0) {
+      throw new Error(
+        `زمان‌بندی کنونی ${conflictReport.total} تداخل سخت دارد؛ پیش از تولید جلسات رفع کنید. مثال: ${hardConflicts[0].message}`,
+      );
+    }
+
+    const existingRows = await tx
+      .select({ offeringId: class_sessions.offeringId, sessionNo: class_sessions.sessionNo })
+      .from(class_sessions)
+      .where(eq(class_sessions.offeringId, offeringId));
+    const existing = new Set<number>();
+    let skipped = 0;
+    const warnings: string[] = [];
+    for (const e of existingRows) {
+      if (e.sessionNo != null) existing.add(e.sessionNo);
+    }
+
+    const sessionsPerOffering: Record<number, number> = {};
+    const values: {
+      offeringId: number; sessionDate: string; startTime: string; endTime: string;
+      status: string; sessionNo: number; isMakeUpSession: number;
+    }[] = [];
+    for (const s of targetRows) {
+      if (s.dayOfWeek == null || !Number.isInteger(s.dayOfWeek) || s.dayOfWeek < 0 || s.dayOfWeek > 6) {
+        warnings.push(`برنامهٔ هفتگی offering ${s.offeringId} (درس ${s.courseCode}) روز هفتهٔ نامعتبر دارد و نادیده گرفته شد.`);
+        if (sessionsPerOffering[s.offeringId] == null) sessionsPerOffering[s.offeringId] = 0;
+        continue;
+      }
+      let dates;
+      try {
+        dates = computeSessionDates({
+          termStart: term.startDate,
+          dayOfWeek: s.dayOfWeek,
+          sessionsCount,
+          holidays,
+          recurrence: s.recurrence,
+        });
+      } catch {
+        warnings.push(`برنامهٔ هفتگی offering ${s.offeringId} (درس ${s.courseCode}) روز هفتهٔ نامعتبر دارد و نادیده گرفته شد.`);
+        if (sessionsPerOffering[s.offeringId] == null) sessionsPerOffering[s.offeringId] = 0;
+        continue;
+      }
+      const kept = dates.filter(d => existing.has(d.sessionNo));
+      skipped += kept.length;
+      sessionsPerOffering[s.offeringId] = dates.length - kept.length;
+      for (const d of dates) {
+        if (existing.has(d.sessionNo)) continue;
+        values.push({
+          offeringId: s.offeringId,
+          sessionDate: d.jalaliDate,
+          startTime: hm(s.startTime),
+          endTime: hm(s.endTime),
+          status: 'SCHEDULED',
+          sessionNo: d.sessionNo,
+          isMakeUpSession: 0,
+        });
+      }
+    }
+
+    if (!px.dryRun && values.length > 0) {
+      try {
+        for (let i = 0; i < values.length; i += 400) {
+          await tx.insert(class_sessions).values(values.slice(i, i + 400));
+        }
+      } catch {
+        throw new Error('خطا در ذخیرهٔ جلسات تولیدشده؛ لطفاً دوباره تلاش کنید و در صورت تکرار به آموزش اطلاع دهید.');
+      }
+    }
+
+    const termStartStr = term.startDate.toISOString().slice(0, 10);
+    await auditChain(tx, actorUserId, 'SCHEDULING_SESSIONS_GENERATED', 'academic_term', termId, {
+      generated: values.length,
+      skipped,
+      offerings: 1,
+      offeringId,
+      sessionsPerOffering,
+      holidays: holidays.length,
+      termStart: termStartStr,
+    });
+
+    return {
+      ok: true,
+      generated: px.dryRun ? 0 : values.length,
+      skipped,
+      warnings,
+      offerings: 1,
+      sessionsPerOffering,
+      hardConflicts,
+      termStart: termStartStr,
+    };
+  });
+}
+
 /**
  * تشخیص قیود سخت روی زمان‌بندی واقعی یک ترم.
  *
