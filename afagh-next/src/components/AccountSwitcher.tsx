@@ -38,7 +38,7 @@ export default function AccountSwitcher({ siblings }: { siblings: SiblingAccount
   }
 
   return (
-    <div className="mx-auto max-w-6xl scroll-mt-24 px-4 pt-3" dir="rtl" id="account-switch">
+    <div className="print:hidden mx-auto max-w-6xl scroll-mt-24 px-4 pt-3" dir="rtl" id="account-switch">
       <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs shadow-xs">
         <p className="font-extrabold text-amber-900">
           🔀 حساب دیگری با همین کدملی دارید — برای مشاهدهٔ کارتابل آن، انتخاب کنید:

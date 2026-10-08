@@ -160,7 +160,7 @@ export default async function ProfessorHome() {
 
       <ProfessorTermFilterBanner selectedTerm={selectedTerm} universityId={universityId} demo={demo} />
 
-      <div className="bg-gradient-to-l from-indigo-950 via-indigo-900 to-slate-900 text-white rounded-3xl p-6 shadow-xl border border-indigo-700/50 space-y-4">
+      <div className="print:hidden bg-gradient-to-l from-indigo-950 via-indigo-900 to-slate-900 text-white rounded-3xl p-6 shadow-xl border border-indigo-700/50 space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-400 text-slate-950">
@@ -258,7 +258,7 @@ export default async function ProfessorHome() {
         recordings={demo ? DEMO_RECORDINGS : undefined}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className="print:hidden grid grid-cols-1 sm:grid-cols-4 gap-4">
         <Link
           href="/professor/schedule"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-indigo-400 hover:shadow-md transition space-y-2 group"
@@ -330,7 +330,7 @@ export default async function ProfessorHome() {
         />
       )}
 
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="print:hidden grid gap-6 md:grid-cols-3">
 
         <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 md:col-span-2 space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-200">
