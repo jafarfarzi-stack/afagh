@@ -67,3 +67,38 @@ export const hasProfessorSchedule = (row: ProfessorScheduleLike): boolean =>
   !Number.isNaN(toMinutes(row.startTime)) &&
   !Number.isNaN(toMinutes(row.endTime)) &&
   toMinutes(row.endTime) > toMinutes(row.startTime);
+
+export type ProfessorScheduleRow = {
+  id: number;
+  code: string;
+  title: string;
+  units: number;
+  courseType: 'پایه' | 'اصلی' | 'تخصصی' | 'عمومی' | 'عملی';
+  groupNumber: number;
+  enrolledCount: number;
+  capacity: number;
+  dayOfWeek: number | null;
+  dayName: string;
+  startTime: string;
+  endTime: string;
+  roomName: string;
+  buildingName: string;
+  weekType: 'ALL' | 'EVEN' | 'ODD';
+  isCoTaught: boolean;
+  coRole?: 'THEORY' | 'LAB';
+  coPartnerName?: string;
+  hasSchedule: boolean;
+  outsideStandardSlots: boolean;
+};
+
+/** ارائه‌های یکتای استاد در یک ترم، مستقل از تعداد ردیف‌های زمان‌بندی */
+export function professorUniqueOfferings(rows: ProfessorScheduleRow[]): ProfessorScheduleRow[] {
+  const out: ProfessorScheduleRow[] = [];
+  const seen = new Set<number>();
+  for (const r of rows) {
+    if (seen.has(r.id)) continue;
+    seen.add(r.id);
+    out.push(r);
+  }
+  return out;
+}

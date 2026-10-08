@@ -19,36 +19,9 @@ import {
 
 export const JALALI_DAY_NAMES = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
 
-export type ProfessorScheduleRow = {
-  id: number;
-  code: string;
-  title: string;
-  units: number;
-  courseType: 'پایه' | 'اصلی' | 'تخصصی' | 'عمومی' | 'عملی';
-  groupNumber: number;
-  enrolledCount: number;
-  capacity: number;
-  dayOfWeek: number | null;
-  dayName: string;
-  startTime: string;
-  endTime: string;
-  roomName: string;
-  buildingName: string;
-  weekType: 'ALL' | 'EVEN' | 'ODD';
-  isCoTaught: boolean;
-  coRole?: 'THEORY' | 'LAB';
-  coPartnerName?: string;
-  /**
-   * آیا این ارائه ساعت و روز معتبر دارد و در نتیجه در جدول هفتگی دیده می‌شود؟
-   * تک‌منبعِ حقیقت برای هر دو بلوک داشبورد: جدول هفتگی و فهرست دروس.
-   */
-  hasSchedule: boolean;
-  /**
-   * ساعت این کلاس با هیچ بازهٔ ثابتِ جدول هفتگی هم‌پوشانی ندارد، پس داخل
-   * شبکهٔ جدول نمایش داده نمی‌شود و باید جداگانه فهرست شود.
-   */
-  outsideStandardSlots: boolean;
-};
+import { professorUniqueOfferings, type ProfessorScheduleRow } from '@/lib/professor-week-grid';
+
+export { professorUniqueOfferings, type ProfessorScheduleRow };
 
 function mapCourseType(raw: string | null | undefined): ProfessorScheduleRow['courseType'] {
   const v = String(raw ?? '');
@@ -150,18 +123,6 @@ export async function professorScheduleRows(staffId: number, termId: number, uni
     });
   }
 
-  return out;
-}
-
-/** ارائه‌های یکتای استاد در یک ترم، مستقل از تعداد ردیف‌های زمان‌بندی */
-export function professorUniqueOfferings(rows: ProfessorScheduleRow[]): ProfessorScheduleRow[] {
-  const out: ProfessorScheduleRow[] = [];
-  const seen = new Set<number>();
-  for (const r of rows) {
-    if (seen.has(r.id)) continue;
-    seen.add(r.id);
-    out.push(r);
-  }
   return out;
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { professorUniqueOfferings, type ProfessorScheduleRow } from '@/lib/professor-data';
+import { professorUniqueOfferings, type ProfessorScheduleRow } from '@/lib/professor-week-grid';
 import { professorCalendarEntryKey } from '@/lib/professor-calendar-layout';
 import ProfessorCalendarGrid, { type ProfessorCalendarEntry } from './professor-calendar-grid';
 
