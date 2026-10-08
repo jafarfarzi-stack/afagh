@@ -43,29 +43,28 @@ const faDate = (d: Date | string | null | undefined) =>
 
 export default async function ProfessorHome() {
   const user = await requireRole(['PROFESSOR']);
-  const me = await getStaffByUser(user.id);
+  const [me, demo] = await Promise.all([getStaffByUser(user.id), isDemoProfessorUser(user.id)]);
   if (!me) return <p className="card">پروندهٔ هیئت علمی یافت نشد.</p>;
 
-  const demo = await isDemoProfessorUser(user.id);
-
   const universityId = me.universityId ?? user.universityId ?? null;
-  const { term, selectedTerm } = await professorTermFilter(universityId);
 
-  const liveSessions = await getTodayLiveClasses({ universityId, staffId: me.id, viewerUserId: user.id });
-
-  const scheduleRows = term ? await professorScheduleRows(me.id, term.id, universityId) : [];
-
-  const deptRows = me.departmentId
-    ? await db.select({ name: departments.name }).from(departments).where(eq(departments.id, me.departmentId)).limit(1)
-    : [];
+  const [termFilter, liveSessions, deptRows, uniRows] = await Promise.all([
+    professorTermFilter(universityId),
+    getTodayLiveClasses({ universityId, staffId: me.id, viewerUserId: user.id }),
+    me.departmentId
+      ? db.select({ name: departments.name }).from(departments).where(eq(departments.id, me.departmentId)).limit(1)
+      : Promise.resolve([]),
+    universityId
+      ? db.select({ title: universities.title, logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, universityId)).limit(1)
+      : Promise.resolve([]),
+  ]);
+  const { term, selectedTerm } = termFilter;
   const deptName = deptRows[0]?.name ?? null;
+  const [uniRow] = uniRows;
+  const needLogoFallback = !uniRow?.logoUrl;
 
-  const [uniRow] = universityId
-    ? await db.select({ title: universities.title, logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, universityId)).limit(1)
-    : [];
-  const universityLogoUrl = uniRow?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
-
-  const [contractRows, availabilityRows, pays] = await Promise.all([
+  const [scheduleRows, contractRows, availabilityRows, pays, termDocs, logoFallback] = await Promise.all([
+    term ? professorScheduleRows(me.id, term.id, universityId) : Promise.resolve([]),
     term
       ? db.select({ id: professor_term_contracts.id, contractType: professor_term_contracts.contractType, baseDutyUnits: professor_term_contracts.baseDutyUnits })
           .from(professor_term_contracts)
@@ -83,16 +82,17 @@ export default async function ProfessorHome() {
           .innerJoin(professor_term_contracts, eq(professor_term_contracts.id, payroll_statements.contractId))
           .where(and(eq(professor_term_contracts.staffId, me.id), eq(professor_term_contracts.termId, term.id)))
       : Promise.resolve([]),
+    term
+      ? db
+          .select({ id: electronic_documents.id, title: electronic_documents.title, signatureStatus: electronic_documents.signatureStatus, signedAt: electronic_documents.signedAt, documentHash: electronic_documents.documentHash, createdAt: electronic_documents.createdAt })
+          .from(electronic_documents)
+          .where(and(eq(electronic_documents.staffId, me.id), eq(electronic_documents.termId, term.id)))
+      : Promise.resolve([]),
+    needLogoFallback ? getSetting('UNIVERSITY_LOGO').catch(() => '') : Promise.resolve(''),
   ]);
+  const universityLogoUrl = uniRow?.logoUrl || logoFallback || null;
 
   const contract = contractRows[0] ?? null;
-
-  const termDocs = term
-    ? await db
-        .select({ id: electronic_documents.id, title: electronic_documents.title, signatureStatus: electronic_documents.signatureStatus, signedAt: electronic_documents.signedAt, documentHash: electronic_documents.documentHash, createdAt: electronic_documents.createdAt })
-        .from(electronic_documents)
-        .where(and(eq(electronic_documents.staffId, me.id), eq(electronic_documents.termId, term.id)))
-    : [];
 
   const availabilityCount = Number(availabilityRows[0]?.n ?? 0);
   const gradeDeadline = term?.gradeEntryDeadline ?? null;

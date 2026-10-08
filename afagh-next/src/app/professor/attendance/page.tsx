@@ -136,10 +136,11 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
   const scheduledRooms = roomIds.length
     ? await db.select().from(classrooms).where(inArray(classrooms.id, roomIds))
     : [];
-  // فهرست انتخاب کلاس برای جلسهٔ جبرانی: همهٔ کلاس‌های دانشگاه استاد
-  const rooms = universityId
-    ? await db.select().from(classrooms).where(eq(classrooms.universityId, universityId)).orderBy(classrooms.name)
-    : scheduledRooms;
+  const fallbackRooms = universityId
+    ? await db.select().from(classrooms).where(eq(classrooms.universityId, universityId)).orderBy(classrooms.name).limit(20)
+    : [];
+  const roomById = new Map([...scheduledRooms, ...fallbackRooms].map(r => [r.id, r] as const));
+  const rooms = [...roomById.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 
   // دانشجویان هر ارائه (ثبت‌نامی‌های فعال)
   const enrollmentRows = offeringIds.length
@@ -155,9 +156,23 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
   const attendanceRows = allSessions.length
     ? await db.select().from(student_class_attendance).where(inArray(student_class_attendance.sessionId, allSessions.map(s => s.id)))
     : [];
+  const enrollmentById = new Map(enrollmentRows.map(e => [e.id, e] as const));
+  const sessionById = new Map(allSessions.map(s => [s.id, s] as const));
+  const sessionsByOffering = new Map<number, typeof allSessions>();
+  for (const s of allSessions) {
+    const list = sessionsByOffering.get(s.offeringId) ?? [];
+    list.push(s);
+    sessionsByOffering.set(s.offeringId, list);
+  }
+  const schedulesByOffering = new Map<number, typeof scheduleRows>();
+  for (const r of scheduleRows) {
+    const list = schedulesByOffering.get(r.offeringId) ?? [];
+    list.push(r);
+    schedulesByOffering.set(r.offeringId, list);
+  }
   const attBySession = new Map<number, Map<number, string>>();
   for (const a of attendanceRows) {
-    const en = enrollmentRows.find(e => e.id === a.enrollmentId);
+    const en = enrollmentById.get(a.enrollmentId);
     if (!en) continue;
     let m = attBySession.get(a.sessionId);
     if (!m) { m = new Map(); attBySession.set(a.sessionId, m); }
@@ -202,9 +217,9 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
     const primary = offeringById.get(g.primaryId) ?? g.members[0];
     const offering = primary.offering;
     const codes = [...new Set(g.members.map(m => m.course.code))];
-    const rows = scheduleRows.filter(r => r.offeringId === offering.id);
+    const rows = schedulesByOffering.get(offering.id) ?? [];
     const sched = rows.find(r => r.scheduleType === 'CLASS' && r.roomId) ?? rows.find(r => r.roomId) ?? rows[0];
-    const room = sched?.roomId ? rooms.find(r => r.id === sched.roomId) : undefined;
+    const room = sched?.roomId ? roomById.get(sched.roomId) : undefined;
     const scheduleTime = formatScheduleLabel(rows);
 
     const studentsList: StudentInfo[] = [];
@@ -218,7 +233,7 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
     }
 
     const orderedSessions = g.members
-      .flatMap(m => allSessions.filter(s => s.offeringId === m.offering.id))
+      .flatMap(m => sessionsByOffering.get(m.offering.id) ?? [])
       .sort((a, b) =>
         (a.offeringId === g.primaryId ? 0 : 1) - (b.offeringId === g.primaryId ? 0 : 1)
         || (a.sessionNo ?? 0) - (b.sessionNo ?? 0) || a.id - b.id);
@@ -236,7 +251,7 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
       }
       const profCheck = profAttBySession.get(s.id);
       const replaced = s.replacedSessionId
-        ? allSessions.find(x => x.id === s.replacedSessionId)?.sessionNo ?? undefined
+        ? sessionById.get(s.replacedSessionId)?.sessionNo ?? undefined
         : undefined;
       sessions.push({
         id: s.id,
@@ -271,8 +286,8 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
       units: Math.max(...g.members.map(m => Number(m.course.units ?? 0))),
       roomName: room?.name ?? '',
       scheduleTime,
-      hasSchedules: g.members.some(m => scheduleRows.some(r => r.offeringId === m.offering.id)),
-      canGenerate: g.members.some(m => scheduleRows.some(r => r.offeringId === m.offering.id && r.scheduleType === 'CLASS' && r.dayOfWeek != null)),
+      hasSchedules: g.members.some(m => (schedulesByOffering.get(m.offering.id)?.length ?? 0) > 0),
+      canGenerate: g.members.some(m => (schedulesByOffering.get(m.offering.id) ?? []).some(r => r.scheduleType === 'CLASS' && r.dayOfWeek != null)),
       students: studentsList,
       sessions,
     };
@@ -284,14 +299,13 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
   const initialMakeupHistory: MakeupSessionRecord[] = allSessions
     .filter(s => (s.isMakeUpSession ?? 0) === 1)
     .map(s => {
-      const offering = allOfferings.find(o => o.offering.id === s.offeringId);
+      const offering = offeringById.get(s.offeringId);
       const replacedSessionNo = s.replacedSessionId
-        ? allSessions.find(x => x.id === s.replacedSessionId)?.sessionNo ?? 0
+        ? sessionById.get(s.replacedSessionId)?.sessionNo ?? 0
         : 0;
-      const room = offering
-        ? scheduleRows.find(r => r.offeringId === offering.offering.id)?.roomId
-        : undefined;
-      const roomName = room ? rooms.find(r => r.id === room)?.name ?? '' : '';
+      const schedForMakeup = offering ? schedulesByOffering.get(offering.offering.id) : undefined;
+      const room = schedForMakeup?.[0]?.roomId;
+      const roomName = room ? roomById.get(room)?.name ?? '' : '';
       return {
         id: s.id,
         offeringId: s.offeringId,

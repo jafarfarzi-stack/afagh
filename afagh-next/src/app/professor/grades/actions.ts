@@ -370,7 +370,6 @@ export async function finalizeSignedAction(
     }
 
     revalidatePath('/professor/grades');
-    revalidatePath('/student');
     return { ok: true, persisted: true };
   } catch (err) {
     return fail(err);
