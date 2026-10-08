@@ -1,14 +1,16 @@
 'use server';
 
-import { and, eq, max } from 'drizzle-orm';
+import { and, eq, max, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import {
-  class_sessions, classrooms, course_offerings, enrollments, professor_class_attendance,
-  student_class_attendance,
+  class_sessions, classrooms, course_offerings, enrollments, offering_professors, professor_class_attendance,
+  schedules, student_class_attendance,
 } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
+import { generateClassSessionsForTerm } from '@/lib/class-session-generator';
 import { logger } from '@/lib/logger';
+import type { HardConflict } from '@/lib/scheduling-core';
 
 export interface AttendanceEntry {
   studentId: number;
@@ -103,5 +105,99 @@ export async function scheduleMakeupSessionAction(input: {
     return { ok: true, sessionId: row.id };
   } catch (err) {
     return { ok: false, error: (err as Error)?.message || 'خطا در ثبت جلسهٔ جبرانی.' };
+  }
+}
+
+export interface GenerateOfferingSessionsResult {
+  ok: boolean;
+  error?: string;
+  generated?: number;
+  skipped?: number;
+  offerings?: number;
+  perOffering?: number;
+  already?: boolean;
+  conflicts?: HardConflict[];
+  termStart?: string | null;
+}
+
+export async function generateOfferingSessionsAction(offeringId: number): Promise<GenerateOfferingSessionsResult> {
+  try {
+    const user = await requireRole(['PROFESSOR']);
+    const me = await getStaffByUser(user.id);
+    if (!me) return { ok: false, error: 'پروندهٔ هیئت علمی یافت نشد.' };
+
+    const oid = Number(offeringId);
+    if (!Number.isInteger(oid) || oid <= 0) return { ok: false, error: 'درس نامعتبر است.' };
+
+    const [offering] = await db
+      .select({ id: course_offerings.id, professorId: course_offerings.professorId, termId: course_offerings.termId })
+      .from(course_offerings)
+      .where(eq(course_offerings.id, oid))
+      .limit(1);
+    if (!offering) return { ok: false, error: 'درس یافت نشد.' };
+
+    let owned = offering.professorId === me.id;
+    if (!owned) {
+      const [shared] = await db
+        .select({ id: offering_professors.id })
+        .from(offering_professors)
+        .where(and(eq(offering_professors.offeringId, oid), eq(offering_professors.staffId, me.id)))
+        .limit(1);
+      owned = !!shared;
+    }
+    if (!owned) return { ok: false, error: 'شما استاد این درس نیستید.' };
+
+    const classRows = await db
+      .select({ id: schedules.id })
+      .from(schedules)
+      .where(and(
+        eq(schedules.offeringId, oid),
+        eq(schedules.scheduleType, 'CLASS'),
+        sql`${schedules.dayOfWeek} is not null`,
+      ))
+      .limit(1);
+    if (classRows.length === 0) {
+      return { ok: false, error: 'برای این درس زمان‌بندی هفتگی (CLASS) ثبت نشده است؛ با ادارهٔ آموزش هماهنگ کنید.' };
+    }
+
+    const regular = await db
+      .select({ id: class_sessions.id })
+      .from(class_sessions)
+      .where(and(eq(class_sessions.offeringId, oid), eq(class_sessions.isMakeUpSession, 0)))
+      .limit(1);
+    if (regular.length > 0) {
+      return { ok: true, generated: 0, skipped: 0, offerings: 0, perOffering: 0, already: true };
+    }
+
+    const preview = await generateClassSessionsForTerm(user.id, offering.termId, { dryRun: true, failOnHardConflict: false });
+    if (!preview.ok) {
+      return { ok: false, error: preview.error || 'تولید جلسات ناموفق بود.' };
+    }
+    const scoped = preview.hardConflicts.filter(h => h.offeringIds.includes(oid));
+    if (scoped.length > 0) {
+      return {
+        ok: false,
+        error: `زمان‌بندی این درس ${scoped.length} تداخل سخت دارد؛ پیش از تولید جلسات با ادارهٔ آموزش رفع کنید. نمونه: ${scoped[0].message}`,
+        conflicts: scoped,
+      };
+    }
+
+    const result = await generateClassSessionsForTerm(user.id, offering.termId, { failOnHardConflict: false });
+    if (!result.ok) {
+      return { ok: false, error: result.error || 'تولید جلسات ناموفق بود.' };
+    }
+    logger.info('offering_sessions_generated_by_professor', { offeringId: oid, termId: offering.termId, generated: result.generated });
+    revalidatePath('/professor/attendance');
+    return {
+      ok: true,
+      generated: result.generated,
+      skipped: result.skipped,
+      offerings: result.offerings,
+      perOffering: result.sessionsPerOffering[oid] ?? 0,
+      conflicts: result.hardConflicts.filter(h => h.offeringIds.includes(oid)),
+      termStart: result.termStart,
+    };
+  } catch (err) {
+    return { ok: false, error: (err as Error)?.message || 'خطا در تولید جلسات.' };
   }
 }

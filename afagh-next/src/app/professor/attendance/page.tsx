@@ -1,11 +1,12 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
-  class_sessions, classrooms, course_offerings, courses, enrollments,
+  academic_terms, class_sessions, classrooms, course_offerings, courses, enrollments,
   offering_professors, professor_class_attendance, schedules, student_class_attendance, students, users,
 } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import { jalaliDateOf } from '@/lib/scheduling-core';
+import { formatScheduleLabel } from '@/lib/professor-attendance-display';
 import ProfessorAttendanceClient, { AttendanceCourseOffering, ClassSessionItem, MakeupSessionRecord, StudentInfo } from './ProfessorAttendanceClient';
 import { professorTermFilter } from '@/lib/professor-term-filter';
 import ProfessorTermFilterBanner from '../term-filter-banner';
@@ -91,7 +92,34 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
         ))
     : [];
 
-  const offeringIds = myOfferings.map(o => o.offering.id);
+  let linkedNotice: { offeringId: number; title: string; termTitle: string; selectedTermTitle: string } | null = null;
+  let allOfferings = myOfferings;
+  if (defaultOfferingId && !myOfferings.some(o => o.offering.id === defaultOfferingId)) {
+    const linked = await db
+      .select({ offering: course_offerings, course: courses })
+      .from(course_offerings)
+      .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+      .where(and(
+        eq(course_offerings.id, defaultOfferingId),
+        universityId ? eq(course_offerings.universityId, universityId) : undefined,
+        sql`(${course_offerings.professorId} = ${me.id} or ${course_offerings.id} in ${sharedOfferingIds})`,
+      ))
+      .limit(1);
+    if (linked.length > 0) {
+      allOfferings = [...myOfferings, ...linked];
+      const [linkedTerm] = linked[0].offering.termId
+        ? await db.select({ title: academic_terms.title }).from(academic_terms).where(eq(academic_terms.id, linked[0].offering.termId)).limit(1)
+        : [];
+      linkedNotice = {
+        offeringId: defaultOfferingId,
+        title: linked[0].course.title,
+        termTitle: linkedTerm?.title ?? 'نیمسال دیگر',
+        selectedTermTitle: term?.title ?? 'نیمسال جاری',
+      };
+    }
+  }
+
+  const offeringIds = allOfferings.map(o => o.offering.id);
   const allSessions = offeringIds.length
     ? await db.select().from(class_sessions).where(inArray(class_sessions.offeringId, offeringIds)).orderBy(class_sessions.sessionNo)
     : [];
@@ -99,9 +127,9 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
   // نام کلاس از زمان‌بندی واقعی هر ارائه
   const scheduleRows = offeringIds.length
     ? await db
-        .select({ offeringId: schedules.offeringId, dayOfWeek: schedules.dayOfWeek, startTime: schedules.startTime, endTime: schedules.endTime, roomId: schedules.roomId })
+        .select({ offeringId: schedules.offeringId, dayOfWeek: schedules.dayOfWeek, startTime: schedules.startTime, endTime: schedules.endTime, roomId: schedules.roomId, scheduleType: schedules.scheduleType })
         .from(schedules)
-        .where(and(inArray(schedules.offeringId, offeringIds), eq(schedules.scheduleType, 'CLASS')))
+        .where(and(inArray(schedules.offeringId, offeringIds), ne(schedules.scheduleType, 'EXAM')))
     : [];
   const roomIds = [...new Set(scheduleRows.map(r => r.roomId).filter(Boolean))] as number[];
   const scheduledRooms = roomIds.length
@@ -142,13 +170,11 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
     : [];
   const profAttBySession = new Map(profAttRows.map(r => [r.sessionId, r]));
 
-  const initialOfferings: AttendanceCourseOffering[] = myOfferings.map(({ offering, course }) => {
-    const sched = scheduleRows.find(r => r.offeringId === offering.id);
+  const initialOfferings: AttendanceCourseOffering[] = allOfferings.map(({ offering, course }) => {
+    const rows = scheduleRows.filter(r => r.offeringId === offering.id);
+    const sched = rows.find(r => r.scheduleType === 'CLASS' && r.roomId) ?? rows.find(r => r.roomId) ?? rows[0];
     const room = sched?.roomId ? rooms.find(r => r.id === sched.roomId) : undefined;
-    const dayNames = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه'];
-    const scheduleTime = sched?.dayOfWeek != null
-      ? `${dayNames[sched.dayOfWeek] ?? ''}‌ها ${String(sched.startTime).slice(0, 5)} الی ${String(sched.endTime).slice(0, 5)}`
-      : 'زمان کلاس ثبت نشده';
+    const scheduleTime = formatScheduleLabel(rows);
 
     const studentsList: StudentInfo[] = enrollmentRows
       .filter(e => e.offeringId === offering.id)
@@ -198,6 +224,8 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
       units: Number(course.units),
       roomName: room?.name ?? '',
       scheduleTime,
+      hasSchedules: rows.length > 0,
+      canGenerate: rows.some(r => r.scheduleType === 'CLASS' && r.dayOfWeek != null),
       students: studentsList,
       sessions,
     };
@@ -209,7 +237,7 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
   const initialMakeupHistory: MakeupSessionRecord[] = allSessions
     .filter(s => (s.isMakeUpSession ?? 0) === 1)
     .map(s => {
-      const offering = myOfferings.find(o => o.offering.id === s.offeringId);
+      const offering = allOfferings.find(o => o.offering.id === s.offeringId);
       const replacedSessionNo = s.replacedSessionId
         ? allSessions.find(x => x.id === s.replacedSessionId)?.sessionNo ?? 0
         : 0;
@@ -249,6 +277,7 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
         termTitle={termTitle}
         initialOfferings={initialOfferings}
         defaultOfferingId={defaultOfferingId}
+        linkedOfferingNotice={linkedNotice}
         initialMakeupHistory={initialMakeupHistory}
         todayJalali={todayJalali}
         rooms={roomOptions}

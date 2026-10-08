@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { saveSessionAttendanceAction, scheduleMakeupSessionAction } from './actions';
+import { useRouter } from 'next/navigation';
+import { generateOfferingSessionsAction, saveSessionAttendanceAction, scheduleMakeupSessionAction } from './actions';
+import { mergeRefreshedOfferings } from '@/lib/professor-attendance-display';
 import {
   DEMO_ATTENDANCE_DEFAULT_OFFERING_ID,
   DEMO_ATTENDANCE_DEFAULT_ROOM_ID,
@@ -52,6 +54,8 @@ export interface AttendanceCourseOffering {
   units: number;
   roomName: string;
   scheduleTime: string;
+  hasSchedules?: boolean;
+  canGenerate?: boolean;
   students: StudentInfo[];
   sessions: ClassSessionItem[];
 }
@@ -83,6 +87,7 @@ interface Props {
   termTitle: string;
   initialOfferings: AttendanceCourseOffering[];
   defaultOfferingId?: number;
+  linkedOfferingNotice?: { offeringId: number; title: string; termTitle: string; selectedTermTitle: string } | null;
   initialMakeupHistory: MakeupSessionRecord[];
   todayJalali: string;
   rooms: { id: number; name: string; capacity: number; type: string }[];
@@ -100,10 +105,12 @@ export default function ProfessorAttendanceClient({
   termTitle,
   initialOfferings,
   defaultOfferingId,
+  linkedOfferingNotice = null,
   initialMakeupHistory,
   todayJalali,
   rooms: realRooms,
 }: Props) {
+  const router = useRouter();
   const profDisplayName = professor?.name?.trim()
     || (demo ? DEMO_ATTENDANCE_PROFESSOR_FALLBACK_NAME : 'استاد محترم');
 
@@ -144,6 +151,9 @@ export default function ProfessorAttendanceClient({
 
   // Log of make-up sessions requested / scheduled (واقعی از class_sessions)
   const [makeupHistory, setMakeupHistory] = useState<MakeupSessionRecord[]>(initialMakeupHistory);
+  const [generatingSessions, setGeneratingSessions] = useState(false);
+  const [generateResult, setGenerateResult] = useState<string | null>(null);
+  const [generateConflicts, setGenerateConflicts] = useState<{ message: string }[]>([]);
 
   // Current offering & session
   // ⚠ حالت خالی: استادی که هنوز هیچ درسی به او تخصیص نیافته، offerings خالی دارد.
@@ -158,6 +168,49 @@ export default function ProfessorAttendanceClient({
     const sessions = currentOffering?.sessions ?? [];
     return sessions.find(s => s.sessionNo === selectedSessionNo) ?? sessions[0] ?? null;
   }, [currentOffering, selectedSessionNo]);
+
+  useEffect(() => {
+    setOfferings(prev => {
+      const merged = mergeRefreshedOfferings(prev, initialOfferings);
+      return merged.length === prev.length && merged.every((o, i) => o === prev[i]) ? prev : merged;
+    });
+  }, [initialOfferings]);
+
+  useEffect(() => {
+    const cur = offerings.find(o => o.id === selectedOfferingId) ?? offerings[0];
+    if (cur && cur.sessions.length > 0 && selectedSessionNo === 0) {
+      setSelectedSessionNo(cur.sessions[0].sessionNo);
+    }
+  }, [offerings, selectedOfferingId, selectedSessionNo]);
+
+  const handleGenerateSessions = async () => {
+    if (!currentOffering || generatingSessions) return;
+    setGeneratingSessions(true);
+    setGenerateResult(null);
+    setGenerateConflicts([]);
+    try {
+      const res = await generateOfferingSessionsAction(currentOffering.id);
+      if (!res.ok) {
+        setGenerateResult(res.error || 'تولید جلسات ناموفق بود.');
+        setGenerateConflicts((res.conflicts ?? []).map(c => ({ message: c.message })));
+        return;
+      }
+      if (res.already) {
+        setGenerateResult('برای این درس جلسه‌ای از قبل ثبت شده است؛ نیازی به تولید مجدد نیست.');
+        router.refresh();
+        return;
+      }
+      const parts = [`${faNum(res.perOffering ?? 0)} جلسه برای این درس تولید شد.`];
+      if ((res.skipped ?? 0) > 0) parts.push(`${faNum(res.skipped)} جلسه تکراری رد شد.`);
+      setGenerateResult(parts.join(' '));
+      setGenerateConflicts((res.conflicts ?? []).map(c => ({ message: c.message })));
+      router.refresh();
+    } catch {
+      setGenerateResult('خطا در ارتباط با سرور.');
+    } finally {
+      setGeneratingSessions(false);
+    }
+  };
 
   // Compute total prior absences for each student across all completed sessions
   const studentPriorAbsentsMap = useMemo(() => {
@@ -473,16 +526,91 @@ export default function ProfessorAttendanceClient({
   // ── حالت خالی (بدون درس تخصیص‌یافته یا بدون جلسهٔ تولیدشده) ──
   // همهٔ هوک‌ها بالاتر اجرا شده‌اند، پس این return زودهنگام قانون ترتیب هوک‌ها را نمی‌شکند.
   if (!currentOffering || !currentSession) {
+    const emptyOffering = currentOffering;
+    const showLinkedNotice = !!linkedOfferingNotice && emptyOffering?.id === linkedOfferingNotice.offeringId;
     return (
       <div className="space-y-5" dir="rtl">
+        {showLinkedNotice && (
+          <div className="p-3 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold leading-6">
+            این درس ({linkedOfferingNotice.title}) مربوط به {linkedOfferingNotice.termTitle} است و فیلتر نیمسال روی {linkedOfferingNotice.selectedTermTitle} قرار دارد؛ انتخاب شما حفظ شده است.
+          </div>
+        )}
         <div className="card p-8 text-center space-y-3">
           <div className="text-4xl">📋</div>
           <h2 className="text-lg font-bold">درسی برای حضوروغیاب یافت نشد</h2>
-          <p className="text-sm text-gray-400 leading-7">
-            {offerings.length === 0
-              ? `جناب ${profDisplayName}، در نیمسال جاری هیچ درسی به شما تخصیص نیافته است. پس از تخصیص درس توسط مدیر گروه، کارتابل حضوروغیاب همین‌جا فعال می‌شود.`
-              : 'برای این درس هنوز هیچ جلسه‌ای تولید نشده است؛ پس از تعیین برنامهٔ هفتگی، جلسات به‌صورت خودکار ساخته می‌شوند.'}
-          </p>
+          {offerings.length === 0 ? (
+            <p className="text-sm text-gray-400 leading-7">
+              {`جناب ${profDisplayName}، در نیمسال جاری هیچ درسی به شما تخصیص نیافته است. پس از تخصیص درس توسط مدیر گروه، کارتابل حضوروغیاب همین‌جا فعال می‌شود.`}
+            </p>
+          ) : emptyOffering ? (
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+                <div className="font-extrabold text-slate-900 text-sm">
+                  {emptyOffering.title} (گروه {faNum(emptyOffering.groupNumber)} — کد {emptyOffering.code})
+                </div>
+                <div className="text-xs text-slate-600 font-bold">
+                  {emptyOffering.scheduleTime}
+                  {emptyOffering.roomName ? ` · 🏛️ ${emptyOffering.roomName}` : ''}
+                </div>
+                {offerings.length > 1 && (
+                  <select
+                    value={selectedOfferingId}
+                    onChange={e => {
+                      const newOffId = Number(e.target.value);
+                      setSelectedOfferingId(newOffId);
+                      setGenerateResult(null);
+                      setGenerateConflicts([]);
+                      const firstSess = offerings.find(o => o.id === newOffId)?.sessions[0]?.sessionNo ?? 0;
+                      setSelectedSessionNo(firstSess);
+                    }}
+                    className="mt-2 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
+                  >
+                    {offerings.map(o => (
+                      <option key={o.id} value={o.id}>
+                        {o.title} (گروه {faNum(o.groupNumber)} — کد {o.code})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              {!demo && emptyOffering.sessions.length === 0 && !emptyOffering.hasSchedules && (
+                <p className="text-sm text-gray-400 leading-7">
+                  برای این درس هنوز هیچ زمان‌بندی هفتگی ثبت نشده است؛ جلسات فقط از روی برنامهٔ هفتگی ساخته می‌شوند. برای تعیین برنامهٔ هفتگی با ادارهٔ آموزش هماهنگ کنید.
+                </p>
+              )}
+              {!demo && emptyOffering.sessions.length === 0 && emptyOffering.hasSchedules && !emptyOffering.canGenerate && (
+                <p className="text-sm text-gray-400 leading-7">
+                  برای این درس زمان‌بندی ثبت شده اما جلسهٔ هفتگی قابل تولیدی ندارد؛ لطفاً با ادارهٔ آموزش هماهنگ کنید تا برنامهٔ هفتگی (CLASS) کامل شود.
+                </p>
+              )}
+              {!demo && emptyOffering.sessions.length === 0 && emptyOffering.canGenerate && (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-400 leading-7">
+                    برای این درس زمان‌بندی هفتگی ثبت شده ولی جلساتش هنوز ساخته نشده است. با دکمهٔ زیر جلسات این درس را از روی برنامهٔ هفتگی تولید کنید.
+                  </p>
+                  <button
+                    onClick={handleGenerateSessions}
+                    disabled={generatingSessions}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold text-xs shadow transition"
+                  >
+                    {generatingSessions ? 'در حال تولید جلسات…' : 'تولید جلسات این درس'}
+                  </button>
+                  {generateResult && (
+                    <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold leading-6">
+                      {generateResult}
+                    </div>
+                  )}
+                  {generateConflicts.length > 0 && (
+                    <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-bold leading-6 text-right space-y-1">
+                      {generateConflicts.map((c, i) => (
+                        <div key={i}>• {c.message}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : null}
         </div>
       </div>
     );
