@@ -298,6 +298,8 @@ export default async function ProfessorHome() {
           termTitle={termTitle}
           selectedTermTitle={selectedTerm?.title ?? null}
           rows={scheduleRows}
+          professorName={user.name}
+          staffCode={me.staffCode}
         />
       )}
 
