@@ -76,18 +76,16 @@ export function StudentSidebar({ user }: { user: { name: string; studentCode?: s
 
       {/* Manual & Help link */}
       <div className="p-3 border-t border-slate-100 bg-slate-50/50 space-y-1">
-        <a
-          href="/Afagh_ERP_Comprehensive_User_Manual.pdf"
-          target="_blank"
-          rel="noopener noreferrer"
+        <Link
+          href="/help?tab=student"
           className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-emerald-800 hover:bg-emerald-50 transition"
         >
           <div className="flex items-center gap-2">
             <span>📖</span>
-            <span>کتابچه راهنمای سامانه</span>
+            <span>راهنمای دانشجو</span>
           </div>
-          <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">PDF</span>
-        </a>
+          <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">راهنما</span>
+        </Link>
       </div>
     </aside>
   );

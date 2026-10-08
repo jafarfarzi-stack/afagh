@@ -68,6 +68,12 @@ export default async function ProfessorLayout({ children }: { children: React.Re
                 {headed.length === 1 ? ` (${headed[0].name})` : ` (${headed.length.toLocaleString('fa-IR')} گروه)`}
               </Link>
             )}
+            <Link
+              href="/help?tab=professor"
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition"
+            >
+              📖 راهنمای استاد
+            </Link>
             <form action={logoutAction}>
               <button className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition">
                 خروج از سامانه

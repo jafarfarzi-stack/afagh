@@ -31,6 +31,9 @@ export default async function GroupManagerLayout({ children }: { children: React
                 🎓 کارتابل استادی من
               </Link>
             )}
+            <Link href="/help?tab=group-manager" className="rounded-lg bg-teal-800 px-3 py-1.5 text-xs font-bold hover:bg-teal-700">
+              📖 راهنمای مدیر گروه
+            </Link>
             <form action={logoutAction}><button className="text-xs underline opacity-70">خروج</button></form>
           </div>
         </div>

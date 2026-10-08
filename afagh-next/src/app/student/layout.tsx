@@ -47,9 +47,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
               universityId={me?.universityId ?? null}
             />
             <a
-              href="/Afagh_ERP_Comprehensive_User_Manual.pdf"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="/help?tab=student"
               className="hidden sm:inline-flex text-xs bg-emerald-700/80 hover:bg-emerald-700 text-emerald-100 border border-emerald-600 px-3 py-1.5 rounded-lg transition-colors font-medium items-center gap-1.5"
             >
               <span>📖</span>

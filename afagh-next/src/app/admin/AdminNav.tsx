@@ -134,7 +134,7 @@ export default function AdminNav({ roles, theme }: { roles: string[]; theme?: Un
             </nav>
             <div className={`p-2 border-t ${th.navBorder}`}>
               <Link
-                href="/manual"
+                href="/help?tab=admin"
                 className="flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] bg-emerald-700/70 hover:bg-emerald-700 border border-emerald-500/40 font-bold transition-colors"
               >
                 <span>📖</span> راهنمای کاربری و PDF
