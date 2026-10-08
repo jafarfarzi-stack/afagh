@@ -120,7 +120,7 @@ export interface GenerateOfferingSessionsResult {
   termStart?: string | null;
 }
 
-export const GENERATE_SESSIONS_GENERIC_ERROR = 'خطای غیرمنتظره در تولید جلسات؛ لطفاً دوباره تلاش کنید و در صورت تکرار به آموزش اطلاع دهید.';
+const GENERATE_SESSIONS_GENERIC_ERROR = 'خطای غیرمنتظره در تولید جلسات؛ لطفاً دوباره تلاش کنید و در صورت تکرار به آموزش اطلاع دهید.';
 
 const toSafeError = (message: unknown): string => String(message ?? '').slice(0, 300) || GENERATE_SESSIONS_GENERIC_ERROR;
 
