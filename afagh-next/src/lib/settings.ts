@@ -144,6 +144,7 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'CONTRACT_TAX_PERCENT', env: 'AFAGH_CONTRACT_TAX_PERCENT', group: 'گردش کار و حق‌التدریس', label: 'درصد کسر مالیات قرارداد', type: 'number', default: '10' },
   { key: 'CONTRACT_INSURANCE_PERCENT', env: 'AFAGH_CONTRACT_INSURANCE_PERCENT', group: 'گردش کار و حق‌التدریس', label: 'درصد کسر بیمهٔ قرارداد', type: 'number', default: '7' },
   { key: 'HOURLY_RATE_TMN', env: 'AFAGH_HOURLY_RATE_TMN', group: 'گردش کار و حق‌التدریس', label: 'نرخ پایهٔ هر ساعت تدریس (تومان)', type: 'number', default: '850000', help: 'مبنای برآورد مبلغ قرارداد حق‌التدریس، وقتی نرخ اختصاصیِ مرتبهٔ علمی در جدول نرخ‌ها ثبت نشده باشد' },
+  { key: 'CONTRACT_MINUTES_PER_UNIT', env: 'AFAGH_CONTRACT_MINUTES_PER_UNIT', group: 'گردش کار و حق‌التدریس', label: 'دقیقهٔ قابل‌احتساب هر واحد در هفته', type: 'number', default: '0', help: 'صفر = همان ساعت واقعی جدول (رفتار فعلی)؛ مثلاً ۶۰ یعنی هر واحد یک ساعت کامل برای استاد حساب می‌شود حتی اگر کلاس ۴۵ دقیقه برگزار شود' },
   { key: 'PAYROLL_TERM_SESSIONS', env: 'PAYROLL_TERM_SESSIONS', group: 'گردش کار و حق‌التدریس', label: 'جلسات مبنای ترم (حق‌التدریس)', type: 'number', default: '16', help: 'مبنای تناسب کسر غیبت، وقتی برای کلاس هیچ جلسه‌ای ثبت نشده باشد' },
   { key: 'PAYROLL_MIDTERM_PERCENT', env: 'PAYROLL_MIDTERM_PERCENT', group: 'گردش کار و حق‌التدریس', label: 'درصد علی‌الحساب میان‌ترم', type: 'number', default: '40' },
   { key: 'PAYROLL_CROWDED_THRESHOLD', env: 'PAYROLL_CROWDED_THRESHOLD', group: 'گردش کار و حق‌التدریس', label: 'حدنصاب کلاس پرجمعیت (نفر)', type: 'number', default: '40' },

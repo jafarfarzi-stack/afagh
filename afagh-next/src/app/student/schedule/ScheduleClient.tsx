@@ -318,7 +318,7 @@ export default function ScheduleClient({
         )}
       </div>
 
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
+      <div className="print:hidden bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
         <h3 className="font-extrabold text-slate-900 text-sm">
           فهرست دروس ثبت‌نام‌شده:
         </h3>
@@ -386,9 +386,9 @@ export default function ScheduleClient({
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
+      <div className="print:hidden bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
         <h3 className="font-extrabold text-slate-900 text-sm">
-          برنامه امتحانات پایان‌ترم (به ترتیب تاریخ):
+          برنامهٔ امتحانات پایان‌نیمسال:
         </h3>
 
         <div className="overflow-x-auto rounded-xl border border-slate-300">

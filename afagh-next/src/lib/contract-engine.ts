@@ -38,6 +38,7 @@ export type ContractDraft = {
   departmentName: string;
   cooperationType: string;
   hourlyRate: number;
+  minutesPerUnit?: number;
   lines: ContractLine[];
   totalTermHours: number;
   totalUnits: number;
@@ -56,7 +57,8 @@ export async function contractSettings() {
   const hourlyRate = Number((await getSetting('HOURLY_RATE_TMN')) || 850000);
   const taxRatePercent = Number((await getSetting('CONTRACT_TAX_PERCENT')) || 10);
   const insuranceRatePercent = Number((await getSetting('CONTRACT_INSURANCE_PERCENT')) || 7);
-  return { hourlyRate, taxRatePercent, insuranceRatePercent };
+  const minutesPerUnit = Number((await getSetting('CONTRACT_MINUTES_PER_UNIT')) || 0);
+  return { hourlyRate, taxRatePercent, insuranceRatePercent, minutesPerUnit };
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -67,6 +69,7 @@ export async function buildContractDraft(staffId: number, termId: number): Promi
   if (!me) return null;
   const [term] = await db.select().from(academic_terms).where(eq(academic_terms.id, termId)).limit(1);
   if (!term) return null;
+  const { hourlyRate, taxRatePercent, insuranceRatePercent, minutesPerUnit } = await contractSettings();
 
   const offers = await db
     .select({ offering: course_offerings, course: courses })
@@ -118,23 +121,22 @@ export async function buildContractDraft(staffId: number, termId: number): Promi
       const [eh, em] = String(r.endTime).split(':').map(Number);
       return acc + ((eh * 60 + em) - (sh * 60 + sm)) / 60;
     }, 0);
-    const unitsList = g.members.map(m => Number(m.course.units) || 0);
-    const theoryList = g.members.map(m => Number(m.course.theoreticalUnits ?? 0));
-    const practList = g.members.map(m => Number(m.course.practicalUnits ?? 0));
-    const weeklyHours = Math.max(weekly, Math.max(...unitsList, 0) || 1);
+    const baseUnits = Number(primary.course.units) || 0;
+    const weeklyHours = minutesPerUnit > 0
+      ? (baseUnits * minutesPerUnit) / 60
+      : Math.max(weekly, baseUnits || 1);
     lines.push({
       offeringId: primary.offering.id,
       code: codes.join(' / '),
       title: g.merged ? mergedDisplayTitle(primary.course.title, codes) : primary.course.title,
       groupNumber: primary.offering.groupNumber,
-      theoryUnits: Math.max(...theoryList, 0),
-      practicalUnits: Math.max(...practList, 0),
+      theoryUnits: Number(primary.course.theoreticalUnits ?? 0),
+      practicalUnits: Number(primary.course.practicalUnits ?? 0),
       weeklyHours: round2(weeklyHours),
       termTotalHours: round2(weeklyHours * TERM_WEEKS),
     });
   }
 
-  const { hourlyRate, taxRatePercent, insuranceRatePercent } = await contractSettings();
   const totalTermHours = round2(lines.reduce((s, l) => s + l.termTotalHours, 0));
   const totalUnits = round2(lines.reduce((s, l) => s + l.theoryUnits + l.practicalUnits, 0));
   const grossAmount = Math.round(totalTermHours * hourlyRate);
@@ -155,6 +157,7 @@ export async function buildContractDraft(staffId: number, termId: number): Promi
     professorName: '',
     nationalCode: '',
     staffCode: me.staffCode,
+    minutesPerUnit,
     bankAccountNo: me.bankAccountNo || '',
     staffType: me.staffType || '',
     academicRank: me.academicRank || '',
