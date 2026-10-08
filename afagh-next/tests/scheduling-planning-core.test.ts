@@ -65,11 +65,11 @@ eq('کلید ورودی رشتهٔ عددی', co.id, '1403');
 const rawApproved = {
   offeringId: 9, code: '202', title: 'فیزیک', units: '2', courseType: 'پایه', groupNumber: 1,
   professorId: 4, professorName: 'دکتر الف', capacity: 35, enrolledCount: 20,
-  dayOfWeek: 3, dayName: 'دوشنبه', startTime: '08:00', endTime: '10:00',
+  dayOfWeek: 2, dayName: 'دوشنبه', startTime: '08:00', endTime: '10:00',
   roomId: 6, roomName: 'A1', buildingName: 'پردیس مرکزی',
 };
 const [off] = mapOfferings([rawApproved]);
-eq('روز ۱‌پایه دیتابیس → شاخص ۰‌پایه UI', off.classSchedules[0].dayOfWeek, 2);
+eq('روز ۰‌پایه دیتابیس بدون تغییر به UI', off.classSchedules[0].dayOfWeek, 2);
 eq('روز null → شنبه (شاخص صفر)', mapOfferings([{ ...rawApproved, dayOfWeek: null }])[0].classSchedules[0].dayOfWeek, 0);
 eq('نام سالن و ساختمان حفظ شد', [off.classSchedules[0].roomName, off.classSchedules[0].buildingName], ['A1', 'پردیس مرکزی']);
 eq('فیلتر/حوزهٔ کلی برای ورودی‌ها', [off.cohortId, off.programId], ['ALL', 0]);
@@ -100,13 +100,13 @@ eq('مشترک بدون استاد دوم → سهم کامل به استاد ا
 
 console.log('\n۴) وضعیت درٔ دسترس بودن استاد روی اسلات');
 const av = (over: Partial<SchedulingWorkspace['availabilities'][number]> = {}): SchedulingWorkspace['availabilities'][number] => ({
-  staffId: 1, dayOfWeek: 1, startTime: '08:00', endTime: '10:00', status: 'PREF', ...over,
+  staffId: 1, dayOfWeek: 0, startTime: '08:00', endTime: '10:00', status: 'PREF', ...over,
 });
 const SLOT = { startTime: '08:00' };
 eq('پوشش کامل با اولویت → PREF', slotAvailStatus([av()], 1, 0, SLOT), 'PREF');
 eq('وضعیت AVAIL', slotAvailStatus([av({ status: 'AVAIL' })], 1, 0, SLOT), 'AVAIL');
 eq('استاد دیگر → NONE', slotAvailStatus([av({ staffId: 2 })], 1, 0, SLOT), 'NONE');
-eq('روز دیگر → NONE (شاخص ۰‌پایه + ۱)', slotAvailStatus([av({ dayOfWeek: 2 })], 1, 0, SLOT), 'NONE');
+eq('روز دیگر → NONE (هر دو ۰‌پایه)', slotAvailStatus([av({ dayOfWeek: 1 })], 1, 0, SLOT), 'NONE');
 eq('بازهٔ تمام‌شده در شروع اسلات → NONE', slotAvailStatus([av({ startTime: '06:00', endTime: '08:00' })], 1, 0, SLOT), 'NONE');
 eq('شروع میانی بازه هم پوشش است', slotAvailStatus([av({ startTime: '07:30', endTime: '09:00' })], 1, 0, SLOT), 'PREF');
 eq('PREF بر AVAIL مقدم است', slotAvailStatus([av({ status: 'AVAIL' }), av({ status: 'PREF' })], 1, 0, SLOT), 'PREF');

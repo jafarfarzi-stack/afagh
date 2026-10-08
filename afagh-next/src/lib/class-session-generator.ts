@@ -8,7 +8,7 @@
  *   `class_sessions` درج می‌شود — تراکنشی، idempotent و همراه audit.
  *
  * قواعد:
- *   ① فقط schedules با scheduleType='CLASS' و dayOfWeek معتبر (۱..۷)
+ *   ① فقط schedules با scheduleType='CLASS' و dayOfWeek معتبر (۰..۶)
  *   ② تعطیلات رسمی (لیست 'YYYY/MM/DD') از جلسات حذف می‌شود
  *   ③ اجرای مجدد: جلسات قبلیِ غیرجبرانیِ همان درس‌ها حذف و نو ساخته می‌شود
  *      (قفل توافقی pg_advisory_xact_lock روی termId — هم‌الگو با موتور)
@@ -218,7 +218,7 @@ export async function generateClassSessionsForTerm(
       status: string; sessionNo: number; isMakeUpSession: number;
     }[] = [];
     for (const s of schedRows) {
-      if (s.dayOfWeek == null || !Number.isInteger(s.dayOfWeek) || s.dayOfWeek < 1 || s.dayOfWeek > 7) {
+      if (s.dayOfWeek == null || !Number.isInteger(s.dayOfWeek) || s.dayOfWeek < 0 || s.dayOfWeek > 6) {
         warnings.push(`برنامهٔ هفتگی offering ${s.offeringId} (درس ${s.courseCode}) روز هفتهٔ نامعتبر دارد و نادیده گرفته شد.`);
         if (sessionsPerOffering[s.offeringId] == null) sessionsPerOffering[s.offeringId] = 0;
         continue;

@@ -52,9 +52,10 @@ throws('ظرفیت اعشاری', () => validateGroupDrafts([mk({ capacity: 40.5
 throws('جنسیت نامعتبر', () => validateGroupDrafts([mk({ gender: 'COED' as any })], false), 'جنسیت');
 throws('استاد صفر', () => validateGroupDrafts([mk({ professorId: 0 })], false), 'استاد');
 throws('کلاس صفر', () => validateGroupDrafts([mk({ classroomId: 0 })], false), 'کلاس فیزیکی');
-throws('روز صفر', () => validateGroupDrafts([mk({ dayOfWeek: 0 })], false), 'روز');
-throws('روز هشت', () => validateGroupDrafts([mk({ dayOfWeek: 8 })], false), 'روز');
-eq('dayOfWeek 7 (Friday) validates', validateGroupDrafts([mk({ dayOfWeek: 7 })], false).length, 1);
+eq('dayOfWeek 0 (Saturday) validates', validateGroupDrafts([mk({ dayOfWeek: 0 })], false).length, 1);
+eq('dayOfWeek 6 (Friday) validates', validateGroupDrafts([mk({ dayOfWeek: 6 })], false).length, 1);
+throws('روز منفی یک', () => validateGroupDrafts([mk({ dayOfWeek: -1 })], false), 'روز');
+throws('روز هفت', () => validateGroupDrafts([mk({ dayOfWeek: 7 })], false), 'روز');
 throws('پایان قبل از شروع', () => validateGroupDrafts([mk({ startTime: '10:00', endTime: '09:00' })], false), 'بازهٔ زمانی');
 throws('مدت ۵ ساعت', () => validateGroupDrafts([mk({ startTime: '08:00', endTime: '13:00' })], false), '۴ ساعت');
 throws('عبور از مرز شیفت (۱۰:۳۰–۱۳:۰۰)', () => validateGroupDrafts([mk({ startTime: '10:30', endTime: '13:00' })], false), 'مرز شیفت');
@@ -211,36 +212,38 @@ const capIssue = detectScheduleConflicts([
 ], rooms);
 eq('ظرفیت کلاس > ظرفیت سالن → ROOM_CAPACITY', capIssue.some(c => c.type === 'ROOM_CAPACITY'), true);
 
-// sessionDatesFor: شنبه (dayOfWeek=1) — اولین جلسه = همان شنبهٔ هفتهٔ اول
+// sessionDatesFor: شنبه (dayOfWeek=0) — اولین جلسه = همان شنبهٔ هفتهٔ اول
 const start = new Date('2025-09-20T00:00:00Z'); // شنبه
-const all = sessionDatesFor(start, 1, 'ALL', 16);
+const all = sessionDatesFor(start, 0, 'ALL', 16);
 eq('ALL → ۱۶ جلسه', all.length, 16);
 eq('sessionNo ها ۱..۱۶', all[0].sessionNo, 1);
 eq('جلسهٔ آخر = هفتهٔ ۱۶', all[15].sessionNo, 16);
 eq('فاصلهٔ هفتگی دقیق', (all[1].date.getTime() - all[0].date.getTime()) / 86400000, 7);
 eq('تاریخ جلسهٔ ۱ = شنبه شروع', all[0].date.toISOString().slice(0, 10), '2025-09-20');
 
-// یکشنبه (dayOfWeek=2) → یک روز بعد از شنبهٔ شروع
-const sun = sessionDatesFor(start, 2, 'ALL', 4);
+// یکشنبه (dayOfWeek=1) → یک روز بعد از شنبهٔ شروع
+const sun = sessionDatesFor(start, 1, 'ALL', 4);
 eq('یکشنبه = +۱ روز', sun[0].date.toISOString().slice(0, 10), '2025-09-21');
 
-const fri = sessionDatesFor(start, 7, 'ALL', 4);
-eq('Friday day 7 is valid', fri.length, 4);
+const fri = sessionDatesFor(start, 6, 'ALL', 4);
+eq('Friday day 6 is valid', fri.length, 4);
 eq('Friday = +6 days', fri[0].date.toISOString().slice(0, 10), '2025-09-26');
 eq('Friday weekly step', (fri[1].date.getTime() - fri[0].date.getTime()) / 86400000, 7);
 
 // EVEN → فقط هفته‌های زوج (۸ جلسه، sessionNo های ۱..۸)
-const even = sessionDatesFor(start, 1, 'EVEN', 16);
+const even = sessionDatesFor(start, 0, 'EVEN', 16);
 eq('EVEN → ۸ جلسه', even.length, 8);
 eq('اولین جلسهٔ EVEN هفتهٔ ۲ (شنبهٔ بعدی)', even[0].date.toISOString().slice(0, 10), '2025-09-27');
 
 // ODD → هفته‌های فرد
-const odd = sessionDatesFor(start, 1, 'ODD', 16);
+const odd = sessionDatesFor(start, 0, 'ODD', 16);
 eq('ODD → ۸ جلسه', odd.length, 8);
 eq('اولین جلسهٔ ODD = هفتهٔ ۱', odd[0].date.toISOString().slice(0, 10), '2025-09-20');
 
 // روز نامعتبر
-eq('روز خارج از ۱..۶ → خالی', sessionDatesFor(start, 9, 'ALL', 16), []);
+eq('روز خارج از ۰..۶ → خالی', sessionDatesFor(start, 9, 'ALL', 16), []);
+eq('روز ۷ → خالی', sessionDatesFor(start, 7, 'ALL', 16), []);
+eq('روز منفی → خالی', sessionDatesFor(start, -1, 'ALL', 16), []);
 
 console.log('\n۷) قیود سخت V2 (استاد+دوم، سالن، ظرفیت)');
 {
@@ -283,31 +286,39 @@ console.log('\n۸) مولد تاریخ جلسات (شمسی، زوج/فرد، ت
 
   // ۱۴۰۵/۰۶/۲۹ = یکشنبه (2026-09-20) → اولین شنبه = ۱۴۰۵/۰۷/۰۴
   const start = parseJalaliDate('1405/06/29');
-  const all = computeSessionDates({ termStart: start, dayOfWeek: 1, sessionsCount: 16 });
+  const all = computeSessionDates({ termStart: start, dayOfWeek: 0, sessionsCount: 16 });
   eq('۱۶ جلسهٔ هفتگی شنبه', all.length, 16);
   eq('جلسهٔ اول: نخستین شنبه بعد از شروع', all[0].jalaliDate, '1405/07/04');
   eq('جلسهٔ دوم: ۷ روز بعد', all[1].jalaliDate, '1405/07/11');
   eq('شمارهٔ جلسات متوالی', all.map(s => s.sessionNo).join(','), Array.from({ length: 16 }, (_, i) => i + 1).join(','));
   eq('جلسهٔ چهارم: سه شنبه هفتهٔ بعد (۱۴۰۵/۰۷/۲۵)', all[3].jalaliDate, '1405/07/25');
 
-  const holiday = computeSessionDates({ termStart: start, dayOfWeek: 1, sessionsCount: 8, holidays: ['1405/07/11'] });
+  const holiday = computeSessionDates({ termStart: start, dayOfWeek: 0, sessionsCount: 8, holidays: ['1405/07/11'] });
   eq('تعطیل رسمی → پرش و ۸ جلسه', holiday.length, 8);
   eq('جلسهٔ پرش‌شده حذف و جلسهٔ بعد جایگزین', holiday[1].jalaliDate, '1405/07/18');
 
-  const even = computeSessionDates({ termStart: start, dayOfWeek: 1, sessionsCount: 4, recurrence: 'EVEN' });
+  const even = computeSessionDates({ termStart: start, dayOfWeek: 0, sessionsCount: 4, recurrence: 'EVEN' });
   eq('هفتهٔ زوج: ۰۷/۱۱ (هفتهٔ دوم)', even[0].jalaliDate, '1405/07/11');
-  const odd = computeSessionDates({ termStart: start, dayOfWeek: 1, sessionsCount: 4, recurrence: 'ODD' });
+  const odd = computeSessionDates({ termStart: start, dayOfWeek: 0, sessionsCount: 4, recurrence: 'ODD' });
   eq('هفتهٔ فرد: ۰۷/۰۴ (هفتهٔ اول)', odd[0].jalaliDate, '1405/07/04');
-  throws('روز صفر', () => computeSessionDates({ termStart: start, dayOfWeek: 0, sessionsCount: 4 }), 'روز');
-  const friJ = computeSessionDates({ termStart: start, dayOfWeek: 7, sessionsCount: 3 });
+  throws('روز منفی یک', () => computeSessionDates({ termStart: start, dayOfWeek: -1, sessionsCount: 4 }), 'روز');
+  throws('روز هفت', () => computeSessionDates({ termStart: start, dayOfWeek: 7, sessionsCount: 4 }), 'روز');
+  const friJ = computeSessionDates({ termStart: start, dayOfWeek: 6, sessionsCount: 3 });
   eq('Friday sessions count', friJ.length, 3);
   eq('Friday first date', friJ[0].jalaliDate, '1405/07/03');
   throws('day 8 invalid', () => computeSessionDates({ termStart: start, dayOfWeek: 8, sessionsCount: 4 }));
-  throws('جلسات ۷۰', () => computeSessionDates({ termStart: start, dayOfWeek: 1, sessionsCount: 70 }), 'تعداد جلسات');
+  throws('جلسات ۷۰', () => computeSessionDates({ termStart: start, dayOfWeek: 0, sessionsCount: 70 }), 'تعداد جلسات');
 
-  // چهارشنبه (روز ۵): ۱۴۰۵/۰۶/۲۹ یکشنبه → اولین چهارشنبه = ۱۴۰۵/۰۷/۰۱
-  const wed = computeSessionDates({ termStart: start, dayOfWeek: 5, sessionsCount: 3 });
+  // چهارشنبه (روز ۴): ۱۴۰۵/۰۶/۲۹ یکشنبه → اولین چهارشنبه = ۱۴۰۵/۰۷/۰۱
+  const wed = computeSessionDates({ termStart: start, dayOfWeek: 4, sessionsCount: 3 });
   eq('اولین چهارشنبهٔ بعد از شروع (۱۴۰۵/۰۷/۰۱)', wed[0].jalaliDate, '1405/07/01');
+
+  // لنگر تقویمی واقعی: ۱۴۰۳/۰۸/۰۵ شنبه بود (2024-10-26 میلادی، شنبه)
+  eq('لنگر شنبه: میلادی→شمسی', jalaliDateOf(new Date(2024, 9, 26)), '1403/08/05');
+  eq('لنگر شنبه واقعاً شنبه است', parseJalaliDate('1403/08/05').getDay(), 6);
+  const satSessions = computeSessionDates({ termStart: parseJalaliDate('1403/08/01'), dayOfWeek: 0, sessionsCount: 4 });
+  eq('هر ۴ جلسهٔ روز ۰ شنبه‌اند', satSessions.map(s => parseJalaliDate(s.jalaliDate).getDay()), [6, 6, 6, 6]);
+  eq('نخستین شنبهٔ بعد از ۱۴۰۳/۰۸/۰۱', satSessions[0].jalaliDate, '1403/08/05');
 }
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);

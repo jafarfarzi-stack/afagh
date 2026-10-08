@@ -85,7 +85,7 @@ function TempWeeklySchedule({ cart }: { cart: CartItem[] }) {
     for (const a of all)
       for (const b of all)
         if (a !== b && a.day === b.day && checkTimeOverlap(a.start, a.end, b.start, b.end)) a.conflict = true;
-    const map: Record<number, typeof all> = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
+    const map: Record<number, typeof all> = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
     for (const e of all) if (map[e.day]) map[e.day].push(e);
     for (const k of Object.keys(map)) map[Number(k)].sort((x, y) => x.start.localeCompare(y.start));
     return map;
@@ -109,8 +109,8 @@ function TempWeeklySchedule({ cart }: { cart: CartItem[] }) {
         {days.map((dn, di) => (
           <div key={dn} className="rounded-xl border border-slate-200 bg-slate-50 p-2 space-y-1.5 min-h-[110px]">
             <p className="text-[11px] font-black text-slate-700 text-center border-b border-slate-200 pb-1">{dn}</p>
-            {byDay[di + 1].length === 0 && <p className="text-[10px] text-slate-400 text-center pt-3">—</p>}
-            {byDay[di + 1].map((e, i) => (
+            {byDay[di].length === 0 && <p className="text-[10px] text-slate-400 text-center pt-3">—</p>}
+            {byDay[di].map((e, i) => (
               <div
                 key={i}
                 className={`rounded-lg p-1.5 text-[10px] font-bold border ${

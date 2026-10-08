@@ -113,7 +113,7 @@ export default async function StudentSchedulePage() {
     if (s.scheduleType === 'CLASS' && s.dayOfWeek != null) {
       entry.classes.push({
         dayOfWeek: s.dayOfWeek,
-        dayName: DAY_NAMES[s.dayOfWeek - 1] || `روز ${s.dayOfWeek}`,
+        dayName: DAY_NAMES[s.dayOfWeek] || `روز ${s.dayOfWeek}`,
         startTime: s.startTime.slice(0, 5),
         endTime: s.endTime.slice(0, 5),
         room: s.roomName || 'کلاس تئوری',

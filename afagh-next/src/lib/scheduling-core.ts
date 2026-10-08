@@ -223,7 +223,7 @@ export interface GroupDraftInput {
   gender: ClassGender;
   professorId: number;
   classroomId: number;
-  dayOfWeek: number;        // 1..7 (شنبه=1)
+  dayOfWeek: number;        // 0..6 (شنبه=0)
   startTime: string;        // "HH:MM"
   endTime: string;          // "HH:MM"
 }
@@ -289,7 +289,7 @@ export function validateGroupDrafts(inputs: GroupDraftInput[], ownerIsServicePoo
     const rid = Number(raw.classroomId);
     if (!Number.isInteger(rid) || rid <= 0) throw new Error(`کلاس فیزیکی گروه ${g} نامعتبر است.`);
     const day = Number(raw.dayOfWeek);
-    if (!Number.isInteger(day) || day < 1 || day > DAYS_PER_WEEK) throw new Error(`روز گروه ${g} نامعتبر است.`);
+    if (!Number.isInteger(day) || day < 0 || day >= DAYS_PER_WEEK) throw new Error(`روز گروه ${g} نامعتبر است.`);
 
     const start = toMinutes(raw.startTime);
     const end = toMinutes(raw.endTime);
@@ -491,7 +491,7 @@ export function shiftUtilization(usedMinutes: number, shiftMinutes: number): num
 export interface ScheduleConflictInput {
   offeringId: number;
   groupNumber: number | null;
-  dayOfWeek: number | null;          // 1..7 (شنبه=1) — null = بدون روز (ناقص)
+  dayOfWeek: number | null;          // 0..6 (شنبه=0) — null = بدون روز (ناقص)
   startTime: string;                 // HH:MM
   endTime: string;
   roomId: number | null;
@@ -607,7 +607,7 @@ export function hasHardConflicts(conflicts: ScheduleConflict[]): boolean {
 
 /**
  * تاریخ جلسات یک درس در ترم — خالص، بدون DB.
- * قرارداد: dayOfWeek: 1..7 (شنبه = 1)، termStart تاریخ اولین روز هفتهٔ اول است.
+ * قرارداد: dayOfWeek: 0..6 (شنبه = 0)، termStart تاریخ اولین روز هفتهٔ اول است.
  *   ALL  → ۱۶ جلسهٔ هفتگی
  *   EVEN → هفته‌های زوج (جلسات ۲، ۴، …، ۱۶ — ۸ جلسه)
  *   ODD  → هفته‌های فرد (جلسات ۱، ۳، …، ۱۵ — ۸ جلسه)
@@ -619,10 +619,10 @@ export function sessionDatesFor(
   scheduleType: 'ALL' | 'EVEN' | 'ODD',
   totalSessions = 16
 ): { sessionNo: number; date: Date }[] {
-  if (dayOfWeek < 1 || dayOfWeek > 7) return [];
+  if (dayOfWeek < 0 || dayOfWeek > 6) return [];
   const base = new Date(termStart.getTime());
   base.setUTCHours(0, 0, 0, 0);
-  const offsetDays = dayOfWeek - 1; // شنبه = 0
+  const offsetDays = dayOfWeek; // شنبه = 0
   const first = new Date(base.getTime() + offsetDays * 86400000);
   const out: { sessionNo: number; date: Date }[] = [];
   let no = 1;
@@ -650,7 +650,7 @@ export interface HardConflictEntry {
   /** استاد اصلی + استاد دوم (Co-Teaching از offering_professors) */
   professorIds: number[];
   roomId: number | null;
-  dayOfWeek: number;      // 1..7 (شنبه=1)
+  dayOfWeek: number;      // 0..6 (شنبه=0)
   startMinutes: number;
   endMinutes: number;
   enrolledCount: number;  // ثبت‌نام‌شدهٔ واقعی (یا پیش‌بینی تقاضا)
@@ -786,7 +786,7 @@ export type WeekRecurrence = 'ALL' | 'EVEN' | 'ODD';
 export interface SessionDateInput {
   /** شروع ترم (Date از academic_terms.startDate) */
   termStart: Date;
-  /** 1..7 (شنبه=1) */
+  /** 0..6 (شنبه=0) */
   dayOfWeek: number;
   /** تعداد جلسات (پیش‌فرض ۱۶) */
   sessionsCount: number;
@@ -806,9 +806,9 @@ export interface GeneratedSession {
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
-/** روز هفتهٔ ۱..۶ (شنبه=1) → باقی‌ماندهٔ JDN بر ۷ (شنبه=5) */
+/** روز هفتهٔ 0..6 (شنبه=0) → باقی‌ماندهٔ JDN بر ۷ (شنبه=5) */
 function jalaliWeekdayToJdnMod(dow: number): number {
-  return (5 + ((dow - 1) % 7)) % 7;
+  return (5 + dow) % 7;
 }
 
 /**
@@ -822,7 +822,7 @@ export function computeSessionDates(
   px: SessionDateInput & { recurrence?: WeekRecurrence },
 ): GeneratedSession[] {
   const { termStart, dayOfWeek, sessionsCount, oddFirstWeek = true } = px;
-  if (dayOfWeek < 1 || dayOfWeek > 7) throw new Error('روز هفته باید ۱..۷ باشد (شنبه=1).');
+  if (dayOfWeek < 0 || dayOfWeek > 6) throw new Error('روز هفته باید ۰..۶ باشد (شنبه=۰).');
   if (sessionsCount < 1 || sessionsCount > 60) throw new Error('تعداد جلسات باید ۱..۶۰ باشد.');
   const holidays = new Set((px.holidays ?? []).map(h => h.trim()).filter(Boolean));
   const start = new Date(termStart.getFullYear(), termStart.getMonth(), termStart.getDate());

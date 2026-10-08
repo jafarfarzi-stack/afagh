@@ -51,7 +51,7 @@ function empty(columns: ReportResult['columns'], summary: string): ReportResult 
   return { columns, rows: [], total: 0, page: 1, per: PER, totalPages: 1, summary };
 }
 
-const DAY_FA = sql`CASE sc1."dayOfWeek" WHEN 1 THEN 'شنبه' WHEN 2 THEN 'یکشنبه' WHEN 3 THEN 'دوشنبه' WHEN 4 THEN 'سه‌شنبه' WHEN 5 THEN 'چهارشنبه' WHEN 6 THEN 'پنج‌شنبه' ELSE COALESCE('روز ' || sc1."dayOfWeek"::text, '—') END`;
+const DAY_FA = sql`CASE sc1."dayOfWeek" WHEN 0 THEN 'شنبه' WHEN 1 THEN 'یکشنبه' WHEN 2 THEN 'دوشنبه' WHEN 3 THEN 'سه‌شنبه' WHEN 4 THEN 'چهارشنبه' WHEN 5 THEN 'پنج‌شنبه' WHEN 6 THEN 'جمعه' ELSE COALESCE('روز ' || sc1."dayOfWeek"::text, '—') END`;
 
 /** ۱) تداخل برنامه هفتگی: دو اخذ یک دانشجو در یک ترم با روز یکسان و بازهٔ زمانی هم‌پوشان */
 async function weeklyConflicts(f: ExtFilters): Promise<ReportResult> {

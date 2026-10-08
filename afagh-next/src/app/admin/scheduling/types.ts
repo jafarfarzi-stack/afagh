@@ -63,7 +63,7 @@ export interface ProfessorOption {
 }
 export type SlotStatus = 'PREF' | 'AVAIL' | 'UNAVAIL';
 
-// [profId][dayIndex (0..5)][slotId] = SlotStatus
+// [profId][dayIndex (0..6)][slotId] = SlotStatus
 export interface ProfessorAvailabilityMap {
   [profId: number]: {
     [dayOfWeek: number]: {

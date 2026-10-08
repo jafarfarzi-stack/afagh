@@ -168,7 +168,7 @@ export default function SmartAssignTab() {
                       <div key={idx} className="border-2 border-indigo-100 rounded-2xl p-3.5 bg-gradient-to-br from-indigo-50/60 to-white space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-extrabold text-indigo-900">
-                            {DAY_NAMES[(slot.dayOfWeek - 1) % 6]} — {slot.startTime} تا {slot.endTime}
+                            {DAY_NAMES[slot.dayOfWeek] ?? '—'} — {slot.startTime} تا {slot.endTime}
                           </span>
                           <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
                             امتیاز {faNum(slot.score)}

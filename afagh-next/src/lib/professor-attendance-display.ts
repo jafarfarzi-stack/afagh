@@ -1,11 +1,11 @@
 export const ATTENDANCE_DAY_NAMES: Record<number, string> = {
-  1: 'شنبه',
-  2: 'یکشنبه',
-  3: 'دوشنبه',
-  4: 'سه‌شنبه',
-  5: 'چهارشنبه',
-  6: 'پنج‌شنبه',
-  7: 'جمعه',
+  0: 'شنبه',
+  1: 'یکشنبه',
+  2: 'دوشنبه',
+  3: 'سه‌شنبه',
+  4: 'چهارشنبه',
+  5: 'پنج‌شنبه',
+  6: 'جمعه',
 };
 
 export function dayOfWeekToName(dow: number | null | undefined): string {

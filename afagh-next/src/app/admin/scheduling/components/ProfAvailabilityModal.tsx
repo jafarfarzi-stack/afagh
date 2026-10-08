@@ -51,7 +51,7 @@ export default function ProfAvailabilityModal() {
                           {rows.map((r, idx) => (
                             <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                               <td className="p-2 border border-slate-200 font-extrabold text-center bg-slate-100 text-slate-900">
-                                {r.dayOfWeek ? DAY_NAMES[(r.dayOfWeek - 1) % 6] : '—'}
+                                {r.dayOfWeek != null ? DAY_NAMES[r.dayOfWeek] ?? '—' : '—'}
                               </td>
                               <td className="p-2 border border-slate-200 text-center font-mono font-bold">{faNum(r.startTime ?? '—')}</td>
                               <td className="p-2 border border-slate-200 text-center font-mono font-bold">{faNum(r.endTime ?? '—')}</td>

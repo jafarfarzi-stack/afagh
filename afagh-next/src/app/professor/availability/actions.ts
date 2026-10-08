@@ -35,7 +35,7 @@ export async function loadAvailabilityAction(termId: number): Promise<{ ok: bool
 
     const cells: AvailabilityCell[] = [];
     for (const r of rows) {
-      const dayIndex = (r.dayOfWeek ?? 0) - 1;
+      const dayIndex = r.dayOfWeek ?? -1;
       if (dayIndex < 0 || dayIndex > 6) continue;
       const slot = Object.entries(SLOT_TIMES).find(([, t]) => t && t.start === String(r.startTime).slice(0, 5) && t.end === String(r.endTime).slice(0, 5));
       if (!slot) continue;
@@ -76,7 +76,7 @@ export async function saveAvailabilityAction(termId: number, cells: Availability
       const toInsert = valid
         .filter(c => c.status !== 'UNAVAIL' && SLOT_TIMES[c.slotIndex])
         .map(c => ({
-          staffId: me.id, termId: t, dayOfWeek: c.dayIndex + 1,
+          staffId: me.id, termId: t, dayOfWeek: c.dayIndex,
           startTime: SLOT_TIMES[c.slotIndex]!.start as unknown as string,
           endTime: SLOT_TIMES[c.slotIndex]!.end as unknown as string,
           status: c.status,

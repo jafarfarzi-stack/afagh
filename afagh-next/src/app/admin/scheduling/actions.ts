@@ -343,7 +343,7 @@ async function listApprovedOfferings(termId: number, universityId?: number) {
     capacity: r.capacity,
     enrolledCount: r.enrolledCount,
     dayOfWeek: r.dayOfWeek,
-    dayName: ['', 'شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه'][r.dayOfWeek ?? 0] ?? '—',
+    dayName: ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'][r.dayOfWeek ?? -1] ?? '—',
     startTime: hm(r.startTime),
     endTime: hm(r.endTime),
     roomId: r.roomId,

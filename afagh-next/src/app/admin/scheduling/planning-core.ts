@@ -124,7 +124,7 @@ export function mapOfferings(rows: SchedulingWorkspace['approvedOfferings']): De
     enrolledCount: r.enrolledCount,
     waitlistCapacity: 0,
     classSchedules: [{
-      dayOfWeek: (r.dayOfWeek ?? 1) - 1,
+      dayOfWeek: (r.dayOfWeek ?? 0),
       dayName: r.dayName,
       slotId: 0,
       startTime: r.startTime,
@@ -278,7 +278,7 @@ export function computeProfUnits(
 /**
  * وضعیت واقعی اعلام درٔ دسترس بودن در یک اسلات (از professor_availabilities).
  * بازهٔ استاد باید شروع اسلات را بپوشاند: startTime <= slot.start و endTime > slot.start.
- * روز هفته در دیتابیس ۱‌پایه است (شنبه=۱)، شاخص آرایه ۰‌پایه.
+ * روز هفته در دیتابیس ۰‌پایه است (شنبه=۰)، شاخص آرایه ۰‌پایه.
  */
 export function slotAvailStatus(
   rows: SchedulingWorkspace['availabilities'],
@@ -287,7 +287,7 @@ export function slotAvailStatus(
   slot: Pick<TimeSlot, 'startTime'>,
 ): 'PREF' | 'AVAIL' | 'NONE' {
   const mine = rows.filter(r =>
-    r.staffId === profId && r.dayOfWeek === dayIdx + 1 &&
+    r.staffId === profId && r.dayOfWeek === dayIdx &&
     r.startTime != null && r.endTime != null &&
     r.startTime <= slot.startTime && r.endTime > slot.startTime
   );

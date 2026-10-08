@@ -8,7 +8,7 @@ import {
 import { JALALI_DAY_NAMES, professorUniqueOfferings } from '@/lib/professor-data';
 
 const row = (over: Partial<Parameters<typeof hasProfessorSchedule>[0]> = {}) => ({
-  dayOfWeek: 1,
+  dayOfWeek: 0,
   startTime: '08:00',
   endTime: '10:00',
   ...over,
@@ -16,15 +16,16 @@ const row = (over: Partial<Parameters<typeof hasProfessorSchedule>[0]> = {}) => 
 
 console.log('— professor week grid —');
 assert.equal(PROFESSOR_GRID_DAYS.length, 7, 'grid must cover Saturday..Friday');
-assert.equal(JALALI_DAY_NAMES[1 - 1], 'شنبه', 'Saturday class (day 1) labels شنبه');
-assert.equal(JALALI_DAY_NAMES[7 - 1], 'جمعه', 'Friday class (day 7) labels جمعه');
+assert.equal(JALALI_DAY_NAMES[0], 'شنبه', 'Saturday class (day 0) labels شنبه');
+assert.equal(JALALI_DAY_NAMES[6], 'جمعه', 'Friday class (day 6) labels جمعه');
 assert.equal(PROFESSOR_GRID_DAYS[6], 'جمعه');
 assert.equal(PROFESSOR_GRID_TIME_SLOTS.length, 5);
 
 assert.equal(hasProfessorSchedule(row()), true);
-assert.equal(hasProfessorSchedule(row({ dayOfWeek: 0 })), false, 'day 0 is invalid in the 1-based convention');
-assert.equal(hasProfessorSchedule(row({ dayOfWeek: 7 })), true, 'Friday (day 7) is a real class day');
-assert.equal(hasProfessorSchedule(row({ dayOfWeek: 8 })), false, 'day 8 is invalid');
+assert.equal(hasProfessorSchedule(row({ dayOfWeek: 0 })), true, 'Saturday (day 0) is a real class day');
+assert.equal(hasProfessorSchedule(row({ dayOfWeek: 6 })), true, 'Friday (day 6) is a real class day');
+assert.equal(hasProfessorSchedule(row({ dayOfWeek: 7 })), false, 'day 7 is invalid in the 0-based convention');
+assert.equal(hasProfessorSchedule(row({ dayOfWeek: -1 })), false, 'day -1 is invalid');
 assert.equal(hasProfessorSchedule(row({ dayOfWeek: null })), false);
 assert.equal(hasProfessorSchedule(row({ startTime: '' })), false);
 assert.equal(hasProfessorSchedule(row({ endTime: '' })), false);

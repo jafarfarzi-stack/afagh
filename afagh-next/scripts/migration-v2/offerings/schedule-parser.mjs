@@ -4,7 +4,7 @@
  *  — تجزیه و نرمال‌سازی زمان‌بندی جلسات هفتگی و کلاسی
  *  — پشتیبانی از فرمت پایگاه داده سما (DayCode, StartTime, EndTime, CrossType)
  *  — پشتیبانی از متون آزاد و فارسی (شنبه ۰۸:۰۰ الی ۱۰:۰۰، هفته‌های زوج/فرد)
- *  — نگاشت روزهای هفته به قرارداد سیستم (۱=شنبه ... ۷=جمعه)
+ *  — نگاشت روزهای هفته به قرارداد سیستم (۰=شنبه ... ۶=جمعه)
  * ══════════════════════════════════════════════════════════════════════
  */
 
@@ -21,8 +21,8 @@ export function cleanPersianDigits(val) {
 }
 
 /**
- * نگاشت نام روز فارسی به شناسه روز هفته (۱=شنبه ... ۷=جمعه)
- * قرارداد سامانه: ۱: شنبه، ۲: یکشنبه، ۳: دوشنبه، ۴: سه‌شنبه، ۵: چهارشنبه، ۶: پنج‌شنبه، ۷: جمعه
+ * نگاشت نام روز فارسی به شناسه روز هفته (۰=شنبه ... ۶=جمعه)
+ * قرارداد سامانه: ۰: شنبه، ۱: یکشنبه، ۲: دوشنبه، ۳: سه‌شنبه، ۴: چهارشنبه، ۵: پنج‌شنبه، ۶: جمعه
  * @param {string} text 
  * @returns {number|null}
  */
@@ -32,47 +32,48 @@ export function parsePersianDayOfWeek(text) {
     .replace(/[\u200c\s_\-]+/g, '') // حذف نیم‌فاصله، فاصله و خط تیره
     .toLowerCase();
 
-  if (/^(شنبه|0شنبه)$/.test(s)) return 1;
-  if (/^(یکشنبه|یک‌شنبه|1شنبه)$/.test(s)) return 2;
-  if (/^(دوشنبه|دو‌شنبه|2شنبه)$/.test(s)) return 3;
-  if (/^(سهشنبه|سه‌شنبه|3شنبه)$/.test(s)) return 4;
-  if (/^(چهارشنبه|چهار‌شنبه|4شنبه)$/.test(s)) return 5;
-  if (/^(پنجشنبه|پنج‌شنبه|5شنبه)$/.test(s)) return 6;
-  if (/^(جمعه|آدینه|6شنبه|7شنبه)$/.test(s)) return 7;
+  if (/^(شنبه|0شنبه)$/.test(s)) return 0;
+  if (/^(یکشنبه|یک‌شنبه|1شنبه)$/.test(s)) return 1;
+  if (/^(دوشنبه|دو‌شنبه|2شنبه)$/.test(s)) return 2;
+  if (/^(سهشنبه|سه‌شنبه|3شنبه)$/.test(s)) return 3;
+  if (/^(چهارشنبه|چهار‌شنبه|4شنبه)$/.test(s)) return 4;
+  if (/^(پنجشنبه|پنج‌شنبه|5شنبه)$/.test(s)) return 5;
+  if (/^(جمعه|آدینه|6شنبه|7شنبه)$/.test(s)) return 6;
 
   // بررسی تطابق نسبی اگر در متن بلندتر باشد
-  if (s.includes('جمعه') || s.includes('آدینه')) return 7;
-  if (s.includes('پنجشنبه')) return 6;
-  if (s.includes('چهارشنبه')) return 5;
-  if (s.includes('سهشنبه')) return 4;
-  if (s.includes('دوشنبه')) return 3;
-  if (s.includes('یکشنبه')) return 2;
-  if (s.includes('شنبه')) return 1;
+  if (s.includes('جمعه') || s.includes('آدینه')) return 6;
+  if (s.includes('پنجشنبه')) return 5;
+  if (s.includes('چهارشنبه')) return 4;
+  if (s.includes('سهشنبه')) return 3;
+  if (s.includes('دوشنبه')) return 2;
+  if (s.includes('یکشنبه')) return 1;
+  if (s.includes('شنبه')) return 0;
 
   return null;
 }
 
 /**
- * نام فارسی روز هفته از روی شناسه عددی ۱..۷
+ * نام فارسی روز هفته از روی شناسه عددی ۰..۶
  * @param {number} dayNumber 
  * @returns {string}
  */
 export function dayOfWeekToPersian(dayNumber) {
   const map = {
-    1: 'شنبه',
-    2: 'یکشنبه',
-    3: 'دوشنبه',
-    4: 'سه‌شنبه',
-    5: 'چهارشنبه',
-    6: 'پنج‌شنبه',
-    7: 'جمعه',
+    0: 'شنبه',
+    1: 'یکشنبه',
+    2: 'دوشنبه',
+    3: 'سه‌شنبه',
+    4: 'چهارشنبه',
+    5: 'پنج‌شنبه',
+    6: 'جمعه',
   };
   return map[dayNumber] || '';
 }
 
 /**
- * تبدیل کد روز سما به قرارداد سامانه (۱..۷)
+ * تبدیل کد روز سما به قرارداد سامانه (۰..۶)
  * سما: 0=شنبه, 1=یکشنبه, ..., 6=جمعه, -1=بدون زمان‌بندی
+ * مقدار خام سما بدون تغییر ذخیره می‌شود؛ -1/نامعتبر → null (بدون زمان‌بندی)
  * @param {string|number} samaDayCode 
  * @returns {number|null}
  */
@@ -80,7 +81,7 @@ export function samaDayCodeToDayOfWeek(samaDayCode) {
   if (samaDayCode === null || samaDayCode === undefined) return null;
   const code = parseInt(cleanPersianDigits(samaDayCode), 10);
   if (isNaN(code) || code < 0 || code > 6) return null;
-  return code + 1; // 0 -> 1 (شنبه), ..., 6 -> 7 (جمعه)
+  return code;
 }
 
 /**
@@ -200,7 +201,7 @@ export function parseSamaScheduleSlot(row) {
     roomCode = null;
   }
 
-  const hasSchedule = Boolean(dayOfWeek && startTime && endTime);
+  const hasSchedule = dayOfWeek != null && Boolean(startTime && endTime);
 
   return {
     dayOfWeek,
@@ -235,7 +236,7 @@ export function parseScheduleString(text) {
 
   for (const seg of segments) {
     const day = parsePersianDayOfWeek(seg);
-    if (!day) continue;
+    if (day == null) continue;
 
     const parity = parseWeekParity(seg);
 

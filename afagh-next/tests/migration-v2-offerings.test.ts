@@ -50,27 +50,29 @@ console.log('\n--- ۱. تست‌های تبدیل ارقام و روزهای ه�
 eq('تبدیل ارقام فارسی', cleanPersianDigits('۰۱۲۳۴۵۶۷۸۹'), '0123456789');
 eq('تبدیل ارقام عربی', cleanPersianDigits('٠١٢٣٤٥٦٧٨٩'), '0123456789');
 
-eq('روز شنبه', parsePersianDayOfWeek('شنبه'), 1);
-eq('روز یکشنبه', parsePersianDayOfWeek('یکشنبه'), 2);
-eq('روز یک‌شنبه با نیم‌فاصله', parsePersianDayOfWeek('یک‌شنبه'), 2);
-eq('روز دوشنبه', parsePersianDayOfWeek('دوشنبه'), 3);
-eq('روز سه‌شنبه', parsePersianDayOfWeek('سه‌شنبه'), 4);
-eq('روز چهارشنبه', parsePersianDayOfWeek('چهارشنبه'), 5);
-eq('روز پنج‌شنبه', parsePersianDayOfWeek('پنج‌شنبه'), 6);
-eq('روز جمعه', parsePersianDayOfWeek('جمعه'), 7);
-eq('روز آدینه', parsePersianDayOfWeek('آدینه'), 7);
+eq('روز شنبه', parsePersianDayOfWeek('شنبه'), 0);
+eq('روز یکشنبه', parsePersianDayOfWeek('یکشنبه'), 1);
+eq('روز یک‌شنبه با نیم‌فاصله', parsePersianDayOfWeek('یک‌شنبه'), 1);
+eq('روز دوشنبه', parsePersianDayOfWeek('دوشنبه'), 2);
+eq('روز سه‌شنبه', parsePersianDayOfWeek('سه‌شنبه'), 3);
+eq('روز چهارشنبه', parsePersianDayOfWeek('چهارشنبه'), 4);
+eq('روز پنج‌شنبه', parsePersianDayOfWeek('پنج‌شنبه'), 5);
+eq('روز جمعه', parsePersianDayOfWeek('جمعه'), 6);
+eq('روز آدینه', parsePersianDayOfWeek('آدینه'), 6);
 eq('روز نامعتبر', parsePersianDayOfWeek('نامعلوم'), null);
 
-eq('عنوان فارسی روز ۱', dayOfWeekToPersian(1), 'شنبه');
-eq('عنوان فارسی روز ۶', dayOfWeekToPersian(6), 'پنج‌شنبه');
-eq('عنوان فارسی روز ۷', dayOfWeekToPersian(7), 'جمعه');
+eq('عنوان فارسی روز ۰', dayOfWeekToPersian(0), 'شنبه');
+eq('عنوان فارسی روز ۵', dayOfWeekToPersian(5), 'پنج‌شنبه');
+eq('عنوان فارسی روز ۶', dayOfWeekToPersian(6), 'جمعه');
 
-eq('کد روز سما 0 -> شنبه (1)', samaDayCodeToDayOfWeek(0), 1);
-eq('کد روز سما 1 -> یکشنبه (2)', samaDayCodeToDayOfWeek(1), 2);
-eq('کد روز سما 4 -> چهارشنبه (5)', samaDayCodeToDayOfWeek(4), 5);
-eq('کد روز سما 5 -> پنجشنبه (6)', samaDayCodeToDayOfWeek(5), 6);
-eq('کد روز سما 6 -> جمعه (7)', samaDayCodeToDayOfWeek(6), 7);
+eq('کد روز سما 0 -> شنبه (0)', samaDayCodeToDayOfWeek(0), 0);
+eq('کد روز سما 1 -> یکشنبه (1)', samaDayCodeToDayOfWeek(1), 1);
+eq('کد روز سما 4 -> چهارشنبه (4)', samaDayCodeToDayOfWeek(4), 4);
+eq('کد روز سما 5 -> پنجشنبه (5)', samaDayCodeToDayOfWeek(5), 5);
+eq('کد روز سما 6 -> جمعه (6)', samaDayCodeToDayOfWeek(6), 6);
 eq('کد روز سما -1 -> null', samaDayCodeToDayOfWeek(-1), null);
+eq('لنگر سما 58013: DayCode 0 -> شنبه', dayOfWeekToPersian(samaDayCodeToDayOfWeek(0) ?? -1), 'شنبه');
+eq('لنگر سما 43142: DayCode 2 -> دوشنبه', dayOfWeekToPersian(samaDayCodeToDayOfWeek(2) ?? -1), 'دوشنبه');
 
 console.log('\n--- ۲. تست‌های تجزیه زمان و بازه‌های ساعتی ---');
 
@@ -112,7 +114,7 @@ const slotNormal = parseSamaScheduleSlot({
   placeCode: '101',
   weeklyCrossTypeID: '1',
 });
-eq('اسلات عادی شنبه', slotNormal.dayOfWeek, 1);
+eq('اسلات عادی شنبه', slotNormal.dayOfWeek, 0);
 eq('اسلات عادی شروع', slotNormal.startTime, '08:00:00');
 eq('اسلات عادی پایان', slotNormal.endTime, '09:30:00');
 eq('اسلات عادی کلاس', slotNormal.roomCode, '101');
@@ -134,17 +136,17 @@ console.log('\n--- ۴. تست‌های تجزیه متن آزاد برنامه �
 const freeText1 = 'شنبه ۰۸:۰۰ - ۱۰:۰۰ (کلاس ۱۰۱) / دوشنبه ۱۰:۰۰ - ۱۲:۰۰ (کلاس ۱۰۲)';
 const parsedFree1 = parseScheduleString(freeText1);
 eq('تعداد اسلات‌های متن مرکب', parsedFree1.length, 2);
-eq('اسلات اول روز شنبه', parsedFree1[0].dayOfWeek, 1);
+eq('اسلات اول روز شنبه', parsedFree1[0].dayOfWeek, 0);
 eq('اسلات اول شروع', parsedFree1[0].startTime, '08:00:00');
 eq('اسلات اول کلاس ۱۰۱', parsedFree1[0].roomHint, '101');
-eq('اسلات دوم روز دوشنبه', parsedFree1[1].dayOfWeek, 3);
+eq('اسلات دوم روز دوشنبه', parsedFree1[1].dayOfWeek, 2);
 eq('اسلات دوم شروع', parsedFree1[1].startTime, '10:00:00');
 eq('اسلات دوم کلاس ۱۰۲', parsedFree1[1].roomHint, '102');
 
 const freeText2 = 'چهارشنبه 14:00 الی 15:30 هفته زوج سالن همایش';
 const parsedFree2 = parseScheduleString(freeText2);
 eq('تعداد اسلات زوج', parsedFree2.length, 1);
-eq('روز چهارشنبه', parsedFree2[0].dayOfWeek, 5);
+eq('روز چهارشنبه', parsedFree2[0].dayOfWeek, 4);
 eq('نوع هفته زوج', parsedFree2[0].scheduleType, 'EVEN');
 
 console.log('\n--- ۵. تست‌های تفکیک جنسیت و نوع ارائه ---');
@@ -187,7 +189,7 @@ if (resValid.ok) {
   eq('کد استاد', resValid.row.professorCode, '8614');
   eq('محدودیت جنسیت', resValid.row.genderRestriction, 'MIXED');
   eq('تعداد اسلات برنامه هفتگی', resValid.row.schedules.length, 1);
-  eq('روز اسلات شنبه', resValid.row.schedules[0].dayOfWeek, 1);
+  eq('روز اسلات شنبه', resValid.row.schedules[0].dayOfWeek, 0);
 }
 
 // ردیف ۳ رقمی ترم (زرینه 871 -> 13871)

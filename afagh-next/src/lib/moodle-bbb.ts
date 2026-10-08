@@ -24,10 +24,10 @@ function todayJalali(): string {
   return jalaliDateOf(new Date());
 }
 
-/** اندیهٔ روز هفتهٔ جلالی: ۱ = شنبه … ۷ = جمعه (هم‌راستا با schedules.dayOfWeek) */
+/** اندیهٔ روز هفتهٔ جلالی: ۰ = شنبه … ۶ = جمعه (هم‌راستا با schedules.dayOfWeek) */
 function jalaliWeekdayIndex(d: Date): number {
   const g = d.getDay();
-  return ((g + 1) % 7) + 1;
+  return (g + 1) % 7;
 }
 
 export interface VirtualClassSession {

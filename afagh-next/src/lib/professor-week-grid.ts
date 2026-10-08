@@ -65,8 +65,8 @@ export type ProfessorScheduleLike = {
 export const hasProfessorSchedule = (row: ProfessorScheduleLike): boolean =>
   row.dayOfWeek != null &&
   Number.isInteger(row.dayOfWeek) &&
-  (row.dayOfWeek as number) >= 1 &&
-  (row.dayOfWeek as number) <= 7 &&
+  (row.dayOfWeek as number) >= 0 &&
+  (row.dayOfWeek as number) <= 6 &&
   !Number.isNaN(toMinutes(row.startTime)) &&
   !Number.isNaN(toMinutes(row.endTime)) &&
   toMinutes(row.endTime) > toMinutes(row.startTime);

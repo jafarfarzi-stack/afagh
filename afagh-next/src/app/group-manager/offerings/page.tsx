@@ -108,13 +108,13 @@ export default async function OfferingsPage({ searchParams }: { searchParams: Pr
                 {sch.map(s => (
                   <form key={s.id} action={deleteScheduleAction} className="flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1">
                     <input type="hidden" name="id" value={s.id} />
-                    <span>{DAYS[(s.day ?? 1) - 1]} {hm(s.st)}–{hm(s.en)}{s.room ? ' · ' + s.room : ''}</span>
+                    <span>{DAYS[s.day ?? 0]} {hm(s.st)}–{hm(s.en)}{s.room ? ' · ' + s.room : ''}</span>
                     <button className="text-red-500 hover:underline">×</button>
                   </form>
                 ))}
                 <form action={addScheduleAction} className="flex items-center gap-1">
                   <input type="hidden" name="offeringId" value={o.id} />
-                  <select name="day" className="input !py-1 !px-2">{DAYS.map((d, i) => <option key={d} value={i + 1}>{d}</option>)}</select>
+                  <select name="day" className="input !py-1 !px-2">{DAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}</select>
                   <input name="start" type="time" required className="input !py-1 !px-2" dir="ltr" />
                   <input name="end" type="time" required className="input !py-1 !px-2" dir="ltr" />
                   <select name="roomId" className="input !py-1 !px-2">

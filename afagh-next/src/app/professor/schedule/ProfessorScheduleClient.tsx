@@ -15,7 +15,7 @@ export interface ProfessorScheduleOffering {
   groupNumber: number;
   enrolledCount: number;
   capacity: number;
-  dayOfWeek: number | null; // 1: شنبه ... 7: جمعه · null = زمان‌بندی ثبت نشده
+  dayOfWeek: number | null; // 0: شنبه ... 6: جمعه · null = زمان‌بندی ثبت نشده
   dayName: string;
   startTime: string;
   endTime: string;
