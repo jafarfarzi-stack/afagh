@@ -24,12 +24,25 @@ export default function ShowcaseSlider({ slides }: { slides: ShowcaseSlide[] }) 
 
   if (!n) return null;
   const s = slides[idx];
-  const body = (
+
+  return (
     <div className="relative h-52 sm:h-64 overflow-hidden rounded-3xl shadow-2xl border border-white/20">
-      {s.imageUrl ? (
-        <img src={s.imageUrl} alt={s.title} className="absolute inset-0 h-full w-full object-cover" />
+      {s.linkUrl ? (
+        <a href={s.linkUrl} className="block h-full w-full" aria-label={s.title}>
+          {s.imageUrl ? (
+            <img src={s.imageUrl} alt={s.title} className="absolute inset-0 h-full w-full object-cover" />
+          ) : (
+            <div className={`absolute inset-0 bg-gradient-to-l ${GRADIENTS[idx % GRADIENTS.length]}`} />
+          )}
+        </a>
       ) : (
-        <div className={`absolute inset-0 bg-gradient-to-l ${GRADIENTS[idx % GRADIENTS.length]}`} />
+        <>
+          {s.imageUrl ? (
+            <img src={s.imageUrl} alt={s.title} className="absolute inset-0 h-full w-full object-cover" />
+          ) : (
+            <div className={`absolute inset-0 bg-gradient-to-l ${GRADIENTS[idx % GRADIENTS.length]}`} />
+          )}
+        </>
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
       <div className="absolute bottom-0 right-0 left-0 p-5 sm:p-6">
@@ -52,7 +65,4 @@ export default function ShowcaseSlider({ slides }: { slides: ShowcaseSlide[] }) 
       )}
     </div>
   );
-
-  // پیوند داخلی با <a> ساده تا تب/پارامتر حفظ شود
-  return s.linkUrl ? <a href={s.linkUrl} className="block">{body}</a> : body;
 }
