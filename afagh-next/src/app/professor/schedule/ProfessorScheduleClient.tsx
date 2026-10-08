@@ -2,12 +2,9 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import {
-  PROFESSOR_GRID_DAYS,
-  PROFESSOR_GRID_TIME_SLOTS,
-  hasProfessorSchedule,
-  professorRangeMatch,
-} from '@/lib/professor-week-grid';
+import { hasProfessorSchedule } from '@/lib/professor-week-grid';
+import { filterProfessorCalendarByWeek, professorCalendarEntryKey } from '@/lib/professor-calendar-layout';
+import ProfessorCalendarGrid, { type ProfessorCalendarEntry } from '../professor-calendar-grid';
 
 export interface ProfessorScheduleOffering {
   id: number;
@@ -51,10 +48,6 @@ const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).rep
 const uniqueIds = (rows: ProfessorScheduleOffering[]) =>
   new Set(rows.map(r => r.id)).size;
 
-const DAY_NAMES = PROFESSOR_GRID_DAYS;
-
-const TIME_SLOTS = PROFESSOR_GRID_TIME_SLOTS;
-
 export default function ProfessorScheduleClient({ professor, termTitle, initialOfferings }: Props) {
   const [offerings] = useState<ProfessorScheduleOffering[]>(initialOfferings);
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<'ALL' | 'EVEN' | 'ODD'>('ALL');
@@ -72,29 +65,30 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
   const scheduledRows = offerings.filter(isScheduled);
   const daysWithClass = new Set(scheduledRows.map(o => o.dayOfWeek as number)).size;
   const unscheduled = offerings.filter(o => !isScheduled(o));
-  const outsideSlots = scheduledRows.filter(
-    o => o.outsideStandardSlots ?? professorRangeMatch(o.startTime, o.endTime).outsideStandardSlots,
-  );
   const sessionsOf = (offeringId: number) => scheduledRows.filter(o => o.id === offeringId).length;
-  const filteredScheduled = scheduledRows.filter(o => {
-    if (selectedWeekFilter === 'EVEN' && o.weekType === 'ODD') return false;
-    if (selectedWeekFilter === 'ODD' && o.weekType === 'EVEN') return false;
-    return true;
-  });
+  const filteredScheduled = filterProfessorCalendarByWeek(scheduledRows, selectedWeekFilter);
+  const calendarEntries: ProfessorCalendarEntry[] = filteredScheduled.map(o => ({
+    key: professorCalendarEntryKey(o),
+    id: o.id,
+    code: o.code,
+    title: o.title,
+    groupNumber: o.groupNumber,
+    dayOfWeek: o.dayOfWeek,
+    startTime: o.startTime,
+    endTime: o.endTime,
+    roomName: o.roomName,
+    buildingName: o.buildingName,
+    weekType: o.weekType,
+    courseType: o.courseType,
+    isCoTaught: o.isCoTaught,
+    coRole: o.coRole,
+    coPartnerName: o.coPartnerName,
+    enrolledCount: o.enrolledCount,
+    capacity: o.capacity,
+    merged: o.title.includes('ادغامی') || o.code.includes('/'),
+  }));
   const weekFilterLabel = selectedWeekFilter === 'EVEN' ? 'فقط هفته‌های زوج' : selectedWeekFilter === 'ODD' ? 'فقط هفته‌های فرد' : 'همه جلسات (زوج و فرد)';
-  const legendEven = filteredScheduled.some(o => o.weekType === 'EVEN');
-  const legendOdd = filteredScheduled.some(o => o.weekType === 'ODD');
-  const legendAll = filteredScheduled.some(o => o.weekType === 'ALL');
   const printDate = new Intl.DateTimeFormat('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-
-  const weekBadge = (weekType: ProfessorScheduleOffering['weekType']) =>
-    weekType === 'EVEN' ? (
-      <span className="prof-week-badge px-1.5 py-0.5 rounded bg-cyan-100 text-cyan-900 font-bold border border-cyan-300 whitespace-nowrap">🔷 هفته زوج</span>
-    ) : weekType === 'ODD' ? (
-      <span className="prof-week-badge px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-bold border border-amber-300 whitespace-nowrap">🔶 هفته فرد</span>
-    ) : (
-      <span className="prof-week-badge px-1.5 py-0.5 rounded bg-slate-200 text-slate-800 font-bold whitespace-nowrap">هر هفته</span>
-    );
 
   const handlePrint = () => {
     window.print();
@@ -272,15 +266,6 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
           </div>
         </div>
 
-        {(legendEven || legendOdd) && (
-          <div className="prof-week-legend flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
-            <span className="text-slate-500">راهنمای هفته‌ها:</span>
-            {legendAll && <span className="prof-week-badge px-2 py-0.5 rounded-lg bg-slate-200 text-slate-800">هر هفته — همه هفته‌ها</span>}
-            {legendEven && <span className="prof-week-badge px-2 py-0.5 rounded-lg bg-cyan-100 text-cyan-900 border border-cyan-300">🔷 هفته زوج — فقط هفته‌های زوج</span>}
-            {legendOdd && <span className="prof-week-badge px-2 py-0.5 rounded-lg bg-amber-100 text-amber-900 border border-amber-300">🔶 هفته فرد — فقط هفته‌های فرد</span>}
-          </div>
-        )}
-
         {scheduledRows.length === 0 && (
           <div className="text-center p-6 bg-amber-50 rounded-2xl border border-dashed border-amber-300 text-xs font-bold text-amber-900 leading-6">
             {faNum(totalClasses)} کلاس در {termTitle ? `نیمسال «${termTitle}»` : 'نیمسال جاری'} به شما تخصیص یافته است،
@@ -290,89 +275,7 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
         )}
 
         {scheduledRows.length > 0 && (
-        <div className="prof-week-scroll overflow-x-auto">
-          <table className="prof-week-grid w-full border-collapse text-xs">
-            <thead>
-              <tr className="bg-slate-900 text-white text-center">
-                <th className="prof-week-sticky sticky top-0 right-0 z-10 p-2.5 border border-slate-800 w-24 font-extrabold bg-slate-900">روز هفته</th>
-                {TIME_SLOTS.map(slot => (
-                  <th key={slot.id} className="prof-week-sticky sticky top-0 z-10 p-2.5 border border-slate-800 font-extrabold bg-slate-900 whitespace-nowrap">
-                    <div>{slot.label}</div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {DAY_NAMES.map((dayName, dayIdx) => {
-                const dayOfferings = filteredScheduled.filter(o => o.dayOfWeek === dayIdx);
-
-                return (
-                  <tr key={dayIdx} className={dayIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                    <td className="prof-week-sticky sticky right-0 p-2.5 border border-slate-200 font-extrabold text-center bg-slate-100 text-slate-900 whitespace-nowrap">
-                      {dayName}
-                    </td>
-
-                    {TIME_SLOTS.map(slot => {
-                      const matched = dayOfferings.filter(o =>
-                        professorRangeMatch(o.startTime, o.endTime).slotIds.includes(slot.id),
-                      );
-
-                      return (
-                        <td key={slot.id} className="p-1.5 border border-slate-200 min-h-[96px] align-top">
-                          {matched.length === 0 ? (
-                            <div className="h-full min-h-[88px] flex items-center justify-center text-slate-300 text-[10px] font-bold">
-                              —
-                            </div>
-                          ) : (
-                            <div className="space-y-1.5">
-                              {matched.map(item => (
-                                <div
-                                  key={`${item.id}-${item.weekType}-${item.startTime}-${item.endTime}-${slot.id}`}
-                                  className={`prof-week-card p-2 rounded-xl border text-right transition shadow-xs ${
-                                    item.courseType === 'عملی'
-                                      ? 'bg-amber-50 border-amber-300 text-amber-950'
-                                      : 'bg-indigo-50 border-indigo-200 text-indigo-950'
-                                  }`}
-                                >
-                                  <div className="font-extrabold text-[11px] text-slate-900 leading-5 truncate" title={item.title}>
-                                    {item.title}
-                                  </div>
-
-                                  <div className="font-mono text-[10px] font-bold text-indigo-900 whitespace-nowrap">
-                                    {item.code} · گروه {faNum(item.groupNumber)}
-                                  </div>
-                                  <div className="text-[10px] font-bold text-slate-700 whitespace-nowrap truncate">
-                                    {item.roomName ? `🏛️ ${item.roomName}` : '🏛️ سالن ثبت نشده'}{item.buildingName ? ` · ${item.buildingName}` : ''}
-                                  </div>
-                                  <div className="text-[10px] font-mono text-slate-600 whitespace-nowrap">
-                                    {faNum(item.startTime)} الی {faNum(item.endTime)}
-                                  </div>
-
-                                  {item.isCoTaught && (
-                                    <div className="p-1 rounded bg-purple-100 text-purple-900 text-[10px] font-bold mt-1 border border-purple-200 leading-4">
-                                      👥 مشترک ({item.coRole === 'THEORY' ? 'استاد تئوری' : 'استاد عملی'} · همکار: {item.coPartnerName})
-                                    </div>
-                                  )}
-
-                                  <div className="flex items-center justify-between gap-1 text-[10px] pt-1 mt-1 border-t border-slate-200/60">
-                                    <span className="font-bold text-slate-600 whitespace-nowrap">
-                                      👥 {faNum(item.enrolledCount)}/{faNum(item.capacity)}
-                                    </span>
-                                    {weekBadge(item.weekType)}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+          <ProfessorCalendarGrid entries={calendarEntries} />
         )}
 
         {unscheduled.length > 0 && (
@@ -394,24 +297,6 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
           </div>
         )}
 
-        {outsideSlots.length > 0 && (
-          <div className="print:hidden mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-4 space-y-2">
-            <h4 className="text-xs font-extrabold text-sky-900">
-              کلاس‌هایی که ساعتشان خارج از بازه‌های ثابت جدول است ({faNum(uniqueIds(outsideSlots))} کلاس)
-            </h4>
-            <p className="text-[11px] text-sky-800 leading-5">
-              ساعت ثبت‌شدهٔ این کلاس‌ها با هیچ‌یک از بازه‌های ثابت ستون‌های جدول (۰۸:۰۰ تا ۱۹:۳۰)
-              هم‌پوشانی کامل ندارد، بنابراین در شبکهٔ جدول جا نمی‌شوند. ساعت واقعی:
-            </p>
-            <ul className="space-y-1 text-[11px] font-bold text-sky-900">
-              {outsideSlots.map(o => (
-                <li key={`${o.id}-${o.weekType}-${o.startTime}-outside`}>
-                  {o.dayName} {faNum(o.startTime)} الی {faNum(o.endTime)} · {o.code} · {o.title} (گروه {faNum(o.groupNumber)})
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
 
       {/* Course Offerings List & Quick Links */}

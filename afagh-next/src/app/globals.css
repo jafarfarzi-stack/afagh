@@ -126,17 +126,20 @@ body { @apply bg-slate-100 text-slate-800 font-sans; }
   body.printing-portrait .transcript-print-area .tr-term-table td { padding: 1pt 1.5pt !important; }
   body.printing-portrait .transcript-print-area .tr-term-footer { font-size: 7pt; }
   .prof-week-print { direction: rtl !important; }
-  .prof-week-print .prof-week-scroll { overflow: visible !important; }
-  .prof-week-print .prof-week-sticky { position: static !important; }
-  .prof-week-print table.prof-week-grid { width: 100% !important; border-collapse: collapse !important; table-layout: fixed !important; font-size: 9pt !important; line-height: 1.5 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-  .prof-week-print table.prof-week-grid > thead { display: table-header-group !important; }
-  .prof-week-print table.prof-week-grid > tbody > tr { break-inside: avoid; page-break-inside: avoid; }
-  .prof-week-print table.prof-week-grid th, .prof-week-print table.prof-week-grid td { border: 1pt solid #000 !important; background: #ffffff !important; color: #000000 !important; padding: 2pt 3pt !important; vertical-align: top !important; overflow-wrap: break-word; word-break: break-word; box-shadow: none !important; }
-  .prof-week-print table.prof-week-grid th { font-weight: 800 !important; }
-  .prof-week-print .prof-week-card { break-inside: avoid; page-break-inside: avoid; border: 1pt solid #000 !important; background: #ffffff !important; color: #000000 !important; box-shadow: none !important; border-radius: 4pt !important; padding: 2pt 3pt !important; font-size: 8pt !important; line-height: 1.5 !important; }
-  .prof-week-print .prof-week-card > div { background: transparent !important; }
+  .prof-week-print .prof-week-scroll { overflow: visible !important; border: none !important; border-radius: 0 !important; }
+  .prof-week-print .prof-cal { min-width: 0 !important; width: 100% !important; --cal-hour: 24px !important; }
+  .prof-week-print .prof-cal-head { position: static !important; background: #ffffff !important; color: #000000 !important; }
+  .prof-week-print .prof-cal-day-head, .prof-week-print .prof-cal-gutter-head { position: static !important; background: #ffffff !important; color: #000000 !important; border: 1pt solid #000 !important; font-size: 8.5pt !important; font-weight: 800 !important; padding: 2pt 3pt !important; }
+  .prof-week-print .prof-cal-body { width: 100% !important; }
+  .prof-week-print .prof-cal-gutter { position: static !important; background: #ffffff !important; border: 1pt solid #000 !important; }
+  .prof-week-print .prof-cal-gutter-label { color: #000000 !important; font-size: 7pt !important; font-weight: 700 !important; }
+  .prof-week-print .prof-cal-day { background: #ffffff !important; border: 1pt solid #000 !important; }
+  .prof-week-print .prof-cal-hour-line { border-top: 0.5pt solid #000 !important; }
+  .prof-week-print .prof-cal-half-line { border-top: 0.5pt dashed #666 !important; }
+  .prof-week-print .prof-week-card { border: 1pt solid #000 !important; background: #ffffff !important; color: #000000 !important; box-shadow: none !important; border-radius: 3pt !important; padding: 1.5pt 2.5pt !important; font-size: 7.5pt !important; line-height: 1.45 !important; overflow: hidden !important; }
+  .prof-week-print .prof-week-card > div { background: transparent !important; color: #000000 !important; border-color: #000 !important; }
   .prof-week-print .prof-week-badge { border: 1pt solid #000 !important; background: #ffffff !important; color: #000000 !important; font-weight: 800 !important; box-shadow: none !important; }
-  .prof-week-print .prof-week-legend { border: 1pt solid #000 !important; border-radius: 4pt !important; padding: 2pt 4pt !important; margin-bottom: 4pt !important; color: #000000 !important; background: #ffffff !important; font-size: 8.5pt !important; }
+  .prof-week-print .prof-week-legend { border: 1pt solid #000 !important; border-radius: 4pt !important; padding: 2pt 4pt !important; margin-bottom: 4pt !important; color: #000000 !important; background: #ffffff !important; font-size: 8pt !important; }
   .prof-week-print .prof-week-print-head { display: block !important; direction: rtl !important; border: 1.5pt solid #000 !important; border-radius: 6pt !important; padding: 5pt 8pt !important; margin-bottom: 6pt !important; font-size: 9.5pt !important; line-height: 1.7 !important; color: #000000 !important; background: #ffffff !important; }
 }
 
