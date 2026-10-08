@@ -8,6 +8,7 @@ import { getSiblingAccounts } from '@/lib/account-switch';
 import AccountSwitcher from '@/components/AccountSwitcher';
 import TermSwitcher from '@/components/TermSwitcher';
 import { getTermScope } from '@/lib/term-scope';
+import ThemeToggle from '@/components/ThemeToggle';
 import { logoutAction } from '../login/actions';
 
 export default async function ProfessorLayout({ children }: { children: React.ReactNode }) {
@@ -89,6 +90,7 @@ export default async function ProfessorLayout({ children }: { children: React.Re
             >
               📕 PDF
             </a>
+            <ThemeToggle />
             <form action={logoutAction}>
               <button className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition">
                 خروج از سامانه

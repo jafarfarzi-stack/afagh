@@ -58,6 +58,60 @@
    بی‌سروصدا به Tahoma (فونتِ جانشین) می‌افتند. مقدار محاسبه‌شده دقیقاً همانِ
    پیش‌تنظیم است (Vazirmatn, Tahoma, sans-serif) ⇒ بدون هیچ تغییر ظاهری. */
 body { @apply bg-slate-100 text-slate-800 font-sans; }
+
+/* ── Dark mode variables (CSS custom properties) ── */
+:root {
+  --bg-primary: #f1f5f9;      /* slate-100 */
+  --bg-secondary: #ffffff;    /* white */
+  --bg-tertiary: #f8fafc;     /* slate-50 */
+  --text-primary: #1e293b;    /* slate-800 */
+  --text-secondary: #475569;  /* slate-600 */
+  --text-muted: #94a3b8;      /* slate-400 */
+  --border-color: #e2e8f0;    /* slate-200 */
+  --card-bg: #ffffff;
+  --card-border: #e2e8f0;
+  --header-bg: #0f172a;       /* slate-900 */
+  --header-text: #ffffff;
+  --accent-bg: #eff6ff;       /* blue-50 */
+  --accent-border: #bfdbfe;   /* blue-200 */
+  --accent-text: #1e40af;     /* blue-800 */
+}
+
+.dark {
+  --bg-primary: #0f172a;      /* slate-900 */
+  --bg-secondary: #1e293b;    /* slate-800 */
+  --bg-tertiary: #334155;     /* slate-700 */
+  --text-primary: #f8fafc;    /* slate-50 */
+  --text-secondary: #cbd5e1;  /* slate-300 */
+  --text-muted: #64748b;      /* slate-500 */
+  --border-color: #334155;    /* slate-700 */
+  --card-bg: #1e293b;         /* slate-800 */
+  --card-border: #334155;     /* slate-700 */
+  --header-bg: #020617;       /* slate-950 */
+  --header-text: #f8fafc;
+  --accent-bg: #1e3a5f;       /* blue-900 */
+  --accent-border: #1e40af;   /* blue-800 */
+  --accent-text: #bfdbfe;     /* blue-200 */
+}
+
+/* Apply CSS variables to common elements */
+body { background-color: var(--bg-primary); color: var(--text-primary); }
+.card { background-color: var(--card-bg); border-color: var(--card-border); }
+input, select, textarea { background-color: var(--bg-secondary); color: var(--text-primary); border-color: var(--border-color); }
+input:focus, select:focus, textarea:focus { border-color: var(--accent-text); box-shadow: 0 0 0 2px var(--accent-bg); }
+button { background-color: var(--bg-tertiary); color: var(--text-primary); border-color: var(--border-color); }
+button:hover { background-color: var(--border-color); }
+.bg-slate-100 { background-color: var(--bg-primary) !important; }
+.bg-white { background-color: var(--bg-secondary) !important; }
+.bg-slate-50 { background-color: var(--bg-tertiary) !important; }
+.text-slate-800 { color: var(--text-primary) !important; }
+.text-slate-600 { color: var(--text-secondary) !important; }
+.text-slate-400 { color: var(--text-muted) !important; }
+.border-slate-200 { border-color: var(--border-color) !important; }
+.bg-slate-900 { background-color: var(--header-bg) !important; }
+.text-white { color: var(--header-text) !important; }
+.bg-indigo-700 { background-color: #3b82f6 !important; } /* blue-500 for dark */
+.hover\:bg-indigo-600:hover { background-color: #2563eb !important; }
 .card { @apply bg-white rounded-2xl shadow-sm border border-slate-200 p-4; }
 .btn { @apply inline-flex items-center justify-center gap-1 rounded-xl px-4 py-2 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed; }
 .btn-primary { @apply btn bg-emerald-600 text-white hover:bg-emerald-700; }

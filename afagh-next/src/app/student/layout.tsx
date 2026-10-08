@@ -7,6 +7,7 @@ import TermSwitcher from '@/components/TermSwitcher';
 import { getTermScope } from '@/lib/term-scope';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
 import { DEMO_STUDENT } from '@/lib/demo-student-data';
+import ThemeToggle from '@/components/ThemeToggle';
 import { logoutAction } from '../login/actions';
 import StudentNav, { StudentSidebar } from './StudentNav';
 
@@ -61,6 +62,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
               <span>📕</span>
               <span>PDF راهنما</span>
             </a>
+            <ThemeToggle />
             <form action={logoutAction}>
               <button className="text-xs bg-emerald-900/90 hover:bg-emerald-950 text-emerald-100 border border-emerald-700/60 px-3 py-1.5 rounded-lg transition-colors font-medium">
                 خروج از حساب

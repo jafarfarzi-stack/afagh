@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { requireRole, getStaffByUser } from '@/lib/auth';
 import { headedDepartments } from '@/lib/group-manager';
+import ThemeToggle from '@/components/ThemeToggle';
 import { logoutAction } from '../login/actions';
 import DeptSwitcher from './DeptSwitcher';
 
@@ -34,7 +35,8 @@ export default async function GroupManagerLayout({ children }: { children: React
             <Link href="/help/group-manager" className="rounded-lg bg-teal-800 px-3 py-1.5 text-xs font-bold hover:bg-teal-700">
               📖 راهنمای مدیر گروه
             </Link>
-            <form action={logoutAction}><button className="text-xs underline opacity-70">خروج</button></form>
+            <ThemeToggle />
+              <form action={logoutAction}><button className="text-xs underline opacity-70">خروج</button></form>
           </div>
         </div>
 

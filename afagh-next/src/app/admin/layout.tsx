@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { requireRole } from '@/lib/auth';
+import ThemeToggle from '@/components/ThemeToggle';
 import { logoutAction } from '../login/actions';
 import AdminNav from './AdminNav';
 import UniversitySwitcher from './UniversitySwitcher';
@@ -78,7 +79,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             >
               📕 PDF
             </a>
-            <form action={logoutAction}>
+            <ThemeToggle />
+              <form action={logoutAction}>
               <button className={`text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}>
                 خروج
               </button>
