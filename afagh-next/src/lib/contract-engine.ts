@@ -8,6 +8,7 @@ import {
 import { getSetting } from '@/lib/settings';
 import { isDemoMode } from '@/lib/auth';
 import { logger as log } from '@/lib/logger';
+import { groupIntoMerged, mergedDisplayTitle, mergedGroupKey, offeringSharedKeys } from '@/lib/professor-data';
 
 /** تعداد هفته‌های تدریس در هر نیمسال (هم‌راستا با مولد جلسات) */
 export const TERM_WEEKS = 16;
@@ -73,25 +74,61 @@ export async function buildContractDraft(staffId: number, termId: number): Promi
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .where(and(eq(course_offerings.professorId, staffId), eq(course_offerings.termId, termId), eq(course_offerings.isActive, 1)));
 
+  const offeringIds = offers.map(o => o.offering.id);
+  const allSched = offeringIds.length
+    ? await db
+        .select({
+          offeringId: schedules.offeringId,
+          dayOfWeek: schedules.dayOfWeek,
+          startTime: schedules.startTime,
+          endTime: schedules.endTime,
+          roomId: schedules.roomId,
+        })
+        .from(schedules)
+        .where(and(inArray(schedules.offeringId, offeringIds), eq(schedules.scheduleType, 'CLASS')))
+    : [];
+  const schedByOffering = new Map<number, typeof allSched>();
+  for (const r of allSched) {
+    const list = schedByOffering.get(r.offeringId) ?? [];
+    list.push(r);
+    schedByOffering.set(r.offeringId, list);
+  }
+  const sharedKeys = await offeringSharedKeys(offeringIds);
+  const groups = groupIntoMerged(
+    offers,
+    o => o.offering.id,
+    o => mergedGroupKey(
+      sharedKeys.get(o.offering.id) ?? null,
+      (schedByOffering.get(o.offering.id) ?? []).map(s => ({
+        dayOfWeek: s.dayOfWeek,
+        startTime: s.startTime ? String(s.startTime).slice(0, 5) : null,
+        endTime: s.endTime ? String(s.endTime).slice(0, 5) : null,
+        roomKey: s.roomId,
+      })),
+    ),
+  );
+
   const lines: ContractLine[] = [];
-  for (const { offering, course } of offers) {
-    const rows = await db
-      .select({ startTime: schedules.startTime, endTime: schedules.endTime })
-      .from(schedules)
-      .where(and(eq(schedules.offeringId, offering.id), eq(schedules.scheduleType, 'CLASS')));
+  for (const g of groups) {
+    const primary = g.members.find(m => m.offering.id === g.primaryId) ?? g.members[0];
+    const codes = [...new Set(g.members.map(m => m.course.code))];
+    const rows = schedByOffering.get(primary.offering.id) ?? [];
     const weekly = rows.reduce((acc, r) => {
       const [sh, sm] = String(r.startTime).split(':').map(Number);
       const [eh, em] = String(r.endTime).split(':').map(Number);
       return acc + ((eh * 60 + em) - (sh * 60 + sm)) / 60;
     }, 0);
-    const weeklyHours = Math.max(weekly, Number(course.units) || 1);
+    const unitsList = g.members.map(m => Number(m.course.units) || 0);
+    const theoryList = g.members.map(m => Number(m.course.theoreticalUnits ?? 0));
+    const practList = g.members.map(m => Number(m.course.practicalUnits ?? 0));
+    const weeklyHours = Math.max(weekly, Math.max(...unitsList, 0) || 1);
     lines.push({
-      offeringId: offering.id,
-      code: course.code,
-      title: course.title,
-      groupNumber: offering.groupNumber,
-      theoryUnits: Number(course.theoreticalUnits ?? 0),
-      practicalUnits: Number(course.practicalUnits ?? 0),
+      offeringId: primary.offering.id,
+      code: codes.join(' / '),
+      title: g.merged ? mergedDisplayTitle(primary.course.title, codes) : primary.course.title,
+      groupNumber: primary.offering.groupNumber,
+      theoryUnits: Math.max(...theoryList, 0),
+      practicalUnits: Math.max(...practList, 0),
       weeklyHours: round2(weeklyHours),
       termTotalHours: round2(weeklyHours * TERM_WEEKS),
     });
