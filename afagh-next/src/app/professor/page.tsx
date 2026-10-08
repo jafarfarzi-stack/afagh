@@ -153,6 +153,7 @@ export default async function ProfessorHome() {
   const realOfferings = demo ? [] : mergedClassGroups;
   const realScheduledCount = scheduleRows.filter(r => r.hasSchedule).length;
   const realUnscheduledCount = scheduleRows.filter(r => !r.hasSchedule).length;
+  const weekTableRows = scheduleRows.map(r => ({ ...r, sharedScheduleGroupKey: mergeSharedKeys.get(r.id) ?? null }));
 
   return (
     <div className="space-y-6" dir="rtl">
@@ -323,7 +324,7 @@ export default async function ProfessorHome() {
         <ProfessorWeekTable
           termTitle={termTitle}
           selectedTermTitle={selectedTerm?.title ?? null}
-          rows={scheduleRows}
+          rows={weekTableRows}
           professorName={user.name}
           staffCode={me.staffCode}
         />

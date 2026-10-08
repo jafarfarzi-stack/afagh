@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { hasProfessorSchedule } from '@/lib/professor-week-grid';
-import { filterProfessorCalendarByWeek, professorCalendarEntryKey } from '@/lib/professor-calendar-layout';
+import { collapseCalendarEntries, filterProfessorCalendarByWeek, professorCalendarEntryKey } from '@/lib/professor-calendar-layout';
 import ProfessorCalendarGrid, { type ProfessorCalendarEntry } from '../professor-calendar-grid';
 
 export interface ProfessorScheduleOffering {
@@ -21,12 +21,14 @@ export interface ProfessorScheduleOffering {
   endTime: string;
   roomName: string;
   buildingName: string;
-  weekType: 'ALL' | 'EVEN' | 'ODD';
+  weekType: 'ALL' | 'EVEN' | 'ODD' | 'BOTH';
   isCoTaught?: boolean;
   coRole?: 'THEORY' | 'LAB';
   coPartnerName?: string;
   hasSchedule?: boolean;
   outsideStandardSlots?: boolean;
+  merged?: boolean;
+  sharedScheduleGroupKey?: string | null;
 }
 
 interface Props {
@@ -66,7 +68,7 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
   const daysWithClass = new Set(scheduledRows.map(o => o.dayOfWeek as number)).size;
   const unscheduled = offerings.filter(o => !isScheduled(o));
   const sessionsOf = (offeringId: number) => scheduledRows.filter(o => o.id === offeringId).length;
-  const filteredScheduled = filterProfessorCalendarByWeek(scheduledRows, selectedWeekFilter);
+  const filteredScheduled = filterProfessorCalendarByWeek(collapseCalendarEntries(scheduledRows), selectedWeekFilter);
   const calendarEntries: ProfessorCalendarEntry[] = filteredScheduled.map(o => ({
     key: professorCalendarEntryKey(o),
     id: o.id,
@@ -85,7 +87,7 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
     coPartnerName: o.coPartnerName,
     enrolledCount: o.enrolledCount,
     capacity: o.capacity,
-    merged: o.title.includes('ادغامی') || o.code.includes('/'),
+    merged: o.merged ?? false,
   }));
   const weekFilterLabel = selectedWeekFilter === 'EVEN' ? 'فقط هفته‌های زوج' : selectedWeekFilter === 'ODD' ? 'فقط هفته‌های فرد' : 'همه جلسات (زوج و فرد)';
   const printDate = new Intl.DateTimeFormat('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());

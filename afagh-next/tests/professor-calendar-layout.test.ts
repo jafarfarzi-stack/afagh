@@ -3,13 +3,17 @@ import {
   PROFESSOR_CALENDAR_DAY_COUNT,
   PROFESSOR_CALENDAR_END_MINUTES,
   PROFESSOR_CALENDAR_START_MINUTES,
+  collapseCalendarEntries,
   filterProfessorCalendarByWeek,
+  groupIntoMerged,
   layoutProfessorCalendarDay,
   layoutProfessorCalendarWeek,
+  mergedGroupKey,
   professorCalendarDayIndex,
   professorCalendarEntryKey,
   professorCalendarHourLabels,
   professorCalendarTimeToMinutes,
+  type ProfessorCalendarCollapseRow,
   type ProfessorCalendarSchedulable,
 } from '@/lib/professor-calendar-layout';
 
@@ -139,3 +143,115 @@ assert.equal(layoutProfessorCalendarDay([row({ startTime: '', endTime: '' })]).l
 console.log('✓ out-of-range times clamp, short classes keep a minimum height, invalid rows drop');
 
 console.log('\nهمهٔ تست‌های چیدمان تقویمی استاد پاس شد.');
+
+const crow = (over: Partial<ProfessorCalendarCollapseRow> = {}): ProfessorCalendarCollapseRow => ({
+  id: 1,
+  code: 'C101',
+  title: 'فیزیک',
+  groupNumber: 1,
+  units: 3,
+  enrolledCount: 20,
+  capacity: 30,
+  dayOfWeek: 0,
+  startTime: '08:00',
+  endTime: '10:00',
+  roomName: 'A1',
+  buildingName: '',
+  weekType: 'ALL',
+  ...over,
+});
+
+assert.equal(mergedGroupKey('G1', { dayOfWeek: 0, startTime: '08:00', endTime: '10:00', roomKey: 'A1' }), 'K:G1');
+assert.equal(
+  mergedGroupKey(null, { dayOfWeek: 0, startTime: '08:00', endTime: '10:00', roomKey: 'A1' }),
+  'S:0|08:00|10:00|A1',
+);
+assert.equal(mergedGroupKey(null, { dayOfWeek: null, startTime: '', endTime: '' }), null);
+const gchk = groupIntoMerged([{ id: 1 }, { id: 2 }], x => x.id, () => 'K:G');
+assert.equal(gchk.length, 1);
+assert.equal(gchk[0].merged, true);
+console.log('✓ merge helpers live in the client-safe layout module');
+
+const mergedTwo = collapseCalendarEntries([
+  crow({ id: 1, code: 'C101', title: 'فیزیک', enrolledCount: 20, capacity: 30, units: 3 }),
+  crow({ id: 2, code: 'C102', title: 'فیزیک', enrolledCount: 15, capacity: 25, units: 2 }),
+]);
+assert.equal(mergedTwo.length, 1);
+assert.equal(mergedTwo[0].code, 'C101 / C102');
+assert.equal(mergedTwo[0].title, 'فیزیک');
+assert.equal(mergedTwo[0].enrolledCount, 35);
+assert.equal(mergedTwo[0].capacity, 30);
+assert.equal(mergedTwo[0].units, 3);
+assert.equal(mergedTwo[0].merged, true);
+assert.equal(mergedTwo[0].weekType, 'ALL');
+assert.equal(mergedTwo[0].dayOfWeek, 0);
+assert.equal(mergedTwo[0].startTime, '08:00');
+const mergedKeyed = collapseCalendarEntries([
+  crow({ id: 3, code: 'C201', sharedScheduleGroupKey: 'G1', dayOfWeek: 1, startTime: '10:00', endTime: '12:00', roomName: 'B2', enrolledCount: 10, capacity: 20 }),
+  crow({ id: 4, code: 'C202', sharedScheduleGroupKey: 'G1', dayOfWeek: 1, startTime: '10:00', endTime: '12:00', roomName: 'B2', enrolledCount: 12, capacity: 22 }),
+]);
+assert.equal(mergedKeyed.length, 1);
+assert.equal(mergedKeyed[0].code, 'C201 / C202');
+assert.equal(mergedKeyed[0].enrolledCount, 22);
+assert.equal(mergedKeyed[0].merged, true);
+console.log('✓ merged members at one slot collapse to a single entry with joined codes and summed enrollment');
+
+const twins = collapseCalendarEntries([
+  crow({ id: 7, code: 'C301', weekType: 'EVEN', enrolledCount: 18, capacity: 30 }),
+  crow({ id: 7, code: 'C301', weekType: 'ODD', enrolledCount: 18, capacity: 30 }),
+]);
+assert.equal(twins.length, 1);
+assert.equal(twins[0].weekType, 'BOTH');
+assert.equal(twins[0].code, 'C301');
+assert.equal(twins[0].enrolledCount, 18);
+assert.notEqual(twins[0].merged, true);
+console.log('✓ EVEN+ODD twins collapse to one BOTH entry without doubling enrollment');
+
+const overlapDiff = collapseCalendarEntries([
+  crow({ id: 11, code: 'C401', startTime: '10:00', endTime: '12:00' }),
+  crow({ id: 12, code: 'C402', startTime: '11:00', endTime: '13:00' }),
+]);
+assert.equal(overlapDiff.length, 2);
+assert.deepEqual(
+  overlapDiff.map(r => r.code).sort(),
+  ['C401', 'C402'],
+);
+const placedDiff = layoutProfessorCalendarDay(overlapDiff);
+assert.ok(placedDiff.every(p => p.columnCount === 2));
+const sessionsKept = collapseCalendarEntries([
+  crow({ id: 21, code: 'C501', sharedScheduleGroupKey: 'G9', dayOfWeek: 0, startTime: '08:00', endTime: '10:00', roomName: 'A1' }),
+  crow({ id: 22, code: 'C502', sharedScheduleGroupKey: 'G9', dayOfWeek: 2, startTime: '08:00', endTime: '10:00', roomName: 'A1' }),
+]);
+assert.equal(sessionsKept.length, 2);
+const twoSessions = collapseCalendarEntries([
+  crow({ id: 31, dayOfWeek: 0, startTime: '08:00', endTime: '10:00' }),
+  crow({ id: 31, dayOfWeek: 2, startTime: '08:00', endTime: '10:00' }),
+]);
+assert.equal(twoSessions.length, 2);
+console.log('✓ genuinely different or separate-session rows stay split and keep side-by-side layout');
+
+const bothRows = [
+  crow({ id: 41, weekType: 'BOTH' }),
+  crow({ id: 42, weekType: 'EVEN' }),
+  crow({ id: 43, weekType: 'ODD' }),
+  crow({ id: 44, weekType: 'ALL' }),
+];
+assert.deepEqual(filterProfessorCalendarByWeek(bothRows, 'ALL').map(r => r.id), [41, 42, 43, 44]);
+assert.deepEqual(filterProfessorCalendarByWeek(bothRows, 'EVEN').map(r => r.id), [41, 42, 44]);
+assert.deepEqual(filterProfessorCalendarByWeek(bothRows, 'ODD').map(r => r.id), [41, 43, 44]);
+console.log('✓ BOTH entries stay visible under EVEN and ODD filters');
+
+const solo = collapseCalendarEntries([
+  crow({ id: 51, code: 'C601', dayOfWeek: 0, startTime: '08:00', endTime: '10:00' }),
+  crow({ id: 52, code: 'C602', dayOfWeek: 1, startTime: '10:00', endTime: '12:00' }),
+]);
+assert.equal(solo.length, 2);
+assert.equal(solo[0].code, 'C601');
+assert.equal(solo[1].code, 'C602');
+const placedSolo = layoutProfessorCalendarWeek(solo);
+assert.equal(placedSolo.get(0)!.length, 1);
+assert.equal(placedSolo.get(0)![0].columnCount, 1);
+assert.equal(placedSolo.get(1)!.length, 1);
+console.log('✓ genuine non-overlapping classes are unaffected');
+
+console.log('\nهمهٔ تست‌های ادغام تقویمی استاد پاس شد.');

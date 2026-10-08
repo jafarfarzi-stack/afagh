@@ -103,9 +103,13 @@ export default async function ProfessorSchedulePage() {
     r => r.id,
     r => mergeKeyOf(r.id, { dayOfWeek: r.dayOfWeek, startTime: r.startTime, endTime: r.endTime, roomKey: r.roomName }),
   );
+  const mergedOfferingIds = new Set<number>();
+  for (const g of fullGroups) if (g.merged) for (const id of g.memberIds) mergedOfferingIds.add(id);
   const offerings: ProfessorScheduleOffering[] = rowGroups.map(g => {
     const rep = g.members.find(m => m.id === g.primaryId) ?? g.members[0];
     const info = fullInfoById.get(rep.id);
+    const rowWeekTypes = new Set(g.members.map(m => m.weekType));
+    const rowOfferingIds = new Set(g.members.map(m => m.id));
     return {
       ...rep,
       id: info?.primaryId ?? rep.id,
@@ -114,6 +118,9 @@ export default async function ProfessorSchedulePage() {
       units: info?.units ?? rep.units,
       enrolledCount: info?.enrolled ?? rep.enrolledCount,
       capacity: info?.capacity ?? rep.capacity,
+      weekType: rowWeekTypes.size > 1 ? 'BOTH' : rep.weekType,
+      merged: rowOfferingIds.size > 1 || mergedOfferingIds.has(rep.id),
+      sharedScheduleGroupKey: mergeSharedKeys.get(rep.id) ?? null,
     };
   });
 

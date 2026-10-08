@@ -1,7 +1,7 @@
 'use client';
 
 import { professorUniqueOfferings, type ProfessorScheduleRow } from '@/lib/professor-week-grid';
-import { professorCalendarEntryKey } from '@/lib/professor-calendar-layout';
+import { collapseCalendarEntries, professorCalendarEntryKey } from '@/lib/professor-calendar-layout';
 import ProfessorCalendarGrid, { type ProfessorCalendarEntry } from './professor-calendar-grid';
 
 const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
@@ -35,7 +35,7 @@ export default function ProfessorWeekTable({ termTitle, selectedTermTitle, rows,
     );
   }
 
-  const entries: ProfessorCalendarEntry[] = scheduled.map(r => ({
+  const entries: ProfessorCalendarEntry[] = collapseCalendarEntries(scheduled).map(r => ({
     key: professorCalendarEntryKey(r),
     id: r.id,
     code: r.code,
@@ -53,6 +53,7 @@ export default function ProfessorWeekTable({ termTitle, selectedTermTitle, rows,
     coPartnerName: r.coPartnerName,
     enrolledCount: r.enrolledCount,
     capacity: r.capacity,
+    merged: r.merged ?? false,
   }));
 
   return (

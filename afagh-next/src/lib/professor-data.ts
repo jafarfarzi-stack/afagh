@@ -287,78 +287,15 @@ export async function professorDepartmentName(departmentId?: number | null): Pro
   return row?.name ?? null;
 }
 
-export type MergeSlotLike = {
-  dayOfWeek?: number | null;
-  startTime?: string | null;
-  endTime?: string | null;
-  roomKey?: string | number | null;
-};
+import {
+  groupIntoMerged,
+  mergedGroupKey,
+  normMergeTime,
+  type MergedGroup,
+  type MergeSlotLike,
+} from '@/lib/professor-calendar-layout';
 
-function normMergeTime(v: string | null | undefined): string | null {
-  const m = /^(\d{1,2}):(\d{2})/.exec(String(v ?? '').trim());
-  if (!m) return null;
-  return `${m[1].padStart(2, '0')}:${m[2]}`;
-}
-
-export function mergedGroupKey(
-  sharedScheduleGroupKey: string | null | undefined,
-  slots: MergeSlotLike | MergeSlotLike[],
-): string | null {
-  const shared = String(sharedScheduleGroupKey ?? '').trim();
-  if (shared) return `K:${shared}`;
-  const list = (Array.isArray(slots) ? slots : [slots])
-    .map(s => {
-      const st = normMergeTime(s.startTime);
-      const en = normMergeTime(s.endTime);
-      if (s.dayOfWeek == null || !st || !en) return null;
-      const room = s.roomKey == null || String(s.roomKey) === '' ? '-' : String(s.roomKey);
-      return `${s.dayOfWeek}|${st}|${en}|${room}`;
-    })
-    .filter((x): x is string => x != null);
-  if (list.length === 0) return null;
-  return `S:${[...new Set(list)].sort().join(';')}`;
-}
-
-export type MergedGroup<T> = {
-  key: string | null;
-  merged: boolean;
-  primaryId: number;
-  memberIds: number[];
-  members: T[];
-};
-
-export function groupIntoMerged<T>(
-  items: T[],
-  idOf: (item: T) => number,
-  keyOf: (item: T) => string | null,
-): MergedGroup<T>[] {
-  const groups: MergedGroup<T>[] = [];
-  const byKey = new Map<string, MergedGroup<T>>();
-  for (const item of items) {
-    const k = keyOf(item);
-    if (k == null) {
-      groups.push({ key: null, merged: false, primaryId: idOf(item), memberIds: [idOf(item)], members: [item] });
-      continue;
-    }
-    let g = byKey.get(k);
-    if (!g) {
-      g = { key: k, merged: false, primaryId: idOf(item), memberIds: [], members: [] };
-      byKey.set(k, g);
-      groups.push(g);
-    }
-    g.members.push(item);
-    g.memberIds.push(idOf(item));
-  }
-  for (const g of groups) {
-    if (g.members.length > 1) {
-      g.merged = true;
-      g.members.sort((a, b) => idOf(a) - idOf(b));
-      g.memberIds = g.members.map(idOf);
-      g.primaryId = g.memberIds[0];
-    }
-  }
-  return groups;
-}
+export { groupIntoMerged, mergedGroupKey, normMergeTime, type MergedGroup, type MergeSlotLike };
 
 export async function offeringSharedKeys(offeringIds: number[]): Promise<Map<number, string>> {
   const out = new Map<number, string>();

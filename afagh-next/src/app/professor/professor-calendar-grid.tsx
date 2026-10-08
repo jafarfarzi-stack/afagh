@@ -38,6 +38,11 @@ const HOUR_LABELS = professorCalendarHourLabels();
 const TOTAL_MINUTES = PROFESSOR_CALENDAR_END_MINUTES - PROFESSOR_CALENDAR_START_MINUTES;
 
 function WeekBadge({ weekType }: { weekType: ProfessorCalendarWeekType }) {
+  if (weekType === 'BOTH') {
+    return (
+      <span className="prof-week-badge px-1.5 py-0.5 rounded bg-violet-100 text-violet-900 font-bold border border-violet-300 whitespace-nowrap">🔷🔶 زوج و فرد</span>
+    );
+  }
   if (weekType === 'EVEN') {
     return (
       <span className="prof-week-badge px-1.5 py-0.5 rounded bg-cyan-100 text-cyan-900 font-bold border border-cyan-300 whitespace-nowrap">🔷 هفته زوج</span>
@@ -67,16 +72,19 @@ export default function ProfessorCalendarGrid({ entries }: { entries: ProfessorC
   const placed = byDay.map(list => layoutProfessorCalendarDay(list));
   const hasEven = entries.some(e => e.weekType === 'EVEN');
   const hasOdd = entries.some(e => e.weekType === 'ODD');
+  const hasBoth = entries.some(e => e.weekType === 'BOTH');
   const hasAll = entries.some(e => e.weekType === 'ALL');
 
   return (
     <div className="space-y-3">
-      {(hasEven || hasOdd) && (
+      <style>{'.prof-week-card{container-type:inline-size}.prof-week-card .prof-week-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}[data-narrow="true"] .prof-week-card{padding:4px !important;line-height:1.3 !important}[data-narrow="true"] .prof-week-title{font-size:10px !important}[data-narrow="true"] .prof-week-code{font-size:9px !important}[data-narrow="true"] .prof-week-essential{font-size:9px !important}[data-narrow="true"] .prof-week-detail{display:none !important}@container (max-width:150px){.prof-week-detail{display:none}.prof-week-title{font-size:10px}.prof-week-code{font-size:9px}.prof-week-essential{font-size:9px}}'}</style>
+      {(hasEven || hasOdd || hasBoth) && (
         <div className="prof-week-legend flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
           <span className="text-slate-500">راهنمای هفته‌ها:</span>
           {hasAll && <span className="prof-week-badge px-2 py-0.5 rounded-lg bg-slate-200 text-slate-800">هر هفته — همه هفته‌ها</span>}
           {hasEven && <span className="prof-week-badge px-2 py-0.5 rounded-lg bg-cyan-100 text-cyan-900 border border-cyan-300">🔷 هفته زوج — فقط هفته‌های زوج</span>}
           {hasOdd && <span className="prof-week-badge px-2 py-0.5 rounded-lg bg-amber-100 text-amber-900 border border-amber-300">🔶 هفته فرد — فقط هفته‌های فرد</span>}
+          {hasBoth && <span className="prof-week-badge px-2 py-0.5 rounded-lg bg-violet-100 text-violet-900 border border-violet-300">🔷🔶 زوج و فرد — همه هفته‌ها</span>}
         </div>
       )}
 
@@ -133,6 +141,8 @@ export default function ProfessorCalendarGrid({ entries }: { entries: ProfessorC
                       <div
                         key={`${p.key}#${i}`}
                         className="absolute p-[2px]"
+                        data-narrow={p.columnCount > 1 ? 'true' : 'false'}
+                        data-cols={p.columnCount}
                         style={{
                           top: `${p.topPercent}%`,
                           height: `${p.heightPercent}%`,
@@ -142,23 +152,27 @@ export default function ProfessorCalendarGrid({ entries }: { entries: ProfessorC
                         }}
                       >
                         <div
+                          title={`${e.title} — ${e.code} · ${professorCalendarEntryTime(e)}${e.roomName ? ` · ${e.roomName}` : ''}`}
                           className={`prof-week-card h-full overflow-hidden p-1.5 rounded-lg border text-right shadow-xs leading-4 ${
                             e.courseType === 'عملی'
                               ? 'bg-amber-50 border-amber-300 text-amber-950'
                               : 'bg-indigo-50 border-indigo-200 text-indigo-950'
                           }`}
                         >
-                          <div className="font-extrabold text-[11px] text-slate-900 leading-5 truncate" title={e.title}>
+                          <div className="prof-week-title font-extrabold text-[11px] text-slate-900 leading-5 truncate" title={e.title}>
                             {e.title}
                           </div>
-                          <div className="font-mono text-[10px] font-bold text-indigo-900 whitespace-nowrap">
+                          <div className="prof-week-code font-mono text-[10px] font-bold text-indigo-900 whitespace-nowrap truncate" title={`${e.code} · گروه ${e.groupNumber}`}>
                             {e.code} · گروه {faNum(e.groupNumber)}
                           </div>
-                          <div className="text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">
+                          <div className="prof-week-essential text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">
                             {professorCalendarEntryTime(e)}
                           </div>
-                          <div className="text-[10px] font-bold text-slate-700 whitespace-nowrap truncate">
-                            {e.roomName ? `🏛️ ${e.roomName}` : '🏛️ سالن ثبت نشده'}{e.buildingName ? ` · ${e.buildingName}` : ''}
+                          <div
+                            className="prof-week-essential text-[10px] font-bold text-slate-700 whitespace-nowrap truncate"
+                            title={e.roomName ? `${e.roomName}${e.buildingName ? ` · ${e.buildingName}` : ''}` : 'سالن ثبت نشده'}
+                          >
+                            {e.roomName ? `🏛️ ${e.roomName}` : '🏛️ سالن ثبت نشده'}<span className="prof-week-detail">{e.buildingName ? ` · ${e.buildingName}` : ''}</span>
                           </div>
                           {e.merged && (
                             <div className="prof-week-badge mt-0.5 inline-block px-1.5 py-0.5 rounded bg-teal-100 text-teal-950 font-bold border border-teal-300 text-[10px] whitespace-nowrap">
@@ -166,12 +180,12 @@ export default function ProfessorCalendarGrid({ entries }: { entries: ProfessorC
                             </div>
                           )}
                           {e.isCoTaught && (
-                            <div className="mt-0.5 px-1 py-0.5 rounded bg-purple-100 text-purple-900 text-[10px] font-bold border border-purple-200 leading-4 truncate">
+                            <div className="prof-week-detail mt-0.5 px-1 py-0.5 rounded bg-purple-100 text-purple-900 text-[10px] font-bold border border-purple-200 leading-4 truncate" title={e.coPartnerName ? `مشترک · ${e.coPartnerName}` : 'مشترک'}>
                               👥 مشترک{e.coPartnerName ? ` · ${e.coPartnerName}` : ''}
                             </div>
                           )}
                           <div className="flex items-center justify-between gap-1 text-[10px] pt-0.5 mt-0.5 border-t border-slate-200/60">
-                            <span className="font-bold text-slate-600 whitespace-nowrap">
+                            <span className="prof-week-detail font-bold text-slate-600 whitespace-nowrap">
                               {e.enrolledCount != null ? `👥 ${faNum(e.enrolledCount)}/${faNum(e.capacity)}` : '👥'}
                             </span>
                             <WeekBadge weekType={e.weekType} />

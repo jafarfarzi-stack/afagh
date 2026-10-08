@@ -87,6 +87,8 @@ export type ProfessorScheduleRow = {
   roomName: string;
   buildingName: string;
   weekType: 'ALL' | 'EVEN' | 'ODD';
+  sharedScheduleGroupKey?: string | null;
+  merged?: boolean;
   isCoTaught: boolean;
   coRole?: 'THEORY' | 'LAB';
   coPartnerName?: string;

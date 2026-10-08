@@ -3,7 +3,7 @@ export const PROFESSOR_CALENDAR_END_MINUTES = 20 * 60;
 export const PROFESSOR_CALENDAR_DAY_COUNT = 7;
 export const PROFESSOR_CALENDAR_MIN_ENTRY_MINUTES = 30;
 
-export type ProfessorCalendarWeekType = 'ALL' | 'EVEN' | 'ODD';
+export type ProfessorCalendarWeekType = 'ALL' | 'EVEN' | 'ODD' | 'BOTH';
 export type ProfessorCalendarWeekFilter = 'ALL' | 'EVEN' | 'ODD';
 
 export interface ProfessorCalendarSchedulable {
@@ -40,9 +40,153 @@ export function filterProfessorCalendarByWeek<T extends ProfessorCalendarSchedul
   rows: T[],
   filter: ProfessorCalendarWeekFilter,
 ): T[] {
-  if (filter === 'EVEN') return rows.filter(r => r.weekType !== 'ODD');
-  if (filter === 'ODD') return rows.filter(r => r.weekType !== 'EVEN');
+  if (filter === 'EVEN') return rows.filter(r => r.weekType === 'ALL' || r.weekType === 'EVEN' || r.weekType === 'BOTH');
+  if (filter === 'ODD') return rows.filter(r => r.weekType === 'ALL' || r.weekType === 'ODD' || r.weekType === 'BOTH');
   return rows.slice();
+}
+
+export type MergeSlotLike = {
+  dayOfWeek?: number | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  roomKey?: string | number | null;
+};
+
+export function normMergeTime(v: string | null | undefined): string | null {
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(v ?? '').trim());
+  if (!m) return null;
+  return `${m[1].padStart(2, '0')}:${m[2]}`;
+}
+
+export function mergedGroupKey(
+  sharedScheduleGroupKey: string | null | undefined,
+  slots: MergeSlotLike | MergeSlotLike[],
+): string | null {
+  const shared = String(sharedScheduleGroupKey ?? '').trim();
+  if (shared) return `K:${shared}`;
+  const list = (Array.isArray(slots) ? slots : [slots])
+    .map(s => {
+      const st = normMergeTime(s.startTime);
+      const en = normMergeTime(s.endTime);
+      if (s.dayOfWeek == null || !st || !en) return null;
+      const room = s.roomKey == null || String(s.roomKey) === '' ? '-' : String(s.roomKey);
+      return `${s.dayOfWeek}|${st}|${en}|${room}`;
+    })
+    .filter((x): x is string => x != null);
+  if (list.length === 0) return null;
+  return `S:${[...new Set(list)].sort().join(';')}`;
+}
+
+export type MergedGroup<T> = {
+  key: string | null;
+  merged: boolean;
+  primaryId: number;
+  memberIds: number[];
+  members: T[];
+};
+
+export function groupIntoMerged<T>(
+  items: T[],
+  idOf: (item: T) => number,
+  keyOf: (item: T) => string | null,
+): MergedGroup<T>[] {
+  const groups: MergedGroup<T>[] = [];
+  const byKey = new Map<string, MergedGroup<T>>();
+  for (const item of items) {
+    const k = keyOf(item);
+    if (k == null) {
+      groups.push({ key: null, merged: false, primaryId: idOf(item), memberIds: [idOf(item)], members: [item] });
+      continue;
+    }
+    let g = byKey.get(k);
+    if (!g) {
+      g = { key: k, merged: false, primaryId: idOf(item), memberIds: [], members: [] };
+      byKey.set(k, g);
+      groups.push(g);
+    }
+    g.members.push(item);
+    g.memberIds.push(idOf(item));
+  }
+  for (const g of groups) {
+    if (g.members.length > 1) {
+      g.merged = true;
+      g.members.sort((a, b) => idOf(a) - idOf(b));
+      g.memberIds = g.members.map(idOf);
+      g.primaryId = g.memberIds[0];
+    }
+  }
+  return groups;
+}
+
+export interface ProfessorCalendarCollapseRow {
+  id: number;
+  dayOfWeek: number | null;
+  startTime: string;
+  endTime: string;
+  weekType: ProfessorCalendarWeekType;
+  code?: string;
+  title?: string;
+  groupNumber?: number;
+  units?: number;
+  enrolledCount?: number;
+  capacity?: number;
+  roomName?: string | null;
+  buildingName?: string | null;
+  roomKey?: string | number | null;
+  sharedScheduleGroupKey?: string | null;
+  merged?: boolean;
+}
+
+const finiteNum = (v: unknown): number | null =>
+  typeof v === 'number' && Number.isFinite(v) ? v : null;
+
+export function collapseCalendarEntries<T extends ProfessorCalendarCollapseRow>(rows: T[]): T[] {
+  const groups = groupIntoMerged(
+    rows,
+    r => r.id,
+    r => {
+      const slot = mergedGroupKey(null, {
+        dayOfWeek: r.dayOfWeek ?? null,
+        startTime: r.startTime ?? '',
+        endTime: r.endTime ?? '',
+        roomKey: r.roomKey ?? r.roomName ?? null,
+      });
+      const shared = String(r.sharedScheduleGroupKey ?? '').trim();
+      if (slot == null) return shared ? `K:${shared}` : null;
+      return shared ? `K:${shared}|${slot}` : slot;
+    },
+  );
+  const out: T[] = [];
+  for (const g of groups) {
+    if (!g.merged) {
+      out.push(g.members[0]);
+      continue;
+    }
+    const primary = g.members.find(m => m.id === g.primaryId) ?? g.members[0];
+    const codes = [...new Set(g.members.map(m => String(m.code ?? '').trim()).filter(c => c !== ''))];
+    const weekSet = new Set(g.members.map(m => String(m.weekType)));
+    const weekType = (weekSet.size === 1 ? primary.weekType : 'BOTH') as T['weekType'];
+    const perId = new Map<number, T>();
+    for (const m of g.members) if (!perId.has(m.id)) perId.set(m.id, m);
+    const uniq = [...perId.values()];
+    const multiOffering = uniq.length > 1;
+    const enrolledParts = uniq.map(m => finiteNum(m.enrolledCount)).filter((v): v is number => v != null);
+    const capacityParts = uniq.map(m => finiteNum(m.capacity)).filter((v): v is number => v != null);
+    const unitParts = uniq.map(m => finiteNum(m.units)).filter((v): v is number => v != null);
+    out.push({
+      ...primary,
+      code: (codes.length > 0 ? codes.join(' / ') : primary.code) as T['code'],
+      title: primary.title as T['title'],
+      weekType,
+      merged: (multiOffering || primary.merged === true) as T['merged'],
+      enrolledCount: (enrolledParts.length > 0
+        ? enrolledParts.reduce((s, v) => s + v, 0)
+        : primary.enrolledCount) as T['enrolledCount'],
+      capacity: (capacityParts.length > 0 ? Math.max(...capacityParts) : primary.capacity) as T['capacity'],
+      units: (unitParts.length > 0 ? Math.max(...unitParts) : primary.units) as T['units'],
+    } as T);
+  }
+  return out;
 }
 
 export function professorCalendarHourLabels(): string[] {
