@@ -101,7 +101,7 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
       <style>{'@media print { @page { size: A4 landscape; margin: 8mm 7mm; } }'}</style>
       <div className="prof-week-print-head hidden print:block">
         <span className="font-extrabold">برنامه هفتگی تدریس — {professor.name} (کد پرسنلی {faNum(professor.staffCode)}{professor.academicRank ? ` · ${professor.academicRank}` : ''})</span>
-        <span> · {termTitle || 'نیمسال جاری'} · {weekFilterLabel} · تاریخ چاپ: <span suppressHydrationWarning>{printDate}</span></span>
+        <span> · <bdi>{termTitle || 'نیمسال جاری'}</bdi> · {weekFilterLabel} · تاریخ چاپ: <span suppressHydrationWarning>{printDate}</span></span>
       </div>
       {/* Header Bar */}
       <div className="print:hidden bg-gradient-to-l from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-5 shadow-lg border border-indigo-700/50 space-y-4">

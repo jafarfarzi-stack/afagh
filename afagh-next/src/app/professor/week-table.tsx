@@ -61,7 +61,7 @@ export default function ProfessorWeekTable({ termTitle, selectedTermTitle, rows,
       <style>{'@media print { @page { size: A4 landscape; margin: 8mm 7mm; } }'}</style>
       <div className="prof-week-print-head hidden print:block">
         <span className="font-extrabold">برنامه هفتگی تدریس{professorName ? ` — ${professorName}` : ''}{staffCode ? ` (کد پرسنلی ${faNum(staffCode)})` : ''}</span>
-        <span> · {termTitle || 'نیمسال جاری'} · همه جلسات (زوج و فرد) · تاریخ چاپ: <span suppressHydrationWarning>{printDate}</span></span>
+        <span> · <bdi>{termTitle || 'نیمسال جاری'}</bdi> · همه جلسات (زوج و فرد) · تاریخ چاپ: <span suppressHydrationWarning>{printDate}</span></span>
       </div>
       <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-200 print:hidden">
         <div>

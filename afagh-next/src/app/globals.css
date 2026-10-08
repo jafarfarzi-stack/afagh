@@ -127,7 +127,7 @@ body { @apply bg-slate-100 text-slate-800 font-sans; }
   body.printing-portrait .transcript-print-area .tr-term-footer { font-size: 7pt; }
   .prof-week-print { direction: rtl !important; }
   .prof-week-print .prof-week-scroll { overflow: visible !important; border: none !important; border-radius: 0 !important; }
-  .prof-week-print .prof-cal { min-width: 0 !important; width: 100% !important; --cal-hour: 24px !important; }
+  .prof-week-print .prof-cal { min-width: 0 !important; width: 100% !important; --cal-hour: 32px !important; }
   .prof-week-print .prof-cal-head { position: static !important; background: #ffffff !important; color: #000000 !important; }
   .prof-week-print .prof-cal-day-head, .prof-week-print .prof-cal-gutter-head { position: static !important; background: #ffffff !important; color: #000000 !important; border: 1pt solid #000 !important; font-size: 8.5pt !important; font-weight: 800 !important; padding: 2pt 3pt !important; }
   .prof-week-print .prof-cal-body { width: 100% !important; }

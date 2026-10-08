@@ -159,32 +159,37 @@ export default function ProfessorCalendarGrid({ entries }: { entries: ProfessorC
                               : 'bg-indigo-50 border-indigo-200 text-indigo-950'
                           }`}
                         >
-                          <div className="prof-week-title font-extrabold text-[11px] text-slate-900 leading-5 truncate" title={e.title}>
+                          <div className="hidden print:block text-[7.5pt] font-bold leading-[1.45] text-black">
+                            <div className="truncate">{e.title}{e.merged ? ' 🔗' : ''}</div>
+                            <div className="truncate">{e.code} · گروه {faNum(e.groupNumber)} · 👥 {faNum(e.enrolledCount)}/{faNum(e.capacity)}</div>
+                            <div className="truncate">{professorCalendarEntryTime(e)} · {e.roomName ? `🏛️ ${e.roomName}${e.buildingName ? ` · ${e.buildingName}` : ''}` : '🏛️ سالن ثبت نشده'}{e.weekType === 'EVEN' ? ' · هفته زوج' : e.weekType === 'ODD' ? ' · هفته فرد' : e.weekType === 'BOTH' ? ' · زوج و فرد' : ''}</div>
+                          </div>
+                          <div className="prof-week-title print:hidden font-extrabold text-[11px] text-slate-900 leading-5 truncate" title={e.title}>
                             {e.title}
                           </div>
-                          <div className="prof-week-code font-mono text-[10px] font-bold text-indigo-900 whitespace-nowrap truncate" title={`${e.code} · گروه ${e.groupNumber}`}>
+                          <div className="prof-week-code print:hidden font-mono text-[10px] font-bold text-indigo-900 whitespace-nowrap truncate" title={`${e.code} · گروه ${e.groupNumber}`}>
                             {e.code} · گروه {faNum(e.groupNumber)}
                           </div>
-                          <div className="prof-week-essential text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">
+                          <div className="prof-week-essential print:hidden text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">
                             {professorCalendarEntryTime(e)}
                           </div>
                           <div
-                            className="prof-week-essential text-[10px] font-bold text-slate-700 whitespace-nowrap truncate"
+                            className="prof-week-essential print:hidden text-[10px] font-bold text-slate-700 whitespace-nowrap truncate"
                             title={e.roomName ? `${e.roomName}${e.buildingName ? ` · ${e.buildingName}` : ''}` : 'سالن ثبت نشده'}
                           >
                             {e.roomName ? `🏛️ ${e.roomName}` : '🏛️ سالن ثبت نشده'}<span className="prof-week-detail">{e.buildingName ? ` · ${e.buildingName}` : ''}</span>
                           </div>
                           {e.merged && (
-                            <div className="prof-week-badge mt-0.5 inline-block px-1.5 py-0.5 rounded bg-teal-100 text-teal-950 font-bold border border-teal-300 text-[10px] whitespace-nowrap">
+                            <div className="prof-week-badge print:hidden mt-0.5 inline-block px-1.5 py-0.5 rounded bg-teal-100 text-teal-950 font-bold border border-teal-300 text-[10px] whitespace-nowrap">
                               🔗 کلاس ادغامی
                             </div>
                           )}
                           {e.isCoTaught && (
-                            <div className="prof-week-detail mt-0.5 px-1 py-0.5 rounded bg-purple-100 text-purple-900 text-[10px] font-bold border border-purple-200 leading-4 truncate" title={e.coPartnerName ? `مشترک · ${e.coPartnerName}` : 'مشترک'}>
+                            <div className="prof-week-detail print:hidden mt-0.5 px-1 py-0.5 rounded bg-purple-100 text-purple-900 text-[10px] font-bold border border-purple-200 leading-4 truncate" title={e.coPartnerName ? `مشترک · ${e.coPartnerName}` : 'مشترک'}>
                               👥 مشترک{e.coPartnerName ? ` · ${e.coPartnerName}` : ''}
                             </div>
                           )}
-                          <div className="flex items-center justify-between gap-1 text-[10px] pt-0.5 mt-0.5 border-t border-slate-200/60">
+                          <div className="print:hidden flex items-center justify-between gap-1 text-[10px] pt-0.5 mt-0.5 border-t border-slate-200/60">
                             <span className="prof-week-detail font-bold text-slate-600 whitespace-nowrap">
                               {e.enrolledCount != null ? `👥 ${faNum(e.enrolledCount)}/${faNum(e.capacity)}` : '👥'}
                             </span>
