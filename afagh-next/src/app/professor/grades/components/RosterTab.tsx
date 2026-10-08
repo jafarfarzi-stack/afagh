@@ -102,7 +102,7 @@ export default function RosterTab({ offering, termTitle, lastAutoSaveTime, onReq
     // ۳) همگام‌سازی پس‌زمینه با سرور (بدون قفل کردن UI)
     startTransition(() => {
       void saveAction({
-        offeringId: offering.id,
+        offeringId: st.enrollmentOfferingId ?? offering.id,
         offeringCode: offering.code,
         offeringTitle: offering.title,
         offeringUnits: offering.units,
@@ -134,6 +134,7 @@ export default function RosterTab({ offering, termTitle, lastAutoSaveTime, onReq
       offeringUnits: offering.units,
       termTitle: termTitle,
       professorRank: '',
+      memberOfferingIds: offering.memberOfferingIds,
     });
   };
 
@@ -454,6 +455,7 @@ export default function RosterTab({ offering, termTitle, lastAutoSaveTime, onReq
                       otp: otpCode.trim(),
                       code: offering.code,
                       groupNo: offering.groupNumber,
+                      memberOfferingIds: offering.memberOfferingIds,
                     });
                     if (!res.ok) {
                       alert(res.error || 'تأیید ناموفق بود.');

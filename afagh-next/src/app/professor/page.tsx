@@ -21,6 +21,10 @@ import VirtualClassroomWidget from '@/components/VirtualClassroomWidget';
 import { getTodayLiveClasses } from '@/lib/moodle-bbb';
 import { professorTermFilter } from '@/lib/professor-term-filter';
 import {
+  groupIntoMerged,
+  mergedDisplayTitle,
+  mergedGroupKey,
+  offeringSharedKeys,
   professorScheduleRows,
   professorUniqueOfferings,
   type ProfessorScheduleRow,
@@ -94,6 +98,20 @@ export default async function ProfessorHome() {
 
   const termTitle = demo ? DEMO_TERM_TITLE : term?.title ?? '';
 
+  const uniqueScheduleRows = professorUniqueOfferings(scheduleRows);
+  const mergeSlotsById = new Map<number, { dayOfWeek: number | null; startTime: string; endTime: string; roomKey: string }[]>();
+  for (const r of scheduleRows) {
+    const list = mergeSlotsById.get(r.id) ?? [];
+    list.push({ dayOfWeek: r.dayOfWeek, startTime: r.startTime, endTime: r.endTime, roomKey: r.roomName });
+    mergeSlotsById.set(r.id, list);
+  }
+  const mergeSharedKeys = await offeringSharedKeys(uniqueScheduleRows.map(r => r.id));
+  const mergedClassGroups = groupIntoMerged(
+    uniqueScheduleRows,
+    r => r.id,
+    r => mergedGroupKey(mergeSharedKeys.get(r.id) ?? null, mergeSlotsById.get(r.id) ?? []),
+  );
+
   const classCards = demo
     ? DEMO_DASHBOARD_CLASSES.map(c => ({
         key: `${c.id}-${c.roomLabel}-${c.timeLabel}`,
@@ -108,23 +126,31 @@ export default async function ProfessorHome() {
         capacity: c.capacity,
         isCoTaught: c.isCoTaught,
         coTeacherName: c.coTeacherName,
+        isMerged: false,
+        mergedCodes: [] as string[],
       }))
-    : professorUniqueOfferings(scheduleRows).map(c => ({
-        key: `${c.id}`,
-        offeringId: c.id,
-        title: c.title,
-        code: c.code,
-        group: c.groupNumber,
-        units: c.units,
-        roomLine: c.roomName ? `🏛️ ${c.roomName}` : 'سالن ثبت نشده',
-        timeLine: c.hasSchedule ? `${c.dayName} ${c.startTime} الی ${c.endTime}` : 'ساعت‌بندی ثبت نشده',
-        enrolled: c.enrolledCount,
-        capacity: c.capacity,
-        isCoTaught: c.isCoTaught,
-        coTeacherName: c.coPartnerName,
-      }));
+    : mergedClassGroups.map(g => {
+        const primary = g.members.find(m => m.id === g.primaryId) ?? g.members[0];
+        const codes = [...new Set(g.members.map(m => m.code))];
+        return {
+          key: g.merged ? `merged-${g.key}` : `${primary.id}`,
+          offeringId: primary.id,
+          title: g.merged ? mergedDisplayTitle(primary.title, codes) : primary.title,
+          code: codes.join(' / '),
+          group: primary.groupNumber,
+          units: Math.max(...g.members.map(m => m.units)),
+          roomLine: primary.roomName ? `🏛️ ${primary.roomName}` : 'سالن ثبت نشده',
+          timeLine: primary.hasSchedule ? `${primary.dayName} ${primary.startTime} الی ${primary.endTime}` : 'ساعت‌بندی ثبت نشده',
+          enrolled: g.members.reduce((s, m) => s + m.enrolledCount, 0),
+          capacity: Math.max(...g.members.map(m => m.capacity)),
+          isCoTaught: primary.isCoTaught,
+          coTeacherName: primary.coPartnerName,
+          isMerged: g.merged,
+          mergedCodes: codes,
+        };
+      });
 
-  const realOfferings = professorUniqueOfferings(scheduleRows);
+  const realOfferings = demo ? [] : mergedClassGroups;
   const realScheduledCount = scheduleRows.filter(r => r.hasSchedule).length;
   const realUnscheduledCount = scheduleRows.filter(r => !r.hasSchedule).length;
 
@@ -337,7 +363,9 @@ export default async function ProfessorHome() {
                 <div>
                   <div className="flex items-center gap-2">
                     <p className={`font-extrabold text-sm ${c.isCoTaught ? 'text-purple-950' : 'text-slate-900'}`}>{c.title}</p>
-                    {c.isCoTaught ? (
+                    {c.isMerged ? (
+                      <span className="px-2 py-0.5 rounded bg-teal-200 text-teal-950 font-bold text-[10px]">🔗 کلاس ادغامی</span>
+                    ) : c.isCoTaught ? (
                       <span className="px-2 py-0.5 rounded bg-purple-200 text-purple-950 font-bold text-[10px]">👥 درس مشترک</span>
                     ) : (
                       <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 font-bold text-[10px]">گروه {faNum(c.group)}</span>

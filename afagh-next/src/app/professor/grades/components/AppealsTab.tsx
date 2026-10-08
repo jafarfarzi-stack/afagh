@@ -69,7 +69,7 @@ export default function AppealsTab({ offering, dispatch, onOpenAppeal }: Appeals
     const payload: ResolveAppealPayload = {
       appealId: modal.appeal.id,
       studentCode: modal.appeal.studentCode,
-      offeringId: offering.id,
+      offeringId: modal.appeal.enrollmentOfferingId ?? offering.id,
       decision,
       reply: modal.reply,
       newGrade: decision === 'ACCEPTED' ? liveCalculated : modal.appeal.currentGrade,

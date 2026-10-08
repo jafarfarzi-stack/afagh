@@ -12,7 +12,7 @@
  */
 'use server';
 
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { randomInt, createHash } from 'node:crypto';
 import { db } from '@/db';
@@ -21,6 +21,7 @@ import {
   enrollments,
   grade_appeals,
   grade_submission_otps,
+  offering_professors,
   users,
 } from '@/db/schema';
 import { getStaffByUser, isDemoMode, requireRole } from '@/lib/auth';
@@ -66,6 +67,25 @@ function fail(err: unknown): SaveGradeState {
 
 function invalid(message: string): SaveGradeState {
   return { ok: false, error: message };
+}
+
+function mergedTargets(payload: { offeringId: number; memberOfferingIds?: number[] }): number[] {
+  return [...new Set([Number(payload.offeringId), ...((payload.memberOfferingIds ?? []).map(Number))])];
+}
+
+async function memberOwnershipOk(staffId: number, targets: number[]): Promise<boolean> {
+  if (targets.length === 0) return false;
+  const offs = await db
+    .select({ id: course_offerings.id, professorId: course_offerings.professorId })
+    .from(course_offerings)
+    .where(inArray(course_offerings.id, targets));
+  if (offs.length !== targets.length) return false;
+  const coRows = await db
+    .select({ offeringId: offering_professors.offeringId })
+    .from(offering_professors)
+    .where(and(inArray(offering_professors.offeringId, targets), eq(offering_professors.staffId, staffId)));
+  const coSet = new Set(coRows.map(r => r.offeringId));
+  return offs.every(o => o.professorId === staffId || coSet.has(o.id));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -176,12 +196,15 @@ export async function saveGradeAction(
 
 export async function submitTemporaryAction(
   _prev: SaveGradeState,
-  payload: { offeringId: number; offeringCode: string; offeringTitle: string; offeringUnits: number; termTitle: string; professorRank: string }
+  payload: { offeringId: number; offeringCode: string; offeringTitle: string; offeringUnits: number; termTitle: string; professorRank: string; memberOfferingIds?: number[] }
 ): Promise<SaveGradeState> {
   try {
     const user = await requireRole(['PROFESSOR']);
     const me = await getStaffByUser(user.id);
     if (!me) return invalid('پروندهٔ هیئت علمی یافت نشد.');
+
+    const targets = mergedTargets(payload);
+    if (!(await memberOwnershipOk(me.id, targets))) return invalid('شما استاد مسئول این درس نیستید.');
 
     await ensureGradePersistence({
       offeringId: payload.offeringId,
@@ -196,14 +219,15 @@ export async function submitTemporaryAction(
     await db
       .update(course_offerings)
       .set({ gradesTemporaryAt: new Date() })
-      .where(eq(course_offerings.id, payload.offeringId));
+      .where(inArray(course_offerings.id, targets));
     await db
       .update(enrollments)
       .set({ gradeStatus: 'TEMPORARY' })
-      .where(eq(enrollments.offeringId, payload.offeringId));
+      .where(inArray(enrollments.offeringId, targets));
 
-    // ثبت تغییرات در audit log
-    await logBulkGradeChange(payload.offeringId, 'TEMPORARY', user.id, 'PROFESSOR', 'ثبت موقت نمرات توسط استاد');
+    for (const id of targets) {
+      await logBulkGradeChange(id, 'TEMPORARY', user.id, 'PROFESSOR', 'ثبت موقت نمرات توسط استاد');
+    }
 
     revalidatePath('/professor/grades');
     return { ok: true, persisted: true };
@@ -219,7 +243,7 @@ export async function submitTemporaryAction(
 /** درخواست صدور کد OTP — کد واقعی تصادفی؛ فقط هش SHA-256 ذخیره می‌شود + پیامک واقعی */
 export async function requestFinalizeOtpAction(
   _prev: SaveGradeState,
-  payload: { offeringId: number }
+  payload: { offeringId: number; memberOfferingIds?: number[] }
 ): Promise<SaveGradeState & { sent?: boolean; demoOtp?: string }> {
   try {
     const user = await requireRole(['PROFESSOR']);
@@ -231,6 +255,10 @@ export async function requestFinalizeOtpAction(
       .from(course_offerings).where(eq(course_offerings.id, payload.offeringId)).limit(1);
     if (!off) return invalid('ارائهٔ درس یافت نشد.');
     if (off.professorId !== me.id) return invalid('شما استاد مسئول این درس نیستید.');
+    const extraMembers = (payload.memberOfferingIds ?? []).map(Number).filter(id => id !== Number(payload.offeringId));
+    if (extraMembers.length > 0 && !(await memberOwnershipOk(me.id, extraMembers))) {
+      return invalid('شما استاد مسئول این درس نیستید.');
+    }
 
     const code = String(randomInt(10000, 100000));
     const hash = createHash('sha256').update(code).digest('hex');
@@ -258,7 +286,7 @@ export async function requestFinalizeOtpAction(
 /** قفل نهایی نمرات — تأیید OTP از جدول (هش) + مالکیت درس + هش زنجیره‌ای واقعی نمرات */
 export async function finalizeSignedAction(
   _prev: SaveGradeState,
-  payload: { offeringId: number; otp: string; code: string; groupNo: number }
+  payload: { offeringId: number; otp: string; code: string; groupNo: number; memberOfferingIds?: number[] }
 ): Promise<SaveGradeState> {
   try {
     const user = await requireRole(['PROFESSOR']);
@@ -270,6 +298,11 @@ export async function finalizeSignedAction(
       .from(course_offerings).where(eq(course_offerings.id, payload.offeringId)).limit(1);
     if (!off) return invalid('ارائهٔ درس یافت نشد.');
     if (off.professorId !== me.id) return invalid('شما استاد مسئول این درس نیستید.');
+    const targets = mergedTargets(payload);
+    const extraMembers = targets.filter(id => id !== Number(payload.offeringId));
+    if (extraMembers.length > 0 && !(await memberOwnershipOk(me.id, extraMembers))) {
+      return invalid('شما استاد مسئول این درس نیستید.');
+    }
 
     // 🔒 بررسی OTP: هش کد ورودی باید با ردیف فعالِ استفاده‌نشده و غیرمنقضی یکی باشد
     const [row] = await db.select().from(grade_submission_otps)
@@ -293,26 +326,28 @@ export async function finalizeSignedAction(
 
     // 🔒 هش زنجیره‌ای واقعی: از خودِ نمرات ذخیره‌شده (ضد دستکاری)
     const grades = await db
-      .select({ id: enrollments.id, studentId: enrollments.studentId, gradeValue: enrollments.gradeValue, gradeStatus: enrollments.gradeStatus, samaGradeStatusCode: enrollments.samaGradeStatusCode })
+      .select({ id: enrollments.id, offeringId: enrollments.offeringId, studentId: enrollments.studentId, gradeValue: enrollments.gradeValue, gradeStatus: enrollments.gradeStatus, samaGradeStatusCode: enrollments.samaGradeStatusCode })
       .from(enrollments)
-      .where(eq(enrollments.offeringId, payload.offeringId))
-      .orderBy(enrollments.studentId);
+      .where(inArray(enrollments.offeringId, targets))
+      .orderBy(enrollments.offeringId, enrollments.studentId);
     const now = new Date();
-    const chainInput = JSON.stringify({
-      offeringId: payload.offeringId,
-      finalizedAt: now.toISOString(),
-      grades: grades.map(g => [g.studentId, g.gradeValue, g.gradeStatus]),
-    });
-    const gradesHash = 'SHA256:' + createHash('sha256').update(chainInput).digest('hex');
-
-    await db
-      .update(course_offerings)
-      .set({ gradesFinalizedAt: now, gradesHash })
-      .where(eq(course_offerings.id, payload.offeringId));
+    for (const targetId of targets) {
+      const memberGrades = grades.filter(gr => gr.offeringId === targetId);
+      const chainInput = JSON.stringify({
+        offeringId: targetId,
+        finalizedAt: now.toISOString(),
+        grades: memberGrades.map(gr => [gr.studentId, gr.gradeValue, gr.gradeStatus]),
+      });
+      const memberHash = 'SHA256:' + createHash('sha256').update(chainInput).digest('hex');
+      await db
+        .update(course_offerings)
+        .set({ gradesFinalizedAt: now, gradesHash: memberHash })
+        .where(eq(course_offerings.id, targetId));
+    }
 
     // نهایی‌سازی + محاسبه کد وضعیت سما برای هر دانشجو
     for (const g of grades) {
-      const samaCode = await resolveSamaGradeStatusCode(g.studentId, payload.offeringId, g.gradeValue, g.samaGradeStatusCode ?? null);
+      const samaCode = await resolveSamaGradeStatusCode(g.studentId, g.offeringId, g.gradeValue, g.samaGradeStatusCode ?? null);
       await db
         .update(enrollments)
         .set({ gradeStatus: 'FINALIZED', samaGradeStatusCode: samaCode })
@@ -321,7 +356,7 @@ export async function finalizeSignedAction(
       await logGradeChange({
         enrollmentId: g.id,
         studentId: g.studentId,
-        offeringId: payload.offeringId,
+        offeringId: g.offeringId,
         action: 'FINALIZED',
         oldGradeValue: g.gradeValue,
         newGradeValue: g.gradeValue,

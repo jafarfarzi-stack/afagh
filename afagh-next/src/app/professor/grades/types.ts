@@ -47,6 +47,7 @@ export interface StudentGradeItem {
   status: StudentGradeStatus;
   entryYear?: number;
   note?: string;
+  enrollmentOfferingId?: number;
 }
 
 export interface GradeAppealItem {
@@ -61,6 +62,7 @@ export interface GradeAppealItem {
   professorReply?: string;
   newGrade?: number;
   createdAt: string;
+  enrollmentOfferingId?: number;
 }
 
 export interface CoTaughtDetails {
@@ -91,6 +93,9 @@ export interface GradingCourseOffering {
   units: number;
   courseType: 'پایه' | 'اصلی' | 'تخصصی' | 'عمومی' | 'عملی';
   isCoTaught: boolean;
+  isMerged?: boolean;
+  mergedCodes?: string[];
+  memberOfferingIds?: number[];
   coTaughtDetails?: CoTaughtDetails;
   isFinalized?: boolean;
   finalizedAt?: string;

@@ -9,6 +9,7 @@ import {
   teaching_rates, users,
 } from '@/db/schema';
 import { getFiscalYear, getNumber, getSetting } from '@/lib/settings';
+import { collapseMergedOfferings, mergedGroupKey } from '@/lib/professor-data';
 import { notifyUserMultichannel } from '@/lib/messaging';
 import { intToUnits, percentOf, ratioOf, sumUnits, toRial, UNIT_SCALE, unitsToInt } from '@/lib/money';
 import { groupThousands } from '@/lib/calendar';
@@ -102,6 +103,7 @@ type StaffMeta = { name: string; staffCode: string | null; rank: string | null; 
 type StaffOffering = {
   offeringId: number; courseCode: string; courseTitle: string; unitsInt: number; practicalUnits: number;
   groupNumber: number | null; enrolledCount: number; offeringType: string; payRole: string; sharePct: number;
+  mergeKey: string | null; mergedMemberIds?: number[];
 };
 
 type SessionStats = { planned: number; held: number; absents: number; makeup: number; netAbsences: number };
@@ -196,6 +198,7 @@ type TermData = {
   staffInfo: Map<number, StaffMeta>;
   offeringsByStaff: Map<number, StaffOffering[]>;
   sessionsByOffering: Map<number, SessionStats>;
+  slotsByOffering: Map<number, string>;
   gatesByStaff: Map<number, { pendingGrades: number; unsignedDocs: number }>;
   statementsByStaff: Map<number, StatementRow>;
   msPrefixes: string[];
@@ -216,7 +219,7 @@ export async function currentTerm(termId?: number) {
  * تعداد کوئری‌ها ثابت است (۷) و به تعداد اساتید بستگی ندارد.
  */
 export async function loadTermPayrollData(termId: number, universityId?: number): Promise<TermData> {
-  const [term, coefs, rules, contracts, staffRows, offeringRows, sessionRows, gradeRows, docRows, statementRows] =
+  const [term, coefs, rules, contracts, staffRows, offeringRows, sessionRows, gradeRows, docRows, statementRows, slotRows] =
     await Promise.all([
       db.select().from(academic_terms).where(eq(academic_terms.id, termId)).limit(1).then(r => r[0] ?? null),
       loadCoefficients(),
@@ -236,6 +239,7 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
       db.execute(sql`
         select o.id as "offeringId", o."professorId" as "professorId", o."groupNumber" as "groupNumber",
                o."enrolledCount" as "enrolledCount", o."offeringType" as "offeringType",
+               o."sharedScheduleGroupKey" as "mergeKey",
                c.code as "courseCode", c.title as "courseTitle", c.units as "units",
                coalesce(c."practicalUnits", 0) as "practicalUnits",
                op."staffId" as "coStaffId", op.role as "coRole", op."sharePercentage" as "sharePct"
@@ -290,6 +294,14 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
       }).from(payroll_statements).innerJoin(
         professor_term_contracts, eq(professor_term_contracts.id, payroll_statements.contractId),
       ).where(eq(professor_term_contracts.termId, termId)),
+
+      db.execute(sql`
+        select s."offeringId" as "offeringId", s."dayOfWeek" as "dayOfWeek",
+               s."startTime" as "startTime", s."endTime" as "endTime", s."roomId" as "roomId"
+        from schedules s
+        join course_offerings o on o.id = s."offeringId"
+        where o."termId" = ${termId} and s."scheduleType" = 'CLASS'
+      `),
     ]);
 
   const [crowdedThreshold, plannedSessionsDefault, msPrefixSetting] = await Promise.all([
@@ -334,7 +346,7 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
   const offeringsByStaff = new Map<number, StaffOffering[]>();
   const offRows = (offeringRows.rows ?? []) as {
     offeringId: number; professorId: number | null; groupNumber: number | null; enrolledCount: number;
-    offeringType: string; courseCode: string; courseTitle: string; units: string | number;
+    offeringType: string; mergeKey: string | null; courseCode: string; courseTitle: string; units: string | number;
     practicalUnits: string | number; coStaffId: number | null; coRole: string | null; sharePct: string | number | null;
   }[];
   const push = (staffId: number, row: any) => {
@@ -352,6 +364,7 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
       groupNumber: o.groupNumber,
       enrolledCount: Number(o.enrolledCount ?? 0),
       offeringType: o.offeringType ?? 'NORMAL',
+      mergeKey: (o.mergeKey ?? null) as string | null,
     };
     if (o.coStaffId != null) {
       push(o.coStaffId, { ...base, payRole: o.coRole || 'MAIN_LECTURER', sharePct: Number(o.sharePct ?? 100) });
@@ -393,6 +406,18 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
   const statementsByStaff = new Map<number, StatementRow>();
   for (const s of statementRows as StatementRow[]) statementsByStaff.set(Number(s.staffId), s);
 
+  const slotsByOffering = new Map<number, string>();
+  const slotLists = new Map<number, { dayOfWeek: number | null; startTime: string | null; endTime: string | null; roomKey: number | null }[]>();
+  for (const r of (slotRows.rows ?? []) as { offeringId: number; dayOfWeek: number | null; startTime: string | null; endTime: string | null; roomId: number | null }[]) {
+    const list = slotLists.get(Number(r.offeringId)) ?? [];
+    list.push({ dayOfWeek: r.dayOfWeek, startTime: r.startTime, endTime: r.endTime, roomKey: r.roomId });
+    slotLists.set(Number(r.offeringId), list);
+  }
+  for (const [id, slots] of slotLists) {
+    const key = mergedGroupKey(null, slots);
+    if (key) slotsByOffering.set(id, key);
+  }
+
   return {
     termId,
     termTitle: term?.title ?? '',
@@ -403,6 +428,7 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
     staffInfo,
     offeringsByStaff,
     sessionsByOffering,
+    slotsByOffering,
     gatesByStaff,
     statementsByStaff,
     msPrefixes: msPrefixSetting.split(',').map(x => x.trim()).filter(Boolean),
@@ -453,6 +479,16 @@ function gatesOf(data: TermData, staffId: number) {
   };
 }
 
+function pickMergedSessions(data: TermData, ids: number[]): SessionStats {
+  let best: SessionStats | null = null;
+  for (const id of ids) {
+    const s = data.sessionsByOffering.get(id);
+    if (!s) continue;
+    if (!best || s.held > best.held) best = s;
+  }
+  return best ?? { planned: 0, held: 0, absents: 0, makeup: 0, netAbsences: 0 };
+}
+
 export function calcStaffPayrollFromData(data: TermData, staffId: number): StaffPayroll {
   const info = data.staffInfo.get(staffId);
   if (!info) throw new Error('استاد یافت نشد.');
@@ -460,7 +496,10 @@ export function calcStaffPayrollFromData(data: TermData, staffId: number): Staff
   const rate = data.rateByStaff.get(staffId) ?? 0;
   const dutyUnits = contract?.baseDutyUnits ?? 0;
   const taxRate = contract?.taxRate ?? 0;
-  const offerings = data.offeringsByStaff.get(staffId) ?? [];
+  const offerings = collapseMergedOfferings(
+    data.offeringsByStaff.get(staffId) ?? [],
+    id => data.slotsByOffering.get(id) ?? null,
+  );
 
   const rows: PayrollRow[] = [];
   let totalEquivInt = 0;
@@ -468,8 +507,9 @@ export function calcStaffPayrollFromData(data: TermData, staffId: number): Staff
   let absenceDeductionRial = 0;
 
   for (const o of offerings) {
-    const sessions = data.sessionsByOffering.get(o.offeringId) ?? { planned: 0, held: 0, absents: 0, makeup: 0, netAbsences: 0 };
+    const sessions = pickMergedSessions(data, o.mergedMemberIds ?? [o.offeringId]);
     const rule = matchRule(data.rules, o.offeringType, o.payRole, info.rank);
+    const mergedMark = o.mergedMemberIds && o.mergedMemberIds.length > 1 ? ' (کلاس ادغامی)' : '';
 
     // ── مسیر فرمول اختصاصی (پایان‌نامه، معرفی به استاد و…) ──
     if (rule) {
@@ -494,7 +534,7 @@ export function calcStaffPayrollFromData(data: TermData, staffId: number): Staff
       rows.push({
         offeringId: o.offeringId, courseCode: o.courseCode, courseTitle: o.courseTitle,
         units: intToUnits(o.unitsInt), groupNumber: o.groupNumber, payRole: o.payRole, offeringType: o.offeringType,
-        coefficients: label, equivalentUnits: intToUnits(equivInt), sessions,
+        coefficients: label + mergedMark, equivalentUnits: intToUnits(equivInt), sessions,
         effectiveUnits: intToUnits(equivInt), absenceDeductionRial: 0, grossRial: rial, ruleTitle: rule.title,
       });
       continue;
@@ -504,8 +544,9 @@ export function calcStaffPayrollFromData(data: TermData, staffId: number): Staff
     const applied: string[] = [];
     let multiplierInt = UNIT_SCALE; // 1.00 با مقیاس ۱۰۰
     if (o.practicalUnits > 0) { multiplierInt = Math.round(multiplierInt * data.coefs.practical); applied.push(`عملی ×${data.coefs.practical}`); }
-    if (data.msPrefixes.some(p => o.courseCode.startsWith(p))) { multiplierInt = Math.round(multiplierInt * data.coefs.msLevel); applied.push(`ارشد ×${data.coefs.msLevel}`); }
+    if (o.courseCode.split('/').some(c => data.msPrefixes.some(p => c.startsWith(p)))) { multiplierInt = Math.round(multiplierInt * data.coefs.msLevel); applied.push(`ارشد ×${data.coefs.msLevel}`); }
     if (o.enrolledCount > data.crowdedThreshold) { multiplierInt = Math.round(multiplierInt * data.coefs.crowded); applied.push(`جمعی ×${data.coefs.crowded}`); }
+    if (mergedMark) applied.push('کلاس ادغامی');
 
     const sharePct = Number.isFinite(o.sharePct) ? o.sharePct : 100;
     if (sharePct < 100) applied.push(`سهم ${Math.round(sharePct)}٪`);

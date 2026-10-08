@@ -1,6 +1,10 @@
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import {
   coTaughtPartners,
+  groupIntoMerged,
+  mergedDisplayTitle,
+  mergedGroupKey,
+  offeringSharedKeys,
   professorEnrollmentRows,
   professorScheduleRows,
   universityTitle,
@@ -99,7 +103,23 @@ export default async function ProfessorGradesPage({
   for (const r of scheduleRows) if (!seen.has(r.id)) seen.set(r.id, r);
   const baseOfferings = [...seen.values()];
 
+  const slotsByOffering = new Map<number, { dayOfWeek: number | null; startTime: string; endTime: string; roomKey: string }[]>();
+  for (const r of scheduleRows) {
+    const list = slotsByOffering.get(r.id) ?? [];
+    list.push({ dayOfWeek: r.dayOfWeek, startTime: r.startTime, endTime: r.endTime, roomKey: r.roomName });
+    slotsByOffering.set(r.id, list);
+  }
+
   const offeringIds = baseOfferings.map(o => o.id);
+  const sharedKeys = await offeringSharedKeys(offeringIds);
+  const offeringGroups = groupIntoMerged(
+    baseOfferings,
+    o => o.id,
+    o => mergedGroupKey(sharedKeys.get(o.id) ?? null, slotsByOffering.get(o.id) ?? []),
+  );
+  const memberToPrimary = new Map<number, number>();
+  for (const g of offeringGroups) for (const id of g.memberIds) memberToPrimary.set(id, g.primaryId);
+  const resolvedDefaultOfferingId = defaultOfferingId ? (memberToPrimary.get(defaultOfferingId) ?? defaultOfferingId) : undefined;
   const [{ students: enrollRows, appeals: appealRows }, partners] = await Promise.all([
     professorEnrollmentRows(offeringIds),
     coTaughtPartners(offeringIds),
@@ -118,9 +138,17 @@ export default async function ProfessorGradesPage({
     appealsByEnrollment.set(a.enrollmentId, list);
   }
 
-  const initialOfferings: GradingCourseOffering[] = baseOfferings.map(base => {
+  const initialOfferings: GradingCourseOffering[] = offeringGroups.map(g => {
+    const base = g.members.find(m => m.id === g.primaryId) ?? g.members[0];
+    const codes = [...new Set(g.members.map(m => m.code))];
     const partner = partners.get(base.id) ?? null;
-    const list = enrollByOffering.get(base.id) ?? [];
+    const unionEnroll = g.members.flatMap(m => enrollByOffering.get(m.id) ?? []);
+    const seenStudents = new Set<number>();
+    const list = unionEnroll.filter(e => {
+      if (seenStudents.has(e.studentId)) return false;
+      seenStudents.add(e.studentId);
+      return true;
+    });
 
     const gradeStudents: StudentGradeItem[] = list.map(e => {
       const raw = e.gradeValue === null ? null : Number(e.gradeValue);
@@ -132,6 +160,7 @@ export default async function ProfessorGradesPage({
         entryYear: e.entryYear,
         calculatedFinalScore: hasGrade ? raw : undefined,
         status: GRADE_STATUS_MAP[e.gradeStatus] ?? 'DRAFT',
+        enrollmentOfferingId: e.offeringId,
       };
     });
 
@@ -149,6 +178,7 @@ export default async function ProfessorGradesPage({
         professorReply: a.professorReply ?? undefined,
         newGrade: a.newGrade === null ? undefined : Number(a.newGrade),
         createdAt: faDateTime(a.createdAt),
+        enrollmentOfferingId: e.offeringId,
       }));
     });
 
@@ -156,12 +186,15 @@ export default async function ProfessorGradesPage({
 
     const offering: GradingCourseOffering = {
       id: base.id,
-      code: base.code,
-      title: base.title,
+      code: codes.join(' / '),
+      title: g.merged ? mergedDisplayTitle(base.title, codes) : base.title,
       groupNumber: base.groupNumber,
-      units: base.units,
+      units: Math.max(...g.members.map(m => m.units)),
       courseType: base.courseType,
       isCoTaught,
+      isMerged: g.merged,
+      mergedCodes: g.merged ? codes : undefined,
+      memberOfferingIds: g.merged ? g.memberIds : undefined,
       rubric: { ...DEFAULT_RUBRIC },
       students: gradeStudents,
       appeals,
@@ -203,7 +236,7 @@ export default async function ProfessorGradesPage({
         professor={professorData}
         termTitle={termTitle}
         initialOfferings={initialOfferings}
-        defaultOfferingId={defaultOfferingId}
+        defaultOfferingId={resolvedDefaultOfferingId}
       />
     </div>
   );

@@ -8,6 +8,7 @@ import { getStaffByUser, requireRole } from '@/lib/auth';
 import { jalaliDateOf } from '@/lib/scheduling-core';
 import { formatScheduleLabel } from '@/lib/professor-attendance-display';
 import ProfessorAttendanceClient, { AttendanceCourseOffering, ClassSessionItem, MakeupSessionRecord, StudentInfo } from './ProfessorAttendanceClient';
+import { groupIntoMerged, mergedDisplayTitle, mergedGroupKey } from '@/lib/professor-data';
 import { professorTermFilter } from '@/lib/professor-term-filter';
 import ProfessorTermFilterBanner from '../term-filter-banner';
 import { isDemoProfessorUser } from '@/lib/demo-accounts';
@@ -170,62 +171,108 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
     : [];
   const profAttBySession = new Map(profAttRows.map(r => [r.sessionId, r]));
 
-  const initialOfferings: AttendanceCourseOffering[] = allOfferings.map(({ offering, course }) => {
+  const classSlotsByOffering = new Map<number, { dayOfWeek: number | null; startTime: string | null; endTime: string | null; roomKey: number | null }[]>();
+  for (const r of scheduleRows) {
+    if (r.scheduleType !== 'CLASS') continue;
+    const list = classSlotsByOffering.get(r.offeringId) ?? [];
+    list.push({ dayOfWeek: r.dayOfWeek, startTime: r.startTime, endTime: r.endTime, roomKey: r.roomId });
+    classSlotsByOffering.set(r.offeringId, list);
+  }
+  const offeringGroups = groupIntoMerged(
+    allOfferings,
+    o => o.offering.id,
+    o => {
+      const k = mergedGroupKey(o.offering.sharedScheduleGroupKey ?? null, classSlotsByOffering.get(o.offering.id) ?? []);
+      return k ? `${o.offering.termId}|${k}` : null;
+    },
+  );
+  const memberToPrimary = new Map<number, number>();
+  for (const g of offeringGroups) for (const id of g.memberIds) memberToPrimary.set(id, g.primaryId);
+  const resolvedDefaultOfferingId = defaultOfferingId ? (memberToPrimary.get(defaultOfferingId) ?? defaultOfferingId) : undefined;
+
+  const enrollByOffering = new Map<number, typeof enrollmentRows>();
+  for (const e of enrollmentRows) {
+    const list = enrollByOffering.get(e.offeringId) ?? [];
+    list.push(e);
+    enrollByOffering.set(e.offeringId, list);
+  }
+  const offeringById = new Map(allOfferings.map(o => [o.offering.id, o] as const));
+
+  const initialOfferings: AttendanceCourseOffering[] = offeringGroups.map(g => {
+    const primary = offeringById.get(g.primaryId) ?? g.members[0];
+    const offering = primary.offering;
+    const codes = [...new Set(g.members.map(m => m.course.code))];
     const rows = scheduleRows.filter(r => r.offeringId === offering.id);
     const sched = rows.find(r => r.scheduleType === 'CLASS' && r.roomId) ?? rows.find(r => r.roomId) ?? rows[0];
     const room = sched?.roomId ? rooms.find(r => r.id === sched.roomId) : undefined;
     const scheduleTime = formatScheduleLabel(rows);
 
-    const studentsList: StudentInfo[] = enrollmentRows
-      .filter(e => e.offeringId === offering.id)
-      .map(e => ({ id: e.studentId, studentCode: e.studentCode, fullName: `${e.firstName} ${e.lastName}`.trim() }));
+    const studentsList: StudentInfo[] = [];
+    const seenStudents = new Set<number>();
+    for (const m of g.members) {
+      for (const e of enrollByOffering.get(m.offering.id) ?? []) {
+        if (seenStudents.has(e.studentId)) continue;
+        seenStudents.add(e.studentId);
+        studentsList.push({ id: e.studentId, studentCode: e.studentCode, fullName: `${e.firstName} ${e.lastName}`.trim() });
+      }
+    }
 
-    const sessions: ClassSessionItem[] = allSessions
-      .filter(s => s.offeringId === offering.id)
-      .map(s => {
-        const statuses: ClassSessionItem['studentStatuses'] = {};
-        const attMap = attBySession.get(s.id);
-        if (attMap) for (const [studentId, status] of attMap) {
-          statuses[studentId] = { status: status as 'PRESENT' | 'LATE' | 'ABSENT' | 'EXCUSED' };
-        }
-        const profCheck = profAttBySession.get(s.id);
-        const replaced = s.replacedSessionId
-          ? allSessions.find(x => x.id === s.replacedSessionId)?.sessionNo ?? undefined
-          : undefined;
-        return {
-          id: s.id,
-          sessionNo: s.sessionNo ?? 0,
-          sessionDate: faDigits(s.sessionDate),
-          startTime: faDigits(s.startTime),
-          endTime: faDigits(s.endTime),
-          roomName: room?.name ?? '',
-          topic: `جلسهٔ ${s.sessionNo ?? '—'} — ${course.title}`,
-          isHeld: (attMap?.size ?? 0) > 0 || !!profCheck,
-          isMakeUp: (s.isMakeUpSession ?? 0) === 1,
-          replacedSessionNo: replaced,
-          professorStatus: profCheck ? 'VERIFIED_PRESENT' : 'UPCOMING',
-          verificationDetail: profCheck ? 'حضور استاد در این جلسه ثبت شده است.' : 'جلسه در انتظار برگزاری/ثبت',
-          professorCheck: profCheck
-            ? {
-                verificationMethod: profCheck.verificationMethod,
-                ipAddress: profCheck.recordedIpAddress,
-                recordedAt: profCheck.recordedAt ? profCheck.recordedAt.toLocaleString('fa-IR') : null,
-              }
-            : null,
-          studentStatuses: statuses,
-        };
+    const orderedSessions = g.members
+      .flatMap(m => allSessions.filter(s => s.offeringId === m.offering.id))
+      .sort((a, b) =>
+        (a.offeringId === g.primaryId ? 0 : 1) - (b.offeringId === g.primaryId ? 0 : 1)
+        || (a.sessionNo ?? 0) - (b.sessionNo ?? 0) || a.id - b.id);
+    const seenSessions = new Set<string>();
+    const sessions: ClassSessionItem[] = [];
+    for (const s of orderedSessions) {
+      const dedupKey = `${s.sessionDate}|${s.startTime}|${s.endTime}|${s.replacedSessionId ?? 0}|${s.isMakeUpSession ?? 0}`;
+      if (seenSessions.has(dedupKey)) continue;
+      seenSessions.add(dedupKey);
+      const sessionCourse = offeringById.get(s.offeringId)?.course ?? primary.course;
+      const statuses: ClassSessionItem['studentStatuses'] = {};
+      const attMap = attBySession.get(s.id);
+      if (attMap) for (const [studentId, status] of attMap) {
+        statuses[studentId] = { status: status as 'PRESENT' | 'LATE' | 'ABSENT' | 'EXCUSED' };
+      }
+      const profCheck = profAttBySession.get(s.id);
+      const replaced = s.replacedSessionId
+        ? allSessions.find(x => x.id === s.replacedSessionId)?.sessionNo ?? undefined
+        : undefined;
+      sessions.push({
+        id: s.id,
+        sessionNo: s.sessionNo ?? 0,
+        sessionDate: faDigits(s.sessionDate),
+        startTime: faDigits(s.startTime),
+        endTime: faDigits(s.endTime),
+        roomName: room?.name ?? '',
+        topic: `جلسهٔ ${s.sessionNo ?? '—'} — ${sessionCourse.title}`,
+        isHeld: (attMap?.size ?? 0) > 0 || !!profCheck,
+        isMakeUp: (s.isMakeUpSession ?? 0) === 1,
+        replacedSessionNo: replaced,
+        professorStatus: profCheck ? 'VERIFIED_PRESENT' : 'UPCOMING',
+        verificationDetail: profCheck ? 'حضور استاد در این جلسه ثبت شده است.' : 'جلسه در انتظار برگزاری/ثبت',
+        professorCheck: profCheck
+          ? {
+              verificationMethod: profCheck.verificationMethod,
+              ipAddress: profCheck.recordedIpAddress,
+              recordedAt: profCheck.recordedAt ? profCheck.recordedAt.toLocaleString('fa-IR') : null,
+            }
+          : null,
+        studentStatuses: statuses,
       });
+    }
+    sessions.sort((a, b) => a.sessionNo - b.sessionNo || a.id - b.id);
 
     return {
       id: offering.id,
-      code: course.code,
-      title: course.title,
+      code: codes.join(' / '),
+      title: g.merged ? mergedDisplayTitle(primary.course.title, codes) : primary.course.title,
       groupNumber: offering.groupNumber,
-      units: Number(course.units),
+      units: Math.max(...g.members.map(m => Number(m.course.units ?? 0))),
       roomName: room?.name ?? '',
       scheduleTime,
-      hasSchedules: rows.length > 0,
-      canGenerate: rows.some(r => r.scheduleType === 'CLASS' && r.dayOfWeek != null),
+      hasSchedules: g.members.some(m => scheduleRows.some(r => r.offeringId === m.offering.id)),
+      canGenerate: g.members.some(m => scheduleRows.some(r => r.offeringId === m.offering.id && r.scheduleType === 'CLASS' && r.dayOfWeek != null)),
       students: studentsList,
       sessions,
     };
@@ -276,8 +323,8 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
         professor={professorData}
         termTitle={termTitle}
         initialOfferings={initialOfferings}
-        defaultOfferingId={defaultOfferingId}
-        linkedOfferingNotice={linkedNotice}
+        defaultOfferingId={resolvedDefaultOfferingId}
+        linkedOfferingNotice={linkedNotice ? { ...linkedNotice, offeringId: memberToPrimary.get(linkedNotice.offeringId) ?? linkedNotice.offeringId } : null}
         initialMakeupHistory={initialMakeupHistory}
         todayJalali={todayJalali}
         rooms={roomOptions}

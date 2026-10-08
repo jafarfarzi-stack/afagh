@@ -72,9 +72,9 @@ export default function ProfessorGradesClient({
   };
 
   /** درخواست کد OTP هنگام باز شدن مودال قفل — نتیجه (کد دمو) به مودال بازمی‌گردد */
-  const requestOtp = async (offeringId: number) => {
+  const requestOtp = async (offeringId: number, memberOfferingIds?: number[]) => {
     try {
-      const res = await requestFinalizeOtpAction({ ok: true } as any, { offeringId });
+      const res = await requestFinalizeOtpAction({ ok: true } as any, { offeringId, memberOfferingIds });
       return { ok: res.ok, demoOtp: res.demoOtp, error: res.error };
     } catch {
       return { ok: false, error: 'خطا در درخواست کد تأیید.' };
@@ -178,7 +178,7 @@ export default function ProfessorGradesClient({
           offering={currentOffering}
           termTitle={termTitle}
           lastAutoSaveTime={state.lastAutoSaveTime}
-          onRequestFinalizeOtp={() => requestOtp(currentOffering.id)}
+          onRequestFinalizeOtp={() => requestOtp(currentOffering.id, currentOffering.memberOfferingIds)}
           dispatch={dispatch}
         />
       )}
