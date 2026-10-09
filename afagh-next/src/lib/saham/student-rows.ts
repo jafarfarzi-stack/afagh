@@ -122,23 +122,90 @@ export interface RawStudent {
   totalAverage: string | null;
   isThesis: number | null;
   foreignStudentId: string | null;
+  totalFailedUnits: number | null;
+  militaryStatus: string | null;
+  address: string | null;
+  graduateDate: string | null;
+  eduEndYear: number | null;
+  eduEndSemester: number | null;
   /** سال تولد شمسی برای خروجی (سهام سال تولد شمسی می‌خواهد) */
   birthYear: number | null;
 }
 
+/** فیلترهای سمت سرور برای خروجی — همه اختیاری‌اند */
+export interface SahamStudentFilters {
+  status?: string;
+  majorId?: number;
+  facultyId?: number;
+  entryYearFrom?: number;
+  entryYearTo?: number;
+  /** بازهٔ تاریخ فراغت (رشتهٔ شمسی، مثل 1403/01/01) — مخصوص گزارش دانش‌آموختگان */
+  graduateFrom?: string;
+  graduateTo?: string;
+  /** سقف ردیف خروجی (پیش‌فرض ۵۰۰۰) — برای جلوگیری از تایم‌اوت */
+  limit?: number;
+}
+
+export const SAHAM_DEFAULT_LIMIT = 5000;
+export const SAHAM_MAX_LIMIT = 20000;
+
 /**
- * خواندن همهٔ دانشجویان یک دانشگاه با تمام ستون‌های لازم سهام.
- * هر ستون اضافه در یک اسکن (LEFT JOIN) جمع می‌شود تا کوئری سنگین نشود.
+ * خواندن دانشجویان یک دانشگاه با تمام ستون‌های لازم سهام + فیلتر سمت سرور.
+ *
+ * بهینه‌سازی سرعت: به‌جای ۳ ساب‌کوئری LATERAL برای هر دانشجو (۴۰هزار ×
+ * ایندکس‌اسکن + سورت)، دو پاس تجمیعی DISTINCT ON روی همان دانشگاه می‌زنیم.
  */
-export async function fetchSahamStudents(universityId: number): Promise<{
+export async function fetchSahamStudents(
+  universityId: number,
+  f: SahamStudentFilters = {},
+): Promise<{
   rows: RawStudent[];
+  total: number;
+  hasMore: boolean;
   maps: Record<string, Record<string, string>>;
   codes: Map<number, SahamInstituteCode[]>;
 }> {
   const maps = await loadSahamValueMaps();
   const codes = await loadSahamInstituteCodes();
+  const limit = Math.min(Math.max(f.limit ?? SAHAM_DEFAULT_LIMIT, 1), SAHAM_MAX_LIMIT);
+
+  const conds = [sql`s."universityId" = ${universityId}`];
+  if (f.status) conds.push(sql`s.status = ${f.status}`);
+  if (f.majorId) conds.push(sql`s."majorId" = ${f.majorId}`);
+  if (f.facultyId) conds.push(sql`m."facultyId" = ${f.facultyId}`);
+  if (f.entryYearFrom != null) conds.push(sql`s."entryYear" >= ${f.entryYearFrom}`);
+  if (f.entryYearTo != null) conds.push(sql`s."entryYear" <= ${f.entryYearTo}`);
+  if (f.graduateFrom) conds.push(sql`s."graduateDate" >= ${f.graduateFrom}`);
+  if (f.graduateTo) conds.push(sql`s."graduateDate" <= ${f.graduateTo}`);
+  const where = sql.join(conds, sql` AND `);
+
+  const total = (await db.execute<{ n: number } & Record<string, unknown>>(sql`
+    SELECT count(*)::int AS n FROM students s
+    LEFT JOIN majors m ON m.id = s."majorId"
+    WHERE ${where}
+  `)).rows[0]?.n ?? 0;
 
   const rows = (await db.execute<RawStudent & Record<string, unknown>>(sql`
+    WITH last_state AS (
+      SELECT DISTINCT ON (st."studentId") st."studentId", st."statusTitle"
+      FROM student_term_states st
+      JOIN students s2 ON s2.id = st."studentId"
+      WHERE s2."universityId" = ${universityId}
+      ORDER BY st."studentId", st."termCode" DESC
+    ),
+    enr_per_term AS (
+      SELECT e."studentId", t."termCode", count(*)::int AS cnt
+      FROM enrollments e
+      JOIN course_offerings o ON o.id = e."offeringId"
+      JOIN academic_terms t ON t.id = o."termId"
+      JOIN students s2 ON s2.id = e."studentId"
+      WHERE s2."universityId" = ${universityId}
+      GROUP BY e."studentId", t."termCode"
+    ),
+    last_enr AS (
+      SELECT DISTINCT ON ("studentId") "studentId", "termCode", cnt
+      FROM enr_per_term ORDER BY "studentId", "termCode" DESC
+    )
     SELECT
       u2."title"                       AS "universityTitle",
       s."universityId"                 AS "universityId",
@@ -151,9 +218,9 @@ export async function fetchSahamStudents(universityId: number): Promise<{
       m."majorCode"                   AS "majorCode",
       m."name"                        AS "majorTitle",
       s.status                        AS "status",
-      sts."statusTitle"               AS "termStatusTitle",
+      ls."statusTitle"                AS "termStatusTitle",
       s."transferGuestStatus"         AS "transferGuestStatus",
-      lt."termCode"                   AS "lastTermCode",
+      le."termCode"                   AS "lastTermCode",
       s."studentCode"                 AS "studentCode",
       s."entryYear"                   AS "entryYear",
       s."entryTerm"                   AS "entryTerm",
@@ -172,7 +239,7 @@ export async function fetchSahamStudents(universityId: number): Promise<{
       s."residenceProvince"           AS "residenceProvince",
       s."residenceCity"               AS "residenceCity",
       us."postalCode"                 AS "postalCode",
-      s."homeTell"                        AS "homeTell",
+      s."homeTell"                    AS "homeTell",
       us."mobile"                     AS "mobile",
       us."email"                      AS "email",
       us."nationality"                AS "nationality",
@@ -183,7 +250,7 @@ export async function fetchSahamStudents(universityId: number): Promise<{
       s."tuitionPaymentMethod"        AS "tuitionPaymentMethod",
       s."scholarshipType"             AS "scholarshipType",
       s."entranceExamRank"            AS "entranceExamRank",
-      tc."cnt"                        AS "termCourseCount",
+      le.cnt                          AS "termCourseCount",
       s."eqSemesters"                 AS "leaveSemesters",
       NULL::int                       AS "probationSemesters",
       s."totalPassedUnits"            AS "totalPassedUnits",
@@ -191,6 +258,12 @@ export async function fetchSahamStudents(universityId: number): Promise<{
       s."totalAverage"                AS "totalAverage",
       NULL::int                       AS "isThesis",
       s."foreignStudentId"            AS "foreignStudentId",
+      s."totalFailedUnits"            AS "totalFailedUnits",
+      s."militaryStatus"              AS "militaryStatus",
+      us."address"                    AS "address",
+      s."graduateDate"                AS "graduateDate",
+      s."eduEndYear"                  AS "eduEndYear",
+      s."eduEndSemester"              AS "eduEndSemester",
       NULL::int                       AS "birthYear"
     FROM students s
     JOIN users us ON us.id = s."userId"
@@ -199,36 +272,14 @@ export async function fetchSahamStudents(universityId: number): Promise<{
     LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
     LEFT JOIN faculties f ON f.id = m."facultyId"
     LEFT JOIN geo_countries gc ON gc."code" = us."nationality"
-    -- آخرین وضعیت ترم دانشجو
-    LEFT JOIN LATERAL (
-      SELECT st."statusTitle" FROM student_term_states st
-      WHERE st."studentId" = s.id
-      ORDER BY st."termCode" DESC LIMIT 1
-    ) sts ON TRUE
-    -- آخرین ترمی که در آن ثبت‌نام داشته
-    LEFT JOIN LATERAL (
-      SELECT t."termCode" FROM enrollments e
-      JOIN course_offerings o ON o.id = e."offeringId"
-      JOIN academic_terms t ON t.id = o."termId"
-      WHERE e."studentId" = s.id
-      ORDER BY t."termCode" DESC LIMIT 1
-    ) lt ON TRUE
-    -- تعداد درس ثبت‌نامی در آخرین ترم
-    LEFT JOIN LATERAL (
-      SELECT count(*)::int AS "cnt" FROM enrollments e
-      JOIN course_offerings o ON o.id = e."offeringId"
-      WHERE e."studentId" = s.id AND o."termId" = (
-        SELECT o2."termId" FROM enrollments e2
-        JOIN course_offerings o2 ON o2.id = e2."offeringId"
-        WHERE e2."studentId" = s.id
-        ORDER BY o2."termId" DESC LIMIT 1
-      )
-    ) tc ON TRUE
-    WHERE s."universityId" = ${universityId}
+    LEFT JOIN last_state ls ON ls."studentId" = s.id
+    LEFT JOIN last_enr le ON le."studentId" = s.id
+    WHERE ${where}
     ORDER BY s."studentCode"
+    LIMIT ${limit}
   `)).rows;
 
-  return { rows, maps, codes };
+  return { rows, total, hasMore: total > rows.length, maps, codes };
 }
 
 /** تبدیل ردیف خام به ۵۲ ستون سهام (با اعمال نگاشت‌ها) */
