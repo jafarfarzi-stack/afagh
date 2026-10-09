@@ -80,6 +80,8 @@ export async function scheduleMakeupSessionAction(input: {
   endTime: string;
   roomName: string;
   isDirect: boolean;   // بدون نیاز به تأیید آموزش
+  topic?: string;
+  absenceReason?: string;
 }): Promise<{ ok: boolean; error?: string; sessionId?: number }> {
   try {
     const user = await requireRole(['PROFESSOR']);
@@ -105,6 +107,9 @@ export async function scheduleMakeupSessionAction(input: {
       isMakeUpSession: 1,
       replacedSessionId: input.replacedSessionId ? Number(input.replacedSessionId) : null,
       sessionNo: nextNo,
+      roomId: room?.id ?? null,
+      topic: (input.topic ?? '').slice(0, 300) || null,
+      absenceReason: input.absenceReason?.trim() || null,
     }).returning({ id: class_sessions.id });
 
     logger.info('makeup_session_created', { sessionId: row.id, offeringId, direct: input.isDirect });

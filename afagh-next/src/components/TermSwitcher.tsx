@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { setTermCookie } from '@/lib/term-scope-actions';
 import type { TermScope } from '@/lib/term-scope';
 
@@ -18,7 +17,6 @@ export default function TermSwitcher({
   universityId: number | null;
   variant?: 'dark' | 'light';
 }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -52,7 +50,9 @@ export default function TermSwitcher({
       await setTermCookie(termId, universityId);
     } finally {
       setBusy(false);
-      router.refresh();
+      // رفرش کامل: دادهٔ همهٔ صفحه‌ها (سرور + کلاینت) با کوکی جدید لود می‌شود.
+      // router.refresh() کافی نیست چون بخش‌های کلاینتی دوباره fetch نمی‌کنند.
+      window.location.reload();
     }
   };
 

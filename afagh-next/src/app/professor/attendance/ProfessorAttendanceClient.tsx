@@ -66,13 +66,13 @@ export interface MakeupSessionRecord {
   courseTitle: string;
   groupNumber: number;
   professorName: string;
-  replacedSessionNo: number;
+  replacedSessionNo: number | null;
   sessionDate: string;
   sessionTime: string;
   roomName: string;
   topic: string;
   reason: string;
-  status: 'APPROVED_DIRECT' | 'PENDING_EDUCATION' | 'APPROVED_BY_EDUCATION';
+  status: 'APPROVED_DIRECT' | 'PENDING_EDUCATION' | 'APPROVED_BY_EDUCATION' | 'REJECTED';
   allocatedAt: string;
 }
 
@@ -639,6 +639,8 @@ export default function ProfessorAttendanceClient({
         endTime,
         roomName: isDirect ? roomName : '',
         isDirect,
+        topic: makeupForm.topic,
+        absenceReason: makeupForm.reason,
       });
       if (!res.ok) {
         showToast(res.error || 'ثبت جلسهٔ جبرانی ناموفق بود.', 0, 'error');
@@ -1316,7 +1318,11 @@ export default function ProfessorAttendanceClient({
                   </div>
 
                   <div>
-                    {req.status === 'APPROVED_DIRECT' || req.status === 'APPROVED_BY_EDUCATION' ? (
+                    {req.status === 'REJECTED' ? (
+                      <span className="px-3 py-1 rounded-full bg-rose-100 text-rose-900 font-black text-xs border border-rose-300">
+                        ✕ رد شده توسط آموزش
+                      </span>
+                    ) : req.status === 'APPROVED_DIRECT' || req.status === 'APPROVED_BY_EDUCATION' ? (
                       <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 font-black text-xs border border-emerald-300">
                         ✓ تایید و ابلاغ شد (مکان: {req.roomName})
                       </span>

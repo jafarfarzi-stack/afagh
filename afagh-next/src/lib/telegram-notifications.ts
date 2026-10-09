@@ -3,7 +3,7 @@ import { db } from '@/db';
 import { users, students, enrollments, course_offerings, courses, notification_channels } from '@/db/schema';
 import { sendToUser, type MessengerChannel } from '@/lib/messenger-bot';
 import { notifyUserMultichannel, type Channel } from '@/lib/messaging';
-import { getSetting } from '@/lib/settings';
+import { getPublicBaseUrl } from '@/lib/settings';
 import { createLogger } from '@/lib/logger';
 import { toJalaliFromDate } from '@/lib/calendar';
 
@@ -20,6 +20,16 @@ const log = createLogger({ mod: 'messenger.notifications' });
 function jalaliStr(date: Date = new Date()): string {
   const j = toJalaliFromDate(date);
   return `${j.jy}/${String(j.jm).padStart(2, '0')}/${String(j.jd).padStart(2, '0')}`;
+}
+
+/** بات فقط-ارسال است: به‌جای دستور چت، لینک پورتال می‌دهیم. */
+async function portalLine(): Promise<string> {
+  try {
+    const base = await getPublicBaseUrl();
+    return base ? `\nجزئیات در پورتال:\n${base}` : '';
+  } catch {
+    return '';
+  }
 }
 
 /** ارسال پیام به همهٔ پیام‌رسان‌های فعال کاربر */
@@ -50,7 +60,7 @@ export async function notifyEnrollmentDone(input: {
     text += `\nلیست انتظار:\n`;
     for (const w of waitlisted) text += `  - ${w}\n`;
   }
-  text += `\nتاریخ: ${jalaliStr()}\nبرای مشاهده جزئیات /enrollment را ارسال کنید.`;
+  text += `\nتاریخ: ${jalaliStr()}${await portalLine()}`;
 
   try {
     await notifyAllChannels(input.userId, text);
@@ -75,7 +85,7 @@ export async function notifyGradeSubmitted(input: {
   if (input.deadlineDate) {
     text += `مهلت اعتراض: ${input.deadlineDate}\n`;
   }
-  text += `\nبرای مشاهده همه نمرات /grades را ارسال کنید.`;
+  text += `${await portalLine()}`;
 
   try {
     await notifyAllChannels(input.userId, text);
@@ -243,7 +253,7 @@ export async function notifyWaitlistPromoted(input: {
 }) {
   let text = `ارتقا از لیست انتظار\n\n`;
   text += `دانشجوی گرامی، شما از لیست انتظار درس ${input.courseTitle} (${input.courseCode}) خارج شدید و ثبت‌نام شما نهایی شد.\n`;
-  text += `\nتاریخ: ${jalaliStr()}\nبرای مشاهده /enrollment را ارسال کنید.`;
+  text += `\nتاریخ: ${jalaliStr()}${await portalLine()}`;
 
   try {
     await notifyAllChannels(input.userId, text);

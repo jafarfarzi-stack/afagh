@@ -3,11 +3,11 @@
 //
 //  تمام منطق در messenger-bot.ts زندگی می‌کند.
 //  این فایل فقط exportهای قبلی را نگه می‌دارد تا کد موجود نشکند.
+//  setTelegramWebhook حذف شد (وب‌هوک inbound در حالت فقط-ارسال نیست).
 // ═══════════════════════════════════════════════════════════════
 
 export {
   handleTelegramUpdate,
-  setTelegramWebhook,
   sendTelegramToUser,
 } from './messenger-bot';
 

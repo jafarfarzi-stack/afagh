@@ -1366,6 +1366,11 @@ export const class_sessions = pgTable('class_sessions', {
   isMakeUpSession: integer('isMakeUpSession').default(0),
   replacedSessionId: integer('replacedSessionId').references((): AnyPgColumn => class_sessions.id),
   sessionNo: integer('sessionNo'),
+  // ── کارتابل واقعی کلاس جبرانی (مهاجرت ۰۰۶۰) ──
+  roomId: integer('roomId').references(() => classrooms.id),
+  topic: varchar('topic', { length: 300 }),
+  absenceReason: text('absenceReason'),
+  rejectionReason: text('rejectionReason'),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
@@ -2406,6 +2411,32 @@ export const notification_channels = pgTable('notification_channels', {
   verifiedAt: timestamp('verifiedAt'),
   createdAt: timestamp('createdAt').defaultNow()
 }, (t) => ({ uq: unique('uq_notification_channels').on(t.userId, t.channel) }));
+
+// ═══ توکن‌های اتصال پیام‌رسان (پیوند امن بدون رمز عبور در چت) ═══
+//
+//  جریان: کاربر وارد پورتال می‌شود → mintLinkToken (کد انسانی + دیپ‌لینک)
+//  → در بات /start <token> می‌فرستد (poll worker ثبت PENDING می‌کند)
+//  → کاربر در پورتال confirmLink را می‌زند → verifiedAt=now.
+//  کد/توکن خام هرگز ذخیره نمی‌شود؛ فقط sha256 آن‌ها.
+export const messenger_link_tokens = pgTable('messenger_link_tokens', {
+  id: serial('id').primaryKey(),
+  userId: integer('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  channel: varchar('channel', { length: 20 }).notNull(),      // TELEGRAM|BALE|EITAA (SOROUSH|IGAP فریز)
+  tokenHash: varchar('tokenHash', { length: 64 }).notNull(),  // sha256 hex توکن کامل دیپ‌لینک
+  codeHash: varchar('codeHash', { length: 64 }).notNull(),    // sha256 hex کد انسانی کوتاه
+  pendingChatId: varchar('pendingChatId', { length: 64 }),    // chatId ثبت‌شده از پیام /start (تا تأیید نهایی)
+  expiresAt: timestamp('expiresAt').notNull(),
+  usedAt: timestamp('usedAt'),
+  attempts: integer('attempts').notNull().default(0),
+  createdAt: timestamp('createdAt').defaultNow(),
+}, (t) => ({ tokenHx: index('ix_messenger_link_tokens_token').on(t.tokenHash) }));
+
+// ═══ آفست poll پیام‌رسان‌ها (getUpdates بله/ایتا) ═══
+export const messenger_poll_offsets = pgTable('messenger_poll_offsets', {
+  channel: varchar('channel', { length: 20 }).primaryKey(),   // BALE|EITAA
+  offset: integer('offset').notNull().default(0),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+});
 
 // ═══ رویدادهای موتور گردش کار (Workflow Event Bus) ═══
 // موتور BPM فقط وضعیت‌ها را جابه‌جا می‌کند؛ اثر تجاری هر فرایند (مثلاً ثبت درس

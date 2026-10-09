@@ -316,9 +316,9 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
         sessionDate: faDigits(s.sessionDate),
         sessionTime: `${faDigits(s.startTime)} الی ${faDigits(s.endTime)}`,
         roomName,
-        topic: `جلسهٔ جبرانی ${s.sessionNo ?? ''}`,
-        reason: s.status === 'PROPOSED' ? 'در انتظار تأیید اداره آموزش' : 'ثبت مستقیم توسط استاد',
-        status: s.status === 'PROPOSED' ? 'PENDING_EDUCATION' : 'APPROVED_DIRECT',
+        topic: s.topic || `جلسهٔ جبرانی ${s.sessionNo ?? ''}`,
+        reason: s.status === 'PROPOSED' ? 'در انتظار تأیید اداره آموزش' : s.status === 'REJECTED' ? `رد شده: ${s.rejectionReason ?? ''}` : 'ثبت مستقیم توسط استاد',
+        status: s.status === 'PROPOSED' ? 'PENDING_EDUCATION' : s.status === 'REJECTED' ? 'REJECTED' : 'APPROVED_DIRECT',
         allocatedAt: todayJalali,
       };
     });

@@ -1,29 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { handleMessengerUpdate, setupMessengerWebhook } from '@/lib/messenger-bot';
-import { createLogger } from '@/lib/logger';
+import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
-const log = createLogger({ mod: 'igap.webhook' });
 
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    await handleMessengerUpdate('IGAP', body);
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    log.error('webhook_error', { error: (e as Error).message });
-    return NextResponse.json({ ok: true });
-  }
+// وب‌هوک inbound ای‌گپ حذف شده (حالت فقط-ارسال).
+// اتصال جدید ای‌گپ فریز است (poll ندارد).
+export async function POST() {
+  return NextResponse.json({ error: 'not_found' }, { status: 404 });
 }
 
-export async function GET(req: NextRequest) {
-  const setup = req.nextUrl.searchParams.get('setup');
-  if (setup === '1') {
-    const baseUrl = (process.env.PUBLIC_BASE_URL || process.env.AFAGH_PUBLIC_BASE_URL || req.nextUrl.origin).replace(/\/+$/, '');
-    const webhookUrl = `${baseUrl}/api/igap/webhook`;
-    const result = await setupMessengerWebhook('IGAP', webhookUrl);
-    log.info('webhook_setup', { url: webhookUrl, ...result });
-    return NextResponse.json({ setup: true, messenger: 'IGAP', url: webhookUrl, ...result });
-  }
-  return NextResponse.json({ status: 'ok', messenger: 'IGAP', message: 'وب‌هوک ای‌گپ فعال است.' });
+export async function GET() {
+  return NextResponse.json({ error: 'not_found' }, { status: 404 });
 }
