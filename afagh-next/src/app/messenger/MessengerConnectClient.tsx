@@ -29,6 +29,8 @@ export default function MessengerConnectClient() {
       }
       setCode(res.code);
       setMsg({ kind: 'ok', text: `کد اتصال صادر شد (۱۰ دقیقه اعتبار). در پیام‌رسان این را بفرستید: /start ${res.code}` });
+    } catch {
+      setMsg({ kind: 'err', text: 'خطا در ارتباط با سرور — صفحه را رفرش کنید (Ctrl+F5) و دوباره تلاش کنید.' });
     } finally {
       setBusy(false);
     }
@@ -50,6 +52,8 @@ export default function MessengerConnectClient() {
       setMsg({ kind: 'ok', text: '✅ اتصال تأیید شد — از این پس اعلان‌ها را در پیام‌رسان می‌گیرید.' });
       setCode('');
       setConfirmInput('');
+    } catch {
+      setMsg({ kind: 'err', text: 'خطا در ارتباط با سرور — صفحه را رفرش کنید (Ctrl+F5) و دوباره تلاش کنید.' });
     } finally {
       setBusy(false);
     }
