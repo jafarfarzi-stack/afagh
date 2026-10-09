@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireMigrationAdmin, xlsxResponse } from '@/lib/migration/http';
+import { requireMigrationAdmin } from '@/lib/migration/http';
 import { buildSahamWorkbook } from '@/lib/saham/build';
 
 export const dynamic = 'force-dynamic';
@@ -7,6 +7,9 @@ export const dynamic = 'force-dynamic';
 /**
  * دانلود فایل اکسل گزارش سهام برای یک دانشگاه.
  *   GET /api/admin/saham/students?universityId=1
+ *
+ * نکته: نام فایل فارسی است؛ هدر filename باید ASCII بماند (وگرنه
+ * خطای ByteString می‌گیریم) و نام واقعی در filename* می‌رود (RFC 5987).
  */
 export async function GET(req: NextRequest) {
   const auth = await requireMigrationAdmin();
@@ -22,7 +25,14 @@ export async function GET(req: NextRequest) {
     if (count === 0) {
       return NextResponse.json({ error: 'برای این دانشگاه دانشجویی یافت نشد.' }, { status: 404 });
     }
-    const res = xlsxResponse(buf, fileName);
+    const asciiName = `saham-students-uni${universityId}.xlsx`;
+    const res = new NextResponse(new Uint8Array(buf), {
+      headers: {
+        'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'content-disposition': `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+        'cache-control': 'no-store',
+      },
+    });
     res.headers.set('x-row-count', String(count));
     return res;
   } catch (e) {
