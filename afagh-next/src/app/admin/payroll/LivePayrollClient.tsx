@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useTransition, useEffect } from 'react';
 import {
   payrollComputeAction, payrollConfigAction, payrollExportAction,
-  payrollMidtermAction, payrollPayslipAction, payrollSettleAction,
+  payrollMidtermAction, payrollPayslipAction,
 } from './actions';
 import { normalizeFa, faIncludes } from '@/lib/persian-search';
 
@@ -27,18 +27,30 @@ const STATUS_FA: Record<string, string> = {
   NOT_COMPUTED: 'محاسبه‌نشده',
   DRAFT: 'پیش‌نویس',
   MID_TERM_PAID: 'میان‌ترم پرداخت‌شده',
+  DEPT_HEAD_APPROVED: 'تأیید مدیر گروه',
+  DEAN_APPROVED: 'تأیید معاونت آموزشی',
+  REJECTED: 'ردّ نهایی',
   FINAL_SETTLED: 'تسویهٔ نهایی',
+};
+// رنگ نشان مرحلهٔ زنجیرهٔ تأیید
+const STATUS_BADGE: Record<string, string> = {
+  DEPT_HEAD_APPROVED: 'bg-indigo-600 text-white',
+  DEAN_APPROVED: 'bg-blue-600 text-white',
+  REJECTED: 'bg-rose-600 text-white',
+  MID_TERM_PAID: 'bg-amber-200 text-amber-900',
+  FINAL_SETTLED: 'bg-emerald-600 text-white',
 };
 const CONTRACT_FA: Record<string, string> = { FULL_TIME: 'هیئت علمی', ADJUNCT: 'مدعو', FULL_TIME_FACULTY: 'هیئت علمی' };
 
 type LiveTab = 'overview' | 'coefficients_rules';
 
 export default function LivePayrollClient({
-  initialTerm, initialList, initialTotals,
+  initialTerm, initialList, initialTotals, userRoles = [],
 }: {
   initialTerm: string;
   initialList: OverviewItem[];
   initialTotals: OverviewTotals;
+  userRoles?: string[];
 }) {
   const [list, setList] = useState<OverviewItem[]>(initialList);
   const [totals, setTotals] = useState<OverviewTotals>(initialTotals);
@@ -55,6 +67,18 @@ export default function LivePayrollClient({
     setToast(m);
     setTimeout(() => setToast(null), 5000);
   };
+
+  // ── زنجیرهٔ تأیید فیش (سرورساید، از /api/admin/payroll/approvals) ──
+  const isAdmin = userRoles.includes('ADMIN');
+  const canDeptAct = isAdmin || userRoles.includes('DEP_HEAD');
+  const canDeanAct = isAdmin || userRoles.includes('VICE_EDU') || userRoles.includes('EDU_EXPERT');
+  const canSettle = isAdmin;
+  // مدیر گروهِ خالص، اکشن نمای کلی موتور را ندارد؛ تازه‌سازی از مسیر دامنه‌دار
+  const useScopedRefresh = !(
+    isAdmin || userRoles.includes('EDU_EXPERT') || userRoles.includes('VICE_EDU') ||
+    userRoles.includes('FINANCE_EXPERT') || userRoles.includes('FINANCE')
+  );
+  const canManageEngine = !useScopedRefresh;
 
   const filtered = useMemo(() => {
     const q = normalizeFa(query);
@@ -95,13 +119,51 @@ export default function LivePayrollClient({
 
   const runSettle = (staffId: number, name: string) =>
     startBusy(async () => {
-      const r = await payrollSettleAction(staffId);
-      if (r.ok === false) return say(r.error);
-      say(`تسویهٔ نهایی ${name} به مبلغ ${money(r.amount)} انجام شد.`);
+      // تسویه فقط پس از تأیید معاونت آموزشی (پیش‌شرط در لایهٔ تأیید، بعد فراخوانی موتور)
+      const res = await fetch('/api/admin/payroll/approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ op: 'settle', staffId }),
+      });
+      const r = await res.json();
+      if (!r.ok) return say(r.error || 'خطا در تسویه');
+      say(r.info ?? `تسویهٔ نهایی ${name} به مبلغ ${money(r.amount ?? 0)} انجام شد.`);
+      await runComputeSilent();
+    });
+
+  const runApproval = (op: 'approve-dept' | 'approve-dean' | 'return' | 'reject', statementId: number | null) =>
+    startBusy(async () => {
+      if (!statementId) return say('ابتدا فیش ترم را محاسبه کنید.');
+      let note: string | undefined;
+      if (op === 'return' || op === 'reject') {
+        const m = prompt(op === 'return' ? 'یادداشت اصلاح (الزامی):' : 'دلیل ردّ نهایی (الزامی):');
+        if (!m || !m.trim()) return say('بدون یادداشت، بازگشت/ردّ انجام نمی‌شود.');
+        note = m.trim();
+      }
+      const res = await fetch('/api/admin/payroll/approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ op, statementId, note }),
+      });
+      const r = await res.json();
+      if (!r.ok) return say(r.error || 'خطا');
+      say(r.info ?? 'تأیید ثبت شد.');
       await runComputeSilent();
     });
 
   const runComputeSilent = async () => {
+    if (useScopedRefresh) {
+      try {
+        const res = await fetch('/api/admin/payroll/approvals');
+        const j = await res.json();
+        if (j.ok) {
+          setList(j.list as OverviewItem[]);
+          setTotals(j.totals as OverviewTotals);
+          setTerm(j.term);
+        }
+      } catch { /* پیام خطا را همان اکشن قبلی نشان داده */ }
+      return;
+    }
     const ov = await (await import('./actions')).payrollOverviewAction();
     if (ov.ok) {
       setList(ov.list as OverviewItem[]);
@@ -156,12 +218,18 @@ export default function LivePayrollClient({
         <h2 className="text-lg font-bold text-slate-800">حق‌التدریس ترم {term || '—'}</h2>
         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">دادهٔ زنده از موتور مالی</span>
         <div className="flex-1" />
-        <button onClick={runCompute} disabled={busy} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm text-white disabled:opacity-50">
-          محاسبهٔ فیش ترم
-        </button>
-        <button onClick={doExport} disabled={busy} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50">
-          خروجی واریز دسته‌جمعی (CSV)
-        </button>
+        {canManageEngine ? (
+          <>
+            <button onClick={runCompute} disabled={busy} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm text-white disabled:opacity-50">
+              محاسبهٔ فیش ترم
+            </button>
+            <button onClick={doExport} disabled={busy} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50">
+              خروجی واریز دسته‌جمعی (CSV)
+            </button>
+          </>
+        ) : (
+          <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700">کارتابل تأیید مدیر گروه — فقط فیش‌های گروه شما</span>
+        )}
       </div>
 
       {/* Tab Navigation */}
@@ -271,7 +339,7 @@ export default function LivePayrollClient({
                   <td className="p-2 font-bold">{money(x.net)}</td>
                   <td className="p-2">{money(x.midtermPaid + x.finalPaid)}</td>
                   <td className="p-2">
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5">{STATUS_FA[x.status] ?? x.status}</span>
+                    <span className={`rounded-full px-2 py-0.5 ${STATUS_BADGE[x.status] ?? 'bg-slate-100 text-slate-700'}`}>{STATUS_FA[x.status] ?? x.status}</span>
                   </td>
                   <td className="p-2 text-[11px]">
                     <span className={x.gates.gradesFinalized ? 'text-emerald-600' : 'text-amber-600'}>
@@ -285,12 +353,33 @@ export default function LivePayrollClient({
                   <td className="p-2">
                     <div className="flex flex-wrap gap-1">
                       <button onClick={() => openSlip(x.id)} disabled={busy} className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50">فیش</button>
-                      {x.status === 'DRAFT' ? (
+                      {x.status === 'DRAFT' && canManageEngine ? (
                         <button onClick={() => runMidterm(x.id, x.name)} disabled={busy} className="rounded border border-indigo-300 px-2 py-1 text-indigo-700 disabled:opacity-50">
                           علی‌الحساب
                         </button>
                       ) : null}
-                      {x.status !== 'FINAL_SETTLED' ? (
+                      {/* ── زنجیرهٔ تأیید: دکمهٔ هر مرحله فقط برای نقشِ عامل آن + ADMIN ── */}
+                      {x.statementId && canDeptAct && (x.status === 'DRAFT' || x.status === 'MID_TERM_PAID') ? (
+                        <button onClick={() => runApproval('approve-dept', x.statementId)} disabled={busy} className="rounded border border-indigo-300 px-2 py-1 text-indigo-700 disabled:opacity-50">
+                          تأیید مدیر گروه
+                        </button>
+                      ) : null}
+                      {x.statementId && canDeanAct && x.status === 'DEPT_HEAD_APPROVED' ? (
+                        <button onClick={() => runApproval('approve-dean', x.statementId)} disabled={busy} className="rounded border border-blue-300 px-2 py-1 text-blue-700 disabled:opacity-50">
+                          تأیید معاونت آموزشی
+                        </button>
+                      ) : null}
+                      {x.statementId && (canDeptAct || canDeanAct) && (x.status === 'DEPT_HEAD_APPROVED' || x.status === 'DEAN_APPROVED') ? (
+                        <button onClick={() => runApproval('return', x.statementId)} disabled={busy} className="rounded border border-amber-300 px-2 py-1 text-amber-700 disabled:opacity-50">
+                          بازگشت برای اصلاح
+                        </button>
+                      ) : null}
+                      {x.statementId && (canDeptAct || canDeanAct) && x.status !== 'FINAL_SETTLED' && x.status !== 'REJECTED' && x.status !== 'NOT_COMPUTED' ? (
+                        <button onClick={() => runApproval('reject', x.statementId)} disabled={busy} className="rounded border border-rose-300 px-2 py-1 text-rose-700 disabled:opacity-50">
+                          ردّ نهایی
+                        </button>
+                      ) : null}
+                      {x.status === 'DEAN_APPROVED' && canSettle ? (
                         <button onClick={() => runSettle(x.id, x.name)} disabled={busy} className="rounded border border-emerald-300 px-2 py-1 text-emerald-700 disabled:opacity-50">
                           تسویهٔ نهایی
                         </button>

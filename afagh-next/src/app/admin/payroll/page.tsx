@@ -1,6 +1,6 @@
 import { requireRole } from '@/lib/auth';
-import { currentTerm, getOverview } from '@/lib/payroll-engine';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { currentTerm } from '@/lib/payroll-engine';
+import { getScopedOverview } from '@/lib/payroll-approvals';
 import LivePayrollClient from './LivePayrollClient';
 import PayrollEngineClient from './PayrollEngineClient';
 
@@ -14,11 +14,9 @@ type Tab = 'live' | 'simulator';
  *   • «شبیه‌ساز سناریو» — پیش‌نمایش رابط کاربری با دادهٔ نمونه (بدون نوشتن در دیتابیس)
  */
 export default async function PayrollPage(props: { searchParams: Promise<{ tab?: string }> }) {
-  const user = await requireRole(['ADMIN', 'EDU_EXPERT', 'FINANCE_EXPERT', 'FINANCE']);
+  // زنجیرهٔ تأیید فیش: مدیر گروه (دامنهٔ گروه خودش) + معاونت آموزشی هم کارتابل را می‌بینند
+  const user = await requireRole(['ADMIN', 'EDU_EXPERT', 'VICE_EDU', 'FINANCE_EXPERT', 'FINANCE', 'DEP_HEAD']);
   const isFinance = user.roles.some(r => r === 'FINANCE_EXPERT' || r === 'FINANCE');
-
-  const currentUniversity = await getCurrentUniversity();
-  const currentUniversityId = currentUniversity?.id ?? null;
 
   const sp = await props.searchParams;
   const tab: Tab = sp?.tab === 'simulator' ? 'simulator' : 'live';
@@ -26,7 +24,8 @@ export default async function PayrollPage(props: { searchParams: Promise<{ tab?:
   if (tab === 'simulator') return <PayrollEngineClient />;
 
   const term = await currentTerm();
-  const overview = term ? await getOverview(term.id, currentUniversityId ?? undefined) : null;
+  // نمای دامنه‌دار: مدیر گروهِ خالص فقط فیش‌های گروه خودش را می‌بیند (داخل getScopedOverview)
+  const overview = term ? await getScopedOverview().catch(() => null) : null;
 
   return (
     <div className="space-y-4 p-4" dir="rtl">
@@ -62,7 +61,7 @@ export default async function PayrollPage(props: { searchParams: Promise<{ tab?:
       ) : null}
 
       {term && overview ? (
-        <LivePayrollClient initialTerm={overview.term} initialList={overview.list} initialTotals={overview.totals} />
+        <LivePayrollClient initialTerm={overview.term} initialList={overview.list} initialTotals={overview.totals} userRoles={user.roles} />
       ) : null}
     </div>
   );

@@ -3,19 +3,9 @@ import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import {
   loadSahamValueMaps, mapSahamValue, loadSahamInstituteCodes,
-  loadGeoTitles, pickSahamCode, type SahamInstituteCode,
+  loadGeoTitles, pickSahamCode, cityTitle, type SahamInstituteCode, type GeoTitles,
 } from './saham-maps';
-import { jalaliDateOf } from '@/lib/scheduling-core';
-
-/** سال تولد شمسی از تاریخ میلادی ISO ('YYYY-MM-DD') — خطا/خالی → '' */
-function sahamBirthYear(iso: string | null): string {
-  if (!iso) return '';
-  try {
-    return jalaliDateOf(new Date(iso + 'T00:00:00')).slice(0, 4);
-  } catch {
-    return '';
-  }
-}
+import { sahamBirthYear } from './student-rows';
 
 /**
  * گزارش آموزشگران سهام (3-TeachingStaff.xlsx) — ۳۷ ستون.
@@ -121,7 +111,7 @@ export async function fetchSahamInstructors(
       u2."title"                    AS "universityTitle",
       st."facultyId"                AS "facultyId",
       f."name"                      AS "instituteTitle",
-      dp."title"                    AS "deptTitle",
+      dp."name"                     AS "deptTitle",
       us."firstName"                AS "firstName",
       us."lastName"                 AS "lastName",
       us."fatherName"               AS "fatherName",
@@ -171,12 +161,12 @@ export function toSahamInstructorRow(
   r: RawInstructor,
   maps: Record<string, Record<string, string>>,
   codeRow: SahamInstituteCode | null,
-  geo: { province: Record<string, string>; city: Record<string, string> },
+  geo: GeoTitles,
 ): string[] {
   const m = (field: string, v: unknown) => mapSahamValue(maps, field, v);
   const inst = codeRow ? { code: codeRow.code, title: codeRow.title } : { code: '', title: r.instituteTitle ?? '' };
   const provName = codeRow?.provinceCode ? (geo.province[codeRow.provinceCode] ?? '') : '';
-  const cityName = codeRow?.cityCode ? (geo.city[codeRow.cityCode] ?? '') : '';
+  const cityName = cityTitle(geo, codeRow?.provinceCode ?? null, codeRow?.cityCode ?? null);
   const hireYear = (r.hireDate ?? '').slice(0, 4);
 
   return [

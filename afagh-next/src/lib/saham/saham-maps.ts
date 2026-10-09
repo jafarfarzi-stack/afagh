@@ -38,20 +38,37 @@ export function mapSahamValue(maps: Record<string, Record<string, string>>, fiel
 
 /**
  * نام استان/شهر از جدول‌های مرجع geo.
- * سهام «نام» می‌خواهد نه کد؛ کد ۱۲ در geo_provinces = آذربایجان غربی است.
+ * سهام «نام» می‌خواهد نه کد؛ شهرها فقط با (استان+کد) یکتا هستند
+ * (کد ۱۱ هم در اردبیل هست هم ارومیه!) پس lookup شهر حتماً با استان است.
  */
-export async function loadGeoTitles(): Promise<{ province: Record<string, string>; city: Record<string, string> }> {
-  const prov = (await db.execute<{ code: string; title: string }>(sql`
+export interface GeoTitles {
+  province: Record<string, string>;
+  city: Record<string, string>;
+  cityScoped: Record<string, string>;
+}
+
+export async function loadGeoTitles(): Promise<GeoTitles> {
+  const prov = (await db.execute<{ code: string; title: string } & Record<string, unknown>>(sql`
     SELECT "code", "title" FROM geo_provinces
   `)).rows;
-  const city = (await db.execute<{ code: string; title: string }>(sql`
-    SELECT "code", "title" FROM geo_cities
+  const city = (await db.execute<{ provinceCode: string; code: string; title: string } & Record<string, unknown>>(sql`
+    SELECT "provinceCode", "code", "title" FROM geo_cities
   `)).rows;
   const pm: Record<string, string> = {};
   for (const r of prov) pm[r.code] = r.title;
   const cm: Record<string, string> = {};
-  for (const r of city) cm[r.code] = r.title;
-  return { province: pm, city: cm };
+  const scoped: Record<string, string> = {};
+  for (const r of city) {
+    cm[r.code] = r.title;
+    scoped[`${r.provinceCode}:${r.code}`] = r.title;
+  }
+  return { province: pm, city: cm, cityScoped: scoped };
+}
+
+/** نام شهر با قید استان (جلوگیری از تداخل کدهای تکراری بین استان‌ها) */
+export function cityTitle(geo: GeoTitles, provinceCode: string | null, cityCode: string | null): string {
+  if (!provinceCode || !cityCode) return '';
+  return geo.cityScoped[`${provinceCode}:${cityCode}`] ?? '';
 }
 
 export interface SahamInstituteCode {
@@ -83,23 +100,18 @@ export async function loadSahamInstituteCodes(): Promise<Map<number, SahamInstit
   return byUni;
 }
 
-/** انتخاب سطر کد سهام برای یک دانشگاه + دانشکده (با fallback) */
+/**
+ * انتخاب سطر کد سهام برای یک دانشگاه + دانشکده.
+ * فقط تطبیق دقیق دانشکده؛ اگر دانشکده کدی نداشت، خالی برمی‌گردد —
+ * حدس «حوزه ستادی» برای دانشجو ممنوع است (دادهٔ غلط بدتر از خالی).
+ * تکمیل کدها از صفحهٔ تنظیمات سهام انجام می‌شود.
+ */
 export function pickSahamCode(
   byUni: Map<number, SahamInstituteCode[]>,
   universityId: number,
   facultyId: number | null,
 ): SahamInstituteCode | null {
   const list = byUni.get(universityId);
-  if (list?.length) {
-    if (facultyId != null) {
-      const hit = list.find(r => r.facultyId === facultyId);
-      if (hit) return hit;
-    }
-    const def = list.find(r => r.isDefault === 1);
-    if (def) return def;
-    return list[0];
-  }
-  // fallback به آفاق
-  const afagh = byUni.get(1) ?? [];
-  return afagh.find(r => r.isDefault === 1) ?? afagh[0] ?? null;
+  if (!list?.length || facultyId == null) return null;
+  return list.find(r => r.facultyId === facultyId) ?? null;
 }

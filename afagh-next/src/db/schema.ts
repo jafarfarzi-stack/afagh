@@ -1326,6 +1326,11 @@ export const professor_term_contracts = pgTable('professor_term_contracts', {
   contractType: varchar('contractType', { length: 50 }),
   baseDutyUnits: numeric('baseDutyUnits', { precision: 4, scale: 2 }).default('0'),
   taxRate: numeric('taxRate', { precision: 4, scale: 2 }),
+  // ── مهاجرت 0056: اسنپ‌شات ترمی — هنگام ساخت قرارداد از staff مهر می‌شود؛
+  // NULL = ردیف قدیمی ← موتور مقدار زنده می‌خواند (بدون backfill) ──
+  rankSnapshot: varchar('rankSnapshot', { length: 50 }),
+  baseSnapshot: varchar('baseSnapshot', { length: 20 }),
+  rateSnapshot: numeric('rateSnapshot', { precision: 12, scale: 0 }),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
@@ -1344,6 +1349,10 @@ export const payroll_statements = pgTable('payroll_statements', {
   finalPaidAmount: numeric('finalPaidAmount', { precision: 12, scale: 0 }).default('0'),
   finalPaidAt: timestamp('finalPaidAt'),
   computedAt: timestamp('computedAt').defaultNow(),
+  // ── مهاجرت 0056: اسنپ‌شات ترمی — هنگام compute مهر می‌شود؛ NULL = ردیف قدیمی ──
+  rankSnapshot: varchar('rankSnapshot', { length: 50 }),
+  baseSnapshot: varchar('baseSnapshot', { length: 20 }),
+  rateSnapshot: numeric('rateSnapshot', { precision: 12, scale: 0 }),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
@@ -3093,3 +3102,36 @@ export const lesson_plan_settings = pgTable('lesson_plan_settings', {
   notice: text('notice'),
   updatedAt: timestamp('updatedAt').defaultNow(),
 });
+
+// ══════════════════════════════════════════════════════════════════════
+//  مهاجرت 0056 — موظفیِ نقش‌محور + اسنپ‌شاتِ ترمیِ مرتبه/پایه/نرخ
+//  قرارداد منجمد: نام جدول‌ها/ستون‌ها عیناً مطابق drizzle/0056_payroll_role_duty.sql.
+//  ستون‌های rankSnapshot/baseSnapshot/rateSnapshot روی professor_term_contracts
+//  و payroll_statements NULLپذیرند: NULL = ردیف قدیمی ← موتور مقدار زنده می‌خواند.
+// ══════════════════════════════════════════════════════════════════════
+
+/** کاتالوگ باز سمت‌های موظفی (دانشگاه‌محور) — موظفی از «نقش» می‌آید نه مرتبه */
+export const payroll_duty_roles = pgTable('payroll_duty_roles', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  code: varchar('code', { length: 40 }).notNull(),
+  title: varchar('title', { length: 150 }).notNull(),
+  dutyUnits: numeric('dutyUnits', { precision: 4, scale: 2 }),
+  reductionUnits: numeric('reductionUnits', { precision: 4, scale: 2 }).notNull().default('0'),
+  isTeaching: integer('isTeaching').notNull().default(1),
+  sortOrder: integer('sortOrder').notNull().default(0),
+}, (t) => ([
+  unique('uq_payroll_duty_roles_uni_code').on(t.universityId, t.code),
+]));
+
+/** انتساب نقش به استاد در هر ترم */
+export const staff_term_roles = pgTable('staff_term_roles', {
+  id: serial('id').primaryKey(),
+  staffId: integer('staffId').notNull().references(() => staff.id, { onDelete: 'cascade' }),
+  termId: integer('termId').notNull().references(() => academic_terms.id, { onDelete: 'cascade' }),
+  roleId: integer('roleId').notNull().references(() => payroll_duty_roles.id, { onDelete: 'cascade' }),
+  isPrimary: integer('isPrimary').notNull().default(0),
+}, (t) => ([
+  unique('uq_staff_term_roles').on(t.staffId, t.termId, t.roleId),
+  index('idx_staff_term_roles_term').on(t.termId),
+]));

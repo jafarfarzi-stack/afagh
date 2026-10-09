@@ -1,17 +1,6 @@
 import 'server-only';
-import { mapSahamValue, type SahamInstituteCode } from './saham-maps';
-import { jalaliDateOf } from '@/lib/scheduling-core';
-import { sahamNative, type RawStudent } from './student-rows';
-
-/** سال تولد شمسی از تاریخ میلادی ISO ('YYYY-MM-DD') — خطا/خالی → '' */
-function sahamBirthYear(iso: string | null): string {
-  if (!iso) return '';
-  try {
-    return jalaliDateOf(new Date(iso + 'T00:00:00')).slice(0, 4);
-  } catch {
-    return '';
-  }
-}
+import { mapSahamValue, cityTitle, type SahamInstituteCode, type GeoTitles } from './saham-maps';
+import { sahamNative, sahamBirthYear, type RawStudent } from './student-rows';
 
 /**
  * گزارش دانش‌آموختگان سهام (2-Graduate.xlsx):
@@ -79,12 +68,12 @@ export function toSahamGraduateRow(
   r: RawStudent,
   maps: Record<string, Record<string, string>>,
   codeRow: SahamInstituteCode | null,
-  geo: { province: Record<string, string>; city: Record<string, string> },
+  geo: GeoTitles,
 ): string[] {
   const m = (field: string, v: unknown) => mapSahamValue(maps, field, v);
   const inst = codeRow ? { code: codeRow.code, title: codeRow.title } : { code: '', title: r.facultyTitle ?? '' };
   const provName = codeRow?.provinceCode ? (geo.province[codeRow.provinceCode] ?? '') : '';
-  const cityName = codeRow?.cityCode ? (geo.city[codeRow.cityCode] ?? '') : '';
+  const cityName = cityTitle(geo, codeRow?.provinceCode ?? null, codeRow?.cityCode ?? null);
   // نیمسال فراغت: سال+نیمسال پایان، وگرنه تاریخ فراغت
   const gradTerm = r.eduEndYear != null
     ? `${r.eduEndYear}${r.eduEndSemester === 2 ? '2' : '1'}`

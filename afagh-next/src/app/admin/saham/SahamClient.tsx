@@ -314,6 +314,7 @@ export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lo
           <li>اگر تعداد از سقف بیشتر شد، فیلتر را تنگ‌تر کنید (وضعیت/رشته/ورودی) و در چند نوبت دانلود بگیرید.</li>
         </ul>
         <div className="mt-2 flex flex-wrap gap-3">
+          <Link href="/admin/saham/settings" className="font-bold text-indigo-700 underline">⚙️ تنظیمات کدهای مؤسسه (استان/شهر استقرار)</Link>
           <Link href="/admin/migration" className="font-bold text-indigo-700 underline">تکمیل کدها و نگاشت‌ها</Link>
           <Link href="/admin/students" className="font-bold text-indigo-700 underline">پروندهٔ دانشجویان</Link>
         </div>

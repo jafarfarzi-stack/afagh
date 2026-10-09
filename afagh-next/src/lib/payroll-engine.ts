@@ -8,6 +8,7 @@ import {
   payroll_statements, professor_term_contracts, staff, teaching_coefficients,
   teaching_rates, users,
 } from '@/db/schema';
+import { loadTermEffectiveDuties } from '@/lib/payroll-roles';
 import { getFiscalYear, getNumber, getSetting } from '@/lib/settings';
 import { collapseMergedOfferings, mergedGroupKey } from '@/lib/professor-data';
 import { notifyUserMultichannel } from '@/lib/messaging';
@@ -116,7 +117,11 @@ type StatementRow = {
   computedAt: Date | null;
 };
 
-type ContractRow = { id: number; staffId: number; contractType: string | null; baseDutyUnits: number; taxRate: number };
+type ContractRow = {
+  id: number; staffId: number; contractType: string | null; baseDutyUnits: number; taxRate: number;
+  // مهاجرت 0056 — اسنپ‌شات ترمی (NULL = ردیف قدیمی ← مقدار زنده خوانده می‌شود)
+  rankSnapshot: string | null; baseSnapshot: string | null; rateSnapshot: number | null;
+};
 
 const ROLE_FA: Record<string, string> = {
   MAIN_LECTURER: 'مدرس اصلی', SUPERVISOR: 'استاد راهنما', ADVISOR: 'استاد مشاور',
@@ -195,6 +200,8 @@ type TermData = {
   rules: PayRule[];
   rateByStaff: Map<number, number>;
   contracts: Map<number, ContractRow>;
+  // مهاجرت 0056 — موظفی مؤثر نقش‌محور (غایب = بدون نقش تدریسی ← fallback قدیمی)
+  effectiveDuties: Map<number, number>;
   staffInfo: Map<number, StaffMeta>;
   offeringsByStaff: Map<number, StaffOffering[]>;
   sessionsByOffering: Map<number, SessionStats>;
@@ -304,13 +311,15 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
       `),
     ]);
 
-  const [crowdedThreshold, plannedSessionsDefault, msPrefixSetting] = await Promise.all([
+  const [crowdedThreshold, plannedSessionsDefault, msPrefixSetting, effectiveDuties] = await Promise.all([
     getNumber('PAYROLL_CROWDED_THRESHOLD', 40),
     getNumber('PAYROLL_TERM_SESSIONS', 16),
     getSetting('PAYROLL_MS_COURSE_PREFIX'),
+    // مهاجرت 0056 — موظفی نقش‌محور (یک کوئری برای کل ترم)
+    loadTermEffectiveDuties(termId),
   ]);
 
-  // نرخ پایهٔ هر استاد: بیشترین سال مؤثر ≤ سال تحصیلی جاری
+  // نرخ پایهٔ هر استاد: اسنپ‌شات قرارداد (ترمِ مهرشده) وگرنه بیشترین سال مؤثر ≤ سال جاری
   const year = Number(await getFiscalYear());
   const rateRows = await db
     .select().from(teaching_rates)
@@ -339,7 +348,22 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
       contractType: c.contractType,
       baseDutyUnits: Number(c.baseDutyUnits ?? 0),
       taxRate: Number(c.taxRate ?? 0),
+      // مهاجرت 0056 — NULL = ردیف قدیمی
+      rankSnapshot: (c as { rankSnapshot?: string | null }).rankSnapshot ?? null,
+      baseSnapshot: (c as { baseSnapshot?: string | null }).baseSnapshot ?? null,
+      rateSnapshot: (c as { rateSnapshot?: string | number | null }).rateSnapshot == null
+        ? null
+        : Number((c as { rateSnapshot?: string | number | null }).rateSnapshot),
     });
+  }
+  // مهاجرت 0056 — اسنپ‌شاتِ حاضر بر مقدار زنده غلبه می‌کند (ابلاغ/فیش ترم قدیمی
+  // با همان اعدادِ همان ترم محاسبه می‌شود، نه اعداد امروز استاد)
+  for (const [staffId, c] of contractsMap) {
+    if (c.rankSnapshot != null) {
+      const info = staffInfo.get(staffId);
+      if (info) info.rank = c.rankSnapshot;
+    }
+    if (c.rateSnapshot != null) rateByStaff.set(staffId, c.rateSnapshot);
   }
 
   // کلاس‌ها به تفکیک استاد (اصلی + همکار)
@@ -425,6 +449,7 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
     rules,
     rateByStaff,
     contracts: contractsMap,
+    effectiveDuties,
     staffInfo,
     offeringsByStaff,
     sessionsByOffering,
@@ -494,7 +519,10 @@ export function calcStaffPayrollFromData(data: TermData, staffId: number): Staff
   if (!info) throw new Error('استاد یافت نشد.');
   const contract = data.contracts.get(staffId);
   const rate = data.rateByStaff.get(staffId) ?? 0;
-  const dutyUnits = contract?.baseDutyUnits ?? 0;
+  // مهاجرت 0056 — موظفی از «نقش» می‌آید نه مرتبه: نقش تدریسی منتسب باشد ←
+  // موظفی مؤثر نقش‌محور، وگرنه بازگشت به baseDutyUnits قدیمی (سازگار با گذشته)
+  const roleDuty = data.effectiveDuties.get(staffId);
+  const dutyUnits = roleDuty ?? contract?.baseDutyUnits ?? 0;
   const taxRate = contract?.taxRate ?? 0;
   const offerings = collapseMergedOfferings(
     data.offeringsByStaff.get(staffId) ?? [],
@@ -649,6 +677,12 @@ export async function computeTermPayroll(actorUserId?: number | null, termId?: n
     const existing = data.statementsByStaff.get(staffId);
     if (existing && existing.status === 'FINAL_SETTLED') { skippedSettled++; continue; }
 
+    // مهاجرت 0056 — مهر اسنپ‌شات ترمی روی فیش: اسنپ‌شات قرارداد اگر هست،
+    // وگرنه مقدارِ همین محاسبه (که خودش اسنپ‌شات-یا-زنده است)؛ NULL نمی‌ماند
+    const snapRank = contract.rankSnapshot ?? calc.staff.rank ?? null;
+    const snapBase = contract.baseSnapshot ?? null;
+    const snapRate = contract.rateSnapshot ?? calc.rate;
+
     if (existing?.id) {
       updates.push({
         id: existing.id,
@@ -660,6 +694,9 @@ export async function computeTermPayroll(actorUserId?: number | null, termId?: n
           netAmount: String(calc.net),
           detailJson: detail,
           computedAt: new Date(),
+          rankSnapshot: snapRank,
+          baseSnapshot: snapBase,
+          rateSnapshot: String(snapRate),
         },
       });
     } else {
@@ -672,6 +709,9 @@ export async function computeTermPayroll(actorUserId?: number | null, termId?: n
         netAmount: String(calc.net),
         detailJson: detail,
         status: 'DRAFT',
+        rankSnapshot: snapRank,
+        baseSnapshot: snapBase,
+        rateSnapshot: String(snapRate),
       });
     }
     computed++;

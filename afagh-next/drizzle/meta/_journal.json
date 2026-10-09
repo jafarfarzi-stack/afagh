@@ -421,6 +421,20 @@
       "when": 1792339200000,
       "tag": "0055_lesson_plan",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1792425600000,
+      "tag": "0056_payroll_role_duty",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1792512000000,
+      "tag": "0057_payroll_approvals",
+      "breakpoints": true
     }
   ]
 }

@@ -4,8 +4,9 @@ import { db } from '@/db';
 import {
   academic_terms, course_offerings, courses, departments, document_signatures,
   electronic_documents, professor_term_contracts, schedules, staff, signature_otps,
+  teaching_rates,
 } from '@/db/schema';
-import { getSetting } from '@/lib/settings';
+import { getFiscalYear, getSetting } from '@/lib/settings';
 import { isDemoMode } from '@/lib/auth';
 import { logger as log } from '@/lib/logger';
 import { groupIntoMerged, mergedDisplayTitle, mergedGroupKey, offeringSharedKeys } from '@/lib/professor-data';
@@ -230,10 +231,29 @@ export async function ensureContractDocument(staffId: number, termId: number, id
   }
 
   // ردیف قرارداد ترم (معیار حقوقی/مالی)
+  // مهاجرت 0056 — مهر اسنپ‌شات ترمیِ مرتبه/پایه/نرخ از پروندهٔ جاری استاد؛
+  // محاسبهٔ مجددِ ترم قدیمی همین اعداد را می‌خواند نه اعداد امروز را.
+  const [stRow] = await db
+    .select({ academicRank: staff.academicRank, academicBase: staff.academicBase, degree: staff.degree })
+    .from(staff).where(eq(staff.id, staffId)).limit(1);
+  let snapRate: string | null = null;
+  try {
+    const year = Number(await getFiscalYear());
+    const allRates = await db.select().from(teaching_rates);
+    const applicable = allRates
+      .filter(r => r.academicRank === (stRow?.academicRank ?? null)
+        && r.degree === (stRow?.degree ?? null)
+        && Number(r.effectiveYear ?? 0) <= year)
+      .sort((a, b) => Number(b.effectiveYear ?? 0) - Number(a.effectiveYear ?? 0));
+    if (applicable[0]?.baseRatePerUnit != null) snapRate = String(applicable[0].baseRatePerUnit);
+  } catch { snapRate = null; }
   const [contractRow] = await db.insert(professor_term_contracts).values({
     staffId, termId,
     contractType: 'HOUR_RATE',
     taxRate: String(full.taxRatePercent),
+    rankSnapshot: stRow?.academicRank ?? null,
+    baseSnapshot: stRow?.academicBase ?? null,
+    rateSnapshot: snapRate,
   }).returning({ id: professor_term_contracts.id });
 
   const [doc] = await db.insert(electronic_documents).values({

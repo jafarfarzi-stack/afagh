@@ -1,11 +1,11 @@
 import 'server-only';
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
-import { loadSahamValueMaps, mapSahamValue, loadSahamInstituteCodes, pickSahamCode, type SahamInstituteCode } from './saham-maps';
+import { loadSahamValueMaps, mapSahamValue, loadSahamInstituteCodes, pickSahamCode, cityTitle, type SahamInstituteCode, type GeoTitles } from './saham-maps';
 import { jalaliDateOf } from '@/lib/scheduling-core';
 
 /** سال تولد شمسی از تاریخ میلادی ISO ('YYYY-MM-DD') — خطا/خالی → '' */
-function sahamBirthYear(iso: string | null): string {
+export function sahamBirthYear(iso: string | null): string {
   if (!iso) return '';
   try {
     return jalaliDateOf(new Date(iso + 'T00:00:00')).slice(0, 4);
@@ -230,6 +230,21 @@ export async function fetchSahamStudents(
     last_enr AS (
       SELECT DISTINCT ON ("studentId") "studentId", "termCode", cnt
       FROM enr_per_term ORDER BY "studentId", "termCode" DESC
+    ),
+    -- تعداد نیمسال‌های مرخصی (کد وضعیت ۲ و ۳) و مشروطی (isProbation) هر دانشجو
+    leave_cnt AS (
+      SELECT st."studentId", count(*)::int AS cnt
+      FROM student_term_states st
+      JOIN students s2 ON s2.id = st."studentId"
+      WHERE s2."universityId" = ${universityId} AND st."statusCode" IN ('2', '3')
+      GROUP BY st."studentId"
+    ),
+    prob_cnt AS (
+      SELECT st."studentId", count(*)::int AS cnt
+      FROM student_term_states st
+      JOIN students s2 ON s2.id = st."studentId"
+      WHERE s2."universityId" = ${universityId} AND st."isProbation" = 1
+      GROUP BY st."studentId"
     )
     SELECT
       u2."title"                       AS "universityTitle",
@@ -276,8 +291,8 @@ export async function fetchSahamStudents(
       s."scholarshipType"             AS "scholarshipType",
       s."entranceExamRank"            AS "entranceExamRank",
       le.cnt                          AS "termCourseCount",
-      s."eqSemesters"                 AS "leaveSemesters",
-      NULL::int                       AS "probationSemesters",
+      lc.cnt                          AS "leaveSemesters",
+      pc.cnt                          AS "probationSemesters",
       s."totalPassedUnits"            AS "totalPassedUnits",
       s."unitsRemaining"              AS "unitsRemaining",
       s."totalAverage"                AS "totalAverage",
@@ -299,6 +314,8 @@ export async function fetchSahamStudents(
     LEFT JOIN geo_countries gc ON gc."code" = us."nationality"
     LEFT JOIN last_state ls ON ls."studentId" = s.id
     LEFT JOIN last_enr le ON le."studentId" = s.id
+    LEFT JOIN leave_cnt lc ON lc."studentId" = s.id
+    LEFT JOIN prob_cnt pc ON pc."studentId" = s.id
     WHERE ${where}
     ORDER BY s."studentCode"
     LIMIT ${limit}
@@ -312,13 +329,13 @@ export function toSahamRow(
   r: RawStudent,
   maps: Record<string, Record<string, string>>,
   codeRow: SahamInstituteCode | null,
-  geo: { province: Record<string, string>; city: Record<string, string> },
+  geo: GeoTitles,
 ): string[] {
   const m = (field: string, v: unknown) => mapSahamValue(maps, field, v);
   // کد واحد/دانشکده + نام + استان/شهر استقرار از جدول saham_institute_codes
   const inst = codeRow ? { code: codeRow.code, title: codeRow.title } : { code: '', title: r.facultyTitle ?? '' };
   const provName = codeRow?.provinceCode ? (geo.province[codeRow.provinceCode] ?? '') : '';
-  const cityName = codeRow?.cityCode ? (geo.city[codeRow.cityCode] ?? '') : '';
+  const cityName = cityTitle(geo, codeRow?.provinceCode ?? null, codeRow?.cityCode ?? null);
 
   return [
     r.universityTitle,
