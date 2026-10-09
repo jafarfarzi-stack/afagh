@@ -205,6 +205,7 @@ try {
       { key: 'FINANCE_CRON_SECRET', env: process.env.FINANCE_CRON_SECRET }, // یادآوری چک
       { key: 'GRAD_CRON_SECRET', env: process.env.GRAD_CRON_SECRET },       // فارغ‌التحصیلی + گردش کار
       { key: 'BI_CRON_SECRET', env: process.env.BI_CRON_SECRET },           // تازه‌سازی BI (M-3: مستقل از GRAD)
+      { key: 'GREETINGS_CRON_SECRET', env: process.env.GREETINGS_CRON_SECRET }, // تبریک تولد + شروع ترم
     ];
     const secretsDir = '/secrets';
     const secretsFile = path.join(secretsDir, 'cron.env');

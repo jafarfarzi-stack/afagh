@@ -40,10 +40,12 @@ CHEQUE_MIN="$(num "${CHEQUE_REMIND_INTERVAL_MIN:-60}" 60)"
 GRAD_MIN="$(num "${GRAD_SCAN_INTERVAL_MIN:-1440}" 1440)"
 BI_MIN="$(num "${BI_REFRESH_INTERVAL_MIN:-720}" 720)"
 WF_MIN="$(num "${WORKFLOW_EVENTS_INTERVAL_MIN:-60}" 60)"
+GREET_MIN="$(num "${GREETINGS_INTERVAL_MIN:-1440}" 1440)"
 
 FINANCE_SECRET="${FINANCE_CRON_SECRET:-}"
 GRAD_SECRET="${GRAD_CRON_SECRET:-}"
 BI_SECRET="${BI_CRON_SECRET:-}"
+GREET_SECRET="${GREETINGS_CRON_SECRET:-}"
 
 now_min() { echo $(( $(date +%s) / 60 )); }
 
@@ -110,6 +112,7 @@ next_cheque=$start
 next_grad=$start
 next_bi=$start
 next_wf=$start
+next_greet=$start
 
 echo "[scheduler] شروع — app=$APP_URL tick=${TICK}s retry=${RETRY_MIN}min alert_after=${FAIL_ALERT_AT}"
 echo "[scheduler] فاصله‌ها (دقیقه): cheque=$CHEQUE_MIN grad=$GRAD_MIN bi=$BI_MIN workflow=$WF_MIN"
@@ -121,6 +124,9 @@ if [ -z "$GRAD_SECRET" ]; then
 fi
 if [ -z "$BI_SECRET" ]; then
   echo "[scheduler] هشدار: BI_CRON_SECRET خالی است — تازه‌سازی گزارش‌های تحلیلی اجرا نمی‌شود"
+fi
+if [ -z "$GREET_SECRET" ]; then
+  echo "[scheduler] هشدار: GREETINGS_CRON_SECRET خالی است — تبریک‌های خودکار اجرا نمی‌شود"
 fi
 
 while :; do
@@ -140,6 +146,10 @@ while :; do
 
   if [ "$now" -ge "$next_wf" ]; then
     call workflow "/api/cron/workflow-events" "$GRAD_SECRET" next_wf "$WF_MIN"
+  fi
+
+  if [ "$now" -ge "$next_greet" ]; then
+    call greet "/api/cron/greetings" "$GREET_SECRET" next_greet "$GREET_MIN"
   fi
 
   sleep "$TICK"
