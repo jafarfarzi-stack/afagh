@@ -7,11 +7,11 @@ import { allRoleGuides, buildHelpIndex, defaultGuideForRoles, isHelpRoleKey, vis
 export const metadata = { title: 'مرکز راهنمای سامانه آفاق' };
 
 const GUIDE_CARD: Record<string, string> = {
-  student: 'border-emerald-300 bg-emerald-50/60',
-  professor: 'border-indigo-300 bg-indigo-50/60',
-  'group-manager': 'border-teal-300 bg-teal-50/60',
-  admin: 'border-slate-400 bg-slate-100/70',
-  shared: 'border-amber-300 bg-amber-50/60',
+  student: 'border-emerald-300 bg-emerald-50/60 dark:border-emerald-800 dark:bg-emerald-950/60',
+  professor: 'border-indigo-300 bg-indigo-50/60 dark:border-indigo-800 dark:bg-indigo-950/60',
+  'group-manager': 'border-teal-300 bg-teal-50/60 dark:border-teal-800 dark:bg-teal-950/60',
+  admin: 'border-slate-400 bg-slate-100/70 dark:border-slate-600 dark:bg-slate-800/70',
+  shared: 'border-amber-300 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/60',
 };
 
 export default async function HelpLandingPage(props: { searchParams: Promise<{ tab?: string }> }) {

@@ -211,7 +211,7 @@ export default function LivePayrollClient({
   return (
     <div className="space-y-4" dir="rtl">
       {toast ? (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">{toast}</div>
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">{toast}</div>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
@@ -709,7 +709,7 @@ function CoefficientsRulesLiveTab({ term, onToast, busy }: CoefficientsRulesLive
           </table>
         </div>
 
-        <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900">
+        <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           <strong>نحوه اعمال:</strong> واحد درس × ضریب درس عملی × ضریب مقطع ارشد × ضریب کلاس جمعی = واحد معادل نهایی.
           <br />آستانه کلاس جمعی از تنظیمات (PAYROLL_CROWDED_THRESHOLD) خوانده می‌شود (پیش‌فرض ۴۰ نفر).
         </div>

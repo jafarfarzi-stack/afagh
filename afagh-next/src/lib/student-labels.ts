@@ -92,12 +92,12 @@ export function studentStatusFa(status: string | null | undefined, samaCode?: st
 /** رنگ چیپ وضعیت */
 export function studentStatusChip(status: string | null | undefined): string {
   switch (status) {
-    case 'ACTIVE': return 'bg-emerald-100 text-emerald-800';
-    case 'GRADUATED': return 'bg-sky-100 text-sky-800';
-    case 'EXPELLED': return 'bg-red-100 text-red-800';
-    case 'WITHDRAWN': return 'bg-orange-100 text-orange-800';
-    case 'SUSPENDED': return 'bg-amber-100 text-amber-800';
-    case 'TRANSFERRED': return 'bg-violet-100 text-violet-800';
+    case 'ACTIVE': return 'bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200';
+    case 'GRADUATED': return 'bg-sky-100 text-sky-800 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200';
+    case 'EXPELLED': return 'bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200';
+    case 'WITHDRAWN': return 'bg-orange-100 text-orange-800 dark:border-orange-800 dark:bg-orange-950 dark:text-orange-200';
+    case 'SUSPENDED': return 'bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200';
+    case 'TRANSFERRED': return 'bg-violet-100 text-violet-800 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-200';
     case 'NO_SHOW': return 'bg-slate-200 text-slate-600';
     case 'DECEASED': return 'bg-zinc-800 text-zinc-100';
     default: return 'bg-slate-100 text-slate-600';
@@ -122,11 +122,11 @@ export function gradeStatusFa(status: string | null | undefined): string {
 /** رنگ چیپ وضع نمره */
 export function gradeStatusChip(status: string | null | undefined): string {
   switch (status) {
-    case 'FINALIZED': return 'bg-emerald-100 text-emerald-800';
-    case 'TEMPORARY': return 'bg-amber-100 text-amber-800';
+    case 'FINALIZED': return 'bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200';
+    case 'TEMPORARY': return 'bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200';
     case 'EXEMPT':
-    case 'PASSED_NO_GRADE': return 'bg-sky-100 text-sky-800';
-    case 'FAILED_NO_GRADE': return 'bg-red-100 text-red-800';
+    case 'PASSED_NO_GRADE': return 'bg-sky-100 text-sky-800 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200';
+    case 'FAILED_NO_GRADE': return 'bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200';
     default: return 'bg-slate-100 text-slate-600';
   }
 }

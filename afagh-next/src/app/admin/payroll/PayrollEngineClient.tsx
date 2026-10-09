@@ -229,7 +229,7 @@ export default function PayrollEngineClient() {
 
       {/* Toast Alert */}
       {toastMessage && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl text-xs font-bold flex items-center justify-between shadow-xs animate-in fade-in">
+        <div className="p-3.5 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl text-xs font-bold flex items-center justify-between shadow-xs animate-in fade-in dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
           <div className="flex items-center gap-2">
             <span className="text-lg">📢</span>
             <span>{toastMessage}</span>

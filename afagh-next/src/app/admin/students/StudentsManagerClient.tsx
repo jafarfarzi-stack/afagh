@@ -599,7 +599,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
       </div>
 
       {toastMsg && (
-        <div className="p-3 bg-emerald-100 text-emerald-900 font-bold border border-emerald-300 rounded-xl shadow-sm text-center animate-fade">
+        <div className="p-3 bg-emerald-100 text-emerald-900 font-bold border border-emerald-300 rounded-xl shadow-sm text-center animate-fade dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
           {toastMsg}
         </div>
       )}
@@ -828,13 +828,13 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                   {/* ── حساب وب دانشجو: فعال/غیرفعال + تغییر رمز (فقط ADMIN) ── */}
                   <div className="grid grid-cols-3 gap-2 items-center border-t border-slate-200 pt-2 mt-2">
                     <span className="font-bold">🔐 حساب وب:</span>
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full text-center ${currentStudent.isActive === 0 ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full text-center ${currentStudent.isActive === 0 ? 'bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200' : 'bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'}`}>
                       {currentStudent.isActive === 0 ? '⛔ غیرفعال' : '✅ فعال'}
                     </span>
                     <div className="flex gap-1.5 justify-end">
                       <button
                         onClick={() => handleToggleActive(currentStudent.userId, currentStudent.isActive === 0, `${currentStudent.firstName} ${currentStudent.lastName}`)}
-                        className={`px-2.5 py-1 rounded text-[11px] font-bold border ${currentStudent.isActive === 0 ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100'}`}
+                        className={`px-2.5 py-1 rounded text-[11px] font-bold border ${currentStudent.isActive === 0 ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100 dark:border-red-800 dark:bg-red-950 dark:text-red-200 dark:hover:bg-red-900'}`}
                         title="فعال/غیرفعال‌سازی کامل حساب (ورود، کارتابل، برنامه‌ریزی، نشست‌ها، OTPها) — فقط مدیر سیستم"
                       >
                         {currentStudent.isActive === 0 ? 'فعال‌سازی کامل' : 'غیرفعال‌سازی کامل'}
@@ -886,7 +886,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                   <div className="grid grid-cols-2 gap-2">
                     <div className="flex items-center gap-2">
                       <span className="w-24">استاد راهنما:</span>
-                      <input type="text" value={profile.advisorCode ?? ''} onChange={e => pf('advisorCode', e.target.value)} className="bg-yellow-100 border border-slate-300 px-2 py-1 rounded w-full font-bold" placeholder="کد/نام استاد راهنما —" />
+                      <input type="text" value={profile.advisorCode ?? ''} onChange={e => pf('advisorCode', e.target.value)} className="bg-yellow-100 border border-slate-300 px-2 py-1 rounded w-full font-bold dark:text-slate-900" placeholder="کد/نام استاد راهنما —" />
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="w-24">وضعیت نظام وظیفه:</span>
@@ -1018,7 +1018,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
               <div className="border border-slate-300 p-2.5 rounded bg-slate-50 space-y-1.5">
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span>نام خوابگاه و شماره اتاق:</span>
-                  <input type="text" value={profile.dormName ?? ''} onChange={e => pf('dormName', e.target.value)} className="bg-yellow-100 border border-slate-300 px-2 py-1 rounded font-bold" placeholder="—" />
+                  <input type="text" value={profile.dormName ?? ''} onChange={e => pf('dormName', e.target.value)} className="bg-yellow-100 border border-slate-300 px-2 py-1 rounded font-bold dark:text-slate-900" placeholder="—" />
                   <input type="text" value={profile.dormRoom ?? ''} onChange={e => pf('dormRoom', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded text-center" placeholder="—" />
                 </div>
                 <div className="grid grid-cols-3 gap-2 items-center">
@@ -1352,7 +1352,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
               {transcriptLoading ? (
                 <p className="text-center text-slate-500 py-6">در حال بارگذاری کارنامه…</p>
               ) : !transcript || transcript.length === 0 ? (
-                <p className="text-center text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">کارنامه‌ای برای این دانشجو یافت نشد (ممکن است نمرات در مرحلهٔ انتقال باشد).</p>
+                <p className="text-center text-amber-700 bg-amber-50 border border-amber-200 rounded p-3 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">کارنامه‌ای برای این دانشجو یافت نشد (ممکن است نمرات در مرحلهٔ انتقال باشد).</p>
               ) : transcriptView === 'simple' ? (
                 <div className="overflow-x-auto border border-slate-300 rounded">
                   <table className="w-full text-right text-[11px]">
@@ -1385,7 +1385,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                     <td className="p-1.5 text-center">
                       <button
                         onClick={() => openEditGrade(r)}
-                        className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-300"
+                        className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-300 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200 dark:hover:bg-amber-900"
                         title="ویرایش یا اصلاح نمره"
                       >
                         ✏️ ویرایش
@@ -1560,10 +1560,6 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                 <span>❌</span> <span>انصراف (Ctrl+Z)</span>
               </button>
             </div>
-
-            <button onClick={() => setStuTab('list')} className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 font-semibold rounded flex items-center gap-1">
-              <span>📋</span> <span>انتقال به لیست داوطلبان</span>
-            </button>
           </div>
 
         </div>
@@ -1796,7 +1792,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                   {/* ── حساب وب استاد: فعال/غیرفعال + تغییر رمز (فقط ADMIN) ── */}
                   <div className="grid grid-cols-3 gap-2 items-center border-t border-slate-200 pt-2 mt-1">
                     <span className="font-bold">🔐 حساب وب:</span>
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full text-center ${(currentStaff.userIsActive ?? 1) === 0 ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full text-center ${(currentStaff.userIsActive ?? 1) === 0 ? 'bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200' : 'bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'}`}>
                       {(currentStaff.userIsActive ?? 1) === 0 ? '⛔ غیرفعال' : '✅ فعال'}
                     </span>
                     <div className="flex gap-1.5 justify-end">
@@ -1942,7 +1938,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
               <button onClick={() => showToast('حالت ویرایش فعال شد (F4)')} className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-400 font-bold rounded flex items-center gap-1">
                 <span>✏️</span> <span>F4 ویرایش</span>
               </button>
-              <button onClick={() => showToast('حذف رکورد انجام شد')} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 rounded flex items-center gap-1">
+              <button onClick={() => showToast('حذف رکورد انجام شد')} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 rounded flex items-center gap-1 dark:border-red-800 dark:bg-red-950 dark:text-red-200 dark:hover:bg-red-900">
                 <span>🗑️</span> <span>حذف</span>
               </button>
             </div>

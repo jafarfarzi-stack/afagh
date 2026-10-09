@@ -106,7 +106,7 @@ export default function RegulationCheckClient() {
         بررسی کدهای وضعیت نمره سما (آیین‌نامه)
       </h1>
 
-      <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-xs text-amber-800">
+      <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
         <b>توضیح:</b> این ابزار تمام نمرات تثبیت‌شده را با محاسبه مجدد آیین‌نامه مقایسه می‌کند.
         اگر کد وضعیت فعلی با کد صحیح آیین‌نامه متفاوت باشد، آن را نشان می‌دهد.
         کدهای قدیمی ممکن است از داده‌های اولیه سما کپی شده باشند و صحیح نباشند.
@@ -150,7 +150,7 @@ export default function RegulationCheckClient() {
       </div>
 
       {msg && (
-        <div className={`p-3 rounded text-sm font-bold ${msg.includes('خطا') ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-green-100 text-green-800 border border-green-300'}`}>
+        <div className={`p-3 rounded text-sm font-bold ${msg.includes('خطا') ? 'bg-red-100 text-red-800 border border-red-300 dark:border-red-800 dark:bg-red-950 dark:text-red-200' : 'bg-green-100 text-green-800 border border-green-300 dark:border-green-800 dark:bg-green-950 dark:text-green-200'}`}>
           {msg}
         </div>
       )}
@@ -210,12 +210,12 @@ export default function RegulationCheckClient() {
                     </span>
                   </td>
                   <td className="p-2 text-center font-mono">
-                    <span className="px-2 py-0.5 rounded bg-red-100 text-red-700 font-bold border border-red-300">
+                    <span className="px-2 py-0.5 rounded bg-red-100 text-red-700 font-bold border border-red-300 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
                       {r.currentCode || '—'}
                     </span>
                   </td>
                   <td className="p-2 text-center font-mono">
-                    <span className="px-2 py-0.5 rounded bg-green-100 text-green-700 font-bold border border-green-300">
+                    <span className="px-2 py-0.5 rounded bg-green-100 text-green-700 font-bold border border-green-300 dark:border-green-800 dark:bg-green-950 dark:text-green-200">
                       {r.correctCode || '—'}
                     </span>
                   </td>
@@ -237,7 +237,7 @@ export default function RegulationCheckClient() {
       {/* ── مغایرت وضعیت: فارغ‌التحصیل بدون نمره ── */}
       <div className="border-t-2 border-slate-700 pt-4 mt-6 space-y-3">
         <h2 className="text-base font-extrabold text-slate-800">مغایرت وضعیت فارغ‌التحصیلی</h2>
-        <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-xs text-amber-800">
+        <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           <b>توضیح:</b> وضعیت فارغ‌التحصیلی از داده ثبتی می‌آید و مستقل از نمرات است.
           اگر برای فارغ‌التحصیلی نه نمره نهایی و نه سابقه legacy ثبت شده باشد،
           یعنی جزئیات نمراتش در اکسپورت سما جا مانده (مثل انتقالی با سوابق) و باید پیگیری شود.
@@ -251,7 +251,7 @@ export default function RegulationCheckClient() {
             {statusScanning ? 'در حال بررسی...' : 'اسکن فارغ‌التحصیلان بدون نمره'}
           </button>
           {statusMsg && (
-            <div className={`p-2 rounded text-xs font-bold ${statusMsg.includes('خطا') ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-green-100 text-green-800 border border-green-300'}`}>
+            <div className={`p-2 rounded text-xs font-bold ${statusMsg.includes('خطا') ? 'bg-red-100 text-red-800 border border-red-300 dark:border-red-800 dark:bg-red-950 dark:text-red-200' : 'bg-green-100 text-green-800 border border-green-300 dark:border-green-800 dark:bg-green-950 dark:text-green-200'}`}>
               {statusMsg}
             </div>
           )}

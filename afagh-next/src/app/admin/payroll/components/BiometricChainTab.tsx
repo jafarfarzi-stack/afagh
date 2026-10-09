@@ -51,8 +51,8 @@ export default function BiometricChainTab({ state, api }: Props) {
                 {biometricLogs.filter(l => l.verificationMethod === 'GATE_FINGERPRINT').length} جلسه (کلاس اول) 🧬
               </span>
             </div>
-            <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200">
-              <span className="text-emerald-800 text-[11px] block font-bold">پیوستگی زنجیره‌ای (Chain Match):</span>
+            <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 dark:border-emerald-800 dark:bg-emerald-950">
+              <span className="text-emerald-800 text-[11px] block font-bold dark:text-emerald-200">پیوستگی زنجیره‌ای (Chain Match):</span>
               <span className="text-base font-black text-emerald-950 font-mono">
                 {biometricLogs.filter(l => l.verificationMethod === 'CHAIN_MATCHING_CONTINUOUS').length} جلسه (کلاس‌های متوالی) 🔗
               </span>

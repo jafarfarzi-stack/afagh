@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { homeForClient } from './roles';
 import { chooseLoginAccountAction, loginAndReport } from './actions';
+import { toEnDigits } from '@/lib/persian-search';
 
 type Candidate = {
   id: number; name: string; staffCodes: string[]; universityTitle: string | null; roles: string[];
@@ -96,9 +97,9 @@ export default function LoginCard() {
       </div>
       {!choice ? (
         <>
-          <input className="input text-left" dir="ltr" placeholder="کد ملی یا کد پرسنلی" value={code} onChange={e => setCode(e.target.value)} name="code" autoComplete="username" />
-          <input className="input text-left" dir="ltr" type="password" placeholder="رمز عبور" value={pass} onChange={e => setPass(e.target.value)} name="password" autoComplete="current-password" />
-          {err && <p className="rounded-xl bg-red-50 p-2 text-center text-sm text-red-700">{err}</p>}
+          <input className="input text-left" dir="ltr" placeholder="کد ملی یا کد پرسنلی" value={code} onChange={e => setCode(toEnDigits(e.target.value))} name="code" autoComplete="username" />
+          <input className="input text-left" dir="ltr" type="password" placeholder="رمز عبور" value={pass} onChange={e => setPass(toEnDigits(e.target.value))} name="password" autoComplete="current-password" />
+          {err && <p className="rounded-xl bg-red-50 p-2 text-center text-sm text-red-700 dark:border dark:border-red-800 dark:bg-red-950 dark:text-red-200">{err}</p>}
           <button className="btn-primary w-full" disabled={busy}>{busy ? 'در حال ورود…' : 'ورود'}</button>
           <p className="text-center text-[11px] text-slate-400">
             ورود اول؟ گذرواژه شما برابر همان کد است. <a href="/help?tab=shared" className="text-indigo-700 font-bold hover:underline">راهنمای ورود</a>
@@ -106,7 +107,7 @@ export default function LoginCard() {
         </>
       ) : (
         <>
-          <p className="rounded-xl bg-amber-50 p-2 text-center text-sm font-bold text-amber-900">
+          <p className="rounded-xl bg-amber-50 p-2 text-center text-sm font-bold text-amber-900 dark:border dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
             این شناسه چند حساب دارد — وارد کدام کارتابل می‌شوید؟
           </p>
           <div className="space-y-2">
@@ -126,7 +127,7 @@ export default function LoginCard() {
               </button>
             ))}
           </div>
-          {err && <p className="rounded-xl bg-red-50 p-2 text-center text-sm text-red-700">{err}</p>}
+          {err && <p className="rounded-xl bg-red-50 p-2 text-center text-sm text-red-700 dark:border dark:border-red-800 dark:bg-red-950 dark:text-red-200">{err}</p>}
           <button type="button" className="w-full text-center text-xs text-slate-500 hover:underline" disabled={busy} onClick={() => { setChoice(null); setErr(''); }}>
             بازگشت به ورود
           </button>

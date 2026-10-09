@@ -68,14 +68,14 @@ export default function InsuranceAdvancesTab({ state, api }: Props) {
               </p>
             </div>
 
-            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 space-y-1">
+            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 space-y-1 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
               <span className="text-amber-900 font-bold block">سیاست پرداخت مساعده (Advance):</span>
               <p className="text-amber-950 font-bold leading-5">
                 منوی درخواست علی‌الحساب برای عموم اساتید <b>پنهان</b> است تا بار مالی زودرس ایجاد نشود؛ مدیر مالی می‌تواند به صورت موردی آن را برای استاد فعال کند.
               </p>
             </div>
 
-            <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 space-y-1">
+            <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 space-y-1 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
               <span className="text-emerald-900 font-bold block">کسر خودکار در تسویه نهایی:</span>
               <p className="text-emerald-950 font-bold leading-5">
                 مبالغ مساعده پرداخت‌شده در میان‌ترم، به طور اتوماتیک از فیش تسویه حساب پایان ترم کسر می‌شوند (جلوگیری از پرداخت مضاعف).

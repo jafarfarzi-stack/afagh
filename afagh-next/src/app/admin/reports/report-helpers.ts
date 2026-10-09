@@ -5,6 +5,7 @@
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { STUDENT_STATUS_FA } from '@/lib/student-labels';
+import { toEnDigits } from '@/lib/persian-search';
 
 export const PER = 50;
 
@@ -65,11 +66,12 @@ export function studentWhere(f: ReportFilters, alias = 's') {
   if (f.majorId) c.push(sql`${a}."majorId" = ${f.majorId}`);
   if (f.entryYear) c.push(sql`${a}."entryYear" = ${f.entryYear}`);
   if (f.nationalCode) {
-    const like = `%${f.nationalCode}%`;
+    // کدهای ذخیره‌شده انگلیسی‌اند؛ ارقام فارسی ورودی نرمال می‌شود تا کدهای SA/SS هم پیدا شوند.
+    const like = `%${toEnDigits(String(f.nationalCode))}%`;
     c.push(sql`u."nationalCode" ILIKE ${like}`);
   }
   if (f.q) {
-    const like = `%${f.q}%`;
+    const like = `%${toEnDigits(String(f.q))}%`;
     c.push(sql`(${a}."studentCode" ILIKE ${like} OR u."firstName" ILIKE ${like} OR u."lastName" ILIKE ${like} OR u."nationalCode" ILIKE ${like})`);
   }
   return c;

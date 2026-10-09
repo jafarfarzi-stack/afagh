@@ -166,7 +166,7 @@ export default function RolesClient(props: {
         <a href="/admin/payroll" className="text-sm text-slate-600 underline">بازگشت به میز حق‌التدریس</a>
       </div>
 
-      <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+      <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
         موظفی هر استاد از «نقش» او می‌آید نه مرتبهٔ علمی. موظفی مؤثر = موظفیِ نقش تدریسی اصلی (کمترین ترتیب) منهای مجموع کسرِ همهٔ نقش‌ها (کفِ صفر)؛
         بدون نقش تدریسی، موظفی قدیمی قرارداد مبناست.
         اعداد پیش‌فرض سید قطعی نیستند — با تأیید مالی دانشگاه اصلاحشان کنید.

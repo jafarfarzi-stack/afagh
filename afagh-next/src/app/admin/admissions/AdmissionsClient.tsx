@@ -315,10 +315,10 @@ export default function AdmissionsClient({
         <div
           className={`p-4 rounded-2xl border text-xs font-bold flex items-center justify-between animate-fadeIn ${
             feedback.type === 'success'
-              ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
               : feedback.type === 'warning'
-                ? 'bg-amber-50 border-amber-300 text-amber-900'
-                : 'bg-red-50 border-red-300 text-red-900'
+                ? 'bg-amber-50 border-amber-300 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200'
+                : 'bg-red-50 border-red-300 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-200'
           }`}
         >
           <span>✓ {feedback.text}</span>
@@ -432,7 +432,7 @@ export default function AdmissionsClient({
                         {isResolved ? (
                           <span className="font-bold text-emerald-800">{st.mappedMajorName || '—'}</span>
                         ) : (
-                          <span className="text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded border border-red-200">
+                          <span className="text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded border border-red-200 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
                             ⚠️ تعریف‌نشده (نیاز به نگاشت)
                           </span>
                         )}
@@ -443,10 +443,10 @@ export default function AdmissionsClient({
                         <span
                           className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                             st.status === 'IMPORTED'
-                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
                               : isResolved
-                              ? 'bg-sky-100 text-sky-900 border border-sky-300'
-                              : 'bg-red-100 text-red-900 border border-red-300'
+                              ? 'bg-sky-100 text-sky-900 border border-sky-300 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200'
+                              : 'bg-red-100 text-red-900 border border-red-300 dark:border-red-800 dark:bg-red-950 dark:text-red-200'
                           }`}
                         >
                           {st.status === 'IMPORTED' ? '✓ ثبت‌نام قطعی شد' : isResolved ? 'آماده ثبت‌نام' : 'نیازمند نگاشت'}
@@ -497,7 +497,7 @@ export default function AdmissionsClient({
                   type="text"
                   value={formulaPattern}
                   onChange={e => setFormulaPattern(e.target.value)}
-                  className="w-full p-2.5 text-xs font-mono font-bold rounded-xl border border-indigo-300 bg-indigo-50/50"
+                  className="w-full p-2.5 text-xs font-mono font-bold rounded-xl border border-indigo-300 bg-indigo-50/50 dark:border-indigo-700 dark:bg-indigo-950 dark:text-indigo-100"
                   dir="ltr"
                 />
                 <p className="text-[10px] text-slate-400 mt-1">
@@ -714,8 +714,8 @@ export default function AdmissionsClient({
             <div
               className={`card p-6 rounded-2xl border-2 space-y-4 animate-scaleUp ${
                 irandocResult.decision === 'AUTO_APPROVE'
-                  ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950'
-                  : 'bg-red-50/80 border-red-400 text-red-950'
+                  ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200'
+                  : 'bg-red-50/80 border-red-400 text-red-950 dark:border-red-700 dark:bg-red-950 dark:text-red-200'
               }`}
             >
               <div className="flex items-center justify-between">

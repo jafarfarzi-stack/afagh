@@ -849,8 +849,8 @@ export async function updateStaffProfileAction(
   if (!staffId || !patch || typeof patch !== 'object') return { ok: false, error: 'شناسهٔ پرونده یا مقادیر نامعتبر است.' };
   const uni = await getCurrentUniversity().catch(() => null);
   if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
-  const [row] = await db.select({ userId: staff.userId, universityId: staff.universityId })
-    .from(staff).where(eq(staff.id, staffId)).limit(1);
+  const [row] = await db.select({ userId: staff.userId, universityId: staff.universityId, nationalCode: users.nationalCode })
+    .from(staff).leftJoin(users, eq(users.id, staff.userId)).where(eq(staff.id, staffId)).limit(1);
   if (!row) return { ok: false, error: 'پرونده یافت نشد.' };
   if (row.universityId !== null && row.universityId !== uni.id) {
     return { ok: false, error: 'پرونده متعلق به دانشگاه دیگری است.' };
@@ -869,7 +869,10 @@ export async function updateStaffProfileAction(
     }
     if ('nationalCode' in patch) {
       const nc = clean(patch.nationalCode, 10);
-      if (nc !== undefined) {
+      if (nc !== undefined && nc !== (row.nationalCode ?? null)) {
+        // مقدار جدید است → باید کد ملی معتبر ۱۰ رقمی باشد (+ کنترل تکراری).
+        // اگر کاربر کد را دست نزده (حتی کدهای قدیمی SA/SS/…)، بدون اعتبارسنجی
+        // رد می‌شویم تا ویرایش بقیهٔ فیلدها (موبایل و…) قفل نشود.
         if (!/^\d{10}$/.test(nc)) return { ok: false, error: 'کد ملی باید ۱۰ رقم باشد.' };
         const clash = await db.select({ id: users.id }).from(users)
           .where(and(eq(users.nationalCode, nc), eq(users.universityId, uni.id))).limit(1);
@@ -890,7 +893,7 @@ export async function updateStaffProfileAction(
           return { ok: false, error: 'تاریخ تولد خارج از بازهٔ مجاز است.' };
         }
         const g = toGregorian(jy, jm, jd);
-        userSet.birthDate = `${g.gy}-${String(g.gm).padStart(2, '0')}-${String(g.gd).padStart(2, '0')}`;
+        userSet.birthDate = new Date(Date.UTC(g.gy, g.gm - 1, g.gd));
       }
     }
     if (Object.keys(userSet).length) {

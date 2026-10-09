@@ -101,7 +101,7 @@ export default function AccountSwitcher({ siblings }: { siblings: SiblingAccount
             );
           })}
         </div>
-        {err && <p className="mt-2 rounded-lg bg-red-50 p-1.5 text-center font-bold text-red-700">{err}</p>}
+        {err && <p className="mt-2 rounded-lg bg-red-50 p-1.5 text-center font-bold text-red-700 dark:border dark:border-red-800 dark:bg-red-950 dark:text-red-200">{err}</p>}
       </div>
     </div>
   );

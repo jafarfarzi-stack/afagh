@@ -139,11 +139,11 @@ const statusFa: Record<string, string> = {
 };
 
 const statusBadge: Record<string, string> = {
-  SUBMITTED: 'bg-amber-100 text-amber-900 border-amber-300',
-  IN_REVIEW: 'bg-sky-100 text-sky-900 border-sky-300',
-  APPROVED: 'bg-emerald-100 text-emerald-900 border-emerald-300',
-  REJECTED: 'bg-red-100 text-red-900 border-red-300',
-  RETURNED: 'bg-purple-100 text-purple-900 border-purple-300',
+  SUBMITTED: 'bg-amber-100 text-amber-900 border-amber-300 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200',
+  IN_REVIEW: 'bg-sky-100 text-sky-900 border-sky-300 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200',
+  APPROVED: 'bg-emerald-100 text-emerald-900 border-emerald-300 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+  REJECTED: 'bg-red-100 text-red-900 border-red-300 dark:border-red-800 dark:bg-red-950 dark:text-red-200',
+  RETURNED: 'bg-purple-100 text-purple-900 border-purple-300 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-200',
 };
 
 const roleFa: Record<string, string> = {
@@ -285,8 +285,8 @@ export default function AdminWorkflowsClient({
         <div
           className={`p-4 rounded-2xl border text-xs font-bold flex items-center justify-between animate-fadeIn ${
             feedbackMsg.type === 'success'
-              ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
-              : 'bg-red-50 border-red-300 text-red-900'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+              : 'bg-red-50 border-red-300 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-200'
           }`}
         >
           <span>✓ {feedbackMsg.text}</span>
@@ -393,8 +393,8 @@ export default function AdminWorkflowsClient({
                           <span
                             className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                               req.isBreached
-                                ? 'bg-red-100 text-red-900 border border-red-300'
-                                : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                ? 'bg-red-100 text-red-900 border border-red-300 dark:border-red-800 dark:bg-red-950 dark:text-red-200'
+                                : 'bg-emerald-100 text-emerald-900 border border-emerald-300 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
                             }`}
                           >
                             {req.isBreached ? '⚠️ تاخیر از SLA' : '✓ در مهلت مجاز'}
@@ -483,8 +483,8 @@ export default function AdminWorkflowsClient({
                                 onClick={() => handleClearCheckpoint(cp.id)}
                                 className={`px-2 py-0.5 rounded text-[10px] font-bold border transition ${
                                   cp.isCleared === 1
-                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                                    : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                                    : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200 dark:hover:bg-amber-900'
                                 }`}
                               >
                                 {cp.departmentTitle}: {cp.isCleared === 1 ? '✓ تسویه' : 'کلیک جهت تسویه'}
@@ -587,7 +587,7 @@ export default function AdminWorkflowsClient({
 
                         <div>
                           <span className="text-slate-500 block mb-1">اقدام در صورت انقضای مهلت (Timeout):</span>
-                          <span className="font-bold text-red-900 bg-red-50 p-2 rounded-xl border border-red-200 block">
+                          <span className="font-bold text-red-900 bg-red-50 p-2 rounded-xl border border-red-200 block dark:border-red-800 dark:bg-red-950 dark:text-red-200">
                             ⚡ {step.timeoutAction === 'ESCALATE' ? 'ارجاع خودکار به مقام بالاتر (Escalation)' : step.timeoutAction === 'AUTO_APPROVE' ? 'تأیید خودکار سیستمی (Auto-Approve)' : 'بستن خودکار پرونده'}
                           </span>
                         </div>
@@ -849,7 +849,7 @@ export default function AdminWorkflowsClient({
                         {st.avgMttrHours} ساعت
                       </td>
                       <td className="p-3 text-center">
-                        <span className="font-mono font-extrabold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        <span className="font-mono font-extrabold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
                           {st.slaAdherencePercent}%
                         </span>
                       </td>

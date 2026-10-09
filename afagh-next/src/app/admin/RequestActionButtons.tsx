@@ -37,7 +37,7 @@ export default function RequestActionButtons({ requestId, status }: { requestId:
             });
           }
         }}
-        className="rounded-md bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs px-2.5 py-1 font-medium transition-colors disabled:opacity-50"
+        className="rounded-md bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs px-2.5 py-1 font-medium transition-colors disabled:opacity-50 dark:border-red-800 dark:bg-red-950 dark:text-red-200 dark:hover:bg-red-900"
       >
         رد
       </button>

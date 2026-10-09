@@ -47,8 +47,8 @@ export default function ChangePasswordPage() {
         <input className="input text-left" dir="ltr" type="password" placeholder="رمز فعلی" value={current} onChange={e => setCurrent(e.target.value)} />
         <input className="input text-left" dir="ltr" type="password" placeholder="رمز جدید (حداقل ۸ کاراکتر)" value={next} onChange={e => setNext(e.target.value)} />
         <input className="input text-left" dir="ltr" type="password" placeholder="تکرار رمز جدید" value={confirm} onChange={e => setConfirm(e.target.value)} />
-        {err && <p className="rounded-xl bg-red-50 p-2 text-center text-sm text-red-700">{err}</p>}
-        {ok && <p className="rounded-xl bg-emerald-50 p-2 text-center text-sm text-emerald-700">✓ رمز با موفقیت تغییر کرد. در حال انتقال…</p>}
+        {err && <p className="rounded-xl bg-red-50 p-2 text-center text-sm text-red-700 dark:border dark:border-red-800 dark:bg-red-950 dark:text-red-200">{err}</p>}
+        {ok && <p className="rounded-xl bg-emerald-50 p-2 text-center text-sm text-emerald-700 dark:border dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">✓ رمز با موفقیت تغییر کرد. در حال انتقال…</p>}
         <button className="btn-primary w-full" disabled={busy || !current || !next || !confirm}>{busy ? 'در حال ثبت…' : 'تغییر رمز و ورود'}</button>
       </form>
     </main>

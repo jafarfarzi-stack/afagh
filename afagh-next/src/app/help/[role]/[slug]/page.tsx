@@ -14,10 +14,10 @@ export async function generateMetadata(props: { params: Promise<{ role: string; 
 }
 
 const NOTE_STYLE: Record<string, string> = {
-  info: 'border-sky-300 bg-sky-50 text-sky-900',
-  ok: 'border-emerald-300 bg-emerald-50 text-emerald-900',
-  warn: 'border-amber-300 bg-amber-50 text-amber-900',
-  danger: 'border-rose-300 bg-rose-50 text-rose-900',
+  info: 'border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200',
+  ok: 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+  warn: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200',
+  danger: 'border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-200',
 };
 
 export default async function HelpTopicPage(props: { params: Promise<{ role: string; slug: string }> }) {
@@ -113,11 +113,11 @@ export default async function HelpTopicPage(props: { params: Promise<{ role: str
           </section>
         )}
 
-        <section aria-label="اگر مشکل داشتید" className="rounded-2xl border border-amber-300 bg-amber-50/60 p-4 shadow-sm sm:p-6">
-          <h2 className="text-sm font-black text-amber-900">🛟 اگر مشکل داشتید</h2>
+        <section aria-label="اگر مشکل داشتید" className="rounded-2xl border border-amber-300 bg-amber-50/60 p-4 shadow-sm sm:p-6 dark:border-amber-800 dark:bg-amber-950/60">
+          <h2 className="text-sm font-black text-amber-900 dark:text-amber-200">🛟 اگر مشکل داشتید</h2>
           <ul className="mt-2 space-y-1.5">
             {t.troubleshooting.map((x, i) => (
-              <li key={i} className="flex items-start gap-2 text-xs leading-loose text-amber-950">
+              <li key={i} className="flex items-start gap-2 text-xs leading-loose text-amber-950 dark:text-amber-200">
                 <span aria-hidden="true" className="mt-0.5 shrink-0">•</span>
                 <span>{x}</span>
               </li>

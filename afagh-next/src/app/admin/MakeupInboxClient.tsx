@@ -105,7 +105,7 @@ export default function MakeupInboxClient({ initialRows, rooms }: Props) {
       </div>
 
       {toast && (
-        <div className={`p-3 border rounded-xl text-xs font-bold flex items-center justify-between ${toast.kind === 'ok' ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : 'bg-red-50 border-red-300 text-red-800'}`}>
+        <div className={`p-3 border rounded-xl text-xs font-bold flex items-center justify-between ${toast.kind === 'ok' ? 'bg-emerald-50 border-emerald-300 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' : 'bg-red-50 border-red-300 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200'}`}>
           <span>{toast.text}</span>
           <button onClick={() => setToast(null)} className="font-black">✕</button>
         </div>
@@ -139,9 +139,9 @@ export default function MakeupInboxClient({ initialRows, rooms }: Props) {
                         استاد: {req.professorName} ({req.staffCode})
                       </span>
                       <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold ${
-                        isPending ? 'bg-amber-200 text-amber-900 border border-amber-300'
-                        : isApproved ? 'bg-emerald-200 text-emerald-900 border border-emerald-300'
-                        : 'bg-rose-200 text-rose-900 border border-rose-300'
+                        isPending ? 'bg-amber-200 text-amber-900 border border-amber-300 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200'
+                        : isApproved ? 'bg-emerald-200 text-emerald-900 border border-emerald-300 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                        : 'bg-rose-200 text-rose-900 border border-rose-300 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-200'
                       }`}>
                         {isPending ? '⏳ نیازمند تخصیص کلاس آموزش' : isApproved ? '✓ تایید و ابلاغ رسمی شده' : '✕ رد شده'}
                       </span>
@@ -165,13 +165,13 @@ export default function MakeupInboxClient({ initialRows, rooms }: Props) {
                     )}
 
                     {isApproved && (
-                      <div className="p-2.5 bg-emerald-100/80 border border-emerald-300 rounded-xl text-xs text-emerald-900 font-bold">
+                      <div className="p-2.5 bg-emerald-100/80 border border-emerald-300 rounded-xl text-xs text-emerald-900 font-bold dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
                         🏛️ کلاس تخصیص‌یافته: <strong>{req.roomName ?? '—'}</strong>
                       </div>
                     )}
 
                     {isRejected && (
-                      <div className="p-2 bg-rose-100/80 border border-rose-300 rounded-xl text-xs text-rose-900 font-bold">
+                      <div className="p-2 bg-rose-100/80 border border-rose-300 rounded-xl text-xs text-rose-900 font-bold dark:border-rose-800 dark:bg-rose-950 dark:text-rose-200">
                         دلیل عدم تایید: {req.rejectionReason ?? '—'}
                       </div>
                     )}
@@ -202,7 +202,7 @@ export default function MakeupInboxClient({ initialRows, rooms }: Props) {
                         </button>
                         <button
                           onClick={() => { setRejectingId(req.id); setRejectionText(''); }}
-                          className="py-2 px-3 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold text-xs transition"
+                          className="py-2 px-3 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold text-xs transition dark:bg-rose-950 dark:text-rose-200 dark:hover:bg-rose-900"
                         >
                           رد
                         </button>
@@ -212,8 +212,8 @@ export default function MakeupInboxClient({ initialRows, rooms }: Props) {
                 </div>
 
                 {rejectingId === req.id && (
-                  <div className="mt-3 p-3 bg-rose-50 rounded-xl border border-rose-300 space-y-2">
-                    <label className="text-xs font-bold text-rose-900 block">دلیل رد درخواست جبرانی (جهت اطلاع استاد):</label>
+                  <div className="mt-3 p-3 bg-rose-50 rounded-xl border border-rose-300 space-y-2 dark:border-rose-800 dark:bg-rose-950">
+                    <label className="text-xs font-bold text-rose-900 block dark:text-rose-200">دلیل رد درخواست جبرانی (جهت اطلاع استاد):</label>
                     <input
                       type="text"
                       value={rejectionText}

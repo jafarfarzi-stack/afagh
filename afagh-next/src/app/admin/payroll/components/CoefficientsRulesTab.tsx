@@ -279,7 +279,7 @@ export default function CoefficientsRulesTab({ state, api }: Props) {
           </table>
         </div>
 
-        <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900">
+        <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           <strong>نحوه اعمال:</strong> واحد درس × ضریب درس عملی × ضریب مقطع ارشد × ضریب کلاس جمعی = واحد معادل نهایی.
           <br />آستانه کلاس جمعی از تنظیمات (PAYROLL_CROWDED_THRESHOLD) خوانده می‌شود (پیش‌فرض ۴۰ نفر).
         </div>

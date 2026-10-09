@@ -4,7 +4,7 @@ import { degree_level_configs, departments, educational_regulations, faculties, 
 import type { RegulationPick } from './types';
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
-import { normalizeFa, normCol } from '@/lib/persian-search';
+import { normalizeFa, normCol, toEnDigits } from '@/lib/persian-search';
 import { getSetting } from '@/lib/settings';
 import StudentsManagerClient from './StudentsManagerClient';
 
@@ -47,7 +47,9 @@ export default async function AdminStudentsPage({
   if (statusFilter !== 'ALL') conds.push(eq(students.status, statusFilter));
   if (degreeFilter > 0) conds.push(eq(students.degreeLevelId, degreeFilter));
   if (q) {
-    const like = `%${q}%`;
+    // شناسه‌ها (کد ملی/دانشجویی) در DB انگلیسی‌اند؛ ارقام فارسی ورودی ادمین
+    // نرمال می‌شود تا «SA۰۱۲۵…» هم ردیف «SA0125…» را پیدا کند. حروف (SA/…) دست‌نخورده می‌مانند.
+    const like = `%${toEnDigits(q)}%`;
     const faLike = `%${normalizeFa(q)}%`;
     conds.push(
       or(
@@ -63,7 +65,7 @@ export default async function AdminStudentsPage({
     const faLike = `%${normalizeFa(fName)}%`;
     conds.push(or(ilike(normCol(users.firstName), faLike), ilike(normCol(users.lastName), faLike))!);
   }
-  if (fNc) conds.push(ilike(users.nationalCode, `%${fNc}%`));
+  if (fNc) conds.push(ilike(users.nationalCode, `%${toEnDigits(fNc)}%`));
   if (fMajor) conds.push(ilike(normCol(majors.name), `%${normalizeFa(fMajor)}%`));
   if (/^\d{4}$/.test(fYear)) conds.push(eq(students.entryYear, Number(fYear)));
   const where = conds.length ? and(...conds) : undefined;

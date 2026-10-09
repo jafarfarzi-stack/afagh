@@ -6,6 +6,7 @@ import {
   student_sponsorships, student_loans, students, users,
 } from '@/db/schema';
 import { computeTermAdjustments, toNum, type TermCharge } from '../finance-rules';
+import { toEnDigits } from '@/lib/persian-search';
 
 export interface FinanceStudentRow {
   studentId: number;
@@ -57,7 +58,8 @@ export async function listFinanceStudents(
   if (effectiveUniversityId) where.push(eq(students.universityId, effectiveUniversityId));
 
   if (filters.search && filters.search.trim()) {
-    const needle = `%${filters.search.trim()}%`;
+    // کدهای ذخیره‌شده انگلیسی‌اند؛ ارقام فارسی ورودی نرمال می‌شود تا کدهای SA/SS هم پیدا شوند.
+    const needle = `%${toEnDigits(filters.search.trim())}%`;
     const searchCond = or(
       sql`${users.firstName} ILIKE ${needle}`,
       sql`${users.lastName} ILIKE ${needle}`,

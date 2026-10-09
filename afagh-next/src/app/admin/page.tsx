@@ -42,11 +42,11 @@ const stFa: Record<string, string> = {
 };
 
 const stColor: Record<string, string> = {
-  SUBMITTED: 'bg-amber-100 text-amber-800 border border-amber-300',
-  IN_REVIEW: 'bg-sky-100 text-sky-800 border border-sky-300',
-  APPROVED: 'bg-emerald-100 text-emerald-800 border border-emerald-300',
-  REJECTED: 'bg-red-100 text-red-700 border border-red-300',
-  RETURNED: 'bg-purple-100 text-purple-800 border border-purple-300',
+  SUBMITTED: 'bg-amber-100 text-amber-800 border border-amber-300 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200',
+  IN_REVIEW: 'bg-sky-100 text-sky-800 border border-sky-300 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200',
+  APPROVED: 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+  REJECTED: 'bg-red-100 text-red-700 border border-red-300 dark:border-red-800 dark:bg-red-950 dark:text-red-200',
+  RETURNED: 'bg-purple-100 text-purple-800 border border-purple-300 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-200',
 };
 
 /** سرستون کارتابل: کلیک = nav با ?sort=col&dir=asc|desc (سورت سمت سرور) */

@@ -76,9 +76,9 @@ export default function MessengerConnectClient() {
       </button>
 
       {code && (
-        <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-center">
-          <div className="text-[11px] text-emerald-700 font-bold">در سروش به {ch?.bot || 'بات'} این پیام را بفرستید:</div>
-          <div className="mt-1 font-mono text-lg font-black text-emerald-900" dir="ltr">/start {code}</div>
+        <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-center dark:border-emerald-800 dark:bg-emerald-950">
+          <div className="text-[11px] text-emerald-700 font-bold dark:text-emerald-200">در سروش به {ch?.bot || 'بات'} این پیام را بفرستید:</div>
+          <div className="mt-1 font-mono text-lg font-black text-emerald-900 dark:text-emerald-200" dir="ltr">/start {code}</div>
         </div>
       )}
 
@@ -92,7 +92,7 @@ export default function MessengerConnectClient() {
       </div>
 
       {msg && (
-        <div className={`rounded-xl border p-3 text-xs font-bold ${msg.kind === 'ok' ? 'border-emerald-300 bg-emerald-50/70 text-emerald-800' : 'border-red-300 bg-red-50/70 text-red-800'}`}>
+        <div className={`rounded-xl border p-3 text-xs font-bold ${msg.kind === 'ok' ? 'border-emerald-300 bg-emerald-50/70 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' : 'border-red-300 bg-red-50/70 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200'}`}>
           {msg.text}
         </div>
       )}

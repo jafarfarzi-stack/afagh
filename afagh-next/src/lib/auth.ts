@@ -451,7 +451,18 @@ export async function login(
   }
   // یک شناسه، چند حسابِ هم‌رمز → کاربر خودش انتخاب می‌کند وارد کدام کارتابل شود.
   const { signToken } = await import('@/lib/verification');
-  const token = await signToken({ uids: matched.map((m) => m.id).join(','), ident: clean }, 5 * 60);
+  let token: string;
+  try {
+    token = await signToken({ uids: matched.map((m) => m.id).join(','), ident: clean }, 5 * 60);
+  } catch (e) {
+    // اگر امضای توکن به هر دلیل (مثلاً نبود کلید) شکست خورد، به‌جای ۵۰۰،
+    // خطای قابل‌فهم بده + راه جایگزین (ورود جداگانه با کد هر حساب).
+    try {
+      const { createLogger } = await import('@/lib/logger');
+      createLogger({ mod: 'auth' }).error('login_choice_sign_failed', { error: (e as Error)?.message ?? String(e) });
+    } catch { /* لاگ اختیاری است */ }
+    return { ok: false, error: 'خطای داخلی در آماده‌سازی انتخاب حساب. لطفاً با کد پرسنلی/دانشجویی هر حساب جداگانه وارد شوید.' };
+  }
   const candidates = await candidateSummaries(matched.map((m) => m.id));
   return { ok: false, needChoice: true, token, candidates };
 }

@@ -41,11 +41,14 @@ export function faLikePattern(raw: string | null | undefined): string {
 /**
  * تطبیق زیررشته‌ای نرمال‌شده برای فیلترهای کلاینتی/حافظه‌ای.
  * هر دو سمت نرمال می‌شوند تا «ي» با «ی» و «ك» با «ک» بخورد.
+ * ارقام فارسی/عربی هم به انگلیسی برمی‌گردند تا جست‌وجوی کد ملی/پرسنلی/دانشجویی
+ * با کیبورد فارسی (مثلاً «SA۰۱۲۵…») ردیف‌های ذخیره‌شدهٔ انگلیسی (SA0125…) را پیدا کند.
+ * (فقط تطبیق بیشتر؛ دادهٔ ذخیره‌شده دست‌نخورده می‌ماند.)
  */
 export function faIncludes(haystack: string | null | undefined, needle: string | null | undefined): boolean {
-  const n = normalizeFa(needle);
+  const n = toEnDigits(normalizeFa(needle));
   if (!n) return true;
-  return normalizeFa(haystack).includes(n);
+  return toEnDigits(normalizeFa(haystack)).includes(n);
 }
 
 /**
