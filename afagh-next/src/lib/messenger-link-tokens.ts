@@ -122,7 +122,27 @@ export async function handlePairingText(
     .set({ pendingChatId: chatId })
     .where(eq(messenger_link_tokens.id, hit.id));
   log.info('pairing_recorded', { channel, tokenId: hit.id, tokenHash: hit.tokenHash.slice(0, 12) });
-  return 'کد دریافت شد. ✅\nبه پورتال برگردید و دکمهٔ «تأیید اتصال» را بزنید تا اعلان‌ها فعال شود.';
+  return 'کد دریافت شد. ✅\nبه پورتال برگردید — اتصال به‌صورت خودکار تأیید می‌شود.';
+}
+
+// ──────── بررسی وضعیت جفت‌سازی (برای تأیید خودکار سمت کلاینت) ────────
+//  فقط می‌خواند؛ شمارش تلاش را نمی‌سوزاند و حالت token را تغییر نمی‌دهد.
+
+export async function checkPairingStatus(userId: number, rawCode: string): Promise<{
+  ok: boolean; paired?: boolean; channel?: string; error?: string;
+}> {
+  const param = String(rawCode ?? '').trim();
+  if (!param) return { ok: false, error: LINK_GENERIC_ERROR };
+  const digest = sha256hex(param);
+  const rows = await db.select().from(messenger_link_tokens)
+    .where(eq(messenger_link_tokens.userId, userId)).limit(50);
+  const hit = rows.find(r =>
+    timingEqHex(r.tokenHash, digest) || timingEqHex(r.codeHash, digest)
+  );
+  if (!hit) return { ok: false, error: LINK_GENERIC_ERROR };
+  if (hit.usedAt) return { ok: true, paired: true, channel: hit.channel };
+  if (hit.expiresAt <= new Date()) return { ok: false, error: LINK_GENERIC_ERROR };
+  return { ok: true, paired: Boolean(hit.pendingChatId), channel: hit.channel };
 }
 
 // ──────── تأیید نهایی از پورتال ────────

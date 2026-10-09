@@ -383,10 +383,17 @@ export async function login(
   // شناسه ممکن است با کیبورد فارسی تایپ شده باشد (ارقام ۰-۹)؛ همهٔ کدهای
   // سیستمی انگلیسی‌اند پس اول نرمال می‌کنیم تا ورود اول شکست نخورد.
   const clean = toEnDigits(identifier.trim());
-  // شناسه می‌تواند «کد ملی» یا «کد پرسنلی/کاربری» باشد.
-  // کد ملی در سطح دانشگاه یکتاست نه سراسری + یک نفر ممکن است چند حساب داشته باشد؛
-  // همهٔ کاندیداها را به ترتیب id امتحان می‌کنیم.
-  const byNc = await db.select().from(users).where(eq(users.nationalCode, clean)).orderBy(asc(users.id));
+  // شناسه می‌تواند «کد پرسنلی/کاربری» یا «شماره دانشجویی» باشد.
+  // 🔒 ورود با کدملی حذف شد (کدملی روی حساب‌های چندگانهٔ یک نفر تکراری است و
+  // تعارض ورود می‌ساخت)؛ فقط در حالت دمو کدملی هم پذیرفته می‌شود چون حساب‌های
+  // دمو با کدملی ساخته شده‌اند. کدپرسنلی در سطح دانشگاه یکتاست؛ یک نفر ممکن
+  // است چند حساب داشته باشد — همهٔ کاندیداها را به ترتیب id امتحان می‌کنیم.
+  const cands: typeof users.$inferSelect[] = [];
+  const seen = new Set<number>();
+  if (isDemoMode()) {
+    const byNc = await db.select().from(users).where(eq(users.nationalCode, clean)).orderBy(asc(users.id));
+    for (const c of byNc) if (!seen.has(c.id)) { seen.add(c.id); cands.push(c); }
+  }
   const byStaff = await db
     .select({ user: users })
     .from(staff)
@@ -394,10 +401,9 @@ export async function login(
     .where(eq(staff.staffCode, clean))
     .orderBy(asc(users.id))
     .then((rows) => rows.map((r) => r.user));
-  const seen = new Set<number>();
-  const cands = [...byNc, ...byStaff].filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true)));
+  for (const c of byStaff) if (!seen.has(c.id)) { seen.add(c.id); cands.push(c); }
   if (!cands.length) {
-    // جستجو بر اساس شماره دانشجویی (سازگاری قبلی)
+    // جستجو بر اساس شماره دانشجویی
     const stuRows = await db
       .select({ user: users })
       .from(students)
@@ -405,7 +411,7 @@ export async function login(
       .where(eq(students.studentCode, clean))
       .orderBy(asc(users.id))
       .then((rows) => rows.map((r) => r.user));
-    cands.push(...stuRows.filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true))));
+    for (const c of stuRows) if (!seen.has(c.id)) { seen.add(c.id); cands.push(c); }
   }
   // ── گسترش هم‌شخصی: اگر شناسه کدملی/کدپرسنلیِ یک نفرِ دوکده باشد،
   // حساب‌های linked او هم کاندیدا می‌شوند؛ ورود به هر حساب فقط با رمزِ همان حساب.

@@ -25,7 +25,7 @@ import {
   users,
 } from '@/db/schema';
 import { getStaffByUser, isDemoMode, requireRole } from '@/lib/auth';
-import { sendSms } from '@/lib/messaging';
+import { notifyUserMultichannel, sendSms } from '@/lib/messaging';
 import { ensureGradePersistence, resolveStudentRow } from '@/lib/demo-grades-seed';
 import { logGradeChange, logBulkGradeChange } from '@/lib/grade-change-log';
 import { resolveSamaGradeStatusCode } from '@/lib/resolve-sama-code';
@@ -274,7 +274,10 @@ export async function requestFinalizeOtpAction(
 
     // پیامک واقعی از طریق سرویس‌دهندهٔ پیکربندی‌شده (Kavenegar/SMS.ir/…)
     const [u] = await db.select({ mobile: users.mobile }).from(users).where(eq(users.id, user.id)).limit(1);
-    if (u?.mobile) await sendSms(u.mobile, `کد تأیید قفل نهایی نمرات (آفاق): ${code} — تا ۵ دقیقه معتبر است.`);
+    const otpText = `کد تأیید قفل نهایی نمرات (آفاق): ${code} — تا ۵ دقیقه معتبر است.`;
+    if (u?.mobile) await sendSms(u.mobile, otpText).catch(() => { /* SMS خاموش/خاموش — ادامه به messenger */ });
+    // علاوه بر SMS، از کانال پیام‌رسان متصل استاد (سروش/بله/…) هم بفرست
+    await notifyUserMultichannel({ userId: user.id, eventCode: 'GRADE_FINALIZE_OTP', text: otpText, channels: ['SOROUSH', 'BALE', 'EITAA', 'TELEGRAM'] }).catch(() => { /* messenger خاموش */ });
 
     // در دمو کد در پاسخ برمی‌گردد تا بدون پیامک هم تست شود
     return { ok: true, sent: true, demoOtp: isDemoMode() ? code : undefined };

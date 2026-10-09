@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { confirmLinkAction, mintLinkTokenAction } from '@/lib/messenger-link-actions';
+import { useEffect, useRef, useState } from 'react';
+import { checkPairingAction, confirmLinkAction, mintLinkTokenAction } from '@/lib/messenger-link-actions';
 
 const CHANNELS = [
   { key: 'SOROUSH', label: 'سروش‌پلاس', bot: '@afaghbot', ready: true },
@@ -11,16 +11,36 @@ const CHANNELS = [
   { key: 'IGAP', label: 'آی‌گپ', bot: '', ready: false },
 ] as const;
 
+/** فاصلهٔ هر polling وضعیت جفت‌سازی (میلی‌ثانیه) */
+const POLL_MS = 2500;
+/** حداکثر مدت polling — کمی بیشتر از TTL توکن (۱۰ دقیقه) */
+const POLL_MAX_MS = 11 * 60 * 1000;
+
 export default function MessengerConnectClient() {
   const [channel, setChannel] = useState<string>('SOROUSH');
   const [code, setCode] = useState('');
-  const [confirmInput, setConfirmInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [waiting, setWaiting] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollStartRef = useRef(0);
+
+  // توقف polling هنگام unmount یا تغییر کد
+  useEffect(() => () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+  }, []);
+
+  const stopPolling = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    setWaiting(false);
+  };
 
   const mint = async () => {
     setBusy(true);
     setMsg(null);
+    setCode('');
+    stopPolling();
     try {
       const res = await mintLinkTokenAction(channel);
       if (!res.ok) {
@@ -28,7 +48,8 @@ export default function MessengerConnectClient() {
         return;
       }
       setCode(res.code);
-      setMsg({ kind: 'ok', text: `کد اتصال صادر شد (۱۰ دقیقه اعتبار). در پیام‌رسان این را بفرستید: /start ${res.code}` });
+      setMsg({ kind: 'ok', text: `کد اتصال صادر شد (۱۰ دقیقه اعتبار). در پیام‌رسان به ${CHANNELS.find(c => c.key === channel)?.bot || 'بات'} پیام زیر را بفرستید — تأیید خودکار انجام می‌شود.` });
+      startPolling(res.code);
     } catch {
       setMsg({ kind: 'err', text: 'خطا در ارتباط با سرور — صفحه را رفرش کنید (Ctrl+F5) و دوباره تلاش کنید.' });
     } finally {
@@ -36,26 +57,49 @@ export default function MessengerConnectClient() {
     }
   };
 
-  const confirm = async () => {
-    if (!confirmInput.trim()) {
-      setMsg({ kind: 'err', text: 'کد را وارد کنید.' });
-      return;
-    }
-    setBusy(true);
-    setMsg(null);
-    try {
-      const res = await confirmLinkAction(confirmInput.trim());
-      if (!res.ok) {
-        setMsg({ kind: 'err', text: res.error });
+  const startPolling = (c: string) => {
+    stopPolling();
+    setWaiting(true);
+    pollStartRef.current = Date.now();
+    pollRef.current = setInterval(async () => {
+      // توقف خودکار پس از سقف زمانی
+      if (Date.now() - pollStartRef.current > POLL_MAX_MS) {
+        stopPolling();
+        setMsg({ kind: 'err', text: 'مهلت انتظار تمام شد. کد جدیدی بگیرید و دوباره تلاش کنید.' });
         return;
       }
-      setMsg({ kind: 'ok', text: '✅ اتصال تأیید شد — از این پس اعلان‌ها را در پیام‌رسان می‌گیرید.' });
-      setCode('');
-      setConfirmInput('');
+      try {
+        const st = await checkPairingAction(c);
+        if (st.ok && st.paired) {
+          stopPolling();
+          const cf = await confirmLinkAction(c);
+          if (cf.ok) {
+            setMsg({ kind: 'ok', text: '✅ اتصال تأیید شد — از این پس اعلان‌ها را در پیام‌رسان می‌گیرید.' });
+            setCode('');
+          } else {
+            setMsg({ kind: 'err', text: cf.error || 'تأیید نهایی ناموفق بود — دوباره تلاش کنید.' });
+          }
+        }
+      } catch { /* polling بعدی تلاش می‌کند */ }
+    }, POLL_MS);
+  };
+
+  const copyCode = async () => {
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(`/start ${code}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
-      setMsg({ kind: 'err', text: 'خطا در ارتباط با سرور — صفحه را رفرش کنید (Ctrl+F5) و دوباره تلاش کنید.' });
-    } finally {
-      setBusy(false);
+      // fallback: انتخاب متن
+      const el = document.getElementById('link-code');
+      if (el) {
+        const r = document.createRange();
+        r.selectNodeContents(el);
+        const s = window.getSelection();
+        s?.removeAllRanges();
+        s?.addRange(r);
+      }
     }
   };
 
@@ -64,7 +108,7 @@ export default function MessengerConnectClient() {
   return (
     <div className="card space-y-3">
       <label className="block text-xs font-bold text-slate-600">پیام‌رسان
-        <select value={channel} onChange={e => { setChannel(e.target.value); setCode(''); setMsg(null); }} className="mt-1 w-full rounded border px-2 py-2 text-sm">
+        <select value={channel} onChange={e => { setChannel(e.target.value); setCode(''); setMsg(null); stopPolling(); }} className="mt-1 w-full rounded border px-2 py-2 text-sm">
           {CHANNELS.map(c => (
             <option key={c.key} value={c.key}>{c.label}{c.ready ? '' : ' (به‌زودی)'}</option>
           ))}
@@ -77,19 +121,28 @@ export default function MessengerConnectClient() {
 
       {code && (
         <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-center dark:border-emerald-800 dark:bg-emerald-950">
-          <div className="text-[11px] text-emerald-700 font-bold dark:text-emerald-200">در سروش به {ch?.bot || 'بات'} این پیام را بفرستید:</div>
-          <div className="mt-1 font-mono text-lg font-black text-emerald-900 dark:text-emerald-200" dir="ltr">/start {code}</div>
+          <div className="text-[11px] text-emerald-700 font-bold dark:text-emerald-200">
+            در {ch?.label || 'پیام‌رسان'} به {ch?.bot || 'بات'} این پیام را بفرستید:
+          </div>
+          <button
+            onClick={copyCode}
+            className="mt-1.5 w-full rounded-lg border border-emerald-400 bg-white/70 px-3 py-2 font-mono text-lg font-black text-emerald-900 transition hover:bg-white active:scale-[0.98] dark:border-emerald-700 dark:bg-slate-900/60 dark:text-emerald-100"
+            title="کلیک برای کپی"
+            dir="ltr"
+          >
+            <span id="link-code">/start {code}</span>
+            <span className="mr-2 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+              {copied ? '✅ کپی شد' : '📋 کپی'}
+            </span>
+          </button>
+          {waiting && (
+            <div className="mt-2 flex items-center justify-center gap-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+              در انتظار ارسال پیام در بات — تأیید خودکار انجام می‌شود…
+            </div>
+          )}
         </div>
       )}
-
-      <div className="border-t border-slate-100 pt-3">
-        <label className="block text-xs font-bold text-slate-600">پس از ارسال در بات، همین کد را اینجا تأیید کنید
-          <input value={confirmInput} onChange={e => setConfirmInput(e.target.value)} placeholder="کد ۸ رقمی" dir="ltr" className="mt-1 w-full rounded border px-2 py-2 text-sm font-mono" />
-        </label>
-        <button onClick={confirm} disabled={busy} className="mt-2 w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-40">
-          {busy ? '⏳…' : '✓ تأیید نهایی اتصال'}
-        </button>
-      </div>
 
       {msg && (
         <div className={`rounded-xl border p-3 text-xs font-bold ${msg.kind === 'ok' ? 'border-emerald-300 bg-emerald-50/70 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' : 'border-red-300 bg-red-50/70 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200'}`}>

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import LoginCard from './LoginCard';
 import ThemeToggle from '@/components/ThemeToggle';
 import ShowcaseSlider from './ShowcaseSlider';
+import UniversitySwitcher from './UniversitySwitcher';
 import { getLoginShowcase, type ShowcaseNotice } from '@/lib/login-showcase';
 
 export const metadata = { title: 'ورود | سامانه جامع آفاق' };
@@ -53,23 +54,7 @@ export default async function LoginPage(props: { searchParams: Promise<{ u?: str
           </div>
 
           <div className="flex items-center justify-between">
-            {show.universities.length > 1 && (
-              <div className="flex flex-wrap gap-1.5">
-                {show.universities.map(u => (
-                  <Link
-                    key={u.code}
-                    href={`/login?u=${u.code}`}
-                    className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border transition ${
-                      u.code === uni.code
-                        ? 'bg-white text-emerald-950 border-white shadow'
-                        : 'bg-white/10 text-emerald-100 border-white/20 hover:bg-white/20'
-                    }`}
-                  >
-                    {u.title}
-                  </Link>
-                ))}
-              </div>
-            )}
+            <UniversitySwitcher universities={show.universities} currentCode={uni.code} />
             <ThemeToggle />
           </div>
 

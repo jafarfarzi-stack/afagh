@@ -157,7 +157,7 @@ function selfTest() {
 // ═══════════════════════════════════════════════════════════════════════
 const dec1256 = new TextDecoder('windows-1256');
 
-/** فقط سطر اول غیرخالی را برمی‌گرداند (هدر) */
+/** فقط اولین سطر غیرخالی را برمی‌گرداند (هدر — سطرهای خالی/ فقط tab ابتدای فایل را رد می‌کند) */
 async function readHeader(path) {
   const stream = createReadStream(path, { highWaterMark: 1 << 20, start: 0, end: 65535 });
   let text = '';
@@ -166,7 +166,12 @@ async function readHeader(path) {
     const nl = text.indexOf('\n');
     if (nl >= 0) {
       stream.destroy();
-      return text.slice(0, nl).replace(/\r$/, '').split('\t');
+      const lines = text.split('\n');
+      for (const raw of lines) {
+        const line = raw.replace(/\r$/, '');
+        if (line.trim() !== '') return line.split('\t');
+      }
+      return lines[lines.length - 1].replace(/\r$/, '').split('\t');
     }
   }
   return text.replace(/\r$/, '').split('\t');
@@ -393,9 +398,14 @@ async function main() {
 
     // ── ۴) گروه‌بندی در سطح کاربر (users.nationalCode در سطح کاربر است) ──
     const byUser = new Map();
+    let nullCurrentStudents = 0;
     for (const s of students) {
+      if (s.currentCode == null) { nullCurrentStudents++; continue; }
       if (!byUser.has(s.userId)) byUser.set(s.userId, { userId: s.userId, currentCode: s.currentCode, birthCertNo: s.birthCertNo, students: [] });
       byUser.get(s.userId).students.push(s);
+    }
+    if (nullCurrentStudents) {
+      console.log(`\n⚠ ${nullCurrentStudents} ردیف دانشجویی با nationalCode=NULL نادیده گرفته شد (ترمیم کدهای NULL خارج از دامنهٔ این ابزار است).`);
     }
 
     // ── ۵) ارزیابی منبع برای هر کاربر ──

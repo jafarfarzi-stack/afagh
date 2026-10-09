@@ -870,15 +870,12 @@ export async function updateStaffProfileAction(
     if ('nationalCode' in patch) {
       const nc = clean(patch.nationalCode, 10);
       if (nc !== undefined && nc !== (row.nationalCode ?? null)) {
-        // مقدار جدید است → باید کد ملی معتبر ۱۰ رقمی باشد (+ کنترل تکراری).
+        // مقدار جدید است → باید کد ملی معتبر ۱۰ رقمی باشد.
+        // قید یکتایی (UNIQUE nationalCode) حذف شده؛ دوقلوها/اشخاص با کد
+        // مشترک قانونی‌اند و دیگر برخورد (clash) را رد نمی‌کنیم.
         // اگر کاربر کد را دست نزده (حتی کدهای قدیمی SA/SS/…)، بدون اعتبارسنجی
         // رد می‌شویم تا ویرایش بقیهٔ فیلدها (موبایل و…) قفل نشود.
         if (!/^\d{10}$/.test(nc)) return { ok: false, error: 'کد ملی باید ۱۰ رقم باشد.' };
-        const clash = await db.select({ id: users.id }).from(users)
-          .where(and(eq(users.nationalCode, nc), eq(users.universityId, uni.id))).limit(1);
-        if (clash.length && clash[0].id !== row.userId) {
-          return { ok: false, error: 'این کد ملی متعلق به کاربر دیگری است.' };
-        }
         userSet.nationalCode = nc;
       }
     }

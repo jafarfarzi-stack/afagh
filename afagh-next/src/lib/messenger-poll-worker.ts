@@ -144,9 +144,16 @@ export function startPolling(channel: MessengerChannel): { ok: boolean; error?: 
   }, HEARTBEAT_MS);
 
   (async () => {
-    const acquired = await redis.set(lockKey, instanceId, 'EX', LOCK_TTL_SEC, 'NX').catch(() => null);
-    if (acquired !== 'OK') {
-      log.info('poll_already_running', { channel });
+    // قفل ممکن است از پروسهٔ قبلیِ مرده مانده باشد (TTL تا ۲۵ ثانیه)؛
+    // تسلیم نمی‌شویم — تا آزاد شدن، هر ۵ ثانیه retry می‌کنیم.
+    let acquired: string | null = null;
+    while (!stopped) {
+      acquired = await redis.set(lockKey, instanceId, 'EX', LOCK_TTL_SEC, 'NX').catch(() => null);
+      if (acquired === 'OK') break;
+      log.info('poll_lock_wait', { channel });
+      await new Promise((r) => setTimeout(r, 5_000));
+    }
+    if (stopped || acquired !== 'OK') {
       if (heartbeat) clearInterval(heartbeat);
       running.delete(channel);
       return;

@@ -93,16 +93,16 @@ export default function LoginCard() {
     <form onSubmit={submit} className="card w-full space-y-4 shadow-2xl">
       <div className="text-center">
         <h2 className="text-base font-black text-slate-900">ورود به سامانه</h2>
-        <p className="text-xs text-slate-500 mt-1">ورود با کد ملی / کد پرسنلی / شماره دانشجویی + رمز عبور</p>
+        <p className="text-xs text-slate-500 mt-1">ورود با کد پرسنلی / شماره دانشجویی + رمز عبور</p>
       </div>
       {!choice ? (
         <>
-          <input className="input text-left" dir="ltr" placeholder="کد ملی یا کد پرسنلی" value={code} onChange={e => setCode(toEnDigits(e.target.value))} name="code" autoComplete="username" />
+          <input className="input text-left" dir="ltr" placeholder="کد پرسنلی یا شماره دانشجویی" value={code} onChange={e => setCode(toEnDigits(e.target.value))} name="code" autoComplete="username" />
           <input className="input text-left" dir="ltr" type="password" placeholder="رمز عبور" value={pass} onChange={e => setPass(toEnDigits(e.target.value))} name="password" autoComplete="current-password" />
           {err && <p className="rounded-xl bg-red-50 p-2 text-center text-sm text-red-700 dark:border dark:border-red-800 dark:bg-red-950 dark:text-red-200">{err}</p>}
           <button className="btn-primary w-full" disabled={busy}>{busy ? 'در حال ورود…' : 'ورود'}</button>
           <p className="text-center text-[11px] text-slate-400">
-            ورود اول؟ گذرواژه شما برابر همان کد است. <a href="/help?tab=shared" className="text-indigo-700 font-bold hover:underline">راهنمای ورود</a>
+            ورود اول؟ گذرواژهٔ اولیهٔ شما برابر همان کد است. <a href="/help?tab=shared" className="text-indigo-700 font-bold hover:underline">راهنمای ورود</a>
           </p>
         </>
       ) : (

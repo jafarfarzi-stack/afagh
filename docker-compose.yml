@@ -105,6 +105,9 @@ x-app-env: &app-env
   API_TIMEOUT_SECONDS: ${API_TIMEOUT_SECONDS:-10}
   # رمزنگاری اسرار ثمین (AES-256-GCM، hex شصت‌وچهار کاراکتری) — فقط وقتی لازم است که اتصال ثمین ثبت شود
   SAMIN_MASTER_KEY: ${SAMIN_MASTER_KEY:-}
+  # کلید امضای HMAC توکن کارت/انتخاب حساب (login choice) — بدون آن «انتخاب حساب» ۵۰۰ می‌دهد
+  TICKET_TOKEN_SECRET: ${TICKET_TOKEN_SECRET:-}
+  PREVIOUS_TICKET_TOKEN_SECRET: ${PREVIOUS_TICKET_TOKEN_SECRET:-}
 
 x-logging: &default-logging
   driver: json-file
