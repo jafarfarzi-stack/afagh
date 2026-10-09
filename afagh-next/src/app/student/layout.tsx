@@ -40,7 +40,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
               <p className="text-xs text-emerald-200">میز کاربری دانشجو — {user.name}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <TermSwitcher
               terms={termScope.terms}
               selectedId={termScope.selectedId}

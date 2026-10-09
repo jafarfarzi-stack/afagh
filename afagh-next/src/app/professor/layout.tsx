@@ -59,7 +59,7 @@ export default async function ProfessorLayout({ children }: { children: React.Re
               ) : null}
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <TermSwitcher
               terms={termScope.terms}
               selectedId={termScope.selectedId}

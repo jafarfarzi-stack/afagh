@@ -40,7 +40,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen bg-sky-50/70" data-uni={curUni.code}>
       <header className={`${th.header} text-white shadow-md transition-colors`}>
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 p-3.5 px-4">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 p-3.5 pl-4 pr-14 sm:pr-4">
           <div className="flex items-center gap-3">
             <div className={`w-8 h-8 rounded-lg ${th.badge} flex items-center justify-center font-bold text-sm shadow-inner`}>
               {curUni.title.slice(0, 1)}
@@ -52,7 +52,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <p className="text-xs opacity-80">{user.name} · نقش‌ها: {user.roles.join('، ')}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          {/* ردیف کنترل‌ها می‌شکند تا در موبایل صفحه را عریض نکند (سرریز ۵۰۰px+ بود) */}
+          <div className="flex flex-wrap items-center gap-2">
             <TermSwitcher
               terms={termScope.terms}
               selectedId={termScope.selectedId}
