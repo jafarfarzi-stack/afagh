@@ -39,16 +39,25 @@ export async function sendTemplateTestMessage(
   if (!/^09\d{9}$/.test(m)) {
     return { ok: false, error: 'شماره موبایل معتبر وارد کنید (مثل 09123456789).' };
   }
-  const [user] = await db.select({ id: users.id }).from(users).where(eq(users.mobile, m)).limit(1);
-  if (!user) {
+  // یک شماره ممکن است روی چند حساب باشد (کد ملی واحد با چند کد پرسنلی/دانشجویی)؛
+  // اتصال بات «به‌ازای هر حساب» است، پس حسابی را برمی‌داریم که در این کانال لینک شده.
+  const matched = await db.select({ id: users.id, firstName: users.firstName, lastName: users.lastName })
+    .from(users).where(eq(users.mobile, m));
+  if (!matched.length) {
     return { ok: false, error: `کاربری با موبایل ${m} در سامانه یافت نشد — اول باید حساب داشته باشد (اتصال بات هم در /messenger انجام می‌شود).` };
   }
   try {
-    const r = await sendTestMessage(user.id, channel as Channel);
-    if (r.status === 'SENT') {
-      return { ok: true, message: `📲 پیام آزمایشی واقعی از طریق ${CHANNEL_FA[channel]} به ${m} ارسال شد.` };
+    let lastSkip: string | null = null;
+    for (const u of matched) {
+      const r = await sendTestMessage(u.id, channel as Channel);
+      if (r.status === 'SENT') {
+        const who = `${u.firstName || ''} ${u.lastName || ''}`.trim();
+        return { ok: true, message: `📲 پیام آزمایشی واقعی از طریق ${CHANNEL_FA[channel]} به ${m}${who ? ` (حساب ${who})` : ''} ارسال شد.` };
+      }
+      if (r.status === 'SKIPPED') lastSkip = r.error ?? r.status;
+      else return { ok: false, error: `ارسال نشد (${CHANNEL_FA[channel]}): ${r.error ?? r.status}` };
     }
-    return { ok: false, error: `ارسال نشد (${CHANNEL_FA[channel]}): ${r.error ?? r.status}` };
+    return { ok: false, error: `ارسال نشد (${CHANNEL_FA[channel]}): ${lastSkip ?? 'SKIPPED'} — اتصال بات برای هر حساب جداست؛ با همان حسابی که این شماره را دارد وارد /messenger شوید و بات را لینک کنید.` };
   } catch (e) {
     return { ok: false, error: `خطای ارسال: ${(e as Error).message}` };
   }
