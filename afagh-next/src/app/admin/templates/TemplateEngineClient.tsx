@@ -4,6 +4,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { saveSettingsAction } from '@/lib/settings-actions';
 import { SECRET_MASK } from '@/lib/settings-shared';
+import { sendTemplateTestMessage } from './actions';
 import Link from 'next/link';
 
 // ==========================================
@@ -283,25 +284,21 @@ export default function TemplateEngineClient({ settings }: { settings: Integrati
   const charCount = renderedPreviewText.length;
   const smsSegments = charCount <= 70 ? 1 : Math.ceil(charCount / 67);
 
-  // Send Test Message
-  const handleSendTestMessage = () => {
+  // Send Test Message — واقعی: از مسیر مشترک ارسال همهٔ فرایندها
+  const handleSendTestMessage = async () => {
     if (!testMobileNumber.trim()) {
       showToast('لطفاً شماره تلفن همراه یا شناسه کاربری را وارد نمایید.');
       return;
     }
     setIsSendingTest(true);
-    setTimeout(() => {
+    try {
+      const res = await sendTemplateTestMessage(testChannel, testMobileNumber.trim());
+      showToast(res.ok ? res.message : `⛔ ${res.error}`);
+    } catch {
+      showToast('⛔ خطا در ارتباط با سرور.');
+    } finally {
       setIsSendingTest(false);
-      const channelFa =
-        testChannel === 'BALE'
-          ? 'پیام‌رسان بله'
-          : testChannel === 'EITAA'
-          ? 'پیام‌رسان ایتا'
-          : testChannel === 'TELEGRAM'
-          ? 'تلگرام'
-          : 'پیامک SMS';
-      showToast(`📲 پیام آزمایشی با موفقیت از طریق ${channelFa} به ${testMobileNumber} ارسال شد.`);
-    }, 1000);
+    }
   };
 
   // ذخیرهٔ واقعی تنظیمات در پیکربندی سامانه (جدول system_settings)

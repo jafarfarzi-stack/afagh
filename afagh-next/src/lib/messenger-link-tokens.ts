@@ -93,8 +93,10 @@ export async function handlePairingText(
   channel: MessengerChannel, chatId: string, text: string,
 ): Promise<string | null> {
   const m = text.match(/^\/start(?:@\S+)?\s*(\S+)?\s*$/);
-  if (!m) return null;
-  const param = (m[1] ?? '').trim();
+  // بله گاهی فقط /start را تحویل می‌دهد یا کاربر فقط کد خالی می‌فرستد —
+  // کد ۸ رقمی تکی هم پذیرفته می‌شود.
+  const bare = /^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$/.test(text.trim()) ? text.trim() : '';
+  const param = ((m && m[1]) || bare || '').trim();
   if (!param) {
     return 'برای اتصال حساب، از داخل پورتال «کد اتصال» بگیرید و اینجا ارسال کنید:\n/start CODE';
   }
