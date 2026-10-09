@@ -8,9 +8,9 @@ export const metadata = { title: 'ورود | سامانه جامع آفاق' };
 export const dynamic = 'force-dynamic';
 
 const NOTICE_STYLE: Record<string, string> = {
-  important: 'border-red-300 bg-red-50 text-red-900',
-  warning: 'border-amber-300 bg-amber-50 text-amber-900',
-  info: 'border-sky-200 bg-white/95 text-slate-700',
+  important: 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-200',
+  warning: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200',
+  info: 'border-sky-200 bg-white/95 text-slate-700 dark:border-sky-800 dark:bg-slate-900 dark:text-slate-200',
 };
 const NOTICE_ICON: Record<string, string> = { important: '📢', warning: '⚠️', info: 'ℹ️' };
 

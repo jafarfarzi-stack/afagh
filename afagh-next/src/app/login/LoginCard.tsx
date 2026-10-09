@@ -43,9 +43,23 @@ export default function LoginCard() {
     // شلیک نشود و دکمه‌ی صرفاً وابسته به state برای همیشه غیرفعال بماند.
     if (!code.trim() || !pass) { setErr('کد (ملی یا پرسنلی) و رمز عبور را وارد کنید.'); return; }
     setBusy(true); setErr(''); setChoice(null);
-    const res = await loginAndReport(code, pass).catch(() => null);
+    let res: Awaited<ReturnType<typeof loginAndReport>> | null;
+    try {
+      res = await loginAndReport(code, pass);
+    } catch (e) {
+      // خطای واقعی را نشان بده تا «ارتباط برقرار نشد» کلی، قابل عیب‌یابی باشد
+      const msg = e instanceof Error ? e.message : String(e ?? '');
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setErr('به اینترنت متصل نیستید. اتصال را بررسی و دوباره تلاش کنید.');
+      } else if (/failed to fetch|network|load failed|timeout/i.test(msg)) {
+        setErr(`ارتباط با سرور برقرار نشد (${msg.slice(0, 80)}). اگر با فیلترشکن هستید آن را عوض کنید و دوباره تلاش کنید.`);
+      } else {
+        setErr(`خطای ورود: ${msg.slice(0, 120) || 'نامشخص'}`);
+      }
+      setBusy(false); return;
+    }
     if (!res) {
-      setErr('ارتباط با سرور برقرار نشد. اگر پیش‌نمایش را داخل همین صفحه می‌بینید، آن را در تب جدید باز کنید و دوباره وارد شوید.');
+      setErr('پاسخی از سرور نرسید. صفحه را رفرش کنید و دوباره وارد شوید.');
       setBusy(false); return;
     }
     if ((res as { needChoice?: boolean }).needChoice) {
@@ -61,8 +75,15 @@ export default function LoginCard() {
   async function pick(id: number) {
     if (!choice) return;
     setBusy(true); setErr('');
-    const res = await chooseLoginAccountAction(choice.token, id).catch(() => null);
-    if (!res) { setErr('ارتباط با سرور برقرار نشد.'); setBusy(false); return; }
+    let res: Awaited<ReturnType<typeof chooseLoginAccountAction>> | null;
+    try {
+      res = await chooseLoginAccountAction(choice.token, id);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e ?? '');
+      setErr(`خطای انتخاب حساب: ${msg.slice(0, 120) || 'نامشخص'}`);
+      setBusy(false); return;
+    }
+    if (!res) { setErr('پاسخی از سرور نرسید.'); setBusy(false); return; }
     if (!res.ok) { setErr(res.error || 'خطا'); setBusy(false); return; }
     afterOk(res.mustChange);
   }
