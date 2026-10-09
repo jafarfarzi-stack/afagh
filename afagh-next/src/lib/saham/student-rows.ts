@@ -172,7 +172,7 @@ export async function fetchSahamStudents(universityId: number): Promise<{
       s."residenceProvince"           AS "residenceProvince",
       s."residenceCity"               AS "residenceCity",
       us."postalCode"                 AS "postalCode",
-      COALESCE(s."homeTell", us."phone") AS "homeTell",
+      s."homeTell"                        AS "homeTell",
       us."mobile"                     AS "mobile",
       us."email"                      AS "email",
       us."nationality"                AS "nationality",
