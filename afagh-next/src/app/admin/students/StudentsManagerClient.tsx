@@ -1469,7 +1469,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
               </div>
 
               <div className="overflow-x-auto border border-slate-300 rounded">
-                <table className="w-full table-fixed text-right text-xs">
+                <table className="w-full min-w-[860px] table-fixed text-right text-xs">
                   <colgroup>
                     <col style={{ width: 150 }} />
                     <col style={{ width: 140 }} />
@@ -1866,7 +1866,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
               </div>
 
               <div className="overflow-x-auto border border-slate-300 rounded">
-                <table className="w-full table-fixed text-right text-xs">
+                <table className="w-full min-w-[900px] table-fixed text-right text-xs">
                   <colgroup>
                     <col style={{ width: 150 }} />
                     <col style={{ width: 90 }} />

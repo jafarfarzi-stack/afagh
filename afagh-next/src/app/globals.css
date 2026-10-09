@@ -59,17 +59,17 @@
    پیش‌تنظیم است (Vazirmatn, Tahoma, sans-serif) ⇒ بدون هیچ تغییر ظاهری. */
 body { @apply bg-slate-100 text-slate-800 font-sans; }
 
-/* ── Dark mode variables (CSS custom properties) ── */
+/* ── نگاشت تم روشن/تیره روی یوتیلیتی‌های پرکاربرد ──
+   مقادیر :root دقیقاً برابر تیلویند اصلی‌اند ⇒ حالت روشن هیچ تغییری نمی‌کند.
+   در .dark هر رنگ به پلهٔ خوانای مقابل نگاشت می‌شود. */
 :root {
   --bg-primary: #f1f5f9;      /* slate-100 */
   --bg-secondary: #ffffff;    /* white */
   --bg-tertiary: #f8fafc;     /* slate-50 */
-  --text-primary: #1e293b;    /* slate-800 */
-  --text-secondary: #475569;  /* slate-600 */
-  --text-muted: #94a3b8;      /* slate-400 */
-  --border-color: #e2e8f0;    /* slate-200 */
-  --card-bg: #ffffff;
-  --card-border: #e2e8f0;
+  --bg-muted: #e2e8f0;        /* slate-200 */
+  --t-900: #0f172a; --t-800: #1e293b; --t-700: #334155; --t-600: #475569; --t-500: #64748b;
+  --t-400: #94a3b8; --t-300: #cbd5e1; --t-200: #e2e8f0; --t-100: #f1f5f9;
+  --b-100: #f1f5f9; --b-200: #e2e8f0; --b-300: #cbd5e1; --b-400: #94a3b8;
   --header-bg: #0f172a;       /* slate-900 */
   --header-text: #ffffff;
   --accent-bg: #eff6ff;       /* blue-50 */
@@ -80,13 +80,11 @@ body { @apply bg-slate-100 text-slate-800 font-sans; }
 .dark {
   --bg-primary: #0f172a;      /* slate-900 */
   --bg-secondary: #1e293b;    /* slate-800 */
-  --bg-tertiary: #334155;     /* slate-700 */
-  --text-primary: #f8fafc;    /* slate-50 */
-  --text-secondary: #cbd5e1;  /* slate-300 */
-  --text-muted: #64748b;      /* slate-500 */
-  --border-color: #334155;    /* slate-700 */
-  --card-bg: #1e293b;         /* slate-800 */
-  --card-border: #334155;     /* slate-700 */
+  --bg-tertiary: #1e293b;     /* slate-800 */
+  --bg-muted: #334155;        /* slate-700 */
+  --t-900: #f8fafc; --t-800: #f1f5f9; --t-700: #e2e8f0; --t-600: #cbd5e1; --t-500: #94a3b8;
+  --t-400: #64748b; --t-300: #cbd5e1; --t-200: #e2e8f0; --t-100: #f1f5f9;
+  --b-100: #334155; --b-200: #334155; --b-300: #475569; --b-400: #64748b;
   --header-bg: #020617;       /* slate-950 */
   --header-text: #f8fafc;
   --accent-bg: #1e3a5f;       /* blue-900 */
@@ -95,22 +93,82 @@ body { @apply bg-slate-100 text-slate-800 font-sans; }
 }
 
 /* Apply CSS variables to common elements */
-body { background-color: var(--bg-primary); color: var(--text-primary); }
-.card { background-color: var(--card-bg); border-color: var(--card-border); }
-input, select, textarea { background-color: var(--bg-secondary); color: var(--text-primary); border-color: var(--border-color); }
+body { background-color: var(--bg-primary); color: var(--t-800); }
+.card { background-color: var(--bg-secondary); border-color: var(--b-200); }
+input, select, textarea { background-color: var(--bg-secondary); color: var(--t-800); border-color: var(--b-200); }
 input:focus, select:focus, textarea:focus { border-color: var(--accent-text); box-shadow: 0 0 0 2px var(--accent-bg); }
-.bg-slate-100 { background-color: var(--bg-primary) !important; }
+/* پس‌زمینه‌ها */
 .bg-white { background-color: var(--bg-secondary) !important; }
 .bg-slate-50 { background-color: var(--bg-tertiary) !important; }
-.text-slate-800 { color: var(--text-primary) !important; }
-.text-slate-600 { color: var(--text-secondary) !important; }
-.text-slate-400 { color: var(--text-muted) !important; }
-.border-slate-200 { border-color: var(--border-color) !important; }
+.bg-slate-100 { background-color: var(--bg-primary) !important; }
+.bg-slate-200 { background-color: var(--bg-muted) !important; }
+.bg-slate-300 { background-color: var(--bg-muted) !important; }
 .bg-slate-900 { background-color: var(--header-bg) !important; }
+/* متن‌های خاکستری */
+.text-slate-900 { color: var(--t-900) !important; }
+.text-slate-800 { color: var(--t-800) !important; }
+.text-slate-700 { color: var(--t-700) !important; }
+.text-slate-600 { color: var(--t-600) !important; }
+.text-slate-500 { color: var(--t-500) !important; }
+.text-slate-400 { color: var(--t-400) !important; }
+.text-slate-300 { color: var(--t-300) !important; }
+.text-slate-200 { color: var(--t-200) !important; }
+.text-slate-100 { color: var(--t-100) !important; }
 .text-white { color: var(--header-text) !important; }
-/* فقط در دارک‌مود: ایندیگو روشن‌تر برای کنتراست */
-.dark .bg-indigo-700 { background-color: #3b82f6 !important; } /* blue-500 for dark */
+.text-black { color: var(--t-900) !important; }
+/* مرزها */
+.border-slate-100 { border-color: var(--b-100) !important; }
+.border-slate-200 { border-color: var(--b-200) !important; }
+.border-slate-300 { border-color: var(--b-300) !important; }
+.border-slate-400 { border-color: var(--b-400) !important; }
+.border-slate-500 { border-color: var(--b-400) !important; }
+.border-slate-800 { border-color: #475569 !important; }
+/* متن‌های رنگی تیره ⇒ در دارک‌مود روشن‌تر */
+.dark .text-emerald-700, .dark .text-emerald-800 { color: #6ee7b7 !important; }
+.dark .text-emerald-600 { color: #34d399 !important; }
+.dark .text-indigo-700, .dark .text-indigo-800 { color: #a5b4fc !important; }
+.dark .text-indigo-600 { color: #818cf8 !important; }
+.dark .text-amber-700, .dark .text-amber-800 { color: #fcd34d !important; }
+.dark .text-amber-600 { color: #fbbf24 !important; }
+.dark .text-rose-700, .dark .text-rose-800 { color: #fda4af !important; }
+.dark .text-rose-600 { color: #fb7185 !important; }
+.dark .text-red-700, .dark .text-red-800 { color: #fca5a5 !important; }
+.dark .text-red-600 { color: #f87171 !important; }
+.dark .text-sky-700, .dark .text-sky-800 { color: #7dd3fc !important; }
+.dark .text-blue-700 { color: #93c5fd !important; }
+.dark .text-purple-700, .dark .text-purple-800 { color: #c4b5fd !important; }
+.dark .text-teal-700, .dark .text-teal-800 { color: #5eead4 !important; }
+.dark .text-orange-700 { color: #fdba74 !important; }
+.dark .text-green-800 { color: #86efac !important; }
+.dark .text-cyan-800 { color: #67e8f9 !important; }
+/* ایندیگو در دارک‌مود روشن‌تر برای کنتراست */
+.dark .bg-indigo-700 { background-color: #3b82f6 !important; }
 .dark .hover\:bg-indigo-600:hover { background-color: #2563eb !important; }
+/* هاورهای روشن ⇒ تیره در دارک‌مود */
+.dark .hover\:bg-slate-50:hover { background-color: #1e293b !important; }
+.dark .hover\:bg-slate-100:hover { background-color: #334155 !important; }
+.dark .hover\:bg-slate-200:hover { background-color: #475569 !important; }
+.dark .hover\:bg-indigo-50:hover { background-color: #312e81 !important; }
+.dark .hover\:bg-indigo-100:hover { background-color: #3730a3 !important; }
+.dark .hover\:bg-emerald-50:hover { background-color: #064e3b !important; }
+.dark .hover\:bg-emerald-200:hover { background-color: #065f46 !important; }
+.dark .hover\:bg-amber-100:hover { background-color: #78350f !important; }
+.dark .hover\:bg-amber-200:hover { background-color: #92400e !important; }
+.dark .hover\:bg-rose-100:hover { background-color: #881337 !important; }
+.dark .hover\:bg-red-100:hover { background-color: #7f1d1d !important; }
+.dark .hover\:bg-slate-700:hover { background-color: #475569 !important; }
+.dark .hover\:bg-slate-800:hover { background-color: #334155 !important; }
+.dark .hover\:bg-slate-900:hover { background-color: #1e293b !important; }
+.dark .hover\:bg-indigo-800:hover { background-color: #4f46e5 !important; }
+.dark .hover\:bg-indigo-950:hover { background-color: #3730a3 !important; }
+.dark .hover\:bg-emerald-700:hover { background-color: #10b981 !important; }
+.dark .hover\:bg-emerald-800:hover { background-color: #059669 !important; }
+.dark .hover\:bg-amber-700:hover { background-color: #f59e0b !important; }
+.dark .hover\:bg-rose-700:hover { background-color: #f43f5e !important; }
+.dark .hover\:text-slate-900:hover { color: #f1f5f9 !important; }
+.dark .hover\:text-indigo-900:hover { color: #a5b4fc !important; }
+/* دکمه ثانویه در دارک‌مود */
+.dark .btn-ghost { background-color: #334155 !important; color: #e2e8f0 !important; }
 .card { @apply bg-white rounded-2xl shadow-sm border border-slate-200 p-4; }
 .btn { @apply inline-flex items-center justify-center gap-1 rounded-xl px-4 py-2 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed; }
 .btn-primary { @apply btn bg-emerald-600 text-white hover:bg-emerald-700; }
@@ -146,12 +204,15 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
     print-color-adjust: exact; -webkit-print-color-adjust: exact;
   }
   /* جدول سند کارنامه: سربرگ thead در همهٔ صفحات چاپ تکرار می‌شود */
-  .transcript-print-area table.tr-doc { width: 100%; border: 0; border-collapse: collapse; }
+  .transcript-print-area table.tr-doc { width: 100%; max-width: 100%; border: 0; border-collapse: collapse; table-layout: fixed; }
   .transcript-print-area table.tr-doc > thead { display: table-header-group; }
   .transcript-print-area table.tr-doc > tfoot { display: table-footer-group; }
   .transcript-print-area table.tr-doc > tfoot > tr { break-inside: avoid; page-break-inside: avoid; }
   .transcript-print-area .tr-signatures { border-top: 2px solid #334155; }
-  .transcript-print-area table.tr-doc td.tr-doc-cell { padding: 0; border: 0; vertical-align: top; }
+  .transcript-print-area table.tr-doc td.tr-doc-cell { padding: 0; border: 0; vertical-align: top; min-width: 0; }
+  .transcript-print-area .tr-info-grid > div { min-width: 0; overflow-wrap: anywhere; }
+  .transcript-print-area .tr-term-table td { overflow-wrap: anywhere; }
+  .transcript-print-area .tr-signatures span { min-width: 0; }
   .transcript-print-area table.tr-doc > tbody > tr.tr-doc-row { break-inside: avoid; page-break-inside: avoid; }
   .transcript-print-area .tr-term-row { break-inside: avoid; page-break-inside: avoid; }
   .transcript-print-area .term-block { page-break-inside: avoid; break-inside: avoid; }
