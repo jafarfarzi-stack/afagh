@@ -19,9 +19,10 @@ const log = createLogger({ mod: 'messenger-bot' });
 
 export type MessengerChannel = 'TELEGRAM' | 'BALE' | 'SOROUSH' | 'EITAA' | 'IGAP';
 
-export const POLL_CHANNELS: MessengerChannel[] = ['BALE', 'EITAA'];
-export const LINKABLE_CHANNELS: MessengerChannel[] = ['TELEGRAM', 'BALE', 'EITAA'];
-// سروش/ای‌گپ: poll نداریم — اتصال جدید فریز است (متن صادقانه در actions).
+export const POLL_CHANNELS: MessengerChannel[] = ['BALE', 'EITAA', 'SOROUSH'];
+
+export const LINKABLE_CHANNELS: MessengerChannel[] = ['TELEGRAM', 'BALE', 'EITAA', 'SOROUSH'];
+// ای‌گپ: poll اثبات‌نشده — اتصال جدید فریز است (متن صادقانه در actions).
 
 // ──────── پیکربندی API هر پیام‌رسان ────────
 
@@ -39,7 +40,7 @@ interface MessengerConfig {
 export const MESSENGER_CONFIGS: Record<MessengerChannel, MessengerConfig> = {
   TELEGRAM: { tokenKey: 'TELEGRAM_TOKEN', baseKey: 'TELEGRAM_API_BASE', defaultBase: 'https://api.telegram.org', style: 'BOT', enabledKey: 'TELEGRAM_BOT_ENABLED', deepLinkPrefix: 'https://t.me/', usernameKey: 'TELEGRAM_BOT_USERNAME' },
   BALE:     { tokenKey: 'BALE_TOKEN',     baseKey: 'BALE_API_BASE',     defaultBase: 'https://tapi.bale.ai',      style: 'BOT', enabledKey: 'BALE_BOT_ENABLED',     deepLinkPrefix: 'https://ble.ir/', usernameKey: 'BALE_BOT_USERNAME' },
-  SOROUSH:  { tokenKey: 'SOROUSH_TOKEN',  baseKey: 'SOROUSH_API_BASE',  defaultBase: 'https://api.soroush.app',   style: 'BOT', enabledKey: 'SOROUSH_BOT_ENABLED',  deepLinkPrefix: '', usernameKey: '' },
+  SOROUSH:  { tokenKey: 'SOROUSH_TOKEN',  baseKey: 'SOROUSH_API_BASE',  defaultBase: 'https://api.splus.ir',      style: 'BOT', enabledKey: 'SOROUSH_BOT_ENABLED',  deepLinkPrefix: '', usernameKey: '' },
   EITAA:    { tokenKey: 'EITAA_TOKEN',    baseKey: 'EITAA_API_BASE',    defaultBase: 'https://eitaayar.ir/api',    style: 'EITAA', enabledKey: 'EITAA_BOT_ENABLED', deepLinkPrefix: 'https://eitaa.com/', usernameKey: 'EITAA_BOT_USERNAME' },
   IGAP:     { tokenKey: 'IGAP_TOKEN',     baseKey: 'IGAP_API_BASE',     defaultBase: 'https://igap.ai/api',        style: 'BOT', enabledKey: 'IGAP_BOT_ENABLED',     deepLinkPrefix: '', usernameKey: '' },
 };
