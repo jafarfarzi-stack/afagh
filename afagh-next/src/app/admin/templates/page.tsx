@@ -3,6 +3,7 @@ import { getBool, getSetting } from '@/lib/settings';
 import { SECRET_MASK } from '@/lib/settings-shared';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import TemplateEngineClient, { type IntegrationSettingsProps } from './TemplateEngineClient';
+import { listNotificationTemplates } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,5 +48,5 @@ export default async function AdminTemplatesPage() {
     },
   };
 
-  return <TemplateEngineClient settings={settings} />;
+  return <TemplateEngineClient settings={settings} initialTemplates={await listNotificationTemplates()} />;
 }

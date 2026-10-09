@@ -1533,6 +1533,11 @@ export const notification_templates = pgTable('notification_templates', {
   templateText: text('templateText').notNull(),
   isActive: integer('isActive').default(1),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  // ── ویرایشگر قالب‌های چندکاناله (مهاجرت ۰۰۶۲) ──
+  title: varchar('title', { length: 150 }),
+  variables: text('variables'),
+  channels: varchar('channels', { length: 100 }),
+  updatedAt: timestamp('updatedAt').defaultNow(),
 });
 
 export const notifications = pgTable('notifications', {

@@ -75,6 +75,7 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'TELEGRAM_TOKEN', env: 'TELEGRAM_BOT_TOKEN', group: 'پیامک و ربات‌های پیام‌رسان', label: 'توکن ربات تلگرام', type: 'secret', default: '' },
   { key: 'TELEGRAM_CHANNEL', env: 'TELEGRAM_CHANNEL_ID', group: 'پیامک و ربات‌های پیام‌رسان', label: 'شناسهٔ کانال تلگرام', type: 'text', default: '' },
   { key: 'TELEGRAM_BOT_USERNAME', env: 'TELEGRAM_BOT_USERNAME', group: 'پیامک و ربات‌های پیام‌رسان', label: 'نام‌کاربری بات تلگرام (بدون @)', type: 'text', default: '', help: 'برای ساخت دیپ‌لینک اتصال؛ خالی = فقط دستور متنی /start CODE' },
+  { key: 'SOROUSH_BOT_USERNAME', env: 'SOROUSH_BOT_USERNAME', group: 'پیامک و ربات‌های پیام‌رسان', label: 'نام‌کاربری بات سروش (بدون @)', type: 'text', default: 'afaghbot', help: 'برای نمایش آدرس عضویت در بنر؛ خالی = فقط دستور متنی' },
   { key: 'BALE_BOT_USERNAME', env: 'BALE_BOT_USERNAME', group: 'پیامک و ربات‌های پیام‌رسان', label: 'نام‌کاربری بات بله', type: 'text', default: '', help: 'برای ساخت دیپ‌لینک اتصال؛ خالی = فقط دستور متنی /start CODE' },
   { key: 'EITAA_BOT_USERNAME', env: 'EITAA_BOT_USERNAME', group: 'پیامک و ربات‌های پیام‌رسان', label: 'نام‌کاربری بات ایتا', type: 'text', default: '', help: 'برای ساخت دیپ‌لینک اتصال؛ خالی = فقط دستور متنی /start CODE' },
   { key: 'TELEGRAM_WEBHOOK_SECRET', env: 'TELEGRAM_WEBHOOK_SECRET', group: 'پیامک و ربات‌های پیام‌رسان', label: 'کلید وب‌هوک تلگرام', type: 'secret', default: '', help: 'حالت فقط-ارسال: قطع inbound با نشست ادمین: GET /api/telegram/webhook?setup=1' },

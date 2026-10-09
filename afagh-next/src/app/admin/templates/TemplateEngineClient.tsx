@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { saveSettingsAction } from '@/lib/settings-actions';
 import { SECRET_MASK } from '@/lib/settings-shared';
-import { sendTemplateTestMessage } from './actions';
+import { saveNotificationTemplate, sendTemplateTestMessage, type SavedTemplateRow } from './actions';
 import Link from 'next/link';
 
 // ==========================================
@@ -155,11 +155,42 @@ export interface IntegrationSettingsProps {
   pay: { provider: string; terminalId: string; merchantId: string; merchantKey: string; callbackUrl: string; sandbox: boolean; wagePercent: string };
 }
 
-export default function TemplateEngineClient({ settings }: { settings: IntegrationSettingsProps }) {
+export default function TemplateEngineClient({ settings, initialTemplates }: { settings: IntegrationSettingsProps; initialTemplates: SavedTemplateRow[] }) {
   const [activeTab, setActiveTab] = useState<'TEMPLATES' | 'MESSAGING_BOTS' | 'SHAPARAK' | 'LMS_BBB'>('TEMPLATES');
 
-  // Templates state
-  const [templates, setTemplates] = useState<NotificationTemplateItem[]>(INITIAL_TEMPLATES);
+  // Templates state — ردیف‌های دیتابیس روی پیش‌فرض‌ها می‌نشینند
+  const [templates, setTemplates] = useState<NotificationTemplateItem[]>(() => {
+    const byCode = new Map(initialTemplates.map(t => [t.eventCode, t]));
+    const merged = INITIAL_TEMPLATES.map((t, i) => {
+      const s = byCode.get(t.eventCode);
+      if (!s) return t;
+      return {
+        ...t,
+        title: s.title || t.title,
+        templateText: s.templateText,
+        allowedVariables: s.variables.length ? s.variables : t.allowedVariables,
+      };
+    });
+    // رویدادهای فقط-دیتابیسی (اگر کدی خارج از فهرست ثابت باشد)
+    const known = new Set(INITIAL_TEMPLATES.map(t => t.eventCode));
+    initialTemplates.filter(s => !known.has(s.eventCode)).forEach((s, k) => {
+      merged.push({
+        id: 1000 + k,
+        eventCode: s.eventCode,
+        title: s.title,
+        channel: 'SMS',
+        templateText: s.templateText,
+        isActive: s.isActive,
+        allowedVariables: s.variables,
+        updatedAt: '',
+      });
+    });
+    return merged;
+  });
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [newVarTag, setNewVarTag] = useState('');
+  const [newVarLabel, setNewVarLabel] = useState('');
+  const [newVarSample, setNewVarSample] = useState('');
   const [selectedEventCode, setSelectedEventCode] = useState<string>('EXAM_ABSENCE');
   const [testMobileNumber, setTestMobileNumber] = useState<string>('09123456789');
   const [testChannel, setTestChannel] = useState<NotificationChannel>('SMS');
@@ -250,6 +281,56 @@ export default function TemplateEngineClient({ settings }: { settings: Integrati
     setTemplates(prev =>
       prev.map(t => (t.eventCode === selectedEventCode ? { ...t, templateText: text } : t))
     );
+  };
+
+  // افزودن دستی متغیر جدید به قالب جاری
+  const handleAddVariable = () => {
+    let tag = newVarTag.trim();
+    if (!tag) {
+      showToast('⛔ نام متغیر را بنویسید (مثلاً نام_استاد).');
+      return;
+    }
+    tag = tag.replace(/[{}]/g, '').trim();
+    if (!tag) {
+      showToast('⛔ نام متغیر معتبر نیست.');
+      return;
+    }
+    const full = `{${tag}}`;
+    if (currentTemplate.allowedVariables.some(v => v.tag === full)) {
+      showToast('⛔ این متغیر قبلاً اضافه شده است.');
+      return;
+    }
+    setTemplates(prev =>
+      prev.map(t =>
+        t.eventCode === selectedEventCode
+          ? { ...t, allowedVariables: [...t.allowedVariables, { tag: full, label: newVarLabel.trim() || tag, sampleValue: newVarSample.trim() || '…' }] }
+          : t
+      )
+    );
+    setNewVarTag('');
+    setNewVarLabel('');
+    setNewVarSample('');
+    showToast(`➕ متغیر «${full}» اضافه شد — با کلیک روی آن در متن درج می‌شود.`);
+  };
+
+  // ذخیرهٔ واقعی قالب جاری در دیتابیس
+  const handleSaveTemplate = async () => {
+    setSavingTemplate(true);
+    try {
+      const res = await saveNotificationTemplate({
+        eventCode: currentTemplate.eventCode,
+        title: currentTemplate.title,
+        templateText: currentTemplate.templateText,
+        variables: currentTemplate.allowedVariables,
+        channels: currentTemplate.channel,
+        isActive: currentTemplate.isActive,
+      });
+      showToast(res.ok ? `💾 قالب «${currentTemplate.title}» واقعاً در دیتابیس ذخیره شد.` : `⛔ ${res.error}`);
+    } catch {
+      showToast('⛔ خطا در ارتباط با سرور.');
+    } finally {
+      setSavingTemplate(false);
+    }
   };
 
   // Preset Tones for Exam Absence
@@ -547,12 +628,11 @@ export default function TemplateEngineClient({ settings }: { settings: Integrati
                 </div>
 
                 <button
-                  onClick={() => {
-                    showToast(`💾 تغییرات قالب «${currentTemplate.title}» با موفقیت در پایگاه داده ذخیره و در صف ارسال قرار گرفت.`);
-                  }}
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition"
+                  onClick={handleSaveTemplate}
+                  disabled={savingTemplate}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition disabled:opacity-50"
                 >
-                  <span>💾 ذخیره قالب در دیتابیس</span>
+                  <span>💾 {savingTemplate ? 'در حال ذخیره…' : 'ذخیره قالب در دیتابیس'}</span>
                 </button>
               </div>
 
@@ -607,6 +687,22 @@ export default function TemplateEngineClient({ settings }: { settings: Integrati
                       <span className="text-[10px] text-slate-500 font-sans font-normal">({v.label})</span>
                     </button>
                   ))}
+                </div>
+
+                {/* افزودن دستی متغیر جدید */}
+                <div className="flex flex-wrap items-end gap-1.5 rounded-xl border border-dashed border-indigo-300 bg-indigo-50/50 p-2">
+                  <label className="text-[11px] font-bold text-slate-600">نام متغیر جدید
+                    <input value={newVarTag} onChange={e => setNewVarTag(e.target.value)} placeholder="نام_استاد" className="mt-1 w-32 rounded border px-2 py-1.5 text-xs font-mono" />
+                  </label>
+                  <label className="text-[11px] font-bold text-slate-600">برچسب
+                    <input value={newVarLabel} onChange={e => setNewVarLabel(e.target.value)} placeholder="نام استاد" className="mt-1 w-28 rounded border px-2 py-1.5 text-xs" />
+                  </label>
+                  <label className="text-[11px] font-bold text-slate-600">نمونه برای پیش‌نمایش
+                    <input value={newVarSample} onChange={e => setNewVarSample(e.target.value)} placeholder="دکتر احمدی" className="mt-1 w-32 rounded border px-2 py-1.5 text-xs" />
+                  </label>
+                  <button onClick={handleAddVariable} className="rounded-lg bg-indigo-700 px-3 py-1.5 text-[11px] font-black text-white hover:bg-indigo-800">
+                    ➕ افزودن متغیر
+                  </button>
                 </div>
               </div>
 

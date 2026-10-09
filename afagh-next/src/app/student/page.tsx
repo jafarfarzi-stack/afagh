@@ -26,6 +26,7 @@ import {
 } from '@/lib/student-dashboard-helpers';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
 import TermFilterChip from '@/components/TermFilterChip';
+import MessengerOnboardBanner from '@/components/MessengerOnboardBanner';
 import { getExamCardData } from '@/lib/verification';
 import Link from 'next/link';
 import { emergencyDropAction, emergencyDropFormAction } from './actions';
@@ -229,6 +230,7 @@ export default async function StudentDashboardPage() {
       {filteredTerm && (
         <TermFilterChip title={filteredTerm.title} universityId={me.universityId ?? null} />
       )}
+      <MessengerOnboardBanner />
       {/* ========================================================================= */}
       {/* 1. STUDENT HERO & PROFILE SUMMARY BANNER */}
       {/* ========================================================================= */}

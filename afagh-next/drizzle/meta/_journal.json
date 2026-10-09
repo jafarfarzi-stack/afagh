@@ -463,6 +463,13 @@
       "when": 1792857600000,
       "tag": "0061_messenger_link_tokens_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1792944000000,
+      "tag": "0062_notification_templates",
+      "breakpoints": true
     }
   ]
 }
