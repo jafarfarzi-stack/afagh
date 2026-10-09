@@ -419,6 +419,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/saham',
+    icon: '📤',
+    title: 'گزارش سالانهٔ سهام',
+    desc: 'خروجی اکسل سامانهٔ آماری (IRPHE)',
+    group: 'settings',
+    roles: ['ADMIN'],
+    accent: 'from-teal-900 to-emerald-950 border-teal-700/50',
+    iconBg: 'bg-teal-700/80 border-teal-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/settings',
     icon: '⚙️',
     title: 'پیکربندی سامانه',
