@@ -352,7 +352,17 @@ export default function ScheduleClient({
                     <td className="p-2 border-l border-slate-200 text-center font-mono" dir="ltr">
                       {c.code}
                     </td>
-                    <td className="p-2 border-l border-slate-200 font-extrabold text-slate-900">{c.title}</td>
+                    <td className="p-2 border-l border-slate-200 font-extrabold text-slate-900">
+                      {c.title}
+                      <div className="mt-1">
+                        <Link
+                          href={`/student/lesson-plan/${c.offeringId}`}
+                          className="inline-block px-2 py-0.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-bold text-[10px] transition"
+                        >
+                          📋 مشاهده طرح درس
+                        </Link>
+                      </div>
+                    </td>
                     <td className="p-2 border-l border-slate-200 text-center font-bold">
                       گروه {faNum(c.group)}
                     </td>

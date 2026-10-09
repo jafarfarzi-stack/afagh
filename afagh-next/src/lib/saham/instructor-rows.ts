@@ -5,6 +5,17 @@ import {
   loadSahamValueMaps, mapSahamValue, loadSahamInstituteCodes,
   loadGeoTitles, pickSahamCode, type SahamInstituteCode,
 } from './saham-maps';
+import { jalaliDateOf } from '@/lib/scheduling-core';
+
+/** سال تولد شمسی از تاریخ میلادی ISO ('YYYY-MM-DD') — خطا/خالی → '' */
+function sahamBirthYear(iso: string | null): string {
+  if (!iso) return '';
+  try {
+    return jalaliDateOf(new Date(iso + 'T00:00:00')).slice(0, 4);
+  } catch {
+    return '';
+  }
+}
 
 /**
  * گزارش آموزشگران سهام (3-TeachingStaff.xlsx) — ۳۷ ستون.
@@ -117,7 +128,7 @@ export async function fetchSahamInstructors(
       us."gender"                   AS "gender",
       us."nationalCode"             AS "nationalCode",
       us."birthCertNo"              AS "birthCertNo",
-      to_char(us."birthDate", 'YYYY') AS "birthYear",
+      to_char(us."birthDate", 'YYYY-MM-DD') AS "birthYear",
       COALESCE(st."birthProvince", '') AS "birthProvince",
       COALESCE(st."birthCity", '')     AS "birthCity",
       COALESCE(us."placeOfBirth", '')  AS "birthCityFallback",
@@ -181,7 +192,7 @@ export function toSahamInstructorRow(
     m('gender', r.gender),
     r.nationalCode ?? '',
     r.birthCertNo ?? '',
-    r.birthYear ?? '',
+    sahamBirthYear(r.birthYear),
     r.birthProvince ?? '',
     r.birthCity || r.birthCityFallback || '',
     r.maritalStatus ?? '',

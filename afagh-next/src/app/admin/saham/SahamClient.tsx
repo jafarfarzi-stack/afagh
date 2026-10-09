@@ -34,6 +34,7 @@ function qs(params: Record<string, string | number | undefined>): string {
 
 export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lookups: SahamFilterLookups }) {
   const [kind, setKind] = useState<Kind>('students');
+  const [uniFilter, setUniFilter] = useState('');
   const [status, setStatus] = useState('');
   const [majorId, setMajorId] = useState('');
   const [facultyId, setFacultyId] = useState('');
@@ -51,6 +52,12 @@ export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lo
 
   const majorsAll = lookups.majors;
   const facultiesAll = lookups.faculties;
+
+  // محدودسازی به دانشگاه انتخاب‌شده (پیش‌فرض: همه)
+  const statsShown = uniFilter ? stats.filter(s => String(s.universityId) === uniFilter) : stats;
+  const majors = uniFilter ? majorsAll.filter(m => String(m.universityId) === uniFilter) : majorsAll;
+  const faculties = uniFilter ? facultiesAll.filter(f => String(f.universityId) === uniFilter) : facultiesAll;
+  const terms = uniFilter ? lookups.terms.filter(t => String(t.universityId) === uniFilter) : lookups.terms;
 
   const buildParams = (id: number) => ({
     universityId: id,
@@ -143,6 +150,18 @@ export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lo
 
         {/* فیلترها */}
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+          <label className="text-[11px] text-slate-600">دانشگاه
+            <select
+              value={uniFilter}
+              onChange={e => { setUniFilter(e.target.value); setMajorId(''); setFacultyId(''); setTermId(''); setPreview({}); }}
+              className="mt-1 w-full rounded border px-2 py-1.5 text-xs"
+            >
+              <option value="">همهٔ دانشگاه‌ها</option>
+              {stats.map(s => (
+                <option key={s.universityId} value={s.universityId}>{s.title}</option>
+              ))}
+            </select>
+          </label>
           {kind === 'students' && (
             <label className="text-[11px] text-slate-600">وضعیت تحصیلی
               <select value={status} onChange={e => setStatus(e.target.value)} className="mt-1 w-full rounded border px-2 py-1.5 text-xs">
@@ -158,7 +177,7 @@ export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lo
               <label className="text-[11px] text-slate-600">رشته
                 <select value={majorId} onChange={e => setMajorId(e.target.value)} className="mt-1 w-full rounded border px-2 py-1.5 text-xs">
                   <option value="">همهٔ رشته‌ها</option>
-                  {majorsAll.slice(0, 500).map(mj => (
+                  {majors.slice(0, 500).map(mj => (
                     <option key={mj.id} value={mj.id}>{mj.name}</option>
                   ))}
                 </select>
@@ -166,7 +185,7 @@ export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lo
               <label className="text-[11px] text-slate-600">دانشکده
                 <select value={facultyId} onChange={e => setFacultyId(e.target.value)} className="mt-1 w-full rounded border px-2 py-1.5 text-xs">
                   <option value="">همهٔ دانشکده‌ها</option>
-                  {facultiesAll.map(f => (
+                  {faculties.map(f => (
                     <option key={f.id} value={f.id}>{f.name}</option>
                   ))}
                 </select>
@@ -193,7 +212,7 @@ export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lo
             <label className="text-[11px] text-slate-600 col-span-2">نیمسال (فقط اساتید دارای ارائه)
               <select value={termId} onChange={e => setTermId(e.target.value)} className="mt-1 w-full rounded border px-2 py-1.5 text-xs">
                 <option value="">— انتخاب نیمسال —</option>
-                {lookups.terms.map(t => (
+                {terms.map(t => (
                   <option key={t.id} value={t.id}>{t.title}{t.isCurrent ? ' (جاری)' : ''}</option>
                 ))}
               </select>
@@ -222,7 +241,7 @@ export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lo
             </tr>
           </thead>
           <tbody>
-            {stats.map(s => {
+            {statsShown.map(s => {
               const noCode = s.sahamCodeCount === 0;
               const pv = preview[s.universityId];
               return (

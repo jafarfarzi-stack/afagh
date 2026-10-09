@@ -431,6 +431,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/lesson-plans',
+    icon: '📋',
+    title: 'طرح درس اساتید',
+    desc: 'الزام تکمیل و پایش پیشرفت طرح‌های درس',
+    group: 'settings',
+    roles: ['ADMIN'],
+    accent: 'from-violet-900 to-purple-950 border-violet-700/50',
+    iconBg: 'bg-violet-700/80 border-violet-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/settings',
     icon: '⚙️',
     title: 'پیکربندی سامانه',

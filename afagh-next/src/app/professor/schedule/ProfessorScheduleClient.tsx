@@ -384,6 +384,12 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
                       >
                         📝 ثبت نمره
                       </Link>
+                      <Link
+                        href={`/professor/lesson-plan/${item.id}`}
+                        className="px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[10px] transition"
+                      >
+                        📋 طرح درس
+                      </Link>
                     </div>
                   </td>
                 </tr>

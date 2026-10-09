@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireMigrationAdmin } from '@/lib/migration/http';
 import { buildSahamWorkbook, type SahamKind } from '@/lib/saham/build';
 import { fetchSahamStudents } from '@/lib/saham/student-rows';
-import { fetchSahamInstructors } from '@/lib/saham/instructor-rows';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -54,8 +53,6 @@ export async function GET(req: NextRequest) {
     if (q.get('preview') === '1') {
       if (kind === 'instructors') {
         if (!filters.termId) return NextResponse.json({ error: 'انتخاب نیمسال لازم است.' }, { status: 400 });
-        const { rows } = await fetchSahamInstructors(universityId, filters.termId, 1);
-        void rows;
         // تعداد دقیق با کوئری سبک
         const { db } = await import('@/db');
         const { sql } = await import('drizzle-orm');

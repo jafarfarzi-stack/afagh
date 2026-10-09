@@ -1,6 +1,17 @@
 import 'server-only';
 import { mapSahamValue, type SahamInstituteCode } from './saham-maps';
-import type { RawStudent } from './student-rows';
+import { jalaliDateOf } from '@/lib/scheduling-core';
+import { sahamNative, type RawStudent } from './student-rows';
+
+/** سال تولد شمسی از تاریخ میلادی ISO ('YYYY-MM-DD') — خطا/خالی → '' */
+function sahamBirthYear(iso: string | null): string {
+  if (!iso) return '';
+  try {
+    return jalaliDateOf(new Date(iso + 'T00:00:00')).slice(0, 4);
+  } catch {
+    return '';
+  }
+}
 
 /**
  * گزارش دانش‌آموختگان سهام (2-Graduate.xlsx):
@@ -94,7 +105,7 @@ export function toSahamGraduateRow(
     m('student_status', r.status),
     m('student_status_code', r.status),
     r.studentCode,
-    String(r.entryYear ?? '') + (r.entryTerm === 2 ? ' - 2' : ' - 1'),
+    r.entryYear != null ? `${r.entryYear}${r.entryTerm === 2 ? '2' : '1'}` : '',
     gradTerm,
     r.firstName ?? '',
     r.lastName ?? '',
@@ -104,10 +115,10 @@ export function toSahamGraduateRow(
     r.nationalCode ?? '',
     r.maritalStatus ?? m('marital', r.maritalStatus),
     m('religion', r.religion),
-    r.birthDate ?? '',
+    sahamBirthYear(r.birthDate),
     r.birthProvince ?? '',
     r.birthCity ?? '',
-    r.nativeType ?? '',
+    sahamNative(r.nativeType),
     r.residenceProvince ?? '',
     r.residenceCity ?? '',
     r.postalCode ?? '',

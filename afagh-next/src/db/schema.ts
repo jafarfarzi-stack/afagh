@@ -3043,3 +3043,53 @@ export const saham_value_maps = pgTable('saham_value_maps', {
   unique('uq_saham_value_map').on(t.field, t.sourceValue),
   index('idx_saham_value_map_field').on(t.field),
 ]);
+
+// ══════════════════════════════════════════════════════════════════════
+//  ماژول اختیاری «طرح درس» (Lesson-Plan) — مهاجرت 0055
+//  قرارداد منجمد: نام جدول‌ها/ستون‌ها عیناً مطابق drizzle/0055_lesson_plan.sql.
+//  lesson_plan_weights بارم‌بندیِ درصدیِ همین ماژول است و ربطی به بارمِ /۲۰
+//  سمت‌کاربرِ صفحهٔ نمرات استاد (RubricWeights در grades-core.ts) ندارد.
+// ══════════════════════════════════════════════════════════════════════
+
+export const lesson_plans = pgTable('lesson_plans', {
+  id: serial('id').primaryKey(),
+  offeringId: integer('offeringId').notNull().unique().references(() => course_offerings.id),
+  courseMode: varchar('courseMode', { length: 10 }).notNull().default('THEORY'),
+  totalSessions: integer('totalSessions').notNull().default(16),
+  objectives: text('objectives'),
+  resources: text('resources'),
+  status: varchar('status', { length: 12 }).default('DRAFT'),
+  submittedAt: timestamp('submittedAt'),
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+});
+
+export const lesson_plan_weights = pgTable('lesson_plan_weights', {
+  id: serial('id').primaryKey(),
+  planId: integer('planId').notNull().references(() => lesson_plans.id, { onDelete: 'cascade' }),
+  title: varchar('title', { length: 100 }).notNull(),
+  percent: numeric('percent', { precision: 5, scale: 2 }).notNull(),
+  sortOrder: integer('sortOrder').default(0),
+}, (t) => ({
+  planIdx: index('idx_lesson_plan_weights_plan').on(t.planId),
+}));
+
+export const lesson_plan_sessions = pgTable('lesson_plan_sessions', {
+  id: serial('id').primaryKey(),
+  planId: integer('planId').notNull().references(() => lesson_plans.id, { onDelete: 'cascade' }),
+  sessionNo: integer('sessionNo').notNull(),
+  sessionKind: varchar('sessionKind', { length: 10 }).default('THEORY'),
+  topic: varchar('topic', { length: 300 }),
+  details: text('details'),
+  weightId: integer('weightId').references(() => lesson_plan_weights.id, { onDelete: 'set null' }),
+}, (t) => ({
+  uqPlanSession: unique('uq_lesson_plan_sessions_plan_session').on(t.planId, t.sessionNo),
+  planIdx: index('idx_lesson_plan_sessions_plan').on(t.planId),
+}));
+
+export const lesson_plan_settings = pgTable('lesson_plan_settings', {
+  universityId: integer('universityId').primaryKey().references(() => universities.id),
+  isRequired: integer('isRequired').default(0),
+  notice: text('notice'),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+});

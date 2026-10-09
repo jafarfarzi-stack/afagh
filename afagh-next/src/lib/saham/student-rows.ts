@@ -2,6 +2,31 @@ import 'server-only';
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { loadSahamValueMaps, mapSahamValue, loadSahamInstituteCodes, pickSahamCode, type SahamInstituteCode } from './saham-maps';
+import { jalaliDateOf } from '@/lib/scheduling-core';
+
+/** سال تولد شمسی از تاریخ میلادی ISO ('YYYY-MM-DD') — خطا/خالی → '' */
+function sahamBirthYear(iso: string | null): string {
+  if (!iso) return '';
+  try {
+    return jalaliDateOf(new Date(iso + 'T00:00:00')).slice(0, 4);
+  } catch {
+    return '';
+  }
+}
+
+/** سال ورود سهام: سال چسبیده به ۱/۲ بدون خط‌تیره (مثل 14011) */
+function sahamEntryYear(entryYear: number | null, entryTerm: number | null): string {
+  if (entryYear == null) return '';
+  return `${entryYear}${entryTerm === 2 ? '2' : '1'}`;
+}
+
+/** نگاشت کد بومی/غیربومی (BOOMI خام: 1/2) به متن سهام */
+const NATIVE_MAP: Record<string, string> = { '1': 'بومی', '2': 'غیربومی' };
+export function sahamNative(v: string | null): string {
+  if (!v) return '';
+  const t = v.trim();
+  return NATIVE_MAP[t] ?? t;
+}
 
 /**
  * ══════════════════════════════════════════════════════════════════════
@@ -232,7 +257,7 @@ export async function fetchSahamStudents(
       us."nationalCode"               AS "nationalCode",
       s."maritalStatus"               AS "maritalStatus",
       us."religion"                   AS "religion",
-      to_char(us."birthDate", 'YYYY')  AS "birthDate",
+      to_char(us."birthDate", 'YYYY-MM-DD')  AS "birthDate",
       s."birthProvince"               AS "birthProvince",
       s."birthCity"                   AS "birthCity",
       s."nativeType"                  AS "nativeType",
@@ -313,7 +338,7 @@ export function toSahamRow(
     r.transferGuestStatus ?? '',
     r.lastTermCode ?? '',
     r.studentCode,
-    String(r.entryYear ?? '') + (r.entryTerm === 2 ? ' - 2' : ' - 1'),
+    sahamEntryYear(r.entryYear, r.entryTerm),
     r.firstName ?? '',
     r.lastName ?? '',
     m('gender', r.gender),
@@ -322,10 +347,10 @@ export function toSahamRow(
     r.nationalCode ?? '',
     r.maritalStatus ?? m('marital', r.maritalStatus),
     m('religion', r.religion),
-    r.birthDate ?? '',
+    sahamBirthYear(r.birthDate),
     r.birthProvince ?? '',
     r.birthCity ?? '',
-    r.nativeType ?? '',
+    sahamNative(r.nativeType),
     r.residenceProvince ?? '',
     r.residenceCity ?? '',
     r.postalCode ?? '',
