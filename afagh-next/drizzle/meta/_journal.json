@@ -470,6 +470,13 @@
       "when": 1792944000000,
       "tag": "0062_notification_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1793030400000,
+      "tag": "0063_user_notification_prefs_rls",
+      "breakpoints": true
     }
   ]
 }
