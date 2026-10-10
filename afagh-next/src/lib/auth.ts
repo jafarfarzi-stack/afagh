@@ -2,7 +2,7 @@ import { createHash, randomBytes, scrypt as _scrypt, timingSafeEqual } from 'cry
 import { promisify } from 'util';
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { and, asc, eq, gt, inArray, lt, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, lt, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { ensureBaseReferenceData } from '@/lib/base-data';
 import { clientIp, rateLimit } from '@/lib/rateLimit';
@@ -565,7 +565,11 @@ export function homeFor(roles: string[]): string {
 }
 
 export async function getStudentByUser(userId: number) {
-  const [s] = await db.select().from(students).where(eq(students.userId, userId)).limit(1);
+  // یک کاربر می‌تواند چند پروندهٔ دانشجویی داشته باشد (مثلاً یک NO_SHOW قدیمی
+  // + یک ACTIVE جدید). بدون ترتیب، limit(1) پروندهٔ اشتباه را برمی‌دارد و پنل
+  // در همهٔ ترم‌ها خالی نشان می‌دهد — پس ACTIVE اول، بعد جدیدترین.
+  const [s] = await db.select().from(students).where(eq(students.userId, userId))
+    .orderBy(sql`CASE WHEN ${students.status} = 'ACTIVE' THEN 0 ELSE 1 END`, desc(students.id)).limit(1);
   if (s) return s;
   // ── خودترمیم: اگر کاربر دمو است ولی رکورد دانشجویی ندارد (مشکل شناخته‌شدهٔ
   //    نصب تازه)، پرونده را همان لحظه می‌سازیم تا صفحه‌ها «پرونده یافت نشد» ندهند.
@@ -573,7 +577,8 @@ export async function getStudentByUser(userId: number) {
     const [u] = await db.select({ nationalCode: users.nationalCode }).from(users).where(eq(users.id, userId)).limit(1);
     if (isDemoMode() && u && DEMO_ACCOUNTS[u.nationalCode]?.isStudent) {
       await ensureDemoStudentRecord(userId, u.nationalCode);
-      const [s2] = await db.select().from(students).where(eq(students.userId, userId)).limit(1);
+      const [s2] = await db.select().from(students).where(eq(students.userId, userId))
+        .orderBy(sql`CASE WHEN ${students.status} = 'ACTIVE' THEN 0 ELSE 1 END`, desc(students.id)).limit(1);
       return s2 ?? null;
     }
   } catch (err: any) {

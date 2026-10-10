@@ -43,7 +43,9 @@ export async function alumniOf(userId: number) {
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(majors, eq(majors.id, students.majorId))
     .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
-    .where(eq(students.userId, userId)).limit(1);
+    // کاربر چندپرونده‌ای: پروندهٔ GRADUATED اول (مبنای همین پورتال)، بعد جدیدترین
+    .where(eq(students.userId, userId))
+    .orderBy(sql`CASE WHEN ${students.status} = 'GRADUATED' THEN 0 ELSE 1 END`, desc(students.id)).limit(1);
   if (!row || row.status !== 'GRADUATED') return null;
   return { ...row, fullName: `${row.firstName} ${row.lastName}` };
 }
