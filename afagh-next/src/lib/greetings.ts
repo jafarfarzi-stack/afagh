@@ -23,6 +23,30 @@ export interface GreetResult {
 }
 
 /**
+ * متن یک پیام کلی از تنظیمات (قابل‌ویرایش در تنظیمات ← پیامک و ربات‌ها).
+ * اگر مدیر چیزی ننوشته باشد، همان متن پیش‌فرضِ تعریف‌شده می‌آید.
+ * جای‌نگهدارها ({name} و {term}) با مقدار واقعی پر می‌شوند.
+ */
+async function greetingText(
+  key: 'GREET_BIRTHDAY_TEXT' | 'GREET_TERM_TEXT',
+  vars: Record<string, string>,
+): Promise<string> {
+  let t = '';
+  try {
+    t = (await getSetting(key)).trim();
+  } catch {
+    t = '';
+  }
+  if (!t) {
+    t = key === 'GREET_BIRTHDAY_TEXT'
+      ? '🎂 {name} عزیز، تولدت مبارک! دانشگاه آفاق برایت سالی سرشار از موفقیت آرزو می‌کند.'
+      : '🎓 سال تحصیلی جدید ({term}) آغاز شد! دانشگاه آفاق نیمسالی موفق برایتان آرزو می‌کند. برنامهٔ کلاسی خود را در پورتال ببینید.';
+  }
+  for (const [k, v] of Object.entries(vars)) t = t.split(`{${k}}`).join(v);
+  return t;
+}
+
+/**
  * تبریک تولد روزانه: کاربران فعال که ماه/روز تولدشان (میلادی) با امروز می‌خواند.
  * ضدتکرار: هر کاربر هر روز فقط یک‌بار (eventCode=BIRTHDAY).
  */
@@ -47,18 +71,17 @@ async function runBirthdayGreetings(): Promise<GreetResult['birthdays']> {
 
   let sent = 0;
   let skipped = 0;
+  const tpl = await greetingText('GREET_BIRTHDAY_TEXT', {});
   for (const u of cands) {
     if (done.has(u.id)) {
       skipped++;
       continue;
     }
-    const name = (u.firstName ?? '').trim();
+    const name = (u.firstName ?? '').trim() || 'دوست عزیز';
     await notifyUserMultichannel({
       userId: u.id,
       eventCode: 'BIRTHDAY',
-      text: name
-        ? `🎂 ${name} عزیز، تولدت مبارک! دانشگاه آفاق برایت سالی سرشار از موفقیت آرزو می‌کند.`
-        : '🎂 تولدت مبارک! دانشگاه آفاق برایت سالی سرشار از موفقیت آرزو می‌کند.',
+      text: tpl.split('{name}').join(name),
     });
     sent++;
   }
@@ -134,6 +157,7 @@ async function runTermStartGreetings(): Promise<GreetResult['termStarts']> {
       .limit(60000)) as { id: number }[];
 
     const allMembers = [...stuMembers, ...profMembers];
+    const tpl = await greetingText('GREET_TERM_TEXT', { term: t.title });
     for (const m of allMembers) {
       if (done.has(m.id)) {
         skipped++;
@@ -143,7 +167,7 @@ async function runTermStartGreetings(): Promise<GreetResult['termStarts']> {
       await notifyUserMultichannel({
         userId: m.id,
         eventCode: code,
-        text: `🎓 سال تحصیلی جدید (${t.title}) آغاز شد! دانشگاه آفاق نیمسالی موفق برایتان آرزو می‌کند. برنامهٔ کلاسی خود را در پورتال ببینید.`,
+        text: tpl,
         channels,
       });
       sent++;

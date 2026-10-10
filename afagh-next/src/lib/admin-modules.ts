@@ -191,6 +191,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/broadcast',
+    icon: '📣',
+    title: 'ارسال پیام همگانی',
+    desc: 'پیام به دانشجویان/اساتید رشته، گروه، دانشکده یا ورودی',
+    group: 'settings',
+    roles: EDU,
+    accent: 'from-teal-950 to-indigo-950 border-teal-700/50',
+    iconBg: 'bg-teal-800/80 border-teal-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/archive',
     icon: '🗄️',
     title: 'بایگانی الکترونیک مدارک',

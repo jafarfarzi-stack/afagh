@@ -349,6 +349,16 @@ export default function SettingsClient({ settings, groups }: Props) {
                       <option value="true">فعال</option>
                       <option value="false">غیرفعال</option>
                     </select>
+                  ) : s.type === 'textarea' ? (
+                    <textarea
+                      dir="rtl"
+                      disabled={s.envOnly || pending}
+                      value={values[s.key] ?? ''}
+                      placeholder={s.envOnly ? 'در فایل .env تنظیم می‌شود' : 'خالی = استفاده از ENV/پیش‌فرض'}
+                      onChange={e => setValue(s.key, e.target.value)}
+                      rows={3}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm disabled:bg-slate-100 leading-7"
+                    />
                   ) : (
                     <input
                       dir="ltr"

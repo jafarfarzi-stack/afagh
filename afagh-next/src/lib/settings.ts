@@ -16,7 +16,7 @@ import { system_settings } from '@/db/schema';
 //  چون پیش از برقراری اتصال به دیتابیس لازم‌اند.
 // ════════════════════════════════════════════════════════════════════
 
-export type SettingType = 'text' | 'url' | 'number' | 'boolean' | 'secret' | 'image';
+export type SettingType = 'text' | 'textarea' | 'url' | 'number' | 'boolean' | 'secret' | 'image';
 
 export interface SettingDef {
   key: string;
@@ -133,6 +133,8 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'BI_CRON_SECRET', env: 'BI_CRON_SECRET', group: 'فراغت‌التحصیلی و صدور مدارک', label: 'کلید فراخوانی تازه‌سازی BI', type: 'secret', default: '', help: 'مستقل از GRAD_CRON_SECRET (M-3): هدر x-cron-secret برای POST /api/cron/bi-refresh' },
   { key: 'GREETINGS_CRON_SECRET', env: 'GREETINGS_CRON_SECRET', group: 'پیامک و ربات‌های پیام‌رسان', label: 'کلید تبریک‌های خودکار', type: 'secret', default: '', help: 'هدر x-cron-secret برای POST /api/cron/greetings (تولد روزانه + شروع ترم)' },
   { key: 'GREET_TERM_CHANNELS', env: 'GREET_TERM_CHANNELS', group: 'پیامک و ربات‌های پیام‌رسان', label: 'کانال‌های تبریک شروع ترم', type: 'text', default: 'INAPP', help: 'پیش‌فرض فقط داخل‌پورتال (بدون هزینهٔ پیامک برای ارسال انبوه)' },
+  { key: 'GREET_BIRTHDAY_TEXT', env: 'GREET_BIRTHDAY_TEXT', group: 'پیامک و ربات‌های پیام‌رسان', label: 'متن تبریک تولد', type: 'textarea', default: '🎂 {name} عزیز، تولدت مبارک! دانشگاه آفاق برایت سالی سرشار از موفقیت آرزو می‌کند.', help: '{name} = نام کوچک؛ اگر نام ثبت نباشد «دوست عزیز» گذاشته می‌شود' },
+  { key: 'GREET_TERM_TEXT', env: 'GREET_TERM_TEXT', group: 'پیامک و ربات‌های پیام‌رسان', label: 'متن تبریک شروع ترم', type: 'textarea', default: '🎓 سال تحصیلی جدید ({term}) آغاز شد! دانشگاه آفاق نیمسالی موفق برایتان آرزو می‌کند. برنامهٔ کلاسی خود را در پورتال ببینید.', help: '{term} = عنوان ترم (مثل نیمسال اول ۱۴۰۵)' },
   { key: 'ALUMNI_FEE_TRANSCRIPT', env: 'ALUMNI_FEE_TRANSCRIPT', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'هزینهٔ ریزنمرات رسمی (ریال)', type: 'number', default: '0' },
   { key: 'ALUMNI_FEE_RELEASE', env: 'ALUMNI_FEE_RELEASE', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'هزینهٔ آزادسازی مدرک (ریال)', type: 'number', default: '0' },
   { key: 'ALUMNI_FEE_TRANSLATION', env: 'ALUMNI_FEE_TRANSLATION', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'هزینهٔ تأییدیه برای دارالترجمه (ریال)', type: 'number', default: '0' },
