@@ -1,6 +1,6 @@
 'use server';
 
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { staff, students, universities, users } from '@/db/schema';
 import { getSessionUser, issueSessionFor, verifyPassword } from '@/lib/auth';
@@ -54,7 +54,8 @@ async function describeUser(id: number): Promise<SiblingAccount | null> {
   const sts = await db.select({ staffCode: staff.staffCode }).from(staff).where(eq(staff.userId, id));
   const stds =
     sts.length === 0
-      ? await db.select({ studentCode: students.studentCode }).from(students).where(eq(students.userId, id)).limit(1)
+      ? await db.select({ studentCode: students.studentCode }).from(students).where(eq(students.userId, id))
+        .orderBy(sql`CASE WHEN ${students.status} = 'ACTIVE' THEN 0 ELSE 1 END`, desc(students.id)).limit(1)
       : [];
   const code = sts[0]?.staffCode ?? stds[0]?.studentCode ?? null;
   if (!code) return null;
