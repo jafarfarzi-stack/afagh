@@ -59,6 +59,7 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'BBB_AUTO_RECORD', env: 'BIGBLUEBUTTON_AUTO_RECORD', group: 'کلاس مجازی (BBB / Moodle)', label: 'ضبط خودکار جلسات', type: 'boolean', default: 'false' },
   { key: 'MOODLE_URL', env: 'MOODLE_URL', group: 'کلاس مجازی (BBB / Moodle)', label: 'نشانی سامانه Moodle', type: 'url', default: '' },
   { key: 'MOODLE_TOKEN', env: 'MOODLE_TOKEN', group: 'کلاس مجازی (BBB / Moodle)', label: 'توکن وب‌سرویس Moodle', type: 'secret', default: '' },
+  { key: 'MOODLE_PULL_TOKEN', env: 'MOODLE_PULL_TOKEN', group: 'کلاس مجازی (BBB / Moodle)', label: 'توکن کشش مودل (LMS pull API)', type: 'secret', default: '', help: 'کلید هدر x-lms-token برای GET /api/lms/* — خالی یعنی API بسته است. این توکن را در پلاگین مودل بگذارید تا درس‌ها، کاربران، ثبت‌نامی‌ها و برنامهٔ کلاسی را بکشد' },
 
   // ── پیام‌رسان‌ها ──
   { key: 'SMS_PROVIDER', env: 'SMS_PROVIDER', group: 'پیامک و ربات‌های پیام‌رسان', label: 'سرویس‌دهندهٔ پیامک', type: 'text', default: '', help: 'مثال: KAVENEGAR / FARAPAYAMAK / SMSIR' },
