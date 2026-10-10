@@ -5,11 +5,28 @@ import { notification_channels } from '@/db/schema';
 import { getSessionUser } from '@/lib/auth';
 import { getSetting } from '@/lib/settings';
 
+// پیام‌رسان‌هایی که کاربر می‌تواند به آن‌ها وصل شود (تلگرام فقط-ارسالی است و
+// اتصال جدید نمی‌پذیرد، پس در پیشنهادها نیست).
+const LINKABLE: { key: string; label: string; usernameKey: string }[] = [
+  { key: 'SOROUSH', label: 'سروش', usernameKey: 'SOROUSH_BOT_USERNAME' },
+  { key: 'BALE', label: 'بله', usernameKey: 'BALE_BOT_USERNAME' },
+  { key: 'EITAA', label: 'ایتا', usernameKey: 'EITAA_BOT_USERNAME' },
+];
+
+const CHANNEL_FA: Record<string, string> = {
+  SOROUSH: 'سروش',
+  BALE: 'بله',
+  EITAA: 'ایتا',
+  TELEGRAM: 'تلگرام',
+};
+
 /**
- * بنر عضویت پیام‌رسان — فقط وقتی نشان داده می‌شود که لازم باشد:
+ * بنر عضویت پیام‌رسان — سه حالت:
  * · هیچ اتصالی ندارد → راهنمای کامل (آدرس بات + کد صحت‌سنجی)
  * · اتصال دارد ولی تأیید نشده → فقط «کد را بده»
- * · متصل و تأییدشده → هیچ‌چیز (سکوت)
+ * · یک (یا چند) کانال تأییدشده دارد ولی کانال دیگری هنوز وصل نیست →
+ *   بنر جمع‌وجور «پیام‌رسان دیگر هم اضافه کن» تا صفحهٔ /messenger گم نشود.
+ * · همهٔ کانال‌های قابل‌اتصال وصل‌اند → هیچ‌چیز (سکوت)
  */
 export default async function MessengerOnboardBanner() {
   const me = await getSessionUser();
@@ -29,14 +46,61 @@ export default async function MessengerOnboardBanner() {
     return null;
   }
 
-  const verified = rows.some(r => (r.isActive ?? 0) === 1 && r.verifiedAt);
-  if (verified) return null;
-
+  const verified = new Set(
+    rows.filter(r => (r.isActive ?? 0) === 1 && r.verifiedAt).map(r => r.channel),
+  );
   const hasAny = rows.length > 0;
-  const [soroushBot, baleBot] = await Promise.all([
-    getSetting('SOROUSH_BOT_USERNAME').catch(() => ''),
-    getSetting('BALE_BOT_USERNAME').catch(() => ''),
-  ]);
+  const missing = LINKABLE.filter(c => !verified.has(c.key));
+
+  // همه وصل‌اند → سکوت
+  if (hasAny && verified.size > 0 && missing.length === 0) return null;
+  // هیچ ردیفی ندارد و چیزی برای پیشنهاد نیست → سکوت (نباید بنر خالی نشان داد)
+  if (!hasAny && missing.length === 0) return null;
+
+  // نام‌کاربری بات‌ها فقط برای نمایش آدرس عضویت
+  const usernames: Record<string, string> = {};
+  await Promise.all(
+    missing.map(async c => {
+      try {
+        usernames[c.key] = (await getSetting(c.usernameKey)).trim().replace(/^@/, '');
+      } catch {
+        usernames[c.key] = '';
+      }
+    }),
+  );
+  const addr = (key: string, label: string) =>
+    usernames[key] ? (
+      <>
+        {' '}{label} <span className="font-mono font-bold" dir="ltr">@{usernames[key]}</span>
+      </>
+    ) : (
+      <> {label}</>
+    );
+
+  // حالت سوم: قبلاً یک کانال وصل کرده و حالا می‌خواهد کانال دیگری اضافه کند
+  if (verified.size > 0 && missing.length > 0) {
+    const doneNames = [...verified].map(c => CHANNEL_FA[c] ?? c).join('، ');
+    return (
+      <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-3 text-xs leading-6 text-indigo-900" dir="rtl">
+        <p>
+          <span className="font-black">✅ اتصال {doneNames} فعال است.</span>
+          {' '}می‌خواهید اعلان‌ها را در پیام‌رسان دیگری هم بگیرید؟ در
+          {missing.map((c, i) => (
+            <span key={c.key}>{i > 0 ? ' یا' : ''}{addr(c.key, c.label)}</span>
+          ))}
+          {' '}عضو شوید، در صفحهٔ اتصال کد بگیرید و بفرستید:
+        </p>
+        <Link
+          href="/messenger"
+          className="mt-1.5 inline-block rounded-xl bg-indigo-700 px-4 py-1.5 text-xs font-black text-white hover:bg-indigo-800"
+        >
+          افزودن پیام‌رسان دیگر ←
+        </Link>
+      </div>
+    );
+  }
+
+  const [soroushBot, baleBot] = [usernames['SOROUSH'] ?? '', usernames['BALE'] ?? ''];
 
   return (
     <div className="rounded-2xl border border-indigo-300 bg-indigo-50/80 p-4 text-xs leading-6 text-indigo-900" dir="rtl">

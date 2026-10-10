@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { requireRole } from '@/lib/auth';
 import { alumniOf } from '@/lib/alumni';
+import MessengerOnboardBanner from '@/components/MessengerOnboardBanner';
 import { logoutAction } from '../login/actions';
 
 export const dynamic = 'force-dynamic';
@@ -41,6 +42,9 @@ export default async function AlumniLayout({ children }: { children: React.React
           </div>
         </div>
       </header>
+      <div className="mx-auto w-full max-w-6xl px-4 pt-3 print:hidden">
+        <MessengerOnboardBanner />
+      </div>
       <main className="flex-1 max-w-6xl w-full mx-auto p-4">{children}</main>
       <footer className="text-center text-[11px] text-slate-400 py-4">
         ارتباط شما با دانشگاه پس از فراغت از تحصیل قطع نمی‌شود.

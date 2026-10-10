@@ -1,7 +1,16 @@
 import 'server-only';
 import { and, eq, gte, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { academic_terms, notification_deliveries, students, users } from '@/db/schema';
+import {
+  academic_terms,
+  course_offerings,
+  enrollments,
+  notification_deliveries,
+  offering_professors,
+  staff,
+  students,
+  users,
+} from '@/db/schema';
 import { getSetting } from '@/lib/settings';
 import { notifyUserMultichannel, type Channel } from '@/lib/messaging';
 import { createLogger } from '@/lib/logger';
@@ -58,8 +67,11 @@ async function runBirthdayGreetings(): Promise<GreetResult['birthdays']> {
 
 /**
  * تبریک شروع ترم انبوه: ترم‌هایی که تاریخ شروع کلاس‌شان امروز است.
- * گیرندگان: فقط دانشجویان در حال تحصیل (status=ACTIVE) همان دانشگاه —
- * نه دانش‌آموختگان، انصرافی‌ها و بقیه.
+ * گیرندگان (فقط این دو گروه):
+ *   • دانشجویانِ در حال تحصیلِ همین ترم (انتخاب واحد کرده و status=ACTIVE)
+ *   • استادانِ مدرسِ همین ترم
+ * مبنا «ارائه‌های همان ترم» است؛ دانش‌آموختگان، انصرافی‌ها و کسانی که در
+ * این ترم درگیر نیستند پیامی نمی‌گیرند.
  * کانال‌ها از تنظیم GREET_TERM_CHANNELS (پیش‌فرض فقط INAPP تا هزینهٔ پیامک نتراشد).
  * ضدتکرار به‌ازای هر کاربر+ترم (eventCode=TERM_START_<termId>).
  */
@@ -90,22 +102,44 @@ async function runTermStartGreetings(): Promise<GreetResult['termStarts']> {
       ));
     const done = new Set(doneRows.map(r => r.userId));
 
-    const members = (await db
-      .select({ id: users.id })
+    // ── گیرندگان: دانشجویانِ در حال تحصیلِ ترم + استادانِ مدرسِ همان ترم ──
+    // دقیقاً همان دو گروهی که در آن لحظه درگیر ترم‌اند:
+    //   دانشجو → در این ترم انتخاب واحد کرده و وضعیتش ACTIVE است
+    //   استاد  → در این ترم درسی ارائه می‌کند
+    // با JOIN مستقیم روی ارائه‌های همان ترم (نه کشیدن هزاران شناسه به حافظه).
+    const stuMembers = (await db
+      .selectDistinct({ id: users.id })
       .from(students)
+      .innerJoin(enrollments, eq(enrollments.studentId, students.id))
+      .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
       .innerJoin(users, eq(users.id, students.userId))
       .where(and(
-        eq(students.universityId, t.universityId),
+        eq(course_offerings.termId, t.id),
         eq(students.status, 'ACTIVE'),
         eq(users.isActive, 1),
       ))
       .limit(60000)) as { id: number }[];
 
-    for (const m of members) {
+    // استادانِ مدرسِ همین ترم
+    const profMembers = (await db
+      .selectDistinct({ id: users.id })
+      .from(staff)
+      .innerJoin(offering_professors, eq(offering_professors.staffId, staff.id))
+      .innerJoin(course_offerings, eq(course_offerings.id, offering_professors.offeringId))
+      .innerJoin(users, eq(users.id, staff.userId))
+      .where(and(
+        eq(course_offerings.termId, t.id),
+        eq(users.isActive, 1),
+      ))
+      .limit(60000)) as { id: number }[];
+
+    const allMembers = [...stuMembers, ...profMembers];
+    for (const m of allMembers) {
       if (done.has(m.id)) {
         skipped++;
         continue;
       }
+      done.add(m.id); // یک نفر اگر هم دانشجو و هم استادِ ترم باشد، یک‌بار پیام بگیرد
       await notifyUserMultichannel({
         userId: m.id,
         eventCode: code,
@@ -114,7 +148,7 @@ async function runTermStartGreetings(): Promise<GreetResult['termStarts']> {
       });
       sent++;
     }
-    log.info('term_start_greeted', { termId: t.id, sent });
+    log.info('term_start_greeted', { termId: t.id, sent, students: stuMembers.length, professors: profMembers.length });
   }
   return { terms: terms.length, sent, skipped };
 }

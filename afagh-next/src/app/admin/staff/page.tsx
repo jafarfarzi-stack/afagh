@@ -77,6 +77,57 @@ async function saveUserRolesAction(userId: number, roleIds: number[]): Promise<{
   return { ok: true, added, removed };
 }
 
+/**
+ * فعال/غیرفعال کردن پروندهٔ پرسنلی — فقط روی جدول staff، نه حساب کاربر.
+ *
+ * چرا جدا از users.isActive: پروندهٔ استاد ممکن است سال‌ها نگه داشته شود (برای
+ * سوابق تدریس، امضای اسناد، گزارش‌ها) اما نباید در فهرست‌ها و انتخاب استاد جلو بیاید.
+ * با خاموش‌کردن پرونده، استاد از «انتخاب استاد» و گزارش‌های عملیاتی حذف می‌شود،
+ * ولی سابقهٔ ترم‌های گذشته دست‌نخورده می‌ماند.
+ */
+async function toggleStaffActiveAction(fd: FormData) {
+  'use server';
+  await requireRole(['ADMIN']);
+  const staffId = Number(fd.get('staffId'));
+  const next = Number(fd.get('next')) === 1 ? 1 : 0;
+  if (!Number.isInteger(staffId) || staffId <= 0) return;
+
+  const { getCurrentUniversity } = await import('@/lib/university-scope');
+  const uni = await getCurrentUniversity().catch(() => null);
+  const [row] = await db.select({ id: staff.id, userId: staff.userId }).from(staff)
+    .where(eq(staff.id, staffId)).limit(1);
+  if (!row) return;
+  // فقط مدیرِ همان دانشگاه اجازه دارد (پرونده‌های سراسری = بدون دانشگاه)
+  if (uni) {
+    const [s] = await db.select({ universityId: staff.universityId }).from(staff).where(eq(staff.id, staffId)).limit(1);
+    if (s && s.universityId !== null && s.universityId !== uni.id) return;
+  }
+
+  await db.update(staff).set({ isActive: next }).where(eq(staff.id, staffId));
+
+  // اگر دارد گروه‌ای را مدیریت می‌کند، خاموش‌کردنش مدیر گروه را بی‌مدیر می‌گذارد؛
+  // هشدار را لاگ می‌کنیم تا مدیر بداند و جایگزین بگذارد.
+  if (next === 0) {
+    const led = await db.select({ id: departments.id }).from(departments).where(eq(departments.headStaffId, staffId));
+    if (led.length) {
+      console.warn(`[admin/staff] پروندهٔ ${staffId} خاموش شد ولی ${led.length} گروه را اداره می‌کند — مدیر گروه باید جایگزین شود.`);
+    }
+  }
+  revalidatePath('/admin/staff');
+}
+
+/** فعال/غیرفعال گروهی: خاموش‌کردن چند استاد بر پایهٔ گروه (کم‌کردن حجم داده) */
+async function bulkSetStaffActiveAction(fd: FormData) {
+  'use server';
+  await requireRole(['ADMIN']);
+  const ids = String(fd.get('staffIds') || '').split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
+  const next = Number(fd.get('next')) === 1 ? 1 : 0;
+  if (!ids.length) return;
+  // سقف ۵۰۰ تایکه تا یک درخواست، دیتابیس را قفل نکند
+  await db.update(staff).set({ isActive: next }).where(inArray(staff.id, ids.slice(0, 500)));
+  revalidatePath('/admin/staff');
+}
+
 /** ثبت حساب کاربری جدید «کارشناس/کارمند» (نه استاد و نه دانشجو) — فقط ADMIN */
 async function createStaffExpertAction(input: {
   nationalCode: string; firstName: string; lastName: string;
@@ -142,7 +193,7 @@ export default async function StaffPage() {
   const uw = uni ? eq(staff.universityId, uni.id) : undefined;
   const [head] = await db.select().from(roles).where(eq(roles.code, 'DEP_HEAD')).limit(1);
   const rows = await db
-    .select({ userId: users.id, code: users.nationalCode, name: users.firstName, family: users.lastName, staffCode: staff.staffCode, dept: departments.name, rank: staff.academicRank, type: staff.staffType })
+    .select({ staffId: staff.id, userId: users.id, code: users.nationalCode, name: users.firstName, family: users.lastName, staffCode: staff.staffCode, dept: departments.name, rank: staff.academicRank, type: staff.staffType, active: staff.isActive, userActive: users.isActive })
     .from(staff)
     .innerJoin(users, eq(users.id, staff.userId))
     .leftJoin(departments, eq(departments.id, staff.departmentId))
@@ -191,6 +242,8 @@ export default async function StaffPage() {
         headUserIds={[...heads]}
         ledBy={Object.fromEntries(ledBy)}
         toggleAction={toggleHeadAction}
+        toggleActiveAction={toggleStaffActiveAction}
+        bulkActiveAction={bulkSetStaffActiveAction}
         rolesAll={roleRows}
         userRoleIds={userRoleIds}
         saveRolesAction={saveUserRolesAction}
