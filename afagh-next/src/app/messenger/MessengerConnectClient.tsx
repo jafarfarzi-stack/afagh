@@ -25,6 +25,11 @@ export default function MessengerConnectClient() {
   const [waiting, setWaiting] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartRef = useRef(0);
+  // ── قفل «در حال پاسخ»: setInterval با بدنهٔ async اگر پاسخ کندتر از POLL_MS
+  //    برسد، tick بعدی روی همان درخواست قبلی سوار می‌شود؛ آن‌وقت دو بار
+  //    confirmLink صدا زده می‌شود و دومی خطای «کد مصرف‌شده» نشان می‌دهد —
+  //    با اینکه اتصال درست برقرار شده است. این قفل اجازهٔ یک درخواست هم‌زمان می‌دهد.
+  const pollBusyRef = useRef(false);
 
   // توقف polling هنگام unmount یا تغییر کد
   useEffect(() => () => {
@@ -89,6 +94,8 @@ export default function MessengerConnectClient() {
         return;
       }
       try {
+        if (pollBusyRef.current) return;
+        pollBusyRef.current = true;
         const st = await checkPairingAction(c);
         if (st.ok && st.paired) {
           stopPolling();
@@ -101,6 +108,7 @@ export default function MessengerConnectClient() {
           }
         }
       } catch { /* polling بعدی تلاش می‌کند */ }
+      finally { pollBusyRef.current = false; }
     }, POLL_MS);
   };
 

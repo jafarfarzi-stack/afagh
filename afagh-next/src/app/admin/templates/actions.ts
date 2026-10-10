@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { notification_templates, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
-import { sendTestMessage, type Channel } from '@/lib/messaging';
+import { sendMessenger, sendTestMessage, type Channel } from '@/lib/messaging';
 
 const TESTABLE: Channel[] = ['SMS', 'BALE', 'EITAA', 'TELEGRAM', 'SOROUSH', 'IGAP'];
 
@@ -35,29 +35,57 @@ export async function sendTemplateTestMessage(
   if (!TESTABLE.includes(channel as Channel)) {
     return { ok: false, error: 'کانال نامعتبر است.' };
   }
-  const m = toAsciiDigits(String(mobile || '')).replace(/[\s-]/g, '');
-  if (!/^09\d{9}$/.test(m)) {
-    return { ok: false, error: 'شماره موبایل معتبر وارد کنید (مثل 09123456789).' };
+  // فقط عدد (موبایل یا شناسهٔ چت) — بدون پیشوند @ و بدون خط تیره
+  const m = toAsciiDigits(String(mobile || '')).replace(/[\s\-@]/g, '');
+  // ① ابتدا شمارهٔ موبایل معتبر
+  if (/^09\d{9}$/.test(m)) {
+    const matched = await db.select({ id: users.id, firstName: users.firstName, lastName: users.lastName })
+      .from(users).where(eq(users.mobile, m));
+    if (!matched.length) {
+      return { ok: false, error: `کاربری با موبایل ${m} در سامانه یافت نشد — اول باید حساب داشته باشد (اتصال بات هم در /messenger انجام می‌شود).` };
+    }
+    return await dispatchToUsers(matched, channel as Channel);
   }
-  // یک شماره ممکن است روی چند حساب باشد (کد ملی واحد با چند کد پرسنلی/دانشجویی)؛
-  // اتصال بات «به‌ازای هر حساب» است، پس حسابی را برمی‌داریم که در این کانال لینک شده.
-  const matched = await db.select({ id: users.id, firstName: users.firstName, lastName: users.lastName })
-    .from(users).where(eq(users.mobile, m));
-  if (!matched.length) {
-    return { ok: false, error: `کاربری با موبایل ${m} در سامانه یافت نشد — اول باید حساب داشته باشد (اتصال بات هم در /messenger انجام می‌شود).` };
+  // ② وگرنه اگر یک شناسهٔ عددیِ دیگر است (مثل chatId سروش/بله/ایتا) → مستقیم از همان کانال
+  if (/^\d{3,15}$/.test(m)) {
+    return await dispatchDirectToChannel(m, channel as Channel);
   }
+  return { ok: false, error: 'شماره موبایل معتبر (مثل 09123456789) یا شناسهٔ عددی مقصد در پیام‌رسان را وارد کنید.' };
+}
+
+/** ارسال تست به چند حسابِ هم‌شماره — اول حسابی که در آن کانال لینک شده */
+async function dispatchToUsers(
+  matched: { id: number; firstName: string | null; lastName: string | null }[],
+  channel: Channel,
+): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
   try {
     let lastSkip: string | null = null;
     for (const u of matched) {
-      const r = await sendTestMessage(u.id, channel as Channel);
+      const r = await sendTestMessage(u.id, channel);
       if (r.status === 'SENT') {
         const who = `${u.firstName || ''} ${u.lastName || ''}`.trim();
-        return { ok: true, message: `📲 پیام آزمایشی واقعی از طریق ${CHANNEL_FA[channel]} به ${m}${who ? ` (حساب ${who})` : ''} ارسال شد.` };
+        return { ok: true, message: `📲 پیام آزمایشی واقعی از طریق ${CHANNEL_FA[channel]} به ${u.id}${who ? ` (${who})` : ''} ارسال شد.` };
       }
       if (r.status === 'SKIPPED') lastSkip = r.error ?? r.status;
       else return { ok: false, error: `ارسال نشد (${CHANNEL_FA[channel]}): ${r.error ?? r.status}` };
     }
     return { ok: false, error: `ارسال نشد (${CHANNEL_FA[channel]}): ${lastSkip ?? 'SKIPPED'} — اتصال بات برای هر حساب جداست؛ با همان حسابی که این شماره را دارد وارد /messenger شوید و بات را لینک کنید.` };
+  } catch (e) {
+    return { ok: false, error: `خطای ارسال: ${(e as Error).message}` };
+  }
+}
+
+/** ارسال تست مستقیم به یک شناسهٔ مقصد (chatId) در همان کانال انتخابی */
+async function dispatchDirectToChannel(
+  targetId: string,
+  channel: Channel,
+): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  try {
+    const r = await sendMessenger(channel, targetId, '📲 پیام آزمایشی از سامانه جامع دانشگاه آفاق — این پیام یک‌بارمصرف است.');
+    if (r.status === 'SENT') {
+      return { ok: true, message: `📲 پیام آزمایشی از طریق ${CHANNEL_FA[channel]} مستقیماً به شناسهٔ ${targetId} ارسال شد.` };
+    }
+    return { ok: false, error: `ارسال نشد (${CHANNEL_FA[channel]} به ${targetId}): ${r.error ?? r.status}` };
   } catch (e) {
     return { ok: false, error: `خطای ارسال: ${(e as Error).message}` };
   }

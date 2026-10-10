@@ -767,13 +767,14 @@ export default function TemplateEngineClient({ settings, initialTemplates }: { s
                     </div>
 
                     <p className="text-slate-600 text-[11px]">
-                      شماره موبایل یا شناسه مقصد را جهت ارسال تست وارد نمایید:
+                      موبایل کاربر (<span className="font-mono" dir="ltr">09123456789</span>) یا شناسهٔ مقصد در
+                      پیام‌رسان (<span className="font-mono" dir="ltr">19771455</span>) را وارد کنید:
                     </p>
                     <input
                       type="text"
                       value={testMobileNumber}
                       onChange={e => setTestMobileNumber(e.target.value)}
-                      placeholder="09123456789 یا @username"
+                      placeholder="09123456789 یا 19771455"
                       className="w-full border border-slate-300 rounded-xl p-2.5 font-mono font-bold text-center bg-white"
                     />
                   </div>
