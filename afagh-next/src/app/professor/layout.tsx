@@ -160,6 +160,13 @@ export default async function ProfessorLayout({ children }: { children: React.Re
             📑 فرم قرارداد حق‌التدریس
           </Link>
           <Link
+            href="/professor/broadcast"
+            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200"
+            title="ارسال پیام به دانشجویان کلاس‌های خودتان"
+          >
+            📣 پیام به کلاس
+          </Link>
+          <Link
             href="/professor/documents"
             className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200"
           >

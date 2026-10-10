@@ -1,6 +1,6 @@
 'use server';
 
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms,
@@ -10,6 +10,8 @@ import {
   enrollments,
   faculties,
   majors,
+  notification_deliveries,
+  notifications,
   offering_professors,
   staff,
   students,
@@ -244,13 +246,167 @@ export async function previewBroadcastCount(
 
 const SENDABLE: Channel[] = ['INAPP', 'SMS', 'SOROUSH', 'BALE', 'EITAA'];
 
+export interface BroadcastRecord {
+  eventCode: string;
+  sender: string;
+  sentAt: string | null;
+  body: string;
+  total: number;
+  inbox: number;
+  channels: ChannelStat[];
+}
+
+function parseBroadcastSender(eventCode: string): number | null {
+  // قالب جدید: BROADCAST_<adminId>_<ts> · قدیمی: BROADCAST_<ts>
+  const parts = eventCode.split('_');
+  if (parts.length >= 3 && parts[0] === 'BROADCAST') {
+    const n = Number(parts[1]);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  }
+  return null;
+}
+
+/**
+ * تاریخچهٔ ارسال‌های همگانی (مدیر/کارشناس و استاد) — چه پیامی، کی، به کجا،
+ * با چه نتیجه‌ای. جدیدترین اول. فرستنده از داخل کد رهگیری خوانده می‌شود؛
+ * رکوردهای قدیمی فرستنده ندارند و «—» نشان داده می‌شوند.
+ */
+export async function listBroadcastHistory(
+  limit = 20,
+): Promise<{ ok: true; records: BroadcastRecord[] } | { ok: false; error: string }> {
+  try {
+    await requireRole(EDU);
+  } catch {
+    return { ok: false, error: 'دسترسی ندارید.' };
+  }
+  try {
+    const codes = (await db.execute(sql`
+      SELECT "eventCode" AS code, MAX(id) AS m
+      FROM notification_deliveries
+      WHERE "eventCode" LIKE 'BROADCAST%' OR "eventCode" LIKE 'PROFMSG%'
+      GROUP BY "eventCode"
+      ORDER BY m DESC
+      LIMIT ${Math.min(Math.max(limit, 1), 50)}
+    `)) as unknown as { code: string; m: number }[];
+    if (!codes.length) return { ok: true, records: [] };
+    const list = codes.map(r => r.code);
+
+    const inboxRows = (await db
+      .select({ eventCode: notifications.eventCode, n: sql<number>`COUNT(*)` })
+      .from(notifications)
+      .where(inArray(notifications.eventCode, list))
+      .groupBy(notifications.eventCode)) as { eventCode: string | null; n: number }[];
+    const inboxBy = new Map(list.map(c => [c, 0] as [string, number]));
+    for (const r of inboxRows) if (r.eventCode) inboxBy.set(r.eventCode, Number(r.n));
+
+    const detRows = (await db
+      .select({
+        eventCode: notification_deliveries.eventCode,
+        channel: notification_deliveries.channel,
+        status: notification_deliveries.status,
+        n: sql<number>`COUNT(*)`,
+      })
+      .from(notification_deliveries)
+      .where(inArray(notification_deliveries.eventCode, list))
+      .groupBy(notification_deliveries.eventCode, notification_deliveries.channel, notification_deliveries.status)
+    ) as { eventCode: string | null; channel: string; status: string; n: number }[];
+
+    const metaRows = (await db.execute(sql`
+      SELECT "eventCode" AS code, MIN("createdAt") AS at,
+             (ARRAY_AGG(body ORDER BY id LIMIT 1))[1] AS sample
+      FROM notification_deliveries
+      WHERE "eventCode" IN (${sql.join(list.map(c => sql`${c}`), sql`, `)})
+      GROUP BY "eventCode"
+    `)) as unknown as { code: string; at: string | null; sample: string | null }[];
+
+    const senderIds = [...new Set(list.map(parseBroadcastSender).filter((n): n is number => n !== null))];
+    const nameBy = new Map<number, string>();
+    if (senderIds.length) {
+      const us = await db
+        .select({ id: users.id, firstName: users.firstName, lastName: users.lastName })
+        .from(users)
+        .where(inArray(users.id, senderIds));
+      for (const u of us) nameBy.set(u.id, `${u.firstName || ''} ${u.lastName || ''}`.trim() || `کاربر ${u.id}`);
+    }
+
+    const statsBy = new Map<string, Map<string, ChannelStat>>();
+    const totals = new Map<string, Set<number>>();
+    for (const c of list) {
+      statsBy.set(c, new Map());
+      totals.set(c, new Set());
+    }
+    // تعداد گیرندگان یکتا از روی deliveries (userId) — برای هر کد جدا می‌خوانیم
+    const userRows = (await db
+      .select({ eventCode: notification_deliveries.eventCode, userId: notification_deliveries.userId })
+      .from(notification_deliveries)
+      .where(inArray(notification_deliveries.eventCode, list))
+      .limit(200000)) as { eventCode: string | null; userId: number }[];
+    for (const r of userRows) {
+      if (!r.eventCode) continue;
+      totals.get(r.eventCode)?.add(r.userId);
+    }
+    for (const r of detRows) {
+      if (!r.eventCode) continue;
+      const m = statsBy.get(r.eventCode)!;
+      let s = m.get(r.channel);
+      if (!s) {
+        s = { channel: r.channel, sent: 0, skipped: 0, failed: 0 };
+        m.set(r.channel, s);
+      }
+      const n = Number(r.n);
+      if (r.status === 'SENT') s.sent += n;
+      else if (r.status === 'SKIPPED') s.skipped += n;
+      else s.failed += n;
+    }
+
+    const metaBy = new Map(metaRows.map(r => [r.code, r]));
+    const records: BroadcastRecord[] = list.map(code => {
+      const meta = metaBy.get(code);
+      const sid = parseBroadcastSender(code);
+      const users_n = totals.get(code)?.size ?? 0;
+      return {
+        eventCode: code,
+        sender: sid ? (nameBy.get(sid) ?? `کاربر ${sid}`) : '—',
+        sentAt: meta?.at ?? null,
+        body: (meta?.sample ?? '').slice(0, 300),
+        total: users_n,
+        inbox: inboxBy.get(code) ?? 0,
+        channels: [...(statsBy.get(code)?.values() ?? [])],
+      };
+    });
+    return { ok: true, records };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+export interface ChannelStat {
+  channel: string;
+  sent: number;
+  skipped: number;
+  failed: number;
+}
+
+export interface BroadcastReport {
+  total: number;
+  /** رسیدن به صندوق داخل پورتال (همیشه برای همه ثبت می‌شود) */
+  inbox: number;
+  /** درخواست‌هایی که کلاً به خطا خوردند (حتی صندوق هم ثبت نشد) */
+  failedRequests: number;
+  /** تفکیک کانال‌های بیرونی — اینجاست که «عضو نشده» دیده می‌شود */
+  channels: ChannelStat[];
+}
+
 export async function sendBroadcast(
   a: BroadcastAudience,
   channels: Channel[],
   text: string,
-): Promise<{ ok: true; sent: number; failed: number; total: number } | { ok: false; error: string }> {
+): Promise<{ ok: true; report: BroadcastReport } | { ok: false; error: string }> {
+  let me: { id: number } | null = null;
   try {
     await requireRole(EDU);
+    const { getSessionUser } = await import('@/lib/auth');
+    me = await getSessionUser();
   } catch {
     return { ok: false, error: 'دسترسی ندارید.' };
   }
@@ -268,9 +424,21 @@ export async function sendBroadcast(
   }
   if (!ids.length) return { ok: false, error: 'هیچ مخاطبی با این فیلترها پیدا نشد.' };
 
-  const eventCode = `BROADCAST_${Date.now()}`;
-  let sent = 0;
-  let failed = 0;
+  // کد رهگیری شامل فرستنده است تا در تاریخچه معلوم باشد کی فرستاده
+  const eventCode = `BROADCAST_${me?.id ?? 0}_${Date.now()}`;
+  const stats = new Map<string, ChannelStat>();
+  const bump = (channel: string, status: string) => {
+    let s = stats.get(channel);
+    if (!s) {
+      s = { channel, sent: 0, skipped: 0, failed: 0 };
+      stats.set(channel, s);
+    }
+    if (status === 'SENT') s.sent++;
+    else if (status === 'SKIPPED') s.skipped++;
+    else s.failed++;
+  };
+  let inbox = 0;
+  let failedRequests = 0;
   // بسته‌های ۱۰تایی موازی — هم سریع است هم دیتابیس/سرویس را خفه نمی‌کند
   for (let i = 0; i < ids.length; i += 10) {
     const chunk = ids.slice(i, i + 10);
@@ -278,9 +446,13 @@ export async function sendBroadcast(
       chunk.map(id => notifyUserMultichannel({ userId: id, eventCode, text: body, channels: ch })),
     );
     for (const r of rs) {
-      if (r.status === 'fulfilled') sent++;
-      else failed++;
+      if (r.status === 'fulfilled') {
+        inbox++;
+        for (const d of r.value.results) bump(d.channel, d.status);
+      } else {
+        failedRequests++;
+      }
     }
   }
-  return { ok: true, sent, failed, total: ids.length };
+  return { ok: true, report: { total: ids.length, inbox, failedRequests, channels: [...stats.values()] } };
 }

@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   getTermOfferings,
+  listBroadcastHistory,
   previewBroadcastCount,
   sendBroadcast,
   type BroadcastAudience,
   type BroadcastFilters,
+  type BroadcastRecord,
+  type BroadcastReport,
   type TermOffering,
 } from './actions';
 import type { Channel } from '@/lib/messaging';
@@ -57,7 +60,10 @@ export default function BroadcastClient({ filters }: { filters: BroadcastFilters
   const [text, setText] = useState('');
   const [count, setCount] = useState<{ count: number; capped: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [report, setReport] = useState<BroadcastReport | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  const [history, setHistory] = useState<BroadcastRecord[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const departments = useMemo(
     () => filters.departments.filter(d => !facultyId || d.facultyId === Number(facultyId)),
@@ -127,10 +133,12 @@ export default function BroadcastClient({ filters }: { filters: BroadcastFilters
     if (!ok) return;
     setBusy(true);
     setResult(null);
+    setReport(null);
     try {
       const r = await sendBroadcast(audience(), channels, text.trim());
       if (r.ok) {
-        setResult(`✅ ارسال شد: ${r.sent.toLocaleString('fa-IR')} موفق، ${r.failed.toLocaleString('fa-IR')} ناموفق از ${r.total.toLocaleString('fa-IR')} نفر.`);
+        setReport(r.report);
+        refreshHistory();
       } else {
         setResult(`⛔ ${r.error}`);
       }
@@ -140,6 +148,20 @@ export default function BroadcastClient({ filters }: { filters: BroadcastFilters
       setBusy(false);
     }
   };
+
+  const refreshHistory = async () => {
+    try {
+      const r = await listBroadcastHistory(20);
+      if (r.ok) setHistory(r.records);
+    } catch {
+      /* تاریخچه اختیاری است — خطایش مزاحم ارسال نمی‌شود */
+    }
+  };
+
+  useEffect(() => {
+    refreshHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const toggleChannel = (c: Channel) =>
     setChannels(prev => (prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]));
@@ -338,11 +360,65 @@ export default function BroadcastClient({ filters }: { filters: BroadcastFilters
         </div>
       </div>
 
+      {report && (
+        <div className="rounded-2xl border border-emerald-300 bg-emerald-50/70 p-4 text-xs leading-7">
+          <p className="font-black text-emerald-900">
+            ✅ ارسال تمام شد — {report.total.toLocaleString('fa-IR')} مخاطب:
+          </p>
+          <ul className="mt-1 list-disc pr-5 text-emerald-900">
+            <li>📥 صندوق داخل پورتال: <strong>{report.inbox.toLocaleString('fa-IR')} نفر</strong> (همه این را می‌بینند)</li>
+            {report.channels.map(c => (
+              <li key={c.channel}>
+                {c.channel === 'SMS' ? '📲 پیامک' : c.channel === 'SOROUSH' ? '🟣 سروش' : c.channel === 'BALE' ? '🟢 بله' : c.channel === 'EITAA' ? '🟠 ایتا' : c.channel}:
+                {' '}<strong>{c.sent.toLocaleString('fa-IR')} ارسال شد</strong>
+                {c.skipped > 0 && <span> · {c.skipped.toLocaleString('fa-IR')} نفر عضو این کانال نیستند</span>}
+                {c.failed > 0 && <span className="text-red-700"> · {c.failed.toLocaleString('fa-IR')} خطا</span>}
+              </li>
+            ))}
+            {report.failedRequests > 0 && (
+              <li className="text-red-700">{report.failedRequests.toLocaleString('fa-IR')} درخواست کلاً به خطا خورد.</li>
+            )}
+          </ul>
+        </div>
+      )}
+
       {result && (
         <div className="rounded-2xl border p-4 text-xs font-black leading-7 bg-slate-50 border-slate-200 text-slate-800">
           {result}
         </div>
       )}
+
+      {/* ── تاریخچهٔ ارسال‌ها ── */}
+      <div className="rounded-2xl border border-slate-200 bg-white">
+        <button
+          onClick={() => setHistoryOpen(v => !v)}
+          className="flex w-full items-center justify-between p-4 text-sm font-black text-slate-900"
+        >
+          <span>🗂️ چه پیام‌هایی قبلاً به کجاها ارسال شده ({history.length.toLocaleString('fa-IR')})</span>
+          <span>{historyOpen ? '▴' : '▾'}</span>
+        </button>
+        {historyOpen && (
+          <div className="space-y-2 border-t border-slate-100 p-4">
+            {history.length === 0 ? (
+              <p className="text-xs text-slate-500">هنوز ارسال همگانی ثبت نشده است.</p>
+            ) : (
+              history.map(h => (
+                <div key={h.eventCode} className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-xs leading-6">
+                  <p className="font-bold text-slate-800">{h.body || '—'}</p>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    👤 {h.sender} · 🕐 {h.sentAt ? new Date(h.sentAt).toLocaleString('fa-IR') : '—'} · 👥 {h.total.toLocaleString('fa-IR')} نفر · 📥 صندوق: {h.inbox.toLocaleString('fa-IR')}
+                  </p>
+                  {h.channels.length > 0 && (
+                    <p className="text-[11px] text-slate-600">
+                      {h.channels.map(c => `${c.channel}: ${c.sent.toLocaleString('fa-IR')} ارسال / ${c.skipped.toLocaleString('fa-IR')} بدون اتصال / ${c.failed.toLocaleString('fa-IR')} خطا`).join(' · ')}
+                    </p>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
