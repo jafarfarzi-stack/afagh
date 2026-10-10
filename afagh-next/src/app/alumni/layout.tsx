@@ -22,11 +22,23 @@ export default async function AlumniLayout({ children }: { children: React.React
               <p className="text-xs text-indigo-200">{me.fullName} — {me.majorName ?? '—'} / {me.degreeTitle ?? '—'}</p>
             </div>
           </div>
-          <form action={logoutAction}>
-            <button className="text-xs bg-indigo-950/90 hover:bg-black text-indigo-100 border border-indigo-700/60 px-3 py-1.5 rounded-lg font-medium">
-              خروج از حساب
-            </button>
-          </form>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* ── کاربرِ دوقلو (دانش‌آموخته + استاد، یک حساب): سوییچ بدون رمز به پنل استاد ── */}
+            {user.roles.includes('PROFESSOR') && (
+              <a
+                href="/professor"
+                className="text-xs bg-amber-400 hover:bg-amber-300 text-slate-950 border border-amber-300 px-3 py-1.5 rounded-lg font-black"
+                title="این حساب هم پروندهٔ استادی دارد — بدون ورود مجدد به کارتابل استاد بروید"
+              >
+                👨‍🏫 پنل استاد
+              </a>
+            )}
+            <form action={logoutAction}>
+              <button className="text-xs bg-indigo-950/90 hover:bg-black text-indigo-100 border border-indigo-700/60 px-3 py-1.5 rounded-lg font-medium">
+                خروج از حساب
+              </button>
+            </form>
+          </div>
         </div>
       </header>
       <main className="flex-1 max-w-6xl w-full mx-auto p-4">{children}</main>
