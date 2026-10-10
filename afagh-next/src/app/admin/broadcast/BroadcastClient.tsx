@@ -31,6 +31,27 @@ export default function BroadcastClient({ filters }: { filters: BroadcastFilters
   const [offeringId, setOfferingId] = useState('');
   const [offerings, setOfferings] = useState<TermOffering[]>([]);
   const [loadingOfferings, setLoadingOfferings] = useState(false);
+  // ── جست‌وجوی کلاس: تایپ کد درس/گروه/نام استاد به‌جای اسکرول ۱۵۰۰ گزینه ──
+  const [classQuery, setClassQuery] = useState('');
+  const [classOpen, setClassOpen] = useState(false);
+
+  /** ارقام فارسی/عربی → لاتین تا «۱۲۳» هم کد «123» را پیدا کند */
+  const fa2en = (s: string) =>
+    s.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+
+  const classMatches = useMemo(() => {
+    const q = fa2en(classQuery.trim()).toLowerCase();
+    if (!q) return offerings.slice(0, 60);
+    const toks = q.split(/\s+/);
+    return offerings
+      .filter(o => {
+        const hay = fa2en(o.label).toLowerCase();
+        return toks.every(t => hay.includes(t));
+      })
+      .slice(0, 60);
+  }, [offerings, classQuery]);
+
+  const selectedOffering = offeringId ? offerings.find(o => o.id === Number(offeringId)) : undefined;
   const [activeOnly, setActiveOnly] = useState(true);
   const [channels, setChannels] = useState<Channel[]>(['INAPP']);
   const [text, setText] = useState('');
@@ -60,6 +81,8 @@ export default function BroadcastClient({ filters }: { filters: BroadcastFilters
 
   const loadOfferings = async (tid: string) => {
     setOfferingId('');
+    setClassQuery('');
+    setClassOpen(false);
     setOfferings([]);
     if (!tid) return;
     setLoadingOfferings(true);
@@ -197,20 +220,73 @@ export default function BroadcastClient({ filters }: { filters: BroadcastFilters
               ))}
             </select>
           </label>
-          <label className="text-xs font-bold text-slate-600">
-            🏫 کلاس درس {offeringId ? `(فقط ثبت‌نام‌شدگان${role !== 'student' ? ' و استاد' : ''} همین کلاس)` : '(اول ترم را انتخاب کنید)'}
-            <select
-              value={offeringId}
-              disabled={!termId || loadingOfferings}
-              onChange={e => { setOfferingId(e.target.value); setCount(null); }}
-              className={sel + ' mt-1'}
-            >
-              <option value="">{loadingOfferings ? 'در حال بارگذاری کلاس‌ها…' : `همهٔ کلاس‌ها (${offerings.length.toLocaleString('fa-IR')})`}</option>
-              {offerings.map(o => (
-                <option key={o.id} value={o.id}>{o.label} ({o.enrolled.toLocaleString('fa-IR')} نفر)</option>
-              ))}
-            </select>
-          </label>
+          <div className="relative">
+            <span className="text-xs font-bold text-slate-600">
+              🏫 کلاس درس {offeringId ? `(فقط ثبت‌نام‌شدگان${role !== 'student' ? ' و استاد' : ''} همین کلاس)` : '(کد درس یا گروه را تایپ کنید)'}
+            </span>
+            <div className="mt-1 flex gap-1.5">
+              <input
+                value={selectedOffering && !classOpen ? selectedOffering.label : classQuery}
+                disabled={!termId || loadingOfferings}
+                onChange={e => {
+                  setClassQuery(e.target.value);
+                  setClassOpen(true);
+                  if (offeringId) { setOfferingId(''); setCount(null); }
+                }}
+                onFocus={() => setClassOpen(true)}
+                onBlur={() => setTimeout(() => setClassOpen(false), 200)}
+                placeholder={loadingOfferings ? 'در حال بارگذاری کلاس‌ها…' : `جست‌وجو در ${offerings.length.toLocaleString('fa-IR')} کلاس — مثلاً «ریاضی گروه ۲» یا کد درس`}
+                className={sel + ' mt-1'}
+              />
+              {offeringId && (
+                <button
+                  onClick={() => { setOfferingId(''); setClassQuery(''); setCount(null); }}
+                  className="mt-1 shrink-0 rounded-xl border border-slate-300 bg-white px-3 text-xs font-black text-slate-500 hover:bg-slate-50"
+                  title="حذف انتخاب کلاس"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            {classOpen && termId && !loadingOfferings && (
+              <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-300 bg-white shadow-xl">
+                {classMatches.length === 0 ? (
+                  <p className="p-3 text-xs text-slate-500">کلاسی پیدا نشد — کد درس یا گروه دیگری را امتحان کنید.</p>
+                ) : (
+                  <>
+                    <button
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => { setOfferingId(''); setClassQuery(''); setClassOpen(false); setCount(null); }}
+                      className="block w-full p-2.5 text-right text-xs font-black text-indigo-700 hover:bg-indigo-50"
+                    >
+                      همهٔ کلاس‌ها ({offerings.length.toLocaleString('fa-IR')})
+                    </button>
+                    {classMatches.map(o => (
+                      <button
+                        key={o.id}
+                        onMouseDown={e => e.preventDefault()}
+                        onClick={() => {
+                          setOfferingId(String(o.id));
+                          setClassQuery('');
+                          setClassOpen(false);
+                          setCount(null);
+                        }}
+                        className="block w-full border-t border-slate-100 p-2.5 text-right text-xs hover:bg-indigo-50"
+                      >
+                        <span className="font-bold text-slate-800">{o.label}</span>
+                        <span className="mr-2 text-[11px] text-slate-500">({o.enrolled.toLocaleString('fa-IR')} نفر)</span>
+                      </button>
+                    ))}
+                    {classQuery.trim() && (
+                      <p className="border-t border-slate-100 p-2 text-[11px] text-slate-400">
+                        {classMatches.length} مورد اول نمایش داده شد — دقیق‌تر تایپ کنید.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={preview} disabled={busy} className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-black text-white hover:bg-slate-900 disabled:opacity-60">
