@@ -192,7 +192,7 @@ export default function TemplateEngineClient({ settings, initialTemplates }: { s
   const [newVarLabel, setNewVarLabel] = useState('');
   const [newVarSample, setNewVarSample] = useState('');
   const [selectedEventCode, setSelectedEventCode] = useState<string>('EXAM_ABSENCE');
-  const [testMobileNumber, setTestMobileNumber] = useState<string>('09123456789');
+  const [testMobileNumber, setTestMobileNumber] = useState<string>('');
   const [testChannel, setTestChannel] = useState<NotificationChannel>('SMS');
   const [isSendingTest, setIsSendingTest] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -368,7 +368,7 @@ export default function TemplateEngineClient({ settings, initialTemplates }: { s
   // Send Test Message — واقعی: از مسیر مشترک ارسال همهٔ فرایندها
   const handleSendTestMessage = async () => {
     if (!testMobileNumber.trim()) {
-      showToast('لطفاً شماره تلفن همراه یا شناسه کاربری را وارد نمایید.');
+      showToast('کد پرسنلی، شمارهٔ دانشجویی یا موبایل را وارد کنید.');
       return;
     }
     setIsSendingTest(true);
@@ -767,14 +767,14 @@ export default function TemplateEngineClient({ settings, initialTemplates }: { s
                     </div>
 
                     <p className="text-slate-600 text-[11px]">
-                      موبایل کاربر (<span className="font-mono" dir="ltr">09123456789</span>) یا شناسهٔ مقصد در
-                      پیام‌رسان (<span className="font-mono" dir="ltr">19771455</span>) را وارد کنید:
+                      کد پرسنلی (<span className="font-mono" dir="ltr">4000101</span>)، شمارهٔ دانشجویی، موبایل یا کد ملی را وارد کنید —
+                      سامانه خودش آیدیِ همان پیام‌رسان را پیدا می‌کند:
                     </p>
                     <input
                       type="text"
                       value={testMobileNumber}
                       onChange={e => setTestMobileNumber(e.target.value)}
-                      placeholder="09123456789 یا 19771455"
+                      placeholder="4000101"
                       className="w-full border border-slate-300 rounded-xl p-2.5 font-mono font-bold text-center bg-white"
                     />
                   </div>
