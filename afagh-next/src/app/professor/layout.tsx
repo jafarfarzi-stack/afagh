@@ -107,6 +107,16 @@ export default async function ProfessorLayout({ children }: { children: React.Re
           >
             🏠 داشبورد و کلاس‌ها
           </Link>
+          {/* ── کاربرِ دوقلو (هم استاد هم دانشجو، یک حساب): سوییچ بدون رمز به پنل دانشجو ── */}
+          {user.roles.includes('STUDENT') && (
+            <Link
+              href="/student"
+              className="px-3 py-1.5 rounded-xl font-black transition bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-xs"
+              title="این حساب هم پروندهٔ دانشجویی دارد — بدون ورود مجدد به پنل دانشجو بروید"
+            >
+              🎓 پنل دانشجو
+            </Link>
+          )}
           <Link
             href="/professor/schedule"
             className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200"

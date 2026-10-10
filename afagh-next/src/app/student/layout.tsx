@@ -62,6 +62,17 @@ export default async function StudentLayout({ children }: { children: React.Reac
               <span>📕</span>
               <span>PDF راهنما</span>
             </a>
+            {/* ── کاربرِ دوقلو (هم دانشجو هم استاد، یک حساب): سوییچ بدون رمز به پنل استاد ── */}
+            {user.roles.includes('PROFESSOR') && (
+              <a
+                href="/professor"
+                className="inline-flex text-xs bg-amber-400 hover:bg-amber-300 text-slate-950 border border-amber-300 px-3 py-1.5 rounded-lg transition-colors font-black items-center gap-1.5"
+                title="این حساب هم پروندهٔ استادی دارد — بدون ورود مجدد به کارتابل استاد بروید"
+              >
+                <span>👨‍🏫</span>
+                <span>پنل استاد</span>
+              </a>
+            )}
             <ThemeToggle />
             <form action={logoutAction}>
               <button className="text-xs bg-emerald-900/90 hover:bg-emerald-950 text-emerald-100 border border-emerald-700/60 px-3 py-1.5 rounded-lg transition-colors font-medium">

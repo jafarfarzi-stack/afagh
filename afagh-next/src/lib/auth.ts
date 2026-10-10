@@ -95,7 +95,9 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   return {
     id: rows[0].id,
     name: rows[0].firstName + ' ' + rows[0].lastName,
-    roles: rows.map(r => r.role).filter(Boolean) as string[],
+    // یک نقش ممکن است چند سطر user_roles داشته باشد — تکراری‌ها را حذف می‌کنیم
+    // تا نشان‌های نقش در هدر دو بار نمایش داده نشوند.
+    roles: [...new Set(rows.map(r => r.role).filter(Boolean))] as string[],
     mustChangePassword: rows[0].mustChangePassword === 1,
     universityId: rows[0].universityId ?? null,
   };
