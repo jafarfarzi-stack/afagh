@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import {
+  getTermOfferings,
   previewBroadcastCount,
   sendBroadcast,
   type BroadcastAudience,
   type BroadcastFilters,
+  type TermOffering,
 } from './actions';
 import type { Channel } from '@/lib/messaging';
 
@@ -25,6 +27,10 @@ export default function BroadcastClient({ filters }: { filters: BroadcastFilters
   const [departmentId, setDepartmentId] = useState('');
   const [majorId, setMajorId] = useState('');
   const [entryYear, setEntryYear] = useState('');
+  const [termId, setTermId] = useState(() => filters.terms.find(t => t.isCurrent === 1)?.id?.toString() ?? '');
+  const [offeringId, setOfferingId] = useState('');
+  const [offerings, setOfferings] = useState<TermOffering[]>([]);
+  const [loadingOfferings, setLoadingOfferings] = useState(false);
   const [activeOnly, setActiveOnly] = useState(true);
   const [channels, setChannels] = useState<Channel[]>(['INAPP']);
   const [text, setText] = useState('');
@@ -47,8 +53,24 @@ export default function BroadcastClient({ filters }: { filters: BroadcastFilters
     departmentId: departmentId ? Number(departmentId) : null,
     majorId: majorId ? Number(majorId) : null,
     entryYear: entryYear ? Number(entryYear) : null,
+    termId: termId ? Number(termId) : null,
+    offeringId: offeringId ? Number(offeringId) : null,
     activeOnly,
   });
+
+  const loadOfferings = async (tid: string) => {
+    setOfferingId('');
+    setOfferings([]);
+    if (!tid) return;
+    setLoadingOfferings(true);
+    try {
+      setOfferings(await getTermOfferings(Number(tid)));
+    } catch {
+      setOfferings([]);
+    } finally {
+      setLoadingOfferings(false);
+    }
+  };
 
   const preview = async () => {
     setBusy(true);
@@ -154,6 +176,35 @@ export default function BroadcastClient({ filters }: { filters: BroadcastFilters
           <input type="checkbox" checked={activeOnly} onChange={e => { setActiveOnly(e.target.checked); setCount(null); }} className="w-4 h-4" />
           فقط فعال‌ها (دانشجوی در حال تحصیل / پروندهٔ پرسنلی فعال)
         </label>
+        {/* ── فیلتر کلاس درس در ترم ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-xl border border-dashed border-indigo-300 bg-indigo-50/50 p-2.5">
+          <label className="text-xs font-bold text-slate-600">🎓 ترم (برای انتخاب کلاس)
+            <select
+              value={termId}
+              onChange={e => { setTermId(e.target.value); setCount(null); loadOfferings(e.target.value); }}
+              className={sel + ' mt-1'}
+            >
+              <option value="">— بدون فیلتر ترم —</option>
+              {filters.terms.map(t => (
+                <option key={t.id} value={t.id}>{t.title}{t.isCurrent === 1 ? ' (جاری)' : ''}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-bold text-slate-600">
+            🏫 کلاس درس {offeringId ? `(فقط ثبت‌نام‌شدگان${role !== 'student' ? ' و استاد' : ''} همین کلاس)` : '(اول ترم را انتخاب کنید)'}
+            <select
+              value={offeringId}
+              disabled={!termId || loadingOfferings}
+              onChange={e => { setOfferingId(e.target.value); setCount(null); }}
+              className={sel + ' mt-1'}
+            >
+              <option value="">{loadingOfferings ? 'در حال بارگذاری کلاس‌ها…' : `همهٔ کلاس‌ها (${offerings.length.toLocaleString('fa-IR')})`}</option>
+              {offerings.map(o => (
+                <option key={o.id} value={o.id}>{o.label} ({o.enrolled.toLocaleString('fa-IR')} نفر)</option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={preview} disabled={busy} className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-black text-white hover:bg-slate-900 disabled:opacity-60">
             {busy ? '…' : '🔍 شمارش مخاطبان'}

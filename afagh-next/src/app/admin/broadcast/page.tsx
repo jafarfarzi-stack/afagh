@@ -16,6 +16,7 @@ export default async function BroadcastPage() {
     departments: [],
     majors: [],
     entryYears: [],
+    terms: [],
   }));
 
   return (
