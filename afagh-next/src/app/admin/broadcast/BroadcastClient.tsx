@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   getTermOfferings,
   previewBroadcastCount,
@@ -71,6 +71,13 @@ export default function BroadcastClient({ filters }: { filters: BroadcastFilters
       setLoadingOfferings(false);
     }
   };
+
+  // ترم جاری از اول انتخاب است — پس کلاس‌هایش را همان اول بارگذاری کن.
+  // (بدون این، فهرست تا «تغییر دستی ترم» همیشه خالی می‌ماند و «۰ کلاس» نشان می‌دهد.)
+  useEffect(() => {
+    if (termId) loadOfferings(termId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const preview = async () => {
     setBusy(true);
