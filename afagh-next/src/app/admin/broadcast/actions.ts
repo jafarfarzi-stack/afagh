@@ -158,14 +158,26 @@ async function audienceUserIds(a: BroadcastAudience): Promise<{ ids: number[]; c
       if (a.activeOnly) conds.push(eq(students.status, 'ACTIVE'));
       if (a.majorId) conds.push(eq(students.majorId, a.majorId));
       if (a.entryYear) conds.push(eq(students.entryYear, a.entryYear));
-      // فیلتر دانشکده/گروه از روی رشتهٔ دانشجو — اول رشته‌های واجدشرط، بعد دانشجوها
+      // فیلتر دانشکده/گروه/رشته از روی رشتهٔ دانشجو — سلسله‌مراتب رعایت می‌شود:
+      // هر سطح دقیق‌تر، سطح بالاتر را بی‌اثر می‌کند (رشته، گروه و دانشکدهٔ خودش
+      // را می‌داند). وگرنه ترکیب «دانشکده + گروه» کسانی را حذف می‌کند که فقط
+      // یک سطح‌شان در دیتا پر شده است.
       let stu: { id: number }[] = [];
-      if (a.facultyId || a.departmentId) {
-        const mConds = [];
-        if (a.facultyId) mConds.push(eq(majors.facultyId, a.facultyId));
-        if (a.departmentId) mConds.push(eq(majors.departmentId, a.departmentId));
+      if (a.majorId) {
+        stu = (await db.select({ id: users.id }).from(students)
+          .innerJoin(users, eq(users.id, students.userId))
+          .where(and(...conds, eq(students.majorId, a.majorId))).limit(CAP)) as { id: number }[];
+      } else if (a.departmentId) {
         const mids = (await db.select({ id: majors.id }).from(majors)
-          .where(mConds.length > 1 ? and(...mConds) : mConds[0]).limit(5000)).map(r => r.id);
+          .where(eq(majors.departmentId, a.departmentId)).limit(5000)).map(r => r.id);
+        if (mids.length) {
+          stu = (await db.select({ id: users.id }).from(students)
+            .innerJoin(users, eq(users.id, students.userId))
+            .where(and(...conds, inArray(students.majorId, mids))).limit(CAP)) as { id: number }[];
+        }
+      } else if (a.facultyId) {
+        const mids = (await db.select({ id: majors.id }).from(majors)
+          .where(eq(majors.facultyId, a.facultyId)).limit(5000)).map(r => r.id);
         if (mids.length) {
           stu = (await db.select({ id: users.id }).from(students)
             .innerJoin(users, eq(users.id, students.userId))
@@ -212,9 +224,11 @@ async function audienceUserIds(a: BroadcastAudience): Promise<{ ids: number[]; c
       const conds = [eq(users.isActive, 1)];
       if (u) conds.push(eq(staff.universityId, u));
       if (a.activeOnly) conds.push(eq(staff.isActive, 1));
-      if (a.facultyId) conds.push(eq(staff.facultyId, a.facultyId));
+      // گروه دقیق‌تر از دانشکده است و آن را در خودش دارد؛ اگر هر دو انتخاب
+      // شده باشند فقط گروه اعمال می‌شود تا ستون خالی facultyId کسی را
+      // بی‌دلیل حذف نکند. (ورودی و رشته برای استاد معنا ندارد.)
       if (a.departmentId) conds.push(eq(staff.departmentId, a.departmentId));
-      // ورودی و رشته برای استاد معنا ندارد — نادیده گرفته می‌شود
+      else if (a.facultyId) conds.push(eq(staff.facultyId, a.facultyId));
       const rows = (await db.select({ id: users.id }).from(staff)
         .innerJoin(users, eq(users.id, staff.userId))
         .where(and(...conds)).limit(CAP)) as { id: number }[];
