@@ -41,8 +41,28 @@ export default function MessengerConnectClient() {
     setMsg(null);
     setCode('');
     stopPolling();
+    // ── تلاش خودکار دوباره (فقط خطای حمل‌ونقل، نه خطای منطقی) ──
+    // اگر پاسخ اول در راه گم شود (شبکه/پروکسی)، کاربر نباید «حتی یک‌بار» خطا
+    // ببیند؛ یک‌بار دیگر پس از مکث کوتاه تلاش می‌کنیم و فقط اگر هر دو شکست
+    // خورد خطا نشان می‌دهیم. صدور تکراری بی‌ضرر است (قبلی ۱۰ دقیقه اعتبار دارد).
+    let res: Awaited<ReturnType<typeof mintLinkTokenAction>> | null = null;
+    let transportFailed = false;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        res = await mintLinkTokenAction(channel);
+        transportFailed = false;
+        break;
+      } catch (e) {
+        transportFailed = true;
+        try { console.error('[messenger] mint attempt failed', attempt, (e as Error)?.message); } catch { /* ignore */ }
+        if (attempt === 1) await new Promise(r => setTimeout(r, 1500));
+      }
+    }
     try {
-      const res = await mintLinkTokenAction(channel);
+      if (!res) {
+        setMsg({ kind: 'err', text: transportFailed ? 'خطا در ارتباط با سرور — صفحه را رفرش کنید (Ctrl+F5) و دوباره تلاش کنید.' : 'پاسخی از سرور نرسید — دوباره تلاش کنید.' });
+        return;
+      }
       if (!res.ok) {
         setMsg({ kind: 'err', text: res.error });
         return;
