@@ -1,7 +1,7 @@
 import 'server-only';
 import { and, eq, gte, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { academic_terms, notification_deliveries, users } from '@/db/schema';
+import { academic_terms, notification_deliveries, students, users } from '@/db/schema';
 import { getSetting } from '@/lib/settings';
 import { notifyUserMultichannel, type Channel } from '@/lib/messaging';
 import { createLogger } from '@/lib/logger';
@@ -58,8 +58,9 @@ async function runBirthdayGreetings(): Promise<GreetResult['birthdays']> {
 
 /**
  * تبریک شروع ترم انبوه: ترم‌هایی که تاریخ شروع کلاس‌شان امروز است.
- * گیرندگان: همهٔ کاربران فعال همان دانشگاه. کانال‌ها از تنظیم
- * GREET_TERM_CHANNELS (پیش‌فرض فقط INAPP تا هزینهٔ پیامک نتراشد).
+ * گیرندگان: فقط دانشجویان در حال تحصیل (status=ACTIVE) همان دانشگاه —
+ * نه دانش‌آموختگان، انصرافی‌ها و بقیه.
+ * کانال‌ها از تنظیم GREET_TERM_CHANNELS (پیش‌فرض فقط INAPP تا هزینهٔ پیامک نتراشد).
  * ضدتکرار به‌ازای هر کاربر+ترم (eventCode=TERM_START_<termId>).
  */
 async function runTermStartGreetings(): Promise<GreetResult['termStarts']> {
@@ -91,8 +92,13 @@ async function runTermStartGreetings(): Promise<GreetResult['termStarts']> {
 
     const members = (await db
       .select({ id: users.id })
-      .from(users)
-      .where(and(eq(users.isActive, 1), eq(users.universityId, t.universityId)))
+      .from(students)
+      .innerJoin(users, eq(users.id, students.userId))
+      .where(and(
+        eq(students.universityId, t.universityId),
+        eq(students.status, 'ACTIVE'),
+        eq(users.isActive, 1),
+      ))
       .limit(60000)) as { id: number }[];
 
     for (const m of members) {
