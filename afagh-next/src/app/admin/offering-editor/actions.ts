@@ -5,11 +5,12 @@ import { db, withUserRls } from '@/db';
 import {
   academic_terms, classrooms, course_offerings, courses, departments, schedules, staff, users,
 } from '@/db/schema';
-import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { requireRoleOrPermission } from '@/lib/permissions-enforcer';
 import { currentExpertFilters } from '@/lib/expert-scope';
 
 const EDU = ['ADMIN', 'EDU_EXPERT'];
+const EDU_PERM = ['scheduling:manage_chart'];
 
 export interface OfferingEditRow {
   offeringId: number;
@@ -22,7 +23,7 @@ export interface OfferingEditRow {
 
 /** فهرست ارائه‌های ترم برای ویرایش — کارشناس فقط دامنهٔ خودش */
 export async function listOfferingsForEditor(termId: number): Promise<OfferingEditRow[]> {
-  await requireRole(EDU);
+  await requireRoleOrPermission(EDU, EDU_PERM);
   const u = await getCurrentUniversity().catch(() => null);
   const eff = await currentExpertFilters().catch(() => null);
 
@@ -74,7 +75,7 @@ export async function listOfferingsForEditor(termId: number): Promise<OfferingEd
 }
 
 export async function getRoomsForEditor(): Promise<{ id: number; name: string }[]> {
-  await requireRole(EDU);
+  await requireRoleOrPermission(EDU, EDU_PERM);
   return (await db.select({ id: classrooms.id, name: classrooms.name }).from(classrooms).orderBy(asc(classrooms.name))).map(r => ({ id: r.id, name: r.name }));
 }
 
@@ -90,7 +91,7 @@ function toMin(s: string): number { const [h, m] = String(s || '').split(':').ma
 
 /** ذخیرهٔ تغییرات (ظرفیت + زمان کلاس/امتحان) با گارد تداخل؛ تداخل → نیازمند دلیل */
 export async function saveOfferingEditorAction(input: OfferingEditInput): Promise<{ ok: boolean; error?: string }> {
-  const me = await requireRole(EDU);
+  const me = await requireRoleOrPermission(EDU, EDU_PERM);
   const [off] = await db.select().from(course_offerings).where(eq(course_offerings.id, input.offeringId)).limit(1);
   if (!off) return { ok: false, error: 'ارائه یافت نشد.' };
 
@@ -166,7 +167,7 @@ export async function saveOfferingEditorAction(input: OfferingEditInput): Promis
 }
 
 export async function listTermsForEditor(): Promise<{ id: number; title: string; isCurrent: boolean }[]> {
-  await requireRole(EDU);
+  await requireRoleOrPermission(EDU, EDU_PERM);
   const u = await getCurrentUniversity().catch(() => null);
   const rows = await db.select({ id: academic_terms.id, title: academic_terms.title, isCurrent: academic_terms.isCurrent })
     .from(academic_terms)
