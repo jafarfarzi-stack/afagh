@@ -991,7 +991,8 @@ export const evaluation_responses = pgTable('evaluation_responses', {
   offeringId: integer('offeringId').references(() => course_offerings.id),
   questionId: integer('questionId').references(() => evaluation_questions.id),
   selectedOptionId: integer('selectedOptionId').references(() => question_options.id),
-  textAnswer: text('textAnswer')
+  textAnswer: text('textAnswer'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 export const integrations_config = pgTable('integrations_config', {
@@ -1434,6 +1435,7 @@ export const signature_otps = pgTable('signature_otps', {
   isUsed: integer('isUsed').default(0),
   attempts: integer('attempts').default(0),
   lockedAt: timestamp('lockedAt'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow()
 });
 
@@ -1552,6 +1554,7 @@ export const notifications = pgTable('notifications', {
   eventCode: varchar('eventCode', { length: 50 }),
   payload: text('payload'),
   isRead: integer('isRead').default(0),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow()
 });
 
@@ -1840,7 +1843,8 @@ export const instructor_attendance_days = pgTable('instructor_attendance_days', 
 export const staff_roles = pgTable('staff_roles', {
   id: serial('id').primaryKey(),
   staffId: integer('staffId').notNull().references(() => staff.id),
-  roleId: integer('roleId').notNull().references(() => roles.id)
+  roleId: integer('roleId').notNull().references(() => roles.id),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
 // ============================================================================
@@ -1966,6 +1970,8 @@ export const legacy_financial_records = pgTable('legacy_financial_records', {
   legacyPaid: numeric('legacyPaid', { precision: 14, scale: 0 }).notNull().default('0'),
   batchId: integer('batchId'),                                 // دستهٔ واردسازی (برای واگرد)
   raw: text('raw'),                                            // JSON ردیف خام برای رهگیری
+  /** دانشگاه مالک این ردیف — هویت = (universityId + studentCode + termCode) */
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   importedAt: timestamp('importedAt').defaultNow()
 }, (t) => ({ uq: unique('uq_legacy_financial_records').on(t.sourceCode, t.studentCode, t.termCode) }));
 
@@ -2022,6 +2028,7 @@ export const legacy_grades = pgTable('legacy_grades', {
   compareNote: text('compareNote'),
   appliedAt: timestamp('appliedAt'),
   raw: text('raw'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   importedAt: timestamp('importedAt').defaultNow()
 }, (t) => ({ uq: unique('uq_legacy_grades').on(t.sourceCode, t.studentCode, t.termCode, t.courseCode) }));
 
@@ -2420,6 +2427,7 @@ export const notification_channels = pgTable('notification_channels', {
   address: varchar('address', { length: 120 }).notNull(),     // شمارهٔ موبایل یا chat id
   isActive: integer('isActive').notNull().default(1),
   verifiedAt: timestamp('verifiedAt'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow()
 }, (t) => ({ uq: unique('uq_notification_channels').on(t.userId, t.channel) }));
 
@@ -2439,6 +2447,7 @@ export const messenger_link_tokens = pgTable('messenger_link_tokens', {
   expiresAt: timestamp('expiresAt').notNull(),
   usedAt: timestamp('usedAt'),
   attempts: integer('attempts').notNull().default(0),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow(),
 }, (t) => ({ tokenHx: index('ix_messenger_link_tokens_token').on(t.tokenHash) }));
 
@@ -2485,6 +2494,7 @@ export const notification_deliveries = pgTable('notification_deliveries', {
   error: text('error'),
   body: text('body'),
   durationMs: integer('durationMs'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow()
 });
 
@@ -3111,6 +3121,7 @@ export const lesson_plans = pgTable('lesson_plans', {
   resources: text('resources'),
   status: varchar('status', { length: 12 }).default('DRAFT'),
   submittedAt: timestamp('submittedAt'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow(),
   updatedAt: timestamp('updatedAt').defaultNow(),
 });
@@ -3121,6 +3132,7 @@ export const lesson_plan_weights = pgTable('lesson_plan_weights', {
   title: varchar('title', { length: 100 }).notNull(),
   percent: numeric('percent', { precision: 5, scale: 2 }).notNull(),
   sortOrder: integer('sortOrder').default(0),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({
   planIdx: index('idx_lesson_plan_weights_plan').on(t.planId),
 }));
@@ -3133,6 +3145,7 @@ export const lesson_plan_sessions = pgTable('lesson_plan_sessions', {
   topic: varchar('topic', { length: 300 }),
   details: text('details'),
   weightId: integer('weightId').references(() => lesson_plan_weights.id, { onDelete: 'set null' }),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({
   uqPlanSession: unique('uq_lesson_plan_sessions_plan_session').on(t.planId, t.sessionNo),
   planIdx: index('idx_lesson_plan_sessions_plan').on(t.planId),
@@ -3173,6 +3186,7 @@ export const staff_term_roles = pgTable('staff_term_roles', {
   termId: integer('termId').notNull().references(() => academic_terms.id, { onDelete: 'cascade' }),
   roleId: integer('roleId').notNull().references(() => payroll_duty_roles.id, { onDelete: 'cascade' }),
   isPrimary: integer('isPrimary').notNull().default(0),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ([
   unique('uq_staff_term_roles').on(t.staffId, t.termId, t.roleId),
   index('idx_staff_term_roles_term').on(t.termId),
