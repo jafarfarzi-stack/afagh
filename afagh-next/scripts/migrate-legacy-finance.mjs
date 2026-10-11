@@ -26,7 +26,7 @@ for (let i = 0; i < raw.length; i++) {
 const APPLY = args.apply === 'true';
 const UNI = Number(args.uni || 1);
 const MIN_MATCH = Number(args['min-match'] || 0.9);
-const DIR = args.dir || '/tmp/fin_export';
+const DIR = args.dir || '/tmp/lp2v2/fin_export_uems';
 const DB_ENV = args['db-env'] || '/root/afagh/.env';
 const DB_HOST = args['db-host'] || '172.20.0.3';
 
@@ -57,6 +57,7 @@ const toOurTerm = (legacy) => {
   const s = String(legacy ?? '').trim();
   if (/^\d{3}$/.test(s)) return '13' + s;      // 902 → 13902
   if (/^\d{4}$/.test(s)) return '1' + s;       // 1390 → 11390 (پسمانده — outlier)
+  if (/^\d{5}$/.test(s)) return s;             // 14051 / 13831 (فرمت کامل uems)
   return s;
 };
 const cap = (a, n) => a.slice(0, n);
@@ -124,13 +125,18 @@ const report = { dry: !APPLY, uni: UNI, gate: null, termAms: null, stdPays: null
         if (!tid) { aStat.skipNoTerm++; continue; }
         for (const [tt, amt] of [['TUITION_FIXED', fix], ['TUITION_VARIABLE', units]]) {
           if (!amt) { aStat.skipZero++; continue; }
-          const ref = amsId + ('TUITION_FIXED' === tt ? 0 : 1000000);
-          const ex = await tx.query(`SELECT 1 FROM student_ledger WHERE "referenceId"=$1 AND "transactionType"=$2 LIMIT 1`, [Number(ref), tt]);
-          if (ex.rows.length) continue;
+          // referenceId int4 است؛ شناسهٔ قدیمی گاهی تا ~2.1 میلیارد می‌رود —
+          // بدون offset (dedupe با transactionType) و محدود به بازهٔ امن.
+          const ref = Number(amsId);
+          const refSafe = Number.isSafeInteger(ref) && ref >= 0 && ref <= 2000000000 ? ref : null;
+          if (refSafe !== null) {
+            const ex = await tx.query(`SELECT 1 FROM student_ledger WHERE "referenceId"=$1 AND "transactionType"=$2 LIMIT 1`, [refSafe, tt]);
+            if (ex.rows.length) continue;
+          }
           await tx.query(
             `INSERT INTO student_ledger ("studentId","termId","transactionType",amount,description,"referenceId","universityId")
              VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-            [sid, tid, tt, amt, `وارد از سیستم قدیمی (TermAms id=${amsId})`, Number(ref), UNI],
+            [sid, tid, tt, amt, `وارد از سیستم قدیمی (TermAms id=${amsId})`, refSafe, UNI],
           );
           if (tt === 'TUITION_FIXED') aStat.feeFixed++; else aStat.feeUnits++;
         }
@@ -154,9 +160,12 @@ const report = { dry: !APPLY, uni: UNI, gate: null, termAms: null, stdPays: null
         if (!tid) { pStat.skipNoTerm++; continue; }
         if (!mab) { pStat.skipZero++; continue; }
         const pt = col(r, spay.header, 'pay_type');
-        const ref = Number(col(r, spay.header, 'stdpaysId')) + 2000000;
-        const ex = await tx2.query(`SELECT 1 FROM student_ledger WHERE "referenceId"=$1 AND "transactionType"='PAYMENT' LIMIT 1`, [ref]);
-        if (ex.rows.length) continue;
+        const spId = Number(col(r, spay.header, 'stdpaysId'));
+        const ref = Number.isSafeInteger(spId) && spId >= 0 && spId <= 2000000000 ? spId : null;
+        if (ref !== null) {
+          const ex = await tx2.query(`SELECT 1 FROM student_ledger WHERE "referenceId"=$1 AND "transactionType"='PAYMENT' LIMIT 1`, [ref]);
+          if (ex.rows.length) continue;
+        }
         const who = paytypeByCode.get(pt) || '';
         if (pt && !paytypeByCode.has(pt)) pStat.payTypeMissing.add(pt);
         await tx2.query(
