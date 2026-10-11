@@ -213,8 +213,8 @@ function placeBoardCells(merged: MergedCell[]): { placedByDay: Placed[][]; outsi
 }
 
 /** جدول تقویمی + فهرست خارج‌بازه — مشترک تابلوی کلاس‌ها و تب‌های استاد/دانشجو */
-function BoardGrid({ placedByDay, outside, big, showRoom, hideEnrolled }: {
-  placedByDay: Placed[][]; outside: CellT[]; big?: boolean; showRoom?: boolean; hideEnrolled?: boolean;
+function BoardGrid({ placedByDay, outside, big, showRoom }: {
+  placedByDay: Placed[][]; outside: CellT[]; big?: boolean; showRoom?: boolean;
 }) {
   return (
     <>
@@ -244,7 +244,7 @@ function BoardGrid({ placedByDay, outside, big, showRoom, hideEnrolled }: {
                               {c.merged && <span className="mr-1 rounded bg-amber-200 px-1 text-[10px] font-black">🔗 ادغامی</span>}
                             </div>
                             {showRoom && <div className="text-slate-500">{c.roomName || '—'}{c.buildingName ? ` (${c.buildingName})` : ''}</div>}
-                            <div className="text-slate-600">{c.profs}{!hideEnrolled && <> · {faDigits(c.enrolled)} نفر</>}</div>
+                            <div className="text-slate-600">{c.profs}<span className="print:hidden"> · {faDigits(c.enrolled)} نفر</span></div>
                           </div>
                         );
                       })}
@@ -457,7 +457,7 @@ function BoardGrid({ placedByDay, outside, big, showRoom, hideEnrolled }: {
               </p>
             </div>
           )}
-          <BoardGrid placedByDay={placedByDay} outside={outside} big={!!poster} showRoom={!poster} hideEnrolled={!!poster} />
+          <BoardGrid placedByDay={placedByDay} outside={outside} big={!!poster} showRoom={!poster} />
         </div>
       )}
       </>
