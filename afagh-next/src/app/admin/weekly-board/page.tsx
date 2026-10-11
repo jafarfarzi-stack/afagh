@@ -50,10 +50,12 @@ function profDisplay(
   if (!showTitle) return [showFirst ? first : '', last].filter(Boolean).join(' ');
   const rank = normFa(m.profRank);
   const isDoctor = rank.includes('دانشیار') || rank.includes('استاد');
+  const isEngineer = !isDoctor && rank.includes('مربی');
+  const degree = isDoctor ? 'دکتر' : isEngineer ? 'مهندس' : '';
   const female = m.profGender === 'FEMALE' || (!m.profGender && normFa(m.profLegacyTitle).includes('خانم'));
   const male = m.profGender === 'MALE' || (!m.profGender && normFa(m.profLegacyTitle).includes('آقا'));
   const honor = female ? (shortHonor ? 'خانم' : 'سرکار خانم') : male ? (shortHonor ? 'آقای' : 'جناب آقای') : '';
-  return [honor, isDoctor ? 'دکتر' : '', showFirst ? first : '', last].filter(Boolean).join(' ');
+  return [honor, degree, showFirst ? first : '', last].filter(Boolean).join(' ');
 }
 
 export default async function WeeklyBoardPage({ searchParams }: {
