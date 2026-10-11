@@ -262,6 +262,18 @@ export default function ProfessorAttendanceClient({
   };
 
   const allSessionsCount = allSessionsFlat.length;
+  // ── آکاردئون «همهٔ جلسات»: باز/بسته بودن هر درس (پیش‌فرض: همه باز) ──
+  const [openCourses, setOpenCourses] = useState<Set<number>>(
+    () => new Set(offerings.map(o => o.id)),
+  );
+  const toggleCourse = (offeringId: number) => {
+    setOpenCourses(prev => {
+      const next = new Set(prev);
+      if (next.has(offeringId)) next.delete(offeringId);
+      else next.add(offeringId);
+      return next;
+    });
+  };
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastKind, setToastKind] = useState<'success' | 'error'>('success');
   const [rosterQuery, setRosterQuery] = useState('');
@@ -842,7 +854,10 @@ export default function ProfessorAttendanceClient({
                 if (!rows.length) return null;
                 return (
                   <section key={o.id} className="p-2">
-                    <header className="flex flex-wrap items-center gap-2 px-2 py-1.5 rounded-t-xl bg-indigo-50 border border-indigo-100">
+                    <button
+                      onClick={() => toggleCourse(o.id)}
+                      className="w-full flex flex-wrap items-center gap-2 px-2 py-1.5 rounded-xl bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 transition"
+                    >
                       <span className="font-black text-slate-900 text-xs">{o.title}</span>
                       <span className="text-[10px] font-mono text-slate-500">({o.code})</span>
                       <span className="text-[10px] rounded-full px-2 py-0.5 font-black bg-white text-slate-600 border border-slate-200">گروه {faNum(o.groupNumber)}</span>
@@ -850,7 +865,9 @@ export default function ProfessorAttendanceClient({
                         {faNum(rows.length)} جلسه
                       </span>
                       <span className="text-[10px] text-slate-500 font-bold">{o.scheduleTime || ''}</span>
-                    </header>
+                      <span className="mr-auto text-slate-500 font-black text-xs">{openCourses.has(o.id) ? '▾ بستن' : '▴ باز'}</span>
+                    </button>
+                    {openCourses.has(o.id) && (
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead className="bg-white text-slate-500">
@@ -889,6 +906,7 @@ export default function ProfessorAttendanceClient({
                         </tbody>
                       </table>
                     </div>
+                    )}
                   </section>
                 );
               })}
