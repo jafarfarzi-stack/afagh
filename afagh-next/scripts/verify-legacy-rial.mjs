@@ -97,8 +97,15 @@ const toOurTerm = (legacy) => { const s=String(legacy??'').trim(); if(/^\d{3}$/.
     }
   }
   // ردیف‌هایی که در لجر ما هست ولی از TermAms نیامده (ندارد) — جزئی گزارش
-  for (const [k, v] of ourNet) {
-    if (!tams.rows.some(r => `${stuById.get(col(r, tams.header, 'StnO'))}|${termById.get(toOurTerm(col(r, tams.header, 'TermCode')))}` === k)) onlyOur++;
+  // (با Set؛ نسخهٔ قبلی به‌ازای هر کلید کل TermAms را می‌گشت — O(n²) و ساعت‌ها CPU)
+  const amsKeys = new Set();
+  for (const r of tams.rows) {
+    const sid = stuById.get(col(r, tams.header, 'StnO'));
+    const tid = termById.get(toOurTerm(col(r, tams.header, 'TermCode')));
+    if (sid && tid) amsKeys.add(`${sid}|${tid}`);
+  }
+  for (const k of ourNet.keys()) {
+    if (!amsKeys.has(k)) onlyOur++;
   }
 
   console.log(`== RIALL CHECK (uni ${UNI}) ==`);
