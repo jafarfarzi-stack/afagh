@@ -34,6 +34,8 @@ export interface AdminModule {
   group?: ModuleGroupKey;
   /** نقش‌هایی که این ماژول را می‌بینند و می‌توانند باز کنند */
   roles: string[];
+  /** کدهای مجوزی که (به‌تنهایی) دسترسی به ماژول می‌دهند — مکمل roles */
+  permissions?: string[];
   /** گرادیان کارت در داشبورد */
   accent: string;
   /** رنگ آیکن کارت */
@@ -65,6 +67,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     desc: 'پرونده، مدارک، KYC و سوابق',
     group: 'edu',
     roles: ['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER'],
+    permissions: ['students:view_dossier'],
     accent: 'from-slate-900 to-slate-950 border-slate-600/50',
     iconBg: 'bg-slate-700/80 border-slate-500/50',
     inNav: true,
@@ -87,12 +90,12 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🔑',
     title: 'مرکز کدها',
     desc: 'تعریف و بازبینی کد دانشکده، گروه، رشته، مقطع و درس',
-    group: 'edu',
+    group: 'settings',
     roles: ['ADMIN', 'VICE_EDU', 'EDU_EXPERT'],
     accent: 'from-amber-950 to-slate-950 border-amber-700/50',
     iconBg: 'bg-amber-700/80 border-amber-500/50',
     inNav: true,
-    inGrid: true,
+    inGrid: false,
   },
   {
     href: '/admin/departments',
@@ -123,12 +126,12 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🏷️',
     title: 'مدیریت دروس و کدهای وضعیت نمره',
     desc: 'تعریف، ویرایش و کدگذاری وضعیت نمره دروس بانک و چارت',
-    group: 'edu',
+    group: 'settings',
     roles: ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'],
     accent: 'from-amber-950 to-orange-950 border-amber-700/50',
     iconBg: 'bg-amber-700/80 border-amber-500/50',
     inNav: true,
-    inGrid: true,
+    inGrid: false,
   },
   {
     href: '/admin/regulations',
@@ -147,12 +150,12 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: '🔍',
     title: 'بررسی کدهای وضعیت نمره',
     desc: 'تشخیص و اصلاح خودکار کدهای وضعیت نمره سما بر اساس آیین‌نامه',
-    group: 'edu',
+    group: 'settings',
     roles: ['ADMIN'],
     accent: 'from-red-950 to-rose-950 border-red-700/50',
     iconBg: 'bg-red-700/80 border-red-500/50',
     inNav: true,
-    inGrid: true,
+    inGrid: false,
   },
   {
     href: '/admin/scheduling',
@@ -209,8 +212,22 @@ export const ADMIN_MODULES: AdminModule[] = [
     desc: 'تکی/دسته‌جمعی با کاتالوگ و پیش‌نیاز — ردیابی کی و چرا',
     group: 'edu',
     roles: EDU,
+    permissions: ['edu:manage_enrollment'],
     accent: 'from-indigo-950 to-slate-950 border-indigo-700/50',
     iconBg: 'bg-indigo-800/80 border-indigo-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
+    href: '/admin/group-transfer',
+    icon: '🔀',
+    title: 'انتقال بین گروه‌ها',
+    desc: 'انتقال دانشجو بین گروه‌های یک درس با چک سخت‌گیری‌ها',
+    group: 'edu',
+    roles: ['ADMIN', 'EDU_EXPERT'],
+    permissions: ['edu:manage_enrollment'],
+    accent: 'from-cyan-950 to-slate-950 border-cyan-700/50',
+    iconBg: 'bg-cyan-800/80 border-cyan-500/50',
     inNav: true,
     inGrid: true,
   },
@@ -227,12 +244,25 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/code-hub',
+    icon: '🧩',
+    title: 'کدها و وضعیت نمره',
+    desc: 'مرکز کدها + کدهای وضعیت نمره + بررسی خودکار سما — یکجا',
+    group: 'settings',
+    roles: ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'],
+    accent: 'from-amber-900 to-orange-950 border-amber-600/50',
+    iconBg: 'bg-amber-800/80 border-amber-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/weekly-board',
     icon: '🗓️',
     title: 'سردر برنامهٔ هفتگی',
     desc: 'برنامهٔ هفتگی کلاس‌ها — قابل چاپ برای نصب روی سردر',
     group: 'plan',
     roles: ['ADMIN', 'EDU_EXPERT'],
+    permissions: ['scheduling:manage_chart'],
     accent: 'from-teal-950 to-slate-950 border-teal-700/50',
     iconBg: 'bg-teal-800/80 border-teal-500/50',
     inNav: true,
@@ -257,6 +287,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     desc: 'حکم کارگزینی، فیش و تسویه مالی',
     group: 'fin',
     roles: ['ADMIN', 'EDU_EXPERT', 'FINANCE_EXPERT', 'FINANCE'],
+    permissions: ['finance:view_ledger'],
     accent: 'from-cyan-950 to-sky-950 border-cyan-700/50',
     iconBg: 'bg-cyan-700/80 border-cyan-500/50',
     inNav: true,
@@ -269,6 +300,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     desc: 'شهریه، دفتر مالی و بدهی دانشجویان',
     group: 'fin',
     roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'],
+    permissions: ['finance:view_ledger'],
     accent: 'from-emerald-900 to-teal-950 border-emerald-600/50',
     iconBg: 'bg-emerald-700/80 border-emerald-500/50',
     inNav: true,
@@ -281,6 +313,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     desc: 'فهرست کامل دانشجویان، کارنامهٔ مالی، تخفیف، بنیاد، چک و وام',
     group: 'fin',
     roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'],
+    permissions: ['finance:view_ledger'],
     accent: 'from-teal-900 to-emerald-950 border-teal-600/50',
     iconBg: 'bg-teal-700/80 border-teal-500/50',
     inNav: true,
@@ -293,6 +326,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     desc: 'قواعد شهریهٔ ثابت و متغیر بر اساس نوع ترم و نوع درس',
     group: 'fin',
     roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'],
+    permissions: ['finance:view_ledger'],
     accent: 'from-cyan-900 to-sky-950 border-cyan-600/50',
     iconBg: 'bg-cyan-700/80 border-cyan-500/50',
     inNav: true,
@@ -305,6 +339,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     desc: 'ثبت پرداخت کارت‌خوان فیزیکی، ویدی، گزارش روزانه صندوق',
     group: 'fin',
     roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'],
+    permissions: ['finance:view_ledger'],
     accent: 'from-orange-900 to-amber-950 border-orange-600/50',
     iconBg: 'bg-orange-700/80 border-orange-500/50',
     inNav: true,
@@ -401,6 +436,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     desc: 'تسویه‌حساب و صدور مدارک پایانی',
     group: 'research',
     roles: ['ADMIN'],
+    permissions: ['graduation:review_dossier'],
     accent: 'from-indigo-950 to-violet-950 border-indigo-700/50',
     iconBg: 'bg-indigo-700/80 border-indigo-500/50',
     inNav: true,
@@ -504,26 +540,38 @@ export const ADMIN_MODULES: AdminModule[] = [
   },
 ];
 
-/** آیا کاربر با این نقش‌ها مجاز به دیدن ماژول است؟ */
-export function canSeeModule(roles: string[], m: AdminModule): boolean {
+/** آیا کاربر با این نقش‌ها/مجوزها مجاز به دیدن ماژول است؟ (ADMIN همیشه عبور می‌کند) */
+export function canSeeModule(
+  roles: string[],
+  m: AdminModule,
+  permissions?: ReadonlySet<string> | string[],
+): boolean {
   if (roles.includes('ADMIN')) return true;
-  return m.roles.some(r => roles.includes(r));
+  if (m.roles.some(r => roles.includes(r))) return true;
+  if (m.permissions && m.permissions.length > 0 && permissions) {
+    const set = permissions instanceof Set ? permissions : new Set(permissions);
+    if (m.permissions.some(p => set.has(p))) return true;
+  }
+  return false;
 }
 
 /** ماژول‌های قابل نمایش در منوی افقی برای کاربر */
-export function navModules(roles: string[]): AdminModule[] {
-  return ADMIN_MODULES.filter(m => m.inNav && canSeeModule(roles, m));
+export function navModules(roles: string[], permissions?: ReadonlySet<string> | string[]): AdminModule[] {
+  return ADMIN_MODULES.filter(m => m.inNav && canSeeModule(roles, m, permissions));
 }
 
 /** ماژول‌های قابل نمایش به‌صورت کارت در داشبورد برای کاربر */
-export function gridModules(roles: string[]): AdminModule[] {
-  return ADMIN_MODULES.filter(m => m.inGrid && canSeeModule(roles, m));
+export function gridModules(roles: string[], permissions?: ReadonlySet<string> | string[]): AdminModule[] {
+  return ADMIN_MODULES.filter(m => m.inGrid && canSeeModule(roles, m, permissions));
 }
 
 /** ماژول‌های یک دسته برای کاربر — برای صفحهٔ کاشی‌های دسته */
-export function groupedModules(roles: string[]): { group: (typeof MODULE_GROUPS)[number]; modules: AdminModule[] }[] {
+export function groupedModules(
+  roles: string[],
+  permissions?: ReadonlySet<string> | string[],
+): { group: (typeof MODULE_GROUPS)[number]; modules: AdminModule[] }[] {
   return MODULE_GROUPS.map(g => ({
     group: g,
-    modules: ADMIN_MODULES.filter(m => m.inGrid && (m as { group?: ModuleGroupKey }).group === g.key && canSeeModule(roles, m)),
+    modules: ADMIN_MODULES.filter(m => m.inGrid && (m as { group?: ModuleGroupKey }).group === g.key && canSeeModule(roles, m, permissions)),
   })).filter(g => g.modules.length > 0);
 }
