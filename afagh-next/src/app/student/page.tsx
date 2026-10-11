@@ -17,6 +17,7 @@ import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA } from '@/lib/regulations-engine';
 import { resolveStudentCurriculum } from '@/lib/curriculum-apply';
 import { getTermScope } from '@/lib/term-scope';
+import { getBool } from '@/lib/settings';
 import {
   buildDashboardScheduleMap,
   buildProfNameMap,
@@ -60,6 +61,12 @@ export default async function StudentDashboardPage() {
   if (demo) {
     return <DemoDashboard name={user.name} filteredTermTitle={filteredTerm?.title ?? null} />;
   }
+
+  // کلیدهای دستی مدیر: پنجرهٔ انتخاب واحد و حذف اضطراری
+  const [enrollmentWindowOpen, emergencyWithdrawOpen] = await Promise.all([
+    getBool('ENROLLMENT_WINDOW_OPEN').catch(() => true),
+    getBool('EMERGENCY_WITHDRAW_OPEN').catch(() => true),
+  ]);
 
   const examTerm = term ? { id: term.id, title: term.title } : null;
 
@@ -775,16 +782,24 @@ export default async function StudentDashboardPage() {
                         <span>حذف اضطراری انجام شده</span>
                       </span>
                     ) : (
-                      <form action={emergencyDropFormAction}>
-                        <input type="hidden" name="enrollmentId" value={c.enrollmentId} />
-                        <button
-                          type="submit"
-                          className="w-full text-xs bg-rose-100 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-300 px-3 py-1.5 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5"
-                        >
-                          <span>⚠️</span>
-                          <span>حذف اضطراری</span>
-                        </button>
-                      </form>
+                      <>
+                        {emergencyWithdrawOpen ? (
+                          <form action={emergencyDropFormAction}>
+                            <input type="hidden" name="enrollmentId" value={c.enrollmentId} />
+                            <button
+                              type="submit"
+                              className="w-full text-xs bg-rose-100 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-300 px-3 py-1.5 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5"
+                            >
+                              <span>⚠️</span>
+                              <span>حذف اضطراری</span>
+                            </button>
+                          </form>
+                        ) : (
+                          <span className="block w-full text-center text-[11px] bg-slate-100 text-slate-500 border border-slate-200 px-3 py-1.5 rounded-xl font-bold">
+                            حذف اضطراری غیرفعال است
+                          </span>
+                        )}
+                      </>
                     )}
                   </div>
                 );

@@ -872,6 +872,11 @@ export const enrollments = pgTable('enrollments', {
   samaGradeStatusCode: varchar('samaGradeStatusCode', { length: 10 }),
   /** کد اصلی اولیه سما (هنگام واردات داده) — برای مقایسه بعدی با موتور آیین‌نامه حفظ می‌شود */
   originalSamaCode: varchar('originalSamaCode', { length: 10 }),
+  // ── ثبت‌نام توسط کارشناس آموزش (به‌جای دانشجو) + ردگیری ──
+  // کی زده، آیا قیود آیین‌نامه (پیش‌نیاز/ظرفیت/سقف واحد) نادیده گرفته شد و چرا
+  enrolledByUserId: integer('enrolledByUserId').references(() => users.id),
+  enrollOverrideReason: text('enrollOverrideReason'),
+  enrollOverride: integer('enrollOverride').notNull().default(0),
   /** تأییدیهٔ دیجیتال دانشجو برای داشتن دو امتحان هم‌روز (شیفت‌های متفاوت) — فاز ۱۰ */
   hasAcceptedSameDayExam: integer('hasAcceptedSameDayExam').notNull().default(0),
   /** حذف اضطراری (پس از مهلت حذف و اضافه) — سند §۲۲۴۳ */

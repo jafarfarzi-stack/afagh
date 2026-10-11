@@ -1,0 +1,326 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import {
+  bulkDropAction, bulkEnrollAction, countBulkStudents, getStudentCatalog,
+  listOfferingsForManualEnroll, manualEnrollAction, manualEnrollHistory,
+  searchStudentsForManualEnroll, type ManualEnrollOffering, type CatalogOffering,
+} from './actions';
+
+export interface EnrollFilters {
+  terms: { id: number; title: string; isCurrent: boolean }[];
+  majors: { id: number; name: string; departmentId: number | null }[];
+  departments: { id: number; name: string; facultyId: number }[];
+  faculties: { id: number; name: string }[];
+  entryYears: number[];
+}
+
+const sel = 'w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white';
+
+export default function ManualEnrollClient({ filters }: { filters: EnrollFilters }) {
+  const [tab, setTab] = useState<'single' | 'bulk' | 'history'>('single');
+  // single
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState<{ studentId: number; studentCode: string; name: string; entryYear: number | null }[]>([]);
+  const [selStudent, setSelStudent] = useState<{ studentId: number; studentCode: string; name: string } | null>(null);
+  const [singleTerm, setSingleTerm] = useState(() => filters.terms.find(t => t.isCurrent)?.id ?? filters.terms[0]?.id ?? 0);
+  const [offerings, setOfferings] = useState<ManualEnrollOffering[]>([]);
+  const [selOffering, setSelOffering] = useState('');
+  // کاتالوگِ همان دانشجو (راهنمای مانند انتخاب واحد)
+  const [catalog, setCatalog] = useState<CatalogOffering[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogQuery, setCatalogQuery] = useState('');
+  const [cart, setCart] = useState<CatalogOffering[]>([]);
+  // bulk
+  const [bulkTerm, setBulkTerm] = useState(singleTerm);
+  const [party, setParty] = useState('');
+  const [major, setMajor] = useState('');
+  const [dept, setDept] = useState('');
+  const [fac, setFac] = useState('');
+  const [year, setYear] = useState('');
+  const [bulkOfferings, setBulkOfferings] = useState<ManualEnrollOffering[]>([]);
+  const [chosen, setChosen] = useState<number[]>([]);
+  const [bulkCount, setBulkCount] = useState<number | null>(null);
+  // override
+  const [override, setOverride] = useState(true);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [historyL, setHistoryL] = useState<NonNullable<Awaited<ReturnType<typeof manualEnrollHistory>>['items']>>([]);
+
+  const loadOfferings = async (termId: number) => {
+    if (!termId) { setOfferings([]); setBulkOfferings([]); return; }
+    const rows = await listOfferingsForManualEnroll(termId);
+    setOfferings(rows); setBulkOfferings(rows);
+  };
+  useEffect(() => { loadOfferings(singleTerm); }, [singleTerm]);
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const refresh = async () => {
+    const h = await manualEnrollHistory(50).catch(() => ({ items: [] as typeof historyL } as const));
+    setHistoryL(h.items ?? []);
+  };
+
+  const search = async () => {
+    if (!q.trim()) return;
+    const r = await searchStudentsForManualEnroll(q.trim()).catch(() => ({ ok: false as const, error: 'خطا' }));
+    if (r.ok) setResults(r.items ?? []);
+  };
+
+  const loadCatalog = async (studentId: number) => {
+    setCatalogLoading(true); setCart([]);
+    const r = await getStudentCatalog(studentId, singleTerm).catch(() => ({ ok: false as const, error: 'خطا' }));
+    setCatalog(r.ok ? (r.items ?? []) : []); setCatalogLoading(false);
+  };
+
+  const doSingle = async () => {
+    if (!selStudent || !selOffering) { setMsg({ kind: 'err', text: 'دانشجو و کلاس را انتخاب کنید.' }); return; }
+    setBusy(true); setMsg(null);
+    const r = await manualEnrollAction({ studentId: selStudent.studentId, offeringId: Number(selOffering), override, reason }).catch(() => ({ ok: false as const, error: 'خطا' }));
+    setMsg(r.ok ? { kind: 'ok', text: `✅ ثبت شد برای ${selStudent.name} (اختصاص ثبت: شما)` } : { kind: 'err', text: r.error ?? 'ناموفق' });
+    setBusy(false); refresh();
+  };
+
+  const doCart = async () => {
+    if (!selStudent || !cart.length) { setMsg({ kind: 'err', text: 'دانشجو و حداقل یک درس از کاتالوگ را انتخاب کنید.' }); return; }
+    if (!window.confirm(`ثبت ${cart.length} درس از کاتالوگ برای ${selStudent.name}؟`)) return;
+    setBusy(true); setMsg(null); let okN = 0, errN: string[] = [];
+    for (const o of cart) {
+      const r = await manualEnrollAction({ studentId: selStudent.studentId, offeringId: o.offeringId, override, reason }).catch(() => ({ ok: false as const, error: 'خطا' }));
+      if (r.ok) okN++; else errN.push(`${o.code}: ${r.error ?? ''}`);
+    }
+    setMsg({ kind: okN > 0 ? 'ok' : 'err', text: okN > 0 ? `✅ ${okN} درس ثبت شد${errN.length ? `؛ ردشدهها: ${errN.join(' | ')}` : ''}` : `⛔ ${errN.join(' | ')}` });
+    setCart([]); setBusy(false); setCatalogLoading(true);
+    await loadCatalog(selStudent.studentId); setCatalogLoading(false);
+    refresh();
+  };
+
+  const filteredCatalog = useMemo(() => {
+    const qq = catalogQuery.trim().toLowerCase();
+    return qq ? catalog.filter(c => (c.code + ' ' + c.title).toLowerCase().includes(qq)) : catalog;
+  }, [catalog, catalogQuery]);
+  const inCart = (id: number) => cart.some(c => c.offeringId === id);
+
+  const bulkFilter = () => ({
+    termId: Number(bulkTerm), entryYear: year ? Number(year) : null,
+    majorId: major ? Number(major) : null, departmentId: dept ? Number(dept) : null, facultyId: fac ? Number(fac) : null,
+  });
+
+  const countBulk = async () => {
+    setBusy(true); setMsg(null);
+    const r = await countBulkStudents(bulkFilter()).catch(() => ({ ok: false as const, error: 'خطا' }));
+    if (r.ok) setBulkCount(r.count ?? 0); else setMsg({ kind: 'err', text: r.error ?? '' });
+    setBusy(false);
+  };
+
+  const doBulk = async (op: 'enroll' | 'drop') => {
+    const title = op === 'enroll' ? 'ثبت‌نام دسته‌جمعی' : 'حذف دسته‌جمعی';
+    const n = bulkCount ?? 0;
+    if (!chosen.length) { setMsg({ kind: 'err', text: 'حداقل یک کلاس انتخاب کنید.' }); return; }
+    if (!window.confirm(`${title} برای ${n} دانشجو در ${chosen.length} کلاس؟ از جمله بیشنور.`)) return;
+    setBusy(true); setMsg(null);
+    const r = op === 'enroll'
+      ? await bulkEnrollAction(bulkFilter(), chosen, override, reason).catch(() => ({ ok: false as const, error: 'خطا' }))
+      : await bulkDropAction(bulkFilter(), chosen, reason).catch(() => ({ ok: false as const, error: 'خطا' }));
+    setMsg(r.ok
+      ? { kind: 'ok', text: `✅ ${title}: ${op === 'enroll' ? `ثبت ${(r as any).inserted ?? 0} / رد ${(r as any).skipped ?? 0}` : `حذف ${(r as any).dropped ?? 0}`}` }
+      : { kind: 'err', text: r.error ?? 'ناموفق' });
+    setBusy(false); refresh();
+  };
+
+  const bulkFilteredMajors = useMemo(() => filters.majors.filter(m => !dept || m.departmentId === Number(dept)), [filters.majors, dept]);
+
+  const offerHelp = <span className="text-[10px] text-slate-400">ترم را عوض کن تا کلاس‌ها بیاید (تا ۴۰۰۰).</span>;
+
+  return (
+    <div className="space-y-4" dir="rtl">
+      <div className="card">
+        <h1 className="font-black text-base">📝 ثبت‌نام به‌جای دانشجو (کارشناس آموزش)</h1>
+        <p className="text-xs text-slate-500 mt-1">تک‌ثبت‌نام، ثبت‌نام/حذف دسته‌جمعی با امکان نادیده‌گرفتن آیین‌نامه (با دلیل) — همه با ردگیری «چه کسی، چه زمانی، چرا».</p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {([['single', '✍️ ثبت‌نام تکی'], ['bulk', '👥 دسته‌جمعی'], ['history', '🗂️ تاریخچه (پیگیری)']] as const).map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition ${tab === k ? 'bg-indigo-700 text-white' : 'bg-white text-slate-600 border border-slate-300'}`}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'single' && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+          <div className="grid sm:grid-cols-2 gap-2">
+            <label className="text-xs font-bold text-slate-600">جست‌وجوی دانشجو (شماره دانشجویی)
+              <div className="flex gap-1.5 mt-1">
+                <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && search()} placeholder="4031253607" className={sel} />
+                <button onClick={search} className="shrink-0 px-3 rounded-xl bg-slate-800 text-white text-xs font-black">جست‌وجو</button>
+              </div>
+            </label>
+            <label className="text-xs font-bold text-slate-600">دانشجو
+              <select value={selStudent ? String(selStudent.studentId) : ''} onChange={e => { const it = results.find(x => String(x.studentId) === e.target.value); const s = it ? { studentId: it.studentId, studentCode: it.studentCode, name: it.name } : null; setSelStudent(s); setSelOffering(''); if (s) loadCatalog(s.studentId); else setCatalog([]); }} className={sel + ' mt-1'}>
+                <option value="">— انتخاب —</option>
+                {results.map(r => <option key={r.studentId} value={r.studentId}>{r.studentCode} · {r.name}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-2">
+            <label className="text-xs font-bold text-slate-600">ترم
+              <select value={singleTerm} onChange={e => { setSingleTerm(Number(e.target.value)); setSelOffering(''); if (selStudent) loadCatalog(selStudent.studentId); }} className={sel + ' mt-1'}>
+                {filters.terms.map(t => <option key={t.id} value={t.id}>{t.title}{t.isCurrent ? ' (جاری)' : ''}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-bold text-slate-600">کلاس {offerHelp}
+              <select value={selOffering} onChange={e => setSelOffering(e.target.value)} className={sel + ' mt-1'}>
+                <option value="">— انتخاب —</option>
+                {offerings.map(o => <option key={o.offeringId} value={o.offeringId}>{o.code} {o.title} — گ{o.groupNumber} ({o.enrolledCount}/{o.capacity}) · {o.professorName}</option>)}
+              </select>
+            </label>
+          </div>
+          <ManualControls override={override} setOverride={setOverride} reason={reason} setReason={setReason} />
+
+          {/* ── کاتالوگِ همان دانشجو (راهنمای کارشناس) ── */}
+          {(selStudent || selOffering) && (
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-black text-indigo-900">📚 کاتالوگ/چارتِ {selStudent?.name || 'دانشجو'} در این ترم {catalogLoading && '(در حال بارگذاری…)'}</h3>
+                <input value={catalogQuery} onChange={e => setCatalogQuery(e.target.value)} placeholder="جست‌وجوی کد/نام…" className="w-44 border border-slate-300 rounded-lg px-2 py-1 text-xs" />
+              </div>
+              {cart.length > 0 && (
+                <div className="rounded-lg bg-white border border-indigo-300 p-2 text-xs flex flex-wrap items-center gap-2">
+                  <span className="font-black text-indigo-900">سبد: {cart.length} درس</span>
+                  <span className="text-slate-500">{cart.map(c => `${c.code}(گ${c.groupNumber})`).join('، ')}</span>
+                  <button onClick={doCart} disabled={busy} className="mr-auto rounded-lg bg-emerald-700 px-3 py-1 text-white font-black">ثبت این سبد برای دانشجو</button>
+                </div>
+              )}
+              <div className="max-h-80 overflow-y-auto rounded-lg border border-indigo-100 bg-white divide-y divide-slate-100">
+                {filteredCatalog.map(c => (
+                  <div key={c.offeringId} className={'flex flex-wrap items-center gap-2 p-2 ' + (c.alreadyEnrolled ? 'opacity-50' : '')}>
+                    <button
+                      disabled={inCart(c.offeringId) || c.alreadyEnrolled}
+                      onClick={() => setCart(p => inCart(c.offeringId) ? p.filter(x => x.offeringId !== c.offeringId) : [...p, c])}
+                      className={'px-2.5 py-1 rounded-lg text-[11px] font-black ' + (inCart(c.offeringId) ? 'bg-indigo-800 text-white' : c.alreadyEnrolled ? 'bg-slate-200 text-slate-500' : 'bg-indigo-100 text-indigo-900 hover:bg-indigo-200')}>
+                      {c.alreadyEnrolled ? 'ثبت است' : inCart(c.offeringId) ? '✓ در سبد' : '＋'}
+                    </button>
+                    <span className="font-bold text-slate-800">{c.code} {c.title} <span className="text-slate-500">(گ{c.groupNumber})</span></span>
+                    <span className="text-[10px] text-slate-500">{c.units ?? ''} واحد · {c.enrolledCount}/{c.capacity} · {c.professorName}</span>
+                    {c.prereq && <span className="text-[10px] text-amber-700 font-bold">پیش‌نیاز: {c.prereq}</span>}
+                  </div>
+                ))}
+                {!catalogLoading && !filteredCatalog.length && <p className="p-3 text-xs text-slate-400">در این ترم ارائه‌ای برای نمایش نیست.</p>}
+              </div>
+              <p className="text-[10px] text-indigo-700">نادیده‌گرفتن آیین‌نامه اگر نیاز باشد از تیک بالا استفاده کن (با دلیل).</p>
+            </div>
+          )}
+
+          <button onClick={doSingle} disabled={busy} className="w-full py-2.5 rounded-xl bg-indigo-700 text-white font-black text-xs disabled:opacity-50">
+            {busy ? '…' : 'ثبت‌نام تکی به‌جای دانشجو'}
+          </button>
+        </div>
+      )}
+
+      {tab === 'bulk' && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            <label className="text-xs font-bold text-slate-600">ترم
+              <select value={bulkTerm} onChange={e => { setBulkTerm(Number(e.target.value)); setChosen([]); }} className={sel + ' mt-1'}>
+                {filters.terms.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-bold text-slate-600">دانشکده
+              <select value={fac} onChange={e => { setFac(e.target.value); setDept(''); }} className={sel + ' mt-1'}>
+                <option value="">همه</option>
+                {filters.faculties.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-bold text-slate-600">گروه
+              <select value={dept} onChange={e => { setDept(e.target.value); setMajor(''); }} className={sel + ' mt-1'}>
+                <option value="">همه</option>
+                {filters.departments.filter(d => !fac || d.facultyId === Number(fac)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-bold text-slate-600">رشته
+              <select value={major} onChange={e => setMajor(e.target.value)} className={sel + ' mt-1'}>
+                <option value="">همه</option>
+                {bulkFilteredMajors.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-xs font-bold text-slate-600">ورودی
+              <select value={year} onChange={e => setYear(e.target.value)} className={sel + ' mt-1'}>
+                <option value="">همه</option>
+                {filters.entryYears.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </label>
+            <button onClick={countBulk} disabled={busy} className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-black text-white disabled:opacity-50">🔍 شمارش</button>
+            {bulkCount !== null && <span className="text-xs font-black text-indigo-800">{bulkCount.toLocaleString('fa-IR')} دانشجو</span>}
+          </div>
+          <div className="rounded-xl border border-slate-200 p-2 max-h-64 overflow-y-auto space-y-1">
+            <p className="text-[11px] font-bold text-slate-500">کلاس‌های ترم (چندتا را تیک بزن):</p>
+            {bulkOfferings.slice(0, 4000).map(o => (
+              <label key={o.offeringId} className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={chosen.includes(o.offeringId)} onChange={() => setChosen(p => p.includes(o.offeringId) ? p.filter(x => x !== o.offeringId) : [...p, o.offeringId])} className="w-4 h-4" />
+                <span>{o.code} {o.title} — گ{o.groupNumber} ({o.enrolledCount}/{o.capacity}) · {o.professorName}</span>
+              </label>
+            ))}
+          </div>
+          <ManualControls override={override} setOverride={setOverride} reason={reason} setReason={setReason} />
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => doBulk('enroll')} disabled={busy} className="flex-1 py-2.5 rounded-xl bg-emerald-700 text-white font-black text-xs disabled:opacity-50">➕ ثبت‌نام دسته‌جمعی</button>
+            <button onClick={() => doBulk('drop')} disabled={busy} className="flex-1 py-2.5 rounded-xl bg-rose-700 text-white font-black text-xs disabled:opacity-50">➖ حذف دسته‌جمعی</button>
+          </div>
+        </div>
+      )}
+
+      {tab === 'history' && (
+        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+          <div className="p-3 border-b bg-slate-50 font-black text-sm">🗂️ ثبت‌نام‌های انجام‌شده توسط کارشناس (آخرین ۵۰)</div>
+          <div className="max-h-[30rem] overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-slate-100 text-slate-600"><tr>
+                <th className="p-2 text-right">دانشجو</th><th className="p-2 text-right">درس</th><th className="p-2 text-right">ترم</th>
+                <th className="p-2 text-right">توسط</th><th className="p-2 text-right">زمان</th><th className="p-2 text-center">نادیده</th><th className="p-2 text-right">دلیل</th>
+              </tr></thead>
+              <tbody>
+                {historyL.map(h => (
+                  <tr key={h.id} className="border-t border-slate-100">
+                    <td className="p-2 font-bold">{h.studentCode} {h.studentName}</td>
+                    <td className="p-2">{h.courseCode} {h.courseTitle} (گ{h.groupNumber})</td>
+                    <td className="p-2">{h.termTitle}</td>
+                    <td className="p-2">{h.who}</td>
+                    <td className="p-2">{h.when ? new Date(h.when).toLocaleString('fa-IR') : '—'}</td>
+                    <td className="p-2 text-center">{h.override ? <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 font-black text-[10px]">بله</span> : '—'}</td>
+                    <td className="p-2 text-slate-600">{h.reason || '—'}</td>
+                  </tr>
+                ))}
+                {!historyL.length && <tr><td colSpan={7} className="p-4 text-center text-slate-400">هنوز ثبت‌نام دستی‌ای انجام نشده.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {msg && <div className={`rounded-2xl border p-3 text-xs font-black leading-6 ${msg.kind === 'ok' ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'}`}>{msg.text}</div>}
+    </div>
+  );
+}
+
+function ManualControls({ override, setOverride, reason, setReason }: {
+  override: boolean; setOverride: (v: boolean) => void; reason: string; setReason: (v: string) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-2">
+      <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
+        <input type="checkbox" checked={override} onChange={e => setOverride(e.target.checked)} className="w-4 h-4" />
+        نادیده‌گرفتن آیین‌نامه (پیش‌نیاز/ظرفیت/سقف واحد)
+      </label>
+      {override && (
+        <input value={reason} onChange={e => setReason(e.target.value)} placeholder="دلیل نادیده‌گرفتن (الزامی — ثبت می‌شود)…" className={sel} />
+      )}
+    </div>
+  );
+}

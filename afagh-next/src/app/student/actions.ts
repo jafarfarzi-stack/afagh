@@ -10,6 +10,7 @@ import { academic_terms, course_offerings, courses, enrollments, notifications, 
 import { withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { releaseSeat, takeSeat } from '@/lib/waitingRoom';
+import { getBool } from '@/lib/settings';
 
 export async function dropCourseAction(enrollmentId: number): Promise<{ ok: boolean; error?: string; promotedTo?: string | null }> {
   const user = await requireRole(['STUDENT']);
@@ -79,6 +80,10 @@ export async function emergencyDropAction(enrollmentId: number): Promise<{ ok: b
   const user = await requireRole(['STUDENT']);
   const me = await getStudentByUser(user.id);
   if (!me) return { ok: false, error: 'پروندهٔ دانشجویی یافت نشد.' };
+
+  // کلید دستی مدیر: «حذف اضطراری» سراسری خاموش؟
+  const ewOpen = await getBool('EMERGENCY_WITHDRAW_OPEN');
+  if (!ewOpen) return { ok: false, error: 'حذف اضطراری در حال حاضر غیرفعال است؛ با ادارهٔ آموزش هماهنگ کنید.' };
 
   const [row] = await db
     .select({

@@ -203,6 +203,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/manual-enroll',
+    icon: '📝',
+    title: 'ثبت‌نام به‌جای دانشجو',
+    desc: 'تکی/دسته‌جمعی با کاتالوگ و پیش‌نیاز — ردیابی کی و چرا',
+    group: 'edu',
+    roles: EDU,
+    accent: 'from-indigo-950 to-slate-950 border-indigo-700/50',
+    iconBg: 'bg-indigo-800/80 border-indigo-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/archive',
     icon: '🗄️',
     title: 'بایگانی الکترونیک مدارک',
