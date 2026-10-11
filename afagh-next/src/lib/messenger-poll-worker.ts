@@ -11,7 +11,7 @@ import { createLogger } from '@/lib/logger';
 const log = createLogger({ mod: 'messenger-poll' });
 
 // ═══════════════════════════════════════════════════════════════
-//  Poll worker جفت‌سازی توکن — فقط BALE و EITAA
+//  Poll worker جفت‌سازی توکن — BALE / EITAA / SOROUSH
 //
 //  وب‌هوک inbound حذف شده؛ این worker با getUpdates (long-poll ۲۵ ثانیه)
 //  فقط پیام‌های /start <token> را می‌خواند و chatId را PENDING ثبت می‌کند.
@@ -79,10 +79,14 @@ async function fetchUpdates(
       body: JSON.stringify({ offset, timeout: LONG_POLL_SEC, allowed_updates: ['message'] }),
       signal: ctrl.signal,
     });
-    if (!r.ok) return { updates: [], ok: false };
+    // 409 یعنی یک getUpdates دیگر هم‌زمان فعال است (نمونهٔ قدیمی در حال خاموشی
+    // یا تست دستی) — با خطای مشخص لاگ می‌شود تا با قطعی واقعی اشتباه نشود.
+    if (r.status === 409) throw new Error('getUpdates_http409_conflict');
+    if (!r.ok) throw new Error(`getUpdates_http${r.status}`);
     const data = (await r.json()) as { ok?: boolean; result?: Update[] };
     return { updates: Array.isArray(data.result) ? data.result : [], ok: data.ok !== false };
-  } catch {
+  } catch (e) {
+    if ((e as Error)?.message?.startsWith('getUpdates_http')) throw e;
     return { updates: [], ok: false };
   } finally {
     clearTimeout(t);
@@ -110,12 +114,12 @@ async function handleOne(channel: MessengerChannel, u: Update): Promise<void> {
 }
 
 /**
- * شروع long-poll برای یک کانال (BALE/EITAA).
+ * شروع long-poll برای یک کانال (BALE/EITAA/SOROUSH).
  * قفل Redis تک‌نمونه‌ای: اگر نمونهٔ دیگری زنده باشد، این فراخوانی بی‌درنگ برمی‌گردد.
  */
 export function startPolling(channel: MessengerChannel): { ok: boolean; error?: string } {
   if (!POLL_CHANNELS.includes(channel)) {
-    return { ok: false, error: `poll برای ${channel} پشتیبانی نمی‌شود (فقط BALE و EITAA).` };
+    return { ok: false, error: `poll برای ${channel} پشتیبانی نمی‌شود (فقط ${POLL_CHANNELS.join('، ')}).` };
   }
   if (running.has(channel)) return { ok: true };
 
@@ -201,10 +205,16 @@ export function stopPolling(channel: MessengerChannel): void {
   running.get(channel)?.stop();
 }
 
-/** شروع هر دو کانال poll (BALE + EITAA) — نقطهٔ ورود فرایند worker. */
+/** شروع همهٔ کانال‌های poll — کانال بدون توکن، یک‌بار info می‌خورد و رد می‌شود (نه warn هر دقیقه). */
 export function startAllPolling(): void {
   for (const ch of POLL_CHANNELS) {
-    const r = startPolling(ch);
-    if (!r.ok) log.warn('poll_start_rejected', { channel: ch, error: r.error });
+    void getConfig(ch).then(({ token }) => {
+      if (!token) {
+        log.info('poll_skipped_no_token', { channel: ch });
+        return;
+      }
+      const r = startPolling(ch);
+      if (!r.ok) log.warn('poll_start_rejected', { channel: ch, error: r.error });
+    }).catch((e) => log.warn('poll_start_rejected', { channel: ch, error: (e as Error).message }));
   }
 }
