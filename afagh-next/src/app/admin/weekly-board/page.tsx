@@ -14,7 +14,9 @@ import PrintButton from './PrintButton';
 export const dynamic = 'force-dynamic';
 
 const DAY_NAMES = ['شنبه', 'یک‌شنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
-const HOURS = Array.from({ length: 13 }, (_, i) => `${String(8 + i).padStart(2, '0')}:00`); // 08:00..20:00
+// شبکهٔ ۱۵دقیقه‌ای ۸ تا ۲۰ (مدل تقویم هفتگی): ۴۸ سطر — بلوک‌ها دقیق می‌نشینند
+const SLOT_START = 8 * 60, SLOT_END = 20 * 60, SLOT_STEP = 15;
+const SLOTS = Array.from({ length: (SLOT_END - SLOT_START) / SLOT_STEP }, (_, i) => SLOT_START + i * SLOT_STEP);
 
 const faDigits = (s: string | number) => String(s).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
 
@@ -70,7 +72,6 @@ export default async function WeeklyBoardPage({ searchParams }: {
   const facultyId = Number(sp.faculty) || 0;
   const deptId = Number(sp.dept) || 0;
   const roomId = Number(sp.room) || 0;
-  const posterMode = roomId > 0;
 
   // کلیدهای نمایش نام استاد (تنظیمات مدیر)
   const [showTitle, showFirst, shortHonor] = await Promise.all([
@@ -95,11 +96,36 @@ export default async function WeeklyBoardPage({ searchParams }: {
     .where(uni ? eq(departments.universityId, uni.id) : undefined)
     .orderBy(asc(departments.name)))
     .filter(d => facIds.size === 0 || facIds.has(d.facultyId));
-  const rooms = await db.select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, capacity: classrooms.capacity, facultyId: classrooms.facultyId })
-    .from(classrooms)
-    .where(uni ? eq(classrooms.universityId, uni.id) : undefined)
-    .orderBy(asc(classrooms.name));
-  const selRoom = rooms.find(r => r.id === roomId) ?? null;
+  const rooms = await (async () => {
+    if (!term) return [];
+    // فقط کلاس‌هایی که در همین ترم سانس دارند (خالی‌ها نه) + احترام به فیلتر دانشکده
+    const facDeptIds = facultyId ? depts.filter(d => d.facultyId === facultyId).map(d => d.id) : null;
+    if (facDeptIds && facDeptIds.length === 0) return []; // fail-closed مثل scopeConds
+    const rows0 = await db.select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, capacity: classrooms.capacity, facultyId: classrooms.facultyId })
+      .from(classrooms)
+      .where(and(
+        uni ? eq(classrooms.universityId, uni.id) : undefined,
+        sql`EXISTS (SELECT 1 FROM schedules s
+          JOIN course_offerings o ON o.id = s."offeringId"
+          JOIN courses c ON c.id = o."courseId"
+          WHERE s."roomId" = classrooms.id AND s."scheduleType" = 'CLASS'
+            AND o."termId" = ${term.id} AND o."isActive" = 1
+            ${facDeptIds ? sql`AND c."departmentId" IN (${sql.join(facDeptIds.map(n => sql`${n}`), sql`, `)})` : sql``})`,
+      ))
+      .orderBy(asc(classrooms.id));
+    // ادغام هم‌نام‌های مهاجرت سما (دو ردیف یک نام، بدون ساختمان): یک گزینه، همهٔ idها
+    const key = (r: { name: string; buildingName: string | null }) =>
+      normFa(r.name).trim() + '|' + normFa(r.buildingName).trim();
+    const out: (typeof rows0[number] & { aliasIds: number[] })[] = [];
+    for (const r of rows0) {
+      const k = key(r);
+      const ex = out.find(x => key(x) === k);
+      if (ex) ex.aliasIds.push(r.id);
+      else out.push({ ...r, aliasIds: [r.id] });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name, 'fa'));
+  })();
+  const selRoom = rooms.find(r => r.id === roomId || r.aliasIds.includes(roomId)) ?? null;
 
   // ستون‌های مشترک هر سه تب (تابلوی کلاس‌ها / برنامه استاد / برنامه دانشجو)
   const boardSelect = {
@@ -136,7 +162,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
           eq(schedules.scheduleType, 'CLASS'),
           eq(course_offerings.termId, term.id),
           eq(course_offerings.isActive, 1),
-          ...(roomId ? [eq(schedules.roomId, roomId)] : []),
+          ...(selRoom ? [inArray(schedules.roomId, selRoom.aliasIds)] : roomId ? [sql`1=0`] : []),
           ...await scopeConds(user.roles, deptId, facultyId),
         ))
         .orderBy(asc(courses.title), asc(course_offerings.groupNumber))
@@ -202,8 +228,8 @@ function placeBoardCells(merged: MergedCell[]): { placedByDay: Placed[][]; outsi
     const start = toMin(r.startTime), end = toMin(r.endTime);
     if (!(end > start)) { outside.push({ ...r, start, end }); continue; }
     const hits: number[] = [];
-    for (let hi = 0; hi < HOURS.length; hi++) {
-      if (start < (8 + hi + 1) * 60 && end > (8 + hi) * 60) hits.push(hi);
+    for (let hi = 0; hi < SLOTS.length; hi++) {
+      if (start < SLOTS[hi] + SLOT_STEP && end > SLOTS[hi]) hits.push(hi);
     }
     if (!hits.length) { outside.push({ ...r, start, end }); continue; }
     placedByDay[d].push({ cell: { ...r, start, end }, first: hits[0], span: hits.length });
@@ -226,12 +252,18 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
           </tr>
         </thead>
         <tbody>
-          {HOURS.map((h, hi) => (
-            <tr key={h}>
-              <td className="border border-slate-300 bg-slate-50 p-1 text-center font-mono">{faDigits(h)}</td>
+          {SLOTS.map((m, hi) => (
+            <tr key={m}>
+              <td className="border border-slate-300 bg-slate-50 p-0.5 text-center font-mono">
+                {hi % 4 === 0
+                  ? <b className="text-[11px]">{faDigits(fmtClock(m))}</b>
+                  : <span className="text-slate-400 text-[9px]">{faDigits(fmtClock(m))}</span>}
+              </td>
               {DAY_NAMES.map((_, di) => {
-                // چند بلوک هم‌ساعت (کلاس‌های مختلف) زیر هم می‌آیند — هیچ‌کدام گم نمی‌شود
-                const starts = placedByDay[di].filter(x => x.first === hi);
+                // شرط صریح: فقط بلوک‌های همین روز — هیچ بلوکی افقی جابه‌جا نمی‌شود،
+                // حتی اگر در تایم جا نشود (سرریز فقط عمودی، در ستون خودش می‌ماند)
+                const dayList = placedByDay[di].filter(x => Number(x.cell.dayOfWeek) === di);
+                const starts = dayList.filter(x => x.first === hi);
                 if (starts.length) {
                   const span = Math.max(...starts.map(x => x.span));
                   return (
@@ -251,7 +283,7 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
                     </td>
                   );
                 }
-                const covered = placedByDay[di].some(x => hi > x.first && hi < x.first + x.span);
+                const covered = dayList.some(x => hi > x.first && hi < x.first + x.span);
                 if (covered) return null;
                 return <td key={di} className="border border-slate-200 p-0.5 align-top" style={{ minHeight: 46 }} />;
               })}
@@ -366,19 +398,32 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
   const personMerged = collapseBoardRows(personRows, showTitle, showFirst, shortHonor);
   const personPlaced = placeBoardCells(personMerged);
 
-  const poster = posterMode && selRoom ? selRoom : null;
+  const poster = selRoom ?? null;
 
   // ── سربرگ چاپ: دانشکده • نیمسال • کلاس ──
+  // پوستر درب همیشه تک‌دانشکده است: دانشکدهٔ انتخابی، وگرنه دانشکدهٔ خود کلاس،
+  // وگرنه پرتکرارترین دانشکدهٔ سانس‌ها (هرگز فهرست چندتایی).
   const facName = (id: number | null | undefined) => facs.find(f => f.id === id)?.name ?? '';
+  const deptFac = new Map(depts.map(d => [d.id, d.facultyId] as const));
+  const modeFaculty = (() => {
+    const cnt = new Map<string, number>();
+    for (const m of mergedCells) {
+      const n = facName(deptFac.get(m.deptId ?? -1));
+      if (n) cnt.set(n, (cnt.get(n) ?? 0) + 1);
+    }
+    let best = '', bestN = 0;
+    for (const [n, c] of cnt) if (c > bestN) { best = n; bestN = c; }
+    return best;
+  })();
   const headerFaculty = facultyId
     ? facName(facultyId)
-    : poster?.facultyId
-      ? facName(poster.facultyId)
+    : poster
+      ? (poster.facultyId ? facName(poster.facultyId) : modeFaculty)
       : (() => {
-          const deptFac = new Map(depts.map(d => [d.id, d.facultyId] as const));
           const names = [...new Set(mergedCells.map(m => facName(deptFac.get(m.deptId ?? -1))).filter(Boolean))];
           return names.length <= 2 ? names.join('، ') : `${names.slice(0, 2).join('، ')} و …`;
         })();
+
   const headerDept = deptId ? depts.find(d => d.id === deptId)?.name ?? '' : '';
 
   // ارم دانشگاه (الگوی سراسری اسناد: logoUrl دانشگاه، وگرنه UNIVERSITY_LOGO)
