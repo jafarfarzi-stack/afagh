@@ -43,21 +43,16 @@ const faToEn = (s: unknown) => String(s ?? '').replace(/[۰-۹]/g, d => String('
 /** نام نمایشی استاد با لقب احترام: استادیار و بالاتر «دکتر» + جناب آقای/سرکار خانم */
 function profDisplay(
   m: Pick<BoardRow, 'profFirstName' | 'profLastName' | 'profRank' | 'profGender' | 'profLegacyTitle'>,
-  showTitle: boolean, showFirst: boolean,
+  showTitle: boolean, showFirst: boolean, shortHonor = false,
 ): string {
   const first = (m.profFirstName || '').trim();
   const last = (m.profLastName || '').trim();
   if (!showTitle) return [showFirst ? first : '', last].filter(Boolean).join(' ');
   const rank = normFa(m.profRank);
   const isDoctor = rank.includes('دانشیار') || rank.includes('استاد');
-  let honor = '';
-  if (m.profGender === 'FEMALE') honor = 'سرکار خانم';
-  else if (m.profGender === 'MALE') honor = 'جناب آقای';
-  else {
-    const leg = normFa(m.profLegacyTitle);
-    if (leg.includes('خانم')) honor = 'سرکار خانم';
-    else if (leg.includes('آقا')) honor = 'جناب آقای';
-  }
+  const female = m.profGender === 'FEMALE' || (!m.profGender && normFa(m.profLegacyTitle).includes('خانم'));
+  const male = m.profGender === 'MALE' || (!m.profGender && normFa(m.profLegacyTitle).includes('آقا'));
+  const honor = female ? (shortHonor ? 'خانم' : 'سرکار خانم') : male ? (shortHonor ? 'آقای' : 'جناب آقای') : '';
   return [honor, isDoctor ? 'دکتر' : '', showFirst ? first : '', last].filter(Boolean).join(' ');
 }
 
@@ -76,9 +71,10 @@ export default async function WeeklyBoardPage({ searchParams }: {
   const posterMode = roomId > 0;
 
   // کلیدهای نمایش نام استاد (تنظیمات مدیر)
-  const [showTitle, showFirst] = await Promise.all([
+  const [showTitle, showFirst, shortHonor] = await Promise.all([
     getBool('WEEKLY_BOARD_PROF_TITLE').catch(() => true),
     getBool('WEEKLY_BOARD_SHOW_FIRSTNAME').catch(() => true),
+    getBool('WEEKLY_BOARD_SHORT_HONORIFIC').catch(() => false),
   ]);
 
   const terms = await db.select({ id: academic_terms.id, title: academic_terms.title, isCurrent: academic_terms.isCurrent })
@@ -153,7 +149,7 @@ type MergedCell = BoardRow & {
 };
 
 /** ادغامی‌ها مثل برنامهٔ استاد/دانشجو: یک بلوک واحد (کلید K مشترک، وگرنه سانس S) */
-function collapseBoardRows(list: BoardRow[], showTitle: boolean, showFirst: boolean): MergedCell[] {
+function collapseBoardRows(list: BoardRow[], showTitle: boolean, showFirst: boolean, shortHonor = false): MergedCell[] {
   return groupIntoMerged<BoardRow & { uid: number }>(
     list.map((r, i) => ({ ...r, uid: i })),
     (m) => m.offeringId * 100000 + m.uid,
@@ -173,12 +169,12 @@ function collapseBoardRows(list: BoardRow[], showTitle: boolean, showFirst: bool
       const m = g.members[0];
       return {
         ...m, merged: false as const, codes: String(m.courseCode ?? ''),
-        profs: profDisplay(m, showTitle, showFirst), groupLabel: faDigits(m.groupNumber),
+        profs: profDisplay(m, showTitle, showFirst, shortHonor), groupLabel: faDigits(m.groupNumber),
         enrolled: Number(m.enrolledCount) || 0,
       };
     }
     const codes = [...new Set(g.members.map(m => String(m.courseCode ?? '').trim()).filter(Boolean))];
-    const profs = [...new Set(g.members.map(m => profDisplay(m, showTitle, showFirst)).filter(Boolean))];
+    const profs = [...new Set(g.members.map(m => profDisplay(m, showTitle, showFirst, shortHonor)).filter(Boolean))];
     const groups = [...new Set(g.members.map(m => m.groupNumber))].sort((a, b) => a - b);
     const enrolled = g.members.reduce((s, m) => s + (Number(m.enrolledCount) || 0), 0);
     return {
@@ -266,7 +262,7 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
   );
 }
 
-  const mergedCells = collapseBoardRows(rows, showTitle, showFirst);
+  const mergedCells = collapseBoardRows(rows, showTitle, showFirst, shortHonor);
   const { placedByDay, outside } = placeBoardCells(mergedCells);
 
   // ── تب‌های برنامهٔ استاد / دانشجو (جست‌وجو با کد استادی / شماره دانشجویی) ──
@@ -291,7 +287,7 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
       if (p) {
         personInfo = {
           kind: 'prof', code: p.staffCode,
-          name: profDisplay({ profFirstName: p.firstName, profLastName: p.lastName, profRank: p.rank, profGender: p.gender, profLegacyTitle: p.legacyTitle }, showTitle, showFirst),
+          name: profDisplay({ profFirstName: p.firstName, profLastName: p.lastName, profRank: p.rank, profGender: p.gender, profLegacyTitle: p.legacyTitle }, showTitle, showFirst, shortHonor),
           extra: p.deptName || '',
         };
         const coIds = (await db.select({ offeringId: offering_professors.offeringId })
@@ -356,7 +352,7 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
       }
     }
   }
-  const personMerged = collapseBoardRows(personRows, showTitle, showFirst);
+  const personMerged = collapseBoardRows(personRows, showTitle, showFirst, shortHonor);
   const personPlaced = placeBoardCells(personMerged);
 
   const poster = posterMode && selRoom ? selRoom : null;

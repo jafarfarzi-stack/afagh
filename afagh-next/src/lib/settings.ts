@@ -168,7 +168,8 @@ export const SETTING_DEFS: SettingDef[] = [
 
   // ── سردر برنامهٔ هفتگی ──
   { key: 'WEEKLY_BOARD_PROF_TITLE', env: 'WEEKLY_BOARD_PROF_TITLE', group: 'سردر برنامهٔ هفتگی', label: 'لقب احترام استاد در سردر', type: 'boolean', default: 'true', help: 'استادیار و بالاتر «دکتر» + جناب آقای/سرکار خانم بر اساس جنسیت' },
-  { key: 'WEEKLY_BOARD_SHOW_FIRSTNAME', env: 'WEEKLY_BOARD_SHOW_FIRSTNAME', group: 'سردر برنامهٔ هفتگی', label: 'چاپ نام کوچک استاد در سردر', type: 'boolean', default: 'true', help: 'خاموش = فقط نام خانوادگی (با لقب)' },
+  { key: 'WEEKLY_BOARD_SHOW_FIRSTNAME', env: 'WEEKLY_BOARD_SHOW_FIRSTNAME', group: 'سردر برنامهٔ هفتگی', label: 'چاپ نام کوچک استاد در سردر', type: 'boolean', default: 'true', help: 'خاموش = فقط نام خانوادگی (با لقب). مثلاً «سرکار خانم دکتر میکی» به‌جای «سرکار خانم دکتر مرضیه میکی»' },
+  { key: 'WEEKLY_BOARD_SHORT_HONORIFIC', env: 'WEEKLY_BOARD_SHORT_HONORIFIC', group: 'سردر برنامهٔ هفتگی', label: 'لقب کوتاه در سردر (کم‌جا)', type: 'boolean', default: 'false', help: 'روشن = «خانم/آقای» به‌جای «سرکار خانم/جناب آقای» برای جاهای تنگ' },
 
   // ── امنیت ورود و نظارت ──
   { key: 'SESSION_LOCK_MINUTES', env: 'SESSION_LOCK_MINUTES', group: 'امنیت ورود و نظارت', label: 'قفل خودکار بیکاری (دقیقه)', type: 'number', default: '15', help: 'پس از این مدت بی‌تعاملی، صفحه قفل و رمز دوباره خواسته می‌شود. ۰ = غیرفعال' },
