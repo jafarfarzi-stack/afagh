@@ -72,7 +72,7 @@ const toOurTerm = (legacy) => { const s=String(legacy??'').trim(); if(/^\d{3}$/.
   let exact = 0, diff = 0, onlyOur = 0, onlyLegacy = 0, sumDiff = 0;
   const samples = [];
   for (const r of tams.rows) {
-    const sid = stuById.get(col(r, tams.header, 'StnO'));
+    const sid = stuById.get(col(r, tams.header, 'Stno'));
     const tid = termById.get(toOurTerm(col(r, tams.header, 'TermCode')));
     if (!sid || !tid) continue;
     const k = `${sid}|${tid}`;
@@ -100,7 +100,7 @@ const toOurTerm = (legacy) => { const s=String(legacy??'').trim(); if(/^\d{3}$/.
   // (با Set؛ نسخهٔ قبلی به‌ازای هر کلید کل TermAms را می‌گشت — O(n²) و ساعت‌ها CPU)
   const amsKeys = new Set();
   for (const r of tams.rows) {
-    const sid = stuById.get(col(r, tams.header, 'StnO'));
+    const sid = stuById.get(col(r, tams.header, 'Stno'));
     const tid = termById.get(toOurTerm(col(r, tams.header, 'TermCode')));
     if (sid && tid) amsKeys.add(`${sid}|${tid}`);
   }
