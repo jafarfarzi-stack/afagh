@@ -784,8 +784,12 @@ export function detectHardConflicts(
 export type WeekRecurrence = 'ALL' | 'EVEN' | 'ODD';
 
 export interface SessionDateInput {
-  /** شروع ترم (Date از academic_terms.startDate) */
+  /** شروع ترم (Date از academic_terms.startDate) — پایهٔ محاسبه در صورت نبود classStartDate */
   termStart: Date;
+  /** شروع کلاس‌ها (academic_terms.classStartDate) — اگر داده شود بر termStart مقدم است */
+  classStartDate?: Date;
+  /** پایان کلاس‌ها (academic_terms.classEndDate) — جلسه‌ای پس از آن ساخته نمی‌شود */
+  classEndDate?: Date;
   /** 0..6 (شنبه=0) */
   dayOfWeek: number;
   /** تعداد جلسات (پیش‌فرض ۱۶) */
@@ -812,9 +816,10 @@ function jalaliWeekdayToJdnMod(dow: number): number {
 }
 
 /**
- * تولید تاریخ جلسات هفتگی یک کلاس از شروع ترم:
- *  - اولین تکرارِ روزِ هفته روی/بعد از شروع ترم
- *  - گام ۷ روزه تا رسیدن به sessionsCount
+ * تولید تاریخ جلسات هفتگی یک کلاس:
+ *  - مبدأ = classStartDate اگر داده شده، وگرنه startDate ترم
+ *  - اولین تکرارِ روزِ هفته روی/بعد از مبدأ
+ *  - گام ۷ روزه تا رسیدن به sessionsCount (یا تا پایان classEndDate)
  *  - هفته‌های زوج/فرد و تعطیلات رسمی حذف می‌شوند
  *  - سقف ایمنی ۴۰ هفته (جلوگیری از حلقهٔ بی‌پایان)
  */
@@ -825,7 +830,10 @@ export function computeSessionDates(
   if (dayOfWeek < 0 || dayOfWeek > 6) throw new Error('روز هفته باید ۰..۶ باشد (شنبه=۰).');
   if (sessionsCount < 1 || sessionsCount > 60) throw new Error('تعداد جلسات باید ۱..۶۰ باشد.');
   const holidays = new Set((px.holidays ?? []).map(h => h.trim()).filter(Boolean));
-  const start = new Date(termStart.getFullYear(), termStart.getMonth(), termStart.getDate());
+  // مبدأ جلسات: شروع کلاس‌ها، با fallback به شروع ترم
+  const base = px.classStartDate ?? termStart;
+  const start = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+  const endCap = px.classEndDate ? new Date(px.classEndDate.getFullYear(), px.classEndDate.getMonth(), px.classEndDate.getDate()) : null;
   const j0 = toJalaliFromDate(start);
   let jdn = j2d(j0.jy, j0.jm, j0.jd);
   const target = jalaliWeekdayToJdnMod(dayOfWeek);
@@ -842,6 +850,12 @@ export function computeSessionDates(
         : (isEven ? rec === 'ODD' : rec === 'EVEN');
     const j = d2j(jdn);
     const ds = `${j.jy}/${pad2(j.jm)}/${pad2(j.jd)}`;
+    // توقف اگر از پایان کلاس‌ها گذشته باشیم
+    if (endCap) {
+      const gg = toGregorian(j.jy, j.jm, j.jd);
+      const cur = new Date(gg.gy, gg.gm - 1, gg.gd);
+      if (cur > endCap) break;
+    }
     if (weekOk && !holidays.has(ds)) {
       out.push({ sessionNo: out.length + 1, jalaliDate: ds, jm: j.jm, jd: j.jd });
     }

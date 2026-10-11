@@ -151,7 +151,10 @@ export async function generateClassSessionsForTerm(
 
     const [term] = await tx.select().from(academic_terms).where(eq(academic_terms.id, termId)).limit(1);
     if (!term) throw new Error('نیمسال تحصیلی یافت نشد.');
-    if (!term.startDate) {
+    // مبدأ/پایان جلسات = بازهٔ آموزشی (classStart/classEnd) با fallback به شروع/پایان ترم
+    const classStart = term.classStartDate ?? term.startDate;
+    const classEnd = term.classEndDate ?? null;
+    if (!classStart) {
       throw new Error('تاریخ شروع نیمسال (startDate) ثبت نشده است؛ ابتدا تقویم ترم را تعریف کنید.');
     }
 
@@ -226,7 +229,9 @@ export async function generateClassSessionsForTerm(
       let dates;
       try {
         dates = computeSessionDates({
-          termStart: term.startDate,
+          termStart: classStart,
+          classStartDate: classStart,
+          classEndDate: classEnd ?? undefined,
           dayOfWeek: s.dayOfWeek,
           sessionsCount,
           holidays,
@@ -265,7 +270,7 @@ export async function generateClassSessionsForTerm(
       }
     }
 
-    const termStartStr = term.startDate.toISOString().slice(0, 10);
+    const termStartStr = classStart.toISOString().slice(0, 10);
     await auditChain(tx, actorUserId, 'SCHEDULING_SESSIONS_GENERATED', 'academic_term', termId, {
       generated: values.length,
       skipped,
@@ -304,7 +309,10 @@ export async function generateClassSessionsForOffering(
 
     const [term] = await tx.select().from(academic_terms).where(eq(academic_terms.id, termId)).limit(1);
     if (!term) throw new Error('نیمسال تحصیلی یافت نشد.');
-    if (!term.startDate) {
+    // مبدأ/پایان جلسات = بازهٔ آموزشی (classStart/classEnd) با fallback به شروع/پایان ترم
+    const classStart = term.classStartDate ?? term.startDate;
+    const classEnd = term.classEndDate ?? null;
+    if (!classStart) {
       throw new Error('تاریخ شروع نیمسال (startDate) ثبت نشده است؛ ابتدا تقویم ترم را تعریف کنید.');
     }
 
@@ -369,7 +377,9 @@ export async function generateClassSessionsForOffering(
       let dates;
       try {
         dates = computeSessionDates({
-          termStart: term.startDate,
+          termStart: classStart,
+          classStartDate: classStart,
+          classEndDate: classEnd ?? undefined,
           dayOfWeek: s.dayOfWeek,
           sessionsCount,
           holidays,
@@ -407,7 +417,7 @@ export async function generateClassSessionsForOffering(
       }
     }
 
-    const termStartStr = term.startDate.toISOString().slice(0, 10);
+    const termStartStr = classStart.toISOString().slice(0, 10);
     await auditChain(tx, actorUserId, 'SCHEDULING_SESSIONS_GENERATED', 'academic_term', termId, {
       generated: values.length,
       skipped,

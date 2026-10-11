@@ -477,6 +477,13 @@
       "when": 1793030400000,
       "tag": "0063_user_notification_prefs_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1793116800000,
+      "tag": "0064_class_start_end_dates",
+      "breakpoints": true
     }
   ]
 }

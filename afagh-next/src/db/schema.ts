@@ -652,6 +652,12 @@ export const academic_terms = pgTable('academic_terms', {
   addDropEndDate: timestamp('addDropEndDate'),     // پایان حذف و اضافه
   startDate: timestamp('startDate'),
   endDate: timestamp('endDate'),
+  // ── بازهٔ آموزشی (شروع/پایان کلاس‌ها) — جدا از شروع/پایان ترم ──
+  // ثبت‌نام و شروع ترم ممکن است از تاریخی زودتر آغاز شود؛ کلاس‌ها از
+  // classStartDate شروع و تا classEndDate ادامه می‌یابند. تولید جلسات
+  // (class_sessions) بر پایهٔ همین بازه است (با fallback به startDate/endDate).
+  classStartDate: timestamp('classStartDate'),
+  classEndDate: timestamp('classEndDate'),
   gradeEntryDeadline: timestamp('gradeEntryDeadline'),
   // ── زمان‌بندی نیمسال از فایل سما (zamanbandi) ──
   singleDropStartDate: timestamp('singleDropStartDate'), // حذف تک‌درس از
