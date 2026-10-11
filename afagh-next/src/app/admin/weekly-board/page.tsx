@@ -50,7 +50,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
 
   const facs = await db.select({ id: faculties.id, name: faculties.name }).from(faculties).orderBy(asc(faculties.name));
   const depts = await db.select({ id: departments.id, name: departments.name, facultyId: departments.facultyId }).from(departments).orderBy(asc(departments.name));
-  const rooms = await db.select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, capacity: classrooms.capacity })
+  const rooms = await db.select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, capacity: classrooms.capacity, facultyId: classrooms.facultyId })
     .from(classrooms)
     .where(uni ? eq(classrooms.universityId, uni.id) : undefined)
     .orderBy(asc(classrooms.name));
@@ -138,6 +138,19 @@ export default async function WeeklyBoardPage({ searchParams }: {
 
   const poster = posterMode && selRoom ? selRoom : null;
 
+  // ── سربرگ چاپ: دانشکده • نیمسال • کلاس ──
+  const facName = (id: number | null | undefined) => facs.find(f => f.id === id)?.name ?? '';
+  const headerFaculty = facultyId
+    ? facName(facultyId)
+    : poster?.facultyId
+      ? facName(poster.facultyId)
+      : (() => {
+          const deptFac = new Map(depts.map(d => [d.id, d.facultyId] as const));
+          const names = [...new Set(mergedCells.map(m => facName(deptFac.get(m.deptId ?? -1))).filter(Boolean))];
+          return names.length <= 2 ? names.join('، ') : `${names.slice(0, 2).join('، ')} و …`;
+        })();
+  const headerDept = deptId ? depts.find(d => d.id === deptId)?.name ?? '' : '';
+
   return (
     <div className="space-y-4" dir="rtl">
       <form method="get" className="card flex flex-wrap items-end gap-3 print:hidden">
@@ -170,18 +183,26 @@ export default async function WeeklyBoardPage({ searchParams }: {
 
       {term && (
         <div className="print-area rounded-2xl border border-slate-300 bg-white p-4 space-y-3 overflow-x-auto" dir="rtl">
+          {poster && <style>{`@page { size: A4 landscape; margin: 8mm 8mm; }`}</style>}
           {poster ? (
             <div className="text-center border-b-4 border-double border-slate-800 pb-3">
-              <h1 className="text-2xl font-black text-slate-900">🚪 برنامهٔ هفتگی {poster.name}</h1>
-              <p className="text-sm font-bold text-slate-700 mt-1">
-                {poster.buildingName ? `${poster.buildingName} · ` : ''}ظرفیت {faDigits(poster.capacity)} نفر · {term.title}
+              <h1 className="text-2xl font-black text-slate-900">🚪 برنامهٔ هفتگی کلاس {poster.name}</h1>
+              <p className="text-base font-black text-slate-800 mt-2">
+                {headerFaculty ? `دانشکدهٔ ${headerFaculty} · ` : ''}نیمسال {term.title}{poster.buildingName ? ` · ${poster.buildingName}` : ''}
               </p>
-              <p className="text-[11px] text-slate-500">دانشگاه {uni?.title ?? ''}</p>
+              <p className="text-sm font-bold text-slate-600 mt-1">
+                کلاس {poster.name} · ظرفیت {faDigits(poster.capacity)} نفر · دانشگاه {uni?.title ?? ''}
+              </p>
             </div>
           ) : (
             <div className="text-center">
-              <h1 className="text-base font-black text-slate-900">برنامهٔ هفتگی کلاس‌ها — {term.title}</h1>
-              <p className="text-[11px] text-slate-500">دانشگاه {uni?.title ?? ''} · {mergedCells.length} سانس<span className="print:hidden"> (دامنهٔ انتخابی)</span></p>
+              <h1 className="text-base font-black text-slate-900">برنامهٔ هفتگی کلاس‌ها — نیمسال {term.title}</h1>
+              <p className="text-[11px] text-slate-500">
+                دانشگاه {uni?.title ?? ''}
+                {headerFaculty ? ` · دانشکدهٔ ${headerFaculty}` : ''}
+                {headerDept ? ` · گروه ${headerDept}` : ''} · {mergedCells.length} سانس
+                <span className="print:hidden"> (دامنهٔ انتخابی)</span>
+              </p>
             </div>
           )}
           <table className={`w-full border-collapse ${poster ? 'text-sm' : 'text-[11px]'}`}>
