@@ -827,61 +827,71 @@ export default function ProfessorAttendanceClient({
         )}
       </div>
 
-      {/* ── نمای «همهٔ جلسات»: فهرست تخت کلیک‌پذیر ── */}
+      {/* ── نمای «همهٔ جلسات»: به تفکیک هر درس (گروه‌بندی شده) ── */}
       {viewMode === 'all' && allSessionsFlat.length > 0 && (
         <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
           <div className="p-3 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
-            <h3 className="text-sm font-black text-slate-900">📅 همهٔ جلسات کلاس‌های شما به ترتیب تاریخ</h3>
+            <h3 className="text-sm font-black text-slate-900">📅 همهٔ جلسات کلاس‌های شما — به تفکیک درس</h3>
             <span className="text-[11px] text-slate-500 font-bold">برای ورود به هر جلسه، روی ردیف کلیک کنید</span>
           </div>
-          <div className="max-h-[26rem] overflow-y-auto">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-slate-100 text-slate-600">
-                <tr>
-                  <th className="p-2 text-right font-black">تاریخ</th>
-                  <th className="p-2 text-right font-black">درس</th>
-                  <th className="p-2 text-center font-black">جلسه</th>
-                  <th className="p-2 text-center font-black">ساعت</th>
-                  <th className="p-2 text-right font-black">سالن</th>
-                  <th className="p-2 text-center font-black">وضعیت</th>
-                  <th className="p-2 text-center font-black">ورود</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allSessionsFlat.map((r, i) => (
-                  <tr
-                    key={`${r.offeringId}-${r.sessionNo}-${r.sessionDate}`}
-                    onClick={() => openAllSession(r.offeringId, r.sessionNo)}
-                    className={`cursor-pointer border-t border-slate-100 hover:bg-indigo-50 transition ${
-                      i % 2 ? 'bg-slate-50/40' : 'bg-white'
-                    } ${r.isMakeUp ? 'bg-amber-50/60' : ''}`}
-                  >
-                    <td className="p-2 font-bold whitespace-nowrap text-indigo-900" dir="ltr">{faNum(r.sessionDate)}</td>
-                    <td className="p-2">
-                      <span className="font-bold text-slate-800">{r.title}</span>
-                      <span className="text-[10px] text-slate-400 font-mono"> ({r.code} — گروه {faNum(r.groupNumber)})</span>
-                    </td>
-                    <td className="p-2 text-center font-black">{faNum(r.sessionNo)}{r.isMakeUp ? ' 🔷' : ''}</td>
-                    <td className="p-2 text-center whitespace-nowrap" dir="ltr">{faNum(r.startTime)}–{faNum(r.endTime)}</td>
-                    <td className="p-2 text-slate-600">{r.roomName || '—'}</td>
-                    <td className="p-2 text-center">
-                      {r.isMakeUp ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900">جبرانی</span>
-                      ) : r.isHeld ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-200 text-emerald-900">برگزار شده</span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-200 text-slate-600">//</span>
-                      )}
-                    </td>
-                    <td className="p-2 text-center">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-700 text-white text-[10px] font-black hover:bg-indigo-800">
-                        ورود ←
+          <div className="max-h-[30rem] overflow-y-auto divide-y divide-slate-200">
+            {offerings
+              .filter(o => o.sessions.some(s => s.sessionDate))
+              .map(o => {
+                const rows = allSessionsFlat.filter(r => r.offeringId === o.id);
+                if (!rows.length) return null;
+                return (
+                  <section key={o.id} className="p-2">
+                    <header className="flex flex-wrap items-center gap-2 px-2 py-1.5 rounded-t-xl bg-indigo-50 border border-indigo-100">
+                      <span className="font-black text-slate-900 text-xs">{o.title}</span>
+                      <span className="text-[10px] font-mono text-slate-500">({o.code})</span>
+                      <span className="text-[10px] rounded-full px-2 py-0.5 font-black bg-white text-slate-600 border border-slate-200">گروه {faNum(o.groupNumber)}</span>
+                      <span className="text-[10px] rounded-full px-2 py-0.5 font-black bg-white text-indigo-700 border border-indigo-200">
+                        {faNum(rows.length)} جلسه
                       </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      <span className="text-[10px] text-slate-500 font-bold">{o.scheduleTime || ''}</span>
+                    </header>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-white text-slate-500">
+                          <tr>
+                            <th className="p-1.5 text-right font-black w-24">تاریخ</th>
+                            <th className="p-1.5 text-center font-black w-14">جلسه</th>
+                            <th className="p-1.5 text-center font-black">ساعت</th>
+                            <th className="p-1.5 text-right font-black">سالن</th>
+                            <th className="p-1.5 text-center font-black w-20">وضعیت</th>
+                            <th className="p-1.5 text-center font-black w-16">ورود</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map(r => (
+                            <tr
+                              key={`${r.offeringId}-${r.sessionNo}-${r.sessionDate}`}
+                              onClick={() => openAllSession(r.offeringId, r.sessionNo)}
+                              className={`cursor-pointer border-t border-slate-100 hover:bg-indigo-50 transition ${r.isMakeUp ? 'bg-amber-50/60' : ''}`}
+                            >
+                              <td className="p-1.5 font-bold whitespace-nowrap text-indigo-900" dir="ltr">{faNum(r.sessionDate)}</td>
+                              <td className="p-1.5 text-center font-black">{faNum(r.sessionNo)}{r.isMakeUp ? ' 🔷' : ''}</td>
+                              <td className="p-1.5 text-center whitespace-nowrap" dir="ltr">{faNum(r.startTime)}–{faNum(r.endTime)}</td>
+                              <td className="p-1.5 text-slate-600">{r.roomName || '—'}</td>
+                              <td className="p-1.5 text-center">
+                                {r.isMakeUp
+                                  ? <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900">جبرانی</span>
+                                  : r.isHeld
+                                    ? <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-200 text-emerald-900">برگزار شده</span>
+                                    : <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-200 text-slate-600">//</span>}
+                              </td>
+                              <td className="p-1.5 text-center">
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-700 text-white text-[10px] font-black hover:bg-indigo-800">ورود ←</span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                );
+              })}
           </div>
         </div>
       )}
