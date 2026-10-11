@@ -80,7 +80,7 @@ try {
     'exam_attendances','exam_sessions','exam_halls','exam_calendar_configs',
     'invigilators','exam_invigilators','exam_remuneration_rates',
     // کارکنان/آموزشی و اعلان‌ها (staffId / userId):
-    'offering_professors','staff_roles',
+    'offering_professors','staff_roles','expert_scopes',
     'notification_channels','notification_deliveries','notification_logs',
     'user_roles',            // زیرپرسمانِ سیاست‌های نقش‌محورِ پایان‌نامه — خودش هم RLS دارد
     'legacy_code_maps',      // deny-all صریح (USING(false))

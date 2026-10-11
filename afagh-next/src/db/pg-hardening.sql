@@ -670,6 +670,18 @@ DROP POLICY IF EXISTS user_roles_self_read ON "user_roles";
 CREATE POLICY user_roles_self_read ON "user_roles" FOR SELECT TO afagh_app
   USING ("userId" = nullif(current_setting('app.user_id', true), '')::int);
 
+-- expert_scopes: کارشناس فقط ردیف‌های خودش را می‌خواند (expert-scope.ts)؛
+-- مدیر/کارشناس ارشد همه را (الگوی نقش‌محور). نوشتن ادمین از اتصال مالک (BYPASSRLS) می‌گذرد.
+ALTER TABLE "expert_scopes" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS expert_scopes_self_read ON "expert_scopes";
+CREATE POLICY expert_scopes_self_read ON "expert_scopes" FOR SELECT TO afagh_app
+  USING ("userId" = nullif(current_setting('app.user_id', true), '')::int);
+DROP POLICY IF EXISTS expert_scopes_admin_read ON "expert_scopes";
+CREATE POLICY expert_scopes_admin_read ON "expert_scopes" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'VICE_EDU')));
+
 ALTER TABLE "grade_change_log" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS grade_change_log_self_read ON "grade_change_log";
 CREATE POLICY grade_change_log_self_read ON "grade_change_log" FOR SELECT TO afagh_app
