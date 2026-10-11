@@ -30,6 +30,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const LIMITED_ROLES = ['PROFESSOR', 'GRADUATION_EXPERT'];
 
   const user = await requireRole([...AREA_ROLES, ...LIMITED_ROLES]);
+  // نقش‌های سفارشی (کارشناس ثبت‌نام/فارغ‌التحصیلی و…) که مجوز دارند ولی در لیست
+  // نقش‌های بالا نیستند، با داشتنِ هر مجوزِ واقعی اجازهٔ ورود به شاخهٔ /admin می‌گیرند
+  // تا به ماژول‌های مجاز خودشان برسند (گاردِ هر صفحه + منو، خودش مجوز را چک می‌کند).
+  if (!user.roles.some(r => AREA_ROLES.includes(r) || LIMITED_ROLES.includes(r))) {
+    const { requireRoleOrPermission } = await import('@/lib/permissions-enforcer');
+    await requireRoleOrPermission([], ['*']).catch(() => {});
+  }
   // بارگذاری مجوزهای کاربر (بدون نقش سیستمی هم کار می‌کند) برای منوی مبتنی بر RBAC
   const { getUserPermissionCodes } = await import('@/lib/permissions-enforcer');
   const permissionCodes = await getUserPermissionCodes(user.id).catch(() => []);
