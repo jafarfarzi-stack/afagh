@@ -7,7 +7,7 @@ import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 
 export async function listExpertCandidates(): Promise<{
-  ok: boolean; items?: { userId: number; name: string; scopes: { type: string; id: number | null; uni: number | null }[] }[]; error?: string;
+  ok: boolean; items?: { userId: number; name: string; canEditGrades: boolean; scopes: { type: string; id: number | null; uni: number | null }[] }[]; error?: string;
 }> {
   try { await requireRole(['ADMIN']); } catch { return { ok: false, error: 'فقط مدیر.' }; }
   const [edu] = await db.select({ id: roles.id }).from(roles).where(eq(roles.code, 'EDU_EXPERT')).limit(1).catch(() => []);
@@ -21,7 +21,15 @@ export async function listExpertCandidates(): Promise<{
   const sc = await db.select().from(expert_scopes).where(inArray(expert_scopes.userId, userIds));
   return {
     ok: true,
-    items: us.map(uu => ({ userId: uu.id, name: `${uu.firstName || ''} ${uu.lastName || ''}`.trim(), scopes: sc.filter(s => s.userId === uu.id).map(s => ({ type: s.scopeType, id: s.scopeId, uni: s.universityId })) })),
+    items: us.map(uu => {
+      const rows = sc.filter(s => s.userId === uu.id);
+      return {
+        userId: uu.id,
+        name: `${uu.firstName || ''} ${uu.lastName || ''}`.trim(),
+        canEditGrades: rows.some(r => (r.canEditGrades ?? 0) === 1),
+        scopes: rows.map(s => ({ type: s.scopeType, id: s.scopeId, uni: s.universityId })),
+      };
+    }),
   };
 }
 
@@ -50,8 +58,12 @@ export async function getScopeSelect(): Promise<ScopeSelect> {
   };
 }
 
-/** حذف/جایگزینی کامل دامنهٔ یک کارشناس */
-export async function saveExpertScopes(userId: number, scopes: { type: string; id: number | null; uni: number | null }[]): Promise<{ ok: boolean; error?: string }> {
+/** حذف/جایگزینی کامل دامنهٔ یک کارشناس + پرچم «ویرایش نمره» */
+export async function saveExpertScopes(
+  userId: number,
+  scopes: { type: string; id: number | null; uni: number | null }[],
+  canEditGrades: boolean,
+): Promise<{ ok: boolean; error?: string }> {
   try { await requireRole(['ADMIN']); } catch { return { ok: false, error: 'فقط مدیر.' }; }
   if (!Number.isInteger(userId)) return { ok: false, error: 'کاربر نامعتبر.' };
   await db.delete(expert_scopes).where(eq(expert_scopes.userId, userId));
@@ -59,8 +71,14 @@ export async function saveExpertScopes(userId: number, scopes: { type: string; i
     .map(s => ({
       userId, scopeType: s.type, scopeId: s.type === 'UNIVERSITY' ? null : s.id,
       universityId: s.type === 'UNIVERSITY' ? s.id : (s.uni ?? null),
+      canEditGrades: canEditGrades ? 1 : 0,
     }));
-  if (vals.length) await db.insert(expert_scopes).values(vals).onConflictDoNothing();
+  // اگر فقط پرچم نمره باشد ولی محدودیتی نباشد → یک ردیف CONFIG برای نگهداری پرچم
+  if (!vals.length && canEditGrades) {
+    await db.insert(expert_scopes).values({ userId, scopeType: 'CONFIG', scopeId: null, universityId: null, canEditGrades: 1 }).onConflictDoNothing();
+  } else if (vals.length) {
+    await db.insert(expert_scopes).values(vals).onConflictDoNothing();
+  }
   return { ok: true };
 }
 

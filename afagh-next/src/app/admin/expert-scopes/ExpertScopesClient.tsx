@@ -4,11 +4,12 @@ import { useState } from 'react';
 import { saveExpertScopes, type ScopeSelect } from './actions';
 
 export default function ExpertScopesClient({ select, initialCandidates }: {
-  select: ScopeSelect; initialCandidates: { userId: number; name: string; scopes: { type: string; id: number | null; uni: number | null }[] }[];
+  select: ScopeSelect; initialCandidates: { userId: number; name: string; canEditGrades: boolean; scopes: { type: string; id: number | null; uni: number | null }[] }[];
 }) {
   const [cands, setCands] = useState(initialCandidates);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [scopes, setScopes] = useState<{ type: string; id: number | null; uni: number | null }[]>([]);
+  const [gradeFlag, setGradeFlag] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -16,6 +17,7 @@ export default function ExpertScopesClient({ select, initialCandidates }: {
     const c = cands.find(x => x.userId === userId);
     setEditingId(userId);
     setScopes(c ? c.scopes.map(s => ({ ...s })) : []);
+    setGradeFlag(c?.canEditGrades ?? false);
     setMsg(null);
   };
   const addScope = (type: string, id: number | null, uni: number | null) => {
@@ -27,7 +29,7 @@ export default function ExpertScopesClient({ select, initialCandidates }: {
   const save = async () => {
     if (editingId == null) return;
     setBusy(true); setMsg(null);
-    const r = await saveExpertScopes(editingId, scopes).catch(() => ({ ok: false as const, error: 'خطا' }));
+    const r = await saveExpertScopes(editingId, scopes, gradeFlag).catch(() => ({ ok: false as const, error: 'خطا' }));
     setMsg(r.ok ? '✅ ذخیره شد.' : `⛔ ${r.error ?? ''}`);
     setBusy(false);
   };
@@ -97,6 +99,13 @@ export default function ExpertScopesClient({ select, initialCandidates }: {
               </span>
             ))}
             {!scopes.length && <span className="text-[11px] text-slate-400 font-bold">(بدون محدودیت → کل دانشگاه)</span>}
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
+              <input type="checkbox" checked={gradeFlag} onChange={e => setGradeFlag(e.target.checked)} className="w-4 h-4" />
+              دسترسی «ویرایش نمره» برای این کارشناس (فقط کارشناسِ خاص)
+            </label>
           </div>
 
           <div className="flex items-center gap-2">

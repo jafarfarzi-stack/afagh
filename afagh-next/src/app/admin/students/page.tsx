@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { degree_level_configs, departments, educational_regulations, faculties, legacy_code_maps, majors, roles, staff, students, universities, user_roles, users } from '@/db/schema';
 import type { RegulationPick } from './types';
 import { requireRole } from '@/lib/auth';
+import { currentExpertFilters, scopedMajorIds } from '@/lib/expert-scope';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { normalizeFa, normCol, toEnDigits } from '@/lib/persian-search';
 import { getSetting } from '@/lib/settings';
@@ -44,6 +45,12 @@ export default async function AdminStudentsPage({
   // ── فیلترهای مشترک ──
   const conds = [];
   if (currentUniversityId) conds.push(eq(students.universityId, currentUniversityId));
+  // دامنهٔ کارشناس آموزش: فقط دانشجویانِ رشته‌های مجازش
+  if (user.roles.includes('EDU_EXPERT')) {
+    const _eff = await currentExpertFilters().catch(() => null);
+    const _maj = await scopedMajorIds(_eff, currentUniversityId).catch(() => null);
+    if (_maj) conds.push(inArray(students.majorId, _maj));
+  }
   if (statusFilter !== 'ALL') conds.push(eq(students.status, statusFilter));
   if (degreeFilter > 0) conds.push(eq(students.degreeLevelId, degreeFilter));
   if (q) {
@@ -285,10 +292,24 @@ export default async function AdminStudentsPage({
     .innerJoin(users, eq(users.id, staff.userId))
     .leftJoin(departments, eq(departments.id, staff.departmentId))
     .leftJoin(faculties, eq(faculties.id, staff.facultyId))
-    .where(currentUniversityId ? eq(staff.universityId, currentUniversityId) : undefined)
+    .where(and(
+      currentUniversityId ? eq(staff.universityId, currentUniversityId) : undefined,
+      ...await staffScopeConds(user.roles),
+    ))
     .orderBy(desc(staff.id));
 
-  const [head] = await db.select().from(roles).where(eq(roles.code, 'DEP_HEAD')).limit(1);
+  function staffScopeConds(roles: string[]): Promise<any[]> {
+  return (async () => {
+    if (!roles.includes('EDU_EXPERT')) return [];
+    const _eff = await currentExpertFilters().catch(() => null);
+    if (!_eff) return [];
+    if (_eff.departmentIds) return [inArray(staff.departmentId, _eff.departmentIds)];
+    if (_eff.facultyIds) return [inArray(staff.facultyId, _eff.facultyIds)];
+    return [];
+  })();
+}
+
+const [head] = await db.select().from(roles).where(eq(roles.code, 'DEP_HEAD')).limit(1);
   const roleRows = await db.select({ id: roles.id, code: roles.code, title: roles.title, isSystem: roles.isSystem }).from(roles).orderBy(roles.id);
   const staffUserIds = staffRows.map(r => r.userId).filter(Number.isInteger);
   const urRows = staffUserIds.length ? await db.select().from(user_roles).where(inArray(user_roles.userId, staffUserIds)) : [];

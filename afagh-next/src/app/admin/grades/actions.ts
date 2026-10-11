@@ -45,6 +45,13 @@ export async function adminSetGradeAction(
 ): Promise<AdminGradeState> {
   try {
     const user = await requireRole(['ADMIN', 'GRADUATEAFFAIRS']);
+    // کارشناس آموزش: فقط اگر برای او «ویرایش نمره» فعال شده باشد (expert_scopes.canEditGrades)
+    if (!user.roles.includes('ADMIN') && !user.roles.includes('GRADUATEAFFAIRS')) {
+      const { expertCanEditGrades } = await import('@/lib/expert-scope');
+      if (!(await expertCanEditGrades(user.id))) {
+        return { ok: false, error: 'شما مجوز ویرایش نمره ندارید (فقط کارشناسانی که «ویرایش نمره» برایشان فعال شده).' };
+      }
+    }
 
     // اعتبارسنجی
     if (payload.gradeValue !== null &&
@@ -56,11 +63,17 @@ export async function adminSetGradeAction(
     }
     const uni = await getCurrentUniversity().catch(() => null);
     if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
-    const [stuRow] = await db.select({ universityId: students.universityId })
+    const [stuRow] = await db.select({ universityId: students.universityId, status: students.status })
       .from(students).where(eq(students.id, payload.studentId)).limit(1);
     if (!stuRow) return { ok: false, error: 'دانشجو یافت نشد.' };
     if (stuRow.universityId !== null && stuRow.universityId !== uni.id) {
       return { ok: false, error: 'دانشجو متعلق به دانشگاه دیگری است.' };
+    }
+    // ⚠️ اخطار فارغ‌التحصیل/غیرفعال: تغییر نمره فقط با «شرط خاص» — دلیل کامل (≥۱۰ نویسه) و تأیید صریح
+    if (stuRow.status && !['ACTIVE', 'PROBATION'].includes(stuRow.status)) {
+      if (payload.reason.trim().length < 10) {
+        return { ok: false, error: `دانشجو ${stuRow.status === 'GRADUATED' ? 'فارغ‌التحصیل' : 'غیرفعال'} است — تغییر نمره نیازمند دلیل کامل‌تر (≥۱۰ نویسه) و تأیید خاص است.` };
+      }
     }
     const legacySource = (await import('@/app/admin/students/transcript-utils')).legacySourceCodeFor(uni.code);
     const refScope = (c: any) => or(eq(c, uni.id), isNull(c));

@@ -3209,6 +3209,8 @@ export const expert_scopes = pgTable('expert_scopes', {
   scopeType: varchar('scopeType', { length: 20 }).notNull(),
   scopeId: integer('scopeId'),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  /** پرچم «ویرایش نمره» برای این کارشناس (دایره‌العمل‌ها یکسان نگه داشته می‌شوند) */
+  canEditGrades: integer('canEditGrades').notNull().default(0),
   createdAt: timestamp('createdAt').defaultNow(),
 }, (t) => ({
   uq: unique('uq_expert_scopes').on(t.userId, t.scopeType, t.scopeId, t.universityId),

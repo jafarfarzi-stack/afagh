@@ -71,4 +71,11 @@ export async function staffInScope(f: ExpertScopeFilters | null, staffId: number
   return true;
 }
 
+/** آیا کارشناس اجازهٔ ویرایش نمره دارد (expert_scopes.canEditGrades)؟ */
+export async function expertCanEditGrades(userId: number): Promise<boolean> {
+  const [r] = await db.select({ flag: expert_scopes.canEditGrades })
+    .from(expert_scopes).where(eq(expert_scopes.userId, userId)).limit(1);
+  return (r?.flag ?? 0) === 1;
+}
+
 void users;
