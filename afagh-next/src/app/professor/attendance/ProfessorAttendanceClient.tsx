@@ -230,6 +230,38 @@ export default function ProfessorAttendanceClient({
         ?? initialOfferings[0]?.sessions[0]?.sessionNo
         ?? 0
   );
+  // ── نمای «همهٔ جلسات»: یک فهرست تخت از جلساتِ همهٔ درس‌ها، با کلیک وارد جلسه می‌شود ──
+  const [viewMode, setViewMode] = useState<'course' | 'all'>('course');
+
+  // لیست تخت همهٔ جلسات (درس + جلسه) مرتب‌شده بر اساس تاریخ شمسی
+  const allSessionsFlat = useMemo(() => {
+    const items: { offeringId: number; title: string; code: string; groupNumber: number; sessionNo: number; sessionDate: string; startTime: string; endTime: string; isHeld: boolean; isMakeUp: boolean; roomName: string; scheduleTime: string }[] = [];
+    for (const o of offerings) {
+      for (const s of o.sessions) {
+        if (!s.sessionDate) continue;
+        items.push({
+          offeringId: o.id, title: o.title, code: o.code, groupNumber: o.groupNumber,
+          sessionNo: s.sessionNo, sessionDate: s.sessionDate,
+          startTime: s.startTime, endTime: s.endTime,
+          isHeld: s.isHeld ?? false, isMakeUp: s.isMakeUp ?? false,
+          roomName: s.roomName || o.roomName, scheduleTime: o.scheduleTime,
+        });
+      }
+    }
+    // مرتب‌سازی عددی بر اساس YYYY/MM/DD شمسی
+    const num = (d: string) => { const p = d.split('/').map(Number); return (p[0] ?? 0) * 10000 + (p[1] ?? 0) * 100 + (p[2] ?? 0); };
+    items.sort((a, b) => num(a.sessionDate) - num(b.sessionDate) || a.offeringId - b.offeringId || a.sessionNo - b.sessionNo);
+    return items;
+  }, [offerings]);
+
+  const openAllSession = (offeringId: number, sessionNo: number) => {
+    setSelectedOfferingId(offeringId);
+    setSelectedSessionNo(sessionNo);
+    setViewMode('course');
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { /* ignore */ }
+  };
+
+  const allSessionsCount = allSessionsFlat.length;
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastKind, setToastKind] = useState<'success' | 'error'>('success');
   const [rosterQuery, setRosterQuery] = useState('');
@@ -768,6 +800,91 @@ export default function ProfessorAttendanceClient({
   return (
     <div className="space-y-5" dir="rtl">
       
+      {/* ── نوار حالت نمایش: «جلسات یک درس» / «همهٔ جلسات» ── */}
+      <div className="print:hidden flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => setViewMode('course')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition ${
+            viewMode === 'course' && allSessionsFlat.length > 0
+              ? 'bg-indigo-700 text-white shadow'
+              : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
+          }`}
+        >
+          🗂️ جلسات این درس
+        </button>
+        <button
+          onClick={() => setViewMode('all')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition ${
+            viewMode === 'all'
+              ? 'bg-indigo-700 text-white shadow'
+              : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
+          }`}
+        >
+          📅 همهٔ جلسات {allSessionsFlat.length > 0 && `(${faNum(allSessionsFlat.length)})`}
+        </button>
+        {viewMode === 'all' && allSessionsFlat.length === 0 && (
+          <span className="text-xs text-slate-500 font-bold">هنوز جلسه‌ای تولید نشده است.</span>
+        )}
+      </div>
+
+      {/* ── نمای «همهٔ جلسات»: فهرست تخت کلیک‌پذیر ── */}
+      {viewMode === 'all' && allSessionsFlat.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+          <div className="p-3 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
+            <h3 className="text-sm font-black text-slate-900">📅 همهٔ جلسات کلاس‌های شما به ترتیب تاریخ</h3>
+            <span className="text-[11px] text-slate-500 font-bold">برای ورود به هر جلسه، روی ردیف کلیک کنید</span>
+          </div>
+          <div className="max-h-[26rem] overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-slate-100 text-slate-600">
+                <tr>
+                  <th className="p-2 text-right font-black">تاریخ</th>
+                  <th className="p-2 text-right font-black">درس</th>
+                  <th className="p-2 text-center font-black">جلسه</th>
+                  <th className="p-2 text-center font-black">ساعت</th>
+                  <th className="p-2 text-right font-black">سالن</th>
+                  <th className="p-2 text-center font-black">وضعیت</th>
+                  <th className="p-2 text-center font-black">ورود</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allSessionsFlat.map((r, i) => (
+                  <tr
+                    key={`${r.offeringId}-${r.sessionNo}-${r.sessionDate}`}
+                    onClick={() => openAllSession(r.offeringId, r.sessionNo)}
+                    className={`cursor-pointer border-t border-slate-100 hover:bg-indigo-50 transition ${
+                      i % 2 ? 'bg-slate-50/40' : 'bg-white'
+                    } ${r.isMakeUp ? 'bg-amber-50/60' : ''}`}
+                  >
+                    <td className="p-2 font-bold whitespace-nowrap text-indigo-900" dir="ltr">{faNum(r.sessionDate)}</td>
+                    <td className="p-2">
+                      <span className="font-bold text-slate-800">{r.title}</span>
+                      <span className="text-[10px] text-slate-400 font-mono"> ({r.code} — گروه {faNum(r.groupNumber)})</span>
+                    </td>
+                    <td className="p-2 text-center font-black">{faNum(r.sessionNo)}{r.isMakeUp ? ' 🔷' : ''}</td>
+                    <td className="p-2 text-center whitespace-nowrap" dir="ltr">{faNum(r.startTime)}–{faNum(r.endTime)}</td>
+                    <td className="p-2 text-slate-600">{r.roomName || '—'}</td>
+                    <td className="p-2 text-center">
+                      {r.isMakeUp ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900">جبرانی</span>
+                      ) : r.isHeld ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-200 text-emerald-900">برگزار شده</span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-200 text-slate-600">//</span>
+                      )}
+                    </td>
+                    <td className="p-2 text-center">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-700 text-white text-[10px] font-black hover:bg-indigo-800">
+                        ورود ←
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
       {/* Toast */}
       {toastMessage && (
         <div role="status" className={toastKind === 'error'
