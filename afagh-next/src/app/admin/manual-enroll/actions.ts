@@ -3,13 +3,14 @@
 import { and, asc, desc, eq, ilike, inArray, sql } from 'drizzle-orm';
 import { db, withUserRls } from '@/db';
 import {
-  academic_terms, course_offerings, courses, enrollments, majors, offering_professors,
-  staff, students, users,
+  academic_terms, course_offerings, courses, enrollments, financial_clearances, majors,
+  offering_professors, schedules, staff, students, users,
 } from '@/db/schema';
 import { getSessionUser, requireRole } from '@/lib/auth';
 import { getBool } from '@/lib/settings';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { buildPrereqContext, formatPrereq } from '@/lib/enroll-engine/prereqs';
+import { currentExpertFilters, scopedMajorIds } from '@/lib/expert-scope';
 
 const EDU = ['ADMIN', 'EDU_EXPERT'];
 
@@ -27,6 +28,10 @@ export async function searchStudentsForManualEnroll(q: string): Promise<{
   if (!needle) return { ok: true, items: [] };
   const conds = [eq(students.status, 'ACTIVE')];
   if (u) conds.push(eq(students.universityId, u));
+  // دامنهٔ کارشناس: رشته‌های مجازش را اعمال کن
+  const eff = await currentExpertFilters();
+  const majScope = await scopedMajorIds(eff, u);
+  if (majScope) conds.push(inArray(students.majorId, majScope));
   const rows = await db
     .select({
       userId: students.userId, studentId: students.id, studentCode: students.studentCode,
@@ -89,6 +94,10 @@ export async function manualEnrollAction(input: ManualEnrollInput): Promise<{ ok
   const [stu] = await db.select().from(students).where(and(eq(students.id, sid), eq(students.status, 'ACTIVE'))).limit(1);
   if (!stu) return { ok: false, error: 'دانشجوی فعال یافت نشد.' };
   if (u && stu.universityId && stu.universityId !== u) return { ok: false, error: 'این دانشجو از دانشگاه دیگری است.' };
+  // دامنهٔ کارشناس: اگر رشتهٔ دانشجو در محدوده‌اش نیست، رد کن
+  const _eff = await currentExpertFilters();
+  const _maj = await scopedMajorIds(_eff, u);
+  if (_maj && !_maj.includes(stu.majorId ?? -1)) return { ok: false, error: 'این دانشجو در محدودهٔ دسترسی شما نیست.' };
   const [off] = await db.select().from(course_offerings)
     .where(and(eq(course_offerings.id, oid), eq(course_offerings.isActive, 1))).limit(1);
   if (!off) return { ok: false, error: 'کلاس یافت نشد یا غیرفعال است.' };
@@ -98,9 +107,22 @@ export async function manualEnrollAction(input: ManualEnrollInput): Promise<{ ok
   if (!override && off.enrolledCount != null && off.capacity > 0 && off.enrolledCount >= off.capacity) {
     return { ok: false, error: 'ظرفیت کلاس پر است — برای تخطی، نادیده‌گرفتن (با دلیل) لازم است.' };
   }
+  // تداخل هفتگی/امتحانی → گیت «حکم شورا»
+  const conflicts = (await buildConflictIndex(sid, off.termId)).get(oid);
+  const gateErr = councilGate(conflicts, override);
+  if (gateErr) return { ok: false, error: gateErr };
+  // اخطارهای آیین‌نامه (مشروطی/سنوات/مالی/…) — سطح block نیازمند مجوز
+  const warnings = (await getStudentWarnings(sid, off.termId)).items ?? [];
+  const blocks = warnings.filter(w => w.level === 'block');
+  if (blocks.length && !override) {
+    return { ok: false, error: `اخطار آیین‌نامه: ${blocks.map(b => b.title).join('، ')} — برای صدور مجوز، نادیده‌گرفتن+دلیل را فعال کن.` };
+  }
+  const overriddenCodes = override ? JSON.stringify([...new Set([...warnings.map(w => w.code), ...(conflicts ? ['conflict'] : [])])]) : null;
+
   const ins = await withUserRls(me.id, tx => tx.insert(enrollments).values({
     studentId: sid, offeringId: oid, status: 'REGISTERED', universityId: stu.universityId ?? null,
     enrolledByUserId: me.id, enrollOverride: override ? 1 : 0, enrollOverrideReason: override ? reason : null,
+    councilRuling: conflicts?.length ? 1 : 0, overriddenRules: overriddenCodes,
   }).returning({ id: enrollments.id }));
   await db.update(course_offerings).set({ enrolledCount: sql`${course_offerings.enrolledCount} + 1` }).where(eq(course_offerings.id, oid));
   return { ok: true, enrollmentId: ins[0]?.id };
@@ -117,6 +139,10 @@ export interface BulkFilter {
 
 async function bulkStudentIds(f: BulkFilter): Promise<number[]> {
   const conds = [eq(students.status, 'ACTIVE')];
+  // دامنهٔ کارشناس
+  const eff = await currentExpertFilters();
+  const majScope = await scopedMajorIds(eff, null);
+  if (majScope) conds.push(inArray(students.majorId, majScope));
   if (f.entryYear) conds.push(eq(students.entryYear, f.entryYear));
   if (f.majorId) conds.push(eq(students.majorId, f.majorId));
   if (f.departmentId || f.facultyId) {
@@ -165,6 +191,7 @@ export async function bulkEnrollAction(
       const ins = await withUserRls(me.id, tx => tx.insert(enrollments).values({
         studentId: sid, offeringId: oid, status: 'REGISTERED', universityId: off.universityId ?? null,
         enrolledByUserId: me.id, enrollOverride: override ? 1 : 0, enrollOverrideReason: override ? String(reason || '').trim() : null,
+        councilRuling: override ? 1 : 0,
       }).onConflictDoNothing().returning({ id: enrollments.id }));
       if (ins.length) {
         inserted++;
@@ -238,6 +265,138 @@ export async function manualEnrollHistory(limit = 50): Promise<{
 
 void getSessionUser; void offering_professors; // (import refs نگه‌داری می‌شوند تا از حذف ناخواسته جلوگیری شود)
 
+// ─────────────── تشخیص تداخل (هفتگی/امتحانی) — ثبت بر اساس حکم شورا ───────────────
+function toMin(hhmm: string): number { const [h, m] = String(hhmm || '').split(':').map(Number); return (h || 0) * 60 + (m || 0); }
+function rangesOverlap(a: string, b: string, c: string, d: string): boolean { return toMin(a) < toMin(d) && toMin(c) < toMin(b); }
+
+interface SchedLike { dayOfWeek: number | null; startTime: string | null; endTime: string | null; examDate: string | null; }
+
+/**
+ * برای یک دانشجو در یک ترم: ایندکسِ تداخل هر ارائه با بقیهٔ ارائه‌های ثبت‌شده‌اش.
+ * تداخل هفتگی: همان روز + بازهٔ زمانی همپوشان کلاس.
+ * تداخل امتحانی: همان تاریخ امتحان + زمان همپوشان.
+ */
+async function buildConflictIndex(studentId: number, termId: number): Promise<Map<number, string[]>> {
+  const out = new Map<number, string[]>();
+  const enrolledRows = await db
+    .select({ offeringId: enrollments.offeringId, title: courses.title })
+    .from(enrollments)
+    .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+    .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+    .where(and(eq(enrollments.studentId, studentId), eq(course_offerings.termId, termId),
+      inArray(enrollments.status, ['REGISTERED', 'WAITLISTED', 'PENDING_COUNCIL'])));
+  const enrolledOffIds = enrolledRows.map(r => r.offeringId).filter((n): n is number => typeof n === 'number');
+  if (!enrolledOffIds.length) return out;
+
+  const schedRows = await db
+    .select({
+      offeringId: schedules.offeringId, dayOfWeek: schedules.dayOfWeek,
+      startTime: schedules.startTime, endTime: schedules.endTime, examDate: schedules.examDate,
+    })
+    .from(schedules)
+    .where(and(inArray(schedules.offeringId, enrolledOffIds), inArray(schedules.scheduleType, ['CLASS', 'EXAM'])));
+  const byOff = new Map<number, SchedLike[]>();
+  for (const s of schedRows) {
+    const arr = byOff.get(s.offeringId) ?? [];
+    arr.push({ dayOfWeek: s.dayOfWeek, startTime: (s.startTime as unknown as string) ?? null, endTime: (s.endTime as unknown as string) ?? null, examDate: s.examDate as unknown as string | null ?? null });
+    byOff.set(s.offeringId, arr);
+  }
+  const titleBy = new Map(enrolledRows.map(r => [r.offeringId, r.title]));
+  // ارائهٔ هدف یعنی هر ارائهای که در همین کوئری به‌عنوان «موازی» با یک ارائهٔ دیگر مقایسه میشود
+  const offIds = [...byOff.keys()];
+  for (let i = 0; i < offIds.length; i++) {
+    for (let j = i + 1; j < offIds.length; j++) {
+      const a = byOff.get(offIds[i])!, b = byOff.get(offIds[j])!;
+      const aTitle = titleBy.get(offIds[i]) ?? `درس ${offIds[i]}`;
+      const bTitle = titleBy.get(offIds[j]) ?? `درس ${offIds[j]}`;
+      // هفتگی
+      for (const sa of a) for (const sb of b) {
+        if (sa.dayOfWeek != null && sb.dayOfWeek != null && sa.dayOfWeek === sb.dayOfWeek && sa.startTime && sb.startTime && sa.endTime && sb.endTime) {
+          if (rangesOverlap(sa.startTime, sa.endTime, sb.startTime, sb.endTime)) {
+            push(out, offIds[i], `تداخل هفتگی با «${bTitle}» (روز ${sa.dayOfWeek})`);
+            push(out, offIds[j], `تداخل هفتگی با «${aTitle}» (روز ${sa.dayOfWeek})`);
+          }
+        }
+      }
+      // امتحانی
+      for (const ea of a) for (const eb of b) {
+        if (ea.examDate && eb.examDate && ea.examDate === eb.examDate && ea.startTime && eb.startTime) {
+          push(out, offIds[i], `تداخل امتحانی با «${bTitle}» (${ea.examDate})`);
+          push(out, offIds[j], `تداخل امتحانی با «${aTitle}» (${ea.examDate})`);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function push(m: Map<number, string[]>, k: number, v: string) {
+  const arr = m.get(k) ?? [];
+  arr.push(v);
+  m.set(k, arr);
+}
+
+// ─────────────── اخطارهای آیین‌نامه برای کارشناس (مشروطی/سنوات/مالی/…) ───────────────
+import { evaluateStudentRegulationStatus } from '@/lib/regulations-engine';
+
+export interface StudentWarning { code: string; level: 'block' | 'warn'; title: string; detail: string; }
+
+/** اخطارهای قابلتوجه برای انتخاب واحد یک دانشجو — همگام با موتور آیین‌نامه */
+export async function getStudentWarnings(studentId: number, termId: number): Promise<{
+  ok: boolean; items?: StudentWarning[]; error?: string;
+}> {
+  try { await requireRole(EDU); } catch { return { ok: false, error: 'دسترسی ندارید.' }; }
+  const sid = Number(studentId), tid = Number(termId);
+  const items: StudentWarning[] = [];
+  const [stu] = await db.select().from(students).where(eq(students.id, sid)).limit(1);
+  if (!stu) return { ok: false, error: 'دانشجو یافت نشد.' };
+
+  // ① وضعیت پرونده
+  if (stu.status) {
+    const mapTitle: Record<string, string> = { PROBATION: 'مشروط', BLOCKED_COMMISSION: 'مسدود (کمیسیون)', DROPPED: 'انصرافی', GRADUATED: 'فارغ‌التحصیل', NO_SHOW: 'NO_SHOW' };
+    if (stu.status === 'BLOCKED_COMMISSION') items.push({ code: 'status_blocked', level: 'block', title: 'مسدود', detail: 'پروندهٔ دانشجو برای کمیسیون مسدود است.' });
+    else if (stu.status === 'PROBATION') items.push({ code: 'status_probation', level: 'warn', title: 'مشروط', detail: 'دانشجو در وضعیت مشروط است.' });
+  }
+
+  // ② سنوات / مشروطیت (موتور آیین‌نامه)
+  try {
+    const summary = await evaluateStudentRegulationStatus(sid);
+    const cfg = summary.rulesConfig;
+    const maxProb = (cfg.probation_and_tenure?.max_total_probations ?? 3) + (stu.extraAllowedProbations ?? 0);
+    const maxSem = (cfg.probation_and_tenure?.max_study_semesters ?? 8) + (stu.extraAllowedSemesters ?? 0) - (summary.equivalenceSemesters ?? 0);
+    if (summary.totalProbations >= maxProb) {
+      items.push({ code: 'probation_limit', level: 'block', title: 'سقف مشروطیت', detail: `${summary.totalProbations} ترم مشروطی از سقف ${maxProb} ترم — ادامهٔ تحصیل نیازمند کمیسیون است.` });
+    }
+    if (summary.completedSemesters >= maxSem) {
+      items.push({ code: 'tenure_limit', level: 'block', title: 'پایان سنوات', detail: `${summary.completedSemesters} ترم از سقف ${maxSem} ترم — نیازمند سنوات ارفاقی.` });
+    }
+  } catch { /* موتور در دسترس نیست */ }
+
+  // ③ مالی (تسویه/بدهی)
+  try {
+    const [clear] = await db.select({ isCleared: financial_clearances.isCleared }).from(financial_clearances)
+      .where(and(eq(financial_clearances.studentId, sid), eq(financial_clearances.termId, tid))).limit(1);
+    if (!clear || (clear.isCleared ?? 0) !== 1) {
+      items.push({ code: 'not_settled', level: 'warn', title: 'تسویهٔ ترم', detail: 'تسویهٔ مالی این ترم ثبت نشده است.' });
+    }
+  } catch { /* ignore */ }
+
+  return { ok: true, items };
+}
+
+/** کدهای اخطار برای ثبت «مجوز» — وقتی override فعال است چه چیزهایی نادیده گرفته میشود */
+async function warningCodesFor(sid: number, tid: number): Promise<string[]> {
+  const w = await getStudentWarnings(sid, tid).catch(() => ({ items: [] as StudentWarning[] }));
+  return (w.items ?? []).map(x => x.code);
+}
+
+/** منطق گیت «حکم شورا»: تداخل داریم؛ اگر نادیده نگرفتیم رد کن */
+function councilGate(conflicts: string[] | undefined, override: boolean): string | null {
+  if (!conflicts || !conflicts.length) return null;
+  if (!override) return `درس با برنامهٔ دانشجو تداخل دارد — برای ثبت «بر اساس حکم شورا» باید نادیده‌گرفتن+دلیل فعال باشد. (${conflicts[0]})`;
+  return null;
+}
+
 // ─────────────── کاتالوگِ همان دانشجو (راهنمای کارشناس) ───────────────
 // مانند «انتخاب واحد» خودِ دانشجو: چارت+ارائه‌ها+پیش‌نیازها را نشان می‌دهد
 // تا کارشناس مثل خودِ دانشجو درس‌ها را ببیند و انتخاب کند.
@@ -246,6 +405,7 @@ export interface CatalogOffering extends ManualEnrollOffering {
   courseId: number;
   alreadyEnrolled: boolean;
   prereq: string | null;
+  conflicts: string[];
 }
 
 export async function getStudentCatalog(studentId: number, termId: number): Promise<{
@@ -285,6 +445,7 @@ export async function getStudentCatalog(studentId: number, termId: number): Prom
   }
 
   const prereqCtx = await buildPrereqContext(sid).catch(() => null);
+  const conflictIndex = await buildConflictIndex(sid, tid);
   const items: CatalogOffering[] = rows.map(r => ({
     offeringId: r.offeringId, courseId: r.courseId, code: r.code, title: r.title, groupNumber: r.groupNumber,
     units: r.units == null ? null : Number(r.units), capacity: r.capacity,
@@ -292,6 +453,7 @@ export async function getStudentCatalog(studentId: number, termId: number): Prom
     professorName: (r.professorId != null && profName.get(r.professorId)) || '—',
     alreadyEnrolled: takenCourseIds.has(r.courseId),
     prereq: prereqCtx ? formatPrereq(prereqCtx.ruleByCourse.get(r.courseId), prereqCtx.titles) : null,
+    conflicts: conflictIndex.get(r.offeringId) ?? [],
   }));
   return { ok: true, items };
 }

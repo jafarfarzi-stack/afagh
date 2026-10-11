@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  bulkDropAction, bulkEnrollAction, countBulkStudents, getStudentCatalog,
+  bulkDropAction, bulkEnrollAction, countBulkStudents, getStudentCatalog, getStudentWarnings,
   listOfferingsForManualEnroll, manualEnrollAction, manualEnrollHistory,
-  searchStudentsForManualEnroll, type ManualEnrollOffering, type CatalogOffering,
+  searchStudentsForManualEnroll, type ManualEnrollOffering, type CatalogOffering, type StudentWarning,
 } from './actions';
 
 export interface EnrollFilters {
@@ -31,6 +31,8 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogQuery, setCatalogQuery] = useState('');
   const [cart, setCart] = useState<CatalogOffering[]>([]);
+  // اخطارهای آیین‌نامه برای کارشناس
+  const [warnings, setWarnings] = useState<StudentWarning[]>([]);
   // bulk
   const [bulkTerm, setBulkTerm] = useState(singleTerm);
   const [party, setParty] = useState('');
@@ -71,9 +73,11 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
   };
 
   const loadCatalog = async (studentId: number) => {
-    setCatalogLoading(true); setCart([]);
+    setCatalogLoading(true); setCart([]); setWarnings([]);
     const r = await getStudentCatalog(studentId, singleTerm).catch(() => ({ ok: false as const, error: 'خطا' }));
     setCatalog(r.ok ? (r.items ?? []) : []); setCatalogLoading(false);
+    const w = await getStudentWarnings(studentId, singleTerm).catch(() => ({ ok: false as const, error: 'خطا' }));
+    setWarnings(w.ok ? (w.items ?? []) : []);
   };
 
   const doSingle = async () => {
@@ -182,6 +186,19 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
           </div>
           <ManualControls override={override} setOverride={setOverride} reason={reason} setReason={setReason} />
 
+          {/* ── پنل اخطارهای آیین‌نامه (مشروطی/سنوات/مالی) برای صدور مجوز ── */}
+          {selStudent && warnings.length > 0 && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-3 space-y-1">
+              <p className="text-xs font-black text-amber-900">⚠️ اخطارهای آیین‌نامهٔ این دانشجو:</p>
+              {warnings.map((w, i) => (
+                <p key={i} className={'text-[11px] font-bold ' + (w.level === 'block' ? 'text-red-700' : 'text-amber-800')}>
+                  {w.level === 'block' ? '❌' : '⚠'} {w.title}: {w.detail}
+                </p>
+              ))}
+              <p className="text-[10px] text-amber-800">برای صدور مجوز با وجود اخطار، تیک «نادیده‌گرفتن» را فعال و دلیل را بنویس — اخطارهای نادیده‌گرفته‌شده در تاریخچه ثبت می‌شوند.</p>
+            </div>
+          )}
+
           {/* ── کاتالوگِ همان دانشجو (راهنمای کارشناس) ── */}
           {(selStudent || selOffering) && (
             <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-3 space-y-2">
@@ -208,6 +225,9 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
                     <span className="font-bold text-slate-800">{c.code} {c.title} <span className="text-slate-500">(گ{c.groupNumber})</span></span>
                     <span className="text-[10px] text-slate-500">{c.units ?? ''} واحد · {c.enrolledCount}/{c.capacity} · {c.professorName}</span>
                     {c.prereq && <span className="text-[10px] text-amber-700 font-bold">پیش‌نیاز: {c.prereq}</span>}
+                    {c.conflicts && c.conflicts.length > 0 && (
+                      <span className="text-[10px] font-black text-rose-700 rounded-full bg-rose-100 px-2 py-0.5">تداخل: {c.conflicts[0]}</span>
+                    )}
                   </div>
                 ))}
                 {!catalogLoading && !filteredCatalog.length && <p className="p-3 text-xs text-slate-400">در این ترم ارائه‌ای برای نمایش نیست.</p>}

@@ -215,6 +215,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/expert-scopes',
+    icon: '🔐',
+    title: 'دامنهٔ دسترسی کارشناسان',
+    desc: 'تخصیص دانشگاه/دانشکده/گروه/رشته به کارشناس آموزش',
+    group: 'settings',
+    roles: ['ADMIN'],
+    accent: 'from-zinc-900 to-slate-950 border-zinc-600/50',
+    iconBg: 'bg-zinc-800/80 border-zinc-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/archive',
     icon: '🗄️',
     title: 'بایگانی الکترونیک مدارک',

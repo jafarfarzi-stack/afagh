@@ -877,6 +877,10 @@ export const enrollments = pgTable('enrollments', {
   enrolledByUserId: integer('enrolledByUserId').references(() => users.id),
   enrollOverrideReason: text('enrollOverrideReason'),
   enrollOverride: integer('enrollOverride').notNull().default(0),
+  /** ثبت بر اساس حکم شورا/کمیسیون (تداخل هفتگی/امتحانی) — متن حکم در enrollOverrideReason */
+  councilRuling: integer('councilRuling').notNull().default(0),
+  /** کدهای اخطار نادیده‌گرفته‌شده هنگام صدور مجوز (JSON array) — مشروطی/سنوات/مالی/… */
+  overriddenRules: text('overriddenRules'),
   /** تأییدیهٔ دیجیتال دانشجو برای داشتن دو امتحان هم‌روز (شیفت‌های متفاوت) — فاز ۱۰ */
   hasAcceptedSameDayExam: integer('hasAcceptedSameDayExam').notNull().default(0),
   /** حذف اضطراری (پس از مهلت حذف و اضافه) — سند §۲۲۴۳ */
@@ -3196,3 +3200,17 @@ export const staff_term_roles = pgTable('staff_term_roles', {
   unique('uq_staff_term_roles').on(t.staffId, t.termId, t.roleId),
   index('idx_staff_term_roles_term').on(t.termId),
 ]));
+
+/** دامنهٔ دسترسی کارشناسان آموزش — محدود به دانشگاه/دانشکده/گروه/رشته */
+export const expert_scopes = pgTable('expert_scopes', {
+  id: serial('id').primaryKey(),
+  userId: integer('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /** UNIVERSITY | FACULTY | DEPARTMENT | MAJOR */
+  scopeType: varchar('scopeType', { length: 20 }).notNull(),
+  scopeId: integer('scopeId'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  createdAt: timestamp('createdAt').defaultNow(),
+}, (t) => ({
+  uq: unique('uq_expert_scopes').on(t.userId, t.scopeType, t.scopeId, t.universityId),
+  ux: index('idx_expert_scopes_user').on(t.userId),
+}));
