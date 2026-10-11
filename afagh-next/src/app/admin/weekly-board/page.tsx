@@ -146,7 +146,7 @@ const toMin = (t: string | null) => { if (!t) return 0; const [h, m] = String(t)
 const fmtClock = (min: number) => faDigits(`${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`);
 
 type MergedCell = BoardRow & {
-  merged: boolean; codes: string; profs: string; groupLabel: string; enrolled: number;
+  merged: boolean; codes: string; titles: string; profs: string; groupLabel: string; enrolled: number;
   uid: number;
 };
 
@@ -171,16 +171,19 @@ function collapseBoardRows(list: BoardRow[], showTitle: boolean, showFirst: bool
       const m = g.members[0];
       return {
         ...m, merged: false as const, codes: String(m.courseCode ?? ''),
+        titles: String(m.courseTitle ?? ''),
         profs: profDisplay(m, showTitle, showFirst, shortHonor), groupLabel: faDigits(m.groupNumber),
         enrolled: Number(m.enrolledCount) || 0,
       };
     }
     const codes = [...new Set(g.members.map(m => String(m.courseCode ?? '').trim()).filter(Boolean))];
+    const titles = [...new Set(g.members.map(m => String(m.courseTitle ?? '').trim()).filter(Boolean))];
     const profs = [...new Set(g.members.map(m => profDisplay(m, showTitle, showFirst, shortHonor)).filter(Boolean))];
     const groups = [...new Set(g.members.map(m => m.groupNumber))].sort((a, b) => a - b);
     const enrolled = g.members.reduce((s, m) => s + (Number(m.enrolledCount) || 0), 0);
     return {
       ...g.members[0], merged: true as const, codes: codes.join(' / '),
+      titles: titles.join(' / '),
       profs: profs.join('، '), groupLabel: groups.map(faDigits).join('، '), enrolled,
     };
   });
@@ -210,8 +213,8 @@ function placeBoardCells(merged: MergedCell[]): { placedByDay: Placed[][]; outsi
 }
 
 /** جدول تقویمی + فهرست خارج‌بازه — مشترک تابلوی کلاس‌ها و تب‌های استاد/دانشجو */
-function BoardGrid({ placedByDay, outside, big, showRoom }: {
-  placedByDay: Placed[][]; outside: CellT[]; big?: boolean; showRoom?: boolean;
+function BoardGrid({ placedByDay, outside, big, showRoom, hideEnrolled }: {
+  placedByDay: Placed[][]; outside: CellT[]; big?: boolean; showRoom?: boolean; hideEnrolled?: boolean;
 }) {
   return (
     <>
@@ -227,18 +230,24 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
             <tr key={h}>
               <td className="border border-slate-300 bg-slate-50 p-1 text-center font-mono">{faDigits(h)}</td>
               {DAY_NAMES.map((_, di) => {
-                const p = placedByDay[di].find(x => x.first === hi);
-                if (p) {
-                  const c = p.cell;
+                // چند بلوک هم‌ساعت (کلاس‌های مختلف) زیر هم می‌آیند — هیچ‌کدام گم نمی‌شود
+                const starts = placedByDay[di].filter(x => x.first === hi);
+                if (starts.length) {
+                  const span = Math.max(...starts.map(x => x.span));
                   return (
-                    <td key={di} rowSpan={p.span} className="border border-slate-200 p-1 align-top bg-white" style={{ minHeight: 46 }}>
-                      <div className={`rounded border-r-4 px-2 py-1 leading-6 ${c.merged ? 'bg-amber-50 border-amber-500' : 'bg-indigo-50 border-indigo-500'} ${big ? 'text-sm' : 'text-[11px]'}`}>
-                        <div><b>{c.codes} {c.courseTitle}</b> گروه {c.groupLabel}
-                          {c.merged && <span className="mr-1 rounded bg-amber-200 px-1 text-[10px] font-black">🔗 ادغامی</span>}
-                        </div>
-                        {showRoom && <div className="text-slate-500">{c.roomName || '—'}{c.buildingName ? ` (${c.buildingName})` : ''}</div>}
-                        <div className="text-slate-600">{c.profs} · {faDigits(c.enrolled)} نفر</div>
-                      </div>
+                    <td key={di} rowSpan={span} className="border border-slate-200 p-1 align-top bg-white" style={{ minHeight: 46 }}>
+                      {starts.map((p, j) => {
+                        const c = p.cell;
+                        return (
+                          <div key={j} className={`rounded border-r-4 px-2 py-1 leading-6 ${j > 0 ? 'mt-1' : ''} ${c.merged ? 'bg-amber-50 border-amber-500' : 'bg-indigo-50 border-indigo-500'} ${big ? 'text-sm' : 'text-[11px]'}`}>
+                            <div><b>{c.codes} {c.titles}</b> گروه {c.groupLabel}
+                              {c.merged && <span className="mr-1 rounded bg-amber-200 px-1 text-[10px] font-black">🔗 ادغامی</span>}
+                            </div>
+                            {showRoom && <div className="text-slate-500">{c.roomName || '—'}{c.buildingName ? ` (${c.buildingName})` : ''}</div>}
+                            <div className="text-slate-600">{c.profs}{!hideEnrolled && <> · {faDigits(c.enrolled)} نفر</>}</div>
+                          </div>
+                        );
+                      })}
                     </td>
                   );
                 }
@@ -448,52 +457,7 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
               </p>
             </div>
           )}
-          <table className={`w-full border-collapse ${poster ? 'text-sm' : 'text-[11px]'}`}>
-            <thead>
-              <tr>
-                <th className="border border-slate-300 bg-slate-100 p-1">ساعت</th>
-                {DAY_NAMES.map(d => <th key={d} className="border border-slate-300 bg-slate-100 p-1 rounded-t">{d}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {HOURS.map((h, hi) => (
-                <tr key={h}>
-                  <td className="border border-slate-300 bg-slate-50 p-1 text-center font-mono">{faDigits(h)}</td>
-                  {DAY_NAMES.map((_, di) => {
-                    const p = placedByDay[di].find(x => x.first === hi);
-                    if (p) {
-                      const c = p.cell;
-                      return (
-                        <td key={di} rowSpan={p.span} className="border border-slate-200 p-1 align-top bg-white" style={{ minHeight: 46 }}>
-                          <div className={`rounded border-r-4 px-2 py-1 leading-6 ${c.merged ? 'bg-amber-50 border-amber-500' : 'bg-indigo-50 border-indigo-500'} ${poster ? 'text-sm' : 'text-[11px]'}`}>
-                            <div className="font-black text-slate-900">🕗 از {fmtClock(c.start)} تا {fmtClock(c.end)}</div>
-                            <div><b>{c.codes} {c.courseTitle}</b> گروه {c.groupLabel}
-                              {c.merged && <span className="mr-1 rounded bg-amber-200 px-1 text-[10px] font-black">🔗 ادغامی</span>}
-                            </div>
-                            {!poster && <div className="text-slate-500">{c.roomName || '—'}{c.buildingName ? ` (${c.buildingName})` : ''}</div>}
-                            <div className="text-slate-600">{c.profs} · {faDigits(c.enrolled)} نفر</div>
-                          </div>
-                        </td>
-                      );
-                    }
-                    const covered = placedByDay[di].some(x => hi > x.first && hi < x.first + x.span);
-                    if (covered) return null;
-                    return <td key={di} className="border border-slate-200 p-0.5 align-top" style={{ minHeight: 46 }} />;
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {outside.length > 0 && (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900">
-              <b>⏰ خارج از بازهٔ ۸ تا ۲۰:</b>
-              <ul className="mt-1 space-y-0.5">
-                {outside.map((c, i) => (
-                  <li key={i}>{DAY_NAMES[Number(c.dayOfWeek)] ?? ''} — {c.codes} {c.courseTitle} (از {fmtClock(c.start)} تا {fmtClock(c.end)} · {c.roomName || '—'})</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <BoardGrid placedByDay={placedByDay} outside={outside} big={!!poster} showRoom={!poster} hideEnrolled={!!poster} />
         </div>
       )}
       </>
@@ -521,7 +485,7 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
             <p className="text-lg font-black text-slate-800 mt-1">{personInfo.name}</p>
             <p className="text-sm font-bold text-slate-600 mt-1">
               {personInfo.kind === 'prof' ? 'کد استادی' : 'شماره دانشجویی'} {faDigits(personInfo.code)}
-              {personInfo.extra ? ` · ${personInfo.extra}` : ''} · {term.title} · دانشگاه {uni?.title ?? ''}
+              {personInfo.extra ? ` · ${personInfo.extra}` : ''} · {withPrefix('نیمسال', term.title)} · {withPrefix('دانشگاه', uni?.title ?? '')}
             </p>
           </div>
           <BoardGrid placedByDay={personPlaced.placedByDay} outside={personPlaced.outside} showRoom />
