@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, classrooms, course_offerings, courses, departments, faculties,
@@ -7,7 +7,7 @@ import {
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { currentExpertFilters } from '@/lib/expert-scope';
-import { getSetting } from '@/lib/settings';
+import { getSetting, getBool } from '@/lib/settings';
 import { groupIntoMerged, mergedGroupKey } from '@/lib/professor-calendar-layout';
 import PrintButton from './PrintButton';
 
@@ -24,11 +24,31 @@ type BoardRow = {
   dayOfWeek: number | null; startTime: string | null; endTime: string | null;
   roomId: number | null; roomName: string | null; buildingName: string | null;
   profFirstName: string | null; profLastName: string | null;
+  profRank: string | null; profGender: string | null; profLegacyTitle: string | null;
   deptId: number | null; sharedKey: string | null;
 };
 
-function profName(m: Pick<BoardRow, 'profFirstName' | 'profLastName'>): string {
-  return `${m.profFirstName || ''} ${m.profLastName || ''}`.trim();
+const normFa = (s: unknown) => String(s ?? '').replace(/ي/g, 'ی').replace(/ك/g, 'ک');
+
+/** نام نمایشی استاد با لقب احترام: استادیار و بالاتر «دکتر» + جناب آقای/سرکار خانم */
+function profDisplay(
+  m: Pick<BoardRow, 'profFirstName' | 'profLastName' | 'profRank' | 'profGender' | 'profLegacyTitle'>,
+  showTitle: boolean, showFirst: boolean,
+): string {
+  const first = (m.profFirstName || '').trim();
+  const last = (m.profLastName || '').trim();
+  if (!showTitle) return [showFirst ? first : '', last].filter(Boolean).join(' ');
+  const rank = normFa(m.profRank);
+  const isDoctor = rank.includes('دانشیار') || rank.includes('استاد');
+  let honor = '';
+  if (m.profGender === 'FEMALE') honor = 'سرکار خانم';
+  else if (m.profGender === 'MALE') honor = 'جناب آقای';
+  else {
+    const leg = normFa(m.profLegacyTitle);
+    if (leg.includes('خانم')) honor = 'سرکار خانم';
+    else if (leg.includes('آقا')) honor = 'جناب آقای';
+  }
+  return [honor, isDoctor ? 'دکتر' : '', showFirst ? first : '', last].filter(Boolean).join(' ');
 }
 
 export default async function WeeklyBoardPage({ searchParams }: {
@@ -43,14 +63,28 @@ export default async function WeeklyBoardPage({ searchParams }: {
   const roomId = Number(sp.room) || 0;
   const posterMode = roomId > 0;
 
+  // کلیدهای نمایش نام استاد (تنظیمات مدیر)
+  const [showTitle, showFirst] = await Promise.all([
+    getBool('WEEKLY_BOARD_PROF_TITLE').catch(() => true),
+    getBool('WEEKLY_BOARD_SHOW_FIRSTNAME').catch(() => true),
+  ]);
+
   const terms = await db.select({ id: academic_terms.id, title: academic_terms.title, isCurrent: academic_terms.isCurrent })
     .from(academic_terms)
     .where(uni ? eq(academic_terms.universityId, uni.id) : undefined)
     .orderBy(desc(academic_terms.id));
   const term = terms.find(t => t.id === termId) ?? terms.find(t => t.isCurrent === 1) ?? terms[0] ?? null;
 
-  const facs = await db.select({ id: faculties.id, name: faculties.name }).from(faculties).orderBy(asc(faculties.name));
-  const depts = await db.select({ id: departments.id, name: departments.name, facultyId: departments.facultyId }).from(departments).orderBy(asc(departments.name));
+  const facRows = await db.select({ id: faculties.id, name: faculties.name }).from(faculties)
+    .where(uni ? eq(faculties.universityId, uni.id) : undefined)
+    .orderBy(asc(faculties.name));
+  // حذف تکراری‌های هم‌نام مهاجرت سما (دو ردیف یک نام) — کمترین id می‌ماند
+  const facs = facRows.filter((f, i, a) => a.findIndex(x => x.name.trim() === f.name.trim()) === i);
+  const facIds = new Set(facs.map(f => f.id));
+  const depts = (await db.select({ id: departments.id, name: departments.name, facultyId: departments.facultyId }).from(departments)
+    .where(uni ? eq(departments.universityId, uni.id) : undefined)
+    .orderBy(asc(departments.name)))
+    .filter(d => facIds.size === 0 || facIds.has(d.facultyId));
   const rooms = await db.select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, capacity: classrooms.capacity, facultyId: classrooms.facultyId })
     .from(classrooms)
     .where(uni ? eq(classrooms.universityId, uni.id) : undefined)
@@ -73,6 +107,9 @@ export default async function WeeklyBoardPage({ searchParams }: {
           buildingName: classrooms.buildingName,
           profFirstName: users.firstName,
           profLastName: users.lastName,
+          profRank: staff.academicRank,
+          profGender: users.gender,
+          profLegacyTitle: staff.title,
           deptId: courses.departmentId,
           sharedKey: course_offerings.sharedScheduleGroupKey,
         })
@@ -113,12 +150,12 @@ export default async function WeeklyBoardPage({ searchParams }: {
       const m = g.members[0];
       return {
         ...m, merged: false as const, codes: String(m.courseCode ?? ''),
-        profs: profName(m), groupLabel: faDigits(m.groupNumber),
+        profs: profDisplay(m, showTitle, showFirst), groupLabel: faDigits(m.groupNumber),
         enrolled: Number(m.enrolledCount) || 0,
       };
     }
     const codes = [...new Set(g.members.map(m => String(m.courseCode ?? '').trim()).filter(Boolean))];
-    const profs = [...new Set(g.members.map(profName).filter(Boolean))];
+    const profs = [...new Set(g.members.map(m => profDisplay(m, showTitle, showFirst)).filter(Boolean))];
     const groups = [...new Set(g.members.map(m => m.groupNumber))].sort((a, b) => a - b);
     const enrolled = g.members.reduce((s, m) => s + (Number(m.enrolledCount) || 0), 0);
     return {
@@ -129,13 +166,25 @@ export default async function WeeklyBoardPage({ searchParams }: {
 
   const toMin = (t: string | null) => { if (!t) return 0; const [h, m] = String(t).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
   const fmtClock = (min: number) => faDigits(`${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`);
-  const grid: Record<number, { r: (typeof mergedCells)[number]; start: number; end: number }[]> = {};
+  // ── چیدمان تقویمی دقیق: هر سانس یک بلوک با rowSpan روی سطرهای ساعتی ──
+  // (مدل تقویم هفتگی استاد/دانشجو — از-تا دقیق، بدون تکرار در سطرها)
+  type CellT = (typeof mergedCells)[number] & { start: number; end: number };
+  type Placed = { cell: CellT; first: number; span: number };
+  const placedByDay: Placed[][] = Array.from({ length: 7 }, () => []);
+  const outside: CellT[] = [];
   for (const r of mergedCells) {
     const d = r.dayOfWeek == null ? -1 : Number(r.dayOfWeek);
     if (d < 0 || d > 6) continue;
     const start = toMin(r.startTime), end = toMin(r.endTime);
-    (grid[d] ??= []).push({ r, start, end });
+    if (!(end > start)) { outside.push({ ...r, start, end }); continue; }
+    const hits: number[] = [];
+    for (let hi = 0; hi < HOURS.length; hi++) {
+      if (start < (8 + hi + 1) * 60 && end > (8 + hi) * 60) hits.push(hi);
+    }
+    if (!hits.length) { outside.push({ ...r, start, end }); continue; }
+    placedByDay[d].push({ cell: { ...r, start, end }, first: hits[0], span: hits.length });
   }
+  for (const list of placedByDay) list.sort((a, b) => a.first - b.first || a.cell.start - b.cell.start);
 
   const poster = posterMode && selRoom ? selRoom : null;
 
@@ -193,17 +242,17 @@ export default async function WeeklyBoardPage({ searchParams }: {
               {logoUrl && <img src={logoUrl} alt="ارم دانشگاه" className="mx-auto mb-2 h-16 w-16 object-contain" />}
               <h1 className="text-2xl font-black text-slate-900">🚪 برنامهٔ هفتگی کلاس {poster.name}</h1>
               <p className="text-base font-black text-slate-800 mt-2">
-                {headerFaculty ? `دانشکدهٔ ${headerFaculty} · ` : ''}نیمسال {term.title}{poster.buildingName ? ` · ${poster.buildingName}` : ''}
+                {headerFaculty ? `دانشکدهٔ ${headerFaculty} · ` : ''}{term.title}{poster.buildingName ? ` · ${poster.buildingName}` : ''}
               </p>
               <p className="text-sm font-bold text-slate-600 mt-1">
-                کلاس {poster.name} · ظرفیت {faDigits(poster.capacity)} نفر · دانشگاه {uni?.title ?? ''}
+                دانشگاه {uni?.title ?? ''}
               </p>
             </div>
           ) : (
             <div className="text-center">
               <div className="flex items-center justify-center gap-2">
                 {logoUrl && <img src={logoUrl} alt="ارم دانشگاه" className="h-10 w-10 object-contain" />}
-                <h1 className="text-base font-black text-slate-900">برنامهٔ هفتگی کلاس‌ها — نیمسال {term.title}</h1>
+                <h1 className="text-base font-black text-slate-900">برنامهٔ هفتگی کلاس‌ها — {term.title}</h1>
               </div>
               <p className="text-[11px] text-slate-500">
                 دانشگاه {uni?.title ?? ''}
@@ -225,24 +274,40 @@ export default async function WeeklyBoardPage({ searchParams }: {
                 <tr key={h}>
                   <td className="border border-slate-300 bg-slate-50 p-1 text-center font-mono">{faDigits(h)}</td>
                   {DAY_NAMES.map((_, di) => {
-                    const cells = (grid[di] ?? []).filter(c => c.start < toMin(`${hi + 8 + 1}:00`) && c.end > toMin(`${hi + 8}:00`));
-                    return (
-                      <td key={di} className="border border-slate-200 p-0.5 align-top" style={{ minHeight: 46 }}>
-                        {cells.map((c, i) => (
-                          <div key={i} className={`mb-0.5 rounded border-r-2 px-1 py-0.5 leading-5 ${c.r.merged ? 'bg-amber-50 border-amber-500' : 'bg-indigo-50 border-indigo-500'} ${poster ? 'text-[13px]' : 'text-[10px] leading-4'}`}>
-                            <b>{c.r.codes} {c.r.courseTitle}</b> گروه {c.r.groupLabel}
-                            {c.r.merged && <span className="mr-1 rounded bg-amber-200 px-1 text-[10px] font-black">🔗 ادغامی</span>}
-                            <div className="text-slate-500">{fmtClock(c.start)}–{fmtClock(c.end)}{poster ? '' : ` · ${c.r.roomName || '—'}`}</div>
-                            <div className="text-slate-600">{c.r.profs} · {faDigits(c.r.enrolled)} نفر</div>
+                    const p = placedByDay[di].find(x => x.first === hi);
+                    if (p) {
+                      const c = p.cell;
+                      return (
+                        <td key={di} rowSpan={p.span} className="border border-slate-200 p-1 align-top bg-white" style={{ minHeight: 46 }}>
+                          <div className={`rounded border-r-4 px-2 py-1 leading-6 ${c.merged ? 'bg-amber-50 border-amber-500' : 'bg-indigo-50 border-indigo-500'} ${poster ? 'text-sm' : 'text-[11px]'}`}>
+                            <div className="font-black text-slate-900">🕗 از {fmtClock(c.start)} تا {fmtClock(c.end)}</div>
+                            <div><b>{c.codes} {c.courseTitle}</b> گروه {c.groupLabel}
+                              {c.merged && <span className="mr-1 rounded bg-amber-200 px-1 text-[10px] font-black">🔗 ادغامی</span>}
+                            </div>
+                            {!poster && <div className="text-slate-500">{c.roomName || '—'}{c.buildingName ? ` (${c.buildingName})` : ''}</div>}
+                            <div className="text-slate-600">{c.profs} · {faDigits(c.enrolled)} نفر</div>
                           </div>
-                        ))}
-                      </td>
-                    );
+                        </td>
+                      );
+                    }
+                    const covered = placedByDay[di].some(x => hi > x.first && hi < x.first + x.span);
+                    if (covered) return null;
+                    return <td key={di} className="border border-slate-200 p-0.5 align-top" style={{ minHeight: 46 }} />;
                   })}
                 </tr>
               ))}
             </tbody>
           </table>
+          {outside.length > 0 && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900">
+              <b>⏰ خارج از بازهٔ ۸ تا ۲۰:</b>
+              <ul className="mt-1 space-y-0.5">
+                {outside.map((c, i) => (
+                  <li key={i}>{DAY_NAMES[Number(c.dayOfWeek)] ?? ''} — {c.codes} {c.courseTitle} (از {fmtClock(c.start)} تا {fmtClock(c.end)} · {c.roomName || '—'})</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -254,7 +319,8 @@ async function scopeConds(roles: string[], deptId: number, facultyId: number): P
   if (deptId) c.push(eq(courses.departmentId, deptId));
   else if (facultyId) {
     const ids = (await db.select({ id: departments.id }).from(departments).where(eq(departments.facultyId, facultyId))).map(r => r.id);
-    if (ids.length) c.push(inArray(courses.departmentId, ids));
+    // fail-closed: دانشکدهٔ بدون گروه یعنی «هیچ» — نه «همه» (باگ نمایش همهٔ دانشکده‌ها)
+    c.push(ids.length ? inArray(courses.departmentId, ids) : sql`1=0`);
   }
   if (roles.includes('EDU_EXPERT')) {
     const eff = await currentExpertFilters().catch(() => null);
