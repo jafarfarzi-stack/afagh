@@ -235,7 +235,6 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
                   return (
                     <td key={di} rowSpan={p.span} className="border border-slate-200 p-1 align-top bg-white" style={{ minHeight: 46 }}>
                       <div className={`rounded border-r-4 px-2 py-1 leading-6 ${c.merged ? 'bg-amber-50 border-amber-500' : 'bg-indigo-50 border-indigo-500'} ${big ? 'text-sm' : 'text-[11px]'}`}>
-                        <div className="font-black text-slate-900">🕗 از {fmtClock(c.start)} تا {fmtClock(c.end)}</div>
                         <div><b>{c.codes} {c.courseTitle}</b> گروه {c.groupLabel}
                           {c.merged && <span className="mr-1 rounded bg-amber-200 px-1 text-[10px] font-black">🔗 ادغامی</span>}
                         </div>
