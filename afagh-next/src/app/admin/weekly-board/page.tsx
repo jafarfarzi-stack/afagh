@@ -7,6 +7,7 @@ import {
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { currentExpertFilters } from '@/lib/expert-scope';
+import { getSetting } from '@/lib/settings';
 import { groupIntoMerged, mergedGroupKey } from '@/lib/professor-calendar-layout';
 import PrintButton from './PrintButton';
 
@@ -151,6 +152,9 @@ export default async function WeeklyBoardPage({ searchParams }: {
         })();
   const headerDept = deptId ? depts.find(d => d.id === deptId)?.name ?? '' : '';
 
+  // ارم دانشگاه (الگوی سراسری اسناد: logoUrl دانشگاه، وگرنه UNIVERSITY_LOGO)
+  const logoUrl = uni?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
+
   return (
     <div className="space-y-4" dir="rtl">
       <form method="get" className="card flex flex-wrap items-end gap-3 print:hidden">
@@ -186,6 +190,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
           {poster && <style>{`@page { size: A4 landscape; margin: 8mm 8mm; }`}</style>}
           {poster ? (
             <div className="text-center border-b-4 border-double border-slate-800 pb-3">
+              {logoUrl && <img src={logoUrl} alt="ارم دانشگاه" className="mx-auto mb-2 h-16 w-16 object-contain" />}
               <h1 className="text-2xl font-black text-slate-900">🚪 برنامهٔ هفتگی کلاس {poster.name}</h1>
               <p className="text-base font-black text-slate-800 mt-2">
                 {headerFaculty ? `دانشکدهٔ ${headerFaculty} · ` : ''}نیمسال {term.title}{poster.buildingName ? ` · ${poster.buildingName}` : ''}
@@ -196,7 +201,10 @@ export default async function WeeklyBoardPage({ searchParams }: {
             </div>
           ) : (
             <div className="text-center">
-              <h1 className="text-base font-black text-slate-900">برنامهٔ هفتگی کلاس‌ها — نیمسال {term.title}</h1>
+              <div className="flex items-center justify-center gap-2">
+                {logoUrl && <img src={logoUrl} alt="ارم دانشگاه" className="h-10 w-10 object-contain" />}
+                <h1 className="text-base font-black text-slate-900">برنامهٔ هفتگی کلاس‌ها — نیمسال {term.title}</h1>
+              </div>
               <p className="text-[11px] text-slate-500">
                 دانشگاه {uni?.title ?? ''}
                 {headerFaculty ? ` · دانشکدهٔ ${headerFaculty}` : ''}
