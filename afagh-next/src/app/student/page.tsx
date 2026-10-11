@@ -266,7 +266,7 @@ export default async function StudentDashboardPage() {
                   {statusFa[me.status || 'ACTIVE'] || 'دانشجوی فعال'}
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white/15 text-emerald-100 border border-white/20">
-                  ترم {(termOrdinal ?? me.currentTermNo ?? '').toString().toLocaleString('fa-IR')} تحصیلی
+                  ترم {(termOrdinal ?? me.currentTermNo ?? 0).toLocaleString('fa-IR')} تحصیلی
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-emerald-200 font-medium">

@@ -23,7 +23,7 @@ export default async function AdminReportsPage() {
           <p className="text-xs text-slate-500 mt-0.5">فعال ترم، خلاصه وضعیت، تفکیک دانشکده/رشته، مشروطی، برترها، تکمیلی... — همه صفحه‌بندی‌شده با خروجی Excel</p>
         </div>
       </div>
-      <ReportsClient opts={opts} initialUniversityId={currentUniversityId ?? 0} allowedKinds={allowed} />
+      <ReportsClient opts={opts} initialUniversityId={currentUniversityId ?? 0} allowedKinds={allowed} scope="edu" />
     </div>
   );
 }

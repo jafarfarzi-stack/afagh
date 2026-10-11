@@ -217,7 +217,7 @@ export default async function StudentSchedulePage() {
           studentCode: me.studentCode,
           majorName: major?.name || 'مهندسی کامپیوتر',
           degreeTitle: degree?.title || 'کارشناسی پیوسته',
-          currentTermNo: termOrdinal ?? me.currentTermNo || 1,
+          currentTermNo: (termOrdinal ?? me.currentTermNo ?? 1),
           entryYear: me.entryYear,
         }}
         term={{

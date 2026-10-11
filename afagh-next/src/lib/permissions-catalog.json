@@ -642,6 +642,18 @@
       "title": "گزارش «دروس بار سوم (مردودی دو بار)»",
       "category": "گزارش‌ها",
       "description": "اجرا و خروجی گزارش «دروس بار سوم (مردودی دو بار)» در مرکز گزارش‌ها"
+    },
+    {
+      "code": "reports:edu",
+      "title": "مرکز گزارش‌های آموزشی",
+      "category": "گزارش‌ها",
+      "description": "دسترسی به تمام گزارش‌های مرکز آموزشی — همهٔ kinds آموزشی"
+    },
+    {
+      "code": "reports:finance",
+      "title": "مرکز گزارش‌های مالی",
+      "category": "گزارش‌ها",
+      "description": "دسترسی به مرکز گزارش‌های مالی — همهٔ kinds مالی"
     }
   ],
   "roleDefaults": {
@@ -671,7 +683,8 @@
       "scheduling:assign_professors",
       "exams:plan_calendar",
       "exams:manage_halls",
-      "grades:resolve_appeals"
+      "grades:resolve_appeals",
+      "reports:edu"
     ],
     "VICE_EDU": [
       "students:view_dossier",
@@ -685,7 +698,8 @@
       "finance:manage_tuition_rules",
       "finance:approve_advances",
       "finance:settle_payroll",
-      "finance:tamin_insurance"
+      "finance:tamin_insurance",
+      "reports:finance"
     ],
     "ARCHIVE_EXPERT": [
       "archive:verify_papers",

@@ -30,7 +30,29 @@ import { run as runStatusOps } from './r-status-ops';
 import { run as runThesis } from './r-thesis';
 import { run as runCollect } from './r-collect-external';
 
-const ROLES = ['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER'] as never[];
+// نقش‌های هر دو مرکز گزارش (آموزشی + مالی). کارشناس مالی نباید برای باز کردن
+// مرکز مالی به نقش آموزشی نیاز داشته باشد؛ گیت ریز (assertReportPermission)
+// همچنان اجازهٔ اجرای هر گزارش را با reports:<kind> / مرکز می‌دهد.
+const ROLES = ['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'] as never[];
+
+// ── دسته‌بندی مرکز گزارش‌ها ──
+// kindهای دستهٔ «مالی» — همان cat: 'finance' در کلاینت (ReportsClient).
+// برای اعطای سطح مرکز (reports:finance) بدون نیاز به دادن reports:<kind> تکتک.
+const FINANCE_KINDS = new Set([
+  'tuition',
+  'tuition-tariff',
+  'tuition-statement',
+  'finance-worklist',
+  'payroll-overview',
+  'bi-teaching-quality',
+  'bi-facilities',
+]);
+
+/** نگاشت kind → مرکز: فقط «مالی» جدا می‌شود؛ مابقی آموزشی‌اند */
+function reportCenter(kind: string): 'finance' | 'edu' {
+  return FINANCE_KINDS.has(kind) ? 'finance' : 'edu';
+}
+
 export async function getFilterOptions({ universityId }: { universityId?: number } = {}): Promise<FilterOptions> {
   await requireRole(ROLES);
   const terms = await db.execute<{ code: string; title: string | null }>(
@@ -76,8 +98,12 @@ export async function getFilterOptions({ universityId }: { universityId?: number
 export async function assertReportPermission(kind: string): Promise<void> {
   const user = await requireRole(ROLES);
   if (user.roles.includes('ADMIN')) return;
-  const { hasPermission } = await import('@/lib/permissions-enforcer');
-  if (!(await hasPermission(user.id, `reports:${kind}`))) {
+  const { getUserPermissions } = await import('@/lib/permissions-enforcer');
+  const perms = await getUserPermissions(user.id);
+  const ok =
+    perms.has(`reports:${kind}`) ||
+    (reportCenter(kind) === 'finance' ? perms.has('reports:finance') : perms.has('reports:edu'));
+  if (!ok) {
     throw new Error('دسترسی به این گزارش در ماتریس دسترسی‌ها داده نشده است.');
   }
 }
@@ -88,7 +114,12 @@ export async function allowedReportKinds(kinds: string[]): Promise<string[] | nu
   if (user.roles.includes('ADMIN')) return null;
   const { getUserPermissions } = await import('@/lib/permissions-enforcer');
   const perms = await getUserPermissions(user.id);
-  return kinds.filter(k => perms.has(`reports:${k}`));
+  const hasEdu = perms.has('reports:edu');
+  const hasFinance = perms.has('reports:finance');
+  return kinds.filter(k =>
+    perms.has(`reports:${k}`) ||
+    (reportCenter(k) === 'finance' ? hasFinance : hasEdu),
+  );
 }
 
 export async function runReport(kind: string, f: ReportFilters): Promise<ReportResult> {

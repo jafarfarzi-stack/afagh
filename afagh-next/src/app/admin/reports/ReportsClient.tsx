@@ -3,101 +3,116 @@
 import { useEffect, useState } from 'react';
 import { exportReport, runReport, type FilterOptions, type ReportResult } from './actions';
 import { LINK_CARDS } from './report-links';
+import { faIncludes } from '@/lib/persian-search';
 
-type Card = { kind: string; icon: string; title: string; needsTerm?: boolean; soon?: boolean; customs?: { key: string; title: string }[] };
+type ReportCat = 'students' | 'probation' | 'program' | 'exams' | 'classes' | 'finance' | 'research';
+
+type Card = { kind: string; icon: string; title: string; cat: ReportCat; needsTerm?: boolean; soon?: boolean; customs?: { key: string; title: string }[] };
+
+const CATEGORIES: { key: ReportCat; label: string }[] = [
+  { key: 'students', label: '🧑‍🎓 دانشجویی و فهرست' },
+  { key: 'probation', label: '⚠️ مشروطی و آیین‌نامه' },
+  { key: 'program', label: '🗓️ برنامه و نمره' },
+  { key: 'exams', label: '📝 امتحانات' },
+  { key: 'classes', label: '🏫 کلاس‌ها' },
+  { key: 'finance', label: '💰 مالی' },
+  { key: 'research', label: '🎓 پژوهش و مکاتبات' },
+];
 
 const CARDS: Card[] = [
-  { kind: 'active-term', icon: '🧑‍🎓', title: 'گزارش دانشجویان فعال ترم', needsTerm: true },
-  { kind: 'status-summary', icon: '📊', title: 'گزارش خلاصه وضعیت تحصیلی' },
-  { kind: 'by-faculty', icon: '🏛️', title: 'گزارش به تفکیک دانشکده' },
-  { kind: 'by-major', icon: '📚', title: 'گزارش دانشجویان هر رشته' },
-  { kind: 'grade-status', icon: '📝', title: 'دانشجویان برحسب وضعیت نمره', needsTerm: true },
-  { kind: 'probation', icon: '⚠️', title: 'مشروطی‌های ترم', needsTerm: true },
-  { kind: 'top', icon: '🏆', title: 'گزارش نمرات برتر هر رشته' },
-  { kind: 'incomplete', icon: '📋', title: 'تکمیلی دانشجویان (پرونده ناقص)' },
-  { kind: 'graduates', icon: '🎓', title: 'دانش‌آموختگان' },
-  { kind: 'entries', icon: '📥', title: 'ورودی‌های جدید' },
-  { kind: 'noshow', icon: '🚫', title: 'عدم مراجعه‌ها' },
-  { kind: 'transfers', icon: '🔀', title: 'میهمان / انتقالی' },
-  { kind: 'tuition', icon: '💰', title: 'گزارش شهریه / تراکنش مالی' },
-  { kind: 'payesh', icon: '🗂️', title: 'گزارش پاسخ‌های طرح پایش' },
-  { kind: 'jame', icon: '🧮', title: 'دانشجویان واجد شرایط آزمون جامع' },
-  { kind: 'docs', icon: '📎', title: 'مدارک دانشجویان' },
+  { kind: 'active-term', cat: 'students', icon: '🧑‍🎓', title: 'گزارش دانشجویان فعال ترم', needsTerm: true },
+  { kind: 'status-summary', cat: 'students', icon: '📊', title: 'گزارش خلاصه وضعیت تحصیلی' },
+  { kind: 'by-faculty', cat: 'students', icon: '🏛️', title: 'گزارش به تفکیک دانشکده' },
+  { kind: 'by-major', cat: 'students', icon: '📚', title: 'گزارش دانشجویان هر رشته' },
+  { kind: 'grade-status', cat: 'students', icon: '📝', title: 'دانشجویان برحسب وضعیت نمره', needsTerm: true },
+  { kind: 'probation', cat: 'probation', icon: '⚠️', title: 'مشروطی‌های ترم', needsTerm: true },
+  { kind: 'top', cat: 'program', icon: '🏆', title: 'گزارش نمرات برتر هر رشته' },
+  { kind: 'incomplete', cat: 'students', icon: '📋', title: 'تکمیلی دانشجویان (پرونده ناقص)' },
+  { kind: 'graduates', cat: 'research', icon: '🎓', title: 'دانش‌آموختگان' },
+  { kind: 'entries', cat: 'students', icon: '📥', title: 'ورودی‌های جدید' },
+  { kind: 'noshow', cat: 'students', icon: '🚫', title: 'عدم مراجعه‌ها' },
+  { kind: 'transfers', cat: 'students', icon: '🔀', title: 'میهمان / انتقالی' },
+  { kind: 'tuition', cat: 'finance', icon: '💰', title: 'گزارش شهریه / تراکنش مالی' },
+  { kind: 'payesh', cat: 'research', icon: '🗂️', title: 'گزارش پاسخ‌های طرح پایش' },
+  { kind: 'jame', cat: 'research', icon: '🧮', title: 'دانشجویان واجد شرایط آزمون جامع' },
+  { kind: 'docs', cat: 'research', icon: '📎', title: 'مدارک دانشجویان' },
 
   // ── موج ۲: ۵۰ گزارش خانواده‌ها (منطق در r-*.ts) ──
   // آموزشی/مشروطی
-  { kind: 'probation-violations', icon: '⚠️', title: 'تخلفات مشروطی', needsTerm: true },
-  { kind: 'probation-chains', icon: '🔗', title: 'مشروطی متناوب و متوالی', needsTerm: true },
-  { kind: 'unit-cap-violations', icon: '📏', title: 'عدم رعایت سقف و کف واحد', needsTerm: true },
-  { kind: 'repeated-courses', icon: '🔁', title: 'دروس چندبار اخذشده' },
+  { kind: 'probation-violations', cat: 'probation', icon: '⚠️', title: 'تخلفات مشروطی', needsTerm: true },
+  { kind: 'probation-chains', cat: 'probation', icon: '🔗', title: 'مشروطی متناوب و متوالی', needsTerm: true },
+  { kind: 'unit-cap-violations', cat: 'probation', icon: '📏', title: 'عدم رعایت سقف و کف واحد', needsTerm: true },
+  { kind: 'repeated-courses', cat: 'probation', icon: '🔁', title: 'دروس چندبار اخذشده' },
   // آموزشی/برنامه و نمره
-  { kind: 'student-weekly-conflicts', icon: '🗓', title: 'تداخل برنامه هفتگی دانشجویان', needsTerm: true },
-  { kind: 'student-exam-conflicts', icon: '📝', title: 'تداخل برنامه امتحانی', needsTerm: true },
-  { kind: 'prereq-violations', icon: '⛓', title: 'عدم رعایت پیش‌نیاز/هم‌نیاز', needsTerm: true },
-  { kind: 'course-grade-status', icon: '📋', title: 'وضعیت درس و نمره', needsTerm: true, customs: [{ key: 'gradeStatus', title: 'وضع نمره' }, { key: 'samaCode', title: 'کد سما' }] },
-  { kind: 'enrollment-pick', icon: '🧾', title: 'انتخاب واحد دانشجویان', needsTerm: true },
+  { kind: 'student-weekly-conflicts', cat: 'program', icon: '🗓', title: 'تداخل برنامه هفتگی دانشجویان', needsTerm: true },
+  { kind: 'student-exam-conflicts', cat: 'program', icon: '📝', title: 'تداخل برنامه امتحانی', needsTerm: true },
+  { kind: 'prereq-violations', cat: 'probation', icon: '⛓', title: 'عدم رعایت پیش‌نیاز/هم‌نیاز', needsTerm: true },
+  { kind: 'course-grade-status', cat: 'probation', icon: '📋', title: 'وضعیت درس و نمره', needsTerm: true, customs: [{ key: 'gradeStatus', title: 'وضع نمره' }, { key: 'samaCode', title: 'کد سما' }] },
+  { kind: 'enrollment-pick', cat: 'program', icon: '🧾', title: 'انتخاب واحد دانشجویان', needsTerm: true },
   // آموزشی/فهرست
-  { kind: 'offered-course-roster', icon: '👥', title: 'دانشجویان درس ارائه‌شده', needsTerm: true },
-  { kind: 'top-students', icon: '🏆', title: 'نفرات برتر (معدل کل)' },
-  { kind: 'no-photo', icon: '📷', title: 'دانشجویان فاقد عکس' },
-  { kind: 'graduates-info', icon: '🎓', title: 'اطلاعات دانش‌آموختگان' },
+  { kind: 'offered-course-roster', cat: 'program', icon: '👥', title: 'دانشجویان درس ارائه‌شده', needsTerm: true },
+  { kind: 'top-students', cat: 'program', icon: '🏆', title: 'نفرات برتر (معدل کل)' },
+  { kind: 'no-photo', cat: 'students', icon: '📷', title: 'دانشجویان فاقد عکس' },
+  { kind: 'graduates-info', cat: 'research', icon: '🎓', title: 'اطلاعات دانش‌آموختگان' },
   // وضعیت و عملیات
-  { kind: 'status-report', icon: '📊', title: 'وضعیت دانشجویان' },
-  { kind: 'major-change-report', icon: '🔀', title: 'تغییر رشته' },
-  { kind: 'status-change-report', icon: '🔄', title: 'تغییر وضعیت' },
-  { kind: 'gpa-refresh-preview', icon: '🧮', title: 'به‌روزرسانی معدل نیمسال' },
-  { kind: 'profile-refresh', icon: '👤', title: 'به‌روزرسانی نیمرخ تحصیلی' },
-  { kind: 'portal-export', icon: '📡', title: 'ارسال به پرتال' },
+  { kind: 'status-report', cat: 'students', icon: '📊', title: 'وضعیت دانشجویان' },
+  { kind: 'major-change-report', cat: 'students', icon: '🔀', title: 'تغییر رشته' },
+  { kind: 'status-change-report', cat: 'students', icon: '🔄', title: 'تغییر وضعیت' },
+  { kind: 'gpa-refresh-preview', cat: 'program', icon: '🧮', title: 'به‌روزرسانی معدل نیمسال' },
+  { kind: 'profile-refresh', cat: 'program', icon: '👤', title: 'به‌روزرسانی نیمرخ تحصیلی' },
+  { kind: 'portal-export', cat: 'program', icon: '📡', title: 'ارسال به پرتال' },
   // امتحانات
-  { kind: 'exam-session-sheet', icon: '📄', title: 'صورت‌جلسه امتحان', needsTerm: true },
-  { kind: 'seat-numbers', icon: '💺', title: 'شماره صندلی', needsTerm: true },
-  { kind: 'final-exam-schedule', icon: '🗓', title: 'برنامه امتحانات پایان ترم', needsTerm: true },
-  { kind: 'grade-entry-report', icon: '✍️', title: 'ثبت نمره استادان', needsTerm: true },
-  { kind: 'grade-deadline', icon: '⏰', title: 'زمان‌بندی ثبت نمرات', needsTerm: true },
+  { kind: 'exam-session-sheet', cat: 'exams', icon: '📄', title: 'صورت‌جلسه امتحان', needsTerm: true },
+  { kind: 'seat-numbers', cat: 'exams', icon: '💺', title: 'شماره صندلی', needsTerm: true },
+  { kind: 'final-exam-schedule', cat: 'exams', icon: '🗓', title: 'برنامه امتحانات پایان ترم', needsTerm: true },
+  { kind: 'grade-entry-report', cat: 'exams', icon: '✍️', title: 'ثبت نمره استادان', needsTerm: true },
+  { kind: 'grade-deadline', cat: 'exams', icon: '⏰', title: 'زمان‌بندی ثبت نمرات', needsTerm: true },
   // کلاس‌ها
-  { kind: 'empty-rooms', icon: '🏚', title: 'کلاس‌های خالی', needsTerm: true },
-  { kind: 'weekly-timetable', icon: '🗓', title: 'برنامه هفتگی کلاس‌ها', needsTerm: true },
-  { kind: 'room-conflicts', icon: '⚠️', title: 'تداخل برنامه کلاس‌ها', needsTerm: true },
-  { kind: 'low-enrollment', icon: '📉', title: 'ظرفیت به حدنصاب نرسیده', needsTerm: true },
-  { kind: 'makeup-courses', icon: '🩹', title: 'دروس جبرانی/پیش‌دانشگاهی' },
+  { kind: 'empty-rooms', cat: 'classes', icon: '🏚', title: 'کلاس‌های خالی', needsTerm: true },
+  { kind: 'weekly-timetable', cat: 'classes', icon: '🗓', title: 'برنامه هفتگی کلاس‌ها', needsTerm: true },
+  { kind: 'room-conflicts', cat: 'classes', icon: '⚠️', title: 'تداخل برنامه کلاس‌ها', needsTerm: true },
+  { kind: 'low-enrollment', cat: 'classes', icon: '📉', title: 'ظرفیت به حدنصاب نرسیده', needsTerm: true },
+  { kind: 'makeup-courses', cat: 'classes', icon: '🩹', title: 'دروس جبرانی/پیش‌دانشگاهی' },
   // اساتید
-  { kind: 'staff-list', icon: '👨‍🏫', title: 'اساتید', needsTerm: true },
-  { kind: 'staff-courses', icon: '📚', title: 'استادان مدرس دروس', needsTerm: true },
-  { kind: 'staff-timetable', icon: '🗓', title: 'برنامه هفتگی اساتید', needsTerm: true },
-  { kind: 'attendance-list', icon: '📝', title: 'حضور و غیاب', needsTerm: true },
+  { kind: 'staff-list', cat: 'classes', icon: '👨‍🏫', title: 'اساتید', needsTerm: true },
+  { kind: 'staff-courses', cat: 'classes', icon: '📚', title: 'استادان مدرس دروس', needsTerm: true },
+  { kind: 'staff-timetable', cat: 'classes', icon: '🗓', title: 'برنامه هفتگی اساتید', needsTerm: true },
+  { kind: 'attendance-list', cat: 'classes', icon: '📝', title: 'حضور و غیاب', needsTerm: true },
   // مالی
-  { kind: 'tuition-tariff', icon: '💰', title: 'تعرفه تحصیلی' },
-  { kind: 'tuition-statement', icon: '🧾', title: 'صورت‌حساب شهریه', needsTerm: true },
+  { kind: 'tuition-tariff', cat: 'finance', icon: '💰', title: 'تعرفه تحصیلی' },
+  { kind: 'tuition-statement', cat: 'finance', icon: '🧾', title: 'صورت‌حساب شهریه', needsTerm: true },
   // پژوهش
-  { kind: 'proposal-cap', icon: '🎓', title: 'ظرفیت پروپوزال استادان', soon: true },
-  { kind: 'pending-requests', icon: '⏳', title: 'درخواست‌های درانتظار' },
-  { kind: 'defenses', icon: '🎤', title: 'لیست دفاعیات' },
-  { kind: 'proposals', icon: '📄', title: 'پروپوزال' },
-  { kind: 'seminars', icon: '💬', title: 'سمینار', soon: true },
+  { kind: 'proposal-cap', cat: 'research', icon: '🎓', title: 'ظرفیت پروپوزال استادان', soon: true },
+  { kind: 'pending-requests', cat: 'research', icon: '⏳', title: 'درخواست‌های درانتظار' },
+  { kind: 'defenses', cat: 'research', icon: '🎤', title: 'لیست دفاعیات' },
+  { kind: 'proposals', cat: 'research', icon: '📄', title: 'پروپوزال' },
+  { kind: 'seminars', cat: 'research', icon: '💬', title: 'سمینار', soon: true },
   // شورا و مکاتبات
-  { kind: 'council-edu', icon: '🏛', title: 'شورای آموزشی' },
-  { kind: 'discipline', icon: '⚖', title: 'کمیته انضباطی', soon: true },
-  { kind: 'letter-templates', icon: '📄', title: 'قالب‌های مکاتبات' },
-  { kind: 'transcript-card', icon: '🎓', title: 'کارنامه دانشجویان' },
-  { kind: 'exam-entry-card', icon: '🎟', title: 'کارت ورود به جلسه', needsTerm: true },
-  { kind: 'student-card', icon: '🪪', title: 'کارت دانشجویی' },
-  { kind: 'study-cert', icon: '📜', title: 'گواهی اشتغال به تحصیل' },
-  { kind: 'edu-confirm', icon: '✅', title: 'تاییدیه تحصیلی' },
-  { kind: 'grad-cert', icon: '🎓', title: 'گواهی پایان تحصیلات' },
-  { kind: 'military-defer', icon: '🎖', title: 'معافیت تحصیلی' },
-  { kind: 'finance-worklist', icon: '🗂️', title: 'کارتابل مالی (مانده دانشجویان)', customs: [{ key: 'onlyDebtors', title: 'فقط بدهکار (1)' }] },
-  { kind: 'payroll-overview', icon: '💵', title: 'حق‌التدریس اساتید', needsTerm: true },
-  { kind: 'bi-teaching-quality', icon: '🎯', title: 'کیفیت تدریس اساتید (BI)' },
-  { kind: 'bi-facilities', icon: '🏫', title: 'امکانات کلاس‌ها (BI)' },
-  { kind: 'graduation-dossiers', icon: '🎓', title: 'پرونده‌های فراغت‌التحصیل', customs: [{ key: 'dossierStatus', title: 'وضعیت (کد)' }] },
-  { kind: 'grade-audit-log', icon: '📜', title: 'لاگ تغییرات نمرات' },
-  { kind: 'third-attempt', icon: '🔁', title: 'دروس بار سوم (مردودی دو بار)', needsTerm: true },
+  { kind: 'council-edu', cat: 'research', icon: '🏛', title: 'شورای آموزشی' },
+  { kind: 'discipline', cat: 'research', icon: '⚖', title: 'کمیته انضباطی', soon: true },
+  { kind: 'letter-templates', cat: 'research', icon: '📄', title: 'قالب‌های مکاتبات' },
+  { kind: 'transcript-card', cat: 'exams', icon: '🎓', title: 'کارنامه دانشجویان' },
+  { kind: 'exam-entry-card', cat: 'exams', icon: '🎟', title: 'کارت ورود به جلسه', needsTerm: true },
+  { kind: 'student-card', cat: 'research', icon: '🪪', title: 'کارت دانشجویی' },
+  { kind: 'study-cert', cat: 'research', icon: '📜', title: 'گواهی اشتغال به تحصیل' },
+  { kind: 'edu-confirm', cat: 'research', icon: '✅', title: 'تاییدیه تحصیلی' },
+  { kind: 'grad-cert', cat: 'research', icon: '🎓', title: 'گواهی پایان تحصیلات' },
+  { kind: 'military-defer', cat: 'research', icon: '🎖', title: 'معافیت تحصیلی' },
+  { kind: 'finance-worklist', cat: 'finance', icon: '🗂️', title: 'کارتابل مالی (مانده دانشجویان)', customs: [{ key: 'onlyDebtors', title: 'فقط بدهکار (1)' }] },
+  { kind: 'payroll-overview', cat: 'finance', icon: '💵', title: 'حق‌التدریس اساتید', needsTerm: true },
+  { kind: 'bi-teaching-quality', cat: 'finance', icon: '🎯', title: 'کیفیت تدریس اساتید (BI)' },
+  { kind: 'bi-facilities', cat: 'finance', icon: '🏫', title: 'امکانات کلاس‌ها (BI)' },
+  { kind: 'graduation-dossiers', cat: 'research', icon: '🎓', title: 'پرونده‌های فراغت‌التحصیل', customs: [{ key: 'dossierStatus', title: 'وضعیت (کد)' }] },
+  { kind: 'grade-audit-log', cat: 'program', icon: '📜', title: 'لاگ تغییرات نمرات' },
+  { kind: 'third-attempt', cat: 'probation', icon: '🔁', title: 'دروس بار سوم (مردودی دو بار)', needsTerm: true },
 ];
 
 const NEW_KINDS = new Set(['finance-worklist', 'payroll-overview', 'bi-teaching-quality', 'bi-facilities', 'graduation-dossiers', 'grade-audit-log', 'probation-violations', 'probation-chains', 'unit-cap-violations', 'repeated-courses', 'student-weekly-conflicts', 'student-exam-conflicts', 'prereq-violations', 'course-grade-status', 'enrollment-pick', 'offered-course-roster', 'top-students', 'no-photo', 'graduates-info', 'status-report', 'major-change-report', 'status-change-report', 'gpa-refresh-preview', 'profile-refresh', 'portal-export', 'exam-session-sheet', 'seat-numbers', 'final-exam-schedule', 'grade-entry-report', 'grade-deadline', 'empty-rooms', 'weekly-timetable', 'room-conflicts', 'low-enrollment', 'makeup-courses', 'staff-list', 'staff-courses', 'staff-timetable', 'attendance-list', 'tuition-tariff', 'tuition-statement', 'pending-requests', 'defenses', 'proposals', 'council-edu', 'letter-templates', 'transcript-card', 'exam-entry-card', 'student-card', 'study-cert', 'edu-confirm', 'grad-cert', 'military-defer']);
 
-export default function ReportsClient({ opts, initialUniversityId, allowedKinds }: { opts: FilterOptions; initialUniversityId?: number; allowedKinds?: string[] | null }) {
+export default function ReportsClient({ opts, initialUniversityId, allowedKinds, scope = 'all' }: { opts: FilterOptions; initialUniversityId?: number; allowedKinds?: string[] | null; scope?: 'all' | 'edu' | 'finance' }) {
   const [kind, setKind] = useState<string>('active-term');
+  const [cat, setCat] = useState<ReportCat | undefined>(undefined);
+  const [search, setSearch] = useState('');
   const [term, setTerm] = useState(opts.latestTerm);
   const [degreeId, setDegreeId] = useState(0);
   const [facultyId, setFacultyId] = useState(0);
@@ -115,12 +130,22 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds 
   const [err, setErr] = useState('');
   const [showLinks, setShowLinks] = useState(false);
 
-  const visibleCards = allowedKinds ? CARDS.filter(c => allowedKinds.includes(c.kind)) : CARDS;
+  // ── محدودسازی بر اساس مرکز (scope) + مجوزها ──
+  const scopeFiltered = CARDS.filter(c =>
+    scope === 'finance' ? c.cat === 'finance' : scope === 'edu' ? c.cat !== 'finance' : true,
+  );
+  const visibleCards = allowedKinds ? scopeFiltered.filter(c => allowedKinds.includes(c.kind)) : scopeFiltered;
+  const tabKeys = CATEGORIES.map(c => c.key).filter(k => visibleCards.some(c => c.cat === k));
+  const activeCat = cat && tabKeys.includes(cat) ? cat : tabKeys[0];
+  const searchedCards = search.trim() ? visibleCards.filter(c => faIncludes(c.title, search) || faIncludes(c.kind, search)) : visibleCards;
+  const gridCards = activeCat ? searchedCards.filter(c => c.cat === activeCat) : searchedCards;
+
   const card = visibleCards.find(c => c.kind === kind);
   useEffect(() => {
     if (!visibleCards.some(c => c.kind === kind)) setKind(visibleCards[0]?.kind ?? 'active-term');
+    if (cat && !visibleCards.some(c => c.cat === cat)) setCat(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allowedKinds]);
+  }, [allowedKinds, scope]);
   const filters = { term, degreeId, facultyId, departmentId, majorId, entryYear, q: q.trim(), nationalCode: nationalCode.trim(), miss, page: 1, universityId, ...extra };
 
   const run = async (page = 1) => {
@@ -170,25 +195,62 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds 
 
   return (
     <div className="space-y-4">
-      {/* نوار دسته‌بندی به سبک سما */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-        {visibleCards.map(c => (
-          <button
-            key={c.kind}
-            disabled={c.soon}
-            onClick={() => pick(c.kind)}
-            className={`flex items-center gap-2 p-3 rounded-lg border-2 text-right font-bold text-[13px] transition-all shadow-sm
-              ${c.soon
-                ? 'bg-stone-100 border-stone-200 text-stone-400 cursor-not-allowed'
-                : kind === c.kind
-                  ? 'bg-indigo-50 border-indigo-500 text-indigo-950 shadow-md'
-                  : 'bg-gradient-to-b from-white to-slate-100 border-slate-300 text-slate-700 hover:border-indigo-300 hover:shadow'}`}
-          >
-            <span className="text-2xl">{c.icon}</span>
-            <span>{c.title}{c.soon && <span className="block text-[10px] font-normal">به‌زودی</span>}</span>
-          </button>
-        ))}
-      </div>
+      {/* زیرعنوان مرکز مالی */}
+      {scope === 'finance' && (
+        <p className="text-xs font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">مرکز گزارش‌های مالی</p>
+      )}
+
+      {/* نوار دسته‌بندی (تب‌ها) */}
+      {tabKeys.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {CATEGORIES
+            .filter(c => (scope === 'finance' ? c.key === 'finance' : scope === 'edu' ? c.key !== 'finance' : true) && tabKeys.includes(c.key))
+            .map(c => (
+              <button
+                key={c.key}
+                onClick={() => setCat(c.key)}
+                className={`px-3 py-1.5 rounded-full border-2 text-xs font-bold transition-all shadow-sm
+                  ${activeCat === c.key
+                    ? 'bg-indigo-600 border-indigo-700 text-white shadow-md'
+                    : 'bg-white border-slate-300 text-slate-600 hover:border-indigo-300 hover:shadow'}`}
+              >
+                {c.label}
+              </button>
+            ))}
+        </div>
+      )}
+
+      {/* جست‌وجوی گزارش‌ها */}
+      <input
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder={`🔍 جست‌وجو در گزارش‌ها (نام یا کد)… (${visibleCards.length} گزارش)`}
+        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm shadow-sm focus:border-indigo-400 focus:outline-none"
+      />
+
+      {/* کارت‌های گزارش دستهٔ فعال */}
+      {gridCards.length === 0 ? (
+        <p className="p-6 text-center text-slate-500 text-sm bg-white border border-slate-300 rounded-xl shadow-sm">گزارشی با این عبارت یا در این دسته یافت نشد.</p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+          {gridCards.map(c => (
+            <button
+              key={c.kind}
+              disabled={c.soon}
+              onClick={() => pick(c.kind)}
+              className={`flex items-center gap-2 p-3 rounded-lg border-2 text-right font-bold text-[13px] transition-all shadow-sm
+                ${c.soon
+                  ? 'bg-stone-100 border-stone-200 text-stone-400 cursor-not-allowed'
+                  : kind === c.kind
+                    ? 'bg-indigo-50 border-indigo-500 text-indigo-950 shadow-md'
+                    : 'bg-gradient-to-b from-white to-slate-100 border-slate-300 text-slate-700 hover:border-indigo-300 hover:shadow'}`}
+            >
+              <span className="text-2xl">{c.icon}</span>
+              <span>{c.title}{c.soon && <span className="block text-[10px] font-normal">به‌زودی</span>}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* نوار فیلتر */}
       {!card?.soon && (
