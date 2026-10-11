@@ -21,6 +21,19 @@ import { jalaliDateOf } from '@/lib/scheduling-core';
 
 const EDITORS = ['ADMIN', 'EDU_EXPERT'];
 
+/** نرمال‌سازی تاریخ سشن به شمسی YYYY/MM/DD (ردیف قدیمی میلادی → تبدیل) */
+function normSessionDate(v: unknown): string {
+  const s = String(v ?? '').trim();
+  if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(s)) return s;
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+  if (m) {
+    try {
+      return jalaliDateOf(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+    } catch { return s; }
+  }
+  return s;
+}
+
 // ─────────────────────────── helpers (غیر export — گارد CI) ───────────────────────────
 
 async function listRealTerms(universityId?: number) {
@@ -74,7 +87,9 @@ async function loadSessions(termId: number, universityId?: number) {
 
   return sessions.map(s => ({
     id: s.id,
-    examDate: s.examDate,
+    // قرارداد: exam_sessions شمسی YYYY/MM/DD است؛ اما ردیف‌های قدیمی/مهاجرتی
+    // میلادی YYYY-MM-DD دارند — این‌جا نرمال می‌کنیم تا UI همیشه شمسی ببیند.
+    examDate: normSessionDate(s.examDate),
     startTime: s.startTime,
     endTime: s.endTime,
     proctors: inv
