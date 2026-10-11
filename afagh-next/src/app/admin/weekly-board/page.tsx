@@ -7,6 +7,7 @@ import {
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { currentExpertFilters } from '@/lib/expert-scope';
+import PrintButton from './PrintButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -97,7 +98,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
           </select>
         </label>
         <button className="rounded-xl bg-indigo-700 px-5 py-2 text-white font-black text-sm">نمایش</button>
-        <button type="button" onClick={() => window.print()} className="rounded-xl bg-slate-800 px-5 py-2 text-white font-black text-sm print:hidden">🖨️ چاپ سردر</button>
+        <PrintButton />
       </form>
 
       {term && (
