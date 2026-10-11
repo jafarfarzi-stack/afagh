@@ -47,9 +47,13 @@ const readTsv = (name) => {
   const rows = lines.slice(1).map(l => l.split('\t'));
   return { header, rows };
 };
-const col = (row, header, name) => {
-  const i = header.indexOf(name);
-  return i >= 0 && i < row.length ? String(row[i] ?? '').trim() : '';
+const col = (row, header, ...names) => {
+  for (const n of names) {
+    let i = header.indexOf(n);
+    if (i < 0) i = header.findIndex(h => h.toLowerCase() === n.toLowerCase());
+    if (i >= 0 && i < row.length) return String(row[i] ?? '').trim();
+  }
+  return '';
 };
 const num = (s) => { const v = Number(String(s ?? '').replace(/[,\s]/g, '')); return Number.isFinite(v) ? v : null; };
 /** کد ترم قدیمی ('902') → کد ما ('13902') */
@@ -83,7 +87,7 @@ const report = { dry: !APPLY, uni: UNI, gate: null, termAms: null, stdPays: null
     console.log('tsv: termAms=' + tams.rows.length + ' stdPays=' + spay.rows.length);
 
     // ── گیت: نرخ تطبیق ──
-    const amsStno = new Set(tams.rows.map(r => col(r, tams.header, 'StnO')).filter(Boolean));
+    const amsStno = new Set(tams.rows.map(r => col(r, tams.header, 'StnO', 'Stno')).filter(Boolean));
     const payStno = new Set(spay.rows.map(r => col(r, spay.header, 'Stno')).filter(Boolean));
     const allStno = [...new Set([...amsStno, ...payStno])];
     const stHit = allStno.filter(c => stuById.has(c));
@@ -115,7 +119,7 @@ const report = { dry: !APPLY, uni: UNI, gate: null, termAms: null, stdPays: null
     try {
       await tx.query('BEGIN');
       for (const r of tams.rows) {
-        const stno = col(r, tams.header, 'StnO');
+        const stno = col(r, tams.header, 'StnO', 'Stno');
         const sid = stuById.get(stno);
         const tid = termById.get(toOurTerm(col(r, tams.header, 'TermCode')));
         const fix = num(col(r, tams.header, 'Fix_Price'));
@@ -190,7 +194,7 @@ const report = { dry: !APPLY, uni: UNI, gate: null, termAms: null, stdPays: null
       for (const r of tams.rows) {
         const fin = num(col(r, tams.header, 'FinallAcc'));
         if (fin !== 0) continue;
-        const sid = stuById.get(col(r, tams.header, 'StnO'));
+        const sid = stuById.get(col(r, tams.header, 'StnO', 'Stno'));
         const tid = termById.get(toOurTerm(col(r, tams.header, 'TermCode')));
         if (!sid) { cStat.skipNoStudent++; continue; }
         if (!tid) { cStat.skipNoTerm++; continue; }
