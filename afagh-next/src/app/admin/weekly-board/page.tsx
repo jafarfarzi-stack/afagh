@@ -7,6 +7,7 @@ import {
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { currentExpertFilters } from '@/lib/expert-scope';
+import { groupIntoMerged, mergedGroupKey } from '@/lib/professor-calendar-layout';
 import PrintButton from './PrintButton';
 
 export const dynamic = 'force-dynamic';
@@ -16,8 +17,21 @@ const HOURS = Array.from({ length: 13 }, (_, i) => `${String(8 + i).padStart(2, 
 
 const faDigits = (s: string | number) => String(s).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
 
+type BoardRow = {
+  offeringId: number; groupNumber: number; enrolledCount: number | null;
+  courseCode: string | null; courseTitle: string | null;
+  dayOfWeek: number | null; startTime: string | null; endTime: string | null;
+  roomId: number | null; roomName: string | null; buildingName: string | null;
+  profFirstName: string | null; profLastName: string | null;
+  deptId: number | null; sharedKey: string | null;
+};
+
+function profName(m: Pick<BoardRow, 'profFirstName' | 'profLastName'>): string {
+  return `${m.profFirstName || ''} ${m.profLastName || ''}`.trim();
+}
+
 export default async function WeeklyBoardPage({ searchParams }: {
-  searchParams: Promise<{ term?: string; faculty?: string; dept?: string }>;
+  searchParams: Promise<{ term?: string; faculty?: string; dept?: string; room?: string }>;
 }) {
   const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
   const uni = await getCurrentUniversity().catch(() => null);
@@ -25,6 +39,8 @@ export default async function WeeklyBoardPage({ searchParams }: {
   const termId = Number(sp.term) || 0;
   const facultyId = Number(sp.faculty) || 0;
   const deptId = Number(sp.dept) || 0;
+  const roomId = Number(sp.room) || 0;
+  const posterMode = roomId > 0;
 
   const terms = await db.select({ id: academic_terms.id, title: academic_terms.title, isCurrent: academic_terms.isCurrent })
     .from(academic_terms)
@@ -34,6 +50,11 @@ export default async function WeeklyBoardPage({ searchParams }: {
 
   const facs = await db.select({ id: faculties.id, name: faculties.name }).from(faculties).orderBy(asc(faculties.name));
   const depts = await db.select({ id: departments.id, name: departments.name, facultyId: departments.facultyId }).from(departments).orderBy(asc(departments.name));
+  const rooms = await db.select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, capacity: classrooms.capacity })
+    .from(classrooms)
+    .where(uni ? eq(classrooms.universityId, uni.id) : undefined)
+    .orderBy(asc(classrooms.name));
+  const selRoom = rooms.find(r => r.id === roomId) ?? null;
 
   const rows = term
     ? await db
@@ -46,11 +67,13 @@ export default async function WeeklyBoardPage({ searchParams }: {
           dayOfWeek: schedules.dayOfWeek,
           startTime: schedules.startTime,
           endTime: schedules.endTime,
+          roomId: schedules.roomId,
           roomName: classrooms.name,
           buildingName: classrooms.buildingName,
           profFirstName: users.firstName,
           profLastName: users.lastName,
           deptId: courses.departmentId,
+          sharedKey: course_offerings.sharedScheduleGroupKey,
         })
         .from(schedules)
         .innerJoin(course_offerings, eq(course_offerings.id, schedules.offeringId))
@@ -62,24 +85,62 @@ export default async function WeeklyBoardPage({ searchParams }: {
           eq(schedules.scheduleType, 'CLASS'),
           eq(course_offerings.termId, term.id),
           eq(course_offerings.isActive, 1),
+          ...(roomId ? [eq(schedules.roomId, roomId)] : []),
           ...await scopeConds(user.roles, deptId, facultyId),
         ))
         .orderBy(asc(courses.title), asc(course_offerings.groupNumber))
     : [];
 
+  // ── ادغامی‌ها مثل برنامهٔ استاد/دانشجو: یک بلوک واحد ──
+  // کلید = sharedScheduleGroupKey ارائه (K) وگرنه سانس یکسان روز/ساعت/کلاس (S).
+  const mergedCells = groupIntoMerged<BoardRow & { uid: number }>(
+    rows.map((r, i) => ({ ...r, uid: i })),
+    (m) => m.offeringId * 100000 + m.uid,
+    (m) => {
+      const shared = String(m.sharedKey ?? '').trim();
+      const slot = mergedGroupKey(null, {
+        dayOfWeek: m.dayOfWeek,
+        startTime: m.startTime,
+        endTime: m.endTime,
+        roomKey: m.roomId ?? m.roomName ?? null,
+      });
+      if (slot == null) return shared ? `K:${shared}` : null;
+      return shared ? `K:${shared}|${slot}` : slot;
+    },
+  ).map(g => {
+    if (!g.merged) {
+      const m = g.members[0];
+      return {
+        ...m, merged: false as const, codes: String(m.courseCode ?? ''),
+        profs: profName(m), groupLabel: faDigits(m.groupNumber),
+        enrolled: Number(m.enrolledCount) || 0,
+      };
+    }
+    const codes = [...new Set(g.members.map(m => String(m.courseCode ?? '').trim()).filter(Boolean))];
+    const profs = [...new Set(g.members.map(profName).filter(Boolean))];
+    const groups = [...new Set(g.members.map(m => m.groupNumber))].sort((a, b) => a - b);
+    const enrolled = g.members.reduce((s, m) => s + (Number(m.enrolledCount) || 0), 0);
+    return {
+      ...g.members[0], merged: true as const, codes: codes.join(' / '),
+      profs: profs.join('، '), groupLabel: groups.map(faDigits).join('، '), enrolled,
+    };
+  });
+
   const toMin = (t: string | null) => { if (!t) return 0; const [h, m] = String(t).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
   const fmtClock = (min: number) => faDigits(`${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`);
-  const grid: Record<number, { r: typeof rows[number]; start: number; end: number }[]> = {};
-  for (const r of rows) {
+  const grid: Record<number, { r: (typeof mergedCells)[number]; start: number; end: number }[]> = {};
+  for (const r of mergedCells) {
     const d = r.dayOfWeek == null ? -1 : Number(r.dayOfWeek);
     if (d < 0 || d > 6) continue;
     const start = toMin(r.startTime), end = toMin(r.endTime);
     (grid[d] ??= []).push({ r, start, end });
   }
 
+  const poster = posterMode && selRoom ? selRoom : null;
+
   return (
     <div className="space-y-4" dir="rtl">
-      <form method="get" className="card flex flex-wrap items-end gap-3">
+      <form method="get" className="card flex flex-wrap items-end gap-3 print:hidden">
         <label className="text-xs font-bold">ترم
           <select name="term" defaultValue={term?.id} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
             {terms.map(t => <option key={t.id} value={t.id}>{t.title}{t.isCurrent === 1 ? ' (جاری)' : ''}</option>)}
@@ -97,17 +158,33 @@ export default async function WeeklyBoardPage({ searchParams }: {
             {depts.filter(d => !facultyId || d.facultyId === facultyId).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
         </label>
+        <label className="text-xs font-bold">🚪 کلاس (پوستر درب)
+          <select name="room" defaultValue={roomId || ''} className="block mt-1 border border-teal-500 rounded-xl px-3 py-2 text-sm bg-teal-50 font-black">
+            <option value="">همهٔ کلاس‌ها (تابلوی کلی)</option>
+            {rooms.map(r => <option key={r.id} value={r.id}>{r.name}{r.buildingName ? ` — ${r.buildingName}` : ''}</option>)}
+          </select>
+        </label>
         <button className="rounded-xl bg-indigo-700 px-5 py-2 text-white font-black text-sm">نمایش</button>
         <PrintButton />
       </form>
 
       {term && (
         <div className="print-area rounded-2xl border border-slate-300 bg-white p-4 space-y-3 overflow-x-auto" dir="rtl">
-          <div className="text-center">
-            <h1 className="text-base font-black text-slate-900">برنامهٔ هفتگی کلاس‌ها — {term.title}</h1>
-            <p className="text-[11px] text-slate-500">دانشگاه {uni?.title ?? ''} · {rows.length} کلاس<span className="print:hidden"> (دامنهٔ انتخابی)</span></p>
-          </div>
-          <table className="w-full border-collapse text-[11px]">
+          {poster ? (
+            <div className="text-center border-b-4 border-double border-slate-800 pb-3">
+              <h1 className="text-2xl font-black text-slate-900">🚪 برنامهٔ هفتگی {poster.name}</h1>
+              <p className="text-sm font-bold text-slate-700 mt-1">
+                {poster.buildingName ? `${poster.buildingName} · ` : ''}ظرفیت {faDigits(poster.capacity)} نفر · {term.title}
+              </p>
+              <p className="text-[11px] text-slate-500">دانشگاه {uni?.title ?? ''}</p>
+            </div>
+          ) : (
+            <div className="text-center">
+              <h1 className="text-base font-black text-slate-900">برنامهٔ هفتگی کلاس‌ها — {term.title}</h1>
+              <p className="text-[11px] text-slate-500">دانشگاه {uni?.title ?? ''} · {mergedCells.length} سانس<span className="print:hidden"> (دامنهٔ انتخابی)</span></p>
+            </div>
+          )}
+          <table className={`w-full border-collapse ${poster ? 'text-sm' : 'text-[11px]'}`}>
             <thead>
               <tr>
                 <th className="border border-slate-300 bg-slate-100 p-1">ساعت</th>
@@ -123,10 +200,11 @@ export default async function WeeklyBoardPage({ searchParams }: {
                     return (
                       <td key={di} className="border border-slate-200 p-0.5 align-top" style={{ minHeight: 46 }}>
                         {cells.map((c, i) => (
-                          <div key={i} className="mb-0.5 rounded bg-indigo-50 border-r-2 border-indigo-500 px-1 py-0.5 leading-4 text-[10px]">
-                            <b>{c.r.courseCode} {c.r.courseTitle}</b> گروه {faDigits(c.r.groupNumber)}
-                            <div className="text-slate-500">{fmtClock(c.start)}–{fmtClock(c.end)} · {c.r.roomName || '—'}{c.r.buildingName ? ` (${c.r.buildingName})` : ''}</div>
-                            <div className="text-slate-600">{c.r.profFirstName || ''} {c.r.profLastName || ''} · {faDigits(c.r.enrolledCount ?? 0)} نفر</div>
+                          <div key={i} className={`mb-0.5 rounded border-r-2 px-1 py-0.5 leading-5 ${c.r.merged ? 'bg-amber-50 border-amber-500' : 'bg-indigo-50 border-indigo-500'} ${poster ? 'text-[13px]' : 'text-[10px] leading-4'}`}>
+                            <b>{c.r.codes} {c.r.courseTitle}</b> گروه {c.r.groupLabel}
+                            {c.r.merged && <span className="mr-1 rounded bg-amber-200 px-1 text-[10px] font-black">🔗 ادغامی</span>}
+                            <div className="text-slate-500">{fmtClock(c.start)}–{fmtClock(c.end)}{poster ? '' : ` · ${c.r.roomName || '—'}`}</div>
+                            <div className="text-slate-600">{c.r.profs} · {faDigits(c.r.enrolled)} نفر</div>
                           </div>
                         ))}
                       </td>
