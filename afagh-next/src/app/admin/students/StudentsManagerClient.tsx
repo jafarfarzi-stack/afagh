@@ -428,6 +428,9 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
   // ── فرم ویرایش پروندهٔ دانشجو (هویت + تکمیلی سما) — فقط ADMIN ──
   const [profile, setProfile] = useState<Record<string, string | number | null>>({});
   const [profileSaving, setProfileSaving] = useState(false);
+  // کد ورود ۵ رقمی (سال ۴رقمی + ترم ۱رقمی) — ویرایش مستقل از فرم هویت
+  const [entryCode, setEntryCode] = useState('');
+  const [entrySaving, setEntrySaving] = useState(false);
   const syncProfile = (s: StudentItem) => {
     setProfile({
       fatherName: s.fatherName || '', birthCertNo: s.birthCertNo || '',
@@ -453,7 +456,10 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
     });
   };
   useEffect(() => {
-    if (currentStudent) syncProfile(currentStudent);
+    if (currentStudent) {
+      syncProfile(currentStudent);
+      setEntryCode(`${currentStudent.entryYear}${currentStudent.entryTerm}`);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStudent?.id]);
   const pf = (k: string, v: string | number) => setProfile(p => ({ ...p, [k]: v }));
@@ -487,6 +493,35 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
       setProfileSaving(false);
     }
   };
+
+  const saveEntry = async () => {
+    if (!currentStudent) return;
+    const code = entryCode.trim();
+    if (!/^\d{5}$/.test(code)) { showToast('کد ورود باید ۵ رقم باشد (مثل 14032).'); return; }
+    const entryYear = Number(code.slice(0, 4));
+    const entryTerm = Number(code.slice(4));
+    if (entryYear < 1300 || entryYear > 1500) { showToast('سال ورود باید بین ۱۳۰۰ تا ۱۵۰۰ باشد.'); return; }
+    if (entryTerm < 1 || entryTerm > 3) { showToast('ترم ورود باید ۱ (مهر)، ۲ (بهمن) یا ۳ (تابستان) باشد.'); return; }
+    setEntrySaving(true);
+    try {
+      const r = await updateStudentProfileAction(currentStudent.id, { entryYear, entryTerm });
+      showToast(r.ok ? '✅ سال/ترم ورود ذخیره شد.' : (r.error || 'انجام نشد.'));
+      if (r.ok) router.refresh();
+    } catch (err: any) {
+      showToast(err?.message || 'خطا در ارتباط با سرور.');
+    } finally {
+      setEntrySaving(false);
+    }
+  };
+  // تاریخ شروع بر اساس کد ورود تایپ‌شده (ترم ۲ → ۱۱/۰۱، بقیه → ۰۷/۰۱)
+  const entryStartDate = (() => {
+    const code = entryCode.trim();
+    if (!/^\d{5}$/.test(code)) return null;
+    const y = Number(code.slice(0, 4));
+    const t = Number(code.slice(4));
+    if (y < 1300 || y > 1500 || t < 1 || t > 3) return null;
+    return `${faNum(y, 0)}/${t === 2 ? '۱۱' : '۰۷'}/۰۱`;
+  })();
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -683,8 +718,29 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                 <div className="space-y-1.5 border border-slate-300 p-2.5 rounded bg-slate-50/50">
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-red-700 font-bold">* کد ترم ورود:</span>
-                    <input type="text" defaultValue={`${currentStudent.entryYear}1`} className="bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
-                    <span className="text-slate-500 text-[10px]">* شروع: {currentStudent.entryYear}/۰۷/۰۱</span>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={entryCode}
+                        onChange={e => setEntryCode(e.target.value.replace(/\D/g, '').slice(0, 5))}
+                        placeholder="مثل 14032"
+                        disabled={entrySaving}
+                        className="bg-white border border-slate-300 px-2 py-1 rounded font-mono w-28 text-center tracking-wider placeholder:text-slate-300 disabled:opacity-50"
+                        title="سال ورود (۴ رقم) + ترم ورود (۱ رقم) — مثل 14032 یعنی سال 1403 ترم 2"
+                      />
+                      <button
+                        onClick={saveEntry}
+                        disabled={entrySaving}
+                        className="px-2 py-1 rounded bg-blue-700 text-white font-bold text-[11px] hover:bg-blue-800 disabled:opacity-50"
+                        title="ذخیرهٔ سال/ترم ورود (فقط مدیر سیستم)"
+                      >
+                        {entrySaving ? 'در حال ذخیره…' : '💾 ذخیرهٔ ورود'}
+                      </button>
+                    </div>
+                    <span className="text-slate-500 text-[10px]">
+                      {entryStartDate ? `* شروع: ${entryStartDate}` : null}
+                      {currentStudent.entryDate ? ` — تاریخ ورود: ${dateToJalali(currentStudent.entryDate)}` : null}
+                    </span>
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-red-700 font-bold">* نام خانوادگی و نام:</span>

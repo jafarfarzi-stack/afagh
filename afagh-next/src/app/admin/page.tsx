@@ -84,7 +84,9 @@ export default async function AdminHome({
   const sp = await searchParams;
   const user = await requireRole(ALL_ADMIN_ROLES);
   const isEdu = user.roles.includes('ADMIN') || user.roles.includes('EDU_EXPERT');
-  const groups = groupedModules(user.roles);
+  const { getUserPermissionCodes } = await import('@/lib/permissions-enforcer');
+  const permissionCodes = await getUserPermissionCodes(user.id).catch(() => []);
+  const groups = groupedModules(user.roles, permissionCodes);
 
   // ── مرتب‌سازی ستونی کارتابل از URL (?sort=col&dir=asc|desc — پیش‌فرض: جدیدترین) ──
   const SORTABLE: Record<string, 'track' | 'name' | 'status' | 'created' | 'proc'> = {

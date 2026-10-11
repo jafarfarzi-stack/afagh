@@ -16,7 +16,7 @@ import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA } from '@/lib/regulations-engine';
 import { resolveStudentCurriculum } from '@/lib/curriculum-apply';
-import { getTermScope } from '@/lib/term-scope';
+import { getTermScope, listTermsForUniversity, termOrdinalForEntry } from '@/lib/term-scope';
 import { getBool } from '@/lib/settings';
 import {
   buildDashboardScheduleMap,
@@ -57,6 +57,17 @@ export default async function StudentDashboardPage() {
     isDemoStudentUser(user.id),
   ]);
   const { filteredTerm, term } = resolveDashboardTerm(termScope);
+
+  // شمارهٔ ترم تحصیلی بر مبنای ورودی — جایگاهِ ترمِ فعلی نسبت به ترمِ ورود
+  const ordinalTerms = await listTermsForUniversity(me.universityId, { limit: null }).catch(() => []);
+  const termOrdinal = term
+    ? termOrdinalForEntry({
+        entryYear: me.entryYear,
+        entryTerm: me.entryTerm,
+        terms: ordinalTerms,
+        targetTermCode: (term as { termCode?: string | null }).termCode ?? null,
+      })
+    : null;
 
   if (demo) {
     return <DemoDashboard name={user.name} filteredTermTitle={filteredTerm?.title ?? null} />;
@@ -255,7 +266,7 @@ export default async function StudentDashboardPage() {
                   {statusFa[me.status || 'ACTIVE'] || 'دانشجوی فعال'}
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white/15 text-emerald-100 border border-white/20">
-                  ترم {me.currentTermNo ?? '—'} تحصیلی
+                  ترم {(termOrdinal ?? me.currentTermNo ?? '').toString().toLocaleString('fa-IR')} تحصیلی
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-emerald-200 font-medium">

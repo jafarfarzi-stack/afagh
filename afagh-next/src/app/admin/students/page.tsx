@@ -2,7 +2,6 @@ import { and, count, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { degree_level_configs, departments, educational_regulations, faculties, legacy_code_maps, majors, roles, staff, students, universities, user_roles, users } from '@/db/schema';
 import type { RegulationPick } from './types';
-import { requireRole } from '@/lib/auth';
 import { currentExpertFilters, scopedMajorIds } from '@/lib/expert-scope';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { normalizeFa, normCol, toEnDigits } from '@/lib/persian-search';
@@ -18,7 +17,11 @@ export default async function AdminStudentsPage({
 }: {
   searchParams: Promise<{ q?: string; page?: string; status?: string; degree?: string; sort?: string; f_code?: string; f_name?: string; f_nc?: string; f_major?: string; f_year?: string; university?: string }>;
 }) {
-  const user = await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'GRADUATEAFFAIRS']);
+  const { requireRoleOrPermission } = await import('@/lib/permissions-enforcer');
+  const user = await requireRoleOrPermission(
+    ['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'GRADUATEAFFAIRS'],
+    ['students:view_dossier'],
+  );
   const canEditGrades = user.roles.some(r => r === 'ADMIN' || r === 'GRADUATEAFFAIRS');
   const sp = await searchParams;
 

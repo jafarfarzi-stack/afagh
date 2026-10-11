@@ -745,6 +745,9 @@ export type StudentProfilePatch = {
   documentDeficiency?: string | null;
   unitsRemaining?: number | null;
   eqSemesters?: number | null;
+  entryYear?: number | null;
+  entryTerm?: number | null;
+  entryDate?: string | null;
 };
 
 /** ذخیرهٔ تغییرات پروندهٔ دانشجو (هویت + تکمیلی سما) توسط ادمین — فقط ADMIN */
@@ -776,6 +779,17 @@ export async function updateStudentProfileAction(
     return isNaN(n) ? null : n;
   };
   try {
+    // ── سال/ترم ورود: سال ۱۳۰۰..۱۵۰۰، ترم ۱..۳ (می‌آید از کد ورود ۵ رقمی کلاینت) ──
+    if ('entryYear' in patch || 'entryTerm' in patch) {
+      const ey = patch.entryYear == null ? undefined : Number(patch.entryYear);
+      const et = patch.entryTerm == null ? undefined : Number(patch.entryTerm);
+      if (ey !== undefined && (!Number.isInteger(ey) || ey < 1300 || ey > 1500)) {
+        return { ok: false, error: 'سال ورود باید عددی صحیح بین ۱۳۰۰ تا ۱۵۰۰ باشد.' };
+      }
+      if (et !== undefined && (!Number.isInteger(et) || et < 1 || et > 3)) {
+        return { ok: false, error: 'ترم ورود باید ۱ (مهر)، ۲ (بهمن) یا ۳ (تابستان) باشد.' };
+      }
+    }
     const userSet: Record<string, unknown> = {};
     const us = [
       ['fatherName', 100], ['birthCertNo', 20], ['placeOfBirth', 150], ['placeOfIssue', 150],
@@ -805,12 +819,12 @@ export async function updateStudentProfileAction(
       'studentCardStatus', 'archiveNo', 'parvandehNo', 'dormName', 'dormRoom', 'guardianJobTitle',
       'guardianPhone', 'guardianAddress', 'guardianEmail', 'diplomaType', 'diplomaPlace',
       'diplomaYear', 'diplomaGrade', 'pishdPlace', 'pishdYear', 'pishdGrade', 'tuitionType',
-      'englishExamType', 'englishScore', 'documentDeficiency',
+      'englishExamType', 'englishScore', 'documentDeficiency', 'entryDate',
     ] as const;
     for (const k of ss) {
       if (k in patch) { const v = clean((patch as Record<string, unknown>)[k], 300); if (v !== undefined) stuSet[k] = v; }
     }
-    const ns = ['hasDorm', 'tuitionPayer', 'certIssued3m', 'unitsRemaining', 'eqSemesters'] as const;
+    const ns = ['hasDorm', 'tuitionPayer', 'certIssued3m', 'unitsRemaining', 'eqSemesters', 'entryYear', 'entryTerm'] as const;
     for (const k of ns) {
       if (k in patch) { const v = cleanNum((patch as Record<string, unknown>)[k]); if (v !== undefined) stuSet[k] = v; }
     }

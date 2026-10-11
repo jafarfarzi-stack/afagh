@@ -14,6 +14,7 @@ export type StudentItem = {
   mobile: string;
   entryYear: number;
   entryTerm: number;
+  entryDate?: string | null;
   status: string;
   samaStatusCode?: string | null;
   quotaType: string;

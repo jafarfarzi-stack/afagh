@@ -20,7 +20,9 @@ const ALL_ADMIN_ROLES = [
 export default async function CategoryPage({ params }: { params: Promise<{ group: string }> }) {
   const user = await requireRole(ALL_ADMIN_ROLES);
   const { group: key } = await params;
-  const groups = groupedModules(user.roles);
+  const { getUserPermissionCodes } = await import('@/lib/permissions-enforcer');
+  const permissionCodes = await getUserPermissionCodes(user.id).catch(() => []);
+  const groups = groupedModules(user.roles, permissionCodes);
   const g = groups.find(x => x.group.key === key);
 
   if (!g) {

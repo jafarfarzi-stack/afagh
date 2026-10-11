@@ -11,7 +11,7 @@ import type { UniTheme } from '@/lib/university-theme';
  * منوی کشویی سمت راست کارتابل مدیریت — جایگزین نوار افقی قبلی.
  * دکمهٔ ثابت بالا-راست + پنل لغزنده از راست با جست‌وجو؛ فقط نقش‌های مجاز.
  */
-export default function AdminNav({ roles, theme }: { roles: string[]; theme?: UniTheme }) {
+export default function AdminNav({ roles, permissions, theme }: { roles: string[]; permissions?: string[]; theme?: UniTheme }) {
   const th: UniTheme = theme ?? {
     header: 'bg-indigo-950', badge: 'bg-indigo-900/90 hover:bg-indigo-900 border-indigo-600/60',
     ring: 'border-indigo-700/60', soft: 'bg-indigo-900/80 text-indigo-200',
@@ -34,8 +34,8 @@ export default function AdminNav({ roles, theme }: { roles: string[]; theme?: Un
     return () => window.removeEventListener('keydown', onKey);
   }, [open ]);
 
-  const modules = useMemo(() => navModules(roles), [roles]);
-  const grouped = useMemo(() => groupedModules(roles), [roles]);
+  const modules = useMemo(() => navModules(roles, permissions), [roles, permissions]);
+  const grouped = useMemo(() => groupedModules(roles, permissions), [roles, permissions]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const filtered = useMemo(() => {
     const t = normalizeFa(q);

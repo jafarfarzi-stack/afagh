@@ -4,11 +4,10 @@
  * Usage: import { requirePermission, canAccessField, withPermissionCheck } from '@/lib/permissions-enforcer'
  */
 
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { db } from '@/db';
-import { eq, and } from 'drizzle-orm';
-import { users, roles, role_permissions, permissions, user_roles } from '@/db/schema';
+import { eq } from 'drizzle-orm';
+import { roles, role_permissions, permissions, user_roles } from '@/db/schema';
 
 export type PermissionCode = string; // e.g., 'finance:student:edit', 'grades:enter', 'enrollment:approve'
 export type ResourceType = 'page' | 'api' | 'field' | 'action' | 'button';
@@ -21,7 +20,14 @@ interface PermissionCache {
 const cache: PermissionCache = { userPermissions: new Map(), lastRefresh: 0 };
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-/** Refresh permission cache from database */
+/**
+ * Refresh permission cache from database.
+ *
+ * 🔧 Fix: custom (admin-created, non-system) roles were previously filtered out
+ * with `WHERE roles.isSystem = 1`, so their permissions never reached the cache
+ * and the whole RBAC matrix was inert for them. Now permissions of ALL roles
+ * (system + custom) are loaded.
+ */
 export async function refreshPermissionCache(): Promise<void> {
   const rows = await db.select({
     userId: user_roles.userId,
@@ -30,8 +36,7 @@ export async function refreshPermissionCache(): Promise<void> {
     .from(user_roles)
     .innerJoin(roles, eq(roles.id, user_roles.roleId))
     .innerJoin(role_permissions, eq(role_permissions.roleId, roles.id))
-    .innerJoin(permissions, eq(permissions.id, role_permissions.permissionId))
-    .where(eq(roles.isSystem, 1)); // or filter by universityId if needed
+    .innerJoin(permissions, eq(permissions.id, role_permissions.permissionId));
 
   const newMap = new Map<number, Set<string>>();
   for (const row of rows) {
@@ -54,6 +59,53 @@ export async function getUserPermissions(userId: number): Promise<Set<string>> {
 export async function hasPermission(userId: number, permissionCode: PermissionCode): Promise<boolean> {
   const perms = await getUserPermissions(userId);
   return perms.has(permissionCode);
+}
+
+/** Permission codes of a user as a sorted, unique array (reuses the cache) */
+export async function getUserPermissionCodes(userId: number): Promise<string[]> {
+  const perms = await getUserPermissions(userId);
+  return [...perms].sort();
+}
+
+/** نتیجهٔ گارد ترکیبی «نقش یاهمجوز» — همان شکل SessionUser + مجوزهای کاربر */
+export type PermissionAuthResult = {
+  id: number;
+  name: string;
+  roles: string[];
+  mustChangePassword: boolean;
+  universityId: number | null;
+  permissions: string[];
+};
+
+/**
+ * گارد سرور برای صفحه‌ها: دسترسی «نقش-محور» یا «مجوز-محور».
+ * ADMIN همیشه عبور می‌کند؛ اگر نه نقشی در allowedRoles دارد و نه هیچ‌کدام از
+ * permissionCodes را دارد → redirect('/admin'). بدون نشست → redirect('/login').
+ */
+export async function requireRoleOrPermission(
+  allowedRoles: string[],
+  permissionCodes?: string[],
+): Promise<PermissionAuthResult> {
+  const { getSessionUser } = await import('@/lib/auth');
+  const user = await getSessionUser();
+  if (!user) redirect('/login');
+  // هم‌راستا با requireRole: رمز پیش‌فرض باید پیش از ورود به کارتابل عوض شود.
+  if (user.mustChangePassword) redirect('/change-password');
+
+  const permissions = await getUserPermissionCodes(user.id);
+  const hasRole = user.roles.includes('ADMIN') || user.roles.some(r => allowedRoles.includes(r));
+  const hasPermission = !!permissionCodes && permissionCodes.length > 0
+    && permissionCodes.some(p => permissions.includes(p));
+  if (!hasRole && !hasPermission) redirect('/admin');
+
+  return {
+    id: user.id,
+    name: user.name,
+    roles: user.roles,
+    mustChangePassword: user.mustChangePassword,
+    universityId: user.universityId,
+    permissions,
+  };
 }
 
 /** Get current user ID from session (server-side) */

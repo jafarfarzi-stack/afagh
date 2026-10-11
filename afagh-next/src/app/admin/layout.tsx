@@ -30,6 +30,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const LIMITED_ROLES = ['PROFESSOR', 'GRADUATION_EXPERT'];
 
   const user = await requireRole([...AREA_ROLES, ...LIMITED_ROLES]);
+  // بارگذاری مجوزهای کاربر (بدون نقش سیستمی هم کار می‌کند) برای منوی مبتنی بر RBAC
+  const { getUserPermissionCodes } = await import('@/lib/permissions-enforcer');
+  const permissionCodes = await getUserPermissionCodes(user.id).catch(() => []);
   // انتخاب دانشگاه فعال، ابزار مدیریتی است؛ به دو نقش محدود بالا نشان داده نمی‌شود
   // (کنشِ `setUniversityCookie` خودش گارد ندارد — گزارش شود).
   const canSwitchUniversity = user.roles.some(r => AREA_ROLES.includes(r));
@@ -88,7 +91,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </form>
           </div>
         </div>
-        <AdminNav roles={user.roles} theme={th} />
+        <AdminNav roles={user.roles} permissions={permissionCodes} theme={th} />
       </header>
       <main className="mx-auto max-w-6xl p-3 sm:p-5 pb-16">{children}</main>
     </div>

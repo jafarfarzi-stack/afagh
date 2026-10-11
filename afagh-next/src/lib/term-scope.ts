@@ -238,3 +238,31 @@ export async function getSelectedTerm(universityId: number | null | undefined): 
   if (selectedId) return terms.find((t) => t.id === selectedId) ?? null;
   return terms.find((t) => t.isEffectiveCurrent) ?? null;
 }
+
+/**
+ * شمارهٔ ترتیبِ ترمِ تحصیلیِ دانشجو بر مبنای ورودی — نه ستونِ `currentTermNo`.
+ * کدِ ترمِ ورود از entryYear+entryTerm ساخته می‌شود (مثلاً 1403+2 ⇒ «14032»)
+ * و جایگاهِ آن در فهرستِ مرتبِ ترم‌های آموزشیِ دانشگاه تا ترمِ هدف شمرده می‌شود.
+ * اگر ترمِ ورود در فهرست نباشد، اولین ترمِ >= آن مبنا می‌شود (ورودی‌های خیلی قدیمی).
+ */
+export function termOrdinalForEntry(opts: {
+  entryYear: number | null | undefined;
+  entryTerm: number | null | undefined;
+  terms: TermCodeLike[];
+  targetTermCode: string | null | undefined;
+}): number | null {
+  const { entryYear, entryTerm, terms, targetTermCode } = opts;
+  if (entryYear == null || !targetTermCode) return null;
+  const entryCode = Number(`${entryYear}${entryTerm ?? 1}`);
+  if (!Number.isFinite(entryCode)) return null;
+  const ordered = sortTermsChronologically(filterTeachingTerms(terms));
+  if (!ordered.length) return null;
+  const codes = ordered.map((t) => termCodeNumber(t.termCode));
+  // اولین ترمِ آموزشی که به ترمِ ورود می‌رسد (تطابق دقیق یا اولین ترمِ بعدی)
+  let entryIdx = codes.findIndex((c) => c >= entryCode);
+  if (entryIdx < 0) entryIdx = codes.length - 1; // ورودی بعد از آخرین ترمِ فهرست
+  const targetIdx = codes.indexOf(termCodeNumber(targetTermCode));
+  if (targetIdx < 0) return null;
+  const ordinal = targetIdx - entryIdx + 1;
+  return ordinal >= 1 ? ordinal : null;
+}

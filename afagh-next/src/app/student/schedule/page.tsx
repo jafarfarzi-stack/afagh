@@ -14,7 +14,7 @@ import {
   users,
 } from '@/db/schema';
 import { getStudentByUser, requireRole } from '@/lib/auth';
-import { getTermScope } from '@/lib/term-scope';
+import { getTermScope, listTermsForUniversity, termOrdinalForEntry } from '@/lib/term-scope';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import TermFilterChip from '@/components/TermFilterChip';
 import ScheduleClient, { type StudentScheduleCourse } from './ScheduleClient';
@@ -41,9 +41,25 @@ export default async function StudentSchedulePage() {
   const filteredTerm = termScope.selectedId
     ? termScope.terms.find(t => t.id === termScope.selectedId) ?? null
     : null;
-  const term = filteredTerm
-    ? ((await db.select().from(academic_terms).where(eq(academic_terms.id, filteredTerm.id)).limit(1))[0] ?? null)
-    : ((await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1)))[0] ?? null);
+  // وقتی فیلتر «همهٔ نیمسال‌ها» است، ترمِ مؤثرِ جاری مبنا می‌شود (نه ستونِ
+  // isCurrent که روی ترم‌های بازسازیشده صفر است) — دانشجو بدون کلیکِ اضافه
+  // برنامهٔ نیمسال جاری را می‌بیند و از سوییچر هم بقیهٔ ترم‌ها را انتخاب می‌کند.
+  const termId = filteredTerm?.id ?? termScope.effectiveId ?? null;
+  const term = termId
+    ? ((await db.select().from(academic_terms).where(eq(academic_terms.id, termId)).limit(1))[0] ?? null)
+    : null;
+
+  // شمارهٔ ترم تحصیلی بر مبنای ورودی (نه ستونِ currentTermNo که برای
+  // بعضی ورودی‌های قدیمی ۱ مانده است) — جایگاهِ ترمِ نمایشی نسبت به ترمِ ورود.
+  const ordinalTerms = await listTermsForUniversity(me.universityId, { limit: null }).catch(() => []);
+  const termOrdinal = term
+    ? termOrdinalForEntry({
+        entryYear: me.entryYear,
+        entryTerm: me.entryTerm,
+        terms: ordinalTerms,
+        targetTermCode: term.termCode,
+      })
+    : null;
   const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
   const [degree] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
 
@@ -201,7 +217,7 @@ export default async function StudentSchedulePage() {
           studentCode: me.studentCode,
           majorName: major?.name || 'مهندسی کامپیوتر',
           degreeTitle: degree?.title || 'کارشناسی پیوسته',
-          currentTermNo: me.currentTermNo || 1,
+          currentTermNo: termOrdinal ?? me.currentTermNo || 1,
           entryYear: me.entryYear,
         }}
         term={{
