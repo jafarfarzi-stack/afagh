@@ -776,7 +776,30 @@ export const offering_professors = pgTable('offering_professors', {
   role: varchar('role', { length: 50 }).notNull().default('MAIN_LECTURER'),
   sharePercentage: numeric('sharePercentage', { precision: 5, scale: 2 }).default('100.00'),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  /** تاریخ معرفی درس به استاد — برای تشخیص «درس دیرمعرفی‌شده» در بازهٔ ثبت نمره (ردیف‌های قدیمی NULL) */
+  assignedAt: timestamp('assignedAt').defaultNow(),
 });
+
+/**
+ * درخواست بازگشایی نمرات نهایی‌شده توسط استاد — تأیید ادمین/کارشناس.
+ * چرخه: استاد (finalized، اشتباه) → درخواست PENDING با دلیل → بررسی‌کننده
+ * APPROVED (بازگشایی به TEMPORARY + لاگ UNFINALIZE) یا REJECTED با توضیح.
+ */
+export const grade_unfinalize_requests = pgTable('grade_unfinalize_requests', {
+  id: serial('id').primaryKey(),
+  offeringId: integer('offeringId').notNull().references(() => course_offerings.id),
+  requestedByUserId: integer('requestedByUserId').notNull().references(() => users.id),
+  reason: text('reason').notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('PENDING'), // PENDING|REVIEWED|APPROVED|REJECTED
+  reviewedByUserId: integer('reviewedByUserId').references(() => users.id),
+  reviewNote: text('reviewNote'),
+  createdAt: timestamp('createdAt').defaultNow(),
+  reviewedAt: timestamp('reviewedAt'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+}, (t) => ({
+  offeringIdx: index('idx_unfinalize_offering').on(t.offeringId),
+  statusIdx: index('idx_unfinalize_status').on(t.status),
+}));
 
 export const schedules = pgTable('schedules', {
   id: serial('id').primaryKey(),

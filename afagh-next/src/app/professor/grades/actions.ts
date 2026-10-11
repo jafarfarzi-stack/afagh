@@ -21,6 +21,7 @@ import {
   enrollments,
   grade_appeals,
   grade_submission_otps,
+  grade_unfinalize_requests,
   offering_professors,
   users,
 } from '@/db/schema';
@@ -497,5 +498,87 @@ export async function resolveAppealAction(
     return { ok: true, persisted: true };
   } catch (err) {
     return fail(err);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// درخواست بازگشایی نمرات نهایی‌شده (تأیید دومرحله‌ای توسط مدیر)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function requestUnfinalizeAction(
+  offeringId: number,
+  reason: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const user = await requireRole(['PROFESSOR']);
+    const me = await getStaffByUser(user.id);
+    if (!me) return { ok: false, error: 'پروندهٔ هیئت علمی یافت نشد.' };
+    if (!(await memberOwnershipOk(me.id, [offeringId]))) {
+      return { ok: false, error: 'شما استاد مسئول این درس نیستید.' };
+    }
+    const [off] = await db
+      .select({ id: course_offerings.id, gradesFinalizedAt: course_offerings.gradesFinalizedAt, universityId: course_offerings.universityId })
+      .from(course_offerings)
+      .where(eq(course_offerings.id, offeringId))
+      .limit(1);
+    if (!off) return { ok: false, error: 'ارائهٔ درس یافت نشد.' };
+    if (!off.gradesFinalizedAt) return { ok: false, error: 'نمرات این ارائه نهایی نشده است.' };
+    const clean = (reason ?? '').trim();
+    if (clean.length < 10) return { ok: false, error: 'دلیل درخواست الزامی است (حداقل ۱۰ نویسه).' };
+    const existing = await db
+      .select({ id: grade_unfinalize_requests.id, status: grade_unfinalize_requests.status })
+      .from(grade_unfinalize_requests)
+      .where(and(
+        eq(grade_unfinalize_requests.offeringId, offeringId),
+        inArray(grade_unfinalize_requests.status, ['PENDING', 'REVIEWED']),
+      ))
+      .limit(1);
+    if (existing.length > 0) {
+      return { ok: false, error: 'برای این ارائه یک درخواست باز در جریان است.' };
+    }
+    await db.insert(grade_unfinalize_requests).values({
+      offeringId,
+      requestedByUserId: user.id,
+      reason: clean,
+      status: 'PENDING',
+      universityId: off.universityId,
+    });
+    revalidatePath('/professor/grades');
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: (err as Error)?.message || 'خطای ناشناختهٔ سرور.' };
+  }
+}
+
+export async function getMyUnfinalizeRequests(
+  offeringIds: number[],
+): Promise<Record<number, { status: string; createdAt: string }>> {
+  const out: Record<number, { status: string; createdAt: string }> = {};
+  try {
+    if (!offeringIds || offeringIds.length === 0) return out;
+    const user = await requireRole(['PROFESSOR']);
+    const rows = await db
+      .select({
+        offeringId: grade_unfinalize_requests.offeringId,
+        status: grade_unfinalize_requests.status,
+        createdAt: grade_unfinalize_requests.createdAt,
+      })
+      .from(grade_unfinalize_requests)
+      .where(and(
+        inArray(grade_unfinalize_requests.offeringId, offeringIds),
+        eq(grade_unfinalize_requests.requestedByUserId, user.id),
+      ))
+      .orderBy(desc(grade_unfinalize_requests.id));
+    for (const r of rows) {
+      if (!(r.offeringId in out)) {
+        out[r.offeringId] = {
+          status: r.status,
+          createdAt: r.createdAt ? new Date(r.createdAt).toLocaleString('fa-IR') : '',
+        };
+      }
+    }
+    return out;
+  } catch {
+    return out;
   }
 }

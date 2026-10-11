@@ -9,7 +9,7 @@
 import { and, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { academic_terms, course_offerings, courses, educational_regulations, enrollments, grade_change_log, legacy_grades, roles, staff, students, user_roles, users } from '@/db/schema';
+import { academic_terms, course_offerings, courses, educational_regulations, enrollments, grade_change_log, grade_unfinalize_requests, legacy_grades, roles, staff, students, user_roles, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { logGradeChange } from '@/lib/grade-change-log';
 import { resolveSamaGradeStatusCode, syncStudentCourseRegulations } from '@/lib/resolve-sama-code';
@@ -712,4 +712,121 @@ export async function getUniversityId(): Promise<{ universityId: number | null }
   await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'GRADUATEAFFAIRS', 'FINANCE_EXPERT', 'FINANCE', 'VICE_EDU']);
   const u = await getCurrentUniversity();
   return { universityId: u?.id ?? null };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  بررسی دومرحله‌ای درخواست بازگشایی نمرات نهایی‌شده
+//  مرحلهٔ ۱ (PENDING → REVIEWED|REJECTED): ADMIN / GRADUATEAFFAIRS
+//  مرحلهٔ ۲ (REVIEWED → APPROVED|REJECTED): فقط VICE_EDU (معاون آموزشی)
+//  با APPROVED: gradesFinalizedAt=NULL + بازگشت به TEMPORARY + لاگ UNFINALIZE
+// ═══════════════════════════════════════════════════════════════════
+
+export async function reviewUnfinalizeAction(
+  requestId: number,
+  decision: 'REVIEWED' | 'APPROVED' | 'REJECTED',
+  note?: string | null,
+  extendDeadlineTo?: string | null,
+): Promise<AdminGradeState> {
+  try {
+    const cleanNote = (note ?? '').trim() || null;
+
+    // ── گیت نقش بر اساس مرحله ──
+    let user: { id: number; name: string; roles: string[] };
+    if (decision === 'APPROVED' || decision === 'REJECTED') {
+      // REJECTED ممکن است در هر دو مرحله رخ دهد؛ مرحله را از وضعیت رکورد می‌فهمیم.
+      // ابتدا رکورد را می‌خوانیم تا بدانیم در کدام مرحله‌ایم (نیاز به uni دارد — بعداً).
+      user = await requireRole(['ADMIN', 'GRADUATEAFFAIRS', 'VICE_EDU']).catch(() => null as never);
+      if (!user) return { ok: false, error: 'شما مجوز بررسی درخواست بازگشایی را ندارید.' };
+    } else {
+      user = await requireRole(['ADMIN', 'GRADUATEAFFAIRS']);
+    }
+
+    const [req] = await db
+      .select()
+      .from(grade_unfinalize_requests)
+      .where(eq(grade_unfinalize_requests.id, requestId))
+      .limit(1);
+    if (!req) return { ok: false, error: 'درخواست یافت نشد.' };
+
+    // ── گیت دقیق مرحله ──
+    if (req.status === 'PENDING') {
+      if (decision === 'APPROVED') {
+        return { ok: false, error: 'این درخواست هنوز مرحلهٔ اول را نگذرانده است؛ ابتدا بررسی مرحلهٔ اول لازم است.' };
+      }
+      // PENDING → REVIEWED|REJECTED: فقط ADMIN/GRADUATEAFFAIRS
+      if (!user.roles.includes('ADMIN') && !user.roles.includes('GRADUATEAFFAIRS')) {
+        return { ok: false, error: 'بررسی مرحلهٔ اول فقط با مدیر یا کارشناس فارغ‌التحصیلان است.' };
+      }
+    } else if (req.status === 'REVIEWED') {
+      // REVIEWED → APPROVED|REJECTED: فقط VICE_EDU (انحصاری)
+      try {
+        await requireRole(['VICE_EDU']);
+      } catch {
+        return { ok: false, error: 'تأیید نهایی فقط با معاون آموزشی است.' };
+      }
+    } else {
+      return { ok: false, error: 'این درخواست قبلاً تعیین‌تکلیف شده است.' };
+    }
+
+    // 🔐 تأیید دومرحله‌ای (همان قرارداد adminSetGradeAction)
+    const { checkStepUpToken } = await import('@/lib/step-up');
+    if (!(await checkStepUpToken(user.id, 'grades:edit'))) {
+      return { ok: false, error: 'STEPUP_REQUIRED:برای بررسی درخواست بازگشایی، ابتدا رمز عبور خود را تأیید کنید (تأیید دومرحله‌ای — ۱۰ دقیقه معتبر است).' };
+    }
+
+    // اسکوپ دانشگاه (همان الگوی لاگ: cookie uni)
+    const { getCurrentUniversity } = await import('@/lib/university-scope');
+    const uni = await getCurrentUniversity().catch(() => null);
+    if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+    if (req.universityId !== null && req.universityId !== uni.id) {
+      return { ok: false, error: 'درخواست متعلق به دانشگاه دیگری است.' };
+    }
+
+    if (decision === 'APPROVED') {
+      // اعتبارسنجی مهلت اختصاصی (اختیاری، نمایشی)
+      let extDate: Date | null = null;
+      if (extendDeadlineTo && extendDeadlineTo.trim()) {
+        const t = new Date(extendDeadlineTo.trim()).getTime();
+        if (Number.isNaN(t)) return { ok: false, error: 'تاریخ مهلت اختصاصی نامعتبر است.' };
+        extDate = new Date(t);
+      }
+      await db.transaction(async (tx) => {
+        await tx
+          .update(grade_unfinalize_requests)
+          .set({ status: 'APPROVED', reviewedByUserId: user.id, reviewNote: cleanNote, reviewedAt: new Date() })
+          .where(eq(grade_unfinalize_requests.id, requestId));
+        await tx
+          .update(course_offerings)
+          .set({
+            gradesFinalizedAt: null,
+            gradesTemporaryAt: new Date(),
+            ...(extDate ? { customGradeDeadline: extDate } : {}),
+          })
+          .where(eq(course_offerings.id, req.offeringId));
+      });
+      const { logBulkGradeChange } = await import('@/lib/grade-change-log');
+      await logBulkGradeChange(req.offeringId, 'UNFINALIZE', user.id, 'ADMIN', cleanNote ?? 'تأیید بازگشایی نمرات توسط معاون آموزشی').catch(() => null);
+    } else {
+      // REVIEWED یا REJECTED: فقط به‌روزرسانی ردیف درخواست
+      await db
+        .update(grade_unfinalize_requests)
+        .set({ status: decision, reviewedByUserId: user.id, reviewNote: cleanNote, reviewedAt: new Date() })
+        .where(eq(grade_unfinalize_requests.id, requestId));
+    }
+
+    revalidatePath('/admin/grades/audit');
+    revalidatePath('/professor/grades');
+
+    // 📢 اطلاع به استاد درخواست‌کننده (fire-and-forget)
+    {
+      const { notifyUserMultichannel } = await import('@/lib/messaging');
+      const decisionFa = decision === 'APPROVED' ? 'تأیید نهایی شد ✅' : decision === 'REVIEWED' ? 'مرحلهٔ اول تأیید شد و در انتظار معاون آموزشی است ⏳' : 'رد شد ❌';
+      const text = `📬 نتیجهٔ درخواست بازگشایی نمرات (ارائهٔ ${req.offeringId}): ${decisionFa}${cleanNote ? ` — توضیح: ${cleanNote}` : ''}`;
+      notifyUserMultichannel({ userId: req.requestedByUserId, eventCode: 'GRADE_UNFINALIZE_DECIDED', text }).catch(() => null);
+    }
+
+    return { ok: true, message: decision === 'APPROVED' ? 'نمرات به «موقت» بازگشایی شد.' : decision === 'REVIEWED' ? 'مرحلهٔ اول ثبت شد؛ در انتظار معاون آموزشی.' : 'درخواست رد شد.' };
+  } catch (err) {
+    return fail(err);
+  }
 }

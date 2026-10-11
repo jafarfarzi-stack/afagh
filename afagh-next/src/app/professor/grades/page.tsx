@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
-import { universities } from '@/db/schema';
+import { academic_terms, course_offerings, courses, grade_unfinalize_requests, universities } from '@/db/schema';
 import { getSetting } from '@/lib/settings';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import {
@@ -142,6 +142,43 @@ export default async function ProfessorGradesPage({
     appealsByEnrollment.set(a.enrollmentId, list);
   }
 
+  // ── افزودنی بازگشایی: مهلت ثبت نمره + پرچم پایان‌نامه + وضعیت درخواست (تک کوئری دسته‌ای) ──
+  const deadlineByOffering = new Map<number, string | null>();
+  const thesisByOffering = new Map<number, boolean>();
+  const unfinalizeByOffering = new Map<number, 'PENDING' | 'REVIEWED' | 'APPROVED' | 'REJECTED'>();
+  if (offeringIds.length > 0) {
+    const metaRows = await db
+      .select({
+        id: course_offerings.id,
+        customGradeDeadline: course_offerings.customGradeDeadline,
+        termDeadline: academic_terms.gradeEntryDeadline,
+        isThesis: courses.isThesis,
+      })
+      .from(course_offerings)
+      .leftJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
+      .leftJoin(courses, eq(courses.id, course_offerings.courseId))
+      .where(inArray(course_offerings.id, offeringIds));
+    for (const m of metaRows) {
+      const dl = m.customGradeDeadline ?? m.termDeadline ?? null;
+      deadlineByOffering.set(m.id, dl ? new Date(dl).toLocaleString('fa-IR') : null);
+      thesisByOffering.set(m.id, (m.isThesis ?? 0) === 1);
+    }
+    const reqRows = await db
+      .select({
+        offeringId: grade_unfinalize_requests.offeringId,
+        status: grade_unfinalize_requests.status,
+      })
+      .from(grade_unfinalize_requests)
+      .where(inArray(grade_unfinalize_requests.offeringId, offeringIds))
+      .orderBy(grade_unfinalize_requests.id);
+    for (const r of reqRows) {
+      const s = r.status as 'PENDING' | 'REVIEWED' | 'APPROVED' | 'REJECTED';
+      if (s === 'PENDING' || s === 'REVIEWED' || s === 'APPROVED' || s === 'REJECTED') {
+        unfinalizeByOffering.set(r.offeringId, s);
+      }
+    }
+  }
+
   const initialOfferings: GradingCourseOffering[] = offeringGroups.map(g => {
     const base = g.members.find(m => m.id === g.primaryId) ?? g.members[0];
     const codes = [...new Set(g.members.map(m => m.code))];
@@ -203,6 +240,19 @@ export default async function ProfessorGradesPage({
       students: gradeStudents,
       appeals,
       isFinalized: list.length > 0 && list.every(e => (GRADE_STATUS_MAP[e.gradeStatus] ?? 'DRAFT') === 'FINALIZED'),
+      gradeDeadline: g.members.map(m => deadlineByOffering.get(m.id) ?? null).find(Boolean) ?? null,
+      isThesis: g.members.some(m => thesisByOffering.get(m.id)),
+      unfinalizeStatus: (() => {
+        for (const m of g.members) {
+          const s = unfinalizeByOffering.get(m.id);
+          if (s === 'PENDING' || s === 'REVIEWED') return s;
+        }
+        for (const m of g.members) {
+          const s = unfinalizeByOffering.get(m.id);
+          if (s) return s;
+        }
+        return 'NONE';
+      })(),
     };
 
     if (isCoTaught && partner) {

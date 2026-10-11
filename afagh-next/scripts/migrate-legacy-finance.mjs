@@ -73,6 +73,10 @@ const report = { dry: !APPLY, uni: UNI, gate: null, termAms: null, stdPays: null
     if (!uni) throw new Error('university not found: ' + UNI);
     console.log('university:', uni.code, uni.title, 'apply=', APPLY);
 
+    // ایندکس dedupe (بدون آن، هر ردیف اسکن کامل جدول است و فاز پرداخت عملاً قفل می‌شود)
+    await q(`CREATE INDEX IF NOT EXISTS idx_student_ledger_ref_type ON student_ledger ("referenceId", "transactionType")`);
+    console.log('index: idx_student_ledger_ref_type ensured');
+
     // ── نقشه‌های (uni + کد) ──
     const students = (await q('SELECT id, "studentCode" FROM students WHERE "universityId"=$1', [UNI]));
     const stuById = new Map(students.map(r => [String(r.studentCode), Number(r.id)]));
@@ -118,6 +122,7 @@ const report = { dry: !APPLY, uni: UNI, gate: null, termAms: null, stdPays: null
     const tx = await pool.connect();
     try {
       await tx.query('BEGIN');
+      let batch = 0;
       for (const r of tams.rows) {
         const stno = col(r, tams.header, 'StnO', 'Stno');
         const sid = stuById.get(stno);
@@ -143,6 +148,10 @@ const report = { dry: !APPLY, uni: UNI, gate: null, termAms: null, stdPays: null
             [sid, tid, tt, amt, `وارد از سیستم قدیمی (TermAms id=${amsId})`, refSafe, UNI],
           );
           if (tt === 'TUITION_FIXED') aStat.feeFixed++; else aStat.feeUnits++;
+          if (++batch % 5000 === 0) {
+            await tx.query('COMMIT'); await tx.query('BEGIN');
+            console.log(`  ... TermAms progress: fixed=${aStat.feeFixed} units=${aStat.feeUnits}`);
+          }
         }
       }
       await tx.query('COMMIT');
@@ -178,6 +187,10 @@ const report = { dry: !APPLY, uni: UNI, gate: null, termAms: null, stdPays: null
           [sid, tid, mab, `پرداخت از سیستم قدیمی — فیش ${col(r, spay.header, 'Fish_no')}${who ? ' (' + who + ')' : ''}`, ref, UNI],
         );
         pStat.inserted++;
+        if (pStat.inserted % 5000 === 0) {
+          await tx2.query('COMMIT'); await tx2.query('BEGIN');
+          console.log(`  ... StdPays progress: inserted=${pStat.inserted}`);
+        }
       }
       await tx2.query('COMMIT');
     } catch (e) { await tx2.query('ROLLBACK'); throw e; } finally { tx2.release(); }
@@ -205,6 +218,10 @@ const report = { dry: !APPLY, uni: UNI, gate: null, termAms: null, stdPays: null
           [sid, tid, UNI],
         );
         cStat.inserted++;
+        if (cStat.inserted % 5000 === 0) {
+          await tx3.query('COMMIT'); await tx3.query('BEGIN');
+          console.log(`  ... clearances progress: inserted=${cStat.inserted}`);
+        }
       }
       await tx3.query('COMMIT');
     } catch (e) { await tx3.query('ROLLBACK'); throw e; } finally { tx3.release(); }

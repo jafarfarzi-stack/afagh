@@ -1,4 +1,4 @@
-import { desc, eq, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { course_offerings, courses, grade_change_log, process_definitions, student_requests, students, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';

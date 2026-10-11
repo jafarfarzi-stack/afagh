@@ -1,21 +1,54 @@
 import Link from 'next/link';
+import { getSessionUser } from '@/lib/auth';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/db';
-import { grade_change_log, course_offerings, courses, academic_terms, users, students } from '@/db/schema';
-import { desc, eq, like, or, sql } from 'drizzle-orm';
+import { grade_change_log, grade_unfinalize_requests, course_offerings, courses, academic_terms, users, students } from '@/db/schema';
+import { desc, eq, or, sql } from 'drizzle-orm';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import UnfinalizeReviewClient from './UnfinalizeReviewClient';
 
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 50;
 
 export default async function GradeAuditPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  await requireRole(['ADMIN', 'GRADUATEAFFAIRS', 'EDU_EXPERT']);
+  await requireRole(['ADMIN', 'GRADUATEAFFAIRS', 'EDU_EXPERT', 'VICE_EDU']);
   const sp = await searchParams;
   const q = (sp.q ?? '').trim();
   const page = Math.max(parseInt(sp.page ?? '1', 10) || 1, 1);
   const offset = (page - 1) * PAGE_SIZE;
   const uniId = (await getCurrentUniversity()).id;
+  const me = await getSessionUser().catch(() => null);
+  const canFinalApprove = !!me && (me.roles ?? []).includes('VICE_EDU');
+
+  // ── درخواست‌های بازگشایی در انتظار بررسی (همان اسکوپ دانشگاهی لاگ) ──
+  const pendingUnfinalize = await db
+    .select({
+      id: grade_unfinalize_requests.id,
+      offeringId: grade_unfinalize_requests.offeringId,
+      reason: grade_unfinalize_requests.reason,
+      status: grade_unfinalize_requests.status,
+      createdAt: grade_unfinalize_requests.createdAt,
+      courseCode: courses.code,
+      courseTitle: courses.title,
+      termCode: academic_terms.termCode,
+      requesterFirstName: users.firstName,
+      requesterLastName: users.lastName,
+    })
+    .from(grade_unfinalize_requests)
+    .leftJoin(course_offerings, sql`${course_offerings.id} = ${grade_unfinalize_requests.offeringId}`)
+    .leftJoin(courses, sql`${courses.id} = ${course_offerings.courseId}`)
+    .leftJoin(academic_terms, sql`${academic_terms.id} = ${course_offerings.termId}`)
+    .leftJoin(users, sql`${users.id} = ${grade_unfinalize_requests.requestedByUserId}`)
+    .where(or(
+      eq(grade_unfinalize_requests.universityId, uniId),
+      // درخواست‌های قدیمی بدون دانشگاه: تعلق را از روی ارائه می‌سنجیم
+      sql`${grade_unfinalize_requests.universityId} IS NULL
+        AND (${grade_unfinalize_requests.offeringId} IN (SELECT id FROM course_offerings WHERE universityId = ${uniId}))`,
+    ))
+    .orderBy(desc(grade_unfinalize_requests.createdAt))
+    .limit(50);
+  const openUnfinalize = pendingUnfinalize.filter(r => r.status === 'PENDING' || r.status === 'REVIEWED');
 
   const rows = await db
     .select({
@@ -67,6 +100,44 @@ export default async function GradeAuditPage({ searchParams }: { searchParams: P
       <div className="flex items-center justify-between">
         <h1 className="font-extrabold text-lg">📜 لاگ سراسری تغییرات نمرات (Audit Trail)</h1>
         <Link href="/admin/students" className="text-xs font-bold text-indigo-700 hover:underline">← بازگشت به پرونده‌ها</Link>
+      </div>
+      {/* ── درخواست‌های بازگشایی در انتظار بررسی (دومرحله‌ای) ── */}
+      <div className="border border-amber-300 rounded-lg bg-amber-50 p-3 space-y-2">
+        <h2 className="font-black text-sm text-amber-900">🔓 درخواست‌های بازگشایی نمرات نهایی‌شده ({openUnfinalize.length.toLocaleString('fa-IR')})</h2>
+        {openUnfinalize.length === 0 ? (
+          <p className="text-[11px] text-amber-800 font-bold">درخواست بازی وجود ندارد.</p>
+        ) : (
+          <div className="overflow-x-auto bg-white rounded-lg border border-amber-200">
+            <table className="w-full text-right text-[11px]">
+              <thead className="bg-amber-100 border-b border-amber-300 font-bold">
+                <tr>
+                  <th className="p-2">#</th>
+                  <th className="p-2">درس</th>
+                  <th className="p-2">ترم</th>
+                  <th className="p-2">استاد درخواست‌کننده</th>
+                  <th className="p-2">دلیل</th>
+                  <th className="p-2">تاریخ</th>
+                  <th className="p-2">مرحله</th>
+                  <th className="p-2">بررسی</th>
+                </tr>
+              </thead>
+              <tbody>
+                {openUnfinalize.map((r) => (
+                  <tr key={r.id} className="border-b border-amber-100 hover:bg-amber-50">
+                    <td className="p-2 font-mono text-slate-500">#{r.id}</td>
+                    <td className="p-2"><span className="font-mono font-bold">{r.courseCode ?? '—'}</span><span className="block text-[10px] text-slate-600 truncate max-w-[180px]">{r.courseTitle ?? `ارائهٔ ${r.offeringId}`}</span></td>
+                    <td className="p-2 font-mono">{r.termCode ?? '—'}</td>
+                    <td className="p-2 font-bold">{r.requesterFirstName || r.requesterLastName ? `${r.requesterFirstName ?? ''} ${r.requesterLastName ?? ''}`.trim() : '—'}</td>
+                    <td className="p-2 max-w-xs truncate" title={r.reason}>{r.reason}</td>
+                    <td className="p-2 font-mono" dir="ltr">{r.createdAt ? new Date(r.createdAt as unknown as string).toLocaleString('fa-IR') : '—'}</td>
+                    <td className="p-2">{r.status === 'PENDING' ? <span className="px-2 py-0.5 rounded bg-amber-200 text-amber-900 font-bold text-[10px]">مرحلهٔ ۱ ⏳</span> : <span className="px-2 py-0.5 rounded bg-indigo-200 text-indigo-900 font-bold text-[10px]">در انتظار معاون آموزشی</span>}</td>
+                    <td className="p-2"><UnfinalizeReviewClient requestId={r.id} currentStage={r.status as 'PENDING' | 'REVIEWED'} canFinalApprove={canFinalApprove} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
       <form className="flex gap-2">
         <input name="q" defaultValue={q} placeholder="جستجو: کد درس / عنوان درس / شماره دانشجویی / ترم" className="flex-1 max-w-md bg-white border border-slate-300 rounded px-3 py-1.5 text-xs" />

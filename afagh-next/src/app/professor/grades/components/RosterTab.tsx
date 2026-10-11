@@ -21,6 +21,8 @@ import {
   SaveGradePayload,
   SaveGradeState,
   finalizeSignedAction,
+  getMyUnfinalizeRequests,
+  requestUnfinalizeAction,
   saveGradeAction,
   submitTemporaryAction,
 } from '../actions';
@@ -67,6 +69,39 @@ export default function RosterTab({ offering, termTitle, lastAutoSaveTime, onReq
   const [demoOtp, setDemoOtp] = useState<string | null>(null);
   const [otpBusy, setOtpBusy] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
+
+  // ── درخواست بازگشایی نمرات نهایی‌شده ──
+  const [unfinalizeOpen, setUnfinalizeOpen] = useState(false);
+  const [unfinalizeReason, setUnfinalizeReason] = useState('');
+  const [unfinalizeBusy, setUnfinalizeBusy] = useState(false);
+  const [unfinalizeStatus, setUnfinalizeStatus] = useState<string | undefined>(offering.unfinalizeStatus);
+  useEffect(() => { setUnfinalizeStatus(offering.unfinalizeStatus); }, [offering.id, offering.unfinalizeStatus]);
+  const submitUnfinalize = async () => {
+    if (unfinalizeReason.trim().length < 10) {
+      alert('دلیل درخواست الزامی است (حداقل ۱۰ نویسه).');
+      return;
+    }
+    setUnfinalizeBusy(true);
+    try {
+      const res = await requestUnfinalizeAction(offering.id, unfinalizeReason.trim());
+      if (!res.ok) {
+        // اگر درخواست بازی از قبل هست، وضعیت را همگام کن
+        if ((res.error ?? '').includes('در جریان')) {
+          const m = await getMyUnfinalizeRequests([offering.id, ...(offering.memberOfferingIds ?? [])]).catch(() => ({} as Record<number, { status: string }>));
+          const s = m[offering.id]?.status ?? offering.memberOfferingIds?.map(id => m[id]?.status).find(Boolean);
+          if (s) setUnfinalizeStatus(s);
+        }
+        alert(res.error || 'ثبت درخواست ناموفق بود.');
+        return;
+      }
+      setUnfinalizeStatus('PENDING');
+      setUnfinalizeOpen(false);
+      setUnfinalizeReason('');
+      flashToast(dispatch, '📨 درخواست بازگشایی ثبت شد؛ پس از تأیید نهایی معاون آموزشی، نمرات به «موقت» برمی‌گردند.', 6000);
+    } finally {
+      setUnfinalizeBusy(false);
+    }
+  };
 
   // ── لایهٔ خوش‌بینانه: نمرهٔ تایپ‌شده فوراً با محاسبهٔ مجدد نهایی دیده می‌شود
   const [optimisticStudents, addOptimisticUpdate] = useOptimistic(
@@ -264,6 +299,77 @@ export default function RosterTab({ offering, termTitle, lastAutoSaveTime, onReq
           </button>
         </div>
       </div>
+
+      {/* ── بازگشایی نمرات نهایی‌شده ── */}
+      {isFinalized && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {offering.gradeDeadline && (
+              <span className="px-2.5 py-1 rounded-full bg-white border border-amber-300 text-amber-900 text-[11px] font-black">
+                ⏳ مهلت ثبت نمرهٔ ترم: {faNum(offering.gradeDeadline)}
+              </span>
+            )}
+            {offering.isThesis && (
+              <span className="px-2.5 py-1 rounded-full bg-purple-800 text-white text-[11px] font-black">
+                🎓 پایان‌نامه
+              </span>
+            )}
+          </div>
+          {unfinalizeStatus === 'PENDING' ? (
+            <p className="text-xs font-black text-amber-900">در انتظار بررسی ⏳ — درخواست شما ثبت شده و هنوز بررسی نشده است.</p>
+          ) : unfinalizeStatus === 'REVIEWED' ? (
+            <p className="text-xs font-black text-amber-900">تأیید مرحلهٔ اول، در انتظار معاون آموزشی — تا تأیید نهایی هیچ تغییری اعمال نمی‌شود.</p>
+          ) : unfinalizeStatus === 'REJECTED' ? (
+            <p className="text-xs font-black text-rose-700">درخواست قبلی رد شد؛ در صورت نیاز می‌توانید درخواست جدید ثبت کنید.</p>
+          ) : null}
+          {unfinalizeStatus !== 'PENDING' && unfinalizeStatus !== 'REVIEWED' && (
+            <>
+              {!unfinalizeOpen ? (
+                <button
+                  onClick={() => setUnfinalizeOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-white border-2 border-amber-400 hover:bg-amber-100 text-amber-900 font-black text-xs transition"
+                >
+                  🔓 درخواست بازگشایی نمرات
+                </button>
+              ) : (
+                <div className="space-y-3 bg-white rounded-xl border border-amber-200 p-3">
+                  <div className="rounded-xl bg-slate-900 text-white p-3 text-[11px] font-bold leading-6">
+                    <div className="font-black text-amber-300 mb-1">⚠ پیامدهای بازگشایی:</div>
+                    <ol className="list-decimal pr-5 space-y-0.5">
+                      <li>بازگشایی با نام شما در لاگ ممیزی ثبت می‌شود.</li>
+                      <li>تا تأیید نهایی معاون آموزشی هیچ تغییری اعمال نمی‌شود.</li>
+                      <li>پس از تأیید، نمرات به «موقت» برمی‌گردند و باید دوباره با OTP نهایی کنید.</li>
+                      <li>مهلت ثبت نمرهٔ ترم: {offering.gradeDeadline ? faNum(offering.gradeDeadline) : '—'} — پایان‌نامه‌ها و دروس دیرمعرفی‌شده با مهلت اختصاصی بررسی می‌شوند.</li>
+                    </ol>
+                  </div>
+                  <textarea
+                    value={unfinalizeReason}
+                    onChange={e => setUnfinalizeReason(e.target.value)}
+                    rows={3}
+                    placeholder="دلیل اشتباه در نهایی‌سازی را بنویسید (حداقل ۱۰ نویسه)…"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={submitUnfinalize}
+                      disabled={unfinalizeBusy}
+                      className="flex-1 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs transition disabled:opacity-50"
+                    >
+                      {unfinalizeBusy ? 'در حال ثبت…' : '📨 ثبت درخواست بازگشایی'}
+                    </button>
+                    <button
+                      onClick={() => { setUnfinalizeOpen(false); setUnfinalizeReason(''); }}
+                      className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition"
+                    >
+                      انصراف
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* جستجو */}
       <div className="flex items-center justify-between gap-3">

@@ -533,6 +533,13 @@
       "when": 1793721600000,
       "tag": "0071_term_activation",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1793808000000,
+      "tag": "0072_grade_unfinalize",
+      "breakpoints": true
     }
   ]
 }
