@@ -450,8 +450,8 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
                 <h1 className="text-base font-black text-slate-900">برنامهٔ هفتگی کلاس‌ها — {term.title}</h1>
               </div>
               <p className="text-[11px] text-slate-500">
-                دانشگاه {uni?.title ?? ''}
-                {headerFaculty ? ` · دانشکدهٔ ${headerFaculty}` : ''}
+                {withPrefix('دانشگاه', uni?.title ?? '')}
+                {headerFaculty ? ` · ${withPrefix('دانشکدهٔ', headerFaculty)}` : ''}
                 {headerDept ? ` · گروه ${headerDept}` : ''} · {mergedCells.length} سانس
                 <span className="print:hidden"> (دامنهٔ انتخابی)</span>
               </p>
