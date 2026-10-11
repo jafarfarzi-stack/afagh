@@ -2,7 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, cart_items, course_offerings, courses,
-  enrollments, financial_clearances, financial_terms, notifications, schedules, students,
+  enrollments, financial_clearances, financial_terms, notifications, schedules, student_term_states, students,
 } from '@/db/schema';
 import { withUserRls } from '@/db';
 import { atomicSeat, nextWaitlistPosition, releaseSeat, warmupCapacities } from '../waitingRoom';
@@ -90,6 +90,16 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
 
   const [term] = await D.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
   if (!term || !term.isEnrollmentOpen) { out.ok = false; out.hardErrors.push('پنجرهٔ انتخاب واحد بسته است.'); return out; }
+
+  // گیت «فعال‌سازی ترم» (اختیاری — تنظیم ENFORCE_TERM_ACTIVATION)
+  if (await import('../settings').then(m => m.getBool('ENFORCE_TERM_ACTIVATION')).catch(() => false)) {
+    const [ts] = await D.select({ statusCode: student_term_states.statusCode })
+      .from(student_term_states)
+      .where(and(eq(student_term_states.studentId, studentId), eq(student_term_states.termId, term.id))).limit(1);
+    if ((ts?.statusCode ?? '') !== 'ACTIVE') {
+      out.hardErrors.push('ابتدا باید برای این ترم «فعال‌سازی» شوید (با آموزش/کارشناس هماهنگ کنید).');
+    }
+  }
 
   // ── فیلتر ۱: مالی (§۱۰۰۸) + وضعیت دانشجو ──
   const [stu] = await D.select().from(students).where(eq(students.id, studentId)).limit(1);

@@ -526,6 +526,13 @@
       "when": 1793635200000,
       "tag": "0070_expert_grade_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1793721600000,
+      "tag": "0071_term_activation",
+      "breakpoints": true
     }
   ]
 }

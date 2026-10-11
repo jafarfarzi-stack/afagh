@@ -227,6 +227,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/weekly-board',
+    icon: '🗓️',
+    title: 'سردر برنامهٔ هفتگی',
+    desc: 'برنامهٔ هفتگی کلاس‌ها — قابل چاپ برای نصب روی سردر',
+    group: 'plan',
+    roles: ['ADMIN', 'EDU_EXPERT'],
+    accent: 'from-teal-950 to-slate-950 border-teal-700/50',
+    iconBg: 'bg-teal-800/80 border-teal-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/archive',
     icon: '🗄️',
     title: 'بایگانی الکترونیک مدارک',

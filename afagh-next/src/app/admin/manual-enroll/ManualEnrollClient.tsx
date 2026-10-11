@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  bulkDropAction, bulkEnrollAction, countBulkStudents, getStudentCatalog, getStudentWarnings,
+  activateTermForFilter, bulkDropAction, bulkEnrollAction, countBulkStudents, getStudentCatalog, getStudentWarnings,
   listOfferingsForManualEnroll, manualEnrollAction, manualEnrollHistory,
   searchStudentsForManualEnroll, type ManualEnrollOffering, type CatalogOffering, type StudentWarning,
 } from './actions';
@@ -18,7 +18,7 @@ export interface EnrollFilters {
 const sel = 'w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white';
 
 export default function ManualEnrollClient({ filters }: { filters: EnrollFilters }) {
-  const [tab, setTab] = useState<'single' | 'bulk' | 'history'>('single');
+  const [tab, setTab] = useState<'single' | 'bulk' | 'history' | 'activate'>('single');
   // single
   const [q, setQ] = useState('');
   const [results, setResults] = useState<{ studentId: number; studentCode: string; name: string; entryYear: number | null }[]>([]);
@@ -147,7 +147,7 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {([['single', '✍️ ثبت‌نام تکی'], ['bulk', '👥 دسته‌جمعی'], ['history', '🗂️ تاریخچه (پیگیری)']] as const).map(([k, l]) => (
+        {([['single', '✍️ ثبت‌نام تکی'], ['bulk', '👥 دسته‌جمعی'], ['activate', '🔋 فعال‌سازی ترم'], ['history', '🗂️ تاریخچه (پیگیری)']] as const).map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`px-4 py-2 rounded-xl text-xs font-black transition ${tab === k ? 'bg-indigo-700 text-white' : 'bg-white text-slate-600 border border-slate-300'}`}>
             {l}
@@ -292,6 +292,58 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
           <div className="flex flex-wrap gap-2">
             <button onClick={() => doBulk('enroll')} disabled={busy} className="flex-1 py-2.5 rounded-xl bg-emerald-700 text-white font-black text-xs disabled:opacity-50">➕ ثبت‌نام دسته‌جمعی</button>
             <button onClick={() => doBulk('drop')} disabled={busy} className="flex-1 py-2.5 rounded-xl bg-rose-700 text-white font-black text-xs disabled:opacity-50">➖ حذف دسته‌جمعی</button>
+          </div>
+        </div>
+      )}
+
+      {tab === 'activate' && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+          <p className="text-xs font-bold text-slate-600">دانشجویانِ فیلتر را برای ترمِ انتخابی فعال/غیرفعال کن — با گیتِ «فعال‌سازی ترم» در انتخاب‌واحد (تنظیم ENFORCE_TERM_ACTIVATION).</p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            <label className="text-xs font-bold text-slate-600">ترم
+              <select value={bulkTerm} onChange={e => setBulkTerm(Number(e.target.value))} className={sel + ' mt-1'}>
+                {filters.terms.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-bold text-slate-600">دانشکده
+              <select value={fac} onChange={e => { setFac(e.target.value); setDept(''); }} className={sel + ' mt-1'}>
+                <option value="">همه</option>
+                {filters.faculties.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-bold text-slate-600">گروه
+              <select value={dept} onChange={e => { setDept(e.target.value); setMajor(''); }} className={sel + ' mt-1'}>
+                <option value="">همه</option>
+                {filters.departments.filter(d => !fac || d.facultyId === Number(fac)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-bold text-slate-600">ورودی
+              <select value={year} onChange={e => setYear(e.target.value)} className={sel + ' mt-1'}>
+                <option value="">همه</option>
+                {filters.entryYears.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={countBulk} disabled={busy} className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-black text-white disabled:opacity-50">🔍 شمارش</button>
+            {bulkCount !== null && <span className="text-xs font-black text-indigo-800">{bulkCount.toLocaleString('fa-IR')} دانشجو</span>}
+            <button disabled={busy} className="rounded-xl bg-emerald-700 px-5 py-2 text-white font-black text-xs disabled:opacity-50"
+              onClick={async () => {
+                if (!window.confirm(`فعال‌سازی ${bulkCount ?? '?'} دانشجو در ترم؟`)) return;
+                setBusy(true); setMsg(null);
+                const a = activateTermForFilter(bulkFilter(), true).catch(() => ({ ok: false as const, error: 'خطا' }));
+                const r = await a;
+                setMsg(r.ok ? { kind: 'ok', text: `✅ فعال‌سازی ترم: ${r.updated} دانشجو` } : { kind: 'err', text: r.error ?? '' });
+                setBusy(false);
+              }}>🔋 فعال‌سازی در ترم</button>
+            <button disabled={busy} className="rounded-xl bg-rose-700 px-5 py-2 text-white font-black text-xs disabled:opacity-50"
+              onClick={async () => {
+                if (!window.confirm(`غیرفعال‌سازی ${bulkCount ?? '?'} دانشجو در ترم؟`)) return;
+                setBusy(true); setMsg(null);
+                const r = await activateTermForFilter(bulkFilter(), false).catch(() => ({ ok: false as const, error: 'خطا' }));
+                setMsg(r.ok ? { kind: 'ok', text: `✅ غیرفعال‌سازی: ${r.updated} دانشجو` } : { kind: 'err', text: r.error ?? '' });
+                setBusy(false);
+              }}>➖ غیرفعال‌سازی در ترم</button>
           </div>
         </div>
       )}

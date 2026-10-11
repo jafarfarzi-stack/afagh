@@ -4,7 +4,7 @@ import { and, asc, desc, eq, ilike, inArray, sql } from 'drizzle-orm';
 import { db, withUserRls } from '@/db';
 import {
   academic_terms, course_offerings, courses, enrollments, financial_clearances, majors,
-  offering_professors, schedules, staff, students, users,
+  offering_professors, schedules, staff, student_term_states, students, users,
 } from '@/db/schema';
 import { getSessionUser, requireRole } from '@/lib/auth';
 import { getBool } from '@/lib/settings';
@@ -264,6 +264,48 @@ export async function manualEnrollHistory(limit = 50): Promise<{
 }
 
 void getSessionUser; void offering_professors; // (import refs نگه‌داری می‌شوند تا از حذف ناخواسته جلوگیری شود)
+
+// ─────────────── فعال‌سازی ترم به‌ازای دانشجویان (فردی/گروهی، با دامنه) ───────────────
+/** فعال/غیرفعال کردن دانشجویانِ فیلتر در یک ترم (student_term_states) — با ردیابی */
+export async function activateTermForFilter(
+  f: BulkFilter, active: boolean,
+): Promise<{ ok: boolean; error?: string; updated?: number; total?: number }> {
+  const me = await requireRole(EDU);
+  const tid = Number(f.termId);
+  const [term] = await db.select({ id: academic_terms.id, termCode: academic_terms.termCode, universityId: academic_terms.universityId })
+    .from(academic_terms).where(eq(academic_terms.id, tid)).limit(1);
+  if (!term) return { ok: false, error: 'ترم یافت نشد.' };
+  const sids = await bulkStudentIds(f);
+  if (!sids.length) return { ok: false, error: 'هیچ دانشجویی با این فیلتر پیدا نشد.' };
+
+  let updated = 0;
+  for (const sid of sids) {
+    await withUserRls(me.id, tx => tx.insert(student_term_states).values({
+      studentId: sid, termId: tid, termCode: term.termCode,
+      statusCode: active ? 'ACTIVE' : 'INACTIVE',
+      statusTitle: active ? 'فعال در ترم' : 'غیرفعال در ترم',
+      activatedByUserId: me.id, activatedAt: new Date(),
+      universityId: term.universityId ?? null,
+    }).onConflictDoUpdate({
+      target: [student_term_states.studentId, student_term_states.termId],
+      set: {
+        statusCode: active ? 'ACTIVE' : 'INACTIVE',
+        statusTitle: active ? 'فعال در ترم' : 'غیرفعال در ترم',
+        activatedByUserId: me.id, activatedAt: new Date(),
+      },
+    }));
+    updated++;
+  }
+  return { ok: true, updated, total: sids.length };
+}
+
+/** آیا این دانشجو در ترم مشخص فعال است؟ */
+export async function isTermActive(studentId: number, termId: number): Promise<boolean> {
+  const [r] = await db.select({ statusCode: student_term_states.statusCode })
+    .from(student_term_states)
+    .where(and(eq(student_term_states.studentId, studentId), eq(student_term_states.termId, termId))).limit(1);
+  return (r?.statusCode ?? '') === 'ACTIVE';
+}
 
 // ─────────────── تشخیص تداخل (هفتگی/امتحانی) — ثبت بر اساس حکم شورا ───────────────
 function toMin(hhmm: string): number { const [h, m] = String(hhmm || '').split(':').map(Number); return (h || 0) * 60 + (m || 0); }

@@ -425,6 +425,9 @@ export const student_term_states = pgTable('student_term_states', {
   sourceCompletedUnits: numeric('sourceCompletedUnits', { precision: 4, scale: 1 }),
   sourcePassedUnits: numeric('sourcePassedUnits', { precision: 4, scale: 1 }),
   sourceAttemptedUnits: numeric('sourceAttemptedUnits', { precision: 4, scale: 1 }),
+  /** ردیابی فعال‌سازی ترم‌به‌ترم */
+  activatedByUserId: integer('activatedByUserId').references(() => users.id),
+  activatedAt: timestamp('activatedAt'),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ uq: unique('uq_student_term_states').on(t.studentId, t.termId) }));
 
