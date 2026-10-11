@@ -17,7 +17,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
       <body style={{ margin: 0, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', fontFamily: 'system-ui, Tahoma, sans-serif' }}>
         <div style={{ background: '#fff', borderRadius: 24, padding: 32, maxWidth: 420, width: '100%', textAlign: 'center', border: '1px solid #e2e8f0', boxShadow: '0 10px 30px rgba(15,23,42,.08)' }}>
           <div style={{ fontSize: 44 }}>⚠️</div>
-          <h1 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', margin: '12px 0 6px' }}>سامانه موقتاً در دسترس نیست</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--t-900)', margin: '12px 0 6px' }}>سامانه موقتاً در دسترس نیست</h1>
           <p style={{ fontSize: 12, color: '#64748b', fontWeight: 700, lineHeight: 1.9, margin: 0 }}>
             خطایی بنیادی در بارگذاری سامانه رخ داد. لطفاً چند لحظه بعد دوباره تلاش کنید؛ اگر تکرار شد، کد پیگیری را به پشتیبانی اعلام کنید.
           </p>
