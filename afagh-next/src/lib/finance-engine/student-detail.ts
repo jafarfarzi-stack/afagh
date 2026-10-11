@@ -10,6 +10,9 @@ import {
   buildTranscript, computeTermAdjustments, toNum, transcriptTotals,
   type ChequeRow, type LoanRow, type TermCharge, type TermStatement,
 } from '../finance-rules';
+import { DEBT_LEDGER_TYPES } from '../ledger-balance';
+
+const DEBT_TYPE_SET: ReadonlySet<string> = new Set(DEBT_LEDGER_TYPES);
 
 // ══════════════════════════════════════════════════════════════════════
 //  تخفیف، بنیاد، چک و وام یک دانشجو
@@ -146,8 +149,9 @@ export async function getStudentFinance(
 
   const termCharges: TermCharge[] = [];
   for (const [termId, termLedger] of ledgerByTerm.entries()) {
+    // مبنای بدهی هر ترم از واژگان کانونی (شامل انواع قدیمی TUITION_FIXED/VARIABLE)
     const charges = termLedger
-      .filter((t) => ['CHARGE', 'TUITION_CHARGE'].includes(String(t.transactionType).toUpperCase()))
+      .filter((t) => DEBT_TYPE_SET.has(String(t.transactionType).toUpperCase()))
       .reduce((a, t) => a + toNum(t.amount), 0);
     termCharges.push({ termId, charges });
   }

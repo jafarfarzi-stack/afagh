@@ -5,9 +5,23 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { universities } from '@/db/schema';
 import { UNIVERSITY_COOKIE } from '@/lib/university-scope';
+import { requireRole } from '@/lib/auth';
+
+const AREA_ROLES = [
+  'ADMIN',
+  'EDU_EXPERT',
+  'ARCHIVE_EXPERT',
+  'FINANCE_EXPERT',
+  'FINANCE',
+  'MILITARY_OFFICER',
+  'VAULT_MANAGER',
+  'DEP_HEAD',
+  'VICE_EDU',
+] as never[];
 
 /** تنظیم کوکی دانشگاه فعال — فقط کدهای موجود در DB پذیرفته می‌شود */
 export async function setUniversityCookie(code: string) {
+  await requireRole(AREA_ROLES);
   const c = String(code || '').trim().slice(0, 20);
   if (!c) return;
   try {

@@ -166,6 +166,12 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'PAYROLL_COEF_CROWDED', env: 'PAYROLL_COEF_CROWDED', group: 'گردش کار و حق‌التدریس', label: 'نام ردیف ضریب کلاس جمعی', type: 'text', default: 'ضریب کلاس جمعی (>۴۰ نفر)' },
   { key: 'PAYROLL_MS_COURSE_PREFIX', env: 'PAYROLL_MS_COURSE_PREFIX', group: 'گردش کار و حق‌التدریس', label: 'پیشوند کد دروس کارشناسی ارشد', type: 'text', default: '21', help: 'کد دروسی که با این رقم شروع می‌شوند مشمول ضریب مقطع ارشد‌اند (با ویرگول)' },
 
+  // ── امنیت ورود و نظارت ──
+  { key: 'SESSION_LOCK_MINUTES', env: 'SESSION_LOCK_MINUTES', group: 'امنیت ورود و نظارت', label: 'قفل خودکار بیکاری (دقیقه)', type: 'number', default: '15', help: 'پس از این مدت بی‌تعاملی، صفحه قفل و رمز دوباره خواسته می‌شود. ۰ = غیرفعال' },
+  { key: 'GRADE_EDIT_NOTIFY_BOARD', env: 'GRADE_EDIT_NOTIFY_BOARD', group: 'امنیت ورود و نظارت', label: 'اعلام تغییر نمره در کارتابل ادمین', type: 'boolean', default: 'true', help: 'نوار «فعالیت زندهٔ نمرات» (۳۰ دقیقهٔ اخیر) بالای کارتابل ادمین نمایش داده می‌شود' },
+  { key: 'GRADE_EDIT_NOTIFY_MSG', env: 'GRADE_EDIT_NOTIFY_MSG', group: 'امنیت ورود و نظارت', label: 'پیام‌رسانِ تغییر نمره به مدیران', type: 'boolean', default: 'false', help: 'با هر ثبت نمره توسط کارشناس/ادمین، به مدیران دانشگاه پیام‌رسان اطلاع داده می‌شود' },
+  { key: 'GRADE_CHANGE_NOTIFY_PROF', env: 'GRADE_CHANGE_NOTIFY_PROF', group: 'امنیت ورود و نظارت', label: 'اطلاع به استاد از تغییر نمره در ترم جاری', type: 'boolean', default: 'true', help: 'اگر در ترم جاری نمره‌ای از درس استادی توسط کارشناس/ادمین تغییر کرد، به خود استاد پیام‌رسان اطلاع داده می‌شود' },
+
   // ── ارزشیابی و هوش تجاری ──
   { key: 'EVAL_FLAG_THRESHOLD', env: 'EVAL_FLAG_THRESHOLD', group: 'ارزشیابی و هوش تجاری', label: 'آستانهٔ بحرانی نمرهٔ ارزشیابی استاد', type: 'number', default: '3.5', help: 'استاد زیر این نمره در داشبورد مدیریتی علامت می‌خورد' },
   { key: 'EVAL_FACILITY_REPAIR_THRESHOLD', env: 'EVAL_FACILITY_REPAIR_THRESHOLD', group: 'ارزشیابی و هوش تجاری', label: 'آستانهٔ ارجاع کلاس به تعمیرات', type: 'number', default: '3', help: 'اگر میانگین هر شاخص امکانات زیر این عدد باشد، کلاس نیازمند تعمیر گزارش می‌شود' },

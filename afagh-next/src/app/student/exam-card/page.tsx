@@ -88,7 +88,8 @@ export default async function StudentExamCardPage() {
       ticketQr = await qrSvg(`${publicBaseUrl}/exam-ticket/${encodeURIComponent(examTicket.token)}`, {
         errorCorrectionLevel: 'M',
       });
-    } catch {
+    } catch (err) {
+      console.error('[exam-card] qr failed', err);
       ticketQr = '';
     }
   }

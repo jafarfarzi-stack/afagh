@@ -6,6 +6,8 @@ import { getStaffByUser, requireRole } from '@/lib/auth';
 import { headedDepartments } from '@/lib/group-manager';
 import { getSiblingAccounts } from '@/lib/account-switch';
 import AccountSwitcher from '@/components/AccountSwitcher';
+import SessionLock from '@/components/SessionLock';
+import { getNumber } from '@/lib/settings';
 import TermSwitcher from '@/components/TermSwitcher';
 import { getTermScope } from '@/lib/term-scope';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -32,6 +34,9 @@ export default async function ProfessorLayout({ children }: { children: React.Re
 
   // حساب‌های هم‌شخص (کد پرسنلی/دانشجویی دیگرِ همین کدملی) برای بنر جابه‌جایی
   const siblings = await getSiblingAccounts().catch(() => []);
+
+  // قفل خودکار بیکاری — مدت از تنظیمات مدیر (۰ = غیرفعال)
+  const lockMin = await getNumber('SESSION_LOCK_MINUTES', 15).catch(() => 15);
 
   // استاد به یک دانشگاه تعلق دارد؛ فیلتر نیمسال فقط با همان دانشگاه اعتبارسنجی می‌شود
   const universityId = me?.universityId ?? null;
@@ -176,6 +181,7 @@ export default async function ProfessorLayout({ children }: { children: React.Re
       </header>
 
       <main className="mx-auto max-w-6xl p-4 sm:p-6">{children}</main>
+      <SessionLock name={user.name} timeoutMin={lockMin} />
     </div>
   );
 }

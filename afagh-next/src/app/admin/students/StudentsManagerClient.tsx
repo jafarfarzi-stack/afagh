@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { backfillRolesAction, bulkResetPasswordsAction, bulkResetToNationalCodeAction, createStaffExpertAction, getCohortStats, getTranscript, getTranscriptRegulation, resetUserPasswordAction, saveUserRolesAction, setStudentRegulationAction, setUserActiveAction, updateStaffProfileAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
+import { backfillRolesAction, bulkForcePasswordChangeAction, bulkResetPasswordsAction, bulkResetToNationalCodeAction, createStaffExpertAction, getCohortStats, getTranscript, getTranscriptRegulation, resetUserPasswordAction, saveUserRolesAction, setStudentRegulationAction, setUserActiveAction, updateStaffProfileAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
+import { requestStepUpAction } from '@/lib/step-up-actions';
 import type { RegulationConfig } from '@/lib/regulations-engine';
 import { ClientTh, ServerTh, useClientTable, type ColumnDef } from '@/components/DataTable';
 import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, studentStatusChip, studentStatusFa} from '@/lib/student-labels';
@@ -131,6 +132,10 @@ export default function StudentsManagerClient(props: {
   const [gradeValueInput, setGradeValueInput] = useState<string>('');
   const [gradeReasonInput, setGradeReasonInput] = useState<string>('');
   const [gradeSaving, setGradeSaving] = useState(false);
+  // تأیید دومرحله‌ای ثبت نمره (رمز عبور — ۱۰ دقیقه معتبر)
+  const [gradeNeedsStepUp, setGradeNeedsStepUp] = useState(false);
+  const [gradeStepUpPw, setGradeStepUpPw] = useState('');
+  const [gradeStepUpBusy, setGradeStepUpBusy] = useState(false);
   const [autoSamaCode, setAutoSamaCode] = useState<{ code: string | null; title: string }>({ code: null, title: 'در حال محاسبه...' });
   const [selectedSamaCode, setSelectedSamaCode] = useState<string>('AUTO');
 
@@ -147,7 +152,7 @@ export default function StudentsManagerClient(props: {
   const [bulkPass, setBulkPass] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkBackfill, setBulkBackfill] = useState(false);
-  const [bulkMode, setBulkMode] = useState<'password' | 'national_code'>('password');
+  const [bulkMode, setBulkMode] = useState<'password' | 'national_code' | 'force_change'>('password');
   // ── ثبت استاد/کارکن جدید (مودال) ──
   const [createStaffOpen, setCreateStaffOpen] = useState(false);
   const [createStaffBusy, setCreateStaffBusy] = useState(false);
@@ -242,6 +247,13 @@ export default function StudentsManagerClient(props: {
       let r;
       if (bulkMode === 'national_code') {
         r = await bulkResetToNationalCodeAction(bulkScope);
+      } else if (bulkMode === 'force_change') {
+        r = await bulkForcePasswordChangeAction(bulkScope);
+        if (!r.ok) { showToast(r.error || 'انجام نشد.'); return; }
+        showToast(`✅ ${(r.count ?? 0).toLocaleString('fa-IR')} حساب ${bulkScope === 'student' ? 'دانشجویی' : 'استادی'} ملزم به تغییر رمز در ورود بعدی شدند (رمز فعلی دست نخورد).`);
+        setBulkOpen(false);
+        router.refresh();
+        return;
       } else {
         r = await bulkResetPasswordsAction(bulkScope, bulkPass);
       }
@@ -309,13 +321,18 @@ export default function StudentsManagerClient(props: {
     setGradeValueInput(row.gradeValue ?? '');
     setGradeReasonInput('');
     setSelectedSamaCode('AUTO');
+    setGradeNeedsStepUp(false);
+    setGradeStepUpPw('');
     setGradeEditModalOpen(true);
   };
 
   const handleSaveGrade = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentStudent || !gradeEditTarget) return;
-    const num = gradeValueInput.trim() === '' ? null : Number(gradeValueInput.trim());
+    await doSaveGrade();
+  };
+
+  const doSaveGrade = async () => {
+    if (!currentStudent || !gradeEditTarget) return;    const num = gradeValueInput.trim() === '' ? null : Number(gradeValueInput.trim());
     if (num !== null && (isNaN(num) || num < 0 || num > 20)) {
       showToast('نمره باید بین ۰ تا ۲۰ باشد.');
       return;
@@ -342,6 +359,10 @@ export default function StudentsManagerClient(props: {
         setGradeEditModalOpen(false);
         setTranscriptLoading(true);
 getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.length, 'rows'); setTranscript(r); }).catch(e => { console.error('[transcript] ERROR', e); setTranscript([]); }).finally(() => setTranscriptLoading(false));
+      } else if (res.error && res.error.startsWith('STEPUP_REQUIRED:')) {
+        // تأیید دومرحله‌ای لازم است — مودال باز می‌ماند و باکس رمز نشان داده می‌شود
+        setGradeNeedsStepUp(true);
+        showToast('🔐 برای ثبت نمره، ابتدا رمز عبور خود را تأیید کنید.');
       } else {
         showToast(res.error || 'خطا در ثبت نمره.');
       }
@@ -349,6 +370,22 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
       showToast(err?.message || 'خطا در ارتباط با سرور.');
     } finally {
       setGradeSaving(false);
+    }
+  };
+
+  /** تأیید رمز دومرحله‌ای و تلاش مجدد ثبت نمره */
+  const handleStepUpConfirm = async () => {
+    if (!gradeStepUpPw) { showToast('رمز عبور را وارد کنید.'); return; }
+    setGradeStepUpBusy(true);
+    try {
+      const r = await requestStepUpAction('grades:edit', gradeStepUpPw).catch(() => ({ ok: false as const, error: 'خطا در ارتباط با سرور.' }));
+      if (!r.ok) { showToast(r.error || 'تأیید نشد.'); return; }
+      setGradeNeedsStepUp(false);
+      setGradeStepUpPw('');
+      showToast('✅ تأیید شد — در حال ثبت نمره…');
+      await doSaveGrade();
+    } finally {
+      setGradeStepUpBusy(false);
     }
   };
 
@@ -2219,6 +2256,31 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                 />
               </div>
 
+              {gradeNeedsStepUp && (
+                <div className="bg-indigo-50 border-2 border-indigo-400 rounded-lg p-3 space-y-2">
+                  <p className="font-bold text-indigo-900">🔐 تأیید دومرحله‌ای: رمز عبور خود را وارد کنید (۱۰ دقیقه معتبر می‌ماند).</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={gradeStepUpPw}
+                      onChange={e => setGradeStepUpPw(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void handleStepUpConfirm(); } }}
+                      placeholder="رمز عبور شما"
+                      className="flex-1 bg-white border border-indigo-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                      dir="ltr"
+                    />
+                    <button
+                      type="button"
+                      disabled={gradeStepUpBusy}
+                      onClick={() => void handleStepUpConfirm()}
+                      className="px-4 py-2 bg-indigo-700 hover:bg-indigo-800 disabled:bg-indigo-400 text-white font-bold rounded-lg"
+                    >
+                      {gradeStepUpBusy ? '…' : 'تأیید و ثبت'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="bg-slate-50 border border-slate-200 rounded p-2.5 text-[11px] text-slate-600 space-y-1">
                 <p>🔒 <b>قوانین ممیزی:</b></p>
                 <ul className="list-disc list-inside space-y-0.5">
@@ -2375,9 +2437,18 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                     <input type="radio" name="bulkMode" checked={bulkMode === 'password'} onChange={() => setBulkMode('password')} className="accent-slate-800" />
                     <span>رمز دلخواه</span>
                   </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="bulkMode" checked={bulkMode === 'force_change'} onChange={() => setBulkMode('force_change')} className="accent-indigo-600" />
+                    <span className="font-bold text-indigo-700">🔐 فقط اجبار به تغییر رمز (بدون تغییر رمز فعلی)</span>
+                  </label>
                 </div>
               </div>
-              {bulkMode === 'password' ? (
+              {bulkMode === 'force_change' ? (
+                <div className="rounded-lg bg-indigo-50 border border-indigo-300 p-3 text-indigo-800 leading-relaxed">
+                  <b>🔐 اجبار به تغییر رمز</b>
+                  <p className="text-[10px] mt-1">رمز هیچ حسابی عوض نمی‌شود؛ همهٔ حساب‌های فعال این گروه در ورود بعدی ملزم به تعیین رمز جدید خواهند بود.</p>
+                </div>
+              ) : bulkMode === 'password' ? (
                 <div>
                   <label className="text-slate-600 font-bold block mb-1">رمز جدید (۴ تا ۶۴ کاراکتر):</label>
                   <input

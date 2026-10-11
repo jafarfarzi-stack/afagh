@@ -101,6 +101,21 @@ export async function saveGradeAction(
     const me = await getStaffByUser(user.id);
     if (!me) return invalid('پروندهٔ هیئت علمی یافت نشد.');
 
+    // 🔒 مالکیت: فقط استادِ خودِ ارائه می‌تواند نمره ثبت کند (همان الگوی submitTemporaryAction)
+    if (!(await memberOwnershipOk(me.id, [payload.offeringId]))) return invalid('شما استاد مسئول این درس نیستید.');
+
+    // 🔒 قفل نهایی: پس از finalize هیچ ویرایشی از این مسیر مجاز نیست.
+    // بازگشایی فقط توسط مدیر انجام می‌شود (قلاب آینده: اکشن unfinalize مخصوص ADMIN که
+    // gradesFinalizedAt را پاک می‌کند — این‌جا فقط رد می‌کنیم، UI بازگشایی ساخته نمی‌شود).
+    const [offeringLock] = await db
+      .select({ gradesFinalizedAt: course_offerings.gradesFinalizedAt })
+      .from(course_offerings)
+      .where(eq(course_offerings.id, payload.offeringId))
+      .limit(1);
+    if (offeringLock?.gradesFinalizedAt) {
+      return invalid('نمرات این ارائه نهایی شده است؛ تغییر فقط با بازگشایی توسط مدیر.');
+    }
+
     // ۱) اعتبارسنجی فیلد
     if (!SCORE_FIELDS.includes(payload.field)) {
       return invalid('فیلد نمره نامعتبر است.');
@@ -334,11 +349,20 @@ export async function finalizeSignedAction(
       .where(inArray(enrollments.offeringId, targets))
       .orderBy(enrollments.offeringId, enrollments.studentId);
     const now = new Date();
+    // 🔗 زنجیره‌سازی: هشِ قبلیِ هر ارائه در ورودی هش جدید گنجانده می‌شود تا
+    // نهایی‌سازیِ مجدد روی مقادیر دستکاری‌شده، زنجیره را آشکارا ادامه دهد
+    // (ستون gradesHash از قبل وجود دارد — نیازی به مهاجرت نیست).
+    const prevHashRows = await db
+      .select({ id: course_offerings.id, gradesHash: course_offerings.gradesHash })
+      .from(course_offerings)
+      .where(inArray(course_offerings.id, targets));
+    const prevHashById = new Map(prevHashRows.map(r => [r.id, r.gradesHash]));
     for (const targetId of targets) {
       const memberGrades = grades.filter(gr => gr.offeringId === targetId);
       const chainInput = JSON.stringify({
         offeringId: targetId,
         finalizedAt: now.toISOString(),
+        prevHash: prevHashById.get(targetId) ?? null,
         grades: memberGrades.map(gr => [gr.studentId, gr.gradeValue, gr.gradeStatus]),
       });
       const memberHash = 'SHA256:' + createHash('sha256').update(chainInput).digest('hex');
@@ -397,7 +421,12 @@ export async function resolveAppealAction(
   payload: ResolveAppealPayload
 ): Promise<SaveGradeState> {
   try {
-    await requireRole(['PROFESSOR']);
+    const user = await requireRole(['PROFESSOR']);
+    const me = await getStaffByUser(user.id);
+    if (!me) return invalid('پروندهٔ هیئت علمی یافت نشد.');
+
+    // 🔒 مالکیت: فقط استادِ خودِ ارائه می‌تواند به اعتراض رسیدگی کند
+    if (!(await memberOwnershipOk(me.id, [payload.offeringId]))) return invalid('شما استاد مسئول این درس نیستید.');
 
     if (payload.decision !== 'ACCEPTED' && payload.decision !== 'REJECTED') {
       return invalid('تصمیم نامعتبر است.');
@@ -415,6 +444,19 @@ export async function resolveAppealAction(
       .limit(1);
     if (!appeal) return invalid('اعتراض یافت نشد یا قبلاً بسته شده است.');
 
+    // 🔒 تطابق: اعتراض باید متعلق به همین ارائه و همین دانشجو باشد
+    // (جدول grade_appeals فقط enrollmentId دارد — تطابق از روی enrollments بررسی می‌شود)
+    const [appealEnr] = await db.select({
+      id: enrollments.id, studentId: enrollments.studentId, offeringId: enrollments.offeringId,
+    }).from(enrollments).where(eq(enrollments.id, appeal.enrollmentId)).limit(1);
+    if (!appealEnr || appealEnr.offeringId !== payload.offeringId) {
+      return invalid('مشخصات اعتراض با این ارائه مطابقت ندارد.');
+    }
+    const appealStudent = await resolveStudentRow(payload.offeringId, payload.studentCode);
+    if (!appealStudent || appealStudent.student.id !== appealEnr.studentId) {
+      return invalid('مشخصات اعتراض با این دانشجو مطابقت ندارد.');
+    }
+
     await db
       .update(grade_appeals)
       .set({
@@ -428,20 +470,22 @@ export async function resolveAppealAction(
       const row = await resolveStudentRow(payload.offeringId, payload.studentCode);
       if (row) {
         const newGradeStr = String(Number(payload.newGrade.toFixed(2)));
-        const [enr] = await db.select({ id: enrollments.id, gradeValue: enrollments.gradeValue }).from(enrollments)
+        const [enr] = await db.select({ id: enrollments.id, gradeValue: enrollments.gradeValue, gradeStatus: enrollments.gradeStatus }).from(enrollments)
           .where(and(eq(enrollments.studentId, row.student.id), eq(enrollments.offeringId, payload.offeringId))).limit(1);
 
+        // وضعیت نمره دست نمی‌خورد: به‌ویژه نمرهٔ FINALIZED نباید به TEMPORARY تنزل یابد.
         await db
           .update(enrollments)
-          .set({ gradeValue: newGradeStr, gradeStatus: 'TEMPORARY' })
+          .set({ gradeValue: newGradeStr })
           .where(and(eq(enrollments.studentId, row.student.id), eq(enrollments.offeringId, payload.offeringId)));
 
         if (enr) {
           await logGradeChange({
             enrollmentId: enr.id, studentId: row.student.id, offeringId: payload.offeringId,
             action: 'APPEAL', oldGradeValue: enr.gradeValue, newGradeValue: newGradeStr,
-            oldGradeStatus: 'TEMPORARY', newGradeStatus: 'TEMPORARY',
+            oldGradeStatus: enr.gradeStatus, newGradeStatus: enr.gradeStatus,
             reason: `پذیرش اعتراض: ${payload.reply}`,
+            actorUserId: user.id,
             actorRole: 'PROFESSOR',
           });
         }

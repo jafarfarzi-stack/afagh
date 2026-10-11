@@ -9,7 +9,7 @@
 import { and, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { academic_terms, course_offerings, courses, educational_regulations, enrollments, grade_change_log, legacy_grades, students, users } from '@/db/schema';
+import { academic_terms, course_offerings, courses, educational_regulations, enrollments, grade_change_log, legacy_grades, roles, staff, students, user_roles, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { logGradeChange } from '@/lib/grade-change-log';
 import { resolveSamaGradeStatusCode, syncStudentCourseRegulations } from '@/lib/resolve-sama-code';
@@ -51,6 +51,13 @@ export async function adminSetGradeAction(
       if (!(await expertCanEditGrades(user.id))) {
         return { ok: false, error: 'شما مجوز ویرایش نمره ندارید (فقط کارشناسانی که «ویرایش نمره» برایشان فعال شده).' };
       }
+    }
+
+    // 🔐 تأیید دومرحله‌ای: ثبت نمره فقط اگر رمز عبور در ۱۰ دقیقهٔ اخیر دوباره
+    // تأیید شده باشد (کوکی step-up). کلاینت روی STEPUP_REQUIRED مودال رمز باز می‌کند.
+    const { checkStepUpToken } = await import('@/lib/step-up');
+    if (!(await checkStepUpToken(user.id, 'grades:edit'))) {
+      return { ok: false, error: 'STEPUP_REQUIRED:برای ثبت نمره، ابتدا رمز عبور خود را تأیید کنید (تأیید دومرحله‌ای — ۱۰ دقیقه معتبر است).' };
     }
 
     // اعتبارسنجی
@@ -284,6 +291,54 @@ export async function adminSetGradeAction(
 
     revalidatePath('/admin/students');
     revalidatePath('/professor/grades');
+
+    // 📢 اعلام تغییر نمره — هر دو کلید از تنظیمات مدیر خاموش/روشن می‌شوند؛
+    // اعلان هرگز ثبت نمره را نمی‌شکند (fire-and-forget با catch).
+    try {
+      const { getBool } = await import('@/lib/settings');
+      const [notifyAdmins, notifyProf] = await Promise.all([
+        getBool('GRADE_EDIT_NOTIFY_MSG').catch(() => false),
+        getBool('GRADE_CHANGE_NOTIFY_PROF').catch(() => true),
+      ]);
+      if (notifyAdmins || notifyProf) {
+        const { notifyUserMultichannel } = await import('@/lib/messaging');
+        const gradeTxt = `ثبت نمره توسط ${user.name}: دانشجو ${payload.studentCode} — درس ${payload.courseCode ?? ''} ترم ${payload.termCode ?? ''} → نمره ${gradeStr ?? '—'}`;
+        const jobs: Promise<unknown>[] = [];
+        if (notifyAdmins) {
+          const adminIds = await db.select({ id: users.id }).from(users)
+            .innerJoin(user_roles, eq(user_roles.userId, users.id))
+            .innerJoin(roles, eq(roles.id, user_roles.roleId))
+            .where(and(eq(roles.code, 'ADMIN'), eq(users.isActive, 1), or(eq(users.universityId, uni.id), isNull(users.universityId))))
+            .limit(20);
+          for (const a of adminIds) {
+            jobs.push(notifyUserMultichannel({ userId: a.id, eventCode: 'GRADE_EDIT_ALERT', text: `🔔 ${gradeTxt}` }).catch(() => null));
+          }
+        }
+        if (notifyProf && targetOfferingId) {
+          // فقط اگر ارائه در ترم جاری است، به استاد همان درس اطلاع بده
+          const [off] = await db.select({
+            professorId: course_offerings.professorId,
+            isCurrent: academic_terms.isCurrent,
+          }).from(course_offerings)
+            .leftJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
+            .where(eq(course_offerings.id, targetOfferingId)).limit(1);
+          if (off?.isCurrent === 1 && off.professorId) {
+            const [st] = await db.select({ userId: staff.userId }).from(staff).where(eq(staff.id, off.professorId)).limit(1);
+            if (st?.userId && st.userId !== user.id) {
+              jobs.push(notifyUserMultichannel({
+                userId: st.userId,
+                eventCode: 'GRADE_CHANGED_BY_ADMIN',
+                text: `📝 نمره‌ای از درس شما در ترم جاری توسط ${user.name} تغییر کرد: دانشجو ${payload.studentCode} — درس ${payload.courseCode ?? ''} → نمره ${gradeStr ?? '—'}`,
+              }).catch(() => null));
+            }
+          }
+        }
+        if (jobs.length) await Promise.all(jobs);
+      }
+    } catch {
+      // اعلان اختیاری است
+    }
+
     return { ok: true, message: 'نمره و کد وضعیت با موفقیت ثبت شد.' };
   } catch (err) {
     return fail(err);

@@ -58,7 +58,9 @@ export function faStatus(s: unknown): string {
 export function studentWhere(f: ReportFilters, alias = 's') {
   const a = sql.identifier(alias);
   const c = [];
+  // تفکیک دانشگاه اجباری (fail-closed): بدون universityId هیچ ردیفی برنگردان
   if (f.universityId) c.push(sql`(${a}."universityId" = ${f.universityId} OR ${a}."universityId" IS NULL)`);
+  else c.push(sql`1 = 0`);
   // مقطع: عنوان‌ها در کاتالوگ تکراری‌اند (SAMA/HAMAVA) — با عنوان تطبیق بده تا همهٔ شناسه‌های هم‌عنوان بیایند
   if (f.degreeId) c.push(sql`${a}."degreeLevelId" IN (SELECT id FROM degree_level_configs WHERE title = (SELECT title FROM degree_level_configs WHERE id = ${f.degreeId}))`);
   if (f.facultyId) c.push(sql`m."facultyId" = ${f.facultyId}`);

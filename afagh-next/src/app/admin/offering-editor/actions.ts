@@ -38,6 +38,7 @@ export async function listOfferingsForEditor(termId: number): Promise<OfferingEd
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .where(and(
       eq(course_offerings.termId, termId), eq(course_offerings.isActive, 1),
+      u ? eq(course_offerings.universityId, u.id) : undefined,
       ...await scopeOffConds(eff),
     ))
     .orderBy(asc(courses.title), asc(course_offerings.groupNumber)).limit(4000);
@@ -76,7 +77,11 @@ export async function listOfferingsForEditor(termId: number): Promise<OfferingEd
 
 export async function getRoomsForEditor(): Promise<{ id: number; name: string }[]> {
   await requireRoleOrPermission(EDU, EDU_PERM);
-  return (await db.select({ id: classrooms.id, name: classrooms.name }).from(classrooms).orderBy(asc(classrooms.name))).map(r => ({ id: r.id, name: r.name }));
+  const u = await getCurrentUniversity().catch(() => null);
+  const { sql } = await import('drizzle-orm');
+  return (await db.select({ id: classrooms.id, name: classrooms.name }).from(classrooms)
+    .where(u ? sql`${classrooms.universityId} = ${u.id} OR ${classrooms.universityId} IS NULL` : undefined)
+    .orderBy(asc(classrooms.name))).map(r => ({ id: r.id, name: r.name }));
 }
 
 export interface OfferingEditInput {
@@ -94,6 +99,24 @@ export async function saveOfferingEditorAction(input: OfferingEditInput): Promis
   const me = await requireRoleOrPermission(EDU, EDU_PERM);
   const [off] = await db.select().from(course_offerings).where(eq(course_offerings.id, input.offeringId)).limit(1);
   if (!off) return { ok: false, error: 'ارائه یافت نشد.' };
+  const u = await getCurrentUniversity().catch(() => null);
+  if (u && off.universityId && off.universityId !== u.id) return { ok: false, error: 'این ارائه متعلق به دانشگاه دیگری است.' };
+  if (u && off.universityId == null) return { ok: false, error: 'دانشگاه ارائه نامشخص است.' };
+  // IDOR: هر شناسهٔ برنامه/امتحانِ ارسالی باید متعلق به همین ارائه باشد
+  const suppliedIds = [...(input.classRows || []).map(c => Number(c.id)).filter(Number.isInteger),
+    ...(input.exam?.id ? [Number(input.exam.id)] : [])].filter(Number.isInteger);
+  if (suppliedIds.length) {
+    const owned = await db.select({ id: schedules.id }).from(schedules)
+      .where(and(inArray(schedules.id, suppliedIds), eq(schedules.offeringId, input.offeringId)));
+    if (owned.length !== [...new Set(suppliedIds)].length) return { ok: false, error: 'شناسهٔ برنامه نامعتبر است.' };
+  }
+  // سالن‌ها باید متعلق به همین دانشگاه باشند
+  const roomIds = [...new Set((input.classRows || []).map(c => c.roomId).filter((n): n is number => typeof n === 'number' && Number.isInteger(n)))];
+  if (roomIds.length && u) {
+    const roomRows = await db.select({ id: classrooms.id, universityId: classrooms.universityId }).from(classrooms).where(inArray(classrooms.id, roomIds));
+    if (roomRows.length !== roomIds.length) return { ok: false, error: 'سالن نامعتبر است.' };
+    if (roomRows.some(r => r.universityId && r.universityId !== u.id)) return { ok: false, error: 'این سالن متعلق به دانشگاه دیگری است.' };
+  }
 
   const eff = await currentExpertFilters().catch(() => null);
   const [course] = await db.select({ departmentId: courses.departmentId }).from(courses).where(eq(courses.id, off.courseId)).limit(1);

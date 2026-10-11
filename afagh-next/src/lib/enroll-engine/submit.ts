@@ -1,10 +1,11 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, cart_items, course_offerings, courses,
-  enrollments, financial_clearances, financial_terms, notifications, schedules, student_term_states, students,
+  enrollments, financial_clearances, financial_terms, notifications, schedules, student_ledger, student_term_states, students,
 } from '@/db/schema';
 import { withUserRls } from '@/db';
+import { ledgerBalance } from '../ledger-balance';
 import { atomicSeat, nextWaitlistPosition, releaseSeat, warmupCapacities } from '../waitingRoom';
 import { evaluateStudentRegulationStatus, parseUnits } from '../regulations-engine';
 import { buildPrereqContext, evaluateLogicTree, type PrereqContext } from './prereqs';
@@ -136,16 +137,16 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
     });
     const debtThreshold = await getThreshold();
     if (debtThreshold > 0) {
-      const balResult = await D.execute(sql`
-        SELECT COALESCE(SUM(
-          CASE WHEN "transactionType" IN ('CHARGE','TUITION_CHARGE') THEN amount
-               WHEN "transactionType" IN ('PAYMENT','CREDIT','DISCOUNT','SPONSOR','LOAN','SUBJECT_FEE_DEDUCTIVE') THEN -amount
-               ELSE 0 END
-        ), 0) AS balance
-        FROM student_ledger
-        WHERE "studentId" = ${studentId} AND ("termId" = ${clearanceTermId} OR "financialTermId" = ${clearanceTermId})
-      `);
-      const balance = Number(balResult.rows[0]?.balance ?? 0);
+      // تراز کانونی (واژگان یکتا): مثبت = بدهی. آستانهٔ ENROLLMENT_DEBT_THRESHOLD حفظ شده.
+      const debtRows = await D.select({
+        transactionType: student_ledger.transactionType,
+        amount: student_ledger.amount,
+      }).from(student_ledger)
+        .where(and(
+          eq(student_ledger.studentId, studentId),
+          or(eq(student_ledger.termId, clearanceTermId), eq(student_ledger.financialTermId, clearanceTermId)),
+        )) as { transactionType: string | null; amount: number | string | null }[];
+      const balance = ledgerBalance(debtRows);
       if (balance > debtThreshold) {
         out.ok = false;
         out.hardErrors.push(`مانده بدهکاری شما (${balance.toLocaleString('fa-IR')} ریال) بیش از حد مجاز (${debtThreshold.toLocaleString('fa-IR')} ریال) است. ابتدا بدهکاری را کاهش دهید.`);

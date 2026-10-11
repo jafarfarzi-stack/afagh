@@ -69,6 +69,48 @@ export async function clientIp(): Promise<string> {
 export type RateLimitResult = { ok: true } | { ok: false; retryAfterSec: number };
 
 /**
+ * بررسی بدون شمارش — برای گیت‌هایی که فقط «خطاها» باید بشمارند (مثل ورود:
+ * موفقیت نباید سهمیه بسوزاند و قفل یک حساب نباید به حساب دیگر سرایت کند).
+ */
+export async function peekRateLimit(key: string, limit: number, windowSec: number): Promise<RateLimitResult> {
+  const rkey = `rl:${key}`;
+  try {
+    if (Date.now() < redisDownUntil) throw new Error('redis-breaker-open');
+    const n = Number((await rlRedis.get(rkey)) ?? 0);
+    if (n >= limit) {
+      const ttl = await rlRedis.ttl(rkey);
+      return { ok: false, retryAfterSec: Math.max(1, ttl < 0 ? windowSec : ttl) };
+    }
+    return { ok: true };
+  } catch {
+    redisDownUntil = Date.now() + BREAKER_MS;
+    const now = Date.now();
+    const rec = mem.get(rkey);
+    if (rec && rec.resetAt > now && rec.count >= limit) {
+      return { ok: false, retryAfterSec: Math.max(1, Math.ceil((rec.resetAt - now) / 1000)) };
+    }
+    return { ok: true };
+  }
+}
+
+/** فقط شمارش (بدون بررسی) — همراه peekRateLimit برای «شمارشِ فقط خطا». */
+export async function hitRateLimit(key: string, windowSec: number): Promise<void> {
+  const rkey = `rl:${key}`;
+  try {
+    if (Date.now() < redisDownUntil) throw new Error('redis-breaker-open');
+    const n = await rlRedis.incr(rkey);
+    if (n === 1) await rlRedis.expire(rkey, windowSec);
+  } catch {
+    redisDownUntil = Date.now() + BREAKER_MS;
+    const now = Date.now();
+    if (mem.size > 10000) memSweep();
+    const rec = mem.get(rkey);
+    if (!rec || rec.resetAt <= now) mem.set(rkey, { count: 1, resetAt: now + windowSec * 1000 });
+    else rec.count += 1;
+  }
+}
+
+/**
  * مجاز بودن درخواست — بعد از سررسید محدودیت، خودکار آزاد می‌شود.
  * @param key       کلید (مثلاً `login:1.2.3.4`)
  * @param limit     حداکثر تلاش در پنجره

@@ -30,10 +30,10 @@ export function generateCertificateVerificationHash(data: CertificateData): stri
  * پیش‌تر یک الگوی ساختگی (Mock) بود که اسکن نمی‌شد؛ اکنون از موتور QR واقعی
  * (`@/lib/qr`) تولید می‌شود تا نگهبان/کارفرما بتواند مدرک را اسکن و استعلام کند.
  */
-export async function generateSvgQrCode(url: string): Promise<string> {
-  let svg = await renderQrSvg(url, { errorCorrectionLevel: 'M' });
-  // svg تولیدی width/height ندارد؛ برای پرکردن ظرف والد، ۱۰۰٪ تزریق می‌کنیم (viewBox حفظ می‌شود)
-  svg = svg.replace('<svg ', '<svg width="100%" height="100%" ');
+export async function generateSvgQrCode(url: string, size = 120): Promise<string> {
+  let svg = await renderQrSvg(url, { errorCorrectionLevel: 'M', size });
+  // qrSvg حالا width/height صریح دارد؛ برای پرکردن ظرف والد، ۱۰۰٪ جایگزین می‌کنیم (viewBox حفظ می‌شود)
+  svg = svg.replace(/width="[^"]*"\s*height="[^"]*"/, 'width="100%" height="100%"');
   return `<div class="certificate-qr" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">${svg}</div>`;
 }
 

@@ -52,6 +52,16 @@ export interface ManualEnrollOffering {
 
 export async function listOfferingsForManualEnroll(termId: number): Promise<ManualEnrollOffering[]> {
   try { await requireRole(EDU); } catch { return []; }
+  const u = await uniId();
+  const eff = await currentExpertFilters().catch(() => null);
+  const majScope = await scopedMajorIds(eff, u).catch(() => null);
+  let deptScope: number[] | null = null;
+  if (majScope) {
+    const mrows = await db.select({ departmentId: majors.departmentId }).from(majors).where(inArray(majors.id, majScope)).limit(5000).catch(() => []);
+    const ds = [...new Set(mrows.map(r => r.departmentId).filter((n): n is number => typeof n === 'number'))];
+    if (ds.length) deptScope = ds;
+    else if (eff) return [];
+  }
   const rows = await db
     .select({
       offeringId: course_offerings.id, code: courses.code, title: courses.title,
@@ -60,7 +70,9 @@ export async function listOfferingsForManualEnroll(termId: number): Promise<Manu
     })
     .from(course_offerings)
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-    .where(and(eq(course_offerings.termId, termId), eq(course_offerings.isActive, 1)))
+    .where(and(eq(course_offerings.termId, termId), eq(course_offerings.isActive, 1),
+      u ? eq(course_offerings.universityId, u) : sql`1 = 0`,
+      deptScope ? inArray(courses.departmentId, deptScope) : undefined))
     .orderBy(asc(courses.title), asc(course_offerings.groupNumber)).limit(4000);
   const profIds = [...new Set(rows.map(r => r.professorId).filter((n): n is number => typeof n === 'number'))];
   const profName = new Map<number, string>();
@@ -101,6 +113,8 @@ export async function manualEnrollAction(input: ManualEnrollInput): Promise<{ ok
   const [off] = await db.select().from(course_offerings)
     .where(and(eq(course_offerings.id, oid), eq(course_offerings.isActive, 1))).limit(1);
   if (!off) return { ok: false, error: 'کلاس یافت نشد یا غیرفعال است.' };
+  if (u && off.universityId && off.universityId !== u) return { ok: false, error: 'این کلاس متعلق به دانشگاه دیگری است.' };
+  if (u && off.universityId == null) return { ok: false, error: 'دانشگاه کلاس نامشخص است.' };
   const dup = await db.select({ id: enrollments.id }).from(enrollments)
     .where(and(eq(enrollments.studentId, sid), eq(enrollments.offeringId, oid))).limit(1);
   if (dup.length) return { ok: false, error: 'این دانشجو همین‌الان در این کلاس ثبت است.' };
@@ -138,10 +152,11 @@ export interface BulkFilter {
 }
 
 async function bulkStudentIds(f: BulkFilter): Promise<number[]> {
-  const conds = [eq(students.status, 'ACTIVE')];
+  const u = await uniId();
+  const conds = [eq(students.status, 'ACTIVE'), u ? eq(students.universityId, u) : sql`1 = 0`];
   // دامنهٔ کارشناس
   const eff = await currentExpertFilters();
-  const majScope = await scopedMajorIds(eff, null);
+  const majScope = await scopedMajorIds(eff, u);
   if (majScope) conds.push(inArray(students.majorId, majScope));
   if (f.entryYear) conds.push(eq(students.entryYear, f.entryYear));
   if (f.majorId) conds.push(eq(students.majorId, f.majorId));
@@ -175,12 +190,14 @@ export async function bulkEnrollAction(
   if (!ids.length) return { ok: false, error: 'حداقل یک کلاس انتخاب کنید.' };
   const sids = await bulkStudentIds(f);
   if (!sids.length) return { ok: false, error: 'هیچ دانشجویی با این فیلتر پیدا نشد.' };
+  const ub = await uniId();
 
   let inserted = 0, skipped = 0;
   for (const oid of ids) {
     // گیت ظرفیت مگر با override
     const [off] = await db.select().from(course_offerings).where(eq(course_offerings.id, oid)).limit(1);
     if (!off) { skipped++; continue; }
+    if (ub && off.universityId && off.universityId !== ub) { skipped++; continue; }
     for (const sid of sids) {
       if (inserted + skipped >= 3000) break;
       const dup = await db.select({ id: enrollments.id }).from(enrollments)
@@ -211,8 +228,13 @@ export async function bulkDropAction(
   if (!ids.length) return { ok: false, error: 'حداقل یک کلاس انتخاب کنید.' };
   const sids = await bulkStudentIds(f);
   if (!sids.length) return { ok: false, error: 'هیچ دانشجویی با این فیلتر پیدا نشد.' };
+  const ud = await uniId();
   let dropped = 0, skipped = 0;
   for (const oid of ids) {
+    if (ud) {
+      const [offChk] = await db.select({ universityId: course_offerings.universityId }).from(course_offerings).where(eq(course_offerings.id, oid)).limit(1);
+      if (!offChk || (offChk.universityId && offChk.universityId !== ud)) { skipped += 0; continue; }
+    }
     const res = await withUserRls(me.id, tx => tx.update(enrollments)
       .set({ status: 'DROPPED', enrolledByUserId: me.id, enrollOverrideReason: String(reason || '').trim() || null })
       .where(and(inArray(enrollments.studentId, sids), eq(enrollments.offeringId, oid), eq(enrollments.status, 'REGISTERED')))
@@ -275,6 +297,9 @@ export async function activateTermForFilter(
   const [term] = await db.select({ id: academic_terms.id, termCode: academic_terms.termCode, universityId: academic_terms.universityId })
     .from(academic_terms).where(eq(academic_terms.id, tid)).limit(1);
   if (!term) return { ok: false, error: 'ترم یافت نشد.' };
+  const u0 = await uniId();
+  if (u0 && term.universityId && term.universityId !== u0) return { ok: false, error: 'این ترم متعلق به دانشگاه دیگری است.' };
+  if (u0 && term.universityId == null) return { ok: false, error: 'دانشگاه ترم نامشخص است.' };
   const sids = await bulkStudentIds(f);
   if (!sids.length) return { ok: false, error: 'هیچ دانشجویی با این فیلتر پیدا نشد.' };
 
@@ -392,6 +417,12 @@ export async function getStudentWarnings(studentId: number, termId: number): Pro
   const items: StudentWarning[] = [];
   const [stu] = await db.select().from(students).where(eq(students.id, sid)).limit(1);
   if (!stu) return { ok: false, error: 'دانشجو یافت نشد.' };
+  const u = await uniId();
+  if (u && stu.universityId && stu.universityId !== u) return { ok: false, error: 'این دانشجو از دانشگاه دیگری است.' };
+  if (u && stu.universityId == null) return { ok: false, error: 'دانشگاه دانشجو نامشخص است.' };
+  const _eff0 = await currentExpertFilters().catch(() => null);
+  const _maj0 = await scopedMajorIds(_eff0, u).catch(() => null);
+  if (_maj0 && !_maj0.includes(stu.majorId ?? -1)) return { ok: false, error: 'این دانشجو در محدودهٔ دسترسی شما نیست.' };
 
   // ① وضعیت پرونده
   if (stu.status) {
@@ -458,6 +489,12 @@ export async function getStudentCatalog(studentId: number, termId: number): Prom
   if (!Number.isInteger(sid) || !Number.isInteger(tid)) return { ok: false, error: 'اطلاعات نامعتبر.' };
   const [stu] = await db.select().from(students).where(eq(students.id, sid)).limit(1);
   if (!stu) return { ok: false, error: 'دانشجو یافت نشد.' };
+  const u = await uniId();
+  if (u && stu.universityId && stu.universityId !== u) return { ok: false, error: 'این دانشجو از دانشگاه دیگری است.' };
+  if (u && stu.universityId == null) return { ok: false, error: 'دانشگاه دانشجو نامشخص است.' };
+  const _effC = await currentExpertFilters().catch(() => null);
+  const _majC = await scopedMajorIds(_effC, u).catch(() => null);
+  if (_majC && !_majC.includes(stu.majorId ?? -1)) return { ok: false, error: 'این دانشجو در محدودهٔ دسترسی شما نیست.' };
 
   const enrolled = await db.select({ courseId: courses.id })
     .from(enrollments)
@@ -474,7 +511,8 @@ export async function getStudentCatalog(studentId: number, termId: number): Prom
   })
     .from(course_offerings)
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-    .where(and(eq(course_offerings.termId, tid), eq(course_offerings.isActive, 1)))
+    .where(and(eq(course_offerings.termId, tid), eq(course_offerings.isActive, 1),
+      u ? eq(course_offerings.universityId, u) : sql`1 = 0`))
     .orderBy(asc(courses.title), asc(course_offerings.groupNumber))
     .limit(4000);
 

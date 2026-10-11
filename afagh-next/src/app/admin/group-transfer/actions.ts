@@ -171,13 +171,15 @@ export async function getGroupRosterAction(termId: number, offeringId: number): 
       offeringId: course_offerings.id, groupNumber: course_offerings.groupNumber,
       capacity: course_offerings.capacity, enrolledCount: course_offerings.enrolledCount,
       code: courses.code, title: courses.title, departmentId: courses.departmentId,
-      professorId: course_offerings.professorId,
+      professorId: course_offerings.professorId, universityId: course_offerings.universityId,
     })
     .from(course_offerings)
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .where(and(eq(course_offerings.id, oid), eq(course_offerings.termId, tid)))
     .limit(1);
   if (!off) return { ok: false, error: 'گروه مبدأ یافت نشد یا متعلق به این ترم نیست.' };
+  if (u && off.universityId && off.universityId !== u) return { ok: false, error: 'این گروه متعلق به دانشگاه دیگری است.' };
+  if (u && off.universityId == null) return { ok: false, error: 'دانشگاه گروه نامشخص است.' };
 
   const eff = await currentExpertFilters();
   const deptScope = await scopedDepartmentIds(eff, u);
@@ -224,9 +226,18 @@ export async function getTransferTargetGroupsAction(termId: number, offeringId: 
   const tid = Number(termId), oid = Number(offeringId);
   if (!Number.isInteger(tid) || !Number.isInteger(oid)) return { ok: false, error: 'اطلاعات نامعتبر.' };
 
-  const [src] = await db.select({ courseId: course_offerings.courseId }).from(course_offerings)
+  const [src] = await db.select({ courseId: course_offerings.courseId, universityId: course_offerings.universityId, departmentId: courses.departmentId }).from(course_offerings)
+    .innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .where(eq(course_offerings.id, oid)).limit(1);
   if (!src) return { ok: false, error: 'گروه مبدأ یافت نشد.' };
+  const u = await uniId();
+  if (u && src.universityId && src.universityId !== u) return { ok: false, error: 'این گروه متعلق به دانشگاه دیگری است.' };
+  if (u && src.universityId == null) return { ok: false, error: 'دانشگاه گروه نامشخص است.' };
+  const eff = await currentExpertFilters();
+  const deptScope = await scopedDepartmentIds(eff, u);
+  if (deptScope && (!src.departmentId || !deptScope.includes(src.departmentId))) {
+    return { ok: false, error: 'این درس در محدودهٔ دسترسی شما نیست.' };
+  }
 
   const rows = await db
     .select({
@@ -242,6 +253,8 @@ export async function getTransferTargetGroupsAction(termId: number, offeringId: 
       eq(course_offerings.courseId, src.courseId),
       eq(course_offerings.isActive, 1),
       ne(course_offerings.id, oid),
+      u ? eq(course_offerings.universityId, u) : sql`1 = 0`,
+      deptScope ? inArray(courses.departmentId, deptScope) : undefined,
     ))
     .orderBy(asc(course_offerings.groupNumber))
     .limit(500);
@@ -449,6 +462,15 @@ export async function transferStudentAction(input: TransferInput): Promise<Trans
 
   // دامنهٔ کارشناس: درس هر دو گروه باید در محدودهٔ مجاز باشد
   const u = await uniId();
+  if (u) {
+    if (fromOff[0].universityId && fromOff[0].universityId !== u) return { ok: false, error: 'گروه مبدأ متعلق به دانشگاه دیگری است.' };
+    if (toOff[0].universityId && toOff[0].universityId !== u) return { ok: false, error: 'گروه مقصد متعلق به دانشگاه دیگری است.' };
+    if (fromOff[0].universityId == null || toOff[0].universityId == null) return { ok: false, error: 'دانشگاه گروه‌ها نامشخص است.' };
+    const [stuChk] = await db.select({ universityId: students.universityId }).from(students).where(eq(students.id, enr.studentId)).limit(1);
+    if (stuChk?.universityId && stuChk.universityId !== u) return { ok: false, error: 'این دانشجو از دانشگاه دیگری است.' };
+    if (stuChk && stuChk.universityId == null) return { ok: false, error: 'دانشگاه دانشجو نامشخص است.' };
+    if (enr.universityId && enr.universityId !== u) return { ok: false, error: 'این ثبت‌نام متعلق به دانشگاه دیگری است.' };
+  }
   const eff = await currentExpertFilters();
   const deptScope = await scopedDepartmentIds(eff, u);
   if (deptScope) {
@@ -491,7 +513,6 @@ export async function transferStudentAction(input: TransferInput): Promise<Trans
         enrollOverrideReason: hasOverride ? overrideReason : null,
         councilRuling: gates.conflictBlocked ? 1 : 0,
         overriddenRules: hasOverride ? JSON.stringify([...gates.blocks, ...gates.warnings]) : null,
-        universityId: toOff[0].universityId ?? null,
       }).where(eq(enrollments.id, enrollmentId));
 
       // ظرفیت مقصد: افزایش اتمیک (مگر با نادیده‌گرفتن ظرفیت)

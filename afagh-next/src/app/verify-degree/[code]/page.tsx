@@ -16,7 +16,7 @@ export default async function VerifyDegreePage({ params }: { params: Promise<{ c
   const { code } = await params;
   const r = await verifyDegree(code);
   const url = `${await getPublicBaseUrl()}/verify-degree/${code}`;
-  const qr = await generateSvgQrCode(url);
+  const qr = await generateSvgQrCode(url, 96);
 
   return (
     <main className="min-h-screen bg-slate-100 flex items-center justify-center p-4" dir="rtl">

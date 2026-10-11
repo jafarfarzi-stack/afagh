@@ -14,17 +14,20 @@ export interface QrOptions {
   /** رنگ ماژول تیره (پیش‌فرض سرمه‌ای تیره برای چاپ) */
   dark?: string;
   light?: string;
+  /** عرض/ارتفاع صریح SVG (پیکسل) — خروجی `qrcode` فقط viewBox دارد و بدون این در چاپ صفر می‌شود */
+  size?: number;
 }
 
 /** تولید SVG برداری از متن/URL — برای رندر مستقیم یا چاپ */
 export async function qrSvg(text: string, opts: QrOptions = {}): Promise<string> {
+  const size = opts.size ?? 160;
   const svg = await QRCode.toString(text || ' ', {
     type: 'svg',
     errorCorrectionLevel: opts.errorCorrectionLevel ?? 'M',
     margin: opts.margin ?? 2,
     color: { dark: opts.dark ?? '#0f172a', light: opts.light ?? '#ffffff' },
   });
-  return svg;
+  return svg.replace('<svg ', `<svg width="${size}" height="${size}" `);
 }
 
 /** تولید DataURL (PNG) برای جاهایی که تصویر لازم است */

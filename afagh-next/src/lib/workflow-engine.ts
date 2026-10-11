@@ -18,6 +18,7 @@ import { getFiscalYear, getSetting } from '@/lib/settings';
 import { dispatchWorkflowEvent, fireWorkflowEvent, type WorkflowEventCode } from '@/lib/workflow-events';
 import { notifyUserMultichannel } from '@/lib/messaging';
 import { createLogger } from '@/lib/logger';
+import { ledgerBalance } from '@/lib/ledger-balance';
 // import با اثر جانبی عمدی: بارگذاری این فایل، هندلرهای رویداد را رجیستر می‌کند
 import '@/lib/workflow-handlers';
 
@@ -55,17 +56,16 @@ const TERMINAL_STATUSES = ['APPROVED', 'REJECTED', 'CANCELLED'];
 /** وضعیت‌های باز (در جریان) */
 const OPEN_STATUSES = ['SUBMITTED', 'IN_REVIEW', 'RETURNED'];
 
-/** تراز مالی دانشجو — با توابع تجمعی SQL، نه حلقه در Node */
+/** تراز مالی دانشجو — واگذار به تراز کانونی (واژگان یکتا).
+ *  قرارداد علامت تاریخی حفظ شده: مثبت = بستانکار، منفی = بدهکار
+ *  (فراخوانندهٔ خارج از مالکیت در exam-card-term-data.ts به همین علامت تکیه دارد). */
 export async function studentLedgerBalance(tx: DbTx | undefined, studentId: number): Promise<number> {
   const t = tx ?? db;
-  const [row] = await t
-    .select({ balance: sql<string>`coalesce(sum(case
-        when ${student_ledger.transactionType} in ('TUITION_CHARGE', 'CHARGE') then -${student_ledger.amount}
-        when ${student_ledger.transactionType} in ('PAYMENT', 'CREDIT') then ${student_ledger.amount}
-        else 0 end), 0)` })
+  const rows = await t
+    .select({ transactionType: student_ledger.transactionType, amount: student_ledger.amount })
     .from(student_ledger)
     .where(eq(student_ledger.studentId, studentId));
-  return Number(row?.balance ?? 0);
+  return -ledgerBalance(rows);
 }
 
 /**

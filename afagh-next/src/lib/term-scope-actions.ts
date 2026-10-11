@@ -5,10 +5,14 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { academic_terms } from '@/db/schema';
 import { TERM_COOKIE } from './term-scope';
+import { getCurrentUniversity } from './university-scope';
 
-export async function setTermCookie(termId: number | null, universityId: number | null): Promise<void> {
+export async function setTermCookie(termId: number | null, _universityId: number | null): Promise<void> {
+  void _universityId;
   const store = await cookies();
-  if (!termId || !universityId) {
+  // دانشگاه فقط از کوکی معتبر سمت سرور خوانده می‌شود؛ آرگومان کلاینت نادیده گرفته می‌شود
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!termId || !uni) {
     store.delete(TERM_COOKIE);
     return;
   }
@@ -27,7 +31,7 @@ export async function setTermCookie(termId: number | null, universityId: number 
       .where(eq(academic_terms.id, termId))
       .limit(1)
   )[0];
-  if (!owner || Number(owner.universityId) !== Number(universityId)) return;
+  if (!owner || Number(owner.universityId) !== Number(uni.id)) return;
   store.set(TERM_COOKIE, String(termId), {
     path: '/',
     maxAge: 365 * 24 * 3600,

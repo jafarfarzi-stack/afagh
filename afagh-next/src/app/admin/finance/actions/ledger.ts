@@ -11,6 +11,49 @@ import { appendAudit } from '@/lib/audit';
 import { safeRials } from '@/lib/money';
 import { FINANCE, clean, intOrNull, money, num, requireStudentUni, assertRowUni, uniScopeOf, currentUni } from './shared';
 
+/** دستهٔ تراکنش دیتابیس برای نوشتن در دفتر مالی */
+export type LedgerTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** نقش‌های مجاز POS (صندوق‌دار هم ویدی می‌کند — در FINANCE نیست) */
+const POS_FINANCE_ROLES = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'];
+
+type LedgerWrite = {
+  universityId: number;
+  studentId: number;
+  termId: number | null;
+  financialTermId?: number | null;
+  transactionType: string;
+  /** رشتهٔ ریالی اعتبارسنجی‌شده (برای برگشتی: منفی) */
+  amount: string;
+  description: string;
+  referenceId?: number | null;
+  actorUserId?: number | null;
+  auditAction: string;
+  auditDetails: Record<string, unknown>;
+};
+
+/** نوشتن یک ردیف دفتر مالی + ردیف حسابرسی، روی اتصال داده‌شده (تراکنش بیرونی یا داخلی) */
+async function writeLedgerRow(tx: LedgerTx, w: LedgerWrite): Promise<number> {
+  const [ins] = await tx.insert(student_ledger).values({
+    universityId: w.universityId,
+    studentId: w.studentId,
+    termId: w.termId,
+    financialTermId: w.financialTermId ?? null,
+    transactionType: w.transactionType,
+    amount: w.amount,
+    description: w.description,
+    referenceId: w.referenceId ?? null,
+  }).returning({ id: student_ledger.id });
+  await appendAudit(tx, {
+    actorUserId: w.actorUserId ?? null,
+    action: w.auditAction,
+    entityType: 'student_ledger',
+    entityId: ins.id,
+    details: JSON.stringify(w.auditDetails),
+  });
+  return ins.id;
+}
+
 // ══════════════════════════════════════════════════════════════════════
 //  پرداخت و شارژ دفتر مالی
 // ══════════════════════════════════════════════════════════════════════
@@ -23,41 +66,101 @@ export async function recordLedgerAction(input: {
   description: string;
   financialTermId?: number | null;
   referenceId?: number;
-}): Promise<{ ok: boolean; error?: string }> {
-  await requireRole(FINANCE);
+  /**
+   * برگشتی صریح (ویدی/استرداد): مبلغ منفی مجاز است و با همان نوع تراکنش
+   * ذخیره می‌شود تا تراز کانونی آن را از اعتبار همان نوع کم کند.
+   * بدون این پرچم، مبلغ منفی/صفر رد می‌شود.
+   */
+  isReversal?: boolean;
+}, opts?: { tx?: LedgerTx; allowedRoles?: string[] }): Promise<{ ok: boolean; error?: string; ledgerId?: number }> {
+  await requireRole(opts?.allowedRoles ?? FINANCE);
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
 
-  const amount = safeRials(input.amount);
-  if (amount === null || amount <= 0) return { ok: false, error: 'مبلغ باید عدد صحیح و بزرگ‌تر از صفر باشد' };
+  let amount: number | null;
+  if (input.isReversal) {
+    const magnitude = safeRials(Math.abs(Number(input.amount)));
+    amount = magnitude === null || magnitude <= 0 ? null : -magnitude;
+  } else {
+    amount = safeRials(input.amount);
+  }
+  if (amount === null || (!input.isReversal && amount <= 0) || (input.isReversal && amount >= 0)) {
+    return { ok: false, error: 'مبلغ باید عدد صحیح و بزرگ‌تر از صفر باشد' };
+  }
   const sc = await requireStudentScope(input.studentId);
   if (!sc.ok) return { ok: false, error: sc.error };
   const su = await requireStudentUni(input.studentId);
   if (!su.ok) return { ok: false, error: su.error };
 
   const user = await getSessionUser();
-  try {
-    return await db.transaction(async (tx) => {
-      const [ins] = await tx.insert(student_ledger).values({
-        universityId: su.uniId,
-        studentId: input.studentId,
-        termId: input.termId,
-        transactionType: input.transactionType,
-        amount: String(amount),
-        description: clean(input.description) || (input.transactionType === 'PAYMENT' ? 'پرداخت شهریه' : 'شارژ شهریه'),
-      }).returning({ id: student_ledger.id });
-      await appendAudit(tx, {
-        actorUserId: user?.id ?? null,
-        action: `FINANCE_LEDGER_${input.transactionType}`,
-        entityType: 'student_ledger',
-        entityId: ins.id,
-        details: JSON.stringify({ studentId: input.studentId, amount, termId: input.termId }),
-      });
-      return { ok: true };
+  const description = clean(input.description) || (input.transactionType === 'PAYMENT' ? 'پرداخت شهریه' : 'شارژ شهریه');
+  const run = async (tx: LedgerTx) => {
+    const ledgerId = await writeLedgerRow(tx, {
+      universityId: su.uniId,
+      studentId: input.studentId,
+      termId: input.termId,
+      financialTermId: input.financialTermId ?? null,
+      transactionType: input.transactionType,
+      amount: String(amount),
+      description,
+      referenceId: input.referenceId ?? null,
+      actorUserId: user?.id ?? null,
+      auditAction: `FINANCE_LEDGER_${input.transactionType}${input.isReversal ? '_REVERSAL' : ''}`,
+      auditDetails: { studentId: input.studentId, amount, termId: input.termId, referenceId: input.referenceId ?? null },
     });
+    return { ok: true, ledgerId };
+  };
+  // اگر تراکنش بیرونی داده شد، در همان ادامه می‌یابد (بدون تودرتو) تا
+  // فراخواننده (مثل ویدی POS) بتواند همه‌چیز را اتمیک کند.
+  if (opts?.tx) {
+    try {
+      return await run(opts.tx);
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'خطا در ثبت تراکنش مالی' };
+    }
+  }
+  try {
+    return await db.transaction(run);
   } catch (e: any) {
     return { ok: false, error: e?.message || 'خطا در ثبت تراکنش مالی' };
   }
+}
+
+/**
+ * برگشتی صریح یک ردیف دفتر مالی (ویدی POS): مبلغ مثبتِ قدرمطلق می‌گیرد و
+ * آن را منفی با همان نوع تراکنش ذخیره می‌کند؛ referenceId به ردیف اصلی
+ * اشاره می‌کند. نوع جدیدی نوشته نمی‌شود، پس نیازی به مهاجرت constraint نیست.
+ */
+export async function recordReversalAction(input: {
+  studentId: number;
+  termId: number | null;
+  financialTermId?: number | null;
+  /** شناسهٔ ردیف اصلی دفتر مالی (null = ردیف قدیمی بدون پیوند، فقط در شرح) */
+  originalLedgerId: number | null;
+  transactionType: 'PAYMENT' | 'CHARGE' | 'POS_PAYMENT';
+  /** قدرمطلق مبلغ برگشتی (ریال) */
+  amount: number;
+  reason: string;
+}, opts?: { tx?: LedgerTx }): Promise<{ ok: boolean; error?: string; ledgerId?: number }> {
+  await requireRole(POS_FINANCE_ROLES);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
+
+  const magnitude = safeRials(input.amount);
+  if (magnitude === null || magnitude <= 0) return { ok: false, error: 'مبلغ برگشتی باید عدد صحیح و بزرگ‌تر از صفر باشد' };
+  const reason = clean(input.reason);
+  if (!reason) return { ok: false, error: 'دلیل برگشتی الزامی است' };
+
+  return recordLedgerAction({
+    studentId: input.studentId,
+    termId: input.termId,
+    financialTermId: input.financialTermId ?? null,
+    transactionType: input.transactionType,
+    amount: -magnitude,
+    description: `برگشتی ${input.transactionType} — ردیف اصلی #${input.originalLedgerId ?? '—'} — ${reason}`,
+    referenceId: input.originalLedgerId ?? undefined,
+    isReversal: true,
+  }, { tx: opts?.tx, allowedRoles: POS_FINANCE_ROLES });
 }
 
 /** ثبت شهریهٔ یک ترم بر اساس فرمول تخصیصِ منطبق بر دانشجو */

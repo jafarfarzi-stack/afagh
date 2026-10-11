@@ -4,11 +4,11 @@ import { eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, degree_level_configs, majors, short_term_certificates,
-  short_term_courses, short_term_learners, short_term_registrations, student_cards, students, users,
+  short_term_courses, short_term_learners, short_term_registrations, student_cards, student_ledger, students, users,
 } from '@/db/schema';
 import { getNumber, getSetting } from '@/lib/settings';
 import { currentTermFor } from '@/lib/terms';
-import { studentLedgerBalance } from '@/lib/workflow-engine';
+import { ledgerBalance } from '@/lib/ledger-balance';
 import { createLogger } from '@/lib/logger';
 
 // ══════════════════════════════════════════════════════════════════════
@@ -29,6 +29,19 @@ import { createLogger } from '@/lib/logger';
 // ══════════════════════════════════════════════════════════════════════
 
 const log = createLogger({ mod: 'verification' });
+
+/**
+ * بدهی ریالی دانشجو از تراز کانونی دفتر مالی (مثبت = بدهکار، صفر = تسویه).
+ * هر سه گیت (کارت، آزمون، کارت ورود به جلسه) از همین استفاده می‌کنند تا
+ * انواع قدیمی (TUITION_FIXED/VARIABLE) و POS_PAYMENT نامرئی نمانند.
+ */
+async function studentDebtRials(studentId: number): Promise<number> {
+  const rows = await db
+    .select({ transactionType: student_ledger.transactionType, amount: student_ledger.amount })
+    .from(student_ledger)
+    .where(eq(student_ledger.studentId, studentId));
+  return Math.max(0, Math.round(ledgerBalance(rows)));
+}
 
 const b64u = (buf: Buffer) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64u = (s: string) => Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
@@ -185,8 +198,7 @@ export async function verifyStudentCard(rawToken: string): Promise<StudentCardVe
 
   if (!card) return { verdict: 'NOT_FOUND' };
 
-  const debtRaw = await studentLedgerBalance(undefined, card.studentId);
-  const debt = Math.max(0, -Math.round(debtRaw));
+  const debt = await studentDebtRials(card.studentId);
 
   const base = {
     token: card.token,
@@ -298,8 +310,7 @@ export async function verifyExamTicket(rawToken: string): Promise<ExamTicketVeri
   if (!stu) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
 
   const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1)).limit(1);
-  const debtRaw = await studentLedgerBalance(undefined, stu.studentId);
-  const debt = Math.max(0, -Math.round(debtRaw));
+  const debt = await studentDebtRials(stu.studentId);
   if (debt > 0) {
     return { ok: false, reason: 'NOT_CLEARED', message: 'تسویهٔ مالی انجام نشده است؛ صدور کارت ورود مجاز نیست.', debt };
   }
@@ -567,8 +578,7 @@ export async function getExamCardData(
   if (!stu) return null;
 
   const term = resolvedTerm !== undefined ? resolvedTerm : await currentTermFor(stu.universityId);
-  const balance = await studentLedgerBalance(undefined, stu.studentId);
-  const debt = Math.max(0, -Math.round(balance));
+  const debt = await studentDebtRials(stu.studentId);
 
   const rows = ((await db.execute(sql`
     select en.id as "enrollmentId",

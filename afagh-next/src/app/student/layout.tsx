@@ -3,6 +3,8 @@ import { getStudentByUser, requireRole } from '@/lib/auth';
 import { alumniOf } from '@/lib/alumni';
 import { getSiblingAccounts } from '@/lib/account-switch';
 import AccountSwitcher from '@/components/AccountSwitcher';
+import SessionLock from '@/components/SessionLock';
+import { getNumber } from '@/lib/settings';
 import TermSwitcher from '@/components/TermSwitcher';
 import { getTermScope } from '@/lib/term-scope';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
@@ -25,6 +27,9 @@ export default async function StudentLayout({ children }: { children: React.Reac
 
   // حساب‌های هم‌شخص (شماره دانشجویی/کد پرسنلی دیگرِ همین کدملی) برای بنر جابه‌جایی
   const siblings = await getSiblingAccounts().catch(() => []);
+
+  // قفل خودکار بیکاری — مدت از تنظیمات مدیر (۰ = غیرفعال)
+  const lockMin = await getNumber('SESSION_LOCK_MINUTES', 15).catch(() => 15);
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col" dir="rtl">
@@ -97,6 +102,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
 
       {/* نوار ناوبری پایین فقط برای موبایل */}
       <StudentNav />
+      <SessionLock name={user.name} timeoutMin={lockMin} />
     </div>
   );
 }

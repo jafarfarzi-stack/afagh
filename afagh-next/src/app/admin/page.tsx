@@ -1,7 +1,8 @@
 import { desc, eq, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { process_definitions, student_requests, students, users } from '@/db/schema';
+import { course_offerings, courses, grade_change_log, process_definitions, student_requests, students, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { getBool } from '@/lib/settings';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { groupedModules } from '@/lib/admin-modules';
 import { ensureWorker, waitingRoomStats, warmupCapacities } from '@/lib/waitingRoom';
@@ -104,6 +105,9 @@ export default async function AdminHome({
   let counts: { status: string; n: number }[] = [];
   let inbox: any[] = [];
   let wr: Awaited<ReturnType<typeof waitingRoomStats>> | null = null;
+  // 🔴 فعالیت زندهٔ نمرات (۳۰ دقیقهٔ اخیر) — قابل خاموش/روشن از تنظیمات مدیر
+  let gradeLive: { actor: string; role: string | null; studentCode: string; course: string; grade: string | null; at: Date | null }[] = [];
+  let showGradeLive = false;
 
   if (isEdu) {
     ensureWorker();
@@ -149,6 +153,42 @@ export default async function AdminHome({
       .where(uniScope)
       .orderBy(...(orderBy as never[]))
       .limit(20);
+
+    showGradeLive = (user.roles.includes('ADMIN') || user.roles.includes('EDU_EXPERT') || user.roles.includes('VICE_EDU'))
+      && await getBool('GRADE_EDIT_NOTIFY_BOARD').catch(() => true);
+    if (showGradeLive) {
+      const rows = await db
+        .select({
+          actorFirst: users.firstName,
+          actorLast: users.lastName,
+          actorRole: grade_change_log.actorRole,
+          studentCode: students.studentCode,
+          courseTitle: courses.title,
+          courseCode: courses.code,
+          grade: grade_change_log.newGradeValue,
+          at: grade_change_log.createdAt,
+        })
+        .from(grade_change_log)
+        .leftJoin(users, eq(users.id, grade_change_log.actorUserId))
+        .leftJoin(students, eq(students.id, grade_change_log.studentId))
+        .leftJoin(course_offerings, eq(course_offerings.id, grade_change_log.offeringId))
+        .leftJoin(courses, eq(courses.id, course_offerings.courseId))
+        .where(and(
+          sql`${grade_change_log.createdAt} > now() - interval '30 minutes'`,
+          or(eq(students.universityId, uniId), isNull(students.universityId)),
+        ))
+        .orderBy(desc(grade_change_log.id))
+        .limit(10)
+        .catch(() => []);
+      gradeLive = rows.map(r => ({
+        actor: `${r.actorFirst || ''} ${r.actorLast || ''}`.trim() || '—',
+        role: r.actorRole,
+        studentCode: r.studentCode || '—',
+        course: r.courseTitle || r.courseCode || '—',
+        grade: r.grade,
+        at: r.at,
+      }));
+    }
   }
 
   return (
@@ -202,6 +242,34 @@ export default async function AdminHome({
 
           {/* کارتابل درخواست‌های کلاس جبرانی اساتید */}
           <AdminMakeupRequestsCard />
+
+          {/* 🔴 فعالیت زندهٔ نمرات — چه کسی هم‌اکنون/اخیراً نمره تغییر داده است */}
+          {showGradeLive && (
+            <div className="card border-red-300">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="font-bold text-slate-800">🔴 فعالیت زندهٔ نمرات (۳۰ دقیقهٔ اخیر)</h2>
+                <span className="text-xs text-slate-500">{gradeLive.length} تغییر</span>
+              </div>
+              {gradeLive.length === 0 ? (
+                <p className="text-xs text-slate-400">در ۳۰ دقیقهٔ اخیر تغییری در نمرات ثبت نشده است.</p>
+              ) : (
+                <ul className="text-xs space-y-1.5">
+                  {gradeLive.map((g, i) => (
+                    <li key={i} className="flex flex-wrap items-center gap-x-2 border-b border-slate-100 pb-1.5">
+                      <b>{g.actor}</b>
+                      {g.role && <span className="text-slate-500">({g.role})</span>}
+                      <span>دانشجو <span className="font-mono" dir="ltr">{g.studentCode}</span></span>
+                      <span className="text-slate-600">{g.course}</span>
+                      <span>→ <b className="font-mono">{g.grade ?? '—'}</b></span>
+                      <span className="text-slate-400 mr-auto">
+                        {g.at ? new Date(g.at).toLocaleString('fa-IR', { hour: '2-digit', minute: '2-digit' }) : ''}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           {/* وضعیت موتور صف Redis */}
           {wr && (

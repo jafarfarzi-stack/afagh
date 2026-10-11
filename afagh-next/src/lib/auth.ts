@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { and, asc, desc, eq, gt, inArray, lt, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { ensureBaseReferenceData } from '@/lib/base-data';
-import { clientIp, rateLimit } from '@/lib/rateLimit';
+import { clientIp, hitRateLimit, peekRateLimit, rateLimit } from '@/lib/rateLimit';
 import {
   degree_level_configs,
   educational_regulations,
@@ -376,15 +376,22 @@ async function candidateSummaries(userIds: number[]): Promise<LoginCandidate[]> 
 export async function login(
   identifier: string, password: string,
 ): Promise<{ ok: boolean; error?: string; mustChange?: boolean; needChoice?: boolean; token?: string; candidates?: LoginCandidate[] }> {
-  // ── M-1: محدودیت تلاش ورود (۵ تلاش / ۱۰ دقیقه به ازای هر IP) ──
-  const rl = await rateLimit(`login:${await clientIp()}`, 5, 10 * 60);
-  if (!rl.ok) {
-    return { ok: false, error: `تلاش‌های ورود بیش از حد مجاز شد. ${Math.ceil(rl.retryAfterSec / 60)} دقیقهٔ دیگر دوباره تلاش کنید.` };
-  }
-
+  // ── M-1: محدودیت تلاش ورود — دو لایه تا قفل یک حساب به حساب دیگر سرایت نکند:
+  //   ۱) per-IP (ضد اسپری انبوه، ۲۰/۱۰دقیقه — پشت NAT دانشگاه هم جا دارد)
+  //   ۲) per-account (فقط «خطاها» می‌شمارند، ۵/۱۰دقیقه؛ موفقیت سهمیه نمی‌سوزاند)
   // شناسه ممکن است با کیبورد فارسی تایپ شده باشد (ارقام ۰-۹)؛ همهٔ کدهای
   // سیستمی انگلیسی‌اند پس اول نرمال می‌کنیم تا ورود اول شکست نخورد.
   const clean = toEnDigits(identifier.trim());
+  const accKey = `login:acc:${sha256(clean).slice(0, 24)}`;
+  const ipRl = await rateLimit(`login:ip:${await clientIp()}`, 20, 10 * 60);
+  if (!ipRl.ok) {
+    return { ok: false, error: `تلاش‌های ورود بیش از حد مجاز شد. ${Math.ceil(ipRl.retryAfterSec / 60)} دقیقهٔ دیگر دوباره تلاش کنید.` };
+  }
+  const accRl = await peekRateLimit(accKey, 5, 10 * 60);
+  if (!accRl.ok) {
+    return { ok: false, error: `تلاش‌های ورود بیش از حد مجاز شد. ${Math.ceil(accRl.retryAfterSec / 60)} دقیقهٔ دیگر دوباره تلاش کنید.` };
+  }
+
   // شناسه می‌تواند «کد پرسنلی/کاربری» یا «شماره دانشجویی» باشد.
   // 🔒 ورود با کدملی حذف شد (کدملی روی حساب‌های چندگانهٔ یک نفر تکراری است و
   // تعارض ورود می‌ساخت)؛ فقط در حالت دمو کدملی هم پذیرفته می‌شود چون حساب‌های
@@ -450,6 +457,9 @@ export async function login(
     }
   }
   if (!matched.length) {
+    // فقط خطای حسابِ موجود می‌شمارد (کاربر ناموجود سهمیهٔ کسی را نمی‌سوزاند؛
+    // IP همان‌طور که بالا گفته شد جداگانه مهار شده است).
+    if (cands.length) await hitRateLimit(accKey, 10 * 60).catch(() => {});
     if (cands.some((c) => c.isActive)) return { ok: false, error: 'رمز نادرست است.' };
     return { ok: false, error: 'کاربر یافت نشد.' };
   }

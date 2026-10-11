@@ -3,6 +3,7 @@
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import {
   NUM,
   PER,
@@ -125,6 +126,9 @@ export async function allowedReportKinds(kinds: string[]): Promise<string[] | nu
 export async function runReport(kind: string, f: ReportFilters): Promise<ReportResult> {
   await requireRole(ROLES);
   await assertReportPermission(kind);
+  // تفکیک دانشگاه سمت سرورمشتق می‌شود؛ ورودی کلاینت نادیده گرفته می‌شود
+  const uni = await getCurrentUniversity().catch(() => null);
+  f = { ...f, universityId: uni?.id ?? -1 };
   const term = f.term || '';
 
   try {
@@ -348,7 +352,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
         [sql`s.status = 'GRADUATED'`], f,
       );
     case 'entries': {
-      const years = await db.execute<{ y: number }>(sql`SELECT DISTINCT "entryYear" AS y FROM students ORDER BY 1 DESC LIMIT 1`);
+      const years = await db.execute<{ y: number }>(sql`SELECT DISTINCT "entryYear" AS y FROM students WHERE ("universityId" = ${f.universityId} OR "universityId" IS NULL) ORDER BY 1 DESC LIMIT 1`);
       const y = f.entryYear || Number(years.rows[0]?.y ?? 0);
       const r = await studentListReport(
         [
@@ -550,6 +554,8 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
 export async function exportReport(kind: string, f: ReportFilters): Promise<{ header: string[]; lines: string[][] }> {
   await requireRole(ROLES);
   await assertReportPermission(kind);
+  const uni = await getCurrentUniversity().catch(() => null);
+  f = { ...f, universityId: uni?.id ?? -1 };
   const first = await runReport(kind, { ...f, page: 1 });
   const all = [...first.rows];
   for (let p = 2; p <= first.totalPages && all.length < 5000; p++) {

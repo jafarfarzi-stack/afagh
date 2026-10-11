@@ -583,6 +583,35 @@ export async function bulkResetPasswordsAction(
   }
 }
 
+/** اجبار تغییر رمز در ورود بعدی برای یک دسته (رمز فعلی دست نمی‌خورد) — فقط ADMIN */
+export async function bulkForcePasswordChangeAction(
+  scope: 'student' | 'professor',
+): Promise<{ ok: boolean; error?: string; count?: number }> {
+  try {
+    await requireRole(['ADMIN']);
+  } catch {
+    return { ok: false, error: 'فقط مدیر سیستم (ADMIN) اجازه این عملیات را دارد.' };
+  }
+  const scopeWhere = scope === 'professor'
+    ? `EXISTS (SELECT 1 FROM staff st WHERE st."userId" = users.id)`
+    : `EXISTS (SELECT 1 FROM students st WHERE st."userId" = users.id)`;
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+  const uniWhere = `(users."universityId" = ${uni.id} OR users."universityId" IS NULL)`;
+  try {
+    const upd = await db.execute(sql`
+      UPDATE users SET "mustChangePassword" = 1
+      WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)} AND ${sql.raw(uniWhere)}
+    `);
+    const count = Number((upd as any)?.rowCount ?? 0);
+    return { ok: true, count };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'انجام نشد.' };
+  } finally {
+    revalidatePath('/admin/students');
+  }
+}
+
 /** بازسازی نقش‌های جاافتاده برای همهٔ حساب‌ها (دانشجو=STUDENT، کارمند=PROFESSOR) — فقط ADMIN */
 export async function backfillRolesAction(): Promise<{ ok: boolean; error?: string; inserted?: number }> {
   try {

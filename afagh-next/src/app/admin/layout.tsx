@@ -3,6 +3,8 @@ import { requireRole } from '@/lib/auth';
 import ThemeToggle from '@/components/ThemeToggle';
 import { logoutAction } from '../login/actions';
 import AdminNav from './AdminNav';
+import SessionLock from '@/components/SessionLock';
+import { getNumber } from '@/lib/settings';
 import UniversitySwitcher from './UniversitySwitcher';
 import TermSwitcher from '@/components/TermSwitcher';
 import { getCurrentUniversity, listUniversities, uniTheme } from '@/lib/university-scope';
@@ -47,6 +49,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const curUni = await getCurrentUniversity();
   const th = uniTheme(curUni.code);
   const termScope = await getTermScope(curUni.id);
+  // قفل خودکار بیکاری — مدت از تنظیمات مدیر (SESSION_LOCK_MINUTES؛ ۰ = غیرفعال)
+  const lockMin = await getNumber('SESSION_LOCK_MINUTES', 15).catch(() => 15);
   return (
     <div className="min-h-screen bg-sky-50/70" data-uni={curUni.code}>
       <header className={`${th.header} text-white shadow-md transition-colors`}>
@@ -101,6 +105,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AdminNav roles={user.roles} permissions={permissionCodes} theme={th} />
       </header>
       <main className="mx-auto max-w-6xl p-3 sm:p-5 pb-16">{children}</main>
+      <SessionLock name={user.name} timeoutMin={lockMin} />
     </div>
   );
 }
