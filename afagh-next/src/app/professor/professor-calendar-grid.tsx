@@ -193,7 +193,7 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
                               : 'bg-indigo-50 border-indigo-200 text-indigo-950'
                           }`}
                         >
-                          <div className="hidden print:flex print:flex-col print:justify-center print:h-full text-[6.8pt] font-bold leading-[1.25] text-black">
+                          <div className="prof-print-inner hidden print:flex print:flex-col print:justify-center print:h-full text-[6.8pt] font-bold leading-[1.25] text-black">
                             {doorPrint ? (
                               <>
                                 <div className="prof-print-title text-[8.5pt] font-black leading-[1.15]">{e.title}{e.merged ? ' 🔗' : ''}</div>

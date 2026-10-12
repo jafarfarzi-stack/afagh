@@ -35,7 +35,7 @@ export const DEBT_LEDGER_TYPES = [
   'CHARGE',
   'SUBJECT_ADDITIVE',
   'POS_REFUND',
-  'TUITION_ADJUST_INC', // تعدیل افزایشی قدیمی (بدهی)
+  'TUITION_ADJUST_DEC', // تعدیل کاهشی قدیمی: TSUMMab_Subject<0 به بدهی اضافه می‌شود (همان فرمول TermAcc)
 ] as const;
 
 /** انواع تراکنش دفتر مالی که «اعتبار» می‌سازند (کاهش مانده) */
@@ -49,7 +49,7 @@ export const CREDIT_LEDGER_TYPES = [
   'LOAN',
   'CREDIT',
   'TUITION_BATES',      // بیتس قدیمی = تخفیف/اعتبار (کاهش بدهی)
-  'TUITION_ADJUST_DEC', // تعدیل کاهشی قدیمی (تخفیف موضوعی)
+  'TUITION_ADJUST_INC', // تعدیل افزایشی قدیمی: TSUMMab_Subject>0 تخفیف است (مطابق فرمول TermAcc)
 ] as const;
 
 const DEBT_SET: ReadonlySet<string> = new Set(DEBT_LEDGER_TYPES);
