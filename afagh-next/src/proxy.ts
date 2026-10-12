@@ -22,4 +22,4 @@ export function proxy(req: NextRequest) {
   return NextResponse.next();
 }
 
-export const config = { matcher: ['/student/:path*', '/professor/:path*', '/admin/:path*', '/group-manager/:path*', '/proctor/:path*', '/messenger/:path*', '/alumni/:path*] };
+export const config = { matcher: ['/student/:path*', '/professor/:path*', '/admin/:path*', '/group-manager/:path*', '/proctor/:path*', '/messenger/:path*', '/alumni/:path*'] };
