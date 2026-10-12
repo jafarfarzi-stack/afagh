@@ -178,7 +178,11 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
     setErr('');
     try {
       const { header, lines } = await exportReport(kind, { ...filters, page: 1 });
-      const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+      // گارد تزریق فرمول CSV: مقادیر شروع‌شونده با = + - @ | تب/CR با ' خنثی می‌شوند
+      const esc = (v: string) => {
+        const s = /^[=+\-@|\t\r]/.test(v.trimStart()) ? `'${v}` : v;
+        return `"${s.replace(/"/g, '""')}"`;
+      };
       const csv = '﻿' + [header.map(esc).join(','), ...lines.map(l => l.map(esc).join(','))].join('\r\n');
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
       const a = document.createElement('a');

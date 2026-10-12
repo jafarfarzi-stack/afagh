@@ -57,15 +57,15 @@ const TERMINAL_STATUSES = ['APPROVED', 'REJECTED', 'CANCELLED'];
 const OPEN_STATUSES = ['SUBMITTED', 'IN_REVIEW', 'RETURNED'];
 
 /** تراز مالی دانشجو — واگذار به تراز کانونی (واژگان یکتا).
- *  قرارداد علامت تاریخی حفظ شده: مثبت = بستانکار، منفی = بدهکار
- *  (فراخوانندهٔ خارج از مالکیت در exam-card-term-data.ts به همین علامت تکیه دارد). */
+ *  قرارداد علامت کانونی (ledger-balance.ts): مثبت = بدهی دانشجو،
+ *  صفر/منفی = تسویه یا بستانکار (بستانکار به‌صورت منفی نمایش داده می‌شود). */
 export async function studentLedgerBalance(tx: DbTx | undefined, studentId: number): Promise<number> {
   const t = tx ?? db;
   const rows = await t
     .select({ transactionType: student_ledger.transactionType, amount: student_ledger.amount })
     .from(student_ledger)
     .where(eq(student_ledger.studentId, studentId));
-  return -ledgerBalance(rows);
+  return ledgerBalance(rows);
 }
 
 /**
@@ -264,7 +264,8 @@ export async function submitStudentRequest(params: {
 
       // تراز مالی با SUM در خود پایگاه داده — نه حلقه روی ردیف‌ها در Node
       const balance = await studentLedgerBalance(tx, params.studentId);
-      const autoApprove = hasEnrollment && balance >= 0;
+      // قرارداد کانونی: مثبت = بدهی (مسدود)، صفر/منفی = تسویه/بستانکار (آزاد)
+      const autoApprove = hasEnrollment && balance <= 0;
 
       const digitalHash = crypto
         .createHash('sha256')

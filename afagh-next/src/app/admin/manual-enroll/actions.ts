@@ -138,7 +138,8 @@ export async function manualEnrollAction(input: ManualEnrollInput): Promise<{ ok
     enrolledByUserId: me.id, enrollOverride: override ? 1 : 0, enrollOverrideReason: override ? reason : null,
     councilRuling: conflicts?.length ? 1 : 0, overriddenRules: overriddenCodes,
   }).returning({ id: enrollments.id }));
-  await db.update(course_offerings).set({ enrolledCount: sql`${course_offerings.enrolledCount} + 1` }).where(eq(course_offerings.id, oid));
+  await db.update(course_offerings).set({ enrolledCount: sql`${course_offerings.enrolledCount} + 1` })
+    .where(and(eq(course_offerings.id, oid), u ? eq(course_offerings.universityId, u) : sql`1 = 1`));
   return { ok: true, enrollmentId: ins[0]?.id };
 }
 
@@ -212,7 +213,8 @@ export async function bulkEnrollAction(
       }).onConflictDoNothing().returning({ id: enrollments.id }));
       if (ins.length) {
         inserted++;
-        await db.update(course_offerings).set({ enrolledCount: sql`${course_offerings.enrolledCount} + 1` }).where(eq(course_offerings.id, oid));
+        await db.update(course_offerings).set({ enrolledCount: sql`${course_offerings.enrolledCount} + 1` })
+          .where(and(eq(course_offerings.id, oid), ub ? eq(course_offerings.universityId, ub) : sql`1 = 1`));
       }
     }
   }
@@ -237,10 +239,12 @@ export async function bulkDropAction(
     }
     const res = await withUserRls(me.id, tx => tx.update(enrollments)
       .set({ status: 'DROPPED', enrolledByUserId: me.id, enrollOverrideReason: String(reason || '').trim() || null })
-      .where(and(inArray(enrollments.studentId, sids), eq(enrollments.offeringId, oid), eq(enrollments.status, 'REGISTERED')))
+      .where(and(inArray(enrollments.studentId, sids), eq(enrollments.offeringId, oid), eq(enrollments.status, 'REGISTERED'),
+        ud ? eq(enrollments.universityId, ud) : sql`1 = 1`))
       .returning({ id: enrollments.id }));
     dropped += res.length;
-    await db.update(course_offerings).set({ enrolledCount: sql`GREATEST(${course_offerings.enrolledCount} - ${res.length}, 0)` }).where(eq(course_offerings.id, oid));
+    await db.update(course_offerings).set({ enrolledCount: sql`GREATEST(${course_offerings.enrolledCount} - ${res.length}, 0)` })
+      .where(and(eq(course_offerings.id, oid), ud ? eq(course_offerings.universityId, ud) : sql`1 = 1`));
   }
   return { ok: true, dropped, skipped };
 }
@@ -253,6 +257,8 @@ export async function manualEnrollHistory(limit = 50): Promise<{
   }[]; error?: string;
 }> {
   try { await requireRole(EDU); } catch { return { ok: false, error: 'دسترسی ندارید.' }; }
+  const u = await uniId();
+  const lim = Math.min(Math.max(Number(limit) || 50, 1), 200);
   const rows = await db
     .select({
       id: enrollments.id, studentCode: students.studentCode,
@@ -267,8 +273,8 @@ export async function manualEnrollHistory(limit = 50): Promise<{
     .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .innerJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
-    .where(sql`${enrollments.enrolledByUserId} IS NOT NULL`)
-    .orderBy(desc(enrollments.id)).limit(limit);
+    .where(and(sql`${enrollments.enrolledByUserId} IS NOT NULL`, u ? eq(enrollments.universityId, u) : sql`1 = 0`))
+    .orderBy(desc(enrollments.id)).limit(lim);
   const whoIds = [...new Set(rows.map(r => r.whoId).filter((n): n is number => typeof n === 'number'))];
   const whoName = new Map<number, string>();
   if (whoIds.length) {

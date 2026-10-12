@@ -4,6 +4,8 @@ import { db } from '@/db';
 import { academic_terms, student_subject_fees, students, subject_fee_types } from '@/db/schema';
 import { getSessionUser } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { safeRials } from '@/lib/money';
+import { appendAudit } from '@/lib/audit';
 
 const FINANCE = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'];
 
@@ -93,35 +95,62 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'ترم متعلق به دانشگاه دیگری است' }, { status: 403 });
   }
 
-  // upsert
-  const [existing] = await db
-    .select({ id: student_subject_fees.id })
-    .from(student_subject_fees)
-    .where(and(
-      eq(student_subject_fees.studentId, studentId),
-      eq(student_subject_fees.termId, termId),
-      eq(student_subject_fees.subjectFeeTypeId, subjectFeeTypeId),
-      uniScope,
-    ))
-    .limit(1);
-
-  if (existing) {
-    await db.update(student_subject_fees)
-      .set({ amount: String(Number(amount) || 0), note: note || null, isActive: 1 })
-      .where(and(eq(student_subject_fees.id, existing.id), uniScope));
-    return NextResponse.json({ ok: true, id: existing.id });
+  // 🔒 اعتبارسنجی سخت‌گیرانهٔ مبلغ در مرز ورودی: فقط ریال صحیح مثبت؛
+  // صفر/منفی/NaN/اعشاری/رشتهٔ آلوده رد می‌شود (پیش‌تر `Number(amount) || 0`
+  // هر ورودی نامعتبر را بی‌صدا صفر می‌کرد).
+  const parsedAmount = safeRials(amount);
+  if (parsedAmount === null || parsedAmount <= 0) {
+    return NextResponse.json({ error: 'مبلغ نامعتبر است؛ مبلغ باید عدد صحیح مثبت (ریال) باشد' }, { status: 400 });
   }
+  const noteText = typeof note === 'string' ? note : null;
 
-  const [ins] = await db.insert(student_subject_fees).values({
-    universityId: uni.id,
-    studentId,
-    termId,
-    subjectFeeTypeId,
-    amount: String(Number(amount) || 0),
-    note: note || null,
-  }).returning({ id: student_subject_fees.id });
+  // upsert — تخصیص و حسابرسی در یک تراکنش اتمیک
+  const res = await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select({ id: student_subject_fees.id })
+      .from(student_subject_fees)
+      .where(and(
+        eq(student_subject_fees.studentId, studentId),
+        eq(student_subject_fees.termId, termId),
+        eq(student_subject_fees.subjectFeeTypeId, subjectFeeTypeId),
+        uniScope,
+      ))
+      .limit(1)
+      .for('update');
 
-  return NextResponse.json({ ok: true, id: ins.id });
+    if (existing) {
+      await tx.update(student_subject_fees)
+        .set({ amount: String(parsedAmount), note: noteText || null, isActive: 1 })
+        .where(and(eq(student_subject_fees.id, existing.id), uniScope));
+      await appendAudit(tx, {
+        actorUserId: auth.id ?? null,
+        action: 'FINANCE_SUBJECT_FEE_UPDATED',
+        entityType: 'student_subject_fees',
+        entityId: existing.id,
+        details: JSON.stringify({ studentId, termId, subjectFeeTypeId, amount: parsedAmount }),
+      });
+      return { ok: true as const, id: existing.id };
+    }
+
+    const [ins] = await tx.insert(student_subject_fees).values({
+      universityId: uni.id,
+      studentId,
+      termId,
+      subjectFeeTypeId,
+      amount: String(parsedAmount),
+      note: noteText || null,
+    }).returning({ id: student_subject_fees.id });
+    await appendAudit(tx, {
+      actorUserId: auth.id ?? null,
+      action: 'FINANCE_SUBJECT_FEE_ASSIGNED',
+      entityType: 'student_subject_fees',
+      entityId: ins.id,
+      details: JSON.stringify({ studentId, termId, subjectFeeTypeId, amount: parsedAmount }),
+    });
+    return { ok: true as const, id: ins.id };
+  });
+
+  return NextResponse.json(res);
 }
 
 export async function DELETE(req: NextRequest) {

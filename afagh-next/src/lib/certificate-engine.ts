@@ -41,16 +41,29 @@ export async function generateSvgQrCode(url: string, size = 120): Promise<string
  * قالب استاندارد HTML گواهینامه رسمی با طراحی لوکس جهت پرینت و تبدیل به PDF
  */
 export async function buildCertificateHtml(data: CertificateData): Promise<string> {
-  const verifyUrl = `${await getPublicBaseUrl()}/verify-certificate/${data.certCode}`;
+  const verifyUrl = `${await getPublicBaseUrl()}/verify-certificate/${encodeURIComponent(data.certCode)}`;
   const qrSvg = await generateSvgQrCode(verifyUrl);
   const hash = generateCertificateVerificationHash(data);
+  // 🔒 فرار HTML همهٔ فیلدهای درون‌یابی‌شده (نام فراگیر/دوره/مدرس از ورودی ادمین می‌آید)
+  const esc = (s: unknown) =>
+    String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  const learnerName = esc(data.learnerName);
+  const courseName = esc(data.courseName);
+  const instructorName = esc(data.instructorName);
+  const certCode = esc(data.certCode);
+  const nationalIdMasked = esc(data.nationalIdMasked);
 
   return `
     <!DOCTYPE html>
     <html dir="rtl" lang="fa">
     <head>
       <meta charset="UTF-8" />
-      <title>گواهینامه ${data.certCode}</title>
+      <title>گواهینامه ${certCode}</title>
       <style>
         @page { size: A4 landscape; margin: 0; }
         body {
@@ -131,18 +144,18 @@ export async function buildCertificateHtml(data: CertificateData): Promise<strin
         <div class="title">گواهینـامـه پـایـان دوره تـخصـصی</div>
 
         <div class="body-text">
-          بدین‌وسیله گواهی می‌شود سرکار خانم / جناب آقای <span class="highlight">${data.learnerName}</span> با شماره ملی <span style="font-family: monospace;">${data.nationalIdMasked}</span>، دوره آموزشی و مهارتی <span class="highlight">«${data.courseName}»</span> به مدت <b>${data.durationHours} ساعت</b> را با تدریس استاد محترم <b>${data.instructorName}</b> با موفقیت و نمره نهایی <b style="color: #059669;">${data.grade} از ۲۰</b> به پایان رسانده است.
+          بدین‌وسیله گواهی می‌شود سرکار خانم / جناب آقای <span class="highlight">${learnerName}</span> با شماره ملی <span style="font-family: monospace;">${nationalIdMasked}</span>، دوره آموزشی و مهارتی <span class="highlight">«${courseName}»</span> به مدت <b>${data.durationHours} ساعت</b> را با تدریس استاد محترم <b>${instructorName}</b> با موفقیت و نمره نهایی <b style="color: #059669;">${data.grade} از ۲۰</b> به پایان رسانده است.
         </div>
 
         <div class="footer">
           <div style="text-align: center;">
             <p style="font-weight: bold;">مدرس دوره</p>
-            <p style="font-size: 14px; color: #1e1b4b; margin-top: 10px;">${data.instructorName}</p>
+            <p style="font-size: 14px; color: #1e1b4b; margin-top: 10px;">${instructorName}</p>
           </div>
 
           <div class="qr-box">
             ${qrSvg}
-            <p style="margin-top: 5px;">کد رهگیری: <b>${data.certCode}</b></p>
+            <p style="margin-top: 5px;">کد رهگیری: <b>${certCode}</b></p>
             <p style="font-size: 8px; color: #94a3b8;">SHA-256: ${hash.slice(0, 20)}...</p>
           </div>
 

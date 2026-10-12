@@ -51,8 +51,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ doc
     };
 
     // ۱. بررسی وجود فایل روی دیسک محلی (سوابق دمو و فایل‌های آپلودشده اولیه)
-    //    🔒 گارد path traversal: مسیر نهایی باید داخل پوشهٔ uploads باشد
+    //    🔒 گارد path traversal: مسیر نهایی باید داخل یکی از ریشه‌های مجاز uploads باشد
     const CWD = path.resolve(process.cwd());
+    const allowedRoots = [
+      path.resolve(CWD, '..', 'afagh-erp', 'data', 'uploads'),
+      path.resolve(CWD, 'data', 'uploads'),
+      path.resolve(CWD, '..', 'data', 'uploads'),
+      path.resolve(CWD, 'public', 'uploads'),
+    ];
+    const insideRoot = (p: string) => allowedRoots.some(r => p === r || p.startsWith(r + path.sep));
     const localCandidates = [
       path.join(CWD, '..', 'afagh-erp', 'data', 'uploads', doc.fileUrl),
       path.join(CWD, 'data', 'uploads', doc.fileUrl),
@@ -62,6 +69,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ doc
 
     for (const candidate of localCandidates) {
       const resolved = path.resolve(candidate);
+      if (!insideRoot(resolved)) continue;
       if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
         const fileBuffer = fs.readFileSync(resolved);
         return new NextResponse(fileBuffer, { headers: { 'Content-Type': mime, ...safeHeaders } });
@@ -71,7 +79,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ doc
     // ۲. تلاش برای خواندن مستقیم از سرویس Object Storage (MinIO / S3)
     //    🔒 کلید Object Storage هم نباید از باکت خارج شود (گارد سادهٔ prefix)
     try {
-      if (doc.fileUrl.startsWith('..') || doc.fileUrl.startsWith('/')) {
+      const key = doc.fileUrl;
+      if (key.startsWith('..') || key.startsWith('/') || key.includes('\\') || key.split('/').includes('..') || /^[a-zA-Z]:/.test(key)) {
         return NextResponse.json({ error: 'invalid key' }, { status: 400 });
       }
       const stream = await S3.getObject(ARCHIVE_BUCKET, doc.fileUrl);

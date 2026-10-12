@@ -30,6 +30,16 @@ export async function saveSettingsAction(values: Record<string, string>): Promis
     if (def.type === 'url' && v.trim() && !/^https?:\/\//i.test(v.trim())) {
       return { ok: false, message: `نشانی «${def.label}» باید با http:// یا https:// شروع شود.` };
     }
+    // گارد SSRF: همهٔ کلیدهای نشانی/وب‌هوک باید https بدون userinfo باشند؛
+    // برای مقاصد fetch سرور، DNS هم باید به IP عمومی تفکیک شود.
+    if ((def.type === 'url' || /(_BASE_URL|_URL|WEBHOOK)$/i.test(key)) && v.trim()) {
+      const { assertSafeUrl, LINK_ONLY_KEYS } = await import('@/lib/ssrf-guard');
+      try {
+        await assertSafeUrl(v, { settingKey: key, dnsCheck: !LINK_ONLY_KEYS.has(key) });
+      } catch (e) {
+        return { ok: false, message: e instanceof Error ? `نشانی «${def.label}» ناامن است: ${e.message}` : `نشانی «${def.label}» ناامن است.` };
+      }
+    }
     if (def.type === 'number' && v.trim() && !Number.isFinite(Number(v))) {
       return { ok: false, message: `مقدار «${def.label}» باید عدد باشد.` };
     }

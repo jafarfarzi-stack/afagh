@@ -38,6 +38,9 @@ export async function GET(_req: Request, props: { params: Promise<{ path: string
         'content-type': mime,
         'content-length': String(st.size),
         'cache-control': 'public, max-age=3600',
+        // ضد sniffing + محدودسازی رندر به تصویر (فایل مهاجم با محتوای HTML اجرا نشود)
+        'x-content-type-options': 'nosniff',
+        'content-security-policy': "default-src 'none'; img-src 'self' data:; style-src 'none'; script-src 'none'",
       },
     });
   } catch {

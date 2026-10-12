@@ -1,10 +1,51 @@
 'use server';
 
+import { createHash } from 'crypto';
+import { desc } from 'drizzle-orm';
 import { pool } from '@/db';
+import { db } from '@/db';
+import { audit_logs } from '@/db/schema';
 import { S3, ARCHIVE_BUCKET, ensureBucket } from '@/lib/objectStore';
-import { requireRole } from '@/lib/auth';
+import { getSessionUser, requireRole } from '@/lib/auth';
 
 const DB_URL = process.env.DATABASE_URL || '';
+
+const REDACTED = '[REDACTED]';
+/** کلیدهای محرمانهٔ system_settings که مقدارشان هرگز در دامپ نمی‌آید */
+const SECRET_SETTING_RE = /SECRET|TOKEN|KEY|PASSWORD/i;
+/** رویدادهای حامل OTP — متن تحویل آن‌ها sanitize می‌شود */
+const OTP_EVENT_RE = /OTP/i;
+
+/** حذف مقادیر محرمانه از یک ردیف پیش از دامپ (درجا روی کپی ردیف) */
+function redactRow(table: string, row: Record<string, any>): void {
+  if (table === 'system_settings' && SECRET_SETTING_RE.test(String(row.key ?? ''))) {
+    row.value = REDACTED;
+  } else if (table === 'users') {
+    if ('passwordHash' in row) row.passwordHash = REDACTED;
+  } else if (table === 'notification_deliveries' && OTP_EVENT_RE.test(String(row.eventCode ?? ''))) {
+    row.body = REDACTED;
+  } else if (table === 'notifications' && OTP_EVENT_RE.test(String(row.eventCode ?? ''))) {
+    row.payload = REDACTED;
+  } else if (table === 'verification_otps') {
+    if ('otpCode' in row) row.otpCode = REDACTED;
+  }
+}
+
+/** ثبت ممیزی ایجاد پشتیبان در زنجیرهٔ audit_logs — خطا هرگز دانلود را خراب نمی‌کند */
+async function auditBackup(tables: number): Promise<void> {
+  try {
+    const user = await getSessionUser().catch(() => null);
+    const [last] = await db.select({ hash: audit_logs.hash }).from(audit_logs).orderBy(desc(audit_logs.id)).limit(1);
+    const prevHash = last?.hash ?? '';
+    const now = new Date();
+    const action = 'BACKUP_CREATED';
+    await db.insert(audit_logs).values({
+      actorUserId: user?.id ?? null, action, entityType: 'database', entityId: null,
+      details: JSON.stringify({ tables, redacted: true }), prevHash,
+      hash: createHash('sha256').update(prevHash + '|' + action + '|' + now.toISOString()).digest('hex'),
+    });
+  } catch { /* ممیزی نباید جلوی پشتیبان را بگیرد */ }
+}
 
 // ═══ پشتیبان‌گیری ═══
 
@@ -46,7 +87,9 @@ async function dumpTable(table: string): Promise<string> {
 
   for (let i = 0; i < data.rows.length; i += BATCH) {
     const batch = data.rows.slice(i, i + BATCH);
-    const values = batch.map(row => {
+    const values = batch.map(orig => {
+      const row: Record<string, any> = { ...orig };
+      redactRow(table, row);
       const vals = cols.rows.map(c => {
         const v = row[c.column_name];
         if (v === null || v === undefined) return 'NULL';
@@ -80,6 +123,9 @@ export async function backupDatabaseAction(): Promise<{ ok: boolean; sql?: strin
       const dump = await dumpTable(t);
       if (dump) parts.push(dump);
     }
+
+    // دامپ sanitize شده است (ردکشن رازها) — ثبت ممیزی، بدون اثر بر خروجی دانلود
+    await auditBackup(tables.length);
 
     return { ok: true, sql: parts.join('\n'), tables: tables.length };
   } catch (err: any) {

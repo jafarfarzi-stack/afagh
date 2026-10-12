@@ -35,7 +35,15 @@ export function normCol(col: SQL | unknown): SQL<string> {
 
 /** الگوی LIKE درصدی از روی عبارت خام کاربر (نرمال‌شده). */
 export function faLikePattern(raw: string | null | undefined): string {
-  return `%${normalizeFa(raw)}%`;
+  return `%${escapeLikeChars(normalizeFa(raw))}%`;
+}
+
+/**
+ * فرار کاراکترهای خاص LIKE (\\ ٪ _) — الگو همیشه با ESCAPE '\' استفاده شود
+ * تا ورودی کاربر (مثلاً «٪» یا «_») معنای wildcard نگیرد.
+ */
+export function escapeLikeChars(s: string | null | undefined): string {
+  return String(s ?? '').replace(/[\\%_]/g, m => `\\${m}`);
 }
 
 /**

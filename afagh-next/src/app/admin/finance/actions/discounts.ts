@@ -1,9 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { student_discounts, tuition_discount_types } from '@/db/schema';
+import { audit_logs, student_discounts, student_ledger, student_sponsorships, tuition_discount_types } from '@/db/schema';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { assertServerActionOrigin, requireStudentScope } from '@/lib/security';
 import { toNum } from '@/lib/finance-rules';
@@ -13,6 +13,24 @@ import { FINANCE, clean, money, num, revalidateStudent, requireStudentUni, asser
 // ══════════════════════════════════════════════════════════════════════
 //  تخفیف شهریه
 // ══════════════════════════════════════════════════════════════════════
+
+type CapTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * سقف اثر مالی: شهریهٔ شارژشدهٔ ترم + جمع مبالغ ثابتِ تأییدشدهٔ تخفیف/پوشش.
+ * درصدی‌ها در سقف نوع (maxPercent) و در کارنامه (clamp) مهار می‌شوند؛ این
+ * بررسی بردار نامحدود (مبالغ ثابت) را در لحظهٔ تأیید مهار می‌کند.
+ */
+async function discountSponsorshipCapTx(tx: CapTx, studentId: number, termId: number): Promise<{ charges: number; fixedApproved: number } | null> {
+  const ch = await tx.execute(sql`SELECT COALESCE(SUM(("amount")::numeric), 0) AS "s" FROM student_ledger WHERE "studentId" = ${studentId} AND "termId" = ${termId} AND "transactionType" IN ('TUITION_CHARGE', 'CHARGE') AND ("amount")::numeric > 0`);
+  const charges = Number((ch.rows[0] as { s?: unknown } | undefined)?.s ?? 0);
+  if (!Number.isFinite(charges)) return null;
+  const d = await tx.execute(sql`SELECT COALESCE(SUM(("amount")::numeric), 0) AS "s" FROM student_discounts WHERE "studentId" = ${studentId} AND "termId" = ${termId} AND status = 'APPROVED' AND kind = 'FIXED'`);
+  const s = await tx.execute(sql`SELECT COALESCE(SUM(("amount")::numeric), 0) AS "s" FROM student_sponsorships WHERE "studentId" = ${studentId} AND "termId" = ${termId} AND status IN ('CONFIRMED', 'PAID') AND "coverageKind" = 'FIXED'`);
+  const fixedApproved = Number((d.rows[0] as { s?: unknown } | undefined)?.s ?? 0)
+    + Number((s.rows[0] as { s?: unknown } | undefined)?.s ?? 0);
+  return { charges, fixedApproved };
+}
 
 export async function addDiscountAction(input: {
   studentId: number;
@@ -98,6 +116,25 @@ export async function setDiscountStatusAction(
       if (!su.ok) return { ok: false, error: su.error };
       // فقط PENDING قابل تصمیم است (تخفیف خودکار-تأیید یا قبلاً تصمیم‌گرفته، بازنویسی نمی‌شود)
       if (row.status !== 'PENDING') return { ok: false, error: 'این تخفیف قبلاً تصمیم‌گیری شده است (فقط «در انتظار» قابل تأیید/رد است).' };
+
+      // 🔒 تفکیک وظایف: تأییدکننده باید با ثبت‌کننده (نخستین audit ردیف) متفاوت باشد.
+      const [creator] = await tx.select({ actorUserId: audit_logs.actorUserId }).from(audit_logs)
+        .where(and(eq(audit_logs.entityType, 'student_discounts'), eq(audit_logs.entityId, id)))
+        .orderBy(audit_logs.id)
+        .limit(1);
+      const creatorId = creator?.actorUserId ?? null;
+      if (creatorId !== null && user?.id != null && creatorId === user.id) {
+        return { ok: false, error: 'تأییدکنندهٔ تخفیف باید با ثبت‌کننده متفاوت باشد (تفکیک وظایف)' };
+      }
+
+      // 🔒 سقف اثر مالی (فقط مبالغ ثابت — درصدی‌ها در سقف نوع و کارنامه clamp می‌شوند):
+      // جمع تخفیف‌های ثابتِ تأییدشده + پوشش‌های ثابت + این تخفیف ≤ شهریهٔ شارژشدهٔ همان ترم.
+      if (status === 'APPROVED' && row.termId !== null && row.kind === 'FIXED') {
+        const cap = await discountSponsorshipCapTx(tx, row.studentId, row.termId);
+        if (cap !== null && cap.fixedApproved + Number(row.amount) > cap.charges) {
+          return { ok: false, error: `سقف اثر مالی: جمع تخفیف/پوشش از شهریهٔ شارژشدهٔ ترم (${cap.charges.toLocaleString('fa-IR')} ریال) بیشتر می‌شود` };
+        }
+      }
 
       const upd = await tx.update(student_discounts)
         .set({

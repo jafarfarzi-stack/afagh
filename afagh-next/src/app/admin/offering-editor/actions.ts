@@ -1,6 +1,6 @@
 'use server';
 
-import { and, asc, desc, eq, inArray, ne } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { db, withUserRls } from '@/db';
 import {
   academic_terms, classrooms, course_offerings, courses, departments, schedules, staff, users,
@@ -78,7 +78,6 @@ export async function listOfferingsForEditor(termId: number): Promise<OfferingEd
 export async function getRoomsForEditor(): Promise<{ id: number; name: string }[]> {
   await requireRoleOrPermission(EDU, EDU_PERM);
   const u = await getCurrentUniversity().catch(() => null);
-  const { sql } = await import('drizzle-orm');
   return (await db.select({ id: classrooms.id, name: classrooms.name }).from(classrooms)
     .where(u ? sql`${classrooms.universityId} = ${u.id} OR ${classrooms.universityId} IS NULL` : undefined)
     .orderBy(asc(classrooms.name))).map(r => ({ id: r.id, name: r.name }));
@@ -168,21 +167,22 @@ export async function saveOfferingEditorAction(input: OfferingEditInput): Promis
 
   // ظرفیت
   if (Number.isInteger(input.capacity) && input.capacity >= 0) {
-    await db.update(course_offerings).set({ capacity: input.capacity }).where(eq(course_offerings.id, input.offeringId));
+    await db.update(course_offerings).set({ capacity: input.capacity })
+      .where(and(eq(course_offerings.id, input.offeringId), u ? eq(course_offerings.universityId, u.id) : sql`1 = 1`));
   }
   // جلسات کلاس
   await withUserRls(me.id, async tx => {
     for (const c of input.classRows || []) {
       await tx.update(schedules).set({
         dayOfWeek: c.day, startTime: c.start || '00:00', endTime: c.end || '00:00', roomId: c.roomId ?? null,
-      }).where(eq(schedules.id, c.id));
+      }).where(and(eq(schedules.id, c.id), eq(schedules.offeringId, input.offeringId)));
     }
     // امتحان: به‌روزرسانی ردیف موجود یا درج یک EXAM اگر نبود
     if (input.exam) {
       if (input.exam.id) {
-        await tx.update(schedules).set({ examDate: input.exam.date || null, startTime: input.exam.start || '00:00', endTime: input.exam.end || '00:00' }).where(eq(schedules.id, input.exam.id));
+        await tx.update(schedules).set({ examDate: input.exam.date || null, startTime: input.exam.start || '00:00', endTime: input.exam.end || '00:00' }).where(and(eq(schedules.id, input.exam.id), eq(schedules.offeringId, input.offeringId)));
       } else if (input.exam.date && input.exam.start) {
-        await tx.insert(schedules).values({ offeringId: input.offeringId, scheduleType: 'EXAM', examDate: input.exam.date, startTime: input.exam.start, endTime: input.exam.end || input.exam.start });
+        await tx.insert(schedules).values({ offeringId: input.offeringId, scheduleType: 'EXAM', examDate: input.exam.date, startTime: input.exam.start, endTime: input.exam.end || input.exam.start, universityId: off.universityId ?? null });
       }
     }
   });

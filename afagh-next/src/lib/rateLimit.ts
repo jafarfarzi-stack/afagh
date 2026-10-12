@@ -55,15 +55,54 @@ const memSweep = () => {
   for (const [k, v] of mem) if (v.resetAt <= now) mem.delete(k);
 };
 
-/** IP کلاینت از هدرهای پروکسی (Caddy در مسیر production) — Next 15+: headers() پرامیس است */
+/** IP کلاینت — فقط از هدر پروکسیِ مورداعتماد (Caddy در مسیر production).
+ *
+ *  هدر X-Forwarded-For را هر کلاینتی می‌تواند جعل کند؛ اعتماد به آن بدون
+ *  پروکسیِ مورداعتماد یعنی مهاجم با هر درخواست یک IP تازه جا می‌زند و
+ *  محدودیت per-IP را دور می‌زند. پس:
+ *    • اگر TRUSTED_PROXY=1 (استقرار پشت Caddy/reverse-proxy) → XFF/X-Real-IP معتبرند.
+ *    • در غیر این صورت XFF نادیده گرفته می‌شود (fail-closed: همه در سطل 'local').
+ *  استقرارهای پشت Caddy باید TRUSTED_PROXY=1 را ست کنند. */
+function proxyHeadersTrusted(): boolean {
+  const v = (process.env.TRUSTED_PROXY || '').trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'caddy';
+}
+
 export async function clientIp(): Promise<string> {
   try {
     const h = await headers();
-    const fwd = (h.get('x-forwarded-for') || '').split(',')[0]?.trim();
-    return fwd || h.get('x-real-ip') || 'local';
+    if (proxyHeadersTrusted()) {
+      const fwd = (h.get('x-forwarded-for') || '').split(',')[0]?.trim();
+      return fwd || h.get('x-real-ip')?.trim() || 'local';
+    }
+    return 'local';
   } catch {
     return 'local';
   }
+}
+
+/** شمارش فعلی یک کلید (برای تأخیر تصاعدی) — بدون افزایش شمارنده. */
+export async function getRateLimitCount(key: string): Promise<number> {
+  const rkey = `rl:${key}`;
+  try {
+    if (Date.now() < redisDownUntil) throw new Error('redis-breaker-open');
+    return Number((await rlRedis.get(rkey)) ?? 0);
+  } catch {
+    redisDownUntil = Date.now() + BREAKER_MS;
+    const rec = mem.get(rkey);
+    return rec && rec.resetAt > Date.now() ? rec.count : 0;
+  }
+}
+
+/** تأخیر تصاعدی (ms) بر اساس تعداد خطا — جایگزین قفل سخت: 200ms، 400ms، … سقف 10 ثانیه. */
+export function progressiveDelayMs(failCount: number): number {
+  const n = Math.max(0, Math.floor(failCount));
+  return Math.min(200 * (n + 1), 10_000);
+}
+
+/** خواب تصاعدی پس از خطا — فراخواننده باید await کند. */
+export function progressiveDelay(failCount: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, progressiveDelayMs(failCount)));
 }
 
 export type RateLimitResult = { ok: true } | { ok: false; retryAfterSec: number };

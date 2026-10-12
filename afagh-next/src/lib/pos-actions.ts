@@ -45,7 +45,8 @@ interface PosSaleInput {
   cardPan: string;
   cardholderName?: string;
   description?: string;
-  txnType?: 'SALE' | 'REFUND' | 'VOID';
+  // 🔒 نوع تراکنش از کلاینت پذیرفته نمی‌شود (حفرهٔ mutation): فروش همیشه SALE
+  // است؛ REFUND/VOID فقط از مسیر voidPosTransaction با پیوند به اصل.
 }
 
 /** ترجمهٔ خطای یکتایی (رقابت همزمان) به پیام فارسی تمیز */
@@ -114,7 +115,8 @@ export async function recordPosSale(input: PosSaleInput) {
         stan,
         rrn: input.rrn ?? null,
         amount: String(amount),
-        txnType: input.txnType ?? 'SALE',
+        // 🔒 همیشه SALE — ورودی کلاینت نادیده گرفته می‌شود.
+        txnType: 'SALE',
         entryMode: input.entryMode,
         status: 'APPROVED',
         responseCode: '00',
@@ -155,10 +157,16 @@ function maskPan(pan: string): string {
   return digits.slice(0, 6) + '******' + digits.slice(-4);
 }
 
+/** پنجرهٔ زمانی مجاز ویدی POS پس از تراکنش اصلی (۲۴ ساعت) */
+const POS_VOID_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** نقش‌های ارشد مالی که می‌توانند ویدی را به‌تنهایی (تأیید دوم) انجام دهند */
+const POS_VOID_SENIOR_ROLES = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'];
+
 export async function voidPosTransaction(terminalCode: string, stan: string, reason: string) {
   await requireRole(POS_ROLES);
   const uni = await getCurrentUniversity();
   if (!uni) throw new Error('دانشگاه فعال یافت نشد');
+  const actor = await getSessionUser();
 
   const cleanReason = String(reason ?? '').trim();
   if (!cleanReason) throw new Error('دلیل ویدی الزامی است');
@@ -179,6 +187,21 @@ export async function voidPosTransaction(terminalCode: string, stan: string, rea
         .limit(1)
         .for('update');
       if (!posTxn) throw new Error('تراکنش اصلی یافت نشد یا قبلاً وید شده');
+
+      // 🔒 تفکیک وظایف ویدی: همان صندوق‌دارِ عامل به‌تنهایی (فقط نقش CASHIER)
+      // نمی‌تواند ویدی کند — تأیید دوم لازم است (کاربر متفاوت یا نقش مالی ارشد).
+      const actorRoles = actor?.roles ?? [];
+      const isSameOperator = posTxn.operatorId != null && actor?.id != null && posTxn.operatorId === actor.id;
+      const hasSeniorRole = actorRoles.some(r => POS_VOID_SENIOR_ROLES.includes(r));
+      if (isSameOperator && !hasSeniorRole) {
+        throw new Error('ویدی توسط همان صندوق‌دارِ عامل به‌تنهایی مجاز نیست؛ تأیید دوم (کاربر دیگر یا نقش مالی ارشد) لازم است');
+      }
+
+      // 🔒 پنجرهٔ زمانی ویدی: پس از ۲۴ ساعت فقط نقش ارشد مالی.
+      const createdMs = posTxn.createdAt instanceof Date ? posTxn.createdAt.getTime() : Date.parse(String(posTxn.createdAt ?? ''));
+      if (Number.isFinite(createdMs) && Date.now() - (createdMs as number) > POS_VOID_WINDOW_MS && !hasSeniorRole) {
+        throw new Error('مهلت ویدی (۲۴ ساعت) گذشته است؛ ویدی دیرهنگام فقط با نقش مالی ارشد ممکن است');
+      }
 
       const origAmount = safeRials(posTxn.amount);
       if (origAmount === null || origAmount <= 0) throw new Error('مبلغ تراکنش اصلی نامعتبر است؛ ویدی ممکن نیست');
@@ -201,7 +224,8 @@ export async function voidPosTransaction(terminalCode: string, stan: string, rea
         responseMessage: 'VOIDED',
         cardPan: posTxn.cardPan,
         cardholderName: posTxn.cardholderName,
-        operatorId: posTxn.operatorId,
+        // عامل ویدی (تأییدکنندهٔ دوم) ثبت می‌شود، نه عامل تراکنش اصلی.
+        operatorId: actor?.id ?? posTxn.operatorId,
         description: `ویدی تراکنش ${stan} - ${cleanReason}`,
       }).returning();
 
@@ -223,6 +247,11 @@ export async function voidPosTransaction(terminalCode: string, stan: string, rea
           ))
           .limit(1);
         if (lr) originalLedgerId = lr.id;
+      }
+
+      // 🔒 برگشتی بدون پیوند به ردیف اصلی ممنوع است (fail-closed).
+      if (originalLedgerId === null) {
+        throw new Error('ردیف اصلی دفتر مالی برای این تراکنش یافت نشد؛ ویدی ممکن نیست');
       }
 
       // Reverse in ledger — در همان تراکنش؛ نتیجه بررسی می‌شود و شکست = rollback

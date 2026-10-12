@@ -1,4 +1,4 @@
-import { and, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, cart_items, course_offerings, courses,
@@ -127,30 +127,28 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
   const [fin] = await D.select().from(financial_clearances)
     .where(and(eq(financial_clearances.studentId, studentId), eq(financial_clearances.termId, clearanceTermId)));
   
-  if (!fin || !fin.isCleared) { 
-    out.ok = false; 
-    out.hardErrors.push('تسویه‌حساب مالی این ترم ثبت نشده است. برای انتخاب واحد باید بدهکاری‌تان تسویه شود.'); 
+  if (!fin || !fin.isCleared) {
+    out.ok = false;
+    out.hardErrors.push('تسویه‌حساب مالی این ترم ثبت نشده است. برای انتخاب واحد باید بدهکاری‌تان تسویه شود.');
   } else {
     const getThreshold = deps.getDebtThreshold ?? (async () => {
       const thresholdRaw = await import('../settings').then(m => m.getSetting('ENROLLMENT_DEBT_THRESHOLD'));
       return Math.max(0, Number(thresholdRaw ?? 0));
     });
     const debtThreshold = await getThreshold();
-    if (debtThreshold > 0) {
-      // تراز کانونی (واژگان یکتا): مثبت = بدهی. آستانهٔ ENROLLMENT_DEBT_THRESHOLD حفظ شده.
-      const debtRows = await D.select({
-        transactionType: student_ledger.transactionType,
-        amount: student_ledger.amount,
-      }).from(student_ledger)
-        .where(and(
-          eq(student_ledger.studentId, studentId),
-          or(eq(student_ledger.termId, clearanceTermId), eq(student_ledger.financialTermId, clearanceTermId)),
-        )) as { transactionType: string | null; amount: number | string | null }[];
-      const balance = ledgerBalance(debtRows);
-      if (balance > debtThreshold) {
-        out.ok = false;
-        out.hardErrors.push(`مانده بدهکاری شما (${balance.toLocaleString('fa-IR')} ریال) بیش از حد مجاز (${debtThreshold.toLocaleString('fa-IR')} ریال) است. ابتدا بدهکاری را کاهش دهید.`);
-      }
+    // تراز کانونی (واژگان یکتا) روی کل دفتر — همهٔ ترم‌ها، نه فقط ترم
+    // تسویه: مثبت = بدهی، بدون هیچ معکوسیتی در علامت تا ریاضیِ گیت با
+    // ریاضیِ نمایش (کارنامه/کارتابل) یکی باشد. آستانهٔ صفر fail-closed
+    // است: هر بدهیِ مثبت مسدود می‌کند (نمی‌شود با صفر، بررسی را رد کرد).
+    const debtRows = await D.select({
+      transactionType: student_ledger.transactionType,
+      amount: student_ledger.amount,
+    }).from(student_ledger)
+      .where(eq(student_ledger.studentId, studentId)) as { transactionType: string | null; amount: number | string | null }[];
+    const balance = ledgerBalance(debtRows);
+    if (balance > debtThreshold) {
+      out.ok = false;
+      out.hardErrors.push(`مانده بدهکاری شما (${balance.toLocaleString('fa-IR')} ریال) بیش از حد مجاز (${debtThreshold.toLocaleString('fa-IR')} ریال) است. ابتدا بدهکاری را کاهش دهید.`);
     }
   }
 

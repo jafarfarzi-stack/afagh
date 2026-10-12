@@ -8,6 +8,15 @@
  *
  * قرارداد علامت: مثبت = بدهی دانشجو، صفر/منفی = تسویه یا بستانکار.
  * مبالغ ممکن است رشتهٔ numeric باشند — با Number() اجبار می‌شوند.
+ *
+ * فهرست اعضا = دقیقاً همان ۱۵ نوعی که CHECK دیتابیس
+ * (ck_student_ledger_txn_type — مهاجرت 0073_ledger_types) مجاز می‌داند:
+ * ۱۰ نوع قدیمی (TUITION_FIXED/VARIABLE، PAYMENT، POS_PAYMENT،
+ * DISCOUNT_FIXED/VARIABLE، SUBJECT_ADDITIVE/DEDUCTIVE، SPONSORSHIP، LOAN)
+ * ‏+ TUITION_CHARGE و CHARGE (موتور شهریه/گردش‌کار) + CREDIT (بستانکاری)
+ * ‏+ POS_REFUND (برگشت وجه کارت‌خوان: پرداخت را خنثی می‌کند پس بدهی است)
+ * ‏+ TUITION_BATES (شهریهٔ قدیمی بیتس). هیچ نوع مجازِ دیتابیسی نباید برای
+ * تراز نامرئی بماند — وگرنه گیت‌ها بدهکار را رد می‌کنند (fail-open).
  */
 
 /** ردیف حداقلی موردنیاز برای محاسبهٔ تراز */
@@ -21,8 +30,10 @@ export const DEBT_LEDGER_TYPES = [
   'TUITION_FIXED',
   'TUITION_VARIABLE',
   'TUITION_CHARGE',
+  'TUITION_BATES',
   'CHARGE',
   'SUBJECT_ADDITIVE',
+  'POS_REFUND',
 ] as const;
 
 /** انواع تراکنش دفتر مالی که «اعتبار» می‌سازند (کاهش مانده) */

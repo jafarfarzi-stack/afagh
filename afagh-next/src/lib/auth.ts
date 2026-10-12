@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { and, asc, desc, eq, gt, inArray, lt, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { ensureBaseReferenceData } from '@/lib/base-data';
-import { clientIp, hitRateLimit, peekRateLimit, rateLimit } from '@/lib/rateLimit';
+import { clientIp, getRateLimitCount, hitRateLimit, peekRateLimit, progressiveDelay, rateLimit } from '@/lib/rateLimit';
 import {
   degree_level_configs,
   educational_regulations,
@@ -21,8 +21,19 @@ import {
 } from '@/db/schema';
 
 const scrypt = promisify(_scrypt) as (p: string, s: string, k: number, o: object) => Promise<Buffer>;
-const SCRYPT_OPTS = { N: Number(process.env.AFAGH_SCRYPT_N || 16384), r: 8, p: 1, maxmem: 256 * 1024 * 1024 };
+/** کف امنیتی N=16384 — کمتر از آن در production خطای fail-closed می‌دهد (هش ضعیف = کرک سریع). */
+const SCRYPT_N_RAW = Number(process.env.AFAGH_SCRYPT_N || 16384);
+if (!Number.isInteger(SCRYPT_N_RAW) || SCRYPT_N_RAW < 16384) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('[auth] AFAGH_SCRYPT_N زیر کف مجاز 16384 در production است — سامانه بالا نمی‌آید (fail-closed).');
+  }
+  console.error(`⚠ [auth] AFAGH_SCRYPT_N نامعتبر (${process.env.AFAGH_SCRYPT_N}) — از کف 16384 استفاده می‌شود.`);
+}
+const SCRYPT_OPTS = { N: Number.isInteger(SCRYPT_N_RAW) && SCRYPT_N_RAW >= 16384 ? SCRYPT_N_RAW : 16384, r: 8, p: 1, maxmem: 256 * 1024 * 1024 };
 export const sha256 = (t: string) => createHash('sha256').update(t).digest('hex');
+
+/** هش ساختگی با فرمت معتبر — فقط برای پدینگ زمان‌ثابت در مسیر «کاربر یافت نشد». */
+const DUMMY_PASSWORD_HASH = `${'0'.repeat(32)}:${'0'.repeat(64)}`;
 
 /** فرمت هش فاز صفر: salt:hash (scrypt) — همان الگو، مهاجرت‌پذیر */
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
@@ -110,9 +121,8 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 /**
- * 🔒 حالت دمو (DEMO_MODE):
- *   • `AFAGH_DEMO_MODE=1` → دمو فعال.
- *   • پیش‌فرض: فقط خارج از production فعال است.
+ * 🔒 حالت دمو (DEMO_MODE) — پیش‌فرض خاموش (opt-in):
+ *   • فقط با `AFAGH_DEMO_MODE=1` صریح فعال می‌شود؛ در غیر این صورت false.
  *   • **Production Safety Gate (بازبینی مهندسی):** در production، حتی با
  *     AFAGH_DEMO_MODE=1، بدون `AFAGH_ALLOW_INSECURE_DEMO=true` صریح، دمو فعال
  *     نمی‌شود و لاگ CRITICAL ثبت می‌شود — تا هیچ‌کس ناخواسته مجموعه‌ای از
@@ -125,7 +135,7 @@ export function isDemoMode(): boolean {
   // یعنی «کد دمو در build تولید اساساً غیرفعال است» — نه فقط با ENV قابل خاموش‌کردن.
   if (process.env.NEXT_PUBLIC_AFAGH_DEMO_LOCK === '1') return false;
   const env = (process.env.AFAGH_DEMO_MODE ?? process.env.DEMO_MODE ?? '').trim().toLowerCase();
-  if (!env) return process.env.NODE_ENV !== 'production';
+  if (!env) return false; // 🔒 پیش‌فرض خاموش — فعال‌سازی فقط با ENV صریح (opt-in)
   const enabled = env === '1' || env === 'true';
   if (!enabled) return false;
   if (process.env.NODE_ENV === 'production') {
@@ -142,14 +152,26 @@ export function isDemoMode(): boolean {
   return true;
 }
 
-/** رمز پیش‌فرض حساب‌های دمو — در دمو قابل تغییر است (AFAGH_DEMO_PASSWORD) */
-export const DEMO_PASSWORD = process.env.AFAGH_DEMO_PASSWORD || '123456';
-if (process.env.NODE_ENV === 'production' && DEMO_PASSWORD === '123456') {
-  // P0-2: رمز دموی پیش‌فرض در پروداکشن = ورود شناخته‌شده برای همه.
-  // گیت isDemoMode جلوی ساخت حساب دمو را می‌گیرد، ولی اگر کسی صریحاً دمو را
-  // در پروداکشن فعال کرده باشد، این لاگ CRITICAL باید دیده شود.
-  console.error('⚠ CRITICAL [demo] AFAGH_DEMO_PASSWORD در production همان مقدار پیش‌فرض «123456» است — فوراً عوضش کنید.');
+/**
+ * رمز حساب‌های دمو — هرگز مقدار پیش‌فرض شناخته‌شده ندارد:
+ *   • اگر AFAGH_DEMO_PASSWORD ست شده باشد همان استفاده می‌شود؛
+ *   • در غیر این صورت یک رمز تصادفی ۱۲رقمی تولید و **یک‌بار در stdout** چاپ می‌شود.
+ */
+const __demoPwGlobal = globalThis as unknown as { __afaghDemoPw?: string };
+function resolveDemoPassword(): string {
+  if (__demoPwGlobal.__afaghDemoPw) return __demoPwGlobal.__afaghDemoPw;
+  const fromEnv = (process.env.AFAGH_DEMO_PASSWORD || '').trim();
+  if (fromEnv) {
+    __demoPwGlobal.__afaghDemoPw = fromEnv;
+    return fromEnv;
+  }
+  const generated = randomBytes(9).toString('base64url').slice(0, 12);
+  __demoPwGlobal.__afaghDemoPw = generated;
+  // stdout (نه لاگ خطا) + فقط یک‌بار — رمز شناخته‌شده‌ای در کد/لاگ باقی نمی‌ماند.
+  console.log(`[demo] AFAGH_DEMO_PASSWORD ست نشده است — رمز تصادفی دمو: ${generated}`);
+  return generated;
 }
+export const DEMO_PASSWORD = resolveDemoPassword();
 
 export const DEMO_ACCOUNTS: Record<string, { firstName: string; lastName: string; role: string; staffCode?: string; departmentCode?: string; isStudent?: boolean }> = {
   '0000000001': { firstName: 'مدیر', lastName: 'سامانه', role: 'ADMIN' },
@@ -239,9 +261,12 @@ async function ensureDemoUser(nc: string) {
   }
 
   if (u) {
-    // 🔒 رفع تضادِ «ریست رمز در هر ورود»: رمزی که کاربر عوض کرده هرگز
-    //    دوباره بازنویسی نمی‌شود. فقط حساب غیرفعال در دمو فعال می‌شود.
-    if (!u.isActive && isDemoMode()) {
+    // 🔒 حسابِ دستیِ غیرفعال‌شده هرگز خودکار فعال نمی‌شود (provision-only):
+    //    فعال‌سازی مجدد فقط با فلگ صریح AFAGH_DEMO_REACTIVATE=1 (پیش‌فرض خاموش).
+    //    در غیر این صورت null برمی‌گردد تا ورود ناموفق بماند.
+    if (!u.isActive) {
+      const allowRe = (process.env.AFAGH_DEMO_REACTIVATE || '').trim().toLowerCase();
+      if (allowRe !== '1' && allowRe !== 'true') return null;
       await db.update(users).set({ isActive: 1 }).where(eq(users.id, u.id));
       u.isActive = 1;
     }
@@ -377,32 +402,33 @@ export async function login(
   identifier: string, password: string,
 ): Promise<{ ok: boolean; error?: string; mustChange?: boolean; needChoice?: boolean; token?: string; candidates?: LoginCandidate[] }> {
   // ── M-1: محدودیت تلاش ورود — دو لایه تا قفل یک حساب به حساب دیگر سرایت نکند:
-  //   ۱) per-IP (ضد اسپری انبوه، ۲۰/۱۰دقیقه — پشت NAT دانشگاه هم جا دارد)
+  //   ۱) per-IP (فقط «خطاها» می‌شمارند، ۱۰۰/۱۰دقیقه + تأخیر تصاعدی به‌جای قفل سخت؛
+  //      موفقیت سهمیه نمی‌سوزاند — حملات اسپری کند اما کاربران واقعی پشت NAT قفل نمی‌شوند)
   //   ۲) per-account (فقط «خطاها» می‌شمارند، ۵/۱۰دقیقه؛ موفقیت سهمیه نمی‌سوزاند)
   // شناسه ممکن است با کیبورد فارسی تایپ شده باشد (ارقام ۰-۹)؛ همهٔ کدهای
   // سیستمی انگلیسی‌اند پس اول نرمال می‌کنیم تا ورود اول شکست نخورد.
   const clean = toEnDigits(identifier.trim());
+  const ip = await clientIp();
+  // کلید IP هش می‌شود چون IP از هدر پروکسی می‌آید و نباید خام در Redis بنشیند.
+  const ipKey = `login:ip:${sha256(ip).slice(0, 24)}`;
   const accKey = `login:acc:${sha256(clean).slice(0, 24)}`;
-  const ipRl = await rateLimit(`login:ip:${await clientIp()}`, 20, 10 * 60);
-  if (!ipRl.ok) {
-    return { ok: false, error: `تلاش‌های ورود بیش از حد مجاز شد. ${Math.ceil(ipRl.retryAfterSec / 60)} دقیقهٔ دیگر دوباره تلاش کنید.` };
-  }
   const accRl = await peekRateLimit(accKey, 5, 10 * 60);
   if (!accRl.ok) {
     return { ok: false, error: `تلاش‌های ورود بیش از حد مجاز شد. ${Math.ceil(accRl.retryAfterSec / 60)} دقیقهٔ دیگر دوباره تلاش کنید.` };
   }
+  // لایهٔ IP قفل سخت ندارد: بالای سقف، تأخیر تصاعدی می‌دهیم و ادامه می‌دهیم.
+  const ipRl = await peekRateLimit(ipKey, 100, 10 * 60);
+  if (!ipRl.ok) {
+    await progressiveDelay(await getRateLimitCount(ipKey)).catch(() => {});
+  }
 
   // شناسه می‌تواند «کد پرسنلی/کاربری» یا «شماره دانشجویی» باشد.
   // 🔒 ورود با کدملی حذف شد (کدملی روی حساب‌های چندگانهٔ یک نفر تکراری است و
-  // تعارض ورود می‌ساخت)؛ فقط در حالت دمو کدملی هم پذیرفته می‌شود چون حساب‌های
-  // دمو با کدملی ساخته شده‌اند. کدپرسنلی در سطح دانشگاه یکتاست؛ یک نفر ممکن
+  // تعارض ورود می‌ساخت) — حتی در حالت دمو؛ حساب‌های دمو با کد پرسنلی/دانشجویی
+  // وارد می‌شوند. کدپرسنلی در سطح دانشگاه یکتاست؛ یک نفر ممکن
   // است چند حساب داشته باشد — همهٔ کاندیداها را به ترتیب id امتحان می‌کنیم.
   const cands: typeof users.$inferSelect[] = [];
   const seen = new Set<number>();
-  if (isDemoMode()) {
-    const byNc = await db.select().from(users).where(eq(users.nationalCode, clean)).orderBy(asc(users.id));
-    for (const c of byNc) if (!seen.has(c.id)) { seen.add(c.id); cands.push(c); }
-  }
   const byStaff = await db
     .select({ user: users })
     .from(staff)
@@ -457,11 +483,15 @@ export async function login(
     }
   }
   if (!matched.length) {
-    // فقط خطای حسابِ موجود می‌شمارد (کاربر ناموجود سهمیهٔ کسی را نمی‌سوزاند؛
-    // IP همان‌طور که بالا گفته شد جداگانه مهار شده است).
+    // فقط خطاها می‌شمارند (کاربر ناموجود سهمیهٔ کسی را نمی‌سوزاند؛
+    // موفقیت هم سهمیه نمی‌سوزاند). پیام یکتا: تفکیک «کاربر نیست/رمز غلط»
+    // امکان شمارش حساب‌ها را می‌داد (user enumeration).
+    // پدینگ زمان‌ثابت: وقتی کاندیدایی نیست، یک verify ساختگی می‌زنیم تا
+    // زمان پاسخِ «ناموجود» و «نادرست» یکسان شود.
+    if (!cands.length) await verifyPassword(password, DUMMY_PASSWORD_HASH).catch(() => false);
+    await hitRateLimit(ipKey, 10 * 60).catch(() => {});
     if (cands.length) await hitRateLimit(accKey, 10 * 60).catch(() => {});
-    if (cands.some((c) => c.isActive)) return { ok: false, error: 'رمز نادرست است.' };
-    return { ok: false, error: 'کاربر یافت نشد.' };
+    return { ok: false, error: 'شناسه یا رمز نادرست است.' };
   }
   if (matched.length === 1) {
     const { mustChange } = await issueSessionFor(matched[0].id);

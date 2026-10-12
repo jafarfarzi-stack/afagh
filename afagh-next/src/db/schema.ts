@@ -4,7 +4,7 @@
 //  SQLite→PG مستقیم باشد. لایهٔ سخت‌سازی (ایندکس/پارتیشن/RLS — سند §۲۰۹۳–۲۲۴۰)
 //  → src/db/pg-hardening.sql
 // ══════════════════════════════════════════════════════════════════════
-import { pgTable, serial, integer, varchar, text, timestamp, date, time, numeric, jsonb, boolean, unique, primaryKey, index, check, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, serial, integer, varchar, text, timestamp, date, time, numeric, jsonb, boolean, unique, uniqueIndex, primaryKey, index, check, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const roles = pgTable('roles', {
@@ -1219,6 +1219,9 @@ export const student_ledger = pgTable('student_ledger', {
 }, (t) => [
   index('idx_student_ledger_fin_term').on(t.financialTermId),
   check('ck_student_ledger_txn_type', sql`"transactionType" IN ('TUITION_FIXED','TUITION_VARIABLE','PAYMENT','POS_PAYMENT','DISCOUNT_FIXED','DISCOUNT_VARIABLE','SUBJECT_ADDITIVE','SUBJECT_DEDUCTIVE','SPONSORSHIP','LOAN')`),
+  // 🔒 شارژ شهریهٔ هر ترم یکتاست (بک‌استاپِ chargeTermTuition اتمیک): جزئی روی
+  // TUITION_CHARGE تا برگشتی‌ها (همان transactionType با referenceId) نشکنند.
+  uniqueIndex('uq_student_ledger_tuition_charge').on(t.studentId, t.termId, t.transactionType).where(sql`"transactionType" = 'TUITION_CHARGE'`),
 ]);
 
 export const financial_clearances = pgTable('financial_clearances', {
@@ -1396,7 +1399,10 @@ export const payroll_statements = pgTable('payroll_statements', {
   baseSnapshot: varchar('baseSnapshot', { length: 20 }),
   rateSnapshot: numeric('rateSnapshot', { precision: 12, scale: 0 }),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
-});
+}, (t) => [
+  // 🔒 وضعیت فیش فقط از ماشین حالت زنجیرهٔ تأیید (NULL قدیمی مجاز می‌ماند).
+  check('ck_payroll_statements_status', sql`"status" IN ('DRAFT','MID_TERM_PAID','DEPT_HEAD_APPROVED','DEAN_APPROVED','FINAL_SETTLED','REJECTED')`),
+]);
 
 export const class_sessions = pgTable('class_sessions', {
   id: serial('id').primaryKey(),
@@ -1497,7 +1503,7 @@ export const verification_otps = pgTable('verification_otps', {
   id: serial('id').primaryKey(),
   targetId: integer('targetId').notNull(),
   targetType: varchar('targetType', { length: 50 }).notNull(),
-  otpCode: varchar('otpCode', { length: 10 }).notNull(),
+  otpHash: varchar('otpHash', { length: 64 }).notNull(), // فقط هش کد (HMAC نمک‌دار) — هرگز متن خام OTP
   expiresAt: timestamp('expiresAt').notNull(),
   isUsed: integer('isUsed').default(0)
 });
@@ -2689,7 +2695,7 @@ export const payment_cheques = pgTable('payment_cheques', {
   dueDate: timestamp('dueDate').notNull(),
   status: varchar('status', { length: 20 }).notNull().default('PENDING'), // PENDING | CLEARED | BOUNCED | CANCELLED
   /** شناسهٔ تراکنش دفتر مالی پس از وصول */
-  ledgerTxnId: integer('ledgerTxnId'),
+  ledgerTxnId: integer('ledgerTxnId').references(() => student_ledger.id),
   remindedAt: timestamp('remindedAt'),
   clearedAt: timestamp('clearedAt'),
   note: text('note'),
@@ -2830,7 +2836,7 @@ export const pos_transactions = pgTable('pos_transactions', {
   /** شناسه اپراتور/صندوق‌دار */
   operatorId: integer('operator_id').references(() => users.id),
   /** شناسه تراکنش در دفتر مالی (student_ledger) */
-  ledgerTxnId: integer('ledgerTxnId'),
+  ledgerTxnId: integer('ledgerTxnId').references(() => student_ledger.id),
   /** توضیحات */
   description: text('description'),
   createdAt: timestamp('createdAt').defaultNow(),
@@ -2881,7 +2887,7 @@ export const student_loans = pgTable('student_loans', {
   installments: integer('installments').notNull().default(1),
   firstDueDate: timestamp('firstDueDate'),
   status: varchar('status', { length: 20 }).notNull().default('ACTIVE'), // ACTIVE | SETTLED | CANCELLED
-  ledgerTxnId: integer('ledgerTxnId'),
+  ledgerTxnId: integer('ledgerTxnId').references(() => student_ledger.id),
   note: text('note'),
   createdAt: timestamp('createdAt').defaultNow(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),

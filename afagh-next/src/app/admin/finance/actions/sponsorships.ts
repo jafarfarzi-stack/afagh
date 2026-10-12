@@ -1,9 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { student_sponsorships, tuition_sponsors } from '@/db/schema';
+import { audit_logs, student_discounts, student_ledger, student_sponsorships, tuition_sponsors } from '@/db/schema';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { assertServerActionOrigin, requireStudentScope } from '@/lib/security';
 import { appendAudit } from '@/lib/audit';
@@ -92,6 +92,29 @@ export async function setSponsorshipStatusAction(
       if (!su.ok) return { ok: false, error: su.error };
       const allowed = status === 'REJECTED' ? row.status === 'PENDING' : ['PENDING', 'CONFIRMED'].includes(row.status);
       if (!allowed) return { ok: false, error: 'انتقال نامعتبر: پوشش فقط از «در انتظار» تأیید/پرداخت می‌شود؛ «ردشده» پایانی است.' };
+
+      // 🔒 تفکیک وظایف: تأییدکننده باید با ثبت‌کننده (نخستین audit ردیف) متفاوت باشد.
+      const [creator] = await tx.select({ actorUserId: audit_logs.actorUserId }).from(audit_logs)
+        .where(and(eq(audit_logs.entityType, 'student_sponsorships'), eq(audit_logs.entityId, id)))
+        .orderBy(audit_logs.id)
+        .limit(1);
+      const creatorId = creator?.actorUserId ?? null;
+      if (creatorId !== null && user?.id != null && creatorId === user.id) {
+        return { ok: false, error: 'تأییدکنندهٔ پوشش باید با ثبت‌کننده متفاوت باشد (تفکیک وظایف)' };
+      }
+
+      // 🔒 سقف اثر مالی (مبالغ ثابت): جمع تأییدشده‌ها + این پوشش ≤ شهریهٔ شارژشدهٔ همان ترم.
+      if ((status === 'CONFIRMED' || status === 'PAID') && row.termId !== null && row.coverageKind === 'FIXED') {
+        const ch = await tx.execute(sql`SELECT COALESCE(SUM(("amount")::numeric), 0) AS "s" FROM student_ledger WHERE "studentId" = ${row.studentId} AND "termId" = ${row.termId} AND "transactionType" IN ('TUITION_CHARGE', 'CHARGE') AND ("amount")::numeric > 0`);
+        const charges = Number((ch.rows[0] as { s?: unknown } | undefined)?.s ?? 0);
+        const d = await tx.execute(sql`SELECT COALESCE(SUM(("amount")::numeric), 0) AS "s" FROM student_discounts WHERE "studentId" = ${row.studentId} AND "termId" = ${row.termId} AND status = 'APPROVED' AND kind = 'FIXED'`);
+        const s = await tx.execute(sql`SELECT COALESCE(SUM(("amount")::numeric), 0) AS "s" FROM student_sponsorships WHERE "studentId" = ${row.studentId} AND "termId" = ${row.termId} AND status IN ('CONFIRMED', 'PAID') AND "coverageKind" = 'FIXED'`);
+        const fixedApproved = Number((d.rows[0] as { s?: unknown } | undefined)?.s ?? 0)
+          + Number((s.rows[0] as { s?: unknown } | undefined)?.s ?? 0);
+        if (Number.isFinite(charges) && fixedApproved + Number(row.amount) > charges) {
+          return { ok: false, error: `سقف اثر مالی: جمع تخفیف/پوشش از شهریهٔ شارژشدهٔ ترم (${charges.toLocaleString('fa-IR')} ریال) بیشتر می‌شود` };
+        }
+      }
 
       const upd = await tx.update(student_sponsorships).set({ status })
         .where(and(eq(student_sponsorships.id, id), eq(student_sponsorships.status, row.status)));

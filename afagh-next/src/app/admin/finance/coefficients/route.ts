@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { tuition_coefficients, academic_terms } from '@/db/schema';
 import { getSessionUser } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { appendAudit } from '@/lib/audit';
 
 const FINANCE = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'];
 
@@ -68,33 +69,68 @@ export async function POST(req: NextRequest) {
   const uniScope = or(eq(tuition_coefficients.universityId, uni.id), isNull(tuition_coefficients.universityId));
 
   // upsert: اگر قبلاً ضریبی برای این ترم تعریف شده، به‌روز کن
-  const [existing] = await db
-    .select({ id: tuition_coefficients.id })
-    .from(tuition_coefficients)
-    .where(and(eq(tuition_coefficients.termId, termId), uniScope))
-    .limit(1);
-
-  if (existing) {
-    await db.update(tuition_coefficients)
-      .set({
-        variableCoefficient: String(vCoeff),
-        fixedCoefficient: String(fCoeff),
-        note: note || null,
-        updatedAt: new Date(),
+  // 🔒 سقف تغییر هر فراخوانی ±۲۰٪ (دفاع در برابر جهش ناگهانیِ ضریب شهریهٔ کل
+  // ترم) + ثبت حسابرسی هر upsert. بازهٔ مجاز ۰.۵ تا ۵ حفظ شده است.
+  const res = await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select({
+        id: tuition_coefficients.id,
+        variableCoefficient: tuition_coefficients.variableCoefficient,
+        fixedCoefficient: tuition_coefficients.fixedCoefficient,
       })
-      .where(and(eq(tuition_coefficients.id, existing.id), uniScope));
-    return NextResponse.json({ ok: true, id: existing.id });
-  }
+      .from(tuition_coefficients)
+      .where(and(eq(tuition_coefficients.termId, termId), uniScope))
+      .limit(1)
+      .for('update');
 
-  const [ins] = await db.insert(tuition_coefficients).values({
-    universityId: uni.id,
-    termId,
-    variableCoefficient: String(vCoeff),
-    fixedCoefficient: String(fCoeff),
-    note: note || null,
-  }).returning({ id: tuition_coefficients.id });
+    if (existing) {
+      const oldV = Number(existing.variableCoefficient);
+      const oldF = Number(existing.fixedCoefficient);
+      for (const [label, oldVv, newVv] of [['متغیر', oldV, vCoeff], ['ثابت', oldF, fCoeff]] as const) {
+        if (Number.isFinite(oldVv) && oldVv > 0) {
+          const ratio = newVv / oldVv;
+          if (ratio < 0.8 || ratio > 1.2) {
+            throw new Error(`تغییر ضریب ${label} در هر مرحله حداکثر ±۲۰٪ مجاز است (مقدار فعلی ${oldVv})؛ برای تغییر بزرگ‌تر در چند مرحله اقدام کنید`);
+          }
+        }
+      }
+      await tx.update(tuition_coefficients)
+        .set({
+          variableCoefficient: String(vCoeff),
+          fixedCoefficient: String(fCoeff),
+          note: note || null,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(tuition_coefficients.id, existing.id), uniScope));
+      await appendAudit(tx, {
+        actorUserId: auth.id ?? null,
+        action: 'FINANCE_COEFFICIENT_UPDATED',
+        entityType: 'tuition_coefficients',
+        entityId: existing.id,
+        details: JSON.stringify({ termId, oldV, oldF, newV: vCoeff, newF: fCoeff }),
+      });
+      return { ok: true as const, id: existing.id };
+    }
 
-  return NextResponse.json({ ok: true, id: ins.id });
+    const [ins] = await tx.insert(tuition_coefficients).values({
+      universityId: uni.id,
+      termId,
+      variableCoefficient: String(vCoeff),
+      fixedCoefficient: String(fCoeff),
+      note: note || null,
+    }).returning({ id: tuition_coefficients.id });
+    await appendAudit(tx, {
+      actorUserId: auth.id ?? null,
+      action: 'FINANCE_COEFFICIENT_CREATED',
+      entityType: 'tuition_coefficients',
+      entityId: ins.id,
+      details: JSON.stringify({ termId, newV: vCoeff, newF: fCoeff }),
+    });
+    return { ok: true as const, id: ins.id };
+  }).catch((e: unknown) => ({ ok: false as const, error: (e as Error)?.message || 'خطا در ذخیرهٔ ضریب' }));
+  if (!res.ok) return NextResponse.json({ error: res.error }, { status: 400 });
+
+  return NextResponse.json(res);
 }
 
 export async function DELETE(req: NextRequest) {

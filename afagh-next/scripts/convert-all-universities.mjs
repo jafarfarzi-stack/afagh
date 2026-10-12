@@ -45,13 +45,20 @@ const SKIP_ETL = flag('--skip-etl');
 const SKIP_PIPELINE = flag('--skip-pipeline');
 const ONLY = opt('--only', '').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
 
-const UNIS = [
+const ALL_UNIS = [
   { code: 'AFAGH', dir: 'information-afagh' },
   { code: 'ZARINE', dir: 'information-zarine' },
   { code: 'ALLAME', dir: 'information-allameh' },
   { code: 'SHAMS', dir: 'information-shams' },
   { code: 'NAZHAND', dir: 'information-nazhand' },
-].filter((u) => !ONLY.length || ONLY.includes(u.code));
+];
+const KNOWN_CODES = ALL_UNIS.map((u) => u.code);
+const UNKNOWN = ONLY.filter((c) => !KNOWN_CODES.includes(c));
+if (UNKNOWN.length) {
+  console.error(`کد دانشگاه نامعتبر در --only: ${UNKNOWN.join('، ')} — مجاز: ${KNOWN_CODES.join('، ')}`);
+  process.exit(1);
+}
+const UNIS = ALL_UNIS.filter((u) => !ONLY.length || ONLY.includes(u.code));
 
 function run(label, cmd, args, extraEnv = {}) {
   return new Promise((resolveP, reject) => {
@@ -60,6 +67,7 @@ function run(label, cmd, args, extraEnv = {}) {
       cwd: root,
       stdio: 'inherit',
       env: { ...process.env, ...extraEnv },
+      // POSIX: بدون shell (فقط win32 به shell:true نیاز دارد)
       shell: process.platform === 'win32',
     });
     p.on('close', (code) => {

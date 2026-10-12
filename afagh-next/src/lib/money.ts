@@ -83,17 +83,21 @@ export function sumUnits(values: Iterable<number>): number {
 //  برمی‌گرداند تا Action با پیام «مبلغ نامعتبر است» رد شود (fail-closed).
 // ════════════════════════════════════════════════════════════════════════
 
-/** ریالِ معتبر (عدد صحیح نامنفی) → خودِ عدد؛ هر چیز دیگر → null */
+/** سقف مبلغ مجاز (ریال) — هم‌ارز numeric(12,0) دیتابیس: ۹۹۹٬۹۹۹٬۹۹۹٬۹۹۹ */
+export const MAX_RIALS = 999_999_999_999;
+
+/** ریالِ معتبر (عدد صحیح نامنفی تا سقف numeric(12,0)) → خودِ عدد؛ هر چیز دیگر → null */
 export function safeRials(value: unknown): number | null {
   if (typeof value === 'number') {
-    if (!Number.isSafeInteger(value) || value < 0) return null;
+    if (!Number.isSafeInteger(value) || value < 0 || value > MAX_RIALS) return null;
     return value;
   }
   if (typeof value === 'string') {
     const t = value.trim();
     if (!/^\d{1,15}$/.test(t)) return null;            // فقط ارقام، بدون ‍e/نقطه/علامت/فاصله
     const n = Number(t);
-    return Number.isSafeInteger(n) ? n : null;
+    if (!Number.isSafeInteger(n) || n > MAX_RIALS) return null;
+    return n;
   }
   return null;
 }

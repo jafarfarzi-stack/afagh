@@ -3,9 +3,9 @@
 import { cookies } from 'next/headers';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { universities } from '@/db/schema';
+import { expert_scopes, universities } from '@/db/schema';
 import { UNIVERSITY_COOKIE } from '@/lib/university-scope';
-import { requireRole } from '@/lib/auth';
+import { getSessionUser, requireRole } from '@/lib/auth';
 
 const AREA_ROLES = [
   'ADMIN',
@@ -25,11 +25,33 @@ export async function setUniversityCookie(code: string) {
   const c = String(code || '').trim().slice(0, 20);
   if (!c) return;
   try {
-    const hit = (await db.select({ code: universities.code })
+    const hit = (await db.select({ id: universities.id, code: universities.code })
       .from(universities).where(eq(universities.code, c)).limit(1))[0];
     if (!hit) return;
+    // تقاطع با دامنهٔ کارشناس: مقصد باید در دانشگاه‌های مجازش باشد (ADMIN مستثنا)
+    const me = await getSessionUser().catch(() => null);
+    if (me && !me.roles.includes('ADMIN')) {
+      const rows = await db.select({
+        scopeType: expert_scopes.scopeType, scopeId: expert_scopes.scopeId, universityId: expert_scopes.universityId,
+      }).from(expert_scopes).where(eq(expert_scopes.userId, me.id)).catch(() => []);
+      if (rows.length) {
+        const allowed = new Set<number>();
+        for (const r of rows) {
+          if (r.scopeType === 'UNIVERSITY') {
+            const id = r.scopeId ?? r.universityId;
+            if (typeof id === 'number') allowed.add(id);
+          } else if (typeof r.universityId === 'number') {
+            allowed.add(r.universityId);
+          }
+        }
+        if (allowed.size && !allowed.has(hit.id)) throw new Error('این دانشگاه در محدودهٔ دسترسی شما نیست.');
+      }
+    }
     (await cookies()).set(UNIVERSITY_COOKIE, hit.code, {
       path: '/', maxAge: 365 * 24 * 3600, sameSite: 'lax',
     });
-  } catch { /* DB در دسترس نیست — نادیده */ }
+  } catch (e) {
+    if (e instanceof Error && e.message === 'این دانشگاه در محدودهٔ دسترسی شما نیست.') throw e;
+    /* DB در دسترس نیست — نادیده */
+  }
 }

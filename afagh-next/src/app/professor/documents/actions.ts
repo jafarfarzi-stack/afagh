@@ -1,15 +1,46 @@
 'use server';
 
-// موتور امضای الکترونیک — سند §۲۹۲۶–۲۹۹۰: OTP پنج‌رقمی، هش SHA-256، قفل ۵ تلاش، ممیزی زنجیره‌ای
-import { randomInt } from 'crypto';
+// موتور امضای الکترونیک — سند §۲۹۲۶–۲۹۹۰: OTP شش‌رقمی، HMAC نمک‌دار، قفل ۵ تلاش، ممیزی زنجیره‌ای
+import { createHmac, randomInt, timingSafeEqual } from 'crypto';
 import { headers } from 'next/headers';
 import { and, desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { audit_logs, doc_sign_otps, document_signatures, electronic_documents, notifications } from '@/db/schema';
 import { getStaffByUser, requireRole, sha256 } from '@/lib/auth';
+import { rateLimit } from '@/lib/rateLimit';
 
 const OTP_TTL_SECONDS = 120;
 const MAX_ATTEMPTS = 5;
+
+/**
+ * فلفل HMAC از ENV — هش سادهٔ sha256 مستعد rainbow-table است.
+ * در production بدون AFAGH_OTP_PEPPER بالا نمی‌آییم (fail-closed)؛
+ * در توسعه fallback ثابت با هشدار (فقط برای محیط محلی).
+ */
+function otpPepper(): string {
+  const p = (process.env.AFAGH_OTP_PEPPER || '').trim();
+  if (p) return p;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('[otp] AFAGH_OTP_PEPPER در production ست نشده است — صدور OTP متوقف شد (fail-closed).');
+  }
+  console.error('⚠ [otp] AFAGH_OTP_PEPPER ست نشده است — از مقدار توسعه استفاده می‌شود (فقط محیط محلی).');
+  return 'afagh-dev-otp-pepper';
+}
+
+const otpHmac = (otp: string, documentId: number) =>
+  createHmac('sha256', otpPepper()).update(`${otp.trim()}:${documentId}`).digest('hex');
+
+/** مقایسهٔ زمان‌ثابت دو هش hex — جلوگیری از oracle زمانی. */
+function otpEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a, 'utf8');
+  const bb = Buffer.from(b, 'utf8');
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
+
+// 🔒 گیت build-time: در ایمیج تولید (NEXT_PUBLIC_AFAGH_DEMO_LOCK=1) کد دمو
+// حتی در سطح باندل غیرفعال است؛ چک runtime زیر کمربند دوم است.
+const DEMO_OTP_ALLOWED =
+  process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_AFAGH_DEMO_LOCK !== '1';
 
 async function meCtx() {
   const user = await requireRole(['PROFESSOR']);
@@ -24,15 +55,21 @@ export async function sendOtpAction(documentId: number): Promise<{ ok: boolean; 
   if (!doc || doc.staffId !== me.id) return { ok: false, error: 'سند یافت نشد.', expiresInSeconds: 0 };
   if (doc.signatureStatus === 'SIGNED') return { ok: false, error: 'این سند قبلاً امضا شده است.', expiresInSeconds: 0 };
 
-  const otp = String(randomInt(10000, 100000)); // پنج‌رقمی — §۲۹۲۶
+  // 🔒 سقف صدور: ۳ کد در ۱۵ دقیقه به‌ازای هر (استاد + سند) — ضد اسپم/فرسایش پیامک
+  const rl = await rateLimit(`docotp:issue:${me.id}:${documentId}`, 3, 15 * 60);
+  if (!rl.ok) {
+    return { ok: false, error: 'تعداد درخواست کد بیش از حد مجاز است. چند دقیقهٔ دیگر دوباره تلاش کنید.', expiresInSeconds: rl.retryAfterSec };
+  }
+
+  const otp = String(randomInt(100000, 1000000)); // شش‌رقمی
   await db.insert(doc_sign_otps).values({
     staffId: me.id, documentId,
-    otpHash: sha256(otp + ':' + documentId),
+    otpHash: otpHmac(otp, documentId),
     expiresAt: new Date(Date.now() + OTP_TTL_SECONDS * 1000),
   });
   await db.insert(notifications).values({ userId: user.id, eventCode: 'SIGN_OTP_SENT', payload: JSON.stringify({ documentId }) });
-  // در پروداکشن: ارسال با SMS Provider؛ در توسعه کد برگردانده می‌شود تا گردش کار قابل آزمایش باشد
-  return { ok: true, expiresInSeconds: OTP_TTL_SECONDS, devOtp: process.env.NODE_ENV === 'production' ? undefined : otp };
+  // در پروداکشن: ارسال با SMS Provider؛ کد خام هرگز در پاسخ برنمی‌گردد.
+  return { ok: true, expiresInSeconds: OTP_TTL_SECONDS, devOtp: DEMO_OTP_ALLOWED ? otp : undefined };
 }
 
 export async function verifySignAction(documentId: number, otp: string): Promise<{ ok: boolean; error?: string; signedAt?: string }> {
@@ -49,7 +86,8 @@ export async function verifySignAction(documentId: number, otp: string): Promise
   if (row.lockedAt) return { ok: false, error: 'به دلیل تلاش‌های ناموفق، کد قفل شد. کد جدید بگیرید.' };
   if (row.expiresAt.getTime() < Date.now()) return { ok: false, error: 'کد منقضی شد؛ دوباره درخواست دهید.' };
 
-  if (sha256(otp + ':' + documentId) !== row.otpHash) {
+  // attempts روی ردیف انباشته می‌ماند (شمارش تجمیعی — با صدور کد جدید صفر نمی‌شود مگر ردیف تازه).
+  if (!otpEqual(otpHmac(otp, documentId), row.otpHash)) {
     const attempts = (row.attempts ?? 0) + 1;
     await db.update(doc_sign_otps).set(attempts >= MAX_ATTEMPTS ? { attempts, lockedAt: new Date() } : { attempts }).where(eq(doc_sign_otps.id, row.id));
     return { ok: false, error: attempts >= MAX_ATTEMPTS ? 'تلاش‌ها بیش از حد مجاز — کد قفل شد.' : 'کد نادرست است (' + attempts + '/' + MAX_ATTEMPTS + ').' };
@@ -63,7 +101,8 @@ export async function verifySignAction(documentId: number, otp: string): Promise
   // تراکنش اتمیک: مصرف OTP + امضا + وضعیت سند + ممیزی زنجیره‌ای
   await db.transaction(async tx => {
     await tx.update(doc_sign_otps).set({ isUsed: 1 }).where(eq(doc_sign_otps.id, row.id));
-    await tx.insert(document_signatures).values({ documentId, staffId: me.id, signedAt: now, ipAddress: ip, userAgent: ua, otpUsed: otp });
+    // 🔒 فقط فرم ماسک‌شده (دو رقم آخر) ذخیره می‌شود — الگوی contract-engine
+    await tx.insert(document_signatures).values({ documentId, staffId: me.id, signedAt: now, ipAddress: ip, userAgent: ua, otpUsed: `***${otp.trim().slice(-2)}` });
     await tx.update(electronic_documents).set({ signatureStatus: 'SIGNED' }).where(eq(electronic_documents.id, documentId));
     const [last] = await tx.select({ hash: audit_logs.hash }).from(audit_logs).orderBy(desc(audit_logs.id)).limit(1);
     const prevHash = last?.hash ?? '';

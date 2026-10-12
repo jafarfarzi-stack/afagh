@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { loan_products, student_loans } from '@/db/schema';
+import { audit_logs, loan_products, student_loans } from '@/db/schema';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { assertServerActionOrigin, requireStudentScope } from '@/lib/security';
 import { toNum } from '@/lib/finance-rules';
@@ -14,6 +14,12 @@ import { FINANCE, clean, money, num, revalidateStudent, requireStudentUni, asser
 // ══════════════════════════════════════════════════════════════════════
 //  وام
 // ══════════════════════════════════════════════════════════════════════
+
+/**
+ * سقف تأیید دومرحله‌ای وام (ریال): وامِ بالای این مبلغ فقط با «بررسی» یک
+ * کارشناس و «تسویه/تغییرِ» کارشناسِ دیگر (هر دو متفاوت از ثبت‌کننده) پیش می‌رود.
+ */
+const LOAN_TWO_STEP_THRESHOLD = 100_000_000;
 
 export async function addLoanAction(input: {
   studentId: number;
@@ -73,12 +79,14 @@ export async function addLoanAction(input: {
         status: 'ACTIVE',
         note: clean(input.note),
       }).returning({ id: student_loans.id });
+      // 🔒 وامِ بالای سقف دومرحله‌ای از ابتدا پرچم می‌خورد تا تسویه‌اش بدون بررسی دوم رد شود.
+      const needsSecond = amount > LOAN_TWO_STEP_THRESHOLD;
       await appendAudit(tx, {
         actorUserId: user?.id ?? null,
-        action: 'FINANCE_LOAN_ADDED',
+        action: needsSecond ? 'FINANCE_LOAN_ADDED_NEEDS_REVIEW' : 'FINANCE_LOAN_ADDED',
         entityType: 'student_loans',
         entityId: ins.id,
-        details: JSON.stringify({ studentId: input.studentId, lender, amount, installments: num(input.installments) }),
+        details: JSON.stringify({ studentId: input.studentId, lender, amount, installments: num(input.installments), needsSecondApproval: needsSecond }),
       });
       return { ok: true };
     });
@@ -107,6 +115,34 @@ export async function setLoanStatusAction(
       if (!su.ok) return { ok: false, error: su.error };
       if (row.status === 'SETTLED' || row.status === 'CANCELLED') return { ok: false, error: 'وام تسویه/ابطال‌شده قابل تغییر نیست.' };
 
+      // 🔒 تفکیک وظایف: تغییر وضعیت وام (تأیید) باید توسط کاربری متفاوت از
+      // ثبت‌کننده (نخستین audit ردیف) انجام شود.
+      const [creator] = await tx.select({ actorUserId: audit_logs.actorUserId }).from(audit_logs)
+        .where(and(eq(audit_logs.entityType, 'student_loans'), eq(audit_logs.entityId, id)))
+        .orderBy(audit_logs.id)
+        .limit(1);
+      const creatorId = creator?.actorUserId ?? null;
+      if (creatorId !== null && user?.id != null && creatorId === user.id) {
+        return { ok: false, error: 'تغییر وضعیت وام باید توسط کاربری متفاوت از ثبت‌کننده انجام شود (تفکیک وظایف)' };
+      }
+
+      // 🔒 دومرحله‌ای برای وامِ بالای سقف: تسویه فقط پس از «بررسی» ثبت‌شدهٔ
+      // یک کارشناسِ دیگر (متفاوت از ثبت‌کننده و تسویه‌کننده).
+      if (status === 'SETTLED' && Number(row.amount) > LOAN_TWO_STEP_THRESHOLD) {
+        const reviews = await tx.select({ actorUserId: audit_logs.actorUserId }).from(audit_logs)
+          .where(and(
+            eq(audit_logs.entityType, 'student_loans'),
+            eq(audit_logs.entityId, id),
+            eq(audit_logs.action, 'FINANCE_LOAN_REVIEWED'),
+          ))
+          .orderBy(audit_logs.id);
+        const okReview = reviews.some(r =>
+          r.actorUserId !== null && r.actorUserId !== creatorId && r.actorUserId !== (user?.id ?? null));
+        if (!okReview) {
+          return { ok: false, error: 'وام بالای سقف دومرحله‌ای است: نخست یک کارشناسِ دیگر (متفاوت از ثبت‌کننده و تسویه‌کننده) باید آن را «بررسی» کند' };
+        }
+      }
+
       const upd = await tx.update(student_loans).set({ status })
         .where(and(eq(student_loans.id, id), eq(student_loans.status, row.status)));
       if (upd.rowCount !== 1) return { ok: false, error: 'تغییر همزمان: وضعیت وام توسط کاربر دیگری عوض شده است.' };
@@ -123,6 +159,51 @@ export async function setLoanStatusAction(
     });
   } catch (e: any) {
     return { ok: false, error: e?.message || 'خطا در تغییر وضعیت وام' };
+  }
+}
+
+/**
+ * گام اولِ تأیید دومرحله‌ای وام‌های بالای سقف (LOAN_TWO_STEP_THRESHOLD):
+ * «بررسی» توسط کارشناسی متفاوت از ثبت‌کننده؛ گام دوم، تسویه توسط
+ * کارشناسِ سوم (setLoanStatusAction) است.
+ */
+export async function reviewLoanAction(id: number, note?: string): Promise<{ ok: boolean; error?: string }> {
+  await requireRole(FINANCE);
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
+  const user = await getSessionUser();
+
+  try {
+    return await db.transaction(async (tx) => {
+      const [row] = await tx.select().from(student_loans).where(eq(student_loans.id, id)).limit(1);
+      if (!row) return { ok: false, error: 'وام یافت نشد' };
+      const sc = await requireStudentScope(row.studentId);
+      if (!sc.ok) return { ok: false, error: sc.error };
+      const su = await requireStudentUni(row.studentId);
+      if (!su.ok) return { ok: false, error: su.error };
+      if (row.status === 'SETTLED' || row.status === 'CANCELLED') {
+        return { ok: false, error: 'وام تسویه/ابطال‌شده قابل بررسی نیست.' };
+      }
+      // بررسی‌کننده ≠ ثبت‌کننده (تفکیک وظایف).
+      const [creator] = await tx.select({ actorUserId: audit_logs.actorUserId }).from(audit_logs)
+        .where(and(eq(audit_logs.entityType, 'student_loans'), eq(audit_logs.entityId, id)))
+        .orderBy(audit_logs.id)
+        .limit(1);
+      const creatorId = creator?.actorUserId ?? null;
+      if (creatorId !== null && user?.id != null && creatorId === user.id) {
+        return { ok: false, error: 'بررسی وام باید توسط کاربری متفاوت از ثبت‌کننده انجام شود (تفکیک وظایف)' };
+      }
+      await appendAudit(tx, {
+        actorUserId: user?.id ?? null,
+        action: 'FINANCE_LOAN_REVIEWED',
+        entityType: 'student_loans',
+        entityId: id,
+        details: JSON.stringify({ studentId: row.studentId, amount: Number(row.amount), note: (note ?? '').trim() || null }),
+      });
+      return { ok: true };
+    });
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'خطا در بررسی وام' };
   }
 }
 

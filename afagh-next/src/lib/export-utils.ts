@@ -23,16 +23,27 @@ export interface ExportData {
   summary?: string;
 }
 
+/**
+ * گارد تزریق فرمول CSV (OWASP CSV Injection):
+ * اگر مقدار با = + - @ | تب یا CR شروع شود (پس از trim چپ)، با ' پیشوند
+ * می‌شود تا Excel/LibreOffice آن را فرمول اجرا نکند، سپس نقل‌قول دوتایی.
+ */
+export function csvFormulaPrefix(s: string): string {
+  return /^[=+\-@|\t\r]/.test(s.trimStart()) ? `'${s}` : s;
+}
+
+/** یک سلول متن را با گارد فرمول + نقل‌قول CSV برمی‌گرداند. */
+export function csvCell(v: unknown): string {
+  const str = csvFormulaPrefix(String(v ?? ''));
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
 /** Generate CSV string */
 export function generateCSV(data: ExportData): string {
   const { columns, rows } = data;
-  const header = columns.map(c => `"${c.title.replace(/"/g, '""')}"`).join(',');
-  const body = rows.map(row => 
-    columns.map(c => {
-      const val = row[c.key] ?? '';
-      const str = String(val).replace(/"/g, '""');
-      return `"${str}"`;
-    }).join(',')
+  const header = columns.map(c => csvCell(c.title)).join(',');
+  const body = rows.map(row =>
+    columns.map(c => csvCell(row[c.key] ?? '')).join(',')
   ).join('\n');
   return header + '\n' + body;
 }
@@ -40,9 +51,10 @@ export function generateCSV(data: ExportData): string {
 /** Generate XLSX workbook */
 export function generateXLSX(data: ExportData): ArrayBuffer {
   const { columns, rows, title } = data;
+  const cell = (v: unknown) => typeof v === 'string' ? csvFormulaPrefix(v) : (v ?? '');
   const wsData = [
-    columns.map(c => c.title),
-    ...rows.map(row => columns.map(c => row[c.key] ?? '')),
+    columns.map(c => csvFormulaPrefix(c.title)),
+    ...rows.map(row => columns.map(c => cell(row[c.key]))),
   ];
   const ws = XLSX.utils.aoa_to_sheet(wsData);
   
@@ -153,7 +165,7 @@ export function exportTableToCSV(tableId: string, filename: string) {
   const rows = Array.from(table.querySelectorAll('tr'));
   const csv = rows.map(row => 
     Array.from(row.querySelectorAll('th, td')).map(cell => 
-      `"${cell.textContent?.replace(/"/g, '""') ?? ''}"`
+      csvCell(cell.textContent ?? '')
     ).join(',')
   ).join('\n');
   

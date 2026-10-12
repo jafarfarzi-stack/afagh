@@ -690,9 +690,8 @@ export async function issueDegree(input: {
     const existingCode = (await db.select({ code: issued_degrees.ministryVerificationCode }).from(issued_degrees)
       .where(and(eq(issued_degrees.studentId, a.studentId), sql`${issued_degrees.ministryVerificationCode} is not null`)).limit(1))[0]?.code;
     if (!existingCode) throw new Error('برای دانشنامه، ابتدا «کد صحت» وزارت علوم (سجاد) باید دریافت شود.');
-    // استفادهٔ مجدد از کد صحت قبلی: باید حداقل در لاگ ردیابی شود تا اگر کد
-    // متعلق به چرخهٔ قبلی بود، در استعلام‌گیری مشخص باشد.
-    log.warn('degree_verification_code_reused', { studentId: a.studentId, code: existingCode });
+    // استفادهٔ مجدد از کد صحت قبلی: مقدار خام هرگز لاگ نمی‌شود (فقط ۴ رقم آخر)
+    log.warn('degree_verification_code_reused', { studentId: a.studentId, codeSuffix: existingCode.slice(-4) });
     input.ministryVerificationCode = existingCode;
   }
 
@@ -708,8 +707,22 @@ export async function issueDegree(input: {
 
   const prefix = (await getSetting('GRAD_SERIAL_PREFIX')) || 'AF';
   const year = new Date().getFullYear();
-  const serialNo = `${prefix}-${input.degreeType[0]}${year}-${s.studentCode}-${rnd(2)}`;
-  const verifyCode = `${prefix}${rnd(6)}`;
+  // سریال بدون studentCode (عدم نشت شناسه) + بخش تصادفی؛ یکتایی در حلقه تضمین می‌شود
+  let serialNo = '';
+  for (let i = 0; i < 5; i++) {
+    const cand = `${prefix}-${input.degreeType[0]}${year}-${rnd(4)}`;
+    const [dup] = await db.select({ id: issued_degrees.id }).from(issued_degrees).where(eq(issued_degrees.serialNo, cand)).limit(1);
+    if (!dup) { serialNo = cand; break; }
+  }
+  if (!serialNo) serialNo = `${prefix}-${input.degreeType[0]}${year}-${rnd(6)}`;
+  // کد استعلام ۱۲۸ بیتی تصادفی (32 رقم hex)؛ یکتایی در حلقه تضمین می‌شود
+  let verifyCode = '';
+  for (let i = 0; i < 5; i++) {
+    const cand = crypto.randomBytes(16).toString('hex').toUpperCase();
+    const [dup] = await db.select({ id: issued_degrees.id }).from(issued_degrees).where(eq(issued_degrees.verifyCode, cand)).limit(1);
+    if (!dup) { verifyCode = cand; break; }
+  }
+  if (!verifyCode) verifyCode = crypto.randomBytes(16).toString('hex').toUpperCase();
 
   const snapshot = {
     fullName: `${s.firstName} ${s.lastName}`,
@@ -793,8 +806,9 @@ export async function requestMinistryCode(auditId: number) {
   } else code = '';
 
   if (!code) {
-    // سرویس سجاد پیکربندی نشده یا در دسترس نیست: کد محلی با پیشوند مشخص تا پرونده قفل نشود
-    code = `LOCAL-${crypto.createHash('sha1').update(s.nationalCode + s.studentCode).digest('hex').slice(0, 10).toUpperCase()}`;
+    // سرویس سجاد پیکربندی نشده یا در دسترس نیست: کد محلی تصادفی با پیشوند مشخص
+    // تا پرونده قفل نشود — هرگز مشتق از PII (کد ملی/شماره دانشجویی) نیست.
+    code = `LOCAL-${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
   }
 
   await db.update(graduation_audits).set({

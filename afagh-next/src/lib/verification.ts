@@ -426,42 +426,59 @@ export type CertificateVerification =
 const gradeLabel = (g: number) => (g >= 19 ? 'عالی (A+)' : g >= 17 ? 'خیلی خوب (A)' : g >= 15 ? 'خوب (B)' : 'قبول (Pass)');
 
 export async function issueShortTermCertificate(registrationId: number) {
-  const [reg] = await db
-    .select()
-    .from(short_term_registrations)
-    .where(eq(short_term_registrations.id, registrationId))
-    .limit(1);
-  if (!reg) throw new Error('ثبت‌نام یافت نشد.');
-  if (!reg.isPassed) throw new Error('فقط برای پذیرفته‌شدگان گواهینامه صادر می‌شود.');
-  if (reg.certificateIssued) throw new Error('برای این ثبت‌نام پیش‌تر گواهینامه صادر شده است.');
+  // check-then-insert اتمیک: قفل FOR UPDATE روی ثبت‌نام (سریال‌سازی صدور
+  // تکراری برای یک ثبت‌نام) + قفل توافقی برای شمارهٔ سریال سراسری.
+  return db.transaction(async tx => {
+    const [reg] = await tx
+      .select()
+      .from(short_term_registrations)
+      .where(eq(short_term_registrations.id, registrationId))
+      .limit(1)
+      .for('update');
+    if (!reg) throw new Error('ثبت‌نام یافت نشد.');
+    if (!reg.isPassed) throw new Error('فقط برای پذیرفته‌شدگان گواهینامه صادر می‌شود.');
+    if (reg.certificateIssued) throw new Error('برای این ثبت‌نام پیش‌تر گواهینامه صادر شده است.');
 
-  const [course] = await db.select().from(short_term_courses).where(eq(short_term_courses.id, reg.courseId)).limit(1);
-  const [learner] = await db.select().from(short_term_learners).where(eq(short_term_learners.id, reg.learnerId)).limit(1);
-  if (!course || !learner) throw new Error('دوره یا شرکت‌کننده یافت نشد.');
+    const [course] = await tx.select().from(short_term_courses).where(eq(short_term_courses.id, reg.courseId)).limit(1);
+    const [learner] = await tx.select().from(short_term_learners).where(eq(short_term_learners.id, reg.learnerId)).limit(1);
+    if (!course || !learner) throw new Error('دوره یا شرکت‌کننده یافت نشد.');
 
-  const seq = (await db.select({ n: sql<number>`count(*)::int` }).from(short_term_certificates))[0]?.n ?? 0;
-  const year = new Date().getFullYear();
-  const certificateNumber = `AFQ-CERT-${year}-${String(1000 + seq + 1)}`;
-  const grade = Number(reg.finalGrade ?? 0);
-  const issueDate = `${year}/${String(new Date().getMonth() + 1).padStart(2, '0')}/${String(new Date().getDate()).padStart(2, '0')}`;
-  const verificationHash = certificateFingerprint({
-    certificateNumber, learnerId: reg.learnerId, courseId: reg.courseId, grade, totalHours: course.hours, issueDate,
+    // شمارهٔ سریال از دنبالهٔ پایگاه داده (نه count(*) که در race تکراری می‌دهد).
+    // init زیر قفل توافقی انجام می‌شود تا دو تراکنش همزمان دنباله را به عقب برنگردانند.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended('short_term_certificate_seq', 0))`);
+    await tx.execute(sql`CREATE SEQUENCE IF NOT EXISTS short_term_certificate_seq`);
+    await tx.execute(sql`
+      SELECT setval('short_term_certificate_seq',
+        GREATEST((SELECT count(*)::int FROM short_term_certificates),
+                 (SELECT last_value::int FROM short_term_certificate_seq)), true)
+    `);
+    const seqRes = await tx.execute(sql`SELECT nextval('short_term_certificate_seq') AS seq`);
+    const seq = Number((seqRes.rows[0] as unknown as { seq: string | number }).seq);
+    if (!Number.isFinite(seq) || seq <= 0) throw new Error('تولید شمارهٔ گواهینامه ناموفق بود.');
+    const year = new Date().getFullYear();
+    const certificateNumber = `AFQ-CERT-${year}-${String(1000 + seq)}`;
+    const grade = Number(reg.finalGrade ?? 0);
+    const issueDate = `${year}/${String(new Date().getMonth() + 1).padStart(2, '0')}/${String(new Date().getDate()).padStart(2, '0')}`;
+    const verificationHash = certificateFingerprint({
+      certificateNumber, learnerId: reg.learnerId, courseId: reg.courseId, grade, totalHours: course.hours, issueDate,
+    });
+
+    const [ins] = await tx.insert(short_term_certificates).values({
+      certificateNumber, verificationHash,
+      learnerId: reg.learnerId, courseId: reg.courseId, registrationId: reg.id,
+      fullNameFa: learner.fullName, fullNameEn: learner.fullNameEn,
+      courseTitleFa: course.title, courseTitleEn: course.titleEn,
+      grade: String(grade), totalHours: course.hours, issueDate,
+      universityId: reg.universityId ?? course.universityId ?? learner.universityId ?? null,
+    }).returning({ id: short_term_certificates.id });
+
+    await tx.update(short_term_registrations)
+      .set({ certificateIssued: 1, certificateId: ins.id })
+      .where(eq(short_term_registrations.id, reg.id));
+
+    log.info('certificate_issued', { certificateNumber, registrationId: reg.id });
+    return { id: ins.id, certificateNumber, verificationHash };
   });
-
-  const [ins] = await db.insert(short_term_certificates).values({
-    certificateNumber, verificationHash,
-    learnerId: reg.learnerId, courseId: reg.courseId, registrationId: reg.id,
-    fullNameFa: learner.fullName, fullNameEn: learner.fullNameEn,
-    courseTitleFa: course.title, courseTitleEn: course.titleEn,
-    grade: String(grade), totalHours: course.hours, issueDate,
-  }).returning({ id: short_term_certificates.id });
-
-  await db.update(short_term_registrations)
-    .set({ certificateIssued: 1, certificateId: ins.id })
-    .where(eq(short_term_registrations.id, reg.id));
-
-  log.info('certificate_issued', { certificateNumber, registrationId: reg.id });
-  return { id: ins.id, certificateNumber, verificationHash };
 }
 
 export async function revokeCertificate(certificateNumber: string) {

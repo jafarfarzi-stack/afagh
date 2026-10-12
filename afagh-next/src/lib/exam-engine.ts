@@ -27,11 +27,12 @@ import crypto from 'crypto';
 import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
-  course_exam_sessions, course_offerings, enrollments,
+  academic_terms, course_exam_sessions, course_offerings, enrollments,
   exam_attendances, exam_course_packets, exam_halls, exam_invigilators,
   exam_minutes, exam_sessions, grade_appeals, instructor_deliveries,
   invigilators, seat_allocations,
 } from '@/db/schema';
+import { resolveSamaGradeStatusCode } from '@/lib/resolve-sama-code';
 import { getNumber } from '@/lib/settings';
 import { createLogger } from '@/lib/logger';
 import { auditChain, type AuditTx } from '@/lib/audit-chain';
@@ -69,6 +70,46 @@ async function advisoryLock(tx: AuditTx, ns: string, a: number, b = 0) {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${ns}:${a}:${b}`}, 0))`);
 }
 
+// ─────────────────── محدودسازی دانشگاه (tenant scoping) ───────────────────
+//
+// NOTE (شکاف سمت فراخواننده — exam-actions.ts در مالکیت این تغییر نیست):
+// موتور فقط «سازگاری مالکیت ردیف‌ها» را بررسی می‌کند: جلسه ↔ ترم ↔ سالن /
+// مراقب / ارائه / تحویل. هویت دانشگاهِ کاربرِ فراخواننده (getCurrentUniversity
+// در لایهٔ اکشن) در اینجا در دسترس نیست (فقط actorUserId می‌آید)؛ پس لایهٔ
+// فراخواننده (exam-actions.ts) همچنان باید دانشگاهِ جلسه/ارائه را با دانشگاهِ
+// جاری مقایسه و درخواست بین‌دانشگاهی را پیش از صدا زدن موتور رد کند.
+
+/**
+ * دانشگاهِ مورد انتظار یک جلسه: exam_sessions.universityId وگرنه
+ * universityId ترمِ جلسه (exam_sessions → academic_terms → university).
+ * ناسازگاری جلسه↔ترم (هر دو مشخص و نابرابر) هم رد می‌شود.
+ * NULL = ردیف سراسری/قدیمی → مجاز (طبق قرارداد or/universityId/isNull).
+ */
+async function assertSessionTenant(sessionId: number): Promise<number | null> {
+  const [sess] = await db
+    .select({ universityId: exam_sessions.universityId, termId: exam_sessions.termId })
+    .from(exam_sessions)
+    .where(eq(exam_sessions.id, sessionId))
+    .limit(1);
+  if (!sess) throw new Error('جلسهٔ امتحان یافت نشد.');
+  const [term] = await db
+    .select({ universityId: academic_terms.universityId })
+    .from(academic_terms)
+    .where(eq(academic_terms.id, sess.termId))
+    .limit(1);
+  if (sess.universityId != null && term?.universityId != null && sess.universityId !== term.universityId) {
+    throw new Error('ناسازگاری مالکیت دانشگاه جلسه و ترم؛ درخواست رد شد.');
+  }
+  return sess.universityId ?? term?.universityId ?? null;
+}
+
+/** رد بین‌مستأجری: فقط وقتی هر دو مقدار مشخص و نابرابر باشند. */
+function assertSameTenant(label: string, expected: number | null, actual: number | null) {
+  if (expected != null && actual != null && expected !== actual) {
+    throw new Error(`رد بین‌دانشگاهی: ${label} متعلق به دانشگاه دیگری است.`);
+  }
+}
+
 // ─────────────────────────── مرحلهٔ ۱: صدور حضور و غیاب ───────────────────────────
 
 /**
@@ -79,6 +120,7 @@ async function advisoryLock(tx: AuditTx, ns: string, a: number, b = 0) {
 export async function issueExamAttendance(actorUserId: number | null, sessionId: number) {
   const [sess] = await db.select().from(exam_sessions).where(eq(exam_sessions.id, sessionId)).limit(1);
   if (!sess) throw new Error('جلسهٔ امتحان یافت نشد.');
+  await assertSessionTenant(sessionId);
 
   return db.transaction(async tx => {
     await advisoryLock(tx, 'exam_attendance', sessionId);
@@ -131,13 +173,15 @@ export async function issueExamAttendance(actorUserId: number | null, sessionId:
  */
 export async function proctorClockIn(actorUserId: number | null, sessionId: number, staffIds: number[]) {
   if (!staffIds.length) throw new Error('مراقبی برای ثبت ورود داده نشده است.');
+  const expectedUni = await assertSessionTenant(sessionId);
   const assigned = await db
-    .select({ staffId: exam_invigilators.staffId })
+    .select({ staffId: exam_invigilators.staffId, universityId: exam_invigilators.universityId })
     .from(exam_invigilators)
     .where(and(eq(exam_invigilators.examId, sessionId), inArray(exam_invigilators.staffId, staffIds)));
   if (assigned.length !== staffIds.length) {
     throw new Error(`${staffIds.length - assigned.length} مراقب در این جلسه تخصیص نیافته است.`);
   }
+  for (const r of assigned) assertSameTenant('مراقب تخصیص‌یافته', expectedUni, r.universityId);
   return db.transaction(async tx => {
     await advisoryLock(tx, 'exam_clockin', sessionId);
     const upd = await tx
@@ -169,8 +213,17 @@ export async function proctorVerifyAttendance(
   const { sessionId, hallId, proctorStaffId, checkIns: raw } = px;
   const checkIns = validateCheckIns(raw); // ← خط اول دفاع (تست‌شده در exam-core)
 
+  const expectedUni = await assertSessionTenant(sessionId);
+  const [hall] = await db
+    .select({ id: exam_halls.id, universityId: exam_halls.universityId })
+    .from(exam_halls)
+    .where(eq(exam_halls.id, hallId))
+    .limit(1);
+  if (!hall) throw new Error('سالن یافت نشد.');
+  assertSameTenant('سالن امتحان', expectedUni, hall.universityId);
+
   const assigned = await db
-    .select({ id: invigilators.id })
+    .select({ id: invigilators.id, universityId: invigilators.universityId })
     .from(invigilators)
     .where(and(
       eq(invigilators.sessionId, sessionId),
@@ -179,33 +232,35 @@ export async function proctorVerifyAttendance(
     ))
     .limit(1);
   if (!assigned.length) throw new Error('این مراقب به این سالن در این جلسه تخصیص نیافته است.');
+  assertSameTenant('مراقب تخصیص‌یافته', expectedUni, assigned[0].universityId);
 
   const vals = valuesSql(checkIns.map(c => sql`(${c.studentId}::int, ${c.isPresent}::int, ${c.method}::text, ${c.hasTemporaryPermit ?? 0}::int)`));
-  const upd = await db.execute(sql`
-    update exam_attendances a set
-      "isPresent" = v.is_present,
-      "checkInMethod" = v.method,
-      "hasTemporaryPermit" = v.temp,
-      "verifiedByStaffId" = ${proctorStaffId},
-      "checkInTime" = case when v.is_present = 1 then now() else null end
-    from (values ${vals}) as v("studentId", "is_present", "method", "temp")
-    where a."examId" = ${sessionId}
-      and a."studentId" = v."studentId"
-      and a."studentId" in (
-        select e."studentId"
-        from seat_allocations sa
-        join enrollments e on e.id = sa."enrollmentId"
-        where sa."sessionId" = ${sessionId} and sa."hallId" = ${hallId}
-      )
-  `);
+  // به‌روزرسانی حضور و ممیزی در یک تراکنش واحد: یا هر دو ثبت می‌شوند یا هیچ‌کدام.
+  return db.transaction(async tx => {
+    const upd = await tx.execute(sql`
+      update exam_attendances a set
+        "isPresent" = v.is_present,
+        "checkInMethod" = v.method,
+        "hasTemporaryPermit" = v.temp,
+        "verifiedByStaffId" = ${proctorStaffId},
+        "checkInTime" = case when v.is_present = 1 then now() else null end
+      from (values ${vals}) as v("studentId", "is_present", "method", "temp")
+      where a."examId" = ${sessionId}
+        and a."studentId" = v."studentId"
+        and a."studentId" in (
+          select e."studentId"
+          from seat_allocations sa
+          join enrollments e on e.id = sa."enrollmentId"
+          where sa."sessionId" = ${sessionId} and sa."hallId" = ${hallId}
+        )
+    `);
 
-  await db.transaction(async tx => {
     await auditChain(tx, actorUserId, 'EXAM_ATTENDANCE_VERIFIED', 'exam_hall', hallId, {
       sessionId, proctorStaffId, count: Number(upd.rowCount ?? 0),
     });
-  });
 
-  return { ok: true, verified: Number(upd.rowCount ?? 0) };
+    return { ok: true, verified: Number(upd.rowCount ?? 0) };
+  });
 }
 
 // ─────────────────────────── مرحلهٔ ۳: امضای صورتجلسهٔ سالن ───────────────────────────
@@ -221,11 +276,13 @@ export async function signHallMinutes(
   px: { sessionId: number; hallId: number; supervisorStaffId: number; notes?: string; cheatingIncidentsCount?: number },
 ) {
   const { sessionId, hallId, supervisorStaffId, notes } = px;
+  const expectedUni = await assertSessionTenant(sessionId);
   const [hall] = await db.select().from(exam_halls).where(eq(exam_halls.id, hallId)).limit(1);
   if (!hall) throw new Error('سالن یافت نشد.');
+  assertSameTenant('سالن امتحان', expectedUni, hall.universityId);
   // فقط مراقبِ تخصیص‌یافته به همین سالن می‌تواند صورتجلسه را امضا کند
   const [sup] = await db
-    .select({ id: invigilators.id })
+    .select({ id: invigilators.id, universityId: invigilators.universityId })
     .from(invigilators)
     .where(and(
       eq(invigilators.sessionId, sessionId),
@@ -234,6 +291,7 @@ export async function signHallMinutes(
     ))
     .limit(1);
   if (!sup) throw new Error('این مراقب به این سالن در این جلسه تخصیص نیافته است.');
+  assertSameTenant('مراقب تخصیص‌یافته', expectedUni, sup.universityId);
 
   const totalsResult = await db.execute(sql`
     select
@@ -323,14 +381,23 @@ export async function vaultReceiveHall(
   px: { sessionId: number; hallId: number; vaultManagerId: number },
 ) {
   const { sessionId, hallId, vaultManagerId } = px;
+  const expectedUni = await assertSessionTenant(sessionId);
+  const [hallRow] = await db
+    .select({ id: exam_halls.id, universityId: exam_halls.universityId })
+    .from(exam_halls)
+    .where(eq(exam_halls.id, hallId))
+    .limit(1);
+  if (!hallRow) throw new Error('سالن یافت نشد.');
+  assertSameTenant('سالن امتحان', expectedUni, hallRow.universityId);
   const [minutes] = await db
-    .select({ id: exam_minutes.id, isSignedAndFinalized: exam_minutes.isSignedAndFinalized })
+    .select({ id: exam_minutes.id, isSignedAndFinalized: exam_minutes.isSignedAndFinalized, universityId: exam_minutes.universityId })
     .from(exam_minutes)
     .where(and(eq(exam_minutes.sessionId, sessionId), eq(exam_minutes.hallId, hallId)))
     .limit(1);
   if (!minutes?.isSignedAndFinalized) {
     throw new Error(`گلوگاه مخزن: صورتجلسهٔ سالن ${hallId} هنوز امضا نشده است.`);
   }
+  assertSameTenant('صورتجلسهٔ سالن', expectedUni, minutes.universityId);
 
   const perCourse = await db.execute(sql`
     select co."id" as offeringId,
@@ -383,6 +450,7 @@ export async function vaultReceiveHall(
  * می‌شوند. (زیر قفل توافقی — نهایی‌سازی همزمان با تحویل سالن‌ها تداخل ندارد.)
  */
 export async function finalizeVaultHandover(actorUserId: number | null, sessionId: number, vaultManagerId: number) {
+  await assertSessionTenant(sessionId);
   // برگهٔ واقعی هر بسته = تعداد حاضرِ همان درس در کل جلسه
   const counts = await db.execute(sql`
     select co."courseId" as cid, count(*) filter (where a."isPresent" = 1) as sheets
@@ -453,6 +521,8 @@ export async function deliverToInstructor(
     .select({
       offeringId: course_offerings.id,
       professorId: course_offerings.professorId,
+      termId: course_offerings.termId,
+      universityId: course_offerings.universityId,
       fullyCollected: course_exam_sessions.isFullyCollected,
       totalDeliveredSheets: course_exam_sessions.totalDeliveredSheets,
     })
@@ -463,6 +533,14 @@ export async function deliverToInstructor(
   if (!row) throw new Error('ارائهٔ درس یافت نشد.');
   if (row.professorId !== instructorId) throw new Error('این استاد، استاد این درس نیست.');
   if (!row.fullyCollected) throw new Error(`گلوگاه تحویل: اوراق درس هنوز جمع‌آوری (fully collected) نشده است.`);
+  {
+    const [term] = await db
+      .select({ universityId: academic_terms.universityId })
+      .from(academic_terms)
+      .where(eq(academic_terms.id, row.termId))
+      .limit(1);
+    assertSameTenant('ارائهٔ درس', term?.universityId ?? null, row.universityId);
+  }
 
   const pickupToken = crypto.randomBytes(32).toString('hex');
   const gradeDeadline = new Date(Date.now() + deadlineDays * 86400_000);
@@ -471,7 +549,7 @@ export async function deliverToInstructor(
   const result = await db.transaction(async tx => {
     await advisoryLock(tx, 'exam_delivery', offeringId);
     const [activeDelivery] = await tx
-      .select({ id: instructor_deliveries.id, status: instructor_deliveries.status })
+      .select({ id: instructor_deliveries.id, status: instructor_deliveries.status, universityId: instructor_deliveries.universityId })
       .from(instructor_deliveries)
       .where(and(
         eq(instructor_deliveries.courseOfferingId, offeringId),
@@ -479,6 +557,7 @@ export async function deliverToInstructor(
       ))
       .limit(1);
     if (activeDelivery) {
+      assertSameTenant('تحویل اوراق', row.universityId, activeDelivery.universityId);
       return { ok: false as const, reason: 'ALREADY_DELIVERED' as const, status: activeDelivery.status, deliveryId: activeDelivery.id };
     }
     const [delivery] = await tx
@@ -492,6 +571,7 @@ export async function deliverToInstructor(
         vaultManagerId,
         gradeDeadline,
         status: 'PENDING_GRADING',
+        universityId: row.universityId ?? null,
       })
       .returning({ id: instructor_deliveries.id });
     await auditChain(tx, actorUserId, 'EXAM_DELIVERED_TO_INSTRUCTOR', 'instructor_delivery', delivery.id, {
@@ -521,11 +601,26 @@ export async function submitExamGrades(
   if (!entries.length) throw new Error('ردیف نمره‌ای ارسال نشده است.');
 
   return db.transaction(async tx => {
+    // مالکیت دانشگاه ارائه ↔ ترم
+    const [off] = await tx
+      .select({ universityId: course_offerings.universityId, termId: course_offerings.termId })
+      .from(course_offerings)
+      .where(eq(course_offerings.id, offeringId))
+      .limit(1);
+    if (!off) throw new Error('ارائهٔ درس یافت نشد.');
+    const [offTerm] = await tx
+      .select({ universityId: academic_terms.universityId })
+      .from(academic_terms)
+      .where(eq(academic_terms.id, off.termId))
+      .limit(1);
+    assertSameTenant('ارائهٔ درس', offTerm?.universityId ?? null, off.universityId);
+
     const [delivery] = await tx
       .select({
         id: instructor_deliveries.id,
         status: instructor_deliveries.status,
         instructorId: instructor_deliveries.instructorId,
+        universityId: instructor_deliveries.universityId,
       })
       .from(instructor_deliveries)
       .where(eq(instructor_deliveries.courseOfferingId, offeringId))
@@ -535,27 +630,57 @@ export async function submitExamGrades(
     if (!delivery) throw new Error('گلوگاه ثبت نمره: اوراق این درس هنوز به استاد تحویل نشده است.');
     if (delivery.instructorId !== instructorId) throw new Error('این استاد مجاز به نمره‌دهی این درس نیست.');
     if (delivery.status !== 'PENDING_GRADING') throw new Error(`وضعیت تحویل «${delivery.status}» اجازهٔ ثبت نمره نمی‌دهد.`);
+    assertSameTenant('تحویل اوراق', off.universityId, delivery.universityId);
+
+    // 🔒 فهرست مجاز سمت سرور: فقط دانشجویان ثبت‌نام‌شدهٔ همین ارائه.
+    // اگر حتی یک entries[].studentId در این ارائه ثبت‌نام نباشد، کل بسته رد
+    // می‌شود (throw → rollback) تا ردیف ثبت‌نام جعلی ساخته نشود.
+    const enrolledRows = await tx
+      .select({ studentId: enrollments.studentId, samaGradeStatusCode: enrollments.samaGradeStatusCode })
+      .from(enrollments)
+      .where(eq(enrollments.offeringId, offeringId));
+    const enrolledByStudent = new Map(enrolledRows.map(r => [r.studentId, r.samaGradeStatusCode]));
+    const outsiders = entries.filter(e => !enrolledByStudent.has(e.studentId));
+    if (outsiders.length) {
+      throw new Error(`${outsiders.length} دانشجو در این درس ثبت‌نام نشده‌اند؛ کل بستهٔ نمرات رد شد.`);
+    }
+
+    // نمرهٔ نهایی + کد وضعیت سما برای هر ردیف (همان حل‌گری که مسیر ادمین
+    // در admin/grades/actions.ts استفاده می‌کند: resolveSamaGradeStatusCode).
+    const gradeRows: {
+      studentId: number; offeringId: number; status: 'REGISTERED';
+      gradeValue: string; gradeStatus: 'FINALIZED'; samaGradeStatusCode: string | null;
+    }[] = [];
+    for (const e of entries) {
+      if (!Number.isFinite(e.midtermScore ?? 0) || !Number.isFinite(e.finalExamScore ?? 0)) {
+        throw new Error('نمرهٔ نامعتبر در ردیف ثبت نمره.');
+      }
+      const total = round2(scoreFromComponents(
+        { midtermScore: e.midtermScore, finalExamScore: e.finalExamScore }, rubric,
+      ));
+      const samaCode = await resolveSamaGradeStatusCode(
+        e.studentId, offeringId, String(total), enrolledByStudent.get(e.studentId) ?? null,
+      );
+      gradeRows.push({
+        studentId: e.studentId,
+        offeringId,
+        status: 'REGISTERED',
+        gradeValue: String(total),
+        gradeStatus: 'FINALIZED',
+        samaGradeStatusCode: samaCode,
+      });
+    }
 
     await tx
       .insert(enrollments)
-      .values(entries.map(e => {
-        const total = round2(scoreFromComponents(
-          { midtermScore: e.midtermScore, finalExamScore: e.finalExamScore }, rubric,
-        ));
-        if (!Number.isFinite(e.midtermScore ?? 0) || !Number.isFinite(e.finalExamScore ?? 0)) {
-          throw new Error('نمرهٔ نامعتبر در ردیف ثبت نمره.');
-        }
-        return {
-          studentId: e.studentId,
-          offeringId,
-          status: 'REGISTERED' as const,
-          gradeValue: String(total),
-          gradeStatus: 'FINALIZED' as const,
-        };
-      }))
+      .values(gradeRows)
       .onConflictDoUpdate({
         target: [enrollments.studentId, enrollments.offeringId],
-        set: { gradeValue: sql`excluded."gradeValue"`, gradeStatus: sql`excluded."gradeStatus"` },
+        set: {
+          gradeValue: sql`excluded."gradeValue"`,
+          gradeStatus: sql`excluded."gradeStatus"`,
+          samaGradeStatusCode: sql`excluded."samaGradeStatusCode"`,
+        },
       });
 
     // hash نمرات درس برای راستی‌آزمایی
@@ -599,6 +724,8 @@ export async function openExamAppeal(actorUserId: number | null, px: { enrollmen
     const [enr] = await tx
       .select({
         id: enrollments.id,
+        offeringId: enrollments.offeringId,
+        universityId: enrollments.universityId,
         gradeValue: enrollments.gradeValue,
         gradeStatus: enrollments.gradeStatus,
       })
@@ -608,6 +735,15 @@ export async function openExamAppeal(actorUserId: number | null, px: { enrollmen
       .for('update');
     if (!enr) throw new Error('ثبت‌نام یافت نشد.');
     if (enr.gradeStatus !== 'FINALIZED') throw new Error('اعتراض فقط پس از قطعی‌شدن نمره ممکن است.');
+    {
+      const [off] = await tx
+        .select({ universityId: course_offerings.universityId })
+        .from(course_offerings)
+        .where(eq(course_offerings.id, enr.offeringId))
+        .limit(1);
+      if (!off) throw new Error('ارائهٔ درس یافت نشد.');
+      assertSameTenant('ثبت‌نام درس', off.universityId, enr.universityId);
+    }
 
     const [open] = await tx
       .select({ id: grade_appeals.id })
@@ -662,6 +798,8 @@ export async function answerExamAppeal(
         oldGrade: grade_appeals.oldGrade,
         status: grade_appeals.status,
         offeringId: enrollments.offeringId,
+        enrollmentUniversityId: enrollments.universityId,
+        offeringUniversityId: course_offerings.universityId,
         professorId: course_offerings.professorId,
       })
       .from(grade_appeals)
@@ -672,6 +810,7 @@ export async function answerExamAppeal(
       .for('update');
     if (!appeal) throw new Error('اعتراض یافت نشد.');
     if (appeal.status !== 'OPEN') throw new Error('این اعتراض قبلاً پاسخ داده شده است.');
+    assertSameTenant('ثبت‌نام درس', appeal.offeringUniversityId, appeal.enrollmentUniversityId);
     if (Number(appeal.professorId) !== Number(staffId)) {
       throw new Error('مالکیت: فقط استاد همین درس می‌تواند به این اعتراض پاسخ دهد.');
     }

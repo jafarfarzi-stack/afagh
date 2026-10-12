@@ -46,15 +46,21 @@ export async function getScopeSelect(): Promise<ScopeSelect> {
   const uid = u?.id ?? null;
   const [unis, facs, deps, majs] = await Promise.all([
     db.select({ id: universities.id, code: universities.code, title: universities.title }).from(universities).orderBy(universities.id),
-    db.select({ id: faculties.id, name: faculties.name }).from(faculties).orderBy(asc(faculties.name)),
-    db.select({ id: departments.id, name: departments.name, facultyId: departments.facultyId }).from(departments).orderBy(asc(departments.name)),
-    db.select({ id: majors.id, name: majors.name, departmentId: majors.departmentId }).from(majors).orderBy(asc(majors.name)),
+    db.select({ id: faculties.id, name: faculties.name, universityId: faculties.universityId }).from(faculties).orderBy(asc(faculties.name)),
+    db.select({ id: departments.id, name: departments.name, facultyId: departments.facultyId, universityId: departments.universityId }).from(departments).orderBy(asc(departments.name)),
+    db.select({ id: majors.id, name: majors.name, departmentId: majors.departmentId, facultyId: majors.facultyId, universityId: majors.universityId }).from(majors).orderBy(asc(majors.name)),
   ]);
+  const inUni = (x: { universityId: number | null }) => !uid || x.universityId == null || x.universityId === uid;
+  const facKept = facs.filter(inUni);
+  const facIdSet = new Set(facKept.map(f => f.id));
+  const depKept = deps.filter(d => inUni(d) && (!uid || facIdSet.size === 0 || facIdSet.has(d.facultyId)));
+  const depIdSet = new Set(depKept.map(d => d.id));
+  const majKept = majs.filter(m => inUni(m) && (!uid || m.departmentId == null || depIdSet.has(m.departmentId)));
   return {
     universities: unis,
-    faculties: facs.filter(f => !uid || f.id === f.id),
-    departments: deps.filter(d => !uid || true),
-    majors: majs.map(m => ({ id: m.id, name: m.name, departmentId: m.departmentId ?? null })),
+    faculties: facKept.map(f => ({ id: f.id, name: f.name })),
+    departments: depKept.map(d => ({ id: d.id, name: d.name, facultyId: d.facultyId })),
+    majors: majKept.map(m => ({ id: m.id, name: m.name, departmentId: m.departmentId ?? null })),
   };
 }
 

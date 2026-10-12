@@ -42,6 +42,7 @@ function run(label, cmd, args) {
       cwd: root,
       stdio: 'inherit',
       env: process.env,
+      // POSIX: بدون shell (فقط win32 به shell:true نیاز دارد)
       shell: process.platform === 'win32',
     });
     p.on('close', (code) => {

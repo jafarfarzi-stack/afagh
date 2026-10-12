@@ -16,6 +16,11 @@ import { createLogger } from '@/lib/logger';
 
 const log = createLogger({ mod: 'messaging' });
 
+/** رویدادهای حامل کد یک‌بارمصرف — متن آن‌ها هرگز ذخیره/لاگ نمی‌شود */
+const OTP_EVENT_RE = /OTP/i;
+const isOtpEvent = (eventCode: string) => OTP_EVENT_RE.test(eventCode);
+export const OTP_REDACTED_BODY = '[REDACTED]';
+
 export const CHANNELS = ['INAPP', 'SMS', 'TELEGRAM', 'BALE', 'EITAA', 'SOROUSH', 'IGAP'] as const;
 export type Channel = typeof CHANNELS[number];
 
@@ -65,9 +70,15 @@ export async function sendSms(to: string, text: string): Promise<DeliveryResult>
   try {
     let ref = '';
     if (provider === 'KAVENEGAR') {
+      // کلید فقط در بخش مسیر (الزام API کاوه‌نگار)؛ پارامترها با POST در بدنه می‌روند
+      // تا کلید/متن در query-stringِ URL (و لاگ‌های واسط) نماند.
       const root = base || 'https://api.kavenegar.com';
-      const url = `${root}/v1/${encodeURIComponent(key)}/sms/send.json?receptor=${encodeURIComponent(to)}&sender=${encodeURIComponent(sender)}&message=${encodeURIComponent(text)}`;
-      ref = (await httpJson(url)).slice(0, 100);
+      const url = `${root}/v1/${encodeURIComponent(key)}/sms/send.json`;
+      ref = (await httpJson(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ receptor: to, sender, message: text }).toString(),
+      })).slice(0, 100);
     } else if (provider === 'SMSIR') {
       const root = base || 'https://api.sms.ir';
       ref = (await httpJson(`${root}/v1/send/bulk`, {
@@ -182,7 +193,7 @@ export async function notifyUserMultichannel(input: {
   const body = signature ? `${input.text}\n${signature}` : input.text;
 
   const [ins] = await db.insert(notifications)
-    .values({ userId: input.userId, eventCode: input.eventCode, payload: JSON.stringify({ text: input.text }) })
+    .values({ userId: input.userId, eventCode: input.eventCode, payload: JSON.stringify({ text: isOtpEvent(input.eventCode) ? OTP_REDACTED_BODY : input.text }) })
     .returning({ id: notifications.id });
   const notificationId = ins?.id ?? null;
 
@@ -201,11 +212,13 @@ export async function notifyUserMultichannel(input: {
   }
 
   for (const r of results) {
+    // متن OTP هرگز در گزارش تحویل ذخیره نمی‌شود (فقط [REDACTED])
+    const storedBody = isOtpEvent(input.eventCode) ? OTP_REDACTED_BODY : body.slice(0, 1000);
     await db.insert(notification_deliveries).values({
       userId: input.userId, notificationId, eventCode: input.eventCode,
       channel: r.channel, target: r.target ?? null, status: r.status,
       providerRef: r.providerRef ?? null, error: r.error ?? null,
-      body: body.slice(0, 1000), durationMs: r.durationMs ?? null,
+      body: storedBody, durationMs: r.durationMs ?? null,
     });
   }
 

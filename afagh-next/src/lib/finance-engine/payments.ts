@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { payment_cheques, student_ledger } from '@/db/schema';
 import { appendAudit } from '../audit';
 import { toNum } from '../finance-rules';
+import { safeRials } from '../money';
 
 // ══════════════════════════════════════════════════════════════════════
 //  ثبت پرداخت و وصول چک در دفتر مالی
@@ -18,8 +19,9 @@ export async function recordPayment(input: {
   /** دانشگاه صاحب رکورد — برای تفکیک چنددانشگاهی دفتر مالی */
   universityId?: number | null;
 }): Promise<number> {
-  const amount = Math.round(toNum(input.amount));
-  if (amount <= 0) throw new Error('مبلغ پرداخت باید بزرگ‌تر از صفر باشد');
+  // 🔒 مبلغ از مرز safeRials می‌گذرد (صحیح مثبت تا سقف numeric(12,0)).
+  const amount = safeRials(Math.round(toNum(input.amount)));
+  if (amount === null || amount <= 0) throw new Error('مبلغ پرداخت باید عدد صحیح و بزرگ‌تر از صفر باشد');
 
   const [ins] = await db.insert(student_ledger).values({
     studentId: input.studentId,
@@ -58,11 +60,18 @@ export async function clearCheque(chequeId: number): Promise<{ ok: boolean; reas
       if (cheque.status === 'CANCELLED') return { ok: false, reason: 'چک باطل‌شده قابل وصول نیست' };
       if (cheque.status === 'BOUNCED') return { ok: false, reason: 'چک برگشتی قابل وصول نیست؛ ابتدا وضعیت را به «در انتظار» برگردانید' };
 
+      // 🔒 مبلغ از دیتابیس خوانده و اعتبارسنجی می‌شود (نه از ورودی کلاینت):
+      // صفر/منفی/NaN هرگز در دفتر مالی ثبت نمی‌شود.
+      const chequeAmount = safeRials(String(cheque.amount ?? ''));
+      if (chequeAmount === null || chequeAmount <= 0) {
+        return { ok: false, reason: 'مبلغ ثبت‌شدهٔ چک در دیتابیس نامعتبر است؛ وصول ممکن نیست' };
+      }
+
       const [ins] = await tx.insert(student_ledger).values({
         studentId: cheque.studentId,
         termId: cheque.termId,
         transactionType: 'PAYMENT',
-        amount: String(cheque.amount),
+        amount: String(chequeAmount),
         description: `وصول چک ${cheque.chequeNo || ''}`.trim(),
         universityId: cheque.universityId ?? null,
       }).returning({ id: student_ledger.id });
@@ -78,7 +87,7 @@ export async function clearCheque(chequeId: number): Promise<{ ok: boolean; reas
         action: 'FINANCE_CHEQUE_CLEARED',
         entityType: 'payment_cheques',
         entityId: chequeId,
-        details: JSON.stringify({ studentId: cheque.studentId, ledgerTxnId: ins.id, amount: cheque.amount }),
+        details: JSON.stringify({ studentId: cheque.studentId, ledgerTxnId: ins.id, amount: chequeAmount }),
       });
       return { ok: true };
     });

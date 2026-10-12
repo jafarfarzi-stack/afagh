@@ -1,17 +1,25 @@
 import 'server-only';
 
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { majors, students, users } from '@/db/schema';
+import { majors, student_ledger, students, users } from '@/db/schema';
 import { maskNationalCode, type ExamCardData } from '@/lib/verification';
-import { studentLedgerBalance } from '@/lib/workflow-engine';
+import { ledgerBalance } from '@/lib/ledger-balance';
 
 type TermRow = { id: number; title: string };
+
+/** آستانهٔ تسویهٔ کارت ورود به جلسه (ریال).
+ *  قرارداد کانونی: مثبت = بدهی (مسدود)، صفر/منفی = تسویه/بستانکار (آزاد).
+ *  بدهی ≤ این مقدار «تسویه» شمرده می‌شود؛ اضافه‌پرداخت جزئی (تراز منفی)
+ *  پس از Math.max(0, …) صفر می‌شود و همچنان آزاد است. مقدار صفر یعنی
+ *  هر بدهیِ مثبت — هرقدر خرد — مسدود می‌کند (fail-closed). */
+const EXAM_CARD_DEBT_TOLERANCE_RIALS = 0;
 
 export async function getExamCardDataForTerm(userId: number, term: TermRow): Promise<ExamCardData | null> {
   const [stu] = await db
     .select({
       studentId: students.id, studentCode: students.studentCode, entryYear: students.entryYear,
+      universityId: students.universityId,
       firstName: users.firstName, lastName: users.lastName, nationalCode: users.nationalCode,
       majorName: majors.name,
     })
@@ -22,8 +30,21 @@ export async function getExamCardDataForTerm(userId: number, term: TermRow): Pro
     .limit(1);
   if (!stu) return null;
 
-  const balance = await studentLedgerBalance(undefined, stu.studentId);
-  const debt = Math.max(0, -Math.round(balance));
+  // تراز کانونی (مثبت = بدهی) — فقط دفتر همین دانشگاه؛ ردیف‌های legacy با
+  // universityId = NULL هم دیده می‌شوند (قرارداد صفحات ادمین).
+  const ledgerRows = await db
+    .select({ transactionType: student_ledger.transactionType, amount: student_ledger.amount })
+    .from(student_ledger)
+    .where(
+      stu.universityId == null
+        ? eq(student_ledger.studentId, stu.studentId)
+        : and(
+            eq(student_ledger.studentId, stu.studentId),
+            or(eq(student_ledger.universityId, stu.universityId), isNull(student_ledger.universityId)),
+          ),
+    );
+  const balance = ledgerBalance(ledgerRows);
+  const debt = Math.max(0, Math.round(balance));
 
   const rows = ((await db.execute(sql`
     select en.id as "enrollmentId",
@@ -63,7 +84,7 @@ export async function getExamCardDataForTerm(userId: number, term: TermRow): Pro
     entryYear: stu.entryYear,
     termTitle: term.title || '—',
     debt,
-    isFinancialCleared: debt === 0,
+    isFinancialCleared: debt <= EXAM_CARD_DEBT_TOLERANCE_RIALS,
     courses: rows.map(r => ({
       enrollmentId: r.enrollmentId,
       courseCode: r.courseCode,

@@ -10,6 +10,11 @@ import { getSetting, getPublicBaseUrl } from '@/lib/settings';
 import { qrSvg } from '@/lib/qr';
 import { toShamsi } from '@/lib/shamsi';
 import { putArchiveObject } from '@/lib/objectStore';
+import { maskNationalCode } from '@/lib/verification';
+import { createLogger } from '@/lib/logger';
+import { appendAudit } from '@/lib/audit';
+
+const log = createLogger({ mod: 'equivalence-form' });
 
 /**
  * صدور «فرم رسمی ممهور معادل‌سازی» — سند رسمی با امضای مدیر گروه و مدیرکل
@@ -84,7 +89,15 @@ function escapeHtml(s: unknown): string {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-/** ساخت HTML فرم رسمی ممهور (قابل چاپ و بایگانی) */
+/** ساخت HTML فرم رسمی ممهور (قابل چاپ و بایگانی)
+ *
+ * سیاست نمایش کد ملی (P2):
+ *  - چاپ/بایگانی پیش‌فرض فقط کد ملی ماسک‌شده + کد استعلام را نشان می‌دهد.
+ *  - نسخهٔ کامل فقط با `fullNationalCode` صادر می‌شود و همیشه واترمارک دارد؛
+ *    فراخواننده موظف است پیش از تحویل، `logEquivalenceFormAccess(...,'FULL')`
+ *    را صدا بزند (fail-closed: اگر ثبت دسترسی ناموفق بود، نسخه تحویل ندهید).
+ * اعتبار سند رسمی از هش SHA-256 + QR استعلام است و با ماسک‌شدن نمایش کم نمی‌شود.
+ */
 export async function buildEquivalenceFormHtml(params: {
   universityName: string;
   trackingCode: string;
@@ -98,9 +111,14 @@ export async function buildEquivalenceFormHtml(params: {
   signatories: Signatory[];
   verifyUrl: string;
   contentHash: string;
+  inquiryCode?: string | null;
+  fullNationalCode?: string | null;
 }): Promise<string> {
   const { universityName, trackingCode, studentName, nationalCode, studentCode, majorTitle, degreeTitle, previousUniversity, items, signatories, verifyUrl, contentHash } = params;
   const qr = await qrSvg(verifyUrl, { errorCorrectionLevel: 'M' });
+  const showFull = !!params.fullNationalCode;
+  const displayedCode = showFull ? String(params.fullNationalCode) : maskNationalCode(nationalCode);
+  const inquiryCode = (params.inquiryCode ?? '').trim();
 
   const rowsHtml = items.map((it, i) => `
     <tr>
@@ -152,9 +170,14 @@ export async function buildEquivalenceFormHtml(params: {
   .qr { width:110px; height:110px; }
   .qr svg { width:110px; height:110px; }
   .hash { font-family:monospace; font-size:9px; color:#64748b; word-break:break-all; max-width:60%; }
+  .wm { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; z-index:50; }
+  .wm span { transform:rotate(-30deg); font-size:56px; font-weight:900; color:rgba(190,18,60,.13); border:4px solid rgba(190,18,60,.13); padding:10px 26px; border-radius:12px; white-space:nowrap; }
+  .fullbanner { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; font-size:12px; font-weight:700; border-radius:8px; padding:8px 12px; margin-bottom:14px; }
+  @media print { .wm span { color:rgba(190,18,60,.18); border-color:rgba(190,18,60,.18); } }
 </style>
 </head>
 <body>
+  ${showFull ? '<div class="wm"><span>نسخهٔ کامل — محرمانه</span></div><div class="fullbanner">نسخهٔ کامل با کد ملی بدون ماسک — دسترسی به این نسخه در لاگ ممیزی ثبت می‌شود.</div>' : ''}
   <div class="head">
     <div>
       <div class="uni">${escapeHtml(universityName)}</div>
@@ -170,9 +193,10 @@ export async function buildEquivalenceFormHtml(params: {
   <div class="doc-no">موضوع: معادل‌سازی دروس گذرانده‌شده در مؤسسهٔ آموزش عالی قبلی</div>
 
   <table class="info">
-    <tr><td class="k">نام و نام خانوادگی</td><td>${escapeHtml(studentName)}</td><td class="k">کد ملی</td><td>${faNum(nationalCode)}</td></tr>
+    <tr><td class="k">نام و نام خانوادگی</td><td>${escapeHtml(studentName)}</td><td class="k">کد ملی${showFull ? ' (کامل)' : ''}</td><td>${faNum(displayedCode)}</td></tr>
     <tr><td class="k">شمارهٔ دانشجویی</td><td>${faNum(studentCode)}</td><td class="k">رشته / مقطع</td><td>${escapeHtml(majorTitle)} — ${escapeHtml(degreeTitle)}</td></tr>
     <tr><td class="k">مؤسسهٔ مبدأ</td><td colspan="3">${escapeHtml(previousUniversity)}</td></tr>
+    ${inquiryCode ? `<tr><td class="k">کد استعلام</td><td colspan="3"><b>${escapeHtml(inquiryCode)}</b> <span style="font-size:11px;color:#475569;">(برای استعلام اصالت، همین کد یا QR پایین سند کافی است — نیازی به کد ملی کامل نیست.)</span></td></tr>` : ''}
   </table>
 
   <table class="courses">
@@ -222,10 +246,41 @@ async function ensureDocType(): Promise<{ categoryId: number; typeId: number }> 
 }
 
 /**
+ * ثبت دسترسی به فرم معادل‌سازی در زنجیرهٔ ممیزی.
+ * نسخهٔ کامل (FULL) فقط وقتی تحویل داده شود که این ثبت موفق باشد (fail-closed) —
+ * یعنی فراخواننده باید await کند و روی خطا، نسخه را برنگرداند.
+ */
+export async function logEquivalenceFormAccess(params: {
+  actorUserId: number | null;
+  requestId: number;
+  trackingCode: string;
+  mode: 'MASKED' | 'FULL';
+}): Promise<void> {
+  await db.transaction(async (tx) => {
+    await appendAudit(tx, {
+      actorUserId: params.actorUserId,
+      action: 'EQUIVALENCE_FORM_VIEW',
+      entityType: 'student_request',
+      entityId: params.requestId,
+      details: JSON.stringify({ trackingCode: params.trackingCode, mode: params.mode }),
+    });
+  });
+  log.info('equivalence_form_access', { requestId: params.requestId, mode: params.mode });
+}
+
+/** کد استعلام چاپی — مشتق قطعی از هش سند (بدون نیاز به ستون جدید، قابل راستی‌آزمایی با QR/هش) */
+export function inquiryCodeForHash(contentHash: string): string {
+  const h = String(contentHash || '').replace(/[^0-9a-f]/gi, '').toUpperCase().padEnd(8, '0');
+  return `AFG-${h.slice(0, 4)}-${h.slice(4, 8)}`;
+}
+
+/**
  * صدور و بایگانی فرم رسمی معادل‌سازی برای یک درخواست تصویب‌شده.
  * اگر قبلاً برای همین درخواست صادر شده باشد، چیزی نوشته نمی‌شود (idempotent).
+ * نسخهٔ بایگانی‌شده همیشه ماسک‌شده است (کد ملی کامل در HTML بایگانی نمی‌ماند)؛
+ * اعتبار رسمی از هش + QR استعلام است.
  */
-export async function issueEquivalenceForm(requestId: number): Promise<{ ok: boolean; key?: string; hash?: string; skipped?: boolean; error?: string }> {
+export async function issueEquivalenceForm(requestId: number): Promise<{ ok: boolean; key?: string; hash?: string; inquiryCode?: string; skipped?: boolean; error?: string }> {
   const [req] = await db.select().from(student_requests).where(eq(student_requests.id, requestId)).limit(1);
   if (!req) return { ok: false, error: 'درخواست یافت نشد.' };
 
@@ -272,11 +327,12 @@ export async function issueEquivalenceForm(requestId: number): Promise<{ ok: boo
     .from(student_documents)
     .where(eq(student_documents.contentHash, contentHash))
     .limit(1);
-  if (dup) return { ok: true, skipped: true };
+  if (dup) return { ok: true, skipped: true, hash: contentHash, inquiryCode: inquiryCodeForHash(contentHash) };
 
   const universityName = (await getSetting('UNIVERSITY_NAME')) || 'دانشگاه آفاق';
   const signatories = await resolveSignatories(requestId);
   const verifyUrl = `${await getPublicBaseUrl()}/verify/document/${contentHash}`;
+  const inquiryCode = inquiryCodeForHash(contentHash);
 
   const html = await buildEquivalenceFormHtml({
     universityName,
@@ -291,6 +347,7 @@ export async function issueEquivalenceForm(requestId: number): Promise<{ ok: boo
     signatories,
     verifyUrl,
     contentHash,
+    inquiryCode,
   });
 
   const buf = Buffer.from(html, 'utf-8');
@@ -308,5 +365,6 @@ export async function issueEquivalenceForm(requestId: number): Promise<{ ok: boo
     verificationStatus: 'VERIFIED',
   });
 
-  return { ok: true, key, hash: contentHash };
+  log.info('equivalence_form_issued', { requestId, trackingCode: req.trackingCode, inquiryCode });
+  return { ok: true, key, hash: contentHash, inquiryCode };
 }

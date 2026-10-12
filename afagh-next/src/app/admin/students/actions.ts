@@ -481,7 +481,11 @@ export async function resetUserPasswordAction(
   if (pw.length < 4 || pw.length > 64) return { ok: false, error: 'رمز باید بین ۴ تا ۶۴ کاراکتر باشد.' };
   try {
     const passwordHash = await hashPassword(pw);
-    await db.update(users).set({ passwordHash, mustChangePassword: 1 }).where(eq(users.id, userId));
+    // 🔒 ریست رمز = ابطال نشست‌ها در همان تراکنش (الگوی setUserActiveAction)
+    await db.transaction(async (tx) => {
+      await tx.update(users).set({ passwordHash, mustChangePassword: 1 }).where(eq(users.id, userId));
+      await tx.delete(sessions).where(eq(sessions.userId, userId));
+    });
     await ensureAccountRoles(userId);
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'ثبت نشد.' };
@@ -513,15 +517,23 @@ export async function bulkResetToNationalCodeAction(
     `);
     const rows = (usersToReset as any).rows ?? usersToReset;
     let count = 0;
-    for (const row of rows) {
-      if (!row.nationalCode) continue;
-      const hash = await hashPassword(String(row.nationalCode));
-      await db.execute(sql`
-        UPDATE users SET "passwordHash" = ${hash}, "mustChangePassword" = 1
-        WHERE id = ${row.id}
-      `);
-      count++;
-    }
+    const affectedIds: number[] = [];
+    // 🔒 ریست رمز = ابطال نشست‌ها در همان تراکنش (الگوی setUserActiveAction)
+    await db.transaction(async (tx) => {
+      for (const row of rows) {
+        if (!row.nationalCode) continue;
+        const hash = await hashPassword(String(row.nationalCode));
+        await tx.execute(sql`
+          UPDATE users SET "passwordHash" = ${hash}, "mustChangePassword" = 1
+          WHERE id = ${row.id}
+        `);
+        affectedIds.push(Number(row.id));
+        count++;
+      }
+      if (affectedIds.length) {
+        await tx.delete(sessions).where(inArray(sessions.userId, affectedIds));
+      }
+    });
     // ساخت نقش برای حساب‌های گروهی که ردیف user_roles ندارند
     await db.execute(sql`
       INSERT INTO user_roles ("userId", "roleId")
@@ -560,10 +572,23 @@ export async function bulkResetPasswordsAction(
   const uniWhere2 = `(users."universityId" = ${uni2.id} OR users."universityId" IS NULL)`;
   try {
     const hash = await hashPassword(pw);
-    const upd = await db.execute(sql`
-      UPDATE users SET "passwordHash" = ${hash}, "mustChangePassword" = 1
+    const idsRes = await db.execute(sql<{ id: number }>`
+      SELECT id FROM users
       WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)} AND ${sql.raw(uniWhere2)}
     `);
+    const idsRows = ((idsRes as any).rows ?? idsRes) as { id: number }[];
+    const affectedIds = idsRows.map((r) => Number(r.id)).filter(Number.isInteger);
+    // 🔒 ریست رمز = ابطال نشست‌ها در همان تراکنش (الگوی setUserActiveAction)
+    const upd = await db.transaction(async (tx) => {
+      const u = await tx.execute(sql`
+        UPDATE users SET "passwordHash" = ${hash}, "mustChangePassword" = 1
+        WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)} AND ${sql.raw(uniWhere2)}
+      `);
+      if (affectedIds.length) {
+        await tx.delete(sessions).where(inArray(sessions.userId, affectedIds));
+      }
+      return u;
+    });
     const count = Number((upd as any)?.rowCount ?? 0);
     // ساخت نقش برای حساب‌های گروهی که ردیف user_roles ندارند
     await db.execute(sql`
@@ -599,10 +624,23 @@ export async function bulkForcePasswordChangeAction(
   if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
   const uniWhere = `(users."universityId" = ${uni.id} OR users."universityId" IS NULL)`;
   try {
-    const upd = await db.execute(sql`
-      UPDATE users SET "mustChangePassword" = 1
+    const idsRes = await db.execute(sql<{ id: number }>`
+      SELECT id FROM users
       WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)} AND ${sql.raw(uniWhere)}
     `);
+    const idsRows = ((idsRes as any).rows ?? idsRes) as { id: number }[];
+    const affectedIds = idsRows.map((r) => Number(r.id)).filter(Number.isInteger);
+    // 🔒 اجبار تغییر رمز = ابطال نشست‌ها در همان تراکنش (الگوی setUserActiveAction)
+    const upd = await db.transaction(async (tx) => {
+      const u = await tx.execute(sql`
+        UPDATE users SET "mustChangePassword" = 1
+        WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)} AND ${sql.raw(uniWhere)}
+      `);
+      if (affectedIds.length) {
+        await tx.delete(sessions).where(inArray(sessions.userId, affectedIds));
+      }
+      return u;
+    });
     const count = Number((upd as any)?.rowCount ?? 0);
     return { ok: true, count };
   } catch (e: unknown) {
@@ -714,18 +752,24 @@ export async function saveUserRolesAction(userId: number, roleIds: number[]): Pr
   }
   let added = 0;
   let removed = 0;
-  for (const rid of [...want]) {
-    if (!have.has(rid)) {
-      await db.insert(user_roles).values({ userId, roleId: rid }).onConflictDoNothing().catch(() => {});
-      added++;
+  // 🔒 تغییر نقش = ابطال نشست‌ها در همان تراکنش تا مجوزهای کش‌شدهٔ نشست‌های باز سوءاستفاده نشوند
+  await db.transaction(async (tx) => {
+    for (const rid of [...want]) {
+      if (!have.has(rid)) {
+        await tx.insert(user_roles).values({ userId, roleId: rid }).onConflictDoNothing().catch(() => {});
+        added++;
+      }
     }
-  }
-  for (const rid of [...have]) {
-    if (!want.has(rid)) {
-      await db.delete(user_roles).where(and(eq(user_roles.userId, userId), eq(user_roles.roleId, rid)));
-      removed++;
+    for (const rid of [...have]) {
+      if (!want.has(rid)) {
+        await tx.delete(user_roles).where(and(eq(user_roles.userId, userId), eq(user_roles.roleId, rid)));
+        removed++;
+      }
     }
-  }
+    if (added || removed) {
+      await tx.delete(sessions).where(eq(sessions.userId, userId));
+    }
+  });
   revalidatePath('/admin/students');
   return { ok: true, added, removed };
 }

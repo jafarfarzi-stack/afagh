@@ -23,13 +23,18 @@ const prettyMode = () => {
   return process.env.NODE_ENV !== 'production';
 };
 
-/** کلیدهایی که هرگز نباید در لاگ ظاهر شوند (رمز، توکن، کوکی، کلید API) */
-const SECRET_KEY = /(password|passwd|pass|secret|token|apikey|api_key|authorization|cookie|salt|sharedsecret|privatekey|connectionstring|databaseurl)/i;
+/** کلیدهایی که هرگز نباید در لاگ ظاهر شوند (رمز، توکن، کوکی، کلید API، کد ملی، موبایل، شناسهٔ چت، OTP) */
+const SECRET_KEY = /(password|passwd|pass|secret|token|apikey|api_key|authorization|cookie|salt|sharedsecret|privatekey|connectionstring|databaseurl|nationalcode|national_code|mobile|phone|chatid|chat_id|\botp\b|verifycode|verify_code|serialno|serial_no|studentcode|student_code)/i;
 const MASK = '[REDACTED]';
 
-/** رشته‌هایی که خودشان شبیه رمز/کلید هستند (مثل DSN دیتابیس) */
-const maskString = (s: string): string =>
-  s.replace(/(\/\/[^:/@\s]+):([^@/\s]+)@/g, '$1:' + MASK + '@');
+/** رشته‌هایی که خودشان شبیه رمز/کلید هستند (مثل DSN دیتابیس) + کد ملی/موبایل خام */
+const maskString = (s: string): string => {
+  let out = s.replace(/(\/\/[^:/@\s]+):([^@/\s]+)@/g, '$1:' + MASK + '@');
+  // موبایل ایرانی ۱۱ رقمی و کد ۱۰ رقمی (کد ملی/شناسهٔ چت عددی) — هرگز در لاگ خام نماند
+  out = out.replace(/\b09\d{9}\b/g, MASK);
+  out = out.replace(/\b\d{10}\b/g, MASK);
+  return out;
+};
 
 export function maskSecrets(value: unknown, depth = 0): unknown {
   if (value == null) return value;

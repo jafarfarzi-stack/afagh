@@ -13,7 +13,7 @@ import { academic_terms, course_offerings, courses, educational_regulations, enr
 import { requireRole } from '@/lib/auth';
 import { logGradeChange } from '@/lib/grade-change-log';
 import { resolveSamaGradeStatusCode, syncStudentCourseRegulations } from '@/lib/resolve-sama-code';
-import { gradeStatusTitleOf } from '@/lib/grade-status-codes';
+import { GRADE_STATUS_CODES, gradeStatusTitleOf } from '@/lib/grade-status-codes';
 import { getCurrentUniversity } from '@/lib/university-scope';
 
 export interface AdminGradeState {
@@ -188,8 +188,16 @@ export async function adminSetGradeAction(
       return { ok: false, error: 'شناسه ارائه درس یا درس و ترم مربوطه یافت نشد.' };
     }
 
+    // 🔒 کد دستی سما فقط از فهرست شناخته‌شدهٔ grade-status-codes مجاز است؛
+    // کد ناشناس (تزریق دلخواه) رد می‌شود. مسیر خودکار resolveSamaGradeStatusCode
+    // دست‌نخورده می‌ماند (همان منطق آیین‌نامهٔ دانشجو + کدهای منجمد REGULATION_FROZEN_CODES).
+    const rawCustomCode = payload.customSamaStatusCode?.trim() || null;
+    if (rawCustomCode !== null && !GRADE_STATUS_CODES.some(g => g.code === rawCustomCode)) {
+      return { ok: false, error: `کد وضعیت سما (${rawCustomCode}) در فهرست کدهای شناخته‌شده نیست؛ از فهرست معتبر انتخاب کنید.` };
+    }
+
     // محاسبه کد وضعیت سما: اولویت با کد دستی تعیین‌شده توسط ادمین، در غیر اینصورت حل هوشمند از روی درس و آیین‌نامه
-    const samaCode = payload.customSamaStatusCode?.trim() ||
+    const samaCode = rawCustomCode ||
       await resolveSamaGradeStatusCode(payload.studentId, targetOfferingId, payload.gradeValue, existingEnrollment?.samaGradeStatusCode ?? null);
 
     if (existingEnrollment) {
@@ -611,12 +619,21 @@ export async function scanMismatchedSamaCodes(universityId?: number): Promise<{ 
  * اعمال کدهای صحیح روی نمرات نادرست (بچ اصلاح)
  */
 export async function applyCorrectedSamaCodes(enrollmentIds: number[], universityId?: number): Promise<{ applied: number }> {
-  await requireRole(['ADMIN']);
+  const user = await requireRole(['ADMIN']);
+  // 🔐 تأیید دومرحله‌ای — همان قرارداد adminSetGradeAction (حوزهٔ grades:edit).
+  // فراخوان‌ها try/catch دارند، پس STEPUP_REQUIRED به‌صورت خطا بالا می‌رود.
+  const { checkStepUpToken } = await import('@/lib/step-up');
+  if (!(await checkStepUpToken(user.id, 'grades:edit'))) {
+    throw new Error('STEPUP_REQUIRED:برای اعمال اصلاحات کد سما، ابتدا رمز عبور خود را تأیید کنید (تأیید دومرحله‌ای — ۱۰ دقیقه معتبر است).');
+  }
   let applied = 0;
   const serverUni = await getCurrentUniversity().catch(() => null);
   const uid = serverUni?.id ?? universityId;
 
-  for (const eid of enrollmentIds) {
+  // سقف اندازهٔ دسته برای جلوگیری از overload و قفل طولانی
+  const ids = enrollmentIds.slice(0, 500);
+
+  for (const eid of ids) {
     const [enr] = await db
       .select({
         id: enrollments.id,
@@ -656,6 +673,8 @@ export async function applyCorrectedSamaCodes(enrollmentIds: number[], universit
       oldSamaStatusCode: cur,
       newSamaStatusCode: correctCode,
       reason: `بازمحاسبه خودکار کد وضعیت سما بر اساس آیین‌نامه (قبلی: ${cur})`,
+      actorUserId: user.id,
+      actorRole: 'ADMIN',
     });
     applied++;
   }
@@ -783,27 +802,47 @@ export async function reviewUnfinalizeAction(
     }
 
     if (decision === 'APPROVED') {
-      // اعتبارسنجی مهلت اختصاصی (اختیاری، نمایشی)
+      // اعتبارسنجی مهلت اختصاصی (اختیاری): فقط تاریخ واقعی با now < ext < now+60days
+      // پذیرفته می‌شود؛ در غیر این صورت نادیده گرفته می‌شود (نوشته نمی‌شود، خطا هم نمی‌دهد).
       let extDate: Date | null = null;
       if (extendDeadlineTo && extendDeadlineTo.trim()) {
         const t = new Date(extendDeadlineTo.trim()).getTime();
-        if (Number.isNaN(t)) return { ok: false, error: 'تاریخ مهلت اختصاصی نامعتبر است.' };
-        extDate = new Date(t);
+        const nowMs = Date.now();
+        if (!Number.isNaN(t) && t > nowMs && t < nowMs + 60 * 24 * 60 * 60 * 1000) {
+          extDate = new Date(t);
+        }
       }
-      await db.transaction(async (tx) => {
-        await tx
-          .update(grade_unfinalize_requests)
-          .set({ status: 'APPROVED', reviewedByUserId: user.id, reviewNote: cleanNote, reviewedAt: new Date() })
-          .where(eq(grade_unfinalize_requests.id, requestId));
-        await tx
-          .update(course_offerings)
-          .set({
-            gradesFinalizedAt: null,
-            gradesTemporaryAt: new Date(),
-            ...(extDate ? { customGradeDeadline: extDate } : {}),
-          })
-          .where(eq(course_offerings.id, req.offeringId));
-      });
+      // 🔒 ضد TOCTOU: قفل ردیف (FOR UPDATE) + بازبینی وضعیت داخل تراکنش +
+      // محمول WHERE status='REVIEWED' با راستی‌آزمایی rowCount (returning).
+      try {
+        await db.transaction(async (tx) => {
+          const locked = await tx
+            .select({ status: grade_unfinalize_requests.status })
+            .from(grade_unfinalize_requests)
+            .where(eq(grade_unfinalize_requests.id, requestId))
+            .for('update');
+          if (!locked[0] || locked[0].status !== 'REVIEWED') throw new Error('UNFINALIZE_STALE');
+          const updated = await tx
+            .update(grade_unfinalize_requests)
+            .set({ status: 'APPROVED', reviewedByUserId: user.id, reviewNote: cleanNote, reviewedAt: new Date() })
+            .where(and(eq(grade_unfinalize_requests.id, requestId), eq(grade_unfinalize_requests.status, 'REVIEWED')))
+            .returning({ id: grade_unfinalize_requests.id });
+          if (updated.length === 0) throw new Error('UNFINALIZE_STALE');
+          await tx
+            .update(course_offerings)
+            .set({
+              gradesFinalizedAt: null,
+              gradesTemporaryAt: new Date(),
+              ...(extDate ? { customGradeDeadline: extDate } : {}),
+            })
+            .where(eq(course_offerings.id, req.offeringId));
+        });
+      } catch (err) {
+        if ((err as Error)?.message === 'UNFINALIZE_STALE') {
+          return { ok: false, error: 'این درخواست هم‌زمان توسط دیگری تعیین‌تکلیف شد؛ لطفاً فهرست را تازه کنید.' };
+        }
+        throw err;
+      }
       const { logBulkGradeChange } = await import('@/lib/grade-change-log');
       await logBulkGradeChange(req.offeringId, 'UNFINALIZE', user.id, 'ADMIN', cleanNote ?? 'تأیید بازگشایی نمرات توسط معاون آموزشی').catch(() => null);
     } else {

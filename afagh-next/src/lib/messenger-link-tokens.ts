@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { messenger_link_tokens, notification_channels } from '@/db/schema';
 import { getSetting } from '@/lib/settings';
@@ -92,6 +92,10 @@ export async function mintLinkTokenFor(userId: number, channel: MessengerChannel
 export async function handlePairingText(
   channel: MessengerChannel, chatId: string, text: string,
 ): Promise<string | null> {
+  // سقف تلاش جفت‌سازی برای هر (کانال، چت) — ضد شمارش کد
+  const rl = await rateLimit(`msg-link-pair:${channel}:${chatId}`, 20, 600);
+  if (!rl.ok) return LINK_GENERIC_ERROR;
+
   const m = text.match(/^\/start(?:@\S+)?\s*(\S+)?\s*$/);
   // بله گاهی فقط /start را تحویل می‌دهد یا کاربر فقط کد خالی می‌فرستد —
   // کد ۸ رقمی تکی هم پذیرفته می‌شود.
@@ -119,7 +123,10 @@ export async function handlePairingText(
   }
 
   await db.update(messenger_link_tokens)
-    .set({ pendingChatId: chatId })
+    .set({
+      pendingChatId: chatId,
+      attempts: sql`${messenger_link_tokens.attempts} + 1`,
+    })
     .where(eq(messenger_link_tokens.id, hit.id));
   log.info('pairing_recorded', { channel, tokenId: hit.id, tokenHash: hit.tokenHash.slice(0, 12) });
   return 'کد دریافت شد. ✅\nبه پورتال برگردید — اتصال به‌صورت خودکار تأیید می‌شود.';
@@ -131,6 +138,8 @@ export async function handlePairingText(
 export async function checkPairingStatus(userId: number, rawCode: string): Promise<{
   ok: boolean; paired?: boolean; channel?: string; error?: string;
 }> {
+  const rl = await rateLimit(`msg-link-status:${userId}`, 30, 600);
+  if (!rl.ok) return { ok: false, error: LINK_GENERIC_ERROR };
   const param = String(rawCode ?? '').trim();
   if (!param) return { ok: false, error: LINK_GENERIC_ERROR };
   const digest = sha256hex(param);
@@ -199,4 +208,18 @@ export async function confirmLinkToken(userId: number, rawTokenOrCode: string): 
 
   log.info('link_confirmed', { channel: hit.channel, userId, tokenHash: hit.tokenHash.slice(0, 12) });
   return { ok: true, channel: hit.channel };
+}
+
+// ──────── پاکسازی روزانهٔ توکن‌های مصرف‌شده/منقضی ────────
+// حذف: usedAt NOT NULL (مصرف‌شده) یا منقضی‌شدهٔ بیش از یک روز.
+// از کرون روزانه صدا زده می‌شود: /api/cron/messenger-link-purge
+export async function purgeExpiredLinkTokens(): Promise<{ deleted: number }> {
+  const rows = await db.delete(messenger_link_tokens)
+    .where(or(
+      sql`${messenger_link_tokens.usedAt} IS NOT NULL`,
+      sql`${messenger_link_tokens.expiresAt} < NOW() - INTERVAL '1 day'`,
+    ))
+    .returning({ id: messenger_link_tokens.id });
+  log.info('link_tokens_purged', { deleted: rows.length });
+  return { deleted: rows.length };
 }

@@ -5,7 +5,7 @@
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { STUDENT_STATUS_FA } from '@/lib/student-labels';
-import { toEnDigits } from '@/lib/persian-search';
+import { escapeLikeChars, toEnDigits } from '@/lib/persian-search';
 
 export const PER = 50;
 
@@ -69,12 +69,13 @@ export function studentWhere(f: ReportFilters, alias = 's') {
   if (f.entryYear) c.push(sql`${a}."entryYear" = ${f.entryYear}`);
   if (f.nationalCode) {
     // کدهای ذخیره‌شده انگلیسی‌اند؛ ارقام فارسی ورودی نرمال می‌شود تا کدهای SA/SS هم پیدا شوند.
-    const like = `%${toEnDigits(String(f.nationalCode))}%`;
-    c.push(sql`u."nationalCode" ILIKE ${like}`);
+    // فرار ٪ _ \ تا wildcard تزریقی معنا نگیرد (با ESCAPE '\').
+    const like = `%${escapeLikeChars(toEnDigits(String(f.nationalCode)))}%`;
+    c.push(sql`u."nationalCode" ILIKE ${like} ESCAPE '\\'`);
   }
   if (f.q) {
-    const like = `%${toEnDigits(String(f.q))}%`;
-    c.push(sql`(${a}."studentCode" ILIKE ${like} OR u."firstName" ILIKE ${like} OR u."lastName" ILIKE ${like} OR u."nationalCode" ILIKE ${like})`);
+    const like = `%${escapeLikeChars(toEnDigits(String(f.q)))}%`;
+    c.push(sql`(${a}."studentCode" ILIKE ${like} ESCAPE '\\' OR u."firstName" ILIKE ${like} ESCAPE '\\' OR u."lastName" ILIKE ${like} ESCAPE '\\' OR u."nationalCode" ILIKE ${like} ESCAPE '\\')`);
   }
   return c;
 }

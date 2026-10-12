@@ -1,5 +1,5 @@
 import * as Minio from 'minio';
-import { createHash, randomInt } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 
 // ═══ Object Storage — سند §۲۴۳۸: «فایل‌ها خارج از DB؛ فقط URL در دیتابیس» ═══
 // MinIO (سازگار با S3) — در پروداکشن همان کد به S3/Cloudine وصل می‌شود.
@@ -38,7 +38,7 @@ export async function removeArchiveObject(key: string): Promise<void> {
 }
 
 export function archiveKey(studentId: number, typeId: number, ext: string): string {
-  return `archive/${studentId}/${typeId}-${Date.now()}-${randomInt(100, 999)}.${ext}`;
+  return `archive/${studentId}/${typeId}-${Date.now()}-${randomBytes(8).toString('hex')}.${ext}`;
 }
 
 export const sha256 = (b: Buffer) => createHash('sha256').update(b).digest('hex');

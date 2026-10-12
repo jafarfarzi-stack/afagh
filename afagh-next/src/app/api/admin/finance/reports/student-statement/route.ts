@@ -1,14 +1,26 @@
 'use server';
 
 import { db } from '@/db';
-import { eq, and, sql, inArray } from 'drizzle-orm';
-import { student_ledger, students, users, financial_terms, academic_terms, financial_clearances } from '@/db/schema';
+import { and, eq } from 'drizzle-orm';
+import { student_ledger, students } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { getStudentFinance } from '@/lib/finance-engine';
+import { ledgerBalance } from '@/lib/ledger-balance';
 import { toNum } from '@/lib/finance-rules';
 
 const ROLES: string[] = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'];
 
+/**
+ * صورت‌حساب مالی دانشجو — همهٔ اعداد از مسیر کانونی می‌آیند و هیچ
+ * جمعِ دستیِ موازی اینجا نیست تا با کارنامه/کارتابل واگرا نشود:
+ *   • سطرها و جمع‌ها از getStudentFinance (سازندهٔ کارنامه) — مثبت = بدهی.
+ *   • ماندهٔ کلی از ledgerBalance روی کل دفتر (همهٔ ترم‌ها — نه فقط
+ *     ردیف‌های دارای financialTermId که پیش‌تر ردیف‌های termId-محورِ
+ *     موتور شهریه را گم می‌کرد).
+ * تفکیک ستون‌های سما فقط «نمایشی» است (نگاشت ۱:۱ از نوع خام)؛ ماندهٔ
+ * هر سطر از کارنامه می‌آید.
+ */
 export async function GET(request: Request) {
   await requireRole(ROLES);
   const uni = await getCurrentUniversity();
@@ -22,83 +34,68 @@ export async function GET(request: Request) {
   const [stu] = await db.select().from(students).where(and(eq(students.id, studentId), eq(students.universityId, uni.id))).limit(1);
   if (!stu) return Response.json({ error: 'دانشجو یافت نشد' }, { status: 404 });
 
-  // Get all financial terms for this university
-  const finTerms = await db.select().from(financial_terms)
-    .where(and(eq(financial_terms.universityId, uni.id), eq(financial_terms.isActive, 1)))
-    .orderBy(financial_terms.sortOrder);
+  // مسیر کانونی: کارنامهٔ ترم‌به‌ترم + جمع‌ها (همان که صفحات مالی نشان می‌دهند)
+  const fin = await getStudentFinance(studentId, { universityId: uni.id });
+  if (!fin) return Response.json({ error: 'دانشجو یافت نشد' }, { status: 404 });
 
-  const termIds = finTerms.map(t => t.id);
-  if (termIds.length === 0) return Response.json({ rows: [] });
+  // کل دفتر (همهٔ ترم‌ها) — برای تفکیک نمایشی و ماندهٔ کانونیِ سبکِ گیت
+  const ledgerRows = await db.select({
+    termId: student_ledger.termId,
+    transactionType: student_ledger.transactionType,
+    amount: student_ledger.amount,
+  }).from(student_ledger).where(eq(student_ledger.studentId, studentId));
 
-  // Get all ledger entries for this student across all financial terms
-  const ledgerRows = await db.select().from(student_ledger)
-    .where(and(
-      eq(student_ledger.studentId, studentId),
-      inArray(student_ledger.financialTermId, termIds)
-    ));
+  // ماندهٔ کانونی روی کل دفتر (مثبت = بدهی) — همان ریاضیِ گیت انتخاب واحد
+  const balance = ledgerBalance(ledgerRows);
 
-  // Get student info
-  const [user] = await db.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, stu.userId)).limit(1);
-
-  // Aggregate by financial term
-  const agg = new Map<number, {
-    tuitionFixed: number;
-    tuitionVariable: number;
-    discountFixed: number;
-    discountVariable: number;
-    subjectAdditive: number;
-    subjectDeductive: number;
-    sponsorship: number;
-    payments: number;
-    posPayments: number;
-    loans: number;
-  }>();
-
-  for (const row of ledgerRows) {
-    const termId = row.financialTermId!;
-    const type = row.transactionType as string;
-    const amount = toNum(row.amount);
-    if (!agg.has(termId)) {
-      agg.set(termId, { tuitionFixed: 0, tuitionVariable: 0, discountFixed: 0, discountVariable: 0, subjectAdditive: 0, subjectDeductive: 0, sponsorship: 0, payments: 0, posPayments: 0, loans: 0 });
-    }
-    const a = agg.get(termId)!;
-    switch (type) {
-      case 'TUITION_FIXED': a.tuitionFixed += amount; break;
-      case 'TUITION_VARIABLE': a.tuitionVariable += amount; break;
-      case 'DISCOUNT_FIXED': a.discountFixed += amount; break;
-      case 'DISCOUNT_VARIABLE': a.discountVariable += amount; break;
-      case 'SUBJECT_ADDITIVE': a.subjectAdditive += amount; break;
-      case 'SUBJECT_DEDUCTIVE': a.subjectDeductive += amount; break;
-      case 'SPONSORSHIP': a.sponsorship += amount; break;
-      case 'PAYMENT': a.payments += amount; break;
-      case 'POS_PAYMENT': a.posPayments += amount; break;
-      case 'LOAN': a.loans += amount; break;
-    }
+  // جمعِ خام هر نوع تراکنش به‌تفکیک ترم تحصیلی (بدون منطق مالی — فقط نمایش)
+  const NO_TERM = 0;
+  const byTermType = new Map<number, Map<string, number>>();
+  for (const r of ledgerRows) {
+    const key = r.termId ?? NO_TERM;
+    const t = String(r.transactionType ?? '').trim().toUpperCase();
+    const slot = byTermType.get(key) || new Map<string, number>();
+    slot.set(t, (slot.get(t) || 0) + toNum(r.amount));
+    byTermType.set(key, slot);
   }
 
-  // Build response rows
-  const rows = finTerms.map(t => {
-    const a = agg.get(t.id) || { tuitionFixed: 0, tuitionVariable: 0, discountFixed: 0, discountVariable: 0, subjectAdditive: 0, subjectDeductive: 0, sponsorship: 0, payments: 0, posPayments: 0, loans: 0 };
-    const balance = a.tuitionFixed + a.tuitionVariable + a.subjectAdditive
-      - a.discountFixed - a.discountVariable - a.subjectDeductive - a.sponsorship
-      - a.payments - a.posPayments - a.loans;
+  const termCodeById = new Map(fin.terms.map((t) => [t.id, t.termCode]));
+  const rows = fin.transcript.map((s) => {
+    const byType = byTermType.get(s.termId) || new Map<string, number>();
+    const get = (t: string) => byType.get(t) || 0;
     return {
-      termId: t.id,
-      termCode: t.termCode,
-      termTitle: t.title,
-      tuitionFixed: a.tuitionFixed,
-      tuitionVariable: a.tuitionVariable,
-      discountFixed: a.discountFixed,
-      discountVariable: a.discountVariable,
-      subjectAdditive: a.subjectAdditive,
-      subjectDeductive: a.subjectDeductive,
-      sponsorship: a.sponsorship,
-      payments: a.payments,
-      posPayments: a.posPayments,
-      loans: a.loans,
-      balance,
+      termId: s.termId,
+      termCode: termCodeById.get(s.termId) ?? '',
+      termTitle: s.termTitle,
+      // تفکیک سما (نمایشی — از ردیف‌های خام همان ترم تحصیلی)
+      tuitionFixed: get('TUITION_FIXED'),
+      tuitionVariable: get('TUITION_VARIABLE'),
+      discountFixed: get('DISCOUNT_FIXED'),
+      discountVariable: get('DISCOUNT_VARIABLE'),
+      subjectAdditive: get('SUBJECT_ADDITIVE'),
+      subjectDeductive: get('SUBJECT_DEDUCTIVE'),
+      sponsorship: get('SPONSORSHIP'),
+      payments: get('PAYMENT'),
+      posPayments: get('POS_PAYMENT'),
+      loans: get('LOAN'),
+      // اعداد کانونی (برابر با getStudentFinance — مثبت = بدهی)
+      charges: s.charges,
+      discounts: s.discounts,
+      sponsorships: s.sponsorships,
+      canonicalPayments: s.payments,
+      chequesCleared: s.chequesCleared,
+      chequesPending: s.chequesPending,
+      chequesBounced: s.chequesBounced,
+      canonicalLoans: s.loans,
+      netPayable: s.netPayable,
+      balance: s.balance,
     };
   });
 
-  return Response.json({ rows, student: { name: `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim(), code: stu.studentCode } });
+  return Response.json({
+    rows,
+    totals: fin.totals,
+    balance,
+    student: { name: fin.student.fullName, code: fin.student.studentCode },
+  });
 }

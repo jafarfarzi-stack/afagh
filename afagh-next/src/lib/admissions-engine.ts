@@ -269,6 +269,12 @@ export interface StagingParsedRow {
 
 const NATIONAL_CODE_RE = /^\d{10}$/;
 
+/** نمایش ماسک‌شدهٔ کد ملی در لاگ/خروجی تشخیصی — هرگز خام لاگ نکنید */
+const maskNc = (nc: string) => {
+  const s = String(nc ?? '');
+  return s.length <= 4 ? '[REDACTED]' : `${s.slice(0, 3)}*******${s.slice(-1)}`;
+};
+
 export async function parseAndStageSanjeshData(rawText: string, entryYear = 1405) {
   await ensureDefaultSanjeshMappings();
 
@@ -306,7 +312,7 @@ export async function parseAndStageSanjeshData(rawText: string, entryYear = 1405
 
     // ── اعتبارسنجی کد ملی: ۱۰ رقم — خطوط نامعتبر بی‌صدا وارد سیستم نمی‌شوند ──
     if (!NATIONAL_CODE_RE.test(nationalCode)) {
-      console.warn(`[sanjesh-parser] کد ملی نامعتبر نادیده گرفته شد: «${nationalCode}»`);
+      console.warn(`[sanjesh-parser] کد ملی نامعتبر نادیده گرفته شد: «${maskNc(nationalCode)}»`);
       skippedInvalid++;
       continue;
     }
@@ -494,7 +500,7 @@ export async function importStagedToStudents(stagingIds: number[]) {
       });
     } catch (err: any) {
       // رکورد ناموفق به‌طور کامل rollback شد — بقیهٔ دسته ادامه می‌یابد
-      console.error(`[admissions-import] staging ${row.id} (${row.nationalCode}) ناموفق:`, err?.message);
+      console.error(`[admissions-import] staging ${row.id} (${maskNc(row.nationalCode)}) ناموفق:`, err?.message);
       failures.push({ stagingId: row.id, error: err?.message || 'خطای ناشناخته' });
     }
   }

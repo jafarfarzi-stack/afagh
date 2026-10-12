@@ -287,9 +287,9 @@ export async function rejectStatement(statementId: number, note: string): Promis
 
 /**
  * گام ۳ — تسویهٔ مالی با پیش‌شرط مرحله.
- * خودِ پرداخت همان settleFinal موتور است (فورک نشده)؛ گلوگاه‌های نمره/سند
- * و قفل سطری داخل موتور می‌ماند. پیش‌شرط DEAN_APPROVED این‌جا (بیرون از
- * تراکنش موتور) چک می‌شود — درز اتمی (seam ۱ در سربرگ فایل).
+ * خودِ پرداخت همان settleFinal موتور است (فورک نشده) با محمولهٔ
+ * DEAN_APPROVED داخل تراکنش موتور؛ ردیف FINANCE هم در همان تراکنش
+ * (afterSettle) می‌نشیند. گلوگاه‌های نمره/سند و قفل سطری داخل موتور می‌ماند.
  */
 export async function settleApproved(staffId: number): Promise<ApprovalResult> {
   try {
@@ -308,15 +308,13 @@ export async function settleApproved(staffId: number): Promise<ApprovalResult> {
     if (ps.status !== 'DEAN_APPROVED') {
       return { ok: false, error: 'تسویهٔ نهایی فقط پس از تأیید معاونت آموزشی ممکن است (وضعیت فعلی نیازمند طی زنجیرهٔ تأیید است).' };
     }
-    const res = await settleFinal(staffId, user.id, term.id);
-    // ثبت ردیف FINANCE در تاریخچه + ممیزی (پس از پرداخت موفق؛ جدا از تراکنش موتور)
-    try {
-      await db.transaction(async tx => {
-        await recordApprovalTx(tx, ps.id, 'FINANCE', user, role, 'APPROVE', 'DEAN_APPROVED', 'FINAL_SETTLED', null);
-      });
-    } catch (err) {
-      log.warn('payroll_finance_row_failed', { statementId: ps.id, err: (err as Error).message });
-    }
+    const res = await settleFinal(staffId, user.id, term.id, {
+      // 🔒 ردیف FINANCE در همان تراکنش تسویه نوشته می‌شود (afterSettle) —
+      // پرداخت بدون تاریخچه (یا تاریخچه بدون پرداخت) ممکن نیست.
+      afterSettle: async (tx, statementId) => {
+        await recordApprovalTx(tx, statementId, 'FINANCE', user, role, 'APPROVE', 'DEAN_APPROVED', 'FINAL_SETTLED', null);
+      },
+    });
     return { ok: true, amount: (res as { amount?: number }).amount };
   } catch (err) {
     return { ok: false, error: (err as Error)?.message || 'خطای ناشناخته' };

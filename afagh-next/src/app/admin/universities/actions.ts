@@ -36,6 +36,16 @@ export async function saveSaminConnection(formData: FormData) {
   const apiBaseUrl = String(formData.get('apiBaseUrl') || '').trim() || 'https://apim.saorg.ir';
   const authBaseUrl = String(formData.get('authBaseUrl') || '').trim() || 'https://apiauth.saorg.ir/oauth2/token';
 
+  // گارد SSRF: فقط https بدون userinfo + DNS عمومی + allow-list ثمین
+  const { assertSafeUrl } = await import('@/lib/ssrf-guard');
+  const { SAMIN_HOSTS } = await import('@/lib/ssrf-guard');
+  try {
+    await assertSafeUrl(apiBaseUrl, { allowedHosts: SAMIN_HOSTS });
+    await assertSafeUrl(authBaseUrl, { allowedHosts: SAMIN_HOSTS });
+  } catch (e) {
+    throw new Error(e instanceof Error ? `نشانی اتصال ثمین ناامن است: ${e.message}` : 'نشانی اتصال ثمین ناامن است.');
+  }
+
   const patch: Record<string, unknown> = { universityId, apiBaseUrl, authBaseUrl, clientId, username, isEnabled: 1, updatedAt: new Date() };
   if (clientSecret) (patch as any).clientSecretEnc = encryptSecret(clientSecret);
   if (password) (patch as any).passwordEnc = encryptSecret(password);

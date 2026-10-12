@@ -143,12 +143,23 @@ function buildBoardCalendarEntries(
   showTitle: boolean, showFirst: boolean, shortHonor = false,
   deptNameById: Map<number, string> = new Map(),
   noEngineerTitle = false,
+  /** نام استاد همکارِ مرتبط هر ارائه (وقتی استاد اصلی خالی است) — offeringId → یک نفر */
+  coTeachers: Map<number, Pick<BoardRow, 'profFirstName' | 'profLastName' | 'profRank' | 'profGender' | 'profLegacyTitle'>> = new Map(),
 ): { entries: BoardCalendarEntry[]; skipped: number } {
-  const profOf = (m: Pick<BoardRow, 'profFirstName' | 'profLastName' | 'profRank' | 'profGender' | 'profLegacyTitle' | 'deptId'>) =>
-    profDisplay(
+  const profOf = (m: BoardRow) => {
+    const main = profDisplay(
       m, showTitle, showFirst, shortHonor,
       !noEngineerTitle && !isHumanitiesDept(deptNameById.get(m.deptId ?? -1)),
     );
+    if (main) return main;
+    // استاد اصلی ثبت نشده → همان یک همکار مرتبط (تا چاپ «استاد:» خالی نماند)
+    const co = coTeachers.get(m.offeringId);
+    return co
+      ? profDisplay(co, showTitle, showFirst, shortHonor,
+          !noEngineerTitle && !isHumanitiesDept(deptNameById.get(m.deptId ?? -1)),
+        )
+      : '';
+  };
   type Raw = BoardRow & { uid: number };
   const groups = groupIntoMerged<Raw>(
     list.map((r, i) => ({ ...r, uid: i })),
@@ -285,6 +296,48 @@ export default async function WeeklyBoardPage({ searchParams }: {
     .orderBy(desc(academic_terms.id));
   const term = terms.find(t => t.id === termId) ?? terms.find(t => t.isCurrent === 1) ?? terms[0] ?? null;
 
+  // نام استاد همکار هر ارائهٔ ترم (fallback وقتی استاد اصلی خالی است — چاپ «استاد:» خالی نماند)
+  // ساده: فقط مرتبط‌ترین نفر (نقش استاد اصلی همکار، وگرنه بیشترین سهم تدریس)، نه فهرست همه.
+  const coTeachers: Map<number, Pick<BoardRow, 'profFirstName' | 'profLastName' | 'profRank' | 'profGender' | 'profLegacyTitle'>> =
+    term
+      ? await db
+          .select({
+            offeringId: offering_professors.offeringId,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            rank: staff.academicRank,
+            gender: users.gender,
+            legacyTitle: staff.title,
+            role: offering_professors.role,
+            share: offering_professors.sharePercentage,
+          })
+          .from(offering_professors)
+          .innerJoin(course_offerings, eq(course_offerings.id, offering_professors.offeringId))
+          .innerJoin(staff, eq(staff.id, offering_professors.staffId))
+          .innerJoin(users, eq(users.id, staff.userId))
+          .where(and(eq(course_offerings.termId, term.id), eq(course_offerings.isActive, 1)))
+          .then(coRows => {
+            const score = (role: string | null, share: string | number | null) =>
+              (String(role ?? '').toUpperCase().includes('MAIN') ? 1000 : 0) + Number(share ?? 0);
+            const best = new Map<number, Pick<BoardRow, 'profFirstName' | 'profLastName' | 'profRank' | 'profGender' | 'profLegacyTitle'>>();
+            const bestScore = new Map<number, number>();
+            for (const r of coRows) {
+              const s = score(r.role, r.share);
+              if (!best.has(r.offeringId) || s > (bestScore.get(r.offeringId) ?? -1)) {
+                best.set(r.offeringId, {
+                  profFirstName: r.firstName ?? null,
+                  profLastName: r.lastName ?? null,
+                  profRank: r.rank ?? null,
+                  profGender: r.gender ?? null,
+                  profLegacyTitle: r.legacyTitle ?? null,
+                });
+                bestScore.set(r.offeringId, s);
+              }
+            }
+            return best;
+          })
+      : new Map();
+
   const facRows = await db.select({ id: faculties.id, name: faculties.name }).from(faculties)
     .where(uni ? eq(faculties.universityId, uni.id) : undefined)
     .orderBy(asc(faculties.name));
@@ -368,7 +421,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
           eq(course_offerings.termId, term.id),
           eq(course_offerings.isActive, 1),
           ...(selRoom ? [inArray(schedules.roomId, selRoom.aliasIds)] : roomId ? [sql`1=0`] : []),
-          ...await scopeConds(user.roles, deptId, facultyId),
+          ...await scopeConds(user.roles, deptId, facultyId, uni?.id ?? null),
         ))
         .orderBy(asc(courses.title), asc(course_offerings.groupNumber))
     : [];
@@ -385,7 +438,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
   let personRows: BoardRow[] = [];
   if ((tab === 'prof' || tab === 'student') && q && term) {
     personSearched = true;
-    const scope = await scopeConds(user.roles, 0, 0);
+    const scope = await scopeConds(user.roles, 0, 0, uni?.id ?? null);
     if (tab === 'prof') {
       const [p] = await db.select({
         id: staff.id, staffCode: staff.staffCode,
@@ -590,7 +643,9 @@ export default async function WeeklyBoardPage({ searchParams }: {
             </div>
           ) : (
             /* سردرِ یک کلاس: نام کلاس در هر بلوک تکراری است → نام استاد نشان داده می‌شود */
-            <ProfessorCalendarGrid entries={boardEntries} placeMode="professor" showCode={showCode} />
+            poster
+              ? <ProfessorCalendarGrid entries={boardEntries} placeMode="professor" showCode={showCode} doorPrint />
+              : <ProfessorCalendarGrid entries={boardEntries} placeMode="professor" showCode={showCode} />
           )}
           {boardSkipped > 0 && boardEntries.length > 0 && (
             <p className="print:hidden text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
@@ -655,20 +710,36 @@ export default async function WeeklyBoardPage({ searchParams }: {
   );
 }
 
-async function scopeConds(roles: string[], deptId: number, facultyId: number): Promise<any[]> {
+async function scopeConds(roles: string[], deptId: number, facultyId: number, uniId: number | null): Promise<any[]> {
   const c: any[] = [];
-  if (deptId) c.push(eq(courses.departmentId, deptId));
-  else if (facultyId) {
-    const ids = (await db.select({ id: departments.id }).from(departments).where(eq(departments.facultyId, facultyId))).map(r => r.id);
-    // fail-closed: دانشکدهٔ بدون گروه یعنی «هیچ» — نه «همه» (باگ نمایش همهٔ دانشکده‌ها)
-    c.push(ids.length ? inArray(courses.departmentId, ids) : sql`1=0`);
+  if (deptId) {
+    // اعتبارسنجی گروه در برابر دانشگاه جاری — نامعتبر/بیگانه → هیچ (fail-closed)
+    const [d] = await db.select({ id: departments.id, universityId: departments.universityId }).from(departments).where(eq(departments.id, deptId)).limit(1);
+    if (!d || (uniId && d.universityId && d.universityId !== uniId)) c.push(sql`1=0`);
+    else c.push(eq(courses.departmentId, deptId));
+  } else if (facultyId) {
+    const [fc] = await db.select({ id: faculties.id, universityId: faculties.universityId }).from(faculties).where(eq(faculties.id, facultyId)).limit(1);
+    if (!fc || (uniId && fc.universityId && fc.universityId !== uniId)) {
+      c.push(sql`1=0`);
+    } else {
+      const ids = (await db.select({ id: departments.id }).from(departments).where(eq(departments.facultyId, facultyId))).map(r => r.id);
+      // fail-closed: دانشکدهٔ بدون گروه یعنی «هیچ» — نه «همه» (باگ نمایش همهٔ دانشکده‌ها)
+      c.push(ids.length ? inArray(courses.departmentId, ids) : sql`1=0`);
+    }
   }
   if (roles.includes('EDU_EXPERT')) {
     const eff = await currentExpertFilters().catch(() => null);
+    // تقاطع دانشگاهی: دامنهٔ کارشناس باید دانشگاه جاری را پوشش دهد
+    if (eff?.universityIds && (!uniId || !eff.universityIds.includes(uniId))) c.push(sql`1=0`);
     if (eff?.departmentIds) c.push(inArray(courses.departmentId, eff.departmentIds));
     else if (eff?.facultyIds) {
       const ids = (await db.select({ id: departments.id }).from(departments).where(inArray(departments.facultyId, eff.facultyIds))).map(r => r.id);
-      if (ids.length) c.push(inArray(courses.departmentId, ids));
+      c.push(ids.length ? inArray(courses.departmentId, ids) : sql`1=0`);
+    } else if (eff?.majorIds) {
+      // رشته‌های مجاز کارشناس → گروه‌های آن‌ها (نگاشت رشته→گروه)
+      const mrows = await db.select({ departmentId: majors.departmentId }).from(majors).where(inArray(majors.id, eff.majorIds)).limit(5000);
+      const ds = [...new Set(mrows.map(r => r.departmentId).filter((n): n is number => typeof n === 'number'))];
+      c.push(ds.length ? inArray(courses.departmentId, ds) : sql`1=0`);
     }
   }
   return c;

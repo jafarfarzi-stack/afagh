@@ -2,8 +2,9 @@
 
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { short_term_courses, short_term_discounts, short_term_learners, short_term_registrations } from '@/db/schema';
+import { short_term_certificates, short_term_courses, short_term_discounts, short_term_learners, short_term_registrations } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { auditChain } from '@/lib/audit-chain';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { issueShortTermCertificate, revokeCertificate } from '@/lib/verification';
 import { invalidateSettingsCache } from '@/lib/settings';
@@ -133,9 +134,25 @@ export async function updateRegistrationAction(input: {
 
 /** صدور گواهینامهٔ رسمی با اثر انگشت امنیتی */
 export async function issueCertificateAction(registrationId: number) {
-  await requireRole(['ADMIN', 'EDU_EXPERT']);
+  const me = await requireRole(['ADMIN', 'EDU_EXPERT']);
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return fail('دانشگاه فعال نامشخص است.');
+  const [reg] = await db
+    .select({ id: short_term_registrations.id, universityId: short_term_registrations.universityId })
+    .from(short_term_registrations)
+    .where(eq(short_term_registrations.id, Number(registrationId)))
+    .limit(1);
+  if (!reg) return fail('ثبت‌نام یافت نشد.');
+  if (reg.universityId !== null && reg.universityId !== uni.id) return fail('ثبت‌نام متعلق به دانشگاه دیگری است.');
   try {
     const res = await issueShortTermCertificate(Number(registrationId));
+    await db.transaction(async tx => {
+      await auditChain(tx, me.id, 'SHORT_TERM_CERTIFICATE_ISSUED', 'short_term_certificate', res.id, {
+        registrationId: reg.id,
+        certificateNumber: res.certificateNumber,
+        reason: 'صدور گواهینامه توسط کارشناس آموزش',
+      });
+    });
     return ok(res);
   } catch (err) {
     return fail((err as Error)?.message || 'صدور گواهینامه ناموفق بود.');
@@ -143,12 +160,28 @@ export async function issueCertificateAction(registrationId: number) {
 }
 
 /** باطل‌سازی گواهینامه */
-export async function revokeCertificateAction(certificateNumber: string) {
-  await requireRole(['ADMIN', 'EDU_EXPERT']);
+export async function revokeCertificateAction(certificateNumber: string, reason?: string) {
+  const me = await requireRole(['ADMIN', 'EDU_EXPERT']);
   const code = String(certificateNumber ?? '').trim().toUpperCase();
   if (!code) return fail('شمارهٔ گواهینامه را وارد کنید.');
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!uni) return fail('دانشگاه فعال نامشخص است.');
+  const [cert] = await db
+    .select({ id: short_term_certificates.id, universityId: short_term_certificates.universityId })
+    .from(short_term_certificates)
+    .where(eq(short_term_certificates.certificateNumber, code))
+    .limit(1);
+  if (!cert) return fail('گواهینامه یافت نشد.');
+  if (cert.universityId !== null && cert.universityId !== uni.id) return fail('گواهینامه متعلق به دانشگاه دیگری است.');
+  const why = String(reason ?? '').trim() || 'باطل‌سازی توسط مدیر آموزش';
   await revokeCertificate(code);
-  log.info('certificate_revoked', { certificateNumber: code });
+  await db.transaction(async tx => {
+    await auditChain(tx, me.id, 'SHORT_TERM_CERTIFICATE_REVOKED', 'short_term_certificate', cert.id, {
+      certificateNumber: code,
+      reason: why,
+    });
+  });
+  log.info('certificate_revoked', { certificateNumber: code, reason: why });
   return ok({ certificateNumber: code });
 }
 

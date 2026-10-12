@@ -61,6 +61,17 @@ function appRoleSecret(): string {
 }
 
 /**
+ * کلیدهای S3/MinIO — همان قرارداد objectStore.ts (S3_* وگرنه MINIO_ROOT_*).
+ * خالی یعنی «تنظیم نشده»؛ پر بودن با پیش‌فرض توسعه یعنی «نصب ناامن».
+ */
+function s3AccessKey(): string {
+  return (process.env.S3_ACCESS_KEY || process.env.MINIO_ROOT_USER || '').trim();
+}
+function s3SecretKey(): string {
+  return (process.env.S3_SECRET_KEY || process.env.MINIO_ROOT_PASSWORD || '').trim();
+}
+
+/**
  * در production اجرا می‌شود و روی نقض، startup را می‌بندد (fail-closed).
  * در build (NEXT_PHASE) و توسعه فقط هشدار می‌دهد.
  */
@@ -74,6 +85,14 @@ export function assertProdSecrets(): void {
       checks.push(checkDbSecret('رمز کاربر مالک در DATABASE_URL', owner, allowWeak));
     } catch { /* URL غیراستاندارد — اتصال خودش خطا می‌دهد */ }
   }
+  // P1: کلیدهای S3/MinIO هم با همان سیاست — پیش‌فرض‌های توسعهٔ محلی
+  // (مقادیر docker-compose.yml) در پروداکشن fail-closed است. اگر هیچ‌کدام
+  // تنظیم نشده باشد، objectStore با پیش‌فرض داخلی بالا می‌آید؛ پس بلند هشدار
+  // می‌دهیم تا در سکوت نماند (نصب‌های قدیمی که S3 نمی‌خواهند نمی‌شکنند).
+  const access = s3AccessKey();
+  const secret = s3SecretKey();
+  if (access) checks.push(checkDbSecret('S3_ACCESS_KEY', access, allowWeak));
+  if (secret) checks.push(checkDbSecret('S3_SECRET_KEY', secret, allowWeak));
   for (const r of checks) {
     if (!r.ok) {
       throw new Error(
@@ -84,5 +103,11 @@ export function assertProdSecrets(): void {
     }
     if (r.weak) console.warn('[db] ⚠ سکرت ضعیف با ALLOW_WEAK_SECRETS=1 پذیرفته شد — فقط برای توسعه/دمو.');
     if (r.short) console.warn(`[db] ⚠ ${r.reason} — برای پروداکشن بلندترش کنید.`);
+  }
+  if (!access && !secret) {
+    console.warn(
+      '[s3] ⚠ هیچ‌یک از S3_ACCESS_KEY / S3_SECRET_KEY (یا MINIO_ROOT_USER / MINIO_ROOT_PASSWORD) تنظیم نشده است — ' +
+      'اتصال Object Storage با پیش‌فرض داخلی توسعه بالا می‌آید. اگر این سرور پروداکشن واقعی با بایگانی است، کلید قوی بگذارید.',
+    );
   }
 }

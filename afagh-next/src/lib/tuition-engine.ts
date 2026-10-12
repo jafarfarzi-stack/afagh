@@ -290,21 +290,12 @@ export async function chargeTermTuition(
   opts?: { includeFixed?: boolean },
 ): Promise<{ charged: number; totalTuition: number }> {
   const t = await computeTermTuition(studentId, termId, opts);
+  // 🔒 منفی هرگز بی‌صدا صفر نمی‌شود: هشدار می‌ماند تا علت (تخفیف/پوششِ بیش‌ازحد) بررسی شود.
+  if (t.totalTuition < 0) {
+    console.warn(`[tuition] negative total for student=${studentId} term=${termId}: ${t.totalTuition}`);
+  }
   // مبلغ نهایی هرگز منفی نمی‌شود
-  const amount = Math.max(0, t.totalTuition);
-
-  const [existing] = await db
-    .select({ id: student_ledger.id })
-    .from(student_ledger)
-    .where(and(
-      eq(student_ledger.studentId, studentId),
-      eq(student_ledger.termId, termId),
-      eq(student_ledger.transactionType, 'TUITION_CHARGE'),
-    ))
-    .limit(1);
-
-  // چیزی برای شارژ نیست و پیش‌تر هم شارژی ثبت نشده → هیچ کاری لازم نیست
-  if (amount === 0 && !existing) return { charged: 0, totalTuition: t.totalTuition };
+  const amount = Math.max(0, Math.round(t.totalTuition));
 
   const [term] = await db.select({ title: academic_terms.title }).from(academic_terms).where(eq(academic_terms.id, termId)).limit(1);
   const coeffNote = (t.fixedCoefficient !== 1 || t.variableCoefficient !== 1)
@@ -315,21 +306,69 @@ export async function chargeTermTuition(
     : '';
   const desc = `شهریهٔ ترم «${term?.title ?? termId}» — ثابت ${t.fixedTuitionAfterCoeff.toLocaleString('fa-IR')} + متغیر ${t.variableTuitionAfterCoeff.toLocaleString('fa-IR')}${subjectNote}${coeffNote}`;
 
-  // نکته: اگر amount صفر شد ولی شارژ قبلی وجود دارد، باید «صفر» شود.
-  if (existing) {
-    await db.update(student_ledger)
-      .set({ amount: String(amount), description: desc })
-      .where(eq(student_ledger.id, existing.id));
-  } else {
-    await db.insert(student_ledger).values({
-      studentId,
-      termId,
-      transactionType: 'TUITION_CHARGE',
-      amount: String(amount),
-      description: desc,
-    });
-  }
-  return { charged: amount, totalTuition: t.totalTuition };
+  // 🔒 اتمیک: انتخاب-قفل-به‌روزرسانی/درج در یک تراکنش واحد با FOR UPDATE تا
+  // شارژ همزمانِ یک ترم دو ردیف نسازد (بک‌استاپ: ایندکس یکتای جزئی
+  // uq_student_ledger_tuition_charge). universityId همیشه ست می‌شود.
+  return db.transaction(async (tx) => {
+    const [stu] = await tx.select({ universityId: students.universityId })
+      .from(students).where(eq(students.id, studentId)).limit(1);
+    if (!stu) throw new Error('دانشجو یافت نشد');
+    if (stu.universityId === null) throw new Error('دانشگاه دانشجو نامشخص است؛ شارژ ممکن نیست');
+
+    const [existing] = await tx
+      .select({ id: student_ledger.id })
+      .from(student_ledger)
+      .where(and(
+        eq(student_ledger.studentId, studentId),
+        eq(student_ledger.termId, termId),
+        eq(student_ledger.transactionType, 'TUITION_CHARGE'),
+      ))
+      .limit(1)
+      .for('update');
+
+    // چیزی برای شارژ نیست و پیش‌تر هم شارژی ثبت نشده → هیچ کاری لازم نیست
+    if (amount === 0 && !existing) return { charged: 0, totalTuition: t.totalTuition };
+
+    // نکته: اگر amount صفر شد ولی شارژ قبلی وجود دارد، باید «صفر» شود.
+    if (existing) {
+      await tx.update(student_ledger)
+        .set({ amount: String(amount), description: desc })
+        .where(eq(student_ledger.id, existing.id));
+    } else {
+      try {
+        await tx.insert(student_ledger).values({
+          universityId: stu.universityId,
+          studentId,
+          termId,
+          transactionType: 'TUITION_CHARGE',
+          amount: String(amount),
+          description: desc,
+        });
+      } catch (e: any) {
+        // رقابت همزمانِ نادر (بک‌استاپ یکتا): ردیفِ برنده را به‌روز کن.
+        const msg = String(e?.message ?? e);
+        if ((e as { code?: string })?.code === '23505' || msg.toLowerCase().includes('duplicate key')) {
+          const [winner] = await tx
+            .select({ id: student_ledger.id })
+            .from(student_ledger)
+            .where(and(
+              eq(student_ledger.studentId, studentId),
+              eq(student_ledger.termId, termId),
+              eq(student_ledger.transactionType, 'TUITION_CHARGE'),
+            ))
+            .limit(1)
+            .for('update');
+          if (!winner) throw e;
+          await tx.update(student_ledger)
+            .set({ amount: String(amount), description: desc })
+            .where(eq(student_ledger.id, winner.id));
+        } else {
+          throw e;
+        }
+      }
+    }
+    return { charged: amount, totalTuition: t.totalTuition };
+  });
 }
 
 /** سیاست شهریهٔ ثابت معادل‌سازی — از تنظیم EQUIV_FIXED_TUITION_MODE (دیتابیس ← ENV ← پیش‌فرض) */

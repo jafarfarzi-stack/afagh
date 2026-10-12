@@ -540,6 +540,20 @@
       "when": 1793808000000,
       "tag": "0072_grade_unfinalize",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1793894400000,
+      "tag": "0073_verification_otp_hash",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1793980800000,
+      "tag": "0073_ledger_types",
+      "breakpoints": true
     }
   ]
 }

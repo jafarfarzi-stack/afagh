@@ -11,10 +11,21 @@
  */
 import pg from 'pg';
 import { randomBytes, scrypt } from 'node:crypto';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 const APPLY = process.argv.includes('--apply');
-const CONC = Number(process.env.CONC || 32);
+const CONC_RAW = String(process.env.CONC ?? '32').trim();
+if (!/^\d+$/.test(CONC_RAW)) {
+  console.error(`CONC نامعتبر است («${process.env.CONC}») — باید عدد صحیح مثبت باشد`);
+  process.exit(1);
+}
+const CONC = Number(CONC_RAW);
+if (!Number.isSafeInteger(CONC) || CONC < 1 || CONC > 256) {
+  console.error(`CONC نامعتبر است («${CONC_RAW}») — باید عدد صحیح بین ۱ تا ۲۵۶ باشد`);
+  process.exit(1);
+}
 const DBURL = process.env.DATABASE_URL || process.env.DBURL;
 if (!DBURL) {
   console.error('DATABASE_URL/DBURL تنظیم نشده');
@@ -81,12 +92,17 @@ async function main() {
     return;
   }
 
-  // بکاپ برگشت‌پذیر هش‌ها
+  // بکاپ برگشت‌پذیر هش‌ها (بدون shell: آرگومان‌ها به‌صورت آرایه پاس داده می‌شوند)
   const ts = new Date().toISOString().replace(/[:.]/g, '').slice(0, 15);
   const bakFile = `/root/afagh/backups/pw-badhash-${ts}.csv`;
-  execSync(
-    `docker exec afagh_pg psql -U afagh -d afagh_db -c "COPY (SELECT id, \\"passwordHash\\", \\"mustChangePassword\\" FROM users WHERE \\"passwordHash\\" NOT SIMILAR TO '[0-9a-f]{32}:[0-9a-f]{64}') TO STDOUT CSV" > ${bakFile}`,
+  mkdirSync(dirname(bakFile), { recursive: true });
+  const bakSql = `COPY (SELECT id, "passwordHash", "mustChangePassword" FROM users WHERE "passwordHash" NOT SIMILAR TO '[0-9a-f]{32}:[0-9a-f]{64}') TO STDOUT CSV`;
+  const bakOut = execFileSync(
+    'docker',
+    ['exec', 'afagh_pg', 'psql', '-U', 'afagh', '-d', 'afagh_db', '-c', bakSql],
+    { encoding: 'buffer', maxBuffer: 256 << 20 },
   );
+  writeFileSync(bakFile, bakOut);
   console.log(`بکاپ هش‌ها: ${bakFile}`);
 
   let done = 0;

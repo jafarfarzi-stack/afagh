@@ -1,8 +1,15 @@
 import { toNum, toMs } from './numbers';
 import type { AppliedAmount } from './discounts';
+import { CREDIT_LEDGER_TYPES, DEBT_LEDGER_TYPES } from '../ledger-balance';
 
 // ══════════════════════════════════════════════════════════════════════
 //  کارنامهٔ مالی ترم‌به‌ترم
+//
+//  قرارداد علامت (یکپارچه با تراز کانونی ledger-balance.ts):
+//  مثبت = بدهی دانشجو. charges/netPayable/balance همگی با همین قراردادند.
+//  تنها استثنا StatementEvent.sign است که «جهت نمایشی رویداد» است
+//  (۱+ = به نفع دانشجو/سبز، ۱− = به زیان او/قرمز) و مصرف‌کننده‌هایش
+//  (صفحات کارنامه) به همین شکل به آن تکیه دارند — دست نخورده می‌ماند.
 // ══════════════════════════════════════════════════════════════════════
 
 export interface LedgerTxn {
@@ -33,21 +40,32 @@ export interface LoanRow {
   status: string | null;
 }
 
-/** انواع تراکنش دفتر مالی که «بدهی» می‌سازند */
-export const CHARGE_TYPES = ['CHARGE', 'TUITION_CHARGE'] as const;
-/** انواع تراکنش دفتر مالی که «پرداخت» شمرده می‌شوند */
-export const PAYMENT_TYPES = ['PAYMENT', 'CREDIT'] as const;
+/**
+ * انواع تراکنش دفتر مالی که «بدهی» می‌سازند — عینِ واژگان کانونی
+ * (DEBT_LEDGER_TYPES). تعریف محلیِ جدا ممنوع است تا کارنامه و گیت‌ها
+ * واگرا نشوند؛ مثبت = بدهی دانشجو.
+ */
+export const CHARGE_TYPES = DEBT_LEDGER_TYPES;
+/**
+ * انواع تراکنش دفتر مالی که «اعتبار» می‌سازند (کاهش بدهی) — عینِ
+ * واژگان کانونی (CREDIT_LEDGER_TYPES).
+ */
+export const PAYMENT_TYPES = CREDIT_LEDGER_TYPES;
 /** چک با این وضعیت پرداخت شمرده می‌شود */
 export const CHEQUE_CLEARED = 'CLEARED';
-/** وام با این وضعیت به مانده اثر می‌گذارد */
-export const LOAN_ACTIVE = ['ACTIVE', 'SETTLED'] as const;
+/** وام با این وضعیت به مانده اثر می‌گذارد — فقط ACTIVE؛ وام SETTLED (تسویه‌شده،
+ *  یعنی بدهی‌اش برگشته) هرگز بدهی را کم نمی‌کند، وگرنه مانده برای همیشه منفیِ کاذب می‌ماند. */
+export const LOAN_ACTIVE = ['ACTIVE'] as const;
+
+const CHARGE_SET: ReadonlySet<string> = new Set(CHARGE_TYPES);
+const PAYMENT_SET: ReadonlySet<string> = new Set(PAYMENT_TYPES);
 
 export function isChargeType(type: string | null): boolean {
-  return CHARGE_TYPES.includes((type || '').toUpperCase() as (typeof CHARGE_TYPES)[number]);
+  return CHARGE_SET.has(String(type || '').trim().toUpperCase());
 }
 
 export function isPaymentType(type: string | null): boolean {
-  return PAYMENT_TYPES.includes((type || '').toUpperCase() as (typeof PAYMENT_TYPES)[number]);
+  return PAYMENT_SET.has(String(type || '').trim().toUpperCase());
 }
 
 /** رویداد کارنامهٔ مالی — «چه اتفاقی افتاده» */
@@ -215,7 +233,11 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
       });
     }
 
-    const netPayable = charges - discounts - sponsorships;
+    // 🔒 سقف: جمع تخفیف+پوشش هرگز از شهریهٔ همان ترم بیشتر نمی‌شود؛
+    // خالصِ قابل‌پرداخت منفی (طلبِ کاذب به نفع دانشجو) ساخته نمی‌شود.
+    const cappedDiscounts = Math.min(discounts, charges);
+    const cappedSponsorships = Math.min(sponsorships, Math.max(0, charges - cappedDiscounts));
+    const netPayable = charges - cappedDiscounts - cappedSponsorships;
     const balance = netPayable - payments - chequesCleared - loans;
 
     events.sort((a, b) => {
@@ -229,8 +251,8 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
       termId,
       termTitle: termId === NO_TERM ? 'بدون ترم' : titles[String(termId)] || `ترم ${termId}`,
       charges,
-      discounts,
-      sponsorships,
+      discounts: cappedDiscounts,
+      sponsorships: cappedSponsorships,
       payments,
       chequesCleared,
       chequesPending,

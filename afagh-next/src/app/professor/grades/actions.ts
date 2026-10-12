@@ -31,7 +31,7 @@ import { ensureGradePersistence, resolveStudentRow } from '@/lib/demo-grades-see
 import { logGradeChange, logBulkGradeChange } from '@/lib/grade-change-log';
 import { resolveSamaGradeStatusCode } from '@/lib/resolve-sama-code';
 import type { StudentGradeField } from './types';
-import { SCORE_FIELDS } from './grades-core';
+import { DEFAULT_RUBRIC, SCORE_FIELDS, rubricFieldMax } from './grades-core';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // انواع
@@ -89,6 +89,25 @@ async function memberOwnershipOk(staffId: number, targets: number[]): Promise<bo
   return offs.every(o => o.professorId === staffId || coSet.has(o.id));
 }
 
+/**
+ * نقش/وضعیت درس مشترک از پایگاه داده (مرجع — نه ادعای کلاینت).
+ * نگاشت نقش از professor-data.ts: ‏PRACTICAL/LAB → بخش عملی، بقیه → تئوری.
+ * درس مشترک = حداقل دو ردیف در offering_professors (همان قاعدهٔ coTaughtPartners).
+ */
+async function serverCoTeach(
+  offeringId: number,
+  staffId: number,
+): Promise<{ isCoTaught: boolean; role?: 'THEORY' | 'LAB' }> {
+  const rows = await db
+    .select({ staffId: offering_professors.staffId, role: offering_professors.role })
+    .from(offering_professors)
+    .where(eq(offering_professors.offeringId, offeringId));
+  if (rows.length < 2) return { isCoTaught: false };
+  const mine = rows.find(r => r.staffId === staffId);
+  const role = mine && (mine.role === 'PRACTICAL' || mine.role === 'LAB') ? 'LAB' as const : 'THEORY' as const;
+  return { isCoTaught: true, role };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ذخیرهٔ یک نمره (با پس‌زمینهٔ غیرمزاحم — بدون قفل UI)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,24 +141,26 @@ export async function saveGradeAction(
       return invalid('فیلد نمره نامعتبر است.');
     }
 
-    // ۲) اعتبارسنجی عددی: بازهٔ ۰..۲۰ و سقف بارم
+    // ۲) اعتبارسنجی عددی: سقف سخت ۰..۲۰.
+    // ⚠️ سقف بارم (payload.rubricMax) فقط راهنمای UI است و برای مجوز استفاده نمی‌شود:
+    // هیچ جدول بارم سمت سرور وجود ندارد (بارم فقط در DEFAULT_RUBRIC کلاینت است)، پس
+    // سرور فقط سقف ۰..۲۰ را اعمال می‌کند. ایزوله‌سازی درس مشترک پایین‌تر از روی
+    // نقش پایگاه داده (offering_professors.role) اعمال می‌شود.
     if (payload.value === null) {
       // پاک‌سازی نمره مجاز است
     } else if (!Number.isFinite(payload.value) || payload.value < 0 || payload.value > 20) {
       return invalid('نمره باید بین ۰ تا ۲۰ باشد.');
-    } else if (
-      !payload.isCoTaught &&
-      payload.value > Math.min(20, Math.max(0, payload.rubricMax))
-    ) {
-      return invalid(`نمرهٔ واردشده از سقف بارم (${payload.rubricMax}) بیشتر است.`);
     }
-    // در درس مشترک: سقف برای هر دو بخش از ۲۰ است؛ نقش به‌صورت ایزوله اعمال می‌شود:
-    if (payload.isCoTaught) {
-      const role = payload.coTaughtRole;
-      if (role === 'THEORY' && payload.field === 'labProfScore') {
+    // در درس مشترک: ایزوله‌سازی از روی مرجع سرور (نه ادعای کلاینت).
+    // ادعای کلاینت فقط می‌تواند محدودیت را بیشتر کند، نه کمتر (تضعیف ممنوع).
+    const serverCo = await serverCoTeach(payload.offeringId, me.id);
+    const effectiveCoTaught = serverCo.isCoTaught || payload.isCoTaught;
+    const effectiveRole = serverCo.role ?? payload.coTaughtRole;
+    if (effectiveCoTaught) {
+      if (effectiveRole === 'THEORY' && payload.field === 'labProfScore') {
         return invalid('دسترسی: استاد بخش تئوری اجازهٔ تغییر نمرهٔ عملی را ندارد.');
       }
-      if (role === 'LAB' && payload.field === 'theoryProfScore') {
+      if (effectiveRole === 'LAB' && payload.field === 'theoryProfScore') {
         return invalid('دسترسی: استاد بخش عملی اجازهٔ تغییر نمرهٔ تئوری را ندارد.');
       }
     }
@@ -221,6 +242,16 @@ export async function submitTemporaryAction(
 
     const targets = mergedTargets(payload);
     if (!(await memberOwnershipOk(me.id, targets))) return invalid('شما استاد مسئول این درس نیستید.');
+
+    // 🔒 قفل نهایی: ثبت موقت مجدد روی ارائهٔ نهایی‌شده ممنوع است (همان قاعدهٔ saveGradeAction).
+    // تغییر نمرهٔ نهایی‌شده فقط از مسیر دومرحله‌ای درخواست بازگشایی (unfinalize) می‌گذرد.
+    const finalizedLocks = await db
+      .select({ id: course_offerings.id, gradesFinalizedAt: course_offerings.gradesFinalizedAt })
+      .from(course_offerings)
+      .where(inArray(course_offerings.id, targets));
+    if (finalizedLocks.some(l => l.gradesFinalizedAt)) {
+      return invalid('نمرات این ارائه نهایی شده است؛ ثبت موقت مجدد فقط با بازگشایی توسط مدیر (درخواست بازگشایی) امکان‌پذیر است.');
+    }
 
     await ensureGradePersistence({
       offeringId: payload.offeringId,
@@ -415,6 +446,39 @@ export interface ResolveAppealPayload {
   decision: 'ACCEPTED' | 'REJECTED';
   reply: string;
   newGrade: number; // نمرهٔ محاسبه‌شده از ریزمولفه‌ها (در صورت پذیرش)
+  // ریزمولفه‌ها (اختیاری): اگر داده شود، سرور نمرهٔ جدید را خودش از روی آن‌ها
+  // بازمحاسبه می‌کند و مقدار newGrade کلاینت فقط سقف پشتیبان است.
+  components?: {
+    midtermScore?: number;
+    homeworkScore?: number;
+    participationScore?: number;
+    practicalScore?: number;
+    finalExamScore?: number;
+  } | null;
+}
+
+/**
+ * بازمحاسبهٔ سروری نمره از ریزمولفه‌ها با سقف بارم مرجع (DEFAULT_RUBRIC).
+ * هر مؤلفه باید عدد متناهی ≥۰ باشد؛ در غیر این صورت null (یعنی «قابل بازمحاسبه نیست»).
+ */
+function recomputeAppealGradeFromComponents(comp: NonNullable<ResolveAppealPayload['components']>): number | null {
+  const entries: Array<[StudentGradeField, number | undefined]> = [
+    ['midtermScore', comp.midtermScore],
+    ['homeworkScore', comp.homeworkScore],
+    ['participationScore', comp.participationScore],
+    ['practicalScore', comp.practicalScore],
+    ['finalExamScore', comp.finalExamScore],
+  ];
+  let sum = 0;
+  let seen = 0;
+  for (const [field, v] of entries) {
+    if (v === undefined) continue;
+    if (!Number.isFinite(v) || (v as number) < 0) return null;
+    sum += Math.min(v as number, rubricFieldMax(field, DEFAULT_RUBRIC));
+    seen++;
+  }
+  if (seen === 0) return null;
+  return Math.max(0, Math.min(20, Math.round(sum * 100) / 100));
 }
 
 export async function resolveAppealAction(
@@ -449,28 +513,46 @@ export async function resolveAppealAction(
     // (جدول grade_appeals فقط enrollmentId دارد — تطابق از روی enrollments بررسی می‌شود)
     const [appealEnr] = await db.select({
       id: enrollments.id, studentId: enrollments.studentId, offeringId: enrollments.offeringId,
+      gradeValue: enrollments.gradeValue, gradeStatus: enrollments.gradeStatus,
     }).from(enrollments).where(eq(enrollments.id, appeal.enrollmentId)).limit(1);
     if (!appealEnr || appealEnr.offeringId !== payload.offeringId) {
       return invalid('مشخصات اعتراض با این ارائه مطابقت ندارد.');
+    }
+    // 🔒 قفل نهایی: رسیدگیِ پذیرش روی نمرهٔ FINALIZED ممنوع است — حتی gradeValue هم
+    // دست نمی‌خورد. تغییر نمرهٔ نهایی‌شده فقط از مسیر دومرحله‌ای بازگشایی (unfinalize) می‌گذرد.
+    if (payload.decision === 'ACCEPTED' && appealEnr.gradeStatus === 'FINALIZED') {
+      return invalid('این نمره نهایی شده است؛ تغییر آن فقط با درخواست بازگشایی و تأیید مدیر امکان‌پذیر است.');
     }
     const appealStudent = await resolveStudentRow(payload.offeringId, payload.studentCode);
     if (!appealStudent || appealStudent.student.id !== appealEnr.studentId) {
       return invalid('مشخصات اعتراض با این دانشجو مطابقت ندارد.');
     }
 
+    // 🧮 نمرهٔ جدید: بازمحاسبهٔ سروری از ریزمولفه‌ها هرجا موجود باشد (درس تک‌استادی)؛
+    // در غیر این صورت مقدار کلاینت با سقف ۰..۲۰. مقدار کلاینت هرگز کورکورانه اعتماد نمی‌شود.
+    let serverNewGrade = payload.newGrade;
+    if (payload.decision === 'ACCEPTED' && payload.components) {
+      const serverCo = await serverCoTeach(payload.offeringId, me.id);
+      if (!serverCo.isCoTaught) {
+        const recomputed = recomputeAppealGradeFromComponents(payload.components);
+        if (recomputed !== null) serverNewGrade = recomputed;
+      }
+    }
+    serverNewGrade = Math.max(0, Math.min(20, Number(Number(serverNewGrade).toFixed(2))));
+
     await db
       .update(grade_appeals)
       .set({
         status: payload.decision,
         professorReply: payload.reply,
-        newGrade: payload.decision === 'ACCEPTED' ? String(Number(payload.newGrade.toFixed(2))) : undefined,
+        newGrade: payload.decision === 'ACCEPTED' ? String(serverNewGrade) : undefined,
       })
       .where(eq(grade_appeals.id, payload.appealId));
 
     if (payload.decision === 'ACCEPTED') {
       const row = await resolveStudentRow(payload.offeringId, payload.studentCode);
       if (row) {
-        const newGradeStr = String(Number(payload.newGrade.toFixed(2)));
+        const newGradeStr = String(serverNewGrade);
         const [enr] = await db.select({ id: enrollments.id, gradeValue: enrollments.gradeValue, gradeStatus: enrollments.gradeStatus }).from(enrollments)
           .where(and(eq(enrollments.studentId, row.student.id), eq(enrollments.offeringId, payload.offeringId))).limit(1);
 

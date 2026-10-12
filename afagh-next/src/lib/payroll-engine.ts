@@ -43,6 +43,9 @@ import { createLogger } from '@/lib/logger';
 
 const log = createLogger({ mod: 'payroll' });
 
+/** اتصال تراکنشی موتور (برای قلاب afterSettle و فراخوان‌های داخل-تراکنشی) */
+export type EngineTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 export type PayrollStatus = 'DRAFT' | 'MID_TERM_PAID' | 'FINAL_SETTLED';
 
 export type PayrollRow = {
@@ -640,6 +643,8 @@ export type ComputeTermResult = {
   computed: number;
   skippedNoContract: number;
   skippedSettled: number;
+  /** فیش‌های در زنجیرهٔ تأیید/ردشده که بدون بازگشت به DRAFT دست نخوردند */
+  skippedLocked: number;
   totals: { gross: number; deductions: number; net: number };
 };
 
@@ -657,12 +662,25 @@ export async function computeTermPayroll(actorUserId?: number | null, termId?: n
   let computed = 0;
   let skippedNoContract = 0;
   let skippedSettled = 0;
+  let skippedLocked = 0;
+  const lockedIds: number[] = [];
   const totals = { gross: 0, deductions: 0, net: 0 };
   const updates: { id: number; set: Record<string, unknown> }[] = [];
 
   for (const staffId of staffIds) {
     const contract = data.contracts.get(staffId);
     if (!contract) { skippedNoContract++; continue; }
+    const existing = data.statementsByStaff.get(staffId);
+    if (existing && existing.status === 'FINAL_SETTLED') { skippedSettled++; continue; }
+    // 🔒 محاسبهٔ مجدد روی فیشِ در زنجیرهٔ تأیید (مدیر گروه/معاونت) یا ردشده
+    // ممنوع است مگر با بازگشت صریح به DRAFT (returnStatement با audit)؛
+    // وگرنه تأییدِ در جریان بی‌اثر/دورزده می‌شد. MID_TERM_PAID استثناست چون
+    // وضعیتش پرداختِ واقعی است نه مرحلهٔ تأیید (مبالغ فقط به‌روز می‌شوند).
+    if (existing?.id && !['DRAFT', 'MID_TERM_PAID'].includes(existing.status ?? '')) {
+      skippedLocked++;
+      lockedIds.push(existing.id);
+      continue;
+    }
     const calc = calcStaffPayrollFromData(data, staffId);
     const deductions = calc.tax + calc.absenceDeductionRial;
     const detail = JSON.stringify({
@@ -673,9 +691,6 @@ export async function computeTermPayroll(actorUserId?: number | null, termId?: n
     totals.gross += calc.gross;
     totals.deductions += deductions;
     totals.net += calc.net;
-
-    const existing = data.statementsByStaff.get(staffId);
-    if (existing && existing.status === 'FINAL_SETTLED') { skippedSettled++; continue; }
 
     // مهاجرت 0056 — مهر اسنپ‌شات ترمی روی فیش: اسنپ‌شات قرارداد اگر هست،
     // وگرنه مقدارِ همین محاسبه (که خودش اسنپ‌شات-یا-زنده است)؛ NULL نمی‌ماند
@@ -720,13 +735,14 @@ export async function computeTermPayroll(actorUserId?: number | null, termId?: n
   await db.transaction(async tx => {
     if (values.length) await tx.insert(payroll_statements).values(values);
     for (const u of updates) await tx.update(payroll_statements).set(u.set).where(eq(payroll_statements.id, u.id));
+    // 🔒 فیش‌های قفل (در زنجیرهٔ تأیید) که دست نخوردند، با شناسه در audit می‌مانند.
     await writeAudit(tx, actorUserId ?? null, 'PAYROLL_COMPUTED', 'term', term.id, {
-      computed, skippedNoContract, skippedSettled, totals,
+      computed, skippedNoContract, skippedSettled, skippedLocked, lockedIds, totals,
     });
   });
 
-  log.info('payroll_computed', { termId: term.id, computed, skippedNoContract, skippedSettled });
-  return { ok: true, termTitle: term.title, computed, skippedNoContract, skippedSettled, totals };
+  log.info('payroll_computed', { termId: term.id, computed, skippedNoContract, skippedSettled, skippedLocked });
+  return { ok: true, termTitle: term.title, computed, skippedNoContract, skippedSettled, skippedLocked, totals };
 }
 
 // ─────────────────── داشبورد مالی ───────────────────
@@ -871,7 +887,15 @@ export async function payMidterm(staffId: number, actorUserId?: number | null, t
 }
 
 /** تسویهٔ نهایی — هر دو گلوگاه باید بسته باشد */
-export async function settleFinal(staffId: number, actorUserId?: number | null, termId?: number) {
+export async function settleFinal(
+  staffId: number,
+  actorUserId?: number | null,
+  termId?: number,
+  opts?: {
+    /** قلابِ داخلِ همان تراکنش تسویه (مثلاً درج ردیف FINANCE در تاریخچهٔ تأیید) — اتمی با پرداخت */
+    afterSettle?: (tx: EngineTx, statementId: number) => Promise<void>;
+  },
+) {
   const term = await currentTerm(termId);
   if (!term) throw new Error('ترم جاری مشخص نیست.');
 
@@ -887,6 +911,10 @@ export async function settleFinal(staffId: number, actorUserId?: number | null, 
       .for('update');
     if (!ps) throw new Error('ابتدا فیش ترم را محاسبه کنید.');
     if (ps.status === 'FINAL_SETTLED') throw new Error('این فیش قبلاً تسویه شده است.');
+    // پیش‌شرط زنجیرهٔ تأیید — بررسی زودهنگام (خطای واضح) + محموله در UPDATE (ضد-رقابت) هر دو.
+    if (ps.status !== 'DEAN_APPROVED') {
+      throw new Error('تسویهٔ نهایی فقط پس از تأیید معاونت آموزشی ممکن است (وضعیت فعلی نیازمند طی زنجیرهٔ تأیید است).');
+    }
 
     // گلوگاه‌ها داخل همان تراکنش خوانده می‌شوند تا بین بررسی و پرداخت چیزی عوض نشود
     // (دو کوئری سبک به‌جای بارگذاری کامل ترم — برای پرداخت دسته‌ای صدها برابر سریع‌تر)
@@ -898,11 +926,18 @@ export async function settleFinal(staffId: number, actorUserId?: number | null, 
     const paid = toRial(Number(ps.midtermPaidAmount ?? 0)) + toRial(Number(ps.finalPaidAmount ?? 0));
     const amount = Math.max(0, net - paid);
 
-    await tx
+    // 🔒 محمولهٔ وضعیت داخل تراکنش: فقط DEAN_APPROVED → FINAL_SETTLED؛
+    // اگر وضعیت در همین لحظه عوض شده باشد rowCount≠1 و تراکنش برمی‌گردد.
+    const upd = await tx
       .update(payroll_statements)
       .set({ finalPaidAmount: String(amount), finalPaidAt: new Date(), status: 'FINAL_SETTLED' })
-      .where(eq(payroll_statements.id, ps.id));
+      .where(and(eq(payroll_statements.id, ps.id), eq(payroll_statements.status, 'DEAN_APPROVED')));
+    if (upd.rowCount !== 1) {
+      throw new Error('وضعیت فیش در همین لحظه تغییر کرده است؛ تسویه انجام نشد. دوباره تلاش کنید.');
+    }
     await writeAudit(tx, actorUserId ?? null, 'PAYROLL_SETTLED', 'staff', staffId, { amount, statementId: ps.id, gates: g });
+    // ردیف تکمیلی فراخواننده (تاریخچهٔ FINANCE) در همان تراکنش — نه جدا.
+    if (opts?.afterSettle) await opts.afterSettle(tx, ps.id);
 
     const [st] = await tx.select({ userId: staff.userId }).from(staff).where(eq(staff.id, staffId)).limit(1);
     return { amount, userId: st?.userId ?? null, gates: g };
