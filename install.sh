@@ -46,21 +46,21 @@ wait_port 6379 || die "Redis آماده نشد"
 step "۲/۷ دیتابیس PostgreSQL (نقش‌ها + afagh_db)"
 if sudo -n true 2>/dev/null && sudo -u postgres psql -tAc "SELECT 1" >/dev/null 2>&1; then
   sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='afagh'" | grep -q 1 || \
-    sudo -u postgres psql -c "CREATE ROLE afagh LOGIN PASSWORD 'afagh' SUPERUSER CREATEDB;" >/dev/null
+    sudo -u postgres psql -c "CREATE ROLE afagh LOGIN SUPERUSER CREATEDB;" >/dev/null
   ok "نقش afagh"
   sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='afagh_db'" | grep -q 1 || \
     sudo -u postgres createdb -O afagh afagh_db
   ok "دیتابیس afagh_db"
 else
-  PGPASSWORD=afagh psql -h 127.0.0.1 -U afagh -d afagh_db -tAc "SELECT 1" >/dev/null 2>&1 \
+  PGPASSWORD="${PGPASSWORD:-$(read -s -p 'Enter PG password for afagh user: '; echo)}" psql -h 127.0.0.1 -U afagh -d afagh_db -tAc "SELECT 1" >/dev/null 2>&1 \
     && ok "نقش/دیتابیس از قبل موجود است" || {
     bad "دسترسی مدیر PG نداریم — دستی اجرا کنید:"
-    echo "    sudo -u postgres psql -c \"CREATE ROLE afagh LOGIN PASSWORD 'afagh' SUPERUSER CREATEDB;\""
+    echo "    sudo -u postgres psql -c \"CREATE ROLE afagh LOGIN SUPERUSER CREATEDB;\""
     echo "    sudo -u postgres createdb -O afagh afagh_db"
     exit 1
   }
 fi
-export PGPASSWORD=afagh
+export PGPASSWORD="${PGPASSWORD:-$(read -s -p 'Enter PG password for afagh user: '; echo)}"
 PSQL="psql -h 127.0.0.1 -U afagh -d afagh_db"
 
 # ── ۳) نصب وابستگی‌ها ──

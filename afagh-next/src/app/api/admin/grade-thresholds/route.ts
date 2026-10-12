@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
+import { assertSameOrigin } from '@/lib/security';
 import { db } from '@/db';
+import { z } from 'zod';
 import { grade_thresholds, degree_level_configs } from '@/db/schema';
 import { and, asc, eq, isNull, or } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
@@ -8,6 +10,12 @@ import { clearThresholdCache } from '@/lib/grade-qualitative';
 import { getCurrentUniversity } from '@/lib/university-scope';
 
 const ALLOWED = ['ADMIN', 'EDU_EXPERT'];
+
+const degreeLevelSchema = z.object({
+  degreeLevelId: z.number().int().positive(),
+  transcriptDisplayMode: z.enum(['NUMERIC', 'LETTER', 'GPA']).optional(),
+  thresholds: z.array(z.object({ minValue: z.number(), maxValue: z.number() })).optional(),
+});
 
 // GET — دریافت آستانه‌ها برای یک مقطع یا همه
 export async function GET(req: NextRequest) {
@@ -42,12 +50,17 @@ export async function GET(req: NextRequest) {
 
 // POST — ایجاد یا به‌روزرسانی آستانه‌ها
 export async function POST(req: NextRequest) {
+  assertSameOrigin(req);
   const user = await getSessionUser();
   if (!user || !user.roles.some(r => ALLOWED.includes(r))) {
     return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز.' }, { status: 403 });
   }
   const body = await req.json();
-  const { degreeLevelId, transcriptDisplayMode, thresholds } = body;
+  const result = degreeLevelSchema.safeParse(body);
+  if (!result.success) {
+    return NextResponse.json({ ok: false, error: 'داده ورودی معتبر نیست.' }, { status: 400 });
+  }
+  const { degreeLevelId, transcriptDisplayMode, thresholds } = result.data;
   if (!degreeLevelId) {
     return NextResponse.json({ ok: false, error: 'مقطع تحصیلی الزامی است.' }, { status: 400 });
   }

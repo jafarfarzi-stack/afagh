@@ -235,8 +235,14 @@ if ($null -eq $envText) { $envText = '' }
 #   DATABASE_URL     → اتصال اصلی اپ
 #   DATABASE_URL_APP → اتصال نقش فقط-خواندنی afagh_app برای RLS (صفحات دانشجو)
 $pairs = @(
-  @{ key = 'DATABASE_URL';     val = "postgres://afagh:afagh@localhost:$hostPgPort/afagh_db" },
-  @{ key = 'DATABASE_URL_APP'; val = "postgres://afagh_app:afagh_app@127.0.0.1:$hostPgPort/afagh_db" }
+  @{
+  key = 'DATABASE_URL';
+  val = "postgres://${DB_USER:-afagh}:${DB_PASSWORD:-$(read -s -p 'Enter PG password for afagh user: '; echo)}@localhost:$hostPgPort/afagh_db"
+},
+  @{
+  key = 'DATABASE_URL_APP';
+  val = "postgres://${DB_USER_APP:-afagh_app}:${DB_PASSWORD_APP:-$(read -s -p 'Enter PG password for afagh_app user: '; echo)}@127.0.0.1:$hostPgPort/afagh_db"
+},
 )
 $envChanged = $false
 foreach ($p in $pairs) {

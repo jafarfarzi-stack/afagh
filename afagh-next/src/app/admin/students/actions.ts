@@ -704,7 +704,8 @@ export async function createStaffExpertAction(input: {
     if (dupNc.length) return { ok: false, error: 'کاربری با این کد ملی از قبل وجود دارد.' };
     const dupSc = await db.select({ id: staff.id }).from(staff).where(and(eq(staff.staffCode, sc), or(eq(staff.universityId, uni.id), isNull(staff.universityId)))).limit(1);
     if (dupSc.length) return { ok: false, error: 'کد پرسنلی تکراری است.' };
-    const passwordHash = await hashPassword(nc); // ورود اولیه با کد ملی؛ اجباری به تغییر
+    const tempPassword = randomBytes(9).toString('base64url').slice(0, 12);
+            const passwordHash = await hashPassword(tempPassword);
     const [u] = await db.insert(users).values({
       universityId: uni.id,
       nationalCode: nc, firstName: fn, lastName: ln,

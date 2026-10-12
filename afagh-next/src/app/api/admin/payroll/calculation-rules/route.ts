@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
+import { assertSameOrigin } from '@/lib/security';
 import { db } from '@/db';
 import { payroll_calculation_rules } from '@/db/schema';
 import { and, eq, isNull, or } from 'drizzle-orm';
@@ -23,6 +24,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  assertSameOrigin(req);
   try {
     const user = await requireRole(['ADMIN']);
     const body = await req.json();

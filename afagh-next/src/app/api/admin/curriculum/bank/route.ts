@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
+import { assertSameOrigin } from '@/lib/security';
 import { db } from '@/db';
 import { courses, departments, degree_level_configs, equivalence_clusters } from '@/db/schema';
 import { eq, ilike, or, and, asc, sql, count, isNull } from 'drizzle-orm';
@@ -78,6 +79,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  assertSameOrigin(req);
   const user = await getSessionUser();
   if (!user || !user.roles.some(r => ALLOWED.includes(r))) {
     return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز.' }, { status: 403 });
@@ -145,6 +147,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  assertSameOrigin(req);
   const user = await getSessionUser();
   if (!user || !user.roles.some(r => ALLOWED.includes(r))) {
     return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز.' }, { status: 403 });

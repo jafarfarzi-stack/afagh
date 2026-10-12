@@ -47,8 +47,10 @@ export async function setUniversityCookie(code: string) {
         if (allowed.size && !allowed.has(hit.id)) throw new Error('این دانشگاه در محدودهٔ دسترسی شما نیست.');
       }
     }
+    const secureMode = (process.env.AFAGH_COOKIE_SECURE ?? 'auto').toLowerCase();
+    const secure = secureMode === 'true' ? true : secureMode === 'false' ? false : true; // production default: secure
     (await cookies()).set(UNIVERSITY_COOKIE, hit.code, {
-      path: '/', maxAge: 365 * 24 * 3600, sameSite: 'lax',
+      path: '/', maxAge: 365 * 24 * 3600, httpOnly: true, secure, sameSite: 'lax',
     });
   } catch (e) {
     if (e instanceof Error && e.message === 'این دانشگاه در محدودهٔ دسترسی شما نیست.') throw e;

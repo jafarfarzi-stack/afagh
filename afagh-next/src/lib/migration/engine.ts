@@ -728,6 +728,7 @@ export async function commit(
         await db.insert(user_roles).values({ userId, roleId: profRole.id })
           .onConflictDoNothing({ target: [user_roles.userId, user_roles.roleId] })
           .catch(() => {});
+        clearPermissionCache();
       }
       inserted++;
     }

@@ -155,7 +155,12 @@ const api = async (req, res, url) => {
     const token = crypto.randomBytes(32).toString('hex');
     db.prepare(`INSERT INTO sessions (token, userId, expiresAt) VALUES (?,?, datetime('now','+2 days'))`).run(token, u.id);
     rbac.audit({ actorUserId: u.id, action: 'LOGIN', entityType: 'user', entityId: u.id, ipAddress: req.socket.remoteAddress });
-    return json(res, 200, { token, user: { id: u.id, name: `${u.firstName} ${u.lastName}`, nationalCode: u.nationalCode } });
+    // Set session as HttpOnly/Secure cookie; same-site auto (HTTPS→None, HTTP→Lax)
+    const secure = req.headers['x-forwarded-proto'] && req.headers['x-forwarded-proto'].includes('https');
+    const sameSite = secure ? 'none' : 'lax';
+    res.setHeader('Set-Cookie', `token=${token}; HttpOnly; Secure; SameSite=${sameSite}; Path=/; Max-Age=${2*86400}`);
+    // Return user info without nationalCode cross-origin
+    return json(res, 200, { ok: true, user: { id: u.id, name: `${u.firstName} ${u.lastName}`, role: rbac.getRoles(u.id) } });
   }
 
   // ── خروج (ابطال نشست جاری) ──
@@ -781,11 +786,22 @@ const serveStatic = (res, filePath) => {
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
-  // ── CORS: پنل توکن را در هدر Authorization می‌فرستد (کوکی cross-site نمی‌خواهد)،
-  // پس انعکاس مبدأ دلخواه لازم نیست. `*` ثابت + Vary: Origin.
-  // P0-2: قبلاً `req.headers.origin` بدون اعتبارسنجی منعکس می‌شد.
+  // ── CORS: specialised for ERP panel ──
+  // –plugins/eras/: Origin explicitly allowed (admin panel). 
+  // –all other /api/*: origin checks in assertSameOrigin (next/koa) — 
+  //   here we only expose headers, don’t trust * with credentials.
   if (url.pathname.startsWith('/api/')) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // Allow the panel’s own origin + localhost dev origins only.
+    const origin = req.headers.origin;
+    const allowed = origin === 'https://localhost:8080' ||
+                    origin === 'http://localhost:8080' ||
+                    origin === '' ||
+                    origin === 'https://lx.afagh.ac.ir';
+    if (allowed) {
+      res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', 'null'); // block unknown origins
+    }
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');

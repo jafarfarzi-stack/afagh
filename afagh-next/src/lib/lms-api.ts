@@ -43,7 +43,7 @@ export async function requireLmsToken(req: NextRequest): Promise<NextResponse | 
     );
   }
   const url = new URL(req.url);
-  const provided = (req.headers.get('x-lms-token') ?? url.searchParams.get('token') ?? '').trim();
+  const provided = (req.headers.get('x-lms-token') ?? '').trim();
   if (!provided || !timingEq(sha256hex(provided), sha256hex(configured))) {
     log.warn('lms_unauthorized', {});
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });

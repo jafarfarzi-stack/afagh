@@ -1,10 +1,10 @@
 import { createHash, randomBytes, scrypt as _scrypt, timingSafeEqual } from 'crypto';
 import { promisify } from 'util';
-import { cookies, headers } from 'next/headers';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { sessionTransport } from '@/lib/proxy-trust';
 import { and, asc, desc, eq, gt, inArray, lt, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { ensureBaseReferenceData } from '@/lib/base-data';
 import { clientIp, getRateLimitCount, hitRateLimit, peekRateLimit, progressiveDelay, rateLimit } from '@/lib/rateLimit';
 import {
   degree_level_configs,
@@ -59,26 +59,13 @@ const SESSION_MAX_AGE = 2 * 86400; // دو روز
 export async function sessionCookieOptions(): Promise<{
   httpOnly: true; path: string; maxAge: number; secure: boolean; sameSite: 'lax' | 'none' | 'strict';
 }> {
-  let isHttps = false;
-  try {
-    const h = await headers();
-    const proto = (h.get('x-forwarded-proto') || h.get('x-forwarded-protocol') || '').split(',')[0].trim().toLowerCase();
-    const host = (h.get('host') || '').toLowerCase();
-    isHttps = proto === 'https' || (!proto && (h.get('x-forwarded-ssl') === 'on' || host.endsWith('.e2b.app')));
-  } catch {
-    isHttps = false;
-  }
-
-  const secureEnv = (process.env.AFAGH_COOKIE_SECURE || 'auto').toLowerCase();
-  const sameSiteEnv = (process.env.AFAGH_COOKIE_SAMESITE || 'auto').toLowerCase();
-
-  let secure = secureEnv === 'true' ? true : secureEnv === 'false' ? false : isHttps;
-  let sameSite: 'lax' | 'none' | 'strict' =
-    sameSiteEnv === 'none' ? 'none' : sameSiteEnv === 'strict' ? 'strict' : sameSiteEnv === 'lax' ? 'lax' : isHttps ? 'none' : 'lax';
-
-  // SameSite=None بدون Secure توسط مرورگر رد می‌شود
-  if (sameSite === 'none' && !secure) sameSite = 'lax';
-
+  const env = {
+    NODE_ENV: process.env.NODE_ENV,
+    AFAGH_PUBLIC_BASE_URL: process.env.AFAGH_PUBLIC_BASE_URL,
+    AFAGH_COOKIE_SECURE: process.env.AFAGH_COOKIE_SECURE,
+    AFAGH_COOKIE_SAMESITE: process.env.AFAGH_COOKIE_SAMESITE,
+  };
+  const { secure, sameSite } = sessionTransport(env);
   return { httpOnly: true, path: '/', maxAge: SESSION_MAX_AGE, secure, sameSite };
 }
 
@@ -95,12 +82,12 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     .innerJoin(users, eq(users.id, sessions.userId))
     .leftJoin(user_roles, eq(user_roles.userId, users.id))
     .leftJoin(roles, eq(roles.id, user_roles.roleId))
-    .where(and(eq(sessions.token, token), gt(sessions.expiresAt, new Date())));
+    .where(and(eq(sessions.token, sha256(token)), gt(sessions.expiresAt, new Date())));
   if (!rows.length) return null;
   // ⛔ غیرفعال‌سازیِ «کامل» کاربر: نشستِ باز هم بی‌اعتبار است، نه فقط ورودِ بعدی.
   //    اینجا همهٔ کانال‌های مبتنی بر کوکی (وب، کارتابل، اکشن‌ها و APIها) قطع می‌شوند.
   if (rows[0].isActive !== 1) {
-    await db.delete(sessions).where(eq(sessions.token, token));
+    await db.delete(sessions).where(eq(sessions.token, sha256(token)));
     return null;
   }
   return {
@@ -301,6 +288,7 @@ async function ensureDemoUser(nc: string) {
     }
     if (roleRow) {
       await db.insert(user_roles).values({ userId: created.id, roleId: roleRow.id }).catch(() => {});
+      clearPermissionCache();
     }
 
     if (demo.staffCode) {
@@ -364,7 +352,7 @@ export async function issueSessionFor(userId: number): Promise<{ mustChange: boo
     }
   }
 
-  await db.insert(sessions).values({ token, userId, expiresAt: new Date(Date.now() + SESSION_MAX_AGE * 1000) });
+  await db.insert(sessions).values({ token: sha256(token), userId, expiresAt: new Date(Date.now() + SESSION_MAX_AGE * 1000) });
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, token, await sessionCookieOptions());
   // حساب تازه‌پذیرش‌شده با رمز پیش‌فرض → اجبار به تغییر رمز در اولین ورود
@@ -567,9 +555,12 @@ export async function invalidateUserSessions(userId: number): Promise<void> {
 
 export async function logout() {
   const cookieStore = await cookies();
+  const u = await getSessionUser();
+  if (u) await db.delete(sessions).where(eq(sessions.userId, u.id)); // logout everywhere
   const token = cookieStore.get(SESSION_COOKIE)?.value;
-  if (token) await db.delete(sessions).where(eq(sessions.token, token));
+  if (token) await db.delete(sessions).where(eq(sessions.token, sha256(token))); // fallback
   cookieStore.delete(SESSION_COOKIE);
+  return { ok: true };
 }
 
 /** گیت نقش در layout ها — ریدایرکت به پورتال درست (سه داشبورد ایزوله — سند §۲۸۶۵) */
