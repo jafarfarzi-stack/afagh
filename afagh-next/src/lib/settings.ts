@@ -167,8 +167,9 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'PAYROLL_MS_COURSE_PREFIX', env: 'PAYROLL_MS_COURSE_PREFIX', group: 'گردش کار و حق‌التدریس', label: 'پیشوند کد دروس کارشناسی ارشد', type: 'text', default: '21', help: 'کد دروسی که با این رقم شروع می‌شوند مشمول ضریب مقطع ارشد‌اند (با ویرگول)' },
 
   // ── سردر برنامهٔ هفتگی ──
-  { key: 'WEEKLY_BOARD_PROF_TITLE', env: 'WEEKLY_BOARD_PROF_TITLE', group: 'سردر برنامهٔ هفتگی', label: 'لقب احترام استاد در سردر', type: 'boolean', default: 'true', help: 'استادیار و بالاتر «دکتر» + جناب آقای/سرکار خانم بر اساس جنسیت' },
-  { key: 'WEEKLY_BOARD_SHOW_FIRSTNAME', env: 'WEEKLY_BOARD_SHOW_FIRSTNAME', group: 'سردر برنامهٔ هفتگی', label: 'چاپ نام کوچک استاد در سردر', type: 'boolean', default: 'true', help: 'خاموش = فقط نام خانوادگی (با لقب). مثلاً «سرکار خانم دکتر میکی» به‌جای «سرکار خانم دکتر مرضیه میکی»' },
+  { key: 'WEEKLY_BOARD_PROF_TITLE', env: 'WEEKLY_BOARD_PROF_TITLE', group: 'سردر برنامهٔ هفتگی', label: 'لقب احترام استاد در سردر', type: 'boolean', default: 'true', help: 'استادیار و بالاتر «دکتر» + مهندس برای فنی' },
+  { key: 'WEEKLY_BOARD_GENDER_HONORIFIC', env: 'WEEKLY_BOARD_GENDER_HONORIFIC', group: 'سردر برنامهٔ هفتگی', label: 'پیشوند «جناب آقای / سرکار خانم» در سردر', type: 'boolean', default: 'false', help: 'خاموش = فقط مرتبه علمی (دکتر / مهندس) بدون پیشوند جنسیتی تا نام استاد در چاپ کامل جا شود. روشن = افزودن جناب آقای / سرکار خانم' },
+  { key: 'WEEKLY_BOARD_SHOW_FIRSTNAME', env: 'WEEKLY_BOARD_SHOW_FIRSTNAME', group: 'سردر برنامهٔ هفتگی', label: 'چاپ نام کوچک استاد در سردر', type: 'boolean', default: 'true', help: 'خاموش = فقط نام خانوادگی (با لقب). مثلاً «دکتر میکی» به‌جای «دکتر مرضیه میکی»' },
   { key: 'WEEKLY_BOARD_SHORT_HONORIFIC', env: 'WEEKLY_BOARD_SHORT_HONORIFIC', group: 'سردر برنامهٔ هفتگی', label: 'لقب کوتاه در سردر (کم‌جا)', type: 'boolean', default: 'false', help: 'روشن = «خانم/آقای» به‌جای «سرکار خانم/جناب آقای» برای جاهای تنگ' },
 
   // ── امنیت ورود و نظارت ──

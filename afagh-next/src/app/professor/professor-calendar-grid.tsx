@@ -191,19 +191,19 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
                               : 'bg-indigo-50 border-indigo-200 text-indigo-950'
                           }`}
                         >
-                          <div className="hidden print:block text-[7.5pt] font-bold leading-[1.45] text-black">
+                          <div className="hidden print:block text-[6.8pt] font-bold leading-[1.25] text-black">
                             {doorPrint ? (
                               <>
-                                <div>{e.title}{e.merged ? ' 🔗' : ''}</div>
-                                <div>گروه {professorCalendarEntryGroup(e)} · {professorCalendarEntryTime(e)}</div>
-                                <div>استاد: {e.professorName || '—'}</div>
+                                <div className="prof-print-title text-[6.8pt] font-black leading-[1.2]">{e.title}{e.merged ? ' 🔗' : ''}</div>
+                                <div className="prof-print-meta text-[5.8pt] leading-[1.15] text-slate-900">گروه {professorCalendarEntryGroup(e)} · {professorCalendarEntryTime(e)}</div>
+                                <div className="prof-print-teacher text-[5.8pt] font-bold leading-[1.15] text-black">استاد: {e.professorName || '—'}</div>
                               </>
                             ) : (
                               <>
-                                <div className="truncate">{e.title}{e.merged ? ' 🔗' : ''}</div>
-                                <div className="truncate">{showCode ? `${e.code} · ` : ''}گروه {professorCalendarEntryGroup(e)} · 👥 {faNum(e.enrolledCount)}/{faNum(e.capacity)}</div>
-                                <div className="truncate">{professorCalendarEntryTime(e)} · {placeTitle(e)}{e.weekType === 'EVEN' ? ' · هفته زوج' : e.weekType === 'ODD' ? ' · هفته فرد' : e.weekType === 'BOTH' ? ' · زوج و فرد' : ''}</div>
-                                {e.professorName && !hideProfessorPill ? <div className="truncate">استاد: {e.professorName}</div> : null}
+                                <div className="prof-print-title text-[6.8pt] font-black leading-[1.2] truncate">{e.title}{e.merged ? ' 🔗' : ''}</div>
+                                <div className="prof-print-meta text-[5.8pt] leading-[1.15] truncate">{showCode ? `${e.code} · ` : ''}گروه {professorCalendarEntryGroup(e)} · 👥 {faNum(e.enrolledCount)}/{faNum(e.capacity)}</div>
+                                <div className="prof-print-meta text-[5.8pt] leading-[1.15] truncate">{professorCalendarEntryTime(e)} · {placeTitle(e)}{e.weekType === 'EVEN' ? ' · هفته زوج' : e.weekType === 'ODD' ? ' · هفته فرد' : e.weekType === 'BOTH' ? ' · زوج و فرد' : ''}</div>
+                                {e.professorName && !hideProfessorPill ? <div className="prof-print-teacher text-[5.8pt] font-bold leading-[1.15] text-black truncate">استاد: {e.professorName}</div> : null}
                               </>
                             )}
                           </div>

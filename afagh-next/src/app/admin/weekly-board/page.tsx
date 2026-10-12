@@ -94,10 +94,11 @@ function isHumanitiesDept(deptName: string | null | undefined): boolean {
   return HUMANITIES_DEPT_PATTERN.test(normFa(deptName ?? ''));
 }
 
-/** نام نمایشی استاد با لقب احترام: استادیار و بالاتر «دکتر» + جناب آقای/سرکار خانم */
+/** نام نمایشی استاد با لقب احترام: استادیار و بالاتر «دکتر» + جناب آقای/سرکار خانم (اختیاری) */
 function profDisplay(
   m: Pick<BoardRow, 'profFirstName' | 'profLastName' | 'profRank' | 'profGender' | 'profLegacyTitle'>,
   showTitle: boolean, showFirst: boolean, shortHonor = false, allowEngineer = true,
+  showGenderHonor = true,
 ): string {
   const first = (m.profFirstName || '').trim();
   const last = (m.profLastName || '').trim();
@@ -106,9 +107,12 @@ function profDisplay(
   const isDoctor = rank.includes('دانشیار') || rank.includes('استاد');
   const isEngineer = allowEngineer && !isDoctor && rank.includes('مربی');
   const degree = isDoctor ? 'دکتر' : isEngineer ? 'مهندس' : '';
-  const female = m.profGender === 'FEMALE' || (!m.profGender && normFa(m.profLegacyTitle).includes('خانم'));
-  const male = m.profGender === 'MALE' || (!m.profGender && normFa(m.profLegacyTitle).includes('آقا'));
-  const honor = female ? (shortHonor ? 'خانم' : 'سرکار خانم') : male ? (shortHonor ? 'آقای' : 'جناب آقای') : '';
+  let honor = '';
+  if (showGenderHonor) {
+    const female = m.profGender === 'FEMALE' || (!m.profGender && normFa(m.profLegacyTitle).includes('خانم'));
+    const male = m.profGender === 'MALE' || (!m.profGender && normFa(m.profLegacyTitle).includes('آقا'));
+    honor = female ? (shortHonor ? 'خانم' : 'سرکار خانم') : male ? (shortHonor ? 'آقای' : 'جناب آقای') : '';
+  }
   return [honor, degree, showFirst ? first : '', last].filter(Boolean).join(' ');
 }
 
@@ -145,11 +149,13 @@ function buildBoardCalendarEntries(
   noEngineerTitle = false,
   /** نام استادان همکار هر ارائه (وقتی استاد اصلی خالی است) — offeringId → فهرست به ترتیب staffId */
   coTeachers: Map<number, ({ staffId: number } & Pick<BoardRow, 'profFirstName' | 'profLastName' | 'profRank' | 'profGender' | 'profLegacyTitle'>)[]> = new Map(),
+  showGenderHonor = true,
 ): { entries: BoardCalendarEntry[]; skipped: number } {
   const profOf = (m: BoardRow, slotRank: Map<number, string[]>) => {
     const main = profDisplay(
       m, showTitle, showFirst, shortHonor,
       !noEngineerTitle && !isHumanitiesDept(deptNameById.get(m.deptId ?? -1)),
+      showGenderHonor,
     );
     if (main) return main;
     // استاد اصلی ثبت نشده → استادی که در همین سانس درس دارد:
@@ -163,6 +169,7 @@ function buildBoardCalendarEntries(
     const pick = teachers[rank >= 0 ? rank % teachers.length : 0];
     return profDisplay(pick, showTitle, showFirst, shortHonor,
       !noEngineerTitle && !isHumanitiesDept(deptNameById.get(m.deptId ?? -1)),
+      showGenderHonor,
     );
   };
   // سانس‌های متمایز هر ارائه به ترتیب زمانی (مبنای تطبیق استاد↔سانس) — با تفکیک زوج/فرد
@@ -273,7 +280,7 @@ function buildBoardCalendarEntries(
 }
 
 export default async function WeeklyBoardPage({ searchParams }: {
-  searchParams: Promise<{ term?: string; faculty?: string; dept?: string; room?: string; tab?: string; q?: string; code?: string; title?: string }>;
+  searchParams: Promise<{ term?: string; faculty?: string; dept?: string; room?: string; tab?: string; q?: string; code?: string; title?: string; gender?: string }>;
 }) {
   const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
   const uni = await getCurrentUniversity().catch(() => null);
@@ -288,24 +295,39 @@ export default async function WeeklyBoardPage({ searchParams }: {
   const roomId = Number(sp.room) || 0;
 
   // کلیدهای نمایش نام استاد (تنظیمات مدیر) — مبنای حالت «تنظیم سامانه»
-  const [cfgShowTitle, showFirst, shortHonor] = await Promise.all([
+  const [cfgShowTitle, showFirst, cfgShortHonor, cfgShowGender] = await Promise.all([
     getBool('WEEKLY_BOARD_PROF_TITLE').catch(() => true),
     getBool('WEEKLY_BOARD_SHOW_FIRSTNAME').catch(() => true),
     getBool('WEEKLY_BOARD_SHORT_HONORIFIC').catch(() => false),
+    getBool('WEEKLY_BOARD_GENDER_HONORIFIC').catch(() => false),
   ]);
 
   // ── عنوان استاد: کاملاً اختیاری ──
   //   system      → پیرو تنظیمات «پیکربندی سامانه»
   //   full        → آقای/خانم + دکتر + (مهندس برای گروه‌های فنی)
+  //   academic    → فقط مرتبه علمی (دکتر/مهندس) بدون پیشوند جنسیتی
   //   no-engineer → آقای/خانم + دکتر، ولی مربی‌ها «بدون مهندس»
   //   plain       → فقط نام و نام خانوادگی
   const titleParam = sp.title ?? '';
-  const profTitleMode: 'system' | 'full' | 'no-engineer' | 'plain' =
-    titleParam === '1' ? 'full' : titleParam === '0' ? 'no-engineer' : titleParam === 'name' ? 'plain' : 'system';
+  const genderParam = sp.gender ?? '';
+  const profTitleMode: 'system' | 'full' | 'academic' | 'no-engineer' | 'plain' =
+    titleParam === '1' ? 'full'
+      : titleParam === 'academic' ? 'academic'
+        : titleParam === '0' ? 'no-engineer'
+          : titleParam === 'name' ? 'plain'
+            : 'system';
   const showTitle = profTitleMode === 'plain' ? false
     : profTitleMode === 'system' ? cfgShowTitle
       : true;
   const noEngineerTitle = profTitleMode === 'no-engineer';
+  // پیشوند جنسیتی: academic در فیلتر «عنوان» یعنی صریحاً بدون آقا/خانم
+  const showGenderHonor = profTitleMode === 'academic' ? false
+    : genderParam === '0' || genderParam === 'none' ? false
+      : genderParam === 'full' || genderParam === '1' || genderParam === 'short' ? true
+        : cfgShowGender;
+  const shortHonor = genderParam === 'short' ? true
+    : genderParam === 'full' || genderParam === '1' ? false
+      : cfgShortHonor;
 
   const terms = await db.select({ id: academic_terms.id, title: academic_terms.title, isCurrent: academic_terms.isCurrent })
     .from(academic_terms)
@@ -440,7 +462,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
     : [];
 
   // ورودی‌های گرید تقویمی با همان فرمت کارتابل استاد/دانشجو (تک‌صفحهٔ افقی + بج ادغامی + بج زوج/فرد)
-  const { entries: boardEntries, skipped: boardSkipped } = buildBoardCalendarEntries(rows, showTitle, showFirst, shortHonor, new Map(depts.map(d => [d.id, d.name] as const)), noEngineerTitle);
+  const { entries: boardEntries, skipped: boardSkipped } = buildBoardCalendarEntries(rows, showTitle, showFirst, shortHonor, new Map(depts.map(d => [d.id, d.name] as const)), noEngineerTitle, coTeachers, showGenderHonor);
   const boardOfferingCount = new Set(rows.map(r => r.offeringId)).size;
   const boardMergedCount = boardEntries.filter(e => e.merged).length;
 
@@ -466,7 +488,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
       if (p) {
         personInfo = {
           kind: 'prof', code: p.staffCode,
-          name: profDisplay({ profFirstName: p.firstName, profLastName: p.lastName, profRank: p.rank, profGender: p.gender, profLegacyTitle: p.legacyTitle }, showTitle, showFirst, shortHonor),
+          name: profDisplay({ profFirstName: p.firstName, profLastName: p.lastName, profRank: p.rank, profGender: p.gender, profLegacyTitle: p.legacyTitle }, showTitle, showFirst, shortHonor, !noEngineerTitle, showGenderHonor),
           extra: p.deptName || '',
         };
         const coIds = (await db.select({ offeringId: offering_professors.offeringId })
@@ -531,7 +553,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
       }
     }
   }
-  const { entries: personEntries, skipped: personSkipped } = buildBoardCalendarEntries(personRows, showTitle, showFirst, shortHonor, new Map(depts.map(d => [d.id, d.name] as const)), noEngineerTitle);
+  const { entries: personEntries, skipped: personSkipped } = buildBoardCalendarEntries(personRows, showTitle, showFirst, shortHonor, new Map(depts.map(d => [d.id, d.name] as const)), noEngineerTitle, new Map(), showGenderHonor);
 
   const poster = selRoom ?? null;
 
@@ -571,7 +593,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
         {([['board', '🗓 تابلوی کلاس‌ها'], ['prof', '👨‍🏫 برنامهٔ استاد'], ['student', '🎓 برنامهٔ دانشجو']] as const).map(([v, t]) => (
           <a
             key={v}
-            href={`/admin/weekly-board?term=${term?.id ?? ''}&tab=${v}${showCode ? '&code=1' : ''}${titleParam ? `&title=${titleParam}` : ''}`}
+            href={`/admin/weekly-board?term=${term?.id ?? ''}&tab=${v}${showCode ? '&code=1' : ''}${titleParam ? `&title=${titleParam}` : ''}${genderParam ? `&gender=${genderParam}` : ''}`}
             className={`rounded-xl px-4 py-2 text-sm font-black ${tab === v ? 'bg-teal-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
           >
             {t}
@@ -608,9 +630,18 @@ export default async function WeeklyBoardPage({ searchParams }: {
         <label className="text-xs font-bold">عنوان استاد
           <select name="title" defaultValue={titleParam} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
             <option value="">پیرو تنظیم سامانه</option>
-            <option value="1">با عنوان (آقای دکتر …)</option>
+            <option value="academic">فقط مرتبه علمی (دکتر/مهندس) — کم‌جا</option>
+            <option value="1">با عنوان کامل (آقای دکتر …)</option>
             <option value="0">مربی‌ها بدون «مهندس»</option>
             <option value="name">فقط نام (بدون عنوان)</option>
+          </select>
+        </label>
+        <label className="text-xs font-bold">پیشوند آقا / خانم
+          <select name="gender" defaultValue={genderParam} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+            <option value="">پیرو تنظیم سامانه</option>
+            <option value="0">بدون آقا/خانم (کم‌جا — ویژهٔ چاپ)</option>
+            <option value="short">کوتاه (آقای / خانم)</option>
+            <option value="full">کامل (جناب آقای / سرکار خانم)</option>
           </select>
         </label>
         <label className="text-xs font-bold">کد درس
@@ -673,6 +704,8 @@ export default async function WeeklyBoardPage({ searchParams }: {
       <form method="get" className="card flex flex-wrap items-end gap-3 print:hidden">
         <input type="hidden" name="tab" value={tab} />
         <input type="hidden" name="term" value={term?.id ?? ''} />
+        <input type="hidden" name="title" value={titleParam} />
+        <input type="hidden" name="gender" value={genderParam} />
         <label className="text-xs font-bold">{tab === 'prof' ? 'کد استادی' : 'شماره دانشجویی'}
           <input name="q" defaultValue={q} dir="ltr" placeholder={tab === 'prof' ? 'مثل ۱۰۰۱' : 'مثل ۴۰۲…'} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white font-mono" />
         </label>
