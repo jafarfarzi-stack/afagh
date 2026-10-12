@@ -38,7 +38,10 @@ const readTsv = (name) => {
   const header = lines[0].split('\t');
   return { header, rows: lines.slice(1).map(l => l.split('\t')) };
 };
-const col = (row, header, n) => { const i = header.indexOf(n); return i>=0 && i<row.length ? String(row[i] ?? '').trim() : ''; };
+const col = (row, header, ...names) => {
+  for (const n of names) { const i = header.indexOf(n); if (i >= 0 && i < row.length) return String(row[i] ?? '').trim(); }
+  return '';
+};
 const num = (s) => { const v = Number(String(s ?? '').replace(/[,\s]/g, '')); return Number.isFinite(v) ? v : 0; };
 const toOurTerm = (legacy) => { const s=String(legacy??'').trim(); if(/^\d{3}$/.test(s)) return '13'+s; if(/^\d{4}$/.test(s)) return '1'+s; return s; };
 
@@ -61,39 +64,46 @@ const toOurTerm = (legacy) => { const s=String(legacy??'').trim(); if(/^\d{3}$/.
     legacyPay.set(k, (legacyPay.get(k) || 0) + num(col(r, spay.header, 'Mab')));
   }
 
-  // تراز لجر ما به ازای (sid|tid)
+  // تراز لجر ما به ازای (sid|tid) بر اساس قرارداد کانونی ledger-balance
   const led = await q(`
     SELECT sl."studentId", sl."termId",
-      SUM(CASE WHEN sl."transactionType" IN ('TUITION_FIXED','TUITION_VARIABLE','TUITION_BATES') THEN sl.amount ELSE 0 END) AS fees,
-      SUM(CASE WHEN sl."transactionType" = 'PAYMENT' THEN sl.amount ELSE 0 END) AS pays
+      SUM(CASE WHEN sl."transactionType" IN ('TUITION_FIXED','TUITION_VARIABLE','TUITION_ADJUST_INC') THEN sl.amount ELSE 0 END) AS debt,
+      SUM(CASE WHEN sl."transactionType" IN ('PAYMENT','TUITION_BATES','TUITION_ADJUST_DEC') THEN sl.amount ELSE 0 END) AS credit
     FROM student_ledger sl WHERE sl."universityId"=$1 GROUP BY 1,2`, [UNI]);
-  const ourNet = new Map(led.map(r => [`${r.studentId}|${r.termId}`, { fees: num(r.fees), pays: num(r.pays) }]));
+  const ourNet = new Map(led.map(r => [`${r.studentId}|${r.termId}`, { debt: num(r.debt), credit: num(r.credit) }]));
 
   let exact = 0, diff = 0, onlyOur = 0, onlyLegacy = 0, sumDiff = 0;
   const samples = [];
   for (const r of tams.rows) {
-    const sid = stuById.get(col(r, tams.header, 'Stno'));
+    const sid = stuById.get(col(r, tams.header, 'StnO', 'Stno'));
     const tid = termById.get(toOurTerm(col(r, tams.header, 'TermCode')));
     if (!sid || !tid) continue;
     const k = `${sid}|${tid}`;
     const fix = num(col(r, tams.header, 'Fix_Price'));
     const units = num(col(r, tams.header, 'Units_Price'));
     const bates = num(col(r, tams.header, 'Fix_Bates')) + num(col(r, tams.header, 'Units_Bates')) + num(col(r, tams.header, 'Mab_Bates'));
-    const adjust = num(col(r, tams.header, 'TMabIncDec')) + num(col(r, tams.header, 'TFix_PriceIncDec')) + num(col(r, tams.header, 'TUnits_PriceIncDec')) + num(col(r, tams.header, 'TSUMMab_Subject')) + num(col(r, tams.header, 'TMab_Support'));
+    const sub = num(col(r, tams.header, 'TSUMMab_Subject'));
     const termAcc = num(col(r, tams.header, 'TermAcc'));
     const legacyPaySum = legacyPay.get(k) ?? 0;
-    // تراز موردانتظار قدیمی: TermAcc = TermPays − (fix+units) − bates + adjust → از سمت ما:
-    //   expectedOur = (fix+units) + bates − legacyPaySum (− adjust در صورت اعمال انطباق)
-    const expectedOur = (fix + units + bates) - legacyPaySum;
+
+    // فرمول قطعی سیستم قدیم (۹۹٫۹۷٪):
+    // TermAcc = TermPays − (fix + units) + bates + sub
+    // با قرارداد ما (مثبت = بدهکار): expectedDebt = −TermAcc
+    const expectedNet = -termAcc;
+
     const o = ourNet.get(k);
     if (!o) { onlyLegacy++; continue; }
-    const our = o.fees - o.pays;
-    if (our === expectedOur && adjust === 0) { exact++; }
-    else {
+    const ourNetVal = o.debt - o.credit;
+    const delta = ourNetVal - expectedNet;
+
+    if (Math.abs(delta) < 0.5) {
+      exact++;
+    } else {
       diff++;
-      const delta = our - expectedOur;
       sumDiff += Math.abs(delta);
-      if (samples.length < 25) samples.push({ k, fix, units, bates, adjust, termAcc, legacyPaySum, our, expectedOur, delta });
+      if (samples.length < 25) {
+        samples.push({ k, fix, units, bates, sub, termAcc, legacyPaySum, ourDebt: o.debt, ourCredit: o.credit, ourNet: ourNetVal, expectedNet, delta });
+      }
     }
   }
   // ردیف‌هایی که در لجر ما هست ولی از TermAms نیامده (ندارد) — جزئی گزارش
@@ -117,7 +127,7 @@ const toOurTerm = (legacy) => { const s=String(legacy??'').trim(); if(/^\d{3}$/.
   console.log(`sum |delta| (rial): ${sumDiff.toLocaleString('en')}`);
   console.log('samples:');
   for (const s of samples) {
-    console.log(`  k=${s.k} fix=${s.fix} units=${s.units} bates=${s.bates} adjust=${s.adjust} legacyPay=${s.legacyPaySum} our=${s.our} expected=${s.expectedOur} delta=${s.delta}`);
+    console.log(`  k=${s.k} fix=${s.fix} units=${s.units} bates=${s.bates} sub=${s.sub} termAcc=${s.termAcc} legacyPay=${s.legacyPaySum} ourDebt=${s.ourDebt} ourCredit=${s.ourCredit} ourNet=${s.ourNet} expected=${s.expectedNet} delta=${s.delta}`);
   }
   await pool.end();
 })().catch(e => { console.error('FATAL', e); try { pool.end(); } catch {} process.exit(1); });
