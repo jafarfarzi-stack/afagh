@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { payroll_calculation_rules } from '@/db/schema';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { calculationRuleSchema } from '../route';
 
 async function ownedRuleId(id: number) {
   const uni = await getCurrentUniversity().catch(() => null);
@@ -29,7 +30,11 @@ export async function PUT(
     if (!own.uni || !own.ok) {
       return NextResponse.json({ ok: false, error: 'رکورد یافت نشد یا متعلق به دانشگاه دیگری است.' }, { status: 403 });
     }
-    const body = await req.json();
+    const rawBody = await req.json();
+    const result = calculationRuleSchema.partial().safeParse(rawBody);
+    if (!result.success) {
+      return NextResponse.json({ ok: false, error: 'داده ورودی معتبر نیست.' }, { status: 400 });
+    }
     const {
       offeringType,
       professorRole,
@@ -39,7 +44,7 @@ export async function PUT(
       flatFee,
       title,
       isActive,
-    } = body;
+    } = result.data;
 
     await db
       .update(payroll_calculation_rules)

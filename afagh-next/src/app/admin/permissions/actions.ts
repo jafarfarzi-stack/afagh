@@ -20,7 +20,7 @@ import { permissions, role_permissions, roles, user_roles } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { assertServerActionOrigin } from '@/lib/security';
 import { auditChain } from '@/lib/audit-chain';
-import { clearPermissionCache } from '@/lib/permissions-enforcer';
+import { clearPermissionCache, invalidatePermissionCacheFor } from '@/lib/permissions-enforcer';
 import { createLogger } from '@/lib/logger';
 import { PERMISSION_CATALOG } from '@/lib/permissions-catalog';
 
@@ -189,6 +189,8 @@ export async function saveRolePermissionsAction(input: { roleId: number; codes: 
 
   log.info('role_permissions_saved', { roleId, roleCode: role.code, count: permRows.length });
   clearPermissionCache();
+  const holders = await db.select({ userId: user_roles.userId }).from(user_roles).where(eq(user_roles.roleId, roleId));
+  await invalidatePermissionCacheFor(holders.map((h) => h.userId));
   return ok({ roleId, count: permRows.length });
 }
 
@@ -216,6 +218,8 @@ export async function createRoleAction(input: { code: string; title: string }) {
     });
     log.info('role_created', { id: created.id, code });
     clearPermissionCache();
+    const holders = await db.select({ userId: user_roles.userId }).from(user_roles).where(eq(user_roles.roleId, created.id));
+    await invalidatePermissionCacheFor(holders.map((h) => h.userId));
     return ok({ id: created.id, code, title });
   } catch (err: any) {
     log.error('create_role_failed', { code, error: String(err?.message ?? err) });
@@ -253,5 +257,7 @@ export async function deleteRoleAction(input: { roleId: number }) {
 
   log.info('role_deleted', { roleId, code: role.code });
   clearPermissionCache();
+  const holders = await db.select({ userId: user_roles.userId }).from(user_roles).where(eq(user_roles.roleId, roleId));
+  await invalidatePermissionCacheFor(holders.map((h) => h.userId));
   return ok({ roleId });
 }

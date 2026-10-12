@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, roles, staff, student_term_states, students, universities, user_roles, users, sessions, signature_otps, doc_sign_otps, grade_submission_otps } from '@/db/schema';
 import { and, desc, eq, inArray, isNull, notInArray, or, sql } from 'drizzle-orm';
 import { hashPassword, requireRole } from '@/lib/auth';
+import { z } from 'zod';
 import { clearPermissionCache } from '@/lib/permissions-enforcer';
 import { getSessionUser } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
@@ -830,6 +831,55 @@ export type StudentProfilePatch = {
   entryDate?: string | null;
 };
 
+/** Zod allow-list گیت اعتبارسنجی وصلهٔ پروندهٔ دانشجو (maxها هم‌گام با slicing داخل اکشن) */
+const studentProfilePatchSchema = z.object({
+  fatherName: z.coerce.string().max(100).nullish(),
+  birthCertNo: z.coerce.string().max(20).nullish(),
+  placeOfBirth: z.coerce.string().max(150).nullish(),
+  placeOfIssue: z.coerce.string().max(150).nullish(),
+  gender: z.coerce.string().max(10).nullish(),
+  mobile: z.coerce.string().max(11).nullish(),
+  email: z.coerce.string().max(150).nullish(),
+  postalCode: z.coerce.string().max(10).nullish(),
+  address: z.coerce.string().max(300).nullish(),
+  passportNumber: z.coerce.string().max(20).nullish(),
+  nationality: z.coerce.string().max(10).nullish(),
+  advisorCode: z.coerce.string().max(300).nullish(),
+  documentStatus: z.coerce.string().max(300).nullish(),
+  scholarshipType: z.coerce.string().max(300).nullish(),
+  militaryStatus: z.coerce.string().max(300).nullish(),
+  militaryExemptionNo: z.coerce.string().max(300).nullish(),
+  homeTell: z.coerce.string().max(300).nullish(),
+  studentCardStatus: z.coerce.string().max(300).nullish(),
+  archiveNo: z.coerce.string().max(300).nullish(),
+  parvandehNo: z.coerce.string().max(300).nullish(),
+  dormName: z.coerce.string().max(300).nullish(),
+  dormRoom: z.coerce.string().max(300).nullish(),
+  guardianJobTitle: z.coerce.string().max(300).nullish(),
+  guardianPhone: z.coerce.string().max(300).nullish(),
+  guardianAddress: z.coerce.string().max(300).nullish(),
+  guardianEmail: z.coerce.string().max(300).nullish(),
+  diplomaType: z.coerce.string().max(300).nullish(),
+  diplomaPlace: z.coerce.string().max(300).nullish(),
+  diplomaYear: z.coerce.string().max(300).nullish(),
+  diplomaGrade: z.coerce.string().max(300).nullish(),
+  pishdPlace: z.coerce.string().max(300).nullish(),
+  pishdYear: z.coerce.string().max(300).nullish(),
+  pishdGrade: z.coerce.string().max(300).nullish(),
+  tuitionType: z.coerce.string().max(300).nullish(),
+  englishExamType: z.coerce.string().max(300).nullish(),
+  englishScore: z.coerce.string().max(300).nullish(),
+  documentDeficiency: z.coerce.string().max(300).nullish(),
+  entryDate: z.coerce.string().max(300).nullish(),
+  hasDorm: z.coerce.number().nullish(),
+  tuitionPayer: z.coerce.number().nullish(),
+  certIssued3m: z.coerce.number().nullish(),
+  unitsRemaining: z.coerce.number().nullish(),
+  eqSemesters: z.coerce.number().nullish(),
+  entryYear: z.coerce.number().int().min(1300).max(1500).nullish(),
+  entryTerm: z.coerce.number().int().min(1).max(3).nullish(),
+}).strict();
+
 /** ذخیرهٔ تغییرات پروندهٔ دانشجو (هویت + تکمیلی سما) توسط ادمین — فقط ADMIN */
 export async function updateStudentProfileAction(
   studentId: number, patch: StudentProfilePatch,
@@ -839,6 +889,9 @@ export async function updateStudentProfileAction(
   } catch {
     return { ok: false, error: 'فقط مدیر سیستم (ADMIN) اجازه ویرایش پروندهٔ دانشجو را دارد.' };
   }
+  if (!z.coerce.number().int().positive().safeParse(studentId).success) return { ok: false, error: 'شناسهٔ دانشجو یا مقادیر نامعتبر است.' };
+  const gated = studentProfilePatchSchema.safeParse(patch);
+  if (!gated.success) return { ok: false, error: gated.error.errors[0]?.message ?? 'مقادیر نامعتبر است.' };
   if (!studentId || !patch || typeof patch !== 'object') return { ok: false, error: 'شناسهٔ دانشجو یا مقادیر نامعتبر است.' };
   const uni = await getCurrentUniversity().catch(() => null);
   if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
@@ -931,6 +984,31 @@ export type StaffProfilePatch = {
   maritalStatus?: string; phone?: string; isActive?: number;
 };
 
+/** Zod allow-list گیت اعتبارسنجی وصلهٔ پروندهٔ استاد/کارمند (maxها هم‌گام با slicing داخل اکشن) */
+const staffProfilePatchSchema = z.object({
+  firstName: z.coerce.string().max(100).nullish(),
+  lastName: z.coerce.string().max(100).nullish(),
+  nationalCode: z.coerce.string().max(10).nullish(),
+  mobile: z.coerce.string().max(11).nullish(),
+  email: z.coerce.string().max(150).nullish(),
+  address: z.coerce.string().max(300).nullish(),
+  birthDate: z.coerce.string().max(10).nullish(),
+  academicRank: z.coerce.string().max(50).nullish(),
+  degree: z.coerce.string().max(50).nullish(),
+  cooperationType: z.coerce.string().max(50).nullish(),
+  staffType: z.coerce.string().max(50).nullish(),
+  personnelNo: z.coerce.string().max(50).nullish(),
+  hireDate: z.coerce.string().max(10).nullish(),
+  bankAccountNo: z.coerce.string().max(50).nullish(),
+  academicBase: z.coerce.string().max(20).nullish(),
+  fieldOfStudy: z.coerce.string().max(200).nullish(),
+  lastDegreeUniversity: z.coerce.string().max(200).nullish(),
+  lastDegreeCountryCode: z.coerce.string().max(10).nullish(),
+  maritalStatus: z.coerce.string().max(20).nullish(),
+  phone: z.coerce.string().max(20).nullish(),
+  isActive: z.union([z.coerce.number().int().min(0).max(1), z.null(), z.undefined()]),
+}).strict();
+
 /** ذخیرهٔ تغییرات پروندهٔ استاد/کارمند توسط ادمین — فقط ADMIN */
 export async function updateStaffProfileAction(
   staffId: number, patch: StaffProfilePatch,
@@ -940,6 +1018,9 @@ export async function updateStaffProfileAction(
   } catch {
     return { ok: false, error: 'فقط مدیر سیستم (ADMIN) اجازه ویرایش پروندهٔ استاد را دارد.' };
   }
+  if (!z.coerce.number().int().positive().safeParse(staffId).success) return { ok: false, error: 'شناسهٔ پرونده یا مقادیر نامعتبر است.' };
+  const gated = staffProfilePatchSchema.safeParse(patch);
+  if (!gated.success) return { ok: false, error: gated.error.errors[0]?.message ?? 'مقادیر نامعتبر است.' };
   if (!staffId || !patch || typeof patch !== 'object') return { ok: false, error: 'شناسهٔ پرونده یا مقادیر نامعتبر است.' };
   const uni = await getCurrentUniversity().catch(() => null);
   if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };

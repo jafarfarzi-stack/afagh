@@ -51,6 +51,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'نوع فایل مجاز نیست (فقط تصویر یا PDF).' }, { status: 415 });
   }
 
+  // ── اعتبارسنجی magic-bytes: بایت‌های آغازین باید با MIME ادعاشده بخوانند ──
+  function magicMatches(m: string, b: Buffer): boolean {
+    if (b.length < 4) return false;
+    if (m === 'image/jpeg') return b[0] === 0xFF && b[1] === 0xD8;
+    if (m === 'image/png') return b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47;
+    if (m === 'image/gif') return b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46;
+    if (m === 'application/pdf') return b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46;
+    if (m === 'image/bmp') return b[0] === 0x42 && b[1] === 0x4D;
+    if (m === 'image/webp') {
+      return b.length >= 12
+        && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46
+        && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50;
+    }
+    return false;
+  }
+  if (!magicMatches(mime, buf)) {
+    return NextResponse.json({ error: 'محتوای فایل با نوع ادعاشده مطابقت ندارد.' }, { status: 400 });
+  }
+
   const ext = (file.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
   const key = archiveKey(studentUserId, typeId ?? categoryId, ext);
   const { size, etag } = await putArchiveObject(key, buf, file.type || 'application/octet-stream');

@@ -22,7 +22,7 @@ function timingEq(aHex: string, bHex: string): boolean {
 }
 
 /**
- * احراز هویت API کششی مودل: هدر `x-lms-token` یا پارامتر `?token=`.
+ * احراز هویت API کششی مودل: فقط هدر `x-lms-token` (مقایسهٔ زمان-ثابت).
  * توکن در تنظیمات (MOODLE_PULL_TOKEN) — تا وقتی خالی است API کاملاً بسته است.
  */
 export async function requireLmsToken(req: NextRequest): Promise<NextResponse | null> {
@@ -42,7 +42,6 @@ export async function requireLmsToken(req: NextRequest): Promise<NextResponse | 
       { status: 503 },
     );
   }
-  const url = new URL(req.url);
   const provided = (req.headers.get('x-lms-token') ?? '').trim();
   if (!provided || !timingEq(sha256hex(provided), sha256hex(configured))) {
     log.warn('lms_unauthorized', {});
@@ -56,7 +55,7 @@ export function lmsOk<T>(data: T, paging?: { limit: number; offset: number; coun
 }
 
 export function lmsPaging(url: URL): { limit: number; offset: number } {
-  const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 500), 1), 5000);
+  const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 500), 1), 500);
   const offset = Math.max(Number(url.searchParams.get('offset') || 0), 0);
   return { limit, offset };
 }

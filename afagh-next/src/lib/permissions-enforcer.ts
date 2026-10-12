@@ -239,3 +239,8 @@ export function clearPermissionCache(): void {
   cache.userPermissions.clear();
   cache.lastRefresh = 0;
 }
+
+/** Targeted invalidation — remove only the given users from the cache Map */
+export async function invalidatePermissionCacheFor(userIds: number[]): Promise<void> {
+  for (const id of userIds) cache.userPermissions.delete(id);
+}

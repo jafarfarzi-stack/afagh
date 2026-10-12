@@ -61,6 +61,17 @@ export function assertSameOrigin(req: NextRequest): NextResponse | null {
         { status: 403 },
       );
     }
+    return null;
+  }
+
+  // Observability-only: non-browser clients legitimately send no Origin/Referer
+  // and stay allowed — but an authenticated mutating request without either
+  // header is worth logging (possible misconfiguration or anomaly).
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method.toUpperCase())) {
+    const hasAuth = req.headers.has('authorization') || req.headers.has('cookie');
+    if (hasAuth) {
+      console.warn('[csrf] no-origin mutating request', { path: req.nextUrl.pathname, method: req.method });
+    }
   }
 
   return null;
@@ -80,7 +91,14 @@ export async function assertServerActionOrigin(): Promise<{ ok: true } | { ok: f
     const h = await headers();
     const host = h.get('host') ?? '';
     const origin = h.get('origin') ?? '';
-    if (!origin) return { ok: true }; // curl/cron/test — CSRF مرورگری بدون Origin رخ نمی‌دهد
+    if (!origin) {
+      // Observability-only: non-browser callers (curl/cron/test) stay allowed.
+      const referer = h.get('referer') ?? '';
+      if (!referer && (h.has('authorization') || h.has('cookie'))) {
+        console.warn('[csrf] no-origin server-action', { path: h.get('next-url') ?? h.get('referer') ?? 'unknown', method: 'ServerAction' });
+      }
+      return { ok: true }; // curl/cron/test — CSRF مرورگری بدون Origin رخ نمی‌دهد
+    }
     const originHost = hostOf(origin);
     if (originHost === host || EXTRA_ORIGINS.includes(origin) || EXTRA_ORIGINS.some((o) => hostOf(o) === originHost)) {
       return { ok: true };
@@ -98,13 +116,13 @@ export async function assertServerActionOrigin(): Promise<{ ok: true } | { ok: f
 //  ج) مجوز سطح-شیء (Object-Level Authorization — بازبینی بند ۳)
 //
 //  «Role Authorization» (ادمین/مالی) کافی نیست؛ باید مشخص باشد کارشناس مالی
-//  روی *کدام* دانشجو مجاز است. سیاست پیش‌فرض: همهٔ دانشجویان (مطابق گردش
-//  کار فعلی دانشگاه). با AFAGH_OBJECT_SCOPE=department قابل فعال‌سازی است:
-//  کارشناس فقط دانشجوی گروه/دانشکدهٔ خودش را می‌بیند/تغییر می‌دهد.
+//  روی *کدام* دانشجو مجاز است. سیاست پیش‌فرض: حوزهٔ گروه (department) —
+//  fail-closed در production. با AFAGH_OBJECT_SCOPE=all می‌توان صراحتاً به
+//  رفتار قدیمی «همهٔ دانشجویان» برگشت (opt-out)؛ مقدار faculty نیز پشتیبانی می‌شود.
 // ════════════════════════════════════════════════════════════════════════
 
 export async function requireStudentScope(studentId: number): Promise<{ ok: true } | { ok: false; error: string }> {
-  const mode = (process.env.AFAGH_OBJECT_SCOPE || 'all').toLowerCase();
+  const mode = (process.env.AFAGH_OBJECT_SCOPE || 'department').toLowerCase();
   if (mode !== 'department' && mode !== 'faculty') return { ok: true };
 
   try {

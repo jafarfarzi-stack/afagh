@@ -2,9 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { assertSameOrigin } from '@/lib/security';
 import { db } from '@/db';
+import { z } from 'zod';
 import { payroll_calculation_rules } from '@/db/schema';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import { getCurrentUniversity } from '@/lib/university-scope';
+
+export const calculationRuleSchema = z.object({
+  offeringType: z.enum(['THEORY', 'THESIS', 'DIRECTED_READING', 'INTERNSHIP', 'NORMAL', 'TRANSFER']).nullable().optional(),
+  professorRole: z.enum(['MAIN_LECTURER', 'SUPERVISOR', 'ADVISOR', 'REVIEWER', 'EXAMINER']).nullable().optional(),
+  academicRank: z.enum(['مربی', 'استادیار', 'دانشیار', 'استاد تمام']).nullable().optional(),
+  multiplierUnit: z.coerce.number().min(0).max(99.99).nullable().optional(),
+  multiplierPerStudent: z.coerce.number().min(0).max(99.99).nullable().optional(),
+  flatFee: z.coerce.number().int().min(0).max(999999999999).nullable().optional(),
+  title: z.string().trim().min(1).max(150),
+  isActive: z.union([z.literal(0), z.literal(1)]).optional(),
+});
 
 export async function GET() {
   try {
@@ -27,7 +39,11 @@ export async function POST(req: NextRequest) {
   assertSameOrigin(req);
   try {
     const user = await requireRole(['ADMIN']);
-    const body = await req.json();
+    const rawBody = await req.json();
+    const result = calculationRuleSchema.safeParse(rawBody);
+    if (!result.success) {
+      return NextResponse.json({ ok: false, error: 'داده ورودی معتبر نیست.' }, { status: 400 });
+    }
     const {
       offeringType,
       professorRole,
@@ -36,11 +52,7 @@ export async function POST(req: NextRequest) {
       multiplierPerStudent,
       flatFee,
       title,
-    } = body;
-
-    if (!title) {
-      return NextResponse.json({ ok: false, error: 'عنوان قانون الزامی است' }, { status: 400 });
-    }
+    } = result.data;
     const uni = await getCurrentUniversity().catch(() => null);
     if (!uni) return NextResponse.json({ ok: false, error: 'دانشگاه فعال نامشخص است.' }, { status: 400 });
 

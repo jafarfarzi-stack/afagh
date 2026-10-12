@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/db';
+import { z } from 'zod';
 import { teaching_coefficients } from '@/db/schema';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import { getCurrentUniversity } from '@/lib/university-scope';
+
+const coefficientSchema = z.object({
+  ruleName: z.string().trim().min(1).max(100),
+  multiplier: z.coerce.number().min(0).max(9.99),
+});
 
 export async function GET() {
   try {
@@ -20,12 +26,12 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireRole(['ADMIN']);
-    const body = await req.json();
-    const { ruleName, multiplier } = body;
-
-    if (!ruleName || typeof multiplier !== 'number') {
+    const rawBody = await req.json();
+    const result = coefficientSchema.safeParse(rawBody);
+    if (!result.success) {
       return NextResponse.json({ ok: false, error: 'پارامترهای نامعتبر' }, { status: 400 });
     }
+    const { ruleName, multiplier } = result.data;
     const uni = await getCurrentUniversity().catch(() => null);
     if (!uni) return NextResponse.json({ ok: false, error: 'دانشگاه فعال نامشخص است.' }, { status: 400 });
     const uniScope = or(eq(teaching_coefficients.universityId, uni.id), isNull(teaching_coefficients.universityId));

@@ -156,6 +156,8 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       : [];
     const termIds = terms.map(t => t.id);
     const codes = await uniCodeById();
+    // کد ملی (idnumber) به‌صورت پیش‌فرض حذف؛ فقط با ?withNationalCode=1 (همراه توکن معتبر)
+    const withNationalCode = url.searchParams.get('withNationalCode') === '1';
     const out: Record<string, unknown>[] = [];
 
     if (role === 'student' || role === 'both') {
@@ -204,7 +206,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
           }
           for (const r of srows) {
             out.push({
-              username: r.username, idnumber: r.idnumber, firstname: r.firstname, lastname: r.lastname,
+              username: r.username, ...(withNationalCode ? { idnumber: r.idnumber } : {}), firstname: r.firstname, lastname: r.lastname,
               email: r.email, phone: r.phone, role: 'student', active: r.status === 'ACTIVE',
               major: r.majorId ? (majorsBy.get(r.majorId) ?? null) : null,
               entryYear: r.entryYear ?? null,
@@ -240,7 +242,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
         }
         for (const r of srows) {
           out.push({
-            username: r.username, idnumber: r.idnumber, firstname: r.firstname, lastname: r.lastname,
+            username: r.username, ...(withNationalCode ? { idnumber: r.idnumber } : {}), firstname: r.firstname, lastname: r.lastname,
             email: r.email, phone: r.phone, role: 'student', active: r.status === 'ACTIVE',
             major: r.majorId ? (majorsBy.get(r.majorId) ?? null) : null,
             entryYear: r.entryYear ?? null,
@@ -299,7 +301,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       }
       for (const r of prows) {
         out.push({
-          username: r.username, idnumber: r.idnumber, firstname: r.firstname, lastname: r.lastname,
+          username: r.username, ...(withNationalCode ? { idnumber: r.idnumber } : {}), firstname: r.firstname, lastname: r.lastname,
           email: r.email, phone: r.phone, role: 'staff', active: true,
           department: r.departmentId ? (depBy.get(r.departmentId) ?? null) : null,
           universityCode: r.universityId ? (codes.get(r.universityId) ?? null) : null,

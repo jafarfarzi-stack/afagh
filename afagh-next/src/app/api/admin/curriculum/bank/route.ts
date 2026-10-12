@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { assertSameOrigin } from '@/lib/security';
 import { db } from '@/db';
+import { z } from 'zod';
 import { courses, departments, degree_level_configs, equivalence_clusters } from '@/db/schema';
 import { eq, ilike, or, and, asc, sql, count, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
@@ -9,6 +10,75 @@ import { getCurrentUniversity } from '@/lib/university-scope';
 
 const ALLOWED = ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'];
 const PAGE_SIZE = 100;
+
+const courseTypeEnum = z.enum(['پایه', 'اصلی', 'تخصصی', 'عمومی', 'عملی', 'نظری', 'کارگاهی', 'اختیاری']);
+const gradingTypeEnum = z.enum(['NUMERIC', 'PASS_FAIL']);
+const offeringScopeEnum = z.enum(['DEPARTMENTAL', 'GENERAL_SERVICE', 'UNIVERSITY_WIDE']);
+const locationTypeEnum = z.enum(['IN_CAMPUS', 'OUT_CAMPUS', 'ONLINE', 'HYBRID']);
+const unitsNumber = z.coerce.number().min(0).max(20);
+const nullableId = z.union([z.number().int().positive(), z.null()]).optional();
+
+const bankCreateSchema = z.object({
+  code: z.string().trim().min(1).max(20),
+  title: z.string().trim().min(1).max(200),
+  theoreticalUnits: z.coerce.number().min(0).max(20).default(0),
+  practicalUnits: z.coerce.number().min(0).max(20).default(0),
+  courseType: courseTypeEnum.default('تخصصی'),
+  gradingType: gradingTypeEnum.default('NUMERIC'),
+  affectsGpa: z.coerce.boolean().optional(),
+  departmentId: z.coerce.number().int().positive().nullable().optional(),
+  degreeLevelId: z.coerce.number().int().positive().nullable().optional(),
+  clusterId: z.coerce.number().int().positive().nullable().optional(),
+  offeringScope: offeringScopeEnum.default('DEPARTMENTAL'),
+  locationType: locationTypeEnum.default('IN_CAMPUS'),
+  courseNature: z.string().trim().max(50).nullable().optional(),
+  englishName: z.string().trim().max(200).nullable().optional(),
+  description: z.string().max(2000).nullable().optional(),
+  weeklyTheoryHours: unitsNumber.nullable().optional(),
+  weeklyPracticalHours: unitsNumber.nullable().optional(),
+  isThesis: z.coerce.boolean().optional(),
+  hasProject: z.coerce.boolean().optional(),
+  internshipUnits: unitsNumber.nullable().optional(),
+  minPassedMark: z.coerce.number().min(0).max(20).nullable().optional(),
+  defaultAcceptMarkState: z.string().trim().max(50).nullable().optional(),
+  defaultRejectMarkState: z.string().trim().max(50).nullable().optional(),
+  courseIsActive: z.coerce.boolean().optional(),
+  emergencyWithdrawal: z.coerce.boolean().optional(),
+  coRequisites: z.string().max(500).nullable().optional(),
+  facesHours: unitsNumber.nullable().optional(),
+  equivalentCourseCodes: z.string().max(500).nullable().optional(),
+});
+
+const bankPatchSchema = z.object({
+  code: z.string().trim().min(1).max(20).optional(),
+  title: z.string().trim().min(1).max(200).optional(),
+  theoreticalUnits: unitsNumber.optional(),
+  practicalUnits: unitsNumber.optional(),
+  courseType: courseTypeEnum.optional(),
+  gradingType: gradingTypeEnum.optional(),
+  affectsGpa: z.coerce.boolean().optional(),
+  departmentId: nullableId,
+  degreeLevelId: nullableId,
+  clusterId: nullableId,
+  offeringScope: offeringScopeEnum.optional(),
+  locationType: locationTypeEnum.optional(),
+  courseNature: z.string().trim().max(50).nullable().optional(),
+  englishName: z.string().trim().max(200).nullable().optional(),
+  description: z.string().max(2000).nullable().optional(),
+  weeklyTheoryHours: unitsNumber.nullable().optional(),
+  weeklyPracticalHours: unitsNumber.nullable().optional(),
+  isThesis: z.coerce.boolean().optional(),
+  hasProject: z.coerce.boolean().optional(),
+  internshipUnits: unitsNumber.nullable().optional(),
+  minPassedMark: z.coerce.number().min(0).max(20).nullable().optional(),
+  defaultAcceptMarkState: z.string().trim().max(50).nullable().optional(),
+  defaultRejectMarkState: z.string().trim().max(50).nullable().optional(),
+  courseIsActive: z.coerce.boolean().optional(),
+  emergencyWithdrawal: z.coerce.boolean().optional(),
+  coRequisites: z.string().max(500).nullable().optional(),
+  facesHours: unitsNumber.nullable().optional(),
+  equivalentCourseCodes: z.string().max(500).nullable().optional(),
+}).strict();
 
 export async function GET(req: NextRequest) {
   const user = await getSessionUser();
@@ -97,7 +167,12 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
-  const body = await req.json();
+  const rawBody = await req.json();
+  const parsed = bankPatchSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return NextResponse.json({ ok: false, error: 'داده ورودی معتبر نیست.' }, { status: 400 });
+  }
+  const body = parsed.data;
   const patch: Record<string, unknown> = {};
   if (body.title != null) patch.title = body.title;
   if (body.theoreticalUnits != null) patch.theoreticalUnits = String(body.theoreticalUnits);
@@ -152,11 +227,16 @@ export async function POST(req: NextRequest) {
   if (!user || !user.roles.some(r => ALLOWED.includes(r))) {
     return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز.' }, { status: 403 });
   }
-  const body = await req.json();
-  const code = String(body.code || '').trim();
-  const title = String(body.title || '').trim();
-  const theo = Number(body.theoreticalUnits || 0);
-  const prac = Number(body.practicalUnits || 0);
+  const rawBody = await req.json();
+  const result = bankCreateSchema.safeParse(rawBody);
+  if (!result.success) {
+    return NextResponse.json({ ok: false, error: 'داده ورودی معتبر نیست.' }, { status: 400 });
+  }
+  const body = result.data;
+  const code = body.code;
+  const title = body.title;
+  const theo = body.theoreticalUnits ?? 0;
+  const prac = body.practicalUnits ?? 0;
   if (!code || !title) {
     return NextResponse.json({ ok: false, error: 'کد درس و عنوان الزامی است.' }, { status: 400 });
   }

@@ -48,7 +48,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
 export type SessionUser = { id: number; name: string; roles: string[]; mustChangePassword: boolean; universityId: number | null };
 
 export const SESSION_COOKIE = 'token';
-const SESSION_MAX_AGE = 2 * 86400; // دو روز
+const SESSION_MAX_AGE = 4 * 3600; // چهار ساعت (absolute TTL)
 
 /**
  * فلگ‌های کوکی نشست — به‌صورت خودکار با پروتکل تطبیق می‌یابد:
@@ -78,6 +78,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     .select({
       id: users.id, firstName: users.firstName, lastName: users.lastName, role: roles.code,
       mustChangePassword: users.mustChangePassword, isActive: users.isActive, universityId: users.universityId,
+      expiresAt: sessions.expiresAt,
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
@@ -91,6 +92,16 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     await db.delete(sessions).where(eq(sessions.token, sha256(token)));
     return null;
   }
+  // ── Sliding expiration: اگر بیش از نیمی از عمر نشست سپری شده، تمدید کن ──
+  try {
+    const exp = rows[0].expiresAt instanceof Date ? rows[0].expiresAt.getTime() : new Date(rows[0].expiresAt).getTime();
+    const remainingMs = exp - Date.now();
+    if (remainingMs > 0 && remainingMs < (SESSION_MAX_AGE * 1000) / 2) {
+      await db.update(sessions)
+        .set({ expiresAt: new Date(Date.now() + SESSION_MAX_AGE * 1000) })
+        .where(eq(sessions.token, sha256(token)));
+    }
+  } catch { /* تمدید اختیاری است — خطا نشست را باطل نمی‌کند */ }
   return {
     id: rows[0].id,
     name: rows[0].firstName + ' ' + rows[0].lastName,
@@ -109,12 +120,9 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 /**
- * 🔒 حالت دمو (DEMO_MODE) — پیش‌فرض خاموش (opt-in):
+ * 🔒 حالت دمو (DEMO_MODE) — پیش‌فرض خاموش (opt-in) + fail-closed در production:
  *   • فقط با `AFAGH_DEMO_MODE=1` صریح فعال می‌شود؛ در غیر این صورت false.
- *   • **Production Safety Gate (بازبینی مهندسی):** در production، حتی با
- *     AFAGH_DEMO_MODE=1، بدون `AFAGH_ALLOW_INSECURE_DEMO=true` صریح، دمو فعال
- *     نمی‌شود و لاگ CRITICAL ثبت می‌شود — تا هیچ‌کس ناخواسته مجموعه‌ای از
- *     حساب‌های شناخته‌شده بسازد.
+ *   • در production همیشه false — هیچ ENVای آن را فعال نمی‌کند.
  */
 let demoGateWarned = false;
 export function isDemoMode(): boolean {
@@ -127,23 +135,20 @@ export function isDemoMode(): boolean {
   const enabled = env === '1' || env === 'true';
   if (!enabled) return false;
   if (process.env.NODE_ENV === 'production') {
-    const allow = (process.env.AFAGH_ALLOW_INSECURE_DEMO ?? '').trim().toLowerCase();
-    if (allow !== '1' && allow !== 'true') {
-      if (!demoGateWarned) {
-        demoGateWarned = true;
-        console.error('⚠ CRITICAL [demo] AFAGH_DEMO_MODE=1 در production بدون AFAGH_ALLOW_INSECURE_DEMO=true است — حساب‌های دمو غیرفعال‌اند. این پیکربندی برای محیط عمومی یک خطر است.');
-      }
-      return false;
+    // 🔒 fail-closed: دمو در production هرگز فعال نمی‌شود — حتی با ENV صریح.
+    if (enabled && !demoGateWarned) {
+      demoGateWarned = true;
+      console.error('⛔ CRITICAL [demo] درخواست حالت دمو در production رد شد — دمو در محیط تولید همیشه غیرفعال است (fail-closed).');
     }
-    console.error('⚠ CRITICAL [demo] حالت دمو به‌صورت صریح در production فعال شد (AFAGH_DEMO_MODE=1 + AFAGH_ALLOW_INSECURE_DEMO=true) — حساب‌های شناخته‌شده در دسترس‌اند! فقط برای محیط نمایشی داخل شبکهٔ محرمانه.');
+    return false;
   }
   return true;
 }
 
 /**
- * رمز حساب‌های دمو — هرگز مقدار پیش‌فرض شناخته‌شده ندارد:
- *   • اگر AFAGH_DEMO_PASSWORD ست شده باشد همان استفاده می‌شود؛
- *   • در غیر این صورت یک رمز تصادفی ۱۲رقمی تولید و **یک‌بار در stdout** چاپ می‌شود.
+ * رمز حساب‌های دمو — فقط از AFAGH_DEMO_PASSWORD صریح خوانده می‌شود؛
+ * هرگز تولید تصادفی و هرگز چاپ در stdout/لاگ.
+ * اگر حالت دمو فعال باشد ولی متغیر ست نشده باشد، با خطای صریح fail می‌کند.
  */
 const __demoPwGlobal = globalThis as unknown as { __afaghDemoPw?: string };
 function resolveDemoPassword(): string {
@@ -153,13 +158,15 @@ function resolveDemoPassword(): string {
     __demoPwGlobal.__afaghDemoPw = fromEnv;
     return fromEnv;
   }
-  const generated = randomBytes(9).toString('base64url').slice(0, 12);
-  __demoPwGlobal.__afaghDemoPw = generated;
-  // stdout (نه لاگ خطا) + فقط یک‌بار — رمز شناخته‌شده‌ای در کد/لاگ باقی نمی‌ماند.
-  console.log(`[demo] AFAGH_DEMO_PASSWORD ست نشده است — رمز تصادفی دمو: ${generated}`);
-  return generated;
+  // 🔒 بدون رمز صریح، حساب دمو ساخته نمی‌شود — هیچ رمزی تولید/چاپ نمی‌شود.
+  // ensureDemoUser قبل از مصرف این مقدار isDemoMode را چک می‌کند، پس این خطا
+  // فقط وقتی رخ می‌دهد که دمو واقعاً نیاز به رمز داشته باشد.
+  throw new Error('[demo] حالت دمو فعال است ولی AFAGH_DEMO_PASSWORD ست نشده است — برای ساخت حساب‌های دمو باید رمز صریح در ENV بدهید.');
 }
-export const DEMO_PASSWORD = resolveDemoPassword();
+/** رمز دمو — lazy: فقط وقتی خوانده می‌شود که دمو واقعاً نیازش داشته باشد. */
+export function getDemoPassword(): string {
+  return resolveDemoPassword();
+}
 
 export const DEMO_ACCOUNTS: Record<string, { firstName: string; lastName: string; role: string; staffCode?: string; departmentCode?: string; isStudent?: boolean }> = {
   '0000000001': { firstName: 'مدیر', lastName: 'سامانه', role: 'ADMIN' },
@@ -268,8 +275,8 @@ async function ensureDemoUser(nc: string) {
     return u;
   }
 
-  // Provision missing demo user
-  const passwordHash = await hashPassword(DEMO_PASSWORD);
+  // Provision missing demo user — رمز فقط از ENV صریح؛ اگر نباشد خطای واضح می‌دهد
+  const passwordHash = await hashPassword(getDemoPassword());
   const [created] = await db
     .insert(users)
     .values({
@@ -311,7 +318,8 @@ async function ensureDemoUser(nc: string) {
   return created ?? null;
 }
 
-/** حداکثر نشست فعال همزمان برای هر کاربر — قدیمی‌ترین‌ها حذف می‌شوند (M-4) */
+/** سقف نشست همزمان — منسوخ: issueSessionFor اکنون همهٔ نشست‌های قبلی کاربر را باطل می‌کند (ضد fixation). نگه‌داشته برای سازگاری. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const MAX_SESSIONS_PER_USER = 8;
 
 /** نگاشت فایل مبدأ: کد استاد → کد ملی (فقط سرور). معکوسش برای گسترش کاندیداهای ورود. */
@@ -334,24 +342,10 @@ export async function issueSessionFor(userId: number): Promise<{ mustChange: boo
   if (!u) throw new Error('کاربر یافت نشد.');
   const token = randomBytes(32).toString('hex');
 
-  // ── M-4: پاکسازی و چرخش نشست‌ها ──
+  // ── ضد تثبیت نشست (session fixation): همهٔ نشست‌های قبلی کاربر باطل می‌شود ──
+  //    تا کوکیِ مهاجم‌نشانی‌شده پس از ورود قربانی قابل سوءاستفاده نباشد.
   await db.delete(sessions).where(lt(sessions.expiresAt, new Date()));
-  const [activeCnt] = await db
-    .select({ c: sql<number>`count(*)::int` })
-    .from(sessions)
-    .where(eq(sessions.userId, userId));
-  const active = activeCnt?.c ?? 0;
-  if (active >= MAX_SESSIONS_PER_USER) {
-    const oldSessions = await db
-      .select({ token: sessions.token })
-      .from(sessions)
-      .where(eq(sessions.userId, userId))
-      .orderBy(asc(sessions.expiresAt))
-      .limit(active - MAX_SESSIONS_PER_USER + 1); // حداقل یکی، تا جایی برای نشست جدید باز شود
-    for (const s of oldSessions) {
-      await db.delete(sessions).where(eq(sessions.token, s.token)).catch(() => {});
-    }
-  }
+  await db.delete(sessions).where(eq(sessions.userId, userId));
 
   await db.insert(sessions).values({ token: sha256(token), userId, expiresAt: new Date(Date.now() + SESSION_MAX_AGE * 1000) });
   const cookieStore = await cookies();
@@ -536,7 +530,10 @@ export async function changePassword(currentPassword: string, newPassword: strin
       return { ok: false, error: 'رمز فعلی نادرست است.' };
   }
   const trimmed = newPassword.trim();
-  if (trimmed.length < 8) return { ok: false, error: 'رمز جدید باید حداقل ۸ کاراکتر باشد.' };
+  if (trimmed.length < 10) return { ok: false, error: 'رمز جدید باید حداقل ۱۰ کاراکتر باشد.' };
+  if (trimmed.length > 128) return { ok: false, error: 'رمز جدید باید حداکثر ۱۲۸ کاراکتر باشد.' };
+  if (!/[A-Za-z]/.test(trimmed) || !/[0-9]/.test(trimmed))
+    return { ok: false, error: 'رمز جدید باید حداقل یک حرف و یک رقم داشته باشد.' };
   if (trimmed === currentPassword) return { ok: false, error: 'رمز جدید نباید با رمز فعلی یکسان باشد.' };
   const passwordHash = await hashPassword(trimmed);
   await db.update(users).set({ passwordHash, mustChangePassword: 0 }).where(eq(users.id, u.id));
@@ -545,7 +542,7 @@ export async function changePassword(currentPassword: string, newPassword: strin
   //    نشست جاری حفظ می‌شود تا کاربر وسط کار اخراج نشود.
   const cookieStore = await cookies();
   const currentToken = cookieStore.get(SESSION_COOKIE)?.value ?? '';
-  await db.delete(sessions).where(and(eq(sessions.userId, u.id), ne(sessions.token, currentToken)));
+  await db.delete(sessions).where(and(eq(sessions.userId, u.id), ne(sessions.token, sha256(currentToken))));
   return { ok: true };
 }
 

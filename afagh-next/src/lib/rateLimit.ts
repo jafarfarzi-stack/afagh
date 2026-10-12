@@ -68,6 +68,25 @@ function proxyHeadersTrusted(): boolean {
   return v === '1' || v === 'true' || v === 'caddy';
 }
 
+// NOTE: when proxy headers are untrusted (TRUSTED_PROXY unset), every client
+// shares the single 'local' bucket, so per-IP rate-limiting degrades to a
+// global bucket. That fallback behavior is intentional (fail-closed), but a
+// flood of 'local' hits can mean misconfiguration (proxy not marked trusted)
+// or abuse. The sliding-60s counter below only logs a warning for
+// observability — it never blocks or changes bucketing.
+const LOCAL_BUCKET_WARN_THRESHOLD = 200;
+let localBucketHits: number[] = [];
+function noteLocalBucketFallback(): void {
+  const now = Date.now();
+  localBucketHits.push(now);
+  const cutoff = now - 60_000;
+  while (localBucketHits.length > 0 && localBucketHits[0]! < cutoff) localBucketHits.shift();
+  if (localBucketHits.length > LOCAL_BUCKET_WARN_THRESHOLD) {
+    console.warn('[ratelimit] rate-limit-fallback-abuse', { bucket: 'local', hitsIn60s: localBucketHits.length });
+    localBucketHits = [];
+  }
+}
+
 export async function clientIp(): Promise<string> {
   try {
     const h = await headers();
@@ -75,8 +94,10 @@ export async function clientIp(): Promise<string> {
       const fwd = (h.get('x-forwarded-for') || '').split(',')[0]?.trim();
       return fwd || h.get('x-real-ip')?.trim() || 'local';
     }
+    noteLocalBucketFallback();
     return 'local';
   } catch {
+    noteLocalBucketFallback();
     return 'local';
   }
 }

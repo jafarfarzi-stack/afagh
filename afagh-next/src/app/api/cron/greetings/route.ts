@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSessionUser } from '@/lib/auth';
 import { getSetting } from '@/lib/settings';
 import { assertSameOrigin } from '@/lib/security';
 import { runGreetingScans } from '@/lib/greetings';
@@ -14,17 +13,18 @@ const log = createLogger({ mod: 'cron.greetings' });
 const ACTION = 'CRON_GREETINGS';
 
 // تبریک‌های خودکار: تولد روزانه + شروع ترم انبوه.
-// فراخوانی: هدر x-cron-secret برابر GREETINGS_CRON_SECRET، یا نشست ادمین.
+// فراخوانی فقط ماشین‌به‌ماشین: هدر x-cron-secret برابر GREETINGS_CRON_SECRET.
 // GET فقط وضعیت است (بدون هیچ اثر جانبی)؛ اجرای واقعی فقط با POST.
 async function authorize(req: NextRequest): Promise<{ ok: true; actorUserId: number | null } | { ok: false; res: NextResponse }> {
   const rl = await guardedRateLimit(`cron:greet:${await clientIp()}`, 30, 60);
   if (!rl.ok) return { ok: false, res: NextResponse.json({ ok: false, error: rl.error }, { status: 429 }) };
   const secret = (await getSetting('GREETINGS_CRON_SECRET')).trim();
+  if (!secret) {
+    log.warn('cron_secret_missing', { action: ACTION, hint: 'GREETINGS_CRON_SECRET تنظیم نشده (fail-closed).' });
+    return { ok: false, res: NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز است. کلید کرون معتبر نیست.' }, { status: 401 }) };
+  }
   const provided = req.headers.get('x-cron-secret')?.trim() ?? '';
-  if (secret && provided === secret) return { ok: true, actorUserId: null };
-  const user = await getSessionUser();
-  if (user?.roles.includes('ADMIN')) return { ok: true, actorUserId: user.id };
-  if (!secret) log.warn('cron_secret_missing', { action: ACTION, hint: 'GREETINGS_CRON_SECRET تنظیم نشده؛ فقط نشست ادمین مجاز است.' });
+  if (provided === secret) return { ok: true, actorUserId: null };
   return { ok: false, res: NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز است. کلید کرون معتبر نیست.' }, { status: 401 }) };
 }
 

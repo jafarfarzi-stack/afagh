@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSessionUser } from '@/lib/auth';
 import { refreshAllBiCaches, cacheStatus } from '@/lib/bi-engine';
 import { getSetting } from '@/lib/settings';
 import { assertSameOrigin } from '@/lib/security';
@@ -24,21 +23,17 @@ const ACTION = 'CRON_BI_REFRESH';
 //   30 2 * * * curl -fsS -X POST -H "x-cron-secret: ***" http://localhost:8080/api/cron/bi-refresh
 //
 // GET فقط وضعیت کش است (خواندن، بدون بازسازی)؛ اجرای واقعی فقط با POST.
-// احراز هویت فقط با BI_CRON_SECRET صریح — fallback به GRAD_CRON_SECRET حذف شده است.
+// احراز هویت فقط ماشین‌به‌ماشین با BI_CRON_SECRET (fail-closed، بدون fallback).
 async function authorize(req: NextRequest): Promise<{ ok: true; actorUserId: number | null } | { ok: false; res: NextResponse }> {
   const rl = await guardedRateLimit(`cron:bi:${await clientIp()}`, 30, 60);
   if (!rl.ok) return { ok: false, res: NextResponse.json({ ok: false, error: rl.error }, { status: 429 }) };
   const biSecret = (await getSetting('BI_CRON_SECRET')).trim();
   if (!biSecret) {
-    log.warn('cron_bi_secret_missing', { action: ACTION, hint: 'BI_CRON_SECRET تنظیم نشده؛ فراخوان با کلید ناممکن است (fail-closed).' });
-    const user = await getSessionUser();
-    if (user?.roles.includes('ADMIN')) return { ok: true, actorUserId: user.id };
-    return { ok: false, res: NextResponse.json({ ok: false, error: 'کلید کرون BI تنظیم نشده است؛ با مدیر سامانه تماس بگیرید.' }, { status: 503 }) };
+    log.warn('cron_bi_secret_missing', { action: ACTION, hint: 'BI_CRON_SECRET تنظیم نشده (fail-closed).' });
+    return { ok: false, res: NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز است. کلید کرون معتبر نیست.' }, { status: 401 }) };
   }
   const provided = req.headers.get('x-cron-secret')?.trim() ?? '';
   if (provided === biSecret) return { ok: true, actorUserId: null };
-  const user = await getSessionUser();
-  if (user?.roles.includes('ADMIN')) return { ok: true, actorUserId: user.id };
   return { ok: false, res: NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز است. کلید کرون معتبر نیست.' }, { status: 401 }) };
 }
 

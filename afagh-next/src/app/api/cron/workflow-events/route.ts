@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSessionUser } from '@/lib/auth';
 import { getSetting } from '@/lib/settings';
 import { assertSameOrigin } from '@/lib/security';
 import { retryPendingWorkflowEvents } from '@/lib/workflow-events';
@@ -17,18 +16,19 @@ const ACTION = 'CRON_WORKFLOW_EVENTS';
 // اثر تجاری یک پروندهٔ تأییدشده (مثلاً ثبت درس تطبیق‌شده در کارنامه) اگر وسط کار
 // خطا داده باشد، در جدول workflow_events با وضعیت FAILED می‌ماند و این job آن
 // را دوباره اجرا می‌کند.
-// دو راه فراخوانی: هدر x-cron-secret برابر تنظیم GRAD_CRON_SECRET، یا نشست ادمین.
+// فراخوانی فقط ماشین‌به‌ماشین: هدر x-cron-secret برابر تنظیم WORKFLOW_EVENTS_CRON_SECRET.
 // نمونهٔ crontab:  */15 * * * * curl -fsS -X POST -H "x-cron-secret: ***" http://localhost:8080/api/cron/workflow-events
 // GET فقط وضعیت است (بدون هیچ اثر جانبی)؛ اجرای واقعی فقط با POST.
 async function authorize(req: NextRequest): Promise<{ ok: true; actorUserId: number | null } | { ok: false; res: NextResponse }> {
   const rl = await guardedRateLimit(`cron:wfev:${await clientIp()}`, 30, 60);
   if (!rl.ok) return { ok: false, res: NextResponse.json({ ok: false, error: rl.error }, { status: 429 }) };
-  const secret = (await getSetting('GRAD_CRON_SECRET')).trim();
+  const secret = (await getSetting('WORKFLOW_EVENTS_CRON_SECRET')).trim();
+  if (!secret) {
+    log.warn('cron_secret_missing', { action: ACTION, hint: 'WORKFLOW_EVENTS_CRON_SECRET تنظیم نشده (fail-closed).' });
+    return { ok: false, res: NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز است. کلید کرون معتبر نیست.' }, { status: 401 }) };
+  }
   const provided = req.headers.get('x-cron-secret')?.trim() ?? '';
-  if (secret && provided === secret) return { ok: true, actorUserId: null };
-  const user = await getSessionUser();
-  if (user?.roles.includes('ADMIN')) return { ok: true, actorUserId: user.id };
-  if (!secret) log.warn('cron_secret_missing', { action: ACTION, hint: 'GRAD_CRON_SECRET تنظیم نشده؛ فقط نشست ادمین مجاز است.' });
+  if (provided === secret) return { ok: true, actorUserId: null };
   return { ok: false, res: NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز است. کلید کرون معتبر نیست.' }, { status: 401 }) };
 }
 
