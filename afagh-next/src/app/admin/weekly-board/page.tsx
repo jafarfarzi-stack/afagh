@@ -249,12 +249,9 @@ function buildBoardCalendarEntries(
     const en = String(primary.endTime ?? '').slice(0, 5);
     if (d == null || !Number.isInteger(d) || d < 0 || d > 6 || !st || !en || en <= st) { skipped += g.members.length; continue; }
     const row = { id: primary.offeringId, dayOfWeek: d, startTime: st, endTime: en, weekType };
-    // ترکیب عنوان دقیقاً مثل کارتابل استاد: اگر اعضا یک درس باشند (تئوری+عملی)
-    // عنوان با برچسب «کلاس ادغامی» می‌آید؛ وگرنه عنوان‌های متفاوت با « / » کنار هم.
+    // ادغامی: فقط یک نام درس (اولین عنوان یکتا) تا در چاپ جا شود — بج 🔗 جداگانه هست.
     const uniqTitles = [...new Set(titles)];
-    const titleLabel = uniqTitles.length === 1
-      ? `${uniqTitles[0]} (کلاس ادغامی: ${codes.join('، ')})`
-      : uniqTitles.join(' / ');
+    const titleLabel = uniqTitles[0] ?? String(primary.courseTitle ?? '');
     entries.push({
       key: professorCalendarEntryKey(row),
       id: primary.offeringId,

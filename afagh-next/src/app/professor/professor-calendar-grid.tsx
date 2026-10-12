@@ -196,7 +196,7 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
                           <div className="hidden print:flex print:flex-col print:justify-center print:h-full text-[6.8pt] font-bold leading-[1.25] text-black">
                             {doorPrint ? (
                               <>
-                                <div className="prof-print-title text-[6.8pt] font-black leading-[1.2]">{e.title}{e.merged ? ' 🔗' : ''}</div>
+                                <div className="prof-print-title text-[8.5pt] font-black leading-[1.15]">{e.title}{e.merged ? ' 🔗' : ''}</div>
                                 <div className="prof-print-meta text-[5.8pt] leading-[1.15] text-slate-900">
                                   گروه {professorCalendarEntryGroup(e)}{printCount && e.enrolledCount != null ? ` · 👥 ${faNum(e.enrolledCount)}${e.capacity != null ? `/${faNum(e.capacity)}` : ''}` : ''} · {professorCalendarEntryTime(e)}
                                 </div>
@@ -204,7 +204,7 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
                               </>
                             ) : (
                               <>
-                                <div className="prof-print-title text-[6.8pt] font-black leading-[1.2] truncate">{e.title}{e.merged ? ' 🔗' : ''}</div>
+                                <div className="prof-print-title text-[8.5pt] font-black leading-[1.15] truncate">{e.title}{e.merged ? ' 🔗' : ''}</div>
                                 <div className="prof-print-meta text-[5.8pt] leading-[1.15] truncate">
                                   {showCode ? `${e.code} · ` : ''}گروه {professorCalendarEntryGroup(e)}{printCount && e.enrolledCount != null ? ` · 👥 ${faNum(e.enrolledCount)}${e.capacity != null ? `/${faNum(e.capacity)}` : ''}` : ''}
                                 </div>
