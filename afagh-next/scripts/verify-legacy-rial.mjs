@@ -64,7 +64,7 @@ const toOurTerm = (legacy) => { const s=String(legacy??'').trim(); if(/^\d{3}$/.
   // تراز لجر ما به ازای (sid|tid)
   const led = await q(`
     SELECT sl."studentId", sl."termId",
-      SUM(CASE WHEN sl."transactionType" IN ('TUITION_FIXED','TUITION_VARIABLE') THEN sl.amount ELSE 0 END) AS fees,
+      SUM(CASE WHEN sl."transactionType" IN ('TUITION_FIXED','TUITION_VARIABLE','TUITION_BATES') THEN sl.amount ELSE 0 END) AS fees,
       SUM(CASE WHEN sl."transactionType" = 'PAYMENT' THEN sl.amount ELSE 0 END) AS pays
     FROM student_ledger sl WHERE sl."universityId"=$1 GROUP BY 1,2`, [UNI]);
   const ourNet = new Map(led.map(r => [`${r.studentId}|${r.termId}`, { fees: num(r.fees), pays: num(r.pays) }]));
