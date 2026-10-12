@@ -111,7 +111,8 @@ function profDisplay(
   if (showGenderHonor) {
     const female = m.profGender === 'FEMALE' || (!m.profGender && normFa(m.profLegacyTitle).includes('خانم'));
     const male = m.profGender === 'MALE' || (!m.profGender && normFa(m.profLegacyTitle).includes('آقا'));
-    honor = female ? (shortHonor ? 'خانم' : 'سرکار خانم') : male ? (shortHonor ? 'آقای' : 'جناب آقای') : '';
+    // قاعدهٔ استاندارد سردر: فقط «خانم» و «آقای» (بدون سرکار/جناب) — بسیار کوتاه‌تر و مناسب چاپ
+    honor = female ? 'خانم' : male ? 'آقای' : '';
   }
   return [honor, degree, showFirst ? first : '', last].filter(Boolean).join(' ');
 }
@@ -640,7 +641,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
           <select name="gender" defaultValue={genderParam} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
             <option value="">پیرو تنظیم سامانه</option>
             <option value="0">بدون آقا/خانم (کم‌جا — ویژهٔ چاپ)</option>
-            <option value="short">کوتاه (آقای / خانم)</option>
+            <option value="short">کوتاه (آقای / خانم) ✓ پیش‌فرض</option>
             <option value="full">کامل (جناب آقای / سرکار خانم)</option>
           </select>
         </label>

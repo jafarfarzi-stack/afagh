@@ -170,7 +170,7 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'WEEKLY_BOARD_PROF_TITLE', env: 'WEEKLY_BOARD_PROF_TITLE', group: 'سردر برنامهٔ هفتگی', label: 'لقب احترام استاد در سردر', type: 'boolean', default: 'true', help: 'استادیار و بالاتر «دکتر» + مهندس برای فنی' },
   { key: 'WEEKLY_BOARD_GENDER_HONORIFIC', env: 'WEEKLY_BOARD_GENDER_HONORIFIC', group: 'سردر برنامهٔ هفتگی', label: 'پیشوند «جناب آقای / سرکار خانم» در سردر', type: 'boolean', default: 'false', help: 'خاموش = فقط مرتبه علمی (دکتر / مهندس) بدون پیشوند جنسیتی تا نام استاد در چاپ کامل جا شود. روشن = افزودن جناب آقای / سرکار خانم' },
   { key: 'WEEKLY_BOARD_SHOW_FIRSTNAME', env: 'WEEKLY_BOARD_SHOW_FIRSTNAME', group: 'سردر برنامهٔ هفتگی', label: 'چاپ نام کوچک استاد در سردر', type: 'boolean', default: 'true', help: 'خاموش = فقط نام خانوادگی (با لقب). مثلاً «دکتر میکی» به‌جای «دکتر مرضیه میکی»' },
-  { key: 'WEEKLY_BOARD_SHORT_HONORIFIC', env: 'WEEKLY_BOARD_SHORT_HONORIFIC', group: 'سردر برنامهٔ هفتگی', label: 'لقب کوتاه در سردر (کم‌جا)', type: 'boolean', default: 'false', help: 'روشن = «خانم/آقای» به‌جای «سرکار خانم/جناب آقای» برای جاهای تنگ' },
+  { key: 'WEEKLY_BOARD_SHORT_HONORIFIC', env: 'WEEKLY_BOARD_SHORT_HONORIFIC', group: 'سردر برنامهٔ هفتگی', label: 'لقب کامل در سردر (سرکار/جناب)', type: 'boolean', default: 'false', help: 'پیش‌فرض خاموش است: فقط «خانم/آقای» چاپ می‌شود (کوتاه و مناسب چاپ). روشن = «سرکار خانم/جناب آقای» (طولانی)' },
 
   // ── امنیت ورود و نظارت ──
   { key: 'SESSION_LOCK_MINUTES', env: 'SESSION_LOCK_MINUTES', group: 'امنیت ورود و نظارت', label: 'قفل خودکار بیکاری (دقیقه)', type: 'number', default: '15', help: 'پس از این مدت بی‌تعاملی، صفحه قفل و رمز دوباره خواسته می‌شود. ۰ = غیرفعال' },
