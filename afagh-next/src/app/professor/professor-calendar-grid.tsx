@@ -17,6 +17,8 @@ export interface ProfessorCalendarEntry {
   code: string;
   title: string;
   groupNumber: number;
+  /** برچسب گروه نمایشی (مثل «۱، ۲» برای بلوک‌های ادغامی چندگروهی) — اگر خالی باشد groupNumber نمایش داده می‌شود */
+  groupLabel?: string | null;
   dayOfWeek: number | null;
   startTime: string;
   endTime: string;
@@ -63,7 +65,34 @@ export function professorCalendarEntryTime(e: Pick<ProfessorCalendarEntry, 'star
   return `${faNum(String(e.startTime).slice(0, 5))} الی ${faNum(String(e.endTime).slice(0, 5))}`;
 }
 
-export default function ProfessorCalendarGrid({ entries }: { entries: ProfessorCalendarEntry[] }) {
+export function professorCalendarEntryGroup(e: Pick<ProfessorCalendarEntry, 'groupNumber' | 'groupLabel'>) {
+  const label = String(e.groupLabel ?? '').trim();
+  return label ? faNum(label) : faNum(e.groupNumber);
+}
+
+/**
+ * `room` (پیش‌فرض، کارتابل استاد/دانشجو): سطر چهارم کارت = نام کلاس + ساختمان.
+ * `professor` (سردر کلاس‌ها): چون پوستر برای یک کلاسِ ثابت چاپ می‌شود و نام کلاس
+ * در هر بلوک تکراری و بی‌فایده است، سطر چهارم = نام استاد (مثلاً «آقای دکتر محمدی»)
+ * و برچسب جداگانهٔ «استاد:» دیگر نشان داده نمی‌شود تا تکرار نشود.
+ */
+export type ProfessorCalendarPlaceMode = 'room' | 'professor';
+
+export default function ProfessorCalendarGrid({ entries, placeMode = 'room', showCode = true }: {
+  entries: ProfessorCalendarEntry[];
+  placeMode?: ProfessorCalendarPlaceMode;
+  /** چاپ/نمایش کد درس — برای سردر کلاس‌ها پیش‌فرض خاموش است تا خوانایی بالا برود */
+  showCode?: boolean;
+}) {
+  const byPlace = (e: ProfessorCalendarEntry) =>
+    placeMode === 'professor'
+      ? (e.professorName ? `👤 ${e.professorName}` : '👤 استاد ثبت نشده')
+      : (e.roomName ? `🏛️ ${e.roomName}` : '🏛️ سالن ثبت نشده');
+  const placeTitle = (e: ProfessorCalendarEntry) =>
+    placeMode === 'professor'
+      ? (e.professorName ? `استاد: ${e.professorName}` : 'استاد ثبت نشده')
+      : (e.roomName ? `${e.roomName}${e.buildingName ? ` · ${e.buildingName}` : ''}` : 'سالن ثبت نشده');
+  const hideProfessorPill = placeMode === 'professor';
   const byDay: ProfessorCalendarEntry[][] = Array.from({ length: PROFESSOR_GRID_DAYS.length }, () => []);
   for (const e of entries) {
     const d = professorCalendarDayIndex(e.dayOfWeek);
@@ -153,7 +182,7 @@ export default function ProfessorCalendarGrid({ entries }: { entries: ProfessorC
                         }}
                       >
                         <div
-                          title={`${e.title} — ${e.code} · ${professorCalendarEntryTime(e)}${e.roomName ? ` · ${e.roomName}` : ''}`}
+                          title={`${e.title} — ${e.code} · ${professorCalendarEntryTime(e)} · ${placeTitle(e)}`}
                           className={`prof-week-card h-full overflow-hidden p-1.5 rounded-lg border text-right shadow-xs leading-4 ${
                             e.courseType === 'عملی'
                               ? 'bg-amber-50 border-amber-300 text-amber-950'
@@ -162,31 +191,31 @@ export default function ProfessorCalendarGrid({ entries }: { entries: ProfessorC
                         >
                           <div className="hidden print:block text-[7.5pt] font-bold leading-[1.45] text-black">
                             <div className="truncate">{e.title}{e.merged ? ' 🔗' : ''}</div>
-                            <div className="truncate">{e.code} · گروه {faNum(e.groupNumber)} · 👥 {faNum(e.enrolledCount)}/{faNum(e.capacity)}</div>
-                            <div className="truncate">{professorCalendarEntryTime(e)} · {e.roomName ? `🏛️ ${e.roomName}${e.buildingName ? ` · ${e.buildingName}` : ''}` : '🏛️ سالن ثبت نشده'}{e.weekType === 'EVEN' ? ' · هفته زوج' : e.weekType === 'ODD' ? ' · هفته فرد' : e.weekType === 'BOTH' ? ' · زوج و فرد' : ''}</div>
-                            {e.professorName ? <div className="truncate">استاد: {e.professorName}</div> : null}
+                            <div className="truncate">{showCode ? `${e.code} · ` : ''}گروه {professorCalendarEntryGroup(e)} · 👥 {faNum(e.enrolledCount)}/{faNum(e.capacity)}</div>
+                            <div className="truncate">{professorCalendarEntryTime(e)} · {placeTitle(e)}{e.weekType === 'EVEN' ? ' · هفته زوج' : e.weekType === 'ODD' ? ' · هفته فرد' : e.weekType === 'BOTH' ? ' · زوج و فرد' : ''}</div>
+                            {e.professorName && !hideProfessorPill ? <div className="truncate">استاد: {e.professorName}</div> : null}
                           </div>
                           <div className="prof-week-title print:hidden font-extrabold text-[11px] text-slate-900 leading-5 truncate" title={e.title}>
                             {e.title}
                           </div>
-                          <div className="prof-week-code print:hidden font-mono text-[10px] font-bold text-indigo-900 whitespace-nowrap truncate" title={`${e.code} · گروه ${e.groupNumber}`}>
-                            {e.code} · گروه {faNum(e.groupNumber)}
+                          <div className="prof-week-code print:hidden font-mono text-[10px] font-bold text-indigo-900 whitespace-nowrap truncate" title={showCode ? `${e.code} · گروه ${professorCalendarEntryGroup(e)}` : `گروه ${professorCalendarEntryGroup(e)}`}>
+                            {showCode ? `${e.code} · ` : ''}گروه {professorCalendarEntryGroup(e)}
                           </div>
                           <div className="prof-week-essential print:hidden text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">
                             {professorCalendarEntryTime(e)}
                           </div>
                           <div
                             className="prof-week-essential print:hidden text-[10px] font-bold text-slate-700 whitespace-nowrap truncate"
-                            title={e.roomName ? `${e.roomName}${e.buildingName ? ` · ${e.buildingName}` : ''}` : 'سالن ثبت نشده'}
+                            title={placeTitle(e)}
                           >
-                            {e.roomName ? `🏛️ ${e.roomName}` : '🏛️ سالن ثبت نشده'}<span className="prof-week-detail">{e.buildingName ? ` · ${e.buildingName}` : ''}</span>
+                            {byPlace(e)}{placeMode === 'room' && e.buildingName ? <span className="prof-week-detail"> · {e.buildingName}</span> : null}
                           </div>
                           {e.merged && (
                             <div className="prof-week-badge print:hidden mt-0.5 inline-block px-1.5 py-0.5 rounded bg-teal-100 text-teal-950 font-bold border border-teal-300 text-[10px] whitespace-nowrap">
                               🔗 کلاس ادغامی
                             </div>
                           )}
-                          {e.professorName ? (
+                          {e.professorName && !hideProfessorPill ? (
                             <div
                               className="prof-week-detail print:hidden mt-0.5 px-1 py-0.5 rounded bg-slate-100 text-slate-800 text-[10px] font-bold border border-slate-200 leading-4 truncate"
                               title={`استاد: ${e.professorName}`}

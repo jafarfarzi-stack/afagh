@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, classrooms, course_offerings, courses, departments, enrollments, faculties,
@@ -8,15 +8,11 @@ import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { currentExpertFilters } from '@/lib/expert-scope';
 import { getSetting, getBool } from '@/lib/settings';
-import { groupIntoMerged, mergedGroupKey } from '@/lib/professor-calendar-layout';
+import { groupIntoMerged, mergedGroupKey, professorCalendarEntryKey, type ProfessorCalendarWeekType } from '@/lib/professor-calendar-layout';
+import ProfessorCalendarGrid, { type ProfessorCalendarEntry } from '@/app/professor/professor-calendar-grid';
 import PrintButton from './PrintButton';
 
 export const dynamic = 'force-dynamic';
-
-const DAY_NAMES = ['شنبه', 'یک‌شنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
-// شبکهٔ ۱۵دقیقه‌ای ۸ تا ۲۰ (مدل تقویم هفتگی): ۴۸ سطر — بلوک‌ها دقیق می‌نشینند
-const SLOT_START = 8 * 60, SLOT_END = 20 * 60, SLOT_STEP = 15;
-const SLOTS = Array.from({ length: (SLOT_END - SLOT_START) / SLOT_STEP }, (_, i) => SLOT_START + i * SLOT_STEP);
 
 const faDigits = (s: string | number) => String(s).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
 
@@ -28,9 +24,52 @@ const withPrefix = (prefix: string, value: unknown) => {
   return v.startsWith(prefix) || v.includes(prefix) ? v : `${prefix} ${v}`;
 };
 
+function metaParts(parts: (string | null | undefined)[]): string {
+  return parts.filter(Boolean).join(' · ');
+}
+
+/**
+ * سربرگ سردر — عین کارتابل استاد/دانشجو:
+ *   · روی صفحه: یک سطر فشرده (`print:hidden`)
+ *   · در چاپ: جعبهٔ سربرگ کوچک `prof-week-print-head` (تک‌سطر، فونت کم)
+ * بنابراین بالای جدول هرگز سه سطر شلوغ نمی‌شود.
+ */
+function BoardHeader({ logoUrl, title, meta }: {
+  logoUrl: string | null;
+  title: string;
+  meta: string;
+}) {
+  return (
+    <>
+      {/* چاپ: تک‌سطر داخل جعبهٔ سربرگ استاندارد */}
+      <div className="prof-week-print-head hidden print:block">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4mm' }}>
+          {logoUrl && (
+            <img src={logoUrl} alt="" width={53} height={53} style={{ height: '11mm', width: 'auto', display: 'block' }} />
+          )}
+          <div style={{ minWidth: 0 }}>
+            <div className="font-extrabold truncate">{title}</div>
+            <div className="truncate">{meta}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* صفحه: یک سطر، بدون شلوغی */}
+      <div className="print:hidden flex items-center gap-2 pb-2 mb-1 border-b border-slate-200 overflow-hidden">
+        {logoUrl && <img src={logoUrl} alt="ارم دانشگاه" className="h-8 w-8 shrink-0 object-contain" />}
+        <h2 className="text-sm font-black text-slate-900 truncate shrink-0 max-w-[46%]">{title}</h2>
+        <span className="text-slate-300 shrink-0">|</span>
+        <p className="text-[11px] font-bold text-slate-500 truncate">{meta}</p>
+      </div>
+    </>
+  );
+}
+
 type BoardRow = {
-  offeringId: number; groupNumber: number; enrolledCount: number | null;
+  offeringId: number; groupNumber: number; enrolledCount: number | null; capacity: number | null;
   courseCode: string | null; courseTitle: string | null;
+  courseNature: string | null; courseType: string | null;
+  scheduleType: string | null;
   dayOfWeek: number | null; startTime: string | null; endTime: string | null;
   roomId: number | null; roomName: string | null; buildingName: string | null;
   profFirstName: string | null; profLastName: string | null;
@@ -42,17 +81,30 @@ const normFa = (s: unknown) => String(s ?? '').replace(/ي/g, 'ی').replace(/ك/
 /** ارقام فارسی/عربی به انگلیسی — برای جست‌وجوی کد استاد/شماره دانشجویی */
 const faToEn = (s: unknown) => String(s ?? '').replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).trim();
 
+/**
+ * گروه‌های «علوم انسانی» که لقب «مهندس» برای مربیانشان نامناسب است.
+ * در سردر کلاس‌ها برای این گروه‌ها فقط «آقای/خانم + نام» می‌آید، نه «مهندس».
+ * الگو عمداً گروه‌های فنی/مهندسی (کامپیوتر، برق، مکانیک، عمران، صنایع، …) را دربر نمی‌گیرد.
+ */
+const HUMANITIES_DEPT_PATTERN =
+  /(حقوق|مدیریت|روانشناسی|حسابداری|مدارک|علوم انسانی|ادبیات|زبان|هنر|طراحی صنعتی|معماری|جغرافیا|اقتصاد|جامعه|تربیت بدنی|علوم تربیتی|سیاست|روابط بین الملل|فلسفه|دیریت|کتابداری|بین الملل)/;
+
+/** آیا این ردیف به گروه علوم انسانی تعلق دارد؟ (نام گروه از طریق deptId نگاشت می‌شود) */
+function isHumanitiesDept(deptName: string | null | undefined): boolean {
+  return HUMANITIES_DEPT_PATTERN.test(normFa(deptName ?? ''));
+}
+
 /** نام نمایشی استاد با لقب احترام: استادیار و بالاتر «دکتر» + جناب آقای/سرکار خانم */
 function profDisplay(
   m: Pick<BoardRow, 'profFirstName' | 'profLastName' | 'profRank' | 'profGender' | 'profLegacyTitle'>,
-  showTitle: boolean, showFirst: boolean, shortHonor = false,
+  showTitle: boolean, showFirst: boolean, shortHonor = false, allowEngineer = true,
 ): string {
   const first = (m.profFirstName || '').trim();
   const last = (m.profLastName || '').trim();
   if (!showTitle) return [showFirst ? first : '', last].filter(Boolean).join(' ');
   const rank = normFa(m.profRank);
   const isDoctor = rank.includes('دانشیار') || rank.includes('استاد');
-  const isEngineer = !isDoctor && rank.includes('مربی');
+  const isEngineer = allowEngineer && !isDoctor && rank.includes('مربی');
   const degree = isDoctor ? 'دکتر' : isEngineer ? 'مهندس' : '';
   const female = m.profGender === 'FEMALE' || (!m.profGender && normFa(m.profLegacyTitle).includes('خانم'));
   const male = m.profGender === 'MALE' || (!m.profGender && normFa(m.profLegacyTitle).includes('آقا'));
@@ -60,25 +112,172 @@ function profDisplay(
   return [honor, degree, showFirst ? first : '', last].filter(Boolean).join(' ');
 }
 
+/** نگاشت scheduleType به نوع هفتهٔ تقویم (مثل کارتابل استاد/دانشجو): CLASS/ALL→هر هفته، EVEN→زوج، ODD→فرد، BOTH→زوج و فرد */
+function mapBoardWeekType(scheduleType: string | null | undefined): ProfessorCalendarWeekType {
+  const v = String(scheduleType ?? '').toUpperCase();
+  if (v === 'EVEN') return 'EVEN';
+  if (v === 'ODD') return 'ODD';
+  if (v === 'BOTH') return 'BOTH';
+  return 'ALL';
+}
+
+/** رنگ‌بندی بلوک مثل کارتابل استاد: عملی (کارگاهی/آزمایشگاهی) کهربایی، بقیه نیلی */
+function mapBoardCourseType(courseNature: string | null | undefined, courseType: string | null | undefined): string {
+  const v = `${courseNature ?? ''} ${courseType ?? ''}`;
+  if (v.includes('عملی') || v.includes('کارگاه') || v.includes('آزمایش')) return 'عملی';
+  return String(courseType || courseNature || 'تخصصی');
+}
+
+export type BoardCalendarEntry = ProfessorCalendarEntry & {
+  sharedScheduleGroupKey: string | null;
+  roomKey: string | number | null;
+};
+
+/**
+ * ساخت ورودی‌های گرید تقویمی (همان فرمت کارتابل استاد/دانشجو) از سانس‌های سردر.
+ * ادغامی‌ها مثل برنامهٔ استاد/دانشجو یک بلوک واحد می‌شوند: کدها با « / »،
+ * عناوین با « / »، استادان با «،»، گروه‌ها با «،»، ثبت‌نامی جمع و ظرفیت ماکزیمم.
+ */
+function buildBoardCalendarEntries(
+  list: BoardRow[],
+  showTitle: boolean, showFirst: boolean, shortHonor = false,
+  deptNameById: Map<number, string> = new Map(),
+  noEngineerTitle = false,
+): { entries: BoardCalendarEntry[]; skipped: number } {
+  const profOf = (m: Pick<BoardRow, 'profFirstName' | 'profLastName' | 'profRank' | 'profGender' | 'profLegacyTitle' | 'deptId'>) =>
+    profDisplay(
+      m, showTitle, showFirst, shortHonor,
+      !noEngineerTitle && !isHumanitiesDept(deptNameById.get(m.deptId ?? -1)),
+    );
+  type Raw = BoardRow & { uid: number };
+  const groups = groupIntoMerged<Raw>(
+    list.map((r, i) => ({ ...r, uid: i })),
+    (m) => m.offeringId * 100000 + m.uid,
+    (m) => {
+      const shared = String(m.sharedKey ?? '').trim();
+      const slot = mergedGroupKey(null, {
+        dayOfWeek: m.dayOfWeek,
+        startTime: m.startTime,
+        endTime: m.endTime,
+        roomKey: m.roomId ?? m.roomName ?? null,
+      });
+      if (slot == null) return shared ? `K:${shared}` : null;
+      return shared ? `K:${shared}|${slot}` : slot;
+    },
+  );
+  const entries: BoardCalendarEntry[] = [];
+  let skipped = 0;
+  for (const g of groups) {
+    if (!g.merged) {
+      const m = g.members[0];
+      const d = m.dayOfWeek == null ? null : Number(m.dayOfWeek);
+      const st = String(m.startTime ?? '').slice(0, 5);
+      const en = String(m.endTime ?? '').slice(0, 5);
+      if (d == null || !Number.isInteger(d) || d < 0 || d > 6 || !st || !en || en <= st) { skipped += 1; continue; }
+      const weekType = mapBoardWeekType(m.scheduleType);
+      const row = { id: m.offeringId, dayOfWeek: d, startTime: st, endTime: en, weekType };
+      entries.push({
+        key: professorCalendarEntryKey(row),
+        id: m.offeringId,
+        code: String(m.courseCode ?? ''),
+        title: String(m.courseTitle ?? ''),
+        groupNumber: m.groupNumber,
+        groupLabel: String(m.groupNumber),
+        dayOfWeek: d,
+        startTime: st,
+        endTime: en,
+        roomName: m.roomName ?? '',
+        buildingName: m.buildingName ?? '',
+        weekType,
+        courseType: mapBoardCourseType(m.courseNature, m.courseType),
+        professorName: profOf(m),
+        enrolledCount: m.enrolledCount ?? null,
+        capacity: m.capacity ?? null,
+        merged: false,
+        sharedScheduleGroupKey: String(m.sharedKey ?? '').trim() || null,
+        roomKey: m.roomId ?? m.roomName ?? null,
+      });
+      continue;
+    }
+    const primary = g.members.find(m => m.offeringId * 100000 + m.uid === g.primaryId) ?? g.members[0];
+    const codes = [...new Set(g.members.map(m => String(m.courseCode ?? '').trim()).filter(Boolean))];
+    const titles = [...new Set(g.members.map(m => String(m.courseTitle ?? '').trim()).filter(Boolean))];
+    const profs = [...new Set(g.members.map(m => profOf(m)).filter(Boolean))];
+    const groupNums = [...new Set(g.members.map(m => m.groupNumber))].sort((a, b) => a - b);
+    const enrolled = g.members.reduce((s, m) => s + (Number(m.enrolledCount) || 0), 0);
+    const caps = g.members.map(m => Number(m.capacity)).filter(n => Number.isFinite(n) && n > 0);
+    const weekSet = new Set(g.members.map(m => mapBoardWeekType(m.scheduleType)));
+    const weekType: ProfessorCalendarWeekType = weekSet.size === 1 ? [...weekSet][0] : 'BOTH';
+    const d = primary.dayOfWeek == null ? null : Number(primary.dayOfWeek);
+    const st = String(primary.startTime ?? '').slice(0, 5);
+    const en = String(primary.endTime ?? '').slice(0, 5);
+    if (d == null || !Number.isInteger(d) || d < 0 || d > 6 || !st || !en || en <= st) { skipped += g.members.length; continue; }
+    const row = { id: primary.offeringId, dayOfWeek: d, startTime: st, endTime: en, weekType };
+    // ترکیب عنوان دقیقاً مثل کارتابل استاد: اگر اعضا یک درس باشند (تئوری+عملی)
+    // عنوان با برچسب «کلاس ادغامی» می‌آید؛ وگرنه عنوان‌های متفاوت با « / » کنار هم.
+    const uniqTitles = [...new Set(titles)];
+    const titleLabel = uniqTitles.length === 1
+      ? `${uniqTitles[0]} (کلاس ادغامی: ${codes.join('، ')})`
+      : uniqTitles.join(' / ');
+    entries.push({
+      key: professorCalendarEntryKey(row),
+      id: primary.offeringId,
+      code: codes.length > 0 ? codes.join(' / ') : String(primary.courseCode ?? ''),
+      title: titleLabel,
+      groupNumber: primary.groupNumber,
+      groupLabel: groupNums.map(n => String(n)).join('، '),
+      dayOfWeek: d,
+      startTime: st,
+      endTime: en,
+      roomName: primary.roomName ?? '',
+      buildingName: primary.buildingName ?? '',
+      weekType,
+      courseType: mapBoardCourseType(primary.courseNature, primary.courseType),
+      professorName: profs.join('، '),
+      enrolledCount: enrolled,
+      capacity: caps.length > 0 ? Math.max(...caps) : primary.capacity ?? null,
+      merged: true,
+      sharedScheduleGroupKey: String(primary.sharedKey ?? '').trim() || null,
+      roomKey: primary.roomId ?? primary.roomName ?? null,
+    });
+  }
+  return { entries, skipped };
+}
+
 export default async function WeeklyBoardPage({ searchParams }: {
-  searchParams: Promise<{ term?: string; faculty?: string; dept?: string; room?: string; tab?: string; q?: string }>;
+  searchParams: Promise<{ term?: string; faculty?: string; dept?: string; room?: string; tab?: string; q?: string; code?: string; title?: string }>;
 }) {
   const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
   const uni = await getCurrentUniversity().catch(() => null);
   const sp = await searchParams;
   const tab = sp.tab === 'prof' || sp.tab === 'student' ? sp.tab : 'board';
   const q = faToEn(sp.q);
+  // کد درس در سردر کلاس‌ها پیش‌فرض خاموش است (خوانایی بالاتر)؛ با ?code=1 روشن می‌شود.
+  const showCode = sp.code === '1';
   const termId = Number(sp.term) || 0;
   const facultyId = Number(sp.faculty) || 0;
   const deptId = Number(sp.dept) || 0;
   const roomId = Number(sp.room) || 0;
 
-  // کلیدهای نمایش نام استاد (تنظیمات مدیر)
-  const [showTitle, showFirst, shortHonor] = await Promise.all([
+  // کلیدهای نمایش نام استاد (تنظیمات مدیر) — مبنای حالت «تنظیم سامانه»
+  const [cfgShowTitle, showFirst, shortHonor] = await Promise.all([
     getBool('WEEKLY_BOARD_PROF_TITLE').catch(() => true),
     getBool('WEEKLY_BOARD_SHOW_FIRSTNAME').catch(() => true),
     getBool('WEEKLY_BOARD_SHORT_HONORIFIC').catch(() => false),
   ]);
+
+  // ── عنوان استاد: کاملاً اختیاری ──
+  //   system      → پیرو تنظیمات «پیکربندی سامانه»
+  //   full        → آقای/خانم + دکتر + (مهندس برای گروه‌های فنی)
+  //   no-engineer → آقای/خانم + دکتر، ولی مربی‌ها «بدون مهندس»
+  //   plain       → فقط نام و نام خانوادگی
+  const titleParam = sp.title ?? '';
+  const profTitleMode: 'system' | 'full' | 'no-engineer' | 'plain' =
+    titleParam === '1' ? 'full' : titleParam === '0' ? 'no-engineer' : titleParam === 'name' ? 'plain' : 'system';
+  const showTitle = profTitleMode === 'plain' ? false
+    : profTitleMode === 'system' ? cfgShowTitle
+      : true;
+  const noEngineerTitle = profTitleMode === 'no-engineer';
 
   const terms = await db.select({ id: academic_terms.id, title: academic_terms.title, isCurrent: academic_terms.isCurrent })
     .from(academic_terms)
@@ -99,6 +298,8 @@ export default async function WeeklyBoardPage({ searchParams }: {
   const rooms = await (async () => {
     if (!term) return [];
     // فقط کلاس‌هایی که در همین ترم سانس دارند (خالی‌ها نه) + احترام به فیلتر دانشکده
+    // NOTE: مبنا همهٔ سانس‌های کلاسی است (CLASS/EVEN/ODD/BOTH) نه فقط CLASS — وگرنه
+    // کلاس‌هایی که فقط سانس زوج/فرد دارند از فهرست پوستر جا می‌مانند.
     const facDeptIds = facultyId ? depts.filter(d => d.facultyId === facultyId).map(d => d.id) : null;
     if (facDeptIds && facDeptIds.length === 0) return []; // fail-closed مثل scopeConds
     const rows0 = await db.select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, capacity: classrooms.capacity, facultyId: classrooms.facultyId })
@@ -108,7 +309,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
         sql`EXISTS (SELECT 1 FROM schedules s
           JOIN course_offerings o ON o.id = s."offeringId"
           JOIN courses c ON c.id = o."courseId"
-          WHERE s."roomId" = classrooms.id AND s."scheduleType" = 'CLASS'
+          WHERE s."roomId" = classrooms.id AND s."scheduleType" <> 'EXAM'
             AND o."termId" = ${term.id} AND o."isActive" = 1
             ${facDeptIds ? sql`AND c."departmentId" IN (${sql.join(facDeptIds.map(n => sql`${n}`), sql`, `)})` : sql``})`,
       ))
@@ -132,8 +333,12 @@ export default async function WeeklyBoardPage({ searchParams }: {
     offeringId: course_offerings.id,
     groupNumber: course_offerings.groupNumber,
     enrolledCount: course_offerings.enrolledCount,
+    capacity: course_offerings.capacity,
     courseCode: courses.code,
     courseTitle: courses.title,
+    courseNature: courses.courseNature,
+    courseType: courses.courseType,
+    scheduleType: schedules.scheduleType,
     dayOfWeek: schedules.dayOfWeek,
     startTime: schedules.startTime,
     endTime: schedules.endTime,
@@ -159,7 +364,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
         .leftJoin(users, eq(users.id, staff.userId))
         .leftJoin(classrooms, eq(classrooms.id, schedules.roomId))
         .where(and(
-          eq(schedules.scheduleType, 'CLASS'),
+          ne(schedules.scheduleType, 'EXAM'),
           eq(course_offerings.termId, term.id),
           eq(course_offerings.isActive, 1),
           ...(selRoom ? [inArray(schedules.roomId, selRoom.aliasIds)] : roomId ? [sql`1=0`] : []),
@@ -168,145 +373,10 @@ export default async function WeeklyBoardPage({ searchParams }: {
         .orderBy(asc(courses.title), asc(course_offerings.groupNumber))
     : [];
 
-const toMin = (t: string | null) => { if (!t) return 0; const [h, m] = String(t).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
-const fmtClock = (min: number) => faDigits(`${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`);
-
-type MergedCell = BoardRow & {
-  merged: boolean; codes: string; titles: string; profs: string; groupLabel: string; enrolled: number;
-  uid: number;
-};
-
-/** ادغامی‌ها مثل برنامهٔ استاد/دانشجو: یک بلوک واحد (کلید K مشترک، وگرنه سانس S) */
-function collapseBoardRows(list: BoardRow[], showTitle: boolean, showFirst: boolean, shortHonor = false): MergedCell[] {
-  return groupIntoMerged<BoardRow & { uid: number }>(
-    list.map((r, i) => ({ ...r, uid: i })),
-    (m) => m.offeringId * 100000 + m.uid,
-    (m) => {
-      const shared = String(m.sharedKey ?? '').trim();
-      const slot = mergedGroupKey(null, {
-        dayOfWeek: m.dayOfWeek,
-        startTime: m.startTime,
-        endTime: m.endTime,
-        roomKey: m.roomId ?? m.roomName ?? null,
-      });
-      if (slot == null) return shared ? `K:${shared}` : null;
-      return shared ? `K:${shared}|${slot}` : slot;
-    },
-  ).map(g => {
-    if (!g.merged) {
-      const m = g.members[0];
-      return {
-        ...m, merged: false as const, codes: String(m.courseCode ?? ''),
-        titles: String(m.courseTitle ?? ''),
-        profs: profDisplay(m, showTitle, showFirst, shortHonor), groupLabel: faDigits(m.groupNumber),
-        enrolled: Number(m.enrolledCount) || 0,
-      };
-    }
-    const codes = [...new Set(g.members.map(m => String(m.courseCode ?? '').trim()).filter(Boolean))];
-    const titles = [...new Set(g.members.map(m => String(m.courseTitle ?? '').trim()).filter(Boolean))];
-    const profs = [...new Set(g.members.map(m => profDisplay(m, showTitle, showFirst, shortHonor)).filter(Boolean))];
-    const groups = [...new Set(g.members.map(m => m.groupNumber))].sort((a, b) => a - b);
-    const enrolled = g.members.reduce((s, m) => s + (Number(m.enrolledCount) || 0), 0);
-    return {
-      ...g.members[0], merged: true as const, codes: codes.join(' / '),
-      titles: titles.join(' / '),
-      profs: profs.join('، '), groupLabel: groups.map(faDigits).join('، '), enrolled,
-    };
-  });
-}
-
-type CellT = MergedCell & { start: number; end: number };
-type Placed = { cell: CellT; first: number; span: number };
-
-/** چیدمان تقویمی دقیق: هر سانس یک بلوک با rowSpan روی سطرهای ساعتی ۸ تا ۲۰ */
-function placeBoardCells(merged: MergedCell[]): { placedByDay: Placed[][]; outside: CellT[] } {
-  const placedByDay: Placed[][] = Array.from({ length: 7 }, () => []);
-  const outside: CellT[] = [];
-  for (const r of merged) {
-    const d = r.dayOfWeek == null ? -1 : Number(r.dayOfWeek);
-    if (d < 0 || d > 6) continue;
-    const start = toMin(r.startTime), end = toMin(r.endTime);
-    if (!(end > start)) { outside.push({ ...r, start, end }); continue; }
-    const hits: number[] = [];
-    for (let hi = 0; hi < SLOTS.length; hi++) {
-      if (start < SLOTS[hi] + SLOT_STEP && end > SLOTS[hi]) hits.push(hi);
-    }
-    if (!hits.length) { outside.push({ ...r, start, end }); continue; }
-    placedByDay[d].push({ cell: { ...r, start, end }, first: hits[0], span: hits.length });
-  }
-  for (const list of placedByDay) list.sort((a, b) => a.first - b.first || a.cell.start - b.cell.start);
-  return { placedByDay, outside };
-}
-
-/** جدول تقویمی + فهرست خارج‌بازه — مشترک تابلوی کلاس‌ها و تب‌های استاد/دانشجو */
-function BoardGrid({ placedByDay, outside, big, showRoom }: {
-  placedByDay: Placed[][]; outside: CellT[]; big?: boolean; showRoom?: boolean;
-}) {
-  return (
-    <>
-      <table className={`w-full border-collapse ${big ? 'text-sm' : 'text-[11px]'}`}>
-        <thead>
-          <tr>
-            <th className="border border-slate-300 bg-slate-100 p-1">ساعت</th>
-            {DAY_NAMES.map(d => <th key={d} className="border border-slate-300 bg-slate-100 p-1 rounded-t">{d}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {SLOTS.map((m, hi) => (
-            <tr key={m}>
-              <td className="border border-slate-300 bg-slate-50 p-0.5 text-center font-mono">
-                {hi % 4 === 0
-                  ? <b className="text-[11px]">{faDigits(fmtClock(m))}</b>
-                  : <span className="text-slate-400 text-[9px]">{faDigits(fmtClock(m))}</span>}
-              </td>
-              {DAY_NAMES.map((_, di) => {
-                // شرط صریح: فقط بلوک‌های همین روز — هیچ بلوکی افقی جابه‌جا نمی‌شود،
-                // حتی اگر در تایم جا نشود (سرریز فقط عمودی، در ستون خودش می‌ماند)
-                const dayList = placedByDay[di].filter(x => Number(x.cell.dayOfWeek) === di);
-                const starts = dayList.filter(x => x.first === hi);
-                if (starts.length) {
-                  const span = Math.max(...starts.map(x => x.span));
-                  return (
-                    <td key={di} rowSpan={span} className="border border-slate-200 p-1 align-top bg-white" style={{ minHeight: 46 }}>
-                      {starts.map((p, j) => {
-                        const c = p.cell;
-                        return (
-                          <div key={j} className={`rounded border-r-4 px-2 py-1 leading-6 ${j > 0 ? 'mt-1' : ''} ${c.merged ? 'bg-amber-50 border-amber-500' : 'bg-indigo-50 border-indigo-500'} ${big ? 'text-sm' : 'text-[11px]'}`}>
-                            <div><b>{c.codes} {c.titles}</b> گروه {c.groupLabel}
-                              {c.merged && <span className="mr-1 rounded bg-amber-200 px-1 text-[10px] font-black">🔗 ادغامی</span>}
-                            </div>
-                            {showRoom && <div className="text-slate-500">{c.roomName || '—'}{c.buildingName ? ` (${c.buildingName})` : ''}</div>}
-                            <div className="text-slate-600">{c.profs}<span className="print:hidden"> · {faDigits(c.enrolled)} نفر</span></div>
-                          </div>
-                        );
-                      })}
-                    </td>
-                  );
-                }
-                const covered = dayList.some(x => hi > x.first && hi < x.first + x.span);
-                if (covered) return null;
-                return <td key={di} className="border border-slate-200 p-0.5 align-top" style={{ minHeight: 46 }} />;
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {outside.length > 0 && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900">
-          <b>⏰ خارج از بازهٔ ۸ تا ۲۰:</b>
-          <ul className="mt-1 space-y-0.5">
-            {outside.map((c, i) => (
-              <li key={i}>{DAY_NAMES[Number(c.dayOfWeek)] ?? ''} — {c.codes} {c.courseTitle} (از {fmtClock(c.start)} تا {fmtClock(c.end)} · {c.roomName || '—'})</li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </>
-  );
-}
-
-  const mergedCells = collapseBoardRows(rows, showTitle, showFirst, shortHonor);
-  const { placedByDay, outside } = placeBoardCells(mergedCells);
+  // ورودی‌های گرید تقویمی با همان فرمت کارتابل استاد/دانشجو (تک‌صفحهٔ افقی + بج ادغامی + بج زوج/فرد)
+  const { entries: boardEntries, skipped: boardSkipped } = buildBoardCalendarEntries(rows, showTitle, showFirst, shortHonor, new Map(depts.map(d => [d.id, d.name] as const)), noEngineerTitle);
+  const boardOfferingCount = new Set(rows.map(r => r.offeringId)).size;
+  const boardMergedCount = boardEntries.filter(e => e.merged).length;
 
   // ── تب‌های برنامهٔ استاد / دانشجو (جست‌وجو با کد استادی / شماره دانشجویی) ──
   type PersonInfo = { kind: 'prof' | 'student'; name: string; code: string; extra: string };
@@ -343,7 +413,7 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
           .leftJoin(users, eq(users.id, staff.userId))
           .leftJoin(classrooms, eq(classrooms.id, schedules.roomId))
           .where(and(
-            eq(schedules.scheduleType, 'CLASS'),
+            ne(schedules.scheduleType, 'EXAM'),
             eq(course_offerings.termId, term.id),
             eq(course_offerings.isActive, 1),
             coIds.length
@@ -385,7 +455,7 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
             .leftJoin(users, eq(users.id, staff.userId))
             .leftJoin(classrooms, eq(classrooms.id, schedules.roomId))
             .where(and(
-              eq(schedules.scheduleType, 'CLASS'),
+              ne(schedules.scheduleType, 'EXAM'),
               inArray(course_offerings.id, offIds),
               eq(course_offerings.isActive, 1),
               ...scope,
@@ -395,8 +465,7 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
       }
     }
   }
-  const personMerged = collapseBoardRows(personRows, showTitle, showFirst, shortHonor);
-  const personPlaced = placeBoardCells(personMerged);
+  const { entries: personEntries, skipped: personSkipped } = buildBoardCalendarEntries(personRows, showTitle, showFirst, shortHonor, new Map(depts.map(d => [d.id, d.name] as const)), noEngineerTitle);
 
   const poster = selRoom ?? null;
 
@@ -407,7 +476,7 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
   const deptFac = new Map(depts.map(d => [d.id, d.facultyId] as const));
   const modeFaculty = (() => {
     const cnt = new Map<string, number>();
-    for (const m of mergedCells) {
+    for (const m of rows) {
       const n = facName(deptFac.get(m.deptId ?? -1));
       if (n) cnt.set(n, (cnt.get(n) ?? 0) + 1);
     }
@@ -420,7 +489,7 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
     : poster
       ? (poster.facultyId ? facName(poster.facultyId) : modeFaculty)
       : (() => {
-          const names = [...new Set(mergedCells.map(m => facName(deptFac.get(m.deptId ?? -1))).filter(Boolean))];
+          const names = [...new Set(rows.map(m => facName(deptFac.get(m.deptId ?? -1))).filter(Boolean))];
           return names.length <= 2 ? names.join('، ') : `${names.slice(0, 2).join('، ')} و …`;
         })();
 
@@ -436,7 +505,7 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
         {([['board', '🗓 تابلوی کلاس‌ها'], ['prof', '👨‍🏫 برنامهٔ استاد'], ['student', '🎓 برنامهٔ دانشجو']] as const).map(([v, t]) => (
           <a
             key={v}
-            href={`/admin/weekly-board?term=${term?.id ?? ''}&tab=${v}`}
+            href={`/admin/weekly-board?term=${term?.id ?? ''}&tab=${v}${showCode ? '&code=1' : ''}${titleParam ? `&title=${titleParam}` : ''}`}
             className={`rounded-xl px-4 py-2 text-sm font-black ${tab === v ? 'bg-teal-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
           >
             {t}
@@ -470,39 +539,64 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
             {rooms.map(r => <option key={r.id} value={r.id}>{r.name}{r.buildingName ? ` — ${r.buildingName}` : ''}</option>)}
           </select>
         </label>
+        <label className="text-xs font-bold">عنوان استاد
+          <select name="title" defaultValue={titleParam} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+            <option value="">پیرو تنظیم سامانه</option>
+            <option value="1">با عنوان (آقای دکتر …)</option>
+            <option value="0">مربی‌ها بدون «مهندس»</option>
+            <option value="name">فقط نام (بدون عنوان)</option>
+          </select>
+        </label>
+        <label className="text-xs font-bold">کد درس
+          <select name="code" defaultValue={showCode ? '1' : ''} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+            <option value="">بدون کد (خواناتر)</option>
+            <option value="1">نمایش کد درس</option>
+          </select>
+        </label>
         <button className="rounded-xl bg-indigo-700 px-5 py-2 text-white font-black text-sm">نمایش</button>
         <PrintButton />
       </form>
 
       {term && (
-        <div className="print-area rounded-2xl border border-slate-300 bg-white p-4 space-y-3 overflow-x-auto" dir="rtl">
-          {poster && <style>{`@page { size: A4 landscape; margin: 8mm 8mm; }`}</style>}
+        <div className="print-area prof-week-print rounded-2xl border border-slate-300 bg-white p-4 space-y-3" dir="rtl">
+          <style>{'@media print { @page { size: A4 landscape; margin: 8mm 7mm; } }'}</style>
           {poster ? (
-            <div className="text-center border-b-4 border-double border-slate-800 pb-3">
-              {logoUrl && <img src={logoUrl} alt="ارم دانشگاه" className="mx-auto mb-2 h-16 w-16 object-contain" />}
-              <h1 className="text-2xl font-black text-slate-900">🚪 برنامهٔ هفتگی {withPrefix('کلاس', poster.name)}</h1>
-              <p className="text-base font-black text-slate-800 mt-2">
-                {headerFaculty ? `${withPrefix('دانشکدهٔ', headerFaculty)} · ` : ''}{withPrefix('نیمسال', term.title)}{poster.buildingName ? ` · ${poster.buildingName}` : ''}
-              </p>
-              <p className="text-sm font-bold text-slate-600 mt-1">
-                {withPrefix('دانشگاه', uni?.title ?? '')}
-              </p>
+            <BoardHeader
+              logoUrl={logoUrl}
+              title={`🚪 برنامهٔ هفتگی ${withPrefix('کلاس', poster.name)}`}
+              meta={metaParts([
+                headerFaculty ? withPrefix('دانشکدهٔ', headerFaculty) : null,
+                withPrefix('نیمسال', term.title),
+                poster.buildingName || null,
+                withPrefix('دانشگاه', uni?.title ?? ''),
+              ])}
+            />
+) : (
+            <BoardHeader
+              logoUrl={logoUrl}
+              title={`برنامهٔ هفتگی کلاس‌ها — ${term.title}`}
+              meta={metaParts([
+                withPrefix('دانشگاه', uni?.title ?? ''),
+                headerFaculty ? withPrefix('دانشکدهٔ', headerFaculty) : null,
+                headerDept ? `گروه ${headerDept}` : null,
+                `${faDigits(boardOfferingCount)} کلاس · ${faDigits(boardEntries.length)} بلوک${boardMergedCount > 0 ? ` (${faDigits(boardMergedCount)} ادغامی 🔗)` : ''}`,
+              ])}
+            />
+          )}
+          {boardEntries.length === 0 ? (
+            <div className="text-center p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-xs font-bold text-slate-500 leading-6">
+              در دامنهٔ انتخابی سانس کلاسی برای نمایش در جدول هفتگی وجود ندارد.
+              {boardSkipped > 0 ? ` (${faDigits(boardSkipped)} سانس بدون روز/ساعت معتبر از جدول کنار گذاشته شد.)` : ''}
             </div>
           ) : (
-            <div className="text-center">
-              <div className="flex items-center justify-center gap-2">
-                {logoUrl && <img src={logoUrl} alt="ارم دانشگاه" className="h-10 w-10 object-contain" />}
-                <h1 className="text-base font-black text-slate-900">برنامهٔ هفتگی کلاس‌ها — {term.title}</h1>
-              </div>
-              <p className="text-[11px] text-slate-500">
-                {withPrefix('دانشگاه', uni?.title ?? '')}
-                {headerFaculty ? ` · ${withPrefix('دانشکدهٔ', headerFaculty)}` : ''}
-                {headerDept ? ` · گروه ${headerDept}` : ''} · {mergedCells.length} سانس
-                <span className="print:hidden"> (دامنهٔ انتخابی)</span>
-              </p>
-            </div>
+            /* سردرِ یک کلاس: نام کلاس در هر بلوک تکراری است → نام استاد نشان داده می‌شود */
+            <ProfessorCalendarGrid entries={boardEntries} placeMode="professor" showCode={showCode} />
           )}
-          <BoardGrid placedByDay={placedByDay} outside={outside} big={!!poster} showRoom={!poster} />
+          {boardSkipped > 0 && boardEntries.length > 0 && (
+            <p className="print:hidden text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+              ⏰ {faDigits(boardSkipped)} سانس بدون روز/ساعت معتبر در جدول نمایش داده نمی‌شود.
+            </p>
+          )}
         </div>
       )}
       </>
@@ -519,21 +613,30 @@ function BoardGrid({ placedByDay, outside, big, showRoom }: {
       </form>
 
       {term && personSearched && personInfo && (
-        <div className="print-area rounded-2xl border border-slate-300 bg-white p-4 space-y-3 overflow-x-auto" dir="rtl">
-          <div className="text-center border-b-4 border-double border-slate-800 pb-3">
-            <div className="flex items-center justify-center gap-2">
-              {logoUrl && <img src={logoUrl} alt="ارم دانشگاه" className="h-14 w-14 object-contain" />}
-              <h1 className="text-xl font-black text-slate-900">
-                {personInfo.kind === 'prof' ? '👨‍🏫 برنامهٔ هفتگی استاد' : '🎓 برنامهٔ هفتگی دانشجو'}
-              </h1>
+        <div className="print-area prof-week-print rounded-2xl border border-slate-300 bg-white p-4 space-y-3" dir="rtl">
+          <style>{'@media print { @page { size: A4 landscape; margin: 8mm 7mm; } }'}</style>
+          <BoardHeader
+            logoUrl={logoUrl}
+            title={`${personInfo.kind === 'prof' ? '👨‍🏫 برنامهٔ هفتگی استاد' : '🎓 برنامهٔ هفتگی دانشجو'} — ${personInfo.name}`}
+            meta={metaParts([
+              `${personInfo.kind === 'prof' ? 'کد استادی' : 'شماره دانشجویی'} ${faDigits(personInfo.code)}`,
+              personInfo.extra || null,
+              withPrefix('نیمسال', term.title),
+              withPrefix('دانشگاه', uni?.title ?? ''),
+            ])}
+          />
+          {personEntries.length === 0 ? (
+            <div className="text-center p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-xs font-bold text-slate-500 leading-6">
+              سانس کلاسی برای نمایش در جدول هفتگی وجود ندارد.
             </div>
-            <p className="text-lg font-black text-slate-800 mt-1">{personInfo.name}</p>
-            <p className="text-sm font-bold text-slate-600 mt-1">
-              {personInfo.kind === 'prof' ? 'کد استادی' : 'شماره دانشجویی'} {faDigits(personInfo.code)}
-              {personInfo.extra ? ` · ${personInfo.extra}` : ''} · {withPrefix('نیمسال', term.title)} · {withPrefix('دانشگاه', uni?.title ?? '')}
+          ) : (
+            <ProfessorCalendarGrid entries={personEntries} />
+          )}
+          {personSkipped > 0 && personEntries.length > 0 && (
+            <p className="print:hidden text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+              ⏰ {faDigits(personSkipped)} سانس بدون روز/ساعت معتبر در جدول نمایش داده نمی‌شود.
             </p>
-          </div>
-          <BoardGrid placedByDay={personPlaced.placedByDay} outside={personPlaced.outside} showRoom />
+          )}
         </div>
       )}
       {term && personSearched && !personInfo && (
