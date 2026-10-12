@@ -16,9 +16,8 @@
  * ‏+ TUITION_CHARGE و CHARGE (موتور شهریه/گردش‌کار) + CREDIT (بستانکاری)
  * ‏+ POS_REFUND (برگشت وجه کارت‌خوان: پرداخت را خنثی می‌کند پس بدهی است)
  * ‏+ TUITION_BATES (بیتس قدیمی: تخفیف/اعتبار — علامت سیستم قدیم مثبت=طلبکار)
- * ‏+ TUITION_ADJUST (تعدیل قدیمی TSUMMab_Subject: مثبت=بدهی، منفی=بستانکاری؛
- *    مبلغ همیشه |adjust| ذخیره می‌شود و نوع در DEBT/CREDIT بر اساس علامت
- *    در اسکریپت درج تعیین می‌شود — اینجا هر دو فهرست را پوشش می‌دهیم).
+ * ‏+ TUITION_ADJUST_DEC (تعدیل کاهشی قدیمی TSUMMab_Subject<0) و
+ *    TUITION_ADJUST_INC (تعدیل افزایشی TSUMMab_Subject>0).
  * هیچ نوع مجازِ دیتابیسی نباید برای تراز نامرئی بماند.
  */
 
@@ -33,10 +32,10 @@ export const DEBT_LEDGER_TYPES = [
   'TUITION_FIXED',
   'TUITION_VARIABLE',
   'TUITION_CHARGE',
-  'TUITION_BATES',
   'CHARGE',
   'SUBJECT_ADDITIVE',
   'POS_REFUND',
+  'TUITION_ADJUST_INC', // تعدیل افزایشی قدیمی (بدهی)
 ] as const;
 
 /** انواع تراکنش دفتر مالی که «اعتبار» می‌سازند (کاهش مانده) */
@@ -49,6 +48,8 @@ export const CREDIT_LEDGER_TYPES = [
   'SPONSORSHIP',
   'LOAN',
   'CREDIT',
+  'TUITION_BATES',      // بیتس قدیمی = تخفیف/اعتبار (کاهش بدهی)
+  'TUITION_ADJUST_DEC', // تعدیل کاهشی قدیمی (تخفیف موضوعی)
 ] as const;
 
 const DEBT_SET: ReadonlySet<string> = new Set(DEBT_LEDGER_TYPES);
