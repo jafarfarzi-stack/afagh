@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { departments, roles, staff, user_roles, users } from '@/db/schema';
 import { getSessionUser, hashPassword, requireRole } from '@/lib/auth';
+import { clearPermissionCache } from '@/lib/permissions-enforcer';
 import StaffTable from './StaffTable';
 
 export const dynamic = 'force-dynamic';
@@ -36,6 +37,7 @@ async function toggleHeadAction(fd: FormData) {
     const [st] = await db.select({ id: staff.id }).from(staff).where(eq(staff.userId, userId)).limit(1);
     if (st) await db.update(departments).set({ headStaffId: null }).where(eq(departments.headStaffId, st.id));
   }
+  clearPermissionCache();
   revalidatePath('/admin/staff');
   revalidatePath('/admin/departments');
 }
@@ -73,6 +75,7 @@ async function saveUserRolesAction(userId: number, roleIds: number[]): Promise<{
       removed++;
     }
   }
+  clearPermissionCache();
   revalidatePath('/admin/staff');
   return { ok: true, added, removed };
 }
@@ -177,7 +180,10 @@ async function createStaffExpertAction(input: {
     const stType = String(input.staffType || '').trim();
     if (stType.includes('هیئت') || stType.includes('مربی') || stType.includes('استاد')) {
       const [prof] = await db.select({ id: roles.id }).from(roles).where(eq(roles.code, 'PROFESSOR')).limit(1);
-      if (prof) await db.insert(user_roles).values({ userId: u.id, roleId: prof.id }).onConflictDoNothing();
+      if (prof) {
+        await db.insert(user_roles).values({ userId: u.id, roleId: prof.id }).onConflictDoNothing();
+        clearPermissionCache();
+      }
     }
     revalidatePath('/admin/staff');
     return { ok: true, userId: u.id };

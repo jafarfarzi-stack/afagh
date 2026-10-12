@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, roles, staff, student_term_states, students, universities, user_roles, users, sessions, signature_otps, doc_sign_otps, grade_submission_otps } from '@/db/schema';
 import { and, desc, eq, inArray, isNull, notInArray, or, sql } from 'drizzle-orm';
 import { hashPassword, requireRole } from '@/lib/auth';
+import { clearPermissionCache } from '@/lib/permissions-enforcer';
 import { getSessionUser } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { resolveCityMinistry } from '@/lib/shared-coding';
@@ -463,6 +464,7 @@ async function ensureAccountRoles(userId: number): Promise<void> {
       await db.insert(user_roles).values({ userId, roleId: r.id })
         .onConflictDoNothing({ target: [user_roles.userId, user_roles.roleId] })
         .catch(() => {});
+      clearPermissionCache();
     }
   }
 }
@@ -722,7 +724,10 @@ export async function createStaffExpertAction(input: {
     const stType = String(input.staffType || '').trim();
     if (stType.includes('هیئت') || stType.includes('مربی') || stType.includes('استاد')) {
       const [prof] = await db.select({ id: roles.id }).from(roles).where(eq(roles.code, 'PROFESSOR')).limit(1);
-      if (prof) await db.insert(user_roles).values({ userId: u.id, roleId: prof.id }).onConflictDoNothing();
+      if (prof) {
+        await db.insert(user_roles).values({ userId: u.id, roleId: prof.id }).onConflictDoNothing();
+        clearPermissionCache();
+      }
     }
     revalidatePath('/admin/students');
     revalidatePath('/admin/staff');
@@ -770,6 +775,7 @@ export async function saveUserRolesAction(userId: number, roleIds: number[]): Pr
       await tx.delete(sessions).where(eq(sessions.userId, userId));
     }
   });
+  if (added || removed) clearPermissionCache();
   revalidatePath('/admin/students');
   return { ok: true, added, removed };
 }

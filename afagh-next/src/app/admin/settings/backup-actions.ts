@@ -28,6 +28,7 @@ function redactRow(table: string, row: Record<string, any>): void {
     row.payload = REDACTED;
   } else if (table === 'verification_otps') {
     if ('otpCode' in row) row.otpCode = REDACTED;
+    if ('otpHash' in row) row.otpHash = REDACTED;
   }
 }
 

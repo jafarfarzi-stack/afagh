@@ -137,6 +137,14 @@ export async function adminSetGradeAction(
           return { ok: false, error: 'ثبت‌نام متعلق به دانشگاه دیگری است.' };
         }
         existingEnrollment = e;
+      } else {
+        // ارائهٔ مستقیم بدون ثبت‌نام موجود — مالکیت دانشگاهی ارائه هم چک شود
+        const [off] = await db.select({ universityId: course_offerings.universityId })
+          .from(course_offerings).where(eq(course_offerings.id, targetOfferingId)).limit(1);
+        if (!off) return { ok: false, error: 'ارائه یافت نشد.' };
+        if (off.universityId !== null && off.universityId !== uni.id) {
+          return { ok: false, error: 'ارائه متعلق به دانشگاه دیگری است.' };
+        }
       }
     }
 
@@ -800,6 +808,15 @@ export async function reviewUnfinalizeAction(
     if (req.universityId !== null && req.universityId !== uni.id) {
       return { ok: false, error: 'درخواست متعلق به دانشگاه دیگری است.' };
     }
+    // دفاع‌عمقی NULL-uni: مالکیت دانشگاهی خود ارائه هم راستی‌آزمایی شود
+    // (رکوردهای قدیمی/دستی بدون universityId نباید از دانشگاه دیگر تأیید شوند)
+    const [offUni] = await db.select({ universityId: course_offerings.universityId })
+      .from(course_offerings).where(eq(course_offerings.id, req.offeringId)).limit(1);
+    if (!offUni) return { ok: false, error: 'ارائهٔ درخواست یافت نشد.' };
+    if (offUni.universityId !== null && offUni.universityId !== uni.id) {
+      return { ok: false, error: 'ارائه متعلق به دانشگاه دیگری است.' };
+    }
+    const offUniId = offUni.universityId ?? null;
 
     if (decision === 'APPROVED') {
       // اعتبارسنجی مهلت اختصاصی (اختیاری): فقط تاریخ واقعی با now < ext < now+60days
@@ -835,7 +852,10 @@ export async function reviewUnfinalizeAction(
               gradesTemporaryAt: new Date(),
               ...(extDate ? { customGradeDeadline: extDate } : {}),
             })
-            .where(eq(course_offerings.id, req.offeringId));
+            // قید دانشگاهی فقط وقتی معلوم است (رکورد legacy با NULL همان id را می‌گیرد)
+            .where(offUniId !== null
+              ? and(eq(course_offerings.id, req.offeringId), eq(course_offerings.universityId, offUniId))
+              : eq(course_offerings.id, req.offeringId));
         });
       } catch (err) {
         if ((err as Error)?.message === 'UNFINALIZE_STALE') {

@@ -67,11 +67,11 @@ export default function ElectronicSignature(props: {
   // ── وضعیت ۲: کد ارسال شد ──
   if (phase === 'OTP_SENT') return (
     <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5">
-      <p className="text-sm">کد تأیید پنج‌رقمی به شمارهٔ همراه ثبت‌شده ارسال شد.</p>
+      <p className="text-sm">کد تأیید شش‌رقمی به شمارهٔ همراه ثبت‌شده ارسال شد.</p>
       {devOtp && <p className="rounded-xl bg-amber-50 p-2 text-center text-sm text-amber-800 dark:border dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">[حالت توسعه] کد: <b className="font-mono" dir="ltr">{devOtp}</b></p>}
       <input
         className="input text-center font-mono text-2xl tracking-[0.6em]"
-        dir="ltr" inputMode="numeric" maxLength={5} placeholder="•••••"
+        dir="ltr" inputMode="numeric" maxLength={6} placeholder="••••••"
         value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
       />
       {error && <p className="rounded-xl bg-red-50 p-2 text-center text-sm text-red-700 dark:border dark:border-red-800 dark:bg-red-950 dark:text-red-200">{error}</p>}
@@ -79,7 +79,7 @@ export default function ElectronicSignature(props: {
         <span className={'text-xs ' + (remain <= 30 ? 'text-red-600' : 'text-slate-500')} dir="ltr">{mm}:{ss}</span>
         <button className="text-xs text-slate-500 underline" onClick={requestOtp} disabled={busy}>ارسال مجدد</button>
       </div>
-      <button className="btn-primary w-full" disabled={busy || otp.length !== 5 || remain <= 0} onClick={sign}>
+      <button className="btn-primary w-full" disabled={busy || otp.length !== 6 || remain <= 0} onClick={sign}>
         {busy ? 'در حال تأیید…' : 'تأیید و امضا'}
       </button>
     </div>

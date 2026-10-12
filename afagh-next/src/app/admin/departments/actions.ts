@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { courses, departments, faculties, majors, roles, staff, user_roles, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { clearPermissionCache } from '@/lib/permissions-enforcer';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { isHeadOfAny } from '@/lib/group-manager';
 
@@ -182,7 +183,10 @@ async function grantDepHead(userId: number) {
   const rid = await depHeadRoleId();
   if (!rid) return;
   const has = await db.select().from(user_roles).where(and(eq(user_roles.userId, userId), eq(user_roles.roleId, rid))).limit(1);
-  if (!has.length) await db.insert(user_roles).values({ userId, roleId: rid });
+  if (!has.length) {
+    await db.insert(user_roles).values({ userId, roleId: rid });
+    clearPermissionCache();
+  }
 }
 
 /**
@@ -196,7 +200,8 @@ async function revokeDepHeadIfUnused(staffId: number, userId: number | null) {
   if (await isHeadOfAny(staffId)) return;
   const rid = await depHeadRoleId();
   if (!rid) return;
-  await db.delete(user_roles).where(and(eq(user_roles.userId, userId), eq(user_roles.roleId, rid)));
+  const r = await db.delete(user_roles).where(and(eq(user_roles.userId, userId), eq(user_roles.roleId, rid)));
+  if (Number((r as unknown as { rowCount?: number })?.rowCount ?? 0) > 0) clearPermissionCache();
 }
 
 export async function createDepartmentAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
