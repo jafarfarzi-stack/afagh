@@ -6,7 +6,11 @@ import {
   student_sponsorships, student_loans, students, users,
 } from '@/db/schema';
 import { computeTermAdjustments, toNum, type TermCharge } from '../finance-rules';
+import { DEBT_LEDGER_TYPES, CREDIT_LEDGER_TYPES } from '../ledger-balance';
 import { toEnDigits } from '@/lib/persian-search';
+
+const DEBT_SET: ReadonlySet<string> = new Set(DEBT_LEDGER_TYPES);
+const CREDIT_SET: ReadonlySet<string> = new Set(CREDIT_LEDGER_TYPES);
 
 export interface FinanceStudentRow {
   studentId: number;
@@ -150,15 +154,20 @@ export async function listFinanceStudents(
 
   const termChargesByStudent = new Map<number, TermCharge[]>();
   const paymentsByStudent = new Map<number, number>();
+  // واژگان کانونی ledger-balance: همهٔ انواع بدهی (شامل شهریه قدیمی FIXED/VARIABLE
+  // و TUITION_ADJUST_DEC = مبلغ موضوعی منفی) و اعتبار (بیتس + ADJUST_INC + تخفیف‌ها)
+  const ledgerCreditsByStudent = new Map<number, number>();
   for (const r of ledgerAgg) {
     const type = String(r.transactionType).toUpperCase();
     const amount = toNum(r.total);
-    if (type === 'CHARGE' || type === 'TUITION_CHARGE') {
+    if (DEBT_SET.has(type)) {
       const arr = termChargesByStudent.get(r.studentId) || [];
       arr.push({ termId: r.termId ?? NO_TERM, charges: amount });
       termChargesByStudent.set(r.studentId, arr);
-    } else if (type === 'PAYMENT' || type === 'CREDIT') {
+    } else if (type === 'PAYMENT' || type === 'POS_PAYMENT') {
       paymentsByStudent.set(r.studentId, (paymentsByStudent.get(r.studentId) || 0) + amount);
+    } else if (CREDIT_SET.has(type)) {
+      ledgerCreditsByStudent.set(r.studentId, (ledgerCreditsByStudent.get(r.studentId) || 0) + amount);
     }
   }
 
@@ -201,7 +210,7 @@ export async function listFinanceStudents(
     });
 
     const charges = adjustments.reduce((a, t) => a + t.charges, 0);
-    const discounts = adjustments.reduce((a, t) => a + t.discounts, 0);
+    const discounts = adjustments.reduce((a, t) => a + t.discounts, 0) + (ledgerCreditsByStudent.get(r.studentId) || 0);
     const sponsorships = adjustments.reduce((a, t) => a + t.sponsorships, 0);
     const payments = paymentsByStudent.get(r.studentId) || 0;
     const cheques = chequesByStudent.get(r.studentId) || { cleared: 0, pending: 0 };
