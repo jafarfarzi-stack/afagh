@@ -78,13 +78,15 @@ export function professorCalendarEntryGroup(e: Pick<ProfessorCalendarEntry, 'gro
  */
 export type ProfessorCalendarPlaceMode = 'room' | 'professor';
 
-export default function ProfessorCalendarGrid({ entries, placeMode = 'room', showCode = true, doorPrint = false }: {
+export default function ProfessorCalendarGrid({ entries, placeMode = 'room', showCode = true, doorPrint = false, printCount = false }: {
   entries: ProfessorCalendarEntry[];
   placeMode?: ProfessorCalendarPlaceMode;
   /** چاپ/نمایش کد درس — برای سردر کلاس‌ها پیش‌فرض خاموش است تا خوانایی بالا برود */
   showCode?: boolean;
   /** چاپ پوستری درب کلاس (مثل تابلوی قدیم): عنوان / «گروه + ساعت» / «استاد: نام» — بدون تعداد نفرات */
   doorPrint?: boolean;
+  /** نمایش تعداد دانشجو در چاپ (انتخابی کاربر؛ پیش‌فرض خاموش تا چاپ شلوغ نشود) */
+  printCount?: boolean;
 }) {
   const byPlace = (e: ProfessorCalendarEntry) =>
     placeMode === 'professor'
@@ -195,13 +197,17 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
                             {doorPrint ? (
                               <>
                                 <div className="prof-print-title text-[6.8pt] font-black leading-[1.2]">{e.title}{e.merged ? ' 🔗' : ''}</div>
-                                <div className="prof-print-meta text-[5.8pt] leading-[1.15] text-slate-900">گروه {professorCalendarEntryGroup(e)} · {professorCalendarEntryTime(e)}</div>
+                                <div className="prof-print-meta text-[5.8pt] leading-[1.15] text-slate-900">
+                                  گروه {professorCalendarEntryGroup(e)}{printCount && e.enrolledCount != null ? ` · 👥 ${faNum(e.enrolledCount)}${e.capacity != null ? `/${faNum(e.capacity)}` : ''}` : ''} · {professorCalendarEntryTime(e)}
+                                </div>
                                 <div className="prof-print-teacher text-[5.8pt] font-bold leading-[1.15] text-black">استاد: {e.professorName || '—'}</div>
                               </>
                             ) : (
                               <>
                                 <div className="prof-print-title text-[6.8pt] font-black leading-[1.2] truncate">{e.title}{e.merged ? ' 🔗' : ''}</div>
-                                <div className="prof-print-meta text-[5.8pt] leading-[1.15] truncate">{showCode ? `${e.code} · ` : ''}گروه {professorCalendarEntryGroup(e)}</div>
+                                <div className="prof-print-meta text-[5.8pt] leading-[1.15] truncate">
+                                  {showCode ? `${e.code} · ` : ''}گروه {professorCalendarEntryGroup(e)}{printCount && e.enrolledCount != null ? ` · 👥 ${faNum(e.enrolledCount)}${e.capacity != null ? `/${faNum(e.capacity)}` : ''}` : ''}
+                                </div>
                                 <div className="prof-print-meta text-[5.8pt] leading-[1.15] truncate">{professorCalendarEntryTime(e)} · {placeTitle(e)}{e.weekType === 'EVEN' ? ' · هفته زوج' : e.weekType === 'ODD' ? ' · هفته فرد' : e.weekType === 'BOTH' ? ' · زوج و فرد' : ''}</div>
                                 {e.professorName && !hideProfessorPill ? <div className="prof-print-teacher text-[5.8pt] font-bold leading-[1.15] text-black truncate">استاد: {e.professorName}</div> : null}
                               </>

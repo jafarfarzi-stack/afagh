@@ -1219,7 +1219,8 @@ export const student_ledger = pgTable('student_ledger', {
 }, (t) => [
   index('idx_student_ledger_fin_term').on(t.financialTermId),
   // ۱۵ نوع معتبر — همراستا با 0073_ledger_types (منبع حقیقت: ledger-balance.ts)
-  check('ck_student_ledger_txn_type', sql`"transactionType" IN ('TUITION_FIXED','TUITION_VARIABLE','PAYMENT','POS_PAYMENT','DISCOUNT_FIXED','DISCOUNT_VARIABLE','SUBJECT_ADDITIVE','SUBJECT_DEDUCTIVE','SPONSORSHIP','LOAN','TUITION_CHARGE','CHARGE','CREDIT','POS_REFUND','TUITION_BATES')`),
+  // ۱۶ نوع معتبر — همراستا با 0075_tuition_adjust (منبع حقیقت: ledger-balance.ts)
+  check('ck_student_ledger_txn_type', sql`"transactionType" IN ('TUITION_FIXED','TUITION_VARIABLE','PAYMENT','POS_PAYMENT','DISCOUNT_FIXED','DISCOUNT_VARIABLE','SUBJECT_ADDITIVE','SUBJECT_DEDUCTIVE','SPONSORSHIP','LOAN','TUITION_CHARGE','CHARGE','CREDIT','POS_REFUND','TUITION_BATES','TUITION_ADJUST')`),
   // 🔒 شارژ شهریهٔ هر ترم یکتاست (بک‌استاپِ chargeTermTuition اتمیک): جزئی روی
   // TUITION_CHARGE تا برگشتی‌ها (همان transactionType با referenceId) نشکنند.
   uniqueIndex('uq_student_ledger_tuition_charge').on(t.studentId, t.termId, t.transactionType).where(sql`"transactionType" = 'TUITION_CHARGE'`),

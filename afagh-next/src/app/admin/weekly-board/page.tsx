@@ -281,7 +281,7 @@ function buildBoardCalendarEntries(
 }
 
 export default async function WeeklyBoardPage({ searchParams }: {
-  searchParams: Promise<{ term?: string; faculty?: string; dept?: string; room?: string; tab?: string; q?: string; code?: string; title?: string; gender?: string }>;
+  searchParams: Promise<{ term?: string; faculty?: string; dept?: string; room?: string; tab?: string; q?: string; code?: string; title?: string; gender?: string; count?: string }>;
 }) {
   const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
   const uni = await getCurrentUniversity().catch(() => null);
@@ -290,6 +290,8 @@ export default async function WeeklyBoardPage({ searchParams }: {
   const q = faToEn(sp.q);
   // کد درس در سردر کلاس‌ها پیش‌فرض خاموش است (خوانایی بالاتر)؛ با ?code=1 روشن می‌شود.
   const showCode = sp.code === '1';
+  // تعداد دانشجو در چاپ: انتخابی کاربر (پیش‌فرض خاموش تا چاپ شلوغ نشود)؛ با ?count=1 روشن می‌شود.
+  const printCount = sp.count === '1';
   const termId = Number(sp.term) || 0;
   const facultyId = Number(sp.faculty) || 0;
   const deptId = Number(sp.dept) || 0;
@@ -594,7 +596,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
         {([['board', '🗓 تابلوی کلاس‌ها'], ['prof', '👨‍🏫 برنامهٔ استاد'], ['student', '🎓 برنامهٔ دانشجو']] as const).map(([v, t]) => (
           <a
             key={v}
-            href={`/admin/weekly-board?term=${term?.id ?? ''}&tab=${v}${showCode ? '&code=1' : ''}${titleParam ? `&title=${titleParam}` : ''}${genderParam ? `&gender=${genderParam}` : ''}`}
+            href={`/admin/weekly-board?term=${term?.id ?? ''}&tab=${v}${showCode ? '&code=1' : ''}${titleParam ? `&title=${titleParam}` : ''}${genderParam ? `&gender=${genderParam}` : ''}${printCount ? '&count=1' : ''}`}
             className={`rounded-xl px-4 py-2 text-sm font-black ${tab === v ? 'bg-teal-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
           >
             {t}
@@ -651,6 +653,12 @@ export default async function WeeklyBoardPage({ searchParams }: {
             <option value="1">نمایش کد درس</option>
           </select>
         </label>
+        <label className="text-xs font-bold">تعداد دانشجو در چاپ
+          <select name="count" defaultValue={printCount ? '1' : ''} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+            <option value="">بدون تعداد (کم‌جا)</option>
+            <option value="1">نمایش تعداد (👥 n/ظرفیت)</option>
+          </select>
+        </label>
         <button className="rounded-xl bg-indigo-700 px-5 py-2 text-white font-black text-sm">نمایش</button>
         <PrintButton />
       </form>
@@ -689,8 +697,8 @@ export default async function WeeklyBoardPage({ searchParams }: {
           ) : (
             /* سردرِ یک کلاس: نام کلاس در هر بلوک تکراری است → نام استاد نشان داده می‌شود */
             poster
-              ? <ProfessorCalendarGrid entries={boardEntries} placeMode="professor" showCode={showCode} doorPrint />
-              : <ProfessorCalendarGrid entries={boardEntries} placeMode="professor" showCode={showCode} />
+              ? <ProfessorCalendarGrid entries={boardEntries} placeMode="professor" showCode={showCode} doorPrint printCount={printCount} />
+              : <ProfessorCalendarGrid entries={boardEntries} placeMode="professor" showCode={showCode} printCount={printCount} />
           )}
           {boardSkipped > 0 && boardEntries.length > 0 && (
             <p className="print:hidden text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
