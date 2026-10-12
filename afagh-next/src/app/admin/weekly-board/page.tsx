@@ -143,23 +143,40 @@ function buildBoardCalendarEntries(
   showTitle: boolean, showFirst: boolean, shortHonor = false,
   deptNameById: Map<number, string> = new Map(),
   noEngineerTitle = false,
-  /** نام استاد همکارِ مرتبط هر ارائه (وقتی استاد اصلی خالی است) — offeringId → یک نفر */
-  coTeachers: Map<number, Pick<BoardRow, 'profFirstName' | 'profLastName' | 'profRank' | 'profGender' | 'profLegacyTitle'>> = new Map(),
+  /** نام استادان همکار هر ارائه (وقتی استاد اصلی خالی است) — offeringId → فهرست به ترتیب staffId */
+  coTeachers: Map<number, ({ staffId: number } & Pick<BoardRow, 'profFirstName' | 'profLastName' | 'profRank' | 'profGender' | 'profLegacyTitle'>)[]> = new Map(),
 ): { entries: BoardCalendarEntry[]; skipped: number } {
-  const profOf = (m: BoardRow) => {
+  const profOf = (m: BoardRow, slotRank: Map<number, string[]>) => {
     const main = profDisplay(
       m, showTitle, showFirst, shortHonor,
       !noEngineerTitle && !isHumanitiesDept(deptNameById.get(m.deptId ?? -1)),
     );
     if (main) return main;
-    // استاد اصلی ثبت نشده → همان یک همکار مرتبط (تا چاپ «استاد:» خالی نماند)
-    const co = coTeachers.get(m.offeringId);
-    return co
-      ? profDisplay(co, showTitle, showFirst, shortHonor,
-          !noEngineerTitle && !isHumanitiesDept(deptNameById.get(m.deptId ?? -1)),
-        )
-      : '';
+    // استاد اصلی ثبت نشده → استادی که در همین سانس درس دارد:
+    // رتبهٔ زمانی سانس (روز+ساعت+زوج/فرد) میان سانس‌های همان ارائه ↔ همان رتبه در فهرست همکاران.
+    // (مثلاً استاد اول ساعت ۸، استاد دوم ساعت ۱۰ — یا یکی زوج و دیگری فرد — همان که در برنامهٔ درسی ثبت است.)
+    const teachers = coTeachers.get(m.offeringId) ?? [];
+    if (!teachers.length) return '';
+    const slots = slotRank.get(m.offeringId) ?? [];
+    const key = `${m.dayOfWeek}|${String(m.startTime ?? '').slice(0, 5)}|${mapBoardWeekType(m.scheduleType)}`;
+    const rank = slots.indexOf(key);
+    const pick = teachers[rank >= 0 ? rank % teachers.length : 0];
+    return profDisplay(pick, showTitle, showFirst, shortHonor,
+      !noEngineerTitle && !isHumanitiesDept(deptNameById.get(m.deptId ?? -1)),
+    );
   };
+  // سانس‌های متمایز هر ارائه به ترتیب زمانی (مبنای تطبیق استاد↔سانس) — با تفکیک زوج/فرد
+  const slotRank = (() => {
+    const map = new Map<number, string[]>();
+    for (const r of list) {
+      const k = `${r.dayOfWeek}|${String(r.startTime ?? '').slice(0, 5)}|${mapBoardWeekType(r.scheduleType)}`;
+      const arr = map.get(r.offeringId) ?? [];
+      if (!arr.includes(k)) arr.push(k);
+      map.set(r.offeringId, arr);
+    }
+    for (const arr of map.values()) arr.sort();
+    return map;
+  })();
   type Raw = BoardRow & { uid: number };
   const groups = groupIntoMerged<Raw>(
     list.map((r, i) => ({ ...r, uid: i })),
@@ -201,7 +218,7 @@ function buildBoardCalendarEntries(
         buildingName: m.buildingName ?? '',
         weekType,
         courseType: mapBoardCourseType(m.courseNature, m.courseType),
-        professorName: profOf(m),
+        professorName: profOf(m, slotRank),
         enrolledCount: m.enrolledCount ?? null,
         capacity: m.capacity ?? null,
         merged: false,
@@ -213,7 +230,7 @@ function buildBoardCalendarEntries(
     const primary = g.members.find(m => m.offeringId * 100000 + m.uid === g.primaryId) ?? g.members[0];
     const codes = [...new Set(g.members.map(m => String(m.courseCode ?? '').trim()).filter(Boolean))];
     const titles = [...new Set(g.members.map(m => String(m.courseTitle ?? '').trim()).filter(Boolean))];
-    const profs = [...new Set(g.members.map(m => profOf(m)).filter(Boolean))];
+    const profs = [...new Set(g.members.map(m => profOf(m, slotRank)).filter(Boolean))];
     const groupNums = [...new Set(g.members.map(m => m.groupNumber))].sort((a, b) => a - b);
     const enrolled = g.members.reduce((s, m) => s + (Number(m.enrolledCount) || 0), 0);
     const caps = g.members.map(m => Number(m.capacity)).filter(n => Number.isFinite(n) && n > 0);
@@ -296,20 +313,19 @@ export default async function WeeklyBoardPage({ searchParams }: {
     .orderBy(desc(academic_terms.id));
   const term = terms.find(t => t.id === termId) ?? terms.find(t => t.isCurrent === 1) ?? terms[0] ?? null;
 
-  // نام استاد همکار هر ارائهٔ ترم (fallback وقتی استاد اصلی خالی است — چاپ «استاد:» خالی نماند)
-  // ساده: فقط مرتبط‌ترین نفر (نقش استاد اصلی همکار، وگرنه بیشترین سهم تدریس)، نه فهرست همه.
-  const coTeachers: Map<number, Pick<BoardRow, 'profFirstName' | 'profLastName' | 'profRank' | 'profGender' | 'profLegacyTitle'>> =
+  // نام استادان همکار هر ارائهٔ ترم، مرتب به ترتیب staffId (مبنای تطبیق با ترتیب سانس‌ها)
+  // fallback وقتی استاد اصلی خالی است — چاپ «استاد:» خالی نماند.
+  const coTeachers: Map<number, ({ staffId: number } & Pick<BoardRow, 'profFirstName' | 'profLastName' | 'profRank' | 'profGender' | 'profLegacyTitle'>)[]> =
     term
       ? await db
           .select({
             offeringId: offering_professors.offeringId,
+            staffId: offering_professors.staffId,
             firstName: users.firstName,
             lastName: users.lastName,
             rank: staff.academicRank,
             gender: users.gender,
             legacyTitle: staff.title,
-            role: offering_professors.role,
-            share: offering_professors.sharePercentage,
           })
           .from(offering_professors)
           .innerJoin(course_offerings, eq(course_offerings.id, offering_professors.offeringId))
@@ -317,24 +333,21 @@ export default async function WeeklyBoardPage({ searchParams }: {
           .innerJoin(users, eq(users.id, staff.userId))
           .where(and(eq(course_offerings.termId, term.id), eq(course_offerings.isActive, 1)))
           .then(coRows => {
-            const score = (role: string | null, share: string | number | null) =>
-              (String(role ?? '').toUpperCase().includes('MAIN') ? 1000 : 0) + Number(share ?? 0);
-            const best = new Map<number, Pick<BoardRow, 'profFirstName' | 'profLastName' | 'profRank' | 'profGender' | 'profLegacyTitle'>>();
-            const bestScore = new Map<number, number>();
+            const map = new Map<number, ({ staffId: number } & Pick<BoardRow, 'profFirstName' | 'profLastName' | 'profRank' | 'profGender' | 'profLegacyTitle'>)[]>();
             for (const r of coRows) {
-              const s = score(r.role, r.share);
-              if (!best.has(r.offeringId) || s > (bestScore.get(r.offeringId) ?? -1)) {
-                best.set(r.offeringId, {
-                  profFirstName: r.firstName ?? null,
-                  profLastName: r.lastName ?? null,
-                  profRank: r.rank ?? null,
-                  profGender: r.gender ?? null,
-                  profLegacyTitle: r.legacyTitle ?? null,
-                });
-                bestScore.set(r.offeringId, s);
-              }
+              const arr = map.get(r.offeringId) ?? [];
+              arr.push({
+                staffId: r.staffId,
+                profFirstName: r.firstName ?? null,
+                profLastName: r.lastName ?? null,
+                profRank: r.rank ?? null,
+                profGender: r.gender ?? null,
+                profLegacyTitle: r.legacyTitle ?? null,
+              });
+              map.set(r.offeringId, arr);
             }
-            return best;
+            for (const arr of map.values()) arr.sort((a, b) => a.staffId - b.staffId);
+            return map;
           })
       : new Map();
 
