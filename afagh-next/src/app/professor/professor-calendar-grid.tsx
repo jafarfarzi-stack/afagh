@@ -191,7 +191,7 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
                               : 'bg-indigo-50 border-indigo-200 text-indigo-950'
                           }`}
                         >
-                          <div className="hidden print:block text-[6.8pt] font-bold leading-[1.25] text-black">
+                          <div className="hidden print:flex print:flex-col print:justify-center print:h-full text-[6.8pt] font-bold leading-[1.25] text-black">
                             {doorPrint ? (
                               <>
                                 <div className="prof-print-title text-[6.8pt] font-black leading-[1.2]">{e.title}{e.merged ? ' 🔗' : ''}</div>
@@ -201,7 +201,7 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
                             ) : (
                               <>
                                 <div className="prof-print-title text-[6.8pt] font-black leading-[1.2] truncate">{e.title}{e.merged ? ' 🔗' : ''}</div>
-                                <div className="prof-print-meta text-[5.8pt] leading-[1.15] truncate">{showCode ? `${e.code} · ` : ''}گروه {professorCalendarEntryGroup(e)} · 👥 {faNum(e.enrolledCount)}/{faNum(e.capacity)}</div>
+                                <div className="prof-print-meta text-[5.8pt] leading-[1.15] truncate">{showCode ? `${e.code} · ` : ''}گروه {professorCalendarEntryGroup(e)}</div>
                                 <div className="prof-print-meta text-[5.8pt] leading-[1.15] truncate">{professorCalendarEntryTime(e)} · {placeTitle(e)}{e.weekType === 'EVEN' ? ' · هفته زوج' : e.weekType === 'ODD' ? ' · هفته فرد' : e.weekType === 'BOTH' ? ' · زوج و فرد' : ''}</div>
                                 {e.professorName && !hideProfessorPill ? <div className="prof-print-teacher text-[5.8pt] font-bold leading-[1.15] text-black truncate">استاد: {e.professorName}</div> : null}
                               </>
@@ -211,7 +211,7 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
                             {e.title}
                           </div>
                           <div className="prof-week-code print:hidden font-mono text-[10px] font-bold text-indigo-900 whitespace-nowrap truncate" title={showCode ? `${e.code} · گروه ${professorCalendarEntryGroup(e)}` : `گروه ${professorCalendarEntryGroup(e)}`}>
-                            {showCode ? `${e.code} · ` : ''}گروه {professorCalendarEntryGroup(e)}
+                            {showCode ? `${e.code} · ` : ''}گروه {professorCalendarEntryGroup(e)}{e.enrolledCount != null ? ` · 👥 ${faNum(e.enrolledCount)}${e.capacity != null ? `/${faNum(e.capacity)}` : ''}` : ''}
                           </div>
                           <div className="prof-week-essential print:hidden text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">
                             {professorCalendarEntryTime(e)}
