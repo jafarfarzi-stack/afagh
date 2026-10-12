@@ -554,6 +554,13 @@
       "when": 1793980800000,
       "tag": "0073_ledger_types",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1794067200000,
+      "tag": "0074_integrity_constraints",
+      "breakpoints": true
     }
   ]
 }
