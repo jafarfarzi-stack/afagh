@@ -197,8 +197,10 @@ function buildBoardCalendarEntries(
         endTime: m.endTime,
         roomKey: m.roomId ?? m.roomName ?? null,
       });
-      if (slot == null) return shared ? `K:${shared}` : null;
-      return shared ? `K:${shared}|${slot}` : slot;
+      // مرج دستی (M-...) در همه‌جا — برد، چاپ، کارتابل — بر سانس خودکار اولویت دارد؛
+      // SOLO- یعنی شکستن مرج → رفتار مثل خودکار (تک‌تک).
+      if (shared && !shared.startsWith('SOLO-')) return `K:${shared}`;
+      return slot;
     },
   );
   const entries: BoardCalendarEntry[] = [];
@@ -235,44 +237,58 @@ function buildBoardCalendarEntries(
       });
       continue;
     }
-    const primary = g.members.find(m => m.offeringId * 100000 + m.uid === g.primaryId) ?? g.members[0];
+    // گروه ادغامی: هویت مشترک (کدها/عناوین/گروه‌ها) در همهٔ سانس‌ها؛
+    // هر سانس متمایز یک بلوک جدا در گرید و چاپ — همه با بج 🔗
     const codes = [...new Set(g.members.map(m => String(m.courseCode ?? '').trim()).filter(Boolean))];
     const titles = [...new Set(g.members.map(m => String(m.courseTitle ?? '').trim()).filter(Boolean))];
-    const profs = [...new Set(g.members.map(m => profOf(m, slotRank)).filter(Boolean))];
     const groupNums = [...new Set(g.members.map(m => m.groupNumber))].sort((a, b) => a - b);
-    const enrolled = g.members.reduce((s, m) => s + (Number(m.enrolledCount) || 0), 0);
-    const caps = g.members.map(m => Number(m.capacity)).filter(n => Number.isFinite(n) && n > 0);
-    const weekSet = new Set(g.members.map(m => mapBoardWeekType(m.scheduleType)));
-    const weekType: ProfessorCalendarWeekType = weekSet.size === 1 ? [...weekSet][0] : 'BOTH';
-    const d = primary.dayOfWeek == null ? null : Number(primary.dayOfWeek);
-    const st = String(primary.startTime ?? '').slice(0, 5);
-    const en = String(primary.endTime ?? '').slice(0, 5);
-    if (d == null || !Number.isInteger(d) || d < 0 || d > 6 || !st || !en || en <= st) { skipped += g.members.length; continue; }
-    const row = { id: primary.offeringId, dayOfWeek: d, startTime: st, endTime: en, weekType };
-    // ادغامی: فقط یک نام درس (اولین عنوان یکتا) تا در چاپ جا شود — بج 🔗 جداگانه هست.
-    const uniqTitles = [...new Set(titles)];
-    const titleLabel = uniqTitles[0] ?? String(primary.courseTitle ?? '');
-    entries.push({
-      key: professorCalendarEntryKey(row),
-      id: primary.offeringId,
-      code: codes.length > 0 ? codes.join(' / ') : String(primary.courseCode ?? ''),
-      title: titleLabel,
-      groupNumber: primary.groupNumber,
-      groupLabel: groupNums.map(n => String(n)).join('، '),
-      dayOfWeek: d,
-      startTime: st,
-      endTime: en,
-      roomName: primary.roomName ?? '',
-      buildingName: primary.buildingName ?? '',
-      weekType,
-      courseType: mapBoardCourseType(primary.courseNature, primary.courseType),
-      professorName: profs.join('، '),
-      enrolledCount: enrolled,
-      capacity: caps.length > 0 ? Math.max(...caps) : primary.capacity ?? null,
-      merged: true,
-      sharedScheduleGroupKey: String(primary.sharedKey ?? '').trim() || null,
-      roomKey: primary.roomId ?? primary.roomName ?? null,
-    });
+    const byId = new Map<number, Raw>();
+    for (const m of g.members) if (!byId.has(m.offeringId)) byId.set(m.offeringId, m);
+    const uniqOfferings = [...byId.values()];
+    const bySlot = new Map<string, Raw[]>();
+    for (const m of g.members) {
+      const sk = `${m.dayOfWeek}|${String(m.startTime ?? '').slice(0, 5)}|${String(m.endTime ?? '').slice(0, 5)}|${mapBoardWeekType(m.scheduleType)}`;
+      const arr = bySlot.get(sk) ?? [];
+      arr.push(m);
+      bySlot.set(sk, arr);
+    }
+    for (const slotMembers of bySlot.values()) {
+      const primary = slotMembers.find(m => m.offeringId * 100000 + m.uid === g.primaryId) ?? slotMembers[0];
+      const d = primary.dayOfWeek == null ? null : Number(primary.dayOfWeek);
+      const st = String(primary.startTime ?? '').slice(0, 5);
+      const en = String(primary.endTime ?? '').slice(0, 5);
+      if (d == null || !Number.isInteger(d) || d < 0 || d > 6 || !st || !en || en <= st) { skipped += slotMembers.length; continue; }
+      const weekType = mapBoardWeekType(primary.scheduleType);
+      const row = { id: primary.offeringId, dayOfWeek: d, startTime: st, endTime: en, weekType };
+      const slotIds = new Set(slotMembers.map(m => m.offeringId));
+      const enrolled = uniqOfferings.filter(m => slotIds.has(m.offeringId)).reduce((s, m) => s + (Number(m.enrolledCount) || 0), 0);
+      const caps = uniqOfferings.filter(m => slotIds.has(m.offeringId)).map(m => Number(m.capacity)).filter(n => Number.isFinite(n) && n > 0);
+      const profs = [...new Set(slotMembers.map(m => profOf(m, slotRank)).filter(Boolean))];
+      // ادغامی: فقط یک نام درس (اولین عنوان یکتا) تا در چاپ جا شود — بج 🔗 جداگانه هست.
+      const uniqTitles = [...new Set(titles)];
+      const titleLabel = uniqTitles[0] ?? String(primary.courseTitle ?? '');
+      entries.push({
+        key: professorCalendarEntryKey(row),
+        id: primary.offeringId,
+        code: codes.length > 0 ? codes.join(' / ') : String(primary.courseCode ?? ''),
+        title: titleLabel,
+        groupNumber: primary.groupNumber,
+        groupLabel: groupNums.map(n => String(n)).join('، '),
+        dayOfWeek: d,
+        startTime: st,
+        endTime: en,
+        roomName: primary.roomName ?? '',
+        buildingName: primary.buildingName ?? '',
+        weekType,
+        courseType: mapBoardCourseType(primary.courseNature, primary.courseType),
+        professorName: profs.join('، '),
+        enrolledCount: enrolled,
+        capacity: caps.length > 0 ? Math.max(...caps) : primary.capacity ?? null,
+        merged: true,
+        sharedScheduleGroupKey: String(primary.sharedKey ?? '').trim() || null,
+        roomKey: primary.roomId ?? primary.roomName ?? null,
+      });
+    }
   }
   return { entries, skipped };
 }

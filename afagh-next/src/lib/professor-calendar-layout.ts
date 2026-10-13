@@ -152,8 +152,10 @@ export function collapseCalendarEntries<T extends ProfessorCalendarCollapseRow>(
         roomKey: r.roomKey ?? r.roomName ?? null,
       });
       const shared = String(r.sharedScheduleGroupKey ?? '').trim();
-      if (slot == null) return shared ? `K:${shared}` : null;
-      return shared ? `K:${shared}|${slot}` : slot;
+      // مرج دستی (M-...) در همه‌جای برنامه بر سانس خودکار اولویت دارد؛
+      // SOLO- یعنی شکستن مرج → رفتار مثل خودکار (تک‌تک).
+      if (shared && !shared.startsWith('SOLO-')) return `K:${shared}`;
+      return slot;
     },
   );
   const out: T[] = [];
@@ -162,29 +164,41 @@ export function collapseCalendarEntries<T extends ProfessorCalendarCollapseRow>(
       out.push(g.members[0]);
       continue;
     }
-    const primary = g.members.find(m => m.id === g.primaryId) ?? g.members[0];
     const codes = [...new Set(g.members.map(m => String(m.code ?? '').trim()).filter(c => c !== ''))];
-    const weekSet = new Set(g.members.map(m => String(m.weekType)));
-    const weekType = (weekSet.size === 1 ? primary.weekType : 'BOTH') as T['weekType'];
     const perId = new Map<number, T>();
     for (const m of g.members) if (!perId.has(m.id)) perId.set(m.id, m);
     const uniq = [...perId.values()];
     const multiOffering = uniq.length > 1;
-    const enrolledParts = uniq.map(m => finiteNum(m.enrolledCount)).filter((v): v is number => v != null);
-    const capacityParts = uniq.map(m => finiteNum(m.capacity)).filter((v): v is number => v != null);
-    const unitParts = uniq.map(m => finiteNum(m.units)).filter((v): v is number => v != null);
-    out.push({
-      ...primary,
-      code: (codes.length > 0 ? codes.join(' / ') : primary.code) as T['code'],
-      title: primary.title as T['title'],
-      weekType,
-      merged: (multiOffering || primary.merged === true) as T['merged'],
-      enrolledCount: (enrolledParts.length > 0
-        ? enrolledParts.reduce((s, v) => s + v, 0)
-        : primary.enrolledCount) as T['enrolledCount'],
-      capacity: (capacityParts.length > 0 ? Math.max(...capacityParts) : primary.capacity) as T['capacity'],
-      units: (unitParts.length > 0 ? Math.max(...unitParts) : primary.units) as T['units'],
-    } as T);
+    // هر سانس متمایز یک بلوک جدا در گرید (و چاپ) — همه با کد مشترک و بج 🔗
+    const bySlot = new Map<string, T[]>();
+    for (const m of g.members) {
+      const sk = `${m.dayOfWeek}|${m.startTime}|${m.endTime}|${String(m.weekType)}`;
+      const arr = bySlot.get(sk) ?? [];
+      arr.push(m);
+      bySlot.set(sk, arr);
+    }
+    for (const slotMembers of bySlot.values()) {
+      const primary = slotMembers.find(m => m.id === g.primaryId) ?? slotMembers[0];
+      const weekSet = new Set(slotMembers.map(m => String(m.weekType)));
+      const weekType = (weekSet.size === 1 ? primary.weekType : 'BOTH') as T['weekType'];
+      const slotIds = new Set(slotMembers.map(m => m.id));
+      const inSlot = uniq.filter(m => slotIds.has(m.id));
+      const enrolledParts = inSlot.map(m => finiteNum(m.enrolledCount)).filter((v): v is number => v != null);
+      const capacityParts = inSlot.map(m => finiteNum(m.capacity)).filter((v): v is number => v != null);
+      const unitParts = uniq.map(m => finiteNum(m.units)).filter((v): v is number => v != null);
+      out.push({
+        ...primary,
+        code: (codes.length > 0 ? codes.join(' / ') : primary.code) as T['code'],
+        title: primary.title as T['title'],
+        weekType,
+        merged: (multiOffering || primary.merged === true) as T['merged'],
+        enrolledCount: (enrolledParts.length > 0
+          ? enrolledParts.reduce((s, v) => s + v, 0)
+          : primary.enrolledCount) as T['enrolledCount'],
+        capacity: (capacityParts.length > 0 ? Math.max(...capacityParts) : primary.capacity) as T['capacity'],
+        units: (unitParts.length > 0 ? Math.max(...unitParts) : primary.units) as T['units'],
+      } as T);
+    }
   }
   return out;
 }
