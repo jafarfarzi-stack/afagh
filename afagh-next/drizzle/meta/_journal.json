@@ -687,6 +687,13 @@
       "when": 1794153604013,
       "tag": "0092_rule_expression",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1794153604014,
+      "tag": "0093_rates_1405",
+      "breakpoints": true
     }
   ]
 }

@@ -67,7 +67,7 @@ export type PayrollRow = {
 };
 
 export type StaffPayroll = {
-  staff: { id: number; name: string; staffCode: string | null; rank: string | null; degree: string | null; contractType: string | null };
+  staff: { id: number; name: string; staffCode: string | null; rank: string | null; base: string | null; degree: string | null; contractType: string | null; rateSource?: string | null };
   rate: number;
   /** منشأ نرخ: جدول ثابت / اسنپ‌شات قرارداد / کسری از حکم (۱/N) */
   rateSource: 'TABLE' | 'BASE' | 'SNAPSHOT' | 'FRACTION';
@@ -920,7 +920,9 @@ export function calcStaffPayrollFromData(data: TermData, staffId: number): Staff
   return {
     staff: {
       id: staffId, name: info.name, staffCode: info.staffCode,
-      rank: info.rank, degree: info.degree, contractType: contract?.contractType ?? null,
+      rank: info.rank, base: info.base, degree: info.degree,
+      contractType: contract?.contractType ?? null,
+      rateSource: data.rateSource.get(staffId) ?? 'TABLE',
     },
     rate, dutyUnits, taxRate, rows,
     rateSource: data.rateSource.get(staffId) ?? 'TABLE',
@@ -1423,7 +1425,7 @@ export async function listPayableStaff(termId?: number) {
   if (!term) return [];
   const data = await loadTermPayrollData(term.id);
   return Array.from(data.offeringsByStaff.keys())
-    .map(id => ({ staffId: id, ...(data.staffInfo.get(id) ?? { name: '', staffCode: null, rank: null, degree: null, userId: 0 }), hasContract: data.contracts.has(id) }))
+    .map(id => ({ staffId: id, ...(data.staffInfo.get(id) ?? { name: '', staffCode: null, rank: null, base: null, degree: null, userId: 0 }), hasContract: data.contracts.has(id) }))
     .filter(x => x.hasContract);
 }
 

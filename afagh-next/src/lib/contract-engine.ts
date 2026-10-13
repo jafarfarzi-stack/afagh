@@ -254,11 +254,18 @@ export async function ensureContractDocument(staffId: number, termId: number, id
   try {
     const year = Number(await getFiscalYear());
     const allRates = await db.select().from(teaching_rates);
+    const rank = stRow?.academicRank ?? null;
+    const degree = stRow?.degree ?? null;
+    const base = stRow?.academicBase ?? null;
     const applicable = allRates
-      .filter(r => r.academicRank === (stRow?.academicRank ?? null)
-        && r.degree === (stRow?.degree ?? null)
-        && Number(r.effectiveYear ?? 0) <= year)
-      .sort((a, b) => Number(b.effectiveYear ?? 0) - Number(a.effectiveYear ?? 0));
+      .filter(r =>
+        r.academicRank === rank &&
+        r.degree === degree &&
+        Number(r.effectiveYear ?? 0) <= year &&
+        (r.academicBase == null || (base != null && r.academicBase === base)))
+      .sort((a, b) =>
+        ((b.academicBase != null ? 1 : 0) - (a.academicBase != null ? 1 : 0)) ||
+        Number(b.effectiveYear ?? 0) - Number(a.effectiveYear ?? 0));
     if (applicable[0]?.baseRatePerUnit != null) snapRate = String(applicable[0].baseRatePerUnit);
   } catch { snapRate = null; }
   const [contractRow] = await db.insert(professor_term_contracts).values({

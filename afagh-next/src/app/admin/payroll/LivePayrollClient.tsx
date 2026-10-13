@@ -10,8 +10,8 @@ import { normalizeFa, faIncludes } from '@/lib/persian-search';
 // ═══ میز کار حق‌التدریس — دادهٔ واقعی از موتور مالی ═══
 
 export type OverviewItem = {
-  id: number; name: string; staffCode: string | null; rank: string | null; degree: string | null;
-  contractType: string | null; rate: number; totalEquivalentUnits: number; totalEffectiveUnits: number;
+  id: number; name: string; staffCode: string | null; rank: string | null; base: string | null; degree: string | null;
+  contractType: string | null; rate: number; rateSource: string | null; totalEquivalentUnits: number; totalEffectiveUnits: number;
   payableUnits: number; gross: number; tax: number; absenceDeductionRial: number; net: number;
   status: string; statementId: number | null; midtermPaid: number; finalPaid: number; remaining: number;
   gates: { gradesFinalized: boolean; pendingGrades: number; docsSigned: boolean; unsignedDocs: number };
@@ -41,6 +41,13 @@ const STATUS_BADGE: Record<string, string> = {
   FINAL_SETTLED: 'bg-emerald-600 text-white',
 };
 const CONTRACT_FA: Record<string, string> = { FULL_TIME: 'هیئت علمی', ADJUNCT: 'مدعو', FULL_TIME_FACULTY: 'هیئت علمی' };
+/** منبع نرخ هر واحد — کجا آمده؟ (مهاجرت 0090 تفکیک مرتبه/پایه) */
+const RATE_SOURCE_FA: Record<string, string> = {
+  BASE: 'سطر پایه‌دار جدول',
+  TABLE: 'سطر عمومی جدول',
+  SNAPSHOT: 'اسنپ‌شات قرارداد',
+  FRACTION: 'نسبت حکم (۱/N)',
+};
 
 type LiveTab = 'overview' | 'coefficients_rules';
 
@@ -273,7 +280,7 @@ export default function LivePayrollClient({
             <div className="mt-2 font-bold">نرخ پایهٔ هر واحد</div>
             <ul>
               {config.rates.map((r: any, i: number) => (
-                <li key={i}>{r.academicRank} / {r.degree} — {money(r.baseRatePerUnit)} (سال {faNum(r.effectiveYear)})</li>
+                <li key={i}>{r.academicRank} {r.academicBase ? `· پایه ${r.academicBase}` : ''} / {r.degree} — {money(r.baseRatePerUnit)} (سال {faNum(r.effectiveYear)})</li>
               ))}
             </ul>
             {config.rules.length && (
@@ -307,7 +314,8 @@ export default function LivePayrollClient({
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="p-2">استاد</th>
-                <th className="p-2">نوع قرارداد</th>
+                <th className="p-2">مرتبه / پایه</th>
+                <th className="p-2">نرخ واحد</th>
                 <th className="p-2">واحد معادل</th>
                 <th className="p-2">واحد قابل پرداخت</th>
                 <th className="p-2">ناخالص</th>
@@ -322,15 +330,26 @@ export default function LivePayrollClient({
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={12} className="p-6 text-center text-slate-400">ردیفی یافت نشد. ابتدا «محاسبهٔ فیش ترم» را بزنید.</td></tr>
+                <tr><td colSpan={14} className="p-6 text-center text-slate-400">ردیفی یافت نشد. ابتدا «محاسبهٔ فیش ترم» را بزنید.</td></tr>
               ) : null}
               {filtered.map(x => (
                 <tr key={x.id} className="border-t border-slate-100">
                   <td className="p-2">
                     <div className="font-medium text-slate-800">{x.name}</div>
-                    <div className="text-[11px] text-slate-400">{faNum(x.staffCode ?? '—')} · {x.rank ?? '—'}</div>
+                    <div className="text-[11px] text-slate-400">{faNum(x.staffCode ?? '—')}</div>
                   </td>
-                  <td className="p-2">{CONTRACT_FA[x.contractType ?? ''] ?? x.contractType ?? '—'}</td>
+                  <td className="p-2">
+                    <div className="font-medium text-slate-700">{x.rank ?? '—'}</div>
+                    <div className="text-[11px] text-slate-500">
+                      پایه {x.base ? faNum(x.base) : '—'}
+                      {x.degree && <span className="text-slate-400"> · {x.degree}</span>}
+                    </div>
+                  </td>
+                  <td className="p-2">
+                    <div className="font-mono text-[11px] text-slate-800">{money(x.rate)}</div>
+                    <div className="text-[10px] text-slate-400">{RATE_SOURCE_FA[x.rateSource ?? 'TABLE']}</div>
+                  </td>
+                  <td className="p-2 text-[11px] text-slate-600">{CONTRACT_FA[x.contractType ?? ''] ?? x.contractType ?? '—'}</td>
                   <td className="p-2">{faNum(x.totalEquivalentUnits.toFixed(2))}</td>
                   <td className="p-2">{faNum(x.payableUnits.toFixed(2))}</td>
                   <td className="p-2">{money(x.gross)}</td>
