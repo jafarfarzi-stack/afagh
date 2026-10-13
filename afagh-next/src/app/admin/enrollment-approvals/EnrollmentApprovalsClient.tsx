@@ -14,7 +14,7 @@ function toJalali(iso: string | Date | null): string {
   const gy = d.getFullYear(), gm = d.getMonth() + 1, gd = d.getDate();
   const g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
   const gy2 = gm > 2 ? gy + 1 : gy;
-  const days = 365 * gy + Math.floor((gy2 + 3) / 4) - Math.floor((gy2 + 99) / 100)
+  let days = 365 * gy + Math.floor((gy2 + 3) / 4) - Math.floor((gy2 + 99) / 100)
     + Math.floor((gy2 + 399) / 400) - 80 + gd + g_d_m[gm - 1];
   let jy = -1595 + 33 * Math.floor(days / 12053);
   days %= 12053;

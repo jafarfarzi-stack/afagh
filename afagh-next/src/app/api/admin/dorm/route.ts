@@ -31,7 +31,7 @@ async function guard() {
     if (role instanceof NextResponse) return role;
     return null;
   } catch (e) {
-    log.warn('dorm auth error', e);
+    log.warn('dorm auth error', { err: e });
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 }

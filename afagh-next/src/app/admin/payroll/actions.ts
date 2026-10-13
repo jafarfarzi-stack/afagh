@@ -87,12 +87,14 @@ export async function payrollConfigAction() {
       midterm: cfg.midterm,
       rates: cfg.rates.map(r => ({
         academicRank: r.academicRank, degree: r.degree,
+        academicBase: r.academicBase ?? null,
         baseRatePerUnit: Number(r.baseRatePerUnit), effectiveYear: r.effectiveYear,
       })),
       rules: cfg.rules.map(r => ({
         id: r.id, offeringType: r.offeringType, professorRole: r.professorRole,
-        academicRank: r.academicRank, multiplierUnit: r.multiplierUnit,
-        multiplierPerStudent: r.multiplierPerStudent, flatFee: r.flatFee, title: r.title,
+        academicRank: r.academicRank, expression: r.expression,
+        classMode: r.classMode, minStudents: r.minStudents, maxStudents: r.maxStudents,
+        perStudentHours: r.perStudentHours, title: r.title,
       })),
     };
   } catch (err) {
@@ -204,15 +206,44 @@ export async function getPayrollCalculationRulesAction() {
   }
 }
 
-export async function createPayrollCalculationRuleAction(data: {
-  offeringType: string | null;
-  professorRole: string | null;
-  academicRank: string | null;
-  multiplierUnit: number | null;
-  multiplierPerStudent: number | null;
-  flatFee: number | null;
+export type PayrollRuleInput = {
+  offeringType?: string | null;
+  professorRole?: string | null;
+  academicRank?: string | null;
+  expression?: string | null;
+  departmentId?: number | null;
+  courseType?: string | null;
+  repeatNumber?: number | null;
+  flatBase?: number | null;
+  classMode?: string | null;
+  minStudents?: number | null;
+  maxStudents?: number | null;
+  perStudentHours?: number | null;
   title: string;
-}) {
+  isActive?: number;
+};
+
+/** نگاشت ورودی اکشن → ستون‌های جدول قوانین (عبارت جایگزینِ ضرایب قدیمی) */
+function ruleValues(data: PayrollRuleInput) {
+  return {
+    offeringType: data.offeringType ?? null,
+    professorRole: data.professorRole ?? null,
+    academicRank: data.academicRank ?? null,
+    expression: data.expression ?? null,
+    departmentId: data.departmentId ?? null,
+    courseType: data.courseType ?? null,
+    repeatNumber: data.repeatNumber ?? null,
+    flatBase: data.flatBase?.toString() ?? null,
+    classMode: data.classMode ?? 'ANY',
+    minStudents: data.minStudents ?? null,
+    maxStudents: data.maxStudents ?? null,
+    perStudentHours: data.perStudentHours?.toString() ?? null,
+    title: data.title,
+    isActive: data.isActive ?? 1,
+  };
+}
+
+export async function createPayrollCalculationRuleAction(data: PayrollRuleInput) {
   try {
     const user = await requireRole(['ADMIN']);
     const { db } = await import('@/db');
@@ -223,16 +254,9 @@ export async function createPayrollCalculationRuleAction(data: {
 
     await db.insert(payroll_calculation_rules).values({
       universityId: uni.id,
-      offeringType: data.offeringType,
-      professorRole: data.professorRole,
-      academicRank: data.academicRank,
-      multiplierUnit: data.multiplierUnit?.toString() ?? null,
-      multiplierPerStudent: data.multiplierPerStudent?.toString() ?? null,
-      flatFee: data.flatFee?.toString() ?? null,
-      title: data.title,
-      isActive: 1,
+      ...ruleValues(data),
     });
-    
+
     revalidatePath('/admin/payroll');
     return { ok: true as const };
   } catch (err) {
@@ -240,16 +264,7 @@ export async function createPayrollCalculationRuleAction(data: {
   }
 }
 
-export async function updatePayrollCalculationRuleAction(id: number, data: {
-  offeringType: string | null;
-  professorRole: string | null;
-  academicRank: string | null;
-  multiplierUnit: number | null;
-  multiplierPerStudent: number | null;
-  flatFee: number | null;
-  title: string;
-  isActive: number;
-}) {
+export async function updatePayrollCalculationRuleAction(id: number, data: PayrollRuleInput) {
   try {
     const user = await requireRole(['ADMIN']);
     const { db } = await import('@/db');
@@ -267,17 +282,7 @@ export async function updatePayrollCalculationRuleAction(id: number, data: {
 
     await db
       .update(payroll_calculation_rules)
-      .set({
-        offeringType: data.offeringType,
-        professorRole: data.professorRole,
-        academicRank: data.academicRank,
-        multiplierUnit: data.multiplierUnit?.toString() ?? null,
-        multiplierPerStudent: data.multiplierPerStudent?.toString() ?? null,
-        flatFee: data.flatFee?.toString() ?? null,
-        title: data.title,
-        isActive: data.isActive,
-        updatedAt: new Date(),
-      })
+      .set({ ...ruleValues(data), updatedAt: new Date() })
       .where(and(
         eq(payroll_calculation_rules.id, id),
         or(eq(payroll_calculation_rules.universityId, uni.id), isNull(payroll_calculation_rules.universityId)),

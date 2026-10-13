@@ -36,29 +36,30 @@ export async function PUT(
       return NextResponse.json({ ok: false, error: 'داده ورودی معتبر نیست.' }, { status: 400 });
     }
     const {
-      offeringType,
-      professorRole,
-      academicRank,
-      multiplierUnit,
-      multiplierPerStudent,
-      flatFee,
-      title,
-      isActive,
+      offeringType, professorRole, academicRank, expression,
+      departmentId, courseType, repeatNumber, flatBase, title, isActive,
+      classMode, minStudents, maxStudents, perStudentHours,
     } = result.data;
+
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    if (offeringType !== undefined) patch.offeringType = offeringType ?? null;
+    if (professorRole !== undefined) patch.professorRole = professorRole ?? null;
+    if (academicRank !== undefined) patch.academicRank = academicRank ?? null;
+    if (expression !== undefined) patch.expression = expression ?? null;
+    if (departmentId !== undefined) patch.departmentId = departmentId ?? null;
+    if (courseType !== undefined) patch.courseType = courseType ?? null;
+    if (repeatNumber !== undefined) patch.repeatNumber = repeatNumber ?? null;
+    if (flatBase !== undefined) patch.flatBase = flatBase?.toString() ?? null;
+    if (classMode !== undefined) patch.classMode = classMode ?? 'ANY';
+    if (minStudents !== undefined) patch.minStudents = minStudents ?? null;
+    if (maxStudents !== undefined) patch.maxStudents = maxStudents ?? null;
+    if (perStudentHours !== undefined) patch.perStudentHours = perStudentHours?.toString() ?? null;
+    if (title !== undefined) patch.title = title;
+    if (isActive !== undefined) patch.isActive = isActive;
 
     await db
       .update(payroll_calculation_rules)
-      .set({
-        offeringType: offeringType ?? null,
-        professorRole: professorRole ?? null,
-        academicRank: academicRank ?? null,
-        multiplierUnit: multiplierUnit?.toString() ?? null,
-        multiplierPerStudent: multiplierPerStudent?.toString() ?? null,
-        flatFee: flatFee?.toString() ?? null,
-        title,
-        isActive: isActive ?? 1,
-        updatedAt: new Date(),
-      })
+      .set(patch)
       .where(and(
         eq(payroll_calculation_rules.id, parseInt(id)),
         or(eq(payroll_calculation_rules.universityId, own.uni.id), isNull(payroll_calculation_rules.universityId)),

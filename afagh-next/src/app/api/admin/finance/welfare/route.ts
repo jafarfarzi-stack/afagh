@@ -28,7 +28,7 @@ async function guard() {
     if (role instanceof NextResponse) return role;
     return null;
   } catch (e) {
-    log.warn('welfare auth error', e);
+    log.warn('welfare auth error', { err: e });
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 }
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
   try {
     const { searchParams } = new URL(req.url);
-    const universityId = await getCurrentUniversity();
+    const universityId = (await getCurrentUniversity().catch(() => null))?.id ?? null;
 
     // وام‌های یک صندوق (با نام دانشجو) — fundId=unassigned یعنی بدون صندوق
     const fundIdParam = searchParams.get('fundId');
@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
       if (fundId !== null && (!Number.isInteger(fundId) || fundId <= 0)) {
         return NextResponse.json({ error: 'invalid_fund' }, { status: 400 });
       }
-      const universityId = await getCurrentUniversity();
+      const universityId = (await getCurrentUniversity().catch(() => null))?.id ?? null;
       const result = await db.transaction(async (tx) => {
         const [loan] = await tx
           .select({ id: student_loans.id, universityId: student_loans.universityId })
@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: 'invalid_body', details: parsed.error.flatten() }, { status: 400 });
     }
-    const universityId = await getCurrentUniversity();
+    const universityId = (await getCurrentUniversity().catch(() => null))?.id ?? null;
     const created = await db.transaction(async (tx) => {
       const [row] = await tx
         .insert(welfare_funds)
@@ -258,7 +258,7 @@ export async function DELETE(req: NextRequest) {
   if (denied) return denied;
   try {
     const user = await getSessionUser();
-    if (!user || user.role !== 'ADMIN') {
+    if (!user || !user.roles.includes('ADMIN')) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 });
     }
     const { searchParams } = new URL(req.url);

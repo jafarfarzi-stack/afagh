@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   try {
     await requireRole([...ALLOWED]);
   } catch (e) {
-    log.warn('coverage auth error', e);
+    log.warn('coverage auth error', { err: e });
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
   try {

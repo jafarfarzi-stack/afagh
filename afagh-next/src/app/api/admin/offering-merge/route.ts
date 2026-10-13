@@ -32,7 +32,7 @@ async function guard() {
     if (role instanceof NextResponse) return role;
     return null;
   } catch (e) {
-    log.warn('course-merge auth error', e);
+    log.warn('course-merge auth error', { err: e });
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 }
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     if (!Number.isInteger(termId) || termId <= 0) {
       return NextResponse.json({ error: 'invalid_term' }, { status: 400 });
     }
-    const universityId = await getCurrentUniversity();
+    const universityId = (await getCurrentUniversity().catch(() => null))?.id ?? null;
 
     const offRows = await db.execute(sql`
       select o.id as "offeringId", c.code as "courseCode", c.title as "courseTitle",

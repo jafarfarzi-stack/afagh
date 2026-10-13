@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     const role = await requireRole([...ALLOWED]);
     if (role instanceof NextResponse) return role;
   } catch (e) {
-    log.warn('finance-statement auth error', e);
+    log.warn('finance-statement auth error', { err: e });
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
           details: JSON.stringify({ expiresAt: issued.expiresAt }),
         }),
       )
-      .catch(e => log.warn('finance-statement audit failed', e));
+      .catch(e => log.warn('finance-statement audit failed', { err: e }));
 
     return NextResponse.json({ token: issued.token, verifyUrl, expiresAt: issued.expiresAt });
   } catch (e) {

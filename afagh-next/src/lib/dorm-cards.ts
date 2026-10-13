@@ -91,7 +91,7 @@ export async function listDormResidences(opts?: { studentId?: number; status?: s
     academicYear: r.academicYear,
     validFrom: r.validFrom ? new Date(r.validFrom).toISOString() : null,
     validTo: r.validTo ? new Date(r.validTo).toISOString() : null,
-    status: r.status,
+    status: (r.status ?? 'active') as DormResidenceRow['status'],
     createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
   }));
 }
@@ -187,5 +187,3 @@ export async function deleteDormResidence(id: number): Promise<{ ok: true } | { 
   });
   return { ok: true };
 }
-
-void or; void gte; void lte; void desc; void degree_level_configs; // (import refs)

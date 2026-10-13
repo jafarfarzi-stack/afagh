@@ -5,10 +5,10 @@ import {
   course_offerings,
   courses,
   academic_terms,
-  english_enrollment_approvals,
   students,
   users,
 } from '@/db/schema';
+import { english_enrollment_approvals } from '@/db/schema-enrollment-approvals';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
@@ -41,7 +41,7 @@ async function guard(req: NextRequest) {
     if (role instanceof NextResponse) return role;
     return null;
   } catch (e) {
-    log.warn('enroll-approval auth error', e);
+    log.warn('enroll-approval auth error', { err: e });
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 }
@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
     const q = (searchParams.get('q') ?? '').trim();
     const status = searchParams.get('status');
     const page = Math.max(1, Number(searchParams.get('page') ?? '1') || 1);
-    const universityId = await getCurrentUniversity();
+    const universityId = (await getCurrentUniversity().catch(() => null))?.id ?? null;
 
     // جستجوی دانشجو (اتومکمل مثل discipline/warnings)
     if (searchParams.get('action') === 'students') {
@@ -312,7 +312,7 @@ export async function DELETE(req: NextRequest) {
   if (denied) return denied;
   try {
     const user = await getSessionUser();
-    if (!user || user.role !== 'ADMIN') {
+    if (!user || !user.roles.includes('ADMIN')) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 });
     }
     const { searchParams } = new URL(req.url);

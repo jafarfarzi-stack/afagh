@@ -6,6 +6,16 @@ import { scheduled_warnings } from '@/db/schema-warnings';
 import { notifyUserMultichannel, type Channel } from '@/lib/messaging';
 import { getSetting } from '@/lib/settings';
 import { createLogger } from '@/lib/logger';
+import {
+  WARNING_STATUSES,
+  WARNING_TYPES,
+  SCHED_WARNINGS_PAGE_SIZE,
+  isWarningType,
+  isWarningStatus,
+  warningTypeLabel,
+  type WarningStatus,
+  type WarningType,
+} from '@/lib/scheduled-warnings-shared';
 
 const log = createLogger({ mod: 'scheduled-warnings' });
 
@@ -29,10 +39,6 @@ export {
   SCHED_WARNINGS_PAGE_SIZE,
 } from '@/lib/scheduled-warnings-shared';
 export type { WarningStatus, WarningType } from '@/lib/scheduled-warnings-shared';
-import {
-  WARNING_TYPES, WARNING_STATUSES, SCHED_WARNINGS_PAGE_SIZE,
-  isWarningType, isWarningStatus,
-} from '@/lib/scheduled-warnings-shared';
 
 /** نتیجهٔ یک دور اجرای پویش */
 export interface WarnRunResult {

@@ -40,7 +40,7 @@ async function guard() {
     if (role instanceof NextResponse) return role;
     return null;
   } catch (e) {
-    log.warn('student-formula auth error', e);
+    log.warn('student-formula auth error', { err: e });
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 }
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
   try {
     const { searchParams } = new URL(req.url);
-    const universityId = await getCurrentUniversity();
+    const universityId = (await getCurrentUniversity().catch(() => null))?.id ?? null;
 
     // فهرست ترم‌ها برای سلکت فرم
     if (searchParams.get('action') === 'terms') {
@@ -195,7 +195,7 @@ export async function POST(req: NextRequest) {
       if (!term) return NextResponse.json({ error: 'term_not_found' }, { status: 404 });
     }
 
-    const universityId = await getCurrentUniversity();
+    const universityId = (await getCurrentUniversity().catch(() => null))?.id ?? null;
     const created = await db.transaction(async (tx) => {
       await deactivateConflicts(tx, studentId, termId);
       const [row] = await tx
@@ -294,7 +294,7 @@ export async function DELETE(req: NextRequest) {
   if (denied) return denied;
   try {
     const user = await getSessionUser();
-    if (!user || user.role !== 'ADMIN') {
+    if (!user || !user.roles.includes('ADMIN')) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 });
     }
     const { searchParams } = new URL(req.url);

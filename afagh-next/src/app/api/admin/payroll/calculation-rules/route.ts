@@ -6,16 +6,32 @@ import { z } from 'zod';
 import { payroll_calculation_rules } from '@/db/schema';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { validateFormula } from '@/lib/payroll-formula';
 
 export const calculationRuleSchema = z.object({
-  offeringType: z.enum(['THEORY', 'THESIS', 'DIRECTED_READING', 'INTERNSHIP', 'NORMAL', 'TRANSFER']).nullable().optional(),
-  professorRole: z.enum(['MAIN_LECTURER', 'SUPERVISOR', 'ADVISOR', 'REVIEWER', 'EXAMINER']).nullable().optional(),
-  academicRank: z.enum(['مربی', 'استادیار', 'دانشیار', 'استاد تمام']).nullable().optional(),
-  multiplierUnit: z.coerce.number().min(0).max(99.99).nullable().optional(),
-  multiplierPerStudent: z.coerce.number().min(0).max(99.99).nullable().optional(),
-  flatFee: z.coerce.number().int().min(0).max(999999999999).nullable().optional(),
+  offeringType: z.string().trim().max(50).nullable().optional(),
+  // نقش آزاد است (از کاتالوگ teaching_role_defs می‌آید، نه enum ثابت)
+  professorRole: z.string().trim().max(50).nullable().optional(),
+  academicRank: z.string().trim().max(50).nullable().optional(),
+  expression: z.string().trim().max(500).nullable().optional(),
+  departmentId: z.coerce.number().int().positive().nullable().optional(),
+  courseType: z.string().trim().max(50).nullable().optional(),
+  repeatNumber: z.coerce.number().int().min(1).max(20).nullable().optional(),
+  flatBase: z.coerce.number().min(0).max(999999999999).nullable().optional(),
+  classMode: z.enum(['ANY', 'WITH_CLASS', 'NO_CLASS']).nullable().optional(),
+  minStudents: z.coerce.number().int().min(0).max(100000).nullable().optional(),
+  maxStudents: z.coerce.number().int().min(0).max(100000).nullable().optional(),
+  perStudentHours: z.coerce.number().min(0).max(999).nullable().optional(),
   title: z.string().trim().min(1).max(150),
   isActive: z.union([z.literal(0), z.literal(1)]).optional(),
+}).superRefine((v, ctx) => {
+  if (v.minStudents != null && v.maxStudents != null && v.minStudents > v.maxStudents) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['maxStudents'], message: 'حداکثر تعداد دانشجو باید ≥ حداقل باشد.' });
+  }
+  if (v.expression) {
+    const bad = validateFormula(v.expression);
+    if (bad) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['expression'], message: bad });
+  }
 });
 
 export async function GET() {
@@ -45,13 +61,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'داده ورودی معتبر نیست.' }, { status: 400 });
     }
     const {
-      offeringType,
-      professorRole,
-      academicRank,
-      multiplierUnit,
-      multiplierPerStudent,
-      flatFee,
-      title,
+      offeringType, professorRole, academicRank, expression, departmentId,
+      courseType, repeatNumber, flatBase, classMode,
+      minStudents, maxStudents, perStudentHours, title,
     } = result.data;
     const uni = await getCurrentUniversity().catch(() => null);
     if (!uni) return NextResponse.json({ ok: false, error: 'دانشگاه فعال نامشخص است.' }, { status: 400 });
@@ -61,9 +73,15 @@ export async function POST(req: NextRequest) {
       offeringType: offeringType || null,
       professorRole: professorRole || null,
       academicRank: academicRank || null,
-      multiplierUnit: multiplierUnit?.toString() ?? null,
-      multiplierPerStudent: multiplierPerStudent?.toString() ?? null,
-      flatFee: flatFee?.toString() ?? null,
+      expression: expression || null,
+      departmentId: departmentId ?? null,
+      courseType: courseType || null,
+      repeatNumber: repeatNumber ?? null,
+      flatBase: flatBase?.toString() ?? null,
+      classMode: classMode || 'ANY',
+      minStudents: minStudents ?? null,
+      maxStudents: maxStudents ?? null,
+      perStudentHours: perStudentHours?.toString() ?? null,
       title,
       isActive: 1,
     });
