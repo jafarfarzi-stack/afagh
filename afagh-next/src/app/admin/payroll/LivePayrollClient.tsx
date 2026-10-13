@@ -11,7 +11,8 @@ import { normalizeFa, faIncludes } from '@/lib/persian-search';
 
 export type OverviewItem = {
   id: number; name: string; staffCode: string | null; rank: string | null; base: string | null; degree: string | null;
-  contractType: string | null; rate: number; rateSource: string | null; totalEquivalentUnits: number; totalEffectiveUnits: number;
+  contractType: string | null; rate: number; rateSource: string | null; dutyUnits: number;
+  totalEquivalentUnits: number; totalEffectiveUnits: number;
   payableUnits: number; gross: number; tax: number; absenceDeductionRial: number; net: number;
   status: string; statementId: number | null; midtermPaid: number; finalPaid: number; remaining: number;
   gates: { gradesFinalized: boolean; pendingGrades: number; docsSigned: boolean; unsignedDocs: number };
