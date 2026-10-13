@@ -687,6 +687,188 @@ DROP POLICY IF EXISTS grade_change_log_self_read ON "grade_change_log";
 CREATE POLICY grade_change_log_self_read ON "grade_change_log" FOR SELECT TO afagh_app
   USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
 
+-- ═══════════════════════════════════════════════════════════════════════
+--  ⑨ جدول‌های جدید ماژول‌های الحاقی (مهاجرت 0075-0092) — پوشش RLS کامل
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- ── کمیته انضباطی (discipline_cases): مالکیت دانشجو + مدیر/کارشناس ──
+ALTER TABLE "discipline_cases" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS discipline_cases_self_read ON "discipline_cases";
+CREATE POLICY discipline_cases_self_read ON "discipline_cases" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+DROP POLICY IF EXISTS discipline_cases_admin_read ON "discipline_cases";
+CREATE POLICY discipline_cases_admin_read ON "discipline_cases" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'VICE_EDU')));
+
+-- ── جلسات شورای آموزشی (council_meetings): کاتالوگ سراسری + دانشگاه کاربر + مدیر ──
+ALTER TABLE "council_meetings" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS council_meetings_uni ON "council_meetings";
+CREATE POLICY council_meetings_uni ON "council_meetings" FOR SELECT TO afagh_app
+  USING ("universityId" IS NULL
+      OR "universityId" IN (SELECT "universityId" FROM "students"
+                            WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int
+                              AND "universityId" IS NOT NULL)
+      OR "universityId" IN (SELECT "universityId" FROM "staff"
+                            WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int
+                              AND "universityId" IS NOT NULL)
+      OR EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+                 WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                   AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'VICE_EDU')));
+
+-- ── مصوبات شورای آموزشی (council_decisions): اگر studentId داری → دانشجو/استاد، وگرنه کاتالوگ + مدیر ──
+ALTER TABLE "council_decisions" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS council_decisions_self_read ON "council_decisions";
+CREATE POLICY council_decisions_self_read ON "council_decisions" FOR SELECT TO afagh_app
+  USING ("studentId" IS NOT NULL AND "studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+      OR EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+                 WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                   AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'VICE_EDU')));
+
+-- ── کارت‌های سکونت خوابگاه (dorm_residences): مالکیت دانشجو + مدیر ──
+ALTER TABLE "dorm_residences" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS dorm_residences_self_read ON "dorm_residences";
+CREATE POLICY dorm_residences_self_read ON "dorm_residences" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+DROP POLICY IF EXISTS dorm_residences_admin_read ON "dorm_residences";
+CREATE POLICY dorm_residences_admin_read ON "dorm_residences" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'VICE_EDU')));
+
+-- ── تأیید انتخاب واحد انگلیسی (english_enrollment_approvals): مالکیت دانشجو + تصمیم‌گیرنده/ایجادکننده + مدیر ──
+ALTER TABLE "english_enrollment_approvals" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS english_enrollment_approvals_self_read ON "english_enrollment_approvals";
+CREATE POLICY english_enrollment_approvals_self_read ON "english_enrollment_approvals" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+      OR "requestedBy" = nullif(current_setting('app.user_id', true), '')::int
+      OR "decidedBy" = nullif(current_setting('app.user_id', true), '')::int);
+DROP POLICY IF EXISTS english_enrollment_approvals_admin_read ON "english_enrollment_approvals";
+CREATE POLICY english_enrollment_approvals_admin_read ON "english_enrollment_approvals" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'VICE_EDU')));
+
+-- ── هشدارهای زمان‌بندی‌شده (scheduled_warnings): مالکیت دانشجو + ایجادکننده + مدیر ──
+ALTER TABLE "scheduled_warnings" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS scheduled_warnings_self_read ON "scheduled_warnings";
+CREATE POLICY scheduled_warnings_self_read ON "scheduled_warnings" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+      OR "createdBy" = nullif(current_setting('app.user_id', true), '')::int);
+DROP POLICY IF EXISTS scheduled_warnings_admin_read ON "scheduled_warnings";
+CREATE POLICY scheduled_warnings_admin_read ON "scheduled_warnings" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'VICE_EDU')));
+
+-- ── فرمول ویژهٔ شهریه (student_tuition_overrides): مالکیت دانشجو + ایجادکننده + مدیر ──
+ALTER TABLE "student_tuition_overrides" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tuition_overrides_self_read ON "student_tuition_overrides";
+CREATE POLICY tuition_overrides_self_read ON "student_tuition_overrides" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+      OR "createdBy" = nullif(current_setting('app.user_id', true), '')::int);
+DROP POLICY IF EXISTS tuition_overrides_admin_read ON "student_tuition_overrides";
+CREATE POLICY tuition_overrides_admin_read ON "student_tuition_overrides" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'VICE_EDU')));
+
+-- ── نظارت پایان‌نامه (thesis_supervisions): مالکیت استاد + دانشجو (در صورت وجود) + مدیر ──
+ALTER TABLE "thesis_supervisions" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS thesis_supervisions_self_read ON "thesis_supervisions";
+CREATE POLICY thesis_supervisions_self_read ON "thesis_supervisions" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+      OR ("studentId" IS NOT NULL AND "studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int))
+      OR "createdBy" = nullif(current_setting('app.user_id', true), '')::int);
+DROP POLICY IF EXISTS thesis_supervisions_admin_read ON "thesis_supervisions";
+CREATE POLICY thesis_supervisions_admin_read ON "thesis_supervisions" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'VICE_EDU')));
+
+-- ── ابلاغ‌های آموزشی (teaching_decrees): مالکیت استاد + صادرکننده + مدیر ──
+ALTER TABLE "teaching_decrees" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS teaching_decrees_self_read ON "teaching_decrees";
+CREATE POLICY teaching_decrees_self_read ON "teaching_decrees" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+      OR "issuedBy" = nullif(current_setting('app.user_id', true), '')::int);
+DROP POLICY IF EXISTS teaching_decrees_admin_read ON "teaching_decrees";
+CREATE POLICY teaching_decrees_admin_read ON "teaching_decrees" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'VICE_EDU')));
+
+-- ── افزوده‌های حق‌التدریس درس-استاد (offering_payroll_extras): مالکیت استاد + ایجادکننده + مدیر ──
+ALTER TABLE "offering_payroll_extras" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS offering_payroll_extras_self_read ON "offering_payroll_extras";
+CREATE POLICY offering_payroll_extras_self_read ON "offering_payroll_extras" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+      OR "createdBy" = nullif(current_setting('app.user_id', true), '')::int);
+DROP POLICY IF EXISTS offering_payroll_extras_admin_read ON "offering_payroll_extras";
+CREATE POLICY offering_payroll_extras_admin_read ON "offering_payroll_extras" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'VICE_EDU')));
+
+-- ── ثبت فعالیت‌های کیفی استاد (staff_activity_entries): مالکیت استاد + تصمیم‌گیرنده/ایجادکننده + مدیر ──
+ALTER TABLE "staff_activity_entries" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS staff_activity_entries_self_read ON "staff_activity_entries";
+CREATE POLICY staff_activity_entries_self_read ON "staff_activity_entries" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+      OR "createdBy" = nullif(current_setting('app.user_id', true), '')::int
+      OR "decidedBy" = nullif(current_setting('app.user_id', true), '')::int);
+DROP POLICY IF EXISTS staff_activity_entries_admin_read ON "staff_activity_entries";
+CREATE POLICY staff_activity_entries_admin_read ON "staff_activity_entries" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'VICE_EDU')));
+
+-- ── مبالغ نقدی جنبی ترم استاد (payroll_cash_extras): مالکیت استاد + ایجادکننده + مدیر ──
+ALTER TABLE "payroll_cash_extras" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS payroll_cash_extras_self_read ON "payroll_cash_extras";
+CREATE POLICY payroll_cash_extras_self_read ON "payroll_cash_extras" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+      OR "createdBy" = nullif(current_setting('app.user_id', true), '')::int);
+DROP POLICY IF EXISTS payroll_cash_extras_admin_read ON "payroll_cash_extras";
+CREATE POLICY payroll_cash_extras_admin_read ON "payroll_cash_extras" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'VICE_EDU')));
+
+-- ── پرداخت امتحانی (exam_payments): مالکیت استاد + ایجادکننده + مدیر ──
+ALTER TABLE "exam_payments" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS exam_payments_self_read ON "exam_payments";
+CREATE POLICY exam_payments_self_read ON "exam_payments" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+      OR "createdBy" = nullif(current_setting('app.user_id', true), '')::int);
+DROP POLICY IF EXISTS exam_payments_admin_read ON "exam_payments";
+CREATE POLICY exam_payments_admin_read ON "exam_payments" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'VICE_EDU')));
+
+-- ── اعتراضات استاد (payroll_objections): مالکیت استاد + بررسی‌کننده + مدیر ──
+ALTER TABLE "payroll_objections" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS payroll_objections_self_read ON "payroll_objections";
+CREATE POLICY payroll_objections_self_read ON "payroll_objections" FOR SELECT TO afagh_app
+  USING ("staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+      OR "createdBy" = nullif(current_setting('app.user_id', true), '')::int
+      OR "reviewedBy" = nullif(current_setting('app.user_id', true), '')::int);
+DROP POLICY IF EXISTS payroll_objections_admin_read ON "payroll_objections";
+CREATE POLICY payroll_objections_admin_read ON "payroll_objections" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'VICE_EDU')));
+
+-- ── کاتالوگ نقش‌های استاد (teaching_role_defs): کاتالوگ مدیریتی → فقط مدیر/کارشناس ──
+ALTER TABLE "teaching_role_defs" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS teaching_role_defs_admin_read ON "teaching_role_defs";
+CREATE POLICY teaching_role_defs_admin_read ON "teaching_role_defs" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'VICE_EDU')));
+
 ALTER TABLE "legacy_code_maps" ENABLE ROW LEVEL SECURITY;
 -- targetId عمومی/داخلی است و کاربرد نقش اپ ندارد → برای نقش اپ «هیچ» (deny-all صریح)
 DROP POLICY IF EXISTS legacy_code_maps_deny_all ON "legacy_code_maps";
