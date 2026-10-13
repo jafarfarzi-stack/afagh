@@ -44,7 +44,7 @@ async function main(): Promise<void> {
   };
 
   type Store = {
-    terms: any[]; students: any[]; finTerms: any[]; clearances: any[];
+    terms: any[]; students: any[]; finTerms: any[]; clearances: any[]; ledger: any[];
     cart: any[]; offs: any[]; current: any[]; sched: any[];
     rows: (t: any, joins: any[]) => any[];
   };
@@ -57,6 +57,10 @@ async function main(): Promise<void> {
       students: [{ id: 9, status: 'ACTIVE', universityId: 1 }],
       finTerms: [],
       clearances: [{ studentId: 9, termId: 5, isCleared: 1 }],
+      // دروازهٔ مانده‌بدهکاری (ledgerBalance روی کل دفتر) — بدون این نقشهٔ fake،
+      // processQueuedSubmit در select روی student_ledger استثنا می‌داد و کل زنجیرهٔ
+      // npm test بعد از این تست متوقف می‌شد. دفتر خالی ⇒ مانده صفر ⇒ عبور.
+      ledger: [],
       cart: [11, 12, 13, 14, 15, 16].map(id => ({ studentId: 9, offeringId: id })),
       offs: [11, 12, 13, 14, 15, 16].map((id, i) => ({
         id, courseId: 101 + i, code: 'C' + (i + 1), title: titles[i],
@@ -69,6 +73,7 @@ async function main(): Promise<void> {
         if (t === S.students) return st.students;
         if (t === S.financial_terms) return st.finTerms;
         if (t === S.financial_clearances) return st.clearances;
+        if (t === S.student_ledger) return st.ledger;
         if (t === S.cart_items) return st.cart;
         if (t === S.course_offerings && joins.includes(S.courses)) return st.offs;
         if (t === S.enrollments) return st.current;

@@ -11,10 +11,25 @@ import { getCurrentUniversity } from '@/lib/university-scope';
 
 const ALLOWED = ['ADMIN', 'EDU_EXPERT'];
 
+// توجه: کلاینت (GradeCodesClient) مقدارها را به‌صورت رشته می‌فرستد
+// (minValue/maxValue از input type=number) و برای هر آستانه label و passed هم می‌فرستد.
+// پیش‌تر اسکیما فقط {minValue:number,maxValue:number} را می‌پذیرفت ⇒ safeParse شکست می‌خورد
+// و label/passed/آستانه‌ها هرگز ذخیره نمی‌شدند. اکنون با coerce و فیلدهای کامل.
 const degreeLevelSchema = z.object({
-  degreeLevelId: z.number().int().positive(),
+  degreeLevelId: z.coerce.number().int().positive(),
   transcriptDisplayMode: z.enum(['NUMERIC', 'LETTER', 'GPA']).optional(),
-  thresholds: z.array(z.object({ minValue: z.number(), maxValue: z.number() })).optional(),
+  thresholds: z.array(z.object({
+    label: z.string().trim().min(1).max(50),
+    minValue: z.coerce.number().min(0).max(20),
+    maxValue: z.coerce.number().min(0).max(20),
+    passed: z.coerce.boolean().default(true),
+  })).max(50).optional(),
+}).superRefine((v, ctx) => {
+  v.thresholds?.forEach((t, i) => {
+    if (t.minValue > t.maxValue) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['thresholds', i, 'minValue'], message: 'minValue باید ≤ maxValue باشد' });
+    }
+  });
 });
 
 // GET — دریافت آستانه‌ها برای یک مقطع یا همه
