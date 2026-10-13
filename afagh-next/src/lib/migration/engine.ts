@@ -7,6 +7,7 @@ import {
   majors, migration_runs, roles, staff, student_ledger, students, user_roles, users,
 } from '@/db/schema';
 import { boolFa, checkNationalCode, dateFa, norm, num } from './normalize';
+import { clearPermissionCache } from '@/lib/permissions-enforcer';
 import { computeGradeStatus } from '@/lib/grade-utils';
 import { COURSE_ALIASES, parseCourseRow } from './course-row';
 import {

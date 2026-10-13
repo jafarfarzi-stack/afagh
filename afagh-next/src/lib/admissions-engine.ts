@@ -420,7 +420,7 @@ export async function importStagedToStudents(stagingIds: number[]) {
         if (!user) {
           // رمز پیش‌فرض با همان موتور امنیتی سراسری (scrypt + salt تصادفی) —
           // نه sha256 خام؛ و فلگ «تغییر اجباری رمز» برای اولین ورود ست می‌شود.
-          const tempPassword = randomBytes(9).toString('base64url').slice(0, 12);
+          const tempPassword = crypto.randomBytes(9).toString('base64url').slice(0, 12);
             const passwordHash = await hashPassword(tempPassword);
           [user] = await tx
             .insert(users)
@@ -542,7 +542,7 @@ export async function registerManualStudent(params: {
       .limit(1);
 
     if (!user) {
-      const tempPassword = randomBytes(9).toString('base64url').slice(0, 12);
+      const tempPassword = crypto.randomBytes(9).toString('base64url').slice(0, 12);
             const passwordHash = await hashPassword(tempPassword);
       [user] = await tx
         .insert(users)

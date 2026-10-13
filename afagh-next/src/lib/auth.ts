@@ -6,6 +6,7 @@ import { sessionTransport } from '@/lib/proxy-trust';
 import { and, asc, desc, eq, gt, inArray, lt, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { ensureBaseReferenceData } from '@/lib/base-data';
+import { clearPermissionCache } from '@/lib/permissions-enforcer';
 import { clientIp, getRateLimitCount, hitRateLimit, peekRateLimit, progressiveDelay, rateLimit } from '@/lib/rateLimit';
 import {
   degree_level_configs,
