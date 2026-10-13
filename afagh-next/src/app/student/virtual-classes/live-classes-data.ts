@@ -46,9 +46,11 @@ export async function listTermVirtualClasses(
       left join staff st on st.id = o."professorId"
       left join users pu on pu.id = st."userId"
       left join schedules sc on sc."offeringId" = o.id and sc."scheduleType" = 'CLASS'
-     where en."studentId" = ${studentId}
-       and (${termId === null ? sql`true` : sql`o."termId" = ${termId}`})
-     order by c.code, vc."meetingName"
+      where en."studentId" = ${studentId}
+        and (${termId === null ? sql`true` : sql`o."termId" = ${termId}`})
+      group by c.id, c.code, c.title, pu."firstName", pu."lastName",
+               vc.id, vc."bbbMeetingId", vc."isRunning", vc."currentAttendanceCount"
+      order by c.code, vc."bbbMeetingId"
   `)).rows ?? []) as unknown as Row[];
 
   return rows.map(r => ({
