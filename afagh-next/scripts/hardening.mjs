@@ -84,6 +84,12 @@ try {
     'notification_channels','notification_deliveries','notification_logs',
     'user_roles',            // زیرپرسمانِ سیاست‌های نقش‌محورِ پایان‌نامه — خودش هم RLS دارد
     'legacy_code_maps',      // deny-all صریح (USING(false))
+    // ── ۱۴ جدول ماژول‌های الحاقی (مهاجرت 0075-0092) ──
+    'discipline_cases','council_meetings','council_decisions','dorm_residences',
+    'english_enrollment_approvals','scheduled_warnings','student_tuition_overrides',
+    'thesis_supervisions','teaching_decrees','offering_payroll_extras',
+    'staff_activity_entries','payroll_cash_extras','exam_payments','payroll_objections',
+    'teaching_role_defs',
   ];
   const checks = await client.query(
     `SELECT c.relname AS table_name, c.relrowsecurity AS rls_enabled
