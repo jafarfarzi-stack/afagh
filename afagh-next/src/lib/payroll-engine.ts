@@ -598,6 +598,10 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
     if (!info) continue;
     if (c.rankSnapshot != null) info.rank = c.rankSnapshot;
     if (c.baseSnapshot != null) info.base = c.baseSnapshot;
+    if (c.rateSnapshot != null) {
+      rateByStaff.set(staffId, c.rateSnapshot);
+      rateSource.set(staffId, 'SNAPSHOT');
+    }
   }
 
   // ── نرخ جدول با بُعد پایه (مهاجرت 0090): سطر دقیق (مرتبه+مدرک+پایه) بر
@@ -617,11 +621,7 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
     rateByStaff.set(s.id, Number(winRate?.baseRatePerUnit ?? 0));
     rateSource.set(s.id, winRate?.academicBase != null ? 'BASE' : 'TABLE');
   }
-    if (c.rateSnapshot != null) {
-      rateByStaff.set(staffId, c.rateSnapshot);
-      rateSource.set(staffId, 'SNAPSHOT');
-    }
-  }
+
   // ── سوییچ نرخ کسری از حکم (۱/N): مبنای حکم قرارداد ÷ مقسوم ──
   // بالاترین اولویت است (انتخاب صریح ادمین)؛ استاد بدون مبنای حکم از جدول/اسنپ‌شات می‌خواند.
   if (rateFraction && rateDivisor > 0) {

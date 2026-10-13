@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import {
   WARNING_STATUSES, WARNING_TYPES, WARNING_TYPE_LABEL,
   statusBadgeClass, warningTypeLabel,
-} from '@/lib/scheduled-warnings';
+} from '@/lib/scheduled-warnings-shared';
 
 type Msg = { text: string; kind: 'ok' | 'error' } | null;
 
