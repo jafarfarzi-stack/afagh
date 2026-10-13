@@ -5,7 +5,8 @@ import { db } from '@/db';
 import { payroll_calculation_rules } from '@/db/schema';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import { getCurrentUniversity } from '@/lib/university-scope';
-import { calculationRuleSchema } from '../route';
+import { calculationRuleBaseSchema } from '../route';
+import { validateFormula } from '@/lib/payroll-formula';
 
 async function ownedRuleId(id: number) {
   const uni = await getCurrentUniversity().catch(() => null);
@@ -31,9 +32,18 @@ export async function PUT(
       return NextResponse.json({ ok: false, error: 'رکورد یافت نشد یا متعلق به دانشگاه دیگری است.' }, { status: 403 });
     }
     const rawBody = await req.json();
-    const result = calculationRuleSchema.partial().safeParse(rawBody);
+    // partial روی شکل پایه اعمال می‌شود، سپس superRefine (اعتبارسنجی عبارت ریاضی) اجرا می‌گردد.
+    const result = calculationRuleBaseSchema.partial().superRefine((v, ctx) => {
+      if (v.minStudents != null && v.maxStudents != null && v.minStudents > v.maxStudents) {
+        ctx.addIssue({ code: 'custom' as const, path: ['maxStudents'], message: 'حداکثر تعداد دانشجو باید ≥ حداقل باشد.' });
+      }
+      if (v.expression) {
+        const bad = validateFormula(v.expression);
+        if (bad) ctx.addIssue({ code: 'custom' as const, path: ['expression'], message: bad });
+      }
+    }).safeParse(rawBody);
     if (!result.success) {
-      return NextResponse.json({ ok: false, error: 'داده ورودی معتبر نیست.' }, { status: 400 });
+      return NextResponse.json({ ok: false, error: 'داده ورودی معتبر نیست.', details: result.error.flatten() }, { status: 400 });
     }
     const {
       offeringType, professorRole, academicRank, expression,

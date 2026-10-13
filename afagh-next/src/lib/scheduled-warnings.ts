@@ -120,7 +120,7 @@ export async function runPendingWarnings(): Promise<WarnRunResult> {
   }
 
   const result: WarnRunResult = { due: due.length, sent, skipped, failed };
-  log.info('sched_warnings_run', result);
+  log.info('sched_warnings_run', { ...result });
   return result;
 }
 

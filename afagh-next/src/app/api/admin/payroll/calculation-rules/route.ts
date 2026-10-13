@@ -8,7 +8,8 @@ import { and, eq, isNull, or } from 'drizzle-orm';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { validateFormula } from '@/lib/payroll-formula';
 
-export const calculationRuleSchema = z.object({
+/** شکل پایه (بدون اعتبارسنجی متقابل) — تا بتوان روی آن `.partial()` زد. */
+export const calculationRuleBaseSchema = z.object({
   offeringType: z.string().trim().max(50).nullable().optional(),
   // نقش آزاد است (از کاتالوگ teaching_role_defs می‌آید، نه enum ثابت)
   professorRole: z.string().trim().max(50).nullable().optional(),
@@ -24,7 +25,10 @@ export const calculationRuleSchema = z.object({
   perStudentHours: z.coerce.number().min(0).max(999).nullable().optional(),
   title: z.string().trim().min(1).max(150),
   isActive: z.union([z.literal(0), z.literal(1)]).optional(),
-}).superRefine((v, ctx) => {
+});
+
+/** اعتبارسنجی متقابل + صحت عبارت ریاضی (روی همان شکل پایه). */
+export const calculationRuleSchema = calculationRuleBaseSchema.superRefine((v, ctx) => {
   if (v.minStudents != null && v.maxStudents != null && v.minStudents > v.maxStudents) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['maxStudents'], message: 'حداکثر تعداد دانشجو باید ≥ حداقل باشد.' });
   }

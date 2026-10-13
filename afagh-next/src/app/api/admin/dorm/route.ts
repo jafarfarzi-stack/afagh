@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireRole } from '@/lib/auth';
 import { createLogger } from '@/lib/logger';
+import type { DormResidenceInput } from '@/lib/dorm-cards';
 import {
   createDormResidence,
   deleteDormResidence,
@@ -14,6 +15,7 @@ export const dynamic = 'force-dynamic';
 const log = createLogger({ mod: 'api.admin.dorm' });
 const ALLOWED = ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'] as const;
 
+// nullish فیلدها به null تبدیل می‌شوند تا با DormResidenceInput (که null ندارد) سازگار شوند
 const bodySchema = z.object({
   studentId: z.number().int().positive(),
   dormName: z.string().max(150).nullish(),
@@ -24,6 +26,26 @@ const bodySchema = z.object({
   validTo: z.string().nullish(),
   status: z.enum(['active', 'ended', 'revoked']).nullish(),
 });
+
+// nullish → null نگاشت می‌شود و وضعیت پیش‌فرض از enum جدا می‌ماند
+type DormBody = Omit<DormResidenceInput, 'status'> & {
+  status?: DormResidenceInput['status'] | null;
+};
+const toInput = (d: z.infer<typeof bodySchema>): DormResidenceInput => ({
+  studentId: d.studentId,
+  dormName: d.dormName ?? null,
+  roomNo: d.roomNo ?? null,
+  bedNo: d.bedNo ?? null,
+  academicYear: d.academicYear ?? null,
+  validFrom: d.validFrom ?? null,
+  validTo: d.validTo ?? null,
+  ...(d.status ? { status: d.status } : {}),
+});
+const toPatch = (d: z.infer<typeof bodySchema>): DormResidenceInput => {
+  const { studentId: _drop, ...rest } = d;
+  void _drop;
+  return { ...toInput({ ...d, studentId: 0 }), status: rest.status ?? undefined };
+};
 
 async function guard() {
   try {
@@ -66,7 +88,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: 'invalid_body', details: parsed.error.flatten() }, { status: 400 });
     }
-    const result = await createDormResidence({ ...parsed.data, studentId: parsed.data.studentId });
+    const result = await createDormResidence(toInput(parsed.data));
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ id: result.id }, { status: 201 });
   } catch (e) {
@@ -88,7 +110,7 @@ export async function PATCH(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: 'invalid_body', details: parsed.error.flatten() }, { status: 400 });
     }
-    const result = await updateDormResidence(id, { studentId: 0, ...parsed.data });
+    const result = await updateDormResidence(id, toPatch(parsed.data));
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ ok: true });
   } catch (e) {

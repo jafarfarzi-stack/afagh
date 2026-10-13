@@ -214,7 +214,7 @@ export async function POST(req: NextRequest) {
       .limit(1);
     if (!student) return NextResponse.json({ error: 'student_not_found' }, { status: 404 });
 
-    const universityId = (await getCurrentUniversity()) ?? offering.universityId ?? null;
+    const universityId = (await getCurrentUniversity().catch(() => null))?.id ?? offering.universityId ?? null;
 
     const created = await db.transaction(async (tx) => {
       const [row] = await tx

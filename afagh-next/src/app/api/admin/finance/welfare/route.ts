@@ -231,9 +231,14 @@ export async function PATCH(req: NextRequest) {
         .for('update')
         .limit(1);
       if (!before) return null;
+      // فقط کلیدهای تعریف‌شده ارسال می‌شوند تا drizzle مقدار undefined نگیرد
+      const patch: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(parsed.data)) {
+        if (v !== undefined) patch[k] = v;
+      }
       const [row] = await tx
         .update(welfare_funds)
-        .set(parsed.data)
+        .set(patch)
         .where(eq(welfare_funds.id, id))
         .returning({ id: welfare_funds.id });
       await appendAudit(tx, {
