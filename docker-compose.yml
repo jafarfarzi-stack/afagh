@@ -112,6 +112,8 @@ x-app-env: &app-env
   AFAGH_OTP_PEPPER: ${AFAGH_OTP_PEPPER:-}
   # کلید هدر x-cron-secret برای POST /api/cron/bi-refresh (fail-closed؛ در پنل تنظیمات هم قابل ست است)
   BI_CRON_SECRET: ${BI_CRON_SECRET:-}
+  # کلید هدر x-cron-secret برای POST /api/cron/scheduled-warnings (ارسال خودکار هشدارها از پیام‌رسان‌ها)
+  SCHED_WARN_CRON_SECRET: ${SCHED_WARN_CRON_SECRET:-}
 
 x-logging: &default-logging
   driver: json-file
@@ -260,6 +262,7 @@ services:
       GRADUATION_SCAN_CRON_SECRET: ${GRADUATION_SCAN_CRON_SECRET:-}
       WORKFLOW_EVENTS_CRON_SECRET: ${WORKFLOW_EVENTS_CRON_SECRET:-}
       MSG_LINK_CRON_SECRET: ${MSG_LINK_CRON_SECRET:-}
+      SCHED_WARN_CRON_SECRET: ${SCHED_WARN_CRON_SECRET:-}
       # فاصلهٔ پویش‌ها به دقیقه — همه از ENV، هیچ‌کدام در کد سخت‌کد نیست
       SCHEDULER_TICK_SECONDS: ${SCHEDULER_TICK_SECONDS:-60}
       CHEQUE_REMIND_INTERVAL_MIN: ${CHEQUE_REMIND_INTERVAL_MIN:-60}
@@ -267,6 +270,7 @@ services:
       BI_REFRESH_INTERVAL_MIN: ${BI_REFRESH_INTERVAL_MIN:-720}
       WORKFLOW_EVENTS_INTERVAL_MIN: ${WORKFLOW_EVENTS_INTERVAL_MIN:-60}
       GREETINGS_INTERVAL_MIN: ${GREETINGS_INTERVAL_MIN:-1440}
+      SCHED_WARNINGS_INTERVAL_MIN: ${SCHED_WARNINGS_INTERVAL_MIN:-15}
     depends_on:
       app:
         condition: service_started

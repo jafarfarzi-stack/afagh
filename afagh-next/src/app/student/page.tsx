@@ -495,6 +495,28 @@ export default async function StudentDashboardPage() {
           </Link>
 
           <Link
+            href="/student/enroll-confirm"
+            className="card p-4 bg-white hover:bg-lime-50/50 border border-slate-200 hover:border-lime-300 rounded-2xl shadow-xs transition-all group flex flex-col justify-between"
+          >
+            <div className="flex items-start justify-between">
+              <div className="w-11 h-11 rounded-2xl bg-lime-100 text-lime-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+                🖨️
+              </div>
+              <span className="text-[10px] bg-lime-100 text-lime-800 px-2 py-0.5 rounded-full font-bold">
+                QR Code
+              </span>
+            </div>
+            <div className="mt-3">
+              <h3 className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-lime-900 transition">
+                تأییدیه انتخاب واحد
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+                چاپ برگه با QR استعلام اصالت
+              </p>
+            </div>
+          </Link>
+
+          <Link
             href="/student/transcript"
             className="card p-4 bg-white hover:bg-indigo-50/50 border border-slate-200 hover:border-indigo-300 rounded-2xl shadow-xs transition-all group flex flex-col justify-between"
           >

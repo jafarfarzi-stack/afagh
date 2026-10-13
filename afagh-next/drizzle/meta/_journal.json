@@ -568,6 +568,48 @@
       "when": 1794153600000,
       "tag": "0075_tuition_adjust",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1794153601000,
+      "tag": "0076_discipline",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1794153602000,
+      "tag": "0077_dorm_residences",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1794153603000,
+      "tag": "0078_scheduled_warnings",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1794153604000,
+      "tag": "0079_english_enrollment_approvals",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1794153604001,
+      "tag": "0080_council",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1794153604002,
+      "tag": "0082_finance_time_control",
+      "breakpoints": true
     }
   ]
 }

@@ -386,7 +386,114 @@ export async function verifyExamTicket(rawToken: string): Promise<ExamTicketVeri
   };
 }
 
-// ─────────────────── ج) اصالت‌سنجی گواهینامهٔ دوره‌های آزاد ───────────────────
+// ─────────────────── ج) تأییدیهٔ انتخاب واحد (گزارش چاپی با QR) ───────────────────
+
+export type EnrollConfirmVerification =
+  | { ok: false; reason: 'BAD_TOKEN' | 'EXPIRED' | 'NOT_FOUND' | 'EMPTY'; message: string }
+  | {
+      ok: true;
+      studentId: number;
+      studentName: string;
+      studentCode: string;
+      nationalIdMasked: string;
+      majorName: string | null;
+      termId: number;
+      termTitle: string;
+      courses: {
+        courseTitle: string;
+        courseCode: string;
+        units: number;
+        groupNumber: number;
+        professorName: string | null;
+        status: string;
+      }[];
+      totalUnits: number;
+      checkedAt: string;
+    };
+
+/** توکن تأییدیهٔ انتخاب واحد — امضاشده و میان‌مدت (پیش‌فرض ۳۰ روز، سقف ۱ سال) */
+export async function issueEnrollConfirmToken(userId: number, termId: number): Promise<{ token: string; expiresAt: string }> {
+  const configured = await getNumber('ENROLL_CONFIRM_TTL_MINUTES', 43200);
+  if (!Number.isFinite(configured) || configured <= 0) {
+    log.warn('enroll_confirm_ttl_invalid', { configured });
+    throw new Error('مدت اعتبار تأییدیهٔ انتخاب واحد (ENROLL_CONFIRM_TTL_MINUTES) باید عددی بزرگ‌تر از صفر باشد.');
+  }
+  const ttlMin = Math.min(configured, 525600); // سقف ۱ سال — تأییدیه نباید دائمی شود
+  const token = await signToken({ uid: userId, kind: 'ENROLL_CONFIRM', term: termId }, ttlMin * 60);
+  return { token, expiresAt: new Date(Date.now() + ttlMin * 60_000).toISOString() };
+}
+
+export async function verifyEnrollConfirm(rawToken: string): Promise<EnrollConfirmVerification> {
+  const sig = await verifyTokenSignature<{ uid: number; kind: string; term: number }>(rawToken);
+  if (!sig.ok) {
+    return {
+      ok: false,
+      reason: sig.reason === 'EXPIRED' ? 'EXPIRED' : 'BAD_TOKEN',
+      message: sig.reason === 'EXPIRED'
+        ? 'این تأییدیه منقضی شده است؛ دانشجو باید از سامانه تأییدیهٔ تازه بگیرد.'
+        : 'توکن نامعتبر یا دستکاری‌شده است.',
+    };
+  }
+  if (sig.payload.kind !== 'ENROLL_CONFIRM') return { ok: false, reason: 'BAD_TOKEN', message: 'نوع توکن با تأییدیهٔ انتخاب واحد همخوانی ندارد.' };
+
+  const [stu] = await db
+    .select({
+      studentId: students.id, studentCode: students.studentCode,
+      firstName: users.firstName, lastName: users.lastName, nationalCode: users.nationalCode,
+      majorName: majors.name,
+    })
+    .from(students)
+    .innerJoin(users, eq(users.id, students.userId))
+    .leftJoin(majors, eq(majors.id, students.majorId))
+    .where(eq(users.id, sig.payload.uid))
+    .limit(1);
+  if (!stu) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
+
+  const [term] = await db.select({ id: academic_terms.id, title: academic_terms.title })
+    .from(academic_terms).where(eq(academic_terms.id, sig.payload.term)).limit(1);
+  if (!term) return { ok: false, reason: 'NOT_FOUND', message: 'نیمسال این تأییدیه در سامانه یافت نشد.' };
+
+  // لیست زندهٔ دروس ثبت‌شدهٔ همان نیمسال (به‌جز حذف‌شده‌ها) — استعلام برخط، بدون اسنپ‌شات جدا
+  const courses = ((await db.execute(sql`
+    select c.title as "courseTitle", c.code as "courseCode",
+           coalesce(c.units, 0)::int as "units",
+           o."groupNumber" as "groupNumber",
+           (pu."firstName" || ' ' || pu."lastName") as "professorName",
+           en.status as "status"
+      from enrollments en
+      join course_offerings o on o.id = en."offeringId"
+      join courses c on c.id = o."courseId"
+      left join staff st on st.id = o."professorId"
+      left join users pu on pu.id = st."userId"
+     where en."studentId" = ${stu.studentId}
+       and o."termId" = ${term.id}
+       and en.status <> 'DROPPED'
+     order by c.title
+  `)).rows ?? []) as unknown as {
+    courseTitle: string; courseCode: string; units: number;
+    groupNumber: number; professorName: string | null; status: string;
+  }[];
+
+  if (!courses.length) {
+    return { ok: false, reason: 'EMPTY', message: 'برای این دانشجو در این نیمسال ثبت‌نامی (به‌جز حذف‌شده) وجود ندارد.' };
+  }
+
+  return {
+    ok: true,
+    studentId: stu.studentId,
+    studentName: `${stu.firstName} ${stu.lastName}`,
+    studentCode: stu.studentCode,
+    nationalIdMasked: maskNationalCode(stu.nationalCode),
+    majorName: stu.majorName,
+    termId: term.id,
+    termTitle: term.title,
+    courses,
+    totalUnits: courses.reduce((s, c) => s + (Number(c.units) || 0), 0),
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+// ─────────────────── د) اصالت‌سنجی گواهینامهٔ دوره‌های آزاد ───────────────────
 
 /** اثر انگشت SHA-256 روی فیلدهای اساسی گواهینامه — برای کشف دستکاری */
 export function certificateFingerprint(input: {
