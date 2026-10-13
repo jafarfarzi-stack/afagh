@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 ════════════════════════════════════════════════════════════════════════
   راه‌انداز خودکار سامانه جامع آفاق — ویندوز
@@ -365,6 +365,7 @@ if ($st.schema -ne $schemaHash) {
   Must $Next { npm run db:migrate } "اعمال مهاجرت‌های دیتابیس ناموفق بود"
   Must $Next { node scripts/apply-patches.mjs } "اعمال پچ‌های اسکیما ناموفق بود"
   if ((RunIn $Next { npm run db:base }) -ne 0) { Warn "دادهٔ پایه اعمال نشد (ادامه می‌دهیم)" }
+  if ((RunIn $Next { npm run db:seed:saham }) -ne 0) { Warn "سید کدهای سهام اعمال نشد (ادامه می‌دهیم)" }
   $st.schema = $schemaHash
   Ok "جدول‌ها اعمال شد"
 } else { Ok "schema بدون تغییر — رد شد" }

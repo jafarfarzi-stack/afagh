@@ -48,7 +48,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # ترتیب (P0-2 و P0-3 — بازبینی پروداکشن):
 #   مهاجرت نسخه‌دار (که نخستین کارش پشتیبان fail-closed است) → پچ‌ها → دادهٔ پایه
-#   → سخت‌سازی و RLS → راستی‌آزمایی پشتیبان.
+#   → سید کدهای سهام (وابسته به دانشکده‌های seed-base) → سخت‌سازی و RLS → راستی‌آزمایی پشتیبان.
 # چرا نه `drizzle-kit push --force`؟ push «اسکیمای فعلی کد» را روی دیتابیس می‌ریزد:
 #   · غیرتعیینی و غیرقابل audit است (برای ERP مالی/آموزشی قابل قبول نیست)؛
 #   · می‌تواند ستون/ایندکسی را که در schema.ts نیامده حذف کند؛
@@ -56,11 +56,12 @@ COPY . .
 #   scripts/migrate-db.mjs را می‌زند که CI می‌زند (drizzle/*.sql با دفتر مهاجرت).
 # اگر هر مرحله شکست بخورد، exit-code غیرصفر → اپ (depends_on مخصوص) استارت نمی‌شود.
 CMD ["sh", "-c", "set -e; \
-  echo '=== گام ۱/۵: پشتیبان + مهاجرت نسخه‌دار (drizzle/*.sql) ==='; node scripts/migrate-db.mjs; \
-  echo '=== گام ۲/۵: پچ‌های اسکیما ==='; node scripts/apply-patches.mjs; \
-  echo '=== گام ۳/۵: دادهٔ پایه ==='; node scripts/seed-base.mjs; \
-  echo '=== گام ۴/۵: سخت‌سازی و RLS ==='; node scripts/hardening.mjs; \
-  echo '=== گام ۵/۵: راستی‌آزمایی پشتیبان ==='; node scripts/verify-backup.mjs || echo '⚠ راستی‌آزمایی پشتیبان غیربحرانی — ادامه…'; \
+  echo '=== گام ۱/۶: پشتیبان + مهاجرت نسخه‌دار (drizzle/*.sql) ==='; node scripts/migrate-db.mjs; \
+  echo '=== گام ۲/۶: پچ‌های اسکیما ==='; node scripts/apply-patches.mjs; \
+  echo '=== گام ۳/۶: دادهٔ پایه ==='; node scripts/seed-base.mjs; \
+  echo '=== گام ۴/۶: سید کدهای سهام (بعد از دانشکده‌ها — وگرنه saham_institute_codes_facultyId_fkey می‌شکند) ==='; node scripts/seed-saham-codes.mjs; \
+  echo '=== گام ۵/۶: سخت‌سازی و RLS ==='; node scripts/hardening.mjs; \
+  echo '=== گام ۶/۶: راستی‌آزمایی پشتیبان ==='; node scripts/verify-backup.mjs || echo '⚠ راستی‌آزمایی پشتیبان غیربحرانی — ادامه…'; \
   echo '=== ✅ migrator با موفقیت تمام شد ==='"]
 
 # ── بیلد ──
