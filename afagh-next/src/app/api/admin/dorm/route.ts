@@ -41,11 +41,18 @@ const toInput = (d: z.infer<typeof bodySchema>): DormResidenceInput => ({
   validTo: d.validTo ?? null,
   ...(d.status ? { status: d.status } : {}),
 });
-const toPatch = (d: z.infer<typeof bodySchema>): DormResidenceInput => {
-  const { studentId: _drop, ...rest } = d;
-  void _drop;
-  return { ...toInput({ ...d, studentId: 0 }), status: rest.status ?? undefined };
-};
+const patchSchema = bodySchema.omit({ studentId: true });
+type DormPatchBody = z.infer<typeof patchSchema>;
+const toPatch = (d: DormPatchBody): DormResidenceInput => ({
+  studentId: 0,
+  dormName: d.dormName ?? null,
+  roomNo: d.roomNo ?? null,
+  bedNo: d.bedNo ?? null,
+  academicYear: d.academicYear ?? null,
+  validFrom: d.validFrom ?? null,
+  validTo: d.validTo ?? null,
+  status: d.status ?? undefined,
+});
 
 async function guard() {
   try {
@@ -106,7 +113,7 @@ export async function PATCH(req: NextRequest) {
     if (!Number.isInteger(id) || id <= 0) {
       return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
     }
-    const parsed = bodySchema.omit({ studentId: true }).safeParse(await req.json());
+    const parsed = patchSchema.safeParse(await req.json());
     if (!parsed.success) {
       return NextResponse.json({ error: 'invalid_body', details: parsed.error.flatten() }, { status: 400 });
     }
