@@ -15,6 +15,7 @@ import { notifyUserMultichannel } from '@/lib/messaging';
 import { intToUnits, percentOf, ratioOf, sumUnits, toRial, UNIT_SCALE, unitsToInt } from '@/lib/money';
 import { groupThousands } from '@/lib/calendar';
 import { createLogger } from '@/lib/logger';
+import { evalFormula } from './payroll-formula';
 
 // ══════════════════════════════════════════════════════════════════════
 //  موتور حق‌التدریس اساتید (Payroll Engine) — نسخهٔ PostgreSQL/Drizzle
@@ -69,7 +70,7 @@ export type StaffPayroll = {
   staff: { id: number; name: string; staffCode: string | null; rank: string | null; degree: string | null; contractType: string | null };
   rate: number;
   /** منشأ نرخ: جدول ثابت / اسنپ‌شات قرارداد / کسری از حکم (۱/N) */
-  rateSource: 'TABLE' | 'SNAPSHOT' | 'FRACTION';
+  rateSource: 'TABLE' | 'BASE' | 'SNAPSHOT' | 'FRACTION';
   rateDivisor: number;
   dutyUnits: number;
   taxRate: number;
@@ -109,12 +110,13 @@ type Coefs = {
   crowdedTier: { minStudents: number | null; stepSize: number | null; stepIncrement: number | null } | null;
 };
 
-type StaffMeta = { name: string; staffCode: string | null; rank: string | null; degree: string | null; userId: number };
+type StaffMeta = { name: string; staffCode: string | null; rank: string | null; base: string | null; degree: string | null; userId: number };
 
 type StaffOffering = {
   offeringId: number; courseCode: string; courseTitle: string; unitsInt: number; practicalUnits: number;
   groupNumber: number | null; enrolledCount: number; offeringType: string; payRole: string; sharePct: number;
   mergeKey: string | null; mergedMemberIds?: number[];
+  courseId: number; theoryUnits: number; deptId: number | null; courseType: string | null;
 };
 
 type SessionStats = { planned: number; held: number; absents: number; makeup: number; netAbsences: number };
@@ -138,7 +140,13 @@ type ContractRow = {
 const ROLE_FA: Record<string, string> = {
   MAIN_LECTURER: 'مدرس اصلی', SUPERVISOR: 'استاد راهنما', ADVISOR: 'استاد مشاور',
   REVIEWER: 'داور', EXAMINER: 'ممتحن',
+  ASSISTANT: 'کمک‌استاد', SELF_STUDY: 'استاد خودخوان',
 };
+
+// عنوان نقش: کاتالوگ قابل‌تعریف ← نقش‌های استاندارد ← خود کد
+function roleLabel(data: TermData, code: string): string {
+  return data.roleTitles.get(code) ?? ROLE_FA[code] ?? code;
+}
 const TYPE_FA: Record<string, string> = {
   THEORY: 'نظری', THESIS: 'پایان‌نامه', DIRECTED_READING: 'معرفی به استاد',
   INTERNSHIP: 'کارآموزی', NORMAL: 'نظری', TRANSFER: 'تطبیق واحد',
@@ -182,10 +190,20 @@ async function loadCoefficients(): Promise<Coefs> {
   };
 }
 
-/** قوانین فرمول‌ساز (payroll_calculation_rules) — خاص‌ترین قاعده برنده است */
+/** قوانین فرمول‌ساز (payroll_calculation_rules) — خاص‌ترین قاعده برنده است.
+ * الگوریتم یکپارچه (0092): هر سطر = ابعاد اختیاری (خالی = همه) + یک عبارت
+ * ریاضی با متغیرهای N/A/W/U/C/R/K/F/H که مستقیم ریال می‌دهد. */
 type PayRule = {
   id: number; offeringType: string | null; professorRole: string | null; academicRank: string | null;
-  multiplierUnit: number | null; multiplierPerStudent: number | null; flatFee: number | null; title: string | null;
+  classMode: string; minStudents: number | null; maxStudents: number | null;
+  departmentId: number | null; courseType: string | null; repeatNumber: number | null;
+  expression: string | null; flatBase: number | null; perStudentHours: number | null;
+  title: string | null;
+};
+
+export type RuleMatch = {
+  offeringType: string; role: string; rank: string | null; hasClass: boolean;
+  enrolled: number; deptId: number | null; courseType: string | null; nth: number;
 };
 
 async function loadPayRules(): Promise<PayRule[]> {
@@ -194,30 +212,153 @@ async function loadPayRules(): Promise<PayRule[]> {
     .from(payroll_calculation_rules)
     .where(eq(payroll_calculation_rules.isActive, 1));
   return rows
-    .filter(r => r.offeringType || r.professorRole)   // قاعده باید اختصاصی باشد
+    .filter(r => r.offeringType || r.professorRole || r.academicRank
+      || (r.classMode && r.classMode !== 'ANY') || r.departmentId != null
+      || r.courseType || r.repeatNumber != null
+      || r.minStudents != null || r.maxStudents != null)   // قاعده باید اختصاصی باشد
     .map(r => ({
       id: r.id,
       offeringType: r.offeringType,
       professorRole: r.professorRole,
       academicRank: r.academicRank,
-      multiplierUnit: r.multiplierUnit == null ? null : Number(r.multiplierUnit),
-      multiplierPerStudent: r.multiplierPerStudent == null ? null : Number(r.multiplierPerStudent),
-      flatFee: r.flatFee == null ? null : Number(r.flatFee),
+      classMode: r.classMode ?? 'ANY',
+      minStudents: r.minStudents ?? null,
+      maxStudents: r.maxStudents ?? null,
+      departmentId: (r as { departmentId?: number | null }).departmentId ?? null,
+      courseType: (r as { courseType?: string | null }).courseType ?? null,
+      repeatNumber: (r as { repeatNumber?: number | null }).repeatNumber ?? null,
+      expression: (r as { expression?: string | null }).expression ?? null,
+      flatBase: (r as { flatBase?: string | number | null }).flatBase == null
+        ? null : Number((r as { flatBase?: string | number | null }).flatBase),
+      perStudentHours: (r as { perStudentHours?: string | number | null }).perStudentHours == null
+        ? null : Number((r as { perStudentHours?: string | number | null }).perStudentHours),
       title: r.title,
     }))
     .sort((a, b) => score(b) - score(a) || a.id - b.id);
 }
 
 function score(r: PayRule) {
-  return (r.offeringType ? 1 : 0) + (r.professorRole ? 1 : 0) + (r.academicRank ? 1 : 0);
+  return (r.offeringType ? 2 : 0) + (r.professorRole ? 2 : 0) + (r.academicRank ? 1 : 0)
+    + (r.classMode && r.classMode !== 'ANY' ? 1 : 0)
+    + (r.minStudents != null ? 1 : 0) + (r.maxStudents != null ? 1 : 0)
+    + (r.departmentId != null ? 1 : 0) + (r.courseType ? 1 : 0) + (r.repeatNumber != null ? 2 : 0);
 }
 
-function matchRule(rules: PayRule[], offeringType: string, role: string, rank: string | null): PayRule | null {
-  const t = offeringType === 'NORMAL' ? 'THEORY' : offeringType;
+/** یک سطر نمای پوشش فرمول: هر ارائهٔ هر استاد چه فرمولی دارد یا چرا ندارد */
+export type CoverageRow = {
+  staffId: number; staffName: string; offeringId: number; courseCode: string; courseTitle: string;
+  groupNumber: number | null; offeringType: string; offeringTypeFa: string; role: string; roleFa: string;
+  enrolled: number; hasClass: boolean; nth: number; merged: boolean; memberCount: number;
+  ruleId: number | null; ruleTitle: string | null; expression: string | null;
+  missDim: string | null; missReason: string | null;
+};
+
+/** علت‌یابی پلکانی: اولین بُعدی که مجموعهٔ نامزدها را خالی می‌کند */
+export function diagnoseRuleMiss(rules: PayRule[], m: RuleMatch): { dim: string; reason: string } {
+  if (rules.length === 0) {
+    return { dim: 'none', reason: 'هیچ قانون فرمول فعالی تعریف نشده است — از زبانهٔ قوانین، دست‌کم یک سطر بسازید.' };
+  }
+  const t = m.offeringType === 'NORMAL' ? 'THEORY' : m.offeringType;
+  const tFa = TYPE_FA[t] ?? t;
+  let cands = rules;
+  const steps: { dim: string; keep: (r: PayRule) => boolean; reason: () => string }[] = [
+    {
+      dim: 'offeringType',
+      keep: r => !r.offeringType || r.offeringType === t,
+      reason: () => `نوع درس «${tFa}»: هیچ قانونی این نوع را پوشش نمی‌دهد.`,
+    },
+    {
+      dim: 'professorRole',
+      keep: r => !r.professorRole || r.professorRole === m.role,
+      reason: () => `نقش «${m.role}»: قانونی برای این نقش تعریف نشده (نقش قابل تعریف است).`,
+    },
+    {
+      dim: 'academicRank',
+      keep: r => !r.academicRank || r.academicRank === m.rank,
+      reason: () => `مرتبهٔ «${m.rank ?? '—'}»: قوانین موجود مرتبهٔ دیگری می‌خواهند.`,
+    },
+    {
+      dim: 'classMode',
+      keep: r => !r.classMode || r.classMode === 'ANY' || (r.classMode === 'WITH_CLASS') === m.hasClass,
+      reason: () => m.hasClass
+        ? 'وضعیت کلاس: ارائه باکلاس است ولی قوانینِ منطبق فقط «بدون‌کلاس» می‌خواهند.'
+        : 'وضعیت کلاس: ارائه بدون‌کلاس است ولی قوانینِ منطبق فقط «باکلاس» می‌خواهند.',
+    },
+    {
+      dim: 'studentRange',
+      keep: r => (r.minStudents == null || m.enrolled >= r.minStudents) && (r.maxStudents == null || m.enrolled <= r.maxStudents),
+      reason: () => `تعداد دانشجو (${m.enrolled} نفر): خارج از بازهٔ قوانین منطبق است.`,
+    },
+    {
+      dim: 'department',
+      keep: r => r.departmentId == null || r.departmentId === m.deptId,
+      reason: () => 'گروه آموزشی: قوانین منطبق محدود به گروه دیگری هستند.',
+    },
+    {
+      dim: 'courseType',
+      keep: r => !r.courseType || r.courseType === m.courseType,
+      reason: () => `نوع درس کاتالوگ («${m.courseType ?? '—'}»): قانونی برای این نوع نیست.`,
+    },
+    {
+      dim: 'repeat',
+      keep: r => r.repeatNumber == null || r.repeatNumber === m.nth,
+      reason: () => `نوبت تکرار (بار ${m.nth}اُم): قوانین منطبق نوبت دیگری می‌خواهند.`,
+    },
+  ];
+  for (const s of steps) {
+    const next = cands.filter(s.keep);
+    if (next.length === 0) return { dim: s.dim, reason: s.reason() };
+    cands = next;
+  }
+  return { dim: 'unknown', reason: 'علت نامشخص — با پشتیبانی در میان بگذارید.' };
+}
+
+/** نمای پوشش یک ترم: هر ارائهٔ هر استاد → قانون برنده یا علت نبود فرمول */
+export async function computeRuleCoverage(termId: number, universityId?: number): Promise<{ rows: CoverageRow[]; ruleCount: number }> {
+  const data = await loadTermPayrollData(termId, universityId);
+  const rows: CoverageRow[] = [];
+  for (const [staffId, list] of data.offeringsByStaff) {
+    const info = data.staffInfo.get(staffId);
+    const collapsed = collapseMergedOfferings(list, id => data.slotsByOffering.get(id) ?? null);
+    for (const o of collapsed) {
+      const memberIds = o.mergedMemberIds ?? [o.offeringId];
+      const hasClass = memberIds.some(id => data.slotsByOffering.has(id));
+      const nth = (data.repeatCount.get(`${staffId}:${o.courseId}`) ?? 0) + 1;
+      const m: RuleMatch = {
+        offeringType: o.offeringType, role: o.payRole, rank: info?.rank ?? null, hasClass,
+        enrolled: o.enrolledCount, deptId: o.deptId, courseType: o.courseType, nth,
+      };
+      const rule = matchRule(data.rules, m);
+      const miss = rule ? null : diagnoseRuleMiss(data.rules, m);
+      rows.push({
+        staffId, staffName: info?.name ?? `#${staffId}`,
+        offeringId: o.offeringId, courseCode: o.courseCode, courseTitle: o.courseTitle,
+        groupNumber: o.groupNumber, offeringType: o.offeringType,
+        offeringTypeFa: TYPE_FA[o.offeringType] ?? o.offeringType,
+        role: o.payRole, roleFa: roleLabel(data, o.payRole),
+        enrolled: o.enrolledCount, hasClass, nth,
+        merged: (o.mergedMemberIds?.length ?? 1) > 1, memberCount: memberIds.length,
+        ruleId: rule?.id ?? null, ruleTitle: rule?.title ?? null, expression: rule?.expression ?? null,
+        missDim: miss?.dim ?? null, missReason: miss?.reason ?? null,
+      });
+    }
+  }
+  rows.sort((a, b) => (a.ruleId == null ? 0 : 1) - (b.ruleId == null ? 0 : 1) || a.courseTitle.localeCompare(b.courseTitle, 'fa'));
+  return { rows, ruleCount: data.rules.length };
+}
+
+function matchRule(rules: PayRule[], m: RuleMatch): PayRule | null {
+  const t = m.offeringType === 'NORMAL' ? 'THEORY' : m.offeringType;
   return rules.find(r =>
     (!r.offeringType || r.offeringType === t) &&
-    (!r.professorRole || r.professorRole === role) &&
-    (!r.academicRank || r.academicRank === rank),
+    (!r.professorRole || r.professorRole === m.role) &&
+    (!r.academicRank || r.academicRank === m.rank) &&
+    (!r.classMode || r.classMode === 'ANY' || (r.classMode === 'WITH_CLASS') === m.hasClass) &&
+    (r.minStudents == null || m.enrolled >= r.minStudents) &&
+    (r.maxStudents == null || m.enrolled <= r.maxStudents) &&
+    (r.departmentId == null || r.departmentId === m.deptId) &&
+    (!r.courseType || r.courseType === m.courseType) &&
+    (r.repeatNumber == null || r.repeatNumber === m.nth),
   ) ?? null;
 }
 
@@ -260,8 +401,12 @@ type TermData = {
   crowdedStepUp: number;
   rateFraction: boolean;
   rateDivisor: number;
-  rateSource: Map<number, 'TABLE' | 'SNAPSHOT' | 'FRACTION'>;
+  rateSource: Map<number, 'TABLE' | 'BASE' | 'SNAPSHOT' | 'FRACTION'>;
   plannedSessionsDefault: number;
+  // ── الگوریتم یکپارچه (0092/0089): عناوین نقش‌ها، نقش دستی، دفعهٔ تدریس ──
+  roleTitles: Map<string, string>;
+  payRoleOverride: Map<string, string>;
+  repeatCount: Map<string, number>;
 };
 
 /** ترم جاری (یا ترم مشخص‌شده) */
@@ -277,7 +422,7 @@ export async function currentTerm(termId?: number) {
  * تعداد کوئری‌ها ثابت است (۷) و به تعداد اساتید بستگی ندارد.
  */
 export async function loadTermPayrollData(termId: number, universityId?: number): Promise<TermData> {
-  const [term, coefs, rules, contracts, staffRows, offeringRows, sessionRows, gradeRows, docRows, statementRows, slotRows] =
+  const [term, coefs, rules, contracts, staffRows, offeringRows, sessionRows, gradeRows, docRows, statementRows, slotRows, overrideRows, repeatRows, roleDefRows] =
     await Promise.all([
       db.select().from(academic_terms).where(eq(academic_terms.id, termId)).limit(1).then(r => r[0] ?? null),
       loadCoefficients(),
@@ -289,14 +434,15 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
       // ۲) اساتید + نام کاربری
       db.select({
         id: staff.id, userId: staff.userId, staffCode: staff.staffCode,
-        academicRank: staff.academicRank, degree: staff.degree,
+        academicRank: staff.academicRank, academicBase: staff.academicBase, degree: staff.degree,
         firstName: users.firstName, lastName: users.lastName,
       }).from(staff).innerJoin(users, eq(users.id, staff.userId)),
 
       // ۳) کلاس‌های ترم + نقش و سهم هر استاد (یک کوئری برای همه)
       db.execute(sql`
         select o.id as "offeringId", o."professorId" as "professorId", o."groupNumber" as "groupNumber",
-               o."enrolledCount" as "enrolledCount", o."offeringType" as "offeringType",
+               o."enrolledCount" as "enrolledCount", o."offeringType" as "offeringType", o."courseId" as "courseId",
+               coalesce(c."theoreticalUnits", 0) as "theoryUnits", c."departmentId" as "deptId", c."courseType" as "courseType",
                o."sharedScheduleGroupKey" as "mergeKey",
                c.code as "courseCode", c.title as "courseTitle", c.units as "units",
                coalesce(c."practicalUnits", 0) as "practicalUnits",
@@ -360,6 +506,35 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
         join course_offerings o on o.id = s."offeringId"
         where o."termId" = ${termId} and s."scheduleType" = 'CLASS'
       `),
+
+      // ۸) نقش دستی استاد در ارائه (مهاجرت 0089؛ خالی = خودکار)
+      db.execute(sql`
+        select e."offeringId" as "offeringId", e."staffId" as "staffId", e."payRoleOverride" as "role"
+        from offering_payroll_extras e
+        join course_offerings o on o.id = e."offeringId"
+        where o."termId" = ${termId} and e."payRoleOverride" is not null
+      `),
+
+      // ۹) دفعهٔ تدریس: تعداد ترم‌های قبلیِ همین استاد+درس (پارامتر پنجم قدیم)
+      db.execute(sql`
+        select s."staffId" as "staffId", s."courseId" as "courseId", count(distinct s."termId") as "priorTerms"
+        from (
+          select o."courseId" as "courseId", o."termId" as "termId", o."professorId" as "staffId"
+          from course_offerings o where o."isActive" = 1 and o."professorId" is not null
+          union
+          select o."courseId" as "courseId", o."termId" as "termId", op."staffId" as "staffId"
+          from course_offerings o join offering_professors op on op."offeringId" = o.id
+          where o."isActive" = 1
+        ) s
+        join academic_terms t on t.id = s."termId"
+        where coalesce(t."sortOrder", 0) < coalesce((select "sortOrder" from academic_terms where id = ${termId}), 0)
+        group by s."staffId", s."courseId"
+      `),
+
+      // ۱۰) عناوین نقش‌های قابل‌تعریف (مهاجرت 0089)
+      db.execute(sql`
+        select "code" as "code", "title" as "title" from teaching_role_defs where "isActive" = 1
+      `),
     ]);
 
   const [crowdedThreshold, crowdedStep, crowdedStepUp, rateFractionRaw, rateDivisor, plannedSessionsDefault, msPrefixSetting, effectiveDuties] = await Promise.all([
@@ -381,21 +556,17 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
     .select().from(teaching_rates)
     .orderBy(teaching_rates.effectiveYear);
   const rateByStaff = new Map<number, number>();
-  const rateSource = new Map<number, 'TABLE' | 'SNAPSHOT' | 'FRACTION'>();
+  const rateSource = new Map<number, 'TABLE' | 'BASE' | 'SNAPSHOT' | 'FRACTION'>();
   const staffInfo = new Map<number, StaffMeta>();
   for (const s of staffRows) {
     staffInfo.set(s.id, {
       name: `${s.firstName ?? ''} ${s.lastName ?? ''}`.trim(),
       staffCode: s.staffCode,
       rank: s.academicRank,
+      base: (s as { academicBase?: string | null }).academicBase ?? null,
       degree: s.degree,
       userId: s.userId,
     });
-    const applicable = rateRows
-      .filter(r => r.academicRank === s.academicRank && r.degree === s.degree && Number(r.effectiveYear ?? 0) <= year)
-      .sort((a, b) => Number(b.effectiveYear ?? 0) - Number(a.effectiveYear ?? 0));
-    rateByStaff.set(s.id, Number(applicable[0]?.baseRatePerUnit ?? 0));
-    rateSource.set(s.id, 'TABLE');
   }
 
   const contractsMap = new Map<number, ContractRow>();
@@ -419,12 +590,33 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
     });
   }
   // مهاجرت 0056 — اسنپ‌شاتِ حاضر بر مقدار زنده غلبه می‌کند (ابلاغ/فیش ترم قدیمی
-  // با همان اعدادِ همان ترم محاسبه می‌شود، نه اعداد امروز استاد)
+  // با همان اعدادِ همان ترم محاسبه می‌شود، نه اعداد امروز استاد).
+  // مهاجرت 0090 — این بازنویسی حالا «قبل» از تفکیک نرخ جدول انجام می‌شود تا
+  // نرخ ترم قدیمی از مرتبه/پایهٔ همان ترم بیاید، نه امروز استاد.
   for (const [staffId, c] of contractsMap) {
-    if (c.rankSnapshot != null) {
-      const info = staffInfo.get(staffId);
-      if (info) info.rank = c.rankSnapshot;
-    }
+    const info = staffInfo.get(staffId);
+    if (!info) continue;
+    if (c.rankSnapshot != null) info.rank = c.rankSnapshot;
+    if (c.baseSnapshot != null) info.base = c.baseSnapshot;
+  }
+
+  // ── نرخ جدول با بُعد پایه (مهاجرت 0090): سطر دقیق (مرتبه+مدرک+پایه) بر
+  // سطر عمومی (مرتبه+مدرک، پایه NULL) غلبه می‌کند؛ سطر پایه‌دارِ نامرتبط حذف.
+  for (const s of staffRows) {
+    const info = staffInfo.get(s.id);
+    const rank = info?.rank ?? s.academicRank;
+    const sBase = info?.base ?? null;
+    const applicable = rateRows
+      .filter(r =>
+        r.academicRank === rank && r.degree === s.degree && Number(r.effectiveYear ?? 0) <= year &&
+        (r.academicBase == null || (sBase != null && r.academicBase === sBase)))
+      .sort((a, b) =>
+        ((b.academicBase != null ? 1 : 0) - (a.academicBase != null ? 1 : 0)) ||
+        Number(b.effectiveYear ?? 0) - Number(a.effectiveYear ?? 0));
+    const winRate = applicable[0];
+    rateByStaff.set(s.id, Number(winRate?.baseRatePerUnit ?? 0));
+    rateSource.set(s.id, winRate?.academicBase != null ? 'BASE' : 'TABLE');
+  }
     if (c.rateSnapshot != null) {
       rateByStaff.set(staffId, c.rateSnapshot);
       rateSource.set(staffId, 'SNAPSHOT');
@@ -441,12 +633,27 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
     }
   }
 
+  // ── مهاجرت 0089/0092: نقش دستی + عناوین نقش + شمارش تکرار ──
+  const payRoleOverride = new Map<string, string>();
+  for (const r of (overrideRows.rows ?? []) as { offeringId: number; staffId: number; role: string }[]) {
+    if (r.role) payRoleOverride.set(`${Number(r.offeringId)}:${Number(r.staffId)}`, String(r.role));
+  }
+  const repeatCount = new Map<string, number>();
+  for (const r of (repeatRows.rows ?? []) as { staffId: number; courseId: number; priorTerms: string }[]) {
+    repeatCount.set(`${Number(r.staffId)}:${Number(r.courseId)}`, Number(r.priorTerms ?? 0));
+  }
+  const roleTitles = new Map<string, string>();
+  for (const r of (roleDefRows.rows ?? []) as { code: string; title: string }[]) {
+    if (r.code) roleTitles.set(String(r.code), String(r.title));
+  }
+
   // کلاس‌ها به تفکیک استاد (اصلی + همکار)
   const offeringsByStaff = new Map<number, StaffOffering[]>();
   const offRows = (offeringRows.rows ?? []) as {
     offeringId: number; professorId: number | null; groupNumber: number | null; enrolledCount: number;
     offeringType: string; mergeKey: string | null; courseCode: string; courseTitle: string; units: string | number;
     practicalUnits: string | number; coStaffId: number | null; coRole: string | null; sharePct: string | number | null;
+    courseId: number; theoryUnits: string | number; deptId: number | null; courseType: string | null;
   }[];
   const push = (staffId: number, row: any) => {
     const arr = offeringsByStaff.get(staffId);
@@ -464,13 +671,19 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
       enrolledCount: Number(o.enrolledCount ?? 0),
       offeringType: o.offeringType ?? 'NORMAL',
       mergeKey: (o.mergeKey ?? null) as string | null,
+      courseId: Number(o.courseId),
+      theoryUnits: Number(o.theoryUnits ?? 0),
+      deptId: o.deptId ?? null,
+      courseType: o.courseType ?? null,
     };
     if (o.coStaffId != null) {
-      push(o.coStaffId, { ...base, payRole: o.coRole || 'MAIN_LECTURER', sharePct: Number(o.sharePct ?? 100) });
+      const ov = payRoleOverride.get(`${o.offeringId}:${o.coStaffId}`);
+      push(o.coStaffId, { ...base, payRole: ov ?? (o.coRole || 'MAIN_LECTURER'), sharePct: Number(o.sharePct ?? 100) });
     } else if (o.professorId != null) {
+      const ov = payRoleOverride.get(`${o.offeringId}:${o.professorId}`);
       push(o.professorId, {
         ...base,
-        payRole: base.offeringType === 'THESIS' ? 'SUPERVISOR' : 'MAIN_LECTURER',
+        payRole: ov ?? (base.offeringType === 'THESIS' ? 'SUPERVISOR' : 'MAIN_LECTURER'),
         sharePct: 100,
       });
     }
@@ -539,6 +752,9 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
     rateDivisor,
     rateSource,
     plannedSessionsDefault,
+    roleTitles,
+    payRoleOverride,
+    repeatCount,
   };
 }
 
@@ -615,28 +831,42 @@ export function calcStaffPayrollFromData(data: TermData, staffId: number): Staff
   let absenceDeductionRial = 0;
 
   for (const o of offerings) {
-    const sessions = pickMergedSessions(data, o.mergedMemberIds ?? [o.offeringId]);
-    const rule = matchRule(data.rules, o.offeringType, o.payRole, info.rank);
+    const memberIds = o.mergedMemberIds ?? [o.offeringId];
+    const sessions = pickMergedSessions(data, memberIds);
+    // وضعیت کلاس: داشتن جلسه CLASS یعنی باکلاس (خودخوان/معرفی/کارآموزی بدون کلاس)
+    const hasClass = memberIds.some(id => data.slotsByOffering.has(id));
+    const nth = (data.repeatCount.get(`${staffId}:${o.courseId}`) ?? 0) + 1;
+    const rule = matchRule(data.rules, {
+      offeringType: o.offeringType, role: o.payRole, rank: info.rank, hasClass,
+      enrolled: o.enrolledCount, deptId: o.deptId, courseType: o.courseType, nth,
+    });
     const mergedMark = o.mergedMemberIds && o.mergedMemberIds.length > 1 ? ' (کلاس ادغامی)' : '';
 
-    // ── مسیر فرمول اختصاصی (پایان‌نامه، معرفی به استاد و…) ──
+    // ── مسیر عبارت یکپارچه (0092): یک عبارت، خروجی مستقیم ریال ──
     if (rule) {
       const students = o.enrolledCount;
+      const crowd = crowdedMult(students, data);
+      const expr = (rule.expression ?? '').trim() || 'RT*UN';
       let rial = 0;
-      let formula = '';
-      if (rule.flatFee != null) {
-        rial = toRial(Number(rule.flatFee) * Math.max(students, 1));
-        formula = `مقطوع ${groupThousands(Number(rule.flatFee))} × ${Math.max(students, 1)}`;
-      } else if (rule.multiplierPerStudent != null) {
-        rial = toRial(rate * intToUnits(o.unitsInt) * students * rule.multiplierPerStudent);
-        formula = `نرخ × ${intToUnits(o.unitsInt)} واحد × ${students} دانشجو × ${rule.multiplierPerStudent}`;
-      } else {
-        const m = rule.multiplierUnit ?? 1;
-        rial = toRial(rate * intToUnits(o.unitsInt) * m);
-        formula = `نرخ × ${intToUnits(o.unitsInt)} واحد × ${m}`;
-      }
+      let err: string | null = null;
+      try {
+        rial = toRial(evalFormula(expr, {
+          TH: o.theoryUnits,
+          PH: o.practicalUnits * 2,
+          WH: 0,
+          UN: intToUnits(o.unitsInt),
+          ST: students,
+          RT: rate,
+          CF: crowd.mult,
+          BS: rule.flatBase ?? 0,
+          HR: rule.perStudentHours ?? 0,
+        }));
+      } catch (e) { err = (e as Error).message; }
       const equivInt = rate > 0 ? Math.round((rial / rate) * UNIT_SCALE) : 0;
-      const label = `فرمول ${TYPE_FA[o.offeringType] || o.offeringType}/${ROLE_FA[o.payRole] || o.payRole}: ${formula}`;
+      const roleFa = roleLabel(data, o.payRole);
+      const label = err
+        ? `فرمول ${TYPE_FA[o.offeringType] || o.offeringType}/${roleFa} — خطا: ${err}`
+        : `فرمول ${TYPE_FA[o.offeringType] || o.offeringType}/${roleFa}${nth > 1 ? ` (تکرار ${nth})` : ''}: ${expr} = ${groupThousands(rial)}`;
       totalEquivInt += equivInt;
       totalEffectiveInt += equivInt;
       rows.push({

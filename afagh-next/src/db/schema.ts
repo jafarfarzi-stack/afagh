@@ -1347,6 +1347,8 @@ export const teaching_rates = pgTable('teaching_rates', {
   degree: varchar('degree', { length: 50 }),
   baseRatePerUnit: numeric('baseRatePerUnit', { precision: 12, scale: 0 }).notNull(),
   effectiveYear: integer('effectiveYear'),
+  // ── مهاجرت 0090: بُعد پایه (NULL = همهٔ پایه‌ها؛ مربی پایه ۱ ≠ پایه ۲)
+  academicBase: varchar('academicBase', { length: 20 }),
   versionId: integer('versionId'), // نسخه آیین‌نامه (مهاجرت 0085؛ NULL = همه نسخه‌ها)
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
@@ -1369,9 +1371,12 @@ export const payroll_calculation_rules = pgTable('payroll_calculation_rules', {
   offeringType: varchar('offeringType', { length: 50 }),
   professorRole: varchar('professorRole', { length: 50 }),
   academicRank: varchar('academicRank', { length: 50 }),
-  multiplierUnit: numeric('multiplierUnit', { precision: 4, scale: 2 }).default('1.00'),
-  multiplierPerStudent: numeric('multiplierPerStudent', { precision: 4, scale: 2 }),
-  flatFee: numeric('flatFee', { precision: 12, scale: 0 }),
+  // ── مهاجرت 0092: عبارت یکپارچه + ابعاد گروه/نوع/تکرار (جای ۳ ستون قدیمی) ──
+  expression: text('expression'),                 // عبارت ریاضی با N/A/W/U/C/R/K/F/H (خروجی: ریال)
+  departmentId: integer('departmentId'),          // گروه آموزشی (NULL = همه)
+  courseType: varchar('courseType', { length: 50 }), // نوع دقیق درس (NULL = همه)
+  repeatNumber: integer('repeatNumber'),          // دفعهٔ Nام تدریس (NULL = همه)
+  flatBase: numeric('flatBase', { precision: 12, scale: 0 }), // مبلغ مبنا برای F (NULL = ۰)
   title: varchar('title', { length: 150 }),
   isActive: integer('isActive').default(1),
   versionId: integer('versionId'), // نسخه آیین‌نامه (مهاجرت 0085؛ NULL = همه نسخه‌ها)
@@ -1382,6 +1387,12 @@ export const payroll_calculation_rules = pgTable('payroll_calculation_rules', {
   repeatCourseWindow: integer('repeatCourseWindow'),  // پنجره تکرار همان درس (تعداد ترم)
   termCountWindow: integer('termCountWindow'),        // پنجره شمارش تکرار (تعداد ترم)
   excludeTerms: text('excludeTerms'),                 // کد ترم‌های مستثنی (CSV)
+  // ── مهاجرت 0089: بُعد وضعیت کلاس (ANY | WITH_CLASS | NO_CLASS) ──
+  classMode: varchar('classMode', { length: 20 }).notNull().default('ANY'),
+  // ── مهاجرت 0091: بازه دانشجو + فرمول ساعتی (الگوریتم یکپارچه؛ NULL = بدون قید) ──
+  minStudents: integer('minStudents'),            // کف بازه (NULL = بدون کف)
+  maxStudents: integer('maxStudents'),            // سقف بازه (NULL = بی‌نهایت)
+  perStudentHours: numeric('perStudentHours', { precision: 5, scale: 2 }), // ساعت به‌ازای هر دانشجو (NULL = فرمول عادی)
   updatedAt: timestamp('updatedAt').defaultNow(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });

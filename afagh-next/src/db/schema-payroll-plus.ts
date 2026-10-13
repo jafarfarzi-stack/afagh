@@ -105,6 +105,8 @@ export const offering_payroll_extras = pgTable('offering_payroll_extras', {
   extraUnits: numeric('extraUnits', { precision: 5, scale: 2 }).notNull().default('0'),
   flatAmount: integer('flatAmount').notNull().default(0),
   reason: text('reason'),
+  // ── 0089: نقش دستی استاد در این ارائه (کد از کاتالوگ teaching_role_defs؛ NULL = خودکار)
+  payRoleOverride: varchar('payRoleOverride', { length: 50 }),
   createdBy: integer('createdBy').references(() => users.id),
   universityId: integer('universityId').references(() => universities.id),
   createdAt: timestamp('createdAt').defaultNow(),
@@ -203,6 +205,19 @@ export const payroll_objections = pgTable('payroll_objections', {
   createdAt: timestamp('createdAt').defaultNow(),
 });
 
+// ── 0089: کاتالوگ نقش‌های قابل تعریف استاد در درس ────────────────────
+
+/** نقش استاد در درس — قابل‌تعریف توسط مدیر (کمک‌استاد، استاد خودخوان…) */
+export const teaching_role_defs = pgTable('teaching_role_defs', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 50 }).notNull().unique(),
+  title: varchar('title', { length: 100 }).notNull(),
+  description: text('description'),
+  isActive: integer('isActive').notNull().default(1),
+  universityId: integer('universityId').references(() => universities.id),
+  createdAt: timestamp('createdAt').defaultNow(),
+});
+
 export type ThesisSupervisionRow = typeof thesis_supervisions.$inferSelect;
 export type ThesisDrawRow = typeof thesis_unit_draws.$inferSelect;
 export type TeachingDecreeRow = typeof teaching_decrees.$inferSelect;
@@ -213,3 +228,4 @@ export type AllowanceItemRow = typeof payroll_allowance_items.$inferSelect;
 export type CashExtraRow = typeof payroll_cash_extras.$inferSelect;
 export type ExamPaymentRow = typeof exam_payments.$inferSelect;
 export type PayrollObjectionRow = typeof payroll_objections.$inferSelect;
+export type TeachingRoleDefRow = typeof teaching_role_defs.$inferSelect;

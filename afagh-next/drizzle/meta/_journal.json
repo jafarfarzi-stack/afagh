@@ -659,6 +659,34 @@
       "when": 1790000060000,
       "tag": "0088_exam_pay_objections",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1790000000000,
+      "tag": "0089_offering_role_override",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1790000000000,
+      "tag": "0090_rate_base",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1790000050000,
+      "tag": "0091_rule_student_range",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1790000060000,
+      "tag": "0092_rule_expression",
+      "breakpoints": true
     }
   ]
 }

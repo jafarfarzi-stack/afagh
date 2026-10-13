@@ -391,6 +391,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/payroll/coverage',
+    icon: '🗺️',
+    title: 'پوشش فرمول‌ها',
+    desc: 'کدام درس‌ها فرمول دارند، کدام ندارند و چرا',
+    group: 'fin',
+    roles: ['ADMIN', 'EDU_EXPERT', 'VICE_EDU', 'FINANCE_EXPERT', 'FINANCE'],
+    accent: 'from-teal-950 to-emerald-950 border-teal-700/50',
+    iconBg: 'bg-teal-700/80 border-teal-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/student-finance',
     icon: '💳',
     title: 'امور مالی دانشجویان',
