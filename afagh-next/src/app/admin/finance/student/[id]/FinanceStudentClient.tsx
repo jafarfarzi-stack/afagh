@@ -46,6 +46,7 @@ type EnhancedTuition = {
   fixedTuitionAfterCoeff: number; variableTuitionAfterCoeff: number;
   subjectFees: { code: string; title: string; kind: string; amount: number }[];
   subjectFeesTotal: number; totalTuition: number;
+  overrideId: number | null; overrideReason: string | null;
 };
 
 const fa = (n: number) => Number(n || 0).toLocaleString('fa-IR');
@@ -68,6 +69,7 @@ export default function FinanceStudentClient(props: {
   cheques: ChequeRow[];
   loans: LoanRow[];
   loanProducts: LoanProduct[];
+  welfareFunds: { id: number; title: string }[];
   formula: FormulaInfo | null;
   enhancedTuition: EnhancedTuition | null;
 }) {
@@ -459,6 +461,7 @@ export default function FinanceStudentClient(props: {
                 studentId,
                 termId: f.get('termId') ? Number(f.get('termId')) : null,
                 loanProductId: f.get('loanProductId') ? Number(f.get('loanProductId')) : null,
+                welfareFundId: f.get('welfareFundId') ? Number(f.get('welfareFundId')) : null,
                 lender: String(f.get('lender') || ''),
                 loanCode: String(f.get('loanCode') || ''),
                 amount: Number(f.get('amount')) || 0,
@@ -509,6 +512,15 @@ export default function FinanceStudentClient(props: {
                   {terms.map((t) => <option key={t.id} value={t.id}>{t.termTitle}</option>)}
                 </select>
               </label>
+              {props.welfareFunds.length > 0 && (
+                <label className={labelCls}>
+                  صندوق رفاه
+                  <select name="welfareFundId" className={inputCls}>
+                    <option value="">— بدون صندوق —</option>
+                    {props.welfareFunds.map((w) => <option key={w.id} value={w.id}>{w.title}</option>)}
+                  </select>
+                </label>
+              )}
               <label className={`${labelCls} sm:col-span-3`}>یادداشت<input name="note" className={inputCls} /></label>
             </div>
             <button type="submit" disabled={pending} className={`${btnCls} mt-3`}>ثبت وام</button>
@@ -563,9 +575,16 @@ export default function FinanceStudentClient(props: {
       {tab === 'ledger' && (
         <div className="space-y-4">
           {/* شهریه با ضریب و مبالغ موضوعی */}
-          {props.enhancedTuition && (props.enhancedTuition.fixedCoefficient !== 1 || props.enhancedTuition.variableCoefficient !== 1 || props.enhancedTuition.subjectFeesTotal !== 0) && (
+          {props.enhancedTuition && (props.enhancedTuition.fixedCoefficient !== 1 || props.enhancedTuition.variableCoefficient !== 1 || props.enhancedTuition.subjectFeesTotal !== 0 || props.enhancedTuition.overrideId !== null) && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-              <h4 className="mb-2 text-xs font-bold text-amber-800">شهریهٔ ترم جاری با ضریب افزایشی و مبالغ موضوعی</h4>
+              <h4 className="mb-2 text-xs font-bold text-amber-800">
+                شهریهٔ ترم جاری با ضریب افزایشی و مبالغ موضوعی
+                {props.enhancedTuition.overrideId !== null && (
+                  <span className="mr-2 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] text-violet-800">
+                    🎯 فرمول ویژه{props.enhancedTuition.overrideReason ? ` — ${props.enhancedTuition.overrideReason}` : ''}
+                  </span>
+                )}
+              </h4>
               <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-3">
                 <div><span className="text-slate-500">شهریه ثابت خام: </span><span className="font-medium">{fa(props.enhancedTuition.fixedTuition)}</span></div>
                 {props.enhancedTuition.fixedCoefficient !== 1 && (

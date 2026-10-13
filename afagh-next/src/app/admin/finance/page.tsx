@@ -72,6 +72,12 @@ export default async function FinanceWorklistPage(props: {
           <Link href="/admin/tuition" className="rounded-lg bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700">
             🧮 موتور شهریه
           </Link>
+          <Link href="/admin/finance/student-formula" className="rounded-lg bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700">
+            🎯 فرمول ویژهٔ دانشجو
+          </Link>
+          <Link href="/admin/finance/welfare" className="rounded-lg bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700">
+            🤝 صندوق رفاه
+          </Link>
         </div>
       </div>
 

@@ -2883,6 +2883,8 @@ export const student_loans = pgTable('student_loans', {
   studentId: integer('studentId').notNull().references(() => students.id),
   termId: integer('termId').references(() => academic_terms.id),
   loanProductId: integer('loanProductId').references(() => loan_products.id),
+  /** صندوق رفاه/حمایتی تأمین‌کنندهٔ وام (ماژول 0081 — FK در SQL مهاجرت) */
+  welfareFundId: integer('welfareFundId'),
   lender: varchar('lender', { length: 150 }).notNull(),
   loanCode: varchar('loanCode', { length: 40 }),
   amount: numeric('amount', { precision: 12, scale: 0 }).notNull(),

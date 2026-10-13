@@ -610,6 +610,13 @@
       "when": 1794153604002,
       "tag": "0082_finance_time_control",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1790000000000,
+      "tag": "0081_welfare_student_formula",
+      "breakpoints": true
     }
   ]
 }

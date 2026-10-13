@@ -9,6 +9,7 @@ import FinanceStudentClient from './FinanceStudentClient';
 import { db } from '@/db';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import { student_subject_fees, subject_fee_types } from '@/db/schema';
+import { welfare_funds } from '@/db/schema-welfare';
 import { getCurrentUniversity } from '@/lib/university-scope';
 
 export const dynamic = 'force-dynamic';
@@ -69,6 +70,17 @@ const fin = await getStudentFinance(studentId, {
   const enhancedTuition = currentTerm
     ? await computeTermTuition(studentId, currentTerm.id)
     : null;
+
+  // صندوق‌های فعال رفاه (سلکت فرم ثبت وام)
+  const activeFunds = await db
+    .select({ id: welfare_funds.id, title: welfare_funds.title })
+    .from(welfare_funds)
+    .where(
+      and(
+        eq(welfare_funds.isActive, 1),
+        currentUniversity ? or(eq(welfare_funds.universityId, currentUniversity.id), isNull(welfare_funds.universityId)) : undefined,
+      ),
+    );
 
   // خواندن مبالغ موضوعی ترم جاری
   const uni = currentUniversity ?? await getCurrentUniversity().catch(() => null);
@@ -147,9 +159,16 @@ const fin = await getStudentFinance(studentId, {
           </div>
 
           {/* جزئیات ترم جاری با ضریب و مبالغ موضوعی */}
-          {enhancedTuition && (enhancedTuition.fixedCoefficient !== 1 || enhancedTuition.variableCoefficient !== 1 || enhancedTuition.subjectFeesTotal !== 0) && (
+          {enhancedTuition && (enhancedTuition.fixedCoefficient !== 1 || enhancedTuition.variableCoefficient !== 1 || enhancedTuition.subjectFeesTotal !== 0 || enhancedTuition.overrideId !== null) && (
             <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-              <h4 className="mb-2 text-xs font-bold text-amber-800">شهریهٔ ترم جاری با ضریب افزایشی</h4>
+              <h4 className="mb-2 text-xs font-bold text-amber-800">
+                شهریهٔ ترم جاری با ضریب افزایشی
+                {enhancedTuition.overrideId !== null && (
+                  <span className="mr-2 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] text-violet-800">
+                    🎯 فرمول ویژه
+                  </span>
+                )}
+              </h4>
               <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
                 <div><span className="text-slate-500">شهریه خام: </span><span className="font-medium">{fa(enhancedTuition.fixedTuition + enhancedTuition.variableTuition)}</span></div>
                 {enhancedTuition.fixedCoefficient !== 1 && (
@@ -162,6 +181,11 @@ const fin = await getStudentFinance(studentId, {
                   <div><span className="text-slate-500">مبالغ موضوعی: </span><span className={`font-medium ${enhancedTuition.subjectFeesTotal > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>{enhancedTuition.subjectFeesTotal > 0 ? '+' : ''}{fa(enhancedTuition.subjectFeesTotal)}</span></div>
                 )}
               </div>
+              {enhancedTuition.overrideId !== null && enhancedTuition.overrideReason && (
+                <p className="mt-2 text-[11px] text-violet-700">
+                  دلیل فرمول ویژه: {enhancedTuition.overrideReason}
+                </p>
+              )}
               {enhancedTuition.subjectFees.length > 0 && (
                 <div className="mt-2 border-t border-amber-200 pt-2">
                   <p className="mb-1 text-[10px] font-bold text-amber-700">اقلام موضوعی:</p>
@@ -333,6 +357,7 @@ const fin = await getStudentFinance(studentId, {
           defaultAmount: Number(l.defaultAmount),
           defaultInstallments: l.defaultInstallments,
         }))}
+        welfareFunds={activeFunds}
         formula={formulaCalc ? {
           termTitle: currentTerm?.termTitle || '',
           formulaTitle: formulaCalc.formula?.title || null,
@@ -352,6 +377,8 @@ const fin = await getStudentFinance(studentId, {
           subjectFees: enhancedTuition.subjectFees,
           subjectFeesTotal: enhancedTuition.subjectFeesTotal,
           totalTuition: enhancedTuition.totalTuition,
+          overrideId: enhancedTuition.overrideId,
+          overrideReason: enhancedTuition.overrideReason,
         } : null}
       />
     </div>

@@ -1,10 +1,11 @@
 import 'server-only';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, course_offerings, courses, enrollments, student_ledger,
   students, tuition_rules, tuition_coefficients, subject_fee_types, student_subject_fees,
 } from '@/db/schema';
+import { student_tuition_overrides } from '@/db/schema-welfare';
 
 /**
  * موتور شهریهٔ آفاق — بدون هیچ نرخ سخت‌کد.
@@ -93,6 +94,9 @@ export interface TermTuition {
   totalTuition: number;
   lines: TuitionLine[];
   fixedRuleId: number | null;
+  /** فرمول ویژهٔ دانشجو (ماژول 0081) — تهی = قاعدهٔ عمومی اعمال شده */
+  overrideId: number | null;
+  overrideReason: string | null;
 }
 
 /**
@@ -182,6 +186,32 @@ async function computeSubjectFees(studentId: number, termId: number, variableTui
  *   ثابت (بر اساس نوع ترم) + مجموع(واحد × نرخ هر واحد بر اساس نوع گذراندن درس)
  *   + ضریب افزایشی نیمسال + مبالغ موضوعی
  */
+/**
+ * فرمول ویژهٔ فعال یک دانشجو (ماژول 0081 — شکاف سما).
+ * اولویت: فرمول مخصوص همین ترم > فرمول عمومی همهٔ ترم‌ها (termId تهی).
+ */
+export async function findActiveTuitionOverride(
+  studentId: number,
+  termId: number,
+): Promise<typeof student_tuition_overrides.$inferSelect | null> {
+  const rows = await db
+    .select()
+    .from(student_tuition_overrides)
+    .where(
+      and(
+        eq(student_tuition_overrides.studentId, studentId),
+        eq(student_tuition_overrides.isActive, 1),
+      ),
+    )
+    .orderBy(desc(student_tuition_overrides.id));
+  if (rows.length === 0) return null;
+  return (
+    rows.find((r) => r.termId === termId) ??
+    rows.find((r) => r.termId === null) ??
+    null
+  );
+}
+
 export async function computeTermTuition(
   studentId: number,
   termId: number,
@@ -198,12 +228,18 @@ export async function computeTermTuition(
   // قواعد شهریه یک‌بار خوانده می‌شوند تا به ازای هر درس کوئری تکراری نزنیم
   const feeRules = await loadActiveFeeRules();
 
+  // فرمول ویژهٔ دانشجو (ماژول 0081): جایگزین قاعدهٔ عمومی (ثابت + نرخ واحد)
+  const override = await findActiveTuitionOverride(studentId, termId);
+  const overrideRate = override ? toNum(override.perUnitAmount) : 0;
+
   // شهریهٔ ثابت — یک‌بار به ازای نوع ترم؛ فقط قواعد سطح ترم (بدون offeringType)
   const fixedRule = resolveTuitionRule(feeRules, {
     degreeLevelId, majorId, termType, entryYear, termLevelOnly: true,
   });
   const includeFixed = opts?.includeFixed !== false;
-  const fixedTuition = includeFixed ? toNum(fixedRule?.fixedAmount ?? 0) : 0;
+  const fixedTuition = override
+    ? toNum(override.fixedAmount)
+    : includeFixed ? toNum(fixedRule?.fixedAmount ?? 0) : 0;
 
   // دروس ثبت‌شدهٔ دانشجو در این ترم + نوع گذراندن هر درس
   const rows = await db
@@ -231,6 +267,20 @@ export async function computeTermTuition(
   let variableTuition = 0;
   for (const r of rows) {
     const units = toNum(r.units);
+    // فرمول ویژه: نرخ واحدِ اختصاصی برای همهٔ دروس (بدون سطل‌بندی نوع درس)
+    if (override) {
+      const amount = Math.round(units * overrideRate);
+      variableTuition += amount;
+      lines.push({
+        courseCode: r.courseCode,
+        courseTitle: r.courseTitle,
+        offeringType: r.offeringType,
+        units,
+        perUnit: overrideRate,
+        amount,
+      });
+      continue;
+    }
     const rule = resolveTuitionRule(feeRules, {
       degreeLevelId, majorId, termType, entryYear, offeringType: r.offeringType,
     });
@@ -276,7 +326,9 @@ export async function computeTermTuition(
     variableTuitionAfterCoeff,
     totalTuition: fixedTuitionAfterCoeff + variableTuitionAfterCoeff + subjectFees.total,
     lines,
-    fixedRuleId: includeFixed ? (fixedRule?.id ?? null) : null,
+    fixedRuleId: override ? null : (includeFixed ? (fixedRule?.id ?? null) : null),
+    overrideId: override?.id ?? null,
+    overrideReason: override?.reason ?? null,
   };
 }
 

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { audit_logs, loan_products, student_loans } from '@/db/schema';
+import { welfare_funds } from '@/db/schema-welfare';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { assertServerActionOrigin, requireStudentScope } from '@/lib/security';
 import { toNum } from '@/lib/finance-rules';
@@ -31,6 +32,8 @@ export async function addLoanAction(input: {
   installments: number;
   firstDueDate: string;
   note: string;
+  /** صندوق رفاه/حمایتی (ماژول 0081) — اختیاری */
+  welfareFundId?: number | null;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireRole(FINANCE);
   const og = await assertServerActionOrigin();
@@ -63,6 +66,18 @@ export async function addLoanAction(input: {
   const firstDue = clean(input.firstDueDate);
   const firstDueMs = firstDue ? Date.parse(firstDue) : NaN;
 
+  // صندوق رفاه (اختیاری): وجود + هم‌دانشگاهی بودن بررسی می‌شود
+  let welfareFundId: number | null = null;
+  if (input.welfareFundId !== undefined && input.welfareFundId !== null) {
+    const [fund] = await db.select().from(welfare_funds)
+      .where(eq(welfare_funds.id, input.welfareFundId)).limit(1);
+    if (!fund) return { ok: false, error: 'صندوق رفاه یافت نشد' };
+    if (fund.universityId !== null && fund.universityId !== su.uniId) {
+      return { ok: false, error: 'صندوق متعلق به دانشگاه دیگری است' };
+    }
+    welfareFundId = fund.id;
+  }
+
   const user = await getSessionUser();
   try {
     return await db.transaction(async (tx) => {
@@ -71,6 +86,7 @@ export async function addLoanAction(input: {
         studentId: input.studentId,
         termId: input.termId,
         loanProductId: input.loanProductId || null,
+        welfareFundId,
         lender,
         loanCode: clean(input.loanCode),
         amount: String(amount),
