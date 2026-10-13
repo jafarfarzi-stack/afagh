@@ -6,7 +6,9 @@ import { getStudentFinance } from '@/lib/finance-engine';
 import { toNum, transcriptTotals } from '@/lib/finance-rules';
 import { getTermScope } from '@/lib/term-scope';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
-import { getSetting } from '@/lib/settings';
+import { getPublicBaseUrl, getSetting } from '@/lib/settings';
+import { issueFinanceStatementToken } from '@/lib/verification';
+import { qrSvg } from '@/lib/qr';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import PrintButton from '../PrintButton';
 import TermFilterChip from '../term-filter-chip';
@@ -101,6 +103,24 @@ export default async function StudentFinancePage() {
 
   // eventCode در اسکیما nullable است، پس تهی را صریح پوشش می‌دهیم
   const financeNotifications = notifyRows.filter((n) => !!n.eventCode && STUDENT_EVENTS.includes(n.eventCode));
+
+  // توکن امضاشدهٔ کارنامهٔ مالی + QR استعلام برخط (بلوک مهر در بخش چاپی)
+  const publicBaseUrl = await getPublicBaseUrl();
+  let stmtVerifyUrl: string | null = null;
+  let stmtQr = '';
+  let stmtExpiresAt: string | null = null;
+  try {
+    const issued = await issueFinanceStatementToken(user.id);
+    stmtVerifyUrl = `${publicBaseUrl}/verify-finance/${encodeURIComponent(issued.token)}`;
+    stmtExpiresAt = issued.expiresAt;
+    try {
+      stmtQr = await qrSvg(stmtVerifyUrl, { errorCorrectionLevel: 'M' });
+    } catch (err) {
+      console.error('[student-finance] qr failed', err);
+    }
+  } catch (err) {
+    console.error('[student-finance] statement token failed', err);
+  }
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -333,6 +353,36 @@ export default async function StudentFinancePage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ بلوک رسمیت: QR استعلام + مهر و امضا ═══ */}
+        {stmtVerifyUrl && (
+          <div className="card">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                {stmtQr ? (
+                  <div className="h-24 w-24 shrink-0 border border-slate-200 bg-white p-1" dangerouslySetInnerHTML={{ __html: stmtQr }} />
+                ) : null}
+                <div className="text-[11px] leading-6 text-slate-600">
+                  <p className="font-bold text-slate-800">استعلام برخط اصالت این کارنامه</p>
+                  <p className="break-all font-mono text-[10px] text-slate-500" dir="ltr">{stmtVerifyUrl}</p>
+                  {stmtExpiresAt && (
+                    <p>اعتبار استعلام تا {jdate(new Date(stmtExpiresAt))}</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-8 text-center text-[11px] text-slate-600">
+                <div>
+                  <p className="mb-10 font-medium">مهر و امضای امور مالی</p>
+                  <div className="border-t border-slate-300 pt-1">نام و امضا</div>
+                </div>
+                <div>
+                  <p className="mb-10 font-medium">مهر دانشگاه</p>
+                  <div className="border-t border-slate-300 pt-1">تاریخ صدور: {jdate(new Date())}</div>
+                </div>
+              </div>
             </div>
           </div>
         )}

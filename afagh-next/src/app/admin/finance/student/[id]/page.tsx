@@ -5,6 +5,7 @@ import { getStudentFinance, computeFormulaTuition } from '@/lib/finance-engine';
 import { computeTermTuition } from '@/lib/tuition-engine';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import PrintButton from '@/components/PrintButton';
+import StatementLinkButton from './StatementLinkButton';
 import FinanceStudentClient from './FinanceStudentClient';
 import { db } from '@/db';
 import { and, eq, isNull, or } from 'drizzle-orm';
@@ -111,6 +112,7 @@ const fin = await getStudentFinance(studentId, {
         </div>
         <div className="flex flex-wrap gap-2">
           <PrintButton />
+          <StatementLinkButton studentId={studentId} />
           <Link href="/admin/finance" className="rounded-lg bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700">
             بازگشت به کارتابل
           </Link>

@@ -7,6 +7,7 @@ import {
   short_term_courses, short_term_learners, short_term_registrations, student_cards, student_ledger, students, users,
 } from '@/db/schema';
 import { getNumber, getSetting } from '@/lib/settings';
+import { getStudentFinance } from '@/lib/finance-engine/student-detail';
 import { currentTermFor } from '@/lib/terms';
 import { ledgerBalance } from '@/lib/ledger-balance';
 import { createLogger } from '@/lib/logger';
@@ -493,8 +494,106 @@ export async function verifyEnrollConfirm(rawToken: string): Promise<EnrollConfi
   };
 }
 
-// ─────────────────── د) اصالت‌سنجی گواهینامهٔ دوره‌های آزاد ───────────────────
+// ─────────────────── هـ) کارنامهٔ مالی دانشجو (گزارش چاپی با QR) ───────────────────
 
+export type FinanceStatementVerification =
+  | { ok: false; reason: 'BAD_TOKEN' | 'EXPIRED' | 'NOT_FOUND' | 'EMPTY'; message: string }
+  | {
+      ok: true;
+      studentId: number;
+      studentName: string;
+      studentCode: string;
+      nationalIdMasked: string;
+      majorName: string | null;
+      totals: {
+        charges: number;
+        discounts: number;
+        sponsorships: number;
+        payments: number;
+        balance: number;
+        chequesPending: number;
+      };
+      terms: {
+        termTitle: string;
+        charges: number;
+        discounts: number;
+        payments: number;
+        balance: number;
+      }[];
+      checkedAt: string;
+    };
+
+/** توکن کارنامهٔ مالی — امضاشده و میان‌مدت (پیش‌فرض ۳۰ روز، سقف ۱ سال) */
+export async function issueFinanceStatementToken(userId: number): Promise<{ token: string; expiresAt: string }> {
+  const configured = await getNumber('FINANCE_STMT_TTL_MINUTES', 43200);
+  if (!Number.isFinite(configured) || configured <= 0) {
+    log.warn('finance_stmt_ttl_invalid', { configured });
+    throw new Error('مدت اعتبار کارنامهٔ مالی (FINANCE_STMT_TTL_MINUTES) باید عددی بزرگ‌تر از صفر باشد.');
+  }
+  const ttlMin = Math.min(configured, 525600); // سقف ۱ سال — کارنامه نباید دائمی شود
+  const token = await signToken({ uid: userId, kind: 'FINANCE_STMT' }, ttlMin * 60);
+  return { token, expiresAt: new Date(Date.now() + ttlMin * 60_000).toISOString() };
+}
+
+export async function verifyFinanceStatement(rawToken: string): Promise<FinanceStatementVerification> {
+  const sig = await verifyTokenSignature<{ uid: number; kind: string }>(rawToken);
+  if (!sig.ok) {
+    return {
+      ok: false,
+      reason: sig.reason === 'EXPIRED' ? 'EXPIRED' : 'BAD_TOKEN',
+      message: sig.reason === 'EXPIRED'
+        ? 'این کارنامه منقضی شده است؛ دانشجو باید از سامانه کارنامهٔ تازه بگیرد.'
+        : 'توکن نامعتبر یا دستکاری‌شده است.',
+    };
+  }
+  if (sig.payload.kind !== 'FINANCE_STMT') return { ok: false, reason: 'BAD_TOKEN', message: 'نوع توکن با کارنامهٔ مالی همخوانی ندارد.' };
+
+  const [stu] = await db
+    .select({
+      studentId: students.id, studentCode: students.studentCode,
+      firstName: users.firstName, lastName: users.lastName, nationalCode: users.nationalCode,
+      majorName: majors.name,
+    })
+    .from(students)
+    .innerJoin(users, eq(users.id, students.userId))
+    .leftJoin(majors, eq(majors.id, students.majorId))
+    .where(eq(users.id, sig.payload.uid))
+    .limit(1);
+  if (!stu) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
+
+  // کارنامهٔ زنده از موتور مالی (تک‌منبع: getStudentFinance) — استعلام برخط، بدون اسنپ‌شات جدا
+  const fin = await getStudentFinance(stu.studentId);
+  if (!fin || fin.transcript.length === 0) {
+    return { ok: false, reason: 'EMPTY', message: 'برای این دانشجو هیچ تراکنش مالی ثبت نشده است.' };
+  }
+
+  return {
+    ok: true,
+    studentId: stu.studentId,
+    studentName: `${stu.firstName} ${stu.lastName}`,
+    studentCode: stu.studentCode,
+    nationalIdMasked: maskNationalCode(stu.nationalCode),
+    majorName: stu.majorName,
+    totals: {
+      charges: fin.totals.charges,
+      discounts: fin.totals.discounts,
+      sponsorships: fin.totals.sponsorships,
+      payments: fin.totals.payments,
+      balance: fin.totals.balance,
+      chequesPending: fin.totals.chequesPending,
+    },
+    terms: fin.transcript.map((t) => ({
+      termTitle: t.termTitle,
+      charges: t.charges,
+      discounts: t.discounts,
+      payments: t.payments,
+      balance: t.balance,
+    })),
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+// ─────────────────── د) اصالت‌سنجی گواهینامهٔ دوره‌های آزاد ───────────────────
 /** اثر انگشت SHA-256 روی فیلدهای اساسی گواهینامه — برای کشف دستکاری */
 export function certificateFingerprint(input: {
   certificateNumber: string; learnerId: number; courseId: number; grade: string | number; totalHours: number; issueDate: string;
