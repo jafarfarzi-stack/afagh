@@ -87,7 +87,7 @@ export async function recordPosSale(input: PosSaleInput) {
   // Get current financial term
   const finTerms = await db.select().from(financial_terms)
     .where(and(eq(financial_terms.universityId, uni.id), eq(financial_terms.isActive, 1)))
-    .orderBy(sql`sort_order ASC NULLS LAST`);
+    .orderBy(sql`"sortOrder" ASC NULLS LAST`);
   const financialTermId = finTerms[0]?.id ?? null;
 
   // Get current academic term

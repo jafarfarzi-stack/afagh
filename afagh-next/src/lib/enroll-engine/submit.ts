@@ -117,7 +117,7 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
   let finTermId: number | null = null;
   const finTerms = await D.select().from(financial_terms)
     .where(and(eq(financial_terms.universityId, stu.universityId ?? 0), eq(financial_terms.isActive, 1)))
-    .orderBy(sql`sort_order ASC NULLS LAST`);
+    .orderBy(sql`"sortOrder" ASC NULLS LAST`);
   if (finTerms.length > 0) {
     // ترم مالی جاری را پیدا می‌کنیم (بر اساس sortOrder یا termCode)
     finTermId = finTerms[0].id;

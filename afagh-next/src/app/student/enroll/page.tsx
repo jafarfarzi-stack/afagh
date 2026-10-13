@@ -146,7 +146,7 @@ export default async function EnrollPage() {
   // پیدا کردن ترم مالی جاری
   const finTerms = await db.select().from(financial_terms)
     .where(and(eq(financial_terms.universityId, me.universityId ?? 0), eq(financial_terms.isActive, 1)))
-    .orderBy(sql`sort_order ASC NULLS LAST`);
+    .orderBy(sql`"sortOrder" ASC NULLS LAST`);
   const currentFinTerm = finTerms[0];
 
   // بافت دانشجو برای resolver
