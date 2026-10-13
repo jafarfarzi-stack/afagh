@@ -78,7 +78,9 @@ export async function buildContractDraft(staffId: number, termId: number): Promi
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .where(and(eq(course_offerings.professorId, staffId), eq(course_offerings.termId, termId), eq(course_offerings.isActive, 1)));
 
-  const offeringIds = offers.map(o => o.offering.id);
+  const directed = offers.filter(o => o.offering.offeringType === 'DIRECTED_READING');
+  const teachable = offers.filter(o => o.offering.offeringType !== 'DIRECTED_READING');
+  const offeringIds = teachable.map(o => o.offering.id);
   const allSched = offeringIds.length
     ? await db
         .select({
@@ -99,7 +101,7 @@ export async function buildContractDraft(staffId: number, termId: number): Promi
   }
   const sharedKeys = await offeringSharedKeys(offeringIds);
   const groups = groupIntoMerged(
-    offers,
+    teachable,
     o => o.offering.id,
     o => mergedGroupKey(
       sharedKeys.get(o.offering.id) ?? null,
@@ -135,6 +137,18 @@ export async function buildContractDraft(staffId: number, termId: number): Promi
       practicalUnits: Number(primary.course.practicalUnits ?? 0),
       weeklyHours: round2(weeklyHours),
       termTotalHours: round2(weeklyHours * TERM_WEEKS),
+    });
+  }
+  for (const d of directed) {
+    lines.push({
+      offeringId: d.offering.id,
+      code: d.course.code,
+      title: `${d.course.title} (معرفی به استاد)`,
+      groupNumber: d.offering.groupNumber,
+      theoryUnits: 0,
+      practicalUnits: 0,
+      weeklyHours: 0,
+      termTotalHours: 0,
     });
   }
 

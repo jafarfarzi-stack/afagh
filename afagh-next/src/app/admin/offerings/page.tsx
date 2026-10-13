@@ -57,6 +57,26 @@ async function saveTargetingAction(formData: FormData) {
   revalidatePath('/student/enroll');
 }
 
+const OFFERING_TYPE_OPTIONS = ['NORMAL', 'SUMMER', 'DIRECTED_READING'] as const;
+
+async function saveOfferingTypeAction(formData: FormData) {
+  'use server';
+  await requireRole(['ADMIN']);
+  const id = Number(formData.get('offeringId'));
+  const type = String(formData.get('otype') || 'NORMAL').trim().toUpperCase();
+  if (!id || !(OFFERING_TYPE_OPTIONS as readonly string[]).includes(type)) return;
+  const { getCurrentUniversity } = await import('@/lib/university-scope');
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (uni) {
+    const [o] = await db.select({ universityId: course_offerings.universityId })
+      .from(course_offerings).where(eq(course_offerings.id, id)).limit(1);
+    if (!o) return;
+    if (o.universityId !== null && o.universityId !== uni.id) return;
+  }
+  await db.update(course_offerings).set({ offeringType: type }).where(eq(course_offerings.id, id));
+  revalidatePath('/admin/offerings');
+}
+
 const toLocalInput = (d: Date | null) =>
   d ? new Date(d).toLocaleString('sv-SE', { hour12: false }).slice(0, 16) : '';
 
@@ -70,7 +90,7 @@ export default async function OfferingsPage() {
   const win = windowStatus(term);
   const offs = term
     ? await db
-        .select({ id: course_offerings.id, code: courses.code, title: courses.title, group: course_offerings.groupNumber, cap: course_offerings.capacity, enr: course_offerings.enrolledCount, deg: course_offerings.targetDegreeLevelId, major: course_offerings.targetMajorId, ys: course_offerings.entryYearStart, ye: course_offerings.entryYearEnd })
+        .select({ id: course_offerings.id, code: courses.code, title: courses.title, group: course_offerings.groupNumber, cap: course_offerings.capacity, enr: course_offerings.enrolledCount, deg: course_offerings.targetDegreeLevelId, major: course_offerings.targetMajorId, ys: course_offerings.entryYearStart, ye: course_offerings.entryYearEnd, typ: course_offerings.offeringType })
         .from(course_offerings).innerJoin(courses, eq(courses.id, course_offerings.courseId))
         .where(and(eq(course_offerings.termId, term.id), eq(course_offerings.isActive, 1)))
         .orderBy(courses.code)
@@ -108,6 +128,7 @@ export default async function OfferingsPage() {
         <p className="mb-3 text-xs text-slate-500">خالی = بدون محدودیت. مثال: مقطع «کارشناسی ارشد» فقط برای ارشدی‌ها دیده می‌شود؛ بازهٔ ورودی ۱۴۰۰ تا ∞ یعنی ورودی‌های قدیمی‌تر آن را نمی‌بینند.</p>
         <OfferingsClient
           saveTargeting={saveTargetingAction}
+          saveType={saveOfferingTypeAction}
           rows={offs.map(o => ({ ...o, label: targetingLabel({ targetDegreeLevelId: o.deg, targetMajorId: o.major, entryYearStart: o.ys, entryYearEnd: o.ye }, degTitle, majorTitle) }))}
           degrees={degrees.map(d => ({ id: d.id, title: d.title }))}
           majors={majorRows.map(m => ({ id: m.id, name: m.name }))}
