@@ -617,6 +617,48 @@
       "when": 1790000000000,
       "tag": "0081_welfare_student_formula",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1790000010000,
+      "tag": "0083_thesis_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1790000020000,
+      "tag": "0084_teaching_decrees",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1790000030000,
+      "tag": "0085_regulation_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1790000040000,
+      "tag": "0086_rule_formula",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1790000050000,
+      "tag": "0087_offering_staff_money",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1790000060000,
+      "tag": "0088_exam_pay_objections",
+      "breakpoints": true
     }
   ]
 }

@@ -461,6 +461,8 @@ export const staff = pgTable('staff', {
   birthCity: varchar('birthCity', { length: 100 }),       // شهر محل تولد
   bankAccountNo: varchar('bankAccountNo', { length: 50 }), // شماره حساب
   phone: varchar('phone', { length: 20 }),                 // تلفن ثابت
+  photoUrl: text('photoUrl'),                              // عکس پرسنلی (مهاجرت 0087)
+  isVeteran: integer('isVeteran').notNull().default(0),    // ایثارگر — معافیت مالیاتی (مهاجرت 0087)
   canManageServicePool: integer('canManageServicePool').default(0), // مدیر گروه خدماتی-سراسری (تربیت بدنی/زبان)
   /** دانشگاه مالک این پرونده */
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
@@ -672,7 +674,10 @@ export const academic_terms = pgTable('academic_terms', {
   guestRegStartDate: timestamp('guestRegStartDate'),     // ثبت‌نام میهمانی (تابستان) از
   guestRegEndDate: timestamp('guestRegEndDate'),         // ثبت‌نام میهمانی (تابستان) تا
   appealWindowDays: integer('appealWindowDays').default(3),
-  professorAppealSlaDays: integer('professorAppealSlaDays').default(5)
+  professorAppealSlaDays: integer('professorAppealSlaDays').default(5),
+  // ── مهاجرت 0085: نسخه آیین‌نامه + تعداد هفته‌های آموزشی (NULL = آخرین نسخه / ۱۶) ──
+  regulationVersionId: integer('regulationVersionId'),
+  weeksCount: integer('weeksCount'),
 }, (t) => [
   unique('uq_terms_uni_code').on(t.universityId, t.termCode),
 ]);
@@ -1342,6 +1347,7 @@ export const teaching_rates = pgTable('teaching_rates', {
   degree: varchar('degree', { length: 50 }),
   baseRatePerUnit: numeric('baseRatePerUnit', { precision: 12, scale: 0 }).notNull(),
   effectiveYear: integer('effectiveYear'),
+  versionId: integer('versionId'), // نسخه آیین‌نامه (مهاجرت 0085؛ NULL = همه نسخه‌ها)
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
@@ -1349,6 +1355,12 @@ export const teaching_coefficients = pgTable('teaching_coefficients', {
   id: serial('id').primaryKey(),
   ruleName: varchar('ruleName', { length: 100 }).notNull(),
   multiplier: numeric('multiplier', { precision: 3, scale: 2 }).notNull(),
+  versionId: integer('versionId'), // نسخه آیین‌نامه (مهاجرت 0085)
+  // ── مهاجرت 0086: کلاس پرجمعیت پلکانی — آستانه، گام، افزایش هر پله، سقف واحد ──
+  minStudents: integer('minStudents'),       // NULL = آستانه سراسری PAYROLL_CROWDED_THRESHOLD
+  stepSize: integer('stepSize'),             // هر چند نفر = یک پله (NULL = PAYROLL_CROWDED_STEP)
+  stepIncrement: numeric('stepIncrement', { precision: 6, scale: 4 }), // افزایش ضریب هر پله (NULL = PAYROLL_CROWDED_STEP_UP)
+  capUnits: numeric('capUnits', { precision: 6, scale: 2 }),           // سقف واحد مشمول این ضریب
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
@@ -1362,6 +1374,14 @@ export const payroll_calculation_rules = pgTable('payroll_calculation_rules', {
   flatFee: numeric('flatFee', { precision: 12, scale: 0 }),
   title: varchar('title', { length: 150 }),
   isActive: integer('isActive').default(1),
+  versionId: integer('versionId'), // نسخه آیین‌نامه (مهاجرت 0085؛ NULL = همه نسخه‌ها)
+  // ── مهاجرت 0086: ابعاد فرمول (مقطع، تکرار، دوری، پنجره‌ها) ──
+  degreeLevelId: integer('degreeLevelId'),            // NULL = همه مقاطع
+  repeatPolicy: varchar('repeatPolicy', { length: 20 }).default('ALLOW'), // ALLOW | FIRST_ONLY | HALF_AFTER
+  distanceScope: varchar('distanceScope', { length: 20 }).default('ALL'), // ALL | PRESENT_ONLY | VIRTUAL_ONLY
+  repeatCourseWindow: integer('repeatCourseWindow'),  // پنجره تکرار همان درس (تعداد ترم)
+  termCountWindow: integer('termCountWindow'),        // پنجره شمارش تکرار (تعداد ترم)
+  excludeTerms: text('excludeTerms'),                 // کد ترم‌های مستثنی (CSV)
   updatedAt: timestamp('updatedAt').defaultNow(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
@@ -1378,6 +1398,8 @@ export const professor_term_contracts = pgTable('professor_term_contracts', {
   rankSnapshot: varchar('rankSnapshot', { length: 50 }),
   baseSnapshot: varchar('baseSnapshot', { length: 20 }),
   rateSnapshot: numeric('rateSnapshot', { precision: 12, scale: 0 }),
+  // ── مهاجرت 0087: مبنای حکم (مجموع حقوق مرتبه+پایه+فوق‌العاده) برای حالت نرخ ۱/N ──
+  salaryBase: integer('salaryBase'),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 
@@ -1400,6 +1422,12 @@ export const payroll_statements = pgTable('payroll_statements', {
   rankSnapshot: varchar('rankSnapshot', { length: 50 }),
   baseSnapshot: varchar('baseSnapshot', { length: 20 }),
   rateSnapshot: numeric('rateSnapshot', { precision: 12, scale: 0 }),
+  // ── مهاجرت 0087: اقلام تکمیلی + ابلاغیه ──
+  activityPay: integer('activityPay').notNull().default(0),
+  allowancePay: integer('allowancePay').notNull().default(0),
+  examPay: integer('examPay').notNull().default(0),
+  cashExtraPay: integer('cashExtraPay').notNull().default(0),
+  decreeId: integer('decreeId'),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => [
   // 🔒 وضعیت فیش فقط از ماشین حالت زنجیرهٔ تأیید (NULL قدیمی مجاز می‌ماند).

@@ -68,6 +68,9 @@ export type PayrollRow = {
 export type StaffPayroll = {
   staff: { id: number; name: string; staffCode: string | null; rank: string | null; degree: string | null; contractType: string | null };
   rate: number;
+  /** منشأ نرخ: جدول ثابت / اسنپ‌شات قرارداد / کسری از حکم (۱/N) */
+  rateSource: 'TABLE' | 'SNAPSHOT' | 'FRACTION';
+  rateDivisor: number;
   dutyUnits: number;
   taxRate: number;
   rows: PayrollRow[];
@@ -100,7 +103,11 @@ export type PayrollOverviewItem = StaffPayroll['staff'] & {
   gates: StaffPayroll['gates'];
 };
 
-type Coefs = { practical: number; msLevel: number; crowded: number };
+type Coefs = {
+  practical: number; msLevel: number; crowded: number;
+  /** پله‌بندی ردیف «کلاس جمعی» — NULL یعنی سراسری از تنظیمات (مهاجرت 0086) */
+  crowdedTier: { minStudents: number | null; stepSize: number | null; stepIncrement: number | null } | null;
+};
 
 type StaffMeta = { name: string; staffCode: string | null; rank: string | null; degree: string | null; userId: number };
 
@@ -124,6 +131,8 @@ type ContractRow = {
   id: number; staffId: number; contractType: string | null; baseDutyUnits: number; taxRate: number;
   // مهاجرت 0056 — اسنپ‌شات ترمی (NULL = ردیف قدیمی ← مقدار زنده خوانده می‌شود)
   rankSnapshot: string | null; baseSnapshot: string | null; rateSnapshot: number | null;
+  // مهاجرت 0087 — مبنای حکم برای حالت نرخ ۱/N (NULL = جدول ثابت)
+  salaryBase: number | null;
 };
 
 const ROLE_FA: Record<string, string> = {
@@ -145,14 +154,32 @@ async function loadCoefficients(): Promise<Coefs> {
     getSetting('PAYROLL_COEF_CROWDED'),
   ]);
   const rows = await db
-    .select({ ruleName: teaching_coefficients.ruleName, multiplier: teaching_coefficients.multiplier })
+    .select({
+      ruleName: teaching_coefficients.ruleName,
+      multiplier: teaching_coefficients.multiplier,
+      minStudents: teaching_coefficients.minStudents,
+      stepSize: teaching_coefficients.stepSize,
+      stepIncrement: teaching_coefficients.stepIncrement,
+    })
     .from(teaching_coefficients);
   const map = new Map(rows.map(r => [r.ruleName, Number(r.multiplier)]));
   const num = (name: string, fallback: number) => {
     const v = map.get(name);
     return Number.isFinite(v) && (v as number) > 0 ? (v as number) : fallback;
   };
-  return { practical: num(practicalName, 1), msLevel: num(msName, 1), crowded: num(crowdedName, 1) };
+  const crowdedRow = rows.find(r => r.ruleName === crowdedName);
+  return {
+    practical: num(practicalName, 1),
+    msLevel: num(msName, 1),
+    crowded: num(crowdedName, 1),
+    crowdedTier: crowdedRow
+      ? {
+          minStudents: crowdedRow.minStudents == null ? null : Number(crowdedRow.minStudents),
+          stepSize: crowdedRow.stepSize == null ? null : Number(crowdedRow.stepSize),
+          stepIncrement: crowdedRow.stepIncrement == null ? null : Number(crowdedRow.stepIncrement),
+        }
+      : null,
+  };
 }
 
 /** قوانین فرمول‌ساز (payroll_calculation_rules) — خاص‌ترین قاعده برنده است */
@@ -194,6 +221,21 @@ function matchRule(rules: PayRule[], offeringType: string, role: string, rank: s
   ) ?? null;
 }
 
+/** ضریب پلکانی کلاس پرجمعیت — آستانه T و گام S انتخابی؛ steps=‏⌊(n−T)/S⌋+۱ */
+function crowdedMult(enrolled: number, data: TermData): { mult: number; label: string } {
+  const tier = data.coefs.crowdedTier;
+  const T = tier?.minStudents != null && tier.minStudents > 0 ? tier.minStudents : data.crowdedThreshold;
+  const base = data.coefs.crowded;
+  if (enrolled <= T) return { mult: base, label: '' };
+  const S = Math.max(1, Math.round(tier?.stepSize ?? data.crowdedStep ?? 25));
+  const up = Number(tier?.stepIncrement ?? data.crowdedStepUp ?? 0);
+  const steps = Math.floor((enrolled - T) / S) + 1;
+  // up=۰ یعنی رفتار قدیمی: یک جهش ثابت بدون پله
+  if (!(up > 0) || steps <= 1) return { mult: base, label: `جمعی ×${base}` };
+  const mult = Math.round((base + (steps - 1) * up) * 100) / 100;
+  return { mult, label: `جمعی ×${mult} (${steps} پله)` };
+}
+
 // ─────────────────── بارگذاری دسته‌جمعی ترم (بدون N+1) ───────────────────
 
 type TermData = {
@@ -213,6 +255,12 @@ type TermData = {
   statementsByStaff: Map<number, StatementRow>;
   msPrefixes: string[];
   crowdedThreshold: number;
+  // ── پلکان پرجمعیت + سوییچ نرخ کسری (۱/N) ──
+  crowdedStep: number;
+  crowdedStepUp: number;
+  rateFraction: boolean;
+  rateDivisor: number;
+  rateSource: Map<number, 'TABLE' | 'SNAPSHOT' | 'FRACTION'>;
   plannedSessionsDefault: number;
 };
 
@@ -314,13 +362,18 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
       `),
     ]);
 
-  const [crowdedThreshold, plannedSessionsDefault, msPrefixSetting, effectiveDuties] = await Promise.all([
+  const [crowdedThreshold, crowdedStep, crowdedStepUp, rateFractionRaw, rateDivisor, plannedSessionsDefault, msPrefixSetting, effectiveDuties] = await Promise.all([
     getNumber('PAYROLL_CROWDED_THRESHOLD', 40),
+    getNumber('PAYROLL_CROWDED_STEP', 25),
+    getNumber('PAYROLL_CROWDED_STEP_UP', 0),
+    getSetting('PAYROLL_RATE_FRACTION'),
+    getNumber('PAYROLL_RATE_DIVISOR', 50),
     getNumber('PAYROLL_TERM_SESSIONS', 16),
     getSetting('PAYROLL_MS_COURSE_PREFIX'),
     // مهاجرت 0056 — موظفی نقش‌محور (یک کوئری برای کل ترم)
     loadTermEffectiveDuties(termId),
   ]);
+  const rateFraction = String(rateFractionRaw ?? '').toLowerCase() === 'true';
 
   // نرخ پایهٔ هر استاد: اسنپ‌شات قرارداد (ترمِ مهرشده) وگرنه بیشترین سال مؤثر ≤ سال جاری
   const year = Number(await getFiscalYear());
@@ -328,6 +381,7 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
     .select().from(teaching_rates)
     .orderBy(teaching_rates.effectiveYear);
   const rateByStaff = new Map<number, number>();
+  const rateSource = new Map<number, 'TABLE' | 'SNAPSHOT' | 'FRACTION'>();
   const staffInfo = new Map<number, StaffMeta>();
   for (const s of staffRows) {
     staffInfo.set(s.id, {
@@ -341,6 +395,7 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
       .filter(r => r.academicRank === s.academicRank && r.degree === s.degree && Number(r.effectiveYear ?? 0) <= year)
       .sort((a, b) => Number(b.effectiveYear ?? 0) - Number(a.effectiveYear ?? 0));
     rateByStaff.set(s.id, Number(applicable[0]?.baseRatePerUnit ?? 0));
+    rateSource.set(s.id, 'TABLE');
   }
 
   const contractsMap = new Map<number, ContractRow>();
@@ -357,6 +412,10 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
       rateSnapshot: (c as { rateSnapshot?: string | number | null }).rateSnapshot == null
         ? null
         : Number((c as { rateSnapshot?: string | number | null }).rateSnapshot),
+      // مهاجرت 0087 — NULL = ردیف قدیمی ← جدول ثابت
+      salaryBase: (c as { salaryBase?: string | number | null }).salaryBase == null
+        ? null
+        : Number((c as { salaryBase?: string | number | null }).salaryBase),
     });
   }
   // مهاجرت 0056 — اسنپ‌شاتِ حاضر بر مقدار زنده غلبه می‌کند (ابلاغ/فیش ترم قدیمی
@@ -366,7 +425,20 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
       const info = staffInfo.get(staffId);
       if (info) info.rank = c.rankSnapshot;
     }
-    if (c.rateSnapshot != null) rateByStaff.set(staffId, c.rateSnapshot);
+    if (c.rateSnapshot != null) {
+      rateByStaff.set(staffId, c.rateSnapshot);
+      rateSource.set(staffId, 'SNAPSHOT');
+    }
+  }
+  // ── سوییچ نرخ کسری از حکم (۱/N): مبنای حکم قرارداد ÷ مقسوم ──
+  // بالاترین اولویت است (انتخاب صریح ادمین)؛ استاد بدون مبنای حکم از جدول/اسنپ‌شات می‌خواند.
+  if (rateFraction && rateDivisor > 0) {
+    for (const [staffId, c] of contractsMap) {
+      if ((c.salaryBase ?? 0) > 0) {
+        rateByStaff.set(staffId, Math.round((c.salaryBase as number) / rateDivisor));
+        rateSource.set(staffId, 'FRACTION');
+      }
+    }
   }
 
   // کلاس‌ها به تفکیک استاد (اصلی + همکار)
@@ -461,6 +533,11 @@ export async function loadTermPayrollData(termId: number, universityId?: number)
     statementsByStaff,
     msPrefixes: msPrefixSetting.split(',').map(x => x.trim()).filter(Boolean),
     crowdedThreshold,
+    crowdedStep,
+    crowdedStepUp,
+    rateFraction,
+    rateDivisor,
+    rateSource,
     plannedSessionsDefault,
   };
 }
@@ -576,7 +653,8 @@ export function calcStaffPayrollFromData(data: TermData, staffId: number): Staff
     let multiplierInt = UNIT_SCALE; // 1.00 با مقیاس ۱۰۰
     if (o.practicalUnits > 0) { multiplierInt = Math.round(multiplierInt * data.coefs.practical); applied.push(`عملی ×${data.coefs.practical}`); }
     if (o.courseCode.split('/').some(c => data.msPrefixes.some(p => c.startsWith(p)))) { multiplierInt = Math.round(multiplierInt * data.coefs.msLevel); applied.push(`ارشد ×${data.coefs.msLevel}`); }
-    if (o.enrolledCount > data.crowdedThreshold) { multiplierInt = Math.round(multiplierInt * data.coefs.crowded); applied.push(`جمعی ×${data.coefs.crowded}`); }
+    const crowd = crowdedMult(o.enrolledCount, data);
+    if (crowd.label) { multiplierInt = Math.round(multiplierInt * crowd.mult); applied.push(crowd.label); }
     if (mergedMark) applied.push('کلاس ادغامی');
 
     const sharePct = Number.isFinite(o.sharePct) ? o.sharePct : 100;
@@ -615,6 +693,8 @@ export function calcStaffPayrollFromData(data: TermData, staffId: number): Staff
       rank: info.rank, degree: info.degree, contractType: contract?.contractType ?? null,
     },
     rate, dutyUnits, taxRate, rows,
+    rateSource: data.rateSource.get(staffId) ?? 'TABLE',
+    rateDivisor: data.rateDivisor,
     totalEquivalentUnits: intToUnits(totalEquivInt),
     totalEffectiveUnits: intToUnits(totalEffectiveInt),
     payableUnits: intToUnits(payableInt),
@@ -685,6 +765,7 @@ export async function computeTermPayroll(actorUserId?: number | null, termId?: n
     const deductions = calc.tax + calc.absenceDeductionRial;
     const detail = JSON.stringify({
       rows: calc.rows, rate: calc.rate, dutyUnits: calc.dutyUnits, taxRate: calc.taxRate,
+      rateSource: calc.rateSource, rateDivisor: calc.rateDivisor,
       absenceDeductionRial: calc.absenceDeductionRial, staff: calc.staff, gates: calc.gates,
       engine: 'payroll-engine.v2', scale: UNIT_SCALE,
     });

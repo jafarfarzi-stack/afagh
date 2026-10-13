@@ -218,6 +218,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/course-merge',
+    icon: '🔗',
+    title: 'ادغام دروس',
+    desc: 'ادغام دستی کلاس‌ها، جدا کردن و بازگشت به خودکار',
+    group: 'edu',
+    roles: ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'],
+    accent: 'from-cyan-950 to-sky-950 border-cyan-700/50',
+    iconBg: 'bg-cyan-700/80 border-cyan-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/regulation-check',
     icon: '🔍',
     title: 'بررسی کدهای وضعیت نمره',
