@@ -7,7 +7,7 @@ import {
 } from '@/db/schema';
 import { computeTermAdjustments, toNum, type TermCharge } from '../finance-rules';
 import { DEBT_LEDGER_TYPES, CREDIT_LEDGER_TYPES } from '../ledger-balance';
-import { toEnDigits } from '@/lib/persian-search';
+import { escapeLikeChars, toEnDigits } from '@/lib/persian-search';
 
 const DEBT_SET: ReadonlySet<string> = new Set(DEBT_LEDGER_TYPES);
 const CREDIT_SET: ReadonlySet<string> = new Set(CREDIT_LEDGER_TYPES);
@@ -63,12 +63,13 @@ export async function listFinanceStudents(
 
   if (filters.search && filters.search.trim()) {
     // کدهای ذخیره‌شده انگلیسی‌اند؛ ارقام فارسی ورودی نرمال می‌شود تا کدهای SA/SS هم پیدا شوند.
-    const needle = `%${toEnDigits(filters.search.trim())}%`;
+    // 🔒 فرار wildcard ورودی کاربر (با ESCAPE '\')
+    const needle = `%${escapeLikeChars(toEnDigits(filters.search.trim()))}%`;
     const searchCond = or(
-      sql`${users.firstName} ILIKE ${needle}`,
-      sql`${users.lastName} ILIKE ${needle}`,
-      sql`${users.nationalCode} ILIKE ${needle}`,
-      sql`${students.studentCode} ILIKE ${needle}`
+      sql`${users.firstName} ILIKE ${needle} ESCAPE '\\'`,
+      sql`${users.lastName} ILIKE ${needle} ESCAPE '\\'`,
+      sql`${users.nationalCode} ILIKE ${needle} ESCAPE '\\'`,
+      sql`${students.studentCode} ILIKE ${needle} ESCAPE '\\'`
     );
     if (searchCond) where.push(searchCond);
   }

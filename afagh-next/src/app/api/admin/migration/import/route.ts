@@ -95,6 +95,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ...report, batchId, sheets: tables.map(t => t.sheet) }, { headers: { 'x-request-id': rid } });
   } catch (e) {
     log.error('import_failed', { kind, sourceCode, ms: Date.now() - t0, err: e });
-    return NextResponse.json({ error: (e as Error).message || 'خطا در خواندن فایل' }, { status: 400 });
+    // 🔒 پیام خام به کلاینت برنمی‌گردد — فقط لاگ سرور.
+    console.error('[api] migration/import failed:', e instanceof Error ? e.message : e);
+    return NextResponse.json({ error: 'خطا در خواندن فایل' }, { status: 400 });
   }
 }

@@ -28,7 +28,9 @@ export async function GET() {
     .from(majors)
     .innerJoin(degree_level_configs, eq(degree_level_configs.id, majors.degreeLevelId))
     .where(and(eq(majors.isActive, 1), uw))
-    .orderBy(majors.name);
+    .orderBy(majors.name)
+    // سقف سپر فرسودگی: رشتهٔ فعال یک دانشگاه چندصد ردیف است.
+    .limit(2000);
 
   return Response.json(
     rows.map(r => ({

@@ -89,6 +89,8 @@ export async function GET(req: NextRequest) {
     res.headers.set('x-has-more', hasMore ? '1' : '0');
     return res;
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    // 🔒 پیام خام (SQL/فایل‌سیستم) به کلاینت برنمی‌گردد — فقط لاگ سرور.
+    console.error('[api] saham/students failed:', e instanceof Error ? e.message : e);
+    return NextResponse.json({ error: 'خطای داخلی سرور؛ دوباره تلاش کنید.' }, { status: 500 });
   }
 }

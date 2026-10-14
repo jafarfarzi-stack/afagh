@@ -33,6 +33,8 @@ export async function GET(req: NextRequest) {
     .from(curriculum_courses)
     .innerJoin(courses, eq(courses.id, curriculum_courses.courseId))
     .where(eq(curriculum_courses.curriculumVersionId, versionId))
-    .orderBy(asc(courses.code));
+    .orderBy(asc(courses.code))
+    // سقف سپر فرسودگی: دروس یک نسخه چندصد ردیف است؛ ۵۰۰۰ هرگز رفتار عادی را عوض نمی‌کند.
+    .limit(5000);
   return NextResponse.json({ courses: rows });
 }

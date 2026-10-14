@@ -33,6 +33,8 @@ export async function POST(req: NextRequest) {
     const report = await commit(auth.user.id, entity, [picked.table], file.name, sourceCode, rewriteCodes);
     return NextResponse.json({ ...report, sheet: picked.table.sheet, sheets: tables.map(t => t.sheet) });
   } catch (e) {
-    return NextResponse.json({ error: 'خطای مهاجرت: ' + (e as Error).message }, { status: 500 });
+    // 🔒 پیام خام به کلاینت برنمی‌گردد — فقط لاگ سرور.
+    console.error('[api] migration/commit failed:', e instanceof Error ? e.message : e);
+    return NextResponse.json({ error: 'خطای مهاجرت؛ جزئیات در لاگ سرور ثبت شد.' }, { status: 500 });
   }
 }

@@ -479,7 +479,11 @@ async function ensureAccountRoles(userId: number): Promise<void> {
   }
 }
 
-/** تغییر رمز عبور کاربر توسط مدیر (حداقل ۴ رقم/حرف) — فقط ADMIN */
+/**
+ * تغییر رمز عبور کاربر توسط مدیر — فقط ADMIN.
+ * 🔒 کف/سقف طول دقیقاً با استاندارد سامانه (changePassword در auth.ts: ۱۰ تا ۱۲۸)
+ * یکی است؛ پیش از این ۴ تا ۶۴ بود و رمز «abcd» پذیرفته می‌شد.
+ */
 export async function resetUserPasswordAction(
   userId: number, newPassword: string,
 ): Promise<{ ok: boolean; error?: string }> {
@@ -490,7 +494,7 @@ export async function resetUserPasswordAction(
   }
   const pw = String(newPassword || '').trim();
   if (!userId) return { ok: false, error: 'کاربر نامعتبر است.' };
-  if (pw.length < 4 || pw.length > 64) return { ok: false, error: 'رمز باید بین ۴ تا ۶۴ کاراکتر باشد.' };
+  if (pw.length < 10 || pw.length > 128) return { ok: false, error: 'رمز باید بین ۱۰ تا ۱۲۸ کاراکتر باشد.' };
   try {
     const passwordHash = await hashPassword(pw);
     // 🔒 ریست رمز = ابطال نشست‌ها در همان تراکنش (الگوی setUserActiveAction)
@@ -574,7 +578,8 @@ export async function bulkResetPasswordsAction(
     return { ok: false, error: 'فقط مدیر سیستم (ADMIN) اجازه این عملیات را دارد.' };
   }
   const pw = String(newPassword || '').trim();
-  if (pw.length < 4 || pw.length > 64) return { ok: false, error: 'رمز باید بین ۴ تا ۶۴ کاراکتر باشد.' };
+  // 🔒 همان استاندارد سامانه (۱۰ تا ۱۲۸) — رمز مشترک گروهی هم نباید ضعیف باشد.
+  if (pw.length < 10 || pw.length > 128) return { ok: false, error: 'رمز باید بین ۱۰ تا ۱۲۸ کاراکتر باشد.' };
   const scopeWhere = scope === 'professor'
     ? `EXISTS (SELECT 1 FROM staff st WHERE st."userId" = users.id)`
     : `EXISTS (SELECT 1 FROM students st WHERE st."userId" = users.id)`;

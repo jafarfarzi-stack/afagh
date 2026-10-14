@@ -29,6 +29,8 @@ export async function POST(req: NextRequest) {
     const report = await importPhotoArchive(buf, file.name, scope, commit);
     return NextResponse.json(report);
   } catch (e) {
-    return NextResponse.json({ error: 'خطای واردسازی عکس‌ها: ' + (e as Error).message }, { status: 500 });
+    // 🔒 پیام خام به کلاینت برنمی‌گردد — فقط لاگ سرور.
+    console.error('[api] migration/photos failed:', e instanceof Error ? e.message : e);
+    return NextResponse.json({ error: 'خطای واردسازی عکس‌ها؛ جزئیات در لاگ سرور ثبت شد.' }, { status: 500 });
   }
 }

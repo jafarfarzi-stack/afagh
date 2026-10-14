@@ -36,6 +36,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ fileName: file.name, ...result }, { headers: { 'x-request-id': rid } });
   } catch (e) {
     log.error('inspect_failed', { kind, err: e });
-    return NextResponse.json({ error: (e as Error).message || 'خطا در خواندن فایل' }, { status: 400 });
+    // 🔒 پیام خام به کلاینت برنمی‌گردد — فقط لاگ سرور.
+    console.error('[api] migration/inspect failed:', e instanceof Error ? e.message : e);
+    return NextResponse.json({ error: 'خطا در خواندن فایل' }, { status: 400 });
   }
 }

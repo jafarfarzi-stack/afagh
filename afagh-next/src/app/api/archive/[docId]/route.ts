@@ -127,6 +127,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ doc
       },
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'خطای سرور' }, { status: 500 });
+    // 🔒 پیام خام (مسیر فایل/جزئیات S3) به کلاینت برنمی‌گردد — فقط لاگ سرور.
+    console.error('[api] archive/[docId] failed:', err?.message ?? err);
+    return NextResponse.json({ error: 'خطای سرور' }, { status: 500 });
   }
 }

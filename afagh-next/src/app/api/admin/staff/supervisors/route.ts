@@ -52,7 +52,9 @@ export async function GET() {
     .innerJoin(users, eq(users.id, staff.userId))
     .leftJoin(departments, eq(departments.id, staff.departmentId))
     .where(and(eq(staff.isActive, 1), isProfessor, uw))
-    .orderBy(users.lastName, users.firstName);
+    .orderBy(users.lastName, users.firstName)
+    // سقف سپر فرسودگی: استاد فعال یک دانشگاه چندصد نفر است.
+    .limit(2000);
 
   return Response.json(
     rows.map(r => {

@@ -23,7 +23,9 @@ export async function GET(req: NextRequest) {
     const ov = await getScopedOverview();
     return NextResponse.json({ ok: true, term: ov.term, list: ov.list, totals: ov.totals, scoped: (ov as { scoped?: boolean }).scoped ?? false });
   } catch (err) {
-    return NextResponse.json({ ok: false, error: (err as Error)?.message || 'خطای ناشناخته' }, { status: 401 });
+    // 🔒 پیام خام به کلاینت برنمی‌گردد — فقط لاگ سرور.
+    console.error('[api] payroll/approvals GET failed:', err instanceof Error ? err.message : err);
+    return NextResponse.json({ ok: false, error: 'خطای ناشناخته' }, { status: 401 });
   }
 }
 
@@ -52,6 +54,8 @@ export async function POST(req: NextRequest) {
       : await rejectStatement(statementId, note ?? '');
     return NextResponse.json(r, { status: r.ok ? 200 : 400 });
   } catch (err) {
-    return NextResponse.json({ ok: false, error: (err as Error)?.message || 'خطای ناشناخته' }, { status: 401 });
+    // 🔒 پیام خام به کلاینت برنمی‌گردد — فقط لاگ سرور.
+    console.error('[api] payroll/approvals POST failed:', err instanceof Error ? err.message : err);
+    return NextResponse.json({ ok: false, error: 'خطای ناشناخته' }, { status: 401 });
   }
 }

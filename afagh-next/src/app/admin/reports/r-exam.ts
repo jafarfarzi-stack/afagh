@@ -2,6 +2,7 @@ import type { ReportFilters, ReportResult } from './report-helpers';
 import { paged, studentWhere, joinAnd } from './report-helpers';
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
+import { escapeLikeChars } from '@/lib/persian-search';
 import { requireRole } from '@/lib/auth';
 
 export const CARDS = [
@@ -151,8 +152,10 @@ export async function run(kind: string, f: F): Promise<ReportResult | null> {
 
     // ── ۴. ثبت نمره استادان: ارائه‌ها/نهایی‌شده‌ها/مانده‌ها به تفکیک استاد ──
     case 'grade-entry-report': {
-      const qCond = f.q
-        ? sql`(st."staffCode" ILIKE ${`%${String(f.q)}%`} OR pu."firstName" ILIKE ${`%${String(f.q)}%`} OR pu."lastName" ILIKE ${`%${String(f.q)}%`})`
+      // 🔒 فرار wildcard ورودی کاربر (با ESCAPE '\')
+      const examQ = f.q ? `%${escapeLikeChars(String(f.q))}%` : null;
+      const qCond = examQ
+        ? sql`(st."staffCode" ILIKE ${examQ} ESCAPE '\\' OR pu."firstName" ILIKE ${examQ} ESCAPE '\\' OR pu."lastName" ILIKE ${examQ} ESCAPE '\\')`
         : sql`1=1`;
       const from = sql`FROM offering_professors op
         JOIN course_offerings o ON o.id = op."offeringId"

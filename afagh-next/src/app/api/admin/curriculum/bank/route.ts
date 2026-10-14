@@ -4,7 +4,8 @@ import { assertCsrf } from '@/lib/security';
 import { db } from '@/db';
 import { z } from 'zod';
 import { courses, departments, degree_level_configs, equivalence_clusters } from '@/db/schema';
-import { eq, ilike, or, and, asc, sql, count, isNull } from 'drizzle-orm';
+import { eq, or, and, asc, sql, count, isNull } from 'drizzle-orm';
+import { escapeLikeChars } from '@/lib/persian-search';
 import { revalidatePath } from 'next/cache';
 import { getCurrentUniversity } from '@/lib/university-scope';
 
@@ -94,8 +95,13 @@ export async function GET(req: NextRequest) {
   const uni = await getCurrentUniversity().catch(() => null);
   const uniScope = uni ? or(eq(courses.universityId, uni.id), isNull(courses.universityId)) : undefined;
 
+  // 🔒 فرار wildcard ورودی کاربر (با ESCAPE '\')
+  const like = `%${escapeLikeChars(q)}%`;
   const search = q
-    ? or(ilike(courses.code, `%${q}%`), ilike(courses.title, `%${q}%`))
+    ? or(
+        sql`${courses.code} ILIKE ${like} ESCAPE '\\'`,
+        sql`${courses.title} ILIKE ${like} ESCAPE '\\'`,
+      )
     : undefined;
   const where = and(search, uniScope);
 

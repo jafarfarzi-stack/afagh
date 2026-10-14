@@ -1,10 +1,10 @@
-import { and, count, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { degree_level_configs, departments, educational_regulations, faculties, legacy_code_maps, majors, roles, staff, students, universities, user_roles, users } from '@/db/schema';
 import type { RegulationPick } from './types';
 import { currentExpertFilters, scopedMajorIds } from '@/lib/expert-scope';
 import { getCurrentUniversity } from '@/lib/university-scope';
-import { normalizeFa, normCol, toEnDigits } from '@/lib/persian-search';
+import { escapeLikeChars, normalizeFa, normCol, toEnDigits } from '@/lib/persian-search';
 import { getSetting } from '@/lib/settings';
 import StudentsManagerClient from './StudentsManagerClient';
 
@@ -59,24 +59,25 @@ export default async function AdminStudentsPage({
   if (q) {
     // شناسه‌ها (کد ملی/دانشجویی) در DB انگلیسی‌اند؛ ارقام فارسی ورودی ادمین
     // نرمال می‌شود تا «SA۰۱۲۵…» هم ردیف «SA0125…» را پیدا کند. حروف (SA/…) دست‌نخورده می‌مانند.
-    const like = `%${toEnDigits(q)}%`;
-    const faLike = `%${normalizeFa(q)}%`;
+    // 🔒 ٪ _ \ ورودی با escapeLikeChars خنثی می‌شوند (با ESCAPE '\') تا wildcard تزریقی معنا نگیرد.
+    const like = `%${escapeLikeChars(toEnDigits(q))}%`;
+    const faLike = `%${escapeLikeChars(normalizeFa(q))}%`;
     conds.push(
       or(
-        ilike(students.studentCode, like),
-        ilike(users.nationalCode, like),
-        ilike(normCol(users.firstName), faLike),
-        ilike(normCol(users.lastName), faLike),
+        sql`${students.studentCode} ILIKE ${like} ESCAPE '\\'`,
+        sql`${users.nationalCode} ILIKE ${like} ESCAPE '\\'`,
+        sql`${normCol(users.firstName)} ILIKE ${faLike} ESCAPE '\\'`,
+        sql`${normCol(users.lastName)} ILIKE ${faLike} ESCAPE '\\'`,
       )!,
     );
   }
-  if (fCode) conds.push(ilike(students.studentCode, `%${fCode}%`));
+  if (fCode) conds.push(sql`${students.studentCode} ILIKE ${`%${escapeLikeChars(fCode)}%`} ESCAPE '\\'`);
   if (fName) {
-    const faLike = `%${normalizeFa(fName)}%`;
-    conds.push(or(ilike(normCol(users.firstName), faLike), ilike(normCol(users.lastName), faLike))!);
+    const faLike = `%${escapeLikeChars(normalizeFa(fName))}%`;
+    conds.push(or(sql`${normCol(users.firstName)} ILIKE ${faLike} ESCAPE '\\'`, sql`${normCol(users.lastName)} ILIKE ${faLike} ESCAPE '\\'`)!);
   }
-  if (fNc) conds.push(ilike(users.nationalCode, `%${toEnDigits(fNc)}%`));
-  if (fMajor) conds.push(ilike(normCol(majors.name), `%${normalizeFa(fMajor)}%`));
+  if (fNc) conds.push(sql`${users.nationalCode} ILIKE ${`%${escapeLikeChars(toEnDigits(fNc))}%`} ESCAPE '\\'`);
+  if (fMajor) conds.push(sql`${normCol(majors.name)} ILIKE ${`%${escapeLikeChars(normalizeFa(fMajor))}%`} ESCAPE '\\'`);
   if (/^\d{4}$/.test(fYear)) conds.push(eq(students.entryYear, Number(fYear)));
   const where = conds.length ? and(...conds) : undefined;
 

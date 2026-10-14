@@ -5,7 +5,8 @@ import {
   curriculum_courses, curriculum_versions, majors,
   courses, degree_level_configs
 } from '@/db/schema';
-import { eq, ilike, or, asc, sql, count, and, isNull } from 'drizzle-orm';
+import { eq, or, asc, sql, count, and, isNull } from 'drizzle-orm';
+import { escapeLikeChars } from '@/lib/persian-search';
 import { getCurrentUniversity } from '@/lib/university-scope';
 
 const ALLOWED = ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'];
@@ -31,10 +32,12 @@ export async function GET(req: NextRequest) {
     conditions.push(or(eq(majors.universityId, uni.id), isNull(majors.universityId)));
   }
   if (q) {
+    // 🔒 فرار wildcard ورودی کاربر (با ESCAPE '\')
+    const like = `%${escapeLikeChars(q)}%`;
     conditions.push(or(
-      ilike(courses.code, `%${q}%`),
-      ilike(courses.title, `%${q}%`),
-      ilike(majors.name, `%${q}%`),
+      sql`${courses.code} ILIKE ${like} ESCAPE '\\'`,
+      sql`${courses.title} ILIKE ${like} ESCAPE '\\'`,
+      sql`${majors.name} ILIKE ${like} ESCAPE '\\'`,
     ));
   }
 

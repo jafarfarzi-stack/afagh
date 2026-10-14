@@ -76,7 +76,9 @@ export async function GET(req: NextRequest) {
     try {
       issued = await issueEnrollConfirmToken(stu.userId, termId);
     } catch (e) {
-      return NextResponse.json({ error: (e as Error)?.message || 'issue_failed' }, { status: 500 });
+      // 🔒 پیام خام به کلاینت برنمی‌گردد — فقط لاگ سرور.
+      console.error('[api] enrollment-confirmation issue failed:', e instanceof Error ? e.message : e);
+      return NextResponse.json({ error: 'issue_failed' }, { status: 500 });
     }
 
     const verifyUrl = `${await getPublicBaseUrl()}/verify-enrollment/${encodeURIComponent(issued.token)}`;

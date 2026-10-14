@@ -51,7 +51,9 @@ export async function GET() {
       ));
     return NextResponse.json({ ok: true, rules: rows });
   } catch (err) {
-    return NextResponse.json({ ok: false, error: (err as Error)?.message || 'خطای ناشناخته' }, { status: 401 });
+    // 🔒 پیام خام به کلاینت برنمی‌گردد — فقط لاگ سرور.
+    console.error('[api] payroll/calculation-rules GET failed:', err instanceof Error ? err.message : err);
+    return NextResponse.json({ ok: false, error: 'خطای ناشناخته' }, { status: 401 });
   }
 }
 
@@ -93,6 +95,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    return NextResponse.json({ ok: false, error: (err as Error)?.message || 'خطای ناشناخته' }, { status: 401 });
+    // 🔒 پیام خام به کلاینت برنمی‌گردد — فقط لاگ سرور.
+    console.error('[api] payroll/calculation-rules POST failed:', err instanceof Error ? err.message : err);
+    return NextResponse.json({ ok: false, error: 'خطای ناشناخته' }, { status: 401 });
   }
 }

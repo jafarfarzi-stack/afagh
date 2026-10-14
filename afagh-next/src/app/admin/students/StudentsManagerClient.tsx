@@ -2450,12 +2450,12 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                 </div>
               ) : bulkMode === 'password' ? (
                 <div>
-                  <label className="text-slate-600 font-bold block mb-1">رمز جدید (۴ تا ۶۴ کاراکتر):</label>
+                  <label className="text-slate-600 font-bold block mb-1">رمز جدید (۱۰ تا ۱۲۸ کاراکتر):</label>
                   <input
                     type="text"
                     required
-                    minLength={4}
-                    maxLength={64}
+                    minLength={10}
+                    maxLength={128}
                     dir="ltr"
                     placeholder="رمز جدید همهٔ این گروه"
                     value={bulkPass}
@@ -2616,12 +2616,12 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
               <button type="button" onClick={() => setPwModalFor(null)} className="text-slate-300 hover:text-white text-lg leading-none">✕</button>
             </div>
             <form onSubmit={handleResetPassword} className="p-5 space-y-3 text-xs">
-              <p className="text-slate-600">رمز جدید را وارد کنید (۴ تا ۶۴ کاراکتر). کاربر در اولین ورود ملزم به تغییر رمز می‌شود.</p>
+              <p className="text-slate-600">رمز جدید را وارد کنید (۱۰ تا ۱۲۸ کاراکتر). کاربر در اولین ورود ملزم به تغییر رمز می‌شود.</p>
               <input
                 type="text"
                 required
-                minLength={4}
-                maxLength={64}
+                minLength={10}
+                maxLength={128}
                 dir="ltr"
                 placeholder="رمز جدید"
                 value={pwInput}

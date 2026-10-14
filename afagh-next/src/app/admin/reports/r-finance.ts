@@ -1,6 +1,7 @@
 import type { ReportFilters, ReportResult } from './report-helpers';
 import { paged, studentWhere } from './report-helpers';
 import { sql } from 'drizzle-orm';
+import { escapeLikeChars } from '@/lib/persian-search';
 import { requireRole } from '@/lib/auth';
 
 const ROLES = ['ADMIN', 'EDU_EXPERT', 'FINANCE_EXPERT', 'FINANCE'];
@@ -33,8 +34,9 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     if (f.entryYear) conds.push(sql`(tr."entryYearFrom" IS NULL OR tr."entryYearFrom" <= ${f.entryYear}) AND (tr."entryYearTo" IS NULL OR tr."entryYearTo" >= ${f.entryYear})`);
     if (f.term) conds.push(sql`(tr."currentTermId" IS NULL OR at."termCode" = ${f.term})`);
     if (f.q) {
-      const like = `%${f.q}%`;
-      conds.push(sql`(tr.code ILIKE ${like} OR tr.title ILIKE ${like})`);
+      // 🔒 فرار wildcard ورودی کاربر (با ESCAPE '\')
+      const like = `%${escapeLikeChars(String(f.q))}%`;
+      conds.push(sql`(tr.code ILIKE ${like} ESCAPE '\\' OR tr.title ILIKE ${like} ESCAPE '\\')`);
     }
     const cols = sql`tr.code AS code, tr.title AS title, d.title AS degree, m.name AS major,
       tr."entryYearFrom" AS yfrom, tr."entryYearTo" AS yto, tr."termType" AS termtype,

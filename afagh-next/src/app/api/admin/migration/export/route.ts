@@ -36,6 +36,8 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.json({ error: 'نوع خروجی نامعتبر' }, { status: 400 });
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    // 🔒 پیام خام به کلاینت برنمی‌گردد — فقط لاگ سرور.
+    console.error('[api] migration/export failed:', e instanceof Error ? e.message : e);
+    return NextResponse.json({ error: 'خطای داخلی سرور؛ دوباره تلاش کنید.' }, { status: 500 });
   }
 }

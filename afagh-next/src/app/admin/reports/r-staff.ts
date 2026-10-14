@@ -2,6 +2,7 @@ import type { ReportFilters, ReportResult } from './report-helpers';
 import { paged } from './report-helpers';
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
+import { escapeLikeChars } from '@/lib/persian-search';
 import { requireRole } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 
@@ -42,8 +43,9 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       if (f.departmentId) conds.push(sql`st."departmentId" = ${f.departmentId}`);
       if (f.facultyId) conds.push(sql`st."facultyId" = ${f.facultyId}`);
       if (f.q) {
-        const like = `%${f.q}%`;
-        conds.push(sql`(st."staffCode" ILIKE ${like} OR u."firstName" ILIKE ${like} OR u."lastName" ILIKE ${like})`);
+        // 🔒 فرار wildcard ورودی کاربر (با ESCAPE '\')
+        const like = `%${escapeLikeChars(String(f.q))}%`;
+        conds.push(sql`(st."staffCode" ILIKE ${like} ESCAPE '\\' OR u."firstName" ILIKE ${like} ESCAPE '\\' OR u."lastName" ILIKE ${like} ESCAPE '\\')`);
       }
       const cols = sql`st."staffCode" AS code, u."firstName" || ' ' || u."lastName" AS name, st."academicRank" AS rank, dep.name AS department, st."staffType" AS type, ${offCount}`;
       const r = await paged(

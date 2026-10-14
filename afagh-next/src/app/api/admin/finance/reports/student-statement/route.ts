@@ -22,6 +22,7 @@ const ROLES: string[] = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'];
  * هر سطر از کارنامه می‌آید.
  */
 export async function GET(request: Request) {
+  try {
   await requireRole(ROLES);
   const uni = await getCurrentUniversity();
   if (!uni) return Response.json({ error: 'دانشگاه فعال یافت نشد' }, { status: 400 });
@@ -38,12 +39,13 @@ export async function GET(request: Request) {
   const fin = await getStudentFinance(studentId, { universityId: uni.id });
   if (!fin) return Response.json({ error: 'دانشجو یافت نشد' }, { status: 404 });
 
-  // کل دفتر (همهٔ ترم‌ها) — برای تفکیک نمایشی و ماندهٔ کانونیِ سبکِ گیت
+  // کل دفتر (همهٔ ترم‌ها) — برای تفکیک نمایشی و ماندهٔ کانونیِ سبکِ گیت.
+  // سقف ۵۰۰۰ ردیف: دفتر واقعی یک دانشجو چندصد ردیف است؛ سقف فقط سپر فرسودگی است.
   const ledgerRows = await db.select({
     termId: student_ledger.termId,
     transactionType: student_ledger.transactionType,
     amount: student_ledger.amount,
-  }).from(student_ledger).where(eq(student_ledger.studentId, studentId));
+  }).from(student_ledger).where(eq(student_ledger.studentId, studentId)).limit(5000);
 
   // ماندهٔ کانونی روی کل دفتر (مثبت = بدهی) — همان ریاضیِ گیت انتخاب واحد
   const balance = ledgerBalance(ledgerRows);
@@ -98,4 +100,11 @@ export async function GET(request: Request) {
     balance,
     student: { name: fin.student.fullName, code: fin.student.studentCode },
   });
+  } catch (e) {
+    // 🔒 پیام خام به کلاینت برنمی‌گردد — فقط لاگ سرور. (ریدایرکت/404 نکست را دست نمی‌زنیم.)
+    const msg = e instanceof Error ? e.message : '';
+    if (msg === 'NEXT_REDIRECT' || msg === 'NEXT_NOT_FOUND') throw e;
+    console.error('[api] finance/reports/student-statement failed:', msg || e);
+    return Response.json({ error: 'خطای داخلی سرور' }, { status: 500 });
+  }
 }

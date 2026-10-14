@@ -78,7 +78,9 @@ export async function PUT(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    return NextResponse.json({ ok: false, error: (err as Error)?.message || 'خطای ناشناخته' }, { status: 401 });
+    // 🔒 پیام خام به کلاینت برنمی‌گردد — فقط لاگ سرور.
+    console.error('[api] payroll/calculation-rules/[id] PATCH failed:', err instanceof Error ? err.message : err);
+    return NextResponse.json({ ok: false, error: 'خطای ناشناخته' }, { status: 401 });
   }
 }
 
@@ -106,6 +108,8 @@ export async function DELETE(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    return NextResponse.json({ ok: false, error: (err as Error)?.message || 'خطای ناشناخته' }, { status: 401 });
+    // 🔒 پیام خام به کلاینت برنمی‌گردد — فقط لاگ سرور.
+    console.error('[api] payroll/calculation-rules/[id] DELETE failed:', err instanceof Error ? err.message : err);
+    return NextResponse.json({ ok: false, error: 'خطای ناشناخته' }, { status: 401 });
   }
 }
