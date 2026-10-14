@@ -323,6 +323,10 @@ export async function computeRuleCoverage(termId: number, universityId?: number)
   const rows: CoverageRow[] = [];
   for (const [staffId, list] of data.offeringsByStaff) {
     const info = data.staffInfo.get(staffId);
+    if (!info) {
+      log.warn('coverage_skip_orphan_staff', { staffId, termId });
+      continue;
+    }
     const collapsed = collapseMergedOfferings(list, id => data.slotsByOffering.get(id) ?? null);
     for (const o of collapsed) {
       const memberIds = o.mergedMemberIds ?? [o.offeringId];
@@ -1080,7 +1084,18 @@ export async function getOverview(termId?: number, universityId?: number): Promi
   const list: PayrollOverviewItem[] = [];
   for (const staffId of Array.from(data.offeringsByStaff.keys())) {
     if (!data.contracts.has(staffId)) continue;   // بدون قرارداد → در فهرست پرداخت نیست
-    const calc = calcStaffPayrollFromData(data, staffId);
+    if (!data.staffInfo.get(staffId)) {
+      // استاد یتیم (کاربر حذف‌شده): یک ردیف خراب نباید کل نمای ترم را بخواباند
+      log.warn('overview_skip_orphan_staff', { staffId, termId: term.id });
+      continue;
+    }
+    let calc;
+    try {
+      calc = calcStaffPayrollFromData(data, staffId);
+    } catch (e) {
+      log.warn('overview_skip_failed_staff', { staffId, termId: term.id, err: (e as Error).message });
+      continue;
+    }
     const ps = data.statementsByStaff.get(staffId);
     const midtermPaid = toRial(Number(ps?.midtermPaidAmount ?? 0));
     const finalPaid = toRial(Number(ps?.finalPaidAmount ?? 0));
