@@ -191,9 +191,17 @@ try {
   console.log(`  ✓ دانشکده/گروه/رشته (${STRUCTURE.length} دانشکده)`);
 
   // ═══ M-2: تضمین کلیدهای محرمانهٔ پویش‌های زمان‌بندی‌شده ═══
-  // بدون این، scheduler هیچ پویشی را فراخوانی نمی‌کرد (خاموشی بی‌صدا):
-  //   FINANCE_CRON_SECRET → یادآوری چک
-  //   GRAD_CRON_SECRET    → فارغ‌التحصیلی + BI + گردش کار
+  // بدون این، scheduler هیچ پویشی را فراخوانی نمی‌کرد (خاموشی بی‌صدا).
+  // هر مسیر /api/cron/* کلید اختصاصی خودش را می‌خواند (fail-closed، بدون fallback):
+  //   FINANCE_CRON_SECRET        → یادآوری چک
+  //   GRADUATION_SCAN_CRON_SECRET → پویش فارغ‌التحصیلی
+  //   WORKFLOW_EVENTS_CRON_SECRET → رویدادهای گردش کار
+  //   BI_CRON_SECRET             → تازه‌سازی BI
+  //   GREETINGS_CRON_SECRET      → تبریک تولد + شروع ترم
+  //   MSG_LINK_CRON_SECRET       → پاکسازی لینک اتصال پیام‌رسان
+  //   SCHED_WARN_CRON_SECRET     → ارسال هشدارهای زمان‌بندی‌شده
+  // کلید قدیمیِ GRAD_CRON_SECRET (نسل اول: فارغ‌التحصیلی + BI + گردش کار) دیگر
+  // هیچ مسیری را باز نمی‌کند؛ فقط برای مهاجرت ارزش خواندن دارد (پایین).
   // رفتار:
   //   • DB منبع حقیقت برای اپ است (getSetting اول DB را می‌خواند)؛
   //   • scheduler از فایل secrets.env در volume مشترک می‌خواند؛
@@ -202,31 +210,40 @@ try {
   //     یک کلید تصادفی ۴۸-کاراکتری تولید و در DB + فایل ثبت می‌شود.
   try {
     const CRON_SECRETS = [
-      { key: 'FINANCE_CRON_SECRET', env: process.env.FINANCE_CRON_SECRET }, // یادآوری چک
-      { key: 'GRAD_CRON_SECRET', env: process.env.GRAD_CRON_SECRET },       // فارغ‌التحصیلی + گردش کار
-      { key: 'BI_CRON_SECRET', env: process.env.BI_CRON_SECRET },           // تازه‌سازی BI (M-3: مستقل از GRAD)
-      { key: 'GREETINGS_CRON_SECRET', env: process.env.GREETINGS_CRON_SECRET }, // تبریک تولد + شروع ترم
+      { key: 'FINANCE_CRON_SECRET', env: process.env.FINANCE_CRON_SECRET },                    // یادآوری چک
+      { key: 'GRADUATION_SCAN_CRON_SECRET', env: process.env.GRADUATION_SCAN_CRON_SECRET, legacy: true }, // فارغ‌التحصیلی (مستقل)
+      { key: 'WORKFLOW_EVENTS_CRON_SECRET', env: process.env.WORKFLOW_EVENTS_CRON_SECRET, legacy: true }, // رویدادهای گردش کار (مستقل)
+      { key: 'BI_CRON_SECRET', env: process.env.BI_CRON_SECRET, legacy: true },                 // تازه‌سازی BI (مستقل)
+      { key: 'GREETINGS_CRON_SECRET', env: process.env.GREETINGS_CRON_SECRET },                 // تبریک تولد + شروع ترم
+      { key: 'MSG_LINK_CRON_SECRET', env: process.env.MSG_LINK_CRON_SECRET },                   // پاکسازی لینک پیام‌رسان
+      { key: 'SCHED_WARN_CRON_SECRET', env: process.env.SCHED_WARN_CRON_SECRET },               // هشدارهای زمان‌بندی‌شده
     ];
+    // مهاجرت: نصب‌های پیشین فقط GRAD_CRON_SECRET دارند. اگر کلید اختصاصیِ
+    // همان پویش هنوز ساخته نشده، همان مقدارِ قدیمی را به ارث می‌برد تا بعد از
+    // ارتقا scheduler با کلیدی حرف بزند که اپ می‌پذیرد (وگرنه ۴۰۱ تا ابد).
+    const [legacyRow] = await q(`SELECT value FROM system_settings WHERE key = $1`, ['GRAD_CRON_SECRET']);
+    const legacyGrad = (legacyRow?.value || process.env.GRAD_CRON_SECRET || '').trim();
+
     const secretsDir = '/secrets';
     const secretsFile = path.join(secretsDir, 'cron.env');
     const writeable = fs.existsSync(secretsDir) ? secretsFile : null;
 
     const outLines = [];
-    let prevValue = ''; // برای همارز اولیهٔ BI (سازگاری با نصب‌های قدیمی)
-    for (const { key, env } of CRON_SECRETS) {
+    for (const { key, env, legacy } of CRON_SECRETS) {
       const [row] = await q(`SELECT value FROM system_settings WHERE key = $1`, [key]);
       let value = (row?.value || '').trim();
       const envVal = (env || '').trim();
       if (!value && envVal) value = envVal;
-      if (!value) value = key === 'BI_CRON_SECRET' && prevValue ? prevValue : crypto.randomBytes(24).toString('hex');
+      if (!value && legacy) value = legacyGrad;
+      if (!value) value = crypto.randomBytes(24).toString('hex');
       await q(
         `INSERT INTO system_settings (key, value) VALUES ($1,$2)
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
         [key, value],
       );
       if (writeable) outLines.push(`${key}=${value}`);
-      console.log(`  ✓ ${key} ${envVal ? '(از ENV)' : '(تصادفی جدید — در DB و فایل secrets ثبت شد)'}`);
-      prevValue = value;
+      const from = envVal ? 'از ENV' : value === legacyGrad && legacy ? 'ارثی از GRAD_CRON_SECRET' : 'تصادفی جدید';
+      console.log(`  ✓ ${key} (${from} — در DB و ${writeable ? 'فایل secrets' : 'تنظیمات'} ثبت شد)`);
     }
     if (writeable) {
       fs.writeFileSync(secretsFile, outLines.join('\n') + '\n', { mode: 0o600 });

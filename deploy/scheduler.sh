@@ -9,12 +9,18 @@
 #  موعدشان رسیده فراخوانی می‌کند.
 #
 #  همهٔ فاصله‌ها از ENV می‌آیند (به دقیقه)، نه از کد:
-#    CHEQUE_REMIND_INTERVAL_MIN     یادآوری چک          پیش‌فرض ۶۰
-#    GRAD_SCAN_INTERVAL_MIN         پویش فارغ‌التحصیلی  پیش‌فرض ۱۴۴۰
-#    BI_REFRESH_INTERVAL_MIN        تازه‌سازی گزارش BI   پیش‌فرض ۷۲۰
-#    WORKFLOW_EVENTS_INTERVAL_MIN   رویدادهای گردش کار   پیش‌فرض ۶۰
+#    CHEQUE_REMIND_INTERVAL_MIN      یادآوری چک             پیش‌فرض ۶۰
+#    GRAD_SCAN_INTERVAL_MIN          پویش فارغ‌التحصیلی      پیش‌فرض ۱۴۴۰
+#    BI_REFRESH_INTERVAL_MIN         تازه‌سازی گزارش BI      پیش‌فرض ۷۲۰
+#    WORKFLOW_EVENTS_INTERVAL_MIN    رویدادهای گردش کار      پیش‌فرض ۶۰
+#    GREETINGS_INTERVAL_MIN          تبریک‌های خودکار         پیش‌فرض ۱۴۴۰
+#    SCHED_WARNINGS_INTERVAL_MIN     هشدارهای زمان‌بندی‌شده   پیش‌فرض ۱۵
+#    MSG_LINK_PURGE_INTERVAL_MIN     پاکسازی لینک پیام‌رسان   پیش‌فرض ۱۴۴۰
 #
-#  مسیرها GET را به POST واگذار می‌کنند، پس فراخوانی ساده می‌ماند.
+#  ⚠️ روش فراخوانی: مسیرهای /api/cron/* کار واقعی را **فقط با POST** انجام می‌دهند؛
+#  GET فقط وضعیت خواندنی می‌دهد و هیچ اثری ندارد. پس همهٔ فراخوانی‌های این حلقه
+#  POST هستند — با wget ساده (GET) هر پویشی بی‌صدا «انجام می‌شد» ولی در عمل
+#  هیچ کاری نمی‌کرد (ریشهٔ خرابی: یادآوری چک و پویش‌ها هرگز اجرا نشدند).
 # ══════════════════════════════════════════════════════════════════════
 set -u
 
@@ -22,6 +28,8 @@ APP_URL="${APP_URL:-http://app:8080}"
 
 # M-2: کلیدهای محرمانه از volume مشترک (که seed-base هنگام نصب تولید می‌کند)
 # اگر ENV ست شده باشد، همان مقداری است که seed-base در DB ثبت کرده — همیشه هم‌ارزند.
+# نام هر متغیر = دقیقاً همان کلیدی که مسیر مقصد در DB (getSetting) می‌خواند؛
+# کلید اشتباه یعنی ۴۰۱ و پویشی که هرگز اجرا نمی‌شود. پس هر مسیر کلید خودش را دارد.
 if [ -f /secrets/cron.env ]; then
   . /secrets/cron.env
 fi
@@ -42,12 +50,18 @@ BI_MIN="$(num "${BI_REFRESH_INTERVAL_MIN:-720}" 720)"
 WF_MIN="$(num "${WORKFLOW_EVENTS_INTERVAL_MIN:-60}" 60)"
 GREET_MIN="$(num "${GREETINGS_INTERVAL_MIN:-1440}" 1440)"
 WARN_MIN="$(num "${SCHED_WARNINGS_INTERVAL_MIN:-15}" 15)"
+MSGLINK_MIN="$(num "${MSG_LINK_PURGE_INTERVAL_MIN:-1440}" 1440)"
 
+# کلید اختصاصی هر مسیر — نام متغیر = کلیدی که همان route در DB می‌خواند.
+# GRAD_CRON_SECRET کلیدِ نسل اول بود و دیگر هیچ مسیری آن را نمی‌خواند؛ اگر امروز
+# فراخوانی می‌شد، اپ ۴۰۱ می‌داد و پویش بی‌صدا از دست می‌رفت.
 FINANCE_SECRET="${FINANCE_CRON_SECRET:-}"
-GRAD_SECRET="${GRAD_CRON_SECRET:-}"
+GRAD_SCAN_SECRET="${GRADUATION_SCAN_CRON_SECRET:-}"
+WF_EVENTS_SECRET="${WORKFLOW_EVENTS_CRON_SECRET:-}"
 BI_SECRET="${BI_CRON_SECRET:-}"
 GREET_SECRET="${GREETINGS_CRON_SECRET:-}"
 WARN_SECRET="${SCHED_WARN_CRON_SECRET:-}"
+MSGLINK_SECRET="${MSG_LINK_CRON_SECRET:-}"
 
 now_min() { echo $(( $(date +%s) / 60 )); }
 
@@ -73,7 +87,9 @@ call() {
     return 0
   fi
   _tmp=$(mktemp 2>/dev/null || echo /tmp/afagh-cron.$$)
-  _err=$(wget -q -O "$_tmp" --header="x-cron-secret: $_secret" "$APP_URL$_path" 2>&1)
+  # ⚠️ مسیرهای /api/cron/* کار واقعی را فقط با POST انجام می‌دهند؛ GET فقط
+  #    وضعیت خواندنی می‌دهد. بدون --post-data همهٔ پویش‌ها بی‌صدا no-op بودند.
+  _err=$(wget -q -O "$_tmp" --post-data="" --header="x-cron-secret: $_secret" "$APP_URL$_path" 2>&1)
   _rc=$?
   _body=$(head -c 220 "$_tmp" 2>/dev/null | tr '\n' ' ')
   rm -f "$_tmp"
@@ -121,14 +137,21 @@ next_bi=$start
 next_wf=$start
 next_greet=$start
 next_warn=$start
+next_msglink=$start
 
 echo "[scheduler] شروع — app=$APP_URL tick=${TICK}s retry=${RETRY_MIN}min alert_after=${FAIL_ALERT_AT}"
 echo "[scheduler] فاصله‌ها (دقیقه): cheque=$CHEQUE_MIN grad=$GRAD_MIN bi=$BI_MIN workflow=$WF_MIN"
 if [ -z "$FINANCE_SECRET" ]; then
   echo "[scheduler] هشدار: FINANCE_CRON_SECRET خالی است — یادآوری چک ارسال نمی‌شود"
 fi
-if [ -z "$GRAD_SECRET" ]; then
-  echo "[scheduler] هشدار: GRAD_CRON_SECRET خالی است — پویش فارغ‌التحصیلی/گردش کار اجرا نمی‌شود"
+if [ -z "$GRAD_SCAN_SECRET" ]; then
+  echo "[scheduler] هشدار: GRADUATION_SCAN_CRON_SECRET خالی است — پویش فارغ‌التحصیلی اجرا نمی‌شود"
+fi
+if [ -z "$WF_EVENTS_SECRET" ]; then
+  echo "[scheduler] هشدار: WORKFLOW_EVENTS_CRON_SECRET خالی است — رویدادهای گردش کار اجرا نمی‌شود"
+fi
+if [ -z "$MSGLINK_SECRET" ]; then
+  echo "[scheduler] هشدار: MSG_LINK_CRON_SECRET خالی است — پاکسازی لینک پیام‌رسان اجرا نمی‌شود"
 fi
 if [ -z "$BI_SECRET" ]; then
   echo "[scheduler] هشدار: BI_CRON_SECRET خالی است — تازه‌سازی گزارش‌های تحلیلی اجرا نمی‌شود"
@@ -148,7 +171,7 @@ while :; do
   fi
 
   if [ "$now" -ge "$next_grad" ]; then
-    call grad "/api/cron/graduation-scan" "$GRAD_SECRET" next_grad "$GRAD_MIN"
+    call grad "/api/cron/graduation-scan" "$GRAD_SCAN_SECRET" next_grad "$GRAD_MIN"
   fi
 
   if [ "$now" -ge "$next_bi" ]; then
@@ -156,7 +179,7 @@ while :; do
   fi
 
   if [ "$now" -ge "$next_wf" ]; then
-    call workflow "/api/cron/workflow-events" "$GRAD_SECRET" next_wf "$WF_MIN"
+    call workflow "/api/cron/workflow-events" "$WF_EVENTS_SECRET" next_wf "$WF_MIN"
   fi
 
   if [ "$now" -ge "$next_greet" ]; then
@@ -165,6 +188,10 @@ while :; do
 
   if [ "$now" -ge "$next_warn" ]; then
     call schedwarn "/api/cron/scheduled-warnings" "$WARN_SECRET" next_warn "$WARN_MIN"
+  fi
+
+  if [ "$now" -ge "$next_msglink" ]; then
+    call msglink "/api/cron/messenger-link-purge" "$MSGLINK_SECRET" next_msglink "$MSGLINK_MIN"
   fi
 
   sleep "$TICK"

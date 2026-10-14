@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSetting } from '@/lib/settings';
 import { assertSameOrigin } from '@/lib/security';
@@ -19,6 +20,15 @@ const ACTION = 'CRON_WORKFLOW_EVENTS';
 // فراخوانی فقط ماشین‌به‌ماشین: هدر x-cron-secret برابر تنظیم WORKFLOW_EVENTS_CRON_SECRET.
 // نمونهٔ crontab:  */15 * * * * curl -fsS -X POST -H "x-cron-secret: ***" http://localhost:8080/api/cron/workflow-events
 // GET فقط وضعیت است (بدون هیچ اثر جانبی)؛ اجرای واقعی فقط با POST.
+// مقایسهٔ هدر با کلید ثابت‌زمان است (الگوی checkWebhookSecret در /api/telegram/webhook).
+function secretMatches(header: string | null, expected: string): boolean {
+  const provided = header?.trim() ?? '';
+  const a = Buffer.from(provided, 'utf8');
+  const b = Buffer.from(expected, 'utf8');
+  if (a.length !== b.length || a.length === 0) return false;
+  return timingSafeEqual(a, b);
+}
+
 async function authorize(req: NextRequest): Promise<{ ok: true; actorUserId: number | null } | { ok: false; res: NextResponse }> {
   const rl = await guardedRateLimit(`cron:wfev:${await clientIp()}`, 30, 60);
   if (!rl.ok) return { ok: false, res: NextResponse.json({ ok: false, error: rl.error }, { status: 429 }) };
@@ -27,9 +37,10 @@ async function authorize(req: NextRequest): Promise<{ ok: true; actorUserId: num
     log.warn('cron_secret_missing', { action: ACTION, hint: 'WORKFLOW_EVENTS_CRON_SECRET تنظیم نشده (fail-closed).' });
     return { ok: false, res: NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز است. کلید کرون معتبر نیست.' }, { status: 401 }) };
   }
-  const provided = req.headers.get('x-cron-secret')?.trim() ?? '';
-  if (provided === secret) return { ok: true, actorUserId: null };
-  return { ok: false, res: NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز است. کلید کرون معتبر نیست.' }, { status: 401 }) };
+  if (!secretMatches(req.headers.get('x-cron-secret'), secret)) {
+    return { ok: false, res: NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز است. کلید کرون معتبر نیست.' }, { status: 401 }) };
+  }
+  return { ok: true, actorUserId: null };
 }
 
 /** ثبت ممیزی فراخوان موفق — بهترین تلاش؛ خرابی ممیزی هرگز خودِ کرون را نمی‌خواباند. */
@@ -49,10 +60,15 @@ export async function POST(req: NextRequest) {
   const auth = await authorize(req);
   if (!auth.ok) return auth.res;
 
-  const limit = Number(req.nextUrl.searchParams.get('limit') ?? 50);
+  // limit از query می‌آید و پیش از این بی‌سقف بود: Number('1e9') متناهی است و
+  // می‌شد یک درخواست را به «اجرای همهٔ رویدادهای ناموفق» تبدیل کرد. بازهٔ ۱..۲۰۰.
+  const rawLimit = Number(req.nextUrl.searchParams.get('limit') ?? 50);
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(200, Math.max(1, Math.trunc(rawLimit)))
+    : 50;
   const started = Date.now();
   try {
-    const result = await retryPendingWorkflowEvents(Number.isFinite(limit) ? limit : 50);
+    const result = await retryPendingWorkflowEvents(limit);
     const durationMs = Date.now() - started;
     log.info('cron_workflow_events_done', { ...result, durationMs });
     await auditCron(auth.actorUserId, { durationMs, ...result });
@@ -74,6 +90,6 @@ export async function GET(req: NextRequest) {
     ok: true,
     dryRun: true,
     status: 'آماده',
-    hint: 'اجرای دوبارهٔ رویدادها فقط با POST انجام می‌شود (پارامتر limit برای سقف تعداد).',
+    hint: 'اجرای دوبارهٔ رویدادها فقط با POST انجام می‌شود (پارامتر limit، بازهٔ ۱ تا ۲۰۰).',
   });
 }
