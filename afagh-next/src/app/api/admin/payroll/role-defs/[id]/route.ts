@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
-import { assertSameOrigin } from '@/lib/security';
+import { assertCsrf } from '@/lib/security';
 import { db } from '@/db';
 import { z } from 'zod';
 import { eq, sql, and } from 'drizzle-orm';
@@ -26,7 +26,8 @@ function badId(id: string): number | null {
 
 /** PUT — ویرایش نقش تدریس */
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  assertSameOrigin(req);
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   try {
     await requireRole([...WRITE_ROLES]);
     const id = badId((await ctx.params).id);

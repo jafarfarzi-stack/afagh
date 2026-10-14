@@ -1,3 +1,4 @@
+import { assertCsrf } from '@/lib/security';
 // ══════════════════════════════════════════════════════════════════════
 //  آفاق ERP — «کمیته انضباطی» — API فهرست/ایجاد/ویرایش پرونده
 //
@@ -21,6 +22,7 @@ import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import {
+
   DISCIPLINE_DECISIONS, DISCIPLINE_STATUSES, DISCIPLINE_PAGE_SIZE,
   isDisciplineStatus, isDisciplineDecision,
 } from '@/lib/discipline';
@@ -151,6 +153,9 @@ export async function GET(req: NextRequest) {
 
 /** POST — ایجاد پروندهٔ جدید */
 export async function POST(req: NextRequest) {
+  // 🔒 گیت CSRF — بدون این، POST سایه‌ای از صفحهٔ مهاجم کوکی نشست را می‌فرستد
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   try {
     await requireRole(ALLOWED);
   } catch (e: any) {
@@ -215,6 +220,9 @@ export async function POST(req: NextRequest) {
 
 /** PATCH — تغییر وضعیت / ثبت تصمیم */
 export async function PATCH(req: NextRequest) {
+  // 🔒 گیت CSRF — بدون این، POST سایه‌ای از صفحهٔ مهاجم کوکی نشست را می‌فرستد
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   try {
     await requireRole(ALLOWED);
   } catch (e: any) {
@@ -283,6 +291,9 @@ export async function PATCH(req: NextRequest) {
 
 /** DELETE — حذف پرونده (فقط ADMIN؛ اسناد به‌صورت cascade حذف می‌شوند) */
 export async function DELETE(req: NextRequest) {
+  // 🔒 گیت CSRF — بدون این، POST سایه‌ای از صفحهٔ مهاجم کوکی نشست را می‌فرستد
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   try {
     await requireRole(['ADMIN']);
   } catch (e: any) {

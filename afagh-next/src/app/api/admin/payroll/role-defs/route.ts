@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
-import { assertSameOrigin } from '@/lib/security';
+import { assertCsrf } from '@/lib/security';
 import { db } from '@/db';
 import { z } from 'zod';
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
@@ -45,7 +45,8 @@ export async function GET() {
 
 /** POST — افزودن نقش تدریس به کاتالوگ */
 export async function POST(req: NextRequest) {
-  assertSameOrigin(req);
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   try {
     await requireRole([...WRITE_ROLES]);
     const parsed = bodySchema.safeParse(await req.json());

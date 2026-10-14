@@ -9,10 +9,12 @@ import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import {
+
   isWarningStatus,
   isWarningType,
   SCHED_WARNINGS_PAGE_SIZE,
 } from '@/lib/scheduled-warnings';
+import { assertCsrf } from '@/lib/security';
 
 // ══════════════════════════════════════════════════════════════════════
 //  API هشدارهای زمان‌بندی‌شدهٔ دانشجو
@@ -149,6 +151,9 @@ export async function GET(req: NextRequest) {
 
 /** POST — ثبت هشدار جدید */
 export async function POST(req: NextRequest) {
+  // 🔒 گیت CSRF — بدون این، POST سایه‌ای از صفحهٔ مهاجم کوکی نشست را می‌فرستد
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   const denied = await guard();
   if (denied) return denied;
 
@@ -208,6 +213,9 @@ export async function POST(req: NextRequest) {
 
 /** PATCH — ویرایش / لغو / ارسال فوری (?id=) */
 export async function PATCH(req: NextRequest) {
+  // 🔒 گیت CSRF — بدون این، POST سایه‌ای از صفحهٔ مهاجم کوکی نشست را می‌فرستد
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   const denied = await guard();
   if (denied) return denied;
 
@@ -282,6 +290,9 @@ export async function PATCH(req: NextRequest) {
 
 /** DELETE — حذف هشدار (فقط ADMIN) (?id=) */
 export async function DELETE(req: NextRequest) {
+  // 🔒 گیت CSRF — بدون این، POST سایه‌ای از صفحهٔ مهاجم کوکی نشست را می‌فرستد
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   try {
     await requireRole(['ADMIN']);
   } catch (e: any) {

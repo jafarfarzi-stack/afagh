@@ -3,7 +3,7 @@ import {
   approveDean, approveDeptHead, getApprovalHistory, getScopedOverview,
   rejectStatement, returnStatement, settleApproved, type ApprovalOp,
 } from '@/lib/payroll-approvals';
-import { assertSameOrigin } from '@/lib/security';
+import { assertCsrf } from '@/lib/security';
 
 // ─────────────────────────────────────────────────────────────────
 //  زنجیرهٔ تأیید فیش حق‌التدریس — نقطهٔ اتصال کلاینت (LivePayrollClient)
@@ -28,7 +28,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  assertSameOrigin(req);
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   try {
     const body = await req.json().catch(() => ({}));
     const op = body?.op as ApprovalOp;

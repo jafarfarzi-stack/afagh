@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
-import { assertSameOrigin } from '@/lib/security';
+import { assertCsrf } from '@/lib/security';
 import { db } from '@/db';
 import { z } from 'zod';
 import { grade_thresholds, degree_level_configs } from '@/db/schema';
@@ -65,7 +65,8 @@ export async function GET(req: NextRequest) {
 
 // POST — ایجاد یا به‌روزرسانی آستانه‌ها
 export async function POST(req: NextRequest) {
-  assertSameOrigin(req);
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   const user = await getSessionUser();
   if (!user || !user.roles.some(r => ALLOWED.includes(r))) {
     return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز.' }, { status: 403 });

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { teaching_coefficients } from '@/db/schema';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { assertCsrf } from '@/lib/security';
 
 const coefficientSchema = z.object({
   ruleName: z.string().trim().min(1).max(100),
@@ -24,6 +25,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // 🔒 گیت CSRF — این مسیر هیچ گیت same-origin نداشت، یعنی تغییر ضریب
+  //    حق‌التدریس با یک POST سایه‌ای از صفحهٔ مهاجم ممکن بود.
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   try {
     const user = await requireRole(['ADMIN']);
     const rawBody = await req.json();

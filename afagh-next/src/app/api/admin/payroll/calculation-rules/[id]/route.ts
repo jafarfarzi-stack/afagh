@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
-import { assertSameOrigin } from '@/lib/security';
+import { assertCsrf } from '@/lib/security';
 import { db } from '@/db';
 import { payroll_calculation_rules } from '@/db/schema';
 import { and, eq, isNull, or } from 'drizzle-orm';
@@ -22,7 +22,8 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  assertSameOrigin(req);
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   try {
     const user = await requireRole(['ADMIN']);
     const { id } = await params;
@@ -85,7 +86,8 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  assertSameOrigin(req);
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   try {
     const user = await requireRole(['ADMIN']);
     const { id } = await params;

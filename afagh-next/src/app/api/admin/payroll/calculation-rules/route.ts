@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
-import { assertSameOrigin } from '@/lib/security';
+import { assertCsrf } from '@/lib/security';
 import { db } from '@/db';
 import { z } from 'zod';
 import { payroll_calculation_rules } from '@/db/schema';
@@ -56,7 +56,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  assertSameOrigin(req);
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   try {
     const user = await requireRole(['ADMIN']);
     const rawBody = await req.json();

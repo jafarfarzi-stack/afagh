@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
-import { assertSameOrigin } from '@/lib/security';
+import { assertCsrf } from '@/lib/security';
 import { db } from '@/db';
 import { z } from 'zod';
 import { and, eq } from 'drizzle-orm';
@@ -18,7 +18,8 @@ const WRITE_ROLES = ['ADMIN'];
  *  payRoleOverride = کدِ teaching_role_defs؛ خالی ⇒ NULL ⇒ تشخیص خودکار موتور.
  */
 export async function PUT(req: NextRequest) {
-  assertSameOrigin(req);
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   try {
     await requireRole([...WRITE_ROLES]);
     const { searchParams } = new URL(req.url);

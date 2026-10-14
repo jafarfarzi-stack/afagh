@@ -1,3 +1,4 @@
+import { assertCsrf } from '@/lib/security';
 // ══════════════════════════════════════════════════════════════════════
 //  آفاق ERP — «شورای آموزشی» — API جلسات و مصوبات
 //
@@ -24,6 +25,7 @@ import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { strParam, intParam, dateParam } from '@/lib/council';
+
 
 export const dynamic = 'force-dynamic';
 
@@ -103,6 +105,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // 🔒 گیت CSRF — بدون این، POST سایه‌ای از صفحهٔ مهاجم کوکی نشست را می‌فرستد
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   const denied = await guard();
   if (denied) return denied;
 
@@ -146,6 +151,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  // 🔒 گیت CSRF — بدون این، POST سایه‌ای از صفحهٔ مهاجم کوکی نشست را می‌فرستد
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   const denied = await guard();
   if (denied) return denied;
   const id = intParam(req.nextUrl.searchParams, 'id');
@@ -191,6 +199,9 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  // 🔒 گیت CSRF — بدون این، POST سایه‌ای از صفحهٔ مهاجم کوکی نشست را می‌فرستد
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   const denied = await guard();
   if (denied) return denied;
   const id = intParam(req.nextUrl.searchParams, 'id');

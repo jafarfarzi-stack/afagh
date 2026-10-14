@@ -1,3 +1,4 @@
+import { assertCsrf } from '@/lib/security';
 // ══════════════════════════════════════════════════════════════════════
 //  آفاق ERP — «شورای آموزشی» — API مصوبات/توصیه‌ها/درخواست‌های تجدیدنظر
 //
@@ -20,6 +21,7 @@ import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import {
+
   DECISION_TYPES, IMPLEMENTATION_STATUSES, isOneOf, intParam,
 } from '@/lib/council';
 
@@ -110,6 +112,9 @@ export async function GET(req: NextRequest) {
 
 /** POST — ایجاد مصوبه */
 export async function POST(req: NextRequest) {
+  // 🔒 گیت CSRF — بدون این، POST سایه‌ای از صفحهٔ مهاجم کوکی نشست را می‌فرستد
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   const denied = await guard();
   if (denied) return denied;
 
@@ -176,6 +181,9 @@ export async function POST(req: NextRequest) {
 
 /** PATCH — ویرایش مصوبه */
 export async function PATCH(req: NextRequest) {
+  // 🔒 گیت CSRF — بدون این، POST سایه‌ای از صفحهٔ مهاجم کوکی نشست را می‌فرستد
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   const denied = await guard();
   if (denied) return denied;
   const id = intParam(req.nextUrl.searchParams, 'id');
@@ -234,6 +242,9 @@ export async function PATCH(req: NextRequest) {
 
 /** DELETE — حذف مصوبه */
 export async function DELETE(req: NextRequest) {
+  // 🔒 گیت CSRF — بدون این، POST سایه‌ای از صفحهٔ مهاجم کوکی نشست را می‌فرستد
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   const denied = await guard();
   if (denied) return denied;
   const id = intParam(req.nextUrl.searchParams, 'id');

@@ -35,6 +35,27 @@ function hostOf(urlOrHost: string): string {
   }
 }
 
+/**
+ * گیت CSRF برای Route Handler — یک خط، بدون امکان فراموشی.
+ *
+ * چرا این کمکی لازم شد: `assertSameOrigin(req)` نتیجه‌اش را برمی‌گرداند و
+ * چند مسیر آن را **دور می‌ریختند** (مثلاً `assertSameOrigin(req);` تنها).
+ * چون کوکی نشست روی HTTPS با `SameSite=None` ست می‌شود، مرورگر همراهِ
+ * درخواست cross-site را هم می‌فرستد ⇒ یک صفحهٔ مهاجم می‌توانست با POST
+ * سایه‌ای، برنامهٔ درسی/آستانهٔ نمره/حقوق را تغییر دهد.
+ *
+ * الگوی درست و اجباری:
+ * ```ts
+ * const csrf = assertCsrf(req);
+ * if (csrf) return csrf;
+ * ```
+ * این تابع فقط `return csrf` را داخل خود دارد، پس دیگر نمی‌شود
+ * نتیجه را نادیده گرفت.
+ */
+export function assertCsrf(req: NextRequest): NextResponse | null {
+  return assertSameOrigin(req);
+}
+
 /** اگر پاسخ برگرداند → باید فوراً همان پاسخ برگردانده شود؛ وگرنه null یعنی مجاز. */
 export function assertSameOrigin(req: NextRequest): NextResponse | null {
   const host = req.headers.get('host') ?? hostOf(req.url);

@@ -4,8 +4,13 @@ import { db } from '@/db';
 import { curriculum_courses, curriculum_versions } from '@/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { assertCsrf } from '@/lib/security';
+
 
 export async function PATCH(req: NextRequest) {
+  // 🔒 گیت CSRF — بدون این، POST سایه‌ای از صفحهٔ مهاجم کوکی نشست را می‌فرستد
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   const user = await getSessionUser();
   if (!user || (!user.roles.includes('ADMIN') && !user.roles.includes('EDU_EXPERT'))) {
     return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز.' }, { status: 403 });

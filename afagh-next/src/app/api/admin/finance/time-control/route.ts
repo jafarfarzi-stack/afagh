@@ -1,3 +1,4 @@
+import { assertCsrf } from '@/lib/security';
 // ══════════════════════════════════════════════════════════════════════
 //  آفاق ERP — «کنترل زمانی دقیق ثبت مالی» — API وضعیت و تنظیم دوره
 //
@@ -16,6 +17,7 @@ import { requireRole, getSessionUser } from '@/lib/auth';
 import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
 import { getLockState, invalidateTimeControlCache } from '@/lib/finance-time-control';
+
 
 export const dynamic = 'force-dynamic';
 
@@ -47,6 +49,9 @@ export async function GET() {
 
 /** POST — ایجاد/به‌روزرسانی دورهٔ مالی فعال */
 export async function POST(req: NextRequest) {
+  // 🔒 گیت CSRF — بدون این، POST سایه‌ای از صفحهٔ مهاجم کوکی نشست را می‌فرستد
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   try {
     await requireRole(FINANCE);
   } catch (e: any) {

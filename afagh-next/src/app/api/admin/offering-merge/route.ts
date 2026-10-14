@@ -8,6 +8,8 @@ import { createLogger } from '@/lib/logger';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { groupIntoMerged, mergedGroupKey } from '@/lib/professor-calendar-layout';
 import { z } from 'zod';
+import { assertCsrf } from '@/lib/security';
+
 
 export const dynamic = 'force-dynamic';
 
@@ -132,6 +134,9 @@ const patchSchema = z.object({
 });
 
 export async function PATCH(req: NextRequest) {
+  // 🔒 گیت CSRF — بدون این، POST سایه‌ای از صفحهٔ مهاجم کوکی نشست را می‌فرستد
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   const denied = await guard();
   if (denied) return denied;
   try {
