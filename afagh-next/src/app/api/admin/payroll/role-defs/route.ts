@@ -35,8 +35,11 @@ export async function GET() {
       .orderBy(teaching_role_defs.code);
     return NextResponse.json({ ok: true, roleDefs: rows });
   } catch (err) {
+    // requireRole به‌جای throw، redirect پرتاب می‌کند — این خطا نیست
+    const msg = (err as Error)?.message;
+    if (msg === 'NEXT_REDIRECT' || msg === 'NEXT_NOT_FOUND') throw err;
     log.error('role-defs GET failed', err);
-    return NextResponse.json({ ok: false, error: (err as Error)?.message || 'خطای ناشناخته' }, { status: 401 });
+    return NextResponse.json({ ok: false, error: msg || 'خطای ناشناخته' }, { status: 500 });
   }
 }
 

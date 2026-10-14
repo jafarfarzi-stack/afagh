@@ -14,7 +14,9 @@ export async function GET(req: NextRequest) {
   try {
     await requireRole([...ALLOWED]);
   } catch (e) {
-    log.warn('coverage auth error', { err: e });
+    const msg = (e as Error)?.message;
+    if (msg === 'NEXT_REDIRECT' || msg === 'NEXT_NOT_FOUND') throw e;
+    log.warn('coverage auth error', { err: msg });
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
   try {
@@ -28,6 +30,8 @@ export async function GET(req: NextRequest) {
     const missing = rows.filter(r => r.ruleId == null).length;
     return NextResponse.json({ rows, ruleCount, total: rows.length, missing });
   } catch (e) {
+    const msg = (e as Error)?.message;
+    if (msg === 'NEXT_REDIRECT' || msg === 'NEXT_NOT_FOUND') throw e;
     log.error('coverage GET failed', e);
     return NextResponse.json({ error: 'server_error' }, { status: 500 });
   }

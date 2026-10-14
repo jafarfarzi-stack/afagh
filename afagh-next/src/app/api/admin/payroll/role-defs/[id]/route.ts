@@ -90,7 +90,9 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
     await db.delete(teaching_role_defs).where(eq(teaching_role_defs.id, id));
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const msg = (err as Error)?.message;
+    if (msg === 'NEXT_REDIRECT' || msg === 'NEXT_NOT_FOUND') throw err;
     log.error('role-defs DELETE failed', err);
-    return NextResponse.json({ ok: false, error: (err as Error)?.message || 'خطای ناشناخته' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: msg || 'خطای ناشناخته' }, { status: 500 });
   }
 }

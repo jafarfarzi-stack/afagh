@@ -79,7 +79,9 @@ export async function PUT(req: NextRequest) {
       .where(eq(offering_payroll_extras.id, existing[0].id));
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const msg = (err as Error)?.message;
+    if (msg === 'NEXT_REDIRECT' || msg === 'NEXT_NOT_FOUND') throw err;
     log.error('offering-extras PUT failed', err);
-    return NextResponse.json({ ok: false, error: (err as Error)?.message || 'خطای ناشناخته' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: msg || 'خطای ناشناخته' }, { status: 500 });
   }
 }
