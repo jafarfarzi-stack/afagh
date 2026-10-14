@@ -321,6 +321,8 @@ export default function RosterTab({ offering, termTitle, lastAutoSaveTime, onReq
             <p className="text-xs font-black text-amber-900">تأیید مرحلهٔ اول، در انتظار معاون آموزشی — تا تأیید نهایی هیچ تغییری اعمال نمی‌شود.</p>
           ) : unfinalizeStatus === 'REJECTED' ? (
             <p className="text-xs font-black text-rose-700">درخواست قبلی رد شد؛ در صورت نیاز می‌توانید درخواست جدید ثبت کنید.</p>
+          ) : unfinalizeStatus === 'APPLIED' ? (
+            <p className="text-xs font-black text-emerald-800">بازگشایی نمرات تأیید و انجام شد ✅ — در صورت نیاز، برای تغییر بعدی درخواست تازه ثبت کنید.</p>
           ) : null}
           {unfinalizeStatus !== 'PENDING' && unfinalizeStatus !== 'REVIEWED' && (
             <>

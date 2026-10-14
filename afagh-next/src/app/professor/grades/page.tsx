@@ -145,7 +145,7 @@ export default async function ProfessorGradesPage({
   // ── افزودنی بازگشایی: مهلت ثبت نمره + پرچم پایان‌نامه + وضعیت درخواست (تک کوئری دسته‌ای) ──
   const deadlineByOffering = new Map<number, string | null>();
   const thesisByOffering = new Map<number, boolean>();
-  const unfinalizeByOffering = new Map<number, 'PENDING' | 'REVIEWED' | 'APPROVED' | 'REJECTED'>();
+  const unfinalizeByOffering = new Map<number, 'PENDING' | 'REVIEWED' | 'APPROVED' | 'REJECTED' | 'APPLIED'>();
   if (offeringIds.length > 0) {
     const metaRows = await db
       .select({
@@ -172,8 +172,8 @@ export default async function ProfessorGradesPage({
       .where(inArray(grade_unfinalize_requests.offeringId, offeringIds))
       .orderBy(grade_unfinalize_requests.id);
     for (const r of reqRows) {
-      const s = r.status as 'PENDING' | 'REVIEWED' | 'APPROVED' | 'REJECTED';
-      if (s === 'PENDING' || s === 'REVIEWED' || s === 'APPROVED' || s === 'REJECTED') {
+      const s = r.status as 'PENDING' | 'REVIEWED' | 'APPROVED' | 'REJECTED' | 'APPLIED';
+      if (s === 'PENDING' || s === 'REVIEWED' || s === 'APPROVED' || s === 'REJECTED' || s === 'APPLIED') {
         unfinalizeByOffering.set(r.offeringId, s);
       }
     }

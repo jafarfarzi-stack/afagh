@@ -100,7 +100,7 @@ export interface GradingCourseOffering {
   isFinalized?: boolean;
   finalizedAt?: string;
   finalSignatureHash?: string;
-  unfinalizeStatus?: 'NONE' | 'PENDING' | 'REVIEWED' | 'APPROVED' | 'REJECTED';
+  unfinalizeStatus?: 'NONE' | 'PENDING' | 'REVIEWED' | 'APPROVED' | 'REJECTED' | 'APPLIED';
   gradeDeadline?: string | null;
   isThesis?: boolean;
   isArchived?: boolean;

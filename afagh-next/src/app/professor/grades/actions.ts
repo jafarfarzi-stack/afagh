@@ -185,6 +185,14 @@ export async function saveGradeAction(
     const row = await resolveStudentRow(payload.offeringId, payload.studentCode);
     let persisted = false;
     if (row) {
+      // 🔒 قفل نمرهٔ نهایی‌شده: این اکشن با `onConflictDoUpdate` ردیف را
+      //    DRAFT می‌کرد، یعنی استاد می‌توانست نمرهٔ قطعیِ تأییدشده را خودش
+      //    برگرداند. حالا فقط با درخواست بازگشاییِ تأییدشده ممکن است.
+      {
+        const { assertGradeWriteAllowed } = await import('@/lib/grades/finalize-lock');
+        const gate = await assertGradeWriteAllowed(payload.offeringId);
+        if (!gate.ok) return invalid(gate.error!);
+      }
       const gradeValue = payload.value === null ? null : String(Number(payload.value.toFixed(2)));
       await db
         .insert(enrollments)

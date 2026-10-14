@@ -196,6 +196,15 @@ export async function adminSetGradeAction(
       return { ok: false, error: 'شناسه ارائه درس یا درس و ترم مربوطه یافت نشد.' };
     }
 
+    // 🔒 قفل نمرهٔ نهایی‌شده: نوشتن روی ردیف FINALIZED فقط با درخواست
+    //    بازگشاییِ تأییدشده (معاون آموزشی) مجاز است. پیش از این، این مسیر
+    //    نمرهٔ قطعی را مستقیم بازنویسی می‌کرد و درخواست بازگشایی بی‌اثر بود.
+    {
+      const { assertGradeWriteAllowed } = await import('@/lib/grades/finalize-lock');
+      const gate = await assertGradeWriteAllowed(targetOfferingId);
+      if (!gate.ok) return { ok: false, error: gate.error! };
+    }
+
     // 🔒 کد دستی سما فقط از فهرست شناخته‌شدهٔ grade-status-codes مجاز است؛
     // کد ناشناس (تزریق دلخواه) رد می‌شود. مسیر خودکار resolveSamaGradeStatusCode
     // دست‌نخورده می‌ماند (همان منطق آیین‌نامهٔ دانشجو + کدهای منجمد REGULATION_FROZEN_CODES).

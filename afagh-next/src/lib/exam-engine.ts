@@ -29,7 +29,8 @@ import { db } from '@/db';
 import {
   academic_terms, course_exam_sessions, course_offerings, enrollments,
   exam_attendances, exam_course_packets, exam_halls, exam_invigilators,
-  exam_minutes, exam_sessions, grade_appeals, instructor_deliveries,
+  exam_minutes, exam_sessions, grade_appeals, grade_unfinalize_requests,
+  instructor_deliveries,
   invigilators, seat_allocations,
 } from '@/db/schema';
 import { resolveSamaGradeStatusCode } from '@/lib/resolve-sama-code';
@@ -603,11 +604,34 @@ export async function submitExamGrades(
   return db.transaction(async tx => {
     // مالکیت دانشگاه ارائه ↔ ترم
     const [off] = await tx
-      .select({ universityId: course_offerings.universityId, termId: course_offerings.termId })
+      .select({
+        universityId: course_offerings.universityId,
+        termId: course_offerings.termId,
+        finalizedAt: course_offerings.gradesFinalizedAt,
+      })
       .from(course_offerings)
       .where(eq(course_offerings.id, offeringId))
       .limit(1);
     if (!off) throw new Error('ارائهٔ درس یافت نشد.');
+
+    // 🔒 قفل نمرهٔ نهایی‌شده: upsert پایین `FINALIZED` را روی ردیف نهایی‌شده هم
+    //   می‌نوشت. حالا اگر نمرات ارائه نهایی شده باشد، ارسال نمره رد می‌شود مگر
+    //   درخواست بازگشاییِ تأییدشده وجود داشته باشد.
+    if (off.finalizedAt) {
+      const [approved] = await tx
+        .select({ id: grade_unfinalize_requests.id })
+        .from(grade_unfinalize_requests)
+        .where(and(
+          eq(grade_unfinalize_requests.offeringId, offeringId),
+          eq(grade_unfinalize_requests.status, 'APPROVED'),
+        ))
+        .limit(1);
+      if (!approved) {
+        throw new Error(
+          'نمرات این درس نهایی شده است؛ ارسال نمره فقط پس از تأیید درخواست بازگشایی نمره ممکن است.',
+        );
+      }
+    }
     const [offTerm] = await tx
       .select({ universityId: academic_terms.universityId })
       .from(academic_terms)
@@ -828,6 +852,20 @@ export async function answerExamAppeal(
     const { changed, status } = decideAppealOutcome(oldGrade, newTotal);
 
     if (changed) {
+      // 🔒 قفل نمرهٔ نهایی‌شده: پاسخ اع-examination استاد نباید نمرهٔ قطعیِ
+      //   یک ارائهٔ FINALIZED را دور بزند. پیش از این، همین UPDATE بدون هیچ
+      //   بررسی‌ای `gradeValue` را روی ردیف نهایی‌شده می‌نوشت و
+      //   `gradesHash` را هم به‌روز نمی‌کرد ⇒ کارنامه و مدرک ناسازگار می‌شدند.
+      const finalizedAt = await tx
+        .select({ finalizedAt: course_offerings.gradesFinalizedAt })
+        .from(course_offerings)
+        .where(eq(course_offerings.id, appeal.offeringId))
+        .limit(1);
+      if (finalizedAt[0]?.finalizedAt) {
+        throw new Error(
+          'نمرات این درس نهایی شده است؛ اعتراض باید از مسیر «درخواست بازگشایی نمره» و پس از تأیید معاون آموزشی پیگیری شود.',
+        );
+      }
       await tx
         .update(enrollments)
         .set({ gradeValue: String(newTotal) })
