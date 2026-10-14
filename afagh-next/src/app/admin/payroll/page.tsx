@@ -60,6 +60,36 @@ export default async function PayrollPage(props: { searchParams: Promise<{ tab?:
         >
           سمت‌ها و انتساب ترمی
         </a>
+        <a
+          href="/admin/payroll/decrees"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
+        >
+          ابلاغ‌های آموزشی
+        </a>
+        <a
+          href="/admin/payroll/thesis"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
+        >
+          دفتر پایان‌نامه
+        </a>
+        <a
+          href="/admin/payroll/regulations"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
+        >
+          نسخه‌های آیین‌نامه
+        </a>
+        <a
+          href="/admin/payroll/exam-payments"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
+        >
+          پرداخت‌های امتحانی
+        </a>
+        <a
+          href="/admin/payroll/objections"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
+        >
+          اعتراض‌ها
+        </a>
       </div>
 
       {isFinance && (

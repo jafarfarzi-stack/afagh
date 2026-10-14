@@ -4,21 +4,9 @@ import { db } from '@/db';
 import { academic_terms, staff, students, users } from '@/db/schema';
 import { thesis_supervisions, thesis_unit_draws } from '@/db/schema-payroll-plus';
 import { createLogger } from '@/lib/logger';
+import { THESIS_ROLES, THESIS_STATUSES } from '@/lib/thesis-labels';
 
 const log = createLogger({ mod: 'thesis-ledger' });
-
-export const THESIS_ROLES = ['SUPERVISOR', 'ADVISOR'] as const;
-export const THESIS_ROLE_FA: Record<string, string> = {
-  SUPERVISOR: 'راهنما',
-  ADVISOR: 'مشاور',
-};
-
-export const THESIS_STATUSES = ['ONGOING', 'COMPLETED', 'CANCELLED'] as const;
-export const THESIS_STATUS_FA: Record<string, string> = {
-  ONGOING: 'در جریان',
-  COMPLETED: 'تکمیل‌شده',
-  CANCELLED: 'لغوشده',
-};
 
 export type ThesisResult = { ok: true; id: number } | { ok: false; error: string };
 

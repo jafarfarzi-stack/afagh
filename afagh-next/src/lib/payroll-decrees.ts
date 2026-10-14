@@ -13,23 +13,11 @@ import {
 import { calcStaffPayroll } from '@/lib/payroll-engine';
 import { getSessionUser } from '@/lib/auth';
 import { createLogger } from '@/lib/logger';
+import { DECREE_SECTIONS, DECREE_SECTION_FA, DECREE_STATUSES, DECREE_STATUS_FA } from '@/lib/decree-labels';
+
+export { DECREE_SECTIONS, DECREE_SECTION_FA, DECREE_STATUSES, DECREE_STATUS_FA };
 
 const log = createLogger({ mod: 'payroll-decrees' });
-
-export const DECREE_STATUSES = ['DRAFT', 'ISSUED'] as const;
-export const DECREE_STATUS_FA: Record<string, string> = {
-  DRAFT: 'پیش‌نویس',
-  ISSUED: 'صادرشده',
-};
-
-export const DECREE_SECTIONS = ['COURSES', 'THESIS', 'ACTIVITIES', 'EXAM', 'SUMMARY'] as const;
-export const DECREE_SECTION_FA: Record<string, string> = {
-  COURSES: 'درس‌ها',
-  THESIS: 'پایان‌نامه',
-  ACTIVITIES: 'فعالیت‌ها',
-  EXAM: 'امتحانات',
-  SUMMARY: 'جمع‌بندی',
-};
 
 export type DecreeResult = { ok: true; id: number } | { ok: false; error: string };
 
