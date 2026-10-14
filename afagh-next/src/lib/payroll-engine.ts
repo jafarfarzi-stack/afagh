@@ -253,6 +253,8 @@ export type CoverageRow = {
   enrolled: number; hasClass: boolean; nth: number; merged: boolean; memberCount: number;
   ruleId: number | null; ruleTitle: string | null; expression: string | null;
   missDim: string | null; missReason: string | null;
+  /** نقش دستی ثبت‌شده برای این ارائه-استاد (offering_payroll_extras.payRoleOverride) */
+  overrideCode: string | null; overrideTitle: string | null;
 };
 
 /** علت‌یابی پلکانی: اولین بُعدی که مجموعهٔ نامزدها را خالی می‌کند */
@@ -342,6 +344,11 @@ export async function computeRuleCoverage(termId: number, universityId?: number)
         merged: (o.mergedMemberIds?.length ?? 1) > 1, memberCount: memberIds.length,
         ruleId: rule?.id ?? null, ruleTitle: rule?.title ?? null, expression: rule?.expression ?? null,
         missDim: miss?.dim ?? null, missReason: miss?.reason ?? null,
+        overrideCode: data.payRoleOverride.get(`${o.offeringId}:${staffId}`) ?? null,
+        overrideTitle: (() => {
+          const c = data.payRoleOverride.get(`${o.offeringId}:${staffId}`);
+          return c ? (data.roleTitles.get(c) ?? c) : null;
+        })(),
       });
     }
   }

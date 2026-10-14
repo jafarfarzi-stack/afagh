@@ -42,6 +42,24 @@ export default async function PayrollPage(props: { searchParams: Promise<{ tab?:
         >
           شبیه‌ساز سناریو (دادهٔ نمونه)
         </a>
+        <a
+          href="/admin/payroll/coverage"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
+        >
+          پوشش فرمول‌ها
+        </a>
+        <a
+          href="/admin/payroll/teaching-roles"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
+        >
+          نقش تدریس در درس‌ها
+        </a>
+        <a
+          href="/admin/payroll/roles"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
+        >
+          سمت‌ها و انتساب ترمی
+        </a>
       </div>
 
       {isFinance && (

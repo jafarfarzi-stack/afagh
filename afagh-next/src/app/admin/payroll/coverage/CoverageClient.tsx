@@ -9,6 +9,7 @@ type Row = {
   enrolled: number; hasClass: boolean; nth: number; merged: boolean; memberCount: number;
   ruleId: number | null; ruleTitle: string | null; expression: string | null;
   missDim: string | null; missReason: string | null;
+  overrideCode: string | null; overrideTitle: string | null;
 };
 
 const MISS_DIM_FA: Record<string, string> = {
@@ -170,6 +171,11 @@ export default function CoverageClient() {
                 <td className="p-2 text-xs">
                   <div>{r.offeringTypeFa}</div>
                   <div className="text-gray-500">{r.roleFa}</div>
+                  {r.overrideTitle && (
+                    <div className="mt-0.5 inline-block bg-violet-100 text-violet-800 rounded px-1.5 py-0.5 text-[10px] font-medium">
+                      نقش دستی: {r.overrideTitle}
+                    </div>
+                  )}
                 </td>
                 <td className="p-2 text-center">{r.enrolled}</td>
                 <td className="p-2 text-center">{r.hasClass ? '✅' : '—'}</td>
