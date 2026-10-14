@@ -11,6 +11,7 @@ import {
 } from '@/db/schema';
 import { getBool, getNumber, getSetting } from '@/lib/settings';
 import { executeIrandocCheck } from '@/lib/api-integrations';
+import { ssrfFetch } from '@/lib/ssrf-guard';
 import { createLogger } from '@/lib/logger';
 import { deliveriesForUser, notifyUserMultichannel } from '@/lib/messaging';
 import { getRegulationConfig } from '@/lib/regulations-engine';
@@ -477,7 +478,9 @@ export async function runAutoClearance(auditId: number) {
         const timeout = (await getNumber('API_TIMEOUT_SECONDS', 10)) * 1000;
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), timeout);
-        const resp = await fetch(`${dep.apiUrl.replace(/\/+$/, '')}?studentId=${a.studentId}`, { signal: ctrl.signal });
+        // گارد SSRF: نشانی از پنل مدیر (clearance_departments.apiUrl) می‌آید —
+        // فقط https + بدون userinfo + مقصد عمومی (یا میزبان مجازِ AFAGH_SSRF_ALLOW_HOSTS).
+        const resp = await ssrfFetch(`${dep.apiUrl.replace(/\/+$/, '')}?studentId=${a.studentId}`, { signal: ctrl.signal });
         clearTimeout(t);
         const j = (await resp.json()) as { cleared?: boolean; amountDue?: number; detail?: string };
         await db.update(clearance_checklist).set({
@@ -826,14 +829,15 @@ export async function requestMinistryCode(auditId: number) {
       const timeout = (await getNumber('API_TIMEOUT_SECONDS', 10)) * 1000;
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), timeout);
-      const resp = await fetch(`${base}/degree-verification`, {
+      // گارد SSRF: SAJJAD_BASE_URL از تنظیمات می‌آید (allow-list: saorg.ir)
+      const resp = await ssrfFetch(`${base}/degree-verification`, {
         method: 'POST', signal: ctrl.signal,
         headers: { 'content-type': 'application/json', authorization: `Bearer ${await getSetting('IRANDOC_TOKEN')}` },
         body: JSON.stringify({
           national_id: s.nationalCode, student_code: s.studentCode,
           full_name: `${s.firstName} ${s.lastName}`, request_code: a.sajjadRequestCode ?? null,
         }),
-      });
+      }, { settingKey: 'SAJJAD_BASE_URL' });
       clearTimeout(t);
       const j = (await resp.json()) as { verificationCode?: string; code?: string };
       code = String(j.verificationCode || j.code || '');

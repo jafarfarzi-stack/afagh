@@ -16,7 +16,13 @@ const SECRET_SETTING_RE = /SECRET|TOKEN|KEY|PASSWORD/i;
 /** رویدادهای حامل OTP — متن تحویل آن‌ها sanitize می‌شود */
 const OTP_EVENT_RE = /OTP/i;
 
-/** حذف مقادیر محرمانه از یک ردیف پیش از دامپ (درجا روی کپی ردیف) */
+/**
+ * حذف مقادیر محرمانه از یک ردیف پیش از دامپ (درجا روی کپی ردیف).
+ *
+ * قاعده: هر ستونی که «محرمانه» است حذف می‌شود، حتی اگر امروز فقط هش/نام مستعار
+ * باشد — چون ردیف‌های قدیمی هنوز مقدار خام دارند و دامپ باید مستقل از سنِ
+ * ردیف امن باشد. ستون غایب بی‌اثر رد می‌شود (guard با `in`).
+ */
 function redactRow(table: string, row: Record<string, any>): void {
   if (table === 'system_settings' && SECRET_SETTING_RE.test(String(row.key ?? ''))) {
     row.value = REDACTED;
@@ -29,6 +35,22 @@ function redactRow(table: string, row: Record<string, any>): void {
   } else if (table === 'verification_otps') {
     if ('otpCode' in row) row.otpCode = REDACTED;
     if ('otpHash' in row) row.otpHash = REDACTED;
+  } else if (table === 'instructor_deliveries') {
+    // توکن برداشت اوراق توسط استاد — bearer واقعی؛ حتی پس از هش‌شدن، ردیف قدیمی
+    // مقدار خام دارد و نباید هرگز وارد فایل پشتیبان شود.
+    if ('pickupToken' in row) row.pickupToken = REDACTED;
+  } else if (table === 'student_cards') {
+    // توکن امنیتی کارت دانشجویی — گیت حراست (/id/[token]) را باز می‌کند؛
+    // دامپ نباید آن را به کسی بدهد که فقط دسترسی خواندن پشتیبان دارد.
+    if ('secureToken' in row) row.secureToken = REDACTED;
+  } else if (table === 'integrations_config') {
+    // کلیدها و توکن‌های سرویس‌های ثالث (API key/secret) به‌صورت JSON خام
+    // ذخیره می‌شوند → کل ستون حذف می‌شود، نه فقط چند کلید مشخص.
+    if ('authCredentials' in row) row.authCredentials = REDACTED;
+  } else if (table === 'api_audit_logs') {
+    // بدنهٔ خام درخواست به سرویس‌های ثالث می‌رود و می‌تواند کد ملی/شمارهٔ تماس و
+    // سایر PII خام را حمل کند → کل ستون حذف می‌شود.
+    if ('requestPayload' in row) row.requestPayload = REDACTED;
   }
 }
 

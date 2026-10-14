@@ -180,11 +180,22 @@ t('assertProdSecrets: در production با رمز ضعیف startup بسته می
     DATABASE_URL: 'postgres://afagh:some-strong-owner-secret-9f3k2l@db:5432/afagh_db',
   }, () => assert.throws(() => assertProdSecrets(), /پیش‌فرض‌های ضعیف/));
   const strong = gen();
+  // 🔐 از این پس کلیدهای S3/MinIO هم fail-closed هستند (پیش از این فقط
+  //    console.warn می‌شد و پروداکشن با کلید پیش‌فرض عمومی بالا می‌آمد).
+  const s3 = gen();
   withEnv({
     NODE_ENV: 'production', NEXT_PHASE: '',
     AFAGH_APP_DB_PASSWORD: strong,
     DATABASE_URL: `postgres://afagh:${strong}@db:5432/afagh_db`,
+    S3_ACCESS_KEY: s3, S3_SECRET_KEY: s3,
   }, () => assert.doesNotThrow(() => assertProdSecrets()));
+  // کلید S3 ضعیف/پیش‌فرض ⇒ startup بسته می‌شود
+  withEnv({
+    NODE_ENV: 'production', NEXT_PHASE: '',
+    AFAGH_APP_DB_PASSWORD: strong,
+    DATABASE_URL: `postgres://afagh:${strong}@db:5432/afagh_db`,
+    S3_ACCESS_KEY: 'afagh', S3_SECRET_KEY: 'afagh-secret',
+  }, () => assert.throws(() => assertProdSecrets()));
   // رمز ضعیف فقط در URL (نه ENV) هم گرفته می‌شود
   withEnv({
     NODE_ENV: 'production', NEXT_PHASE: '', AFAGH_APP_DB_PASSWORD: undefined,

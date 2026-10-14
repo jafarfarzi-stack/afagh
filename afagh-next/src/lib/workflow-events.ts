@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { student_requests, workflow_events } from '@/db/schema';
 import { getNumber, getSetting } from '@/lib/settings';
 import { createLogger } from '@/lib/logger';
+import { ssrfFetch } from '@/lib/ssrf-guard';
 
 // ══════════════════════════════════════════════════════════════════════
 //  گذرگاه رویداد موتور گردش کار (Workflow Event Bus)
@@ -218,7 +219,9 @@ export async function dispatchWorkflowEvent(
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), Math.max(1, timeoutSec) * 1000);
       try {
-        await fetch(url, {
+        // گارد SSRF: مقصد وب‌هوک از تنظیمات مدیر می‌آید (بدون allow-list میزبان؛
+        // فقط https + مقصد عمومی، یا میزبان مجازِ AFAGH_SSRF_ALLOW_HOSTS برای وب‌هوک داخلی).
+        await ssrfFetch(url, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -231,7 +234,7 @@ export async function dispatchWorkflowEvent(
             firedAt: meta.firedAt.toISOString(),
           }),
           signal: ctrl.signal,
-        });
+        }, { settingKey: 'WORKFLOW_WEBHOOK_URL' });
       } finally {
         clearTimeout(timer);
       }

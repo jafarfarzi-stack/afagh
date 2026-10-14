@@ -67,18 +67,20 @@ async function saveOffset(channel: MessengerChannel, offset: number): Promise<vo
 async function fetchUpdates(
   channel: MessengerChannel, offset: number,
 ): Promise<{ updates: Update[]; ok: boolean }> {
-  const { token, base, style } = await getConfig(channel);
+  const { token, base, style, baseKey } = await getConfig(channel);
   if (!token) return { updates: [], ok: false };
   const url = style === 'EITAA' ? `${base}/${token}/getUpdates` : `${base}/bot${token}/getUpdates`;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), (LONG_POLL_SEC + 10) * 1000);
   try {
-    const r = await fetch(url, {
+    // 🔒 SSRF — نشانی پایه از تنظیمات می‌آید؛ allow-list همان کانال + بررسی DNS.
+    const { ssrfFetch } = await import('@/lib/ssrf-guard');
+    const r = await ssrfFetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ offset, timeout: LONG_POLL_SEC, allowed_updates: ['message'] }),
       signal: ctrl.signal,
-    });
+    }, { settingKey: baseKey });
     // 409 یعنی یک getUpdates دیگر هم‌زمان فعال است (نمونهٔ قدیمی در حال خاموشی
     // یا تست دستی) — با خطای مشخص لاگ می‌شود تا با قطعی واقعی اشتباه نشود.
     if (r.status === 409) throw new Error('getUpdates_http409_conflict');

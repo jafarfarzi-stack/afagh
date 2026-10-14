@@ -36,7 +36,7 @@ export async function getSaminToken(universityId: number): Promise<string> {
 
   // احراز هویت ثمین: Basic(clientId:secret) + grant_type=password
   const basic = Buffer.from(`${conn.clientId}:${secret}`).toString('base64');
-  const res = await fetch(conn.authBaseUrl, {
+  const res = await saminFetch(conn.authBaseUrl, {
     method: 'POST',
     headers: {
       Authorization: `Basic ${basic}`,
@@ -71,13 +71,29 @@ export async function getSaminToken(universityId: number): Promise<string> {
   return access;
 }
 
+/**
+ * 🔒 fetch امن برای سرویس ثمین.
+ *
+ * `authBaseUrl` / `apiBaseUrl` را کارشناس هنگام ثبت «اتصال ثمین» وارد می‌کند،
+ * پس نشانیِ دلخواه است و بدون گارد می‌شد مسیر SSRF بود (خواندن متادیتای
+ * ابریِ 169.254.169.254 یا درخواست به شبکهٔ داخلی — آن هم با هدر
+ * Authorization که توکن/گذرواژهٔ سرویس را به مقصد مهاجم می‌برد).
+ *
+ * پیش‌فرض فقط میزبان‌های رسمی سامان (`SAMIN_HOSTS`) است؛ برای سرویس
+ * خودمیزبان، میزبان باید صریحاً در `AFAGH_SSRF_ALLOW_HOSTS` اعلام شود.
+ */
+async function saminFetch(url: string, init?: RequestInit): Promise<Response> {
+  const { ssrfFetch, SAMIN_HOSTS } = await import('@/lib/ssrf-guard');
+  return ssrfFetch(url, init, { allowedHosts: [...SAMIN_HOSTS] });
+}
+
 export async function saminBulkImport(universityId: number, payload: SaminBulkPayload): Promise<{ response_code: number; import_data_status: string; trace_id: number }> {
   const [conn] = await db.select().from(samin_connections).where(eq(samin_connections.universityId, universityId)).limit(1);
   if (!conn) throw new Error('اتصال ثمین یافت نشد');
   const token = await getSaminToken(universityId);
   const url = `${conn.apiBaseUrl.replace(/\/+$/, '')}/api/mdm/import_data/bulk_import_data/`;
 
-  const res = await fetch(url, {
+  const res = await saminFetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -108,7 +124,7 @@ export async function saminTrace(universityId: number, traceId: number): Promise
   const token = await getSaminToken(universityId);
   const url = `${conn.apiBaseUrl.replace(/\/+$/, '')}/api/mdm/import_data/trace_bulk_import_data?trace_id=${traceId}`;
 
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await saminFetch(url, { headers: { Authorization: `Bearer ${token}` } });
   const j = await res.json().catch(async () => ({ raw: await res.text() }));
   if (!res.ok) throw new Error(`trace ${res.status}: ${JSON.stringify(j).slice(0, 500)}`);
   return j;
@@ -122,7 +138,7 @@ export async function saminGetChangesLog(universityId: number, entityCode: strin
   if (traceId) p.set('trace_id', String(traceId));
   const url = `${conn.apiBaseUrl.replace(/\/+$/, '')}/api/mdm/log/get_changeslog?${p}`;
 
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await saminFetch(url, { headers: { Authorization: `Bearer ${token}` } });
   const j = await res.json().catch(async () => ({ raw: await res.text() }));
   if (!res.ok) throw new Error(`get_changeslog ${res.status}: ${JSON.stringify(j).slice(0, 500)}`);
   return j;

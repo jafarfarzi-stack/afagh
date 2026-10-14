@@ -49,7 +49,8 @@ export async function getConfig(channel: MessengerChannel) {
   const cfg = MESSENGER_CONFIGS[channel];
   const token = (await getSetting(cfg.tokenKey)).trim();
   const base = ((await getSetting(cfg.baseKey)) || cfg.defaultBase).replace(/\/+$/, '');
-  return { token, base, style: cfg.style };
+  // baseKey برگردانده می‌شود تا گارد SSRF بتواند allow-list همان کانال را اعمال کند
+  return { token, base, style: cfg.style, baseKey: cfg.baseKey };
 }
 
 /** inbound این کانال مجاز است؟ — fail-closed: هر خطا/نبود پرچم = خاموش. */
@@ -64,18 +65,21 @@ export async function isInboundEnabled(channel: MessengerChannel): Promise<boole
 // ──────── ارسال پیام ────────
 
 export async function sendMessage(channel: MessengerChannel, chatId: string, text: string): Promise<boolean> {
-  const { token, base, style } = await getConfig(channel);
+  const { token, base, style, baseKey } = await getConfig(channel);
   if (!token) return false;
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 10_000);
     const url = style === 'EITAA' ? `${base}/${token}/sendMessage` : `${base}/bot${token}/sendMessage`;
-    const r = await fetch(url, {
+    // 🔒 SSRF: نشانی پایه از تنظیمات مدیر می‌آید ⇒ با allow-list همان کانال
+    //    (کلید = baseKey) و بررسی DNS اعتبارسنجی می‌شود.
+    const { ssrfFetch } = await import('@/lib/ssrf-guard');
+    const r = await ssrfFetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
       signal: ctrl.signal,
-    });
+    }, { settingKey: baseKey });
     clearTimeout(t);
     return r.ok;
   } catch (e) {
@@ -90,13 +94,16 @@ export async function sendMessage(channel: MessengerChannel, chatId: string, tex
 //  هرگز خطا پرتاب نمی‌کند: اگر API در دسترس نباشد، لاگ + ادامه.
 
 export async function deleteMessengerWebhook(channel: MessengerChannel): Promise<{ ok: boolean; error?: string }> {
-  const { token, base, style } = await getConfig(channel);
+  const { token, base, style, baseKey } = await getConfig(channel);
   if (!token) return { ok: false, error: 'token_missing' };
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 15_000);
     const url = style === 'EITAA' ? `${base}/${token}/deleteWebhook` : `${base}/bot${token}/deleteWebhook`;
-    const r = await fetch(url, { method: 'POST', signal: ctrl.signal });
+    // 🔒 SSRF — همان allow-list کانال (نویسندهٔ این مسیرِ مهاجرتی است و نباید
+    //    به مقصد دلخواهِ تنظیمات بتواند برود).
+    const { ssrfFetch } = await import('@/lib/ssrf-guard');
+    const r = await ssrfFetch(url, { method: 'POST', signal: ctrl.signal }, { settingKey: baseKey });
     clearTimeout(t);
     if (!r.ok) {
       log.warn('webhook_delete_http', { channel, status: r.status });

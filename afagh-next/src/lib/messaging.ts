@@ -38,11 +38,18 @@ async function timeoutMs() {
   return (await getNumber('API_TIMEOUT_SECONDS', 10)) * 1000;
 }
 
+/**
+ * 🔒 SSRF: هر نشانیِ سرویس پیامک از تنظیمات مدیر می‌آید (SMS_BASE_URL و
+ *    قالب‌های اختصاصی)، پس پیش از fetch باید از گارد رد شود. گارد هم DNS را
+ *    بررسی می‌کند و هم هر مقصد ریدایرکت را دوباره اعتبارسنجی می‌کند.
+ *    سرویس‌های درون‌خوشه‌ای با AFAGH_SSRF_ALLOW_HOSTS استثنا هستند.
+ */
 async function httpJson(url: string, init?: RequestInit) {
+  const { ssrfFetch } = await import('@/lib/ssrf-guard');
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), await timeoutMs());
   try {
-    const r = await fetch(url, { ...init, signal: ctrl.signal });
+    const r = await ssrfFetch(url, { ...init, signal: ctrl.signal });
     const text = await r.text();
     if (!r.ok) throw new Error(`HTTP ${r.status}: ${text.slice(0, 160)}`);
     return text;

@@ -147,7 +147,11 @@ export async function executeIrandocCheck(params: {
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 10000);
-      const r = await fetch(`${irandocBase}/similarity-check`, {
+      // 🔒 SSRF + حفاظت از PII: نشانی سرویس از تنظیمات مدیر می‌آید و این
+      //    درخواست «کد ملی» و عنوان پایان‌نامه را حمل می‌کند؛ اگر مقصد مهاجم
+      //    باشد، هم به شبکهٔ داخلی می‌رسد و هم دادهٔ شخصی فرد به او نشت می‌کند.
+      const { ssrfFetch } = await import('@/lib/ssrf-guard');
+      const r = await ssrfFetch(`${irandocBase}/similarity-check`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

@@ -60,6 +60,38 @@ export interface ExamAppealRecheck {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+// ───────────── توکن برداشت اوراق — فقط هش در پایگاه داده ─────────────
+//
+// الگو از `messenger-link-tokens.ts` (tokenHash) و `auth.ts` (`sha256`):
+// مقدار خام توکن فقط یک‌بار هنگام صدور به استاد داده می‌شود و هرگز در DB نمی‌نشیند.
+// ستون `pickupToken` (varchar(64) یکتا) حالا sha256(token) به‌صورت hex است.
+
+/** الگوی هش: دقیقاً ۶۴ کاراکتر hex — یعنی مقدار از قبل هش شده است */
+const SHA256_HEX_RE = /^[0-9a-f]{64}$/i;
+
+function sha256hex(s: string): string {
+  return crypto.createHash('sha256').update(s, 'utf8').digest('hex');
+}
+
+/**
+ * مقایسهٔ توکن ارائه‌شده با مقدار ذخیره‌شده.
+ *
+ * سازگاری با ردیف‌های قدیمی: پیش از این تغییر مقدار خام در DB بود. توکن خامِ
+ * قدیمی خودش `randomBytes(32)` یعنی دقیقاً ۶۴ رقم hex است، پس «شبیه هش» هم هست؛
+ * بنابراین هر دو تفسیر پذیرفته می‌شود: مقدار ذخیره‌شده یا خودش هش است یا هشِ
+ * توکن خام. پس ردیف قدیمی و ردیف تازه بدون مهاجرت کار می‌کنند.
+ */
+function pickupTokenMatches(stored: string, presented: string): boolean {
+  const s = String(stored ?? '');
+  if (!s) return false;
+  const want = Buffer.from(sha256hex(presented), 'hex');
+  const candidates = SHA256_HEX_RE.test(s) ? [s, sha256hex(s)] : [sha256hex(s)];
+  return candidates.some(c => {
+    const a = Buffer.from(c, 'hex');
+    return a.length === want.length && crypto.timingSafeEqual(a, want);
+  });
+}
+
 /** VALUES چندردیفی کاملاً پارامتری — هرگز روی ورودی کاربر sql.raw نمی‌شود */
 function valuesSql(rows: ReturnType<typeof sql>[]): ReturnType<typeof sql.join> {
   return sql.join(rows, sql`, `);
@@ -507,7 +539,8 @@ export async function finalizeVaultHandover(actorUserId: number | null, sessionI
 
 /**
  * تحویل اوراق به استاد: مهلت نمره‌دهی (gradeDeadline) از تنظیمات خوانده می‌شود؛
- * توکن برداشت یکتا تولید و تحویل در instructor_deliveries ثبت می‌شود.
+ * توکن برداشت یکتا تولید می‌شود و **فقط sha256 آن** در instructor_deliveries ثبت
+ * می‌گردد؛ مقدار خام یک‌بار در پاسخ برگردانده می‌شود.
  * گلوگاه: فقط درس‌هایی که fully collected شده‌اند قابل تحویل‌اند؛
  * چک «تحویل فعالِ تکراری» داخل تراکنش + قفل توافقی (بدون duplicate در race).
  */
@@ -544,6 +577,9 @@ export async function deliverToInstructor(
   }
 
   const pickupToken = crypto.randomBytes(32).toString('hex');
+  // 🔒 فقط هش ذخیره می‌شود؛ مقدار خام یک‌بار همین‌جا به فراخواننده برمی‌گردد
+  //    (تحویل حضوری/چاپی به استاد) و دیگر هرگز قابل بازیابی نیست.
+  const pickupTokenDigest = sha256hex(pickupToken);
   const gradeDeadline = new Date(Date.now() + deadlineDays * 86400_000);
   const sheetCount = Number(row.totalDeliveredSheets ?? 0);
 
@@ -567,7 +603,7 @@ export async function deliverToInstructor(
         courseOfferingId: offeringId,
         instructorId,
         sheetCount,
-        pickupToken,
+        pickupToken: pickupTokenDigest,
         deliveredAt: new Date(),
         vaultManagerId,
         gradeDeadline,
@@ -578,10 +614,32 @@ export async function deliverToInstructor(
     await auditChain(tx, actorUserId, 'EXAM_DELIVERED_TO_INSTRUCTOR', 'instructor_delivery', delivery.id, {
       offeringId, instructorId, sheetCount, gradeDeadline: gradeDeadline.toISOString(),
     });
+    // ⚠️ `pickupToken` در این پاسخ، مقدار خام است و تنها بارِ قابل بازیابی آن است.
+    //    لاگ ممیزی عمداً هش/توکن ندارد (فقط شناسه‌ها و مهلت).
     return { ok: true as const, deliveryId: delivery.id, pickupToken, sheetCount, gradeDeadline };
   });
 
   return result;
+}
+
+/**
+ * راستی‌آزمایی توکن برداشت ارائه‌شده در برابر `instructor_deliveries.pickupToken`.
+ *
+ * جست‌وجو با هش انجام می‌شود (`sha256(token)` = ستون)؛ اگر ردیفی مقدار خامِ
+ *legacy داشته باشد، هشِ آن مقدار خام محاسبه و با مقدار ارائه‌شده مقایسه می‌گردد.
+ * مقایسه زمان‌ثابت است؛ هیچ مقدار خامی وارد لاگ نمی‌شود.
+ */
+export async function verifyInstructorPickupToken(token: string): Promise<boolean> {
+  const raw = String(token ?? '').trim();
+  if (!raw) return false;
+  const digest = sha256hex(raw);
+  // نامزدها: ردیف‌های هش‌شده با این هش + ردیف‌های legacy که خودِ توکن خام در ستون است.
+  const rows = await db
+    .select({ stored: instructor_deliveries.pickupToken })
+    .from(instructor_deliveries)
+    .where(sql`${instructor_deliveries.pickupToken} = ${digest} or ${instructor_deliveries.pickupToken} = ${raw}`)
+    .limit(5);
+  return rows.some(r => pickupTokenMatches(r.stored, raw));
 }
 
 // ─────────────────────────── مرحلهٔ ۶: ثبت نمرات (بارم‌بندی) ───────────────────────────

@@ -71,6 +71,38 @@ function s3SecretKey(): string {
   return (process.env.S3_SECRET_KEY || process.env.MINIO_ROOT_PASSWORD || '').trim();
 }
 
+/** پیش‌فرض‌های عمومیِ توسعه — هرگز در پروداکشن پذیرفته نمی‌شوند */
+export const S3_DEV_DEFAULT_ACCESS_KEY = 'afagh';
+export const S3_DEV_DEFAULT_SECRET_KEY = 'afagh-secret';
+
+/**
+ * گارد fail-closed کلیدهای Object Storage.
+ *
+ * برخلاف رمزهای نقش DB، اینجا سیاست «طول/ساختار» اعمال نمی‌شود (کلید دسترسی S3
+ * می‌تواند کوتاه باشد)؛ فقط دو حالت کشنده رد می‌شود:
+ *   ۱) هرکدام تنظیم نشده → objectStore با پیش‌فرض داخلی بالا می‌آمد (پیش‌تر فقط
+ *      هشدار می‌داد ⇒ در سکوت نصب ناامن بود).
+ *   ۲) برابر با پیش‌فرض عمومی توسعه (`afagh` / `afagh-secret`) → بایگانی اسناد
+ *      دانشجویان عملاً بدون رمز است.
+ *
+ * همان escape hatch سیاست DB: `ALLOW_WEAK_SECRETS=1` (فقط توسعه/دمو).
+ */
+export function checkObjectStoreCredentials(allowWeak = process.env.ALLOW_WEAK_SECRETS === '1'): SecretVerdict {
+  const access = s3AccessKey();
+  const secret = s3SecretKey();
+  if (!access || !secret) {
+    return allowWeak
+      ? { ok: true, weak: true }
+      : { ok: false, reason: 'کلیدهای Object Storage (S3_ACCESS_KEY / S3_SECRET_KEY یا MINIO_ROOT_USER / MINIO_ROOT_PASSWORD) تنظیم نشده‌اند' };
+  }
+  if (access === S3_DEV_DEFAULT_ACCESS_KEY || secret === S3_DEV_DEFAULT_SECRET_KEY) {
+    return allowWeak
+      ? { ok: true, weak: true }
+      : { ok: false, reason: 'کلیدهای Object Storage یکی از پیش‌فرض‌های عمومی توسعه (afagh / afagh-secret) است — در پروداکشن پذیرفته نمی‌شود' };
+  }
+  return { ok: true };
+}
+
 /**
  * در production اجرا می‌شود و روی نقض، startup را می‌بندد (fail-closed).
  * در build (NEXT_PHASE) و توسعه فقط هشدار می‌دهد.
@@ -85,10 +117,9 @@ export function assertProdSecrets(): void {
       checks.push(checkDbSecret('رمز کاربر مالک در DATABASE_URL', owner, allowWeak));
     } catch { /* URL غیراستاندارد — اتصال خودش خطا می‌دهد */ }
   }
-  // P1: کلیدهای S3/MinIO هم با همان سیاست — پیش‌فرض‌های توسعهٔ محلی
-  // (مقادیر docker-compose.yml) در پروداکشن fail-closed است. اگر هیچ‌کدام
-  // تنظیم نشده باشد، objectStore با پیش‌فرض داخلی بالا می‌آید؛ پس بلند هشدار
-  // می‌دهیم تا در سکوت نماند (نصب‌های قدیمی که S3 نمی‌خواهند نمی‌شکنند).
+  // P1: کلیدهای S3/MinIO هم fail-closed. objectStore.ts همین گارد را هنگام ساخت
+  // کلاینت صدا می‌زند؛ اینجا فقط لایهٔ startup است تا علت همان‌جا دیده شود.
+  checks.push(checkObjectStoreCredentials(allowWeak));
   const access = s3AccessKey();
   const secret = s3SecretKey();
   if (access) checks.push(checkDbSecret('S3_ACCESS_KEY', access, allowWeak));
@@ -107,7 +138,7 @@ export function assertProdSecrets(): void {
   if (!access && !secret) {
     console.warn(
       '[s3] ⚠ هیچ‌یک از S3_ACCESS_KEY / S3_SECRET_KEY (یا MINIO_ROOT_USER / MINIO_ROOT_PASSWORD) تنظیم نشده است — ' +
-      'اتصال Object Storage با پیش‌فرض داخلی توسعه بالا می‌آید. اگر این سرور پروداکشن واقعی با بایگانی است، کلید قوی بگذارید.',
+      'پیش‌فرض توسعه فقط در حالت غیرپروداکشن مجاز است.',
     );
   }
 }

@@ -1,14 +1,32 @@
 /**
- * گارد SSRF برای نشانی‌های بیرونی (تنظیمات مدیر + اتصال ثمین).
+ * گارد SSRF برای نشانی‌های بیرونی (تنظیمات مدیر + اتصال ثمین + وب‌هوک گردش کار).
  * - فقط https (بدون userinfo)
  * - allow-list میزبان به‌ازای هر یکپارچه‌سازی (اختیاری)
  * - بررسی DNS: همهٔ رکوردهای A/AAAA باید عمومی باشند (نه خصوصی/لوپ‌بک/لینک‌لوکال)
+ * - نشانی‌های IPv4 جاسازی‌شده در IPv6 (::ffff:127.0.0.1) و NAT64 (64:ff9b::/96)
+ *   پیش از بررسی رنج، به IPv4 باز می‌شوند تا دور زدن ممکن نباشد.
+ * - ریدایرکت دستی: هر مقصد پیش از دنبال‌کردن دوباره اعتبارسنجی می‌شود
+ *   (هم مسیر دور زدن allow-list/DNS و هم پنجرهٔ DNS rebinding).
  * فقط node built-ins (node:dns/promises) — وابستگی جدید ندارد.
  * عمداً server-only ندارد تا با tsx تست‌پذیر بماند؛ بررسی DNS در رانتایم Node
- * انجام می‌شود و نقطهٔ اعمال (settings/samin actions) سمت سرور است.
+ * انجام می‌شود و نقطهٔ اعمال (settings/samin actions + هر فراخوان بیرونی) سمت سرور است.
+ *
+ * ── استثنای صریح اپراتور برای سرویس‌های درون‌خوشه‌ای ──
+ * بعضی سرویس‌ها مستندشده روی نشانی خصوصی/نام داکری اجرا می‌شوند (مثلاً
+ * `minio`، یک سرویس خودمیزبان سجاد/سپهر/ایرانداک روی میزبان داخلی). گارد
+ * به‌جای حذف‌شدن، راه خروج صریح دارد:
+ *   AFAGH_SSRF_ALLOW_HOSTS=minio,samin.internal,irandoc.lan
+ * میزبان‌های فهرست‌شده «مجاز اعلام‌شده» تلقی می‌شوند: بررسی DNS-خصوصی و
+ * allow-list پیش‌فرض سرویس رویشان اعمال نمی‌شود و `http://` هم برایشان مجاز
+ * است (سرویس داخلی معمولاً TLS ندارد). بقیهٔ کنترل‌ها (سینتکس، نبود
+ * userinfo، اعتبارسنجی مجدد هر ریدایرکت) سر جایشان می‌ماند. این متغیر فقط از
+ * ENV خوانده می‌شود و از پنل مدیر قابل نوشتن نیست.
  */
 
 export const SAMIN_HOSTS = ['apim.saorg.ir', 'apiauth.saorg.ir'] as const;
+
+/** نام متغیر محیطیِ allow-list اپراتور (سرویس‌های داخلی). */
+export const ENV_ALLOW_HOSTS_VAR = 'AFAGH_SSRF_ALLOW_HOSTS';
 
 /** میزبان‌های پیش‌فرض شناخته‌شده به‌ازای هر کلید تنظیمات (قابل گسترش). */
 const PRESET_HOSTS: Record<string, string[]> = {
@@ -44,8 +62,54 @@ export function isPrivateIPv4(ip: string): boolean {
   return false;
 }
 
-export function isPrivateIP(ip: string): boolean {
-  const v = ip.trim().toLowerCase().replace(/^\[(.*)\]$/, '$1');
+const IPV4_RE = /^\d{1,3}(\.\d{1,3}){3}$/;
+
+/** بازکردن نشانی IPv6 به ۸ هگزت (بدون zone-id). null اگر IPv6 معتبر نباشد. */
+function expandIPv6(raw: string): number[] | null {
+  let s = raw.trim().toLowerCase().split('%')[0];
+  if (!s.includes(':')) return null;
+  const dc = s.lastIndexOf(':');
+  const tail = s.slice(dc + 1);
+  if (tail.includes('.')) {
+    // بخش dotted-quad انتهایی (مثل ::ffff:127.0.0.1) → دو هگزت
+    if (!IPV4_RE.test(tail)) return null;
+    const p = tail.split('.').map(Number);
+    if (p.some(n => n > 255)) return null;
+    s = `${s.slice(0, dc + 1)}${(((p[0] << 8) | p[1]) >>> 0).toString(16)}:${(((p[2] << 8) | p[3]) >>> 0).toString(16)}`;
+  }
+  const halves = s.split('::');
+  if (halves.length > 2) return null;
+  const hex = (t: string) => (/^[0-9a-f]{1,4}$/.test(t) ? parseInt(t, 16) : NaN);
+  const head = (halves[0] ? halves[0].split(':') : []).map(hex);
+  const rest = halves.length === 2 ? (halves[1] ? halves[1].split(':') : []).map(hex) : [];
+  if (head.concat(rest).some(n => Number.isNaN(n))) return null;
+  const missing = 8 - (head.length + rest.length);
+  if (halves.length === 1 ? missing !== 0 : missing < 1) return null;
+  const out = halves.length === 1 ? head : [...head, ...new Array<number>(missing).fill(0), ...rest];
+  return out.length === 8 ? out : null;
+}
+
+/**
+ * IPv4 جاسازی‌شده در IPv6 را بیرون می‌کشد:
+ *   • ::ffff:a.b.c.d  (IPv4-mapped)      • ::a.b.c.d  (compatible)
+ *   • 64:ff9b::a.b.c.d  (NAT64 well-known prefix)
+ * بقیهٔ نشانی‌های IPv6 (یا ورودی نامعتبر) → null.
+ */
+export function embeddedIPv4(raw: string): string | null {
+  const w = expandIPv6(raw);
+  if (!w) return null;
+  const zero6 = w.slice(0, 6).every(n => n === 0);
+  const isMapped = zero6 && w[5] === 0xffff;
+  const isCompat = zero6;
+  const isNat64 = w[0] === 0x64 && w[1] === 0xff9b && w.slice(2, 6).every(n => n === 0);
+  if (!isMapped && !isCompat && !isNat64) return null;
+  return `${w[6] >> 8}.${w[6] & 255}.${w[7] >> 8}.${w[7] & 255}`;
+}
+
+export function isPrivateIP(raw: string): boolean {
+  const v = raw.trim().toLowerCase().replace(/^\[(.*)\]$/, '$1');
+  const inner = embeddedIPv4(v);
+  if (inner) return isPrivateIPv4(inner); // جاسازی‌شده/NAT64 → همان قواعد IPv4
   if (v.includes(':')) {
     // IPv6: لوپ‌بک، unspecified، لینک‌لوکال، unique-local
     if (v === '::1' || v === '::') return true;
@@ -57,12 +121,19 @@ export function isPrivateIP(ip: string): boolean {
   return isPrivateIPv4(v);
 }
 
-function hostAllowed(hostname: string, allowed: string[]): boolean {
+function hostAllowed(hostname: string, allowed: readonly string[]): boolean {
   const h = hostname.toLowerCase();
   return allowed.some(a => {
-    const x = a.toLowerCase();
+    const x = a.toLowerCase().replace(/^\./, '');
     return h === x || h.endsWith(`.${x}`);
   });
+}
+
+/** allow-list اپراتور از ENV (سرویس‌های درون‌خوشه‌ای/خودمیزبان). */
+export function envAllowedHosts(): string[] {
+  const raw = process.env[ENV_ALLOW_HOSTS_VAR];
+  if (!raw) return [];
+  return raw.split(',').map(s => s.trim()).filter(Boolean);
 }
 
 export interface AssertSafeUrlOptions {
@@ -81,15 +152,17 @@ export class UnsafeUrlError extends Error {
   }
 }
 
-/** بررسی نحوی: https-only + بدون userinfo. خروجی URL پارس‌شده. */
-export function parseSafeUrl(raw: string): URL {
-  const v = raw.trim();
-  let u: URL;
+function parseUrl(raw: string): URL {
   try {
-    u = new URL(v);
+    return new URL(raw.trim());
   } catch {
     throw new UnsafeUrlError('نشانی معتبر نیست.');
   }
+}
+
+/** بررسی نحوی: https-only + بدون userinfo. خروجی URL پارس‌شده. */
+export function parseSafeUrl(raw: string): URL {
+  const u = parseUrl(raw);
   if (u.protocol !== 'https:') throw new UnsafeUrlError('نشانی باید با https:// شروع شود.');
   if (u.username || u.password) throw new UnsafeUrlError('نشانی نباید نام‌کاربری/رمز داشته باشد.');
   if (!u.hostname) throw new UnsafeUrlError('میزبان نشانی نامشخص است.');
@@ -99,15 +172,24 @@ export function parseSafeUrl(raw: string): URL {
 /**
  * اعتبارسنجی کامل SSRF: سینتکس + allow-list (در صورت تعیین) + بررسی DNS.
  * خطا با UnsafeUrlError و پیام فارسی.
+ *
+ * میزبانِ فهرست‌شده در AFAGH_SSRF_ALLOW_HOSTS استثناست: http و نشانی خصوصی
+ * برایش مجاز است و allow-list سرویس روی آن اعمال نمی‌شود (سرویس داخلی اپراتور).
  */
 export async function assertSafeUrl(raw: string, opts: AssertSafeUrlOptions = {}): Promise<URL> {
-  const u = parseSafeUrl(raw);
+  const probe = parseUrl(raw);
+  const trusted = hostAllowed(probe.hostname, envAllowedHosts());
+  // http فقط برای میزبان‌های مجاز اعلام‌شده؛ بقیه سخت‌گیرانه https-only می‌مانند.
+  const u = trusted && (probe.protocol === 'http:' || probe.protocol === 'https:') ? probe : parseSafeUrl(raw);
+  if (u.username || u.password) throw new UnsafeUrlError('نشانی نباید نام‌کاربری/رمز داشته باشد.');
+  if (!u.hostname) throw new UnsafeUrlError('میزبان نشانی نامشخص است.');
+
   const preset = opts.settingKey ? (PRESET_HOSTS[opts.settingKey] ?? null) : null;
   const allowed = opts.allowedHosts ?? preset ?? undefined;
-  if (allowed && allowed.length > 0 && !hostAllowed(u.hostname, [...allowed])) {
+  if (!trusted && allowed && allowed.length > 0 && !hostAllowed(u.hostname, allowed)) {
     throw new UnsafeUrlError(`میزبان «${u.hostname}» برای این سرویس مجاز نیست.`);
   }
-  if (opts.dnsCheck === false) return u;
+  if (opts.dnsCheck === false || trusted) return u;
   const { lookup } = await import('node:dns/promises');
   let records: { address: string }[];
   try {
@@ -124,8 +206,38 @@ export async function assertSafeUrl(raw: string, opts: AssertSafeUrlOptions = {}
   return u;
 }
 
-/** fetch امن: اعتبارسنجی SSRF + redirect دستی (جلوگیری از دور زدن via ریدایرکت). */
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const MAX_REDIRECTS = 5;
+
+/**
+ * fetch امن: اعتبارسنجی SSRF + ریدایرکت دستی.
+ * هر مقصد ریدایرکت پیش از دنبال‌کردن دوباره از صفر اعتبارسنجی می‌شود، پس نه
+ * allow-list/DNS دور زده می‌شود و نه به میزبانی می‌رسیم که فقط «در لحظهٔ
+ * اعتبارسنجی» عمومی بوده (DNS rebinding).
+ */
 export async function ssrfFetch(raw: string, init?: RequestInit, opts: AssertSafeUrlOptions = {}): Promise<Response> {
-  await assertSafeUrl(raw, opts);
-  return fetch(raw, { ...init, redirect: 'manual' });
+  const base = init ?? {};
+  let current = raw;
+  let currentInit: RequestInit = base;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    await assertSafeUrl(current, opts);
+    const res = await fetch(current, { ...currentInit, redirect: 'manual' });
+    if (!REDIRECT_STATUSES.has(res.status)) return res;
+    const location = res.headers.get('location');
+    if (!location) return res;
+    if (hop === MAX_REDIRECTS) throw new UnsafeUrlError('تعداد ریدایرکت‌ها بیش از حد مجاز است.');
+    let next: string;
+    try {
+      next = new URL(location, current).toString();
+    } catch {
+      throw new UnsafeUrlError('مقصد ریدایرکت معتبر نیست.');
+    }
+    current = next;
+    // ۳۰۳ و (۳۰۱/۳۰۲ روی POST) طبق رفتار استاندارد به GET تبدیل می‌شوند.
+    const method = (currentInit.method ?? 'GET').toUpperCase();
+    if (res.status === 303 || ((res.status === 301 || res.status === 302) && method === 'POST')) {
+      currentInit = { ...currentInit, method: 'GET', body: undefined };
+    }
+  }
+  throw new UnsafeUrlError('تعداد ریدایرکت‌ها بیش از حد مجاز است.');
 }
