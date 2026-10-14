@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getSessionUser } from '@/lib/auth';
 import HelpScreenshot from '@/components/help/HelpScreenshot';
-import { HelpBreadcrumbs, HelpPrevNext } from '@/components/help/HelpNav';
+import { HelpBreadcrumbs, HelpPrevNext, HelpTopBar } from '@/components/help/HelpNav';
 import { canViewGuide, findTopic, getRoleGuide, isHelpRoleKey, topicPrevNext } from '../../content/index';
 
 export async function generateMetadata(props: { params: Promise<{ role: string; slug: string }> }) {
@@ -36,6 +36,7 @@ export default async function HelpTopicPage(props: { params: Promise<{ role: str
   return (
     <div className="min-h-screen bg-slate-100 p-4 text-slate-900 sm:p-8" dir="rtl">
       <article className="mx-auto max-w-3xl space-y-5">
+        <HelpTopBar role={g.role} title={t.title} />
         <HelpBreadcrumbs trail={[{ label: 'مرکز راهنما', href: '/help' }, { label: g.title, href: `/help/${g.role}` }, { label: t.title }]} />
 
         <header className="rounded-3xl bg-slate-900 p-6 text-white shadow-xl sm:p-8">

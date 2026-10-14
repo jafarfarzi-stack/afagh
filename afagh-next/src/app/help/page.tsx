@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getSessionUser } from '@/lib/auth';
 import HelpSearch from '@/components/help/HelpSearch';
+import { HelpTopBar } from '@/components/help/HelpNav';
 import { allRoleGuides, buildHelpIndex, defaultGuideForRoles, isHelpRoleKey, visibleGuides } from './content/index';
 
 export const metadata = { title: 'مرکز راهنمای سامانه آفاق' };
@@ -30,6 +31,7 @@ export default async function HelpLandingPage(props: { searchParams: Promise<{ t
   return (
     <div className="min-h-screen bg-slate-100 p-4 text-slate-900 sm:p-8" dir="rtl">
       <div className="mx-auto max-w-5xl space-y-6">
+        <HelpTopBar role={def} title="مرکز راهنمای سامانه آفاق" />
         <div className="flex flex-col gap-4 rounded-3xl border border-indigo-700/50 bg-gradient-to-l from-indigo-950 via-slate-900 to-indigo-900 p-6 text-white shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
           <div>
             <span className="rounded-full bg-amber-400 px-3 py-1 text-xs font-bold text-slate-950">مرکز راهنمای سامانه دانشگاهی آفاق</span>
