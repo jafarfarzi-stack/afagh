@@ -2,7 +2,7 @@ const { chromium } = require('playwright-core');
 const fs = require('fs');
 const path = require('path');
 
-const BASE = 'http://localhost:8080';
+const BASE = 'http://localhost:8081';
 const OUT_DIR = '/root/afagh/afagh-next/public/help';
 
 const ACCOUNTS = {
@@ -58,7 +58,7 @@ const JOBS = {
   'group-manager': {
     user: 'gm',
     pages: [
-      { route: '/group-manager', slug: 'offerings' },
+      { route: '/group-manager/offerings', slug: 'offerings' },
       { route: '/group-manager/courses', slug: 'courses' },
       { route: '/group-manager/classrooms', slug: 'classrooms' },
       { route: '/group-manager/equivalence', slug: 'equivalence' },
@@ -73,6 +73,18 @@ const JOBS = {
       { route: '/admin/samin', slug: 'samin' },
       { route: '/admin/student-finance', slug: 'finance' },
       { route: '/admin/students', slug: 'staff' },
+      { route: '/admin/payroll', slug: 'payroll' },
+      { route: '/admin/payroll/coverage', slug: 'payroll-coverage' },
+      { route: '/admin/payroll/roles', slug: 'payroll-roles' },
+      { route: '/admin/payroll/teaching-roles', slug: 'payroll-teaching-roles' },
+      { route: '/admin/payroll/objections', slug: 'payroll-objections' },
+      { route: '/admin/payroll/regulations', slug: 'payroll-regulations' },
+      { route: '/admin/payroll/exam-payments', slug: 'payroll-exam' },
+      { route: '/admin/payroll/decrees', slug: 'payroll-decrees' },
+      { route: '/admin/payroll/thesis', slug: 'payroll-thesis' },
+      { route: '/admin/finance/reports', slug: 'finance-reports' },
+      { route: '/admin/finance/reports/student-statement?studentId=1', slug: 'finance-statement' },
+      { route: '/admin/weekly-board', slug: 'weekly-board' },
     ],
   },
   shared: {
@@ -87,6 +99,7 @@ const JOBS = {
 };
 
 async function redactPage(page) {
+  // ۱) سراسری: کدها، موبایل و ایمیل — متن‌های رابط کاربری خوانا می‌مانند
   await page.evaluate(() => {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     const nodes = [];
@@ -100,10 +113,31 @@ async function redactPage(page) {
       t = t.replace(/\b(?!(?:14|13)\d{2}\b)\d{4,8}\b/g, '****');
       t = t.replace(/09\d{9}/g, '09*********');
       t = t.replace(/\S+@\S+\.\S+/g, '***@***.***');
-      t = t.replace(/[اآ-ی]{2,}\s+[اآ-ی]{2,}/g, '**** ****');
       if (t !== orig) node.textContent = t;
     }
   });
+  // ۲) نام اشخاص: فقط داخل ستون‌هایی که سرستون‌شان هویتی است
+  await page.evaluate(() => {
+    const nameHead = /نام|دانشجو|استاد|مدرس|کاربر|پرسنل|مشاور|راهنما|عامل|مراقب|ملی|خانوادگی|مخاطب|شخص|مدرس/;
+    document.querySelectorAll('table').forEach(tbl => {
+      const ths = [...tbl.querySelectorAll('thead th')];
+      if (!ths.length) return;
+      const idx = new Set();
+      ths.forEach((th, i) => { if (nameHead.test(th.textContent)) idx.add(i); });
+      if (!idx.size) return;
+      tbl.querySelectorAll('tbody tr').forEach(tr => {
+        [...tr.children].forEach((td, i) => {
+          if (td.tagName !== 'TD' || !idx.has(i)) return;
+          td.childNodes.forEach(n => {
+            if (n.nodeType === 3 && /[اآ-ی]/.test(n.textContent) && !/\d/.test(n.textContent)) {
+              n.textContent = '**** ****';
+            }
+          });
+        });
+      });
+    });
+  });
+  // ۳) مقادیر داخل ورودی‌ها
   await page.evaluate(() => {
     document.querySelectorAll('input[type="text"], input[type="email"], input[type="number"]').forEach(el => {
       if (el.value && el.value.length > 2) {
@@ -111,19 +145,12 @@ async function redactPage(page) {
       }
     });
   });
-  await page.evaluate(() => {
-    document.querySelectorAll('td, th').forEach(cell => {
-      const t = cell.textContent.trim();
-      if (t.match(/^[\d]{10,}$/) || t.match(/^[\d]{4,8}$/) || t.match(/^[اآ-ی]{2,}\s+[اآ-ی]{2,}$/)) {
-        cell.textContent = t.replace(/\d/g, '*').replace(/[اآ-ی]/g, '*');
-      }
-    });
-  });
 }
+
 
 async function login(page, account) {
   if (!account) return;
-  await page.goto('http://localhost:8080/login', { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.goto('http://localhost:8081/login', { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.fill('input[name=code]', account.code);
   await page.fill('input[name=password]', 'Tmp#98765');
   await page.click('button.btn-primary');
@@ -139,7 +166,7 @@ async function captureJob(browser, jobName) {
   if (account) await login(page, account);
 
   for (const p of job.pages) {
-    const url = p.route.startsWith('http') ? p.route : 'http://localhost:8080' + p.route;
+    const url = p.route.startsWith('http') ? p.route : BASE + p.route;
     console.log(`  ${jobName}/${p.slug} -> ${url}`);
     try {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });

@@ -1,7 +1,7 @@
 import type { HelpRoleGuide, HelpSection } from '@/components/help/help-types';
 import { studentSectionsStart } from './student-start';
 
-const UPDATED = '۱۴۰۵/۰۷/۱۶';
+const UPDATED = '۱۴۰۵/۰۷/۲۲'
 
 const studentSectionsMain: HelpSection[] = [
   {

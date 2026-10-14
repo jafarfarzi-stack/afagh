@@ -1,6 +1,6 @@
 import type { HelpRoleGuide } from '@/components/help/help-types';
 
-const UPDATED = '۱۴۰۵/۰۷/۱۶';
+const UPDATED = '۱۴۰۵/۰۷/۲۲'
 
 export const professorGuide: HelpRoleGuide = {
   role: 'professor',
