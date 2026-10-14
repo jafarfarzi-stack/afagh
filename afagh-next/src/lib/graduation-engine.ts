@@ -16,6 +16,8 @@ import { deliveriesForUser, notifyUserMultichannel } from '@/lib/messaging';
 import { getRegulationConfig } from '@/lib/regulations-engine';
 import { aggregateAuditTranscript } from '@/lib/gpa-aggregation';
 import { resolveStudentCurriculum, resolutionReasonMessage } from '@/lib/curriculum-apply';
+import { safeRials } from '@/lib/money';
+import { appendAudit } from '@/lib/audit';
 
 // ═══════════════════════════════════════════════════════════════════
 //  موتور فارغ‌التحصیلی «رویدادمحور» (Zero-Touch Graduation)
@@ -642,18 +644,54 @@ export async function setFinalPhoto(auditId: number, documentId: number) {
   return advanceDossier(auditId);
 }
 
-export async function payStampFee(auditId: number, userId: number) {
-  const [a] = await db.select().from(graduation_audits).where(eq(graduation_audits.id, auditId)).limit(1);
-  if (!a) throw new Error('پرونده یافت نشد.');
-  const fee = Number(a.stampFeeAmount ?? 0);
-  if (fee > 0 && !a.stampFeePaid) {
-    await db.insert(student_ledger).values({
-      studentId: a.studentId, termId: a.graduationTermId, transactionType: 'CREDIT',
-      amount: String(fee), description: 'پرداخت هزینهٔ تمبر ابطال دانشنامه',
+/**
+ * هزینهٔ تمبر ابطال — فقط کارشناس مالی می‌تواند آن را «پرداخت‌شده» کند.
+ *
+ * ⛔ پیش از این، اکشن دانشجویی (`payStampAction`) همین کار را می‌کرد و بدون
+ * هیچ درگاه یا رسیدی، ردیف `CREDIT` در `student_ledger` می‌نوشت؛ یعنی دانشجو
+ * با یک کلیک بدهی خودش را در دفتر مالی پاک می‌کرد (forge).
+ * حالا نوشتن به دفتر فقط از `settleStampFeeByFinance` انجام می‌شود: نقش مالی،
+ * تراکنش اتمیک، قفل ردیف و ممیزی.
+ */
+export async function settleStampFeeByFinance(auditId: number, actorUserId: number) {
+  return db.transaction(async (tx) => {
+    // 🔒 قفل ردیف: دو کارشناس همزمان نتوانند دو بار ثبت کنند
+    const rows = await tx.execute(sql`
+      SELECT id, "studentId", "graduationTermId", "universityId",
+             "stampFeeAmount", "stampFeePaid"
+      FROM graduation_audits WHERE id = ${auditId} FOR UPDATE`);
+    const a = rows.rows[0] as any;
+    if (!a) throw new Error('پرونده یافت نشد.');
+    if (a.stampFeePaid) throw new Error('این هزینه پیش‌تر تسویه شده است.');
+
+    const fee = safeRials(String(a.stampFeeAmount ?? '0'));
+    if (fee === null || fee <= 0) throw new Error('مبلغ هزینهٔ تمبر نامعتبر یا صفر است.');
+
+    const [led] = await tx.insert(student_ledger).values({
+      studentId: a.studentId,
+      termId: a.graduationTermId ?? null,
+      transactionType: 'PAYMENT',           // پرداخت واقعی، نه «اعتبار» رایگان
+      amount: String(fee),
+      description: 'پرداخت هزینهٔ تمبر ابطال دانشنامه (تأیید واحد مالی)',
+      universityId: a.universityId ?? null,
+    }).returning({ id: student_ledger.id });
+
+    const upd = await tx.update(graduation_audits)
+      .set({ stampFeePaid: 1, lastEventAt: new Date() })
+      .where(sql`id = ${auditId} AND "stampFeePaid" = 0`);
+    if (upd.rowCount !== 1) {
+      throw new Error('وضعیت پرونده در همین لحظه تغییر کرد؛ دوباره تلاش کنید.');
+    }
+
+    await appendAudit(tx, {
+      action: 'GRADUATION_STAMP_FEE_SETTLED',
+      entityType: 'graduation_audits',
+      entityId: auditId,
+      actorUserId: actorUserId ?? null,
+      details: JSON.stringify({ studentId: a.studentId, ledgerTxnId: led?.id ?? null, amount: fee }),
     });
-  }
-  await db.update(graduation_audits).set({ stampFeePaid: 1, lastEventAt: new Date() }).where(eq(graduation_audits.id, auditId));
-  return advanceDossier(auditId);
+    return { ok: true as const, ledgerTxnId: led?.id ?? null, amount: fee };
+  });
 }
 
 // ───────────────────── صدور مدرک ─────────────────────

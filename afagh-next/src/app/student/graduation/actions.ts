@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { document_categories, graduation_audits } from '@/db/schema';
 import { getStudentByUser, requireRole } from '@/lib/auth';
-import { getStudentTracker, payStampFee, setFinalPhoto, submitSajjadRequest } from '@/lib/graduation-engine';
+import { getStudentTracker, setFinalPhoto, submitSajjadRequest } from '@/lib/graduation-engine';
 import { activeChannels, listUserChannels, saveUserChannel, sendTestMessage, type Channel } from '@/lib/messaging';
 
 // ═══ تنها کنش‌هایی که از خودِ دانشجو خواسته می‌شود ═══
@@ -92,12 +92,22 @@ export async function submitSajjadAction(auditId: number, code: string) {
   } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : 'خطا' }; }
 }
 
+/**
+ * ⛔ تسویهٔ هزینهٔ تمبر از سمت دانشجو ممکن نیست.
+ *
+ * پیش از این، این اکشن ردیف `CREDIT` در دفتر مالی می‌نوشت و پرونده را جلو
+ * می‌برد — یعنی دانشجو بدون پرداخت هیچ پولی، بدهی‌اش در دفتر پاک می‌شد.
+ * اکنون فقط پیام راهنما برمی‌گردد و تسویه از مسیر «واحد مالی» انجام می‌شود
+ * (`settleStampFeeByFinance` با نقش مالی، تراکنش اتمیک و ممیزی).
+ */
 export async function payStampAction(auditId: number) {
-  const { user, studentId } = await me();
+  const { studentId } = await me();
   try {
     await ownAudit(studentId, auditId);
-    await payStampFee(auditId, user.id);
     revalidatePath('/student/graduation');
-    return { ok: true as const, tracker: await getStudentTracker(studentId) };
+    return {
+      ok: false as const,
+      error: 'پرداخت هزینهٔ تمبر باید از طریق واحد مالی (یا درگاه بانکی) انجام و تأیید شود. لطفاً به واحد مالی مراجعه کنید.',
+    };
   } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : 'خطا' }; }
 }

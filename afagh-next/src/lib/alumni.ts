@@ -8,6 +8,8 @@ import {
 } from '@/db/schema';
 import { getNumber } from '@/lib/settings';
 import { createLogger } from '@/lib/logger';
+import { safeRials } from '@/lib/money';
+import { appendAudit } from '@/lib/audit';
 
 // ═══ پورتال دانش‌آموختگان ═══
 // ارتباط دانشگاه با فرد بعد از فارغ‌التحصیلی قطع نمی‌شود: حساب کاربری از
@@ -106,21 +108,64 @@ export async function submitRequest(studentId: number, input: {
   return r;
 }
 
+/**
+ * ⛔ ثبت پرداخت هزینهٔ خدمت از سمت دانشجو حذف شد.
+ *
+ * نسخهٔ قبلی از همین تابع (که اکشن دانشجویی صدا می‌زد) ردیف `CREDIT` در
+ * `student_ledger` می‌نوشت و درخواست را «پرداخت‌شده» می‌کرد — بدون درگاه،
+ * بدون رسید و بدون تأیید واحد مالی. یعنی هر دانش‌آموخته‌ای می‌توانست با یک
+ * کلیک، هزینهٔ خدمت را رایگان از کار در بیاورد.
+ *
+ * حالا تسویه فقط با `confirmAlumniFeeByFinance` انجام می‌شود.
+ */
 export async function payRequest(requestId: number, studentId: number) {
   const [r] = await db.select().from(alumni_requests)
     .where(and(eq(alumni_requests.id, requestId), eq(alumni_requests.studentId, studentId))).limit(1);
   if (!r) throw new Error('درخواست یافت نشد.');
-  if (r.status !== 'AWAITING_PAYMENT') return { ok: true, already: true };
+  if (r.status !== 'AWAITING_PAYMENT') return { ok: true as const, already: true };
+  throw new Error('پرداخت هزینه باید از طریق واحد مالی انجام و تأیید شود.');
+}
 
-  const [led] = await db.insert(student_ledger).values({
-    studentId, transactionType: 'CREDIT', amount: String(Math.round(Number(r.fee ?? 0))),
-    description: `پرداخت هزینهٔ خدمت دانش‌آموختگان — ${r.trackingCode}`,
-  }).returning({ id: student_ledger.id });
+/**
+ * تسویهٔ هزینهٔ خدمت دانش‌آموختگان — فقط واحد مالی (قفل ردیف + تراکنش + ممیزی).
+ */
+export async function confirmAlumniFeeByFinance(requestId: number, actorUserId: number) {
+  return db.transaction(async (tx) => {
+    const rows = await tx.execute(sql`
+      SELECT id, "studentId", fee, "trackingCode", status
+      FROM alumni_requests WHERE id = ${requestId} FOR UPDATE`);
+    const r = rows.rows[0] as any;
+    if (!r) throw new Error('درخواست یافت نشد.');
+    if (r.status !== 'AWAITING_PAYMENT') throw new Error('این درخواست در وضعیت «در انتظار پرداخت» نیست.');
 
-  await db.update(alumni_requests).set({
-    status: 'IN_REVIEW', paidAt: new Date(), ledgerId: led?.id ?? null, updatedAt: new Date(),
-  }).where(eq(alumni_requests.id, requestId));
-  return { ok: true };
+    const fee = safeRials(String(r.fee ?? '0'));
+    if (fee === null || fee <= 0) throw new Error('مبلغ هزینه نامعتبر یا صفر است.');
+
+    const [stu] = await tx.select({ universityId: students.universityId })
+      .from(students).where(eq(students.id, r.studentId)).limit(1);
+
+    const [led] = await tx.insert(student_ledger).values({
+      studentId: r.studentId,
+      transactionType: 'PAYMENT',            // پرداخت واقعی، نه «اعتبار» رایگان
+      amount: String(fee),
+      description: `پرداخت هزینهٔ خدمت دانش‌آموختگان — ${r.trackingCode} (تأیید واحد مالی)`,
+      universityId: stu?.universityId ?? null,
+    }).returning({ id: student_ledger.id });
+
+    const upd = await tx.update(alumni_requests).set({
+      status: 'IN_REVIEW', paidAt: new Date(), ledgerId: led?.id ?? null, updatedAt: new Date(),
+    }).where(sql`id = ${requestId} AND status = 'AWAITING_PAYMENT'`);
+    if (upd.rowCount !== 1) throw new Error('وضعیت درخواست در همین لحظه تغییر کرد؛ دوباره تلاش کنید.');
+
+    await appendAudit(tx, {
+      action: 'ALUMNI_FEE_SETTLED',
+      entityType: 'alumni_requests',
+      entityId: requestId,
+      actorUserId: actorUserId ?? null,
+      details: JSON.stringify({ studentId: r.studentId, ledgerTxnId: led?.id ?? null, amount: fee }),
+    });
+    return { ok: true as const, ledgerTxnId: led?.id ?? null, amount: fee };
+  });
 }
 
 export async function myRequests(studentId: number) {

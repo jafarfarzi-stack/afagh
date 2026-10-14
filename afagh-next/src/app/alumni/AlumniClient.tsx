@@ -165,8 +165,12 @@ export default function AlumniClient({ me, services, initialRequests, degrees, i
                 <td className="p-2 text-[10px]">{dt(r.createdAt)}</td>
                 <td className="p-2">
                   {r.status === 'AWAITING_PAYMENT' && (
-                    <button onClick={() => pay(r.id)} disabled={pending}
-                      className="px-2 py-1 rounded-lg bg-emerald-700 text-white text-[10px] font-black disabled:opacity-50">پرداخت</button>
+                    <>
+                      {/* ⛔ ثبت پرداخت از سمت دانش‌آموخته حذف شد — تسویه با تأیید واحد مالی */}
+                      <button onClick={() => pay(r.id)} disabled={pending}
+                        title="مبلغ را به واحد مالی پرداخت کنید؛ پس از تأیید کارشناس، درخواست به کارتابل اداره آموزش می‌رود."
+                        className="px-2 py-1 rounded-lg bg-slate-600 text-white text-[10px] font-black disabled:opacity-50">راهنمای پرداخت</button>
+                    </>
                   )}
                   {r.resultFileUrl && (
                     <a href={r.resultFileUrl} className="px-2 py-1 rounded-lg bg-slate-100 text-[10px] font-black">دریافت فایل</a>

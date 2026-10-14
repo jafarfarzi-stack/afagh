@@ -45,6 +45,10 @@ export async function submitRequestAction(input: { requestType: string; destinat
   } catch (e) { return fail(e); }
 }
 
+/**
+ * ⛔ ثبت پرداخت از سمت دانش‌آموخته حذف شد (جعل اعتبار در دفتر مالی).
+ * تسویه فقط با تأیید واحد مالی انجام می‌شود.
+ */
 export async function payRequestAction(requestId: number) {
   try {
     const { studentId } = await meAlumni();

@@ -102,10 +102,8 @@ export default function TrackerClient({ initial, userId }: { initial: Tracker; u
   const pay = () => start(async () => {
     const r = await payStampAction(a.id);
     if (!r.ok) { setMsg({ kind: 'err', text: r.error }); return; }
-    setT(r.tracker);
     setMsg({ kind: 'ok', text: 'پرداخت تمبر ابطال ثبت شد.' });
   });
-
   const needPhoto = t.needPhoto && !a.photoDocumentId;
   const needFee = Number(a.stampFeeAmount ?? 0) > 0 && !a.stampFeePaid;
   const needSajjad = t.needSajjad;
@@ -227,8 +225,13 @@ export default function TrackerClient({ initial, userId }: { initial: Tracker; u
           {needFee && (
             <div className="space-y-2">
               <p className="text-xs text-amber-900 font-bold">پرداخت هزینهٔ تمبر ابطال: {money(Number(a.stampFeeAmount))}</p>
+              {/* ⛔ ثبت پرداخت از سمت دانشجو حذف شد (جعل اعتبار در دفتر مالی).
+                  تسویه فقط با تأیید واحد مالی انجام می‌شود. */}
+              <p className="text-[11px] text-slate-600 leading-5">
+                مبلغ را به واحد مالی پرداخت کنید؛ پس از تأیید کارشناس مالی، وضعیت این بند خودکار به «تسویه‌شده» تغییر می‌کند.
+              </p>
               <button onClick={pay} disabled={pending}
-                className="px-3 py-1.5 rounded-lg bg-indigo-700 text-white text-xs font-black disabled:opacity-50">پرداخت و ثبت در پروندهٔ مالی</button>
+                className="px-3 py-1.5 rounded-lg bg-slate-600 text-white text-xs font-black disabled:opacity-50">راهنمای پرداخت</button>
             </div>
           )}
         </div>
