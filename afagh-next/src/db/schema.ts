@@ -2531,7 +2531,10 @@ export const messenger_link_tokens = pgTable('messenger_link_tokens', {
   attempts: integer('attempts').notNull().default(0),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   createdAt: timestamp('createdAt').defaultNow(),
-}, (t) => ({ tokenHx: index('ix_messenger_link_tokens_token').on(t.tokenHash) }));
+}, (t) => ({
+  tokenHx: index('ix_messenger_link_tokens_token').on(t.tokenHash),
+  codeHx: index('ix_messenger_link_tokens_code').on(t.codeHash),
+}));
 
 // ═══ آفست poll پیام‌رسان‌ها (getUpdates بله/ایتا) ═══
 export const messenger_poll_offsets = pgTable('messenger_poll_offsets', {

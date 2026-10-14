@@ -137,9 +137,20 @@ export async function deleteAllMessengerWebhooks(): Promise<Record<string, boole
 //  در صورت روشن‌بودن صریح پرچم، فقط جفت‌سازی توکن (/start <token>)
 //  پذیرفته می‌شود؛ هر پیام دیگری پاسخ آموزشی ثابت می‌گیرد.
 //  هیچ دستور تعاملی، هیچ رمزی، هیچ وضعیت مکالمه‌ای.
+//
+//  INVARIANT (امنیتی — معماری poll-worker): این مسیر inbound به‌تنهایی
+//  هیچ مقصد تحویلی را برقرار/جابه‌جا نمی‌کند. تنها اثرِ آن، ثبتِ سرنخِ
+//  تأییدنشدهٔ pendingChatId از راه handlePairingText است؛ نوشتنِ
+//  notification_channels فقط در confirmLinkToken (نشست احرازهویتی پورتال
+//  + رمز خامِ پیوندخورده به همان کاربر) انجام می‌شود. chatId ادعاشده در
+//  بدنهٔ وب‌هوک نامطمئن است و اعتماد به مبدأ آن فقط از احرازِ حمل‌ونقل
+//  (secret وب‌هوک در route / توکن بات در poll worker) می‌آید.
 // ═══════════════════════════════════════════════════════════════
 
-export async function handleMessengerUpdate(channel: MessengerChannel, body: Record<string, unknown>): Promise<void> {
+export async function handleMessengerUpdate(
+  channel: MessengerChannel, body: Record<string, unknown>,
+  opts?: { limiterKey?: string },
+): Promise<void> {
   if (!(await isInboundEnabled(channel))) return;
 
   const msg = body.message as Record<string, unknown> | undefined;
@@ -151,7 +162,10 @@ export async function handleMessengerUpdate(channel: MessengerChannel, body: Rec
   const text = String(msg.text ?? '').trim();
   if (!text) return;
 
-  const reply = await handlePairingText(channel, chatId, text);
+  // limiterKey (مثل IP مورداعتماد پروکسی) از فراخوانِ وب‌هوک می‌آید تا سقف
+  // تلاش جفت‌سازی روی شناسهٔ مهاجم‌کنترل‌شدهٔ chat سوار نشود؛ poll worker
+  // آن را نمی‌دهد و سطل per-chat (مبدأ مطمئن) می‌ماند.
+  const reply = await handlePairingText(channel, chatId, text, opts?.limiterKey ? { limiterKey: opts.limiterKey } : undefined);
   if (reply) {
     await sendMessage(channel, chatId, reply);
     return;

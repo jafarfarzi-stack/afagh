@@ -88,12 +88,28 @@ export async function mintLinkTokenFor(userId: number, channel: MessengerChannel
 //
 //  param بلند (>۱۲ رقم) = توکن کامل دیپ‌لینک؛ کوتاه = کد انسانی.
 //  فقط هش‌ها لاگ می‌شوند، هرگز مقدار خام.
+//
+//  INVARIANT (امنیتی): این تابع فقط یک «سرنخِ تأییدنشده» (pendingChatId)
+//  روی ردیف توکن می‌نویسد — هرگز مقصد تحویل اعلان (notification_channels)
+//  را نمی‌سازد یا تغییر نمی‌دهد. مقصد تحویل فقط در confirmLinkToken و فقط
+//  با نشست احرازهویتیِ پورتال + دانستن رمز خامِ پیوندخورده به همان userId
+//  ثبت می‌شود. پس chatId ادعاشده در بدنهٔ وب‌هوک به‌تنهایی هیچ اشتراکی را
+//  جابه‌جا نمی‌کند؛ بدترین اثر جعلِ آن، یک pendingChatId اشتباه است که
+//  قربانی هنگام تأیید می‌تواند نادیده بگیرد/بازنویسی کند.
 
 export async function handlePairingText(
   channel: MessengerChannel, chatId: string, text: string,
+  opts?: { limiterKey?: string },
 ): Promise<string | null> {
-  // سقف تلاش جفت‌سازی برای هر (کانال، چت) — ضد شمارش کد
-  const rl = await rateLimit(`msg-link-pair:${channel}:${chatId}`, 20, 600);
+  // سقف تلاش جفت‌سازی — پیش‌فرض سطل (کانال، چت) برای poll (مبدأ مطمئن:
+  // chatId را خودِ API پلتفرم با توکن بات داده). فراخوانِ وب‌هوک باید
+  // limiterKey = IPِ مورداعتماد پروکسی بدهد، چون chatId در بدنهٔ وب‌هوک
+  // مهاجم‌کنترل‌شده است و سطلِ per-chatId یعنی سطل تازه به‌ازای هر شناسهٔ
+  // جعلی و دورزدن brute-force.
+  const bucket = opts?.limiterKey
+    ? `msg-link-pair:ip:${opts.limiterKey}`
+    : `msg-link-pair:${channel}:${chatId}`;
+  const rl = await rateLimit(bucket, 20, 600);
   if (!rl.ok) return LINK_GENERIC_ERROR;
 
   const m = text.match(/^\/start(?:@\S+)?\s*(\S+)?\s*$/);
@@ -107,26 +123,35 @@ export async function handlePairingText(
 
   const digest = sha256hex(param);
   const now = new Date();
+  // جست‌وجوی نمایه‌شده روی ستون‌های هش (به‌جای اسکن حافظه‌ای limit(50) که
+  // کدهای معتبرِ فراتر از ۵۰ توکنِ باز را جا می‌انداخت). tokenHash ایندکس
+  // دارد (ix_messenger_link_tokens_token)؛ codeHash ایندکس ندارد و افزودنش
+  // مهاجرت DB می‌خواهد (خارج از scope این تغییر) — درستیِ تطبیق حفظ است.
   const rows = await db.select().from(messenger_link_tokens).where(and(
     eq(messenger_link_tokens.channel, channel),
     isNull(messenger_link_tokens.usedAt),
     gt(messenger_link_tokens.expiresAt, now),
-  )).limit(50);
+    or(
+      eq(messenger_link_tokens.tokenHash, digest),
+      eq(messenger_link_tokens.codeHash, digest),
+    ),
+  )).limit(1);
 
-  // مقایسهٔ ثابت‌زمان روی هر دو ستون هش
-  const hit = rows.find(r =>
-    timingEqHex(r.tokenHash, digest) || timingEqHex(r.codeHash, digest)
-  );
+  // مقایسهٔ ثابت‌زمان روی هر دو ستون هش (دفاع در عمق — WHERE بالا هم دقیق است)
+  const hit = rows[0] && (
+    timingEqHex(rows[0].tokenHash, digest) || timingEqHex(rows[0].codeHash, digest)
+  ) ? rows[0] : undefined;
   if (!hit) {
+    // تطبیق ناموفق: ردیفی برای سوزاندن attempts وجود ندارد — attempts فقط
+    // در شکست‌های confirm (منتسب به ردیف مشخص) می‌سوزد، نه اینجا.
     log.warn('pairing_no_match', { channel, paramHash: digest.slice(0, 12) });
     return LINK_GENERIC_ERROR;
   }
 
+  // تطبیق موفق: فقط سرنخ pending ثبت می‌شود — attempts سوزانده نمی‌شود تا
+  // ارسالِ دوبارهٔ کد درست (یا replay) کاربر را قفل نکند (رگرسیون قبلی).
   await db.update(messenger_link_tokens)
-    .set({
-      pendingChatId: chatId,
-      attempts: sql`${messenger_link_tokens.attempts} + 1`,
-    })
+    .set({ pendingChatId: chatId })
     .where(eq(messenger_link_tokens.id, hit.id));
   log.info('pairing_recorded', { channel, tokenId: hit.id, tokenHash: hit.tokenHash.slice(0, 12) });
   return 'کد دریافت شد. ✅\nبه پورتال برگردید — اتصال به‌صورت خودکار تأیید می‌شود.';
@@ -143,11 +168,18 @@ export async function checkPairingStatus(userId: number, rawCode: string): Promi
   const param = String(rawCode ?? '').trim();
   if (!param) return { ok: false, error: LINK_GENERIC_ERROR };
   const digest = sha256hex(param);
+  // جست‌وجوی مستقیم روی هش‌ها (بدون اسکن limit(50) — ردیف کاربرِ پرتوکن جا نمی‌ماند).
   const rows = await db.select().from(messenger_link_tokens)
-    .where(eq(messenger_link_tokens.userId, userId)).limit(50);
-  const hit = rows.find(r =>
-    timingEqHex(r.tokenHash, digest) || timingEqHex(r.codeHash, digest)
-  );
+    .where(and(
+      eq(messenger_link_tokens.userId, userId),
+      or(
+        eq(messenger_link_tokens.tokenHash, digest),
+        eq(messenger_link_tokens.codeHash, digest),
+      ),
+    )).limit(1);
+  const hit = rows[0] && (
+    timingEqHex(rows[0].tokenHash, digest) || timingEqHex(rows[0].codeHash, digest)
+  ) ? rows[0] : undefined;
   if (!hit) return { ok: false, error: LINK_GENERIC_ERROR };
   if (hit.usedAt) return { ok: true, paired: true, channel: hit.channel };
   if (hit.expiresAt <= new Date()) return { ok: false, error: LINK_GENERIC_ERROR };
@@ -166,29 +198,38 @@ export async function confirmLinkToken(userId: number, rawTokenOrCode: string): 
   if (!rl.ok) return { ok: false, error: LINK_GENERIC_ERROR };
 
   const digest = sha256hex(param);
+  // جست‌وجوی مستقیم روی هش‌ها (بدون اسکن limit(50) — ردیف کاربرِ پرتوکن جا نمی‌ماند).
   const rows = await db.select().from(messenger_link_tokens)
-    .where(eq(messenger_link_tokens.userId, userId)).limit(50);
-  const hit = rows.find(r =>
-    timingEqHex(r.tokenHash, digest) || timingEqHex(r.codeHash, digest)
-  );
+    .where(and(
+      eq(messenger_link_tokens.userId, userId),
+      or(
+        eq(messenger_link_tokens.tokenHash, digest),
+        eq(messenger_link_tokens.codeHash, digest),
+      ),
+    )).limit(1);
+  const hit = rows[0] && (
+    timingEqHex(rows[0].tokenHash, digest) || timingEqHex(rows[0].codeHash, digest)
+  ) ? rows[0] : undefined;
 
-  const fail = async (why: string, rowId?: number) => {
-    if (rowId !== undefined) {
+  // attempts فقط روی شکستِ منتسب به ردیف مشخص می‌سوزد — هرگز روی موفقیت،
+  // تا replay کد درست پس از اتصال، کاربر را قفل نکند.
+  const fail = async (why: string, row?: typeof hit) => {
+    if (row) {
       await db.update(messenger_link_tokens)
-        .set({ attempts: (rows.find(r => r.id === rowId)?.attempts ?? 0) + 1 })
-        .where(eq(messenger_link_tokens.id, rowId));
+        .set({ attempts: (row.attempts ?? 0) + 1 })
+        .where(eq(messenger_link_tokens.id, row.id));
     }
     log.warn('link_confirm_failed', { userId, why, tokenHash: digest.slice(0, 12) });
     return { ok: false as const, error: LINK_GENERIC_ERROR };
   };
 
   if (!hit) return fail('no_match');
-  if (hit.usedAt) return fail('reused', hit.id);
-  if (hit.expiresAt <= new Date()) return fail('expired', hit.id);
-  if ((hit.attempts ?? 0) >= LINK_MAX_ATTEMPTS) return fail('attempts', hit.id);
+  if (hit.usedAt) return fail('reused', hit);
+  if (hit.expiresAt <= new Date()) return fail('expired', hit);
+  if ((hit.attempts ?? 0) >= LINK_MAX_ATTEMPTS) return fail('attempts', hit);
   if (!hit.pendingChatId) {
     // هنوز پیام /start از بات نرسیده — شمارش تلاش منظور می‌شود.
-    return fail('no_pairing', hit.id);
+    return fail('no_pairing', hit);
   }
 
   const chatId = hit.pendingChatId;

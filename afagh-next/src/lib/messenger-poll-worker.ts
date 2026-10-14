@@ -180,10 +180,13 @@ export function startPolling(channel: MessengerChannel): { ok: boolean; error?: 
         for (const u of updates) {
           try {
             await handleOne(channel, u);
+            // آفست فقط پس از موفقیت جلو می‌رود — شکست، آپدیت را برای دور
+            // بعد نگه می‌دارد و هرگز بی‌صدا رد نمی‌شود (at-least-once؛ تکرارِ
+            // گاه‌به‌گاهِ پاسخ در قطعی زیرساخت، بر فقدانِ خاموش ترجیح دارد).
+            offset = Math.max(offset, u.update_id + 1);
           } catch (e) {
-            log.error('poll_update_failed', { channel, error: (e as Error).message });
+            log.error('poll_update_failed', { channel, update_id: u.update_id, error: (e as Error).message });
           }
-          offset = Math.max(offset, u.update_id + 1);
         }
         if (updates.length) await saveOffset(channel, offset).catch((e) => log.error('poll_offset_save_failed', { channel, error: (e as Error).message }));
         backoffMs = 1000; // موفقیت → ریست
