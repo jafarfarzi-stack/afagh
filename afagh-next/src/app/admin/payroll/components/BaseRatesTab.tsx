@@ -35,13 +35,25 @@ export default function BaseRatesTab({ state, api }: Props) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {baseRates.map(rate => (
               <div key={rate.id} className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="font-black text-slate-900 text-sm">
                     مرتبه: {rate.academicRank} ({rate.degree})
                   </span>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-50 text-indigo-900 font-bold">
-                    سال ۱۴۰۵
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {rate.academicBase && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-violet-50 text-violet-900 font-bold">
+                        پایه {rate.academicBase}
+                      </span>
+                    )}
+                    {rate.academicBase == null && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold">
+                        همهٔ پایه‌ها
+                      </span>
+                    )}
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-50 text-indigo-900 font-bold">
+                      سال {faNum(rate.effectiveYear)}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 text-xs">

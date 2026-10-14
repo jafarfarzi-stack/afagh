@@ -83,6 +83,8 @@ export interface BaseRateItem {
   id: number;
   academicRank: string;
   degree: string;
+  /** پایهٔ علمی (مهاجرت ۰۰۹۰) — null یعنی سطر عمومیِ همهٔ پایه‌ها */
+  academicBase: string | null;
   ratePerUnit: number; // in Rials
   ratePerHour: number; // in Rials
   effectiveYear: number;
@@ -156,10 +158,10 @@ export type PayrollTabType =
 // ==========================================
 
 export const INITIAL_BASE_RATES: BaseRateItem[] = [
-  { id: 1, academicRank: 'مربی', degree: 'کارشناسی ارشد', ratePerUnit: 25000000, ratePerHour: 1562500, effectiveYear: 1405 },
-  { id: 2, academicRank: 'استادیار', degree: 'دکتری تخصصی (Ph.D.)', ratePerUnit: 38000000, ratePerHour: 2375000, effectiveYear: 1405 },
-  { id: 3, academicRank: 'دانشیار', degree: 'دکتری تخصصی (Ph.D.)', ratePerUnit: 49000000, ratePerHour: 3062500, effectiveYear: 1405 },
-  { id: 4, academicRank: 'استاد تمام', degree: 'دکتری تخصصی (Ph.D.)', ratePerUnit: 62000000, ratePerHour: 3875000, effectiveYear: 1405 },
+  { id: 1, academicRank: 'مربی', degree: 'کارشناسی ارشد', academicBase: null, ratePerUnit: 25000000, ratePerHour: 1562500, effectiveYear: 1405 },
+  { id: 2, academicRank: 'استادیار', degree: 'دکتری تخصصی (Ph.D.)', academicBase: null, ratePerUnit: 38000000, ratePerHour: 2375000, effectiveYear: 1405 },
+  { id: 3, academicRank: 'دانشیار', degree: 'دکتری تخصصی (Ph.D.)', academicBase: null, ratePerUnit: 49000000, ratePerHour: 3062500, effectiveYear: 1405 },
+  { id: 4, academicRank: 'استاد تمام', degree: 'دکتری تخصصی (Ph.D.)', academicBase: null, ratePerUnit: 62000000, ratePerHour: 3875000, effectiveYear: 1405 },
 ];
 
 export const INITIAL_MULTIPLIERS: MultiplierRuleItem[] = [
