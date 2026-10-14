@@ -249,14 +249,14 @@ export async function issueDecree(input: {
       .returning({ id: teaching_decrees.id });
 
     // ── اقلام بخش‌ها از همان محاسبه ──
-    const items: { section: string; title: string; units: string | null; amount: number; metaJson: string }[] = [];
+    const items: { section: string; title: string; units: string | null; amount: string; metaJson: string }[] = [];
     for (const r of calc.rows) {
       const isThesis = r.offeringType === 'THESIS' || r.payRole === 'SUPERVISOR' || r.payRole === 'ADVISOR';
       items.push({
         section: isThesis ? 'THESIS' : 'COURSES',
         title: `${r.courseTitle} (گروه ${r.groupNumber ?? '—'})`,
         units: String(r.equivalentUnits ?? 0),
-        amount: Math.round(Number(r.grossRial ?? 0)),
+        amount: String(Math.round(Number(r.grossRial ?? 0))),
         metaJson: JSON.stringify({ offeringId: r.offeringId, courseCode: r.courseCode, ruleTitle: r.ruleTitle ?? null }),
       });
     }
@@ -282,7 +282,7 @@ export async function issueDecree(input: {
           section: 'ACTIVITIES',
           title: `${a.title} — ${Number(a.quantity ?? 0)} مورد`,
           units: String(Math.round(units * 100) / 100),
-          amount: 0,
+          amount: '0',
           metaJson: JSON.stringify({ kind: 'activity' }),
         });
       }
@@ -300,7 +300,7 @@ export async function issueDecree(input: {
           section: 'EXAM',
           title: `${SRC_FA[p.source] ?? p.source} — ${p.sessionCount ?? 0} جلسه`,
           units: null,
-          amount: Number(p.amount ?? 0),
+          amount: String(Number(p.amount ?? 0)),
           metaJson: JSON.stringify({ kind: 'exam', source: p.source }),
         });
       }
@@ -311,7 +311,7 @@ export async function issueDecree(input: {
       section: 'SUMMARY',
       title: `جمع قابل پرداخت: ${calc.payableUnits} واحد — خالص ${Math.round(calc.net).toLocaleString('en-US')} ریال`,
       units: String(calc.payableUnits ?? 0),
-      amount: Math.round(calc.net ?? 0),
+      amount: String(Math.round(calc.net ?? 0)),
       metaJson: JSON.stringify({ kind: 'summary', gross: calc.gross, tax: calc.tax }),
     });
 
