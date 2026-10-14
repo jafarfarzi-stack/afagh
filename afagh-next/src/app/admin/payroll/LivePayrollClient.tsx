@@ -11,7 +11,7 @@ import { normalizeFa, faIncludes } from '@/lib/persian-search';
 
 export type OverviewItem = {
   id: number; name: string; staffCode: string | null; rank: string | null; base: string | null; degree: string | null;
-  contractType: string | null; rate: number; rateSource: string | null; dutyUnits: number;
+  contractType: string | null; rate: number; rateSource: 'TABLE' | 'BASE' | 'SNAPSHOT' | 'FRACTION'; dutyUnits: number;
   totalEquivalentUnits: number; totalEffectiveUnits: number;
   payableUnits: number; gross: number; tax: number; absenceDeductionRial: number; net: number;
   status: string; statementId: number | null; midtermPaid: number; finalPaid: number; remaining: number;
@@ -348,7 +348,7 @@ export default function LivePayrollClient({
                   </td>
                   <td className="p-2">
                     <div className="font-mono text-[11px] text-slate-800">{money(x.rate)}</div>
-                    <div className="text-[10px] text-slate-400">{RATE_SOURCE_FA[x.rateSource ?? 'TABLE']}</div>
+                    <div className="text-[10px] text-slate-400">{RATE_SOURCE_FA[x.rateSource]}</div>
                   </td>
                   <td className="p-2 text-[11px] text-slate-600">{CONTRACT_FA[x.contractType ?? ''] ?? x.contractType ?? '—'}</td>
                   <td className="p-2">{faNum(x.totalEquivalentUnits.toFixed(2))}</td>

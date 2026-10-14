@@ -67,7 +67,7 @@ export type PayrollRow = {
 };
 
 export type StaffPayroll = {
-  staff: { id: number; name: string; staffCode: string | null; rank: string | null; base: string | null; degree: string | null; contractType: string | null; rateSource?: string | null };
+  staff: { id: number; name: string; staffCode: string | null; rank: string | null; base: string | null; degree: string | null; contractType: string | null };
   rate: number;
   /** منشأ نرخ: جدول ثابت / اسنپ‌شات قرارداد / کسری از حکم (۱/N) */
   rateSource: 'TABLE' | 'BASE' | 'SNAPSHOT' | 'FRACTION';
@@ -88,6 +88,8 @@ export type StaffPayroll = {
 
 export type PayrollOverviewItem = StaffPayroll['staff'] & {
   rate: number;
+  /** منشأ نرخ: سطر عمومی جدول / سطر پایه‌دار / اسنپ‌شات قرارداد / نسبت حکم */
+  rateSource: StaffPayroll['rateSource'];
   dutyUnits: number;
   totalEquivalentUnits: number;
   totalEffectiveUnits: number;
@@ -922,7 +924,6 @@ export function calcStaffPayrollFromData(data: TermData, staffId: number): Staff
       id: staffId, name: info.name, staffCode: info.staffCode,
       rank: info.rank, base: info.base, degree: info.degree,
       contractType: contract?.contractType ?? null,
-      rateSource: data.rateSource.get(staffId) ?? 'TABLE',
     },
     rate, dutyUnits, taxRate, rows,
     rateSource: data.rateSource.get(staffId) ?? 'TABLE',
@@ -1080,6 +1081,7 @@ export async function getOverview(termId?: number, universityId?: number): Promi
     list.push({
       ...calc.staff,
       rate: calc.rate,
+      rateSource: calc.rateSource,
       dutyUnits: calc.dutyUnits,
       totalEquivalentUnits: calc.totalEquivalentUnits,
       totalEffectiveUnits: calc.totalEffectiveUnits,
