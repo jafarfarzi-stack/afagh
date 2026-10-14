@@ -12,7 +12,14 @@
  *    pg_restore -d "$DATABASE_URL" /backups/afagh-<timestamp>.dump -c --if-exists
  *    (در کانتینر migrator: docker compose run --rm --entrypoint sh migrator)
  *
- *  اگر pg_dump روی سیستم نباشد (توسعه) → هشدار و ادامه (بدون توقف نصب).
+ *  اگر pg_dump روی سیستم نباشد:
+ *    • توسعهٔ محلی → هشدار و ادامه (بدون توقف نصب).
+ *    • ایمیج migrator (AFAGH_REQUIRE_BACKUP=1) → خطا و توقف (fail-closed).
+ *      چرا؟ Dockerfile مرحلهٔ migrator هر دو تلاش نصب کلاینت را با `|| true`
+ *      می‌پوشاند تا بیلد در شرایط شبکهٔ بد نشکند؛ پس ممکن است ایمیجی بدون
+ *      هیچ postgresql-client ساخته شود. بدون این گیت، migrate-db.mjs خروجِ
+ *      ۰ را «پشتیبان موفق» می‌خواند و مهاجرت‌ها روی پروداکشن بدون هیچ
+ *      پشتیبانی اجرا می‌شدند (عبور ناامن و بی‌صدا).
  * ════════════════════════════════════════════════════════════════════════
  */
 import { execFileSync } from 'node:child_process';
@@ -98,6 +105,13 @@ if (process.env.AFAGH_SKIP_BACKUP === '1') {
 
 const dumpV = pgDumpMajor();
 if (dumpV === null) {
+  // گیت fail-closed برای ایمیج migrator: نبودِ ابزار ≠ پشتیبان موفق.
+  if (process.env.AFAGH_REQUIRE_BACKUP === '1') {
+    console.error('❌ pg_dump در ایمیج migrator یافت نشد — بدون ابزار پشتیبان، استقرار متوقف شد.');
+    console.error('   ایمیج migrator را دوباره بسازید (docker compose build --no-cache migrator).');
+    console.error('   فقط اگر همین حالا دستی پشتیبان گرفته‌اید: AFAGH_SKIP_BACKUP=1');
+    process.exit(1);
+  }
   console.warn('⚠ pg_dump یافت نشد — پشتیبان‌گیری رد شد (در ایمیج migrator موجود است؛ فقط توسعه).');
   process.exit(0);
 }

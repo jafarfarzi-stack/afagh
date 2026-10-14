@@ -1,6 +1,6 @@
 # آفاق (Afagh) — سامانه جامع مدیریت دانشگاه
 
-بازسازی کامل سامانه‌ی آفاق ERP بر پایه **Next.js 14 App Router + PostgreSQL 16 + Drizzle ORM + Redis** — با وفاداری کامل به معماری فاز صفر (Express/SQLite) و مهاجرتی ۱:۱ داده‌ها.
+بازسازی کامل سامانه‌ی آفاق ERP بر پایه **Next.js 16 App Router + PostgreSQL 16 + Drizzle ORM + Redis** — با وفاداری کامل به معماری فاز صفر (Express/SQLite) و مهاجرتی ۱:۱ داده‌ها.
 
 ---
 
@@ -63,7 +63,7 @@ afagh-next/
 ## 🚀 راه‌اندازی سریع
 
 ### پیش‌نیازها
-- **Node.js 20+** (پیشنهاد: 20.18 LTS)
+- **Node.js 22+** (ایمیج Docker بر پایه `node:22-bookworm-slim` است)
 - **PostgreSQL 16** (یا `docker compose up -d postgres`)
 - **Redis 7+** (برای اتاق انتظار، `docker compose up -d redis`)
 - **MinIO** (برای Object Storage، `docker compose up -d minio`)
@@ -292,7 +292,7 @@ MIT License — استفاده آزاد، تجاری، تغییر و توزیع 
 
 ## 🔗 لینک‌های مفید
 
-- **مستندات Next.js 14 App Router**: https://nextjs.org/docs/app
+- **مستندات Next.js 16 App Router**: https://nextjs.org/docs/app
 - **Drizzle ORM**: https://orm.drizzle.team
 - **PostgreSQL 16 Docs**: https://www.postgresql.org/docs/16/
 - **Redis Lua Scripting**: https://redis.io/docs/latest/develop/use/patterns/atomic-operations/

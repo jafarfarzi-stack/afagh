@@ -169,10 +169,13 @@ export function collapseCalendarEntries<T extends ProfessorCalendarCollapseRow>(
     for (const m of g.members) if (!perId.has(m.id)) perId.set(m.id, m);
     const uniq = [...perId.values()];
     const multiOffering = uniq.length > 1;
-    // هر سانس متمایز یک بلوک جدا در گرید (و چاپ) — همه با کد مشترک و بج 🔗
+    // هر سانس متمایز یک بلوک جدا در گرید (و چاپ) — همه با کد مشترک و بج 🔗.
+    // «سانس» فقط روز+ساعت است، نه زوج/فرد: دو ردیف هم‌سانسِ EVEN/ODD باید در
+    // یک سطل بیفتند تا به یک ورودی BOTH ادغام شوند (وگرنه شاخهٔ BOTH پایین
+    // کد مرده می‌شد — رگرسیون 0c69030 که weekType را جزئی از کلید کرده بود).
     const bySlot = new Map<string, T[]>();
     for (const m of g.members) {
-      const sk = `${m.dayOfWeek}|${m.startTime}|${m.endTime}|${String(m.weekType)}`;
+      const sk = `${m.dayOfWeek}|${m.startTime}|${m.endTime}`;
       const arr = bySlot.get(sk) ?? [];
       arr.push(m);
       bySlot.set(sk, arr);

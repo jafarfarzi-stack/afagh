@@ -23,7 +23,11 @@ RUN npm ci --no-audit --no-fund --omit=optional
 # نیازی به بیلد Next ندارد؛ فقط drizzle-kit (devDependency) و اسکریپت‌ها.
 # postgresql-client برای پشتیبان پیش از استقرار (backup-db.mjs) نصب می‌شود.
 FROM base AS migrator
-ENV NODE_ENV=production
+# AFAGH_REQUIRE_BACKUP=1 → نبودِ pg_dump در این ایمیج = توقف استقرار (fail-closed).
+# (نصب کلاینت با `|| true` پوشانده شده تا بیلد نشکند؛ این گیتِ ران‌تایم جلوی
+# «مهاجرتِ بدون پشتیبانِ بی‌صدا» را می‌گیرد — backup-db.mjs.)
+ENV NODE_ENV=production \
+    AFAGH_REQUIRE_BACKUP=1
 # ⚠️ نسخهٔ pg_dump باید ≥ نسخهٔ سرور باشد.
 #    Debian bookworm فقط postgresql-client-15 دارد ولی سرویس postgres در
 #    docker-compose نسخهٔ ۱۶ است؛ pg_dump 15 با «server version mismatch»
