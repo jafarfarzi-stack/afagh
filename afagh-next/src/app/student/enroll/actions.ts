@@ -23,12 +23,38 @@ import { getStudentByUser, requireRole } from '@/lib/auth';
 import { enqueueSubmit, ensureWorker, rateLimitSubmit, redisAvailable } from '@/lib/waitingRoom';
 import { processQueuedSubmit, type SubmitResult } from '@/lib/enroll-engine';
 
+/**
+ * زمینهٔ انتخاب واحد.
+ *
+ * 🔒 ترم جاری و ارائه‌ها فقط از **دانشگاه خودِ دانشجو** خوانده می‌شوند. پیش از این،
+ * ترم با `WHERE isCurrent = 1` بدون فیلتر دانشگاه انتخاب می‌شد و ارائه هم با
+ * `WHERE id = ?` خوانده می‌شد؛ یعنی دانشجوی دانشگاه الف می‌توانست با یک
+ * `offeringId` متعلق به دانشگاه ب سبدش بسازد و ثبت نهایی کند.
+ */
 async function ctx() {
   const user = await requireRole(['STUDENT']);
   const me = await getStudentByUser(user.id);
   if (!me) throw new Error('پروندهٔ دانشجویی یافت نشد');
-  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
-  return { user, me, term };
+  const myUni = me.universityId ?? null;
+  // بدون دانشگاه = نامشخص؛ deny (fail-closed) — نه «همهٔ دانشگاه‌ها»
+  const uniCond = myUni == null ? sql`1 = 0` : eq(academic_terms.universityId, myUni);
+  const [term] = await db.select().from(academic_terms)
+    .where(and(eq(academic_terms.isCurrent, 1), uniCond)).limit(1);
+  return { user, me, term, myUni };
+}
+
+/** ارائه باید در همان دانشگاهِ دانشجو و همان ترم جاری باشد — وگرنه رد شود */
+async function offeringInMyScope(meUni: number | null, termId: number, offeringId: number) {
+  if (meUni == null) return null;
+  const [o] = await db.select({
+    id: course_offerings.id, courseId: course_offerings.courseId,
+    universityId: course_offerings.universityId,
+  }).from(course_offerings).where(and(
+    eq(course_offerings.id, offeringId),
+    eq(course_offerings.termId, termId),
+    eq(course_offerings.universityId, meUni),
+  )).limit(1);
+  return o ?? null;
 }
 
 function timeOverlap(s1: string, e1: string, s2: string, e2: string) {
@@ -36,17 +62,14 @@ function timeOverlap(s1: string, e1: string, s2: string, e2: string) {
 }
 
 export async function addToCartAction(offeringId: number) {
-  const { user, me, term } = await ctx();
+  const { user, me, term, myUni } = await ctx();
   if (!term) return { ok: false, error: 'ترم جاری فعال نیست' };
 
-  // دریافت اطلاعات این ارائه
-  const [targetOff] = await db
-    .select({ id: course_offerings.id, courseId: course_offerings.courseId })
-    .from(course_offerings)
-    .where(eq(course_offerings.id, offeringId))
-    .limit(1);
+  // 🔒 ارائه باید متعلق به دانشگاه و ترمِ خودِ دانشجو باشد
+  const targetOff = await offeringInMyScope(myUni, term.id, offeringId);
+  if (!targetOff) return { ok: false, error: 'این ارائه برای دانشگاه/نیمسال شما در دسترس نیست' };
 
-  if (targetOff) {
+  {
     // یافتن و حذف سایر گروه‌های همین درس از سبد دانشجو (جایگزینی گروه جدید)
     const otherGroupOfferings = await db
       .select({ id: course_offerings.id })
@@ -100,15 +123,16 @@ export async function autoFillCartFromChartAction(): Promise<{
   message: string;
   conflictsResolved?: number;
 }> {
-  const { user, me, term } = await ctx();
+  const { user, me, term, myUni } = await ctx();
   if (!term) return { ok: false, count: 0, units: 0, message: 'ترم جاری فعال نیست.' };
+  if (myUni == null) return { ok: false, count: 0, units: 0, message: 'دانشگاه شما مشخص نیست.' };
 
   // ۱. پاکسازی سبد قبلی جهت چیدمان تازه و بدون تداخل
   await db.transaction(tx =>
     tx.delete(cart_items).where(eq(cart_items.studentId, me.id))
   );
 
-  // ۲. دریافت تمام ارائه‌های فعال ترم جاری
+  // ۲. دریافت تمام ارائه‌های فعال ترم جاری — فقط دانشگاه خودِ دانشجو
   const offerings = await db
     .select({
       id: course_offerings.id,
@@ -122,7 +146,11 @@ export async function autoFillCartFromChartAction(): Promise<{
     })
     .from(course_offerings)
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-    .where(and(eq(course_offerings.termId, term.id), eq(course_offerings.isActive, 1)));
+    .where(and(
+      eq(course_offerings.termId, term.id),
+      eq(course_offerings.isActive, 1),
+      eq(course_offerings.universityId, myUni),   // 🔒 مرز دانشگاه
+    ));
 
   // ۳. دریافت زمان‌بندی کلاس‌ها و امتحانات ارائه‌ها
   const allScheds = await db.select().from(schedules);
@@ -338,13 +366,17 @@ import { emergencyDropAction, emergencyDropFormAction } from '../actions';
 export { emergencyDropAction, emergencyDropFormAction };
 
 export async function referCouncilAction(offeringId: number, reason?: string): Promise<{ ok: boolean; error?: string }> {
-  const { user, me, term } = await ctx();
+  const { user, me, term, myUni } = await ctx();
   if (!term) return { ok: false, error: 'ترم جاری یافت نشد.' };
+  // 🔒 فقط ارائهٔ همین دانشگاه و همین ترم — وگرنه درخواست معرفی به کمیته
+  //    برای درسی از دانشگاه/نیمسال دیگر ثبت می‌شد.
+  const target = await offeringInMyScope(myUni, term.id, offeringId);
+  if (!target) return { ok: false, error: 'این ارائه برای دانشگاه/نیمسال شما در دسترس نیست' };
   const [o] = await db
     .select({ title: courses.title })
     .from(course_offerings)
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-    .where(eq(course_offerings.id, offeringId));
+    .where(eq(course_offerings.id, target.id));
 
   // ثبت PENDING_COUNCIL + پروندهٔ گردش کار
   const [ins] = await db.transaction(tx =>

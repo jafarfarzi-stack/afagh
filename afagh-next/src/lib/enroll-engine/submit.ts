@@ -89,7 +89,18 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
   const D: typeof db = deps.db ?? db;
   const doRls = deps.withUserRls ?? withUserRls;
 
-  const [term] = await D.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1));
+  // دانشجوی صاحب این درخواست — مرز دانشگاه از همین‌جا مشتق می‌شود
+  const [stu] = await D.select().from(students).where(eq(students.id, studentId)).limit(1);
+  if (!stu) { out.ok = false; out.hardErrors.push('پروندهٔ دانشجویی یافت نشد.'); return out; }
+  const stuUni = stu.universityId ?? null;
+
+  // 🔒 ترم جاریِ «همان دانشگاه». پیش از این `isCurrent = 1` بدون فیلتر دانشگاه
+  //    بود و دانشجوی یک دانشگاه ممکن بود با ترمِ دانشگاه دیگر ثبت کند.
+  //    دانشجوی بدون دانشگاه = نامشخص → deny (fail-closed).
+  const [term] = await D.select().from(academic_terms).where(and(
+    eq(academic_terms.isCurrent, 1),
+    stuUni == null ? sql`1 = 0` : eq(academic_terms.universityId, stuUni),
+  ));
   if (!term || !term.isEnrollmentOpen) { out.ok = false; out.hardErrors.push('پنجرهٔ انتخاب واحد بسته است.'); return out; }
 
   // گیت «فعال‌سازی ترم» (اختیاری — تنظیم ENFORCE_TERM_ACTIVATION)
@@ -103,8 +114,7 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
   }
 
   // ── فیلتر ۱: مالی (§۱۰۰۸) + وضعیت دانشجو ──
-  const [stu] = await D.select().from(students).where(eq(students.id, studentId)).limit(1);
-  if (!stu) { out.ok = false; out.hardErrors.push('پروندهٔ دانشجویی یافت نشد.'); return out; }
+  // (رکورد دانشجو در ابتدای تابع خوانده شد؛ اینجا فقط وضعیت بررسی می‌شود)
   if (stu.status !== 'ACTIVE') {
     out.ok = false;
     out.hardErrors.push(stu.status === 'BLOCKED_COMMISSION'
@@ -156,10 +166,20 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
   if (cart.length === 0) { out.ok = false; out.hardErrors.push('سبد خالی است.'); return out; }
 
   const ids = cart.map(c => c.offeringId);
+  // 🔒 سبد هم باید به دانشگاه و ترم خودِ دانشجو قفل شود: حتی اگر سطری از راه
+  //    رخنه‌ای دیگر وارد سبد شده باشد، اینجا حذف و ثبت نمی‌شود.
   const offs = await D
     .select({ id: course_offerings.id, courseId: course_offerings.courseId, code: courses.code, title: courses.title, units: courses.units, capacity: course_offerings.capacity, enrolled: course_offerings.enrolledCount, waitCap: course_offerings.waitlistCapacity })
     .from(course_offerings).innerJoin(courses, eq(courses.id, course_offerings.courseId))
-    .where(inArray(course_offerings.id, ids));
+    .where(and(
+      inArray(course_offerings.id, ids),
+      eq(course_offerings.termId, term.id),
+      stuUni == null ? sql`1 = 0` : eq(course_offerings.universityId, stuUni),
+    ));
+  if (offs.length !== ids.length) {
+    const dropped = ids.filter(i => !offs.some(o => o.id === i));
+    out.hardErrors.push(`${dropped.length} درس از سبد به دلیل تعلق نداشتن به دانشگاه/نیمسال شما حذف شد.`);
+  }
 
   // دروس همین ترم که قبلاً ثبت شده‌اند (تکراری نگیریم)
   const current = await D

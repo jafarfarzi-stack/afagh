@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { users } from '@/db/schema';
 import { getSessionUser } from '@/lib/auth';
+import { canActOnUniversity } from '@/lib/university-scope';
 import { ARCHIVE_BUCKET, S3 } from '@/lib/objectStore';
 
 export const dynamic = 'force-dynamic';
@@ -30,6 +31,19 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ userId: str
   const privileged = me.roles.some(r => VIEWER_ROLES.includes(r));
   if (!privileged && me.id !== userId) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
+
+  // 🔒 مرز دانشگاه: عکس دادهٔ شخصیِ هر دانشگاه است. پیش از این فقط «نقش»
+  //    بررسی می‌شد، پس یک کارشناس هر دانشگاه با یک `userId` دلخواه عکس
+  //    دانشجوی دانشگاه دیگر را می‌دید. هر کسی جز خودِ صاحب عکس فقط در
+  //    دانشگاه‌های مجاز خودش می‌تواند ببیند.
+  if (me.id !== userId) {
+    const [target] = await db.select({ universityId: users.universityId })
+      .from(users).where(eq(users.id, userId)).limit(1);
+    if (!target) return NextResponse.json({ error: 'not found' }, { status: 404 });
+    if (!(await canActOnUniversity(target.universityId))) {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+    }
   }
 
   const [u] = await db.select({ key: users.photoKey, mime: users.photoMime })

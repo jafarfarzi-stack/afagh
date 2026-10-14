@@ -121,7 +121,50 @@ export async function assertServerActionOrigin(): Promise<{ ok: true } | { ok: f
 //  رفتار قدیمی «همهٔ دانشجویان» برگشت (opt-out)؛ مقدار faculty نیز پشتیبانی می‌شود.
 // ════════════════════════════════════════════════════════════════════════
 
+/**
+ * 🔒 گیت مرز دانشگاه برای هر رکورد دانشجو.
+ *
+ * نقش («ادمین/کارشناس») برای دیدن دادهٔ یک دانشجو کافی نیست؛ باید معلوم شود
+ * آن دانشجو **در دانشگاهِ مجازِ کاربر** است. پیش از این، `getTranscript` و
+ * چند مسیر دیگر فقط `requireRole` داشتند و با یک `studentId` دلخواه، کارنامهٔ
+ * هر دانشگاهی خوانده می‌شد.
+ *
+ * `null`/بدون دانشگاه در رکورد دانشجو یعنی «نامشخص» → رد (fail-closed)، نه
+ * «همهٔ دانشگاه‌ها».
+ */
+export async function requireStudentUniversity(studentId: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const { db } = await import('@/db');
+    const { students } = await import('@/db/schema');
+    const { eq } = await import('drizzle-orm');
+    const { canActOnUniversity } = await import('@/lib/university-scope');
+
+    const [stu] = await db
+      .select({ universityId: students.universityId })
+      .from(students)
+      .where(eq(students.id, studentId))
+      .limit(1);
+    if (!stu) return { ok: false, error: 'پروندهٔ دانشجو یافت نشد.' };
+    if (stu.universityId == null) {
+      return { ok: false, error: 'دانشگاه این دانشجو مشخص نیست — دسترسی رد شد (fail-closed).' };
+    }
+    if (!(await canActOnUniversity(stu.universityId))) {
+      return { ok: false, error: 'این دانشجو در دانشگاه شما نیست — دسترسی رد شد.' };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error('[scope] requireStudentUniversity failed:', err);
+    return { ok: false, error: 'خطا در بررسی محدودهٔ دانشگاه؛ دسترسی رد شد.' };
+  }
+}
+
 export async function requireStudentScope(studentId: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  // 🔒 مرز دانشگاه **همیشه** و پیش از هر چیز دیگر — حتی برای ADMIN و حتی وقتی
+  //   opt-out سطح‌شیء (`AFAGH_OBJECT_SCOPE=all`) روشن است. آن opt-out فقط
+  //   دربارهٔ «گروه/دانشکده» است، نه دربارهٔ مرز بین دانشگاه‌ها.
+  const uniGate = await requireStudentUniversity(studentId);
+  if (!uniGate.ok) return uniGate;
+
   const mode = (process.env.AFAGH_OBJECT_SCOPE || 'department').toLowerCase();
   if (mode !== 'department' && mode !== 'faculty') return { ok: true };
 

@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { clearPermissionCache } from '@/lib/permissions-enforcer';
 import { getSessionUser } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { requireStudentUniversity } from '@/lib/security';
 import { resolveCityMinistry } from '@/lib/shared-coding';
 import { toGregorian } from '@/lib/calendar';
 import { legacyRowOfSource, legacySourceCodeFor } from './transcript-utils';
@@ -20,6 +21,9 @@ export async function getTranscriptRegulation(studentId: number): Promise<{
   config: import('@/lib/regulations-engine').RegulationConfig;
 } | null> {
   await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'GRADUATEAFFAIRS']);
+  // 🔒 مرز دانشگاه (هم‌سطح getTranscript)
+  const uniGate = await requireStudentUniversity(studentId);
+  if (!uniGate.ok) return null;
   const { getRegulationConfig, DEFAULT_BACHELOR_REGULATION_1403 } = await import('@/lib/regulations-engine');
   const [stu] = await db
     .select({ regulationId: students.regulationId, degreeLevelId: students.degreeLevelId })
@@ -237,6 +241,10 @@ function markStatOf(raw: string | null): string | null {
 
 export async function getTranscript(studentId: number): Promise<TranscriptRow[]> {
   await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'GRADUATEAFFAIRS']);
+  // 🔒 مرز دانشگاه: کارنامهٔ کامل دادهٔ حساس است. بدون این گیت، یک کارشناس
+  //   با یک studentId دلخواه کارنامهٔ دانشجوی دانشگاه دیگر را می‌خواند.
+  const uniGate = await requireStudentUniversity(studentId);
+  if (!uniGate.ok) return [];
   const [stu] = await db
     .select({ id: students.id, code: students.studentCode, universityCode: universities.code })
     .from(students)
