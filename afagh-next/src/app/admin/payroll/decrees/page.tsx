@@ -58,7 +58,14 @@ export default async function DecreesPage() {
     await requireRole([...READ]);
     const u = await getCurrentUniversity().catch(() => null);
     const list = await listDecrees(termId, u?.id ?? null);
-    return { ok: true as const, list };
+    return {
+      ok: true as const,
+      list: list.map(d => ({
+        ...d,
+        issuedAt: d.issuedAt ? new Date(d.issuedAt).toISOString() : null,
+        createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : null,
+      })),
+    };
   }
 
   async function issueAction(staffId: number, termId: number, signers: { title: string; name: string }[]) {
