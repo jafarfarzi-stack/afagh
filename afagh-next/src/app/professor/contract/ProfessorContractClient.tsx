@@ -380,7 +380,7 @@ export default function ProfessorContractClient({ demo = false, initialContract,
                   <span className="font-mono font-black text-indigo-700 text-lg tracking-widest">{demoOtp}</span>
                 </>
               ) : (
-                <span className="text-slate-500 block">کد ۵ رقمی تأیید امضا به شمارهٔ همراه ثبت‌شده شما پیامک شد.</span>
+                <span className="text-slate-500 block">کد ۶ رقمی تأیید امضا به شمارهٔ همراه ثبت‌شده شما پیامک شد.</span>
               )}
             </div>
 
@@ -390,10 +390,11 @@ export default function ProfessorContractClient({ demo = false, initialContract,
               </label>
               <input
                 type="text"
-                maxLength={5}
+                inputMode="numeric"
+                maxLength={6}
                 value={otpCode}
-                onChange={e => setOtpCode(e.target.value)}
-                placeholder="• • • • •"
+                onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="• • • • • •"
                 className="w-full border-2 border-indigo-500 rounded-xl p-3 text-center font-mono font-black text-xl tracking-widest text-slate-900 focus:outline-hidden"
               />
             </div>

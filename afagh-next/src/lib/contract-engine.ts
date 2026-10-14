@@ -1,5 +1,5 @@
-import { and, eq, inArray } from 'drizzle-orm';
-import { createHash, randomInt } from 'node:crypto';
+import { and, desc, eq, inArray } from 'drizzle-orm';
+import { createHash } from 'node:crypto';
 import { db } from '@/db';
 import {
   academic_terms, course_offerings, courses, departments, document_signatures,
@@ -9,6 +9,7 @@ import {
 import { getFiscalYear, getSetting } from '@/lib/settings';
 import { isDemoMode } from '@/lib/auth';
 import { logger as log } from '@/lib/logger';
+import { legacyOtpDigest, newOtpCode, otpDigest, otpEqual } from '@/lib/otp';
 import { groupIntoMerged, mergedDisplayTitle, mergedGroupKey, offeringSharedKeys } from '@/lib/professor-data';
 
 /** تعداد هفته‌های تدریس در هر نیمسال (هم‌راستا با مولد جلسات) */
@@ -290,10 +291,31 @@ export async function ensureContractDocument(staffId: number, termId: number, id
   return { ok: true as const, documentId: doc.id, signed: false, contract: full };
 }
 
-/** صدور کد یکبارمصرف امضای قرارداد (هش SHA-256؛ کد خام فقط در دمو برگردانده می‌شود) */
+/**
+ * صدور کد یکبارمصرف امضای قرارداد.
+ *
+ * 🔐 پیش از این: کد **۵ رقمی** با `sha256` ساده ذخیره می‌شد (فضای ۹۰٬۰۰۰ و
+ *    بدون نمک ⇒ با یک خواندن از بکاپ در چند میلی‌ثانیه قابل معکوس بود و امضای
+ *    قرارداد قابل جعل می‌شد). حالا کد ۶ رقمی با HMAC فلفل‌دار و بافت یکتای
+ *    `contract:<staffId>:<documentId>` ذخیره می‌شود و کد قبلی باطل می‌گردد.
+ */
 export async function issueContractOtp(staffId: number, documentId: number): Promise<{ ok: boolean; demoOtp?: string; error?: string }> {
-  const code = String(randomInt(10000, 100000));
-  const hash = sha256Hex(code);
+  // 🔒 سقف صدور: ۳ کد در ۱۵ دقیقه (پیش از این بدون محدودیت بود ⇒ فرسایش پیامک
+  //    و امکان چرخشِ کد برای دور زدن قفلِ ۵ تلاش).
+  const { rateLimit } = await import('@/lib/rateLimit');
+  const rl = await rateLimit(`contractotp:issue:${staffId}:${documentId}`, 3, 15 * 60);
+  if (!rl.ok) {
+    return { ok: false, error: 'تعداد درخواست کد بیش از حد مجاز است. چند دقیقهٔ دیگر دوباره تلاش کنید.' };
+  }
+  const code = newOtpCode();
+  const hash = otpDigest(code, `contract:${staffId}:${documentId}`);
+  // کد قبلیِ مصرف‌نشده باطل می‌شود تا فقط آخرین کد معتبر باشد
+  await db.delete(signature_otps).where(and(
+    eq(signature_otps.staffId, staffId),
+    eq(signature_otps.purpose, 'CONTRACT_SIGN'),
+    eq(signature_otps.refId, documentId),
+    eq(signature_otps.isUsed, 0),
+  ));
   await db.insert(signature_otps).values({
     staffId, purpose: 'CONTRACT_SIGN', refId: documentId, otpHash: hash,
     expiresAt: new Date(Date.now() + 5 * 60 * 1000),
@@ -305,15 +327,19 @@ export async function issueContractOtp(staffId: number, documentId: number): Pro
 export async function signContract(
   staffId: number, documentId: number, otp: string, ip: string, userAgent: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  // ⚠️ پیش از این `orderBy(signature_otps.id)` صعودی بود ⇒ **قدیمی‌ترین** کدِ
+  //    مصرف‌نشده بررسی می‌شد. حالا نزولی است: آخرین کد صادرشده.
   const [row] = await db.select().from(signature_otps)
     .where(and(eq(signature_otps.staffId, staffId), eq(signature_otps.purpose, 'CONTRACT_SIGN'), eq(signature_otps.refId, documentId), eq(signature_otps.isUsed, 0)))
-    .orderBy(signature_otps.id).limit(1);
+    .orderBy(desc(signature_otps.id)).limit(1);
   if (!row) return { ok: false, error: 'کد تأییدی فعالی وجود ندارد؛ دوباره درخواست کد بدهید.' };
   if (new Date(row.expiresAt).getTime() < Date.now()) return { ok: false, error: 'کد منقضی شده است؛ کد جدید بگیرید.' };
   if (row.lockedAt) return { ok: false, error: 'به دلیل تلاش‌های ناموفق، درخواست امضا قفل شده است.' };
 
-  const inputHash = sha256Hex(otp.trim());
-  if (inputHash !== row.otpHash) {
+  // 🔐 مقایسهٔ زمان-ثابت؛ هشِ قدیمیِ در‌جریان هم پذیرفته می‌شود (سازگاری)
+  const inputHash = otpDigest(otp, `contract:${staffId}:${documentId}`);
+  const legacyHash = legacyOtpDigest(otp);
+  if (!otpEqual(inputHash, row.otpHash) && !otpEqual(legacyHash, row.otpHash)) {
     const attempts = (row.attempts ?? 0) + 1;
     await db.update(signature_otps).set({ attempts, lockedAt: attempts >= 5 ? new Date() : null }).where(eq(signature_otps.id, row.id));
     return { ok: false, error: `کد تأیید نادرست است. (تلاش ${attempts} از ۵)` };

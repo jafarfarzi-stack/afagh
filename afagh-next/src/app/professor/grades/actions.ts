@@ -14,7 +14,7 @@
 
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
-import { randomInt, createHash } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { db } from '@/db';
 import {
   course_offerings,
@@ -26,6 +26,8 @@ import {
   users,
 } from '@/db/schema';
 import { getStaffByUser, isDemoMode, requireRole } from '@/lib/auth';
+import { legacyOtpDigest, newOtpCode, otpDigest, otpEqual } from '@/lib/otp';
+import { rateLimit } from '@/lib/rateLimit';
 import { notifyUserMultichannel, sendSms } from '@/lib/messaging';
 import { ensureGradePersistence, resolveStudentRow } from '@/lib/demo-grades-seed';
 import { logGradeChange, logBulkGradeChange } from '@/lib/grade-change-log';
@@ -315,8 +317,22 @@ export async function requestFinalizeOtpAction(
       return invalid('شما استاد مسئول این درس نیستید.');
     }
 
-    const code = String(randomInt(10000, 100000));
-    const hash = createHash('sha256').update(code).digest('hex');
+    // 🔒 سقف صدور: ۳ کد در ۱۵ دقیقه به‌ازای هر (استاد + ارائه) — ضد اسپم و
+    //    ضد حملهٔ حدسِ کد روی پیامک. پیش از این هیچ محدودیتی نبود.
+    const rl = await rateLimit(`gradeotp:issue:${me.id}:${payload.offeringId}`, 3, 15 * 60);
+    if (!rl.ok) {
+      return invalid('تعداد درخواست کد بیش از حد مجاز است. چند دقیقهٔ دیگر دوباره تلاش کنید.');
+    }
+
+    // 🔐 کد ۶ رقمی با HMAC فلفل‌دار + بافت یکتا (پیش از این: ۵ رقمی با
+    //    sha256 ساده ⇒ با یک خواندن از دیتابیس/بکاپ در چند میلی‌ثانیه شکسته می‌شد
+    //    و قفل نهایی نمره قابل جعل بود).
+    const code = newOtpCode();
+    const hash = otpDigest(code, `grade:${me.id}:${payload.offeringId}`);
+    // هر کد قبلیِ مصرف‌نشده باطل می‌شود (کد تازه جایگزین می‌شود)
+    await db
+      .delete(grade_submission_otps)
+      .where(and(eq(grade_submission_otps.staffId, me.id), eq(grade_submission_otps.offeringId, payload.offeringId)));
     await db
       .insert(grade_submission_otps)
       .values({
@@ -374,8 +390,11 @@ export async function finalizeSignedAction(
     if (new Date(row.expiresAt).getTime() < Date.now()) return invalid('کد تأیید منقضی شده است؛ کد جدید بگیرید.');
     if (row.lockedAt) return invalid('به دلیل تلاش‌های ناموفق، درخواست امضا قفل شده است.');
 
-    const inputHash = createHash('sha256').update(payload.otp.trim()).digest('hex');
-    if (inputHash !== row.otpHash) {
+    // 🔐 مقایسهٔ HMAC با زمان-ثابت + پذیرش هشِ قدیمیِ در‌جریان
+    //    (پیش از این: sha256 ساده با `!==` — هم قابل‌معکوس، هم oracle زمانی).
+    const inputHash = otpDigest(payload.otp, `grade:${me.id}:${payload.offeringId}`);
+    const legacyHash = legacyOtpDigest(payload.otp);
+    if (!otpEqual(inputHash, row.otpHash) && !otpEqual(legacyHash, row.otpHash)) {
       const attempts = (row.attempts ?? 0) + 1;
       await db.update(grade_submission_otps).set({ attempts, lockedAt: attempts >= 5 ? new Date() : null }).where(eq(grade_submission_otps.id, row.id));
       return invalid(`کد تأیید نادرست است. (تلاش ${attempts} از ۵)`);

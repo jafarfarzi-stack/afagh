@@ -1,41 +1,21 @@
 'use server';
 
 // موتور امضای الکترونیک — سند §۲۹۲۶–۲۹۹۰: OTP شش‌رقمی، HMAC نمک‌دار، قفل ۵ تلاش، ممیزی زنجیره‌ای
-import { createHmac, randomInt, timingSafeEqual } from 'crypto';
 import { headers } from 'next/headers';
 import { and, desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { audit_logs, doc_sign_otps, document_signatures, electronic_documents, notifications } from '@/db/schema';
 import { getStaffByUser, requireRole, sha256 } from '@/lib/auth';
 import { rateLimit } from '@/lib/rateLimit';
+import { newOtpCode, otpDigest, otpEqual } from '@/lib/otp';
 
 const OTP_TTL_SECONDS = 120;
 const MAX_ATTEMPTS = 5;
 
-/**
- * فلفل HMAC از ENV — هش سادهٔ sha256 مستعد rainbow-table است.
- * در production بدون AFAGH_OTP_PEPPER بالا نمی‌آییم (fail-closed)؛
- * در توسعه fallback ثابت با هشدار (فقط برای محیط محلی).
- */
-function otpPepper(): string {
-  const p = (process.env.AFAGH_OTP_PEPPER || '').trim();
-  if (p) return p;
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('[otp] AFAGH_OTP_PEPPER در production ست نشده است — صدور OTP متوقف شد (fail-closed).');
-  }
-  console.error('⚠ [otp] AFAGH_OTP_PEPPER ست نشده است — از مقدار توسعه استفاده می‌شود (فقط محیط محلی).');
-  return 'afagh-dev-otp-pepper';
-}
-
-const otpHmac = (otp: string, documentId: number) =>
-  createHmac('sha256', otpPepper()).update(`${otp.trim()}:${documentId}`).digest('hex');
-
-/** مقایسهٔ زمان‌ثابت دو هش hex — جلوگیری از oracle زمانی. */
-function otpEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a, 'utf8');
-  const bb = Buffer.from(b, 'utf8');
-  return ab.length === bb.length && timingSafeEqual(ab, bb);
-}
+// منطق OTP (فلفل، کد ۶ رقمی، هش HMAC با بافت یکتا، مقایسهٔ زمان-ثابت) در
+// ماژول مشترک `@/lib/otp` است تا قفل نمره و امضای قرارداد هم دقیقاً همین
+// استاندارد را داشته باشند — یک تعریف، یک رفتار.
+const otpHmac = (otp: string, documentId: number) => otpDigest(otp, `doc:${documentId}`);
 
 // 🔒 گیت build-time: در ایمیج تولید (NEXT_PUBLIC_AFAGH_DEMO_LOCK=1) کد دمو
 // حتی در سطح باندل غیرفعال است؛ چک runtime زیر کمربند دوم است.
@@ -61,7 +41,7 @@ export async function sendOtpAction(documentId: number): Promise<{ ok: boolean; 
     return { ok: false, error: 'تعداد درخواست کد بیش از حد مجاز است. چند دقیقهٔ دیگر دوباره تلاش کنید.', expiresInSeconds: rl.retryAfterSec };
   }
 
-  const otp = String(randomInt(100000, 1000000)); // شش‌رقمی
+  const otp = newOtpCode();
   await db.insert(doc_sign_otps).values({
     staffId: me.id, documentId,
     otpHash: otpHmac(otp, documentId),
