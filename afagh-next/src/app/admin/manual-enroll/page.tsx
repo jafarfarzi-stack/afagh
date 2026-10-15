@@ -27,12 +27,26 @@ export default async function ManualEnrollPage() {
     .where(and(eq(students.status, 'ACTIVE'), u ? eq(students.universityId, u) : undefined))
     .orderBy(students.entryYear)).map(r => r.y).filter((y): y is number => typeof y === 'number');
 
+  // نیمسال‌های ورودِ موجود، به‌صورت «مهر 1404» / «بهمن 1403» (سال + نیمسال با هم)
+  const TERM_FA: Record<number, string> = { 1: 'مهر', 2: 'بهمن', 3: 'تابستان' };
+  const cohorts = (await db.selectDistinct({ y: students.entryYear, t: students.entryTerm })
+    .from(students)
+    .where(and(eq(students.status, 'ACTIVE'), u ? eq(students.universityId, u) : undefined))
+    .orderBy(desc(students.entryYear), desc(students.entryTerm)))
+    .filter(r => typeof r.y === 'number')
+    .map(r => {
+      const y = r.y as number;
+      const t = Number(r.t ?? 1) || 1;
+      return { key: `${y}-${t}`, entryYear: y, entryTerm: t, label: `${TERM_FA[t] ?? `نیمسال ${t}`} ${y}` };
+    });
+
   const filters: EnrollFilters = {
     terms,
     majors: majorsRows.map(m => ({ id: m.id, name: m.name, departmentId: m.departmentId ?? null })),
     departments: depts.map(d => ({ id: d.id, name: d.name, facultyId: d.facultyId })),
     faculties: facs.map(f => ({ id: f.id, name: f.name })),
     entryYears: years,
+    entryCohorts: cohorts,
   };
   return <ManualEnrollClient filters={filters} />;
 }

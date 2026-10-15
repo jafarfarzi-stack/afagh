@@ -13,6 +13,8 @@ export interface EnrollFilters {
   departments: { id: number; name: string; facultyId: number }[];
   faculties: { id: number; name: string }[];
   entryYears: number[];
+  /** نیمسال‌های ورود به‌صورت «مهر 1404» / «بهمن 1403» — فیلتر یکپارچهٔ سال+نیمسال */
+  entryCohorts: { key: string; entryYear: number; entryTerm: number; label: string }[];
 }
 
 const sel = 'w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white';
@@ -34,9 +36,10 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
   const [cart, setCart] = useState<CatalogOffering[]>([]);
   // درس‌های ثبت‌شدهٔ فعلی دانشجو + خلاصهٔ چارت/سقف واحد
   const [enrolled, setEnrolled] = useState<StudentTermEnrollment[]>([]);
-  const [chartInfo, setChartInfo] = useState<{ versionCode: string | null; title: string | null; chartCount: number; commonCount: number; otherCount: number; message?: string; effectiveMaxUnits: number | null; currentUnits: number } | null>(null);
+  const [chartInfo, setChartInfo] = useState<{ versionCode: string | null; title: string | null; chartCount: number; commonCount: number; otherCount: number; message?: string; effectiveMaxUnits: number | null; currentUnits: number; chartTotalCount?: number; chartOfferedCount?: number } | null>(null);
   const [catalogErr, setCatalogErr] = useState<string | null>(null);
-  const [scopeFilter, setScopeFilter] = useState<'all' | 'chart' | 'common' | 'other'>('all');
+  // فیلتر دامنه: پیش‌فرض فقط چارت+مشترک (درس‌های خودِ دانشجو). «خارج» با کلیک آگاهانه باز می‌شود.
+const [scopeFilter, setScopeFilter] = useState<'mine' | 'chart' | 'common' | 'other'>('mine');
   // انتخاب صریح دانشجو در تب دسته‌جمعی
   const [bulkStudents, setBulkStudents] = useState<{ studentId: number; studentCode: string; name: string }[]>([]);
   const [bulkStudentQ, setBulkStudentQ] = useState('');
@@ -50,7 +53,7 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
   const [dept, setDept] = useState('');
   const [fac, setFac] = useState('');
   const [year, setYear] = useState('');
-  const [entryTerm, setEntryTerm] = useState('');
+  const [cohort, setCohort] = useState('');
   const [bulkOfferings, setBulkOfferings] = useState<ManualEnrollOffering[]>([]);
   const [chosen, setChosen] = useState<number[]>([]);
   const [bulkCount, setBulkCount] = useState<number | null>(null);
@@ -99,7 +102,8 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
     if (r.ok) {
       setCatalog((r as any).items ?? []);
       setEnrolled((r as any).enrolled ?? []);
-      setChartInfo((r as any).chart ?? null);
+      const ch = (r as any).chart ?? null;
+      setChartInfo(ch ? { ...ch, chartTotalCount: (r as any).chartTotalCount ?? ch.chartCount, chartOfferedCount: (r as any).chartOfferedCount ?? ch.chartCount } : null);
     } else {
       setCatalog([]); setCatalogErr((r as any).error || 'خطای ناشناخته');
     }
@@ -140,10 +144,15 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
     refresh();
   };
 
-  const filteredCatalog = useMemo(() => {
+  // ── فیلتر دامنه ──
+// پیش‌فرض «mine» = فقط درس‌های خودِ دانشجو (چارت رشته + مشترک/عمومی).
+// «other» (خارج از چارت = رشته/مقطع دیگر) پنهان است و فقط با کلیک آگاهانه باز می‌شود.
+const filteredCatalog = useMemo(() => {
     const qq = catalogQuery.trim().toLowerCase();
     return catalog.filter(c => {
-      if (scopeFilter !== 'all' && c.scope !== scopeFilter) return false;
+      if (scopeFilter === 'mine') {
+        if (c.scope === 'other') return false;
+      } else if (c.scope !== scopeFilter) return false;
       if (qq) {
         const hay = `${c.code} ${c.title}`.toLowerCase();
         if (!hay.includes(qq)) return false;
@@ -153,17 +162,30 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
   }, [catalog, catalogQuery, scopeFilter]);
   const inCart = (id: number) => cart.some(c => c.offeringId === id);
 
-  const bulkFilter = () => ({
-    termId: Number(bulkTerm), entryYear: year ? Number(year) : null,
-    entryTerm: entryTerm ? Number(entryTerm) : null,
-    majorId: major ? Number(major) : null, departmentId: dept ? Number(dept) : null, facultyId: fac ? Number(fac) : null,
-    studentIds: bulkStudents.length ? bulkStudents.map(s => s.studentId) : null,
-  });
+  /** راهنمای متناسبِ پایینِ کاتالوگ — بر اساس فیلتر فعال */
+  const scopeHint = scopeFilter === 'other'
+    ? '⚠ این درس‌ها در چارت رشتهٔ دانشجو نیستند (از رشته یا مقطع دیگر). ثبتشان یک تخطی آیین‌نامه‌ای است: تیک «نادیده‌گرفتن آیین‌نامه» را با دلیل روشن بزن — هر مورد با نام کاربر و دلیل در تاریخچه ثبت می‌شود.'
+    : scopeFilter === 'common'
+      ? 'فقط دروس مشترک/عمومی: این‌ها برای همهٔ دانشجویان قابل انتخاب‌اند و در چارت رشته نمی‌آیند. برای دیدن درس‌های رشتهٔ خود دانشجو به «چارت + مشترک» یا «فقط چارت» برگرد.'
+      : scopeFilter === 'chart'
+        ? 'فقط درس‌های چارت رشتهٔ دانشجو — کل چارت، نه فقط ارائه‌شده‌های این ترم. درس‌هایی که در این ترم ارائه نشده‌اند با برچسب «ارائه نشده» می‌آیند و قابل انتخاب نیستند تا استاد/ارائه‌شونده ثبت کند.'
+        : 'پیش‌فرض فقط درس‌های خودِ دانشجو نشان داده می‌شود: 🗂 چارت رشته + 🌐 مشترک/عمومی. درس‌های خارج از چارت پنهان‌اند؛ اگر واقعاً لازم شد، دکمهٔ «⚠ خارج از چارت» را بزن و با نادیده‌گرفتن آیین‌نامه + دلیل ثبت کن.';
 
-  const activateFilter = (): BulkFilter => ({
-    ...bulkFilter(),
-    entryYear: null,
-  });
+  const bulkFilter = (): BulkFilter => {
+    const c = filters.entryCohorts.find(x => x.key === cohort);
+    return {
+      termId: Number(bulkTerm),
+      entryYear: c ? c.entryYear : (year ? Number(year) : null),
+      entryTerm: c ? c.entryTerm : null,
+      majorId: major ? Number(major) : null, departmentId: dept ? Number(dept) : null, facultyId: fac ? Number(fac) : null,
+      studentIds: bulkStudents.length ? bulkStudents.map(s => s.studentId) : null,
+    };
+  };
+
+  const activateFilter = (): BulkFilter => {
+    const c = filters.entryCohorts.find(x => x.key === cohort);
+    return { ...bulkFilter(), entryYear: c ? c.entryYear : null, entryTerm: c ? c.entryTerm : null };
+  };
 
   const countBulk = async (filter: BulkFilter = bulkFilter()) => {
     setBusy(true); setMsg(null);
@@ -279,7 +301,7 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
           {(selStudent || selOffering) && (
             <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="text-xs font-black text-indigo-900">📚 کاتالوگ/چارتِ {selStudent?.name || 'دانشجو'} در این ترم {catalogLoading && '(در حال بارگذاری…)'}</h3>
+                <h3 className="text-xs font-black text-indigo-900">📚 چارت و کاتالوگِ {selStudent?.name || 'دانشجو'} — درس‌های خودِ دانشجو در ترم {catalogLoading && '(در حال بارگذاری…)'}</h3>
                 <input value={catalogQuery} onChange={e => setCatalogQuery(e.target.value)} placeholder="جست‌وجوی کد/نام درس…" className="w-48 border border-slate-300 rounded-lg px-2 py-1 text-xs" />
               </div>
 
@@ -294,7 +316,10 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
                 <div className="rounded-lg bg-white border border-indigo-200 p-2 text-[11px] space-y-1">
                   <p className="font-black text-indigo-900">
                     {chartInfo.versionCode ? `چارت ${chartInfo.versionCode}${chartInfo.title ? ` «${chartInfo.title}»` : ''}` : 'چارت رشته'}
-                    {' — '}🗂 چارت: {chartInfo.chartCount} · 🌐 مشترک: {chartInfo.commonCount} · 📦 خارج از چارت: {chartInfo.otherCount}
+                    {' — '}🗂 کل چارت: {(chartInfo.chartTotalCount ?? chartInfo.chartCount).toLocaleString('fa-IR')}
+                    {' '}درس (در این ترم ارائه: {(chartInfo.chartOfferedCount ?? chartInfo.chartCount).toLocaleString('fa-IR')})
+                    {' · '}🌐 مشترک: {chartInfo.commonCount.toLocaleString('fa-IR')}
+                    {' · '}📦 خارج از چارت: {chartInfo.otherCount.toLocaleString('fa-IR')} <span className="text-slate-400">(پنهان)</span>
                   </p>
                   {chartInfo.effectiveMaxUnits != null && (
                     <p className={'font-black ' + (chartInfo.currentUnits >= chartInfo.effectiveMaxUnits ? 'text-rose-700' : 'text-slate-700')}>
@@ -322,15 +347,28 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
                 </div>
               )}
 
-              {/* ── فیلتر دامنهٔ درس ── */}
+              {/* ── فیلتر دامنهٔ درس: پیش‌فرض «چارت + مشترک» (درس‌های خودِ دانشجو) ── */}
               <div className="flex flex-wrap gap-1.5">
-                {([['all', 'همه'], ['chart', '🗂 چارت رشته'], ['common', '🌐 مشترک/عمومی'], ['other', '📦 خارج از چارت']] as const).map(([k, l]) => (
+                {([['mine', '📚 چارت + مشترک'], ['chart', '🗂 فقط چارت'], ['common', '🌐 فقط مشترک/عمومی']] as const).map(([k, l]) => (
                   <button key={k} onClick={() => setScopeFilter(k)}
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition ${scopeFilter === k ? 'bg-indigo-700 text-white' : 'bg-white text-slate-600 border border-slate-300'}`}>
                     {l}
                   </button>
                 ))}
+                <span className="text-[10px] text-slate-400 self-center">|</span>
+                <button onClick={() => setScopeFilter(scopeFilter === 'other' ? 'mine' : 'other')}
+                  title="درس‌های خارج از چارتِ رشتهٔ دانشجو (رشته/مقطع دیگر) — ثبتشان نیازمند نادیده‌گرفتن آیین‌نامه با دلیل است"
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition border ${scopeFilter === 'other' ? 'bg-rose-600 text-white border-rose-600' : 'bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100'}`}>
+                  ⚠ خارج از چارت {chartInfo?.otherCount ? `(${chartInfo.otherCount.toLocaleString('fa-IR')})` : ''}
+                </button>
               </div>
+
+              {scopeFilter === 'other' && (
+                <div className="rounded-lg border border-rose-300 bg-rose-50 p-2 text-[11px] font-black text-rose-800 space-y-1">
+                  <p>⛔ حالت «خارج از چارت» روشن است: این درس‌ها در برنامهٔ درسی رشتهٔ این دانشجو نیستند.</p>
+                  <p className="font-bold">برای ثبتشان باید تیک «نادیده‌گرفتن آیین‌نامه» را با دلیل روشن بزنید؛ نام کاربر، دلیل و درس در تاریخچه ثبت می‌شود. برای برگشتن، دوباره همین دکمه را بزن.</p>
+                </div>
+              )}
 
               {cart.length > 0 && (
                 <div className="rounded-lg bg-white border border-indigo-300 p-2 text-xs flex flex-wrap items-center gap-2">
@@ -341,16 +379,22 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
               )}
               <div className="max-h-80 overflow-y-auto rounded-lg border border-indigo-100 bg-white divide-y divide-slate-100">
                 {filteredCatalog.map(c => (
-                  <div key={c.offeringId} className={'flex flex-wrap items-center gap-2 p-2 ' + (c.alreadyEnrolled ? 'opacity-50' : '')}>
+                  <div key={`${c.courseId}-${c.offeringId}`} className={'flex flex-wrap items-center gap-2 p-2 ' + (c.alreadyEnrolled ? 'opacity-60' : '') + (c.offered ? '' : ' bg-slate-50/70')}>
                     <button
-                      disabled={inCart(c.offeringId) || c.alreadyEnrolled}
+                      disabled={!c.offered || inCart(c.offeringId) || c.alreadyEnrolled}
                       onClick={() => setCart(p => inCart(c.offeringId) ? p.filter(x => x.offeringId !== c.offeringId) : [...p, c])}
-                      className={'px-2.5 py-1 rounded-lg text-[11px] font-black ' + (inCart(c.offeringId) ? 'bg-indigo-800 text-white' : c.alreadyEnrolled ? 'bg-slate-200 text-slate-500' : 'bg-indigo-100 text-indigo-900 hover:bg-indigo-200')}>
-                      {c.alreadyEnrolled ? 'ثبت است' : inCart(c.offeringId) ? '✓ در سبد' : '＋'}
+                      title={c.offered ? '' : 'این درس در ترمِ انتخابی ارائه نشده است — تا ارائه شدن قابل ثبت نیست'}
+                      className={'px-2.5 py-1 rounded-lg text-[11px] font-black ' + (!c.offered ? 'bg-slate-200 text-slate-500 cursor-not-allowed' : inCart(c.offeringId) ? 'bg-indigo-800 text-white' : c.alreadyEnrolled ? 'bg-slate-200 text-slate-500' : 'bg-indigo-100 text-indigo-900 hover:bg-indigo-200')}>
+                      {!c.offered ? 'ارائه نشده' : c.alreadyEnrolled ? 'ثبت است' : inCart(c.offeringId) ? '✓ در سبد' : '＋'}
                     </button>
-                    <span className="font-bold text-slate-800">{c.code} {c.title} <span className="text-slate-500">(گ{c.groupNumber})</span></span>
-                    <span className="text-[10px] text-slate-500">{c.units ?? ''} واحد · {c.enrolledCount}/{c.capacity} · {c.professorName}</span>
-                    <span className={'px-1.5 py-0.5 rounded-full text-[10px] font-black ' + (c.scope === 'chart' ? 'bg-indigo-100 text-indigo-800' : c.scope === 'common' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600')}>
+                    <span className={'font-bold ' + (c.offered ? 'text-slate-800' : 'text-slate-500')}>
+                      {c.code} {c.title}
+                      {c.offered ? <span className="text-slate-500"> (گ{c.groupNumber})</span> : <span className="text-slate-400"> — در این ترم ارائه نشده</span>}
+                    </span>
+                    {c.offered
+                      ? <span className="text-[10px] text-slate-500">{c.units ?? ''} واحد · {c.enrolledCount}/{c.capacity} · {c.professorName}</span>
+                      : <span className="text-[10px] text-slate-400">{c.units ?? ''} واحد · {c.professorName === '—' ? 'بدون ارائه‌دهنده' : c.professorName}</span>}
+                    <span className={'px-1.5 py-0.5 rounded-full text-[10px] font-black ' + (c.scope === 'chart' ? 'bg-indigo-100 text-indigo-800' : c.scope === 'common' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-700')}>
                       {c.scope === 'chart' ? 'چارت' : c.scope === 'common' ? 'مشترک' : 'خارج'}
                     </span>
                     {c.prereq && !c.prereqMissing && <span className="text-[10px] text-amber-700 font-bold">پیش‌نیاز: {c.prereq}</span>}
@@ -360,9 +404,16 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
                     )}
                   </div>
                 ))}
-                {!catalogLoading && !filteredCatalog.length && <p className="p-3 text-xs text-slate-400">در این ترم ارائه‌ای برای این فیلتر نیست.</p>}
+                {!catalogLoading && !filteredCatalog.length && (
+                  <p className="p-3 text-xs text-slate-400">
+                    {scopeFilter === 'other'
+                      ? 'درسی خارج از چارت در این ترم ارائه نشده است.'
+                      : 'در این فیلتر چیزی نیست — «فقط چارت» یا «⚠ خارج از چارت» را امتحان کنید.'}
+                  </p>
+                )}
               </div>
-              <p className="text-[10px] text-indigo-700">نادیده‌گرفتن آیین‌نامه (سقف واحد/پیش‌نیاز/ظرفیت/تداخل) اگر نیاز باشد از تیک بالا استفاده کن (با دلیل).</p>
+              <p className={'text-[10px] leading-5 ' + (scopeFilter === 'other' ? 'text-rose-700 font-bold' : 'text-indigo-700')}>{scopeHint}</p>
+              <p className="text-[10px] text-slate-500">نادیده‌گرفتن آیین‌نامه (سقف واحد/پیش‌نیاز/ظرفیت/تداخل) اگر نیاز باشد از تیک بالا استفاده کن (با دلیل).</p>
             </div>
           )}
 
@@ -438,11 +489,9 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
               </select>
             </label>
             <label className="text-xs font-bold text-slate-600">نیمسال ورود
-              <select value={entryTerm} onChange={e => setEntryTerm(e.target.value)} className={sel + ' mt-1'}>
+              <select value={cohort} onChange={e => setCohort(e.target.value)} className={sel + ' mt-1'}>
                 <option value="">همه</option>
-                <option value={1}>مهر (۱)</option>
-                <option value={2}>بهمن (۲)</option>
-                <option value={3}>تابستان (۳)</option>
+                {filters.entryCohorts.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
               </select>
             </label>
             <button onClick={() => countBulk()} disabled={busy} className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-black text-white disabled:opacity-50">🔍 شمارش</button>
@@ -487,11 +536,9 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
               </select>
             </label>
             <label className="text-xs font-bold text-slate-600">نیمسال ورود
-              <select value={entryTerm} onChange={e => setEntryTerm(e.target.value)} className={sel + ' mt-1'}>
+              <select value={cohort} onChange={e => setCohort(e.target.value)} className={sel + ' mt-1'}>
                 <option value="">همه</option>
-                <option value={1}>مهر (۱)</option>
-                <option value={2}>بهمن (۲)</option>
-                <option value={3}>تابستان (۳)</option>
+                {filters.entryCohorts.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
               </select>
             </label>
           </div>

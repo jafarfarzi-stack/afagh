@@ -569,6 +569,8 @@ function councilGate(conflicts: string[] | undefined, override: boolean): string
 
 export interface CatalogOffering extends ManualEnrollOffering {
   courseId: number;
+  /** آیا این درس در ترمِ انتخابی واقعاً ارائه شده است؟ (false = فقط در چارت هست، ارائه ندارد) */
+  offered: boolean;
   alreadyEnrolled: boolean;
   /** اگر در این ترم ثبت شده، شناسهٔ ثبت‌نام و وضعیتش (برای حذف/اصلاح) */
   enrollmentId: number | null;
@@ -609,6 +611,10 @@ export interface CatalogResult {
     /** سقف واحد آیین‌نامه‌ای و جمع ثبت‌شده — برای هشدار سقف */
     effectiveMaxUnits: number | null; currentUnits: number;
   };
+  /** تعداد درس‌های چارتی که در ترمِ جاری واقعاً ارائه شده‌اند */
+  chartOfferedCount?: number;
+  /** تعداد کل درس‌های چارتی رشتهٔ دانشجو */
+  chartTotalCount?: number;
 }
 
 /**
@@ -760,6 +766,7 @@ export async function getStudentCatalog(
       units: r.units == null ? null : Number(r.units), capacity: r.capacity,
       enrolledCount: r.enrolledCount ?? 0,
       professorName: (r.professorId != null && profName.get(r.professorId)) || '—',
+      offered: true,
       alreadyEnrolled: takenCourseIds.has(r.courseId),
       enrollmentId: enr?.enrollmentId ?? null,
       enrollmentStatus: enr?.status ?? null,
@@ -769,8 +776,48 @@ export async function getStudentCatalog(
       scope,
     });
   }
+
+  // ── درس‌های چارتی که در این ترم ارائه نشده‌اند ──
+  // کارشناس باید کل چارتِ دانشجو را ببیند (نه فقط ارائه‌شده‌های این ترم)؛
+  // این‌ها با offeringId=0 و offered=false می‌آیند تا در UI غیرقابل انتخاب باشند.
+  const chartTotalCount = chartCount;
+  const offeredCourseIds = new Set(rows.map(r => r.courseId));
+  const missingChartIds = [...chartCourseIds].filter(id => !offeredCourseIds.has(id));
+  if (missingChartIds.length) {
+    const missingRows = await db.select({ id: courses.id, code: courses.code, title: courses.title, units: courses.units })
+      .from(courses).where(inArray(courses.id, missingChartIds)).orderBy(asc(courses.title)).limit(2000);
+    for (const m of missingRows) {
+      if (q) {
+        const hay = `${m.code} ${m.title}`.toLowerCase();
+        if (!hay.includes(q.toLowerCase())) continue;
+      }
+      let prereqMissing: string | null = null;
+      if (prereqCtx) {
+        const rule = prereqCtx.ruleByCourse.get(m.id);
+        if (rule) {
+          const ev = evaluateLogicTree(rule, prereqCtx.passed);
+          if (!ev.ok) prereqMissing = ev.missing.map(c => prereqCtx.titles.get(c) ?? c).join('، ');
+        }
+      }
+      items.push({
+        offeringId: 0, courseId: m.id, code: m.code, title: m.title, groupNumber: 0,
+        units: m.units == null ? null : Number(m.units), capacity: 0, enrolledCount: 0,
+        professorName: '—', offered: false,
+        alreadyEnrolled: takenCourseIds.has(m.id),
+        enrollmentId: enrollByCourse.get(m.id)?.enrollmentId ?? null,
+        enrollmentStatus: enrollByCourse.get(m.id)?.status ?? null,
+        prereq: prereqCtx ? formatPrereq(prereqCtx.ruleByCourse.get(m.id), prereqCtx.titles) : null,
+        prereqMissing,
+        conflicts: [],
+        scope: 'chart',
+      });
+    }
+  }
+
   return {
     ok: true, items, enrolled: enrolledList,
     chart: { ...chart, chartCount, commonCount, otherCount, message: chartMessage, effectiveMaxUnits, currentUnits },
+    chartOfferedCount: chartCount,
+    chartTotalCount,
   };
 }
