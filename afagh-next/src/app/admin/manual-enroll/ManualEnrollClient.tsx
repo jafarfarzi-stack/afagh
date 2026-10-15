@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  activateTermForFilter, bulkDropAction, bulkEnrollAction, countBulkStudents, getStudentCatalog, getStudentWarnings,
+  activateTermForFilter, bulkDropAction, bulkEnrollAction, countBulkStudents, dropEnrollAction, getStudentCatalog, getStudentWarnings,
   listOfferingsForManualEnroll, manualEnrollAction, manualEnrollHistory,
-  searchStudentsForManualEnroll, type ManualEnrollOffering, type CatalogOffering, type StudentWarning,
+  searchStudentsForManualEnroll, type ManualEnrollOffering, type CatalogOffering, type StudentTermEnrollment, type StudentWarning,
 } from './actions';
 
 export interface EnrollFilters {
@@ -31,6 +31,15 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogQuery, setCatalogQuery] = useState('');
   const [cart, setCart] = useState<CatalogOffering[]>([]);
+  // درس‌های ثبت‌شدهٔ فعلی دانشجو + خلاصهٔ چارت/سقف واحد
+  const [enrolled, setEnrolled] = useState<StudentTermEnrollment[]>([]);
+  const [chartInfo, setChartInfo] = useState<{ versionCode: string | null; title: string | null; chartCount: number; commonCount: number; otherCount: number; message?: string; effectiveMaxUnits: number | null; currentUnits: number } | null>(null);
+  const [catalogErr, setCatalogErr] = useState<string | null>(null);
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'chart' | 'common' | 'other'>('all');
+  // انتخاب صریح دانشجو در تب دسته‌جمعی
+  const [bulkStudents, setBulkStudents] = useState<{ studentId: number; studentCode: string; name: string }[]>([]);
+  const [bulkStudentQ, setBulkStudentQ] = useState('');
+  const [bulkStudentHits, setBulkStudentHits] = useState<{ studentId: number; studentCode: string; name: string }[]>([]);
   // اخطارهای آیین‌نامه برای کارشناس
   const [warnings, setWarnings] = useState<StudentWarning[]>([]);
   // bulk
@@ -73,11 +82,29 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
   };
 
   const loadCatalog = async (studentId: number) => {
-    setCatalogLoading(true); setCart([]); setWarnings([]);
-    const r = await getStudentCatalog(studentId, singleTerm).catch(() => ({ ok: false as const, error: 'خطا' }));
-    setCatalog(r.ok ? (r.items ?? []) : []); setCatalogLoading(false);
-    const w = await getStudentWarnings(studentId, singleTerm).catch(() => ({ ok: false as const, error: 'خطا' }));
+    setCatalogLoading(true); setCart([]); setWarnings([]); setCatalogErr(null);
+    setEnrolled([]); setChartInfo(null);
+    const r = await getStudentCatalog(studentId, singleTerm).catch((e: unknown) => ({ ok: false as const, error: (e as Error)?.message || 'خطا در برقراری ارتباط با سرور' }));
+    if (r.ok) {
+      setCatalog((r as any).items ?? []);
+      setEnrolled((r as any).enrolled ?? []);
+      setChartInfo((r as any).chart ?? null);
+    } else {
+      setCatalog([]); setCatalogErr((r as any).error || 'خطای ناشناخته');
+    }
+    setCatalogLoading(false);
+    const w = await getStudentWarnings(studentId, singleTerm).catch(() => ({ ok: false as const, items: [] as StudentWarning[] }));
     setWarnings(w.ok ? (w.items ?? []) : []);
+  };
+
+  const dropEnrolled = async (e: StudentTermEnrollment) => {
+    if (!window.confirm(`حذف «${e.code} ${e.title} (گ${e.groupNumber})» از ثبت‌نام ${selStudent?.name ?? ''}؟`)) return;
+    setBusy(true); setMsg(null);
+    const r = await dropEnrollAction(e.enrollmentId, 'حذف توسط کارشناس از صفحهٔ ثبت‌نام تکی').catch(() => ({ ok: false as const, error: 'خطا' }));
+    setMsg(r.ok ? { kind: 'ok', text: `✅ «${e.code}» حذف شد.` } : { kind: 'err', text: (r as any).error ?? 'ناموفق' });
+    setBusy(false);
+    if (selStudent) await loadCatalog(selStudent.studentId);
+    refresh();
   };
 
   const doSingle = async () => {
@@ -104,13 +131,21 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
 
   const filteredCatalog = useMemo(() => {
     const qq = catalogQuery.trim().toLowerCase();
-    return qq ? catalog.filter(c => (c.code + ' ' + c.title).toLowerCase().includes(qq)) : catalog;
-  }, [catalog, catalogQuery]);
+    return catalog.filter(c => {
+      if (scopeFilter !== 'all' && c.scope !== scopeFilter) return false;
+      if (qq) {
+        const hay = `${c.code} ${c.title}`.toLowerCase();
+        if (!hay.includes(qq)) return false;
+      }
+      return true;
+    });
+  }, [catalog, catalogQuery, scopeFilter]);
   const inCart = (id: number) => cart.some(c => c.offeringId === id);
 
   const bulkFilter = () => ({
     termId: Number(bulkTerm), entryYear: year ? Number(year) : null,
     majorId: major ? Number(major) : null, departmentId: dept ? Number(dept) : null, facultyId: fac ? Number(fac) : null,
+    studentIds: bulkStudents.length ? bulkStudents.map(s => s.studentId) : null,
   });
 
   const countBulk = async () => {
@@ -136,6 +171,17 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
   };
 
   const bulkFilteredMajors = useMemo(() => filters.majors.filter(m => !dept || m.departmentId === Number(dept)), [filters.majors, dept]);
+
+  const searchBulkStudents = async () => {
+    if (!bulkStudentQ.trim()) return;
+    const r = await searchStudentsForManualEnroll(bulkStudentQ.trim()).catch(() => ({ ok: false as const, error: 'خطا' }));
+    setBulkStudentHits(r.ok ? (r.items ?? []) : []);
+  };
+  const addBulkStudent = (s: { studentId: number; studentCode: string; name: string }) => {
+    setBulkStudents(p => p.some(x => x.studentId === s.studentId) ? p : [...p, s]);
+    setBulkStudentQ(''); setBulkStudentHits([]);
+  };
+  const removeBulkStudent = (id: number) => setBulkStudents(p => p.filter(x => x.studentId !== id));
 
   const offerHelp = <span className="text-[10px] text-slate-400">ترم را عوض کن تا کلاس‌ها بیاید (تا ۴۰۰۰).</span>;
 
@@ -204,8 +250,58 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
             <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-xs font-black text-indigo-900">📚 کاتالوگ/چارتِ {selStudent?.name || 'دانشجو'} در این ترم {catalogLoading && '(در حال بارگذاری…)'}</h3>
-                <input value={catalogQuery} onChange={e => setCatalogQuery(e.target.value)} placeholder="جست‌وجوی کد/نام…" className="w-44 border border-slate-300 rounded-lg px-2 py-1 text-xs" />
+                <input value={catalogQuery} onChange={e => setCatalogQuery(e.target.value)} placeholder="جست‌وجوی کد/نام درس…" className="w-48 border border-slate-300 rounded-lg px-2 py-1 text-xs" />
               </div>
+
+              {catalogErr && (
+                <div className="rounded-lg border border-rose-300 bg-rose-50 p-2 text-[11px] font-black text-rose-800">
+                  ⚠ خطا در بارگذاری کاتالوگ: {catalogErr}
+                </div>
+              )}
+
+              {/* ── خلاصهٔ چارت + سقف واحد ── */}
+              {chartInfo && (
+                <div className="rounded-lg bg-white border border-indigo-200 p-2 text-[11px] space-y-1">
+                  <p className="font-black text-indigo-900">
+                    {chartInfo.versionCode ? `چارت ${chartInfo.versionCode}${chartInfo.title ? ` «${chartInfo.title}»` : ''}` : 'چارت رشته'}
+                    {' — '}🗂 چارت: {chartInfo.chartCount} · 🌐 مشترک: {chartInfo.commonCount} · 📦 خارج از چارت: {chartInfo.otherCount}
+                  </p>
+                  {chartInfo.effectiveMaxUnits != null && (
+                    <p className={'font-black ' + (chartInfo.currentUnits >= chartInfo.effectiveMaxUnits ? 'text-rose-700' : 'text-slate-700')}>
+                      سقف واحد: {chartInfo.currentUnits}/{chartInfo.effectiveMaxUnits}
+                      {chartInfo.currentUnits >= chartInfo.effectiveMaxUnits && ' — ⚠ به سقف رسیده؛ افزودن نیازمند نادیده‌گرفتن با دلیل است.'}
+                    </p>
+                  )}
+                  {chartInfo.message && <p className="text-amber-700 font-bold">⚠ {chartInfo.message}</p>}
+                </div>
+              )}
+
+              {/* ── درس‌های ثبت‌شدهٔ فعلی دانشجو (قابل حذف/اصلاح) ── */}
+              {enrolled.length > 0 && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50/50 p-2 space-y-1">
+                  <p className="text-[11px] font-black text-rose-900">✅ درس‌های ثبت‌شدهٔ این ترم ({enrolled.length}) — برای اصلاح/حذف:</p>
+                  {enrolled.map(e => (
+                    <div key={e.enrollmentId} className="flex flex-wrap items-center gap-2 text-[11px]">
+                      <span className="font-bold text-slate-800">{e.code} {e.title} <span className="text-slate-500">(گ{e.groupNumber})</span></span>
+                      <span className="text-slate-500">{e.units ?? ''} واحد · {e.professorName}</span>
+                      <span className={'px-1.5 py-0.5 rounded-full text-[10px] font-black ' + (e.status === 'REGISTERED' ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-200 text-amber-900')}>{e.status === 'REGISTERED' ? 'ثبت' : e.status === 'WAITLISTED' ? 'صف' : e.status}</span>
+                      {e.override && <span className="px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[10px] font-black">با مجوز</span>}
+                      <button onClick={() => dropEnrolled(e)} disabled={busy} className="mr-auto rounded-lg bg-rose-600 px-2 py-0.5 text-white font-black text-[10px] disabled:opacity-50">حذف</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ── فیلتر دامنهٔ درس ── */}
+              <div className="flex flex-wrap gap-1.5">
+                {([['all', 'همه'], ['chart', '🗂 چارت رشته'], ['common', '🌐 مشترک/عمومی'], ['other', '📦 خارج از چارت']] as const).map(([k, l]) => (
+                  <button key={k} onClick={() => setScopeFilter(k)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition ${scopeFilter === k ? 'bg-indigo-700 text-white' : 'bg-white text-slate-600 border border-slate-300'}`}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+
               {cart.length > 0 && (
                 <div className="rounded-lg bg-white border border-indigo-300 p-2 text-xs flex flex-wrap items-center gap-2">
                   <span className="font-black text-indigo-900">سبد: {cart.length} درس</span>
@@ -224,15 +320,19 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
                     </button>
                     <span className="font-bold text-slate-800">{c.code} {c.title} <span className="text-slate-500">(گ{c.groupNumber})</span></span>
                     <span className="text-[10px] text-slate-500">{c.units ?? ''} واحد · {c.enrolledCount}/{c.capacity} · {c.professorName}</span>
-                    {c.prereq && <span className="text-[10px] text-amber-700 font-bold">پیش‌نیاز: {c.prereq}</span>}
+                    <span className={'px-1.5 py-0.5 rounded-full text-[10px] font-black ' + (c.scope === 'chart' ? 'bg-indigo-100 text-indigo-800' : c.scope === 'common' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600')}>
+                      {c.scope === 'chart' ? 'چارت' : c.scope === 'common' ? 'مشترک' : 'خارج'}
+                    </span>
+                    {c.prereq && !c.prereqMissing && <span className="text-[10px] text-amber-700 font-bold">پیش‌نیاز: {c.prereq}</span>}
+                    {c.prereqMissing && <span className="text-[10px] font-black text-rose-700 rounded-full bg-rose-100 px-2 py-0.5">⛔ پیش‌نیاز ناقص: {c.prereqMissing}</span>}
                     {c.conflicts && c.conflicts.length > 0 && (
                       <span className="text-[10px] font-black text-rose-700 rounded-full bg-rose-100 px-2 py-0.5">تداخل: {c.conflicts[0]}</span>
                     )}
                   </div>
                 ))}
-                {!catalogLoading && !filteredCatalog.length && <p className="p-3 text-xs text-slate-400">در این ترم ارائه‌ای برای نمایش نیست.</p>}
+                {!catalogLoading && !filteredCatalog.length && <p className="p-3 text-xs text-slate-400">در این ترم ارائه‌ای برای این فیلتر نیست.</p>}
               </div>
-              <p className="text-[10px] text-indigo-700">نادیده‌گرفتن آیین‌نامه اگر نیاز باشد از تیک بالا استفاده کن (با دلیل).</p>
+              <p className="text-[10px] text-indigo-700">نادیده‌گرفتن آیین‌نامه (سقف واحد/پیش‌نیاز/ظرفیت/تداخل) اگر نیاز باشد از تیک بالا استفاده کن (با دلیل).</p>
             </div>
           )}
 
@@ -269,6 +369,37 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
               </select>
             </label>
           </div>
+
+          {/* ── انتخاب صریح دانشجو (اختیاری — مقدم بر فیلتر گروهی) ── */}
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-2 space-y-1.5">
+            <p className="text-[11px] font-black text-indigo-900">🎯 انتخاب دانشجو (اختیاری): اگر دانشجویی اضافه کنی، فقط همان‌ها در عملیات لحاظ می‌شوند و فیلترهای بالا نادیده گرفته می‌شود.</p>
+            <div className="flex gap-1.5">
+              <input value={bulkStudentQ} onChange={e => setBulkStudentQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchBulkStudents()} placeholder="شماره دانشجویی یا نام…" className={sel + ' flex-1'} />
+              <button onClick={searchBulkStudents} className="shrink-0 px-3 rounded-xl bg-slate-800 text-white text-xs font-black">جست‌وجو</button>
+            </div>
+            {bulkStudentHits.length > 0 && (
+              <div className="max-h-32 overflow-y-auto rounded-lg border border-indigo-100 bg-white divide-y divide-slate-100">
+                {bulkStudentHits.map(h => (
+                  <button key={h.studentId} onClick={() => addBulkStudent(h)} className="w-full text-right px-2 py-1 text-[11px] hover:bg-indigo-50 flex items-center justify-between">
+                    <span className="font-bold">{h.studentCode} · {h.name}</span>
+                    <span className="text-indigo-700 font-black">＋ افزودن</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {bulkStudents.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {bulkStudents.map(s => (
+                  <span key={s.studentId} className="inline-flex items-center gap-1 rounded-full bg-indigo-700 text-white px-2.5 py-0.5 text-[11px] font-black">
+                    {s.studentCode} · {s.name}
+                    <button onClick={() => removeBulkStudent(s.studentId)} className="text-white/80 hover:text-white">✕</button>
+                  </span>
+                ))}
+                <button onClick={() => setBulkStudents([])} className="rounded-full bg-slate-200 text-slate-600 px-2.5 py-0.5 text-[11px] font-black">پاک‌سازی</button>
+              </div>
+            )}
+          </div>
+
           <div className="flex flex-wrap items-center gap-2">
             <label className="text-xs font-bold text-slate-600">ورودی
               <select value={year} onChange={e => setYear(e.target.value)} className={sel + ' mt-1'}>

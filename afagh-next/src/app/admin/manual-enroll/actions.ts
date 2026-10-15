@@ -1,9 +1,9 @@
 'use server';
 
-import { and, asc, desc, eq, ilike, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { db, withUserRls } from '@/db';
 import {
-  academic_terms, course_offerings, courses, enrollments, financial_clearances, majors,
+  academic_terms, course_offerings, courses, curriculum_courses, departments, enrollments, financial_clearances, majors,
   offering_professors, schedules, staff, student_term_states, students, users,
 } from '@/db/schema';
 import { getSessionUser, requireRole } from '@/lib/auth';
@@ -11,6 +11,8 @@ import { getBool } from '@/lib/settings';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { buildPrereqContext, formatPrereq } from '@/lib/enroll-engine/prereqs';
 import { currentExpertFilters, scopedMajorIds } from '@/lib/expert-scope';
+import { resolveStudentCurriculum, resolutionReasonMessage } from '@/lib/curriculum-apply';
+import { evaluateLogicTree } from '@/lib/enroll-engine/prereqs';
 
 const EDU = ['ADMIN', 'EDU_EXPERT'];
 
@@ -40,7 +42,10 @@ export async function searchStudentsForManualEnroll(q: string): Promise<{
     })
     .from(students)
     .innerJoin(users, eq(users.id, students.userId))
-    .where(and(...conds, ilike(students.studentCode, `%${needle}%`)))
+    .where(and(...conds, or(
+      ilike(students.studentCode, `%${needle}%`),
+      ilike(sql`coalesce(${users.firstName}, '') || ' ' || coalesce(${users.lastName}, '')`, `%${needle}%`),
+    )))
     .orderBy(desc(students.id)).limit(20);
   return { ok: true, items: rows.map(r => ({ userId: r.userId, studentId: r.studentId, studentCode: r.studentCode, status: r.status, entryYear: r.entryYear, name: `${r.firstName || ''} ${r.lastName || ''}`.trim() })) };
 }
@@ -121,6 +126,34 @@ export async function manualEnrollAction(input: ManualEnrollInput): Promise<{ ok
   if (!override && off.enrolledCount != null && off.capacity > 0 && off.enrolledCount >= off.capacity) {
     return { ok: false, error: 'ظرفیت کلاس پر است — برای تخطی، نادیده‌گرفتن (با دلیل) لازم است.' };
   }
+  // ── گیت سقف واحد (همان موتور آیین‌نامهٔ انتخاب واحد دانشجو) ──
+  const offCourse = await db.select({ code: courses.code, title: courses.title, units: courses.units })
+    .from(courses).where(eq(courses.id, off.courseId)).limit(1);
+  const newUnits = Number(offCourse[0]?.units ?? 0);
+  let allowedMax: number | null = null;
+  try { allowedMax = (await evaluateStudentRegulationStatus(sid, off.termId)).effectiveMaxUnits; } catch { allowedMax = null; }
+  const curUnitsRows = await db.select({ units: courses.units })
+    .from(enrollments).innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+    .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+    .where(and(eq(enrollments.studentId, sid), eq(course_offerings.termId, off.termId),
+      inArray(enrollments.status, ['REGISTERED', 'PENDING_COUNCIL'])));
+  const curUnits = curUnitsRows.reduce((s, r) => s + Number(r.units || 0), 0);
+  if (!override && allowedMax != null && curUnits + newUnits > allowedMax) {
+    return { ok: false, error: `سقف واحد: ثبت‌شده ${curUnits} + این درس ${newUnits} = ${curUnits + newUnits} واحد، بیش از سقف مجاز ${allowedMax} واحد است — برای تخطی، نادیده‌گرفتن (با دلیل) لازم است.` };
+  }
+  // ── گیت پیش‌نیاز (درخت منطقی — خطای نرم، با override پذیرفته می‌شود) ──
+  let prereqViolated: string | null = null;
+  try {
+    const pctx = await buildPrereqContext(sid);
+    const rule = pctx.ruleByCourse.get(off.courseId);
+    if (rule) {
+      const ev = evaluateLogicTree(rule, pctx.passed);
+      if (!ev.ok) prereqViolated = ev.missing.map(c => pctx.titles.get(c) ?? c).join('، ');
+    }
+  } catch { /* موتور در دسترس نیست */ }
+  if (!override && prereqViolated) {
+    return { ok: false, error: `پیش‌نیاز برآورده نشده: نیازمند گذراندن «${prereqViolated}» است — برای تخطی، نادیده‌گرفتن (با دلیل) لازم است.` };
+  }
   // تداخل هفتگی/امتحانی → گیت «حکم شورا»
   const conflicts = (await buildConflictIndex(sid, off.termId)).get(oid);
   const gateErr = councilGate(conflicts, override);
@@ -131,7 +164,14 @@ export async function manualEnrollAction(input: ManualEnrollInput): Promise<{ ok
   if (blocks.length && !override) {
     return { ok: false, error: `اخطار آیین‌نامه: ${blocks.map(b => b.title).join('، ')} — برای صدور مجوز، نادیده‌گرفتن+دلیل را فعال کن.` };
   }
-  const overriddenCodes = override ? JSON.stringify([...new Set([...warnings.map(w => w.code), ...(conflicts ? ['conflict'] : [])])]) : null;
+  const overriddenCodes = override ? JSON.stringify([
+    ...new Set([
+      ...warnings.map(w => w.code),
+      ...(conflicts ? ['conflict'] : []),
+      ...(prereqViolated ? ['prereq'] : []),
+      ...(allowedMax != null && curUnits + newUnits > allowedMax ? ['max_units'] : []),
+    ]),
+  ]) : null;
 
   const ins = await withUserRls(me.id, tx => tx.insert(enrollments).values({
     studentId: sid, offeringId: oid, status: 'REGISTERED', universityId: stu.universityId ?? null,
@@ -143,6 +183,38 @@ export async function manualEnrollAction(input: ManualEnrollInput): Promise<{ ok
   return { ok: true, enrollmentId: ins[0]?.id };
 }
 
+// ─────────────── حذف/اصلاح یک ثبت‌نامِ ثبت‌شدهٔ توسط کارشناس ───────────────
+export async function dropEnrollAction(enrollmentId: number, reason: string): Promise<{ ok: boolean; error?: string }> {
+  const me = await requireRole(EDU);
+  const eid = Number(enrollmentId);
+  if (!Number.isInteger(eid)) return { ok: false, error: 'اطلاعات نامعتبر.' };
+  const [row] = await db.select({
+    id: enrollments.id, studentId: enrollments.studentId, offeringId: enrollments.offeringId,
+    status: enrollments.status, universityId: enrollments.universityId,
+    studentUni: students.universityId,
+  })
+    .from(enrollments).innerJoin(students, eq(students.id, enrollments.studentId))
+    .where(eq(enrollments.id, eid)).limit(1);
+  if (!row) return { ok: false, error: 'ثبت‌نام یافت نشد.' };
+  const u = await uniId();
+  if (u && row.studentUni && row.studentUni !== u) return { ok: false, error: 'این دانشجو از دانشگاه دیگری است.' };
+  // دامنهٔ کارشناس
+  const eff = await currentExpertFilters();
+  const majScope = await scopedMajorIds(eff, u);
+  if (majScope) {
+    const [stu] = await db.select({ majorId: students.majorId }).from(students).where(eq(students.id, row.studentId)).limit(1);
+    if (!majScope.includes(stu?.majorId ?? -1)) return { ok: false, error: 'این دانشجو در محدودهٔ دسترسی شما نیست.' };
+  }
+  if (row.status === 'DROPPED' || row.status === 'COMPLETED') return { ok: false, error: 'این ثبت‌نام قبلاً حذف/نهایی شده است.' };
+  const rs = String(reason || '').trim();
+  await withUserRls(me.id, tx => tx.update(enrollments)
+    .set({ status: 'DROPPED', enrolledByUserId: me.id, enrollOverrideReason: rs || null })
+    .where(eq(enrollments.id, eid)));
+  await db.update(course_offerings).set({ enrolledCount: sql`GREATEST(${course_offerings.enrolledCount} - 1, 0)` })
+    .where(eq(course_offerings.id, row.offeringId));
+  return { ok: true };
+}
+
 // ─────────────── فیلتر گروهی (ورودی/رشته/دانشکده/گروه/ترم) ───────────────
 export interface BulkFilter {
   termId: number;
@@ -150,9 +222,22 @@ export interface BulkFilter {
   majorId: number | null;
   departmentId: number | null;
   facultyId: number | null;
+  /** انتخاب صریح دانشجو (جست‌وجو+افزودن) — اگر خالی نباشد، مقدم بر فیلتر گروهی است */
+  studentIds?: number[] | null;
 }
 
 async function bulkStudentIds(f: BulkFilter): Promise<number[]> {
+  // انتخاب صریح دانشجویان: فقط همان‌ها (با اعمال وضعیت فعال و مرز دانشگاه/کارشناس)
+  if (Array.isArray(f.studentIds) && f.studentIds.length) {
+    const u = await uniId();
+    const conds: any[] = [inArray(students.id, f.studentIds.map(Number).filter(Number.isInteger))];
+    if (u) conds.push(eq(students.universityId, u));
+    const eff = await currentExpertFilters();
+    const majScope = await scopedMajorIds(eff, u);
+    if (majScope) conds.push(inArray(students.majorId, majScope));
+    const rows = await db.select({ id: students.id }).from(students).where(and(...conds)).limit(5000);
+    return rows.map(r => r.id);
+  }
   const u = await uniId();
   const conds = [eq(students.status, 'ACTIVE'), u ? eq(students.universityId, u) : sql`1 = 0`];
   // دامنهٔ کارشناس
@@ -483,13 +568,59 @@ function councilGate(conflicts: string[] | undefined, override: boolean): string
 export interface CatalogOffering extends ManualEnrollOffering {
   courseId: number;
   alreadyEnrolled: boolean;
+  /** اگر در این ترم ثبت شده، شناسهٔ ثبت‌نام و وضعیتش (برای حذف/اصلاح) */
+  enrollmentId: number | null;
+  enrollmentStatus: string | null;
   prereq: string | null;
+  /** پیش‌نیازِ برآورده‌نشدهٔ این درس (اگر ناقص باشد) */
+  prereqMissing: string | null;
   conflicts: string[];
+  /** دامنهٔ درس برای این دانشجو: چارتِ رشته · مشترک/عمومی · خارج از چارت */
+  scope: 'chart' | 'common' | 'other';
 }
 
-export async function getStudentCatalog(studentId: number, termId: number): Promise<{
-  ok: boolean; items?: CatalogOffering[]; error?: string;
-}> {
+/** درسِ ثبت‌شدهٔ فعلی دانشجو در یک ترم — برای نمایش و حذف/اصلاح توسط کارشناس */
+export interface StudentTermEnrollment {
+  enrollmentId: number;
+  offeringId: number;
+  courseId: number;
+  code: string;
+  title: string;
+  groupNumber: number;
+  units: number | null;
+  status: string;
+  professorName: string;
+  registeredAt: string | null;
+  override: boolean;
+}
+
+export interface CatalogResult {
+  ok: boolean;
+  items?: CatalogOffering[];
+  error?: string;
+  /** درس‌های ثبت‌شدهٔ فعلی دانشجو در این ترم (برای اصلاح/حذف) */
+  enrolled?: StudentTermEnrollment[];
+  /** خلاصهٔ فیلتر چارت و سقف واحد — برای نمایش بالای کاتالوگ */
+  chart?: {
+    versionCode: string | null; title: string | null;
+    chartCount: number; commonCount: number; otherCount: number; message?: string;
+    /** سقف واحد آیین‌نامه‌ای و جمع ثبت‌شده — برای هشدار سقف */
+    effectiveMaxUnits: number | null; currentUnits: number;
+  };
+}
+
+/**
+ * کاتالوگِ همان دانشجو برای کارشناس — مثل «انتخاب واحد» خودِ دانشجو:
+ *   ۱) ارائه‌هایی که در «چارت/برنامهٔ درسی» رشتهٔ دانشجو هستند (scope='chart')
+ *   ۲) دروس مشترک/عمومیِ قابل‌انتخاب برای همه (گروه GENERAL یا offeringScope خدماتی) (scope='common')
+ *   ۳) بقیهٔ ارائه‌های ترم (خارج از چارت) — برای تخطی آگاهانه (scope='other')
+ * جست‌وجوی کد/نام درس هم سمت سرور اعمال می‌شود.
+ */
+export async function getStudentCatalog(
+  studentId: number,
+  termId: number,
+  opts?: { q?: string },
+): Promise<CatalogResult> {
   try { await requireRole(EDU); } catch { return { ok: false, error: 'دسترسی ندارید.' }; }
   const sid = Number(studentId), tid = Number(termId);
   if (!Number.isInteger(sid) || !Number.isInteger(tid)) return { ok: false, error: 'اطلاعات نامعتبر.' };
@@ -502,25 +633,51 @@ export async function getStudentCatalog(studentId: number, termId: number): Prom
   const _majC = await scopedMajorIds(_effC, u).catch(() => null);
   if (_majC && !_majC.includes(stu.majorId ?? -1)) return { ok: false, error: 'این دانشجو در محدودهٔ دسترسی شما نیست.' };
 
-  const enrolled = await db.select({ courseId: courses.id })
+  // ── ۱) چارتِ رشتهٔ دانشجو: courseIdهای نسخهٔ قابل‌اعمال ──
+  const chartCourseIds = new Set<number>();
+  let chart: NonNullable<CatalogResult['chart']> = { versionCode: null, title: null, chartCount: 0, commonCount: 0, otherCount: 0, effectiveMaxUnits: null, currentUnits: 0 };
+  let chartMessage: string | undefined;
+  try {
+    const res = await resolveStudentCurriculum(sid);
+    if (res.version) {
+      const cc = await db.select({ courseId: curriculum_courses.courseId })
+        .from(curriculum_courses).where(eq(curriculum_courses.curriculumVersionId, res.version.id));
+      for (const r of cc) chartCourseIds.add(r.courseId);
+      chart = { ...chart, versionCode: res.version.versionCode, title: res.version.title };
+    } else {
+      chartMessage = resolutionReasonMessage(res.reason);
+    }
+  } catch { chartMessage = 'چارت این دانشجو قابل محاسبه نیست.'; }
+
+  // ── ۲) دروس مشترک/عمومی: گروه GENERAL یا offeringScope خدماتی/سراسری ──
+  const enrolled = await db.select({
+    courseId: courses.id, enrollmentId: enrollments.id, status: enrollments.status,
+  })
     .from(enrollments)
     .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .where(and(eq(enrollments.studentId, sid), eq(course_offerings.termId, tid),
       inArray(enrollments.status, ['REGISTERED', 'WAITLISTED', 'PENDING_COUNCIL'])));
   const takenCourseIds = new Set(enrolled.map(e => e.courseId));
+  const enrollByCourse = new Map(enrolled.map(e => [e.courseId, { enrollmentId: e.enrollmentId, status: e.status } as const]));
 
+  const q = String(opts?.q || '').trim();
   const rows = await db.select({
     offeringId: course_offerings.id, courseId: courses.id, code: courses.code, title: courses.title,
     groupNumber: course_offerings.groupNumber, units: courses.units, capacity: course_offerings.capacity,
     enrolledCount: course_offerings.enrolledCount, professorId: course_offerings.professorId,
+    offeringScope: courses.offeringScope, deptKind: departments.kind,
   })
     .from(course_offerings)
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+    .leftJoin(departments, eq(departments.id, courses.departmentId))
     .where(and(eq(course_offerings.termId, tid), eq(course_offerings.isActive, 1),
       u ? eq(course_offerings.universityId, u) : sql`1 = 0`))
     .orderBy(asc(courses.title), asc(course_offerings.groupNumber))
     .limit(4000);
+
+  const isCommon = (r: { offeringScope: string | null; deptKind: string | null }) =>
+    r.deptKind === 'GENERAL' || r.offeringScope === 'GENERAL_SERVICE' || r.offeringScope === 'UNIVERSITY_WIDE';
 
   const profIds = [...new Set(rows.map(r => r.professorId).filter((n): n is number => typeof n === 'number'))];
   const profName = new Map<number, string>();
@@ -532,14 +689,86 @@ export async function getStudentCatalog(studentId: number, termId: number): Prom
 
   const prereqCtx = await buildPrereqContext(sid).catch(() => null);
   const conflictIndex = await buildConflictIndex(sid, tid);
-  const items: CatalogOffering[] = rows.map(r => ({
-    offeringId: r.offeringId, courseId: r.courseId, code: r.code, title: r.title, groupNumber: r.groupNumber,
-    units: r.units == null ? null : Number(r.units), capacity: r.capacity,
-    enrolledCount: r.enrolledCount ?? 0,
-    professorName: (r.professorId != null && profName.get(r.professorId)) || '—',
-    alreadyEnrolled: takenCourseIds.has(r.courseId),
-    prereq: prereqCtx ? formatPrereq(prereqCtx.ruleByCourse.get(r.courseId), prereqCtx.titles) : null,
-    conflicts: conflictIndex.get(r.offeringId) ?? [],
+
+  // ── سقف واحد آیین‌نامه‌ای + جمع ثبت‌شده (برای هشدار سقف در کاتالوگ) ──
+  let effectiveMaxUnits: number | null = null;
+  let currentUnits = 0;
+  try {
+    const regSummary = await evaluateStudentRegulationStatus(sid, tid);
+    effectiveMaxUnits = regSummary.effectiveMaxUnits;
+  } catch { effectiveMaxUnits = null; }
+  const enrollRowsFull = await db.select({ units: courses.units, status: enrollments.status })
+    .from(enrollments)
+    .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+    .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+    .where(and(eq(enrollments.studentId, sid), eq(course_offerings.termId, tid),
+      inArray(enrollments.status, ['REGISTERED', 'PENDING_COUNCIL'])));
+  for (const r of enrollRowsFull) currentUnits += Number(r.units || 0);
+
+  // ── فهرست درس‌های ثبت‌شدهٔ فعلی (برای نمایش/حذف/اصلاح توسط کارشناس) ──
+  const enrolledDetail = await db.select({
+    enrollmentId: enrollments.id, offeringId: enrollments.offeringId, courseId: courses.id,
+    code: courses.code, title: courses.title, groupNumber: course_offerings.groupNumber,
+    units: courses.units, status: enrollments.status, professorId: course_offerings.professorId,
+    registeredAt: enrollments.registeredAt, override: enrollments.enrollOverride,
+  })
+    .from(enrollments)
+    .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+    .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+    .where(and(eq(enrollments.studentId, sid), eq(course_offerings.termId, tid),
+      inArray(enrollments.status, ['REGISTERED', 'WAITLISTED', 'PENDING_COUNCIL'])))
+    .orderBy(asc(courses.title));
+  const enrProfIds = [...new Set(enrolledDetail.map(r => r.professorId).filter((n): n is number => typeof n === 'number'))];
+  const enrProfName = new Map<number, string>();
+  if (enrProfIds.length) {
+    const ps = await db.select({ id: staff.id, firstName: users.firstName, lastName: users.lastName })
+      .from(staff).innerJoin(users, eq(users.id, staff.userId)).where(inArray(staff.id, enrProfIds));
+    for (const p of ps) enrProfName.set(p.id, `${p.firstName || ''} ${p.lastName || ''}`.trim());
+  }
+  const enrolledList: StudentTermEnrollment[] = enrolledDetail.map(r => ({
+    enrollmentId: r.enrollmentId, offeringId: r.offeringId, courseId: r.courseId,
+    code: r.code, title: r.title, groupNumber: r.groupNumber,
+    units: r.units == null ? null : Number(r.units), status: r.status,
+    professorName: (r.professorId != null && enrProfName.get(r.professorId)) || '—',
+    registeredAt: r.registeredAt ? (r.registeredAt as Date).toISOString() : null,
+    override: (r.override ?? 0) === 1,
   }));
-  return { ok: true, items };
+
+  let chartCount = 0, commonCount = 0, otherCount = 0;
+  const items: CatalogOffering[] = [];
+  for (const r of rows) {
+    const scope: CatalogOffering['scope'] = chartCourseIds.has(r.courseId) ? 'chart' : (isCommon(r) ? 'common' : 'other');
+    if (scope === 'chart') chartCount++; else if (scope === 'common') commonCount++; else otherCount++;
+    if (q) {
+      const hay = `${r.code} ${r.title}`.toLowerCase();
+      if (!hay.includes(q.toLowerCase())) continue;
+    }
+    // پیش‌نیازِ ناقصِ این درس (برای نمایش/اعمال gate)
+    let prereqMissing: string | null = null;
+    if (prereqCtx) {
+      const rule = prereqCtx.ruleByCourse.get(r.courseId);
+      if (rule) {
+        const ev = evaluateLogicTree(rule, prereqCtx.passed);
+        if (!ev.ok) prereqMissing = ev.missing.map(c => prereqCtx.titles.get(c) ?? c).join('، ');
+      }
+    }
+    const enr = enrollByCourse.get(r.courseId);
+    items.push({
+      offeringId: r.offeringId, courseId: r.courseId, code: r.code, title: r.title, groupNumber: r.groupNumber,
+      units: r.units == null ? null : Number(r.units), capacity: r.capacity,
+      enrolledCount: r.enrolledCount ?? 0,
+      professorName: (r.professorId != null && profName.get(r.professorId)) || '—',
+      alreadyEnrolled: takenCourseIds.has(r.courseId),
+      enrollmentId: enr?.enrollmentId ?? null,
+      enrollmentStatus: enr?.status ?? null,
+      prereq: prereqCtx ? formatPrereq(prereqCtx.ruleByCourse.get(r.courseId), prereqCtx.titles) : null,
+      prereqMissing,
+      conflicts: conflictIndex.get(r.offeringId) ?? [],
+      scope,
+    });
+  }
+  return {
+    ok: true, items, enrolled: enrolledList,
+    chart: { ...chart, chartCount, commonCount, otherCount, message: chartMessage, effectiveMaxUnits, currentUnits },
+  };
 }
