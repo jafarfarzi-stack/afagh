@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   listOfferingsForEditor, saveOfferingEditorAction, getRoomsForEditor,
   type OfferingEditRow,
@@ -19,9 +19,13 @@ export default function OfferingEditorClient({ terms }: { terms: { id: number; t
   const [reason, setReason] = useState('');
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { load(); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [termId]);
+  useEffect(() => {
+    if (open != null) panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [open ]);
   const load = async () => {
     setRows(await listOfferingsForEditor(termId).catch(() => []));
     setRooms(await getRoomsForEditor().catch(() => []));
@@ -84,7 +88,7 @@ export default function OfferingEditorClient({ terms }: { terms: { id: number; t
       </div>
 
       {open != null && draft && (
-        <div className="rounded-2xl border border-indigo-300 bg-indigo-50/40 p-4 space-y-3">
+        <div ref={panelRef} className="rounded-2xl border-2 border-indigo-500 bg-indigo-50/60 p-4 space-y-3 scroll-mt-24 shadow-lg">
           <h3 className="text-sm font-black">✏️ {draft.code} {draft.title} (گروه {draft.groupNumber})</h3>
           <label className="block text-xs font-bold text-slate-600">ظرفیت
             <input type="number" value={draft.capacity} onChange={e => setDraft({ ...draft, capacity: Number(e.target.value) })} className={sel + ' w-24'} />
