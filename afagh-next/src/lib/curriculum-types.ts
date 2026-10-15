@@ -238,6 +238,7 @@ export interface CurriculumVersion {
   status: CurriculumVersionStatus;
   entryYearFrom: number;
   entryYearTo: number | null;        // NULL = به بعد
+  entryTermId: number | null;        // نیمسال ورودی مربوطه (NULL = همه نیمسال‌ها)
   effectiveFrom: string | null;      // تاریخ مصوبه (شمسی varchar)
   effectiveTo: string | null;
   totalRequiredUnits: number;        // سقف واحد لازم برای فارغ‌التحصیلی

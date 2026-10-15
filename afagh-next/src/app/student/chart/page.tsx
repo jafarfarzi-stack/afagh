@@ -141,6 +141,7 @@ export default async function StudentCurriculumChartPage() {
         degreeLevelId: me.degreeLevelId,
         trackId: null,
         entryYear: me.entryYear,
+        entryTerm: me.entryTerm,
       })
     : null;
 

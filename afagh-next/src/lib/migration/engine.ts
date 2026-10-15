@@ -451,7 +451,7 @@ export async function commit(
         }
         const [st] = await tx.insert(students).values({
           userId: u.id, studentCode: String(r.studentCode), majorId: major?.id ?? null,
-          degreeLevelId: reg.degreeLevelId, regulationId: reg.id, entryYear: entryYr, entryTerm: r.entryTerm ?? 1, status: String(r.status),
+          degreeLevelId: reg.degreeLevelId, regulationId: reg.id, entryYear: entryYr, entryTerm: Number(r.entryTerm) ?? 1, status: String(r.status),
         }).onConflictDoNothing().returning({ id: students.id });
         return !!st;
       });

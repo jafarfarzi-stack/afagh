@@ -109,6 +109,7 @@ console.log('— Resolution نسخهٔ قابل اعمال —');
 
 const mk = (p: Partial<CurriculumVersion> & Pick<CurriculumVersion, 'id' | 'majorId' | 'degreeLevelId' | 'versionCode' | 'status' | 'entryYearFrom'>): CurriculumVersion => ({
   trackId: null,
+  entryTermId: null,
   title: `برنامهٔ ${p.versionCode}`,
   entryYearTo: null,
   effectiveFrom: null,
@@ -122,7 +123,7 @@ const mk = (p: Partial<CurriculumVersion> & Pick<CurriculumVersion, 'id' | 'majo
   ...p,
 });
 
-const ctx = { majorId: 412, degreeLevelId: 1, trackId: null, entryYear: 1403 };
+const ctx = { majorId: 412, degreeLevelId: 1, trackId: null, entryYear: 1403, entryTerm: null };
 const r = (name: string, out: ResolutionOutcome, wantId: number | null, wantReason: string) =>
   eq(name, { id: out.version?.id ?? null, reason: out.reason }, { id: wantId, reason: wantReason });
 
@@ -218,20 +219,21 @@ const drizzleLike = (p: Partial<ResolvableLike> & { id: number; majorId: number;
 type ResolvableLike = {
   id: number; majorId: number; degreeLevelId: number; trackId: number | null;
   versionCode: string; status: string; entryYearFrom: number; entryYearTo: number | null;
+  entryTermId: number | null;
   createdAt: Date; updatedAt: Date; totalRequiredUnits: string; title: string;
 };
 
 const rows = [
-  drizzleLike({ id: 1, majorId: 412, degreeLevelId: 1, versionCode: '1400', status: 'ARCHIVED', entryYearFrom: 1400, entryYearTo: 1401 }),
-  drizzleLike({ id: 2, majorId: 412, degreeLevelId: 1, versionCode: '1402', status: 'ARCHIVED', entryYearFrom: 1402, entryYearTo: 1403 }),
-  drizzleLike({ id: 3, majorId: 412, degreeLevelId: 1, versionCode: '1404', status: 'PUBLISHED', entryYearFrom: 1404, entryYearTo: 1405 }),
-  drizzleLike({ id: 4, majorId: 412, degreeLevelId: 1, versionCode: '1405', status: 'DRAFT', entryYearFrom: 1405 }),
+  drizzleLike({ id: 1, majorId: 412, degreeLevelId: 1, versionCode: '1400', status: 'ARCHIVED', entryYearFrom: 1400, entryYearTo: 1401, entryTermId: null }),
+  drizzleLike({ id: 2, majorId: 412, degreeLevelId: 1, versionCode: '1402', status: 'ARCHIVED', entryYearFrom: 1402, entryYearTo: 1403, entryTermId: null }),
+  drizzleLike({ id: 3, majorId: 412, degreeLevelId: 1, versionCode: '1404', status: 'PUBLISHED', entryYearFrom: 1404, entryYearTo: 1405, entryTermId: null }),
+  drizzleLike({ id: 4, majorId: 412, degreeLevelId: 1, versionCode: '1405', status: 'DRAFT', entryYearFrom: 1405, entryTermId: null }),
 ];
-r('ردیف Drizzle-like: ورودی ۱۴۰۳ → ۱۴۰۲', resolveApplicableCurriculum(rows, { majorId: 412, degreeLevelId: 1, trackId: null, entryYear: 1403 }), 2, 'RESOLVED');
-r('ردیف Drizzle-like: ورودی ۱۴۰۴ → ۱۴۰۴', resolveApplicableCurriculum(rows, { majorId: 412, degreeLevelId: 1, trackId: null, entryYear: 1404 }), 3, 'RESOLVED');
-r('ردیف Drizzle-like: ورودی ۱۴۰۶ → NO_ENTRY_WINDOW', resolveApplicableCurriculum(rows, { majorId: 412, degreeLevelId: 1, trackId: null, entryYear: 1406 }), null, 'NO_ENTRY_WINDOW');
-eq('isApplicable با ردیف Drizzle-like (منتشرشده، داخل پنجره)', isApplicableForStudent(drizzleLike({ id: 3, majorId: 412, degreeLevelId: 1, versionCode: '1404', status: 'PUBLISHED', entryYearFrom: 1404 }), 1404), true);
-eq('isApplicable با ردیف Drizzle-like (پیش‌نویس)', isApplicableForStudent(drizzleLike({ id: 4, majorId: 412, degreeLevelId: 1, versionCode: '1405', status: 'DRAFT', entryYearFrom: 1405 }), 1405), false);
+r('ردیف Drizzle-like: ورودی ۱۴۰۳ → ۱۴۰۲', resolveApplicableCurriculum(rows, { majorId: 412, degreeLevelId: 1, trackId: null, entryYear: 1403, entryTerm: null }), 2, 'RESOLVED');
+r('ردیف Drizzle-like: ورودی ۱۴۰۴ → ۱۴۰۴', resolveApplicableCurriculum(rows, { majorId: 412, degreeLevelId: 1, trackId: null, entryYear: 1404, entryTerm: null }), 3, 'RESOLVED');
+r('ردیف Drizzle-like: ورودی ۱۴۰۶ → NO_ENTRY_WINDOW', resolveApplicableCurriculum(rows, { majorId: 412, degreeLevelId: 1, trackId: null, entryYear: 1406, entryTerm: null }), null, 'NO_ENTRY_WINDOW');
+eq('isApplicable با ردیف Drizzle-like (منتشرشده، داخل پنجره)', isApplicableForStudent(drizzleLike({ id: 3, majorId: 412, degreeLevelId: 1, versionCode: '1404', status: 'PUBLISHED', entryYearFrom: 1404, entryTermId: null }), 1404), true);
+eq('isApplicable با ردیف Drizzle-like (پیش‌نویس)', isApplicableForStudent(drizzleLike({ id: 4, majorId: 412, degreeLevelId: 1, versionCode: '1405', status: 'DRAFT', entryYearFrom: 1405, entryTermId: null }), 1405), false);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);
