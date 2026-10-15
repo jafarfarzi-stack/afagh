@@ -30,6 +30,9 @@ export default async function StudentLayout({ children }: { children: React.Reac
 
   // قفل خودکار بیکاری — مدت از تنظیمات مدیر (۰ = غیرفعال)
   const lockMin = await getNumber('SESSION_LOCK_MINUTES', 15).catch(() => 15);
+  // پرچم سمت سرور تا رفرش پس از قفل، دوباره قفل نشان بدهد (مقاوم در برابر دورزدن با رفرش)
+  const { isSessionLocked } = await import('@/lib/session-lock');
+  const lockOn = await isSessionLocked(user.id).catch(() => false);
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col" dir="rtl">
@@ -102,7 +105,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
 
       {/* نوار ناوبری پایین فقط برای موبایل */}
       <StudentNav />
-      <SessionLock name={user.name} timeoutMin={lockMin} />
+      <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />
     </div>
   );
 }

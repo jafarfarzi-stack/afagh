@@ -78,9 +78,21 @@ export async function verifyOwnPasswordAction(password: string): Promise<{ ok: b
   const hash = await ownPasswordHash(user.id);
   if (!hash || !(await verifyPassword(password, hash))) {
     await stepUpFail(user.id);
-    return { ok: false, error: 'رمز نادرث است.' };
+    return { ok: false, error: 'رمز نادرست است.' };
   }
   await clearSessionLock(user.id);
+  return { ok: true };
+}
+
+/**
+ * ثبت قفل بیکاری در سمت سرور (کلاینت هنگام فعال‌شدن تایمر صدا می‌زند).
+ * بدون این، رفرش صفحه قفلِ فقط-کلاینتی را دور می‌زد. نیازی به رمز ندارد چون
+ * فقط برای نشستِ خودِ کاربر پرچم می‌گذارد؛ برداشتنش رمز می‌خواهد.
+ */
+export async function lockNowAction(): Promise<{ ok: boolean }> {
+  const user = await getSessionUser().catch(() => null);
+  if (!user) return { ok: false };
+  await setSessionLock(user.id);
   return { ok: true };
 }
 

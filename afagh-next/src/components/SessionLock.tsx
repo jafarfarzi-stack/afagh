@@ -1,22 +1,27 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { verifyOwnPasswordAction } from '@/lib/step-up-actions';
+import { lockNowAction, verifyOwnPasswordAction } from '@/lib/step-up-actions';
 
 /**
  * قفل خودکار بیکاری: اگر کاربر N دقیقه هیچ تعاملی (ماوس/کیبورد/لمس) نداشت،
  * صفحه قفل می‌شود و ادامهٔ کار منوط به ورود دوبارهٔ رمز عبور است.
+ * پرچم قفل سمت سرور هم ثبت می‌شود (lockNowAction) و layout هنگام رندر آن را
+ * می‌خواند (initialLocked) — پس رفرش/تب جدید قفل را دور نمی‌زند.
  * بررسی رمز سمت سرور انجام می‌شود (verifyOwnPasswordAction) — خودِ overlay
  * با DevTools قابل پنهان‌شدن است ولی هیچ داده‌ای بدون نشست معتبر لود نمی‌شود
  * و عملیات حساس جداگانه step-up می‌خواهند.
  */
-export default function SessionLock({ name, timeoutMin = 15 }: { name: string; timeoutMin?: number }) {
+export default function SessionLock({ name, timeoutMin = 15, initialLocked = false }: { name: string; timeoutMin?: number; initialLocked?: boolean }) {
   const disabled = !(timeoutMin > 0);
-  const [locked, setLocked] = useState(false);
+  const [locked, setLocked] = useState(initialLocked);
   const [pw, setPw] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // اگر سرور هنگام رندر قفل را گزارش کرد (مثلاً پس از رفرش)، همان را نشان بده
+  useEffect(() => { if (initialLocked) { setPw(''); setErr(''); setLocked(true); } }, [initialLocked]);
 
   const arm = useCallback(() => {
     if (disabled) return;
@@ -25,6 +30,8 @@ export default function SessionLock({ name, timeoutMin = 15 }: { name: string; t
       setPw('');
       setErr('');
       setLocked(true);
+      // ثبت سمت سرور تا رفرش قفل را دور نزند (خطا نادیده گرفته می‌شود — قفل محلی برقرار است)
+      lockNowAction().catch(() => {});
     }, Math.max(1, timeoutMin) * 60 * 1000);
   }, [timeoutMin, disabled]);
 

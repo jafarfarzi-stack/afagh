@@ -37,6 +37,9 @@ export default async function ProfessorLayout({ children }: { children: React.Re
 
   // قفل خودکار بیکاری — مدت از تنظیمات مدیر (۰ = غیرفعال)
   const lockMin = await getNumber('SESSION_LOCK_MINUTES', 15).catch(() => 15);
+  // پرچم سمت سرور تا رفرش پس از قفل، دوباره قفل نشان بدهد (مقاوم در برابر دورزدن با رفرش)
+  const { isSessionLocked } = await import('@/lib/session-lock');
+  const lockOn = await isSessionLocked(user.id).catch(() => false);
 
   // استاد به یک دانشگاه تعلق دارد؛ فیلتر نیمسال فقط با همان دانشگاه اعتبارسنجی می‌شود
   const universityId = me?.universityId ?? null;
@@ -181,7 +184,7 @@ export default async function ProfessorLayout({ children }: { children: React.Re
       </header>
 
       <main className="mx-auto max-w-6xl p-4 sm:p-6">{children}</main>
-      <SessionLock name={user.name} timeoutMin={lockMin} />
+      <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />
     </div>
   );
 }

@@ -51,6 +51,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const termScope = await getTermScope(curUni.id);
   // قفل خودکار بیکاری — مدت از تنظیمات مدیر (SESSION_LOCK_MINUTES؛ ۰ = غیرفعال)
   const lockMin = await getNumber('SESSION_LOCK_MINUTES', 15).catch(() => 15);
+  // پرچم سمت سرور تا رفرش پس از قفل، دوباره قفل نشان بدهد (مقاوم در برابر دورزدن با رفرش)
+  const { isSessionLocked } = await import('@/lib/session-lock');
+  const lockOn = await isSessionLocked(user.id).catch(() => false);
   return (
     <div className="min-h-screen bg-sky-50/70" data-uni={curUni.code}>
       <header className={`${th.header} text-white shadow-md transition-colors`}>
@@ -105,7 +108,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AdminNav roles={user.roles} permissions={permissionCodes} theme={th} />
       </header>
       <main className="mx-auto max-w-6xl p-3 sm:p-5 pb-16">{children}</main>
-      <SessionLock name={user.name} timeoutMin={lockMin} />
+      <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />
     </div>
   );
 }
