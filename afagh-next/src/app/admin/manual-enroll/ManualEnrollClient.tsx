@@ -445,7 +445,7 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
                 <option value={3}>تابستان (۳)</option>
               </select>
             </label>
-            <button onClick={countBulk} disabled={busy} className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-black text-white disabled:opacity-50">🔍 شمارش</button>
+            <button onClick={() => countBulk()} disabled={busy} className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-black text-white disabled:opacity-50">🔍 شمارش</button>
             {bulkCount !== null && <span className="text-xs font-black text-indigo-800">{bulkCount.toLocaleString('fa-IR')} دانشجو</span>}
           </div>
           <div className="rounded-xl border border-slate-200 p-2 max-h-64 overflow-y-auto space-y-1">
