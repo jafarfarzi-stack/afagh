@@ -36,6 +36,7 @@ export interface ResolvableVersion {
   status: string;
   entryYearFrom: number;
   entryYearTo: number | null;
+  entryTermId: number | null; // نیمسال ورودِ مربوط به نسخه (۱=مهر، ۲=بهمن، ۳=تابستان)
 }
 
 /** وضعیت‌هایی که در Resolution لحاظ می‌شوند */
@@ -57,6 +58,8 @@ export interface CurriculumResolutionContext {
   trackId: number | null;
   /** سال ورود دانشجو (entryYear در students) */
   entryYear: number;
+  /** نیمسال ورود دانشجو (entryTerm در students: ۱=مهر، ۲=بهمن، ۳=تابستان) */
+  entryTerm: number | null;
 }
 
 export type ResolutionReason =
@@ -129,6 +132,12 @@ export function resolveApplicableCurriculum(
     (v) => v.entryYearFrom <= ctx.entryYear && (v.entryYearTo == null || v.entryYearTo >= ctx.entryYear)
   );
   if (inWindow.length === 0) {
+    return { version: null, reason: 'NO_ENTRY_WINDOW', candidates: [] };
+  }
+
+  // فیلتر ۵ — نیمسال ورود: نسخه MUST برای همین نیمسال باشد (مگر entryTermId=NULL که برای همه است)
+  const byTerm = inWindow.filter((v) => v.entryTermId == null || v.entryTermId === ctx.entryTerm);
+  if (byTerm.length === 0) {
     return { version: null, reason: 'NO_ENTRY_WINDOW', candidates: [] };
   }
 

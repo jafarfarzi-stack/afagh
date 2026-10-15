@@ -42,6 +42,7 @@ export async function resolveStudentCurriculum(studentId: number): Promise<Curri
     degreeLevelId: stu.degreeLevelId,
     trackId: null, // دانشجو گرایش ندارد → نسخهٔ گرایش‌آزاد (trackId=NULL) یا اختصاصیِ همان گرایش
     entryYear: stu.entryYear,
+    entryTerm: stu.entryTerm,
   });
 
   if (!outcome.version) return { ...outcome, version: null };

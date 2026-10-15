@@ -114,6 +114,7 @@ export function prepare(entity: Entity, tables: Table[], fileName: string): Prep
       const last = get(['نام خانوادگی', 'نامخانوادگی', 'last_name', 'lastname']);
       const code = get(['شماره دانشجویی', 'شمارهدانشجویی', 'student_code', 'studentcode']);
       const entryYear = num(get(['سال ورود', 'ورودی', 'entry_year']));
+      const entryTerm = num(get(['نیمسال ورود', 'نیمسال ورودی', 'entry_term', 'entryTerm']));
       const majorName = get(['نام رشته', 'رشته', 'گرایش', 'major']);
       // ⭐ «کد رشته» سند اصالت است: نام رشته می‌تواند در دو مقطع یا دو دانشکده
       //    تکرار شود، ولی کد یکتاست و مقطع/گروه/دانشکده را هم مشخص می‌کند.
@@ -146,7 +147,7 @@ export function prepare(entity: Entity, tables: Table[], fileName: string): Prep
       const gender = GENDER[genderFa ?? ''] ?? (/^(MALE|FEMALE)$/i.test(genderFa ?? '') ? (genderFa as string).toUpperCase() : null);
       rows.push({
         nationalCode: nc, firstName: first, lastName: last, studentCode: code,
-        entryYear: entryYear ?? 1400, majorName, majorCode: majorCode || null,
+        entryYear: entryYear ?? 1400, entryTerm: entryTerm ?? 1, majorName, majorCode: majorCode || null,
         degreeName: degreeName || null, degreeCode: degreeCode || null, status,
         birthCertNo: birthCertNo || null, birthCertSeries: birthCertSeries || null,
         placeOfBirth: placeOfBirth || null, placeOfIssue: placeOfIssue || null,
@@ -450,7 +451,7 @@ export async function commit(
         }
         const [st] = await tx.insert(students).values({
           userId: u.id, studentCode: String(r.studentCode), majorId: major?.id ?? null,
-          degreeLevelId: reg.degreeLevelId, regulationId: reg.id, entryYear: entryYr, entryTerm: 1, status: String(r.status),
+          degreeLevelId: reg.degreeLevelId, regulationId: reg.id, entryYear: entryYr, entryTerm: r.entryTerm ?? 1, status: String(r.status),
         }).onConflictDoNothing().returning({ id: students.id });
         return !!st;
       });

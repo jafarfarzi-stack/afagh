@@ -559,6 +559,7 @@ export const curriculum_versions = pgTable('curriculum_versions', {
   status: varchar('status', { length: 20 }).notNull().default('DRAFT'), // DRAFT|REVIEW|APPROVED|PUBLISHED|ARCHIVED
   entryYearFrom: integer('entryYearFrom').notNull(),                    // بازهٔ ورودی: از
   entryYearTo: integer('entryYearTo'),                                  // بازهٔ ورودی: تا (NULL = به بعد)
+  entryTermId: integer('entryTermId').references(() => financial_terms.id), // نیمسال ورودی مربوطه (۱=مهر، ۲=بهمن، ۳=تابستان)
   effectiveFrom: varchar('effectiveFrom', { length: 10 }),              // تاریخ مصوبه (شمسی)
   effectiveTo: varchar('effectiveTo', { length: 10 }),
   totalRequiredUnits: numeric('totalRequiredUnits', { precision: 5, scale: 1 }).notNull().default('0'),
