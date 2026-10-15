@@ -215,6 +215,7 @@ const drizzleLike = (p: Partial<ResolvableLike> & { id: number; majorId: number;
   trackId: null, entryYearTo: null, createdAt: new Date('2025-01-01'), updatedAt: new Date('2025-01-01'),
   title: 'برنامه', totalRequiredUnits: '140.0',
   ...p,
+  entryTermId: p.entryTermId ?? null,
 });
 type ResolvableLike = {
   id: number; majorId: number; degreeLevelId: number; trackId: number | null;
