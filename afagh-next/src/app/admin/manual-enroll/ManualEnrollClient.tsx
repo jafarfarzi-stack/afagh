@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   activateTermForFilter, bulkDropAction, bulkEnrollAction, countBulkStudents, dropEnrollAction, getStudentCatalog, getStudentWarnings,
   listOfferingsForManualEnroll, manualEnrollAction, manualEnrollHistory,
-  searchStudentsForManualEnroll, type ManualEnrollOffering, type CatalogOffering, type StudentTermEnrollment, type StudentWarning,
+  searchStudentsForManualEnroll, type BulkFilter, type ManualEnrollOffering, type CatalogOffering, type StudentTermEnrollment, type StudentWarning,
 } from './actions';
 
 export interface EnrollFilters {
