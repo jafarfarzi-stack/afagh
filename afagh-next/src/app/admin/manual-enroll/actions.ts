@@ -215,10 +215,11 @@ export async function dropEnrollAction(enrollmentId: number, reason: string): Pr
   return { ok: true };
 }
 
-// ─────────────── فیلتر گروهی (ورودی/رشته/دانشکده/گروه/ترم) ───────────────
+// ─────────────── فیلتر گروهی (ورودی/رشته/دانشکده/گروه/ترم/نیمسال ورود) ───────────────
 export interface BulkFilter {
   termId: number;
   entryYear: number | null;
+  entryTerm: number | null;
   majorId: number | null;
   departmentId: number | null;
   facultyId: number | null;
@@ -245,6 +246,7 @@ async function bulkStudentIds(f: BulkFilter): Promise<number[]> {
   const majScope = await scopedMajorIds(eff, u);
   if (majScope) conds.push(inArray(students.majorId, majScope));
   if (f.entryYear) conds.push(eq(students.entryYear, f.entryYear));
+  if (f.entryTerm) conds.push(eq(students.entryTerm, f.entryTerm));
   if (f.majorId) conds.push(eq(students.majorId, f.majorId));
   if (f.departmentId || f.facultyId) {
     const mConds: any[] = [];

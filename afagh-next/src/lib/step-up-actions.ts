@@ -6,6 +6,7 @@ import { db } from '@/db';
 import { users } from '@/db/schema';
 import { getSessionUser, verifyPassword } from '@/lib/auth';
 import { clientIp, getRateLimitCount, hitRateLimit, peekRateLimit, progressiveDelay } from '@/lib/rateLimit';
+import { clearSessionLock, setSessionLock } from '@/lib/session-lock';
 import { STEPUP_TTL, checkStepUpToken, issueStepUpToken, stepUpCookieName } from '@/lib/step-up';
 
 const cookieOpts = (maxAge: number) => ({
@@ -77,8 +78,9 @@ export async function verifyOwnPasswordAction(password: string): Promise<{ ok: b
   const hash = await ownPasswordHash(user.id);
   if (!hash || !(await verifyPassword(password, hash))) {
     await stepUpFail(user.id);
-    return { ok: false, error: 'رمز نادرست است.' };
+    return { ok: false, error: 'رمز نادرث است.' };
   }
+  await setSessionLock(user.id);
   return { ok: true };
 }
 

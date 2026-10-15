@@ -23,6 +23,7 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
   const [q, setQ] = useState('');
   const [results, setResults] = useState<{ studentId: number; studentCode: string; name: string; entryYear: number | null }[]>([]);
   const [selStudent, setSelStudent] = useState<{ studentId: number; studentCode: string; name: string } | null>(null);
+  const [searched, setSearched] = useState(false);
   const [singleTerm, setSingleTerm] = useState(() => filters.terms.find(t => t.isCurrent)?.id ?? filters.terms[0]?.id ?? 0);
   const [offerings, setOfferings] = useState<ManualEnrollOffering[]>([]);
   const [selOffering, setSelOffering] = useState('');
@@ -49,6 +50,7 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
   const [dept, setDept] = useState('');
   const [fac, setFac] = useState('');
   const [year, setYear] = useState('');
+  const [entryTerm, setEntryTerm] = useState('');
   const [bulkOfferings, setBulkOfferings] = useState<ManualEnrollOffering[]>([]);
   const [chosen, setChosen] = useState<number[]>([]);
   const [bulkCount, setBulkCount] = useState<number | null>(null);
@@ -78,7 +80,16 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
   const search = async () => {
     if (!q.trim()) return;
     const r = await searchStudentsForManualEnroll(q.trim()).catch(() => ({ ok: false as const, error: 'خطا' }));
-    if (r.ok) setResults(r.items ?? []);
+    if (r.ok) {
+      setResults(r.items ?? []);
+      setSearched(true);
+      if (r.items?.length === 1) {
+        const s = r.items[0];
+        const sel = { studentId: s.studentId, studentCode: s.studentCode, name: s.name };
+        setSelStudent(sel);
+        if (selStudent?.studentId !== s.studentId) await loadCatalog(s.studentId);
+      }
+    }
   };
 
   const loadCatalog = async (studentId: number) => {
@@ -144,13 +155,19 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
 
   const bulkFilter = () => ({
     termId: Number(bulkTerm), entryYear: year ? Number(year) : null,
+    entryTerm: entryTerm ? Number(entryTerm) : null,
     majorId: major ? Number(major) : null, departmentId: dept ? Number(dept) : null, facultyId: fac ? Number(fac) : null,
     studentIds: bulkStudents.length ? bulkStudents.map(s => s.studentId) : null,
   });
 
-  const countBulk = async () => {
+  const activateFilter = (): BulkFilter => ({
+    ...bulkFilter(),
+    entryYear: null,
+  });
+
+  const countBulk = async (filter: BulkFilter = bulkFilter()) => {
     setBusy(true); setMsg(null);
-    const r = await countBulkStudents(bulkFilter()).catch(() => ({ ok: false as const, error: 'خطا' }));
+    const r = await countBulkStudents(filter).catch(() => ({ ok: false as const, error: 'خطا' }));
     if (r.ok) setBulkCount(r.count ?? 0); else setMsg({ kind: 'err', text: r.error ?? '' });
     setBusy(false);
   };
@@ -210,6 +227,19 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
                 <button onClick={search} className="shrink-0 px-3 rounded-xl bg-slate-800 text-white text-xs font-black">جست‌وجو</button>
               </div>
             </label>
+            {searched && results.length > 0 && (
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-2 mt-2 max-h-48 overflow-y-auto">
+                {results.map(r => (
+                  <button key={r.studentId} onClick={() => { setSelStudent({ studentId: r.studentId, studentCode: r.studentCode, name: r.name }); setSelOffering(''); loadCatalog(r.studentId); }} className="w-full text-right px-2 py-1 text-[11px] hover:bg-indigo-50 flex items-center justify-between">
+                    <span className="font-bold">{r.studentCode} · {r.name}</span>
+                    <span className="text-indigo-700 font-black">✓ انتخاب</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {searched && results.length === 0 && (
+              <p className="text-xs text-slate-500 mt-1 text-center">دانشجویی با این عبارت یافت نشد.</p>
+            )}
             <label className="text-xs font-bold text-slate-600">دانشجو
               <select value={selStudent ? String(selStudent.studentId) : ''} onChange={e => { const it = results.find(x => String(x.studentId) === e.target.value); const s = it ? { studentId: it.studentId, studentCode: it.studentCode, name: it.name } : null; setSelStudent(s); setSelOffering(''); if (s) loadCatalog(s.studentId); else setCatalog([]); }} className={sel + ' mt-1'}>
                 <option value="">— انتخاب —</option>
@@ -407,6 +437,14 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
                 {filters.entryYears.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </label>
+            <label className="text-xs font-bold text-slate-600">نیمسال ورود
+              <select value={entryTerm} onChange={e => setEntryTerm(e.target.value)} className={sel + ' mt-1'}>
+                <option value="">همه</option>
+                <option value={1}>مهر (۱)</option>
+                <option value={2}>بهمن (۲)</option>
+                <option value={3}>تابستان (۳)</option>
+              </select>
+            </label>
             <button onClick={countBulk} disabled={busy} className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-black text-white disabled:opacity-50">🔍 شمارش</button>
             {bulkCount !== null && <span className="text-xs font-black text-indigo-800">{bulkCount.toLocaleString('fa-IR')} دانشجو</span>}
           </div>
@@ -448,21 +486,23 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
                 {filters.departments.filter(d => !fac || d.facultyId === Number(fac)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </label>
-            <label className="text-xs font-bold text-slate-600">ورودی
-              <select value={year} onChange={e => setYear(e.target.value)} className={sel + ' mt-1'}>
+            <label className="text-xs font-bold text-slate-600">نیمسال ورود
+              <select value={entryTerm} onChange={e => setEntryTerm(e.target.value)} className={sel + ' mt-1'}>
                 <option value="">همه</option>
-                {filters.entryYears.map(y => <option key={y} value={y}>{y}</option>)}
+                <option value={1}>مهر (۱)</option>
+                <option value={2}>بهمن (۲)</option>
+                <option value={3}>تابستان (۳)</option>
               </select>
             </label>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button onClick={countBulk} disabled={busy} className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-black text-white disabled:opacity-50">🔍 شمارش</button>
+            <button onClick={() => countBulk(activateFilter())} disabled={busy} className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-black text-white disabled:opacity-50">🔍 شمارش</button>
             {bulkCount !== null && <span className="text-xs font-black text-indigo-800">{bulkCount.toLocaleString('fa-IR')} دانشجو</span>}
             <button disabled={busy} className="rounded-xl bg-emerald-700 px-5 py-2 text-white font-black text-xs disabled:opacity-50"
               onClick={async () => {
                 if (!window.confirm(`فعال‌سازی ${bulkCount ?? '?'} دانشجو در ترم؟`)) return;
                 setBusy(true); setMsg(null);
-                const a = activateTermForFilter(bulkFilter(), true).catch(() => ({ ok: false as const, error: 'خطا' }));
+                const a = activateTermForFilter(activateFilter(), true).catch(() => ({ ok: false as const, error: 'خطا' }));
                 const r = await a;
                 setMsg(r.ok ? { kind: 'ok', text: `✅ فعال‌سازی ترم: ${r.updated} دانشجو` } : { kind: 'err', text: r.error ?? '' });
                 setBusy(false);
@@ -471,7 +511,7 @@ export default function ManualEnrollClient({ filters }: { filters: EnrollFilters
               onClick={async () => {
                 if (!window.confirm(`غیرفعال‌سازی ${bulkCount ?? '?'} دانشجو در ترم؟`)) return;
                 setBusy(true); setMsg(null);
-                const r = await activateTermForFilter(bulkFilter(), false).catch(() => ({ ok: false as const, error: 'خطا' }));
+                const r = await activateTermForFilter(activateFilter(), false).catch(() => ({ ok: false as const, error: 'خطا' }));
                 setMsg(r.ok ? { kind: 'ok', text: `✅ غیرفعال‌سازی: ${r.updated} دانشجو` } : { kind: 'err', text: r.error ?? '' });
                 setBusy(false);
               }}>➖ غیرفعال‌سازی در ترم</button>
