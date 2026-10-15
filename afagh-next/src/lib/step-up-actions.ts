@@ -80,7 +80,7 @@ export async function verifyOwnPasswordAction(password: string): Promise<{ ok: b
     await stepUpFail(user.id);
     return { ok: false, error: 'رمز نادرث است.' };
   }
-  await setSessionLock(user.id);
+  await clearSessionLock(user.id);
   return { ok: true };
 }
 
