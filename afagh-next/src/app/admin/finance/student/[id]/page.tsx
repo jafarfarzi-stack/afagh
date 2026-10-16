@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireRole } from '@/lib/auth';
 import { getStudentFinance, computeFormulaTuition } from '@/lib/finance-engine';
@@ -123,13 +123,11 @@ const fin = await getStudentFinance(studentId, {
           student={student}
           terms={transcript}
           totals={totals}
-        <FinancialTranscript
-          student={student}
-          terms={transcript}
-          totals={totals}
           universityTitle={currentUniversity?.title ?? null}
           logoUrl={logoUrl}
           issuedAt={jdate(new Date())}
+          verifyBlock={financeVerify ? <FinanceVerifyBlock url={financeVerify.url} qr={financeVerify.qr} expiresAt={financeVerify.expiresAt} /> : undefined}
+          
           cheques={fin.cheques.map((c) => ({
             id: c.id, chequeNo: c.chequeNo, bankName: c.bankName,
             amount: Number(c.amount), dueDate: c.dueDate, status: c.status,

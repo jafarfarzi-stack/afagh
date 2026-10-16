@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+﻿import type { ReactNode } from 'react';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 
 /**
@@ -193,7 +193,7 @@ export default function FinancialTranscript({
             <p><span className="font-sans text-slate-500">وضعیت: </span><b>{(student.status && STATUS_FA[student.status]) || student.status || '—'}</b></p>
           </div>
         </div>
-      </div>>
+      </div>
 
       <div className="space-y-3 p-4">
         {/* ── جدول مشخصات ── */}
