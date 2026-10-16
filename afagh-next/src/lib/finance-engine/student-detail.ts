@@ -132,7 +132,11 @@ export async function getStudentFinance(
     ]);
 
   const termTitles: Record<string, string> = {};
-  for (const t of terms) termTitles[String(t.id)] = t.termTitle || t.termCode;
+  const termCodes: Record<string, string> = {};
+  for (const t of terms) {
+    termTitles[String(t.id)] = t.termTitle || t.termCode;
+    termCodes[String(t.id)] = t.termCode;
+  }
 
   // تخفیف‌ها و پوشش بنیادها از computeTermAdjustments می‌آیند — همان تابعی
   // که کارتابل هم صدایش می‌زند. دو پیاده‌سازی جدا یعنی دو عدد متفاوت برای
@@ -192,6 +196,7 @@ export async function getStudentFinance(
     cheques: cheques as ChequeRow[],
     loans: loans.map((l) => l.row) as LoanRow[],
     termTitles,
+    termCodes,
   });
 
   return {

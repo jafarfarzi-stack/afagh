@@ -279,6 +279,30 @@ section('کارنامهٔ مالی');
   eq('ماندهٔ کل', tot.balance, 3_000_000);
 }
 eq('کارنامهٔ دانشجو بدون تراکنش خالی است', buildTranscript({ ledger: [] }).length, 0);
+{
+  // ترتیب زمانی: شناسهٔ ترم‌های مهاجرتی نامرتب است — ملاک، کد ترم است
+  const st = buildTranscript({
+    ledger: [
+      { id: 1, termId: 30, transactionType: 'TUITION_CHARGE', amount: 3_000_000, createdAt: '2026-01-01' },
+      { id: 2, termId: 10, transactionType: 'TUITION_CHARGE', amount: 1_000_000, createdAt: '2025-01-01' },
+      { id: 3, termId: 20, transactionType: 'TUITION_CHARGE', amount: 2_000_000, createdAt: '2025-06-01' },
+      { id: 4, termId: null, transactionType: 'CHARGE', amount: 50_000 }
+    ],
+    termTitles: { '10': 'نیمسال اول ۱۴۰۰-۱۴۰۱', '20': 'نیمسال دوم ۱۴۰۰-۱۴۰۱', '30': 'نیمسال اول ۱۴۰۱-۱۴۰۲' },
+    termCodes: { '10': '14001', '20': '14002', '30': '14011' }
+  });
+  eq('ترتیب زمانی: قدیم‌ترین ترم اول کارنامه است', st[0].termId, 10);
+  eq('ترتیب زمانی: ترم دوم به ترتیب سال', st[1].termId, 20);
+  eq('ترتیب زمانی: جدیدترین ترم بعد از بقیه', st[2].termId, 30);
+  eq('سطر «بدون ترم» آخر کارنامه می‌آید', st[3].termId, 0);
+  eq('کد ناشناخته بعد از کدهای معتبر می‌آید', buildTranscript({
+    ledger: [
+      { id: 1, termId: 7, transactionType: 'CHARGE', amount: 100 },
+      { id: 2, termId: 8, transactionType: 'CHARGE', amount: 200 }
+    ],
+    termCodes: { '8': '14011' }
+  })[1].termId, 7);
+}
 
 // ── ۸. تعدیلات ترم‌به‌ترم (مرجع مشترک کارتابل و کارنامه) ──────
 section('تعدیلات ترم‌به‌ترم');

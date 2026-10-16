@@ -1,6 +1,7 @@
 import { toNum, toMs } from './numbers';
 import type { AppliedAmount } from './discounts';
 import { CREDIT_LEDGER_TYPES, DEBT_LEDGER_TYPES } from '../ledger-balance';
+import { normalizeTermCode } from '../scheduling-core';
 
 // ══════════════════════════════════════════════════════════════════════
 //  کارنامهٔ مالی ترم‌به‌ترم
@@ -104,6 +105,12 @@ export interface TranscriptInput {
   loans?: LoanRow[];
   /** عنوان ترم‌ها برای نمایش؛ کلید = شناسهٔ ترم */
   termTitles?: Record<string, string>;
+  /**
+   * کد ترم‌ها (۵ رقمی سال+نیمسال) برای مرتب‌سازی زمانی کارنامه؛
+   * کلید = شناسهٔ ترم. در دادهٔ مهاجرتی (TermAms) شناسهٔ ترم ترتیب
+   * زمانی ندارد، پس ترتیب سطرها حتماً باید از کد ترم استخراج شود.
+   */
+  termCodes?: Record<string, string>;
 }
 
 /**
@@ -134,7 +141,24 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
 
   const statements: TermStatement[] = [];
 
-  for (const termId of Array.from(termIds).sort((a, b) => a - b)) {
+  // ── ترتیب زمانی ترم‌ها: از قدیم به جدید ──
+  // ملاک، کد ترم (۵ رقمی = سال + نوع ترم) است، نه شناسه؛ شناسهٔ ترم‌های
+  // مهاجرتی (TermAms) ترتیب زمانی ندارد و کارنامه را به‌هم می‌ریخت.
+  // سه گروه: کدهای معتبر (به ترتیب زمانی) ← کدهای ناشناخته (به ترتیب شناسه)
+  // ← «بدون ترم» (آخر کارنامه).
+  const chronKey = (termId: number): [number, number, number] => {
+    if (termId === NO_TERM) return [2, 0, termId];
+    const norm = normalizeTermCode((input.termCodes || {})[String(termId)]);
+    if (norm) return [0, norm.sortKey, termId];
+    return [1, 0, termId];
+  };
+  const orderedTermIds = Array.from(termIds).sort((a, b) => {
+    const ka = chronKey(a);
+    const kb = chronKey(b);
+    return ka[0] - kb[0] || ka[1] - kb[1] || ka[2] - kb[2];
+  });
+
+  for (const termId of orderedTermIds) {
     const inTerm = <T extends { termId: number | null }>(rows: T[]): T[] =>
       rows.filter((r) => (r.termId === null || r.termId === undefined ? NO_TERM : r.termId) === termId);
 

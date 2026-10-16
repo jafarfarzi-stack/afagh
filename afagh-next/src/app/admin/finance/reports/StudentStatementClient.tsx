@@ -66,10 +66,21 @@ function generateText(data: StatementRow[], studentName: string, studentCode: st
   return `صورت حساب مالی - ${studentName} (${studentCode})\nتاریخ: ${new Date().toLocaleString('fa-IR')}\n\n${headerLine}\n${sepLine}\n${body}\n${sepLine}\n${totals}`;
 }
 
+/** کارت خلاصهٔ عددی بالای صورت‌حساب */
+function SumBox({ icon, label, value, tone, sub }: { icon: string; label: string; value: string; tone: string; sub?: string }) {
+  return (
+    <div className={`relative rounded-xl border bg-gradient-to-b p-3 pt-4 text-center shadow-sm ${tone}`}>
+      <p className="text-lg font-black leading-tight">{value}</p>
+      <p className="mt-0.5 text-[11px] font-medium opacity-75">{label}</p>
+      {sub && <p className="mt-0.5 text-[10px] font-bold opacity-90">{sub}</p>}
+      <span className="absolute -top-2.5 right-2 text-sm">{icon}</span>
+    </div>
+  );
+}
+
 export default function StudentStatementClient({ studentId, studentName, studentCode }: Props) {
   const [data, setData] = useState<StatementRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [chartInstance, setChartInstance] = useState<ChartJS | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'chart'>('table');
   const [exporting, setExporting] = useState<string | null>(null);
 
@@ -80,11 +91,12 @@ export default function StudentStatementClient({ studentId, studentName, student
       .catch(() => setLoading(false));
   }, [studentId]);
 
+  // نمودار فقط وقتی ساخته می‌شود که حالت نمودار فعال است؛ تمیزکاری با cleanup
+  // (نسخهٔ قبلی با chartInstance در state حلقهٔ destroy/create می‌ساخت)
   useEffect(() => {
-    if (!data.length) return;
+    if (viewMode !== 'chart' || !data.length) return;
     const ctx = document.getElementById('balanceChart') as HTMLCanvasElement;
     if (!ctx) return;
-    if (chartInstance) chartInstance.destroy();
 
     const chart = new ChartJS(ctx, {
       type: 'bar',
@@ -103,8 +115,9 @@ export default function StudentStatementClient({ studentId, studentName, student
         scales: { y: { beginAtZero: true, ticks: { callback: v => fa(Number(v)) } }, y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => fa(Number(v)) } } },
       },
     });
-    setChartInstance(chart);
-  }, [data, chartInstance]);
+    return () => chart.destroy();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, viewMode]);
 
   const exportCSV = () => {
     setExporting('csv');
@@ -122,68 +135,88 @@ export default function StudentStatementClient({ studentId, studentName, student
     setExporting(null);
   };
 
-  const printStatement = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    printWindow.document.write(`
-      <html dir="rtl" lang="fa"><head><meta charset="UTF-8"><title>صورت حساب مالی - ${studentName}</title>
-      <style>
-        body { font-family: Vazirmatn, Tahoma, Arial; padding: 20px; direction: rtl; }
-        .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
-        .info { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 14px; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        th, td { border: 1px solid #ddd; padding: 6px; text-align: center; }
-        th { background: #f5f5f5; }
-        .summary { margin-top: 20px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-        .box { border: 1px solid #ddd; padding: 10px; text-align: center; }
-        .box.negative { background: #fef2f2; color: #dc2626; }
-        .box.positive { background: #f0fdf4; color: #16a34a; }
-        @media print { .no-print { display: none; } }
-      </style></head><body>
-      <div class="header"><h1>صورت حساب مالی دانشجویی</h1><p>سیستم آفاق - پخش شده در ${new Date().toLocaleString('fa-IR')}</p></div>
-      <div class="info"><div>نام و نام خانوادگی: ${studentName}</div><div>شماره دانشجویی: ${studentCode}</div><div>تاریخ استخراج: ${new Date().toLocaleString('fa-IR')}</div></div>
-      <table><thead><tr>
-        <th>ترم</th><th>شهریه ثابت</th><th>شهریه متغیر</th><th>تخفیف ثابت</th><th>تخفیف متغیر</th><th>موضوعی افزایشی</th><th>موضوعی کاهشی</th><th>پوشش بنیاد</th><th>پرداخت آنلاین</th><th>پرداخت POS</th><th>وام</th><th>مانده</th>
-      </tr></thead><tbody>
-      ${data.map(d => `<tr>
-        <td>${d.termTitle} (${d.termCode})</td><td>${fa(d.tuitionFixed)}</td><td>${fa(d.tuitionVariable)}</td><td>${fa(d.discountFixed)}</td><td>${fa(d.discountVariable)}</td><td>${fa(d.subjectAdditive)}</td><td>${fa(d.subjectDeductive)}</td><td>${fa(d.sponsorship)}</td><td>${fa(d.payments)}</td><td>${fa(d.posPayments)}</td><td>${fa(d.loans)}</td><td class="${d.balance > 0 ? 'negative' : 'positive'}">${fa(d.balance)}</td>
-      </tr>`).join('')}
-      </tbody></table>
-      <div class="summary">
-        <div class="box"><strong>جمع شهریه ثابت</strong><br>${fa(data.reduce((s, d) => s + d.tuitionFixed, 0))}</div>
-        <div class="box"><strong>جمع شهریه متغیر</strong><br>${fa(data.reduce((s, d) => s + d.tuitionVariable, 0))}</div>
-        <div class="box"><strong>جمع پرداخت‌ها</strong><br>${fa(data.reduce((s, d) => s + d.payments + d.posPayments, 0))}</div>
-      </div>
-      <div class="no-print" style="margin-top:20px;text-align:center;"><button onclick="window.print()" style="padding:10px 20px;font-size:14px;">🖨️ چاپ / ذخیره PDF</button></div>
-    </body></html>
-    `);
-    printWindow.document.close();
-  };
+  /** چاپ: همان سند رسمی FinancialTranscript داخل .print-area چاپ می‌شود (A4) */
+  const printStatement = () => window.print();
 
   if (loading) return <div className="card p-6 text-center text-slate-500">⏳ در حال بارگذاری صورت حساب...</div>;
 
+  const totals = data.reduce(
+    (acc, d) => ({
+      charges: acc.charges + (d.charges ?? 0),
+      discounts: acc.discounts + (d.discounts ?? 0),
+      sponsorships: acc.sponsorships + (d.sponsorships ?? 0),
+      payments: acc.payments + (d.canonicalPayments ?? 0),
+      chequesCleared: acc.chequesCleared + (d.chequesCleared ?? 0),
+      chequesPending: acc.chequesPending + (d.chequesPending ?? 0),
+      chequesBounced: acc.chequesBounced + (d.chequesBounced ?? 0),
+      loans: acc.loans + (d.canonicalLoans ?? 0),
+      balance: acc.balance + (d.balance ?? 0),
+    }),
+    { charges: 0, discounts: 0, sponsorships: 0, payments: 0, chequesCleared: 0, chequesPending: 0, chequesBounced: 0, loans: 0, balance: 0 },
+  );
+  const paidTotal = totals.payments + totals.chequesCleared + totals.loans;
+
   return (
     <div className="space-y-4" dir="rtl">
-      <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
-        <div>
-          <h1 className="font-extrabold text-slate-800 text-base sm:text-lg">📄 صورت حساب مالی - {studentName}</h1>
-          <p className="text-xs text-slate-500 mt-1">شماره دانشجویی: {studentCode} | بر اساس ۹ مشخصه سما (ثابت/متغیر/پرداختی/تخفیف ثابت/تخفیف متغیر/موضوعی+/- /بنیاد/وام)</p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={printStatement} className="rounded-lg bg-emerald-700 hover:bg-emerald-800 px-3 py-1.5 text-xs font-medium text-white">🖨️ چاپ / PDF</button>
-          <button onClick={() => setViewMode(v => v === 'table' ? 'chart' : 'table')} className="rounded-lg bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700">
-            {viewMode === 'table' ? '📊 نمودار' : '📋 جدول'}
-          </button>
+      {/* ── سربرگ premium ── */}
+      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-l from-slate-800 via-indigo-900 to-indigo-700 p-4 text-white shadow-lg print:hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-base font-black sm:text-lg">📄 صورت‌حساب مالی — {studentName}</h1>
+            <p className="mt-1 text-[11px] text-indigo-100/90">
+              شمارهٔ دانشجویی: <span dir="ltr" className="font-mono">{studentCode}</span> — ۹ مشخصهٔ سما (ثابت/متغیر/پرداختی/تخفیف ثابت/متغیر/موضوعی + و − /بنیاد/وام)
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={printStatement} className="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-xs font-bold text-white shadow-sm">
+              🖨️ چاپ / PDF رسمی
+            </button>
+            <button
+              onClick={() => setViewMode(v => v === 'table' ? 'chart' : 'table')}
+              className="rounded-lg border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-bold backdrop-blur transition hover:bg-white/20"
+            >
+              {viewMode === 'table' ? '📊 نمودار روند' : '📊 بستن نمودار'}
+            </button>
+            <button
+              onClick={exportCSV}
+              disabled={exporting === 'csv'}
+              className="rounded-lg border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-bold backdrop-blur transition hover:bg-white/20 disabled:opacity-50"
+            >
+              {exporting === 'csv' ? '⏳…' : '📥 CSV'}
+            </button>
+            <button
+              onClick={exportText}
+              disabled={exporting === 'txt'}
+              className="rounded-lg border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-bold backdrop-blur transition hover:bg-white/20 disabled:opacity-50"
+            >
+              {exporting === 'txt' ? '⏳…' : '📥 متن'}
+            </button>
+          </div>
         </div>
       </div>
 
+      {/* ── نوار KPI خلاصه ── */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5 print:hidden">
+        <SumBox icon="💸" label="جمع شهریه (ریال)" value={fa(totals.charges)} tone="border-rose-200 from-rose-50 to-white text-rose-700" />
+        <SumBox icon="🎁" label="تخفیف + پوشش بنیاد (ریال)" value={fa(totals.discounts + totals.sponsorships)} tone="border-violet-200 from-violet-50 to-white text-violet-700" />
+        <SumBox icon="💵" label="پرداخت + چک وصولی + وام (ریال)" value={fa(paidTotal)} tone="border-emerald-200 from-emerald-50 to-white text-emerald-700" />
+        <SumBox icon="⏳" label="چک در انتظار وصول (ریال)" value={fa(totals.chequesPending)} tone="border-amber-200 from-amber-50 to-white text-amber-700" />
+        <SumBox
+          icon={totals.balance > 0 ? '🔴' : '🟢'}
+          label={totals.balance > 0 ? 'ماندهٔ بدهی (ریال)' : totals.balance < 0 ? 'بستانکاری (ریال)' : 'وضعیت حساب'}
+          value={fa(Math.abs(totals.balance))}
+          tone={totals.balance > 0 ? 'border-rose-300 from-rose-100 to-white text-rose-800' : 'border-emerald-300 from-emerald-100 to-white text-emerald-800'}
+        />
+      </div>
+
       {viewMode === 'chart' && (
-        <div className="card" style={{ height: 400 }}>
+        <div className="card print:hidden" style={{ height: 400 }}>
           <canvas id="balanceChart" />
         </div>
       )}
 
-      {viewMode === 'table' && (
+      {/* سند رسمی — همیشه رندر می‌شود تا چاپ از هر حالتی درست خروجی دهد */}
+      <div className="print-area">
         <FinancialTranscript
           student={{ fullName: studentName, studentCode }}
           terms={data.map((d) => ({
@@ -201,20 +234,10 @@ export default function StudentStatementClient({ studentId, studentName, student
             balance: d.balance ?? 0,
             events: [],
           }))}
-          totals={{
-            charges: data.reduce((s, d) => s + (d.charges ?? 0), 0),
-            discounts: data.reduce((s, d) => s + (d.discounts ?? 0), 0),
-            sponsorships: data.reduce((s, d) => s + (d.sponsorships ?? 0), 0),
-            payments: data.reduce((s, d) => s + (d.canonicalPayments ?? 0), 0),
-            chequesCleared: data.reduce((s, d) => s + (d.chequesCleared ?? 0), 0),
-            chequesPending: data.reduce((s, d) => s + (d.chequesPending ?? 0), 0),
-            chequesBounced: data.reduce((s, d) => s + (d.chequesBounced ?? 0), 0),
-            loans: data.reduce((s, d) => s + (d.canonicalLoans ?? 0), 0),
-            balance: data.reduce((s, d) => s + (d.balance ?? 0), 0),
-          }}
+          totals={totals}
           showEvents={false}
         />
-      )}
+      </div>
     </div>
   );
 }
