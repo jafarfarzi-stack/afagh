@@ -348,6 +348,53 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
 .dark .hover\:bg-gray-50:hover { background-color: #334155 !important; }
 .dark .hover\:bg-gray-100:hover { background-color: #334155 !important; }
 .dark .hover\:bg-gray-200:hover { background-color: #475569 !important; }
+
+/* ─────────────────────────────────────────────────────────────
+    دارک‌مود — ایست‌های گرادیان کارت‌های KPI/داک مالی
+    کارت‌ها `from-X-50 to-white` یا `to-X-50/60` می‌سازند؛ بدون این نگاشت
+    انتهای گرادیان روشن می‌ماند ولی متنِ remapشده روشن می‌شود
+    («متن نامرئی»). انتهای روشن ⇒ پلهٔ تیرهٔ همان خانواده.
+    ───────────────────────────────────────────────────────────── */
+.dark .to-white { --tw-gradient-to: #1e293b var(--tw-gradient-to-position) !important; }
+.dark .from-slate-50 { --tw-gradient-from: #1e293b var(--tw-gradient-from-position) !important; }
+.dark .from-rose-50 { --tw-gradient-from: #4c0519 var(--tw-gradient-from-position) !important; }
+.dark .from-violet-50 { --tw-gradient-from: #2e1065 var(--tw-gradient-from-position) !important; }
+.dark .from-indigo-50 { --tw-gradient-from: #1e1b4b var(--tw-gradient-from-position) !important; }
+.dark .from-emerald-50 { --tw-gradient-from: #022c22 var(--tw-gradient-from-position) !important; }
+.dark .from-amber-50 { --tw-gradient-from: #451a03 var(--tw-gradient-from-position) !important; }
+.dark .from-sky-50 { --tw-gradient-from: #082f49 var(--tw-gradient-from-position) !important; }
+.dark .from-rose-100 { --tw-gradient-from: #881337 var(--tw-gradient-from-position) !important; }
+.dark .from-emerald-100 { --tw-gradient-from: #064e3b var(--tw-gradient-from-position) !important; }
+.dark .to-emerald-50\/60 { --tw-gradient-to: #022c22 var(--tw-gradient-to-position) !important; }
+.dark .to-indigo-50\/60 { --tw-gradient-to: #1e1b4b var(--tw-gradient-to-position) !important; }
+.dark .to-violet-50\/60 { --tw-gradient-to: #2e1065 var(--tw-gradient-to-position) !important; }
+.dark .to-slate-50\/60 { --tw-gradient-to: #1e293b var(--tw-gradient-to-position) !important; }
+.dark .to-amber-50\/60 { --tw-gradient-to: #451a03 var(--tw-gradient-to-position) !important; }
+.dark .to-sky-50\/60 { --tw-gradient-to: #082f49 var(--tw-gradient-to-position) !important; }
+.dark .to-teal-50\/60 { --tw-gradient-to: #042f2e var(--tw-gradient-to-position) !important; }
+.dark .to-rose-50\/60 { --tw-gradient-to: #4c0519 var(--tw-gradient-to-position) !important; }
+
+/* ── دارک‌مود: variantهای پس‌زمینه/هاور که نگاشت پایه نمی‌پوشاند
+      (کلاس variant اسم جدا دارد: `.bg-slate-50\/95` از `.bg-slate-50` متمایز است) ── */
+.dark .bg-slate-50\/95 { background-color: #1e293b !important; }
+.dark .bg-slate-100\/95 { background-color: #334155 !important; }
+.dark .hover\:bg-emerald-50\/40:hover { background-color: rgba(6, 78, 59, 0.5) !important; }
+.dark .hover\:bg-emerald-50\/60:hover { background-color: rgba(6, 78, 59, 0.7) !important; }
+.dark .hover\:bg-emerald-100:hover { background-color: #065f46 !important; }
+.dark .focus\:bg-white:focus { background-color: #1e293b !important; }
+.dark .hover\:text-emerald-700:hover { color: #6ee7b7 !important; }
+
+/* ── دارک‌مود: خانوادهٔ violet (جای purple گذاشته شده بود) + مرزهای جاافتادهٔ کاشی‌ها ── */
+.dark .text-violet-700, .dark .text-violet-800, .dark .text-violet-900 { color: #c4b5fd !important; }
+.dark .bg-violet-50 { background-color: #2e1065 !important; }
+.dark .bg-violet-100 { background-color: #4c1d95 !important; }
+.dark .bg-violet-200 { background-color: #5b21b6 !important; }
+.dark .border-violet-200 { border-color: #6d28d9 !important; }
+.dark .border-violet-300 { border-color: #7c3aed !important; }
+.dark .border-sky-300 { border-color: #0284c7 !important; }
+.dark .border-teal-300 { border-color: #0d9488 !important; }
+.dark .hover\:bg-rose-200:hover { background-color: #9f1239 !important; }
+
 .card { @apply bg-white rounded-2xl shadow-sm border border-slate-200 p-4; }
 .btn { @apply inline-flex items-center justify-center gap-1 rounded-xl px-4 py-2 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed; }
 .btn-primary { @apply btn bg-emerald-600 text-white hover:bg-emerald-700; }

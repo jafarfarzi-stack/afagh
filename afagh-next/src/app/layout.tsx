@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import PrintThemeGuard from '@/components/PrintThemeGuard';
 
 export const metadata: Metadata = { title: 'سامانه جامع آفاق', description: 'کالبد Next.js + PostgreSQL — سه داشبورد ایزوله' };
 
@@ -14,7 +15,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <link rel="preload" href="/fonts/vazirmatn-latin-400.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
       <link rel="preload" href="/fonts/vazirmatn-arabic-700.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
       <link rel="preload" href="/fonts/vazirmatn-latin-700.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
-      <body className="min-h-screen">{children}</body>
+      <body className="min-h-screen">
+        <PrintThemeGuard />
+        {children}
+      </body>
     </html>
   );
 }

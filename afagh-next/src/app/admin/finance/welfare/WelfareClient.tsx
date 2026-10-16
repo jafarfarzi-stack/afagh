@@ -110,19 +110,22 @@ export default function WelfareClient() {
 
   return (
     <div className="space-y-4" dir="rtl">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="font-extrabold text-slate-800 text-base sm:text-lg">🤝 صندوق رفاه دانشجویان</h1>
-          <p className="text-xs text-slate-500 mt-1">
-            صندوق‌ها به‌عنوان مفهوم جدا + انتساب هر وام به یک صندوق (پوشش شکاف سما)
-          </p>
+      {/* ── سربرگ premium ── */}
+      <div className="overflow-hidden rounded-2xl border border-emerald-900/20 bg-gradient-to-l from-emerald-700 via-teal-700 to-slate-900 p-4 text-white shadow-lg print:hidden sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-lg font-black sm:text-xl">🤝 صندوق رفاه دانشجویان</h1>
+            <p className="mt-1 text-xs text-emerald-50/90">
+              صندوق‌ها به‌عنوان مفهوم جدا + انتساب هر وام به یک صندوق (پوشش شکاف سما)
+            </p>
+          </div>
+          <button
+            onClick={() => setModal({})}
+            className="rounded-lg border border-white/25 bg-white/15 px-3 py-1.5 text-xs font-black backdrop-blur transition hover:bg-white/25"
+          >
+            ＋ صندوق جدید
+          </button>
         </div>
-        <button
-          onClick={() => setModal({})}
-          className="rounded-lg bg-emerald-700 hover:bg-emerald-800 px-3 py-1.5 text-xs font-medium text-white"
-        >
-          ＋ صندوق جدید
-        </button>
       </div>
 
       <div className="card">

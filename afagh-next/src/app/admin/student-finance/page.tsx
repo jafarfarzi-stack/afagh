@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { requireRole } from '@/lib/auth';
@@ -97,10 +98,19 @@ export default async function StudentFinancePage() {
 
   return (
     <div className="space-y-4" dir="rtl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-extrabold text-slate-800 text-base sm:text-lg">💳 امور مالی دانشجویان</h1>
-          <p className="text-xs text-slate-500 mt-1">شهریه، دفتر مالی دانشجویان و پرونده‌های در انتظار اقدام مالی</p>
+      {/* ── سربرگ premium ── */}
+      <div className="overflow-hidden rounded-2xl border border-emerald-900/20 bg-gradient-to-l from-emerald-700 via-teal-700 to-slate-900 p-4 text-white shadow-lg print:hidden sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-lg font-black sm:text-xl">💳 امور مالی دانشجویان</h1>
+            <p className="mt-1 text-xs text-emerald-50/90">شهریه، دفتر مالی دانشجویان و پرونده‌های در انتظار اقدام مالی</p>
+          </div>
+          <Link
+            href="/admin/finance/reports"
+            className="rounded-lg border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-bold backdrop-blur transition hover:bg-white/20"
+          >
+            📊 مرکز گزارش‌ها
+          </Link>
         </div>
       </div>
 

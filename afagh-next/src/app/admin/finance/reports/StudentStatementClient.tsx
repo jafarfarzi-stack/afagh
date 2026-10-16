@@ -84,6 +84,17 @@ export default function StudentStatementClient({ studentId, studentName, student
   const [viewMode, setViewMode] = useState<'table' | 'chart'>('table');
   const [exporting, setExporting] = useState<string | null>(null);
 
+  // رنگ‌های نمودار باید با تم زنده بمانند — toggle تم بدون رفرش صفحه انجام می‌شود
+  const [isDark, setIsDark] = useState(false);
+  useEffect(() => {
+    const root = document.documentElement;
+    const sync = () => setIsDark(root.classList.contains('dark'));
+    sync();
+    const obs = new MutationObserver(sync);
+    obs.observe(root, { attributes: true, attributeFilter: ['class'] });
+    return () => obs.disconnect();
+  }, []);
+
   useEffect(() => {
     fetch(`/api/admin/finance/reports/student-statement?studentId=${studentId}`)
       .then(r => r.json())
@@ -111,13 +122,28 @@ export default function StudentStatementClient({ studentId, studentName, student
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { labels: { font: { family: 'Vazirmatn, Tahoma' } } }, title: { display: true, text: 'روند مانده ترم‌به‌ترم', font: { family: 'Vazirmatn, Tahoma', size: 14 } } },
-        scales: { y: { beginAtZero: true, ticks: { callback: v => fa(Number(v)) } }, y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => fa(Number(v)) } } },
+        plugins: {
+          legend: { labels: { color: isDark ? '#e2e8f0' : '#334155', font: { family: 'Vazirmatn, Tahoma' } } },
+          title: { display: true, text: 'روند مانده ترم‌به‌ترم', color: isDark ? '#e2e8f0' : '#334155', font: { family: 'Vazirmatn, Tahoma', size: 14 } },
+        },
+        scales: {
+          x: { ticks: { color: isDark ? '#cbd5e1' : '#475569' }, grid: { color: isDark ? 'rgba(148,163,184,0.16)' : 'rgba(100,116,139,0.16)' } },
+          y: {
+            beginAtZero: true,
+            ticks: { color: isDark ? '#cbd5e1' : '#475569', callback: v => fa(Number(v)) },
+            grid: { color: isDark ? 'rgba(148,163,184,0.16)' : 'rgba(100,116,139,0.16)' },
+          },
+          y1: {
+            type: 'linear', display: true, position: 'right',
+            grid: { drawOnChartArea: false },
+            ticks: { color: isDark ? '#cbd5e1' : '#475569', callback: v => fa(Number(v)) },
+          },
+        },
       },
     });
     return () => chart.destroy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, viewMode]);
+  }, [data, viewMode, isDark]);
 
   const exportCSV = () => {
     setExporting('csv');

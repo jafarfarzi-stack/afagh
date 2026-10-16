@@ -83,20 +83,27 @@ const fin = await getStudentFinance(studentId, {
 
   return (
     <div className="space-y-4" dir="rtl">
-      {/* سربرگ */}
-      <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
-        <div>
-          <h1 className="font-extrabold text-slate-800 text-base sm:text-lg">📄 کارنامهٔ مالی دانشجو</h1>
-          <p className="text-xs text-slate-500 mt-1">
-            {student.fullName} — {student.studentCode || 'بدون شمارهٔ دانشجویی'}
-          </p>
+      {/* ── سربرگ premium (بدون دکمه‌های عملیاتی؛ آنها زیر سربرگ با استایل خودشان) ── */}
+      <div className="print:hidden">
+        <div className="overflow-hidden rounded-2xl border border-emerald-900/20 bg-gradient-to-l from-emerald-700 via-teal-700 to-slate-900 p-4 text-white shadow-lg sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="text-lg font-black sm:text-xl">📄 کارنامهٔ مالی دانشجو</h1>
+              <p className="mt-1 text-xs text-emerald-50/90">
+                {student.fullName} — {student.studentCode || 'بدون شمارهٔ دانشجویی'}
+              </p>
+            </div>
+            <Link
+              href="/admin/finance"
+              className="rounded-lg border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-bold backdrop-blur transition hover:bg-white/20"
+            >
+              ↩️ بازگشت به کارتابل
+            </Link>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="mt-2 flex flex-wrap gap-2">
           <PrintButton />
           <StatementLinkButton studentId={studentId} />
-          <Link href="/admin/finance" className="rounded-lg bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700">
-            بازگشت به کارتابل
-          </Link>
         </div>
       </div>
 

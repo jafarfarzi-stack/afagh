@@ -64,16 +64,22 @@ export default async function FinanceRulesPage() {
 
   return (
     <div className="space-y-4" dir="rtl">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="font-extrabold text-slate-800 text-base sm:text-lg">⚙️ تعاریف موتور مالی</h1>
-          <p className="text-xs text-slate-500 mt-1">
-            انواع تخفیف شهریه، بنیادهای حامی، فرمول‌ها، ضریب افزایشی نیمسال و مبالغ موضوعی
-          </p>
+      {/* ── سربرگ premium ── */}
+      <div className="overflow-hidden rounded-2xl border border-emerald-900/20 bg-gradient-to-l from-emerald-700 via-teal-700 to-slate-900 p-4 text-white shadow-lg print:hidden sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-lg font-black sm:text-xl">⚙️ تعاریف موتور مالی</h1>
+            <p className="mt-1 text-xs text-emerald-50/90">
+              انواع تخفیف شهریه، بنیادهای حامی، فرمول‌ها، ضریب افزایشی نیمسال و مبالغ موضوعی
+            </p>
+          </div>
+          <Link
+            href="/admin/finance"
+            className="rounded-lg border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-bold backdrop-blur transition hover:bg-white/20"
+          >
+            ↩️ بازگشت به کارتابل
+          </Link>
         </div>
-        <Link href="/admin/finance" className="rounded-lg bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700">
-          بازگشت به کارتابل
-        </Link>
       </div>
 
       <RulesClient
