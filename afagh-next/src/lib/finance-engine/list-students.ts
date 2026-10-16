@@ -42,6 +42,12 @@ export interface FinanceListFilters {
   onlyDebtors?: boolean;
   limit?: number;
   universityId?: number | null;
+  /**
+   * دامنهٔ نیمسال: با تعویض سوییچر نیمسال سربرگ، همهٔ اعداد (شهریه، تخفیف،
+   * بنیاد، پرداخت، چک، وام و مانده) فقط از همین نیمسال خوانده می‌شوند.
+   * `null` یعنی «همهٔ نیمسال‌ها» — رفتار قبلی و مبنای کارنامهٔ تجمیعی.
+   */
+  termId?: number | null;
 }
 
 /**
@@ -59,7 +65,15 @@ export async function listFinanceStudents(
   if (filters.degreeLevelId) where.push(eq(students.degreeLevelId, filters.degreeLevelId));
   if (filters.entryYear) where.push(eq(students.entryYear, filters.entryYear));
   const effectiveUniversityId = universityId ?? filters.universityId;
-  if (effectiveUniversityId) where.push(eq(students.universityId, effectiveUniversityId));
+  // ⚠ id=0 یعنی DENY_UNI: کاربر به هیچ دانشگاهی مجاز نیست. شرطِ سادهٔ
+  // «اگر مقدار داشت» اینجا فیلتر را کنار می‌گذاشت و همهٔ دانشگاه‌ها را
+  // لو می‌داد؛ به‌جایش فهرست باید خالی باشد (fail-closed).
+  if (effectiveUniversityId === 0) return [];
+  // null یعنی «عمداً بدون فیلتر دانشگاه» (تماس‌های داخلی) — اما هر مقدار
+  // دیگری یعنی دانشگاهِ فعال و باید واقعاً اعمال شود.
+  if (effectiveUniversityId !== null && effectiveUniversityId !== undefined) {
+    where.push(eq(students.universityId, effectiveUniversityId));
+  }
 
   if (filters.search && filters.search.trim()) {
     // کدهای ذخیره‌شده انگلیسی‌اند؛ ارقام فارسی ورودی نرمال می‌شود تا کدهای SA/SS هم پیدا شوند.
@@ -75,6 +89,17 @@ export async function listFinanceStudents(
   }
 
   const limit = Math.min(Math.max(filters.limit ?? 500, 1), 2000);
+
+  // دامنهٔ نیمسال — روی هر پنج کوئری تجمیعی اعمال می‌شود تا با تعویض
+  // سوییچر نیمسال، همهٔ اعداد با هم عوض شوند (نه فقط پرداخت‌ها).
+  // ردیف‌های بی‌ترم (termId = NULL) متعلق به هیچ نیمسالی نیستند و در
+  // دیدِ یک نیمسالِ مشخص نمی‌آیند؛ در حالت «همهٔ نیمسال‌ها» سرِ جایشان می‌مانند.
+  const scopeTermId = typeof filters.termId === 'number' && filters.termId > 0 ? filters.termId : null;
+  const ledgerTermCond = scopeTermId ? eq(student_ledger.termId, scopeTermId) : undefined;
+  const discountTermCond = scopeTermId ? eq(student_discounts.termId, scopeTermId) : undefined;
+  const sponsorTermCond = scopeTermId ? eq(student_sponsorships.termId, scopeTermId) : undefined;
+  const chequeTermCond = scopeTermId ? eq(payment_cheques.termId, scopeTermId) : undefined;
+  const loanTermCond = scopeTermId ? eq(student_loans.termId, scopeTermId) : undefined;
 
   const base = await db.select({
     studentId: students.id,
@@ -108,7 +133,7 @@ export async function listFinanceStudents(
       transactionType: student_ledger.transactionType,
       total: sql<number>`SUM(${student_ledger.amount})`,
     }).from(student_ledger)
-      .where(inArray(student_ledger.studentId, ids))
+      .where(and(inArray(student_ledger.studentId, ids), ledgerTermCond))
       .groupBy(student_ledger.studentId, student_ledger.termId, student_ledger.transactionType),
 
     db.select({
@@ -119,7 +144,7 @@ export async function listFinanceStudents(
       percent: student_discounts.percent,
       amount: student_discounts.amount,
     }).from(student_discounts)
-      .where(and(inArray(student_discounts.studentId, ids), eq(student_discounts.status, 'APPROVED'))),
+      .where(and(inArray(student_discounts.studentId, ids), eq(student_discounts.status, 'APPROVED'), discountTermCond)),
 
     db.select({
       id: student_sponsorships.id,
@@ -131,7 +156,8 @@ export async function listFinanceStudents(
     }).from(student_sponsorships)
       .where(and(
         inArray(student_sponsorships.studentId, ids),
-        inArray(student_sponsorships.status, ['CONFIRMED', 'PAID'])
+        inArray(student_sponsorships.status, ['CONFIRMED', 'PAID']),
+        sponsorTermCond
       )),
 
     db.select({
@@ -139,7 +165,7 @@ export async function listFinanceStudents(
       status: payment_cheques.status,
       total: sql<number>`SUM(${payment_cheques.amount})`,
     }).from(payment_cheques)
-      .where(inArray(payment_cheques.studentId, ids))
+      .where(and(inArray(payment_cheques.studentId, ids), chequeTermCond))
       .groupBy(payment_cheques.studentId, payment_cheques.status),
 
     db.select({
@@ -147,7 +173,7 @@ export async function listFinanceStudents(
       status: student_loans.status,
       total: sql<number>`SUM(${student_loans.amount})`,
     }).from(student_loans)
-      .where(inArray(student_loans.studentId, ids))
+      .where(and(inArray(student_loans.studentId, ids), loanTermCond))
       .groupBy(student_loans.studentId, student_loans.status),
   ]);
 

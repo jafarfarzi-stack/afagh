@@ -3,6 +3,7 @@ import PrintButton from '@/components/PrintButton';
 import { requireRole } from '@/lib/auth';
 import { listFinanceStudents, listFinanceFilterOptions } from '@/lib/finance-engine';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { getTermScope } from '@/lib/term-scope';
 import FinanceTable from './FinanceTable';
 
 export const dynamic = 'force-dynamic';
@@ -51,6 +52,13 @@ export default async function FinanceWorklistPage(props: {
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
 
+  // دامنهٔ نیمسال از سوییچر سربرگ (کوکی afagh_term) می‌آید؛ null = همهٔ نیمسال‌ها
+  const termScope = await getTermScope(currentUniversityId);
+  const scopeTermId = termScope.selectedId;
+  const scopeTermTitle = scopeTermId
+    ? (termScope.terms.find((t) => t.id === scopeTermId)?.title ?? `نیمسال ${scopeTermId}`)
+    : null;
+
   const sp = (await props.searchParams) || {};
   const majorId = Number(sp.majorId) || null;
   const degreeLevelId = Number(sp.degreeLevelId) || null;
@@ -60,7 +68,11 @@ export default async function FinanceWorklistPage(props: {
 
   const [options, students] = await Promise.all([
     listFinanceFilterOptions({ universityId: currentUniversityId }),
-    listFinanceStudents({ majorId, degreeLevelId, entryYear, search, onlyDebtors, limit: 1000, universityId: currentUniversityId }),
+    listFinanceStudents({
+      majorId, degreeLevelId, entryYear, search, onlyDebtors, limit: 1000,
+      universityId: currentUniversityId,
+      termId: scopeTermId,
+    }),
   ]);
 
   const totals = students.reduce(
@@ -99,11 +111,15 @@ export default async function FinanceWorklistPage(props: {
             <p className="mt-1 text-xs text-emerald-50/90">
               فهرست کامل دانشجویان با ماندهٔ مالی — فیلتر رشته، مقطع و ورودی؛ ورود مستقیم به کارنامهٔ مالی هر دانشجو
             </p>
-            {currentUniversity && (
-              <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-bold">
-                🏛️ {currentUniversity.title}
-              </p>
-            )}
+            {/* دامنهٔ فعال: دانشگاه × نیمسال — تا معلوم باشد اعداد متعلق به کدام بازه‌اند */}
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-bold">
+                🏛️ {currentUniversity ? currentUniversity.title : 'بدون دانشگاه'}
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-bold">
+                📅 {scopeTermTitle ?? 'همهٔ نیمسال‌ها'}
+              </span>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Link href="/admin/finance/rules" className={dockCls}>⚙️ قواعد مالی</Link>
