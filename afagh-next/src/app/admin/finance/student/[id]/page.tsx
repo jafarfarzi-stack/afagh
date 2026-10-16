@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { requireRole } from '@/lib/auth';
 import { getStudentFinance, computeFormulaTuition } from '@/lib/finance-engine';
 import { computeTermTuition } from '@/lib/tuition-engine';
-import { toJalaliFromDate } from '@/lib/calendar';
+import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import PrintButton from '@/components/PrintButton';
 import FinancialTranscript from '@/components/FinancialTranscript';
 import StatementLinkButton from './StatementLinkButton';
