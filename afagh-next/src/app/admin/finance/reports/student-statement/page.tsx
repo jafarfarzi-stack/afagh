@@ -1,8 +1,13 @@
 import { requireRole } from '@/lib/auth';
 import { getStudentFinance, listFinanceStudents } from '@/lib/finance-engine';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { getSetting } from '@/lib/settings';
+import { buildFinanceStatementVerify as buildFinanceVerify } from '@/lib/finance-verify';
 import StudentStatementClient from '../StudentStatementClient';
 import StudentPicker from './StudentPicker';
+import { db } from '@/db';
+import { eq } from 'drizzle-orm';
+import { students } from '@/db/schema';
 
 const FINANCE = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'] as never[];
 

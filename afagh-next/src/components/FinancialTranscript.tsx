@@ -125,6 +125,8 @@ export interface FinancialTranscriptProps {
   totals: TranscriptTotalsView;
   /** عنوان دانشگاه در سربرگ (پیش‌فرض: دانشگاه آفاق) */
   universityTitle?: string | null;
+  /** آرم/نشان اختصاصی دانشگاه در مدخل میانی سربرگ؛ خالی = نشان دایره‌ای پیش‌فرض */
+  logoUrl?: string | null;
   /** تاریخ صدور شمسی در سربرگ (اگر داده نشود، چاپ نمی‌شود — برای جلوگیری از ناهماهنگی hydration در کلاینت) */
   issuedAt?: string | null;
   /** عنوان بخش جمع (پیش‌فرض: «جمع کل دوره») */
@@ -145,6 +147,7 @@ export default function FinancialTranscript({
   terms,
   totals,
   universityTitle,
+  logoUrl,
   issuedAt,
   scopeLabel,
   showEvents = true,
@@ -162,23 +165,35 @@ export default function FinancialTranscript({
 
   return (
     <div dir="rtl" className="bg-white border-2 border-slate-800 shadow-xl print:shadow-none text-xs text-slate-800">
-      {/* ── سربرگ رسمی ── */}
-      <div className="grid grid-cols-3 items-start gap-2 border-b-2 border-slate-800 bg-slate-50 px-4 py-3">
-        <div className="text-[11px] leading-6 text-slate-600">
-          <p className="font-bold text-slate-800">ادارهٔ امور مالی</p>
-          <p>{universityTitle || 'دانشگاه آفاق'}</p>
+      {/* ── سربرگ سه‌بخشی رسمی دانشگاه (همان مدل کارنامهٔ تحصیلی: right/center/left) ── */}
+      <div className="px-4 pt-4 pb-2 border-b-2 border-slate-800">
+        <div className="grid grid-cols-3 items-center text-center">
+          {/* ستون راست */}
+          <div className="text-right space-y-1">
+            <p className="font-bold text-slate-800">جمهوری اسلامی ایران</p>
+            <p className="font-semibold text-slate-700">وزارت علوم، تحقیقات و فناوری</p>
+            <p className="font-extrabold text-slate-900 text-sm">{universityTitle || 'دانشگاه جامع آفاق'}</p>
+            <p className="text-[11px] text-slate-500">معاونت اداری و مالی — ادارهٔ امور مالی</p>
+          </div>
+          {/* ستون وسط (نشان و عنوان سند) */}
+          <div className="flex flex-col items-center justify-center">
+            {logoUrl ? (
+              <img src={logoUrl} alt="آرم دانشگاه" className="mb-1 h-12 w-12 shrink-0 object-contain" />
+            ) : (
+              <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-full border-2 border-slate-800 text-xl font-bold text-slate-800">آفاق</div>
+            )}
+            <h2 className="border-b border-slate-800 pb-0.5 px-4 text-base font-black tracking-wide text-slate-950">کارنامهٔ مالی دانشجو</h2>
+            <p className="mt-0.5 text-[10px] text-slate-600">صورت وضعیت بدهی، تخفیف، پوشش، پرداخت، چک و وام — ترم‌به‌ترم</p>
+          </div>
+          {/* ستون چپ (اطلاعات سند) */}
+          <div className="space-y-1 text-left font-mono text-[11px]">
+            <p><span className="font-sans text-slate-500">شماره پرونده: </span><b>{faDigits(student.studentCode || '—')}</b></p>
+            {issuedAt ? <p><span className="font-sans text-slate-500">تاریخ صدور: </span><b>{issuedAt}</b></p> : null}
+            <p><span className="font-sans text-slate-500">صفحه: </span><b>۱ از ۱</b></p>
+            <p><span className="font-sans text-slate-500">وضعیت: </span><b>{(student.status && STATUS_FA[student.status]) || student.status || '—'}</b></p>
+          </div>
         </div>
-        <div className="text-center">
-          <div className="mx-auto mb-1 flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-800 text-lg font-black text-white">آ</div>
-          <h2 className="text-sm font-black text-slate-900">کارنامهٔ مالی دانشجو</h2>
-          <p className="mt-0.5 text-[10px] text-slate-500">صورت وضعیت بدهی، تخفیف، پوشش، پرداخت، چک و وام — ترم‌به‌ترم</p>
-        </div>
-        <div className="text-left text-[11px] leading-6 text-slate-600">
-          {issuedAt ? <p>تاریخ صدور: <span className="font-medium text-slate-800">{issuedAt}</span></p> : null}
-          <p>شمارهٔ دانشجویی: <span className="font-medium text-slate-800">{faDigits(student.studentCode || '—')}</span></p>
-          <p>وضعیت: <span className="font-medium text-slate-800">{(student.status && STATUS_FA[student.status]) || student.status || '—'}</span></p>
-        </div>
-      </div>
+      </div>>
 
       <div className="space-y-3 p-4">
         {/* ── جدول مشخصات ── */}

@@ -63,9 +63,10 @@ export default async function StudentFinancePage() {
   if (!fin) return <p className="card p-6 text-center text-slate-500">اطلاعات مالی یافت نشد.</p>;
 
   const [uniRow] = me.universityId
-    ? await db.select({ title: universities.title }).from(universities).where(eq(universities.id, me.universityId)).limit(1)
+    ? await db.select({ title: universities.title, logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, me.universityId)).limit(1)
     : [];
   const uniTitle = uniRow?.title ?? null;
+  const universityLogo = uniRow?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
 
   const { student, cheques, loans } = fin;
   const selectedTerm = scope.selectedId
@@ -182,6 +183,7 @@ export default async function StudentFinancePage() {
           terms={transcript}
           totals={totals}
           universityTitle={uniTitle}
+          logoUrl={universityLogo}
           issuedAt={jdate(new Date())}
           scopeLabel={selectedTerm ? `جمع نیمسال ${selectedTerm.title}` : undefined}
           cheques={visibleCheques.map((c) => ({

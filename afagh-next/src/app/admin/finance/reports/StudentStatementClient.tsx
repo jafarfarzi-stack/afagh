@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title, LineElement, PointElement } from 'chart.js';
 import { saveAs } from 'file-saver';
 import FinancialTranscript from '@/components/FinancialTranscript';
+import FinanceVerifyBlock from '@/components/FinanceVerifyBlock';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title, LineElement, PointElement);
 
@@ -40,6 +41,9 @@ interface Props {
   studentId: number;
   studentName: string;
   studentCode: string;
+  universityTitle?: string | null;
+  logoUrl?: string | null;
+  verify?: { url: string; qr: string; expiresAt: string | null } | null;
 }
 
 function generateCSV(data: StatementRow[], studentName: string, studentCode: string): string {
@@ -78,7 +82,7 @@ function SumBox({ icon, label, value, tone, sub }: { icon: string; label: string
   );
 }
 
-export default function StudentStatementClient({ studentId, studentName, studentCode }: Props) {
+export default function StudentStatementClient({ studentId, studentName, studentCode, universityTitle, logoUrl, verify }: Props) {
   const [data, setData] = useState<StatementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'table' | 'chart'>('table');
@@ -262,6 +266,9 @@ export default function StudentStatementClient({ studentId, studentName, student
           }))}
           totals={totals}
           showEvents={false}
+          universityTitle={universityTitle}
+          logoUrl={logoUrl}
+          verifyBlock={verify ? <FinanceVerifyBlock url={verify.url} qr={verify.qr} expiresAt={verify.expiresAt} /> : undefined}
         />
       </div>
     </div>

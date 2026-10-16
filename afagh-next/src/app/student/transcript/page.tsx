@@ -34,6 +34,8 @@ export default async function StudentTranscriptPage() {
 
   const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
   const [level] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
+  const [uniRow] = me.universityId ? await db.select({ title: universities.title, logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, me.universityId)).limit(1) : [null];
+  const universityLogo = uniRow?.logoUrl ?? null;
   const [identity] = await db.select({ nationalCode: users.nationalCode }).from(users).where(eq(users.id, user.id)).limit(1);
 
   const demo = await isDemoStudentUser(user.id);
@@ -199,9 +201,13 @@ export default async function StudentTranscriptPage() {
 
             {/* ستون وسط (نشان و عنوان سند) */}
             <div className="flex flex-col items-center justify-center">
+            {universityLogo ? (
+              <img src={universityLogo} alt={"آرم دانشگاه"} className={"mb-1 h-12 w-12 shrink-0 object-contain"} />
+            ) : (
               <div className="w-12 h-12 rounded-full border-2 border-slate-800 flex items-center justify-center font-bold text-xl text-slate-800 mb-1">
-                آفاق
+                آ ف ا ق
               </div>
+            )}
               <h1 className="text-base font-black tracking-wide text-slate-950 border-b border-slate-800 pb-0.5 px-4">
                 کارنامه کل تحصیلی دانشجو
               </h1>
