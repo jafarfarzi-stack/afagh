@@ -138,22 +138,6 @@ const fin = await getStudentFinance(studentId, {
             enhancedTuition && (enhancedTuition.fixedCoefficient !== 1 || enhancedTuition.variableCoefficient !== 1 || enhancedTuition.subjectFeesTotal !== 0 || enhancedTuition.overrideId !== null) ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                 <h4 className="mb-2 text-xs font-bold text-amber-800">
-          universityTitle={currentUniversity?.title ?? null}
-          logoUrl={logoUrl}
-          issuedAt={jdate(new Date())}
-          verifyBlock={financeVerify ? <FinanceVerifyBlock url={financeVerify.url} qr={financeVerify.qr} expiresAt={financeVerify.expiresAt} /> : undefined}
-          cheques={fin.cheques.map((c) => ({
-            id: c.id, chequeNo: c.chequeNo, bankName: c.bankName,
-            amount: Number(c.amount), dueDate: c.dueDate, status: c.status,
-          }))}
-          loans={fin.loans.map((l) => ({
-            id: l.id, productTitle: l.productTitle, lender: l.lender,
-            amount: Number(l.amount), installments: l.installments, status: l.status,
-          }))}
-          leadBlock={
-            enhancedTuition && (enhancedTuition.fixedCoefficient !== 1 || enhancedTuition.variableCoefficient !== 1 || enhancedTuition.subjectFeesTotal !== 0 || enhancedTuition.overrideId !== null) ? (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                <h4 className="mb-2 text-xs font-bold text-amber-800">
                   شهریهٔ ترم جاری با ضریب افزایشی
                   {enhancedTuition.overrideId !== null && (
                     <span className="mr-2 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] text-violet-800">
