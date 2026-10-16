@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title, LineElement, PointElement } from 'chart.js';
 import { saveAs } from 'file-saver';
+import FinancialTranscript from '@/components/FinancialTranscript';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title, LineElement, PointElement);
 
@@ -23,6 +24,16 @@ interface StatementRow {
   posPayments: number;
   loans: number;
   balance: number;
+  // اعداد کانونی کارنامه (از API صورت‌حساب — برابر با getStudentFinance)
+  charges: number;
+  discounts: number;
+  sponsorships: number;
+  canonicalPayments: number;
+  chequesCleared: number;
+  chequesPending: number;
+  chequesBounced: number;
+  canonicalLoans: number;
+  netPayable: number;
 }
 
 interface Props {
@@ -173,58 +184,36 @@ export default function StudentStatementClient({ studentId, studentName, student
       )}
 
       {viewMode === 'table' && (
-        <div className="card overflow-x-auto">
-          <table className="w-full text-right text-xs">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50 text-slate-600">
-                <th className="p-2">ترم</th>
-                <th className="p-2">شهریه ثابت</th>
-                <th className="p-2">شهریه متغیر</th>
-                <th className="p-2">تخفیف ثابت</th>
-                <th className="p-2">تخفیف متغیر</th>
-                <th className="p-2">موضوعی +\nافزایشی</th>
-                <th className="p-2">موضوعی -\nکاهشی</th>
-                <th className="p-2">پوشش\nبنیاد</th>
-                <th className="p-2">پرداخت\nآنلاین</th>
-                <th className="p-2">پرداخت\nPOS</th>
-                <th className="p-2">وام</th>
-                <th className="p-2">مانده</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((d, i) => (
-                <tr key={d.termId} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'} >
-                  <td className="p-2 font-medium text-slate-800">{d.termTitle}<br/><span className="text-[10px] text-slate-500">{d.termCode}</span></td>
-                  <td className="p-2 text-slate-700">{fa(d.tuitionFixed)}</td>
-                  <td className="p-2 text-slate-700">{fa(d.tuitionVariable)}</td>
-                  <td className="p-2 text-emerald-700">{fa(d.discountFixed)}</td>
-                  <td className="p-2 text-emerald-700">{fa(d.discountVariable)}</td>
-                  <td className="p-2 text-amber-700">{fa(d.subjectAdditive)}</td>
-                  <td className="p-2 text-emerald-700">{fa(d.subjectDeductive)}</td>
-                  <td className="p-2 text-cyan-700">{fa(d.sponsorship)}</td>
-                  <td className="p-2 text-blue-700">{fa(d.payments)}</td>
-                  <td className="p-2 text-orange-700">{fa(d.posPayments)}</td>
-                  <td className="p-2 text-violet-700">{fa(d.loans)}</td>
-                  <td className={`p-2 font-bold ${d.balance > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>{fa(d.balance)}</td>
-                </tr>
-              ))}
-              <tr className="bg-slate-100 font-bold text-slate-800">
-                <td className="p-2">جمع کل</td>
-                <td className="p-2">{fa(data.reduce((s, d) => s + d.tuitionFixed, 0))}</td>
-                <td className="p-2">{fa(data.reduce((s, d) => s + d.tuitionVariable, 0))}</td>
-                <td className="p-2 text-emerald-700">{fa(data.reduce((s, d) => s + d.discountFixed, 0))}</td>
-                <td className="p-2 text-emerald-700">{fa(data.reduce((s, d) => s + d.discountVariable, 0))}</td>
-                <td className="p-2 text-amber-700">{fa(data.reduce((s, d) => s + d.subjectAdditive, 0))}</td>
-                <td className="p-2 text-emerald-700">{fa(data.reduce((s, d) => s + d.subjectDeductive, 0))}</td>
-                <td className="p-2 text-cyan-700">{fa(data.reduce((s, d) => s + d.sponsorship, 0))}</td>
-                <td className="p-2 text-blue-700">{fa(data.reduce((s, d) => s + d.payments, 0))}</td>
-                <td className="p-2 text-orange-700">{fa(data.reduce((s, d) => s + d.posPayments, 0))}</td>
-                <td className="p-2 text-violet-700">{fa(data.reduce((s, d) => s + d.loans, 0))}</td>
-                <td className="p-2">{fa(data.reduce((s, d) => s + d.balance, 0))}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <FinancialTranscript
+          student={{ fullName: studentName, studentCode }}
+          terms={data.map((d) => ({
+            termId: d.termId,
+            termTitle: d.termCode ? `${d.termTitle} (${d.termCode})` : d.termTitle,
+            charges: d.charges ?? 0,
+            discounts: d.discounts ?? 0,
+            sponsorships: d.sponsorships ?? 0,
+            netPayable: d.netPayable ?? 0,
+            payments: d.canonicalPayments ?? 0,
+            chequesCleared: d.chequesCleared ?? 0,
+            chequesPending: d.chequesPending ?? 0,
+            chequesBounced: d.chequesBounced ?? 0,
+            loans: d.canonicalLoans ?? 0,
+            balance: d.balance ?? 0,
+            events: [],
+          }))}
+          totals={{
+            charges: data.reduce((s, d) => s + (d.charges ?? 0), 0),
+            discounts: data.reduce((s, d) => s + (d.discounts ?? 0), 0),
+            sponsorships: data.reduce((s, d) => s + (d.sponsorships ?? 0), 0),
+            payments: data.reduce((s, d) => s + (d.canonicalPayments ?? 0), 0),
+            chequesCleared: data.reduce((s, d) => s + (d.chequesCleared ?? 0), 0),
+            chequesPending: data.reduce((s, d) => s + (d.chequesPending ?? 0), 0),
+            chequesBounced: data.reduce((s, d) => s + (d.chequesBounced ?? 0), 0),
+            loans: data.reduce((s, d) => s + (d.canonicalLoans ?? 0), 0),
+            balance: data.reduce((s, d) => s + (d.balance ?? 0), 0),
+          }}
+          showEvents={false}
+        />
       )}
     </div>
   );

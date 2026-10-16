@@ -1,6 +1,7 @@
 import { desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { notifications } from '@/db/schema';
+import { notifications, universities } from '@/db/schema';
+import FinancialTranscript from '@/components/FinancialTranscript';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { getStudentFinance } from '@/lib/finance-engine';
 import { toNum, transcriptTotals } from '@/lib/finance-rules';
@@ -26,16 +27,6 @@ function jdate(d: string | Date | null | undefined): string {
   const { jy, jm, jd } = toJalaliFromDate(date);
   return faDigits(`${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`);
 }
-
-const EVENT_LABEL: Record<string, string> = {
-  CHARGE: 'بدهی',
-  DISCOUNT: 'تخفیف',
-  SPONSOR: 'پوشش بنیاد',
-  PAYMENT: 'پرداخت',
-  CHEQUE: 'چک',
-  LOAN: 'وام',
-  CLEARANCE: 'تسویه',
-};
 
 /**
  * رویدادهای مالی که برای دانشجو نمایش داده می‌شوند.
@@ -70,6 +61,11 @@ export default async function StudentFinancePage() {
   ]);
 
   if (!fin) return <p className="card p-6 text-center text-slate-500">اطلاعات مالی یافت نشد.</p>;
+
+  const [uniRow] = me.universityId
+    ? await db.select({ title: universities.title }).from(universities).where(eq(universities.id, me.universityId)).limit(1)
+    : [];
+  const uniTitle = uniRow?.title ?? null;
 
   const { student, cheques, loans } = fin;
   const selectedTerm = scope.selectedId
@@ -179,213 +175,44 @@ export default async function StudentFinancePage() {
         </div>
       )}
 
-      {/* ═══ بخش چاپ‌شدنی ═══ */}
+      {/* ═══ بخش چاپ‌شدنی: کارنامهٔ مالی رسمی ═══ */}
       <div className="print-area space-y-4">
-        <div className="card">
-          <div className="mb-3 border-b border-slate-100 pb-2 text-center">
-            <h2 className="font-extrabold text-slate-800">کارنامهٔ مالی دانشجو</h2>
-            <p className="text-[11px] text-slate-500 mt-0.5">دانشگاه آزاد اسلامی — واحد ممسنی</p>
-          </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
-            <div><span className="text-slate-500">نام و نام خانوادگی: </span><span className="font-medium text-slate-800">{student.fullName || '—'}</span></div>
-            <div><span className="text-slate-500">شمارهٔ دانشجویی: </span><span className="font-medium text-slate-800">{faDigits(student.studentCode || '—')}</span></div>
-            <div><span className="text-slate-500">کد ملی: </span><span className="font-medium text-slate-800">{faDigits(student.nationalCode || '—')}</span></div>
-            <div><span className="text-slate-500">رشته: </span><span className="font-medium text-slate-800">{student.majorTitle || '—'}</span></div>
-            <div><span className="text-slate-500">مقطع: </span><span className="font-medium text-slate-800">{student.degreeTitle || '—'}</span></div>
-            <div><span className="text-slate-500">ورودی: </span><span className="font-medium text-slate-800">{student.entryYear ? fa(student.entryYear) : '—'}</span></div>
-          </div>
-        </div>
-
-        <div className="card">
-          <h3 className="mb-2 border-b border-slate-100 pb-2 font-bold text-slate-800">
-            {selectedTerm ? `جمع کل نیمسال ${selectedTerm.title}` : 'جمع کل دوره'}
-          </h3>
-          <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
-            <div>
-              <p className="text-lg font-bold text-slate-800">{fa(totals.charges)}</p>
-              <p className="text-[11px] text-slate-500">جمع شهریه (ریال)</p>
-            </div>
-            <div>
-              <p className="text-lg font-bold text-violet-700">{fa(totals.discounts)}</p>
-              <p className="text-[11px] text-slate-500">تخفیف‌ها</p>
-            </div>
-            <div>
-              <p className="text-lg font-bold text-indigo-700">{fa(totals.sponsorships)}</p>
-              <p className="text-[11px] text-slate-500">پوشش بنیادها</p>
-            </div>
-            <div>
-              <p className="text-lg font-bold text-emerald-700">{fa(totals.payments + totals.chequesCleared + totals.loans)}</p>
-              <p className="text-[11px] text-slate-500">پرداخت / وام / چک وصولی</p>
-            </div>
-          </div>
-          <div className="mt-3 rounded-lg bg-slate-50 p-3 text-center">
-            <p className={`text-xl font-extrabold ${totals.balance > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
-              {fa(Math.abs(totals.balance))} ریال
-            </p>
-            <p className="text-[11px] text-slate-600">
-              {totals.balance > 0 ? 'ماندهٔ بدهی شما' : totals.balance < 0 ? 'بستانکاری شما' : 'حساب شما تسویه است'}
-            </p>
-          </div>
-          {totals.chequesPending > 0 && (
-            <p className="mt-2 text-center text-[11px] text-amber-700">
-              ⚠️ {fa(totals.chequesPending)} ریال چک وصول‌نشده دارید — در ماندهٔ بالا لحاظ نشده است
-            </p>
-          )}
-        </div>
-
-        <div className="card">
-          <h3 className="mb-2 border-b border-slate-100 pb-2 font-bold text-slate-800">
-            {selectedTerm ? `ریز ترم‌به‌ترم — ${selectedTerm.title}` : 'ریز ترم‌به‌ترم'}
-          </h3>
-          {transcript.length === 0 ? (
-            <p className="py-6 text-center text-xs text-slate-500">
-              {selectedTerm
-                ? `برای نیمسال «${selectedTerm.title}» هیچ تراکنش مالی ثبت نشده است.`
-                : 'هیچ تراکنش مالی ثبت نشده است.'}
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {transcript.map((t) => (
-                <div key={t.termId} className="rounded-lg border border-slate-200">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
-                    <h4 className="text-sm font-bold text-slate-800">{t.termTitle}</h4>
-                    <p className={`text-xs font-bold ${t.balance > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
-                      مانده: {fa(Math.abs(t.balance))} ریال
-                      {t.balance > 0 ? ' (بدهکار)' : t.balance < 0 ? ' (بستانکار)' : ' (تسویه)'}
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 p-3 text-[11px] sm:grid-cols-4">
-                    <div><span className="text-slate-500">شهریه: </span><span className="font-medium">{fa(t.charges)}</span></div>
-                    <div><span className="text-slate-500">تخفیف: </span><span className="font-medium text-violet-700">{fa(t.discounts)}</span></div>
-                    <div><span className="text-slate-500">بنیاد: </span><span className="font-medium text-indigo-700">{fa(t.sponsorships)}</span></div>
-                    <div><span className="text-slate-500">پرداخت: </span><span className="font-medium text-emerald-700">{fa(t.payments)}</span></div>
-                    <div><span className="text-slate-500">چک وصولی: </span><span className="font-medium">{fa(t.chequesCleared)}</span></div>
-                    <div><span className="text-slate-500">چک معوق: </span><span className="font-medium text-amber-700">{fa(t.chequesPending)}</span></div>
-                    <div><span className="text-slate-500">وام: </span><span className="font-medium text-sky-700">{fa(t.loans)}</span></div>
-                  </div>
-                  {t.events.length > 0 && (
-                    <div className="border-t border-slate-100 px-3 py-2">
-                      <ul className="space-y-1">
-                        {t.events.map((e, i) => (
-                          <li key={i} className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                            <span className="flex items-center gap-1.5">
-                              <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] text-slate-600">
-                                {EVENT_LABEL[e.kind] || e.kind}
-                              </span>
-                              <span className="text-slate-700">{e.label}</span>
-                              {e.dateMs && <span className="text-slate-400">{jdate(new Date(e.dateMs))}</span>}
-                            </span>
-                            <span className={`font-medium ${e.sign === 1 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                              {e.sign === 1 ? '+' : '−'}{fa(e.amount)}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
+        <FinancialTranscript
+          student={student}
+          terms={transcript}
+          totals={totals}
+          universityTitle={uniTitle}
+          issuedAt={jdate(new Date())}
+          scopeLabel={selectedTerm ? `جمع نیمسال ${selectedTerm.title}` : undefined}
+          cheques={visibleCheques.map((c) => ({
+            id: c.id, chequeNo: c.chequeNo, bankName: c.bankName,
+            amount: toNum(c.amount), dueDate: c.dueDate, status: c.status,
+          }))}
+          loans={visibleLoans.map((l) => ({
+            id: l.id, productTitle: l.productTitle, lender: l.lender,
+            amount: toNum(l.amount), installments: l.installments, status: l.status,
+          }))}
+          verifyBlock={
+            stmtVerifyUrl ? (
+              <div className="rounded-lg border border-slate-700 bg-slate-50 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    {stmtQr ? (
+                      <div className="h-24 w-24 shrink-0 border border-slate-300 bg-white p-1" dangerouslySetInnerHTML={{ __html: stmtQr }} />
+                    ) : null}
+                    <div className="text-[11px] leading-6 text-slate-600">
+                      <p className="font-bold text-slate-800">استعلام برخط اصالت این کارنامه</p>
+                      <p className="break-all font-mono text-[10px] text-slate-500" dir="ltr">{stmtVerifyUrl}</p>
+                      {stmtExpiresAt && (
+                        <p>اعتبار استعلام تا {jdate(new Date(stmtExpiresAt))}</p>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {visibleCheques.length > 0 && (
-          <div className="card">
-            <h3 className="mb-2 border-b border-slate-100 pb-2 font-bold text-slate-800">چک‌های شما</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 text-[11px] text-slate-500">
-                    <th className="p-2">شمارهٔ چک</th><th className="p-2">بانک</th>
-                    <th className="p-2">مبلغ</th><th className="p-2">سررسید</th><th className="p-2">وضعیت</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleCheques.map((c) => (
-                    <tr key={c.id} className="border-b border-slate-100 last:border-0">
-                      <td className="p-2">{faDigits(c.chequeNo || '—')}</td>
-                      <td className="p-2 text-slate-600">{c.bankName || '—'}</td>
-                      <td className="p-2">{fa(toNum(c.amount))}</td>
-                      <td className="p-2">{jdate(c.dueDate)}</td>
-                      <td className="p-2">
-                        <span className={`rounded px-1.5 py-0.5 text-[10px] ${
-                          c.status === 'CLEARED' ? 'bg-emerald-50 text-emerald-700' :
-                          c.status === 'BOUNCED' ? 'bg-rose-50 text-rose-700' :
-                          c.status === 'CANCELLED' ? 'bg-slate-100 text-slate-600' : 'bg-amber-50 text-amber-700'}`}>
-                          {c.status === 'CLEARED' ? 'وصول‌شده' : c.status === 'BOUNCED' ? 'برگشتی' :
-                           c.status === 'CANCELLED' ? 'باطل‌شده' : 'در انتظار وصول'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {visibleLoans.length > 0 && (
-          <div className="card">
-            <h3 className="mb-2 border-b border-slate-100 pb-2 font-bold text-slate-800">وام‌های شما</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 text-[11px] text-slate-500">
-                    <th className="p-2">نوع وام</th><th className="p-2">پرداخت‌کننده</th>
-                    <th className="p-2">مبلغ</th><th className="p-2">اقساط</th><th className="p-2">وضعیت</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleLoans.map((l) => (
-                    <tr key={l.id} className="border-b border-slate-100 last:border-0">
-                      <td className="p-2">{l.productTitle || '—'}</td>
-                      <td className="p-2 text-slate-600">{l.lender}</td>
-                      <td className="p-2">{fa(toNum(l.amount))}</td>
-                      <td className="p-2">{fa(l.installments)}</td>
-                      <td className="p-2">
-                        <span className={`rounded px-1.5 py-0.5 text-[10px] ${
-                          l.status === 'ACTIVE' ? 'bg-sky-50 text-sky-700' :
-                          l.status === 'SETTLED' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
-                          {l.status === 'ACTIVE' ? 'فعال' : l.status === 'SETTLED' ? 'تسویه‌شده' : 'لغوشده'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* ═══ بلوک رسمیت: QR استعلام + مهر و امضا ═══ */}
-        {stmtVerifyUrl && (
-          <div className="card">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                {stmtQr ? (
-                  <div className="h-24 w-24 shrink-0 border border-slate-200 bg-white p-1" dangerouslySetInnerHTML={{ __html: stmtQr }} />
-                ) : null}
-                <div className="text-[11px] leading-6 text-slate-600">
-                  <p className="font-bold text-slate-800">استعلام برخط اصالت این کارنامه</p>
-                  <p className="break-all font-mono text-[10px] text-slate-500" dir="ltr">{stmtVerifyUrl}</p>
-                  {stmtExpiresAt && (
-                    <p>اعتبار استعلام تا {jdate(new Date(stmtExpiresAt))}</p>
-                  )}
+                  </div>
                 </div>
               </div>
-              <div className="flex gap-8 text-center text-[11px] text-slate-600">
-                <div>
-                  <p className="mb-10 font-medium">مهر و امضای امور مالی</p>
-                  <div className="border-t border-slate-300 pt-1">نام و امضا</div>
-                </div>
-                <div>
-                  <p className="mb-10 font-medium">مهر دانشگاه</p>
-                  <div className="border-t border-slate-300 pt-1">تاریخ صدور: {jdate(new Date())}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+            ) : null
+          }
+        />
       </div>
     </div>
   );
