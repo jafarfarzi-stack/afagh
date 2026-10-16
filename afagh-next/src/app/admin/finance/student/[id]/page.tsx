@@ -2,7 +2,7 @@
 import { notFound } from 'next/navigation';
 import { requireRole } from '@/lib/auth';
 import { getStudentFinance, computeFormulaTuition } from '@/lib/finance-engine';
-import { computeTermTuition } from '@/lib/tuition-engine';
+import { computeTermTuition, computeCourseTuitionForTerms } from '@/lib/tuition-engine';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import PrintButton from '@/components/PrintButton';
 import FinancialTranscript from '@/components/FinancialTranscript';
@@ -88,6 +88,19 @@ const fin = await getStudentFinance(studentId, {
 
   const { student, totals, transcript } = fin;
 
+  // ریز شهریهٔ متغیر دروس برای همهٔ ترم‌های کارنامه (همان موتور کانونی، فقط lines)
+  const courseMap = await computeCourseTuitionForTerms(studentId, transcript.map((t) => t.termId));
+  const transcriptWithCourses = transcript.map((t) => ({
+    ...t,
+    courses: (courseMap[t.termId] ?? []).map((l) => ({
+      courseCode: l.courseCode,
+      courseTitle: l.courseTitle,
+      units: l.units,
+      perUnit: l.perUnit,
+      amount: l.amount,
+    })),
+  }));
+
   return (
     <div className="space-y-4" dir="rtl">
       {/* ── سربرگ premium (بدون دکمه‌های عملیاتی؛ آنها زیر سربرگ با استایل خودشان) ── */}
@@ -118,7 +131,7 @@ const fin = await getStudentFinance(studentId, {
       <div className="print-area space-y-4">
         <FinancialTranscript
           student={student}
-          terms={transcript}
+          terms={transcriptWithCourses}
           totals={totals}
           universityTitle={currentUniversity?.title ?? null}
           logoUrl={logoUrl}

@@ -35,6 +35,13 @@ interface StatementRow {
   chequesBounced: number;
   canonicalLoans: number;
   netPayable: number;
+  courses?: {
+    courseCode: string | null;
+    courseTitle: string | null;
+    units: number;
+    perUnit: number;
+    amount: number;
+  }[];
 }
 
 interface Props {
@@ -263,6 +270,7 @@ export default function StudentStatementClient({ studentId, studentName, student
             loans: d.canonicalLoans ?? 0,
             balance: d.balance ?? 0,
             events: [],
+            courses: d.courses ?? [],
           }))}
           totals={totals}
           showEvents={false}

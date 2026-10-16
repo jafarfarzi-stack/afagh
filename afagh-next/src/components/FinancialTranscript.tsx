@@ -33,6 +33,14 @@ export interface TranscriptEventView {
   sign: 1 | -1;
 }
 
+export interface TranscriptCourseView {
+  courseCode: string | null;
+  courseTitle: string | null;
+  units: number;
+  perUnit: number;
+  amount: number;
+}
+
 export interface TranscriptTermView {
   termId: number;
   termTitle: string;
@@ -47,6 +55,8 @@ export interface TranscriptTermView {
   loans: number;
   balance: number;
   events: TranscriptEventView[];
+  /** ریز شهریهٔ متغیر دروس ترم (محاسباتی/اطلاعاتی — مبنای سند، جمع دفتر کل است) */
+  courses?: TranscriptCourseView[];
 }
 
 export interface TranscriptTotalsView {
@@ -301,6 +311,41 @@ export default function FinancialTranscript({
                             </tr>
                           </tbody>
                         </table>
+                        {t.courses && t.courses.length > 0 && (
+                          <div className="border-t border-slate-200">
+                            <p className="bg-slate-50 px-2 py-1 text-[9px] font-black text-slate-700">
+                              ریز شهریه متغیر دروس <span className="font-medium text-slate-500">(محاسباتی — مبنای سند، جمع دفتر کل است)</span>
+                            </p>
+                            <table className="w-full border-collapse text-[9px]">
+                              <thead>
+                                <tr className="bg-slate-50 text-slate-600">
+                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">ردیف</th>
+                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">کد درس</th>
+                                  <th className="border-t border-slate-200 px-1 py-0.5 font-bold">نام درس</th>
+                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">واحد</th>
+                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">نرخ واحد</th>
+                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">مبلغ متغیر</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {t.courses.map((c, i) => (
+                                  <tr key={i} className="border-t border-slate-100">
+                                    <td className="px-1 py-0.5 text-center text-slate-500">{fa(i + 1)}</td>
+                                    <td className="px-1 py-0.5 text-center font-mono" dir="ltr">{c.courseCode || '—'}</td>
+                                    <td className="px-1 py-0.5 font-medium">{c.courseTitle || '—'}</td>
+                                    <td className="px-1 py-0.5 text-center font-mono">{fa(c.units)}</td>
+                                    <td className="px-1 py-0.5 text-center font-mono">{fa(c.perUnit)}</td>
+                                    <td className="px-1 py-0.5 text-left font-bold">{fa(c.amount)}</td>
+                                  </tr>
+                                ))}
+                                <tr className="border-t border-slate-200 bg-slate-50/60">
+                                  <td colSpan={5} className="px-1 py-0.5 font-black">جمع متغیر دروس</td>
+                                  <td className="px-1 py-0.5 text-left font-black">{fa(t.courses.reduce((a, c) => a + (Number(c.amount) || 0), 0))}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                         {showEvents && t.events.length > 0 && (
                           <ul className="space-y-0.5 border-t border-slate-200 bg-slate-50/60 px-2 py-1.5">
                             {t.events.map((e, i) => (

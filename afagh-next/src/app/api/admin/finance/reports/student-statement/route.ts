@@ -6,6 +6,7 @@ import { student_ledger, students } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { getStudentFinance } from '@/lib/finance-engine';
+import { computeCourseTuitionForTerms } from '@/lib/tuition-engine';
 import { ledgerBalance } from '@/lib/ledger-balance';
 import { toNum } from '@/lib/finance-rules';
 
@@ -62,6 +63,8 @@ export async function GET(request: Request) {
   }
 
   const termCodeById = new Map(fin.terms.map((t) => [t.id, t.termCode]));
+  // ریز شهریهٔ متغیر دروس (همان موتور کانونی، فقط lines)
+  const courseMap = await computeCourseTuitionForTerms(studentId, fin.transcript.map((s) => s.termId));
   const rows = fin.transcript.map((s) => {
     const byType = byTermType.get(s.termId) || new Map<string, number>();
     const get = (t: string) => byType.get(t) || 0;
@@ -91,6 +94,14 @@ export async function GET(request: Request) {
       canonicalLoans: s.loans,
       netPayable: s.netPayable,
       balance: s.balance,
+      // ریز دروس ترم (محاسباتی — مبنای سند، جمع دفتر کل است)
+      courses: (courseMap[s.termId] ?? []).map((l) => ({
+        courseCode: l.courseCode,
+        courseTitle: l.courseTitle,
+        units: l.units,
+        perUnit: l.perUnit,
+        amount: l.amount,
+      })),
     };
   });
 

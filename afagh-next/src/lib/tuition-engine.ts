@@ -333,6 +333,29 @@ export async function computeTermTuition(
 }
 
 /**
+ * ریز شهریهٔ متغیر دروس برای چند ترم — برای «کارنامهٔ ریز مالی».
+ * همان computeTermTuition (تک‌منبع) را به‌ازای هر ترم صدا می‌زند تا منطق
+ * قاعده/فرمول‌ویژه/ضریب و حذف انتقال‌یافته‌ها واگرا نشود؛ فقط lines برمی‌گردد.
+ * خطای یک ترم، کل کارنامه را خراب نمی‌کند (آن ترم بدون ریز می‌ماند).
+ */
+export async function computeCourseTuitionForTerms(
+  studentId: number,
+  termIds: number[],
+): Promise<Record<number, TuitionLine[]>> {
+  const entries = await Promise.all(
+    termIds.map(async (termId) => {
+      try {
+        const calc = await computeTermTuition(studentId, termId);
+        return [termId, calc?.lines ?? []] as const;
+      } catch {
+        return [termId, []] as const;
+      }
+    }),
+  );
+  return Object.fromEntries(entries) as Record<number, TuitionLine[]>;
+}
+
+/**
  * شارژ شهریهٔ محاسبه‌شده در دفتر مالی دانشجو (idempotent با referenceId=termId
  * و نوع TUITION_CHARGE). اگر پیش‌تر برای همین ترم شارژ شده باشد، به‌روز می‌شود.
  */

@@ -4,6 +4,7 @@ import { notifications, universities } from '@/db/schema';
 import FinancialTranscript from '@/components/FinancialTranscript';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { getStudentFinance } from '@/lib/finance-engine';
+import { computeCourseTuitionForTerms } from '@/lib/tuition-engine';
 import { toNum, transcriptTotals } from '@/lib/finance-rules';
 import { getTermScope } from '@/lib/term-scope';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
@@ -83,6 +84,19 @@ export default async function StudentFinancePage() {
   const visibleLoans = selectedTerm
     ? loans.filter(l => l.termId === selectedTerm.id)
     : loans;
+
+  // ریز شهریهٔ متغیر دروس ترم‌های نمایشی (همان موتور کانونی، فقط lines)
+  const courseMap = await computeCourseTuitionForTerms(me.id, transcript.map((t) => t.termId));
+  const transcriptWithCourses = transcript.map((t) => ({
+    ...t,
+    courses: (courseMap[t.termId] ?? []).map((l) => ({
+      courseCode: l.courseCode,
+      courseTitle: l.courseTitle,
+      units: l.units,
+      perUnit: l.perUnit,
+      amount: l.amount,
+    })),
+  }));
 
   const remindDays = Math.max(0, Math.round(toNum(remindDaysRaw) || 0));
   const nowMs = Date.now();
@@ -180,7 +194,7 @@ export default async function StudentFinancePage() {
       <div className="print-area space-y-4">
         <FinancialTranscript
           student={student}
-          terms={transcript}
+          terms={transcriptWithCourses}
           totals={totals}
           universityTitle={uniTitle}
           logoUrl={universityLogo}
