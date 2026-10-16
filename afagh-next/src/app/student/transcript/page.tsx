@@ -1,6 +1,6 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+﻿import { and, asc, desc, eq } from 'drizzle-orm';
 import type { ReactNode } from 'react';
-import { academic_terms, course_offerings, courses, degree_level_configs, educational_regulations, enrollments, majors, users } from '@/db/schema';
+import { academic_terms, course_offerings, courses, degree_level_configs, educational_regulations, enrollments, majors, universities, users } from '@/db/schema';
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA, getRegulationConfig } from '@/lib/regulations-engine';

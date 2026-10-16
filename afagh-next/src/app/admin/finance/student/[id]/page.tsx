@@ -16,8 +16,6 @@ import { welfare_funds } from '@/db/schema-welfare';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { getSetting } from '@/lib/settings';
 import { buildFinanceStatementVerify as buildFinanceVerify } from '@/lib/finance-verify';
-import { getSetting } from '@/lib/settings';
-import { buildFinanceStatementVerify as buildFinanceVerify } from '@/lib/finance-verify';
 
 export const dynamic = 'force-dynamic';
 
