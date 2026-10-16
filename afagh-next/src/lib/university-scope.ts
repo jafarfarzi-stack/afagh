@@ -60,6 +60,14 @@ export const authorizedUniversityIds = cache(async (): Promise<number[] | null> 
   const ids = new Set<number>();
   if (typeof me.universityId === 'number') ids.add(me.universityId);
 
+  // ⚠ مدیرِ پلتفرمی باید پیش از fallbackهای زیر شناسایی شود.
+  // `users.universityId` خالی یعنی «به هیچ دانشگاهی وابسته نیست» و طبق سیاست
+  // بالا همهٔ دانشگاه‌ها برایش مجاز است. اگر این شرط بعد از fallbackهای
+  // students/staff می‌آمد، یک ردیف کارمندی قدیمی او را به یک دانشگاه قفل
+  // می‌کرد؛ آن‌وقت listUniversities() تک‌عضوی می‌شد و UniversitySwitcher
+  // (که حداقل ۲ دانشگاه می‌خواهد) در سربرگ ناپدید می‌ماند.
+  if (!ids.size && me.roles.includes('ADMIN')) return null;
+
   if (me.roles.includes('EDU_EXPERT')) {
     const rows = await db
       .select({ scopeType: expert_scopes.scopeType, scopeId: expert_scopes.scopeId, universityId: expert_scopes.universityId })
