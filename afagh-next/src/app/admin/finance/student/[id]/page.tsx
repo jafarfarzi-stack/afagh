@@ -6,6 +6,7 @@ import { computeTermTuition } from '@/lib/tuition-engine';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import PrintButton from '@/components/PrintButton';
 import FinancialTranscript from '@/components/FinancialTranscript';
+import FinanceVerifyBlock from '@/components/FinanceVerifyBlock';
 import StatementLinkButton from './StatementLinkButton';
 import FinanceStudentClient from './FinanceStudentClient';
 import { db } from '@/db';
@@ -14,10 +15,8 @@ import { student_subject_fees, subject_fee_types, students } from '@/db/schema';
 import { welfare_funds } from '@/db/schema-welfare';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { getSetting } from '@/lib/settings';
-import FinanceVerifyBlock from '@/components/FinanceVerifyBlock';
 import { buildFinanceStatementVerify as buildFinanceVerify } from '@/lib/finance-verify';
 import { getSetting } from '@/lib/settings';
-import FinanceVerifyBlock from '@/components/FinanceVerifyBlock';
 import { buildFinanceStatementVerify as buildFinanceVerify } from '@/lib/finance-verify';
 
 export const dynamic = 'force-dynamic';
@@ -127,7 +126,6 @@ const fin = await getStudentFinance(studentId, {
           logoUrl={logoUrl}
           issuedAt={jdate(new Date())}
           verifyBlock={financeVerify ? <FinanceVerifyBlock url={financeVerify.url} qr={financeVerify.qr} expiresAt={financeVerify.expiresAt} /> : undefined}
-          
           cheques={fin.cheques.map((c) => ({
             id: c.id, chequeNo: c.chequeNo, bankName: c.bankName,
             amount: Number(c.amount), dueDate: c.dueDate, status: c.status,
@@ -140,24 +138,6 @@ const fin = await getStudentFinance(studentId, {
             enhancedTuition && (enhancedTuition.fixedCoefficient !== 1 || enhancedTuition.variableCoefficient !== 1 || enhancedTuition.subjectFeesTotal !== 0 || enhancedTuition.overrideId !== null) ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                 <h4 className="mb-2 text-xs font-bold text-amber-800">
-                  " title to enhance (details elided)
-```
-
-Actually easier: edit just knit the two lines `universityTitle={...}` and `issuedAt`. Add `logoUrl` + insert verifyBlock after leadBlock or later. Let me edit minimally: replace `universityTitle={currentUniversity?.title ?? null}\n          issuedAt={jdate(new Date())}` with plus logoUrl. And add `verifyBlock={financeVerify ? <FinanceVerifyBlock url={financeVerify.url} qr={financeVerify.qr} expiresAt={financeVerify.expiresAt} /> : undefined}` before the closing of FinancialTranscript props. But I need locate closing. Use edit approach: change the closing `          leadBlock={\n            ... ? (\n              ...` hard.  
-
-Simpler: instead, put verifyBlock after `issuedAt` as another prop inside FinancialTranscript BEFORE leadBlock. Replace exact line string.
-
-Let me do two edits:
-1. After `issuing unique prop` line add `logoUrl={logoUrl}`.
-2. Replace line `issuedAt={jdate(new Date())}` → add `logoUrl` then issuedAt.
-
-Actually the original call:
-```
-          universityTitle={currentUniversity?.title ?? null}
-          logoUrl={logoUrl}
-          issuedAt={jdate(new Date())}
-```
-I only added logoUrl prop interface; should pass it. Edit now.<|end|><|start|>Assistant to=edit<|channel|>analysis <|constrain|>xml<|message|><rfl:parameter name="newString">
           universityTitle={currentUniversity?.title ?? null}
           logoUrl={logoUrl}
           issuedAt={jdate(new Date())}
