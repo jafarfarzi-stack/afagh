@@ -1,28 +1,30 @@
-import 'server-only';
+﻿import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 
-import { getPublicBaseUrl } from '@/lib/settings';
-import { issueFinanceStatementToken } from '@/lib/verification';
-import { qrSvg } from '@/lib/qr';
+type Props = { url: string; qr?: string; expiresAt?: string | null };
 
-export type FinanceVerify = { url: string; qr: string; expiresAt: string | null } | null;
-
-export async function buildFinanceStatementVerify(userId: number): Promise<FinanceVerify> {
-  if (!userId) return null;
-  try {
-    const publicBaseUrl = await getPublicBaseUrl();
-    const issued = await issueFinanceStatementToken(userId);
-    const url = `${publicBaseUrl}/verify-finance/${encodeURIComponent(issued.token)}`;
-    let qr = '';
-    try {
-      qr = await qrSvg(url, { errorCorrectionLevel: 'M' });
-    } catch (err) {
-      console.error('[finance-verify] qr failed', err);
-    }
-    return { url, qr, expiresAt: issued.expiresAt };
-  } catch (err) {
-    console.error('[finance-verify] token failed', err);
-    return null;
-  }
+function jdate(d: string | Date | null | undefined): string {
+  if (!d) return '\u2014';
+  const date = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(date.getTime())) return '\u2014';
+  const { jy, jm, jd } = toJalaliFromDate(date);
+  return faDigits(jy + '/' + String(jm).padStart(2, '0') + '/' + String(jd).padStart(2, '0'));
 }
-" path">
-D:\afagh\afagh-next\src\lib\finance-verify.ts
+
+export default function FinanceVerifyBlock({ url, qr, expiresAt }: Props) {
+  return (
+    <div className="rounded-lg border border-slate-700 bg-slate-50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          {qr ? (
+            <div className="h-24 w-24 shrink-0 border border-slate-300 bg-white p-1" dangerouslySetInnerHTML={{ __html: qr }} />
+          ) : null}
+          <div className="text-[11px] leading-6 text-slate-600">
+            <p className="font-bold text-slate-800">استعلام برخط اصالت این کارنامه</p>
+            <p className="break-all font-mono text-[10px] text-slate-500" dir="ltr">{url}</p>
+            {expiresAt && <p>اعتبار استعلام تا {jdate(new Date(expiresAt))}</p>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
