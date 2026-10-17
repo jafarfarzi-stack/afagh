@@ -83,21 +83,19 @@ export async function GET(request: Request) {
     const lines = tariffLines ?? courseMap[s.termId] ?? [];
     const ledgerVariable = get('TUITION_VARIABLE');
     const weights = lines.map((l) => toNum(l.amount));
-    // مبنای ریز:
-    //   ▸ تعرفهٔ رسمی تفصیلی همان نیمسال (TARIFF): خودش سند است → بدون تخصیص؛
-    //     مبلغ هر درس عیناً همان است که سامانهٔ مبدأ سند رسمی را با آن می‌ساخت.
-    //     (دفتر کلِ واردشده از سیستم قدیم می‌تواند برای نیمسالِ در جریان هنوز
-    //      به‌روز نشده باشد؛ آن اختلاف، موضوعِ خودِ دفتر کل است نه ریز.)
-    //   ▸ در نبود تعرفه (LEDGER): مبلغ هر درس به تناسب وزن از جمع دفتر کل تخصیص
-    //     می‌یابد تا ریز با سند واگرا نشود و جدول صفر نماند.
-    const shares = tariffLines
-      ? weights.map((w) => Math.round(w))
-      : ledgerVariable > 0
-        ? allocateWeightedShares(
-            weights.some((w) => w > 0) ? weights : lines.map((l) => toNum(l.units)),
-            ledgerVariable,
-          )
-        : weights.map((w) => Math.round(w));
+    // مبنای ریز (دو لایه):
+    //   ▸ وزن هر درس از تعرفهٔ رسمی تفصیلی همان سال می‌آید (نظری×نرخ + عملی×نرخِ
+    //     نوع درس مالی) — همان چیزی که سامانهٔ مبدأ سند را با آن می‌ساخت.
+    //   ▸ ولی «جمع» همیشه جمع دفتر کل است: مقدار ذخیره‌شده در سما معتبر است و
+    //     ممکن است با بازمحاسبهٔ دروس فرق کند (نیمسالِ در جریان، دروس پژوهشی که
+    //     سما جداگانه نگه می‌دارد، و رُندکردن). پس مبلغ هر درس به تناسب وزن‌ها از
+    //     جمع دفتر کل تخصیص می‌یابد تا ریز و سند هیچ‌وقت واگرا نشوند.
+    const shares = ledgerVariable > 0
+      ? allocateWeightedShares(
+          weights.some((w) => w > 0) ? weights : lines.map((l) => toNum(l.units)),
+          ledgerVariable,
+        )
+      : weights.map((w) => Math.round(w));
     return {
       termId: s.termId,
       termCode: termCodeById.get(s.termId) ?? '',
