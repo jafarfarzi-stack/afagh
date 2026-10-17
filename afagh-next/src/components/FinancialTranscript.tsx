@@ -55,8 +55,15 @@ export interface TranscriptTermView {
   loans: number;
   balance: number;
   events: TranscriptEventView[];
-  /** ریز شهریهٔ متغیر دروس ترم (محاسباتی/اطلاعاتی — مبنای سند، جمع دفتر کل است) */
+  /** ریز شهریهٔ متغیر دروس ترم (محاسباتی/اطلاعاتی) */
   courses?: TranscriptCourseView[];
+  /**
+   * مبنای ریز دروس:
+   *   ▸ TARIFF = تعرفهٔ رسمی تفصیلی همان نیمسال (نظری×نرخ + عملی×نرخِ نوع درس) —
+   *     همان مبنایی که سامانهٔ مبدأ سند رسمی را با آن می‌ساخت.
+   *   ▸ LEDGER = محاسباتی؛ مبلغ هر درس به تناسب وزن از جمع دفتر کل تخصیص یافته.
+   */
+  coursesBasis?: 'TARIFF' | 'LEDGER';
 }
 
 export interface TranscriptTotalsView {
@@ -314,7 +321,12 @@ export default function FinancialTranscript({
                         {t.courses && t.courses.length > 0 && (
                           <div className="border-t border-slate-200">
                             <p className="bg-slate-50 px-2 py-1 text-[9px] font-black text-slate-700">
-                              ریز شهریه متغیر دروس <span className="font-medium text-slate-500">(محاسباتی — مبنای سند، جمع دفتر کل است)</span>
+                              ریز شهریه متغیر دروس{' '}
+                              <span className="font-medium text-slate-500">
+                                {t.coursesBasis === 'TARIFF'
+                                  ? '(بر پایهٔ تعرفهٔ رسمی همان نیمسال — نظری×نرخ + عملی×نرخِ نوع درس)'
+                                  : '(محاسباتی — مبنای سند، جمع دفتر کل است)'}
+                              </span>
                             </p>
                             <table className="w-full border-collapse text-[9px]">
                               <thead>

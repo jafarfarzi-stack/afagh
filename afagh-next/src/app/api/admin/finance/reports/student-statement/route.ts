@@ -79,15 +79,25 @@ export async function GET(request: Request) {
     // ریز دروس: خطوط موتور شهریه وزن‌اند، ولی سند رسمی = جمع دفتر کل. مبلغ
     // هر درس به تناسب وزنِ محاسباتی از «شهریهٔ متغیر» دفتر کل تخصیص می‌یابد تا
     // جمع ریز، دقیقاً با کارنامه یکی شود (و جدول صفر نماند وقتی تعرفه ثبت نشده).
-    const lines = tariffMap[s.termId] ?? courseMap[s.termId] ?? [];
+    const tariffLines = tariffMap[s.termId];
+    const lines = tariffLines ?? courseMap[s.termId] ?? [];
     const ledgerVariable = get('TUITION_VARIABLE');
     const weights = lines.map((l) => toNum(l.amount));
-    const shares = ledgerVariable > 0
-      ? allocateWeightedShares(
-          weights.some((w) => w > 0) ? weights : lines.map((l) => toNum(l.units)),
-          ledgerVariable,
-        )
-      : weights.map((w) => Math.round(w));
+    // مبنای ریز:
+    //   ▸ تعرفهٔ رسمی تفصیلی همان نیمسال (TARIFF): خودش سند است → بدون تخصیص؛
+    //     مبلغ هر درس عیناً همان است که سامانهٔ مبدأ سند رسمی را با آن می‌ساخت.
+    //     (دفتر کلِ واردشده از سیستم قدیم می‌تواند برای نیمسالِ در جریان هنوز
+    //      به‌روز نشده باشد؛ آن اختلاف، موضوعِ خودِ دفتر کل است نه ریز.)
+    //   ▸ در نبود تعرفه (LEDGER): مبلغ هر درس به تناسب وزن از جمع دفتر کل تخصیص
+    //     می‌یابد تا ریز با سند واگرا نشود و جدول صفر نماند.
+    const shares = tariffLines
+      ? weights.map((w) => Math.round(w))
+      : ledgerVariable > 0
+        ? allocateWeightedShares(
+            weights.some((w) => w > 0) ? weights : lines.map((l) => toNum(l.units)),
+            ledgerVariable,
+          )
+        : weights.map((w) => Math.round(w));
     return {
       termId: s.termId,
       termCode: termCodeById.get(s.termId) ?? '',
@@ -114,7 +124,7 @@ export async function GET(request: Request) {
       canonicalLoans: s.loans,
       netPayable: s.netPayable,
       balance: s.balance,
-      // ریز دروس ترم (محاسباتی — مبنای سند، جمع دفتر کل است)
+      // ریز دروس ترم (مبنای سند: تعرفهٔ رسمی یا تخصیص از دفتر کل)
       courses: lines.map((l, i) => ({
         courseCode: l.courseCode,
         courseTitle: l.courseTitle,
@@ -122,6 +132,7 @@ export async function GET(request: Request) {
         perUnit: toNum(l.units) > 0 ? Math.round(shares[i] / toNum(l.units)) : 0,
         amount: shares[i],
       })),
+      coursesBasis: tariffLines ? 'TARIFF' : 'LEDGER',
     };
   });
 
