@@ -187,6 +187,11 @@ export interface SahamStudentFilters {
   /** بازهٔ تاریخ فراغت (رشتهٔ شمسی، مثل 1403/01/01) — مخصوص گزارش دانش‌آموختگان */
   graduateFrom?: string;
   graduateTo?: string;
+  /**
+   * ترم انتخابی سوییچر نیمسال (`academic_terms.id`) — برای ستون پایان‌نامه.
+   * ترم جاری دانشگاه (`isCurrent=1`) همیشه لحاظ می‌شود؛ این فقط *اضافه* می‌شود.
+   */
+  termId?: number;
   /** سقف ردیف خروجی (پیش‌فرض ۵۰۰۰) — برای جلوگیری از تایم‌اوت */
   limit?: number;
 }
@@ -265,6 +270,23 @@ export async function fetchSahamStudents(
       JOIN students s2 ON s2.id = st."studentId"
       WHERE s2."universityId" = ${universityId} AND st."isProbation" = 1
       GROUP BY st."studentId"
+    ),
+    -- آیا دانشجو در ترم جاری درس «پایان‌نامه» دارد؟
+    -- منبع درست، پرچم خودِ *درس* است (courses.isThesis) که در بانک دروس
+    -- تنظیم می‌شود؛ نه پرچم دوره‌ای enrollments.
+    -- ترم‌های بررسی: ترم جاری دانشگاه (isCurrent=1) و ترم انتخابی سوییچر
+    -- (`f.termId`) — طبق تصمیم کاربر «۱ و ۲» هر دو لحاظ می‌شوند.
+    thesis_now AS (
+      SELECT e."studentId", 1::int AS f
+      FROM enrollments e
+      JOIN course_offerings o ON o.id = e."offeringId"
+      JOIN courses c ON c.id = o."courseId"
+      JOIN academic_terms t ON t.id = o."termId"
+      JOIN students s2 ON s2.id = e."studentId"
+      WHERE s2."universityId" = ${universityId}
+        AND c."isThesis" = 1
+        AND (t."isCurrent" = 1 OR t.id = ${f.termId ?? 0})
+      GROUP BY e."studentId"
     )
     SELECT
       u2."title"                       AS "universityTitle",
@@ -316,7 +338,7 @@ export async function fetchSahamStudents(
       s."totalPassedUnits"            AS "totalPassedUnits",
       s."unitsRemaining"              AS "unitsRemaining",
       s."totalAverage"                AS "totalAverage",
-      NULL::int                       AS "isThesis",
+      COALESCE(tn.f, 0)              AS "isThesis",
       s."foreignStudentId"            AS "foreignStudentId",
       s."totalFailedUnits"            AS "totalFailedUnits",
       s."militaryStatus"              AS "militaryStatus",
@@ -336,6 +358,7 @@ export async function fetchSahamStudents(
     LEFT JOIN last_enr le ON le."studentId" = s.id
     LEFT JOIN leave_cnt lc ON lc."studentId" = s.id
     LEFT JOIN prob_cnt pc ON pc."studentId" = s.id
+    LEFT JOIN thesis_now tn ON tn."studentId" = s.id
     WHERE ${where}
     ORDER BY s."studentCode"
     LIMIT ${limit}
