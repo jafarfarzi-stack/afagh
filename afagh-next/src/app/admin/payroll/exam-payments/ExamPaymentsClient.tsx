@@ -6,9 +6,14 @@ type Payment = {
   id: number; staffId: number; staffName: string; staffCode: string | null;
   termId: number; source: string; sessionCount: number; unitCount: number;
   amount: number; decreeId: number | null; createdAt: string | null;
+  /** تعداد تحویلهای اوراق این استاد در ترم + تعداد در انتظار بازگشت به بایگانی */
+  archiveDeliveries?: number;
+  archivePending?: number;
 };
 
 type Term = { id: number; title: string; isCurrent: boolean };
+
+type NotReady = { staffId: number; staffCode: string | null; name: string; pending: number; payments: number };
 
 const SOURCE_FA: Record<string, string> = {
   INVIGILATION: 'مراقبت',
@@ -20,18 +25,38 @@ const faNum = (v: number | string | null | undefined) =>
   v === null || v === undefined || v === '' ? '—' : String(v).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
 const money = (n: number) => faNum(Math.round(Number(n || 0)).toLocaleString('en-US')) + ' ریال';
 
+/**
+ * ستون «آمادگی پرداخت»: شرط پرداخت حقالزحمهٔ تصحیح، بازگشت اوراق اصلاحشده
+ * به بایگانی است (زنجیرهٔ تحویل: استاد → بایگان با QR).
+ */
+function ReadinessBadge({ deliveries, pending }: { deliveries: number; pending: number }) {
+  if (deliveries === 0) {
+    return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500" title="اوراق امتحانی برای این استاد در این ترم ثبت نشده است">بدون اوراق</span>;
+  }
+  if (pending === 0) {
+    return <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-black text-emerald-800" title={`همهٔ ${faNum(deliveries)} تحویل به بایگانی برگشته است`}>✓ آماده پرداخت</span>;
+  }
+  return (
+    <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-black text-rose-800" title="تا بازگشت اوراق به بایگانی، پرداخت حقالزحمهٔ تصحیح مجاز نیست">
+      ⛔ {faNum(pending)} درس در انتظار بایگانی
+    </span>
+  );
+}
+
 export default function ExamPaymentsClient(props: {
   initial: Payment[];
   terms: Term[];
   currentTermId: number | null;
+  notReady?: NotReady[];
   actions: {
     searchStaffAction: (q: string) => Promise<{ ok: boolean; error?: string; list?: { id: number; staffCode: string | null; name: string }[] }>;
-    listAction: (termId: number) => Promise<{ ok: boolean; list?: Payment[] }>;
+    listAction: (termId: number) => Promise<{ ok: boolean; list?: Payment[]; notReady?: NotReady[] }>;
     createAction: (input: { staffId: number; termId: number; source: string; sessionCount: number; unitCount: number; amount: number }) => Promise<{ ok: boolean; error?: string; id?: number }>;
     deleteAction: (id: number) => Promise<{ ok: boolean; error?: string }>;
   };
 }) {
   const { terms, actions } = props;
+  const [notReady, setNotReady] = useState<NotReady[]>(props.notReady ?? []);
   const [rows, setRows] = useState<Payment[]>(props.initial);
   const [termId, setTermId] = useState<number | null>(props.currentTermId);
   const [msg, setMsg] = useState<string | null>(null);
@@ -52,7 +77,10 @@ export default function ExamPaymentsClient(props: {
     setTermId(tid);
     start(async () => {
       const res = await actions.listAction(tid);
-      if (res.ok) setRows(res.list ?? []);
+      if (res.ok) {
+        setRows(res.list ?? []);
+        setNotReady(res.notReady ?? []);
+      }
     });
   }
 
@@ -78,7 +106,7 @@ export default function ExamPaymentsClient(props: {
       setMsg('پرداخت ثبت شد.');
       setSessions(''); setUnits(''); setAmount('');
       const r = await actions.listAction(termId);
-      if (r.ok) setRows(r.list ?? []);
+      if (r.ok) { setRows(r.list ?? []); setNotReady(r.notReady ?? []); }
     });
   }
 
@@ -106,6 +134,44 @@ export default function ExamPaymentsClient(props: {
       </div>
 
       {msg ? <div className="rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-sm text-slate-800">{msg}</div> : null}
+
+      {notReady.length > 0 ? (
+        <section className="rounded-2xl border border-amber-300 bg-amber-50 p-4 space-y-2">
+          <h2 className="text-sm font-black text-amber-900">⛔ شرط پرداخت برقرار نیست — اوراق به بایگانی برنگشته</h2>
+          <p className="text-xs text-amber-800">
+            پرداخت حقالزحمهٔ تصحیح مشروط به بازگشت اوراق اصلاحشده به بایگانی است (تحویل استاد → بایگان با QR).
+            تا آن زمان این استادان آمادهٔ پرداخت نیستند:
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-amber-200 text-[11px] text-amber-800">
+                  <th className="p-1.5 text-right">استاد</th>
+                  <th className="p-1.5">درس در انتظار بایگانی</th>
+                  <th className="p-1.5">پرداخت ثبت‌شده</th>
+                  <th className="p-1.5">اقدام</th>
+                </tr>
+              </thead>
+              <tbody>
+                {notReady.map(n => (
+                  <tr key={n.staffId} className="border-b border-amber-100">
+                    <td className="p-1.5 font-bold text-amber-950">
+                      {n.name} <span className="font-mono text-[10px] text-amber-700" dir="ltr">{n.staffCode}</span>
+                    </td>
+                    <td className="p-1.5 text-center font-mono font-black text-rose-700">{faNum(n.pending)}</td>
+                    <td className="p-1.5 text-center font-mono">{faNum(n.payments)}</td>
+                    <td className="p-1.5 text-center">
+                      <a href="/admin/exams/handover" className="rounded-lg bg-amber-700 px-2 py-1 text-[10px] font-black text-white hover:bg-amber-800">
+                        QR تحویل به بایگانی
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
         <h2 className="font-black text-slate-900 text-sm">ثبت پرداخت جدید</h2>
@@ -154,6 +220,7 @@ export default function ExamPaymentsClient(props: {
                 <th className="p-2">جلسات</th>
                 <th className="p-2">واحد</th>
                 <th className="p-2">مبلغ</th>
+                <th className="p-2">آمادگی پرداخت</th>
                 <th className="p-2">ابلاغ</th>
                 <th className="p-2">حذف</th>
               </tr>
@@ -166,6 +233,9 @@ export default function ExamPaymentsClient(props: {
                   <td className="p-2 text-center">{faNum(r.sessionCount)}</td>
                   <td className="p-2 text-center">{faNum(r.unitCount)}</td>
                   <td className="p-2 font-mono text-xs whitespace-nowrap">{money(r.amount)}</td>
+                  <td className="p-2 text-center">
+                    <ReadinessBadge deliveries={r.archiveDeliveries ?? 0} pending={r.archivePending ?? 0} />
+                  </td>
                   <td className="p-2 text-center text-xs text-slate-500">{r.decreeId ? `#${faNum(r.decreeId)}` : '—'}</td>
                   <td className="p-2 text-center">
                     <button onClick={() => doDelete(r.id)} disabled={pending} className="rounded-lg border border-red-300 px-2 py-1 text-xs text-red-700 disabled:opacity-50">حذف</button>
@@ -173,7 +243,7 @@ export default function ExamPaymentsClient(props: {
                 </tr>
               ))}
               {rows.length === 0 ? (
-                <tr><td colSpan={7} className="p-4 text-center text-xs text-slate-500">پرداختی در این ترم ثبت نشده است.</td></tr>
+                <tr><td colSpan={8} className="p-4 text-center text-xs text-slate-500">پرداختی در این ترم ثبت نشده است.</td></tr>
               ) : null}
             </tbody>
           </table>

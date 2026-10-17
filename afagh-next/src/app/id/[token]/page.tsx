@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { verifyStudentCard } from '@/lib/verification';
+import { studentPhotoDataUrl, universityBrand } from '@/lib/verify-assets';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,12 +57,22 @@ export default async function StudentCardGatePage({ params }: { params: Promise<
 
   const tone = res.allowed ? 'border-emerald-500 shadow-emerald-950/50' : 'border-rose-500 shadow-rose-950/50';
 
+  // عکس دانشجو + ارم دانشگاه: گیت حراست با همین دو تصویر هویت را تطبیق می‌دهد
+  const [photo, brand] = await Promise.all([
+    studentPhotoDataUrl(res.userId),
+    universityBrand(res.universityId),
+  ]);
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-950 p-4 font-sans text-slate-100" dir="rtl">
       <div className="mb-6 text-center">
-        <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-600 text-xl font-black text-white shadow-lg shadow-indigo-600/40">آ</div>
+        {brand.logoUrl ? (
+          <img src={brand.logoUrl} alt="ارم دانشگاه" className="mx-auto mb-2 h-14 w-14 rounded-2xl bg-white/95 object-contain p-1 shadow-lg" />
+        ) : (
+          <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-600 text-xl font-black text-white shadow-lg shadow-indigo-600/40">آ</div>
+        )}
         <h1 className="text-base font-black text-white sm:text-lg">سامانهٔ گیت حراست و استعلام کارت دانشجویی</h1>
-        <p className="text-xs text-indigo-300">AFAGH University Smart ID & Campus Security Live Verification</p>
+        <p className="text-xs text-indigo-300">{brand.title ?? 'دانشگاه غیرانتفاعی آفاق ارومیه'} — استعلام برخط زنده</p>
       </div>
 
       <div className="w-full max-w-md">
@@ -74,9 +85,15 @@ export default async function StudentCardGatePage({ params }: { params: Promise<
 
           <div className="space-y-5 p-6 text-xs">
             <div className="flex items-center gap-4">
-              <div className="flex h-28 w-24 shrink-0 flex-col items-center justify-center rounded-2xl border-2 border-indigo-400/50 bg-indigo-950 text-indigo-300 shadow-md">
-                <span className="text-4xl">👨‍🎓</span>
-                <span className="mt-1 text-[9px] font-bold text-slate-400">عکس احراز هویت</span>
+              <div className="h-28 w-24 shrink-0 overflow-hidden rounded-2xl border-2 border-indigo-400/50 bg-indigo-950 shadow-md">
+                {photo ? (
+                  <img src={photo} alt="عکس دانشجو" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full flex-col items-center justify-center text-indigo-300">
+                    <span className="text-4xl">👨‍🎓</span>
+                    <span className="mt-1 text-[9px] font-bold text-slate-400">بدون عکس</span>
+                  </div>
+                )}
               </div>
               <div className="space-y-1">
                 {res.degreeLevel && (
@@ -94,8 +111,8 @@ export default async function StudentCardGatePage({ params }: { params: Promise<
                 <span className="font-mono text-sm font-black tracking-wider text-amber-300" dir="ltr">{res.studentCode}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">کد ملی (ماسک‌شده):</span>
-                <span className="font-mono font-bold text-slate-200" dir="ltr">{res.nationalIdMasked}</span>
+                <span className="text-slate-400">کد ملی:</span>
+                <span className="font-mono font-bold text-slate-200" dir="ltr">{res.nationalId || res.nationalIdMasked}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-400">شناسهٔ RFID:</span>
@@ -103,7 +120,7 @@ export default async function StudentCardGatePage({ params }: { params: Promise<
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-400">وضعیت تحصیلی:</span>
-                <span className="font-bold text-slate-200">{res.studentStatus}</span>
+                <span className="font-bold text-slate-200">{res.statusLabel}</span>
               </div>
               {res.debt > 0 && (
                 <div className="flex items-center justify-between">

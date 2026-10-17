@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { subject_fee_types, student_subject_fees } from '@/db/schema';
 import { getSessionUser } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { assertCsrf } from '@/lib/security';
 
 const FINANCE = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'];
 
@@ -27,6 +28,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // 🔒 CSRF: همانند بقیهٔ هندلرهای تغییردهندهٔ پنل مالی
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
+
   const auth = await checkFinanceAuth();
   if (!auth) return NextResponse.json({ error: 'دسترسی غیرمجاز' }, { status: 403 });
 

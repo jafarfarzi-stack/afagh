@@ -1157,12 +1157,20 @@ export async function submitRequestSatisfaction(params: {
   requestId: number;
   score: number;
   feedback?: string;
+  /**
+   * 🔒 مالکیت: اگر داده شود، فقط درخواست همین دانشجو به‌روز می‌شود.
+   * پیش‌تر هر دانشجو می‌توانست با یک `requestId` دلخواه، امتیاز/بازخورد
+   * درخواست دانشجوی دیگر را بازنویسی کند (IDOR).
+   */
+  studentId?: number;
 }): Promise<{ ok: boolean }> {
   const score = Math.max(1, Math.min(5, Math.round(Number(params.score) || 0)));
   const [row] = await db
     .update(student_requests)
     .set({ satisfactionScore: score, feedbackText: params.feedback || null, updatedAt: new Date() })
-    .where(eq(student_requests.id, params.requestId))
+    .where(params.studentId
+      ? and(eq(student_requests.id, params.requestId), eq(student_requests.studentId, params.studentId))
+      : eq(student_requests.id, params.requestId))
     .returning({ id: student_requests.id });
   if (!row) throw new Error('درخواست یافت نشد.');
   return { ok: true };

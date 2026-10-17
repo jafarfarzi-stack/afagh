@@ -26,11 +26,7 @@ export default function VirtualClassroomWidget({ user, initialSessions, recordin
   const handleJoinClass = async (meetingId: string) => {
     setIsLaunching(meetingId);
     try {
-      const res = await joinVirtualClassAction({
-        meetingId,
-        fullName: user.name,
-        role: user.role === 'PROFESSOR' ? 'MODERATOR' : 'ATTENDEE',
-      });
+      const res = await joinVirtualClassAction({ meetingId });
 
       if (res.ok) {
         // Open in new tab or popup

@@ -13,6 +13,8 @@ import {
   academic_terms,
   student_requests,
   users,
+  universities,
+  legacy_grades,
 } from '@/db/schema';
 import {
   RegulationConfig,
@@ -538,28 +540,7 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
   const retakeMinGrade = config?.grading_and_gpa?.retakeMinGrade ?? passingGrade;
   const dedupeRepeated = config?.grading_and_gpa?.dedupeRepeatedCourses === true;
 
-  const rows = await db
-    .select({
-      enrollmentId: enrollments.id,
-      courseId: courses.id,
-      code: courses.code,
-      title: courses.title,
-      units: courses.units,
-      gradeValue: enrollments.gradeValue,
-      gradeStatus: enrollments.gradeStatus,
-      samaGradeStatusCode: enrollments.samaGradeStatusCode,
-      gradingType: courses.gradingType,
-      affectsGpa: courses.affectsGpa,
-      termId: course_offerings.termId,
-      courseMinMark: courses.minPassedMark,
-    })
-    .from(enrollments)
-    .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
-    .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-    .where(and(
-      eq(enrollments.studentId, studentId),
-      inArray(enrollments.gradeStatus, ['FINALIZED', 'EXEMPT', 'PASSED_NO_GRADE'])
-    ));
+  const rows = await loadGpaRowsWithFallback(studentId);
 
   // حدنصاب هر درس: اول minPassedMark خود درس، بعد پیش‌فرض آیین‌نامه
   // (مثلاً ارشد ۱۲، دکتری ۱۴ — نه همیشه ۱۰)، و سیاست حذف نمرهٔ مردودی — همه در
@@ -577,5 +558,209 @@ export async function calculateOfficialGPA(studentId: number): Promise<{
     passedUnits: core.passedUnits,
     excludedCount: core.excludedCount,
     policy,
+  };
+}
+
+/**
+ * شکل مشترک ردیفِ معدل: هم از `enrollments` (سامانهٔ جدید) پر می‌شود و هم از
+ * `legacy_grades` (سیستم قدیمی) تا هر دو مسیر از یک هستهٔ تجمیع رد شوند.
+ */
+type GpaSourceRow = {
+  enrollmentId: number | null;
+  courseId: number | null;
+  code: string | null;
+  title: string | null;
+  units: unknown;
+  gradeValue: unknown;
+  gradeStatus: string | null;
+  samaGradeStatusCode: string | null;
+  gradingType: string | null;
+  affectsGpa: number | null;
+  termId: number | null;
+  termCode: string | null;
+  termTitle: string | null;
+  courseMinMark: unknown;
+};
+
+/** کد وضع نمرهٔ سما از ستون raw سیستم قدیمی (`markStat`) */
+function markStatOfLegacy(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { markStat?: unknown };
+    const v = parsed?.markStat;
+    return v === null || v === undefined || v === '' ? null : String(v);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ردیف‌های واجدِ معدل (نهایی/معاف/قبول بدون نمره) به‌همراه نیمسالِ هر درس.
+ * یک نقطهٔ حقیقت برای هم معدل کل و هم ریزِ ترم‌به‌ترم.
+ */
+async function loadOfficialGpaRows(studentId: number): Promise<GpaSourceRow[]> {
+  return db
+    .select({
+      enrollmentId: enrollments.id,
+      courseId: courses.id,
+      code: courses.code,
+      title: courses.title,
+      units: courses.units,
+      gradeValue: enrollments.gradeValue,
+      gradeStatus: enrollments.gradeStatus,
+      samaGradeStatusCode: enrollments.samaGradeStatusCode,
+      gradingType: courses.gradingType,
+      affectsGpa: courses.affectsGpa,
+      termId: course_offerings.termId,
+      termCode: academic_terms.termCode,
+      termTitle: academic_terms.title,
+      courseMinMark: courses.minPassedMark,
+    })
+    .from(enrollments)
+    .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+    .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+    .leftJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
+    .where(and(
+      eq(enrollments.studentId, studentId),
+      inArray(enrollments.gradeStatus, ['FINALIZED', 'EXEMPT', 'PASSED_NO_GRADE'])
+    ));
+}
+
+/**
+ * نمراتِ «سیستم قدیمی» برای پرونده‌هایی که هنوز به `enrollments` ارتقا نیافته‌اند.
+ *
+ * ۲٬۶۶۵ دانشجو (که ۲٬۰۹۴ نفرشان فارغ‌التحصیل‌اند) فقط در `legacy_grades` نمره
+ * دارند؛ پیش از این، کارنامهٔ چاپی/اداری آن‌ها عدد داشت ولی استعلام برخط ۰ نشان
+ * می‌داد. دامنهٔ مبدأ همان قرارداد پروژه است: `legacy_grades.sourceCode = universities.code`
+ * (بدون آن، کد وضع نمرهٔ دانشگاه دیگر روی کارنامه می‌نشیند).
+ */
+async function loadLegacyGpaRows(studentId: number): Promise<GpaSourceRow[]> {
+  const [stu] = await db
+    .select({ code: students.studentCode, uniCode: universities.code })
+    .from(students)
+    .leftJoin(universities, eq(universities.id, students.universityId))
+    .where(eq(students.id, studentId))
+    .limit(1);
+  const source = String(stu?.uniCode ?? '').trim().toUpperCase();
+  if (!stu?.code || !/^[A-Z0-9_-]{2,50}$/.test(source)) return [];
+
+  const rows = await db
+    .select({
+      code: legacy_grades.courseCode,
+      units: legacy_grades.units,
+      gradeValue: legacy_grades.gradeValue,
+      gradeStatus: legacy_grades.gradeStatus,
+      termCode: legacy_grades.termCode,
+      raw: legacy_grades.raw,
+    })
+    .from(legacy_grades)
+    .where(and(eq(legacy_grades.studentCode, stu.code), eq(legacy_grades.sourceCode, source)))
+    .orderBy(asc(legacy_grades.termCode), asc(legacy_grades.courseCode))
+    .limit(500);
+
+  return rows.map(r => ({
+    enrollmentId: null,
+    courseId: null,
+    code: r.code,
+    title: null,
+    units: r.units,
+    gradeValue: r.gradeValue,
+    gradeStatus: r.gradeStatus,
+    samaGradeStatusCode: markStatOfLegacy(r.raw),
+    gradingType: null,
+    affectsGpa: 1,
+    termId: null,
+    termCode: r.termCode,
+    termTitle: null,
+    courseMinMark: null,
+  }));
+}
+
+/** ردیف‌های معدل: اول سامانهٔ جدید؛ اگر هیچ نمرهٔ ثبت‌شده‌ای نبود، سیستم قدیمی. */
+async function loadGpaRowsWithFallback(studentId: number): Promise<GpaSourceRow[]> {
+  const enrolled = await loadOfficialGpaRows(studentId);
+  if (enrolled.some(r => parseGrade(r.gradeValue) !== null)) return enrolled;
+  const legacy = await loadLegacyGpaRows(studentId);
+  return legacy.length ? legacy : enrolled;
+}
+
+export type OfficialGpaTermRow = {
+  termId: number | null;
+  termCode: string | null;
+  termTitle: string;
+  /** معدل همان نیمسال (null = نمرهٔ واحدی برای معدل نداشته) */
+  gpa: number | null;
+  /** واحدهای محاسبه‌شده در معدلِ همان نیمسال */
+  units: number;
+  passedUnits: number;
+  /** مشروط: معدل ترم زیر مرزِ آیین‌نامه (پیش‌فرض ۱۲ لیسانس / ۱۴ ارشد) */
+  isProbation: boolean;
+};
+
+export type OfficialGpaBreakdown = {
+  gpa: number;
+  totalUnits: number;
+  passedUnits: number;
+  excludedCount: number;
+  policy: string;
+  /** مرز مشروطی از آیین‌نامهٔ همان مقطع */
+  probationThreshold: number;
+  /** ریزِ ترم‌به‌ترم، مرتب بر اساس کد نیمسال */
+  terms: OfficialGpaTermRow[];
+};
+
+/**
+ * معدل کل + وضعیت هر نیمسال (برای استعلام کارنامه).
+ *
+ * همان هستهٔ خالصِ `aggregateOfficialGpaRows` روی زیرمجموعهٔ ردیف‌های هر نیمسال
+ * اجرا می‌شود؛ بنابراین عدد هر ترم با عدد کل از یک قاعده می‌آید و «مشروطی» هم
+ * با مرزِ خودِ آیین‌نامه سنجیده می‌شود، نه با یک ثابتِ دستی.
+ */
+export async function calculateOfficialGpaBreakdown(studentId: number): Promise<OfficialGpaBreakdown> {
+  const [stu] = await db.select().from(students).where(eq(students.id, studentId)).limit(1);
+  const config = (await getRegulationConfig(stu?.regulationId, stu?.degreeLevelId)) || DEFAULT_BACHELOR_REGULATION_1403;
+  const policy = config?.grading_and_gpa?.failed_course_gpa_policy ?? 'EXCLUDE_IF_PASSED';
+  const passingGrade = config?.grading_and_gpa?.default_passing_grade || 10;
+  const retakeMinGrade = config?.grading_and_gpa?.retakeMinGrade ?? passingGrade;
+  const dedupeRepeated = config?.grading_and_gpa?.dedupeRepeatedCourses === true;
+  const probationThreshold = Number(config?.probation_and_tenure?.probation_gpa_threshold ?? 12);
+
+  const rows = await loadGpaRowsWithFallback(studentId);
+  const input = { passingGrade, retakeMinGrade, policy, dedupeRepeated };
+  const core = aggregateOfficialGpaRows(rows, input);
+
+  // گروه‌بندی ترم‌به‌ترم: ردیف‌های سامانهٔ جدید با termId و ردیف‌های سیستم قدیمی
+  // فقط با termCode می‌آیند، پس کلید گروه هر دو حالت را پوشش می‌دهد.
+  const groups = new Map<string, { termId: number | null; termCode: string | null; termTitle: string | null; rows: GpaSourceRow[] }>();
+  for (const r of rows) {
+    const key = r.termId != null ? `t:${r.termId}` : `c:${r.termCode ?? '?'}`;
+    const bucket = groups.get(key);
+    if (bucket) bucket.rows.push(r);
+    else groups.set(key, { termId: r.termId, termCode: r.termCode, termTitle: r.termTitle, rows: [r] });
+  }
+
+  const terms: OfficialGpaTermRow[] = [...groups.values()]
+    .map(g => {
+      const c = aggregateOfficialGpaRows(g.rows, input);
+      return {
+        termId: g.termId,
+        termCode: g.termCode,
+        termTitle: g.termTitle ?? g.termCode ?? '—',
+        gpa: c.totalUnits > 0 ? c.gpa : null,
+        units: c.totalUnits,
+        passedUnits: c.passedUnits,
+        isProbation: c.totalUnits > 0 && c.gpa < probationThreshold,
+      };
+    })
+    .sort((a, b) => String(a.termCode ?? '').localeCompare(String(b.termCode ?? ''), 'en'));
+
+  return {
+    gpa: core.gpa,
+    totalUnits: core.totalUnits,
+    passedUnits: core.passedUnits,
+    excludedCount: core.excludedCount,
+    policy,
+    probationThreshold: Number.isFinite(probationThreshold) ? probationThreshold : 12,
+    terms,
   };
 }

@@ -8,7 +8,8 @@ import {
   short_term_courses, short_term_learners, short_term_registrations, staff, student_cards, student_ledger, students, users,
 } from '@/db/schema';
 import { getNumber, getSetting } from '@/lib/settings';
-import { calculateOfficialGPA } from '@/lib/regulations-engine';
+import { calculateOfficialGpaBreakdown } from '@/lib/regulations-engine';
+import { studentStatusFa } from '@/lib/student-labels';
 import { getStudentFinance } from '@/lib/finance-engine/student-detail';
 import { currentTermFor } from '@/lib/terms';
 import { ledgerBalance } from '@/lib/ledger-balance';
@@ -58,6 +59,20 @@ export function maskNationalCode(code: string | null | undefined): string {
   if (c.length <= 5) return '*****';
   return `${c.slice(0, 3)}*****${c.slice(-2)}`;
 }
+
+/**
+ * ترتیب قطعیِ انتخاب پروندهٔ دانشجو.
+ *
+ * یک کاربر می‌تواند چند پروندهٔ دانشجویی داشته باشد (مثلاً یک NO_SHOW قدیمیِ
+ * بی‌داده + یک ACTIVE جدید). بدون ترتیب، `limit(1)` پروندهٔ خالی را برمی‌داشت و
+ * استعلام کارنامه ۰/۰/۰ نشان می‌داد در حالی که کارنامهٔ چاپی عدد واقعی داشت.
+ * قاعده: ACTIVE اول، بعد پرونده‌ای که دادهٔ بیشتری دارد، بعد جدیدترین.
+ */
+const STUDENT_PICK_ORDER = [
+  sql`CASE WHEN "students"."status" = 'ACTIVE' THEN 0 ELSE 1 END`,
+  sql`(select count(*) from enrollments e where e."studentId" = "students"."id") desc`,
+  sql`"students"."id" desc`,
+];
 
 // ─────────────────── امضای توکن ───────────────────
 
@@ -125,9 +140,15 @@ export type StudentCardVerification =
       allowed: boolean;
       token: string;
       studentId: number;
+      userId: number;
+      universityId: number | null;
       studentCode: string;
       fullName: string;
+      /** کد ملی کامل (برای مقایسهٔ حضوری با کارت ملی) */
+      nationalId: string;
       nationalIdMasked: string;
+      /** وضعیت تحصیلی به فارسی */
+      statusLabel: string;
       majorName: string | null;
       degreeLevel: string | null;
       entranceYear: number;
@@ -182,8 +203,11 @@ export async function verifyStudentCard(rawToken: string): Promise<StudentCardVe
       issuedAt: student_cards.issuedAt,
       expiresAt: student_cards.expiresAt,
       studentId: students.id,
+      userId: students.userId,
+      universityId: students.universityId,
       studentCode: students.studentCode,
       studentStatus: students.status,
+      samaStatusCode: students.samaStatusCode,
       entryYear: students.entryYear,
       firstName: users.firstName,
       lastName: users.lastName,
@@ -206,9 +230,13 @@ export async function verifyStudentCard(rawToken: string): Promise<StudentCardVe
   const base = {
     token: card.token,
     studentId: card.studentId,
+    userId: card.userId,
+    universityId: card.universityId ?? null,
     studentCode: card.studentCode,
     fullName: `${card.firstName} ${card.lastName}`,
+    nationalId: String(card.nationalCode ?? ''),
     nationalIdMasked: maskNationalCode(card.nationalCode),
+    statusLabel: studentStatusFa(card.studentStatus, card.samaStatusCode),
     majorName: card.majorName,
     degreeLevel: card.degreeLevel,
     entranceYear: card.entryYear,
@@ -254,8 +282,11 @@ export type ExamTicketVerification =
   | {
       ok: true;
       studentId: number;
+      userId: number;
+      universityId: number | null;
       studentName: string;
       studentCode: string;
+      nationalId: string;
       nationalIdMasked: string;
       majorName: string | null;
       termTitle: string;
@@ -301,7 +332,7 @@ export async function verifyExamTicket(rawToken: string): Promise<ExamTicketVeri
 
   const [stu] = await db
     .select({
-      studentId: students.id, studentCode: students.studentCode,
+      studentId: students.id, userId: students.userId, studentCode: students.studentCode,
       firstName: users.firstName, lastName: users.lastName, nationalCode: users.nationalCode,
       majorName: majors.name, universityId: students.universityId,
     })
@@ -309,6 +340,7 @@ export async function verifyExamTicket(rawToken: string): Promise<ExamTicketVeri
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(majors, eq(majors.id, students.majorId))
     .where(eq(users.id, sig.payload.uid))
+    .orderBy(...STUDENT_PICK_ORDER)
     .limit(1);
   if (!stu) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
 
@@ -379,8 +411,11 @@ export async function verifyExamTicket(rawToken: string): Promise<ExamTicketVeri
   return {
     ok: true,
     studentId: stu.studentId,
+    userId: stu.userId,
+    universityId: stu.universityId ?? null,
     studentName: `${stu.firstName} ${stu.lastName}`,
     studentCode: stu.studentCode,
+    nationalId: String(stu.nationalCode ?? ''),
     nationalIdMasked: maskNationalCode(stu.nationalCode),
     majorName: stu.majorName,
     termTitle: term?.title ?? '—',
@@ -398,8 +433,11 @@ export type EnrollConfirmVerification =
   | {
       ok: true;
       studentId: number;
+      userId: number;
+      universityId: number | null;
       studentName: string;
       studentCode: string;
+      nationalId: string;
       nationalIdMasked: string;
       majorName: string | null;
       termId: number;
@@ -443,14 +481,15 @@ export async function verifyEnrollConfirm(rawToken: string): Promise<EnrollConfi
 
   const [stu] = await db
     .select({
-      studentId: students.id, studentCode: students.studentCode,
+      studentId: students.id, userId: students.userId, studentCode: students.studentCode,
       firstName: users.firstName, lastName: users.lastName, nationalCode: users.nationalCode,
-      majorName: majors.name,
+      majorName: majors.name, universityId: students.universityId,
     })
     .from(students)
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(majors, eq(majors.id, students.majorId))
     .where(eq(users.id, sig.payload.uid))
+    .orderBy(...STUDENT_PICK_ORDER)
     .limit(1);
   if (!stu) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
 
@@ -486,8 +525,11 @@ export async function verifyEnrollConfirm(rawToken: string): Promise<EnrollConfi
   return {
     ok: true,
     studentId: stu.studentId,
+    userId: stu.userId,
+    universityId: stu.universityId ?? null,
     studentName: `${stu.firstName} ${stu.lastName}`,
     studentCode: stu.studentCode,
+    nationalId: String(stu.nationalCode ?? ''),
     nationalIdMasked: maskNationalCode(stu.nationalCode),
     majorName: stu.majorName,
     termId: term.id,
@@ -505,8 +547,11 @@ export type FinanceStatementVerification =
   | {
       ok: true;
       studentId: number;
+      userId: number;
+      universityId: number | null;
       studentName: string;
       studentCode: string;
+      nationalId: string;
       nationalIdMasked: string;
       majorName: string | null;
       totals: {
@@ -554,14 +599,15 @@ export async function verifyFinanceStatement(rawToken: string): Promise<FinanceS
 
   const [stu] = await db
     .select({
-      studentId: students.id, studentCode: students.studentCode,
+      studentId: students.id, userId: students.userId, studentCode: students.studentCode,
       firstName: users.firstName, lastName: users.lastName, nationalCode: users.nationalCode,
-      majorName: majors.name,
+      majorName: majors.name, universityId: students.universityId,
     })
     .from(students)
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(majors, eq(majors.id, students.majorId))
     .where(eq(users.id, sig.payload.uid))
+    .orderBy(...STUDENT_PICK_ORDER)
     .limit(1);
   if (!stu) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
 
@@ -574,8 +620,11 @@ export async function verifyFinanceStatement(rawToken: string): Promise<FinanceS
   return {
     ok: true,
     studentId: stu.studentId,
+    userId: stu.userId,
+    universityId: stu.universityId ?? null,
     studentName: `${stu.firstName} ${stu.lastName}`,
     studentCode: stu.studentCode,
+    nationalId: String(stu.nationalCode ?? ''),
     nationalIdMasked: maskNationalCode(stu.nationalCode),
     majorName: stu.majorName,
     totals: {
@@ -603,9 +652,15 @@ export type TranscriptVerification =
   | {
       ok: true;
       studentId: number;
+      userId: number;
+      universityId: number | null;
       studentName: string;
       studentCode: string;
+      /** کد ملی کامل — استعلام‌کننده باید آن را با کارت ملی شخص مقایسه کند */
+      nationalId: string;
       nationalIdMasked: string;
+      /** وضعیت تحصیلی کل (فعال/فارغ‌التحصیل/…) به فارسی */
+      statusLabel: string;
       majorName: string | null;
       degreeTitle: string | null;
       entryYear: number | null;
@@ -613,6 +668,17 @@ export type TranscriptVerification =
       totalUnits: number;
       passedUnits: number;
       policy: string;
+      /** مرز مشروطی همین مقطع از آیین‌نامه */
+      probationThreshold: number;
+      /** وضعیت هر نیمسال: معدل، واحد و مشروطی */
+      terms: {
+        termCode: string | null;
+        termTitle: string;
+        gpa: number | null;
+        units: number;
+        passedUnits: number;
+        isProbation: boolean;
+      }[];
       checkedAt: string;
     };
 
@@ -652,8 +718,12 @@ export async function verifyTranscript(rawToken: string): Promise<TranscriptVeri
   const [stu] = await db
     .select({
       studentId: students.id,
+      userId: students.userId,
+      universityId: students.universityId,
       studentCode: students.studentCode,
       entryYear: students.entryYear,
+      status: students.status,
+      samaStatusCode: students.samaStatusCode,
       firstName: users.firstName,
       lastName: users.lastName,
       nationalCode: users.nationalCode,
@@ -665,10 +735,13 @@ export async function verifyTranscript(rawToken: string): Promise<TranscriptVeri
     .leftJoin(majors, eq(majors.id, students.majorId))
     .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
     .where(eq(users.id, sig.payload.uid))
+    .orderBy(...STUDENT_PICK_ORDER)
     .limit(1);
   if (!stu) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
 
-  const gpaData = await calculateOfficialGPA(stu.studentId).catch(() => null);
+  // معدل کل + ریز ترم‌به‌ترم؛ اگر پرونده فقط در سیستم قدیمی نمره دارد، همان‌ها
+  // خوانده می‌شوند تا استعلام با کارنامهٔ چاپی واگرا نشود.
+  const gpaData = await calculateOfficialGpaBreakdown(stu.studentId).catch(() => null);
   if (!gpaData) {
     return { ok: false, reason: 'EMPTY', message: 'محاسبهٔ کارنامهٔ تحصیلی برای این دانشجو ممکن نشد.' };
   }
@@ -676,9 +749,13 @@ export async function verifyTranscript(rawToken: string): Promise<TranscriptVeri
   return {
     ok: true,
     studentId: stu.studentId,
+    userId: stu.userId,
+    universityId: stu.universityId ?? null,
     studentName: `${stu.firstName} ${stu.lastName}`,
     studentCode: stu.studentCode,
+    nationalId: String(stu.nationalCode ?? ''),
     nationalIdMasked: maskNationalCode(stu.nationalCode),
+    statusLabel: studentStatusFa(stu.status, stu.samaStatusCode),
     majorName: stu.majorName,
     degreeTitle: stu.degreeTitle,
     entryYear: stu.entryYear ?? null,
@@ -686,6 +763,15 @@ export async function verifyTranscript(rawToken: string): Promise<TranscriptVeri
     totalUnits: gpaData.totalUnits,
     passedUnits: gpaData.passedUnits,
     policy: String(gpaData.policy ?? ''),
+    probationThreshold: gpaData.probationThreshold,
+    terms: gpaData.terms.map(t => ({
+      termCode: t.termCode,
+      termTitle: t.termTitle,
+      gpa: t.gpa,
+      units: t.units,
+      passedUnits: t.passedUnits,
+      isProbation: t.isProbation,
+    })),
     checkedAt: new Date().toISOString(),
   };
 }

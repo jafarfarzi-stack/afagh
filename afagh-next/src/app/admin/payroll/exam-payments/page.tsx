@@ -1,8 +1,9 @@
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { db } from '@/db';
-import { and, desc, eq, like, or } from 'drizzle-orm';
+import { and, desc, eq, like, or, sql } from 'drizzle-orm';
 import { academic_terms, staff, users } from '@/db/schema';
+import { pickEffectiveTerm } from '@/lib/term-scope';
 import { exam_payments } from '@/db/schema-payroll-plus';
 import ExamPaymentsClient from './ExamPaymentsClient';
 
@@ -11,18 +12,49 @@ export const dynamic = 'force-dynamic';
 const READ = ['ADMIN', 'EDU_EXPERT', 'VICE_EDU', 'FINANCE'];
 const WRITE = ['ADMIN', 'EDU_EXPERT'];
 
+type NotReadyRow = { staffId: number; staffCode: string | null; name: string; pending: number; payments: number };
+
+/**
+ * استادانی که اوراقشان به بایگانی برنگشته (شرط پرداخت حقالزحمهٔ تصحیح برقرار نیست)
+ * بههمراه تعداد پرداختهای ثبتشدهٔ همان ترم، برای هشدار آمادگی پرداخت.
+ */
+async function notReadyForTerm(termId: number): Promise<NotReadyRow[]> {
+  const res = await db.execute(sql`
+    select st.id as "staffId", st."staffCode", (u."firstName" || ' ' || u."lastName") as name,
+           count(*)::int as pending,
+           coalesce((select count(*) from exam_payments ep where ep."staffId" = st.id and ep."termId" = ${termId}), 0)::int as payments
+      from instructor_deliveries d
+      join course_offerings o on o.id = d."courseOfferingId"
+      join staff st on st.id = d."instructorId"
+      left join users u on u.id = st."userId"
+     where o."termId" = ${termId}
+       and coalesce(d."papersReturnedToArchive", 0) = 0
+     group by st.id, st."staffCode", u."firstName", u."lastName"
+     order by pending desc
+     limit 20
+  `);
+  return (res.rows ?? []) as unknown as NotReadyRow[];
+}
+
 export default async function ExamPaymentsPage() {
   await requireRole([...READ]);
   const uni = await getCurrentUniversity().catch(() => null);
   const universityId = uni?.id ?? null;
 
   const terms = await db
-    .select({ id: academic_terms.id, title: academic_terms.title, isCurrent: academic_terms.isCurrent })
+    .select({
+      id: academic_terms.id,
+      title: academic_terms.title,
+      isCurrent: academic_terms.isCurrent,
+      startDate: academic_terms.startDate,
+      endDate: academic_terms.endDate,
+    })
     .from(academic_terms)
     .where(universityId == null ? undefined : eq(academic_terms.universityId, universityId))
     .orderBy(desc(academic_terms.sortOrder))
-    .limit(20);
-  const currentTermId = terms.find(t => Number(t.isCurrent) === 1)?.id ?? terms[0]?.id ?? null;
+    .limit(30);
+  // نیمسال فعال تاریخ‌محور (پرچم isCurrent ممکن است روی ترم‌های کهنه مانده باشد)
+  const currentTermId = pickEffectiveTerm(terms)?.id ?? terms.find(t => Number(t.isCurrent) === 1)?.id ?? terms[0]?.id ?? null;
 
   const rows = currentTermId == null ? [] : await db
     .select({
@@ -38,6 +70,10 @@ export default async function ExamPaymentsPage() {
       staffCode: staff.staffCode,
       firstName: users.firstName,
       lastName: users.lastName,
+      // شرط پرداخت: همهٔ اوراق امتحان این استاد باید به بایگانی برگشته باشد.
+      // (نام ستون بیرونی صریح است تا با staff."staffId" مبهم نشود.)
+      archiveDeliveries: sql<number>`(select count(*) from instructor_deliveries d join course_offerings o on o.id = d."courseOfferingId" where d."instructorId" = "exam_payments"."staffId" and o."termId" = ${currentTermId})::int`,
+      archivePending: sql<number>`(select count(*) from instructor_deliveries d join course_offerings o on o.id = d."courseOfferingId" where d."instructorId" = "exam_payments"."staffId" and o."termId" = ${currentTermId} and coalesce(d."papersReturnedToArchive", 0) = 0)::int`,
     })
     .from(exam_payments)
     .innerJoin(staff, eq(staff.id, exam_payments.staffId))
@@ -48,6 +84,9 @@ export default async function ExamPaymentsPage() {
     ))
     .orderBy(desc(exam_payments.createdAt))
     .limit(200);
+
+  // استادانی که اوراقشان به بایگانی برنگشته (شرط پرداخت برقرار نیست)
+  const notReady = currentTermId == null ? [] : await notReadyForTerm(currentTermId);
 
   async function searchStaffAction(q: string) {
     'use server';
@@ -88,6 +127,9 @@ export default async function ExamPaymentsPage() {
         staffCode: staff.staffCode,
         firstName: users.firstName,
         lastName: users.lastName,
+        // شرط پرداخت: بازگشت اوراق به بایگانی (نام ستون بیرونی صریح تا مبهم نشود)
+        archiveDeliveries: sql<number>`(select count(*) from instructor_deliveries d join course_offerings o on o.id = d."courseOfferingId" where d."instructorId" = "exam_payments"."staffId" and o."termId" = ${termId})::int`,
+        archivePending: sql<number>`(select count(*) from instructor_deliveries d join course_offerings o on o.id = d."courseOfferingId" where d."instructorId" = "exam_payments"."staffId" and o."termId" = ${termId} and coalesce(d."papersReturnedToArchive", 0) = 0)::int`,
       })
       .from(exam_payments)
       .innerJoin(staff, eq(staff.id, exam_payments.staffId))
@@ -106,6 +148,7 @@ export default async function ExamPaymentsPage() {
         staffName: `${r.firstName ?? ''} ${r.lastName ?? ''}`.trim() || '—',
         createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
       })),
+      notReady: await notReadyForTerm(termId),
     };
   }
 
@@ -161,6 +204,7 @@ export default async function ExamPaymentsPage() {
         }))}
         terms={terms.map(t => ({ id: t.id, title: t.title, isCurrent: Number(t.isCurrent ?? 0) === 1 }))}
         currentTermId={currentTermId}
+        notReady={notReady}
         actions={{ searchStaffAction, listAction, createAction, deleteAction }}
       />
     </div>

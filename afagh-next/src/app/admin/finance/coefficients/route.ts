@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { tuition_coefficients, academic_terms } from '@/db/schema';
 import { getSessionUser } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { assertCsrf } from '@/lib/security';
 import { appendAudit } from '@/lib/audit';
 
 const FINANCE = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'];
@@ -41,6 +42,11 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // 🔒 CSRF: کوکی نشست روی HTTPS با SameSite=None ارسال می‌شود؛ بدون این گارد
+  // یک صفحهٔ مهاجم می‌توانست با درخواست ساده ضریب شهریه را تغییر دهد.
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
+
   const auth = await checkFinanceAuth();
   if (!auth) return NextResponse.json({ error: 'دسترسی غیرمجاز' }, { status: 403 });
 

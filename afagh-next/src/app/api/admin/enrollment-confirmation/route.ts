@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
     }
 
     const [stu] = await db
-      .select({ id: students.id, userId: students.userId })
+      .select({ id: students.id, userId: students.userId, universityId: students.universityId })
       .from(students)
       .where(eq(students.id, studentId))
       .limit(1);
@@ -65,12 +65,20 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'student_not_found' }, { status: 404 });
     }
 
+    // 🔒 مرز دانشگاه: صدور تأییدیهٔ عمومی برای دانشجوی دانشگاه دیگر ممنوع
+    const { requireStudentUniversity } = await import('@/lib/security');
+    const uniGate = await requireStudentUniversity(studentId);
+    if (!uniGate.ok) return NextResponse.json({ error: uniGate.error }, { status: 403 });
+
     const [term] = await db
-      .select({ id: academic_terms.id })
+      .select({ id: academic_terms.id, universityId: academic_terms.universityId })
       .from(academic_terms)
       .where(eq(academic_terms.id, termId))
       .limit(1);
     if (!term) return NextResponse.json({ error: 'term_not_found' }, { status: 404 });
+    if (term.universityId != null && stu.universityId != null && term.universityId !== stu.universityId) {
+      return NextResponse.json({ error: 'این نیمسال به دانشگاه دیگری تعلق دارد.' }, { status: 403 });
+    }
 
     let issued: { token: string; expiresAt: string };
     try {

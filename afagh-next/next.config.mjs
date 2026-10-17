@@ -16,8 +16,34 @@ const standalone = process.env.AFAGH_STANDALONE === '1';
 // (پروژه اسکریپت lint جداگانه ندارد؛ دروازه‌های CI تایپ‌چک و تست‌اند.)
 const nextConfig = {
   reactStrictMode: true,
+  // 🔒 افشای فناوری را خاموش می‌کند (X-Powered-By: Next.js)
+  poweredByHeader: false,
   ...(standalone ? { output: 'standalone' } : {}),
   typescript: { ignoreBuildErrors: skipTypeCheck },
+  /**
+   * هدرهای امنیتی پایه روی همهٔ پاسخ‌ها.
+   *
+   * توجه: `frame-ancestors`/`X-Frame-Options` عمداً اینجا نیست، چون سامانه در
+   * «دامنهٔ واسط» داخل iframe استفاده می‌شود و بستن قاب، آن یکپارچگی را می‌شکند؛
+   * دروازهٔ کلیک‌جکینگ باید در لبه (CDN/Caddy) و با علم به همان یکپارچگی تنظیم شود.
+   */
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'X-Permitted-Cross-Domain-Policies', value: 'none' },
+          { key: 'Permissions-Policy', value: 'geolocation=(), microphone=(self), camera=(self), payment=()' },
+          // CSP حداقلی و بی‌خطر: جلوی <object>/<base> تزریقی را می‌گیرد بدون
+          // اینکه اسکریپت‌های درون‌خطی Next را بشکند.
+          { key: 'Content-Security-Policy', value: "object-src 'none'; base-uri 'self'" },
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

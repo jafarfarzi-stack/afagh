@@ -34,6 +34,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'invalid_studentId' }, { status: 400 });
     }
 
+    // 🔒 مرز دانشگاه: پیش‌تر هر کارشناس مالی می‌توانست برای دانشجوی هر دانشگاه
+    //    توکن عمومی کارنامهٔ مالی صادر کند (نشتی بین‌دانشگاهی).
+    const { requireStudentUniversity } = await import('@/lib/security');
+    const uniGate = await requireStudentUniversity(studentId);
+    if (!uniGate.ok) return NextResponse.json({ error: uniGate.error }, { status: 403 });
+
     const [stu] = await db
       .select({ id: students.id, userId: students.userId })
       .from(students)

@@ -60,10 +60,15 @@ export async function submitSatisfactionRatingAction(requestId: number, score: n
   const user = await requireRole(['STUDENT']);
 
   try {
+    // 🔒 فقط درخواست خودِ همین دانشجو قابل امتیازدهی است (ضد IDOR)
+    const me = await getStudentByUser(user.id);
+    if (!me) return { ok: false, error: 'پروندهٔ دانشجویی یافت نشد.' };
+
     await submitRequestSatisfaction({
       requestId,
       score,
       feedback,
+      studentId: me.id,
     });
 
     revalidatePath('/student/requests');
