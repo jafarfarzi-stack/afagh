@@ -4,7 +4,10 @@ import { academic_terms, course_offerings, courses, degree_level_configs, educat
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA, getRegulationConfig } from '@/lib/regulations-engine';
-import { maskNationalCode } from '@/lib/verification';
+import { maskNationalCode, issueTranscriptToken } from '@/lib/verification';
+import { getPublicBaseUrl } from '@/lib/settings';
+import { qrSvg } from '@/lib/qr';
+import VerifyQrBlock from '@/components/VerifyQrBlock';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
 import { DEMO_STUDENT } from '@/lib/demo-student-data';
 import { COURSE_TYPE_FA } from '@/lib/student-labels';
@@ -167,6 +170,17 @@ export default async function StudentTranscriptPage() {
 
   const totalCumulativeGpa = officialGpaData.totalUnits > 0 ? officialGpaData.gpa.toFixed(2) : '—';
   const todayFa = new Date().toLocaleDateString('fa-IR');
+
+  // ── بلوک رسمیت: QR استعلام برخط اصالت کارنامه (مقصد: /verify-transcript/<token>) ──
+  let transcriptQr: { url: string; qr: string; expiresAt: string | null } | null = null;
+  try {
+    const publicBaseUrl = await getPublicBaseUrl();
+    const issued = await issueTranscriptToken(user.id);
+    const url = `${publicBaseUrl}/verify-transcript/${encodeURIComponent(issued.token)}`;
+    transcriptQr = { url, qr: await qrSvg(url, { errorCorrectionLevel: 'Q', size: 128, margin: 4 }), expiresAt: issued.expiresAt };
+  } catch (err) {
+    console.warn('transcript qr failed:', err);
+  }
 
   return (
     <div className="space-y-4">
@@ -467,7 +481,19 @@ export default async function StudentTranscriptPage() {
           )}
         </div>
 
-        {/* ۵. متن حقوقی سند و محل امضا و مهرهای رسمی */}
+        {/* ۵. بلوک رسمیت: استعلام برخط اصالت کارنامه */}
+        {transcriptQr && (
+          <div className="mt-4">
+            <VerifyQrBlock
+              title="استعلام برخط اصالت این کارنامه"
+              url={transcriptQr.url}
+              qr={transcriptQr.qr}
+              expiresAt={transcriptQr.expiresAt}
+            />
+          </div>
+        )}
+
+        {/* ۶. متن حقوقی سند و محل امضا و مهرهای رسمی */}
         <div className="mt-6 pt-3 border-t border-slate-400 text-[10px] text-slate-600 space-y-4">
           <p className="leading-relaxed">
             <b>تذکر مهم:</b> این کارنامه صرفاً جهت اطلاع از وضعیت تحصیلی دانشجو صادر گردیده و هرگونه خط‌خوردگی یا تغییر در مندرجات آن، سند را از درجه اعتبار ساقط می‌نماید. نمرات دروس توصیفی در مخرج معدل عددی لحاظ نمی‌شوند.

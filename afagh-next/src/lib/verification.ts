@@ -7,6 +7,7 @@ import {
   short_term_courses, short_term_learners, short_term_registrations, student_cards, student_ledger, students, users,
 } from '@/db/schema';
 import { getNumber, getSetting } from '@/lib/settings';
+import { calculateOfficialGPA } from '@/lib/regulations-engine';
 import { getStudentFinance } from '@/lib/finance-engine/student-detail';
 import { currentTermFor } from '@/lib/terms';
 import { ledgerBalance } from '@/lib/ledger-balance';
@@ -589,6 +590,97 @@ export async function verifyFinanceStatement(rawToken: string): Promise<FinanceS
       payments: t.payments,
       balance: t.balance,
     })),
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+// ─────────────────── ج) اصالت‌سنجی کارنامهٔ تحصیلی ───────────────────
+export type TranscriptVerification =
+  | { ok: false; reason: 'BAD_TOKEN' | 'EXPIRED' | 'NOT_FOUND' | 'EMPTY'; message: string }
+  | {
+      ok: true;
+      studentId: number;
+      studentName: string;
+      studentCode: string;
+      nationalIdMasked: string;
+      majorName: string | null;
+      degreeTitle: string | null;
+      entryYear: number | null;
+      gpa: number;
+      totalUnits: number;
+      passedUnits: number;
+      policy: string;
+      checkedAt: string;
+    };
+
+/** توکن کارنامهٔ تحصیلی — امضاشده و میان‌مدت (پیش‌فرض ۳۰ روز، سقف ۱ سال) */
+export async function issueTranscriptToken(userId: number): Promise<{ token: string; expiresAt: string }> {
+  const configured = await getNumber('TRANSCRIPT_TTL_MINUTES', 43200);
+  if (!Number.isFinite(configured) || configured <= 0) {
+    throw new Error('مدت اعتبار کارنامهٔ تحصیلی (TRANSCRIPT_TTL_MINUTES) باید عددی بزرگ‌تر از صفر باشد.');
+  }
+  const ttlMin = Math.min(configured, 525600);
+  const token = await signToken({ uid: userId, kind: 'TRANSCRIPT' }, ttlMin * 60);
+  return { token, expiresAt: new Date(Date.now() + ttlMin * 60_000).toISOString() };
+}
+
+/**
+ * استعلام برخط کارنامهٔ تحصیلی — خلاصهٔ رسمی (هویت + واحدها + معدل).
+ * ارقام زنده از موتور قوانین آموزشی (`calculateOfficialGPA`) خوانده می‌شود، پس
+ * استعلام هیچ‌وقت با کارنامهٔ چاپی واگرا نمی‌شود.
+ */
+export async function verifyTranscript(rawToken: string): Promise<TranscriptVerification> {
+  const sig = await verifyTokenSignature<{ uid: number; kind: string }>(rawToken);
+  if (!sig.ok) {
+    return {
+      ok: false,
+      reason: sig.reason === 'EXPIRED' ? 'EXPIRED' : 'BAD_TOKEN',
+      message: sig.reason === 'EXPIRED'
+        ? 'این کارنامهٔ تحصیلی منقضی شده است؛ دانشجو باید از سامانه کارنامهٔ تازه بگیرد.'
+        : 'توکن نامعتبر یا دستکاری‌شده است.',
+    };
+  }
+  if (sig.payload.kind !== 'TRANSCRIPT') {
+    return { ok: false, reason: 'BAD_TOKEN', message: 'نوع توکن با کارنامهٔ تحصیلی همخوانی ندارد.' };
+  }
+
+  const [stu] = await db
+    .select({
+      studentId: students.id,
+      studentCode: students.studentCode,
+      entryYear: students.entryYear,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      nationalCode: users.nationalCode,
+      majorName: majors.name,
+      degreeTitle: degree_level_configs.title,
+    })
+    .from(students)
+    .innerJoin(users, eq(users.id, students.userId))
+    .leftJoin(majors, eq(majors.id, students.majorId))
+    .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
+    .where(eq(users.id, sig.payload.uid))
+    .limit(1);
+  if (!stu) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
+
+  const gpaData = await calculateOfficialGPA(stu.studentId).catch(() => null);
+  if (!gpaData) {
+    return { ok: false, reason: 'EMPTY', message: 'محاسبهٔ کارنامهٔ تحصیلی برای این دانشجو ممکن نشد.' };
+  }
+
+  return {
+    ok: true,
+    studentId: stu.studentId,
+    studentName: `${stu.firstName} ${stu.lastName}`,
+    studentCode: stu.studentCode,
+    nationalIdMasked: maskNationalCode(stu.nationalCode),
+    majorName: stu.majorName,
+    degreeTitle: stu.degreeTitle,
+    entryYear: stu.entryYear ?? null,
+    gpa: gpaData.gpa,
+    totalUnits: gpaData.totalUnits,
+    passedUnits: gpaData.passedUnits,
+    policy: String(gpaData.policy ?? ''),
     checkedAt: new Date().toISOString(),
   };
 }
