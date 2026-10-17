@@ -40,6 +40,7 @@ const UNI = Number(args.university || 1);
 const APPLY = args.apply === 'true';
 const RESET = args.reset !== 'false'; // پیش‌فرض: حذف قواعد قبلیِ همین منبع
 const FALLBACK = args.fallback !== 'false';
+const SUMMER = args.summer !== 'false';
 
 if (!IN) {
   console.error('usage: node scripts/import-uems-tuition.mjs --in <file.tsv> [--out <file.sql>] [--apply] [--university 1] [--reset false] [--fallback false]');
@@ -127,6 +128,24 @@ async function main() {
     );
   }
 
+  // ── ترم تابستان: شهریهٔ ثابت نصف میشود (پرچم IsHalfTerm در سما) ──────
+  // نرخ هر واحد همان نرخ سال است؛ فقط ثابت نصف می‌شود. قاعده با termType='SUMMER'
+  // خاص‌تر از قاعدهٔ عمومی است، پس در ترم تابستان همین انتخاب می‌شود.
+  let summerCount = 0;
+  if (SUMMER) {
+    for (const r of rows) {
+      const sumTitle = `تعرفهٔ سما — رشتهٔ ${r.majorCode} ورودی ${r.entryYear} (تابستان: ثابت نصف)`;
+      parts.push(
+        `INSERT INTO "tuition_rules" ${COLS}\n` +
+          `SELECT 'UEMS-SUM-' || trim(m."majorCode") || '-' || ${r.entryYear} || '-' || m."id", ` +
+          `${q(sumTitle)}, NULL, m."id", 'SUMMER', NULL, ` +
+          `${r.entryYear}, ${r.entryYear}, ${fmt(r.fixed / 2)}, ${fmt(r.theory)}, ${fmt(r.practical)}, ${fmt(r.general)}, 100, 1, ${UNI}\n` +
+          `FROM "majors" m WHERE trim(m."majorCode") = ${q(r.majorCode)} AND m."universityId" = ${UNI};`,
+      );
+      summerCount++;
+    }
+  }
+
   // ── قواعد پشتیبان: میانگین همهٔ رشته‌ها به ازای سالِ ورود ────────────
   let fallbackCount = 0;
   if (FALLBACK && rows.length > 0) {
@@ -180,7 +199,7 @@ async function main() {
 
   mkdirSync(dirname(OUT), { recursive: true });
   writeFileSync(OUT, sql, 'utf8');
-  console.log(`${rows.length} major rules + ${fallbackCount} fallback rules -> ${OUT}`);
+  console.log(`${rows.length} major rules + ${summerCount} summer rules + ${fallbackCount} fallback rules -> ${OUT}`);
 }
 
 main().catch((e) => {
