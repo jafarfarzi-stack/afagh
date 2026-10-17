@@ -4,8 +4,10 @@
 //  نمای رسمی کارنامه با فرمت سما: ۳ نیمسال کنار هم + سربرگ/پانوشت + صفحهٔ دوم
 //  (این همان چیزی است که دکمهٔ چاپ هم عیناً چاپ می‌کند — WYSIWYG.)
 // ═══════════════════════════════════════════════════════════════════════
+import { useState, useEffect } from 'react';
 import type { StudentItem, TermGroup, TranscriptSummary, CodeLabels, TranscriptPrintOptions, OriginUniversity, CohortStats } from '../types';
 import PersonPhoto from './PersonPhoto';
+import VerifyQrBlock from '@/components/VerifyQrBlock';
 import { DEFAULT_PRINT_OPTIONS } from '../types';
 import type { TranscriptRow } from '../actions';
 import { courseTypeFa, gradeStatusFa, quotaFa, studentStatusFa, studyModeFa } from '@/lib/student-labels';
@@ -48,6 +50,19 @@ export default function OfficialTranscriptView({
     quota: (v: string | null | undefined) => codeLabel(codeLabels?.quota, v),
   };
   const probation = summary.terms.filter(t => t.probation).length;
+
+  // ── QR استعلام برخط اصالت کارنامه (از API ادمین؛ فقط برای دانشجوی بازشده) ──
+  const [verifyQr, setVerifyQr] = useState<{ url: string; qr: string; expiresAt: string | null } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setVerifyQr(null);
+    if (!student?.id) return;
+    fetch(`/api/admin/students/transcript-qr?studentId=${student.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d?.qr) setVerifyQr(d as { url: string; qr: string; expiresAt: string | null }); })
+      .catch(() => { /* بی‌صدا: نبودِ QR نباید کارنامه را خراب کند */ });
+    return () => { alive = false; };
+  }, [student?.id]);
   // شمار نیمسال‌ها به تفکیک نوع (مثل پانوشت سما) — همان قاعدهٔ groupTranscript
   const termKindCounts = (() => {
     let regular = 0, summer = 0, equiv = 0;
@@ -317,6 +332,19 @@ export default function OfficialTranscriptView({
         </div>
         </td></tr>
       )}
+        {/* بلوک رسمیت: QR استعلام برخط اصالت کارنامه (پیش از امضاها) */}
+        {verifyQr && (
+          <tr><td className="tr-doc-cell">
+            <div className="px-3 pt-3">
+              <VerifyQrBlock
+                title="استعلام برخط اصالت این کارنامه"
+                url={verifyQr.url}
+                qr={verifyQr.qr}
+                expiresAt={verifyQr.expiresAt}
+              />
+            </div>
+          </td></tr>
+        )}
         </tbody>
       </table>
     </div>
