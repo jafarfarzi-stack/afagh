@@ -86,7 +86,10 @@ export default async function StudentExamCardPage() {
   if (examTicket) {
     try {
       ticketQr = await qrSvg(`${publicBaseUrl}/exam-ticket/${encodeURIComponent(examTicket.token)}`, {
-        errorCorrectionLevel: 'M',
+        // سطح تصحیح خطای بالا + حاشیهٔ سکوت استاندارد: اسکنر دستی مراقب در ورودی سالن
+        errorCorrectionLevel: 'Q',
+        size: 160,
+        margin: 4,
       });
     } catch (err) {
       console.error('[exam-card] qr failed', err);

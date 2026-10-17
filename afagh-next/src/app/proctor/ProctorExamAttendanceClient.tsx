@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { examProctorClockInAction, examProctorVerifyAction } from '@/lib/exam-actions';
+import { examProctorClockInAction, examProctorScanAction, examProctorVerifyAction } from '@/lib/exam-actions';
 import type { ExamCheckIn } from '@/lib/exam-engine';
 
 export interface ProctorRosterItem {
@@ -40,6 +40,8 @@ export default function ProctorExamAttendanceClient({ sessions, staffName }: { s
   const [marked, setMarked] = useState<Record<string, { present: boolean; permit: boolean }>>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; error: boolean } | null>(null);
+  const [scanValue, setScanValue] = useState('');
+  const [scanResult, setScanResult] = useState<{ name: string; code: string; ok: boolean } | null>(null);
 
   const session = useMemo(() => sessions.find(s => s.id === activeSessionId) ?? sessions[0] ?? null, [sessions, activeSessionId]);
 
@@ -107,6 +109,33 @@ export default function ProctorExamAttendanceClient({ sessions, staffName }: { s
     }
   };
 
+  /** اسکن QR کارت ورود به جلسه: حضور همان دانشجو بلافاصله در سامانه ثبت می‌شود */
+  const handleScan = async () => {
+    if (!session) return;
+    const raw = scanValue.trim();
+    if (!raw) return;
+    setBusy(true);
+    try {
+      const res = await examProctorScanAction({ sessionId: session.id, hallId: session.hallId, raw });
+      if (typeof res === 'object' && res !== null && 'ok' in res && res.ok) {
+        const r = res as { studentId: number; studentName: string; studentCode: string };
+        toggleMark(r.studentId, { present: true });
+        setScanResult({ name: r.studentName, code: r.studentCode, ok: true });
+        showMsg(`✅ حضور ${r.studentName} (${r.studentCode}) ثبت شد.`);
+      } else {
+        const err = typeof res === 'object' && res !== null && 'error' in res ? String((res as { error?: string }).error) : 'کارت خوانده نشد';
+        const nm = typeof res === 'object' && res !== null && 'studentName' in res ? String((res as { studentName?: string }).studentName ?? '') : '';
+        setScanResult(nm ? { name: nm, code: '', ok: false } : null);
+        showMsg('⛔ ' + err, true);
+      }
+    } catch {
+      showMsg('خطا در ارتباط با سرور.', true);
+    } finally {
+      setBusy(false);
+      setScanValue('');
+    }
+  };
+
   return (
     <div className="space-y-5" dir="rtl">
       <div className="bg-gradient-to-l from-teal-950 via-teal-900 to-slate-900 rounded-3xl p-5 text-white shadow-lg">
@@ -169,6 +198,44 @@ export default function ProctorExamAttendanceClient({ sessions, staffName }: { s
               <p className="text-[10px] font-bold text-slate-500">کل صندلی‌ها</p>
               <p className="font-black text-slate-900 text-xl">{faNum(roster.length)}</p>
             </div>
+          </div>
+
+          {/* اسکن QR کارت ورود به جلسه — ثبت حضور در همان لحظه */}
+          <div className="p-4 border-b border-slate-100 bg-teal-50/50">
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="flex-1 min-w-[240px]">
+                <span className="block text-[11px] font-black text-teal-900 mb-1">
+                  📷 اسکن QR کارت ورود به جلسه (یا چسباندن کد)
+                </span>
+                <input
+                  type="text"
+                  value={scanValue}
+                  onChange={e => setScanValue(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void handleScan(); } }}
+                  placeholder="اسکنر را روی QR کارت بگیرید…"
+                  dir="ltr"
+                  autoFocus
+                  className="w-full rounded-xl border border-teal-300 bg-white px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                />
+              </label>
+              <button
+                onClick={() => void handleScan()}
+                disabled={busy || !scanValue.trim()}
+                className="px-4 py-2 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs font-black transition disabled:opacity-50"
+              >
+                ثبت حضور با اسکن
+              </button>
+            </div>
+            {scanResult && (
+              <p className={`mt-2 text-[11px] font-black ${scanResult.ok ? 'text-emerald-700' : 'text-rose-700'}`}>
+                {scanResult.ok
+                  ? `✓ ${scanResult.name}${scanResult.code ? ` — ${scanResult.code}` : ''} به‌عنوان حاضر ثبت شد.`
+                  : `⛔ ${scanResult.name} در این جلسه/سالن نیست.`}
+              </p>
+            )}
+            <p className="mt-1 text-[10px] text-teal-800/80">
+              توکن کارت با امضای سامانه بررسی می‌شود؛ حضور فقط برای دانشجوی همین سالن ثبت می‌گردد و در زنجیرهٔ ممیزی می‌ماند.
+            </p>
           </div>
 
           {/* فهرست داوطلبان نشسته در این سالن */}

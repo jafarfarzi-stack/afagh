@@ -170,6 +170,13 @@ export default function StudentCardsClient({ rows }: { rows: CardRow[] }) {
                           تعویض توکن
                         </button>
                         <Link
+                          href={`/admin/student-cards/card/${r.studentId}`}
+                          target="_blank"
+                          className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-800 hover:bg-emerald-100"
+                        >
+                          🖨 چاپ کارت (QR)
+                        </Link>
+                        <Link
                           href={`/id/${r.card.token}`}
                           target="_blank"
                           className="rounded-lg border border-indigo-300 bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-800 hover:bg-indigo-100"

@@ -17,6 +17,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { course_offerings, enrollments } from '@/db/schema';
 import { getStaffByUser, getStudentByUser, requireRole } from '@/lib/auth';
+import { verifyExamTicket } from '@/lib/verification';
 import * as engine from '@/lib/exam-engine';
 import type { ExamAppealRecheck, ExamCheckIn, ExamGradeEntry } from '@/lib/exam-engine';
 import type { RubricWeights } from '@/app/professor/grades/types';
@@ -71,6 +72,50 @@ export async function examProctorVerifyAction(px: { sessionId: number; hallId: n
   );
   reval();
   return out;
+}
+
+// ── ②.۱ اسکن QR کارت ورود به جلسه در ورودی سالن → ثبت حضور همان دانشجو ──
+/**
+ * مراقب QR کارت آزمون دانشجو را اسکن می‌کند (متن اسکن‌شده یا خودِ نشانی
+ * `…/exam-ticket/<token>`)، توکن با امضای سامانه اعتبارسنجی می‌شود و حضور فقط
+ * برای همان دانشجو در جدول `exam_attendances` ثبت می‌گردد. اگر دانشجو در
+ * سالن/جلسهٔ جاری نباشد، هیچ ردیفی به‌روز نمی‌شود و پیام صریح برمی‌گردد.
+ */
+export async function examProctorScanAction(px: { sessionId: number; hallId: number; raw: string }) {
+  const user = await requireRole(['PROCTOR', 'ADMIN', 'EDU_EXPERT']);
+  const me = await getStaffByUser(user.id);
+  if (!me) return { ok: false, error: 'پروندهٔ پرسنلی یافت نشد.' };
+
+  const raw = String(px.raw ?? '').trim();
+  if (!raw) return { ok: false, error: 'چیزی اسکن نشد.' };
+  const m = raw.match(/exam-ticket\/([^/?#\s]+)/i);
+  const token = decodeURIComponent((m ? m[1] : raw).trim());
+  if (!token) return { ok: false, error: 'کد اسکن‌شده خوانا نیست.' };
+
+  const res = await verifyExamTicket(token);
+  if (!res.ok) return { ok: false, error: res.message || 'کارت ورود به جلسه نامعتبر است.' };
+
+  const out = await wrap(() =>
+    engine.proctorVerifyAttendance(user.id, {
+      sessionId: px.sessionId,
+      hallId: px.hallId,
+      proctorStaffId: me.id,
+      checkIns: [{ studentId: res.studentId, isPresent: 1, method: 'QR_SCAN', hasTemporaryPermit: 0 }],
+    }),
+  );
+  reval();
+
+  const verified = Number((out as { verified?: number } | null)?.verified ?? 0);
+  if (!verified) {
+    return { ok: false, error: `${res.studentName} در این جلسه/سالن ثبت‌نام نشده است (کارت سالن دیگری است).`, studentName: res.studentName };
+  }
+  return {
+    ok: true,
+    studentId: res.studentId,
+    studentName: res.studentName,
+    studentCode: res.studentCode,
+    verified,
+  };
 }
 
 // ── ③ امضای صورتجلسه (فقط مراقبِ همان سالن) ──
