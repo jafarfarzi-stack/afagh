@@ -676,12 +676,25 @@ async function loadLegacyGpaRows(studentId: number): Promise<GpaSourceRow[]> {
   }));
 }
 
-/** ردیف‌های معدل: اول سامانهٔ جدید؛ اگر هیچ نمرهٔ ثبت‌شده‌ای نبود، سیستم قدیمی. */
+/**
+ * ردیف‌های معدل با ادغامِ کاملِ دو منبع:
+ *   ۱) نمرات سامانهٔ جدید (`enrollments`) — مرجع هر درسی که آنجا هست؛
+ *   ۲) نمرات سیستم قدیمی (`legacy_grades`) — فقط برای درسی که در `enrollments`
+ *      معادلی ندارد (کلید: کد نیمسال + کد درس).
+ *
+ * چرا ادغام و نه «یا»؟ کارنامهٔ چاپی/اداری همین کار را می‌کند، پس اگر استعلام
+ * فقط `enrollments` را می‌دید، معدل/واحدِ صفحهٔ استعلام با کارنامهٔ چاپی واگرا
+ * می‌شد (دقیقاً همان اختلافی که گزارش شد). ۲٬۶۶۵ دانشجو هم کلاً نمره‌شان فقط در
+ * سیستم قدیمی است و با این ادغام پوشش داده می‌شوند.
+ */
 async function loadGpaRowsWithFallback(studentId: number): Promise<GpaSourceRow[]> {
   const enrolled = await loadOfficialGpaRows(studentId);
-  if (enrolled.some(r => parseGrade(r.gradeValue) !== null)) return enrolled;
   const legacy = await loadLegacyGpaRows(studentId);
-  return legacy.length ? legacy : enrolled;
+  if (!legacy.length) return enrolled;
+
+  const covered = new Set(enrolled.map(r => `${r.termCode ?? ''}|${r.code ?? ''}`));
+  const extras = legacy.filter(r => !covered.has(`${r.termCode ?? ''}|${r.code ?? ''}`));
+  return extras.length ? [...enrolled, ...extras] : enrolled;
 }
 
 export type OfficialGpaTermRow = {
@@ -729,14 +742,19 @@ export async function calculateOfficialGpaBreakdown(studentId: number): Promise<
   const input = { passingGrade, retakeMinGrade, policy, dedupeRepeated };
   const core = aggregateOfficialGpaRows(rows, input);
 
-  // گروه‌بندی ترم‌به‌ترم: ردیف‌های سامانهٔ جدید با termId و ردیف‌های سیستم قدیمی
-  // فقط با termCode می‌آیند، پس کلید گروه هر دو حالت را پوشش می‌دهد.
+  // گروه‌بندی ترم‌به‌ترم: کلید بر پایهٔ کد نیمسال است تا ردیف‌های سامانهٔ جدید
+  // (termId) و ردیف‌های سیستم قدیمی (فقط termCode) در یک سطر بیایند.
   const groups = new Map<string, { termId: number | null; termCode: string | null; termTitle: string | null; rows: GpaSourceRow[] }>();
   for (const r of rows) {
-    const key = r.termId != null ? `t:${r.termId}` : `c:${r.termCode ?? '?'}`;
+    const key = r.termCode ? `c:${r.termCode}` : `t:${r.termId ?? '?'}`;
     const bucket = groups.get(key);
-    if (bucket) bucket.rows.push(r);
-    else groups.set(key, { termId: r.termId, termCode: r.termCode, termTitle: r.termTitle, rows: [r] });
+    if (bucket) {
+      bucket.rows.push(r);
+      if (!bucket.termTitle && r.termTitle) bucket.termTitle = r.termTitle;
+      if (bucket.termId == null && r.termId != null) bucket.termId = r.termId;
+    } else {
+      groups.set(key, { termId: r.termId, termCode: r.termCode, termTitle: r.termTitle, rows: [r] });
+    }
   }
 
   const terms: OfficialGpaTermRow[] = [...groups.values()]
