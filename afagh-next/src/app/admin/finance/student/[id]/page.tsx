@@ -2,7 +2,8 @@
 import { notFound } from 'next/navigation';
 import { requireRole } from '@/lib/auth';
 import { getStudentFinance, computeFormulaTuition } from '@/lib/finance-engine';
-import { computeTermTuition, computeCourseTuitionForTerms } from '@/lib/tuition-engine';
+import { computeTermTuition } from '@/lib/tuition-engine';
+import { buildTranscriptCourses } from '@/lib/transcript-courses';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import PrintButton from '@/components/PrintButton';
 import FinancialTranscript from '@/components/FinancialTranscript';
@@ -88,17 +89,13 @@ const fin = await getStudentFinance(studentId, {
 
   const { student, totals, transcript } = fin;
 
-  // ریز شهریهٔ متغیر دروس برای همهٔ ترم‌های کارنامه (همان موتور کانونی، فقط lines)
-  const courseMap = await computeCourseTuitionForTerms(studentId, transcript.map((t) => t.termId));
+  // ریز شهریهٔ متغیر دروس برای همهٔ ترم‌های کارنامه (مسیر یکتای buildTranscriptCourses:
+  // وزن از تعرفهٔ رسمی همان سال، جمع قفل‌شده به «شهریهٔ متغیر» دفتر کل)
+  const courseMap = await buildTranscriptCourses(studentId, transcript.map((t) => t.termId));
   const transcriptWithCourses = transcript.map((t) => ({
     ...t,
-    courses: (courseMap[t.termId] ?? []).map((l) => ({
-      courseCode: l.courseCode,
-      courseTitle: l.courseTitle,
-      units: l.units,
-      perUnit: l.perUnit,
-      amount: l.amount,
-    })),
+    courses: courseMap[t.termId]?.lines ?? [],
+    coursesBasis: courseMap[t.termId]?.basis,
   }));
 
   return (

@@ -1,0 +1,90 @@
+import 'server-only';
+import { and, eq } from 'drizzle-orm';
+import { db } from '@/db';
+import { student_ledger } from '@/db/schema';
+import { allocateWeightedShares, toNum } from '@/lib/finance-rules';
+import { computeCourseTuitionForTerms } from '@/lib/tuition-engine';
+import { computeTariffCourseLinesForTerms } from '@/lib/tuition-tariff';
+
+/**
+ * ریز شهریهٔ متغیر دروس — تنها مسیر ساخت آن برای همهٔ نماها.
+ *
+ * سه جا این جدول را نشان می‌دهند (کارنامهٔ ادمین، صفحهٔ مالی دانشجو، گزارش
+ * صورت‌حساب) و پیش‌تر هرکدام جداگانه از موتور شهریه می‌خواندند؛ نتیجه این بود که
+ * ریزِ نیمسال‌های گذشته با نرخ نیمسال جاری حساب می‌شد و با سند رسمی نمی‌خواند.
+ *
+ * منطق یکتا:
+ *   ۱) «وزن» هر درس از تعرفهٔ رسمی تفصیلی همان **سال** می‌آید (نظری×نرخ + عملی×نرخِ
+ *      نوع درس مالی) — همان محاسبهٔ سامانهٔ مبدأ؛ اگر تعرفهٔ آن سال نباشد، وزن‌ها از
+ *      موتور یکپارچهٔ شهریه می‌آید.
+ *   ۲) مبلغ هر درس به تناسب وزن‌ها از جمع «شهریهٔ متغیر» **دفتر کل** تخصیص می‌یابد؛
+ *      مقدار ذخیره‌شده در سما سند معتبر است و ممکن است با بازمحاسبهٔ دروس فرق کند
+ *      (ترم در جریان، دروس پژوهشی که سما جداگانه نگه می‌دارد، رُندکردن).
+ *      بنابراین جمع ریز همیشه دقیقاً با کارنامه یکی است.
+ */
+
+export interface TranscriptCourseLine {
+  courseCode: string | null;
+  courseTitle: string | null;
+  units: number;
+  perUnit: number;
+  amount: number;
+}
+
+export interface TranscriptCourses {
+  lines: TranscriptCourseLine[];
+  /** منبع وزن‌ها: TARIFF = تعرفهٔ رسمی سال، LEDGER = موتور یکپارچهٔ شهریه */
+  basis: 'TARIFF' | 'LEDGER';
+}
+
+export async function buildTranscriptCourses(
+  studentId: number,
+  termIds: number[],
+): Promise<Record<number, TranscriptCourses>> {
+  const ids = [...new Set((termIds || []).filter((t) => Number.isFinite(t) && t > 0))];
+  if (!ids.length) return {};
+
+  // جمع «شهریهٔ متغیر» هر ترم — سند معتبر
+  const ledgerRows = await db
+    .select({ termId: student_ledger.termId, amount: student_ledger.amount })
+    .from(student_ledger)
+    .where(and(
+      eq(student_ledger.studentId, studentId),
+      eq(student_ledger.transactionType, 'TUITION_VARIABLE'),
+    ));
+  const ledgerVar = new Map<number, number>();
+  for (const r of ledgerRows) {
+    const key = r.termId ?? 0;
+    ledgerVar.set(key, (ledgerVar.get(key) ?? 0) + toNum(r.amount));
+  }
+
+  const [tariffMap, engineMap] = await Promise.all([
+    computeTariffCourseLinesForTerms(studentId, ids),
+    computeCourseTuitionForTerms(studentId, ids),
+  ]);
+
+  const out: Record<number, TranscriptCourses> = {};
+  for (const termId of ids) {
+    const tariffLines = tariffMap[termId];
+    const lines = tariffLines ?? engineMap[termId] ?? [];
+    const target = ledgerVar.get(termId) ?? 0;
+    const weights = lines.map((l) => toNum(l.amount));
+    const shares = target > 0
+      ? allocateWeightedShares(
+          weights.some((w) => w > 0) ? weights : lines.map((l) => toNum(l.units)),
+          target,
+        )
+      : weights.map((w) => Math.round(w));
+    out[termId] = {
+      basis: tariffLines ? 'TARIFF' : 'LEDGER',
+      lines: lines.map((l, i) => ({
+        courseCode: l.courseCode,
+        courseTitle: l.courseTitle,
+        units: toNum(l.units),
+        perUnit: toNum(l.units) > 0 ? Math.round(shares[i] / toNum(l.units)) : 0,
+        amount: shares[i],
+      })),
+    };
+  }
+  return out;
+}

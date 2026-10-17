@@ -4,7 +4,8 @@ import { notifications, universities } from '@/db/schema';
 import FinancialTranscript from '@/components/FinancialTranscript';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { getStudentFinance } from '@/lib/finance-engine';
-import { computeCourseTuitionForTerms } from '@/lib/tuition-engine';
+import { computeTermTuition } from '@/lib/tuition-engine';
+import { buildTranscriptCourses } from '@/lib/transcript-courses';
 import { toNum, transcriptTotals } from '@/lib/finance-rules';
 import { getTermScope } from '@/lib/term-scope';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
@@ -85,17 +86,12 @@ export default async function StudentFinancePage() {
     ? loans.filter(l => l.termId === selectedTerm.id)
     : loans;
 
-  // ریز شهریهٔ متغیر دروس ترم‌های نمایشی (همان موتور کانونی، فقط lines)
-  const courseMap = await computeCourseTuitionForTerms(me.id, transcript.map((t) => t.termId));
+  // ریز شهریهٔ متغیر دروس ترم‌های نمایشی (مسیر یکتای buildTranscriptCourses)
+  const courseMap = await buildTranscriptCourses(me.id, transcript.map((t) => t.termId));
   const transcriptWithCourses = transcript.map((t) => ({
     ...t,
-    courses: (courseMap[t.termId] ?? []).map((l) => ({
-      courseCode: l.courseCode,
-      courseTitle: l.courseTitle,
-      units: l.units,
-      perUnit: l.perUnit,
-      amount: l.amount,
-    })),
+    courses: courseMap[t.termId]?.lines ?? [],
+    coursesBasis: courseMap[t.termId]?.basis,
   }));
 
   const remindDays = Math.max(0, Math.round(toNum(remindDaysRaw) || 0));

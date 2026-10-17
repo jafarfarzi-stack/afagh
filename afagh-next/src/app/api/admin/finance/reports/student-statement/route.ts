@@ -6,10 +6,9 @@ import { student_ledger, students } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { getStudentFinance } from '@/lib/finance-engine';
-import { computeCourseTuitionForTerms } from '@/lib/tuition-engine';
-import { computeTariffCourseLinesForTerms } from '@/lib/tuition-tariff';
+import { buildTranscriptCourses } from '@/lib/transcript-courses';
 import { ledgerBalance } from '@/lib/ledger-balance';
-import { toNum, allocateWeightedShares } from '@/lib/finance-rules';
+import { toNum } from '@/lib/finance-rules';
 
 const ROLES: string[] = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'];
 
@@ -65,37 +64,13 @@ export async function GET(request: Request) {
 
   const termCodeById = new Map(fin.terms.map((t) => [t.id, t.termCode]));
   const termIds = fin.transcript.map((s) => s.termId);
-  // ریز شهریهٔ متغیر دروس — دو منبع، به ترتیب دقت:
-  //   ۱) تعرفهٔ تفصیلی سما (نیمسال × رشته × ورود × نوع درس مالی) — همان چیزی که
-  //      سامانهٔ مبدأ سند رسمی را با آن می‌ساخت، پس ریال‌به‌ریال با کارنامهٔ قدیم
-  //      می‌خواند.
-  //   ۲) موتور یکپارچهٔ شهریه (tuition_rules) — برای نیمسال‌هایی که تعرفهٔ
-  //      تفصیلی‌شان در دست نیست.
-  const tariffMap = await computeTariffCourseLinesForTerms(studentId, termIds);
-  const courseMap = await computeCourseTuitionForTerms(studentId, termIds);
+  // ریز شهریهٔ متغیر دروس — مسیر یکتا با نماهای دیگر (buildTranscriptCourses):
+  // وزن‌ها از تعرفهٔ رسمی تفصیلی همان سال، جمع قفل‌شده به «شهریهٔ متغیر» دفتر کل.
+  const courseMap = await buildTranscriptCourses(studentId, termIds);
   const rows = fin.transcript.map((s) => {
     const byType = byTermType.get(s.termId) || new Map<string, number>();
     const get = (t: string) => byType.get(t) || 0;
-    // ریز دروس: خطوط موتور شهریه وزن‌اند، ولی سند رسمی = جمع دفتر کل. مبلغ
-    // هر درس به تناسب وزنِ محاسباتی از «شهریهٔ متغیر» دفتر کل تخصیص می‌یابد تا
-    // جمع ریز، دقیقاً با کارنامه یکی شود (و جدول صفر نماند وقتی تعرفه ثبت نشده).
-    const tariffLines = tariffMap[s.termId];
-    const lines = tariffLines ?? courseMap[s.termId] ?? [];
-    const ledgerVariable = get('TUITION_VARIABLE');
-    const weights = lines.map((l) => toNum(l.amount));
-    // مبنای ریز (دو لایه):
-    //   ▸ وزن هر درس از تعرفهٔ رسمی تفصیلی همان سال می‌آید (نظری×نرخ + عملی×نرخِ
-    //     نوع درس مالی) — همان چیزی که سامانهٔ مبدأ سند را با آن می‌ساخت.
-    //   ▸ ولی «جمع» همیشه جمع دفتر کل است: مقدار ذخیره‌شده در سما معتبر است و
-    //     ممکن است با بازمحاسبهٔ دروس فرق کند (نیمسالِ در جریان، دروس پژوهشی که
-    //     سما جداگانه نگه می‌دارد، و رُندکردن). پس مبلغ هر درس به تناسب وزن‌ها از
-    //     جمع دفتر کل تخصیص می‌یابد تا ریز و سند هیچ‌وقت واگرا نشوند.
-    const shares = ledgerVariable > 0
-      ? allocateWeightedShares(
-          weights.some((w) => w > 0) ? weights : lines.map((l) => toNum(l.units)),
-          ledgerVariable,
-        )
-      : weights.map((w) => Math.round(w));
+    const courses = courseMap[s.termId];
     return {
       termId: s.termId,
       termCode: termCodeById.get(s.termId) ?? '',
@@ -122,15 +97,9 @@ export async function GET(request: Request) {
       canonicalLoans: s.loans,
       netPayable: s.netPayable,
       balance: s.balance,
-      // ریز دروس ترم (مبنای سند: تعرفهٔ رسمی یا تخصیص از دفتر کل)
-      courses: lines.map((l, i) => ({
-        courseCode: l.courseCode,
-        courseTitle: l.courseTitle,
-        units: l.units,
-        perUnit: toNum(l.units) > 0 ? Math.round(shares[i] / toNum(l.units)) : 0,
-        amount: shares[i],
-      })),
-      coursesBasis: tariffLines ? 'TARIFF' : 'LEDGER',
+      // ریز دروس ترم (وزن از تعرفهٔ رسمی سال، جمع = شهریهٔ متغیر دفتر کل)
+      courses: courses?.lines ?? [],
+      coursesBasis: courses?.basis ?? 'LEDGER',
     };
   });
 
