@@ -275,7 +275,7 @@ export async function fetchSahamStudents(
     -- منبع درست، پرچم خودِ *درس* است (courses.isThesis) که در بانک دروس
     -- تنظیم می‌شود؛ نه پرچم دوره‌ای enrollments.
     -- ترم‌های بررسی: ترم جاری دانشگاه (isCurrent=1) و ترم انتخابی سوییچر
-    -- (`f.termId`) — طبق تصمیم کاربر «۱ و ۲» هر دو لحاظ می‌شوند.
+    -- (پارامتر termId) — طبق تصمیم کاربر «۱ و ۲» هر دو لحاظ می‌شوند.
     thesis_now AS (
       SELECT e."studentId", 1::int AS f
       FROM enrollments e
@@ -285,7 +285,7 @@ export async function fetchSahamStudents(
       JOIN students s2 ON s2.id = e."studentId"
       WHERE s2."universityId" = ${universityId}
         AND c."isThesis" = 1
-        AND (t."isCurrent" = 1 OR t.id = ${f.termId ?? 0})
+        AND ${f.termId ? sql`t.id = ${f.termId}` : sql`t."isCurrent" = 1`}
       GROUP BY e."studentId"
     )
     SELECT

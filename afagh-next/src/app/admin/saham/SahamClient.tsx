@@ -15,7 +15,7 @@ const FILL_ROWS: { key: keyof SahamStat['fill']; label: string; hint: string }[]
 type Kind = 'students' | 'graduates' | 'instructors';
 
 const KIND_TABS: { key: Kind; label: string; hint: string }[] = [
-  { key: 'students', label: '🎓 دانشجویان (۵۲ ستون)', hint: 'همهٔ وضعیت‌ها؛ با فیلتر' },
+  { key: 'students', label: '🎓 دانشجویان (۵۲ ستون)', hint: 'همهٔ وضعیت‌ها؛ با شیت نظام وظیفه' },
   { key: 'graduates', label: '🎓 دانش‌آموختگان (۴۳ ستون)', hint: 'بازهٔ تاریخ فراغت + شیت نظام وظیفه' },
   { key: 'instructors', label: '👨‍🏫 آموزشگران (۳۷ ستون)', hint: 'اساتید دارای ارائه در نیمسال' },
 ];
@@ -34,7 +34,8 @@ function qs(params: Record<string, string | number | undefined>): string {
 
 export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lookups: SahamFilterLookups }) {
   const [kind, setKind] = useState<Kind>('students');
-  const [uniFilter, setUniFilter] = useState('');
+  /** چند انتخاب دانشگاه — «چند مؤسسه در یک فایل» */
+  const [selected, setSelected] = useState<number[]>(() => stats.map((s) => s.universityId));
   const [status, setStatus] = useState('');
   const [majorId, setMajorId] = useState('');
   const [facultyId, setFacultyId] = useState('');
@@ -44,73 +45,94 @@ export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lo
   const [gradTo, setGradTo] = useState('');
   const [termId, setTermId] = useState('');
   const [limit, setLimit] = useState('5000');
-  const [busy, setBusy] = useState<number | null>(null);
-  const [preview, setPreview] = useState<Record<number, number | null>>({});
-  const [previewBusy, setPreviewBusy] = useState<number | null>(null);
+  const [applied, setApplied] = useState<{ sig: string; counts: Record<number, number>; total: number } | null>(null);
+  const [counting, setCounting] = useState(false);
+  const [busy, setBusy] = useState<number | 'all' | null>(null);
+  const [progress, setProgress] = useState('');
   const [err, setErr] = useState('');
   const [warn, setWarn] = useState('');
 
-  const majorsAll = lookups.majors;
-  const facultiesAll = lookups.faculties;
+  const rows = stats.filter((s) => selected.includes(s.universityId));
+  const majors = lookups.majors.filter((m) => selected.includes(m.universityId));
+  const faculties = lookups.faculties.filter((f) => selected.includes(f.universityId));
+  const terms = lookups.terms.filter((t) => selected.includes(t.universityId));
+  const needTerm = kind === 'instructors' && !termId;
 
-  // محدودسازی به دانشگاه انتخاب‌شده (پیش‌فرض: همه)
-  const statsShown = uniFilter ? stats.filter(s => String(s.universityId) === uniFilter) : stats;
-  const majors = uniFilter ? majorsAll.filter(m => String(m.universityId) === uniFilter) : majorsAll;
-  const faculties = uniFilter ? facultiesAll.filter(f => String(f.universityId) === uniFilter) : facultiesAll;
-  const terms = uniFilter ? lookups.terms.filter(t => String(t.universityId) === uniFilter) : lookups.terms;
+  /** هر تغییر فیلتر، عدد محاسبه‌شدهٔ قبلی را باطل می‌کند (عدد کهنه گمراه‌کننده است) */
+  const reset = () => { setApplied(null); setErr(''); setWarn(''); setProgress(''); };
+  const sig = JSON.stringify({ kind, selected, status, majorId, facultyId, entryFrom, entryTo, gradFrom, gradTo, termId, limit });
+  const fresh = applied !== null && applied.sig === sig;
 
-  const buildParams = (id: number) => ({
-    universityId: id,
+  const params = (opts: { id?: number; all?: boolean } = {}) => ({
+    universityId: opts.all ? selected.join(',') : opts.id,
     kind,
-    status: kind === 'students' ? status || undefined : undefined,
+    status: kind === 'students' ? (status || undefined) : undefined,
     majorId: majorId || undefined,
     facultyId: facultyId || undefined,
     entryFrom: entryFrom || undefined,
     entryTo: entryTo || undefined,
-    gradFrom: kind === 'graduates' ? gradFrom || undefined : undefined,
-    gradTo: kind === 'graduates' ? gradTo || undefined : undefined,
-    termId: kind === 'instructors' ? termId || undefined : undefined,
+    gradFrom: kind === 'graduates' ? (gradFrom || undefined) : undefined,
+    gradTo: kind === 'graduates' ? (gradTo || undefined) : undefined,
+    termId: kind === 'instructors' ? (termId || undefined) : undefined,
     limit: limit || undefined,
   });
 
-  const doPreview = async (id: number) => {
-    setPreviewBusy(id);
-    setErr('');
+  /** دکمهٔ اصلی: شمارش رکوردهای همهٔ مؤسسه‌های انتخاب‌شده با فیلترهای فعلی */
+  const apply = async () => {
+    if (needTerm) { setErr('برای گزارش آموزشگران اول نیمسال را انتخاب کنید.'); return; }
+    if (!rows.length) { setErr('هیچ مؤسسه‌ای انتخاب نشده است.'); return; }
+    setCounting(true); reset();
+    const counts: Record<number, number> = {};
+    let total = 0;
     try {
-      const res = await fetch(`/api/admin/saham/students?${qs({ ...buildParams(id), preview: 1 })}`);
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || 'خطا');
-      setPreview(p => ({ ...p, [id]: body.total }));
+      let i = 0;
+      for (const s of rows) {
+        i++;
+        setProgress(`محاسبهٔ ${i.toLocaleString('fa-IR')} از ${rows.length.toLocaleString('fa-IR')} — ${s.title}`);
+        const res = await fetch(`/api/admin/saham/students?${qs({ ...params({ id: s.universityId }), preview: 1 })}`);
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || 'محاسبهٔ تعداد ناموفق بود.');
+        const n = Number(body.total) || 0;
+        counts[s.universityId] = n;
+        total += n;
+      }
+      setApplied({ sig, counts, total });
+      setProgress('');
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'خطای نامشخص');
+      setProgress('');
     } finally {
-      setPreviewBusy(null);
+      setCounting(false);
     }
   };
 
-  const download = async (id: number) => {
-    setBusy(id);
-    setErr('');
-    setWarn('');
+  const saveBlob = (blob: Blob, name: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  /** دانلود یک مؤسسه، یا یک فایل تجمیعی برای همهٔ انتخاب‌شده‌ها */
+  const download = async (target: number | 'all') => {
+    if (needTerm) { setErr('برای گزارش آموزشگران اول نیمسال را انتخاب کنید.'); return; }
+    setBusy(target); setErr(''); setWarn('');
     try {
-      const res = await fetch(`/api/admin/saham/students?${qs(buildParams(id))}`);
+      const url = `/api/admin/saham/students?${qs(target === 'all' ? params({ all: true }) : params({ id: target }))}`;
+      const res = await fetch(url);
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: 'خطای نامشخص' }));
         throw new Error(body.error || 'ساخت فایل ناموفق بود.');
       }
       if (res.headers.get('x-has-more') === '1') {
-        setWarn(`⚠️ خروجی به ${Number(res.headers.get('x-row-count')).toLocaleString('fa-IR')} ردیف محدود شد از مجموع ${Number(res.headers.get('x-row-total')).toLocaleString('fa-IR')} — فیلتر را تنگ‌تر کنید یا در چند نوبت دانلود بگیرید.`);
+        setWarn(`⚠️ خروجی به ${Number(res.headers.get('x-row-count')).toLocaleString('fa-IR')} ردیف محدود شد از مجموع ${Number(res.headers.get('x-row-total')).toLocaleString('fa-IR')} — فیلتر را تنگ‌تر کنید یا در چند نوبت بگیرید.`);
       }
       const blob = await res.blob();
       const cd = res.headers.get('content-disposition') || '';
       const m = /filename\*=UTF-8''([^;]+)/.exec(cd);
-      const name = m ? decodeURIComponent(m[1]) : `SAHAM-${id}.xlsx`;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = name;
-      a.click();
-      URL.revokeObjectURL(url);
+      saveBlob(blob, m ? decodeURIComponent(m[1]) : `SAHAM-${target === 'all' ? 'all' : target}.xlsx`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'خطای نامشخص');
     } finally {
@@ -119,27 +141,29 @@ export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lo
   };
 
   const kindCount = (s: SahamStat) => kind === 'graduates' ? s.graduates : kind === 'instructors' ? s.instructors : s.students;
+  const toggle = (id: number) =>
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const fa = (n: number) => n.toLocaleString('fa-IR');
 
   return (
     <div className="space-y-3">
       {err && (
-        <div className="rounded-xl border border-red-300 bg-red-50/70 p-3 text-xs font-bold text-red-800">
+        <div role="alert" className="rounded-xl border border-red-300 bg-red-50/70 p-3 text-xs font-bold text-red-800">
           ❌ {err.length > 500 ? err.slice(0, 500) + '…' : err}
         </div>
       )}
       {warn && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-3 text-xs font-bold text-amber-800">
-          {warn}
-        </div>
+        <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-3 text-xs font-bold text-amber-800">{warn}</div>
       )}
 
       {/* تب نوع گزارش */}
       <div className="card !p-3">
         <div className="flex flex-wrap gap-2">
-          {KIND_TABS.map(t => (
+          {KIND_TABS.map((t) => (
             <button
               key={t.key}
-              onClick={() => { setKind(t.key); setPreview({}); setErr(''); setWarn(''); }}
+              onClick={() => { setKind(t.key); reset(); }}
               title={t.hint}
               className={`rounded-xl px-4 py-2 text-xs font-black transition ${kind === t.key ? 'bg-indigo-700 text-white shadow' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
             >
@@ -150,23 +174,11 @@ export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lo
 
         {/* فیلترها */}
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-          <label className="text-[11px] text-slate-600">دانشگاه
-            <select
-              value={uniFilter}
-              onChange={e => { setUniFilter(e.target.value); setMajorId(''); setFacultyId(''); setTermId(''); setPreview({}); }}
-              className="mt-1 w-full rounded border px-2 py-1.5 text-xs"
-            >
-              <option value="">همهٔ دانشگاه‌ها</option>
-              {stats.map(s => (
-                <option key={s.universityId} value={s.universityId}>{s.title}</option>
-              ))}
-            </select>
-          </label>
           {kind === 'students' && (
             <label className="text-[11px] text-slate-600">وضعیت تحصیلی
-              <select value={status} onChange={e => setStatus(e.target.value)} className="mt-1 w-full rounded border px-2 py-1.5 text-xs">
+              <select value={status} onChange={(e) => { setStatus(e.target.value); reset(); }} className="mt-1 w-full rounded border px-2 py-1.5 text-xs">
                 <option value="">همهٔ وضعیت‌ها</option>
-                {[...new Set(lookups.statuses.map(s => s.status))].map(st => (
+                {[...new Set(lookups.statuses.map((s) => s.status))].map((st) => (
                   <option key={st} value={st}>{STATUS_FA[st] ?? st}</option>
                 ))}
               </select>
@@ -175,57 +187,105 @@ export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lo
           {kind !== 'instructors' && (
             <>
               <label className="text-[11px] text-slate-600">رشته
-                <select value={majorId} onChange={e => setMajorId(e.target.value)} className="mt-1 w-full rounded border px-2 py-1.5 text-xs">
+                <select value={majorId} onChange={(e) => { setMajorId(e.target.value); reset(); }} className="mt-1 w-full rounded border px-2 py-1.5 text-xs">
                   <option value="">همهٔ رشته‌ها</option>
-                  {majors.slice(0, 500).map(mj => (
-                    <option key={mj.id} value={mj.id}>{mj.name}</option>
-                  ))}
+                  {majors.slice(0, 500).map((mj) => <option key={mj.id} value={mj.id}>{mj.name}</option>)}
                 </select>
               </label>
               <label className="text-[11px] text-slate-600">دانشکده
-                <select value={facultyId} onChange={e => setFacultyId(e.target.value)} className="mt-1 w-full rounded border px-2 py-1.5 text-xs">
+                <select value={facultyId} onChange={(e) => { setFacultyId(e.target.value); reset(); }} className="mt-1 w-full rounded border px-2 py-1.5 text-xs">
                   <option value="">همهٔ دانشکده‌ها</option>
-                  {faculties.map(f => (
-                    <option key={f.id} value={f.id}>{f.name}</option>
-                  ))}
+                  {faculties.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </select>
               </label>
               <label className="text-[11px] text-slate-600">ورودی از (سال)
-                <input value={entryFrom} onChange={e => setEntryFrom(e.target.value)} placeholder="۱۴۰۰" inputMode="numeric" className="mt-1 w-full rounded border px-2 py-1.5 text-xs" />
+                <input value={entryFrom} onChange={(e) => { setEntryFrom(e.target.value); reset(); }} placeholder="1400" inputMode="numeric" className="mt-1 w-full rounded border px-2 py-1.5 text-xs" />
               </label>
               <label className="text-[11px] text-slate-600">ورودی تا (سال)
-                <input value={entryTo} onChange={e => setEntryTo(e.target.value)} placeholder="۱۴۰۴" inputMode="numeric" className="mt-1 w-full rounded border px-2 py-1.5 text-xs" />
+                <input value={entryTo} onChange={(e) => { setEntryTo(e.target.value); reset(); }} placeholder="1404" inputMode="numeric" className="mt-1 w-full rounded border px-2 py-1.5 text-xs" />
               </label>
             </>
           )}
           {kind === 'graduates' && (
             <>
               <label className="text-[11px] text-slate-600">فراغت از (۱۴۰۳/۰۱/۰۱)
-                <input value={gradFrom} onChange={e => setGradFrom(e.target.value)} placeholder="1403/01/01" className="mt-1 w-full rounded border px-2 py-1.5 text-xs font-mono" dir="ltr" />
+                <input value={gradFrom} onChange={(e) => { setGradFrom(e.target.value); reset(); }} placeholder="1403/01/01" className="mt-1 w-full rounded border px-2 py-1.5 text-xs font-mono" dir="ltr" />
               </label>
               <label className="text-[11px] text-slate-600">فراغت تا (۱۴۰۴/۱۲/۲۹)
-                <input value={gradTo} onChange={e => setGradTo(e.target.value)} placeholder="1404/12/29" className="mt-1 w-full rounded border px-2 py-1.5 text-xs font-mono" dir="ltr" />
+                <input value={gradTo} onChange={(e) => { setGradTo(e.target.value); reset(); }} placeholder="1404/12/29" className="mt-1 w-full rounded border px-2 py-1.5 text-xs font-mono" dir="ltr" />
               </label>
             </>
           )}
           {kind === 'instructors' && (
-            <label className="text-[11px] text-slate-600 col-span-2">نیمسال (فقط اساتید دارای ارائه)
-              <select value={termId} onChange={e => setTermId(e.target.value)} className="mt-1 w-full rounded border px-2 py-1.5 text-xs">
+            <label className="text-[11px] text-slate-600 col-span-2">نیمسال (فقط اساتید دارای ارائه) — اجباری
+              <select value={termId} onChange={(e) => { setTermId(e.target.value); reset(); }} className="mt-1 w-full rounded border px-2 py-1.5 text-xs">
                 <option value="">— انتخاب نیمسال —</option>
-                {terms.map(t => (
-                  <option key={t.id} value={t.id}>{t.title}{t.isCurrent ? ' (جاری)' : ''}</option>
-                ))}
+                {terms.map((t) => <option key={t.id} value={t.id}>{t.title}{t.isCurrent ? ' (جاری)' : ''}</option>)}
               </select>
             </label>
           )}
-          <label className="text-[11px] text-slate-600">سقف ردیف
-            <select value={limit} onChange={e => setLimit(e.target.value)} className="mt-1 w-full rounded border px-2 py-1.5 text-xs font-mono" dir="ltr">
+          <label className="text-[11px] text-slate-600">سقف ردیف (هر فایل)
+            <select value={limit} onChange={(e) => { setLimit(e.target.value); reset(); }} className="mt-1 w-full rounded border px-2 py-1.5 text-xs font-mono" dir="ltr">
               <option value="1000">1,000</option>
               <option value="5000">5,000</option>
               <option value="10000">10,000</option>
               <option value="20000">20,000</option>
             </select>
           </label>
+        </div>
+
+        {/* دکمه‌های عمل */}
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3">
+          <button
+            onClick={apply}
+            disabled={counting || needTerm || !rows.length}
+            className="rounded-xl bg-indigo-700 px-4 py-2 text-xs font-black text-white shadow hover:bg-indigo-800 disabled:opacity-40"
+          >
+            {counting ? '⏳ در حال محاسبه…' : '🔎 اعمال فیلتر و محاسبهٔ تعداد'}
+          </button>
+          <button
+            onClick={() => download('all')}
+            disabled={busy !== null || needTerm || !rows.length}
+            title="یک فایل اکسل برای همهٔ مؤسسه‌های انتخاب‌شده"
+            className="rounded-xl bg-emerald-700 px-4 py-2 text-xs font-black text-white shadow hover:bg-emerald-800 disabled:opacity-40"
+          >
+            {busy === 'all' ? '⏳ در حال ساخت…' : `⬇️ دانلود اکسل یک‌فایلی (${fa(rows.length)} مؤسسه)`}
+          </button>
+          <button onClick={reset} className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">
+            ↺ پاک‌کردن فیلترها
+          </button>
+          {progress && <span className="text-[11px] font-bold text-slate-500">{progress}</span>}
+        </div>
+
+        {/* خلاصهٔ وضعیت محاسبه */}
+        {applied && (
+          fresh ? (
+            <div className="mt-2 rounded-xl border border-emerald-300 bg-emerald-50/70 p-2 text-[11px] font-bold text-emerald-800">
+              ✅ فیلتر اعمال شد — جمع: {fa(applied.total)} رکورد در {fa(rows.length)} مؤسسه
+            </div>
+          ) : (
+            <div className="mt-2 rounded-xl border border-amber-300 bg-amber-50/70 p-2 text-[11px] font-bold text-amber-800">
+              ⚠️ فیلترها تغییر کرده‌اند؛ برای اعداد به‌روز دوباره «اعمال فیلتر و محاسبهٔ تعداد» را بزنید.
+            </div>
+          )
+        )}
+
+        {/* انتخاب چندگانهٔ مؤسسه‌ها */}
+        <div className="mt-3 rounded-xl border border-slate-200 p-2">
+          <div className="mb-1.5 flex items-center gap-2">
+            <span className="text-[11px] font-bold text-slate-600">مؤسسه‌ها (چندتایی انتخاب کنید — یک فایل می‌گیرید):</span>
+            <button onClick={() => { setSelected(stats.map((s) => s.universityId)); reset(); }} className="text-[11px] font-bold text-indigo-700 underline">همه</button>
+            <button onClick={() => { setSelected([]); reset(); }} className="text-[11px] font-bold text-slate-500 underline">هیچ‌کدام</button>
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {stats.map((s) => (
+              <label key={s.universityId} className="flex items-center gap-1.5 text-[11px] text-slate-700">
+                <input type="checkbox" checked={selected.includes(s.universityId)} onChange={() => { toggle(s.universityId); reset(); }} className="h-3.5 w-3.5 accent-indigo-700" />
+                <span className={s.sahamCodeCount === 0 ? 'text-amber-700' : ''}>{s.title}</span>
+                {s.isDissolved && <span className="rounded bg-slate-200 px-1 text-[9px]">منحل</span>}
+              </label>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -236,14 +296,14 @@ export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lo
               <th className="p-2.5">دانشگاه / مؤسسه</th>
               <th className="p-2.5">کد سهام</th>
               <th className="p-2.5">تعداد ({kind === 'graduates' ? 'آموخته' : kind === 'instructors' ? 'آموزشگر' : 'دانشجو'})</th>
-              {FILL_ROWS.map(f => <th key={f.key} className="p-2.5 whitespace-nowrap">{f.label}</th>)}
+              {FILL_ROWS.map((f) => <th key={f.key} className="p-2.5 whitespace-nowrap">{f.label}</th>)}
               <th className="p-2.5">خروجی</th>
             </tr>
           </thead>
           <tbody>
-            {statsShown.map(s => {
+            {rows.map((s) => {
               const noCode = s.sahamCodeCount === 0;
-              const pv = preview[s.universityId];
+              const filtered = fresh ? applied!.counts[s.universityId] : undefined;
               return (
                 <tr key={s.universityId} className="border-t border-slate-200">
                   <td className="p-2.5">
@@ -256,13 +316,19 @@ export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lo
                   <td className="p-2.5">
                     {noCode
                       ? <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">بدون کد</span>
-                      : <span className="font-mono text-[11px]">{s.sahamCodeCount.toLocaleString('fa-IR')} واحد</span>}
+                      : <span className="font-mono text-[11px]">{fa(s.sahamCodeCount)} واحد</span>}
                   </td>
-                  <td className="p-2.5 font-bold">
-                    {kindCount(s).toLocaleString('fa-IR')}
-                    {pv != null && <div className="text-[10px] font-normal text-emerald-700">فیلتر: {pv.toLocaleString('fa-IR')}</div>}
+                  <td className="p-2.5">
+                    {filtered != null ? (
+                      <div className="font-black text-emerald-700">{fa(filtered)}</div>
+                    ) : (
+                      <div className="font-bold text-slate-700">
+                        {fa(kindCount(s))}
+                        <span className="mr-1 text-[10px] font-normal text-slate-400">(کل)</span>
+                      </div>
+                    )}
                   </td>
-                  {FILL_ROWS.map(f => {
+                  {FILL_ROWS.map((f) => {
                     const n = s.fill[f.key];
                     const pct = s.students ? Math.round((n / s.students) * 100) : 0;
                     return (
@@ -274,29 +340,20 @@ export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lo
                               style={{ width: `${pct}%` }}
                             />
                           </div>
-                          <span className="font-mono text-[10px] text-slate-600">{pct.toLocaleString('fa-IR')}٪</span>
+                          <span className="font-mono text-[10px] text-slate-600">{fa(pct)}٪</span>
                         </div>
                       </td>
                     );
                   })}
                   <td className="p-2.5">
-                    <div className="flex gap-1.5">
-                      <button
-                        onClick={() => doPreview(s.universityId)}
-                        disabled={previewBusy === s.universityId}
-                        title="شمارش رکوردهای مطابق فیلتر، بدون ساخت فایل"
-                        className="rounded border border-slate-300 px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-40"
-                      >
-                        {previewBusy === s.universityId ? '…' : '🔍 تعداد'}
-                      </button>
-                      <button
-                        onClick={() => download(s.universityId)}
-                        disabled={busy === s.universityId || kindCount(s) === 0}
-                        className="rounded bg-indigo-700 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-indigo-800 disabled:opacity-40"
-                      >
-                        {busy === s.universityId ? '⏳ در حال ساخت…' : '⬇️ دانلود اکسل'}
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => download(s.universityId)}
+                      disabled={busy !== null || needTerm}
+                      title={needTerm ? 'اول نیمسال را انتخاب کنید' : 'خروجی این مؤسسه'}
+                      className="rounded bg-indigo-700 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-indigo-800 disabled:opacity-40"
+                    >
+                      {busy === s.universityId ? '⏳…' : '⬇️ اکسل'}
+                    </button>
                   </td>
                 </tr>
               );
@@ -311,7 +368,7 @@ export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lo
           <li>ستون «کد دانشکده/واحد» ۱۲ رقمی و با فرمت <span className="font-mono">Text</span> باشد — صفرهای اول نباید حذف شود.</li>
           <li>ستون‌های متنی نباید عدد باشند؛ سهام مقدار را با فهرست بستهٔ خودش مقایسه می‌کند («نام مطابقت نداشت»).</li>
           <li>شمارهٔ ملی تکراری یا خالی = حذف کل رکورد در سامانهٔ سهام.</li>
-          <li>اگر تعداد از سقف بیشتر شد، فیلتر را تنگ‌تر کنید (وضعیت/رشته/ورودی) و در چند نوبت دانلود بگیرید.</li>
+          <li>برای فایل بزرگ‌تر، فیلتر را تنگ‌تر کنید (وضعیت/رشته/ورودی) یا چند نوبت بگیرید.</li>
         </ul>
         <div className="mt-2 flex flex-wrap gap-3">
           <Link href="/admin/saham/settings" className="font-bold text-indigo-700 underline">⚙️ تنظیمات کدهای مؤسسه (استان/شهر استقرار)</Link>
