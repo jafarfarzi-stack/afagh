@@ -623,6 +623,69 @@ export async function deliverToInstructor(
 }
 
 /**
+ * مرحلهٔ ۵.۵ — بازگشت اوراق اصلاح‌شده به بایگانی (شرط پرداخت حق‌الزحمهٔ تصحیح).
+ *
+ * استاد پس از تصحیح، اوراق را به بایگانی تحویل می‌دهد؛ با تأیید بایگان، ردیف
+ * تحویل `papersReturnedToArchive=1` و `status='ARCHIVED'` می‌شود و زمان/هویت
+ * تحویلگیرنده ثبت می‌گردد. همه‌چیز در یک تراکنش + زنجیرهٔ ممیزی.
+ */
+export async function returnPapersToArchive(
+  actorUserId: number | null,
+  px: { offeringId: number; archiveStaffId: number; sheetCount?: number | null; note?: string | null },
+) {
+  const { offeringId, archiveStaffId } = px;
+  const [offering] = await db
+    .select({ id: course_offerings.id, termId: course_offerings.termId, universityId: course_offerings.universityId })
+    .from(course_offerings)
+    .where(eq(course_offerings.id, offeringId))
+    .limit(1);
+  if (!offering) throw new Error('ارائهٔ درس یافت نشد.');
+  {
+    const [term] = await db
+      .select({ universityId: academic_terms.universityId })
+      .from(academic_terms)
+      .where(eq(academic_terms.id, offering.termId))
+      .limit(1);
+    assertSameTenant('ارائهٔ درس', term?.universityId ?? null, offering.universityId);
+  }
+
+  return db.transaction(async tx => {
+    await advisoryLock(tx, 'exam_archive', offeringId);
+    const [delivery] = await tx
+      .select({
+        id: instructor_deliveries.id, status: instructor_deliveries.status,
+        sheetCount: instructor_deliveries.sheetCount, returnedAt: instructor_deliveries.returnedAt,
+      })
+      .from(instructor_deliveries)
+      .where(and(
+        eq(instructor_deliveries.courseOfferingId, offeringId),
+        sql`${instructor_deliveries.status} <> 'ARCHIVED'`,
+      ))
+      .orderBy(desc(instructor_deliveries.id))
+      .limit(1);
+    if (!delivery) throw new Error('تحویل فعالی برای این درس نیست (اوراق قبلاً بایگانی شده یا تحویل نشده است).');
+    if (delivery.status === 'INSTRUCTOR_RETURNED') throw new Error('بازگشت اوراق قبلاً ثبت شده است.');
+
+    const sheets = Number(px.sheetCount ?? delivery.sheetCount ?? 0);
+    await tx
+      .update(instructor_deliveries)
+      .set({
+        papersReturnedToArchive: 1,
+        archiveManagerId: archiveStaffId,
+        returnedAt: new Date(),
+        status: 'ARCHIVED',
+      })
+      .where(eq(instructor_deliveries.id, delivery.id));
+
+    await auditChain(tx, actorUserId, 'EXAM_PAPERS_ARCHIVED', 'course_offering', offeringId, {
+      deliveryId: delivery.id, archiveStaffId, sheets, note: px.note ?? null,
+    });
+
+    return { ok: true as const, deliveryId: delivery.id, sheets, archivedAt: new Date().toISOString() };
+  });
+}
+
+/**
  * راستی‌آزمایی توکن برداشت ارائه‌شده در برابر `instructor_deliveries.pickupToken`.
  *
  * جست‌وجو با هش انجام می‌شود (`sha256(token)` = ستون)؛ اگر ردیفی مقدار خامِ

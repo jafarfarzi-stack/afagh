@@ -13,11 +13,11 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { course_offerings, enrollments } from '@/db/schema';
 import { getStaffByUser, getStudentByUser, requireRole } from '@/lib/auth';
-import { verifyExamTicket } from '@/lib/verification';
+import { verifyExamHandover, verifyExamTicket } from '@/lib/verification';
 import * as engine from '@/lib/exam-engine';
 import type { ExamAppealRecheck, ExamCheckIn, ExamGradeEntry } from '@/lib/exam-engine';
 import type { RubricWeights } from '@/app/professor/grades/types';
@@ -160,6 +160,126 @@ export async function examFinalizeHandoverAction(px: { sessionId: number }) {
   const out = await wrap(() => engine.finalizeVaultHandover(user.id, px.sessionId, me.id));
   reval();
   return out;
+}
+
+// ── ⑥ تأیید تحویل با اسکن QR (تحویلگیرنده: مخزن یا استاد) ──
+/**
+ * تحویلگیرنده کد QR تحویل را اسکن میکند (یا میچسباند) و همین اکشن، مرحلهٔ
+ * متناظر زنجیرهٔ تحویل را اجرا میکند:
+ *   ▸ VAULT      — مراقب → مخزن: `vaultReceiveHall`
+ *   ▸ FINALIZE   — نهاییسازی تحویل همهٔ سالنهای جلسه: `finalizeVaultHandover`
+ *   ▸ INSTRUCTOR — مخزن → استاد: `deliverToInstructor` (فقط استادِ مالک درس یا اداری)
+ * هویت از نشست گرفته میشود، نه از payload؛ توکن فقط «کدام تحویل» را میگوید.
+ */
+export async function examHandoverConfirmAction(rawToken: string) {
+  const raw = String(rawToken ?? '').trim();
+  const m = raw.match(/exam-handover\/([^/?#\s]+)/i);
+  const token = decodeURIComponent((m ? m[1] : raw).trim());
+  if (!token) return { ok: false, error: 'کد تحویل خوانا نیست.' };
+
+  const res = await verifyExamHandover(token);
+  if (!res.ok) return { ok: false, error: res.message };
+  if (!res.ok) return { ok: false, error: 'کد تحویل نامعتبر است.' };
+
+  const roles = (res.step === 'INSTRUCTOR' || res.step === 'ARCHIVE')
+    ? ['ADMIN', 'EDU_EXPERT', 'PROFESSOR', 'ARCHIVE_EXPERT']
+    : ['ADMIN', 'EDU_EXPERT', 'VAULT_MANAGER'];
+  const user = await requireRole(roles);
+  const me = await getStaffByUser(user.id);
+  if (!me) return { ok: false, error: 'پروندهٔ پرسنلی یافت نشد.' };
+
+  if (res.step === 'ARCHIVE') {
+    if (!res.offeringId) return { ok: false, error: 'ارائهٔ درس مشخص نیست.' };
+    const out = await wrap(() =>
+      engine.returnPapersToArchive(user.id, { offeringId: res.offeringId as number, archiveStaffId: me.id }),
+    );
+    reval();
+    return { ok: true, message: 'بازگشت اوراق به بایگانی ثبت شد (شرط پرداخت حق‌الزحمهٔ تصحیح).', out };
+  }
+
+  if (res.step === 'INSTRUCTOR') {
+    if (!res.offeringId) return { ok: false, error: 'ارائهٔ درس مشخص نیست.' };
+    const [offering] = await db
+      .select({ professorId: course_offerings.professorId })
+      .from(course_offerings)
+      .where(eq(course_offerings.id, res.offeringId))
+      .limit(1);
+    if (!offering?.professorId) return { ok: false, error: 'استاد مالک درس یافت نشد.' };
+    const isOwner = Number(offering.professorId) === Number(me.id);
+    const isAdmin = user.roles.some(r => r === 'ADMIN' || r === 'EDU_EXPERT');
+    if (!isOwner && !isAdmin) return { ok: false, error: 'این اوراق به شما تحویل نشده است.' };
+    const out = await wrap(() =>
+      engine.deliverToInstructor(user.id, {
+        offeringId: res.offeringId as number,
+        instructorId: Number(offering.professorId),
+        vaultManagerId: me.id,
+      }),
+    );
+    reval();
+    return { ok: true, message: 'تحویل اوراق به استاد ثبت شد.', out };
+  }
+
+  if (!res.sessionId) return { ok: false, error: 'جلسهٔ امتحان مشخص نیست.' };
+  if (res.step === 'VAULT') {
+    if (!res.hallId) return { ok: false, error: 'سالن مشخص نیست.' };
+    const out = await wrap(() =>
+      engine.vaultReceiveHall(user.id, { sessionId: res.sessionId as number, hallId: res.hallId as number, vaultManagerId: me.id }),
+    );
+    reval();
+    return { ok: true, message: 'دریافت اوراق سالن توسط مخزن ثبت شد.', out };
+  }
+  const out = await wrap(() => engine.finalizeVaultHandover(user.id, res.sessionId as number, me.id));
+  reval();
+  return { ok: true, message: 'نهاییسازی تحویل اوراق به مخزن ثبت شد.', out };
+}
+
+// ── ⑦ حضور مراقب/استاد در جلسهٔ امتحان (دستی یا با اسکن) ──
+/**
+ * ثبت حضور مراقب یا استادِ درس در جلسهٔ امتحان.
+ * کارشناس آموزش می‌تواند دستی تأیید کند (روش MANUAL_BY_EXPERT) و مراقب هم
+ * حضور خودش را با روش CLOCK_IN ثبت می‌کند. یک ردیف به‌ازای هر (جلسه، نفر).
+ */
+export async function examStaffPresenceAction(px: {
+  sessionId: number;
+  hallId?: number | null;
+  staffId: number;
+  role: 'PROCTOR' | 'PROFESSOR';
+  isPresent: boolean;
+  note?: string | null;
+}) {
+  const user = await requireRole(['ADMIN', 'EDU_EXPERT', 'PROCTOR']);
+  const me = await getStaffByUser(user.id);
+  if (!me) return { ok: false, error: 'پروندهٔ پرسنلی یافت نشد.' };
+  const sessionId = Number(px.sessionId);
+  const staffId = Number(px.staffId);
+  if (!sessionId || !staffId) return { ok: false, error: 'جلسه یا شخص نامعتبر است.' };
+
+  // مراقب فقط حضور خودش را می‌تواند ثبت کند؛ کارشناس/مدیر همه را
+  const canAll = user.roles.some(r => r === 'ADMIN' || r === 'EDU_EXPERT');
+  if (!canAll && staffId !== me.id) return { ok: false, error: 'شما فقط می‌توانید حضور خودتان را ثبت کنید.' };
+
+  try {
+    await db.transaction(async tx => {
+      await tx.execute(sql`
+        insert into exam_session_staff_attendance
+          ("sessionId","hallId","staffId","role","isPresent","method","confirmedByStaffId","note","universityId")
+        values (${sessionId}, ${px.hallId ?? null}, ${staffId}, ${px.role}, ${px.isPresent ? 1 : 0},
+                ${px.isPresent ? (canAll ? 'MANUAL_BY_EXPERT' : 'CLOCK_IN') : null},
+                ${me.id}, ${px.note ?? null},
+                (select "universityId" from exam_sessions where id = ${sessionId}))
+        on conflict ("sessionId","staffId") do update set
+          "isPresent" = excluded."isPresent",
+          "method" = excluded."method",
+          "confirmedByStaffId" = excluded."confirmedByStaffId",
+          "note" = excluded."note",
+          "recordedAt" = now()
+      `);
+    });
+    reval();
+    return { ok: true, message: px.isPresent ? 'حضور ثبت شد.' : 'حضور لغو شد.' };
+  } catch (err) {
+    return { ok: false, error: (err as Error)?.message || 'ثبت حضور ممکن نشد.' };
+  }
 }
 
 // ── ⑤ تحویل به استادِ مالک درس (اداری؛ استاد از DB خوانده می‌شود نه payload) ──

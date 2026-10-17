@@ -1488,8 +1488,35 @@ export const professor_class_attendance = pgTable('professor_class_attendance', 
   deviceUserAgent: text('deviceUserAgent'),
   status: varchar('status', { length: 20 }).notNull().default('VALID'),
   recordedAt: timestamp('recordedAt').defaultNow(),
+  /** یادداشت تأیید دستی توسط کارشناس آموزش */
+  note: varchar('note', { length: 300 }),
+  /** کارشناسی که حضور را دستی تأیید کرده (ممیزی) */
+  confirmedByStaffId: integer('confirmedByStaffId').references(() => staff.id),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
+
+/**
+ * حضور مراقب/استاد در جلسهٔ امتحان — جدا از حضور دانشجویان.
+ * به‌ازای هر (جلسه، نفر) یک ردیف: روش ثبت (CLOCK_IN/QR_SCAN/MANUAL_BY_EXPERT)
+ * و هویت تأییدکننده نگه داشته می‌شود تا زنجیرهٔ ممیزی کامل باشد.
+ */
+export const exam_session_staff_attendance = pgTable('exam_session_staff_attendance', {
+  id: serial('id').primaryKey(),
+  sessionId: integer('sessionId').notNull().references(() => exam_sessions.id),
+  hallId: integer('hallId').references(() => exam_halls.id),
+  staffId: integer('staffId').notNull().references(() => staff.id),
+  /** PROCTOR | PROFESSOR */
+  role: varchar('role', { length: 30 }).notNull(),
+  isPresent: integer('isPresent').notNull().default(0),
+  /** CLOCK_IN | QR_SCAN | MANUAL_BY_EXPERT */
+  method: varchar('method', { length: 30 }),
+  confirmedByStaffId: integer('confirmedByStaffId').references(() => staff.id),
+  note: varchar('note', { length: 300 }),
+  recordedAt: timestamp('recordedAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+}, (t) => ({
+  uq: unique('uq_exam_session_staff_attendance').on(t.sessionId, t.staffId),
+}));
 
 export const physical_access_logs = pgTable('physical_access_logs', {
   id: serial('id').primaryKey(),

@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { examProctorClockInAction, examProctorScanAction, examProctorVerifyAction } from '@/lib/exam-actions';
+import VerifyQrBlock from '@/components/VerifyQrBlock';
 import type { ExamCheckIn } from '@/lib/exam-engine';
 
 export interface ProctorRosterItem {
@@ -37,11 +38,12 @@ const faNum = (v: unknown) => (v === null || v === undefined || v === '' ? '—'
 
 export default function ProctorExamAttendanceClient({ sessions, staffName }: { sessions: ProctorSessionData[]; staffName: string }) {
   const [activeSessionId, setActiveSessionId] = useState<number | null>(sessions[0]?.id ?? null);
-  const [marked, setMarked] = useState<Record<string, { present: boolean; permit: boolean }>>({});
+  const [marked, setMarked] = useState<Record<string, { present: boolean; permit: boolean; method?: 'QR_SCAN' | 'MANUAL_BY_INVIGILATOR' }>>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; error: boolean } | null>(null);
   const [scanValue, setScanValue] = useState('');
   const [scanResult, setScanResult] = useState<{ name: string; code: string; ok: boolean } | null>(null);
+  const [handoverQr, setHandoverQr] = useState<{ url: string; qr: string; expiresAt: string | null } | null>(null);
 
   const session = useMemo(() => sessions.find(s => s.id === activeSessionId) ?? sessions[0] ?? null, [sessions, activeSessionId]);
 
@@ -61,9 +63,28 @@ export default function ProctorExamAttendanceClient({ sessions, staffName }: { s
   const presentCount = roster.filter(r => (marked[`${session!.id}-${r.studentId}`]?.present ?? r.isPresent)).length;
   const pendingCount = roster.filter(r => !(marked[`${session!.id}-${r.studentId}`]?.present ?? r.isPresent)).length;
 
-  const toggleMark = (studentId: number, patch: Partial<{ present: boolean; permit: boolean }>) => {
+  const toggleMark = (studentId: number, patch: Partial<{ present: boolean; permit: boolean; method: 'QR_SCAN' | 'MANUAL_BY_INVIGILATOR' }>) => {
     const key = `${session!.id}-${studentId}`;
-    setMarked(prev => ({ ...prev, [key]: { present: prev[key]?.present ?? false, permit: prev[key]?.permit ?? false, ...patch } }));
+    setMarked(prev => {
+      const before = prev[key] ?? { present: false, permit: false };
+      const next = { ...before, ...patch };
+      // تیک دستی = «کارت ورود به جلسه ارائه نشد» → روش «ثبت دستی مراقب»
+      // (اسکن QR که قبلاً ثبت شده، دست‌نخورده می‌ماند)
+      if (patch.present === true && !patch.method && before.method !== 'QR_SCAN') {
+        next.method = 'MANUAL_BY_INVIGILATOR';
+      }
+      return { ...prev, [key]: next };
+    });
+  };
+
+  /** روش ثبت حضور هر دانشجو: اسکن QR، یا ثبت دستی مراقب (کارت نیاورده)، یا غیبت */
+  const methodFor = (r: ProctorRosterItem): 'QR_SCAN' | 'MANUAL_BY_INVIGILATOR' | 'SYSTEM_EXCUSE' => {
+    const m = marked[`${session!.id}-${r.studentId}`];
+    const present = m ? m.present : r.isPresent;
+    if (!present) return 'SYSTEM_EXCUSE';
+    if (m?.method) return m.method;
+    if (r.checkInMethod === 'QR_SCAN' || r.checkInMethod === 'MANUAL_BY_INVIGILATOR') return r.checkInMethod;
+    return 'MANUAL_BY_INVIGILATOR';
   };
 
   const handleClockIn = async () => {
@@ -88,7 +109,7 @@ export default function ProctorExamAttendanceClient({ sessions, staffName }: { s
         const m = marked[`${session.id}-${r.studentId}`];
         const present = m ? m.present : r.isPresent;
         const permit = m ? m.permit : r.hasTemporaryPermit;
-        return { studentId: r.studentId, isPresent: present ? 1 : 0, method: present ? 'QR_SCAN' : 'SYSTEM_EXCUSE', hasTemporaryPermit: permit ? 1 : 0 };
+        return { studentId: r.studentId, isPresent: present ? 1 : 0, method: methodFor(r), hasTemporaryPermit: permit ? 1 : 0 };
       });
     if (checkIns.every(c => c.isPresent === 0)) {
       showMsg('هیچ دانشجویی به‌عنوان حاضر علامت‌گذاری نشده است.', true);
@@ -119,7 +140,7 @@ export default function ProctorExamAttendanceClient({ sessions, staffName }: { s
       const res = await examProctorScanAction({ sessionId: session.id, hallId: session.hallId, raw });
       if (typeof res === 'object' && res !== null && 'ok' in res && res.ok) {
         const r = res as { studentId: number; studentName: string; studentCode: string };
-        toggleMark(r.studentId, { present: true });
+        toggleMark(r.studentId, { present: true, method: 'QR_SCAN' });
         setScanResult({ name: r.studentName, code: r.studentCode, ok: true });
         showMsg(`✅ حضور ${r.studentName} (${r.studentCode}) ثبت شد.`);
       } else {
@@ -133,6 +154,22 @@ export default function ProctorExamAttendanceClient({ sessions, staffName }: { s
     } finally {
       setBusy(false);
       setScanValue('');
+    }
+  };
+
+  /** QR تحویل اوراق سالن به مخزن (تحویلگیرنده: انباردار/اداری) */
+  const showVaultQr = async () => {
+    if (!session) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/admin/exams/handover-qr?step=VAULT&sessionId=${session.id}&hallId=${session.hallId}`);
+      const d = r.ok ? await r.json() : null;
+      if (d?.qr) { setHandoverQr(d); showMsg('QR تحویل ساخته شد — آن را به انباردار نشان دهید تا اسکن کند.'); }
+      else showMsg('ساخت QR تحویل ممکن نشد.', true);
+    } catch {
+      showMsg('خطا در ارتباط با سرور.', true);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -181,8 +218,23 @@ export default function ProctorExamAttendanceClient({ sessions, staffName }: { s
               <button onClick={handleClockIn} disabled={busy} className="px-3.5 py-1.5 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-[11px] font-black transition disabled:opacity-50">
                 🕐 ثبت ورود مراقب
               </button>
+              <button onClick={() => void showVaultQr()} disabled={busy} className="px-3.5 py-1.5 rounded-xl bg-indigo-800 hover:bg-indigo-900 text-white text-[11px] font-black transition disabled:opacity-50">
+                🔳 QR تحویل اوراق به مخزن
+              </button>
             </div>
           </div>
+
+          {handoverQr && (
+            <div className="border-b border-slate-100 p-3">
+              <VerifyQrBlock
+                title="تحویل اوراق سالن به مخزن — این کد را به انباردار نشان دهید"
+                url={handoverQr.url}
+                qr={handoverQr.qr}
+                expiresAt={handoverQr.expiresAt}
+                hint="انباردار کد را اسکن میکند و در صفحهٔ تحویل، دریافت اوراق را تأیید میکند."
+              />
+            </div>
+          )}
 
           {/* خلاصهٔ زنده */}
           <div className="p-4 grid grid-cols-3 gap-3 text-center border-b border-slate-100">
@@ -235,6 +287,7 @@ export default function ProctorExamAttendanceClient({ sessions, staffName }: { s
             )}
             <p className="mt-1 text-[10px] text-teal-800/80">
               توکن کارت با امضای سامانه بررسی می‌شود؛ حضور فقط برای دانشجوی همین سالن ثبت می‌گردد و در زنجیرهٔ ممیزی می‌ماند.
+              دانشجویی که کارت نیاورده را از ستون «حاضر» تیک بزنید — به‌صورت خودکار با روش «ثبت دستی مراقب» و در صورتجلسه ثبت می‌شود.
             </p>
           </div>
 
@@ -283,6 +336,11 @@ export default function ProctorExamAttendanceClient({ sessions, staffName }: { s
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-black text-[10px]">—</span>
+                        )}
+                        {present && (
+                          <span className={`mt-1 block text-[9px] font-black ${methodFor(r) === 'QR_SCAN' ? 'text-teal-700' : 'text-amber-700'}`}>
+                            {methodFor(r) === 'QR_SCAN' ? '🔳 اسکن کارت' : '✋ کارت نیاورده (ثبت دستی مراقب)'}
+                          </span>
                         )}
                       </td>
                     </tr>

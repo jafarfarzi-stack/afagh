@@ -1,0 +1,194 @@
+'use client';
+
+import { useMemo, useState, useTransition } from 'react';
+import { confirmProfessorAttendanceAction } from './actions';
+
+export interface ManualRow {
+  sessionId: number;
+  sessionNo: number;
+  sessionDate: string;
+  time: string;
+  isMakeUp: boolean;
+  courseCode: string | null;
+  courseTitle: string | null;
+  staffId: number | null;
+  professorName: string;
+  method: string | null;
+  status: string | null;
+  note: string | null;
+  punches: number;
+}
+
+const faNum = (v: unknown) =>
+  v === null || v === undefined || v === '' ? '—' : String(v).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+
+const METHOD_FA: Record<string, string> = {
+  MANUAL_BY_EXPERT: 'تأیید دستی کارشناس',
+  MANUAL_ATTENDANCE_SHEET: 'برگهٔ حضور استاد',
+  FINGERPRINT: 'اثر انگشت (گیت)',
+  BIOMETRIC_CHAIN: 'زنجیرهٔ اثر انگشت',
+};
+
+/**
+ * رابط مجزای «تأیید دستی حضور استاد» — جست‌وجو + تأیید/لغو تک‌کلیکی.
+ * وضعیت خودکار (اثر انگشت) و وضعیت ثبت‌شده کنار هم نشان داده می‌شود.
+ */
+export default function ManualAttendanceClient({
+  terms,
+  termId,
+  termTitle,
+  rows,
+}: {
+  terms: { id: number; title: string; termCode: string; isCurrent: boolean; isActive: boolean }[];
+  termId: number;
+  termTitle: string;
+  rows: ManualRow[];
+}) {
+  const [pending, startTransition] = useTransition();
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [q, setQ] = useState('');
+  const [onlyMissing, setOnlyMissing] = useState(false);
+  const [done, setDone] = useState<Record<number, { present: boolean; note?: string }>>({});
+
+  const filtered = useMemo(() => {
+    const needle = q.trim();
+    return rows.filter(r => {
+      const recorded = done[r.sessionId]?.present ?? (r.status === 'VALID');
+      if (onlyMissing && recorded) return false;
+      if (!needle) return true;
+      return `${r.courseCode ?? ''} ${r.courseTitle ?? ''} ${r.professorName} ${r.sessionDate}`.includes(needle);
+    });
+  }, [rows, q, onlyMissing, done]);
+
+  const act = (r: ManualRow, present: boolean) => {
+    if (!r.staffId) { setMsg({ ok: false, text: 'استاد این درس ثبت نشده است.' }); return; }
+    startTransition(async () => {
+      const res = await confirmProfessorAttendanceAction({ sessionId: r.sessionId, staffId: r.staffId as number, isPresent: present });
+      if (res.ok) {
+        setDone(prev => ({ ...prev, [r.sessionId]: { present } }));
+        setMsg({ ok: true, text: present ? `حضور ${r.professorName} برای جلسهٔ ${faNum(r.sessionNo)} تأیید شد.` : `تأیید حضور جلسهٔ ${faNum(r.sessionNo)} لغو شد.` });
+      } else {
+        setMsg({ ok: false, text: res.error ?? 'ثبت ممکن نشد.' });
+      }
+    });
+  };
+
+  return (
+    <div className="space-y-4" dir="rtl">
+      <div className="overflow-hidden rounded-2xl border border-indigo-900/20 bg-gradient-to-l from-indigo-800 via-indigo-700 to-slate-900 p-4 text-white shadow-lg">
+        <h1 className="text-lg font-black">🧑‍🏫 تأیید دستی حضور استاد</h1>
+        <p className="mt-1 text-xs text-indigo-50/90">
+          حضور استاد خودکار از سامانهٔ اثر انگشت خوانده می‌شود؛ اگر دستگاه ثبت نکرده باشد، کارشناس آموزش می‌تواند
+          حضور همان جلسه را اینجا دستی تأیید کند (روش ثبت: «تأیید دستی کارشناس» + یادداشت و هویت تأییدکننده در ممیزی).
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-300 bg-white p-3">
+        <label className="text-[11px] font-bold text-slate-700">
+          نیمسال
+          <select
+            value={termId}
+            onChange={e => { window.location.href = `/admin/attendance-manual?term=${e.target.value}`; }}
+            className="mt-1 block min-w-[220px] rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+          >
+            {terms.map(t => (
+              <option key={t.id} value={t.id}>
+                {t.title} ({t.termCode}){t.isActive ? ' — نیمسال فعال' : t.isCurrent ? ' — جاری' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-[11px] font-bold text-slate-700">
+          جست‌وجو (درس/استاد/تاریخ)
+          <input value={q} onChange={e => setQ(e.target.value)} className="mt-1 block w-56 rounded-lg border border-slate-300 px-2 py-1.5 text-xs" />
+        </label>
+        <label className="flex items-center gap-1 pb-2 text-[11px] font-bold text-slate-700">
+          <input type="checkbox" checked={onlyMissing} onChange={e => setOnlyMissing(e.target.checked)} />
+          فقط جلسه‌های بدون تأیید
+        </label>
+        <span className="mr-auto text-[11px] text-slate-500">
+          {faNum(filtered.length)} جلسه از {faNum(rows.length)} — {termTitle}
+        </span>
+      </div>
+
+      {msg && (
+        <div className={`rounded-lg border px-3 py-2 text-xs font-bold ${msg.ok ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-rose-300 bg-rose-50 text-rose-800'}`}>
+          {msg.text}
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-xl border border-slate-300 bg-white">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-slate-900 text-center text-[11px] text-white">
+              <th className="p-2.5">جلسه</th>
+              <th className="p-2.5">تاریخ / ساعت</th>
+              <th className="p-2.5">درس</th>
+              <th className="p-2.5">استاد</th>
+              <th className="p-2.5">اثر انگشت (گیت)</th>
+              <th className="p-2.5">وضعیت ثبت‌شده</th>
+              <th className="p-2.5">تأیید دستی</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(r => {
+              const recorded = done[r.sessionId]?.present ?? (r.status === 'VALID');
+              const manual = (done[r.sessionId] ? true : r.method === 'MANUAL_BY_EXPERT');
+              return (
+                <tr key={r.sessionId} className={`border-b border-slate-100 ${recorded ? 'bg-emerald-50/40' : ''}`}>
+                  <td className="p-2.5 text-center font-mono font-black text-slate-700">
+                    {faNum(r.sessionNo)}
+                    {r.isMakeUp && <span className="mr-1 rounded bg-amber-100 px-1 text-[9px] font-black text-amber-800">جبرانی</span>}
+                  </td>
+                  <td className="p-2.5 text-center text-slate-600">
+                    <span className="block font-mono">{faNum(r.sessionDate)}</span>
+                    <span className="block text-[10px] text-slate-400" dir="ltr">{r.time}</span>
+                  </td>
+                  <td className="p-2.5">
+                    <span className="font-black text-indigo-950">{r.courseCode}</span>
+                    <span className="block text-[10px] text-slate-500">{r.courseTitle}</span>
+                  </td>
+                  <td className="p-2.5 font-bold text-slate-800">{r.professorName}</td>
+                  <td className="p-2.5 text-center">
+                    {r.punches > 0
+                      ? <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-black text-teal-800">✓ {faNum(r.punches)} تردد</span>
+                      : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">ثبت نشده</span>}
+                  </td>
+                  <td className="p-2.5 text-center">
+                    {recorded
+                      ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800">✓ حاضر {manual ? '(دستی)' : ''}</span>
+                      : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">—</span>}
+                    {r.note && <span className="mt-1 block text-[9px] text-slate-500">{r.note}</span>}
+                  </td>
+                  <td className="p-2.5 text-center">
+                    <button
+                      type="button"
+                      disabled={pending || !r.staffId}
+                      onClick={() => act(r, true)}
+                      className="rounded-lg bg-emerald-700 px-2.5 py-1 text-[10px] font-black text-white transition hover:bg-emerald-800 disabled:opacity-40"
+                    >
+                      تأیید حضور
+                    </button>
+                    {recorded && (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => act(r, false)}
+                        className="mr-1 rounded-lg border border-rose-300 bg-rose-50 px-2.5 py-1 text-[10px] font-black text-rose-800 transition hover:bg-rose-100 disabled:opacity-40"
+                      >
+                        لغو
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+            {filtered.length === 0 && (
+              <tr><td colSpan={7} className="p-6 text-center text-slate-500">جلسه‌ای با این فیلتر یافت نشد.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

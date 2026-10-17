@@ -1,10 +1,11 @@
 import 'server-only';
 import { createHmac, createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and } from 'drizzle-orm';
 import { db } from '@/db';
 import {
-  academic_terms, degree_level_configs, majors, short_term_certificates,
-  short_term_courses, short_term_learners, short_term_registrations, student_cards, student_ledger, students, users,
+  academic_terms, course_offerings, courses, degree_level_configs, exam_course_packets, exam_halls,
+  exam_minutes, exam_sessions, instructor_deliveries, majors, short_term_certificates,
+  short_term_courses, short_term_learners, short_term_registrations, staff, student_cards, student_ledger, students, users,
 } from '@/db/schema';
 import { getNumber, getSetting } from '@/lib/settings';
 import { calculateOfficialGPA } from '@/lib/regulations-engine';
@@ -302,7 +303,7 @@ export async function verifyExamTicket(rawToken: string): Promise<ExamTicketVeri
     .select({
       studentId: students.id, studentCode: students.studentCode,
       firstName: users.firstName, lastName: users.lastName, nationalCode: users.nationalCode,
-      majorName: majors.name,
+      majorName: majors.name, universityId: students.universityId,
     })
     .from(students)
     .innerJoin(users, eq(users.id, students.userId))
@@ -311,7 +312,9 @@ export async function verifyExamTicket(rawToken: string): Promise<ExamTicketVeri
     .limit(1);
   if (!stu) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
 
-  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1)).limit(1);
+  // نیمسال فعال: انتخاب تاریخ‌محور برای همان دانشگاه (پرچم isCurrent ممکن است روی
+  // چند ترم کهنه مانده باشد و باعث شود کارت آزمون ترمِ اشتباه را فیلتر کند).
+  const term = await currentTermFor(stu.universityId).catch(() => null);
   const debt = await studentDebtRials(stu.studentId);
   if (debt > 0) {
     return { ok: false, reason: 'NOT_CLEARED', message: 'تسویهٔ مالی انجام نشده است؛ صدور کارت ورود مجاز نیست.', debt };
@@ -685,6 +688,135 @@ export async function verifyTranscript(rawToken: string): Promise<TranscriptVeri
     policy: String(gpaData.policy ?? ''),
     checkedAt: new Date().toISOString(),
   };
+}
+
+// ─────────────────── ه) زنجیرهٔ تحویل اوراق امتحان (QR تحویل) ───────────────────
+export type ExamHandoverStep = 'VAULT' | 'FINALIZE' | 'INSTRUCTOR' | 'ARCHIVE';
+
+export type ExamHandoverVerification =
+  | { ok: false; reason: 'BAD_TOKEN' | 'EXPIRED' | 'NOT_FOUND'; message: string }
+  | {
+      ok: true;
+      step: ExamHandoverStep;
+      sessionId: number | null;
+      hallId: number | null;
+      offeringId: number | null;
+      /** شرح خوانا برای تحویلگیرنده */
+      title: string;
+      details: { label: string; value: string }[];
+      checkedAt: string;
+    };
+
+const HANDOVER_TTL_MINUTES = 180;
+
+/**
+ * توکن تحویل اوراق — امضاشده و کوتاه‌مدت (پیش‌فرض ۳ ساعت).
+ *
+ * فرستندهٔ اوراق (مراقب/مخزن) این توکن را به‌شکل QR نشان می‌دهد و تحویلگیرنده
+ * (مخزن یا استاد) آن را اسکن می‌کند؛ صفحهٔ `/exam-handover/<token>` جزئیات
+ * تحویل را نشان می‌دهد و با تأیید تحویلگیرنده، همان اکشنِ موتور اجرا می‌شود.
+ */
+export async function issueExamHandoverToken(px: {
+  step: ExamHandoverStep;
+  sessionId?: number | null;
+  hallId?: number | null;
+  offeringId?: number | null;
+}): Promise<{ token: string; expiresAt: string }> {
+  const payload: Record<string, string | number> = {
+    kind: 'EXAM_HANDOVER',
+    step: px.step,
+    sid: Number(px.sessionId ?? 0),
+    hid: Number(px.hallId ?? 0),
+    oid: Number(px.offeringId ?? 0),
+  };
+  const token = await signToken(payload, HANDOVER_TTL_MINUTES * 60);
+  return { token, expiresAt: new Date(Date.now() + HANDOVER_TTL_MINUTES * 60_000).toISOString() };
+}
+
+/** اعتبارسنجی توکن تحویل + خواندن شرح تحویل از پایگاه داده */
+export async function verifyExamHandover(rawToken: string): Promise<ExamHandoverVerification> {
+  const sig = await verifyTokenSignature<{ kind?: string; step?: string; sid?: number; hid?: number; oid?: number }>(rawToken);
+  if (!sig.ok) {
+    return {
+      ok: false,
+      reason: sig.reason === 'EXPIRED' ? 'EXPIRED' : 'BAD_TOKEN',
+      message: sig.reason === 'EXPIRED'
+        ? 'این کد تحویل منقضی شده است؛ فرستنده باید کد تازه بسازد.'
+        : 'کد تحویل نامعتبر یا دستکاری‌شده است.',
+    };
+  }
+  const step = String(sig.payload.step ?? '') as ExamHandoverStep;
+  if (sig.payload.kind !== 'EXAM_HANDOVER' || !['VAULT', 'FINALIZE', 'INSTRUCTOR', 'ARCHIVE'].includes(step)) {
+    return { ok: false, reason: 'BAD_TOKEN', message: 'نوع کد با تحویل اوراق همخوانی ندارد.' };
+  }
+  const sessionId = Number(sig.payload.sid ?? 0) || null;
+  const hallId = Number(sig.payload.hid ?? 0) || null;
+  const offeringId = Number(sig.payload.oid ?? 0) || null;
+
+  const details: { label: string; value: string }[] = [];
+  let title = 'تحویل اوراق امتحان';
+
+  if (step === 'INSTRUCTOR' || step === 'ARCHIVE') {
+    if (!offeringId) return { ok: false, reason: 'NOT_FOUND', message: 'ارائهٔ درس در کد تحویل مشخص نیست.' };
+    const [row] = await db
+      .select({
+        courseTitle: courses.title, courseCode: courses.code,
+        professorName: sql<string>`${users.firstName} || ' ' || ${users.lastName}`,
+        termTitle: academic_terms.title,
+        deliveryStatus: instructor_deliveries.status,
+        returnedAt: instructor_deliveries.returnedAt,
+        sheets: instructor_deliveries.sheetCount,
+      })
+      .from(course_offerings)
+      .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+      .leftJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
+      .leftJoin(staff, eq(staff.id, course_offerings.professorId))
+      .leftJoin(users, eq(users.id, staff.userId))
+      .leftJoin(instructor_deliveries, and(
+        eq(instructor_deliveries.courseOfferingId, course_offerings.id),
+        sql`${instructor_deliveries.status} <> 'ARCHIVED'`,
+      ))
+      .where(eq(course_offerings.id, offeringId))
+      .limit(1);
+    if (!row) return { ok: false, reason: 'NOT_FOUND', message: 'ارائهٔ درس یافت نشد.' };
+    title = step === 'ARCHIVE' ? 'بازگشت اوراق اصلاح‌شده به بایگانی' : 'تحویل اوراق امتحان به استاد';
+    details.push(
+      { label: 'درس', value: `${row.courseCode} — ${row.courseTitle}` },
+      { label: 'استاد', value: row.professorName ?? '—' },
+      { label: 'نیمسال', value: row.termTitle ?? '—' },
+      { label: 'وضعیت تحویل', value: row.deliveryStatus ?? 'تحویل فعالی نیست' },
+      { label: 'تعداد اوراق', value: row.sheets != null ? String(row.sheets) : '—' },
+    );
+  } else {
+    if (!sessionId) return { ok: false, reason: 'NOT_FOUND', message: 'جلسهٔ امتحان در کد تحویل مشخص نیست.' };
+    const [row] = await db
+      .select({
+        examDate: exam_sessions.examDate, startTime: exam_sessions.startTime, endTime: exam_sessions.endTime,
+        hallName: exam_halls.name, buildingName: exam_halls.buildingName,
+        present: sql<number>`(select count(*) from exam_attendances ea where ea."examId" = ${exam_sessions.id} and ea."isPresent" = 1)::int`,
+        total: sql<number>`(select count(*) from exam_attendances ea where ea."examId" = ${exam_sessions.id})::int`,
+        minutesSigned: sql<number>`(select count(*) from exam_minutes m where m."sessionId" = ${exam_sessions.id} and m."isSignedAndFinalized" = 1)::int`,
+        vaultReceived: sql<number>`(select count(*) from exam_minutes m where m."sessionId" = ${exam_sessions.id} and m."vaultReceivedAt" is not null)::int`,
+        packets: sql<number>`(select count(*) from exam_course_packets p where p."examId" = ${exam_sessions.id})::int`,
+        delivered: sql<number>`(select count(*) from exam_course_packets p where p."examId" = ${exam_sessions.id} and p."handoverStatus" = 'DELIVERED')::int`,
+      })
+      .from(exam_sessions)
+      .leftJoin(exam_halls, hallId ? eq(exam_halls.id, hallId) : sql`true`)
+      .where(eq(exam_sessions.id, sessionId))
+      .limit(1);
+    if (!row) return { ok: false, reason: 'NOT_FOUND', message: 'جلسهٔ امتحان یافت نشد.' };
+    title = step === 'VAULT' ? 'تحویل اوراق سالن به مخزن' : 'نهایی‌سازی تحویل اوراق به مخزن';
+    details.push(
+      { label: 'سالن', value: `${row.hallName ?? '—'}${row.buildingName ? ` (${row.buildingName})` : ''}` },
+      { label: 'تاریخ/ساعت', value: `${row.examDate} — ${row.startTime} تا ${row.endTime}` },
+      { label: 'حضور ثبت‌شده', value: `${row.present} از ${row.total}` },
+      { label: 'صورتجلسه', value: row.minutesSigned ? 'امضا شده ✓' : 'امضا نشده ✗' },
+      { label: 'دریافت مخزن', value: row.vaultReceived ? 'ثبت شده ✓' : 'ثبت نشده ✗' },
+      { label: 'بسته‌های اوراق', value: `${row.packets} بسته (${row.delivered} تحویل‌شده)` },
+    );
+  }
+
+  return { ok: true, step, sessionId, hallId, offeringId, title, details, checkedAt: new Date().toISOString() };
 }
 
 // ─────────────────── د) اصالت‌سنجی گواهینامهٔ دوره‌های آزاد ───────────────────

@@ -16,6 +16,7 @@ import {
 } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { pickEffectiveTerm } from '@/lib/term-scope';
 import * as engine from '@/lib/exam-engine';
 import { jalaliDateOf } from '@/lib/scheduling-core';
 
@@ -39,7 +40,16 @@ function normSessionDate(v: unknown): string {
 async function listRealTerms(universityId?: number) {
   const where = universityId ? eq(academic_terms.universityId, universityId) : undefined;
   return db
-    .select({ id: academic_terms.id, code: academic_terms.termCode, title: academic_terms.title, isCurrent: academic_terms.isCurrent })
+    .select({
+      id: academic_terms.id,
+      code: academic_terms.termCode,
+      title: academic_terms.title,
+      isCurrent: academic_terms.isCurrent,
+      // تاریخ‌ها لازم است تا «نیمسال فعال» تاریخ‌محور انتخاب شود (پرچم isCurrent
+      // ممکن است سال‌ها روی چند ترم کهنه مانده باشد)
+      startDate: academic_terms.startDate,
+      endDate: academic_terms.endDate,
+    })
     .from(academic_terms)
     .where(where)
     .orderBy(desc(academic_terms.id));
@@ -205,7 +215,7 @@ export async function getExamWorkspaceAction(termId?: number, universityId?: num
     const serverUni = await getCurrentUniversity().catch(() => null);
     const uid = serverUni?.id ?? universityId;
     const terms = await listRealTerms(uid);
-    const resolvedTermId = termId ?? terms.find(t => t.isCurrent === 1)?.id ?? terms[0]?.id ?? null;
+    const resolvedTermId = termId ?? pickEffectiveTerm(terms)?.id ?? terms[0]?.id ?? null;
 
     let sessions: Awaited<ReturnType<typeof loadSessions>> = [];
     let courses: Awaited<ReturnType<typeof loadExamCourses>> = [];

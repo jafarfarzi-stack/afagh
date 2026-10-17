@@ -729,6 +729,13 @@
       "when": 1794240000300,
       "tag": "0096_curriculum_versions_entry_term",
       "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1794240000400,
+      "tag": "0099_prof_attendance_manual",
+      "breakpoints": true
     }
   ]
 }
