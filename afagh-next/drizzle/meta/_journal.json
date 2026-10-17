@@ -708,6 +708,13 @@
       "when": 1794240000016,
       "tag": "0095_msglink_codehash_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1794240000100,
+      "tag": "0097_uems_term_tariff",
+      "breakpoints": true
     }
   ]
 }

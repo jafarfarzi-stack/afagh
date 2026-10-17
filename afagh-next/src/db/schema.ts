@@ -519,6 +519,12 @@ export const courses = pgTable('courses', {
   facesHours: numeric('facesHours', { precision: 3, scale: 1 }),       // ساعات چهره‌به‌چهره
   /** کدهای دروس هم‌ارز (جداشده با کاما) — مثال: '101,102,103' */
   equivalentCourseCodes: text('equivalentCourseCodes'),
+  /**
+   * «نوع درس مالی» سما (Mali_type) — از جدول LT7 سامانهٔ مبدأ، به‌ازای کد درس.
+   * نرخ هر واحد در تعرفهٔ سما به همین نوع وابسته است (نظری × Th + عملی × OP)،
+   * پس بدون آن بازتولید ریز شهریهٔ کارنامهٔ قدیم ممکن نیست.
+   */
+  legacyMaliType: integer('legacyMaliType'),
 }, (t) => [
   // کد درس در هر دانشگاه یکتاست (نه سراسری) — سما هر دانشگاه کدگذاری جدا دارد
   unique('uq_courses_uni_code').on(t.universityId, t.code),
@@ -3010,6 +3016,39 @@ export const tuition_rules = pgTable('tuition_rules', {
   index('idx_tuition_rules_current_term').on(t.currentTermId),
   index('idx_tuition_rules_faculty').on(t.facultyId),
   index('idx_tuition_rules_clinical').on(t.clinicalPhase),
+]);
+
+/**
+ * تعرفهٔ تفصیلی نیمسال‌های گذشته (سامانهٔ سما) — «نوع درس مالی» × نیمسال × رشته × ورودی.
+ *
+ * چرا جدا از `tuition_rules`؟ مدل `tuition_rules` سه نرخ دارد (نظری/عملی/عمومی) و
+ * به نیمسال وابسته نیست، ولی سما شهریهٔ هر درس را با نرخِ «نوع درس مالی» خودش در
+ * همان نیمسال می‌سازد:
+ *
+ *     مبلغ درس = واحدهای نظری × thPrice + واحدهای عملی × opPrice
+ *
+ * برای بازتولید دقیقِ ریال‌به‌ریال کارنامهٔ مالیِ نیمسال‌های گذشته (سند رسمی
+ * دانشگاه) همین تفصیل لازم است. تعرفهٔ نیمسال‌های جاری/آینده همچنان از
+ * `tuition_rules` می‌آید.
+ */
+export const tuition_term_tariff = pgTable('tuition_term_tariff', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  /** کد نیمسال سما — مثل '14031' */
+  termCode: varchar('termCode', { length: 20 }).notNull(),
+  majorId: integer('majorId').references(() => majors.id),
+  /** سالِ ورودِ گروه (نیمسالِ ورود ÷ ۱۰) */
+  entryYear: integer('entryYear').notNull(),
+  /** نوع درس مالی سما (Mali_type) */
+  maliType: integer('maliType').notNull(),
+  thPrice: numeric('thPrice', { precision: 16, scale: 2 }).notNull().default('0'),
+  opPrice: numeric('opPrice', { precision: 16, scale: 2 }).notNull().default('0'),
+  uPriceCode: varchar('uPriceCode', { length: 20 }),
+  source: varchar('source', { length: 40 }).default('SAMA'),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+}, (t) => [
+  unique('uq_tuition_term_tariff').on(t.universityId, t.termCode, t.majorId, t.entryYear, t.maliType),
+  index('idx_tuition_term_tariff_lookup').on(t.universityId, t.termCode, t.majorId, t.entryYear),
 ]);
 
 // ══════════════════════════════════════════════════════════════════════

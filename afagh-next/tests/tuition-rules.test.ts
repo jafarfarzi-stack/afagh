@@ -7,6 +7,7 @@
  */
 import { mapLegacyFeeRules, normalizeEquivFixedMode, pickFeeRule, shouldChargeFixed, termTypeOf, toNum } from '../src/lib/tuition-rules.ts';
 import { resolveTuitionRule, type TuitionRuleLike } from '../src/lib/tuition-resolver.ts';
+import { pickTariffRate, tariffCourseAmount, type TariffRate } from '../src/lib/tuition-tariff-core.ts';
 
 let pass = 0;
 let fail = 0;
@@ -169,6 +170,43 @@ eq('دانشجوی دانشگاه ۲ فقط قاعدهٔ مشترک را می‌
   resolveTuitionRule(uniRules, { degreeLevelId: 1, majorId: 999, entryYear: 1403, universityId: 2 })?.id, 3);
 eq('قاعدهٔ غیرفعال هرگز انتخاب نمی‌شود',
   resolveTuitionRule([{ ...uniRules[0], isActive: 0 }], { degreeLevelId: 1, majorId: 42, entryYear: 1403, universityId: 1 }), null);
+
+console.log('\n۱۲) تعرفهٔ تفصیلی سما: مبلغ درس = نظری×Th + عملی×OP (نوع درس مالی)');
+// نرخ‌های واقعی کد 35403952 (نیمسال ۱۴۰۳) و 35404952 (نیمسال ۱۴۰۴) از سامانهٔ سما
+const r14031 = new Map<number, TariffRate>([
+  [1, { th: 1167997.85, op: 3503993.6 }],
+  [2, { th: 1751996.79, op: 1751996.79 }],
+  [3, { th: 2141329.4, op: 1751996.79 }],
+  [4, { th: 2141329.4, op: 1751996.79 }],
+  [22, { th: 2141329.4, op: 3503993.6 }],
+  [23, { th: 2141329.4, op: 5255990.36 }],
+]);
+const r14041 = new Map<number, TariffRate>([
+  [1, { th: 1810396.67, op: 5431190.08 }],
+  [2, { th: 2715595.02, op: 2715595.02 }],
+  [3, { th: 3319060.57, op: 2715595.02 }],
+  [4, { th: 3319060.57, op: 2715595.02 }],
+  [22, { th: 3319060.57, op: 5431190.08 }],
+]);
+// ۱۴۰۳: ۵۳۰۰۷ (اصلی=۴، ۳ نظری) — کارنامهٔ رسمی: ۶٬۴۲۳٬۹۸۷
+eq('۵۳۰۰۷ (اصلی، ۳ نظری)', tariffCourseAmount(3, 0, pickTariffRate(r14031, 4)!), 6423988);
+// ۱۴۰۳: ۹۹۰۰۱ (عمومی=۱، ۲ نظری) — کارنامهٔ رسمی: ۲٬۳۳۵٬۹۹۶
+eq('۹۹۰۰۱ (عمومی، ۲ نظری)', tariffCourseAmount(2, 0, pickTariffRate(r14031, 1)!), 2335996);
+// ۱۴۰۳: ۵۳۰۰۸ (اصلی، ۱ عملی) — کارنامهٔ رسمی: ۱٬۷۵۱٬۹۹۷
+eq('۵۳۰۰۸ (اصلی، ۱ عملی)', tariffCourseAmount(0, 1, pickTariffRate(r14031, 4)!), 1751997);
+// ۱۴۰۳: ۹۹۰۴۱ تربیت بدنی (نوع ۲۲، نیم‌واحد نظری + نیم‌واحد عملی) — کارنامهٔ رسمی: ۲٬۸۲۲٬۶۶۱
+eq('۹۹۰۴۱ تربیت بدنی (۰/۵ نظری + ۰/۵ عملی)', tariffCourseAmount(0.5, 0.5, pickTariffRate(r14031, 22)!), 2822662);
+// ۱۴۰۴: ۵۳۰۲۹ (تخصصی، ۲ نظری) و ۵۳۱۱۲ (تخصصی، ۱ عملی) — مطابق کارنامهٔ رسمی
+eq('۵۳۰۲۹ (تخصصی، ۲ نظری)', tariffCourseAmount(2, 0, pickTariffRate(r14041, 3)!), 6638121);
+eq('۵۳۱۱۲ (تخصصی، ۱ عملی)', tariffCourseAmount(0, 1, pickTariffRate(r14041, 3)!), 2715595);
+eq('۹۹۰۲۷ (پایه، ۳ نظری)', tariffCourseAmount(3, 0, pickTariffRate(r14041, 2)!), 8146785);
+eq('۹۹۰۶۴ (پایه، ۲ نظری)', tariffCourseAmount(2, 0, pickTariffRate(r14041, 2)!), 5431190);
+// نرخ هر نوع دقیقاً همان نوع درس مالی خودِ درس را می‌گیرد (نه نرخ یکسان برای همه)
+eq('نوع ۲ نرخ پایه می‌گیرد، نه تخصصی', pickTariffRate(r14041, 2)?.th, 2715595.02);
+eq('نوع نامعلوم → نرخ تخصصی (رایج‌ترین)', pickTariffRate(r14041, null)?.th, 3319060.57);
+eq('نوع ناموجود → نرخ تخصصی', pickTariffRate(r14041, 999)?.th, 3319060.57);
+eq('بدون نرخ → null', pickTariffRate(new Map(), 3), null);
+eq('نوع نامعلوم و نبودِ نوع ۳ → گران‌ترین نوع', pickTariffRate(new Map([[7, { th: 10, op: 1 }], [8, { th: 99, op: 0 }]]), null)?.th, 99);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);
