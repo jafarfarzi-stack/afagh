@@ -194,6 +194,28 @@ CREATE POLICY pclass_self_read ON "professor_class_attendance" FOR SELECT TO afa
   USING ("staffId" IN (SELECT "id" FROM "staff"
     WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
 
+-- حضور مراقب/استاد در جلسهٔ امتحان: خودِ شخص + نقش‌های مجاز (مراقب/کارشناس/مدیر)
+ALTER TABLE "exam_session_staff_attendance" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS exam_staff_att_read ON "exam_session_staff_attendance";
+CREATE POLICY exam_staff_att_read ON "exam_session_staff_attendance" FOR SELECT TO afagh_app
+  USING (
+    "staffId" IN (SELECT "id" FROM "staff" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+    OR EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+               WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                 AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'VICE_EDU', 'PROCTOR', 'VAULT_MANAGER'))
+  );
+DROP POLICY IF EXISTS exam_staff_att_ins ON "exam_session_staff_attendance";
+CREATE POLICY exam_staff_att_ins ON "exam_session_staff_attendance" FOR INSERT TO afagh_app
+  WITH CHECK (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+                      WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                        AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'PROCTOR')));
+DROP POLICY IF EXISTS exam_staff_att_upd ON "exam_session_staff_attendance";
+CREATE POLICY exam_staff_att_upd ON "exam_session_staff_attendance" FOR UPDATE TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+                 WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                   AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'PROCTOR')))
+  WITH CHECK (true);
+
 DROP POLICY IF EXISTS pexam_self_read ON "professor_exam_attendance";
 CREATE POLICY pexam_self_read ON "professor_exam_attendance" FOR SELECT TO afagh_app
   USING ("staffId" IN (SELECT "id" FROM "staff"

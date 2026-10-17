@@ -34,3 +34,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS "uq_exam_session_staff_attendance"
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_exam_session_staff_attendance_session"
   ON "exam_session_staff_attendance" ("sessionId", "role");
+
+-- RLS: گیتِ استقرار هر جدولِ دادهٔ شخصی/مالی را بدون RLS رد می‌کند.
+-- سیاست‌ها در `pg-hardening.sql` ساخته می‌شوند (جایی که نقش afagh_app قطعاً هست).
+--> statement-breakpoint
+ALTER TABLE "exam_session_staff_attendance" ENABLE ROW LEVEL SECURITY;
