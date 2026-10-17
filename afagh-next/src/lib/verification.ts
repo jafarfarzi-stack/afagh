@@ -351,8 +351,8 @@ export async function verifyExamTicket(rawToken: string): Promise<ExamTicketVeri
     // بدون تخصیص صندلی: از ردیف EXAM زمان‌بندی همان کلاس‌ها
     const sched = ((await db.execute(sql`
       select c.title as "courseTitle", c.code as "courseCode",
-             coalesce(sc."examDate", '') as "examDate",
-             coalesce(sc."startTime", '') as "startTime", coalesce(sc."endTime", '') as "endTime",
+             coalesce(sc."examDate"::text, '') as "examDate",
+             coalesce(sc."startTime"::text, '') as "startTime", coalesce(sc."endTime"::text, '') as "endTime",
              (pu."firstName" || ' ' || pu."lastName") as "professorName"
         from enrollments en
         join course_offerings o on o.id = en."offeringId"

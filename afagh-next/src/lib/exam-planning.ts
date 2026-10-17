@@ -81,6 +81,28 @@ const jalaliOfDateCol = (d: unknown): string | null => {
   return jalaliDateOf(dt);
 };
 
+/**
+ * تاریخ یک «جلسهٔ امتحان» به شکل شمسی استاندارد.
+ *
+ * قرارداد پروژه این است که `exam_sessions.examDate` شمسی باشد، ولی ردیف‌های
+ * موجودِ دیتابیس (ایمپورت/سید قدیمی) میلادی‌اند؛ پیش‌تر مقایسهٔ خام باعث می‌شد
+ * هیچ ارائه‌ای به جلسه تطبیق نخورد و «تخصیص صندلی» همیشه صفر بماند. این تابع
+ * هر دو قالب را می‌پذیرد تا تطبیق خراب نشود.
+ */
+const sessionDateJalali = (v: unknown): string | null => {
+  const s = String(v ?? '').trim();
+  if (!s) return null;
+  const jal = /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/.exec(s);
+  if (jal) {
+    const year = Number(jal[1]);
+    if (year < 1600) return normJalali(`${jal[1]}/${jal[2]}/${jal[3]}`);
+    const iso = fromIsoDate(`${jal[1]}-${jal[2]}-${jal[3]}`);
+    return iso ? normJalali(jalaliDateOf(iso)) : null;
+  }
+  const iso = fromIsoDate(s);
+  return iso ? normJalali(jalaliDateOf(iso)) : null;
+};
+
 // ─────────────────────────── زون‌بندی ───────────────────────────
 
 /** خواندن (یا null) تنظیمات تقویم امتحانات یک ترم */
@@ -502,7 +524,7 @@ export async function generateSeatAllocations(actorUserId: number, termId: numbe
       const matched = schedRows
         .filter(r => {
           const jd = jalaliOfDateCol(r.examDate);
-          return jd != null && normJalali(jd) === s.examDate && hm(r.startTime) === s.startTime;
+          return jd != null && normJalali(jd) === sessionDateJalali(s.examDate) && hm(r.startTime) === s.startTime;
         })
         .map(r => r.offeringId);
 
