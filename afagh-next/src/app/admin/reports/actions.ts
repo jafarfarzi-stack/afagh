@@ -3,7 +3,7 @@
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 import {
   NUM,
   PER,
@@ -56,31 +56,35 @@ function reportCenter(kind: string): 'finance' | 'edu' {
 
 export async function getFilterOptions({ universityId }: { universityId?: number } = {}): Promise<FilterOptions> {
   await requireRole(ROLES);
+  // 🔒 اگر دانشگاهِ فعال معتبر نباشد (۰ = DENY_UNI یا نامشخص) از «هیچ دانشگاهی»
+  // استفاده می‌شود، نه «همهٔ دانشگاه‌ها». پیش‌تر شرط کاملاً حذف می‌شد و فهرست
+  // ترم/دانشکده/گروه/رشته/ورودیِ همهٔ دانشگاه‌ها لو می‌رفت (fail-open).
+  const uid = isRealUniversityId(universityId) ? universityId : -1;
   const terms = await db.execute<{ code: string; title: string | null }>(
-    universityId
-      ? sql`SELECT DISTINCT "termCode" AS code, MAX(title) AS title FROM academic_terms WHERE "universityId" = ${universityId} GROUP BY "termCode" ORDER BY "termCode" DESC`
+    uid
+      ? sql`SELECT DISTINCT "termCode" AS code, MAX(title) AS title FROM academic_terms WHERE "universityId" = ${uid} GROUP BY "termCode" ORDER BY "termCode" DESC`
       : sql`SELECT DISTINCT "termCode" AS code, MAX(title) AS title FROM academic_terms GROUP BY "termCode" ORDER BY "termCode" DESC`,
   );
   const degrees = await db.execute<{ id: number; title: string }>(
     sql`SELECT MIN(id) AS id, title FROM degree_level_configs GROUP BY title ORDER BY MIN(id)`,
   );
   const faculties = await db.execute<{ id: number; name: string }>(
-    universityId
-      ? sql`SELECT id, name FROM faculties WHERE "universityId" = ${universityId} OR "universityId" IS NULL ORDER BY id`
+    uid
+      ? sql`SELECT id, name FROM faculties WHERE "universityId" = ${uid} OR "universityId" IS NULL ORDER BY id`
       : sql`SELECT id, name FROM faculties ORDER BY id`,
   );
   const departments = await db.execute<{ id: number; name: string; code: string | null }>(
-    universityId
-      ? sql`SELECT id, name, "departmentCode" AS code FROM departments WHERE "universityId" = ${universityId} OR "universityId" IS NULL ORDER BY name`
+    uid
+      ? sql`SELECT id, name, "departmentCode" AS code FROM departments WHERE "universityId" = ${uid} OR "universityId" IS NULL ORDER BY name`
       : sql`SELECT id, name, "departmentCode" AS code FROM departments ORDER BY name`,
   );
   const majors = await db.execute<{ id: number; name: string; code: string | null }>(
-    universityId
-      ? sql`SELECT id, name, "majorCode" AS code FROM majors WHERE "universityId" = ${universityId} OR "universityId" IS NULL ORDER BY name`
+    uid
+      ? sql`SELECT id, name, "majorCode" AS code FROM majors WHERE "universityId" = ${uid} OR "universityId" IS NULL ORDER BY name`
       : sql`SELECT id, name, "majorCode" AS code FROM majors ORDER BY name`,
   );
   const years = await db.execute<{ y: number }>(
-    sql`SELECT DISTINCT "entryYear" AS y FROM students ${universityId ? sql`WHERE "universityId" = ${universityId}` : sql``} ORDER BY 1 DESC`,
+    sql`SELECT DISTINCT "entryYear" AS y FROM students ${uid ? sql`WHERE "universityId" = ${uid}` : sql``} ORDER BY 1 DESC`,
   );
   return {
     terms: terms.rows,
@@ -128,7 +132,8 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
   await assertReportPermission(kind);
   // تفکیک دانشگاه سمت سرورمشتق می‌شود؛ ورودی کلاینت نادیده گرفته می‌شود
   const uni = await getCurrentUniversity().catch(() => null);
-  f = { ...f, universityId: uni?.id ?? -1 };
+  // 🔒 دانشگاهِ ۰/نامشخص ⇒ ۱- (هیچ ردیفی)، نه «حذف شرط» که همه را می‌آورد
+  f = { ...f, universityId: isRealUniversityId(uni?.id) ? uni.id : -1 };
   const term = f.term || '';
 
   try {

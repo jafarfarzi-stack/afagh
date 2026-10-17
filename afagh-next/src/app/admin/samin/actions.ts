@@ -57,3 +57,66 @@ export async function traceSamin(universityId: number, traceId: number) {
   const { saminTrace } = await import('@/lib/samin/client');
   return saminTrace(universityId, traceId);
 }
+
+/**
+ * ارسال «نمونه» به ثمین — چند **فارغ‌التحصیل** مشخص (پیش‌فرض ۲ نفر) برای
+ * آزمون واقعی اتصال. برخلاف `enqueueForSamin` که کل دانشجویان را صف می‌کند،
+ * اینجا فقط چند رکورد با وضعیت GRADUATED انتخاب، به صف اضافه و همان لحظه
+ * با `bulk_import_data` ارسال می‌شوند تا `trace_id` و وضعیت سامانه دیده شود.
+ */
+export async function sendSampleGraduatesToSamin(universityId: number, count = 2) {
+  await requireRole(['ADMIN']);
+  const limit = Math.min(Math.max(Number(count) || 2, 1), 10);
+
+  const rows = await db
+    .select({ id: students.id })
+    .from(students)
+    .where(and(eq(students.universityId, universityId), eq(students.status, 'GRADUATED')))
+    .orderBy(students.id)
+    .limit(limit);
+  if (!rows.length) {
+    throw new Error('برای این مؤسسه دانش‌آموخته‌ای با وضعیت «فارغ‌التحصیل» پیدا نشد.');
+  }
+
+  const batch: { pk: string; studentPk: string; payload: Record<string, unknown> }[] = [];
+  for (const r of rows) {
+    const payload = await buildSaminPayloadForStudent(r.id);
+    if (!payload) continue;
+    batch.push({
+      pk: String((payload as any).person_pk_in_source || r.id),
+      studentPk: String((payload as any).student_pk_in_source || r.id),
+      payload: payload as Record<string, unknown>,
+    });
+  }
+  if (!batch.length) throw new Error('ساخت payload برای نمونه‌ها ناموفق بود (دادهٔ دانشجو ناقص است).');
+
+  // ثبت در همان صف تا در صفحه قابل رصد باشد (تکراری‌ها بی‌اثر)
+  for (const b of batch) {
+    await db.insert(samin_staging).values({
+      universityId,
+      entityCode: '1000',
+      personPkInSource: b.pk,
+      studentPkInSource: b.studentPk,
+      payload: b.payload as any,
+      status: 'PENDING',
+    }).onConflictDoNothing();
+  }
+
+  const res: any = await saminBulkImport(universityId, {
+    data_object: batch.map((b) => b.payload),
+    entity_code: '1000',
+    import_type_code: '0',
+  });
+
+  const traceId = Number(res?.trace_id ?? res?.traceId ?? 0) || null;
+  for (const b of batch) {
+    await db.update(samin_staging).set({ status: 'SENT', traceId, sentAt: new Date() })
+      .where(and(
+        eq(samin_staging.universityId, universityId),
+        eq(samin_staging.entityCode, '1000'),
+        eq(samin_staging.personPkInSource, b.pk),
+      ));
+  }
+  revalidatePath('/admin/samin');
+  return { sent: batch.length, ...res };
+}

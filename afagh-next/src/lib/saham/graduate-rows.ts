@@ -1,6 +1,7 @@
 import 'server-only';
-import { mapSahamValue, cityTitle, type SahamInstituteCode, type GeoTitles } from './saham-maps';
-import { sahamNative, sahamBirthYear, type RawStudent } from './student-rows';
+import { cityTitle, type SahamInstituteCode, type GeoTitles } from './saham-maps';
+import { mapSahamClosed } from './codes';
+import { sahamNative, sahamBirthYear, sahamEntryYear, sahamGradTermFromDate, type RawStudent } from './student-rows';
 
 /**
  * گزارش دانش‌آموختگان سهام (2-Graduate.xlsx):
@@ -70,14 +71,15 @@ export function toSahamGraduateRow(
   codeRow: SahamInstituteCode | null,
   geo: GeoTitles,
 ): string[] {
-  const m = (field: string, v: unknown) => mapSahamValue(maps, field, v);
+  const m = (field: string, v: unknown) => mapSahamClosed(maps, field, v);
   const inst = codeRow ? { code: codeRow.code, title: codeRow.title } : { code: '', title: r.facultyTitle ?? '' };
   const provName = codeRow?.provinceCode ? (geo.province[codeRow.provinceCode] ?? '') : '';
   const cityName = cityTitle(geo, codeRow?.provinceCode ?? null, codeRow?.cityCode ?? null);
-  // نیمسال فراغت: سال+نیمسال پایان، وگرنه تاریخ فراغت
+  // نیمسال فراغت: سه رقم آخر سال + شمارهٔ نیمسال (بند ۱۶ راهنمای سهام).
+  // `eduEndYear` در دیتابیس خالی است، پس از تاریخ فراغت ساخته می‌شود.
   const gradTerm = r.eduEndYear != null
-    ? `${r.eduEndYear}${r.eduEndSemester === 2 ? '2' : '1'}`
-    : (r.graduateDate ?? '');
+    ? sahamEntryYear(r.eduEndYear, r.eduEndSemester)
+    : sahamGradTermFromDate(r.graduateDate);
 
   return [
     r.universityTitle,
@@ -85,16 +87,16 @@ export function toSahamGraduateRow(
     inst.title,
     provName,
     cityName,
-    r.teachingMode ?? 'حضوری',
-    r.studyType ?? '',
+    r.teachingMode ? m('teaching_mode', r.teachingMode) : 'حضوری',
+    m('study_type', r.studyType),
     r.degreeCode ?? '',
-    r.degreeTitle ?? '',
+    m('degree', r.degreeTitle),
     r.majorCode ?? '',
     r.majorTitle ?? '',
     m('student_status', r.status),
     m('student_status_code', r.status),
     r.studentCode,
-    r.entryYear != null ? `${r.entryYear}${r.entryTerm === 2 ? '2' : '1'}` : '',
+    sahamEntryYear(r.entryYear, r.entryTerm),
     gradTerm,
     r.firstName ?? '',
     r.lastName ?? '',
@@ -102,7 +104,7 @@ export function toSahamGraduateRow(
     r.fatherName ?? '',
     r.birthCertNo ?? '',
     r.nationalCode ?? '',
-    r.maritalStatus ?? m('marital', r.maritalStatus),
+    m('marital', r.maritalStatus),
     m('religion', r.religion),
     sahamBirthYear(r.birthDate),
     r.birthProvince ?? '',

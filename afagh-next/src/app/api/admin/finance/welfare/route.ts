@@ -6,7 +6,7 @@ import { welfare_funds } from '@/db/schema-welfare';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId, universityEq } from '@/lib/university-scope';
 import { z } from 'zod';
 import { assertCsrf } from '@/lib/security';
 
@@ -36,7 +36,8 @@ async function guard() {
 }
 
 function uniFilter(universityId: number | null) {
-  return universityId ? eq(welfare_funds.universityId, universityId) : undefined;
+  // 🔒 ۰/نامشخص ⇒ هیچ صندوقی (پیش‌تر شرط حذف می‌شد ⇒ صندوق‌های همهٔ دانشگاه‌ها)
+  return universityEq(welfare_funds.universityId, universityId);
 }
 
 export async function GET(req: NextRequest) {
@@ -58,9 +59,7 @@ export async function GET(req: NextRequest) {
       const fundCond = unassigned
         ? isNull(student_loans.welfareFundId)
         : eq(student_loans.welfareFundId, fundId);
-      const where = universityId
-        ? and(fundCond, eq(student_loans.universityId, universityId))
-        : fundCond;
+      const where = and(fundCond, universityEq(student_loans.universityId, universityId));
       const [{ total }] = await db.select({ total: count() }).from(student_loans).where(where);
       const rows = await db
         .select({
@@ -98,9 +97,7 @@ export async function GET(req: NextRequest) {
       .select({ fundId: student_loans.welfareFundId, n: count() })
       .from(student_loans)
       .where(
-        universityId
-          ? and(eq(student_loans.universityId, universityId))
-          : undefined,
+        universityEq(student_loans.universityId, universityId),
       );
     const countMap = new Map<number, number>();
     for (const c of counts) if (c.fundId !== null) countMap.set(c.fundId, Number(c.n));
@@ -143,7 +140,9 @@ export async function POST(req: NextRequest) {
           .for('update')
           .limit(1);
         if (!loan) return null;
-        if (universityId !== null && loan.universityId !== null && loan.universityId !== universityId) {
+        // 🔒 اگر دانشگاهِ جاری معتبر نباشد (۰/نامشخص) هیچ وامی قابل تغییر نیست
+        if (!isRealUniversityId(universityId)) return 'forbidden' as const;
+        if (loan.universityId !== null && loan.universityId !== universityId) {
           return 'forbidden' as const;
         }
         if (fundId !== null) {

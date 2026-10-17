@@ -46,6 +46,30 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const canSwitchUniversity = user.roles.some(r => AREA_ROLES.includes(r));
   const unis = await listUniversities();
   const curUni = await getCurrentUniversity();
+  // 🔒 مرز دانشگاهی (fail-closed) — قفل کلِ شاخهٔ مدیریت:
+  // وقتی کاربر به هیچ دانشگاهی مجاز نیست، `getCurrentUniversity` شناسهٔ ۰
+  // (DENY_UNI) برمی‌گرداند. پیش از این، صفحه‌ها و کوئری‌های زیرشاخه با
+  // «شرط حذف‌شده» اجرا می‌شدند و دادهٔ همهٔ دانشگاه‌ها را نشان می‌دادند
+  // (fail-open). اینجا ورود به شاخه بسته می‌شود؛ تک‌تک مسیرهای API هم
+  // مستقلاً با `universityEq` بسته شده‌اند.
+  if (!(curUni.id > 0)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6" dir="rtl">
+        <div className="w-full max-w-md rounded-2xl border border-rose-200 bg-white p-6 text-center shadow-sm">
+          <p className="text-lg font-extrabold text-rose-700">دسترسی به پنل مدیریت مجاز نیست</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            حساب شما به هیچ دانشگاهی متصل نیست؛ بنابراین دادهٔ دانشگاهی برای نمایش وجود ندارد.
+            لطفاً با مدیر سامانه تماس بگیرید تا دانشگاهِ حساب شما تنظیم شود.
+          </p>
+          <form action={logoutAction} className="mt-5">
+            <button className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">
+              خروج از حساب
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
   const th = uniTheme(curUni.code);
   const termScope = await getTermScope(curUni.id);
   // قفل خودکار بیکاری — سرور-محور (مدت به تفکیک نقش؛ ۰ = غیرفعال).

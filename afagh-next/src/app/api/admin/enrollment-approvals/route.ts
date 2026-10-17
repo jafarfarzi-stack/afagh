@@ -12,7 +12,7 @@ import { english_enrollment_approvals } from '@/db/schema-enrollment-approvals';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, universityEq } from '@/lib/university-scope';
 import { z } from 'zod';
 import { assertCsrf } from '@/lib/security';
 
@@ -72,12 +72,11 @@ export async function GET(req: NextRequest) {
         .from(students)
         .innerJoin(users, eq(users.id, students.userId))
         .where(
-          universityId
-            ? and(
-                eq(students.universityId, universityId),
-                or(eq(students.studentCode, q), sql`${name} LIKE ${'%' + q + '%'}`),
-              )
-            : or(eq(students.studentCode, q), sql`${name} LIKE ${'%' + q + '%'}`),
+          and(
+            // 🔒 دانشگاهِ ۰/نامشخص ⇒ هیچ ردیفی (پیش‌تر شرط حذف می‌شد ⇒ همهٔ دانشگاه‌ها)
+            universityEq(students.universityId, universityId),
+            or(eq(students.studentCode, q), sql`${name} LIKE ${'%' + q + '%'}`),
+          ),
         )
         .limit(20);
       return NextResponse.json({ hits: rows });
@@ -107,7 +106,7 @@ export async function GET(req: NextRequest) {
         .where(
           and(
             eq(course_offerings.isActive, 1),
-            universityId ? eq(course_offerings.universityId, universityId) : undefined,
+            universityEq(course_offerings.universityId, universityId),
             titleCond,
           ),
         )
@@ -117,32 +116,20 @@ export async function GET(req: NextRequest) {
     }
 
     // لیست درخواست‌ها
-    const where: ReturnType<typeof and> = universityId
-      ? and(
-          eq(english_enrollment_approvals.universityId, universityId),
-          status && STATUSES.includes(status as (typeof STATUSES)[number])
-            ? eq(english_enrollment_approvals.status, status)
-            : undefined,
-          q
-            ? or(
-                ilike(students.studentCode, `%${q}%`),
-                ilike(courses.title, `%${q}%`),
-                sql`(${users.firstName} || ' ' || ${users.lastName}) LIKE ${'%' + q + '%'}`,
-              )
-            : undefined,
-        )
-      : and(
-          status && STATUSES.includes(status as (typeof STATUSES)[number])
-            ? eq(english_enrollment_approvals.status, status)
-            : undefined,
-          q
-            ? or(
-                ilike(students.studentCode, `%${q}%`),
-                ilike(courses.title, `%${q}%`),
-                sql`(${users.firstName} || ' ' || ${users.lastName}) LIKE ${'%' + q + '%'}`,
-              )
-            : undefined,
-        );
+    const where: ReturnType<typeof and> = and(
+      // 🔒 دانشگاهِ ۰/نامشخص ⇒ هیچ ردیفی (پیش‌تر شرط حذف می‌شد ⇒ همهٔ دانشگاه‌ها)
+      universityEq(english_enrollment_approvals.universityId, universityId),
+      status && STATUSES.includes(status as (typeof STATUSES)[number])
+        ? eq(english_enrollment_approvals.status, status)
+        : undefined,
+      q
+        ? or(
+            ilike(students.studentCode, `%${q}%`),
+            ilike(courses.title, `%${q}%`),
+            sql`(${users.firstName} || ' ' || ${users.lastName}) LIKE ${'%' + q + '%'}`,
+          )
+        : undefined,
+    );
 
     const [{ total }] = await db
       .select({ total: count() })

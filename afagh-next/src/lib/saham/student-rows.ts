@@ -1,7 +1,8 @@
 import 'server-only';
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
-import { loadSahamValueMaps, mapSahamValue, loadSahamInstituteCodes, pickSahamCode, cityTitle, type SahamInstituteCode, type GeoTitles } from './saham-maps';
+import { loadSahamValueMaps, loadSahamInstituteCodes, pickSahamCode, cityTitle, type SahamInstituteCode, type GeoTitles } from './saham-maps';
+import { mapSahamClosed } from './codes';
 import { jalaliDateOf } from '@/lib/scheduling-core';
 
 /** سال تولد شمسی از تاریخ میلادی ISO ('YYYY-MM-DD') — خطا/خالی → '' */
@@ -14,10 +15,29 @@ export function sahamBirthYear(iso: string | null): string {
   }
 }
 
-/** سال ورود سهام: سال چسبیده به ۱/۲ بدون خط‌تیره (مثل 14011) */
-function sahamEntryYear(entryYear: number | null, entryTerm: number | null): string {
+/**
+ * سال ورود سهام — طبق راهنمای رسمی سهام (`راهنمای_ارسال_فایل.pdf` بند ۱۵):
+ *   «۱۴۰۱ → ۴۰۱۱»  یعنی **سه رقم آخر سال + شمارهٔ نیمسال**.
+ * ⚠️ فرمت پیشینِ ما ۵ رقمی بود (`14011`) که با استاندارد سهام نمی‌خواند.
+ */
+export function sahamEntryYear(entryYear: number | null, entryTerm: number | null): string {
   if (entryYear == null) return '';
-  return `${entryYear}${entryTerm === 2 ? '2' : '1'}`;
+  return `${entryYear % 1000}${entryTerm === 2 ? '2' : '1'}`;
+}
+
+/**
+ * «نیمسال فارغ‌التحصیلی» از تاریخ فراغت جلالی — طبق بند ۱۶ راهنما
+ * مقادیری مثل `3991`/`3992`/`3993` یعنی سه رقم آخر سال + شمارهٔ نیمسال
+ * (۱: نیمسال دومِ سال قبل، ۲: نیمسال اول، ۳: تابستان).
+ */
+export function sahamGradTermFromDate(d: string | null): string {
+  if (!d) return '';
+  const m = /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/.exec(String(d).trim());
+  if (!m) return d;
+  const year = Number(m[1]) % 1000;
+  const month = Number(m[2]);
+  const sem = month >= 7 ? 1 : month >= 5 ? 3 : 2;
+  return `${year}${sem}`;
 }
 
 /** نگاشت کد بومی/غیربومی (BOOMI خام: 1/2) به متن سهام */
@@ -331,7 +351,7 @@ export function toSahamRow(
   codeRow: SahamInstituteCode | null,
   geo: GeoTitles,
 ): string[] {
-  const m = (field: string, v: unknown) => mapSahamValue(maps, field, v);
+  const m = (field: string, v: unknown) => mapSahamClosed(maps, field, v);
   // کد واحد/دانشکده + نام + استان/شهر استقرار از جدول saham_institute_codes
   const inst = codeRow ? { code: codeRow.code, title: codeRow.title } : { code: '', title: r.facultyTitle ?? '' };
   const provName = codeRow?.provinceCode ? (geo.province[codeRow.provinceCode] ?? '') : '';
@@ -343,16 +363,16 @@ export function toSahamRow(
     inst.title,
     provName,
     cityName,
-    r.teachingMode ?? 'حضوری',
-    r.studyType ?? '',
+    r.teachingMode ? m('teaching_mode', r.teachingMode) : 'حضوری',
+    m('study_type', r.studyType),
     r.degreeCode ?? '',
-    r.degreeTitle ?? '',
+    m('degree', r.degreeTitle),
     r.majorCode ?? '',
     r.majorTitle ?? '',
     m('student_status_code', r.status),
     m('student_status', r.status),
-    r.termStatusTitle ?? '',
-    r.transferGuestStatus ?? '',
+    m('term_status', r.termStatusTitle),
+    m('transfer_guest', r.transferGuestStatus),
     r.lastTermCode ?? '',
     r.studentCode,
     sahamEntryYear(r.entryYear, r.entryTerm),
@@ -362,7 +382,7 @@ export function toSahamRow(
     r.fatherName ?? '',
     r.birthCertNo ?? '',
     r.nationalCode ?? '',
-    r.maritalStatus ?? m('marital', r.maritalStatus),
+    m('marital', r.maritalStatus),
     m('religion', r.religion),
     sahamBirthYear(r.birthDate),
     r.birthProvince ?? '',
@@ -376,10 +396,10 @@ export function toSahamRow(
     r.email ?? '',
     r.countryTitle ?? (r.nationality === '120001' ? 'ایران' : ''),
     m('admission_type', r.acceptanceType),
-    r.admissionMethod ?? '',
+    m('admission_method', r.admissionMethod),
     m('quota', r.quotaType),
-    r.tuitionPaymentMethod ?? '',
-    r.scholarshipType ?? '',
+    m('tuition_payment', r.tuitionPaymentMethod),
+    m('scholarship', r.scholarshipType),
     r.entranceExamRank ?? '',
     r.termCourseCount != null ? String(r.termCourseCount) : '',
     r.leaveSemesters != null ? String(r.leaveSemesters) : '',

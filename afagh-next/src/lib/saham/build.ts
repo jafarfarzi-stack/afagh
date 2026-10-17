@@ -70,8 +70,11 @@ export async function buildSahamWorkbook(
   }
 
   const data = rows.map(r => toSahamRow(r, maps, pickSahamCode(codes, r.universityId, r.facultyId ?? null), geo));
+  // شیت دوم «وضعیت نظام وظیفه» — در فایل رسمی 1-Student.xlsx هم وجود دارد
+  const mil = rows.map(toSahamMilitaryRow);
   const buf = writeXlsx([
     { name: 'اطلاعات ثبتی دانشجویان', rows: [[...SAHAM_STUDENT_HEADERS], ...data], widths: widthsFor(SAHAM_STUDENT_HEADERS) },
+    { name: 'وضعیت نظام وظیفه', rows: [[...SAHAM_MILITARY_HEADERS], ...mil], widths: [16, 16, 14, 16, 24] },
   ]);
   return { buf, fileName: `SAHAM-Students-${uni}.xlsx`, count: rows.length, total, hasMore };
 }

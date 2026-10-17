@@ -736,6 +736,13 @@
       "when": 1794240000400,
       "tag": "0099_prof_attendance_manual",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1794240000500,
+      "tag": "0100_saham_value_maps_official_lists",
+      "breakpoints": true
     }
   ]
 }

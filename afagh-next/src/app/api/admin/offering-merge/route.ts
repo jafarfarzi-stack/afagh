@@ -5,7 +5,7 @@ import { course_offerings } from '@/db/schema';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 import { groupIntoMerged, mergedGroupKey } from '@/lib/professor-calendar-layout';
 import { z } from 'zod';
 import { assertCsrf } from '@/lib/security';
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
       left join staff s on s.id = o."professorId"
       left join users u on u.id = s."userId"
       where o."termId" = ${termId} and o."isActive" = 1
-        ${universityId ? sql`and o."universityId" = ${universityId}` : sql``}
+        ${isRealUniversityId(universityId) ? sql`and o."universityId" = ${universityId}` : sql`and 1 = 0`}
       order by c.title, o."groupNumber"
     `);
     const offerings = (offRows.rows ?? []) as OfferingRow[];

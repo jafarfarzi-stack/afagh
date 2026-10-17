@@ -6,7 +6,7 @@ import { student_tuition_overrides } from '@/db/schema-welfare';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, universityEq } from '@/lib/university-scope';
 import { z } from 'zod';
 import { assertCsrf } from '@/lib/security';
 
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
       const terms = await db
         .select({ id: academic_terms.id, title: academic_terms.title, termCode: academic_terms.termCode })
         .from(academic_terms)
-        .where(universityId ? eq(academic_terms.universityId, universityId) : undefined)
+        .where(universityEq(academic_terms.universityId, universityId))
         .orderBy(desc(academic_terms.id))
         .limit(60);
       return NextResponse.json({ terms });
@@ -97,7 +97,8 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, Number(searchParams.get('page') ?? '1') || 1);
 
     const where = and(
-      universityId ? eq(student_tuition_overrides.universityId, universityId) : undefined,
+      // 🔒 ۰/نامشخص ⇒ هیچ ردیفی (پیش‌تر شرط حذف می‌شد ⇒ overrideهای همهٔ دانشگاه‌ها)
+      universityEq(student_tuition_overrides.universityId, universityId),
       Number.isInteger(studentId) && studentId > 0
         ? eq(student_tuition_overrides.studentId, studentId)
         : undefined,

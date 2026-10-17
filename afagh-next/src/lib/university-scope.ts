@@ -146,3 +146,27 @@ export async function currentUniversitySqlCondition(column: any): Promise<any> {
   if (!allowed.length) return sql`1 = 0`;                    // deny-all (fail-closed)
   return inArray(column, allowed);
 }
+
+/**
+ * 🔒 آیا این شناسه یک دانشگاهِ *واقعی* است؟
+ *
+ * دو حالتِ خطرناک که هر دو falsy‌اند و نباید به «حذف فیلتر» ترجمه شوند:
+ *   • `0` = DENY_UNI → کاربر به هیچ دانشگاهی مجاز نیست
+ *   • `null` / `undefined` = دانشگاه نامشخص (خطای DB یا نبود زمینه)
+ *
+ * الگوی قدیمی `universityId ? eq(col, universityId) : undefined` برای این دو
+ * حالت شرط را **حذف** می‌کرد؛ یعنی نه‌فقط دسترسی باز می‌شد، بلکه دادهٔ *همهٔ*
+ * دانشگاه‌ها برمی‌گشت (fail-open). این تابع آن در را می‌بندد.
+ */
+export function isRealUniversityId(id: number | null | undefined): id is number {
+  return typeof id === 'number' && Number.isFinite(id) && id > 0;
+}
+
+/**
+ * شرط «همین دانشگاه» برای کوئری‌های مبتنی بر شناسهٔ عددی — همیشه بسته:
+ *   • شناسهٔ واقعی            → `column = id`
+ *   • `0` / `null` / نامشخص   → `1 = 0` (هیچ ردیفی؛ نه حذف شرط)
+ */
+export function universityEq(column: any, universityId: number | null | undefined): any {
+  return isRealUniversityId(universityId) ? eq(column, universityId) : sql`1 = 0`;
+}

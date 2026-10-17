@@ -281,7 +281,8 @@ export async function listFinanceFilterOptions({ universityId }: { universityId?
     db.select({ id: degree_level_configs.id, title: degree_level_configs.title })
       .from(degree_level_configs).orderBy(asc(degree_level_configs.title)),
     db.selectDistinct({ entryYear: students.entryYear }).from(students)
-      .where(universityId ? eq(students.universityId, universityId) : undefined),
+      // 🔒 دانشگاهِ ۰/نامشخص ⇒ هیچ ورودی‌ای (پیش‌تر شرط حذف می‌شد ⇒ ورودی‌های همهٔ دانشگاه‌ها)
+      .where(universityId && universityId > 0 ? eq(students.universityId, universityId) : sql`1 = 0`),
   ]);
 
   const entryYears = yearRows

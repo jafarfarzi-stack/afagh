@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { enqueueForSamin, sendToSamin, traceSamin } from './actions';
+import { enqueueForSamin, sendToSamin, traceSamin, sendSampleGraduatesToSamin } from './actions';
 
 type Uni = { id: number; code: string; title: string };
 
@@ -56,6 +56,42 @@ export default function SaminClient({
         >
           ارسال ۵۰تایی (bulk_import_data)
         </button>
+      </div>
+
+      <div className="card space-y-3">
+        <h3 className="font-bold text-xs">۳) ارسال «نمونه» — دو فارغ‌التحصیل (آزمون واقعی اتصال)</h3>
+        <p className="text-[11px] text-slate-500">
+          دو دانش‌آموختهٔ همین مؤسسه (وضعیت «فارغ‌التحصیل») را مستقیم با <span className="font-mono">bulk_import_data</span> ارسال
+          می‌کند و <span className="font-mono">trace_id</span> و پاسخ سازمان را برمی‌گرداند. اگر پاسخ
+          <span className="font-mono"> NOT_ALLOWED_USER </span>
+          بود، یعنی توکن و اتصال درست است ولی کاربرِ سازمانی این مؤسسه هنوز «مجوز دسترسی» نگرفته است
+          (نامهٔ ۳۱۷۵۱/۱/۰۳/۰۶ — فرم احراز هویت وب‌سرویس در سامانهٔ سجاد).
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          {[2, 5].map(n => (
+            <button
+              key={n}
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                setMsg('در حال ساخت payload و ارسال نمونه…');
+                try {
+                  const r = await sendSampleGraduatesToSamin(university.id, n);
+                  setMsg(
+                    `نمونه ارسال شد: ${r.sent} رکورد\n` +
+                    `trace_id: ${r.trace_id ?? r.traceId ?? '—'}\n` +
+                    `وضعیت: ${r.import_data_status ?? r.status ?? '—'}\n` +
+                    `response_code: ${r.response_code ?? '—'}\n` +
+                    `پیام: ${r.message ?? '—'}`,
+                  );
+                } catch (e: any) { setMsg(e.message); } finally { setBusy(false); }
+              }}
+              className="bg-sky-700 text-white px-4 py-1.5 rounded text-xs disabled:opacity-50"
+            >
+              ارسال {n.toLocaleString('fa-IR')} فارغ‌التحصیل نمونه
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="card space-y-2">

@@ -2,9 +2,10 @@ import 'server-only';
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import {
-  loadSahamValueMaps, mapSahamValue, loadSahamInstituteCodes,
+  loadSahamValueMaps, loadSahamInstituteCodes,
   loadGeoTitles, pickSahamCode, cityTitle, type SahamInstituteCode, type GeoTitles,
 } from './saham-maps';
+import { mapSahamClosed } from './codes';
 import { sahamBirthYear } from './student-rows';
 
 /**
@@ -163,7 +164,7 @@ export function toSahamInstructorRow(
   codeRow: SahamInstituteCode | null,
   geo: GeoTitles,
 ): string[] {
-  const m = (field: string, v: unknown) => mapSahamValue(maps, field, v);
+  const m = (field: string, v: unknown) => mapSahamClosed(maps, field, v);
   const inst = codeRow ? { code: codeRow.code, title: codeRow.title } : { code: '', title: r.instituteTitle ?? '' };
   const provName = codeRow?.provinceCode ? (geo.province[codeRow.provinceCode] ?? '') : '';
   const cityName = cityTitle(geo, codeRow?.provinceCode ?? null, codeRow?.cityCode ?? null);
@@ -185,20 +186,26 @@ export function toSahamInstructorRow(
     sahamBirthYear(r.birthYear),
     r.birthProvince ?? '',
     r.birthCity || r.birthCityFallback || '',
-    r.maritalStatus ?? '',
-    r.degree ?? '',
-    r.fieldMain ?? r.fieldOfStudy ?? '',
-    r.fieldOfStudy ?? '',
+    m('marital', r.maritalStatus),
+    m('last_degree', r.degree),
+    // ۱۸) «رشته تحصیلی آخرین مدرک» ← fieldOfStudy
+    // (پیش‌تر ۱۸ و ۱۹ جابه‌جا بودند و هر دو یک مقدار می‌گرفتند)
+    r.fieldOfStudy ?? r.fieldMain ?? '',
+    // ۱۹) «گروه تحصیلی آخرین مدرک» ← fieldMain
+    r.fieldMain ?? '',
     r.lastDegreeYear != null ? String(r.lastDegreeYear) : '',
     r.lastDegreeCountry ?? '',
     r.lastDegreeUniversity ?? '',
-    r.employmentType ?? '',
-    r.cooperationType ?? '',
+    m('employment_type', r.employmentType),
+    m('service_type', r.cooperationType),
     r.staffType ?? '',
-    r.academicRank ?? '',
+    // ۲۶) «نوع هیات علمی» با «مرتبه علمی» (ستون ۲۹) متفاوت است و منبعِ
+    //     مستقل دارد؛ فهرست رسمی‌اش در codes.xlsx نبود، پس عمداً خالی
+    //     می‌ماند تا مقدار نادرست به سازمان نرود.
+    '',
     r.title ?? '',
     r.hireDate ?? '',
-    r.academicRank ?? '',
+    m('academic_rank', r.academicRank),
     r.academicBase ?? '',
     hireYear,
     r.personnelNo ?? '',
