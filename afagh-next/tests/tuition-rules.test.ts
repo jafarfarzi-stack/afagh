@@ -7,7 +7,7 @@
  */
 import { mapLegacyFeeRules, normalizeEquivFixedMode, pickFeeRule, shouldChargeFixed, termTypeOf, toNum } from '../src/lib/tuition-rules.ts';
 import { resolveTuitionRule, type TuitionRuleLike } from '../src/lib/tuition-resolver.ts';
-import { pickTariffRate, tariffCourseAmount, type TariffRate } from '../src/lib/tuition-tariff-core.ts';
+import { pickTariffRate, tariffAmountOrZero, tariffCourseAmount, type TariffRate } from '../src/lib/tuition-tariff-core.ts';
 
 let pass = 0;
 let fail = 0;
@@ -203,10 +203,16 @@ eq('۹۹۰۲۷ (پایه، ۳ نظری)', tariffCourseAmount(3, 0, pickTariffRat
 eq('۹۹۰۶۴ (پایه، ۲ نظری)', tariffCourseAmount(2, 0, pickTariffRate(r14041, 2)!), 5431190);
 // نرخ هر نوع دقیقاً همان نوع درس مالی خودِ درس را می‌گیرد (نه نرخ یکسان برای همه)
 eq('نوع ۲ نرخ پایه می‌گیرد، نه تخصصی', pickTariffRate(r14041, 2)?.th, 2715595.02);
-eq('نوع نامعلوم → نرخ تخصصی (رایج‌ترین)', pickTariffRate(r14041, null)?.th, 3319060.57);
-eq('نوع ناموجود → نرخ تخصصی', pickTariffRate(r14041, 999)?.th, 3319060.57);
-eq('بدون نرخ → null', pickTariffRate(new Map(), 3), null);
-eq('نوع نامعلوم و نبودِ نوع ۳ → گران‌ترین نوع', pickTariffRate(new Map([[7, { th: 10, op: 1 }], [8, { th: 99, op: 0 }]]), null)?.th, 99);
+// سما درسی را که «نوع درس مالی» ندارد (یا نوعش در تعرفه نیست) صفر حساب می‌کند —
+// پس هیچ پیش‌فرضی جایگزین نمی‌شود (وگرنه کارنامه با سند رسمی نمی‌خواند).
+eq('نوع نامعلوم → بی‌نرخ (صفر، مثل سند رسمی)', pickTariffRate(r14041, null), null);
+eq('نوع صفر → بی‌نرخ', pickTariffRate(r14041, 0), null);
+eq('نوع ناموجود در تعرفه → بی‌نرخ', pickTariffRate(r14041, 999), null);
+eq('بدون هیچ نرخ → null', pickTariffRate(new Map(), 3), null);
+// درس بی‌نرخ در سند رسمی صفر است (مثلاً درسی که در LT7 نوع مالی ندارد)
+eq('درس بی‌نرخ → مبلغ صفر', tariffAmountOrZero(3, 0, pickTariffRate(r14041, null)), 0);
+eq('درس بی‌نرخ و پرعملی هم صفر', tariffAmountOrZero(0, 1, null), 0);
+eq('درس با نرخ → همان مبلغ فرمول', tariffAmountOrZero(3, 0, pickTariffRate(r14041, 3)), 9957182);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

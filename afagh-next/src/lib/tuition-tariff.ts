@@ -5,10 +5,10 @@ import {
   academic_terms, course_offerings, courses, enrollments, students, tuition_term_tariff,
 } from '@/db/schema';
 import { toNum } from '@/lib/finance-rules';
-import { pickTariffRate, tariffCourseAmount, type TariffLine, type TariffRate } from '@/lib/tuition-tariff-core';
+import { pickTariffRate, tariffAmountOrZero, tariffCourseAmount, type TariffLine, type TariffRate } from '@/lib/tuition-tariff-core';
 
 export type { TariffLine, TariffRate } from '@/lib/tuition-tariff-core';
-export { pickTariffRate, tariffCourseAmount } from '@/lib/tuition-tariff-core';
+export { pickTariffRate, tariffCourseAmount, tariffAmountOrZero } from '@/lib/tuition-tariff-core';
 
 /**
  * بازتولید ریز شهریهٔ متغیر دروس بر پایهٔ «تعرفهٔ تفصیلی سما».
@@ -54,11 +54,11 @@ export async function computeTariffCourseLinesForTerms(
     const code = String(t.termCode ?? '').trim();
     if (code) codeById.set(t.id, code);
   }
-  const codes = [...new Set(codeById.values())];
-  if (!codes.length) return {};
+  if (!codeById.size) return {};
 
   const rateRows = await db
     .select({
+      termYear: tuition_term_tariff.termYear,
       termCode: tuition_term_tariff.termCode,
       maliType: tuition_term_tariff.maliType,
       th: tuition_term_tariff.thPrice,
@@ -69,16 +69,18 @@ export async function computeTariffCourseLinesForTerms(
       eq(tuition_term_tariff.universityId, stu.universityId),
       eq(tuition_term_tariff.majorId, stu.majorId),
       eq(tuition_term_tariff.entryYear, stu.entryYear),
-      inArray(tuition_term_tariff.termCode, codes),
     ));
-  const byTerm = new Map<string, Map<number, TariffRate>>();
+  // کلید تطبیق «سالِ تعرفه» است (نرخ سما سالانه است، نه هر نیمسال)
+  const byYear = new Map<number, Map<number, TariffRate>>();
   for (const r of rateRows) {
-    const key = String(r.termCode ?? '').trim();
-    const m = byTerm.get(key) || new Map<number, TariffRate>();
+    const raw = r.termYear ?? Number(String(r.termCode ?? '').slice(0, 4));
+    const year = Number(raw);
+    if (!Number.isFinite(year) || year <= 0) continue;
+    const m = byYear.get(year) || new Map<number, TariffRate>();
     m.set(Number(r.maliType), { th: toNum(r.th), op: toNum(r.op) });
-    byTerm.set(key, m);
+    byYear.set(year, m);
   }
-  if (!byTerm.size) return {};
+  if (!byYear.size) return {};
 
   const rows = await db
     .select({
@@ -101,17 +103,23 @@ export async function computeTariffCourseLinesForTerms(
     ));
 
   const out: Record<number, TariffLine[]> = {};
+  // نیمسال‌هایی که تعرفهٔ سالشان موجود است «پوشش‌داده‌شده»اند (حتی اگر درس ثبت‌شده‌ای
+  // نداشته باشند) تا فراخوان برایشان سراغ موتور نرود و مبنای ریز یکدست بماند.
+  for (const [termId, code] of codeById) {
+    const year = Number(String(code).slice(0, 4));
+    if (byYear.has(year)) out[termId] = [];
+  }
   for (const r of rows) {
     const code = codeById.get(r.termId);
     if (!code) continue;
-    const rates = byTerm.get(code);
+    const rates = byYear.get(Number(String(code).slice(0, 4)));
     if (!rates) continue;
     const theoryUnits = toNum(r.theoreticalUnits);
     const practicalUnits = toNum(r.practicalUnits);
     const maliType = r.legacyMaliType ?? null;
     const rate = pickTariffRate(rates, maliType);
-    if (!rate) continue;
-    const amount = tariffCourseAmount(theoryUnits, practicalUnits, rate);
+    // بی‌نرخ = صفر، عیناً مثل سند رسمی (درسِ بدون «نوع درس مالی» شارژ نمی‌شود)
+    const amount = tariffAmountOrZero(theoryUnits, practicalUnits, rate);
     const units = toNum(r.units);
     const list = out[r.termId] || [];
     list.push({

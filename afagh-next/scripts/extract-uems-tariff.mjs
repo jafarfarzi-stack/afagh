@@ -46,6 +46,11 @@ mkdirSync(OUT, { recursive: true });
  * برای هر (کدِ قیمت، نوع درس) یک ردیف قیمت برمی‌دارد:
  *   ▸ اول SusCode=0، بعد زیرگروه‌هایی که قیمت صفر ندارند، بعد کوچک‌ترین زیرگروه.
  *   (زیرگروه‌های «صفر» در سما یعنی بی‌تعرفه و نباید برداشته شوند.)
+ *
+ * ⚠️ تعرفهٔ سما «سالانه» است: کدِ قیمت سال را در خود دارد و برای همهٔ نیمسال‌های
+ * آن سال (مهر/بهمن/تابستان) یکسان به کار می‌رود. جدول TermPrice فقط برای بعضی
+ * نیمسال‌ها ردیف دارد (مثلاً 14031 ولی نه 14032)، پس کلید درست «سال» است نه کد
+ * نیمسال؛ به همین دلیل ستون termYear هم بیرون داده می‌شود.
  */
 const SQL_TARIFF = `
 SET NOCOUNT ON;
@@ -61,15 +66,16 @@ WITH pick AS (
 ),
 u AS (SELECT * FROM pick WHERE rn = 1),
 tp AS (
-  SELECT DISTINCT p.Termcode, p.TermEnter, p.Reshte, p.UPrice_code,
+  SELECT DISTINCT p.Termcode, LEFT(p.Termcode, 4) AS termYear, p.TermEnter, p.Reshte, p.UPrice_code,
          ROW_NUMBER() OVER (
-           PARTITION BY p.Termcode, LEFT(p.TermEnter, 4), p.Reshte
-           ORDER BY p.TermEnter ASC, p.TermPriceId ASC
+           PARTITION BY LEFT(p.Termcode, 4), LEFT(p.TermEnter, 4), p.Reshte
+           ORDER BY p.Termcode ASC, p.TermPriceId ASC
          ) AS rn
   FROM TermPrice p
 )
 SELECT
-  tp.Termcode                        AS termCode,
+  tp.termYear                        AS termYear,
+  tp.Termcode                        AS srcTermCode,
   CAST(tp.Reshte AS varchar(20))     AS majorCode,
   LEFT(tp.TermEnter, 4)              AS entryYear,
   CAST(u.UnitType AS varchar(10))    AS maliType,
@@ -79,7 +85,7 @@ SELECT
 FROM tp
 JOIN u ON u.UPrice_Code = tp.UPrice_code
 WHERE tp.rn = 1 AND (u.Th_Price <> 0 OR u.OP_Price <> 0)
-ORDER BY tp.Termcode, tp.Reshte, LEFT(tp.TermEnter, 4), u.UnitType;
+ORDER BY tp.termYear, tp.Reshte, LEFT(tp.TermEnter, 4), u.UnitType;
 `;
 
 const SQL_LESSONS = `

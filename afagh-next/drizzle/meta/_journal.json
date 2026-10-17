@@ -715,6 +715,13 @@
       "when": 1794240000100,
       "tag": "0097_uems_term_tariff",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1794240000200,
+      "tag": "0098_tariff_term_year",
+      "breakpoints": true
     }
   ]
 }

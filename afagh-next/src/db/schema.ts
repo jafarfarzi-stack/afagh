@@ -3034,8 +3034,13 @@ export const tuition_rules = pgTable('tuition_rules', {
 export const tuition_term_tariff = pgTable('tuition_term_tariff', {
   id: serial('id').primaryKey(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
-  /** کد نیمسال سما — مثل '14031' */
+  /** کد نیمسال سما — مثل '14031' (نمونهٔ نمایندهٔ آن سال) */
   termCode: varchar('termCode', { length: 20 }).notNull(),
+  /**
+   * سالِ تعرفه (۱۴۰۳ = 1403). کدِ قیمت سما سالانه است و برای همهٔ نیمسال‌های
+   * آن سال یکسان؛ پس کلید تطبیق همین است (نه کد نیمسال).
+   */
+  termYear: integer('termYear'),
   majorId: integer('majorId').references(() => majors.id),
   /** سالِ ورودِ گروه (نیمسالِ ورود ÷ ۱۰) */
   entryYear: integer('entryYear').notNull(),
@@ -3049,6 +3054,7 @@ export const tuition_term_tariff = pgTable('tuition_term_tariff', {
 }, (t) => [
   unique('uq_tuition_term_tariff').on(t.universityId, t.termCode, t.majorId, t.entryYear, t.maliType),
   index('idx_tuition_term_tariff_lookup').on(t.universityId, t.termCode, t.majorId, t.entryYear),
+  index('idx_tuition_term_tariff_year').on(t.universityId, t.termYear, t.majorId, t.entryYear),
 ]);
 
 // ══════════════════════════════════════════════════════════════════════

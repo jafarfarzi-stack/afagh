@@ -50,35 +50,36 @@ const readTsv = (path) =>
     .map((l) => l.split('\t'));
 
 async function main() {
-  // ── ۱) تعرفهٔ تفصیلی: گروه‌بندی بر اساس (نیمسال، رشته، ورودی) ──
+  // ── ۱) تعرفهٔ تفصیلی: گروه‌بندی بر اساس (سالِ تعرفه، رشته، سالِ ورود) ──
+  // کدِ قیمت سالانه است، پس نیمسال‌های یک سال در یک گروه جمع می‌شوند.
   const groups = new Map();
   let tariffRows = 0;
   for (const c of readTsv(TARIFF)) {
-    const [termCode, majorCode, entryYear, maliType, th, op, uPriceCode] = c;
-    if (!termCode || !majorCode || !entryYear || !maliType) continue;
+    const [termYear, srcTermCode, majorCode, entryYear, maliType, th, op, uPriceCode] = c;
+    if (!termYear || !majorCode || !entryYear || !maliType) continue;
     if (majorCode === '0') continue;
     if (num(th) === 0 && num(op) === 0) continue;
-    const key = `${termCode}|${majorCode}|${entryYear}`;
-    const list = groups.get(key) || [];
-    list.push({ maliType, th: fmt(th), op: fmt(op), uPriceCode: uPriceCode || null });
-    groups.set(key, list);
+    const key = `${termYear}|${majorCode}|${entryYear}`;
+    const g = groups.get(key) || { termCode: srcTermCode || termYear, rows: [] };
+    g.rows.push({ maliType, th: fmt(th), op: fmt(op), uPriceCode: uPriceCode || null });
+    groups.set(key, g);
     tariffRows++;
   }
 
   const parts = [];
   parts.push('-- تعرفهٔ تفصیلی سما — تولیدشده با scripts/import-uems-tariff.mjs');
-  parts.push(`-- منبع: ${TARIFF} | دانشگاه: ${UNI} | ردیف قیمت: ${tariffRows} | گروه: ${groups.size}`);
+  parts.push(`-- منبع: ${TARIFF} | دانشگاه: ${UNI} | ردیف قیمت: ${tariffRows} | گروه (سال×رشته×ورود): ${groups.size}`);
   parts.push('BEGIN;');
   parts.push(`DELETE FROM "tuition_term_tariff" WHERE "source" = ${q(SOURCE)} AND "universityId" = ${UNI};`);
 
-  for (const [key, list] of groups) {
-    const [termCode, majorCode, entryYear] = key.split('|');
-    const values = list
+  for (const [key, g] of groups) {
+    const [termYear, majorCode, entryYear] = key.split('|');
+    const values = g.rows
       .map((r) => `(${r.maliType}, ${r.th}, ${r.op}, ${r.uPriceCode ? q(r.uPriceCode) : 'NULL'})`)
       .join(',');
     parts.push(
-      `INSERT INTO "tuition_term_tariff" ("universityId","termCode","majorId","entryYear","maliType","thPrice","opPrice","uPriceCode","source")\n` +
-        `SELECT ${UNI}, ${q(termCode)}, m."id", ${Number(entryYear)}, v.mt, v.th, v.op, v.upc, ${q(SOURCE)}\n` +
+      `INSERT INTO "tuition_term_tariff" ("universityId","termCode","termYear","majorId","entryYear","maliType","thPrice","opPrice","uPriceCode","source")\n` +
+        `SELECT ${UNI}, ${q(g.termCode)}, ${Number(termYear)}, m."id", ${Number(entryYear)}, v.mt, v.th, v.op, v.upc, ${q(SOURCE)}\n` +
         `FROM "majors" m, (VALUES ${values}) AS v(mt, th, op, upc)\n` +
         `WHERE trim(m."majorCode") = ${q(majorCode)} AND m."universityId" = ${UNI};`,
     );
