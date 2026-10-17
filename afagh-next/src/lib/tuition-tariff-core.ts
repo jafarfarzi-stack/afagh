@@ -46,6 +46,23 @@ export function tariffAmountOrZero(
 }
 
 /**
+ * کدِ قیمتِ سما سال را در خود دارد (`35405952` = سال ۱۴۰۵؛ رقم چهارم از آخر).
+ * هنگام تعریف تعرفهٔ سال بعد، همان گروه با رقم سالِ تازه بازنویسی می‌شود تا کد
+ * معنا‌دار بماند. اگر کد از الگو پیروی نکند (`39430405`) دست‌نخورده برمی‌گردد.
+ */
+export function shiftPriceCodeYear(
+  code: string | null | undefined,
+  fromYear: number,
+  toYear: number,
+): string | null {
+  const c = String(code ?? '').trim();
+  if (!/^\d{5,8}$/.test(c)) return c || null;
+  const idx = c.length - 4;
+  if (c[idx] !== String(fromYear % 10)) return c;
+  return c.slice(0, idx) + String(toYear % 10) + c.slice(idx + 1);
+}
+
+/**
  * انتخاب نرخ برای یک درس از تعرفهٔ همان سال.
  *
  * ⚠️ عمداً «پیش‌فرض» وجود ندارد: سامانهٔ سما درسی را که «نوع درس مالی» ندارد

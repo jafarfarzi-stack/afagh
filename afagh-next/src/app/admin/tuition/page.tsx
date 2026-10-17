@@ -22,7 +22,19 @@ export default async function TuitionRulesPage() {
   ]);
 
   return (
-    <TuitionRulesClient
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-sky-300 bg-sky-50/70 px-3 py-2" dir="rtl">
+        <a
+          href="/admin/tuition/tariff"
+          className="rounded-lg bg-sky-700 px-3 py-1.5 text-xs font-black text-white transition hover:bg-sky-800"
+        >
+          📐 تعریف تعرفهٔ سالانهٔ شهریهٔ متغیر (نرخ هر نوع درس)
+        </a>
+        <span className="text-[11px] text-sky-900">
+          نرخ شهریهٔ متغیر سالانه است و به «نوع درس مالی» گره خورده؛ سال‌های بعد را از همان صفحه با «کپی از سال قبل» تعریف کنید.
+        </span>
+      </div>
+      <TuitionRulesClient
       rules={rules.map(r => ({
         id: r.id,
         degreeLevelId: r.degreeLevelId,
@@ -36,6 +48,7 @@ export default async function TuitionRulesPage() {
       }))}
       degrees={degrees.map(d => ({ id: d.id, title: d.title }))}
       equivFixedMode={normalizeEquivFixedMode(equivModeRaw)}
-    />
+      />
+    </div>
   );
 }

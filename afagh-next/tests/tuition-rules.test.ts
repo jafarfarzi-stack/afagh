@@ -7,7 +7,7 @@
  */
 import { mapLegacyFeeRules, normalizeEquivFixedMode, pickFeeRule, shouldChargeFixed, termTypeOf, toNum } from '../src/lib/tuition-rules.ts';
 import { resolveTuitionRule, type TuitionRuleLike } from '../src/lib/tuition-resolver.ts';
-import { pickTariffRate, tariffAmountOrZero, tariffCourseAmount, type TariffRate } from '../src/lib/tuition-tariff-core.ts';
+import { pickTariffRate, shiftPriceCodeYear, tariffAmountOrZero, tariffCourseAmount, type TariffRate } from '../src/lib/tuition-tariff-core.ts';
 
 let pass = 0;
 let fail = 0;
@@ -213,6 +213,13 @@ eq('بدون هیچ نرخ → null', pickTariffRate(new Map(), 3), null);
 eq('درس بی‌نرخ → مبلغ صفر', tariffAmountOrZero(3, 0, pickTariffRate(r14041, null)), 0);
 eq('درس بی‌نرخ و پرعملی هم صفر', tariffAmountOrZero(0, 1, null), 0);
 eq('درس با نرخ → همان مبلغ فرمول', tariffAmountOrZero(3, 0, pickTariffRate(r14041, 3)), 9957182);
+
+console.log('\n۱۳) تعریف تعرفهٔ سالانه: بازنویسی رقم سال در کد گروه');
+eq('۳۵۴۰۵۹۵۲ (سال ۱۴۰۵) → ۳۵۴۰۶۹۵۲ برای ۱۴۰۶', shiftPriceCodeYear('35405952', 1405, 1406), '35406952');
+eq('۳۵۴۰۳۹۵۲ (سال ۱۴۰۳) → ۳۵۴۰۴۹۵۲ برای ۱۴۰۴', shiftPriceCodeYear('35403952', 1403, 1404), '35404952');
+eq('کدی که الگو را نمی‌خواند دست‌نخورده می‌ماند', shiftPriceCodeYear('39430405', 1405, 1406), '39430405');
+eq('کد خالی → null', shiftPriceCodeYear('', 1405, 1406), null);
+eq('کد غیرعددی دست‌نخورده', shiftPriceCodeYear('MANUAL-1', 1405, 1406), 'MANUAL-1');
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);
