@@ -37,13 +37,14 @@ export default async function ExamHandoverPage({
           examDate: exam_sessions.examDate,
           startTime: exam_sessions.startTime,
           endTime: exam_sessions.endTime,
-          hallId: sql<number | null>`(select sa."hallId" from seat_allocations sa where sa."sessionId" = ${exam_sessions.id} limit 1)`,
-          hallName: sql<string | null>`(select h.name from seat_allocations sa join exam_halls h on h.id = sa."hallId" where sa."sessionId" = ${exam_sessions.id} limit 1)`,
-          present: sql<number>`(select count(*) from exam_attendances ea where ea."examId" = ${exam_sessions.id} and ea."isPresent" = 1)::int`,
-          total: sql<number>`(select count(*) from exam_attendances ea where ea."examId" = ${exam_sessions.id})::int`,
-          minutesSigned: sql<number>`(select count(*) from exam_minutes m where m."sessionId" = ${exam_sessions.id} and m."isSignedAndFinalized" = 1)::int`,
-          vaultReceived: sql<number>`(select count(*) from exam_minutes m where m."sessionId" = ${exam_sessions.id} and m."vaultReceivedAt" is not null)::int`,
-          packets: sql<number>`(select count(*) from exam_course_packets p where p."examId" = ${exam_sessions.id})::int`,
+          // ⚠ ستون بیرونی باید صریح نام‌دار باشد؛ وگرنه در زیرکوئری «id» مبهم می‌شود
+          hallId: sql<number | null>`(select sa."hallId" from seat_allocations sa where sa."sessionId" = "exam_sessions"."id" limit 1)`,
+          hallName: sql<string | null>`(select h.name from seat_allocations sa join exam_halls h on h.id = sa."hallId" where sa."sessionId" = "exam_sessions"."id" limit 1)`,
+          present: sql<number>`(select count(*) from exam_attendances ea where ea."examId" = "exam_sessions"."id" and ea."isPresent" = 1)::int`,
+          total: sql<number>`(select count(*) from exam_attendances ea where ea."examId" = "exam_sessions"."id")::int`,
+          minutesSigned: sql<number>`(select count(*) from exam_minutes m where m."sessionId" = "exam_sessions"."id" and m."isSignedAndFinalized" = 1)::int`,
+          vaultReceived: sql<number>`(select count(*) from exam_minutes m where m."sessionId" = "exam_sessions"."id" and m."vaultReceivedAt" is not null)::int`,
+          packets: sql<number>`(select count(*) from exam_course_packets p where p."examId" = "exam_sessions"."id")::int`,
         })
         .from(exam_sessions)
         .where(and(
@@ -96,7 +97,7 @@ export default async function ExamHandoverPage({
         status: String(r.status ?? ''),
         sheetCount: Number(r.sheetCount ?? 0),
         returnedToArchive: Number(r.returnedToArchive ?? 0) === 1,
-        returnedAt: r.returnedAt ? r.returnedAt.toISOString() : null,
+        returnedAt: r.returnedAt ? new Date(r.returnedAt as unknown as string).toISOString() : null,
         courseCode: r.courseCode,
         courseTitle: r.courseTitle,
         professorName: r.professorName ?? '—',
