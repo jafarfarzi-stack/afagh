@@ -648,6 +648,13 @@ async function loadLegacyGpaRows(studentId: number): Promise<GpaSourceRow[]> {
     .select({
       code: legacy_grades.courseCode,
       units: legacy_grades.units,
+      // ⚠ در ایمپورت قدیمی، ستون units خالی است؛ واحد و مشخصات درس باید از
+      //   کاتالوگ `courses` (بر پایهٔ کد درس) خوانده شود، وگرنه معدلِ دانشجویانی
+      //   که نمره‌شان فقط در سیستم قدیمی است صفر می‌ماند.
+      catalogUnits: sql<number | null>`(select c.units from courses c where c.code = "courseCode" order by c.id limit 1)`,
+      catalogMinMark: sql<number | null>`(select c."minPassedMark" from courses c where c.code = "courseCode" order by c.id limit 1)`,
+      catalogGradingType: sql<string | null>`(select c."gradingType" from courses c where c.code = "courseCode" order by c.id limit 1)`,
+      catalogAffectsGpa: sql<number | null>`(select c."affectsGpa" from courses c where c.code = "courseCode" order by c.id limit 1)`,
       gradeValue: legacy_grades.gradeValue,
       gradeStatus: legacy_grades.gradeStatus,
       termCode: legacy_grades.termCode,
@@ -663,16 +670,16 @@ async function loadLegacyGpaRows(studentId: number): Promise<GpaSourceRow[]> {
     courseId: null,
     code: r.code,
     title: null,
-    units: r.units,
+    units: Number(r.units ?? 0) > 0 ? r.units : r.catalogUnits,
     gradeValue: r.gradeValue,
     gradeStatus: r.gradeStatus,
     samaGradeStatusCode: markStatOfLegacy(r.raw),
-    gradingType: null,
-    affectsGpa: 1,
+    gradingType: r.catalogGradingType ?? null,
+    affectsGpa: r.catalogAffectsGpa ?? 1,
     termId: null,
     termCode: r.termCode,
     termTitle: null,
-    courseMinMark: null,
+    courseMinMark: r.catalogMinMark,
   }));
 }
 
