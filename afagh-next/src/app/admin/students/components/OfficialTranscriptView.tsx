@@ -5,6 +5,7 @@
 //  (این همان چیزی است که دکمهٔ چاپ هم عیناً چاپ می‌کند — WYSIWYG.)
 // ═══════════════════════════════════════════════════════════════════════
 import type { StudentItem, TermGroup, TranscriptSummary, CodeLabels, TranscriptPrintOptions, OriginUniversity, CohortStats } from '../types';
+import PersonPhoto from './PersonPhoto';
 import { DEFAULT_PRINT_OPTIONS } from '../types';
 import type { TranscriptRow } from '../actions';
 import { courseTypeFa, gradeStatusFa, quotaFa, studentStatusFa, studyModeFa } from '@/lib/student-labels';
@@ -193,7 +194,9 @@ export default function OfficialTranscriptView({
         <div className="text-center">
           <p className="text-[10px]">موسسه آموزش عالی غیرانتفاعی - غیردولتی آفاق</p>
           {printOptions.showPhoto && student.photoKey ? (
-            <div className="mx-auto mt-1 w-14 h-[70px] bg-slate-100 border border-slate-300 text-[8px] text-slate-400 flex items-center justify-center">عکس دانشجو</div>
+            <div className="mx-auto mt-1 w-14 h-[70px] flex items-center justify-center">
+              <PersonPhoto userId={student.userId} hasPhoto={!!student.photoKey} className="w-14 h-[70px]" icon="👤" label="عکس" />
+            </div>
           ) : null}
         </div>
         <div className="w-16 h-16 flex items-center justify-center">

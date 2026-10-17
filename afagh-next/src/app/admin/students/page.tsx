@@ -289,6 +289,7 @@ export default async function AdminStudentsPage({
       email: users.email,
       userId: users.id,
       userIsActive: users.isActive,
+      photoKey: users.photoKey,
       phone: staff.phone,
       maritalStatus: staff.maritalStatus,
     })
@@ -450,6 +451,7 @@ const [head] = await db.select().from(roles).where(eq(roles.code, 'DEP_HEAD')).l
           bankAccountNo: st.bankAccountNo,
           academicBase: st.academicBase,
           isActive: st.isActive == null ? 1 : st.isActive,
+          photoKey: (st as unknown as { photoKey?: string | null }).photoKey ?? null,
           role: 'استاد / هیئت علمی',
         }))}
         canEditGrades={canEditGrades}

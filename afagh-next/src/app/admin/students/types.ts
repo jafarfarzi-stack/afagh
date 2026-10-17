@@ -141,6 +141,7 @@ export type StaffItem = {
   isActive?: number | null;
   userId?: number | null;
   userIsActive?: number | null;
+  photoKey?: string | null;
 };
 
 export type TermGroup = {

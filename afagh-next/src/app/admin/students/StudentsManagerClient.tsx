@@ -12,6 +12,7 @@ import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, studentSta
 // ── هستهٔ خالص و قرارداد داده از ماژول‌های جدا (ریفکتور دور ۱۱) ──
 import type { StudentItem, RegulationPick, Pagination, StaffItem, CodeLabels, TranscriptPrintOptions, OriginUniversity, CohortStats} from './types';
 import { DEFAULT_PRINT_OPTIONS } from './types';
+import PersonPhoto from './components/PersonPhoto';
 import { regThresholds, groupTranscript, faNum, dateToJalali} from './transcript-utils';
 import OfficialTranscriptView from './components/OfficialTranscriptView';
 import { adminSetGradeAction, getStudentGradeAuditLog, resolveSamaCodeForGradeAction } from '@/app/admin/grades/actions';
@@ -961,12 +962,9 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
           {stuTab === 'info_combined' && currentStudent && (
             <div key={`stu-b-${currentStudent.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* کادر عکس پرسنلی */}
+                {/* کادر عکس پرسنلی — از مسیر امن /api/photo/[userId]؛ بدون عکس همان جای‌نگهدار */}
                 <div className="border border-slate-300 p-3 rounded bg-slate-50 flex flex-col items-center justify-center space-y-2">
-                  <div className="w-28 h-36 bg-slate-200 border-2 border-slate-400 rounded flex flex-col items-center justify-center text-slate-500 shadow-inner">
-                    <span className="text-3xl">👤</span>
-                    <span className="text-[10px] mt-1 font-bold">عکس پرسنلی</span>
-                  </div>
+                  <PersonPhoto userId={currentStudent.userId} hasPhoto={!!currentStudent.photoKey} className="w-28 h-36" icon="👤" label="عکس پرسنلی" />
                   <div className="flex flex-col gap-1 w-full max-w-[140px]">
                     <button onClick={() => showToast('📁 کادر انتخاب تصویر باز شد')} className="px-2 py-1 bg-white border border-slate-300 rounded hover:bg-slate-100 font-bold text-[11px]">فایل تصویر</button>
                     <button onClick={() => showToast('تصویر حذف گردید')} className="px-2 py-1 bg-white border border-slate-300 rounded hover:bg-slate-100 text-red-700 text-[11px]">حذف تصویر</button>
@@ -1733,10 +1731,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                 {/* کادرهای عکس و امضای الکترونیک استاد */}
                 <div className="space-y-3">
                   <div className="border border-slate-300 p-2.5 rounded bg-slate-50 flex flex-col items-center space-y-1.5">
-                    <div className="w-24 h-28 bg-slate-200 border border-slate-400 rounded flex flex-col items-center justify-center text-slate-500">
-                      <span className="text-2xl">👨‍🏫</span>
-                      <span className="text-[9px] font-bold">تصویر پرسنلی</span>
-                    </div>
+                    <PersonPhoto userId={currentStaff.userId} hasPhoto={!!currentStaff.photoKey} className="w-24 h-28" icon="👨‍🏫" label="تصویر پرسنلی" />
                     <div className="flex gap-1">
                       <button onClick={() => showToast('فایل تصویر پرسنلی استاد انتخاب شد')} className="px-2 py-0.5 bg-white border border-slate-300 rounded text-[10px]">فایل تصویر</button>
                       <button onClick={() => showToast('تصویر حذف شد')} className="px-2 py-0.5 bg-white border border-slate-300 rounded text-red-700 text-[10px]">حذف</button>
