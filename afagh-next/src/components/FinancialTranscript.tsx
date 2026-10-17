@@ -291,7 +291,7 @@ export default function FinancialTranscript({
           ) : (
             <div className="space-y-3">
               {chunks.map((group, gi) => (
-                <div key={gi} className="grid gap-3 lg:grid-cols-3">
+                <div key={gi} className="grid gap-3 lg:grid-cols-3 print:grid-cols-3">
                   {group.map((t) => {
                     const b = balanceBadge(t.balance);
                     return (

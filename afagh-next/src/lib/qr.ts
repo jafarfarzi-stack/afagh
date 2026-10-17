@@ -23,8 +23,9 @@ export async function qrSvg(text: string, opts: QrOptions = {}): Promise<string>
   const size = opts.size ?? 160;
   const svg = await QRCode.toString(text || ' ', {
     type: 'svg',
-    errorCorrectionLevel: opts.errorCorrectionLevel ?? 'M',
-    margin: opts.margin ?? 2,
+    errorCorrectionLevel: opts.errorCorrectionLevel ?? 'Q',
+    // حاشیهٔ سکوت استاندارد (۴ ماژول): بدون آن اسکنرهای موبایل QR چاپی را نمی‌خوانند.
+    margin: opts.margin ?? 4,
     color: { dark: opts.dark ?? '#0f172a', light: opts.light ?? '#ffffff' },
   });
   return svg.replace('<svg ', `<svg width="${size}" height="${size}" `);
@@ -34,9 +35,9 @@ export async function qrSvg(text: string, opts: QrOptions = {}): Promise<string>
 export async function qrDataUrl(text: string, opts: QrOptions = {}): Promise<string> {
   return QRCode.toDataURL(text || ' ', {
     type: 'image/png',
-    errorCorrectionLevel: opts.errorCorrectionLevel ?? 'M',
-    margin: opts.margin ?? 2,
-    width: 256,
+    errorCorrectionLevel: opts.errorCorrectionLevel ?? 'Q',
+    margin: opts.margin ?? 4,
+    width: opts.size ?? 256,
     color: { dark: opts.dark ?? '#0f172aff', light: opts.light ?? '#ffffffff' },
   });
 }

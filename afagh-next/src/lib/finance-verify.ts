@@ -14,7 +14,7 @@ export async function buildFinanceStatementVerify(userId: number): Promise<Finan
     const url = `${publicBaseUrl}/verify-finance/${encodeURIComponent(issued.token)}`;
     let qr = '';
     try {
-      qr = await qrSvg(url, { errorCorrectionLevel: 'M' });
+      qr = await qrSvg(url, { errorCorrectionLevel: 'Q', size: 128, margin: 4 });
     } catch (err) {
       console.error('[finance-verify] qr failed', err);
     }
