@@ -6,6 +6,7 @@
  * بدون نیاز به PostgreSQL قابل اجراست.
  */
 import {
+  allocateWeightedShares,
   applyDiscounts,
   applySponsorships,
   bucketCourseUnits,
@@ -185,10 +186,27 @@ eq('باقی‌ماندهٔ بی‌سطل در نظری می‌نشیند', buck
 eq('عملی هیچ‌گاه از کل واحدها بیشتر نمی‌شود', bucketCourseUnits(
   { units: 2, theoreticalUnits: 0, practicalUnits: 9, courseType: null }),
   { theory: 0, practical: 2, general: 0 });
+// املای عربی (ي) در دادهٔ legacy رایج است؛ «عمومي» باید همان «عمومی» شمرده شود
+eq('درس عمومی با املای عربی (عمومي) هم سطل عمومی می‌گیرد', bucketCourseUnits(
+  { units: 2, theoreticalUnits: 2, practicalUnits: 0, courseType: 'عمومي' }),
+  { theory: 0, practical: 0, general: 2 });
+eq('درس عمومی با نیم‌فاصله/فاصلهٔ اضافه هم شناسایی می‌شود', bucketCourseUnits(
+  { units: 3, theoreticalUnits: 3, practicalUnits: 0, courseType: ' عمومي ' }),
+  { theory: 0, practical: 0, general: 3 });
 eq('جمع سطل‌ها', totalBuckets([
   { theory: 2, practical: 1, general: 0 },
   { theory: 0, practical: 0, general: 2 }
 ]), { theory: 2, practical: 1, general: 2 });
+
+// ── ۶.۱ تخصیص مبلغ متغیر به ریز دروس (باید دقیقاً با سند یکی شود) ────
+section('تخصیص مبلغ متغیر به دروس');
+eq('تقسیم به تناسب وزن و جمع دقیق', allocateWeightedShares([300, 100], 1000), [750, 250]);
+eq('باقی‌ماندهٔ گردکردن به بزرگ‌ترین باقی‌مانده می‌رود', allocateWeightedShares([1, 1, 1], 100), [34, 33, 33]);
+eq('جمع همیشه برابر مبلغ کل است', allocateWeightedShares([7, 11, 13], 1_000_003).reduce((a, b) => a + b, 0), 1_000_003);
+eq('وزن صفر → سهم صفر', allocateWeightedShares([0, 5], 500), [0, 500]);
+eq('وزن‌های صفر → تقسیم مساوی', allocateWeightedShares([0, 0, 0], 100), [34, 33, 33]);
+eq('مبلغ کل صفر → همه صفر', allocateWeightedShares([10, 20], 0), [0, 0]);
+eq('بدون سطر → خروجی خالی', allocateWeightedShares([], 1000), []);
 {
   const t = tuitionFromFormula(
     { fixedAmount: 1_000_000, perUnitTheory: 100_000, perUnitPractical: 200_000, perUnitGeneral: 50_000 },

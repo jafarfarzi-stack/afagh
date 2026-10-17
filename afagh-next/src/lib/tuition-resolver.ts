@@ -47,6 +47,8 @@ export interface TuitionRuleLike {
   percentUnderMin?: number | string | null;
   priority?: number | null;
   isActive?: number | null;
+  /** تهی = قاعدهٔ مشترک همهٔ دانشگاه‌ها */
+  universityId?: number | null;
 }
 
 /** بافت دانشجو/ترم که قاعده با آن تطبیق داده می‌شود */
@@ -60,6 +62,12 @@ export interface TuitionRuleContext {
   clinicalPhase?: string | null;
   entryTermId?: number | null;
   currentTermId?: number | null;
+  /**
+   * دانشگاهِ دانشجو. قاعدهٔ متعلق به دانشگاه دیگر (universityId ست‌شده و
+   * متفاوت) هرگز تطبیق نمی‌شود. اگر بافت دانشگاه را ندهد، این قید اعمال
+   * نمی‌شود تا مسیرهای قدیمی (فرمول‌های بدون دانشگاه) نشکنند.
+   */
+  universityId?: number | null;
   /**
    * فقط قواعدِ بدون offeringType در نظر گرفته می‌شوند. برای شهریهٔ ثابت ضروری
    * است: شهریهٔ ثابت به ازای نوع ترم است و نباید از قاعده‌ای بیاید که برای
@@ -84,6 +92,7 @@ function termSpecificity(r: TuitionRuleLike): number {
 /** آیا قاعده با بافت دانشجو سازگار است؟ (فیلد تهی = بدون محدودیت) */
 export function tuitionRuleMatches(r: TuitionRuleLike, ctx: TuitionRuleContext): boolean {
   if (r.isActive != null && r.isActive !== 1) return false;
+  if (r.universityId != null && ctx.universityId != null && r.universityId !== ctx.universityId) return false;
   if (r.degreeLevelId != null && r.degreeLevelId !== ctx.degreeLevelId) return false;
   if (r.majorId != null && r.majorId !== (ctx.majorId ?? null)) return false;
   if (r.facultyId != null && r.facultyId !== (ctx.facultyId ?? null)) return false;

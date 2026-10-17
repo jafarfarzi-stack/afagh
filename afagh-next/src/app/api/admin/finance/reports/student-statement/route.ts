@@ -8,7 +8,7 @@ import { getCurrentUniversity } from '@/lib/university-scope';
 import { getStudentFinance } from '@/lib/finance-engine';
 import { computeCourseTuitionForTerms } from '@/lib/tuition-engine';
 import { ledgerBalance } from '@/lib/ledger-balance';
-import { toNum } from '@/lib/finance-rules';
+import { toNum, allocateWeightedShares } from '@/lib/finance-rules';
 
 const ROLES: string[] = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'];
 
@@ -68,6 +68,18 @@ export async function GET(request: Request) {
   const rows = fin.transcript.map((s) => {
     const byType = byTermType.get(s.termId) || new Map<string, number>();
     const get = (t: string) => byType.get(t) || 0;
+    // ریز دروس: خطوط موتور شهریه وزن‌اند، ولی سند رسمی = جمع دفتر کل. مبلغ
+    // هر درس به تناسب وزنِ محاسباتی از «شهریهٔ متغیر» دفتر کل تخصیص می‌یابد تا
+    // جمع ریز، دقیقاً با کارنامه یکی شود (و جدول صفر نماند وقتی تعرفه ثبت نشده).
+    const lines = courseMap[s.termId] ?? [];
+    const ledgerVariable = get('TUITION_VARIABLE');
+    const weights = lines.map((l) => toNum(l.amount));
+    const shares = ledgerVariable > 0
+      ? allocateWeightedShares(
+          weights.some((w) => w > 0) ? weights : lines.map((l) => toNum(l.units)),
+          ledgerVariable,
+        )
+      : weights.map((w) => Math.round(w));
     return {
       termId: s.termId,
       termCode: termCodeById.get(s.termId) ?? '',
@@ -95,12 +107,12 @@ export async function GET(request: Request) {
       netPayable: s.netPayable,
       balance: s.balance,
       // ریز دروس ترم (محاسباتی — مبنای سند، جمع دفتر کل است)
-      courses: (courseMap[s.termId] ?? []).map((l) => ({
+      courses: lines.map((l, i) => ({
         courseCode: l.courseCode,
         courseTitle: l.courseTitle,
         units: l.units,
-        perUnit: l.perUnit,
-        amount: l.amount,
+        perUnit: toNum(l.units) > 0 ? Math.round(shares[i] / toNum(l.units)) : 0,
+        amount: shares[i],
       })),
     };
   });

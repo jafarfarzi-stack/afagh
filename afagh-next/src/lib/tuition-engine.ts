@@ -49,6 +49,7 @@ export async function resolveFeeRule(params: FeeRuleParams): Promise<ResolvedRul
     termType: params.termType ?? null,
     offeringType: params.offeringType ?? null,
     termLevelOnly: params.termLevelOnly,
+    universityId: params.universityId ?? null,
   });
   if (!best) return null;
   return {
@@ -224,6 +225,7 @@ export async function computeTermTuition(
   const degreeLevelId = stu?.degreeLevelId ?? null;
   const majorId = stu?.majorId ?? null;
   const entryYear = stu?.entryYear ?? null;
+  const universityId = stu?.universityId ?? null;
 
   // قواعد شهریه یک‌بار خوانده می‌شوند تا به ازای هر درس کوئری تکراری نزنیم
   const feeRules = await loadActiveFeeRules();
@@ -234,7 +236,7 @@ export async function computeTermTuition(
 
   // شهریهٔ ثابت — یک‌بار به ازای نوع ترم؛ فقط قواعد سطح ترم (بدون offeringType)
   const fixedRule = resolveTuitionRule(feeRules, {
-    degreeLevelId, majorId, termType, entryYear, termLevelOnly: true,
+    degreeLevelId, majorId, termType, entryYear, termLevelOnly: true, universityId,
   });
   const includeFixed = opts?.includeFixed !== false;
   const fixedTuition = override
@@ -282,7 +284,7 @@ export async function computeTermTuition(
       continue;
     }
     const rule = resolveTuitionRule(feeRules, {
-      degreeLevelId, majorId, termType, entryYear, offeringType: r.offeringType,
+      degreeLevelId, majorId, termType, entryYear, offeringType: r.offeringType, universityId,
     });
     const src = rule ?? fixedRule;
     // نرخ هر واحد بر حسب نوع درس (نظری/عملی/عمومی) + سطل‌بندی واحدهای درس

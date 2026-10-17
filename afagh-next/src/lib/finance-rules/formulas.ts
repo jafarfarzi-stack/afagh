@@ -1,4 +1,5 @@
 import { resolveTuitionRule, type TuitionRuleLike } from '../tuition-resolver';
+import { normalizeBankType } from '../bank-roles';
 import { toNum, toRial } from './numbers';
 
 // ══════════════════════════════════════════════════════════════════════
@@ -94,6 +95,10 @@ export interface UnitBuckets {
  * درس عمومی از روی courseType تشخیص داده می‌شود و کل واحدهایش در سطل عمومی
  * می‌نشیند؛ در غیر این صورت واحدها بر اساس ستون‌های نظری/عملی درس تقسیم
  * می‌شوند و باقی در سطل نظری.
+ *
+ * ⚠️ مقادیر legacy اغلب با املای عربی (ي/ك) و فاصلهٔ اضافه ذخیره شده‌اند؛
+ * بدون هنجارسازی («عمومي» ≠ «عمومی») درس عمومی هرگز سطل عمومی نمی‌گرفت و
+ * نرخ عمومی بی‌استفاده می‌ماند.
  */
 export function bucketCourseUnits(course: {
   units: number | string | null;
@@ -102,7 +107,7 @@ export function bucketCourseUnits(course: {
   courseType?: string | null;
 }): UnitBuckets {
   const units = toNum(course.units);
-  const type = String(course.courseType || '').toUpperCase();
+  const type = normalizeBankType(course.courseType);
   const isGeneral = type === 'GENERAL' || type === 'عمومی' || type === 'OMOMI';
 
   if (isGeneral) return { theory: 0, practical: 0, general: units };
@@ -123,6 +128,56 @@ export function totalBuckets(courses: UnitBuckets[]): UnitBuckets {
     }),
     { theory: 0, practical: 0, general: 0 }
   );
+}
+
+/**
+ * تخصیص یک مبلغ کل به چند سطر، به تناسب «وزن» هر سطر.
+ *
+ * کاربرد: ریز شهریهٔ متغیر دروس. مبلغِ رسمی سند، جمعِ ردیف‌های دفتر کل
+ * (`TUITION_VARIABLE`) است؛ ریز محاسباتی باید *دقیقاً* با آن یکی شود.
+ * بنابراین سهم هر درس = وزن آن × (جمع دفتر کل ÷ جمع وزن‌ها) و باقی‌ماندهٔ
+ * گردکردن به روشِ «باقی‌ماندهٔ بزرگ‌تر» به سطرها اضافه می‌شود تا هیچ ریالی
+ * نه گم شود و نه اضافه بیاید.
+ *
+ * وزن‌های صفر (تعرفهٔ ثبت‌نشده) → تقسیم مساوی؛ تا ریز به‌جای جدولِ صفر،
+ * تصویری صادقانه از مبلغ کل باشد.
+ */
+export function allocateWeightedShares(weights: number[], target: number): number[] {
+  const n = (weights || []).length;
+  if (n === 0) return [];
+  const total = Math.max(0, Math.round(toNum(target)));
+  const clean = weights.map((w) => {
+    const v = toNum(w);
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  });
+  if (total === 0) return clean.map(() => 0);
+
+  const sum = clean.reduce((a, b) => a + b, 0);
+  if (sum <= 0) {
+    // وزن‌ها صفرند → تقسیم مساوی (باقی‌مانده به ترتیب سطرها)
+    const base = Math.floor(total / n);
+    const out = clean.map(() => base);
+    for (let i = 0; i < total - base * n; i++) out[i] += 1;
+    return out;
+  }
+
+  const raw = clean.map((w) => (w / sum) * total);
+  const out = raw.map((x) => Math.floor(x));
+  let remainder = total - out.reduce((a, b) => a + b, 0);
+  const order = raw
+    .map((x, i) => ({ i, frac: x - Math.floor(x) }))
+    .sort((a, b) => b.frac - a.frac || a.i - b.i);
+  for (const o of order) {
+    if (remainder <= 0) break;
+    out[o.i] += 1;
+    remainder -= 1;
+  }
+  // بازماندهٔ نظری (خطای ممیز شناور) — به ترتیب سطرها
+  for (let i = 0; remainder > 0; i = (i + 1) % n) {
+    out[i] += 1;
+    remainder -= 1;
+  }
+  return out;
 }
 
 /** شهریهٔ ناخالص از یک فرمول تخصیص */

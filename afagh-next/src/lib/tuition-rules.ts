@@ -37,6 +37,8 @@ export interface FeeRuleParams {
    * برای یک نوع گذراندن درس خاص (مثلاً TRANSFER) تعریف شده است.
    */
   termLevelOnly?: boolean;
+  /** دانشگاه دانشجو — قاعدهٔ دانشگاه دیگر تطبیق نمی‌شود (چند‌دانشگاهی) */
+  universityId?: number | null;
 }
 
 /** حداقل شکلی که یک سطر قاعدهٔ شهریه باید داشته باشد */
