@@ -198,6 +198,7 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'EXAM_TICKET_TTL_MINUTES', env: 'EXAM_TICKET_TTL_MINUTES', group: 'ارزشیابی و هوش تجاری', label: 'اعتبار توکن کارت آزمون (دقیقه)', type: 'number', default: '180' },
   { key: 'ENROLL_CONFIRM_TTL_MINUTES', env: 'ENROLL_CONFIRM_TTL_MINUTES', group: 'ارزشیابی و هوش تجاری', label: 'اعتبار توکن تأییدیه انتخاب واحد (دقیقه)', type: 'number', default: '43200', help: 'مدت اعتبار QR تأییدیهٔ انتخاب واحد؛ پیش‌فرض ۴۳۲۰۰ دقیقه (۳۰ روز)' },
   { key: 'FINANCE_STMT_TTL_MINUTES', env: 'FINANCE_STMT_TTL_MINUTES', group: 'ارزشیابی و هوش تجاری', label: 'اعتبار توکن کارنامهٔ مالی (دقیقه)', type: 'number', default: '43200', help: 'مدت اعتبار QR کارنامهٔ مالی دانشجو؛ پیش‌فرض ۴۳۲۰۰ دقیقه (۳۰ روز)' },
+  { key: 'TRANSCRIPT_TTL_MINUTES', env: 'TRANSCRIPT_TTL_MINUTES', group: 'ارزشیابی و هوش تجاری', label: 'اعتبار توکن کارنامهٔ تحصیلی (دقیقه)', type: 'number', default: '43200', help: 'مدت اعتبار QR کارنامهٔ تحصیلی دانشجو؛ پیش‌فرض ۴۳۲۰۰ دقیقه (۳۰ روز)' },
   { key: 'EXAM_GRADE_DEADLINE_DAYS', env: 'EXAM_GRADE_DEADLINE_DAYS', group: 'ارزشیابی و هوش تجاری', label: 'مهلت ثبت نمرهٔ امتحان (روز)', type: 'number', default: '5' },
   { key: 'STUDENT_CARD_VALID_DAYS', env: 'STUDENT_CARD_VALID_DAYS', group: 'ارزشیابی و هوش تجاری', label: 'اعتبار کارت دانشجویی (روز)', type: 'number', default: '365' },
   { key: 'PERF_SLA_TARGET', env: 'PERF_SLA_TARGET', group: 'ارزشیابی و هوش تجاری', label: 'هدف پایبندی به ضرب‌الاجل (SLA) استاد', type: 'number', default: '90', help: 'درصد؛ مبنای نشان عملکرد و پاداش بهره‌وری' },

@@ -615,7 +615,9 @@ export type TranscriptVerification =
 
 /** توکن کارنامهٔ تحصیلی — امضاشده و میان‌مدت (پیش‌فرض ۳۰ روز، سقف ۱ سال) */
 export async function issueTranscriptToken(userId: number): Promise<{ token: string; expiresAt: string }> {
-  const configured = await getNumber('TRANSCRIPT_TTL_MINUTES', 43200);
+  // تنظیم ممکن است هنوز ثبت نشده باشد؛ نبودِ آن نباید صدور کارنامه را بشکند
+  // (پیش‌تر getNumber برای تنظیم ناشناخته خطا می‌داد و بلوک QR رندر نمی‌شد).
+  const configured = await getNumber('TRANSCRIPT_TTL_MINUTES', 43200).catch(() => 43200);
   if (!Number.isFinite(configured) || configured <= 0) {
     throw new Error('مدت اعتبار کارنامهٔ تحصیلی (TRANSCRIPT_TTL_MINUTES) باید عددی بزرگ‌تر از صفر باشد.');
   }
