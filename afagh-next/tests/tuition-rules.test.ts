@@ -6,6 +6,7 @@
  * نیاز به PostgreSQL قابل اجراست.
  */
 import { mapLegacyFeeRules, normalizeEquivFixedMode, pickFeeRule, shouldChargeFixed, termTypeOf, toNum } from '../src/lib/tuition-rules.ts';
+import { resolveTuitionRule, type TuitionRuleLike } from '../src/lib/tuition-resolver.ts';
 
 let pass = 0;
 let fail = 0;
@@ -146,6 +147,28 @@ const dm2 = dmRules.filter(r => r.id !== 3);
 eq('مقطع بر رشته می‌چربد حتی با priority بالاتر', pickFeeRule(dm2, { degreeLevelId: 2, majorId: 5, termType: 'NORMAL' })?.id, 2);
 eq('مقطع دیگر → قاعدهٔ مقطع رد و تنها بدون‌مقطع می‌ماند', pickFeeRule(dm2, { degreeLevelId: 3, majorId: 5, termType: 'NORMAL' })?.id, 1);
 eq('رشتهٔ دیگرِ همان مقطع → قاعدهٔ آن رشته', pickFeeRule(dmRules, { degreeLevelId: 2, majorId: 6, termType: 'NORMAL' })?.id, 4);
+
+console.log('\n۱۱) resolver یکپارچه: قید دانشگاه + قاعدهٔ پشتیبان سالانه');
+// قاعدهٔ رشتۀ دانشگاه ۱ (priority 100) در برابر قاعدهٔ پشتیبان بدون رشته (priority 900)
+const uniRules: TuitionRuleLike[] = [
+  { id: 1, degreeLevelId: null, majorId: 42, termType: null, offeringType: null, entryYearFrom: 1403, entryYearTo: 1403, universityId: 1, fixedAmount: '0', perUnitTheory: '1000', perUnitPractical: '1000', perUnitGeneral: '1000', priority: 100 },
+  { id: 2, degreeLevelId: null, majorId: null, termType: null, offeringType: null, entryYearFrom: 1403, entryYearTo: 1403, universityId: 1, fixedAmount: '0', perUnitTheory: '500', perUnitPractical: '500', perUnitGeneral: '500', priority: 900 },
+  { id: 3, degreeLevelId: null, majorId: null, termType: null, offeringType: null, entryYearFrom: null, entryYearTo: null, universityId: null, fixedAmount: '0', perUnitTheory: '100', perUnitPractical: '100', perUnitGeneral: '100', priority: 100 },
+];
+eq('دانشجوی همان رشته → قاعدهٔ رشته‌محور',
+  resolveTuitionRule(uniRules, { degreeLevelId: 1, majorId: 42, entryYear: 1403, universityId: 1 })?.id, 1);
+eq('رشتهٔ بدون قاعده → قاعدهٔ پشتیبان سالانه (نه صفر)',
+  resolveTuitionRule(uniRules, { degreeLevelId: 1, majorId: 999, entryYear: 1403, universityId: 1 })?.id, 2);
+eq('قاعدهٔ دانشگاه ۱ به دانشجوی دانشگاه ۲ نمی‌رسد',
+  resolveTuitionRule(uniRules, { degreeLevelId: 1, majorId: 42, entryYear: 1403, universityId: 2 })?.id, 3);
+eq('قاعدهٔ بی‌دانشگاه (مشترک) برای همه هست',
+  resolveTuitionRule([uniRules[2]], { degreeLevelId: 1, majorId: 42, entryYear: 1403, universityId: 5 })?.id, 3);
+eq('بدون دادن دانشگاه در بافت، قید دانشگاه اعمال نمی‌شود (سازگاری عقب‌رو)',
+  resolveTuitionRule(uniRules, { degreeLevelId: 1, majorId: 42, entryYear: 1403 })?.id, 1);
+eq('دانشجوی دانشگاه ۲ فقط قاعدهٔ مشترک را می‌بیند و پشتیبانِ دانشگاه ۱ را نه',
+  resolveTuitionRule(uniRules, { degreeLevelId: 1, majorId: 999, entryYear: 1403, universityId: 2 })?.id, 3);
+eq('قاعدهٔ غیرفعال هرگز انتخاب نمی‌شود',
+  resolveTuitionRule([{ ...uniRules[0], isActive: 0 }], { degreeLevelId: 1, majorId: 42, entryYear: 1403, universityId: 1 }), null);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);
