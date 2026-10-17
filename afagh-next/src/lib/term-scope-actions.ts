@@ -4,11 +4,15 @@ import { cookies } from 'next/headers';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { academic_terms } from '@/db/schema';
+import { getSessionUser } from '@/lib/auth';
 import { TERM_COOKIE } from './term-scope';
 import { getCurrentUniversity } from './university-scope';
 
 export async function setTermCookie(termId: number | null, _universityId: number | null): Promise<void> {
   void _universityId;
+  // 🔒 بدون نشست هیچ کوکی‌ای ست نمی‌شود (وگرنه رابط عمومی می‌توانست کوکی نیم‌سال بگذارد)
+  const me = await getSessionUser().catch(() => null);
+  if (!me) return;
   const store = await cookies();
   // دانشگاه فقط از کوکی معتبر سمت سرور خوانده می‌شود؛ آرگومان کلاینت نادیده گرفته می‌شود
   const uni = await getCurrentUniversity().catch(() => null);

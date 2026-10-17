@@ -1,4 +1,4 @@
-import { assertCsrf } from '@/lib/security';
+import { assertCsrf, requireStudentScope } from '@/lib/security';
 // ══════════════════════════════════════════════════════════════════════
 //  آفاق ERP — «کمیته انضباطی» — API فهرست/ایجاد/ویرایش پرونده
 //
@@ -174,6 +174,10 @@ export async function POST(req: NextRequest) {
   }
   const { studentId, violationType, description, reporterName, caseDate } = parsed.data;
 
+  // 🔒 مرز دانشگاه (IDOR): کارشناس دانشگاه A نباید برای دانشجوی دانشگاه B پرونده بسازد
+  const scope = await requireStudentScope(studentId);
+  if (!scope.ok) return NextResponse.json({ ok: false, error: scope.error }, { status: 403 });
+
   const user = await getSessionUser();
   const uni = await getCurrentUniversity().catch(() => null);
 
@@ -251,6 +255,14 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'تصمیم نامعتبر است.' }, { status: 400 });
   }
 
+  // 🔒 مرز دانشگاه (IDOR): پروندهٔ دانشجوی دانشگاه دیگر قابل تغییر نیست
+  {
+    const [row] = await db.select({ studentId: discipline_cases.studentId }).from(discipline_cases).where(eq(discipline_cases.id, id)).limit(1);
+    if (!row) return NextResponse.json({ ok: false, error: 'پرونده یافت نشد.' }, { status: 404 });
+    const scope = await requireStudentScope(row.studentId);
+    if (!scope.ok) return NextResponse.json({ ok: false, error: scope.error }, { status: 403 });
+  }
+
   const user = await getSessionUser();
   const set: Partial<typeof discipline_cases.$inferInsert> = { updatedAt: new Date() };
   if (status) set.status = status;
@@ -302,6 +314,14 @@ export async function DELETE(req: NextRequest) {
 
   const id = Number(req.nextUrl.searchParams.get('id') || 0);
   if (!id) return NextResponse.json({ ok: false, error: 'شناسه پرونده الزامی است.' }, { status: 400 });
+
+  // 🔒 مرز دانشگاه (IDOR): حتی ADMIN یک دانشگاه نباید پروندهٔ دانشگاه دیگر را حذف کند
+  {
+    const [row] = await db.select({ studentId: discipline_cases.studentId }).from(discipline_cases).where(eq(discipline_cases.id, id)).limit(1);
+    if (!row) return NextResponse.json({ ok: false, error: 'پرونده یافت نشد.' }, { status: 404 });
+    const scope = await requireStudentScope(row.studentId);
+    if (!scope.ok) return NextResponse.json({ ok: false, error: scope.error }, { status: 403 });
+  }
 
   const user = await getSessionUser();
   try {

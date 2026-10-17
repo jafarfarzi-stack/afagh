@@ -7,7 +7,6 @@ import { headedDepartments } from '@/lib/group-manager';
 import { getSiblingAccounts } from '@/lib/account-switch';
 import AccountSwitcher from '@/components/AccountSwitcher';
 import SessionLock from '@/components/SessionLock';
-import { getNumber } from '@/lib/settings';
 import TermSwitcher from '@/components/TermSwitcher';
 import { getTermScope } from '@/lib/term-scope';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -35,11 +34,11 @@ export default async function ProfessorLayout({ children }: { children: React.Re
   // حساب‌های هم‌شخص (کد پرسنلی/دانشجویی دیگرِ همین کدملی) برای بنر جابه‌جایی
   const siblings = await getSiblingAccounts().catch(() => []);
 
-  // قفل خودکار بیکاری — مدت از تنظیمات مدیر (۰ = غیرفعال)
-  const lockMin = await getNumber('SESSION_LOCK_MINUTES', 15).catch(() => 15);
-  // پرچم سمت سرور تا رفرش پس از قفل، دوباره قفل نشان بدهد (مقاوم در برابر دورزدن با رفرش)
-  const { isSessionLocked } = await import('@/lib/session-lock');
-  const lockOn = await isSessionLocked(user.id).catch(() => false);
+  // قفل خودکار بیکاری — سرور-محور (مدت به تفکیک نقش؛ ۰ = غیرفعال).
+  // منبع حقیقت «زمان آخرین فعالیت» است؛ پس رفرش قفل را دور نمی‌زند و کاربرِ در حال کار بیرون نمی‌افتد.
+  const { evaluateIdleLock, resolveIdleTimeoutMinutes } = await import('@/lib/session-lock');
+  const lockMin = await resolveIdleTimeoutMinutes(user.roles).catch(() => 15);
+  const lockOn = await evaluateIdleLock(user.id, lockMin).catch(() => false);
 
   // استاد به یک دانشگاه تعلق دارد؛ فیلتر نیمسال فقط با همان دانشگاه اعتبارسنجی می‌شود
   const universityId = me?.universityId ?? null;

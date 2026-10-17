@@ -395,7 +395,7 @@ export default function ProfessorContractClient({ demo = false, initialContract,
                 value={otpCode}
                 onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
                 placeholder="• • • • • •"
-                className="w-full border-2 border-indigo-500 rounded-xl p-3 text-center font-mono font-black text-xl tracking-widest text-slate-900 focus:outline-hidden"
+                className="w-full border-2 border-indigo-500 rounded-xl p-3 text-center font-mono font-black text-xl tracking-widest text-slate-900 focus:outline-none"
               />
             </div>
 

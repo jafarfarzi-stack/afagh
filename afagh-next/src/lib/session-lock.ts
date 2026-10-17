@@ -70,6 +70,8 @@ export async function clearSessionLock(userId: number): Promise<void> {
   mem.delete(userId);
   pendingClear.add(userId);
   await flushClears();
+  // بازگشایی = فعالیت: ساعت بیکاری از این لحظه از نو شمرده شود، وگرنه بلافاصله دوباره قفل می‌شد
+  await touchActivity(userId);
 }
 
 /** آیا کاربر هم‌اکنون قفل است؟ (layoutها هنگام رندر می‌خوانند) */
@@ -83,4 +85,110 @@ export async function isSessionLocked(userId: number): Promise<boolean> {
     if (Date.now() < downUntil) throw new Error('redis-breaker-open');
     return (await lockRedis.get(KEY(userId))) === '1';
   } catch { downUntil = Date.now() + BREAKER_MS; return false; }
+}
+
+/* ------------------------------------------------------------------------- *
+ * قفل بیکاری سرور-محور (بر پایهٔ «زمان آخرین فعالیت»)
+ *
+ * چرا: پیش‌تر قفل فقط با server action کلاینت (lockNowAction) در سرور ثبت
+ * می‌شد؛ اگر آن action رد می‌شد (ناهم‌خوانی Origin/Host پشت پروکسی،
+ * آی‌فریم، قطع لحظه‌ای شبکه) پرچم ثبت نمی‌شد و رفرش کاربر را بی‌قفل
+ * برمی‌گرداند. حالا «آخرین فعالیت» در سرور نگه داشته می‌شود و قفل از روی
+ * آن محاسبه می‌گردد؛ پس رفرش/تب جدید هم قفل را نشان می‌دهد و کاربرِ در حال
+ * کار هرگز بی‌دلیل بیرون نمی‌افتد.
+ * ------------------------------------------------------------------------- */
+
+const SEEN_KEY = (id: number) => `sessseen:${id}`;
+/** TTL کلید فعالیت — بیشتر از هر سقف معقولِ قفل (۲۴ ساعت). */
+const SEEN_TTL_SEC = 24 * 3600;
+
+/** userId → آخرین فعالیت (mirror درون‌حافظه برای دوران قطعی Redis) */
+const seenMem: Map<number, number> = new Map();
+/** نوشتن‌های عقب‌افتادهٔ فعالیت که هنوز به Redis نرسیده‌اند. */
+const pendingSeen: Map<number, number> = new Map();
+
+async function flushSeen(): Promise<void> {
+  if (!pendingSeen.size) return;
+  try {
+    if (Date.now() < downUntil) throw new Error('redis-breaker-open');
+    for (const [id, at] of [...pendingSeen]) {
+      await lockRedis.set(SEEN_KEY(id), String(at), 'EX', SEEN_TTL_SEC);
+      if (pendingSeen.get(id) === at) pendingSeen.delete(id);
+    }
+  } catch { downUntil = Date.now() + BREAKER_MS; }
+}
+
+/** ثبت یک «فعالیت» کاربر (بازدید صفحه، حرکت ماوس، تایپ، لمس). */
+export async function touchActivity(userId: number, at: number = Date.now()): Promise<void> {
+  const cutoff = at - SEEN_TTL_SEC * 1000;
+  for (const [k, v] of seenMem) if (v < cutoff) seenMem.delete(k);
+  seenMem.set(userId, at);
+  pendingSeen.set(userId, at);
+  await flushSeen();
+}
+
+/** زمان آخرین فعالیت — null یعنی هنوز برای این کاربر ثبت نشده. */
+export async function lastActivityAt(userId: number): Promise<number | null> {
+  const m = seenMem.get(userId);
+  if (m != null) return m;
+  await flushSeen();
+  try {
+    if (Date.now() < downUntil) throw new Error('redis-breaker-open');
+    const v = await lockRedis.get(SEEN_KEY(userId));
+    const n = v == null ? NaN : Number(v);
+    return Number.isFinite(n) ? n : null;
+  } catch { downUntil = Date.now() + BREAKER_MS; return null; }
+}
+
+/** آیا از آخرین فعالیت بیش از timeoutMin دقیقه گذشته؟ (بدون به‌روزرسانی زمان) */
+export async function isIdle(userId: number, timeoutMin: number): Promise<boolean> {
+  if (!(timeoutMin > 0)) return false;
+  const at = await lastActivityAt(userId);
+  if (at === null) return false; // نخستین مشاهده — مبنایی برای بیکاری نیست
+  return Date.now() - at > timeoutMin * 60_000;
+}
+
+/**
+ * ارزیابی قفل بیکاری هنگام رندر layout (منبع حقیقت).
+ * ۱) پرچم قفل صریح روشن است → قفل. ۲) از آخرین فعالیت بیش از حد گذشته →
+ * قفل (و زمان فعالیت جلو برده نمی‌شود، تا قفل پایدار بماند). ۳) در حال
+ * کار → همین بازدید «فعالیت» ثبت و بدون قفل ادامه می‌دهد.
+ */
+export async function evaluateIdleLock(userId: number, timeoutMin: number): Promise<boolean> {
+  if (!(timeoutMin > 0)) return false;
+  if (await isSessionLocked(userId)) return true;
+  if (await isIdle(userId, timeoutMin)) return true;
+  await touchActivity(userId);
+  return false;
+}
+
+function clampMinutes(n: number): number {
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(Math.trunc(n), 24 * 60);
+}
+
+/**
+ * سقف قفل بیکاری برای یک کاربر بر پایهٔ نقش‌هایش.
+ * SESSION_LOCK_MINUTES_ROLES یک JSON اختیاری است مثل {"ADMIN":30,"STUDENT":0}
+ * (۰ = غیرفعال برای آن نقش). اولین نقشِ منطبق برنده است، وگرنه پیش‌فرضِ عمومیِ
+ * SESSION_LOCK_MINUTES.
+ */
+export async function resolveIdleTimeoutMinutes(roles: readonly string[] | null | undefined): Promise<number> {
+  const { getNumber, getSetting } = await import('@/lib/settings');
+  const fallback = await getNumber('SESSION_LOCK_MINUTES', 15).catch(() => 15);
+  const raw = await getSetting('SESSION_LOCK_MINUTES_ROLES').catch(() => '');
+  if (!raw) return clampMinutes(fallback);
+  try {
+    const map = JSON.parse(raw) as Record<string, unknown>;
+    if (map && typeof map === 'object') {
+      for (const r of roles ?? []) {
+        if (!r || !(r in map)) continue;
+        const v = map[r];
+        if (v === undefined || v === null || v === '') continue;
+        const n = Number(v);
+        if (Number.isFinite(n)) return clampMinutes(n);
+      }
+    }
+  } catch { /* JSON نامعتبر → پیش‌فرض */ }
+  return clampMinutes(fallback);
 }

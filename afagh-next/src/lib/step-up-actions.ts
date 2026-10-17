@@ -70,7 +70,7 @@ export async function requestStepUpAction(scope: string, password: string): Prom
 }
 
 /** راستی‌آزمایی صرف رمز کاربر جاری (برای قفل بیکاری) — توکن صادر نمی‌کند. */
-export async function verifyOwnPasswordAction(password: string): Promise<{ ok: boolean; error?: string }> {
+export async function verifyOwnPasswordCore(password: string): Promise<{ ok: boolean; error?: string }> {
   const user = await getSessionUser();
   if (!user) return { ok: false, error: 'نشست منقضی شده است؛ دوباره وارد شوید.' };
   const gate = await stepUpGate(user.id);
@@ -82,6 +82,10 @@ export async function verifyOwnPasswordAction(password: string): Promise<{ ok: b
   }
   await clearSessionLock(user.id);
   return { ok: true };
+}
+
+export async function verifyOwnPasswordAction(password: string): Promise<{ ok: boolean; error?: string }> {
+  return verifyOwnPasswordCore(password);
 }
 
 /**

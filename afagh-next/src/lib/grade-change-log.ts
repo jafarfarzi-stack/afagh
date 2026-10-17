@@ -3,7 +3,7 @@
  *
  * هر تغییر (ذخیره/موقت/نهایی/اعتراض/اعمال ادمین) یک ردیف append-only ثبت می‌کند.
  */
-'use server';
+import 'server-only';
 
 import { db } from '@/db';
 import { grade_change_log, enrollments } from '@/db/schema';

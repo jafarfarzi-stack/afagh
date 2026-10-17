@@ -2203,7 +2203,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                   placeholder="مثال: ۱۶.۵۰"
                   value={gradeValueInput}
                   onChange={e => setGradeValueInput(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
 
@@ -2217,7 +2217,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                 <select
                   value={selectedSamaCode}
                   onChange={e => setSelectedSamaCode(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 >
                   <option value="AUTO">
                     {`⚡ خودکار طبق تعریف درس و آیین‌نامه: [کد ${autoSamaCode.code || '—'}] ${autoSamaCode.title}`}
@@ -2247,7 +2247,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                   placeholder="مثال: حکم کمیسیون موارد خاص به شماره ۱۲۳۴ یا اصلاح نمره طبق صورتجلسه شورای آموزشی"
                   value={gradeReasonInput}
                   onChange={e => setGradeReasonInput(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
 
@@ -2261,7 +2261,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                       onChange={e => setGradeStepUpPw(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void handleStepUpConfirm(); } }}
                       placeholder="رمز عبور شما"
-                      className="flex-1 bg-white border border-indigo-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                      className="flex-1 bg-white border border-indigo-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                       dir="ltr"
                     />
                     <button
@@ -2455,7 +2455,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                     placeholder="رمز جدید همهٔ این گروه"
                     value={bulkPass}
                     onChange={e => setBulkPass(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-slate-500 focus:outline-hidden"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-slate-500 focus:outline-none"
                   />
                 </div>
               ) : (
@@ -2543,27 +2543,27 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
                   <span className="text-red-700 font-bold">* کد ملی</span>
-                  <input dir="ltr" value={csf.nc} onChange={e => setCsf({ ...csf, nc: e.target.value })} required className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono focus:ring-2 focus:ring-slate-500 focus:outline-hidden" placeholder="۱۰ رقم" />
+                  <input dir="ltr" value={csf.nc} onChange={e => setCsf({ ...csf, nc: e.target.value })} required className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono focus:ring-2 focus:ring-slate-500 focus:outline-none" placeholder="۱۰ رقم" />
                 </label>
                 <label className="block">
                   <span className="text-indigo-900 font-bold">* نام</span>
-                  <input value={csf.fn} onChange={e => setCsf({ ...csf, fn: e.target.value })} required className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-hidden" />
+                  <input value={csf.fn} onChange={e => setCsf({ ...csf, fn: e.target.value })} required className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-none" />
                 </label>
                 <label className="block">
                   <span className="text-indigo-900 font-bold">* نام خانوادگی</span>
-                  <input value={csf.ln} onChange={e => setCsf({ ...csf, ln: e.target.value })} required className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-hidden" />
+                  <input value={csf.ln} onChange={e => setCsf({ ...csf, ln: e.target.value })} required className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-none" />
                 </label>
                 <label className="block">
                   <span>نام پدر</span>
-                  <input value={csf.father} onChange={e => setCsf({ ...csf, father: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-hidden" />
+                  <input value={csf.father} onChange={e => setCsf({ ...csf, father: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-none" />
                 </label>
                 <label className="block">
                   <span>شماره شناسنامه</span>
-                  <input value={csf.bcn} onChange={e => setCsf({ ...csf, bcn: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-hidden" />
+                  <input value={csf.bcn} onChange={e => setCsf({ ...csf, bcn: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-none" />
                 </label>
                 <label className="block">
                   <span>جنسیت</span>
-                  <select value={csf.gender} onChange={e => setCsf({ ...csf, gender: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-hidden">
+                  <select value={csf.gender} onChange={e => setCsf({ ...csf, gender: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-none">
                     <option value="">—</option>
                     <option>مرد</option>
                     <option>زن</option>
@@ -2571,19 +2571,19 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                 </label>
                 <label className="block">
                   <span>موبایل</span>
-                  <input dir="ltr" value={csf.mobile} onChange={e => setCsf({ ...csf, mobile: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono focus:ring-2 focus:ring-slate-500 focus:outline-hidden" />
+                  <input dir="ltr" value={csf.mobile} onChange={e => setCsf({ ...csf, mobile: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono focus:ring-2 focus:ring-slate-500 focus:outline-none" />
                 </label>
                 <label className="block">
                   <span>ایمیل</span>
-                  <input dir="ltr" value={csf.email} onChange={e => setCsf({ ...csf, email: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono focus:ring-2 focus:ring-slate-500 focus:outline-hidden" />
+                  <input dir="ltr" value={csf.email} onChange={e => setCsf({ ...csf, email: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono focus:ring-2 focus:ring-slate-500 focus:outline-none" />
                 </label>
                 <label className="block">
                   <span>کد پرسنلی</span>
-                  <input dir="ltr" value={csf.code} onChange={e => setCsf({ ...csf, code: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono focus:ring-2 focus:ring-slate-500 focus:outline-hidden" placeholder="پیش‌فرض: کد ملی" />
+                  <input dir="ltr" value={csf.code} onChange={e => setCsf({ ...csf, code: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono focus:ring-2 focus:ring-slate-500 focus:outline-none" placeholder="پیش‌فرض: کد ملی" />
                 </label>
                 <label className="block">
                   <span>نوع سمت</span>
-                  <select value={csf.type} onChange={e => setCsf({ ...csf, type: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-hidden">
+                  <select value={csf.type} onChange={e => setCsf({ ...csf, type: e.target.value })} className="mt-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-slate-500 focus:outline-none">
                     <option value="اداری">اداری / کارشناس</option>
                     <option value="هیئت علمی">استاد / هیئت علمی</option>
                     <option value="هیئت علمی-اداری">استاد و کارمند اداری (هیئت علمی + اداری)</option>
@@ -2621,7 +2621,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
                 placeholder="رمز جدید"
                 value={pwInput}
                 onChange={e => setPwInput(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-slate-500 focus:outline-hidden"
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-slate-500 focus:outline-none"
               />
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
                 <button type="button" onClick={() => setPwModalFor(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>

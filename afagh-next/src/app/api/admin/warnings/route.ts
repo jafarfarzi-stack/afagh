@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, count, desc, eq, gte, lte, or, sql, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, lte, or, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/db';
 import { students, users } from '@/db/schema';
@@ -7,14 +7,14 @@ import { scheduled_warnings } from '@/db/schema-warnings';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { authorizedUniversityIds, getCurrentUniversity } from '@/lib/university-scope';
 import {
 
   isWarningStatus,
   isWarningType,
   SCHED_WARNINGS_PAGE_SIZE,
 } from '@/lib/scheduled-warnings';
-import { assertCsrf } from '@/lib/security';
+import { assertCsrf, requireStudentScope } from '@/lib/security';
 
 // ══════════════════════════════════════════════════════════════════════
 //  API هشدارهای زمان‌بندی‌شدهٔ دانشجو
@@ -63,6 +63,11 @@ export async function GET(req: NextRequest) {
   if (p.get('action') === 'students') {
     const q = (p.get('q') || '').trim();
     if (q.length < 2) return NextResponse.json({ ok: true, hits: [] });
+    // 🔒 مرز دانشگاه (IDOR): جست‌وجوی دانشجو نباید دانشجوی دانشگاه‌های دیگر را برگرداند.
+    // authorizedUniversityIds: null = حساب پلتفرمی (نامحدود)، [] = deny-all.
+    const allowedIds = await authorizedUniversityIds().catch(() => []);
+    if (Array.isArray(allowedIds) && allowedIds.length === 0) return NextResponse.json({ ok: true, hits: [] });
+    const uniFilter = Array.isArray(allowedIds) ? inArray(students.universityId, allowedIds) : undefined;
     const like = `%${q}%`;
     const hits = await db
       .select({
@@ -73,7 +78,10 @@ export async function GET(req: NextRequest) {
       })
       .from(students)
       .innerJoin(users, eq(users.id, students.userId))
-      .where(or(eq(students.studentCode, q), sql`${users.firstName} || ' ' || ${users.lastName} LIKE ${like}`))
+      .where(and(
+        uniFilter,
+        or(eq(students.studentCode, q), sql`${users.firstName} || ' ' || ${users.lastName} LIKE ${like}`),
+      ))
       .orderBy(students.studentCode)
       .limit(20);
     return NextResponse.json({ ok: true, hits });
@@ -172,6 +180,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'نوع هشدار نامعتبر است.' }, { status: 400 });
   }
 
+  // 🔒 مرز دانشگاه (IDOR): کارشناس دانشگاه A نباید برای دانشجوی دانشگاه B هشدار بسازد
+  const scope = await requireStudentScope(d.studentId);
+  if (!scope.ok) return NextResponse.json({ ok: false, error: scope.error }, { status: 403 });
+
   const user = await getSessionUser();
   const uni = await getCurrentUniversity().catch(() => null);
 
@@ -235,6 +247,14 @@ export async function PATCH(req: NextRequest) {
   const d = parsed.data;
   if (d.warningType && !isWarningType(d.warningType)) {
     return NextResponse.json({ ok: false, error: 'نوع هشدار نامعتبر است.' }, { status: 400 });
+  }
+
+  // 🔒 مرز دانشگاه (IDOR): هشدار دانشجوی دانشگاه دیگر قابل تغییر نیست
+  {
+    const [w] = await db.select({ studentId: scheduled_warnings.studentId }).from(scheduled_warnings).where(eq(scheduled_warnings.id, id)).limit(1);
+    if (!w) return NextResponse.json({ ok: false, error: 'هشدار پیدا نشد.' }, { status: 404 });
+    const scope = await requireStudentScope(w.studentId);
+    if (!scope.ok) return NextResponse.json({ ok: false, error: scope.error }, { status: 403 });
   }
 
   const user = await getSessionUser();
@@ -301,6 +321,14 @@ export async function DELETE(req: NextRequest) {
 
   const id = Number(req.nextUrl.searchParams.get('id') || 0);
   if (!id) return NextResponse.json({ ok: false, error: 'شناسه هشدار الزامی است.' }, { status: 400 });
+
+  // 🔒 مرز دانشگاه (IDOR): حتی ADMIN یک دانشگاه نباید هشدار دانشگاه دیگر را حذف کند
+  {
+    const [w] = await db.select({ studentId: scheduled_warnings.studentId }).from(scheduled_warnings).where(eq(scheduled_warnings.id, id)).limit(1);
+    if (!w) return NextResponse.json({ ok: false, error: 'هشدار پیدا نشد.' }, { status: 404 });
+    const scope = await requireStudentScope(w.studentId);
+    if (!scope.ok) return NextResponse.json({ ok: false, error: scope.error }, { status: 403 });
+  }
 
   const user = await getSessionUser();
   try {

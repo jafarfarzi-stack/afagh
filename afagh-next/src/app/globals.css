@@ -554,3 +554,28 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   }
   .transcript-print-area .tr-term-table { font-size: 11px; }
 }
+
+/* ─── سازگاری مرورگرها (فایرفاکس / سافاری / آیفون) ───
+  ۱) در iOS Safari فوکوس روی ورودی با فونت کمتر از ۱۶px صفحه را زوم می‌کند؛
+     روی موبایل اندازهٔ ورودی‌ها را به ۱۶px می‌بریم (چیدمان دست‌نخورده می‌ماند).
+  ۲) جلوگیری از بزرگ‌نمایی خودکار متن هنگام چرخش دستگاه در iOS. */
+@media (max-width: 767px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='submit']):not([type='button']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* ─── iOS/Safari: ارتفاع پویا ───
+   در سافاری آیفون، 100vh بلندتر از نمای واقعی است (نوار آدرس) و باعث پرش
+   چیدمان/بریدگی محتوا در صفحه‌های تمام‌قد میشود. همان کلاس min-h-screen را
+   روی مرورگرهای مدرن به dvh می‌بریم؛ مرورگرهای قدیمی که dvh را نمیشناسند
+   همان 100vh را میگیرند. */
+@supports (min-height: 100dvh) {
+  .min-h-screen { min-height: 100dvh; }
+}

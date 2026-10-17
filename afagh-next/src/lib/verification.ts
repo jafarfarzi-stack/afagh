@@ -50,6 +50,11 @@ async function studentDebtRials(studentId: number): Promise<number> {
 const b64u = (buf: Buffer) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64u = (s: string) => Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
 
+/**
+ * 🔒 استعلام‌های عمومی (توکن/QR): فیلد `nationalId` در نتایج زیر **فقط ماسک‌شده**
+ * برگردانده می‌شود. کد ملی کامل هرگز روی صفحهٔ عمومی (verify-*، /id، exam-ticket)
+ * نمایش داده نمی‌شود؛ مصرف‌کننده‌های داخلی باید از مسیرهای احرازشده استفاده کنند.
+ */
 /** کد ملی ماسک‌شده — فقط سه رقم اول و دو رقم آخر */
 export function maskNationalCode(code: string | null | undefined): string {
   const c = String(code ?? '').trim();
@@ -234,7 +239,7 @@ export async function verifyStudentCard(rawToken: string): Promise<StudentCardVe
     universityId: card.universityId ?? null,
     studentCode: card.studentCode,
     fullName: `${card.firstName} ${card.lastName}`,
-    nationalId: String(card.nationalCode ?? ''),
+    nationalId: maskNationalCode(card.nationalCode),
     nationalIdMasked: maskNationalCode(card.nationalCode),
     statusLabel: studentStatusFa(card.studentStatus, card.samaStatusCode),
     majorName: card.majorName,
@@ -415,7 +420,7 @@ export async function verifyExamTicket(rawToken: string): Promise<ExamTicketVeri
     universityId: stu.universityId ?? null,
     studentName: `${stu.firstName} ${stu.lastName}`,
     studentCode: stu.studentCode,
-    nationalId: String(stu.nationalCode ?? ''),
+    nationalId: maskNationalCode(stu.nationalCode),
     nationalIdMasked: maskNationalCode(stu.nationalCode),
     majorName: stu.majorName,
     termTitle: term?.title ?? '—',
@@ -529,7 +534,7 @@ export async function verifyEnrollConfirm(rawToken: string): Promise<EnrollConfi
     universityId: stu.universityId ?? null,
     studentName: `${stu.firstName} ${stu.lastName}`,
     studentCode: stu.studentCode,
-    nationalId: String(stu.nationalCode ?? ''),
+    nationalId: maskNationalCode(stu.nationalCode),
     nationalIdMasked: maskNationalCode(stu.nationalCode),
     majorName: stu.majorName,
     termId: term.id,
@@ -624,7 +629,7 @@ export async function verifyFinanceStatement(rawToken: string): Promise<FinanceS
     universityId: stu.universityId ?? null,
     studentName: `${stu.firstName} ${stu.lastName}`,
     studentCode: stu.studentCode,
-    nationalId: String(stu.nationalCode ?? ''),
+    nationalId: maskNationalCode(stu.nationalCode),
     nationalIdMasked: maskNationalCode(stu.nationalCode),
     majorName: stu.majorName,
     totals: {
@@ -753,7 +758,7 @@ export async function verifyTranscript(rawToken: string): Promise<TranscriptVeri
     universityId: stu.universityId ?? null,
     studentName: `${stu.firstName} ${stu.lastName}`,
     studentCode: stu.studentCode,
-    nationalId: String(stu.nationalCode ?? ''),
+    nationalId: maskNationalCode(stu.nationalCode),
     nationalIdMasked: maskNationalCode(stu.nationalCode),
     statusLabel: studentStatusFa(stu.status, stu.samaStatusCode),
     majorName: stu.majorName,

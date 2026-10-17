@@ -35,10 +35,10 @@ export default async function LoginPage(props: { searchParams: Promise<{ u?: str
   const uni = show.university;
 
   return (
-    <main dir="rtl" className="min-h-screen bg-gradient-to-bl from-emerald-950 via-slate-900 to-teal-950 p-4 sm:p-8 flex items-center justify-center">
+    <main dir="rtl" className="min-h-screen bg-gradient-to-bl from-emerald-950 via-slate-900 to-teal-950 p-4 sm:p-8 flex items-start sm:items-center justify-center">
       <div className="w-full max-w-6xl grid gap-6 lg:grid-cols-5 items-start">
         {/* ── پنل معرفی / اسلایدر ── */}
-        <div className="space-y-4 lg:col-span-3">
+        <div className="order-2 space-y-4 lg:order-1 lg:col-span-3">
           <div className="flex items-center gap-4">
             {uni.logoUrl ? (
               <img src={uni.logoUrl} alt={uni.title} className="h-16 w-16 sm:h-20 sm:w-20 object-contain rounded-3xl bg-white p-2 shadow-2xl" />
@@ -70,7 +70,7 @@ export default async function LoginPage(props: { searchParams: Promise<{ u?: str
         </div>
 
         {/* ── ستون ورود ── */}
-        <div className="space-y-4 lg:col-span-2 lg:sticky lg:top-6">
+        <div className="order-1 space-y-4 lg:order-2 lg:col-span-2 lg:sticky lg:top-6">
           {important.length > 0 && (
             <div className="space-y-2.5">
               {important.map(n => (

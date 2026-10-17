@@ -97,9 +97,37 @@ export default function LoginCard() {
       </div>
       {!choice ? (
         <>
-          <input className="input text-left" dir="ltr" placeholder="کد پرسنلی یا شماره دانشجویی" value={code} onChange={e => setCode(toEnDigits(e.target.value))} name="code" autoComplete="username" />
-          <input className="input text-left" dir="ltr" type="password" placeholder="رمز عبور" value={pass} onChange={e => setPass(toEnDigits(e.target.value))} name="password" autoComplete="current-password" />
-          {err && <p className="rounded-xl bg-red-50 p-2 text-center text-sm text-red-700 dark:border dark:border-red-800 dark:bg-red-950 dark:text-red-200">{err}</p>}
+          <input
+            className="input text-left"
+            dir="ltr"
+            placeholder="کد پرسنلی یا شماره دانشجویی"
+            value={code}
+            onChange={e => setCode(toEnDigits(e.target.value))}
+            name="code"
+            autoComplete="username"
+            inputMode="text"
+            enterKeyHint="next"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-label="کد پرسنلی یا شماره دانشجویی"
+          />
+          <input
+            className="input text-left"
+            dir="ltr"
+            type="password"
+            placeholder="رمز عبور"
+            value={pass}
+            onChange={e => setPass(toEnDigits(e.target.value))}
+            name="password"
+            autoComplete="current-password"
+            enterKeyHint="go"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-label="رمز عبور"
+          />
+          {err && <p role="alert" className="rounded-xl bg-red-50 p-2 text-center text-sm text-red-700 dark:border dark:border-red-800 dark:bg-red-950 dark:text-red-200">{err}</p>}
           <button className="btn-primary w-full" disabled={busy}>{busy ? 'در حال ورود…' : 'ورود'}</button>
           <p className="text-center text-[11px] text-slate-400">
             ورود اول؟ گذرواژهٔ اولیهٔ شما برابر همان کد است. <a href="/help?tab=shared" className="text-indigo-700 font-bold hover:underline">راهنمای ورود</a>
