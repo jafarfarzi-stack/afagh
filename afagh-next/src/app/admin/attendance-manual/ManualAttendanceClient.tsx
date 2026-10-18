@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useTransition } from 'react';
-import { confirmProfessorAttendanceAction } from './actions';
+import { confirmProfessorAttendanceAction, markClassHeldAction } from './actions';
 
 export interface ManualRow {
   sessionId: number;
@@ -9,6 +9,9 @@ export interface ManualRow {
   sessionDate: string;
   time: string;
   isMakeUp: boolean;
+  isHoliday: boolean;
+  isExtraSession: boolean;
+  sessionStatus: string;
   courseCode: string | null;
   courseTitle: string | null;
   staffId: number | null;
@@ -49,6 +52,21 @@ export default function ManualAttendanceClient({
   const [q, setQ] = useState('');
   const [onlyMissing, setOnlyMissing] = useState(false);
   const [done, setDone] = useState<Record<number, { present: boolean; note?: string }>>({});
+  const [heldMap, setHeldMap] = useState<Record<number, boolean>>({});
+  const isHeld = (r: ManualRow) => heldMap[r.sessionId] ?? (r.sessionStatus === 'HELD');
+
+  /** تیک زندهٔ «تشکیل کلاس» — همان منبع شمارش جلسات برگزارشده در حق‌الزحمه */
+  const markHeld = (r: ManualRow, held: boolean) => {
+    startTransition(async () => {
+      const res = await markClassHeldAction({ sessionId: r.sessionId, held });
+      if (res.ok) {
+        setHeldMap(prev => ({ ...prev, [r.sessionId]: held }));
+        setMsg({ ok: true, text: held ? `تشکیل کلاس جلسهٔ ${faNum(r.sessionNo)} ثبت شد.` : `تیک تشکیل جلسهٔ ${faNum(r.sessionNo)} لغو شد.` });
+      } else {
+        setMsg({ ok: false, text: res.error ?? 'ثبت تشکیل کلاس ممکن نشد.' });
+      }
+    });
+  };
 
   const filtered = useMemo(() => {
     const needle = q.trim();
@@ -76,10 +94,11 @@ export default function ManualAttendanceClient({
   return (
     <div className="space-y-4" dir="rtl">
       <div className="overflow-hidden rounded-2xl border border-indigo-900/20 bg-gradient-to-l from-indigo-800 via-indigo-700 to-slate-900 p-4 text-white shadow-lg">
-        <h1 className="text-lg font-black">🧑‍🏫 تأیید دستی حضور استاد</h1>
+        <h1 className="text-lg font-black">🧑‍🏫 حضور و تشکیل کلاس — تأیید دستی کارشناس</h1>
         <p className="mt-1 text-xs text-indigo-50/90">
-          حضور استاد خودکار از سامانهٔ اثر انگشت خوانده می‌شود؛ اگر دستگاه ثبت نکرده باشد، کارشناس آموزش می‌تواند
-          حضور همان جلسه را اینجا دستی تأیید کند (روش ثبت: «تأیید دستی کارشناس» + یادداشت و هویت تأییدکننده در ممیزی).
+          دو کار در یک صفحه: (۱) <b>تیک «تشکیل کلاس»</b> به‌صورت زنده — همان چیزی که استاد در کارتابل خودش
+          می‌زند و مبنای شمارش جلسات برگزارشده در حق‌الزحمه است؛ (۲) <b>تأیید دستی حضور استاد</b> وقتی سامانهٔ
+          اثر انگشت ثبت نکرده (روش ثبت: «تأیید دستی کارشناس» + یادداشت و هویت تأییدکننده در ممیزی).
         </p>
       </div>
 
@@ -127,7 +146,8 @@ export default function ManualAttendanceClient({
               <th className="p-2.5">استاد</th>
               <th className="p-2.5">اثر انگشت (گیت)</th>
               <th className="p-2.5">وضعیت ثبت‌شده</th>
-              <th className="p-2.5">تأیید دستی</th>
+              <th className="p-2.5">تشکیل کلاس (زنده)</th>
+              <th className="p-2.5">تأیید دستی حضور</th>
             </tr>
           </thead>
           <tbody>
@@ -161,6 +181,32 @@ export default function ManualAttendanceClient({
                     {r.note && <span className="mt-1 block text-[9px] text-slate-500">{r.note}</span>}
                   </td>
                   <td className="p-2.5 text-center">
+                    {r.isHoliday && <span className="ml-1 rounded bg-rose-100 px-1.5 py-0.5 text-[9px] font-black text-rose-800">تعطیل</span>}
+                    {r.isExtraSession && <span className="ml-1 rounded bg-violet-100 px-1.5 py-0.5 text-[9px] font-black text-violet-800">فوق‌برنامه</span>}
+                    {isHeld(r) ? (
+                      <>
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800">✓ برگزار شد</span>
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => markHeld(r, false)}
+                          className="mr-1 rounded-lg border border-slate-300 px-2 py-0.5 text-[10px] font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+                        >
+                          لغو
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => markHeld(r, true)}
+                        className="rounded-lg bg-indigo-700 px-2.5 py-1 text-[10px] font-black text-white transition hover:bg-indigo-800 disabled:opacity-40"
+                      >
+                        تیک تشکیل کلاس
+                      </button>
+                    )}
+                  </td>
+                  <td className="p-2.5 text-center">
                     <button
                       type="button"
                       disabled={pending || !r.staffId}
@@ -184,7 +230,7 @@ export default function ManualAttendanceClient({
               );
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={7} className="p-6 text-center text-slate-500">جلسه‌ای با این فیلتر یافت نشد.</td></tr>
+              <tr><td colSpan={8} className="p-6 text-center text-slate-500">جلسه‌ای با این فیلتر یافت نشد.</td></tr>
             )}
           </tbody>
         </table>

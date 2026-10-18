@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
-import { isIdle, isSessionLocked, resolveIdleTimeoutMinutes, touchActivity } from '@/lib/session-lock';
+import { isIdle, isSessionLocked, resolveIdleTimeoutMinutes, setSessionLock, touchActivity } from '@/lib/session-lock';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,5 +38,20 @@ export async function POST(req: Request) {
   }
 
   const idle = await isIdle(user.id, timeoutMin).catch(() => false);
-  return NextResponse.json({ ok: true, locked: idle, timeoutMin });
+  if (idle) {
+    /**
+     * 🔒 خودِ سرور قفل را **ثبت** می‌کند (نه فقط گزارش).
+     *
+     * چرا: پیش‌تر این مسیر فقط «قفل هست/نیست» را می‌گفت و ثبت پرچم به server
+     * action کلاینت (`lockNowAction`) سپرده شده بود؛ اگر آن اکشن رد می‌شد
+     * (ناهم‌خوانی Origin/Host پشت پروکسی، آی‌فریم، قطع لحظه‌ای شبکه) یا درخواست
+     * به پروسهٔ دیگری می‌رفت، بستن تب و بازکردن مجدد آدرس، کارتابل را **بی‌رمز**
+     * باز می‌کرد. حالا قفل با همین تشخیص بیکاری در سرور ثبت می‌شود و
+     * `evaluateIdleLock` در layout هم همین کار را می‌کند؛ پس رفرش/تب جدید هم
+     * قفل می‌ماند تا رمز درست وارد شود.
+     */
+    await setSessionLock(user.id).catch(() => {});
+    return NextResponse.json({ ok: true, locked: true, timeoutMin });
+  }
+  return NextResponse.json({ ok: true, locked: false, timeoutMin });
 }

@@ -157,7 +157,18 @@ export async function isIdle(userId: number, timeoutMin: number): Promise<boolea
 export async function evaluateIdleLock(userId: number, timeoutMin: number): Promise<boolean> {
   if (!(timeoutMin > 0)) return false;
   if (await isSessionLocked(userId)) return true;
-  if (await isIdle(userId, timeoutMin)) return true;
+  if (await isIdle(userId, timeoutMin)) {
+    /**
+     * 🔒 قفل را همین‌جا **ثبت** کن، نه فقط گزارش.
+     *
+     * پیش‌تر این تابع صرفاً `true` برمی‌گرداند و ثبت پرچم به client action
+     * (`lockNowAction`) سپرده شده بود؛ اگر آن اکشن رد می‌شد یا درخواست بعدی
+     * (رفرش/تب جدید) به پروسهٔ دیگری می‌رفت، کارتابل بی‌رمز باز می‌شد. الان
+     * خودِ layout هنگام رندر، قفل را پایدار می‌کند.
+     */
+    await setSessionLock(userId).catch(() => {});
+    return true;
+  }
   await touchActivity(userId);
   return false;
 }

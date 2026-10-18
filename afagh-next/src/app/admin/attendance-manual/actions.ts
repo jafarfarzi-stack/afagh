@@ -64,8 +64,59 @@ export async function confirmProfessorAttendanceAction(px: {
   }
 }
 
-/** خلاصهٔ حضور دستیِ ثبت‌شده برای یک ترم (برای نمایش وضعیت در همان صفحه) */
-export async function manualAttendanceStatsAction(termId: number) {
+/**
+ * تیک «تشکیل کلاس» توسط کارشناس آموزش (زنده) — همان چیزی که پیش‌تر فقط استاد
+ * در کارتابل خودش می‌توانست ثبت کند.
+ *
+ * `class_sessions.status` همان منبعی است که موتور حقوق (`payroll-engine`) و
+ * کارنامهٔ عملکرد استاد از آن «جلسات برگزارشده» را می‌شمارند؛ پس تیک کارشناس
+ * مستقیماً روی محاسبهٔ کسور/حق‌الزحمه اثر می‌گذارد.
+ * «لغو» جلسه را به SCHEDULED برمی‌گرداند و `updatedAt` هم به‌روز می‌شود.
+ */
+export async function markClassHeldAction(px: {
+  sessionId: number;
+  held: boolean;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
+    const me = await getStaffByUser(user.id);
+    if (!me) return { ok: false, error: 'پروندهٔ پرسنلی یافت نشد.' };
+
+    const sessionId = Number(px.sessionId);
+    if (!sessionId) return { ok: false, error: 'جلسه نامعتبر است.' };
+
+    const [row] = await db
+      .select({
+        id: class_sessions.id,
+        universityId: course_offerings.universityId,
+      })
+      .from(class_sessions)
+      .innerJoin(course_offerings, eq(course_offerings.id, class_sessions.offeringId))
+      .where(eq(class_sessions.id, sessionId))
+      .limit(1);
+    if (!row) return { ok: false, error: 'جلسه یافت نشد.' };
+
+    // مرز دانشگاه: کارشناس فقط جلسات دانشگاه مجاز خودش را تیک می‌زند
+    const { canActOnUniversity } = await import('@/lib/university-scope');
+    if (row.universityId != null && !(await canActOnUniversity(row.universityId))) {
+      return { ok: false, error: 'این جلسه در دانشگاه شما نیست.' };
+    }
+
+    await db
+      .update(class_sessions)
+      .set({ status: px.held ? 'HELD' : 'SCHEDULED', updatedAt: new Date() })
+      .where(eq(class_sessions.id, sessionId));
+
+    revalidatePath('/admin/attendance-manual');
+    revalidatePath('/admin/class-sessions');
+    revalidatePath('/professor/attendance');
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: (err as Error)?.message || 'ثبت تشکیل کلاس ممکن نشد.' };
+  }
+}
+
+/** خلاصهٔ حضور دستیِ ثبت‌شده برای یک ترم (برای نمایش وضعیت در همان صفحه) */export async function manualAttendanceStatsAction(termId: number) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
   const rows = await db.execute(sql`
     select count(*)::int as total,
