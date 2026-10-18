@@ -1,6 +1,6 @@
 ﻿import { and, asc, desc, eq } from 'drizzle-orm';
 import type { ReactNode } from 'react';
-import { academic_terms, course_offerings, courses, degree_level_configs, educational_regulations, enrollments, majors, universities, users } from '@/db/schema';
+import { academic_terms, course_offerings, courses, degree_level_configs, educational_regulations, enrollments, majors, students, universities, users } from '@/db/schema';
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA, getRegulationConfig } from '@/lib/regulations-engine';
@@ -30,10 +30,39 @@ const statusFa: Record<string, string> = {
   GRADUATED: 'فارغ‌التحصیل',
 };
 
-export default async function StudentTranscriptPage() {
+export default async function StudentTranscriptPage({ searchParams }: { searchParams: Promise<{ record?: string }> }) {
   const user = await requireRole(['STUDENT']);
-  const me = await getStudentByUser(user.id);
-  if (!me) return <p className="card p-6 text-center text-slate-500">پروندهٔ دانشجویی یافت نشد.</p>;
+  const picked = await getStudentByUser(user.id);
+  if (!picked) return <p className="card p-6 text-center text-slate-500">پروندهٔ دانشجویی یافت نشد.</p>;
+
+  // ── دانش‌آموختهٔ چندمقطعی: یک کاربر می‌تواند چند پرونده داشته باشد
+  //    (کاردانی + کارشناسی + ارشد). کارنامهٔ هر مقطع باید جدا و درست بیاید،
+  //    و QR هر کارنامه هم همان پرونده را در خود نهفته دارد.
+  const myRecords = await db
+    .select({
+      id: students.id,
+      studentCode: students.studentCode,
+      status: students.status,
+      degreeTitle: degree_level_configs.title,
+      entryYear: students.entryYear,
+    })
+    .from(students)
+    .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
+    .where(eq(students.userId, user.id))
+    .orderBy(desc(students.entryYear), desc(students.id));
+
+  const sp = await searchParams;
+  const wantedRecordId = Number(sp?.record ?? 0) || 0;
+  let active = picked;
+  if (wantedRecordId && wantedRecordId !== picked.id && myRecords.some(r => r.id === wantedRecordId)) {
+    const [alt] = await db
+      .select()
+      .from(students)
+      .where(and(eq(students.id, wantedRecordId), eq(students.userId, user.id)))
+      .limit(1);
+    if (alt) active = alt;
+  }
+  const me = active;
 
   const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
   const [level] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
@@ -184,6 +213,24 @@ export default async function StudentTranscriptPage() {
 
   return (
     <div className="space-y-4">
+      {myRecords.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-sm print:hidden">
+          <span className="font-bold text-slate-600">پروندهٔ تحصیلی (مقطع):</span>
+          {myRecords.map(r => (
+            <a
+              key={r.id}
+              href={`/student/transcript?record=${r.id}`}
+              className={`rounded-lg border px-2.5 py-1 font-bold ${r.id === me.id
+                ? 'border-indigo-500 bg-indigo-50 text-indigo-800'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+            >
+              {r.degreeTitle ?? 'مقطع نامشخص'} · <span className="font-mono" dir="ltr">{r.studentCode}</span>
+              {r.status === 'GRADUATED' ? ' — فارغ‌التحصیل' : ''}
+            </a>
+          ))}
+          <span className="text-[10px] text-slate-400">هر مقطع کارنامهٔ جداگانه و QR جدا دارد.</span>
+        </div>
+      )}
       {filteredTerm && (
         <TermFilterChip title={filteredTerm.title} universityId={me.universityId ?? null} />
       )}
