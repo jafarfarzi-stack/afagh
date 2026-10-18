@@ -1,0 +1,216 @@
+/* ════════════════════════════════════════════════════════════════
+   توکن‌های سیستم طراحی آفاق — v1.0
+   استفاده: import در globals.css یا لینک مستقیم در صفحه
+   قاعده: هیچ کامپوننتی رنگ خام ننویسد؛ فقط var(--…)
+   ════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── سطح‌ها ── */
+  --surface:            #f1f5f9;
+  --surface-raised:     #ffffff;
+  --surface-sunken:     #f8fafc;
+  --surface-muted:      #e2e8f0;
+
+  /* ── مرزها ── */
+  --border:             #e2e8f0;
+  --border-strong:      #cbd5e1;
+
+  /* ── متن ── */
+  --text:               #1e293b;
+  --text-muted:         #64748b;
+  --text-subtle:        #94a3b8;
+  --text-inverse:       #ffffff;
+
+  /* ── اکشن اصلی ── */
+  --primary:            #059669;
+  --primary-hover:      #047857;
+  --primary-soft:       #ecfdf5;
+  --on-primary:         #ffffff;
+
+  /* ── وضعیت‌ها ── */
+  --success:            #059669;
+  --success-soft:       #ecfdf5;
+  --warning:            #d97706;
+  --warning-soft:       #fffbeb;
+  --danger:             #e11d48;
+  --danger-soft:        #fff1f2;
+  --info:               #0284c7;
+  --info-soft:          #f0f9ff;
+  --neutral:            #64748b;
+  --neutral-soft:       #f1f5f9;
+
+  /* ── سربرگ/ناوبری ── */
+  --header-bg:          #0f172a;
+  --header-text:        #ffffff;
+
+  /* ── فوکوس ── */
+  --focus-ring:         #10b981;
+  --focus-ring-offset:  #ffffff;
+
+  /* ── سایه ── */
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.05);
+  --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.12);
+
+  /* ── شعاع ── */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  /* ── فاصله (مقیاس ۴px) ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* ── تایپوگرافی ── */
+  --font-sans: 'Vazirmatn', Tahoma, sans-serif;
+  --font-mono: 'Vazirmatn', ui-monospace, 'Cascadia Code', monospace;
+  --text-display:  24px;
+  --text-title:    16px;
+  --text-subtitle: 14px;
+  --text-body:     13px;
+  --text-label:    12px;
+  --text-caption:  11px;
+  --leading-fa:    1.8;
+}
+
+/* ════════════ حالت تیره — همان توکن‌ها، پلهٔ مقابل ════════════ */
+.dark,
+[data-theme='dark'] {
+  --surface:            #0f172a;
+  --surface-raised:     #1e293b;
+  --surface-sunken:     #1e293b;
+  --surface-muted:      #334155;
+
+  --border:             #334155;
+  --border-strong:      #475569;
+
+  --text:               #f1f5f9;
+  --text-muted:         #94a3b8;
+  --text-subtle:        #64748b;
+  --text-inverse:       #0f172a;
+
+  --primary:            #10b981;
+  --primary-hover:      #34d399;
+  --primary-soft:       #064e3b;
+  --on-primary:         #062f26;
+
+  --success:            #34d399;
+  --success-soft:       #064e3b;
+  --warning:            #fbbf24;
+  --warning-soft:       #451a03;
+  --danger:             #fb7185;
+  --danger-soft:        #4c0519;
+  --info:               #38bdf8;
+  --info-soft:          #082f49;
+  --neutral:            #94a3b8;
+  --neutral-soft:       #334155;
+
+  --header-bg:          #020617;
+  --header-text:        #f8fafc;
+
+  --focus-ring:         #34d399;
+  --focus-ring-offset:  #0f172a;
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.5);
+}
+
+/* ════════════ کلاس‌های پایه (اختیاری — معادل .card/.btn/.input) ════════════ */
+
+.ds-surface   { background: var(--surface); color: var(--text); font-family: var(--font-sans); }
+.ds-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-sm);
+}
+
+.ds-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-body);
+  font-weight: 700;
+  line-height: 1.5;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color .15s, color .15s, border-color .15s;
+}
+.ds-btn:disabled { opacity: .5; cursor: not-allowed; }
+.ds-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+.ds-btn--primary { background: var(--primary); color: var(--on-primary); }
+.ds-btn--primary:hover:not(:disabled) { background: var(--primary-hover); }
+
+.ds-btn--ghost { background: var(--surface-muted); color: var(--text); }
+.ds-btn--ghost:hover:not(:disabled) { background: var(--border-strong); color: var(--text-inverse); }
+
+.ds-btn--danger { background: var(--danger); color: #fff; }
+.ds-btn--danger:hover:not(:disabled) { filter: brightness(.92); }
+
+.ds-btn--link {
+  background: transparent; color: var(--primary);
+  padding-inline: var(--space-1); text-decoration: underline; text-underline-offset: 3px;
+}
+
+.ds-input {
+  width: 100%;
+  background: var(--surface-raised);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-body);
+  font-family: var(--font-sans);
+  min-height: 36px;
+}
+.ds-input::placeholder { color: var(--text-subtle); }
+.ds-input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; border-color: var(--primary); }
+.ds-input--invalid { border-color: var(--danger); }
+.ds-input--ltr { direction: ltr; text-align: left; font-variant-numeric: tabular-nums; }
+
+.ds-field-error { color: var(--danger); font-size: var(--text-label); font-weight: 700; margin-top: var(--space-1); }
+
+.ds-badge {
+  display: inline-block; border-radius: var(--radius-full);
+  padding: 2px 10px; font-size: var(--text-label); font-weight: 700;
+  background: var(--neutral-soft); color: var(--neutral);
+}
+.ds-badge--success { background: var(--success-soft); color: var(--success); }
+.ds-badge--warning { background: var(--warning-soft); color: var(--warning); }
+.ds-badge--danger  { background: var(--danger-soft);  color: var(--danger); }
+.ds-badge--info    { background: var(--info-soft);    color: var(--info); }
+
+.ds-table { width: 100%; border-collapse: collapse; font-size: var(--text-label); }
+.ds-table thead th {
+  background: var(--surface-sunken); color: var(--text-muted);
+  font-weight: 700; text-align: right; padding: var(--space-2);
+  border-bottom: 1px solid var(--border-strong); position: sticky; top: 0;
+}
+.ds-table tbody td { padding: var(--space-2); border-bottom: 1px solid var(--border); color: var(--text); }
+.ds-table tbody tr:hover { background: var(--surface-sunken); }
+.ds-table .num { font-variant-numeric: tabular-nums; text-align: left; direction: ltr; }
+
+.ds-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-2); padding: var(--space-8) var(--space-4); text-align: center;
+  color: var(--text-muted); font-size: var(--text-body);
+}
+.ds-state__icon { font-size: 28px; opacity: .5; }
+.ds-state__title { font-weight: 800; color: var(--text); }
+.ds-state--error { background: var(--danger-soft); color: var(--danger); border-radius: var(--radius-md); }
+
+/* ════════════ چاپ ════════════ */
+@media print {
+  :root, .dark, [data-theme='dark'] {
+    --surface: #fff; --surface-raised: #fff; --surface-sunken: #fff;
+    --text: #000; --text-muted: #333; --border: #999;
+  }
+  .ds-btn { display: none !important; }
+  .ds-card { box-shadow: none; border-color: #999; }
+}

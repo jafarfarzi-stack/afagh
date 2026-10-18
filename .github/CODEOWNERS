@@ -1,0 +1,33 @@
+# مالکیت مسیرها — تعیین می‌کند چه کسی باید PR را بازبینی کند.
+# قاعده: مسیرهای پرریسک (P0) باید بازبینِ دامنه داشته باشند، نه فقط تأییدکنندهٔ عمومی.
+# docs/CODE-REVIEW.md §2
+
+# پیش‌فرض: مالک مخزن
+*                                   @jafarfarzi-stack
+
+# ── P0: مالی و آیین‌نامه ──
+/afagh-next/src/lib/regulations*              @jafarfarzi-stack
+/afagh-next/src/lib/graduation-engine.ts      @jafarfarzi-stack
+/afagh-next/src/lib/tuition*                  @jafarfarzi-stack
+/afagh-next/src/app/admin/finance/            @jafarfarzi-stack
+
+# ── P0: مهاجرت و اسکیما ──
+/afagh-next/drizzle/               @jafarfarzi-stack
+/afagh-next/src/db/                @jafarfarzi-stack
+/afagh-next/scripts/hardening.mjs  @jafarfarzi-stack
+/afagh-next/src/db/pg-hardening.sql @jafarfarzi-stack
+
+# ── P0: احراز هویت و نشست ──
+/afagh-next/src/lib/auth.ts        @jafarfarzi-stack
+/afagh-next/src/lib/proxy-trust.ts @jafarfarzi-stack
+/afagh-next/src/app/login/         @jafarfarzi-stack
+
+# ── P1: گزارش‌ها و ثبت‌نام ──
+/afagh-next/src/app/admin/reports/ @jafarfarzi-stack
+/afagh-next/src/lib/enroll*        @jafarfarzi-stack
+/afagh-next/src/app/api/           @jafarfarzi-stack
+
+# ── زیرساخت ──
+/.github/                          @jafarfarzi-stack
+/docker-compose*.yml               @jafarfarzi-stack
+/deploy-debian.sh                  @jafarfarzi-stack

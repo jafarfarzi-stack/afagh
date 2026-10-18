@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>سیستم طراحی آفاق — راهنمای زنده</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  @font-face {
+    font-family: 'Vazirmatn'; font-weight: 400; font-display: swap;
+    src: url('../../afagh-next/public/fonts/vazirmatn-arabic-400.woff2') format('woff2');
+    unicode-range: U+0600-06FF, U+200C-200E, U+FB50-FDFF, U+FE70-FEFC;
+  }
+  @font-face {
+    font-family: 'Vazirmatn'; font-weight: 400; font-display: swap;
+    src: url('../../afagh-next/public/fonts/vazirmatn-latin-400.woff2') format('woff2');
+    unicode-range: U+0000-00FF;
+  }
+  @font-face {
+    font-family: 'Vazirmatn'; font-weight: 700; font-display: swap;
+    src: url('../../afagh-next/public/fonts/vazirmatn-arabic-700.woff2') format('woff2');
+    unicode-range: U+0600-06FF, U+200C-200E, U+FB50-FDFF, U+FE70-FEFC;
+  }
+  @font-face {
+    font-family: 'Vazirmatn'; font-weight: 700; font-display: swap;
+    src: url('../../afagh-next/public/fonts/vazirmatn-latin-700.woff2') format('woff2');
+    unicode-range: U+0000-00FF;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    background: var(--surface); color: var(--text);
+    font-family: var(--font-sans); font-size: var(--text-body);
+    line-height: var(--leading-fa);
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 20px 80px; }
+  header.top {
+    background: var(--header-bg); color: var(--header-text);
+    padding: 20px 0; margin-bottom: 24px;
+  }
+  header.top .wrap { padding-top: 0; padding-bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  h1 { font-size: 20px; font-weight: 700; margin: 0; }
+  .sub { font-size: var(--text-label); opacity: .75; margin-top: 2px; }
+  section { margin-bottom: 32px; }
+  h2 {
+    font-size: var(--text-title); font-weight: 700; margin: 0 0 12px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: var(--text-subtitle); font-weight: 700; margin: 20px 0 8px; color: var(--text-muted); }
+  .note { font-size: var(--text-caption); color: var(--text-subtle); margin-top: 6px; }
+
+  .grid { display: grid; gap: 12px; }
+  .g2 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .g3 { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+
+  .swatch { border-radius: var(--radius-md); border: 1px solid var(--border); overflow: hidden; }
+  .swatch .chip { height: 56px; }
+  .swatch .meta { padding: 8px 10px; background: var(--surface-raised); }
+  .swatch .name { font-size: var(--text-label); font-weight: 700; }
+  .swatch .val { font-size: 10px; color: var(--text-subtle); direction: ltr; text-align: left; font-variant-numeric: tabular-nums; }
+
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .stack > * + * { margin-top: 10px; }
+
+  .toggle {
+    background: rgba(255,255,255,.12); color: inherit; border: 1px solid rgba(255,255,255,.25);
+    border-radius: var(--radius-full); padding: 6px 14px; font-family: inherit;
+    font-size: var(--text-label); font-weight: 700; cursor: pointer;
+  }
+  .toggle:hover { background: rgba(255,255,255,.2); }
+
+  .type-row { display: flex; align-items: baseline; gap: 14px; padding: 8px 0; border-bottom: 1px dashed var(--border); }
+  .type-row .tag { width: 92px; flex: 0 0 auto; font-size: 10px; color: var(--text-subtle); direction: ltr; text-align: left; }
+
+  .code { font-family: ui-monospace, monospace; font-size: 11px; background: var(--surface-muted); padding: 2px 6px; border-radius: 6px; direction: ltr; display: inline-block; }
+  table.ds-table { background: var(--surface-raised); border-radius: var(--radius-md); overflow: hidden; }
+  .box { background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div>
+      <h1>سیستم طراحی آفاق</h1>
+      <div class="sub">راهنمای زنده — توکن‌ها، تایپوگرافی، کامپوننت‌ها · v1.0</div>
+    </div>
+    <button class="toggle" id="themeBtn" type="button">🌙 حالت تیره</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section>
+    <h2>۱. رنگ‌های معنایی</h2>
+    <p class="note">هر توکن نقش را می‌گوید، نه رنگ را. در حالت تیره همان توکن‌ها پلهٔ مقابل را برمی‌گردانند — بدون تعریف دوباره.</p>
+    <div class="grid g3" id="swatches"></div>
+  </section>
+
+  <section>
+    <h2>۲. تایپوگرافی</h2>
+    <div class="type-row"><span class="tag">display 24/800</span><span style="font-size:24px;font-weight:700">سامانه جامع آموزشی آفاق</span></div>
+    <div class="type-row"><span class="tag">title 16/800</span><span style="font-size:16px;font-weight:700">گزارش دانشجویان فعال ترم</span></div>
+    <div class="type-row"><span class="tag">subtitle 14/700</span><span style="font-size:14px;font-weight:700">فیلترهای گزارش</span></div>
+    <div class="type-row"><span class="tag">body 13/400</span><span>۲٬۳۸۹ دانشجو در ترم ۱۴۰۵۱ ثبت‌نام کرده‌اند.</span></div>
+    <div class="type-row"><span class="tag">label 12/700</span><span style="font-size:12px;font-weight:700">شماره دانشجویی</span></div>
+    <div class="type-row"><span class="tag">caption 11/400</span><span style="font-size:11px;color:var(--text-subtle)">آخرین به‌روزرسانی: امروز ۱۷:۴۵</span></div>
+    <div class="type-row"><span class="tag">mono 12</span><span style="direction:ltr;text-align:left;font-variant-numeric:tabular-nums">4001227504 · 14051</span></div>
+    <p class="note">اعداد نمایشی فارسی، اعداد ورودی/کد لاتین با <span class="code">dir="ltr"</span> و <span class="code">tabular-nums</span>.</p>
+  </section>
+
+  <section>
+    <h2>۳. دکمه‌ها</h2>
+    <h3>حالت‌ها</h3>
+    <div class="row">
+      <button class="ds-btn ds-btn--primary">ذخیره</button>
+      <button class="ds-btn ds-btn--ghost">انصراف</button>
+      <button class="ds-btn ds-btn--danger">حذف</button>
+      <button class="ds-btn ds-btn--link">مشاهدهٔ جزئیات</button>
+      <button class="ds-btn ds-btn--primary" disabled>غیرفعال</button>
+    </div>
+    <p class="note">در هر ناحیهٔ دید فقط یک دکمهٔ اصلی. «حذف» همیشه تأیید دوم می‌خواهد.</p>
+  </section>
+
+  <section>
+    <h2>۴. فیلدها</h2>
+    <div class="grid g2">
+      <div>
+        <label style="font-size:12px;font-weight:700">نام و نام خانوادگی</label>
+        <input class="ds-input" placeholder="مثلاً محمدحسین نظری" style="margin-top:4px">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:700">شماره دانشجویی</label>
+        <input class="ds-input ds-input--ltr" value="4001227504" style="margin-top:4px">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:700">کد ملی</label>
+        <input class="ds-input ds-input--invalid ds-input--ltr" value="123" style="margin-top:4px">
+        <div class="ds-field-error">کد ملی باید ۱۰ رقم باشد.</div>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:700">ترم</label>
+        <select class="ds-input" style="margin-top:4px">
+          <option>نیمسال اول ۱۴۰۵-۱۴۰۶</option>
+          <option>نیمسال دوم ۱۴۰۴-۱۴۰۵</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>۵. بج وضعیت</h2>
+    <div class="row">
+      <span class="ds-badge ds-badge--success">فارغ‌التحصیل</span>
+      <span class="ds-badge ds-badge--warning">مشروط</span>
+      <span class="ds-badge ds-badge--danger">بدهکار</span>
+      <span class="ds-badge ds-badge--info">در انتظار شورا</span>
+      <span class="ds-badge">آرشیو</span>
+    </div>
+    <p class="note">رنگ تنها حامل معنا نیست — متن وضعیت همیشه همراه بج می‌آید.</p>
+  </section>
+
+  <section>
+    <h2>۶. کارت و جدول</h2>
+    <div class="ds-card" style="margin-bottom:12px">
+      <div style="font-size:16px;font-weight:700;margin-bottom:10px">📑 مرکز گزارش‌های آموزشی</div>
+      <table class="ds-table">
+        <thead>
+          <tr><th>شماره دانشجویی</th><th>نام</th><th>رشته</th><th style="text-align:left">تعداد درس</th><th>وضعیت</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="num">4001227504</td><td>محمدحسین نظری</td><td>علوم تربیتی</td><td class="num">11</td><td><span class="ds-badge ds-badge--success">فعال</span></td></tr>
+          <tr><td class="num">4001243503</td><td>عرفان فرجی‌زاده</td><td>حسابداری</td><td class="num">5</td><td><span class="ds-badge ds-badge--warning">مشروط</span></td></tr>
+          <tr><td class="num">4001245014</td><td>دانیال سقایی</td><td>مدیریت بازرگانی</td><td class="num">5</td><td><span class="ds-badge ds-badge--success">فعال</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">سربرگ چسبان، سطر ۳۲–۳۶px، اعداد تراز انتهایی با <span class="code">tabular-nums</span>.</p>
+  </section>
+
+  <section>
+    <h2>۷. حالت خالی و خطا</h2>
+    <div class="grid g2">
+      <div class="box">
+        <div class="ds-state">
+          <div class="ds-state__icon">📭</div>
+          <div class="ds-state__title">رکوردی یافت نشد</div>
+          <div>۰ دانشجو — چون ترمی انتخاب نشده است.</div>
+        </div>
+      </div>
+      <div class="box">
+        <div class="ds-state ds-state--error">
+          <div class="ds-state__icon">⚠️</div>
+          <div class="ds-state__title">اجرای گزارش ناموفق بود</div>
+          <div>خطای سرور · شناسه: ۳۶۰۷۸۷۴۹۳۱</div>
+        </div>
+      </div>
+    </div>
+    <p class="note">حالت خالی همیشه <b>دلیل</b> می‌گوید. خطا همیشه شناسهٔ پیگیری دارد.</p>
+  </section>
+
+  <section>
+    <h2>۸. فاصله و شعاع</h2>
+    <div class="row" style="align-items:flex-end">
+      <div><div style="width:4px;height:4px;background:var(--primary)"></div><div class="note">4</div></div>
+      <div><div style="width:8px;height:8px;background:var(--primary)"></div><div class="note">8</div></div>
+      <div><div style="width:12px;height:12px;background:var(--primary)"></div><div class="note">12</div></div>
+      <div><div style="width:16px;height:16px;background:var(--primary)"></div><div class="note">16</div></div>
+      <div><div style="width:24px;height:24px;background:var(--primary)"></div><div class="note">24</div></div>
+      <div><div style="width:32px;height:32px;background:var(--primary)"></div><div class="note">32</div></div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <div style="width:80px;height:44px;background:var(--surface-muted);border-radius:8px;display:grid;place-items:center;font-size:10px">sm 8</div>
+      <div style="width:80px;height:44px;background:var(--surface-muted);border-radius:12px;display:grid;place-items:center;font-size:10px">md 12</div>
+      <div style="width:80px;height:44px;background:var(--surface-muted);border-radius:16px;display:grid;place-items:center;font-size:10px">lg 16</div>
+      <div style="width:80px;height:44px;background:var(--surface-muted);border-radius:9999px;display:grid;place-items:center;font-size:10px">full</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>۹. چاپ</h2>
+    <div class="box">
+      <p style="margin:0">هر سند در <span class="code">.print-area</span> می‌پیچد. A4 عمودی، حاشیهٔ ۱۰mm/۸mm، پس‌زمینهٔ سفید اجباری حتی در تم تیره، سربرگ جدول در هر صفحه تکرار می‌شود.</p>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  const TOKENS = [
+    ['--surface','سطح صفحه'], ['--surface-raised','کارت / پنل'], ['--surface-sunken','سربرگ جدول'],
+    ['--border','مرز'], ['--text','متن اصلی'], ['--text-muted','متن ثانویه'],
+    ['--primary','اکشن اصلی'], ['--success','موفق'], ['--warning','هشدار'],
+    ['--danger','خطا / خطر'], ['--info','اطلاع'], ['--neutral','خنثی'],
+  ];
+  const box = document.getElementById('swatches');
+  const cs = getComputedStyle(document.documentElement);
+  TOKENS.forEach(([name, label]) => {
+    const val = cs.getPropertyValue(name).trim();
+    const el = document.createElement('div');
+    el.className = 'swatch';
+    el.innerHTML = `<div class="chip" style="background:var(${name})"></div>
+      <div class="meta"><div class="name">${label}</div>
+      <div class="val">${name} · ${val}</div></div>`;
+    box.appendChild(el);
+  });
+
+  const btn = document.getElementById('themeBtn');
+  btn.addEventListener('click', () => {
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+    btn.textContent = dark ? '🌙 حالت تیره' : '☀️ حالت روشن';
+  });
+</script>
+</body>
+</html>
