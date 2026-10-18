@@ -1,6 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { eq } from 'drizzle-orm';
+import { db } from '@/db';
+import { staff } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import {
   computeTermPayroll, exportBatch, getOverview, getStaffPayslip,
@@ -35,6 +38,18 @@ export async function payrollComputeAction() {
 export async function payrollPayslipAction(staffId: number) {
   try {
     await requireRole(['ADMIN', 'EDU_EXPERT']);
+    // 🔒 مرز دانشگاه: فیش حقوقی هر استاد فقط برای کاربران مجاز همان دانشگاه
+    //    (پیش‌تر با یک staffId دلخواه، محاسبهٔ حقوق هر استاد خوانده می‌شد).
+    const { canActOnUniversity } = await import('@/lib/university-scope');
+    const [st] = await db
+      .select({ universityId: staff.universityId })
+      .from(staff)
+      .where(eq(staff.id, staffId))
+      .limit(1);
+    if (!st) return { ok: false as const, error: 'استاد یافت نشد.' };
+    if (st.universityId != null && !(await canActOnUniversity(st.universityId))) {
+      return { ok: false as const, error: 'این استاد در دانشگاه شما نیست.' };
+    }
     const slip = await getStaffPayslip(staffId);
     return { ok: true as const, ...slip };
   } catch (err) {

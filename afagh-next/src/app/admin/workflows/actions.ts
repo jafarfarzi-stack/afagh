@@ -10,7 +10,7 @@ import {
 } from '@/lib/workflow-engine';
 import { eventsForRequest, retryPendingWorkflowEvents } from '@/lib/workflow-events';
 import { db } from '@/db';
-import { process_definitions, process_steps, student_requests, students } from '@/db/schema';
+import { process_definitions, process_steps, request_parallel_checkpoints, student_requests, students } from '@/db/schema';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import { getCurrentUniversity } from '@/lib/university-scope';
 
@@ -107,7 +107,19 @@ export async function adminEscalateWorkflowStepAction(requestId: number, note?: 
 }
 
 export async function adminClearParallelCheckpointAction(checkpointId: number, notes?: string) {
-  const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
+  await requireRole(['ADMIN', 'EDU_EXPERT']);
+
+  // 🔒 مرز دانشگاه: چک‌پوینت به یک درخواست تعلق دارد؛ همان مرزِ سایر اکشن‌های
+  //    این فایل باید اینجا هم اعمال شود (پیش‌تر با checkpointId دلخواه، تسویهٔ
+  //    درخواست دانشگاه دیگر پاک می‌شد).
+  const [cp] = await db
+    .select({ requestId: request_parallel_checkpoints.requestId })
+    .from(request_parallel_checkpoints)
+    .where(eq(request_parallel_checkpoints.id, checkpointId))
+    .limit(1);
+  if (!cp) return { ok: false, error: 'چک‌پوینت تسویه یافت نشد.' };
+  const scope = await assertWorkflowRequestInUni(cp.requestId);
+  if (!scope.ok) return { ok: false, error: scope.error };
 
   const res = await clearParallelCheckpoint({
     checkpointId,

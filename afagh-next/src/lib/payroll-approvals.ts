@@ -61,6 +61,8 @@ type StatementCtx = {
   status: string;
   staffId: number;
   departmentId: number | null;
+  /** دانشگاهِ استادِ فیش — برای مرز دانشگاه در تأیید معاونت/تاریخچه */
+  universityId: number | null;
   professorUserId: number | null;
   midtermPaid: number;
 };
@@ -117,6 +119,7 @@ async function loadStatementTx(
       midtermPaidAmount: payroll_statements.midtermPaidAmount,
       staffId: professor_term_contracts.staffId,
       departmentId: staff.departmentId,
+      universityId: staff.universityId,
       professorUserId: staff.userId,
     })
     .from(payroll_statements)
@@ -130,6 +133,7 @@ async function loadStatementTx(
     status: row.status ?? 'DRAFT',
     staffId: row.staffId,
     departmentId: row.departmentId,
+    universityId: row.universityId ?? null,
     professorUserId: row.professorUserId,
     midtermPaid: Number(row.midtermPaidAmount ?? 0),
   };
@@ -144,6 +148,22 @@ async function assertDeptScope(user: SessionUser, ctx: StatementCtx) {
   const depts = await headedDepartments(actorStaff.id, actorStaff.departmentId ?? null);
   if (!depts.some(d => d.id === ctx.departmentId)) {
     throw new Error('این فیش متعلق به گروه آموزشی شما نیست.');
+  }
+}
+
+/**
+ * دامنهٔ دانشگاهی: فیش باید در دانشگاهِ مجازِ کاربر باشد (fail-closed).
+ * برای مرحلهٔ معاونت آموزشی که «گروه» معنا ندارد، این مرز لازم است — پیش‌تر
+ * approveDean هیچ اسکوپی نداشت و کارشناس یک دانشگاه می‌توانست فیش دانشگاه
+ * دیگر را از مرحلهٔ معاونت عبور دهد.
+ */
+async function assertUniScope(user: SessionUser, ctx: StatementCtx) {
+  const { canActOnUniversity } = await import('@/lib/university-scope');
+  if (ctx.universityId == null) {
+    throw new Error('دانشگاه استادِ این فیش مشخص نیست؛ تأیید ممکن نیست.');
+  }
+  if (!(await canActOnUniversity(ctx.universityId))) {
+    throw new Error('این فیش متعلق به دانشگاه شما نیست.');
   }
 }
 
@@ -205,6 +225,7 @@ export async function approveDean(statementId: number, note?: string): Promise<A
     const out = await db.transaction(async tx => {
       const ctx = await loadStatementTx(tx, statementId);
       if (!ctx) throw new Error('فیش یافت نشد.');
+      await assertUniScope(user, ctx);
       if (['DEAN_APPROVED', 'FINAL_SETTLED'].includes(ctx.status)) {
         return { noop: true };
       }
@@ -324,6 +345,17 @@ export async function settleApproved(staffId: number): Promise<ApprovalResult> {
 /** تاریخچهٔ تأیید یک فیش (برای نمایش زیر فیش/دیالوگ) */
 export async function getApprovalHistory(statementId: number) {
   await requireRole(['ADMIN', 'EDU_EXPERT', 'VICE_EDU', 'DEP_HEAD', 'FINANCE_EXPERT', 'FINANCE']);
+  // 🔒 مرز دانشگاه: تاریخچهٔ تأیید فیش هر دانشگاه فقط برای کاربران مجاز همان دانشگاه
+  const { canActOnUniversity } = await import('@/lib/university-scope');
+  const [scope] = await db
+    .select({ universityId: staff.universityId })
+    .from(payroll_statements)
+    .innerJoin(professor_term_contracts, eq(professor_term_contracts.id, payroll_statements.contractId))
+    .innerJoin(staff, eq(staff.id, professor_term_contracts.staffId))
+    .where(eq(payroll_statements.id, statementId))
+    .limit(1);
+  if (!scope) return [];
+  if (scope.universityId != null && !(await canActOnUniversity(scope.universityId))) return [];
   const rows = await db.select().from(payroll_approvals).where(eq(payroll_approvals.statementId, statementId));
   rows.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
   return rows;

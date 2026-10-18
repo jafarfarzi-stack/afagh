@@ -28,6 +28,17 @@ const nextConfig = {
    * دروازهٔ کلیک‌جکینگ باید در لبه (CDN/Caddy) و با علم به همان یکپارچگی تنظیم شود.
    */
   async headers() {
+    // مسیرهای استعلام عمومی: نه ایندکس شوند و نه در کش مرورگر/پروکسی بمانند
+    // (لینک امضاشدهٔ سند با PII نباید در نتایج جست‌وجو یا کش میانی بایگانی شود).
+    const verifyPaths = [
+      '/verify-transcript',
+      '/verify-finance',
+      '/verify-enrollment',
+      '/exam-ticket',
+      '/id',
+      '/verify',
+      '/exam-handover',
+    ];
     return [
       {
         source: '/:path*',
@@ -42,6 +53,13 @@ const nextConfig = {
           { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
         ],
       },
+      ...verifyPaths.map(p => ({
+        source: `${p}/:path*`,
+        headers: [
+          { key: 'Cache-Control', value: 'no-store, max-age=0, must-revalidate' },
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' },
+        ],
+      })),
     ];
   },
 };

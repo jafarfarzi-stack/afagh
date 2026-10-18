@@ -514,13 +514,16 @@ export async function resolveSamaCodeForGradeAction(
   offeringId: number,
   gradeValue: number | null,
 ): Promise<{ code: string | null; title: string }> {
+  // 🔒 گارد نقش: این اکشن پیش‌تر هیچ بررسی نقشی نداشت و با یک studentId دلخواه
+  //    کد وضعیت نمرهٔ هر دانشجو (هر دانشگاه) خوانده می‌شد.
+  await requireRole(['ADMIN', 'EDU_EXPERT', 'VICE_EDU']);
   const uni = await getCurrentUniversity().catch(() => null);
-  if (uni) {
-    const [s] = await db.select({ universityId: students.universityId })
-      .from(students).where(eq(students.id, studentId)).limit(1);
-    if (!s || (s.universityId !== null && s.universityId !== uni.id)) {
-      return { code: null, title: 'نامشخص' };
-    }
+  // fail-closed: بدون دانشگاه فعال، هیچ داده‌ای برنمی‌گردد
+  if (!uni) return { code: null, title: 'نامشخص' };
+  const [s] = await db.select({ universityId: students.universityId })
+    .from(students).where(eq(students.id, studentId)).limit(1);
+  if (!s || (s.universityId !== null && s.universityId !== uni.id)) {
+    return { code: null, title: 'نامشخص' };
   }
   const code = await resolveSamaGradeStatusCode(studentId, offeringId, gradeValue);
   const title = gradeStatusTitleOf(code) || 'نامشخص';

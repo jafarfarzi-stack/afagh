@@ -1,0 +1,16 @@
+# سامانهٔ آفاق — صفحات استعلام عمومی اسناد نباید ایندکس شوند
+# (لینک هر سند امضاشده و شامل دادهٔ شخصی است؛ ایندکس‌شدن یعنی بایگانی عمومی)
+User-agent: *
+Disallow: /verify-transcript/
+Disallow: /verify-finance/
+Disallow: /verify-enrollment/
+Disallow: /exam-ticket/
+Disallow: /id/
+Disallow: /verify/
+Disallow: /exam-handover/
+Disallow: /api/verify/
+Disallow: /api/photo/
+Disallow: /api/archive/
+Disallow: /uploads/
+
+Allow: /

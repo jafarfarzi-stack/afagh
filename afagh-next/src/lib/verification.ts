@@ -601,7 +601,7 @@ export async function issueEnrollConfirmToken(
   termId: number,
   student?: { id: number; code: string | null; universityId?: number | null } | null,
 ): Promise<{ token: string; expiresAt: string }> {
-  const configured = await getNumber('ENROLL_CONFIRM_TTL_MINUTES', 43200);
+  const configured = await getNumber('ENROLL_CONFIRM_TTL_MINUTES', 20160);
   if (!Number.isFinite(configured) || configured <= 0) {
     log.warn('enroll_confirm_ttl_invalid', { configured });
     throw new Error('مدت اعتبار تأییدیهٔ انتخاب واحد (ENROLL_CONFIRM_TTL_MINUTES) باید عددی بزرگ‌تر از صفر باشد.');
@@ -732,7 +732,7 @@ export async function issueFinanceStatementToken(
   userId: number,
   student?: { id: number; code: string | null; universityId?: number | null } | null,
 ): Promise<{ token: string; expiresAt: string }> {
-  const configured = await getNumber('FINANCE_STMT_TTL_MINUTES', 43200);
+  const configured = await getNumber('FINANCE_STMT_TTL_MINUTES', 10080);
   if (!Number.isFinite(configured) || configured <= 0) {
     log.warn('finance_stmt_ttl_invalid', { configured });
     throw new Error('مدت اعتبار کارنامهٔ مالی (FINANCE_STMT_TTL_MINUTES) باید عددی بزرگ‌تر از صفر باشد.');
@@ -872,7 +872,7 @@ export async function issueTranscriptToken(
 ): Promise<{ token: string; expiresAt: string }> {
   // تنظیم ممکن است هنوز ثبت نشده باشد؛ نبودِ آن نباید صدور کارنامه را بشکند
   // (پیش‌تر getNumber برای تنظیم ناشناخته خطا می‌داد و بلوک QR رندر نمی‌شد).
-  const configured = await getNumber('TRANSCRIPT_TTL_MINUTES', 43200).catch(() => 43200);
+  const configured = await getNumber('TRANSCRIPT_TTL_MINUTES', 10080).catch(() => 10080);
   if (!Number.isFinite(configured) || configured <= 0) {
     throw new Error('مدت اعتبار کارنامهٔ تحصیلی (TRANSCRIPT_TTL_MINUTES) باید عددی بزرگ‌تر از صفر باشد.');
   }
