@@ -417,14 +417,6 @@ export async function activateTermForFilter(
   return { ok: true, updated, total: sids.length };
 }
 
-/** آیا این دانشجو در ترم مشخص فعال است؟ */
-export async function isTermActive(studentId: number, termId: number): Promise<boolean> {
-  const [r] = await db.select({ statusCode: student_term_states.statusCode })
-    .from(student_term_states)
-    .where(and(eq(student_term_states.studentId, studentId), eq(student_term_states.termId, termId))).limit(1);
-  return (r?.statusCode ?? '') === 'ACTIVE';
-}
-
 // ─────────────── تشخیص تداخل (هفتگی/امتحانی) — ثبت بر اساس حکم شورا ───────────────
 function toMin(hhmm: string): number { const [h, m] = String(hhmm || '').split(':').map(Number); return (h || 0) * 60 + (m || 0); }
 function rangesOverlap(a: string, b: string, c: string, d: string): boolean { return toMin(a) < toMin(d) && toMin(c) < toMin(b); }

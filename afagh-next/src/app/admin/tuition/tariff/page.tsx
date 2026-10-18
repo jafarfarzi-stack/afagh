@@ -7,8 +7,15 @@ import TariffClient, { type TariffGroup } from './TariffClient';
 
 export const dynamic = 'force-dynamic';
 
-/** نام «نوع درس مالی» سما — همان کدهای J_MaliType که نرخ‌ها به آن گره خورده‌اند */
-export const MALI_TYPE_LABELS: Record<number, string> = {
+/**
+ * نام «نوع درس مالی» سما — همان کدهای J_MaliType که نرخ‌ها به آن گره خورده‌اند.
+ *
+ * توجه: عمداً `export` ندارد. Next 16 برای فایل‌های page نوع تولید می‌کند که
+ * هر اکسپورت اضافه‌ای (جز default/config/metadata/…) را رد می‌کند و build را
+ * با TS2344 می‌شکند؛ در حالی که `tsc --noEmit` تنها این را نمی‌بیند، چون
+ * `.next/types` فقط هنگام build ساخته می‌شود.
+ */
+const MALI_TYPE_LABELS: Record<number, string> = {
   1: 'عمومی',
   2: 'پایه',
   3: 'تخصصی',
