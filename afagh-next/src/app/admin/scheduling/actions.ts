@@ -21,7 +21,7 @@ import {
   professor_availabilities, scheduling_room_grants, staff, students, term_scheduling_states, users,
 } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId, universityEq } from '@/lib/university-scope';
 import { getSchedulingState, transitionSchedulingPhase, supplyGroupDrafts, allocateSections, allocateRoomQuotas, getSmartSuggestions } from '@/lib/scheduling-engine';
 import { runSchedulingHealthCheck, type HealthReport } from '@/lib/scheduling-health';
 import { generateClassSessionsForTerm, getTermSessionsSummary, inspectSchedulingHardConflicts } from '@/lib/class-session-generator';
@@ -37,19 +37,31 @@ async function listRealTerms(universityId?: number) {
   return db
     .select({ id: academic_terms.id, code: academic_terms.termCode, title: academic_terms.title, isCurrent: academic_terms.isCurrent })
     .from(academic_terms)
-    .where(universityId ? or(eq(academic_terms.universityId, universityId), isNull(academic_terms.universityId)) : undefined)
+    .where(uniOrGlobal(academic_terms.universityId, universityId))
     .orderBy(desc(academic_terms.id));
 }
 
-/** دانشگاه فعال سرور — معیار scope؛ پارامتر کلاینت فقط fallback */
-async function serverUniId(fallback?: number): Promise<number | undefined> {
+/**
+ * دانشگاه فعال سرور — تنها مرجع دامنه.
+ * شناسهٔ کلاینت پذیرفته نمی‌شود و شناسهٔ ۰ (DENY_UNI) به `undefined` تبدیل می‌شود
+ * تا همهٔ کوئری‌ها با «۱ = ۰» fail-closed شوند (نه حذف فیلتر ⇒ دیدن همهٔ دانشگاه‌ها).
+ */
+async function serverUniId(): Promise<number | undefined> {
   const uni = await getCurrentUniversity().catch(() => null);
-  return uni?.id ?? fallback;
+  return isRealUniversityId(uni?.id) ? uni.id : undefined;
+}
+
+/**
+ * شرط «همین دانشگاه یا ردیف‌های عمومی (universityId = NULL)» برای ستون‌های nullable.
+ * شناسهٔ نامعتبر (0/null/نامشخص) ⇒ `۱ = ۰`؛ هرگز شرط حذف نمی‌شود.
+ */
+function uniOrGlobal(column: any, universityId: number | undefined): any {
+  return isRealUniversityId(universityId) ? or(eq(column, universityId), isNull(column)) : sql`1 = 0`;
 }
 
 /** رشته‌ها = majors + دانشکده (فقط فعال) — فیلتر شده بر اساس universityId */
 async function listRealPrograms(universityId?: number) {
-  const majorWhere = universityId ? and(eq(majors.isActive, 1), eq(majors.universityId, universityId)) : eq(majors.isActive, 1);
+  const majorWhere = and(eq(majors.isActive, 1), universityEq(majors.universityId, universityId));
   return db
     .select({
       id: majors.id,
@@ -69,7 +81,7 @@ async function listRealPrograms(universityId?: number) {
 
 /** ورودی‌های واقعی دانشجویان (cohort) = (ورودی، تعداد) — فیلتر شده بر اساس universityId */
 async function listRealCohorts(universityId?: number) {
-  const where = universityId ? eq(students.universityId, universityId) : undefined;
+  const where = universityEq(students.universityId, universityId);
   const rows = await db
     .select({
       entryYear: students.entryYear,
@@ -85,7 +97,7 @@ async function listRealCohorts(universityId?: number) {
 
 /** سالن‌های واقعی — فیلتر شده بر اساس universityId */
 async function listRealClassrooms(universityId?: number) {
-  const where = universityId ? eq(classrooms.universityId, universityId) : undefined;
+  const where = universityEq(classrooms.universityId, universityId);
   return db
     .select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, capacity: classrooms.capacity, roomType: classrooms.roomType })
     .from(classrooms)
@@ -94,7 +106,7 @@ async function listRealClassrooms(universityId?: number) {
 
 /** استادان واقعی (staff + users + گروه) — فیلتر شده بر اساس universityId */
 async function listRealProfessors(universityId?: number) {
-  const where = universityId ? and(eq(staff.isActive, 1), eq(staff.universityId, universityId)) : eq(staff.isActive, 1);
+  const where = and(eq(staff.isActive, 1), universityEq(staff.universityId, universityId));
   return db
     .select({
       id: staff.id,
@@ -113,7 +125,7 @@ async function listRealProfessors(universityId?: number) {
 
 /** تقاضای واقعی: درس‌های دارای offering در این ترم (با ظرفیت/گروه/استاد/رشتهٔ هدف) — فیلتر شده بر اساس universityId */
 async function listRealDemands(termId: number, universityId?: number) {
-  const uniFilter = universityId ? eq(course_offerings.universityId, universityId) : undefined;
+  const uniFilter = universityEq(course_offerings.universityId, universityId);
   const rows = await db
     .select({
       offeringId: course_offerings.id,
@@ -176,23 +188,23 @@ async function listRealDemands(termId: number, universityId?: number) {
 /** تقاضای مبتنی بر چارت درسی: درس‌های تعریف‌شده در curriculum_versions برای یک رشته/مقطع/ورودی */
 async function listCurriculumDemands(termId: number, programId: number, universityId?: number) {
   // 1) پیدا کردن ترم و سال تحصیلی
-  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.id, termId)).limit(1);
+  const [term] = await db.select().from(academic_terms).where(and(eq(academic_terms.id, termId), uniOrGlobal(academic_terms.universityId, universityId))).limit(1);
   if (!term) return [];
 
   // 2) پیدا کردن رشته (major)
-  const [major] = await db.select().from(majors).where(eq(majors.id, programId)).limit(1);
+  const [major] = await db.select().from(majors).where(and(eq(majors.id, programId), uniOrGlobal(majors.universityId, universityId))).limit(1);
   if (!major) return [];
 
   // 3) پیدا کردن نسخهٔ برنامه درسی منتشرشده/بایگانی‌شده برای این رشته و مقطع و سال ورودی
   // ورودی‌های متنوع وجود دارند؛ باید تمام ورودی‌های فعال را پوشش دهد
-  const uniFilter = universityId ? eq(curriculum_versions.universityId, universityId) : undefined;
+  const cvUniFilter = universityEq(curriculum_versions.universityId, universityId);
   const cvRows = await db
     .select({ id: curriculum_versions.id })
     .from(curriculum_versions)
     .where(and(
       eq(curriculum_versions.majorId, programId),
       eq(curriculum_versions.degreeLevelId, major.degreeLevelId),
-      uniFilter,
+      cvUniFilter,
       sql`${curriculum_versions.status} in ('PUBLISHED','ARCHIVED')`,
       sql`${term.academicYear} between ${curriculum_versions.entryYearFrom} and coalesce(${curriculum_versions.entryYearTo}, 9999)`
     ))
@@ -260,7 +272,7 @@ async function listCurriculumDemands(termId: number, programId: number, universi
     .where(and(
       eq(course_offerings.termId, termId),
       inArray(courses.id, courseIds),
-      uniFilter
+      uniOrGlobal(course_offerings.universityId, universityId)
     ))
     .orderBy(courses.code);
 
@@ -301,7 +313,7 @@ const hm = (t: unknown) => (t == null ? '' : String(t).slice(0, 5));
 
 /** برنامهٔ مصوب واقعی: سطرهای schedules با scheduleType='CLASS' + جزئیات درس/استاد/سالن — فیلتر شده بر اساس universityId */
 async function listApprovedOfferings(termId: number, universityId?: number) {
-  const uniFilter = universityId ? eq(course_offerings.universityId, universityId) : undefined;
+  const uniFilter = universityEq(course_offerings.universityId, universityId);
   const rows = await db
     .select({
       offeringId: course_offerings.id,
@@ -354,7 +366,7 @@ async function listApprovedOfferings(termId: number, universityId?: number) {
 
 /** درخواست‌های جلسهٔ جبرانی واقعی (class_sessions.isMakeUpSession = 1) — فیلتر شده بر اساس universityId */
 async function listMakeupSessions(termId: number, universityId?: number) {
-  const uniFilter = universityId ? eq(course_offerings.universityId, universityId) : undefined;
+  const uniFilter = universityEq(course_offerings.universityId, universityId);
   const rows = await db
     .select({
       id: class_sessions.id,
@@ -390,7 +402,7 @@ async function listMakeupSessions(termId: number, universityId?: number) {
 
 /** سالن‌هایی که در این ترم سهمیهٔ ALLOCATED دارند — فیلتر شده بر اساس universityId */
 async function listAllocatedRoomIds(termId: number, universityId?: number) {
-  const uniFilter = universityId ? eq(classrooms.universityId, universityId) : undefined;
+  const uniFilter = universityEq(classrooms.universityId, universityId);
   const rows = await db
     .select({ classroomId: scheduling_room_grants.classroomId })
     .from(scheduling_room_grants)
@@ -441,16 +453,16 @@ export type SchedulingWorkspaceResult =
   | { ok: false; error: string };
 
 /** دادهٔ اولیهٔ واقعی صفحه (جایگزین INITIAL_* های Mock) */
-export async function getSchedulingWorkspaceAction(termId?: number, universityId?: number): Promise<SchedulingWorkspaceResult> {
+export async function getSchedulingWorkspaceAction(termId?: number, _universityId?: number): Promise<SchedulingWorkspaceResult> {
   try {
     await requireRole(EDITORS);
-    const uid = await serverUniId(universityId);
+    const uid = await serverUniId();
     const [terms, programs, classrooms, professors, deptRows] = await Promise.all([
       listRealTerms(uid),
       listRealPrograms(uid),
       listRealClassrooms(uid),
       listRealProfessors(uid),
-      db.select({ id: departments.id, name: departments.name }).from(departments).where(uid ? or(eq(departments.universityId, uid), isNull(departments.universityId)) : undefined).orderBy(departments.name),
+      db.select({ id: departments.id, name: departments.name }).from(departments).where(uniOrGlobal(departments.universityId, uid)).orderBy(departments.name),
     ]);
     const resolvedTermId = termId ?? terms.find(t => t.isCurrent === 1)?.id ?? terms[0]?.id ?? null;
 
@@ -470,7 +482,7 @@ export async function getSchedulingWorkspaceAction(termId?: number, universityId
       [demands, phases, cohorts, availRows] = await Promise.all([
         listRealDemands(resolvedTermId, uid),
         db.select({ termId: term_scheduling_states.termId, phase: term_scheduling_states.phase }).from(term_scheduling_states)
-          .where(uid ? or(eq(term_scheduling_states.universityId, uid), isNull(term_scheduling_states.universityId)) : undefined),
+          .where(uniOrGlobal(term_scheduling_states.universityId, uid)),
         listRealCohorts(uid),
         db.select({
           staffId: professor_availabilities.staffId,
@@ -480,14 +492,14 @@ export async function getSchedulingWorkspaceAction(termId?: number, universityId
           status: professor_availabilities.status,
         }).from(professor_availabilities).where(and(
           or(eq(professor_availabilities.termId, resolvedTermId), sql`${professor_availabilities.termId} is null`),
-          uid ? or(eq(professor_availabilities.universityId, uid), isNull(professor_availabilities.universityId)) : undefined,
+          uniOrGlobal(professor_availabilities.universityId, uid),
         )),
       ]);
       const [inspect, term] = await Promise.all([
         inspectSchedulingHardConflicts(resolvedTermId),
         db.select().from(academic_terms).where(and(
           eq(academic_terms.id, resolvedTermId),
-          uid ? or(eq(academic_terms.universityId, uid), isNull(academic_terms.universityId)) : undefined,
+          uniOrGlobal(academic_terms.universityId, uid),
         )).limit(1).then(rows => rows[0] ?? null),
       ]);
       hardConflictCount = inspect.total;
@@ -556,10 +568,10 @@ export type CurriculumDemandsResult =
   | { ok: true; demands: Awaited<ReturnType<typeof listCurriculumDemands>> }
   | { ok: false; error: string };
 
-export async function getCurriculumDemandsAction(termId: number, programId: number, universityId?: number): Promise<CurriculumDemandsResult> {
+export async function getCurriculumDemandsAction(termId: number, programId: number, _universityId?: number): Promise<CurriculumDemandsResult> {
   try {
     await requireRole(EDITORS);
-    const demands = await listCurriculumDemands(termId, programId, await serverUniId(universityId));
+    const demands = await listCurriculumDemands(termId, programId, await serverUniId());
     return { ok: true, demands };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? 'خطا در بارگذاری دروس چارت درسی.' };
@@ -628,7 +640,7 @@ export async function getSchedulingDashboardAction(termId?: number) {
   try {
     const uni = await getCurrentUniversity().catch(() => null);
     const uid = uni?.id;
-    const scopeOf = (c: any) => (uid ? or(eq(c, uid), isNull(c)) : undefined);
+    const scopeOf = (c: any) => uniOrGlobal(c, uid);
     const [terms, rooms, profs, phases] = await Promise.all([
       db.select({ id: academic_terms.id, termCode: academic_terms.termCode, title: academic_terms.title, isCurrent: academic_terms.isCurrent, isSummer: academic_terms.isSummer, startDate: academic_terms.startDate })
         .from(academic_terms).where(scopeOf(academic_terms.universityId)).orderBy(desc(academic_terms.id)),
@@ -643,11 +655,9 @@ export async function getSchedulingDashboardAction(termId?: number) {
       db.select().from(term_scheduling_states).where(scopeOf(term_scheduling_states.universityId)),
     ]);
 
-    const current = uid
-      ? await db.select().from(academic_terms).where(and(eq(academic_terms.isCurrent, 1), scopeOf(academic_terms.universityId))).limit(1)
-      : await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1)).limit(1);
+    const current = await db.select().from(academic_terms).where(and(eq(academic_terms.isCurrent, 1), scopeOf(academic_terms.universityId))).limit(1);
     const targetTermId = termId ?? current[0]?.id ?? terms[0]?.id ?? null;
-    if (termId != null && uid && !terms.some(t => t.id === termId)) {
+    if (termId != null && !terms.some(t => t.id === termId)) {
       return { ok: false, error: 'ترم متعلق به دانشگاه دیگری است.' };
     }
     let offerings: any[] = [];
@@ -706,11 +716,11 @@ export async function checkScheduleConflictsAction(termId: number) {
   try {
     const uni = await getCurrentUniversity().catch(() => null);
     const uid = uni?.id;
-    const offScope = uid ? or(eq(course_offerings.universityId, uid), isNull(course_offerings.universityId)) : undefined;
+    const offScope = uniOrGlobal(course_offerings.universityId, uid);
     // ترم باید متعلق به همین دانشگاه باشد
     const [term] = await db.select({ id: academic_terms.id }).from(academic_terms)
-      .where(and(eq(academic_terms.id, termId), offScope ? or(eq(academic_terms.universityId, uid as number), isNull(academic_terms.universityId)) : undefined)).limit(1);
-    if (uid && !term) return { ok: false, error: 'ترم متعلق به دانشگاه دیگری است.' };
+      .where(and(eq(academic_terms.id, termId), uniOrGlobal(academic_terms.universityId, uid))).limit(1);
+    if (!term) return { ok: false, error: 'ترم متعلق به دانشگاه دیگری است.' };
     const rows = await db
       .select({
         offeringId: schedules.offeringId,
@@ -738,10 +748,7 @@ export async function checkScheduleConflictsAction(termId: number) {
       profByOffering.get(p.offeringId)!.push(p.staffId);
     }
 
-    const roomRows = uid
-      ? await db.select().from(classrooms)
-        .where(or(eq(classrooms.universityId, uid), isNull(classrooms.universityId)))
-      : await db.select().from(classrooms);
+    const roomRows = await db.select().from(classrooms).where(uniOrGlobal(classrooms.universityId, uid));
     const rooms: RoomCapacityInfo[] = roomRows.map((r) => ({ id: r.id, capacity: r.capacity, title: r.name }));
 
     const entries: ScheduleConflictInput[] = rows.map((r) => ({

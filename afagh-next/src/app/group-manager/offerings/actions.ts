@@ -33,6 +33,7 @@ export async function createOfferingAction(fd: FormData) {
     waitlistCapacity: num(fd, 'waitCap'), professorId: optNum(fd, 'professorId'),
     targetDegreeLevelId: optNum(fd, 'deg'), targetMajorId: optNum(fd, 'major'),
     entryYearStart: optNum(fd, 'ys'), entryYearEnd: optNum(fd, 'ye'),
+    universityId: me.universityId ?? null,
   }).returning({ id: course_offerings.id });
   revalidatePath('/group-manager/offerings');
   revalidatePath('/student/enroll');
@@ -81,7 +82,7 @@ export async function addScheduleAction(fd: FormData) {
   const st = str(fd, 'start'), en = str(fd, 'end');
   const day = num(fd, 'day');
   if (!st || !en || en <= st) back('/group-manager/offerings', 'err', 'ساعت پایان باید بعد از شروع باشد.');
-  await db.insert(schedules).values({ offeringId, scheduleType: 'CLASS', dayOfWeek: day, startTime: st, endTime: en, roomId: optNum(fd, 'roomId') });
+  await db.insert(schedules).values({ offeringId, scheduleType: 'CLASS', dayOfWeek: day, startTime: st, endTime: en, roomId: optNum(fd, 'roomId'), universityId: me.universityId ?? null });
   revalidatePath('/group-manager/offerings');
   revalidatePath('/student/enroll');
   back('/group-manager/offerings', 'msg', 'برنامهٔ هفتگی ثبت شد.');
