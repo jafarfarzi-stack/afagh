@@ -5,7 +5,7 @@ import { getStudentFinance, computeFormulaTuition } from '@/lib/finance-engine';
 import { computeTermTuition } from '@/lib/tuition-engine';
 import { buildTranscriptCourses } from '@/lib/transcript-courses';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
-import PrintButton from '@/components/PrintButton';
+import PrintTranscriptButton from '@/components/PrintTranscriptButton';
 import FinancialTranscript from '@/components/FinancialTranscript';
 import FinanceVerifyBlock from '@/components/FinanceVerifyBlock';
 import StatementLinkButton from './StatementLinkButton';
@@ -121,7 +121,7 @@ const fin = await getStudentFinance(studentId, {
           </div>
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
-          <PrintButton />
+          <PrintTranscriptButton orientation="landscape" />
           <StatementLinkButton studentId={studentId} />
         </div>
       </div>

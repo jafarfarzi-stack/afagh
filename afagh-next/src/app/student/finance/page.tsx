@@ -13,7 +13,7 @@ import { getPublicBaseUrl, getSetting } from '@/lib/settings';
 import { issueFinanceStatementToken } from '@/lib/verification';
 import { qrSvg } from '@/lib/qr';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
-import PrintButton from '../PrintButton';
+import PrintTranscriptButton from '@/components/PrintTranscriptButton';
 import TermFilterChip from '../term-filter-chip';
 import { DemoFinance } from '../demo-sections';
 
@@ -186,7 +186,7 @@ export default async function StudentFinancePage({ searchParams }: { searchParam
           {selectedTerm && (
             <TermFilterChip title={selectedTerm.title} universityId={me.universityId} />
           )}
-          <PrintButton />
+          <PrintTranscriptButton orientation="landscape" />
         </div>
       </div>
 

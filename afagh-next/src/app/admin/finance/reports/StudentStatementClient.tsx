@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title, LineElement, PointElement } from 'chart.js';
 import { saveAs } from 'file-saver';
 import FinancialTranscript from '@/components/FinancialTranscript';
+import { doPrintTranscript } from '@/components/print-transcript';
 import FinanceVerifyBlock from '@/components/FinanceVerifyBlock';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title, LineElement, PointElement);
@@ -172,8 +173,8 @@ export default function StudentStatementClient({ studentId, studentName, student
     setExporting(null);
   };
 
-  /** چاپ: همان سند رسمی FinancialTranscript داخل .print-area چاپ می‌شود (A4) */
-  const printStatement = () => window.print();
+  /** چاپ: همان منطق کارنامهٔ تحصیلی (کپی ایزولهٔ .transcript-print-area + A4) */
+  const printStatement = () => doPrintTranscript('landscape');
 
   if (loading) return <div className="card p-6 text-center text-slate-500">⏳ در حال بارگذاری صورت حساب...</div>;
 

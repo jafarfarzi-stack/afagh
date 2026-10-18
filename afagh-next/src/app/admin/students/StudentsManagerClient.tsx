@@ -45,41 +45,14 @@ const acceptTypeTitle = (raw?: string | null) => {
   return ACCEPT_TYPE_FA.find(([, t]) => normalizeFa(t) === n)?.[1] || raw || '';
 };
 
+import { doPrintTranscript } from '@/components/print-transcript';
+
+export { doPrintTranscript };
+
 /**
- * چاپ مستقیم همان نمای روی صفحه (WYSIWYG).
- * برای اینکه چیدمان پنهانِ بقیهٔ صفحه صفحهٔ خالی نسازد، یک کپی از کارنامه
- * در ریشهٔ body گذاشته می‌شود و هنگام چاپ فقط همان ریشه دیده می‌شود.
- * جهت کاغذ + سربرگ/پاصفحه فقط برای همین چاپ تزریق و پس از چاپ برداشته می‌شود
- * (افقی = فرمت سما با ۳ نیمسال کنار هم؛ عمودی = همان ۳ ستونه فشرده).
+ * چاپ مستقیم همان نمای روی صفحه (WYSIWYG) — پیاده‌سازی در
+ * `@/components/print-transcript` است تا کارنامهٔ مالی هم همان رفتار را داشته باشد.
  */
-export function doPrintTranscript(orientation: 'landscape' | 'portrait' = 'landscape'): void {
-  if (typeof document === 'undefined') return;
-  const src = document.querySelector('.transcript-print-area');
-  const holder = document.createElement('div');
-  holder.id = 'transcript-print-root';
-  if (src) holder.appendChild(src.cloneNode(true));
-  document.body.appendChild(holder);
-  document.body.classList.add('printing-transcript');
-  if (orientation === 'portrait') document.body.classList.add('printing-portrait');
-  const pageStyle = document.createElement('style');
-  pageStyle.id = 'transcript-page-size';
-  const margins = orientation === 'portrait' ? '8mm 8mm 13mm 8mm' : '8mm 10mm 13mm 10mm';
-  const size = orientation === 'portrait' ? 'A4 portrait' : 'A4 landscape';
-  pageStyle.textContent =
-    `@media print { @page { size: ${size}; margin: ${margins};` +
-    ' @bottom-center { content: \'صفحه \' counter(page) \' از \' counter(pages); font-size: 8pt; color: #475569; font-family: "Vazirmatn", Tahoma, sans-serif; } } }';
-  document.head.appendChild(pageStyle);
-  const done = () => {
-    document.body.classList.remove('printing-transcript', 'printing-portrait');
-    pageStyle.remove();
-    holder.remove();
-    window.removeEventListener('afterprint', done);
-  };
-  window.addEventListener('afterprint', done);
-  window.print();
-  // fallback اگر afterprint نیامد (بستن دستی دیالوگ)
-  setTimeout(done, 3000);
-}
 
 export default function StudentsManagerClient(props: {
   logoUrl?: string | null;

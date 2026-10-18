@@ -14,7 +14,7 @@ import { COURSE_TYPE_FA } from '@/lib/student-labels';
 import { sortTermsForTranscript, groupTermsByAcademicYear, EQUIVALENCE_GROUP_YEAR } from '@/lib/scheduling-core';
 import { getTermScope } from '@/lib/term-scope';
 import TermFilterChip from '@/components/TermFilterChip';
-import PrintButton from '../PrintButton';
+import PrintTranscriptButton from '@/components/PrintTranscriptButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -243,11 +243,11 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
             <p className="text-xs text-slate-500">مشاهده ریزنمرات، محاسبه صحیح دروس توصیفی و استناد به آیین‌نامه</p>
           </div>
         </div>
-        <PrintButton />
+        <PrintTranscriptButton orientation="landscape" />
       </div>
 
       {/* سند رسمی کارنامه (کاغذ رسمی کارنامه دانشگاهی) */}
-      <div className="bg-white text-slate-900 border-2 border-slate-800 p-5 sm:p-8 shadow-xl print-area print:shadow-none print:border print:m-0 print:p-4 text-xs font-sans">
+      <div className="transcript-print-area bg-white text-slate-900 border-2 border-slate-800 p-5 sm:p-8 shadow-xl print-area print:shadow-none print:border print:m-0 print:p-4 text-xs font-sans">
         
         {/* ۱. سربرگ سه‌بخشی رسمی دانشگاه */}
         <div className="border-b-2 border-slate-800 pb-4 mb-4">

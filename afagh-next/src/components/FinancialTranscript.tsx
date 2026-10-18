@@ -182,7 +182,13 @@ export default function FinancialTranscript({
   for (let i = 0; i < terms.length; i += 3) chunks.push(terms.slice(i, i + 3));
 
   return (
-    <div dir="rtl" className="bg-white border-2 border-slate-800 shadow-xl print:shadow-none text-xs text-slate-800">
+    <div dir="rtl" className="transcript-print-area tr-root bg-white border-2 border-slate-800 shadow-xl print:shadow-none text-xs text-slate-800">
+      {/* ساختار سند به سبک کارنامهٔ تحصیلی: table.tr-doc با thead/tfoot تا سربرگ
+          و بلوک امضا در همهٔ صفحات چاپ تکرار شوند و ردیف‌ها بین دو صفحه نشکنند. */}
+      <table className="tr-doc">
+        <thead>
+          <tr>
+            <td className="tr-doc-cell">
       {/* ── سربرگ سه‌بخشی رسمی دانشگاه (همان مدل کارنامهٔ تحصیلی: right/center/left) ── */}
       <div className="px-4 pt-4 pb-2 border-b-2 border-slate-800">
         <div className="grid grid-cols-3 items-center text-center">
@@ -212,7 +218,12 @@ export default function FinancialTranscript({
           </div>
         </div>
       </div>
-
+            </td>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="tr-doc-row">
+            <td className="tr-doc-cell">
       <div className="space-y-3 p-4">
         {/* ── جدول مشخصات ── */}
         <table className="w-full border-collapse border border-slate-700 text-[11px]">
@@ -243,7 +254,7 @@ export default function FinancialTranscript({
         {leadBlock}
 
         {/* ── جمع کل دوره ── */}
-        <div className="break-inside-avoid rounded-lg border border-slate-700">
+        <div className="tr-breakdown break-inside-avoid rounded-lg border border-slate-700">
           <h3 className="border-b border-slate-700 bg-indigo-900 px-3 py-1.5 text-[12px] font-black text-white">
             {scopeLabel || 'جمع کل دوره'}
           </h3>
@@ -295,12 +306,12 @@ export default function FinancialTranscript({
                   {group.map((t) => {
                     const b = balanceBadge(t.balance);
                     return (
-                      <div key={t.termId} className="break-inside-avoid overflow-hidden rounded-lg border border-slate-700">
+                      <div key={t.termId} className="term-block break-inside-avoid overflow-hidden rounded-lg border border-slate-700">
                         <div className="flex items-center justify-between gap-1 border-b border-slate-700 bg-slate-100 px-2 py-1.5">
                           <h4 className="text-[11px] font-black text-slate-900">{t.termTitle}</h4>
                           <span className={`rounded-full border px-1.5 py-px text-[9px] font-black ${b.cls}`}>{b.text}</span>
                         </div>
-                        <table className="w-full border-collapse text-[10px]">
+                        <table className="tr-term-table w-full border-collapse text-[10px]">
                           <tbody>
                             <TermRow label="شهریه (بدهی)" value={fa(t.charges)} />
                             <TermRow label="تخفیف" value={fa(t.discounts)} valueCls="text-violet-700" />
@@ -345,7 +356,7 @@ export default function FinancialTranscript({
                                   <tr key={i} className="border-t border-slate-100">
                                     <td className="px-1 py-0.5 text-center text-slate-500">{fa(i + 1)}</td>
                                     <td className="px-1 py-0.5 text-center font-mono" dir="ltr">{c.courseCode || '—'}</td>
-                                    <td className="px-1 py-0.5 font-medium">{c.courseTitle || '—'}</td>
+                                    <td className="tr-course-title px-1 py-0.5 font-medium">{c.courseTitle || '—'}</td>
                                     <td className="px-1 py-0.5 text-center font-mono">{fa(c.units)}</td>
                                     <td className="px-1 py-0.5 text-center font-mono">{fa(c.perUnit)}</td>
                                     <td className="px-1 py-0.5 text-left font-bold">{fa(c.amount)}</td>
@@ -385,7 +396,7 @@ export default function FinancialTranscript({
 
         {/* ── چک‌ها ── */}
         {cheques.length > 0 && (
-          <div className="break-inside-avoid">
+          <div className="tr-breakdown break-inside-avoid">
             <h3 className="mb-1 border-b-2 border-slate-800 pb-1 text-[12px] font-black text-slate-900">چک‌های دانشجو</h3>
             <table className="w-full border-collapse border border-slate-700 text-center text-[10px]">
               <thead>
@@ -416,7 +427,7 @@ export default function FinancialTranscript({
 
         {/* ── وام‌ها ── */}
         {loans.length > 0 && (
-          <div className="break-inside-avoid">
+          <div className="tr-breakdown break-inside-avoid">
             <h3 className="mb-1 border-b-2 border-slate-800 pb-1 text-[12px] font-black text-slate-900">وام‌های دانشجو</h3>
             <table className="w-full border-collapse border border-slate-700 text-center text-[10px]">
               <thead>
@@ -447,22 +458,32 @@ export default function FinancialTranscript({
 
         {verifyBlock}
 
-        {/* ── امضا و مهر ── */}
-        <div className="grid grid-cols-3 gap-2 pt-2 text-center text-[10px] text-slate-600">
-          <div>
-            <p className="mb-8 font-medium">کارشناس امور مالی</p>
-            <div className="border-t border-slate-400 pt-1">نام و امضا</div>
-          </div>
-          <div>
-            <p className="mb-8 font-medium">مهر ادارهٔ مالی</p>
-            <div className="border-t border-slate-400 pt-1">مهر</div>
-          </div>
-          <div>
-            <p className="mb-8 font-medium">مدیر مالی</p>
-            <div className="border-t border-slate-400 pt-1">نام و امضا</div>
-          </div>
-        </div>
       </div>
+            </td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td className="tr-doc-cell tr-signatures">
+              {/* ── امضا و مهر (در پایین هر صفحهٔ چاپ تکرار می‌شود) ── */}
+              <div className="grid grid-cols-3 gap-2 px-4 pb-4 pt-3 text-center text-[10px] text-slate-600">
+                <div>
+                  <p className="mb-8 font-medium">کارشناس امور مالی</p>
+                  <div className="border-t border-slate-400 pt-1">نام و امضا</div>
+                </div>
+                <div>
+                  <p className="mb-8 font-medium">مهر ادارهٔ مالی</p>
+                  <div className="border-t border-slate-400 pt-1">مهر</div>
+                </div>
+                <div>
+                  <p className="mb-8 font-medium">مدیر مالی</p>
+                  <div className="border-t border-slate-400 pt-1">نام و امضا</div>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
     </div>
   );
 }
