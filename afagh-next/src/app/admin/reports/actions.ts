@@ -4,6 +4,8 @@ import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
+import { CREDIT_LEDGER_TYPES, DEBT_LEDGER_TYPES } from '@/lib/ledger-balance';
+import { calculateOfficialGpaBreakdown } from '@/lib/regulations-engine';
 import {
   NUM,
   PER,
@@ -251,22 +253,62 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
       };
     }
 
-    // ── مشروطی‌های ترم ──
+    // ── مشروطی‌های ترم — مرز از آیین‌نامهٔ همان مقطع و از موتور رسمی ──
+    // 🔒 پیش‌تر «AVG < 12» هاردکد بود (ارشد ۱۴ و دکتری ۱۶ دارند) و «تعداد درس»
+    //    (نه واحد) معیار قرار می‌گرفت؛ تابستان و معادل‌سازی هم استثنا نمی‌شد.
+    //    اکنون از calculateOfficialGpaBreakdown می‌آید: همان مرز مشروطیِ مقطع،
+    //    واحد مؤثر، و همان ردیف‌هایی که در کارنامهٔ رسمی مشروط شمرده می‌شوند.
     case 'probation': {
-      const from = sql`FROM enrollments e JOIN course_offerings o ON o.id = e."offeringId" JOIN academic_terms t ON t.id = o."termId" JOIN students s ON s.id = e."studentId" JOIN users u ON u.id = s."userId" LEFT JOIN majors m ON m.id = s."majorId"`;
-      const conds = [sql`t."termCode" = ${term}`, sql`e."gradeStatus" = 'FINALIZED'`, sql`${NUM}`, ...studentWhere(f)];
-      const cols = sql`s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name, m.name AS major, COUNT(*)::int AS units, ROUND(AVG(e."gradeValue"::numeric), 2) AS avg`;
-      const r = await paged(
-        [
+      const isSummerOrEquiv = (code: string | null) => {
+        const c = String(code ?? '');
+        return /3$/.test(c) || /5$/.test(c) || c.toUpperCase().includes('EQ');
+      };
+      const CAP = 600;
+      const pop = await db.execute<{
+        id: number; code: string; name: string; major: string | null;
+        degree: string | null; y: number | null; st: string | null;
+      }>(sql`
+        SELECT s.id AS id, s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
+               m.name AS major, d.title AS degree, s."entryYear" AS y, s.status AS st
+        ${STU_FROM}
+        WHERE ${sql.join(studentWhere(f), sql` AND `)}
+        ORDER BY s."studentCode"
+        LIMIT ${CAP}
+      `);
+      const out: Record<string, unknown>[] = [];
+      for (const row of pop.rows ?? []) {
+        const b = await calculateOfficialGpaBreakdown(row.id).catch(() => null);
+        if (!b) continue;
+        const probTerms = b.terms.filter(t =>
+          t.isProbation
+          && !isSummerOrEquiv(t.termCode)
+          && (!term || String(t.termCode ?? '') === term));
+        if (!probTerms.length) continue;
+        const last = probTerms[probTerms.length - 1];
+        out.push({
+          code: row.code, name: row.name, major: row.major ?? '—', degree: row.degree ?? '—',
+          y: row.y ?? '—', probTerms: probTerms.length,
+          lastTerm: last.termTitle, lastGpa: last.gpa, threshold: b.probationThreshold,
+          units: last.units, st: faStatus(row.st),
+        });
+      }
+      out.sort((a, b2) => Number(b2.probTerms) - Number(a.probTerms));
+      const page = Math.max(1, Number(f.page) || 1);
+      const rows = out.slice((page - 1) * PER, page * PER);
+      return {
+        columns: [
           { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
-          { key: 'major', title: 'رشته' }, { key: 'units', title: 'درس نهایی‌شده' }, { key: 'avg', title: 'میانگین ترم' },
+          { key: 'major', title: 'رشته' }, { key: 'degree', title: 'مقطع' },
+          { key: 'y', title: 'سال ورود' }, { key: 'probTerms', title: 'تعداد ترم مشروطی' },
+          { key: 'lastTerm', title: 'آخرین ترم مشروط' }, { key: 'lastGpa', title: 'معدل آن ترم' },
+          { key: 'threshold', title: 'مرز مشروطی مقطع' }, { key: 'units', title: 'واحد مؤثر' },
+          { key: 'st', title: 'وضعیت' },
         ],
-        from, conds, cols, sql`ORDER BY avg`, f,
-        sql`s."studentCode", u."firstName", u."lastName", m.name`,
-        sql`AVG(e."gradeValue"::numeric) < 12 AND COUNT(*) >= 2`,
-      );
-      r.summary = `${r.total.toLocaleString('fa-IR')} مشروط در ترم ${term}`;
-      return r;
+        rows, total: out.length, page, per: PER,
+        totalPages: Math.max(1, Math.ceil(out.length / PER)),
+        summary: `${out.length.toLocaleString('fa-IR')} دانشجوی مشروط بر پایهٔ مرز آیین‌نامهٔ مقطع (تابستان/معادل‌سازی شمرده نشد)`
+          + ((pop.rows?.length ?? 0) >= CAP ? ` · توجه: سقف ${CAP} نفر برای سرعت؛ رشته/مقطع/سال و نیمسال ورود را فیلتر کنید.` : ''),
+      };
     }
 
     // ── نمرات برتر هر رشته ──
@@ -419,15 +461,21 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
     }
 
     // ── گزارش شهریه / تراکنش‌های مالی ترم ──
+    // 🔒 واژگان کانونی دفتر کل (ledger-balance.ts): این گزارش پیش‌تر روی نوع
+    //    تراکنشِ **ناموجود** 'DEBIT' ساخته شده بود (در CHECK دیتابیس نیست) ⇒
+    //    ستون بستانکار همیشه ۰ و «مانده» بی‌معنا/معکوس می‌شد.
     case 'tuition': {
-      const uniCond = f.universityId ? sql`AND (s."universityId" = ${f.universityId} OR s."universityId" IS NULL)` : sql``;
+      const uniCond = sql`AND (s."universityId" = ${f.universityId} OR s."universityId" IS NULL)`;
       const termCond = term ? sql`AND t."termCode" = ${term}` : sql``;
+      const debtIn = sql`sl."transactionType" IN (${sql.join(DEBT_LEDGER_TYPES.map(t => sql`${t}`), sql`, `)})`;
+      const creditIn = sql`sl."transactionType" IN (${sql.join(CREDIT_LEDGER_TYPES.map(t => sql`${t}`), sql`, `)})`;
       const data = await db.execute<Record<string, unknown>>(sql`
         SELECT s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
           m.name AS major, d.title AS degree,
-          COALESCE(SUM(CASE WHEN sl."transactionType" = 'CREDIT' THEN sl.amount ELSE 0 END), 0)::int AS credit,
-          COALESCE(SUM(CASE WHEN sl."transactionType" = 'DEBIT' THEN sl.amount ELSE 0 END), 0)::int AS debit,
-          COALESCE(SUM(CASE WHEN sl."transactionType" = 'CREDIT' THEN sl.amount ELSE -sl.amount END), 0)::int AS balance,
+          COALESCE(SUM(CASE WHEN ${debtIn} THEN sl.amount ELSE 0 END), 0)::int AS debt,
+          COALESCE(SUM(CASE WHEN ${creditIn} THEN sl.amount ELSE 0 END), 0)::int AS credit,
+          (COALESCE(SUM(CASE WHEN ${debtIn} THEN sl.amount ELSE 0 END), 0)
+            - COALESCE(SUM(CASE WHEN ${creditIn} THEN sl.amount ELSE 0 END), 0))::int AS balance,
           COUNT(sl.id)::int AS txCount
         FROM students s JOIN users u ON u.id = s."userId"
           LEFT JOIN majors m ON m.id = s."majorId"
@@ -438,17 +486,17 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
         GROUP BY s."studentCode", u."firstName", u."lastName", m.name, d.title
         ORDER BY balance DESC`);
       const total = data.rows.length;
+      const totalDebt = data.rows.reduce((a, x) => a + Number(x.debt), 0);
       const totalCredit = data.rows.reduce((a, x) => a + Number(x.credit), 0);
-      const totalDebit = data.rows.reduce((a, x) => a + Number(x.debit), 0);
       return {
         columns: [
           { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
           { key: 'major', title: 'رشته' }, { key: 'degree', title: 'مقطع' },
-          { key: 'credit', title: 'بدهکار' }, { key: 'debit', title: 'بستانکار' },
-          { key: 'balance', title: 'مانده' }, { key: 'txCount', title: 'تراکنش' },
+          { key: 'debt', title: 'بدهی (ریال)' }, { key: 'credit', title: 'اعتبار (ریال)' },
+          { key: 'balance', title: 'مانده (ریال)' }, { key: 'txCount', title: 'تراکنش' },
         ],
         rows: data.rows, total, page: 1, per: total || 1, totalPages: 1,
-        summary: `جمع بدهکار: ${totalCredit.toLocaleString('fa-IR')} — بستانکار: ${totalDebit.toLocaleString('fa-IR')}`,
+        summary: `جمع بدهی: ${totalDebt.toLocaleString('fa-IR')} ریال — جمع اعتبار: ${totalCredit.toLocaleString('fa-IR')} ریال (بر پایهٔ واژگان کانونی دفتر کل)`,
       };
     }
 

@@ -10,6 +10,7 @@ import {
   thesis_progress, thesis_progress_reports, defense_jury_pools, defense_sessions, irandoc_logs, staff, classrooms,
 } from '@/db/schema';
 import { getBool, getNumber, getSetting } from '@/lib/settings';
+import { ledgerBalance } from '@/lib/ledger-balance';
 import { executeIrandocCheck } from '@/lib/api-integrations';
 import { ssrfFetch } from '@/lib/ssrf-guard';
 import { createLogger } from '@/lib/logger';
@@ -416,13 +417,17 @@ export async function runIrandoc(auditId: number, params?: { trackingCode?: stri
 
 // ───────────────── مرحله: تسویه‌حساب موازی ─────────────────
 
-/** بدهی مالی دانشجو از دفتر مالی (بدهکار − بستانکار) */
+/** بدهی مالی دانشجو از دفتر مالی کانونی (بدهی − اعتبار) */
 export async function financeBalance(studentId: number): Promise<number> {
-  const [r] = await db.select({
-    debit: sql<string>`coalesce(sum(case when "transactionType" = 'DEBIT' then amount else 0 end),0)`,
-    credit: sql<string>`coalesce(sum(case when "transactionType" = 'CREDIT' then amount else 0 end),0)`,
-  }).from(student_ledger).where(eq(student_ledger.studentId, studentId));
-  return Math.round(Number(r?.debit ?? 0) - Number(r?.credit ?? 0));
+  // 🔒 پیش‌تر این تابع روی نوع تراکنشِ ناموجود 'DEBIT' ساخته شده بود ⇒ بدهی
+  //    همیشه صفر و مانده = −Σ(CREDIT) می‌شد؛ نتیجه: دانشجوی **بدهکار** در
+  //    runAutoClearance «تسویه» علامت می‌خورد و پروندهٔ فراغت جلو می‌رفت.
+  //    اکنون از واژگان کانونی `ledgerBalance` استفاده می‌کند.
+  const rows = await db
+    .select({ transactionType: student_ledger.transactionType, amount: student_ledger.amount })
+    .from(student_ledger)
+    .where(eq(student_ledger.studentId, studentId));
+  return Math.max(0, Math.round(ledgerBalance(rows)));
 }
 
 /** ساخت چک‌لیست و اجرای بررسی‌های خودکار — همهٔ دپارتمان‌ها هم‌زمان */

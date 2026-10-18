@@ -18,6 +18,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { requireRole } from '@/lib/auth';
 import { STUDENT_STATUS_FA } from '@/lib/student-labels';
+import { calculateOfficialGpaBreakdown } from '@/lib/regulations-engine';
 
 export type StatusOpsCard = {
   kind: string;
@@ -190,10 +191,18 @@ export async function run(kind: string, f: Filters): Promise<ReportResult | null
         JOIN users u ON u.id = s."userId"
         LEFT JOIN majors m ON m.id = s."majorId"
         JOIN LATERAL (
-          SELECT ROUND(AVG(e."gradeValue"::numeric), 2) AS reavg, COUNT(*)::int AS n
+          SELECT
+            -- 🔒 معدل وزنی بر واحد (نه میانگین سادهٔ نمره‌ها) و فقط دروس مؤثر در معدل
+            ROUND(
+              SUM(e."gradeValue"::numeric * COALESCE(c.units, 0))
+                FILTER (WHERE e."gradeStatus" = 'FINALIZED' AND ${NUMERIC_GRADE} AND COALESCE(c."affectsGpa", 1) = 1)
+              / NULLIF(SUM(COALESCE(c.units, 0))
+                FILTER (WHERE e."gradeStatus" = 'FINALIZED' AND ${NUMERIC_GRADE} AND COALESCE(c."affectsGpa", 1) = 1), 0)
+            , 2) AS reavg,
+            COUNT(*) FILTER (WHERE e."gradeStatus" = 'FINALIZED' AND ${NUMERIC_GRADE})::int AS n
           FROM enrollments e JOIN course_offerings o ON o.id = e."offeringId"
+            LEFT JOIN courses c ON c.id = o."courseId"
           WHERE e."studentId" = s.id AND o."termId" = sts."termId"
-            AND e."gradeStatus" = 'FINALIZED' AND ${NUMERIC_GRADE}
         ) g ON true`;
       const conds = [...studentWhere(f)];
       if (term) conds.push(sql`t."termCode" = ${term}`);
@@ -224,7 +233,13 @@ export async function run(kind: string, f: Filters): Promise<ReportResult | null
         JOIN LATERAL (
           SELECT COALESCE(SUM(c.units) FILTER (WHERE e.status <> 'DROPPED'), 0)::int AS taken_u,
             COALESCE(SUM(c.units) FILTER (WHERE e."gradeStatus" = 'FINALIZED' AND ${NUMERIC_GRADE} AND e."gradeValue"::numeric >= 10), 0)::int AS passed_u,
-            ROUND(AVG(e."gradeValue"::numeric) FILTER (WHERE e."gradeStatus" = 'FINALIZED' AND ${NUMERIC_GRADE}), 2) AS reavg
+            -- 🔒 معدل وزنی بر واحد (پیش‌تر میانگین ساده بود ⇒ اختلاف‌های کاذب با موتور رسمی)
+            ROUND(
+              SUM(e."gradeValue"::numeric * COALESCE(c.units, 0))
+                FILTER (WHERE e."gradeStatus" = 'FINALIZED' AND ${NUMERIC_GRADE} AND COALESCE(c."affectsGpa", 1) = 1)
+              / NULLIF(SUM(COALESCE(c.units, 0))
+                FILTER (WHERE e."gradeStatus" = 'FINALIZED' AND ${NUMERIC_GRADE} AND COALESCE(c."affectsGpa", 1) = 1), 0)
+            , 2) AS reavg
           FROM enrollments e
             LEFT JOIN course_offerings o ON o.id = e."offeringId"
             LEFT JOIN courses c ON c.id = o."courseId"
@@ -369,23 +384,28 @@ export async function recomputeStudentTotals(idsInput: unknown): Promise<Mutatio
   await requireRole(ADMIN_ROLE);
   const ids = asIds(idsInput);
   if (!ids.length) return { ok: false, error: 'شناسه‌ای انتخاب نشده است' };
-  const r = await db.execute<{ id: number }>(sql`
-    UPDATE students s SET "totalTakenUnits" = g.taken_u, "totalPassedUnits" = g.passed_u, "totalAverage" = g.reavg
-    FROM (
-      SELECT s2.id AS sid,
-        COALESCE(SUM(c.units) FILTER (WHERE e.status <> 'DROPPED'), 0)::int AS taken_u,
-        COALESCE(SUM(c.units) FILTER (WHERE e."gradeStatus" = 'FINALIZED' AND e."gradeValue"::text ~ '^[0-9]+(\\.[0-9]+)?$' AND e."gradeValue"::numeric >= 10), 0)::int AS passed_u,
-        ROUND(AVG(e."gradeValue"::numeric) FILTER (WHERE e."gradeStatus" = 'FINALIZED' AND e."gradeValue"::text ~ '^[0-9]+(\\.[0-9]+)?$'), 2) AS reavg
-      FROM students s2
-        LEFT JOIN enrollments e ON e."studentId" = s2.id
+  // 🔒 معدل از **موتور رسمی** می‌آید (وزنی بر واحد + سیاست آیین‌نامه + حذف مردودی
+  //    پس از قبولی). پیش‌تر میانگین سادهٔ نمره‌ها نوشته می‌شد و همین ستون
+  //    `students.totalAverage` را خراب می‌کرد (و گزارش «نفرات برتر» از آن می‌خواند).
+  let updated = 0;
+  for (const id of ids) {
+    const takenRes = await db.execute<{ taken_u: number }>(sql`
+      SELECT COALESCE(SUM(c.units) FILTER (WHERE e.status <> 'DROPPED'), 0)::int AS taken_u
+      FROM enrollments e
         LEFT JOIN course_offerings o ON o.id = e."offeringId"
         LEFT JOIN courses c ON c.id = o."courseId"
-      WHERE s2.id IN (${sql.join(ids, sql`, `)})
-      GROUP BY s2.id
-    ) g
-    WHERE s.id = g.sid
-    RETURNING s.id AS id`);
-  return { ok: true, updated: r.rows.length };
+      WHERE e."studentId" = ${id}`);
+    const taken = Number(takenRes.rows?.[0]?.taken_u ?? 0);
+    const gpa = await calculateOfficialGpaBreakdown(id).catch(() => null);
+    const upd = await db.execute<{ id: number }>(sql`
+      UPDATE students
+         SET "totalTakenUnits" = ${taken},
+             "totalPassedUnits" = ${gpa?.passedUnits ?? 0},
+             "totalAverage" = ${gpa && gpa.totalUnits > 0 ? gpa.gpa : null}
+       WHERE id = ${id} RETURNING id`);
+    updated += upd.rows?.length ?? 0;
+  }
+  return { ok: true, updated };
 }
 
 /** ارسال به پرتال: ساخت ردیف alumni_profiles برای فارغ‌التحصیلان بدون پروفایل */
