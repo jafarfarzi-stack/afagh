@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { issueCardAction, revokeCardAction } from './actions';
-import { normalizeFa, faIncludes } from '@/lib/persian-search';
 
 export type CardRow = {
   studentId: number;
@@ -26,6 +26,8 @@ export type CardRow = {
   debt: number;
 };
 
+type Stats = { total: number; issued: number; blocked: number; expired: number };
+
 const fa = (n: unknown) => String(n ?? '—').replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
 const mask = (c: string | null) => (!c ? '—' : c.length <= 5 ? c : `${c.slice(0, 3)}${'*'.repeat(c.length - 5)}${c.slice(-2)}`);
 
@@ -36,16 +38,40 @@ const STATUS_TONE: Record<string, string> = {
   REVOKED: 'bg-rose-100 text-rose-900 border-rose-300',
 };
 
-export default function StudentCardsClient({ rows }: { rows: CardRow[] }) {
-  const [query, setQuery] = useState('');
+export default function StudentCardsClient({
+  rows,
+  q: qProp,
+  page,
+  totalPages,
+  total,
+  perPage,
+  stats,
+}: {
+  rows: CardRow[];
+  q: string;
+  page: number;
+  totalPages: number;
+  total: number;
+  perPage: number;
+  stats: Stats;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [query, setQuery] = useState(qProp);
   const [busy, setBusy] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const firstRender = useRef(true);
 
-  const filtered = useMemo(() => {
-    const q = normalizeFa(query);
-    if (!q) return rows;
-    return rows.filter(r => r.studentCode.includes(q) || faIncludes(r.fullName, q));
-  }, [rows, query]);
+  // جستجوی سمت سرور با تأخیر کوتاه — ۴۸ هزار دانشجو هرگز یک‌جا به مرورگر نمی‌آید
+  useEffect(() => {
+    if (firstRender.current) { firstRender.current = false; return; }
+    const t = setTimeout(() => {
+      const p = new URLSearchParams();
+      if (query.trim()) p.set('q', query.trim());
+      startTransition(() => router.replace(`/admin/student-cards${p.toString() ? `?${p}` : ''}`));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [query, router]);
 
   const notify = (m: string) => {
     setMessage(m);
@@ -64,15 +90,16 @@ export default function StudentCardsClient({ rows }: { rows: CardRow[] }) {
     }
   };
 
-  const stats = useMemo(
-    () => ({
-      total: rows.length,
-      issued: rows.filter(r => r.card).length,
-      blocked: rows.filter(r => r.debt > 0).length,
-      expired: rows.filter(r => r.card?.expired || r.card?.printStatus === 'REVOKED' || r.card?.printStatus === 'LOST').length,
-    }),
-    [rows],
-  );
+  const pageHref = (p: number) => {
+    const sp = new URLSearchParams();
+    if (qProp) sp.set('q', qProp);
+    if (p > 1) sp.set('page', String(p));
+    const s = sp.toString();
+    return `/admin/student-cards${s ? `?${s}` : ''}`;
+  };
+
+  const from = total === 0 ? 0 : (page - 1) * perPage + 1;
+  const to = Math.min(page * perPage, total);
 
   return (
     <div className="space-y-4">
@@ -101,10 +128,17 @@ export default function StudentCardsClient({ rows }: { rows: CardRow[] }) {
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="جست‌وجو با شمارهٔ دانشجویی یا نام…"
+          placeholder="جست‌وجو با شمارهٔ دانشجویی، کد ملی یا نام…"
           className="flex-1 min-w-52 rounded-xl border border-slate-300 p-2 text-xs"
         />
-        <span className="text-[11px] text-slate-500 font-bold">{fa(filtered.length)} ردیف</span>
+        {query && (
+          <button onClick={() => setQuery('')} className="rounded-lg border border-slate-300 px-2 py-1 text-[10px] font-bold text-slate-600">
+            پاک‌کردن
+          </button>
+        )}
+        <span className="text-[11px] text-slate-500 font-bold">
+          {pending ? '… در حال جست‌وجو' : qProp ? `${fa(total)} نتیجه برای «${qProp}»` : `${fa(total)} دانشجو`}
+        </span>
       </div>
 
       <div className="card !p-0 bg-white border-slate-300 overflow-x-auto">
@@ -117,7 +151,7 @@ export default function StudentCardsClient({ rows }: { rows: CardRow[] }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(r => (
+            {rows.map(r => (
               <tr key={r.studentId} className="border-t border-slate-200 hover:bg-slate-50">
                 <td className="p-2.5">
                   <div className="font-bold text-slate-900">{r.fullName}</div>
@@ -203,14 +237,39 @@ export default function StudentCardsClient({ rows }: { rows: CardRow[] }) {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && (
+            {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="p-6 text-center text-slate-500">دانشجویی یافت نشد.</td>
+                <td colSpan={8} className="p-6 text-center text-slate-500">
+                  {qProp ? `دانشجویی با «${qProp}» یافت نشد.` : 'دانشجویی یافت نشد.'}
+                </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold text-slate-600">
+          <span>نمایش {fa(from)}–{fa(to)} از {fa(total)}</span>
+          <div className="flex items-center gap-1.5">
+            <Link
+              href={pageHref(page - 1)}
+              aria-disabled={page <= 1}
+              className={`rounded-lg border px-3 py-1 ${page <= 1 ? 'pointer-events-none border-slate-200 text-slate-400' : 'border-slate-300 hover:bg-slate-100'}`}
+            >
+              ← قبلی
+            </Link>
+            <span className="px-2">صفحهٔ {fa(page)} از {fa(totalPages)}</span>
+            <Link
+              href={pageHref(page + 1)}
+              aria-disabled={page >= totalPages}
+              className={`rounded-lg border px-3 py-1 ${page >= totalPages ? 'pointer-events-none border-slate-200 text-slate-400' : 'border-slate-300 hover:bg-slate-100'}`}
+            >
+              بعدی →
+            </Link>
+          </div>
+        </div>
+      )}
 
       <p className="text-[11px] text-slate-500 leading-5">
         کارت با وضعیت «باطل/مفقود/منقضی»، دانشجوی غیرفعال و دانشجوی دارای بدهی در گیت حراست قرمز می‌شود و ورود

@@ -1,12 +1,15 @@
-import { desc, eq, sql } from 'drizzle-orm';
+import { count, desc, eq, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { degree_level_configs, majors, student_cards, students, users } from '@/db/schema';
+import { degree_level_configs, majors, student_cards, student_ledger, students, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { escapeLikeChars, normalizeFa, normCol, toEnDigits } from '@/lib/persian-search';
 import { getNumber, getSetting } from '@/lib/settings';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import StudentCardsClient from './StudentCardsClient';
 
 export const dynamic = 'force-dynamic';
+
+const PER_PAGE = 50;
 
 const fa = (n: unknown) => String(n ?? '—').replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
 
@@ -16,13 +19,57 @@ const fa = (n: unknown) => String(n ?? '—').replace(/\d/g, d => '۰۱۲۳۴۵�
  * این صفحه تنها مسیر صدور رکورد در `student_cards` است؛ همان جدولی که گیت
  * حراست (`/id/[token]`) از آن استعلام می‌گیرد. پیش‌تر هیچ مسیر صدوری وجود
  * نداشت و گیت با دادهٔ ساختگی پاسخ می‌داد.
+ *
+ * ⚠️ تاریخچهٔ کارایی (باگ ۵۰۴ تولید — ۱۸ اکتبر ۲۰۲۶):
+ * بدهی هر دانشجو با یک **زیرکوئری همبسته** روی `student_ledger` حساب می‌شد و
+ * همهٔ ۴۸٬۳۶۱ دانشجو یک‌جا به کلاینت می‌رفت. با ۳۴۳٬۰۹۷ ردیف دفتر مالی و
+ * نبودِ ایندکس روی `student_ledger("studentId")`، کوئری از ۱۸۰ ثانیه هم رد
+ * می‌شد و پروکسی ۵۰۴ می‌داد. اصلاح: تجمیع **یک‌بارهٔ** دفتر مالی (GROUP BY) +
+ * جستجو و صفحه‌بندی سمت سرور (همان الگوی `/admin/students`).
  */
-export default async function AdminStudentCardsPage() {
+export default async function AdminStudentCardsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; page?: string }>;
+}) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
+
+  const sp = await searchParams;
+  const q = (sp.q || '').trim().slice(0, 60);
+  const page = Math.max(1, parseInt(sp.page || '1', 10) || 1);
 
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
   /* TODO: filter by universityId */
+
+  // ── بدهی هر دانشجو: یک تجمیع، نه یک زیرکوئری به‌ازای هر ردیف ──
+  const debtAgg = db
+    .select({
+      studentId: student_ledger.studentId,
+      debt: sql<string>`sum(case when ${student_ledger.transactionType} in ('TUITION_CHARGE','CHARGE') then ${student_ledger.amount} else -${student_ledger.amount} end)`.as('debt'),
+    })
+    .from(student_ledger)
+    .groupBy(student_ledger.studentId)
+    .as('debt_agg');
+
+  // ── جستجو (قراردادهای صفحهٔ دانشجویان: نرمال‌سازی ارقام/حروف + escape) ──
+  const where = q
+    ? or(
+        sql`${students.studentCode} ILIKE ${`%${escapeLikeChars(toEnDigits(q))}%`} ESCAPE '\\'`,
+        sql`${users.nationalCode} ILIKE ${`%${escapeLikeChars(toEnDigits(q))}%`} ESCAPE '\\'`,
+        sql`${normCol(users.firstName)} ILIKE ${`%${escapeLikeChars(normalizeFa(q))}%`} ESCAPE '\\'`,
+        sql`${normCol(users.lastName)} ILIKE ${`%${escapeLikeChars(normalizeFa(q))}%`} ESCAPE '\\'`,
+      )
+    : undefined;
+
+  const countRow = await db
+    .select({ n: count() })
+    .from(students)
+    .innerJoin(users, eq(users.id, students.userId))
+    .where(where as never);
+  const total = Number(countRow[0]?.n ?? 0);
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+  const safePage = Math.min(page, totalPages);
 
   const rows = await db
     .select({
@@ -40,16 +87,35 @@ export default async function AdminStudentCardsPage() {
       rfidSerialNumber: student_cards.rfidSerialNumber,
       issuedAt: student_cards.issuedAt,
       expiresAt: student_cards.expiresAt,
-      debt: sql<string>`coalesce((
-        select -sum(case when l."transactionType" in ('TUITION_CHARGE','CHARGE') then -l.amount else l.amount end)
-          from student_ledger l where l."studentId" = ${students.id}), 0)`,
+      debt: sql<string>`coalesce(${debtAgg.debt}, 0)`,
     })
     .from(students)
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(student_cards, eq(student_cards.studentId, students.id))
     .leftJoin(majors, eq(majors.id, students.majorId))
     .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
-    .orderBy(desc(students.id));
+    .leftJoin(debtAgg, eq(debtAgg.studentId, students.id))
+    .where(where as never)
+    .orderBy(desc(students.id))
+    .limit(PER_PAGE)
+    .offset((safePage - 1) * PER_PAGE);
+
+  // ── آمار کلی (مستقل از صفحه و جستجو) — شمارش‌های ارزان ──
+  const statsRes = await db.execute(sql`
+    select
+      (select count(*) from students)::int as total,
+      (select count(*) from student_cards)::int as issued,
+      (select count(*) from (
+         select "studentId" from student_ledger
+          group by "studentId"
+         having sum(case when "transactionType" in ('TUITION_CHARGE','CHARGE') then amount else -amount end) > 0
+       ) d)::int as blocked,
+      (select count(*) from student_cards
+        where "expiresAt" < now() or "printStatus" in ('REVOKED','LOST'))::int as expired
+  `);
+  const stats = (statsRes.rows?.[0] ?? { total: 0, issued: 0, blocked: 0, expired: 0 }) as {
+    total: number; issued: number; blocked: number; expired: number;
+  };
 
   const validDays = await getNumber('STUDENT_CARD_VALID_DAYS', 365);
   const secretSet = (await getSetting('TICKET_TOKEN_SECRET')).trim().length > 0;
@@ -72,6 +138,12 @@ export default async function AdminStudentCardsPage() {
       </div>
 
       <StudentCardsClient
+        q={q}
+        page={safePage}
+        totalPages={totalPages}
+        total={total}
+        perPage={PER_PAGE}
+        stats={stats}
         rows={rows.map(r => ({
           studentId: r.studentId,
           studentCode: r.studentCode,
