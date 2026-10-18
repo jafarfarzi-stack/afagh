@@ -2084,19 +2084,19 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
               </div>
             </button>
 
-            {/* کاشی ۵: مدیریت جلسات استاد */}
-            <button
-              onClick={() => showToast('تقویم و گزارش جلسات کلاسی اساتید بارگذاری شد')}
+            {/* کاشی ۵: مدیریت جلسات درس */}
+            <Link
+              href="/admin/class-sessions"
               className="p-4 bg-gradient-to-b from-white to-slate-100 border-2 border-slate-300 hover:border-slate-500 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-3 text-right group"
             >
               <div className="w-12 h-12 rounded-lg bg-purple-100 text-purple-800 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
                 🎓
               </div>
               <div>
-                <p className="font-extrabold text-sm text-slate-900">مدیریت جلسات استاد (حضور و غیاب و جبرانی)</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">جلسات ۱۶گانه، کلاس‌های جبرانی و محاسبه کسور حق‌التدریس</p>
+                <p className="font-extrabold text-sm text-slate-900">مدیریت جلسات درس (حضور و غیاب و جبرانی)</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">جدول جلسات درس با پرچم‌های تعطیل/فوق‌برنامه/فعال، ممیزی زمانی و لیست دانشجویان</p>
               </div>
-            </button>
+            </Link>
 
             {/* کاشی ۶: کاتالوگ و سرفصل رشته‌ها */}
             <Link

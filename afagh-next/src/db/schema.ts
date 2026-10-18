@@ -1467,6 +1467,17 @@ export const class_sessions = pgTable('class_sessions', {
   topic: varchar('topic', { length: 300 }),
   absenceReason: text('absenceReason'),
   rejectionReason: text('rejectionReason'),
+  // ── پرچم‌ها و مهرهای زمانی جلسه (مهاجرت ۰۱۰۱) ──
+  /** تعطیل: جلسه به‌خاطر تعطیلی برگزار نشد (جدا از غیبت استاد) */
+  isHoliday: integer('isHoliday').notNull().default(0),
+  /** فوق‌برنامه: جلسهٔ اضافه بیرون از جلسات استاندارد ترم */
+  isExtraSession: integer('isExtraSession').notNull().default(0),
+  /** فعال: جلسهٔ لغوشده/منقضی در فهرست عملیاتی نیاید */
+  isActive: integer('isActive').notNull().default(1),
+  createdAt: timestamp('createdAt').defaultNow(),
+  /** آخرین باری که استاد این جلسه را در کارتابل خود دیده است */
+  professorViewedAt: timestamp('professorViewedAt'),
+  updatedAt: timestamp('updatedAt').defaultNow(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });
 

@@ -109,11 +109,11 @@ const CARDS: Card[] = [
 
 const NEW_KINDS = new Set(['finance-worklist', 'payroll-overview', 'bi-teaching-quality', 'bi-facilities', 'graduation-dossiers', 'grade-audit-log', 'probation-violations', 'probation-chains', 'unit-cap-violations', 'repeated-courses', 'student-weekly-conflicts', 'student-exam-conflicts', 'prereq-violations', 'course-grade-status', 'enrollment-pick', 'offered-course-roster', 'top-students', 'no-photo', 'graduates-info', 'status-report', 'major-change-report', 'status-change-report', 'gpa-refresh-preview', 'profile-refresh', 'portal-export', 'exam-session-sheet', 'seat-numbers', 'final-exam-schedule', 'grade-entry-report', 'grade-deadline', 'empty-rooms', 'weekly-timetable', 'room-conflicts', 'low-enrollment', 'makeup-courses', 'staff-list', 'staff-courses', 'staff-timetable', 'attendance-list', 'tuition-tariff', 'tuition-statement', 'pending-requests', 'defenses', 'proposals', 'council-edu', 'letter-templates', 'transcript-card', 'exam-entry-card', 'student-card', 'study-cert', 'edu-confirm', 'grad-cert', 'military-defer']);
 
-export default function ReportsClient({ opts, initialUniversityId, allowedKinds, scope = 'all' }: { opts: FilterOptions; initialUniversityId?: number; allowedKinds?: string[] | null; scope?: 'all' | 'edu' | 'finance' }) {
-  const [kind, setKind] = useState<string>('active-term');
+export default function ReportsClient({ opts, initialUniversityId, allowedKinds, scope = 'all', initialKind, initialTerm, initialExtra }: { opts: FilterOptions; initialUniversityId?: number; allowedKinds?: string[] | null; scope?: 'all' | 'edu' | 'finance'; initialKind?: string; initialTerm?: string; initialExtra?: Record<string, string> }) {
+  const [kind, setKind] = useState<string>(initialKind ?? 'active-term');
   const [cat, setCat] = useState<ReportCat | undefined>(undefined);
   const [search, setSearch] = useState('');
-  const [term, setTerm] = useState(opts.latestTerm);
+  const [term, setTerm] = useState(initialTerm || opts.latestTerm);
   const [degreeId, setDegreeId] = useState(0);
   const [facultyId, setFacultyId] = useState(0);
   const [departmentId, setDepartmentId] = useState(0);
@@ -123,7 +123,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
   const [nationalCode, setNationalCode] = useState('');
   const [miss, setMiss] = useState('national');
   const [universityId, setUniversityId] = useState(initialUniversityId ?? 0);
-  const [extra, setExtra] = useState<Record<string, string>>({});
+  const [extra, setExtra] = useState<Record<string, string>>(initialExtra ?? {});
   const [res, setRes] = useState<ReportResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
