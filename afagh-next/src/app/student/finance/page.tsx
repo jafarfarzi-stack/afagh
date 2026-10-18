@@ -1,6 +1,6 @@
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, and } from 'drizzle-orm';
 import { db } from '@/db';
-import { notifications, universities } from '@/db/schema';
+import { degree_level_configs, notifications, students, universities } from '@/db/schema';
 import FinancialTranscript from '@/components/FinancialTranscript';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { getStudentFinance } from '@/lib/finance-engine';
@@ -38,10 +38,39 @@ function jdate(d: string | Date | null | undefined): string {
  */
 const STUDENT_EVENTS = ['FINANCE_CHEQUE_DUE'];
 
-export default async function StudentFinancePage() {
+export default async function StudentFinancePage({ searchParams }: { searchParams: Promise<{ record?: string }> }) {
   const user = await requireRole(['STUDENT']);
-  const me = await getStudentByUser(user.id);
-  if (!me) return <p className="card p-6 text-center text-slate-500">پروندهٔ دانشجویی یافت نشد.</p>;
+  const picked = await getStudentByUser(user.id);
+  if (!picked) return <p className="card p-6 text-center text-slate-500">پروندهٔ دانشجویی یافت نشد.</p>;
+
+  // ── دانش‌آموخته/دانشجوی چندمقطعی: هر پروندهٔ دانشجویی کارنامهٔ مالی خودش را
+  //    دارد (دفتر مالی به studentId گره خورده است)، پس مقطع باید قابل انتخاب باشد
+  //    و QR هر کارنامه هم همان پرونده را در خود نهفته دارد.
+  const myRecords = await db
+    .select({
+      id: students.id,
+      studentCode: students.studentCode,
+      status: students.status,
+      degreeTitle: degree_level_configs.title,
+      entryYear: students.entryYear,
+    })
+    .from(students)
+    .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
+    .where(eq(students.userId, user.id))
+    .orderBy(desc(students.entryYear), desc(students.id));
+
+  const sp = await searchParams;
+  const wantedRecordId = Number(sp?.record ?? 0) || 0;
+  let active = picked;
+  if (wantedRecordId && wantedRecordId !== picked.id && myRecords.some(r => r.id === wantedRecordId)) {
+    const [alt] = await db
+      .select()
+      .from(students)
+      .where(and(eq(students.id, wantedRecordId), eq(students.userId, user.id)))
+      .limit(1);
+    if (alt) active = alt;
+  }
+  const me = active;
 
   const demo = await isDemoStudentUser(user.id);
   if (demo) {
@@ -131,6 +160,23 @@ export default async function StudentFinancePage() {
 
   return (
     <div className="space-y-4" dir="rtl">
+      {myRecords.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-sm print:hidden">
+          <span className="font-bold text-slate-600">پروندهٔ مالی (مقطع):</span>
+          {myRecords.map(r => (
+            <a
+              key={r.id}
+              href={`/student/finance?record=${r.id}`}
+              className={`rounded-lg border px-2.5 py-1 font-bold ${r.id === me.id
+                ? 'border-emerald-500 bg-emerald-50 text-emerald-800'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+            >
+              {r.degreeTitle ?? 'مقطع نامشخص'} · <span className="font-mono" dir="ltr">{r.studentCode}</span>
+            </a>
+          ))}
+          <span className="text-[10px] text-slate-400">مانده و ریز ترم‌به‌ترم هر مقطع جداست.</span>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
         <div>
           <h1 className="font-extrabold text-slate-800 text-base sm:text-lg">💳 امور مالی من</h1>
