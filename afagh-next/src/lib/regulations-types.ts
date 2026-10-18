@@ -168,7 +168,10 @@ export const DEFAULT_BACHELOR_REGULATION_1390: RegulationConfig = {
 export type LevelGroup = 'SHORT' | 'LONG' | 'MS' | 'PHD';
 
 export function maghtaGroup(maghtaOrCode: string | number | null | undefined): LevelGroup {
-  const m = String(maghtaOrCode ?? '').trim().replace(/^SAMA-/i, '').toUpperCase();
+  // پیشوند منبع را بردار: کدهای مقطع با SAMA- و HAMAVA- می‌آیند و پیش‌تر فقط
+  // SAMA- حذف می‌شد ⇒ «HAMAVA-5» (کارشناسی ناپیوسته) و «HAMAVA-1» (کاردانی)
+  // به‌اشتباه گروه LONG (سقف مشروطی ۳) می‌گرفتند در حالی که سقفشان ۲ است.
+  const m = String(maghtaOrCode ?? '').trim().replace(/^[A-Za-z]+-/, '').toUpperCase();
   if (m === '3' || m === 'MS') return 'MS';
   if (['4', '6', '7', '8'].includes(m) || m === 'PHD') return 'PHD';
   if (['1', '5', '9', '10'].includes(m) || m === 'AD') return 'SHORT';
