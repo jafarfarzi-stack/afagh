@@ -18,9 +18,13 @@ export default function LoginCard() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [choice, setChoice] = useState<{ token: string; candidates: Candidate[] } | null>(null);
+  /* تا وقتی React هیدراته نشده، دکمهٔ ورود غیرفعال می‌ماند تا ارسال بومیِ فرم
+     (که هیچ اعتبارسنجی‌ای ندارد و فقط یک درخواست بی‌مصرف می‌فرستد) رخ ندهد. */
+  const [ready, setReady] = useState(false);
 
   // پیام‌های بازگشتی (مثلاً کاربر بدون نقش) — بدون نیاز به useSearchParams
   useEffect(() => {
+    setReady(true);
     const e = new URLSearchParams(window.location.search).get('e');
     if (e === 'norole') setErr('ورود موفق بود، اما برای این حساب هیچ نقشی تعریف نشده است. با مدیر سامانه تماس بگیرید.');
     if (e === 'expired') setErr('نشست شما منقضی شده است. دوباره وارد شوید.');
@@ -90,7 +94,10 @@ export default function LoginCard() {
   }
 
   return (
-    <form onSubmit={submit} className="card w-full space-y-4 shadow-2xl">
+    /* method="post" عمدی است: پیش از hydration، ارسال فرم به‌صورت GET انجام می‌شد و
+       رمز عبور در نوار آدرس، history مرورگر و لاگ دسترسی سرور ثبت می‌شد
+       (/login?code=…&password=…). با POST، حتی در همان پنجرهٔ کوتاه هیچ رمزی در URL نمی‌رود. */
+    <form onSubmit={submit} method="post" className="card w-full space-y-4 shadow-2xl">
       <div className="text-center">
         <h2 className="text-base font-black text-slate-900">ورود به سامانه</h2>
         <p className="text-xs text-slate-500 mt-1">ورود با کد پرسنلی / شماره دانشجویی + رمز عبور</p>
@@ -128,7 +135,7 @@ export default function LoginCard() {
             aria-label="رمز عبور"
           />
           {err && <p role="alert" className="rounded-xl bg-red-50 p-2 text-center text-sm text-red-700 dark:border dark:border-red-800 dark:bg-red-950 dark:text-red-200">{err}</p>}
-          <button className="btn-primary w-full" disabled={busy}>{busy ? 'در حال ورود…' : 'ورود'}</button>
+          <button className="btn-primary w-full" disabled={!ready || busy}>{busy ? 'در حال ورود…' : 'ورود'}</button>
           <p className="text-center text-[11px] text-slate-400">
             ورود اول؟ گذرواژهٔ اولیهٔ شما برابر همان کد است. <a href="/help?tab=shared" className="text-indigo-700 font-bold hover:underline">راهنمای ورود</a>
           </p>
