@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { generateOfferingSessionsAction, saveSessionAttendanceAction, scheduleMakeupSessionAction } from './actions';
 import { mergeRefreshedOfferings } from '@/lib/professor-attendance-display';
+import AttendanceMatrixSheet from './AttendanceMatrixSheet';
+import PrintTranscriptButton from '@/components/PrintTranscriptButton';
 import {
   DEMO_ATTENDANCE_DEFAULT_OFFERING_ID,
   DEMO_ATTENDANCE_DEFAULT_ROOM_ID,
@@ -956,6 +958,11 @@ export default function ProfessorAttendanceClient({
             >
               🗓️ برنامه هفتگی
             </Link>
+            <PrintTranscriptButton
+              orientation="landscape"
+              label="چاپ برگهٔ حضور کل جلسات"
+              className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition print:hidden"
+            />
           </div>
         </div>
 
@@ -1620,6 +1627,22 @@ export default function ProfessorAttendanceClient({
           </div>
         </div>
       )}
+
+      {/* ── برگهٔ چاپی: کل جلسات درس در یک برگهٔ افقی (ماتریس دانشجو × جلسه) ── */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
+          <h3 className="text-sm font-black text-slate-900">
+            🖨️ برگهٔ حضور کل جلسات — همهٔ جلسات در یک برگه (افقی)
+          </h3>
+          <PrintTranscriptButton orientation="landscape" label="چاپ / ذخیره PDF" />
+        </div>
+        <AttendanceMatrixSheet
+          professor={{ name: profDisplayName, staffCode: professor.staffCode, academicRank: professor.academicRank }}
+          termTitle={termTitle}
+          offering={currentOffering}
+          todayJalali={todayJalali}
+        />
+      </div>
 
     </div>
   );
