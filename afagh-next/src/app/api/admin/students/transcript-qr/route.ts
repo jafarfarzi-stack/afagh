@@ -29,7 +29,7 @@ export async function GET(request: Request) {
 
     const uni = await getCurrentUniversity().catch(() => null);
     const [stu] = await db
-      .select({ userId: students.userId, universityId: students.universityId })
+      .select({ id: students.id, userId: students.userId, studentCode: students.studentCode, universityId: students.universityId })
       .from(students)
       .where(uni ? and(eq(students.id, studentId), eq(students.universityId, uni.id)) : eq(students.id, studentId))
       .limit(1);
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     if (!stu.userId) return Response.json({ error: 'این دانشجو حساب کاربری ندارد؛ استعلام ممکن نیست' }, { status: 409 });
 
     const publicBaseUrl = await getPublicBaseUrl();
-    const issued = await issueTranscriptToken(stu.userId);
+    const issued = await issueTranscriptToken(stu.userId, { id: stu.id, code: stu.studentCode, universityId: stu.universityId });
     const verifyUrl = `${publicBaseUrl}/verify-transcript/${encodeURIComponent(issued.token)}`;
     const qr = await qrSvg(verifyUrl, { errorCorrectionLevel: 'Q', size: 128, margin: 4 });
 

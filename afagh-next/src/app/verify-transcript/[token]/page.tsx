@@ -150,9 +150,20 @@ export default async function VerifyTranscriptPage({ params }: { params: Promise
           )}
         </div>
 
+        {res.otherRecords.length > 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-900">
+            <b>توجه — پروندهٔ چندمقطعی:</b> این شخص در پروندهٔ دیگری هم سابقه دارد:{' '}
+            {res.otherRecords.map(r => `${r.degreeTitle ?? 'مقطع نامشخص'} (${r.studentCode}${r.isGraduated ? ' — فارغ‌التحصیل' : ''})`).join(' · ')}
+            . این استعلام فقط مربوط به مقطع «{res.degreeTitle ?? '—'}» با شمارهٔ دانشجویی {res.studentCode} است.
+          </div>
+        )}
+
         <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] leading-5 text-slate-500">
           اعداد این صفحه به‌صورت زنده از موتور قوانین آموزشی سامانه خوانده می‌شود (سیاست معدل: {res.policy || '—'}).
-          زمان استعلام: {jdate(res.checkedAt)}.
+          زمان استعلام: {jdate(res.checkedAt)}.{' '}
+          {res.pinned
+            ? 'تطبیق پرونده با شناسهٔ نهفته در همین QR انجام شد.'
+            : 'این QR پیش از افزودن شناسهٔ پرونده صادر شده است؛ برای تطبیق دقیق مقطع، کارنامهٔ تازه بگیرید.'}
         </p>
       </div>
     </div>

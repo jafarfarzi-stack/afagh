@@ -83,8 +83,10 @@ const fin = await getStudentFinance(studentId, {
       uni ? or(eq(student_subject_fees.universityId, uni.id), isNull(student_subject_fees.universityId)) : undefined,
     )) : [];
 
-  const [stuRow] = await db.select({ userId: students.userId }).from(students).where(eq(students.id, studentId)).limit(1);
-  const financeVerify = stuRow?.userId ? await buildFinanceVerify(stuRow.userId) : null;
+  const [stuRow] = await db.select({ userId: students.userId, studentCode: students.studentCode, universityId: students.universityId }).from(students).where(eq(students.id, studentId)).limit(1);
+  const financeVerify = stuRow?.userId
+    ? await buildFinanceVerify(stuRow.userId, { id: studentId, code: stuRow.studentCode, universityId: stuRow.universityId })
+    : null;
   const logoUrl = uni?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
 
   const { student, totals, transcript } = fin;

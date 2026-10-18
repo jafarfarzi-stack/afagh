@@ -37,7 +37,7 @@ export default async function StudentEnrollConfirmPage() {
   let expiresAt: string | null = null;
   let blocked: string | null = null;
   try {
-    const issued = await issueEnrollConfirmToken(user.id, selectedTerm.id);
+    const issued = await issueEnrollConfirmToken(user.id, selectedTerm.id, me ? { id: me.id, code: me.studentCode, universityId: me.universityId } : null);
     token = issued.token;
     expiresAt = issued.expiresAt;
   } catch (err) {

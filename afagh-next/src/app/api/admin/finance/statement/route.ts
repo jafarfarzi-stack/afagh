@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     if (!uniGate.ok) return NextResponse.json({ error: uniGate.error }, { status: 403 });
 
     const [stu] = await db
-      .select({ id: students.id, userId: students.userId })
+      .select({ id: students.id, userId: students.userId, studentCode: students.studentCode, universityId: students.universityId })
       .from(students)
       .where(eq(students.id, studentId))
       .limit(1);
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 
     let issued: { token: string; expiresAt: string };
     try {
-      issued = await issueFinanceStatementToken(stu.userId);
+      issued = await issueFinanceStatementToken(stu.userId, { id: stu.id, code: stu.studentCode, universityId: stu.universityId });
     } catch (e) {
       // 🔒 پیام خام به کلاینت برنمی‌گردد — فقط لاگ سرور.
       console.error('[api] finance/statement issue failed:', e instanceof Error ? e.message : e);

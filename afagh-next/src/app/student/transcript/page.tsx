@@ -175,7 +175,7 @@ export default async function StudentTranscriptPage() {
   let transcriptQr: { url: string; qr: string; expiresAt: string | null } | null = null;
   try {
     const publicBaseUrl = await getPublicBaseUrl();
-    const issued = await issueTranscriptToken(user.id);
+    const issued = await issueTranscriptToken(user.id, { id: me.id, code: me.studentCode, universityId: me.universityId });
     const url = `${publicBaseUrl}/verify-transcript/${encodeURIComponent(issued.token)}`;
     transcriptQr = { url, qr: await qrSvg(url, { errorCorrectionLevel: 'Q', size: 128, margin: 4 }), expiresAt: issued.expiresAt };
   } catch (err) {

@@ -117,7 +117,7 @@ export default async function StudentFinancePage() {
   let stmtQr = '';
   let stmtExpiresAt: string | null = null;
   try {
-    const issued = await issueFinanceStatementToken(user.id);
+    const issued = await issueFinanceStatementToken(user.id, { id: me.id, code: me.studentCode, universityId: me.universityId });
     stmtVerifyUrl = `${publicBaseUrl}/verify-finance/${encodeURIComponent(issued.token)}`;
     stmtExpiresAt = issued.expiresAt;
     try {

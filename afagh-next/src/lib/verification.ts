@@ -1,6 +1,6 @@
 import 'server-only';
 import { createHmac, createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { eq, sql, and } from 'drizzle-orm';
+import { eq, sql, and, desc } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, course_offerings, courses, degree_level_configs, exam_course_packets, exam_halls,
@@ -78,6 +78,71 @@ const STUDENT_PICK_ORDER = [
   sql`(select count(*) from enrollments e where e."studentId" = "students"."id") desc`,
   sql`"students"."id" desc`,
 ];
+
+/**
+ * انتخاب قطعیِ پروندهٔ دانشجوی هدف برای یک توکن استعلام.
+ *
+ * 🔒 چرا؟ یک شخص می‌تواند چند پروندهٔ دانشجویی داشته باشد: یک NO_SHOW قدیمی،
+ * **دو فارغ‌التحصیلی در دو مقطع** (کاردانی/کارشناسی/ارشد)، یا حتی دو حساب
+ * کاربری با یک کد ملی. اگر توکن فقط `uid` داشته باشد، استعلام باید بین
+ * پرونده‌ها «حدس» بزند و ممکن است کارنامهٔ مقطع دیگر را نشان دهد.
+ *
+ * پس سه چیز در توکن امضاشده نهفته می‌شود:
+ *   • `uid` — کاربرِ صادرکنندهٔ سند
+ *   • `sid` — شناسهٔ دقیق پروندهٔ دانشجویی (کلید اصلی؛ قطعیِ قطعی)
+ *   • `sc`  — شمارهٔ دانشجویی (خوانا/قابل‌ممیزی)
+ *   • `uni` — دانشگاهِ سند
+ * چون **شمارهٔ دانشجویی می‌تواند در دو دانشگاه یکی باشد**، جست‌وجو با `sc`
+ * هرگز بدون `uid` انجام نمی‌شود و در تطبیق‌های چندگانه، دانشگاهِ سند و
+ * دانشگاهِ خودِ کاربر اولویت می‌گیرند. قید نهایی همیشه «همان شخص» است:
+ * همان کاربر، یا همان کد ملی.
+ */
+async function resolveTargetStudentId(
+  payload: { uid?: unknown; sid?: unknown; sc?: unknown; uni?: unknown },
+): Promise<{ id: number; via: 'SID' | 'SC' | 'UID_FALLBACK' } | null> {
+  const uid = Number(payload.uid ?? 0) || 0;
+  const sid = Number(payload.sid ?? 0) || 0;
+  const sc = String(payload.sc ?? '').trim();
+  const uni = Number(payload.uni ?? 0) || 0;
+  if (!uid) return null;
+
+  // پرونده باید مالِ همین شخص باشد: همان کاربر، یا همان کد ملی
+  const samePerson = sql`(${students.userId} = ${uid} OR ${users.nationalCode} = (select "nationalCode" from users where id = ${uid}))`;
+
+  if (sid) {
+    const pinned = await db
+      .select({ id: students.id })
+      .from(students)
+      .innerJoin(users, eq(users.id, students.userId))
+      .where(and(eq(students.id, sid), samePerson))
+      .limit(1);
+    if (pinned[0]?.id) return { id: pinned[0].id, via: 'SID' };
+  }
+
+  if (sc) {
+    const byCode = await db
+      .select({ id: students.id })
+      .from(students)
+      .innerJoin(users, eq(users.id, students.userId))
+      .where(and(eq(students.studentCode, sc), samePerson))
+      .orderBy(
+        sql`CASE WHEN "students"."universityId" = ${uni} AND ${uni} <> 0 THEN 0 ELSE 1 END`,
+        sql`CASE WHEN "students"."universityId" = (select "universityId" from users where id = ${uid}) THEN 0 ELSE 1 END`,
+        desc(students.id),
+      )
+      .limit(1);
+    if (byCode[0]?.id) return { id: byCode[0].id, via: 'SC' };
+  }
+
+  const fallback = await db
+    .select({ id: students.id })
+    .from(students)
+    .innerJoin(users, eq(users.id, students.userId))
+    .where(eq(users.id, uid))
+    .orderBy(...STUDENT_PICK_ORDER)
+    .limit(1);
+  return fallback[0]?.id ? { id: fallback[0].id, via: 'UID_FALLBACK' } : null;
+}
 
 // ─────────────────── امضای توکن ───────────────────
 
@@ -239,7 +304,7 @@ export async function verifyStudentCard(rawToken: string): Promise<StudentCardVe
     universityId: card.universityId ?? null,
     studentCode: card.studentCode,
     fullName: `${card.firstName} ${card.lastName}`,
-    nationalId: maskNationalCode(card.nationalCode),
+    nationalId: String(card.nationalCode ?? ''),
     nationalIdMasked: maskNationalCode(card.nationalCode),
     statusLabel: studentStatusFa(card.studentStatus, card.samaStatusCode),
     majorName: card.majorName,
@@ -335,6 +400,10 @@ export async function verifyExamTicket(rawToken: string): Promise<ExamTicketVeri
   }
   if (sig.payload.kind !== 'EXAM') return { ok: false, reason: 'BAD_TOKEN', message: 'نوع توکن با کارت ورود به جلسه همخوانی ندارد.' };
 
+  // پروندهٔ دقیقِ همین سند (شناسه/شمارهٔ دانشجویی نهفته در توکن؛ نه حدس)
+  const target = await resolveTargetStudentId(sig.payload);
+  if (!target) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
+
   const [stu] = await db
     .select({
       studentId: students.id, userId: students.userId, studentCode: students.studentCode,
@@ -344,8 +413,7 @@ export async function verifyExamTicket(rawToken: string): Promise<ExamTicketVeri
     .from(students)
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(majors, eq(majors.id, students.majorId))
-    .where(eq(users.id, sig.payload.uid))
-    .orderBy(...STUDENT_PICK_ORDER)
+    .where(eq(students.id, target.id))
     .limit(1);
   if (!stu) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
 
@@ -420,7 +488,7 @@ export async function verifyExamTicket(rawToken: string): Promise<ExamTicketVeri
     universityId: stu.universityId ?? null,
     studentName: `${stu.firstName} ${stu.lastName}`,
     studentCode: stu.studentCode,
-    nationalId: maskNationalCode(stu.nationalCode),
+    nationalId: String(stu.nationalCode ?? ''),
     nationalIdMasked: maskNationalCode(stu.nationalCode),
     majorName: stu.majorName,
     termTitle: term?.title ?? '—',
@@ -460,14 +528,25 @@ export type EnrollConfirmVerification =
     };
 
 /** توکن تأییدیهٔ انتخاب واحد — امضاشده و میان‌مدت (پیش‌فرض ۳۰ روز، سقف ۱ سال) */
-export async function issueEnrollConfirmToken(userId: number, termId: number): Promise<{ token: string; expiresAt: string }> {
+export async function issueEnrollConfirmToken(
+  userId: number,
+  termId: number,
+  student?: { id: number; code: string | null; universityId?: number | null } | null,
+): Promise<{ token: string; expiresAt: string }> {
   const configured = await getNumber('ENROLL_CONFIRM_TTL_MINUTES', 43200);
   if (!Number.isFinite(configured) || configured <= 0) {
     log.warn('enroll_confirm_ttl_invalid', { configured });
     throw new Error('مدت اعتبار تأییدیهٔ انتخاب واحد (ENROLL_CONFIRM_TTL_MINUTES) باید عددی بزرگ‌تر از صفر باشد.');
   }
   const ttlMin = Math.min(configured, 525600); // سقف ۱ سال — تأییدیه نباید دائمی شود
-  const token = await signToken({ uid: userId, kind: 'ENROLL_CONFIRM', term: termId }, ttlMin * 60);
+  const token = await signToken({
+    uid: userId,
+    term: termId,
+    sid: Number(student?.id ?? 0),
+    sc: String(student?.code ?? ''),
+    uni: Number(student?.universityId ?? 0),
+    kind: 'ENROLL_CONFIRM',
+  }, ttlMin * 60);
   return { token, expiresAt: new Date(Date.now() + ttlMin * 60_000).toISOString() };
 }
 
@@ -484,6 +563,10 @@ export async function verifyEnrollConfirm(rawToken: string): Promise<EnrollConfi
   }
   if (sig.payload.kind !== 'ENROLL_CONFIRM') return { ok: false, reason: 'BAD_TOKEN', message: 'نوع توکن با تأییدیهٔ انتخاب واحد همخوانی ندارد.' };
 
+  // پروندهٔ دقیقِ همین سند (شناسه/شمارهٔ دانشجویی نهفته در توکن؛ نه حدس)
+  const target = await resolveTargetStudentId(sig.payload);
+  if (!target) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
+
   const [stu] = await db
     .select({
       studentId: students.id, userId: students.userId, studentCode: students.studentCode,
@@ -493,8 +576,7 @@ export async function verifyEnrollConfirm(rawToken: string): Promise<EnrollConfi
     .from(students)
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(majors, eq(majors.id, students.majorId))
-    .where(eq(users.id, sig.payload.uid))
-    .orderBy(...STUDENT_PICK_ORDER)
+    .where(eq(students.id, target.id))
     .limit(1);
   if (!stu) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
 
@@ -534,7 +616,7 @@ export async function verifyEnrollConfirm(rawToken: string): Promise<EnrollConfi
     universityId: stu.universityId ?? null,
     studentName: `${stu.firstName} ${stu.lastName}`,
     studentCode: stu.studentCode,
-    nationalId: maskNationalCode(stu.nationalCode),
+    nationalId: String(stu.nationalCode ?? ''),
     nationalIdMasked: maskNationalCode(stu.nationalCode),
     majorName: stu.majorName,
     termId: term.id,
@@ -578,14 +660,23 @@ export type FinanceStatementVerification =
     };
 
 /** توکن کارنامهٔ مالی — امضاشده و میان‌مدت (پیش‌فرض ۳۰ روز، سقف ۱ سال) */
-export async function issueFinanceStatementToken(userId: number): Promise<{ token: string; expiresAt: string }> {
+export async function issueFinanceStatementToken(
+  userId: number,
+  student?: { id: number; code: string | null; universityId?: number | null } | null,
+): Promise<{ token: string; expiresAt: string }> {
   const configured = await getNumber('FINANCE_STMT_TTL_MINUTES', 43200);
   if (!Number.isFinite(configured) || configured <= 0) {
     log.warn('finance_stmt_ttl_invalid', { configured });
     throw new Error('مدت اعتبار کارنامهٔ مالی (FINANCE_STMT_TTL_MINUTES) باید عددی بزرگ‌تر از صفر باشد.');
   }
   const ttlMin = Math.min(configured, 525600); // سقف ۱ سال — کارنامه نباید دائمی شود
-  const token = await signToken({ uid: userId, kind: 'FINANCE_STMT' }, ttlMin * 60);
+  const token = await signToken({
+    uid: userId,
+    sid: Number(student?.id ?? 0),
+    sc: String(student?.code ?? ''),
+    uni: Number(student?.universityId ?? 0),
+    kind: 'FINANCE_STMT',
+  }, ttlMin * 60);
   return { token, expiresAt: new Date(Date.now() + ttlMin * 60_000).toISOString() };
 }
 
@@ -602,6 +693,10 @@ export async function verifyFinanceStatement(rawToken: string): Promise<FinanceS
   }
   if (sig.payload.kind !== 'FINANCE_STMT') return { ok: false, reason: 'BAD_TOKEN', message: 'نوع توکن با کارنامهٔ مالی همخوانی ندارد.' };
 
+  // پروندهٔ دقیقِ همین سند (شناسه/شمارهٔ دانشجویی نهفته در توکن؛ نه حدس)
+  const target = await resolveTargetStudentId(sig.payload);
+  if (!target) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
+
   const [stu] = await db
     .select({
       studentId: students.id, userId: students.userId, studentCode: students.studentCode,
@@ -611,8 +706,7 @@ export async function verifyFinanceStatement(rawToken: string): Promise<FinanceS
     .from(students)
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(majors, eq(majors.id, students.majorId))
-    .where(eq(users.id, sig.payload.uid))
-    .orderBy(...STUDENT_PICK_ORDER)
+    .where(eq(students.id, target.id))
     .limit(1);
   if (!stu) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
 
@@ -629,7 +723,7 @@ export async function verifyFinanceStatement(rawToken: string): Promise<FinanceS
     universityId: stu.universityId ?? null,
     studentName: `${stu.firstName} ${stu.lastName}`,
     studentCode: stu.studentCode,
-    nationalId: maskNationalCode(stu.nationalCode),
+    nationalId: String(stu.nationalCode ?? ''),
     nationalIdMasked: maskNationalCode(stu.nationalCode),
     majorName: stu.majorName,
     totals: {
@@ -675,6 +769,18 @@ export type TranscriptVerification =
       policy: string;
       /** مرز مشروطی همین مقطع از آیین‌نامه */
       probationThreshold: number;
+      /** آیا پرونده با شناسه/شمارهٔ نهفته در خود QR تطبیق داده شد؟ (نه با حدس) */
+      pinned: boolean;
+      /** روش تطبیق پرونده: شناسهٔ دقیق / شمارهٔ دانشجویی / انتخاب قطعی کاربر */
+      resolvedVia: 'SID' | 'SC' | 'UID_FALLBACK';
+      /** سایر مقاطع همین شخص (دانش‌آموختهٔ چندمقطعی) */
+      otherRecords: {
+        studentCode: string;
+        degreeTitle: string | null;
+        statusLabel: string;
+        entryYear: number | null;
+        isGraduated: boolean;
+      }[];
       /** وضعیت هر نیمسال: معدل، واحد و مشروطی */
       terms: {
         termCode: string | null;
@@ -688,7 +794,14 @@ export type TranscriptVerification =
     };
 
 /** توکن کارنامهٔ تحصیلی — امضاشده و میان‌مدت (پیش‌فرض ۳۰ روز، سقف ۱ سال) */
-export async function issueTranscriptToken(userId: number): Promise<{ token: string; expiresAt: string }> {
+export async function issueTranscriptToken(
+  userId: number,
+  /**
+   * پروندهٔ دقیقی که این کارنامه به آن تعلق دارد (شناسه + شمارهٔ دانشجویی).
+   * برای افراد چندمقطعی حیاتی است: بدون آن، استعلام بین پرونده‌ها حدس می‌زند.
+   */
+  student?: { id: number; code: string | null; universityId?: number | null } | null,
+): Promise<{ token: string; expiresAt: string }> {
   // تنظیم ممکن است هنوز ثبت نشده باشد؛ نبودِ آن نباید صدور کارنامه را بشکند
   // (پیش‌تر getNumber برای تنظیم ناشناخته خطا می‌داد و بلوک QR رندر نمی‌شد).
   const configured = await getNumber('TRANSCRIPT_TTL_MINUTES', 43200).catch(() => 43200);
@@ -696,7 +809,13 @@ export async function issueTranscriptToken(userId: number): Promise<{ token: str
     throw new Error('مدت اعتبار کارنامهٔ تحصیلی (TRANSCRIPT_TTL_MINUTES) باید عددی بزرگ‌تر از صفر باشد.');
   }
   const ttlMin = Math.min(configured, 525600);
-  const token = await signToken({ uid: userId, kind: 'TRANSCRIPT' }, ttlMin * 60);
+  const token = await signToken({
+    uid: userId,
+    sid: Number(student?.id ?? 0),
+    sc: String(student?.code ?? ''),
+    uni: Number(student?.universityId ?? 0),
+    kind: 'TRANSCRIPT',
+  }, ttlMin * 60);
   return { token, expiresAt: new Date(Date.now() + ttlMin * 60_000).toISOString() };
 }
 
@@ -720,6 +839,10 @@ export async function verifyTranscript(rawToken: string): Promise<TranscriptVeri
     return { ok: false, reason: 'BAD_TOKEN', message: 'نوع توکن با کارنامهٔ تحصیلی همخوانی ندارد.' };
   }
 
+  // پروندهٔ دقیقِ همین سند (نه حدس بین پرونده‌های شخص — مهم برای چندمقطعی‌ها)
+  const target = await resolveTargetStudentId(sig.payload);
+  if (!target) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
+
   const [stu] = await db
     .select({
       studentId: students.id,
@@ -739,10 +862,48 @@ export async function verifyTranscript(rawToken: string): Promise<TranscriptVeri
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(majors, eq(majors.id, students.majorId))
     .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
-    .where(eq(users.id, sig.payload.uid))
-    .orderBy(...STUDENT_PICK_ORDER)
+    .where(eq(students.id, target.id))
     .limit(1);
   if (!stu) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
+
+  // سایر مقاطع همین شخص (دانش‌آموختهٔ دو/چند مقطعی) — تا استعلام‌کننده ببیند
+  // این شخص در مقطع دیگری هم پرونده دارد و همان کارنامه را اشتباه نگیرد.
+  let otherRecords: {
+    studentCode: string;
+    degreeTitle: string | null;
+    statusLabel: string;
+    entryYear: number | null;
+    isGraduated: boolean;
+  }[] = [];
+  const nc = String(stu.nationalCode ?? '').trim();
+  if (nc) {
+    try {
+      const others = await db
+        .select({
+          studentCode: students.studentCode,
+          degreeTitle: degree_level_configs.title,
+          status: students.status,
+          samaStatusCode: students.samaStatusCode,
+          entryYear: students.entryYear,
+        })
+        .from(students)
+        .innerJoin(users, eq(users.id, students.userId))
+        .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
+        .where(and(
+          eq(users.nationalCode, nc),
+          sql`"students"."id" <> ${stu.studentId}`,
+        ))
+        .orderBy(desc(students.entryYear), desc(students.id))
+        .limit(5);
+      otherRecords = others.map(o => ({
+        studentCode: o.studentCode,
+        degreeTitle: o.degreeTitle,
+        statusLabel: studentStatusFa(o.status, o.samaStatusCode),
+        entryYear: o.entryYear ?? null,
+        isGraduated: o.status === 'GRADUATED',
+      }));
+    } catch { /* فهرست سایر مقاطع اختیاری است */ }
+  }
 
   // معدل کل + ریز ترم‌به‌ترم؛ اگر پرونده فقط در سیستم قدیمی نمره دارد، همان‌ها
   // خوانده می‌شوند تا استعلام با کارنامهٔ چاپی واگرا نشود.
@@ -758,7 +919,9 @@ export async function verifyTranscript(rawToken: string): Promise<TranscriptVeri
     universityId: stu.universityId ?? null,
     studentName: `${stu.firstName} ${stu.lastName}`,
     studentCode: stu.studentCode,
-    nationalId: maskNationalCode(stu.nationalCode),
+    // کد ملی کامل: استعلام‌کننده باید آن را با کارت ملی شخص مقایسه کند
+    // (تصمیم مالک سامانه — نسخهٔ ماسک‌شده هم در nationalIdMasked موجود است).
+    nationalId: String(stu.nationalCode ?? ''),
     nationalIdMasked: maskNationalCode(stu.nationalCode),
     statusLabel: studentStatusFa(stu.status, stu.samaStatusCode),
     majorName: stu.majorName,
@@ -769,6 +932,9 @@ export async function verifyTranscript(rawToken: string): Promise<TranscriptVeri
     passedUnits: gpaData.passedUnits,
     policy: String(gpaData.policy ?? ''),
     probationThreshold: gpaData.probationThreshold,
+    pinned: target.via !== 'UID_FALLBACK',
+    resolvedVia: target.via,
+    otherRecords,
     terms: gpaData.terms.map(t => ({
       termCode: t.termCode,
       termTitle: t.termTitle,

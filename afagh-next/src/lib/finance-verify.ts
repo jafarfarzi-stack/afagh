@@ -6,11 +6,14 @@ import { qrSvg } from '@/lib/qr';
 
 export type FinanceVerify = { url: string; qr: string; expiresAt: string | null } | null;
 
-export async function buildFinanceStatementVerify(userId: number): Promise<FinanceVerify> {
+export async function buildFinanceStatementVerify(
+  userId: number,
+  student?: { id: number; code: string | null; universityId?: number | null } | null,
+): Promise<FinanceVerify> {
   if (!userId) return null;
   try {
     const publicBaseUrl = await getPublicBaseUrl();
-    const issued = await issueFinanceStatementToken(userId);
+    const issued = await issueFinanceStatementToken(userId, student ?? null);
     const url = `${publicBaseUrl}/verify-finance/${encodeURIComponent(issued.token)}`;
     let qr = '';
     try {

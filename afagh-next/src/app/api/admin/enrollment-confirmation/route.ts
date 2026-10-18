@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
     }
 
     const [stu] = await db
-      .select({ id: students.id, userId: students.userId, universityId: students.universityId })
+      .select({ id: students.id, userId: students.userId, studentCode: students.studentCode, universityId: students.universityId })
       .from(students)
       .where(eq(students.id, studentId))
       .limit(1);
@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
 
     let issued: { token: string; expiresAt: string };
     try {
-      issued = await issueEnrollConfirmToken(stu.userId, termId);
+      issued = await issueEnrollConfirmToken(stu.userId, termId, { id: stu.id, code: stu.studentCode, universityId: stu.universityId });
     } catch (e) {
       // 🔒 پیام خام به کلاینت برنمی‌گردد — فقط لاگ سرور.
       console.error('[api] enrollment-confirmation issue failed:', e instanceof Error ? e.message : e);
