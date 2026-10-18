@@ -1,7 +1,8 @@
 import type { ReportFilters, ReportResult } from './report-helpers';
-import { paged } from './report-helpers';
+import { paged, studentWhere } from './report-helpers';
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
+import { CREDIT_LEDGER_TYPES, DEBT_LEDGER_TYPES } from '@/lib/ledger-balance';
 import { escapeLikeChars } from '@/lib/persian-search';
 import { requireRole } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
@@ -109,30 +110,57 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       return r;
     }
 
-    // ── 📝 حضور و غیاب (class_sessions.status: HELD/ABSENT/SCHEDULED) ──
+    // ── 📝 لیست حضور و غیاب دروس ترم — به‌ازای هر (دانشجو × درس) ──
+    // مطابق فرم سیستم قدیم: فیلتر کد درس/کد استاد، فقط دانشجویان فعال،
+    // نمایش وضعیت مالی، و ترتیب اسامی (شمارهٔ دانشجویی / نام / کد استاد).
     case 'attendance-list': {
-      const from = sql`FROM class_sessions cs JOIN course_offerings o ON o.id = cs."offeringId" JOIN academic_terms t ON t.id = o."termId" JOIN courses c ON c.id = o."courseId" LEFT JOIN staff st ON st.id = o."professorId" LEFT JOIN users u ON u.id = st."userId"`;
-      const conds: ReturnType<typeof sql>[] = [];
+      const orderBy = String(f.orderBy ?? 'NAME').toUpperCase();
+      const showFinance = String(f.showFinance ?? '') === '1' || f.showFinance === true;
+      const debtIn = sql`sl."transactionType" IN (${sql.join(DEBT_LEDGER_TYPES.map(t => sql`${t}`), sql`, `)})`;
+      const creditIn = sql`sl."transactionType" IN (${sql.join(CREDIT_LEDGER_TYPES.map(t => sql`${t}`), sql`, `)})`;
+      const from = sql`FROM enrollments e
+        JOIN course_offerings o ON o.id = e."offeringId"
+        JOIN academic_terms t ON t.id = o."termId"
+        JOIN courses c ON c.id = o."courseId"
+        JOIN students s ON s.id = e."studentId"
+        JOIN users u ON u.id = s."userId"
+        LEFT JOIN staff st ON st.id = o."professorId"
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::int AS sessions,
+                 COUNT(*) FILTER (WHERE sca.status = 'PRESENT')::int AS present,
+                 COUNT(*) FILTER (WHERE sca.status = 'ABSENT')::int AS absent
+            FROM student_class_attendance sca WHERE sca."enrollmentId" = e.id
+        ) att ON true`;
+      const conds: ReturnType<typeof sql>[] = [sql`e.status <> 'DROPPED'`, ...studentWhere(f)];
       pushUni(conds, 'o', f);
       if (term) conds.push(sql`t."termCode" = ${term}`);
+      const courseCode = String(f.courseCode ?? '').trim();
+      if (courseCode) conds.push(sql`c.code = ${courseCode}`);
+      const professorCode = String(f.professorCode ?? '').trim();
+      if (professorCode) conds.push(sql`st."staffCode" = ${professorCode}`);
       if (f.q) {
         const like = `%${f.q}%`;
-        conds.push(sql`(c.code ILIKE ${like} OR c.title ILIKE ${like} OR st."staffCode" ILIKE ${like} OR u."lastName" ILIKE ${like})`);
+        conds.push(sql`(c.code ILIKE ${like} OR c.title ILIKE ${like} OR st."staffCode" ILIKE ${like} OR u."lastName" ILIKE ${like} OR s."studentCode" ILIKE ${like})`);
       }
-      const cols = sql`st."staffCode" AS code, u."firstName" || ' ' || u."lastName" AS professor, c.code AS course_code, c.title AS course_title, o."groupNumber" AS grp, t."termCode" AS term, COUNT(*)::int AS total, COUNT(*) FILTER (WHERE cs.status = 'HELD')::int AS held, COUNT(*) FILTER (WHERE cs.status = 'ABSENT')::int AS absent, COUNT(*) FILTER (WHERE cs."isMakeUpSession" = 1)::int AS makeup, (SELECT COUNT(*)::int FROM student_class_attendance sca JOIN class_sessions cs2 ON cs2.id = sca."sessionId" WHERE cs2."offeringId" = o.id AND sca.status = 'ABSENT') AS student_absent`;
+      const financeCol = showFinance
+        ? sql`, CASE WHEN COALESCE((SELECT SUM(CASE WHEN ${debtIn} THEN sl.amount ELSE 0 END) - SUM(CASE WHEN ${creditIn} THEN sl.amount ELSE 0 END) FROM student_ledger sl WHERE sl."studentId" = s.id), 0) > 0 THEN 'بدهکار' ELSE 'تسویه' END AS finance`
+        : sql``;
+      const cols = sql`st."staffCode" AS prof, s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name, c.code AS course_code, c.title AS course_title, o."groupNumber" AS grp, t."termCode" AS term, att.sessions AS sessions, att.present AS present, att.absent AS absent, (CASE WHEN att.sessions > 0 THEN ROUND(100.0 * att.present / att.sessions)::int ELSE NULL END) AS present_pct${financeCol}`;
+      const columns = [
+        { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام دانشجو' },
+        { key: 'course_code', title: 'کد درس' }, { key: 'course_title', title: 'عنوان درس' },
+        { key: 'grp', title: 'گروه' }, { key: 'prof', title: 'کد استاد' }, { key: 'term', title: 'ترم' },
+        { key: 'sessions', title: 'جلسات ثبت‌شده' }, { key: 'present', title: 'حاضر' },
+        { key: 'absent', title: 'غایب' }, { key: 'present_pct', title: 'درصد حضور' },
+        ...(showFinance ? [{ key: 'finance', title: 'وضعیت مالی' }] : []),
+      ];
+      const order = orderBy === 'CODE' ? sql`code, course_code` : orderBy === 'PROF' ? sql`prof, course_code, name` : sql`name, code, course_code`;
       const r = await paged(
-        [
-          { key: 'code', title: 'کد استاد' }, { key: 'professor', title: 'نام استاد' },
-          { key: 'course_code', title: 'کد درس' }, { key: 'course_title', title: 'عنوان درس' },
-          { key: 'grp', title: 'گروه' }, { key: 'term', title: 'ترم' },
-          { key: 'total', title: 'کل جلسات' }, { key: 'held', title: 'برگزار‌شده' },
-          { key: 'absent', title: 'برگزار‌نشده' }, { key: 'makeup', title: 'جبرانی' },
-          { key: 'student_absent', title: 'غیبت دانشجویی' },
-        ],
-        from, conds, cols, sql`ORDER BY term DESC, code`, f,
-        sql`o.id, st."staffCode", u."firstName", u."lastName", c.code, c.title, o."groupNumber", t."termCode"`,
+        columns, from, conds, cols, order, f,
+        sql`e.id, st."staffCode", s."studentCode", u."firstName", u."lastName", c.code, c.title, o."groupNumber", t."termCode", att.sessions, att.present, att.absent`,
       );
-      r.summary = `${r.total.toLocaleString('fa-IR')} ارائه${term ? ` در ترم ${term}` : ''}`;
+      r.summary = `${r.total.toLocaleString('fa-IR')} ردیف دانشجو×درس${term ? ` در ترم ${term}` : ''} — ترتیب: ${orderBy === 'CODE' ? 'شمارهٔ دانشجویی' : orderBy === 'PROF' ? 'کد استاد و درس' : 'نام و نام خانوادگی'}`
+        + (showFinance ? ' · ستون وضعیت مالی بر پایهٔ دفتر کل کانونی' : '');
       return r;
     }
 

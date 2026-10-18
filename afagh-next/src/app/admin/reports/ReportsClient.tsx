@@ -401,6 +401,30 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                 </label>
               </>
             )}
+            {kind === 'attendance-list' && (
+              <>
+                <label className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600">کد درس:</span>
+                  <input value={extra.courseCode ?? ''} onChange={e => setExtra({ ...extra, courseCode: e.target.value })} placeholder="مثلاً 53012" className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 w-28" dir="ltr" />
+                </label>
+                <label className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600">کد استاد:</span>
+                  <input value={extra.professorCode ?? ''} onChange={e => setExtra({ ...extra, professorCode: e.target.value })} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 w-28" dir="ltr" />
+                </label>
+                <label className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600">ترتیب اسامی:</span>
+                  <select value={extra.orderBy ?? 'NAME'} onChange={e => setExtra({ ...extra, orderBy: e.target.value })} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
+                    <option value="NAME">نام و نام خانوادگی</option>
+                    <option value="CODE">شمارهٔ دانشجویی</option>
+                    <option value="PROF">کد استاد و ساعت درس</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-1 pb-2 text-[11px] font-bold text-slate-700">
+                  <input type="checkbox" checked={extra.showFinance === '1'} onChange={e => setExtra({ ...extra, showFinance: e.target.checked ? '1' : '' })} />
+                  نمایش وضعیت مالی
+                </label>
+              </>
+            )}
             <label className="flex items-center gap-1">
               <span className="font-bold text-slate-600">کد ملی:</span>
               <input
