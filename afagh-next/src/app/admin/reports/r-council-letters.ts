@@ -123,7 +123,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       const r = await paged(
         [
           { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
-          { key: 'major', title: 'رشته' }, { key: 'exam_date', title: 'تاریخ آزمون' },
+          { key: 'major', title: 'رشته' }, { key: 'exam_date', title: 'تاریخ آزمون', format: 'DATE' },
           { key: 'seats', title: 'صندلی' },
         ],
         from, conds, cols, sql`ORDER BY code, exam_date`, f,
@@ -146,7 +146,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         [
           { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
           { key: 'major', title: 'رشته' }, { key: 'degree', title: 'مقطع' },
-          { key: 'card', title: 'وضعیت کارت' }, { key: 'issued', title: 'تاریخ صدور' },
+          { key: 'card', title: 'وضعیت کارت' }, { key: 'issued', title: 'تاریخ صدور', format: 'DATE' },
         ],
         from, [sql`s.status = 'ACTIVE'`, ...studentWhere(f)], cols, sql`ORDER BY code`, f,
       );
@@ -208,7 +208,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
           { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
           { key: 'major', title: 'رشته' }, { key: 'degree', title: 'مقطع' },
           { key: 'y', title: 'ورودی' }, { key: 'doc', title: 'سریال مدرک' },
-          { key: 'issued', title: 'تاریخ صدور' },
+          { key: 'issued', title: 'تاریخ صدور', format: 'DATE' },
         ],
         from, [sql`s.status = 'GRADUATED'`, ...studentWhere(f)], cols, sql`ORDER BY code`, f,
       );

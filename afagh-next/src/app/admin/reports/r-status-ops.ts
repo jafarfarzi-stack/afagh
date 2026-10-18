@@ -278,7 +278,7 @@ export async function run(kind: string, f: Filters): Promise<ReportResult | null
         [
           { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
           { key: 'nc', title: 'کد ملی' }, { key: 'major', title: 'رشته' },
-          { key: 'degree', title: 'مقطع' }, { key: 'y', title: 'ورودی' }, { key: 'gdate', title: 'تاریخ فراغت' },
+          { key: 'degree', title: 'مقطع' }, { key: 'y', title: 'ورودی' }, { key: 'gdate', title: 'تاریخ فراغت', format: 'DATE' },
         ],
         baseFrom, conds, cols, sql`ORDER BY s."studentCode"`, f,
       );

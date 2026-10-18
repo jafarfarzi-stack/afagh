@@ -190,9 +190,9 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
   if (kind === 'grade-audit-log') {
     await requireRole(['ADMIN', 'GRADUATEAFFAIRS', 'EDU_EXPERT']);
     const q = (f.q || '').trim() || undefined;
-    const fetched = await getAllGradeAuditLogs({ limit: 200, offset: 0, q });
+    const termCode = typeof f.term === 'string' && f.term.trim() ? f.term.trim() : undefined;
+    const fetched = await getAllGradeAuditLogs({ limit: 200, offset: 0, q, termCode });
     const rows = fetched
-      .filter(r => !f.term || r.termCode === f.term)
       .map(r => ({
         date: r.createdAt ? new Date(r.createdAt as unknown as string).toISOString().slice(0, 16).replace('T', ' ') : '—',
         student: `#${r.studentId}`, course: `${r.courseCode ?? '—'} ${r.courseTitle ?? ''}`.trim(),
@@ -203,14 +203,14 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       }));
     return pageOf(
       [
-        { key: 'date', title: 'تاریخ' }, { key: 'student', title: 'دانشجو' },
+        { key: 'date', title: 'تاریخ', format: 'DATETIME' }, { key: 'student', title: 'دانشجو' },
         { key: 'course', title: 'درس' }, { key: 'term', title: 'ترم' },
         { key: 'action', title: 'عملیات' }, { key: 'before', title: 'قبل' },
         { key: 'after', title: 'بعد' }, { key: 'actor', title: 'اقدام‌کننده' },
         { key: 'reason', title: 'دلیل' },
       ],
       rows, f,
-      `${rows.length.toLocaleString('fa-IR')} رکورد (۲۰۰ لاگ اخیر)`,
+      `${rows.length.toLocaleString('fa-IR')} رکورد (۲۰۰ لاگ اخیر${termCode ? ` ترم ${termCode}` : ''})`,
     );
   }
 

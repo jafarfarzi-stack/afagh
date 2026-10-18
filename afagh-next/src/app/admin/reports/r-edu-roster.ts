@@ -219,7 +219,7 @@ export async function run(kind: string, f: ReportFilters & Record<string, unknow
         [
           { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
           { key: 'major', title: 'رشته' }, { key: 'degree', title: 'مقطع' },
-          { key: 'graduateDate', title: 'تاریخ فراغت' }, { key: 'eduEndYear', title: 'سال پایان تحصیل' },
+          { key: 'graduateDate', title: 'تاریخ فراغت', format: 'DATE' }, { key: 'eduEndYear', title: 'سال پایان تحصیل' },
           { key: 'avg', title: 'معدل کل' },
         ],
         STU_FROM,

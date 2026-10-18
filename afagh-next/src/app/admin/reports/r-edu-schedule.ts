@@ -102,7 +102,7 @@ async function examConflicts(f: ExtFilters): Promise<ReportResult> {
   const columns = [
     { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
     { key: 'course1', title: 'درس اول' }, { key: 'course2', title: 'درس دوم' },
-    { key: 'exam_date', title: 'تاریخ امتحان' }, { key: 'time1', title: 'ساعت درس اول' },
+    { key: 'exam_date', title: 'تاریخ امتحان', format: 'DATE' as const }, { key: 'time1', title: 'ساعت درس اول' },
     { key: 'time2', title: 'ساعت درس دوم' },
   ];
   if (!term) return empty(columns, 'ترمی یافت نشد');

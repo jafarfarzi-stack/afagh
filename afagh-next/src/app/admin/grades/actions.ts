@@ -458,7 +458,7 @@ export async function getStudentGradeAuditLog(studentId: number) {
 }
 
 /** لاگ سراسری (همهٔ دانشجویان) — برای صفحهٔ «همهٔ لاگ‌های نمرات» */
-export async function getAllGradeAuditLogs(opts?: { limit?: number; offset?: number; q?: string }) {
+export async function getAllGradeAuditLogs(opts?: { limit?: number; offset?: number; q?: string; termCode?: string }) {
   await requireRole(['ADMIN', 'GRADUATEAFFAIRS', 'EDU_EXPERT']);
   const uni = await getCurrentUniversity().catch(() => null);
   const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 200);
@@ -491,7 +491,12 @@ export async function getAllGradeAuditLogs(opts?: { limit?: number; offset?: num
     .leftJoin(courses, eq(courses.id, course_offerings.courseId))
     .leftJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
     .innerJoin(students, eq(students.id, grade_change_log.studentId))
-    .where(uni ? or(eq(students.universityId, uni.id), isNull(students.universityId)) : undefined)
+    .where(and(
+      uni ? or(eq(students.universityId, uni.id), isNull(students.universityId)) : undefined,
+      // 🔒 فیلتر ترم باید در WHERE اعمال شود، نه بعد از LIMIT؛ وگرنه برای ترم‌های
+      //    قدیمی نتیجهٔ خالی کاذب می‌داد (لاگ‌های آن ترم بیرون از ۲۰۰ رکورد آخر).
+      opts?.termCode ? eq(academic_terms.termCode, String(opts.termCode)) : undefined,
+    ))
     .orderBy(desc(grade_change_log.createdAt))
     .limit(limit)
     .offset(offset);

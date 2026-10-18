@@ -37,7 +37,15 @@ export type ReportFilters = {
   [key: string]: string | number | boolean | undefined;
 };
 
-export type ReportColumn = { key: string; title: string };
+export type ReportColumn = {
+  key: string;
+  title: string;
+  /**
+   * قالب نمایش/خروجی سلول — در `@/lib/report-format` تفسیر می‌شود تا هیچ تاریخ
+   * میلادی یا مبلغ بدون جداکننده به کاربر نرسد.
+   */
+  format?: 'DATE' | 'DATETIME' | 'MONEY' | 'NUMBER';
+};
 export type ReportResult = {
   columns: ReportColumn[];
   rows: Record<string, unknown>[];

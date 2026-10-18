@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 import { exportReport, runReport, type FilterOptions, type ReportResult } from './actions';
 import { LINK_CARDS } from './report-links';
 import { faIncludes } from '@/lib/persian-search';
+import { faNum, formatReportCell as fmtCell } from '@/lib/report-format';
 
+/** ارقام لاتین → فارسی (بدون تبدیل عدد) */
 type ReportCat = 'students' | 'probation' | 'program' | 'exams' | 'classes' | 'finance' | 'research';
 
 type Card = { kind: string; icon: string; title: string; cat: ReportCat; needsTerm?: boolean; soon?: boolean; customs?: { key: string; title: string }[] };
@@ -32,7 +34,7 @@ const CARDS: Card[] = [
   { kind: 'entries', cat: 'students', icon: '📥', title: 'ورودی‌های جدید' },
   { kind: 'noshow', cat: 'students', icon: '🚫', title: 'عدم مراجعه‌ها' },
   { kind: 'transfers', cat: 'students', icon: '🔀', title: 'میهمان / انتقالی' },
-  { kind: 'tuition', cat: 'finance', icon: '💰', title: 'گزارش شهریه / تراکنش مالی' },
+  { kind: 'tuition', cat: 'finance', icon: '💰', title: 'گزارش شهریه / تراکنش مالی', needsTerm: true },
   { kind: 'payesh', cat: 'research', icon: '🗂️', title: 'گزارش پاسخ‌های طرح پایش' },
   { kind: 'jame', cat: 'research', icon: '🧮', title: 'دانشجویان واجد شرایط آزمون جامع' },
   { kind: 'docs', cat: 'research', icon: '📎', title: 'مدارک دانشجویان' },
@@ -79,7 +81,7 @@ const CARDS: Card[] = [
   { kind: 'staff-timetable', cat: 'classes', icon: '🗓', title: 'برنامه هفتگی اساتید', needsTerm: true },
   { kind: 'attendance-list', cat: 'classes', icon: '📝', title: 'حضور و غیاب', needsTerm: true },
   // مالی
-  { kind: 'tuition-tariff', cat: 'finance', icon: '💰', title: 'تعرفه تحصیلی' },
+  { kind: 'tuition-tariff', cat: 'finance', icon: '💰', title: 'تعرفه تحصیلی', needsTerm: true },
   { kind: 'tuition-statement', cat: 'finance', icon: '🧾', title: 'صورت‌حساب شهریه', needsTerm: true },
   // پژوهش
   { kind: 'proposal-cap', cat: 'research', icon: '🎓', title: 'ظرفیت پروپوزال استادان', soon: true },
@@ -88,7 +90,7 @@ const CARDS: Card[] = [
   { kind: 'proposals', cat: 'research', icon: '📄', title: 'پروپوزال' },
   { kind: 'seminars', cat: 'research', icon: '💬', title: 'سمینار', soon: true },
   // شورا و مکاتبات
-  { kind: 'council-edu', cat: 'research', icon: '🏛', title: 'شورای آموزشی' },
+  { kind: 'council-edu', cat: 'research', icon: '🏛', title: 'شورای آموزشی', needsTerm: true },
   { kind: 'discipline', cat: 'research', icon: '⚖', title: 'کمیته انضباطی', soon: true },
   { kind: 'letter-templates', cat: 'research', icon: '📄', title: 'قالب‌های مکاتبات' },
   { kind: 'transcript-card', cat: 'exams', icon: '🎓', title: 'کارنامه دانشجویان' },
@@ -103,7 +105,7 @@ const CARDS: Card[] = [
   { kind: 'bi-teaching-quality', cat: 'finance', icon: '🎯', title: 'کیفیت تدریس اساتید (BI)' },
   { kind: 'bi-facilities', cat: 'finance', icon: '🏫', title: 'امکانات کلاس‌ها (BI)' },
   { kind: 'graduation-dossiers', cat: 'research', icon: '🎓', title: 'پرونده‌های فراغت‌التحصیل', customs: [{ key: 'dossierStatus', title: 'وضعیت (کد)' }] },
-  { kind: 'grade-audit-log', cat: 'program', icon: '📜', title: 'لاگ تغییرات نمرات' },
+  { kind: 'grade-audit-log', cat: 'program', icon: '📜', title: 'لاگ تغییرات نمرات', needsTerm: true },
   { kind: 'third-attempt', cat: 'probation', icon: '🔁', title: 'دروس بار سوم (مردودی دو بار)', needsTerm: true },
 ];
 
@@ -141,6 +143,16 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
   const gridCards = activeCat ? searchedCards.filter(c => c.cat === activeCat) : searchedCards;
 
   const card = visibleCards.find(c => c.kind === kind);
+  /**
+   * گزارش‌های سطح درس/سالن/استاد: فیلترهای دانشجویی (مقطع/دانشکده/گروه/رشته/ورودی/کدملی)
+   * برایشان معنا ندارد؛ پس در UI هم نمایش داده نمی‌شوند تا کاربر فیلتری نزند که
+   * بی‌اثر است (به‌جای نشان‌دادن و نادیده‌گرفتن).
+   */
+  const COURSE_LEVEL_KINDS = new Set([
+    'weekly-timetable', 'room-conflicts', 'empty-rooms', 'low-enrollment', 'makeup-courses',
+    'staff-list', 'staff-courses', 'staff-timetable', 'payesh',
+  ]);
+  const showStudentFilters = !COURSE_LEVEL_KINDS.has(kind);
   useEffect(() => {
     if (!visibleCards.some(c => c.kind === kind)) setKind(visibleCards[0]?.kind ?? 'active-term');
     if (cat && !visibleCards.some(c => c.cat === cat)) setCat(undefined);
@@ -183,6 +195,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
         const s = /^[=+\-@|\t\r]/.test(v.trimStart()) ? `'${v}` : v;
         return `"${s.replace(/"/g, '""')}"`;
       };
+      // خروجی در سرور با همان `format` ستون‌ها قالب‌بندی شده است (تاریخ شمسی/مبلغ)
       const csv = '﻿' + [header.map(esc).join(','), ...lines.map(l => l.map(esc).join(','))].join('\r\n');
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
       const a = document.createElement('a');
@@ -284,7 +297,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                 {opts.degrees.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
               </select>
             </label>
-            {(kind === 'by-major' || kind === 'active-term' || kind === 'top' || kind === 'third-attempt' || NEW_KINDS.has(kind)) && (
+            {showStudentFilters && (
               <label className="flex items-center gap-1">
                 <span className="font-bold text-slate-600">دانشکده:</span>
                 <select value={facultyId} onChange={e => setFacultyId(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-44">
@@ -293,14 +306,16 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                 </select>
               </label>
             )}
-            <label className="flex items-center gap-1">
-              <span className="font-bold text-slate-600">گروه آموزشی:</span>
-              <select value={departmentId} onChange={e => setDepartmentId(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-44">
-                <option value={0}>همه</option>
-                {opts.departments.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
-              </select>
-            </label>
-            {(kind === 'top' || kind === 'graduates' || kind === 'entries' || kind === 'third-attempt' || NEW_KINDS.has(kind)) && (
+            {showStudentFilters && (
+              <label className="flex items-center gap-1">
+                <span className="font-bold text-slate-600">گروه آموزشی:</span>
+                <select value={departmentId} onChange={e => setDepartmentId(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-44">
+                  <option value={0}>همه</option>
+                  {opts.departments.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+                </select>
+              </label>
+            )}
+            {showStudentFilters && (
               <label className="flex items-center gap-1">
                 <span className="font-bold text-slate-600">رشته:</span>
                 <select value={majorId} onChange={e => setMajorId(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-52">
@@ -309,7 +324,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                 </select>
               </label>
             )}
-            {(kind === 'entries' || kind === 'graduates' || kind === 'top' || NEW_KINDS.has(kind)) && (
+            {showStudentFilters && (
               <label className="flex items-center gap-1">
                 <span className="font-bold text-slate-600">ورودی:</span>
                 <select value={entryYear} onChange={e => setEntryYear(Number(e.target.value))} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 font-mono" dir="ltr">
@@ -425,15 +440,17 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                 </label>
               </>
             )}
-            <label className="flex items-center gap-1">
-              <span className="font-bold text-slate-600">کد ملی:</span>
-              <input
-                value={nationalCode} onChange={e => setNationalCode(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && run(1)}
-                placeholder="کد ملی..."
-                className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 w-36 font-mono" dir="ltr"
-              />
-            </label>
+            {showStudentFilters && (
+              <label className="flex items-center gap-1">
+                <span className="font-bold text-slate-600">کد ملی:</span>
+                <input
+                  value={nationalCode} onChange={e => setNationalCode(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && run(1)}
+                  placeholder="کد ملی..."
+                  className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 w-36 font-mono" dir="ltr"
+                />
+              </label>
+            )}
             {kind === 'incomplete' && (
               <label className="flex items-center gap-1">
                 <span className="font-bold text-slate-600">نقص:</span>
@@ -502,7 +519,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                     <tr key={i} className="border-b border-slate-200 hover:bg-slate-50">
                       {res.columns.map(c => (
                         <td key={c.key} className="p-2 whitespace-nowrap font-mono" dir={/^[0-9]/.test(String(r[c.key] ?? '')) ? 'ltr' : 'auto'}>
-                          {String(r[c.key] ?? '—')}
+                          {fmtCell(r[c.key], c.format)}
                         </td>
                       ))}
                     </tr>

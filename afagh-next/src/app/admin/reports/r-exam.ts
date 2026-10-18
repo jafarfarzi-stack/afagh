@@ -63,7 +63,7 @@ export async function run(kind: string, f: F): Promise<ReportResult | null> {
         CASE WHEN COUNT(ea.id) = 0 THEN 'حضور ثبت نشده — فقط تعداد ثبت‌نامی' ELSE 'حضور ثبت شده' END AS attendance_note`;
       const r = await paged(
         [
-          { key: 'session_id', title: 'شناسه سانس' }, { key: 'exam_date', title: 'تاریخ امتحان' },
+          { key: 'session_id', title: 'شناسه سانس' }, { key: 'exam_date', title: 'تاریخ امتحان', format: 'DATE' },
           { key: 'start_time', title: 'شروع' }, { key: 'end_time', title: 'پایان' },
           { key: 'courses', title: 'دروس' }, { key: 'halls', title: 'سالن‌ها' },
           { key: 'enrolled', title: 'ثبت‌نامی' }, { key: 'present', title: 'حاضر' },
@@ -105,7 +105,7 @@ export async function run(kind: string, f: F): Promise<ReportResult | null> {
         [
           { key: 'seat', title: 'شماره صندلی' }, { key: 'code', title: 'شماره دانشجویی' },
           { key: 'name', title: 'نام' }, { key: 'course', title: 'درس' },
-          { key: 'hall', title: 'سالن' }, { key: 'exam_date', title: 'تاریخ امتحان' },
+          { key: 'hall', title: 'سالن' }, { key: 'exam_date', title: 'تاریخ امتحان', format: 'DATE' },
           { key: 'start_time', title: 'ساعت شروع' },
         ],
         from,
@@ -134,7 +134,7 @@ export async function run(kind: string, f: F): Promise<ReportResult | null> {
         COALESCE(h.name, '—') AS room, o."enrolledCount" AS enrolled`;
       const r = await paged(
         [
-          { key: 'exam_date', title: 'تاریخ امتحان' }, { key: 'start_time', title: 'شروع' },
+          { key: 'exam_date', title: 'تاریخ امتحان', format: 'DATE' }, { key: 'start_time', title: 'شروع' },
           { key: 'end_time', title: 'پایان' }, { key: 'course_code', title: 'کد درس' },
           { key: 'course', title: 'نام درس' }, { key: 'grp', title: 'گروه' },
           { key: 'professor', title: 'استاد' }, { key: 'room', title: 'سالن' },
@@ -206,7 +206,7 @@ export async function run(kind: string, f: F): Promise<ReportResult | null> {
         [
           { key: 'course_code', title: 'کد درس' }, { key: 'course', title: 'نام درس' },
           { key: 'grp', title: 'گروه' }, { key: 'professor', title: 'استاد' },
-          { key: 'deadline', title: 'مهلت ثبت' }, { key: 'days_left', title: 'روز مانده' },
+          { key: 'deadline', title: 'مهلت ثبت', format: 'DATETIME' }, { key: 'days_left', title: 'روز مانده' },
           { key: 'status', title: 'وضعیت' }, { key: 'deadline_source', title: 'منبع مهلت' },
         ],
         from, conds, cols, sql`ORDER BY deadline`, f,

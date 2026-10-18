@@ -6,6 +6,7 @@ import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 import { CREDIT_LEDGER_TYPES, DEBT_LEDGER_TYPES } from '@/lib/ledger-balance';
 import { calculateOfficialGpaBreakdown } from '@/lib/regulations-engine';
+import { formatReportCell } from '@/lib/report-format';
 import {
   NUM,
   PER,
@@ -170,11 +171,12 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
 
     // ── خلاصه وضعیت تحصیلی ──
     case 'status-summary': {
-      const uniCond = f.universityId ? sql`WHERE (s."universityId" = ${f.universityId} OR s."universityId" IS NULL)` : sql``;
+      // 🔒 همهٔ فیلترهای دانشجویی (مقطع/دانشکده/گروه/رشته/ورودی/نیمسال ورود/جنسیت/سهمیه/کدملی)
+      const where = joinAnd(studentWhere(f));
       const data = await db.execute<Record<string, unknown>>(sql`
         SELECT s.status AS st, d.title AS degree, COUNT(*)::int AS n
-        FROM students s LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
-        ${uniCond}
+        ${STU_FROM}
+        ${where}
         GROUP BY s.status, d.title ORDER BY 1, 2`);
       const rows = data.rows.map(x => ({ st: faStatus(x.st), degree: x.degree, n: x.n }));
       const total = rows.reduce((a, x) => a + Number(x.n), 0);
@@ -187,11 +189,11 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
 
     // ── به تفکیک دانشکده ──
     case 'by-faculty': {
-      const uniCond = f.universityId ? sql`WHERE (s."universityId" = ${f.universityId} OR s."universityId" IS NULL)` : sql``;
+      const where = joinAnd(studentWhere(f));
       const data = await db.execute<Record<string, unknown>>(sql`
         SELECT COALESCE(fc.name, '— بدون دانشکده —') AS faculty, s.status AS st, COUNT(*)::int AS n
-        FROM students s LEFT JOIN majors m ON m.id = s."majorId" LEFT JOIN faculties fc ON fc.id = m."facultyId"
-        ${uniCond}
+        ${STU_FROM}
+        ${where}
         GROUP BY fc.name, s.status ORDER BY 1, 2`);
       const acc = new Map<string, Record<string, unknown>>();
       for (const r of data.rows) {
@@ -238,13 +240,18 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
 
     // ── وضعیت نمرات ترم ──
     case 'grade-status': {
-      const uniCond = f.universityId ? sql`AND (s."universityId" = ${f.universityId} OR s."universityId" IS NULL)` : sql``;
+      const conds = [sql`t."termCode" = ${term}`, ...studentWhere(f)];
       const data = await db.execute<Record<string, unknown>>(sql`
         SELECT e."gradeStatus" AS st, COUNT(*)::int AS n,
           ROUND(AVG(CASE WHEN ${NUM} THEN e."gradeValue"::numeric END), 2) AS avg
-        FROM enrollments e JOIN course_offerings o ON o.id = e."offeringId" JOIN academic_terms t ON t.id = o."termId"
-        JOIN students s ON s.id = e."studentId"
-        WHERE t."termCode" = ${term} ${uniCond} GROUP BY 1 ORDER BY 2 DESC`);
+        FROM enrollments e
+          JOIN course_offerings o ON o.id = e."offeringId"
+          JOIN academic_terms t ON t.id = o."termId"
+          JOIN students s ON s.id = e."studentId"
+          JOIN users u ON u.id = s."userId"
+          LEFT JOIN majors m ON m.id = s."majorId"
+        WHERE ${sql.join(conds, sql` AND `)}
+        GROUP BY 1 ORDER BY 2 DESC`);
       const total = data.rows.reduce((a, x) => a + Number(x.n), 0);
       return {
         columns: [{ key: 'st', title: 'وضعیت نمره' }, { key: 'n', title: 'تعداد' }, { key: 'avg', title: 'میانگین نمرات' }],
@@ -431,7 +438,6 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
       );
     case 'transfers': {
       // Get transfer/guest students with the term they attended as guest/transfer
-      const uniCond = f.universityId ? sql`AND (s."universityId" = ${f.universityId} OR s."universityId" IS NULL)` : sql``;
       const data = await db.execute<Record<string, unknown>>(sql`
         SELECT s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
           u."nationalCode" AS nc, m.name AS major, d.title AS degree, s."entryYear" AS y,
@@ -443,7 +449,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
           LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
           LEFT JOIN student_term_states sts ON sts."studentId" = s.id
             AND (sts."normalizedStatusTitle" ILIKE '%میهمان%' OR sts."normalizedStatusTitle" ILIKE '%انتقال%' OR sts."statusTitle" ILIKE '%میهمان%' OR sts."statusTitle" ILIKE '%انتقال%')
-        WHERE s.status IN ('TRANSFERRED', 'GUEST') ${uniCond}
+        WHERE s.status IN ('TRANSFERRED', 'GUEST') AND ${sql.join(studentWhere(f), sql` AND `)}
         ORDER BY s."studentCode"`);
       const total = data.rows.length;
       return {
@@ -465,8 +471,8 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
     //    تراکنشِ **ناموجود** 'DEBIT' ساخته شده بود (در CHECK دیتابیس نیست) ⇒
     //    ستون بستانکار همیشه ۰ و «مانده» بی‌معنا/معکوس می‌شد.
     case 'tuition': {
-      const uniCond = sql`AND (s."universityId" = ${f.universityId} OR s."universityId" IS NULL)`;
       const termCond = term ? sql`AND t."termCode" = ${term}` : sql``;
+      const studentConds = sql.join(studentWhere(f), sql` AND `);
       const debtIn = sql`sl."transactionType" IN (${sql.join(DEBT_LEDGER_TYPES.map(t => sql`${t}`), sql`, `)})`;
       const creditIn = sql`sl."transactionType" IN (${sql.join(CREDIT_LEDGER_TYPES.map(t => sql`${t}`), sql`, `)})`;
       const data = await db.execute<Record<string, unknown>>(sql`
@@ -482,7 +488,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
           LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
           LEFT JOIN student_ledger sl ON sl."studentId" = s.id
           LEFT JOIN academic_terms t ON t.id = sl."termId"
-        WHERE s.status = 'ACTIVE' ${uniCond} ${termCond}
+        WHERE s.status = 'ACTIVE' AND ${studentConds} ${termCond}
         GROUP BY s."studentCode", u."firstName", u."lastName", m.name, d.title
         ORDER BY balance DESC`);
       const total = data.rows.length;
@@ -532,7 +538,6 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
 
     // ── دانشجویان واجد شرایط آزمون جامع ──
     case 'jame': {
-      const uniCond = f.universityId ? sql`AND (s."universityId" = ${f.universityId} OR s."universityId" IS NULL)` : sql``;
       const data = await db.execute<Record<string, unknown>>(sql`
         SELECT s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
           m.name AS major, d.title AS degree, s."entryYear" AS y,
@@ -542,7 +547,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
           LEFT JOIN majors m ON m.id = s."majorId"
           LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
           LEFT JOIN enrollments e ON e."studentId" = s.id AND e."gradeStatus" = 'FINALIZED' AND e."gradeValue"::text ~ '^[0-9]+(\\.[0-9]+)?$' AND e."gradeValue"::numeric >= 12
-        WHERE s.status = 'ACTIVE' ${uniCond}
+        WHERE s.status = 'ACTIVE' AND ${sql.join(studentWhere(f), sql` AND `)}
         GROUP BY s."studentCode", u."firstName", u."lastName", m.name, d.title, s."entryYear"
         HAVING COUNT(DISTINCT e."offeringId") >= 10
         ORDER BY avg DESC`);
@@ -561,7 +566,6 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
 
     // ── مدارک دانشجو ──
     case 'docs': {
-      const uniCond = f.universityId ? sql`AND (s."universityId" = ${f.universityId} OR s."universityId" IS NULL)` : sql``;
       const data = await db.execute<Record<string, unknown>>(sql`
         SELECT s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
           m.name AS major, d.title AS degree, s.status AS st,
@@ -571,7 +575,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
           LEFT JOIN majors m ON m.id = s."majorId"
           LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
           LEFT JOIN student_documents sd ON sd."personUserId" = u.id
-        WHERE s.status = 'ACTIVE' ${uniCond}
+        WHERE s.status = 'ACTIVE' AND ${sql.join(studentWhere(f), sql` AND `)}
         GROUP BY s."studentCode", u."firstName", u."lastName", m.name, d.title, s.status
         ORDER BY doc_count ASC`);
       const total = data.rows.length;
@@ -632,6 +636,6 @@ export async function exportReport(kind: string, f: ReportFilters): Promise<{ he
   const esc = (v: string) => (/^[=+\-@|\t\r]/.test(v.trimStart()) ? `'${v}` : v);
   return {
     header: first.columns.map(c => esc(c.title)),
-    lines: all.slice(0, 5000).map(row => first.columns.map(c => esc(String(row[c.key] ?? '')))),
+    lines: all.slice(0, 5000).map(row => first.columns.map(c => esc(formatReportCell(row[c.key], c.format)))),
   };
 }

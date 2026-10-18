@@ -77,7 +77,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
           { key: 'major', title: 'رشته' }, { key: 'degree', title: 'مقطع' },
           { key: 'y', title: 'ورودی' }, { key: 'title', title: 'عنوان پایان‌نامه' },
           { key: 'supervisor', title: 'استاد راهنما' }, { key: 'pst', title: 'وضعیت پروپوزال' },
-          { key: 'submitted', title: 'تاریخ ثبت' },
+          { key: 'submitted', title: 'تاریخ ثبت', format: 'DATETIME' },
         ],
         THESIS_FROM, studentWhere(f), cols,
         sql`ORDER BY tp."proposalSubmittedAt" DESC NULLS LAST, s."studentCode"`, f,
@@ -107,7 +107,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         [
           { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
           { key: 'major', title: 'رشته' }, { key: 'degree', title: 'مقطع' },
-          { key: 'scheduled', title: 'زمان دفاع' }, { key: 'room', title: 'سالن' },
+          { key: 'scheduled', title: 'زمان دفاع', format: 'DATETIME' }, { key: 'room', title: 'سالن' },
           { key: 'supervisor', title: 'استاد راهنما' }, { key: 'st', title: 'وضعیت جلسه' },
           { key: 'res', title: 'نتیجه' },
         ],
