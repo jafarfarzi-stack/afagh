@@ -1230,6 +1230,10 @@ export const student_ledger = pgTable('student_ledger', {
   createdAt: timestamp('createdAt').defaultNow()
 }, (t) => [
   index('idx_student_ledger_fin_term').on(t.financialTermId),
+  /* هر گزارش/صفحه‌ای که «بدهی یک دانشجو» یا «گردش حساب» را می‌خواند با
+     studentId فیلتر می‌کند؛ بدون این ایندکس هر چنین کوئری‌ای اسکن کامل
+     ۳۴۳ هزار ردیف بود (باگ ۵۰۴ کارت دانشجویی — ۱۸ اکتبر ۲۰۲۶). */
+  index('idx_student_ledger_student').on(t.studentId),
   // ۱۵ نوع معتبر — همراستا با 0073_ledger_types (منبع حقیقت: ledger-balance.ts)
   // ۱۷ نوع معتبر — همراستا با 0075_tuition_adjust (منبع حقیقت: ledger-balance.ts)
   check('ck_student_ledger_txn_type', sql`"transactionType" IN ('TUITION_FIXED','TUITION_VARIABLE','PAYMENT','POS_PAYMENT','DISCOUNT_FIXED','DISCOUNT_VARIABLE','SUBJECT_ADDITIVE','SUBJECT_DEDUCTIVE','SPONSORSHIP','LOAN','TUITION_CHARGE','CHARGE','CREDIT','POS_REFUND','TUITION_BATES','TUITION_ADJUST_DEC','TUITION_ADJUST_INC')`),

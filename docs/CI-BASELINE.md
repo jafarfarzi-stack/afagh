@@ -65,7 +65,7 @@ error: role "afagh_app" does not exist
 
 | گام | نتیجه |
 |---|---|
-| `migrate-db.mjs` | ✅ ۱۰۷/۱۰۷ مهاجرت ثبت شد |
+| `migrate-db.mjs` | ✅ ۱۰۷/۱۰۷ مهاجرت ثبت شد (اکنون با `0102` → ۱۰۸) |
 | `apply-patches.mjs` | ✅ exit 0 |
 | `seed-base.mjs` | ✅ exit 0 |
 | `hardening.mjs` | ✅ exit 0 |
@@ -75,27 +75,55 @@ error: role "afagh_app" does not exist
 
 کامیت: `dab3291`.
 
+## ایندکس `student_ledger("studentId")` — مهاجرت `0102`
+
+صفحهٔ `/admin/student-cards` در تولید ۵۰۴ می‌داد: بدهی هر دانشجو با زیرکوئری همبسته روی
+`student_ledger` حساب می‌شد و **هیچ ایندکسی روی `studentId` نبود** (تنها ایندکس‌ها: `financialTermId`،
+`(referenceId, transactionType)` و یک unique جزئی برای `TUITION_CHARGE`).
+
+اندازه‌گیری روی دادهٔ واقعی (۴۸٬۳۶۱ دانشجو · ۳۴۳٬۰۹۷ ردیف):
+
+| نسخه | زمان |
+|---|---|
+| زیرکوئری همبسته | ❌ از ۱۸۰ ثانیه هم رد شد (`statement_timeout`) |
+| تجمیع یک‌باره + `LEFT JOIN` | ✅ ۵۳۱ms |
+
+مهاجرت `0102_student_ledger_student_idx.sql` این ایندکس را اضافه می‌کند (`IF NOT EXISTS`، پس روی
+نصب‌هایی که دستی ساخته‌اند بی‌خطر است) تا کوئری‌های بعدی (گردش حساب، گزارش‌های مالی) هم سریع شوند.
+
+> ⚠️ **`drizzle-kit generate` در این مخزن کار نمی‌کند** (از قبل، نه به‌خاطر این تغییر):
+> ```
+> Error: [drizzle/meta/0001_snapshot.json, drizzle/meta/0005_snapshot.json] are pointing
+> to a parent snapshot: drizzle/meta/0001_snapshot.json/snapshot.json which is a collision.
+> ```
+> یعنی مهاجرت‌های تازه باید **دستی** نوشته شوند: فایل `drizzle/NNNN_name.sql` + یک ورودی در
+> `drizzle/meta/_journal.json` با `idx` بعدی. `migrate-db.mjs` فقط همین دو را می‌خواند، پس مهاجرت
+> درست اعمال می‌شود؛ ولی تا رفع برخورد snapshot، `generate` قابل استفاده نیست.
+
+
 
 ## ارتقای وابستگی‌ها (پس از رفع مسدودکننده‌ها)
 
 | بسته | قبل | بعد | دلیل |
 |---|---|---|---|
 | `next` | `16.3.4` | **`16.4.2`** | CVE بحرانی: RCE در `next/og` + نشت محتوای Draft Mode |
-| `xlsx` | `^0.18.5` (npm) | **`0.20.3` از CDN رسمی SheetJS** | Prototype Pollution + ReDoS |
+| `xlsx` | `^0.18.5` (npm) | **حذف شد** | Prototype Pollution + ReDoS — و هیچ مصرف‌کننده‌ای نداشت |
 | `source-map-js` | `1.2.1` (وابستهٔ postcss) | **`1.2.2`** با `overrides` | ReDoS در offset بخش‌های source-map |
 
-نکتهٔ `xlsx`: نسخهٔ npm این بسته از ۰.۱۸.۵ جلوتر نرفته و خودِ SheetJS انتشار را به
-CDN خودش منتقل کرده. بنابراین در `package.json` به‌صورت URL آمده:
+نکتهٔ `xlsx` (تاریخچه): نسخهٔ npm این بسته از ۰.۱۸.۵ جلوتر نرفته و SheetJS انتشار را به
+CDN خودش برده بود؛ مدتی در `package.json` به‌صورت URL آمد و بیلد Docker را به
+`cdn.sheetjs.com` وابسته می‌کرد.
 
-```json
-"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
-```
+**سرانجام (۱۸ اکتبر ۲۰۲۶): کل بسته حذف شد.** `generateXLSX` — تنها مصرف‌کنندهٔ `xlsx` —
+هیچ فراخواننده‌ای در `src/` نداشت (کد مرده). با حذف آن:
 
-پیامد عملی: بیلد Docker و `npm ci` در CI باید به `cdn.sheetjs.com` دسترسی داشته باشند.
-اگر روزی این دامنه در دسترس نبود، بیلد می‌شکند — این یک وابستگی خارجی آگاهانه است.
-(جایگزین: ماندن روی ۰.۱۸.۵ و پذیرش ریسک. کد ما فقط مسیر **نوشتن** اکسل را دارد —
-`aoa_to_sheet` + `write` در `src/lib/export-utils.ts` — و هیچ فایل ورودی کاربر را
-**نمی‌خواند**؛ پس هر دو CVE عملاً قابل بهره‌برداری نبودند. با این حال ارتقا تمیزتر است.)
+- `xlsx` از درخت وابستگی رفت → `npm ci` و بیلد Docker دیگر به `cdn.sheetjs.com` وابسته نیستند
+  (یک نقطهٔ شکست خارجی کمتر).
+- دو CVE آن بسته دیگر حتی به‌عنوان وابستگی نصب‌شده وجود ندارد.
+- `npm audit` هم یک ورودی کمتر برای سنجش دارد.
+
+اگر روزی خروجی واقعی اکسل لازم شد، مسیر درست یک route سروری یا `src/lib/export-doc.ts` است —
+نه بازگرداندن تابعی بدون مصرف‌کننده.
 
 **تصحیح مهم (بررسی ۱۸ اکتبر):** `generateXLSX` در `src/lib/export-utils.ts` **هیچ
 فراخوانی‌ای در `src/` ندارد** — یعنی امروز هیچ مسیر اجرایی، فایل XLSX تولید نمی‌کند:

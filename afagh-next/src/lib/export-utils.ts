@@ -1,13 +1,21 @@
 /**
  * Export utilities for financial reports
- * Supports: CSV, Excel (XLSX), Word (DOCX), Text
+ * Supports: CSV, Word (DOCX), Text
+ *
+ * ⚠️ مسیر XLSX حذف شد (۱۸ اکتبر ۲۰۲۶): `generateXLSX` هیچ فراخواننده‌ای در
+ * `src/` نداشت و تنها مصرف‌کنندهٔ بستهٔ `xlsx` بود. حذفش دو سود داشت:
+ *   ۱) بستهٔ `xlsx` از درخت وابستگی رفت — یعنی `npm ci` و بیلد Docker دیگر
+ *      به `cdn.sheetjs.com` وابسته نیستند (یک نقطهٔ شکست خارجی کمتر).
+ *   ۲) دو CVE آن بسته (Prototype Pollution / ReDoS) دیگر حتی به‌عنوان
+ *      وابستگی نصب‌شده وجود ندارد.
+ * اگر روزی خروجی واقعی اکسل لازم شد، مسیر درست `src/lib/export-doc.ts` یا
+ * یک route سروری است، نه بازگرداندن این تابع بدون مصرف‌کننده.
  */
 
-import * as XLSX from 'xlsx';
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType } from 'docx';
 import { saveAs } from 'file-saver';
 
-export type ExportFormat = 'csv' | 'xlsx' | 'docx' | 'txt';
+export type ExportFormat = 'csv' | 'docx' | 'txt';
 
 export interface ExportColumn {
   key: string;
@@ -46,25 +54,6 @@ export function generateCSV(data: ExportData): string {
     columns.map(c => csvCell(row[c.key] ?? '')).join(',')
   ).join('\n');
   return header + '\n' + body;
-}
-
-/** Generate XLSX workbook */
-export function generateXLSX(data: ExportData): ArrayBuffer {
-  const { columns, rows, title } = data;
-  const cell = (v: unknown) => typeof v === 'string' ? csvFormulaPrefix(v) : (v ?? '');
-  const wsData = [
-    columns.map(c => csvFormulaPrefix(c.title)),
-    ...rows.map(row => columns.map(c => cell(row[c.key]))),
-  ];
-  const ws = XLSX.utils.aoa_to_sheet(wsData);
-  
-  // Set column widths
-  const colWidths = columns.map(c => ({ wch: c.width || Math.max(12, c.title.length + 2) }));
-  ws['!cols'] = colWidths;
-  
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, title || 'Report');
-  return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
 }
 
 /** Generate DOCX document */
@@ -137,11 +126,6 @@ export async function exportReport(data: ExportData, format: ExportFormat, baseF
     case 'csv': {
       const csv = generateCSV(data);
       downloadFile(csv, `${filename}.csv`, 'text/csv;charset=utf-8');
-      break;
-    }
-    case 'xlsx': {
-      const xlsx = generateXLSX(data);
-      downloadFile(xlsx, `${filename}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       break;
     }
     case 'docx': {

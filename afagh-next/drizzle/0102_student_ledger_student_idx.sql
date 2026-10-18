@@ -1,0 +1,18 @@
+-- 0102 — ایندکس student_ledger("studentId")
+--
+-- چرا: هر کوئری‌ای که «بدهی یک دانشجو»، «گردش حساب» یا «ماندهٔ دفتر» را
+-- می‌خواند با studentId فیلتر می‌کند، ولی هیچ ایندکس عمومی روی این ستون
+-- نبود. تنها ایندکس‌های موجود:
+--   ▸ uq_student_ledger_tuition_charge → جزئی (فقط transactionType='TUITION_CHARGE')
+--   ▸ idx_student_ledger_ref_type      → روی (referenceId, transactionType)
+--   ▸ idx_student_ledger_fin_term      → روی financialTermId
+--
+-- پیامد واقعی (باگ ۵۰۴ تولید، ۱۸ اکتبر ۲۰۲۶): صفحهٔ «صدور و مدیریت کارت
+-- دانشجویی» بدهی هر دانشجو را با یک زیرکوئری همبسته حساب می‌کرد؛ با
+-- ۴۸٬۳۶۱ دانشجو و ۳۴۳٬۰۹۷ ردیف دفتر، کوئری از ۱۸۰ ثانیه هم رد شد و پروکسی
+-- 504 داد. کوئری با تجمیع یک‌باره به ۵۳۱ms رسید؛ این ایندکس همان مسیر را
+-- برای همهٔ کوئری‌های بعدی (گردش حساب دانشجو، گزارش‌های مالی) هم سریع می‌کند.
+--
+-- IF NOT EXISTS عمدی است: روی نصب‌هایی که ایندکس را دستی ساخته‌اند، مهاجرت
+-- باید بی‌خطر باشد.
+CREATE INDEX IF NOT EXISTS "idx_student_ledger_student" ON "student_ledger" USING btree ("studentId");
