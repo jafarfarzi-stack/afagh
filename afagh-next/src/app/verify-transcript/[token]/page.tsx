@@ -1,5 +1,6 @@
 import { verifyTranscript } from '@/lib/verification';
 import { studentPhotoDataUrl, universityBrand } from '@/lib/verify-assets';
+import NationalIdCheck from '@/components/NationalIdCheck';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 
 export const dynamic = 'force-dynamic';
@@ -82,7 +83,7 @@ export default async function VerifyTranscriptPage({ params }: { params: Promise
           {[
             ['نام و نام خانوادگی', res.studentName],
             ['شمارهٔ دانشجویی', res.studentCode],
-            ['کد ملی', res.nationalId || res.nationalIdMasked],
+            ['کد ملی', res.nationalIdMasked],
             ['رشته', res.majorName ?? '—'],
             ['مقطع', res.degreeTitle ?? '—'],
             ['سال ورود', res.entryYear ? faNum(res.entryYear) : '—'],
@@ -149,6 +150,8 @@ export default async function VerifyTranscriptPage({ params }: { params: Promise
             <p className="p-3 text-center text-[11px] text-slate-500">نمرهٔ نهایی‌شده‌ای برای محاسبهٔ وضعیت نیمسال‌ها ثبت نشده است.</p>
           )}
         </div>
+
+        <NationalIdCheck token={token} />
 
         {res.otherRecords.length > 0 && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-900">

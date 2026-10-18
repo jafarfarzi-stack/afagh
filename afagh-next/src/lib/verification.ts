@@ -144,6 +144,74 @@ async function resolveTargetStudentId(
   return fallback[0]?.id ? { id: fallback[0].id, via: 'UID_FALLBACK' } : null;
 }
 
+// ─────────────────── تأیید کد ملی بدون افشای آن ───────────────────
+
+/** ارقام فارسی/عربی → لاتین و حذف هر کاراکتر غیررقمی */
+function normalizeDigits(value: unknown): string {
+  return String(value ?? '')
+    .replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/\D/g, '');
+}
+
+/** مقایسهٔ ثابت‌زمان دو رشته */
+function safeEqual(a: string, b: string): boolean {
+  const A = Buffer.from(a);
+  const B = Buffer.from(b);
+  return A.length === B.length && timingSafeEqual(A, B);
+}
+
+/**
+ * تأیید کد ملی برای یک سند استعلام، **بدون افشای کد**.
+ *
+ * چرا این‌گونه؟ کد ملی + نام + شمارهٔ دانشجویی + عکس در یک صفحهٔ عمومی با لینک
+ * بلندمدت، «پروندهٔ هویتی کامل» می‌سازد. پس کد ملی در HTML نمی‌آید و
+ * استعلام‌کننده آن را وارد می‌کند؛ سرور فقط «می‌خواند/نمی‌خواند» را برمی‌گرداند.
+ * ورودی باید **۱۰ رقم کامل** باشد (چند رقم آخر قابل‌حدس/بروت‌فورس است) و
+ * محدودیت نرخ در لایهٔ HTTP اعمال می‌شود.
+ */
+export async function checkNationalIdForToken(
+  token: string,
+  entered: string,
+): Promise<{ ok: true; match: boolean } | { ok: false; reason: 'FORMAT' | 'BAD_TOKEN' | 'NOT_FOUND' }> {
+  const digits = normalizeDigits(entered);
+  if (!/^\d{10}$/.test(digits)) return { ok: false, reason: 'FORMAT' };
+
+  const raw = String(token ?? '').trim();
+  if (!raw) return { ok: false, reason: 'BAD_TOKEN' };
+
+  // ۱) توکن امضاشدهٔ استعلام (T1.*) — همان مسیر تطبیق پروندهٔ دقیق
+  if (raw.startsWith('T1.')) {
+    const sig = await verifyTokenSignature<{ uid?: number; sid?: number; sc?: string; uni?: number; kind?: string }>(raw);
+    if (!sig.ok) return { ok: false, reason: 'BAD_TOKEN' };
+    const kind = String(sig.payload.kind ?? '');
+    if (!['TRANSCRIPT', 'FINANCE_STMT', 'ENROLL_CONFIRM', 'EXAM'].includes(kind)) {
+      return { ok: false, reason: 'BAD_TOKEN' };
+    }
+    const target = await resolveTargetStudentId(sig.payload);
+    if (!target) return { ok: false, reason: 'NOT_FOUND' };
+    const [row] = await db
+      .select({ nationalCode: users.nationalCode })
+      .from(students)
+      .innerJoin(users, eq(users.id, students.userId))
+      .where(eq(students.id, target.id))
+      .limit(1);
+    if (!row) return { ok: false, reason: 'NOT_FOUND' };
+    return { ok: true, match: safeEqual(normalizeDigits(row.nationalCode), digits) };
+  }
+
+  // ۲) توکن کارت دانشجویی (گیت حراست)
+  const [card] = await db
+    .select({ nationalCode: users.nationalCode })
+    .from(student_cards)
+    .innerJoin(students, eq(students.id, student_cards.studentId))
+    .innerJoin(users, eq(users.id, students.userId))
+    .where(eq(student_cards.secureToken, raw))
+    .limit(1);
+  if (!card) return { ok: false, reason: 'NOT_FOUND' };
+  return { ok: true, match: safeEqual(normalizeDigits(card.nationalCode), digits) };
+}
+
 // ─────────────────── امضای توکن ───────────────────
 
 async function tokenSecret(): Promise<string> {
@@ -304,7 +372,7 @@ export async function verifyStudentCard(rawToken: string): Promise<StudentCardVe
     universityId: card.universityId ?? null,
     studentCode: card.studentCode,
     fullName: `${card.firstName} ${card.lastName}`,
-    nationalId: String(card.nationalCode ?? ''),
+    nationalId: maskNationalCode(card.nationalCode),
     nationalIdMasked: maskNationalCode(card.nationalCode),
     statusLabel: studentStatusFa(card.studentStatus, card.samaStatusCode),
     majorName: card.majorName,
@@ -488,7 +556,7 @@ export async function verifyExamTicket(rawToken: string): Promise<ExamTicketVeri
     universityId: stu.universityId ?? null,
     studentName: `${stu.firstName} ${stu.lastName}`,
     studentCode: stu.studentCode,
-    nationalId: String(stu.nationalCode ?? ''),
+    nationalId: maskNationalCode(stu.nationalCode),
     nationalIdMasked: maskNationalCode(stu.nationalCode),
     majorName: stu.majorName,
     termTitle: term?.title ?? '—',
@@ -616,7 +684,7 @@ export async function verifyEnrollConfirm(rawToken: string): Promise<EnrollConfi
     universityId: stu.universityId ?? null,
     studentName: `${stu.firstName} ${stu.lastName}`,
     studentCode: stu.studentCode,
-    nationalId: String(stu.nationalCode ?? ''),
+    nationalId: maskNationalCode(stu.nationalCode),
     nationalIdMasked: maskNationalCode(stu.nationalCode),
     majorName: stu.majorName,
     termId: term.id,
@@ -723,7 +791,7 @@ export async function verifyFinanceStatement(rawToken: string): Promise<FinanceS
     universityId: stu.universityId ?? null,
     studentName: `${stu.firstName} ${stu.lastName}`,
     studentCode: stu.studentCode,
-    nationalId: String(stu.nationalCode ?? ''),
+    nationalId: maskNationalCode(stu.nationalCode),
     nationalIdMasked: maskNationalCode(stu.nationalCode),
     majorName: stu.majorName,
     totals: {
@@ -921,7 +989,7 @@ export async function verifyTranscript(rawToken: string): Promise<TranscriptVeri
     studentCode: stu.studentCode,
     // کد ملی کامل: استعلام‌کننده باید آن را با کارت ملی شخص مقایسه کند
     // (تصمیم مالک سامانه — نسخهٔ ماسک‌شده هم در nationalIdMasked موجود است).
-    nationalId: String(stu.nationalCode ?? ''),
+    nationalId: maskNationalCode(stu.nationalCode),
     nationalIdMasked: maskNationalCode(stu.nationalCode),
     statusLabel: studentStatusFa(stu.status, stu.samaStatusCode),
     majorName: stu.majorName,

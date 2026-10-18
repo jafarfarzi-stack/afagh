@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { verifyStudentCard } from '@/lib/verification';
 import { studentPhotoDataUrl, universityBrand } from '@/lib/verify-assets';
+import NationalIdCheck from '@/components/NationalIdCheck';
 
 export const dynamic = 'force-dynamic';
 
@@ -112,7 +113,7 @@ export default async function StudentCardGatePage({ params }: { params: Promise<
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-400">کد ملی:</span>
-                <span className="font-mono font-bold text-slate-200" dir="ltr">{res.nationalId || res.nationalIdMasked}</span>
+                <span className="font-mono font-bold text-slate-200" dir="ltr">{res.nationalIdMasked}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-400">شناسهٔ RFID:</span>
@@ -133,6 +134,8 @@ export default async function StudentCardGatePage({ params }: { params: Promise<
                 <span className="font-mono font-bold text-indigo-300">{jalali(res.expiresAt)}</span>
               </div>
             </div>
+
+            <NationalIdCheck token={token} dark />
 
             {!res.allowed && (
               <div className="rounded-2xl border border-rose-700/80 bg-rose-950/70 p-3 text-xs font-bold leading-5 text-rose-200">

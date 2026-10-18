@@ -1,5 +1,6 @@
 import { verifyFinanceStatement } from '@/lib/verification';
 import { studentPhotoDataUrl, universityBrand } from '@/lib/verify-assets';
+import NationalIdCheck from '@/components/NationalIdCheck';
 import PrintButton from './PrintButton';
 
 export const dynamic = 'force-dynamic';
@@ -95,7 +96,7 @@ export default async function VerifyFinancePage({ params }: { params: Promise<{ 
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">کد ملی:</span>
-                <span className="font-mono font-bold text-slate-200" dir="ltr">{res.nationalId || res.nationalIdMasked}</span>
+                <span className="font-mono font-bold text-slate-200" dir="ltr">{res.nationalIdMasked}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">رشتهٔ تحصیلی:</span>
@@ -104,6 +105,8 @@ export default async function VerifyFinancePage({ params }: { params: Promise<{ 
             </div>
           </div>
         </div>
+
+        <NationalIdCheck token={token} dark />
 
         {/* جمع کل */}
         <div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-4">

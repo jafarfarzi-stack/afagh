@@ -1,5 +1,6 @@
 import { verifyEnrollConfirm } from '@/lib/verification';
 import { studentPhotoDataUrl, universityBrand } from '@/lib/verify-assets';
+import NationalIdCheck from '@/components/NationalIdCheck';
 import PrintButton from './PrintButton';
 
 export const dynamic = 'force-dynamic';
@@ -103,7 +104,7 @@ export default async function VerifyEnrollmentPage({ params }: { params: Promise
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">کد ملی:</span>
-              <span className="font-mono font-bold text-slate-200" dir="ltr">{res.nationalId || res.nationalIdMasked}</span>
+              <span className="font-mono font-bold text-slate-200" dir="ltr">{res.nationalIdMasked}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">رشتهٔ تحصیلی:</span>
@@ -115,6 +116,8 @@ export default async function VerifyEnrollmentPage({ params }: { params: Promise
             </div>
           </div>
         </div>
+
+        <NationalIdCheck token={token} dark />
 
         {/* فهرست دروس */}
         <div className="space-y-2 text-xs">
