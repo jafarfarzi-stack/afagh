@@ -1,4 +1,4 @@
-import { count, desc, eq, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { degree_level_configs, majors, student_cards, student_ledger, students, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
@@ -40,7 +40,6 @@ export default async function AdminStudentCardsPage({
 
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
-  /* TODO: filter by universityId */
 
   // ── بدهی هر دانشجو: یک تجمیع، نه یک زیرکوئری به‌ازای هر ردیف ──
   const debtAgg = db
@@ -52,15 +51,20 @@ export default async function AdminStudentCardsPage({
     .groupBy(student_ledger.studentId)
     .as('debt_agg');
 
-  // ── جستجو (قراردادهای صفحهٔ دانشجویان: نرمال‌سازی ارقام/حروف + escape) ──
-  const where = q
-    ? or(
+  // ── جستجو + محدودیت دانشگاه (هم‌راستا با /admin/students: ادمین محدود فقط دانشگاه خودش را می‌بیند) ──
+  const conds: unknown[] = [];
+  if (currentUniversityId) conds.push(eq(students.universityId, currentUniversityId));
+  if (q) {
+    conds.push(
+      or(
         sql`${students.studentCode} ILIKE ${`%${escapeLikeChars(toEnDigits(q))}%`} ESCAPE '\\'`,
         sql`${users.nationalCode} ILIKE ${`%${escapeLikeChars(toEnDigits(q))}%`} ESCAPE '\\'`,
         sql`${normCol(users.firstName)} ILIKE ${`%${escapeLikeChars(normalizeFa(q))}%`} ESCAPE '\\'`,
         sql`${normCol(users.lastName)} ILIKE ${`%${escapeLikeChars(normalizeFa(q))}%`} ESCAPE '\\'`,
-      )
-    : undefined;
+      )!,
+    );
+  }
+  const where = conds.length ? and(...(conds as Parameters<typeof and>)) : undefined;
 
   const countRow = await db
     .select({ n: count() })
