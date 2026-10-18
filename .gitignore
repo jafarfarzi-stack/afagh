@@ -22,6 +22,13 @@ SHA256SUMS.txt
 
 # ── استقرار ──
 .env
+# پشتیبان‌های .env (مثل .env.bak-20261017-063932) هرگز نباید commit شوند
+.env.bak*
+.env.*.bak*
+.env.backup*
+afagh-next/.env
+afagh-next/.env.bak*
+afagh-next/.env.*.bak*
 backups/
 caddy_data/
 
