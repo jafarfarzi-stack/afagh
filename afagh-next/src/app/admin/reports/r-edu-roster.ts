@@ -65,19 +65,27 @@ export async function run(kind: string, f: ReportFilters & Record<string, unknow
       const mode: 'OVERALL' | 'TERM' | 'CUMULATIVE' =
         modeRaw === 'TERM' ? 'TERM' : modeRaw === 'CUMULATIVE' ? 'CUMULATIVE' : 'OVERALL';
       const gpaTerm = String(f.gpaTerm ?? '').trim();
+      const gpaTermFrom = String(f.gpaTermFrom ?? '').trim();
+      // «تعداد نفرات برتر که در گزارش آورده می‌شوند» (فرم قدیم) — ۰ = همه
+      const topN = Math.max(0, Math.min(500, Number(f.topN ?? 0) || 0));
 
-      let termTitle = gpaTerm;
-      if (gpaTerm) {
+      const termTitleOf = async (code: string) => {
+        if (!code) return code;
         try {
-          const t = await db.execute<{ title: string | null }>(sql`SELECT title FROM academic_terms WHERE "termCode" = ${gpaTerm} LIMIT 1`);
-          if (t.rows?.[0]?.title) termTitle = t.rows[0].title as string;
-        } catch { /* عنوان اختیاری است */ }
-      }
+          const t = await db.execute<{ title: string | null }>(sql`SELECT title FROM academic_terms WHERE "termCode" = ${code} LIMIT 1`);
+          return (t.rows?.[0]?.title as string) || code;
+        } catch { return code; }
+      };
+      let termTitle = gpaTerm;
+      let termFromTitle = gpaTermFrom;
+      if (gpaTerm) termTitle = await termTitleOf(gpaTerm);
+      if (gpaTermFrom) termFromTitle = await termTitleOf(gpaTermFrom);
+
       const gpaLabel = mode === 'OVERALL'
         ? 'معدل کل'
         : mode === 'TERM'
           ? `معدل نیمسال ${termTitle}`
-          : `معدل تا پایان ${termTitle}`;
+          : (gpaTermFrom ? `معدل از ${termFromTitle} تا پایان ${termTitle}` : `معدل تا پایان ${termTitle}`);
 
       const columns = [
         { key: 'rank', title: 'رتبه' },
@@ -135,7 +143,7 @@ export async function run(kind: string, f: ReportFilters & Record<string, unknow
             const t = b.terms.find(x => String(x.termCode ?? '') === gpaTerm);
             if (t) { gpa = t.gpa; units = t.units; passed = t.passedUnits; }
           } else {
-            const g = await calculateOfficialGpaUpToTerm(r.id, gpaTerm);
+            const g = await calculateOfficialGpaUpToTerm(r.id, gpaTerm, gpaTermFrom || null);
             units = g.totalUnits; passed = g.passedUnits;
             gpa = g.totalUnits > 0 ? g.gpa : null;
           }
@@ -156,10 +164,12 @@ export async function run(kind: string, f: ReportFilters & Record<string, unknow
         s.rank = lastRank;
       });
       const withGpa = scored.filter(s => s.gpa !== null);
+      // «تعداد نفرات برتر» — ۰ یعنی همه (مثل فرم قدیم که مثلاً ۳ نفر می‌خواست)
+      const ranked = topN > 0 ? withGpa.slice(0, topN) : withGpa;
 
       const page = Math.max(1, Number(f.page) || 1);
       const start = (page - 1) * PER;
-      const rows = withGpa.slice(start, start + PER).map(s => ({
+      const rows = ranked.slice(start, start + PER).map(s => ({
         rank: s.rank,
         code: s.code,
         name: s.name,
@@ -177,11 +187,12 @@ export async function run(kind: string, f: ReportFilters & Record<string, unknow
       return {
         columns,
         rows,
-        total: withGpa.length,
+        total: ranked.length,
         page,
         per: PER,
-        totalPages: Math.max(1, Math.ceil(withGpa.length / PER)),
-        summary: `${withGpa.length.toLocaleString('fa-IR')} دانشجو دارای ${gpaLabel} — مرتب‌شده نزولی با رتبه`
+        totalPages: Math.max(1, Math.ceil(ranked.length / PER)),
+        summary: `${ranked.length.toLocaleString('fa-IR')} دانشجو دارای ${gpaLabel} — مرتب‌شده نزولی با رتبه`
+          + (topN > 0 ? ` (برترین‌های انتخاب‌شده: ${topN.toLocaleString('fa-IR')} نفر)` : '')
           + (capped ? ` · توجه: جمعیت واجد شرایط از سقف ${CAP.toLocaleString('fa-IR')} نفر بیشتر بود؛ برای رتبه‌بندی دقیق‌تر رشته/مقطع/سال و نیمسال ورود را فیلتر کنید.` : ''),
       };
     }

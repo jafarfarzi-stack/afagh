@@ -19,6 +19,15 @@ export type ReportFilters = {
   entryYear?: number;
   /** نیمسال ورود (۱ = اول، ۲ = دوم، ۳ = تابستان) */
   entryTerm?: number;
+  /** بازهٔ سال ورود (فرم‌های «از ورودی … تا ورودی …») */
+  entryYearFrom?: number;
+  entryYearTo?: number;
+  /** جنسیت (MALE/FEMALE) — روی users.gender */
+  gender?: string;
+  /** سهمیه (NORMAL/SHAHED/STAFF/TOP_TALENT) */
+  quotaType?: string;
+  /** دامنهٔ وضعیت دانشجو: ACTIVE | INACTIVE | ALL (پیش‌فرض ALL) */
+  statusScope?: string;
   q?: string;
   nationalCode?: string;
   miss?: string;
@@ -72,7 +81,14 @@ export function studentWhere(f: ReportFilters, alias = 's') {
   if (f.departmentId) c.push(sql`m."departmentId" = ${f.departmentId}`);
   if (f.majorId) c.push(sql`${a}."majorId" = ${f.majorId}`);
   if (f.entryYear) c.push(sql`${a}."entryYear" = ${f.entryYear}`);
+  if (f.entryYearFrom) c.push(sql`${a}."entryYear" >= ${Number(f.entryYearFrom)}`);
+  if (f.entryYearTo) c.push(sql`${a}."entryYear" <= ${Number(f.entryYearTo)}`);
   if (f.entryTerm) c.push(sql`${a}."entryTerm" = ${Number(f.entryTerm)}`);
+  if (f.gender === 'MALE' || f.gender === 'FEMALE') c.push(sql`u."gender" = ${f.gender}`);
+  if (f.quotaType) c.push(sql`${a}."quotaType" = ${String(f.quotaType)}`);
+  // دامنهٔ وضعیت: پیش‌فرض «همه» تا با فرم‌های قدیم (فعال/غیرفعال/همه) یکی باشد
+  if (f.statusScope === 'ACTIVE') c.push(sql`${a}."status" = 'ACTIVE'`);
+  else if (f.statusScope === 'INACTIVE') c.push(sql`${a}."status" <> 'ACTIVE'`);
   if (f.nationalCode) {
     // کدهای ذخیره‌شده انگلیسی‌اند؛ ارقام فارسی ورودی نرمال می‌شود تا کدهای SA/SS هم پیدا شوند.
     // فرار ٪ _ \ تا wildcard تزریقی معنا نگیرد (با ESCAPE '\').

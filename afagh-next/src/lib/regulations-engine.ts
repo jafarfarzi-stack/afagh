@@ -715,6 +715,7 @@ async function loadGpaRowsWithFallback(studentId: number): Promise<GpaSourceRow[
 export async function calculateOfficialGpaUpToTerm(
   studentId: number,
   upToTermCode: string,
+  fromTermCode?: string | null,
 ): Promise<{
   gpa: number;
   totalUnits: number;
@@ -731,15 +732,17 @@ export async function calculateOfficialGpaUpToTerm(
   const dedupeRepeated = config?.grading_and_gpa?.dedupeRepeatedCourses === true;
 
   const code = String(upToTermCode ?? '').trim();
+  const from = String(fromTermCode ?? '').trim();
   const all = await loadGpaRowsWithFallback(studentId);
   // کدهای نیمسال در این سامانه با طول ثابت‌اند (مثل 14031) پس مقایسهٔ رشته‌ای
-  // با مقایسهٔ زمانی یکسان است.
-  const rows = code
-    ? all.filter(r => {
-        const tc = String(r.termCode ?? '').trim();
-        return tc !== '' && tc <= code;
-      })
-    : all;
+  // با مقایسهٔ زمانی یکسان است. `from` اختیاری است (بازهٔ ترم در فرم گزارش).
+  const rows = all.filter(r => {
+    const tc = String(r.termCode ?? '').trim();
+    if (tc === '') return false;
+    if (code && tc > code) return false;
+    if (from && tc < from) return false;
+    return true;
+  });
 
   const core = aggregateOfficialGpaRows(rows, { passingGrade, retakeMinGrade, policy, dedupeRepeated });
   return {

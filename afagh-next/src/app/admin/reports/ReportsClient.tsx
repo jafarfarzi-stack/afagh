@@ -321,6 +321,45 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
             {kind === 'top-students' && (
               <>
                 <label className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600">ملاک معدل:</span>
+                  <select value={extra.gpaMode ?? 'OVERALL'} onChange={e => setExtra({ ...extra, gpaMode: e.target.value })} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-56">
+                    <option value="OVERALL">معدل کل</option>
+                    <option value="TERM">معدل یک نیمسال مشخص</option>
+                    <option value="CUMULATIVE">معدل کل تا یک نیمسال</option>
+                  </select>
+                </label>
+                {extra.gpaMode === 'TERM' && (
+                  <label className="flex items-center gap-1">
+                    <span className="font-bold text-slate-600">نیمسال ملاک:</span>
+                    <select value={extra.gpaTerm ?? ''} onChange={e => setExtra({ ...extra, gpaTerm: e.target.value })} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-56">
+                      <option value="">انتخاب کنید…</option>
+                      {opts.terms.map(t => <option key={t.code} value={t.code}>{t.title || t.code}</option>)}
+                    </select>
+                  </label>
+                )}
+                {extra.gpaMode === 'CUMULATIVE' && (
+                  <>
+                    <label className="flex items-center gap-1">
+                      <span className="font-bold text-slate-600">از نیمسال:</span>
+                      <select value={extra.gpaTermFrom ?? ''} onChange={e => setExtra({ ...extra, gpaTermFrom: e.target.value })} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-52">
+                        <option value="">از ابتدا</option>
+                        {opts.terms.map(t => <option key={t.code} value={t.code}>{t.title || t.code}</option>)}
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-1">
+                      <span className="font-bold text-slate-600">تا پایان نیمسال:</span>
+                      <select value={extra.gpaTerm ?? ''} onChange={e => setExtra({ ...extra, gpaTerm: e.target.value })} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-52">
+                        <option value="">انتخاب کنید…</option>
+                        {opts.terms.map(t => <option key={t.code} value={t.code}>{t.title || t.code}</option>)}
+                      </select>
+                    </label>
+                  </>
+                )}
+                <label className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600">تعداد نفرات برتر:</span>
+                  <input value={extra.topN ?? ''} onChange={e => setExtra({ ...extra, topN: e.target.value })} type="number" min="0" max="500" placeholder="همه" className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 w-20" dir="ltr" />
+                </label>
+                <label className="flex items-center gap-1">
                   <span className="font-bold text-slate-600">نیمسال ورود:</span>
                   <select value={extra.entryTerm ?? ''} onChange={e => setExtra({ ...extra, entryTerm: e.target.value })} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
                     <option value="">همه</option>
@@ -330,22 +369,36 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                   </select>
                 </label>
                 <label className="flex items-center gap-1">
-                  <span className="font-bold text-slate-600">ملاک معدل:</span>
-                  <select value={extra.gpaMode ?? 'OVERALL'} onChange={e => setExtra({ ...extra, gpaMode: e.target.value })} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-56">
-                    <option value="OVERALL">معدل کل دوره</option>
-                    <option value="TERM">معدل یک نیمسال مشخص</option>
-                    <option value="CUMULATIVE">معدل تا پایان یک نیمسال</option>
+                  <span className="font-bold text-slate-600">بازهٔ ورودی:</span>
+                  <input value={extra.entryYearFrom ?? ''} onChange={e => setExtra({ ...extra, entryYearFrom: e.target.value })} type="number" placeholder="از" className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 w-20" dir="ltr" />
+                  <input value={extra.entryYearTo ?? ''} onChange={e => setExtra({ ...extra, entryYearTo: e.target.value })} type="number" placeholder="تا" className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 w-20" dir="ltr" />
+                </label>
+                <label className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600">جنسیت:</span>
+                  <select value={extra.gender ?? ''} onChange={e => setExtra({ ...extra, gender: e.target.value })} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
+                    <option value="">همه</option>
+                    <option value="MALE">مرد</option>
+                    <option value="FEMALE">زن</option>
                   </select>
                 </label>
-                {(extra.gpaMode === 'TERM' || extra.gpaMode === 'CUMULATIVE') && (
-                  <label className="flex items-center gap-1">
-                    <span className="font-bold text-slate-600">نیمسال ملاک:</span>
-                    <select value={extra.gpaTerm ?? ''} onChange={e => setExtra({ ...extra, gpaTerm: e.target.value })} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-56">
-                      <option value="">انتخاب کنید…</option>
-                      {opts.terms.map(t => <option key={t.code} value={t.code}>{t.title || t.code}</option>)}
-                    </select>
-                  </label>
-                )}
+                <label className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600">دانشجویان:</span>
+                  <select value={extra.statusScope ?? 'ALL'} onChange={e => setExtra({ ...extra, statusScope: e.target.value })} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
+                    <option value="ALL">همه</option>
+                    <option value="ACTIVE">فعال</option>
+                    <option value="INACTIVE">غیرفعال</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600">سهمیه:</span>
+                  <select value={extra.quotaType ?? ''} onChange={e => setExtra({ ...extra, quotaType: e.target.value })} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
+                    <option value="">همه</option>
+                    <option value="NORMAL">عادی</option>
+                    <option value="SHAHED">شاهد / ایثارگر</option>
+                    <option value="STAFF">کارکنان</option>
+                    <option value="TOP_TALENT">استعداد درخشان</option>
+                  </select>
+                </label>
               </>
             )}
             <label className="flex items-center gap-1">
