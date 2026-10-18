@@ -132,8 +132,17 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
   await assertReportPermission(kind);
   // تفکیک دانشگاه سمت سرورمشتق می‌شود؛ ورودی کلاینت نادیده گرفته می‌شود
   const uni = await getCurrentUniversity().catch(() => null);
-  // 🔒 دانشگاهِ ۰/نامشخص ⇒ ۱- (هیچ ردیفی)، نه «حذف شرط» که همه را می‌آورد
-  f = { ...f, universityId: isRealUniversityId(uni?.id) ? uni.id : -1 };
+  // 🔒 fail-closed واقعی: بدون دانشگاهِ معتبر هیچ گزارشی اجرا نمی‌شود.
+  //    پیش‌تر مقدار جانشین ۱- بود و چون truthy است، شرط‌های درون گزارش‌ها
+  //    «= -1 OR universityId IS NULL» می‌ساختند ⇒ رکوردهای بدون دانشگاه
+  //    (به‌جای «هیچ») برمی‌گشتند.
+  if (!isRealUniversityId(uni?.id)) {
+    return {
+      columns: [], rows: [], total: 0, page: 1, per: 50, totalPages: 1,
+      summary: 'دانشگاه فعال شما مشخص نیست؛ اجرای گزارش ممکن نیست.',
+    };
+  }
+  f = { ...f, universityId: uni.id };
   const term = f.term || '';
 
   try {
@@ -560,15 +569,21 @@ export async function exportReport(kind: string, f: ReportFilters): Promise<{ he
   await requireRole(ROLES);
   await assertReportPermission(kind);
   const uni = await getCurrentUniversity().catch(() => null);
-  f = { ...f, universityId: uni?.id ?? -1 };
+  // 🔒 همان گارد fail-closed مسیر جدول؛ وگرنه خروجی CSV می‌توانست دادهٔ
+  //    همهٔ دانشگاه‌ها را برگرداند (در مسیر خروجی مقدار جانشین falsy می‌شد و
+  //    شرط‌های دانشگاه کلاً حذف می‌شدند).
+  if (!isRealUniversityId(uni?.id)) return { header: [], lines: [] };
+  f = { ...f, universityId: uni.id };
   const first = await runReport(kind, { ...f, page: 1 });
   const all = [...first.rows];
   for (let p = 2; p <= first.totalPages && all.length < 5000; p++) {
     const r = await runReport(kind, { ...f, page: p });
     all.push(...r.rows);
   }
+  // گارد تزریق فرمول سمت سرور (مصرف‌کنندهٔ دیگری لازم نیست دوباره پیاده کند)
+  const esc = (v: string) => (/^[=+\-@|\t\r]/.test(v.trimStart()) ? `'${v}` : v);
   return {
-    header: first.columns.map(c => c.title),
-    lines: all.slice(0, 5000).map(row => first.columns.map(c => String(row[c.key] ?? ''))),
+    header: first.columns.map(c => esc(c.title)),
+    lines: all.slice(0, 5000).map(row => first.columns.map(c => esc(String(row[c.key] ?? '')))),
   };
 }

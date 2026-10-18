@@ -704,6 +704,54 @@ async function loadGpaRowsWithFallback(studentId: number): Promise<GpaSourceRow[
   return extras.length ? [...enrolled, ...extras] : enrolled;
 }
 
+/**
+ * معدل کل تا پایان یک نیمسال مشخص.
+ *
+ * چرا لازم است؟ آیین‌نامه‌ها به «معدل تا پایان ترم N» استناد می‌کنند (مثلاً پذیرش
+ * بدون کنکور استعداد درخشان: معدل تا پایان ترم ۶ کارشناسی). ردیف‌های با کد نیمسال
+ * ≤ ملاک شمرده می‌شوند و همان هستهٔ خالص معدل اجرا می‌گردد تا با معدل کل و
+ * معدل ترم هیچ‌گاه واگرا نشود.
+ */
+export async function calculateOfficialGpaUpToTerm(
+  studentId: number,
+  upToTermCode: string,
+): Promise<{
+  gpa: number;
+  totalUnits: number;
+  passedUnits: number;
+  excludedCount: number;
+  policy: string;
+  termCode: string;
+}> {
+  const [stu] = await db.select().from(students).where(eq(students.id, studentId)).limit(1);
+  const config = (await getRegulationConfig(stu?.regulationId, stu?.degreeLevelId)) || DEFAULT_BACHELOR_REGULATION_1403;
+  const policy = config?.grading_and_gpa?.failed_course_gpa_policy ?? 'EXCLUDE_IF_PASSED';
+  const passingGrade = config?.grading_and_gpa?.default_passing_grade || 10;
+  const retakeMinGrade = config?.grading_and_gpa?.retakeMinGrade ?? passingGrade;
+  const dedupeRepeated = config?.grading_and_gpa?.dedupeRepeatedCourses === true;
+
+  const code = String(upToTermCode ?? '').trim();
+  const all = await loadGpaRowsWithFallback(studentId);
+  // کدهای نیمسال در این سامانه با طول ثابت‌اند (مثل 14031) پس مقایسهٔ رشته‌ای
+  // با مقایسهٔ زمانی یکسان است.
+  const rows = code
+    ? all.filter(r => {
+        const tc = String(r.termCode ?? '').trim();
+        return tc !== '' && tc <= code;
+      })
+    : all;
+
+  const core = aggregateOfficialGpaRows(rows, { passingGrade, retakeMinGrade, policy, dedupeRepeated });
+  return {
+    gpa: core.gpa,
+    totalUnits: core.totalUnits,
+    passedUnits: core.passedUnits,
+    excludedCount: core.excludedCount,
+    policy,
+    termCode: code,
+  };
+}
+
 export type OfficialGpaTermRow = {
   termId: number | null;
   termCode: string | null;

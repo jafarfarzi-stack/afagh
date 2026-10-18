@@ -318,6 +318,36 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                 </select>
               </label>
             )}
+            {kind === 'top-students' && (
+              <>
+                <label className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600">نیمسال ورود:</span>
+                  <select value={extra.entryTerm ?? ''} onChange={e => setExtra({ ...extra, entryTerm: e.target.value })} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
+                    <option value="">همه</option>
+                    <option value="1">نیمسال اول</option>
+                    <option value="2">نیمسال دوم</option>
+                    <option value="3">تابستان</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600">ملاک معدل:</span>
+                  <select value={extra.gpaMode ?? 'OVERALL'} onChange={e => setExtra({ ...extra, gpaMode: e.target.value })} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-56">
+                    <option value="OVERALL">معدل کل دوره</option>
+                    <option value="TERM">معدل یک نیمسال مشخص</option>
+                    <option value="CUMULATIVE">معدل تا پایان یک نیمسال</option>
+                  </select>
+                </label>
+                {(extra.gpaMode === 'TERM' || extra.gpaMode === 'CUMULATIVE') && (
+                  <label className="flex items-center gap-1">
+                    <span className="font-bold text-slate-600">نیمسال ملاک:</span>
+                    <select value={extra.gpaTerm ?? ''} onChange={e => setExtra({ ...extra, gpaTerm: e.target.value })} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 max-w-56">
+                      <option value="">انتخاب کنید…</option>
+                      {opts.terms.map(t => <option key={t.code} value={t.code}>{t.title || t.code}</option>)}
+                    </select>
+                  </label>
+                )}
+              </>
+            )}
             <label className="flex items-center gap-1">
               <span className="font-bold text-slate-600">کد ملی:</span>
               <input
@@ -375,7 +405,11 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
             گزارش «{card?.title}» را انتخاب و <b>اجرای گزارش</b> را بزنید.
           </p>
         ) : res.rows.length === 0 ? (
-          <p className="p-8 text-center text-amber-700 bg-amber-50 text-sm">رکوردی با این فیلترها یافت نشد.</p>
+          <div className="p-6 text-center">
+            <p className="text-sm font-bold text-amber-700">رکوردی با این فیلترها یافت نشد.</p>
+            {/* پیام تشخیصی سرور (مثل «نخست ترم را انتخاب کنید») در حالت خالی هم باید دیده شود */}
+            {res.summary && <p className="mt-2 text-xs leading-6 text-slate-600">{res.summary}</p>}
+          </div>
         ) : (
           <>
             {res.summary && <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700">{res.summary}</div>}

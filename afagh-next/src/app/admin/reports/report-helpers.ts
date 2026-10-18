@@ -6,6 +6,7 @@ import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { STUDENT_STATUS_FA } from '@/lib/student-labels';
 import { escapeLikeChars, toEnDigits } from '@/lib/persian-search';
+import { isRealUniversityId } from '@/lib/university-scope';
 
 export const PER = 50;
 
@@ -16,6 +17,8 @@ export type ReportFilters = {
   majorId?: number;
   departmentId?: number;
   entryYear?: number;
+  /** نیمسال ورود (۱ = اول، ۲ = دوم، ۳ = تابستان) */
+  entryTerm?: number;
   q?: string;
   nationalCode?: string;
   miss?: string;
@@ -58,8 +61,10 @@ export function faStatus(s: unknown): string {
 export function studentWhere(f: ReportFilters, alias = 's') {
   const a = sql.identifier(alias);
   const c = [];
-  // تفکیک دانشگاه اجباری (fail-closed): بدون universityId هیچ ردیفی برنگردان
-  if (f.universityId) c.push(sql`(${a}."universityId" = ${f.universityId} OR ${a}."universityId" IS NULL)`);
+  // تفکیک دانشگاه اجباری (fail-closed): بدون دانشگاهِ معتبر هیچ ردیفی برنگردان
+  // ⚠ پیش‌تر وقتی runReport برای دانشگاه نامشخص مقدار -1 می‌گذاشت، شرط
+  //   «= -1 OR IS NULL» می‌شد و ردیف‌های بدون دانشگاه به‌جای «هیچ»، همه برمی‌گشتند.
+  if (isRealUniversityId(f.universityId)) c.push(sql`(${a}."universityId" = ${f.universityId} OR ${a}."universityId" IS NULL)`);
   else c.push(sql`1 = 0`);
   // مقطع: عنوان‌ها در کاتالوگ تکراری‌اند (SAMA/HAMAVA) — با عنوان تطبیق بده تا همهٔ شناسه‌های هم‌عنوان بیایند
   if (f.degreeId) c.push(sql`${a}."degreeLevelId" IN (SELECT id FROM degree_level_configs WHERE title = (SELECT title FROM degree_level_configs WHERE id = ${f.degreeId}))`);
@@ -67,6 +72,7 @@ export function studentWhere(f: ReportFilters, alias = 's') {
   if (f.departmentId) c.push(sql`m."departmentId" = ${f.departmentId}`);
   if (f.majorId) c.push(sql`${a}."majorId" = ${f.majorId}`);
   if (f.entryYear) c.push(sql`${a}."entryYear" = ${f.entryYear}`);
+  if (f.entryTerm) c.push(sql`${a}."entryTerm" = ${Number(f.entryTerm)}`);
   if (f.nationalCode) {
     // کدهای ذخیره‌شده انگلیسی‌اند؛ ارقام فارسی ورودی نرمال می‌شود تا کدهای SA/SS هم پیدا شوند.
     // فرار ٪ _ \ تا wildcard تزریقی معنا نگیرد (با ESCAPE '\').
