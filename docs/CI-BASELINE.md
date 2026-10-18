@@ -36,8 +36,45 @@ Error occurred prerendering page "/change-password"   (یا /group-manager، ی�
 | بیلد | `next build` روی Node 22 | ❌ (TS2344) | ✅ ۳۰/۳۰ صفحه |
 | ممیزی وابستگی | `node scripts/ci-audit.mjs` | ❌ ۱ critical + ۳ high | ✅ صفر high/critical |
 
-**هر پنج دروازه سبز است.** تنها چیزی که همچنان قرمز می‌ماند `rls-integration` است که
-اینجا اجرا نشد (پایین توضیح داده شده).
+**هر پنج دروازه سبز است.** ششمین دروازه (`rls-integration`) هم پس از رفع علت ریشه‌ای
+(بخش بعدی) روی سرویس‌های دورریز سبز شد.
+
+## رفع `rls-integration` — علت ریشه‌ای: نقش `afagh_app` پیش از مهاجرت‌ها وجود ندارد
+
+`migrate-db.mjs` روی دیتابیس **خالی** (CI یا نخستین استقرار) در مهاجرت
+`0058_staff_term_roles_rls.sql` می‌شکست:
+
+```
+error: role "afagh_app" does not exist
+  code: '42704'   routine: 'get_role_oid'
+  at async migrate (…/migrator.js:4:3)
+```
+
+**چرا:** چهار مهاجرت سیاست RLS را با `CREATE POLICY … TO afagh_app` می‌سازند
+(`0058`, `0061`, `0063`, `0099`)، ولی نقش `afagh_app` را `src/db/pg-hardening.sql`
+می‌سازد که در پایپ‌لاین **بعد از** مهاجرت‌ها اجرا می‌شود
+(`migrate → patches → seed → hardening`). در پروداکشن هرگز دیده نمی‌شد چون نقش
+از قبل موجود بود؛ فقط محیط خالی می‌شکست.
+
+**اصلاح:** یک گام پیش از مهاجرت در جاب `rls-integration` که نقش را idempotent
+می‌سازد (`.github/workflows/ci.yml`). `hardening.mjs` بعداً رمز/گرنت‌ها را تنظیم
+می‌کند و نسبت به وجود نقش idempotent است (`pg-hardening.sql:40-46`).
+
+**اثبات:** کل زنجیره روی پستگرس ۱۶ و ردیس ۷ دورریز (پورت‌های ۵۵۴۳۲/۵۶۳۷۹، جدا از
+پروداکشن) اجرا شد:
+
+| گام | نتیجه |
+|---|---|
+| `migrate-db.mjs` | ✅ ۱۰۷/۱۰۷ مهاجرت ثبت شد |
+| `apply-patches.mjs` | ✅ exit 0 |
+| `seed-base.mjs` | ✅ exit 0 |
+| `hardening.mjs` | ✅ exit 0 |
+| `rls-test.mjs` | ✅ exit 0 (UPDATE/DELETE/INSERT دانشجوی دیگر همه رد شدند؛ گرنت ستونی نمره اعمال شد) |
+| `concurrency-test.mjs` | ✅ exit 0 (تأیید/وصول/تخصیص: دقیقاً یک برنده) |
+| `waiting-room-zset.test.mts` | ✅ ۱۱ موفق / ۰ ناموفق |
+
+کامیت: `dab3291`.
+
 
 ## ارتقای وابستگی‌ها (پس از رفع مسدودکننده‌ها)
 
@@ -56,10 +93,22 @@ CDN خودش منتقل کرده. بنابراین در `package.json` به‌ص
 
 پیامد عملی: بیلد Docker و `npm ci` در CI باید به `cdn.sheetjs.com` دسترسی داشته باشند.
 اگر روزی این دامنه در دسترس نبود، بیلد می‌شکند — این یک وابستگی خارجی آگاهانه است.
-(جایگزین: ماندن روی ۰.۱۸.۵ و پذیرش ریسک. کد ما فقط مسیر **نوشتن** اکسل را استفاده
-می‌کند — `aoa_to_sheet` + `write` در `src/lib/export-utils.ts` — و هیچ فایل ورودی
-کاربر را **نمی‌خواند**؛ پس هر دو CVE عملاً قابل بهره‌برداری نبودند. با این حال ارتقا
-تمیزتر است.)
+(جایگزین: ماندن روی ۰.۱۸.۵ و پذیرش ریسک. کد ما فقط مسیر **نوشتن** اکسل را دارد —
+`aoa_to_sheet` + `write` در `src/lib/export-utils.ts` — و هیچ فایل ورودی کاربر را
+**نمی‌خواند**؛ پس هر دو CVE عملاً قابل بهره‌برداری نبودند. با این حال ارتقا تمیزتر است.)
+
+**تصحیح مهم (بررسی ۱۸ اکتبر):** `generateXLSX` در `src/lib/export-utils.ts` **هیچ
+فراخوانی‌ای در `src/` ندارد** — یعنی امروز هیچ مسیر اجرایی، فایل XLSX تولید نمی‌کند:
+
+| مسیر | خروجی واقعی |
+|---|---|
+| دکمهٔ «خروجی Excel» در `admin/reports` | **CSV** سمت کلاینت (BOM + خنثی‌سازی تزریق فرمول، `ReportsClient.tsx:193-203`) |
+| `GET /api/admin/finance/export` | **HTML/DOCX** از `src/lib/export-doc.ts` |
+| `generateXLSX` | کد مرده (بدون مصرف‌کننده) |
+
+بنابراین ریسک ارتقای `xlsx` در عمل صفر است، و صحت خودِ بستهٔ ۰.۲۰.۳ روی مسیر بیلد
+سرور با یک رفت‌وبرگشت نوشتن/خواندن فارسی تأیید شد (۱۵٬۹۵۵ بایت، خواندن برگشتی درست).
+
 
 ## چه چیزی در همین بررسی اصلاح شد
 
@@ -76,12 +125,28 @@ CDN خودش منتقل کرده. بنابراین در `package.json` به‌ص
 ثابت نمی‌کند بیلد سالم است — و همین دقیقاً یکی از قواعد
 `docs/CODE-REVIEW.md` است: برای تغییرهای P0، شاهدِ اجرا لازم است، نه فقط diff.
 
-## چیزهایی که این محیط نمی‌تواند اجرا کند
+## چیزهایی که این محیط (کپی سرور) نمی‌تواند اجرا کند
 
-- `rls-integration` (پستگرس + ردیس واقعی) — نیاز به سرویس‌های compose دارد؛
-  روی سرور قابل اجراست ولی باید با دیتابیس **جدا** اجرا شود، نه روی دیتابیس
-  پروداکشن.
-- `concurrency-test` — همان شرط.
+- `rls-integration` روی **همان** دیتابیس پروداکشن — نه به‌خاطر ابزار، بلکه به‌خاطر
+  اصل «هرگز مهاجرت/تست روی دادهٔ زنده». با سرویس‌های دورریز اجرا شد (بالا).
+  دستور بازتولیدش:
+
+  ```bash
+  docker run -d --name scratch_pg -e POSTGRES_USER=afagh -e POSTGRES_PASSWORD=test-password \
+    -e POSTGRES_DB=afagh_db -p 127.0.0.1:55432:5432 postgres:16-alpine
+  docker run -d --name scratch_redis -p 127.0.0.1:56379:6379 redis:7-alpine
+  # نقش باید پیش از مهاجرت‌ها باشد (همان علت ریشه‌ای بالا):
+  docker exec scratch_pg psql -U afagh -d afagh_db -c \
+    "CREATE ROLE afagh_app LOGIN PASSWORD 'test-app-password' NOSUPERUSER NOBYPASSRLS"
+  export DATABASE_URL=postgres://afagh:test-password@127.0.0.1:55432/afagh_db
+  export DATABASE_URL_APP=postgres://afagh_app:test-app-password@127.0.0.1:55432/afagh_db
+  export REDIS_URL=redis://127.0.0.1:56379 AFAGH_BACKUP_DIR=/tmp/ci-backups
+  node scripts/migrate-db.mjs && node scripts/apply-patches.mjs && node scripts/seed-base.mjs
+  AFAGH_APP_DB_PASSWORD=test-app-password node scripts/hardening.mjs
+  node scripts/rls-test.mjs && node scripts/concurrency-test.mjs
+  npx tsx scripts/waiting-room-zset.test.mts
+  docker rm -f scratch_pg scratch_redis
+  ```
 
 ## دستور بازتولید همین نتیجه
 
