@@ -302,7 +302,7 @@ export default function FinancialTranscript({
           ) : (
             <div className="space-y-3">
               {chunks.map((group, gi) => (
-                <div key={gi} className="grid gap-3 lg:grid-cols-3 print:grid-cols-3">
+                <div key={gi} className="tr-fin-row break-inside-avoid grid gap-3 lg:grid-cols-3 print:grid-cols-3">
                   {group.map((t) => {
                     const b = balanceBadge(t.balance);
                     return (
@@ -340,7 +340,15 @@ export default function FinancialTranscript({
                                   : '(محاسباتی — مبنای سند، جمع دفتر کل است)'}
                               </span>
                             </p>
-                            <table className="w-full border-collapse text-[9px]">
+                            <table className="tr-term-table tr-fin-courses w-full border-collapse text-[9px]" style={{ tableLayout: 'fixed' }}>
+                              <colgroup>
+                                <col style={{ width: '6%' }} />
+                                <col style={{ width: '14%' }} />
+                                <col style={{ width: '30%' }} />
+                                <col style={{ width: '7%' }} />
+                                <col style={{ width: '22%' }} />
+                                <col style={{ width: '21%' }} />
+                              </colgroup>
                               <thead>
                                 <tr className="bg-slate-50 text-slate-600">
                                   <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">ردیف</th>
