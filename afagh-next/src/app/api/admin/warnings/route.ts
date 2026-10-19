@@ -48,8 +48,9 @@ async function guard(): Promise<NextResponse | null> {
   try {
     await requireRole(ALLOWED);
     return null;
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'دسترسی غیرمجاز' }, { status: 401 });
+  } catch (e) {
+    log.error('auth_guard_failed', { error: e });
+    return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز' }, { status: 401 });
   }
 }
 
@@ -315,8 +316,9 @@ export async function DELETE(req: NextRequest) {
   if (csrf) return csrf;
   try {
     await requireRole(['ADMIN']);
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'دسترسی غیرمجاز' }, { status: 401 });
+  } catch (e) {
+    log.error('auth_guard_failed', { error: e });
+    return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز' }, { status: 401 });
   }
 
   const id = Number(req.nextUrl.searchParams.get('id') || 0);

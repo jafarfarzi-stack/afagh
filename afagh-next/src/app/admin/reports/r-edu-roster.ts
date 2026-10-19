@@ -3,6 +3,7 @@ import { faStatus, paged, PER, studentWhere, STU_FROM, studentListReport } from 
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { requireRole } from '@/lib/auth';
+import { escapeLikeChars } from '@/lib/persian-search';
 import {
   calculateOfficialGPA,
   calculateOfficialGpaBreakdown,
@@ -41,13 +42,13 @@ export async function run(kind: string, f: ReportFilters & Record<string, unknow
       if (!q) {
         return { columns, rows: [], total: 0, page: 1, per: 50, totalPages: 1, summary: 'کد یا نام درس را وارد کنید تا ارائه‌های آن ترم پیدا شود.' };
       }
-      const like = `%${q}%`;
+      const like = `%${escapeLikeChars(q)}%`;
       // ‏f.q مصرف جست‌وجوی درس است، نه دانشجو — پس از فیلتر دانشجو حذف می‌شود
       const rest: ReportFilters = { ...f, q: undefined };
       const from = sql`FROM enrollments e JOIN course_offerings o ON o.id = e."offeringId" JOIN courses c ON c.id = o."courseId" JOIN academic_terms t ON t.id = o."termId" JOIN students s ON s.id = e."studentId" JOIN users u ON u.id = s."userId" LEFT JOIN majors m ON m.id = s."majorId"`;
       const conds = [
         sql`t."termCode" = ${term}`,
-        sql`(c.code ILIKE ${like} OR c.title ILIKE ${like})`,
+        sql`(c.code ILIKE ${like} ESCAPE '\\' OR c.title ILIKE ${like} ESCAPE '\\')`,
         ...studentWhere(rest),
       ];
       const cols = sql`s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name, m.name AS major, o."groupNumber" AS "groupNumber", e."gradeValue" AS "gradeValue", e."gradeStatus" AS "gradeStatus"`;

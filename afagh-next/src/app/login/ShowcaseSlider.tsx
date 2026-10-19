@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { ShowcaseSlide } from '@/lib/login-showcase';
+import { isSafeLinkUrl } from '@/lib/safe-url';
 
 const GRADIENTS = [
   'from-emerald-700 via-teal-800 to-slate-900',
@@ -27,7 +28,7 @@ export default function ShowcaseSlider({ slides }: { slides: ShowcaseSlide[] }) 
 
   return (
     <div className="relative h-52 sm:h-64 overflow-hidden rounded-3xl shadow-2xl border border-white/20">
-      {s.linkUrl ? (
+      {s.linkUrl && isSafeLinkUrl(s.linkUrl) ? (
         <a href={s.linkUrl} className="block h-full w-full" aria-label={s.title}>
           {s.imageUrl ? (
             <img src={s.imageUrl} alt={s.title} className="absolute inset-0 h-full w-full object-cover" />

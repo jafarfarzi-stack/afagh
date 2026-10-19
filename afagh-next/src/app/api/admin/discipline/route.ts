@@ -55,8 +55,9 @@ const updateSchema = z.object({
 export async function GET(req: NextRequest) {
   try {
     await requireRole(ALLOWED);
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'دسترسی غیرمجاز' }, { status: 401 });
+  } catch (e) {
+    log.error('auth_guard_failed', { error: e });
+    return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز' }, { status: 401 });
   }
 
   const p = req.nextUrl.searchParams;
@@ -158,8 +159,9 @@ export async function POST(req: NextRequest) {
   if (csrf) return csrf;
   try {
     await requireRole(ALLOWED);
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'دسترسی غیرمجاز' }, { status: 401 });
+  } catch (e) {
+    log.error('auth_guard_failed', { error: e });
+    return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز' }, { status: 401 });
   }
 
   let raw: unknown;
@@ -218,7 +220,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, id: result.id });
   } catch (e: any) {
     log.error('case_create_failed', { error: e });
-    return NextResponse.json({ ok: false, error: e?.message || 'خطا در ذخیرهٔ پرونده.' }, { status: 400 });
+    return NextResponse.json({ ok: false, error: 'خطا در ذخیرهٔ پرونده.' }, { status: 400 });
   }
 }
 
@@ -229,8 +231,9 @@ export async function PATCH(req: NextRequest) {
   if (csrf) return csrf;
   try {
     await requireRole(ALLOWED);
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'دسترسی غیرمجاز' }, { status: 401 });
+  } catch (e) {
+    log.error('auth_guard_failed', { error: e });
+    return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز' }, { status: 401 });
   }
 
   const id = Number(req.nextUrl.searchParams.get('id') || 0);
@@ -297,7 +300,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     log.error('case_update_failed', { error: e });
-    return NextResponse.json({ ok: false, error: e?.message || 'خطا در به‌روزرسانی پرونده.' }, { status: 400 });
+    return NextResponse.json({ ok: false, error: 'خطا در به‌روزرسانی پرونده.' }, { status: 400 });
   }
 }
 
@@ -308,8 +311,9 @@ export async function DELETE(req: NextRequest) {
   if (csrf) return csrf;
   try {
     await requireRole(['ADMIN']);
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'دسترسی غیرمجاز' }, { status: 401 });
+  } catch (e) {
+    log.error('auth_guard_failed', { error: e });
+    return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز' }, { status: 401 });
   }
 
   const id = Number(req.nextUrl.searchParams.get('id') || 0);
@@ -350,6 +354,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     log.error('case_delete_failed', { error: e });
-    return NextResponse.json({ ok: false, error: e?.message || 'خطا در حذف پرونده.' }, { status: 400 });
+    return NextResponse.json({ ok: false, error: 'خطا در حذف پرونده.' }, { status: 400 });
   }
 }

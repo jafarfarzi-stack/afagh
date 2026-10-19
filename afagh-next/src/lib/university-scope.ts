@@ -50,12 +50,11 @@ async function allUniversities(): Promise<UniScope[]> {
  *   ۳) ردیف `students`/`staff` کاربر اگر `users.universityId` خالی باشد
  *   ۴) `ADMIN` با `universityId = NULL` → حساب پلتفرمی: همهٔ دانشگاه‌ها مجاز
  *
- * خروجی `null` یعنی «نامحدود» (حساب پلتفرمی یا بدون نشست) و `[]` یعنی deny-all.
+ * خروجی `null` یعنی «نامحدود» (فقط حساب پلتفرمی) و `[]` یعنی deny-all (بدون نشست یا خطا).
  */
 export const authorizedUniversityIds = cache(async (): Promise<number[] | null> => {
   const me = await getSessionUser().catch(() => null);
-  // بدون نشست (صفحهٔ ورود، رابط عمومی) — چیزی برای افشا نیست؛ رفتار قدیمی
-  if (!me) return null;
+  if (!me) return [];
 
   const ids = new Set<number>();
   if (typeof me.universityId === 'number') ids.add(me.universityId);
@@ -104,9 +103,9 @@ export const authorizedUniversityIds = cache(async (): Promise<number[] | null> 
  */
 export async function getCurrentUniversity(): Promise<UniScope> {
   const all = await allUniversities();
-  if (!all.length) return FALLBACK_UNI;
+  const allowed = await authorizedUniversityIds().catch(() => []);
+  if (!all.length) return allowed === null ? FALLBACK_UNI : DENY_UNI;
 
-  const allowed = await authorizedUniversityIds().catch(() => null);
   const pool = allowed === null ? all : all.filter(u => allowed.includes(u.id));
   if (!pool.length) return DENY_UNI;
 
@@ -117,8 +116,8 @@ export async function getCurrentUniversity(): Promise<UniScope> {
 /** همهٔ دانشگاه‌ها برای سوییچر سربرگ — فقط آنچه کاربر واقعاً مجاز است */
 export async function listUniversities(): Promise<UniScope[]> {
   const all = await allUniversities();
-  if (!all.length) return [FALLBACK_UNI];
-  const allowed = await authorizedUniversityIds().catch(() => null);
+  const allowed = await authorizedUniversityIds().catch(() => []);
+  if (!all.length) return allowed === null ? [FALLBACK_UNI] : [];
   return allowed === null ? all : all.filter(u => allowed.includes(u.id));
 }
 
@@ -130,7 +129,7 @@ export async function listUniversities(): Promise<UniScope[]> {
  */
 export async function canActOnUniversity(universityId: number | null | undefined): Promise<boolean> {
   if (universityId == null) return false;      // رکورد بدون دانشگاه: مجهول → رد
-  const allowed = await authorizedUniversityIds().catch(() => null);
+  const allowed = await authorizedUniversityIds().catch(() => []);
   if (allowed === null) return true;           // حساب پلتفرمی
   return allowed.includes(Number(universityId));
 }
@@ -141,7 +140,7 @@ export async function canActOnUniversity(universityId: number | null | undefined
  * (`1=0`) — نه حذفِ شرط، چون حذف شرط یعنی «همهٔ دانشگاه‌ها» (fail-open).
  */
 export async function currentUniversitySqlCondition(column: any): Promise<any> {
-  const allowed = await authorizedUniversityIds().catch(() => null);
+  const allowed = await authorizedUniversityIds().catch(() => []);
   if (allowed === null) return undefined;                    // نامحدود: بدون قید
   if (!allowed.length) return sql`1 = 0`;                    // deny-all (fail-closed)
   return inArray(column, allowed);

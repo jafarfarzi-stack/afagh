@@ -13,6 +13,7 @@ import { getBool, getNumber, getSetting } from '@/lib/settings';
 import { ledgerBalance } from '@/lib/ledger-balance';
 import { executeIrandocCheck } from '@/lib/api-integrations';
 import { ssrfFetch } from '@/lib/ssrf-guard';
+import { isSafeLinkUrl } from '@/lib/safe-url';
 import { createLogger } from '@/lib/logger';
 import { deliveriesForUser, notifyUserMultichannel } from '@/lib/messaging';
 import { getRegulationConfig } from '@/lib/regulations-engine';
@@ -615,7 +616,8 @@ export async function advanceDossier(auditId: number): Promise<{ status: string;
 
 /** نشانی پورتال سجاد برای راهنمایی دانشجو (قابل تغییر از تنظیمات) */
 export async function sajjadPortalUrl() {
-  return (await getSetting('SAJJAD_PORTAL_URL')) || 'https://portal.saorg.ir';
+  const v = await getSetting('SAJJAD_PORTAL_URL');
+  return v && isSafeLinkUrl(v) ? v : 'https://portal.saorg.ir';
 }
 
 /** ثبت کد رهگیری درخواست کد صحت که دانشجو در سامانهٔ سجاد گرفته است */

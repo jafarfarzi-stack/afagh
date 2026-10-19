@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
   const kind = q.get('kind') || 'codes';
   const sourceCode = (q.get('sourceCode') || 'LEGACY').toUpperCase();
+  if (!/^[A-Z0-9_]{1,32}$/.test(sourceCode)) return NextResponse.json({ error: 'کد مبدأ نامعتبر است.' }, { status: 400 });
 
   try {
     if (kind === 'codes') {

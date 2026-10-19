@@ -71,7 +71,12 @@ export async function POST(req: NextRequest) {
   if (!user || !user.roles.some(r => ALLOWED.includes(r))) {
     return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز.' }, { status: 403 });
   }
-  const body = await req.json();
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ ok: false, error: 'بدنهٔ درخواست نامعتبر است.' }, { status: 400 });
+  }
   const result = degreeLevelSchema.safeParse(body);
   if (!result.success) {
     return NextResponse.json({ ok: false, error: 'داده ورودی معتبر نیست.' }, { status: 400 });

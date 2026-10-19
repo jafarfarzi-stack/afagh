@@ -332,7 +332,7 @@ export default function StudentsManagerClient(props: {
         showToast(res.message || 'نمره با موفقیت ثبت شد.');
         setGradeEditModalOpen(false);
         setTranscriptLoading(true);
-getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.length, 'rows'); setTranscript(r); }).catch(e => { console.error('[transcript] ERROR', e); setTranscript([]); }).finally(() => setTranscriptLoading(false));
+getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { console.error('[transcript] ERROR', e); setTranscript([]); }).finally(() => setTranscriptLoading(false));
       } else if (res.error && res.error.startsWith('STEPUP_REQUIRED:')) {
         // تأیید دومرحله‌ای لازم است — مودال باز می‌ماند و باکس رمز نشان داده می‌شود
         setGradeNeedsStepUp(true);
@@ -432,7 +432,7 @@ getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.lengt
     setTranscriptLoading(true);
     setTranscript(null);
     setRegConfig(null);
-    getTranscript(currentStudent.id).then(r => { console.log('[transcript]', r.length, 'rows'); setTranscript(r); }).catch(e => { console.error('[transcript] ERROR', e); setTranscript([]); }).finally(() => setTranscriptLoading(false));
+    getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { console.error('[transcript] ERROR', e); setTranscript([]); }).finally(() => setTranscriptLoading(false));
     getTranscriptRegulation(currentStudent.id).then(r => setRegConfig(r?.config ?? null)).catch(() => setRegConfig(null));
   }, [stuTab, currentStudent?.id]);
 

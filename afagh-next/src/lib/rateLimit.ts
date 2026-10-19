@@ -170,6 +170,23 @@ export async function hitRateLimit(key: string, windowSec: number): Promise<void
   }
 }
 
+/** آزادسازی یک رزرو قبلی (برگرداندن یک شمارش) — برای موفقیت پس از rateLimit. */
+export async function releaseRateLimit(key: string): Promise<void> {
+  const rkey = `rl:${key}`;
+  try {
+    if (Date.now() < redisDownUntil) throw new Error('redis-breaker-open');
+    const n = await rlRedis.decr(rkey);
+    if (n <= 0) await rlRedis.del(rkey);
+  } catch {
+    redisDownUntil = Date.now() + BREAKER_MS;
+    const rec = mem.get(rkey);
+    if (rec && rec.resetAt > Date.now()) {
+      rec.count -= 1;
+      if (rec.count <= 0) mem.delete(rkey);
+    }
+  }
+}
+
 /**
  * مجاز بودن درخواست — بعد از سررسید محدودیت، خودکار آزاد می‌شود.
  * @param key       کلید (مثلاً `login:1.2.3.4`)

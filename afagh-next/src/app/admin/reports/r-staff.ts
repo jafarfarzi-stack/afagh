@@ -69,8 +69,8 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       if (term) conds.push(sql`t."termCode" = ${term}`);
       if (f.departmentId) conds.push(sql`c."departmentId" = ${f.departmentId}`);
       if (f.q) {
-        const like = `%${f.q}%`;
-        conds.push(sql`(c.code ILIKE ${like} OR c.title ILIKE ${like} OR st."staffCode" ILIKE ${like} OR u."firstName" ILIKE ${like} OR u."lastName" ILIKE ${like})`);
+        const like = `%${escapeLikeChars(String(f.q))}%`;
+        conds.push(sql`(c.code ILIKE ${like} ESCAPE '\\' OR c.title ILIKE ${like} ESCAPE '\\' OR st."staffCode" ILIKE ${like} ESCAPE '\\' OR u."firstName" ILIKE ${like} ESCAPE '\\' OR u."lastName" ILIKE ${like} ESCAPE '\\')`);
       }
       const cols = sql`st."staffCode" AS staff_code, u."firstName" || ' ' || u."lastName" AS staff_name, c.code AS course_code, c.title AS course_title, o."groupNumber" AS grp, o.capacity AS capacity, o."enrolledCount" AS enrolled, t."termCode" AS term`;
       const r = await paged(
@@ -93,8 +93,8 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       pushUni(conds, 'o', f);
       if (term) conds.push(sql`t."termCode" = ${term}`);
       if (f.q) {
-        const like = `%${f.q}%`;
-        conds.push(sql`(st."staffCode" ILIKE ${like} OR u."firstName" ILIKE ${like} OR u."lastName" ILIKE ${like} OR c.title ILIKE ${like})`);
+        const like = `%${escapeLikeChars(String(f.q))}%`;
+        conds.push(sql`(st."staffCode" ILIKE ${like} ESCAPE '\\' OR u."firstName" ILIKE ${like} ESCAPE '\\' OR u."lastName" ILIKE ${like} ESCAPE '\\' OR c.title ILIKE ${like} ESCAPE '\\')`);
       }
       const cols = sql`st."staffCode" AS code, u."firstName" || ' ' || u."lastName" AS professor, s."dayOfWeek" AS day, s."startTime" AS start, s."endTime" AS finish, c.title AS course, r.name AS room`;
       const r = await paged(
@@ -139,8 +139,8 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       const professorCode = String(f.professorCode ?? '').trim();
       if (professorCode) conds.push(sql`st."staffCode" = ${professorCode}`);
       if (f.q) {
-        const like = `%${f.q}%`;
-        conds.push(sql`(c.code ILIKE ${like} OR c.title ILIKE ${like} OR st."staffCode" ILIKE ${like} OR u."lastName" ILIKE ${like} OR s."studentCode" ILIKE ${like})`);
+        const like = `%${escapeLikeChars(String(f.q))}%`;
+        conds.push(sql`(c.code ILIKE ${like} ESCAPE '\\' OR c.title ILIKE ${like} ESCAPE '\\' OR st."staffCode" ILIKE ${like} ESCAPE '\\' OR u."lastName" ILIKE ${like} ESCAPE '\\' OR s."studentCode" ILIKE ${like} ESCAPE '\\')`);
       }
       const financeCol = showFinance
         ? sql`, CASE WHEN COALESCE((SELECT SUM(CASE WHEN ${debtIn} THEN sl.amount ELSE 0 END) - SUM(CASE WHEN ${creditIn} THEN sl.amount ELSE 0 END) FROM student_ledger sl WHERE sl."studentId" = s.id), 0) > 0 THEN 'بدهکار' ELSE 'تسویه' END AS finance`

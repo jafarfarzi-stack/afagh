@@ -6,9 +6,10 @@ import { pos_terminals, pos_transactions, students, users, financial_terms, acad
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { safeRials } from '@/lib/money';
-import { recordLedgerAction, recordReversalAction } from '@/app/admin/finance/actions/ledger';
+import { recordReversalAction } from '@/app/admin/finance/actions/ledger';
 
 const POS_ROLES: string[] = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'];
+const POS_MAX_RIALS = 10_000_000_000;
 
 export async function getPosTerminals() {
   await requireRole(POS_ROLES);
@@ -41,6 +42,7 @@ interface PosSaleInput {
   amount: number;
   stan: string;
   rrn?: string;
+  authorizationRef: string;
   entryMode: 'CHIP' | 'CONTACTLESS' | 'MAGSTRIPE' | 'FALLBACK' | 'MANUAL';
   cardPan: string;
   cardholderName?: string;
@@ -70,9 +72,15 @@ export async function recordPosSale(input: PosSaleInput) {
 
   // اعتبارسنجی مبلغ در مرز ورودی: فقط ریال صحیح مثبت (نه NaN/منفی/اعشاری)
   const amount = safeRials(input.amount);
-  if (amount === null || amount <= 0) throw new Error('مبلغ نامعتبر است؛ مبلغ باید عدد صحیح مثبت (ریال) باشد');
+  if (amount === null || amount <= 0 || amount > POS_MAX_RIALS) {
+    throw new Error('مبلغ نامعتبر است؛ مبلغ باید عدد صحیح مثبت (ریال) و حداکثر ۱۰٬۰۰۰٬۰۰۰٬۰۰۰ باشد');
+  }
   const stan = String(input.stan ?? '').trim();
   if (!stan) throw new Error('STAN تراکنش الزامی است');
+  const authorizationRef = String(input.authorizationRef ?? '').trim();
+  if (authorizationRef.length < 6 || authorizationRef.length > 40) {
+    throw new Error('شناسهٔ مجوز بانکی (authorizationRef) الزامی است و باید ۶ تا ۴۰ نویسه باشد');
+  }
 
   // Find terminal
   const terminal = await getPosTerminal(input.terminalCode);
@@ -118,33 +126,18 @@ export async function recordPosSale(input: PosSaleInput) {
         // 🔒 همیشه SALE — ورودی کلاینت نادیده گرفته می‌شود.
         txnType: 'SALE',
         entryMode: input.entryMode,
-        status: 'APPROVED',
-        responseCode: '00',
-        responseMessage: 'APPROVED',
+        // 🔒 تأیید بانکی هنوز از درگاه راستی‌آزمایی نمی‌شود: تا آن زمان PENDING و بدون
+        // ثبت در دفتر مالی (ledger) می‌ماند — هیچ پرداختی از روی ادعای کلاینت اعتبار نمی‌گیرد.
+        status: 'PENDING',
+        responseCode: null,
+        responseMessage: 'PENDING_VERIFICATION',
         cardPan: maskPan(input.cardPan),
         cardholderName: input.cardholderName ?? null,
         operatorId,
-        description: input.description ?? `پرداخت POS - ${terminal.title}`,
+        description: `${input.description ?? `پرداخت POS - ${terminal.title}`} | AUTH:${authorizationRef}`,
       }).returning();
 
-      // Record in student ledger — در همان تراکنش؛ شکست = rollback کامل
-      const led = await recordLedgerAction({
-        studentId: stu.id,
-        termId: termId ?? null,
-        financialTermId: financialTermId ?? null,
-        transactionType: 'POS_PAYMENT',
-        amount,
-        description: `پرداخت کارت‌خوان ${terminal.title} - STAN:${stan}${input.rrn ? ` RRN:${input.rrn}` : ''}`,
-        referenceId: posTxn.id,
-      }, { tx });
-      if (!led.ok || !led.ledgerId) throw new Error(led.error ?? 'خطا در ثبت دفتر مالی؛ تراکنش برگشت داده شد');
-
-      // Update POS transaction with the REAL ledger row id
-      await tx.update(pos_transactions)
-        .set({ ledgerTxnId: led.ledgerId })
-        .where(eq(pos_transactions.id, posTxn.id));
-
-      return { ok: true, posTxn };
+      return { ok: true, posTxn, pending: true };
     });
   } catch (e) {
     throw toPosTxError(e, 'خطا در ثبت پرداخت POS');

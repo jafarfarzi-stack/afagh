@@ -1,9 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireRole } from '@/lib/auth';
+import { requirePlatformAdmin } from '@/lib/platform-admin';
 import { resetSettings, saveSettings, SETTING_BY_KEY } from '@/lib/settings';
 import { SECRET_MASK } from '@/lib/settings-shared';
+import { magicMatches } from '@/lib/safe-input';
 
 export interface SettingsActionResult {
   ok: boolean;
@@ -16,7 +17,7 @@ export interface SettingsActionResult {
  */
 export async function saveSettingsAction(values: Record<string, string>): Promise<SettingsActionResult> {
   try {
-    await requireRole(['ADMIN']);
+    await requirePlatformAdmin();
   } catch {
     return { ok: false, message: 'دسترسی لازم را ندارید.' };
   }
@@ -57,7 +58,7 @@ export async function saveSettingsAction(values: Record<string, string>): Promis
  */
 export async function uploadLogoAction(fd: FormData): Promise<SettingsActionResult> {
   try {
-    await requireRole(['ADMIN']);
+    await requirePlatformAdmin();
   } catch {
     return { ok: false, message: 'دسترسی لازم را ندارید.' };
   }
@@ -66,12 +67,13 @@ export async function uploadLogoAction(fd: FormData): Promise<SettingsActionResu
   const allowed = ['image/png', 'image/jpeg', 'image/webp'];
   if (!allowed.includes(file.type)) return { ok: false, message: 'فقط PNG/JPG/WebP مجاز است.' };
   if (file.size > 2 * 1024 * 1024) return { ok: false, message: 'حجم فایل بیش از ۲ مگابایت است.' };
+  const buf = Buffer.from(await file.arrayBuffer());
+  if (!magicMatches(file.type, buf)) return { ok: false, message: 'محتوای فایل با نوع ادعاشده مطابقت ندارد.' };
   const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
   const { mkdir, writeFile } = await import('node:fs/promises');
   const { join } = await import('node:path');
   const dir = join(process.cwd(), 'public', 'uploads');
   await mkdir(dir, { recursive: true });
-  const buf = Buffer.from(await file.arrayBuffer());
   await writeFile(join(dir, `logo.${ext}`), buf);
   // پسوند قبلی متفاوت بود؟ پاکش کن تا فقط یک لوگو بماند
   for (const e of ['png', 'jpg', 'webp']) {
@@ -89,7 +91,7 @@ export async function uploadLogoAction(fd: FormData): Promise<SettingsActionResu
 /** بازگرداندن یک کلید به مقدار ENV/پیش‌فرض */
 export async function resetSettingAction(key: string): Promise<SettingsActionResult> {
   try {
-    await requireRole(['ADMIN']);
+    await requirePlatformAdmin();
   } catch {
     return { ok: false, message: 'دسترسی لازم را ندارید.' };
   }

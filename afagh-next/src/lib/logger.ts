@@ -33,6 +33,7 @@ const maskString = (s: string): string => {
   // موبایل ایرانی ۱۱ رقمی و کد ۱۰ رقمی (کد ملی/شناسهٔ چت عددی) — هرگز در لاگ خام نماند
   out = out.replace(/\b09\d{9}\b/g, MASK);
   out = out.replace(/\b\d{10}\b/g, MASK);
+  out = out.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, MASK);
   return out;
 };
 

@@ -44,9 +44,9 @@ export function sessionTransport(env: Record<string, string | undefined>) {
     if (url.protocol === 'https:' || url.protocol === 'http:') https = url.protocol === 'https:';
   } catch { /* secure production default */ }
   const secureMode = (env.AFAGH_COOKIE_SECURE ?? 'auto').toLowerCase();
-  const secure = secureMode === 'true' ? true : secureMode === 'false' ? false : https;
+  const secure = env.NODE_ENV === 'production' ? true : secureMode === 'true' ? true : secureMode === 'false' ? false : https;
   const mode = (env.AFAGH_COOKIE_SAMESITE ?? 'auto').toLowerCase();
-  let sameSite: 'lax' | 'none' | 'strict' = mode === 'none' ? 'none' : mode === 'strict' ? 'strict' : mode === 'lax' ? 'lax' : https ? 'none' : 'lax';
+  let sameSite: 'lax' | 'none' | 'strict' = mode === 'none' ? 'none' : mode === 'strict' ? 'strict' : 'lax';
   if (sameSite === 'none' && !secure) sameSite = 'lax';
   return { secure, sameSite };
 }

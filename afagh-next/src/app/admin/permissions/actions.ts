@@ -18,6 +18,7 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { permissions, role_permissions, roles, user_roles } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { requirePlatformAdmin } from '@/lib/platform-admin';
 import { assertServerActionOrigin } from '@/lib/security';
 import { auditChain } from '@/lib/audit-chain';
 import { clearPermissionCache, invalidatePermissionCacheFor } from '@/lib/permissions-enforcer';
@@ -139,7 +140,7 @@ export async function getPermissionsWorkspaceAction(): Promise<
 export async function saveRolePermissionsAction(input: { roleId: number; codes: string[] }) {
   const og = await assertServerActionOrigin();
   if (!og.ok) return fail(og.error);
-  const actor = await requireRole(['ADMIN']);
+  const actor = await requirePlatformAdmin();
 
   const roleId = Number(input?.roleId);
   if (!Number.isInteger(roleId) || roleId <= 0) return fail('شناسهٔ نقش نامعتبر است.');
@@ -198,7 +199,7 @@ export async function saveRolePermissionsAction(input: { roleId: number; codes: 
 export async function createRoleAction(input: { code: string; title: string }) {
   const og = await assertServerActionOrigin();
   if (!og.ok) return fail(og.error);
-  const actor = await requireRole(['ADMIN']);
+  const actor = await requirePlatformAdmin();
 
   const code = String(input?.code ?? '').trim().toUpperCase().replace(/\s+/g, '_');
   const title = String(input?.title ?? '').trim();
@@ -231,7 +232,7 @@ export async function createRoleAction(input: { code: string; title: string }) {
 export async function deleteRoleAction(input: { roleId: number }) {
   const og = await assertServerActionOrigin();
   if (!og.ok) return fail(og.error);
-  const actor = await requireRole(['ADMIN']);
+  const actor = await requirePlatformAdmin();
 
   const roleId = Number(input?.roleId);
   const [role] = await db.select().from(roles).where(eq(roles.id, roleId)).limit(1);

@@ -5,6 +5,7 @@ import { eq, isNull, or } from 'drizzle-orm';
 import { db } from '@/db';
 import { clearance_departments } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { assertSafeUrl } from '@/lib/ssrf-guard';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import {
   advanceDossier, approveByHead, getDossier, holdDossier, issueDegree, listDossiers,
@@ -173,6 +174,7 @@ export async function saveDepartmentAction(input: {
     const uni = await getCurrentUniversity().catch(() => null);
     const code = input.code.trim().toUpperCase();
     if (!/^[A-Z0-9_]{2,40}$/.test(code)) return { ok: false as const, error: 'کد فقط حروف لاتین بزرگ/عدد/زیرخط.' };
+    if (input.apiUrl?.trim()) await assertSafeUrl(input.apiUrl);
     const values = {
       code, title: input.title.trim() || code, autoCheck: input.autoCheck || 'NONE',
       apiUrl: input.apiUrl?.trim() || null, responsibleRoleCode: input.responsibleRoleCode?.trim() || null,

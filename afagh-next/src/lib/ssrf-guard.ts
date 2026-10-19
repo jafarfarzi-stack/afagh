@@ -17,8 +17,9 @@
  * به‌جای حذف‌شدن، راه خروج صریح دارد:
  *   AFAGH_SSRF_ALLOW_HOSTS=minio,samin.internal,irandoc.lan
  * میزبان‌های فهرست‌شده «مجاز اعلام‌شده» تلقی می‌شوند: بررسی DNS-خصوصی و
- * allow-list پیش‌فرض سرویس رویشان اعمال نمی‌شود و `http://` هم برایشان مجاز
- * است (سرویس داخلی معمولاً TLS ندارد). بقیهٔ کنترل‌ها (سینتکس، نبود
+ * allow-list پیش‌فرض سرویس رویشان اعمال نمی‌شود و `http://` فقط وقتی مجاز است
+ * که ورودی ENV با پیشوند صریح `http://` نوشته شده باشد (سرویس داخلی معمولاً
+ * TLS ندارد). بقیهٔ کنترل‌ها (سینتکس، نبود
  * userinfo، اعتبارسنجی مجدد هر ریدایرکت) سر جایشان می‌ماند. این متغیر فقط از
  * ENV خوانده می‌شود و از پنل مدیر قابل نوشتن نیست.
  */
@@ -59,6 +60,9 @@ export function isPrivateIPv4(ip: string): boolean {
   if (a === 127) return true;
   if (a === 169 && b === 254) return true;
   if (a === 0) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  if (a === 198 && (b === 18 || b === 19)) return true;
+  if (a >= 224) return true;
   return false;
 }
 
@@ -129,6 +133,14 @@ function hostAllowed(hostname: string, allowed: readonly string[]): boolean {
   });
 }
 
+function isHttpEntry(entry: string): boolean {
+  return /^http:\/\//i.test(entry);
+}
+
+function stripHttpPrefix(entry: string): string {
+  return entry.replace(/^http:\/\//i, '');
+}
+
 /** allow-list اپراتور از ENV (سرویس‌های درون‌خوشه‌ای/خودمیزبان). */
 export function envAllowedHosts(): string[] {
   const raw = process.env[ENV_ALLOW_HOSTS_VAR];
@@ -178,9 +190,12 @@ export function parseSafeUrl(raw: string): URL {
  */
 export async function assertSafeUrl(raw: string, opts: AssertSafeUrlOptions = {}): Promise<URL> {
   const probe = parseUrl(raw);
-  const trusted = hostAllowed(probe.hostname, envAllowedHosts());
-  // http فقط برای میزبان‌های مجاز اعلام‌شده؛ بقیه سخت‌گیرانه https-only می‌مانند.
-  const u = trusted && (probe.protocol === 'http:' || probe.protocol === 'https:') ? probe : parseSafeUrl(raw);
+  const envHosts = envAllowedHosts();
+  const trustedHttps = hostAllowed(probe.hostname, envHosts.map(stripHttpPrefix));
+  const trustedHttp = hostAllowed(probe.hostname, envHosts.filter(isHttpEntry).map(stripHttpPrefix));
+  const trusted = probe.protocol === 'https:' ? trustedHttps : probe.protocol === 'http:' && trustedHttp;
+  // http فقط برای میزبان‌های مجاز با پیشوند صریح http:// در ENV؛ بقیه سخت‌گیرانه https-only می‌مانند.
+  const u = trusted ? probe : parseSafeUrl(raw);
   if (u.username || u.password) throw new UnsafeUrlError('نشانی نباید نام‌کاربری/رمز داشته باشد.');
   if (!u.hostname) throw new UnsafeUrlError('میزبان نشانی نامشخص است.');
 

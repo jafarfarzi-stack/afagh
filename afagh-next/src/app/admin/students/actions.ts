@@ -525,11 +525,11 @@ export async function bulkResetToNationalCodeAction(
   const roleCode = scope === 'professor' ? 'PROFESSOR' : 'STUDENT';
   const uni = await getCurrentUniversity().catch(() => null);
   if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
-  const uniWhere = `(users."universityId" = ${uni.id} OR users."universityId" IS NULL)`;
+  const uniWhere = sql`(users."universityId" = ${uni.id} OR users."universityId" IS NULL)`;
   try {
     const usersToReset = await db.execute(sql<{ id: number; nationalCode: string }>`
       SELECT id, "nationalCode" FROM users
-      WHERE "isActive" = 1 AND "nationalCode" IS NOT NULL AND LENGTH("nationalCode") = 10 AND ${sql.raw(scopeWhere)} AND ${sql.raw(uniWhere)}
+      WHERE "isActive" = 1 AND "nationalCode" IS NOT NULL AND LENGTH("nationalCode") = 10 AND ${sql.raw(scopeWhere)} AND ${uniWhere}
     `);
     const rows = (usersToReset as any).rows ?? usersToReset;
     let count = 0;
@@ -586,12 +586,12 @@ export async function bulkResetPasswordsAction(
   const roleCode = scope === 'professor' ? 'PROFESSOR' : 'STUDENT';
   const uni2 = await getCurrentUniversity().catch(() => null);
   if (!uni2) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
-  const uniWhere2 = `(users."universityId" = ${uni2.id} OR users."universityId" IS NULL)`;
+  const uniWhere2 = sql`(users."universityId" = ${uni2.id} OR users."universityId" IS NULL)`;
   try {
     const hash = await hashPassword(pw);
     const idsRes = await db.execute(sql<{ id: number }>`
       SELECT id FROM users
-      WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)} AND ${sql.raw(uniWhere2)}
+      WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)} AND ${uniWhere2}
     `);
     const idsRows = ((idsRes as any).rows ?? idsRes) as { id: number }[];
     const affectedIds = idsRows.map((r) => Number(r.id)).filter(Number.isInteger);
@@ -599,7 +599,7 @@ export async function bulkResetPasswordsAction(
     const upd = await db.transaction(async (tx) => {
       const u = await tx.execute(sql`
         UPDATE users SET "passwordHash" = ${hash}, "mustChangePassword" = 1
-        WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)} AND ${sql.raw(uniWhere2)}
+        WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)} AND ${uniWhere2}
       `);
       if (affectedIds.length) {
         await tx.delete(sessions).where(inArray(sessions.userId, affectedIds));
@@ -639,11 +639,11 @@ export async function bulkForcePasswordChangeAction(
     : `EXISTS (SELECT 1 FROM students st WHERE st."userId" = users.id)`;
   const uni = await getCurrentUniversity().catch(() => null);
   if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
-  const uniWhere = `(users."universityId" = ${uni.id} OR users."universityId" IS NULL)`;
+  const uniWhere = sql`(users."universityId" = ${uni.id} OR users."universityId" IS NULL)`;
   try {
     const idsRes = await db.execute(sql<{ id: number }>`
       SELECT id FROM users
-      WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)} AND ${sql.raw(uniWhere)}
+      WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)} AND ${uniWhere}
     `);
     const idsRows = ((idsRes as any).rows ?? idsRes) as { id: number }[];
     const affectedIds = idsRows.map((r) => Number(r.id)).filter(Number.isInteger);
@@ -651,7 +651,7 @@ export async function bulkForcePasswordChangeAction(
     const upd = await db.transaction(async (tx) => {
       const u = await tx.execute(sql`
         UPDATE users SET "mustChangePassword" = 1
-        WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)} AND ${sql.raw(uniWhere)}
+        WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)} AND ${uniWhere}
       `);
       if (affectedIds.length) {
         await tx.delete(sessions).where(inArray(sessions.userId, affectedIds));

@@ -335,7 +335,7 @@ export async function exportCodeMaps(sourceCode: string, domain?: MapDomain): Pr
     }));
 
   if (!sheets.length) sheets.push({ name: 'تطبیق کدها', rows: [['کد قدیمی', 'عنوان قدیمی', 'کد جدید', 'عنوان جدید', 'امتیاز', 'وضعیت', 'یادداشت']], widths: [16, 34, 16, 30, 12, 16, 28] });
-  return { buf: writeXlsx(sheets), fileName: `afagh-codemaps-${sourceCode}.xlsx` };
+  return { buf: writeXlsx(sheets), fileName: `afagh-codemaps-${sourceCode.replace(/[^A-Za-z0-9_]/g, '')}.xlsx` };
 }
 
 export async function exportCompareRun(runId: number): Promise<{ buf: Buffer; fileName: string }> {
@@ -396,7 +396,7 @@ export async function exportGrades(sourceCode: string, termCode?: string): Promi
         ] as CellValue[]),
       ],
     }]),
-    fileName: `afagh-legacy-grades-${sourceCode}.xlsx`,
+    fileName: `afagh-legacy-grades-${sourceCode.replace(/[^A-Za-z0-9_]/g, '')}.xlsx`,
   };
 }
 
@@ -433,6 +433,6 @@ export async function exportFinancial(sourceCode: string): Promise<{ buf: Buffer
         ],
       },
     ]),
-    fileName: `afagh-legacy-financial-${sourceCode}.xlsx`,
+    fileName: `afagh-legacy-financial-${sourceCode.replace(/[^A-Za-z0-9_]/g, '')}.xlsx`,
   };
 }

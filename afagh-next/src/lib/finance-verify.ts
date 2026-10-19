@@ -19,11 +19,11 @@ export async function buildFinanceStatementVerify(
     try {
       qr = await qrSvg(url, { errorCorrectionLevel: 'Q', size: 128, margin: 4 });
     } catch (err) {
-      console.error('[finance-verify] qr failed', err);
+      console.error('[finance-verify] qr failed', err instanceof Error ? err.message : String(err));
     }
     return { url, qr, expiresAt: issued.expiresAt };
   } catch (err) {
-    console.error('[finance-verify] token failed', err);
+    console.error('[finance-verify] token failed', err instanceof Error ? err.message : String(err));
     return null;
   }
 }

@@ -159,6 +159,7 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
   const [fin] = await D.select().from(financial_clearances)
     .where(and(eq(financial_clearances.studentId, studentId), eq(financial_clearances.termId, clearanceTermId)));
   
+  let debtThreshold = 0;
   if (!fin || !fin.isCleared) {
     out.ok = false;
     out.hardErrors.push('تسویه‌حساب مالی این ترم ثبت نشده است. برای انتخاب واحد باید بدهکاری‌تان تسویه شود.');
@@ -167,7 +168,7 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
       const thresholdRaw = await import('../settings').then(m => m.getSetting('ENROLLMENT_DEBT_THRESHOLD'));
       return Math.max(0, Number(thresholdRaw ?? 0));
     });
-    const debtThreshold = await getThreshold();
+    debtThreshold = await getThreshold();
     // تراز کانونی (واژگان یکتا) روی کل دفتر — همهٔ ترم‌ها، نه فقط ترم
     // تسویه: مثبت = بدهی، بدون هیچ معکوسیتی در علامت تا ریاضیِ گیت با
     // ریاضیِ نمایش (کارنامه/کارتابل) یکی باشد. آستانهٔ صفر fail-closed
@@ -417,6 +418,25 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
   let txError: unknown = null;
   try {
     await doRls(userId, async (tx: any) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('enroll:' || ${String(studentId)}))`);
+      const debtNow = await tx.execute(sql`select "transactionType", amount from student_ledger where "studentId" = ${studentId}`);
+      const balanceNow = ledgerBalance((debtNow.rows ?? []) as { transactionType: string | null; amount: number | string | null }[]);
+      if (balanceNow > debtThreshold) {
+        throw new Error(`مانده بدهکاری شما (${balanceNow.toLocaleString('fa-IR')} ریال) بیش از حد مجاز (${debtThreshold.toLocaleString('fa-IR')} ریال) است. ابتدا بدهکاری را کاهش دهید.`);
+      }
+      const takenNow = await tx.execute(sql`
+        select c.units as units
+        from enrollments e
+        join course_offerings co on co.id = e."offeringId"
+        join courses c on c.id = co."courseId"
+        where e."studentId" = ${studentId} and co."termId" = ${term.id}
+          and e.status in ('REGISTERED', 'PENDING_COUNCIL')
+      `);
+      const takenUnits = ((takenNow.rows ?? []) as { units: string | number | null }[])
+        .reduce((s, r) => s + parseUnits(r.units), 0);
+      if (takenUnits + newUnits > allowedMaxUnits) {
+        throw new Error(`سقف مجاز انتخاب واحد طبق آیین‌نامه آموزشی (${allowedMaxUnits} واحد) رعایت نشده است (ثبت‌شدهٔ هم‌زمان: ${takenUnits} + جدید: ${newUnits}).`);
+      }
       for (const p of plans) {
         if (p.excluded) continue;
         await tx.execute(sql.raw('SAVEPOINT enroll_sp'));

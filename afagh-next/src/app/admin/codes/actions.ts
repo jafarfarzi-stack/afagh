@@ -305,7 +305,10 @@ export async function missingCodeSummary(): Promise<{ table: string; missing: nu
 export async function exportCodesCsv(table: CodeTable): Promise<string> {
   await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
   const rows = await listCodes(table);
-  const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const esc = (v: string) => {
+    const s = /^[=+\-@|\t\r]/.test(v.trimStart()) ? `'${v}` : v;
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
   const head = 'کد,عنوان,زمینه,کد استاندارد,کد وزارت\n';
   return head + rows.map(r => [esc(r.code ?? ''), esc(r.title), esc(r.context ?? ''),
     esc(r.standardCode ?? ''), esc(r.ministryCode ?? '')].join(',')).join('\n');

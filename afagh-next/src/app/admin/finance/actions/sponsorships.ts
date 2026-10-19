@@ -108,7 +108,7 @@ export async function setSponsorshipStatusAction(
         const ch = await tx.execute(sql`SELECT COALESCE(SUM(("amount")::numeric), 0) AS "s" FROM student_ledger WHERE "studentId" = ${row.studentId} AND "termId" = ${row.termId} AND "transactionType" IN ('TUITION_CHARGE', 'CHARGE') AND ("amount")::numeric > 0`);
         const charges = Number((ch.rows[0] as { s?: unknown } | undefined)?.s ?? 0);
         const d = await tx.execute(sql`SELECT COALESCE(SUM(("amount")::numeric), 0) AS "s" FROM student_discounts WHERE "studentId" = ${row.studentId} AND "termId" = ${row.termId} AND status = 'APPROVED' AND kind = 'FIXED'`);
-        const s = await tx.execute(sql`SELECT COALESCE(SUM(("amount")::numeric), 0) AS "s" FROM student_sponsorships WHERE "studentId" = ${row.studentId} AND "termId" = ${row.termId} AND status IN ('CONFIRMED', 'PAID') AND "coverageKind" = 'FIXED'`);
+        const s = await tx.execute(sql`SELECT COALESCE(SUM(("amount")::numeric), 0) AS "s" FROM student_sponsorships WHERE "studentId" = ${row.studentId} AND "termId" = ${row.termId} AND status IN ('CONFIRMED', 'PAID') AND "coverageKind" = 'FIXED' AND id <> ${row.id}`);
         const fixedApproved = Number((d.rows[0] as { s?: unknown } | undefined)?.s ?? 0)
           + Number((s.rows[0] as { s?: unknown } | undefined)?.s ?? 0);
         if (Number.isFinite(charges) && fixedApproved + Number(row.amount) > charges) {

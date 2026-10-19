@@ -83,6 +83,6 @@ export async function PUT(req: NextRequest) {
     const msg = (err as Error)?.message;
     if (msg === 'NEXT_REDIRECT' || msg === 'NEXT_NOT_FOUND') throw err;
     log.error('offering-extras PUT failed', err);
-    return NextResponse.json({ ok: false, error: msg || 'خطای ناشناخته' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: 'خطای داخلی سرور.' }, { status: 500 });
   }
 }

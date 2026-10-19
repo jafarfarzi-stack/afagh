@@ -156,7 +156,7 @@ export async function buildCertificateHtml(data: CertificateData): Promise<strin
         <div class="title">گواهینـامـه پـایـان دوره تـخصـصی</div>
 
         <div class="body-text">
-          بدین‌وسیله گواهی می‌شود سرکار خانم / جناب آقای <span class="highlight">${learnerName}</span> با شماره ملی <span style="font-family: monospace;">${nationalIdMasked}</span>، دوره آموزشی و مهارتی <span class="highlight">«${courseName}»</span> به مدت <b>${data.durationHours} ساعت</b> را با تدریس استاد محترم <b>${instructorName}</b> با موفقیت و نمره نهایی <b style="color: #059669;">${data.grade} از ۲۰</b> به پایان رسانده است.
+          بدین‌وسیله گواهی می‌شود سرکار خانم / جناب آقای <span class="highlight">${learnerName}</span> با شماره ملی <span style="font-family: monospace;">${nationalIdMasked}</span>، دوره آموزشی و مهارتی <span class="highlight">«${courseName}»</span> به مدت <b>${esc(String(data.durationHours))} ساعت</b> را با تدریس استاد محترم <b>${instructorName}</b> با موفقیت و نمره نهایی <b style="color: #059669;">${esc(String(data.grade))} از ۲۰</b> به پایان رسانده است.
         </div>
 
         <div class="footer">

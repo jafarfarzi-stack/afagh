@@ -15,14 +15,44 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { course_offerings, enrollments } from '@/db/schema';
+import { academic_terms, course_offerings, enrollments, exam_sessions, grade_appeals } from '@/db/schema';
 import { getStaffByUser, getStudentByUser, requireRole } from '@/lib/auth';
 import { verifyExamHandover, verifyExamTicket } from '@/lib/verification';
 import * as engine from '@/lib/exam-engine';
 import type { ExamAppealRecheck, ExamCheckIn, ExamGradeEntry } from '@/lib/exam-engine';
-import type { RubricWeights } from '@/app/professor/grades/types';
+import { canActOnUniversity } from '@/lib/university-scope';
+import { auditChain } from '@/lib/audit-chain';
 
 type Res<T extends object = object> = ({ ok: true } & T) | ({ ok: false; error: string });
+
+const DENY_UNI_MSG = 'دسترسی: این مورد متعلق به دانشگاه شما نیست.';
+
+async function sessionUniversityId(sessionId: number): Promise<number | null> {
+  const [row] = await db
+    .select({ universityId: exam_sessions.universityId, termUniversityId: academic_terms.universityId })
+    .from(exam_sessions)
+    .leftJoin(academic_terms, eq(academic_terms.id, exam_sessions.termId))
+    .where(eq(exam_sessions.id, sessionId))
+    .limit(1);
+  return row ? (row.universityId ?? row.termUniversityId ?? null) : null;
+}
+
+async function offeringUniversityId(offeringId: number): Promise<number | null> {
+  const [row] = await db
+    .select({ universityId: course_offerings.universityId })
+    .from(course_offerings)
+    .where(eq(course_offerings.id, offeringId))
+    .limit(1);
+  return row?.universityId ?? null;
+}
+
+async function sessionInScope(sessionId: number): Promise<boolean> {
+  return canActOnUniversity(await sessionUniversityId(sessionId));
+}
+
+async function offeringInScope(offeringId: number): Promise<boolean> {
+  return canActOnUniversity(await offeringUniversityId(offeringId));
+}
 
 async function wrap<T extends object>(fn: () => Promise<T>): Promise<Res<T>> {
   try {
@@ -42,6 +72,7 @@ const reval = () => {
 // ── ① صدور حضور و غیاب (اداری) ──
 export async function examIssueAttendanceAction(sessionId: number) {
   const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
+  if (!(await sessionInScope(sessionId))) return { ok: false, error: DENY_UNI_MSG };
   const out = await wrap(() => engine.issueExamAttendance(user.id, sessionId));
   reval();
   return out;
@@ -52,6 +83,7 @@ export async function examProctorClockInAction(sessionId: number) {
   const user = await requireRole(['PROCTOR', 'ADMIN', 'EDU_EXPERT']);
   const me = await getStaffByUser(user.id);
   if (!me) return { ok: false, error: 'پروندهٔ پرسنلی یافت نشد.' };
+  if (!(await sessionInScope(sessionId))) return { ok: false, error: DENY_UNI_MSG };
   const out = await wrap(() => engine.proctorClockIn(user.id, sessionId, [me.id]));
   reval();
   return out;
@@ -62,6 +94,7 @@ export async function examProctorVerifyAction(px: { sessionId: number; hallId: n
   const user = await requireRole(['PROCTOR', 'ADMIN', 'EDU_EXPERT']);
   const me = await getStaffByUser(user.id);
   if (!me) return { ok: false, error: 'پروندهٔ پرسنلی یافت نشد.' };
+  if (!(await sessionInScope(px.sessionId))) return { ok: false, error: DENY_UNI_MSG };
   const out = await wrap(() =>
     engine.proctorVerifyAttendance(user.id, {
       sessionId: px.sessionId,
@@ -94,6 +127,7 @@ export async function examProctorScanAction(px: { sessionId: number; hallId: num
 
   const res = await verifyExamTicket(token);
   if (!res.ok) return { ok: false, error: res.message || 'کارت ورود به جلسه نامعتبر است.' };
+  if (!(await sessionInScope(px.sessionId))) return { ok: false, error: DENY_UNI_MSG };
 
   const out = await wrap(() =>
     engine.proctorVerifyAttendance(user.id, {
@@ -128,6 +162,7 @@ export async function examSignMinutesAction(px: {
   const user = await requireRole(['PROCTOR', 'ADMIN', 'EDU_EXPERT']);
   const me = await getStaffByUser(user.id);
   if (!me) return { ok: false, error: 'پروندهٔ پرسنلی یافت نشد.' };
+  if (!(await sessionInScope(px.sessionId))) return { ok: false, error: DENY_UNI_MSG };
   const out = await wrap(() =>
     engine.signHallMinutes(user.id, {
       sessionId: px.sessionId,
@@ -146,6 +181,7 @@ export async function examVaultReceiveAction(px: { sessionId: number; hallId: nu
   const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
   const me = await getStaffByUser(user.id);
   if (!me) return { ok: false, error: 'پروندهٔ پرسنلی یافت نشد.' };
+  if (!(await sessionInScope(px.sessionId))) return { ok: false, error: DENY_UNI_MSG };
   const out = await wrap(() =>
     engine.vaultReceiveHall(user.id, { sessionId: px.sessionId, hallId: px.hallId, vaultManagerId: me.id }),
   );
@@ -157,6 +193,7 @@ export async function examFinalizeHandoverAction(px: { sessionId: number }) {
   const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
   const me = await getStaffByUser(user.id);
   if (!me) return { ok: false, error: 'پروندهٔ پرسنلی یافت نشد.' };
+  if (!(await sessionInScope(px.sessionId))) return { ok: false, error: DENY_UNI_MSG };
   const out = await wrap(() => engine.finalizeVaultHandover(user.id, px.sessionId, me.id));
   reval();
   return out;
@@ -181,15 +218,18 @@ export async function examHandoverConfirmAction(rawToken: string) {
   if (!res.ok) return { ok: false, error: res.message };
   if (!res.ok) return { ok: false, error: 'کد تحویل نامعتبر است.' };
 
-  const roles = (res.step === 'INSTRUCTOR' || res.step === 'ARCHIVE')
-    ? ['ADMIN', 'EDU_EXPERT', 'PROFESSOR', 'ARCHIVE_EXPERT']
-    : ['ADMIN', 'EDU_EXPERT', 'VAULT_MANAGER'];
+  const roles = res.step === 'INSTRUCTOR'
+    ? ['ADMIN', 'EDU_EXPERT', 'PROFESSOR']
+    : res.step === 'ARCHIVE'
+      ? ['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT']
+      : ['ADMIN', 'EDU_EXPERT', 'VAULT_MANAGER'];
   const user = await requireRole(roles);
   const me = await getStaffByUser(user.id);
   if (!me) return { ok: false, error: 'پروندهٔ پرسنلی یافت نشد.' };
 
   if (res.step === 'ARCHIVE') {
     if (!res.offeringId) return { ok: false, error: 'ارائهٔ درس مشخص نیست.' };
+    if (!(await offeringInScope(res.offeringId))) return { ok: false, error: DENY_UNI_MSG };
     const out = await wrap(() =>
       engine.returnPapersToArchive(user.id, { offeringId: res.offeringId as number, archiveStaffId: me.id }),
     );
@@ -199,6 +239,7 @@ export async function examHandoverConfirmAction(rawToken: string) {
 
   if (res.step === 'INSTRUCTOR') {
     if (!res.offeringId) return { ok: false, error: 'ارائهٔ درس مشخص نیست.' };
+    if (!(await offeringInScope(res.offeringId))) return { ok: false, error: DENY_UNI_MSG };
     const [offering] = await db
       .select({ professorId: course_offerings.professorId })
       .from(course_offerings)
@@ -220,6 +261,7 @@ export async function examHandoverConfirmAction(rawToken: string) {
   }
 
   if (!res.sessionId) return { ok: false, error: 'جلسهٔ امتحان مشخص نیست.' };
+  if (!(await sessionInScope(res.sessionId))) return { ok: false, error: DENY_UNI_MSG };
   if (res.step === 'VAULT') {
     if (!res.hallId) return { ok: false, error: 'سالن مشخص نیست.' };
     const out = await wrap(() =>
@@ -253,6 +295,7 @@ export async function examStaffPresenceAction(px: {
   const sessionId = Number(px.sessionId);
   const staffId = Number(px.staffId);
   if (!sessionId || !staffId) return { ok: false, error: 'جلسه یا شخص نامعتبر است.' };
+  if (!(await sessionInScope(sessionId))) return { ok: false, error: DENY_UNI_MSG };
 
   // مراقب فقط حضور خودش را می‌تواند ثبت کند؛ کارشناس/مدیر همه را
   const canAll = user.roles.some(r => r === 'ADMIN' || r === 'EDU_EXPERT');
@@ -274,6 +317,9 @@ export async function examStaffPresenceAction(px: {
           "note" = excluded."note",
           "recordedAt" = now()
       `);
+      await auditChain(tx, user.id, 'EXAM_STAFF_PRESENCE_RECORDED', 'exam_session', sessionId, {
+        staffId, role: px.role, hallId: px.hallId ?? null, isPresent: px.isPresent ? 1 : 0,
+      });
     });
     reval();
     return { ok: true, message: px.isPresent ? 'حضور ثبت شد.' : 'حضور لغو شد.' };
@@ -287,6 +333,7 @@ export async function examDeliverToInstructorAction(px: { offeringId: number }) 
   const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
   const me = await getStaffByUser(user.id);
   if (!me) return { ok: false, error: 'پروندهٔ پرسنلی یافت نشد.' };
+  if (!(await offeringInScope(px.offeringId))) return { ok: false, error: DENY_UNI_MSG };
   const [offering] = await db
     .select({ professorId: course_offerings.professorId })
     .from(course_offerings)
@@ -307,17 +354,16 @@ export async function examDeliverToInstructorAction(px: { offeringId: number }) 
 // ── ⑥ ثبت نمرات (فقط استادِ مالک درس — هویت از نشست) ──
 export async function examSubmitGradesAction(px: {
   offeringId: number;
-  rubric: RubricWeights;
   entries: ExamGradeEntry[];
 }) {
   const user = await requireRole(['PROFESSOR']);
   const me = await getStaffByUser(user.id);
   if (!me) return { ok: false, error: 'پروندهٔ هیئت علمی یافت نشد.' };
+  if (!(await offeringInScope(px.offeringId))) return { ok: false, error: DENY_UNI_MSG };
   const out = await wrap(() =>
     engine.submitExamGrades(user.id, {
       offeringId: px.offeringId,
       instructorId: me.id, // ← هویت سرور
-      rubric: px.rubric,
       entries: px.entries,
     }),
   );
@@ -331,7 +377,7 @@ export async function examOpenAppealAction(px: { enrollmentId: number; studentMe
   const stu = await getStudentByUser(user.id);
   if (!stu) return { ok: false, error: 'پروندهٔ دانشجویی یافت نشد.' };
   const [enr] = await db
-    .select({ studentId: enrollments.studentId })
+    .select({ studentId: enrollments.studentId, universityId: enrollments.universityId })
     .from(enrollments)
     .where(eq(enrollments.id, px.enrollmentId))
     .limit(1);
@@ -339,6 +385,7 @@ export async function examOpenAppealAction(px: { enrollmentId: number; studentMe
   if (Number(enr.studentId) !== Number(stu.id)) {
     return { ok: false, error: 'دسترسی: این ثبت‌نام متعلق به شما نیست.' };
   }
+  if (!(await canActOnUniversity(enr.universityId))) return { ok: false, error: DENY_UNI_MSG };
   const out = await wrap(() => engine.openExamAppeal(user.id, px));
   reval();
   return out;
@@ -348,14 +395,24 @@ export async function examOpenAppealAction(px: { enrollmentId: number; studentMe
 export async function examAnswerAppealAction(px: {
   appealId: number;
   professorReply: string;
-  rubric: RubricWeights;
   recheck: ExamAppealRecheck;
 }) {
   const user = await requireRole(['PROFESSOR']);
   const me = await getStaffByUser(user.id);
   if (!me) return { ok: false, error: 'پروندهٔ هیئت علمی یافت نشد.' };
+  const [appeal] = await db
+    .select({ universityId: grade_appeals.universityId })
+    .from(grade_appeals)
+    .where(eq(grade_appeals.id, px.appealId))
+    .limit(1);
+  if (!(await canActOnUniversity(appeal?.universityId))) return { ok: false, error: DENY_UNI_MSG };
   const out = await wrap(() =>
-    engine.answerExamAppeal(user.id, { ...px, staffId: me.id }), // ← هویت سرور + چک مالکیت در موتور
+    engine.answerExamAppeal(user.id, {
+      appealId: px.appealId,
+      professorReply: px.professorReply,
+      recheck: px.recheck,
+      staffId: me.id, // ← هویت سرور + چک مالکیت در موتور
+    }),
   );
   reval();
   return out;
@@ -364,5 +421,7 @@ export async function examAnswerAppealAction(px: {
 // ── نمای کلی چرخه (برای هر نقش مجاز امتحانی) ──
 export async function examChainOverviewAction(px: { sessionId: number }) {
   await requireRole(['ADMIN', 'EDU_EXPERT', 'PROFESSOR', 'PROCTOR']);
-  return wrap(() => engine.examChainOverview(px.sessionId));
+  const universityId = await sessionUniversityId(px.sessionId);
+  if (!(await canActOnUniversity(universityId))) return { ok: false, error: DENY_UNI_MSG };
+  return wrap(() => engine.examChainOverview(px.sessionId, universityId as number));
 }

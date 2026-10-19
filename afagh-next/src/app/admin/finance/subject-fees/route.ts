@@ -5,8 +5,12 @@ import { subject_fee_types, student_subject_fees } from '@/db/schema';
 import { getSessionUser } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { assertCsrf } from '@/lib/security';
+import { appendAudit } from '@/lib/audit';
 
 const FINANCE = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'];
+const SUBJECT_FEE_KINDS = ['ADDITIVE', 'DEDUCTIVE'];
+const SUBJECT_FEE_APPLIES_TO = ['BOTH', 'FIXED', 'VARIABLE'];
+const MAX_SUBJECT_FEE_RIALS = 10_000_000_000;
 
 async function checkFinanceAuth() {
   const user = await getSessionUser();
@@ -39,11 +43,25 @@ export async function POST(req: NextRequest) {
   const { id, code, title, kind, fixedAmount, variablePercent, appliesTo, isActive, note } = body;
 
   if (!code || !title) return NextResponse.json({ error: 'کد و عنوان الزامی است' }, { status: 400 });
+  if (String(code).length > 40 || String(title).length > 150) {
+    return NextResponse.json({ error: 'طول کد یا عنوان بیش از حد مجاز است' }, { status: 400 });
+  }
+  const kindValue = kind || 'ADDITIVE';
+  if (!SUBJECT_FEE_KINDS.includes(kindValue)) {
+    return NextResponse.json({ error: 'نوع مبلغ موضوعی نامعتبر است' }, { status: 400 });
+  }
+  const appliesToValue = appliesTo || 'BOTH';
+  if (!SUBJECT_FEE_APPLIES_TO.includes(appliesToValue)) {
+    return NextResponse.json({ error: 'محدودهٔ اعمال نامعتبر است' }, { status: 400 });
+  }
 
   const vPercent = Number(variablePercent);
-  const fAmount = Number(fixedAmount);
+  const fAmount = fixedAmount === undefined || fixedAmount === null || fixedAmount === '' ? 0 : Number(fixedAmount);
   if (Number.isFinite(vPercent) && (vPercent < 0 || vPercent > 100)) {
     return NextResponse.json({ error: 'درصد متغیر باید بین ۰ تا ۱۰۰ باشد' }, { status: 400 });
+  }
+  if (!Number.isSafeInteger(fAmount) || fAmount < 0 || fAmount > MAX_SUBJECT_FEE_RIALS) {
+    return NextResponse.json({ error: 'مبلغ ثابت باید عدد صحیح ریال بین ۰ تا ۱۰٬۰۰۰٬۰۰۰٬۰۰۰ باشد' }, { status: 400 });
   }
 
   if (id) {
@@ -56,39 +74,62 @@ export async function POST(req: NextRequest) {
     if (row.universityId !== null && row.universityId !== uni.id) {
       return NextResponse.json({ error: 'رکورد متعلق به دانشگاه دیگری است' }, { status: 403 });
     }
-    await db.update(subject_fee_types).set({
-      code, title,
-      kind: kind || 'ADDITIVE',
-      fixedAmount: String(fAmount || 0),
-      variablePercent: String(vPercent || 0),
-      appliesTo: appliesTo || 'BOTH',
-      isActive: isActive ? 1 : 0,
-      note: note || null,
-    }).where(and(
-      eq(subject_fee_types.id, id),
-      or(eq(subject_fee_types.universityId, uni.id), isNull(subject_fee_types.universityId)),
-    ));
+    await db.transaction(async (tx) => {
+      await tx.update(subject_fee_types).set({
+        code, title,
+        kind: kindValue,
+        fixedAmount: String(fAmount),
+        variablePercent: String(vPercent || 0),
+        appliesTo: appliesToValue,
+        isActive: isActive ? 1 : 0,
+        note: note || null,
+      }).where(and(
+        eq(subject_fee_types.id, id),
+        or(eq(subject_fee_types.universityId, uni.id), isNull(subject_fee_types.universityId)),
+      ));
+      await appendAudit(tx, {
+        actorUserId: auth.id ?? null,
+        action: 'FINANCE_SUBJECT_FEE_TYPE_UPDATED',
+        entityType: 'subject_fee_types',
+        entityId: id,
+        details: JSON.stringify({ code, kind: kindValue, appliesTo: appliesToValue, fixedAmount: fAmount }),
+      });
+    });
     return NextResponse.json({ ok: true, id });
   }
 
   // ایجاد
   const uni = await getCurrentUniversity().catch(() => null);
   if (!uni) return NextResponse.json({ error: 'دانشگاه فعال نامشخص است' }, { status: 400 });
-  const [ins] = await db.insert(subject_fee_types).values({
-    universityId: uni.id,
-    code, title,
-    kind: kind || 'ADDITIVE',
-    fixedAmount: String(fAmount || 0),
-    variablePercent: String(vPercent || 0),
-    appliesTo: appliesTo || 'BOTH',
-    isActive: isActive ? 1 : 0,
-    note: note || null,
-  }).returning({ id: subject_fee_types.id });
+  const ins = await db.transaction(async (tx) => {
+    const [created] = await tx.insert(subject_fee_types).values({
+      universityId: uni.id,
+      code, title,
+      kind: kindValue,
+      fixedAmount: String(fAmount),
+      variablePercent: String(vPercent || 0),
+      appliesTo: appliesToValue,
+      isActive: isActive ? 1 : 0,
+      note: note || null,
+    }).returning({ id: subject_fee_types.id });
+    await appendAudit(tx, {
+      actorUserId: auth.id ?? null,
+      action: 'FINANCE_SUBJECT_FEE_TYPE_CREATED',
+      entityType: 'subject_fee_types',
+      entityId: created.id,
+      details: JSON.stringify({ code, kind: kindValue, appliesTo: appliesToValue, fixedAmount: fAmount }),
+    });
+    return created;
+  });
 
   return NextResponse.json({ ok: true, id: ins.id });
 }
 
 export async function DELETE(req: NextRequest) {
+  // 🔒 CSRF: حذف هم مثل ثبت، فقط از صفحهٔ مالی و با توکن معتبر
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
+
   const auth = await checkFinanceAuth();
   if (!auth) return NextResponse.json({ error: 'دسترسی غیرمجاز' }, { status: 403 });
 
@@ -114,9 +155,18 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'رکورد متعلق به دانشگاه دیگری است' }, { status: 403 });
   }
 
-  await db.delete(subject_fee_types).where(and(
-    eq(subject_fee_types.id, id),
-    or(eq(subject_fee_types.universityId, uni.id), isNull(subject_fee_types.universityId)),
-  ));
+  await db.transaction(async (tx) => {
+    await tx.delete(subject_fee_types).where(and(
+      eq(subject_fee_types.id, id),
+      or(eq(subject_fee_types.universityId, uni.id), isNull(subject_fee_types.universityId)),
+    ));
+    await appendAudit(tx, {
+      actorUserId: auth.id ?? null,
+      action: 'FINANCE_SUBJECT_FEE_TYPE_DELETED',
+      entityType: 'subject_fee_types',
+      entityId: id,
+      details: JSON.stringify({ subjectFeeTypeId: id }),
+    });
+  });
   return NextResponse.json({ ok: true });
 }

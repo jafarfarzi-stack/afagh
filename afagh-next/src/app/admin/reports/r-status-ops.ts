@@ -301,7 +301,9 @@ export async function graduateStudents(idsInput: unknown, graduateDateInput?: un
   await requireRole(ADMIN_ROLE);
   const ids = asIds(idsInput);
   if (!ids.length) return { ok: false, error: 'شناسه‌ای انتخاب نشده است' };
-  const gd = typeof graduateDateInput === 'string' && graduateDateInput.trim() ? graduateDateInput.trim() : null;
+  const rawGd = typeof graduateDateInput === 'string' ? graduateDateInput.trim() : '';
+  if (rawGd && !/^\d{4}-\d{2}-\d{2}$/.test(rawGd)) return { ok: false, error: 'تاریخ فارغ‌التحصیلی باید به شکل YYYY-MM-DD باشد' };
+  const gd = rawGd || null;
   const r = await db.execute<{ id: number }>(
     gd
       ? sql`UPDATE students SET status = 'GRADUATED', "graduateDate" = ${gd} WHERE id IN (${sql.join(ids, sql`, `)}) RETURNING id`

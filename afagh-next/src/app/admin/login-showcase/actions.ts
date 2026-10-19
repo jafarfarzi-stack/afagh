@@ -3,6 +3,8 @@
 import { db } from '@/db';
 import { login_notices, login_slides } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { isSafeLinkUrl } from '@/lib/safe-url';
+import { magicMatches } from '@/lib/safe-input';
 import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
@@ -67,12 +69,13 @@ export async function saveSlideAction(input: SlideInput) {
   await requireRole(['ADMIN']);
   const title = cleanStr(input.title, 150);
   if (!title) throw new Error('عنوان اسلاید الزامی است.');
+  const linkUrl = cleanStr(input.linkUrl, 500);
   const values = {
     universityId: input.universityId || null,
     title,
     subtitle: cleanStr(input.subtitle, 255),
     imageUrl: cleanStr(input.imageUrl, 500),
-    linkUrl: cleanStr(input.linkUrl, 500),
+    linkUrl: isSafeLinkUrl(linkUrl) ? linkUrl : '',
     isActive: input.isActive ? 1 : 0,
     sortOrder: Number.isFinite(Number(input.sortOrder)) ? Number(input.sortOrder) : 0,
     updatedAt: new Date(),
@@ -101,12 +104,14 @@ export async function uploadSlideImageAction(formData: FormData): Promise<{ url:
   const allowed = ['image/png', 'image/jpeg', 'image/webp'];
   if (!allowed.includes(file.type)) throw new Error('فقط PNG/JPG/WebP مجاز است.');
   if (file.size > 2 * 1024 * 1024) throw new Error('حجم فایل بیش از ۲ مگابایت است.');
+  const buf = Buffer.from(await file.arrayBuffer());
+  if (!magicMatches(file.type, buf)) throw new Error('محتوای فایل با نوع ادعاشده مطابقت ندارد.');
   const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
   const { mkdir, writeFile } = await import('node:fs/promises');
   const { join } = await import('node:path');
   await mkdir(join(process.cwd(), 'public', 'uploads'), { recursive: true });
   const name = `slide-${Date.now()}.${ext}`;
-  await writeFile(join(process.cwd(), 'public', 'uploads', name), Buffer.from(await file.arrayBuffer()));
+  await writeFile(join(process.cwd(), 'public', 'uploads', name), buf);
   return { url: `/uploads/${name}` };
 }
 

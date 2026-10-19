@@ -62,7 +62,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ ok: true, roleDef: updated });
   } catch (err) {
     log.error('role-defs PUT failed', err);
-    return NextResponse.json({ ok: false, error: (err as Error)?.message || 'خطای ناشناخته' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: 'خطای داخلی سرور.' }, { status: 500 });
   }
 }
 
@@ -94,6 +94,6 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
     const msg = (err as Error)?.message;
     if (msg === 'NEXT_REDIRECT' || msg === 'NEXT_NOT_FOUND') throw err;
     log.error('role-defs DELETE failed', err);
-    return NextResponse.json({ ok: false, error: msg || 'خطای ناشناخته' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: 'خطای داخلی سرور.' }, { status: 500 });
   }
 }

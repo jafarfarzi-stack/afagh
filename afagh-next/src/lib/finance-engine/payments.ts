@@ -3,37 +3,11 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { payment_cheques, student_ledger } from '@/db/schema';
 import { appendAudit } from '../audit';
-import { toNum } from '../finance-rules';
 import { safeRials } from '../money';
 
 // ══════════════════════════════════════════════════════════════════════
 //  ثبت پرداخت و وصول چک در دفتر مالی
 // ══════════════════════════════════════════════════════════════════════
-
-/** ثبت یک پرداخت قطعی در دفتر مالی */
-export async function recordPayment(input: {
-  studentId: number;
-  termId: number | null;
-  amount: number;
-  description?: string;
-  /** دانشگاه صاحب رکورد — برای تفکیک چنددانشگاهی دفتر مالی */
-  universityId?: number | null;
-}): Promise<number> {
-  // 🔒 مبلغ از مرز safeRials می‌گذرد (صحیح مثبت تا سقف numeric(12,0)).
-  const amount = safeRials(Math.round(toNum(input.amount)));
-  if (amount === null || amount <= 0) throw new Error('مبلغ پرداخت باید عدد صحیح و بزرگ‌تر از صفر باشد');
-
-  const [ins] = await db.insert(student_ledger).values({
-    studentId: input.studentId,
-    termId: input.termId,
-    transactionType: 'PAYMENT',
-    amount: String(amount),
-    description: input.description || 'پرداخت شهریه',
-    universityId: input.universityId ?? null,
-  }).returning({ id: student_ledger.id });
-
-  return ins.id;
-}
 
 /**
  * وصول چک — مبلغ را در دفتر مالی ثبت و وضعیت چک را CLEARED می‌کند.
