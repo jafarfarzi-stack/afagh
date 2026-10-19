@@ -1,5 +1,6 @@
 ﻿import type { ReactNode } from 'react';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
+import { normalizeTermCode } from '@/lib/scheduling-core';
 
 /**
  * ══════════════════════════════════════════════════════════════════════
@@ -44,6 +45,8 @@ export interface TranscriptCourseView {
 export interface TranscriptTermView {
   termId: number;
   termTitle: string;
+  /** کد ۵ رقمی ترم؛ اگر باشد عنوان کامل «نیمسال اول سال تحصیلی ...» ساخته می‌شود */
+  termCode?: string | null;
   charges: number;
   discounts: number;
   sponsorships: number;
@@ -121,6 +124,20 @@ const EVENT_LABEL: Record<string, string> = {
 
 /** نیمسال ورود (students.entryTerm): ۱=مهر، ۲=بهمن، ۳=تابستان */
 const TERM_FA: Record<number, string> = { 1: 'مهر', 2: 'بهمن', 3: 'تابستان' };
+
+/**
+ * عنوان کامل ترم — همان عبارت‌بندی کارنامهٔ تحصیلی:
+ *   نیمسال اول سال تحصیلی ۱۴۰۴-۱۴۰۵ / نیمسال دوم سال تحصیلی ... / نیمسال تابستان ۱۴۰۴-۱۴۰۵ / نیمسال معادل‌سازی
+ * منبع: termCode پنج‌رقمی (سال + رقم نیمسال) از academic_terms.termCode.
+ */
+function termFullTitle(t: TranscriptTermView): string {
+  const norm = normalizeTermCode(t.termCode);
+  if (!norm) return t.termTitle;
+  if (norm.termType === 'EQUIVALENCE') return 'نیمسال معادل‌سازی';
+  const year = faDigits(norm.displayYear);
+  if (norm.termType === 'SUMMER') return `نیمسال تابستان ${year}`;
+  return `${norm.displaySemester} سال تحصیلی ${year}`;
+}
 
 const STATUS_FA: Record<string, string> = {  ACTIVE: 'فعال',
   INACTIVE: 'غیرفعال',
@@ -321,7 +338,7 @@ export default function FinancialTranscript({
                     return (
                       <div key={t.termId} className="term-block break-inside-avoid overflow-hidden rounded-lg border border-slate-700">
                         <div className="flex items-center justify-between gap-1 border-b border-slate-700 bg-slate-100 px-2 py-1.5">
-                          <h4 className="text-[11px] font-black text-slate-900">{t.termTitle}</h4>
+                          <h4 className="text-[11px] font-black text-slate-900">{termFullTitle(t)}</h4>
                           <span className={`rounded-full border px-1.5 py-px text-[9px] font-black ${b.cls}`}>{b.text}</span>
                         </div>
                         {t.courses && t.courses.length > 0 && (

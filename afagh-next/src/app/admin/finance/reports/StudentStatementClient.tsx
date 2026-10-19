@@ -259,7 +259,8 @@ export default function StudentStatementClient({ studentId, studentName, student
           student={{ fullName: studentName, studentCode }}
           terms={data.map((d) => ({
             termId: d.termId,
-            termTitle: d.termCode ? `${d.termTitle} (${d.termCode})` : d.termTitle,
+            termTitle: d.termTitle,
+            termCode: d.termCode ?? null,
             charges: d.charges ?? 0,
             discounts: d.discounts ?? 0,
             sponsorships: d.sponsorships ?? 0,

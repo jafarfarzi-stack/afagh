@@ -82,6 +82,8 @@ export interface StatementEvent {
 export interface TermStatement {
   termId: number;
   termTitle: string;
+  /** کد ۵ رقمی ترم (سال+نیمسال) — برای عنوان کامل «نیمسال اول سال تحصیلی ...» */
+  termCode?: string | null;
   charges: number;
   discounts: number;
   sponsorships: number;
@@ -274,6 +276,7 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
     statements.push({
       termId,
       termTitle: termId === NO_TERM ? 'بدون ترم' : titles[String(termId)] || `ترم ${termId}`,
+      termCode: termId === NO_TERM ? null : (input.termCodes || {})[String(termId)] ?? null,
       charges,
       discounts: cappedDiscounts,
       sponsorships: cappedSponsorships,
