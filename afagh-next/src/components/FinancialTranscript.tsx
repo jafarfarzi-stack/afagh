@@ -165,7 +165,7 @@ export interface FinancialTranscriptProps {
   student: TranscriptStudentView;
   terms: TranscriptTermView[];
   totals: TranscriptTotalsView;
-  /** عنوان دانشگاه در سربرگ (پیش‌فرض: دانشگاه آفاق) */
+  /** عنوان دانشگاه در سربرگ — از رکورد دانشگاه یا تنظیمات سراسری (UNIVERSITY_NAME) */
   universityTitle?: string | null;
   /** آرم/نشان اختصاصی دانشگاه در مدخل میانی سربرگ؛ خالی = نشان دایره‌ای پیش‌فرض */
   logoUrl?: string | null;
@@ -220,16 +220,17 @@ export default function FinancialTranscript({
           <div className="text-right space-y-1">
             <p className="font-bold text-slate-800">جمهوری اسلامی ایران</p>
             <p className="font-semibold text-slate-700">وزارت علوم، تحقیقات و فناوری</p>
-            <p className="font-extrabold text-slate-900 text-sm">{universityTitle || 'دانشگاه جامع آفاق'}</p>
+            {/* نام دانشگاه فقط از تنظیمات/رکورد دانشگاه می‌آید — هیچ نامی هاردکد نیست */}
+            {universityTitle ? <p className="font-extrabold text-slate-900 text-sm">{universityTitle}</p> : null}
             <p className="text-[11px] text-slate-500">معاونت اداری و مالی — ادارهٔ امور مالی</p>
           </div>
           {/* ستون وسط (نشان و عنوان سند) */}
           <div className="flex flex-col items-center justify-center">
+            {/* آرم از تنظیمات سراسری/دانشگاه؛ اگر تعریف نشده باشد چیزی چاپ نمی‌شود
+                (نه یک نشان ساختگی با نام هاردکد) */}
             {logoUrl ? (
               <img src={logoUrl} alt="آرم دانشگاه" className="mb-1 h-12 w-12 shrink-0 object-contain" />
-            ) : (
-              <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-full border-2 border-slate-800 text-xl font-bold text-slate-800">آفاق</div>
-            )}
+            ) : null}
             <h2 className="border-b border-slate-800 pb-0.5 px-4 text-base font-black tracking-wide text-slate-950">کارنامهٔ مالی دانشجو</h2>
             <p className="mt-0.5 text-[10px] text-slate-600">صورت وضعیت بدهی، تخفیف، پوشش، پرداخت، چک و وام — ترم‌به‌ترم</p>
           </div>
@@ -261,7 +262,7 @@ export default function FinancialTranscript({
             </tr>
             <tr>
               <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">شمارهٔ دانشجویی</td>
-              <td className="border border-slate-300 px-2 py-1.5 font-mono" dir="ltr">{faDigits(student.studentCode || '—')}</td>
+              <td className="border border-slate-300 px-2 py-1.5 text-right font-mono" dir="ltr">{faDigits(student.studentCode || '—')}</td>
               <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">مقطع</td>
               <td className="border border-slate-300 px-2 py-1.5">{student.degreeTitle || '—'}</td>
             </tr>
