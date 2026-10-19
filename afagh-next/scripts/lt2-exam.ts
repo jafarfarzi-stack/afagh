@@ -43,10 +43,10 @@ async function runSession(s: number) {
   const t0 = performance.now();
   try {
     await exam.issueExamAttendance(INVIG_USER, sessionId);
-    const verify = await exam.proctorVerifyAttendance(INVIG_USER, { sessionId, hallId, proctorStaffId: INVIG_STAFF, checkIns });
+    const verify: any = await exam.proctorVerifyAttendance(INVIG_USER, { sessionId, hallId, proctorStaffId: INVIG_STAFF, checkIns });
     r.steps.present = verify.presentCount; r.steps.absent = verify.absentCount;
     await exam.signHallMinutes(INVIG_USER, { sessionId, hallId, supervisorStaffId: INVIG_STAFF });
-    const vrec = await exam.vaultReceiveHall(VAULT_USER, { sessionId, hallId, vaultManagerId: VAULT_STAFF });
+    const vrec: any = await exam.vaultReceiveHall(VAULT_USER, { sessionId, hallId, vaultManagerId: VAULT_STAFF });
     r.steps.receivedSheets = vrec.receivedSheets;
     const finz: any = await exam.finalizeVaultHandover(VAULT_USER, sessionId, VAULT_STAFF);
     r.steps.finalized = Array.isArray(finz) ? finz.length : (finz ? 1 : 0);

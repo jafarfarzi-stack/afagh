@@ -34,7 +34,7 @@ const rls = async (userId: number, fn: any) => db.transaction(async (tx: any) =>
 const deps = {
   db, withUserRls: rls, atomicSeat, releaseSeat, nextWaitlistPosition,
   evaluateRegulations: async () => ({ effectiveMaxUnits: 24 }),
-  buildPrereq: async () => ({ ruleByCourse: new Map(), passed: new Set(), titles: new Map() }),
+  buildPrereq: async () => ({ ruleByCourse: new Map(), passed: new Map(), titles: new Map(), defaultPassing: 10 }),
   getDebtThreshold: async () => 0,
   notifyEnrollmentDone: async () => {},
 };
