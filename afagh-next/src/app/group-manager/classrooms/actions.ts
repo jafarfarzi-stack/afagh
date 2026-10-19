@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { classrooms, schedules } from '@/db/schema';
 import { back, num, requireDepHead, str } from '@/lib/group-manager';
+import { classroomOwnedBy, readClassroomUni } from '@/lib/offering-scheduling';
 
 export async function saveClassroomAction(fd: FormData) {
   const { staff: me } = await requireDepHead();
@@ -15,8 +16,8 @@ export async function saveClassroomAction(fd: FormData) {
   // ویرایش فقط روی کلاسِ همین دانشگاه (G3) — کلاس عام/سیستمی (universityId=NULL)
   // هم برای مدیر گروه قابل ویرایش نیست؛ آن‌ها را آموزش می‌سازد.
   if (id) {
-    const [cur] = await db.select({ universityId: classrooms.universityId }).from(classrooms).where(eq(classrooms.id, id)).limit(1);
-    if (!cur || (cur.universityId ?? null) !== myUni)
+    const room = await readClassroomUni(db, id);
+    if (!room || !classroomOwnedBy(room.universityId ?? null, myUni))
       back('/group-manager/classrooms', 'err', 'این کلاس متعلق به دانشگاه شما نیست.');
   }
   const vals = { name, capacity: cap, roomType: str(fd, 'roomType') || null, buildingName: str(fd, 'building') || null, rowsCount: num(fd, 'rows') || null, colsCount: num(fd, 'cols') || null };
@@ -31,8 +32,8 @@ export async function deleteClassroomAction(fd: FormData) {
   const { staff: me } = await requireDepHead();
   const id = num(fd, 'id');
   const myUni = me.universityId ?? null;
-  const [cur] = await db.select({ universityId: classrooms.universityId }).from(classrooms).where(eq(classrooms.id, id)).limit(1);
-  if (!cur || (cur.universityId ?? null) !== myUni)
+  const room = await readClassroomUni(db, id);
+  if (!room || !classroomOwnedBy(room.universityId ?? null, myUni))
     back('/group-manager/classrooms', 'err', 'این کلاس متعلق به دانشگاه شما نیست.');
   const used = await db.select({ id: schedules.id }).from(schedules).where(eq(schedules.roomId, id)).limit(1);
   if (used.length) back('/group-manager/classrooms', 'err', 'این کلاس در برنامهٔ هفتگی استفاده می‌شود — ابتدا برنامه را حذف کنید.');

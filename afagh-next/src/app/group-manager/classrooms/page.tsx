@@ -1,19 +1,15 @@
-import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { classrooms } from '@/db/schema';
 import { requireDepHead } from '@/lib/group-manager';
 import { deleteClassroomAction, saveClassroomAction } from './actions';
+import { listClassroomsForUniversity } from '@/lib/offering-scheduling';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ClassroomsPage({ searchParams }: { searchParams: Promise<{ msg?: string; err?: string }> }) {
   const sp = await searchParams;
   const { staff: me } = await requireDepHead();
-  const myUni = me.universityId ?? null;
   // فقط کلاس‌های همین دانشگاه (G3) — کلاس عام/سیستمی برای مشاهده هم نیست.
-  const rooms = myUni == null
-    ? []
-    : await db.select().from(classrooms).where(eq(classrooms.universityId, myUni)).orderBy(classrooms.name);
+  const rooms = await listClassroomsForUniversity(db, me.universityId ?? null);
 
   return (
     <div className="space-y-4">
