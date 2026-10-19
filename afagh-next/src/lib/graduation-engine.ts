@@ -486,7 +486,9 @@ export async function runAutoClearance(auditId: number) {
         const t = setTimeout(() => ctrl.abort(), timeout);
         // گارد SSRF: نشانی از پنل مدیر (clearance_departments.apiUrl) می‌آید —
         // فقط https + بدون userinfo + مقصد عمومی (یا میزبان مجازِ AFAGH_SSRF_ALLOW_HOSTS).
-        const resp = await ssrfFetch(`${dep.apiUrl.replace(/\/+$/, '')}?studentId=${a.studentId}`, { signal: ctrl.signal });
+        const apiUrl = new URL(dep.apiUrl);
+        apiUrl.searchParams.set('studentId', String(a.studentId));
+        const resp = await ssrfFetch(apiUrl.toString(), { signal: ctrl.signal });
         clearTimeout(t);
         const j = (await resp.json()) as { cleared?: boolean; amountDue?: number; detail?: string };
         await db.update(clearance_checklist).set({

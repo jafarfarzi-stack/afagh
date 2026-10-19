@@ -19,7 +19,7 @@ import { council_meetings, council_decisions } from '@/db/schema-council';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 import {
 
   DECISION_TYPES, IMPLEMENTATION_STATUSES, isOneOf, intParam,
@@ -44,8 +44,8 @@ async function guard() {
   try {
     await requireRole(ALLOWED);
     return null;
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'دسترسی غیرمجاز' }, { status: 401 });
+  } catch {
+    return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز' }, { status: 401 });
   }
 }
 
@@ -56,8 +56,9 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
 
   const filters: SQL[] = [];
-  const uni = await getCurrentUniversity().catch(() => null);
-  if (uni) filters.push(eq(council_decisions.universityId, uni.id));
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) return NextResponse.json({ ok: false, error: 'دانشگاه فعال معتبر نیست.' }, { status: 403 });
+  filters.push(eq(council_decisions.universityId, uni.id));
 
   const meetingId = intParam(sp, 'meetingId');
   if (meetingId) filters.push(eq(council_decisions.meetingId, meetingId));
@@ -134,19 +135,21 @@ export async function POST(req: NextRequest) {
   }
 
   const user = await getSessionUser();
-  const uni = await getCurrentUniversity().catch(() => null);
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) return NextResponse.json({ ok: false, error: 'دانشگاه فعال معتبر نیست.' }, { status: 403 });
 
   try {
     const result = await db.transaction(async (tx) => {
       const [meeting] = await tx
         .select({ id: council_meetings.id, title: council_meetings.title })
         .from(council_meetings)
-        .where(eq(council_meetings.id, meetingId))
+        .where(and(eq(council_meetings.id, meetingId), eq(council_meetings.universityId, uni.id)))
         .limit(1);
       if (!meeting) return { ok: false as const, error: 'جلسه یافت نشد.' };
 
       if (studentId) {
-        const [stu] = await tx.select({ id: students.id }).from(students).where(eq(students.id, studentId)).limit(1);
+         const [stu] = await tx.select({ id: students.id }).from(students)
+           .where(and(eq(students.id, studentId), eq(students.universityId, uni.id))).limit(1);
         if (!stu) return { ok: false as const, error: 'دانشجو یافت نشد.' };
       }
 
@@ -157,7 +160,7 @@ export async function POST(req: NextRequest) {
         content,
         implementationStatus,
         deadline: deadline ? new Date(deadline) : null,
-        universityId: uni?.id ?? null,
+        universityId: uni.id,
       }).returning({ id: council_decisions.id });
 
       await appendAudit(tx, {
@@ -174,8 +177,8 @@ export async function POST(req: NextRequest) {
     log.info('decision_created', { id: result.id, meetingId, actorUserId: user?.id ?? null });
     return NextResponse.json({ ok: true, id: result.id });
   } catch (e: any) {
-    log.error('decision_create_failed', { error: e });
-    return NextResponse.json({ ok: false, error: e?.message || 'خطا در ذخیرهٔ مصوبه.' }, { status: 400 });
+    log.error('decision_create_failed', { error: e instanceof Error ? e.message : String(e) });
+    return NextResponse.json({ ok: false, error: 'خطا در ذخیرهٔ مصوبه.' }, { status: 500 });
   }
 }
 
@@ -186,6 +189,8 @@ export async function PATCH(req: NextRequest) {
   if (csrf) return csrf;
   const denied = await guard();
   if (denied) return denied;
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) return NextResponse.json({ ok: false, error: 'دانشگاه فعال معتبر نیست.' }, { status: 403 });
   const id = intParam(req.nextUrl.searchParams, 'id');
   if (!id) return NextResponse.json({ ok: false, error: 'شناسه مصوبه الزامی است.' }, { status: 400 });
 
@@ -217,12 +222,12 @@ export async function PATCH(req: NextRequest) {
       const [existing] = await tx
         .select({ id: council_decisions.id, implementationStatus: council_decisions.implementationStatus })
         .from(council_decisions)
-        .where(eq(council_decisions.id, id))
+        .where(and(eq(council_decisions.id, id), eq(council_decisions.universityId, uni.id)))
         .limit(1)
         .for('update');
       if (!existing) return { ok: false as const, error: 'مصوبه یافت نشد.' };
 
-      await tx.update(council_decisions).set(set).where(eq(council_decisions.id, id));
+      await tx.update(council_decisions).set(set).where(and(eq(council_decisions.id, id), eq(council_decisions.universityId, uni.id)));
       await appendAudit(tx, {
         actorUserId: user?.id ?? null,
         action: 'COUNCIL_DECISION_UPDATED',
@@ -235,8 +240,8 @@ export async function PATCH(req: NextRequest) {
     if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    log.error('decision_update_failed', { error: e });
-    return NextResponse.json({ ok: false, error: e?.message || 'خطا در به‌روزرسانی مصوبه.' }, { status: 400 });
+    log.error('decision_update_failed', { error: e instanceof Error ? e.message : String(e) });
+    return NextResponse.json({ ok: false, error: 'خطا در به‌روزرسانی مصوبه.' }, { status: 500 });
   }
 }
 
@@ -247,6 +252,8 @@ export async function DELETE(req: NextRequest) {
   if (csrf) return csrf;
   const denied = await guard();
   if (denied) return denied;
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) return NextResponse.json({ ok: false, error: 'دانشگاه فعال معتبر نیست.' }, { status: 403 });
   const id = intParam(req.nextUrl.searchParams, 'id');
   if (!id) return NextResponse.json({ ok: false, error: 'شناسه مصوبه الزامی است.' }, { status: 400 });
 
@@ -256,11 +263,11 @@ export async function DELETE(req: NextRequest) {
       const [existing] = await tx
         .select({ id: council_decisions.id, content: council_decisions.content })
         .from(council_decisions)
-        .where(eq(council_decisions.id, id))
+        .where(and(eq(council_decisions.id, id), eq(council_decisions.universityId, uni.id)))
         .limit(1)
         .for('update');
       if (!existing) return { ok: false as const, error: 'مصوبه یافت نشد.' };
-      await tx.delete(council_decisions).where(eq(council_decisions.id, id));
+      await tx.delete(council_decisions).where(and(eq(council_decisions.id, id), eq(council_decisions.universityId, uni.id)));
       await appendAudit(tx, {
         actorUserId: user?.id ?? null,
         action: 'COUNCIL_DECISION_DELETED',
@@ -273,7 +280,7 @@ export async function DELETE(req: NextRequest) {
     if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    log.error('decision_delete_failed', { error: e });
-    return NextResponse.json({ ok: false, error: e?.message || 'خطا در حذف مصوبه.' }, { status: 400 });
+    log.error('decision_delete_failed', { error: e instanceof Error ? e.message : String(e) });
+    return NextResponse.json({ ok: false, error: 'خطا در حذف مصوبه.' }, { status: 500 });
   }
 }

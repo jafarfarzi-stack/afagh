@@ -61,7 +61,12 @@ export function isPrivateIPv4(ip: string): boolean {
   if (a === 169 && b === 254) return true;
   if (a === 0) return true;
   if (a === 100 && b >= 64 && b <= 127) return true;
+  if (a === 192 && b === 0) return true; // protocol assignments / documentation ranges
+  if (a === 192 && b === 2 && p[2] === 0) return true; // TEST-NET-1
+  if (a === 192 && b === 88 && p[2] === 99) return true; // deprecated 6to4 relay anycast
   if (a === 198 && (b === 18 || b === 19)) return true;
+  if (a === 198 && b === 51 && p[2] === 100) return true; // TEST-NET-2
+  if (a === 203 && b === 0 && p[2] === 113) return true; // TEST-NET-3
   if (a >= 224) return true;
   return false;
 }
@@ -115,11 +120,14 @@ export function isPrivateIP(raw: string): boolean {
   const inner = embeddedIPv4(v);
   if (inner) return isPrivateIPv4(inner); // جاسازی‌شده/NAT64 → همان قواعد IPv4
   if (v.includes(':')) {
-    // IPv6: لوپ‌بک، unspecified، لینک‌لوکال، unique-local
-    if (v === '::1' || v === '::') return true;
-    if (v.startsWith('fe80:') || v.startsWith('fe80::')) return true;
-    if (v.startsWith('fc') || v.startsWith('fd')) return true;
-    if (v.startsWith('ff00:')) return false; // مالتی‌کست — fetch نمی‌زنیم ولی خصوصی نیست
+    // فقط Global Unicast (2000::/3) می‌تواند مقصد عمومی قابل اتصال باشد.
+    // این کار loopback، link-local، ULA، multicast، unspecified و رنج‌های رزروشده
+    // را fail-closed رد می‌کند؛ رنج مستندسازی و تونل‌های قدیمی نیز عمومی نیستند.
+    const words = expandIPv6(v);
+    if (!words || words[0] < 0x2000 || words[0] > 0x3fff) return true;
+    if (words[0] === 0x2001 && words[1] === 0x0db8) return true; // documentation
+    if (words[0] === 0x2001 && words[1] <= 0x01ff) return true; // special-purpose / Teredo
+    if (words[0] === 0x2002) return true; // 6to4 embeds an IPv4 destination
     return false;
   }
   return isPrivateIPv4(v);
@@ -188,7 +196,11 @@ export function parseSafeUrl(raw: string): URL {
  * میزبانِ فهرست‌شده در AFAGH_SSRF_ALLOW_HOSTS استثناست: http و نشانی خصوصی
  * برایش مجاز است و allow-list سرویس روی آن اعمال نمی‌شود (سرویس داخلی اپراتور).
  */
-export async function assertSafeUrl(raw: string, opts: AssertSafeUrlOptions = {}): Promise<URL> {
+async function resolveSafeTarget(
+  raw: string,
+  opts: AssertSafeUrlOptions = {},
+  pinForFetch = false,
+): Promise<{ url: URL; address?: string; family?: number }> {
   const probe = parseUrl(raw);
   const envHosts = envAllowedHosts();
   const trustedHttps = hostAllowed(probe.hostname, envHosts.map(stripHttpPrefix));
@@ -204,21 +216,33 @@ export async function assertSafeUrl(raw: string, opts: AssertSafeUrlOptions = {}
   if (!trusted && allowed && allowed.length > 0 && !hostAllowed(u.hostname, allowed)) {
     throw new UnsafeUrlError(`میزبان «${u.hostname}» برای این سرویس مجاز نیست.`);
   }
-  if (opts.dnsCheck === false || trusted) return u;
+  if (opts.dnsCheck === false && !pinForFetch) return { url: u };
+
+  const hostname = u.hostname.replace(/^\[(.*)\]$/, '$1');
+  const literalFamily = (await import('node:net')).isIP(hostname);
   const { lookup } = await import('node:dns/promises');
   let records: { address: string }[];
-  try {
-    records = await lookup(u.hostname, { all: true });
-  } catch {
-    throw new UnsafeUrlError(`میزبان «${u.hostname}» قابل تفکیک نیست.`);
+  if (literalFamily) {
+    records = [{ address: hostname }];
+  } else {
+    try {
+      records = await lookup(hostname, { all: true, verbatim: true });
+    } catch {
+      throw new UnsafeUrlError(`میزبان «${u.hostname}» قابل تفکیک نیست.`);
+    }
   }
   if (!records.length) throw new UnsafeUrlError(`میزبان «${u.hostname}» رکورد DNS ندارد.`);
   for (const r of records) {
-    if (isPrivateIP(r.address)) {
+    if (!trusted && isPrivateIP(r.address)) {
       throw new UnsafeUrlError(`میزبان «${u.hostname}» به نشانی داخلی تفکیک می‌شود و مجاز نیست.`);
     }
   }
-  return u;
+  const selected = records[0].address;
+  return { url: u, address: selected, family: (await import('node:net')).isIP(selected) };
+}
+
+export async function assertSafeUrl(raw: string, opts: AssertSafeUrlOptions = {}): Promise<URL> {
+  return (await resolveSafeTarget(raw, opts)).url;
 }
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
@@ -235,17 +259,26 @@ export async function ssrfFetch(raw: string, init?: RequestInit, opts: AssertSaf
   let current = raw;
   let currentInit: RequestInit = base;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    await assertSafeUrl(current, opts);
-    const res = await fetch(current, { ...currentInit, redirect: 'manual' });
+    const target = await resolveSafeTarget(current, opts, true);
+    if (!target.address || !target.family) throw new UnsafeUrlError('نشانی مقصد قابل تثبیت نیست.');
+    const res = await fetchPinned(target.url, target.address, target.family, currentInit);
     if (!REDIRECT_STATUSES.has(res.status)) return res;
     const location = res.headers.get('location');
     if (!location) return res;
     if (hop === MAX_REDIRECTS) throw new UnsafeUrlError('تعداد ریدایرکت‌ها بیش از حد مجاز است.');
+    // پاسخ ریدایرکت را تخلیه/ببند تا اتصال قبلی روی سرور مقصد معطل نماند.
+    await res.body?.cancel().catch(() => undefined);
     let next: string;
     try {
       next = new URL(location, current).toString();
     } catch {
       throw new UnsafeUrlError('مقصد ریدایرکت معتبر نیست.');
+    }
+    const redirected = new URL(next);
+    if (redirected.origin !== new URL(current).origin) {
+      const headers = new Headers(currentInit.headers);
+      for (const name of ['authorization', 'proxy-authorization', 'cookie', 'cookie2']) headers.delete(name);
+      currentInit = { ...currentInit, headers };
     }
     current = next;
     // ۳۰۳ و (۳۰۱/۳۰۲ روی POST) طبق رفتار استاندارد به GET تبدیل می‌شوند.
@@ -255,4 +288,64 @@ export async function ssrfFetch(raw: string, init?: RequestInit, opts: AssertSaf
     }
   }
   throw new UnsafeUrlError('تعداد ریدایرکت‌ها بیش از حد مجاز است.');
+}
+
+/** Perform the request against the IP that was validated, while retaining the original Host/SNI. */
+async function fetchPinned(url: URL, address: string, family: number, init: RequestInit): Promise<Response> {
+  const [{ request: httpRequest }, { request: httpsRequest }, { checkServerIdentity }, { Readable }] = await Promise.all([
+    import('node:http'), import('node:https'), import('node:tls'), import('node:stream'),
+  ]);
+  const headers = new Headers(init.headers);
+  headers.set('host', url.host);
+  const requestHeaders = Object.fromEntries(headers.entries());
+  const method = (init.method ?? 'GET').toUpperCase();
+  const requestOptions = {
+    hostname: address,
+    family,
+    port: url.port ? Number(url.port) : url.protocol === 'https:' ? 443 : 80,
+    method,
+    path: `${url.pathname}${url.search}`,
+    headers: requestHeaders,
+    agent: false as const,
+    signal: init.signal ?? undefined,
+    ...(url.protocol === 'https:' ? {
+      servername: url.hostname.replace(/^\[(.*)\]$/, '$1'),
+      checkServerIdentity: (_host: string, cert: Parameters<typeof checkServerIdentity>[1]) =>
+        checkServerIdentity(url.hostname.replace(/^\[(.*)\]$/, '$1'), cert),
+    } : {}),
+  };
+  const request = url.protocol === 'https:'
+    ? httpsRequest(requestOptions)
+    : httpRequest(requestOptions);
+
+  const response = new Promise<Response>((resolve, reject) => {
+    request.once('error', reject);
+    request.once('response', (incoming) => {
+      const responseHeaders = new Headers();
+      for (const [name, value] of Object.entries(incoming.headers)) {
+        if (Array.isArray(value)) for (const item of value) responseHeaders.append(name, item);
+        else if (value !== undefined) responseHeaders.append(name, value);
+      }
+      const noBody = method === 'HEAD' || incoming.statusCode === 204 || incoming.statusCode === 205 || incoming.statusCode === 304;
+      const body = noBody ? null : Readable.toWeb(incoming) as ReadableStream<Uint8Array>;
+      resolve(new Response(body, {
+        status: incoming.statusCode ?? 502,
+        statusText: incoming.statusMessage,
+        headers: responseHeaders,
+      }));
+    });
+  });
+
+  const body = init.body;
+  if (body == null) request.end();
+  else if (typeof body === 'string' || Buffer.isBuffer(body) || body instanceof Uint8Array) request.end(body);
+  else if (body instanceof ArrayBuffer) request.end(Buffer.from(body));
+  else if (ArrayBuffer.isView(body)) request.end(Buffer.from(body.buffer, body.byteOffset, body.byteLength));
+  else if (body instanceof URLSearchParams) request.end(body.toString());
+  else if (body instanceof Blob) request.end(Buffer.from(await body.arrayBuffer()));
+  else if (body instanceof ReadableStream) Readable.fromWeb(body as never).pipe(request);
+  else {
+    request.destroy(new TypeError('این نوع بدنهٔ درخواست برای اتصال امن پشتیبانی نمی‌شود.'));
+  }
+  return response;
 }

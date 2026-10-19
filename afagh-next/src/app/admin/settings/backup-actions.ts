@@ -1,6 +1,6 @@
 'use server';
 
-import { createHash } from 'crypto';
+import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { desc } from 'drizzle-orm';
 import { pool } from '@/db';
 import { db } from '@/db';
@@ -8,14 +8,45 @@ import { audit_logs } from '@/db/schema';
 import { S3, ARCHIVE_BUCKET, ensureBucket } from '@/lib/objectStore';
 import { getSessionUser, requireRole } from '@/lib/auth';
 import { requirePlatformAdmin } from '@/lib/platform-admin';
+import { createLogger } from '@/lib/logger';
 
 const DB_URL = process.env.DATABASE_URL || '';
+const log = createLogger({ mod: 'admin.backup' });
 
 const REDACTED = '[REDACTED]';
 /** کلیدهای محرمانهٔ system_settings که مقدارشان هرگز در دامپ نمی‌آید */
 const SECRET_SETTING_RE = /SECRET|TOKEN|KEY|PASSWORD/i;
 /** رویدادهای حامل OTP — متن تحویل آن‌ها sanitize می‌شود */
 const OTP_EVENT_RE = /OTP/i;
+const BACKUP_SIGNATURE_MARKER = '-- AFAGH_BACKUP_SIGNATURE=';
+
+function backupSigningKey(): Buffer {
+  const value = process.env.AFAGH_BACKUP_SIGNING_KEY?.trim() ?? '';
+  const key = Buffer.from(value, 'utf8');
+  if (key.length < 32 || value.startsWith('CHANGE_ME_')) {
+    throw new Error('کلید امضای پشتیبان تنظیم نشده است؛ بازیابی امن غیرفعال است.');
+  }
+  return key;
+}
+
+function signBackup(body: string): string {
+  return createHmac('sha256', backupSigningKey()).update(body, 'utf8').digest('hex');
+}
+
+function verifyBackup(signedSql: string): string {
+  if (typeof signedSql !== 'string' || Buffer.byteLength(signedSql, 'utf8') > 50 * 1024 * 1024) {
+    throw new Error('فایل پشتیبان نامعتبر یا بزرگ‌تر از حد مجاز است.');
+  }
+  const match = /\r?\n-- AFAGH_BACKUP_SIGNATURE=([a-f0-9]{64})\r?\n?$/.exec(signedSql);
+  if (!match) throw new Error('پشتیبان امضای معتبر ندارد؛ بازیابی فایل‌های قدیمی و امضانشده مجاز نیست.');
+  const body = signedSql.slice(0, match.index);
+  const supplied = Buffer.from(match[1], 'hex');
+  const expected = Buffer.from(signBackup(body), 'hex');
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+    throw new Error('امضای پشتیبان معتبر نیست؛ هیچ دستوری اجرا نشد.');
+  }
+  return body;
+}
 
 /**
  * حذف مقادیر محرمانه از یک ردیف پیش از دامپ (درجا روی کپی ردیف).
@@ -151,9 +182,12 @@ export async function backupDatabaseAction(): Promise<{ ok: boolean; sql?: strin
     // دامپ sanitize شده است (ردکشن رازها) — ثبت ممیزی، بدون اثر بر خروجی دانلود
     await auditBackup(tables.length);
 
-    return { ok: true, sql: parts.join('\n'), tables: tables.length };
+    const body = parts.join('\n').replace(/\r?\n+$/, '');
+    const signature = signBackup(body);
+    return { ok: true, sql: `${body}\n${BACKUP_SIGNATURE_MARKER}${signature}\n`, tables: tables.length };
   } catch (err: any) {
-    return { ok: false, error: err.message || 'خطای نامشخص' };
+    log.error('database_backup_failed', { error: err instanceof Error ? err.message : String(err) });
+    return { ok: false, error: 'ساخت پشتیبان دیتابیس ناموفق بود.' };
   }
 }
 
@@ -179,7 +213,8 @@ export async function listMinioObjectsAction(): Promise<{ ok: boolean; objects?:
     }
     return { ok: true, objects };
   } catch (err: any) {
-    return { ok: false, error: err.message || 'خطای نامشخص' };
+    log.error('minio_list_failed', { error: err instanceof Error ? err.message : String(err) });
+    return { ok: false, error: 'دریافت فهرست فایل‌ها ناموفق بود.' };
   }
 }
 
@@ -195,7 +230,8 @@ export async function downloadMinioObjectAction(key: string): Promise<{ ok: bool
     const name = key.split('/').pop() || key;
     return { ok: true, data: buf.toString('base64'), name };
   } catch (err: any) {
-    return { ok: false, error: err.message || 'خطای نامشخص' };
+    log.error('minio_download_failed', { error: err instanceof Error ? err.message : String(err) });
+    return { ok: false, error: 'دریافت فایل پشتیبان ناموفق بود.' };
   }
 }
 
@@ -204,9 +240,12 @@ export async function downloadMinioObjectAction(key: string): Promise<{ ok: bool
 export async function restoreDatabaseAction(sql: string): Promise<{ ok: boolean; error?: string; statements?: number }> {
   await requirePlatformAdmin();
   try {
+    // فقط دامپی که خود سرور با کلید محرمانه امضا کرده باشد قابل اجراست؛
+    // فایل دلخواه SQL هرگز مستقیماً به pool فرستاده نمی‌شود.
+    const verifiedSql = verifyBackup(sql);
     const statements: string[] = [];
     let current = '';
-    for (const line of sql.split('\n')) {
+    for (const line of verifiedSql.split('\n')) {
       const trimmed = line.trim();
       if (trimmed.startsWith('--') || trimmed === '') continue;
       current += line + '\n';
@@ -225,16 +264,34 @@ export async function restoreDatabaseAction(sql: string): Promise<{ ok: boolean;
     }
     return { ok: true, statements: executed };
   } catch (err: any) {
-    return { ok: false, error: err.message || 'خطای بازیابی' };
+    const message = err instanceof Error ? err.message : String(err);
+    log.error('database_restore_failed', { error: message });
+    const safeErrors = new Set([
+      'کلید امضای پشتیبان تنظیم نشده است؛ بازیابی امن غیرفعال است.',
+      'فایل پشتیبان نامعتبر یا بزرگ‌تر از حد مجاز است.',
+      'پشتیبان امضای معتبر ندارد؛ بازیابی فایل‌های قدیمی و امضانشده مجاز نیست.',
+      'امضای پشتیبان معتبر نیست؛ هیچ دستوری اجرا نشد.',
+    ]);
+    return { ok: false, error: safeErrors.has(message) ? message : 'بازیابی دیتابیس ناموفق بود.' };
   }
 }
 
 export async function restoreMinioObjectAction(key: string, dataBase64: string): Promise<{ ok: boolean; error?: string }> {
   await requirePlatformAdmin();
   try {
+    // بازیابی فقط به کلیدهای تولیدشدهٔ اسناد آرشیو محدود است؛ از نوشتن در کلید
+    // دلخواه یا مسیرهای دیگر bucket جلوگیری می‌شود.
+    if (!/^archive\/[1-9]\d{0,9}\/[1-9]\d{0,9}-\d{10,13}-[a-f0-9]{16}\.(?:pdf|png|jpe?g|webp|gif|bmp)$/i.test(key)) {
+      return { ok: false, error: 'کلید فایل برای بازیابی مجاز نیست.' };
+    }
+    if (typeof dataBase64 !== 'string' || dataBase64.length > 28_000_000 ||
+        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(dataBase64)) {
+      return { ok: false, error: 'محتوای فایل نامعتبر یا بزرگ‌تر از حد مجاز است.' };
+    }
     await ensureBucket();
     const buf = Buffer.from(dataBase64, 'base64');
-    const ext = key.split('.').pop() || 'bin';
+    if (buf.length > 20 * 1024 * 1024) return { ok: false, error: 'حجم فایل از ۲۰ مگابایت بیشتر است.' };
+    const ext = key.split('.').pop()?.toLowerCase() || 'bin';
     const contentType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
       : ext === 'png' ? 'image/png'
       : ext === 'pdf' ? 'application/pdf'
@@ -242,7 +299,8 @@ export async function restoreMinioObjectAction(key: string, dataBase64: string):
     await S3.putObject(ARCHIVE_BUCKET, key, buf, buf.length, { 'Content-Type': contentType });
     return { ok: true };
   } catch (err: any) {
-    return { ok: false, error: err.message || 'خطای بازیابی فایل' };
+    log.error('minio_restore_failed', { error: err instanceof Error ? err.message : String(err) });
+    return { ok: false, error: 'بازیابی فایل ناموفق بود.' };
   }
 }
 
@@ -292,6 +350,7 @@ export async function getBackupStatsAction(): Promise<{ ok: boolean; stats?: { t
       },
     };
   } catch (err: any) {
-    return { ok: false, error: err.message || 'خطای نامشخص' };
+    log.error('backup_stats_failed', { error: err instanceof Error ? err.message : String(err) });
+    return { ok: false, error: 'دریافت آمار پشتیبان ناموفق بود.' };
   }
 }

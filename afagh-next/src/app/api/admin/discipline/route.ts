@@ -1,4 +1,5 @@
 import { assertCsrf, requireStudentScope } from '@/lib/security';
+import { escapeLikeChars } from '@/lib/persian-search';
 // ══════════════════════════════════════════════════════════════════════
 //  آفاق ERP — «کمیته انضباطی» — API فهرست/ایجاد/ویرایش پرونده
 //
@@ -20,7 +21,7 @@ import { discipline_cases, discipline_case_documents } from '@/db/schema-discipl
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 import {
 
   DISCIPLINE_DECISIONS, DISCIPLINE_STATUSES, DISCIPLINE_PAGE_SIZE,
@@ -60,13 +61,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز' }, { status: 401 });
   }
 
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) return NextResponse.json({ ok: false, error: 'دانشگاه فعال معتبر نیست.' }, { status: 403 });
+
   const p = req.nextUrl.searchParams;
 
   // ── حالت جست‌وجوی دانشجو برای انتخاب‌گر فرم ──
   if (p.get('action') === 'students') {
     const q = (p.get('q') || '').trim();
     if (q.length < 2) return NextResponse.json({ ok: true, hits: [] });
-    const like = `%${q}%`;
+    const like = `%${escapeLikeChars(q)}%`;
     const hits = await db
       .select({
         studentId: students.id,
@@ -76,16 +80,17 @@ export async function GET(req: NextRequest) {
       })
       .from(students)
       .innerJoin(users, eq(users.id, students.userId))
-      .where(or(eq(students.studentCode, q), sql`${users.firstName} || ' ' || ${users.lastName} LIKE ${like}`))
+      .where(and(
+        eq(students.universityId, uni.id),
+        or(eq(students.studentCode, q), sql`${users.firstName} || ' ' || ${users.lastName} LIKE ${like} ESCAPE '\\'`),
+      ))
       .orderBy(students.studentCode)
       .limit(20);
     return NextResponse.json({ ok: true, hits });
   }
 
   // ── فهرست پرونده‌ها ──
-  const filters: SQL[] = [];
-  const uni = await getCurrentUniversity().catch(() => null);
-  if (uni) filters.push(eq(discipline_cases.universityId, uni.id));
+  const filters: SQL[] = [eq(discipline_cases.universityId, uni.id)];
 
   const status = p.get('status') || '';
   if (status) {
@@ -97,19 +102,32 @@ export async function GET(req: NextRequest) {
   const studentId = Number(p.get('studentId') || 0);
   if (studentId) filters.push(eq(discipline_cases.studentId, studentId));
   const dateFrom = p.get('dateFrom');
-  if (dateFrom) filters.push(gte(discipline_cases.caseDate, new Date(dateFrom)));
+  if (dateFrom) {
+    const parsedDate = new Date(dateFrom);
+    if (Number.isNaN(parsedDate.getTime())) return NextResponse.json({ ok: false, error: 'تاریخ شروع نامعتبر است.' }, { status: 400 });
+    filters.push(gte(discipline_cases.caseDate, parsedDate));
+  }
   const dateTo = p.get('dateTo');
-  if (dateTo) filters.push(lte(discipline_cases.caseDate, new Date(`${dateTo}T23:59:59`)));
+  if (dateTo) {
+    const parsedDate = new Date(`${dateTo}T23:59:59`);
+    if (Number.isNaN(parsedDate.getTime())) return NextResponse.json({ ok: false, error: 'تاریخ پایان نامعتبر است.' }, { status: 400 });
+    filters.push(lte(discipline_cases.caseDate, parsedDate));
+  }
   const q = (p.get('q') || '').trim();
   if (q) {
-    const like = `%${q}%`;
+    const like = `%${escapeLikeChars(q)}%`;
     filters.push(or(
-      sql`${students.studentCode} LIKE ${like}`,
-      sql`${users.firstName} || ' ' || ${users.lastName} LIKE ${like}`,
+      sql`${students.studentCode} LIKE ${like} ESCAPE '\\'`,
+      sql`${users.firstName} || ' ' || ${users.lastName} LIKE ${like} ESCAPE '\\'`,
     )!);
   }
 
-  const page = Math.max(1, Number(p.get('page') || 1) || 1);
+  const pageRaw = p.get('page');
+  const pageValue = pageRaw ? Number(pageRaw) : 1;
+  if (!Number.isSafeInteger(pageValue) || pageValue < 1) {
+    return NextResponse.json({ ok: false, error: 'شماره صفحه نامعتبر است.' }, { status: 400 });
+  }
+  const page = Math.min(pageValue, 1_000_000);
   const where = filters.length ? and(...filters) : undefined;
 
   const [{ total }] = await db
@@ -181,14 +199,15 @@ export async function POST(req: NextRequest) {
   if (!scope.ok) return NextResponse.json({ ok: false, error: scope.error }, { status: 403 });
 
   const user = await getSessionUser();
-  const uni = await getCurrentUniversity().catch(() => null);
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) return NextResponse.json({ ok: false, error: 'دانشگاه فعال معتبر نیست.' }, { status: 403 });
 
   try {
     const result = await db.transaction(async (tx) => {
       const [stu] = await tx
         .select({ id: students.id, universityId: students.universityId })
         .from(students)
-        .where(eq(students.id, studentId))
+        .where(and(eq(students.id, studentId), eq(students.universityId, uni.id)))
         .limit(1);
       if (!stu) return { ok: false as const, error: 'دانشجو یافت نشد.' };
 
@@ -201,7 +220,7 @@ export async function POST(req: NextRequest) {
           reporterName: reporterName || null,
           status: 'در حال بررسی',
           caseDate: caseDate ? new Date(caseDate) : new Date(),
-          universityId: uni?.id ?? stu.universityId ?? null,
+          universityId: uni.id,
         })
         .returning({ id: discipline_cases.id });
 
@@ -236,8 +255,11 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز' }, { status: 401 });
   }
 
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) return NextResponse.json({ ok: false, error: 'دانشگاه فعال معتبر نیست.' }, { status: 403 });
+
   const id = Number(req.nextUrl.searchParams.get('id') || 0);
-  if (!id) return NextResponse.json({ ok: false, error: 'شناسه پرونده الزامی است.' }, { status: 400 });
+  if (!Number.isSafeInteger(id) || id <= 0) return NextResponse.json({ ok: false, error: 'شناسه پرونده نامعتبر است.' }, { status: 400 });
 
   let raw: unknown;
   try {
@@ -260,7 +282,8 @@ export async function PATCH(req: NextRequest) {
 
   // 🔒 مرز دانشگاه (IDOR): پروندهٔ دانشجوی دانشگاه دیگر قابل تغییر نیست
   {
-    const [row] = await db.select({ studentId: discipline_cases.studentId }).from(discipline_cases).where(eq(discipline_cases.id, id)).limit(1);
+    const [row] = await db.select({ studentId: discipline_cases.studentId }).from(discipline_cases)
+      .where(and(eq(discipline_cases.id, id), eq(discipline_cases.universityId, uni.id))).limit(1);
     if (!row) return NextResponse.json({ ok: false, error: 'پرونده یافت نشد.' }, { status: 404 });
     const scope = await requireStudentScope(row.studentId);
     if (!scope.ok) return NextResponse.json({ ok: false, error: scope.error }, { status: 403 });
@@ -279,12 +302,13 @@ export async function PATCH(req: NextRequest) {
       const [existing] = await tx
         .select({ id: discipline_cases.id, status: discipline_cases.status, committeeDecision: discipline_cases.committeeDecision })
         .from(discipline_cases)
-        .where(eq(discipline_cases.id, id))
+        .where(and(eq(discipline_cases.id, id), eq(discipline_cases.universityId, uni.id)))
         .limit(1)
         .for('update');
       if (!existing) return { ok: false as const, error: 'پرونده یافت نشد.' };
 
-      await tx.update(discipline_cases).set(set).where(eq(discipline_cases.id, id));
+      await tx.update(discipline_cases).set(set)
+        .where(and(eq(discipline_cases.id, id), eq(discipline_cases.universityId, uni.id)));
       await appendAudit(tx, {
         actorUserId: user?.id ?? null,
         action: ACTION_UPDATE,
@@ -316,12 +340,16 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز' }, { status: 401 });
   }
 
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) return NextResponse.json({ ok: false, error: 'دانشگاه فعال معتبر نیست.' }, { status: 403 });
+
   const id = Number(req.nextUrl.searchParams.get('id') || 0);
-  if (!id) return NextResponse.json({ ok: false, error: 'شناسه پرونده الزامی است.' }, { status: 400 });
+  if (!Number.isSafeInteger(id) || id <= 0) return NextResponse.json({ ok: false, error: 'شناسه پرونده نامعتبر است.' }, { status: 400 });
 
   // 🔒 مرز دانشگاه (IDOR): حتی ADMIN یک دانشگاه نباید پروندهٔ دانشگاه دیگر را حذف کند
   {
-    const [row] = await db.select({ studentId: discipline_cases.studentId }).from(discipline_cases).where(eq(discipline_cases.id, id)).limit(1);
+    const [row] = await db.select({ studentId: discipline_cases.studentId }).from(discipline_cases)
+      .where(and(eq(discipline_cases.id, id), eq(discipline_cases.universityId, uni.id))).limit(1);
     if (!row) return NextResponse.json({ ok: false, error: 'پرونده یافت نشد.' }, { status: 404 });
     const scope = await requireStudentScope(row.studentId);
     if (!scope.ok) return NextResponse.json({ ok: false, error: scope.error }, { status: 403 });
@@ -333,12 +361,12 @@ export async function DELETE(req: NextRequest) {
       const [existing] = await tx
         .select({ id: discipline_cases.id, studentId: discipline_cases.studentId, violationType: discipline_cases.violationType })
         .from(discipline_cases)
-        .where(eq(discipline_cases.id, id))
+        .where(and(eq(discipline_cases.id, id), eq(discipline_cases.universityId, uni.id)))
         .limit(1)
         .for('update');
       if (!existing) return { ok: false as const, error: 'پرونده یافت نشد.' };
 
-      await tx.delete(discipline_cases).where(eq(discipline_cases.id, id));
+      await tx.delete(discipline_cases).where(and(eq(discipline_cases.id, id), eq(discipline_cases.universityId, uni.id)));
       await appendAudit(tx, {
         actorUserId: user?.id ?? null,
         action: ACTION_DELETE,

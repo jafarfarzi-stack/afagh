@@ -11,11 +11,11 @@
 //  خروجی attachment با Content-Disposition است.
 // ══════════════════════════════════════════════════════════════════════
 import { NextResponse } from 'next/server';
-import { and, asc, eq, gte, inArray, isNull, lte, or } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lte } from 'drizzle-orm';
 import { db } from '@/db';
 import { academic_terms, student_ledger, students, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 import { getStudentFinance } from '@/lib/finance-engine';
 import { ledgerBalance } from '@/lib/ledger-balance';
 import { toNum } from '@/lib/finance-rules';
@@ -67,18 +67,20 @@ function respond(format: string, input: ExportDocInput, baseName: string): Respo
 export async function GET(request: Request) {
   try {
     await requireRole(ROLES);
-  } catch (e: any) {
+  } catch {
     // requireRole ریدایرکت می‌کند — در مسیر API به 401 ترجمه می‌شود
-    return err(e?.message || 'دسترسی غیرمجاز', 401);
+    return err('دسترسی غیرمجاز', 401);
   }
 
-  const uni = await getCurrentUniversity().catch(() => null);
-  if (!uni) return err('دانشگاه فعال یافت نشد', 400);
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) return err('دانشگاه فعال یافت نشد', 403);
 
   const url = new URL(request.url);
   const type = (url.searchParams.get('type') || '').trim();
   const format = (url.searchParams.get('format') || 'doc').trim();
-  const studentId = Number(url.searchParams.get('studentId') ?? 0);
+  const studentIdRaw = (url.searchParams.get('studentId') ?? '').trim();
+  const studentId = studentIdRaw ? Number(studentIdRaw) : 0;
+  if (studentIdRaw && (!Number.isSafeInteger(studentId) || studentId <= 0)) return err('شناسه دانشجو نامعتبر است', 400);
   const dateFrom = (url.searchParams.get('dateFrom') || '').trim();
   const dateTo = (url.searchParams.get('dateTo') || '').trim();
 
@@ -98,7 +100,7 @@ export async function GET(request: Request) {
     const [stu] = await db
       .select({ id: students.id })
       .from(students)
-      .where(and(eq(students.id, studentId), or(eq(students.universityId, uni.id), isNull(students.universityId))))
+      .where(and(eq(students.id, studentId), eq(students.universityId, uni.id)))
       .limit(1);
     if (!stu) return err('دانشجو یافت نشد', 404);
 
@@ -178,7 +180,7 @@ export async function GET(request: Request) {
     .innerJoin(students, eq(students.id, student_ledger.studentId))
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(academic_terms, eq(academic_terms.id, student_ledger.termId))
-    .where(and(...conds, or(eq(students.universityId, uni.id), isNull(students.universityId))))
+    .where(and(...conds, eq(students.universityId, uni.id)))
     .orderBy(asc(student_ledger.createdAt))
     .limit(5000);
 
