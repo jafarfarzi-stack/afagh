@@ -40,8 +40,9 @@ const periodSchema = z.object({
 export async function GET() {
   try {
     await requireRole(FINANCE);
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'دسترسی غیرمجاز' }, { status: 401 });
+  } catch (e) {
+    log.error('auth_guard_failed', { error: e });
+    return NextResponse.json({ error: 'دسترسی غیرمجاز' }, { status: 401 });
   }
   const state = await getLockState();
   return NextResponse.json(state);
@@ -54,8 +55,9 @@ export async function POST(req: NextRequest) {
   if (csrf) return csrf;
   try {
     await requireRole(FINANCE);
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'دسترسی غیرمجاز' }, { status: 401 });
+  } catch (e) {
+    log.error('auth_guard_failed', { error: e });
+    return NextResponse.json({ error: 'دسترسی غیرمجاز' }, { status: 401 });
   }
 
   let raw: unknown;
@@ -134,6 +136,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ...state });
   } catch (e: any) {
     log.error('period_save_failed', { error: e });
-    return NextResponse.json({ error: e?.message || 'خطا در ذخیرهٔ دورهٔ مالی' }, { status: 400 });
+    return NextResponse.json({ error: 'خطا در ذخیرهٔ دورهٔ مالی' }, { status: 400 });
   }
 }

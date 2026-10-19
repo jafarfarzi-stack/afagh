@@ -8,6 +8,7 @@ import {
   submitStudentRequest,
 } from '@/lib/workflow-engine';
 import { archiveKey, putArchiveObject } from '@/lib/objectStore';
+import { checkUpload, MAX_UPLOAD_BYTES, sanitizeRequestFormData } from '@/lib/safe-input';
 
 /** آپلود پیوست درخواست (مثل کارنامه ممهور) در Object Storage — فقط متادیتا در فرم ذخیره می‌شود */
 export async function uploadRequestAttachmentAction(formData: FormData): Promise<{
@@ -21,17 +22,18 @@ export async function uploadRequestAttachmentAction(formData: FormData): Promise
 
   const file = formData.get('file');
   if (!(file instanceof File) || file.size === 0) return { ok: false, error: 'فایلی انتخاب نشده است.' };
-  if (file.size > 10 * 1024 * 1024) return { ok: false, error: 'حجم پیوست نباید بیش از ۱۰ مگابایت باشد.' };
+  if (file.size > MAX_UPLOAD_BYTES) return { ok: false, error: 'حجم پیوست نباید بیش از ۱۰ مگابایت باشد.' };
 
   const buf = Buffer.from(await file.arrayBuffer());
-  const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
-  const key = `requests/${me.id}/attach-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}.${ext}`;
+  const check = checkUpload(file.name, file.type, buf);
+  if (!check.ok) return { ok: false, error: check.error };
+  const key = `requests/${me.id}/attach-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}.${check.ext}`;
   try {
-    await putArchiveObject(key, buf, file.type || 'application/octet-stream');
+    await putArchiveObject(key, buf, check.mime);
   } catch (e: any) {
     return { ok: false, error: 'خطا در ذخیرهٔ پیوست (Object Storage در دسترس نیست): ' + (e?.message || '') };
   }
-  return { ok: true, attachment: { key, name: file.name, size: file.size, mimeType: file.type || '' } };
+  return { ok: true, attachment: { key, name: file.name, size: file.size, mimeType: check.mime } };
 }
 
 export async function submitStudentRequestAction(processCode: string, formData: Record<string, any>) {
@@ -39,12 +41,15 @@ export async function submitStudentRequestAction(processCode: string, formData: 
   const me = await getStudentByUser(user.id);
   if (!me) return { ok: false, error: 'پرونده دانشجویی یافت نشد.' };
 
+  const clean = sanitizeRequestFormData(formData, me.id);
+  if (!clean.ok) return { ok: false, error: clean.error };
+
   try {
     const created = await submitStudentRequest({
       studentId: me.id,
       userId: user.id,
       processCode,
-      formData,
+      formData: clean.data,
     });
 
     revalidatePath('/student/requests');

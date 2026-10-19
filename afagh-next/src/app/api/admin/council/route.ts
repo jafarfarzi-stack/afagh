@@ -16,15 +16,16 @@ import { assertCsrf } from '@/lib/security';
 //  قراردادها: src/lib/council.ts — نوع/وضعیت فارسی = مقدار ذخیره‌شده
 // ══════════════════════════════════════════════════════════════════════
 import { NextRequest, NextResponse } from 'next/server';
-import { and, count, desc, eq, gte, ilike, lte, or, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, gte, ilike, lte, or, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/db';
 import { council_meetings, council_decisions } from '@/db/schema-council';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 import { strParam, intParam, dateParam } from '@/lib/council';
+import { escapeLikeChars } from '@/lib/persian-search';
 
 
 export const dynamic = 'force-dynamic';
@@ -45,8 +46,8 @@ async function guard() {
   try {
     await requireRole(ALLOWED);
     return null;
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'دسترسی غیرمجاز' }, { status: 401 });
+  } catch {
+    return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز' }, { status: 401 });
   }
 }
 
@@ -58,8 +59,9 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
 
   const filters: SQL[] = [];
-  const uni = await getCurrentUniversity().catch(() => null);
-  if (uni) filters.push(eq(council_meetings.universityId, uni.id));
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) return NextResponse.json({ ok: false, error: 'دانشگاه فعال معتبر نیست.' }, { status: 403 });
+  filters.push(eq(council_meetings.universityId, uni.id));
   const dateFrom = dateParam(sp, 'dateFrom');
   if (dateFrom) filters.push(gte(council_meetings.meetingDate, dateFrom));
   const dateTo = dateParam(sp, 'dateTo');
@@ -70,8 +72,8 @@ export async function GET(req: NextRequest) {
   }
   const q = strParam(sp, 'q');
   if (q) {
-    const like = `%${q}%`;
-    filters.push(or(ilike(council_meetings.title, like), ilike(council_meetings.agenda, like))!);
+    const like = `%${escapeLikeChars(q)}%`;
+    filters.push(or(sql`${council_meetings.title} ILIKE ${like} ESCAPE '\\'`, sql`${council_meetings.agenda} ILIKE ${like} ESCAPE '\\'`)!);
   }
 
   const where = and(...filters) ?? undefined;
@@ -119,7 +121,8 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ ok: false, error: 'داده ورودی معتبر نیست.' }, { status: 400 });
 
   const user = await getSessionUser();
-  const uni = await getCurrentUniversity().catch(() => null);
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) return NextResponse.json({ ok: false, error: 'دانشگاه فعال معتبر نیست.' }, { status: 403 });
   const { title, meetingDate, members, agenda, minutes } = parsed.data;
 
   try {
@@ -130,7 +133,7 @@ export async function POST(req: NextRequest) {
         members: members || null,
         agenda: agenda || null,
         minutes: minutes || null,
-        universityId: uni?.id ?? null,
+        universityId: uni.id,
         createdBy: user?.id ?? null,
       }).returning({ id: council_meetings.id });
       await appendAudit(tx, {
@@ -145,8 +148,8 @@ export async function POST(req: NextRequest) {
     log.info('meeting_created', { id: result.id, actorUserId: user?.id ?? null });
     return NextResponse.json({ ok: true, id: result.id });
   } catch (e: any) {
-    log.error('meeting_create_failed', { error: e });
-    return NextResponse.json({ ok: false, error: e?.message || 'خطا در ذخیرهٔ جلسه.' }, { status: 400 });
+    log.error('meeting_create_failed', { error: e instanceof Error ? e.message : String(e) });
+    return NextResponse.json({ ok: false, error: 'خطا در ذخیرهٔ جلسه.' }, { status: 500 });
   }
 }
 
@@ -156,6 +159,8 @@ export async function PATCH(req: NextRequest) {
   if (csrf) return csrf;
   const denied = await guard();
   if (denied) return denied;
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) return NextResponse.json({ ok: false, error: 'دانشگاه فعال معتبر نیست.' }, { status: 403 });
   const id = intParam(req.nextUrl.searchParams, 'id');
   if (!id) return NextResponse.json({ ok: false, error: 'شناسه جلسه الزامی است.' }, { status: 400 });
 
@@ -171,7 +176,7 @@ export async function PATCH(req: NextRequest) {
   try {
     const result = await db.transaction(async (tx) => {
       const [existing] = await tx.select({ id: council_meetings.id }).from(council_meetings)
-        .where(eq(council_meetings.id, id)).limit(1).for('update');
+        .where(and(eq(council_meetings.id, id), eq(council_meetings.universityId, uni.id))).limit(1).for('update');
       if (!existing) return { ok: false as const, error: 'جلسه یافت نشد.' };
       await tx.update(council_meetings).set({
         title,
@@ -180,7 +185,7 @@ export async function PATCH(req: NextRequest) {
         agenda: agenda || null,
         minutes: minutes || null,
         updatedAt: new Date(),
-      }).where(eq(council_meetings.id, id));
+      }).where(and(eq(council_meetings.id, id), eq(council_meetings.universityId, uni.id)));
       await appendAudit(tx, {
         actorUserId: user?.id ?? null,
         action: 'COUNCIL_MEETING_UPDATED',
@@ -193,8 +198,8 @@ export async function PATCH(req: NextRequest) {
     if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    log.error('meeting_update_failed', { error: e });
-    return NextResponse.json({ ok: false, error: e?.message || 'خطا در به‌روزرسانی جلسه.' }, { status: 400 });
+    log.error('meeting_update_failed', { error: e instanceof Error ? e.message : String(e) });
+    return NextResponse.json({ ok: false, error: 'خطا در به‌روزرسانی جلسه.' }, { status: 500 });
   }
 }
 
@@ -204,6 +209,8 @@ export async function DELETE(req: NextRequest) {
   if (csrf) return csrf;
   const denied = await guard();
   if (denied) return denied;
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) return NextResponse.json({ ok: false, error: 'دانشگاه فعال معتبر نیست.' }, { status: 403 });
   const id = intParam(req.nextUrl.searchParams, 'id');
   if (!id) return NextResponse.json({ ok: false, error: 'شناسه جلسه الزامی است.' }, { status: 400 });
 
@@ -211,9 +218,9 @@ export async function DELETE(req: NextRequest) {
   try {
     const result = await db.transaction(async (tx) => {
       const [existing] = await tx.select({ id: council_meetings.id, title: council_meetings.title })
-        .from(council_meetings).where(eq(council_meetings.id, id)).limit(1).for('update');
+        .from(council_meetings).where(and(eq(council_meetings.id, id), eq(council_meetings.universityId, uni.id))).limit(1).for('update');
       if (!existing) return { ok: false as const, error: 'جلسه یافت نشد.' };
-      await tx.delete(council_meetings).where(eq(council_meetings.id, id));
+      await tx.delete(council_meetings).where(and(eq(council_meetings.id, id), eq(council_meetings.universityId, uni.id)));
       await appendAudit(tx, {
         actorUserId: user?.id ?? null,
         action: 'COUNCIL_MEETING_DELETED',
@@ -226,7 +233,7 @@ export async function DELETE(req: NextRequest) {
     if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    log.error('meeting_delete_failed', { error: e });
-    return NextResponse.json({ ok: false, error: e?.message || 'خطا در حذف جلسه.' }, { status: 400 });
+    log.error('meeting_delete_failed', { error: e instanceof Error ? e.message : String(e) });
+    return NextResponse.json({ ok: false, error: 'خطا در حذف جلسه.' }, { status: 500 });
   }
 }

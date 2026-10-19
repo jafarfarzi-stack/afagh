@@ -19,7 +19,7 @@
 #  توسعهٔ محلی = afagh-next/.env (ساختهٔ install-docker.ps1/.sh) که فقط
 #  زیرساخت dev در afagh-next/docker-compose.yml را تغذیه می‌کند.
 #
-#      app       → Next.js            روی پورت ${APP_PORT:-8080} هاست
+#      app       → Next.js            روی ${APP_BIND:-127.0.0.1}:${APP_PORT:-8080} (پشت پروکسی/Caddy)
 #      postgres  → PostgreSQL 16      فقط روی 127.0.0.1
 #      redis     → Redis 7            فقط روی 127.0.0.1
 #      minio     → Object Storage     فقط روی 127.0.0.1
@@ -39,22 +39,24 @@
 name: afagh
 
 # ── متغیرهای مشترک سرویس‌های اپ ──
-x-app-env: &app-env
-  # زیرساخت (فقط از همین‌جا خوانده می‌شود)
-  # مالک اسکیما — فقط migrator/seed/hardening از این استفاده می‌کند
-  # ⚠ P0-1: هیچ پیش‌فرضی ندارد؛ compose بدون .env بالا نمی‌آید (قدیم «afagh»
-  #   پیش‌فرض بود و هر `docker compose up` بی‌دقت، دیتابیس با رمز قابل‌حدس می‌ساخت).
-  #   راه توسعهٔ محلی:  make env && ALLOW_WEAK_SECRETS=1 make up
-  DATABASE_URL: postgres://afagh:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD تنظیم نشده — «make env» را بزنید و در .env مقدار تصادفی قوی بگذارید (سیاستِ scripts/lib/secret-policy.mjs)}@postgres:5432/afagh_db
+# ⚠ فاز ۲ (بازبینی‌شده): DATABASE_URL مجبوراً در لنگر مشترک می‌ماند — استخرِ «مالک اسکیما»
+#   در خودِ اپ (src/db/index.ts) در زمان import ساخته می‌شود و در production بدون این
+#   متغیر fail-fast می‌دهد؛ پشتیبان/بازیابی درون‌فرآیندی (backup-actions) هم از همین
+#   استخر استفاده می‌کند. حذفِ آن اپ را در پروداکشن از کار می‌انداخت.
+#   دستاورد واقعی این فاز: AFAGH_APP_DB_PASSWORD دیگر به سرویس app تزریق نمی‌شود (فقط migrator).
+#   کارِ باقی‌مانده: استخر اختصاصی فقط برای backup تا رمز مالک از app حذف شود.
+x-common-env: &common-env
   # اتصال اپ با نقش محدود afagh_app (RLS فعال — توسط hardening.mjs ساخته می‌شود)
   DATABASE_URL_APP: postgres://afagh_app:${AFAGH_APP_DB_PASSWORD:?AFAGH_APP_DB_PASSWORD تنظیم نشده — رمز نقش afagh_app؛ با «./deploy-debian.sh» خودکار ساخته می‌شود}@postgres:5432/afagh_db
-  AFAGH_APP_DB_PASSWORD: ${AFAGH_APP_DB_PASSWORD:?AFAGH_APP_DB_PASSWORD تنظیم نشده — رمز نقش afagh_app}
-  # ⟵ hardening.mjs همین مقدار را روی نقش اعمال می‌کند و پیش از آن سیاست رمز را می‌سنجد
+  DATABASE_URL: postgres://afagh:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD تنظیم نشده — «make env» را بزنید و در .env مقدار تصادفی قوی بگذارید (سیاستِ scripts/lib/secret-policy.mjs)}@postgres:5432/afagh_db
   # حالت دمو: ۱ = حساب‌های دمو فعال؛ در production حتماً ۰ (پیش‌فرض خاموش)
   AFAGH_DEMO_MODE: ${AFAGH_DEMO_MODE:-0}
-  # حوزهٔ مجوز سطح-شیء برای کارشناس مالی: all (پیش‌فرض) | department (فقط دانشجوی گروه خود)
-  AFAGH_OBJECT_SCOPE: ${AFAGH_OBJECT_SCOPE:-all}
-  REDIS_URL: redis://redis:6379
+  # حوزهٔ مجوز سطح-شیء برای کارشناس مالی: department (پیش‌فرض امن) | all (دسترسی به همهٔ دانشجویان)
+  # فاز ۲: پیش‌فرض از all به department تغییر کرد — ریشهٔ «کارشناس مالیِ یک گروه، دانشجوی گروه دیگر را می‌دید».
+  AFAGH_OBJECT_SCOPE: ${AFAGH_OBJECT_SCOPE:-department}
+  # ⚠ فاز ۲: Redis با رمز بالا می‌آید (پیش‌تر بدون AUTH بود). REDIS_PASSWORD اجباری است؛
+  #   deploy-debian.sh آن را خودکار می‌سازد و برای استقرارهای موجود backfill می‌کند.
+  REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD تنظیم نشده — رمز Redis؛ «./deploy-debian.sh» خودکار می‌سازد}@redis:6379
   S3_ENDPOINT: minio
   S3_PORT: "9000"
   S3_BUCKET: ${S3_BUCKET:-afagh-archive}
@@ -141,6 +143,11 @@ services:
       POSTGRES_DB: afagh_db
       # برای نمایش صحیح متن فارسی در مرتب‌سازی و جست‌وجو
       LANG: C.UTF-8
+    # فاز ۲: کمینه‌سازی سطح حمله. postgres برای init/افت‌سطح به این capability‌ها نیاز دارد.
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    pids_limit: 512
     volumes:
       - afagh_pg:/var/lib/postgresql/data
     ports: ['127.0.0.1:${PG_HOST_PORT:-5432}:5432']
@@ -156,21 +163,34 @@ services:
     container_name: afagh_redis
     restart: unless-stopped
     logging: *default-logging
-    command: redis-server --appendonly yes
+    # فاز ۲: AUTH اجباری. بدون رمز، هر کاربرِ هاست یا هر کانتینر روی dbnet می‌توانست
+    #   شمارندهٔ نرخ‌محدودسازی، قفل نشست و وضعیت اتاق انتظار را بخواند/دستکاری کند.
+    #   رمز با «$$REDIS_PASSWORD» به sh داده می‌شود تا در Args کانتینر لو نرود.
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD تنظیم نشده — رمز Redis؛ «./deploy-debian.sh» خودکار می‌سازد}
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    pids_limit: 256
     volumes: [afagh_redis:/data]
     ports: ['127.0.0.1:${REDIS_HOST_PORT:-6379}:6379']
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" --no-auth-warning ping | grep -q PONG']
       interval: 5s
       timeout: 5s
       retries: 30
     networks: [dbnet]
 
   minio:
-    image: minio/minio
+    # فاز ۲: ایمیج را پین کنید تا «latest» غافلگیرکننده نباشد. مقدار پیش‌فرض همان latest
+    #   است تا استقرار نشکند؛ توصیه: MINIO_IMAGE=minio/minio:RELEASE.<تاریخ>T<ساعت>Z
+    image: ${MINIO_IMAGE:-minio/minio:latest}
     container_name: afagh_minio
     restart: unless-stopped
     logging: *default-logging
+    # فاز ۲: nobody=اجبار نشد (MinIO برای نوشتن در /data به مالکیت نیاز دارد)؛ فقط esc-priv و pids
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 512
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-afagh}
@@ -195,7 +215,14 @@ services:
     container_name: afagh_migrator
     restart: "no"
     logging: *default-logging
-    environment: *app-env
+    # فاز ۲: رمز نقش afagh_app فقط این‌جا لازم است (hardening.mjs آن را روی نقش اعمال
+    #   می‌کند). DATABASE_URL (مالک اسکیما) از لنگر مشترک می‌آید.
+    environment:
+      <<: *common-env
+      AFAGH_APP_DB_PASSWORD: ${AFAGH_APP_DB_PASSWORD:?AFAGH_APP_DB_PASSWORD تنظیم نشده — رمز نقش afagh_app}
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    pids_limit: 512
     volumes:
       # M-2: کلیدهای پویش‌ها (cron.env) برای scheduler تولید و به اشتراک گذاشته می‌شود
       - afagh_cron_secrets:/secrets
@@ -226,10 +253,17 @@ services:
     container_name: afagh_app
     restart: unless-stopped
     logging: *default-logging
-    environment: *app-env
+    # فاز ۲: app دیگر رمز مالک اسکیما (DATABASE_URL) و AFAGH_APP_DB_PASSWORD را نمی‌گیرد؛
+    #   فقط لنگر مشترک (DATABASE_URL_APP + تنظیمات). اسرار کمتری در `docker inspect`.
+    environment: *common-env
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    pids_limit: 512
     volumes:
       - afagh_uploads:/app/public/uploads
-    ports: ['${APP_PORT:-8080}:8080']
+    # فاز ۲: به‌طور پیش‌فرض فقط روی 127.0.0.1 منتشر می‌شود (پشت Caddy/پروکسی).
+    #   برای انتشار عمومی صریح: APP_BIND=0.0.0.0 (فقط وقتی خودتان HTTP/TLS را مدیریت می‌کنید).
+    ports: ['${APP_BIND:-127.0.0.1}:${APP_PORT:-8080}:8080']
     depends_on:
       postgres:
         condition: service_healthy
@@ -253,16 +287,14 @@ services:
       # M-2: کلیدهای تولیدشده توسط migrator (seed-base) — ENV روی آن مقدم است
       - afagh_cron_secrets:/secrets:ro
     entrypoint: ["sh", "/scheduler.sh"]
+    # فاز ۲: کلیدهای پویش دیگر در ENV تزریق نمی‌شوند (در `docker inspect` دیده می‌شدند).
+    #   scheduler آن‌ها را از فایل volume «/secrets/cron.env» می‌خواند که migrator
+    #   (seed-base) هنگام نصب می‌سازد و همان مقادیر در دیتابیس هم ثبت شده‌اند.
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    pids_limit: 256
     environment:
       APP_URL: http://app:8080
-      FINANCE_CRON_SECRET: ${FINANCE_CRON_SECRET:-}
-      GRAD_CRON_SECRET: ${GRAD_CRON_SECRET:-}
-      BI_CRON_SECRET: ${BI_CRON_SECRET:-}
-      GREETINGS_CRON_SECRET: ${GREETINGS_CRON_SECRET:-}
-      GRADUATION_SCAN_CRON_SECRET: ${GRADUATION_SCAN_CRON_SECRET:-}
-      WORKFLOW_EVENTS_CRON_SECRET: ${WORKFLOW_EVENTS_CRON_SECRET:-}
-      MSG_LINK_CRON_SECRET: ${MSG_LINK_CRON_SECRET:-}
-      SCHED_WARN_CRON_SECRET: ${SCHED_WARN_CRON_SECRET:-}
       # فاصلهٔ پویش‌ها به دقیقه — همه از ENV، هیچ‌کدام در کد سخت‌کد نیست
       SCHEDULER_TICK_SECONDS: ${SCHEDULER_TICK_SECONDS:-60}
       CHEQUE_REMIND_INTERVAL_MIN: ${CHEQUE_REMIND_INTERVAL_MIN:-60}

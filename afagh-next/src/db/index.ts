@@ -4,18 +4,23 @@ import fs from 'fs';
 import path from 'path';
 import { Pool } from 'pg';
 import { observePoolErrors } from './pool-errors';
+import { createLogger } from '@/lib/logger';
 import { assertProdSecrets } from '@/lib/secret-guard';
 import * as schema from './schema';
 
 // ── گارد production: در پروداکشن متغیرهای زیرساخت باید تعیین شوند، نه با پیش‌فرض ──
 // (NEXT_PHASE یعنی در حال build هستیم؛ اتصال ایجاد نمی‌شود)
 const isBuilding = !!process.env.NEXT_PHASE;
+const log = createLogger({ mod: 'db' });
 const requireEnvInProd = (name: string, url: string) => {
-  if (!isBuilding && process.env.NODE_ENV === 'production' && !process.env[name]) {
+  // مقدار خالی یا فقط-فاصله به‌مثابه «تنظیم‌نشده» در نظر گرفته می‌شود؛ در production
+  // هرگز به پیش‌فرض توسعهای سقوط نمی‌کنیم (fail-closed).
+  const configured = process.env[name]?.trim();
+  if (!isBuilding && process.env.NODE_ENV === 'production' && !configured) {
     // ⚠ به‌جای اتصال با پیش‌فرض ضعیف، جریان شروع را متوقف می‌کنیم (fail-fast)
-    throw new Error(`[db] در production متغیر ${name} اجباری است (پیش‌فرض توسعه‌ای «${url}» پذیرفته نمی‌شود).`);
+    throw new Error(`[db] در production متغیر ${name} اجباری است و نمی‌تواند خالی بماند (پیش‌فرض توسعه‌ای «${url}» در production پذیرفته نمی‌شود).`);
   }
-  return process.env[name] || url;
+  return configured || url;
 };
 
 // 🔒 P0-1: پیش از ساختن هر استخر اتصال، سیاست سکرت پروداکشن بررسی می‌شود.
@@ -46,7 +51,7 @@ export async function ensureDbSchemaPatches() {
   if (schemaEnsured) return;
   schemaEnsured = true;
   if (process.env.NODE_ENV === 'production') {
-    console.warn('[db] پچ‌های اسکیما باید توسط migrator پیش از استارت اپ اجرا شده باشند — خودترمیمی runtime در production غیرفعال است.');
+    log.warn('schema_patches_skipped_in_prod');
     return;
   }
   try {
@@ -67,7 +72,7 @@ export async function ensureDbSchemaPatches() {
     if (patchSql == null) throw new Error('patches.sql در هیچ مسیری پیدا نشد');
     await pool.query(patchSql);
   } catch (err: any) {
-    console.error('[db] پچ اسکیما ناموفق (توسعه):', err?.message);
+    log.error('schema_patches_failed', { error: String(err?.message ?? err) });
   }
 }
 
@@ -122,11 +127,11 @@ export async function withUserRls<T>(userId: number, fn: (tx: RlsTx) => Promise<
       // 🔴 production: NEVER fallback (بازبینی — بند ۶). هیچ ENV عمومی‌ای نمی‌تواند
       // مسیر privileged را باز کند؛ در صورت نیاز دسترسی اضطراری، بازیابی از پشتیبان/
       // کنسول مستقیم DBA انجام می‌شود، نه از طریق اپ.
-      console.error(`[rls] ⛔ زیرساخت RLS از دست رفت (${err?.code ?? '?'}): ${msg} — درخواست رد شد (fail-closed مطلق).`);
+      log.error('rls_infra_lost', { code: err?.code ?? '?', error: msg });
       throw new Error('خطای امنیتی زیرساخت (RLS). با مدیر سامانه تماس بگیرید.');
     }
     // فقط توسعه (برای دباگ بدون afagh_app محلی): fallback با لاگ هشدار
-    console.warn('[rls] fallback توسعه‌ای به اتصال مالک فعال شد — این مسیر در production ممنوع است.');
+    log.warn('rls_dev_fallback_enabled');
     return (db as any).transaction(async (tx: any) => {
       await tx.execute(sql`select set_config('app.user_id', ${String(userId)}, true)`);
       return fn(tx);

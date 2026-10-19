@@ -39,6 +39,8 @@ export async function setTermCookie(termId: number | null, _universityId: number
   store.set(TERM_COOKIE, String(termId), {
     path: '/',
     maxAge: 365 * 24 * 3600,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production' || (process.env.AFAGH_COOKIE_SECURE ?? '').toLowerCase() === 'true',
     sameSite: 'lax',
   });
 }

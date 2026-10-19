@@ -3,8 +3,11 @@
 #
 #  ۱) در فایل .env بگذارید:
 #         DOMAIN=edu.example.ac.ir
-#         APP_PORT=127.0.0.1:8080          ← اپ دیگر مستقیم از اینترنت باز نباشد
 #         AFAGH_PUBLIC_BASE_URL=https://edu.example.ac.ir
+#     ⚠ APP_BIND پیش‌فرض 127.0.0.1 است؛ پس اپ مستقیم از اینترنت باز نیست و
+#       فقط از طریق همین Caddy (روی ۸۰/۴۴۳) در دسترس است. برای پورت دیگر: APP_PORT=9090
+#       (پیش‌فرض ۸۰۸۰). فقط اگر خودتان TLS/پروکسی را جای دیگری مدیریت می‌کنید
+#       APP_BIND=0.0.0.0 بگذارید.
 #  ۲) اجرا:
 #         docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
 #     یا:  make up-https

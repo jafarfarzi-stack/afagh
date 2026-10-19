@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { isIdle, isSessionLocked, resolveIdleTimeoutMinutes, setSessionLock, touchActivity } from '@/lib/session-lock';
+import { assertCsrf } from '@/lib/security';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +17,9 @@ export const dynamic = 'force-dynamic';
  * فقط با کوکی نشست کار می‌کند و چون تصمیم نهایی در layout و بر پایهٔ همین زمان
  * گرفته می‌شود، رفرش هم قفل را نشان می‌دهد.
  */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   const user = await getSessionUser().catch(() => null);
   if (!user) return NextResponse.json({ ok: false, locked: false, reason: 'no-session' }, { status: 401 });
 

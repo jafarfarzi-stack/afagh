@@ -18,6 +18,7 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { permissions, role_permissions, roles, user_roles } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { requirePlatformAdmin } from '@/lib/platform-admin';
 import { assertServerActionOrigin } from '@/lib/security';
 import { auditChain } from '@/lib/audit-chain';
 import { clearPermissionCache, invalidatePermissionCacheFor } from '@/lib/permissions-enforcer';
@@ -126,7 +127,7 @@ export async function getPermissionsWorkspaceAction(): Promise<
     });
   } catch (err: any) {
     log.error('permissions_workspace_failed', { error: String(err?.message ?? err) });
-    return fail('بارگذاری ماتریس دسترسی‌ها ناموفق بود: ' + String(err?.message ?? err));
+    return fail('بارگذاری ماتریس دسترسی‌ها ناموفق بود. جزئیات در لاگ سرور ثبت شد.');
   }
 }
 
@@ -139,7 +140,7 @@ export async function getPermissionsWorkspaceAction(): Promise<
 export async function saveRolePermissionsAction(input: { roleId: number; codes: string[] }) {
   const og = await assertServerActionOrigin();
   if (!og.ok) return fail(og.error);
-  const actor = await requireRole(['ADMIN']);
+  const actor = await requirePlatformAdmin();
 
   const roleId = Number(input?.roleId);
   if (!Number.isInteger(roleId) || roleId <= 0) return fail('شناسهٔ نقش نامعتبر است.');
@@ -184,7 +185,7 @@ export async function saveRolePermissionsAction(input: { roleId: number; codes: 
     });
   } catch (err: any) {
     log.error('save_role_permissions_failed', { roleId, error: String(err?.message ?? err) });
-    return fail('ذخیرهٔ دسترسی‌ها ناموفق بود: ' + String(err?.message ?? err));
+    return fail('ذخیرهٔ دسترسی‌ها ناموفق بود. جزئیات در لاگ سرور ثبت شد.');
   }
 
   log.info('role_permissions_saved', { roleId, roleCode: role.code, count: permRows.length });
@@ -198,7 +199,7 @@ export async function saveRolePermissionsAction(input: { roleId: number; codes: 
 export async function createRoleAction(input: { code: string; title: string }) {
   const og = await assertServerActionOrigin();
   if (!og.ok) return fail(og.error);
-  const actor = await requireRole(['ADMIN']);
+  const actor = await requirePlatformAdmin();
 
   const code = String(input?.code ?? '').trim().toUpperCase().replace(/\s+/g, '_');
   const title = String(input?.title ?? '').trim();
@@ -223,7 +224,7 @@ export async function createRoleAction(input: { code: string; title: string }) {
     return ok({ id: created.id, code, title });
   } catch (err: any) {
     log.error('create_role_failed', { code, error: String(err?.message ?? err) });
-    return fail('ایجاد نقش ناموفق بود: ' + String(err?.message ?? err));
+    return fail('ایجاد نقش ناموفق بود. جزئیات در لاگ سرور ثبت شد.');
   }
 }
 
@@ -231,7 +232,7 @@ export async function createRoleAction(input: { code: string; title: string }) {
 export async function deleteRoleAction(input: { roleId: number }) {
   const og = await assertServerActionOrigin();
   if (!og.ok) return fail(og.error);
-  const actor = await requireRole(['ADMIN']);
+  const actor = await requirePlatformAdmin();
 
   const roleId = Number(input?.roleId);
   const [role] = await db.select().from(roles).where(eq(roles.id, roleId)).limit(1);
@@ -252,7 +253,7 @@ export async function deleteRoleAction(input: { roleId: number }) {
     });
   } catch (err: any) {
     log.error('delete_role_failed', { roleId, error: String(err?.message ?? err) });
-    return fail('حذف نقش ناموفق بود: ' + String(err?.message ?? err));
+    return fail('حذف نقش ناموفق بود. جزئیات در لاگ سرور ثبت شد.');
   }
 
   log.info('role_deleted', { roleId, code: role.code });

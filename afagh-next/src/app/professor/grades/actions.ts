@@ -550,6 +550,11 @@ export async function resolveAppealAction(
     if (payload.decision === 'ACCEPTED' && appealEnr.gradeStatus === 'FINALIZED') {
       return invalid('این نمره نهایی شده است؛ تغییر آن فقط با درخواست بازگشایی و تأیید مدیر امکان‌پذیر است.');
     }
+    if (payload.decision === 'ACCEPTED') {
+      const { assertGradeWriteAllowed } = await import('@/lib/grades/finalize-lock');
+      const gate = await assertGradeWriteAllowed(payload.offeringId);
+      if (!gate.ok) return invalid(gate.error!);
+    }
     const appealStudent = await resolveStudentRow(payload.offeringId, payload.studentCode);
     if (!appealStudent || appealStudent.student.id !== appealEnr.studentId) {
       return invalid('مشخصات اعتراض با این دانشجو مطابقت ندارد.');

@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { verifyOwnPasswordCore } from '@/lib/step-up-actions';
+import { assertCsrf } from '@/lib/security';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +12,9 @@ export const dynamic = 'force-dynamic';
  * کنار آن گذاشته‌ایم تا اگر Server Action پشت پروکسی/آی‌فریم به‌دلیل بررسی
  * Origin/Host رد شد، کاربر پشت قفل گیر نکند.
  */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   let password = '';
   try {
     const body = (await req.json()) as { password?: unknown } | null;

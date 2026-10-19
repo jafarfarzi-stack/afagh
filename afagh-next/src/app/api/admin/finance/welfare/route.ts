@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
     if (fundIdParam) {
       const unassigned = fundIdParam === 'unassigned';
       const fundId = unassigned ? NaN : Number(fundIdParam);
-      if (!unassigned && (!Number.isInteger(fundId) || fundId <= 0)) {
+      if (!unassigned && (!Number.isSafeInteger(fundId) || fundId <= 0)) {
         return NextResponse.json({ error: 'invalid_fund' }, { status: 400 });
       }
       const page = Math.max(1, Number(searchParams.get('page') ?? '1') || 1);
@@ -125,10 +125,10 @@ export async function POST(req: NextRequest) {
     if (body?.action === 'assign-loan') {
       const loanId = Number(body.loanId);
       const fundId = body.fundId === null ? null : Number(body.fundId);
-      if (!Number.isInteger(loanId) || loanId <= 0) {
+      if (!Number.isSafeInteger(loanId) || loanId <= 0) {
         return NextResponse.json({ error: 'invalid_loan' }, { status: 400 });
       }
-      if (fundId !== null && (!Number.isInteger(fundId) || fundId <= 0)) {
+      if (fundId !== null && (!Number.isSafeInteger(fundId) || fundId <= 0)) {
         return NextResponse.json({ error: 'invalid_fund' }, { status: 400 });
       }
       const universityId = (await getCurrentUniversity().catch(() => null))?.id ?? null;
@@ -220,7 +220,7 @@ export async function PATCH(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     const { searchParams } = new URL(req.url);
     const id = Number(searchParams.get('id'));
-    if (!Number.isInteger(id) || id <= 0) {
+    if (!Number.isSafeInteger(id) || id <= 0) {
       return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
     }
     const parsed = fundSchema.partial().safeParse(await req.json());
@@ -278,7 +278,7 @@ export async function DELETE(req: NextRequest) {
     }
     const { searchParams } = new URL(req.url);
     const id = Number(searchParams.get('id'));
-    if (!Number.isInteger(id) || id <= 0) {
+    if (!Number.isSafeInteger(id) || id <= 0) {
       return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
     }
     const [{ n }] = await db

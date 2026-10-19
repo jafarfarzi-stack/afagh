@@ -24,6 +24,13 @@ function redirect(path: string): NextResponse {
   return new NextResponse(null, { status: 303, headers: { Location: path } });
 }
 
+function secureCookie(): boolean {
+  const mode = (process.env.AFAGH_COOKIE_SECURE ?? 'auto').toLowerCase();
+  if (mode === 'true') return true;
+  if (mode === 'false') return false;
+  return process.env.NODE_ENV === 'production';
+}
+
 export async function POST(req: NextRequest) {
   const csrf = assertCsrf(req);
   if (csrf) return csrf;
@@ -42,7 +49,7 @@ export async function POST(req: NextRequest) {
   // «همهٔ نیمسال‌ها» = پاک کردن کوکی
   if (!raw) {
     const res = redirect(back);
-    res.cookies.set(TERM_COOKIE, '', { path: '/', maxAge: 0, sameSite: 'lax' });
+    res.cookies.set(TERM_COOKIE, '', { path: '/', maxAge: 0, httpOnly: true, secure: secureCookie(), sameSite: 'lax' });
     return res;
   }
 
@@ -68,6 +75,8 @@ export async function POST(req: NextRequest) {
   res.cookies.set(TERM_COOKIE, String(hit.id), {
     path: '/',
     maxAge: 365 * 24 * 3600,
+    httpOnly: true,
+    secure: secureCookie(),
     sameSite: 'lax',
   });
   return res;

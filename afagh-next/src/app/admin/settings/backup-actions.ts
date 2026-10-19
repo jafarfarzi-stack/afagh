@@ -1,20 +1,91 @@
 'use server';
 
-import { createHash } from 'crypto';
+import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { desc } from 'drizzle-orm';
+import { Pool } from 'pg';
 import { pool } from '@/db';
 import { db } from '@/db';
 import { audit_logs } from '@/db/schema';
+import { observePoolErrors } from '@/db/pool-errors';
 import { S3, ARCHIVE_BUCKET, ensureBucket } from '@/lib/objectStore';
 import { getSessionUser, requireRole } from '@/lib/auth';
+import { requirePlatformAdmin } from '@/lib/platform-admin';
+import { createLogger } from '@/lib/logger';
 
-const DB_URL = process.env.DATABASE_URL || '';
+const log = createLogger({ mod: 'admin.backup' });
+
+// ═══ استخر اختصاصی پشتیبان/بازیابی (فاز ۳) ═══
+// پیش‌فرض: همان استخر مالک (`pool` از DATABASE_URL) تا رفتار امروز دست‌نخورده بماند.
+// ⚠ ریسک باقی‌مانده در حالت پیش‌فرض: این نقش مالک (و در استقرارهای فعلی سوپرکاربر)
+// است؛ دستورات DDL دامپ را اجرا می‌کند و RLS را دور می‌زند. یعنی هر نقص در همین
+// اکشن، دسترسی کامل به دیتابیس است. برای حذف این ریسک، DATABASE_URL_BACKUP را به
+// نقش کم‌مجوز afagh_backup بدهید (scripts/hardening.mjs آن را می‌سازد).
+//
+// سیاست «همه یا هیچ»: اگر متغیر تنظیم شده باشد و نقش کم‌مجوز خطا بدهد، هرگز به استخر
+// مالک سقوط نمی‌کنیم — چون همین سقوط، همان ریسکی است که می‌خواهیم حذف کنیم.
+const BACKUP_DB_URL = process.env.DATABASE_URL_BACKUP?.trim() ?? '';
+const globalForBackup = globalThis as unknown as { backupPool?: Pool };
+let warnedOwnerPoolFallback = false;
+
+/** آیا مسیر کم‌مجوز فعال است؟ (تعیین‌کنندهٔ حالت بازیابی «داده‌به‌جای DDL») */
+function usesDedicatedBackupRole(): boolean {
+  return BACKUP_DB_URL.length > 0;
+}
+
+/** استخر پشتیبان: اختصاصی اگر DATABASE_URL_BACKUP باشد، وگرنه استخر مالک. */
+function backupPool(): Pool {
+  if (!BACKUP_DB_URL) {
+    if (!warnedOwnerPoolFallback) {
+      warnedOwnerPoolFallback = true;
+      log.warn('backup_owner_pool_fallback', {
+        detail: 'DATABASE_URL_BACKUP تنظیم نشده؛ پشتیبان/بازیابی با نقش مالک اجرا می‌شود (DDL + عبور از RLS).',
+      });
+    }
+    return pool;
+  }
+  if (!globalForBackup.backupPool) {
+    globalForBackup.backupPool = new Pool({ connectionString: BACKUP_DB_URL, max: 2 });
+    observePoolErrors(globalForBackup.backupPool);
+  }
+  return globalForBackup.backupPool;
+}
 
 const REDACTED = '[REDACTED]';
+/** جایگزین امن برای ستون‌های jsonb (رشتهٔ [REDACTED] در jsonb نامعتبر است و restore را می‌شکند) */
+const REDACTED_JSON = '{"redacted":true}';
 /** کلیدهای محرمانهٔ system_settings که مقدارشان هرگز در دامپ نمی‌آید */
 const SECRET_SETTING_RE = /SECRET|TOKEN|KEY|PASSWORD/i;
 /** رویدادهای حامل OTP — متن تحویل آن‌ها sanitize می‌شود */
 const OTP_EVENT_RE = /OTP/i;
+const BACKUP_SIGNATURE_MARKER = '-- AFAGH_BACKUP_SIGNATURE=';
+
+function backupSigningKey(): Buffer {
+  const value = process.env.AFAGH_BACKUP_SIGNING_KEY?.trim() ?? '';
+  const key = Buffer.from(value, 'utf8');
+  if (key.length < 32 || value.startsWith('CHANGE_ME_')) {
+    throw new Error('کلید امضای پشتیبان تنظیم نشده است؛ بازیابی امن غیرفعال است.');
+  }
+  return key;
+}
+
+function signBackup(body: string): string {
+  return createHmac('sha256', backupSigningKey()).update(body, 'utf8').digest('hex');
+}
+
+function verifyBackup(signedSql: string): string {
+  if (typeof signedSql !== 'string' || Buffer.byteLength(signedSql, 'utf8') > 50 * 1024 * 1024) {
+    throw new Error('فایل پشتیبان نامعتبر یا بزرگ‌تر از حد مجاز است.');
+  }
+  const match = /\r?\n-- AFAGH_BACKUP_SIGNATURE=([a-f0-9]{64})\r?\n?$/.exec(signedSql);
+  if (!match) throw new Error('پشتیبان امضای معتبر ندارد؛ بازیابی فایل‌های قدیمی و امضانشده مجاز نیست.');
+  const body = signedSql.slice(0, match.index);
+  const supplied = Buffer.from(match[1], 'hex');
+  const expected = Buffer.from(signBackup(body), 'hex');
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+    throw new Error('امضای پشتیبان معتبر نیست؛ هیچ دستوری اجرا نشد.');
+  }
+  return body;
+}
 
 /**
  * حذف مقادیر محرمانه از یک ردیف پیش از دامپ (درجا روی کپی ردیف).
@@ -51,6 +122,37 @@ function redactRow(table: string, row: Record<string, any>): void {
     // بدنهٔ خام درخواست به سرویس‌های ثالث می‌رود و می‌تواند کد ملی/شمارهٔ تماس و
     // سایر PII خام را حمل کند → کل ستون حذف می‌شود.
     if ('requestPayload' in row) row.requestPayload = REDACTED;
+  } else if (table === 'grade_submission_otps' || table === 'signature_otps' || table === 'doc_sign_otps') {
+    // هش OTP امضای نمره/سند/قرارداد — حتی هش‌شده هم نباید در فایل پشتیبان باشد.
+    if ('otpHash' in row) row.otpHash = REDACTED;
+  } else if (table === 'document_signatures') {
+    // OTP خامی که امضای سند با آن انجام شده (varchar(10)) — کاملاً محرمانه.
+    if ('otpUsed' in row) row.otpUsed = REDACTED;
+  } else if (table === 'messenger_link_tokens') {
+    // هش توکن/کد پیوند پیام‌رسان + chatId معلق؛ مبنای احراز هویت در بات هستند.
+    if ('tokenHash' in row) row.tokenHash = REDACTED;
+    if ('codeHash' in row) row.codeHash = REDACTED;
+    if ('pendingChatId' in row) row.pendingChatId = REDACTED;
+  } else if (table === 'samin_connections') {
+    // اعتبارنامهٔ ثمین به‌صورت رمزنگاری‌شده (AES-GCM) ذخیره می‌شود؛ کلید رمزگشایی
+    // بیرون از دامپ است، اما ciphertext هم نباید در پشتیبان پخش شود.
+    if ('clientSecretEnc' in row) row.clientSecretEnc = REDACTED;
+    if ('passwordEnc' in row) row.passwordEnc = REDACTED;
+    if ('tokenEnc' in row) row.tokenEnc = REDACTED;
+  } else if (table === 'payment_gateways') {
+    // config (jsonb) شامل merchantId/terminalId/apiKey/pin است → جایگزین JSON-معتبر.
+    if ('config' in row) row.config = REDACTED_JSON;
+  } else if (table === 'pos_terminals') {
+    // config (jsonb) شامل اطلاعات شبکهٔ کارت‌خوان (ip/port/serial) است.
+    if ('config' in row) row.config = REDACTED_JSON;
+  } else if (table === 'payment_transactions') {
+    // authority در ایندکس یکتا (uq_payment_txn_authority) است؛ برای حفظ قابلیت
+    // restore مقدار یکتای هر ردیف می‌گذاریم، نه ثابت (وگرنه درج تکراری می‌شود).
+    if ('authority' in row) row.authority = `${REDACTED}#${row.id ?? ''}`;
+    if ('bankRefId' in row) row.bankRefId = REDACTED;
+    if ('cardPan' in row) row.cardPan = REDACTED;
+    if ('payerMobile' in row) row.payerMobile = REDACTED;
+    if ('payerEmail' in row) row.payerEmail = REDACTED;
   }
 }
 
@@ -74,7 +176,7 @@ async function auditBackup(tables: number): Promise<void> {
 
 /** لیست جداول کاربری (بدون جداول سیستمی) */
 async function getUserTables(): Promise<string[]> {
-  const res = await pool.query(`
+  const res = await backupPool().query(`
     SELECT tablename FROM pg_tables
     WHERE schemaname = 'public' ORDER BY tablename
   `);
@@ -83,7 +185,7 @@ async function getUserTables(): Promise<string[]> {
 
 /** دامپ SQL از یک جدول */
 async function dumpTable(table: string): Promise<string> {
-  const cols = await pool.query(`
+  const cols = await backupPool().query(`
     SELECT column_name, data_type, is_nullable, column_default
     FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = $1
@@ -101,7 +203,7 @@ async function dumpTable(table: string): Promise<string> {
   let sql = `DROP TABLE IF EXISTS "${table}" CASCADE;\n`;
   sql += `CREATE TABLE "${table}" (\n${colDefs.join(',\n')}\n);\n\n`;
 
-  const data = await pool.query(`SELECT * FROM "${table}"`);
+  const data = await backupPool().query(`SELECT * FROM "${table}"`);
   if (data.rows.length === 0) return sql;
 
   const colNames = cols.rows.map(c => `"${c.column_name}"`).join(', ');
@@ -133,7 +235,7 @@ async function dumpTable(table: string): Promise<string> {
 
 /** دامپ کل دیتابیس */
 export async function backupDatabaseAction(): Promise<{ ok: boolean; sql?: string; error?: string; tables?: number }> {
-  await requireRole(['ADMIN']);
+  await requirePlatformAdmin();
   try {
     const tables = await getUserTables();
     const parts: string[] = [
@@ -150,9 +252,12 @@ export async function backupDatabaseAction(): Promise<{ ok: boolean; sql?: strin
     // دامپ sanitize شده است (ردکشن رازها) — ثبت ممیزی، بدون اثر بر خروجی دانلود
     await auditBackup(tables.length);
 
-    return { ok: true, sql: parts.join('\n'), tables: tables.length };
+    const body = parts.join('\n').replace(/\r?\n+$/, '');
+    const signature = signBackup(body);
+    return { ok: true, sql: `${body}\n${BACKUP_SIGNATURE_MARKER}${signature}\n`, tables: tables.length };
   } catch (err: any) {
-    return { ok: false, error: err.message || 'خطای نامشخص' };
+    log.error('database_backup_failed', { error: err instanceof Error ? err.message : String(err) });
+    return { ok: false, error: 'ساخت پشتیبان دیتابیس ناموفق بود.' };
   }
 }
 
@@ -178,34 +283,92 @@ export async function listMinioObjectsAction(): Promise<{ ok: boolean; objects?:
     }
     return { ok: true, objects };
   } catch (err: any) {
-    return { ok: false, error: err.message || 'خطای نامشخص' };
+    log.error('minio_list_failed', { error: err instanceof Error ? err.message : String(err) });
+    return { ok: false, error: 'دریافت فهرست فایل‌ها ناموفق بود.' };
   }
 }
 
 export async function downloadMinioObjectAction(key: string): Promise<{ ok: boolean; data?: string; name?: string; error?: string }> {
-  await requireRole(['ADMIN']);
+  await requirePlatformAdmin();
+  // اعتبارسنجی کلید: جلوگیری از traversal، جداکنندهٔ بک‌اسلش و کلیدهای خارج از bucket آرشیو.
+  if (typeof key !== 'string' || key.length === 0 || key.length > 512 ||
+      key.startsWith('/') || key.includes('..') || key.includes('\\') || key.includes('\u0000') ||
+      !/^archive\/[A-Za-z0-9][A-Za-z0-9._\-\/]*$/i.test(key)) {
+    return { ok: false, error: 'کلید فایل برای دریافت مجاز نیست.' };
+  }
   try {
     const stream = await S3.getObject(ARCHIVE_BUCKET, key);
     const chunks: Buffer[] = [];
+    let total = 0;
+    const MAX = 50 * 1024 * 1024;
     for await (const chunk of stream) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      const b = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      total += b.length;
+      if (total > MAX) {
+        try { stream.destroy?.(); } catch { /* ignore */ }
+        return { ok: false, error: 'حجم فایل از ۵۰ مگابایت بیشتر است.' };
+      }
+      chunks.push(b);
     }
     const buf = Buffer.concat(chunks);
     const name = key.split('/').pop() || key;
     return { ok: true, data: buf.toString('base64'), name };
   } catch (err: any) {
-    return { ok: false, error: err.message || 'خطای نامشخص' };
+    log.error('minio_download_failed', { error: err instanceof Error ? err.message : String(err) });
+    return { ok: false, error: 'دریافت فایل پشتیبان ناموفق بود.' };
   }
 }
 
 // ═══ بازیابی ═══
 
-export async function restoreDatabaseAction(sql: string): Promise<{ ok: boolean; error?: string; statements?: number }> {
-  await requireRole(['ADMIN']);
+/** نقل‌قول امن شناسه برای TRUNCATE (نام‌ها از دامپِ امضاشده می‌آیند، نه ورودی کاربر). */
+function quoteIdent(name: string): string {
+  return '"' + name.replace(/"/g, '""') + '"';
+}
+
+/**
+ * بازیابی «داده‌به‌جای DDL» برای نقش کم‌مجوز.
+ *
+ * دامپ فعلی برای هر جدول `DROP TABLE ...; CREATE TABLE ...; INSERT ...` می‌سازد.
+ * DROP TABLE فقط با مالکیت جدول ممکن است و هیچ GRANTای مالکیت نمی‌دهد؛ پس با نقش
+ * afagh_backup بخش DDL رد می‌شود و فقط داده اجرا می‌شود: یک TRUNCATE ... CASCADE و
+ * سپس INSERTها. چون ترتیب الفبایی جداول با کلیدهای خارجی سازگار نیست، در همان
+ * تراکنش session_replication_role=replica ست می‌شود (مجوزش را hardening می‌دهد)؛
+ * این کار تریگرهای جانبی را هم در طول بازیابی خاموش می‌کند.
+ */
+async function restoreDataOnly(statements: string[], tables: string[]): Promise<number> {
+  const client = await backupPool().connect();
   try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL session_replication_role = 'replica'");
+    if (tables.length) {
+      await client.query(`TRUNCATE TABLE ${tables.map(quoteIdent).join(', ')} CASCADE`);
+    }
+    let executed = 0;
+    for (const stmt of statements) {
+      if (!/^INSERT\s+INTO\s/i.test(stmt)) continue;
+      await client.query(stmt);
+      executed++;
+    }
+    await client.query('COMMIT');
+    return executed;
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch { /* اتصال ممکن است از دست رفته باشد */ }
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function restoreDatabaseAction(sql: string): Promise<{ ok: boolean; error?: string; statements?: number }> {
+  await requirePlatformAdmin();
+  try {
+    // فقط دامپی که خود سرور با کلید محرمانه امضا کرده باشد قابل اجراست؛
+    // فایل دلخواه SQL هرگز مستقیماً به استخر پشتیبان فرستاده نمی‌شود.
+    const verifiedSql = verifyBackup(sql);
     const statements: string[] = [];
     let current = '';
-    for (const line of sql.split('\n')) {
+    for (const line of verifiedSql.split('\n')) {
       const trimmed = line.trim();
       if (trimmed.startsWith('--') || trimmed === '') continue;
       current += line + '\n';
@@ -216,6 +379,19 @@ export async function restoreDatabaseAction(sql: string): Promise<{ ok: boolean;
     }
     if (current.trim()) statements.push(current.trim());
 
+    // مسیر کم‌مجوز (DATABASE_URL_BACKUP): دامپ همان قالب DROP/CREATE را دارد، اما
+    // afagh_backup مالک جدول‌ها نیست و DROP/CREATE مجاز نیست. پس فقط داده اجرا می‌شود.
+    // این مسیر عمداً به استخر مالک برنمی‌گردد (بدون سقوطِ بی‌صدای دسترسی).
+    if (usesDedicatedBackupRole()) {
+      const tables = [...new Set(
+        [...verifiedSql.matchAll(/CREATE TABLE "((?:[^"]|"")+)"/g)]
+          .map(m => m[1].replace(/""/g, '"')),
+      )];
+      const executed = await restoreDataOnly(statements, tables);
+      return { ok: true, statements: executed };
+    }
+
+    // مسیر پیش‌فرض (نقش مالک): رفتار پیشین حفظ می‌شود — DROP/CREATE/INSERT.
     let executed = 0;
     for (const stmt of statements) {
       if (!stmt || stmt.startsWith('--')) continue;
@@ -224,16 +400,34 @@ export async function restoreDatabaseAction(sql: string): Promise<{ ok: boolean;
     }
     return { ok: true, statements: executed };
   } catch (err: any) {
-    return { ok: false, error: err.message || 'خطای بازیابی' };
+    const message = err instanceof Error ? err.message : String(err);
+    log.error('database_restore_failed', { error: message });
+    const safeErrors = new Set([
+      'کلید امضای پشتیبان تنظیم نشده است؛ بازیابی امن غیرفعال است.',
+      'فایل پشتیبان نامعتبر یا بزرگ‌تر از حد مجاز است.',
+      'پشتیبان امضای معتبر ندارد؛ بازیابی فایل‌های قدیمی و امضانشده مجاز نیست.',
+      'امضای پشتیبان معتبر نیست؛ هیچ دستوری اجرا نشد.',
+    ]);
+    return { ok: false, error: safeErrors.has(message) ? message : 'بازیابی دیتابیس ناموفق بود.' };
   }
 }
 
 export async function restoreMinioObjectAction(key: string, dataBase64: string): Promise<{ ok: boolean; error?: string }> {
-  await requireRole(['ADMIN']);
+  await requirePlatformAdmin();
   try {
+    // بازیابی فقط به کلیدهای تولیدشدهٔ اسناد آرشیو محدود است؛ از نوشتن در کلید
+    // دلخواه یا مسیرهای دیگر bucket جلوگیری می‌شود.
+    if (!/^archive\/[1-9]\d{0,9}\/[1-9]\d{0,9}-\d{10,13}-[a-f0-9]{16}\.(?:pdf|png|jpe?g|webp|gif|bmp)$/i.test(key)) {
+      return { ok: false, error: 'کلید فایل برای بازیابی مجاز نیست.' };
+    }
+    if (typeof dataBase64 !== 'string' || dataBase64.length > 28_000_000 ||
+        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(dataBase64)) {
+      return { ok: false, error: 'محتوای فایل نامعتبر یا بزرگ‌تر از حد مجاز است.' };
+    }
     await ensureBucket();
     const buf = Buffer.from(dataBase64, 'base64');
-    const ext = key.split('.').pop() || 'bin';
+    if (buf.length > 20 * 1024 * 1024) return { ok: false, error: 'حجم فایل از ۲۰ مگابایت بیشتر است.' };
+    const ext = key.split('.').pop()?.toLowerCase() || 'bin';
     const contentType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
       : ext === 'png' ? 'image/png'
       : ext === 'pdf' ? 'application/pdf'
@@ -241,7 +435,8 @@ export async function restoreMinioObjectAction(key: string, dataBase64: string):
     await S3.putObject(ARCHIVE_BUCKET, key, buf, buf.length, { 'Content-Type': contentType });
     return { ok: true };
   } catch (err: any) {
-    return { ok: false, error: err.message || 'خطای بازیابی فایل' };
+    log.error('minio_restore_failed', { error: err instanceof Error ? err.message : String(err) });
+    return { ok: false, error: 'بازیابی فایل ناموفق بود.' };
   }
 }
 
@@ -253,11 +448,11 @@ export async function getBackupStatsAction(): Promise<{ ok: boolean; stats?: { t
     const tables = await getUserTables();
     let totalRows = 0;
     for (const t of tables) {
-      const r = await pool.query(`SELECT COUNT(*) as n FROM "${t}"`);
+      const r = await backupPool().query(`SELECT COUNT(*) as n FROM "${t}"`);
       totalRows += Number(r.rows[0].n);
     }
 
-    const dbSizeRes = await pool.query(`SELECT pg_size_pretty(pg_database_size(current_database())) as size`);
+    const dbSizeRes = await backupPool().query(`SELECT pg_size_pretty(pg_database_size(current_database())) as size`);
     const dbSize = dbSizeRes.rows[0].size;
 
     let minioObjects = 0;
@@ -291,6 +486,7 @@ export async function getBackupStatsAction(): Promise<{ ok: boolean; stats?: { t
       },
     };
   } catch (err: any) {
-    return { ok: false, error: err.message || 'خطای نامشخص' };
+    log.error('backup_stats_failed', { error: err instanceof Error ? err.message : String(err) });
+    return { ok: false, error: 'دریافت آمار پشتیبان ناموفق بود.' };
   }
 }

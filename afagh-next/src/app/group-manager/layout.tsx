@@ -1,16 +1,34 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
-import { requireRole, getStaffByUser } from '@/lib/auth';
+import { requireRole, getStaffByUser, endCurrentSession } from '@/lib/auth';
 import { headedDepartments } from '@/lib/group-manager';
 import { getSiblingAccounts } from '@/lib/account-switch';
 import PanelSwitcher from '@/components/PanelSwitcher';
 import { ADMIN_PANEL_ROLES } from '@/lib/panel-links';
 import ThemeToggle from '@/components/ThemeToggle';
+import SessionLock from '@/components/SessionLock';
 import { logoutAction } from '../login/actions';
 import DeptSwitcher from './DeptSwitcher';
 
 export default async function GroupManagerLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRole(['DEP_HEAD']);
+
+  // قفل خودکار بیکاری — سرور-محور (مدت به تفکیک نقش؛ ۰ = غیرفعال).
+  // منبع حقیقت «زمان آخرین فعالیت» است؛ پس رفرش قفل را دور نمی‌زند و کاربرِ در حال کار بیرون نمی‌افتد.
+  const { evaluateIdleLock, resolveIdleTimeoutMinutes, idleMinutes, resolveReauthMinutes } = await import('@/lib/session-lock');
+  const lockMin = await resolveIdleTimeoutMinutes(user.roles).catch(() => 15);
+  // غیبت طولانی (بیش از SESSION_REAUTH_MINUTES) → نشست همین دستگاه بسته شود و
+  // کاربر به صفحهٔ ورود برود؛ نه قفل روی صفحهٔ کهنهٔ چند ساعت پیش.
+  if (lockMin > 0) {
+    const reauthMin = await resolveReauthMinutes(lockMin).catch(() => 0);
+    const away = reauthMin > 0 ? await idleMinutes(user.id).catch(() => null) : null;
+    if (away != null && away >= reauthMin) {
+      await endCurrentSession().catch(() => {});
+      redirect('/login?expired=1');
+    }
+  }
+  const lockOn = await evaluateIdleLock(user.id, lockMin).catch(() => false);
   const st = await getStaffByUser(user.id);
   const depts = st ? await headedDepartments(st.id, st.departmentId ?? null) : [];
   const active = Number((await cookies()).get('gm_dept')?.value || 0) || depts[0]?.id || 0;
@@ -65,6 +83,7 @@ export default async function GroupManagerLayout({ children }: { children: React
         </nav>
       </header>
       <main className="mx-auto max-w-6xl p-4">{children}</main>
+      <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />
     </div>
   );
 }

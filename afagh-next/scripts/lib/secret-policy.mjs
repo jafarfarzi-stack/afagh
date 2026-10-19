@@ -59,11 +59,17 @@ export function checkSecret(name, value, { minLen = POLICY.minLenDb, allowWeak =
     return { ok: false, reason: `${name} بیش از حد کوتاه است (${v.length} کاراکتر؛ کف مطلق ${POLICY.minHardLen})` };
   }
   if (v.length < minLen) {
-    // دروازهٔ اپراتور (make check-env / deploy-debian.sh): خطا.
-    // لایهٔ اجرایی (hardening، بوت اپ): هشدار — تا فیکسچرهای CI و نصب‌های
-    // دستیِ کوتاه‌اما‌غیرقابل‌حدس را نکوبد؛ رمز قابل‌حدس/نمونه در هر دو لایه خطاست.
-    if (failOnShort) return { ok: false, reason: `${name} کوتاه است (${v.length} کاراکتر؛ حداقل ${minLen})` };
-    return { ok: true, short: true, reason: `${name} کوتاه‌تر از توصیهٔ سیاست است (${v.length}<${minLen}) — برای پروداکشن بلندترش کنید` };
+    // ── سخت‌ترشدنِ فاز ۲ (هم‌سو با src/lib/secret-guard.ts) ──
+    // پیش از این، لایهٔ اجرایی با failOnShort=false کوتاهیِ ۱۲–۲۳ کاراکتری را
+    // فقط هشدار می‌داد و رمز زیر توصیهٔ ۲۴ کاراکتری در پروداکشن رد نمی‌شد.
+    // حالا کوتاهی در هر دو لایه (دروازهٔ اپراتور و لایهٔ اجرایی) خطای سخت است و
+    // تنها escape hatch توسعه/دمو (ALLOW_WEAK_SECRETS=1 ⇒ allowWeak) آن را به
+    // هشدار تنزل می‌دهد؛ دقیقاً همان سیاستِ دروازهٔ startup در secret-guard.
+    if (allowWeak) {
+      return { ok: true, short: true, reason: `${name} کوتاه‌تر از توصیهٔ سیاست است (${v.length}<${minLen}) — فقط با ALLOW_WEAK_SECRETS=1` };
+    }
+    const where = failOnShort ? 'دروازهٔ پروداکشن' : 'لایهٔ اجرایی';
+    return { ok: false, reason: `${name} کوتاه است (${v.length} کاراکتر؛ حداقل ${minLen}) — ${where}` };
   }
   if (/(.)\1{3,}/.test(v)) return { ok: false, reason: `${name} تکرار چهارتایی کاراکتر دارد («aaaa») — ضعیف است` };
   return { ok: true };
@@ -121,6 +127,14 @@ if (CLI && process.argv.includes('--check')) {
     catch { console.error(`❌ نمی‌توانم ${file} را بخوانم`); process.exit(2); }
   }
   const allowWeak = env.ALLOW_WEAK_SECRETS === '1';
+  // فاز ۲: همان هشدار CRITICAL گاردِ اپ — اگر escape hatch در یک محیط
+  // پروداکشن روشن باشد، بلند اعلام می‌کنیم (اما خاموشش نمی‌کنیم؛ ایمیج دمو به آن وابسته است).
+  if (allowWeak && env.NODE_ENV === 'production') {
+    console.warn(
+      '🚨 [CRITICAL] ALLOW_WEAK_SECRETS=1 در NODE_ENV=production فعال است — سکرت‌های ضعیف/کوتاه پذیرفته می‌شوند.\n' +
+      '   این حالت فقط برای دمو/نمایش (showcase) است و روی سرور واقعی ممنوع است.',
+    );
+  }
   const errs = checkProdEnv(env, { allowWeak });
   if (errs.length) {
     console.error('🔒 سیاست سکرت‌های پروداکشن نقض شد:\n  - ' + errs.join('\n  - '));

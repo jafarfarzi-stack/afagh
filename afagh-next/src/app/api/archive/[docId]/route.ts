@@ -26,11 +26,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ doc
     }
     // کارشناس دانشگاه دیگر با شناسهٔ مستقیم به سند دسترسی ندارد
     if (privileged && doc.personUserId !== user.id) {
-      const { getCurrentUniversity } = await import('@/lib/university-scope');
+      const { authorizedUniversityIds, getCurrentUniversity, isRealUniversityId } = await import('@/lib/university-scope');
       const uni = await getCurrentUniversity().catch(() => null);
-      if (!uni) return NextResponse.json({ error: 'دانشگاه فعال نامشخص است' }, { status: 400 });
+      if (!uni || !isRealUniversityId(uni.id)) return NextResponse.json({ error: 'دانشگاه فعال نامشخص است' }, { status: 400 });
       const docUni = (doc as { universityId?: number | null }).universityId ?? null;
-      if (docUni !== null && docUni !== uni.id) {
+      if (docUni === null) {
+        // سند بدون دانشگاه: فقط حساب پلتفرمی
+        if ((await authorizedUniversityIds()) !== null) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+      } else if (docUni !== uni.id) {
         return NextResponse.json({ error: 'forbidden' }, { status: 403 });
       }
     }

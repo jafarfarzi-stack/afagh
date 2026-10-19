@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 
 // AES-256-GCM — کلید از ENV (32 بایت hex یا utf8)
 function keyBuf(): Buffer {
-  const raw = process.env.SAMIN_MASTER_KEY || process.env.TICKET_TOKEN_SECRET || '';
+  const raw = process.env.SAMIN_MASTER_KEY || '';
   if (!raw) throw new Error('SAMIN_MASTER_KEY تعریف نشده — در .env مقداردهی کنید');
   // اگر 64 کاراکتر hex بود، همان را بگیریم
   if (/^[0-9a-fA-F]{64}$/.test(raw.trim())) return Buffer.from(raw.trim(), 'hex');

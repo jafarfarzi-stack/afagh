@@ -5,6 +5,19 @@
 # قرارداد ریشه برقرار باشد؛ پیش‌فرض‌ها عمداً همان مقادیر ناامنِ محلی‌اند و
 # کامپوز پروداکشن (ریشهٔ ریپو: docker-compose.yml + .env ریشه) آن‌ها را fail می‌کند.
 # فایل env توسعه: afagh-next/.env (ساختهٔ install-docker.*) — پروداکشن: .env ریشه.
+#
+# ══ فاز ۲ — سخت‌سازی زیرساخت (همچنان فقط توسعۀ محلی) ══
+# • همهٔ پورت‌های نشرده‌شده به 127.0.0.1 قید شده‌اند؛ یعنی PostgreSQL/Redis/MinIO
+#   از بیرونِ همین میزبان (LAN یا اینترنت) قابل دسترسی نیستند. «dev» بودن این فایل
+#   به‌تنهایی محافظ نبود و این قید امنیتی، مسیر واقعیِ نفوذ را می‌بندد.
+# • دلیل اکتفا به پیش‌فرض‌های رمزِ توسعه: چون پورت‌ها فقط روی loopback منتشر شده‌اند و
+#   هیچ ترافیکی از بیرون به این کانتینرها نمی‌رسد، رمزهای ثابت «afagh» / «afagh-secret»
+#   فقط برای روان‌بودن نصب محلی (install-docker.sh/.ps1) نگه داشته شده‌اند و اجباری
+#   نشده‌اند تا نصب‌های موجود نشکنند.
+#   ⛔ این فایل هرگز نباید در پروداکشن اجرا شود؛ پروداکشن فقط
+#      docker-compose.yml ریشهٔ ریپو + .env ریشه (با رمزهای اجباری و fail-fast).
+# • سخت‌سازی کانتینرها: no-new-privileges + pids_limit + cap_drop. MinIO تنها
+#   سرویسی است که cap_drop نمی‌گیرد، چون برای نوشتن روی /data به capability نیاز دارد.
 name: afagh-dev
 services:
   postgres:
@@ -13,9 +26,16 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: afagh
+      # پیش‌فرض توسعۀ محلی؛ قابل قبول فقط چون پورت زیر روی 127.0.0.1 قید شده است.
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-afagh}
       POSTGRES_DB: afagh_db
-    ports: ['${PG_HOST_PORT:-5432}:5432']
+    # 127.0.0.1 ⇒ فقط میزبان محلی؛ در پروداکشن ورودی عمومی ندارد.
+    ports: ['127.0.0.1:${PG_HOST_PORT:-5432}:5432']
+    security_opt: ['no-new-privileges:true']
+    pids_limit: 512
+    # حداقل capability لازم برای راه‌اندازی postgres: chown دیتادیر + افت‌سطح کاربر
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     volumes: [afagh_pg:/var/lib/postgresql/data]
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U afagh -d afagh_db']
@@ -26,7 +46,16 @@ services:
     image: redis:7-alpine
     container_name: afagh_redis_dev
     restart: unless-stopped
-    ports: ['${REDIS_HOST_PORT:-6379}:6379']
+    # توجه: در این پشتهٔ توسعه عمداً رمز (requirepass) تنظیم نشده است؛ .env ساختهٔ
+    # install-docker.* متغیر REDIS_PASSWORD را ست نمی‌کند و اپ بدون رمز وصل می‌شود.
+    # الزام احراز هویت Redis فقط در پروداکشن اعمال می‌شود
+    # (docker-compose.yml ریشه: REDIS_PASSWORD اجباری + redis-server --requirepass).
+    # پس این سرویس باید صرفاً loopback باقی بماند و هرگز روی میزبان عمومی منتشر نشود.
+    ports: ['127.0.0.1:${REDIS_HOST_PORT:-6379}:6379']
+    security_opt: ['no-new-privileges:true']
+    pids_limit: 256
+    # redis-server هیچ capability خاصی لازم ندارد (پورت 6379 > 1024 و بدون افت‌سطح)
+    cap_drop: [ALL]
     volumes: [redisdata:/data]
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
@@ -40,8 +69,13 @@ services:
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-afagh}
+      # پیش‌فرض توسعۀ محلی؛ قابل قبول فقط به‌خاطر قید 127.0.0.1 روی هر دو پورت.
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-afagh-secret}
-    ports: ['${MINIO_HOST_PORT:-9000}:9000', '${MINIO_CONSOLE_PORT:-9001}:9001']
+    # کنسول MinIO هم فقط روی loopback؛ در غیر این صورت = افشای پنل مدیریت.
+    ports: ['127.0.0.1:${MINIO_HOST_PORT:-9000}:9000', '127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001']
+    security_opt: ['no-new-privileges:true']
+    pids_limit: 512
+    # بدون cap_drop: MinIO برای نوشتن/مالکیت روی /data به capability نیاز دارد.
     volumes: [afagh_minio:/data]
     healthcheck:
       test: ['CMD', 'mc', 'ready', 'local']

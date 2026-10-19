@@ -216,7 +216,7 @@ export async function setCodeAction(fd: FormData): Promise<{ ok: boolean; error?
   const table = String(fd.get('table') ?? '') as CodeTable;
   const id = Number(fd.get('id') || 0);
   const code = String(fd.get('code') ?? '').trim();
-  if (!id) return { ok: false, error: 'رکورد نامعتبر است.' };
+  if (!Number.isSafeInteger(id) || id <= 0) return { ok: false, error: 'رکورد نامعتبر است.' };
   // رکورد باید متعلق به دانشگاه فعال (یا سراسری) باشد
   const uni = await getCurrentUniversity().catch(() => null);
   if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
@@ -305,7 +305,10 @@ export async function missingCodeSummary(): Promise<{ table: string; missing: nu
 export async function exportCodesCsv(table: CodeTable): Promise<string> {
   await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
   const rows = await listCodes(table);
-  const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const esc = (v: string) => {
+    const s = /^[=+\-@|\t\r]/.test(v.trimStart()) ? `'${v}` : v;
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
   const head = 'کد,عنوان,زمینه,کد استاندارد,کد وزارت\n';
   return head + rows.map(r => [esc(r.code ?? ''), esc(r.title), esc(r.context ?? ''),
     esc(r.standardCode ?? ''), esc(r.ministryCode ?? '')].join(',')).join('\n');
@@ -520,7 +523,7 @@ export type EditableCodeRow = Record<string, string> | null;
 /** خواندن یک سطر برای فرم ویرایش عمومی */
 export async function getCodeRowAction(table: CodeTable, id: number): Promise<EditableCodeRow> {
   await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
-  if (!id) return null;
+  if (!Number.isSafeInteger(id) || id <= 0) return null;
   const uni = await getCurrentUniversity();
   const uniId = uni?.id;
   const str_ = (v: unknown) => (v == null ? '' : String(v));
@@ -564,7 +567,7 @@ export async function updateCodeRowAction(fd: FormData): Promise<{ ok: boolean; 
   await requireRole(['ADMIN', 'VICE_EDU']);
   const table = str(fd, 'table') as CodeTable;
   const id = Number(fd.get('id') || 0);
-  if (!id) return { ok: false, error: 'شناسهٔ سطر نامعتبر است.' };
+  if (!Number.isSafeInteger(id) || id <= 0) return { ok: false, error: 'شناسهٔ سطر نامعتبر است.' };
   const uni = await getCurrentUniversity();
   const uniId = uni?.id;
   if (uniId == null) return { ok: false, error: 'دانشگاه جاری مشخص نیست.' };
@@ -654,7 +657,7 @@ export type DegreeDetail = {
 /** خواندن یک مقطع برای فرم ویرایش — همان فیلدهای فرم ساخت */
 export async function getDegreeRowAction(id: number): Promise<DegreeDetail> {
   await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
-  if (!id) return null;
+  if (!Number.isSafeInteger(id) || id <= 0) return null;
   const uni = await getCurrentUniversity().catch(() => null);
   const [r] = await db.select({
     id: degree_level_configs.id, title: degree_level_configs.title, code: degree_level_configs.code,
@@ -675,7 +678,7 @@ export async function getDegreeRowAction(id: number): Promise<DegreeDetail> {
 export async function updateDegreeRowAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
   await requireRole(['ADMIN', 'VICE_EDU']);
   const id = Number(fd.get('id') || 0);
-  if (!id) return { ok: false, error: 'رکورد نامعتبر است.' };
+  if (!Number.isSafeInteger(id) || id <= 0) return { ok: false, error: 'رکورد نامعتبر است.' };
   const [exists] = await db.select({ id: degree_level_configs.id, universityId: degree_level_configs.universityId })
     .from(degree_level_configs).where(eq(degree_level_configs.id, id)).limit(1);
   if (!exists) return { ok: false, error: 'مقطع یافت نشد.' };
@@ -738,7 +741,7 @@ const dtRead = (c: SQLWrapper) =>
  */
 export async function getTermRowAction(id: number): Promise<Record<string, string> | null> {
   await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
-  if (!id) return null;
+  if (!Number.isSafeInteger(id) || id <= 0) return null;
   const uniT = await getCurrentUniversity().catch(() => null);
   const [r] = await db.select({
     title: academic_terms.title,
@@ -795,7 +798,7 @@ const dtWrite = (v: string | null): SQL | null =>
 export async function updateTermRowAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
   const actor = await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
   const id = Number(fd.get('id') || 0);
-  if (!id) return { ok: false, error: 'رکورد نامعتبر است.' };
+  if (!Number.isSafeInteger(id) || id <= 0) return { ok: false, error: 'رکورد نامعتبر است.' };
   const [term] = await db.select({
     id: academic_terms.id, universityId: academic_terms.universityId,
   }).from(academic_terms).where(eq(academic_terms.id, id)).limit(1);
@@ -937,7 +940,7 @@ export async function deleteCodeRowAction(fd: FormData): Promise<{ ok: boolean; 
   await requireRole(['ADMIN', 'VICE_EDU']);
   const table = str(fd, 'table') as CodeTable;
   const id = Number(fd.get('id') || 0);
-  if (!id) return { ok: false, error: 'رکورد نامعتبر است.' };
+  if (!Number.isSafeInteger(id) || id <= 0) return { ok: false, error: 'رکورد نامعتبر است.' };
 
   // ترم را هم می‌شود حذف کرد: چون کدش ویرایش‌پذیر نیست، اگر اشتباه ثبت شود
   // تنها راه اصلاح، حذف رکوردِ بی‌استفاده است. محافظ کلید خارجی جلوی حذف

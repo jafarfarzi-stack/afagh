@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
     }
     const rows = await listDormResidences({
       status,
-      studentId: studentId && Number.isInteger(studentId) && studentId > 0 ? studentId : undefined,
+      studentId: studentId && Number.isSafeInteger(studentId) && studentId > 0 ? studentId : undefined,
     });
     return NextResponse.json({ rows, total: rows.length });
   } catch (e) {
@@ -118,7 +118,7 @@ export async function PATCH(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const id = Number(searchParams.get('id'));
-    if (!Number.isInteger(id) || id <= 0) {
+    if (!Number.isSafeInteger(id) || id <= 0) {
       return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
     }
     const parsed = patchSchema.safeParse(await req.json());
@@ -143,7 +143,7 @@ export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const id = Number(searchParams.get('id'));
-    if (!Number.isInteger(id) || id <= 0) {
+    if (!Number.isSafeInteger(id) || id <= 0) {
       return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
     }
     const result = await deleteDormResidence(id);

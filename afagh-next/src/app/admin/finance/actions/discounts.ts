@@ -7,6 +7,7 @@ import { audit_logs, student_discounts, student_ledger, student_sponsorships, tu
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { assertServerActionOrigin, requireStudentScope } from '@/lib/security';
 import { toNum } from '@/lib/finance-rules';
+import { safeRials } from '@/lib/money';
 import { appendAudit } from '@/lib/audit';
 import { FINANCE, clean, money, num, revalidateStudent, requireStudentUni, assertRowUni, uniScopeOf, currentUni } from './shared';
 
@@ -66,8 +67,20 @@ export async function addDiscountAction(input: {
   // وضعیت ندارد؛ نوع نیازمند تأیید → PENDING، وگرنه (بدون تأیید) → APPROVED.
   const status = type.requiresApproval ? 'PENDING' : 'APPROVED';
 
+  const fixedAmount = type.kind === 'FIXED' ? safeRials(input.amount) : null;
+  if (type.kind === 'FIXED') {
+    if (input.termId == null) return { ok: false, error: 'تخفیف مبلغ ثابت باید به یک نیمسال مشخص تعلق داشته باشد' };
+    if (fixedAmount === null || fixedAmount <= 0) return { ok: false, error: 'مبلغ تخفیف ثابت باید عدد صحیح مثبت (ریال) باشد' };
+  }
+
   try {
     return await db.transaction(async (tx) => {
+      if (status === 'APPROVED' && fixedAmount !== null && input.termId != null) {
+        const cap = await discountSponsorshipCapTx(tx, input.studentId, input.termId);
+        if (cap !== null && cap.fixedApproved + fixedAmount > cap.charges) {
+          return { ok: false, error: `سقف اثر مالی: جمع تخفیف/پوشش از شهریهٔ شارژشدهٔ ترم (${cap.charges.toLocaleString('fa-IR')} ریال) بیشتر می‌شود` };
+        }
+      }
       const [ins] = await tx.insert(student_discounts).values({
         universityId: su.uniId,
         studentId: input.studentId,
@@ -76,7 +89,7 @@ export async function addDiscountAction(input: {
         kind: type.kind,
         percent: String(percent),
         amount: money(input.amount),
-        appliesTo: input.appliesTo || 'BOTH',
+        appliesTo: ['BOTH', 'FIXED', 'VARIABLE'].includes(input.appliesTo) ? input.appliesTo : 'BOTH',
         status,
         reason: clean(input.reason),
         approvedBy: status === 'APPROVED' ? (user?.id ?? null) : null,

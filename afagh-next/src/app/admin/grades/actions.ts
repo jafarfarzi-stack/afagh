@@ -9,12 +9,13 @@
 import { and, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { academic_terms, course_offerings, courses, educational_regulations, enrollments, grade_change_log, grade_unfinalize_requests, legacy_grades, roles, staff, students, user_roles, users } from '@/db/schema';
-import { requireRole } from '@/lib/auth';
+import { academic_terms, course_offerings, courses, educational_regulations, enrollments, grade_change_log, grade_unfinalize_requests, legacy_grades, offering_professors, roles, staff, students, user_roles, users } from '@/db/schema';
+import { getStaffByUser, requireRole } from '@/lib/auth';
 import { logGradeChange } from '@/lib/grade-change-log';
 import { resolveSamaGradeStatusCode, syncStudentCourseRegulations } from '@/lib/resolve-sama-code';
 import { GRADE_STATUS_CODES, gradeStatusTitleOf } from '@/lib/grade-status-codes';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
+import { assertServerActionOrigin } from '@/lib/security';
 
 export interface AdminGradeState {
   ok: boolean;
@@ -24,6 +25,13 @@ export interface AdminGradeState {
 
 function fail(err: unknown): AdminGradeState {
   return { ok: false, error: (err as Error)?.message || 'خطای ناشناختهٔ سرور.' };
+}
+
+async function resolveAdminUniversityId(universityId?: number): Promise<number> {
+  const serverUni = await getCurrentUniversity();
+  if (!isRealUniversityId(serverUni.id)) throw new Error('دانشگاه فعال نامشخص است.');
+  if (universityId != null && universityId !== serverUni.id) throw new Error('دسترسی به دانشگاه دیگر مجاز نیست.');
+  return serverUni.id;
 }
 
 /**
@@ -43,6 +51,8 @@ export async function adminSetGradeAction(
     reason: string;
   }
 ): Promise<AdminGradeState> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   try {
     const user = await requireRole(['ADMIN', 'GRADUATEAFFAIRS']);
     // کارشناس آموزش: فقط اگر برای او «ویرایش نمره» فعال شده باشد (expert_scopes.canEditGrades)
@@ -69,7 +79,7 @@ export async function adminSetGradeAction(
       return { ok: false, error: 'دلیل تغییر الزامی است (حداقل ۳ نویسه).' };
     }
     const uni = await getCurrentUniversity().catch(() => null);
-    if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+    if (!uni || !isRealUniversityId(uni.id)) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
     const [stuRow] = await db.select({ universityId: students.universityId, status: students.status })
       .from(students).where(eq(students.id, payload.studentId)).limit(1);
     if (!stuRow) return { ok: false, error: 'دانشجو یافت نشد.' };
@@ -106,6 +116,7 @@ export async function adminSetGradeAction(
           gradeStatus: enrollments.gradeStatus,
           samaGradeStatusCode: enrollments.samaGradeStatusCode,
           universityId: enrollments.universityId,
+          studentId: enrollments.studentId,
         })
         .from(enrollments)
         .where(eq(enrollments.id, payload.enrollmentId))
@@ -113,6 +124,9 @@ export async function adminSetGradeAction(
       if (e) {
         if (e.universityId !== null && e.universityId !== uni.id) {
           return { ok: false, error: 'ثبت‌نام متعلق به دانشگاه دیگری است.' };
+        }
+        if (Number(e.studentId) !== Number(payload.studentId)) {
+          return { ok: false, error: 'ثبت‌نام متعلق به این دانشجو نیست.' };
         }
         existingEnrollment = e;
         targetOfferingId = e.offeringId;
@@ -374,18 +388,28 @@ export async function adminSetGradeAction(
  * واکشی تاریخچهٔ تغییرات نمرهٔ یک enrollment
  */
 export async function getEnrollmentGradeHistory(enrollmentId: number) {
-  await requireRole(['ADMIN', 'GRADUATEAFFAIRS', 'PROFESSOR']);
-  const uni = await getCurrentUniversity().catch(() => null);
-  if (uni) {
-    const [enr] = await db
-      .select({ reqUni: enrollments.universityId, stuUni: students.universityId })
-      .from(enrollments)
-      .leftJoin(students, eq(students.id, enrollments.studentId))
-      .where(eq(enrollments.id, enrollmentId))
+  const user = await requireRole(['ADMIN', 'GRADUATEAFFAIRS', 'PROFESSOR']);
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) throw new Error('دانشگاه فعال نامشخص است.');
+  const [enr] = await db
+    .select({ reqUni: enrollments.universityId, stuUni: students.universityId, offeringId: enrollments.offeringId })
+    .from(enrollments)
+    .leftJoin(students, eq(students.id, enrollments.studentId))
+    .where(eq(enrollments.id, enrollmentId))
+    .limit(1);
+  if (!enr) return [];
+  const owner = enr.reqUni ?? enr.stuUni;
+  if (owner !== null && owner !== uni.id) return [];
+  if (!user.roles.some(r => r === 'ADMIN' || r === 'GRADUATEAFFAIRS')) {
+    const me = await getStaffByUser(user.id);
+    if (!me) throw new Error('پروندهٔ هیئت علمی یافت نشد.');
+    const [off] = await db.select({ professorId: course_offerings.professorId })
+      .from(course_offerings).where(eq(course_offerings.id, enr.offeringId)).limit(1);
+    const [co] = await db.select({ staffId: offering_professors.staffId })
+      .from(offering_professors)
+      .where(and(eq(offering_professors.offeringId, enr.offeringId), eq(offering_professors.staffId, me.id)))
       .limit(1);
-    if (!enr) return [];
-    const owner = enr.reqUni ?? enr.stuUni;
-    if (owner !== null && owner !== uni.id) return [];
+    if (off?.professorId !== me.id && !co) throw new Error('شما استاد مسئول این درس نیستید.');
   }
   return db
     .select({
@@ -418,13 +442,12 @@ export async function getEnrollmentGradeHistory(enrollmentId: number) {
  */
 export async function getStudentGradeAuditLog(studentId: number) {
   await requireRole(['ADMIN', 'GRADUATEAFFAIRS', 'EDU_EXPERT']);
-  const uni = await getCurrentUniversity().catch(() => null);
-  if (uni) {
-    const [s] = await db.select({ universityId: students.universityId })
-      .from(students).where(eq(students.id, studentId)).limit(1);
-    if (!s) return [];
-    if (s.universityId !== null && s.universityId !== uni.id) return [];
-  }
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) throw new Error('دانشگاه فعال نامشخص است.');
+  const [s] = await db.select({ universityId: students.universityId })
+    .from(students).where(eq(students.id, studentId)).limit(1);
+  if (!s) return [];
+  if (s.universityId !== null && s.universityId !== uni.id) return [];
   return db
     .select({
       id: grade_change_log.id,
@@ -460,7 +483,8 @@ export async function getStudentGradeAuditLog(studentId: number) {
 /** لاگ سراسری (همهٔ دانشجویان) — برای صفحهٔ «همهٔ لاگ‌های نمرات» */
 export async function getAllGradeAuditLogs(opts?: { limit?: number; offset?: number; q?: string; termCode?: string }) {
   await requireRole(['ADMIN', 'GRADUATEAFFAIRS', 'EDU_EXPERT']);
-  const uni = await getCurrentUniversity().catch(() => null);
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) throw new Error('دانشگاه فعال نامشخص است.');
   const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 200);
   const offset = Math.max(opts?.offset ?? 0, 0);
   // q: فیلتر روی نام درس/کددرس/شماره‌دانشجویی/نام دانشجو (ساده - LIKE)
@@ -492,7 +516,7 @@ export async function getAllGradeAuditLogs(opts?: { limit?: number; offset?: num
     .leftJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
     .innerJoin(students, eq(students.id, grade_change_log.studentId))
     .where(and(
-      uni ? or(eq(students.universityId, uni.id), isNull(students.universityId)) : undefined,
+      or(eq(students.universityId, uni.id), isNull(students.universityId)),
       // 🔒 فیلتر ترم باید در WHERE اعمال شود، نه بعد از LIMIT؛ وگرنه برای ترم‌های
       //    قدیمی نتیجهٔ خالی کاذب می‌داد (لاگ‌های آن ترم بیرون از ۲۰۰ رکورد آخر).
       opts?.termCode ? eq(academic_terms.termCode, String(opts.termCode)) : undefined,
@@ -568,10 +592,9 @@ const SCAN_LIMIT = 2000;
 export async function scanMismatchedSamaCodes(universityId?: number): Promise<{ rows: MismatchRow[]; scanned: number; truncated: boolean }> {
   await requireRole(['ADMIN']);
 
-  const serverUni = await getCurrentUniversity().catch(() => null);
-  const uid = serverUni?.id ?? universityId;
+  const uid = await resolveAdminUniversityId(universityId);
   const whereParts: SQL[] = [eq(enrollments.gradeStatus, 'FINALIZED')];
-  if (uid) whereParts.push(eq(students.universityId, uid));
+  whereParts.push(eq(students.universityId, uid));
   const allEnrs = await db
     .select({
       enrollmentId: enrollments.id,
@@ -644,6 +667,8 @@ export async function scanMismatchedSamaCodes(universityId?: number): Promise<{ 
  * اعمال کدهای صحیح روی نمرات نادرست (بچ اصلاح)
  */
 export async function applyCorrectedSamaCodes(enrollmentIds: number[], universityId?: number): Promise<{ applied: number }> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { applied: 0 };
   const user = await requireRole(['ADMIN']);
   // 🔐 تأیید دومرحله‌ای — همان قرارداد adminSetGradeAction (حوزهٔ grades:edit).
   // فراخوان‌ها try/catch دارند، پس STEPUP_REQUIRED به‌صورت خطا بالا می‌رود.
@@ -652,8 +677,7 @@ export async function applyCorrectedSamaCodes(enrollmentIds: number[], universit
     throw new Error('STEPUP_REQUIRED:برای اعمال اصلاحات کد سما، ابتدا رمز عبور خود را تأیید کنید (تأیید دومرحله‌ای — ۱۰ دقیقه معتبر است).');
   }
   let applied = 0;
-  const serverUni = await getCurrentUniversity().catch(() => null);
-  const uid = serverUni?.id ?? universityId;
+  const uid = await resolveAdminUniversityId(universityId);
 
   // سقف اندازهٔ دسته برای جلوگیری از overload و قفل طولانی
   const ids = enrollmentIds.slice(0, 500);
@@ -670,7 +694,7 @@ export async function applyCorrectedSamaCodes(enrollmentIds: number[], universit
       })
       .from(enrollments)
       .innerJoin(students, eq(students.id, enrollments.studentId))
-      .where(and(eq(enrollments.id, eid), uid ? eq(students.universityId, uid) : sql`true`))
+      .where(and(eq(enrollments.id, eid), eq(students.universityId, uid)))
       .limit(1);
     if (!enr) continue;
 
@@ -726,10 +750,9 @@ export interface StatusMismatchRow {
  */
 export async function scanGraduatedWithoutGrades(limit = 200, universityId?: number): Promise<{ total: number; rows: StatusMismatchRow[] }> {
   await requireRole(['ADMIN']);
-  const serverUni = await getCurrentUniversity().catch(() => null);
-  const uid = serverUni?.id ?? universityId;
+  const uid = await resolveAdminUniversityId(universityId);
   const whereParts = [eq(students.status, 'GRADUATED'), isNull(enrollments.id), isNull(legacy_grades.id)];
-  if (uid) whereParts.push(eq(students.universityId, uid));
+  whereParts.push(eq(students.universityId, uid));
   const rows = await db
     .select({
       studentId: students.id,
@@ -771,6 +794,8 @@ export async function reviewUnfinalizeAction(
   note?: string | null,
   extendDeadlineTo?: string | null,
 ): Promise<AdminGradeState> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   try {
     const cleanNote = (note ?? '').trim() || null;
 

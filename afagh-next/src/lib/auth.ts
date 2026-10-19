@@ -2,12 +2,13 @@ import { createHash, randomBytes, scrypt as _scrypt, timingSafeEqual } from 'cry
 import { promisify } from 'util';
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { sessionTransport } from '@/lib/proxy-trust';
+import { sessionTransport, UNKNOWN_CLIENT_IP } from '@/lib/proxy-trust';
 import { and, asc, desc, eq, gt, inArray, lt, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { ensureBaseReferenceData } from '@/lib/base-data';
 import { clearPermissionCache } from '@/lib/permissions-enforcer';
-import { clientIp, getRateLimitCount, hitRateLimit, peekRateLimit, progressiveDelay, rateLimit } from '@/lib/rateLimit';
+import { getRateLimitCount, progressiveDelay, rateLimit, releaseRateLimit } from '@/lib/rateLimit';
+import { requestClientIp } from '@/lib/request-context';
 import {
   degree_level_configs,
   educational_regulations,
@@ -49,14 +50,52 @@ export async function verifyPassword(password: string, stored: string): Promise<
 export type SessionUser = { id: number; name: string; roles: string[]; mustChangePassword: boolean; universityId: number | null };
 
 export const SESSION_COOKIE = 'token';
-const SESSION_MAX_AGE = 4 * 3600; // چهار ساعت (absolute TTL)
+/**
+ * سقف مطلق نشست (۴ ساعت) — بدون تمدید لغزان.
+ * انقضای کوکی و sessions.expiresAt هر دو همین سقف‌اند؛ هیچ ستون createdAt
+ * وجود ندارد و افزودن آن تغییر schema است، پس تمدید بر اساس «زمان ساخت»
+ * ممکن/مجاز نیست. ورود دوباره تنها راه شروع نشست تازه است.
+ * (پیشتر ۱۲ ساعت بود؛ به‌دلیل امنیت کاهش یافت — در صورت نیاز env AFAGH_SESSION_MAX_AGE.)
+ */
+const SESSION_MAX_HOURS_RAW = Number(process.env.AFAGH_SESSION_MAX_HOURS || 4);
+const SESSION_MAX_HOURS = Number.isFinite(SESSION_MAX_HOURS_RAW) && SESSION_MAX_HOURS_RAW >= 1 && SESSION_MAX_HOURS_RAW <= 24
+  ? Math.floor(SESSION_MAX_HOURS_RAW)
+  : 4;
+const SESSION_MAX_AGE = SESSION_MAX_HOURS * 3600;
 
 /**
- * فلگ‌های کوکی نشست — به‌صورت خودکار با پروتکل تطبیق می‌یابد:
- *   • HTTPS → SameSite=None + Secure  (لازم برای iframe و دامنهٔ واسط)
- *   • HTTP  → SameSite=Lax  + بدون Secure
- * چون مرورگر کوکی Secure را روی http ذخیره نمی‌کند و کاربر در حلقهٔ ورود می‌افتد.
- * قابل override با ENV: AFAGH_COOKIE_SECURE=auto|true|false ، AFAGH_COOKIE_SAMESITE=auto|lax|none|strict
+ * ── ویژگی‌های کوکی نشست ──────────────────────────────────────────────
+ *  • httpOnly: همیشه true؛ جاوااسکریپت صفحه (و XSS) به توکن دسترسی ندارد.
+ *  • path: '/'؛ نشست در همهٔ مسیرهای برنامه لازم است (کوکی باریک‌تر یعنی
+ *    قطع شدن گاردها در بخش‌های دیگر). مسیر باریک‌تر فقط برای کوکی‌های
+ *    ترجیحی/فیلتر (مثل afagh_students_nc_filter) مناسب است.
+ *  • domain: عمداً ست نمی‌شود (host-only) تا کوکی به زیردامنه‌ها سرایت نکند.
+ *  • maxAge: ۱۲ ساعت مطلق (بالا) — بدون sliding renewal.
+ *  • secure / sameSite: فقط از sessionTransport در proxy-trust.ts؛ ماتریس
+ *    کامل تصمیم و قاعدهٔ «SameSite=None بدون Secure ممنوع» همان‌جاست.
+ *
+ * ── چرا از پیشوند __Host- استفاده نشد؟ ─────────────────────────────
+ *  پیشوند __Host- امن‌تر است (Secure + Path=/ + بدون Domain را الزام می‌کند
+ *  و جلوی cookie tossing از زیردامنه را می‌گیرد)، اما در چیدمان فعلی
+ *  «امن» نیست:
+ *    ۱) توسعهٔ محلی روی HTTP پشتیبانی می‌شود و در آن Secure=false است؛
+ *       مرورگر کوکی __Host- بدون Secure را رد می‌کند. بنابراین نام کوکی
+ *       باید بین محیط‌ها متفاوت می‌شد (نام پویا) که خودش پیچیدگی و ریسک
+ *       خواندن اشتباه را اضافه می‌کند.
+ *    ۲) تغییر نام، همهٔ نشست‌های زندهٔ فعلی (تا ۱۲ ساعت) را بی‌اعتبار
+ *       می‌کند؛ مگر این‌که یک دورهٔ مهاجرت «خواندن هر دو نام + نوشتن نام
+ *       جدید + حذف نام قدیمی» پیاده شود. این فاز فقط اجازهٔ تغییر در
+ *       تنظیم/پاک‌سازی کوکی را دارد و افزودن مسیر مهاجرتِ تست‌نشده
+ *       (بدون build/test در این محیط) ریسک قفل‌شدن کاربران را دارد.
+ *  در نتیجه نام فعلی حفظ شد. مسیر پیشنهادی برای فاز بعد (با تست):
+ *    الف) خواندن توکن از هر دو نام token و __Host-afagh_session؛
+ *    ب) نوشتن فقط __Host-afagh_session در محیط Secure؛
+ *    ج) حذف token هنگام ورود/خروج؛
+ *    د) پس از یک دورهٔ ۱۲ ساعته (انقضای کامل نشست‌های قدیمی) حذف نام قدیمی.
+ * ────────────────────────────────────────────────────────────────────
+ *
+ * فلگ‌های ENV: AFAGH_COOKIE_SECURE=auto|true|false ،
+ *              AFAGH_COOKIE_SAMESITE=auto|lax|none|strict
  */
 export async function sessionCookieOptions(): Promise<{
   httpOnly: true; path: string; maxAge: number; secure: boolean; sameSite: 'lax' | 'none' | 'strict';
@@ -71,7 +110,11 @@ export async function sessionCookieOptions(): Promise<{
   return { httpOnly: true, path: '/', maxAge: SESSION_MAX_AGE, secure, sameSite };
 }
 
-export async function getSessionUser(): Promise<SessionUser | null> {
+/**
+ * نشستِ کاربری که باید رمزش را عوض کند فقط برای جریان تغییر رمز (و خروج) معتبر است؛
+ * بقیهٔ گاردها (APIها، اکشن‌ها، layout ها) آن را «بدون نشست» می‌بینند.
+ */
+export async function getSessionUser(opts?: { allowPendingPasswordChange?: boolean }): Promise<SessionUser | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -79,7 +122,6 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     .select({
       id: users.id, firstName: users.firstName, lastName: users.lastName, role: roles.code,
       mustChangePassword: users.mustChangePassword, isActive: users.isActive, universityId: users.universityId,
-      expiresAt: sessions.expiresAt,
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
@@ -93,16 +135,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     await db.delete(sessions).where(eq(sessions.token, sha256(token)));
     return null;
   }
-  // ── Sliding expiration: اگر بیش از نیمی از عمر نشست سپری شده، تمدید کن ──
-  try {
-    const exp = rows[0].expiresAt instanceof Date ? rows[0].expiresAt.getTime() : new Date(rows[0].expiresAt).getTime();
-    const remainingMs = exp - Date.now();
-    if (remainingMs > 0 && remainingMs < (SESSION_MAX_AGE * 1000) / 2) {
-      await db.update(sessions)
-        .set({ expiresAt: new Date(Date.now() + SESSION_MAX_AGE * 1000) })
-        .where(eq(sessions.token, sha256(token)));
-    }
-  } catch { /* تمدید اختیاری است — خطا نشست را باطل نمی‌کند */ }
+  // 🔒 تغییر اجباری رمز: تا تغییر رمز، هیچ گارد عمومی نشست معتبر نمی‌بیند.
+  if (rows[0].mustChangePassword === 1 && !opts?.allowPendingPasswordChange) return null;
   return {
     id: rows[0].id,
     name: rows[0].firstName + ' ' + rows[0].lastName,
@@ -388,28 +422,45 @@ async function candidateSummaries(userIds: number[]): Promise<LoginCandidate[]> 
   return out;
 }
 
+const LOGIN_FAILED_MSG = 'شناسه یا رمز نادرست است.';
+
+/** سقف ورود از یک IP تمام شده — login.actions آن را به پیام عمومی تبدیل می‌کند. */
+export class LoginRateLimitError extends Error {
+  constructor(public retryAfterSec: number) {
+    super('LOGIN_RATE_LIMITED');
+  }
+}
+
 export async function login(
   identifier: string, password: string,
 ): Promise<{ ok: boolean; error?: string; mustChange?: boolean; needChoice?: boolean; token?: string; candidates?: LoginCandidate[] }> {
   // ── M-1: محدودیت تلاش ورود — دو لایه تا قفل یک حساب به حساب دیگر سرایت نکند:
-  //   ۱) per-IP (فقط «خطاها» می‌شمارند، ۱۰۰/۱۰دقیقه + تأخیر تصاعدی به‌جای قفل سخت؛
-  //      موفقیت سهمیه نمی‌سوزاند — حملات اسپری کند اما کاربران واقعی پشت NAT قفل نمی‌شوند)
-  //   ۲) per-account (فقط «خطاها» می‌شمارند، ۵/۱۰دقیقه؛ موفقیت سهمیه نمی‌سوزاند)
+  //   ۱) per-IP (۱۰۰/۱۰دقیقه؛ بالای سقف، رد سخت با LoginRateLimitError)
+  //   ۲) per-account (۵/۱۰دقیقه + تأخیر تصاعدی؛ قفل همان پیام عمومی رمز نادرست را می‌دهد)
+  // هر تلاش «پیش از scrypt» رزرو می‌شود (INCR) و فقط در صورت موفقیت آزاد می‌شود —
+  // بدین ترتیب درخواست‌های همزمان نمی‌توانند از سقف عبور کنند.
   // شناسه ممکن است با کیبورد فارسی تایپ شده باشد (ارقام ۰-۹)؛ همهٔ کدهای
   // سیستمی انگلیسی‌اند پس اول نرمال می‌کنیم تا ورود اول شکست نخورد.
   const clean = toEnDigits(identifier.trim());
-  const ip = await clientIp();
+  // IP فقط از مسیر HMAC-احراز‌شدهٔ پروکسی خوانده می‌شود؛ هدر جعل‌پذیر هرگز.
+  const ip = (await requestClientIp()) ?? UNKNOWN_CLIENT_IP;
   // کلید IP هش می‌شود چون IP از هدر پروکسی می‌آید و نباید خام در Redis بنشیند.
   const ipKey = `login:ip:${sha256(ip).slice(0, 24)}`;
   const accKey = `login:acc:${sha256(clean).slice(0, 24)}`;
-  const accRl = await peekRateLimit(accKey, 5, 10 * 60);
+  const releaseReservation = async () => {
+    await releaseRateLimit(ipKey);
+    await releaseRateLimit(accKey);
+  };
+
+  const ipRl = await rateLimit(ipKey, 100, 10 * 60);
+  if (!ipRl.ok) throw new LoginRateLimitError(ipRl.retryAfterSec);
+
+  const priorFails = await getRateLimitCount(accKey).catch(() => 0);
+  if (priorFails > 0) await progressiveDelay(priorFails).catch(() => {});
+  const accRl = await rateLimit(accKey, 5, 10 * 60);
   if (!accRl.ok) {
-    return { ok: false, error: `تلاش‌های ورود بیش از حد مجاز شد. ${Math.ceil(accRl.retryAfterSec / 60)} دقیقهٔ دیگر دوباره تلاش کنید.` };
-  }
-  // لایهٔ IP قفل سخت ندارد: بالای سقف، تأخیر تصاعدی می‌دهیم و ادامه می‌دهیم.
-  const ipRl = await peekRateLimit(ipKey, 100, 10 * 60);
-  if (!ipRl.ok) {
-    await progressiveDelay(await getRateLimitCount(ipKey)).catch(() => {});
+    await verifyPassword(password, DUMMY_PASSWORD_HASH).catch(() => false);
+    return { ok: false, error: LOGIN_FAILED_MSG };
   }
 
   // شناسه می‌تواند «کد پرسنلی/کاربری» یا «شماره دانشجویی» باشد.
@@ -466,6 +517,9 @@ export async function login(
   const passwordVariants = [password];
   const normPass = toEnDigits(password);
   if (normPass !== password) passwordVariants.push(normPass);
+  // پدینگ زمان‌ثابت: وقتی کاندیدای فعالی نیست، یک verify ساختگی می‌زنیم تا
+  // زمان پاسخِ «ناموجود» و «نادرست» یکسان شود.
+  if (!cands.some((c) => c.isActive)) await verifyPassword(password, DUMMY_PASSWORD_HASH).catch(() => false);
   for (const cand of cands) {
     if (!cand.isActive) continue;
     for (const pw of passwordVariants) {
@@ -473,16 +527,11 @@ export async function login(
     }
   }
   if (!matched.length) {
-    // فقط خطاها می‌شمارند (کاربر ناموجود سهمیهٔ کسی را نمی‌سوزاند؛
-    // موفقیت هم سهمیه نمی‌سوزاند). پیام یکتا: تفکیک «کاربر نیست/رمز غلط»
-    // امکان شمارش حساب‌ها را می‌داد (user enumeration).
-    // پدینگ زمان‌ثابت: وقتی کاندیدایی نیست، یک verify ساختگی می‌زنیم تا
-    // زمان پاسخِ «ناموجود» و «نادرست» یکسان شود.
-    if (!cands.length) await verifyPassword(password, DUMMY_PASSWORD_HASH).catch(() => false);
-    await hitRateLimit(ipKey, 10 * 60).catch(() => {});
-    if (cands.length) await hitRateLimit(accKey, 10 * 60).catch(() => {});
-    return { ok: false, error: 'شناسه یا رمز نادرست است.' };
+    // شمارش از پیش رزرو شده است (کاربر ناموجود هم همین کلید را می‌سوزاند تا
+    // شمارش حساب‌ها از روی پیام/قفل ممکن نباشد). پیام یکتا برای همه.
+    return { ok: false, error: LOGIN_FAILED_MSG };
   }
+  await releaseReservation();
   if (matched.length === 1) {
     const { mustChange } = await issueSessionFor(matched[0].id);
     return { ok: true, mustChange };
@@ -509,7 +558,7 @@ export async function login(
 export async function chooseLoginAccount(
   token: string, userId: number,
 ): Promise<{ ok: boolean; error?: string; mustChange?: boolean }> {
-  const rl = await rateLimit(`choose:${await clientIp()}`, 10, 10 * 60);
+  const rl = await rateLimit(`choose:${(await requestClientIp()) ?? UNKNOWN_CLIENT_IP}`, 10, 10 * 60);
   if (!rl.ok) {
     return { ok: false, error: 'تلاش بیش از حد مجاز. چند دقیقه دیگر دوباره تلاش کنید.' };
   }
@@ -526,7 +575,7 @@ export async function chooseLoginAccount(
 
 /** تغییر رمز عبور کاربر جاری (با تأیید رمز فعلی) — حلقهٔ «تغییر اجباری رمز» */
 export async function changePassword(currentPassword: string, newPassword: string): Promise<{ ok: boolean; error?: string }> {
-  const me = await getSessionUser();
+  const me = await getSessionUser({ allowPendingPasswordChange: true });
   if (!me) return { ok: false, error: 'برای تغییر رمز ابتدا وارد شوید.' };
   const [u] = await db.select().from(users).where(eq(users.id, me.id)).limit(1);
   if (!u) return { ok: false, error: 'کاربر یافت نشد.' };
@@ -560,7 +609,7 @@ export async function invalidateUserSessions(userId: number): Promise<void> {
 
 export async function logout() {
   const cookieStore = await cookies();
-  const u = await getSessionUser();
+  const u = await getSessionUser({ allowPendingPasswordChange: true });
   if (u) await db.delete(sessions).where(eq(sessions.userId, u.id)); // logout everywhere
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (token) await db.delete(sessions).where(eq(sessions.token, sha256(token))); // fallback
@@ -589,7 +638,7 @@ export async function endCurrentSession(): Promise<void> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value ?? '';
   // کاربر را پیش از حذف نشست بخوان (وگرنه getSessionUser دیگر چیزی پیدا نمی‌کند)
-  const u = await getSessionUser().catch(() => null);
+  const u = await getSessionUser({ allowPendingPasswordChange: true }).catch(() => null);
   if (token) {
     try {
       await db.delete(sessions).where(eq(sessions.token, sha256(token)));
@@ -603,7 +652,7 @@ export async function endCurrentSession(): Promise<void> {
 
 /** گیت نقش در layout ها — ریدایرکت به پورتال درست (سه داشبورد ایزوله — سند §۲۸۶۵) */
 export async function requireRole(allowed: string[]): Promise<SessionUser> {
-  const u = await getSessionUser();
+  const u = await getSessionUser({ allowPendingPasswordChange: true });
   if (!u) redirect('/login');
   // قبل از هر چیزی: رمز پیش‌فرض باید عوض شود (حساب‌های پذیرش‌شده)
   if (u.mustChangePassword) redirect('/change-password');
@@ -651,7 +700,7 @@ export async function getStudentByUser(userId: number) {
       return s2 ?? null;
     }
   } catch (err: any) {
-    console.error('[auth] خودترمیم پروندهٔ دانشجو ناموفق:', err?.message);
+    try { const { createLogger } = await import('@/lib/logger'); createLogger({ mod: 'auth' }).error('student_record_selfheal_failed', { error: String(err?.message ?? err) }); } catch { /* ignore */ }
   }
   return null;
 }

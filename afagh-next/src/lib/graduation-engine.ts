@@ -13,6 +13,7 @@ import { getBool, getNumber, getSetting } from '@/lib/settings';
 import { ledgerBalance } from '@/lib/ledger-balance';
 import { executeIrandocCheck } from '@/lib/api-integrations';
 import { ssrfFetch } from '@/lib/ssrf-guard';
+import { isSafeLinkUrl } from '@/lib/safe-url';
 import { createLogger } from '@/lib/logger';
 import { deliveriesForUser, notifyUserMultichannel } from '@/lib/messaging';
 import { getRegulationConfig } from '@/lib/regulations-engine';
@@ -485,7 +486,9 @@ export async function runAutoClearance(auditId: number) {
         const t = setTimeout(() => ctrl.abort(), timeout);
         // گارد SSRF: نشانی از پنل مدیر (clearance_departments.apiUrl) می‌آید —
         // فقط https + بدون userinfo + مقصد عمومی (یا میزبان مجازِ AFAGH_SSRF_ALLOW_HOSTS).
-        const resp = await ssrfFetch(`${dep.apiUrl.replace(/\/+$/, '')}?studentId=${a.studentId}`, { signal: ctrl.signal });
+        const apiUrl = new URL(dep.apiUrl);
+        apiUrl.searchParams.set('studentId', String(a.studentId));
+        const resp = await ssrfFetch(apiUrl.toString(), { signal: ctrl.signal });
         clearTimeout(t);
         const j = (await resp.json()) as { cleared?: boolean; amountDue?: number; detail?: string };
         await db.update(clearance_checklist).set({
@@ -615,7 +618,8 @@ export async function advanceDossier(auditId: number): Promise<{ status: string;
 
 /** نشانی پورتال سجاد برای راهنمایی دانشجو (قابل تغییر از تنظیمات) */
 export async function sajjadPortalUrl() {
-  return (await getSetting('SAJJAD_PORTAL_URL')) || 'https://portal.saorg.ir';
+  const v = await getSetting('SAJJAD_PORTAL_URL');
+  return v && isSafeLinkUrl(v) ? v : 'https://portal.saorg.ir';
 }
 
 /** ثبت کد رهگیری درخواست کد صحت که دانشجو در سامانهٔ سجاد گرفته است */

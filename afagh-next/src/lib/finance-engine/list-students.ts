@@ -260,7 +260,7 @@ export async function listFinanceStudents(
       payments,
       chequesCleared: cheques.cleared,
       loans,
-      balance: charges - discounts - sponsorships - payments - cheques.cleared - loans,
+      balance: charges - discounts - sponsorships - payments - loans,
       pendingCheques: cheques.pending,
     };
   });

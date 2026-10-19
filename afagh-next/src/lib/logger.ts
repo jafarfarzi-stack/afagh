@@ -24,15 +24,56 @@ const prettyMode = () => {
 };
 
 /** کلیدهایی که هرگز نباید در لاگ ظاهر شوند (رمز، توکن، کوکی، کلید API، کد ملی، موبایل، شناسهٔ چت، OTP) */
-const SECRET_KEY = /(password|passwd|pass|secret|token|apikey|api_key|authorization|cookie|salt|sharedsecret|privatekey|connectionstring|databaseurl|nationalcode|national_code|mobile|phone|chatid|chat_id|\botp\b|verifycode|verify_code|serialno|serial_no|studentcode|student_code)/i;
+const SECRET_KEY = /(password|passwd|pass|secret|token|apikey|api_key|authorization|cookie|salt|sharedsecret|privatekey|connectionstring|databaseurl|nationalcode|national_code|nationalid|national_id|mobile|phone|chatid|chat_id|\botp\b|otphash|otpcode|otpused|verifycode|verify_code|serialno|serial_no|studentcode|student_code|clientsecretenc|passwordenc|tokenenc|securetoken|secure_token|pickuptoken|pickup_token|authcredentials|cardpan|card_pan|bankrefid|bank_ref_id|payeremail|payer_email|\bemail\b)/i;
 const MASK = '[REDACTED]';
 
-/** رشته‌هایی که خودشان شبیه رمز/کلید هستند (مثل DSN دیتابیس) + کد ملی/موبایل خام */
+// ── الگوهای از پیش کامپایل‌شده برای پاک‌سازی متن ──
+// چرا همهٔ اعداد را ماسک نمی‌کنیم: شناسه‌ها (id)، پورت‌ها، کدهای خطا و
+// timestampهای ۱۰ رقمی برای عیب‌یابی حیاتی‌اند و ماسک‌کردن سراسری آن‌ها
+// لاگ را بی‌فایده می‌کند. پس «مبلغ» فقط وقتی ماسک می‌شود که به یک کلید مالی
+// شناخته‌شده چسبیده باشد؛ در عوض کد ملی/موبایل/ایمیل الگوی مشخص دارند.
+const DSN_RE = /(\/\/[^:/@\s]+):([^@/\s]+)@/g;
+const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+
+/** کلید کد ملی در متن: camelCase، snake_case یا عبارت فارسی */
+const NATIONAL_CODE_KEY = String.raw`(?:national[_\s-]?code|national[_\s-]?id|کد\s*ملی|شناسه\s*ملی)`;
+/** nationalCode=... / "national_code": "..." / کد ملی: ... */
+const NATIONAL_CODE_KV_RE = new RegExp(
+  String.raw`(${NATIONAL_CODE_KEY}\s*["']?\s*[:=]\s*["']?)([^"'\s,;)\]}]+)`,
+  'gi',
+);
+/** «کد ملی ۱۲۳۴۵۶۷۸۹۰» بدون = یا : (فاصله فقط space/tab تا خطوط به‌هم نچسبند) */
+const NATIONAL_CODE_BARE_RE = new RegExp(
+  String.raw`(${NATIONAL_CODE_KEY}[ \t]+)([\d\u06F0-\u06F9]{4,})`,
+  'gi',
+);
+
+/** کلیدهای مالی شناخته‌شده؛ مبلغ فقط در کنار همین کلیدها ماسک می‌شود */
+const AMOUNT_KEY = String.raw`(?:amounts?|balances?|fees?|prices?|tuition|paid|payments?|remaining|debits?|credits?|subtotals?|totals?|installments?|discounts?|refunds?|sum|مبالغ|مبلغ|مانده|بدهی|بستانکار|بدهکار|شهریه|پرداخت|واریز|تخفیف|بازگشت|اقساط|قسط|جمع)`;
+const AMOUNT_KV_RE = new RegExp(
+  // حداقل ۴ رقم تا کدهای وضعیت/پورت (مثل 404) با «مبلغ» اشتباه نشوند؛
+  // فاصله فقط space/tab است تا مقدار از خط عبور نکند و خطوط لاگ به‌هم نچسبند.
+  String.raw`((?<![A-Za-z])${AMOUNT_KEY}[ \t]*["']?[ \t]*(?:[:=][ \t]*["']?|[ \t]+))([-+]?[\d\u06F0-\u06F9][\d\u06F0-\u06F9,٬. ]{3,})`,
+  'gi',
+);
+
+// موبایل ایرانی ۱۱ رقمی و کد ملی ۱۰ رقمی — حتی داخل شناسه‌های دارای حرف/آندرلاین
+const MOBILE_RE = /(?<!\d)09\d{9}(?!\d)/g;
+const NATIONAL_CODE_RE = /(?<![\d\u06F0-\u06F9])[\d\u06F0-\u06F9]{10}(?![\d\u06F0-\u06F9])/g;
+
+/** رشته‌هایی که خودشان شبیه رمز/کلید/PII هستند (DSN، ایمیل، کد ملی، موبایل، مبلغِ کلیددار) */
 const maskString = (s: string): string => {
-  let out = s.replace(/(\/\/[^:/@\s]+):([^@/\s]+)@/g, '$1:' + MASK + '@');
-  // موبایل ایرانی ۱۱ رقمی و کد ۱۰ رقمی (کد ملی/شناسهٔ چت عددی) — هرگز در لاگ خام نماند
-  out = out.replace(/\b09\d{9}\b/g, MASK);
-  out = out.replace(/\b\d{10}\b/g, MASK);
+  let out = s.replace(DSN_RE, '$1:' + MASK + '@');
+  // ایمیل (PII) — پیش از ماسک اعداد تا دامنه/کاربر خراب نشود
+  out = out.replace(EMAIL_RE, MASK);
+  // مقدار چسبیده به کلید کد ملی (حتی اگر ۸/۹ رقمی یا غیرعددی باشد)
+  out = out.replace(NATIONAL_CODE_KV_RE, '$1' + MASK);
+  out = out.replace(NATIONAL_CODE_BARE_RE, '$1' + MASK);
+  // مبلغ/مانده فقط وقتی کلید مالی کنارش باشد
+  out = out.replace(AMOUNT_KV_RE, '$1' + MASK);
+  // موبایل و کد ملی خام در هر جای متن
+  out = out.replace(MOBILE_RE, MASK);
+  out = out.replace(NATIONAL_CODE_RE, MASK);
   return out;
 };
 
@@ -41,7 +82,17 @@ export function maskSecrets(value: unknown, depth = 0): unknown {
   if (typeof value === 'string') return maskString(value);
   if (typeof value !== 'object' || depth > 6) return value;
   if (value instanceof Date) return value.toISOString();
-  if (value instanceof Error) return { name: value.name, message: maskString(value.message), stack: value.stack };
+  if (value instanceof Error) {
+    // پیام و stack هر دو پاک‌سازی می‌شوند (پیام خطای Postgres می‌تواند مقدار
+    // نقض‌شده مثل کد ملی را در خود داشته باشد). code مثل 23505 برای عیب‌یابی می‌ماند.
+    const code = (value as Error & { code?: unknown }).code;
+    return {
+      name: value.name,
+      message: maskString(value.message),
+      ...(code != null ? { code: String(code) } : {}),
+      stack: value.stack ? maskString(value.stack) : undefined,
+    };
+  }
   if (Array.isArray(value)) return value.slice(0, 200).map(v => maskSecrets(v, depth + 1));
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
@@ -59,11 +110,12 @@ const write = (level: LogLevel, base: LogFields, msg: string, fields?: LogFields
     time: new Date().toISOString(),
     app: process.env.LOG_APP_NAME || 'afagh',
     env: process.env.NODE_ENV || 'development',
-    msg,
+    // پیام هم پاک‌سازی می‌شود؛ بعضی فراخوان‌ها پیام خام خطا را به‌جای فیلد می‌فرستند.
+    msg: maskString(msg),
     ...(maskSecrets({ ...base, ...(fields || {}) }) as LogFields),
   };
   const line = prettyMode()
-    ? `${rec.time} ${level.toUpperCase().padEnd(5)} ${msg} ${Object.keys(rec).length > 5 ? JSON.stringify(rec) : ''}`
+    ? `${rec.time} ${level.toUpperCase().padEnd(5)} ${rec.msg} ${Object.keys(rec).length > 5 ? JSON.stringify(rec) : ''}`
     : JSON.stringify(rec);
   if (level === 'error') console.error(line);
   else if (level === 'warn') console.warn(line);

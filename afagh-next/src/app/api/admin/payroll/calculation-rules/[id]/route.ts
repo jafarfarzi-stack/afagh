@@ -27,7 +27,8 @@ export async function PUT(
   try {
     const user = await requireRole(['ADMIN']);
     const { id } = await params;
-    const rid = parseInt(id);
+    const rid = Number(id);
+    if (!Number.isSafeInteger(rid) || rid <= 0) return NextResponse.json({ ok: false, error: 'شناسهٔ نامعتبر است.' }, { status: 400 });
     const own = await ownedRuleId(rid);
     if (!own.uni || !own.ok) {
       return NextResponse.json({ ok: false, error: 'رکورد یافت نشد یا متعلق به دانشگاه دیگری است.' }, { status: 403 });
@@ -72,7 +73,7 @@ export async function PUT(
       .update(payroll_calculation_rules)
       .set(patch)
       .where(and(
-        eq(payroll_calculation_rules.id, parseInt(id)),
+        eq(payroll_calculation_rules.id, rid),
         or(eq(payroll_calculation_rules.universityId, own.uni.id), isNull(payroll_calculation_rules.universityId)),
       ));
 
@@ -93,7 +94,8 @@ export async function DELETE(
   try {
     const user = await requireRole(['ADMIN']);
     const { id } = await params;
-    const rid = parseInt(id);
+    const rid = Number(id);
+    if (!Number.isSafeInteger(rid) || rid <= 0) return NextResponse.json({ ok: false, error: 'شناسهٔ نامعتبر است.' }, { status: 400 });
     const own = await ownedRuleId(rid);
     if (!own.uni || !own.ok) {
       return NextResponse.json({ ok: false, error: 'رکورد یافت نشد یا متعلق به دانشگاه دیگری است.' }, { status: 403 });

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { randomBytes } from 'node:crypto';
 import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
@@ -136,7 +137,7 @@ async function createStaffExpertAction(input: {
   nationalCode: string; firstName: string; lastName: string;
   fatherName?: string; birthCertNo?: string; gender?: string; mobile?: string;
   email?: string; staffCode?: string; departmentId?: number | null; staffType?: string;
-}): Promise<{ ok: boolean; error?: string; userId?: number }> {
+}): Promise<{ ok: boolean; error?: string; userId?: number; password?: string }> {
   'use server';
   try {
     await requireRole(['ADMIN']);
@@ -160,7 +161,9 @@ async function createStaffExpertAction(input: {
       ? await db.select({ id: staff.id }).from(staff).where(and(eq(staff.staffCode, sc), eq(staff.universityId, uni.id))).limit(1)
       : await db.select({ id: staff.id }).from(staff).where(eq(staff.staffCode, sc)).limit(1);
     if (dupSc.length) return { ok: false, error: 'کد پرسنلی تکراری است.' };
-    const passwordHash = await hashPassword(nc); // ورود اولیه با کد ملی؛ اجباری به تغییر
+    // 🔐 رمز یکبارمصرف تصادفی — دیگر رمز اولیه از کد ملی ساخته نمی‌شود (کد ملی قابل‌حدس است)
+    const tempPassword = randomBytes(12).toString('base64url').slice(0, 16);
+    const passwordHash = await hashPassword(tempPassword);
     const [u] = await db.insert(users).values({
       nationalCode: nc, firstName: fn, lastName: ln,
       fatherName: String(input.fatherName || '').trim() || null,
@@ -186,7 +189,8 @@ async function createStaffExpertAction(input: {
       }
     }
     revalidatePath('/admin/staff');
-    return { ok: true, userId: u.id };
+    // ⚠️ رمز یکبارمصرف فقط همین یک‌بار بازگردانده می‌شود؛ در دیتابیس فقط هش ذخیره می‌شود
+    return { ok: true, userId: u.id, password: tempPassword };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'ثبت نشد.' };
   }

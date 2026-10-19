@@ -9,6 +9,7 @@ import {
 import { getNumber } from '@/lib/settings';
 import { createLogger } from '@/lib/logger';
 import { safeRials } from '@/lib/money';
+import { isSafeLinkUrl } from '@/lib/safe-url';
 import { appendAudit } from '@/lib/audit';
 
 // ═══ پورتال دانش‌آموختگان ═══
@@ -209,7 +210,7 @@ export async function resolveRequest(input: {
   if (!r) throw new Error('درخواست یافت نشد.');
   await db.update(alumni_requests).set({
     status: input.status, adminNote: input.note ?? r.adminNote,
-    resultFileUrl: input.resultFileUrl ?? r.resultFileUrl,
+    resultFileUrl: input.resultFileUrl && isSafeLinkUrl(input.resultFileUrl) ? input.resultFileUrl : r.resultFileUrl,
     handledBy: input.userId, updatedAt: new Date(),
   }).where(eq(alumni_requests.id, input.requestId));
 

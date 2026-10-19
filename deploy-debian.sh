@@ -122,15 +122,20 @@ step "۲/۸ تنظیمات و رمزهای پروداکشن"
 ENV_FILE="$ROOT/.env"
 rnd() { tr -dc 'A-Za-z0-9' </dev/urandom | head -c "${1:-28}"; }
 if [ ! -f "$ENV_FILE" ]; then
-  PGPW="$(rnd 32)"; APPDBPW="$(rnd 32)"; MINIOPW="$(rnd 32)"
+  PGPW="$(rnd 32)"; APPDBPW="$(rnd 32)"; MINIOPW="$(rnd 32)"; REDISPW="$(rnd 32)"
   HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
   cat > "$ENV_FILE" <<EOF
 # ساخته‌شده توسط deploy-debian.sh در $(date '+%Y-%m-%d %H:%M') — این فایل را جای امنی نگه دارید
+# فاز ۲: اپ به‌طور پیش‌فرض فقط روی loopback منتشر می‌شود (پشت Caddy/پروکسی).
+# برای انتشار عمومیِ صریح: APP_BIND=0.0.0.0
+APP_BIND=127.0.0.1
 APP_PORT=8080
 POSTGRES_PASSWORD=$PGPW
 # P0-3: رمز نقش محدود afagh_app — قبلاً اصلاً تولید نمی‌شد و compose به
 # پیش‌فرض ناامن «afagh-app-pass» می‌افتاد. hardening.mjs همین مقدار را روی نقش اعمال می‌کند.
 AFAGH_APP_DB_PASSWORD=$APPDBPW
+# فاز ۲: Redis با AUTH بالا می‌آید (پیش‌تر بدون رمز بود) — compose آن را اجباری می‌کند.
+REDIS_PASSWORD=$REDISPW
 PG_HOST_PORT=5432
 REDIS_HOST_PORT=6379
 MINIO_ROOT_USER=afagh
@@ -161,6 +166,18 @@ else
     chmod 600 "$ENV_FILE"
     ok "AFAGH_APP_DB_PASSWORD تصادفی ساخته و به .env اضافه شد"
   fi
+  # فاز ۲: backfill برای استقرارهای قدیمی که REDIS_PASSWORD ندارند
+  # (compose حالا Redis را با «--requirepass» بالا می‌آورد و بدون رمز بالا نمی‌آید)
+  if ! grep -q '^REDIS_PASSWORD=' "$ENV_FILE" || [ -z "$(grep '^REDIS_PASSWORD=' "$ENV_FILE" | cut -d= -f2-)" ]; then
+    REDISPW="$(rnd 32)"
+    if grep -q '^REDIS_PASSWORD=' "$ENV_FILE"; then
+      sed -i "s/^REDIS_PASSWORD=.*/REDIS_PASSWORD=$REDISPW/" "$ENV_FILE"
+    else
+      echo "REDIS_PASSWORD=$REDISPW" >> "$ENV_FILE"
+    fi
+    chmod 600 "$ENV_FILE"
+    ok "REDIS_PASSWORD تصادفی ساخته و به .env اضافه شد"
+  fi
 fi
 if [ -n "$APP_PORT_ARG" ]; then
   sed -i "s/^APP_PORT=.*/APP_PORT=$APP_PORT_ARG/" "$ENV_FILE"
@@ -175,7 +192,20 @@ if [ -n "$BASE_URL_ARG" ]; then
   ok "نشانی عمومی سامانه: $BASE_URL_ARG"
 fi
 set -a; . "$ENV_FILE"; set +a
+
+# فاز ۲ / سازگاری عقب‌رو: در .envهای قدیمی مقدار APP_PORT به شکل «host:port» بود
+#   (مستند در INSTALL.md: APP_PORT=127.0.0.1:8080). حالا bind و port جدا شده‌اند؛ اگر
+#   مقدار شامل «:» بود آن را به APP_BIND و APP_PORT عددی تقسیم می‌کنیم تا همهٔ
+#   بررسی‌های پایین‌دست (ss/curl/URL) با پورت عددی کار کنند.
+case "${APP_PORT:-}" in
+  *:*)
+    APP_BIND="${APP_PORT%%:*}"
+    APP_PORT="${APP_PORT##*:}"
+    ;;
+esac
+APP_BIND="${APP_BIND:-127.0.0.1}"
 APP_PORT="${APP_PORT:-8080}"
+export APP_BIND APP_PORT
 
 # P0-3: fail-fast روی سکرت‌های ناامن — این اسکریپت فقط پروداکشن است (root + Debian)،
 # پس هیچ بهانه‌ای برای مقادیر پیش‌فرض/نمونه پذیرفته نیست.
@@ -191,12 +221,14 @@ repeat_secret() { # $1=value — چهار تکرار پشت‌سرهم («aaaa»
 weak_secret "${POSTGRES_PASSWORD:-}" && die "POSTGRES_PASSWORD ناامن است — در .env مقدار تصادفی قوی بگذارید یا .env را حذف کنید تا دوباره ساخته شود"
 weak_secret "${AFAGH_APP_DB_PASSWORD:-}" && die "AFAGH_APP_DB_PASSWORD ناامن است — در .env مقدار تصادفی قوی بگذارید یا .env را حذف کنید تا دوباره ساخته شود"
 weak_secret "${MINIO_ROOT_PASSWORD:-}" && die "MINIO_ROOT_PASSWORD ناامن است — در .env مقدار تصادفی قوی بگذارید یا .env را حذف کنید تا دوباره ساخته شود"
+weak_secret "${REDIS_PASSWORD:-}" && die "REDIS_PASSWORD ناامن است — در .env مقدار تصادفی قوی بگذارید یا .env را حذف کنید تا دوباره ساخته شود"
 # P0-1: حداقل طول‌ها با سیاست repo یکی است (scripts/lib/secret-policy.mjs):
 #   رمزهای دیتابیس ≥۲۴ · رمز MinIO ≥۱۶ — و هیچ‌کدام نباید تکرار چهارتایی داشته باشند.
 [ "${#POSTGRES_PASSWORD}" -ge 24 ] || die "POSTGRES_PASSWORD کوتاه است (حداقل ۲۴ کاراکتر؛ make env یا رمز تصادفی)"
 [ "${#AFAGH_APP_DB_PASSWORD}" -ge 24 ] || die "AFAGH_APP_DB_PASSWORD کوتاه است (حداقل ۲۴ کاراکتر — رمز نقش afagh_app که به RLS گره خورده)"
 [ "${#MINIO_ROOT_PASSWORD}" -ge 16 ] || die "MINIO_ROOT_PASSWORD کوتاه است (حداقل ۱۶ کاراکتر)"
-for pair in "POSTGRES_PASSWORD:${POSTGRES_PASSWORD}" "AFAGH_APP_DB_PASSWORD:${AFAGH_APP_DB_PASSWORD}" "MINIO_ROOT_PASSWORD:${MINIO_ROOT_PASSWORD}"; do
+[ "${#REDIS_PASSWORD}" -ge 24 ] || die "REDIS_PASSWORD کوتاه است (حداقل ۲۴ کاراکتر — رمز Redis که compose اجباری‌اش می‌کند)"
+for pair in "POSTGRES_PASSWORD:${POSTGRES_PASSWORD}" "AFAGH_APP_DB_PASSWORD:${AFAGH_APP_DB_PASSWORD}" "MINIO_ROOT_PASSWORD:${MINIO_ROOT_PASSWORD}" "REDIS_PASSWORD:${REDIS_PASSWORD}"; do
   repeat_secret "${pair#*:}" && die "${pair%%:*} تکرار چهارتایی کاراکتر دارد — رمز تصادفی بسازید (rnd در همین اسکریپت)"
 done
 ok "سکرت‌ها با سیاست پروداکشن بررسی شدند (طول، عدم نمونه، عدم پیش‌فرض ضعیف)"
@@ -286,18 +318,37 @@ fi
 
 # ── ۷) فایروال و جمع‌بندی ────────────────────────────────────────
 step "۷/۸ فایروال"
-if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
-  ufw allow "${APP_PORT}/tcp" >/dev/null 2>&1 && ok "پورت ${APP_PORT} در ufw باز شد" || warn "باز کردن پورت در ufw ناموفق بود"
-else
-  warn "ufw فعال نیست — اگر فایروال دیگری دارید، پورت ${APP_PORT} را باز کنید"
-fi
+# فاز ۲: فقط وقتی پورت روی همهٔ اینترفیس‌ها (عمومی) منتشر شده، ufw را باز می‌کنیم.
+#   با پیش‌فرض loopback (127.0.0.1) پورت از اینترنت بسته است و باید از Caddy/HTTPS استفاده کرد.
+case "${APP_BIND:-127.0.0.1}" in
+  0.0.0.0|::|"")
+    if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+      ufw allow "${APP_PORT}/tcp" >/dev/null 2>&1 && ok "پورت ${APP_PORT} در ufw باز شد" || warn "باز کردن پورت در ufw ناموفق بود"
+    else
+      warn "ufw فعال نیست — اگر فایروال دیگری دارید، پورت ${APP_PORT} را باز کنید"
+    fi
+    ;;
+  *)
+    warn "پورت فقط روی ${APP_BIND} منتشر شد — از اینترنت بسته است (برای HTTPS از Caddy استفاده کنید)"
+    ;;
+esac
 
 step "۸/۸ استقرار کامل شد"
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+# فاز ۲: سطر «دسترسی» بر اساس APP_BIND ساخته می‌شود (loopback در برابر انتشار عمومی).
+case "${APP_BIND:-127.0.0.1}" in
+  127.0.0.1|localhost|::1)
+    REACH_LINE="      http://localhost:${APP_PORT}        (فقط روی همین سرور — از اینترنت بسته است)
+      برای دسترسی عمومی، DOMAIN را در .env بگذارید و HTTPS را بالا بیاورید: make up-https"
+    ;;
+  *)
+    REACH_LINE="      http://${IP:-SERVER_IP}:${APP_PORT}        (و http://localhost:${APP_PORT} روی خود سرور)"
+    ;;
+esac
 cat <<EOF
 
   ${B}سامانه در دسترس است:${N}
-      http://${IP:-SERVER_IP}:${APP_PORT}        (و http://localhost:${APP_PORT} روی خود سرور)
+${REACH_LINE}
 
   ${B}ورود اولیه (بدون رمز ثابت):${N}
       کد ملی مدیر: ${ADMIN_NC}  →  /admin

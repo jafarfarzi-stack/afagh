@@ -33,20 +33,43 @@ ENV NODE_ENV=production \
 #    docker-compose نسخهٔ ۱۶ است؛ pg_dump 15 با «server version mismatch»
 #    شکست می‌خورد و چون پشتیبان‌گیری نخستین گام migrator است، کل استقرار با
 #    exit 1 متوقف می‌شد (بدون آنکه هیچ‌کدام از پچ‌ها اجرا شود).
-#    پس کلاینت ۱۶ را از مخزن رسمی PGDG نصب می‌کنیم. اگر شبکه در دسترس نبود،
-#    به کلاینت توزیع برمی‌گردیم تا بیلد نشکند؛ backup-db خودش تشخیص می‌دهد.
+#    پس کلاینت ۱۶ را از مخزن رسمی PGDG نصب می‌کنیم.
+# کلید امضای مخزن PGDG هرگز «کورکورانه» پذیرفته نمی‌شود: اثر انگشت (fpr) کلیدِ
+# دانلودشده با اثر انگشت رسمی (B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8) مقایسه
+# می‌شود و فقط در صورت تطابقِ کامل، مخزن ثبت و postgresql-client-16 نصب می‌گردد.
+# اگر دانلود/تأییدِ کلید یا نصب از PGDG در هر مرحله شکست بخورد (مثلاً بیلد
+# آفلاین/محدود)، به‌شکل کنترل‌شده به کلاینت توزیع برمی‌گردیم تا بیلد نشکند؛
+# اما «مهاجرتِ بدون پشتیبانِ بی‌صدا» رخ نمی‌دهد، چون گیتِ ران‌تایم
+# AFAGH_REQUIRE_BACKUP=1 با نبودِ pg_dump استقرار را fail-closed متوقف می‌کند
+# (backup-db.mjs).
+# 🔜 پیگیری (known follow-up): این استیج عمداً USER غیر-root ندارد، چون باید روی
+#    ولوم‌های root-owned یعنی /backups و /secrets بنویسد؛ افزودن کاربر غیر-root
+#    نیازمند بازطراحی مالکیت/دسترسی این ولوم‌هاست.
 RUN set -eux; \
     apt-get update || true; \
     apt-get install -y --no-install-recommends ca-certificates curl gnupg || true; \
-    ( install -d /usr/share/postgresql-common/pgdg \
+    pgdg_ok=0; \
+    if install -d /usr/share/postgresql-common/pgdg \
       && curl -fsSL --retry 3 --max-time 30 \
            https://www.postgresql.org/media/keys/ACCC4CF8.asc \
            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
-      && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
-           > /etc/apt/sources.list.d/pgdg.list \
-      && apt-get update \
-      && apt-get install -y --no-install-recommends postgresql-client-16 ) \
-    || apt-get install -y --no-install-recommends postgresql-client || true; \
+      && gpg --with-colons --import-options show-only --import \
+           /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+         | awk -F: '$1 == "fpr" {print $10}' \
+         | grep -qx B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8; then \
+      echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+           > /etc/apt/sources.list.d/pgdg.list; \
+      if apt-get update \
+         && apt-get install -y --no-install-recommends postgresql-client-16; then \
+        pgdg_ok=1; \
+      fi; \
+    fi; \
+    if [ "$pgdg_ok" -ne 1 ]; then \
+      echo '⚠ کلید PGDG تأیید نشد یا نصب از PGDG ناموفق بود — بازگشت کنترل‌شده به postgresql-client توزیع.' >&2; \
+      rm -f /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc /etc/apt/sources.list.d/pgdg.list; \
+      apt-get update || true; \
+      apt-get install -y --no-install-recommends postgresql-client || true; \
+    fi; \
     rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

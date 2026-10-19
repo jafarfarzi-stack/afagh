@@ -15,6 +15,7 @@ import { createLogger } from '@/lib/logger';
 import { getCurrentUniversity, universityEq } from '@/lib/university-scope';
 import { z } from 'zod';
 import { assertCsrf } from '@/lib/security';
+import { escapeLikeChars } from '@/lib/persian-search';
 
 
 export const dynamic = 'force-dynamic';
@@ -75,7 +76,7 @@ export async function GET(req: NextRequest) {
           and(
             // 🔒 دانشگاهِ ۰/نامشخص ⇒ هیچ ردیفی (پیش‌تر شرط حذف می‌شد ⇒ همهٔ دانشگاه‌ها)
             universityEq(students.universityId, universityId),
-            or(eq(students.studentCode, q), sql`${name} LIKE ${'%' + q + '%'}`),
+            or(eq(students.studentCode, q), sql`${name} LIKE ${'%' + escapeLikeChars(q) + '%'} ESCAPE '\\'`),
           ),
         )
         .limit(20);
@@ -85,8 +86,8 @@ export async function GET(req: NextRequest) {
     // جستجوی ارائهٔ درس انگلیسی (فرم ایجاد درخواست)
     if (searchParams.get('action') === 'offerings') {
       const titleCond = or(
-        ilike(courses.title, `%${q}%`),
-        ilike(courses.code, `%${q}%`),
+        sql`${courses.title} ILIKE ${'%' + escapeLikeChars(q) + '%'} ESCAPE '\\'`,
+        sql`${courses.code} ILIKE ${'%' + escapeLikeChars(q) + '%'} ESCAPE '\\'`,
         // پیش‌فرض: درس‌های زبان/انگلیسی وقتی عبارتی وارد نشده یا با «انگلیس/زبان» می‌خواند
         q ? undefined : sql`(${courses.title} LIKE '%انگلیس%' OR ${courses.title} LIKE '%زبان%' OR ${courses.title} ILIKE '%english%')`,
       );
@@ -124,9 +125,9 @@ export async function GET(req: NextRequest) {
         : undefined,
       q
         ? or(
-            ilike(students.studentCode, `%${q}%`),
-            ilike(courses.title, `%${q}%`),
-            sql`(${users.firstName} || ' ' || ${users.lastName}) LIKE ${'%' + q + '%'}`,
+            sql`${students.studentCode} ILIKE ${'%' + escapeLikeChars(q) + '%'} ESCAPE '\\'`,
+            sql`${courses.title} ILIKE ${'%' + escapeLikeChars(q) + '%'} ESCAPE '\\'`,
+            sql`(${users.firstName} || ' ' || ${users.lastName}) LIKE ${'%' + escapeLikeChars(q) + '%'} ESCAPE '\\'`,
           )
         : undefined,
     );
@@ -248,7 +249,7 @@ export async function PATCH(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     const { searchParams } = new URL(req.url);
     const id = Number(searchParams.get('id'));
-    if (!Number.isInteger(id) || id <= 0) {
+    if (!Number.isSafeInteger(id) || id <= 0) {
       return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
     }
     const body = await req.json();
@@ -315,7 +316,7 @@ export async function DELETE(req: NextRequest) {
     }
     const { searchParams } = new URL(req.url);
     const id = Number(searchParams.get('id'));
-    if (!Number.isInteger(id) || id <= 0) {
+    if (!Number.isSafeInteger(id) || id <= 0) {
       return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
     }
 

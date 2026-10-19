@@ -272,6 +272,8 @@ export async function submitStudentRequest(params: {
         .update(`${trackingCode}:${params.studentId}:${now.toISOString()}:AFAGH_CERT`)
         .digest('hex');
       const certNumber = trackingCode.replace(new RegExp('^' + prefix), 'CERT');
+      const formDataJson = JSON.stringify(params.formData);
+      if (formDataJson.length > 100 * 1024) throw new Error('اطلاعات فرم بیش از حد بزرگ است.');
 
       const [row] = await tx
         .insert(student_requests)
@@ -280,7 +282,7 @@ export async function submitStudentRequest(params: {
           studentId: params.studentId,
           processId: proc.id,
           currentStepId: firstStep.id,
-          formData: JSON.stringify(params.formData),
+          formData: formDataJson,
           status: autoApprove ? 'APPROVED' : 'IN_REVIEW',
           digitalStampHash: digitalHash,
           certificateNumber: certNumber,

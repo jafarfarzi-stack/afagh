@@ -41,6 +41,156 @@ if (!policy.ok) {
   console.log(`✓ رمز نقش afagh_app با سیاست پروداکشن سازگار است (طول ${appPassword.length})`);
 }
 
+// ═══ نقش اختصاصی پشتیبان‌گیری/بازیابی (فاز ۳) ═══
+// چرا نقش جدا؟ پشتیبان و بازیابی درون‌برنامه‌ای امروز روی استخرِ مالک (DATABASE_URL)
+// اجرا می‌شود؛ مالک جدول‌ها را DROP/CREATE می‌کند و (چون مالک است) از RLS عبور
+// می‌کند. این یعنی یک نقص در اکشن پشتیبان = دسترسی کاملِ DDL. نقش afagh_backup
+// فقط داده می‌خواند/می‌نویسد، هیچ DDL ندارد و NOBYPASSRLS است.
+//
+// چرا نبودِ متغیر، استقرار را متوقف نمی‌کند؟ این نقش یک «گام تکمیلی» است: تا وقتی
+// DATABASE_URL_BACKUP در اپ تنظیم نشده، پشتیبان با همان مالک کار می‌کند (ریسک
+// باقی‌مانده، مستند در scripts/phase3/README.md). اگر نبودِ رمز کل نصب را می‌شکست،
+// استقرارهای موجود و محیط توسعه بی‌دلیل قفل می‌شدند. پس: هشدار + رد کردن نقش.
+const BACKUP_PASSWORD_RAW = process.env.AFAGH_BACKUP_DB_PASSWORD;
+let backupPassword = null;
+if (BACKUP_PASSWORD_RAW == null || BACKUP_PASSWORD_RAW.trim() === '') {
+  console.warn(
+    '⚠ AFAGH_BACKUP_DB_PASSWORD تعیین نشده — نقش afagh_backup ساخته/به‌روزرسانی نشد.\n' +
+    '   پشتیبان/بازیابی درون‌برنامه‌ای تا تعیین این متغیر با نقش مالک اجرا می‌شود (ریسک باقی‌مانده).',
+  );
+} else {
+  // همان سیاست و همان گزینه‌های نقش afagh_app — سیاست رمز تکرار نمی‌شود.
+  const backupPolicy = checkSecret('AFAGH_BACKUP_DB_PASSWORD', BACKUP_PASSWORD_RAW, {
+    allowWeak: !isProd || process.env.ALLOW_WEAK_SECRETS === '1',
+    failOnShort: false,
+  });
+  if (!backupPolicy.ok) {
+    console.error('❌ ' + backupPolicy.reason);
+    console.error('   برای رد کردن نقش پشتیبان، AFAGH_BACKUP_DB_PASSWORD را بردارید.');
+    console.error('   رمز قوی بسازید:  node scripts/lib/secret-policy.mjs --gen');
+    process.exit(1);
+  } else if (backupPolicy.weak || backupPolicy.short) {
+    console.warn('⚠ ' + backupPolicy.reason);
+  }
+  backupPassword = BACKUP_PASSWORD_RAW;
+}
+
+/**
+ * ساخت/به‌روزرسانی idempotent نقش afagh_backup + گرنت‌ها + سیاست‌های RLS.
+ *
+ * گرنت‌ها دقیقاً بر اساس کارهایی است که backup-actions.ts انجام می‌دهد:
+ *   • SELECT  → دامپ (getUserTables / dumpTable / شمارش آمار)
+ *   • INSERT  → بازگرداندن ردیف‌ها
+ *   • TRUNCATE→ خالی‌کردن جدول پیش از درج (بازیابی = جایگزینی کامل)
+ * UPDATE/DELETE لازم نیست: بازیابی هیچ‌گاه ردیف را وصله نمی‌کند و چیزی را
+ * تک‌تک حذف نمی‌کند. DROP/CREATE هم عمداً گرنت نمی‌شود؛ هیچ GRANTای مالکیت
+ * نمی‌دهد و مسیر بازیابیِ کم‌مجوز، داده‌به‌جای DDL اجرا می‌کند.
+ */
+async function applyBackupRole(db, dbName, password) {
+  // رمز و نام دیتابیس با quote_literal/quote_ident امن می‌شوند (دستورات نقش، پارامتر نمی‌پذیرند).
+  const quotedPassword = (await db.query('SELECT quote_literal($1) AS lit', [password])).rows[0].lit;
+  const quotedDb = (await db.query('SELECT quote_ident($1) AS ident', [dbName])).rows[0].ident;
+
+  await db.query(`
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'afagh_backup') THEN
+    CREATE ROLE afagh_backup LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD ${quotedPassword};
+  ELSE
+    -- چرخش رمز هم مثل afagh_app واقعاً اعمال می‌شود؛ ویژگی‌ها هم همگرا می‌شوند.
+    ALTER ROLE afagh_backup WITH LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD ${quotedPassword};
+  END IF;
+END $$;
+
+GRANT CONNECT ON DATABASE ${quotedDb} TO afagh_backup;
+GRANT USAGE ON SCHEMA public TO afagh_backup;
+GRANT SELECT, INSERT, TRUNCATE ON ALL TABLES IN SCHEMA public TO afagh_backup;
+-- جدول‌های مهاجرت‌های بعدی هم بدون اجرای دوبارهٔ این فایل همین گرنت را بگیرند.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, TRUNCATE ON TABLES TO afagh_backup;
+-- همگرایی: اگر نقش از قبل مجوز گسترده‌تری داشت، به حداقل لازم باریک می‌شود.
+REVOKE UPDATE, DELETE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA public FROM afagh_backup;
+
+-- RLS: نقش NOBYPASSRLS است، پس بدون سیاستِ صریح هیچ ردیفی نمی‌بیند (دامپ خالی
+-- می‌شد). دو سیاست کمینه و فقط برای همین نقش: خواندن برای دامپ، درج برای بازیابی.
+-- سیاست‌های نقش‌های دیگر دست‌نخورده می‌مانند (سیاست‌ها با OR جمع می‌شوند و این‌ها
+-- فقط TO afagh_backup هستند).
+DO $$
+DECLARE t record;
+BEGIN
+  FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
+    EXECUTE format('DROP POLICY IF EXISTS afagh_backup_read ON %I', t.tablename);
+    EXECUTE format('CREATE POLICY afagh_backup_read ON %I FOR SELECT TO afagh_backup USING (true)', t.tablename);
+    EXECUTE format('DROP POLICY IF EXISTS afagh_backup_insert ON %I', t.tablename);
+    EXECUTE format('CREATE POLICY afagh_backup_insert ON %I FOR INSERT TO afagh_backup WITH CHECK (true)', t.tablename);
+  END LOOP;
+END $$;
+
+-- بازیابی داده روی اسکیمای زنده: ترتیب الفبایی جداول با کلیدهای خارجی سازگار
+-- نیست. session_replication_role=replica در همان نشست، تریگرها/FKها را موقتاً
+-- خاموش می‌کند؛ مجوزش فقط برای همین پارامتر و همین نقش است (PG15+). بدون آن،
+-- بازیابیِ داده‌به‌جای DDL ممکن است وسط کار به دلیل FK شکست بخورد.
+DO $$
+BEGIN
+  IF current_setting('server_version_num')::int >= 150000 THEN
+    EXECUTE 'GRANT SET ON PARAMETER session_replication_role TO afagh_backup';
+  ELSE
+    RAISE WARNING 'afagh_backup: PostgreSQL < 15 — بازیابی داده به ترتیب کلیدهای خارجی وابسته است.';
+  END IF;
+EXCEPTION WHEN insufficient_privilege THEN
+  RAISE WARNING 'afagh_backup: GRANT SET ON PARAMETER session_replication_role ممکن نشد — بازیابی داده ممکن است به دلیل FK شکست بخورد.';
+END $$;
+`);
+
+  // ── اعتبارسنجی نقش: هر انحراف امنیتی استقرار را متوقف می‌کند ──
+  const role = await db.query(
+    `SELECT rolcanlogin, rolinherit, rolsuper, rolbypassrls, rolcreaterole, rolcreatedb, rolreplication
+     FROM pg_roles WHERE rolname = 'afagh_backup'`);
+  const rb = role.rows[0];
+  if (!rb) {
+    console.error('❌ نقش afagh_backup ساخته نشد.');
+    process.exit(1);
+  }
+  if (!rb.rolcanlogin || rb.rolinherit || rb.rolsuper || rb.rolbypassrls ||
+      rb.rolcreaterole || rb.rolcreatedb || rb.rolreplication) {
+    console.error('❌ نقش afagh_backup باید LOGIN + NOINHERIT + NOSUPERUSER + NOBYPASSRLS + بدون CREATEDB/CREATEROLE/REPLICATION باشد.');
+    process.exit(1);
+  }
+
+  const over = await db.query(`
+    SELECT count(*)::int AS n
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind = 'r'
+      AND (has_table_privilege('afagh_backup', c.oid, 'UPDATE')
+        OR has_table_privilege('afagh_backup', c.oid, 'DELETE'))`);
+  if (over.rows[0].n > 0) {
+    // هشدار نه خطا: گرنت عمومی/قدیمی نباید استقرار را بشکند، اما اپراتور باید بداند.
+    console.warn(`⚠ afagh_backup روی ${over.rows[0].n} جدول UPDATE/DELETE دارد — انتظار نمی‌رفت (گرنت عمومی؟).`);
+  }
+
+  // آیا نقش واقعاً می‌تواند session_replication_role را در نشست خودش ست کند؟
+  // بدون آن، بازیابیِ داده‌به‌جای‌DDL ممکن است وسط درج‌ها به دلیل FK شکست بخورد.
+  // نسخهٔ سرور در JS سنجیده می‌شود چون has_parameter_privilege روی PG<15 اصلاً وجود ندارد.
+  const versionRow = await db.query(`SHOW server_version_num`);
+  const pgMajor = Math.floor(Number(versionRow.rows[0].server_version_num) / 10000);
+  if (pgMajor >= 15) {
+    const canSetRepl = await db.query(
+      `SELECT has_parameter_privilege('afagh_backup', 'session_replication_role', 'SET') AS can_set`);
+    if (!canSetRepl.rows[0].can_set) {
+      console.warn(
+        '⚠ afagh_backup نمی‌تواند session_replication_role را ست کند — بازیابیِ داده‌به‌جای‌DDL ' +
+        'ممکن است به دلیل ترتیب کلیدهای خارجی شکست بخورد.',
+      );
+    }
+  } else {
+    console.warn(
+      `⚠ سرور PostgreSQL ${pgMajor} است (کمتر از 15) — مجوز پارامتر session_replication_role ممکن نیست؛ ` +
+      'بازیابیِ داده‌به‌جای‌DDL به ترتیب کلیدهای خارجی وابسته می‌شود.',
+    );
+  }
+
+  console.log('✅ نقش afagh_backup: LOGIN/NOINHERIT/NOBYPASSRLS + SELECT/INSERT/TRUNCATE (بدون DDL).');
+}
+
 const client = new pg.Client({ connectionString: PG_URL });
 
 try {
@@ -52,6 +202,12 @@ try {
   try { dbName = new URL(PG_URL).pathname.replace(/^\//, '') || 'afagh_db'; } catch {}
   await client.query(sql.replaceAll('__AFAGH_APP_PASSWORD__', appPassword).replaceAll('__AFAGH_DB__', dbName));
   console.log('✅ سخت‌سازی دیتابیس و نقش afagh_app با موفقیت ایجاد و اعمال شد.');
+
+  // نقش پشتیبان بعد از ماتریس RLS اعمال می‌شود تا سیاست‌هایش روی همان جدول‌ها بنشیند.
+  if (backupPassword) {
+    console.log('در حال ساخت/به‌روزرسانی نقش کم‌مجوز afagh_backup...');
+    await applyBackupRole(client, dbName, backupPassword);
+  }
 
   // ═══ اعتبارسنجی پس از اعمال: کل ماتریس RLS باید فعال باشد، وگرنه استقرار ناموفق است ═══
   const RLS_TABLES = [

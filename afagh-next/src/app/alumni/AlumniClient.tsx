@@ -2,6 +2,7 @@
 
 import React, { useState, useTransition } from 'react';
 import { payRequestAction, saveProfileAction, submitRequestAction } from './actions';
+import { isSafeLinkUrl } from '@/lib/safe-url';
 
 // ═══ پورتال دانش‌آموختگان: خدمات آنلاین پس از فراغت ═══
 
@@ -172,7 +173,7 @@ export default function AlumniClient({ me, services, initialRequests, degrees, i
                         className="px-2 py-1 rounded-lg bg-slate-600 text-white text-[10px] font-black disabled:opacity-50">راهنمای پرداخت</button>
                     </>
                   )}
-                  {r.resultFileUrl && (
+                  {r.resultFileUrl && isSafeLinkUrl(r.resultFileUrl) && (
                     <a href={r.resultFileUrl} className="px-2 py-1 rounded-lg bg-slate-100 text-[10px] font-black">دریافت فایل</a>
                   )}
                 </td>

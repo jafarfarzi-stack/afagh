@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, count, desc, eq, gte, inArray, lte, or, sql, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, gte, lte, or, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/db';
 import { students, users } from '@/db/schema';
@@ -7,7 +7,7 @@ import { scheduled_warnings } from '@/db/schema-warnings';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
-import { authorizedUniversityIds, getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 import {
 
   isWarningStatus,
@@ -15,6 +15,7 @@ import {
   SCHED_WARNINGS_PAGE_SIZE,
 } from '@/lib/scheduled-warnings';
 import { assertCsrf, requireStudentScope } from '@/lib/security';
+import { escapeLikeChars } from '@/lib/persian-search';
 
 // ══════════════════════════════════════════════════════════════════════
 //  API هشدارهای زمان‌بندی‌شدهٔ دانشجو
@@ -48,8 +49,9 @@ async function guard(): Promise<NextResponse | null> {
   try {
     await requireRole(ALLOWED);
     return null;
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'دسترسی غیرمجاز' }, { status: 401 });
+  } catch (e) {
+    log.error('auth_guard_failed', { error: e });
+    return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز' }, { status: 401 });
   }
 }
 
@@ -57,18 +59,15 @@ async function guard(): Promise<NextResponse | null> {
 export async function GET(req: NextRequest) {
   const denied = await guard();
   if (denied) return denied;
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) return NextResponse.json({ ok: false, error: 'دانشگاه فعال معتبر نیست.' }, { status: 403 });
 
   const p = req.nextUrl.searchParams;
 
   if (p.get('action') === 'students') {
     const q = (p.get('q') || '').trim();
     if (q.length < 2) return NextResponse.json({ ok: true, hits: [] });
-    // 🔒 مرز دانشگاه (IDOR): جست‌وجوی دانشجو نباید دانشجوی دانشگاه‌های دیگر را برگرداند.
-    // authorizedUniversityIds: null = حساب پلتفرمی (نامحدود)، [] = deny-all.
-    const allowedIds = await authorizedUniversityIds().catch(() => []);
-    if (Array.isArray(allowedIds) && allowedIds.length === 0) return NextResponse.json({ ok: true, hits: [] });
-    const uniFilter = Array.isArray(allowedIds) ? inArray(students.universityId, allowedIds) : undefined;
-    const like = `%${q}%`;
+    const like = `%${escapeLikeChars(q)}%`;
     const hits = await db
       .select({
         studentId: students.id,
@@ -79,17 +78,15 @@ export async function GET(req: NextRequest) {
       .from(students)
       .innerJoin(users, eq(users.id, students.userId))
       .where(and(
-        uniFilter,
-        or(eq(students.studentCode, q), sql`${users.firstName} || ' ' || ${users.lastName} LIKE ${like}`),
+        eq(students.universityId, uni.id),
+        or(eq(students.studentCode, q), sql`${users.firstName} || ' ' || ${users.lastName} LIKE ${like} ESCAPE '\\'`),
       ))
       .orderBy(students.studentCode)
       .limit(20);
     return NextResponse.json({ ok: true, hits });
   }
 
-  const filters: SQL[] = [];
-  const uni = await getCurrentUniversity().catch(() => null);
-  if (uni) filters.push(eq(scheduled_warnings.universityId, uni.id));
+  const filters: SQL[] = [eq(scheduled_warnings.universityId, uni.id)];
 
   const status = p.get('status') || '';
   if (status) {
@@ -105,23 +102,42 @@ export async function GET(req: NextRequest) {
     }
     filters.push(eq(scheduled_warnings.warningType, type));
   }
-  const studentId = Number(p.get('studentId') || 0);
+  const studentIdRaw = p.get('studentId');
+  const studentId = studentIdRaw ? Number(studentIdRaw) : 0;
+  if (studentIdRaw && (!Number.isSafeInteger(studentId) || studentId <= 0)) {
+    return NextResponse.json({ ok: false, error: 'شناسه دانشجو نامعتبر است.' }, { status: 400 });
+  }
   if (studentId) filters.push(eq(scheduled_warnings.studentId, studentId));
   const dateFrom = p.get('dateFrom');
-  if (dateFrom) filters.push(gte(scheduled_warnings.sendAt, new Date(dateFrom)));
+  if (dateFrom) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) return NextResponse.json({ ok: false, error: 'تاریخ شروع نامعتبر است.' }, { status: 400 });
+    const parsedDate = new Date(dateFrom);
+    if (Number.isNaN(parsedDate.getTime())) return NextResponse.json({ ok: false, error: 'تاریخ شروع نامعتبر است.' }, { status: 400 });
+    filters.push(gte(scheduled_warnings.sendAt, parsedDate));
+  }
   const dateTo = p.get('dateTo');
-  if (dateTo) filters.push(lte(scheduled_warnings.sendAt, new Date(`${dateTo}T23:59:59`)));
+  if (dateTo) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) return NextResponse.json({ ok: false, error: 'تاریخ پایان نامعتبر است.' }, { status: 400 });
+    const parsedDate = new Date(`${dateTo}T23:59:59`);
+    if (Number.isNaN(parsedDate.getTime())) return NextResponse.json({ ok: false, error: 'تاریخ پایان نامعتبر است.' }, { status: 400 });
+    filters.push(lte(scheduled_warnings.sendAt, parsedDate));
+  }
   const q = (p.get('q') || '').trim();
   if (q) {
-    const like = `%${q}%`;
+    const like = `%${escapeLikeChars(q)}%`;
     filters.push(or(
-      sql`${students.studentCode} LIKE ${like}`,
-      sql`${users.firstName} || ' ' || ${users.lastName} LIKE ${like}`,
-      sql`${scheduled_warnings.title} LIKE ${like}`,
+      sql`${students.studentCode} LIKE ${like} ESCAPE '\\'`,
+      sql`${users.firstName} || ' ' || ${users.lastName} LIKE ${like} ESCAPE '\\'`,
+      sql`${scheduled_warnings.title} LIKE ${like} ESCAPE '\\'`,
     )!);
   }
 
-  const page = Math.max(1, Number(p.get('page') || 1));
+  const pageRaw = p.get('page');
+  const pageValue = pageRaw ? Number(pageRaw) : 1;
+  if (!Number.isSafeInteger(pageValue) || pageValue < 1) {
+    return NextResponse.json({ ok: false, error: 'شماره صفحه نامعتبر است.' }, { status: 400 });
+  }
+  const page = Math.min(pageValue, 1_000_000);
   const offset = (page - 1) * SCHED_WARNINGS_PAGE_SIZE;
   const where = filters.length ? and(...filters) : undefined;
 
@@ -185,7 +201,11 @@ export async function POST(req: NextRequest) {
   if (!scope.ok) return NextResponse.json({ ok: false, error: scope.error }, { status: 403 });
 
   const user = await getSessionUser();
-  const uni = await getCurrentUniversity().catch(() => null);
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) return NextResponse.json({ ok: false, error: 'دانشگاه فعال معتبر نیست.' }, { status: 403 });
+  const [studentInScope] = await db.select({ id: students.id }).from(students)
+    .where(and(eq(students.id, d.studentId), eq(students.universityId, uni.id))).limit(1);
+  if (!studentInScope) return NextResponse.json({ ok: false, error: 'دانشجو در دانشگاه فعال یافت نشد.' }, { status: 403 });
 
   try {
     const sendAtDate = new Date(d.sendAt);
@@ -202,7 +222,7 @@ export async function POST(req: NextRequest) {
         sendAt: sendAtDate,
         status: 'pending',
         createdBy: user?.id ?? null,
-        universityId: uni?.id ?? null,
+        universityId: uni.id,
       })
       .returning({ id: scheduled_warnings.id });
 
@@ -230,9 +250,11 @@ export async function PATCH(req: NextRequest) {
   if (csrf) return csrf;
   const denied = await guard();
   if (denied) return denied;
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) return NextResponse.json({ ok: false, error: 'دانشگاه فعال معتبر نیست.' }, { status: 403 });
 
   const id = Number(req.nextUrl.searchParams.get('id') || 0);
-  if (!id) return NextResponse.json({ ok: false, error: 'شناسه هشدار الزامی است.' }, { status: 400 });
+  if (!Number.isSafeInteger(id) || id <= 0) return NextResponse.json({ ok: false, error: 'شناسه هشدار نامعتبر است.' }, { status: 400 });
 
   let body: unknown;
   try {
@@ -251,7 +273,8 @@ export async function PATCH(req: NextRequest) {
 
   // 🔒 مرز دانشگاه (IDOR): هشدار دانشجوی دانشگاه دیگر قابل تغییر نیست
   {
-    const [w] = await db.select({ studentId: scheduled_warnings.studentId }).from(scheduled_warnings).where(eq(scheduled_warnings.id, id)).limit(1);
+    const [w] = await db.select({ studentId: scheduled_warnings.studentId }).from(scheduled_warnings)
+      .where(and(eq(scheduled_warnings.id, id), eq(scheduled_warnings.universityId, uni.id))).limit(1);
     if (!w) return NextResponse.json({ ok: false, error: 'هشدار پیدا نشد.' }, { status: 404 });
     const scope = await requireStudentScope(w.studentId);
     if (!scope.ok) return NextResponse.json({ ok: false, error: scope.error }, { status: 403 });
@@ -264,7 +287,7 @@ export async function PATCH(req: NextRequest) {
       const [prev] = await tx
         .select({ id: scheduled_warnings.id, status: scheduled_warnings.status })
         .from(scheduled_warnings)
-        .where(eq(scheduled_warnings.id, id))
+        .where(and(eq(scheduled_warnings.id, id), eq(scheduled_warnings.universityId, uni.id)))
         .for('update');
       if (!prev) return null;
 
@@ -285,7 +308,8 @@ export async function PATCH(req: NextRequest) {
         delete patch.title;
       }
       if (Object.keys(patch).length) {
-        await tx.update(scheduled_warnings).set(patch).where(eq(scheduled_warnings.id, id));
+        await tx.update(scheduled_warnings).set(patch)
+          .where(and(eq(scheduled_warnings.id, id), eq(scheduled_warnings.universityId, uni.id)));
       }
 
       await appendAudit(tx, {
@@ -306,6 +330,7 @@ export async function PATCH(req: NextRequest) {
     log.error('warning_patch_failed', { error: msg });
     return NextResponse.json({ ok: false, error: 'به‌روزرسانی هشدار ناموفق بود؛ دوباره تلاش کنید.' }, { status: 500 });
   }
+
 }
 
 /** DELETE — حذف هشدار (فقط ADMIN) (?id=) */
@@ -315,16 +340,21 @@ export async function DELETE(req: NextRequest) {
   if (csrf) return csrf;
   try {
     await requireRole(['ADMIN']);
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'دسترسی غیرمجاز' }, { status: 401 });
+  } catch (e) {
+    log.error('auth_guard_failed', { error: e });
+    return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز' }, { status: 401 });
   }
 
+  const uni = await getCurrentUniversity();
+  if (!isRealUniversityId(uni.id)) return NextResponse.json({ ok: false, error: 'دانشگاه فعال معتبر نیست.' }, { status: 403 });
+
   const id = Number(req.nextUrl.searchParams.get('id') || 0);
-  if (!id) return NextResponse.json({ ok: false, error: 'شناسه هشدار الزامی است.' }, { status: 400 });
+  if (!Number.isSafeInteger(id) || id <= 0) return NextResponse.json({ ok: false, error: 'شناسه هشدار نامعتبر است.' }, { status: 400 });
 
   // 🔒 مرز دانشگاه (IDOR): حتی ADMIN یک دانشگاه نباید هشدار دانشگاه دیگر را حذف کند
   {
-    const [w] = await db.select({ studentId: scheduled_warnings.studentId }).from(scheduled_warnings).where(eq(scheduled_warnings.id, id)).limit(1);
+    const [w] = await db.select({ studentId: scheduled_warnings.studentId }).from(scheduled_warnings)
+      .where(and(eq(scheduled_warnings.id, id), eq(scheduled_warnings.universityId, uni.id))).limit(1);
     if (!w) return NextResponse.json({ ok: false, error: 'هشدار پیدا نشد.' }, { status: 404 });
     const scope = await requireStudentScope(w.studentId);
     if (!scope.ok) return NextResponse.json({ ok: false, error: scope.error }, { status: 403 });
@@ -335,7 +365,7 @@ export async function DELETE(req: NextRequest) {
     const deleted = await db.transaction(async (tx) => {
       const [row] = await tx
         .delete(scheduled_warnings)
-        .where(eq(scheduled_warnings.id, id))
+        .where(and(eq(scheduled_warnings.id, id), eq(scheduled_warnings.universityId, uni.id)))
         .returning({ id: scheduled_warnings.id });
       if (!row) return null;
       await appendAudit(tx, {

@@ -611,7 +611,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
   }
   } catch (e: unknown) {
     // لاگ تشخیصی سمت سرور — استک کامل برای ریشه‌یابی خطاهای نامرئی کلاینت
-    console.error(`[runReport:${kind}]`, e instanceof Error ? (e.stack || e.message) : e);
+    console.error(`[runReport:${kind}]`, e instanceof Error ? e.message : String(e));
     throw e;
   }
 }

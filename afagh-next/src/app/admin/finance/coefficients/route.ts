@@ -50,10 +50,16 @@ export async function POST(req: NextRequest) {
   const auth = await checkFinanceAuth();
   if (!auth) return NextResponse.json({ error: 'دسترسی غیرمجاز' }, { status: 403 });
 
-  const body = await req.json();
-  const { termId, variableCoefficient, fixedCoefficient, note } = body;
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'بدنهٔ درخواست نامعتبر است.' }, { status: 400 });
+  }
+  const { termId: rawTermId, variableCoefficient, fixedCoefficient, note } = (body ?? {}) as Record<string, unknown>;
 
-  if (!termId) return NextResponse.json({ error: 'ترم الزامی است' }, { status: 400 });
+  const termId = Number(rawTermId);
+  if (!Number.isSafeInteger(termId) || termId <= 0) return NextResponse.json({ error: 'ترم الزامی است' }, { status: 400 });
 
   const vCoeff = Number(variableCoefficient);
   const fCoeff = Number(fixedCoefficient);
@@ -104,7 +110,7 @@ export async function POST(req: NextRequest) {
         .set({
           variableCoefficient: String(vCoeff),
           fixedCoefficient: String(fCoeff),
-          note: note || null,
+          note: note ? String(note) : null,
           updatedAt: new Date(),
         })
         .where(and(eq(tuition_coefficients.id, existing.id), uniScope));
@@ -123,7 +129,7 @@ export async function POST(req: NextRequest) {
       termId,
       variableCoefficient: String(vCoeff),
       fixedCoefficient: String(fCoeff),
-      note: note || null,
+      note: note ? String(note) : null,
     }).returning({ id: tuition_coefficients.id });
     await appendAudit(tx, {
       actorUserId: auth.id ?? null,
@@ -140,12 +146,16 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  // 🔒 CSRF: هم‌مبدأسنجی درخواست (DELETE هم تغییردهنده است)
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
+
   const auth = await checkFinanceAuth();
   if (!auth) return NextResponse.json({ error: 'دسترسی غیرمجاز' }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
   const id = Number(searchParams.get('id'));
-  if (!id) return NextResponse.json({ error: 'شناسه الزامی است' }, { status: 400 });
+  if (!Number.isSafeInteger(id) || id <= 0) return NextResponse.json({ error: 'شناسه الزامی است' }, { status: 400 });
   const uni = await getCurrentUniversity().catch(() => null);
   if (!uni) return NextResponse.json({ error: 'دانشگاه فعال نامشخص است' }, { status: 400 });
   const [row] = await db.select({ universityId: tuition_coefficients.universityId })

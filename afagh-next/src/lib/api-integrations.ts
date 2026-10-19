@@ -12,6 +12,7 @@ import {
 import { getNumber, getSetting } from '@/lib/settings';
 import { isDemoMode } from '@/lib/auth';
 import { students, users } from '@/db/schema';
+import { maskNationalCode } from '@/lib/verification';
 
 export interface IntegrationServiceDef {
   serviceName: string;
@@ -127,20 +128,20 @@ export async function executeIrandocCheck(params: {
   const threshold = params.maxAllowedThreshold ?? 20.0;
   const irandocBase = (await getSetting('IRANDOC_BASE_URL')).replace(/\/+$/, '');
 
-  const audit = (status: number, body: unknown, ok: boolean) =>
+  const audit = (status: number, ok: boolean) =>
     db.insert(api_audit_logs).values({
       serviceName: 'IRANDOC_SIMILARITY',
       requestUrl: (irandocBase || 'LOCAL') + '/similarity-check',
       requestPayload: JSON.stringify({
-        national_id: params.nationalCode,
-        tracking_code: params.trackingCode,
-        thesis_title: params.thesisTitle,
+        national_id_masked: maskNationalCode(params.nationalCode),
+        tracking_code_hash: crypto.createHash('sha256').update(params.trackingCode).digest('hex'),
+        has_thesis_title: Boolean(params.thesisTitle),
       }),
       responseStatus: status,
-      responseBody: JSON.stringify(body),
+      responseBody: null,
       durationMs: Date.now() - startTime,
       isSuccess: ok ? 1 : 0,
-    }).catch(err => console.error('API audit log failed:', err));
+    }).catch(err => console.error('API audit log failed:', err instanceof Error ? err.message : String(err)));
 
   // ── مسیر ۱: اتصال واقعی به سرویس ──
   if (irandocBase) {
@@ -175,7 +176,7 @@ export async function executeIrandocCheck(params: {
         status: isApproved ? 'COMPLETED' : 'REJECTED',
         similarityPercentage: similarity,
         maxAllowedThreshold: threshold,
-        certificateUrl: `${irandocBase}/cert/verify-${params.trackingCode}.pdf`,
+        certificateUrl: `${irandocBase}/cert/verify-${encodeURIComponent(params.trackingCode)}.pdf`,
         trackingCode: params.trackingCode,
         thesisTitle: params.thesisTitle,
         decision: decision === 'AUTO_APPROVE' ? 'AUTO_APPROVE' : isApproved ? 'AUTO_APPROVE' : 'REJECT_EXCEED_LIMIT',
@@ -184,7 +185,7 @@ export async function executeIrandocCheck(params: {
           : `درصد مشابهت (${similarity}٪) از سقف مجاز (${threshold}٪) بیشتر است — نیاز به اصلاح متن.`)),
         durationMs: Date.now() - startTime,
       };
-      await audit(200, result, true);
+      await audit(200, true);
       return result;
     } catch (err) {
       const result: IrandocCheckResult = {
@@ -195,10 +196,10 @@ export async function executeIrandocCheck(params: {
         trackingCode: params.trackingCode,
         thesisTitle: params.thesisTitle,
         decision: 'MANUAL_REVIEW',
-        message: `اتصال به سرویس همانندجویی ناموفق بود: ${(err as Error).message} — بررسی دستی توسط کارشناس.`,
+          message: 'اتصال به سرویس همانندجویی ناموفق بود؛ بررسی دستی توسط کارشناس لازم است.',
         durationMs: Date.now() - startTime,
       };
-      await audit(502, result, false);
+      await audit(502, false);
       return result;
     }
   }
@@ -228,7 +229,7 @@ export async function executeIrandocCheck(params: {
         : `[دمو — بدون اتصال به سرویس] مشابهت محاسبه‌شده ${similarity}٪ — بالای سقف ${threshold}٪.`,
       durationMs,
     };
-    await audit(200, result, isApproved);
+    await audit(200, isApproved);
     return result;
   }
 
@@ -244,7 +245,7 @@ export async function executeIrandocCheck(params: {
     message: 'سرویس همانندجویی ایرانداک پیکربندی نشده است (IRANDOC_BASE_URL).',
     durationMs: Date.now() - startTime,
   };
-  await audit(503, result, false);
+  await audit(503, false);
   return result;
 }
 

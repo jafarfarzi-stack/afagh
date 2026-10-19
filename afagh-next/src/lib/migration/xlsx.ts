@@ -23,9 +23,14 @@ function crc32(buf: Buffer): number {
   return (c ^ -1) >>> 0;
 }
 
+const MAX_ENTRY_BYTES = 25 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
+const TOO_BIG = 'فایل اکسل بیش از حد بزرگ است (احتمال فشرده‌سازی مخرب).';
+
 /** استخراج همهٔ عضوهای یک آرشیو ZIP (روش‌های store و deflate) */
 export function unzip(buf: Buffer): Map<string, Buffer> {
   const out = new Map<string, Buffer>();
+  let total = 0;
   // «پایان دایرکتوری مرکزی» را از انتها پیدا می‌کنیم (ممکن است کامنت داشته باشد)
   let eocd = -1;
   for (let i = buf.length - 22; i >= 0 && i > buf.length - 22 - 65536; i--) {
@@ -39,6 +44,7 @@ export function unzip(buf: Buffer): Map<string, Buffer> {
     if (buf.readUInt32LE(p) !== 0x02014b50) break;
     const method = buf.readUInt16LE(p + 10);
     const compSize = buf.readUInt32LE(p + 20);
+    if (buf.readUInt32LE(p + 24) > MAX_ENTRY_BYTES) throw new Error(TOO_BIG);
     const nameLen = buf.readUInt16LE(p + 28);
     const extraLen = buf.readUInt16LE(p + 30);
     const commentLen = buf.readUInt16LE(p + 32);
@@ -50,7 +56,16 @@ export function unzip(buf: Buffer): Map<string, Buffer> {
     const dataStart = localOff + 30 + lNameLen + lExtraLen;
     const raw = buf.subarray(dataStart, dataStart + compSize);
     if (!name.endsWith('/')) {
-      out.set(name, method === 0 ? Buffer.from(raw) : inflateRawSync(raw));
+      let data: Buffer;
+      try {
+        data = method === 0 ? Buffer.from(raw) : inflateRawSync(raw, { maxOutputLength: MAX_ENTRY_BYTES });
+      } catch (e) {
+        if (e instanceof RangeError) throw new Error(TOO_BIG);
+        throw new Error('فایل اکسل فشرده‌سازی معتبر ندارد.');
+      }
+      total += data.length;
+      if (total > MAX_TOTAL_BYTES) throw new Error(TOO_BIG);
+      out.set(name, data);
     }
     p += 46 + nameLen + extraLen + commentLen;
   }

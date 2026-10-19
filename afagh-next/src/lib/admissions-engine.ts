@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { hashPassword } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { createLogger, maskSecrets } from '@/lib/logger';
 import {
   admissions_staging,
   degree_level_configs,
@@ -13,6 +14,10 @@ import {
   students,
   users,
 } from '@/db/schema';
+
+// خطاهای خام Postgres می‌توانند مقدار نقض‌شده (کد ملی) را در پیام داشته باشند؛
+// پس همهٔ خطاها از لاگر ماسک‌دار عبور می‌کنند.
+const log = createLogger({ mod: 'admissions' });
 
 // ============================================================================
 // نمونه داده‌های نگاشت اولیه سازمان سنجش (Default Sanjesh Mappings)
@@ -131,7 +136,7 @@ export async function ensureDefaultSanjeshMappings() {
           // نامرتبط باشد)، از ایجاد نگاشت صرف‌نظر می‌کنیم و هشدار می‌دهیم؛
           // رکوردهای سنجشِ بدون نگاشت با وضعیت PENDING_MAPPING می‌مانند و
           // کارشناس بعداً می‌تواند به‌صورت دستی نگاشت کند.
-          console.warn(`[sanjesh-mappings] رشتهٔ داخلی برای «${sm.majorName}» پیدا نشد — نگاشت ایجاد نشد (${sm.sanjeshCode}).`);
+          log.warn('sanjesh_mapping_missing', { majorName: sm.majorName, sanjeshCode: sm.sanjeshCode });
           continue;
         }
         await db.insert(sanjesh_mappings).values({
@@ -143,7 +148,7 @@ export async function ensureDefaultSanjeshMappings() {
       }
     }
   } catch (err) {
-    console.error('Error ensuring Sanjesh mappings:', err);
+    log.error('sanjesh_mappings_failed', { err });
   }
 }
 
@@ -312,7 +317,7 @@ export async function parseAndStageSanjeshData(rawText: string, entryYear = 1405
 
     // ── اعتبارسنجی کد ملی: ۱۰ رقم — خطوط نامعتبر بی‌صدا وارد سیستم نمی‌شوند ──
     if (!NATIONAL_CODE_RE.test(nationalCode)) {
-      console.warn(`[sanjesh-parser] کد ملی نامعتبر نادیده گرفته شد: «${maskNc(nationalCode)}»`);
+      log.warn('sanjesh_invalid_national_code', { nationalCode: maskNc(nationalCode) });
       skippedInvalid++;
       continue;
     }
@@ -366,7 +371,7 @@ export async function parseAndStageSanjeshData(rawText: string, entryYear = 1405
   }
 
   if (skippedInvalid || skippedDuplicates) {
-    console.warn(`[sanjesh-parser] ${skippedInvalid} خط نامعتبر و ${skippedDuplicates} کد ملی تکراری نادیده گرفته شد.`);
+    log.warn('sanjesh_parse_skipped', { skippedInvalid, skippedDuplicates });
   }
   return stagedResults;
 }
@@ -500,9 +505,14 @@ export async function importStagedToStudents(stagingIds: number[]) {
         nationalCode: row.nationalCode,
       });
     } catch (err: any) {
-      // رکورد ناموفق به‌طور کامل rollback شد — بقیهٔ دسته ادامه می‌یابد
-      console.error(`[admissions-import] staging ${row.id} (${maskNc(row.nationalCode)}) ناموفق:`, err?.message);
-      failures.push({ stagingId: row.id, error: err?.message || 'خطای ناشناخته' });
+      // رکورد ناموفق به‌طور کامل rollback شد — بقیهٔ دسته ادامه می‌یابد.
+      // err ممکن است پیام unique-violation با کد ملی خام داشته باشد؛ هم لاگ و
+      // هم متن برگشتی به UI از فیلتر maskSecrets عبور می‌کند.
+      const rawMessage = err instanceof Error
+        ? err.message
+        : (err?.message ?? (typeof err === 'string' ? err : 'خطای ناشناخته'));
+      log.error('staging_import_failed', { stagingId: row.id, err });
+      failures.push({ stagingId: row.id, error: String(maskSecrets(rawMessage)) });
     }
   }
 

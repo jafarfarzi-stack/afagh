@@ -9,6 +9,7 @@
 
 import type { ReportFilters, ReportResult } from './report-helpers';
 import { paged, studentWhere, joinAnd } from './report-helpers';
+import { escapeLikeChars } from '@/lib/persian-search';
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { requireRole } from '@/lib/auth';
@@ -40,10 +41,10 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
   switch (kind) {
     // ── 🏚 کلاس‌های خالی: بدون هیچ ردیف schedules برای ارائه‌های فعال ترم ──
     case 'empty-rooms': {
-      const like = f.q ? `%${f.q}%` : null;
+      const like = f.q ? `%${escapeLikeChars(String(f.q))}%` : null;
       const conds = [
         ...(uni ? [sql`(r."universityId" = ${uni} OR r."universityId" IS NULL)`] : []),
-        ...(like ? [sql`(r.name ILIKE ${like} OR r."buildingName" ILIKE ${like})`] : []),
+        ...(like ? [sql`(r.name ILIKE ${like} ESCAPE '\\' OR r."buildingName" ILIKE ${like} ESCAPE '\\')`] : []),
         sql`NOT EXISTS (SELECT 1 FROM schedules sch
           JOIN course_offerings o ON o.id = sch."offeringId"
           JOIN academic_terms t ON t.id = o."termId"
@@ -67,11 +68,11 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
 
     // ── 🗓 برنامه هفتگی کلاس‌ها: هر سانس (کلاس/روز/ساعت) یک ردیف ──
     case 'weekly-timetable': {
-      const like = f.q ? `%${f.q}%` : null;
+      const like = f.q ? `%${escapeLikeChars(String(f.q))}%` : null;
       const conds = [
         sql`t."termCode" = ${term}`,
         ...(uni ? [sql`(sch."universityId" = ${uni} OR sch."universityId" IS NULL)`] : []),
-        ...(like ? [sql`(r.name ILIKE ${like} OR c.title ILIKE ${like} OR c.code ILIKE ${like})`] : []),
+        ...(like ? [sql`(r.name ILIKE ${like} ESCAPE '\\' OR c.title ILIKE ${like} ESCAPE '\\' OR c.code ILIKE ${like} ESCAPE '\\')`] : []),
       ];
       const r = await paged(
         [

@@ -1,4 +1,6 @@
 import { and, count, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { cookies } from 'next/headers';
+import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { degree_level_configs, departments, educational_regulations, faculties, legacy_code_maps, majors, roles, staff, students, universities, user_roles, users } from '@/db/schema';
 import type { RegulationPick } from './types';
@@ -12,10 +14,40 @@ export const dynamic = 'force-dynamic';
 
 const PER_PAGE = 50;
 
+// ═══════════════════════════════════════════════════════════════════════
+//  فیلتر کد ملی (دادهٔ حساس) — هرگز در URL، تاریخچهٔ مرورگر یا Referer
+//  قرار نمی‌گیرد. مقدار آن در کوکی HttpOnlyِ نشست نگه‌داری می‌شود تا
+//  فیلتر سمت سرور همچنان کار کند و با رفرش/جابه‌جایی کلاینتی از بین نرود.
+//  سایر فیلترهای غیرحساس مثل قبل در query string می‌مانند.
+// ═══════════════════════════════════════════════════════════════════════
+const NC_FILTER_COOKIE = 'afagh_students_nc_filter';
+const NC_COOKIE_OPTS = {
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  secure: process.env.NODE_ENV === 'production',
+  path: '/admin/students',
+};
+
+async function setStudentNationalCodeFilter(code: string) {
+  'use server';
+  // اکشن سروری نیز مثل خود صفحه محافظت می‌شود (فقط ارقام فارسی/عربی/لاتین)
+  const { requireRoleOrPermission } = await import('@/lib/permissions-enforcer');
+  await requireRoleOrPermission(
+    ['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'GRADUATEAFFAIRS'],
+    ['students:view_dossier'],
+  );
+  const store = await cookies();
+  const clean = String(code ?? '').replace(/[^\d۰-۹٠-٩]/g, '').slice(0, 20);
+  if (clean) store.set(NC_FILTER_COOKIE, clean, NC_COOKIE_OPTS);
+  // حذف با همان pathی که ست شده انجام می‌شود تا کوکی واقعاً پاک شود
+  else store.set(NC_FILTER_COOKIE, '', { ...NC_COOKIE_OPTS, maxAge: 0 });
+  revalidatePath('/admin/students');
+}
+
 export default async function AdminStudentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string; status?: string; degree?: string; sort?: string; f_code?: string; f_name?: string; f_nc?: string; f_major?: string; f_year?: string; university?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; status?: string; degree?: string; sort?: string; f_code?: string; f_name?: string; f_major?: string; f_year?: string; university?: string }>;
 }) {
   const { requireRoleOrPermission } = await import('@/lib/permissions-enforcer');
   const user = await requireRoleOrPermission(
@@ -24,6 +56,7 @@ export default async function AdminStudentsPage({
   );
   const canEditGrades = user.roles.some(r => r === 'ADMIN' || r === 'GRADUATEAFFAIRS');
   const sp = await searchParams;
+  const cookieStore = await cookies();
 
   // ── فهرست دانشگاه‌ها ──
   let allUniversities: { id: number; code: string; title: string; kind: string; saminCode: string | null }[] = [];
@@ -41,7 +74,8 @@ export default async function AdminStudentsPage({
   const sortRaw = (sp.sort || '').trim();
   const fCode = (sp.f_code || '').trim().slice(0, 20);
   const fName = (sp.f_name || '').trim().slice(0, 60);
-  const fNc = (sp.f_nc || '').trim().slice(0, 20);
+  // کد ملی فقط از کوکی HttpOnly خوانده می‌شود؛ پارامتر URL آن حذف شده است
+  const fNc = (cookieStore.get(NC_FILTER_COOKIE)?.value ?? '').trim().slice(0, 20);
   const fMajor = (sp.f_major || '').trim().slice(0, 60);
   const fYear = (sp.f_year || '').trim().slice(0, 4);
 
@@ -335,6 +369,7 @@ const [head] = await db.select().from(roles).where(eq(roles.code, 'DEP_HEAD')).l
 
       <StudentsManagerClient
         key={currentUniversity?.code ?? 'AFAGH'}
+        setNationalCodeFilter={setStudentNationalCodeFilter}
         logoUrl={currentUniversity?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => ''))}
         codeLabels={codeLabels}
         regulations={regulationPicks}

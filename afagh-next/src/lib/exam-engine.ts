@@ -29,7 +29,7 @@ import { db } from '@/db';
 import {
   academic_terms, course_exam_sessions, course_offerings, enrollments,
   exam_attendances, exam_course_packets, exam_halls, exam_invigilators,
-  exam_minutes, exam_sessions, grade_appeals, grade_unfinalize_requests,
+  exam_minutes, exam_sessions, grade_appeals,
   instructor_deliveries,
   invigilators, seat_allocations,
 } from '@/db/schema';
@@ -40,6 +40,9 @@ import { auditChain, type AuditTx } from '@/lib/audit-chain';
 import { decideAppealOutcome, scoreFromComponents, validateCheckIns } from '@/lib/exam-core';
 import type { ExamCheckIn, ExamCheckInInput } from '@/lib/exam-core';
 import type { RubricWeights } from '@/app/professor/grades/types';
+import { DEFAULT_RUBRIC, isRubricValid } from '@/app/professor/grades/grades-core';
+import { guardFinalizedGradeWrite } from '@/lib/grades/finalize-lock';
+import { logGradeChange, type LogGradeChangeParams } from '@/lib/grade-change-log';
 
 export type { ExamCheckIn, ExamCheckInInput } from '@/lib/exam-core';
 
@@ -59,6 +62,19 @@ export interface ExamAppealRecheck {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** بارم امتحان فقط از سرور است؛ بارم ارسالی کلاینت هرگز برای سقف به کار نمی‌رود */
+function serverExamRubric(): RubricWeights {
+  if (!isRubricValid(DEFAULT_RUBRIC)) throw new Error('بارم‌بندی سرور نامعتبر است (مجموع باید ۲۰ باشد).');
+  return DEFAULT_RUBRIC;
+}
+
+function assertComponentScores(c: { midtermScore?: number; finalExamScore?: number }, rubric: RubricWeights) {
+  const bad = (v: number | null | undefined, max: number) => v != null && (!Number.isFinite(v) || v < 0 || v > max);
+  if (bad(c.midtermScore, rubric.midterm) || bad(c.finalExamScore, rubric.finalExam)) {
+    throw new Error('نمرهٔ نامعتبر یا خارج از بارم در ردیف ثبت نمره.');
+  }
+}
 
 // ───────────── توکن برداشت اوراق — فقط هش در پایگاه داده ─────────────
 //
@@ -717,42 +733,25 @@ export async function verifyInstructorPickupToken(token: string): Promise<boolea
  */
 export async function submitExamGrades(
   actorUserId: number | null,
-  px: { offeringId: number; instructorId: number; rubric: RubricWeights; entries: ExamGradeEntry[] },
+  px: { offeringId: number; instructorId: number; entries: ExamGradeEntry[] },
 ) {
-  const { offeringId, instructorId, rubric, entries } = px;
+  const { offeringId, instructorId, entries } = px;
   if (!entries.length) throw new Error('ردیف نمره‌ای ارسال نشده است.');
+  const rubric = serverExamRubric();
 
-  return db.transaction(async tx => {
+  const gradeChanges: LogGradeChangeParams[] = [];
+  const out = await db.transaction(async tx => {
     // مالکیت دانشگاه ارائه ↔ ترم
     const [off] = await tx
       .select({
         universityId: course_offerings.universityId,
         termId: course_offerings.termId,
-        finalizedAt: course_offerings.gradesFinalizedAt,
       })
       .from(course_offerings)
       .where(eq(course_offerings.id, offeringId))
       .limit(1);
     if (!off) throw new Error('ارائهٔ درس یافت نشد.');
 
-    // 🔒 قفل نمرهٔ نهایی‌شده: upsert پایین `FINALIZED` را روی ردیف نهایی‌شده هم
-    //   می‌نوشت. حالا اگر نمرات ارائه نهایی شده باشد، ارسال نمره رد می‌شود مگر
-    //   درخواست بازگشاییِ تأییدشده وجود داشته باشد.
-    if (off.finalizedAt) {
-      const [approved] = await tx
-        .select({ id: grade_unfinalize_requests.id })
-        .from(grade_unfinalize_requests)
-        .where(and(
-          eq(grade_unfinalize_requests.offeringId, offeringId),
-          eq(grade_unfinalize_requests.status, 'APPROVED'),
-        ))
-        .limit(1);
-      if (!approved) {
-        throw new Error(
-          'نمرات این درس نهایی شده است؛ ارسال نمره فقط پس از تأیید درخواست بازگشایی نمره ممکن است.',
-        );
-      }
-    }
     const [offTerm] = await tx
       .select({ universityId: academic_terms.universityId })
       .from(academic_terms)
@@ -781,10 +780,16 @@ export async function submitExamGrades(
     // اگر حتی یک entries[].studentId در این ارائه ثبت‌نام نباشد، کل بسته رد
     // می‌شود (throw → rollback) تا ردیف ثبت‌نام جعلی ساخته نشود.
     const enrolledRows = await tx
-      .select({ studentId: enrollments.studentId, samaGradeStatusCode: enrollments.samaGradeStatusCode })
+      .select({
+        id: enrollments.id,
+        studentId: enrollments.studentId,
+        gradeValue: enrollments.gradeValue,
+        gradeStatus: enrollments.gradeStatus,
+        samaGradeStatusCode: enrollments.samaGradeStatusCode,
+      })
       .from(enrollments)
       .where(eq(enrollments.offeringId, offeringId));
-    const enrolledByStudent = new Map(enrolledRows.map(r => [r.studentId, r.samaGradeStatusCode]));
+    const enrolledByStudent = new Map(enrolledRows.map(r => [r.studentId, r]));
     const outsiders = entries.filter(e => !enrolledByStudent.has(e.studentId));
     if (outsiders.length) {
       throw new Error(`${outsiders.length} دانشجو در این درس ثبت‌نام نشده‌اند؛ کل بستهٔ نمرات رد شد.`);
@@ -797,14 +802,12 @@ export async function submitExamGrades(
       gradeValue: string; gradeStatus: 'FINALIZED'; samaGradeStatusCode: string | null;
     }[] = [];
     for (const e of entries) {
-      if (!Number.isFinite(e.midtermScore ?? 0) || !Number.isFinite(e.finalExamScore ?? 0)) {
-        throw new Error('نمرهٔ نامعتبر در ردیف ثبت نمره.');
-      }
+      assertComponentScores(e, rubric);
       const total = round2(scoreFromComponents(
         { midtermScore: e.midtermScore, finalExamScore: e.finalExamScore }, rubric,
       ));
       const samaCode = await resolveSamaGradeStatusCode(
-        e.studentId, offeringId, String(total), enrolledByStudent.get(e.studentId) ?? null,
+        e.studentId, offeringId, String(total), enrolledByStudent.get(e.studentId)?.samaGradeStatusCode ?? null,
       );
       gradeRows.push({
         studentId: e.studentId,
@@ -813,6 +816,28 @@ export async function submitExamGrades(
         gradeValue: String(total),
         gradeStatus: 'FINALIZED',
         samaGradeStatusCode: samaCode,
+      });
+    }
+
+    const gate = await guardFinalizedGradeWrite(tx, offeringId, 'ثبت نمرهٔ امتحان');
+    if (!gate.ok) throw new Error(gate.error);
+
+    for (const g of gradeRows) {
+      const old = enrolledByStudent.get(g.studentId);
+      if (!old) continue;
+      gradeChanges.push({
+        enrollmentId: old.id,
+        studentId: g.studentId,
+        offeringId,
+        action: 'FINALIZED',
+        oldGradeValue: old.gradeValue,
+        newGradeValue: g.gradeValue,
+        oldGradeStatus: old.gradeStatus,
+        newGradeStatus: 'FINALIZED',
+        oldSamaStatusCode: old.samaGradeStatusCode,
+        newSamaStatusCode: g.samaGradeStatusCode,
+        actorUserId: actorUserId ?? undefined,
+        actorRole: 'PROFESSOR',
       });
     }
 
@@ -854,6 +879,9 @@ export async function submitExamGrades(
     log.info('exam_grades_submitted', { offeringId, count: entries.length });
     return { ok: true, count: entries.length, gradesHash };
   });
+
+  for (const c of gradeChanges) await logGradeChange(c);
+  return out;
 }
 
 // ─────────────────────────── مرحلهٔ ۷: اعتراض ───────────────────────────
@@ -927,15 +955,17 @@ export async function answerExamAppeal(
   px: {
     appealId: number;
     professorReply: string;
-    rubric: RubricWeights;
     recheck: ExamAppealRecheck;
     /** هویت استاد پاسخ‌دهنده — باید استاد همان درس باشد (مالکیت) */
     staffId: number;
   },
 ) {
-  const { appealId, professorReply, rubric, recheck, staffId } = px;
+  const { appealId, professorReply, recheck, staffId } = px;
+  const rubric = serverExamRubric();
+  assertComponentScores(recheck, rubric);
 
-  return db.transaction(async tx => {
+  let gradeChange: LogGradeChangeParams | null = null;
+  const out = await db.transaction(async tx => {
     const [appeal] = await tx
       .select({
         id: grade_appeals.id,
@@ -961,7 +991,7 @@ export async function answerExamAppeal(
     }
 
     const [enr] = await tx
-      .select({ gradeValue: enrollments.gradeValue })
+      .select({ studentId: enrollments.studentId, gradeValue: enrollments.gradeValue, gradeStatus: enrollments.gradeStatus })
       .from(enrollments)
       .where(eq(enrollments.id, appeal.enrollmentId))
       .limit(1);
@@ -973,24 +1003,29 @@ export async function answerExamAppeal(
     const { changed, status } = decideAppealOutcome(oldGrade, newTotal);
 
     if (changed) {
-      // 🔒 قفل نمرهٔ نهایی‌شده: پاسخ اع-examination استاد نباید نمرهٔ قطعیِ
-      //   یک ارائهٔ FINALIZED را دور بزند. پیش از این، همین UPDATE بدون هیچ
-      //   بررسی‌ای `gradeValue` را روی ردیف نهایی‌شده می‌نوشت و
-      //   `gradesHash` را هم به‌روز نمی‌کرد ⇒ کارنامه و مدرک ناسازگار می‌شدند.
-      const finalizedAt = await tx
-        .select({ finalizedAt: course_offerings.gradesFinalizedAt })
-        .from(course_offerings)
-        .where(eq(course_offerings.id, appeal.offeringId))
-        .limit(1);
-      if (finalizedAt[0]?.finalizedAt) {
-        throw new Error(
-          'نمرات این درس نهایی شده است؛ اعتراض باید از مسیر «درخواست بازگشایی نمره» و پس از تأیید معاون آموزشی پیگیری شود.',
-        );
-      }
+      // 🔒 گیت مرکزی نمرهٔ نهایی‌شده: تغییر فقط با درخواست بازگشاییِ تأییدشده
+      //   مجاز است (و همان درخواست مصرف می‌شود).
+      const gate = await guardFinalizedGradeWrite(tx, appeal.offeringId, 'پاسخ به اعتراض');
+      if (!gate.ok) throw new Error(gate.error);
       await tx
         .update(enrollments)
         .set({ gradeValue: String(newTotal) })
         .where(eq(enrollments.id, appeal.enrollmentId));
+      if (enr) {
+        gradeChange = {
+          enrollmentId: appeal.enrollmentId,
+          studentId: enr.studentId,
+          offeringId: appeal.offeringId,
+          action: 'APPEAL',
+          oldGradeValue: enr.gradeValue,
+          newGradeValue: String(newTotal),
+          oldGradeStatus: enr.gradeStatus,
+          newGradeStatus: enr.gradeStatus,
+          reason: `اعتراض #${appealId}`,
+          actorUserId: actorUserId ?? undefined,
+          actorRole: 'PROFESSOR',
+        };
+      }
     }
     await tx
       .update(grade_appeals)
@@ -1003,11 +1038,14 @@ export async function answerExamAppeal(
 
     return { ok: true, status, oldGrade, newGrade: newTotal, changed };
   });
+
+  if (gradeChange) await logGradeChange(gradeChange);
+  return out;
 }
 
 // ─────────────────────────── نمای کلی چرخه (برای تست و داشبورد) ───────────────────────────
 
-export async function examChainOverview(sessionId: number) {
+export async function examChainOverview(sessionId: number, universityId: number) {
   const [attendance] = await db
     .select({ issued: count() })
     .from(exam_attendances)
@@ -1028,10 +1066,11 @@ export async function examChainOverview(sessionId: number) {
   const [collected] = await db
     .select({ n: count() })
     .from(course_exam_sessions)
-    .where(eq(course_exam_sessions.isFullyCollected, 1));
+    .where(and(eq(course_exam_sessions.isFullyCollected, 1), eq(course_exam_sessions.universityId, universityId)));
   const deliveries = await db
     .select({ status: instructor_deliveries.status, n: count() })
     .from(instructor_deliveries)
+    .where(eq(instructor_deliveries.universityId, universityId))
     .groupBy(instructor_deliveries.status);
   const [finalized] = await db
     .select({ n: count() })
@@ -1044,6 +1083,7 @@ export async function examChainOverview(sessionId: number) {
   const appeals = await db
     .select({ status: grade_appeals.status, n: count() })
     .from(grade_appeals)
+    .where(eq(grade_appeals.universityId, universityId))
     .groupBy(grade_appeals.status);
 
   return {

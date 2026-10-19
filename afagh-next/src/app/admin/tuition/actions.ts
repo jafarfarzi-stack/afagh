@@ -5,6 +5,7 @@ import { and, eq, isNull, or } from 'drizzle-orm';
 import { db } from '@/db';
 import { academic_terms, term_financial_rules, tuition_rules } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { assertServerActionOrigin } from '@/lib/security';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { mapLegacyFeeRules, normalizeEquivFixedMode, termTypeOf } from '@/lib/tuition-rules';
 import { saveSettings } from '@/lib/settings';
@@ -34,6 +35,8 @@ const numOr = (v: unknown, d = 0): number => {
 
 /** ایجاد یا به‌روزرسانی یک قاعدهٔ شهریه (جدول یکپارچهٔ tuition_rules) */
 export async function saveFeeRuleAction(input: FeeRuleInput): Promise<{ ok: boolean; error?: string }> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   await requireRole(FINANCE);
 
   const fixedTuition = numOr(input.fixedTuition);
@@ -82,6 +85,8 @@ export async function saveFeeRuleAction(input: FeeRuleInput): Promise<{ ok: bool
 
 /** حذف یک قاعدهٔ شهریه */
 export async function deleteFeeRuleAction(id: number): Promise<{ ok: boolean; error?: string }> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   await requireRole(FINANCE);
   const uni = await getCurrentUniversity().catch(() => null);
   if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
@@ -121,6 +126,8 @@ export async function importLegacyFeeRulesAction(): Promise<{
   created?: number;
   skipped?: number;
 }> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   await requireRole(FINANCE);
 
   const uni = await getCurrentUniversity().catch(() => null);
@@ -206,6 +213,8 @@ export async function importLegacyFeeRulesAction(): Promise<{
  * مقدار پیش از ذخیره نرمال‌سازی می‌شود تا مقدار نامعتبر در دیتابیس نماند.
  */
 export async function setEquivFixedModeAction(mode: string): Promise<{ ok: boolean; error?: string; saved?: string }> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   await requireRole(FINANCE);
   const value = normalizeEquivFixedMode(mode);
   await saveSettings({ EQUIV_FIXED_TUITION_MODE: value });

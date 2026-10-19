@@ -15,6 +15,7 @@ import {
   previewExamConflictsAction,
 } from './actions';
 import type { SubmitResult } from '@/lib/enroll-engine';
+import { isSafeLinkUrl } from '@/lib/safe-url';
 
 export type ClassScheduleItem = {
   dayOfWeek: number;
@@ -155,6 +156,7 @@ export default function EnrollClient(props: {
   } | null;
 }) {
   const router = useRouter();
+  const sajjadHref = isSafeLinkUrl(props.sajjadPortalUrl) ? props.sajjadPortalUrl : 'https://portal.saorg.ir';
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [result, setResult] = useState<SubmitResult | null>(null);
@@ -435,8 +437,8 @@ export default function EnrollClient(props: {
             <ol className="list-decimal list-inside space-y-1 text-slate-700 leading-relaxed">
               <li>
                 ورود به <b>سامانه ملی سجاد</b> به نشانی{' '}
-                <a href={props.sajjadPortalUrl} target="_blank" rel="noreferrer" className="text-blue-700 font-bold underline">
-                  {props.sajjadPortalUrl.replace(/^https?:\/\//, '')}
+                <a href={sajjadHref} target="_blank" rel="noreferrer" className="text-blue-700 font-bold underline">
+                  {sajjadHref.replace(/^https?:\/\//, '')}
                 </a>{' '}
                 و ثبت دادخواست در بخش کمیسیون بررسی موارد خاص دانشگاه آفاق.
               </li>
@@ -454,7 +456,7 @@ export default function EnrollClient(props: {
               📝 ارسال رای کمیسیون و پیگیری در میز خدمات
             </Link>
             <a
-              href={props.sajjadPortalUrl}
+              href={sajjadHref}
               target="_blank"
               rel="noreferrer"
               className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow"

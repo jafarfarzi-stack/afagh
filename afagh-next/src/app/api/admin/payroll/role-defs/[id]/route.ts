@@ -21,7 +21,7 @@ const patchSchema = z.object({
 
 function badId(id: string): number | null {
   const n = Number(id);
-  return Number.isInteger(n) && n > 0 ? n : null;
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 
 /** PUT — ویرایش نقش تدریس */
@@ -62,12 +62,14 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ ok: true, roleDef: updated });
   } catch (err) {
     log.error('role-defs PUT failed', err);
-    return NextResponse.json({ ok: false, error: (err as Error)?.message || 'خطای ناشناخته' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: 'خطای داخلی سرور.' }, { status: 500 });
   }
 }
 
 /** DELETE — فقط اگر هیچ ارائه‌ای از این کد نقش استفاده نکرده باشد */
-export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   try {
     await requireRole([...WRITE_ROLES]);
     const id = badId((await ctx.params).id);
@@ -94,6 +96,6 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
     const msg = (err as Error)?.message;
     if (msg === 'NEXT_REDIRECT' || msg === 'NEXT_NOT_FOUND') throw err;
     log.error('role-defs DELETE failed', err);
-    return NextResponse.json({ ok: false, error: msg || 'خطای ناشناخته' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: 'خطای داخلی سرور.' }, { status: 500 });
   }
 }

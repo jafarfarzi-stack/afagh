@@ -3,6 +3,7 @@ import { paged, studentListReport, studentWhere } from './report-helpers';
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { requireRole } from '@/lib/auth';
+import { escapeLikeChars } from '@/lib/persian-search';
 
 const READ_ROLES = ['ADMIN', 'EDU_EXPERT'];
 
@@ -68,8 +69,8 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       const conds = [];
       if (f.universityId) conds.push(sql`(dt."universityId" = ${f.universityId} OR dt."universityId" IS NULL)`);
       if (f.q) {
-        const like = `%${f.q}%`;
-        conds.push(sql`(dt.code ILIKE ${like} OR dt.title ILIKE ${like})`);
+        const like = `%${escapeLikeChars(String(f.q))}%`;
+        conds.push(sql`(dt.code ILIKE ${like} ESCAPE '\\' OR dt.title ILIKE ${like} ESCAPE '\\')`);
       }
       const r = await paged(
         [
