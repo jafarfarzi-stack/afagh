@@ -507,8 +507,9 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   /* گرید ترم‌ها: در عرض A4 عمودی دقیقاً ۲ کارت در هر ردیف */
   .tr-fin-root .tr-fin-row { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 1.5mm !important; }
   .tr-fin-root .term-block { border-width: 0.6pt !important; border-radius: 1.2mm !important; }
-  .tr-fin-root .term-block > div:first-child { padding: 0.5mm 1.2mm !important; }
-  .tr-fin-root .term-block h4 { font-size: 7.2pt !important; }
+  /* سربرگ کارت ترم: عنوان کامل باید خوانا بماند (۷.۸pt) و بریده نشود */
+  .tr-fin-root .term-block > div:first-child { padding: 0.7mm 1.2mm !important; }
+  .tr-fin-root .term-block h4 { font-size: 7.8pt !important; line-height: 1.35 !important; white-space: normal !important; }
 
   /* ردیف‌های مبلغ ترم: عدد در یک خط می‌ماند، ارتفاع هر ردیف حداقل */
   .tr-fin-root .tr-term-table { font-size: 6.6pt !important; line-height: 1.25 !important; }

@@ -127,16 +127,19 @@ const TERM_FA: Record<number, string> = { 1: 'مهر', 2: 'بهمن', 3: 'تاب
 
 /**
  * عنوان کامل ترم — همان عبارت‌بندی کارنامهٔ تحصیلی:
- *   نیمسال اول سال تحصیلی ۱۴۰۴-۱۴۰۵ / نیمسال دوم سال تحصیلی ... / نیمسال تابستان ۱۴۰۴-۱۴۰۵ / نیمسال معادل‌سازی
+ *   نیمسال اول سال تحصیلی ۱۴۰۴-۱۴۰۵ / نیمسال تابستان ... / نیمسال معادل‌سازی
  * منبع: termCode پنج‌رقمی (سال + رقم نیمسال) از academic_terms.termCode.
+ *
+ * ⚠️ نکتهٔ چاپ: بازهٔ سال باید داخل `dir="ltr"` باشد. خط تیره (-) در متن راست‌به‌چپ
+ * بین دو عدد فارسی، جداکنندهٔ دوجهته نیست و مرورگر دو عدد را جابه‌جا می‌چاپ می‌کند
+ * («۱۴۰۵-۱۴۰۴» به‌جای «۱۴۰۴-۱۴۰۵»). با span LTR ترتیب درست تضمین می‌شود.
  */
-function termFullTitle(t: TranscriptTermView): string {
+function TermTitle({ t }: { t: TranscriptTermView }) {
   const norm = normalizeTermCode(t.termCode);
-  if (!norm) return t.termTitle;
-  if (norm.termType === 'EQUIVALENCE') return 'نیمسال معادل‌سازی';
-  const year = faDigits(norm.displayYear);
-  if (norm.termType === 'SUMMER') return `نیمسال تابستان ${year}`;
-  return `${norm.displaySemester} سال تحصیلی ${year}`;
+  if (!norm) return <>{t.termTitle}</>;
+  if (norm.termType === 'EQUIVALENCE') return <>نیمسال معادل‌سازی</>;
+  const year = <span dir="ltr">{faDigits(norm.displayYear)}</span>;
+  return <>{norm.termType === 'SUMMER' ? 'نیمسال تابستان ' : `${norm.displaySemester} سال تحصیلی `}{year}</>;
 }
 
 const STATUS_FA: Record<string, string> = {  ACTIVE: 'فعال',
@@ -338,7 +341,7 @@ export default function FinancialTranscript({
                     return (
                       <div key={t.termId} className="term-block break-inside-avoid overflow-hidden rounded-lg border border-slate-700">
                         <div className="flex items-center justify-between gap-1 border-b border-slate-700 bg-slate-100 px-2 py-1.5">
-                          <h4 className="text-[11px] font-black text-slate-900">{termFullTitle(t)}</h4>
+                          <h4 className="text-[11px] font-black text-slate-900"><TermTitle t={t} /></h4>
                           <span className={`rounded-full border px-1.5 py-px text-[9px] font-black ${b.cls}`}>{b.text}</span>
                         </div>
                         {t.courses && t.courses.length > 0 && (
