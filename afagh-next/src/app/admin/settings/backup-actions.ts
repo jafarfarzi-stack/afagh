@@ -290,11 +290,25 @@ export async function listMinioObjectsAction(): Promise<{ ok: boolean; objects?:
 
 export async function downloadMinioObjectAction(key: string): Promise<{ ok: boolean; data?: string; name?: string; error?: string }> {
   await requirePlatformAdmin();
+  // اعتبارسنجی کلید: جلوگیری از traversal، جداکنندهٔ بک‌اسلش و کلیدهای خارج از bucket آرشیو.
+  if (typeof key !== 'string' || key.length === 0 || key.length > 512 ||
+      key.startsWith('/') || key.includes('..') || key.includes('\\') || key.includes('\u0000') ||
+      !/^archive\/[A-Za-z0-9][A-Za-z0-9._\-\/]*$/i.test(key)) {
+    return { ok: false, error: 'کلید فایل برای دریافت مجاز نیست.' };
+  }
   try {
     const stream = await S3.getObject(ARCHIVE_BUCKET, key);
     const chunks: Buffer[] = [];
+    let total = 0;
+    const MAX = 50 * 1024 * 1024;
     for await (const chunk of stream) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      const b = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      total += b.length;
+      if (total > MAX) {
+        try { stream.destroy?.(); } catch { /* ignore */ }
+        return { ok: false, error: 'حجم فایل از ۵۰ مگابایت بیشتر است.' };
+      }
+      chunks.push(b);
     }
     const buf = Buffer.concat(chunks);
     const name = key.split('/').pop() || key;

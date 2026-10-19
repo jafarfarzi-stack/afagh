@@ -39,6 +39,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز.' }, { status: 403 });
   }
   const degreeLevelId = Number(req.nextUrl.searchParams.get('degreeLevelId') || 0);
+  if (degreeLevelId && (!Number.isSafeInteger(degreeLevelId) || degreeLevelId <= 0)) return NextResponse.json({ ok: false, error: 'شناسه مقطع نامعتبر است.' }, { status: 400 });
   const uni = await getCurrentUniversity().catch(() => null);
   const uniScope = uni ? or(eq(grade_thresholds.universityId, uni.id), isNull(grade_thresholds.universityId)) : undefined;
   const where = and(

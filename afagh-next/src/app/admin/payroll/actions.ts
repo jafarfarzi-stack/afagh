@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { staff } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { assertServerActionOrigin } from '@/lib/security';
 import {
   computeTermPayroll, exportBatch, getOverview, getStaffPayslip,
   listPayConfiguration, payMidterm, settleFinal,
@@ -26,6 +27,8 @@ export async function payrollOverviewAction() {
 
 export async function payrollComputeAction() {
   try {
+    const og = await assertServerActionOrigin();
+    if (!og.ok) return fail(og.error);
     const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
     const res = await computeTermPayroll(user.id);
     revalidatePath('/admin/payroll');
@@ -59,6 +62,8 @@ export async function payrollPayslipAction(staffId: number) {
 
 export async function payrollMidtermAction(staffId: number) {
   try {
+    const og = await assertServerActionOrigin();
+    if (!og.ok) return fail(og.error);
     const user = await requireRole(['ADMIN']);
     const res = await payMidterm(staffId, user.id);
     revalidatePath('/admin/payroll');
@@ -70,6 +75,8 @@ export async function payrollMidtermAction(staffId: number) {
 
 export async function payrollSettleAction(staffId: number) {
   try {
+    const og = await assertServerActionOrigin();
+    if (!og.ok) return fail(og.error);
     const user = await requireRole(['ADMIN']);
     const res = await settleFinal(staffId, user.id);
     revalidatePath('/admin/payroll');
@@ -81,6 +88,8 @@ export async function payrollSettleAction(staffId: number) {
 
 export async function payrollExportAction() {
   try {
+    const og = await assertServerActionOrigin();
+    if (!og.ok) return fail(og.error);
     await requireRole(['ADMIN', 'EDU_EXPERT']);
     const res = await exportBatch();
     return { ...res, ok: true as const };
@@ -139,6 +148,8 @@ export async function getTeachingCoefficientsAction() {
 
 export async function updateTeachingCoefficientAction(ruleName: string, multiplier: number) {
   try {
+    const og = await assertServerActionOrigin();
+    if (!og.ok) return fail(og.error);
     const user = await requireRole(['ADMIN']);
     const { db } = await import('@/db');
     const { teaching_coefficients } = await import('@/db/schema');
@@ -165,6 +176,8 @@ export async function updateTeachingCoefficientAction(ruleName: string, multipli
 
 export async function upsertTeachingCoefficientAction(ruleName: string, multiplier: number) {
   try {
+    const og = await assertServerActionOrigin();
+    if (!og.ok) return fail(og.error);
     const user = await requireRole(['ADMIN']);
     const { db } = await import('@/db');
     const { teaching_coefficients } = await import('@/db/schema');
@@ -260,6 +273,8 @@ function ruleValues(data: PayrollRuleInput) {
 
 export async function createPayrollCalculationRuleAction(data: PayrollRuleInput) {
   try {
+    const og = await assertServerActionOrigin();
+    if (!og.ok) return fail(og.error);
     const user = await requireRole(['ADMIN']);
     const { db } = await import('@/db');
     const { payroll_calculation_rules } = await import('@/db/schema');
@@ -281,6 +296,8 @@ export async function createPayrollCalculationRuleAction(data: PayrollRuleInput)
 
 export async function updatePayrollCalculationRuleAction(id: number, data: PayrollRuleInput) {
   try {
+    const og = await assertServerActionOrigin();
+    if (!og.ok) return fail(og.error);
     const user = await requireRole(['ADMIN']);
     const { db } = await import('@/db');
     const { payroll_calculation_rules } = await import('@/db/schema');
@@ -312,6 +329,8 @@ export async function updatePayrollCalculationRuleAction(id: number, data: Payro
 
 export async function deletePayrollCalculationRuleAction(id: number) {
   try {
+    const og = await assertServerActionOrigin();
+    if (!og.ok) return fail(og.error);
     const user = await requireRole(['ADMIN']);
     const { db } = await import('@/db');
     const { payroll_calculation_rules } = await import('@/db/schema');

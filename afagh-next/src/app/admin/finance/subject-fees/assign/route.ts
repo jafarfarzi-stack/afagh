@@ -25,7 +25,8 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const studentId = Number(searchParams.get('studentId'));
   const termId = Number(searchParams.get('termId'));
-  if (!studentId) return NextResponse.json({ error: 'studentId الزامی است' }, { status: 400 });
+  if (!Number.isSafeInteger(studentId) || studentId <= 0) return NextResponse.json({ error: 'studentId الزامی است' }, { status: 400 });
+  if (termId && (!Number.isSafeInteger(termId) || termId <= 0)) return NextResponse.json({ error: 'termId نامعتبر است' }, { status: 400 });
   const uni = await getCurrentUniversity().catch(() => null);
   if (!uni) return NextResponse.json({ error: 'دانشگاه فعال نامشخص است' }, { status: 400 });
   const [stu] = await db.select({ universityId: students.universityId })
@@ -69,8 +70,13 @@ export async function POST(req: NextRequest) {
   const auth = await checkFinanceAuth();
   if (!auth) return NextResponse.json({ error: 'دسترسی غیرمجاز' }, { status: 403 });
 
-  const body = await req.json();
-  const { studentId, termId, subjectFeeTypeId, amount, note } = body;
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'بدنهٔ درخواست نامعتبر است.' }, { status: 400 });
+  }
+  const { studentId, termId, subjectFeeTypeId, amount, note } = (body ?? {}) as Record<string, unknown>;
 
   if (!studentId || !termId || !subjectFeeTypeId) {
     return NextResponse.json({ error: 'دانشجو، ترم و نوع مبلغ الزامی است' }, { status: 400 });
@@ -159,12 +165,16 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  // 🔒 CSRF: هم‌مبدأسنجی درخواست (DELETE هم تغییردهنده است)
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
+
   const auth = await checkFinanceAuth();
   if (!auth) return NextResponse.json({ error: 'دسترسی غیرمجاز' }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
   const id = Number(searchParams.get('id'));
-  if (!id) return NextResponse.json({ error: 'شناسه الزامی است' }, { status: 400 });
+  if (!Number.isSafeInteger(id) || id <= 0) return NextResponse.json({ error: 'شناسه الزامی است' }, { status: 400 });
   const uni = await getCurrentUniversity().catch(() => null);
   if (!uni) return NextResponse.json({ error: 'دانشگاه فعال نامشخص است' }, { status: 400 });
   const [row] = await db.select({ universityId: student_subject_fees.universityId })

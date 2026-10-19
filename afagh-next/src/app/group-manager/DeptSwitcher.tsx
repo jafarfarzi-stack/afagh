@@ -15,7 +15,8 @@ export default function DeptSwitcher({ depts, activeId }: { depts: HeadedDept[];
 
   const pick = (id: number) =>
     start(() => {
-      document.cookie = `gm_dept=${id}; path=/; max-age=31536000; samesite=lax`;
+      const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; secure' : '';
+      document.cookie = `gm_dept=${id}; path=/; max-age=31536000; samesite=lax${secure}`;
       router.refresh();
     });
 

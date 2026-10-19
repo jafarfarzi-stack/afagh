@@ -64,7 +64,7 @@ ok "PostgreSQL :5432 (کاربر afagh / دیتابیس afagh_db)"
 docker exec afagh_redis_dev redis-cli ping >/dev/null 2>&1 && ok "Redis :6379" || warn "Redis پاسخ نداد"
 for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1 && break; sleep 2; done
 curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1 \
-  && ok "MinIO :9000 (کنسول :9001 — afagh / afagh-secret)" || warn "MinIO آماده نشد — بایگانی مدارک کار نمی‌کند"
+  && ok "MinIO :9000 (کنسول :9001 — اطلاعات ورود در afagh-next/.env)" || warn "MinIO آماده نشد — بایگانی مدارک کار نمی‌کند"
 
 # ── ۲) .env ──
 step "۲/۷ فایل تنظیمات .env"
@@ -141,7 +141,7 @@ cat <<EOF
       وضعیت:  docker compose -p $PROJECT -f afagh-next/docker-compose.yml ps
       توقف :  docker compose -p $PROJECT -f afagh-next/docker-compose.yml stop
       حذف کامل داده: docker compose -p $PROJECT -f afagh-next/docker-compose.yml down -v
-      کنسول MinIO: http://localhost:9001  (afagh / afagh-secret)
+      کنسول MinIO: http://localhost:9001  (MINIO_ROOT_USER / MINIO_ROOT_PASSWORD از .env)
 
 EOF
 

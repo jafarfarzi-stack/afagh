@@ -89,7 +89,7 @@ export async function addDiscountAction(input: {
         kind: type.kind,
         percent: String(percent),
         amount: money(input.amount),
-        appliesTo: input.appliesTo || 'BOTH',
+        appliesTo: ['BOTH', 'FIXED', 'VARIABLE'].includes(input.appliesTo) ? input.appliesTo : 'BOTH',
         status,
         reason: clean(input.reason),
         approvedBy: status === 'APPROVED' ? (user?.id ?? null) : null,

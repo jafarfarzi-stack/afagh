@@ -17,7 +17,9 @@ export async function GET(req: NextRequest) {
   try {
     const sid = req.nextUrl.searchParams.get('statementId');
     if (sid) {
-      const rows = await getApprovalHistory(Number(sid));
+      const sidNum = Number(sid);
+      if (!Number.isSafeInteger(sidNum) || sidNum <= 0) return NextResponse.json({ ok: false, error: 'شناسهٔ فیش نامعتبر است.' }, { status: 400 });
+      const rows = await getApprovalHistory(sidNum);
       return NextResponse.json({ ok: true, history: rows });
     }
     const ov = await getScopedOverview();
@@ -40,12 +42,12 @@ export async function POST(req: NextRequest) {
     }
     if (op === 'settle') {
       const staffId = Number(body?.staffId);
-      if (!staffId) return NextResponse.json({ ok: false, error: 'شناسهٔ استاد نامعتبر است.' }, { status: 400 });
+      if (!Number.isSafeInteger(staffId) || staffId <= 0) return NextResponse.json({ ok: false, error: 'شناسهٔ استاد نامعتبر است.' }, { status: 400 });
       const r = await settleApproved(staffId);
       return NextResponse.json(r, { status: r.ok ? 200 : 400 });
     }
     const statementId = Number(body?.statementId);
-    if (!statementId) return NextResponse.json({ ok: false, error: 'شناسهٔ فیش نامعتبر است.' }, { status: 400 });
+    if (!Number.isSafeInteger(statementId) || statementId <= 0) return NextResponse.json({ ok: false, error: 'شناسهٔ فیش نامعتبر است.' }, { status: 400 });
     const note = typeof body?.note === 'string' ? body.note : undefined;
     const r =
       op === 'approve-dept' ? await approveDeptHead(statementId, note)

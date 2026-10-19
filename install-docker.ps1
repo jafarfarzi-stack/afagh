@@ -131,7 +131,7 @@ for ($i = 0; $i -lt 30; $i++) {
   try { Invoke-WebRequest -Uri 'http://127.0.0.1:9000/minio/health/live' -UseBasicParsing -TimeoutSec 3 | Out-Null; $minioOk = $true; break }
   catch { Start-Sleep -Seconds 2 }
 }
-if ($minioOk) { Ok "MinIO :9000  (کنسول :9001 — afagh / afagh-secret)" } else { Warn "MinIO آماده نشد — بایگانی مدارک کار نمی‌کند" }
+if ($minioOk) { Ok "MinIO :9000  (کنسول :9001 — اطلاعات ورود در afagh-next\.env)" } else { Warn "MinIO آماده نشد — بایگانی مدارک کار نمی‌کند" }
 
 # ── ۲) فایل تنظیمات ──────────────────────────────────────────────
 Step "۲/۷ فایل تنظیمات .env"
@@ -227,7 +227,7 @@ Write-Host ""
 Write-Host "  سرویس‌های Docker:" -ForegroundColor White
 Write-Host "      وضعیت : docker compose -p $Project -f afagh-next\docker-compose.yml ps"
 Write-Host "      توقف  : .\stop-docker.ps1            (با -RemoveData کل داده پاک می‌شود)"
-Write-Host "      MinIO : http://localhost:9001        (afagh / afagh-secret)"
+Write-Host "      MinIO : http://localhost:9001        (MINIO_ROOT_USER / MINIO_ROOT_PASSWORD از .env)"
 Write-Host ""
 
 function Port-Up($p) {

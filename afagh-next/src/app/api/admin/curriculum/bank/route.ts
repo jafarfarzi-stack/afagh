@@ -162,7 +162,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز.' }, { status: 403 });
   }
   const id = Number(req.nextUrl.searchParams.get('id'));
-  if (!id) return NextResponse.json({ ok: false, error: 'شناسه درس نامعتبر.' }, { status: 400 });
+  if (!Number.isSafeInteger(id) || id <= 0) return NextResponse.json({ ok: false, error: 'شناسه درس نامعتبر.' }, { status: 400 });
 
   // نگهبان دانشگاه: ویرایش درسِ دانشگاه دیگر ممنوع (NULL = سراسری، مجاز).
   const uni = await getCurrentUniversity().catch(() => null);
@@ -174,7 +174,12 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
-  const rawBody = await req.json();
+  let rawBody: unknown;
+  try {
+    rawBody = await req.json();
+  } catch {
+    return NextResponse.json({ ok: false, error: 'بدنهٔ درخواست نامعتبر است.' }, { status: 400 });
+  }
   const parsed = bankPatchSchema.safeParse(rawBody);
   if (!parsed.success) {
     return NextResponse.json({ ok: false, error: 'داده ورودی معتبر نیست.' }, { status: 400 });
@@ -235,7 +240,12 @@ export async function POST(req: NextRequest) {
   if (!user || !user.roles.some(r => ALLOWED.includes(r))) {
     return NextResponse.json({ ok: false, error: 'دسترسی غیرمجاز.' }, { status: 403 });
   }
-  const rawBody = await req.json();
+  let rawBody: unknown;
+  try {
+    rawBody = await req.json();
+  } catch {
+    return NextResponse.json({ ok: false, error: 'بدنهٔ درخواست نامعتبر است.' }, { status: 400 });
+  }
   const result = bankCreateSchema.safeParse(rawBody);
   if (!result.success) {
     return NextResponse.json({ ok: false, error: 'داده ورودی معتبر نیست.' }, { status: 400 });

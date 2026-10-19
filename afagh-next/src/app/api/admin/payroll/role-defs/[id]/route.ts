@@ -21,7 +21,7 @@ const patchSchema = z.object({
 
 function badId(id: string): number | null {
   const n = Number(id);
-  return Number.isInteger(n) && n > 0 ? n : null;
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 
 /** PUT — ویرایش نقش تدریس */
@@ -67,7 +67,9 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 }
 
 /** DELETE — فقط اگر هیچ ارائه‌ای از این کد نقش استفاده نکرده باشد */
-export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const csrf = assertCsrf(req);
+  if (csrf) return csrf;
   try {
     await requireRole([...WRITE_ROLES]);
     const id = badId((await ctx.params).id);

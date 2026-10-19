@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { universities, samin_connections } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { requirePlatformAdmin } from '@/lib/platform-admin';
+import { canActOnUniversity } from '@/lib/university-scope';
 import { encryptSecret } from '@/lib/samin/crypto';
 import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
@@ -12,9 +13,11 @@ import { magicMatches } from '@/lib/safe-input';
 export async function upsertUniversity(formData: FormData) {
   await requirePlatformAdmin();
   const id = Number(formData.get('id') || 0);
+  if (id && (!Number.isSafeInteger(id) || id <= 0)) throw new Error('شناسه نامعتبر است');
   const code = String(formData.get('code') || '').trim().toUpperCase();
   const title = String(formData.get('title') || '').trim();
-  const kind = String(formData.get('kind') || 'DISSOLVED').trim();
+  const kindRaw = String(formData.get('kind') || 'DISSOLVED').trim();
+  const kind = ['OWN', 'DISSOLVED', 'MERGED'].includes(kindRaw) ? kindRaw : 'DISSOLVED';
   const saminCode = String(formData.get('saminCode') || '').trim() || null;
   if (!code || !title) throw new Error('کد و عنوان الزامی است');
   if (!/^[A-Z0-9_-]{2,30}$/.test(code)) throw new Error('کد فقط A-Z 0-9 _ -');
@@ -30,7 +33,8 @@ export async function upsertUniversity(formData: FormData) {
 export async function saveSaminConnection(formData: FormData) {
   await requireRole(['ADMIN']);
   const universityId = Number(formData.get('universityId'));
-  if (!universityId) throw new Error('دانشگاه نامشخص');
+  if (!Number.isSafeInteger(universityId) || universityId <= 0) throw new Error('دانشگاه نامشخص');
+  if (!(await canActOnUniversity(universityId))) throw new Error('دسترسی به این دانشگاه مجاز نیست.');
   const clientId = String(formData.get('clientId') || '').trim() || null;
   const clientSecret = String(formData.get('clientSecret') || '').trim();
   const username = String(formData.get('username') || '').trim() || null;
@@ -69,7 +73,8 @@ export async function deleteUniversity(id: number) {
 export async function uploadUniversityLogoAction(formData: FormData) {
   await requireRole(['ADMIN']);
   const universityId = Number(formData.get('universityId'));
-  if (!universityId) throw new Error('دانشگاه نامشخص');
+  if (!Number.isSafeInteger(universityId) || universityId <= 0) throw new Error('دانشگاه نامشخص');
+  if (!(await canActOnUniversity(universityId))) throw new Error('دسترسی به این دانشگاه مجاز نیست.');
   const [uni] = await db.select().from(universities).where(eq(universities.id, universityId)).limit(1);
   if (!uni) throw new Error('دانشگاه یافت نشد');
   const file = formData.get('logo');
@@ -97,6 +102,7 @@ export async function uploadUniversityLogoAction(formData: FormData) {
 export async function deleteUniversityLogoAction(universityId: number) {
   await requireRole(['ADMIN']);
   if (!Number.isInteger(universityId) || universityId <= 0) throw new Error('دانشگاه نامشخص');
+  if (!(await canActOnUniversity(universityId))) throw new Error('دسترسی به این دانشگاه مجاز نیست.');
   const { unlink } = await import('node:fs/promises');
   const { join } = await import('node:path');
   for (const e of ['png', 'jpg', 'webp']) {

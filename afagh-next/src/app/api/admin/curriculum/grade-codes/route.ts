@@ -17,11 +17,16 @@ export async function PATCH(req: NextRequest) {
   }
   const versionId = Number(req.nextUrl.searchParams.get('versionId'));
   const courseId = Number(req.nextUrl.searchParams.get('courseId'));
-  if (!versionId || !courseId) {
+  if (!Number.isSafeInteger(versionId) || versionId <= 0 || !Number.isSafeInteger(courseId) || courseId <= 0) {
     return NextResponse.json({ ok: false, error: 'شناسه نسخه یا درس نامعتبر است.' }, { status: 400 });
   }
-  const body = await req.json();
-  const { passGradeStatusCode, failGradeStatusCode } = body;
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ ok: false, error: 'بدنهٔ درخواست نامعتبر است.' }, { status: 400 });
+  }
+  const { passGradeStatusCode, failGradeStatusCode } = (body ?? {}) as Record<string, unknown>;
 
   // نگهبان دانشگاه: نسخهٔ دانشگاه دیگر قابل ویرایش نیست (NULL = سراسری، مجاز).
   const uni = await getCurrentUniversity().catch(() => null);

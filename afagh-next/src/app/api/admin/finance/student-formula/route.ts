@@ -9,6 +9,7 @@ import { createLogger } from '@/lib/logger';
 import { getCurrentUniversity, universityEq } from '@/lib/university-scope';
 import { z } from 'zod';
 import { assertCsrf } from '@/lib/security';
+import { escapeLikeChars } from '@/lib/persian-search';
 
 
 export const dynamic = 'force-dynamic';
@@ -99,14 +100,14 @@ export async function GET(req: NextRequest) {
     const where = and(
       // 🔒 ۰/نامشخص ⇒ هیچ ردیفی (پیش‌تر شرط حذف می‌شد ⇒ overrideهای همهٔ دانشگاه‌ها)
       universityEq(student_tuition_overrides.universityId, universityId),
-      Number.isInteger(studentId) && studentId > 0
+      Number.isSafeInteger(studentId) && studentId > 0
         ? eq(student_tuition_overrides.studentId, studentId)
         : undefined,
       activeOnly ? eq(student_tuition_overrides.isActive, 1) : undefined,
       q
         ? or(
             eq(students.studentCode, q),
-            sql`(${users.firstName} || ' ' || ${users.lastName}) LIKE ${'%' + q + '%'}`,
+            sql`(${users.firstName} || ' ' || ${users.lastName}) LIKE ${'%' + escapeLikeChars(q) + '%'} ESCAPE '\\'`,
           )
         : undefined,
     );
@@ -244,7 +245,7 @@ export async function PATCH(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     const { searchParams } = new URL(req.url);
     const id = Number(searchParams.get('id'));
-    if (!Number.isInteger(id) || id <= 0) {
+    if (!Number.isSafeInteger(id) || id <= 0) {
       return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
     }
     const parsed = patchSchema.safeParse(await req.json());
@@ -311,7 +312,7 @@ export async function DELETE(req: NextRequest) {
     }
     const { searchParams } = new URL(req.url);
     const id = Number(searchParams.get('id'));
-    if (!Number.isInteger(id) || id <= 0) {
+    if (!Number.isSafeInteger(id) || id <= 0) {
       return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
     }
     const deleted = await db.transaction(async (tx) => {

@@ -700,7 +700,7 @@ export async function getStudentByUser(userId: number) {
       return s2 ?? null;
     }
   } catch (err: any) {
-    console.error('[auth] خودترمیم پروندهٔ دانشجو ناموفق:', err?.message);
+    try { const { createLogger } = await import('@/lib/logger'); createLogger({ mod: 'auth' }).error('student_record_selfheal_failed', { error: String(err?.message ?? err) }); } catch { /* ignore */ }
   }
   return null;
 }

@@ -15,6 +15,7 @@ import { logGradeChange } from '@/lib/grade-change-log';
 import { resolveSamaGradeStatusCode, syncStudentCourseRegulations } from '@/lib/resolve-sama-code';
 import { GRADE_STATUS_CODES, gradeStatusTitleOf } from '@/lib/grade-status-codes';
 import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
+import { assertServerActionOrigin } from '@/lib/security';
 
 export interface AdminGradeState {
   ok: boolean;
@@ -50,6 +51,8 @@ export async function adminSetGradeAction(
     reason: string;
   }
 ): Promise<AdminGradeState> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   try {
     const user = await requireRole(['ADMIN', 'GRADUATEAFFAIRS']);
     // کارشناس آموزش: فقط اگر برای او «ویرایش نمره» فعال شده باشد (expert_scopes.canEditGrades)
@@ -664,6 +667,8 @@ export async function scanMismatchedSamaCodes(universityId?: number): Promise<{ 
  * اعمال کدهای صحیح روی نمرات نادرست (بچ اصلاح)
  */
 export async function applyCorrectedSamaCodes(enrollmentIds: number[], universityId?: number): Promise<{ applied: number }> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { applied: 0 };
   const user = await requireRole(['ADMIN']);
   // 🔐 تأیید دومرحله‌ای — همان قرارداد adminSetGradeAction (حوزهٔ grades:edit).
   // فراخوان‌ها try/catch دارند، پس STEPUP_REQUIRED به‌صورت خطا بالا می‌رود.
@@ -789,6 +794,8 @@ export async function reviewUnfinalizeAction(
   note?: string | null,
   extendDeadlineTo?: string | null,
 ): Promise<AdminGradeState> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   try {
     const cleanNote = (note ?? '').trim() || null;
 

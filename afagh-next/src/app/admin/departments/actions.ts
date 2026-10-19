@@ -8,6 +8,7 @@ import { requireRole } from '@/lib/auth';
 import { clearPermissionCache, invalidatePermissionCacheFor } from '@/lib/permissions-enforcer';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { isHeadOfAny } from '@/lib/group-manager';
+import { escapeLikeChars } from '@/lib/persian-search';
 
 const s = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
 const n = (fd: FormData, k: string) => {
@@ -416,7 +417,7 @@ export async function listOrphanMajors({ q, page, per }: { q?: string; page?: nu
   const base = and(
     isNull(majors.departmentId),
     or(eq(majors.universityId, uniId), isNull(majors.universityId)),
-    needle ? or(sql`${majors.name} ILIKE ${'%' + needle + '%'}`, sql`${majors.majorCode} ILIKE ${'%' + needle + '%'}`) : undefined,
+    needle ? or(sql`${majors.name} ILIKE ${'%' + escapeLikeChars(needle) + '%'} ESCAPE '\\'`, sql`${majors.majorCode} ILIKE ${'%' + escapeLikeChars(needle) + '%'} ESCAPE '\\'`) : undefined,
   );
   const [{ c: total }] = await db.select({ c: sql<number>`count(*)::int` }).from(majors).where(base);
   const rows = await db.select({ id: majors.id, code: majors.majorCode, name: majors.name })
@@ -458,7 +459,7 @@ export async function listOrphanCourses({ q, page, per }: { q?: string; page?: n
   const base = and(
     isNull(courses.departmentId),
     or(eq(courses.universityId, uniId), isNull(courses.universityId)),
-    needle ? or(sql`${courses.code} ILIKE ${'%' + needle + '%'}`, sql`${courses.title} ILIKE ${'%' + needle + '%'}`) : undefined,
+    needle ? or(sql`${courses.code} ILIKE ${'%' + escapeLikeChars(needle) + '%'} ESCAPE '\\'`, sql`${courses.title} ILIKE ${'%' + escapeLikeChars(needle) + '%'} ESCAPE '\\'`) : undefined,
   );
   const [{ c: total }] = await db.select({ c: sql<number>`count(*)::int` }).from(courses).where(base);
   const rows = await db.select({ id: courses.id, code: courses.code, title: courses.title, courseType: courses.courseType })

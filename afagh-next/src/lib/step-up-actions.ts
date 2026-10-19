@@ -9,6 +9,10 @@ import { clientIp as rateLimitClientIp, getRateLimitCount, hitRateLimit, peekRat
 import { requestClientIp } from '@/lib/request-context';
 import { clearSessionLock, setSessionLock } from '@/lib/session-lock';
 import { STEPUP_TTL, checkStepUpToken, issueStepUpToken, stepUpCookieName } from '@/lib/step-up';
+import { assertServerActionOrigin } from '@/lib/security';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger({ mod: 'step-up' });
 
 const cookieOpts = (maxAge: number) => ({
   httpOnly: true as const,
@@ -53,7 +57,7 @@ async function stepUpGate(userId: number): Promise<{ ok: true } | { ok: false; e
   ]);
   if (!uRl.ok || !iRl.ok) {
     const retry = Math.max(!uRl.ok ? uRl.retryAfterSec : 0, !iRl.ok ? iRl.retryAfterSec : 0);
-    console.warn(`⚠ [step-up] قفل تأیید رمز برای کاربر ${userId} — ${Math.ceil(retry / 60)} دقیقه (احتمال تلاش فرسایشی).`);
+    log.warn('stepup_lockout', { userId, retryMinutes: Math.ceil(retry / 60) });
     await progressiveDelay(await getRateLimitCount(key)).catch(() => {});
     return { ok: false, error: `تلاش‌های تأیید رمز بیش از حد مجاز شد. ${Math.ceil(retry / 60)} دقیقهٔ دیگر دوباره تلاش کنید.` };
   }
@@ -72,6 +76,8 @@ async function stepUpFail(userId: number): Promise<void> {
  * توکن ۱۰دقیقه‌ای در کوکی httpOnly می‌نشیند و اکشن حساس آن را می‌پذیرد.
  */
 export async function requestStepUpAction(scope: string, password: string): Promise<{ ok: boolean; error?: string }> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const user = await getSessionUser();
   if (!user) return { ok: false, error: 'ابتدا وارد شوید.' };
   if (!(scope in STEPUP_TTL)) return { ok: false, error: 'دامنهٔ تأیید نامعتبر است.' };
@@ -89,6 +95,8 @@ export async function requestStepUpAction(scope: string, password: string): Prom
 
 /** راستی‌آزمایی صرف رمز کاربر جاری (برای قفل بیکاری) — توکن صادر نمی‌کند. */
 export async function verifyOwnPasswordCore(password: string): Promise<{ ok: boolean; error?: string }> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const user = await getSessionUser();
   if (!user) return { ok: false, error: 'نشست منقضی شده است؛ دوباره وارد شوید.' };
   const gate = await stepUpGate(user.id);
@@ -103,6 +111,8 @@ export async function verifyOwnPasswordCore(password: string): Promise<{ ok: boo
 }
 
 export async function verifyOwnPasswordAction(password: string): Promise<{ ok: boolean; error?: string }> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   return verifyOwnPasswordCore(password);
 }
 
@@ -112,6 +122,8 @@ export async function verifyOwnPasswordAction(password: string): Promise<{ ok: b
  * فقط برای نشستِ خودِ کاربر پرچم می‌گذارد؛ برداشتنش رمز می‌خواهد.
  */
 export async function lockNowAction(): Promise<{ ok: boolean }> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false };
   const user = await getSessionUser().catch(() => null);
   if (!user) return { ok: false };
   await setSessionLock(user.id);

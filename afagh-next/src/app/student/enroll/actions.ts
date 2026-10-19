@@ -20,6 +20,7 @@ import {
   students,
 } from '@/db/schema';
 import { getStudentByUser, requireRole } from '@/lib/auth';
+import { assertServerActionOrigin } from '@/lib/security';
 import { offeringVisible } from '@/lib/offering-targeting';
 import { enqueueSubmit, ensureWorker, rateLimitSubmit, redisAvailable } from '@/lib/waitingRoom';
 import { processQueuedSubmit, type SubmitResult } from '@/lib/enroll-engine';
@@ -68,6 +69,8 @@ function timeOverlap(s1: string, e1: string, s2: string, e2: string) {
 }
 
 export async function addToCartAction(offeringId: number) {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const { user, me, term, myUni } = await ctx();
   if (!term) return { ok: false, error: 'ترم جاری فعال نیست' };
 
@@ -113,6 +116,8 @@ export async function addToCartAction(offeringId: number) {
 }
 
 export async function removeFromCartAction(offeringId: number) {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const { user, me } = await ctx();
   await db.transaction(tx =>
     tx.delete(cart_items).where(and(eq(cart_items.studentId, me.id), eq(cart_items.offeringId, offeringId)))
@@ -122,6 +127,8 @@ export async function removeFromCartAction(offeringId: number) {
 
 /** خالی کردن کامل سبد انتخاب واحد (حذف همه) */
 export async function clearCartAction() {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const { user, me } = await ctx();
   await db.transaction(tx =>
     tx.delete(cart_items).where(eq(cart_items.studentId, me.id))
@@ -137,6 +144,8 @@ export async function autoFillCartFromChartAction(): Promise<{
   message: string;
   conflictsResolved?: number;
 }> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, count: 0, units: 0, message: og.error };
   const { user, me, term, myUni } = await ctx();
   if (!term) return { ok: false, count: 0, units: 0, message: 'ترم جاری فعال نیست.' };
   if (myUni == null) return { ok: false, count: 0, units: 0, message: 'دانشگاه شما مشخص نیست.' };
@@ -309,8 +318,10 @@ export async function autoFillCartFromChartAction(): Promise<{
  */
 export async function submitCartAction(acceptSameDayRisk = false): Promise<{
   queued: boolean; ticketId: string; position: number; limited?: boolean;
-  direct?: boolean; result?: SubmitResult;
+  direct?: boolean; result?: SubmitResult; error?: string;
 }> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { queued: false, ticketId: '', position: 0, error: og.error };
   const { user, me } = await ctx();
 
   // سپر نرخ (§۲۰۷۷): بیش از ۵ درخواست ثبت در ثانیه → رد سریع
@@ -389,6 +400,8 @@ import { emergencyDropAction, emergencyDropFormAction } from '../actions';
 export { emergencyDropAction, emergencyDropFormAction };
 
 export async function referCouncilAction(offeringId: number, reason?: string): Promise<{ ok: boolean; error?: string }> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
   const { user, me, term, myUni } = await ctx();
   if (!term) return { ok: false, error: 'ترم جاری یافت نشد.' };
   // 🔒 فقط ارائهٔ همین دانشگاه و همین ترم — وگرنه درخواست معرفی به کمیته

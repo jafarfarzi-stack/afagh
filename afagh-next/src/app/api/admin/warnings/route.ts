@@ -110,12 +110,14 @@ export async function GET(req: NextRequest) {
   if (studentId) filters.push(eq(scheduled_warnings.studentId, studentId));
   const dateFrom = p.get('dateFrom');
   if (dateFrom) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) return NextResponse.json({ ok: false, error: 'تاریخ شروع نامعتبر است.' }, { status: 400 });
     const parsedDate = new Date(dateFrom);
     if (Number.isNaN(parsedDate.getTime())) return NextResponse.json({ ok: false, error: 'تاریخ شروع نامعتبر است.' }, { status: 400 });
     filters.push(gte(scheduled_warnings.sendAt, parsedDate));
   }
   const dateTo = p.get('dateTo');
   if (dateTo) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) return NextResponse.json({ ok: false, error: 'تاریخ پایان نامعتبر است.' }, { status: 400 });
     const parsedDate = new Date(`${dateTo}T23:59:59`);
     if (Number.isNaN(parsedDate.getTime())) return NextResponse.json({ ok: false, error: 'تاریخ پایان نامعتبر است.' }, { status: 400 });
     filters.push(lte(scheduled_warnings.sendAt, parsedDate));

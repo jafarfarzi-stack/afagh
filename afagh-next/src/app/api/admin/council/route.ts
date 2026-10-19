@@ -25,6 +25,7 @@ import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
 import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 import { strParam, intParam, dateParam } from '@/lib/council';
+import { escapeLikeChars } from '@/lib/persian-search';
 
 
 export const dynamic = 'force-dynamic';
@@ -71,8 +72,8 @@ export async function GET(req: NextRequest) {
   }
   const q = strParam(sp, 'q');
   if (q) {
-    const like = `%${q}%`;
-    filters.push(or(ilike(council_meetings.title, like), ilike(council_meetings.agenda, like))!);
+    const like = `%${escapeLikeChars(q)}%`;
+    filters.push(or(sql`${council_meetings.title} ILIKE ${like} ESCAPE '\\'`, sql`${council_meetings.agenda} ILIKE ${like} ESCAPE '\\'`)!);
   }
 
   const where = and(...filters) ?? undefined;

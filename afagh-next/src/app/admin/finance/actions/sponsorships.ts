@@ -44,7 +44,7 @@ export async function addSponsorshipAction(input: {
       // 🔒 وضعیت کاملاً سمت سرور: پوششِ بنیاد همیشه ابتدا PENDING است (تأیید ناظر بنیاد
       // یا کارشناس، جداگانه انجام می‌شود) — کلاینت حق تعیین وضعیت ندارد.
       const pct = String(Math.min(Math.max(0, num(input.percent)), 100));
-      const appliesTo = input.appliesTo || 'BOTH';
+      const appliesTo = ['BOTH', 'FIXED', 'VARIABLE'].includes(input.appliesTo) ? input.appliesTo : 'BOTH';
       const [ins] = await tx.insert(student_sponsorships).values({
         universityId: su.uniId,
         studentId: input.studentId,

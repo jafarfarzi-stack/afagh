@@ -32,8 +32,11 @@ import { normalizeEquivFixedMode, termTypeOf, toNum,
 import { resolveTuitionRule } from './tuition-resolver';
 import { bucketCourseUnits } from './finance-rules';
 import { getSetting } from './settings';
+import { createLogger } from './logger';
 
 type FeeRuleRow = typeof tuition_rules.$inferSelect;
+
+const log = createLogger({ mod: 'tuition' });
 
 /** خواندن همهٔ قواعد فعال شهریه (یک کوئری) */
 export async function loadActiveFeeRules(): Promise<FeeRuleRow[]> {
@@ -369,7 +372,7 @@ export async function chargeTermTuition(
   const t = await computeTermTuition(studentId, termId, opts);
   // 🔒 منفی هرگز بی‌صدا صفر نمی‌شود: هشدار می‌ماند تا علت (تخفیف/پوششِ بیش‌ازحد) بررسی شود.
   if (t.totalTuition < 0) {
-    console.warn(`[tuition] negative total for student=${studentId} term=${termId}: ${t.totalTuition}`);
+    log.warn('tuition_negative_total', { studentId, termId });
   }
   // مبلغ نهایی هرگز منفی نمی‌شود
   const amount = Math.max(0, Math.round(t.totalTuition));

@@ -39,8 +39,13 @@ export async function POST(req: NextRequest) {
   const auth = await checkFinanceAuth();
   if (!auth) return NextResponse.json({ error: 'دسترسی غیرمجاز' }, { status: 403 });
 
-  const body = await req.json();
-  const { id, code, title, kind, fixedAmount, variablePercent, appliesTo, isActive, note } = body;
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'بدنهٔ درخواست نامعتبر است.' }, { status: 400 });
+  }
+  const { id, code, title, kind, fixedAmount, variablePercent, appliesTo, isActive, note } = (body ?? {}) as Record<string, unknown>;
 
   if (!code || !title) return NextResponse.json({ error: 'کد و عنوان الزامی است' }, { status: 400 });
   if (String(code).length > 40 || String(title).length > 150) {
@@ -135,7 +140,7 @@ export async function DELETE(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const id = Number(searchParams.get('id'));
-  if (!id) return NextResponse.json({ error: 'شناسه الزامی است' }, { status: 400 });
+  if (!Number.isSafeInteger(id) || id <= 0) return NextResponse.json({ error: 'شناسه الزامی است' }, { status: 400 });
 
   // بررسی تخصیص به دانشجو
   const [assigned] = await db

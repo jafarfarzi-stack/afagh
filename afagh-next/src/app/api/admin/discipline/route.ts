@@ -43,7 +43,7 @@ const createSchema = z.object({
   violationType: z.string().trim().min(1).max(150),
   description: z.string().trim().max(4000).optional().nullable(),
   reporterName: z.string().trim().max(150).optional().nullable(),
-  caseDate: z.string().trim().min(1).max(40).optional().nullable(),
+  caseDate: z.string().trim().min(1).max(40).regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
 });
 
 const updateSchema = z.object({
@@ -100,15 +100,18 @@ export async function GET(req: NextRequest) {
     filters.push(eq(discipline_cases.status, status));
   }
   const studentId = Number(p.get('studentId') || 0);
+  if (studentId && (!Number.isSafeInteger(studentId) || studentId <= 0)) return NextResponse.json({ ok: false, error: 'شناسه دانشجو نامعتبر است.' }, { status: 400 });
   if (studentId) filters.push(eq(discipline_cases.studentId, studentId));
   const dateFrom = p.get('dateFrom');
   if (dateFrom) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) return NextResponse.json({ ok: false, error: 'تاریخ شروع نامعتبر است.' }, { status: 400 });
     const parsedDate = new Date(dateFrom);
     if (Number.isNaN(parsedDate.getTime())) return NextResponse.json({ ok: false, error: 'تاریخ شروع نامعتبر است.' }, { status: 400 });
     filters.push(gte(discipline_cases.caseDate, parsedDate));
   }
   const dateTo = p.get('dateTo');
   if (dateTo) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) return NextResponse.json({ ok: false, error: 'تاریخ پایان نامعتبر است.' }, { status: 400 });
     const parsedDate = new Date(`${dateTo}T23:59:59`);
     if (Number.isNaN(parsedDate.getTime())) return NextResponse.json({ ok: false, error: 'تاریخ پایان نامعتبر است.' }, { status: 400 });
     filters.push(lte(discipline_cases.caseDate, parsedDate));

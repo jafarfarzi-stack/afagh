@@ -102,15 +102,20 @@ export const authorizedUniversityIds = cache(async (): Promise<number[] | null> 
  * (fail-safe) و اگر هیچ دانشگاهی مجاز نباشد، DENY_UNI برمی‌گردد (fail-closed).
  */
 export async function getCurrentUniversity(): Promise<UniScope> {
-  const all = await allUniversities();
-  const allowed = await authorizedUniversityIds().catch((): number[] | null => []);
-  if (!all.length) return allowed === null ? FALLBACK_UNI : DENY_UNI;
+  try {
+    const all = await allUniversities();
+    const allowed = await authorizedUniversityIds().catch((): number[] | null => []);
+    if (!all.length) return allowed === null ? FALLBACK_UNI : DENY_UNI;
 
-  const pool = allowed === null ? all : all.filter(u => allowed.includes(u.id));
-  if (!pool.length) return DENY_UNI;
+    const pool = allowed === null ? all : all.filter(u => allowed.includes(u.id));
+    if (!pool.length) return DENY_UNI;
 
-  const want = (await cookies()).get(UNIVERSITY_COOKIE)?.value?.trim();
-  return (want ? pool.find(u => u.code === want) : undefined) ?? pool[0];
+    const want = (await cookies()).get(UNIVERSITY_COOKIE)?.value?.trim();
+    return (want ? pool.find(u => u.code === want) : undefined) ?? pool[0];
+  } catch {
+    // fail-closed: هر خطای غیرمنتظره → دانشگاه انکار (نه null/undefined که fail-open می‌شد)
+    return DENY_UNI;
+  }
 }
 
 /** همهٔ دانشگاه‌ها برای سوییچر سربرگ — فقط آنچه کاربر واقعاً مجاز است */

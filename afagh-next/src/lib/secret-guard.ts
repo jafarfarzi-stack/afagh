@@ -25,7 +25,7 @@ export type SecretVerdict =
   | { ok: true; weak?: boolean; short?: boolean; reason?: string }
   | { ok: false; reason: string };
 
-export function checkDbSecret(name: string, value: string | undefined, allowWeak = false): SecretVerdict {
+export function checkDbSecret(name: string, value: string | undefined, allowWeak = false, minLen = MIN_LEN): SecretVerdict {
   const v = (value ?? '').trim();
   if (!v) return { ok: false, reason: `${name} تعیین نشده است` };
   if (PLACEHOLDER_PREFIX.test(v)) {
@@ -41,9 +41,13 @@ export function checkDbSecret(name: string, value: string | undefined, allowWeak
   if (v.length < MIN_HARD_LEN) {
     return { ok: false, reason: `${name} بیش از حد کوتاه است (${v.length} کاراکتر؛ کف مطلق ${MIN_HARD_LEN})` };
   }
-  if (v.length < MIN_LEN) {
+  if (v.length < minLen) {
     // کوتاه اما غیرقابل‌حدس → هشدار (فیکسچرهای تست و نصب‌های دستی را نکوبد)
-    return { ok: true, short: true, reason: `${name} کوتاه‌تر از توصیهٔ سیاست است (${v.length}<${MIN_LEN})` };
+    return { ok: true, short: true, reason: `${name} کوتاه‌تر از توصیهٔ سیاست است (${v.length}<${minLen})` };
+  }
+  // هم‌سو با scripts/lib/secret-policy.mjs: تکرار چهارتایی کاراکتر = رمز ضعیف
+  if (/(.)\1{3,}/.test(v)) {
+    return { ok: false, reason: `${name} تکرار چهارتایی کاراکتر دارد («aaaa») — ضعیف است` };
   }
   return { ok: true };
 }
@@ -74,6 +78,8 @@ function s3SecretKey(): string {
 /** پیش‌فرض‌های عمومیِ توسعه — هرگز در پروداکشن پذیرفته نمی‌شوند */
 export const S3_DEV_DEFAULT_ACCESS_KEY = 'afagh';
 export const S3_DEV_DEFAULT_SECRET_KEY = 'afagh-secret';
+/** حداقل طول رمز Object Storage (هم‌سو با secret-policy.mjs: minLenObject) */
+export const MIN_LEN_OBJECT_STORE = 16;
 
 /**
  * گارد fail-closed کلیدهای Object Storage.
@@ -142,8 +148,9 @@ export function assertProdSecrets(): void {
   checks.push(checkObjectStoreCredentials(allowWeak));
   const access = s3AccessKey();
   const secret = s3SecretKey();
-  if (access) checks.push(checkDbSecret('S3_ACCESS_KEY', access, allowWeak));
-  if (secret) checks.push(checkDbSecret('S3_SECRET_KEY', secret, allowWeak));
+  // کلید دسترسی S3 یک شناسه است، نه رمز؛ فقط پیش‌فرض توسعه بالا رد می‌شود.
+  // رمز S3 باید حداقل MIN_LEN_OBJECT_STORE کاراکتر داشته باشد (هم‌سو با secret-policy).
+  if (secret) checks.push(checkDbSecret('S3_SECRET_KEY', secret, allowWeak, MIN_LEN_OBJECT_STORE));
   for (const r of checks) {
     if (!r.ok) {
       throw new Error(

@@ -13,6 +13,7 @@ import { buildPrereqContext, formatPrereq } from '@/lib/enroll-engine/prereqs';
 import { currentExpertFilters, scopedMajorIds } from '@/lib/expert-scope';
 import { resolveStudentCurriculum, resolutionReasonMessage } from '@/lib/curriculum-apply';
 import { evaluateLogicTree } from '@/lib/enroll-engine/prereqs';
+import { escapeLikeChars } from '@/lib/persian-search';
 
 const EDU = ['ADMIN', 'EDU_EXPERT'];
 
@@ -43,8 +44,8 @@ export async function searchStudentsForManualEnroll(q: string): Promise<{
     .from(students)
     .innerJoin(users, eq(users.id, students.userId))
     .where(and(...conds, or(
-      ilike(students.studentCode, `%${needle}%`),
-      ilike(sql`coalesce(${users.firstName}, '') || ' ' || coalesce(${users.lastName}, '')`, `%${needle}%`),
+      sql`${students.studentCode} ILIKE ${'%' + escapeLikeChars(needle) + '%'} ESCAPE '\\'`,
+      sql`coalesce(${users.firstName}, '') || ' ' || coalesce(${users.lastName}, '') ILIKE ${'%' + escapeLikeChars(needle) + '%'} ESCAPE '\\'`,
     )))
     .orderBy(desc(students.id)).limit(20);
   return { ok: true, items: rows.map(r => ({ userId: r.userId, studentId: r.studentId, studentCode: r.studentCode, status: r.status, entryYear: r.entryYear, name: `${r.firstName || ''} ${r.lastName || ''}`.trim() })) };

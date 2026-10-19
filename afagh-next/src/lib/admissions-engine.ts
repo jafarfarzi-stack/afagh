@@ -136,7 +136,7 @@ export async function ensureDefaultSanjeshMappings() {
           // نامرتبط باشد)، از ایجاد نگاشت صرف‌نظر می‌کنیم و هشدار می‌دهیم؛
           // رکوردهای سنجشِ بدون نگاشت با وضعیت PENDING_MAPPING می‌مانند و
           // کارشناس بعداً می‌تواند به‌صورت دستی نگاشت کند.
-          console.warn(`[sanjesh-mappings] رشتهٔ داخلی برای «${sm.majorName}» پیدا نشد — نگاشت ایجاد نشد (${sm.sanjeshCode}).`);
+          log.warn('sanjesh_mapping_missing', { majorName: sm.majorName, sanjeshCode: sm.sanjeshCode });
           continue;
         }
         await db.insert(sanjesh_mappings).values({
@@ -317,7 +317,7 @@ export async function parseAndStageSanjeshData(rawText: string, entryYear = 1405
 
     // ── اعتبارسنجی کد ملی: ۱۰ رقم — خطوط نامعتبر بی‌صدا وارد سیستم نمی‌شوند ──
     if (!NATIONAL_CODE_RE.test(nationalCode)) {
-      console.warn(`[sanjesh-parser] کد ملی نامعتبر نادیده گرفته شد: «${maskNc(nationalCode)}»`);
+      log.warn('sanjesh_invalid_national_code', { nationalCode: maskNc(nationalCode) });
       skippedInvalid++;
       continue;
     }
@@ -371,7 +371,7 @@ export async function parseAndStageSanjeshData(rawText: string, entryYear = 1405
   }
 
   if (skippedInvalid || skippedDuplicates) {
-    console.warn(`[sanjesh-parser] ${skippedInvalid} خط نامعتبر و ${skippedDuplicates} کد ملی تکراری نادیده گرفته شد.`);
+    log.warn('sanjesh_parse_skipped', { skippedInvalid, skippedDuplicates });
   }
   return stagedResults;
 }

@@ -25,7 +25,7 @@ export async function PUT(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const offeringId = Number(searchParams.get('offeringId'));
     const staffId = Number(searchParams.get('staffId'));
-    if (!Number.isInteger(offeringId) || offeringId <= 0 || !Number.isInteger(staffId) || staffId <= 0) {
+    if (!Number.isSafeInteger(offeringId) || offeringId <= 0 || !Number.isSafeInteger(staffId) || staffId <= 0) {
       return NextResponse.json({ ok: false, error: 'شناسهٔ ارائه یا استاد نامعتبر است.' }, { status: 400 });
     }
 
