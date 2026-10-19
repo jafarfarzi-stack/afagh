@@ -229,7 +229,7 @@ export async function executeIrandocCheck(params: {
         : `[دمو — بدون اتصال به سرویس] مشابهت محاسبه‌شده ${similarity}٪ — بالای سقف ${threshold}٪.`,
       durationMs,
     };
-    await audit(200, result, isApproved);
+    await audit(200, isApproved);
     return result;
   }
 
@@ -245,7 +245,7 @@ export async function executeIrandocCheck(params: {
     message: 'سرویس همانندجویی ایرانداک پیکربندی نشده است (IRANDOC_BASE_URL).',
     durationMs: Date.now() - startTime,
   };
-  await audit(503, result, false);
+  await audit(503, false);
   return result;
 }
 
