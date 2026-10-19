@@ -20,6 +20,7 @@ import {
   students,
 } from '@/db/schema';
 import { getStudentByUser, requireRole } from '@/lib/auth';
+import { offeringVisible } from '@/lib/offering-targeting';
 import { enqueueSubmit, ensureWorker, rateLimitSubmit, redisAvailable } from '@/lib/waitingRoom';
 import { processQueuedSubmit, type SubmitResult } from '@/lib/enroll-engine';
 
@@ -49,9 +50,14 @@ async function offeringInMyScope(meUni: number | null, termId: number, offeringI
   const [o] = await db.select({
     id: course_offerings.id, courseId: course_offerings.courseId,
     universityId: course_offerings.universityId,
+    targetDegreeLevelId: course_offerings.targetDegreeLevelId,
+    targetMajorId: course_offerings.targetMajorId,
+    entryYearStart: course_offerings.entryYearStart,
+    entryYearEnd: course_offerings.entryYearEnd,
   }).from(course_offerings).where(and(
     eq(course_offerings.id, offeringId),
     eq(course_offerings.termId, termId),
+    eq(course_offerings.isActive, 1),
     eq(course_offerings.universityId, meUni),
   )).limit(1);
   return o ?? null;
@@ -68,6 +74,14 @@ export async function addToCartAction(offeringId: number) {
   // 🔒 ارائه باید متعلق به دانشگاه و ترمِ خودِ دانشجو باشد
   const targetOff = await offeringInMyScope(myUni, term.id, offeringId);
   if (!targetOff) return { ok: false, error: 'این ارائه برای دانشگاه/نیمسال شما در دسترس نیست' };
+
+  // 🎯 هدف‌گیری (G1): ارائهٔ اختصاصیِ مقطع/رشته/ورودیِ دیگر قابل انتخاب نیست
+  if (!offeringVisible(
+    { targetDegreeLevelId: targetOff.targetDegreeLevelId, targetMajorId: targetOff.targetMajorId, entryYearStart: targetOff.entryYearStart, entryYearEnd: targetOff.entryYearEnd },
+    { degreeLevelId: me.degreeLevelId, majorId: me.majorId ?? null, entryYear: me.entryYear },
+  )) {
+    return { ok: false, error: 'این ارائه به مقطع/رشته/سال ورودی شما اختصاص ندارد.' };
+  }
 
   {
     // یافتن و حذف سایر گروه‌های همین درس از سبد دانشجو (جایگزینی گروه جدید)
@@ -143,6 +157,10 @@ export async function autoFillCartFromChartAction(): Promise<{
       groupNumber: course_offerings.groupNumber,
       capacity: course_offerings.capacity,
       enrolledCount: course_offerings.enrolledCount,
+      targetDegreeLevelId: course_offerings.targetDegreeLevelId,
+      targetMajorId: course_offerings.targetMajorId,
+      entryYearStart: course_offerings.entryYearStart,
+      entryYearEnd: course_offerings.entryYearEnd,
     })
     .from(course_offerings)
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
@@ -151,6 +169,11 @@ export async function autoFillCartFromChartAction(): Promise<{
       eq(course_offerings.isActive, 1),
       eq(course_offerings.universityId, myUni),   // 🔒 مرز دانشگاه
     ));
+
+  // 🎯 هدف‌گیری (G1): چیدمان خودکار هم فقط از ارائه‌های قابل‌دیدنِ این دانشجو
+  //    (مقطع/رشته/بازهٔ ورودی) انتخاب می‌کند.
+  const studentScope = { degreeLevelId: me.degreeLevelId, majorId: me.majorId ?? null, entryYear: me.entryYear };
+  const visibleOfferings = offerings.filter(o => offeringVisible(o, studentScope));
 
   // ۳. دریافت زمان‌بندی کلاس‌ها و امتحانات ارائه‌ها
   const allScheds = await db.select().from(schedules);
@@ -174,7 +197,7 @@ export async function autoFillCartFromChartAction(): Promise<{
 
   // ۴. دسته‌بندی ارائه‌ها بر اساس کد/شناسه درس (جهت مدیریت چندگروهی)
   const byCourse = new Map<number, typeof offerings>();
-  for (const off of offerings) {
+  for (const off of visibleOfferings) {
     // فیلتر عدم درج پایان‌نامه ارشد برای دانشجوی کارشناسی
     if (me.degreeLevelId === 1 && (off.code.startsWith('21') || off.title.includes('پایان‌نامه'))) continue;
     if (off.title.includes('معرفی به استاد') || off.title.includes('مطالعه فردی')) continue;

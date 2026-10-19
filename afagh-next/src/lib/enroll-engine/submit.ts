@@ -6,6 +6,7 @@ import {
 } from '@/db/schema';
 import { withUserRls } from '@/db';
 import { ledgerBalance } from '../ledger-balance';
+import { offeringVisible } from '../offering-targeting';
 import { atomicSeat, nextWaitlistPosition, releaseSeat, warmupCapacities } from '../waitingRoom';
 import { evaluateStudentRegulationStatus, parseUnits } from '../regulations-engine';
 import { buildPrereqContext, evaluateLogicTree, type PrereqContext } from './prereqs';
@@ -122,18 +123,21 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
       : 'وضعیت دانشجو برای انتخاب واحد فعال نیست (' + stu.status + ').');
   }
 
-  // بررسی تسویه‌حساب مالی: ابتدا ترم مالی، سپس ترم تحصیلی
-  // اگر financial_terms وجود دارد از آن استفاده می‌کنیم (سازگاری با سما)
-  let finTermId: number | null = null;
+  // بررسی تسویه‌حساب مالی: ترم مالی فعال مرجع «ترم تحصیلی» دارد
+  // (financial_terms.academicTermId) و ستون financial_clearances.termId با FK
+  // به academic_terms.id اشاره می‌کند. پیش از این، وقتی ترم مالی فعال بود
+  // کوئری تسویه‌حساب با financial_terms.id اجرا می‌شد و چون از فضای
+  // شناسهٔ ترم تحصیلی خارج بود، هیچ ردیفی پیدا نمی‌شد و گیت برای همهٔ
+  // دانشجویان ساکت «تسویه‌نشده» می‌داد (F1).
+  let clearanceTermId = term.id;
   const finTerms = await D.select().from(financial_terms)
     .where(and(eq(financial_terms.universityId, stu.universityId ?? 0), eq(financial_terms.isActive, 1)))
     .orderBy(sql`"sortOrder" ASC NULLS LAST`);
   if (finTerms.length > 0) {
-    // ترم مالی جاری را پیدا می‌کنیم (بر اساس sortOrder یا termCode)
-    finTermId = finTerms[0].id;
+    // ترم مالی جاری پیدا شد؛ اگر به ترم تحصیلی وصل است از همان استفاده کن،
+    // وگرنه به ترم جاریِ خود دانشجو برگرد (هرگز به شناسهٔ ترم مالی نه).
+    clearanceTermId = finTerms[0].academicTermId ?? term.id;
   }
-
-  const clearanceTermId = finTermId ?? term.id;
   const [fin] = await D.select().from(financial_clearances)
     .where(and(eq(financial_clearances.studentId, studentId), eq(financial_clearances.termId, clearanceTermId)));
   
@@ -168,18 +172,35 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
   const ids = cart.map(c => c.offeringId);
   // 🔒 سبد هم باید به دانشگاه و ترم خودِ دانشجو قفل شود: حتی اگر سطری از راه
   //    رخنه‌ای دیگر وارد سبد شده باشد، اینجا حذف و ثبت نمی‌شود.
+  //    + isActive=1: ارائهٔ غیرفعال‌شده (G4) نباید از طریق سبد کهنه ثبت شود.
   const offs = await D
-    .select({ id: course_offerings.id, courseId: course_offerings.courseId, code: courses.code, title: courses.title, units: courses.units, capacity: course_offerings.capacity, enrolled: course_offerings.enrolledCount, waitCap: course_offerings.waitlistCapacity })
+    .select({ id: course_offerings.id, courseId: course_offerings.courseId, code: courses.code, title: courses.title, units: courses.units, capacity: course_offerings.capacity, enrolled: course_offerings.enrolledCount, waitCap: course_offerings.waitlistCapacity, targetDegreeLevelId: course_offerings.targetDegreeLevelId, targetMajorId: course_offerings.targetMajorId, entryYearStart: course_offerings.entryYearStart, entryYearEnd: course_offerings.entryYearEnd })
     .from(course_offerings).innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .where(and(
       inArray(course_offerings.id, ids),
       eq(course_offerings.termId, term.id),
+      eq(course_offerings.isActive, 1),
       stuUni == null ? sql`1 = 0` : eq(course_offerings.universityId, stuUni),
     ));
   if (offs.length !== ids.length) {
     const dropped = ids.filter(i => !offs.some(o => o.id === i));
-    out.hardErrors.push(`${dropped.length} درس از سبد به دلیل تعلق نداشتن به دانشگاه/نیمسال شما حذف شد.`);
+    out.hardErrors.push(`${dropped.length} درس از سبد به دلیل تعلق نداشتن به دانشگاه/نیمسال شما یا غیرفعال بودن ارائه حذف شد.`);
   }
+
+  // ── فیلتر ۰ب: هدف‌گیری ارائه (مقطع/رشته/بازهٔ ورودی) ──
+  // G1: تا پیش از این، کاتالوگ/سبد/هیچ‌کدام هدف‌گیری را اعمال نمی‌کردند؛
+  // دانشجوی خارج از هدف روی ارائهٔ اختصاصی ثبت‌نام می‌کرد. گیت سروری:
+  // offeringVisible تنها مرجع درست دیده‌شدن است (offering-targeting.ts).
+  const visible = offs.filter(o => offeringVisible(
+    { targetDegreeLevelId: o.targetDegreeLevelId, targetMajorId: o.targetMajorId, entryYearStart: o.entryYearStart, entryYearEnd: o.entryYearEnd },
+    { degreeLevelId: stu.degreeLevelId, majorId: stu.majorId ?? null, entryYear: stu.entryYear },
+  ));
+  if (visible.length !== offs.length) {
+    const droppedTargeted = offs.filter(o => !visible.some(v => v.id === o.id));
+    out.ok = false;
+    out.hardErrors.push(`${droppedTargeted.length} درس از سبد به دلیل عدم تطابق مقطع/رشته/سال ورودی با هدف ارائه حذف شد.`);
+  }
+  const activeOffs = visible;
 
   // دروس همین ترم که قبلاً ثبت شده‌اند (تکراری نگیریم)
   const current = await D
@@ -191,7 +212,7 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
 
   // ── فیلتر ۲ب: تکرار همان درس در ترم (خطای سخت — وفادار به فاز صفر) ──
   const takenCourseIds = new Set(current.map(c => c.courseId));
-  for (const o of offs) {
+  for (const o of activeOffs) {
     if (already.has(o.id)) continue;
     if (takenCourseIds.has(o.courseId)) {
       out.hardErrors.push('درس «' + o.title + '» قبلاً در این ترم (در گروهی دیگر) برای شما ثبت شده است.');
@@ -211,7 +232,7 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
 
   // سقف روی «جمع ترم» اعمال می‌شود: ثبت‌شدهٔ قبلی + سبد جدید (نه فقط سبد جدید)
   const currentUnits = current.reduce((s, c) => s + parseUnits(c.units), 0);
-  const newUnits = offs.filter(o => !already.has(o.id)).reduce((s, o) => s + Number(o.units), 0);
+  const newUnits = activeOffs.filter(o => !already.has(o.id)).reduce((s, o) => s + Number(o.units), 0);
   const totalUnits = currentUnits + newUnits;
   if (totalUnits > allowedMaxUnits) {
     out.ok = false;
@@ -254,7 +275,7 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
       }
     }
   }
-  for (const o of offs) {
+  for (const o of activeOffs) {
     if (already.has(o.id)) continue;
     if (classClash.has(o.id)) {
       out.softErrors.push({ offeringId: o.id, msg: 'تداخل زمانی: «' + o.title + '» با کلاس دیگر.' });
@@ -272,7 +293,7 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
   // ── فیلتر ۴: پیش‌نیاز — درخت منطقی (§۱۰۱۲، خطای نرم) ──
   const buildCtx = deps.buildPrereq ?? buildPrereqContext;
   const prereq = await buildCtx(studentId);
-  for (const o of offs) {
+  for (const o of activeOffs) {
     if (already.has(o.id)) continue;
     const rule = prereq.ruleByCourse.get(o.courseId);
     if (!rule) continue;
@@ -298,7 +319,7 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
     excluded: boolean;
     failMessage: string | null;
   };
-  const plans: SubmitPlan[] = offs
+  const plans: SubmitPlan[] = activeOffs
     .filter(o => !already.has(o.id) && !softSet.has(o.id))
     .map(o => ({ o, gotSeat: false, redisSeatTaken: false, waitlisted: false, wlPos: null, excluded: false, failMessage: null }));
 

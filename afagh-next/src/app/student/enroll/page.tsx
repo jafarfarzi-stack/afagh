@@ -18,6 +18,7 @@ import { getStudentByUser, requireRole } from '@/lib/auth';
 import { getTermScope } from '@/lib/term-scope';
 import TermFilterChip from '@/components/TermFilterChip';
 import { buildPrereqContext, formatPrereq } from '@/lib/enroll-engine';
+import { offeringVisible } from '@/lib/offering-targeting';
 import { evaluateStudentRegulationStatus, type StudentAcademicSummary } from '@/lib/regulations-engine';
 import { getSetting } from '@/lib/settings';
 import { toShamsi } from '@/lib/shamsi';
@@ -63,11 +64,29 @@ export default async function EnrollPage() {
           group: course_offerings.groupNumber,
           professorId: course_offerings.professorId,
           offeringType: course_offerings.offeringType,
+          targetDegreeLevelId: course_offerings.targetDegreeLevelId,
+          targetMajorId: course_offerings.targetMajorId,
+          entryYearStart: course_offerings.entryYearStart,
+          entryYearEnd: course_offerings.entryYearEnd,
         })
         .from(course_offerings)
         .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-        .where(and(eq(course_offerings.termId, term.id), eq(course_offerings.isActive, 1)))
+        .where(and(
+          eq(course_offerings.termId, term.id),
+          eq(course_offerings.isActive, 1),
+          // 🔒 مرز دانشگاه: کاتالوگ فقط ارائه‌های دانشگاه خودِ دانشجو
+          // (پیش از این بی‌فیلتر بود و ارائه‌های سایر دانشگاه‌ها هم دیده می‌شد)
+          me.universityId == null ? sql`1 = 0` : eq(course_offerings.universityId, me.universityId),
+        ))
     : [];
+
+  // 🎯 هدف‌گیری ارائه (G1): فقط ارائه‌هایی که مقطع/رشته/بازهٔ ورودیِشان با
+  //    این دانشجو هم‌خوان است دیده شود — پیش از این هدف‌گیری ست می‌شد ولی در
+  //    کاتالوگ اعمال نمی‌شد. offeringVisible تنها مرجع درست است.
+  const offeringsForStudent = rawOfferings.filter(o => offeringVisible(
+    o,
+    { degreeLevelId: me.degreeLevelId, majorId: me.majorId ?? null, entryYear: me.entryYear },
+  ));
 
   // دریافت اطلاعات اساتید
   const profUsers = await db
@@ -84,8 +103,10 @@ export default async function EnrollPage() {
     profMap.set(p.staffId, `${p.firstName || ''} ${p.lastName || ''}`.trim());
   }
 
-  // دریافت زمان‌بندی کلاس‌ها و امتحانات
-  const rawSchedules = term
+  // دریافت زمان‌بندی کلاس‌ها و امتحانات — فقط برای ارائه‌های همین ترم
+  // (پیش از این کل جدول schedules بی‌فیلتر خوانده می‌شد).
+  const termOffIds = rawOfferings.map(o => o.id);
+  const rawSchedules = term && termOffIds.length
     ? await db
         .select({
           offeringId: schedules.offeringId,
@@ -98,6 +119,7 @@ export default async function EnrollPage() {
         })
         .from(schedules)
         .leftJoin(classrooms, eq(classrooms.id, schedules.roomId))
+        .where(inArray(schedules.offeringId, termOffIds))
     : [];
 
   const schedMap = new Map<
@@ -134,7 +156,7 @@ export default async function EnrollPage() {
   // برچسب پیش‌نیاز هر درس از قاعدهٔ مؤثر دانشجو
   const prereqCtx = await buildPrereqContext(me.id);
   const prereqLabel = new Map<number, string>();
-  for (const o of rawOfferings) {
+  for (const o of offeringsForStudent) {
     const lbl = formatPrereq(prereqCtx.ruleByCourse.get(o.courseId ?? -1), prereqCtx.titles);
     if (lbl) prereqLabel.set(o.id, lbl);
   }
@@ -168,7 +190,7 @@ export default async function EnrollPage() {
 
   // محاسبه شهریه برای هر درس
   const tuitionMap = new Map<number, { fixed: number; variable: number; perUnit: number; total: number }>();
-  for (const o of rawOfferings) {
+  for (const o of offeringsForStudent) {
     const ctx = { ...tuitionCtx, offeringType: o.offeringType || 'NORMAL' };
     const rule = resolveTuitionRule(allTuitionRules, ctx);
     if (rule) {
@@ -206,7 +228,7 @@ export default async function EnrollPage() {
         .where(inArray(course_offerings.id, cartOfferingIds))
     : [];
 
-  const offerings = rawOfferings.map(o => {
+  const offerings = offeringsForStudent.map(o => {
     const s = schedMap.get(o.id);
     const tuition = tuitionMap.get(o.id) ?? { fixed: 0, variable: 0, perUnit: 0, total: 0 };
     return {
