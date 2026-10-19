@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     const uni = await getCurrentUniversity().catch(() => null);
     if (!uni) return NextResponse.json({ error: 'دانشگاه فعال نامشخص است' }, { status: 400 });
     const [row] = await db.select({ universityId: subject_fee_types.universityId })
-      .from(subject_fee_types).where(eq(subject_fee_types.id, id)).limit(1);
+      .from(subject_fee_types).where(eq(subject_fee_types.id, idNum)).limit(1);
     if (!row) return NextResponse.json({ error: 'رکورد یافت نشد' }, { status: 404 });
     if (row.universityId !== null && row.universityId !== uni.id) {
       return NextResponse.json({ error: 'رکورد متعلق به دانشگاه دیگری است' }, { status: 403 });

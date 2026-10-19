@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
       termId,
       variableCoefficient: String(vCoeff),
       fixedCoefficient: String(fCoeff),
-      note: note || null,
+      note: note ? String(note) : null,
     }).returning({ id: tuition_coefficients.id });
     await appendAudit(tx, {
       actorUserId: auth.id ?? null,
