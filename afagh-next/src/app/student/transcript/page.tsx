@@ -247,7 +247,7 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
       </div>
 
       {/* سند رسمی کارنامه (کاغذ رسمی کارنامه دانشگاهی) */}
-      <div className="transcript-print-area tr-root bg-white text-slate-900 border-2 border-slate-800 p-5 sm:p-8 shadow-xl print-area print:shadow-none print:border print:m-0 print:p-4 text-xs font-sans">
+      <div className="transcript-print-area bg-white text-slate-900 border-2 border-slate-800 p-5 sm:p-8 shadow-xl print-area print:shadow-none print:border print:m-0 print:p-4 text-xs font-sans">
         
         {/* ۱. سربرگ سه‌بخشی رسمی دانشگاه */}
         <div className="border-b-2 border-slate-800 pb-4 mb-4">
@@ -347,7 +347,7 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
             </div>
             
             {/* ترم‌های این سال */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 print:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {yearGroup.terms.map((termItem, idx) => {
                 let termUnits = 0;
                 let termPassed = 0;
@@ -386,12 +386,12 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
                   : termItem.normalized.displaySemester;
 
                 return (
-                  <div key={`${yearGroup.academicYear}-${idx}`} className="tr-student-term min-w-0 border border-slate-700 overflow-hidden flex flex-col justify-between bg-white">
+                  <div key={`${yearGroup.academicYear}-${idx}`} className="border border-slate-700 overflow-hidden flex flex-col justify-between bg-white">
                     <div>
                       {/* هدر نیمسال */}
-                      <div className="tr-student-term-head bg-slate-200/90 px-3 py-1.5 flex items-center justify-between gap-1 flex-wrap border-b border-slate-700 font-bold">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-slate-950 text-xs break-words">
+                      <div className="bg-slate-200/90 px-3 py-1.5 flex items-center justify-between border-b border-slate-700 font-bold">
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-950 text-xs">
                             📚 {termDisplayTitle}
                             {termItem.normalized.termType === 'EQUIVALENCE' && (
                               <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1 py-0.2 rounded">معادل‌سازی</span>
@@ -413,23 +413,15 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
                     </div>
 
                     {/* جدول دروس */}
-                  <table className="tr-term-table w-full text-right text-[11px] border-collapse" style={{ tableLayout: 'fixed' }}>
-                    <colgroup>
-                      <col style={{ width: '6%' }} />
-                      <col style={{ width: '17%' }} />
-                      <col style={{ width: '37%' }} />
-                      <col style={{ width: '7%' }} />
-                      <col style={{ width: '10%' }} />
-                      <col style={{ width: '23%' }} />
-                    </colgroup>
+                  <table className="w-full text-right text-[11px] border-collapse">
                     <thead>
                       <tr className="bg-slate-100 border-b border-slate-700 font-bold text-slate-800">
-                        <th className="p-1 border-l border-slate-300 text-center">ردیف</th>
-                        <th className="p-1 border-l border-slate-300 text-center">کد درس</th>
+                        <th className="p-1 border-l border-slate-300 text-center w-6">ردیف</th>
+                        <th className="p-1 border-l border-slate-300 text-center w-16">کد درس</th>
                         <th className="p-1 border-l border-slate-300">نام درس</th>
-                        <th className="p-1 border-l border-slate-300 text-center">واحد</th>
-                        <th className="p-1 border-l border-slate-300 text-center">نمره</th>
-                        <th className="p-1 text-center">نتیجه / وضعیت</th>
+                        <th className="p-1 border-l border-slate-300 text-center w-12">واحد</th>
+                        <th className="p-1 border-l border-slate-300 text-center w-14">نمره</th>
+                        <th className="p-1 text-center w-24">نتیجه / وضعیت</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -459,8 +451,8 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
                         return (
                           <tr key={row.id} className="border-b border-slate-200 hover:bg-slate-50">
                             <td className="p-1 border-l border-slate-200 text-center text-slate-600">{rIdx + 1}</td>
-                            <td className="p-1 border-l border-slate-200 text-center font-mono text-[10px] break-all" dir="ltr">{row.code}</td>
-                            <td className="tr-course-title p-1 border-l border-slate-200 font-semibold text-slate-900 break-words">
+                            <td className="p-1 border-l border-slate-200 text-center font-mono text-[10px]" dir="ltr">{row.code}</td>
+                            <td className="p-1 border-l border-slate-200 font-semibold text-slate-900">
                               {row.title}
                             </td>
                             <td className="p-1 border-l border-slate-200 text-center font-bold font-mono">{totalU}</td>
@@ -484,7 +476,7 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
                     </tbody>
                   </table>
 
-                <div className="tr-term-footer bg-slate-100 p-2 border-t border-slate-700 flex items-center justify-between gap-1 flex-wrap font-bold text-[10px] text-slate-800 mt-auto">
+                <div className="bg-slate-100 p-2 border-t border-slate-700 flex items-center justify-between font-bold text-[10px] text-slate-800 mt-auto">
                   <div className="flex gap-2">
                     <span>اخذ: <b className="font-mono">{termUnits}</b></span>
                     <span>گذرانده: <b className="text-emerald-800 font-mono">{termPassed}</b></span>
@@ -504,7 +496,7 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
           <div className="bg-slate-800 text-white px-3 py-1 font-bold text-center text-xs">
             خلاصه وضعیت تحصیلی کل دوره تا تاریخ صدور کارنامه
           </div>
-          <table className="w-full text-center text-[11px] border-collapse font-bold table-fixed">
+          <table className="w-full text-center text-[11px] border-collapse font-bold">
             <tbody>
               <tr className="bg-slate-100 border-b border-slate-400 text-slate-700">
                 <td className="p-2 border-l border-slate-300">کل واحدهای اخذشده</td>

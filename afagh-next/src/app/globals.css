@@ -457,16 +457,6 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   .transcript-print-area .tr-term-table tr { page-break-inside: avoid; break-inside: avoid; }
   .transcript-print-area .tr-course-title { overflow-wrap: break-word; word-break: break-word; }
   .transcript-print-area .tr-term-footer { font-size: 8pt; }
-  /* کارنامهٔ تحصیلی دانشجو (صفحهٔ دانشجو): سربرگ نیمسال و جدول ۶ستونه
-     با عرض ثابت می‌مانند تا هیچ ستونی از کادر کارت بیرون نزند */
-  .transcript-print-area .tr-student-term { min-width: 0; }
-  .transcript-print-area .tr-student-term table { width: 100% !important; table-layout: fixed !important; }
-  .transcript-print-area .tr-student-term table th,
-  .transcript-print-area .tr-student-term table td { overflow-wrap: anywhere; word-break: break-word; }
-  .transcript-print-area .tr-student-term-head { font-size: 8pt; line-height: 1.4; padding: 2pt 3pt !important; }
-  .transcript-print-area .tr-student-term-head .text-xs { font-size: 8pt !important; }
-  .transcript-print-area .tr-student-term-head .text-\[10px\],
-  .transcript-print-area .tr-student-term-head .text-\[9px\] { font-size: 7pt !important; }
   .transcript-print-area .tr-breakdown { break-inside: avoid; page-break-inside: avoid; }
   /* ── چاپ عمودی: همان ۳ ستونه ولی فشرده‌تر تا در عرض بگنجد ── */
   body.printing-portrait .transcript-print-area .tr-root { font-size: 8pt; }
@@ -475,8 +465,6 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   body.printing-portrait .transcript-print-area .tr-term-table th,
   body.printing-portrait .transcript-print-area .tr-term-table td { padding: 1pt 1.5pt !important; }
   body.printing-portrait .transcript-print-area .tr-term-footer { font-size: 7pt; }
-  body.printing-portrait .transcript-print-area .tr-student-term-head { font-size: 7pt; }
-  body.printing-portrait .transcript-print-area .tr-student-term-head .text-xs { font-size: 7pt !important; }
   /* کارنامهٔ مالی در کاغذ عمودی (مثلاً چاپ مرورگر): دو کارت در هر ردیف تا جدول دروس از کادر بیرون نزند */
   @media print and (orientation: portrait) {
     .transcript-print-area .tr-fin-row { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
