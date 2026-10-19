@@ -103,7 +103,7 @@ export const authorizedUniversityIds = cache(async (): Promise<number[] | null> 
  */
 export async function getCurrentUniversity(): Promise<UniScope> {
   const all = await allUniversities();
-  const allowed = await authorizedUniversityIds().catch(() => []);
+  const allowed = await authorizedUniversityIds().catch((): number[] | null => []);
   if (!all.length) return allowed === null ? FALLBACK_UNI : DENY_UNI;
 
   const pool = allowed === null ? all : all.filter(u => allowed.includes(u.id));
@@ -116,7 +116,7 @@ export async function getCurrentUniversity(): Promise<UniScope> {
 /** همهٔ دانشگاه‌ها برای سوییچر سربرگ — فقط آنچه کاربر واقعاً مجاز است */
 export async function listUniversities(): Promise<UniScope[]> {
   const all = await allUniversities();
-  const allowed = await authorizedUniversityIds().catch(() => []);
+  const allowed = await authorizedUniversityIds().catch((): number[] | null => []);
   if (!all.length) return allowed === null ? [FALLBACK_UNI] : [];
   return allowed === null ? all : all.filter(u => allowed.includes(u.id));
 }
@@ -129,7 +129,7 @@ export async function listUniversities(): Promise<UniScope[]> {
  */
 export async function canActOnUniversity(universityId: number | null | undefined): Promise<boolean> {
   if (universityId == null) return false;      // رکورد بدون دانشگاه: مجهول → رد
-  const allowed = await authorizedUniversityIds().catch(() => []);
+  const allowed = await authorizedUniversityIds().catch((): number[] | null => []);
   if (allowed === null) return true;           // حساب پلتفرمی
   return allowed.includes(Number(universityId));
 }
@@ -140,7 +140,7 @@ export async function canActOnUniversity(universityId: number | null | undefined
  * (`1=0`) — نه حذفِ شرط، چون حذف شرط یعنی «همهٔ دانشگاه‌ها» (fail-open).
  */
 export async function currentUniversitySqlCondition(column: any): Promise<any> {
-  const allowed = await authorizedUniversityIds().catch(() => []);
+  const allowed = await authorizedUniversityIds().catch((): number[] | null => []);
   if (allowed === null) return undefined;                    // نامحدود: بدون قید
   if (!allowed.length) return sql`1 = 0`;                    // deny-all (fail-closed)
   return inArray(column, allowed);

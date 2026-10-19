@@ -339,7 +339,7 @@ if (has('appeals')) {
 
 // ═══════════ گزارش نهایی ═══════════
 if (has('report')) {
-  const ov = await engine.examChainOverview(Number((sess as any).id));
+  const ov = await engine.examChainOverview(Number((sess as any).id), Number((sess as any).universityId));
   console.log('\n📊 گزارش نهایی چرخه:');
   console.log(`   حضور و غیاب صادرشده: ${ov.attendanceIssued} (حاضر ${ov.present} · غایب ${ov.absent})`);
   console.log(`   صورتجلسه‌های امضاشده: ${ov.minutesSigned}/10`);

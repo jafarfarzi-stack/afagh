@@ -34,7 +34,7 @@ export async function changePasswordAction(currentPassword: string, newPassword:
 
 export async function logoutAction() {
   const og = await assertServerActionOrigin();
-  if (!og.ok) return { ok: false, error: og.error };
+  if (!og.ok) throw new Error(og.error);
   await logout();
   redirect('/login');
 }

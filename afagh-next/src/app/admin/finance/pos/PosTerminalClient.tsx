@@ -39,6 +39,7 @@ export default function PosTerminalClient({ terminal, universityId }: Props) {
     amount: '',
     stan: '',
     rrn: '',
+    authorizationRef: '',
     entryMode: 'CHIP' as const,
     cardPan: '',
     cardholderName: '',
@@ -67,6 +68,7 @@ export default function PosTerminalClient({ terminal, universityId }: Props) {
         amount: Number(saleForm.amount),
         stan: saleForm.stan.trim(),
         rrn: saleForm.rrn.trim() || undefined,
+        authorizationRef: saleForm.authorizationRef.trim(),
         entryMode: saleForm.entryMode,
         cardPan: saleForm.cardPan.replace(/\D/g, ''),
         cardholderName: saleForm.cardholderName.trim() || undefined,
@@ -74,7 +76,7 @@ export default function PosTerminalClient({ terminal, universityId }: Props) {
       });
       if (r.ok) {
         setMsg({ ok: true, text: `✅ پرداخت ${fa(Number(saleForm.amount))} ریال با موفقیت ثبت شد` });
-        setSaleForm({ ...saleForm, studentCode: '', amount: '', stan: '', rrn: '', cardPan: '', cardholderName: '', description: '' });
+        setSaleForm({ ...saleForm, studentCode: '', amount: '', stan: '', rrn: '', authorizationRef: '', cardPan: '', cardholderName: '', description: '' });
         loadHistory();
       } else {
         setMsg({ ok: false, text: 'خطا در ثبت پرداخت' });
@@ -159,6 +161,10 @@ export default function PosTerminalClient({ terminal, universityId }: Props) {
             <label className={labelCls}>
               RRN (شماره مرجع بانک)
               <input name="rrn" value={saleForm.rrn} onChange={e => setSaleForm({ ...saleForm, rrn: e.target.value })} placeholder="اختیاری" className={inputCls} />
+            </label>
+            <label className={labelCls}>
+              کد تأیید بانک (Authorization) *
+              <input name="authorizationRef" value={saleForm.authorizationRef} onChange={e => setSaleForm({ ...saleForm, authorizationRef: e.target.value })} placeholder="۶ تا ۴۰ کاراکتر" className={inputCls} />
             </label>
             <label className={labelCls}>
               روش ورود کارت *
