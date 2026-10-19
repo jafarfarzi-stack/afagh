@@ -261,9 +261,15 @@ async function groupG4() {
 
 async function groupH() {
   sec('H — یافته‌های باز: یکتایی DB (H1) و بازهٔ سال ورودی (H3)');
-  // H1a — ایندکس یکتای (ترم+درس+گروه) واقعاً در DB هست
-  const idx = (await db.execute(sql`SELECT indexname FROM pg_indexes WHERE tablename = 'course_offerings' AND indexname = 'uq_course_offerings_term_course_group'`)).rows as any[];
-  check('H1a', 'ایندکس یکتای (term+course+group) در DB موجود است', idx.length === 1, JSON.stringify(idx));
+  // H1a — ایندکس یکتای (ترم+درس+گروه) واقعاً در DB هست و «جزئی» است (فقط فعال‌ها)
+  const idx = (await db.execute(sql`SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'course_offerings' AND indexname = 'uq_course_offerings_term_course_group'`)).rows as any[];
+  const idxDef = String(idx[0]?.indexdef ?? '');
+  check(
+    'H1a',
+    'ایندکس یکتای (term+course+group) در DB موجود و جزئی روی isActive=1 است',
+    idx.length === 1 && /UNIQUE/i.test(idxDef) && /isActive/i.test(idxDef),
+    JSON.stringify(idx),
+  );
   // H1b — درج تکراری مستقیم (بدون گارد اپ) باید با unique violation رد شود
   const probe = { courseId: COURSE_GEN, groupNumber: 91, capacity: 5, professorId: null, termId: TERM, universityId: MY_UNI, enrolledCount: 0, isActive: 1, waitlistCapacity: 0 };
   await db.execute(sql.raw('DELETE FROM course_offerings WHERE "courseId" = ' + COURSE_GEN + ' AND "groupNumber" = 91 AND "termId" = ' + TERM));

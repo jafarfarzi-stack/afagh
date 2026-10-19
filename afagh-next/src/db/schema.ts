@@ -751,7 +751,13 @@ export const course_offerings = pgTable('course_offerings', {
   isSharedService: integer('isSharedService').default(0),                            // 1 = استخر خدمات عمومی (فاز تأمین)
   equivalenceClusterId: integer('equivalenceClusterId').references(() => equivalence_clusters.id), // استخر ظرفیت مشترک
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
-}, (t) => ({ uqTermCourseGroup: unique('uq_course_offerings_term_course_group').on(t.termId, t.courseId, t.groupNumber) }));
+}, (t) => ({
+  // H1: حداکثر یک ارائهٔ «فعال» برای هر (ترم+درس+گروه) — ارائهٔ غیرفعال‌شده
+  // تاریخچه است و مانع ساخت ارائهٔ جدید نمی‌شود (مهاجرت 0103).
+  uqTermCourseGroup: uniqueIndex('uq_course_offerings_term_course_group')
+    .on(t.termId, t.courseId, t.groupNumber)
+    .where(sql`"isActive" = 1`),
+}));
 
 /** ────────────────────────────────────────────────────────────────────────
  *  معادل‌سازی درس بین دو دانشگاه (کارنامهٔ فارغ‌التحصیلان دانشگاه مبدأ)

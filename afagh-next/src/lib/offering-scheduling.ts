@@ -120,7 +120,9 @@ export async function readClassroomUni(exec: any, roomId: number) {
   return r ?? null;
 }
 
-/** تکراری بودن (درس+گروه) در ترم (G1/D1/G5). excludeId: ردیفی که خودش است (در ویرایش) */
+/** تکراری بودن (درس+گروه) در ترم (G1/D1/G5). excludeId: ردیفی که خودش است (در ویرایش)
+ *  فقط ارائه‌های «فعال» — هم‌راستا با ایندکس یکتای جزئی مهاجرت 0103:
+ *  ارائهٔ غیرفعال‌شده تاریخچه است و مانع ساخت ارائهٔ جدید نمی‌شود. */
 export async function findDuplicateOffering(
   exec: any,
   args: { termId: number; courseId: number; groupNumber: number; excludeId?: number | null },
@@ -129,6 +131,7 @@ export async function findDuplicateOffering(
     eq(course_offerings.termId, args.termId),
     eq(course_offerings.courseId, args.courseId),
     eq(course_offerings.groupNumber, args.groupNumber),
+    eq(course_offerings.isActive, 1),
   ];
   if (args.excludeId != null) conds.push(ne(course_offerings.id, args.excludeId) as any);
   const [dup] = await exec.select({ id: course_offerings.id }).from(course_offerings).where(and(...conds)).limit(1);
