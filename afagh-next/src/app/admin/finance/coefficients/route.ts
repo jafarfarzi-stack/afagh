@@ -56,9 +56,10 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'بدنهٔ درخواست نامعتبر است.' }, { status: 400 });
   }
-  const { termId, variableCoefficient, fixedCoefficient, note } = (body ?? {}) as Record<string, unknown>;
+  const { termId: rawTermId, variableCoefficient, fixedCoefficient, note } = (body ?? {}) as Record<string, unknown>;
 
-  if (!termId) return NextResponse.json({ error: 'ترم الزامی است' }, { status: 400 });
+  const termId = Number(rawTermId);
+  if (!Number.isSafeInteger(termId) || termId <= 0) return NextResponse.json({ error: 'ترم الزامی است' }, { status: 400 });
 
   const vCoeff = Number(variableCoefficient);
   const fCoeff = Number(fixedCoefficient);
@@ -109,7 +110,7 @@ export async function POST(req: NextRequest) {
         .set({
           variableCoefficient: String(vCoeff),
           fixedCoefficient: String(fCoeff),
-          note: note || null,
+          note: note ? String(note) : null,
           updatedAt: new Date(),
         })
         .where(and(eq(tuition_coefficients.id, existing.id), uniScope));

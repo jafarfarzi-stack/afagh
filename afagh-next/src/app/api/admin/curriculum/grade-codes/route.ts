@@ -41,8 +41,8 @@ export async function PATCH(req: NextRequest) {
   await db
     .update(curriculum_courses)
     .set({
-      passGradeStatusCode: passGradeStatusCode ?? null,
-      failGradeStatusCode: failGradeStatusCode ?? null,
+      passGradeStatusCode: passGradeStatusCode == null ? null : String(passGradeStatusCode),
+      failGradeStatusCode: failGradeStatusCode == null ? null : String(failGradeStatusCode),
     })
     .where(and(
       eq(curriculum_courses.curriculumVersionId, versionId),

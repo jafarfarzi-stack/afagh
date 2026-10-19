@@ -131,7 +131,7 @@ export async function assertServerActionOrigin(): Promise<{ ok: true } | { ok: f
   } catch (err) {
     // 🔒 fail-closed (بازبینی ۴ — High): اگر خودِ «بررسی منشأ» خطای غیرمنتظره بدهد،
     // نباید اجازه صادر کند؛ رد شدن اشتباه، ارزان‌تر از پذیرش یک CSRF است.
-    log.error('csrf_origin_check_failed', { error: String(err?.message ?? err) });
+    log.error('csrf_origin_check_failed', { error: String((err as { message?: string })?.message ?? err) });
     return { ok: false, error: 'خطا در بررسی امنیتی درخواست؛ دوباره تلاش کنید.' };
   }
 }
@@ -177,7 +177,7 @@ export async function requireStudentUniversity(studentId: number): Promise<{ ok:
     }
     return { ok: true };
   } catch (err) {
-    log.error('scope_require_student_university_failed', { error: String(err?.message ?? err) });
+    log.error('scope_require_student_university_failed', { error: String((err as { message?: string })?.message ?? err) });
     return { ok: false, error: 'خطا در بررسی محدودهٔ دانشگاه؛ دسترسی رد شد.' };
   }
 }

@@ -76,10 +76,18 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'بدنهٔ درخواست نامعتبر است.' }, { status: 400 });
   }
-  const { studentId, termId, subjectFeeTypeId, amount, note } = (body ?? {}) as Record<string, unknown>;
+  const { studentId: rawStudentId, termId: rawTermId, subjectFeeTypeId: rawSubjectFeeTypeId, amount, note } = (body ?? {}) as Record<string, unknown>;
 
-  if (!studentId || !termId || !subjectFeeTypeId) {
+  if (!rawStudentId || !rawTermId || !rawSubjectFeeTypeId) {
     return NextResponse.json({ error: 'دانشجو، ترم و نوع مبلغ الزامی است' }, { status: 400 });
+  }
+  const studentId = Number(rawStudentId);
+  const termId = Number(rawTermId);
+  const subjectFeeTypeId = Number(rawSubjectFeeTypeId);
+  if (!Number.isSafeInteger(studentId) || studentId <= 0 ||
+      !Number.isSafeInteger(termId) || termId <= 0 ||
+      !Number.isSafeInteger(subjectFeeTypeId) || subjectFeeTypeId <= 0) {
+    return NextResponse.json({ error: 'شناسه‌های نامعتبر' }, { status: 400 });
   }
   const uni = await getCurrentUniversity().catch(() => null);
   if (!uni) return NextResponse.json({ error: 'دانشگاه فعال نامشخص است' }, { status: 400 });

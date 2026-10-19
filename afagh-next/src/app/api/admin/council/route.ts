@@ -16,7 +16,7 @@ import { assertCsrf } from '@/lib/security';
 //  قراردادها: src/lib/council.ts — نوع/وضعیت فارسی = مقدار ذخیره‌شده
 // ══════════════════════════════════════════════════════════════════════
 import { NextRequest, NextResponse } from 'next/server';
-import { and, count, desc, eq, gte, ilike, lte, or, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, gte, ilike, lte, or, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/db';
 import { council_meetings, council_decisions } from '@/db/schema-council';
