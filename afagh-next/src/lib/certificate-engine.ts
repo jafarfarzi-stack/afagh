@@ -1,5 +1,5 @@
 import 'server-only';
-import { getPublicBaseUrl } from '@/lib/settings';
+import { getPublicBaseUrl, getSetting } from '@/lib/settings';
 import { qrSvg as renderQrSvg } from '@/lib/qr';
 import crypto from 'crypto';
 
@@ -17,11 +17,22 @@ export interface CertificateData {
   issueDateEn: string;
 }
 
+/** نمک هش گواهی از ENV — در production بدون آن گواهی صادر نمی‌شود. */
+function certificateSalt(): string {
+  const s = (process.env.AFAGH_CERT_SALT || '').trim();
+  if (s) return s;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('[certificate] AFAGH_CERT_SALT در production ست نشده است — صدور گواهی متوقف شد (fail-closed).');
+  }
+  console.error('⚠ [certificate] AFAGH_CERT_SALT ست نشده است — از مقدار توسعه استفاده می‌شود (فقط محیط محلی).');
+  return 'afagh-dev-cert-salt';
+}
+
 /**
  * تولید هش اعتبارسنجی رمزنگاری‌شده SHA-256 جهت جلوگیری از جعل مدرک
  */
 export function generateCertificateVerificationHash(data: CertificateData): string {
-  const payload = `${data.certCode}|${data.learnerName}|${data.nationalIdMasked}|${data.courseName}|${data.grade}|${data.issueDateFa}|AFAGH_SECRET_SALT_2026`;
+  const payload = `${data.certCode}|${data.learnerName}|${data.nationalIdMasked}|${data.courseName}|${data.grade}|${data.issueDateFa}|${certificateSalt()}`;
   return crypto.createHash('sha256').update(payload).digest('hex');
 }
 
@@ -57,6 +68,8 @@ export async function buildCertificateHtml(data: CertificateData): Promise<strin
   const instructorName = esc(data.instructorName);
   const certCode = esc(data.certCode);
   const nationalIdMasked = esc(data.nationalIdMasked);
+  const uniNameFa = esc(await getSetting('UNIVERSITY_NAME').catch(() => ''));
+  const uniNameEn = esc(await getSetting('UNIVERSITY_NAME_EN').catch(() => ''));
 
   return `
     <!DOCTYPE html>
@@ -131,13 +144,12 @@ export async function buildCertificateHtml(data: CertificateData): Promise<strin
       <div class="cert-card">
         <div class="header">
           <div>
-            <h3>دانشگاه غیرانتفاعی آفاق ارومیه</h3>
+            <h3>${uniNameFa}</h3>
             <p style="font-size: 12px; color: #64748b;">مرکز آموزش‌های تخصصی و آزاد</p>
           </div>
-          <div style="font-size: 32px; font-weight: bold; color: #1e1b4b;">آفاق</div>
+          <div style="font-size: 32px; font-weight: bold; color: #1e1b4b;">${uniNameFa}</div>
           <div style="text-align: left; font-family: sans-serif;" dir="ltr">
-            <h4>AFAGH UNIVERSITY</h4>
-            <p style="font-size: 11px; color: #64748b;">Continuing Education Center</p>
+            ${uniNameEn ? `<h4>${uniNameEn}</h4><p style="font-size: 11px; color: #64748b;">Continuing Education Center</p>` : ''}
           </div>
         </div>
 

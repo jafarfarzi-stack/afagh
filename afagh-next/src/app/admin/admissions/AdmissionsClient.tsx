@@ -137,7 +137,6 @@ export default function AdmissionsClient({
     degreeLevelId: degreeLevels[0]?.id || 1,
     admissionType: 'NORMAL' as const,
     quotaType: 'NORMAL',
-    universityId: 1,
   });
   const [isManualSubmitting, setIsManualSubmitting] = useState(false);
 
@@ -213,7 +212,6 @@ export default function AdmissionsClient({
         degreeLevelId: degreeLevels[0]?.id || 1,
         admissionType: 'NORMAL',
         quotaType: 'NORMAL',
-        universityId: 1,
       });
       setTimeout(() => setFeedback(null), 5000);
     } else {

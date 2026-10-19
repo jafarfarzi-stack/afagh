@@ -46,6 +46,7 @@ export const SETTING_GROUPS = [
 export const SETTING_DEFS: SettingDef[] = [
   // ── عمومی ──
   { key: 'UNIVERSITY_NAME', env: 'AFAGH_UNIVERSITY_NAME', group: 'عمومی و نشانی‌ها', label: 'نام دانشگاه', type: 'text', default: 'دانشگاه آفاق' },
+  { key: 'UNIVERSITY_NAME_EN', env: 'AFAGH_UNIVERSITY_NAME_EN', group: 'عمومی و نشانی‌ها', label: 'نام انگلیسی دانشگاه', type: 'text', default: '', help: 'در سربرگ گواهینامه‌ها؛ خالی = نمایش داده نمی‌شود' },
   { key: 'ENROLLMENT_WINDOW_OPEN', env: 'AFAGH_ENROLLMENT_WINDOW_OPEN', group: 'عمومی و نشانی‌ها', label: 'باز بودن پنجرهٔ انتخاب واحد', type: 'boolean', default: 'true', help: 'کلید دستی مدیر — خاموش = دانشجو نمی‌تواند انتخاب واحد/حذف و اضافه کند (مستقل از تاریخ‌های ترم)' },
   { key: 'EMERGENCY_WITHDRAW_OPEN', env: 'AFAGH_EMERGENCY_WITHDRAW_OPEN', group: 'عمومی و نشانی‌ها', label: 'فعال بودن حذف اضطراری', type: 'boolean', default: 'true', help: 'کلید دستی مدیر — خاموش = دکمهٔ «حذف اضطراری» از دانشجو مخفی و درخواستش رد می‌شود' },
   { key: 'ENROLL_EXPERT_OVERRIDE', env: 'AFAGH_ENROLL_EXPERT_OVERRIDE', group: 'عمومی و نشانی‌ها', label: 'مجاز بودن نادیده‌گرفتن آیین‌نامه توسط کارشناس', type: 'boolean', default: 'true', help: 'کارشناس آموزش هنگام ثبت‌نام به‌جای دانشجو می‌تواند پیش‌نیاز/ظرفیت/سقف واحد را نادیده بگیرد (با ثبت دلیل)؛ خاموش = فقط ثبت بدون نادیده‌گرفتن' },
