@@ -5,7 +5,7 @@ import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA, getRegulationConfig } from '@/lib/regulations-engine';
 import { maskNationalCode, issueTranscriptToken } from '@/lib/verification';
-import { getPublicBaseUrl } from '@/lib/settings';
+import { getPublicBaseUrl, getSetting } from '@/lib/settings';
 import { qrSvg } from '@/lib/qr';
 import VerifyQrBlock from '@/components/VerifyQrBlock';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
@@ -67,7 +67,9 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
   const [major] = me.majorId ? await db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1) : [null];
   const [level] = me.degreeLevelId ? await db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1) : [null];
   const [uniRow] = me.universityId ? await db.select({ title: universities.title, logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, me.universityId)).limit(1) : [null];
-  const universityLogo = uniRow?.logoUrl ?? null;
+  const universityLogo = uniRow?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
+  // نام دانشگاه از رکورد دانشگاه و سپس تنظیمات سراسری — هیچ نامی هاردکد نیست
+  const universityTitle = uniRow?.title || (await getSetting('UNIVERSITY_NAME').catch(() => '')) || null;
   const [identity] = await db.select({ nationalCode: users.nationalCode }).from(users).where(eq(users.id, user.id)).limit(1);
 
   const demo = await isDemoStudentUser(user.id);
@@ -256,7 +258,7 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
             <div className="text-right space-y-1">
               <p className="font-bold text-slate-800">جمهوری اسلامی ایران</p>
               <p className="font-semibold text-slate-700">وزارت علوم، تحقیقات و فناوری</p>
-              <p className="font-extrabold text-slate-900 text-sm">دانشگاه جامع آفاق</p>
+              {universityTitle ? <p className="font-extrabold text-slate-900 text-sm">{universityTitle}</p> : null}
               <p className="text-[11px] text-slate-500">معاونت آموزشی و تحصیلات تکمیلی</p>
             </div>
 
@@ -264,11 +266,7 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
             <div className="flex flex-col items-center justify-center">
             {universityLogo ? (
               <img src={universityLogo} alt={"آرم دانشگاه"} className={"mb-1 h-12 w-12 shrink-0 object-contain"} />
-            ) : (
-              <div className="w-12 h-12 rounded-full border-2 border-slate-800 flex items-center justify-center font-bold text-xl text-slate-800 mb-1">
-                آ ف ا ق
-              </div>
-            )}
+            ) : null}
               <h1 className="text-base font-black tracking-wide text-slate-950 border-b border-slate-800 pb-0.5 px-4">
                 کارنامه کل تحصیلی دانشجو
               </h1>
