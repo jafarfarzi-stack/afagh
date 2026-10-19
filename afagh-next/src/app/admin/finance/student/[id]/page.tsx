@@ -83,11 +83,13 @@ const fin = await getStudentFinance(studentId, {
       uni ? or(eq(student_subject_fees.universityId, uni.id), isNull(student_subject_fees.universityId)) : undefined,
     )) : [];
 
-  const [stuRow] = await db.select({ userId: students.userId, studentCode: students.studentCode, universityId: students.universityId }).from(students).where(eq(students.id, studentId)).limit(1);
+  const [stuRow] = await db.select({ userId: students.userId, studentCode: students.studentCode, universityId: students.universityId, entryTerm: students.entryTerm }).from(students).where(eq(students.id, studentId)).limit(1);
   const financeVerify = stuRow?.userId
     ? await buildFinanceVerify(stuRow.userId, { id: studentId, code: stuRow.studentCode, universityId: stuRow.universityId })
     : null;
   const logoUrl = uni?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
+  // عنوان دانشگاه: دانشگاه جاری → تنظیمات سراسری (UNIVERSITY_NAME)
+  const uniTitle = currentUniversity?.title || (await getSetting('UNIVERSITY_NAME').catch(() => '')) || null;
 
   const { student, totals, transcript } = fin;
 
@@ -129,10 +131,10 @@ const fin = await getStudentFinance(studentId, {
       {/* ═══ بخش چاپ‌شدنی ═══ */}
       <div className="print-area space-y-4">
         <FinancialTranscript
-          student={student}
+          student={{ ...student, entryTerm: stuRow?.entryTerm ?? null }}
           terms={transcriptWithCourses}
           totals={totals}
-          universityTitle={currentUniversity?.title ?? null}
+          universityTitle={uniTitle}
           logoUrl={logoUrl}
           issuedAt={jdate(new Date())}
           verifyBlock={financeVerify ? <FinanceVerifyBlock url={financeVerify.url} qr={financeVerify.qr} expiresAt={financeVerify.expiresAt} /> : undefined}

@@ -96,7 +96,8 @@ export default async function StudentFinancePage({ searchParams }: { searchParam
   const [uniRow] = me.universityId
     ? await db.select({ title: universities.title, logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, me.universityId)).limit(1)
     : [];
-  const uniTitle = uniRow?.title ?? null;
+  // عنوان دانشگاه: دانشگاه دانشجو → تنظیمات سراسری (UNIVERSITY_NAME) → عنوان پیش‌فرض کامپوننت
+  const uniTitle = uniRow?.title || (await getSetting('UNIVERSITY_NAME').catch(() => '')) || null;
   const universityLogo = uniRow?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
 
   const { student, cheques, loans } = fin;
@@ -235,7 +236,7 @@ export default async function StudentFinancePage({ searchParams }: { searchParam
       {/* ═══ بخش چاپ‌شدنی: کارنامهٔ مالی رسمی ═══ */}
       <div className="print-area space-y-4">
         <FinancialTranscript
-          student={student}
+          student={{ ...student, entryTerm: me.entryTerm ?? null }}
           terms={transcriptWithCourses}
           totals={totals}
           universityTitle={uniTitle}

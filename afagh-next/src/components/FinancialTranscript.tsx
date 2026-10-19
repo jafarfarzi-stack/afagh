@@ -86,6 +86,8 @@ export interface TranscriptStudentView {
   majorTitle?: string | null;
   degreeTitle?: string | null;
   entryYear?: number | null;
+  /** نیمسال ورود: ۱=مهر، ۲=بهمن، ۳=تابستان (students.entryTerm) */
+  entryTerm?: number | null;
   status?: string | null;
 }
 
@@ -117,8 +119,10 @@ const EVENT_LABEL: Record<string, string> = {
   CLEARANCE: 'تسویه',
 };
 
-const STATUS_FA: Record<string, string> = {
-  ACTIVE: 'فعال',
+/** نیمسال ورود (students.entryTerm): ۱=مهر، ۲=بهمن، ۳=تابستان */
+const TERM_FA: Record<number, string> = { 1: 'مهر', 2: 'بهمن', 3: 'تابستان' };
+
+const STATUS_FA: Record<string, string> = {  ACTIVE: 'فعال',
   INACTIVE: 'غیرفعال',
   GRADUATED: 'دانش‌آموخته',
   WITHDRAWN: 'انصرافی',
@@ -236,16 +240,24 @@ export default function FinancialTranscript({
               <td className="border border-slate-300 px-2 py-1.5">{faDigits(student.nationalCode || '—')}</td>
             </tr>
             <tr>
-              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">رشته</td>
-              <td className="border border-slate-300 px-2 py-1.5">{student.majorTitle || '—'}</td>
+              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">شمارهٔ دانشجویی</td>
+              <td className="border border-slate-300 px-2 py-1.5 font-mono" dir="ltr">{faDigits(student.studentCode || '—')}</td>
               <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">مقطع</td>
               <td className="border border-slate-300 px-2 py-1.5">{student.degreeTitle || '—'}</td>
             </tr>
             <tr>
-              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">سال ورود</td>
-              <td className="border border-slate-300 px-2 py-1.5">{student.entryYear ? fa(student.entryYear) : '—'}</td>
-              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">وضعیت مالی کل</td>
+              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">رشته</td>
+              <td className="border border-slate-300 px-2 py-1.5">{student.majorTitle || '—'}</td>
+              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">نیمسال ورود</td>
               <td className="border border-slate-300 px-2 py-1.5">
+                {student.entryTerm
+                  ? `${TERM_FA[student.entryTerm] ?? `نیمسال ${fa(student.entryTerm)}`}${student.entryYear ? ' ' + fa(student.entryYear) : ''}`
+                  : (student.entryYear ? fa(student.entryYear) : '—')}
+              </td>
+            </tr>
+            <tr>
+              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">وضعیت مالی کل</td>
+              <td colSpan={3} className="border border-slate-300 px-2 py-1.5">
                 <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${grand.cls}`}>{grand.text}</span>
               </td>
             </tr>
@@ -450,7 +462,8 @@ export default function FinancialTranscript({
           </div>
         )}
 
-        {verifyBlock}
+        {/* بلوک رسمیت: QR استعلام برخط + نشانی (در چاپ هم دیده می‌شود) */}
+        {verifyBlock ? <div className="tr-fin-verify">{verifyBlock}</div> : null}
 
       </div>
             </td>

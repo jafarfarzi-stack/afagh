@@ -24,7 +24,7 @@ export default function FinanceVerifyBlock({ url, qr, expiresAt }: Props) {
       <div className="flex flex-wrap items-start gap-4">
         {qr ? (
           <div
-            className="h-32 w-32 shrink-0 overflow-hidden rounded border border-slate-300 bg-white p-1 [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
+            className="fin-verify-qr h-32 w-32 shrink-0 overflow-hidden rounded border border-slate-300 bg-white p-1 [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
             dangerouslySetInnerHTML={{ __html: qr }}
           />
         ) : null}

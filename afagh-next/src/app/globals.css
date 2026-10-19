@@ -476,10 +476,10 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
      دست‌نخورده بماند. */
   .tr-fin-root .tr-print-hide { display: none !important; }
 
-  /* صرفه‌جویی کاغذ: سربرگ و بلوک امضا فقط یک‌بار (نه تکرار در هر صفحه).
-     در سند چندصفحه‌ای، این دو بلوک به‌تنهایی ~۴۰mm از هر صفحه را می‌خوردند. */
-  .tr-fin-root table.tr-doc > thead,
-  .tr-fin-root table.tr-doc > tfoot { display: table-row-group !important; }
+  /* سربرگ و بلوک امضا در **همهٔ صفحات** چاپ تکرار می‌شوند (عرف سند رسمی).
+     نسخهٔ چاپی سربرگ فشرده است (۷pt، آرم ۹mm) تا تکرارش کاغذ زیادی نگیرد. */
+  .tr-fin-root table.tr-doc > thead { display: table-header-group !important; }
+  .tr-fin-root table.tr-doc > tfoot { display: table-footer-group !important; }
 
   /* بدنهٔ سند یک ردیف بزرگ است؛ اجازهٔ شکستن بین صفحات را دارد، وگرنه
      مرورگر کل سند را یک‌جا نگه می‌دارد و محتوا بریده/سرریز می‌شود. */
@@ -521,6 +521,11 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   .tr-fin-root .tr-fin-sum td { padding: 0.25mm 1mm !important; }
   .tr-fin-root .tr-fin-sum td > div { display: flex; align-items: baseline; justify-content: space-between; gap: 1mm; }
   .tr-fin-root .tr-fin-sum td > div > span:last-child { white-space: nowrap; flex: 0 0 auto; }
+
+  /* بلوک رسمیت (QR استعلام برخط) — باید در چاپ دیده و اسکن شود؛ اندازه متعادل */
+  .tr-fin-root .tr-fin-verify { margin-top: 1mm; }
+  .tr-fin-root .tr-fin-verify .fin-verify-qr { width: 24mm !important; height: 24mm !important; }
+  .tr-fin-root .tr-fin-verify p { font-size: 6.5pt !important; line-height: 1.4 !important; }
 
   /* ریز شهریهٔ متغیر دروس */
   .tr-fin-root .tr-fin-courses { font-size: 6pt !important; }
