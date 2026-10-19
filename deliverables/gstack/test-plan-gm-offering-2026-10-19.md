@@ -187,5 +187,5 @@
 
 **گیت‌ها:** `tsc --noEmit` تمیز · `npm test` هر ۴۴ فایل سبز · `enroll-submit-batch` ۱۲/۱۲.
 
-**بازمانده:** اجرای مجدد هارنس روی استیجینگ با گروه H (در نشست جاری تونل SSH بسته شد). دستور اجرا:
+**هارنس پس از بستن یافته‌ها روی استیجینگ:** ✅ **۴۵/۴۵ در دو اجرای متوالی** (idempotent) — دستور:
 `DATABASE_URL=… npx tsx --conditions=react-server scripts/gm1-offering-flow.ts`
