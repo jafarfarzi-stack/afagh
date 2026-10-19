@@ -7,21 +7,33 @@ import { classrooms, schedules } from '@/db/schema';
 import { back, num, requireDepHead, str } from '@/lib/group-manager';
 
 export async function saveClassroomAction(fd: FormData) {
-  await requireDepHead();
+  const { staff: me } = await requireDepHead();
   const id = num(fd, 'id');
   const name = str(fd, 'name'), cap = num(fd, 'cap');
   if (!name || cap <= 0) back('/group-manager/classrooms', 'err', 'نام کلاس و ظرفیت مثبت الزامی است.');
+  const myUni = me.universityId ?? null;
+  // ویرایش فقط روی کلاسِ همین دانشگاه (G3) — کلاس عام/سیستمی (universityId=NULL)
+  // هم برای مدیر گروه قابل ویرایش نیست؛ آن‌ها را آموزش می‌سازد.
+  if (id) {
+    const [cur] = await db.select({ universityId: classrooms.universityId }).from(classrooms).where(eq(classrooms.id, id)).limit(1);
+    if (!cur || (cur.universityId ?? null) !== myUni)
+      back('/group-manager/classrooms', 'err', 'این کلاس متعلق به دانشگاه شما نیست.');
+  }
   const vals = { name, capacity: cap, roomType: str(fd, 'roomType') || null, buildingName: str(fd, 'building') || null, rowsCount: num(fd, 'rows') || null, colsCount: num(fd, 'cols') || null };
   if (id) await db.update(classrooms).set(vals).where(eq(classrooms.id, id));
-  else await db.insert(classrooms).values(vals);
+  else await db.insert(classrooms).values({ ...vals, universityId: myUni });
   revalidatePath('/group-manager/classrooms');
   revalidatePath('/group-manager/offerings');
   back('/group-manager/classrooms', 'msg', 'کلاس «' + name + '» ذخیره شد.');
 }
 
 export async function deleteClassroomAction(fd: FormData) {
-  await requireDepHead();
+  const { staff: me } = await requireDepHead();
   const id = num(fd, 'id');
+  const myUni = me.universityId ?? null;
+  const [cur] = await db.select({ universityId: classrooms.universityId }).from(classrooms).where(eq(classrooms.id, id)).limit(1);
+  if (!cur || (cur.universityId ?? null) !== myUni)
+    back('/group-manager/classrooms', 'err', 'این کلاس متعلق به دانشگاه شما نیست.');
   const used = await db.select({ id: schedules.id }).from(schedules).where(eq(schedules.roomId, id)).limit(1);
   if (used.length) back('/group-manager/classrooms', 'err', 'این کلاس در برنامهٔ هفتگی استفاده می‌شود — ابتدا برنامه را حذف کنید.');
   await db.delete(classrooms).where(eq(classrooms.id, id));

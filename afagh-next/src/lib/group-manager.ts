@@ -1,4 +1,4 @@
-import { and, eq, inArray, or } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { db } from '@/db';
@@ -42,10 +42,12 @@ const asKind = (k: string | null): 'ACADEMIC' | 'GENERAL' => (k === 'GENERAL' ? 
  * تخصصی خودش + گروه دروس عمومی) و در سربرگ بین آن‌ها جابه‌جا می‌شود.
  */
 export async function headedDepartments(staffId: number, ownDeptId: number | null): Promise<HeadedDept[]> {
+  // فقط گروه‌های فعال (isActive=1 یا NULL که پیش‌فرض ۱ است). پیش از این شرط
+  // به‌اشتباه or(eq(1), eq(1)) بود — یعنی بدون فیلتر واقعی.
   const led = await db
     .select({ id: departments.id, name: departments.name, kind: departments.kind })
     .from(departments)
-    .where(and(eq(departments.headStaffId, staffId), or(eq(departments.isActive, 1), eq(departments.isActive, 1))))
+    .where(and(eq(departments.headStaffId, staffId), or(eq(departments.isActive, 1), isNull(departments.isActive))))
     .orderBy(departments.name);
 
   const out: HeadedDept[] = led.map(d => ({ id: d.id, name: d.name, kind: asKind(d.kind), via: 'HEAD' as const }));

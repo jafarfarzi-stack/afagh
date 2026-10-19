@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { classrooms } from '@/db/schema';
 import { requireDepHead } from '@/lib/group-manager';
@@ -7,8 +8,12 @@ export const dynamic = 'force-dynamic';
 
 export default async function ClassroomsPage({ searchParams }: { searchParams: Promise<{ msg?: string; err?: string }> }) {
   const sp = await searchParams;
-  await requireDepHead();
-  const rooms = await db.select().from(classrooms).orderBy(classrooms.name);
+  const { staff: me } = await requireDepHead();
+  const myUni = me.universityId ?? null;
+  // فقط کلاس‌های همین دانشگاه (G3) — کلاس عام/سیستمی برای مشاهده هم نیست.
+  const rooms = myUni == null
+    ? []
+    : await db.select().from(classrooms).where(eq(classrooms.universityId, myUni)).orderBy(classrooms.name);
 
   return (
     <div className="space-y-4">

@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 import { db } from '@/db';
 import { academic_terms, classrooms, course_offerings, courses, degree_level_configs, majors, offering_professors, schedules, staff, users } from '@/db/schema';
 import { requireDepHead } from '@/lib/group-manager';
@@ -17,11 +17,15 @@ export default async function OfferingsPage({ searchParams }: { searchParams: Pr
   const deptCourses = await db.select().from(courses).where(eq(courses.departmentId, deptId)).orderBy(courses.code);
   const courseById = new Map(deptCourses.map(c => [c.id, c]));
 
-  const offs = term
+  const offs = term && courseById.size > 0
     ? await db.select().from(course_offerings)
-        .where(and(eq(course_offerings.termId, term.id), eq(course_offerings.isActive, 1)))
+        .where(and(
+          eq(course_offerings.termId, term.id),
+          eq(course_offerings.isActive, 1),
+          inArray(course_offerings.courseId, [...courseById.keys()]),
+        ))
     : [];
-  const mine = offs.filter(o => courseById.has(o.courseId));
+  const mine = offs;
   const offIds = mine.map(o => o.id);
 
   const profs = await db.select({ id: staff.id, name: users.firstName, family: users.lastName, rank: staff.academicRank })
@@ -34,7 +38,12 @@ export default async function OfferingsPage({ searchParams }: { searchParams: Pr
         .where(and(inArray(schedules.offeringId, offIds), eq(schedules.scheduleType, 'CLASS')))
     : [];
 
-  const rooms = await db.select().from(classrooms).orderBy(classrooms.name);
+  // سالن‌های قابل انتخاب: همین دانشگاه یا سالن‌های عام/سیستمی (universityId NULL)
+  const rooms = me.universityId == null
+    ? await db.select().from(classrooms).where(isNull(classrooms.universityId)).orderBy(classrooms.name)
+    : await db.select().from(classrooms)
+        .where(or(eq(classrooms.universityId, me.universityId), isNull(classrooms.universityId)))
+        .orderBy(classrooms.name);
   const degrees = await db.select().from(degree_level_configs);
   const majorRows = await db.select().from(majors);
   const degTitle = (id: number) => degrees.find(d => d.id === id)?.title ?? String(id);
