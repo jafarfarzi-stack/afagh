@@ -51,12 +51,17 @@ export type SessionUser = { id: number; name: string; roles: string[]; mustChang
 
 export const SESSION_COOKIE = 'token';
 /**
- * سقف مطلق نشست (۱۲ ساعت) — بدون تمدید لغزان.
+ * سقف مطلق نشست (۴ ساعت) — بدون تمدید لغزان.
  * انقضای کوکی و sessions.expiresAt هر دو همین سقف‌اند؛ هیچ ستون createdAt
  * وجود ندارد و افزودن آن تغییر schema است، پس تمدید بر اساس «زمان ساخت»
  * ممکن/مجاز نیست. ورود دوباره تنها راه شروع نشست تازه است.
+ * (پیشتر ۱۲ ساعت بود؛ به‌دلیل امنیت کاهش یافت — در صورت نیاز env AFAGH_SESSION_MAX_AGE.)
  */
-const SESSION_MAX_AGE = 12 * 3600;
+const SESSION_MAX_HOURS_RAW = Number(process.env.AFAGH_SESSION_MAX_HOURS || 4);
+const SESSION_MAX_HOURS = Number.isFinite(SESSION_MAX_HOURS_RAW) && SESSION_MAX_HOURS_RAW >= 1 && SESSION_MAX_HOURS_RAW <= 24
+  ? Math.floor(SESSION_MAX_HOURS_RAW)
+  : 4;
+const SESSION_MAX_AGE = SESSION_MAX_HOURS * 3600;
 
 /**
  * ── ویژگی‌های کوکی نشست ──────────────────────────────────────────────
