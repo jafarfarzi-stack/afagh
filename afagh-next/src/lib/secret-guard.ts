@@ -106,10 +106,30 @@ export function checkObjectStoreCredentials(allowWeak = process.env.ALLOW_WEAK_S
 /**
  * در production اجرا می‌شود و روی نقض، startup را می‌بندد (fail-closed).
  * در build (NEXT_PHASE) و توسعه فقط هشدار می‌دهد.
+ *
+ * ── سخت‌ترشدنِ فاز ۲ (دروازهٔ راه‌اندازیِ پروداکشن) ──
+ * پیش از این، رمزِ کوتاه (۱۲ تا ۲۳ کاراکتر؛ بین MIN_HARD_LEN و MIN_LEN) در
+ * پروداکشن فقط هشدار می‌گرفت و سرور با رمزی زیر توصیهٔ سیاستِ ۲۴ کاراکتری بالا
+ * می‌آمد. اکنون:
+ *   ۱) کوتاه‌بودنِ رمز در پروداکشن خطای سخت است، مگر آن‌که escape hatch
+ *      توسعه/دمو (`ALLOW_WEAK_SECRETS=1`) روشن باشد.
+ *   ۲) اگر همان escape hatch در `NODE_ENV=production` روشن باشد، یک هشدار
+ *      CRITICAL بلند چاپ می‌شود تا اشتباه روی سرور واقعی استفاده نشود.
+ * توجه: `checkDbSecret` دست‌نخورده مانده چون hardening/migrator به رفتار
+ * لایهٔ پیشین تکیه می‌کنند؛ فقط همین دروازهٔ startup سخت‌تر شده است.
  */
 export function assertProdSecrets(): void {
   if (process.env.NODE_ENV !== 'production' || process.env.NEXT_PHASE) return;
   const allowWeak = process.env.ALLOW_WEAK_SECRETS === '1';
+  if (allowWeak) {
+    // فاز ۲: escape hatch را بلند و صریح اعلام می‌کنیم (بی‌صدا خاموش نمی‌شود،
+    // چون ایمیج دمو به آن تکیه دارد) — ولی هیچ‌کس نباید آن را روی پروداکشن بگذارد.
+    console.warn(
+      '🚨 [CRITICAL] ALLOW_WEAK_SECRETS=1 در پروداکشن فعال است — سکرت‌های ضعیف/کوتاه پذیرفته می‌شوند.\n' +
+      '   این حالت فقط برای دمو/نمایش (showcase) است و روی سرور واقعی ممنوع است.\n' +
+      '   برای پروداکشن: ALLOW_WEAK_SECRETS را بردارید و رمزها را با `make env` بسازید.',
+    );
+  }
   const checks = [checkDbSecret('AFAGH_APP_DB_PASSWORD', appRoleSecret(), allowWeak)];
   if (process.env.DATABASE_URL) {
     try {
@@ -129,6 +149,15 @@ export function assertProdSecrets(): void {
       throw new Error(
         `[db] 🔒 ${r.reason}\n` +
         '   این سرور با پیکربندی ناامن بالا نمی‌آید (سیاست پروداکشن).\n' +
+        '   رمز قوی:  node scripts/lib/secret-policy.mjs --gen   ·   راهنما: make check-env',
+      );
+    }
+    // فاز ۲: کوتاه‌بودنِ رمز در پروداکشن خطای سخت است (قبلاً فقط هشدار بود)؛
+    // تنها escape hatch توسعه/دمو آن را به هشدار تنزل می‌دهد.
+    if (r.short && !allowWeak) {
+      throw new Error(
+        `[db] 🔒 ${r.reason}\n` +
+        `   حداقل توصیه‌شدهٔ پیکربندی پروداکشن ${MIN_LEN} کاراکتر است و این سرور با رمز کوتاه‌تر بالا نمی‌آید.\n` +
         '   رمز قوی:  node scripts/lib/secret-policy.mjs --gen   ·   راهنما: make check-env',
       );
     }

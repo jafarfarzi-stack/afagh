@@ -55,6 +55,8 @@ export { doPrintTranscript };
  */
 
 export default function StudentsManagerClient(props: {
+  /** اکشن سروری: فیلتر کد ملی را در کوکی HttpOnly ذخیره می‌کند (نه در URL) */
+  setNationalCodeFilter: (code: string) => Promise<void>;
   logoUrl?: string | null;
   codeLabels?: CodeLabels | null;
   regulations?: RegulationPick[];
@@ -546,10 +548,13 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
   const [staffQuery, setStaffQuery] = useState('');
   const [staffVisible, setStaffVisible] = useState(100);
   const [staffTypeFilter, setStaffTypeFilter] = useState('ALL');
-  const nav = (patch: Record<string, string>) => {
+  // ── ساخت URL فقط با فیلترهای غیرحساس ──
+  // کد ملی عمداً در URL قرار نمی‌گیرد (لاگ دسترسی وب‌سرور، تاریخچه و Referer)؛
+  // مقدار آن در کوکی HttpOnlyِ نشست روی سرور نگه‌داری می‌شود.
+  const buildUrl = (patch: Record<string, string>) => {
     const cur = {
       q: pg?.q ?? '', status: pg?.status ?? 'ALL', degree: String(pg?.degree ?? 0), page: '1',
-      sort: pg?.sort ?? '', f_code: pg?.f_code ?? '', f_name: pg?.f_name ?? '', f_nc: pg?.f_nc ?? '',
+      sort: pg?.sort ?? '', f_code: pg?.f_code ?? '', f_name: pg?.f_name ?? '',
       f_major: pg?.f_major ?? '', f_year: pg?.f_year ?? '',
       ...patch,
     };
@@ -561,11 +566,12 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
     if (cur.sort) p.set('sort', cur.sort);
     if (cur.f_code) p.set('f_code', cur.f_code);
     if (cur.f_name) p.set('f_name', cur.f_name);
-    if (cur.f_nc) p.set('f_nc', cur.f_nc);
     if (cur.f_major) p.set('f_major', cur.f_major);
     if (cur.f_year) p.set('f_year', cur.f_year);
-    router.push(`${pathname}?${p.toString()}`);
+    const qs = p.toString();
+    return qs ? `${pathname}?${qs}` : pathname;
   };
+  const nav = (patch: Record<string, string>) => { router.push(buildUrl(patch)); };
   // سورت ستونی دانشجویان (سروری): key -> asc -> desc -> بدون سورت
   const [stuSortKey, stuSortDir] = (pg?.sort ?? '').split(':') as [string, string?];
   const toggleStuSort = (key: string) => {
@@ -575,7 +581,40 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
   };
   // فیلترهای ستونی (لوکال + اعمال با Enter)
   const [stuFilters, setStuFilters] = useState({ f_code: pg?.f_code ?? '', f_name: pg?.f_name ?? '', f_nc: pg?.f_nc ?? '', f_major: pg?.f_major ?? '', f_year: pg?.f_year ?? '' });
-  const applyStuFilters = () => nav({ f_code: stuFilters.f_code.trim(), f_name: stuFilters.f_name.trim(), f_nc: stuFilters.f_nc.trim(), f_major: stuFilters.f_major.trim(), f_year: stuFilters.f_year.trim() });
+
+  // کد ملی با اکشن سروری در کوکی HttpOnly ذخیره می‌شود و بقیهٔ فیلترها
+  // مثل قبل در URL می‌مانند. اگر فقط کد ملی تغییر کرده باشد URL عوض
+  // نمی‌شود، پس برای خوانده‌شدن کوکی صریحاً رفرش می‌کنیم تا فیلتر
+  // بعد از رفرش/بازگشت به‌طور گیج‌کننده از دست نرود.
+  const applyStuFilters = async () => {
+    const nc = stuFilters.f_nc.trim();
+    try {
+      await props.setNationalCodeFilter(nc);
+    } catch {
+      showToast('خطا در اعمال فیلتر کد ملی.');
+      return;
+    }
+    const target = buildUrl({
+      f_code: stuFilters.f_code.trim(), f_name: stuFilters.f_name.trim(),
+      f_major: stuFilters.f_major.trim(), f_year: stuFilters.f_year.trim(), page: '1',
+    });
+    if (target === `${pathname}${window.location.search}`) router.refresh();
+    else router.push(target);
+  };
+
+  // پاک‌سازی همهٔ فیلترها؛ کوکی کد ملی هم باید پاک شود
+  const clearStuFilters = async () => {
+    setSearchQuery('');
+    setStuFilters({ f_code: '', f_name: '', f_nc: '', f_major: '', f_year: '' });
+    try {
+      await props.setNationalCodeFilter('');
+    } catch {
+      // پاک‌شدن بقیهٔ فیلترها نباید به خطای کوکی وابسته باشد
+    }
+    const target = buildUrl({ q: '', status: 'ALL', degree: '0', sort: '', f_code: '', f_name: '', f_major: '', f_year: '', page: '1' });
+    if (target === `${pathname}${window.location.search}`) router.refresh();
+    else router.push(target);
+  };
 
   const staffQueryFiltered = props.staffList.filter(s =>
     (!staffQuery ||
@@ -1495,7 +1534,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                 />
                 <button type="submit" className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold rounded">جستجو</button>
                 {(pg?.q || pg?.status !== 'ALL' || (pg?.degree ?? 0) > 0 || pg?.sort || pg?.f_code || pg?.f_name || pg?.f_nc || pg?.f_major || pg?.f_year) && (
-                  <button type="button" onClick={() => { setSearchQuery(''); setStuFilters({ f_code: '', f_name: '', f_nc: '', f_major: '', f_year: '' }); nav({ q: '', status: 'ALL', degree: '0', sort: '', f_code: '', f_name: '', f_nc: '', f_major: '', f_year: '' }); }} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs rounded">✖ پاک‌سازی فیلتر</button>
+                  <button type="button" onClick={clearStuFilters} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs rounded">✖ پاک‌سازی فیلتر</button>
                 )}
                 <span className="text-xs text-slate-500 mr-auto">{(pg?.total ?? props.students.length).toLocaleString('fa-IR')} پرونده</span>
               </form>

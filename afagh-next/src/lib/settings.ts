@@ -203,6 +203,18 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'FINANCE_STMT_TTL_MINUTES', env: 'FINANCE_STMT_TTL_MINUTES', group: 'ارزشیابی و هوش تجاری', label: 'اعتبار توکن کارنامهٔ مالی (دقیقه)', type: 'number', default: '10080', help: 'مدت اعتبار QR کارنامهٔ مالی دانشجو؛ پیش‌فرض ۱۰۰۸۰ دقیقه (۷ روز)' },
   { key: 'TRANSCRIPT_TTL_MINUTES', env: 'TRANSCRIPT_TTL_MINUTES', group: 'ارزشیابی و هوش تجاری', label: 'اعتبار توکن کارنامهٔ تحصیلی (دقیقه)', type: 'number', default: '10080', help: 'مدت اعتبار QR کارنامهٔ تحصیلی دانشجو؛ پیش‌فرض ۱۰۰۸۰ دقیقه (۷ روز)' },
   { key: 'EXAM_GRADE_DEADLINE_DAYS', env: 'EXAM_GRADE_DEADLINE_DAYS', group: 'ارزشیابی و هوش تجاری', label: 'مهلت ثبت نمرهٔ امتحان (روز)', type: 'number', default: '5' },
+  // ── قاعدهٔ اختیاری بارم امتحان ──
+  // این تنظیم «راز» نیست؛ فقط پیکربندی سیاست آموزشی است و در پنل مدیر
+  // (گروه ارزشیابی و هوش تجاری) قابل تغییر است. موتور امتحان در حال حاضر
+  // آن را نمی‌خواند؛ پس تغییرش امروز هیچ رفتاری را عوض نمی‌کند.
+  //   ۰  = بررسی خاموش است (پیش‌فرض فعلی؛ دقیقاً همان رفتار امروز)
+  //   >۰ = مجموع بارم «میان‌ترم + پایان‌ترم» باید دقیقاً برابر این عدد باشد
+  //        ۱۵ = مطابق DEFAULT_RUBRIC فعلی (۵+۱۰)
+  //        ۲۰ = انتظار رایج «میان‌ترم + پایان‌ترم = ۲۰» (بارم پیش‌فرض فعلی
+  //             را رد می‌کند و پیش از فعال‌سازی نیاز به تصمیم محصولی دارد)
+  // ⚠ تغییر این مقدار در میانهٔ ترم می‌تواند بارم و نمرات درس‌های در حال
+  //   اجرا را نامعتبر کند؛ فقط پیش از شروع ترم تغییر دهید.
+  { key: 'EXAM_MIDTERM_FINAL_TARGET', env: 'AFAGH_EXAM_MIDTERM_FINAL_TARGET', group: 'ارزشیابی و هوش تجاری', label: 'هدف مجموع بارم میان‌ترم + پایان‌ترم (۰ = خاموش)', type: 'number', default: '0', help: '۰ = بررسی خاموش و رفتار فعلی حفظ می‌شود؛ عدد مثبت = مجموع دو جزء میان‌ترم و پایان‌ترم باید دقیقاً برابر آن باشد. ۱۵ مطابق بارم پیش‌فرض سامانه (۵+۱۰) است؛ ۲۰ انتظار رایج است ولی بارم پیش‌فرض فعلی را رد می‌کند. تغییر میان ترم می‌تواند بارم و نمرات درس‌های جاری را نامعتبر کند.' },
   { key: 'STUDENT_CARD_VALID_DAYS', env: 'STUDENT_CARD_VALID_DAYS', group: 'ارزشیابی و هوش تجاری', label: 'اعتبار کارت دانشجویی (روز)', type: 'number', default: '365' },
   { key: 'PERF_SLA_TARGET', env: 'PERF_SLA_TARGET', group: 'ارزشیابی و هوش تجاری', label: 'هدف پایبندی به ضرب‌الاجل (SLA) استاد', type: 'number', default: '90', help: 'درصد؛ مبنای نشان عملکرد و پاداش بهره‌وری' },
   { key: 'PERF_EVAL_TARGET', env: 'PERF_EVAL_TARGET', group: 'ارزشیابی و هوش تجاری', label: 'هدف نمرهٔ ارزشیابی استاد', type: 'number', default: '4', help: 'از ۵؛ مبنای نشان عملکرد و پاداش بهره‌وری' },
@@ -211,12 +223,15 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'BI_CACHE_TTL_SECONDS', env: 'BI_CACHE_TTL_SECONDS', group: 'ارزشیابی و هوش تجاری', label: 'عمر کش گزارش‌های BI (ثانیه)', type: 'number', default: '300', help: 'صفر = همیشه محاسبهٔ تازه. داشبورد مدیریتی و ابر کلمات از این کش می‌خوانند' },
 
   // ── زیرساخت (فقط ENV) ──
-  { key: 'DATABASE_URL', env: 'DATABASE_URL', group: 'زیرساخت (فقط ENV)', label: 'اتصال PostgreSQL', type: 'secret', default: 'postgres://afagh:afagh@localhost:5432/afagh_db', envOnly: true },
-  { key: 'REDIS_URL', env: 'REDIS_URL', group: 'زیرساخت (فقط ENV)', label: 'اتصال Redis', type: 'text', default: 'redis://127.0.0.1:6379', envOnly: true },
-  { key: 'S3_ENDPOINT', env: 'S3_ENDPOINT', group: 'زیرساخت (فقط ENV)', label: 'میزبان Object Storage', type: 'text', default: '127.0.0.1', envOnly: true },
-  { key: 'S3_PORT', env: 'S3_PORT', group: 'زیرساخت (فقط ENV)', label: 'پورت Object Storage', type: 'number', default: '9000', envOnly: true },
-  { key: 'S3_BUCKET', env: 'S3_BUCKET', group: 'زیرساخت (فقط ENV)', label: 'نام باکت بایگانی', type: 'text', default: 'afagh-archive', envOnly: true },
-  { key: 'APP_PORT', env: 'PORT', group: 'زیرساخت (فقط ENV)', label: 'پورت لیسن سرویس وب', type: 'number', default: '8080', envOnly: true },
+  // ⚠ هیچ پیش‌فرضی در کد نگه داشته نمی‌شود تا پنل مدیر مقدار واقعی‌نما (اعتبارنامهٔ
+  //   پیش‌فرض ضعیف) نمایش ندهد؛ این مقادیر فقط از ENV (فایل .env / متغیر محیطی
+  //   داکر) خوانده می‌شوند و در نبود آن‌ها خالی نمایش داده می‌شوند.
+  { key: 'DATABASE_URL', env: 'DATABASE_URL', group: 'زیرساخت (فقط ENV)', label: 'اتصال PostgreSQL', type: 'secret', default: '', envOnly: true, help: 'اجباری — باید از طریق ENV تنظیم شود؛ پیش‌فرضی در کد وجود ندارد' },
+  { key: 'REDIS_URL', env: 'REDIS_URL', group: 'زیرساخت (فقط ENV)', label: 'اتصال Redis', type: 'text', default: '', envOnly: true, help: 'باید از طریق ENV تنظیم شود؛ پیش‌فرضی در کد وجود ندارد' },
+  { key: 'S3_ENDPOINT', env: 'S3_ENDPOINT', group: 'زیرساخت (فقط ENV)', label: 'میزبان Object Storage', type: 'text', default: '', envOnly: true, help: 'باید از طریق ENV تنظیم شود؛ پیش‌فرضی در کد وجود ندارد' },
+  { key: 'S3_PORT', env: 'S3_PORT', group: 'زیرساخت (فقط ENV)', label: 'پورت Object Storage', type: 'number', default: '', envOnly: true, help: 'باید از طریق ENV تنظیم شود؛ پیش‌فرضی در کد وجود ندارد' },
+  { key: 'S3_BUCKET', env: 'S3_BUCKET', group: 'زیرساخت (فقط ENV)', label: 'نام باکت بایگانی', type: 'text', default: '', envOnly: true, help: 'باید از طریق ENV تنظیم شود؛ پیش‌فرضی در کد وجود ندارد' },
+  { key: 'APP_PORT', env: 'PORT', group: 'زیرساخت (فقط ENV)', label: 'پورت لیسن سرویس وب', type: 'number', default: '', envOnly: true, help: 'باید از طریق ENV (متغیر PORT) تنظیم شود؛ پیش‌فرضی در کد وجود ندارد' },
 ];
 
 export const SETTING_BY_KEY: Record<string, SettingDef> = Object.fromEntries(SETTING_DEFS.map(d => [d.key, d]));

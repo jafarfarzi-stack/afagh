@@ -12,11 +12,13 @@
  *
  *  نگاشت:
  *    رشته‌ها → faculties (کددانشکده) → departments (کدگروه) → degree_level_configs → majors
- *    اساتید → users (کد ملی؛ رمز پیش‌فرض scrypt + فلگ mustChangePassword) + staff (staffCode)
+ *    اساتید → users (کد ملی؛ رمز یکبارمصرف تصادفی scrypt + فلگ mustChangePassword) + staff (staffCode)
+ *    رمزهای یکبارمصرف در فایل credential (chmod 0600) نوشته می‌شوند و در ترمینال چاپ نمی‌شوند
  * ══════════════════════════════════════════════════════════════════════
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
+import { join } from 'node:path';
 import pg from 'pg';
 
 const { Pool } = pg;
@@ -35,6 +37,11 @@ const majorsFile = args.majors;
 const professorsFile = args.professors;
 const dbUrl = args.db || process.env.DATABASE_URL || 'postgres://afagh:afagh@localhost:5432/afagh_db';
 const dryRun = args['dry-run'] === 'true';
+
+// 🔐 فایل خروجی رمزهای یکبارمصرف (فقط با مجوز ۰۶۰۰) — مثل scripts/create-admin.mjs
+const credFile = args['credential-file'] || process.env.AFAGH_CREDENTIAL_FILE || join(process.cwd(), '.afagh-import-credentials');
+// رمزها فقط یک‌بار در این فایل نوشته می‌شوند و در ترمینال چاپ نمی‌شوند
+const credentials = [];
 
 if (!majorsFile && !professorsFile) {
   console.error('استفاده: node scripts/import-legacy-data.mjs --majors <file> --professors <file> [--dry-run]');
@@ -83,6 +90,31 @@ function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');
   const hash = scryptSync(password, salt, 32, { N: 16384, r: 8, p: 1, maxmem: 256 * 1024 * 1024 }).toString('hex');
   return `${salt}:${hash}`;
+}
+
+/** 🔐 رمز یکبارمصرف تصادفی — هرگز رمز ثابت قدیمی یا کد ملی نیست */
+function randomPassword(len = 24) {
+  return randomBytes(len).toString('base64url').slice(0, len);
+}
+
+/** ثبت رمز یکبارمصرف برای گزارش خارج از باند (فایل ۰۶۰۰) */
+function rememberCredential(kind, nationalCode, password) {
+  credentials.push({ kind, nationalCode, password });
+}
+
+/** نوشتن یک‌بارهٔ رمزها در فایل با مجوز ۰۶۰۰ — بعد از اولین ورود کاربران پاک شود */
+function writeCredentialsFile() {
+  if (!credentials.length) return;
+  const body = [
+    `# رمزهای یکبارمصرف مهاجرت — ${new Date().toISOString()}`,
+    `# یک‌بار بخوانید و این فایل را پاک کنید:  rm ${credFile}`,
+    '',
+    ...credentials.flatMap(c => [
+      `KIND=${c.kind}`, `NATIONAL_CODE=${c.nationalCode}`, `PASSWORD=${c.password}`, '',
+    ]),
+  ].join('\n');
+  writeFileSync(credFile, body, { mode: 0o600 });
+  console.log(`🔐 ${credentials.length} رمز یکبارمصرف در ${credFile} (chmod 600) نوشته شد — بعد از اولین ورود پاکش کنید.`);
 }
 
 const q = async (text, params) => (await pool.query(text, params)).rows;
@@ -190,24 +222,29 @@ async function importProfessors(file) {
     // ── کاربر یکپارچه (کد ملی = کلید) ──
     let userId;
     if (nc) {
-      const passwordHash = hashPassword('123456');
+      // 🔐 رمز یکبارمصرف تصادفی — حذف رمز ثابت قدیمی و وابستگی به کد ملی
+      const oneTimePassword = randomPassword();
+      const passwordHash = hashPassword(oneTimePassword);
       const [u] = await q(`INSERT INTO users ("nationalCode", "firstName", "lastName", mobile, email, "passwordHash",
           "fatherName", "birthCertNo", "birthDate", "placeOfBirth", "placeOfIssue", gender, address, "isActive", "mustChangePassword")
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,1)
         ON CONFLICT DO UPDATE SET mobile = COALESCE(EXCLUDED.mobile, users.mobile), email = COALESCE(EXCLUDED.email, users.email)
-        RETURNING id`, [nc, firstName || 'بدون‌نام', lastName, mobile || null, email || null, passwordHash,
+        RETURNING id, (xmax = 0) AS "isNew"`, [nc, firstName || 'بدون‌نام', lastName, mobile || null, email || null, passwordHash,
         fatherName || null, certNo || null, birthDate || null, birthPlace || null, issuePlace || null,
         gender === '1' ? 'FEMALE' : gender === '2' ? 'MALE' : null, address || null, isActive]);
       userId = u.id;
-      newUsers++;
+      // xmax = 0 یعنی ردیف تازه درج شد (نه به‌روزرسانی) → رمز تولیدشده واقعاً اعمال شده است
+      if (u.isNew) { rememberCredential('PROFESSOR', nc, oneTimePassword); newUsers++; }
     } else {
       // بدون کد ملی معتبر → فقط پروندهٔ استاد با شمارهٔ مستخدم (کاربر موقت با کد مصنوعی)
-      const passwordHash = hashPassword('123456');
+      const oneTimePassword = randomPassword();
+      const passwordHash = hashPassword(oneTimePassword);
+      const placeholderNc = 'S' + code.padStart(9, '0');
       const [u] = await q(`INSERT INTO users ("nationalCode", "firstName", "lastName", "passwordHash", "isActive", "mustChangePassword")
-        VALUES ($1,$2,$3,$4,$5,1) ON CONFLICT DO UPDATE SET "lastName" = EXCLUDED."lastName" RETURNING id`,
-        ['S' + code.padStart(9, '0'), firstName || 'بدون‌نام', lastName || code, passwordHash, isActive]);
+        VALUES ($1,$2,$3,$4,$5,1) ON CONFLICT DO UPDATE SET "lastName" = EXCLUDED."lastName" RETURNING id, (xmax = 0) AS "isNew"`,
+        [placeholderNc, firstName || 'بدون‌نام', lastName || code, passwordHash, isActive]);
       userId = u.id;
-      newUsers++;
+      if (u.isNew) { rememberCredential('PROFESSOR_TEMP', placeholderNc, oneTimePassword); newUsers++; }
     }
 
     // ── پروندهٔ استاد (staffCode = کلید) ──
@@ -262,6 +299,8 @@ try {
 
   if (majorsFile) await importMajors(majorsFile);
   if (professorsFile) await importProfessors(professorsFile);
+  // 🔐 رمزهای یکبارمصرف فقط در فایل (chmod 0600) گزارش می‌شوند، نه در ترمینال
+  writeCredentialsFile();
   console.log('\n🎉 کامل شد.');
 } catch (err) {
   console.error('❌ خطا:', err.message);

@@ -15,6 +15,14 @@ import { resolveCityMinistry } from '@/lib/shared-coding';
 import { toGregorian } from '@/lib/calendar';
 import { legacyRowOfSource, legacySourceCodeFor } from './transcript-utils';
 
+/**
+ * 🔐 رمز یکبارمصرف تصادفی با آنتروپی کافی (۹۶ بیت).
+ * هرگز از کد ملی یا هر دادهٔ قابل‌حدس دیگری مشتق نمی‌شود.
+ */
+function randomOneTimePassword(): string {
+  return randomBytes(12).toString('base64url').slice(0, 16);
+}
+
 /** پیکربندی اجرایی آیین‌نامه ملاک دانشجو برای محاسبات کارنامه */
 export async function getTranscriptRegulation(studentId: number): Promise<{
   title: string | null;
@@ -510,10 +518,13 @@ export async function resetUserPasswordAction(
   return { ok: true };
 }
 
-/** بازنشانی گروهی رمز حساب‌های دانشجویان/اساتید به کد ملی — فقط ADMIN */
+/**
+ * بازنشانی گروهی رمز حساب‌های دانشجویان/اساتید با رمز یکبارمصرف تصادفی — فقط ADMIN.
+ * نام تابع برای سازگاری با کلاینت حفظ شده است؛ دیگر رمز از کد ملی ساخته نمی‌شود.
+ */
 export async function bulkResetToNationalCodeAction(
   scope: 'student' | 'professor',
-): Promise<{ ok: boolean; error?: string; count?: number }> {
+): Promise<{ ok: boolean; error?: string; count?: number; passwords?: { nationalCode: string; password: string }[] }> {
   try {
     await requireRole(['ADMIN']);
   } catch {
@@ -522,6 +533,10 @@ export async function bulkResetToNationalCodeAction(
   const scopeWhere = scope === 'professor'
     ? `EXISTS (SELECT 1 FROM staff st WHERE st."userId" = users.id)`
     : `EXISTS (SELECT 1 FROM students st WHERE st."userId" = users.id)`;
+  // 🔧 رفع باگ SQL: در INSERT زیر جدول با نام مستعار u آمده، پس شرط دامنه هم باید u.id باشد
+  const scopeWhereAlias = scope === 'professor'
+    ? `EXISTS (SELECT 1 FROM staff st WHERE st."userId" = u.id)`
+    : `EXISTS (SELECT 1 FROM students st WHERE st."userId" = u.id)`;
   const roleCode = scope === 'professor' ? 'PROFESSOR' : 'STUDENT';
   const uni = await getCurrentUniversity().catch(() => null);
   if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
@@ -534,16 +549,21 @@ export async function bulkResetToNationalCodeAction(
     const rows = (usersToReset as any).rows ?? usersToReset;
     let count = 0;
     const affectedIds: number[] = [];
+    // ⚠️ رمزهای تولیدشده فقط یک‌بار به مدیر بازگردانده می‌شوند؛ در دیتابیس فقط هش ذخیره می‌شود.
+    const generatedPasswords: { nationalCode: string; password: string }[] = [];
     // 🔒 ریست رمز = ابطال نشست‌ها در همان تراکنش (الگوی setUserActiveAction)
     await db.transaction(async (tx) => {
       for (const row of rows) {
         if (!row.nationalCode) continue;
-        const hash = await hashPassword(String(row.nationalCode));
+        // 🔐 رمز یکبارمصرف تصادفی — دیگر از کد ملی مشتق نمی‌شود (کد ملی قابل‌حدس است)
+        const oneTimePassword = randomOneTimePassword();
+        const hash = await hashPassword(oneTimePassword);
         await tx.execute(sql`
           UPDATE users SET "passwordHash" = ${hash}, "mustChangePassword" = 1
           WHERE id = ${row.id}
         `);
         affectedIds.push(Number(row.id));
+        generatedPasswords.push({ nationalCode: String(row.nationalCode), password: oneTimePassword });
         count++;
       }
       if (affectedIds.length) {
@@ -555,12 +575,12 @@ export async function bulkResetToNationalCodeAction(
       INSERT INTO user_roles ("userId", "roleId")
       SELECT u.id, r.id FROM users u
       JOIN roles r ON r.code = ${roleCode}
-      WHERE ${sql.raw(scopeWhere)}
+      WHERE ${sql.raw(scopeWhereAlias)}
         AND (u."universityId" = ${uni.id} OR u."universityId" IS NULL)
         AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur."userId" = u.id AND ur."roleId" = r.id)
       ON CONFLICT ("userId", "roleId") DO NOTHING
     `);
-    return { ok: true, count };
+    return { ok: true, count, passwords: generatedPasswords };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'انجام نشد.' };
   } finally {
@@ -583,6 +603,10 @@ export async function bulkResetPasswordsAction(
   const scopeWhere = scope === 'professor'
     ? `EXISTS (SELECT 1 FROM staff st WHERE st."userId" = users.id)`
     : `EXISTS (SELECT 1 FROM students st WHERE st."userId" = users.id)`;
+  // 🔧 رفع باگ SQL: در INSERT زیر جدول با نام مستعار u آمده، پس شرط دامنه هم باید u.id باشد
+  const scopeWhereAlias = scope === 'professor'
+    ? `EXISTS (SELECT 1 FROM staff st WHERE st."userId" = u.id)`
+    : `EXISTS (SELECT 1 FROM students st WHERE st."userId" = u.id)`;
   const roleCode = scope === 'professor' ? 'PROFESSOR' : 'STUDENT';
   const uni2 = await getCurrentUniversity().catch(() => null);
   if (!uni2) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
@@ -612,7 +636,7 @@ export async function bulkResetPasswordsAction(
       INSERT INTO user_roles ("userId", "roleId")
       SELECT u.id, r.id FROM users u
       JOIN roles r ON r.code = ${roleCode}
-      WHERE ${sql.raw(scopeWhere)}
+      WHERE ${sql.raw(scopeWhereAlias)}
         AND (u."universityId" = ${uni2.id} OR u."universityId" IS NULL)
         AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur."userId" = u.id AND ur."roleId" = r.id)
       ON CONFLICT ("userId", "roleId") DO NOTHING

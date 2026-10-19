@@ -11,11 +11,14 @@ import * as schema from './schema';
 // (NEXT_PHASE یعنی در حال build هستیم؛ اتصال ایجاد نمی‌شود)
 const isBuilding = !!process.env.NEXT_PHASE;
 const requireEnvInProd = (name: string, url: string) => {
-  if (!isBuilding && process.env.NODE_ENV === 'production' && !process.env[name]) {
+  // مقدار خالی یا فقط-فاصله به‌مثابه «تنظیم‌نشده» در نظر گرفته می‌شود؛ در production
+  // هرگز به پیش‌فرض توسعهای سقوط نمی‌کنیم (fail-closed).
+  const configured = process.env[name]?.trim();
+  if (!isBuilding && process.env.NODE_ENV === 'production' && !configured) {
     // ⚠ به‌جای اتصال با پیش‌فرض ضعیف، جریان شروع را متوقف می‌کنیم (fail-fast)
-    throw new Error(`[db] در production متغیر ${name} اجباری است (پیش‌فرض توسعه‌ای «${url}» پذیرفته نمی‌شود).`);
+    throw new Error(`[db] در production متغیر ${name} اجباری است و نمی‌تواند خالی بماند (پیش‌فرض توسعه‌ای «${url}» در production پذیرفته نمی‌شود).`);
   }
-  return process.env[name] || url;
+  return configured || url;
 };
 
 // 🔒 P0-1: پیش از ساختن هر استخر اتصال، سیاست سکرت پروداکشن بررسی می‌شود.

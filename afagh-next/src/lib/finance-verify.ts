@@ -3,6 +3,11 @@
 import { getPublicBaseUrl } from '@/lib/settings';
 import { issueFinanceStatementToken } from '@/lib/verification';
 import { qrSvg } from '@/lib/qr';
+import { createLogger } from '@/lib/logger';
+
+// خطاهای خام (مثل پیام یکتایی Postgres) می‌توانند کد ملی/شناسه را حمل کنند؛
+// به‌جای console.error مستقیم از لاگر می‌فرستیم تا maskSecrets اعمال شود.
+const log = createLogger({ mod: 'finance-verify' });
 
 export type FinanceVerify = { url: string; qr: string; expiresAt: string | null } | null;
 
@@ -19,11 +24,11 @@ export async function buildFinanceStatementVerify(
     try {
       qr = await qrSvg(url, { errorCorrectionLevel: 'Q', size: 128, margin: 4 });
     } catch (err) {
-      console.error('[finance-verify] qr failed', err instanceof Error ? err.message : String(err));
+      log.error('qr_failed', { err });
     }
     return { url, qr, expiresAt: issued.expiresAt };
   } catch (err) {
-    console.error('[finance-verify] token failed', err instanceof Error ? err.message : String(err));
+    log.error('token_failed', { err });
     return null;
   }
 }

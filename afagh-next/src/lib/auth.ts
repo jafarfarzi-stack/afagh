@@ -50,14 +50,47 @@ export async function verifyPassword(password: string, stored: string): Promise<
 export type SessionUser = { id: number; name: string; roles: string[]; mustChangePassword: boolean; universityId: number | null };
 
 export const SESSION_COOKIE = 'token';
-/** سقف مطلق نشست (۱۲ ساعت) — بدون تمدید؛ انقضای کوکی و sessions.expiresAt هر دو همین سقف‌اند. */
+/**
+ * سقف مطلق نشست (۱۲ ساعت) — بدون تمدید لغزان.
+ * انقضای کوکی و sessions.expiresAt هر دو همین سقف‌اند؛ هیچ ستون createdAt
+ * وجود ندارد و افزودن آن تغییر schema است، پس تمدید بر اساس «زمان ساخت»
+ * ممکن/مجاز نیست. ورود دوباره تنها راه شروع نشست تازه است.
+ */
 const SESSION_MAX_AGE = 12 * 3600;
 
 /**
- * فلگ‌های کوکی نشست:
- *   • پیش‌فرض SameSite=Lax (برای iframe/دامنهٔ واسط: AFAGH_COOKIE_SAMESITE=none صریح لازم است)
- *   • production → Secure همیشه روشن است
- * قابل override با ENV: AFAGH_COOKIE_SECURE=auto|true|false ، AFAGH_COOKIE_SAMESITE=auto|lax|none|strict
+ * ── ویژگی‌های کوکی نشست ──────────────────────────────────────────────
+ *  • httpOnly: همیشه true؛ جاوااسکریپت صفحه (و XSS) به توکن دسترسی ندارد.
+ *  • path: '/'؛ نشست در همهٔ مسیرهای برنامه لازم است (کوکی باریک‌تر یعنی
+ *    قطع شدن گاردها در بخش‌های دیگر). مسیر باریک‌تر فقط برای کوکی‌های
+ *    ترجیحی/فیلتر (مثل afagh_students_nc_filter) مناسب است.
+ *  • domain: عمداً ست نمی‌شود (host-only) تا کوکی به زیردامنه‌ها سرایت نکند.
+ *  • maxAge: ۱۲ ساعت مطلق (بالا) — بدون sliding renewal.
+ *  • secure / sameSite: فقط از sessionTransport در proxy-trust.ts؛ ماتریس
+ *    کامل تصمیم و قاعدهٔ «SameSite=None بدون Secure ممنوع» همان‌جاست.
+ *
+ * ── چرا از پیشوند __Host- استفاده نشد؟ ─────────────────────────────
+ *  پیشوند __Host- امن‌تر است (Secure + Path=/ + بدون Domain را الزام می‌کند
+ *  و جلوی cookie tossing از زیردامنه را می‌گیرد)، اما در چیدمان فعلی
+ *  «امن» نیست:
+ *    ۱) توسعهٔ محلی روی HTTP پشتیبانی می‌شود و در آن Secure=false است؛
+ *       مرورگر کوکی __Host- بدون Secure را رد می‌کند. بنابراین نام کوکی
+ *       باید بین محیط‌ها متفاوت می‌شد (نام پویا) که خودش پیچیدگی و ریسک
+ *       خواندن اشتباه را اضافه می‌کند.
+ *    ۲) تغییر نام، همهٔ نشست‌های زندهٔ فعلی (تا ۱۲ ساعت) را بی‌اعتبار
+ *       می‌کند؛ مگر این‌که یک دورهٔ مهاجرت «خواندن هر دو نام + نوشتن نام
+ *       جدید + حذف نام قدیمی» پیاده شود. این فاز فقط اجازهٔ تغییر در
+ *       تنظیم/پاک‌سازی کوکی را دارد و افزودن مسیر مهاجرتِ تست‌نشده
+ *       (بدون build/test در این محیط) ریسک قفل‌شدن کاربران را دارد.
+ *  در نتیجه نام فعلی حفظ شد. مسیر پیشنهادی برای فاز بعد (با تست):
+ *    الف) خواندن توکن از هر دو نام token و __Host-afagh_session؛
+ *    ب) نوشتن فقط __Host-afagh_session در محیط Secure؛
+ *    ج) حذف token هنگام ورود/خروج؛
+ *    د) پس از یک دورهٔ ۱۲ ساعته (انقضای کامل نشست‌های قدیمی) حذف نام قدیمی.
+ * ────────────────────────────────────────────────────────────────────
+ *
+ * فلگ‌های ENV: AFAGH_COOKIE_SECURE=auto|true|false ،
+ *              AFAGH_COOKIE_SAMESITE=auto|lax|none|strict
  */
 export async function sessionCookieOptions(): Promise<{
   httpOnly: true; path: string; maxAge: number; secure: boolean; sameSite: 'lax' | 'none' | 'strict';

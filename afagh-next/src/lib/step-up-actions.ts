@@ -5,7 +5,8 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { users } from '@/db/schema';
 import { getSessionUser, verifyPassword } from '@/lib/auth';
-import { clientIp, getRateLimitCount, hitRateLimit, peekRateLimit, progressiveDelay } from '@/lib/rateLimit';
+import { clientIp as rateLimitClientIp, getRateLimitCount, hitRateLimit, peekRateLimit, progressiveDelay } from '@/lib/rateLimit';
+import { requestClientIp } from '@/lib/request-context';
 import { clearSessionLock, setSessionLock } from '@/lib/session-lock';
 import { STEPUP_TTL, checkStepUpToken, issueStepUpToken, stepUpCookieName } from '@/lib/step-up';
 
@@ -23,12 +24,29 @@ async function ownPasswordHash(userId: number): Promise<string | null> {
 }
 
 /**
+ * کلید هویتِ IP برای گیت step-up — از منبعِ سخت‌شده.
+ *
+ * مدل اعتماد: منبع اصلی `requestClientIp()` است و فقط هویتی را می‌پذیرد که
+ * پروکسیِ مورداعتماد با توکنِ مشترک تأیید کرده باشد (x-afagh-proxy-token +
+ * x-afagh-client-ip). اگر استقرار پیکربندی نشده باشد، به `rateLimitClientIp()`
+ * برمی‌گردیم که به‌جای سطلِ مشترکِ 'local'، کلیدِ اثرانگشتِ HMAC‌شده می‌سازد.
+ * بدون این fallback، هدر قابل‌جعل بود (مهاجم با هر درخواست سطلِ تازه) و در
+ * حالتِ «بدون پیکربندی»، ۲۰ خطای عمدی گیتِ step-up *همهٔ کاربران* را قفل می‌کرد.
+ */
+async function stepUpIpKey(): Promise<string> {
+  const id = (await requestClientIp()) ?? (await rateLimitClientIp());
+  return `stepup:ip:${id.slice(0, 64)}`;
+}
+
+/**
  * گیت سخت‌گیرانهٔ تأیید رمز (۵ خطا/۱۵دقیقه به‌ازای هر کاربر + هر IP):
  * فقط خطاها می‌شمارند؛ بالای سقف = قفل تصاعدی + لاگ هشدار (احتمال brute-force).
+ * این گیت هم توسط `requestStepUpAction` و هم `verifyOwnPasswordCore` استفاده
+ * می‌شود، پس هر دو از منبعِ سخت‌شدهٔ بالا بهره می‌برند.
  */
 async function stepUpGate(userId: number): Promise<{ ok: true } | { ok: false; error: string }> {
   const key = `stepup:pw:${userId}`;
-  const ipKey = `stepup:ip:${(await clientIp()).slice(0, 64)}`;
+  const ipKey = await stepUpIpKey();
   const [uRl, iRl] = await Promise.all([
     peekRateLimit(key, 5, 15 * 60),
     peekRateLimit(ipKey, 20, 15 * 60),
@@ -44,7 +62,7 @@ async function stepUpGate(userId: number): Promise<{ ok: true } | { ok: false; e
 
 async function stepUpFail(userId: number): Promise<void> {
   const key = `stepup:pw:${userId}`;
-  const ipKey = `stepup:ip:${(await clientIp()).slice(0, 64)}`;
+  const ipKey = await stepUpIpKey();
   await hitRateLimit(key, 15 * 60).catch(() => {});
   await hitRateLimit(ipKey, 15 * 60).catch(() => {});
 }

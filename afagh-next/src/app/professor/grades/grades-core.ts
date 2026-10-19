@@ -29,6 +29,69 @@ export const RUBRIC_PRESETS: Record<RubricPreset, RubricWeights> = {
 
 export const DEFAULT_RUBRIC: RubricWeights = { midterm: 5, homework: 3, participation: 2, practical: 0, finalExam: 10 };
 
+/**
+ * مدل دادهٔ بارم‌بندی یک درس (نام مستعار خوانا برای RubricWeights).
+ *
+ * هر بارم از پنج جزء تشکیل می‌شود:
+ *   midterm (میان‌ترم) + homework (تکالیف) + participation (حضور و فعالیت)
+ *   + practical (بخش عملی) + finalExam (پایان‌ترم)
+ *
+ * دو قاعدهٔ اعتبارسنجی کاملاً جدا داریم:
+ *
+ *   ۱) قاعدهٔ اجباری «جمع پنج جزء = ۲۰» → isRubricValid
+ *      این قاعده از قبل وجود داشته و بدون تغییر باقی می‌ماند.
+ *
+ *   ۲) قاعدهٔ اختیاری «میان‌ترم + پایان‌ترم = هدف» → isMidtermFinalValid
+ *      پیش‌فرض خاموش است تا رفتار امروز سامانه تغییر نکند.
+ *      توجه: مقدار DEFAULT_RUBRIC برابر ۵+۱۰=۱۵ است؛ اگر این قاعده با
+ *      هدف ۲۰ روشن شود، خودِ بارم پیش‌فرض رد می‌شود. فعال‌سازی آن یک
+ *      «تصمیم محصولی» است و باید آگاهانه گرفته شود.
+ */
+export type Rubric = RubricWeights;
+
+/** پنج جزء بارم‌بندی — منبع واحد برای پیمایش و اعتبارسنجی */
+export const RUBRIC_FIELDS: readonly RubricField[] = [
+  'midterm', 'homework', 'participation', 'practical', 'finalExam',
+] as const;
+
+/**
+ * هدف پیش‌فرض «میان‌ترم + پایان‌ترم» برابر مقدار DEFAULT_RUBRIC (۵+۱۰=۱۵).
+ * این عدد فقط مقدار مرجع است و به‌تنهایی هیچ بررسی‌ای را فعال نمی‌کند.
+ */
+export const DEFAULT_MIDTERM_FINAL_TARGET = DEFAULT_RUBRIC.midterm + DEFAULT_RUBRIC.finalExam;
+
+/**
+ * مجموع میان‌ترم و پایان‌ترم یک بارم‌بندی (تابع خالص).
+ */
+export function midtermFinalTotalOf(rubric: RubricWeights): number {
+  return (Number(rubric.midterm) || 0) + (Number(rubric.finalExam) || 0);
+}
+
+/**
+ * بررسی اختیاری «میان‌ترم + پایان‌ترم = target» (تابع خالص).
+ *
+ *   target = null / undefined / ۰ یا نامعتبر  ⇒ بررسی خاموش است و true برمی‌گردد
+ *                                              (پیش‌فرض امروز؛ رفتار تغییر نمی‌کند)
+ *   target > ۰                                ⇒ مجموع دو جزء باید دقیقاً برابر target باشد
+ *
+ * مثال‌ها:
+ *   target = 20 → بارم DEFAULT_RUBRIC (۵+۱۰=۱۵) رد می‌شود.
+ *   target = 15 → بارم پیش‌فرض پذیرفته می‌شود، ولی الگوهایی مثل
+ *                 PRACTICAL_HEAVY (۳+۵=۸) رد می‌شوند.
+ *
+ * ⚠ تغییر این هدف در میانهٔ ترم می‌تواند بارم و نمرات درس‌های جاری را
+ *   نامعتبر کند؛ فقط پیش از شروع ترم تغییر دهید.
+ */
+export function isMidtermFinalValid(
+  rubric: RubricWeights,
+  target: number | null | undefined
+): boolean {
+  if (target === null || target === undefined) return true;
+  const t = Number(target);
+  if (!Number.isFinite(t) || t <= 0) return true; // ۰ یا مقدار نامعتبر = بررسی خاموش
+  return midtermFinalTotalOf(rubric) === t;
+}
+
 /** فیلدهای نمره‌ای که مستقیماً توسط استاد وارد می‌شوند */
 export const SCORE_FIELDS: StudentGradeField[] = [
   'midtermScore', 'homeworkScore', 'participationScore', 'practicalScore',

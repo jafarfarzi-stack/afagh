@@ -7,5 +7,23 @@
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "SAMEORIGIN"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		# حذف هدر Server که توسط سرور بالادستی (Next.js/Reverse Proxy) ارسال میشود تا اطلاعات بنر سرور افشا نشود
+		-Server
+
+		# --- Content-Security-Policy ---
+		# این برنامه بر پایه Next.js 16 (App Router) است و هنوز CSP مبتنی بر nonce برای آن پیادهسازی نشده است.
+		# Next.js در حالت App Router اسکریپتهای inline (برای hydration و bootstrap دادهها) و همچنین استایلهای inline
+		# تزریقشده را در HTML قرار میدهد؛ بنابراین تا زمانی که CSP غیرceمحور (nonce-based) پیاده نشود، باید
+		# 'unsafe-inline' در script-src مجاز باشد، در غیر این صورت بارگذاری برنامه کاملاً شکسته میشود.
+		# نکته امنیتی: 'unsafe-inline' ریسک XSS را افزایش میدهد، اما چون default-src و connect-src روی 'self' قفل
+		# شدهاند و object-src 'none' است و frame-ancestors 'self' دارد، سطح حمله محدود میماند.
+		# برنامه QR را بهصورت SVG با dangerouslySetInnerHTML رندر میکند و تصاویر را از blob:/data: میخواند؛
+		# به همین دلیل img-src شامل data: و blob: شده است. همهچیز same-origin سرو میشود.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; object-src 'none'; form-action 'self'"
+
+		# --- Permissions-Policy ---
+		# دوربین و میکروفون فقط برای همین origin (self) مجاز هستند تا قابلیتهای عکسبرداری/صوت برنامه از کار نیفتد،
+		# اما geolocation بهطور کامل غیرفعال است چون برنامه به موقعیت مکانی نیاز ندارد.
+		Permissions-Policy "geolocation=(), microphone=(self), camera=(self)"
 	}
 }

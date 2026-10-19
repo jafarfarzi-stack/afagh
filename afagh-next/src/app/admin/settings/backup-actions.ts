@@ -2,18 +2,57 @@
 
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { desc } from 'drizzle-orm';
+import { Pool } from 'pg';
 import { pool } from '@/db';
 import { db } from '@/db';
 import { audit_logs } from '@/db/schema';
+import { observePoolErrors } from '@/db/pool-errors';
 import { S3, ARCHIVE_BUCKET, ensureBucket } from '@/lib/objectStore';
 import { getSessionUser, requireRole } from '@/lib/auth';
 import { requirePlatformAdmin } from '@/lib/platform-admin';
 import { createLogger } from '@/lib/logger';
 
-const DB_URL = process.env.DATABASE_URL || '';
 const log = createLogger({ mod: 'admin.backup' });
 
+// ═══ استخر اختصاصی پشتیبان/بازیابی (فاز ۳) ═══
+// پیش‌فرض: همان استخر مالک (`pool` از DATABASE_URL) تا رفتار امروز دست‌نخورده بماند.
+// ⚠ ریسک باقی‌مانده در حالت پیش‌فرض: این نقش مالک (و در استقرارهای فعلی سوپرکاربر)
+// است؛ دستورات DDL دامپ را اجرا می‌کند و RLS را دور می‌زند. یعنی هر نقص در همین
+// اکشن، دسترسی کامل به دیتابیس است. برای حذف این ریسک، DATABASE_URL_BACKUP را به
+// نقش کم‌مجوز afagh_backup بدهید (scripts/hardening.mjs آن را می‌سازد).
+//
+// سیاست «همه یا هیچ»: اگر متغیر تنظیم شده باشد و نقش کم‌مجوز خطا بدهد، هرگز به استخر
+// مالک سقوط نمی‌کنیم — چون همین سقوط، همان ریسکی است که می‌خواهیم حذف کنیم.
+const BACKUP_DB_URL = process.env.DATABASE_URL_BACKUP?.trim() ?? '';
+const globalForBackup = globalThis as unknown as { backupPool?: Pool };
+let warnedOwnerPoolFallback = false;
+
+/** آیا مسیر کم‌مجوز فعال است؟ (تعیین‌کنندهٔ حالت بازیابی «داده‌به‌جای DDL») */
+function usesDedicatedBackupRole(): boolean {
+  return BACKUP_DB_URL.length > 0;
+}
+
+/** استخر پشتیبان: اختصاصی اگر DATABASE_URL_BACKUP باشد، وگرنه استخر مالک. */
+function backupPool(): Pool {
+  if (!BACKUP_DB_URL) {
+    if (!warnedOwnerPoolFallback) {
+      warnedOwnerPoolFallback = true;
+      log.warn('backup_owner_pool_fallback', {
+        detail: 'DATABASE_URL_BACKUP تنظیم نشده؛ پشتیبان/بازیابی با نقش مالک اجرا می‌شود (DDL + عبور از RLS).',
+      });
+    }
+    return pool;
+  }
+  if (!globalForBackup.backupPool) {
+    globalForBackup.backupPool = new Pool({ connectionString: BACKUP_DB_URL, max: 2 });
+    observePoolErrors(globalForBackup.backupPool);
+  }
+  return globalForBackup.backupPool;
+}
+
 const REDACTED = '[REDACTED]';
+/** جایگزین امن برای ستون‌های jsonb (رشتهٔ [REDACTED] در jsonb نامعتبر است و restore را می‌شکند) */
+const REDACTED_JSON = '{"redacted":true}';
 /** کلیدهای محرمانهٔ system_settings که مقدارشان هرگز در دامپ نمی‌آید */
 const SECRET_SETTING_RE = /SECRET|TOKEN|KEY|PASSWORD/i;
 /** رویدادهای حامل OTP — متن تحویل آن‌ها sanitize می‌شود */
@@ -83,6 +122,37 @@ function redactRow(table: string, row: Record<string, any>): void {
     // بدنهٔ خام درخواست به سرویس‌های ثالث می‌رود و می‌تواند کد ملی/شمارهٔ تماس و
     // سایر PII خام را حمل کند → کل ستون حذف می‌شود.
     if ('requestPayload' in row) row.requestPayload = REDACTED;
+  } else if (table === 'grade_submission_otps' || table === 'signature_otps' || table === 'doc_sign_otps') {
+    // هش OTP امضای نمره/سند/قرارداد — حتی هش‌شده هم نباید در فایل پشتیبان باشد.
+    if ('otpHash' in row) row.otpHash = REDACTED;
+  } else if (table === 'document_signatures') {
+    // OTP خامی که امضای سند با آن انجام شده (varchar(10)) — کاملاً محرمانه.
+    if ('otpUsed' in row) row.otpUsed = REDACTED;
+  } else if (table === 'messenger_link_tokens') {
+    // هش توکن/کد پیوند پیام‌رسان + chatId معلق؛ مبنای احراز هویت در بات هستند.
+    if ('tokenHash' in row) row.tokenHash = REDACTED;
+    if ('codeHash' in row) row.codeHash = REDACTED;
+    if ('pendingChatId' in row) row.pendingChatId = REDACTED;
+  } else if (table === 'samin_connections') {
+    // اعتبارنامهٔ ثمین به‌صورت رمزنگاری‌شده (AES-GCM) ذخیره می‌شود؛ کلید رمزگشایی
+    // بیرون از دامپ است، اما ciphertext هم نباید در پشتیبان پخش شود.
+    if ('clientSecretEnc' in row) row.clientSecretEnc = REDACTED;
+    if ('passwordEnc' in row) row.passwordEnc = REDACTED;
+    if ('tokenEnc' in row) row.tokenEnc = REDACTED;
+  } else if (table === 'payment_gateways') {
+    // config (jsonb) شامل merchantId/terminalId/apiKey/pin است → جایگزین JSON-معتبر.
+    if ('config' in row) row.config = REDACTED_JSON;
+  } else if (table === 'pos_terminals') {
+    // config (jsonb) شامل اطلاعات شبکهٔ کارت‌خوان (ip/port/serial) است.
+    if ('config' in row) row.config = REDACTED_JSON;
+  } else if (table === 'payment_transactions') {
+    // authority در ایندکس یکتا (uq_payment_txn_authority) است؛ برای حفظ قابلیت
+    // restore مقدار یکتای هر ردیف می‌گذاریم، نه ثابت (وگرنه درج تکراری می‌شود).
+    if ('authority' in row) row.authority = `${REDACTED}#${row.id ?? ''}`;
+    if ('bankRefId' in row) row.bankRefId = REDACTED;
+    if ('cardPan' in row) row.cardPan = REDACTED;
+    if ('payerMobile' in row) row.payerMobile = REDACTED;
+    if ('payerEmail' in row) row.payerEmail = REDACTED;
   }
 }
 
@@ -106,7 +176,7 @@ async function auditBackup(tables: number): Promise<void> {
 
 /** لیست جداول کاربری (بدون جداول سیستمی) */
 async function getUserTables(): Promise<string[]> {
-  const res = await pool.query(`
+  const res = await backupPool().query(`
     SELECT tablename FROM pg_tables
     WHERE schemaname = 'public' ORDER BY tablename
   `);
@@ -115,7 +185,7 @@ async function getUserTables(): Promise<string[]> {
 
 /** دامپ SQL از یک جدول */
 async function dumpTable(table: string): Promise<string> {
-  const cols = await pool.query(`
+  const cols = await backupPool().query(`
     SELECT column_name, data_type, is_nullable, column_default
     FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = $1
@@ -133,7 +203,7 @@ async function dumpTable(table: string): Promise<string> {
   let sql = `DROP TABLE IF EXISTS "${table}" CASCADE;\n`;
   sql += `CREATE TABLE "${table}" (\n${colDefs.join(',\n')}\n);\n\n`;
 
-  const data = await pool.query(`SELECT * FROM "${table}"`);
+  const data = await backupPool().query(`SELECT * FROM "${table}"`);
   if (data.rows.length === 0) return sql;
 
   const colNames = cols.rows.map(c => `"${c.column_name}"`).join(', ');
@@ -237,11 +307,50 @@ export async function downloadMinioObjectAction(key: string): Promise<{ ok: bool
 
 // ═══ بازیابی ═══
 
+/** نقل‌قول امن شناسه برای TRUNCATE (نام‌ها از دامپِ امضاشده می‌آیند، نه ورودی کاربر). */
+function quoteIdent(name: string): string {
+  return '"' + name.replace(/"/g, '""') + '"';
+}
+
+/**
+ * بازیابی «داده‌به‌جای DDL» برای نقش کم‌مجوز.
+ *
+ * دامپ فعلی برای هر جدول `DROP TABLE ...; CREATE TABLE ...; INSERT ...` می‌سازد.
+ * DROP TABLE فقط با مالکیت جدول ممکن است و هیچ GRANTای مالکیت نمی‌دهد؛ پس با نقش
+ * afagh_backup بخش DDL رد می‌شود و فقط داده اجرا می‌شود: یک TRUNCATE ... CASCADE و
+ * سپس INSERTها. چون ترتیب الفبایی جداول با کلیدهای خارجی سازگار نیست، در همان
+ * تراکنش session_replication_role=replica ست می‌شود (مجوزش را hardening می‌دهد)؛
+ * این کار تریگرهای جانبی را هم در طول بازیابی خاموش می‌کند.
+ */
+async function restoreDataOnly(statements: string[], tables: string[]): Promise<number> {
+  const client = await backupPool().connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL session_replication_role = 'replica'");
+    if (tables.length) {
+      await client.query(`TRUNCATE TABLE ${tables.map(quoteIdent).join(', ')} CASCADE`);
+    }
+    let executed = 0;
+    for (const stmt of statements) {
+      if (!/^INSERT\s+INTO\s/i.test(stmt)) continue;
+      await client.query(stmt);
+      executed++;
+    }
+    await client.query('COMMIT');
+    return executed;
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch { /* اتصال ممکن است از دست رفته باشد */ }
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export async function restoreDatabaseAction(sql: string): Promise<{ ok: boolean; error?: string; statements?: number }> {
   await requirePlatformAdmin();
   try {
     // فقط دامپی که خود سرور با کلید محرمانه امضا کرده باشد قابل اجراست؛
-    // فایل دلخواه SQL هرگز مستقیماً به pool فرستاده نمی‌شود.
+    // فایل دلخواه SQL هرگز مستقیماً به استخر پشتیبان فرستاده نمی‌شود.
     const verifiedSql = verifyBackup(sql);
     const statements: string[] = [];
     let current = '';
@@ -256,6 +365,19 @@ export async function restoreDatabaseAction(sql: string): Promise<{ ok: boolean;
     }
     if (current.trim()) statements.push(current.trim());
 
+    // مسیر کم‌مجوز (DATABASE_URL_BACKUP): دامپ همان قالب DROP/CREATE را دارد، اما
+    // afagh_backup مالک جدول‌ها نیست و DROP/CREATE مجاز نیست. پس فقط داده اجرا می‌شود.
+    // این مسیر عمداً به استخر مالک برنمی‌گردد (بدون سقوطِ بی‌صدای دسترسی).
+    if (usesDedicatedBackupRole()) {
+      const tables = [...new Set(
+        [...verifiedSql.matchAll(/CREATE TABLE "((?:[^"]|"")+)"/g)]
+          .map(m => m[1].replace(/""/g, '"')),
+      )];
+      const executed = await restoreDataOnly(statements, tables);
+      return { ok: true, statements: executed };
+    }
+
+    // مسیر پیش‌فرض (نقش مالک): رفتار پیشین حفظ می‌شود — DROP/CREATE/INSERT.
     let executed = 0;
     for (const stmt of statements) {
       if (!stmt || stmt.startsWith('--')) continue;
@@ -312,11 +434,11 @@ export async function getBackupStatsAction(): Promise<{ ok: boolean; stats?: { t
     const tables = await getUserTables();
     let totalRows = 0;
     for (const t of tables) {
-      const r = await pool.query(`SELECT COUNT(*) as n FROM "${t}"`);
+      const r = await backupPool().query(`SELECT COUNT(*) as n FROM "${t}"`);
       totalRows += Number(r.rows[0].n);
     }
 
-    const dbSizeRes = await pool.query(`SELECT pg_size_pretty(pg_database_size(current_database())) as size`);
+    const dbSizeRes = await backupPool().query(`SELECT pg_size_pretty(pg_database_size(current_database())) as size`);
     const dbSize = dbSizeRes.rows[0].size;
 
     let minioObjects = 0;

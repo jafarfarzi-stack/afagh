@@ -1,6 +1,9 @@
 import 'server-only';
 import { headers } from 'next/headers';
+import { createHmac } from 'node:crypto';
 import Redis from 'ioredis';
+import { normalizeClientIp } from './proxy-trust';
+import { requestClientIp } from './request-context';
 
 /**
  * ══════════════════════════════════════════════════════════════════
@@ -55,50 +58,146 @@ const memSweep = () => {
   for (const [k, v] of mem) if (v.resetAt <= now) mem.delete(k);
 };
 
-/** IP کلاینت — فقط از هدر پروکسیِ مورداعتماد (Caddy در مسیر production).
+/**
+ * ══════════════════════════════════════════════════════════════════
+ *  هویت کلاینت برای محدودسازی نرخ — مدل اعتماد (سه لایه)
  *
- *  هدر X-Forwarded-For را هر کلاینتی می‌تواند جعل کند؛ اعتماد به آن بدون
- *  پروکسیِ مورداعتماد یعنی مهاجم با هر درخواست یک IP تازه جا می‌زند و
- *  محدودیت per-IP را دور می‌زند. پس:
- *    • اگر TRUSTED_PROXY=1 (استقرار پشت Caddy/reverse-proxy) → XFF/X-Real-IP معتبرند.
- *    • در غیر این صورت XFF نادیده گرفته می‌شود (fail-closed: همه در سطل 'local').
- *  استقرارهای پشت Caddy باید TRUSTED_PROXY=1 را ست کنند. */
-function proxyHeadersTrusted(): boolean {
-  const v = (process.env.TRUSTED_PROXY || '').trim().toLowerCase();
-  return v === '1' || v === 'true' || v === 'caddy';
+ *  هیچ هدر ورودی به‌تنهایی قابل اعتماد نیست؛ `X-Forwarded-For` را خودِ کلاینت
+ *  هم می‌تواند بفرستد. پس به ترتیب:
+ *
+ *  ۱) «منبع سخت‌شده» = requestClientIp(): پروکسیِ مورداعتماد هویت واقعی را در
+ *     x-afagh-client-ip می‌نویسد و با توکنِ مشترک (x-afagh-proxy-token، مقایسهٔ
+ *     زمان‌ثابت) آن را تأیید می‌کند. این تنها مسیری است که به هدرِ نوشته‌شده
+ *     توسط خودِ پروکسی تکیه می‌کند (AFAGH_TRUST_PROXY + AFAGH_PROXY_SECRET).
+ *
+ *  ۲) سازگاری با استقرارهای قدیمی (TRUSTED_PROXY/AFAGH_TRUST_PROXY): فقط
+ *     «راست‌ترین» hop از XFF خوانده می‌شود. هر پروکسی آدرسِ همسایهٔ قبلی را به
+ *     *انتهای* لیست اضافه می‌کند؛ پس راست‌ترین مقدار همان چیزی است که
+ *     نزدیک‌ترین پروکسیِ ما نوشته، و چپ‌ترین مقدار کاملاً در اختیار کلاینت است.
+ *     (باگ قبلی: خواندن چپ‌ترین → مهاجم با هر درخواست یک سطل تازه می‌گرفت.)
+ *     ⚠ اگر چند پروکسیِ مورداعتماد پشت‌سرهم باشند، راست‌ترین hop آدرسِ پروکسیِ
+ *     داخلی است؛ یعنی کلاینت‌های پشت آن پروکسی یک سطل مشترک می‌گیرند. این
+ *     انتخابِ محافظه‌کارانه است (هرگز هدرِ قابل‌جعل را ترجیح نمی‌دهیم).
+ *
+ *  ۳) بدون هیچ پیکربندی اعتماد: به‌جای یک سطل مشترک ('local'/'unknown') که با
+ *     یک سیلِ ساده کل سایت را قفل می‌کرد، یک «اثرانگشت» HMAC‌شده می‌سازیم از
+ *     راست‌ترین hop (در صورت وجود) + کوکی نشست + مشخصاتِ پایدار مرورگر.
+ *     نتیجه: کلاینت‌ها سطل‌های جدا دارند و کلید را نمی‌توان با یک هدرِ دلبخواه
+ *     به سطلِ قربانی هدایت کرد (کلید مشتق‌شده است، نه ورودی خام).
+ *     ⚠ هزینه/محدودیت این حالت: اگر اپ *مستقیماً* روی اینترنت expose شود
+ *     (خلافِ پیش‌فرضِ loopback)، راست‌ترین hop هم قابل جعل است و فقط مؤلفه‌های
+ *     سمتِ مرورگر می‌مانند؛ پس محدودیت per-account (مثل login بر اساس نام
+ *     کاربری) باید همیشه لایهٔ دوم بماند. برای تفکیک دقیق per-IP باید لایهٔ ۱
+ *     فعال شود: AFAGH_TRUST_PROXY=true و AFAGH_PROXY_SECRET (≥۳۲ کاراکتر) و
+ *     تزریق هدرهای x-afagh-* توسط پروکسی.
+ * ══════════════════════════════════════════════════════════════════
+ */
+
+/** فلگ اعتماد به پروکسی؛ هر دو نام قدیمی و جدید پشتیبانی می‌شوند. */
+function legacyProxyTrustEnabled(): boolean {
+  return [process.env.TRUSTED_PROXY, process.env.AFAGH_TRUST_PROXY]
+    .map((v) => (v ?? '').trim().toLowerCase())
+    .some((v) => v === '1' || v === 'true' || v === 'yes' || v === 'caddy');
 }
 
-// NOTE: when proxy headers are untrusted (TRUSTED_PROXY unset), every client
-// shares the single 'local' bucket, so per-IP rate-limiting degrades to a
-// global bucket. That fallback behavior is intentional (fail-closed), but a
-// flood of 'local' hits can mean misconfiguration (proxy not marked trusted)
-// or abuse. The sliding-60s counter below only logs a warning for
-// observability — it never blocks or changes bucketing.
-const LOCAL_BUCKET_WARN_THRESHOLD = 200;
-let localBucketHits: number[] = [];
-function noteLocalBucketFallback(): void {
-  const now = Date.now();
-  localBucketHits.push(now);
-  const cutoff = now - 60_000;
-  while (localBucketHits.length > 0 && localBucketHits[0]! < cutoff) localBucketHits.shift();
-  if (localBucketHits.length > LOCAL_BUCKET_WARN_THRESHOLD) {
-    console.warn('[ratelimit] rate-limit-fallback-abuse', { bucket: 'local', hitsIn60s: localBucketHits.length });
-    localBucketHits = [];
+/**
+ * فقط آخرین (راست‌ترین) عنصر XFF — نه چپ‌ترین.
+ *
+ * عناصر میانی/چپ در اختیار کلاینت‌اند و حتی اگر «معتبر» به‌نظر برسند نباید
+ * استفاده شوند. اگر آخرین عنصر IP معتبر نباشد (مثلاً 'unknown' یا IP:port)،
+ * هیچ hop ای برنمی‌گردانیم و به لایهٔ بعد می‌رویم؛ اسکن کردنِ عقب‌گرد برای
+ * یافتنِ اولین مقدار معتبر همان آسیب‌پذیری جعل را برمی‌گرداند.
+ */
+function rightmostForwardedIp(value: string | null): string | null {
+  if (!value) return null;
+  const parts = value.split(',');
+  return normalizeClientIp(parts[parts.length - 1] ?? '');
+}
+
+/** مقدار زبان اصلی از Accept-Language (بدون پارامترهای q). */
+function primaryLanguage(value: string | null): string {
+  return (value ?? '').split(',')[0]?.trim().slice(0, 32) ?? '';
+}
+
+/**
+ * استخراج کوکی نشست از هدر Cookie — عمداً بدون import از auth.ts تا چرخهٔ
+ * ماژول (auth → rateLimit → auth) نسازیم. نام کوکی در auth.ts برابر
+ * SESSION_COOKIE = 'token' است.
+ */
+function sessionTokenFromCookie(value: string | null): string {
+  if (!value) return '';
+  for (const part of value.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    if (part.slice(0, eq).trim() === 'token') return part.slice(eq + 1).trim().slice(0, 256);
   }
+  return '';
 }
 
+/**
+ * کلید جایگزین (fallback) وقتی هیچ پروکسیِ تأییدشده‌ای نداریم.
+ *
+ * HMAC فقط برای «حوزه‌بندی و یک‌طرفه‌سازی» است تا توکن خامِ نشست در کلید Redis
+ * نیفتد؛ رازِ امنیتی نیست. ورودی‌ها به‌گونه‌ای ترکیب می‌شوند که برای ساختنِ
+ * سطلِ تازه، کلاینت باید چند مقدارِ مستقل (hop نوشته‌شده توسط پروکسی، نشست،
+ * User-Agent، زبان) را هم‌زمان عوض کند — نه فقط یک هدر.
+ */
+const FALLBACK_HMAC_KEY = 'afagh:ratelimit:fallback:v1';
+function fallbackClientKey(h: { get(name: string): string | null }): string {
+  const material = [
+    rightmostForwardedIp(h.get('x-forwarded-for')) ?? 'no-hop',
+    sessionTokenFromCookie(h.get('cookie')),
+    (h.get('user-agent') ?? '').slice(0, 256),
+    primaryLanguage(h.get('accept-language')),
+  ].join('\u0000');
+  const digest = createHmac('sha256', FALLBACK_HMAC_KEY).update(material).digest('hex').slice(0, 32);
+  return `fp:${digest}`;
+}
+
+/** هشدارِ حداکثر یک‌بار در دقیقه برای دیدنِ پیکربندیِ ناقص (نه برای بلاک کردن). */
+let lastFallbackWarnAt = 0;
+function noteUntrustedFallback(): void {
+  const now = Date.now();
+  if (now - lastFallbackWarnAt < 60_000) return;
+  lastFallbackWarnAt = now;
+  console.warn(
+    '[ratelimit] proxy-trust-missing — از کلید اثرانگشتِ جایگزین استفاده شد؛ ' +
+    'برای محدودسازی دقیق per-IP، AFAGH_TRUST_PROXY/AFAGH_PROXY_SECRET را تنظیم و هدرهای x-afagh-* را تزریق کنید.',
+  );
+}
+
+/**
+ * IP/هویت کلاینت برای کلید rate-limit.
+ *
+ * امضای تابع (`Promise<string>`) برای سازگاری با همهٔ فراخوان‌های موجود حفظ شده
+ * است، اما خروجی ممکن است IPِ تأییدشده، IPِ راست‌ترین hop، یا کلیدِ
+ * `fp:<hash>` باشد — هرگز یک ثابتِ مشترکِ سراسری نیست (به‌جز خارج از بافت
+ * درخواست که کاربر واقعی وجود ندارد).
+ */
 export async function clientIp(): Promise<string> {
+  // لایهٔ ۱: هویتی که پروکسیِ مورداعتماد با توکنِ مشترک تأیید کرده است.
+  try {
+    const trusted = await requestClientIp();
+    if (trusted) return trusted;
+  } catch { /* ادامه به لایه‌های بعدی */ }
+
   try {
     const h = await headers();
-    if (proxyHeadersTrusted()) {
-      const fwd = (h.get('x-forwarded-for') || '').split(',')[0]?.trim();
-      return fwd || h.get('x-real-ip')?.trim() || 'local';
+    // لایهٔ ۲: استقرارهای قدیمی — فقط راست‌ترین hop، هرگز چپ‌ترین.
+    if (legacyProxyTrustEnabled()) {
+      const hop = rightmostForwardedIp(h.get('x-forwarded-for'));
+      if (hop) return hop;
+      const realIp = normalizeClientIp(h.get('x-real-ip'));
+      if (realIp) return realIp;
     }
-    noteLocalBucketFallback();
-    return 'local';
+    // لایهٔ ۳: بدون پیکربندی — اثرانگشتِ یکتا به‌جای سطل مشترک.
+    noteUntrustedFallback();
+    return fallbackClientKey(h);
   } catch {
-    noteLocalBucketFallback();
-    return 'local';
+    // خارج از بافت درخواست (کران/اسکریپت/تست): هویت کاربری وجود ندارد.
+    // تنها حالتی که یک کلید ثابت برمی‌گردانیم؛ چون درخواستِ بیرونی نیست،
+    // سطل مشترک نمی‌تواند به DoS عمومی تبدیل شود.
+    return 'process';
   }
 }
 

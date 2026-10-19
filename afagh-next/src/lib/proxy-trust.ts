@@ -34,19 +34,87 @@ export function trustedClientIp(headers: HeaderReader, config: ProxyConfig): str
   return normalizeClientIp(headers.get('x-afagh-client-ip'));
 }
 
-/** Cookie transport policy comes from deployment configuration, never headers.
- * Preserve explicit local HTTP support. Missing/invalid production URL defaults
- * to Secure rather than allowing a forged header to downgrade the cookie. */
+/**
+ * ────────────────────────────────────────────────────────────────────────
+ *  ماتریس تصمیم انتقال کوکی نشست (منبع واحد حقیقت)
+ * ────────────────────────────────────────────────────────────────────────
+ *
+ *  تصمیم فقط از ENV گرفته می‌شود، هرگز از هدرهای درخواست (Host /
+ *  X-Forwarded-Proto / X-Forwarded-For / ...). دلیل: اگر هدر مبنا باشد، یک
+ *  پروکسی نادرست یا مهاجم می‌تواند کوکی را به کانال ناامن «تنزل» بدهد.
+ *
+ *  ۱) Secure:
+ *     • NODE_ENV=production  → همیشه true. مقدار AFAGH_COOKIE_SECURE=false
+ *       در production نادیده گرفته می‌شود (یک‌بار هشدار لاگ می‌شود) تا
+ *       کوکی نشست هرگز روی HTTP تولید ارسال نشود.
+ *     • غیر production:
+ *         AFAGH_COOKIE_SECURE=true   → true
+ *         AFAGH_COOKIE_SECURE=false  → false  (فقط برای HTTP محلی)
+ *         auto / خالی / نامعتبر      → اگر AFAGH_PUBLIC_BASE_URL با https://
+ *                                      باشد true، وگرنه false.
+ *       URL نامعتبر/خالی در production به «امن» (Secure=true) میل می‌کند،
+ *       نه به «ناامن».
+ *
+ *  ۲) SameSite:
+ *         AFAGH_COOKIE_SAMESITE=none   → none  (فقط اگر Secure=true)
+ *         AFAGH_COOKIE_SAMESITE=strict → strict
+ *         lax / auto / خالی / نامعتبر → lax  (پیش‌فرض امن)
+ *
+ *  ۳) قاعدهٔ اجباری «none + ناامن ممنوع»:
+ *     مرورگرها SameSite=None را بدون Secure رد می‌کنند؛ اگر جایی پذیرفته
+ *     شود، کوکی روی HTTP قابل شنود/سرقت است. بنابراین ترکیب
+ *     SameSite=None با Secure=false «رد» و به Lax برگردانده می‌شود
+ *     (fail-safe) و هشدار لاگ می‌گیرد. برای SameSite=None باید
+ *     AFAGH_COOKIE_SECURE=true و HTTPS واقعی داشته باشید.
+ *
+ *  ۴) هزینهٔ iframe (opt-in صریح):
+ *     SameSite=None فقط برای جاسازی cross-site لازم است و به‌معنی
+ *     «مرورگر کوکی نشست را با درخواست‌های سایت دیگر هم می‌فرستد». پس
+ *     امنیت تنها با بررسی Origin/Referer (assertCsrf در Route Handlerها و
+ *     assertServerActionOrigin در Server Actionها) حفظ می‌شود. بدون این
+ *     لایه‌ها SameSite=None را فعال نکنید؛ Lax پیش‌فرضِ امن است.
+ * ────────────────────────────────────────────────────────────────────────
+ */
+
+/** هشدارها فقط یک‌بار چاپ می‌شوند تا لاگ در هر درخواست پر نشود. */
+let warnedInsecureNone = false;
+let warnedCrossSiteNone = false;
+let warnedProductionSecureOverride = false;
+
 export function sessionTransport(env: Record<string, string | undefined>) {
   let https = env.NODE_ENV === 'production';
   try {
     const url = new URL(env.AFAGH_PUBLIC_BASE_URL ?? '');
     if (url.protocol === 'https:' || url.protocol === 'http:') https = url.protocol === 'https:';
-  } catch { /* secure production default */ }
+  } catch { /* پیش‌فرض امن در production */ }
+
+  const production = env.NODE_ENV === 'production';
   const secureMode = (env.AFAGH_COOKIE_SECURE ?? 'auto').toLowerCase();
-  const secure = env.NODE_ENV === 'production' ? true : secureMode === 'true' ? true : secureMode === 'false' ? false : https;
+  // در production هیچ ENVای نمی‌تواند Secure را خاموش کند (fail-closed).
+  const secure = production ? true : secureMode === 'true' ? true : secureMode === 'false' ? false : https;
+
+  if (production && secureMode === 'false' && !warnedProductionSecureOverride) {
+    warnedProductionSecureOverride = true;
+    console.warn('⚠ [cookie] AFAGH_COOKIE_SECURE=false در production نادیده گرفته شد؛ Secure اجباری است.');
+  }
+
   const mode = (env.AFAGH_COOKIE_SAMESITE ?? 'auto').toLowerCase();
   let sameSite: 'lax' | 'none' | 'strict' = mode === 'none' ? 'none' : mode === 'strict' ? 'strict' : 'lax';
-  if (sameSite === 'none' && !secure) sameSite = 'lax';
+
+  // «none + ناامن» را نمی‌پذیریم: مرورگر رد می‌کند و اگر نپذیرد، کوکی لو می‌رود.
+  if (sameSite === 'none' && !secure) {
+    if (!warnedInsecureNone) {
+      warnedInsecureNone = true;
+      console.warn('⛔ [cookie] AFAGH_COOKIE_SAMESITE=none بدون Secure رد شد؛ به Lax برگشت. برای iframe باید HTTPS و AFAGH_COOKIE_SECURE=true باشد.');
+    }
+    sameSite = 'lax';
+  }
+
+  // SameSite=None یک تصمیم صریح امنیتی است، نه پیش‌فرض؛ یک‌بار یادآوری می‌کنیم.
+  if (sameSite === 'none' && !warnedCrossSiteNone) {
+    warnedCrossSiteNone = true;
+    console.warn('⚠ [cookie] SameSite=None فعال است (opt-in برای جاسازی cross-site)؛ محافظت CSRF از طریق assertCsrf / assertServerActionOrigin الزامی است.');
+  }
+
   return { secure, sameSite };
 }

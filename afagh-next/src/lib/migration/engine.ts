@@ -62,9 +62,18 @@ const TX_TYPE: Record<string, string> = {
   'پرداخت': 'CREDIT', 'واریز': 'CREDIT', 'credit': 'CREDIT', 'برگشت': 'CREDIT',
 };
 
-function hashDefault(nationalCode: string): string {
+/** هش رمز عبور با همان قالب salt:scrypt(password) — سازگار با src/lib/auth.ts */
+function hashDefault(password: string): string {
   const salt = randomBytes(16).toString('hex');
-  return `${salt}:${scryptSync(nationalCode, salt, 32, { N: 16384, r: 8, p: 1, maxmem: 256 * 1024 * 1024 }).toString('hex')}`;
+  return `${salt}:${scryptSync(password, salt, 32, { N: 16384, r: 8, p: 1, maxmem: 256 * 1024 * 1024 }).toString('hex')}`;
+}
+
+/**
+ * 🔐 رمز یکبارمصرف تصادفی (۱۴۴ بیت آنتروپی).
+ * هرگز از کد ملی — که قابل‌حدس است — مشتق نمی‌شود.
+ */
+function randomOneTimePassword(): string {
+  return randomBytes(18).toString('base64url').slice(0, 24);
 }
 
 export type Prepared = {
@@ -430,7 +439,10 @@ export async function commit(
 
       const mappedStatus = statusMap.get(norm(String(r.status)))?.code;
       if (mappedStatus) r.status = mappedStatus;
+      // 🔐 رمز یکبارمصرف تصادفی برای حساب تازه — دیگر از کد ملی مشتق نمی‌شود
+      const oneTimePassword = randomOneTimePassword();
       const res = await db.transaction(async tx => {
+        let userCreated = false;
         let [u] = await tx.insert(users).values({
           nationalCode: String(r.nationalCode), firstName: String(r.firstName), lastName: String(r.lastName),
           birthCertNo: r.birthCertNo as string | null, birthCertSeries: r.birthCertSeries as string | null,
@@ -438,7 +450,8 @@ export async function commit(
           birthDate: (r.birthDate as Date | null) ?? null, fatherName: r.fatherName as string | null,
           gender: r.gender as string | null, address: r.address as string | null,
           photoFileName: (r.photoFile as string | null) ?? null,   // ZIP عکس‌ها بعداً با همین نام وصل می‌شود
-          passwordHash: hashDefault(String(r.nationalCode)),   // رمز اولیه = کد ملی (کاربر بعداً عوض می‌کند)
+          passwordHash: hashDefault(oneTimePassword),   // رمز یکبارمصرف تصادفی (نه کد ملی)
+          mustChangePassword: 1,                        // اولین ورود → تغییر اجباری رمز
         }).onConflictDoNothing().returning({ id: users.id });
         if (!u) {
           [u] = await tx.select({ id: users.id }).from(users).where(eq(users.nationalCode, String(r.nationalCode))).limit(1);
@@ -447,15 +460,21 @@ export async function commit(
               .where(and(eq(users.id, u.id), isNull(users.photoFileName)));
           }
           const [exSt] = await tx.select({ id: students.id }).from(students).where(eq(students.studentCode, String(r.studentCode))).limit(1);
-          if (exSt) return false; // موجود
+          if (exSt) return { studentInserted: false, userCreated: false }; // موجود
+        } else {
+          userCreated = true;
         }
         const [st] = await tx.insert(students).values({
           userId: u.id, studentCode: String(r.studentCode), majorId: major?.id ?? null,
           degreeLevelId: reg.degreeLevelId, regulationId: reg.id, entryYear: entryYr, entryTerm: Number(r.entryTerm) ?? 1, status: String(r.status),
         }).onConflictDoNothing().returning({ id: students.id });
-        return !!st;
+        return { studentInserted: !!st, userCreated };
       });
-      res ? inserted++ : existing++;
+      if (res.studentInserted) {
+        inserted++;
+        // 📣 رمز یکبارمصرف از همان کانال گزارش مهاجرت (هشدارهای گزارش) یک‌بار به مدیر نشان داده می‌شود
+        if (res.userCreated) report.warnings.push({ row: 0, msg: `🔐 رمز یکبارمصرف دانشجو ${r.studentCode} (کد ملی ${r.nationalCode}): ${oneTimePassword} — در اولین ورود تغییر اجباری است.` });
+      } else existing++;
     }
   }
 
@@ -744,13 +763,17 @@ export async function commit(
           userId = exU.id;
           await fillEmptyUser(exU.id, r);
         } else {
+          // 🔐 رمز یکبارمصرف تصادفی — دیگر از کد ملی مشتق نمی‌شود
+          const oneTimePassword = randomOneTimePassword();
           const [nu] = await db.insert(users).values({
             nationalCode: nc, firstName: String(r.firstName), lastName: String(r.lastName),
             ...identityOf(r),
-            passwordHash: hashDefault(nc),   // رمز اولیه = کد ملی
+            passwordHash: hashDefault(oneTimePassword),
             mustChangePassword: 1,           // اولین ورود → تغییر اجباری رمز
           }).returning({ id: users.id });
           userId = nu.id;
+          // 📣 رمز یکبارمصرف از همان کانال گزارش مهاجرت یک‌بار به مدیر نشان داده می‌شود
+          report.warnings.push({ row: 0, msg: `🔐 رمز یکبارمصرف استاد ${staffCode} (کد ملی ${nc}): ${oneTimePassword} — در اولین ورود تغییر اجباری است.` });
         }
       } else {
         // بدون کد ملی: شناسهٔ جایگزینِ رزروشده تا ستون NOT NULL پر شود و
@@ -764,7 +787,8 @@ export async function commit(
         const [nu] = await db.insert(users).values({
           nationalCode: placeholder, firstName: String(r.firstName), lastName: String(r.lastName),
           ...identityOf(r),
-          passwordHash: hashDefault(randomBytes(24).toString('hex')),   // ورود ناممکن تا اصلاح کد ملی
+          passwordHash: hashDefault(randomOneTimePassword()),   // ورود ناممکن تا اصلاح کد ملی
+          mustChangePassword: 1,
         }).returning({ id: users.id });
         userId = nu.id;
       }

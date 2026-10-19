@@ -33,7 +33,7 @@ check-env: env ## بررسی سکرت‌های .env (سیاست پروداکشن
 
 up: check-env ## بالا آوردن کل سامانه (بیلد در صورت نیاز)
 	$(DC) up -d --build
-	@echo "✓ سامانه روی http://localhost:$${APP_PORT:-8080} در حال اجراست"
+	@echo "✓ سامانه روی http://localhost:$${APP_PORT:-8080} در حال اجراست (bind: $${APP_BIND:-127.0.0.1})"
 
 up-https: check-env ## اجرا پشت Caddy با HTTPS خودکار (نیازمند DOMAIN در .env)
 	$(DC) $(HTTPS) up -d --build
@@ -74,7 +74,7 @@ ps: ## وضعیت سرویس‌ها
 
 health: ## بررسی سلامت سامانه
 	@$(DC) ps
-	@echo -n "  HTTP /login → "; curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:$${APP_PORT:-8080}/login
+	@echo -n "  HTTP /login → "; curl -s -o /dev/null -w "%{http_code}\n" http://$${APP_BIND:-127.0.0.1}:$${APP_PORT:-8080}/login
 
 migrate: ## اجرای دوبارهٔ مهاجرت دیتابیس (بعد از تغییر schema)
 	$(DC) run --rm migrator
@@ -110,8 +110,8 @@ admin: ## ساخت/چرخش حساب مدیر اولیه (رمز تصادفی + 
 psql: ## کنسول تعاملی PostgreSQL
 	$(DC) exec postgres psql -U afagh -d afagh_db
 
-redis-cli: ## کنسول تعاملی Redis
-	$(DC) exec redis redis-cli
+redis-cli: ## کنسول تعاملی Redis (با رمزِ REDIS_PASSWORD داخل کانتینر)
+	$(DC) exec redis sh -c 'redis-cli -a "$$REDIS_PASSWORD" --no-auth-warning'
 
 shell: ## ورود به کانتینر سرویس وب
 	$(DC) exec app sh

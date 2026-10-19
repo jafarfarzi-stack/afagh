@@ -44,8 +44,10 @@ cd afagh
 docker compose up -d --build          # یا:  make up
 ```
 
-سامانه روی **http://SERVER_IP:8080** بالا می‌آید. فایل `docker-compose.yml` در ریشهٔ پروژه
-کل استک را می‌سازد و همهٔ مقادیر پیش‌فرض دارند؛ برای سفارشی‌سازی یک `.env` بسازید
+سامانه به‌طور پیش‌فرض فقط روی **loopback** بالا می‌آید: `APP_BIND=127.0.0.1` و `APP_PORT=8080`
+(یعنی `http://127.0.0.1:8080` روی خود سرور — و مستقیم از اینترنت باز نیست). فایل `docker-compose.yml`
+در ریشهٔ پروژه کل استک را می‌سازد و همهٔ مقادیر پیش‌فرض دارند؛ برای انتشار عمومی صریح
+`APP_BIND=0.0.0.0` بگذارید و برای HTTPS با دامنه `make up-https` را بزنید؛ برای سفارشی‌سازی یک `.env` بسازید
 (`cp .env.prod.example .env`) و فقط همان چند مقدار لازم را عوض کنید.
 
 **میان‌بُرهای آماده (`make help`):**
@@ -72,11 +74,16 @@ docker compose up -d --build          # یا:  make up
 
 ```env
 DOMAIN=edu.example.ac.ir
-APP_PORT=127.0.0.1:8080
 AFAGH_PUBLIC_BASE_URL=https://edu.example.ac.ir
+APP_BIND=127.0.0.1
+APP_PORT=8080
 ```
 
-و `make up-https` بزنید؛ Caddy گواهی Let's Encrypt را خودش می‌گیرد و تمدید می‌کند.
+مقدار پیش‌فرض `APP_BIND` همان `127.0.0.1` است، پس اپ فقط روی **loopback** منتشر می‌شود و
+مستقیم از اینترنت باز نیست؛ تنها Caddy روی ۸۰/۴۴۳ آن را سرو می‌کند. `APP_PORT` یک عدد است
+(پیش‌فرض ۸۰۸۰) — دیگر مقدار ترکیبی `127.0.0.1:8080` را در `APP_PORT` نگذارید. و `make up-https`
+بزنید؛ Caddy گواهی Let's Encrypt را خودش می‌گیرد و تمدید می‌کند. اگر خودتان پروکسی/TLS را
+جای دیگری مدیریت می‌کنید و می‌خواهید اپ عمومی باشد، `APP_BIND=0.0.0.0` بگذارید.
 
 ### راه کامل‌تر: اسکریپت خودکار (نصب داکر + رمزهای تصادفی)
 
@@ -89,7 +96,7 @@ sudo ./deploy-debian.sh
 اسکریپت این کارها را می‌کند:
 
 1. تشخیص نسخهٔ Debian و نصب **Docker Engine + Compose plugin** از مخزن رسمی داکر (اگر نصب نباشد)
-2. ساخت فایل `.env` با **رمزهای تصادفی** برای PostgreSQL و MinIO (`chmod 600`)
+2. ساخت فایل `.env` با **رمزهای تصادفی** برای PostgreSQL، MinIO و Redis (`chmod 600`)
 3. بیلد ایمیج Next.js (خروجی `standalone`، کاربر غیر-root داخل کانتینر)
 4. بالا آوردن `postgres` + `redis` + `minio` + `app` با `docker compose`
 5. اجرای خودکار سرویس **migrator**: ساخت جدول‌ها (`drizzle-kit push`) + ایندکس‌ها و RLS
@@ -109,13 +116,20 @@ sudo ./deploy-debian.sh
 
 | سرویس | ایمیج | دسترسی |
 |---|---|---|
-| `app` (Next.js standalone) | از روی `afagh-next/Dockerfile` | **`0.0.0.0:8080`** — عمومی |
+| `app` (Next.js standalone) | از روی `afagh-next/Dockerfile` | **`127.0.0.1:8080`** — فقط loopback (پیش‌فرض) |
 | `postgres` | `postgres:16-alpine` | فقط `127.0.0.1:5432` |
-| `redis` | `redis:7-alpine` | فقط `127.0.0.1:6379` |
+| `redis` | `redis:7-alpine` | فقط `127.0.0.1:6379` — با رمز (`REDIS_PASSWORD`) |
 | `minio` | `minio/minio` | فقط `127.0.0.1:9000` و کنسول `9001` |
 
-دیتابیس، Redis و MinIO **از بیرون سرور در دسترس نیستند**؛ فقط اپ روی ۸۰۸۰ باز است.
+دیتابیس، Redis و MinIO **از بیرون سرور در دسترس نیستند**؛ اپ هم به‌طور پیش‌فرض فقط روی
+loopback (`127.0.0.1:8080`) منتشر می‌شود و برای باز کردنش روی اینترنت باید صریح
+`APP_BIND=0.0.0.0` بدهید (یا پشت Caddy بگذارید: `make up-https`).
 دادهٔ ماندگار در volumeهای داکر: `afagh_pg`، `afagh_redis`، `afagh_minio`.
+
+> 🔐 از فاز ۲، **Redis با رمز بالا می‌آید** (`--requirepass`) و متغیر `REDIS_PASSWORD`
+> **اجباری** است؛ بدون آن `docker compose` بالا نمی‌آید. `./deploy-debian.sh` این رمز را
+> خودکار می‌سازد (و برای استقرارهای موجودِ بدون رمز، backfill می‌کند). برای `redis-cli`
+> دستی هم باید همان رمز را بدهید: `redis-cli -a "$REDIS_PASSWORD" --no-auth-warning`.
 
 **مدیریت روزمره:**
 
@@ -127,8 +141,10 @@ sudo ./deploy-debian.sh --update                               # به‌روزر
 docker exec afagh_pg pg_dump -U afagh afagh_db > backup-$(date +%F).sql   # پشتیبان
 ```
 
-> پشت **Nginx/Caddy** با HTTPS: ترافیک را به `127.0.0.1:8080` پروکسی کنید و در `.env`
-> مقدار `APP_PORT=127.0.0.1:8080` بگذارید تا پورت مستقیم از اینترنت بسته شود.
+> پشت **Nginx/Caddy** با HTTPS: ترافیک را به `127.0.0.1:8080` پروکسی کنید. مقدار پیش‌فرض
+> `APP_BIND=127.0.0.1` است، پس پورت از اینترنت بسته است؛ اگر خواستید صریح هم بنویسید:
+> `APP_BIND=127.0.0.1` و برای تغییر پورت `APP_PORT=9090`. ساده‌ترین راه HTTPS با گواهی
+> خودکار همان `make up-https` است (Caddy روی ۸۰/۴۴۳).
 
 ---
 

@@ -1,11 +1,29 @@
 import Link from 'next/link';
-import { requireRole } from '@/lib/auth';
+import { redirect } from 'next/navigation';
+import { requireRole, endCurrentSession } from '@/lib/auth';
 import { getSiblingAccounts } from '@/lib/account-switch';
 import PanelSwitcher from '@/components/PanelSwitcher';
+import SessionLock from '@/components/SessionLock';
 import { logoutAction } from '../login/actions';
 
 export default async function ProctorLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRole(['PROCTOR', 'VAULT_MANAGER', 'ADMIN', 'EDU_EXPERT', 'PROFESSOR']);
+
+  // قفل خودکار بیکاری — سرور-محور (مدت به تفکیک نقش؛ ۰ = غیرفعال).
+  // منبع حقیقت «زمان آخرین فعالیت» است؛ پس رفرش قفل را دور نمی‌زند و کاربرِ در حال کار بیرون نمی‌افتد.
+  const { evaluateIdleLock, resolveIdleTimeoutMinutes, idleMinutes, resolveReauthMinutes } = await import('@/lib/session-lock');
+  const lockMin = await resolveIdleTimeoutMinutes(user.roles).catch(() => 15);
+  // غیبت طولانی (بیش از SESSION_REAUTH_MINUTES) → نشست همین دستگاه بسته شود و
+  // کاربر به صفحهٔ ورود برود؛ نه قفل روی صفحهٔ کهنهٔ چند ساعت پیش.
+  if (lockMin > 0) {
+    const reauthMin = await resolveReauthMinutes(lockMin).catch(() => 0);
+    const away = reauthMin > 0 ? await idleMinutes(user.id).catch(() => null) : null;
+    if (away != null && away >= reauthMin) {
+      await endCurrentSession().catch(() => {});
+      redirect('/login?expired=1');
+    }
+  }
+  const lockOn = await evaluateIdleLock(user.id, lockMin).catch(() => false);
   // نقش‌های دیگر همین کاربر (استاد/ستادی) و حساب‌های هم‌کدملی در سوییچر بالای صفحه
   const siblings = await getSiblingAccounts().catch(() => []);
   const hasAdminRole = user.roles.some(r => ['ADMIN', 'EDU_EXPERT', 'VAULT_MANAGER'].includes(r));
@@ -57,6 +75,7 @@ export default async function ProctorLayout({ children }: { children: React.Reac
         </nav>
       </header>
       <main className="mx-auto max-w-6xl p-3 sm:p-5 pb-16">{children}</main>
+      <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />
     </div>
   );
 }
