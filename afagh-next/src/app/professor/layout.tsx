@@ -1,11 +1,13 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { electronic_documents, departments } from '@/db/schema';
-import { getStaffByUser, requireRole } from '@/lib/auth';
+import { getStaffByUser, requireRole, endCurrentSession } from '@/lib/auth';
 import { headedDepartments } from '@/lib/group-manager';
 import { getSiblingAccounts } from '@/lib/account-switch';
-import AccountSwitcher from '@/components/AccountSwitcher';
+import PanelSwitcher from '@/components/PanelSwitcher';
+import { ADMIN_PANEL_ROLES } from '@/lib/panel-links';
 import SessionLock from '@/components/SessionLock';
 import TermSwitcher from '@/components/TermSwitcher';
 import { getTermScope } from '@/lib/term-scope';
@@ -31,13 +33,33 @@ export default async function ProfessorLayout({ children }: { children: React.Re
   // مدیرِ «دروس عمومی» بداند سرپرستی کدام گروه با اوست.
   const headed = user.roles.includes('DEP_HEAD') && me ? await headedDepartments(me.id, me.departmentId ?? null) : [];
 
+  // نقش‌های ستادی/کارشناسی (کارشناس مالی، آموزش، …) هم باید از همین‌جا لینک
+  // داشبورد مدیریت را ببینند — پیش‌تر استادِ چندنقشی هیچ راهی به /admin نداشت.
+  // برای نقش‌های سفارشی (RBAC) هم اگر مجوز واقعی داشته باشد لینک ساخته می‌شود.
+  const alreadyAdmin = user.roles.some(r => (ADMIN_PANEL_ROLES as readonly string[]).includes(r));
+  let permissionCount = 0;
+  if (!alreadyAdmin) {
+    const { getUserPermissionCodes } = await import('@/lib/permissions-enforcer');
+    permissionCount = (await getUserPermissionCodes(user.id).catch(() => [])).length;
+  }
+
   // حساب‌های هم‌شخص (کد پرسنلی/دانشجویی دیگرِ همین کدملی) برای بنر جابه‌جایی
   const siblings = await getSiblingAccounts().catch(() => []);
 
   // قفل خودکار بیکاری — سرور-محور (مدت به تفکیک نقش؛ ۰ = غیرفعال).
   // منبع حقیقت «زمان آخرین فعالیت» است؛ پس رفرش قفل را دور نمی‌زند و کاربرِ در حال کار بیرون نمی‌افتد.
-  const { evaluateIdleLock, resolveIdleTimeoutMinutes } = await import('@/lib/session-lock');
+  const { evaluateIdleLock, resolveIdleTimeoutMinutes, idleMinutes, resolveReauthMinutes } = await import('@/lib/session-lock');
   const lockMin = await resolveIdleTimeoutMinutes(user.roles).catch(() => 15);
+  // غیبت طولانی (بیش از SESSION_REAUTH_MINUTES) → نشست همین دستگاه بسته شود و
+  // کاربر به صفحهٔ ورود برود؛ نه قفل روی صفحهٔ کهنهٔ چند ساعت پیش.
+  if (lockMin > 0) {
+    const reauthMin = await resolveReauthMinutes(lockMin).catch(() => 0);
+    const away = reauthMin > 0 ? await idleMinutes(user.id).catch(() => null) : null;
+    if (away != null && away >= reauthMin) {
+      await endCurrentSession().catch(() => {});
+      redirect('/login?expired=1');
+    }
+  }
   const lockOn = await evaluateIdleLock(user.id, lockMin).catch(() => false);
 
   // استاد به یک دانشگاه تعلق دارد؛ فیلتر نیمسال فقط با همان دانشگاه اعتبارسنجی می‌شود
@@ -46,7 +68,6 @@ export default async function ProfessorLayout({ children }: { children: React.Re
 
   return (
     <div className="min-h-screen bg-slate-50" dir="rtl">
-      <AccountSwitcher siblings={siblings} />
       <header className="print:hidden bg-slate-900 text-white shadow-md border-b border-slate-800">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 p-4">
           <div className="flex items-center gap-3">
@@ -56,34 +77,26 @@ export default async function ProfessorLayout({ children }: { children: React.Re
             <div>
               <p className="font-extrabold text-sm sm:text-base">کارتابل جامع اعضای هیئت علمی و اساتید</p>
               <p className="text-xs text-slate-400">{user.name}{me ? ' · کد پرسنلی: ' + me.staffCode : ''} · گروه: {deptName}</p>
-              {siblings.length > 0 && me?.staffCode ? (
-                <a
-                  href="#account-switch"
-                  className="mt-1 inline-flex items-center gap-1 rounded-lg border border-amber-400/60 bg-amber-400/15 px-2 py-0.5 text-[11px] font-bold text-amber-300 transition hover:bg-amber-400/25"
-                >
-                  🔀 کد فعال: {me.staffCode} · {siblings.length.toLocaleString('fa-IR')} کد دیگر — برای تعویض کلیک کنید
-                </a>
-              ) : null}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <TermSwitcher
               terms={termScope.terms}
               selectedId={termScope.selectedId}
-              effectiveId={termScope.effectiveId}
-              universityId={universityId}
-              variant="dark"
             />
-            {headed.length > 0 && (
-              <Link
-                href="/group-manager"
-                className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-xs font-bold text-white transition"
-                title={'مدیر گروه: ' + headed.map(d => d.name).join('، ')}
-              >
-                🏛️ پنل مدیر گروه
-                {headed.length === 1 ? ` (${headed[0].name})` : ` (${headed.length.toLocaleString('fa-IR')} گروه)`}
-              </Link>
-            )}
+            <PanelSwitcher
+              roles={user.roles}
+              current="professor"
+              permissionCount={permissionCount}
+              siblings={siblings}
+              groupTitle={
+                headed.length === 1
+                  ? headed[0].name
+                  : headed.length > 1
+                    ? `${headed.length.toLocaleString('fa-IR')} گروه`
+                    : undefined
+              }
+            />
             <Link
               href="/help/professor"
               className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition"
@@ -114,16 +127,8 @@ export default async function ProfessorLayout({ children }: { children: React.Re
           >
             🏠 داشبورد و کلاس‌ها
           </Link>
-          {/* ── کاربرِ دوقلو (هم استاد هم دانشجو، یک حساب): سوییچ بدون رمز به پنل دانشجو ── */}
-          {user.roles.includes('STUDENT') && (
-            <Link
-              href="/student"
-              className="px-3 py-1.5 rounded-xl font-black transition bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-xs"
-              title="این حساب هم پروندهٔ دانشجویی دارد — بدون ورود مجدد به پنل دانشجو بروید"
-            >
-              🎓 پنل دانشجو
-            </Link>
-          )}
+          {/* سوییچ به سایر کارتابل‌ها (دانشجو، مدیر گروه، مالی/آموزش) از سوییچر
+              بالای صفحه انجام می‌شود — اینجا لینک تکراری نمی‌گذاریم. */}
           <Link
             href="/professor/schedule"
             className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200"

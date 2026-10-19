@@ -351,6 +351,12 @@ export async function issueSessionFor(userId: number): Promise<{ mustChange: boo
   await db.insert(sessions).values({ token: sha256(token), userId, expiresAt: new Date(Date.now() + SESSION_MAX_AGE * 1000) });
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, token, await sessionCookieOptions());
+  // 🔓 ورودِ موفق یعنی احراز هویت تازه: هر قفل بیکاریِ باقی‌مانده از نشست/دستگاه
+  // قبلی باید پاک شود، وگرنه کاربر بلافاصله بعد از لاگین همان «صفحه قفل» را
+  // می‌بیند و مجبور است رمز را دوباره بزند (قفل per-user بود، نه per-session).
+  // import پویا: auth نباید وابستگیِ ثابت به ماژول server-onlyِ قفل داشته باشد.
+  const { clearSessionLock } = await import('@/lib/session-lock');
+  await clearSessionLock(userId).catch(() => {});
   // حساب تازه‌پذیرش‌شده با رمز پیش‌فرض → اجبار به تغییر رمز در اولین ورود
   return { mustChange: u.mustChangePassword === 1 };
 }
@@ -558,8 +564,41 @@ export async function logout() {
   if (u) await db.delete(sessions).where(eq(sessions.userId, u.id)); // logout everywhere
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (token) await db.delete(sessions).where(eq(sessions.token, sha256(token))); // fallback
+  // قفل بیکاری را هم پاک کن: کاربری که خارج شده نباید در ورودِ بعدی قفل ببیند
+  if (u) {
+    const { clearSessionLock } = await import('@/lib/session-lock');
+    await clearSessionLock(u.id).catch(() => {});
+  }
   cookieStore.delete(SESSION_COOKIE);
   return { ok: true };
+}
+
+/**
+ * بستن نشستِ همین دستگاه (نه همهٔ دستگاه‌ها).
+ * برای «غیبت طولانی» استفاده می‌شود: نشست همین مرورگر باطل و قفل بیکاری پاک
+ * می‌شود تا کاربر به صفحهٔ ورود برود — به‌جای نمایش صفحهٔ قفل روی دادهٔ کهنهٔ
+ * چند ساعت پیش.
+ *
+ * ⚠ کوکی این‌جا حذف نمی‌شود: این تابع از داخل رندر layout (Server Component)
+ * صدا زده می‌شود و Next.js فقط در Server Action / Route Handler اجازهٔ تغییر
+ * کوکی می‌دهد. کوکیِ کهنه به نشستِ حذف‌شده اشاره می‌کند، پس getSessionUser آن
+ * را نامعتبر می‌بیند و صفحهٔ ورود نمایش داده می‌شود؛ ورود بعدی کوکی را
+ * بازنویسی می‌کند.
+ */
+export async function endCurrentSession(): Promise<void> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE)?.value ?? '';
+  // کاربر را پیش از حذف نشست بخوان (وگرنه getSessionUser دیگر چیزی پیدا نمی‌کند)
+  const u = await getSessionUser().catch(() => null);
+  if (token) {
+    try {
+      await db.delete(sessions).where(eq(sessions.token, sha256(token)));
+    } catch { /* نشست شاید قبلاً حذف شده — بی‌اثر */ }
+  }
+  if (u) {
+    const { clearSessionLock } = await import('@/lib/session-lock');
+    await clearSessionLock(u.id).catch(() => {});
+  }
 }
 
 /** گیت نقش در layout ها — ریدایرکت به پورتال درست (سه داشبورد ایزوله — سند §۲۸۶۵) */

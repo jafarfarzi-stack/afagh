@@ -2,6 +2,9 @@ import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { requireRole, getStaffByUser } from '@/lib/auth';
 import { headedDepartments } from '@/lib/group-manager';
+import { getSiblingAccounts } from '@/lib/account-switch';
+import PanelSwitcher from '@/components/PanelSwitcher';
+import { ADMIN_PANEL_ROLES } from '@/lib/panel-links';
 import ThemeToggle from '@/components/ThemeToggle';
 import { logoutAction } from '../login/actions';
 import DeptSwitcher from './DeptSwitcher';
@@ -12,6 +15,17 @@ export default async function GroupManagerLayout({ children }: { children: React
   const depts = st ? await headedDepartments(st.id, st.departmentId ?? null) : [];
   const active = Number((await cookies()).get('gm_dept')?.value || 0) || depts[0]?.id || 0;
   const current = depts.find(d => d.id === active) ?? depts[0] ?? null;
+
+  // مدیر گروهی که استاد/کارشناس مالی/آموزش هم هست، از همین‌جا (بالای صفحه) بین
+  // همهٔ کارتابل‌هایش جابه‌جا می‌شود — پیش‌تر فقط لینک استاد و (برای ADMIN) مدیر بود.
+  const alreadyAdmin = user.roles.some(r => (ADMIN_PANEL_ROLES as readonly string[]).includes(r));
+  let permissionCount = 0;
+  if (!alreadyAdmin) {
+    const { getUserPermissionCodes } = await import('@/lib/permissions-enforcer');
+    permissionCount = (await getUserPermissionCodes(user.id).catch(() => [])).length;
+  }
+  // حساب‌های هم‌شخصِ همین کدملی (کد پرسنلی/دانشجویی دیگر) در همان سوییچر می‌آیند
+  const siblings = await getSiblingAccounts().catch(() => []);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -24,14 +38,14 @@ export default async function GroupManagerLayout({ children }: { children: React
             </p>
             <p className="text-xs opacity-70">{user.name} · نقش‌ها: {user.roles.join('، ')}</p>
           </div>
-          <div className="flex items-center gap-3">
-            {/* ادغام کارتابل‌ها: مدیر گروهی که استاد هم هست با یک کلیک به کارتابل
-                تدریس خودش می‌رود و لازم نیست خارج و دوباره وارد شود. */}
-            {user.roles.includes('PROFESSOR') && (
-              <Link href="/professor" className="rounded-lg bg-teal-800 px-3 py-1.5 text-xs font-bold hover:bg-teal-700">
-                🎓 کارتابل استادی من
-              </Link>
-            )}
+          <div className="flex flex-wrap items-center gap-3">
+            <PanelSwitcher
+              roles={user.roles}
+              current="group-manager"
+              permissionCount={permissionCount}
+              siblings={siblings}
+              groupTitle={current?.name}
+            />
             <Link href="/help/group-manager" className="rounded-lg bg-teal-800 px-3 py-1.5 text-xs font-bold hover:bg-teal-700">
               📖 راهنمای مدیر گروه
             </Link>
@@ -48,7 +62,6 @@ export default async function GroupManagerLayout({ children }: { children: React
           <Link href="/group-manager/offerings" className="hover:underline">ارائه‌های ترم</Link>
           <Link href="/group-manager/classrooms" className="hover:underline">کلاس‌ها</Link>
           <Link href="/group-manager/equivalence" className="hover:underline">معادل‌سازی دروس</Link>
-          {user.roles.includes('ADMIN') && <Link href="/admin" className="hover:underline">کارتابل مدیر</Link>}
         </nav>
       </header>
       <main className="mx-auto max-w-6xl p-4">{children}</main>

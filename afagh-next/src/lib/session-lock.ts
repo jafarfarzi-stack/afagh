@@ -49,7 +49,10 @@ async function flushClears(): Promise<void> {
   try {
     if (Date.now() < downUntil) throw new Error('redis-breaker-open');
     for (const id of [...pendingClear]) {
-      await lockRedis.del(KEY(id));
+      // «سنگ قبر» به‌جای DEL: پروسه‌های دیگر که آینهٔ حافظه‌ای از قفل دارند، با
+      // دیدن مقدار '0' قفل محلی را پاک می‌کنند. با DEL، آینهٔ کهنه تا ۲۴ ساعت
+      // می‌توانست کاربر را در پروسهٔ دیگر قفل نگه دارد.
+      await lockRedis.set(KEY(id), '0', 'EX', TTL_SEC);
       pendingClear.delete(id);
     }
   } catch { downUntil = Date.now() + BREAKER_MS; }
@@ -77,14 +80,31 @@ export async function clearSessionLock(userId: number): Promise<void> {
 /** آیا کاربر هم‌اکنون قفل است؟ (layoutها هنگام رندر می‌خوانند) */
 export async function isSessionLocked(userId: number): Promise<boolean> {
   sweep();
-  const m = mem.get(userId);
-  if (m != null && m > Date.now()) return true;
   // پاک‌سازی عقب‌افتاده را اول انجام بده تا قفلِ پاک‌شده دوباره خوانده نشود
   await flushClears();
-  try {
-    if (Date.now() < downUntil) throw new Error('redis-breaker-open');
-    return (await lockRedis.get(KEY(userId))) === '1';
-  } catch { downUntil = Date.now() + BREAKER_MS; return false; }
+  if (Date.now() >= downUntil) {
+    try {
+      // 🎯 وقتی Redis در دسترس است، «منبع حقیقت» است — نه آینهٔ درون‌حافظه.
+      //   پیش‌تر اول mem چک می‌شد؛ در استقرار چندپروسه‌ای، بازگشایی با رمز فقط
+      //   آینهٔ همان پروسه را پاک می‌کرد و درخواست بعدی (که به پروسهٔ دیگر
+      //   می‌رسید) دوباره «قفل» نشان می‌داد — همان تجربهٔ «رمز را زدم، باز هم
+      //   قفل است».
+      const v = await lockRedis.get(KEY(userId));
+      if (v === '1') { mem.set(userId, Date.now() + TTL_SEC * 1000); return true; }
+      if (v === '0') { mem.delete(userId); return false; }
+      // کلید نیست؛ اگر این پروسه قفلِ فعال در حافظه دارد، نوشتن قبلی به Redis
+      // نرسیده بود → دوباره ثبت کن (fail-closed) وگرنه باز است.
+      const m = mem.get(userId);
+      if (m != null && m > Date.now()) {
+        await lockRedis.set(KEY(userId), '1', 'EX', TTL_SEC).catch(() => {});
+        return true;
+      }
+      return false;
+    } catch { downUntil = Date.now() + BREAKER_MS; }
+  }
+  // دوران قطعی Redis → آینهٔ درون‌حافظه (fail-closed)
+  const m = mem.get(userId);
+  return m != null && m > Date.now();
 }
 
 /* ------------------------------------------------------------------------- *
@@ -129,15 +149,18 @@ export async function touchActivity(userId: number, at: number = Date.now()): Pr
 
 /** زمان آخرین فعالیت — null یعنی هنوز برای این کاربر ثبت نشده. */
 export async function lastActivityAt(userId: number): Promise<number | null> {
-  const m = seenMem.get(userId);
-  if (m != null) return m;
-  await flushSeen();
-  try {
-    if (Date.now() < downUntil) throw new Error('redis-breaker-open');
-    const v = await lockRedis.get(SEEN_KEY(userId));
-    const n = v == null ? NaN : Number(v);
-    return Number.isFinite(n) ? n : null;
-  } catch { downUntil = Date.now() + BREAKER_MS; return null; }
+  if (Date.now() >= downUntil) {
+    try {
+      await flushSeen();
+      // Redis منبع حقیقت است؛ آینهٔ حافظه فقط برای دوران قطعی.
+      const v = await lockRedis.get(SEEN_KEY(userId));
+      const n = v == null ? NaN : Number(v);
+      if (Number.isFinite(n)) { seenMem.set(userId, n); return n; }
+      // کلید نیست ولی این پروسه مقدار تازه‌تری در حافظه دارد (نوشتن نرسیده بود)
+      return seenMem.get(userId) ?? null;
+    } catch { downUntil = Date.now() + BREAKER_MS; }
+  }
+  return seenMem.get(userId) ?? null;
 }
 
 /** آیا از آخرین فعالیت بیش از timeoutMin دقیقه گذشته؟ (بدون به‌روزرسانی زمان) */
@@ -146,6 +169,13 @@ export async function isIdle(userId: number, timeoutMin: number): Promise<boolea
   const at = await lastActivityAt(userId);
   if (at === null) return false; // نخستین مشاهده — مبنایی برای بیکاری نیست
   return Date.now() - at > timeoutMin * 60_000;
+}
+
+/** چند دقیقه از آخرین فعالیت گذشته؟ null = هنوز ثبت نشده (نخستین مشاهده). */
+export async function idleMinutes(userId: number): Promise<number | null> {
+  const at = await lastActivityAt(userId);
+  if (at === null) return null;
+  return (Date.now() - at) / 60_000;
 }
 
 /**
@@ -176,6 +206,25 @@ export async function evaluateIdleLock(userId: number, timeoutMin: number): Prom
 function clampMinutes(n: number): number {
   if (!Number.isFinite(n) || n <= 0) return 0;
   return Math.min(Math.trunc(n), 24 * 60);
+}
+
+/**
+ * سقف «غیبت طولانی» — بیش از این مدت ⇒ پایان نشستِ همین دستگاه و صفحهٔ ورود.
+ *
+ * تفاوت با SESSION_LOCK_MINUTES: آن یکی فقط صفحه را قفل می‌کند (رمز همان
+ * نشست را می‌گیرد)؛ این یکی نشست را می‌بندد. چرا لازم است: قفل بیکاری هنگام
+ * رندر layout روی «آخرین فعالیت» حساب می‌شد، پس کسی که دو ساعت بعد آدرس را
+ * باز می‌کرد، همان قفل را روی صفحهٔ کهنه می‌دید. رفتار درست: غیبت طولانی =
+ * ورود دوباره با صفحهٔ ورود تمیز.
+ *
+ * مقدار ۰ = غیرفعال. مقدار مؤثر هرگز کمتر از «سقف قفل بیکاری + ۵ دقیقه»
+ * نیست تا اول قفل نمایش داده شود و سپس در غیبت طولانی‌تر، ورود مجدد.
+ */
+export async function resolveReauthMinutes(idleTimeoutMin = 0): Promise<number> {
+  const { getNumber } = await import('@/lib/settings');
+  const n = clampMinutes(await getNumber('SESSION_REAUTH_MINUTES', 30).catch(() => 30));
+  if (n <= 0) return 0;
+  return Math.max(n, idleTimeoutMin > 0 ? idleTimeoutMin + 5 : 0);
 }
 
 /**

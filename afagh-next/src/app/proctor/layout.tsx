@@ -1,9 +1,14 @@
 import Link from 'next/link';
 import { requireRole } from '@/lib/auth';
+import { getSiblingAccounts } from '@/lib/account-switch';
+import PanelSwitcher from '@/components/PanelSwitcher';
 import { logoutAction } from '../login/actions';
 
 export default async function ProctorLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRole(['PROCTOR', 'VAULT_MANAGER', 'ADMIN', 'EDU_EXPERT', 'PROFESSOR']);
+  // نقش‌های دیگر همین کاربر (استاد/ستادی) و حساب‌های هم‌کدملی در سوییچر بالای صفحه
+  const siblings = await getSiblingAccounts().catch(() => []);
+  const hasAdminRole = user.roles.some(r => ['ADMIN', 'EDU_EXPERT', 'VAULT_MANAGER'].includes(r));
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -24,7 +29,12 @@ export default async function ProctorLayout({ children }: { children: React.Reac
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {user.roles.includes('ADMIN') && (
+            <PanelSwitcher
+              roles={user.roles}
+              current="proctor"
+              siblings={siblings}
+            />
+            {hasAdminRole && (
               <Link
                 href="/admin/exams"
                 className="text-xs bg-indigo-900/90 hover:bg-indigo-800 text-indigo-200 border border-indigo-700/60 px-3 py-1.5 rounded-lg transition-colors font-bold"

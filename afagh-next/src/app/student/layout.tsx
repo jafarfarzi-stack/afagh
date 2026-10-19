@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
-import { getStudentByUser, requireRole } from '@/lib/auth';
+import { getStudentByUser, requireRole, endCurrentSession } from '@/lib/auth';
 import { alumniOf } from '@/lib/alumni';
 import { getSiblingAccounts } from '@/lib/account-switch';
-import AccountSwitcher from '@/components/AccountSwitcher';
+import PanelSwitcher from '@/components/PanelSwitcher';
+import { ADMIN_PANEL_ROLES } from '@/lib/panel-links';
 import SessionLock from '@/components/SessionLock';
 import TermSwitcher from '@/components/TermSwitcher';
 import { getTermScope } from '@/lib/term-scope';
@@ -24,13 +25,32 @@ export default async function StudentLayout({ children }: { children: React.Reac
   const demo = await isDemoStudentUser(user.id);
   const sidebarStudentCode = demo ? DEMO_STUDENT.studentCode : me?.studentCode ?? null;
 
-  // حساب‌های هم‌شخص (شماره دانشجویی/کد پرسنلی دیگرِ همین کدملی) برای بنر جابه‌جایی
+  // حساب‌های هم‌شخص (شماره دانشجویی/کد پرسنلی دیگرِ همین کدملی) برای سوییچر بالای صفحه
   const siblings = await getSiblingAccounts().catch(() => []);
+
+  // دانشجو معمولاً یک نقش دارد؛ فقط وقتی نقش/مجوز دیگری هم دارد سراغ RBAC می‌رویم
+  // تا یک کوئری اضافه به هر بارگذاری پنل دانشجو تحمیل نشود.
+  const hasStaffRole = user.roles.some(r => r !== 'STUDENT');
+  const alreadyAdmin = user.roles.some(r => (ADMIN_PANEL_ROLES as readonly string[]).includes(r));
+  let permissionCount = 0;
+  if (hasStaffRole && !alreadyAdmin) {
+    const { getUserPermissionCodes } = await import('@/lib/permissions-enforcer');
+    permissionCount = (await getUserPermissionCodes(user.id).catch(() => [])).length;
+  }
 
   // قفل خودکار بیکاری — سرور-محور (مدت به تفکیک نقش؛ ۰ = غیرفعال).
   // منبع حقیقت «زمان آخرین فعالیت» است؛ پس رفرش قفل را دور نمی‌زند و کاربرِ در حال کار بیرون نمی‌افتد.
-  const { evaluateIdleLock, resolveIdleTimeoutMinutes } = await import('@/lib/session-lock');
+  const { evaluateIdleLock, resolveIdleTimeoutMinutes, idleMinutes, resolveReauthMinutes } = await import('@/lib/session-lock');
   const lockMin = await resolveIdleTimeoutMinutes(user.roles).catch(() => 15);
+  // غیبت طولانی → پایان نشست همین دستگاه و هدایت به صفحهٔ ورود
+  if (lockMin > 0) {
+    const reauthMin = await resolveReauthMinutes(lockMin).catch(() => 0);
+    const away = reauthMin > 0 ? await idleMinutes(user.id).catch(() => null) : null;
+    if (away != null && away >= reauthMin) {
+      await endCurrentSession().catch(() => {});
+      redirect('/login?expired=1');
+    }
+  }
   const lockOn = await evaluateIdleLock(user.id, lockMin).catch(() => false);
 
   return (
@@ -51,8 +71,6 @@ export default async function StudentLayout({ children }: { children: React.Reac
             <TermSwitcher
               terms={termScope.terms}
               selectedId={termScope.selectedId}
-              effectiveId={termScope.effectiveId}
-              universityId={me?.universityId ?? null}
             />
             <a
               href="/help/student"
@@ -69,17 +87,14 @@ export default async function StudentLayout({ children }: { children: React.Reac
               <span>📕</span>
               <span>PDF راهنما</span>
             </a>
-            {/* ── کاربرِ دوقلو (هم دانشجو هم استاد، یک حساب): سوییچ بدون رمز به پنل استاد ── */}
-            {user.roles.includes('PROFESSOR') && (
-              <a
-                href="/professor"
-                className="inline-flex text-xs bg-amber-400 hover:bg-amber-300 text-slate-950 border border-amber-300 px-3 py-1.5 rounded-lg transition-colors font-black items-center gap-1.5"
-                title="این حساب هم پروندهٔ استادی دارد — بدون ورود مجدد به کارتابل استاد بروید"
-              >
-                <span>👨‍🏫</span>
-                <span>پنل استاد</span>
-              </a>
-            )}
+            {/* سوییچ به کارتابل استاد/مدیر گروه/ستادی و سایر حساب‌های هم‌کدملی
+                از همین سوییچر واحد انجام می‌شود. */}
+            <PanelSwitcher
+              roles={user.roles}
+              current="student"
+              permissionCount={permissionCount}
+              siblings={siblings}
+            />
             <ThemeToggle />
             <form action={logoutAction}>
               <button className="text-xs bg-emerald-900/90 hover:bg-emerald-950 text-emerald-100 border border-emerald-700/60 px-3 py-1.5 rounded-lg transition-colors font-medium">
@@ -91,7 +106,6 @@ export default async function StudentLayout({ children }: { children: React.Reac
       </header>
 
       {/* بدنه دو ستونه دسکتاپ: سایدبار سمت راست + محتوای اصلی */}
-      <AccountSwitcher siblings={siblings} />
       <div className="flex-1 max-w-7xl w-full mx-auto flex flex-col md:flex-row">
         {/* سایدبار عمودی سمت راست (دسکتاپ) */}
         <StudentSidebar user={{ name: user.name, studentCode: sidebarStudentCode }} />

@@ -1,9 +1,12 @@
 import Link from 'next/link';
-import { requireRole } from '@/lib/auth';
+import { redirect } from 'next/navigation';
+import { requireRole, endCurrentSession } from '@/lib/auth';
 import ThemeToggle from '@/components/ThemeToggle';
 import { logoutAction } from '../login/actions';
 import AdminNav from './AdminNav';
 import SessionLock from '@/components/SessionLock';
+import PanelSwitcher from '@/components/PanelSwitcher';
+import { getSiblingAccounts } from '@/lib/account-switch';
 import UniversitySwitcher from './UniversitySwitcher';
 import TermSwitcher from '@/components/TermSwitcher';
 import { getCurrentUniversity, listUniversities, uniTheme } from '@/lib/university-scope';
@@ -74,9 +77,20 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const termScope = await getTermScope(curUni.id);
   // قفل خودکار بیکاری — سرور-محور (مدت به تفکیک نقش؛ ۰ = غیرفعال).
   // منبع حقیقت «زمان آخرین فعالیت» است؛ پس رفرش قفل را دور نمی‌زند و کاربرِ در حال کار بیرون نمی‌افتد.
-  const { evaluateIdleLock, resolveIdleTimeoutMinutes } = await import('@/lib/session-lock');
+  const { evaluateIdleLock, resolveIdleTimeoutMinutes, idleMinutes, resolveReauthMinutes } = await import('@/lib/session-lock');
   const lockMin = await resolveIdleTimeoutMinutes(user.roles).catch(() => 15);
+  // غیبت طولانی → نشست همین دستگاه بسته و صفحهٔ ورود (نه قفل روی دادهٔ کهنه)
+  if (lockMin > 0) {
+    const reauthMin = await resolveReauthMinutes(lockMin).catch(() => 0);
+    const away = reauthMin > 0 ? await idleMinutes(user.id).catch(() => null) : null;
+    if (away != null && away >= reauthMin) {
+      await endCurrentSession().catch(() => {});
+      redirect('/login?expired=1');
+    }
+  }
   const lockOn = await evaluateIdleLock(user.id, lockMin).catch(() => false);
+  // حساب‌های هم‌شخصِ همین کدملی — برای سوییچر واحد بالای صفحه
+  const siblings = await getSiblingAccounts().catch(() => []);
   return (
     <div className="min-h-screen bg-sky-50/70" data-uni={curUni.code}>
       <header className={`${th.header} text-white shadow-md transition-colors`}>
@@ -94,11 +108,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
           {/* ردیف کنترل‌ها می‌شکند تا در موبایل صفحه را عریض نکند (سرریز ۵۰۰px+ بود) */}
           <div className="flex flex-wrap items-center gap-2">
+            {/* سوییچر واحد: برگشت به کارتابل استاد/مدیر گروه/دانشجو و حساب‌های هم‌کدملی */}
+            <PanelSwitcher
+              roles={user.roles}
+              current="admin"
+              permissionCount={permissionCodes.length}
+              siblings={siblings}
+            />
             <TermSwitcher
               terms={termScope.terms}
               selectedId={termScope.selectedId}
-              effectiveId={termScope.effectiveId}
-              universityId={curUni.id}
             />
             {canSwitchUniversity && (
               <UniversitySwitcher

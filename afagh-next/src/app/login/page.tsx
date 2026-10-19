@@ -27,7 +27,7 @@ function NoticeCard({ n }: { n: ShowcaseNotice }) {
   );
 }
 
-export default async function LoginPage(props: { searchParams: Promise<{ u?: string }> }) {
+export default async function LoginPage(props: { searchParams: Promise<{ u?: string; expired?: string }> }) {
   const sp = await props.searchParams;
   const show = await getLoginShowcase(sp.u);
   const important = show.notices.filter(n => n.kind === 'important');
@@ -71,6 +71,11 @@ export default async function LoginPage(props: { searchParams: Promise<{ u?: str
 
         {/* ── ستون ورود ── */}
         <div className="order-1 space-y-4 lg:order-2 lg:col-span-2 lg:sticky lg:top-6">
+          {sp.expired === '1' && (
+            <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3.5 text-xs font-bold leading-6 text-amber-900 shadow-sm">
+              ⏰ به دلیل عدم فعالیت طولانی، نشست شما در این دستگاه بسته شد. لطفاً دوباره وارد شوید.
+            </div>
+          )}
           {important.length > 0 && (
             <div className="space-y-2.5">
               {important.map(n => (
