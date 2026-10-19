@@ -6,6 +6,11 @@
 //
 // سطح لاگ با ENV: LOG_LEVEL=debug|info|warn|error (پیش‌فرض info، در production info)
 // قالب با ENV: LOG_FORMAT=json|pretty (پیش‌فرض json در production، pretty در dev)
+//
+// قلاب هشدار خطا با ENV: LOG_ALERT_WEBHOOK=<http(s) URL>
+//   اگر تنظیم باشد، هر error() یک POST آتش-و-فراموش به این وب‌هوک می‌فرستد
+//   (بدون بلاک‌کردن درخواست، بدون throw، با بدنهٔ پاک‌شدهٔ maskSecrets).
+//   مهلت با LOG_ALERT_TIMEOUT_MS قابل تنظیم است (پیش‌فرض ۳۰۰۰ms).
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -103,16 +108,61 @@ export function maskSecrets(value: unknown, depth = 0): unknown {
 
 export type LogFields = Record<string, unknown>;
 
+// ═══ قلاب هشدار خطا (Error Alert Hook) ═══
+// اگر ENV «LOG_ALERT_WEBHOOK» تنظیم باشد، هر error() یک POST آتش-و-فراموش
+// (fire-and-forget) به آن می‌فرستد تا خطاها بی‌سروصدا در لاگ نمانند.
+// قراردادهای سخت (بازبینی مهندسی):
+//   • هرگز throw نمی‌کند و هرگز درخواست را بلاک نمی‌کند (await نمی‌شود).
+//   • بدنه فقط از دادهٔ پاک‌شدهٔ maskString/maskSecrets ساخته می‌شود؛ هیچ سکرت/PII
+//     خامی خارج نمی‌شود و URL وب‌هوک هرگز داخل payload/لاگ نمی‌آید.
+//   • شکستِ ارسال هشدار، خودش لاگ نمی‌شود تا حلقهٔ هشدار-بی‌پایان نسازد.
+const alertWebhook = (): string => {
+  const url = String(process.env.LOG_ALERT_WEBHOOK || '').trim();
+  // فقط http/https؛ مقدار نامعتبر بی‌صدا نادیده گرفته می‌شود (بدون لاگ).
+  return /^https?:\/\//i.test(url) ? url : '';
+};
+
+const sendAlert = (time: string, msg: string, fields: LogFields): void => {
+  try {
+    const url = alertWebhook();
+    if (!url || typeof fetch !== 'function') return;
+    const envMs = Number(process.env.LOG_ALERT_TIMEOUT_MS);
+    const timeoutMs = Number.isFinite(envMs) && envMs > 0 ? envMs : 3000;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    void fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: ctrl.signal,
+      // ورودی این تابع از قبل پاک‌سازی شده؛ یک بار دیگر هم maskSecrets می‌زنیم تا
+      // هیچ مسیر فراخوانی نتواند دادهٔ خام به وب‌هوک تزریق کند.
+      body: JSON.stringify({
+        level: 'error',
+        msg: maskString(msg),
+        timestamp: time,
+        fields: maskSecrets(fields),
+      }),
+    })
+      .catch(() => { /* بی‌صدا: قطعی وب‌هوک نباید چیزی را بشکند */ })
+      .finally(() => clearTimeout(timer));
+  } catch {
+    /* هرگز throw نمی‌کند — لاگ اصلی همیشه انجام شده است */
+  }
+};
+
 const write = (level: LogLevel, base: LogFields, msg: string, fields?: LogFields) => {
   if (LEVELS[level] < LEVELS[envLevel()]) return;
+  // پیام و فیلدها هر دو پیش از هر مصرفی (کنسول و وب‌هوک هشدار) پاک‌سازی می‌شوند؛
+  // بعضی فراخوان‌ها پیام خام خطا را به‌جای فیلد می‌فرستند.
+  const safeMsg = maskString(msg);
+  const extra = maskSecrets({ ...base, ...(fields || {}) }) as LogFields;
   const rec = {
     level,
     time: new Date().toISOString(),
     app: process.env.LOG_APP_NAME || 'afagh',
     env: process.env.NODE_ENV || 'development',
-    // پیام هم پاک‌سازی می‌شود؛ بعضی فراخوان‌ها پیام خام خطا را به‌جای فیلد می‌فرستند.
-    msg: maskString(msg),
-    ...(maskSecrets({ ...base, ...(fields || {}) }) as LogFields),
+    msg: safeMsg,
+    ...extra,
   };
   const line = prettyMode()
     ? `${rec.time} ${level.toUpperCase().padEnd(5)} ${rec.msg} ${Object.keys(rec).length > 5 ? JSON.stringify(rec) : ''}`
@@ -120,6 +170,8 @@ const write = (level: LogLevel, base: LogFields, msg: string, fields?: LogFields
   if (level === 'error') console.error(line);
   else if (level === 'warn') console.warn(line);
   else console.log(line);
+  // هشدار فقط برای سطح error و فقط اگر وب‌هوک تنظیم شده باشد.
+  if (level === 'error') sendAlert(rec.time, safeMsg, extra);
 };
 
 export type Logger = {

@@ -50,6 +50,16 @@ export async function verifyPassword(password: string, stored: string): Promise<
 export type SessionUser = { id: number; name: string; roles: string[]; mustChangePassword: boolean; universityId: number | null };
 
 export const SESSION_COOKIE = 'token';
+
+/**
+ * نام کوکی نشست در حالت مهاجرت (`AFAGH_SESSION_COOKIE_PREFIX=host`).
+ * پیشوند `__Host-` مرورگر را ملزم می‌کند کوکی فقط با Secure + Path=/ و
+ * بدون Domain ذخیره شود (همان چیزی که `sessionCookieOptions` می‌دهد).
+ */
+export const SESSION_COOKIE_HOST = '__Host-afagh_session';
+
+/** نوع استور کوکی Next — نتیجهٔ `await cookies()`. */
+type CookieStore = Awaited<ReturnType<typeof cookies>>;
 /**
  * سقف مطلق نشست (۴ ساعت) — بدون تمدید لغزان.
  * انقضای کوکی و sessions.expiresAt هر دو همین سقف‌اند؛ هیچ ستون createdAt
@@ -74,28 +84,30 @@ const SESSION_MAX_AGE = SESSION_MAX_HOURS * 3600;
  *  • secure / sameSite: فقط از sessionTransport در proxy-trust.ts؛ ماتریس
  *    کامل تصمیم و قاعدهٔ «SameSite=None بدون Secure ممنوع» همان‌جاست.
  *
- * ── چرا از پیشوند __Host- استفاده نشد؟ ─────────────────────────────
- *  پیشوند __Host- امن‌تر است (Secure + Path=/ + بدون Domain را الزام می‌کند
- *  و جلوی cookie tossing از زیردامنه را می‌گیرد)، اما در چیدمان فعلی
- *  «امن» نیست:
- *    ۱) توسعهٔ محلی روی HTTP پشتیبانی می‌شود و در آن Secure=false است؛
- *       مرورگر کوکی __Host- بدون Secure را رد می‌کند. بنابراین نام کوکی
- *       باید بین محیط‌ها متفاوت می‌شد (نام پویا) که خودش پیچیدگی و ریسک
- *       خواندن اشتباه را اضافه می‌کند.
- *    ۲) تغییر نام، همهٔ نشست‌های زندهٔ فعلی (تا ۱۲ ساعت) را بی‌اعتبار
- *       می‌کند؛ مگر این‌که یک دورهٔ مهاجرت «خواندن هر دو نام + نوشتن نام
- *       جدید + حذف نام قدیمی» پیاده شود. این فاز فقط اجازهٔ تغییر در
- *       تنظیم/پاک‌سازی کوکی را دارد و افزودن مسیر مهاجرتِ تست‌نشده
- *       (بدون build/test در این محیط) ریسک قفل‌شدن کاربران را دارد.
- *  در نتیجه نام فعلی حفظ شد. مسیر پیشنهادی برای فاز بعد (با تست):
- *    الف) خواندن توکن از هر دو نام token و __Host-afagh_session؛
- *    ب) نوشتن فقط __Host-afagh_session در محیط Secure؛
- *    ج) حذف token هنگام ورود/خروج؛
- *    د) پس از یک دورهٔ ۱۲ ساعته (انقضای کامل نشست‌های قدیمی) حذف نام قدیمی.
- * ────────────────────────────────────────────────────────────────────
+ * ── مهاجرت به پیشوند __Host- (اکنون پیاده شده، پیش‌فرض خاموش) ──────────
+ *  پیشوند `__Host-` امن‌تر است (Secure + Path=/ + بدون Domain را الزام می‌کند
+ *  و جلوی cookie tossing از زیردامنه را می‌گیرد)، اما در محیط HTTP محلی
+ *  مجاز نیست (مرورگر کوکی `__Host-` بدون Secure را رد می‌کند). بنابراین
+ *  مهاجرت پشت گیت `AFAGH_SESSION_COOKIE_PREFIX=host` قرار دارد:
+ *
+ *    • DUAL-READ — توکن ابتدا از `__Host-afagh_session` و در نبودش از نام
+ *      قدیمی `token` خوانده می‌شود (`readSessionToken`). پس نشست‌های زندهٔ
+ *      فعلی (که فقط کوکی قدیمی دارند) بی‌اعتبار نمی‌شوند.
+ *    • DUAL-WRITE — هنگام ورود، اگر گیت روشن و انتقال Secure باشد، توکن در
+ *      هر دو نام نوشته می‌شود (`writeSessionCookie`): نام جدید برای شروع
+ *      مهاجرت و نام قدیمی تا لبه/پروکسی (`proxy.ts` فقط `token` را می‌خواند)
+ *      و کلاینت‌های نسل قبل نشکنند. روی HTTP غیر-Secure فقط نام قدیمی نوشته
+ *      می‌شود.
+ *    • پاک‌سازی — خروج و پایان نشست هر دو نام را حذف می‌کنند
+ *      (`clearSessionCookies`).
+ *
+ *  گام بعدیِ پیشنهادی (بعد از یک دورهٔ ۱۲ ساعته، یعنی انقضای کامل نشست‌های
+ *  قدیمی): به‌روزرسانی `proxy.ts` برای خواندن هر دو نام، سپس حذف نوشتن نام
+ *  قدیمی و در نهایت حذف نام قدیمی از کد.
  *
  * فلگ‌های ENV: AFAGH_COOKIE_SECURE=auto|true|false ،
- *              AFAGH_COOKIE_SAMESITE=auto|lax|none|strict
+ *              AFAGH_COOKIE_SAMESITE=auto|lax|none|strict ،
+ *              AFAGH_SESSION_COOKIE_PREFIX=host (اختیاری؛ پیش‌فرض خاموش)
  */
 export async function sessionCookieOptions(): Promise<{
   httpOnly: true; path: string; maxAge: number; secure: boolean; sameSite: 'lax' | 'none' | 'strict';
@@ -111,12 +123,64 @@ export async function sessionCookieOptions(): Promise<{
 }
 
 /**
+ * گیتِ مهاجرت به نام کوکی `__Host-afagh_session`.
+ * پیش‌فرض خاموش است؛ فقط مقدار دقیق `host` (بی‌توجه به بزرگی/کوچکی حرف)
+ * آن را روشن می‌کند. خاموش‌بودن یعنی رفتار قبلی، بدون هیچ تغییری.
+ */
+export function hostSessionCookieEnabled(): boolean {
+  return (process.env.AFAGH_SESSION_COOKIE_PREFIX ?? '').trim().toLowerCase() === 'host';
+}
+
+/**
+ * خواندن توکن نشست — DUAL-READ.
+ *
+ * اولویت با نام جدید (`__Host-afagh_session`) است و اگر نبود، نام قدیمی
+ * (`token`) خوانده می‌شود. بنابراین پس از فعال‌کردن گیت، هم نشست‌های تازه
+ * (که ممکن است فقط نام جدید را داشته باشند) و هم نشست‌های زندهٔ قبلی که هنوز
+ * کوکی قدیمی دارند معتبر می‌مانند.
+ *
+ * وقتی گیت خاموش است، فقط نام قدیمی خوانده می‌شود (رفتار قبلی).
+ */
+export function readSessionToken(cookieStore: CookieStore): string | undefined {
+  if (hostSessionCookieEnabled()) {
+    const hostToken = cookieStore.get(SESSION_COOKIE_HOST)?.value;
+    if (hostToken) return hostToken;
+  }
+  return cookieStore.get(SESSION_COOKIE)?.value;
+}
+
+/**
+ * نوشتن کوکی نشست — DUAL-WRITE.
+ *
+ * • نام جدید (`__Host-afagh_session`) فقط وقتی گیت روشن و انتقال Secure
+ *   باشد نوشته می‌شود؛ مرورگر کوکی `__Host-` بدون Secure را رد می‌کند.
+ * • نام قدیمی (`token`) همیشه نوشته می‌شود تا پروکسی لبه (`proxy.ts` که
+ *   فقط `token` را می‌خواند)، مسیرهای محافظت‌شده و هر خوانندهٔ نسل قبل
+ *   نشکنند. حذف این خط، گام بعدی مهاجرت است (بعد از به‌روزرسانی لبه).
+ */
+async function writeSessionCookie(cookieStore: CookieStore, token: string): Promise<void> {
+  const opts = await sessionCookieOptions();
+  if (hostSessionCookieEnabled() && opts.secure) {
+    // path='/' و نبودِ domain از sessionCookieOptions تأمین می‌شود — الزام __Host-
+    cookieStore.set(SESSION_COOKIE_HOST, token, opts);
+  }
+  cookieStore.set(SESSION_COOKIE, token, opts);
+}
+
+/** حذف هر دو نام کوکی نشست (قدیمی + جدید) — خروج و پایان نشست. */
+function clearSessionCookies(cookieStore: CookieStore): void {
+  cookieStore.delete(SESSION_COOKIE_HOST);
+  cookieStore.delete(SESSION_COOKIE);
+}
+
+/**
  * نشستِ کاربری که باید رمزش را عوض کند فقط برای جریان تغییر رمز (و خروج) معتبر است؛
  * بقیهٔ گاردها (APIها، اکشن‌ها، layout ها) آن را «بدون نشست» می‌بینند.
  */
 export async function getSessionUser(opts?: { allowPendingPasswordChange?: boolean }): Promise<SessionUser | null> {
   const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE)?.value;
+  // DUAL-READ: نام جدید (__Host-afagh_session) در اولویت، سپس نام قدیمی token
+  const token = readSessionToken(cookieStore);
   if (!token) return null;
   const rows = await db
     .select({
@@ -384,7 +448,8 @@ export async function issueSessionFor(userId: number): Promise<{ mustChange: boo
 
   await db.insert(sessions).values({ token: sha256(token), userId, expiresAt: new Date(Date.now() + SESSION_MAX_AGE * 1000) });
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, token, await sessionCookieOptions());
+  // DUAL-WRITE: نام جدید (اگر گیت روشن و Secure) + نام قدیمی همیشه
+  await writeSessionCookie(cookieStore, token);
   // 🔓 ورودِ موفق یعنی احراز هویت تازه: هر قفل بیکاریِ باقی‌مانده از نشست/دستگاه
   // قبلی باید پاک شود، وگرنه کاربر بلافاصله بعد از لاگین همان «صفحه قفل» را
   // می‌بیند و مجبور است رمز را دوباره بزند (قفل per-user بود، نه per-session).
@@ -597,7 +662,7 @@ export async function changePassword(currentPassword: string, newPassword: strin
   // ── M-4/بازبینی: ابطال همهٔ نشست‌های دیگر کاربر (تغییر رمز = سوءظن یا اشتراک دستگاه) ──
   //    نشست جاری حفظ می‌شود تا کاربر وسط کار اخراج نشود.
   const cookieStore = await cookies();
-  const currentToken = cookieStore.get(SESSION_COOKIE)?.value ?? '';
+  const currentToken = readSessionToken(cookieStore) ?? '';
   await db.delete(sessions).where(and(eq(sessions.userId, u.id), ne(sessions.token, sha256(currentToken))));
   return { ok: true };
 }
@@ -611,14 +676,14 @@ export async function logout() {
   const cookieStore = await cookies();
   const u = await getSessionUser({ allowPendingPasswordChange: true });
   if (u) await db.delete(sessions).where(eq(sessions.userId, u.id)); // logout everywhere
-  const token = cookieStore.get(SESSION_COOKIE)?.value;
+  const token = readSessionToken(cookieStore);
   if (token) await db.delete(sessions).where(eq(sessions.token, sha256(token))); // fallback
   // قفل بیکاری را هم پاک کن: کاربری که خارج شده نباید در ورودِ بعدی قفل ببیند
   if (u) {
     const { clearSessionLock } = await import('@/lib/session-lock');
     await clearSessionLock(u.id).catch(() => {});
   }
-  cookieStore.delete(SESSION_COOKIE);
+  clearSessionCookies(cookieStore);
   return { ok: true };
 }
 
@@ -636,7 +701,7 @@ export async function logout() {
  */
 export async function endCurrentSession(): Promise<void> {
   const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE)?.value ?? '';
+  const token = readSessionToken(cookieStore) ?? '';
   // کاربر را پیش از حذف نشست بخوان (وگرنه getSessionUser دیگر چیزی پیدا نمی‌کند)
   const u = await getSessionUser({ allowPendingPasswordChange: true }).catch(() => null);
   if (token) {

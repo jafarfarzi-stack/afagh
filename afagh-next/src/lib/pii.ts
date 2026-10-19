@@ -49,6 +49,21 @@ import { createCipheriv, createDecipheriv, createHmac, randomBytes, scryptSync }
 /** نام متغیر محیطی کلید اصلی PII (۶۴ کاراکتر hex یا عبارت عبور) */
 export const PII_KEY_ENV = 'AFAGH_PII_KEY';
 
+/**
+ * نام متغیر محیطی کلید *قبلی* PII — فقط برای رمزگشایی در دورهٔ گردش کلید.
+ *
+ * ── گردش کلید (key rotation) ──────────────────────────────────────────
+ *  هنگام تعویض کلید، مقدار قبلی را این‌جا نگه دارید تا دادهٔ رمزشدهٔ قدیمی
+ *  همچنان خوانده شود؛ `encryptPii` همیشه با کلید جاری می‌نویسد و
+ *  `decryptPii` ابتدا کلید جاری و سپس این کلید را امتحان می‌کند.
+ *  پس از backfill کامل (بازرمزگذاری همهٔ ردیف‌ها با کلید تازه) این متغیر
+ *  باید حذف شود تا کلیدِ منقضی در محیط باقی نماند.
+ *
+ *  ⚠ اختیاری است: نبودنش خطا نیست (برخلاف کلید جاری که در پروداکشن
+ *  fail-closed است). فقط رمزگشایی را به یک کلید اضافه محدود می‌کند.
+ */
+export const PII_KEY_PREVIOUS_ENV = 'AFAGH_PII_KEY_PREVIOUS';
+
 /** پیشوند نسخهٔ پاکت رمز — تغییر آن یعنی تغییر قالب ذخیره‌سازی */
 const ENVELOPE_VERSION = 'v1';
 
@@ -91,32 +106,13 @@ function deriveKey(raw: string): Buffer {
 }
 
 /**
- * کلید اصلی PII.
- *
- * fail-closed: در `NODE_ENV=production` اگر `AFAGH_PII_KEY` تنظیم نشده باشد
- * (یا خالی باشد) خطا می‌دهد — هیچ پیش‌فرضی در پروداکشن پذیرفته نمی‌شود.
- * در توسعه/تست، برای اینکه راه‌اندازی محلی بی‌دردسر باشد، از یک کلید ثابت
- * عمومی استفاده می‌شود و یک هشدار یک‌باره چاپ می‌شود.
- *
- * خروجی Buffer است (نه رشته) تا هم‌قرارداد `samin/crypto.ts` بماند.
+ * ساخت کلید از یک متغیر محیطی مشخص (با کش مشترک).
+ * اگر متغیر تنظیم/غیرخالی نباشد `null` برمی‌گرداند — تصمیم‌گیری دربارهٔ
+ * fail-closed بر عهدهٔ فراخوان است.
  */
-export function piiKey(): Buffer {
-  const raw = (process.env[PII_KEY_ENV] ?? '').trim();
-  if (!raw) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error(
-        `${PII_KEY_ENV} تعریف نشده است — رمزنگاری داده‌های هویتی در پروداکشن بدون کلید مجاز نیست.`,
-      );
-    }
-    if (!warnedDevFallback) {
-      warnedDevFallback = true;
-      console.warn(
-        `[pii] ⚠ ${PII_KEY_ENV} تنظیم نشده — کلید توسعهٔ عمومی استفاده می‌شود. ` +
-        'این حالت فقط برای توسعه/تست است و داده‌های رمزشدهٔ آن قابل انتقال به پروداکشن نیست.',
-      );
-    }
-    return deriveKey(DEV_FALLBACK_SECRET);
-  }
+function keyFromEnv(name: string): Buffer | null {
+  const raw = (process.env[name] ?? '').trim();
+  if (!raw) return null;
 
   const cacheKey = `${PASSPHRASE_SALT}\u0000${raw}`;
   const cached = keyCache.get(cacheKey);
@@ -126,6 +122,46 @@ export function piiKey(): Buffer {
   if (keyCache.size >= 8) keyCache.clear();
   keyCache.set(cacheKey, key);
   return key;
+}
+
+/**
+ * کلید اصلی (جاری) PII.
+ *
+ * fail-closed: در `NODE_ENV=production` اگر `AFAGH_PII_KEY` تنظیم نشده باشد
+ * (یا خالی باشد) خطا می‌دهد — هیچ پیش‌فرضی در پروداکشن پذیرفته نمی‌شود.
+ * در توسعه/تست، برای اینکه راه‌اندازی محلی بی‌دردسر باشد، از یک کلید ثابت
+ * عمومی استفاده می‌شود و یک هشدار یک‌باره چاپ می‌شود.
+ *
+ * خروجی Buffer است (نه رشته) تا هم‌قرارداد `samin/crypto.ts` بماند.
+ */
+export function piiKey(): Buffer {
+  const key = keyFromEnv(PII_KEY_ENV);
+  if (key) return key;
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      `${PII_KEY_ENV} تعریف نشده است — رمزنگاری داده‌های هویتی در پروداکشن بدون کلید مجاز نیست.`,
+    );
+  }
+  if (!warnedDevFallback) {
+    warnedDevFallback = true;
+    console.warn(
+      `[pii] ⚠ ${PII_KEY_ENV} تنظیم نشده — کلید توسعهٔ عمومی استفاده می‌شود. ` +
+      'این حالت فقط برای توسعه/تست است و داده‌های رمزشدهٔ آن قابل انتقال به پروداکشن نیست.',
+    );
+  }
+  return deriveKey(DEV_FALLBACK_SECRET);
+}
+
+/**
+ * کلید *قبلی* PII (اختیاری) — برای دورهٔ گردش کلید.
+ *
+ * اگر `AFAGH_PII_KEY_PREVIOUS` تنظیم نشده باشد `null` برمی‌گرداند.
+ * برخلاف `piiKey` این تابع هرگز خطا نمی‌دهد: نبودِ کلید قبلی یعنی «کلیدی
+ * برای گردش تعریف نشده»، نه یک پیکربندیِ ناقص.
+ */
+export function piiKeyPrevious(): Buffer | null {
+  return keyFromEnv(PII_KEY_PREVIOUS_ENV);
 }
 
 /**
@@ -185,6 +221,13 @@ export function encryptPii(plain: string | null | undefined): string {
 /**
  * رمزگشایی پاکت `v1:<iv>:<tag>:<data>`.
  *
+ * ── گردش کلید ────────────────────────────────────────────────────────
+ *  ابتدا با کلید جاری (`AFAGH_PII_KEY`) تلاش می‌شود؛ اگر احراز اصالت شکست
+ *  خورد و کلید قبلی (`AFAGH_PII_KEY_PREVIOUS`) تنظیم شده باشد، همان تلاش با
+ *  کلید قبلی تکرار می‌شود. با این ترتیب دادهٔ رمزشدهٔ پیش از گردش کلید هنوز
+ *  خوانده می‌شود، بدون اینکه `encryptPii` مجبور باشد چند کلید بنویسد.
+ *  توجه: کلید قبلی فقط تا پایان دورهٔ backfill باید تنظیم بماند.
+ *
  * fail-closed: برخلاف `decryptSecret` در ثمین، مقدار بدون پاکت **به‌عنوان
  * متن ساده برگردانده نمی‌شود**؛ چون در مسیر PII این کار یعنی افشای خام و
  * پنهان‌کردن خطای مهاجرت. هر ناسازگاری (پیشوند، طول، hex نامعتبر، دستکاری
@@ -200,20 +243,36 @@ export function decryptPii(cipher: string | null | undefined): string {
   }
 
   const [, ivHex, tagHex, dataHex] = raw.split(':');
-  const key = piiKey();
-  try {
-    const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'));
-    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
-    // Buffer.from(hex) در صورت hex نامعتبر طول را کوتاه می‌کند، ولی isPiiCiphertext
-    // قبلاً قالب را سخت‌گیرانه بررسی کرده است.
-    const dec = Buffer.concat([decipher.update(Buffer.from(dataHex, 'hex')), decipher.final()]);
-    return dec.toString('utf8');
-  } catch {
-    // عمداً خطای اصلی GCM («unable to authenticate data») به بیرون درز نمی‌کند
-    throw new Error(
-      'رمزگشایی PII ناموفق بود — داده دستکاری شده است یا کلید رمزنگاری اشتباه/عوض‌شده است.',
-    );
+
+  // ترتیب مهم است: کلید جاری، سپس (در صورت وجود و تفاوت) کلید قبلی.
+  // piiKey() در پروداکشن بدون کلید عمداً خطا می‌دهد (fail-closed).
+  const keys: Buffer[] = [piiKey()];
+  const previous = piiKeyPrevious();
+  if (previous && !previous.equals(keys[0])) keys.push(previous);
+
+  for (const key of keys) {
+    try {
+      return decryptWithKey(ivHex, tagHex, dataHex, key);
+    } catch {
+      // با کلید اشتباه رد شد — کلید بعدی را امتحان کن (اگر باشد).
+    }
   }
+
+  // هیچ کلیدی باز نکرد: خطای اصلی GCM («unable to authenticate data») عمداً
+  // به بیرون درز نمی‌کند تا سرنخِ cryptographic افشا نشود.
+  throw new Error(
+    'رمزگشایی PII ناموفق بود — داده دستکاری شده است یا کلید رمزنگاری اشتباه/عوض‌شده است.',
+  );
+}
+
+/** یک تلاش رمزگشایی با کلید مشخص؛ در صورت ناموفق‌بودنِ احراز اصالت خطا می‌دهد. */
+function decryptWithKey(ivHex: string, tagHex: string, dataHex: string, key: Buffer): string {
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'));
+  decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+  // Buffer.from(hex) در صورت hex نامعتبر طول را کوتاه می‌کند، ولی isPiiCiphertext
+  // قبلاً قالب را سخت‌گیرانه بررسی کرده است.
+  const dec = Buffer.concat([decipher.update(Buffer.from(dataHex, 'hex')), decipher.final()]);
+  return dec.toString('utf8');
 }
 
 /**

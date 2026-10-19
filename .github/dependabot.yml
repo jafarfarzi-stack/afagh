@@ -1,0 +1,55 @@
+# به‌روزرسانی خودکار وابستگی‌ها — Dependabot
+# هدف: بستن پنجرهٔ آسیب‌پذیری وابستگی‌ها به‌صورت زمان‌بندی‌شده، نه واکنشی.
+# هر PR فقط یک اکوسیستم را لمس می‌کند تا triage و rollback ساده باشد.
+# سند: docs/CI-SECURITY.md
+version: 2
+updates:
+  # ── npm: کالبد اصلی (afagh-next) ──
+  - package-ecosystem: npm
+    directory: /afagh-next
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "06:00"
+      timezone: Asia/Tehran
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels: [dependencies, security]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # minor/patch در یک PR جمع می‌شوند؛ major جداگانه تا بازبینی دقیق شود.
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    # فقط زمانی Dependabot روی امنیت تمرکز کند که یافتهٔ واقعی باشد؛ در غیر این صورت
+    # به‌روزرسانی‌ها از دروازهٔ امنیتی (/.github/workflows/security.yml) عبور می‌کنند.
+    ignore:
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+
+  # ── docker: ایمیج تولیدی (afagh-next/Dockerfile) ──
+  - package-ecosystem: docker
+    directory: /afagh-next
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "06:00"
+      timezone: Asia/Tehran
+    open-pull-requests-limit: 3
+    labels: [dependencies, docker]
+    commit-message:
+      prefix: "chore(docker)"
+
+  # ── docker: استقرار محلی/سرور (docker-compose در ریشه) ──
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "06:00"
+      timezone: Asia/Tehran
+    open-pull-requests-limit: 3
+    labels: [dependencies, docker]
+    commit-message:
+      prefix: "chore(docker)"

@@ -1,0 +1,85 @@
+# ════════════════════════════════════════════════════════════════════════
+#  امنیت مستمر (Security) — مستقل از ci.yml
+#
+#  چرا جدا از .github/workflows/ci.yml؟
+#   • ci.yml دروازهٔ صحت کد است و باید سریع بماند؛ این گردش‌کار ابزارهای
+#     امنیتی را جدا نگه می‌دارد تا خرابی/کندی یک ابزار کل CI را قفل نکند.
+#   • این گردش‌کار در برابر خرابی endpoint رجیستری npm تحمل دارد و
+#     یافتهٔ امنیتی را به‌صورت خوانا گزارش می‌دهد.
+#  سند triage: docs/CI-SECURITY.md
+# ════════════════════════════════════════════════════════════════════════
+name: Security
+
+on:
+  push:
+    branches: [main, FINAL]
+  pull_request:
+  schedule:
+    # هر شنبه ۰۳:۳۰ UTC (~۰۷:۰۰ تهران) — پیش از شروع هفتهٔ کاری
+    - cron: "30 3 * * 6"
+  workflow_dispatch:
+
+# کمترین دسترسی لازم؛ برای کامنت‌گذاری Gitleaks روی PR، دسترسی PR لازم است.
+permissions:
+  contents: read
+  pull-requests: write
+
+# اجرای هم‌زمان روی یک شاخه/PR را لغو می‌کند تا منابع هدر نرود.
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── ۱) اسکن رازها (Secret scanning) ──
+  secret-scan:
+    name: رازها — Gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # تاریخ کامل لازم است تا تاریخچهٔ کامیت‌ها هم اسکن شود، نه فقط diff آخر.
+          fetch-depth: 0
+      # اگر .gitleaks.toml در مخزن نبود، پیکربندی پیش‌فرض Gitleaks استفاده می‌شود.
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # برای سازمان‌های خصوصی، یک سکرت GITLEAKS_LICENSE لازم است (اختیاری):
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  # ── ۲) ممیزی وابستگی‌های production ──
+  dependency-audit:
+    name: وابستگی‌ها — npm audit
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: afagh-next } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: afagh-next/package-lock.json }
+      # npm audit+v6 بدون نیاز به node_modules کار می‌کند (فقط package-lock.json).
+      # گزارش انسانی برای triage — همیشه سبز می‌ماند تا ورودی دستی داشته باشیم.
+      - name: گزارش آسیب‌پذیری‌ها (غیرمسدودکننده)
+        run: npm audit --omit=dev || true
+      # دروازهٔ سخت: high/critical باید CI را قرمز کند.
+      - name: دروازهٔ high/critical (مسدودکننده)
+        run: npm audit --omit=dev --audit-level=high
+
+  # ── ۳) تایپ‌چک سراسری ──
+  typecheck:
+    name: کالبد — تایپ‌چک امنیتی
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: afagh-next } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: afagh-next/package-lock.json }
+      - run: npm ci
+      # اسکریپت ``typecheck`` در afagh-next/package.json موجود است (tsc --noEmit).
+      # زنجیرهٔ زیر برای وقتی است که روزی نام اسکریپت تغییر کرد، بومی‌نپاشد:
+      - name: اجرای typecheck
+        run: |
+          if node -e "process.exit(require('./package.json').scripts?.typecheck ? 0 : 1)"; then
+            npm run typecheck
+          else
+            echo "ℹ️ اسکریپت typecheck وجود ندارد — مستقیم tsc اجرا می‌شود."
+            npx tsc --noEmit
+          fi
