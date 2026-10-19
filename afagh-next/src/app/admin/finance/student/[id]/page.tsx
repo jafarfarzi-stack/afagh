@@ -121,7 +121,7 @@ const fin = await getStudentFinance(studentId, {
           </div>
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
-          <PrintTranscriptButton orientation="landscape" />
+          <PrintTranscriptButton orientation="portrait" />
           <StatementLinkButton studentId={studentId} />
         </div>
       </div>

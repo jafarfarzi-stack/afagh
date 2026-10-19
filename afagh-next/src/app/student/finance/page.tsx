@@ -186,7 +186,7 @@ export default async function StudentFinancePage({ searchParams }: { searchParam
           {selectedTerm && (
             <TermFilterChip title={selectedTerm.title} universityId={me.universityId} />
           )}
-          <PrintTranscriptButton orientation="landscape" />
+          <PrintTranscriptButton orientation="portrait" />
         </div>
       </div>
 

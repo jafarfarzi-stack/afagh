@@ -22,7 +22,8 @@ export function doPrintTranscript(orientation: 'landscape' | 'portrait' = 'lands
   if (orientation === 'portrait') document.body.classList.add('printing-portrait');
   const pageStyle = document.createElement('style');
   pageStyle.id = 'transcript-page-size';
-  const margins = orientation === 'portrait' ? '8mm 8mm 13mm 8mm' : '8mm 10mm 13mm 10mm';
+  // حاشیهٔ عمودی عمداً کم است تا فضای کاغذ به جدول برسد (پاصفحهٔ شمارهٔ صفحه ~۵mm می‌خواهد)
+  const margins = orientation === 'portrait' ? '8mm 7mm 11mm 7mm' : '8mm 10mm 13mm 10mm';
   const size = orientation === 'portrait' ? 'A4 portrait' : 'A4 landscape';
   pageStyle.textContent =
     `@media print { @page { size: ${size}; margin: ${margins};` +

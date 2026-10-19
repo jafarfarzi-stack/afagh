@@ -182,7 +182,7 @@ export default function FinancialTranscript({
   for (let i = 0; i < terms.length; i += 3) chunks.push(terms.slice(i, i + 3));
 
   return (
-    <div dir="rtl" className="transcript-print-area tr-root bg-white border-2 border-slate-800 shadow-xl print:shadow-none text-xs text-slate-800">
+    <div dir="rtl" className="transcript-print-area tr-root tr-fin-root bg-white border-2 border-slate-800 shadow-xl print:shadow-none text-xs text-slate-800">
       {/* ساختار سند به سبک کارنامهٔ تحصیلی: table.tr-doc با thead/tfoot تا سربرگ
           و بلوک امضا در همهٔ صفحات چاپ تکرار شوند و ردیف‌ها بین دو صفحه نشکنند. */}
       <table className="tr-doc">
@@ -213,7 +213,8 @@ export default function FinancialTranscript({
           <div className="space-y-1 text-left font-mono text-[11px]">
             <p><span className="font-sans text-slate-500">شماره پرونده: </span><b>{faDigits(student.studentCode || '—')}</b></p>
             {issuedAt ? <p><span className="font-sans text-slate-500">تاریخ صدور: </span><b>{issuedAt}</b></p> : null}
-            <p><span className="font-sans text-slate-500">صفحه: </span><b>۱ از ۱</b></p>
+            {/* شمارهٔ صفحهٔ واقعی را پاصفحهٔ چاپ (@page) می‌زند؛ این خط ثابت در چاپ حذف می‌شود */}
+            <p className="tr-print-hide"><span className="font-sans text-slate-500">صفحه: </span><b>۱ از ۱</b></p>
             <p><span className="font-sans text-slate-500">وضعیت: </span><b>{(student.status && STATUS_FA[student.status]) || student.status || '—'}</b></p>
           </div>
         </div>
@@ -226,7 +227,7 @@ export default function FinancialTranscript({
             <td className="tr-doc-cell">
       <div className="space-y-3 p-4">
         {/* ── جدول مشخصات ── */}
-        <table className="w-full border-collapse border border-slate-700 text-[11px]">
+        <table className="tr-fin-info w-full border-collapse border border-slate-700 text-[11px]">
           <tbody>
             <tr>
               <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">نام و نام خانوادگی</td>
@@ -258,7 +259,7 @@ export default function FinancialTranscript({
           <h3 className="border-b border-slate-700 bg-indigo-900 px-3 py-1.5 text-[12px] font-black text-white">
             {scopeLabel || 'جمع کل دوره'}
           </h3>
-          <table className="w-full border-collapse text-center text-[11px]">
+          <table className="tr-fin-totals w-full border-collapse text-center text-[11px]">
             <thead>
               <tr className="bg-slate-100 text-slate-700">
                 <th className="border border-slate-300 px-1 py-1.5">جمع شهریه (ریال)</th>
@@ -406,7 +407,7 @@ export default function FinancialTranscript({
         {cheques.length > 0 && (
           <div className="tr-breakdown break-inside-avoid">
             <h3 className="mb-1 border-b-2 border-slate-800 pb-1 text-[12px] font-black text-slate-900">چک‌های دانشجو</h3>
-            <table className="w-full border-collapse border border-slate-700 text-center text-[10px]">
+            <table className="tr-fin-list w-full border-collapse border border-slate-700 text-center text-[10px]">
               <thead>
                 <tr className="bg-slate-100 text-slate-700">
                   <th className="border border-slate-300 px-1 py-1">شمارهٔ چک</th>
@@ -437,7 +438,7 @@ export default function FinancialTranscript({
         {loans.length > 0 && (
           <div className="tr-breakdown break-inside-avoid">
             <h3 className="mb-1 border-b-2 border-slate-800 pb-1 text-[12px] font-black text-slate-900">وام‌های دانشجو</h3>
-            <table className="w-full border-collapse border border-slate-700 text-center text-[10px]">
+            <table className="tr-fin-list w-full border-collapse border border-slate-700 text-center text-[10px]">
               <thead>
                 <tr className="bg-slate-100 text-slate-700">
                   <th className="border border-slate-300 px-1 py-1">نوع وام</th>
