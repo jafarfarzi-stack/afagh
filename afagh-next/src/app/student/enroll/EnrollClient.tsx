@@ -845,6 +845,16 @@ export default function EnrollClient(props: {
               اتاق انتظار (ظرفیت تکمیل): {result.waitlisted.join('، ')} — با آزادشدن ظرفیت، به‌طور خودکار ثبت می‌شوید و اعلان می‌گیرید.
             </p>
           )}
+          {result.droppedCart && result.droppedCart.length > 0 && (
+            <div className="rounded-xl bg-sky-50 p-3 text-sm text-sky-900 border border-sky-200 space-y-1">
+              <p className="font-bold">
+                این ردیف‌ها به‌طور خودکار از سبد حذف شدند و در این ثبت نیامدند (بقیهٔ سبد ثبت شد):
+              </p>
+              {result.droppedCart.map((d, i) => (
+                <p key={i}>• «{d.title}» — {d.reason}</p>
+              ))}
+            </div>
+          )}
           {result.hardErrors.map((e, i) => (
             <p key={i} className="rounded-xl bg-red-50 p-3 text-sm text-red-800 border border-red-200 font-bold">
               ⛔ {e}

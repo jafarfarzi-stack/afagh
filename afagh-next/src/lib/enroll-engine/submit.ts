@@ -27,6 +27,8 @@ export type SubmitResult = {
   waitlisted: string[];
   hardErrors: string[];
   softErrors: { offeringId: number; msg: string }[];
+  /** ردیف‌های سبد که در این ثبت حذف/نادیده شدند (H2 — اطلاعاتی، غیرمسدودکننده) */
+  droppedCart?: { offeringId: number; title: string; reason: string }[];
 };
 
 export type SubmitDeps = {
@@ -71,6 +73,22 @@ export async function compensateSeatDb(exec: any, id: number): Promise<void> {
   await exec.execute(sql`UPDATE course_offerings SET "enrolledCount" = GREATEST("enrolledCount" - 1, 0) WHERE id = ${id}`).catch(() => {});
 }
 
+/**
+ * حذف ردیف‌های کهنه/خارج از هدف از سبد (H2) — best-effort.
+ * اگر RLS یا خطای گذرا مانع حذف شد، ثبت‌نام متوقف نمی‌شود؛ ردیف در سبد
+ * می‌ماند و در submit بعدی دوباره تلاش می‌شود. هرگز نباید خودِ پاک‌سازی
+ * باعث شکست ثبت دروس معتبر شود.
+ */
+async function dropCartRows(exec: any, studentId: number, offeringIds: number[]): Promise<void> {
+  if (offeringIds.length === 0) return;
+  try {
+    await exec.delete(cart_items)
+      .where(and(eq(cart_items.studentId, studentId), inArray(cart_items.offeringId, offeringIds)));
+  } catch {
+    /* best-effort — پاک‌سازی سبد نباید ثبت را بشکند */
+  }
+}
+
 function overlaps(aS: string, aE: string, bS: string, bE: string, aD: number | null, bD: number | null) {
   if (aD == null || bD == null || aD !== bD) return false;
   return aS < bE && bS < aE;
@@ -86,7 +104,7 @@ function examOverlaps(a: { examDate: string | null; startTime: string; endTime: 
  * طبق §۶۹۰۶ فقط نتیجهٔ نهایی در PostgreSQL ثبت می‌شود؛ ظرفیت زنده در Redis می‌ماند.
  */
 export async function processQueuedSubmit(userId: number, studentId: number, acceptSameDayRisk = false, deps: SubmitDeps = {}): Promise<SubmitResult> {
-  const out: SubmitResult = { ok: true, registered: [], waitlisted: [], hardErrors: [], softErrors: [] };
+  const out: SubmitResult = { ok: true, registered: [], waitlisted: [], hardErrors: [], softErrors: [], droppedCart: [] };
   const D: typeof db = deps.db ?? db;
   const doRls = deps.withUserRls ?? withUserRls;
 
@@ -182,9 +200,31 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
       eq(course_offerings.isActive, 1),
       stuUni == null ? sql`1 = 0` : eq(course_offerings.universityId, stuUni),
     ));
-  if (offs.length !== ids.length) {
-    const dropped = ids.filter(i => !offs.some(o => o.id === i));
-    out.hardErrors.push(`${dropped.length} درس از سبد به دلیل تعلق نداشتن به دانشگاه/نیمسال شما یا غیرفعال بودن ارائه حذف شد.`);
+  // ── H2: ردیف‌های کهنهٔ سبد دیگر کل ثبت را متوقف نمی‌کنند ──
+  // پیش از این، هر ردیفی که به ترم/دانشگاه جاری تعلق نداشت یا ارائه‌اش
+  // غیرفعال شده بود، با یک خطای سخت کل submit را متوقف می‌کرد؛ نتیجه:
+  // یک ردیف مرده از ترم قبل، انتخاب واحد ترم جدید را کاملاً قفل می‌کرد.
+  // رفتار جدید (تصمیم محصول): ردیف نامرتبط از سبد حذف می‌شود، در
+  // `droppedCart` گزارش می‌شود و بقیهٔ سبد ثبت می‌شود (خطای نرم، نه سخت).
+  const staleIds = ids.filter(i => !offs.some(o => Number(o.id) === i));
+  if (staleIds.length > 0) {
+    const staleRows = await D
+      .select({
+        id: course_offerings.id, title: courses.title,
+        termId: course_offerings.termId, isActive: course_offerings.isActive,
+        universityId: course_offerings.universityId,
+      })
+      .from(course_offerings).innerJoin(courses, eq(courses.id, course_offerings.courseId))
+      .where(inArray(course_offerings.id, staleIds));
+    for (const r of staleRows) {
+      const reason = Number(r.isActive) !== 1
+        ? 'ارائه غیرفعال شده است'
+        : Number(r.termId) !== Number(term.id)
+          ? 'به نیمسال جاری تعلق ندارد'
+          : 'به دانشگاه شما تعلق ندارد';
+      out.droppedCart!.push({ offeringId: Number(r.id), title: r.title, reason });
+    }
+    await dropCartRows(D, studentId, staleIds);
   }
 
   // ── فیلتر ۰ب: هدف‌گیری ارائه (مقطع/رشته/بازهٔ ورودی) ──
@@ -195,12 +235,23 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
     { targetDegreeLevelId: o.targetDegreeLevelId, targetMajorId: o.targetMajorId, entryYearStart: o.entryYearStart, entryYearEnd: o.entryYearEnd },
     { degreeLevelId: stu.degreeLevelId, majorId: stu.majorId ?? null, entryYear: stu.entryYear },
   ));
-  if (visible.length !== offs.length) {
-    const droppedTargeted = offs.filter(o => !visible.some(v => v.id === o.id));
-    out.ok = false;
-    out.hardErrors.push(`${droppedTargeted.length} درس از سبد به دلیل عدم تطابق مقطع/رشته/سال ورودی با هدف ارائه حذف شد.`);
+  // H2 (ادامه): ردیفِ فعال اما خارج از هدف هم سبد را قفل نمی‌کند — حذف + گزارش.
+  const offTargeted = offs.filter(o => !visible.some(v => v.id === o.id));
+  if (offTargeted.length > 0) {
+    for (const o of offTargeted) {
+      out.droppedCart!.push({
+        offeringId: Number(o.id), title: o.title,
+        reason: 'مقطع/رشته/سال ورودی با هدف ارائه مطابقت ندارد',
+      });
+    }
+    await dropCartRows(D, studentId, offTargeted.map(o => Number(o.id)));
   }
   const activeOffs = visible;
+  if (activeOffs.length === 0) {
+    out.ok = false;
+    out.hardErrors.push('هیچ درس قابل ثبت در سبد شما برای این نیمسال نمانده است — ردیف‌های نامرتبط یا غیرفعال از سبد حذف شدند.');
+    return out;
+  }
 
   // دروس همین ترم که قبلاً ثبت شده‌اند (تکراری نگیریم)
   const current = await D

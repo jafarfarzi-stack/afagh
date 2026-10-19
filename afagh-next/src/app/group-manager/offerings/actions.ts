@@ -7,7 +7,8 @@ import { cart_items, course_offerings, schedules } from '@/db/schema';
 import { back, courseInDept, num, optNum, requireDepHead, str } from '@/lib/group-manager';
 import {
   capacityWarning, detectScheduleConflicts, findDuplicateOffering,
-  professorInUniversity, readClassroom, roomAllowedForSchedule, validateScheduleWindow,
+  professorInUniversity, readClassroom, roomAllowedForSchedule, validateEntryYearRange,
+  validateScheduleWindow,
 } from '@/lib/offering-scheduling';
 
 async function offeringInDept(offeringId: number, deptId: number): Promise<boolean> {
@@ -30,6 +31,10 @@ export async function createOfferingAction(fd: FormData) {
   if (cap <= 0) back('/group-manager/offerings', 'err', 'ظرفیت باید مثبت باشد.');
   if (!(await professorInUniversity(db, professorId, me.universityId ?? null))) back('/group-manager/offerings', 'err', 'استاد انتخاب‌شده در این دانشگاه یافت نشد.');
   const termId = num(fd, 'termId');
+  // H3: بازهٔ وارونهٔ سال ورودی ارائه را برای همه نامرئی می‌کند — خطای پیکربندی
+  const ys = optNum(fd, 'ys'), ye = optNum(fd, 'ye');
+  const eyErr = validateEntryYearRange(ys, ye);
+  if (eyErr) back('/group-manager/offerings', 'err', eyErr);
   const dupId = await findDuplicateOffering(db, { termId, courseId, groupNumber: group });
   if (dupId != null)
     back('/group-manager/offerings', 'err', 'این درس با همین گروه در ترم جاری قبلاً ارائه شده است.');
@@ -37,7 +42,7 @@ export async function createOfferingAction(fd: FormData) {
     termId, courseId, groupNumber: group, capacity: cap,
     waitlistCapacity: num(fd, 'waitCap'), professorId,
     targetDegreeLevelId: optNum(fd, 'deg'), targetMajorId: optNum(fd, 'major'),
-    entryYearStart: optNum(fd, 'ys'), entryYearEnd: optNum(fd, 'ye'),
+    entryYearStart: ys, entryYearEnd: ye,
     universityId: me.universityId ?? null,
   }).returning({ id: course_offerings.id });
   revalidatePath('/group-manager/offerings');
@@ -58,11 +63,15 @@ export async function updateOfferingAction(fd: FormData) {
   // G5: تغییر شمارهٔ گروه نباید (درس+گروه) را در ترم تکراری کند
   const dupId = await findDuplicateOffering(db, { termId: cur.termId, courseId: cur.courseId, groupNumber: group, excludeId: id });
   if (dupId != null) back('/group-manager/offerings', 'err', 'این درس با همین گروه در ترم جاری قبلاً ارائه شده است.');
+  // H3: بازهٔ وارونهٔ سال ورودی — خطای پیکربندی (ارائه برای همه نامرئی می‌شود)
+  const ys = optNum(fd, 'ys'), ye = optNum(fd, 'ye');
+  const eyErr = validateEntryYearRange(ys, ye);
+  if (eyErr) back('/group-manager/offerings', 'err', eyErr);
   await db.update(course_offerings).set({
     capacity: cap, waitlistCapacity: num(fd, 'waitCap'), groupNumber: group,
     professorId,
     targetDegreeLevelId: optNum(fd, 'deg'), targetMajorId: optNum(fd, 'major'),
-    entryYearStart: optNum(fd, 'ys'), entryYearEnd: optNum(fd, 'ye'),
+    entryYearStart: ys, entryYearEnd: ye,
   }).where(eq(course_offerings.id, id));
   revalidatePath('/group-manager/offerings');
   revalidatePath('/student/enroll');

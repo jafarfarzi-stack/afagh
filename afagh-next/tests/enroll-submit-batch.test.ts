@@ -46,6 +46,12 @@ async function main(): Promise<void> {
   type Store = {
     terms: any[]; students: any[]; finTerms: any[]; clearances: any[]; ledger: any[];
     cart: any[]; offs: any[]; current: any[]; sched: any[];
+    /** H2: ردیف‌های کهنه — پاسخ دومین select (course_offerings+courses) */
+    staleOffs?: any[];
+    /** شمارندهٔ select روی course_offerings+courses (۱ = سبد، ۲ = عنوان ردیف کهنه) */
+    offSelectCalls?: number;
+    /** ردیف‌هایی که dropCartRows حذف کرده (نام جدول) */
+    deleted?: string[];
     rows: (t: any, joins: any[]) => any[];
   };
 
@@ -75,7 +81,10 @@ async function main(): Promise<void> {
         if (t === S.financial_clearances) return st.clearances;
         if (t === S.student_ledger) return st.ledger;
         if (t === S.cart_items) return st.cart;
-        if (t === S.course_offerings && joins.includes(S.courses)) return st.offs;
+        if (t === S.course_offerings && joins.includes(S.courses)) {
+          st.offSelectCalls = (st.offSelectCalls ?? 0) + 1;
+          return st.offSelectCalls === 1 ? st.offs : (st.staleOffs ?? []);
+        }
         if (t === S.enrollments) return st.current;
         if (t === S.schedules) return st.sched;
         throw new Error('fake-db: unexpected select');
@@ -103,6 +112,12 @@ async function main(): Promise<void> {
 
   const fakeDb = (store: Store): any => ({
     select: (_f?: any) => new FakeSel(store),
+    delete: (t: any) => ({
+      where: (_c: any) => {
+        (store.deleted ??= []).push(tname(t));
+        return Promise.resolve([]);
+      },
+    }),
     execute: async (_q: any): Promise<any> => { throw new Error('fake-db: execute must be injected'); },
   });
 
@@ -405,6 +420,48 @@ async function main(): Promise<void> {
       'ENROLLMENT_DONE',
     ]) assert.ok(SUBMIT_SRC.includes(s), 'message missing: ' + s);
     assert.ok(!/withUserRls\(userId, tx => tx\.delete\(cart_items\)/.test(SUBMIT_SRC), 'per-course cart delete still present');
+    console.log('  ok');
+  }
+
+  console.log('11) H2: stale cart row is dropped + reported, valid siblings still register');
+  {
+    const store = baseStore();
+    store.offs = store.offs.filter((o: any) => o.id !== 16);
+    store.staleOffs = [{ id: 16, title: 'درس کهنه', termId: 5, isActive: 0, universityId: 1 }];
+    const counters = freshCounters();
+    const caps = makeCaps(fullCaps(), counters);
+    const rls = makeRls({});
+    const deps = stdDeps(store, caps, rls, counters, async () => 1);
+    const out = await M.processQueuedSubmit(1001, 9, false, deps);
+    assert.equal(out.ok, true);
+    assert.deepEqual(out.registered, titles.slice(0, 5));
+    assert.deepEqual(out.hardErrors, []);
+    assert.equal(out.droppedCart?.length, 1);
+    assert.equal(out.droppedCart![0].offeringId, 16);
+    assert.ok(out.droppedCart![0].reason.includes('غیرفعال'), 'reason: ' + out.droppedCart![0].reason);
+    assert.deepEqual(store.deleted, ['cart_items'], 'stale row must be removed from the cart');
+    assert.equal(counters.seatCalls, 5);
+    console.log('  ok');
+  }
+
+  console.log('12) H2: cart with only stale rows → clear hard error, no transaction, cart cleaned');
+  {
+    const store = baseStore();
+    store.cart = [{ studentId: 9, offeringId: 16 }];
+    store.offs = [];
+    store.staleOffs = [{ id: 16, title: 'درس کهنه', termId: 4, isActive: 1, universityId: 1 }];
+    const counters = freshCounters();
+    const caps = makeCaps(fullCaps(), counters);
+    const rls = makeRls({});
+    const deps = stdDeps(store, caps, rls, counters, async () => 1);
+    const out = await M.processQueuedSubmit(1001, 9, false, deps);
+    assert.equal(out.ok, false);
+    assert.deepEqual(out.registered, []);
+    assert.ok(out.hardErrors[0].includes('هیچ درس قابل ثبت'), 'err: ' + out.hardErrors[0]);
+    assert.equal(out.droppedCart?.length, 1);
+    assert.ok(out.droppedCart![0].reason.includes('نیمسال'), 'reason: ' + out.droppedCart![0].reason);
+    assert.equal(rls.count(), 0, 'must not open an RLS transaction when nothing is submittable');
+    assert.deepEqual(store.deleted, ['cart_items']);
     console.log('  ok');
   }
 

@@ -14,6 +14,8 @@
  *   D  lifecycle              — isActive filter at submit (stale cart), deactivate
  *   E  concurrency            — claimSeatsBatch single-winner + duplicate insert probe
  *   F1 financial gate         — clearance lookup keyed on academicTermId (FK fix)
+ *   H  open-findings closure  — H1 unique index (term+course+group), H3 entry-year range
+ *                               (H2 soft-drop is asserted in B2/G4)
  *
  * De-isolated (like lt1/lt4): unit-cap -> 40, prereq -> empty, debt threshold -> 0,
  * Redis seat -> -2 (fall through to REAL DB capacity guard), notify -> off.
@@ -27,7 +29,8 @@ import { offeringVisible } from '@/lib/offering-targeting';
 import {
   capacityWarning, classroomOwnedBy, detectScheduleConflicts, findDuplicateOffering,
   listClassroomsForUniversity, professorInUniversity, readClassroom,
-  readClassroomUni, roomAllowedForSchedule, toHM, timesOverlap, validateScheduleWindow,
+  readClassroomUni, roomAllowedForSchedule, toHM, timesOverlap,
+  validateEntryYearRange, validateScheduleWindow,
 } from '@/lib/offering-scheduling';
 
 // ═══ رنج‌های شناسهٔ سنتتیک (بدون تداخل با دادهٔ واقعی و هارنس‌های lt*) ═══
@@ -80,7 +83,7 @@ async function reset() {
   await rm('DELETE FROM enrollments WHERE "studentId" BETWEEN 1600200 AND 1600400 OR "offeringId" BETWEEN ' + OFF_TARGETED + ' AND ' + (OFF_SEAT + 1));
   await rm('DELETE FROM cart_items WHERE "studentId" BETWEEN 1600200 AND 1600400');
   await rm('DELETE FROM schedules WHERE "offeringId" BETWEEN ' + OFF_TARGETED + ' AND ' + (OFF_SEAT + 1));
-  await rm('DELETE FROM course_offerings WHERE id BETWEEN ' + OFF_TARGETED + ' AND ' + (OFF_SEAT + 1) + ' OR id BETWEEN ' + (OFF_SEAT + 100) + ' AND ' + (OFF_SEAT + 101));
+  await rm('DELETE FROM course_offerings WHERE id BETWEEN ' + OFF_TARGETED + ' AND ' + (OFF_SEAT + 1) + ' OR id BETWEEN ' + (OFF_SEAT + 100) + ' AND ' + (OFF_SEAT + 101) + ' OR id BETWEEN ' + (OFF_SEAT + 200) + ' AND ' + (OFF_SEAT + 201));
   await rm('DELETE FROM courses WHERE id IN (' + COURSE_ACAD + ',' + COURSE_GEN + ')');
   await rm('DELETE FROM financial_clearances WHERE "studentId" BETWEEN 1600200 AND 1600400');
   await rm('DELETE FROM financial_terms WHERE id BETWEEN ' + FT + ' AND ' + (FT + 1));
@@ -212,7 +215,15 @@ async function groupB() {
   await clearEnroll(ST_CLEARED_OUT); await clearCart(ST_CLEARED_OUT);
   await putInCart(ST_CLEARED_OUT, [OFF_TARGETED, OFF_SHARED]);
   const rB2 = await processQueuedSubmit(uidOf(ST_CLEARED_OUT), ST_CLEARED_OUT, false, submitDeps);
-  check('B2', 'خارج از هدف: submit متوقف + پیام صریح (رفتار «abort» — پایدار با گارد دامنهٔ دانشگاه)', !rB2.ok && rB2.registered.length === 0 && rB2.hardErrors.some(e => e.includes('عدم تطابق')), JSON.stringify({ reg: rB2.registered.length, errs: rB2.hardErrors }));
+  const b2CartLeft = (await db.execute(sql.raw('SELECT count(*)::int n FROM cart_items WHERE "studentId" = ' + ST_CLEARED_OUT + ' AND "offeringId" = ' + OFF_TARGETED))).rows as any[];
+  check(
+    'B2',
+    'H2: ردیف خارج از هدف از سبد حذف + بقیهٔ سبد ثبت می‌شود (نه abort)',
+    rB2.ok && rB2.registered.length === 1 && (rB2.droppedCart?.length ?? 0) === 1
+      && (rB2.droppedCart![0].reason.includes('هدف') || rB2.droppedCart![0].reason.includes('مقطع'))
+      && b2CartLeft[0].n === 0,
+    JSON.stringify({ reg: rB2.registered, dropped: rB2.droppedCart, cartLeft: b2CartLeft[0].n, errs: rB2.hardErrors }),
+  );
 
   await clearEnroll(ST_CLEARED); await clearCart(ST_CLEARED);
   await putInCart(ST_CLEARED, [OFF_TARGETED]);
@@ -237,7 +248,37 @@ async function groupG4() {
   await clearEnroll(ST_CLEARED); await clearCart(ST_CLEARED);
   await putInCart(ST_CLEARED, [OFF_INACTIVE, OFF_SHARED]);
   const r = await processQueuedSubmit(uidOf(ST_CLEARED), ST_CLEARED, false, submitDeps);
-  check('G4', 'سبد کهنه با ارائهٔ غیرفعال: submit متوقف + پیام (رفتار «abort»)', !r.ok && r.hardErrors.some(e => e.includes('غیرفعال') || e.includes('حذف')), JSON.stringify({ reg: r.registered.length, errs: r.hardErrors }));
+  const left = (await db.execute(sql.raw('SELECT count(*)::int n FROM cart_items WHERE "studentId" = ' + ST_CLEARED + ' AND "offeringId" = ' + OFF_INACTIVE))).rows as any[];
+  check(
+    'G4',
+    'H2: ارائهٔ غیرفعال از سبد حذف + درس معتبر ثبت می‌شود (نه abort)',
+    r.ok && r.registered.length === 1 && (r.droppedCart?.length ?? 0) === 1
+      && (r.droppedCart![0].reason.includes('غیرفعال'))
+      && left[0].n === 0,
+    JSON.stringify({ reg: r.registered, dropped: r.droppedCart, cartLeft: left[0].n, errs: r.hardErrors }),
+  );
+}
+
+async function groupH() {
+  sec('H — یافته‌های باز: یکتایی DB (H1) و بازهٔ سال ورودی (H3)');
+  // H1a — ایندکس یکتای (ترم+درس+گروه) واقعاً در DB هست
+  const idx = (await db.execute(sql`SELECT indexname FROM pg_indexes WHERE tablename = 'course_offerings' AND indexname = 'uq_course_offerings_term_course_group'`)).rows as any[];
+  check('H1a', 'ایندکس یکتای (term+course+group) در DB موجود است', idx.length === 1, JSON.stringify(idx));
+  // H1b — درج تکراری مستقیم (بدون گارد اپ) باید با unique violation رد شود
+  const probe = { courseId: COURSE_GEN, groupNumber: 91, capacity: 5, professorId: null, termId: TERM, universityId: MY_UNI, enrolledCount: 0, isActive: 1, waitlistCapacity: 0 };
+  await db.execute(sql.raw('DELETE FROM course_offerings WHERE "courseId" = ' + COURSE_GEN + ' AND "groupNumber" = 91 AND "termId" = ' + TERM));
+  await db.insert(schema.course_offerings).values({ id: OFF_SEAT + 200, ...probe });
+  const rejected = await db.insert(schema.course_offerings).values({ id: OFF_SEAT + 201, ...probe })
+    .then(() => false)
+    .catch((e: any) => String(e?.code ?? e?.cause?.code ?? '') === '23505');
+  check('H1b', 'درج تکراری مستقیم در DB با 23505 رد می‌شود', rejected, 'unique violation');
+  await db.execute(sql.raw('DELETE FROM course_offerings WHERE id IN (' + (OFF_SEAT + 200) + ',' + (OFF_SEAT + 201) + ')'));
+  // H3 — اعتبارسنجی بازهٔ سال ورودی (مرجع مشترک فرم مدیر گروه/ادمین)
+  check('H3a', 'بازهٔ وارونه (۱۴۰۴→۱۴۰۰) رد می‌شود', (validateEntryYearRange(1404, 1400) ?? '').includes('نامعتبر'), '');
+  check('H3b', 'بازهٔ درست (۱۴۰۳→۱۴۰۴) مجاز', validateEntryYearRange(1403, 1404) === null, '');
+  check('H3c', 'بدون محدودیت (null,null) مجاز', validateEntryYearRange(null, null) === null, '');
+  check('H3d', 'فقط شروع (۱۴۰۳,null) مجاز', validateEntryYearRange(1403, null) === null, '');
+  check('H3e', 'شروع = پایان (۱۴۰۳,۱۴۰۳) مجاز', validateEntryYearRange(1403, 1403) === null, '');
 }
 
 async function groupC() {
@@ -293,7 +334,7 @@ async function groupE() {
   await db.execute(sql.raw('UPDATE course_offerings SET "enrolledCount" = 0 WHERE id = ' + OFF_SEAT));
   const [a, b] = await Promise.all([claimSeatsBatch(db, [OFF_SEAT]), claimSeatsBatch(db, [OFF_SEAT])]);
   check('E2', 'claimSeatsBatch ظرفیت ۱ → یک برنده', a.size + b.size === 1, 'a=' + a.size + ' b=' + b.size);
-  // E1: درج هم‌زمان (درس+گروه) تکراری — بدون ایندکس یکتا، هر دو می‌نشیند (یافته)
+  // E1: درج هم‌زمان (درس+گروه) تکراری — پس از H1، ایندکس یکتا باید یکی را رد کند
   await db.execute(sql.raw('DELETE FROM course_offerings WHERE "courseId" = ' + COURSE_GEN + ' AND "groupNumber" = 88 AND "termId" = ' + TERM));
   const dupRow = { courseId: COURSE_GEN, groupNumber: 88, capacity: 10, professorId: null, termId: TERM, universityId: MY_UNI, enrolledCount: 0, isActive: 1, waitlistCapacity: 0 };
   const ins = [
@@ -303,7 +344,7 @@ async function groupE() {
   const settled = await Promise.allSettled(ins);
   const okCount = settled.filter(s => s.status === 'fulfilled').length;
   const [cnt] = (await db.execute(sql.raw('SELECT count(*)::int n FROM course_offerings WHERE "courseId" = ' + COURSE_GEN + ' AND "groupNumber" = 88 AND "termId" = ' + TERM))).rows as any[];
-  check('E1', 'درج هم‌زمان تکراری — یونیک بودن فقط در سطح اپ', cnt.n === okCount, 'insertsOk=' + okCount + ' rows=' + cnt.n + (cnt.n > 1 ? ' → نشتی DB' : ''));
+  check('E1', 'H1: درج هم‌زمان تکراری → ایندکس یکتا دقیقاً یک ردیف می‌پذیرد', cnt.n === 1 && okCount === 1, 'insertsOk=' + okCount + ' rows=' + cnt.n);
 }
 
 async function report() {
@@ -326,6 +367,7 @@ async function report() {
   await groupA();
   await groupD();
   await groupE();
+  await groupH();
   await report();
 })().catch(async (e) => { console.error('GM1_FATAL', e); await pool.end(); process.exit(1); });
 

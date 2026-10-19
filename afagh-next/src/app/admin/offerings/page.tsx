@@ -42,6 +42,10 @@ async function saveTargetingAction(formData: FormData) {
   const major = formData.get('major') ? Number(formData.get('major')) : null;
   const ys = formData.get('ys') ? Number(formData.get('ys')) : null;
   const ye = formData.get('ye') ? Number(formData.get('ye')) : null;
+  // H3: بازهٔ وارونهٔ سال ورودی خطای پیکربندی است — چنین ارائه‌ای برای همهٔ دانشجویان نامرئی می‌شود
+  const { validateEntryYearRange } = await import('@/lib/offering-scheduling');
+  const eyErr = validateEntryYearRange(ys, ye);
+  if (eyErr) return;
   const { getCurrentUniversity } = await import('@/lib/university-scope');
   const uni = await getCurrentUniversity().catch(() => null);
   if (uni) {

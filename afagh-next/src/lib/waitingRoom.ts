@@ -200,7 +200,7 @@ export function ensureWorker() {
         const result = await processQueuedSubmit(t.userId, t.studentId, t.acceptSameDayRisk ?? false);
         await finishTicket(t.userId, t.id, result);
       } catch (err) {
-        await finishTicket(t.userId, t.id, { ok: false, registered: [], waitlisted: [], hardErrors: ['خطای داخلی صف: ' + String(err)], softErrors: [] });
+        await finishTicket(t.userId, t.id, { ok: false, registered: [], waitlisted: [], hardErrors: ['خطای داخلی صف: ' + String(err)], softErrors: [], droppedCart: [] });
       }
     }
   }, TICK_MS);

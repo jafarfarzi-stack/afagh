@@ -751,7 +751,7 @@ export const course_offerings = pgTable('course_offerings', {
   isSharedService: integer('isSharedService').default(0),                            // 1 = استخر خدمات عمومی (فاز تأمین)
   equivalenceClusterId: integer('equivalenceClusterId').references(() => equivalence_clusters.id), // استخر ظرفیت مشترک
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
-}, (t) => ({ termCourseGroupIdx: index('offerings_term_course_group_idx').on(t.termId, t.courseId, t.groupNumber) }));
+}, (t) => ({ uqTermCourseGroup: unique('uq_course_offerings_term_course_group').on(t.termId, t.courseId, t.groupNumber) }));
 
 /** ────────────────────────────────────────────────────────────────────────
  *  معادل‌سازی درس بین دو دانشگاه (کارنامهٔ فارغ‌التحصیلان دانشگاه مبدأ)
