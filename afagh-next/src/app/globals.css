@@ -515,6 +515,13 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   .tr-fin-root .tr-term-table td { padding: 0.3mm 1mm !important; }
   .tr-fin-root .tr-term-table td:last-child { white-space: nowrap; }
 
+  /* خلاصهٔ ترم (پایین کارت): سه قلم در هر سطر، هر قلم برچسب+مبلغ در یک سلول
+     تا هیچ عددی بریده نشود (overflow/ellipsis عمداً حذف شد). */
+  .tr-fin-root .tr-fin-sum { font-size: 6.2pt !important; line-height: 1.25 !important; }
+  .tr-fin-root .tr-fin-sum td { padding: 0.25mm 1mm !important; }
+  .tr-fin-root .tr-fin-sum td > div { display: flex; align-items: baseline; justify-content: space-between; gap: 1mm; }
+  .tr-fin-root .tr-fin-sum td > div > span:last-child { white-space: nowrap; flex: 0 0 auto; }
+
   /* ریز شهریهٔ متغیر دروس */
   .tr-fin-root .tr-fin-courses { font-size: 6pt !important; }
   .tr-fin-root .tr-fin-courses th,

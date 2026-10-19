@@ -177,9 +177,9 @@ export default function FinancialTranscript({
   const paidTotal = totals.payments + totals.chequesCleared + totals.loans;
   const grand = balanceBadge(totals.balance);
 
-  // سه ترم در هر ردیف — مانند کارنامهٔ رسمی تحصیلی (OfficialTranscriptView)
+  // دو ترم در هر ردیف — همان تعداد ستون چاپ عمودی A4 تا هیچ خانه‌ای خالی نماند
   const chunks: TranscriptTermView[][] = [];
-  for (let i = 0; i < terms.length; i += 3) chunks.push(terms.slice(i, i + 3));
+  for (let i = 0; i < terms.length; i += 2) chunks.push(terms.slice(i, i + 2));
 
   return (
     <div dir="rtl" className="transcript-print-area tr-root tr-fin-root bg-white border-2 border-slate-800 shadow-xl print:shadow-none text-xs text-slate-800">
@@ -303,7 +303,7 @@ export default function FinancialTranscript({
           ) : (
             <div className="space-y-3">
               {chunks.map((group, gi) => (
-                <div key={gi} className="tr-fin-row break-inside-avoid grid gap-3 lg:grid-cols-3 print:grid-cols-3">
+                <div key={gi} className="tr-fin-row break-inside-avoid grid gap-2 sm:grid-cols-2">
                   {group.map((t) => {
                     const b = balanceBadge(t.balance);
                     return (
@@ -312,30 +312,11 @@ export default function FinancialTranscript({
                           <h4 className="text-[11px] font-black text-slate-900">{t.termTitle}</h4>
                           <span className={`rounded-full border px-1.5 py-px text-[9px] font-black ${b.cls}`}>{b.text}</span>
                         </div>
-                        <table className="tr-term-table w-full border-collapse text-[10px]">
-                          <tbody>
-                            <TermRow label="شهریه (بدهی)" value={fa(t.charges)} />
-                            <TermRow label="تخفیف" value={fa(t.discounts)} valueCls="text-violet-700" />
-                            <TermRow label="پوشش بنیاد" value={fa(t.sponsorships)} valueCls="text-indigo-700" />
-                            <TermRow label="خالص قابل‌پرداخت" value={fa(t.netPayable)} bold />
-                            <TermRow label="پرداخت" value={fa(t.payments)} valueCls="text-emerald-700" />
-                            <TermRow label="چک وصول‌شده" value={fa(t.chequesCleared)} valueCls="text-emerald-700" />
-                            {t.chequesPending > 0 && <TermRow label="چک در انتظار" value={fa(t.chequesPending)} valueCls="text-amber-700" />}
-                            {t.chequesBounced > 0 && <TermRow label="چک برگشتی" value={fa(t.chequesBounced)} valueCls="text-rose-700" />}
-                            <TermRow label="وام" value={fa(t.loans)} valueCls="text-sky-700" />
-                            <tr className="bg-slate-50">
-                              <td className="border-t border-slate-300 px-2 py-1 font-black">ماندهٔ ترم</td>
-                              <td className={`border-t border-slate-300 px-2 py-1 text-left font-black ${t.balance > 0 ? 'text-rose-700' : t.balance < 0 ? 'text-emerald-700' : 'text-slate-700'}`}>
-                                {fa(Math.abs(t.balance))}
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
                         {t.courses && t.courses.length > 0 && (
                           <div className="border-t border-slate-200">
                             <p className="bg-slate-50 px-2 py-1 text-[9px] font-black text-slate-700">
                               ریز شهریه متغیر دروس{' '}
-                              <span className="font-medium text-slate-500">
+                              <span className="tr-print-hide font-medium text-slate-500">
                                 {t.coursesBasis === 'TARIFF'
                                   ? '(بر پایهٔ تعرفهٔ رسمی همان سال — نظری×نرخ + عملی×نرخِ نوع درس؛ تخصیص‌یافته به جمع دفتر کل)'
                                   : '(محاسباتی — مبنای سند، جمع دفتر کل است)'}
@@ -394,6 +375,10 @@ export default function FinancialTranscript({
                             ))}
                           </ul>
                         )}
+                        {/* خلاصهٔ ترم — پایین کارت (نه بالا)، سه قلم در هر سطر تا فشرده شود */}
+                        <div className="border-t border-slate-300 bg-slate-100/70">
+                          <TermSummary t={t} />
+                        </div>
                       </div>
                     );
                   })}
@@ -497,11 +482,56 @@ export default function FinancialTranscript({
   );
 }
 
-function TermRow({ label, value, valueCls, bold }: { label: string; value: string; valueCls?: string; bold?: boolean }) {
+/**
+ * خلاصهٔ ترم — سه قلم در هر سطر (به‌جای جدول ۸ تا ۱۰ ردیفی عمودی).
+ * سه ردیف سه‌ستونه + یک ردیف «ماندهٔ ترم» در پایین؛ حدود ۵ ردیف کاغذ کمتر برای هر ترم.
+ */
+function TermSummary({ t }: { t: TranscriptTermView }) {
+  type Cell = { label: string; value: string; cls?: string; bold?: boolean };
+  const items: Cell[] = [
+    { label: 'شهریه (بدهی)', value: fa(t.charges) },
+    { label: 'تخفیف', value: fa(t.discounts), cls: 'text-violet-700' },
+    { label: 'پوشش بنیاد', value: fa(t.sponsorships), cls: 'text-indigo-700' },
+    { label: 'خالص', value: fa(t.netPayable), bold: true },
+    { label: 'پرداخت', value: fa(t.payments), cls: 'text-emerald-700' },
+    { label: 'چک وصول‌شده', value: fa(t.chequesCleared), cls: 'text-emerald-700' },
+  ];
+  if (t.chequesPending > 0) items.push({ label: 'چک در انتظار', value: fa(t.chequesPending), cls: 'text-amber-700' });
+  if (t.chequesBounced > 0) items.push({ label: 'چک برگشتی', value: fa(t.chequesBounced), cls: 'text-rose-700' });
+  items.push({ label: 'وام', value: fa(t.loans), cls: 'text-sky-700' });
+  // پرکردن ردیف آخر تا شبکهٔ سه‌ستونه به‌هم نریزد
+  while (items.length % 3 !== 0) items.push({ label: '', value: '' });
+  const rows: Cell[][] = [];
+  for (let i = 0; i < items.length; i += 3) rows.push(items.slice(i, i + 3));
+
   return (
-    <tr>
-      <td className={`border-b border-slate-200 px-2 py-1 text-slate-600 ${bold ? 'font-bold text-slate-800' : ''}`}>{label}</td>
-      <td className={`border-b border-slate-200 px-2 py-1 text-left ${bold ? 'font-black text-slate-900' : 'font-medium'} ${valueCls || ''}`}>{value}</td>
-    </tr>
+    <table className="tr-fin-sum w-full border-collapse text-[9px]" style={{ tableLayout: 'fixed' }}>
+      <colgroup>
+        {[0, 1, 2].map((i) => (
+          <col key={i} style={{ width: '33.33%' }} />
+        ))}
+      </colgroup>
+      <tbody>
+        {rows.map((r, ri) => (
+          <tr key={ri} className="border-t border-slate-200">
+            {r.map((c, ci) => (
+              <td key={ci} className="tr-sum-cell px-1 py-0.5 align-top">
+                {/* برچسب و مبلغ در یک سلول تا هیچ‌کدام بریده نشود */}
+                <div className="flex items-baseline justify-between gap-1">
+                  <span className={`text-slate-600 ${c.bold ? 'font-bold text-slate-800' : ''}`}>{c.label}</span>
+                  <span className={`shrink-0 ${c.bold ? 'font-black text-slate-900' : 'font-bold'} ${c.cls || ''}`}>{c.value}</span>
+                </div>
+              </td>
+            ))}
+          </tr>
+        ))}
+        <tr className="border-t border-slate-400 bg-slate-200/60">
+          <td colSpan={2} className="px-1 py-0.5 font-black text-slate-800">ماندهٔ ترم</td>
+          <td className={`px-1 py-0.5 text-left font-black ${t.balance > 0 ? 'text-rose-700' : t.balance < 0 ? 'text-emerald-700' : 'text-slate-700'}`}>
+            {fa(Math.abs(t.balance))}
+          </td>
+        </tr>
+      </tbody>
+    </table>
   );
 }
