@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>استخراج ساختار ستون‌های فایل سنجش (PDF → JSON)</title>
+<style>
+  body { font-family: Tahoma, sans-serif; margin: 16px; background: #f8fafc; color: #1e293b; }
+  h1 { font-size: 18px; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+  label { display: block; font-weight: bold; font-size: 13px; margin-bottom: 6px; }
+  input[type=file] { width: 100%; }
+  button { background: #4f46e5; color: #fff; border: none; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; margin: 4px 2px; }
+  button.secondary { background: #64748b; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  textarea { width: 100%; min-height: 120px; font-family: monospace; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px; direction: ltr; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .hint { font-size: 12px; color: #64748b; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #e2e8f0; padding: 4px 6px; text-align: right; }
+  th { background: #f1f5f9; }
+  .log { font-size: 12px; color: #475569; white-space: pre-wrap; max-height: 200px; overflow: auto; background: #f8fafc; padding: 8px; border-radius: 8px; border: 1px solid #e2e8f0; }
+</style>
+</head>
+<body>
+<h1>استخراج ساختار ستون‌های فایل سنجش (PDF → JSON)</h1>
+<p class="hint">فایل PDF استراکچر سنجش را بارگذاری کنید. ابزار متن را با مختصات استخراج کرده و یک JSON پیشنهادی از ستون‌ها (نام، شروع، طول) تولید می‌کند. خروجی را بررسی و در صورت نیاز اصلاح کنید.</p>
+
+<div class="card">
+  <label>فایل PDF</label>
+  <input type="file" id="pdfFile" accept="application/pdf" />
+  <div class="row" style="margin-top:8px">
+    <button id="extractBtn">استخراج</button>
+    <button id="genJsonBtn" class="secondary" disabled>تولید JSON</button>
+  </div>
+  <div id="status" class="hint"></div>
+</div>
+
+<div class="card">
+  <label>متن خام استخراج‌شده (به ترتیب خطوط)</label>
+  <textarea id="rawText" placeholder="پس از استخراج، متن اینجا نمایش داده می‌شود..."></textarea>
+</div>
+
+<div class="card">
+  <label>JSON پیشنهادی ستون‌ها</label>
+  <textarea id="jsonOut" placeholder='[{"name":"nationalCode","start":0,"length":10,"target":"nationalCode"}, ...]'></textarea>
+  <div class="row">
+    <button id="copyBtn" class="secondary">کپی JSON</button>
+  </div>
+  <div class="hint">فیلد <code>target</code> را متناسب با نیاز (nationalCode, studentCode, previousMajorCode, previousMajorTitle, ...) تنظیم کنید.</div>
+</div>
+
+<div class="card">
+  <label>پیش‌نمایش خطوط (با مختصات x)</label>
+  <div id="linesPreview" class="log"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  let extractedLines = []; // {y, items:[{x,text}]}
+  let allItems = [];
+
+  const status = (m) => { document.getElementById('status').textContent = m; };
+
+  document.getElementById('extractBtn').addEventListener('click', async () => {
+    const f = document.getElementById('pdfFile').files[0];
+    if (!f) { status('ابتدا فایل PDF را انتخاب کنید.'); return; }
+    status('در حال استخراج...');
+    document.getElementById('genJsonBtn').disabled = true;
+    try {
+      const buf = await f.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      allItems = [];
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
+        const tc = await page.getTextContent();
+        for (const it of tc.items) {
+          if (!it.str || !it.str.trim()) continue;
+          const tx = it.transform;
+          allItems.push({ page: p, x: tx[4], y: tx[5], text: it.str });
+        }
+      }
+      // Group by page then by y (rounded to 3px)
+      const byPage = {};
+      for (const it of allItems) {
+        byPage[it.page] = byPage[it.page] || [];
+        byPage[it.page].push(it);
+      }
+      extractedLines = [];
+      for (const p of Object.keys(byPage).sort((a,b)=>a-b)) {
+        const items = byPage[p];
+        const groups = {};
+        for (const it of items) {
+          const key = Math.round(it.y / 3) * 3;
+          groups[key] = groups[key] || [];
+          groups[key].push(it);
+        }
+        const ys = Object.keys(groups).map(Number).sort((a,b)=>b-a); // top-to-bottom (pdf y desc)
+        for (const y of ys) {
+          const lineItems = groups[y].sort((a,b)=>a.x-b.x);
+          extractedLines.push({ page: Number(p), y, items: lineItems });
+        }
+      }
+      // Raw text
+      const raw = extractedLines.map(l => l.items.map(i=>i.text).join(' ')).join('\n');
+      document.getElementById('rawText').value = raw;
+      // Preview table (first 40 lines)
+      const prev = document.getElementById('linesPreview');
+      prev.innerHTML = '';
+      const tbl = document.createElement('table');
+      const thead = document.createElement('thead');
+      thead.innerHTML = '<tr><th>صفحه</th><th>y</th><th>متن (با x)</th></tr>';
+      tbl.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      for (const l of extractedLines.slice(0, 60)) {
+        const tr = document.createElement('tr');
+        const td1 = document.createElement('td'); td1.textContent = l.page;
+        const td2 = document.createElement('td'); td2.textContent = l.y;
+        const td3 = document.createElement('td');
+        td3.textContent = l.items.map(i => `[${Math.round(i.x)}]${i.text}`).join(' ');
+        tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+        tbody.appendChild(tr);
+      }
+      tbl.appendChild(tbody);
+      prev.appendChild(tbl);
+      status('استخراج انجام شد: ' + allItems.length + ' قطعه متن در ' + extractedLines.length + ' خط. حالا «تولید JSON» را بزنید.');
+      document.getElementById('genJsonBtn').disabled = false;
+    } catch (e) {
+      status('خطا: ' + (e && e.message ? e.message : e));
+    }
+  });
+
+  document.getElementById('genJsonBtn').addEventListener('click', () => {
+    if (extractedLines.length === 0) return;
+    // Heuristic: find header line = line with most items that contains position/length keywords
+    const keywords = ['موقعیت','طول','شروع','start','length','ردیف','شماره','نام','عنوان','فیلد','شرح'];
+    let headerIdx = -1, bestScore = -1;
+    extractedLines.forEach((l, idx) => {
+      const text = l.items.map(i=>i.text).join(' ');
+      let score = 0;
+      for (const k of keywords) if (text.includes(k)) score++;
+      if (score > bestScore) { bestScore = score; headerIdx = idx; }
+    });
+    if (headerIdx < 0) headerIdx = 0;
+    const headerLine = extractedLines[headerIdx];
+    // Column boundaries: sort header items by x; boundary = midpoint between consecutive item x-starts (with width approx)
+    const hItems = headerLine.items.slice().sort((a,b)=>a.x-b.x);
+    // Estimate width of each header item
+    const cols = hItems.map((it, i) => {
+      const next = hItems[i+1];
+      const boundary = next ? (it.x + (next.x - it.x)/2) : Infinity;
+      return { item: it, left: it.x, right: boundary };
+    });
+    // Map header text to target field
+    function mapTarget(name) {
+      const n = name.toLowerCase();
+      if (n.includes('ملی') || n.includes('کد ملی')) return 'nationalCode';
+      if (n.includes('دانشجو') && n.includes('شماره')) return 'studentCode';
+      if (n.includes('رشته') && (n.includes('قبل') || n.includes('سابق'))) return 'previousMajorCode';
+      if (n.includes('عنوان') && n.includes('رشته')) return 'previousMajorTitle';
+      if (n.includes('موقعیت') || n.includes('شروع') || n.includes('start')) return null; // meta
+      if (n.includes('طول') || n.includes('length')) return null;
+      return null;
+    }
+    // Build JSON: for each header column that looks like a data field (has a name not meta), create entry
+    const jsonCols = [];
+    for (const c of cols) {
+      const name = c.item.text.trim();
+      // skip meta columns
+      const isMeta = /موقعیت|طول|شروع|ردیف|شماره فیلد|start|length/i.test(name);
+      if (isMeta) continue;
+      // find start/length from the same header row? They are separate columns. We need to pair name column with position/length columns.
+      // Strategy: instead of per-column, build rows: for each data line, collect (x,text) and slice by col boundaries.
+      jsonCols.push({ name, left: c.left, right: c.right });
+    }
+    // We need start & length per field. The structure PDF has separate columns: "موقعیت" and "طول".
+    // Find position column and length column x-ranges among header.
+    let posCol = null, lenCol = null, nameCol = null;
+    for (const c of cols) {
+      const t = c.item.text;
+      if (/موقعیت|شروع|start/i.test(t)) posCol = c;
+      else if (/طول|length/i.test(t)) lenCol = c;
+      else if (/نام|عنوان|شرح|فیلد/i.test(t) && !/شماره|ردیف/i.test(t)) nameCol = c;
+    }
+    // If nameCol not found, use the first non-meta column
+    if (!nameCol) nameCol = cols.find(c => !/موقعیت|طول|شروع|ردیف|شماره|start|length/i.test(c.item.text));
+    // Data rows: lines after header
+    const dataLines = extractedLines.slice(headerIdx + 1);
+    const rows = [];
+    for (const l of dataLines) {
+      // skip separator/empty
+      const txt = l.items.map(i=>i.text).join(' ').trim();
+      if (!txt) continue;
+      // slice by column boundaries for name/pos/len
+      function cellText(col) {
+        if (!col) return '';
+        return l.items.filter(i => i.x >= col.left - 2 && i.x < col.right).map(i=>i.text).join(' ').trim();
+      }
+      const name = nameCol ? cellText(nameCol) : '';
+      const pos = posCol ? cellText(posCol) : '';
+      const len = lenCol ? cellText(lenCol) : '';
+      if (!name && !pos && !len) continue;
+      // parse numbers
+      const startNum = parseInt(pos, 10);
+      const lenNum = parseInt(len, 10);
+      if (isNaN(startNum) || isNaN(lenNum)) continue;
+      rows.push({ name, start: startNum, length: lenNum, target: mapTarget(name) });
+    }
+    // Deduplicate by (start,length)
+    const seen = new Set();
+    const uniq = rows.filter(r => {
+      const k = r.start + ':' + r.length;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    document.getElementById('jsonOut').value = JSON.stringify(uniq, null, 2);
+    status('JSON تولید شد: ' + uniq.length + ' ستون. لطفاً بررسی و اصلاح کنید.');
+  });
+
+  document.getElementById('copyBtn').addEventListener('click', () => {
+    const t = document.getElementById('jsonOut');
+    t.select();
+    document.execCommand('copy');
+    status('کپی شد.');
+  });
+</script>
+</body>
+</html>
