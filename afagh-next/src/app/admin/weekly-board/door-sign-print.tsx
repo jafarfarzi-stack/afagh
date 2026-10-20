@@ -232,7 +232,7 @@ export default async function DoorSignPrint({
   .ds-slot { position:absolute; inset-inline:0.7mm; padding:0.4mm 0; }
   .ds-card { container-type:size; width:100%; height:100%; overflow:hidden;
     border:0.7pt solid #6366f1; border-radius:1.1mm; background:#eef2ff;
-    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.3mm; padding:0.8mm 1mm; text-align:center; }
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.2mm; padding:0.5mm 0.9mm; text-align:center; }
   .ds-card.lab { border-color:#d97706; background:#fffbeb; }
   /* ── سلسله‌مراتبِ متنِ کارت ────────────────────────────────────────────
      اولویت: ۱) عنوان درس ۲) نام استاد ۳) ساعتِ شروع–پایان.
@@ -251,7 +251,7 @@ export default async function DoorSignPrint({
      چون با ellipsis به «دکتر سعید پورمح…» تبدیل می‌شد و بی‌فایده بود. */
   .ds-p { font-family:'Shabnam', 'Vazirmatn', Tahoma, sans-serif; font-weight:400; line-height:1.14;
     color:#1f2937; max-width:100%; overflow:hidden; text-align:center;
-    font-size:max(7pt, min(14cqh,7.2cqi,8.4pt)); display:none;
+    font-size:max(6.5pt, min(12cqh,7.2cqi,8.4pt)); display:none;
     -webkit-box-orient:vertical; -webkit-line-clamp:2; word-break:break-word; }
   /* ساعتِ شروع/پایان: سومِ اولویت — کوچک‌ترین و کم‌رنگ‌ترین (بالای ستون‌ها و
      روی خط‌های ساعت هم پیداست). */
