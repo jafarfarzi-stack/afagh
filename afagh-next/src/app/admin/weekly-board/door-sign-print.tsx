@@ -101,7 +101,7 @@ export default async function DoorSignPrint({
   headerDept,
   appVersion,
   universityName,
-  qrBaseUrl = 'https://b.afagh.ac.ir',
+  qrBaseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://b.afagh.ac.ir',
   mono = false,
 }: DoorSignPrintProps) {
   // جای‌گذاری درس‌ها در هر روز (همان منطق گریدِ تقویم، بدون وابستگی به گرید نمایشگر)
