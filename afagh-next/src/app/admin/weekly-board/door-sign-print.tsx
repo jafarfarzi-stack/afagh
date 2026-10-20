@@ -152,8 +152,12 @@ export default async function DoorSignPrint({
   ].filter(Boolean) as string[];
 
   const css = `
-  /* فونت تیتر: Vazirmatn 900 (Black) — برای عنوانِ نام کلاس و سرصفحه‌ها.
+  /* فونت تیتر: Sahel Bold — تیترِ اصلی و سرصفحه‌ها. نسبت به Vazirmatn Black
+     بازتر و «خوانا-تر» است و در اندازهٔ بزرگ روی کاغذ کمتر به‌هم می‌چسبد.
      font-display:block تا در چاپ، متن با فونت جانشین رندر نشود. */
+  @font-face { font-family:'Sahel Display'; font-style:normal; font-weight:700;
+    src:url('/fonts/sahel-bold.woff2') format('woff2'); font-display:block; }
+  /* پشتیبان: Vazirmatn 900 (Black) */
   @font-face { font-family:'Vazirmatn Display'; font-style:normal; font-weight:900;
     src:url('/fonts/vazirmatn-900.woff2') format('woff2'); font-display:block; }
   .ds-sheet { width:297mm; height:210mm; padding:5mm 6mm 4mm; display:flex; flex-direction:column;
@@ -162,12 +166,12 @@ export default async function DoorSignPrint({
   .ds-sheet * { box-sizing:border-box; }
   .ds-hd { display:flex; align-items:center; gap:5mm; height:38mm; }
   .ds-logo-col { display:flex; flex-direction:column; align-items:center; justify-content:center; height:38mm; }
-  .ds-logo { height:17mm; width:auto; display:block; }
+  .ds-logo { height:20mm; width:auto; display:block; }
   .ds-uni { font-size:8pt; font-weight:700; color:#1e2a6e; text-align:center; margin-top:1.4mm; line-height:1.2; }
   .ds-mid { flex:1; text-align:center; min-width:0; }
   .ds-kicker { font-size:8pt; font-weight:700; color:#1e2a6e; letter-spacing:0.2px; }
-  .ds-title { font-family:'Vazirmatn Display','Vazirmatn',sans-serif; font-size:31pt; font-weight:900;
-    line-height:1.08; color:#0b1020; letter-spacing:0; }
+  .ds-title { font-family:'Sahel Display','Vazirmatn Display','Vazirmatn',sans-serif; font-size:30pt; font-weight:700;
+    line-height:1.16; color:#0b1020; letter-spacing:0; }
   .ds-sub { font-size:8.2pt; color:#334155; margin-top:1.6mm; }
   .ds-room { text-align:center; min-width:32mm; border-inline-start:0.6pt solid #cbd5e1; border-inline-end:0.6pt solid #cbd5e1; padding:0 3mm; }
   .ds-rm-label { font-size:6.5pt; color:#475569; }
@@ -191,18 +195,25 @@ export default async function DoorSignPrint({
      فقط لبه‌های هم‌پوشان با کادر حذف شده‌اند تا خط دوبل نشود. */
   .ds-grid { flex:1; display:grid; grid-template-columns:13.5mm repeat(7,1fr); grid-template-rows:8.5mm 1fr;
     min-height:0; border:1.1pt solid #000; }
-  .ds-dh { font-size:12pt; font-weight:700; text-align:center; padding:1.2mm 0; letter-spacing:0.2px;
+  .ds-dh { font-family:'Sahel Display','Vazirmatn Display','Vazirmatn',sans-serif;
+    font-size:12pt; font-weight:700; text-align:center; padding:1.2mm 0; letter-spacing:0.2px;
     background:#1e2a6e; color:#fff; border-inline-start:1.1pt solid #000; display:flex; align-items:center; justify-content:center; }
   .ds-dh.fri { background:#334155; }
   .ds-dh.empty { background:#fff; color:#0f172a; font-size:8pt; font-weight:700; }
   .ds-dh:first-child { border-inline-start:0; }
   .ds-gut { position:relative; }
   .ds-hl { position:absolute; inset-inline:0; font-size:11pt; font-weight:700; color:#0f172a; text-align:center; font-variant-numeric:tabular-nums; }
+  /* برچسبِ نیم‌ساعت — کوچک و کم‌رنگ تا شلوغ نکند ولی «۹ و نیم» خوانده شود */
+  .ds-hh { position:absolute; inset-inline:0; font-size:5.8pt; font-weight:500; color:#94a3b8;
+    text-align:center; font-variant-numeric:tabular-nums; line-height:1; }
   .ds-day { position:relative; border-inline-start:1.1pt solid #000; }
   .ds-day.fri { background:#f1f5f9; }
   .ds-day:last-child { border-inline-end:0; }
-  .ds-ln { position:absolute; inset-inline:0; border-top:0.6pt solid #94a3b8; }
-  .ds-ln.half { border-top:0.35pt dashed #dbe3ec; }
+  /* خطِ ساعت‌ها: ساعتِ کامل پُررنگ، نیم‌ساعت خط‌چین و کم‌رنگ‌تر — تا «۹ و نیم»
+     از «۱۰» در یک نگاه تفکیک شود. رنگ قبلیِ نیم‌ساعت (#dbe3ec) تقریباً سفید بود
+     و روی کاغذ دیده نمی‌شد. */
+  .ds-ln { position:absolute; inset-inline:0; border-top:0.7pt solid #64748b; }
+  .ds-ln.half { border-top:0.5pt dashed #94a3b8; }
   .ds-ln.end { border-top:0; }
 
   .ds-slot { position:absolute; inset-inline:0.7mm; padding:0.4mm 0; }
@@ -241,7 +252,8 @@ export default async function DoorSignPrint({
   .ds-mono .ds-wk { border-color:#000; color:#000; }
   .ds-mono .ds-qr-tag { border-color:#000; color:#000; }
   .ds-mono .ds-ln { border-top-color:#000; }
-  .ds-mono .ds-ln.half { border-top-color:#888; }
+  .ds-mono .ds-ln.half { border-top-color:#4b5563; }
+  .ds-mono .ds-hh { color:#4b5563; }
   .ds-mono .ds-qr-cap, .ds-mono .ds-sub, .ds-mono .ds-rm-label, .ds-mono .ds-rm-sub, .ds-mono .ds-ft { color:#000; }
   .ds-mono .ds-room { border-color:#000; }
   .ds-mono .ds-sw { border-color:#000; background:#fff; }
@@ -291,7 +303,7 @@ export default async function DoorSignPrint({
             // eslint-disable-next-line @next/next/no-img-element
             <img className="ds-logo" src={logoUrl} alt="آرم دانشگاه" />
           ) : (
-            <div className="ds-logo" style={{ width: '17mm', height: '17mm' }} />
+            <div className="ds-logo" style={{ width: '20mm', height: '20mm' }} />
           )}
           {universityName ? <div className="ds-uni">{fa(universityName)}</div> : null}
         </div>
@@ -329,6 +341,16 @@ export default async function DoorSignPrint({
           {hourLabels.map(({ h, top, tf }) => (
             <div key={h} className="ds-hl" style={{ top: `${top}%`, transform: tf } as CSSProperties}>
               {fa(h)}
+            </div>
+          ))}
+          {/* نشانگرِ نیم‌ساعت: «۳۰» کوچک روی خطِ خط‌چین، تا ۹:۳۰ از ۱۰ تفکیک شود */}
+          {hourLabels.slice(0, -1).map(({ h, top }) => (
+            <div
+              key={`half-${h}`}
+              className="ds-hh"
+              style={{ top: `${top + 50 / n}%`, transform: 'translateY(-50%)' } as CSSProperties}
+            >
+              ۳۰
             </div>
           ))}
         </div>
