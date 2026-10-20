@@ -40,8 +40,9 @@ export default function SemestersTab() {
             <div>
               <h4 className="font-extrabold text-slate-900 text-sm">🗺️ ترمبندی چارت — {selectedVersion.title}</h4>
               <p className="text-[11px] text-slate-500 font-bold mt-0.5">
-                چارت {faNum(chartTermCount)} ترمه (مقطع: {degreeMajor?.degreeTitle ?? '—'}{degreeMajor?.degreeIsGraduate === 1 ? ' · تکمیلی' : ''}) + تابستان؛
-                موتور انتخاب واحد و تطبیق فارغالتحصیلی بر اساس همین ترمبندی عمل میکنند.
+                رشته: {degreeMajor?.name ?? '—'} · مقطع: {degreeMajor?.degreeTitle ?? '—'}{degreeMajor?.degreeIsGraduate === 1 ? ' (تکمیلی)' : ''} ·
+                ورودی: {faNum(selectedVersion.entryYearFrom)}{selectedVersion.entryYearTo ? ` تا ${faNum(selectedVersion.entryYearTo)}` : ' به بعد'} ·
+                چارت {faNum(chartTermCount)} ترمه + تابستان
               </p>
             </div>
             <div className="text-[11px] bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 font-black text-indigo-900">
