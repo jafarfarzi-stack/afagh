@@ -80,6 +80,8 @@ export default async function GroupManagerLayout({ children }: { children: React
           <Link href="/group-manager/offerings" className="hover:underline">ارائه‌های ترم</Link>
           <Link href="/group-manager/classrooms" className="hover:underline">کلاس‌ها</Link>
           <Link href="/group-manager/equivalence" className="hover:underline">معادل‌سازی دروس</Link>
+          <Link href="/group-manager/bypass" className="hover:underline">درخواست‌های بدون پیش‌نیاز</Link>
+          <Link href="/group-manager/compensatory" className="hover:underline">دانشجویان جبرانی</Link>
         </nav>
       </header>
       <main className="mx-auto max-w-6xl p-4">{children}</main>

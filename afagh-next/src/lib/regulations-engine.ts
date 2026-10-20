@@ -163,6 +163,14 @@ export interface StudentAcademicSummary {
   minAllowedUnits: number;
   isSummer: boolean;
   quotaType: string;
+  /** شاگرد ممتاز (تشخیص خودکار از معدل ترم قبل یا اورراید مدیر گروه) */
+  isHonors: boolean;
+  /** منبع تشخیص ممتازی: AUTO (معدل) یا OVERRIDE (دستی) */
+  honorsSource: 'AUTO' | 'OVERRIDE';
+  /** واحدهای جبرانیِ ثبت‌شده برای دانشجو (به سقف واحد اضافه می‌شود) */
+  compensatoryUnits: number;
+  /** سقف واحد پایهٔ آیین‌نامه، پیش از افزودن واحدهای جبرانی */
+  baseMaxUnits: number;
   rulesConfig: RegulationConfig;
 }
 
@@ -311,7 +319,16 @@ export async function evaluateStudentRegulationStatus(
     : (regularTermIds.length > 0 ? termMap.get(regularTermIds[0])!.exact() : null);
 
   const isProbatedLastTerm = relevantLastTermExact !== null && relevantLastTermExact < probationGpaThreshold;
-  const isHonorsLastTerm = relevantLastTermExact !== null && relevantLastTermExact >= config.regular_term_rules.honors_min_gpa;
+  const isHonorsAuto = relevantLastTermExact !== null && relevantLastTermExact >= config.regular_term_rules.honors_min_gpa;
+  /**
+   * اورراید مدیر گروه: students.honorsOverride (NULL=خودکار، ۱=ممتاز، ۰=غیرممتاز).
+   * تشخیص خودکار فقط بر اساس معدل ترم قبل است؛ مدیر گروه می‌تواند آن را نقض کند.
+   */
+  const honorsSource: 'AUTO' | 'OVERRIDE' = stu.honorsOverride == null ? 'AUTO' : 'OVERRIDE';
+  const isHonors = stu.honorsOverride == null ? isHonorsAuto : stu.honorsOverride === 1;
+
+  // واحدهای جبرانی: از سقف پایهٔ آیین‌نامه جدا نگه داشته می‌شود تا در UI قابل نمایش باشد
+  const compensatoryUnits = Math.max(0, Number(stu.compensatoryUnits ?? 0));
 
   // محاسبه سقف واحد مجاز (Effective Max Units)
   let effectiveMaxUnits = config.regular_term_rules.max_units;
@@ -340,10 +357,18 @@ export async function evaluateStudentRegulationStatus(
       minAllowedUnits = 0;
     } else if (isProbatedLastTerm) {
       effectiveMaxUnits = config.regular_term_rules.probation_max_units; // سقف ۱۴ واحد برای مشروط
-    } else if (isHonorsLastTerm) {
-      effectiveMaxUnits = config.regular_term_rules.honors_max_units; // سقف ۲۴ واحد برای معدل الف
+    } else if (isHonors) {
+      effectiveMaxUnits = config.regular_term_rules.honors_max_units; // سقف ۲۴ واحد برای معدل الف (یا مقدار تنظیم‌شده)
     }
   }
+
+  // ترم آخر: کف واحد اعمال نمی‌شود (مثلاً ۸ واحد باقی‌مانده همان‌طور اخذ می‌شود)
+  if (isGraduating) minAllowedUnits = 0;
+
+  // دروس جبرانی: سقف همان ترم به اندازهٔ واحدهای جبرانی بالا می‌رود
+  // (ترم تابستان مستثنی است؛ دروس جبرانی فقط در ترم ۱ و حداکثر ۲ ارائه می‌شوند)
+  const baseMaxUnits = effectiveMaxUnits;
+  if (!isSummer && compensatoryUnits > 0) effectiveMaxUnits += compensatoryUnits;
 
   const completedSemesters = termMap.size;
 
@@ -370,6 +395,10 @@ export async function evaluateStudentRegulationStatus(
     minAllowedUnits,
     isSummer,
     quotaType: stu.quotaType || 'NORMAL',
+    isHonors,
+    honorsSource,
+    compensatoryUnits,
+    baseMaxUnits,
     rulesConfig: config,
   };
 }

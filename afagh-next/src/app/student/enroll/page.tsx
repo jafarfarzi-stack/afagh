@@ -17,7 +17,8 @@ import {
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { getTermScope } from '@/lib/term-scope';
 import TermFilterChip from '@/components/TermFilterChip';
-import { buildPrereqContext, formatPrereq } from '@/lib/enroll-engine';
+import { buildPrereqContext, evaluateLogicTree, formatPrereq } from '@/lib/enroll-engine';
+import { openBypassRequestsOfStudent } from '@/lib/bypass-requests';
 import { offeringVisible } from '@/lib/offering-targeting';
 import { evaluateStudentRegulationStatus, type StudentAcademicSummary } from '@/lib/regulations-engine';
 import { getSetting } from '@/lib/settings';
@@ -156,10 +157,16 @@ export default async function EnrollPage() {
   // برچسب پیش‌نیاز هر درس از قاعدهٔ مؤثر دانشجو
   const prereqCtx = await buildPrereqContext(me.id);
   const prereqLabel = new Map<number, string>();
+  const prereqMet = new Map<number, boolean>();
   for (const o of offeringsForStudent) {
-    const lbl = formatPrereq(prereqCtx.ruleByCourse.get(o.courseId ?? -1), prereqCtx.titles);
+    const node = prereqCtx.ruleByCourse.get(o.courseId ?? -1);
+    const lbl = formatPrereq(node, prereqCtx.titles);
     if (lbl) prereqLabel.set(o.id, lbl);
+    prereqMet.set(o.id, !node || evaluateLogicTree(node, prereqCtx.passed).ok);
   }
+
+  // درخواست‌های باز «بدون رعایت پیش‌نیاز / تداخل امتحانی» همین دانشجو
+  const bypassRequests = await openBypassRequestsOfStudent(me.id).catch(() => []);
 
   // محاسبه شهریه برای هر ارائه بر اساس قوانین جدید
   // بارگذاری تمام قواعد شهریه فعال
@@ -236,6 +243,7 @@ export default async function EnrollPage() {
       units: Number(o.units),
       professor: o.professorId ? profMap.get(o.professorId) || 'نامشخص' : 'نامشخص',
       prereq: prereqLabel.get(o.id) ?? null,
+      prereqMet: prereqMet.get(o.id) ?? true,
       classSchedules: s?.classes || [],
       examSchedule: s?.exam || null,
       tuitionFixed: tuition.fixed,
@@ -279,6 +287,7 @@ export default async function EnrollPage() {
         cart={cartList}
         cartStartedAt={cart.length ? cart.map(c => c.createdAt?.getTime?.() ?? 0).filter(Boolean).sort((a, b) => a - b)[0] || null : null}
         regulationStatus={regulationStatus}
+        bypassRequests={bypassRequests}
       />
     </div>
   );

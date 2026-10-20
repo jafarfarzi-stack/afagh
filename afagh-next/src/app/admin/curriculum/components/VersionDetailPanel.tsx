@@ -9,6 +9,7 @@ import DetailHeaderBar from './DetailHeaderBar';
 import VerifyTab from './VerifyTab';
 import CoursesTab from './CoursesTab';
 import SemestersTab from './SemestersTab';
+import PrereqMapTab from './PrereqMapTab';
 import TransferTab from './TransferTab';
 
 export default function VersionDetailPanel() {
@@ -23,6 +24,7 @@ export default function VersionDetailPanel() {
           <VerifyTab />
           <CoursesTab />
           <SemestersTab />
+          <PrereqMapTab />
           <TransferTab />
         </div>
       )}

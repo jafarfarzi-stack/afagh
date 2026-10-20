@@ -40,6 +40,7 @@ export interface CurriculumCheckInput {
     recommendedSemester: number | null;
     autoCorequisiteAllowed: number;
     clusterId: number | null; // خوشهٔ هم‌ارزی (NULL = درس مستقل)
+    passGradeStatusCode?: string | null; // کد وضع نمرهٔ قبولی (12 = جبرانی)
   }[];
   /** قواعدِ مقیّد به همین نسخه (course_rules.syllabusId = نسخه) */
   rules: {
@@ -336,6 +337,18 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
       'SEMESTER_UNASSIGNED',
       `${unassigned.length} درس بدون ترم مصوب‌اند: ${unassigned.map((c) => c.code).join('، ')} — پیش از چیدمان ترمی تعیین شوند.`,
       unassigned.map((c) => c.code)
+    ));
+  }
+
+  // ── ۱۲) درس جبرانی (کد قبولی ۱۲) فقط در ترم ۱ یا حداکثر ترم ۲ ──
+  const compensatoryLate = input.courses.filter((c) =>
+    c.passGradeStatusCode === '12' && c.recommendedSemester != null && c.recommendedSemester > 2
+  );
+  if (compensatoryLate.length > 0) {
+    results.push(err(
+      'COMPENSATORY_TERM_LIMIT',
+      `دروس جبرانی فقط در ترم ۱ (و در صورت ضرورت ترم ۲) قابل ارائه‌اند: ${compensatoryLate.map((c) => c.code).join('، ')} در ترم ${compensatoryLate.map((c) => c.recommendedSemester).join('، ')} قرار گرفته‌اند.`,
+      compensatoryLate.map((c) => c.code)
     ));
   }
 

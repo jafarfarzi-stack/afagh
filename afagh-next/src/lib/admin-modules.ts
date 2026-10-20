@@ -194,6 +194,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/bypass',
+    icon: '🔀',
+    title: 'درخواست‌های بدون پیش‌نیاز / تداخل امتحانی',
+    desc: 'تصمیم کارشناس آموزش رشته و معاون آموزش + گزارش رد خودکار',
+    group: 'edu',
+    roles: ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'],
+    accent: 'from-indigo-950 to-violet-950 border-indigo-700/50',
+    iconBg: 'bg-indigo-700/80 border-indigo-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/dorm',
     icon: '🏠',
     title: 'کارت سکونت خوابگاه',

@@ -718,6 +718,13 @@ export const academic_terms = pgTable('academic_terms', {
   // ── مهاجرت 0085: نسخه آیین‌نامه + تعداد هفته‌های آموزشی (NULL = آخرین نسخه / ۱۶) ──
   regulationVersionId: integer('regulationVersionId'),
   weeksCount: integer('weeksCount'),
+  // ── درخواست اخذ درس بدون رعایت پیش‌نیاز/تداخل امتحانی (مهاجرت ۰۱۰۹) ──
+  /** مهلت مدیر گروه برای تصمیم‌گیری (ساعت) — پیش‌فرض ۴۸ */
+  bypassManagerHours: integer('bypassManagerHours').default(48),
+  /** مهلت کارشناس آموزش رشته پس از ارجاع (ساعت) — پیش‌فرض ۱۲ */
+  bypassExpertHours: integer('bypassExpertHours').default(12),
+  /** چند ساعت مانده به پایان مهلت، یادآوری ارسال شود — پیش‌فرض ۱۰ */
+  bypassReminderHours: integer('bypassReminderHours').default(10),
 }, (t) => [
   unique('uq_terms_uni_code').on(t.universityId, t.termCode),
 ]);
@@ -972,6 +979,51 @@ export const enrollments = pgTable('enrollments', {
   /** ردیف enrollments مبدأ — کلید idempotency: هر نمرهٔ خارجی فقط یک‌بار قابل اعمال است. */
   sourceEnrollmentId: integer('sourceEnrollmentId').references((): AnyPgColumn => enrollments.id),
 }, (t) => ({ uq: unique('uq_enrollments').on(t.studentId, t.offeringId) }));
+
+/**
+ * درخواست اخذ درس بدون رعایت پیش‌نیاز یا با تداخل امتحانی.
+ *
+ * گردش کار: PENDING_MANAGER → (مهلت مدیر) ESCALATED_EXPERT → (مهلت کارشناس) AUTO_REJECTED
+ * مدیر گروه و کارشناس هر کدام زودتر تصمیم بگیرند پرونده بسته می‌شود؛ معاون آموزش
+ * می‌تواند تصمیم را بازبینی کند (تأیید/رد/بازگرداندن).
+ *
+ * صندلی: هنگام ثبت درخواست `course_offerings.enrolledCount` یک واحد افزایش می‌یابد
+ * (رزرو). تأیید = تبدیل همان رزرو به ثبت‌نام قطعی (بدون افزایش دوباره)؛
+ * رد/انقضا = آزادسازی صندلی.
+ */
+export const enroll_bypass_requests = pgTable('enroll_bypass_requests', {
+  id: serial('id').primaryKey(),
+  studentId: integer('studentId').notNull().references(() => students.id, { onDelete: 'cascade' }),
+  offeringId: integer('offeringId').notNull().references(() => course_offerings.id, { onDelete: 'cascade' }),
+  termId: integer('termId').notNull().references(() => academic_terms.id, { onDelete: 'cascade' }),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  /** PREREQ | EXAM_CONFLICT */
+  kind: varchar('kind', { length: 20 }).notNull(),
+  /** PENDING_MANAGER | ESCALATED_EXPERT | APPROVED | REJECTED | AUTO_REJECTED | CANCELLED */
+  status: varchar('status', { length: 30 }).notNull().default('PENDING_MANAGER'),
+  /** کد دلیل رد: LOW_GPA_PREV_TERM | GROUP_COUNCIL_DISAGREE | UNRESOLVABLE_EXAM_CONFLICT | OTHER | NO_RESPONSE */
+  reasonCode: varchar('reasonCode', { length: 40 }),
+  reasonText: text('reasonText'),
+  /** MANAGER | EXPERT | VICE | SYSTEM */
+  decidedRole: varchar('decidedRole', { length: 20 }),
+  decidedByUserId: integer('decidedByUserId').references(() => users.id),
+  decidedAt: timestamp('decidedAt'),
+  managerDeadlineAt: timestamp('managerDeadlineAt').notNull(),
+  expertDeadlineAt: timestamp('expertDeadlineAt'),
+  escalatedAt: timestamp('escalatedAt'),
+  managerReminderAt: timestamp('managerReminderAt'),
+  expertReminderAt: timestamp('expertReminderAt'),
+  studentWarnedAt: timestamp('studentWarnedAt'),
+  /** ۱ = صندلی این درخواست رزرو شده است */
+  seatReserved: integer('seatReserved').notNull().default(1),
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+}, (t) => [
+  index('idx_bypass_student').on(t.studentId),
+  index('idx_bypass_offering_status').on(t.offeringId, t.status),
+  index('idx_bypass_status_deadline').on(t.status, t.managerDeadlineAt),
+  index('idx_bypass_term').on(t.termId),
+]);
 
 export const grade_appeals = pgTable('grade_appeals', {
   id: serial('id').primaryKey(),

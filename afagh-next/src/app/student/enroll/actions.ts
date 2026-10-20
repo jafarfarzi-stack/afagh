@@ -27,8 +27,11 @@ import { assertServerActionOrigin } from '@/lib/security';
 import { offeringVisible } from '@/lib/offering-targeting';
 import { enqueueSubmit, ensureWorker, rateLimitSubmit, redisAvailable } from '@/lib/waitingRoom';
 import { processQueuedSubmit, type SubmitResult } from '@/lib/enroll-engine';
+import { buildPrereqContext, evaluateLogicTree } from '@/lib/enroll-engine';
+import { evaluateStudentRegulationStatus } from '@/lib/regulations-engine';
 import { resolveApplicableCurriculum, type ResolvableVersion } from '@/lib/curriculum-resolution';
 import { listTermsForUniversity, termOrdinalForEntry } from '@/lib/term-scope';
+import { createBypassRequest, cancelBypassRequest } from '@/lib/bypass-requests';
 
 /**
  * زمینهٔ انتخاب واحد.
@@ -155,9 +158,43 @@ export async function autoFillCartFromChartAction(): Promise<{
   if (!term) return { ok: false, count: 0, units: 0, message: 'ترم جاری فعال نیست.' };
   if (myUni == null) return { ok: false, count: 0, units: 0, message: 'دانشگاه شما مشخص نیست.' };
 
-  // 🎯 پیشنهاد بر اساس چارت سرفصل دانشجو: فقط دروس ترم جاریِ چارت را پیشنهاد می‌دهیم.
-  // اگر چارت/ترم قابل حل نبود، به رفتار پیشین (همهٔ ارائه‌ها) برمی‌گردیم.
-  const suggestedCourseIds = new Set<number>();
+  // ── سقف واحد از موتور آیین‌نامه (شامل ممتازی و واحدهای جبرانی) ──
+  // پیش از این عدد ۲۰ سخت‌کد بود؛ دانشجوی ارشد/ممتاز/جبرانی چیدمان نادرست می‌گرفت.
+  let maxUnitsLimit = 20;
+  let minAllowedUnits = 0;
+  try {
+    const reg = await evaluateStudentRegulationStatus(me.id, term.id);
+    maxUnitsLimit = reg.effectiveMaxUnits;
+    minAllowedUnits = reg.minAllowedUnits;
+  } catch {
+    /* موتور آیین‌نامه در دسترس نبود → سقف پیش‌فرض */
+  }
+
+  // ── وضعیت پیش‌نیاز و دروس پاس‌شده ──
+  const prereqCtx = await buildPrereqContext(me.id);
+  const passesPrereqs = (courseId: number): boolean => {
+    const rule = prereqCtx.ruleByCourse.get(courseId);
+    if (!rule) return true;
+    return evaluateLogicTree(rule, prereqCtx.passed).ok;
+  };
+
+  // ── دروس ثبت‌شدهٔ همین ترم (نباید دوباره پیشنهاد شوند) ──
+  const registeredRows = await db
+    .select({ courseId: course_offerings.courseId })
+    .from(enrollments)
+    .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+    .where(and(
+      eq(enrollments.studentId, me.id),
+      eq(course_offerings.termId, term.id),
+      inArray(enrollments.status, ['REGISTERED', 'PENDING_COUNCIL']),
+    ));
+  const registeredCourseIds = new Set(registeredRows.map(r => r.courseId));
+
+  // ── چارت سرفصل: دروس ترم جاری و ترم‌های قبل ──
+  // قاعده: دروس ترم‌های قبل که پاس نشده‌اند (افتاده/اخذنشده) همچنان قابل انتخاب‌اند؛
+  // درسی که پیش‌نیازش پاس نشده پیشنهاد نمی‌شود (مسیر آن درخواست بایپس است).
+  let chartResolved = false;
+  let chartPicks: { courseId: number; code: string; recommendedSemester: number | null }[] | null = null;
   try {
     const versionRows = me.majorId
       ? await db
@@ -189,12 +226,15 @@ export async function autoFillCartFromChartAction(): Promise<{
       : null;
     const version = resolution?.version ?? null;
     if (version) {
+      chartResolved = true;
       const chartRows = await db
         .select({
           courseId: curriculum_courses.courseId,
           recommendedSemester: curriculum_courses.recommendedSemester,
+          code: courses.code,
         })
         .from(curriculum_courses)
+        .innerJoin(courses, eq(courses.id, curriculum_courses.courseId))
         .where(eq(curriculum_courses.curriculumVersionId, version.id));
       const ordinalTerms = await listTermsForUniversity(me.universityId, { limit: null }).catch(() => []);
       const currentTermOrdinal = term
@@ -206,12 +246,17 @@ export async function autoFillCartFromChartAction(): Promise<{
           })
         : null;
       const targetSem = currentTermOrdinal ?? null;
-      const matched = chartRows.filter(r => targetSem == null || r.recommendedSemester === targetSem);
-      const pool = matched.length > 0 ? matched : chartRows;
-      for (const r of pool) suggestedCourseIds.add(r.courseId);
+      chartPicks = chartRows.filter(r => {
+        if (registeredCourseIds.has(r.courseId)) return false;      // قبلاً همین ترم ثبت شده
+        if (r.code && prereqCtx.passed.has(r.code)) return false;   // قبلاً پاس شده
+        // فقط ترم جاری و ترم‌های قبل؛ درس ترم‌های بعد پیشنهاد نمی‌شود
+        if (targetSem != null && r.recommendedSemester != null && r.recommendedSemester > targetSem) return false;
+        return true;
+      });
     }
   } catch {
     // در صورت خطا، بدون فیلتر چارت ادامه می‌دهیم (رفتار پیشین)
+    chartResolved = false;
   }
 
   // ۱. پاکسازی سبد قبلی جهت چیدمان تازه و بدون تداخل
@@ -268,12 +313,18 @@ export async function autoFillCartFromChartAction(): Promise<{
     }
   }
 
-  // ۴. دسته‌بندی ارائه‌ها بر اساس کد/شناسه درس (جهت مدیریت چندگروهی)
+  // ۴. دسته‌بندی ارائه‌ها بر اساس درس + ترتیب بر اساس ترم چارت (ترم‌های قبل اول)
+  const allowedByChart = chartPicks ? new Set(chartPicks.map(p => p.courseId)) : null;
+  const semOfCourse = new Map<number, number | null>(
+    (chartPicks ?? []).map(p => [p.courseId, p.recommendedSemester])
+  );
+
   const byCourse = new Map<number, typeof offerings>();
   for (const off of visibleOfferings) {
-    // 🎯 اگر چارت دانشجو موجود است، فقط دروس ترم جاریِ چارت را پیشنهاد می‌دهیم
-    if (suggestedCourseIds.size > 0 && !suggestedCourseIds.has(off.courseId)) continue;
-    // فیلتر عدم درج پایان‌نامه ارشد برای دانشجوی کارشناسی
+    // اگر چارت حل شده باشد، فقط دروس واجد شرایط همان چارت پیشنهاد می‌شوند
+    if (allowedByChart && !allowedByChart.has(off.courseId)) continue;
+    if (!passesPrereqs(off.courseId)) continue;
+    if (registeredCourseIds.has(off.courseId)) continue;
     if (me.degreeLevelId === 1 && (off.code.startsWith('21') || off.title.includes('پایان‌نامه'))) continue;
     if (off.title.includes('معرفی به استاد') || off.title.includes('مطالعه فردی')) continue;
 
@@ -285,9 +336,15 @@ export async function autoFillCartFromChartAction(): Promise<{
   const chosenOfferings: typeof offerings = [];
   let totalUnits = 0;
   let conflictsAvoidedCount = 0;
-  const maxUnitsLimit = 20;
 
-  for (const [courseId, groups] of byCourse.entries()) {
+  const orderedCourses = [...byCourse.entries()].sort((a, b) => {
+    const sa = semOfCourse.get(a[0]) ?? 99;
+    const sb = semOfCourse.get(b[0]) ?? 99;
+    if (sa !== sb) return sa - sb;
+    return a[0] - b[0];
+  });
+
+  for (const [courseId, groups] of orderedCourses) {
     const courseUnits = Number(groups[0].units || 0);
     if (totalUnits + courseUnits > maxUnitsLimit) continue;
 
@@ -363,12 +420,28 @@ export async function autoFillCartFromChartAction(): Promise<{
     );
   }
 
+  // پیام شفاف: چه چیزی چیده شد و چرا ممکن است کمتر از سقف باشد
+  const capNote = `سقف مجاز شما ${maxUnitsLimit} واحد است`;
+  if (chosenOfferings.length === 0) {
+    return {
+      ok: true,
+      count: 0,
+      units: 0,
+      conflictsResolved: 0,
+      message: chartResolved
+        ? `درسی برای چیدمان خودکار پیدا نشد. ${capNote}. ممکن است دروس واجد شرایط قبلاً گذرانده شده یا پیش‌نیازشان کامل نشده باشد؛ برای اخذ بدون رعایت پیش‌نیاز از «درخواست بایپس» استفاده کنید.`
+        : `درسی برای چیدمان خودکار پیدا نشد. ${capNote}.`,
+    };
+  }
+  const minNote = minAllowedUnits > 0
+    ? ` حداقل واحد این ترم ${minAllowedUnits} واحد است.`
+    : '';
   return {
     ok: true,
     count: chosenOfferings.length,
     units: totalUnits,
     conflictsResolved: conflictsAvoidedCount,
-    message: `چیدمان هوشمند با موفقیت انجام شد: ${chosenOfferings.length} درس (${totalUnits} واحد) با بررسی دقیق ظرفیت و انتخاب گروه‌های فاقد تداخل کلاسی و امتحانی در سبد شما چیده شد.`,
+    message: `چیدمان هوشمند انجام شد: ${chosenOfferings.length} درس (${totalUnits} واحد) با بررسی ظرفیت، پیش‌نیاز، تداخل کلاسی و امتحانی در سبد شما چیده شد. ${capNote}.${minNote}`,
   };
 }
 
@@ -527,3 +600,79 @@ export async function referCouncilAction(offeringId: number, reason?: string): P
   );
   return { ok: true };
 }
+
+// ───────────────────── درخواست بدون رعایت محدودیت (پیش‌نیاز/تداخل امتحانی) ─────────────────────
+export async function requestBypassAction(
+  offeringId: number,
+  kind: 'PREREQ' | 'EXAM_CONFLICT',
+): Promise<{ ok: boolean; error?: string }> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
+  const { me, term, myUni } = await ctx();
+  if (!term) return { ok: false, error: 'ترم جاری یافت نشد.' };
+  if (kind !== 'PREREQ' && kind !== 'EXAM_CONFLICT') return { ok: false, error: 'نوع درخواست نامعتبر است.' };
+
+  const target = await offeringInMyScope(myUni, term.id, offeringId);
+  if (!target) return { ok: false, error: 'این ارائه برای دانشگاه/نیمسال شما در دسترس نیست' };
+
+  if (!offeringVisible(
+    { targetDegreeLevelId: target.targetDegreeLevelId, targetMajorId: target.targetMajorId, entryYearStart: target.entryYearStart, entryYearEnd: target.entryYearEnd },
+    { degreeLevelId: me.degreeLevelId, majorId: me.majorId ?? null, entryYear: me.entryYear },
+  )) {
+    return { ok: false, error: 'این ارائه به مقطع/رشته/سال ورودی شما اختصاص ندارد.' };
+  }
+
+  // ✅ برای پیش‌نیاز: درخواست فقط وقتی معنا دارد که واقعاً پیش‌نیاز پاس نشده باشد
+  if (kind === 'PREREQ') {
+    const prereqCtx = await buildPrereqContext(me.id);
+    const node = prereqCtx.ruleByCourse.get(target.courseId);
+    if (node && evaluateLogicTree(node, prereqCtx.passed).ok) {
+      return { ok: false, error: 'پیش‌نیاز این درس را پاس کرده‌اید؛ نیازی به درخواست نیست.' };
+    }
+  }
+
+  // ✅ برای تداخل امتحانی: درخواست فقط وقتی معنا دارد که واقعاً تداخل امتحانی وجود داشته باشد
+  if (kind === 'EXAM_CONFLICT') {
+    const targetExams = await db.select({
+      examDate: schedules.examDate, startTime: schedules.startTime, endTime: schedules.endTime,
+    }).from(schedules).where(and(eq(schedules.offeringId, offeringId), eq(schedules.scheduleType, 'EXAM')));
+    if (targetExams.length === 0) {
+      return { ok: false, error: 'برای این درس جلسهٔ امتحانی ثبت نشده است.' };
+    }
+    const regRows = await db.select({ offeringId: enrollments.offeringId })
+      .from(enrollments)
+      .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+      .where(and(
+        eq(enrollments.studentId, me.id),
+        eq(course_offerings.termId, term.id),
+        inArray(enrollments.status, ['REGISTERED', 'PENDING_COUNCIL']),
+      ));
+    const regIds = regRows.map(r => r.offeringId);
+    const regExams = regIds.length
+      ? await db.select({ examDate: schedules.examDate, startTime: schedules.startTime, endTime: schedules.endTime })
+          .from(schedules).where(and(inArray(schedules.offeringId, regIds), eq(schedules.scheduleType, 'EXAM')))
+      : [];
+    const hasConflict = targetExams.some(te =>
+      regExams.some(re =>
+        te.examDate && re.examDate &&
+        String(te.examDate) === String(re.examDate) &&
+        timeOverlap(te.startTime, te.endTime, re.startTime, re.endTime)
+      )
+    );
+    if (!hasConflict) {
+      return { ok: false, error: 'تداخل امتحانی برای این درس با دروس ثبت‌شدهٔ شما یافت نشد.' };
+    }
+  }
+
+  const res = await createBypassRequest({ studentId: me.id, offeringId, kind });
+  if (!res.ok) return { ok: false, error: res.error };
+  return { ok: true };
+}
+
+export async function cancelBypassAction(requestId: number): Promise<{ ok: boolean; error?: string }> {
+  const og = await assertServerActionOrigin();
+  if (!og.ok) return { ok: false, error: og.error };
+  const { me } = await ctx();
+  return cancelBypassRequest(requestId, me.id);
+}
+

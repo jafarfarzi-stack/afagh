@@ -8,14 +8,17 @@ import Link from 'next/link';
 import {
   addToCartAction,
   autoFillCartFromChartAction,
+  cancelBypassAction,
   clearCartAction,
   removeFromCartAction,
   referCouncilAction,
+  requestBypassAction,
   submitCartAction,
   previewExamConflictsAction,
 } from './actions';
 import type { SubmitResult } from '@/lib/enroll-engine';
 import { isSafeLinkUrl } from '@/lib/safe-url';
+import { BYPASS_KIND_LABEL, BYPASS_STATUS_LABEL, type BypassRequestRow } from '@/lib/bypass-labels';
 
 export type ClassScheduleItem = {
   dayOfWeek: number;
@@ -42,6 +45,8 @@ export type OfferingItem = {
   group: number;
   professor: string;
   prereq?: string | null;
+  /** آیا پیش‌نیازهای این درس پاس شده است؟ (false = نیازمند درخواست بایپس) */
+  prereqMet?: boolean;
   classSchedules: ClassScheduleItem[];
   examSchedule: ExamScheduleItem | null;
   tuitionFixed: number;
@@ -153,7 +158,13 @@ export default function EnrollClient(props: {
     minAllowedUnits: number;
     isSummer: boolean;
     quotaType: string;
+    /** شاگرد ممتاز (خودکار یا اورراید مدیر گروه) */
+    isHonors?: boolean;
+    /** واحدهای جبرانی که به سقف اضافه شده‌اند */
+    compensatoryUnits?: number;
   } | null;
+  /** درخواست‌های باز «بدون رعایت پیش‌نیاز / تداخل امتحانی» */
+  bypassRequests?: BypassRequestRow[];
 }) {
   const router = useRouter();
   const sajjadHref = isSafeLinkUrl(props.sajjadPortalUrl) ? props.sajjadPortalUrl : 'https://portal.saorg.ir';
@@ -311,6 +322,27 @@ export default function EnrollClient(props: {
     await removeFromCartAction(id);
     router.refresh();
     setBusy(false);
+  }
+
+  async function requestBypass(id: number, kind: 'PREREQ' | 'EXAM_CONFLICT') {
+    setBusy(true);
+    setMsg('در حال ثبت درخواست…');
+    const res = await requestBypassAction(id, kind);
+    setBusy(false);
+    setMsg(res.ok
+      ? '✅ درخواست ثبت شد؛ صندلی درس تا تصمیم مدیر گروه / کارشناس آموزش برای شما رزرو می‌ماند.'
+      : `⛔ ${res.error || 'ثبت درخواست ناموفق بود.'}`);
+    router.refresh();
+  }
+
+  async function cancelBypass(id: number) {
+    if (!confirm('درخواست لغو شود؟ صندلی رزروشده آزاد می‌شود.')) return;
+    setBusy(true);
+    setMsg('');
+    const res = await cancelBypassAction(id);
+    setBusy(false);
+    setMsg(res.ok ? 'درخواست لغو شد.' : `⛔ ${res.error || 'لغو درخواست ناموفق بود.'}`);
+    router.refresh();
   }
 
   async function switchGroup(newOfferingId: number) {
@@ -482,7 +514,20 @@ export default function EnrollClient(props: {
               <span className="bg-emerald-950 text-emerald-300 font-black px-2.5 py-1 rounded-lg border border-emerald-700">
                 {faNum(effectiveMaxUnits)} واحد
               </span>
+              {(props.regulationStatus.compensatoryUnits ?? 0) > 0 && (
+                <span className="text-[10px] text-emerald-400/80">
+                  (شامل {faNum(props.regulationStatus.compensatoryUnits ?? 0)} واحد جبرانی)
+                </span>
+              )}
             </div>
+            {props.regulationStatus.minAllowedUnits > 0 && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-indigo-400 font-bold">⬇️ حداقل واحد این ترم:</span>
+                <span className="bg-slate-800 text-slate-200 px-2.5 py-1 rounded-lg border border-slate-600 font-semibold">
+                  {faNum(props.regulationStatus.minAllowedUnits)} واحد
+                </span>
+              </div>
+            )}
             <div className="flex items-center gap-1.5">
               <span className="text-indigo-400 font-bold">📊 پیشرفت تحصیلی:</span>
               <span className="text-slate-300 font-mono">
@@ -501,11 +546,58 @@ export default function EnrollClient(props: {
                 ⚠️ وضعیت مشروط
               </span>
             )}
+            {props.regulationStatus.isHonors && !props.regulationStatus.isProbatedLastTerm && (
+              <span className="bg-yellow-400 text-slate-950 font-black px-2.5 py-1 rounded-lg">
+                ⭐ شاگرد ممتاز
+              </span>
+            )}
             {props.term.isSummer && (
               <span className="bg-orange-600 text-white font-bold px-2.5 py-1 rounded-lg">
                 ☀️ ترم تابستان
               </span>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* درخواست‌های در انتظار تصمیم (بدون رعایت پیش‌نیاز / تداخل امتحانی) */}
+      {props.bypassRequests && props.bypassRequests.length > 0 && (
+        <div className="card !p-4 rounded-2xl border border-amber-300 bg-amber-50 space-y-2">
+          <h3 className="font-extrabold text-amber-950 text-sm flex items-center gap-2">
+            <span>⏳</span>
+            <span>درخواست‌های در انتظار تصمیم</span>
+          </h3>
+          <p className="text-[11px] text-amber-800">
+            ظرفیت این دروس تا زمان تصمیم مدیر گروه / کارشناس آموزش برای شما رزرو شده است.
+          </p>
+          <div className="space-y-2">
+            {props.bypassRequests.map(r => (
+              <div
+                key={r.id}
+                className="flex flex-wrap items-center justify-between gap-2 bg-white rounded-xl border border-amber-200 px-3 py-2 text-xs"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-bold text-slate-900">{r.courseTitle}</span>
+                  <span className="font-mono text-[10px] text-slate-500" dir="ltr">{r.courseCode}</span>
+                  <span className="bg-amber-100 text-amber-900 font-bold rounded px-1.5 py-0.5">
+                    بدون رعایت {BYPASS_KIND_LABEL[r.kind]}
+                  </span>
+                  <span className="bg-slate-100 text-slate-700 rounded px-1.5 py-0.5">
+                    {BYPASS_STATUS_LABEL[r.status]}
+                  </span>
+                  <span className="text-slate-500">
+                    مهلت: {new Date(r.managerDeadlineAt).toLocaleString('fa-IR', { dateStyle: 'short', timeStyle: 'short' })}
+                  </span>
+                </div>
+                <button
+                  onClick={() => cancelBypass(r.id)}
+                  disabled={busy}
+                  className="text-[11px] font-bold text-rose-700 border border-rose-300 rounded-lg px-2 py-1 hover:bg-rose-50 disabled:opacity-50"
+                >
+                  لغو درخواست
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -865,13 +957,24 @@ export default function EnrollClient(props: {
           {result.softErrors.map((e, i) => (
             <div key={i} className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900 border border-amber-200 flex items-center justify-between">
               <span>⚠️ {e.msg}</span>
-              <button
-                className="btn-ghost mr-2 !py-1 !px-2 text-xs"
-                disabled={busy}
-                onClick={() => refer(e.offeringId, e.msg)}
-              >
-                ارجاع به کمیسیون موارد خاص
-              </button>
+              <div className="flex flex-wrap items-center gap-1.5 mr-2">
+                {e.msg.startsWith('تداخل نرم امتحان') && (
+                  <button
+                    className="bg-white hover:bg-amber-100 text-amber-800 border border-amber-400 rounded-lg !py-1 !px-2 text-xs font-bold disabled:opacity-50"
+                    disabled={busy}
+                    onClick={() => requestBypass(e.offeringId, 'EXAM_CONFLICT')}
+                  >
+                    درخواست بدون رعایت تداخل امتحانی
+                  </button>
+                )}
+                <button
+                  className="btn-ghost !py-1 !px-2 text-xs"
+                  disabled={busy}
+                  onClick={() => refer(e.offeringId, e.msg)}
+                >
+                  ارجاع به کمیسیون موارد خاص
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -902,6 +1005,11 @@ export default function EnrollClient(props: {
 
             // آیا گروه دیگری از همین درس در سبد هست؟
             const otherGroupInCart = props.cart.find(c => c.courseId === o.courseId && c.id !== o.id);
+
+            // درخواست باز بدون رعایت پیش‌نیاز برای همین گروه
+            const openPrereqRequest = (props.bypassRequests ?? []).some(
+              r => r.offeringId === o.id && r.kind === 'PREREQ'
+            );
 
             return (
               <div
@@ -976,7 +1084,7 @@ export default function EnrollClient(props: {
                 </div>
 
                 {/* دکمه‌های افزودن / حذف / تعویض گروه */}
-                <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
                   {inCart ? (
                     <button
                       className="bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-300 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95"
@@ -1014,6 +1122,24 @@ export default function EnrollClient(props: {
                       <span>➕</span>
                       <span>افزودن به سبد</span>
                     </button>
+                  )}
+
+                  {o.prereqMet === false && !inCart && !openPrereqRequest && (
+                    <button
+                      className="bg-white hover:bg-amber-100 text-amber-800 border border-amber-400 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                      disabled={busy || !props.term.open}
+                      onClick={() => requestBypass(o.id, 'PREREQ')}
+                      title="درخواست ثبت این درس بدون رعایت پیش‌نیاز؛ ظرفیت برای شما رزرو و به مدیر گروه ارجاع می‌شود"
+                    >
+                      <span>📝</span>
+                      <span>درخواست بدون رعایت پیش‌نیاز</span>
+                    </button>
+                  )}
+
+                  {openPrereqRequest && (
+                    <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
+                      ⏳ در انتظار تصمیم
+                    </span>
                   )}
                 </div>
               </div>

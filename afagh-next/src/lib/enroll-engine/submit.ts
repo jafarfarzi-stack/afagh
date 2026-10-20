@@ -2,7 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, cart_items, course_offerings, courses,
-  enrollments, financial_clearances, financial_terms, notifications, schedules, student_ledger, student_term_states, students,
+  enroll_bypass_requests, enrollments, financial_clearances, financial_terms, notifications, schedules, student_ledger, student_term_states, students,
 } from '@/db/schema';
 import { withUserRls } from '@/db';
 import { ledgerBalance } from '../ledger-balance';
@@ -262,6 +262,26 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
     .where(and(eq(enrollments.studentId, studentId), eq(course_offerings.termId, term.id), inArray(enrollments.status, ['REGISTERED', 'PENDING_COUNCIL'])));
   const already = new Set(current.map(c => c.offeringId));
 
+  // ── درخواست‌های بازِ بدون رعایت محدودیت: صندلی رزرو شده و واحدهایشان در سقف ترم حساب می‌شود ──
+  let pendingBypassUnits = 0;
+  const pendingBypassOfferingIds = new Set<number>();
+  try {
+    const pend = await D
+      .select({ offeringId: enroll_bypass_requests.offeringId, units: courses.units })
+      .from(enroll_bypass_requests)
+      .innerJoin(course_offerings, eq(course_offerings.id, enroll_bypass_requests.offeringId))
+      .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+      .where(and(
+        eq(enroll_bypass_requests.studentId, studentId),
+        eq(course_offerings.termId, term.id),
+        inArray(enroll_bypass_requests.status, ['PENDING_MANAGER', 'ESCALATED_EXPERT']),
+      ));
+    for (const r of pend) {
+      pendingBypassUnits += parseUnits(r.units);
+      pendingBypassOfferingIds.add(r.offeringId);
+    }
+  } catch { /* جدول درخواست‌ها ممکن است در نسخهٔ قدیمی موجود نباشد */ }
+
   // ── فیلتر ۲ب: تکرار همان درس در ترم (خطای سخت — وفادار به فاز صفر) ──
   const takenCourseIds = new Set(current.map(c => c.courseId));
   for (const o of activeOffs) {
@@ -283,8 +303,8 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
   }
 
   // سقف روی «جمع ترم» اعمال می‌شود: ثبت‌شدهٔ قبلی + سبد جدید (نه فقط سبد جدید)
-  const currentUnits = current.reduce((s, c) => s + parseUnits(c.units), 0);
-  const newUnits = activeOffs.filter(o => !already.has(o.id)).reduce((s, o) => s + Number(o.units), 0);
+  const currentUnits = current.reduce((s, c) => s + parseUnits(c.units), 0) + pendingBypassUnits;
+  const newUnits = activeOffs.filter(o => !already.has(o.id) && !pendingBypassOfferingIds.has(o.id)).reduce((s, o) => s + Number(o.units), 0);
   const totalUnits = currentUnits + newUnits;
   if (totalUnits > allowedMaxUnits) {
     out.ok = false;
@@ -357,6 +377,16 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
   }
 
   if (out.hardErrors.length) { out.ok = false; return out; }
+
+  // درخواست باز برای همین گروه: ثبت دستی انجام نمی‌شود؛ از طریق تأیید درخواست ثبت می‌گردد
+  for (const o of activeOffs) {
+    if (pendingBypassOfferingIds.has(o.id)) {
+      out.softErrors.push({
+        offeringId: o.id,
+        msg: 'برای درس «' + o.title + '» درخواست باز بدون رعایت محدودیت دارید؛ پس از تصمیم مدیر گروه یا کارشناس آموزش به‌صورت خودکار ثبت می‌شود.',
+      });
+    }
+  }
 
   const doWarmup = deps.warmupCapacities ?? warmupCapacities;
   await doWarmup(false);
@@ -434,8 +464,27 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
       `);
       const takenUnits = ((takenNow.rows ?? []) as { units: string | number | null }[])
         .reduce((s, r) => s + parseUnits(r.units), 0);
-      if (takenUnits + newUnits > allowedMaxUnits) {
-        throw new Error(`سقف مجاز انتخاب واحد طبق آیین‌نامه آموزشی (${allowedMaxUnits} واحد) رعایت نشده است (ثبت‌شدهٔ هم‌زمان: ${takenUnits} + جدید: ${newUnits}).`);
+
+      // واحدهای درخواست‌های باز نیز در سقف حساب می‌شوند (در صورت وجود جدول)
+      let pendingUnitsNow = 0;
+      await tx.execute(sql.raw('SAVEPOINT bypass_units'));
+      try {
+        const pendNow = await tx.execute(sql`
+          select c.units as units
+          from enroll_bypass_requests b
+          join course_offerings co on co.id = b."offeringId"
+          join courses c on c.id = co."courseId"
+          where b."studentId" = ${studentId} and co."termId" = ${term.id}
+            and b.status in ('PENDING_MANAGER', 'ESCALATED_EXPERT')
+        `);
+        pendingUnitsNow = ((pendNow.rows ?? []) as { units: string | number | null }[])
+          .reduce((s, r) => s + parseUnits(r.units), 0);
+      } catch {
+        await tx.execute(sql.raw('ROLLBACK TO SAVEPOINT bypass_units')).catch(() => {});
+      }
+      const takenTotal = takenUnits + pendingUnitsNow;
+      if (takenTotal + newUnits > allowedMaxUnits) {
+        throw new Error(`سقف مجاز انتخاب واحد طبق آیین‌نامه آموزشی (${allowedMaxUnits} واحد) رعایت نشده است (ثبت‌شدهٔ هم‌زمان: ${takenTotal} + جدید: ${newUnits}).`);
       }
       for (const p of plans) {
         if (p.excluded) continue;

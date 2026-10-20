@@ -28,6 +28,7 @@ export const TABS: { key: CurriculumTab; icon: string; label: string }[] = [
   { key: 'CATALOG', icon: '🗂️', label: 'تعریف کاتالوگ رشته' },
   { key: 'COURSES', icon: '📖', label: 'دروس کاتالوگ' },
   { key: 'SEMESTERS', icon: '📅', label: 'ترم‌بندی چارت' },
+  { key: 'PREREQMAP', icon: '🗺️', label: 'نقشهٔ پیش‌نیاز' },
   { key: 'VERIFY', icon: '🧪', label: 'بررسی و خاتمه' },
   { key: 'TRANSFER', icon: '🔄', label: 'انتقال کاتالوگ' },
 ];

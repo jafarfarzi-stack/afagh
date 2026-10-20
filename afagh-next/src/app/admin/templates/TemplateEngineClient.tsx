@@ -11,7 +11,7 @@ import Link from 'next/link';
 // INTERFACES & TYPES
 // ==========================================
 
-export type NotificationChannel = 'SMS' | 'BALE' | 'EITAA' | 'TELEGRAM' | 'EMAIL';
+export type NotificationChannel = 'SMS' | 'BALE' | 'EITAA' | 'TELEGRAM' | 'EMAIL' | 'SOROUSH' | 'INAPP';
 
 export interface NotificationTemplateItem {
   id: number;
@@ -140,6 +140,155 @@ const INITIAL_TEMPLATES: NotificationTemplateItem[] = [
       { tag: '{لینک_سامانه}', label: 'لینک سامانه', sampleValue: 'afagh.ac.ir/professor' },
     ],
     updatedAt: '۱۴۰۵/۰۸/۳۰ - ۱۸:۳۰',
+  },
+  {
+    id: 8,
+    eventCode: 'BYPASS_SUBMITTED',
+    title: 'درخواست ثبت درس بدون رعایت محدودیت (به مدیر گروه)',
+    channel: 'SMS',
+    templateText:
+      'مدیر گروه محترم {نام_مدیر_گروه}، درخواست {نام_دانشجو} برای ثبت درس «{نام_درس}» بدون رعایت {نوع_محدودیت} ثبت شد. مهلت بررسی: {مهلت_پاسخ}. لطفاً از {لینک_سامانه} اقدام فرمایید.',
+    isActive: true,
+    allowedVariables: [
+      { tag: '{نام_مدیر_گروه}', label: 'نام مدیر گروه', sampleValue: 'دکتر حسن کریمی' },
+      { tag: '{نام_دانشجو}', label: 'نام دانشجو', sampleValue: 'علی رضایی اصل' },
+      { tag: '{نام_درس}', label: 'عنوان درس', sampleValue: 'ساختمان داده‌ها' },
+      { tag: '{نوع_محدودیت}', label: 'نوع محدودیت (پیش‌نیاز/تداخل امتحانی)', sampleValue: 'پیش‌نیاز' },
+      { tag: '{مهلت_پاسخ}', label: 'مهلت پاسخ', sampleValue: '۱۴۰۵/۰۷/۳۰ - ۱۲:۰۰' },
+      { tag: '{لینک_سامانه}', label: 'لینک سامانه', sampleValue: 'afagh.ac.ir/group-manager/bypass' },
+    ],
+    updatedAt: '۱۴۰۵/۰۷/۲۸ - ۱۲:۰۰',
+  },
+  {
+    id: 9,
+    eventCode: 'BYPASS_REMINDER_MANAGER',
+    title: 'یادآوری مهلت بررسی درخواست بدون رعایت محدودیت (مدیر گروه)',
+    channel: 'SMS',
+    templateText:
+      'مدیر گروه محترم {نام_مدیر_گروه}، درخواست {نام_دانشجو} برای درس «{نام_درس}» هنوز بررسی نشده و {ساعت_باقیمانده} تا ارجاع به کارشناس آموزش باقی است. لطفاً از {لینک_سامانه} تصمیم‌گیری فرمایید.',
+    isActive: true,
+    allowedVariables: [
+      { tag: '{نام_مدیر_گروه}', label: 'نام مدیر گروه', sampleValue: 'دکتر حسن کریمی' },
+      { tag: '{نام_دانشجو}', label: 'نام دانشجو', sampleValue: 'علی رضایی اصل' },
+      { tag: '{نام_درس}', label: 'عنوان درس', sampleValue: 'ساختمان داده‌ها' },
+      { tag: '{ساعت_باقیمانده}', label: 'زمان باقی‌مانده', sampleValue: '۱۲ ساعت' },
+      { tag: '{لینک_سامانه}', label: 'لینک سامانه', sampleValue: 'afagh.ac.ir/group-manager/bypass' },
+    ],
+    updatedAt: '۱۴۰۵/۰۷/۲۸ - ۱۲:۰۰',
+  },
+  {
+    id: 10,
+    eventCode: 'BYPASS_ESCALATED_TO_EXPERT',
+    title: 'ارجاع درخواست بدون رعایت محدودیت به کارشناس آموزش رشته',
+    channel: 'SMS',
+    templateText:
+      'کارشناس محترم آموزش {نام_کارشناس}، درخواست {نام_دانشجو} برای ثبت درس «{نام_درس}» بدون رعایت {نوع_محدودیت} به دلیل عدم پاسخ مدیر گروه به شما ارجاع شد. مهلت بررسی: {مهلت_پاسخ}. لطفاً از {لینک_سامانه} اقدام فرمایید.',
+    isActive: true,
+    allowedVariables: [
+      { tag: '{نام_کارشناس}', label: 'نام کارشناس آموزش', sampleValue: 'خانم مریم احمدی' },
+      { tag: '{نام_دانشجو}', label: 'نام دانشجو', sampleValue: 'علی رضایی اصل' },
+      { tag: '{نام_درس}', label: 'عنوان درس', sampleValue: 'ساختمان داده‌ها' },
+      { tag: '{نوع_محدودیت}', label: 'نوع محدودیت (پیش‌نیاز/تداخل امتحانی)', sampleValue: 'پیش‌نیاز' },
+      { tag: '{مهلت_پاسخ}', label: 'مهلت پاسخ', sampleValue: '۱۴۰۵/۰۷/۳۰ - ۱۲:۰۰' },
+      { tag: '{لینک_سامانه}', label: 'لینک سامانه', sampleValue: 'afagh.ac.ir/expert/bypass' },
+    ],
+    updatedAt: '۱۴۰۵/۰۷/۲۸ - ۱۲:۰۰',
+  },
+  {
+    id: 11,
+    eventCode: 'BYPASS_REMINDER_EXPERT',
+    title: 'یادآوری مهلت بررسی درخواست بدون رعایت محدودیت (کارشناس آموزش)',
+    channel: 'SMS',
+    templateText:
+      'کارشناس محترم آموزش {نام_کارشناس}، درخواست {نام_دانشجو} برای درس «{نام_درس}» هنوز بررسی نشده و {ساعت_باقیمانده} تا رد خودکار باقی است. لطفاً از {لینک_سامانه} تصمیم‌گیری فرمایید.',
+    isActive: true,
+    allowedVariables: [
+      { tag: '{نام_کارشناس}', label: 'نام کارشناس آموزش', sampleValue: 'خانم مریم احمدی' },
+      { tag: '{نام_دانشجو}', label: 'نام دانشجو', sampleValue: 'علی رضایی اصل' },
+      { tag: '{نام_درس}', label: 'عنوان درس', sampleValue: 'ساختمان داده‌ها' },
+      { tag: '{ساعت_باقیمانده}', label: 'زمان باقی‌مانده', sampleValue: '۱۰ ساعت' },
+      { tag: '{لینک_سامانه}', label: 'لینک سامانه', sampleValue: 'afagh.ac.ir/expert/bypass' },
+    ],
+    updatedAt: '۱۴۰۵/۰۷/۲۸ - ۱۲:۰۰',
+  },
+  {
+    id: 12,
+    eventCode: 'BYPASS_STUDENT_FOLLOWUP_WARNING',
+    title: 'هشدار پیگیری فوری درخواست بدون رعایت محدودیت (دانشجو)',
+    channel: 'SMS',
+    templateText:
+      '{نام_دانشجو} گرامی، درخواست شما برای ثبت درس «{نام_درس}» بدون رعایت {نوع_محدودیت} هنوز بررسی نشده است. لطفاً سریعاً از آموزش رشته پیگیری کنید، وگرنه این درس برایتان ثبت نخواهد شد. (مهلت: {ساعت_باقیمانده})',
+    isActive: true,
+    allowedVariables: [
+      { tag: '{نام_دانشجو}', label: 'نام دانشجو', sampleValue: 'علی رضایی اصل' },
+      { tag: '{نام_درس}', label: 'عنوان درس', sampleValue: 'ساختمان داده‌ها' },
+      { tag: '{نوع_محدودیت}', label: 'نوع محدودیت (پیش‌نیاز/تداخل امتحانی)', sampleValue: 'پیش‌نیاز' },
+      { tag: '{ساعت_باقیمانده}', label: 'زمان باقی‌مانده', sampleValue: '۳ ساعت' },
+    ],
+    updatedAt: '۱۴۰۵/۰۷/۲۸ - ۱۲:۰۰',
+  },
+  {
+    id: 13,
+    eventCode: 'BYPASS_REJECTED',
+    title: 'رد درخواست بدون رعایت محدودیت (دستی)',
+    channel: 'SMS',
+    templateText:
+      '{نام_دانشجو} گرامی، درخواست ثبت درس «{نام_درس}» بدون رعایت {نوع_محدودیت} رد شد. دلیل: {دلیل_رد}. {توضیح_تکمیلی} این درس طبق قوانین آموزشی برایتان ثبت نشد.',
+    isActive: true,
+    allowedVariables: [
+      { tag: '{نام_دانشجو}', label: 'نام دانشجو', sampleValue: 'علی رضایی اصل' },
+      { tag: '{نام_درس}', label: 'عنوان درس', sampleValue: 'ساختمان داده‌ها' },
+      { tag: '{نوع_محدودیت}', label: 'نوع محدودیت (پیش‌نیاز/تداخل امتحانی)', sampleValue: 'پیش‌نیاز' },
+      { tag: '{دلیل_رد}', label: 'دلیل رد', sampleValue: 'معدل پایین ترم قبل' },
+      { tag: '{توضیح_تکمیلی}', label: 'توضیح تکمیلی کارشناس (اختیاری)', sampleValue: '' },
+    ],
+    updatedAt: '۱۴۰۵/۰۷/۲۸ - ۱۲:۰۰',
+  },
+  {
+    id: 14,
+    eventCode: 'BYPASS_AUTO_REJECTED',
+    title: 'رد خودکار درخواست بدون رعایت محدودیت (بدون پاسخ در مهلت)',
+    channel: 'SMS',
+    templateText:
+      '{نام_دانشجو} گرامی، درس «{نام_درس}» به دلیل عدم رعایت {نوع_محدودیت} و طبق قوانین آموزشی برایتان ثبت نشد (بدون پاسخ در مهلت تعیین‌شده). برای پیگیری به آموزش {نام_رشته} مراجعه کنید.',
+    isActive: true,
+    allowedVariables: [
+      { tag: '{نام_دانشجو}', label: 'نام دانشجو', sampleValue: 'علی رضایی اصل' },
+      { tag: '{نام_درس}', label: 'عنوان درس', sampleValue: 'ساختمان داده‌ها' },
+      { tag: '{نوع_محدودیت}', label: 'نوع محدودیت (پیش‌نیاز/تداخل امتحانی)', sampleValue: 'پیش‌نیاز' },
+      { tag: '{نام_رشته}', label: 'نام رشته', sampleValue: 'مهندسی کامپیوتر' },
+    ],
+    updatedAt: '۱۴۰۵/۰۷/۲۸ - ۱۲:۰۰',
+  },
+  {
+    id: 15,
+    eventCode: 'BYPASS_APPROVED',
+    title: 'تأیید درخواست بدون رعایت محدودیت و ثبت درس',
+    channel: 'SMS',
+    templateText:
+      '{نام_دانشجو} گرامی، درخواست ثبت درس «{نام_درس}» بدون رعایت {نوع_محدودیت} تأیید شد و درس به‌صورت خودکار در کارنامه انتخاب واحد شما ثبت گردید.',
+    isActive: true,
+    allowedVariables: [
+      { tag: '{نام_دانشجو}', label: 'نام دانشجو', sampleValue: 'علی رضایی اصل' },
+      { tag: '{نام_درس}', label: 'عنوان درس', sampleValue: 'ساختمان داده‌ها' },
+      { tag: '{نوع_محدودیت}', label: 'نوع محدودیت (پیش‌نیاز/تداخل امتحانی)', sampleValue: 'پیش‌نیاز' },
+    ],
+    updatedAt: '۱۴۰۵/۰۷/۲۸ - ۱۲:۰۰',
+  },
+  {
+    id: 16,
+    eventCode: 'BYPASS_VICE_NOTICE',
+    title: 'گزارش درخواست‌های رد خودکار (معاون آموزش)',
+    channel: 'INAPP',
+    templateText:
+      'معاون محترم آموزش {نام_معاون}، تعداد {تعداد_درخواست} درخواست بدون رعایت محدودیت در مهلت پاسخ‌دهی بی‌پاسخ ماند و به‌صورت خودکار رد شد. جهت بررسی و در صورت نیاز تأیید یا بازگرداندن، از {لینک_سامانه} اقدام فرمایید.',
+    isActive: true,
+    allowedVariables: [
+      { tag: '{نام_معاون}', label: 'نام معاون آموزش', sampleValue: 'دکتر سعید نوری' },
+      { tag: '{تعداد_درخواست}', label: 'تعداد درخواست رد‌شده', sampleValue: '۵' },
+      { tag: '{لینک_سامانه}', label: 'لینک سامانه', sampleValue: 'afagh.ac.ir/vice/bypass' },
+    ],
+    updatedAt: '۱۴۰۵/۰۷/۲۸ - ۱۲:۰۰',
   },
 ];
 

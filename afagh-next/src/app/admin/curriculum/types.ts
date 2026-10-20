@@ -74,4 +74,4 @@ export interface VersionDetail {
 
 export interface BankCourse { id: number; code: string; title: string; units: string; courseType: string; }
 
-export type CurriculumTab = 'CATALOG' | 'COURSES' | 'SEMESTERS' | 'VERIFY' | 'TRANSFER';
+export type CurriculumTab = 'CATALOG' | 'COURSES' | 'SEMESTERS' | 'PREREQMAP' | 'VERIFY' | 'TRANSFER';
