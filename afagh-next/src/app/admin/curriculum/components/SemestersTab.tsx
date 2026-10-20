@@ -54,7 +54,7 @@ export default function SemestersTab() {
           </div>
 
           {!isDraft && (
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] font-bold text-slate-600">
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] font-bold text-slate-600 print:hidden">
               ⚠️ این نسخه «{(STATUS_UI[selectedVersion.status] ?? { label: selectedVersion.status }).label}» است و فقط مشاهده مجاز است؛ برای تغییر ترمبندی از «🔁 ایجاد نسخهٔ جدید (R+1)» یک پیشنویس بسازید.
             </div>
           )}
@@ -99,7 +99,7 @@ export default function SemestersTab() {
                         title={isDraft ? 'بکشید و در ترم موردنظر رها کنید' : c.title}
                         className={`flex items-center justify-between gap-1 bg-white rounded-lg px-2 py-1 border border-emerald-100 text-[11px] ${isDraft ? 'cursor-grab active:cursor-grabbing' : ''} ${dragCourseId === c.courseId ? 'opacity-40' : ''}`}
                       >
-                        {isDraft && <span className="text-slate-300 shrink-0 select-none">⠿</span>}
+                        {isDraft && <span className="text-slate-300 shrink-0 select-none print:hidden">⠿</span>}
                         <span className="font-mono text-indigo-900 text-[10px]">{c.code}</span>
                         <span className="truncate font-bold flex-1">{c.title}</span>
                         <span className="text-slate-400 text-[10px]">{faNum(c.units)}</span>
@@ -107,7 +107,7 @@ export default function SemestersTab() {
                           <button
                             onClick={() => handleAssignSemester(c.courseId, null)}
                             title="حذف از این ترم (نامشخص)"
-                            className="text-rose-500 hover:text-rose-700 font-black px-1"
+                            className="text-rose-500 hover:text-rose-700 font-black px-1 print:hidden"
                           >
                             ✕
                           </button>
@@ -124,7 +124,7 @@ export default function SemestersTab() {
             onDragOver={isDraft ? (e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDropTarget('pool'); }) : undefined}
             onDragLeave={isDraft ? (() => setDropTarget(cur => (cur === 'pool' ? null : cur))) : undefined}
             onDrop={isDraft ? (e => onDropToSemester(e, null)) : undefined}
-            className={`rounded-xl border-2 bg-slate-50 p-3 space-y-2 transition-colors ${isDraft && dropTarget === 'pool' ? '!border-indigo-500 !bg-indigo-50 shadow-lg' : 'border-slate-200'}`}
+            className={`rounded-xl border-2 bg-slate-50 p-3 space-y-2 transition-colors print:hidden ${isDraft && dropTarget === 'pool' ? '!border-indigo-500 !bg-indigo-50 shadow-lg' : 'border-slate-200'}`}
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-black text-slate-800 text-xs">🌫️ دروس بدون ترم (نامشخص) — {faNum(unassignedCourses.length)} درس</span>
