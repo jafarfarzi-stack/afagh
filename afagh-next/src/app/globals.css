@@ -597,8 +597,9 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   .prof-week-print.door-print .prof-cal-day-head { font-size: 12pt !important; padding: 3pt !important; }
   .prof-week-print.door-print .prof-cal-gutter-label { font-size: 9pt !important; }
   /* متن کارت‌ها در چاپ سردر: اندازهٔ ثابت (نه container-query) تا در همهٔ مرورگرها خوانا باشد؛
-     overflow visible تا متن پنهان نشود (کارت‌های کوتاه فقط عنوان را نشان می‌دهند) */
-  .prof-week-print.door-print .prof-week-card { padding: 1pt 2pt !important; gap: 1pt; overflow: visible !important; min-height: 0 !important; }
+     overflow hidden (نه visible) تا متن هیچ‌وقت روی کارت/ستون همسایه نریزد —
+     خودِ متن‌ها با line-clamp-2 محدود شده‌اند، پس چیزی پنهان نمی‌ماند */
+  .prof-week-print.door-print .prof-week-card { padding: 1pt 2pt !important; gap: 1pt; overflow: hidden !important; min-height: 0 !important; }
   .prof-week-print.door-print .prof-print-title { font-size: 7.5pt !important; line-height: 1.1 !important; }
   .prof-week-print.door-print .prof-print-meta,
   .prof-week-print.door-print .prof-print-teacher { font-size: 6pt !important; line-height: 1.1 !important; }

@@ -111,7 +111,7 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
 
   return (
     <div className="space-y-3">
-      <style>{'.prof-week-card{container-type:inline-size}.prof-week-card .prof-week-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}[data-narrow="true"] .prof-week-card{padding:4px !important;line-height:1.3 !important}[data-narrow="true"] .prof-week-title{font-size:10px !important}[data-narrow="true"] .prof-week-code{font-size:9px !important}[data-narrow="true"] .prof-week-essential{font-size:9px !important}[data-narrow="true"] .prof-week-detail{display:none !important}@container (max-width:150px){.prof-week-detail{display:none}.prof-week-title{font-size:10px}.prof-week-code{font-size:9px}.prof-week-essential{font-size:9px}}'}</style>
+      <style>{'.prof-week-card{container-type:inline-size}[data-narrow="true"] .prof-week-card{padding:4px !important;line-height:1.3 !important}[data-narrow="true"] .prof-week-title{font-size:10px !important}[data-narrow="true"] .prof-week-code{font-size:9px !important}[data-narrow="true"] .prof-week-essential{font-size:9px !important}[data-narrow="true"] .prof-week-detail{display:none !important}@container (max-width:150px){.prof-week-detail{display:none}.prof-week-title{font-size:10px}.prof-week-code{font-size:9px}.prof-week-essential{font-size:9px}}'}</style>
       {(hasEven || hasOdd || hasBoth) && (
         <div className="prof-week-legend flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
           <span className="text-slate-500">راهنمای هفته‌ها:</span>
@@ -196,29 +196,29 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
                           <div className="prof-print-inner hidden print:flex print:flex-col print:justify-start print:gap-[2px] print:h-full text-[6.8pt] font-bold leading-[1.25] text-black">
                             {doorPrint ? (
                               <>
-                                <div className="prof-print-title text-[8pt] font-black leading-tight">{e.title}{e.merged ? ' 🔗' : ''}</div>
-                                <div className="prof-print-meta text-[7pt] leading-tight text-slate-900">
+                                <div className="prof-print-title line-clamp-2 text-[8pt] font-black leading-tight">{e.title}{e.merged ? ' 🔗' : ''}</div>
+                                <div className="prof-print-meta line-clamp-2 text-[7pt] leading-tight text-slate-900">
                                   گروه {professorCalendarEntryGroup(e)}{printCount && e.enrolledCount != null ? ` · 👥 ${faNum(e.enrolledCount)}${e.capacity != null ? `/${faNum(e.capacity)}` : ''}` : ''} · {professorCalendarEntryTime(e)}{e.professorName ? ` · ${e.professorName}` : ''}
                                 </div>
                               </>
                             ) : (
                               <>
-                                <div className="prof-print-title text-[8.5pt] font-black leading-[1.15] truncate">{e.title}{e.merged ? ' 🔗' : ''}</div>
-                                <div className="prof-print-meta text-[5.8pt] leading-[1.15] truncate">
+                                <div className="prof-print-title line-clamp-2 break-words text-[8.5pt] font-black leading-[1.15]">{e.title}{e.merged ? ' 🔗' : ''}</div>
+                                <div className="prof-print-meta line-clamp-2 text-[5.8pt] leading-[1.15]">
                                   {showCode ? `${e.code} · ` : ''}گروه {professorCalendarEntryGroup(e)}{printCount && e.enrolledCount != null ? ` · 👥 ${faNum(e.enrolledCount)}${e.capacity != null ? `/${faNum(e.capacity)}` : ''}` : ''}
                                 </div>
-                                <div className="prof-print-meta text-[5.8pt] leading-[1.15] truncate">{professorCalendarEntryTime(e)} · {placeTitle(e)}{e.weekType === 'EVEN' ? ' · هفته زوج' : e.weekType === 'ODD' ? ' · هفته فرد' : e.weekType === 'BOTH' ? ' · زوج و فرد' : ''}</div>
+                                <div className="prof-print-meta line-clamp-2 text-[5.8pt] leading-[1.15]">{professorCalendarEntryTime(e)} · {placeTitle(e)}{e.weekType === 'EVEN' ? ' · هفته زوج' : e.weekType === 'ODD' ? ' · هفته فرد' : e.weekType === 'BOTH' ? ' · زوج و فرد' : ''}</div>
                                 {e.professorName && !hideProfessorPill ? <div className="prof-print-teacher text-[5.8pt] font-bold leading-[1.15] text-black truncate">استاد: {e.professorName}</div> : null}
                               </>
                             )}
                           </div>
-                          <div className="prof-week-title print:hidden font-extrabold text-[11px] text-slate-900 leading-5 truncate" title={e.title}>
+                          <div className="prof-week-title print:hidden font-extrabold text-[11px] text-slate-900 leading-5 line-clamp-2 break-words" title={e.title}>
                             {e.title}
                           </div>
                           <div className="prof-week-code print:hidden font-mono text-[10px] font-bold text-indigo-900 whitespace-nowrap truncate" title={showCode ? `${e.code} · گروه ${professorCalendarEntryGroup(e)}` : `گروه ${professorCalendarEntryGroup(e)}`}>
                             {showCode ? `${e.code} · ` : ''}گروه {professorCalendarEntryGroup(e)}{e.enrolledCount != null ? ` · 👥 ${faNum(e.enrolledCount)}${e.capacity != null ? `/${faNum(e.capacity)}` : ''}` : ''}
                           </div>
-                          <div className="prof-week-essential print:hidden text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">
+                          <div className="prof-week-essential print:hidden text-[10px] font-mono font-bold text-slate-600 truncate">
                             {professorCalendarEntryTime(e)}{e.professorName ? ` · ${e.professorName}` : ''}
                           </div>
                           <div
