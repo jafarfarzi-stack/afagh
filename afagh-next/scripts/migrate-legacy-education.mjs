@@ -132,7 +132,8 @@ const report = { dry: !APPLY, uni: UNI, terms: null, courses: null, chart: null,
       const typeId = int(col(r, lt7.header, 'Type'));
       const title = col(r, lt7.header, 'Name') || code;
       const deptId = int(col(r, lt7.header, 'Daneshkadeh'));
-      const courseType = typeId === 22 ? 'کارگاهی' : (typeId === 3 ? 'نظری' : 'تخصصی');
+      const UEMS_TYPEMAP = { 0: 'نامشخص', 1: 'عمومی', 2: 'پایه', 3: 'تخصصی', 4: 'اصلي', 5: 'کارورزي', 6: 'آزمایشگاه', 7: 'کارگاه', 8: 'پروژه', 9: 'تخصصی انتخابی', 10: 'اختیاری', 11: 'مشترک', 13: 'الزامی مشترک', 14: 'اختصاصی', 16: 'تخصصی الزامی', 17: 'انتخابی', 18: 'الزامی', 19: 'اصلي تخصصی', 20: 'جبرانی', 22: 'پایان‌نامه', 40: 'معرفي به استاد', 50: 'خودخوان' };
+const courseType = UEMS_TYPEMAP[typeId] || 'تخصصی';
       if (APPLY) {
         const ins = await q(
           `INSERT INTO courses ("universityId", code, title, units, "practicalUnits", "courseType", "departmentId") VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
