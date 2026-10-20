@@ -196,11 +196,10 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
                           <div className="prof-print-inner hidden print:flex print:flex-col print:justify-start print:gap-[2px] print:h-full text-[6.8pt] font-bold leading-[1.25] text-black">
                             {doorPrint ? (
                               <>
-                                <div className="prof-print-title text-[7pt] font-black leading-tight">{e.title}{e.merged ? ' 🔗' : ''}</div>
+                                <div className="prof-print-title text-[8pt] font-black leading-tight">{e.title}{e.merged ? ' 🔗' : ''}</div>
                                 <div className="prof-print-meta text-[7pt] leading-tight text-slate-900">
-                                  گروه {professorCalendarEntryGroup(e)}{printCount && e.enrolledCount != null ? ` · 👥 ${faNum(e.enrolledCount)}${e.capacity != null ? `/${faNum(e.capacity)}` : ''}` : ''} · {professorCalendarEntryTime(e)}
+                                  گروه {professorCalendarEntryGroup(e)}{printCount && e.enrolledCount != null ? ` · 👥 ${faNum(e.enrolledCount)}${e.capacity != null ? `/${faNum(e.capacity)}` : ''}` : ''} · {professorCalendarEntryTime(e)}{e.professorName ? ` · ${e.professorName}` : ''}
                                 </div>
-                                <div className="prof-print-teacher text-[7pt] font-bold leading-tight text-black">{e.professorName || '—'}</div>
                               </>
                             ) : (
                               <>
@@ -220,7 +219,7 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
                             {showCode ? `${e.code} · ` : ''}گروه {professorCalendarEntryGroup(e)}{e.enrolledCount != null ? ` · 👥 ${faNum(e.enrolledCount)}${e.capacity != null ? `/${faNum(e.capacity)}` : ''}` : ''}
                           </div>
                           <div className="prof-week-essential print:hidden text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">
-                            {professorCalendarEntryTime(e)}
+                            {professorCalendarEntryTime(e)}{e.professorName ? ` · ${e.professorName}` : ''}
                           </div>
                           <div
                             className="prof-week-essential print:hidden text-[10px] font-bold text-slate-700 whitespace-nowrap truncate"
