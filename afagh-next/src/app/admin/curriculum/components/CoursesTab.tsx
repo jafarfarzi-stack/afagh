@@ -246,11 +246,12 @@ export default function CoursesTab() {
                     </tr>
                   </thead>
                   <tbody>
-                    {typeSummary.map(r => {
+                    {Object.keys(ROLE_LABELS).map(role => {
+                      const r = typeSummary.find(x => x.role === role) ?? { role, count: 0, units: 0 };
                       const target = roleTargets[r.role];
                       const short = target != null && r.units < target;
                       return (
-                        <tr key={r.role} className={`text-center ${short ? 'bg-amber-50' : ''}`}>
+                        <tr key={r.role} className={`text-center ${short ? 'bg-amber-50' : ''} ${r.count === 0 ? 'text-slate-400' : ''}`}>
                           <td className="p-2 border border-slate-200 font-extrabold">{ROLE_LABELS[r.role] ?? r.role}</td>
                           <td className="p-2 border border-slate-200 font-black">{faNum(r.count)}</td>
                           <td className={`p-2 border border-slate-200 font-black ${short ? 'text-amber-700' : ''}`}>

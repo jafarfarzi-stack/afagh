@@ -262,7 +262,7 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
       countByRole.set(c.roleType, (countByRole.get(c.roleType) ?? 0) + 1);
     }
     const roleFa: Record<string, string> = {
-      CORE: 'اصلی', MAJOR: 'تخصصی', ELECTIVE: 'اختیاری', GENERAL: 'عمومی',
+      CORE: 'پایه', MAJOR: 'اصلی', ELECTIVE: 'اختیاری', GENERAL: 'عمومی',
       THESIS: 'پایان‌نامه', INTERNSHIP: 'کارآموزی', WORKSHOP: 'کارگاه',
     };
     for (const [role, min] of Object.entries(input.minRoleCounts)) {
