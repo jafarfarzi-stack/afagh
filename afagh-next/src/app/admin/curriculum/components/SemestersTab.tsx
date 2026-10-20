@@ -40,7 +40,7 @@ export default function SemestersTab() {
             <div>
               <h4 className="font-extrabold text-slate-900 text-sm">🗺️ ترمبندی چارت — {selectedVersion.title}</h4>
               <p className="text-[11px] text-slate-500 font-bold mt-0.5">
-                رشته: {degreeMajor?.name ?? '—'} · مقطع: {degreeMajor?.degreeTitle ?? '—'}{degreeMajor?.degreeIsGraduate === 1 ? ' (تکمیلی)' : ''} ·
+                رشته: {degreeMajor?.name ?? '—'} · مقطع: {degreeMajor?.degreeTitle ?? '—'}{degreeMajor?.degreeCode ? ` (${degreeMajor.degreeCode})` : ''}{degreeMajor?.degreeIsGraduate === 1 ? ' (تکمیلی)' : ''} ·
                 ورودی: {faNum(selectedVersion.entryYearFrom)}{selectedVersion.entryYearTo ? ` تا ${faNum(selectedVersion.entryYearTo)}` : ' به بعد'} ·
                 چارت {faNum(chartTermCount)} ترمه + تابستان
               </p>
