@@ -792,13 +792,6 @@
       "when": 1794400000300,
       "tag": "0107_classroom_active",
       "breakpoints": true
-    },
-    {
-      "idx": 113,
-      "version": "7",
-      "when": 1794400000400,
-      "tag": "0108_student_compensatory_honors",
-      "breakpoints": true
     }
   ]
 }
