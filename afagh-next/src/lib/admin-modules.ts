@@ -653,7 +653,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     href: '/admin/settings',
     icon: '⚙️',
     title: 'پیکربندی سامانه',
-    desc: 'تنظیمات سراسری و پارامترها',
+    desc: 'تنظیمات سراسری، پارامترها و داده‌های پایه (کلاس‌ها و…)',
     group: 'settings',
     roles: ['ADMIN'],
     accent: 'from-slate-800 to-slate-950 border-slate-600/50',

@@ -596,6 +596,76 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   @media print {
     .curriculum-print-area .print\\:hidden { display: none !important; }
   }
+
+  /* ─────────────────────────────────────────────────────────────
+     سردر کلاسی (پوستر درب اتاق) — یک برگ A4 افقی: ۷ ستون شنبه→جمعه،
+     محور ۰۷:۰۰→۲۰:۰۰، اولویتبندی فونت با container query
+     ───────────────────────────────────────────────────────────── */
+  .prof-door-print { padding: 0 !important; }
+  .prof-door-print .prof-week-legend { display: none !important; }
+  .prof-door-print .prof-cal { --cal-hour: 46px !important; }
+  .prof-door-print .prof-cal-head { border: 0 !important; }
+  .prof-door-print .prof-cal-day-head,
+  .prof-door-print .prof-cal-gutter-head {
+    background: #1e2a6e !important; color: #fff !important;
+    border: 0 !important; border-inline-start: 1.1pt solid #000 !important;
+    font-size: 12pt !important; font-weight: 800 !important; padding: 1.6mm 0 !important; line-height: 1.1 !important;
+  }
+  .prof-door-print .prof-cal-gutter { border: 0 !important; }
+  .prof-door-print .prof-cal-gutter-label { color: #0f172a !important; font-size: 11pt !important; font-weight: 800 !important; }
+  /* خطوط عمودی جداکنندهٔ روزها — مشکی پررنگ */
+  .prof-door-print .prof-cal-day { background: #ffffff !important; border: 0 !important; border-inline-start: 1.1pt solid #000 !important; }
+  .prof-door-print .prof-cal-day:last-child { border-inline-end: 1.1pt solid #000 !important; }
+  .prof-door-print .prof-cal-day.fri { background: #f1f5f9 !important; }
+  .prof-door-print .prof-cal-hour-line { border-top: 0.6pt solid #94a3b8 !important; }
+  .prof-door-print .prof-cal-half-line { border-top: 0.35pt dashed #dbe3ec !important; }
+
+  /* کارت درس: container برای مقیاس خودکار فونت */
+  .prof-door-print .prof-week-card {
+    container-type: size !important;
+    border: 0.7pt solid #6366f1 !important; background: #eef2ff !important; border-radius: 1.1mm !important;
+    padding: 0.8mm 1mm !important; overflow: hidden !important;
+    display: flex !important; flex-direction: column !important; align-items: center !important;
+    justify-content: center !important; gap: 0.3mm !important; text-align: center !important;
+  }
+  .prof-door-print .prof-week-card.border-amber-300 { background: #fffbeb !important; border-color: #d97706 !important; }
+  .prof-door-print .prof-print-inner { gap: 0.3mm !important; align-items: center !important; text-align: center !important; }
+
+  .prof-door-print .prof-door-title {
+    font-weight: 800 !important; line-height: 1.06 !important; color: #0b1020 !important;
+    font-size: min(34cqh, 12.5cqi, 15pt) !important;
+    display: block !important; text-align: center !important; max-height: 3.25em !important; overflow: hidden !important;
+    word-break: break-word !important; overflow-wrap: anywhere !important;
+  }
+  .prof-door-print .prof-door-wk {
+    display: inline-block !important; margin-inline-start: 1mm !important;
+    border: 0.6pt solid #b45309 !important; border-radius: 0.7mm !important; padding: 0 0.5mm !important;
+    font-size: 0.56em !important; color: #b45309 !important; font-weight: 800 !important;
+    vertical-align: 0.14em !important; white-space: nowrap !important;
+  }
+  .prof-door-print .prof-door-prof,
+  .prof-door-print .prof-door-time {
+    font-size: min(20cqh, 9cqi, 9.5pt) !important; line-height: 1.1 !important;
+    display: none !important; white-space: nowrap !important; max-width: 100% !important;
+    overflow: hidden !important; text-overflow: ellipsis !important;
+  }
+  .prof-door-print .prof-door-prof { font-weight: 400 !important; color: #1f2937 !important; }
+  .prof-door-print .prof-door-time { font-weight: 800 !important; color: #111827 !important; }
+  .prof-door-print .prof-door-count { font-size: min(18cqh, 8cqi, 8pt) !important; display: none !important; color: #374151 !important; }
+
+  /* پله‌های اولویت */
+  @container (min-height: 9mm)  { .prof-door-print .prof-door-prof  { display: block !important; } }
+  @container (min-height: 15mm) { .prof-door-print .prof-door-time  { display: block !important; } }
+  @container (min-height: 24mm) { .prof-door-print .prof-door-count { display: block !important; } }
+  @container (max-width: 22mm)  { .prof-door-print .prof-door-prof  { display: none !important; } }
+
+  /* خط برند نرمافزار زیر سربرگ چاپ */
+  .prof-door-brand { display: none !important; }
+  .prof-door-print .prof-door-brand {
+    display: block !important; text-align: center !important;
+    font-size: 7pt !important; font-weight: 700 !important; color: #475569 !important;
+    margin-top: 1.2mm !important; letter-spacing: 0.2px;
+  }
 }
 
 /* ── چاپ کارنامه: گرید ۳ستونهٔ هم‌ارتفاع (پانوشت نیمسال‌های یک ردیف هم‌تراز) ── */

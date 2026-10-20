@@ -778,6 +778,27 @@
       "when": 1794400000100,
       "tag": "0105_pii_blind_index_regular",
       "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1794400000200,
+      "tag": "0106_classroom_floor",
+      "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1794400000300,
+      "tag": "0107_classroom_active",
+      "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1794400000400,
+      "tag": "0108_student_compensatory_honors",
+      "breakpoints": true
     }
   ]
 }

@@ -39,6 +39,7 @@ const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).rep
 
 const HOUR_LABELS = professorCalendarHourLabels();
 const TOTAL_MINUTES = PROFESSOR_CALENDAR_END_MINUTES - PROFESSOR_CALENDAR_START_MINUTES;
+const HOUR_ROWS = TOTAL_MINUTES / 60;
 
 function WeekBadge({ weekType }: { weekType: ProfessorCalendarWeekType }) {
   if (weekType === 'BOTH') {
@@ -135,12 +136,12 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
 
           <div className="prof-cal-body grid" style={{ gridTemplateColumns: '56px repeat(7, minmax(0, 1fr))' }}>
             <div className="prof-cal-sticky prof-cal-gutter sticky right-0 z-10 bg-white border-l border-slate-200">
-              <div className="relative w-full" style={{ height: 'calc(var(--cal-hour) * 12)' }}>
+              <div className="relative w-full" style={{ height: `calc(var(--cal-hour) * ${HOUR_ROWS})` }}>
                 {HOUR_LABELS.map((label, i) => (
                   <div
                     key={label}
                     className="prof-cal-gutter-label absolute inset-x-0 text-center text-[10px] font-bold text-slate-500 whitespace-nowrap"
-                    style={{ top: `${(i / 12) * 100}%`, transform: i === 0 ? 'translateY(0)' : i === 12 ? 'translateY(-100%)' : 'translateY(-50%)' }}
+                    style={{ top: `${(i / HOUR_ROWS) * 100}%`, transform: i === 0 ? 'translateY(0)' : i === HOUR_ROWS ? 'translateY(-100%)' : 'translateY(-50%)' }}
                   >
                     {faNum(label)}
                   </div>
@@ -150,8 +151,8 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
 
             {PROFESSOR_GRID_DAYS.map((day, dayIdx) => (
               <div key={day} className="prof-cal-day border-l border-slate-200 last:border-l-0 bg-white">
-                <div className="relative w-full" style={{ height: 'calc(var(--cal-hour) * 12)' }}>
-                  {Array.from({ length: 12 }, (_, h) => (
+                  <div className="relative w-full" style={{ height: `calc(var(--cal-hour) * ${HOUR_ROWS})` }}>
+                  {Array.from({ length: HOUR_ROWS }, (_, h) => (
                     <div key={`h-${h}`}>
                       <div
                         className="prof-cal-hour-line absolute inset-x-0 border-t border-slate-300"
@@ -196,11 +197,17 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
                           <div className="prof-print-inner hidden print:flex print:flex-col print:justify-center print:h-full text-[6.8pt] font-bold leading-[1.25] text-black">
                             {doorPrint ? (
                               <>
-                                <div className="prof-print-title text-[8.5pt] font-black leading-[1.15]">{e.title}{e.merged ? ' 🔗' : ''}</div>
-                                <div className="prof-print-meta text-[5.8pt] leading-[1.15] text-slate-900">
-                                  گروه {professorCalendarEntryGroup(e)}{printCount && e.enrolledCount != null ? ` · 👥 ${faNum(e.enrolledCount)}${e.capacity != null ? `/${faNum(e.capacity)}` : ''}` : ''} · {professorCalendarEntryTime(e)}
+                                <div className="prof-door-title">
+                                  <span className="prof-door-name">{e.title}{e.merged ? ' 🔗' : ''}</span>
+                                  {e.weekType === 'EVEN' ? <span className="prof-door-wk">زوج</span> : null}
+                                  {e.weekType === 'ODD' ? <span className="prof-door-wk">فرد</span> : null}
+                                  {e.weekType === 'BOTH' ? <span className="prof-door-wk">فرد و زوج</span> : null}
                                 </div>
-                                <div className="prof-print-teacher text-[5.8pt] font-bold leading-[1.15] text-black">استاد: {e.professorName || '—'}</div>
+                                <div className="prof-door-prof">{e.professorName || '—'}</div>
+                                <div className="prof-door-time"><span dir="ltr">{professorCalendarEntryTime(e)}</span></div>
+                                {printCount && e.enrolledCount != null ? (
+                                  <div className="prof-door-count">👥 {faNum(e.enrolledCount)}{e.capacity != null ? `/${faNum(e.capacity)}` : ''}</div>
+                                ) : null}
                               </>
                             ) : (
                               <>

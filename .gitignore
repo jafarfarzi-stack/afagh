@@ -35,3 +35,6 @@ caddy_data/
 # ── تولید خودکار next dev (afagh-next/AGENTS.md و CLAUDE.md) ──
 afagh-next/AGENTS.md
 afagh-next/CLAUDE.md
+
+# ── یادداشت/فشردهٔ جلسهٔ محلی (هرگز commit نشود) ──
+SESSION-COMPRESSED.md

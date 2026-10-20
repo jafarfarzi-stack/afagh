@@ -339,6 +339,20 @@ export const students = pgTable('students', {
   extraAllowedSemesters: integer('extraAllowedSemesters').notNull().default(0),
   extraAllowedProbations: integer('extraAllowedProbations').notNull().default(0),
   currentTermNo: integer('currentTermNo').default(1),
+  // ── دروس جبرانی (دانشجوی انتقالی/رشتهٔ نامرتبط) ──
+  // واحدهای جبرانیِ تعیین‌شده توسط مدیر گروه؛ به سقف واحد همان ترم اضافه می‌شود
+  // (مثلاً سقف ۲۰ + ۶ جبرانی = ۲۶) و در «کف واحد» شمرده نمی‌شود.
+  compensatoryUnits: integer('compensatoryUnits').notNull().default(0),
+  /** رشتهٔ قبلی (از سازمان سنجش) — برای تشخیص جبرانی در صفحهٔ مدیر گروه */
+  previousMajorCode: varchar('previousMajorCode', { length: 20 }),
+  previousMajorTitle: varchar('previousMajorTitle', { length: 150 }),
+  /** RELATED | PARTIAL | UNRELATED — تشخیص خودکار/دستی مرتبط‌بودن رشتهٔ قبلی */
+  previousMajorRelation: varchar('previousMajorRelation', { length: 20 }),
+  /**
+   * اورراید دستی «شاگرد ممتاز»: NULL = تشخیص خودکار از معدل ترم قبل،
+   * ۱ = ممتاز (سقف honors_max_units)، ۰ = غیرممتاز. مدیر گروه می‌تواند تغییر دهد.
+   */
+  honorsOverride: integer('honorsOverride'),
   // ── توسعهٔ چنددانشگاهی / ثمین ──
   universityId: integer('universityId').references((): AnyPgColumn => universities.id), // دانشگاه مالک رکورد
   saminStudentPk: varchar('saminStudentPk', { length: 40 }), // کلید دانشجو در مبدأ ثمین
@@ -737,11 +751,15 @@ export const classrooms = pgTable('classrooms', {
   capacity: integer('capacity').notNull(),
   roomType: varchar('roomType', { length: 30 }),
   buildingName: varchar('buildingName', { length: 100 }),
+  // ── طبقه (Floor) — نمایش در پوستر سردر کلاسی (درخواست کاربر R-AA) ──
+  floor: varchar('floor', { length: 20 }),
   rowsCount: integer('rowsCount'),
   colsCount: integer('colsCount'),
   // ── متعلق به کدام دانشکده است (زونینگ در برنامه‌ریزی درسی) ──
   facultyId: integer('facultyId').references(() => faculties.id),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  // ── وضعیت فعال بودن کلاس — فقط کلاس‌های فعال در انتخاب‌گر سردر نمایش داده می‌شوند (R-AA) ──
+  isActive: integer('isActive').notNull().default(1),
 });
 
 export const course_offerings = pgTable('course_offerings', {

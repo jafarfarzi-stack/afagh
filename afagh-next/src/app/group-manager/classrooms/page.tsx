@@ -27,8 +27,10 @@ export default async function ClassroomsPage({ searchParams }: { searchParams: P
             </select>
           </label>
           <label className="text-slate-500">ساختمان<input name="building" className="input mt-1 !py-1 !px-2" /></label>
+          <label className="text-slate-500">طبقه<input name="floor" className="input mt-1 !py-1 !px-2 w-16" dir="ltr" placeholder="مثلاً ۲" /></label>
           <label className="text-slate-500">ردیف‌ها (نیمکت)<input name="rows" type="number" min={0} className="input mt-1 !py-1 !px-2 w-16" dir="ltr" /></label>
           <label className="text-slate-500">ستون‌ها<input name="cols" type="number" min={0} className="input mt-1 !py-1 !px-2 w-16" dir="ltr" /></label>
+          <label className="flex items-center gap-1 text-slate-500"><input type="checkbox" name="isActive" value="1" defaultChecked className="w-4 h-4" /> فعال (قابل برنامه‌ریزی)</label>
           <button className="btn-primary !py-1 !px-3">افزودن کلاس</button>
         </form>
         <p className="text-[11px] text-slate-400">ردیف/ستون برای نقشهٔ حضور و غیاب (ماژول حضور و غیاب) استفاده می‌شود.</p>
@@ -49,8 +51,13 @@ export default async function ClassroomsPage({ searchParams }: { searchParams: P
                     <input name="cap" type="number" min={1} defaultValue={r.capacity} className="input !py-1 !px-2 w-16" dir="ltr" />
                     <input name="roomType" defaultValue={r.roomType ?? ''} className="input !py-1 !px-2 w-24" />
                     <input name="building" defaultValue={r.buildingName ?? ''} className="input !py-1 !px-2 w-28" />
+                    <input name="floor" defaultValue={r.floor ?? ''} className="input !py-1 !px-2 w-14" dir="ltr" />
                     <input name="rows" type="number" defaultValue={r.rowsCount ?? ''} className="input !py-1 !px-2 w-14" dir="ltr" />
                     <input name="cols" type="number" defaultValue={r.colsCount ?? ''} className="input !py-1 !px-2 w-14" dir="ltr" />
+                    <select name="isActive" defaultValue={String(r.isActive ?? 1)} className="input !py-1 !px-2 w-20">
+                      <option value="1">فعال</option>
+                      <option value="0">غیرفعال</option>
+                    </select>
                     <button className="btn-ghost !py-1 !px-2">ذخیره</button>
                   </form>
                 </td>

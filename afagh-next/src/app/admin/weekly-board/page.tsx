@@ -10,7 +10,11 @@ import { currentExpertFilters } from '@/lib/expert-scope';
 import { getSetting, getBool } from '@/lib/settings';
 import { groupIntoMerged, mergedGroupKey, professorCalendarEntryKey, type ProfessorCalendarWeekType } from '@/lib/professor-calendar-layout';
 import ProfessorCalendarGrid, { type ProfessorCalendarEntry } from '@/app/professor/professor-calendar-grid';
+import DoorSignPrint from './door-sign-print';
+import { toggleRoomActive } from './actions';
 import PrintButton from './PrintButton';
+import pkg from '../../../../package.json';
+const APP_VERSION = (pkg as { version?: string }).version ?? '1.0.0';
 
 export const dynamic = 'force-dynamic';
 
@@ -294,7 +298,7 @@ function buildBoardCalendarEntries(
 }
 
 export default async function WeeklyBoardPage({ searchParams }: {
-  searchParams: Promise<{ term?: string; faculty?: string; dept?: string; room?: string; tab?: string; q?: string; code?: string; title?: string; gender?: string; count?: string }>;
+  searchParams: Promise<{ term?: string; faculty?: string; dept?: string; room?: string; tab?: string; q?: string; code?: string; title?: string; gender?: string; count?: string; mono?: string; showInactive?: string }>;
 }) {
   const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
   const uni = await getCurrentUniversity().catch(() => null);
@@ -305,6 +309,9 @@ export default async function WeeklyBoardPage({ searchParams }: {
   const showCode = sp.code === '1';
   // تعداد دانشجو در چاپ: انتخابی کاربر (پیش‌فرض خاموش تا چاپ شلوغ نشود)؛ با ?count=1 روشن می‌شود.
   const printCount = sp.count === '1';
+  const mono = sp.mono === '1';
+  // فقط کلاس‌های فعال در انتخاب‌گر نمایش داده می‌شوند؛ با ?showInactive=1 غیرفعال‌ها هم دیده می‌شوند (R-AA)
+  const showInactive = sp.showInactive === '1';
   const termId = Number(sp.term) || 0;
   const facultyId = Number(sp.faculty) || 0;
   const deptId = Number(sp.dept) || 0;
@@ -406,10 +413,11 @@ export default async function WeeklyBoardPage({ searchParams }: {
     // کلاس‌هایی که فقط سانس زوج/فرد دارند از فهرست پوستر جا می‌مانند.
     const facDeptIds = facultyId ? depts.filter(d => d.facultyId === facultyId).map(d => d.id) : null;
     if (facDeptIds && facDeptIds.length === 0) return []; // fail-closed مثل scopeConds
-    const rows0 = await db.select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, capacity: classrooms.capacity, facultyId: classrooms.facultyId })
+    const rows0 = await db.select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, floor: classrooms.floor, capacity: classrooms.capacity, facultyId: classrooms.facultyId })
       .from(classrooms)
       .where(and(
         uni ? eq(classrooms.universityId, uni.id) : undefined,
+        showInactive ? undefined : eq(classrooms.isActive, 1),
         sql`EXISTS (SELECT 1 FROM schedules s
           JOIN course_offerings o ON o.id = s."offeringId"
           JOIN courses c ON c.id = o."courseId"
@@ -431,6 +439,14 @@ export default async function WeeklyBoardPage({ searchParams }: {
     return out.sort((a, b) => a.name.localeCompare(b.name, 'fa'));
   })();
   const selRoom = rooms.find(r => r.id === roomId || r.aliasIds.includes(roomId)) ?? null;
+
+  // همهٔ کلاس‌ها (فعال + غیرفعال) برای پنل مدیریت وضعیت — فقط در تب تابلو
+  const allRooms = tab === 'board'
+    ? await db.select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, isActive: classrooms.isActive })
+        .from(classrooms)
+        .where(uni ? eq(classrooms.universityId, uni.id) : undefined)
+        .orderBy(asc(classrooms.name))
+    : [];
 
   // ستون‌های مشترک هر سه تب (تابلوی کلاس‌ها / برنامه استاد / برنامه دانشجو)
   const boardSelect = {
@@ -672,46 +688,78 @@ export default async function WeeklyBoardPage({ searchParams }: {
             <option value="1">نمایش تعداد (👥 n/ظرفیت)</option>
           </select>
         </label>
+        <label className="text-xs font-bold">حالت چاپ
+          <select name="mono" defaultValue={mono ? '1' : ''} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+            <option value="">رنگی</option>
+            <option value="1">سیاه‌سفید (عملی = خط‌چین)</option>
+          </select>
+        </label>
+        <label className="flex items-end gap-2 text-xs font-bold self-end pb-2">
+          <input type="checkbox" name="showInactive" value="1" defaultChecked={showInactive} className="w-4 h-4" />
+          نمایش کلاس‌های غیرفعال
+        </label>
         <button className="rounded-xl bg-indigo-700 px-5 py-2 text-white font-black text-sm">نمایش</button>
         <PrintButton />
       </form>
 
-      {term && (
+      {tab === 'board' && (
+        <details className="card print:hidden mt-3" open>
+          <summary className="cursor-pointer text-sm font-bold text-slate-700">مدیریت وضعیت کلاس‌ها (فعال / غیرفعال)</summary>
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {allRooms.map(r => (
+              <div key={r.id} className="flex items-center justify-between gap-2 border border-slate-200 rounded-xl px-3 py-2">
+                <span className="text-sm font-semibold truncate">
+                  {faDigits(r.name)}{r.buildingName ? ` — ${r.buildingName}` : ''}
+                  {r.isActive ? '' : ' (غیرفعال)'}
+                </span>
+                <form action={toggleRoomActive}>
+                  <input type="hidden" name="roomId" value={r.id} />
+                  <input type="hidden" name="active" value={r.isActive ? '0' : '1'} />
+                  <button
+                    type="submit"
+                    className={`rounded-lg px-3 py-1 text-xs font-black ${r.isActive ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}
+                  >
+                    {r.isActive ? 'غیرفعال‌سازی' : 'فعال‌سازی'}
+                  </button>
+                </form>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
+      {term && poster ? (
+        <DoorSignPrint
+          entries={boardEntries}
+          logoUrl={logoUrl}
+          room={poster}
+          termTitle={term.title}
+          headerFaculty={headerFaculty}
+          headerDept={headerDept}
+          appVersion={APP_VERSION}
+          universityName={uni?.title ?? null}
+          mono={mono}
+        />
+      ) : term && (
         <div className="print-area prof-week-print rounded-2xl border border-slate-300 bg-white p-4 space-y-3" dir="rtl">
           <style>{'@media print { @page { size: A4 landscape; margin: 8mm 7mm; } }'}</style>
-          {poster ? (
-            <BoardHeader
-              logoUrl={logoUrl}
-              title={`🚪 برنامهٔ هفتگی ${withPrefix('کلاس', poster.name)}`}
-              meta={metaParts([
-                headerFaculty ? withPrefix('دانشکدهٔ', headerFaculty) : null,
-                withPrefix('نیمسال', term.title),
-                poster.buildingName || null,
-                withPrefix('دانشگاه', uni?.title ?? ''),
-              ])}
-            />
-) : (
-            <BoardHeader
-              logoUrl={logoUrl}
-              title={`برنامهٔ هفتگی کلاس‌ها — ${term.title}`}
-              meta={metaParts([
-                withPrefix('دانشگاه', uni?.title ?? ''),
-                headerFaculty ? withPrefix('دانشکدهٔ', headerFaculty) : null,
-                headerDept ? `گروه ${headerDept}` : null,
-                `${faDigits(boardOfferingCount)} کلاس · ${faDigits(boardEntries.length)} بلوک${boardMergedCount > 0 ? ` (${faDigits(boardMergedCount)} ادغامی 🔗)` : ''}`,
-              ])}
-            />
-          )}
+          <BoardHeader
+            logoUrl={logoUrl}
+            title={`برنامهٔ هفتگی کلاس‌ها — ${term.title}`}
+            meta={metaParts([
+              withPrefix('دانشگاه', uni?.title ?? ''),
+              headerFaculty ? withPrefix('دانشکدهٔ', headerFaculty) : null,
+              headerDept ? `گروه ${headerDept}` : null,
+              `${faDigits(boardOfferingCount)} کلاس · ${faDigits(boardEntries.length)} بلوک${boardMergedCount > 0 ? ` (${faDigits(boardMergedCount)} ادغامی 🔗)` : ''}`,
+            ])}
+          />
           {boardEntries.length === 0 ? (
             <div className="text-center p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-xs font-bold text-slate-500 leading-6">
               در دامنهٔ انتخابی سانس کلاسی برای نمایش در جدول هفتگی وجود ندارد.
               {boardSkipped > 0 ? ` (${faDigits(boardSkipped)} سانس بدون روز/ساعت معتبر از جدول کنار گذاشته شد.)` : ''}
             </div>
           ) : (
-            /* سردرِ یک کلاس: نام کلاس در هر بلوک تکراری است → نام استاد نشان داده می‌شود */
-            poster
-              ? <ProfessorCalendarGrid entries={boardEntries} placeMode="professor" showCode={showCode} doorPrint printCount={printCount} />
-              : <ProfessorCalendarGrid entries={boardEntries} placeMode="professor" showCode={showCode} printCount={printCount} />
+            <ProfessorCalendarGrid entries={boardEntries} placeMode="professor" showCode={showCode} printCount={printCount} />
           )}
           {boardSkipped > 0 && boardEntries.length > 0 && (
             <p className="print:hidden text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
