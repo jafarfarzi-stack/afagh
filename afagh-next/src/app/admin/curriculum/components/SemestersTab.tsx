@@ -121,43 +121,11 @@ export default function SemestersTab() {
             })}
           </div>
 
-          {/* جمع‌بندی نوع درس + چک‌لیست دانشجو (در چاپ نمایش داده می‌شود) */}
-          {detail && detail.courses.length > 0 && (
-            <div className="pt-3 border-t border-slate-200 space-y-2 curriculum-checklist">
-              <h5 className="font-extrabold text-slate-900 text-xs">📋 جمع‌بندی نوع درس و چک‌لیست دانشجو</h5>
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-100 text-center">
-                    <th className="p-2 border border-slate-300">نوع درس</th>
-                    <th className="p-2 border border-slate-300">تعداد</th>
-                    <th className="p-2 border border-slate-300">واحد</th>
-                    <th className="p-2 border border-slate-300">✓</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.keys(ROLE_LABELS).map(role => {
-                    const r = typeSummaryRows(detail.courses).find(x => x.role === role) ?? { role, count: 0, units: 0 };
-                    if (r.count === 0) return null;
-                    return (
-                      <tr key={r.role} className="text-center">
-                        <td className="p-2 border border-slate-200 font-extrabold">{ROLE_LABELS[r.role] ?? r.role}</td>
-                        <td className="p-2 border border-slate-200 font-black">{faNum(r.count)}</td>
-                        <td className="p-2 border border-slate-200 font-black">{faNum(r.units)}</td>
-                        <td className="p-2 border border-slate-200"><span className="inline-block w-4 h-4 border-2 border-slate-400 rounded-sm" /></td>
-                      </tr>
-                    );
-                  })}
-                  <tr className="text-center bg-indigo-50 font-black">
-                    <td className="p-2 border border-indigo-200">جمع کل</td>
-                    <td className="p-2 border border-indigo-200">{faNum(detail.courses.length)}</td>
-                    <td className="p-2 border border-indigo-200">{faNum(totalPlannedUnits)}</td>
-                    <td className="p-2 border border-indigo-200"><span className="inline-block w-4 h-4 border-2 border-slate-400 rounded-sm" /></td>
-                  </tr>
-                </tbody>
-              </table>
-              <p className="text-[10px] text-slate-400 font-bold">دانشجو پس از گذراندن هر درس، کادر مربوط را تیک بزند.</p>
-            </div>
-          )}
+          <div
+            onDragOver={isDraft ? (e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDropTarget('pool'); }) : undefined}
+            onDragLeave={isDraft ? (() => setDropTarget(cur => (cur === 'pool' ? null : cur))) : undefined}
+            onDrop={isDraft ? (e => onDropToSemester(e, null)) : undefined}
+            className={`rounded-xl border-2 bg-slate-50 p-3 space-y-2 transition-colors print:hidden ${isDraft && dropTarget === 'pool' ? '!border-indigo-500 !bg-indigo-50 shadow-lg' : 'border-slate-200'}`}
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-black text-slate-800 text-xs">🌫️ دروس بدون ترم (نامشخص) — {faNum(unassignedCourses.length)} درس</span>
@@ -195,6 +163,43 @@ export default function SemestersTab() {
               ))}
             </div>
           </div>
+          {/* جمع‌بندی نوع درس + چک‌لیست دانشجو (در چاپ نمایش داده می‌شود) */}
+          {detail && detail.courses.length > 0 && (
+            <div className="pt-3 border-t border-slate-200 space-y-2 curriculum-checklist">
+              <h5 className="font-extrabold text-slate-900 text-xs">📋 جمع‌بندی نوع درس و چک‌لیست دانشجو</h5>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-100 text-center">
+                    <th className="p-2 border border-slate-300">نوع درس</th>
+                    <th className="p-2 border border-slate-300">تعداد</th>
+                    <th className="p-2 border border-slate-300">واحد</th>
+                    <th className="p-2 border border-slate-300">✓</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.keys(ROLE_LABELS).map(role => {
+                    const r = typeSummaryRows(detail.courses).find(x => x.role === role) ?? { role, count: 0, units: 0 };
+                    if (r.count === 0) return null;
+                    return (
+                      <tr key={r.role} className="text-center">
+                        <td className="p-2 border border-slate-200 font-extrabold">{ROLE_LABELS[r.role] ?? r.role}</td>
+                        <td className="p-2 border border-slate-200 font-black">{faNum(r.count)}</td>
+                        <td className="p-2 border border-slate-200 font-black">{faNum(r.units)}</td>
+                        <td className="p-2 border border-slate-200"><span className="inline-block w-4 h-4 border-2 border-slate-400 rounded-sm" /></td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="text-center bg-indigo-50 font-black">
+                    <td className="p-2 border border-indigo-200">جمع کل</td>
+                    <td className="p-2 border border-indigo-200">{faNum(detail.courses.length)}</td>
+                    <td className="p-2 border border-indigo-200">{faNum(totalPlannedUnits)}</td>
+                    <td className="p-2 border border-indigo-200"><span className="inline-block w-4 h-4 border-2 border-slate-400 rounded-sm" /></td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="text-[10px] text-slate-400 font-bold">دانشجو پس از گذراندن هر درس، کادر مربوط را تیک بزند.</p>
+            </div>
+          )}
         </div>
       )}
     </>
