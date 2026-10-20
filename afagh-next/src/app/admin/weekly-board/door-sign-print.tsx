@@ -24,6 +24,15 @@ import type { ProfessorCalendarEntry } from '@/app/professor/professor-calendar-
 const fa = (s: string | number) =>
   String(s).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
 
+/**
+ * فاصلهٔ دیداری دورِ ارقام: نام کلاس‌ها در پایگاه داده اغلب بی‌فاصله است
+ * («كلاس2كشاورزي») و روی پوستر به‌هم می‌چسبد. این تابع فقط بین رقم و حرفِ
+ * مجاور فاصله می‌گذارد، پس «كلاس ۲ كشاورزي» می‌شود و بقیهٔ متن دست‌نخورده
+ * می‌ماند. باید پس از `fa` صدا زده شود (ورودی، ارقامِ فارسی می‌گیرد).
+ */
+const spaceDigits = (s: string) =>
+  s.replace(/([^\s۰-۹])([۰-۹])/g, '$1 $2').replace(/([۰-۹])([^\s۰-۹])/g, '$1 $2');
+
 /** تبدیل ارقام فارسی به لاتین — برای کدگذاری بارکد (اسکن‌پذیر) */
 const toLatinDigits = (s: string) =>
   s.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString());
@@ -152,16 +161,20 @@ export default async function DoorSignPrint({
   ].filter(Boolean) as string[];
 
   const css = `
-  /* فونت تیتر: Sahel Bold — تیترِ اصلی و سرصفحه‌ها. نسبت به Vazirmatn Black
-     بازتر و «خوانا-تر» است و در اندازهٔ بزرگ روی کاغذ کمتر به‌هم می‌چسبد.
-     font-display:block تا در چاپ، متن با فونت جانشین رندر نشود. */
-  @font-face { font-family:'Sahel Display'; font-style:normal; font-weight:700;
-    src:url('/fonts/sahel-bold.woff2') format('woff2'); font-display:block; }
-  /* پشتیبان: Vazirmatn 900 (Black) */
+  /* ── فونت‌ها ──────────────────────────────────────────────────────────
+     متنِ پوستر: Shabnam — فونتِ فارسیِ گرد و باز، مخصوصِ اندازه‌های کوچکِ
+     چاپی؛ در ۹pt روی کاغذ از Vazirmatn خواناتر است.
+     تیتر: Vazirmatn Black (۹۰۰) — سنگین و پوستری برای نامِ کلاس.
+     font-display:block تا در چاپ، متن هرگز با فونتِ جانشین (Tahoma) رندر
+     نشود؛ چون چاپ بلافاصله پس از لود صفحه انجام می‌شود و swap فرصت ندارد. */
+  @font-face { font-family:'Shabnam'; font-style:normal; font-weight:400;
+    src:url('/fonts/shabnam-400.woff2') format('woff2'); font-display:block; }
+  @font-face { font-family:'Shabnam'; font-style:normal; font-weight:700;
+    src:url('/fonts/shabnam-700.woff2') format('woff2'); font-display:block; }
   @font-face { font-family:'Vazirmatn Display'; font-style:normal; font-weight:900;
     src:url('/fonts/vazirmatn-900.woff2') format('woff2'); font-display:block; }
   .ds-sheet { width:297mm; height:210mm; padding:5mm 6mm 4mm; display:flex; flex-direction:column;
-    direction:rtl; font-family:'Vazirmatn', Tahoma, 'Segoe UI', Arial, sans-serif; color:#0f172a;
+    direction:rtl; font-family:'Shabnam', 'Vazirmatn', Tahoma, 'Segoe UI', Arial, sans-serif; color:#0f172a;
     -webkit-print-color-adjust:exact; print-color-adjust:exact; box-sizing:border-box; }
   .ds-sheet * { box-sizing:border-box; }
   .ds-hd { display:flex; align-items:center; gap:5mm; height:38mm; }
@@ -170,7 +183,7 @@ export default async function DoorSignPrint({
   .ds-uni { font-size:8pt; font-weight:700; color:#1e2a6e; text-align:center; margin-top:1.4mm; line-height:1.2; }
   .ds-mid { flex:1; text-align:center; min-width:0; }
   .ds-kicker { font-size:8pt; font-weight:700; color:#1e2a6e; letter-spacing:0.2px; }
-  .ds-title { font-family:'Sahel Display','Vazirmatn Display','Vazirmatn',sans-serif; font-size:30pt; font-weight:700;
+  .ds-title { font-family:'Vazirmatn Display','Shabnam',sans-serif; font-size:30pt; font-weight:900;
     line-height:1.16; color:#0b1020; letter-spacing:0; }
   .ds-sub { font-size:8.2pt; color:#334155; margin-top:1.6mm; }
   .ds-room { text-align:center; min-width:32mm; border-inline-start:0.6pt solid #cbd5e1; border-inline-end:0.6pt solid #cbd5e1; padding:0 3mm; }
@@ -195,7 +208,7 @@ export default async function DoorSignPrint({
      فقط لبه‌های هم‌پوشان با کادر حذف شده‌اند تا خط دوبل نشود. */
   .ds-grid { flex:1; display:grid; grid-template-columns:13.5mm repeat(7,1fr); grid-template-rows:8.5mm 1fr;
     min-height:0; border:1.1pt solid #000; }
-  .ds-dh { font-family:'Sahel Display','Vazirmatn Display','Vazirmatn',sans-serif;
+  .ds-dh { font-family:'Vazirmatn Display','Shabnam',sans-serif;
     font-size:12pt; font-weight:700; text-align:center; padding:1.2mm 0; letter-spacing:0.2px;
     background:#1e2a6e; color:#fff; border-inline-start:1.1pt solid #000; display:flex; align-items:center; justify-content:center; }
   .ds-dh.fri { background:#334155; }
@@ -204,7 +217,7 @@ export default async function DoorSignPrint({
   .ds-gut { position:relative; }
   .ds-hl { position:absolute; inset-inline:0; font-size:11pt; font-weight:700; color:#0f172a; text-align:center; font-variant-numeric:tabular-nums; }
   /* برچسبِ نیم‌ساعت — کوچک و کم‌رنگ تا شلوغ نکند ولی «۹ و نیم» خوانده شود */
-  .ds-hh { position:absolute; inset-inline:0; font-size:5.8pt; font-weight:500; color:#94a3b8;
+  .ds-hh { position:absolute; inset-inline:0; font-size:6.2pt; font-weight:600; color:#6b7280;
     text-align:center; font-variant-numeric:tabular-nums; line-height:1; }
   .ds-day { position:relative; border-inline-start:1.1pt solid #000; }
   .ds-day.fri { background:#f1f5f9; }
@@ -221,18 +234,41 @@ export default async function DoorSignPrint({
     border:0.7pt solid #6366f1; border-radius:1.1mm; background:#eef2ff;
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.3mm; padding:0.8mm 1mm; text-align:center; }
   .ds-card.lab { border-color:#d97706; background:#fffbeb; }
-  .ds-t { font-weight:700; line-height:1.14; color:#0b1020; font-size:min(24cqh,10cqi,13pt);
+  /* ── سلسله‌مراتبِ متنِ کارت ────────────────────────────────────────────
+     اولویت: ۱) عنوان درس ۲) نام استاد ۳) ساعتِ شروع–پایان.
+     هیچ اندازهٔ ثابتی برای «کارتِ کوچک / بزرگ» وجود ندارد: هر سه اندازه از
+     ارتفاع (cqh) و عرض (cqi) خودِ کارت گرفته می‌شود، پس کارتِ یک‌ساعته و
+     سه‌ساعته هرکدام اندازهٔ خودشان را می‌گیرند. max(کف, …) خوانایی روی
+     کاغذ را تضمین می‌کند و سقفِ pt مانع بزرگ‌شدنِ بی‌جا می‌شود — یعنی اگر
+     فردا چیدمان/تعداد ستون‌ها عوض شد، متن خودش را تطبیق می‌دهد. */
+  .ds-t { font-weight:700; line-height:1.14; color:#0b1020;
+    font-size:max(9pt, min(22cqh,11cqi,14pt));
     display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3;
     overflow:hidden; text-align:center; word-break:break-word; overflow-wrap:anywhere; }
   .ds-wk { display:inline-block; margin-inline-start:1mm; border:0.6pt solid #b45309; border-radius:0.7mm; padding:0 0.5mm;
     font-size:0.56em; font-weight:700; color:#b45309; vertical-align:0.14em; white-space:nowrap; }
-  .ds-p { font-weight:400; line-height:1.15; color:#1f2937; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
-    font-size:min(13cqh,7.4cqi,8.4pt); display:none; }
-  .ds-h { font-weight:700; line-height:1.1; color:#111827; white-space:nowrap;
-    font-size:min(20cqh,9cqi,9.5pt); display:none; }
-  @container (min-height:9mm)  { .ds-p { display:block; } }
-  @container (min-height:15mm) { .ds-h { display:block; } }
+  /* نام استاد: یک پله پایین‌تر از عنوان. نام در دو سطر می‌شکند (نه nowrap)
+     چون با ellipsis به «دکتر سعید پورمح…» تبدیل می‌شد و بی‌فایده بود. */
+  .ds-p { font-family:'Shabnam', 'Vazirmatn', Tahoma, sans-serif; font-weight:400; line-height:1.14;
+    color:#1f2937; max-width:100%; overflow:hidden; text-align:center;
+    font-size:max(7pt, min(14cqh,7.2cqi,8.4pt)); display:none;
+    -webkit-box-orient:vertical; -webkit-line-clamp:2; word-break:break-word; }
+  /* ساعتِ شروع/پایان: سومِ اولویت — کوچک‌ترین و کم‌رنگ‌ترین (بالای ستون‌ها و
+     روی خط‌های ساعت هم پیداست). */
+  .ds-h { font-weight:500; line-height:1.1; color:#475569; white-space:nowrap;
+    font-size:max(6pt, min(10cqh,5.8cqi,7.2pt)); display:none; }
+
+  /* کدام سطرها دیده شوند — از روی فضای واقعیِ خودِ کارت.
+     هندسهٔ فعلی: هر ساعت ≈ ۱۲mm، پس ۱ ساعت ≈ ۱۲mm · ۲ ساعت ≈ ۲۴mm · ۳ ساعت ≈ ۳۶mm.
+     اولویت دقیقاً همان چیزی است که گفته شد: عنوان درس هرگز قربانی نمی‌شود؛
+     اول نام استاد و بعد ساعت کنار می‌روند. */
+  @container (max-height:28mm) { .ds-t { -webkit-line-clamp:2; } }
+  @container (min-height:13mm) { .ds-p { display:-webkit-box; } }
+  @container (min-height:21mm) { .ds-h { display:block; } }
   @container (max-width:22mm)  { .ds-p { display:none; } }
+  /* کارتِ یک‌ساعته (~۱۲mm): فقط عنوان — اولویتِ اول؛ نامِ استاد در چنین
+     فضایی یا بریده می‌شد یا عنوان را بیرون می‌راند. */
+  @container (max-height:13mm) { .ds-p { display:none; } }
 
   .ds-ft { display:flex; align-items:center; justify-content:space-between; gap:4mm; font-size:7pt; color:#334155; padding-top:1.2mm; }
   .ds-ft .k { display:inline-flex; align-items:center; gap:1mm; margin-inline-end:3mm; }
@@ -260,20 +296,50 @@ export default async function DoorSignPrint({
   .ds-mono .ds-sw.lab { border-style:dashed; }
   .ds-mono .ds-chip { border-color:#000; color:#000; }
 
-  /* ── چاپ: فقط پوستر، در یک برگِ A4 افقی ──────────────────────────────
+  /* ── نمایشِ روی صفحه: پوستر ۲۹۷mm عرض دارد، پس روی نمایشگرِ معمولی
+     سرریز می‌کرد و کل صفحهٔ مدیریت را از حالت ریسپانسیو بیرون می‌برد
+     (اسکرول افقیِ تمام‌صفحه). با zoom پوستر همان‌قدر کوچک می‌شود که
+     در عرضِ پنجره جا شود؛ چاپ تحت تأثیر نیست (zoom در @media print صفر
+     می‌شود) و نسبت‌ها هم حفظ می‌مانند چون همهٔ واحدها نسبی‌اند. */
+  @media screen {
+    .ds-sheet { zoom: .82; margin-inline: auto; }
+  }
+  @media screen and (max-width: 1600px) { .ds-sheet { zoom: .72; } }
+  @media screen and (max-width: 1280px) { .ds-sheet { zoom: .60; } }
+  @media screen and (max-width: 1024px) { .ds-sheet { zoom: .48; } }
+  @media screen and (max-width: 820px)  { .ds-sheet { zoom: .38; } }
+  @media screen and (max-width: 640px)  { .ds-sheet { zoom: .30; } }
+
+  /* ── چاپ: فقط پوستر، دقیقاً یک برگِ A4 افقی ────────────────────────────
      بدون این بلوک، دو چیز پوستر را می‌شکست:
        ۱) @pageِ سراسریِ globals.css که «A4 portrait + حاشیهٔ ۱۰mm» است،
           پس برگ عمودی می‌شد و عرضِ ۲۹۷mm سرریز می‌کرد و روی کاغذ جا نمی‌شد.
        ۲) پوستهٔ پنل مدیریت (<main class="max-w-6xl p-5">) که عرض را محدود
           و پوستر را از گوشهٔ کاغذ جدا می‌کرد.
      همچنین نوار فیلترها/تب‌ها نباید روی کاغذ بیاید: کلاس .wb-chrome در
-     صفحهٔ میزبان فقط برای همین کار اضافه شده است. */
+     صفحهٔ میزبان فقط برای همین کار اضافه شده است.
+
+     چرا «برگِ نام‌دار» (named page) هم اضافه شده: قاعدهٔ @page سراسری و
+     قاعدهٔ اینجا هر دو در @media print‌اند و بردِ یکی بر دیگری به ترتیبِ
+     بارگذاریِ استایل وابسته است — روی برخی مرورگرها/کش‌ها همان سراسری
+     برنده می‌شد و خروجی عمودی می‌ماند. با page: ds-a4 به‌همراه @page ds-a4
+     انتخابِ کاغذ قطعی است و دیگر به ترتیب وابسته نیست.
+     ارتفاع ۲۰۹mm (نه ۲۱۰) تا خطای گِردکردنِ زیرپیکسلی برگِ دوم نسازد. */
   @media print {
-    @page { size: A4 landscape; margin: 0; }
-    html, body { margin:0 !important; padding:0 !important; background:#fff !important; }
+    @page { size: 297mm 210mm; margin: 0; }
+    @page ds-a4 { size: 297mm 210mm; margin: 0; }
+    html, body { margin:0 !important; padding:0 !important; background:#fff !important; height:auto !important; }
     body:has(.ds-sheet) .wb-chrome { display:none !important; }
     body:has(.ds-sheet) main { max-width:none !important; width:auto !important; margin:0 !important; padding:0 !important; }
-    .ds-sheet { width:297mm; height:210mm; border-radius:0 !important; box-shadow:none !important; }
+    body:has(.ds-sheet) .print-area { display:none !important; }
+    /* پوستهٔ پنل (min-h-screen) در چاپ ارتفاعِ یک صفحهٔ کامل می‌گیرد و پوسترِ
+       ۲۰۹mm را به لبه می‌چسباند؛ یک پیکسل بیشتر = برگِ دومِ خالی. */
+    body:has(.ds-sheet) > div,
+    body:has(.ds-sheet) .min-h-screen { min-height:0 !important; }
+    .ds-sheet { page: ds-a4; zoom:1 !important; width:297mm; height:209mm;
+      margin:0 !important; border-radius:0 !important; box-shadow:none !important;
+      overflow:hidden; break-inside:avoid; page-break-inside:avoid;
+      break-after:avoid; page-break-after:avoid; }
   }
   `;
 
@@ -308,7 +374,7 @@ export default async function DoorSignPrint({
           {universityName ? <div className="ds-uni">{fa(universityName)}</div> : null}
         </div>
         <div className="ds-mid">
-          <div className="ds-title">{room ? fa(room.name) : 'سردر کلاسی'}</div>
+          <div className="ds-title">{room ? spaceDigits(fa(room.name)) : 'سردر کلاسی'}</div>
           <div className="ds-sub">{subParts.join(' · ')}</div>
         </div>
         <div className="ds-qr">
@@ -321,7 +387,7 @@ export default async function DoorSignPrint({
           <div className="ds-qr-cap">تأیید حضور استاد<br /><span className="ds-qr-sub">اسکن برای ثبت حضور</span></div>
           <div className="ds-bc">
             {bcBinary ? <BarcodeSvg binary={bcBinary} /> : <div className="ds-bc-ph" />}
-            <div className="ds-bc-cap">{fa(room?.name ?? '')}</div>
+            <div className="ds-bc-cap">{spaceDigits(fa(room?.name ?? ''))}</div>
           </div>
         </div>
       </div>

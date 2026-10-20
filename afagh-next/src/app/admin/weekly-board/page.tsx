@@ -714,20 +714,9 @@ export default async function WeeklyBoardPage({ searchParams }: {
         <PrintButton />
       </form>
 
-      {/* سردر کلاسی سندِ جداست: این لینک یک برگهٔ مستقل (A4 افقی) باز می‌کند
-          که فقط پوستر در آن است — بدون تب و بدون نوار فیلتر. */}
-      {tab === 'board' && selRoom ? (
-        <a
-          href={`/admin/weekly-board?term=${term?.id ?? ''}&tab=board&room=${selRoom.id}&print=door${mono ? '&mono=1' : ''}${showCode ? '&code=1' : ''}${titleParam ? `&title=${titleParam}` : ''}${genderParam ? `&gender=${genderParam}` : ''}${printCount ? '&count=1' : ''}`}
-          target="_blank"
-          rel="noreferrer"
-          className="wb-chrome inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2 text-white text-xs font-black print:hidden"
-        >
-          🖨 چاپ سردر کلاسی — برگهٔ جدا (A4 افقی)
-        </a>
-      ) : null}
-
-
+      {/* سردر کلاسی: با انتخاب کلاس، همین صفحه فقط پوستر را نشان می‌دهد و
+          دکمهٔ «🖨️ چاپ سردر» (همان دکمهٔ همیشگیِ نوار فیلتر) آن را در یک برگ
+          A4 افقی چاپ می‌کند. دکمهٔ جداگانه‌ای لازم نیست. */}
       {term && poster ? (
         <DoorSignPrint
           entries={boardEntries}
@@ -742,7 +731,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
         />
       ) : term && (
         <div className="print-area prof-week-print rounded-2xl border border-slate-300 bg-white p-4 space-y-3" dir="rtl">
-          <style>{'@media print { @page { size: A4 landscape; margin: 8mm 7mm; } }'}</style>
+          <style>{'@media print { @page { size: A4 landscape; margin: 8mm 7mm; } @page wb-a4 { size: A4 landscape; margin: 8mm 7mm; } .prof-week-print { page: wb-a4; position: static !important; } }'}</style>
           <BoardHeader
             logoUrl={logoUrl}
             title={`برنامهٔ هفتگی کلاس‌ها — ${term.title}`}
@@ -785,7 +774,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
 
       {term && personSearched && personInfo && (
         <div className="print-area prof-week-print rounded-2xl border border-slate-300 bg-white p-4 space-y-3" dir="rtl">
-          <style>{'@media print { @page { size: A4 landscape; margin: 8mm 7mm; } }'}</style>
+          <style>{'@media print { @page { size: A4 landscape; margin: 8mm 7mm; } @page wb-a4 { size: A4 landscape; margin: 8mm 7mm; } .prof-week-print { page: wb-a4; position: static !important; } }'}</style>
           <BoardHeader
             logoUrl={logoUrl}
             title={`${personInfo.kind === 'prof' ? '👨‍🏫 برنامهٔ هفتگی استاد' : '🎓 برنامهٔ هفتگی دانشجو'} — ${personInfo.name}`}
