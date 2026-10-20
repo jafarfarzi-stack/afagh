@@ -134,6 +134,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: false,
   },
   {
+    href: '/admin/equivalence-clusters',
+    icon: '🧩',
+    title: 'خوشه‌های دروس هم‌ارز',
+    desc: 'تعریف خوشه و افزودن/حذف دروس هم‌محتوا',
+    group: 'settings',
+    roles: ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'],
+    accent: 'from-teal-950 to-cyan-950 border-teal-700/50',
+    iconBg: 'bg-teal-700/80 border-teal-500/50',
+    inNav: true,
+    inGrid: false,
+  },
+  {
     href: '/admin/regulations',
     icon: '⚖️',
     title: 'مرکز مدیریت آیین‌نامه‌ها',

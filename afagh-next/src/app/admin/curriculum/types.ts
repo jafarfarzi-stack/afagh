@@ -45,6 +45,7 @@ export interface CourseRow {
   courseId: number;
   code: string;
   title: string;
+  clusterId?: number | null;
   units: number;
   roleType: string;
   isRequired: number;

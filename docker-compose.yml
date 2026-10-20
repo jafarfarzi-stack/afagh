@@ -166,7 +166,8 @@ services:
     # فاز ۲: AUTH اجباری. بدون رمز، هر کاربرِ هاست یا هر کانتینر روی dbnet می‌توانست
     #   شمارندهٔ نرخ‌محدودسازی، قفل نشست و وضعیت اتاق انتظار را بخواند/دستکاری کند.
     #   رمز با «$$REDIS_PASSWORD» به sh داده می‌شود تا در Args کانتینر لو نرود.
-    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    user: "999:1000"
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}", "--bind", "0.0.0.0"]
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD تنظیم نشده — رمز Redis؛ «./deploy-debian.sh» خودکار می‌سازد}
     security_opt: ["no-new-privileges:true"]

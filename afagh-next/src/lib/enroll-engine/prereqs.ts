@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { course_offerings, course_rules, courses, degree_level_configs, enrollments, students } from '@/db/schema';
 import { resolveStudentCurriculum } from '../curriculum-apply';
 import { selectEffectiveRules } from '../curriculum-resolution';
+import { expandPassedWithEquivalents } from './equivalence-expand';
 
 // ═══ فیلتر ۴: ارزیابی درخت منطقی پیش‌نیاز (وفادار به فاز صفر — engines/enrollment.js) ═══
 // ساختار: {"operator":"AND"|"OR","conditions":[{course:"code",minGrade:10}, ...]}
@@ -90,9 +91,12 @@ export async function buildPrereqContext(studentId: number): Promise<PrereqConte
     if (ok && (!passed.has(r.code) || (passed.get(r.code) as number) < g)) passed.set(r.code, g);
   }
 
-  const courseRows = await db.select({ code: courses.code, title: courses.title }).from(courses);
+  const courseRows = await db.select({ code: courses.code, title: courses.title, clusterId: courses.clusterId }).from(courses);
   const titles = new Map(courseRows.map(c => [c.code, c.title]));
-  return { passed, ruleByCourse, titles, defaultPassing };
+  const members = courseRows
+    .filter(c => c.clusterId != null)
+    .map(c => ({ clusterCode: Number(c.clusterId), code: c.code }));
+  return { passed: expandPassedWithEquivalents(passed, members), ruleByCourse, titles, defaultPassing };
 }
 
 /** برچسب خوانأ پیش‌نیاز برای UI: «برنامه‌نویسی پیشرفته و ریاضی عمومی ۱» */
