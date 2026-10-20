@@ -592,17 +592,6 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   .prof-week-print .prof-week-badge { border: 1pt solid #000 !important; background: #ffffff !important; color: #000000 !important; font-weight: 800 !important; box-shadow: none !important; }
   .prof-week-print .prof-week-legend { border: 1pt solid #000 !important; border-radius: 4pt !important; padding: 2pt 4pt !important; margin-bottom: 3pt !important; color: #000000 !important; background: #ffffff !important; font-size: 8pt !important; }
   .prof-week-print .prof-week-print-head { display: block !important; direction: rtl !important; border: 1.5pt solid #000 !important; border-radius: 6pt !important; padding: 3pt 6pt !important; margin-bottom: 4pt !important; font-size: 8.5pt !important; line-height: 1.45 !important; color: #000000 !important; background: #ffffff !important; }
-  /* سردر درب کلاس: متن بزرگ‌تر برای خواندن از فاصلهٔ دور؛ ارتفاع ساعت کمی کوتاه‌تر تا همه در یک صفحه جا شود */
-  .prof-week-print.door-print .prof-cal { --cal-hour: 40px !important; }
-  .prof-week-print.door-print .prof-cal-day-head { font-size: 12pt !important; padding: 3pt !important; }
-  .prof-week-print.door-print .prof-cal-gutter-label { font-size: 9pt !important; }
-  /* متن کارت‌ها در چاپ سردر: اندازهٔ ثابت (نه container-query) تا در همهٔ مرورگرها خوانا باشد؛
-     overflow hidden (نه visible) تا متن هیچ‌وقت روی کارت/ستون همسایه نریزد —
-     خودِ متن‌ها با line-clamp-2 محدود شده‌اند، پس چیزی پنهان نمی‌ماند */
-  .prof-week-print.door-print .prof-week-card { padding: 1pt 2pt !important; gap: 1pt; overflow: hidden !important; min-height: 0 !important; }
-  .prof-week-print.door-print .prof-print-title { font-size: 7.5pt !important; line-height: 1.1 !important; }
-  .prof-week-print.door-print .prof-print-meta,
-  .prof-week-print.door-print .prof-print-teacher { font-size: 6pt !important; line-height: 1.1 !important; }
 }
 
 /* ── چاپ کارنامه: گرید ۳ستونهٔ هم‌ارتفاع (پانوشت نیمسال‌های یک ردیف هم‌تراز) ── */

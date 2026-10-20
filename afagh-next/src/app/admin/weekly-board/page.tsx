@@ -65,33 +65,6 @@ function BoardHeader({ logoUrl, title, meta }: {
   );
 }
 
-/**
- * سردر درب کلاس: نام کلاس درشت (از چند متری خوانا)، هیچ متنی برش نمی‌خورد،
- * و هر خط اطلاعات جدا؛ هم روی صفحه هم در چاپ.
- */
-function DoorSignHeader({ logoUrl, room, building, lines }: {
-  logoUrl: string | null;
-  room: string;
-  building: string;
-  lines: string[];
-}) {
-  return (
-    <div className="flex items-center gap-4 rounded-2xl border-4 border-slate-900 bg-white p-4 text-slate-900 print:gap-[5mm] print:rounded-[4pt] print:border-[2.5pt] print:border-black print:p-[3mm]">
-      {logoUrl && (
-        <img src={logoUrl} alt="" className="h-20 w-20 shrink-0 object-contain print:h-[20mm] print:w-[20mm]" />
-      )}
-      <div className="min-w-0 flex-1 text-center">
-        <p className="text-base font-extrabold text-slate-700 print:text-[10pt]">برنامهٔ هفتگی</p>
-        <h2 className="break-words text-5xl font-black leading-tight print:text-[30pt]">{room}</h2>
-        {building && <p className="break-words text-2xl font-extrabold print:text-[14pt]">{building}</p>}
-        <div className="mt-1 flex flex-wrap justify-center gap-x-5 gap-y-1 border-t-2 border-slate-900 pt-2 text-lg font-bold print:text-[10pt]">
-          {lines.map((l, i) => <span key={i}>{l}</span>)}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 type BoardRow = {
   offeringId: number; groupNumber: number; enrolledCount: number | null; capacity: number | null;
   courseCode: string | null; courseTitle: string | null;
@@ -704,18 +677,18 @@ export default async function WeeklyBoardPage({ searchParams }: {
       </form>
 
       {term && (
-        <div className={`print-area prof-week-print ${poster ? 'door-print ' : ''}rounded-2xl border border-slate-300 bg-white p-4 space-y-3`} dir="rtl">
+        <div className="print-area prof-week-print rounded-2xl border border-slate-300 bg-white p-4 space-y-3" dir="rtl">
           <style>{'@media print { @page { size: A4 landscape; margin: 8mm 7mm; } }'}</style>
           {poster ? (
-            <DoorSignHeader
+            <BoardHeader
               logoUrl={logoUrl}
-              room={poster.name}
-              building={poster.buildingName || ''}
-              lines={[
-                headerFaculty ? withPrefix('دانشکدهٔ', headerFaculty) : '',
+              title={`🚪 برنامهٔ هفتگی ${withPrefix('کلاس', poster.name)}`}
+              meta={metaParts([
+                headerFaculty ? withPrefix('دانشکدهٔ', headerFaculty) : null,
                 withPrefix('نیمسال', term.title),
+                poster.buildingName || null,
                 withPrefix('دانشگاه', uni?.title ?? ''),
-              ].filter(Boolean)}
+              ])}
             />
 ) : (
             <BoardHeader
