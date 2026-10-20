@@ -151,6 +151,8 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
   const COURSE_LEVEL_KINDS = new Set([
     'weekly-timetable', 'room-conflicts', 'empty-rooms', 'low-enrollment', 'makeup-courses',
     'staff-list', 'staff-courses', 'staff-timetable', 'payesh',
+    'tuition-tariff', 'letter-templates', 'payroll-overview', 'bi-teaching-quality',
+    'bi-facilities', 'graduation-dossiers', 'grade-audit-log',
   ]);
   const showStudentFilters = !COURSE_LEVEL_KINDS.has(kind);
   useEffect(() => {

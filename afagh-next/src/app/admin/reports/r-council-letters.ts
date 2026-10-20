@@ -187,7 +187,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
           { key: 'track', title: 'کد رهگیری' }, { key: 'name', title: 'نام' },
           { key: 'code', title: 'شماره دانشجویی' }, { key: 'major', title: 'رشته' },
           { key: 'process', title: 'فرایند' }, { key: 'st', title: 'وضعیت' },
-          { key: 'created', title: 'ثبت' },
+          { key: 'created', title: 'ثبت', format: 'DATETIME' },
         ],
         from, conds, cols, sql`ORDER BY created DESC`, f,
       );

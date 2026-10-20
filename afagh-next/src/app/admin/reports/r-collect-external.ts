@@ -75,9 +75,9 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
         { key: 'nc', title: 'کد ملی' }, { key: 'major', title: 'رشته' },
         { key: 'degree', title: 'مقطع' }, { key: 'y', title: 'ورودی' },
-        { key: 'charges', title: 'بدهی' }, { key: 'discounts', title: 'تخفیف' },
-        { key: 'sponsorships', title: 'حمایت' }, { key: 'payments', title: 'پرداخت' },
-        { key: 'balance', title: 'مانده' }, { key: 'pending', title: 'چک در راه' },
+        { key: 'charges', title: 'بدهی', format: 'MONEY' }, { key: 'discounts', title: 'تخفیف', format: 'MONEY' },
+        { key: 'sponsorships', title: 'حمایت', format: 'MONEY' }, { key: 'payments', title: 'پرداخت', format: 'MONEY' },
+        { key: 'balance', title: 'مانده', format: 'MONEY' }, { key: 'pending', title: 'چک در راه', format: 'MONEY' },
       ],
       rows, f,
       `${rows.length.toLocaleString('fa-IR')} دانشجو (سقف ۱۰۰۰)${onlyDebtors ? ' — فقط بدهکار' : ''}`,
@@ -102,9 +102,9 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       [
         { key: 'code', title: 'کد پرسنلی' }, { key: 'name', title: 'استاد' },
         { key: 'rank', title: 'رتبه' }, { key: 'contract', title: 'قرارداد' },
-        { key: 'units', title: 'واحد قابل پرداخت' }, { key: 'gross', title: 'ناخالص' },
-        { key: 'tax', title: 'مالیات' }, { key: 'net', title: 'خالص' },
-        { key: 'paid', title: 'پرداخت‌شده' }, { key: 'remaining', title: 'مانده' },
+        { key: 'units', title: 'واحد قابل پرداخت', format: 'NUMBER' }, { key: 'gross', title: 'ناخالص', format: 'MONEY' },
+        { key: 'tax', title: 'مالیات', format: 'MONEY' }, { key: 'net', title: 'خالص', format: 'MONEY' },
+        { key: 'paid', title: 'پرداخت‌شده', format: 'MONEY' }, { key: 'remaining', title: 'مانده', format: 'MONEY' },
         { key: 'status', title: 'وضعیت' },
       ],
       rows, f,
@@ -127,7 +127,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     return pageOf(
       [
         { key: 'name', title: 'استاد' }, { key: 'rankdept', title: 'رتبه / گروه' },
-        { key: 'score', title: 'نمره جاری' }, { key: 'respondents', title: 'پاسخ‌دهنده' },
+        { key: 'score', title: 'نمره جاری', format: 'NUMBER' }, { key: 'respondents', title: 'پاسخ‌دهنده' },
         { key: 'offerings', title: 'کلاس' }, { key: 'status', title: 'وضعیت' },
       ],
       rows, f,
@@ -150,7 +150,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     return pageOf(
       [
         { key: 'room', title: 'کلاس' }, { key: 'building', title: 'ساختمان' },
-        { key: 'worst', title: 'ضعیف‌ترین شاخص' }, { key: 'worstScore', title: 'نمره شاخص' },
+        { key: 'worst', title: 'ضعیف‌ترین شاخص' }, { key: 'worstScore', title: 'نمره شاخص', format: 'NUMBER' },
         { key: 'responses', title: 'پاسخ' }, { key: 'repair', title: 'وضعیت' },
       ],
       rows, f,
@@ -177,9 +177,9 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       [
         { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
         { key: 'major', title: 'رشته' }, { key: 'degree', title: 'مقطع' },
-        { key: 'gpa', title: 'معدل' }, { key: 'passed', title: 'واحد گذرانده' },
+        { key: 'gpa', title: 'معدل', format: 'NUMBER' }, { key: 'passed', title: 'واحد گذرانده' },
         { key: 'required', title: 'واحد لازم' }, { key: 'status', title: 'مرحله' },
-        { key: 'irandoc', title: 'ایرانداک' }, { key: 'last', title: 'آخرین رویداد' },
+        { key: 'irandoc', title: 'ایرانداک' }, { key: 'last', title: 'آخرین رویداد', format: 'DATETIME' },
       ],
       rows, f,
       `${rows.length.toLocaleString('fa-IR')} پرونده (سقف ۳۰۰)`,
