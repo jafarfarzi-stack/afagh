@@ -135,31 +135,46 @@ export default async function DoorSignPrint({
     bcBinary = '';
   }
 
+  // ساختمان و طبقه از رِکورد خودِ کلاس (نه هاردکد)
+  const roomPlace = [room?.buildingName, room?.floor]
+    .filter(Boolean)
+    .map(s => fa(String(s)))
+    .join(' · ');
+
+  // عنوانِ ترم در بعضی جاها خودش با «نیمسال» شروع می‌شود؛ دوباره نچسبان
+  const termLabel = /^نیمسال/.test(termTitle) ? termTitle : `نیمسال ${termTitle}`;
+
   const subParts = [
     headerFaculty ? `دانشکدهٔ ${headerFaculty}` : null,
     headerDept ? `گروه ${headerDept}` : null,
-    `نیمسال ${termTitle}`,
+    termLabel,
+    roomPlace || null,
   ].filter(Boolean) as string[];
 
   const css = `
+  /* فونت تیتر: Vazirmatn 900 (Black) — برای عنوانِ نام کلاس و سرصفحه‌ها.
+     font-display:block تا در چاپ، متن با فونت جانشین رندر نشود. */
+  @font-face { font-family:'Vazirmatn Display'; font-style:normal; font-weight:900;
+    src:url('/fonts/vazirmatn-900.woff2') format('woff2'); font-display:block; }
   .ds-sheet { width:297mm; height:210mm; padding:5mm 6mm 4mm; display:flex; flex-direction:column;
     direction:rtl; font-family:'Vazirmatn', Tahoma, 'Segoe UI', Arial, sans-serif; color:#0f172a;
     -webkit-print-color-adjust:exact; print-color-adjust:exact; box-sizing:border-box; }
   .ds-sheet * { box-sizing:border-box; }
-  .ds-hd { display:flex; align-items:center; gap:5mm; height:30mm; }
-  .ds-logo-col { display:flex; flex-direction:column; align-items:center; justify-content:center; height:30mm; }
-  .ds-logo { height:15mm; width:auto; display:block; }
-  .ds-uni { font-size:6pt; font-weight:700; color:#1e2a6e; text-align:center; margin-top:0.7mm; line-height:1.1; }
+  .ds-hd { display:flex; align-items:center; gap:5mm; height:38mm; }
+  .ds-logo-col { display:flex; flex-direction:column; align-items:center; justify-content:center; height:38mm; }
+  .ds-logo { height:17mm; width:auto; display:block; }
+  .ds-uni { font-size:8pt; font-weight:700; color:#1e2a6e; text-align:center; margin-top:1.4mm; line-height:1.2; }
   .ds-mid { flex:1; text-align:center; min-width:0; }
   .ds-kicker { font-size:8pt; font-weight:700; color:#1e2a6e; letter-spacing:0.2px; }
-  .ds-title { font-size:22pt; font-weight:800; line-height:1.1; }
-  .ds-sub { font-size:7.5pt; color:#334155; margin-top:0.4mm; }
+  .ds-title { font-family:'Vazirmatn Display','Vazirmatn',sans-serif; font-size:31pt; font-weight:900;
+    line-height:1.08; color:#0b1020; letter-spacing:0; }
+  .ds-sub { font-size:8.2pt; color:#334155; margin-top:1.6mm; }
   .ds-room { text-align:center; min-width:32mm; border-inline-start:0.6pt solid #cbd5e1; border-inline-end:0.6pt solid #cbd5e1; padding:0 3mm; }
   .ds-rm-label { font-size:6.5pt; color:#475569; }
   .ds-rm-num { font-size:22pt; font-weight:700; line-height:1.05; }
   .ds-rm-sub { font-size:5.8pt; color:#475569; line-height:1.25; }
-  .ds-qr { text-align:center; width:20mm; }
-  .ds-qr img { width:13mm; height:13mm; display:block; margin:0 auto; }
+  .ds-qr { text-align:center; width:28mm; }
+  .ds-qr img { width:22mm; height:22mm; display:block; margin:0 auto; }
   .ds-qr-cap { font-size:5.2pt; color:#475569; line-height:1.25; margin-top:0.5mm; }
   .ds-qr-tag { display:inline-block; border:0.5pt dashed #94a3b8; border-radius:0.8mm; padding:0 0.8mm; font-size:4.6pt; color:#64748b; }
   .ds-bc { margin-top:1.4mm; text-align:center; }
@@ -171,31 +186,37 @@ export default async function DoorSignPrint({
   .ds-rule2 { border-top:0.4pt solid #94a3b8; margin:0.4mm 0 1.2mm; }
   .ds-brand { text-align:center; font-size:8pt; font-weight:800; color:#1e2a6e; margin-top:1.4mm; letter-spacing:0.3px; }
 
-  .ds-grid { flex:1; display:grid; grid-template-columns:13.5mm repeat(7,1fr); grid-template-rows:8.5mm 1fr; min-height:0; }
+  /* کادرِ بیرونیِ جدول: بدون این border، سمت چپ و پایینِ جدول باز می‌ماند و
+     پوستر «ناتماس» دیده می‌شود. لبه‌های داخلی از خودِ سلول‌ها می‌آید، پس
+     فقط لبه‌های هم‌پوشان با کادر حذف شده‌اند تا خط دوبل نشود. */
+  .ds-grid { flex:1; display:grid; grid-template-columns:13.5mm repeat(7,1fr); grid-template-rows:8.5mm 1fr;
+    min-height:0; border:1.1pt solid #000; }
   .ds-dh { font-size:12pt; font-weight:700; text-align:center; padding:1.2mm 0; letter-spacing:0.2px;
     background:#1e2a6e; color:#fff; border-inline-start:1.1pt solid #000; display:flex; align-items:center; justify-content:center; }
   .ds-dh.fri { background:#334155; }
   .ds-dh.empty { background:#fff; color:#0f172a; font-size:8pt; font-weight:700; }
-  .ds-gut { position:relative; border-inline-start:1.1pt solid #000; }
+  .ds-dh:first-child { border-inline-start:0; }
+  .ds-gut { position:relative; }
   .ds-hl { position:absolute; inset-inline:0; font-size:11pt; font-weight:700; color:#0f172a; text-align:center; font-variant-numeric:tabular-nums; }
   .ds-day { position:relative; border-inline-start:1.1pt solid #000; }
   .ds-day.fri { background:#f1f5f9; }
-  .ds-day:last-child { border-inline-end:1.1pt solid #000; }
+  .ds-day:last-child { border-inline-end:0; }
   .ds-ln { position:absolute; inset-inline:0; border-top:0.6pt solid #94a3b8; }
   .ds-ln.half { border-top:0.35pt dashed #dbe3ec; }
-  .ds-ln.end { border-top:1.1pt solid #000; }
+  .ds-ln.end { border-top:0; }
 
   .ds-slot { position:absolute; inset-inline:0.7mm; padding:0.4mm 0; }
   .ds-card { container-type:size; width:100%; height:100%; overflow:hidden;
     border:0.7pt solid #6366f1; border-radius:1.1mm; background:#eef2ff;
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.3mm; padding:0.8mm 1mm; text-align:center; }
   .ds-card.lab { border-color:#d97706; background:#fffbeb; }
-  .ds-t { font-weight:700; line-height:1.06; color:#0b1020; font-size:min(34cqh,12.5cqi,15pt);
-    display:block; text-align:center; max-height:3.25em; overflow:hidden; word-break:break-word; overflow-wrap:anywhere; }
+  .ds-t { font-weight:700; line-height:1.14; color:#0b1020; font-size:min(24cqh,10cqi,13pt);
+    display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3;
+    overflow:hidden; text-align:center; word-break:break-word; overflow-wrap:anywhere; }
   .ds-wk { display:inline-block; margin-inline-start:1mm; border:0.6pt solid #b45309; border-radius:0.7mm; padding:0 0.5mm;
     font-size:0.56em; font-weight:700; color:#b45309; vertical-align:0.14em; white-space:nowrap; }
-  .ds-p { font-weight:400; line-height:1.1; color:#1f2937; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
-    font-size:min(20cqh,9cqi,9.5pt); display:none; }
+  .ds-p { font-weight:400; line-height:1.15; color:#1f2937; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
+    font-size:min(13cqh,7.4cqi,8.4pt); display:none; }
   .ds-h { font-weight:700; line-height:1.1; color:#111827; white-space:nowrap;
     font-size:min(20cqh,9cqi,9.5pt); display:none; }
   @container (min-height:9mm)  { .ds-p { display:block; } }
@@ -236,7 +257,7 @@ export default async function DoorSignPrint({
      همچنین نوار فیلترها/تب‌ها نباید روی کاغذ بیاید: کلاس .wb-chrome در
      صفحهٔ میزبان فقط برای همین کار اضافه شده است. */
   @media print {
-    @page { size: 297mm 210mm; margin: 0; }
+    @page { size: A4 landscape; margin: 0; }
     html, body { margin:0 !important; padding:0 !important; background:#fff !important; }
     body:has(.ds-sheet) .wb-chrome { display:none !important; }
     body:has(.ds-sheet) main { max-width:none !important; width:auto !important; margin:0 !important; padding:0 !important; }
@@ -261,26 +282,22 @@ export default async function DoorSignPrint({
     <div className={`ds-sheet${mono ? ' ds-mono' : ''}`} dir="rtl">
       <style>{css}</style>
 
-      {/* ── سربرگ ── */}
+      {/* ── سربرگ ──
+          نام کلاس، عنوانِ وسط است (از classrooms.name). نام مؤسسه از دادهٔ
+          دانشگاه زیر آرم می‌آید و در وسط تکرار نمی‌شود. */}
       <div className="ds-hd">
         <div className="ds-logo-col">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img className="ds-logo" src={logoUrl} alt="آرم دانشگاه" />
           ) : (
-            <div className="ds-logo" style={{ width: '15mm', height: '15mm' }} />
+            <div className="ds-logo" style={{ width: '17mm', height: '17mm' }} />
           )}
           {universityName ? <div className="ds-uni">{fa(universityName)}</div> : null}
         </div>
         <div className="ds-mid">
-          <div className="ds-kicker">مؤسسه آموزش عالی آفاق</div>
-          <div className="ds-title">کلاس</div>
+          <div className="ds-title">{room ? fa(room.name) : 'سردر کلاسی'}</div>
           <div className="ds-sub">{subParts.join(' · ')}</div>
-        </div>
-        <div className="ds-room">
-          <div className="ds-rm-label">شمارهٔ اتاق</div>
-          <div className="ds-rm-num">{room ? fa(room.name) : '—'}</div>
-          <div className="ds-rm-sub">{[room?.buildingName, room?.floor].filter(Boolean).map(s => fa(String(s))).join(' · ') || 'ساختمان دانشگاه'}</div>
         </div>
         <div className="ds-qr">
           {qrDataUrl ? (
