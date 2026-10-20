@@ -36,6 +36,15 @@ CREATE INDEX IF NOT EXISTS "idx_bypass_offering_status" ON "enroll_bypass_reques
 CREATE INDEX IF NOT EXISTS "idx_bypass_status_deadline" ON "enroll_bypass_requests" ("status", "managerDeadlineAt");
 CREATE INDEX IF NOT EXISTS "idx_bypass_term" ON "enroll_bypass_requests" ("termId");
 
+-- RLS (پوشش کامل migrator): جدول دارای studentId/decidedByUserId است
+ALTER TABLE "enroll_bypass_requests" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS bypass_app_access ON "enroll_bypass_requests";
+CREATE POLICY bypass_app_access ON "enroll_bypass_requests" FOR ALL TO afagh_app
+  USING (nullif(current_setting('app.user_id', true), '') IS NOT NULL)
+  WITH CHECK (nullif(current_setting('app.user_id', true), '') IS NOT NULL);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON "enroll_bypass_requests" TO afagh_app;
+
 -- ۳) حداکثر یک درخواست باز برای هر (دانشجو، درس‌ارائه، نوع)
 CREATE UNIQUE INDEX IF NOT EXISTS "uq_bypass_open_request"
   ON "enroll_bypass_requests" ("studentId", "offeringId", "kind")

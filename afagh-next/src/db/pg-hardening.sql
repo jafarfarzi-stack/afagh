@@ -281,6 +281,14 @@ CREATE POLICY enroll_self_upd ON "enrollments" FOR UPDATE TO afagh_app
   WITH CHECK ("studentId" IN (SELECT "id" FROM "students"
                               WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
 
+-- RLS برای درخواست‌های بدون رعایت پیش‌نیاز/تداخل امتحانی (پوشش کامل migrator)
+ALTER TABLE "enroll_bypass_requests" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS bypass_app_access ON "enroll_bypass_requests";
+CREATE POLICY bypass_app_access ON "enroll_bypass_requests" FOR ALL TO afagh_app
+  USING (nullif(current_setting('app.user_id', true), '') IS NOT NULL)
+  WITH CHECK (nullif(current_setting('app.user_id', true), '') IS NOT NULL);
+GRANT SELECT, INSERT, UPDATE, DELETE ON "enroll_bypass_requests" TO afagh_app;
+
 DROP POLICY IF EXISTS cart_self_read ON "cart_items";
 CREATE POLICY cart_self_read ON "cart_items" FOR SELECT TO afagh_app USING (
   "studentId" IN (SELECT "id" FROM "students"
