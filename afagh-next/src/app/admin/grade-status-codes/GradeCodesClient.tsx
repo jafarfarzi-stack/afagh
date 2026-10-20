@@ -53,7 +53,7 @@ type Props = {
   initialMajors: MajorSimple[];
 };
 
-const COURSE_TYPES = ['عمومی', 'پایه', 'تخصصی', 'اختیاری'];
+const COURSE_TYPES = ['عمومی', 'پایه', 'اصلی', 'تخصصی', 'اختیاری'];
 const COURSE_NATURES = ['نظری', 'عملی', 'نظری-عملی', 'کارگاهی', 'کارآموزی', 'پروژه', 'پایان‌نامه', 'رساله', 'معرفی به استاد', 'خودخوان'];
 const OFFERING_SCOPES = [
   { value: 'DEPARTMENTAL', label: 'گروهی (DEPARTMENTAL)' },

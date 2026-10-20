@@ -6,7 +6,7 @@ import { createCourseAction, deleteCourseAction, updateCourseAction } from './ac
 
 export const dynamic = 'force-dynamic';
 
-const TYPE_OPTS = ['عمومی', 'پایه', 'تخصصی', 'اختیاری'];
+const TYPE_OPTS = ['عمومی', 'پایه', 'اصلی', 'تخصصی', 'اختیاری'];
 
 export default async function CoursesPage({ searchParams }: { searchParams: Promise<{ msg?: string; err?: string }> }) {
   const sp = await searchParams;
@@ -52,7 +52,7 @@ export default async function CoursesPage({ searchParams }: { searchParams: Prom
                       <input name="title" defaultValue={c.title} className="input !py-1 !px-2 flex-1 min-w-40" />
                       <input name="theo" type="number" min={0} defaultValue={Number(c.theoreticalUnits ?? 0)} className="input !py-1 !px-2 w-16" dir="ltr" />
                       <input name="prac" type="number" min={0} defaultValue={Number(c.practicalUnits ?? 0)} className="input !py-1 !px-2 w-16" dir="ltr" />
-                      <select name="type" defaultValue={TYPE_OPTS.includes(c.courseType ?? '') ? c.courseType as string : 'تخصصی'} className="input !py-1 !px-2">{TYPE_OPTS.map(t => <option key={t}>{t}</option>)}</select>
+                      <select name="type" defaultValue={TYPE_OPTS.includes(c.courseType ?? '') ? c.courseType as string : 'تخصصی'} className="input !py-1 !px-2">{(TYPE_OPTS.includes(c.courseType ?? '') ? TYPE_OPTS : [c.courseType as string, ...TYPE_OPTS]).map(t => <option key={t}>{t}</option>)}</select>
                       <select name="grading" defaultValue={c.gradingType ?? 'NUMERIC'} className="input !py-1 !px-2"><option value="NUMERIC">عددی</option><option value="PASS_FAIL">قبول/رد</option>{c.gradingType && !['NUMERIC','PASS_FAIL'].includes(c.gradingType) && <option value={c.gradingType}>{c.gradingType}</option>}</select>
                       <label className="flex items-center gap-1 text-slate-500">معدل<input type="checkbox" name="gpa" defaultChecked={!!c.affectsGpa} className="size-4" /></label>
                       <button className="btn-ghost !py-1 !px-2">ذخیره</button>

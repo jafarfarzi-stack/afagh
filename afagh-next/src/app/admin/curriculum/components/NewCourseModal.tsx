@@ -61,7 +61,7 @@ export default function NewCourseModal() {
                   نوع درس:
                   <select value={newCourseForm.courseType} onChange={e => setNewCourseForm({ ...newCourseForm, courseType: e.target.value })}
                     className="mt-1 w-full border border-slate-300 rounded-lg p-2 font-bold bg-white">
-                    {['عمومی', 'پایه', 'تخصصی', 'اختیاری'].map(t => <option key={t} value={t}>{t}</option>)}
+                    {['عمومی', 'پایه', 'اصلی', 'تخصصی', 'اختیاری'].map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </label>
                 <label className="block font-bold text-slate-700">
