@@ -1,9 +1,10 @@
 'use client';
 
-// بنر + فیلتر درختی دانشکده ← گروه ← رشته + دکمهٔ «نسخهٔ جدید»
+// بنر + فیلتر درختی دانشکده ← گروه ← رشته + جستجوی مستقیم کد رشته + دکمهٔ «نسخهٔ جدید»
 import { useCurriculum } from '../curriculum-context';
 import { faNum } from '../curriculum-core';
 import { termCountForDegree } from '@/lib/term-plan';
+import { useEffect, useMemo, useState } from 'react';
 
 export default function CurriculumHeader() {
   const {
@@ -23,6 +24,41 @@ export default function CurriculumHeader() {
     setSelectedVersionId,
     tracks,
   } = useCurriculum();
+  const [majorQuery, setMajorQuery] = useState('');
+
+  const searchedMajors = useMemo(() => {
+    const q = majorQuery.trim();
+    if (!q) return filteredMajors;
+    return filteredMajors.filter(m =>
+      String(m.code ?? '').includes(q) || String(m.name ?? '').includes(q)
+    );
+  }, [filteredMajors, majorQuery]);
+
+  // جستجوی مستقیم: اگر کد دقیق وارد شد، همان رشته را انتخاب کن
+  useEffect(() => {
+    const q = majorQuery.trim();
+    if (!q) return;
+    const exact = majors.find(m => String(m.code ?? '') === q);
+    if (exact) {
+      setFacultyFilter(exact.facultyName ?? '');
+      setDeptFilter(exact.departmentName ?? '');
+      setSelectedMajorId(exact.id);
+      setSelectedVersionId(null);
+      setDetail(null);
+    }
+  }, [majorQuery, majors, setFacultyFilter, setDeptFilter, setSelectedMajorId, setSelectedVersionId, setDetail]);
+
+  // اگر فقط یک نتیجه ماند، خودکار انتخاب کن
+  useEffect(() => {
+    if (majorQuery.trim() && searchedMajors.length === 1) {
+      const m = searchedMajors[0];
+      if (m.id !== selectedMajorId) {
+        setSelectedMajorId(m.id);
+        setSelectedVersionId(null);
+        setDetail(null);
+      }
+    }
+  }, [searchedMajors, majorQuery, selectedMajorId, setSelectedMajorId, setSelectedVersionId, setDetail]);
 
   return (
     <>
@@ -44,7 +80,7 @@ export default function CurriculumHeader() {
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
           <div>
             <label className="text-indigo-200 font-bold block mb-1">دانشکده:</label>
             <select
@@ -72,18 +108,28 @@ export default function CurriculumHeader() {
             </select>
           </div>
           <div>
-            <label className="text-indigo-200 font-bold block mb-1">رشته / مقطع {filteredMajors.length !== majors.length ? `(${faNum(filteredMajors.length)} از ${faNum(majors.length)})` : `(${faNum(majors.length)})`}:</label>
+            <label className="text-indigo-200 font-bold block mb-1">جستجوی رشته (کد یا نام):</label>
+            <input
+              type="text"
+              value={majorQuery}
+              onChange={e => setMajorQuery(e.target.value)}
+              placeholder="مثلاً ۵۴۴ یا مهندسی حرفه‌ای برق"
+              className="w-full bg-slate-900/90 text-white border border-indigo-400/50 rounded-lg px-2.5 py-2 font-bold placeholder:text-indigo-300/50"
+            />
+          </div>
+          <div>
+            <label className="text-indigo-200 font-bold block mb-1">رشته / مقطع {searchedMajors.length !== majors.length ? `(${faNum(searchedMajors.length)} از ${faNum(majors.length)})` : `(${faNum(majors.length)})`}:</label>
             <select
               value={selectedMajorId}
               onChange={e => { setSelectedMajorId(Number(e.target.value)); setSelectedVersionId(null); setDetail(null); }}
               className="w-full bg-slate-900/90 text-white border border-indigo-400/50 rounded-lg px-2.5 py-2 font-bold"
             >
-              {filteredMajors.map(m => (
+              {searchedMajors.map(m => (
                 <option key={m.id} value={m.id}>
                   {m.code} — {m.name} — {m.degreeTitle ?? '—'}{m.facultyName ? ` (${m.facultyName}${m.departmentName ? ` / ${m.departmentName}` : ''})` : ''}
                 </option>
               ))}
-              {filteredMajors.length === 0 && <option value={selectedMajorId}>— موردی با این فیلتر یافت نشد —</option>}
+              {searchedMajors.length === 0 && <option value={selectedMajorId}>— موردی با این جستجو یافت نشد —</option>}
             </select>
           </div>
         </div>
