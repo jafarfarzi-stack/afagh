@@ -196,7 +196,7 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
                           <div className="prof-print-inner hidden print:flex print:flex-col print:justify-start print:gap-[2px] print:h-full text-[6.8pt] font-bold leading-[1.25] text-black">
                             {doorPrint ? (
                               <>
-                                <div className="prof-print-title text-[9pt] font-black leading-tight line-clamp-2">{e.title}{e.merged ? ' 🔗' : ''}</div>
+                                <div className="prof-print-title text-[7pt] font-black leading-tight">{e.title}{e.merged ? ' 🔗' : ''}</div>
                                 <div className="prof-print-meta text-[7pt] leading-tight text-slate-900">
                                   گروه {professorCalendarEntryGroup(e)}{printCount && e.enrolledCount != null ? ` · 👥 ${faNum(e.enrolledCount)}${e.capacity != null ? `/${faNum(e.capacity)}` : ''}` : ''} · {professorCalendarEntryTime(e)}
                                 </div>
