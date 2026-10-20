@@ -10,8 +10,11 @@ import {
   classrooms,
   course_offerings,
   courses,
+  curriculum_courses,
+  curriculum_versions,
   degree_level_configs,
   enrollments,
+  majors,
   notifications,
   process_definitions,
   process_steps,
@@ -24,6 +27,8 @@ import { assertServerActionOrigin } from '@/lib/security';
 import { offeringVisible } from '@/lib/offering-targeting';
 import { enqueueSubmit, ensureWorker, rateLimitSubmit, redisAvailable } from '@/lib/waitingRoom';
 import { processQueuedSubmit, type SubmitResult } from '@/lib/enroll-engine';
+import { resolveApplicableCurriculum, type ResolvableVersion } from '@/lib/curriculum-resolution';
+import { listTermsForUniversity, termOrdinalForEntry } from '@/lib/term-scope';
 
 /**
  * زمینهٔ انتخاب واحد.
@@ -150,6 +155,65 @@ export async function autoFillCartFromChartAction(): Promise<{
   if (!term) return { ok: false, count: 0, units: 0, message: 'ترم جاری فعال نیست.' };
   if (myUni == null) return { ok: false, count: 0, units: 0, message: 'دانشگاه شما مشخص نیست.' };
 
+  // 🎯 پیشنهاد بر اساس چارت سرفصل دانشجو: فقط دروس ترم جاریِ چارت را پیشنهاد می‌دهیم.
+  // اگر چارت/ترم قابل حل نبود، به رفتار پیشین (همهٔ ارائه‌ها) برمی‌گردیم.
+  const suggestedCourseIds = new Set<number>();
+  try {
+    const versionRows = me.majorId
+      ? await db
+          .select({
+            id: curriculum_versions.id,
+            majorId: curriculum_versions.majorId,
+            degreeLevelId: curriculum_versions.degreeLevelId,
+            trackId: curriculum_versions.trackId,
+            versionCode: curriculum_versions.versionCode,
+            status: curriculum_versions.status,
+            entryYearFrom: curriculum_versions.entryYearFrom,
+            entryYearTo: curriculum_versions.entryYearTo,
+          })
+          .from(curriculum_versions)
+          .where(
+            me.universityId
+              ? and(eq(curriculum_versions.majorId, me.majorId), eq(curriculum_versions.universityId, me.universityId))
+              : eq(curriculum_versions.majorId, me.majorId)
+          )
+      : [];
+    const resolution = me.majorId
+      ? resolveApplicableCurriculum(versionRows as ResolvableVersion[], {
+          majorId: me.majorId,
+          degreeLevelId: me.degreeLevelId,
+          trackId: null,
+          entryYear: me.entryYear,
+          entryTerm: me.entryTerm,
+        })
+      : null;
+    const version = resolution?.version ?? null;
+    if (version) {
+      const chartRows = await db
+        .select({
+          courseId: curriculum_courses.courseId,
+          recommendedSemester: curriculum_courses.recommendedSemester,
+        })
+        .from(curriculum_courses)
+        .where(eq(curriculum_courses.curriculumVersionId, version.id));
+      const ordinalTerms = await listTermsForUniversity(me.universityId, { limit: null }).catch(() => []);
+      const currentTermOrdinal = term
+        ? termOrdinalForEntry({
+            entryYear: me.entryYear,
+            entryTerm: me.entryTerm,
+            terms: ordinalTerms,
+            targetTermCode: term.termCode,
+          })
+        : null;
+      const targetSem = currentTermOrdinal ?? null;
+      const matched = chartRows.filter(r => targetSem == null || r.recommendedSemester === targetSem);
+      const pool = matched.length > 0 ? matched : chartRows;
+      for (const r of pool) suggestedCourseIds.add(r.courseId);
+    }
+  } catch {
+    // در صورت خطا، بدون فیلتر چارت ادامه می‌دهیم (رفتار پیشین)
+  }
+
   // ۱. پاکسازی سبد قبلی جهت چیدمان تازه و بدون تداخل
   await db.transaction(tx =>
     tx.delete(cart_items).where(eq(cart_items.studentId, me.id))
@@ -207,6 +271,8 @@ export async function autoFillCartFromChartAction(): Promise<{
   // ۴. دسته‌بندی ارائه‌ها بر اساس کد/شناسه درس (جهت مدیریت چندگروهی)
   const byCourse = new Map<number, typeof offerings>();
   for (const off of visibleOfferings) {
+    // 🎯 اگر چارت دانشجو موجود است، فقط دروس ترم جاریِ چارت را پیشنهاد می‌دهیم
+    if (suggestedCourseIds.size > 0 && !suggestedCourseIds.has(off.courseId)) continue;
     // فیلتر عدم درج پایان‌نامه ارشد برای دانشجوی کارشناسی
     if (me.degreeLevelId === 1 && (off.code.startsWith('21') || off.title.includes('پایان‌نامه'))) continue;
     if (off.title.includes('معرفی به استاد') || off.title.includes('مطالعه فردی')) continue;
