@@ -75,6 +75,9 @@ interface StudentRequestsClientProps {
   };
   processes: ProcessDef[];
   myRequests: RequestItem[];
+  /** سربرگ گواهی: نام و آرم دانشگاه از تنظیمات (هیچ‌کدام هاردکد نیست) */
+  universityTitle?: string | null;
+  universityLogo?: string | null;
 }
 
 // ── گزینه‌های پویا (optionsEndpoint) ────────────────────────────────────────
@@ -166,6 +169,8 @@ export default function StudentRequestsClient({
   student,
   processes,
   myRequests: initialRequests,
+  universityTitle,
+  universityLogo,
 }: StudentRequestsClientProps) {
   const [activeTab, setActiveTab] = useState<'MY_REQUESTS' | 'NEW_REQUEST'>('MY_REQUESTS');
   const [selectedProcessCode, setSelectedProcessCode] = useState<string>(processes[0]?.code || 'ENROLLMENT_CERT');
@@ -878,12 +883,12 @@ export default function StudentRequestsClient({
                 <div className="text-right space-y-1">
                   <p className="font-bold">جمهوری اسلامی ایران</p>
                   <p className="font-semibold text-slate-700">وزارت علوم، تحقیقات و فناوری</p>
-                  <p className="font-black text-sm">دانشگاه جامع آفاق</p>
+                  <p className="font-black text-sm">{universityTitle || ''}</p>
                 </div>
                 <div className="flex flex-col items-center">
-                  <div className="w-12 h-12 rounded-full border-2 border-slate-800 flex items-center justify-center font-black text-lg">
-                    آفاق
-                  </div>
+                  {universityLogo ? (
+                    <img src={universityLogo} alt="آرم دانشگاه" className="w-12 h-12 object-contain" />
+                  ) : null}
                   <h3 className="font-black text-sm mt-1">{viewingCertificate.processTitle}</h3>
                 </div>
                 <div className="text-left font-mono text-[11px] space-y-1">

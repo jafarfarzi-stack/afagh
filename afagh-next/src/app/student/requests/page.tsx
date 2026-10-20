@@ -7,11 +7,13 @@ import {
   request_parallel_checkpoints,
   request_step_logs,
   student_requests,
+  universities,
   users,
 } from '@/db/schema';
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { getTermScope } from '@/lib/term-scope';
+import { getSetting } from '@/lib/settings';
 import { ensureDefaultProcesses } from '@/lib/workflow-engine';
 import StudentRequestsClient from './StudentRequestsClient';
 import TermFilterNote from '../term-filter-note';
@@ -102,6 +104,14 @@ export default async function StudentRequestsPage() {
     ? scope.terms.find(t => t.id === scope.selectedId) ?? null
     : null;
 
+  // نام/آرم دانشگاه برای سربرگ گواهی — از رکورد دانشگاه و سپس تنظیمات سراسری (بدون هاردکد)
+  const [uniRow] = me.universityId
+    ? await db.select({ title: universities.title, logoUrl: universities.logoUrl })
+        .from(universities).where(eq(universities.id, me.universityId)).limit(1)
+    : [null];
+  const uniTitle = uniRow?.title || (await getSetting('UNIVERSITY_NAME').catch(() => '')) || null;
+  const uniLogo = uniRow?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
+
   const myRequestsFormatted = rawRequests.map(r => {
     let parsedForm: any = {};
     try {
@@ -158,6 +168,8 @@ export default async function StudentRequestsPage() {
           majorName: major?.name || '—',
           degreeTitle: level?.title || '—',
         }}
+        universityTitle={uniTitle}
+        universityLogo={uniLogo}
         processes={processesList}
         myRequests={myRequestsFormatted}
       />
