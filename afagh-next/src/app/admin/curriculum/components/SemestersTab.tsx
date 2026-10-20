@@ -4,6 +4,7 @@
 import { useCurriculum } from '../curriculum-context';
 import { STATUS_UI, faNum, semesterUnitTotal } from '../curriculum-core';
 import { SUMMER_SEMESTER, isSummerSemester } from '@/lib/term-plan';
+import PrintButton from '@/components/PrintButton';
 
 export default function SemestersTab() {
   const {
@@ -34,7 +35,7 @@ export default function SemestersTab() {
     <>
       {/* ترمبندی چارت — تب: ترمبندی چارت */}
       {activeTab === 'SEMESTERS' && detail && (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4 curriculum-print-area">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h4 className="font-extrabold text-slate-900 text-sm">🗺️ ترمبندی چارت — {selectedVersion.title}</h4>
@@ -47,6 +48,9 @@ export default function SemestersTab() {
               مجموع واحدهای چارت: {faNum(totalPlannedUnits)} از {faNum(detail.version.totalRequiredUnits)} واحد الزامی
               {detail.version.maxUnitsPerTerm != null ? ` · سقف هر ترم: ${faNum(detail.version.maxUnitsPerTerm)} واحد` : ''}
             </div>
+          </div>
+          <div className="print:hidden">
+            <PrintButton />
           </div>
 
           {!isDraft && (
