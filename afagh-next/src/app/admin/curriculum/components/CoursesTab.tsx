@@ -96,6 +96,7 @@ export default function CoursesTab() {
                   <th className="p-2.5 border border-slate-800" title="درس‌هایی که گذراندن‌شان برای فارغ‌التحصیلی اجباری است؛ موتور تطبیق فارغ‌التحصیلی فقط همین‌ها را چک می‌کند">شرط فارغ‌التحصیلی</th>
                   <th className="p-2.5 border border-slate-800" title="کد وضعیت سما هنگام قبولی (از curriculum_courses.passGradeStatusCode)">کد قبولی</th>
                   <th className="p-2.5 border border-slate-800" title="کد وضعیت سما هنگام مردودی (از curriculum_courses.failGradeStatusCode)">کد مردودی</th>
+                  <th className="p-2.5 border border-slate-800" title="درس‌هایی که از برنامهٔ پایین‌تر (مثلاً کارشناسی) به‌عنوان جبرانی در این نسخه ارائه می‌شوند — کد قبولی/مردودی پیش‌فرض ۱۲/۲۲">جبرانی</th>
                   <th className="p-2.5 border border-slate-800">پیش‌نیاز / هم‌نیاز</th>
                   <th className="p-2.5 border border-slate-800">عملیات</th>
                 </tr>
@@ -105,7 +106,12 @@ export default function CoursesTab() {
                   <tr key={c.courseId} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
                     <td className="p-2 border border-slate-200 text-center text-slate-500 font-bold">{faNum(idx + 1)}</td>
                     <td className="p-2 border border-slate-200 font-mono text-center font-bold text-indigo-900">{c.code}</td>
-                    <td className="p-2 border border-slate-200 font-extrabold text-right">{c.title}</td>
+                    <td className="p-2 border border-slate-200 font-extrabold text-right">
+                      {c.title}
+                      {(c.passGradeStatusCode === '12' || c.passGradeStatusCode === '11' || c.passGradeStatusCode === '32' || c.passGradeStatusCode === '44' || c.passGradeStatusCode === '53') && (
+                        <span className="mr-1 inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-black">جبرانی</span>
+                      )}
+                    </td>
                     <td className="p-2 border border-slate-200 text-center font-black">{faNum(c.units)}</td>
                     <td className="p-2 border border-slate-200 text-center">
                       {isDraft ? (
@@ -194,6 +200,24 @@ export default function CoursesTab() {
                       )}
                     </td>
                     <td className="p-2 border border-slate-200 text-center">
+                      {(() => {
+                        const isComp = c.passGradeStatusCode === '12' || c.passGradeStatusCode === '11' || c.passGradeStatusCode === '32' || c.passGradeStatusCode === '44' || c.passGradeStatusCode === '53';
+                        return isDraft ? (
+                          <label className="inline-flex items-center gap-1 cursor-pointer" title={isComp ? 'جبرانی (کد ۱۲/۲۲)' : 'عادی — تیک بزنید تا جبرانی شود'}>
+                            <input
+                              type="checkbox"
+                              checked={isComp}
+                              onChange={e => handleUpdateGradeStatusCodes(c.courseId, e.target.checked ? '12' : null, e.target.checked ? '22' : null)}
+                              className="accent-indigo-700 w-4 h-4"
+                            />
+                            <span className="text-[10px] font-bold">{isComp ? 'جبرانی' : ''}</span>
+                          </label>
+                        ) : (
+                          <span className={`text-[10px] font-black ${isComp ? 'text-amber-700' : 'text-slate-300'}`}>{isComp ? 'جبرانی' : '—'}</span>
+                        );
+                      })()}
+                    </td>
+                    <td className="p-2 border border-slate-200 text-center">
                       <div className="text-[10px] font-bold text-slate-600 leading-relaxed max-w-44">
                         {(() => {
                           const pre = ruleText(c.courseId, 'PREREQ');
@@ -261,6 +285,12 @@ export default function CoursesTab() {
                         </tr>
                       );
                     })}
+                    <tr className="text-center bg-amber-50 font-black">
+                      <td className="p-2 border border-amber-200">جبرانی (از برنامهٔ پایین‌تر)</td>
+                      <td className="p-2 border border-amber-200">{faNum(detail.courses.filter(c => c.passGradeStatusCode === '12' || c.passGradeStatusCode === '11' || c.passGradeStatusCode === '32' || c.passGradeStatusCode === '44' || c.passGradeStatusCode === '53').length)} درس</td>
+                      <td className="p-2 border border-amber-200">{faNum(detail.courses.filter(c => c.passGradeStatusCode === '12' || c.passGradeStatusCode === '11' || c.passGradeStatusCode === '32' || c.passGradeStatusCode === '44' || c.passGradeStatusCode === '53').reduce((s, c) => s + Number(c.units || 0), 0))}</td>
+                      <td className="p-2 border border-amber-200">—</td>
+                    </tr>
                     <tr className="text-center bg-indigo-50 font-black">
                       <td className="p-2 border border-indigo-200">جمع کل</td>
                       <td className="p-2 border border-indigo-200">{faNum(detail.courses.length)} درس</td>
