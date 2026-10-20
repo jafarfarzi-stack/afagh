@@ -226,6 +226,22 @@ export default async function DoorSignPrint({
   .ds-mono .ds-sw { border-color:#000; background:#fff; }
   .ds-mono .ds-sw.lab { border-style:dashed; }
   .ds-mono .ds-chip { border-color:#000; color:#000; }
+
+  /* ── چاپ: فقط پوستر، در یک برگِ A4 افقی ──────────────────────────────
+     بدون این بلوک، دو چیز پوستر را می‌شکست:
+       ۱) @pageِ سراسریِ globals.css که «A4 portrait + حاشیهٔ ۱۰mm» است،
+          پس برگ عمودی می‌شد و عرضِ ۲۹۷mm سرریز می‌کرد و روی کاغذ جا نمی‌شد.
+       ۲) پوستهٔ پنل مدیریت (<main class="max-w-6xl p-5">) که عرض را محدود
+          و پوستر را از گوشهٔ کاغذ جدا می‌کرد.
+     همچنین نوار فیلترها/تب‌ها نباید روی کاغذ بیاید: کلاس .wb-chrome در
+     صفحهٔ میزبان فقط برای همین کار اضافه شده است. */
+  @media print {
+    @page { size: 297mm 210mm; margin: 0; }
+    html, body { margin:0 !important; padding:0 !important; background:#fff !important; }
+    body:has(.ds-sheet) .wb-chrome { display:none !important; }
+    body:has(.ds-sheet) main { max-width:none !important; width:auto !important; margin:0 !important; padding:0 !important; }
+    .ds-sheet { width:297mm; height:210mm; border-radius:0 !important; box-shadow:none !important; }
+  }
   `;
 
   const n = HOURS.length - 1; // 13 فاصله

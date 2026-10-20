@@ -1,12 +1,9 @@
 import React from 'react';
 import Link from 'next/link';
-import { and, asc, eq, gt, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import {
-  class_sessions,
   classrooms,
-  courses,
-  course_offerings,
   offering_professors,
   professor_class_attendance,
   universities,
@@ -19,6 +16,7 @@ import {
   parseRoomCode,
   tehranNow,
 } from '@/lib/room-checkin';
+import { listSessionsInRoom, listUpcomingSessionsInRoom } from '@/lib/room-session-lookup';
 import { recordRoomAttendance } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -188,26 +186,8 @@ export default async function RoomCheckinPage({
 
   const now = tehranNow();
 
-  const todayRows = await db
-    .select({
-      id: class_sessions.id,
-      startTime: class_sessions.startTime,
-      endTime: class_sessions.endTime,
-      offeringId: class_sessions.offeringId,
-      professorId: course_offerings.professorId,
-      courseTitle: courses.title,
-      courseCode: courses.code,
-      groupNumber: course_offerings.groupNumber,
-    })
-    .from(class_sessions)
-    .innerJoin(course_offerings, eq(course_offerings.id, class_sessions.offeringId))
-    .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-    .where(and(
-      eq(class_sessions.roomId, roomId),
-      eq(class_sessions.isActive, 1),
-      eq(class_sessions.sessionDate, now.jalali),
-    ))
-    .orderBy(asc(class_sessions.startTime));
+  // اتاق از برنامهٔ هفتگی حل می‌شود، نه از class_sessions.roomId (که تقریباً همیشه خالی است).
+  const todayRows = await listSessionsInRoom(roomId, now.jalali);
 
   // استادِ مشترک: مالکِ ارائه نیست ولی در offering_professors ثبت شده است.
   const notMine = todayRows.filter(r => r.professorId !== me.id);
@@ -258,27 +238,7 @@ export default async function RoomCheckinPage({
   // اگر امروز کلاسی در این اتاق نداریم، نزدیک‌ترین جلساتِ آیندهٔ همین استاد را نشان بده.
   let upcoming: { id: number; sessionDate: string; startTime: string; endTime: string; courseTitle: string; courseCode: string }[] = [];
   if (!focus) {
-    const nextRows = await db
-      .select({
-        id: class_sessions.id,
-        sessionDate: class_sessions.sessionDate,
-        startTime: class_sessions.startTime,
-        endTime: class_sessions.endTime,
-        offeringId: class_sessions.offeringId,
-        professorId: course_offerings.professorId,
-        courseTitle: courses.title,
-        courseCode: courses.code,
-      })
-      .from(class_sessions)
-      .innerJoin(course_offerings, eq(course_offerings.id, class_sessions.offeringId))
-      .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-      .where(and(
-        eq(class_sessions.roomId, roomId),
-        eq(class_sessions.isActive, 1),
-        gt(class_sessions.sessionDate, now.jalali),
-      ))
-      .orderBy(asc(class_sessions.sessionDate), asc(class_sessions.startTime))
-      .limit(12);
+    const nextRows = await listUpcomingSessionsInRoom(roomId, now.jalali, 30);
 
     const nextNotMine = nextRows.filter(r => r.professorId !== me.id);
     let nextShared = new Set<number>();

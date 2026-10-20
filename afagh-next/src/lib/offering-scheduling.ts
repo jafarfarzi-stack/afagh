@@ -148,5 +148,9 @@ export function capacityWarning(roomCapacity: number | null, offeringCapacity: n
 /** فهرست کلاس‌های همان دانشگاه (G3) — کلاس عام/سیستمی در پنل مدیر گروه دیده نمی‌شود */
 export async function listClassroomsForUniversity(exec: any, myUni: number | null): Promise<typeof classrooms.$inferSelect[]> {
   if (myUni == null) return [];
-  return exec.select().from(classrooms).where(eq(classrooms.universityId, myUni)).orderBy(classrooms.name);
+  // فقط کلاس‌های «فعال» برای برنامه‌ریزی کلاسی قابل انتخاب‌اند؛ غیرفعال‌کردن کلاس
+  // از صفحهٔ تنظیمات انجام می‌شود و اینجا اثرش اعمال می‌شود.
+  return exec.select().from(classrooms)
+    .where(and(eq(classrooms.universityId, myUni), eq(classrooms.isActive, 1)))
+    .orderBy(classrooms.name);
 }

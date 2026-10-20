@@ -5,16 +5,11 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import {
-  class_sessions,
-  classrooms,
-  course_offerings,
-  offering_professors,
-  professor_class_attendance,
-} from '@/db/schema';
+import { course_offerings, offering_professors, professor_class_attendance } from '@/db/schema';
 import { getSessionUser, getStaffByUser } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 import { checkinState, parseRoomCode, tehranNow } from '@/lib/room-checkin';
+import { getRoomContext, listSessionsInRoom } from '@/lib/room-session-lookup';
 
 /**
  * ثبت حضور استاد با اسکن QR سردر کلاسی.
@@ -22,10 +17,12 @@ import { checkinState, parseRoomCode, tehranNow } from '@/lib/room-checkin';
  * ⚠ این تابع تنها مرجعِ تصمیم است. صفحهٔ `/p/room-*` فقط «نمایش» می‌دهد؛ هر
  * درخواستی — حتی اگر از UI دستکاری‌شده بیاید — اینجا دوباره کامل بررسی می‌شود:
  *   ۱) کاربر وارد شده و پروندهٔ هیئت علمی دارد.
- *   ۲) جلسه واقعاً در همین اتاق و در «امروزِ تهران» است.
+ *   ۲) جلسه واقعاً در همین اتاق و در «امروزِ تهران» است
+ *      (با همان تابعِ حلِ اتاق که صفحه استفاده می‌کند، تا هرگز واگرا نشوند).
  *   ۳) اکنون داخل پنجرهٔ مجاز است (نه زودتر، نه بعد از مهلت).
  *   ۴) استاد واقعاً استادِ همان درس است (مالک یا استاد مشترک).
- *   ۵) ثبت تکراری انجام نمی‌شود (به‌ازای هر جلسه یک ردیف برای هر استاد).
+ *   ۵) مرزِ بین‌دانشگاهی رعایت شده است.
+ *   ۶) ثبت تکراری انجام نمی‌شود (به‌ازای هر جلسه یک ردیف برای هر استاد).
  */
 export async function recordRoomAttendance(formData: FormData): Promise<void> {
   const rawCode = String(formData.get('code') ?? '').trim();
@@ -44,27 +41,12 @@ export async function recordRoomAttendance(formData: FormData): Promise<void> {
   const me = await getStaffByUser(user.id);
   if (!me) redirect(`${back}?err=notstaff`);
 
-  const [session] = await db
-    .select({
-      id: class_sessions.id,
-      offeringId: class_sessions.offeringId,
-      roomId: class_sessions.roomId,
-      sessionDate: class_sessions.sessionDate,
-      startTime: class_sessions.startTime,
-      endTime: class_sessions.endTime,
-      isActive: class_sessions.isActive,
-      status: class_sessions.status,
-    })
-    .from(class_sessions)
-    .where(eq(class_sessions.id, sessionId))
-    .limit(1);
-
-  if (!session || session.isActive !== 1) redirect(`${back}?err=nosession`);
-  // QRِ یک اتاق هرگز نباید جلسهٔ اتاق دیگر را ثبت کند.
-  if (session.roomId !== roomId) redirect(`${back}?err=wrongroom`);
-
   const now = tehranNow();
-  if (session.sessionDate !== now.jalali) redirect(`${back}?err=notoday`);
+
+  // همان منبعِ حقیقتی که صفحه استفاده می‌کند: اتاق از برنامهٔ هفتگی حل می‌شود.
+  const todaySessions = await listSessionsInRoom(roomId, now.jalali);
+  const session = todaySessions.find(s => s.id === sessionId);
+  if (!session) redirect(`${back}?err=nosession`);
 
   if (checkinState(session.startTime, session.endTime, now.minutes) !== 'OPEN') {
     redirect(`${back}?err=window`);
@@ -92,11 +74,7 @@ export async function recordRoomAttendance(formData: FormData): Promise<void> {
   if (!owns) redirect(`${back}?err=notyours`);
 
   // مرزِ بین‌دانشگاهی — همان گاردِ صفحه، اینجا هم چون سرور مرجعِ نهاییِ تصمیم است.
-  const [room] = await db
-    .select({ universityId: classrooms.universityId })
-    .from(classrooms)
-    .where(eq(classrooms.id, roomId))
-    .limit(1);
+  const room = await getRoomContext(roomId);
   if (!room) redirect(`${back}?err=badroom`);
 
   const myUni = me.universityId ?? user.universityId ?? null;

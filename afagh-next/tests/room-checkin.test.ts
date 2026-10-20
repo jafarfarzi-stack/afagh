@@ -6,6 +6,7 @@ import {
   checkinWindowLabel,
   compareJalali,
   hmToMinutes,
+  iranDowFromJalali,
   minutesToHm,
   parseRoomCode,
   tehranNow,
@@ -115,5 +116,28 @@ assert.ok(compareJalali('1405/07/29', '1405/07/28') > 0);
 assert.equal(compareJalali('1405/07/28', '1405/07/28'), 0);
 assert.ok(compareJalali('1405/07/28', '1405/08/01') < 0, 'مقایسهٔ رشته‌ای با صفرپر درست کار می‌کند');
 assert.ok(compareJalali('1405/12/29', '1406/01/01') < 0);
+
+// ── ۶) روزِ هفتهٔ ایرانی (کلیدِ حلِ اتاق از برنامهٔ هفتگی) ──────────────────
+// 1405/07/28 = 2026-10-20 = سه‌شنبه → ۳  (شنبه=۰)
+assert.equal(iranDowFromJalali('1405/07/28'), 3);
+assert.equal(iranDowFromJalali('1405/07/29'), 4); // چهارشنبه
+assert.equal(iranDowFromJalali('1405/07/30'), 5); // پنج‌شنبه
+assert.equal(iranDowFromJalali('1405/08/01'), 6); // جمعه
+assert.equal(iranDowFromJalali('1405/08/02'), 0, 'شنبه باید ۰ باشد (شماره‌گذاریِ schedules)');
+assert.equal(iranDowFromJalali(' 1405/07/28 '), 3);
+
+// نامعتبر → null (fail-closed؛ اتاق حل نمی‌شود)
+assert.equal(iranDowFromJalali('abc'), null);
+assert.equal(iranDowFromJalali('1405/13/01'), null);
+assert.equal(iranDowFromJalali('1405/00/01'), null);
+assert.equal(iranDowFromJalali('1405/07'), null);
+assert.equal(iranDowFromJalali(''), null);
+assert.equal(iranDowFromJalali(null), null);
+
+// هر روزِ هفته در بازهٔ ۰..۶ بماند (پوششِ کاملِ یک هفته)
+const week = new Set<number>();
+for (let d = 28; d <= 30; d++) week.add(iranDowFromJalali(`1405/07/${String(d).padStart(2, '0')}`)!);
+for (let d = 1; d <= 4; d++) week.add(iranDowFromJalali(`1405/08/0${d}`)!);
+assert.equal(week.size, 7, 'هفت روزِ متوالی باید هفت روزِ هفتهٔ متمایز بدهند');
 
 console.log('✓ همهٔ تست‌های room-checkin موفق');

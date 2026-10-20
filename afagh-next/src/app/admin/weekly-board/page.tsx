@@ -11,7 +11,6 @@ import { getSetting, getBool } from '@/lib/settings';
 import { groupIntoMerged, mergedGroupKey, professorCalendarEntryKey, type ProfessorCalendarWeekType } from '@/lib/professor-calendar-layout';
 import ProfessorCalendarGrid, { type ProfessorCalendarEntry } from '@/app/professor/professor-calendar-grid';
 import DoorSignPrint from './door-sign-print';
-import { toggleRoomActive } from './actions';
 import PrintButton from './PrintButton';
 import pkg from '../../../../package.json';
 const APP_VERSION = (pkg as { version?: string }).version ?? '1.0.0';
@@ -298,7 +297,7 @@ function buildBoardCalendarEntries(
 }
 
 export default async function WeeklyBoardPage({ searchParams }: {
-  searchParams: Promise<{ term?: string; faculty?: string; dept?: string; room?: string; tab?: string; q?: string; code?: string; title?: string; gender?: string; count?: string; mono?: string; showInactive?: string }>;
+  searchParams: Promise<{ term?: string; faculty?: string; dept?: string; room?: string; tab?: string; q?: string; code?: string; title?: string; gender?: string; count?: string; mono?: string; print?: string }>;
 }) {
   const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
   const uni = await getCurrentUniversity().catch(() => null);
@@ -310,8 +309,8 @@ export default async function WeeklyBoardPage({ searchParams }: {
   // تعداد دانشجو در چاپ: انتخابی کاربر (پیش‌فرض خاموش تا چاپ شلوغ نشود)؛ با ?count=1 روشن می‌شود.
   const printCount = sp.count === '1';
   const mono = sp.mono === '1';
-  // فقط کلاس‌های فعال در انتخاب‌گر نمایش داده می‌شوند؛ با ?showInactive=1 غیرفعال‌ها هم دیده می‌شوند (R-AA)
-  const showInactive = sp.showInactive === '1';
+  // فقط کلاس‌های «فعال» در انتخاب‌گر می‌آیند. فعال/غیرفعال‌کردن کلاس ربطی به سردر
+  // کلاسی ندارد و جای آن صفحهٔ تنظیمات است (بخش «داده‌های پایه»).
   const termId = Number(sp.term) || 0;
   const facultyId = Number(sp.faculty) || 0;
   const deptId = Number(sp.dept) || 0;
@@ -417,7 +416,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
       .from(classrooms)
       .where(and(
         uni ? eq(classrooms.universityId, uni.id) : undefined,
-        showInactive ? undefined : eq(classrooms.isActive, 1),
+        eq(classrooms.isActive, 1),
         sql`EXISTS (SELECT 1 FROM schedules s
           JOIN course_offerings o ON o.id = s."offeringId"
           JOIN courses c ON c.id = o."courseId"
@@ -439,14 +438,6 @@ export default async function WeeklyBoardPage({ searchParams }: {
     return out.sort((a, b) => a.name.localeCompare(b.name, 'fa'));
   })();
   const selRoom = rooms.find(r => r.id === roomId || r.aliasIds.includes(roomId)) ?? null;
-
-  // همهٔ کلاس‌ها (فعال + غیرفعال) برای پنل مدیریت وضعیت — فقط در تب تابلو
-  const allRooms = tab === 'board'
-    ? await db.select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, isActive: classrooms.isActive })
-        .from(classrooms)
-        .where(uni ? eq(classrooms.universityId, uni.id) : undefined)
-        .orderBy(asc(classrooms.name))
-    : [];
 
   // ستون‌های مشترک هر سه تب (تابلوی کلاس‌ها / برنامه استاد / برنامه دانشجو)
   const boardSelect = {
@@ -618,10 +609,35 @@ export default async function WeeklyBoardPage({ searchParams }: {
   // ارم دانشگاه (الگوی سراسری اسناد: logoUrl دانشگاه، وگرنه UNIVERSITY_LOGO)
   const logoUrl = uni?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
 
+  /**
+   * برگهٔ چاپِ جدا برای سردر کلاسی.
+   *
+   * چرا: تابلوی هفتگی و سردر کلاسی دو سندِ متفاوت‌اند (یکی برنامهٔ ما برای
+   * بایگانی، دیگری پوسترِ درِ کلاس). وقتی هر دو روی یک صفحه بودند، چاپِ هرکدام
+   * دیگری را هم می‌کشید و چیدمان به‌هم می‌ریخت. با `?print=door` این صفحه فقط
+   * و فقط پوستر را برمی‌گرداند؛ نه تب، نه نوار فیلتر، نه چیز دیگر.
+   * آدرسِ آماده: /admin/weekly-board?room=<id>&print=door[&mono=1]
+   */
+  if (sp.print === 'door' && term && selRoom) {
+    return (
+      <DoorSignPrint
+        entries={boardEntries}
+        logoUrl={logoUrl}
+        room={selRoom}
+        termTitle={term.title}
+        headerFaculty={headerFaculty}
+        headerDept={headerDept}
+        appVersion={APP_VERSION}
+        universityName={uni?.title ?? null}
+        mono={mono}
+      />
+    );
+  }
+
   return (
     <div className="space-y-4" dir="rtl">
       {/* تب‌ها: تابلوی کلاس‌ها / برنامهٔ استاد / برنامهٔ دانشجو */}
-      <div className="card flex flex-wrap gap-2 print:hidden">
+      <div className="wb-chrome card flex flex-wrap gap-2 print:hidden">
         {([['board', '🗓 تابلوی کلاس‌ها'], ['prof', '👨‍🏫 برنامهٔ استاد'], ['student', '🎓 برنامهٔ دانشجو']] as const).map(([v, t]) => (
           <a
             key={v}
@@ -635,7 +651,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
 
       {tab === 'board' ? (
       <>
-      <form method="get" className="card flex flex-wrap items-end gap-3 print:hidden">
+      <form method="get" className="wb-chrome card flex flex-wrap items-end gap-3 print:hidden">
         <label className="text-xs font-bold">ترم
           <select name="term" defaultValue={term?.id} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
             {terms.map(t => <option key={t.id} value={t.id}>{t.title}{t.isCurrent === 1 ? ' (جاری)' : ''}</option>)}
@@ -694,39 +710,23 @@ export default async function WeeklyBoardPage({ searchParams }: {
             <option value="1">سیاه‌سفید (عملی = خط‌چین)</option>
           </select>
         </label>
-        <label className="flex items-end gap-2 text-xs font-bold self-end pb-2">
-          <input type="checkbox" name="showInactive" value="1" defaultChecked={showInactive} className="w-4 h-4" />
-          نمایش کلاس‌های غیرفعال
-        </label>
         <button className="rounded-xl bg-indigo-700 px-5 py-2 text-white font-black text-sm">نمایش</button>
         <PrintButton />
       </form>
 
-      {tab === 'board' && (
-        <details className="card print:hidden mt-3" open>
-          <summary className="cursor-pointer text-sm font-bold text-slate-700">مدیریت وضعیت کلاس‌ها (فعال / غیرفعال)</summary>
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {allRooms.map(r => (
-              <div key={r.id} className="flex items-center justify-between gap-2 border border-slate-200 rounded-xl px-3 py-2">
-                <span className="text-sm font-semibold truncate">
-                  {faDigits(r.name)}{r.buildingName ? ` — ${r.buildingName}` : ''}
-                  {r.isActive ? '' : ' (غیرفعال)'}
-                </span>
-                <form action={toggleRoomActive}>
-                  <input type="hidden" name="roomId" value={r.id} />
-                  <input type="hidden" name="active" value={r.isActive ? '0' : '1'} />
-                  <button
-                    type="submit"
-                    className={`rounded-lg px-3 py-1 text-xs font-black ${r.isActive ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}
-                  >
-                    {r.isActive ? 'غیرفعال‌سازی' : 'فعال‌سازی'}
-                  </button>
-                </form>
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
+      {/* سردر کلاسی سندِ جداست: این لینک یک برگهٔ مستقل (A4 افقی) باز می‌کند
+          که فقط پوستر در آن است — بدون تب و بدون نوار فیلتر. */}
+      {tab === 'board' && selRoom ? (
+        <a
+          href={`/admin/weekly-board?term=${term?.id ?? ''}&tab=board&room=${selRoom.id}&print=door${mono ? '&mono=1' : ''}${showCode ? '&code=1' : ''}${titleParam ? `&title=${titleParam}` : ''}${genderParam ? `&gender=${genderParam}` : ''}${printCount ? '&count=1' : ''}`}
+          target="_blank"
+          rel="noreferrer"
+          className="wb-chrome inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2 text-white text-xs font-black print:hidden"
+        >
+          🖨 چاپ سردر کلاسی — برگهٔ جدا (A4 افقی)
+        </a>
+      ) : null}
+
 
       {term && poster ? (
         <DoorSignPrint
@@ -771,7 +771,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
       </>
       ) : (
       <>
-      <form method="get" className="card flex flex-wrap items-end gap-3 print:hidden">
+      <form method="get" className="wb-chrome card flex flex-wrap items-end gap-3 print:hidden">
         <input type="hidden" name="tab" value={tab} />
         <input type="hidden" name="term" value={term?.id ?? ''} />
         <input type="hidden" name="title" value={titleParam} />

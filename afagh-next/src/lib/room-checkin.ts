@@ -10,7 +10,7 @@
  * این ماژول در صفحه تنها برای نمایش است و هرگز جای اعتبارسنجی سمت سرور را نمی‌گیرد.
  */
 
-import { toJalali } from '@/lib/calendar';
+import { toGregorian, toJalali } from '@/lib/calendar';
 
 /** چند دقیقه قبل از شروعِ کلاس، پنجرهٔ ثبت حضور باز می‌شود. */
 export const CHECKIN_OPEN_MIN_BEFORE = 30;
@@ -128,3 +128,26 @@ export function checkinWindowLabel(
 export function compareJalali(a: string, b: string): number {
   return String(a).localeCompare(String(b));
 }
+
+/**
+ * روزِ هفتهٔ ایرانی از تاریخِ شمسی — با همان شماره‌گذاریِ `schedules.dayOfWeek`
+ * (شنبه=۰ … جمعه=۶).
+ *
+ * چرا لازم است: اتاقِ هر جلسه از اسلاتِ هفتگی حل می‌شود، و اسلات با
+ * (ارائه، روزِ هفته، ساعت) کلید می‌خورد. تاریخِ جلسه شمسی است ولی روزِ هفته
+ * را باید از تقویمِ میلادی گرفت، چون فقط آن‌جا روزِ هفته هست.
+ */
+export function iranDowFromJalali(jalali: string | null | undefined): number | null {
+  const m = /^(\d{4})\/(\d{2})\/(\d{2})$/.exec(String(jalali ?? '').trim());
+  if (!m) return null;
+  const jy = Number(m[1]);
+  const jm = Number(m[2]);
+  const jd = Number(m[3]);
+  if (jm < 1 || jm > 12 || jd < 1 || jd > 31) return null;
+
+  const g = toGregorian(jy, jm, jd);
+  // getUTCDay: یکشنبه=۰ … شنبه=۶ → شیفت تا شنبه=۰
+  const jsDay = new Date(Date.UTC(g.gy, g.gm - 1, g.gd)).getUTCDay();
+  return (jsDay + 1) % 7;
+}
+
