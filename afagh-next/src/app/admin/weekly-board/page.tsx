@@ -81,7 +81,7 @@ function DoorSignHeader({ logoUrl, room, building, lines }: {
         <img src={logoUrl} alt="" className="h-20 w-20 shrink-0 object-contain print:h-[20mm] print:w-[20mm]" />
       )}
       <div className="min-w-0 flex-1 text-center">
-        <p className="text-base font-extrabold text-slate-700 print:text-[10pt]">برنامهٔ هفتگی کلاس</p>
+        <p className="text-base font-extrabold text-slate-700 print:text-[10pt]">برنامهٔ هفتگی</p>
         <h2 className="break-words text-5xl font-black leading-tight print:text-[30pt]">{room}</h2>
         {building && <p className="break-words text-2xl font-extrabold print:text-[14pt]">{building}</p>}
         <div className="mt-1 flex flex-wrap justify-center gap-x-5 gap-y-1 border-t-2 border-slate-900 pt-2 text-lg font-bold print:text-[10pt]">
@@ -709,7 +709,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
           {poster ? (
             <DoorSignHeader
               logoUrl={logoUrl}
-              room={withPrefix('کلاس', poster.name)}
+              room={poster.name}
               building={poster.buildingName || ''}
               lines={[
                 headerFaculty ? withPrefix('دانشکدهٔ', headerFaculty) : '',
