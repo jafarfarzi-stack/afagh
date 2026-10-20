@@ -17,6 +17,8 @@ import { isDemoStudentUser } from '@/lib/demo-accounts';
 import TermFilterChip from '@/components/TermFilterChip';
 import TermAutoScroll from '@/components/TermAutoScroll';
 import { resolveApplicableCurriculum, type ResolvableVersion } from '@/lib/curriculum-resolution';
+import PrintButton from '@/components/PrintButton';
+import { faNum } from '@/lib/report-format';
 import Link from 'next/link';
 import { DemoChart } from '../demo-sections';
 
@@ -204,6 +206,19 @@ export default async function StudentCurriculumChartPage() {
     ? `afagh-term-sem-${Math.min(...currentSemesters)}`
     : null;
 
+  // جمع‌بندی نوع درس + پیشرفت (برای چک‌لیست دانشجو)
+  const roleSummary = new Map<string, { total: number; passed: number; units: number; passedUnits: number }>();
+  for (const r of chartRows) {
+    const e = roleSummary.get(r.roleType) ?? { total: 0, passed: 0, units: 0, passedUnits: 0 };
+    e.total += 1;
+    e.units += Number(r.chartUnits ?? r.units ?? 0);
+    if (passedCourseIds.has(r.courseId)) {
+      e.passed += 1;
+      e.passedUnits += Number(r.chartUnits ?? r.units ?? 0);
+    }
+    roleSummary.set(r.roleType, e);
+  }
+
   return (
     <div className="space-y-4">
       <TermAutoScroll targetId={highlightAnchor} />
@@ -229,6 +244,7 @@ export default async function StudentCurriculumChartPage() {
             <span>🛒</span>
             <span>ورود به انتخاب واحد</span>
           </Link>
+          <PrintButton />
         </div>
       </div>
 
@@ -351,6 +367,58 @@ export default async function StudentCurriculumChartPage() {
           <div className="rounded-xl bg-amber-50/80 p-3.5 text-xs text-amber-900 border border-amber-200">
             💡 <b>راهنمای سرفصل:</b> بر اساس چارت مصوب رشته، در صورت تمایل به اخذ دروس ترم‌های بالاتر، رعایت تمامی پیش‌نیازها و سقف واحدهای ترم الزامی است.
           </div>
+
+          {/* جمع‌بندی نوع درس + چک‌لیست پیشرفت دانشجو */}
+          {chartRows.length > 0 && (
+            <div className="card !p-4 bg-white shadow-sm space-y-3 curriculum-print-area">
+              <h4 className="font-extrabold text-slate-900 text-sm">📋 جمع‌بندی نوع درس و پیشرفت شما</h4>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-100 text-center">
+                    <th className="p-2 border border-slate-300">نوع درس</th>
+                    <th className="p-2 border border-slate-300">تعداد (گذرانده / کل)</th>
+                    <th className="p-2 border border-slate-300">واحد (گذرانده / کل)</th>
+                    <th className="p-2 border border-slate-300">✓</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from(roleSummary.entries())
+                    .sort((a, b) => Object.keys(roleFa).indexOf(a[0]) - Object.keys(roleFa).indexOf(b[0]))
+                    .map(([role, v]) => (
+                      <tr key={role} className="text-center">
+                        <td className="p-2 border border-slate-200 font-extrabold">{roleFa[role] ?? role}</td>
+                        <td className="p-2 border border-slate-200 font-black">{faNum(v.passed)} / {faNum(v.total)}</td>
+                        <td className="p-2 border border-slate-200 font-black">{faNum(v.passedUnits)} / {faNum(v.units)}</td>
+                        <td className="p-2 border border-slate-200">
+                          {v.total > 0 && v.passed === v.total ? (
+                            <span className="text-emerald-600 font-black">✓</span>
+                          ) : (
+                            <span className="inline-block w-4 h-4 border-2 border-slate-400 rounded-sm" />
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  <tr className="text-center bg-indigo-50 font-black">
+                    <td className="p-2 border border-indigo-200">جمع کل</td>
+                    <td className="p-2 border border-indigo-200">
+                      {faNum(Array.from(roleSummary.values()).reduce((s, v) => s + v.passed, 0))} / {faNum(chartRows.length)}
+                    </td>
+                    <td className="p-2 border border-indigo-200">
+                      {faNum(Array.from(roleSummary.values()).reduce((s, v) => s + v.passedUnits, 0))} / {faNum(chartUnitsTotal)}
+                    </td>
+                    <td className="p-2 border border-indigo-200">
+                      {chartRows.length > 0 && passedCourseIds.size === chartRows.length ? (
+                        <span className="text-emerald-600 font-black">✓</span>
+                      ) : (
+                        <span className="inline-block w-4 h-4 border-2 border-slate-400 rounded-sm" />
+                      )}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="text-[10px] text-slate-400 font-bold">خانهٔ تیک‌دار = همهٔ دروس آن نوع گذرانده شده‌اند؛ خالی = هنوز مانده.</p>
+            </div>
+          )}
         </>
       )}
     </div>
