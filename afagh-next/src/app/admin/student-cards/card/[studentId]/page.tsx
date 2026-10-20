@@ -105,11 +105,9 @@ export default async function StudentCardPrintPage({ params }: { params: Promise
             {logo ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={logo} alt="آرم دانشگاه" className="h-10 w-10 object-contain" />
-            ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-slate-800 text-[10px] font-black">آفاق</div>
-            )}
+            ) : null}
             <div>
-              <p className="text-[13px] font-black text-slate-900">{row.uniTitle || 'دانشگاه آفاق'}</p>
+              <p className="text-[13px] font-black text-slate-900">{row.uniTitle || uni?.title || ''}</p>
               <p className="text-[10px] text-slate-600">کارت شناسایی دانشجویی</p>
             </div>
           </div>

@@ -36,7 +36,7 @@ import ContractsTab from './components/ContractsTab';
 import BankDisketteTab from './components/BankDisketteTab';
 import CoefficientsRulesTab from './components/CoefficientsRulesTab';
 
-export default function PayrollEngineClient() {
+export default function PayrollEngineClient({ universityTitle }: { universityTitle?: string | null } = {}) {
   const [state, dispatch] = useReducer(
     payrollReducer,
     null,
@@ -379,7 +379,7 @@ export default function PayrollEngineClient() {
                 <span className="text-xl">📜</span>
                 <div>
                   <h3 className="font-extrabold text-sm sm:text-base">
-                    ابلاغیه رسمی تدریس — دانشگاه جامع آفاق
+                    ابلاغیه رسمی تدریس{universityTitle ? ` — ${universityTitle}` : ''}
                   </h3>
                   <p className="text-[11px] text-indigo-300">
                     شماره حکم: {selectedDecreeForView.decreeNo} · {selectedDecreeForView.termTitle}
@@ -675,7 +675,7 @@ export default function PayrollEngineClient() {
                 </div>
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
                   <span className="text-slate-500 font-bold block text-[10px]">مهر اداره کل امور مالی و پرداخت:</span>
-                  <span className="font-black text-slate-800">دانشگاه جامع آفاق</span>
+                  <span className="font-black text-slate-800">{universityTitle || '—'}</span>
                   <span className="text-emerald-700 font-mono text-[9px] block">✓ پلمب و سند حسابداری صادر شد</span>
                 </div>
               </div>

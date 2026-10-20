@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { student_documents } from '@/db/schema';
 import { getSessionUser } from '@/lib/auth';
+import { getSetting } from '@/lib/settings';
 import { ARCHIVE_BUCKET, S3 } from '@/lib/objectStore';
 import fs from 'fs';
 import path from 'path';
@@ -101,12 +102,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ doc
     //    🔒 XML-escape تمام مقادیر interpolate‌شده (fileName از کلاینت می‌آید → ضد تزریق SVG)
     const xmlEscape = (s: string) =>
       s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+    // نام دانشگاه از تنظیمات سراسری — هیچ نامی هاردکد نیست
+    const uniName = (await getSetting('UNIVERSITY_NAME').catch(() => '')) || '';
+    const svgTitle = uniName ? `${xmlEscape(uniName)} — بایگانی الکترونیک مدارک` : 'بایگانی الکترونیک مدارک';
     const fallbackSvg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 460" width="100%" height="100%" dir="rtl">
   <rect width="700" height="460" fill="#f8fafc" rx="16"/>
   <rect x="20" y="20" width="660" height="420" fill="#ffffff" stroke="#cbd5e1" stroke-width="2" rx="12"/>
   <rect x="30" y="30" width="640" height="60" fill="#065f46" rx="8"/>
-  <text x="350" y="68" font-family="sans-serif" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle">دانشگاه جامع آفاق — بایگانی الکترونیک مدارک</text>
+  <text x="350" y="68" font-family="sans-serif" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle">${svgTitle}</text>
   
   <circle cx="350" cy="180" r="45" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
   <text x="350" y="195" font-family="sans-serif" font-size="36" text-anchor="middle">📁</text>

@@ -1,6 +1,8 @@
 import { requireRole } from '@/lib/auth';
 import { currentTerm } from '@/lib/payroll-engine';
 import { getScopedOverview } from '@/lib/payroll-approvals';
+import { getCurrentUniversity } from '@/lib/university-scope';
+import { getSetting } from '@/lib/settings';
 import LivePayrollClient from './LivePayrollClient';
 import PayrollEngineClient from './PayrollEngineClient';
 
@@ -21,7 +23,14 @@ export default async function PayrollPage(props: { searchParams: Promise<{ tab?:
   const sp = await props.searchParams;
   const tab: Tab = sp?.tab === 'simulator' ? 'simulator' : 'live';
 
-  if (tab === 'simulator') return <PayrollEngineClient />;
+  if (tab === 'simulator') {
+    // نام دانشگاه برای سربرگ ابلاغیه/فیش — از دانشگاه فعال و سپس تنظیمات سراسری (بدون هاردکد)
+    const uni = await getCurrentUniversity().catch(() => null);
+    const uniTitle = uni?.title && uni.title !== '—'
+      ? uni.title
+      : (await getSetting('UNIVERSITY_NAME').catch(() => '')) || null;
+    return <PayrollEngineClient universityTitle={uniTitle} />;
+  }
 
   const term = await currentTerm();
   // نمای دامنه‌دار: مدیر گروهِ خالص فقط فیش‌های گروه خودش را می‌بیند (داخل getScopedOverview)
