@@ -596,10 +596,11 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   .prof-week-print.door-print .prof-cal { --cal-hour: 40px !important; }
   .prof-week-print.door-print .prof-cal-day-head { font-size: 12pt !important; padding: 3pt !important; }
   .prof-week-print.door-print .prof-cal-gutter-label { font-size: 9pt !important; }
-  .prof-week-print.door-print .prof-print-title { font-size: 11pt !important; }
+  /* متن هر کارت با عرض همان کارت تنظیم می‌شود (کارت‌های باریک هم‌زمان، متن را نمی‌ریزند روی هم) */
+  .prof-week-print.door-print .prof-week-card { padding: 1.5pt 2pt !important; gap: 1pt; }
+  .prof-week-print.door-print .prof-print-title { font-size: clamp(5.5pt, 11cqw, 9.5pt) !important; line-height: 1.15 !important; }
   .prof-week-print.door-print .prof-print-meta,
-  .prof-week-print.door-print .prof-print-teacher { font-size: 8pt !important; }
-  .prof-week-print.door-print .prof-week-card { padding: 2pt 3pt !important; }
+  .prof-week-print.door-print .prof-print-teacher { font-size: clamp(4.8pt, 9cqw, 7.5pt) !important; line-height: 1.15 !important; }
 }
 
 /* ── چاپ کارنامه: گرید ۳ستونهٔ هم‌ارتفاع (پانوشت نیمسال‌های یک ردیف هم‌تراز) ── */

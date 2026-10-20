@@ -200,7 +200,7 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
                                 <div className="prof-print-meta text-[7pt] leading-tight text-slate-900">
                                   گروه {professorCalendarEntryGroup(e)}{printCount && e.enrolledCount != null ? ` · 👥 ${faNum(e.enrolledCount)}${e.capacity != null ? `/${faNum(e.capacity)}` : ''}` : ''} · {professorCalendarEntryTime(e)}
                                 </div>
-                                <div className="prof-print-teacher text-[7pt] font-bold leading-tight text-black">استاد: {e.professorName || '—'}</div>
+                                <div className="prof-print-teacher text-[7pt] font-bold leading-tight text-black">{e.professorName || '—'}</div>
                               </>
                             ) : (
                               <>
