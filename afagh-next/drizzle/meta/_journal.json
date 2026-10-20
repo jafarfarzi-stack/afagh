@@ -764,6 +764,20 @@
       "when": 1794300000700,
       "tag": "0103_course_offerings_term_course_group_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1794400000000,
+      "tag": "0104_pii_national_code_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1794400000100,
+      "tag": "0105_pii_blind_index_regular",
+      "breakpoints": true
     }
   ]
 }

@@ -121,15 +121,15 @@ for (const t of TARGETS) {
     continue;
   }
 
-  let offset = 0;
+  let lastPk = 0;
   let processed = 0;
   let skipped = 0;
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const res = await client.query(
-      `SELECT ${t.pk} AS pk, ${t.plain} AS plain, ${t.enc} AS enc FROM ${t.table} ` +
-      `WHERE ${t.enc} IS NULL OR ${t.enc} = '' ORDER BY ${t.pk} LIMIT $1 OFFSET $2`,
-      [BATCH, offset],
+      `SELECT "${t.pk}" AS pk, "${t.plain}" AS plain, "${t.enc}" AS enc FROM "${t.table}" ` +
+      `WHERE ("${t.enc}" IS NULL OR "${t.enc}" = '') AND "${t.pk}" > $2 ORDER BY "${t.pk}" LIMIT $1`,
+      [BATCH, lastPk],
     );
     if (res.rows.length === 0) break;
 
@@ -150,7 +150,7 @@ for (const t of TARGETS) {
           console.log(`  · ردیف ${row.pk}: ${maskPii(plain)} → (dry)`);
         } else {
           await client.query(
-            `UPDATE ${t.table} SET ${t.enc} = $1, ${t.idx} = $2 WHERE ${t.pk} = $3`,
+            `UPDATE "${t.table}" SET "${t.enc}" = $1, "${t.idx}" = $2 WHERE "${t.pk}" = $3`,
             [encVal, idxVal, row.pk],
           );
         }
@@ -160,7 +160,7 @@ for (const t of TARGETS) {
         console.error(`  ✗ ردیف ${row.pk}: ${e.message}`);
       }
     }
-    offset += res.rows.length;
+    if (res.rows.length > 0) lastPk = res.rows[res.rows.length - 1].pk;
     if (res.rows.length < BATCH) break;
   }
 

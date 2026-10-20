@@ -37,11 +37,16 @@ export const persons = pgTable('persons', {
   canonicalLastName: varchar('canonicalLastName', { length: 100 }),
   canonicalFatherName: varchar('canonicalFatherName', { length: 100 }),
   canonicalNationalCode: varchar('canonicalNationalCode', { length: 10 }),
+  // ── PII (کد ملی) ── نسخهٔ رمزشدهٔ AES-256-GCM + شاخص کور برای جست‌وجوی برابری
+  // منبع حقیقت همچنان ستون plaintext است تا زمان cutover کامل (فاز بعد).
+  canonicalNationalCodeEnc: text('canonicalNationalCodeEnc'),
+  canonicalNationalCodeBlindIndex: text('canonicalNationalCodeBlindIndex'),
   canonicalBirthDate: date('canonicalBirthDate'),
   createdAt: timestamp('createdAt').defaultNow(),
   updatedAt: timestamp('updatedAt').defaultNow(),
 }, (t) => [
   unique('uq_persons_national_code').on(t.canonicalNationalCode),
+  index('idx_persons_nc_blind').on(t.canonicalNationalCodeBlindIndex),
 ]);
 
 export const person_source_identities = pgTable('person_source_identities', {
@@ -51,6 +56,8 @@ export const person_source_identities = pgTable('person_source_identities', {
   studentId: integer('studentId').references((): AnyPgColumn => students.id),
   sourceStudentCode: varchar('sourceStudentCode', { length: 50 }).notNull(),
   sourceNationalCode: varchar('sourceNationalCode', { length: 10 }),
+  sourceNationalCodeEnc: text('sourceNationalCodeEnc'),
+  sourceNationalCodeBlindIndex: text('sourceNationalCodeBlindIndex'),
   sourceFirstName: varchar('sourceFirstName', { length: 100 }),
   sourceLastName: varchar('sourceLastName', { length: 100 }),
   sourceFatherName: varchar('sourceFatherName', { length: 100 }),
@@ -68,6 +75,7 @@ export const person_source_identities = pgTable('person_source_identities', {
   unique('uq_person_source_identity').on(t.universityId, t.sourceStudentCode),
   index('idx_person_source_identity_person').on(t.personId),
   index('idx_person_source_identity_national').on(t.sourceNationalCode),
+  index('idx_psi_source_nc_blind').on(t.sourceNationalCodeBlindIndex),
   index('idx_person_source_identity_student').on(t.studentId),
 ]);
 
@@ -80,7 +88,11 @@ export const identity_resolution_reviews = pgTable('identity_resolution_reviews'
   matchMethod: varchar('matchMethod', { length: 60 }),
   confidence: numeric('confidence', { precision: 5, scale: 4 }),
   sourceNationalCode: varchar('sourceNationalCode', { length: 10 }),
+  sourceNationalCodeEnc: text('sourceNationalCodeEnc'),
+  sourceNationalCodeBlindIndex: text('sourceNationalCodeBlindIndex'),
   candidateNationalCode: varchar('candidateNationalCode', { length: 10 }),
+  candidateNationalCodeEnc: text('candidateNationalCodeEnc'),
+  candidateNationalCodeBlindIndex: text('candidateNationalCodeBlindIndex'),
   sourceStudentCode: varchar('sourceStudentCode', { length: 50 }),
   candidateStudentCode: varchar('candidateStudentCode', { length: 50 }),
   sourceUniversityId: integer('sourceUniversityId'),
@@ -101,6 +113,8 @@ export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   personId: integer('personId').references(() => persons.id),
   nationalCode: varchar('nationalCode', { length: 10 }).notNull(), // یکتا نیست: هویت = (دانشگاه + شماره دانشجویی)؛ یک شخص می‌تواند در دو دانشگاه دو حساب با یک کد ملی داشته باشد
+  nationalCodeEnc: text('nationalCodeEnc'),
+  nationalCodeBlindIndex: text('nationalCodeBlindIndex'),
   firstName: varchar('firstName', { length: 100 }).notNull(),
   lastName: varchar('lastName', { length: 100 }).notNull(),
   mobile: varchar('mobile', { length: 11 }),
@@ -142,6 +156,7 @@ export const users = pgTable('users', {
 }, (t) => ({
   // هویت حساب = (کد ملی + دانشگاه)؛ NULLها (ثبت‌نام ناقص) از یکتایی مستثنا هستند
   uqNcUni: unique('uq_users_nc_uni').on(t.nationalCode, t.universityId),
+  uqNcBlind: index('idx_users_nc_blind').on(t.nationalCodeBlindIndex, t.universityId),
 }));
 
 export const user_roles = pgTable('user_roles', {
@@ -261,6 +276,8 @@ export const sanjesh_mappings = pgTable('sanjesh_mappings', {
 export const admissions_staging = pgTable('admissions_staging', {
   id: serial('id').primaryKey(),
   nationalCode: varchar('nationalCode', { length: 10 }).notNull(),
+  nationalCodeEnc: text('nationalCodeEnc'),
+  nationalCodeBlindIndex: text('nationalCodeBlindIndex'),
   rawSanjeshData: text('rawSanjeshData'),
   mappedMajorId: integer('mappedMajorId').references(() => majors.id),
   status: varchar('status', { length: 20 }).default('pending'),
@@ -277,7 +294,9 @@ export const admissions_staging = pgTable('admissions_staging', {
   studentId: integer('studentId'),
   decisionNote: text('decisionNote'),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
-});
+}, (t) => [
+  index('idx_adm_stg_nc_blind').on(t.nationalCodeBlindIndex),
+]);
 
 export const student_id_formulas = pgTable('student_id_formulas', {
   id: serial('id').primaryKey(),
