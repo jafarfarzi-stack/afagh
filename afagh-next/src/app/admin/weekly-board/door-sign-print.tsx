@@ -1,6 +1,7 @@
 import QRCode from 'qrcode';
 import type { CSSProperties, JSX } from 'react';
 import { PROFESSOR_GRID_DAYS } from '@/lib/professor-week-grid';
+import { jalaliDateOf } from '@/lib/scheduling-core';
 import {
   layoutProfessorCalendarDay,
   professorCalendarDayIndex,
@@ -131,18 +132,38 @@ export default async function DoorSignPrint({
     qrDataUrl = '';
   }
 
-  // بارکد (Code128) شناسهٔ اتاق — برای اسکن سریع روی پوستر
-  const bcValue = toLatinDigits(String(room?.name ?? room?.id ?? ''));
+  /* بارکد (Code128) شناسهٔ اتاق — برای اسکن سریع روی پوستر.
+     دو اشکالِ قبلی که هر دو با هم «جعبهٔ خالیِ خط‌چین» روی کاغذ می‌ساختند:
+       ۱) `getModule('CODE128')` کلاسِ پایه را برمی‌گرداند که ورودی‌اش باید با
+          کاراکترِ شروع (À/Í/Ï) آغاز شود؛ برای همین همیشه throw می‌شد و
+          catch آن را بی‌صدا می‌بلعید. کلاسِ درست `CODE128B` است.
+       ۲) مقدارِ بارکد از نامِ فارسیِ کلاس ساخته می‌شد؛ Code128B فقط ASCII
+          (۳۲–۱۲۷) را پشتیبانی می‌کند و حروفِ فارسی به بایتی بی‌معنا تبدیل
+          می‌شدند. حالا شناسهٔ لاتینِ اتاق رمز می‌شود که واقعاً اسکن‌پذیر است. */
+  const bcValue = `ROOM-${room?.id ?? 0}`;
   let bcBinary = '';
   try {
     const mod: any = await import('jsbarcode');
     const JsBarcode = mod.default ?? mod;
-    const Code128 = JsBarcode.getModule('CODE128');
-    const inst = new Code128(bcValue, {});
+    const Code128B = JsBarcode.getModule('CODE128B');
+    const inst = new Code128B(bcValue, {});
     bcBinary = (inst.encode().data as string) ?? '';
   } catch {
     bcBinary = '';
   }
+
+  /* تاریخِ چاپ به شمسی و به وقتِ تهران. کانتینر UTC است و بین ۰۰:۰۰ تا
+     ۰۳:۳۰ تهران تاریخِ UTC یک روز عقب‌تر است؛ با گرفتنِ اجزای تاریخ در
+     Asia/Tehran و تبدیلِ همان، تاریخِ پوستر در هر ساعتی درست می‌ماند. */
+  const printDate = (() => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Tehran', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(new Date());
+    const get = (t: string) => Number(parts.find(p => p.type === t)?.value ?? 0);
+    const gy = get('year'), gm = get('month'), gd = get('day');
+    if (!gy || !gm || !gd) return '';
+    return jalaliDateOf(new Date(gy, gm - 1, gd));
+  })();
 
   // ساختمان و طبقه از رِکورد خودِ کلاس (نه هاردکد)
   const roomPlace = [room?.buildingName, room?.floor]
@@ -195,9 +216,11 @@ export default async function DoorSignPrint({
   .ds-qr-cap { font-size:5.2pt; color:#475569; line-height:1.25; margin-top:0.5mm; }
   .ds-qr-tag { display:inline-block; border:0.5pt dashed #94a3b8; border-radius:0.8mm; padding:0 0.8mm; font-size:4.6pt; color:#64748b; }
   .ds-bc { margin-top:1.4mm; text-align:center; }
-  .ds-bc-svg { width:18mm; height:10mm; display:block; margin:0 auto; }
-  .ds-bc-cap { font-size:5pt; color:#475569; margin-top:0.4mm; letter-spacing:0.3px; }
-  .ds-bc-ph { width:18mm; height:10mm; border:0.5pt dashed #cbd5e1; margin:0 auto; border-radius:0.6mm; }
+  /* عرضِ ۲۴mm (ستون ۲۸mm است): پهنای هر ماژول ≈ ۰.۲۱mm — روی چاپگر ۶۰۰dpi
+     و دوربینِ گوشی قابل اسکن. با ۱۸mm قبلی هر ماژول ۰.۱۶mm می‌شد و اسکن
+     کردنِ بارکد روی کاغذ عملاً ممکن نبود. */
+  .ds-bc-svg { width:24mm; height:10mm; display:block; margin:0 auto; }
+  .ds-bc-cap { font-size:5pt; color:#475569; margin-top:0.4mm; letter-spacing:0.3px; font-family:ui-monospace, monospace; }
   .ds-qr-sub { font-size:4.8pt; color:#64748b; }
   .ds-rule { border-top:1.1pt solid #1e2a6e; margin:1.2mm 0 0; }
   .ds-rule2 { border-top:0.4pt solid #94a3b8; margin:0.4mm 0 1.2mm; }
@@ -398,10 +421,14 @@ export default async function DoorSignPrint({
             <div style={{ width: '13mm', height: '13mm', border: '0.5pt dashed #94a3b8', borderRadius: '1mm' }} />
           )}
           <div className="ds-qr-cap">تأیید حضور استاد<br /><span className="ds-qr-sub">اسکن برای ثبت حضور</span></div>
-          <div className="ds-bc">
-            {bcBinary ? <BarcodeSvg binary={bcBinary} /> : <div className="ds-bc-ph" />}
-            <div className="ds-bc-cap">{spaceDigits(fa(room?.name ?? ''))}</div>
-          </div>
+          {/* بارکد فقط وقتی چاپ می‌شود که واقعاً رمزگذاری شده باشد؛ وگرنه
+              یک جعبهٔ خالیِ خط‌چین روی کاغذ می‌ماند (باگِ قبلی). */}
+          {bcBinary ? (
+            <div className="ds-bc">
+              <BarcodeSvg binary={bcBinary} />
+              <div className="ds-bc-cap" dir="ltr">{bcValue}</div>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -483,7 +510,7 @@ export default async function DoorSignPrint({
           <span className="k"><span className="ds-chip">فرد</span><span className="ds-chip">زوج</span> هفتهٔ فرد یا زوج</span>
         </div>
         <div>هر خط افقی = یک ساعت · خط‌چین = نیم‌ساعت · ساعت‌های خالی: کلاس ندارد</div>
-        <div>چاپ: <span dir="ltr">{fa(new Date().toISOString().slice(0, 10).replace(/-/g, '/'))}</span></div>
+        <div>چاپ: <span dir="ltr">{fa(printDate)}</span></div>
       </div>
     </div>
   );
