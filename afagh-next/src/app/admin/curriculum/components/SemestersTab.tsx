@@ -2,9 +2,8 @@
 
 // تب ۳: ترم‌بندی چارت با درگ‌اندراپ + سقف واحد
 import { useCurriculum } from '../curriculum-context';
-import { STATUS_UI, faNum, semesterUnitTotal, typeSummaryRows, ROLE_LABELS } from '../curriculum-core';
+import { STATUS_UI, faNum, semesterUnitTotal } from '../curriculum-core';
 import { SUMMER_SEMESTER, isSummerSemester } from '@/lib/term-plan';
-import PrintButton from '@/components/PrintButton';
 
 export default function SemestersTab() {
   const {
@@ -35,14 +34,13 @@ export default function SemestersTab() {
     <>
       {/* ترمبندی چارت — تب: ترمبندی چارت */}
       {activeTab === 'SEMESTERS' && detail && (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4 curriculum-print-area">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h4 className="font-extrabold text-slate-900 text-sm">🗺️ ترمبندی چارت — {selectedVersion.title}</h4>
               <p className="text-[11px] text-slate-500 font-bold mt-0.5">
-                رشته: {degreeMajor?.name ?? '—'} · مقطع: {degreeMajor?.degreeTitle ?? '—'}{degreeMajor?.degreeCode ? ` (${degreeMajor.degreeCode})` : ''}{degreeMajor?.degreeIsGraduate === 1 ? ' (تکمیلی)' : ''} ·
-                ورودی: {faNum(selectedVersion.entryYearFrom)}{selectedVersion.entryYearTo ? ` تا ${faNum(selectedVersion.entryYearTo)}` : ' به بعد'} ·
-                چارت {faNum(chartTermCount)} ترمه + تابستان
+                چارت {faNum(chartTermCount)} ترمه (مقطع: {degreeMajor?.degreeTitle ?? '—'}{degreeMajor?.degreeIsGraduate === 1 ? ' · تکمیلی' : ''}) + تابستان؛
+                موتور انتخاب واحد و تطبیق فارغالتحصیلی بر اساس همین ترمبندی عمل میکنند.
               </p>
             </div>
             <div className="text-[11px] bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 font-black text-indigo-900">
@@ -50,12 +48,9 @@ export default function SemestersTab() {
               {detail.version.maxUnitsPerTerm != null ? ` · سقف هر ترم: ${faNum(detail.version.maxUnitsPerTerm)} واحد` : ''}
             </div>
           </div>
-          <div className="print:hidden">
-            <PrintButton />
-          </div>
 
           {!isDraft && (
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] font-bold text-slate-600 print:hidden">
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] font-bold text-slate-600">
               ⚠️ این نسخه «{(STATUS_UI[selectedVersion.status] ?? { label: selectedVersion.status }).label}» است و فقط مشاهده مجاز است؛ برای تغییر ترمبندی از «🔁 ایجاد نسخهٔ جدید (R+1)» یک پیشنویس بسازید.
             </div>
           )}
@@ -100,7 +95,7 @@ export default function SemestersTab() {
                         title={isDraft ? 'بکشید و در ترم موردنظر رها کنید' : c.title}
                         className={`flex items-center justify-between gap-1 bg-white rounded-lg px-2 py-1 border border-emerald-100 text-[11px] ${isDraft ? 'cursor-grab active:cursor-grabbing' : ''} ${dragCourseId === c.courseId ? 'opacity-40' : ''}`}
                       >
-                        {isDraft && <span className="text-slate-300 shrink-0 select-none print:hidden">⠿</span>}
+                        {isDraft && <span className="text-slate-300 shrink-0 select-none">⠿</span>}
                         <span className="font-mono text-indigo-900 text-[10px]">{c.code}</span>
                         <span className="truncate font-bold flex-1">{c.title}</span>
                         <span className="text-slate-400 text-[10px]">{faNum(c.units)}</span>
@@ -108,7 +103,7 @@ export default function SemestersTab() {
                           <button
                             onClick={() => handleAssignSemester(c.courseId, null)}
                             title="حذف از این ترم (نامشخص)"
-                            className="text-rose-500 hover:text-rose-700 font-black px-1 print:hidden"
+                            className="text-rose-500 hover:text-rose-700 font-black px-1"
                           >
                             ✕
                           </button>
@@ -125,7 +120,7 @@ export default function SemestersTab() {
             onDragOver={isDraft ? (e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDropTarget('pool'); }) : undefined}
             onDragLeave={isDraft ? (() => setDropTarget(cur => (cur === 'pool' ? null : cur))) : undefined}
             onDrop={isDraft ? (e => onDropToSemester(e, null)) : undefined}
-            className={`rounded-xl border-2 bg-slate-50 p-3 space-y-2 transition-colors print:hidden ${isDraft && dropTarget === 'pool' ? '!border-indigo-500 !bg-indigo-50 shadow-lg' : 'border-slate-200'}`}
+            className={`rounded-xl border-2 bg-slate-50 p-3 space-y-2 transition-colors ${isDraft && dropTarget === 'pool' ? '!border-indigo-500 !bg-indigo-50 shadow-lg' : 'border-slate-200'}`}
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-black text-slate-800 text-xs">🌫️ دروس بدون ترم (نامشخص) — {faNum(unassignedCourses.length)} درس</span>
@@ -163,43 +158,6 @@ export default function SemestersTab() {
               ))}
             </div>
           </div>
-          {/* جمع‌بندی نوع درس + چک‌لیست دانشجو (در چاپ نمایش داده می‌شود) */}
-          {detail && detail.courses.length > 0 && (
-            <div className="pt-3 border-t border-slate-200 space-y-2 curriculum-checklist">
-              <h5 className="font-extrabold text-slate-900 text-xs">📋 جمع‌بندی نوع درس و چک‌لیست دانشجو</h5>
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-100 text-center">
-                    <th className="p-2 border border-slate-300">نوع درس</th>
-                    <th className="p-2 border border-slate-300">تعداد</th>
-                    <th className="p-2 border border-slate-300">واحد</th>
-                    <th className="p-2 border border-slate-300">✓</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.keys(ROLE_LABELS).map(role => {
-                    const r = typeSummaryRows(detail.courses).find(x => x.role === role) ?? { role, count: 0, units: 0 };
-                    if (r.count === 0) return null;
-                    return (
-                      <tr key={r.role} className="text-center">
-                        <td className="p-2 border border-slate-200 font-extrabold">{ROLE_LABELS[r.role] ?? r.role}</td>
-                        <td className="p-2 border border-slate-200 font-black">{faNum(r.count)}</td>
-                        <td className="p-2 border border-slate-200 font-black">{faNum(r.units)}</td>
-                        <td className="p-2 border border-slate-200"><span className="inline-block w-4 h-4 border-2 border-slate-400 rounded-sm" /></td>
-                      </tr>
-                    );
-                  })}
-                  <tr className="text-center bg-indigo-50 font-black">
-                    <td className="p-2 border border-indigo-200">جمع کل</td>
-                    <td className="p-2 border border-indigo-200">{faNum(detail.courses.length)}</td>
-                    <td className="p-2 border border-indigo-200">{faNum(totalPlannedUnits)}</td>
-                    <td className="p-2 border border-indigo-200"><span className="inline-block w-4 h-4 border-2 border-slate-400 rounded-sm" /></td>
-                  </tr>
-                </tbody>
-              </table>
-              <p className="text-[10px] text-slate-400 font-bold">دانشجو پس از گذراندن هر درس، کادر مربوط را تیک بزند.</p>
-            </div>
-          )}
         </div>
       )}
     </>

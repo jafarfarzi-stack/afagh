@@ -22,7 +22,6 @@ import CurriculumToast from '../src/app/admin/curriculum/components/CurriculumTo
 import DetailHeaderBar from '../src/app/admin/curriculum/components/DetailHeaderBar.tsx';
 import NewCourseModal from '../src/app/admin/curriculum/components/NewCourseModal.tsx';
 import NewVersionModal from '../src/app/admin/curriculum/components/NewVersionModal.tsx';
-import PrereqMapTab from '../src/app/admin/curriculum/components/PrereqMapTab.tsx';
 import RejectModal from '../src/app/admin/curriculum/components/RejectModal.tsx';
 import RoleTargetsEditor from '../src/app/admin/curriculum/components/RoleTargetsEditor.tsx';
 import SemestersTab from '../src/app/admin/curriculum/components/SemestersTab.tsx';
@@ -106,7 +105,6 @@ const CASES: [string, React.ComponentType, string[], Record<string, unknown>?][]
   ['VerifyTab', VerifyTab, ['🎯 سهم واحد هر نقش', 'جمع واحدها از سقف واحد ترم کمتر است', 'واحد (Enter/Blur برای ذخیره)', '!در حال بارگذاری جزئیات از سرور'], { activeTab: 'VERIFY' }],
   ['CoursesTab', CoursesTab, ['مبانی برنامه‌سازی', 'پیش‌نیاز / هم‌نیاز', 'افزودن درس از بانک'], { activeTab: 'COURSES' }],
   ['SemestersTab', SemestersTab, ['تابستان', 'نامشخص', 'ساختار داده'], { activeTab: 'SEMESTERS' }],
-  ['PrereqMapTab', PrereqMapTab, ['نقشهٔ پیش‌نیازها', 'مبانی برنامه‌سازی', 'ساختار داده', 'ترم ۱', 'بدون ترم'], { activeTab: 'PREREQMAP' }],
   ['TransferTab', TransferTab, ['نسخهٔ جدید (R+1) از همین نسخه', 'مهندسی کامپیوتر'], { activeTab: 'TRANSFER' }],
   ['NewVersionModal', NewVersionModal, ['ایجاد نسخهٔ جدید برای', '1404-1', 'کپی عمیق از نسخهٔ دیگر'], { modal: 'NEW_VERSION' }],
   ['NewCourseModal', NewCourseModal, ['معرفی درس جدید در بانک دروس', 'CM900', 'عددی'], { modal: 'NEW_COURSE' }],
