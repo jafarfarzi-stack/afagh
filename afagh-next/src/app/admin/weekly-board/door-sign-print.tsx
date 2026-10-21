@@ -1,5 +1,6 @@
 import QRCode from 'qrcode';
-import type { CSSProperties, JSX } from 'react';
+import type { CSSProperties } from 'react';
+import { Fragment } from 'react';
 import { PROFESSOR_GRID_DAYS } from '@/lib/professor-week-grid';
 import { jalaliDateOf } from '@/lib/scheduling-core';
 import {
@@ -45,10 +46,21 @@ const WEEK_FA: Record<ProfessorCalendarWeekType, string> = {
   ALL: '',
 };
 
-const START_MIN = 7 * 60;
-const END_MIN = 20 * 60;
-const TOTAL = END_MIN - START_MIN;
-const HOURS = Array.from({ length: END_MIN / 60 - START_MIN / 60 + 1 }, (_, i) => START_MIN / 60 + i); // 7..20
+/** بازهٔ پیش‌فرضِ محور زمانِ پوستر (۷→۲۰). بعضی دانشگاه‌ها کلاس‌ها را مثلاً ۸→۱۸ دارند. */
+const DEFAULT_AXIS_FROM = 7;
+const DEFAULT_AXIS_TO = 20;
+/** بیش از این مقدار ستونِ ساعت آن‌قدر باریک می‌شود که برچسبِ ساعت‌ها خوانا نماند. */
+const MAX_AXIS_SPAN = 18;
+
+/** ساعتِ ابتدا/انتهای محور را اعتبارسنجی و نرمال‌سازی می‌کند (نامعتبر → پیش‌فرضِ ۷→۲۰). */
+function normalizeAxisHours(from?: number, to?: number): { from: number; to: number } {
+  const clamp = (v: number | undefined, d: number) =>
+    Number.isInteger(v) ? Math.min(Math.max(v as number, 0), 24) : d;
+  const a = clamp(from, DEFAULT_AXIS_FROM);
+  const b = clamp(to, DEFAULT_AXIS_TO);
+  if (b - a < 1 || b - a > MAX_AXIS_SPAN) return { from: DEFAULT_AXIS_FROM, to: DEFAULT_AXIS_TO };
+  return { from: a, to: b };
+}
 
 /** نشانگر هفته (فرد/زوج/زوج و فرد) — بعد از عنوان درس */
 function WeekBadge({ weekType }: { weekType: ProfessorCalendarWeekType }) {
@@ -57,35 +69,6 @@ function WeekBadge({ weekType }: { weekType: ProfessorCalendarWeekType }) {
   return <span className="ds-wk">{w}</span>;
 }
 
-/** رندر بارکد Code128 از رشتهٔ باینری (۱ = نوار سیاه، ۰ = فاصله) */
-function BarcodeSvg({
-  binary,
-  heightMm = 10,
-  unitMm = 0.42,
-  quiet = 10,
-}: {
-  binary: string;
-  heightMm?: number;
-  unitMm?: number;
-  quiet?: number;
-}) {
-  const modules = binary.split('').map((c) => c === '1');
-  const total = modules.length + quiet * 2;
-  const W = total * unitMm;
-  let x = quiet * unitMm;
-  const rects: JSX.Element[] = [];
-  modules.forEach((isBar, idx) => {
-    if (isBar) {
-      rects.push(<rect key={idx} x={x} y={0} width={unitMm} height={heightMm} fill="#000" />);
-    }
-    x += unitMm;
-  });
-  return (
-    <svg className="ds-bc-svg" width={W} height={heightMm} viewBox={`0 0 ${W} ${heightMm}`} preserveAspectRatio="none">
-      {rects}
-    </svg>
-  );
-}
 
 export interface DoorSignPrintProps {
   entries: ProfessorCalendarEntry[];
@@ -100,6 +83,12 @@ export interface DoorSignPrintProps {
   qrBaseUrl?: string;
   /** حالت چاپ سیاه‌سفید: رنگ‌ها حذف می‌شوند و درس عملی خط‌چین می‌شود */
   mono?: boolean;
+  /** مدل چیدمان: 'A' = روزها ستون (پیش‌فرض)، 'B' = روزها سطر (زمان ستون) */
+  model?: 'A' | 'B';
+  /** ساعتِ شروعِ محور زمان (پیش‌فرض ۷) — دانشگاه می‌تواند از تنظیمات تغییرش دهد */
+  startHour?: number;
+  /** ساعتِ پایانِ محور زمان (پیش‌فرض ۲۰) */
+  endHour?: number;
 }
 
 export default async function DoorSignPrint({
@@ -113,7 +102,15 @@ export default async function DoorSignPrint({
   universityName,
   qrBaseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://b.afagh.ac.ir',
   mono = false,
+  model = 'A',
+  startHour = DEFAULT_AXIS_FROM,
+  endHour = DEFAULT_AXIS_TO,
 }: DoorSignPrintProps) {
+  // بازهٔ محور زمان (قابل تنظیم توسط دانشگاه) — محورِ دقیقه‌ای برای چیدمان کارت‌ها
+  const axis = normalizeAxisHours(startHour, endHour);
+  const axisRange = { startMinutes: axis.from * 60, endMinutes: axis.to * 60 };
+  const HOURS = Array.from({ length: axis.to - axis.from + 1 }, (_, i) => axis.from + i);
+  const hourCols = HOURS.length; // ۱۳ برای بازهٔ ۷→۲۰
   // جای‌گذاری درس‌ها در هر روز (همان منطق گریدِ تقویم، بدون وابستگی به گرید نمایشگر)
   const byDay: ProfessorCalendarEntry[][] = Array.from({ length: PROFESSOR_GRID_DAYS.length }, () => []);
   for (const e of entries) {
@@ -121,7 +118,9 @@ export default async function DoorSignPrint({
     if (d == null) continue;
     byDay[d].push(e);
   }
-  const placed = byDay.map((list) => layoutProfessorCalendarDay(list));
+  const placed = byDay.map((list) => layoutProfessorCalendarDay(list, axisRange));
+  // سانس‌های بیرون از بازهٔ انتخابی به لبه چسبانده می‌شوند → به کاربر خبر بدهیم
+  const clippedCount = placed.reduce((s, day) => s + day.filter(p => p.clipped).length, 0);
 
   // QR برای تأیید حضور استاد — آدرس توافق‌شده (فاز اجرا شد)
   const qrUrl = `${qrBaseUrl}/p/room-${room?.id ?? 0}`;
@@ -132,25 +131,6 @@ export default async function DoorSignPrint({
     qrDataUrl = '';
   }
 
-  /* بارکد (Code128) شناسهٔ اتاق — برای اسکن سریع روی پوستر.
-     دو اشکالِ قبلی که هر دو با هم «جعبهٔ خالیِ خط‌چین» روی کاغذ می‌ساختند:
-       ۱) `getModule('CODE128')` کلاسِ پایه را برمی‌گرداند که ورودی‌اش باید با
-          کاراکترِ شروع (À/Í/Ï) آغاز شود؛ برای همین همیشه throw می‌شد و
-          catch آن را بی‌صدا می‌بلعید. کلاسِ درست `CODE128B` است.
-       ۲) مقدارِ بارکد از نامِ فارسیِ کلاس ساخته می‌شد؛ Code128B فقط ASCII
-          (۳۲–۱۲۷) را پشتیبانی می‌کند و حروفِ فارسی به بایتی بی‌معنا تبدیل
-          می‌شدند. حالا شناسهٔ لاتینِ اتاق رمز می‌شود که واقعاً اسکن‌پذیر است. */
-  const bcValue = `ROOM-${room?.id ?? 0}`;
-  let bcBinary = '';
-  try {
-    const mod: any = await import('jsbarcode');
-    const JsBarcode = mod.default ?? mod;
-    const Code128B = JsBarcode.getModule('CODE128B');
-    const inst = new Code128B(bcValue, {});
-    bcBinary = (inst.encode().data as string) ?? '';
-  } catch {
-    bcBinary = '';
-  }
 
   /* تاریخِ چاپ به شمسی و به وقتِ تهران. کانتینر UTC است و بین ۰۰:۰۰ تا
      ۰۳:۳۰ تهران تاریخِ UTC یک روز عقب‌تر است؛ با گرفتنِ اجزای تاریخ در
@@ -198,9 +178,9 @@ export default async function DoorSignPrint({
     direction:rtl; font-family:'Shabnam', 'Vazirmatn', Tahoma, 'Segoe UI', Arial, sans-serif; color:#0f172a;
     -webkit-print-color-adjust:exact; print-color-adjust:exact; box-sizing:border-box; }
   .ds-sheet * { box-sizing:border-box; }
-  .ds-hd { display:flex; align-items:center; gap:5mm; height:38mm; }
-  .ds-logo-col { display:flex; flex-direction:column; align-items:center; justify-content:center; height:38mm; }
-  .ds-logo { height:20mm; width:auto; display:block; }
+  .ds-hd { display:flex; align-items:center; gap:5mm; height:30mm; }
+  .ds-logo-col { display:flex; flex-direction:column; align-items:center; justify-content:center; height:30mm; }
+  .ds-logo { height:16mm; width:auto; display:block; }
   .ds-uni { font-size:8pt; font-weight:700; color:#1e2a6e; text-align:center; margin-top:1.4mm; line-height:1.2; }
   .ds-mid { flex:1; text-align:center; min-width:0; }
   .ds-kicker { font-size:8pt; font-weight:700; color:#1e2a6e; letter-spacing:0.2px; }
@@ -215,16 +195,11 @@ export default async function DoorSignPrint({
   .ds-qr img { width:22mm; height:22mm; display:block; margin:0 auto; }
   .ds-qr-cap { font-size:5.2pt; color:#475569; line-height:1.25; margin-top:0.5mm; }
   .ds-qr-tag { display:inline-block; border:0.5pt dashed #94a3b8; border-radius:0.8mm; padding:0 0.8mm; font-size:4.6pt; color:#64748b; }
-  .ds-bc { margin-top:1.4mm; text-align:center; }
-  /* عرضِ ۲۴mm (ستون ۲۸mm است): پهنای هر ماژول ≈ ۰.۲۱mm — روی چاپگر ۶۰۰dpi
-     و دوربینِ گوشی قابل اسکن. با ۱۸mm قبلی هر ماژول ۰.۱۶mm می‌شد و اسکن
-     کردنِ بارکد روی کاغذ عملاً ممکن نبود. */
-  .ds-bc-svg { width:24mm; height:10mm; display:block; margin:0 auto; }
-  .ds-bc-cap { font-size:5pt; color:#475569; margin-top:0.4mm; letter-spacing:0.3px; font-family:ui-monospace, monospace; }
   .ds-qr-sub { font-size:4.8pt; color:#64748b; }
   .ds-rule { border-top:1.1pt solid #1e2a6e; margin:1.2mm 0 0; }
   .ds-rule2 { border-top:0.4pt solid #94a3b8; margin:0.4mm 0 1.2mm; }
-  .ds-brand { text-align:center; font-size:8pt; font-weight:800; color:#1e2a6e; margin-top:1.4mm; letter-spacing:0.3px; }
+  /* نام نرمافزار پایین پوستر (در فوتر)، نه بالای جدول — درخواست کاربر */
+  .ds-brand-b { text-align:center; font-size:7pt; font-weight:800; color:#1e2a6e; padding-top:1mm; letter-spacing:0.3px; }
 
   /* کادرِ بیرونیِ جدول: بدون این border، سمت چپ و پایینِ جدول باز می‌ماند و
      پوستر «ناتماس» دیده می‌شود. لبه‌های داخلی از خودِ سلول‌ها می‌آید، پس
@@ -270,7 +245,7 @@ export default async function DoorSignPrint({
      کاغذ را تضمین می‌کند و سقفِ pt مانع بزرگ‌شدنِ بی‌جا می‌شود — یعنی اگر
      فردا چیدمان/تعداد ستون‌ها عوض شد، متن خودش را تطبیق می‌دهد. */
   .ds-t { font-weight:700; line-height:1.14; color:#0b1020;
-    font-size:max(9pt, min(22cqh,11cqi,14pt));
+    font-size:max(11pt, min(32cqh,14cqi,18pt));
     display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3;
     overflow:hidden; text-align:center; word-break:break-word; overflow-wrap:anywhere; }
   .ds-wk { display:inline-block; margin-inline-start:1mm; border:0.6pt solid #b45309; border-radius:0.7mm; padding:0 0.5mm;
@@ -279,12 +254,12 @@ export default async function DoorSignPrint({
      چون با ellipsis به «دکتر سعید پورمح…» تبدیل می‌شد و بی‌فایده بود. */
   .ds-p { font-family:'Shabnam', 'Vazirmatn', Tahoma, sans-serif; font-weight:400; line-height:1.14;
     color:#1f2937; max-width:100%; overflow:hidden; text-align:center;
-    font-size:max(6.5pt, min(12cqh,7.2cqi,8.4pt)); display:none;
+    font-size:max(8pt, min(16cqh,9cqi,11pt)); display:none;
     -webkit-box-orient:vertical; -webkit-line-clamp:2; word-break:break-word; }
   /* ساعتِ شروع/پایان: سومِ اولویت — کوچک‌ترین و کم‌رنگ‌ترین (بالای ستون‌ها و
      روی خط‌های ساعت هم پیداست). */
   .ds-h { font-weight:500; line-height:1.1; color:#475569; white-space:nowrap;
-    font-size:max(6pt, min(10cqh,5.8cqi,7.2pt)); display:none; }
+    font-size:max(7pt, min(13cqh,7cqi,9pt)); display:none; }
 
   /* کدام سطرها دیده شوند — از روی فضای واقعیِ خودِ کارت.
      هندسهٔ فعلی: هر ساعت ≈ ۱۲mm، پس ۱ ساعت ≈ ۱۲mm · ۲ ساعت ≈ ۲۴mm · ۳ ساعت ≈ ۳۶mm.
@@ -292,7 +267,7 @@ export default async function DoorSignPrint({
      اول نام استاد و بعد ساعت کنار می‌روند. */
   @container (max-height:28mm) { .ds-t { -webkit-line-clamp:2; } }
   @container (min-height:13mm) { .ds-p { display:-webkit-box; } }
-  @container (min-height:21mm) { .ds-h { display:block; } }
+  @container (min-height:16mm) { .ds-h { display:block; } }
   @container (max-width:22mm)  { .ds-p { display:none; } }
   /* کارتِ یک‌ساعته (~۱۲mm): فقط عنوان — اولویتِ اول؛ نامِ استاد در چنین
      فضایی یا بریده می‌شد یا عنوان را بیرون می‌راند. */
@@ -302,7 +277,7 @@ export default async function DoorSignPrint({
      اندازه یک پله کوچک‌تر می‌شود و همان سه سطرِ عنوان حفظ می‌ماند (اولویتِ
      اول). فقط کارتِ کوتاه‌تر از ۱۳mm به دو سطر محدود می‌شود. */
   @container (max-width:26mm) {
-    .ds-t { font-size:max(7pt, min(20cqh,9.5cqi,10.5pt)); -webkit-line-clamp:3; }
+    .ds-t { font-size:max(9pt, min(28cqh,11cqi,13pt)); -webkit-line-clamp:3; }
   }
   @container (max-width:26mm) and (max-height:13mm) { .ds-t { -webkit-line-clamp:2; } }
 
@@ -317,8 +292,8 @@ export default async function DoorSignPrint({
   .ds-mono .ds-dh.fri { background:#f1f5f9; color:#0f172a; }
   .ds-mono .ds-rule { border-top-color:#000; }
   .ds-mono .ds-rule2 { border-top-color:#000; }
-  .ds-mono .ds-kicker, .ds-mono .ds-brand, .ds-mono .ds-uni { color:#000; }
-  .ds-mono .ds-qr-sub, .ds-mono .ds-bc-cap { color:#000; }
+  .ds-mono .ds-kicker, .ds-mono .ds-brand-b, .ds-mono .ds-uni { color:#000; }
+  .ds-mono .ds-qr-sub { color:#000; }
   .ds-mono .ds-card { background:#fff; border:0.8pt solid #000; }
   .ds-mono .ds-card.lab { background:#fff; border:0.9pt dashed #000; }
   .ds-mono .ds-wk { border-color:#000; color:#000; }
@@ -331,6 +306,48 @@ export default async function DoorSignPrint({
   .ds-mono .ds-sw { border-color:#000; background:#fff; }
   .ds-mono .ds-sw.lab { border-style:dashed; }
   .ds-mono .ds-chip { border-color:#000; color:#000; }
+
+  /* ── مدل ب: روزها در سطر، زمان در ستون ── */
+  .ds-grid-b{ flex:1; display:grid; min-height:0;
+    grid-template-columns:24mm 0.5fr repeat(${hourCols},1fr) 0.5fr; grid-template-rows:9mm repeat(7,1fr); border:1.1pt solid #000; }
+  .ds-grid-b *{ box-sizing:border-box; }
+  .ds-th-b{ grid-column:2/${hourCols + 4}; grid-row:1; position:relative; background:#fff; color:#0f172a; border-bottom:1.1pt solid #000; }
+  .ds-thl-b{ position:absolute; top:50%; font-family:'Vazirmatn Display','Shabnam',sans-serif; font-size:12pt; font-weight:700; text-align:center; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .ds-dl-b{ grid-column:1; border-inline-end:1.1pt solid #000; border-bottom:1.1pt solid #000; background:#fff; color:#0f172a; display:flex; align-items:center; justify-content:center; font-family:'Vazirmatn Display','Shabnam',sans-serif; font-size:12pt; font-weight:700; line-height:1.1; text-align:center; }
+  .ds-dl-b.fri{ background:#f1f5f9; color:#0f172a; }
+  /* گوشهٔ بالا‑راست: برچسب «ساعت» (معادلِ سلولِ خالیِ سرستونِ زمان در مدل الف) */
+  .ds-corner-b{ grid-column:1; grid-row:1; border-inline-end:1.1pt solid #000; border-bottom:1.1pt solid #000; background:#fff; color:#0f172a; display:flex; align-items:center; justify-content:center; font-size:8pt; font-weight:700; }
+  .ds-mono .ds-corner-b{ background:#fff; color:#0f172a; }
+  .ds-day-b{ grid-column:2/${hourCols + 4}; position:relative; border-bottom:1.1pt solid #000; background-image:none; }
+  .ds-day-b.fri{ background-color:#f1f5f9; }
+  .ds-lnv{ position:absolute; top:0; bottom:0; width:0; border-inline-start:.7pt solid #64748b; }
+  .ds-lnv.half{ border-inline-start:.5pt dashed #94a3b8; }
+  .ds-lnv.end{ border-inline-start:0; }
+  .ds-empty-b{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#cbd5e1; font-size:16pt; font-weight:900; user-select:none; }
+  /* mono برای مدل ب */
+  .ds-mono .ds-th-b{ background:#fff; color:#0f172a; }
+  .ds-mono .ds-dl-b{ background:#fff; color:#0f172a; }
+  .ds-mono .ds-dl-b.fri{ background:#f1f5f9; color:#0f172a; }
+  .ds-mono .ds-grid-b{ border-color:#000; }
+  .ds-mono .ds-day-b{ background-image:none; }
+  .ds-mono .ds-lnv{ border-inline-start-color:#000; }
+  .ds-mono .ds-lnv.half{ border-inline-start-color:#4b5563; }
+  .ds-mono .ds-thl-b{ color:#0f172a; }
+
+  /* ── کارتِ مدل ب: ارتفاع ثابت (~۲۱mm = ارتفاع سطرِ روز)، عرض grows با مدتِ درس ──
+     در مدل الف ارتفاع کارت با مدت grows می‌شود (۱ ساعت ≈ ۱۲mm … ۳ ساعت ≈ ۳۶mm) و
+     آستانه‌های cqhِ کارت برایش کافی بود. در مدل ب هر کارت به‌اندازهٔ یک سطرِ روز
+     است، پس با همان آستانه‌ها تیتر بزرگ می‌شد و سطرهای «استاد/ساعت» از کارت بیرون
+     می‌زدند و با overflow:hidden بریده می‌شدند. حالا سهمِ هر سطر از عرضِ کارت
+     (cqi) حساب می‌شود تا هر سه سطر جا شوند. کانتینرِ نام‌دار (dsb) تضمین می‌کند
+     این قواعد فقط مدل ب را هدف بگیرند و کارت‌های مدل الف دست‌نخورده بمانند. */
+  .ds-day-b .ds-card{ container-name:dsb; }
+  .ds-day-b .ds-t{ font-size:max(8.5pt, min(20cqh,12cqi,15pt)); }
+  .ds-day-b .ds-p{ font-size:max(6.5pt, min(11cqh,6cqi,9pt)); display:-webkit-box; }
+  .ds-day-b .ds-h{ font-size:max(6pt, min(9cqh,4.5cqi,7.5pt)); display:block; }
+  @container dsb (max-width:30mm){ .ds-t{ -webkit-line-clamp:3; } }
+  @container dsb (min-width:30mm) and (max-width:74mm){ .ds-t{ -webkit-line-clamp:2; } }
+  @container dsb (min-width:74mm){ .ds-t{ -webkit-line-clamp:1; } }
 
   /* ── نمایشِ روی صفحه: پوستر ۲۹۷mm عرض دارد، پس روی نمایشگرِ معمولی
      سرریز می‌کرد و کل صفحهٔ مدیریت را از حالت ریسپانسیو بیرون می‌برد
@@ -392,6 +409,21 @@ export default async function DoorSignPrint({
   }
   hourLines.push({ top: 100, half: false, end: true });
 
+  // خطوط عمودیِ ساعت برای مدل ب (محور زمان افقی): محور ۶:۳۰→۲۰:۳۰ با بافرِ
+  // نیم‌ساعته در هر دو سر، تا برچسب‌های ساعت روی خطِ خودشان بنشینند و از
+  // لبهٔ کادر بیرون نزنند. n=13 ستونِ ساعتی + ۲×۰.۵fr بافر = ۱۴fr کل.
+  const BUF = 0.5;
+  const AXIS = n;               // ۱۳ ستونِ ساعتی (۷:۰۰→۲۰:۰۰)
+  const TOTAL_FR = n + 2 * BUF; // ۱۴fr
+  const remapX = (pct: number) => (BUF + (pct / 100) * AXIS) / TOTAL_FR * 100;
+  const vLines: { right: number; half: boolean; end?: boolean }[] = [];
+  for (let k = 0; k <= n; k++) {
+    vLines.push({ right: ((BUF + k) / TOTAL_FR) * 100, half: false });
+  }
+  for (let k = 0; k < n; k++) {
+    vLines.push({ right: ((BUF + k + 0.5) / TOTAL_FR) * 100, half: true });
+  }
+
   return (
     <div className={`ds-sheet${mono ? ' ds-mono' : ''}`} dir="rtl">
       <style>{css}</style>
@@ -421,97 +453,164 @@ export default async function DoorSignPrint({
             <div style={{ width: '13mm', height: '13mm', border: '0.5pt dashed #94a3b8', borderRadius: '1mm' }} />
           )}
           <div className="ds-qr-cap">تأیید حضور استاد<br /><span className="ds-qr-sub">اسکن برای ثبت حضور</span></div>
-          {/* بارکد فقط وقتی چاپ می‌شود که واقعاً رمزگذاری شده باشد؛ وگرنه
-              یک جعبهٔ خالیِ خط‌چین روی کاغذ می‌ماند (باگِ قبلی). */}
-          {bcBinary ? (
-            <div className="ds-bc">
-              <BarcodeSvg binary={bcBinary} />
-              <div className="ds-bc-cap" dir="ltr">{bcValue}</div>
-            </div>
-          ) : null}
         </div>
       </div>
 
       <div className="ds-rule" />
       <div className="ds-rule2" />
-      <div className="ds-brand">سامانه جامع آفاق · نسخهٔ {fa(appVersion)}</div>
 
       {/* ── شبکه ── */}
-      <div className="ds-grid">
-        <div className="ds-dh empty">ساعت</div>
-        {PROFESSOR_GRID_DAYS.map((day, i) => (
-          <div key={day} className={`ds-dh${i === 6 ? ' fri' : ''}`}>{day}</div>
-        ))}
-
-        <div className="ds-gut">
-          {hourLabels.map(({ h, top, tf }) => (
-            <div key={h} className="ds-hl" style={{ top: `${top}%`, transform: tf } as CSSProperties}>
-              {fa(h)}
-            </div>
-          ))}
-          {/* نشانگرِ نیم‌ساعت: «۳۰» کوچک روی خطِ خط‌چین، تا ۹:۳۰ از ۱۰ تفکیک شود */}
-          {hourLabels.slice(0, -1).map(({ h, top }) => (
-            <div
-              key={`half-${h}`}
-              className="ds-hh"
-              style={{ top: `${top + 50 / n}%`, transform: 'translateY(-50%)' } as CSSProperties}
-            >
-              ۳۰
-            </div>
-          ))}
-        </div>
-        {placed.map((dayPlaced, dayIdx) => (
-          <div key={dayIdx} className={`ds-day${dayIdx === 6 ? ' fri' : ''}`}>
-            {hourLines.map((ln, i) => (
-              <div
-                key={i}
-                className={`ds-ln${ln.half ? ' half' : ''}${ln.end ? ' end' : ''}`}
-                style={{ top: `${ln.top}%` }}
-              />
-            ))}
-            {dayPlaced.length === 0 && (
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontSize: '16pt', fontWeight: 900, userSelect: 'none' }}>—</div>
-            )}
-            {dayPlaced.map((p, i) => {
-              const e = p.entry as ProfessorCalendarEntry;
+      {model === 'B' ? (
+        /* مدل ب: روزها در سطر، زمان در ستون. همان کارت‌ها (.ds-slot/.ds-card)
+           را بازاستفاده می‌کنیم؛ فقط محور عوض می‌شود: محور زمان افقی
+           (چپ‌بندی از p.topPercent و عرض از p.heightPercent) و ستونِ هم‌پوشان
+           عمودی (بالا از p.leftPercent و ارتفاع از p.widthPercent). منطق
+           layoutProfessorCalendarDay دست‌نخورده می‌ماند. */
+        <div className="ds-grid-b">
+          <div className="ds-th-b">
+            {HOURS.map((h, i) => {
+              /* برچسب دقیقاً روی خطِ ساعتِ خودش می‌نشیند — همان‌جایی که لبهٔ
+                 کارت‌ها و خطوط عمودی هستن (مثل مدل الف). بافرِ نیم‌ساعتهٔ دو سر
+                 (۶:۳۰ و ۲۰:۳۰ نانوشته) فاصلهٔ کافی تا لبهٔ کادر می‌دهد، پس ۷:۰۰
+                 در ۳.۶٪ و ۲۰:۰۰ در ۹۶.۴٪ از لبهٔ راست می‌نشینند و بیرون نمی‌زنند. */
               return (
                 <div
-                  key={`${p.key}#${i}`}
-                  className="ds-slot"
+                  key={h}
+                  className="ds-thl-b"
                   style={{
-                    top: `${p.topPercent}%`,
-                    height: `${p.heightPercent}%`,
-                    // در RTL، inline-start همان لبهٔ راست است؛ سانسِ زودتر
-                    // (col 0) سمت راست می‌نشیند که ترتیبِ خواندنِ فارسی است.
-                    insetInlineStart: `${p.leftPercent}%`,
-                    width: `${p.widthPercent}%`,
+                    right: `${((BUF + i) / TOTAL_FR) * 100}%`,
+                    /* ⚠️ با لنگرِ right، مرکز کردن با ‎+50%‎ انجام می‌شود نه ‎-50%‎.
+                       با ‎-50%‎ برچسب به‌اندازهٔ تمامِ عرضِ خودش چپ‌تر می‌افتاد
+                       (≈۰.۵ ساعت برای ارقام یک‌رقمی) — همان «نیم ساعت جلوتر». */
+                    transform: 'translate(50%, -50%)',
                   }}
-                >
-                  <div className={`ds-card${e.courseType === 'عملی' ? ' lab' : ''}`}>
-                    <div className="ds-t">
-                      {e.title}{e.merged ? ' 🔗' : ''}
-                      <WeekBadge weekType={e.weekType} />
-                    </div>
-                    {e.professorName ? <div className="ds-p">{e.professorName}</div> : null}
-                    <div className="ds-h"><span dir="ltr">{fa(e.startTime)} – {fa(e.endTime)}</span></div>
-                  </div>
-                </div>
+                >{`${fa(h)}:۰۰`}</div>
               );
             })}
           </div>
-        ))}
-      </div>
+          {placed.map((dayPlaced, dayIdx) => (
+            <Fragment key={dayIdx}>
+              <div className={`ds-dl-b${dayIdx === 6 ? ' fri' : ''}`} style={{ gridRow: dayIdx + 2 }}>{PROFESSOR_GRID_DAYS[dayIdx]}</div>
+              <div className={`ds-day-b${dayIdx === 6 ? ' fri' : ''}`} style={{ gridRow: dayIdx + 2 }}>
+                {vLines.map((ln, i) => (
+                  <div key={i} className={`ds-lnv${ln.half ? ' half' : ''}${ln.end ? ' end' : ''}`} style={{ right: `${ln.right}%` }} />
+                ))}
+                {dayPlaced.length === 0 && (
+                  <div className="ds-empty-b">—</div>
+                )}
+                {dayPlaced.map((p, i) => {
+                  const e = p.entry as ProfessorCalendarEntry;
+                  return (
+                    <div
+                      key={`${p.key}#${i}`}
+                      className="ds-slot"
+                      style={{
+                        top: `${p.leftPercent}%`,
+                        height: `${p.widthPercent}%`,
+                        // محور زمان افقی با بافر: چپ‌بندی و عرض را از اسپنِ ۷–۲۰
+                        // به اسپنِ بافر‌دار (۶:۳۰→۲۰:۳۰) بازنگاشت می‌کنیم
+                        insetInlineStart: `${remapX(p.topPercent)}%`,
+                        width: `${p.heightPercent * (AXIS / TOTAL_FR)}%`,
+                      }}
+                    >
+                      <div className={`ds-card${e.courseType === 'عملی' ? ' lab' : ''}`}>
+                        <div className="ds-t">
+                          {e.title}{e.merged ? ' 🔗' : ''}
+                          <WeekBadge weekType={e.weekType} />
+                        </div>
+                        {e.professorName ? <div className="ds-p">{e.professorName}</div> : null}
+                        <div className="ds-h"><span dir="ltr">{fa(e.startTime)} – {fa(e.endTime)}</span></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Fragment>
+          ))}
+        </div>
+      ) : (
+        <div className="ds-grid">
+          <div className="ds-dh empty">ساعت</div>
+          {PROFESSOR_GRID_DAYS.map((day, i) => (
+            <div key={day} className={`ds-dh${i === 6 ? ' fri' : ''}`}>{day}</div>
+          ))}
+
+          <div className="ds-gut">
+            {hourLabels.map(({ h, top, tf }) => (
+              <div key={h} className="ds-hl" style={{ top: `${top}%`, transform: tf } as CSSProperties}>
+                {fa(h)}
+              </div>
+            ))}
+            {/* نشانگرِ نیم‌ساعت: «۳۰» کوچک روی خطِ خط‌چین، تا ۹:۳۰ از ۱۰ تفکیک شود */}
+            {hourLabels.slice(0, -1).map(({ h, top }) => (
+              <div
+                key={`half-${h}`}
+                className="ds-hh"
+                style={{ top: `${top + 50 / n}%`, transform: 'translateY(-50%)' } as CSSProperties}
+              >
+                ۳۰
+              </div>
+            ))}
+          </div>
+          {placed.map((dayPlaced, dayIdx) => (
+            <div key={dayIdx} className={`ds-day${dayIdx === 6 ? ' fri' : ''}`}>
+              {hourLines.map((ln, i) => (
+                <div
+                  key={i}
+                  className={`ds-ln${ln.half ? ' half' : ''}${ln.end ? ' end' : ''}`}
+                  style={{ top: `${ln.top}%` }}
+                />
+              ))}
+              {dayPlaced.length === 0 && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontSize: '16pt', fontWeight: 900, userSelect: 'none' }}>—</div>
+              )}
+              {dayPlaced.map((p, i) => {
+                const e = p.entry as ProfessorCalendarEntry;
+                return (
+                  <div
+                    key={`${p.key}#${i}`}
+                    className="ds-slot"
+                    style={{
+                      top: `${p.topPercent}%`,
+                      height: `${p.heightPercent}%`,
+                      // در RTL، inline-start همان لبهٔ راست است؛ سانسِ زودتر
+                      // (col 0) سمت راست می‌نشیند که ترتیبِ خواندنِ فارسی است.
+                      insetInlineStart: `${p.leftPercent}%`,
+                      width: `${p.widthPercent}%`,
+                    }}
+                  >
+                    <div className={`ds-card${e.courseType === 'عملی' ? ' lab' : ''}`}>
+                      <div className="ds-t">
+                        {e.title}{e.merged ? ' 🔗' : ''}
+                        <WeekBadge weekType={e.weekType} />
+                      </div>
+                      {e.professorName ? <div className="ds-p">{e.professorName}</div> : null}
+                      <div className="ds-h"><span dir="ltr">{fa(e.startTime)} – {fa(e.endTime)}</span></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── پانویس ── */}
+      {clippedCount > 0 && (
+        <div style={{ fontSize: '6.6pt', fontWeight: 700, color: '#b45309', textAlign: 'center', paddingTop: '0.7mm' }}>
+          {fa(clippedCount)} سانس بیرون از بازهٔ {fa(axis.from)}:۰۰–{fa(axis.to)}:۰۰ است و به لبهٔ نمودار چسبانده شد.
+        </div>
+      )}
       <div className="ds-ft">
         <div>
           <span className="k"><span className="ds-sw" />تئوری</span>
           <span className="k"><span className="ds-sw lab" />عملی / آزمایشگاه</span>
           <span className="k"><span className="ds-chip">فرد</span><span className="ds-chip">زوج</span> هفتهٔ فرد یا زوج</span>
         </div>
-        <div>هر خط افقی = یک ساعت · خط‌چین = نیم‌ساعت · ساعت‌های خالی: کلاس ندارد</div>
+        <div>محور زمان {fa(axis.from)}:۰۰ تا {fa(axis.to)}:۰۰ · هر {model === 'B' ? 'ستون' : 'خط افقی'} = یک ساعت · خط‌چین = نیم‌ساعت · ساعت‌های خالی: کلاس ندارد</div>
         <div>چاپ: <span dir="ltr">{fa(printDate)}</span></div>
       </div>
+      <div className="ds-brand-b">سامانه جامع آفاق · نسخهٔ {fa(appVersion)}{model === 'B' ? ' · مدل ب (روزها در سطر)' : ''}</div>
     </div>
   );
 }

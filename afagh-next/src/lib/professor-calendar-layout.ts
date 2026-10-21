@@ -3,6 +3,27 @@ export const PROFESSOR_CALENDAR_END_MINUTES = 20 * 60;
 export const PROFESSOR_CALENDAR_DAY_COUNT = 7;
 export const PROFESSOR_CALENDAR_MIN_ENTRY_MINUTES = 30;
 
+/** بازهٔ محور زمانِ تقویم/پوستر — پیش‌فرض ۷→۲۰، ولی بعضی دانشگاه‌ها ۸→۱۸ دارند. */
+export interface ProfessorCalendarRange {
+  startMinutes: number;
+  endMinutes: number;
+}
+
+export const DEFAULT_PROFESSOR_CALENDAR_RANGE: ProfessorCalendarRange = {
+  startMinutes: PROFESSOR_CALENDAR_START_MINUTES,
+  endMinutes: PROFESSOR_CALENDAR_END_MINUTES,
+};
+
+/** اعتبارسنجی بازه: نامعتبر (پایان ≤ آغاز یا غیرعددی) → پیش‌فرضِ ۷→۲۰. */
+export function normalizeProfessorCalendarRange(
+  range?: Partial<ProfessorCalendarRange> | null,
+): ProfessorCalendarRange {
+  const s = Number(range?.startMinutes);
+  const e = Number(range?.endMinutes);
+  if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) return DEFAULT_PROFESSOR_CALENDAR_RANGE;
+  return { startMinutes: s, endMinutes: e };
+}
+
 export type ProfessorCalendarWeekType = 'ALL' | 'EVEN' | 'ODD' | 'BOTH';
 export type ProfessorCalendarWeekFilter = 'ALL' | 'EVEN' | 'ODD';
 
@@ -230,9 +251,9 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export function layoutProfessorCalendarDay<T extends ProfessorCalendarSchedulable>(
   dayEntries: T[],
+  range?: Partial<ProfessorCalendarRange> | null,
 ): ProfessorCalendarPlacement<T>[] {
-  const start0 = PROFESSOR_CALENDAR_START_MINUTES;
-  const end0 = PROFESSOR_CALENDAR_END_MINUTES;
+  const { startMinutes: start0, endMinutes: end0 } = normalizeProfessorCalendarRange(range);
   const total = end0 - start0;
   const items = dayEntries
     .map(entry => {
@@ -294,6 +315,7 @@ export function layoutProfessorCalendarDay<T extends ProfessorCalendarSchedulabl
 
 export function layoutProfessorCalendarWeek<T extends ProfessorCalendarSchedulable>(
   rows: T[],
+  range?: Partial<ProfessorCalendarRange> | null,
 ): Map<number, ProfessorCalendarPlacement<T>[]> {
   const byDay = new Map<number, T[]>();
   for (let d = 0; d < PROFESSOR_CALENDAR_DAY_COUNT; d += 1) byDay.set(d, []);
@@ -303,6 +325,6 @@ export function layoutProfessorCalendarWeek<T extends ProfessorCalendarSchedulab
     byDay.get(d)!.push(r);
   }
   const out = new Map<number, ProfessorCalendarPlacement<T>[]>();
-  for (const [d, list] of byDay) out.set(d, layoutProfessorCalendarDay(list));
+  for (const [d, list] of byDay) out.set(d, layoutProfessorCalendarDay(list, range));
   return out;
 }
