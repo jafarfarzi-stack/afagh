@@ -229,7 +229,12 @@ export default async function DoorSignPrint({
   .ds-ln.half { border-top:0.5pt dashed #94a3b8; }
   .ds-ln.end { border-top:0; }
 
-  .ds-slot { position:absolute; inset-inline:0.7mm; padding:0.4mm 0; }
+  /* جای‌گذاری افقیِ هر سانس از خودِ placement می‌آید (leftPercent/widthPercent)،
+     دقیقاً مثل گریدِ نمایشگر. قبلاً inset-inline ثابت بود و هر سانسی تمامِ عرضِ
+     ستون را می‌گرفت؛ پس دو کلاسِ هم‌زمان در یک اتاق روی هم می‌افتادند و متنِ
+     کارتِ زیرین «بریده» دیده می‌شد. حالا هرکدام ستونِ خودش را دارد.
+     padding افقی = فاصلهٔ دیداری بین ستون‌های هم‌پوشان و حاشیهٔ ستون از خطوط. */
+  .ds-slot { position:absolute; box-sizing:border-box; padding:0.4mm 0.35mm; }
   .ds-card { container-type:size; width:100%; height:100%; overflow:hidden;
     border:0.7pt solid #6366f1; border-radius:1.1mm; background:#eef2ff;
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.2mm; padding:0.5mm 0.9mm; text-align:center; }
@@ -269,6 +274,14 @@ export default async function DoorSignPrint({
   /* کارتِ یک‌ساعته (~۱۲mm): فقط عنوان — اولویتِ اول؛ نامِ استاد در چنین
      فضایی یا بریده می‌شد یا عنوان را بیرون می‌راند. */
   @container (max-height:13mm) { .ds-p { display:none; } }
+  /* کارتِ باریک = دو سانسِ هم‌زمان در یک اتاق (عرضِ ستون نصف می‌شود).
+     با کفِ ۹pt عنوان سه سطر می‌خواست و سطرِ سوم وسطِ حرف بریده می‌شد؛ پس
+     اندازه یک پله کوچک‌تر می‌شود و همان سه سطرِ عنوان حفظ می‌ماند (اولویتِ
+     اول). فقط کارتِ کوتاه‌تر از ۱۳mm به دو سطر محدود می‌شود. */
+  @container (max-width:26mm) {
+    .ds-t { font-size:max(7pt, min(20cqh,9.5cqi,10.5pt)); -webkit-line-clamp:3; }
+  }
+  @container (max-width:26mm) and (max-height:13mm) { .ds-t { -webkit-line-clamp:2; } }
 
   .ds-ft { display:flex; align-items:center; justify-content:space-between; gap:4mm; font-size:7pt; color:#334155; padding-top:1.2mm; }
   .ds-ft .k { display:inline-flex; align-items:center; gap:1mm; margin-inline-end:3mm; }
@@ -438,7 +451,14 @@ export default async function DoorSignPrint({
                 <div
                   key={`${p.key}#${i}`}
                   className="ds-slot"
-                  style={{ top: `${p.topPercent}%`, height: `${p.heightPercent}%` }}
+                  style={{
+                    top: `${p.topPercent}%`,
+                    height: `${p.heightPercent}%`,
+                    // در RTL، inline-start همان لبهٔ راست است؛ سانسِ زودتر
+                    // (col 0) سمت راست می‌نشیند که ترتیبِ خواندنِ فارسی است.
+                    insetInlineStart: `${p.leftPercent}%`,
+                    width: `${p.widthPercent}%`,
+                  }}
                 >
                   <div className={`ds-card${e.courseType === 'عملی' ? ' lab' : ''}`}>
                     <div className="ds-t">
