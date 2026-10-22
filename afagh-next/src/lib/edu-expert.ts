@@ -18,6 +18,7 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import {
+  classrooms,
   course_offerings,
   courses,
   departments,
@@ -25,6 +26,7 @@ import {
   faculties,
   majors,
   roles,
+  schedules,
   universities,
   user_roles,
   users,
@@ -172,6 +174,10 @@ export async function listOfferingExpertAssignments(termId: number): Promise<
     courseTitle: string;
     groupNumber: number;
     departmentName: string | null;
+    /** نامِ اتاق‌های همان درس از برنامهٔ هفتگی — مثل «كلاس 5 انساني» */
+    rooms: string[];
+    /** آیا برای این درس اصلاً سانس/اتاق تعریف شده؟ (برای فیلترِ جدول) */
+    hasSchedule: boolean;
     assignedUserId: number | null;
     resolvedUserId: number | null;
     source: 'offering' | 'scope' | null;
@@ -200,6 +206,42 @@ export async function listOfferingExpertAssignments(termId: number): Promise<
     : [];
   const deptName = (id: number | null) => (id == null ? null : depts.find((d) => d.id === id)?.name ?? null);
 
+  /* اتاق‌های هر درس — از `schedules`.
+     چرا لازم است: این صفحه «تخصیص کارشناس به کلاس» است، ولی تا امروز هر سطر
+     فقط «درس + گروه» را نشان می‌داد و مدیر نمی‌دانست این درس در کدام اتاق
+     برگزار می‌شود (در دادهٔ واقعی، ۱۷۸ درس از ۲۱۶ درسِ یک ترم هنوز هیچ سانس/
+     اتاقی ندارند). یک درس می‌تواند چند سانس در چند اتاق داشته باشد، پس فهرستِ
+     یکتا از نام‌ها برمی‌گردانیم. */
+  const offeringIds = rows.map((r) => r.offeringId);
+  const schedRows = offeringIds.length
+    ? await db
+        .select({ offeringId: schedules.offeringId, roomId: schedules.roomId, scheduleType: schedules.scheduleType })
+        .from(schedules)
+        .where(inArray(schedules.offeringId, offeringIds))
+        // سانسِ «امتحان» اتاقش سالنِ امتحان است، نه کلاسِ درس — بیرونش می‌گذاریم
+        .then((rs) => rs.filter((s) => String(s.scheduleType ?? '').toUpperCase() !== 'EXAM'))
+        .catch(() => [])
+    : [];
+  const roomIds = [...new Set(schedRows.map((s) => s.roomId).filter((v): v is number => typeof v === 'number'))];
+  const roomRows = roomIds.length
+    ? await db
+        .select({ id: classrooms.id, name: classrooms.name })
+        .from(classrooms)
+        .where(inArray(classrooms.id, roomIds))
+        .catch(() => [])
+    : [];
+  const roomNameOf = (id: number | null) => (id == null ? null : roomRows.find((r) => r.id === id)?.name ?? null);
+  const roomsByOffering = new Map<number, string[]>();
+  const scheduledOfferings = new Set<number>();
+  for (const s of schedRows) {
+    scheduledOfferings.add(s.offeringId);
+    const name = roomNameOf(s.roomId);
+    if (!name) continue;
+    const list = roomsByOffering.get(s.offeringId) ?? [];
+    if (!list.includes(name)) list.push(name);
+    roomsByOffering.set(s.offeringId, list);
+  }
+
   // برای عملکرد: نقش‌ها را یک بار می‌خوانیم و در حافظه جستجو می‌کنیم
   const scopes = await db.select().from(expert_scopes).catch(() => []);
   const scopeHit = (type: string, id: number | null | undefined) => {
@@ -214,6 +256,8 @@ export async function listOfferingExpertAssignments(termId: number): Promise<
         courseTitle: r.courseTitle,
         groupNumber: r.groupNumber,
         departmentName: deptName(r.ownerDepartmentId),
+        rooms: roomsByOffering.get(r.offeringId) ?? [],
+        hasSchedule: scheduledOfferings.has(r.offeringId),
         assignedUserId: r.eduExpertUserId,
         resolvedUserId: r.eduExpertUserId,
         source: 'offering' as const,
@@ -228,6 +272,8 @@ export async function listOfferingExpertAssignments(termId: number): Promise<
       courseTitle: r.courseTitle,
       groupNumber: r.groupNumber,
       departmentName: deptName(r.ownerDepartmentId),
+      rooms: roomsByOffering.get(r.offeringId) ?? [],
+      hasSchedule: scheduledOfferings.has(r.offeringId),
       assignedUserId: null,
       resolvedUserId: fromScope,
       source: fromScope ? ('scope' as const) : null,

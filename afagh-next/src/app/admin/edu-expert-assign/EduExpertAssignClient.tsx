@@ -27,16 +27,28 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
   const [bulkExpert, setBulkExpert] = useState<number | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [query, setQuery] = useState('');
+  /* پیش‌فرض: فقط درس‌هایی که واقعاً کلاس/اتاق دارند. در دادهٔ واقعی حدودِ ۸۰٪
+     درس‌های یک ترم هنوز هیچ سانس/اتاقی ندارند و فقط جدول را شلوغ می‌کنند؛ با
+     برداشتنِ تیک، همهٔ درس‌های ترم برمی‌گردند (برای تخصیصِ پیش از برنامه‌ریزی). */
+  const [scheduledOnly, setScheduledOnly] = useState(true);
 
   const rows = useMemo(() => {
     const q = query.trim();
-    if (!q) return init.rows;
-    return init.rows.filter(
-      (r) => r.courseTitle.includes(q) || String(r.offeringId).includes(q),
-    );
-  }, [init.rows, query]);
+    return init.rows.filter((r) => {
+      if (scheduledOnly && !r.hasSchedule) return false;
+      if (!q) return true;
+      return (
+        r.courseTitle.includes(q) ||
+        String(r.offeringId).includes(q) ||
+        r.rooms.some((n) => n.includes(q))
+      );
+    });
+  }, [init.rows, query, scheduledOnly]);
 
   const allChecked = rows.length > 0 && rows.every((r) => selected.has(r.offeringId));
+  /* تخصیصِ گروهی فقط روی ردیف‌های دیده‌شده اعمال می‌شود؛ وگرنه اگر کاربر
+     فیلتر را عوض کند، ردیف‌های انتخاب‌شدهٔ پنهان هم بی‌خبر تخصیص می‌خوردند. */
+  const visibleSelected = rows.filter((r) => selected.has(r.offeringId));
 
   function toggle(id: number) {
     setSelected((prev) => {
@@ -72,12 +84,12 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
   }
 
   async function doBulk() {
-    if (!selected.size) {
+    if (!visibleSelected.length) {
       setMsg({ ok: false, text: 'هیچ کلاسی انتخاب نشده.' });
       return;
     }
     setMsg(null);
-    const res = await bulkSetOfferingEduExpertAction([...selected], bulkExpert);
+    const res = await bulkSetOfferingEduExpertAction(visibleSelected.map((r) => r.offeringId), bulkExpert);
     if (res.ok) {
       setMsg({ ok: true, text: `${res.updated ?? 0} کلاس به‌روز شد.` });
       setSelected(new Set());
@@ -103,6 +115,7 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
   const assignedCount = init.rows.filter((r) => r.source === 'offering').length;
   const fromScopeCount = init.rows.filter((r) => r.source === 'scope').length;
   const noneCount = init.rows.filter((r) => r.source == null).length;
+  const scheduledCount = init.rows.filter((r) => r.hasSchedule).length;
 
   return (
     <div className="space-y-4 p-4" dir="rtl">
@@ -137,7 +150,7 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
               className="input"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="نام درس یا شمارهٔ ارائه"
+              placeholder="نام درس، شمارهٔ ارائه یا نام اتاق (مثل «انساني»)"
             />
           </label>
 
@@ -159,8 +172,8 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
             </select>
           </label>
 
-          <button className="btn btn-primary" onClick={doBulk} disabled={pending}>
-            تخصیص به {selected.size} کلاس
+          <button className="btn btn-primary" onClick={doBulk} disabled={pending || !visibleSelected.length}>
+            تخصیص به {visibleSelected.length} کلاس
           </button>
           <button className="btn" onClick={doClearAll} disabled={pending}>
             آزاد کردن همهٔ ترم
@@ -168,10 +181,19 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
         </div>
 
         <div className="flex flex-wrap gap-4 text-xs text-slate-600">
-          <span>کل کلاس‌ها: <b>{init.rows.length}</b></span>
+          <span>کل درس‌های ترم: <b>{init.rows.length}</b></span>
+          <span className="text-slate-800">دارای کلاس/اتاق: <b>{scheduledCount}</b></span>
           <span className="text-indigo-700">تخصیص صریح: <b>{assignedCount}</b></span>
           <span className="text-emerald-700">از نقش‌ها: <b>{fromScopeCount}</b></span>
           <span className="text-amber-700">بدون کارشناس: <b>{noneCount}</b></span>
+          <label className="flex items-center gap-1.5 font-bold text-slate-800">
+            <input
+              type="checkbox"
+              checked={scheduledOnly}
+              onChange={(e) => setScheduledOnly(e.target.checked)}
+            />
+            فقط کلاس‌های دارای برنامه (اتاق)
+          </label>
         </div>
 
         {msg && (
@@ -191,6 +213,7 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
               <th className="p-2 text-right">#</th>
               <th className="p-2 text-right">درس</th>
               <th className="p-2 text-right">گروه</th>
+              <th className="p-2 text-right">کلاس (اتاق)</th>
               <th className="p-2 text-right">گروه سازنده</th>
               <th className="p-2 text-right">کارشناس آموزش</th>
               <th className="p-2 text-right">منبع</th>
@@ -210,6 +233,9 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
                 <td className="p-2 text-slate-500">{r.offeringId}</td>
                 <td className="p-2 font-bold">{r.courseTitle}</td>
                 <td className="p-2">{r.groupNumber}</td>
+                <td className="p-2 font-bold text-slate-800">
+                  {r.rooms.length ? r.rooms.join(' · ') : <span className="text-slate-400 font-normal">بدون اتاق</span>}
+                </td>
                 <td className="p-2 text-slate-600">{r.departmentName ?? '—'}</td>
                 <td className="p-2">
                   <select
@@ -246,8 +272,13 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan={7} className="p-6 text-center text-slate-500">
+                <td colSpan={8} className="p-6 text-center text-slate-500">
                   کلاسی یافت نشد.
+                  {scheduledOnly && init.rows.length > 0 && (
+                    <span className="block mt-1 text-xs">
+                      ({init.rows.length} درس هست، ولی هیچ‌کدام برنامه/اتاق ندارند — تیکِ «فقط کلاس‌های دارای برنامه» را بردارید.)
+                    </span>
+                  )}
                 </td>
               </tr>
             )}
@@ -257,6 +288,7 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
 
       <div className="card p-4 text-xs leading-6 text-slate-600 space-y-1">
         <p><b>چطور کار می‌کند:</b></p>
+        <p>۰. ستونِ «کلاس (اتاق)» از برنامهٔ هفتگی می‌آید؛ درس‌هایی که هنوز هیچ سانس/اتاقی ندارند با تیکِ بالای جدول پنهان می‌شوند (برای دیدنشان تیک را بردارید).</p>
         <p>۱. اگر برای کلاس کارشناس انتخاب شود («تخصیص کلاس»)، همان برنده است.</p>
         <p>۲. اگر انتخاب نشود، کارشناس از <b>تخصیص نقش‌ها</b> (دانشگاه/دانشکده/گروه/رشته) پایین می‌آید — دقیق‌ترین دامنه برنده است.</p>
         <p>۳. «بدون کارشناس» یعنی هیچ‌کدام؛ آن کلاس در کارتابل هیچ کارشناسی نمی‌آید.</p>

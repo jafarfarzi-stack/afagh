@@ -14,6 +14,10 @@ export interface EduExpertAssignRow {
   courseTitle: string;
   groupNumber: number;
   departmentName: string | null;
+  /** نامِ اتاق‌های درس از برنامهٔ هفتگی (مثل «كلاس 5 انساني») — ممکن است چندتا باشد */
+  rooms: string[];
+  /** آیا درس اصلاً سانس/اتاق دارد؟ (فیلترِ «فقط کلاس‌های دارای برنامه») */
+  hasSchedule: boolean;
   assignedUserId: number | null;
   resolvedUserId: number | null;
   source: 'offering' | 'scope' | null;
@@ -55,6 +59,8 @@ export async function getEduExpertAssignInit(termId?: number): Promise<EduExpert
       courseTitle: r.courseTitle,
       groupNumber: r.groupNumber,
       departmentName: r.departmentName,
+      rooms: r.rooms,
+      hasSchedule: r.hasSchedule,
       assignedUserId: r.assignedUserId,
       resolvedUserId: r.resolvedUserId,
       source: r.source,
