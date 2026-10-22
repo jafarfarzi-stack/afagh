@@ -827,6 +827,20 @@
       "when": 1794400000800,
       "tag": "0112_classroom_edu_experts",
       "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1794400000900,
+      "tag": "0113_attendance_controller",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1794400001000,
+      "tag": "0114_classroom_department",
+      "breakpoints": true
     }
   ]
 }

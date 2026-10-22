@@ -24,6 +24,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     'VAULT_MANAGER',
     'DEP_HEAD',
     'VICE_EDU',
+    // کنترل‌کنندهٔ حضور و غیاب: فقط کارتابلِ خودش را می‌بیند
+    // (`/admin/attendance-control`) و گاردِ همان صفحه دامنه را محدود می‌کند.
+    'ATTENDANCE_CONTROLLER',
   ];
   // ⚠ استثنای محدود: layout در App Router مسیر جاری را نمی‌بیند، پس نمی‌تواند
   // گارد را به یک زیرمسیر خاص دوخته کرد. کم‌ضررترین حالت این است که این دو نقش

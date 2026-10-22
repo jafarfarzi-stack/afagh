@@ -29,6 +29,8 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
     source: s.source,
     hasEnv: s.hasEnv,
     value: s.type === 'secret' ? (s.value ? SECRET_MASK : '') : s.value,
+    default: s.default,
+    options: s.options,
   }));
 
   const uni = await getCurrentUniversity().catch(() => null);

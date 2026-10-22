@@ -1,11 +1,40 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { toGregorian, toJalaliFromDate } from '@/lib/calendar';
 import {
   listOfferingsForEditor, saveOfferingEditorAction, getRoomsForEditor,
   listEduExpertsForEditor, addEduExpertToOfferingAction, removeEduExpertFromOfferingAction,
   type OfferingEditRow,
 } from './actions';
+
+/* ── تاریخِ امتحان: ذخیره در دیتابیس میلادی است (`schedules.examDate` از نوع date)،
+   ولی همهٔ سامانه شمسی کار می‌کند. پس در فرم شمسی نشان می‌دهیم و هنگام ذخیره
+   به میلادی برمی‌گردانیم. بدون این تبدیل، تاریخی که کاربر شمسی تایپ می‌کرد
+   مستقیماً در ستونِ date نوشته می‌شد و یا رد می‌شد یا روزِ اشتباه ذخیره می‌کرد. */
+const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
+const latinize = (v: string) =>
+  String(v ?? '').replace(/[۰-۹]/g, (c) => String(FA_DIGITS.indexOf(c))).replace(/[٠-٩]/g, (c) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(c)));
+
+/** 'YYYY-MM-DD' میلادی → 'YYYY/MM/DD' شمسی (برای نمایش در فرم) */
+function gregToJalaliInput(iso: string | null | undefined): string {
+  const v = String(iso ?? '').trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return '';
+  const d = new Date(`${v}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return '';
+  const j = toJalaliFromDate(d);
+  return `${j.jy}/${String(j.jm).padStart(2, '0')}/${String(j.jd).padStart(2, '0')}`;
+}
+
+/** 'YYYY/MM/DD' شمسی (ارقام فارسی هم قبول است) → 'YYYY-MM-DD' میلادی، وگرنه null */
+function jalaliInputToGreg(value: string): string | null {
+  const m = latinize(value).trim().match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (!m) return null;
+  const jy = Number(m[1]), jm = Number(m[2]), jd = Number(m[3]);
+  if (jm < 1 || jm > 12 || jd < 1 || jd > 31) return null;
+  const g = toGregorian(jy, jm, jd);
+  return `${g.gy}-${String(g.gm).padStart(2, '0')}-${String(g.gd).padStart(2, '0')}`;
+}
 
 const DAYS = [{ v: 0, n: 'شنبه' }, { v: 1, n: 'یک‌شنبه' }, { v: 2, n: 'دوشنبه' }, { v: 3, n: 'سه‌شنبه' }, { v: 4, n: 'چهارشنبه' }, { v: 5, n: 'پنج‌شنبه' }, { v: 6, n: 'جمعه' }];
 const sel = 'border border-slate-300 rounded-lg px-1.5 py-1 text-xs bg-white';
@@ -38,13 +67,29 @@ export default function OfferingEditorClient({ terms }: { terms: { id: number; t
     return t ? rows.filter(r => (r.code + ' ' + r.title).toLowerCase().includes(t)) : rows;
   }, [rows, q]);
 
-  const edit = (r: OfferingEditRow) => { setOpen(r.offeringId); setDraft(JSON.parse(JSON.stringify(r))); setReason(''); setMsg(null); };
+  const edit = (r: OfferingEditRow) => {
+    setOpen(r.offeringId);
+    const copy: OfferingEditRow = JSON.parse(JSON.stringify(r));
+    // تاریخِ امتحان در فرم شمسی است
+    if (copy.exam?.date) copy.exam.date = gregToJalaliInput(copy.exam.date);
+    setDraft(copy);
+    setReason('');
+    setMsg(null);
+  };
   const save = async () => {
     if (!draft) return;    setBusy(true); setMsg(null);
     const r = await saveOfferingEditorAction({
       offeringId: draft.offeringId, capacity: draft.capacity,
       classRows: draft.classRows.map(c => ({ id: c.id, day: c.day ?? 0, start: c.start ?? '', end: c.end ?? '', roomId: c.roomId })),
-      exam: draft.exam ? { id: draft.exam.id, date: draft.exam.date ?? '', start: draft.exam.start ?? '', end: draft.exam.end ?? '' } : null,
+      exam: draft.exam
+        ? {
+            id: draft.exam.id,
+            // فرم شمسی است؛ ستون دیتابیس میلادی — تبدیل این‌جا انجام می‌شود.
+            date: draft.exam.date ? (jalaliInputToGreg(draft.exam.date) ?? '') : '',
+            start: draft.exam.start ?? '',
+            end: draft.exam.end ?? '',
+          }
+        : null,
       overrideReason: reason,
     }).catch(() => ({ ok: false as const, error: 'خطا' }));
     if (r.ok) { setMsg({ kind: 'ok', text: '✅ ذخیره شد.' }); await load(); setOpen(null); }
@@ -97,7 +142,7 @@ export default function OfferingEditorClient({ terms }: { terms: { id: number; t
                 <td className="p-2 text-center">{r.capacity}</td>
                 <td className="p-2 text-center">{r.enrolledCount}</td>
                 <td className="p-2 text-slate-600">{r.classRows.map(c => `${DAYS.find(d => d.v === c.day)?.n ?? c.day} ${c.start}–${c.end}`).join('، ') || '—'}</td>
-                <td className="p-2 text-slate-600">{r.exam ? `${r.exam.date} ${r.exam.start}` : '—'}</td>
+                <td className="p-2 text-slate-600">{r.exam ? `${gregToJalaliInput(r.exam.date) || '—'} ${r.exam.start ?? ''}` : '—'}</td>
                 <td className="p-2 text-center"><button onClick={() => edit(r)} className="rounded-lg bg-indigo-700 px-3 py-1 text-white font-bold">✏️ ویرایش</button></td>
               </tr>
             ))}
@@ -129,8 +174,26 @@ export default function OfferingEditorClient({ terms }: { terms: { id: number; t
                 </span>
               ))}
               {!draft.eduExpertUserIds.length && (
-                <span className="text-[11px] text-slate-500">خالی = کارشناس از دامنهٔ نقش‌های او پایین می‌آید.</span>
+                <span className="text-[11px] text-slate-500">
+                  {draft.roomExpertUserIds?.length
+                    ? 'بدون تخصیصِ صریح برای این درس — کارشناس از اتاقِ سانس‌های همین درس می‌آید:'
+                    : 'خالی = کارشناس از دامنهٔ نقش‌های او پایین می‌آید.'}
+                </span>
               )}
+              {/* کارشناسِ ارثی از اتاق: مدیر ممکن است کارشناس را به «اتاق» سپرده باشد
+                  (صفحهٔ تخصیص کارشناس به اتاق‌ها) و انتظار داشته باشد همین‌جا هم دیده شود. */}
+              {(draft.roomExpertUserIds ?? [])
+                .filter(id => !draft.eduExpertUserIds.includes(id))
+                .map(id => (
+                  <span
+                    key={`room-${id}`}
+                    className="inline-flex items-center gap-1 rounded-full bg-teal-100 border border-teal-300 px-2 py-0.5 text-[11px] font-bold text-teal-900"
+                    title="از تخصیصِ اتاق به ارث رسیده — برای تغییر، در صفحهٔ «تخصیص کارشناس به اتاق‌ها» عوض کنید"
+                  >
+                    {experts.find(x => x.userId === id)?.name ?? `#${id}`}
+                    <span className="text-[9px] font-black opacity-70">اتاق</span>
+                  </span>
+                ))}
               <select
                 value=""
                 disabled={busy}
@@ -149,8 +212,10 @@ export default function OfferingEditorClient({ terms }: { terms: { id: number; t
             </div>
             <p className="text-[11px] text-slate-500">
               {draft.eduExpertUserIds.length
-                ? `تخصیص صریح این کلاس (${draft.eduExpertUserIds.length} کارشناس) — بر تخصیص نقش‌ها اولویت دارد.`
-                : 'تخصیص صریحی برای این کلاس ثبت نشده.'}
+                ? `تخصیص صریح این کلاس (${draft.eduExpertUserIds.length} کارشناس) — بر تخصیص اتاق و نقش‌ها اولویت دارد.`
+                : draft.roomExpertUserIds?.length
+                  ? 'تخصیص از روی اتاقِ سانس‌های همین درس اعمال می‌شود (بدون نیاز به تخصیص صریح).'
+                  : 'تخصیص صریحی برای این کلاس ثبت نشده و اتاقِ سانس‌ها هم کارشناس ندارد.'}
             </p>
             {!experts.length && (
               <p className="text-[11px] text-amber-700">
@@ -183,7 +248,16 @@ export default function OfferingEditorClient({ terms }: { terms: { id: number; t
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-xs font-bold text-slate-600">امتحان:</p>
-            <input type="text" value={draft.exam?.date ?? ''} onChange={e => setDraft({ ...draft, exam: draft.exam ? { ...draft.exam, date: e.target.value } : { id: null, date: e.target.value, start: '', end: '' } })} placeholder="تاریخ (1405/../..)" className={sel + ' w-32'} />
+            <input
+              type="text"
+              dir="ltr"
+              value={draft.exam?.date ?? ''}
+              onChange={e => setDraft({ ...draft, exam: draft.exam ? { ...draft.exam, date: e.target.value } : { id: null, date: e.target.value, start: '', end: '' } })}
+              placeholder="۱۴۰۵/۱۱/۱۰"
+              title="تاریخ شمسی — مثلاً ۱۴۰۵/۱۱/۱۰"
+              className={sel + ' w-32 ' + (draft.exam?.date && !jalaliInputToGreg(draft.exam.date) ? 'border-rose-400 bg-rose-50' : '')}
+            />
+            <span className="text-[10px] font-bold text-slate-500">شمسی</span>
             <input type="time" value={draft.exam?.start ?? ''} onChange={e => setDraft({ ...draft, exam: draft.exam ? { ...draft.exam, start: e.target.value } : { id: null, date: '', start: e.target.value, end: '' } })} className={sel} />
             <input type="time" value={draft.exam?.end ?? ''} onChange={e => setDraft({ ...draft, exam: draft.exam ? { ...draft.exam, end: e.target.value } : { id: null, date: '', start: '', end: e.target.value } })} className={sel} />
             {draft.exam && draft.exam.date && (

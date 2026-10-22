@@ -13,6 +13,7 @@ import { groupIntoMerged, mergedGroupKey, professorCalendarEntryKey, type Profes
 import ProfessorCalendarGrid, { type ProfessorCalendarEntry } from '@/app/professor/professor-calendar-grid';
 import DoorSignPrint, { type DoorSignDetail } from './door-sign-print';
 import DoorSignDetailSelect, { DOOR_DETAIL_COOKIE } from './DoorSignDetailSelect';
+import FilterSelect from './FilterSelect';
 import PrintButton from './PrintButton';
 import pkg from '../../../../package.json';
 const APP_VERSION = (pkg as { version?: string }).version ?? '1.0.0';
@@ -455,11 +456,18 @@ export default async function WeeklyBoardPage({ searchParams }: {
     .filter(d => facIds.size === 0 || facIds.has(d.facultyId));
   const rooms = await (async () => {
     if (!term) return [];
-    // فقط کلاس‌هایی که در همین ترم سانس دارند (خالی‌ها نه) + احترام به فیلتر دانشکده
+    // فقط کلاس‌هایی که در همین ترم سانس دارند (خالی‌ها نه) + احترام به فیلتر دانشکده **و گروه**
     // NOTE: مبنا همهٔ سانس‌های کلاسی است (CLASS/EVEN/ODD/BOTH) نه فقط CLASS — وگرنه
     // کلاس‌هایی که فقط سانس زوج/فرد دارند از فهرست پوستر جا می‌مانند.
+    //
+    // ⚠ باگِ پیشین: فقط `facultyId` در فهرست «کلاس (پوستر درب)» اعمال می‌شد و
+    //   `deptId` کاملاً نادیده گرفته می‌شد؛ نتیجه این بود که با انتخابِ «گروه»
+    //   فهرستِ کلاس‌ها تغییر نمی‌کرد و کاربر فکر می‌کرد فیلتر کار نمی‌کند.
     const facDeptIds = facultyId ? depts.filter(d => d.facultyId === facultyId).map(d => d.id) : null;
-    if (facDeptIds && facDeptIds.length === 0) return []; // fail-closed مثل scopeConds
+    // گروهِ انتخاب‌شده باید متعلق به همین دانشگاه/دانشکده باشد؛ وگرنه fail-closed.
+    if (deptId && !depts.some(d => d.id === deptId)) return [];
+    const scopedDeptIds = deptId ? [deptId] : facDeptIds;
+    if (scopedDeptIds && scopedDeptIds.length === 0) return []; // fail-closed مثل scopeConds
     const rows0 = await db.select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, floor: classrooms.floor, capacity: classrooms.capacity, facultyId: classrooms.facultyId })
       .from(classrooms)
       .where(and(
@@ -470,7 +478,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
           JOIN courses c ON c.id = o."courseId"
           WHERE s."roomId" = classrooms.id AND s."scheduleType" <> 'EXAM'
             AND o."termId" = ${term.id} AND o."isActive" = 1
-            ${facDeptIds ? sql`AND c."departmentId" IN (${sql.join(facDeptIds.map(n => sql`${n}`), sql`, `)})` : sql``})`,
+            ${scopedDeptIds ? sql`AND c."departmentId" IN (${sql.join(scopedDeptIds.map(n => sql`${n}`), sql`, `)})` : sql``})`,
       ))
       .orderBy(asc(classrooms.id));
     // ادغام هم‌نام‌های مهاجرت سما (دو ردیف یک نام، بدون ساختمان): یک گزینه، همهٔ idها
@@ -486,6 +494,11 @@ export default async function WeeklyBoardPage({ searchParams }: {
     return out.sort((a, b) => a.name.localeCompare(b.name, 'fa'));
   })();
   const selRoom = rooms.find(r => r.id === roomId || r.aliasIds.includes(roomId)) ?? null;
+  // اگر `room` در آدرس مانده ولی در فهرستِ فیلترشده نیست (کاربر دانشکده/گروه را
+  // عوض کرده)، آن را «همهٔ کلاس‌ها» می‌گیریم. پیش‌تر این حالت تابلوی خالی می‌داد
+  // و کاربر فکر می‌کرد فیلتر خراب است. مرزِ دانشگاه و دامنهٔ نقش همچنان با
+  // `scopeConds` اعمال است، پس این کار هیچ داده‌ای را باز نمی‌کند.
+  const effRoomId = selRoom?.id ?? 0;
 
   // ستون‌های مشترک هر سه تب (تابلوی کلاس‌ها / برنامه استاد / برنامه دانشجو)
   const boardSelect = {
@@ -526,7 +539,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
           ne(schedules.scheduleType, 'EXAM'),
           eq(course_offerings.termId, term.id),
           eq(course_offerings.isActive, 1),
-          ...(selRoom ? [inArray(schedules.roomId, selRoom.aliasIds)] : roomId ? [sql`1=0`] : []),
+          ...(selRoom ? [inArray(schedules.roomId, selRoom.aliasIds)] : []),
           ...await scopeConds(user.roles, deptId, facultyId, uni?.id ?? null),
         ))
         .orderBy(asc(courses.title), asc(course_offerings.groupNumber))
@@ -705,27 +718,27 @@ export default async function WeeklyBoardPage({ searchParams }: {
       <>
       <form method="get" className="wb-chrome card flex flex-wrap items-end gap-3 print:hidden">
         <label className="text-xs font-bold">ترم
-          <select name="term" defaultValue={term?.id} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+          <FilterSelect name="term" defaultValue={term?.id} resets={['room']} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
             {terms.map(t => <option key={t.id} value={t.id}>{t.title}{t.isCurrent === 1 ? ' (جاری)' : ''}</option>)}
-          </select>
+          </FilterSelect>
         </label>
         <label className="text-xs font-bold">دانشکده
-          <select name="faculty" defaultValue={facultyId || ''} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+          <FilterSelect name="faculty" defaultValue={facultyId || ''} resets={['room']} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
             <option value="">همه</option>
             {facs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-          </select>
+          </FilterSelect>
         </label>
         <label className="text-xs font-bold">گروه
-          <select name="dept" defaultValue={deptId || ''} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+          <FilterSelect name="dept" defaultValue={deptId || ''} resets={['room']} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
             <option value="">همه</option>
             {depts.filter(d => !facultyId || d.facultyId === facultyId).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
+          </FilterSelect>
         </label>
         <label className="text-xs font-bold">🚪 کلاس (پوستر درب)
-          <select name="room" defaultValue={roomId || ''} className="block mt-1 border border-teal-500 rounded-xl px-3 py-2 text-sm bg-teal-50 font-black">
+          <FilterSelect name="room" defaultValue={effRoomId || ''} className="block mt-1 border border-teal-500 rounded-xl px-3 py-2 text-sm bg-teal-50 font-black">
             <option value="">همهٔ کلاس‌ها (تابلوی کلی)</option>
             {rooms.map(r => <option key={r.id} value={r.id}>{r.name}{r.buildingName ? ` — ${r.buildingName}` : ''}</option>)}
-          </select>
+          </FilterSelect>
         </label>
         <label className="text-xs font-bold">عنوان استاد
           <select name="title" defaultValue={titleParam} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">

@@ -16,7 +16,7 @@ import { system_settings } from '@/db/schema';
 //  چون پیش از برقراری اتصال به دیتابیس لازم‌اند.
 // ════════════════════════════════════════════════════════════════════
 
-export type SettingType = 'text' | 'textarea' | 'url' | 'number' | 'boolean' | 'secret' | 'image';
+export type SettingType = 'text' | 'textarea' | 'url' | 'number' | 'boolean' | 'secret' | 'image' | 'select';
 
 export interface SettingDef {
   key: string;
@@ -28,6 +28,8 @@ export interface SettingDef {
   help?: string;
   /** فقط از ENV خوانده می‌شود (در پنل وب فقط نمایش داده می‌شود) */
   envOnly?: boolean;
+  /** گزینه‌های مجاز برای type === 'select' — مقدارِ خارج از این فهرست ذخیره نمی‌شود */
+  options?: { value: string; label: string }[];
 }
 
 export const SETTING_GROUPS = [
@@ -40,6 +42,7 @@ export const SETTING_GROUPS = [
   'فارغ‌التحصیلی و صدور مدارک',
   'گردش کار و حق‌التدریس',
   'ارزشیابی و هوش تجاری',
+  'حضور و غیاب کلاس‌ها',
   'زیرساخت (فقط ENV)',
 ] as const;
 
@@ -225,6 +228,16 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'PERF_INCENTIVE_PERCENT', env: 'PERF_INCENTIVE_PERCENT', group: 'ارزشیابی و هوش تجاری', label: 'ضریب تشویقی حق‌التدریس (درصد)', type: 'number', default: '10', help: 'پاداش بهره‌وری برای اساتید واجد شرایط' },
   { key: 'BI_CACHE_TTL_SECONDS', env: 'BI_CACHE_TTL_SECONDS', group: 'ارزشیابی و هوش تجاری', label: 'عمر کش گزارش‌های BI (ثانیه)', type: 'number', default: '300', help: 'صفر = همیشه محاسبهٔ تازه. داشبورد مدیریتی و ابر کلمات از این کش می‌خوانند' },
 
+  // ── حضور و غیاب کلاس‌ها ──
+  // چه کسی «تشکیل کلاس» را ثبت کند؟ استاد با اسکنِ QRِ سردر، یا کنترل‌کنندهٔ
+  // حضور و غیاب، یا هر دو. مقدارها: PROFESSOR | CONTROLLER | BOTH
+  { key: 'ATTENDANCE_RECORDER_MODE', env: 'AFAGH_ATTENDANCE_RECORDER_MODE', group: 'حضور و غیاب کلاس‌ها', label: 'چه کسی حضورِ کلاس را ثبت کند؟', type: 'select', default: 'BOTH', options: [
+    { value: 'BOTH', label: 'هر دو — استاد و کنترل‌کنندهٔ حضور (پیش‌فرض)' },
+    { value: 'PROFESSOR', label: 'فقط خودِ استاد (اسکن QR سردر)' },
+    { value: 'CONTROLLER', label: 'فقط کنترل‌کنندهٔ حضور و غیاب' },
+  ], help: 'تعیین می‌کند چه کسی می‌تواند «تشکیل کلاس» را ثبت کند. حالت «فقط کنترل‌کننده» برای دانشگاه‌هایی است که می‌خواهند ثبت حضور کاملاً مستقل از استاد باشد.' },
+  { key: 'ATTENDANCE_CONTROLLER_ROOM_SCOPED', env: 'AFAGH_ATTENDANCE_CONTROLLER_ROOM_SCOPED', group: 'حضور و غیاب کلاس‌ها', label: 'محدود بودن کنترل‌کننده به اتاق‌های تخصیص‌یافته', type: 'boolean', default: 'true', help: 'روشن = کنترل‌کننده فقط در اتاق‌هایی که در «تخصیص کارشناس به اتاق‌ها» به او سپرده شده می‌تواند ثبت کند. خاموش = همهٔ اتاق‌های دانشگاه خودش (مناسب دانشگاه‌های کوچک)' },
+
   // ── زیرساخت (فقط ENV) ──
   // ⚠ هیچ پیش‌فرضی در کد نگه داشته نمی‌شود تا پنل مدیر مقدار واقعی‌نما (اعتبارنامهٔ
   //   پیش‌فرض ضعیف) نمایش ندهد؛ این مقادیر فقط از ENV (فایل .env / متغیر محیطی
@@ -320,7 +333,11 @@ export async function saveSettings(entries: Record<string, string>): Promise<num
   for (const [key, raw] of Object.entries(entries)) {
     const def = SETTING_BY_KEY[key];
     if (!def || def.envOnly) continue;
-    const value = String(raw ?? '').trim();
+    let value = String(raw ?? '').trim();
+    // select: فقط مقدارهای مجاز ذخیره می‌شوند (خارج از فهرست → پیش‌فرض)
+    if (def.type === 'select' && def.options?.length && !def.options.some(o => o.value === value)) {
+      value = def.default;
+    }
     await db
       .insert(system_settings)
       .values({ key, value })

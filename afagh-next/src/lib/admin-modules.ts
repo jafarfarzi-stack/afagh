@@ -402,6 +402,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/attendance-control',
+    icon: '⏱️',
+    title: 'کنترل حضور و غیاب کلاس‌ها',
+    desc: 'ثبتِ تشکیلِ کلاس‌های امروز در اتاق‌های تحت مسئولیت — به‌نامِ استاد هر درس',
+    group: 'edu',
+    roles: ['ADMIN', 'EDU_EXPERT', 'ATTENDANCE_CONTROLLER'],
+    accent: 'from-indigo-950 to-slate-950 border-indigo-700/50',
+    iconBg: 'bg-indigo-800/80 border-indigo-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/archive',
     icon: '🗄️',
     title: 'بایگانی الکترونیک مدارک',

@@ -44,24 +44,45 @@ import { getCurrentUniversity } from '@/lib/university-scope';
 export interface EduExpertCandidate {
   userId: number;
   name: string;
+  /** نقشِ کاندید — برای برچسبِ کنارِ نام در انتخاب‌گر */
+  kind?: 'EDU_EXPERT' | 'ATTENDANCE_CONTROLLER';
 }
 
-/** فهرست کارشناسان آموزشِ دانشگاه جاری — برای dropdown در «تعریف کلاس». */
+/**
+ * فهرست کاندیدهای «مسئولِ اتاق/کلاس» — برای dropdown در «تعریف کلاس» و
+ * «تخصیص کارشناس به اتاق‌ها».
+ *
+ * دو نقش در این فهرست می‌آیند چون هر دو می‌توانند حضورِ کلاس را ثبت کنند:
+ *   • EDU_EXPERT            → کارشناس آموزش
+ *   • ATTENDANCE_CONTROLLER → کنترل‌کنندهٔ حضور و غیاب (مهاجرت ۰۱۱۳)
+ * دامنهٔ هر دو یکی است (`classroom_edu_experts`)، پس یک انتخاب‌گر کافی است.
+ */
 export async function listEduExpertCandidates(): Promise<EduExpertCandidate[]> {
-  const [edu] = await db
-    .select({ id: roles.id })
+  const roleRows = await db
+    .select({ id: roles.id, code: roles.code })
     .from(roles)
-    .where(eq(roles.code, 'EDU_EXPERT'))
-    .limit(1)
+    .where(inArray(roles.code, ['EDU_EXPERT', 'ATTENDANCE_CONTROLLER']))
     .catch(() => []);
-  if (!edu) return [];
+  if (!roleRows.length) return [];
 
-  const rows = await db
-    .select({ userId: user_roles.userId })
+  const roleCode = new Map(roleRows.map((r) => [r.id, r.code] as const));
+  const assignments = await db
+    .select({ userId: user_roles.userId, roleId: user_roles.roleId })
     .from(user_roles)
-    .where(eq(user_roles.roleId, edu.id));
+    .where(inArray(user_roles.roleId, roleRows.map((r) => r.id)))
+    .catch(() => []);
 
-  const userIds = [...new Set(rows.map((r) => r.userId))];
+  // یک کاربر ممکن است هر دو نقش را داشته باشد؛ نقشِ «آموزش» اولویت دارد.
+  const kindOf = new Map<number, 'EDU_EXPERT' | 'ATTENDANCE_CONTROLLER'>();
+  for (const a of assignments) {
+    const code = roleCode.get(a.roleId);
+    if (code === 'EDU_EXPERT') kindOf.set(a.userId, 'EDU_EXPERT');
+    else if (code === 'ATTENDANCE_CONTROLLER' && !kindOf.has(a.userId)) {
+      kindOf.set(a.userId, 'ATTENDANCE_CONTROLLER');
+    }
+  }
+
+  const userIds = [...kindOf.keys()];
   if (!userIds.length) return [];
 
   const uni = await getCurrentUniversity().catch(() => null);
@@ -82,7 +103,15 @@ export async function listEduExpertCandidates(): Promise<EduExpertCandidate[]> {
     // اگر دانشگاه جاری مشخص است، همان دانشگاه را ترجیح بده ولی متخصصان
     // بدون دانشگاه (سراسری) را هم حذف نکن.
     .filter((u) => !uni || u.universityId == null || u.universityId === uni.id)
-    .map((u) => ({ userId: u.id, name: `${u.firstName || ''} ${u.lastName || ''}`.trim() }))
+    .map((u) => {
+      const kind = kindOf.get(u.id) ?? 'EDU_EXPERT';
+      const base = `${u.firstName || ''} ${u.lastName || ''}`.trim();
+      return {
+        userId: u.id,
+        name: kind === 'ATTENDANCE_CONTROLLER' ? `${base} — کنترل‌کنندهٔ حضور` : base,
+        kind,
+      };
+    })
     .sort((a, b) => a.name.localeCompare(b.name, 'fa'));
 }
 
@@ -266,6 +295,11 @@ export interface ClassroomAssignRow {
   offeringCount: number;
   /** گروه‌های سازندهٔ درس‌های همین اتاق — برای اینکه معلوم باشد چه کسانی اینجا کلاس دارند */
   departments: string[];
+  /** گروهِ صریحاً مسئولِ این اتاق (مهاجرت ۰۱۱۴) — NULL = تعیین نشده */
+  departmentId: number | null;
+  departmentName: string | null;
+  /** مدیرگروهِ همان گروه مسئول (`departments.headStaffId`) */
+  headName: string | null;
   expertIds: number[];
   sessions: ClassroomSessionRow[];
 }
@@ -313,7 +347,7 @@ export async function listClassroomExpertAssignments(termId: number): Promise<Cl
   const profIds = [...new Set(rows.map((r) => r.professorId).filter((v): v is number => typeof v === 'number'))];
 
   const [rooms, depts, profs, assignments] = await Promise.all([
-    db.select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, floor: classrooms.floor })
+    db.select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, floor: classrooms.floor, departmentId: classrooms.departmentId })
       .from(classrooms).where(inArray(classrooms.id, roomIds)).catch(() => []),
     deptIds.length
       ? db.select({ id: departments.id, name: departments.name }).from(departments).where(inArray(departments.id, deptIds)).catch(() => [])
@@ -330,6 +364,23 @@ export async function listClassroomExpertAssignments(termId: number): Promise<Cl
   const roomById = new Map(rooms.map((r) => [r.id, r]));
   const deptName = new Map(depts.map((d) => [d.id, d.name]));
   const profName = new Map(profs.map((p) => [p.id, `${p.firstName || ''} ${p.lastName || ''}`.trim()]));
+
+  /* مدیرگروهِ گروهِ مسئولِ هر اتاق — نامِ مدیر لازم است تا مدیر سامانه در همان
+     کارت ببیند «این اتاق در اختیار چه کسی است». */
+  const ownerDeptIds = [...new Set(
+    rooms.map((r) => r.departmentId).filter((v): v is number => typeof v === 'number'),
+  )];
+  const ownerDepts = ownerDeptIds.length
+    ? await db.select({ id: departments.id, name: departments.name, headStaffId: departments.headStaffId })
+        .from(departments).where(inArray(departments.id, ownerDeptIds)).catch(() => [])
+    : ([] as { id: number; name: string; headStaffId: number | null }[]);
+  const ownerDeptById = new Map(ownerDepts.map((d) => [d.id, d]));
+  const headIds = [...new Set(ownerDepts.map((d) => d.headStaffId).filter((v): v is number => typeof v === 'number'))];
+  const heads = headIds.length
+    ? await db.select({ id: staff.id, firstName: users.firstName, lastName: users.lastName })
+        .from(staff).innerJoin(users, eq(users.id, staff.userId)).where(inArray(staff.id, headIds)).catch(() => [])
+    : ([] as { id: number; firstName: string | null; lastName: string | null }[]);
+  const headNameById = new Map(heads.map((h) => [h.id, `${h.firstName || ''} ${h.lastName || ''}`.trim()]));
   const expertsByRoom = new Map<number, number[]>();
   for (const a of assignments) {
     const list = expertsByRoom.get(a.classroomId) ?? [];
@@ -351,6 +402,12 @@ export async function listClassroomExpertAssignments(termId: number): Promise<Cl
         sessionCount: 0,
         offeringCount: 0,
         departments: [],
+        departmentId: room?.departmentId ?? null,
+        departmentName: room?.departmentId != null ? (ownerDeptById.get(room.departmentId)?.name ?? null) : null,
+        headName: (() => {
+          const hid = room?.departmentId != null ? ownerDeptById.get(room.departmentId)?.headStaffId : null;
+          return hid != null ? (headNameById.get(hid) ?? null) : null;
+        })(),
         expertIds: expertsByRoom.get(roomId) ?? [],
         sessions: [],
       };

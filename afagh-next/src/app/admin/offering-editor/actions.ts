@@ -3,7 +3,7 @@
 import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { db, withUserRls } from '@/db';
 import {
-  academic_terms, classrooms, course_offering_edu_experts, course_offerings, courses, departments, schedules, staff, users,
+  academic_terms, classroom_edu_experts, classrooms, course_offering_edu_experts, course_offerings, courses, departments, schedules, staff, users,
 } from '@/db/schema';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { requireRoleOrPermission } from '@/lib/permissions-enforcer';
@@ -21,6 +21,12 @@ export interface OfferingEditRow {
   eduExpertUserId: number | null;
   /** همهٔ کارشناسانِ این کلاس — یک کلاس می‌تواند چند کارشناس داشته باشد */
   eduExpertUserIds: number[];
+  /**
+   * کارشناسانی که از «اتاقِ سانس‌های همین درس» به ارث می‌رسند
+   * (`classroom_edu_experts`). تخصیصِ صریحِ درس لازم نیست؛ اگر این فهرست
+   * خالی نباشد، UI نباید بگوید «تخصیص ندادی».
+   */
+  roomExpertUserIds: number[];
   classRows: { id: number; day: number | null; start: string | null; end: string | null; roomId: number | null }[];
   exam: { id: number | null; date: string | null; start: string | null; end: string | null } | null;
 }
@@ -76,6 +82,28 @@ export async function listOfferingsForEditor(termId: number): Promise<OfferingEd
     if (!list.includes(e.userId)) list.push(e.userId);
     expertsByOff.set(e.offeringId, list);
   }
+
+  /* کارشناسانِ سطحِ اتاق — همان چیزی که در «تخصیص کارشناس به اتاق‌ها» ثبت
+     می‌شود. بدون این، «تعریف برنامهٔ درس» می‌گفت «تخصیص ندادی» درحالی‌که
+     مدیر کارشناس را به اتاقِ همان سانس سپرده بود (زنجیرهٔ حل: درس → اتاق → نقش). */
+  const schedRoomIds = [...new Set(
+    schedRows
+      .filter(r => r.scheduleType !== 'EXAM' && r.roomId != null)
+      .map(r => r.roomId as number),
+  )];
+  const roomExpertRows = schedRoomIds.length
+    ? await db.select({ roomId: classroom_edu_experts.classroomId, userId: classroom_edu_experts.userId })
+        .from(classroom_edu_experts)
+        .where(inArray(classroom_edu_experts.classroomId, schedRoomIds))
+        .orderBy(asc(classroom_edu_experts.id))
+        .catch(() => [])
+    : [];
+  const expertsByRoom = new Map<number, number[]>();
+  for (const e of roomExpertRows) {
+    const list = expertsByRoom.get(e.roomId) ?? [];
+    if (!list.includes(e.userId)) list.push(e.userId);
+    expertsByRoom.set(e.roomId, list);
+  }
   return offs.map(o => {
     const rows = schedRows.filter(s => s.offeringId === o.offeringId);
     const classRows = rows.filter(r => r.scheduleType === 'CLASS').map(r => ({
@@ -91,6 +119,14 @@ export async function listOfferingsForEditor(termId: number): Promise<OfferingEd
       capacity: o.capacity, enrolledCount: o.enrolledCount ?? 0, departmentId: o.departmentId ?? null,
       eduExpertUserId: expertIds[0] ?? null,
       eduExpertUserIds: expertIds,
+      roomExpertUserIds: [
+        ...new Set(
+          classRows
+            .map(c => c.roomId)
+            .filter((v): v is number => typeof v === 'number')
+            .flatMap(id => expertsByRoom.get(id) ?? []),
+        ),
+      ],
       classRows,
       exam: ex ? { id: ex.id, date: ex.examDate ?? null, start: ex.startTime ? String(ex.startTime).slice(0, 5) : null, end: ex.endTime ? String(ex.endTime).slice(0, 5) : null } : null,
     };

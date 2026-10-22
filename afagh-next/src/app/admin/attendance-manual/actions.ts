@@ -120,7 +120,7 @@ export async function markClassHeldAction(px: {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
   const rows = await db.execute(sql`
     select count(*)::int as total,
-           count(*) filter (where pca."verificationMethod" = 'MANUAL_BY_EXPERT')::int as manual
+           count(*) filter (where pca."verificationMethod" in ('MANUAL_BY_EXPERT', 'QR_BY_CONTROLLER'))::int as manual
       from professor_class_attendance pca
       join class_sessions cs on cs.id = pca."sessionId"
       join course_offerings o on o.id = cs."offeringId"

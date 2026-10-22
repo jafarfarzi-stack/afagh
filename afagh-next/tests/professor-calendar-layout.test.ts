@@ -28,7 +28,9 @@ const row = (over: Partial<ProfessorCalendarSchedulable> = {}): ProfessorCalenda
 
 console.log('— professor calendar layout —');
 
-assert.equal(PROFESSOR_CALENDAR_START_MINUTES, 480);
+// محورِ زمانِ گرید از ۷:۰۰ شروع می‌شود (نه ۸:۰۰) تا سانس‌های ۷:۳۰ هم جا شوند؛
+// محورِ «پوسترِ سردر» جداگانه با WEEKLY_BOARD_HOUR_FROM/TO و پیش‌فرض ۸→۲۰ است.
+assert.equal(PROFESSOR_CALENDAR_START_MINUTES, 420);
 assert.equal(PROFESSOR_CALENDAR_END_MINUTES, 1200);
 assert.equal(PROFESSOR_CALENDAR_DAY_COUNT, 7);
 
@@ -54,15 +56,16 @@ assert.equal(professorCalendarDayIndex(1.5), null);
 console.log('✓ day mapping is 0-based Saturday..Friday (0..6), Friday is a real column');
 
 const labels = professorCalendarHourLabels();
-assert.equal(labels.length, 13);
-assert.equal(labels[0], '08:00');
-assert.equal(labels[12], '20:00');
-console.log('✓ hour labels 08:00..20:00');
+// گریدِ استاد از ۷:۰۰ تا ۲۰:۰۰ است (۱۳ ساعت) — سانس‌های ۷:۳۰ هم جا می‌شوند.
+assert.equal(labels.length, 14);
+assert.equal(labels[0], '07:00');
+assert.equal(labels[13], '20:00');
+console.log('✓ hour labels 07:00..20:00');
 
 const placed1440 = layoutProfessorCalendarDay([row({ startTime: '14:40', endTime: '16:20' })]);
 assert.equal(placed1440.length, 1);
-assert.equal(placed1440[0].topPercent, 55.56);
-assert.equal(placed1440[0].heightPercent, 13.89);
+assert.equal(placed1440[0].topPercent, 58.97);
+assert.equal(placed1440[0].heightPercent, 12.82);
 assert.equal(placed1440[0].leftPercent, 0);
 assert.equal(placed1440[0].widthPercent, 100);
 assert.equal(placed1440[0].columnCount, 1);
@@ -130,14 +133,15 @@ assert.deepEqual(filterProfessorCalendarByWeek(weekRows, 'EVEN').map(r => r.id),
 assert.deepEqual(filterProfessorCalendarByWeek(weekRows, 'ODD').map(r => r.id), [72, 73]);
 console.log('✓ week filter keeps ALL plus the selected parity');
 
-const early = layoutProfessorCalendarDay([row({ startTime: '07:00', endTime: '08:30' })])[0];
+// گرید از ۷:۰۰ شروع می‌شود؛ پس سانسِ ۶:۳۰ بالای کادر بریده می‌شود.
+const early = layoutProfessorCalendarDay([row({ startTime: '06:30', endTime: '08:30' })])[0];
 assert.equal(early.topPercent, 0);
 assert.equal(early.clipped, true);
 const late = layoutProfessorCalendarDay([row({ startTime: '19:00', endTime: '21:00' })])[0];
 assert.ok(late.topPercent + late.heightPercent <= 100);
 assert.equal(late.clipped, true);
 const short = layoutProfessorCalendarDay([row({ startTime: '10:00', endTime: '10:15' })])[0];
-assert.ok(short.heightPercent >= (30 / 720) * 100);
+assert.ok(short.heightPercent >= (30 / 780) * 100);
 assert.equal(layoutProfessorCalendarDay([row({ startTime: '10:00', endTime: '10:00' })]).length, 0);
 assert.equal(layoutProfessorCalendarDay([row({ startTime: '', endTime: '' })]).length, 0);
 console.log('✓ out-of-range times clamp, short classes keep a minimum height, invalid rows drop');

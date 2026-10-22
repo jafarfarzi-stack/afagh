@@ -42,6 +42,7 @@ const ROLES = [
   ['FINANCE_EXPERT', 'کارشناس مالی'], ['ADMIN', 'مدیر سامانه'],
   ['ARCHIVE_EXPERT', 'کارشناس بایگانی'], ['MILITARY_OFFICER', 'کارشناس نظام وظیفه'],
   ['PROCTOR', 'مراقب امتحان'], ['VAULT_MANAGER', 'مسئول مخزن مدارک'],
+  ['ATTENDANCE_CONTROLLER', 'کنترل‌کنندهٔ حضور و غیاب کلاس‌ها'],
 ];
 
 const DEGREES = [

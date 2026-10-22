@@ -764,6 +764,12 @@ export const classrooms = pgTable('classrooms', {
   colsCount: integer('colsCount'),
   // ── متعلق به کدام دانشکده است (زونینگ در برنامه‌ریزی درسی) ──
   facultyId: integer('facultyId').references(() => faculties.id),
+  /**
+   * گروهِ مسئولِ این اتاق (مهاجرت ۰۱۱۴) — ادغامِ تخصیص اتاق با تخصیصِ کلاس به
+   * مدیرگروه. مدیرگروه از `departments.headStaffId` همان گروه خوانده می‌شود.
+   * NULL = تخصیص صریح نشده؛ مسئولیت مثل قبل از سانس‌های اتاق استنتاج می‌شود.
+   */
+  departmentId: integer('departmentId').references(() => departments.id),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   // ── وضعیت فعال بودن کلاس — فقط کلاس‌های فعال در انتخاب‌گر سردر نمایش داده می‌شوند (R-AA) ──
   isActive: integer('isActive').notNull().default(1),

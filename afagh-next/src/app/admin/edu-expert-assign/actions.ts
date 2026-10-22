@@ -5,8 +5,12 @@ import { db } from '@/db';
 import {
   academic_terms,
   classroom_edu_experts,
+  classrooms,
   course_offering_edu_experts,
   course_offerings,
+  departments,
+  faculties,
+  staff,
   users,
 } from '@/db/schema';
 import { requireRoleOrPermission } from '@/lib/permissions-enforcer';
@@ -44,6 +48,12 @@ export interface EduExpertAssignRow {
 export interface EduExpertAssignInit {
   terms: { id: number; title: string; isCurrent: boolean }[];
   candidates: { userId: number; name: string }[];
+  /**
+   * گروه‌های آموزشی برای «گروهِ مسئولِ اتاق» — ادغامِ تخصیص اتاق با تخصیصِ
+   * کلاس به مدیرگروه (مهاجرت ۰۱۱۴). هر گروه نامِ مدیرگروهش را هم دارد تا
+   * مدیر سامانه در همان کارت ببیند مسئولیت به چه کسی می‌رسد.
+   */
+  departments: { id: number; name: string; facultyName: string | null; headName: string | null }[];
   /** اتاق‌های دارای سانس در این ترم — سطحِ اصلیِ تخصیص */
   rooms: ClassroomAssignRow[];
   /** استثناهای سطحِ درس — همان جدولِ قبلی، حالا تبِ دوم */
@@ -67,15 +77,17 @@ export async function getEduExpertAssignInit(termId?: number): Promise<EduExpert
     termId ??
     (terms.find((t) => (t.isCurrent ?? 0) === 1)?.id ?? terms[terms.length - 1]?.id ?? 0);
 
-  const [candidates, rooms, rows] = await Promise.all([
+  const [candidates, rooms, rows, deptList] = await Promise.all([
     listEduExpertCandidates(),
     tid ? listClassroomExpertAssignments(tid) : Promise.resolve([]),
     tid ? listOfferingExpertAssignments(tid) : Promise.resolve([]),
+    listDepartmentsForRoomOwner(),
   ]);
 
   return {
     terms: terms.map((t) => ({ id: t.id, title: t.title, isCurrent: (t.isCurrent ?? 0) === 1 })),
     candidates,
+    departments: deptList,
     rooms,
     rows: rows.map((r) => ({
       offeringId: r.offeringId,
@@ -90,6 +102,95 @@ export async function getEduExpertAssignInit(termId?: number): Promise<EduExpert
       source: r.source,
     })),
   };
+}
+
+/**
+ * گروه‌های آموزشیِ دانشگاه جاری + نامِ مدیرگروه هرکدام.
+ * برای انتخاب‌گرِ «گروهِ مسئولِ اتاق» استفاده می‌شود.
+ */
+export async function listDepartmentsForRoomOwner(): Promise<
+  { id: number; name: string; facultyName: string | null; headName: string | null }[]
+> {
+  const { getCurrentUniversity } = await import('@/lib/university-scope');
+  const uni = await getCurrentUniversity().catch(() => null);
+  const ds = await db
+    .select({
+      id: departments.id,
+      name: departments.name,
+      facultyName: faculties.name,
+      headStaffId: departments.headStaffId,
+    })
+    .from(departments)
+    .leftJoin(faculties, eq(faculties.id, departments.facultyId))
+    .where(uni ? eq(departments.universityId, uni.id) : undefined)
+    .orderBy(asc(departments.name))
+    .catch(() => []);
+
+  const headIds = [...new Set(ds.map((d) => d.headStaffId).filter((v): v is number => typeof v === 'number'))];
+  const headNames = new Map<number, string>();
+  if (headIds.length) {
+    const hs = await db
+      .select({ id: staff.id, firstName: users.firstName, lastName: users.lastName })
+      .from(staff)
+      .innerJoin(users, eq(users.id, staff.userId))
+      .where(inArray(staff.id, headIds))
+      .catch(() => []);
+    for (const h of hs) headNames.set(h.id, `${h.firstName || ''} ${h.lastName || ''}`.trim());
+  }
+
+  return ds.map((d) => ({
+    id: d.id,
+    name: d.name,
+    facultyName: d.facultyName ?? null,
+    headName: d.headStaffId != null ? (headNames.get(d.headStaffId) ?? null) : null,
+  }));
+}
+
+/**
+ * تعیینِ «گروهِ مسئولِ اتاق» (یا برداشتنِ آن با null).
+ * همان گروهِ مسئول، مدیرگروهش را هم مشخص می‌کند؛ پس تخصیصِ اتاق و تخصیصِ
+ * کلاس به مدیرگروه یک عمل می‌شوند.
+ */
+export async function setClassroomDepartmentAction(
+  classroomId: number,
+  departmentId: number | null,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireRoleOrPermission(EDU, EDU_PERM);
+  if (!Number.isInteger(classroomId) || classroomId <= 0) {
+    return { ok: false, error: 'اتاق نامعتبر است.' };
+  }
+
+  const { getCurrentUniversity } = await import('@/lib/university-scope');
+  const uni = await getCurrentUniversity().catch(() => null);
+
+  const [room] = await db
+    .select({ id: classrooms.id, universityId: classrooms.universityId })
+    .from(classrooms)
+    .where(eq(classrooms.id, classroomId))
+    .limit(1);
+  if (!room) return { ok: false, error: 'اتاق یافت نشد.' };
+  // مرز دانشگاه: اتاقِ دانشگاه دیگر را نمی‌توان از این‌جا تغییر داد.
+  if (uni && room.universityId != null && room.universityId !== uni.id) {
+    return { ok: false, error: 'این اتاق در دانشگاه شما نیست.' };
+  }
+
+  if (departmentId != null) {
+    const [d] = await db
+      .select({ id: departments.id, universityId: departments.universityId })
+      .from(departments)
+      .where(eq(departments.id, departmentId))
+      .limit(1);
+    if (!d) return { ok: false, error: 'گروه یافت نشد.' };
+    if (uni && d.universityId != null && d.universityId !== uni.id) {
+      return { ok: false, error: 'این گروه در دانشگاه شما نیست.' };
+    }
+  }
+
+  await db
+    .update(classrooms)
+    .set({ departmentId: departmentId ?? null })
+    .where(eq(classrooms.id, classroomId));
+  return { ok: true };
 }
 
 /** اعتبارسنجی کاربر: واقعاً حساب است و (اگر داده بود) فعال است. */

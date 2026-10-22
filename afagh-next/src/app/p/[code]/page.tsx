@@ -20,24 +20,29 @@ import {
   tehranNow,
 } from '@/lib/room-checkin';
 import { listSessionsInRoom, listUpcomingSessionsInRoom, listWeeklySessionsInRoom } from '@/lib/room-session-lookup';
+import { canControlRoom, getRecorderPolicy, listTodaySessionsForRooms } from '@/lib/attendance-control';
 import { recordRoomAttendance } from './actions';
 
 export const dynamic = 'force-dynamic';
 
 const MSG: Record<string, string> = {
   ok: 'حضور شما با موفقیت ثبت شد.',
-  already: 'حضور شما برای این جلسه قبلاً ثبت شده است.',
+  okctrl: 'حضور استاد برای این جلسه ثبت شد.',
+  already: 'حضور برای این جلسه قبلاً ثبت شده است.',
 };
 
 const ERR: Record<string, string> = {
   badroom: 'کد این QR معتبر نیست. لطفاً QR سردر کلاس را دوباره اسکن کنید.',
   nosession: 'جلسهٔ معتبری برای ثبت حضور یافت نشد.',
-  notstaff: 'این صفحه مخصوص استادان است. با حساب استاد وارد شوید.',
+  notstaff: 'این صفحه مخصوص استادان و کنترل‌کنندگان حضور است. با حساب مناسب وارد شوید.',
   wrongroom: 'این جلسه در این اتاق برگزار نمی‌شود.',
   notoday: 'این جلسه امروز برگزار نمی‌شود.',
   window: 'اکنون خارج از بازهٔ مجاز ثبت حضور است.',
-  notyours: 'شما استاد این درس نیستید.',
+  notyours: 'شما استاد این درس نیستید و کنترل‌کنندهٔ این اتاق هم نیستید.',
   wronguni: 'این اتاق به دانشگاه دیگری تعلق دارد.',
+  profblocked: 'بر اساس تنظیم سامانه، ثبت حضور در این دانشگاه فقط توسط کنترل‌کنندهٔ حضور و غیاب انجام می‌شود.',
+  ctrlblocked: 'بر اساس تنظیم سامانه، ثبت حضور فقط توسط خودِ استاد انجام می‌شود.',
+  noprof: 'برای این جلسه استادی ثبت نشده است؛ ابتدا استاد درس را در سامانه مشخص کنید.',
 };
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -238,6 +243,103 @@ export default async function RoomCheckinPage({
     withRecord[withRecord.length - 1] ??
     null;
 
+  /* ── کنترلِ حضور: چه کسی حق ثبت دارد؟ ────────────────────────────────
+     مدیر سامانه با تنظیمِ ATTENDANCE_RECORDER_MODE تعیین می‌کند که خودِ استاد
+     ثبت کند، یا کنترل‌کنندهٔ حضور و غیاب، یا هر دو. دامنهٔ کنترل‌کننده با
+     canControlRoom حل می‌شود (اتاق → استثنای درس → دانشکده/دانشگاه). */
+  const policy = await getRecorderPolicy().catch(() => ({
+    mode: 'BOTH' as const,
+    professorAllowed: true,
+    controllerAllowed: true,
+    roomScoped: true,
+  }));
+  const control = await canControlRoom(user.id, roomId).catch(() => ({
+    allowed: false,
+    source: null as null,
+    roles: [] as string[],
+  }));
+  const ctrlCan = control.allowed && policy.controllerAllowed;
+
+  // جلساتِ امروزِ همین اتاق با وضعیتِ ثبتِ هرکدام — برای کارتابلِ کنترل‌کننده.
+  // (یک اتاق است، پس همان کوئریِ دسته‌ای ارزان تمام می‌شود.)
+  const roomToday = await listTodaySessionsForRooms([roomId], now.jalali).catch(() => []);
+  const anyBySlot = new Map(roomToday.map(r => [`${r.offeringId}|${r.startTime}`, r]));
+  const ctrlRows = ctrlCan ? roomToday : [];
+  const ctrlDone = ctrlRows.filter(r => r.recordedAt != null).length;
+
+  const ctrlCard = ctrlCan ? (
+    <Card>
+      <details open>
+        <summary className="cursor-pointer list-none flex items-center justify-between gap-2">
+          <span className="text-sm font-black text-slate-900">کنترل حضور و غیاب این اتاق</span>
+          <span className={`text-[10px] font-black rounded-full px-2 py-0.5 ${
+            ctrlRows.length > 0 && ctrlDone === ctrlRows.length
+              ? 'bg-emerald-100 text-emerald-800'
+              : 'bg-amber-100 text-amber-800'
+          }`}>
+            {faDigits(ctrlDone)} از {faDigits(ctrlRows.length)} جلسه
+          </span>
+        </summary>
+
+        {ctrlRows.length === 0 ? (
+          <div className="mt-3">
+            <Notice kind="info" text="امروز جلسه‌ای در این اتاق برگزار نمی‌شود." />
+          </div>
+        ) : (
+          <div className="mt-3 space-y-1.5">
+            {ctrlRows.map(r => {
+              const st = checkinState(r.startTime, r.endTime, now.minutes);
+              return (
+                <div
+                  key={r.sessionId}
+                  className={`rounded-2xl border px-3 py-2 flex items-center gap-2 ${
+                    r.recordedAt ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  <div className="text-[10px] font-bold text-slate-500 w-12 shrink-0 leading-4" dir="ltr">
+                    {faDigits(r.startTime)}
+                    <br />
+                    {faDigits(r.endTime)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[11px] font-black text-slate-800 truncate">{r.courseTitle}</div>
+                    <div className="text-[10px] font-bold text-slate-500 truncate">
+                      {r.professorName} · گروه {faDigits(r.groupNumber)}
+                    </div>
+                  </div>
+
+                  {r.recordedAt ? (
+                    <span className="text-[9px] font-black text-emerald-800 bg-emerald-100 border border-emerald-200 rounded-lg px-2 py-1 shrink-0">
+                      ثبت شد
+                    </span>
+                  ) : st === 'OPEN' ? (
+                    <form action={recordRoomAttendance} className="shrink-0">
+                      <input type="hidden" name="code" value={`room-${roomId}`} />
+                      <input type="hidden" name="sessionId" value={r.sessionId} />
+                      <button
+                        type="submit"
+                        className="text-[9px] font-black text-white bg-indigo-700 hover:bg-indigo-800 rounded-lg px-2.5 py-1.5 shadow-sm"
+                      >
+                        ثبت حضور
+                      </button>
+                    </form>
+                  ) : st === 'BEFORE' ? (
+                    <span className="text-[9px] font-bold text-slate-400 shrink-0">هنوز باز نشده</span>
+                  ) : (
+                    <span className="text-[9px] font-bold text-slate-400 shrink-0">گذشته</span>
+                  )}
+                </div>
+              );
+            })}
+            <div className="text-[9px] font-bold text-slate-400 pt-1">
+              ثبت به نامِ استادِ هر جلسه انجام می‌شود و نام شما به‌عنوان ثبت‌کننده در سابقه می‌ماند.
+            </div>
+          </div>
+        )}
+      </details>
+    </Card>
+  ) : null;
+
   // اگر امروز کلاسی در این اتاق نداریم، نزدیک‌ترین جلساتِ آیندهٔ همین استاد را نشان بده.
   let upcoming: { id: number; sessionDate: string; startTime: string; endTime: string; courseTitle: string; courseCode: string }[] = [];
   if (!focus) {
@@ -393,8 +495,15 @@ export default async function RoomCheckinPage({
                     <div className="space-y-1.5">
                       {slots.map(s => {
                         const mine = isMySlot(s);
-                        const rec = isToday ? todayBySlot.get(`${s.offeringId}|${s.startTime}`) : undefined;
+                        const slotKey = `${s.offeringId}|${s.startTime}`;
+                        const recMine = isToday ? todayBySlot.get(slotKey) : undefined;
+                        const recAny = isToday ? anyBySlot.get(slotKey) : undefined;
                         const state = isToday ? checkinState(s.startTime, s.endTime, now.minutes) : null;
+                        // چه کسی می‌تواند این سانس را ثبت کند؟ خودِ استاد (اگر تنظیم اجازه دهد)
+                        // یا کنترل‌کنندهٔ مجازِ اتاق. اگر هیچ‌کدام، فقط برچسبِ وضعیت می‌آید.
+                        const canRecord = (policy.professorAllowed && mine) || ctrlCan;
+                        const recorded = mine ? !!recMine?.recorded : recAny?.recordedAt != null;
+                        const recordSessionId = recAny?.sessionId ?? recMine?.id ?? 0;
                         return (
                           <div
                             key={s.scheduleId}
@@ -418,15 +527,15 @@ export default async function RoomCheckinPage({
                               </div>
                             </div>
 
-                            {isToday && mine ? (
-                              rec?.recorded ? (
+                            {isToday && canRecord ? (
+                              recorded ? (
                                 <span className="text-[9px] font-black text-emerald-800 bg-emerald-100 border border-emerald-200 rounded-lg px-2 py-1 shrink-0">
                                   ثبت شد
                                 </span>
-                              ) : rec && state === 'OPEN' ? (
+                              ) : recordSessionId > 0 && state === 'OPEN' ? (
                                 <form action={recordRoomAttendance} className="shrink-0">
                                   <input type="hidden" name="code" value={`room-${roomId}`} />
-                                  <input type="hidden" name="sessionId" value={rec.id} />
+                                  <input type="hidden" name="sessionId" value={recordSessionId} />
                                   <button
                                     type="submit"
                                     className="text-[9px] font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg px-2.5 py-1.5 shadow-sm"
@@ -470,7 +579,9 @@ export default async function RoomCheckinPage({
 
         {!focus ? (
           <>
-            <Notice kind="info" text="امروز برای شما در این اتاق کلاسی ثبت نشده است." />
+            {!ctrlCan ? (
+              <Notice kind="info" text="امروز برای شما در این اتاق کلاسی ثبت نشده است." />
+            ) : null}
             {upcoming.length > 0 ? (
               <div className="space-y-2">
                 <div className="text-[11px] font-black text-slate-700">جلسات بعدی شما در این اتاق</div>
@@ -507,7 +618,7 @@ export default async function RoomCheckinPage({
                   </div>
                 ) : null}
               </div>
-            ) : focus.state === 'OPEN' ? (
+            ) : focus.state === 'OPEN' && policy.professorAllowed ? (
               <form action={recordRoomAttendance} className="space-y-2">
                 <input type="hidden" name="code" value={`room-${roomId}`} />
                 <input type="hidden" name="sessionId" value={focus.id} />
@@ -523,6 +634,9 @@ export default async function RoomCheckinPage({
                   </div>
                 ) : null}
               </form>
+            ) : focus.state === 'OPEN' ? (
+              /* حالتِ «فقط کنترل‌کننده»: استاد نباید دکمهٔ ثبت ببیند. */
+              <Notice kind="info" text={ERR.profblocked} />
             ) : focus.state === 'BEFORE' ? (
               <Notice
                 kind="info"
@@ -537,10 +651,12 @@ export default async function RoomCheckinPage({
         )}
 
         <div className="text-[10px] font-bold text-slate-400 text-center pt-2 border-t border-slate-100">
-          {faDigits(now.jalali)} · این صفحه فقط برای ثبت حضور استاد است.
+          {faDigits(now.jalali)} · این صفحه فقط برای ثبت حضورِ کلاس است
+          {ctrlCan ? ' (شما به‌عنوان کنترل‌کنندهٔ حضور این اتاق شناخته شدید).' : ' (استاد یا کنترل‌کنندهٔ حضور).'}
         </div>
       </Card>
 
+      {ctrlCard}
       {weeklyCard}
     </Shell>
   );

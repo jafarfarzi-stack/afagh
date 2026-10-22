@@ -736,6 +736,10 @@ export function homeFor(roles: string[]): string {
   // که *فقط* مدیر گروه است و قبلاً اشتباهاً به /admin فرستاده می‌شد.
   if (roles.includes('DEP_HEAD') && !roles.includes('ADMIN') && !roles.includes('EDU_EXPERT') && !roles.includes('VICE_EDU'))
     return '/group-manager';
+  // کنترل‌کنندهٔ حضور و غیاب فقط یک کار دارد: ثبتِ تشکیلِ کلاس‌ها. پس به همان
+  // کارتابل می‌رود، نه به داشبورد مدیریتی که هیچ مجوزی در آن ندارد.
+  if (roles.includes('ATTENDANCE_CONTROLLER') && !roles.includes('ADMIN') && !roles.includes('EDU_EXPERT') && !roles.includes('VICE_EDU'))
+    return '/admin/attendance-control';
   if (roles.includes('FINANCE_EXPERT') || roles.includes('FINANCE')) return '/admin/payroll';
   if (roles.includes('VAULT_MANAGER')) return '/admin/exams';
   if (roles.includes('MILITARY_OFFICER')) return '/admin/students';
