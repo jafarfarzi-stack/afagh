@@ -820,6 +820,13 @@
       "when": 1794400000700,
       "tag": "0111_offering_edu_experts",
       "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1794400000800,
+      "tag": "0112_classroom_edu_experts",
+      "breakpoints": true
     }
   ]
 }

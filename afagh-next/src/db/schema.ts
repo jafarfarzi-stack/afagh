@@ -827,6 +827,25 @@ export const course_offering_edu_experts = pgTable('course_offering_edu_experts'
 }));
 
 /** ────────────────────────────────────────────────────────────────────────
+ *  کارشناسان آموزشِ یک اتاق (کلاس فیزیکی) — مهاجرت ۰۱۱۲.
+ *
+ *  چرا اتاق و نه ارائه: کارشناس آموزش مسئولِ یک فضاست و ساعت‌به‌ساعت همان
+ *  اتاق را می‌گردد؛ در ترمِ ۱۱۱، ۱۳۴۵ ارائه در ۴۹ اتاق برگزار می‌شوند. پس
+ *  تخصیص در سطحِ اتاق ۲۷ برابر کم‌کارتر است و با تغییرِ برنامه خودکار
+ *  به‌روز می‌ماند. تخصیصِ سطحِ درس (`course_offering_edu_experts`) به‌عنوان
+ *  «استثنا» بالاتر از این می‌نشیند.
+ *  ──────────────────────────────────────────────────────────────────────── */
+export const classroom_edu_experts = pgTable('classroom_edu_experts', {
+  id: serial('id').primaryKey(),
+  classroomId: integer('classroomId').notNull().references(() => classrooms.id, { onDelete: 'cascade' }),
+  userId: integer('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+}, (t) => ({
+  uqRoomUser: uniqueIndex('uq_classroom_edu_experts_room_user').on(t.classroomId, t.userId),
+  idxUser: index('idx_classroom_edu_experts_user').on(t.userId),
+}));
+
+/** ────────────────────────────────────────────────────────────────────────
  *  معادل‌سازی درس بین دو دانشگاه (کارنامهٔ فارغ‌التحصیلان دانشگاه مبدأ)
  *  جهت A→B است: A مبدأ (معمولاً AFAGH)، B مقصد (دانشگاه محلی).
  *  `decidedAt === NULL` یعنی پیشنهادِ ماشینی و در انتظار تأیید آدم.

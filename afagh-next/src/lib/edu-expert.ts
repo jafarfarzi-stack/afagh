@@ -23,6 +23,7 @@
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import {
+  classroom_edu_experts,
   classrooms,
   course_offering_edu_experts,
   course_offerings,
@@ -33,6 +34,7 @@ import {
   majors,
   roles,
   schedules,
+  staff,
   universities,
   user_roles,
   users,
@@ -117,8 +119,9 @@ export interface OfferingExpertResolution {
   userId: number | null;
   /** همهٔ کارشناسانِ تخصیص‌یافته به این کلاس (۱ یا بیشتر). اگر از نقش‌ها آمده باشد، تک‌عضوی. */
   userIds: number[];
-  /** منبع تصمیم: 'offering' = تخصیص صریح کلاس · 'scope' = از نقش‌ها · null = هیچ‌کدام */
-  source: 'offering' | 'scope' | null;
+  /** منبع تصمیم: 'offering' = استثنای درس · 'classroom' = کارشناسِ اتاقِ همان سانس ·
+   *  'scope' = از نقش‌ها · null = هیچ‌کدام */
+  source: 'offering' | 'classroom' | 'scope' | null;
 }
 
 /**
@@ -192,11 +195,199 @@ export async function addOfferingEduExperts(
   return ids.length;
 }
 
+/* ────────────────────────────────────────────────────────────────────────
+ *  سطحِ اتاق (کلاس فیزیکی) — مهاجرت ۰۱۱۲
+ *
+ *  کارشناس آموزش مسئولِ یک اتاق است و ساعت‌به‌ساعت همان اتاق را می‌گردد.
+ *  پس تخصیص در سطحِ اتاق انجام می‌شود و مسئولیتِ هر درس خودکار از روی
+ *  `schedules.roomId` پایین می‌آید. تخصیصِ سطحِ درس «استثنا» می‌ماند.
+ *  ──────────────────────────────────────────────────────────────────────── */
+
+/** کارشناسانِ یک اتاق (بدون fallback). */
+export async function getClassroomExpertIds(classroomId: number): Promise<number[]> {
+  const rows = await db
+    .select({ userId: classroom_edu_experts.userId })
+    .from(classroom_edu_experts)
+    .where(eq(classroom_edu_experts.classroomId, classroomId))
+    .orderBy(asc(classroom_edu_experts.id))
+    .catch(() => []);
+  return rows.map((r) => r.userId);
+}
+
+/** جایگزینیِ کاملِ فهرستِ کارشناسانِ یک اتاق. خروجی، فهرستِ نهاییِ ذخیره‌شده است. */
+export async function setClassroomEduExperts(
+  classroomId: number,
+  userIds: number[],
+): Promise<number[]> {
+  const ids = [...new Set(userIds.filter((n) => Number.isInteger(n) && n > 0))];
+  await db.delete(classroom_edu_experts).where(eq(classroom_edu_experts.classroomId, classroomId));
+  if (ids.length) {
+    await db
+      .insert(classroom_edu_experts)
+      .values(ids.map((userId) => ({ classroomId, userId })))
+      .onConflictDoNothing();
+  }
+  return ids;
+}
+
+/** افزودنِ یک کارشناس به یک یا چند اتاق، بدون دست‌زدن به بقیه. */
+export async function addClassroomEduExperts(
+  classroomIds: number[],
+  userId: number,
+): Promise<number> {
+  const ids = [...new Set(classroomIds.filter((n) => Number.isInteger(n) && n > 0))];
+  if (!ids.length || !Number.isInteger(userId) || userId <= 0) return 0;
+  await db
+    .insert(classroom_edu_experts)
+    .values(ids.map((classroomId) => ({ classroomId, userId })))
+    .onConflictDoNothing();
+  return ids.length;
+}
+
+export interface ClassroomSessionRow {
+  scheduleId: number;
+  offeringId: number;
+  dayOfWeek: number | null;
+  start: string | null;
+  end: string | null;
+  courseTitle: string;
+  groupNumber: number;
+  professorName: string;
+}
+
+export interface ClassroomAssignRow {
+  roomId: number;
+  roomName: string;
+  buildingName: string | null;
+  floor: string | null;
+  /** تعدادِ سانسِ هفتگیِ برگزارشده در این اتاق در این ترم */
+  sessionCount: number;
+  /** تعدادِ ارائه‌های متمایزی که در این اتاق سانس دارند */
+  offeringCount: number;
+  /** گروه‌های سازندهٔ درس‌های همین اتاق — برای اینکه معلوم باشد چه کسانی اینجا کلاس دارند */
+  departments: string[];
+  expertIds: number[];
+  sessions: ClassroomSessionRow[];
+}
+
+/**
+ * همهٔ اتاق‌هایی که در یک ترم سانس دارند + کارشناسانشان + جدولِ ساعتی.
+ *
+ * چرا همه‌چیز در یک تابع: صفحهٔ تخصیص با یک رفت‌وبرگشت پر می‌شود و جدولِ
+ * ساعتیِ هر اتاق بدون درخواستِ دوم باز می‌شود (۱۴۶۱ سانس در ۴۹ اتاق — سبک).
+ * اتاق‌هایی که هیچ سانسِ «کلاس» ندارند برنمی‌گردند؛ سانسِ امتحان هم کنار
+ * گذاشته می‌شود چون سالنِ امتحان با اتاقِ درس یکی نیست.
+ */
+export async function listClassroomExpertAssignments(termId: number): Promise<ClassroomAssignRow[]> {
+  const raw = await db
+    .select({
+      scheduleId: schedules.id,
+      scheduleType: schedules.scheduleType,
+      roomId: schedules.roomId,
+      dayOfWeek: schedules.dayOfWeek,
+      start: schedules.startTime,
+      end: schedules.endTime,
+      offeringId: course_offerings.id,
+      courseTitle: courses.title,
+      groupNumber: course_offerings.groupNumber,
+      professorId: course_offerings.professorId,
+      ownerDepartmentId: course_offerings.ownerDepartmentId,
+    })
+    .from(schedules)
+    .innerJoin(course_offerings, eq(course_offerings.id, schedules.offeringId))
+    .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+    .where(and(eq(course_offerings.termId, termId), eq(course_offerings.isActive, 1)))
+    .orderBy(asc(schedules.dayOfWeek), asc(schedules.startTime))
+    .catch(() => []);
+
+  const rows = raw.filter(
+    (r) =>
+      String(r.scheduleType ?? '').toUpperCase() !== 'EXAM' &&
+      typeof r.roomId === 'number' &&
+      r.roomId != null,
+  );
+  if (!rows.length) return [];
+
+  const roomIds = [...new Set(rows.map((r) => r.roomId as number))];
+  const deptIds = [...new Set(rows.map((r) => r.ownerDepartmentId).filter((v): v is number => typeof v === 'number'))];
+  const profIds = [...new Set(rows.map((r) => r.professorId).filter((v): v is number => typeof v === 'number'))];
+
+  const [rooms, depts, profs, assignments] = await Promise.all([
+    db.select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, floor: classrooms.floor })
+      .from(classrooms).where(inArray(classrooms.id, roomIds)).catch(() => []),
+    deptIds.length
+      ? db.select({ id: departments.id, name: departments.name }).from(departments).where(inArray(departments.id, deptIds)).catch(() => [])
+      : Promise.resolve([] as { id: number; name: string }[]),
+    profIds.length
+      ? db.select({ id: staff.id, firstName: users.firstName, lastName: users.lastName })
+          .from(staff).innerJoin(users, eq(users.id, staff.userId)).where(inArray(staff.id, profIds)).catch(() => [])
+      : Promise.resolve([] as { id: number; firstName: string | null; lastName: string | null }[]),
+    db.select({ classroomId: classroom_edu_experts.classroomId, userId: classroom_edu_experts.userId })
+      .from(classroom_edu_experts).where(inArray(classroom_edu_experts.classroomId, roomIds))
+      .orderBy(asc(classroom_edu_experts.id)).catch(() => []),
+  ]);
+
+  const roomById = new Map(rooms.map((r) => [r.id, r]));
+  const deptName = new Map(depts.map((d) => [d.id, d.name]));
+  const profName = new Map(profs.map((p) => [p.id, `${p.firstName || ''} ${p.lastName || ''}`.trim()]));
+  const expertsByRoom = new Map<number, number[]>();
+  for (const a of assignments) {
+    const list = expertsByRoom.get(a.classroomId) ?? [];
+    if (!list.includes(a.userId)) list.push(a.userId);
+    expertsByRoom.set(a.classroomId, list);
+  }
+
+  const byRoom = new Map<number, ClassroomAssignRow>();
+  for (const r of rows) {
+    const roomId = r.roomId as number;
+    let row = byRoom.get(roomId);
+    if (!row) {
+      const room = roomById.get(roomId);
+      row = {
+        roomId,
+        roomName: room?.name ?? `اتاق ${roomId}`,
+        buildingName: room?.buildingName ?? null,
+        floor: room?.floor ?? null,
+        sessionCount: 0,
+        offeringCount: 0,
+        departments: [],
+        expertIds: expertsByRoom.get(roomId) ?? [],
+        sessions: [],
+      };
+      byRoom.set(roomId, row);
+    }
+    row.sessionCount += 1;
+    row.sessions.push({
+      scheduleId: r.scheduleId,
+      offeringId: r.offeringId,
+      dayOfWeek: r.dayOfWeek,
+      start: r.start ? String(r.start).slice(0, 5) : null,
+      end: r.end ? String(r.end).slice(0, 5) : null,
+      courseTitle: r.courseTitle,
+      groupNumber: r.groupNumber,
+      professorName: (r.professorId != null && profName.get(r.professorId)) || '—',
+    });
+    const dn = r.ownerDepartmentId != null ? deptName.get(r.ownerDepartmentId) : null;
+    if (dn && !row.departments.includes(dn)) row.departments.push(dn);
+  }
+
+  const out = [...byRoom.values()];
+  for (const row of out) {
+    row.offeringCount = new Set(row.sessions.map((s) => s.offeringId)).size;
+  }
+  // اول اتاق‌های پرکار، بعد بی‌کار — تا مدیر از بالا شروع کند
+  out.sort((a, b) => b.sessionCount - a.sessionCount || a.roomName.localeCompare(b.roomName, 'fa'));
+  return out;
+}
+
 /**
  * کارشناس مسئولِ یک کلاس را برمی‌گرداند.
  *
  * `offering` باید دست‌کم `id`، `ownerDepartmentId` و `universityId` را داشته باشد.
- * برای هر سه سطح (کلاس، گروه، دانشگاه) نگاه می‌شود و دقیق‌ترین برنده است.
+ * زنجیرهٔ تصمیم از دقیق به کلی:
+ *   ۱) استثنای درس (`course_offering_edu_experts`)
+ *   ۲) کارشناسِ اتاقِ سانس‌های همان درس (`classroom_edu_experts`)
+ *   ۳) دامنهٔ نقش‌ها (`expert_scopes`): رشته → گروه → دانشگاه
  * اگر کلاس چند کارشناس داشته باشد، همه در `userIds` برمی‌گردند و `userId`
  * اولین نفر (کارشناسِ اصلی) است.
  */
@@ -207,7 +398,7 @@ export async function resolveEduExpertForOffering(offering: {
   targetMajorId?: number | null;
   eduExpertUserId?: number | null;
 }): Promise<OfferingExpertResolution> {
-  // ۱) تخصیص صریحِ سطح کلاس (چند‌به‌چند) — برندهٔ قطعی
+  // ۱) استثنای درس (چند‌به‌چند) — برندهٔ قطعی
   const assigned = await getOfferingEduExpertIds(offering.id);
   if (assigned.length) {
     return { userId: assigned[0], userIds: assigned, source: 'offering' };
@@ -217,6 +408,20 @@ export async function resolveEduExpertForOffering(offering: {
     return { userId: offering.eduExpertUserId, userIds: [offering.eduExpertUserId], source: 'offering' };
   }
 
+  // ۲) کارشناسِ اتاقِ سانس‌های همین درس
+  const roomIds = await getOfferingClassroomIds(offering.id);
+  if (roomIds.length) {
+    const roomExperts = await db
+      .select({ userId: classroom_edu_experts.userId })
+      .from(classroom_edu_experts)
+      .where(inArray(classroom_edu_experts.classroomId, roomIds))
+      .orderBy(asc(classroom_edu_experts.id))
+      .catch(() => []);
+    const uniq = [...new Set(roomExperts.map((r) => r.userId))];
+    if (uniq.length) return { userId: uniq[0], userIds: uniq, source: 'classroom' };
+  }
+
+  // ۳) دامنهٔ نقش‌ها
   const scopes = await db.select().from(expert_scopes).catch(() => []);
   if (!scopes.length) return { userId: null, userIds: [], source: null };
 
@@ -251,6 +456,23 @@ export async function resolveEduExpertForOffering(offering: {
   return { userId: candidates[0].userId, userIds: [candidates[0].userId], source: 'scope' };
 }
 
+/** اتاق‌های سانس‌های «کلاس» یک ارائه (بدون سانسِ امتحان). */
+async function getOfferingClassroomIds(offeringId: number): Promise<number[]> {
+  const rs = await db
+    .select({ roomId: schedules.roomId, scheduleType: schedules.scheduleType })
+    .from(schedules)
+    .where(eq(schedules.offeringId, offeringId))
+    .catch(() => []);
+  return [
+    ...new Set(
+      rs
+        .filter((r) => String(r.scheduleType ?? '').toUpperCase() !== 'EXAM')
+        .map((r) => r.roomId)
+        .filter((v): v is number => typeof v === 'number'),
+    ),
+  ];
+}
+
 /**
  * همهٔ کلاس‌های یک ترم را با کارشناس مسئولشان برمی‌گرداند — برای صفحهٔ
  * «تخصیص کارشناس به کلاس‌ها» (جدول انبوه، بدون رفتن به تک‌تک کلاس‌ها).
@@ -270,7 +492,7 @@ export async function listOfferingExpertAssignments(termId: number): Promise<
     /** همهٔ کارشناسانِ تخصیص‌یافته به این کلاس (۰ یا بیشتر) */
     assignedUserIds: number[];
     resolvedUserId: number | null;
-    source: 'offering' | 'scope' | null;
+    source: 'offering' | 'classroom' | 'scope' | null;
     isActive: number;
   }[]
 > {
@@ -323,13 +545,36 @@ export async function listOfferingExpertAssignments(termId: number): Promise<
   const roomNameOf = (id: number | null) => (id == null ? null : roomRows.find((r) => r.id === id)?.name ?? null);
   const roomsByOffering = new Map<number, string[]>();
   const scheduledOfferings = new Set<number>();
+  const roomIdsByOffering = new Map<number, number[]>();
   for (const s of schedRows) {
     scheduledOfferings.add(s.offeringId);
+    if (typeof s.roomId === 'number') {
+      const rl = roomIdsByOffering.get(s.offeringId) ?? [];
+      if (!rl.includes(s.roomId)) rl.push(s.roomId);
+      roomIdsByOffering.set(s.offeringId, rl);
+    }
     const name = roomNameOf(s.roomId);
     if (!name) continue;
     const list = roomsByOffering.get(s.offeringId) ?? [];
     if (!list.includes(name)) list.push(name);
     roomsByOffering.set(s.offeringId, list);
+  }
+
+  /* کارشناسانِ سطحِ اتاق (۰۱۱۲) — یک کوئری برای همهٔ اتاق‌های این ترم.
+     این لایه بین «استثنای درس» و «نقش‌ها» می‌نشیند. */
+  const roomExpertRows = roomIds.length
+    ? await db
+        .select({ classroomId: classroom_edu_experts.classroomId, userId: classroom_edu_experts.userId })
+        .from(classroom_edu_experts)
+        .where(inArray(classroom_edu_experts.classroomId, roomIds))
+        .orderBy(asc(classroom_edu_experts.id))
+        .catch(() => [])
+    : [];
+  const expertsByRoom = new Map<number, number[]>();
+  for (const e of roomExpertRows) {
+    const list = expertsByRoom.get(e.classroomId) ?? [];
+    if (!list.includes(e.userId)) list.push(e.userId);
+    expertsByRoom.set(e.classroomId, list);
   }
 
   // برای عملکرد: نقش‌ها را یک بار می‌خوانیم و در حافظه جستجو می‌کنیم
@@ -374,7 +619,30 @@ export async function listOfferingExpertAssignments(termId: number): Promise<
         isActive: r.isActive ?? 0,
       };
     }
-    // از نقش‌ها: گروه سازنده → دانشگاه (سطح MAJOR در اینجا قیمت ندارد چون
+
+    // ۲) کارشناسِ اتاق‌های همین درس
+    const fromRooms = [
+      ...new Set(
+        (roomIdsByOffering.get(r.offeringId) ?? []).flatMap((roomId) => expertsByRoom.get(roomId) ?? []),
+      ),
+    ];
+    if (fromRooms.length) {
+      return {
+        offeringId: r.offeringId,
+        courseTitle: r.courseTitle,
+        groupNumber: r.groupNumber,
+        departmentName: deptName(r.ownerDepartmentId),
+        rooms: roomsByOffering.get(r.offeringId) ?? [],
+        hasSchedule: scheduledOfferings.has(r.offeringId),
+        assignedUserId: fromRooms[0],
+        assignedUserIds: fromRooms,
+        resolvedUserId: fromRooms[0],
+        source: 'classroom' as const,
+        isActive: r.isActive ?? 0,
+      };
+    }
+
+    // ۳) از نقش‌ها: گروه سازنده → دانشگاه (سطح MAJOR در اینجا قیمت ندارد چون
     // هدفِ رشته به سطح کلاس مربوط است و در جدول انبوه دقتِ کمتری می‌خواهیم)
     const fromScope = scopeHit('DEPARTMENT', r.ownerDepartmentId) ?? scopeHit('UNIVERSITY', r.universityId) ?? null;
     return {

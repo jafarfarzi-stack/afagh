@@ -3,18 +3,25 @@
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  addClassroomExpertAction,
   addOfferingEduExpertAction,
   bulkAddOfferingEduExpertAction,
   bulkSetOfferingEduExpertAction,
+  clearAllClassroomExpertsAction,
   clearTermEduExpertAction,
+  removeClassroomExpertAction,
   removeOfferingEduExpertAction,
   type EduExpertAssignInit,
 } from './actions';
 
 type Row = EduExpertAssignInit['rows'][number];
+type Room = EduExpertAssignInit['rooms'][number];
+
+const DAYS = ['شنبه', 'یک‌شنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
 
 const SOURCE_LABEL: Record<string, string> = {
-  offering: 'تخصیص کلاس',
+  offering: 'استثنای درس',
+  classroom: 'از اتاق',
   scope: 'از نقش‌ها',
   none: '—',
 };
@@ -22,20 +29,29 @@ const SOURCE_LABEL: Record<string, string> = {
 export default function EduExpertAssignClient({ init }: { init: EduExpertAssignInit }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+
   const [termId, setTermId] = useState(
     () => init.terms.find((t) => t.isCurrent)?.id ?? init.terms[init.terms.length - 1]?.id ?? 0,
   );
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [bulkExpert, setBulkExpert] = useState<number | null>(null);
+  /* تبِ اصلی «اتاق‌ها» است چون واحدِ واقعیِ مسئولیت همان است؛ جدولِ درس‌ها
+     فقط برای استثناها لازم می‌شود. */
+  const [tab, setTab] = useState<'rooms' | 'offerings'>('rooms');
+
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  /* ── اتاق‌ها ── */
+  const [roomQuery, setRoomQuery] = useState('');
+  const [unassignedOnly, setUnassignedOnly] = useState(false);
+  const [selectedRooms, setSelectedRooms] = useState<Set<number>>(new Set());
+  const [openRoom, setOpenRoom] = useState<number | null>(null);
+  const [roomOverrides, setRoomOverrides] = useState<Map<number, number[]>>(new Map());
+  const [bulkExpert, setBulkExpert] = useState<number | null>(null);
+
+  /* ── استثناها ── */
   const [query, setQuery] = useState('');
-  /* پیش‌فرض: فقط درس‌هایی که واقعاً کلاس/اتاق دارند. در دادهٔ واقعی حدودِ ۸۰٪
-     درس‌های یک ترم هنوز هیچ سانس/اتاقی ندارند و فقط جدول را شلوغ می‌کنند؛ با
-     برداشتنِ تیک، همهٔ درس‌های ترم برمی‌گردند (برای تخصیصِ پیش از برنامه‌ریزی). */
   const [scheduledOnly, setScheduledOnly] = useState(true);
-  /* به‌روزرسانیِ خوش‌بینانهٔ فهرستِ کارشناسانِ هر ردیف، تا بدون رفرشِ کلِ صفحه
-     چیپ‌ها فوراً عوض شوند (رفرش هم می‌زنیم، ولی UI منتظرِ آن نمی‌ماند). */
-  const [overrides, setOverrides] = useState<Map<number, number[]>>(new Map());
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [offOverrides, setOffOverrides] = useState<Map<number, number[]>>(new Map());
 
   const nameOf = useMemo(() => {
     const m = new Map<number, string>();
@@ -43,7 +59,22 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
     return m;
   }, [init.candidates]);
 
-  const expertIdsOf = (r: Row): number[] => overrides.get(r.offeringId) ?? r.assignedUserIds;
+  const roomExpertIds = (r: Room): number[] => roomOverrides.get(r.roomId) ?? r.expertIds;
+  const offExpertIds = (r: Row): number[] => offOverrides.get(r.offeringId) ?? r.assignedUserIds;
+
+  const rooms = useMemo(() => {
+    const q = roomQuery.trim();
+    return init.rooms.filter((r) => {
+      if (unassignedOnly && (roomOverrides.get(r.roomId) ?? r.expertIds).length) return false;
+      if (!q) return true;
+      return (
+        r.roomName.includes(q) ||
+        (r.buildingName ?? '').includes(q) ||
+        r.departments.some((d) => d.includes(q)) ||
+        (roomOverrides.get(r.roomId) ?? r.expertIds).some((id) => (nameOf.get(id) ?? '').includes(q))
+      );
+    });
+  }, [init.rooms, roomQuery, unassignedOnly, roomOverrides, nameOf]);
 
   const rows = useMemo(() => {
     const q = query.trim();
@@ -54,138 +85,142 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
         r.courseTitle.includes(q) ||
         String(r.offeringId).includes(q) ||
         r.rooms.some((n) => n.includes(q)) ||
-        expertIdsOf(r).some((id) => (nameOf.get(id) ?? '').includes(q))
+        (offOverrides.get(r.offeringId) ?? r.assignedUserIds).some((id) => (nameOf.get(id) ?? '').includes(q))
       );
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [init.rows, query, scheduledOnly, overrides, nameOf]);
+  }, [init.rows, query, scheduledOnly, offOverrides, nameOf]);
 
-  const allChecked = rows.length > 0 && rows.every((r) => selected.has(r.offeringId));
-  /* تخصیصِ گروهی فقط روی ردیف‌های دیده‌شده اعمال می‌شود؛ وگرنه اگر کاربر
-     فیلتر را عوض کند، ردیف‌های انتخاب‌شدهٔ پنهان هم بی‌خبر تخصیص می‌خوردند. */
-  const visibleSelected = rows.filter((r) => selected.has(r.offeringId));
-
-  function setRowExperts(offeringId: number, ids: number[]) {
-    setOverrides((prev) => new Map(prev).set(offeringId, ids));
+  function toggleIn(set: Set<number>, id: number): Set<number> {
+    const next = new Set(set);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
   }
 
-  function toggle(id: number) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function toggleAll() {
-    setSelected((prev) => {
-      if (allChecked) {
-        const next = new Set(prev);
-        rows.forEach((r) => next.delete(r.offeringId));
-        return next;
-      }
-      const next = new Set(prev);
-      rows.forEach((r) => next.add(r.offeringId));
-      return next;
-    });
-  }
-
-  async function addOne(r: Row, userId: number) {
+  /* ── عملیاتِ اتاق ── */
+  async function addToRoom(r: Room, userId: number) {
     if (!userId) return;
-    if (expertIdsOf(r).includes(userId)) {
-      setMsg({ ok: false, text: `${nameOf.get(userId) ?? userId} از قبل به این کلاس تخصیص دارد.` });
+    if (roomExpertIds(r).includes(userId)) {
+      setMsg({ ok: false, text: `${nameOf.get(userId) ?? userId} از قبل مسئول این اتاق است.` });
       return;
     }
+    setMsg(null);
+    const res = await addClassroomExpertAction([r.roomId], userId);
+    if (res.ok) {
+      setRoomOverrides((p) => new Map(p).set(r.roomId, [...roomExpertIds(r), userId]));
+      setMsg({ ok: true, text: 'کارشناس به اتاق اضافه شد.' });
+      router.refresh();
+    } else setMsg({ ok: false, text: res.error ?? 'خطا' });
+  }
+
+  async function removeFromRoom(r: Room, userId: number) {
+    setMsg(null);
+    const res = await removeClassroomExpertAction(r.roomId, userId);
+    if (res.ok) {
+      setRoomOverrides((p) => new Map(p).set(r.roomId, res.userIds ?? roomExpertIds(r).filter((x) => x !== userId)));
+      setMsg({ ok: true, text: 'کارشناس از اتاق حذف شد.' });
+      router.refresh();
+    } else setMsg({ ok: false, text: res.error ?? 'خطا' });
+  }
+
+  async function bulkAddToRooms() {
+    const ids = [...selectedRooms];
+    if (!ids.length) return setMsg({ ok: false, text: 'هیچ اتاقی انتخاب نشده.' });
+    if (!bulkExpert) return setMsg({ ok: false, text: 'اول یک کارشناس انتخاب کنید.' });
+    setMsg(null);
+    const res = await addClassroomExpertAction(ids, bulkExpert);
+    if (res.ok) {
+      setRoomOverrides((p) => {
+        const next = new Map(p);
+        for (const r of init.rooms) {
+          if (!ids.includes(r.roomId)) continue;
+          const cur = next.get(r.roomId) ?? r.expertIds;
+          if (!cur.includes(bulkExpert)) next.set(r.roomId, [...cur, bulkExpert]);
+        }
+        return next;
+      });
+      setMsg({ ok: true, text: `${nameOf.get(bulkExpert) ?? ''} به ${res.updated ?? 0} اتاق اضافه شد.` });
+      setSelectedRooms(new Set());
+      router.refresh();
+    } else setMsg({ ok: false, text: res.error ?? 'خطا' });
+  }
+
+  async function clearRooms() {
+    setMsg(null);
+    const res = await clearAllClassroomExpertsAction();
+    if (res.ok) {
+      setRoomOverrides(new Map(init.rooms.map((r) => [r.roomId, []])));
+      setMsg({ ok: true, text: `${res.updated ?? 0} تخصیصِ اتاق آزاد شد.` });
+      router.refresh();
+    } else setMsg({ ok: false, text: res.error ?? 'خطا' });
+  }
+
+  /* ── عملیاتِ استثنا ── */
+  async function addToOffering(r: Row, userId: number) {
+    if (!userId) return;
     setMsg(null);
     const res = await addOfferingEduExpertAction(r.offeringId, userId);
     if (res.ok) {
-      setRowExperts(r.offeringId, [...expertIdsOf(r), userId]);
-      setMsg({ ok: true, text: 'کارشناس اضافه شد.' });
+      setOffOverrides((p) => new Map(p).set(r.offeringId, [...offExpertIds(r), userId]));
+      setMsg({ ok: true, text: 'استثنا ثبت شد.' });
       router.refresh();
-    } else {
-      setMsg({ ok: false, text: res.error ?? 'خطا' });
-    }
+    } else setMsg({ ok: false, text: res.error ?? 'خطا' });
   }
 
-  async function removeOne(r: Row, userId: number) {
+  async function removeFromOffering(r: Row, userId: number) {
     setMsg(null);
     const res = await removeOfferingEduExpertAction(r.offeringId, userId);
     if (res.ok) {
-      setRowExperts(r.offeringId, res.userIds ?? expertIdsOf(r).filter((x) => x !== userId));
-      setMsg({ ok: true, text: 'کارشناس حذف شد.' });
+      setOffOverrides((p) => new Map(p).set(r.offeringId, res.userIds ?? offExpertIds(r).filter((x) => x !== userId)));
+      setMsg({ ok: true, text: 'استثنا حذف شد.' });
       router.refresh();
-    } else {
-      setMsg({ ok: false, text: res.error ?? 'خطا' });
-    }
+    } else setMsg({ ok: false, text: res.error ?? 'خطا' });
   }
 
-  async function doBulk(mode: 'replace' | 'add') {
-    if (!visibleSelected.length) {
-      setMsg({ ok: false, text: 'هیچ کلاسی انتخاب نشده.' });
-      return;
-    }
-    if (mode === 'add' && !bulkExpert) {
-      setMsg({ ok: false, text: 'برای «افزودن» اول یک کارشناس انتخاب کنید.' });
-      return;
-    }
+  async function doBulkOffering(mode: 'replace' | 'add') {
+    const picked = rows.filter((r) => selected.has(r.offeringId));
+    if (!picked.length) return setMsg({ ok: false, text: 'هیچ درسی انتخاب نشده.' });
+    if (mode === 'add' && !bulkExpert) return setMsg({ ok: false, text: 'اول یک کارشناس انتخاب کنید.' });
     setMsg(null);
-    const ids = visibleSelected.map((r) => r.offeringId);
+    const ids = picked.map((r) => r.offeringId);
 
     if (mode === 'add') {
       const res = await bulkAddOfferingEduExpertAction(ids, bulkExpert as number);
       if (res.ok) {
-        setOverrides((prev) => {
-          const next = new Map(prev);
-          for (const r of visibleSelected) {
-            const cur = expertIdsOf(r);
-            if (!cur.includes(bulkExpert as number)) next.set(r.offeringId, [...cur, bulkExpert as number]);
-          }
-          return next;
-        });
-        setMsg({ ok: true, text: `${nameOf.get(bulkExpert as number) ?? ''} به ${res.updated ?? 0} کلاس اضافه شد (بقیهٔ کارشناسان حفظ شدند).` });
+        setMsg({ ok: true, text: `${res.updated ?? 0} درس به فهرست اضافه شد.` });
         setSelected(new Set());
         router.refresh();
-      } else {
-        setMsg({ ok: false, text: res.error ?? 'خطا' });
-      }
+      } else setMsg({ ok: false, text: res.error ?? 'خطا' });
       return;
     }
-
     const res = await bulkSetOfferingEduExpertAction(ids, bulkExpert);
     if (res.ok) {
-      setOverrides((prev) => {
-        const next = new Map(prev);
-        for (const r of visibleSelected) next.set(r.offeringId, bulkExpert ? [bulkExpert] : []);
-        return next;
-      });
-      setMsg({ ok: true, text: `${res.updated ?? 0} کلاس به‌روز شد (فهرست جایگزین شد).` });
+      setMsg({ ok: true, text: `${res.updated ?? 0} درس بازنویسی شد.` });
       setSelected(new Set());
       router.refresh();
-    } else {
-      setMsg({ ok: false, text: res.error ?? 'خطا' });
-    }
+    } else setMsg({ ok: false, text: res.error ?? 'خطا' });
   }
 
-  async function doClearAll() {
+  async function clearTerm() {
     if (!termId) return;
     setMsg(null);
     const res = await clearTermEduExpertAction(termId);
     if (res.ok) {
-      setOverrides(new Map(init.rows.map((r) => [r.offeringId, []])));
-      setMsg({ ok: true, text: `${res.updated ?? 0} تخصیص آزاد شد (بازگشت به نقش‌ها).` });
-      setSelected(new Set());
+      setOffOverrides(new Map(init.rows.map((r) => [r.offeringId, []])));
+      setMsg({ ok: true, text: `${res.updated ?? 0} استثنا آزاد شد.` });
       router.refresh();
-    } else {
-      setMsg({ ok: false, text: res.error ?? 'خطا' });
-    }
+    } else setMsg({ ok: false, text: res.error ?? 'خطا' });
   }
 
-  const assignedCount = init.rows.filter((r) => r.source === 'offering').length;
-  const multiCount = init.rows.filter((r) => r.assignedUserIds.length > 1).length;
-  const fromScopeCount = init.rows.filter((r) => r.source === 'scope').length;
-  const noneCount = init.rows.filter((r) => r.source == null).length;
-  const scheduledCount = init.rows.filter((r) => r.hasSchedule).length;
+  /* ── شمارنده‌ها ── */
+  const roomAssigned = init.rooms.filter((r) => r.expertIds.length > 0).length;
+  const roomUnassigned = init.rooms.length - roomAssigned;
+  const roomMulti = init.rooms.filter((r) => r.expertIds.length > 1).length;
+  const totalSessions = init.rooms.reduce((s, r) => s + r.sessionCount, 0);
+  const offExplicit = init.rows.filter((r) => r.source === 'offering').length;
+  const offFromRoom = init.rows.filter((r) => r.source === 'classroom').length;
+  const offFromScope = init.rows.filter((r) => r.source === 'scope').length;
+  const offNone = init.rows.filter((r) => r.source == null).length;
 
   return (
     <div className="space-y-4 p-4" dir="rtl">
@@ -214,26 +249,16 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
             </select>
           </label>
 
-          <label className="text-sm">
-            <span className="block mb-1 font-bold">جستجو</span>
-            <input
-              className="input"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="نام درس، شمارهٔ ارائه، نام اتاق یا نام کارشناس"
-            />
-          </label>
-
           <div className="flex-1" />
 
           <label className="text-sm">
-            <span className="block mb-1 font-bold">کارشناس آموزش برای انتخاب‌شده‌ها</span>
+            <span className="block mb-1 font-bold">کارشناس</span>
             <select
               className="input"
               value={bulkExpert ?? ''}
               onChange={(e) => setBulkExpert(e.target.value ? Number(e.target.value) : null)}
             >
-              <option value="">— بدون کارشناس (آزاد کن) —</option>
+              <option value="">— انتخاب کارشناس —</option>
               {init.candidates.map((c) => (
                 <option key={c.userId} value={c.userId}>
                   {c.name}
@@ -241,173 +266,363 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
               ))}
             </select>
           </label>
+        </div>
 
-          <button className="btn btn-primary" onClick={() => doBulk('add')} disabled={pending || !visibleSelected.length || !bulkExpert}>
-            ＋ افزودن به {visibleSelected.length} کلاس
+        <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
+          <button className={tab === 'rooms' ? 'btn btn-primary' : 'btn'} onClick={() => setTab('rooms')}>
+            اتاق‌ها ({init.rooms.length})
           </button>
-          <button className="btn" onClick={() => doBulk('replace')} disabled={pending || !visibleSelected.length}>
-            جایگزینی روی {visibleSelected.length} کلاس
-          </button>
-          <button className="btn" onClick={doClearAll} disabled={pending}>
-            آزاد کردن همهٔ ترم
+          <button className={tab === 'offerings' ? 'btn btn-primary' : 'btn'} onClick={() => setTab('offerings')}>
+            استثناهای درس ({offExplicit})
           </button>
         </div>
 
-        <p className="text-[11px] leading-5 text-slate-600">
-          <b>«افزودن»</b> کارشناس را به فهرستِ هر کلاس اضافه می‌کند و کارشناسانِ قبلی را نگه می‌دارد — برای وقتی یک کلاس بین دو یا چند کارشناس مشترک است.
-          <b> «جایگزینی»</b> فهرست را با همین یک نفر بازنویسی می‌کند.
-        </p>
-
-        <div className="flex flex-wrap gap-4 text-xs text-slate-600">
-          <span>کل درس‌های ترم: <b>{init.rows.length}</b></span>
-          <span className="text-slate-800">دارای کلاس/اتاق: <b>{scheduledCount}</b></span>
-          <span className="text-indigo-700">تخصیص صریح: <b>{assignedCount}</b></span>
-          <span className="text-fuchsia-700">چند‌کارشناسه: <b>{multiCount}</b></span>
-          <span className="text-emerald-700">از نقش‌ها: <b>{fromScopeCount}</b></span>
-          <span className="text-amber-700">بدون کارشناس: <b>{noneCount}</b></span>
-          <label className="flex items-center gap-1.5 font-bold text-slate-800">
-            <input
-              type="checkbox"
-              checked={scheduledOnly}
-              onChange={(e) => setScheduledOnly(e.target.checked)}
-            />
-            فقط کلاس‌های دارای برنامه (اتاق)
-          </label>
-        </div>
-
-        {msg && (
-          <div className={`text-sm font-bold ${msg.ok ? 'text-emerald-700' : 'text-rose-700'}`}>
-            {msg.text}
-          </div>
-        )}
+        {msg && <div className={`text-sm font-bold ${msg.ok ? 'text-emerald-700' : 'text-rose-700'}`}>{msg.text}</div>}
       </div>
 
-      <div className="card overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-900 text-white">
-            <tr>
-              <th className="p-2 w-8">
-                <input type="checkbox" checked={allChecked} onChange={toggleAll} aria-label="انتخاب همه" />
-              </th>
-              <th className="p-2 text-right">#</th>
-              <th className="p-2 text-right">درس</th>
-              <th className="p-2 text-right">گروه</th>
-              <th className="p-2 text-right">کلاس (اتاق)</th>
-              <th className="p-2 text-right">گروه سازنده</th>
-              <th className="p-2 text-right">کارشناسان آموزش</th>
-              <th className="p-2 text-right">منبع</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const ids = expertIdsOf(r);
+      {tab === 'rooms' && (
+        <>
+          <div className="card p-4 space-y-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-sm flex-1 min-w-[220px]">
+                <span className="block mb-1 font-bold">جستجوی اتاق</span>
+                <input
+                  className="input"
+                  value={roomQuery}
+                  onChange={(e) => setRoomQuery(e.target.value)}
+                  placeholder="نام اتاق، ساختمان، گروه یا نام کارشناس"
+                />
+              </label>
+              <button
+                className="btn btn-primary"
+                onClick={bulkAddToRooms}
+                disabled={pending || !selectedRooms.size || !bulkExpert}
+              >
+                ＋ افزودن به {selectedRooms.size} اتاق
+              </button>
+              <button className="btn" onClick={clearRooms} disabled={pending}>
+                آزاد کردن همهٔ اتاق‌ها
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-4 text-xs text-slate-600">
+              <span>اتاق‌های دارای سانس: <b>{init.rooms.length}</b></span>
+              <span className="text-slate-800">کل سانس‌های هفته: <b>{totalSessions}</b></span>
+              <span className="text-indigo-700">دارای کارشناس: <b>{roomAssigned}</b></span>
+              <span className="text-fuchsia-700">چند‌کارشناسه: <b>{roomMulti}</b></span>
+              <span className="text-amber-700">بدون کارشناس: <b>{roomUnassigned}</b></span>
+              <label className="flex items-center gap-1.5 font-bold text-slate-800">
+                <input type="checkbox" checked={unassignedOnly} onChange={(e) => setUnassignedOnly(e.target.checked)} />
+                فقط اتاق‌های بدون کارشناس
+              </label>
+            </div>
+
+            <p className="text-[11px] leading-5 text-slate-600">
+              کارشناس را به <b>اتاق</b> بدهید، نه به درس. هر درسی که در آن اتاق سانس دارد خودکار مالِ همان کارشناس می‌شود و با
+              جابه‌جاییِ برنامه هم خودش را به‌روز می‌کند. برای حالتِ خاص، تبِ «استثناهای درس».
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {rooms.map((r) => {
+              const ids = roomExpertIds(r);
+              const open = openRoom === r.roomId;
+              const byDay = new Map<number, Room['sessions']>();
+              for (const s of r.sessions) {
+                const d = s.dayOfWeek ?? 0;
+                const list = byDay.get(d) ?? [];
+                list.push(s);
+                byDay.set(d, list);
+              }
+              const days = [...byDay.keys()].sort((a, b) => a - b);
               return (
-                <tr key={r.offeringId} className="border-b border-slate-200 hover:bg-slate-50 align-top">
-                  <td className="p-2">
+                <div key={r.roomId} className="card p-3 space-y-2">
+                  <div className="flex items-start gap-2">
                     <input
                       type="checkbox"
-                      checked={selected.has(r.offeringId)}
-                      onChange={() => toggle(r.offeringId)}
-                      aria-label={`انتخاب ${r.courseTitle}`}
+                      className="mt-1"
+                      checked={selectedRooms.has(r.roomId)}
+                      onChange={() => setSelectedRooms((p) => toggleIn(p, r.roomId))}
+                      aria-label={`انتخاب ${r.roomName}`}
                     />
-                  </td>
-                  <td className="p-2 text-slate-500">{r.offeringId}</td>
-                  <td className="p-2 font-bold">{r.courseTitle}</td>
-                  <td className="p-2">{r.groupNumber}</td>
-                  <td className="p-2 font-bold text-slate-800">
-                    {r.rooms.length ? r.rooms.join(' · ') : <span className="text-slate-400 font-normal">بدون اتاق</span>}
-                  </td>
-                  <td className="p-2 text-slate-600">{r.departmentName ?? '—'}</td>
-                  <td className="p-2 min-w-[260px]">
-                    <div className="flex flex-wrap items-center gap-1">
-                      {ids.map((id) => (
-                        <span
-                          key={id}
-                          className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-bold text-indigo-800"
-                        >
-                          {nameOf.get(id) ?? `#${id}`}
-                          <button
-                            type="button"
-                            onClick={() => removeOne(r, id)}
-                            disabled={pending}
-                            className="text-rose-600 hover:text-rose-800 font-black"
-                            aria-label={`حذف ${nameOf.get(id) ?? id}`}
-                            title="حذف این کارشناس"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                      {!ids.length && (
-                        <span className="text-[11px] text-slate-400">
-                          {r.resolvedUserId && r.source === 'scope'
-                            ? `از نقش‌ها: ${nameOf.get(r.resolvedUserId) ?? r.resolvedUserId}`
-                            : 'بدون کارشناس'}
-                        </span>
-                      )}
-                      <select
-                        className="input text-[11px] py-0.5 h-7 w-32"
-                        value=""
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          e.target.value = '';
-                          if (v) addOne(r, Number(v));
-                        }}
-                        disabled={pending}
-                        title="افزودن کارشناس"
-                      >
-                        <option value="">＋ افزودن…</option>
-                        {init.candidates
-                          .filter((c) => !ids.includes(c.userId))
-                          .map((c) => (
-                            <option key={c.userId} value={c.userId}>
-                              {c.name}
-                            </option>
-                          ))}
-                      </select>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-black text-sm">{r.roomName}</p>
+                      <p className="text-[11px] text-slate-500">
+                        {[r.buildingName, r.floor ? `طبقه ${r.floor}` : null].filter(Boolean).join(' · ') || 'بدون ساختمان'}
+                        {' · '}
+                        {r.sessionCount} سانس · {r.offeringCount} درس
+                      </p>
                     </div>
-                  </td>
-                  <td className="p-2">
-                    <span
-                      className={
-                        r.source === 'offering'
-                          ? 'text-indigo-700 font-bold'
-                          : r.source === 'scope'
-                            ? 'text-emerald-700'
-                            : 'text-slate-400'
-                      }
+                  </div>
+
+                  {!!r.departments.length && (
+                    <p className="text-[11px] text-slate-500">گروه‌ها: {r.departments.join(' · ')}</p>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-1">
+                    {ids.map((id) => (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-bold text-indigo-800"
+                      >
+                        {nameOf.get(id) ?? `#${id}`}
+                        <button
+                          type="button"
+                          onClick={() => removeFromRoom(r, id)}
+                          disabled={pending}
+                          className="text-rose-600 hover:text-rose-800 font-black"
+                          aria-label={`حذف ${nameOf.get(id) ?? id} از ${r.roomName}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                    {!ids.length && <span className="text-[11px] text-amber-700">بدون کارشناس</span>}
+                    <select
+                      className="input text-[11px] py-0.5 h-7 w-28"
+                      value=""
+                      disabled={pending}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        e.target.value = '';
+                        if (v) addToRoom(r, Number(v));
+                      }}
                     >
-                      {SOURCE_LABEL[r.source ?? 'none']}
-                      {ids.length > 1 ? ` (${ids.length} نفر)` : ''}
-                    </span>
-                  </td>
-                </tr>
+                      <option value="">＋ افزودن…</option>
+                      {init.candidates
+                        .filter((c) => !ids.includes(c.userId))
+                        .map((c) => (
+                          <option key={c.userId} value={c.userId}>
+                            {c.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <button
+                    className="text-[11px] font-bold text-indigo-700 underline"
+                    onClick={() => setOpenRoom(open ? null : r.roomId)}
+                  >
+                    {open ? 'بستنِ برنامهٔ هفتگی' : `برنامهٔ هفتگی (${r.sessionCount} سانس)`}
+                  </button>
+
+                  {open && (
+                    <div className="space-y-2 border-t border-slate-200 pt-2">
+                      {days.map((d) => (
+                        <div key={d}>
+                          <p className="text-[11px] font-black text-slate-700 mb-1">{DAYS[d] ?? d}</p>
+                          <div className="space-y-1">
+                            {(byDay.get(d) ?? []).map((s) => (
+                              <div key={s.scheduleId} className="flex items-center gap-2 rounded-lg bg-slate-50 px-2 py-1">
+                                <span className="text-[11px] text-slate-500 w-16 shrink-0">
+                                  {s.start}–{s.end}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-[11px] font-bold truncate">{s.courseTitle}</p>
+                                  <p className="text-[10px] text-slate-500 truncate">
+                                    {s.professorName} · گروه {s.groupNumber}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      {!days.length && <p className="text-[11px] text-slate-400">سانسی ثبت نشده.</p>}
+                    </div>
+                  )}
+                </div>
               );
             })}
-            {!rows.length && (
-              <tr>
-                <td colSpan={8} className="p-6 text-center text-slate-500">
-                  کلاسی یافت نشد.
-                  {scheduledOnly && init.rows.length > 0 && (
-                    <span className="block mt-1 text-xs">
-                      ({init.rows.length} درس هست، ولی هیچ‌کدام برنامه/اتاق ندارند — تیکِ «فقط کلاس‌های دارای برنامه» را بردارید.)
-                    </span>
-                  )}
-                </td>
-              </tr>
+            {!rooms.length && (
+              <div className="card p-6 text-center text-sm text-slate-500 md:col-span-2 xl:col-span-3">
+                اتاقی با این مشخصات پیدا نشد.
+                {init.rooms.length === 0 && (
+                  <span className="block mt-1 text-xs">این ترم هنوز هیچ سانس/اتاقی ثبت نشده است.</span>
+                )}
+              </div>
             )}
-          </tbody>
-        </table>
-      </div>
+          </div>
+        </>
+      )}
+
+      {tab === 'offerings' && (
+        <>
+          <div className="card p-4 space-y-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-sm flex-1 min-w-[220px]">
+                <span className="block mb-1 font-bold">جستجوی درس</span>
+                <input
+                  className="input"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="نام درس، شمارهٔ ارائه، اتاق یا نام کارشناس"
+                />
+              </label>
+              <button
+                className="btn btn-primary"
+                onClick={() => doBulkOffering('add')}
+                disabled={pending || !selected.size || !bulkExpert}
+              >
+                ＋ افزودن به {selected.size} درس
+              </button>
+              <button className="btn" onClick={() => doBulkOffering('replace')} disabled={pending || !selected.size}>
+                جایگزینی روی {selected.size} درس
+              </button>
+              <button className="btn" onClick={clearTerm} disabled={pending}>
+                آزاد کردن استثناهای ترم
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-4 text-xs text-slate-600">
+              <span>کل درس‌های ترم: <b>{init.rows.length}</b></span>
+              <span className="text-indigo-700">استثنای درس: <b>{offExplicit}</b></span>
+              <span className="text-sky-700">از اتاق: <b>{offFromRoom}</b></span>
+              <span className="text-emerald-700">از نقش‌ها: <b>{offFromScope}</b></span>
+              <span className="text-amber-700">بدون کارشناس: <b>{offNone}</b></span>
+              <label className="flex items-center gap-1.5 font-bold text-slate-800">
+                <input type="checkbox" checked={scheduledOnly} onChange={(e) => setScheduledOnly(e.target.checked)} />
+                فقط درس‌های دارای برنامه (اتاق)
+              </label>
+            </div>
+
+            <p className="text-[11px] leading-5 text-slate-600">
+              این تب فقط برای <b>استثنا</b> است: درسی که باید کارشناسِ خاصی بگیرد، مستقل از اتاقش. برای کارِ روزمره از تبِ
+              «اتاق‌ها» استفاده کنید.
+            </p>
+          </div>
+
+          <div className="card overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-900 text-white">
+                <tr>
+                  <th className="p-2 w-8">
+                    <input
+                      type="checkbox"
+                      checked={rows.length > 0 && rows.every((r) => selected.has(r.offeringId))}
+                      onChange={() =>
+                        setSelected((p) => {
+                          const all = rows.length > 0 && rows.every((r) => selected.has(r.offeringId));
+                          const next = new Set(p);
+                          rows.forEach((r) => (all ? next.delete(r.offeringId) : next.add(r.offeringId)));
+                          return next;
+                        })
+                      }
+                      aria-label="انتخاب همه"
+                    />
+                  </th>
+                  <th className="p-2 text-right">#</th>
+                  <th className="p-2 text-right">درس</th>
+                  <th className="p-2 text-right">گروه</th>
+                  <th className="p-2 text-right">کلاس (اتاق)</th>
+                  <th className="p-2 text-right">کارشناسان</th>
+                  <th className="p-2 text-right">منبع</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const ids = offExpertIds(r);
+                  return (
+                    <tr key={r.offeringId} className="border-b border-slate-200 hover:bg-slate-50 align-top">
+                      <td className="p-2">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(r.offeringId)}
+                          onChange={() => setSelected((p) => toggleIn(p, r.offeringId))}
+                          aria-label={`انتخاب ${r.courseTitle}`}
+                        />
+                      </td>
+                      <td className="p-2 text-slate-500">{r.offeringId}</td>
+                      <td className="p-2 font-bold">{r.courseTitle}</td>
+                      <td className="p-2">{r.groupNumber}</td>
+                      <td className="p-2 font-bold text-slate-800">
+                        {r.rooms.length ? r.rooms.join(' · ') : <span className="text-slate-400 font-normal">بدون اتاق</span>}
+                      </td>
+                      <td className="p-2 min-w-[240px]">
+                        <div className="flex flex-wrap items-center gap-1">
+                          {ids.map((id) => (
+                            <span
+                              key={id}
+                              className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-bold text-indigo-800"
+                            >
+                              {nameOf.get(id) ?? `#${id}`}
+                              <button
+                                type="button"
+                                onClick={() => removeFromOffering(r, id)}
+                                disabled={pending}
+                                className="text-rose-600 hover:text-rose-800 font-black"
+                                aria-label={`حذف ${nameOf.get(id) ?? id}`}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                          {!ids.length && (
+                            <span className="text-[11px] text-slate-400">
+                              {r.resolvedUserId
+                                ? `${SOURCE_LABEL[r.source ?? 'none']}: ${nameOf.get(r.resolvedUserId) ?? r.resolvedUserId}`
+                                : 'بدون کارشناس'}
+                            </span>
+                          )}
+                          <select
+                            className="input text-[11px] py-0.5 h-7 w-28"
+                            value=""
+                            disabled={pending}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              e.target.value = '';
+                              if (v) addToOffering(r, Number(v));
+                            }}
+                          >
+                            <option value="">＋ افزودن…</option>
+                            {init.candidates
+                              .filter((c) => !ids.includes(c.userId))
+                              .map((c) => (
+                                <option key={c.userId} value={c.userId}>
+                                  {c.name}
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      </td>
+                      <td className="p-2">
+                        <span
+                          className={
+                            r.source === 'offering'
+                              ? 'text-indigo-700 font-bold'
+                              : r.source === 'classroom'
+                                ? 'text-sky-700'
+                                : r.source === 'scope'
+                                  ? 'text-emerald-700'
+                                  : 'text-slate-400'
+                          }
+                        >
+                          {SOURCE_LABEL[r.source ?? 'none']}
+                          {ids.length > 1 ? ` (${ids.length} نفر)` : ''}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!rows.length && (
+                  <tr>
+                    <td colSpan={7} className="p-6 text-center text-slate-500">
+                      درسی یافت نشد.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       <div className="card p-4 text-xs leading-6 text-slate-600 space-y-1">
-        <p><b>چطور کار می‌کند:</b></p>
-        <p>۰. ستونِ «کلاس (اتاق)» از برنامهٔ هفتگی می‌آید؛ درس‌هایی که هنوز هیچ سانس/اتاقی ندارند با تیکِ بالای جدول پنهان می‌شوند (برای دیدنشان تیک را بردارید).</p>
-        <p>۱. هر کلاس می‌تواند <b>چند کارشناس</b> داشته باشد — با «＋ افزودن…» در همان ردیف یکی‌یکی اضافه کنید، یا چند کلاس را تیک بزنید و از دکمهٔ «افزودن» بالای جدول استفاده کنید. با × هر کارشناس را جدا حذف کنید.</p>
-        <p>۲. اگر برای کلاس کارشناس انتخاب شود («تخصیص کلاس»)، همان برنده است و تخصیص نقش‌ها نادیده گرفته می‌شود.</p>
-        <p>۳. اگر هیچ کارشناسی انتخاب نشود، کارشناس از <b>تخصیص نقش‌ها</b> (دانشگاه/دانشکده/گروه/رشته) پایین می‌آید — دقیق‌ترین دامنه برنده است.</p>
-        <p>۴. «بدون کارشناس» یعنی هیچ‌کدام؛ آن کلاس در کارتابل هیچ کارشناسی نمی‌آید.</p>
-        <p>۵. «آزاد کردن همهٔ ترم» همهٔ تخصیص‌های صریح (چند‌کارشناسه هم) را برمی‌دارد و به حالت «از نقش‌ها» برمی‌گردد.</p>
+        <p><b>زنجیرهٔ تصمیم (از دقیق به کلی):</b></p>
+        <p>۱. <b>استثنای درس</b> — اگر برای خودِ درس کارشناس تعیین شود، همان برنده است.</p>
+        <p>۲. <b>کارشناسِ اتاق</b> — هر درسی که در آن اتاق سانس دارد، خودکار مالِ کارشناسِ اتاق است.</p>
+        <p>۳. <b>نقش‌ها</b> — اگر هیچ‌کدام نبود، از تخصیص گروه/دانشکده/دانشگاه پایین می‌آید.</p>
+        <p>۴. یک اتاق و یک درس می‌توانند چند کارشناس داشته باشند؛ با × هر کدام را جدا حذف کنید.</p>
       </div>
     </div>
   );

@@ -2,13 +2,23 @@
 
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
-import { academic_terms, course_offering_edu_experts, course_offerings, users } from '@/db/schema';
+import {
+  academic_terms,
+  classroom_edu_experts,
+  course_offering_edu_experts,
+  course_offerings,
+  users,
+} from '@/db/schema';
 import { requireRoleOrPermission } from '@/lib/permissions-enforcer';
 import {
+  addClassroomEduExperts,
   addOfferingEduExperts,
+  listClassroomExpertAssignments,
   listEduExpertCandidates,
   listOfferingExpertAssignments,
+  setClassroomEduExperts,
   setOfferingEduExperts,
+  type ClassroomAssignRow,
 } from '@/lib/edu-expert';
 
 const EDU = ['ADMIN', 'EDU_EXPERT'];
@@ -28,12 +38,15 @@ export interface EduExpertAssignRow {
   /** همهٔ کارشناسانِ این کلاس — یک کلاس می‌تواند چند کارشناس داشته باشد */
   assignedUserIds: number[];
   resolvedUserId: number | null;
-  source: 'offering' | 'scope' | null;
+  source: 'offering' | 'classroom' | 'scope' | null;
 }
 
 export interface EduExpertAssignInit {
   terms: { id: number; title: string; isCurrent: boolean }[];
   candidates: { userId: number; name: string }[];
+  /** اتاق‌های دارای سانس در این ترم — سطحِ اصلیِ تخصیص */
+  rooms: ClassroomAssignRow[];
+  /** استثناهای سطحِ درس — همان جدولِ قبلی، حالا تبِ دوم */
   rows: EduExpertAssignRow[];
 }
 
@@ -54,14 +67,16 @@ export async function getEduExpertAssignInit(termId?: number): Promise<EduExpert
     termId ??
     (terms.find((t) => (t.isCurrent ?? 0) === 1)?.id ?? terms[terms.length - 1]?.id ?? 0);
 
-  const [candidates, rows] = await Promise.all([
+  const [candidates, rooms, rows] = await Promise.all([
     listEduExpertCandidates(),
+    tid ? listClassroomExpertAssignments(tid) : Promise.resolve([]),
     tid ? listOfferingExpertAssignments(tid) : Promise.resolve([]),
   ]);
 
   return {
     terms: terms.map((t) => ({ id: t.id, title: t.title, isCurrent: (t.isCurrent ?? 0) === 1 })),
     candidates,
+    rooms,
     rows: rows.map((r) => ({
       offeringId: r.offeringId,
       courseTitle: r.courseTitle,
@@ -233,5 +248,66 @@ export async function clearTermEduExpertAction(termId: number): Promise<{ ok: bo
     .set({ eduExpertUserId: null })
     .where(inArray(course_offerings.id, ids));
 
+  return { ok: true, updated: rows.length };
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ *  سطحِ اتاق (۰۱۱۲) — واحدِ اصلیِ تخصیص
+ *  ──────────────────────────────────────────────────────────────────────── */
+
+/** افزودنِ یک کارشناس به یک یا چند اتاق (کارشناسانِ قبلی حفظ می‌شوند). */
+export async function addClassroomExpertAction(
+  classroomIds: number[],
+  userId: number,
+): Promise<{ ok: boolean; updated?: number; error?: string }> {
+  await requireRoleOrPermission(EDU, EDU_PERM);
+
+  const chk = await assertExpert(userId);
+  if (!chk.ok) return { ok: false, error: chk.error };
+  if (chk.userId == null) return { ok: false, error: 'کارشناس انتخاب نشده.' };
+
+  const updated = await addClassroomEduExperts(classroomIds, chk.userId);
+  return { ok: true, updated };
+}
+
+/** حذفِ یک کارشناس از یک اتاق (بقیه می‌مانند). */
+export async function removeClassroomExpertAction(
+  classroomId: number,
+  userId: number,
+): Promise<{ ok: boolean; userIds?: number[]; error?: string }> {
+  await requireRoleOrPermission(EDU, EDU_PERM);
+
+  const current = await db
+    .select({ userId: classroom_edu_experts.userId })
+    .from(classroom_edu_experts)
+    .where(eq(classroom_edu_experts.classroomId, classroomId))
+    .orderBy(asc(classroom_edu_experts.id));
+  const next = current.map((r) => r.userId).filter((id) => id !== userId);
+  const saved = await setClassroomEduExperts(classroomId, next);
+  return { ok: true, userIds: saved };
+}
+
+/** جایگزینیِ کاملِ فهرستِ کارشناسانِ یک اتاق. */
+export async function setClassroomExpertsAction(
+  classroomId: number,
+  userIds: number[],
+): Promise<{ ok: boolean; userIds?: number[]; error?: string }> {
+  await requireRoleOrPermission(EDU, EDU_PERM);
+
+  for (const id of userIds) {
+    const chk = await assertExpert(id);
+    if (!chk.ok) return { ok: false, error: chk.error };
+  }
+  const saved = await setClassroomEduExperts(classroomId, userIds);
+  return { ok: true, userIds: saved };
+}
+
+/** آزاد کردنِ همهٔ تخصیص‌های سطحِ اتاق (کل دانشگاه، نه یک ترم). */
+export async function clearAllClassroomExpertsAction(): Promise<{ ok: boolean; updated?: number; error?: string }> {
+  await requireRoleOrPermission(EDU, EDU_PERM);
+
+  const rows = await db.select({ id: classroom_edu_experts.id }).from(classroom_edu_experts);
+  if (!rows.length) return { ok: true, updated: 0 };
+  await db.delete(classroom_edu_experts);
   return { ok: true, updated: rows.length };
 }
