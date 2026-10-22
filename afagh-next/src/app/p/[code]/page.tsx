@@ -371,10 +371,10 @@ export default async function RoomCheckinPage({
                                 <span className="text-[9px] font-black text-emerald-800 bg-emerald-100 border border-emerald-200 rounded-lg px-2 py-1 shrink-0">
                                   ثبت شد
                                 </span>
-                              ) : state === 'OPEN' ? (
+                              ) : rec && state === 'OPEN' ? (
                                 <form action={recordRoomAttendance} className="shrink-0">
                                   <input type="hidden" name="code" value={`room-${roomId}`} />
-                                  <input type="hidden" name="sessionId" value={rec?.id ?? ''} />
+                                  <input type="hidden" name="sessionId" value={rec.id} />
                                   <button
                                     type="submit"
                                     className="text-[9px] font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg px-2.5 py-1.5 shadow-sm"
@@ -382,10 +382,14 @@ export default async function RoomCheckinPage({
                                     ثبت حضور
                                   </button>
                                 </form>
+                              ) : state === 'BEFORE' ? (
+                                <span className="text-[9px] font-bold text-slate-400 shrink-0">هنوز باز نشده</span>
+                              ) : state === 'CLOSED' ? (
+                                <span className="text-[9px] font-bold text-slate-400 shrink-0">گذشته</span>
                               ) : (
-                                <span className="text-[9px] font-bold text-slate-400 shrink-0">
-                                  {state === 'BEFORE' ? 'هنوز باز نشده' : 'گذشته'}
-                                </span>
+                                /* اسلاتِ امروز هست ولی جلسه‌ای در class_sessions ساخته نشده —
+                                   دکمه نشان نمی‌دهیم تا خطای «جلسه یافت نشد» نگیرد. */
+                                <span className="text-[9px] font-bold text-amber-700 shrink-0">جلسه ثبت نشده</span>
                               )
                             ) : mine ? (
                               <span className="text-[9px] font-bold text-slate-400 shrink-0">در روز جلسه</span>
