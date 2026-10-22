@@ -238,14 +238,22 @@ export default async function DoorSignPrint({
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.2mm; padding:0.5mm 0.9mm; text-align:center; }
   .ds-card.lab { border-color:#d97706; background:#fffbeb; }
   /* ── سلسله‌مراتبِ متنِ کارت ────────────────────────────────────────────
-     اولویت: ۱) عنوان درس ۲) نام استاد ۳) ساعتِ شروع–پایان.
-     هیچ اندازهٔ ثابتی برای «کارتِ کوچک / بزرگ» وجود ندارد: هر سه اندازه از
-     ارتفاع (cqh) و عرض (cqi) خودِ کارت گرفته می‌شود، پس کارتِ یک‌ساعته و
-     سه‌ساعته هرکدام اندازهٔ خودشان را می‌گیرند. max(کف, …) خوانایی روی
-     کاغذ را تضمین می‌کند و سقفِ pt مانع بزرگ‌شدنِ بی‌جا می‌شود — یعنی اگر
-     فردا چیدمان/تعداد ستون‌ها عوض شد، متن خودش را تطبیق می‌دهد. */
+     اولویتِ قطعی (قابل‌مذاکره نیست):
+       ۱) عنوان درس + برچسبِ زوج/فرد  ← همیشه دیده می‌شود
+       ۲) نام استاد                  ← اگر فضا بود
+       ۳) ساعتِ شروع–پایان            ← اگر فضا بود
+     برچسبِ زوج/فرد عمداً inline داخلِ .ds-t است، نه خطِ جدا: اگر خطِ خودش را
+     داشت در کارتِ باریک یا کارت را بیرون می‌راند یا با line-clamp حذف می‌شد.
+     هیچ اندازهٔ ثابتی برای «کارتِ کوچک / بزرگ» وجود ندارد: اندازه‌ها از ارتفاع
+     (cqh) و عرض (cqi) خودِ کارت گرفته می‌شوند و با clamp می‌توانند shrink کنند،
+     پس کارتِ یک‌ساعته و سه‌ساعته هرکدام اندازهٔ خودشان را می‌گیرند. سقفِ pt
+     مانع بزرگ‌شدنِ بی‌جا می‌شود — یعنی اگر فردا چیدمان/تعداد ستون‌ها عوض شد،
+     متن خودش را تطبیق می‌دهد. */
   .ds-t { font-weight:700; line-height:1.14; color:#0b1020;
-    font-size:max(11pt, min(32cqh,14cqi,18pt));
+    /* shrink-to-fit: اندازه از ارتفاع و عرضِ خودِ کارت گرفته می‌شود و می‌تواند
+       تا ۶.۵pt برسد. قبلاً max(11pt, …) یک کفِ سفت بود و کارتِ باریک/کوتاه
+       را مجبور می‌کرد کلمه را وسطِ حرف بشکند (همان «مدیریت تولید» عمودی). */
+    font-size:clamp(6.5pt, min(32cqh,13cqi), 17pt);
     display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3;
     overflow:hidden; text-align:center; word-break:break-word; overflow-wrap:anywhere; }
   .ds-wk { display:inline-block; margin-inline-start:1mm; border:0.6pt solid #b45309; border-radius:0.7mm; padding:0 0.5mm;
@@ -254,32 +262,31 @@ export default async function DoorSignPrint({
      چون با ellipsis به «دکتر سعید پورمح…» تبدیل می‌شد و بی‌فایده بود. */
   .ds-p { font-family:'Shabnam', 'Vazirmatn', Tahoma, sans-serif; font-weight:400; line-height:1.14;
     color:#1f2937; max-width:100%; overflow:hidden; text-align:center;
-    font-size:max(8pt, min(16cqh,9cqi,11pt)); display:none;
+    font-size:clamp(6pt, min(16cqh,8.5cqi), 10.5pt); display:none;
     -webkit-box-orient:vertical; -webkit-line-clamp:2; word-break:break-word; }
   /* ساعتِ شروع/پایان: سومِ اولویت — کوچک‌ترین و کم‌رنگ‌ترین (بالای ستون‌ها و
      روی خط‌های ساعت هم پیداست). */
-  .ds-h { font-weight:500; line-height:1.1; color:#475569; white-space:nowrap;
-    font-size:max(7pt, min(13cqh,7cqi,9pt)); display:none; }
+  .ds-h { font-weight:500; line-height:1.1; color:#475569;
+    font-size:clamp(6pt, min(13cqh,6.5cqi), 8.5pt); display:none; }
 
   /* کدام سطرها دیده شوند — از روی فضای واقعیِ خودِ کارت.
      هندسهٔ فعلی: هر ساعت ≈ ۱۲mm، پس ۱ ساعت ≈ ۱۲mm · ۲ ساعت ≈ ۲۴mm · ۳ ساعت ≈ ۳۶mm.
      اولویت دقیقاً همان چیزی است که گفته شد: عنوان درس هرگز قربانی نمی‌شود؛
      اول نام استاد و بعد ساعت کنار می‌روند. */
-  @container (max-height:28mm) { .ds-t { -webkit-line-clamp:2; } }
-  @container (min-height:13mm) { .ds-p { display:-webkit-box; } }
-  @container (min-height:16mm) { .ds-h { display:block; } }
-  @container (max-width:22mm)  { .ds-p { display:none; } }
-  /* کارتِ یک‌ساعته (~۱۲mm): فقط عنوان — اولویتِ اول؛ نامِ استاد در چنین
-     فضایی یا بریده می‌شد یا عنوان را بیرون می‌راند. */
-  @container (max-height:13mm) { .ds-p { display:none; } }
-  /* کارتِ باریک = دو سانسِ هم‌زمان در یک اتاق (عرضِ ستون نصف می‌شود).
-     با کفِ ۹pt عنوان سه سطر می‌خواست و سطرِ سوم وسطِ حرف بریده می‌شد؛ پس
-     اندازه یک پله کوچک‌تر می‌شود و همان سه سطرِ عنوان حفظ می‌ماند (اولویتِ
-     اول). فقط کارتِ کوتاه‌تر از ۱۳mm به دو سطر محدود می‌شود. */
-  @container (max-width:26mm) {
-    .ds-t { font-size:max(9pt, min(28cqh,11cqi,13pt)); -webkit-line-clamp:3; }
-  }
-  @container (max-width:26mm) and (max-height:13mm) { .ds-t { -webkit-line-clamp:2; } }
+  /* ── سلسله‌مراتبِ دیده‌شدن بر پایهٔ فضای واقعیِ کارت (مدل الف) ─────────────
+     اولویتِ قطعی: ۱) عنوان درس + برچسبِ زوج/فرد (inline داخل .ds-t) — همیشه
+     ۲) نام استاد  ۳) ساعتِ شروع–پایان. هیچ‌کدام هرگز عنوان را بیرون نمی‌رانند:
+     اگر فضا کم بود استاد و بعد ساعت کنار می‌روند، نه عنوان.
+     هندسهٔ مدل الف: ارتفاعِ کارت با مدتِ درس grows می‌شود (۱ ساعت ≈ ۱۲mm) و
+     عرضش ستونِ روز است (≈۲۳mm؛ با سانس‌های هم‌پوشان نصف می‌شود). آستانه‌ها روی
+     کانتینرِ نام‌دارِ dsa محدود شده‌اند تا قواعد مدل ب را هدف نگیرند. */
+  .ds-grid .ds-card{ container-name:dsa; }
+  @container dsa (min-height:11mm) and (min-width:19mm) { .ds-grid .ds-p { display:-webkit-box; } }
+  @container dsa (min-height:14mm) and (min-width:22mm) { .ds-grid .ds-h { display:block; } }
+  @container dsa (max-height:28mm) { .ds-grid .ds-t { -webkit-line-clamp:2; } }
+  @container dsa (max-height:13mm) { .ds-grid .ds-p { display:none; } }
+  @container dsa (max-width:22mm)  { .ds-grid .ds-p { display:none; } }
+  @container dsa (max-width:22mm)  { .ds-grid .ds-h { display:none; } }
 
   .ds-ft { display:flex; align-items:center; justify-content:space-between; gap:4mm; font-size:7pt; color:#334155; padding-top:1.2mm; }
   .ds-ft .k { display:inline-flex; align-items:center; gap:1mm; margin-inline-end:3mm; }
@@ -342,12 +349,18 @@ export default async function DoorSignPrint({
      (cqi) حساب می‌شود تا هر سه سطر جا شوند. کانتینرِ نام‌دار (dsb) تضمین می‌کند
      این قواعد فقط مدل ب را هدف بگیرند و کارت‌های مدل الف دست‌نخورده بمانند. */
   .ds-day-b .ds-card{ container-name:dsb; }
-  .ds-day-b .ds-t{ font-size:max(8.5pt, min(20cqh,12cqi,15pt)); }
-  .ds-day-b .ds-p{ font-size:max(6.5pt, min(11cqh,6cqi,9pt)); display:-webkit-box; }
-  .ds-day-b .ds-h{ font-size:max(6pt, min(9cqh,4.5cqi,7.5pt)); display:block; }
-  @container dsb (max-width:30mm){ .ds-t{ -webkit-line-clamp:3; } }
-  @container dsb (min-width:30mm) and (max-width:74mm){ .ds-t{ -webkit-line-clamp:2; } }
-  @container dsb (min-width:74mm){ .ds-t{ -webkit-line-clamp:1; } }
+  /* مدل ب: ارتفاع ثابت (~۲۱mm)، عرض = مدتِ درس ÷ تعدادِ سانس‌های هم‌پوشان. پس
+     آستانه‌ها روی عرض کارت (cqi) کار می‌کنند: هرچه ستون باریک‌تر، فونتِ عنوان
+     بیشتر shrink می‌شود تا کلمه وسطِ حرف نشکند. */
+  .ds-day-b .ds-t{ font-size:clamp(6.5pt, min(20cqh,11cqi), 15pt); }
+  .ds-day-b .ds-p{ font-size:clamp(6pt, min(11cqh,5.5cqi), 8.5pt); display:none; }
+  .ds-day-b .ds-h{ font-size:clamp(5.5pt, min(9cqh,4cqi), 7.5pt); display:none; }
+  /* همان اولویت: عنوان همیشه؛ استاد اگر عرض ≥ ۱۹mm؛ ساعت اگر عرض ≥ ۲۴mm */
+  @container dsb (min-width:19mm){ .ds-day-b .ds-p{ display:-webkit-box; } }
+  @container dsb (min-width:24mm){ .ds-day-b .ds-h{ display:block; } }
+  @container dsb (max-width:30mm){ .ds-day-b .ds-t{ -webkit-line-clamp:3; } }
+  @container dsb (min-width:30mm) and (max-width:74mm){ .ds-day-b .ds-t{ -webkit-line-clamp:2; } }
+  @container dsb (min-width:74mm){ .ds-day-b .ds-t{ -webkit-line-clamp:1; } }
 
   /* ── نمایشِ روی صفحه: پوستر ۲۹۷mm عرض دارد، پس روی نمایشگرِ معمولی
      سرریز می‌کرد و کل صفحهٔ مدیریت را از حالت ریسپانسیو بیرون می‌برد
