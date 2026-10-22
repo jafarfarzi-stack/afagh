@@ -18,7 +18,7 @@
 
 import { and, asc, eq, gt, inArray, or } from 'drizzle-orm';
 import { db } from '@/db';
-import { class_sessions, classrooms, course_offerings, courses, schedules } from '@/db/schema';
+import { class_sessions, classrooms, course_offerings, courses, schedules, staff, users } from '@/db/schema';
 import { iranDowFromJalali } from '@/lib/room-checkin';
 
 export interface RoomSessionRow {
@@ -199,9 +199,90 @@ export async function listUpcomingSessionsInRoom(
   return out;
 }
 
+/** یک اسلاتِ هفتگیِ اتاق — همان چیزی که روی پوسترِ سردر چاپ می‌شود. */
+export interface WeeklyRoomSlot {
+  scheduleId: number;
+  offeringId: number;
+  dayOfWeek: number;
+  /** 'HH:MM' */
+  startTime: string;
+  /** 'HH:MM' */
+  endTime: string;
+  professorId: number | null;
+  professorName: string;
+  courseTitle: string;
+  courseCode: string;
+  groupNumber: number;
+}
+
+/**
+ * برنامهٔ هفتگیِ کاملِ یک اتاق (همهٔ روزها) — برای نمایش روی صفحهٔ اسکنِ QR.
+ *
+ * چرا جدا از `listSessionsInRoom`: آن یکی جلساتِ «یک تاریخ» را از
+ * `class_sessions` حل می‌کند (چون ثبتِ حضور به شناسهٔ جلسه گره خورده)، ولی
+ * این‌جا هدف «نشان دادنِ همان چیزی است که روی سردر کلاس چاپ شده» تا استاد
+ * بداند چه ساعتی کلاس دارد. منبع، `schedules` است؛ همان منبعِ پوستر، پس
+ * هرگز با تابلو واگرا نمی‌شود.
+ *
+ * `termId` اگر داده شود، فقط ارائه‌های همان ترم می‌آیند؛ وگرنه ممکن است
+ * اسلات‌های ترم‌های قدیمی هم که هنوز پاک نشده‌اند دیده شوند.
+ */
+export async function listWeeklySessionsInRoom(
+  roomId: number,
+  termId?: number | null,
+): Promise<WeeklyRoomSlot[]> {
+  const rows = await db
+    .select({
+      scheduleId: schedules.id,
+      offeringId: schedules.offeringId,
+      dayOfWeek: schedules.dayOfWeek,
+      startTime: schedules.startTime,
+      endTime: schedules.endTime,
+      professorId: course_offerings.professorId,
+      courseTitle: courses.title,
+      courseCode: courses.code,
+      groupNumber: course_offerings.groupNumber,
+    })
+    .from(schedules)
+    .innerJoin(course_offerings, eq(course_offerings.id, schedules.offeringId))
+    .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+    .where(and(
+      eq(schedules.roomId, roomId),
+      eq(schedules.scheduleType, 'CLASS'),
+      eq(course_offerings.isActive, 1),
+      termId ? eq(course_offerings.termId, termId) : undefined,
+    ))
+    .orderBy(asc(schedules.dayOfWeek), asc(schedules.startTime))
+    .catch(() => []);
+
+  const profIds = [...new Set(rows.map(r => r.professorId).filter((v): v is number => typeof v === 'number'))];
+  const names = new Map<number, string>();
+  if (profIds.length) {
+    const ps = await db
+      .select({ id: staff.id, firstName: users.firstName, lastName: users.lastName })
+      .from(staff)
+      .innerJoin(users, eq(users.id, staff.userId))
+      .where(inArray(staff.id, profIds))
+      .catch(() => []);
+    for (const p of ps) names.set(p.id, `${p.firstName || ''} ${p.lastName || ''}`.trim());
+  }
+
+  return rows.map(r => ({
+    scheduleId: r.scheduleId,
+    offeringId: r.offeringId,
+    dayOfWeek: r.dayOfWeek ?? 0,
+    startTime: hm5(r.startTime),
+    endTime: hm5(r.endTime),
+    professorId: r.professorId,
+    professorName: (r.professorId != null && names.get(r.professorId)) || '—',
+    courseTitle: r.courseTitle,
+    courseCode: r.courseCode,
+    groupNumber: r.groupNumber,
+  }));
+}
+
 /** اتاق + نام دانشگاه — برای سرصفحهٔ صفحه */
-export async function getRoomContext(roomId: number) {
-  const [room] = await db
+export async function getRoomContext(roomId: number) {  const [room] = await db
     .select({
       id: classrooms.id,
       name: classrooms.name,

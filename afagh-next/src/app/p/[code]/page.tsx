@@ -10,13 +10,15 @@ import {
 } from '@/db/schema';
 import { getSessionUser, getStaffByUser } from '@/lib/auth';
 import { faDigits } from '@/lib/calendar';
+import { currentTermFor } from '@/lib/terms';
 import {
   checkinState,
   checkinWindowLabel,
+  iranDowFromJalali,
   parseRoomCode,
   tehranNow,
 } from '@/lib/room-checkin';
-import { listSessionsInRoom, listUpcomingSessionsInRoom } from '@/lib/room-session-lookup';
+import { listSessionsInRoom, listUpcomingSessionsInRoom, listWeeklySessionsInRoom } from '@/lib/room-session-lookup';
 import { recordRoomAttendance } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -261,6 +263,147 @@ export default async function RoomCheckinPage({
   const timeLabel = (start: string, end: string) =>
     `${faDigits(start)} تا ${faDigits(end)}`;
 
+  /* ── برنامهٔ هفتگیِ اتاق ──────────────────────────────────────────────
+     همان چیزی که روی پوسترِ سردر چاپ شده. چرا لازم است: تا امروز اگر استاد
+     «امروز» در این اتاق کلاس نداشت، صفحه فقط می‌گفت «کلاسی ثبت نشده» و او
+     نمی‌دانست کِی باید بیاید. حالا کل هفته را می‌بیند و ردیف‌های امروزِ خودش
+     دکمهٔ ثبت حضور دارند. منبع همان `schedules` است، پس با تابلو واگرا نمی‌شود. */
+  const term = await currentTermFor(room.universityId).catch(() => null);
+  const weekly = await listWeeklySessionsInRoom(roomId, term?.id ?? null);
+  const todayDow = iranDowFromJalali(now.jalali);
+
+  // استادِ مشترک در همهٔ روزها، نه فقط امروز
+  const weeklyOfferingIds = [...new Set(weekly.map(w => w.offeringId))];
+  const myShared = new Set<number>();
+  if (weeklyOfferingIds.length) {
+    const sharedAll = await db
+      .select({ offeringId: offering_professors.offeringId })
+      .from(offering_professors)
+      .where(and(
+        eq(offering_professors.staffId, me.id),
+        inArray(offering_professors.offeringId, weeklyOfferingIds),
+      ));
+    for (const s of sharedAll) myShared.add(s.offeringId);
+  }
+  const isMySlot = (w: { professorId: number | null; offeringId: number }) =>
+    w.professorId === me.id || myShared.has(w.offeringId);
+
+  // کلیدِ اتصالِ اسلاتِ هفتگی به جلسهٔ امروز: همان درس + همان ساعتِ شروع
+  const todayBySlot = new Map<string, (typeof withRecord)[number]>();
+  for (const m of withRecord) todayBySlot.set(`${m.offeringId}|${m.startTime}`, m);
+
+  const DAY_NAMES = ['شنبه', 'یک‌شنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
+  const byDay = new Map<number, typeof weekly>();
+  for (const w of weekly) {
+    const list = byDay.get(w.dayOfWeek) ?? [];
+    list.push(w);
+    byDay.set(w.dayOfWeek, list);
+  }
+  // ترتیبِ هفته از شنبه؛ روزِ امروز هم اگر خالی بود نشان داده می‌شود تا معلوم باشد.
+  const weekDays = [0, 1, 2, 3, 4, 5, 6].filter(d => byDay.has(d) || d === todayDow);
+
+  const weeklyCard = (
+    <Card>
+      <details open>
+        <summary className="cursor-pointer list-none flex items-center justify-between gap-2">
+          <span className="text-sm font-black text-slate-900">برنامهٔ هفتگی این اتاق</span>
+          <span className="text-[10px] font-bold text-slate-500">
+            {faDigits(weekly.length)} سانس در هفته
+          </span>
+        </summary>
+
+        {weekly.length === 0 ? (
+          <div className="mt-3">
+            <Notice kind="info" text="برای این اتاق در ترم جاری برنامه‌ای ثبت نشده است." />
+          </div>
+        ) : (
+          <div className="mt-3 space-y-4">
+            {weekDays.map(d => {
+              const slots = byDay.get(d) ?? [];
+              const isToday = d === todayDow;
+              return (
+                <div key={d}>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className={`text-[11px] font-black ${isToday ? 'text-indigo-800' : 'text-slate-700'}`}>
+                      {DAY_NAMES[d]}
+                    </span>
+                    {isToday ? (
+                      <span className="text-[9px] font-black bg-indigo-100 text-indigo-800 rounded-full px-2 py-0.5">
+                        امروز
+                      </span>
+                    ) : null}
+                    <span className="flex-1 h-px bg-slate-100" />
+                  </div>
+
+                  {slots.length === 0 ? (
+                    <div className="text-[10px] font-bold text-slate-400 py-1">کلاسی نیست</div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {slots.map(s => {
+                        const mine = isMySlot(s);
+                        const rec = isToday ? todayBySlot.get(`${s.offeringId}|${s.startTime}`) : undefined;
+                        const state = isToday ? checkinState(s.startTime, s.endTime, now.minutes) : null;
+                        return (
+                          <div
+                            key={s.scheduleId}
+                            className={`rounded-2xl border px-3 py-2 flex items-center gap-2 ${
+                              isToday && mine
+                                ? 'border-indigo-300 bg-indigo-50/60'
+                                : mine
+                                  ? 'border-slate-200 bg-slate-50'
+                                  : 'border-slate-200 bg-white'
+                            }`}
+                          >
+                            <div className="text-[10px] font-bold text-slate-500 w-12 shrink-0 leading-4" dir="ltr">
+                              {faDigits(s.startTime)}
+                              <br />
+                              {faDigits(s.endTime)}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[11px] font-black text-slate-800 truncate">{s.courseTitle}</div>
+                              <div className="text-[10px] font-bold text-slate-500 truncate">
+                                {s.professorName} · گروه {faDigits(s.groupNumber)}
+                              </div>
+                            </div>
+
+                            {isToday && mine ? (
+                              rec?.recorded ? (
+                                <span className="text-[9px] font-black text-emerald-800 bg-emerald-100 border border-emerald-200 rounded-lg px-2 py-1 shrink-0">
+                                  ثبت شد
+                                </span>
+                              ) : state === 'OPEN' ? (
+                                <form action={recordRoomAttendance} className="shrink-0">
+                                  <input type="hidden" name="code" value={`room-${roomId}`} />
+                                  <input type="hidden" name="sessionId" value={rec?.id ?? ''} />
+                                  <button
+                                    type="submit"
+                                    className="text-[9px] font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg px-2.5 py-1.5 shadow-sm"
+                                  >
+                                    ثبت حضور
+                                  </button>
+                                </form>
+                              ) : (
+                                <span className="text-[9px] font-bold text-slate-400 shrink-0">
+                                  {state === 'BEFORE' ? 'هنوز باز نشده' : 'گذشته'}
+                                </span>
+                              )
+                            ) : mine ? (
+                              <span className="text-[9px] font-bold text-slate-400 shrink-0">در روز جلسه</span>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </details>
+    </Card>
+  );
+
   return (
     <Shell>
       <Card>
@@ -341,6 +484,8 @@ export default async function RoomCheckinPage({
           {faDigits(now.jalali)} · این صفحه فقط برای ثبت حضور استاد است.
         </div>
       </Card>
+
+      {weeklyCard}
     </Shell>
   );
 }
