@@ -3,7 +3,7 @@
 import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { db, withUserRls } from '@/db';
 import {
-  academic_terms, classrooms, course_offerings, courses, departments, schedules, staff, users,
+  academic_terms, classrooms, course_offering_edu_experts, course_offerings, courses, departments, schedules, staff, users,
 } from '@/db/schema';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { requireRoleOrPermission } from '@/lib/permissions-enforcer';
@@ -17,6 +17,10 @@ export interface OfferingEditRow {
   code: string; title: string; groupNumber: number; units: number | null;
   professorName: string; capacity: number; enrolledCount: number;
   departmentId: number | null;
+  /** کارشناس آموزشِ اصلیِ این کلاس (اولین نفر — NULL = از نقش‌ها پایین می‌آید) */
+  eduExpertUserId: number | null;
+  /** همهٔ کارشناسانِ این کلاس — یک کلاس می‌تواند چند کارشناس داشته باشد */
+  eduExpertUserIds: number[];
   classRows: { id: number; day: number | null; start: string | null; end: string | null; roomId: number | null }[];
   exam: { id: number | null; date: string | null; start: string | null; end: string | null } | null;
 }
@@ -33,6 +37,7 @@ export async function listOfferingsForEditor(termId: number): Promise<OfferingEd
       groupNumber: course_offerings.groupNumber, units: courses.units,
       professorId: course_offerings.professorId, capacity: course_offerings.capacity,
       enrolledCount: course_offerings.enrolledCount, departmentId: courses.departmentId,
+      eduExpertUserId: course_offerings.eduExpertUserId,
     })
     .from(course_offerings)
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
@@ -57,6 +62,20 @@ export async function listOfferingsForEditor(termId: number): Promise<OfferingEd
       .from(staff).innerJoin(users, eq(users.id, staff.userId)).where(inArray(staff.id, profIds));
     for (const p of ps) profName.set(p.id, `${p.firstName || ''} ${p.lastName || ''}`.trim());
   }
+  /* کارشناسانِ سطح کلاس — چند‌به‌چند (جدولِ واسط، مهاجرت ۰۱۱۱) */
+  const expertRows = offIds.length
+    ? await db.select({ offeringId: course_offering_edu_experts.offeringId, userId: course_offering_edu_experts.userId })
+        .from(course_offering_edu_experts)
+        .where(inArray(course_offering_edu_experts.offeringId, offIds))
+        .orderBy(asc(course_offering_edu_experts.id))
+        .catch(() => [])
+    : [];
+  const expertsByOff = new Map<number, number[]>();
+  for (const e of expertRows) {
+    const list = expertsByOff.get(e.offeringId) ?? [];
+    if (!list.includes(e.userId)) list.push(e.userId);
+    expertsByOff.set(e.offeringId, list);
+  }
   return offs.map(o => {
     const rows = schedRows.filter(s => s.offeringId === o.offeringId);
     const classRows = rows.filter(r => r.scheduleType === 'CLASS').map(r => ({
@@ -64,11 +83,14 @@ export async function listOfferingsForEditor(termId: number): Promise<OfferingEd
       end: r.endTime ? String(r.endTime).slice(0, 5) : null, roomId: r.roomId,
     }));
     const ex = rows.find(r => r.scheduleType === 'EXAM');
+    const expertIds = expertsByOff.get(o.offeringId) ?? (o.eduExpertUserId ? [o.eduExpertUserId] : []);
     return {
       offeringId: o.offeringId, code: o.code, title: o.title, groupNumber: o.groupNumber,
       units: o.units == null ? null : Number(o.units),
       professorName: (o.professorId != null && profName.get(o.professorId)) || '—',
       capacity: o.capacity, enrolledCount: o.enrolledCount ?? 0, departmentId: o.departmentId ?? null,
+      eduExpertUserId: expertIds[0] ?? null,
+      eduExpertUserIds: expertIds,
       classRows,
       exam: ex ? { id: ex.id, date: ex.examDate ?? null, start: ex.startTime ? String(ex.startTime).slice(0, 5) : null, end: ex.endTime ? String(ex.endTime).slice(0, 5) : null } : null,
     };
@@ -207,4 +229,41 @@ async function scopeOffConds(eff: Awaited<ReturnType<typeof currentExpertFilters
     return ids.length ? [inArray(courses.departmentId, ids)] : [eq(courses.id, -1)];
   }
   return [];
+}
+/** فهرست کارشناسان آموزش برای dropdown در «تعریف کلاس». */
+export async function listEduExpertsForEditor(): Promise<{ userId: number; name: string }[]> {
+  await requireRoleOrPermission(EDU, EDU_PERM);
+  const { listEduExpertCandidates } = await import('@/lib/edu-expert');
+  return listEduExpertCandidates();
+}
+
+/** تخصیص/آزادکردن کارشناس آموزش برای یک کلاس — از داخل «تعریف کلاس».
+ *  ⚠ جایگزینِ کامل است؛ برای افزودنِ نفرِ دوم از `addEduExpertToOfferingAction`. */
+export async function assignEduExpertForOfferingAction(
+  offeringId: number,
+  userId: number | null,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireRoleOrPermission(EDU, EDU_PERM);
+  const { setOfferingEduExpertAction } = await import('@/app/admin/edu-expert-assign/actions');
+  return setOfferingEduExpertAction(offeringId, userId);
+}
+
+/** افزودنِ یک کارشناس دیگر به همین کلاس (کارشناسانِ فعلی می‌مانند). */
+export async function addEduExpertToOfferingAction(
+  offeringId: number,
+  userId: number,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireRoleOrPermission(EDU, EDU_PERM);
+  const { addOfferingEduExpertAction } = await import('@/app/admin/edu-expert-assign/actions');
+  return addOfferingEduExpertAction(offeringId, userId);
+}
+
+/** حذفِ یک کارشناس از این کلاس (بقیه می‌مانند). */
+export async function removeEduExpertFromOfferingAction(
+  offeringId: number,
+  userId: number,
+): Promise<{ ok: boolean; userIds?: number[]; error?: string }> {
+  await requireRoleOrPermission(EDU, EDU_PERM);
+  const { removeOfferingEduExpertAction } = await import('@/app/admin/edu-expert-assign/actions');
+  return removeOfferingEduExpertAction(offeringId, userId);
 }

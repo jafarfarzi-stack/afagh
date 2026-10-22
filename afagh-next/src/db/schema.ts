@@ -795,12 +795,35 @@ export const course_offerings = pgTable('course_offerings', {
   isSharedService: integer('isSharedService').default(0),                            // 1 = استخر خدمات عمومی (فاز تأمین)
   equivalenceClusterId: integer('equivalenceClusterId').references(() => equivalence_clusters.id), // استخر ظرفیت مشترک
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  /** کارشناس آموزشِ «اصلیِ» همین کلاس — اولین نفرِ فهرستِ چندکارشناسه.
+   *  NULL = تخصیص در سطح کلاس نشده؛ آن‌وقت از expert_scopes (نقش‌ها) پایین‌می‌آید.
+   *  فهرستِ کامل در جدولِ واسطِ `course_offering_edu_experts` است (مهاجرت 0111)؛
+   *  این ستون فقط برای مصرف‌کننده‌های تک‌مقداری و گزارش‌های قدیمی نگه داشته شده. */
+  eduExpertUserId: integer('eduExpertUserId').references((): AnyPgColumn => users.id),
 }, (t) => ({
   // H1: حداکثر یک ارائهٔ «فعال» برای هر (ترم+درس+گروه) — ارائهٔ غیرفعال‌شده
   // تاریخچه است و مانع ساخت ارائهٔ جدید نمی‌شود (مهاجرت 0103).
   uqTermCourseGroup: uniqueIndex('uq_course_offerings_term_course_group')
     .on(t.termId, t.courseId, t.groupNumber)
     .where(sql`"isActive" = 1`),
+}));
+
+/** ────────────────────────────────────────────────────────────────────────
+ *  کارشناسان آموزشِ یک ارائه — رابطهٔ چند‌به‌چند (مهاجرت 0111).
+ *
+ *  چرا جدولِ واسط و نه ستونِ آرایه: یک کلاس می‌تواند بین دو یا چند کارشناس
+ *  مشترک باشد (درسِ مشترکِ دو گروه، تقسیمِ کارِ کارشناسِ آموزش و دانشکده).
+ *  با جدولِ واسط، «کلاس‌های یک کارشناس» یک ایندکس ساده است و حذفِ کاربر
+ *  خودکار (ON DELETE CASCADE) پاک می‌شود.
+ *  ──────────────────────────────────────────────────────────────────────── */
+export const course_offering_edu_experts = pgTable('course_offering_edu_experts', {
+  id: serial('id').primaryKey(),
+  offeringId: integer('offeringId').notNull().references(() => course_offerings.id, { onDelete: 'cascade' }),
+  userId: integer('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+}, (t) => ({
+  uqOfferingUser: uniqueIndex('uq_co_edu_experts_offering_user').on(t.offeringId, t.userId),
+  idxUser: index('idx_co_edu_experts_user').on(t.userId),
 }));
 
 /** ────────────────────────────────────────────────────────────────────────

@@ -365,6 +365,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/edu-expert-assign',
+    icon: '👤',
+    title: 'تخصیص کارشناس به کلاس‌ها',
+    desc: 'کارشناس آموزشِ مسئولِ هر کلاس — تک‌تک یا گروهی برای یک ترم',
+    group: 'settings',
+    roles: ['ADMIN', 'EDU_EXPERT'],
+    accent: 'from-indigo-900 to-violet-950 border-indigo-600/50',
+    iconBg: 'bg-indigo-800/80 border-indigo-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/code-hub',
     icon: '🧩',
     title: 'کدها و وضعیت نمره',
@@ -555,7 +567,7 @@ export const ADMIN_MODULES: AdminModule[] = [
   {
     href: '/admin/bi',
     icon: '📊',
-    title: 'هوش تجاری ارزشیابی (BI)',
+    title: 'ارزشیابی اساتید و کارکنان',
     desc: 'داشبوردها و تحلیل ارزشیابی',
     group: 'reports',
     roles: ['ADMIN'],

@@ -4,13 +4,15 @@ import {
   academic_terms, classrooms, course_offerings, courses, departments, enrollments, faculties,
   majors, offering_professors, schedules, staff, students, users,
 } from '@/db/schema';
+import { cookies } from 'next/headers';
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { currentExpertFilters } from '@/lib/expert-scope';
 import { getSetting, getBool } from '@/lib/settings';
 import { groupIntoMerged, mergedGroupKey, professorCalendarEntryKey, type ProfessorCalendarWeekType } from '@/lib/professor-calendar-layout';
 import ProfessorCalendarGrid, { type ProfessorCalendarEntry } from '@/app/professor/professor-calendar-grid';
-import DoorSignPrint from './door-sign-print';
+import DoorSignPrint, { type DoorSignDetail } from './door-sign-print';
+import DoorSignDetailSelect, { DOOR_DETAIL_COOKIE } from './DoorSignDetailSelect';
 import PrintButton from './PrintButton';
 import pkg from '../../../../package.json';
 const APP_VERSION = (pkg as { version?: string }).version ?? '1.0.0';
@@ -18,6 +20,35 @@ const APP_VERSION = (pkg as { version?: string }).version ?? '1.0.0';
 export const dynamic = 'force-dynamic';
 
 const faDigits = (s: string | number) => String(s).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+
+/** گزینه‌های ساعتِ محور زمان پوستر سردر */
+const FROM_HOURS = Array.from({ length: 21 }, (_, i) => i); // ۰..۲۰
+const TO_HOURS = Array.from({ length: 24 }, (_, i) => i + 1); // ۱..۲۴
+
+/** ساعتِ معتبر برای محور زمان: عددِ صحیحِ ۰..۲۴ (وگرنه null) */
+function parseHourParam(v: unknown): number | null {
+  const n = Number(String(v ?? '').trim());
+  return Number.isInteger(n) && n >= 0 && n <= 24 ? n : null;
+}
+
+/**
+ * بازهٔ محور زمانِ پوستر سردر.
+ * پیش‌فرض از تنظیمات دانشگاه (WEEKLY_BOARD_HOUR_FROM/TO) می‌آید و پارامترهای
+ * ?from=&to= اورراید‌اش می‌کنند — چون بعضی دانشگاه‌ها کلاس‌ها را ۸→۱۸ (یا
+ * ۷→۱۶) دارند و نیمهٔ شبِ پوستر فقط فضای خالی است. بازهٔ نامعتبر (کمتر از یک
+ * ساعت یا بیشتر از ۱۸ ساعت) → پیش‌فرضِ خودِ تنظیمات.
+ */
+function resolveHourAxis(
+  fromRaw: unknown, toRaw: unknown,
+  defFromRaw: unknown, defToRaw: unknown,
+): { from: number; to: number } {
+  const f0 = parseHourParam(defFromRaw) ?? 8;
+  const t0 = parseHourParam(defToRaw) ?? 20;
+  const f = parseHourParam(fromRaw) ?? f0;
+  const t = parseHourParam(toRaw) ?? t0;
+  if (t - f < 1 || t - f > 18) return { from: f0, to: t0 };
+  return { from: f, to: t };
+}
 
 /** پیشوند هوشمند: اگر مقدار خودش با همان عنوان شروع شود، تکرار نمی‌شود
  * («دانشگاه دانشگاه آفاق» و «نیمسال نیمسال اول» پیش می‌آید چون عنوان رکوردها پیشوند دارد) */
@@ -297,7 +328,7 @@ function buildBoardCalendarEntries(
 }
 
 export default async function WeeklyBoardPage({ searchParams }: {
-  searchParams: Promise<{ term?: string; faculty?: string; dept?: string; room?: string; tab?: string; q?: string; code?: string; title?: string; gender?: string; count?: string; mono?: string; print?: string }>;
+  searchParams: Promise<{ term?: string; faculty?: string; dept?: string; room?: string; tab?: string; q?: string; code?: string; title?: string; gender?: string; count?: string; mono?: string; print?: string; model?: string; from?: string; to?: string; d?: string }>;
 }) {
   const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
   const uni = await getCurrentUniversity().catch(() => null);
@@ -309,6 +340,19 @@ export default async function WeeklyBoardPage({ searchParams }: {
   // تعداد دانشجو در چاپ: انتخابی کاربر (پیش‌فرض خاموش تا چاپ شلوغ نشود)؛ با ?count=1 روشن می‌شود.
   const printCount = sp.count === '1';
   const mono = sp.mono === '1';
+  const model = sp.model === 'B' ? 'B' : 'A';
+  /* حالتِ جزئیاتِ کارتِ سردر — سه حالتِ صریح (درخواست کاربر):
+       ۱) فقط نام درس (+ زوج/فرد)      → ?d=1
+       ۲) نام درس + استاد              → ?d=2
+       ۳) نام درس + استاد + ساعت        → پیش‌فرض (همان رفتارِ قبلی)
+     «زوج/فرد» در هر سه حالت چاپ می‌شود و به این انتخاب ربطی ندارد.
+
+     ⚠️ چرا کوکی هم خوانده می‌شود: انتخاب در URL می‌ماند، ولی مسیرهای چاپی
+     (`?print=door`، تبِ دیگر، پنجرهٔ چاپِ تازه، آدرسِ ذخیره‌شده) پارامتر `d`
+     را با خود نمی‌برند و به پیش‌فرض برمی‌گشتند — یعنی «حالت در چاپ اعمال
+     نمی‌شد». حالا اگر `d` در آدرس نبود، آخرین انتخابِ کاربر از کوکی می‌آید. */
+  const dRaw = sp.d ?? (await cookies()).get(DOOR_DETAIL_COOKIE)?.value ?? '';
+  const detail: DoorSignDetail = dRaw === '1' ? 'title' : dRaw === '2' ? 'prof' : 'full';
   // فقط کلاس‌های «فعال» در انتخاب‌گر می‌آیند. فعال/غیرفعال‌کردن کلاس ربطی به سردر
   // کلاسی ندارد و جای آن صفحهٔ تنظیمات است (بخش «داده‌های پایه»).
   const termId = Number(sp.term) || 0;
@@ -317,12 +361,16 @@ export default async function WeeklyBoardPage({ searchParams }: {
   const roomId = Number(sp.room) || 0;
 
   // کلیدهای نمایش نام استاد (تنظیمات مدیر) — مبنای حالت «تنظیم سامانه»
-  const [cfgShowTitle, showFirst, cfgShortHonor, cfgShowGender] = await Promise.all([
+  const [cfgShowTitle, showFirst, cfgShortHonor, cfgShowGender, cfgHourFrom, cfgHourTo] = await Promise.all([
     getBool('WEEKLY_BOARD_PROF_TITLE').catch(() => true),
     getBool('WEEKLY_BOARD_SHOW_FIRSTNAME').catch(() => true),
     getBool('WEEKLY_BOARD_SHORT_HONORIFIC').catch(() => false),
     getBool('WEEKLY_BOARD_GENDER_HONORIFIC').catch(() => false),
+    getSetting('WEEKLY_BOARD_HOUR_FROM').catch(() => ''),
+    getSetting('WEEKLY_BOARD_HOUR_TO').catch(() => ''),
   ]);
+  // بازهٔ ساعتِ پوستر سردر: پیش‌فرضِ دانشگاه از تنظیمات، اورراید با ?from=&to=
+  const hourAxis = resolveHourAxis(sp.from, sp.to, cfgHourFrom, cfgHourTo);
 
   // ── عنوان استاد: کاملاً اختیاری ──
   //   system      → پیرو تنظیمات «پیکربندی سامانه»
@@ -630,6 +678,10 @@ export default async function WeeklyBoardPage({ searchParams }: {
         appVersion={APP_VERSION}
         universityName={uni?.title ?? null}
         mono={mono}
+        model={model}
+        startHour={hourAxis.from}
+        endHour={hourAxis.to}
+        detail={detail}
       />
     );
   }
@@ -641,7 +693,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
         {([['board', '🗓 تابلوی کلاس‌ها'], ['prof', '👨‍🏫 برنامهٔ استاد'], ['student', '🎓 برنامهٔ دانشجو']] as const).map(([v, t]) => (
           <a
             key={v}
-            href={`/admin/weekly-board?term=${term?.id ?? ''}&tab=${v}${showCode ? '&code=1' : ''}${titleParam ? `&title=${titleParam}` : ''}${genderParam ? `&gender=${genderParam}` : ''}${printCount ? '&count=1' : ''}`}
+            href={`/admin/weekly-board?term=${term?.id ?? ''}&tab=${v}${showCode ? '&code=1' : ''}${titleParam ? `&title=${titleParam}` : ''}${genderParam ? `&gender=${genderParam}` : ''}${printCount ? '&count=1' : ''}${model === 'B' ? '&model=B' : ''}${detail === 'title' ? '&d=1' : detail === 'prof' ? '&d=2' : ''}&from=${hourAxis.from}&to=${hourAxis.to}`}
             className={`rounded-xl px-4 py-2 text-sm font-black ${tab === v ? 'bg-teal-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
           >
             {t}
@@ -710,6 +762,23 @@ export default async function WeeklyBoardPage({ searchParams }: {
             <option value="1">سیاه‌سفید (عملی = خط‌چین)</option>
           </select>
         </label>
+        <label className="text-xs font-bold">چیدمان سردر
+          <select name="model" defaultValue={model} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+            <option value="A">مدل الف — روزها ستون (پیش‌فرض)</option>
+            <option value="B">مدل ب — روزها سطر (زمان ستون)</option>
+          </select>
+        </label>
+        <DoorSignDetailSelect value={detail === 'title' ? '1' : detail === 'prof' ? '2' : ''} />
+        <label className="text-xs font-bold">محور زمان از
+          <select name="from" defaultValue={String(hourAxis.from)} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+            {FROM_HOURS.map(h => <option key={h} value={h}>{faDigits(h)}:۰۰</option>)}
+          </select>
+        </label>
+        <label className="text-xs font-bold">تا
+          <select name="to" defaultValue={String(hourAxis.to)} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+            {TO_HOURS.map(h => <option key={h} value={h}>{h === 24 ? '۲۴:۰۰' : `${faDigits(h)}:۰۰`}</option>)}
+          </select>
+        </label>
         <button className="rounded-xl bg-indigo-700 px-5 py-2 text-white font-black text-sm">نمایش</button>
         <PrintButton />
       </form>
@@ -728,6 +797,10 @@ export default async function WeeklyBoardPage({ searchParams }: {
           appVersion={APP_VERSION}
           universityName={uni?.title ?? null}
           mono={mono}
+          model={model}
+          startHour={hourAxis.from}
+          endHour={hourAxis.to}
+          detail={detail}
         />
       ) : term && (
         <div className="print-area prof-week-print rounded-2xl border border-slate-300 bg-white p-4 space-y-3" dir="rtl">
