@@ -43,11 +43,54 @@ const WEEK_FA: Record<ProfessorCalendarWeekType, string> = {
   ODD: 'فرد',
   EVEN: 'زوج',
   BOTH: 'زوج و فرد',
+  // «ALL» یعنی هر هفته (scheduleType=CLASS) — برچسب نمی‌گیرد (درخواستِ کاربر)
   ALL: '',
 };
 
-/** بازهٔ پیش‌فرضِ محور زمانِ پوستر (۷→۲۰). بعضی دانشگاه‌ها کلاس‌ها را مثلاً ۸→۱۸ دارند. */
-const DEFAULT_AXIS_FROM = 7;
+/** پهنای تقریبی متن بر حسب em (حروف فارسی عریض‌تر از لاتین) */
+const emOfText = (s: string) => {
+  const wide = (s.match(/[\u0600-\u06FF\uFB8A-\uFEFC]/g) ?? []).length;
+  return wide * 0.54 + (s.length - wide) * 0.32;
+};
+
+/* ── سه حالتِ جزئیاتِ کارت (درخواست کاربر) ───────────────────────────────
+   پیش از این، نمایشِ استاد و ساعت با container query بر پایهٔ «فضای تصادفیِ»
+   هر کارت تصمیم گرفته می‌شد؛ نتیجه این بود که در یک پوستر بعضی کارت‌ها استاد
+   داشتند و بعضی نه، و کاربر نمی‌توانست بگوید «این پوستر فقط نام درس باشد».
+   حالا حالت صریح است و انتخابش با کاربر:
+
+     ۱) title → فقط نام درس (+ برچسب زوج/فرد)
+     ۲) prof  → نام درس + نام استاد
+     ۳) full  → نام درس + استاد + ساعت (رفتار پیش‌فرضِ قبلی)
+
+   سهمِ ارتفاعِ عنوان (titleShare) همان چیزی است که «فونتِ هر حالت» را تعیین
+   می‌کند: در حالت ۱ کلِ ارتفاعِ کارت به تیتر می‌رسد، در حالت ۳ فقط کمی بیش از
+   نیمِ آن. بقیهٔ ارتفاع بین استاد و ساعت تقسیم می‌شود. */
+export type DoorSignDetail = 'title' | 'prof' | 'full';
+
+const DETAIL: Record<DoorSignDetail, {
+  /** سهمِ ارتفاعِ کارت که به تیتر می‌رسد (۰..۱) */
+  titleShare: number;
+  /** سقفِ فونتِ تیتر (pt) — در حالتِ عنوان‌تنها پوستر «بلند» می‌شود */
+  maxPt: number;
+  label: string;
+}> = {
+  title: { titleShare: 1.0, maxPt: 20, label: 'فقط نام درس' },
+  prof: { titleShare: 0.72, maxPt: 15, label: 'نام درس + استاد' },
+  full: { titleShare: 0.56, maxPt: 13, label: 'نام درس + استاد + ساعت' },
+};
+
+/** پهنای برچسبِ هفته بر حسب em از فونتِ تیتر — تا در محاسبهٔ fit تیتر حساب شود
+ *  (وگرنه برچسب به سطرِ بعد می‌رود و با line-clamp بریده می‌شود). */
+const badgeEmOf = (wt: ProfessorCalendarWeekType) => {
+  const l = WEEK_FA[wt];
+  if (!l) return 0;
+  const scale = l.length > 4 ? 0.46 : 0.56; // برچسبِ بلند («زوج و فرد») ریزتر
+  return scale * emOfText(l) + 0.6;         // + پدینگِ برچسب و فاصلهٔ ۱mm
+};
+
+/** بازهٔ پیش‌فرضِ محور زمانِ پوستر (۸→۲۰). بعضی دانشگاه‌ها کلاس‌ها را مثلاً ۸→۱۸ دارند. */
+const DEFAULT_AXIS_FROM = 8;
 const DEFAULT_AXIS_TO = 20;
 /** بیش از این مقدار ستونِ ساعت آن‌قدر باریک می‌شود که برچسبِ ساعت‌ها خوانا نماند. */
 const MAX_AXIS_SPAN = 18;
@@ -62,11 +105,11 @@ function normalizeAxisHours(from?: number, to?: number): { from: number; to: num
   return { from: a, to: b };
 }
 
-/** نشانگر هفته (فرد/زوج/زوج و فرد) — بعد از عنوان درس */
+/** نشانگر هفته (فرد/زوج/زوج و فرد) — همیشه، در هر سه حالتِ جزئیات، بعد از عنوان */
 function WeekBadge({ weekType }: { weekType: ProfessorCalendarWeekType }) {
   const w = WEEK_FA[weekType];
   if (!w) return null;
-  return <span className="ds-wk">{w}</span>;
+  return <span className={`ds-wk${w.length > 4 ? ' ds-wk-lg' : ''}`}>{w}</span>;
 }
 
 
@@ -89,6 +132,11 @@ export interface DoorSignPrintProps {
   startHour?: number;
   /** ساعتِ پایانِ محور زمان (پیش‌فرض ۲۰) */
   endHour?: number;
+  /**
+   * حالتِ جزئیاتِ کارت — انتخابِ کاربر، نه نتیجهٔ خودکارِ فضا:
+   *   'title' فقط نام درس | 'prof' درس+استاد | 'full' درس+استاد+ساعت
+   */
+  detail?: DoorSignDetail;
 }
 
 export default async function DoorSignPrint({
@@ -105,6 +153,7 @@ export default async function DoorSignPrint({
   model = 'A',
   startHour = DEFAULT_AXIS_FROM,
   endHour = DEFAULT_AXIS_TO,
+  detail = 'full',
 }: DoorSignPrintProps) {
   // بازهٔ محور زمان (قابل تنظیم توسط دانشگاه) — محورِ دقیقه‌ای برای چیدمان کارت‌ها
   const axis = normalizeAxisHours(startHour, endHour);
@@ -258,6 +307,8 @@ export default async function DoorSignPrint({
     overflow:hidden; text-align:center; word-break:break-word; overflow-wrap:anywhere; }
   .ds-wk { display:inline-block; margin-inline-start:1mm; border:0.6pt solid #b45309; border-radius:0.7mm; padding:0 0.5mm;
     font-size:0.56em; font-weight:700; color:#b45309; vertical-align:0.14em; white-space:nowrap; }
+  /* برچسبِ بلند («زوج و فرد») ریزتر است تا نصفِ عرضِ کارت را نگیرد */
+  .ds-wk-lg { font-size:0.46em; padding:0 0.4mm; margin-inline-start:0.7mm; }
   /* نام استاد: یک پله پایین‌تر از عنوان. نام در دو سطر می‌شکند (نه nowrap)
      چون با ellipsis به «دکتر سعید پورمح…» تبدیل می‌شد و بی‌فایده بود. */
   .ds-p { font-family:'Shabnam', 'Vazirmatn', Tahoma, sans-serif; font-weight:400; line-height:1.14;
@@ -287,6 +338,17 @@ export default async function DoorSignPrint({
   @container dsa (max-height:13mm) { .ds-grid .ds-p { display:none; } }
   @container dsa (max-width:22mm)  { .ds-grid .ds-p { display:none; } }
   @container dsa (max-width:22mm)  { .ds-grid .ds-h { display:none; } }
+
+  /* ── حالتِ صریحِ جزئیات (انتخابِ کاربر) ──────────────────────────────────
+     قواعدِ بالا می‌گویند «اگر جا بود»؛ این قواعد می‌گویند «اگر خواسته شد».
+     عمداً !important دارند چون تصمیمِ کاربر باید بر تصمیمِ خودکارِ فضا مقدم
+     باشد — ولی فقط برای حذف (نمایشِ اجباری نداریم؛ اگر کارت واقعاً کوچک بود
+     چیزی که جا نمی‌شود نمایش داده نمی‌شود). */
+  .ds-m1 .ds-p, .ds-m1 .ds-h { display:none !important; }
+  .ds-m2 .ds-h { display:none !important; }
+  /* در حالتِ دو‌سطری، استاد سهمِ بیشتری از ارتفاع دارد → کمی درشت‌تر.
+     سه کلاس نوشته شده تا بر قاعدهٔ مخصوصِ مدل ب (.ds-day-b .ds-p) هم مقدم باشد. */
+  .ds-m2 .ds-card .ds-p { font-size:clamp(6.5pt, min(19cqh,9cqi), 11pt); }
 
   .ds-ft { display:flex; align-items:center; justify-content:space-between; gap:4mm; font-size:7pt; color:#334155; padding-top:1.2mm; }
   .ds-ft .k { display:inline-flex; align-items:center; gap:1mm; margin-inline-end:3mm; }
@@ -454,36 +516,66 @@ export default async function DoorSignPrint({
   const SHEET_MM = 297;
   const SHEET_PAD_MM = 6 + 6;          // padding افقی برگه
   const LABEL_COL_MM = 24;             // ستون برچسب روز در مدل ب
-  const AXIS_MM = (SHEET_MM - SHEET_PAD_MM - LABEL_COL_MM) / TOTAL_FR; // ≈۱۸.۶mm per fr
-  const CARD_PAD_MM = 0.35 * 2 + 0.9 * 2; // پدینگ slot + کارت
-  const FONT_LADDER = [13, 12, 11, 10, 9.5, 9, 8.5, 8, 7.5, 7, 6.5, 6, 5.5, 5.2];
+  const AXIS_MM = (SHEET_MM - SHEET_PAD_MM - LABEL_COL_MM) / TOTAL_FR; // ≈۲۰mm per fr
+  const CARD_PAD_MM = 0.35 * 2 + 0.9 * 2; // پدینگ افقی slot + کارت
   const PT_PER_MM = 72 / 25.4;
+  const LINE_H = 1.16;                 // line-height مؤثر .ds-t + حاشیهٔ اطمینان
 
-  /** بزرگ‌ترین فونتی (pt) که `title` در `cardMm` میلی‌متر و `maxLines` سطر جا شود. */
-  function fitTitlePt(title: string, cardMm: number, maxLines: number): number {
-    const innerMm = Math.max(cardMm - CARD_PAD_MM, 3);
-    const innerPt = innerMm * PT_PER_MM;
-    // پهنای تخمینی متن: حروف فارسی عریض‌تر از latin اند
-    const wide = (title.match(/[\u0600-\u06FF\uFB8A-\uFEFC]/g) ?? []).length;
-    const narrow = title.length - wide;
-    const emWidth = wide * 0.54 + narrow * 0.32;
-    // نردبان را از بزرگ به کوچک می‌گردیم و اولین فونتی که در maxLines جا شود
-    for (const pt of FONT_LADDER) {
-      const totalPt = emWidth * pt;
-      if (totalPt <= innerPt * maxLines) return pt;
+  /* ── ارتفاعِ واقعیِ کارت ─────────────────────────────────────────────────
+     تا امروز فقط «عرض» در محاسبهٔ فونت دخیل بود؛ به همین دلیل در حالتِ
+     عنوان‌تنها فونت بزرگ نمی‌شد — هنوز فکر می‌کرد استاد و ساعت هم باید جا
+     شوند. حالا ارتفاعِ کارت هم از هندسهٔ برگه حساب می‌شود:
+       برگه ۲۱۰mm − پدینگِ عمودی ۹ − سربرگ ۳۰ − دو خط ۲.۸ − پانویس ۸ ≈ ۱۶۰mm
+     مدل الف: ۱۶۰ − سرستونِ ۸.۵ ≈ ۱۵۱.۵mm برای کلِ محور زمان.
+     مدل ب  : ۱۶۰ − سرستونِ ۹ ≈ ۱۵۱mm ÷ ۷ سطرِ روز ≈ ۲۱.۶mm هر روز. */
+  const GRID_MM = 210 - (5 + 4) - 30 - 2.8 - 8;   // ≈۱۶۰
+  const BODY_MM_A = GRID_MM - 8.5;                // ارتفاعِ محور در مدل الف
+  const ROW_MM_B = (GRID_MM - 9) / 7;             // ارتفاعِ سطرِ روز در مدل ب
+  const CARD_PAD_V_MM = 0.4 * 2 + 0.5 * 2;        // پدینگ عمودی slot + کارت
+
+  /**
+   * بزرگ‌ترین فونتِ تیتر (pt) که هم در عرض و هم در ارتفاعِ مجازِ همان حالت
+   * جا شود. فرمولِ قبلی فقط عرض را می‌دید و ارتفاع را به clampِ CSS می‌سپرد؛
+   * نتیجه این بود که «حالت» نمی‌توانست فونت را عوض کند. اینجا هر سه قید با
+   * هم بررسی می‌شوند:
+   *   ۱) تعداد سطرها از عرضِ کارت بیرون نزند،
+   *   ۲) مجموعِ ارتفاعِ سطرها از سهمِ تیتر در همان حالت بیرون نزند،
+   *   ۳) بلندترین «کلمه» در یک سطر جا شود — وگرنه مرورگر کلمه را وسطِ حرف
+   *      می‌شکند (همان «مدیریت تولید» عمودی که کاربر شکایت کرد).
+   */
+  function fitTitlePt(
+    title: string, cardWmm: number, cardHmm: number, maxLines: number,
+    mode: DoorSignDetail, badgeEm: number,
+  ): number {
+    const innerW = Math.max(cardWmm - CARD_PAD_MM, 3) * PT_PER_MM;
+    const budgetH = Math.max(cardHmm - CARD_PAD_V_MM, 3) * PT_PER_MM * DETAIL[mode].titleShare;
+    const words = title.split(/\s+/).filter(Boolean);
+    const widestWord = words.length ? Math.max(...words.map(emOfText)) : 1;
+    // برچسبِ هفته inline داخلِ تیتر است، پس عرضش را هم حساب می‌کنیم
+    // ۱.۰۶ = حاشیهٔ اطمینان برای شکستنِ سطر روی مرزِ کلمه
+    const emWidth = Math.max(emOfText(title) + badgeEm, 0.6) * 1.06;
+    // نردبانِ ریزِ ۰.۲۵pt از سقفِ حالت به پایین؛ اولین اندازه‌ای که جا شود برنده است
+    for (let pt = DETAIL[mode].maxPt; pt >= 5; pt -= 0.25) {
+      if (widestWord * pt > innerW) continue;              // کلمهٔ بلندتر از سطر
+      const lines = Math.ceil((emWidth * pt) / innerW);
+      if (lines > maxLines) continue;                      // سطرِ بیشتر از مجاز
+      if (lines * pt * LINE_H > budgetH) continue;         // بلندتر از سهمِ ارتفاع
+      return Math.round(pt * 10) / 10;
     }
-    return FONT_LADDER[FONT_LADDER.length - 1];
+    return 5;
   }
 
-  /** حداکثر سطرهای مجاز بر اساس پهنای کارت — کارتِ عریض‌تر = سطرِ کمتر. */
-  function maxTitleLines(cardMm: number): number {
-    if (cardMm >= 74) return 1;
-    if (cardMm >= 30) return 2;
-    return 3;
+  /** حداکثر سطرهای مجاز بر اساس پهنای کارت — کارتِ عریض‌تر = سطرِ کمتر.
+   *  در «فقط نام درس» یک سطر بیشتر مجاز است، چون ارتفاعِ استاد/ساعت آزاد شده. */
+  function maxTitleLines(cardMm: number, mode: DoorSignDetail): number {
+    const base = cardMm >= 74 ? 1 : cardMm >= 30 ? 2 : 3;
+    return mode === 'title' ? Math.min(base + 1, 4) : base;
   }
+
+  const modeClass = detail === 'title' ? 'ds-m1' : detail === 'prof' ? 'ds-m2' : 'ds-m3';
 
   return (
-    <div className={`ds-sheet${mono ? ' ds-mono' : ''}`} dir="rtl">
+    <div className={`ds-sheet${mono ? ' ds-mono' : ''} ${modeClass}`} dir="rtl">
       <style>{css}</style>
 
       {/* ── سربرگ ──
@@ -560,7 +652,8 @@ export default async function DoorSignPrint({
                   const e = p.entry as ProfessorCalendarEntry;
                   // پهنای واقعی کارت بر حسب میلی‌متر — برای shrink-to-fit عنوان
                   const cardMm = (p.heightPercent / 100) * AXIS * AXIS_MM;
-                  const lines = maxTitleLines(cardMm);
+                  const cardHmm = (p.widthPercent / 100) * ROW_MM_B;
+                  const lines = maxTitleLines(cardMm, detail);
                   return (
                     <div
                       key={`${p.key}#${i}`}
@@ -575,7 +668,7 @@ export default async function DoorSignPrint({
                       }}
                     >
                       <div className={`ds-card${e.courseType === 'عملی' ? ' lab' : ''}`}>
-                        <div className="ds-t" style={{ fontSize: `${fitTitlePt(e.title, cardMm, lines)}pt` }}>
+                        <div className="ds-t" style={{ fontSize: `${fitTitlePt(e.title, cardMm, cardHmm, lines, detail, badgeEmOf(e.weekType))}pt`, WebkitLineClamp: lines }}>
                           {e.title}{e.merged ? ' 🔗' : ''}
                           <WeekBadge weekType={e.weekType} />
                         </div>
@@ -631,7 +724,8 @@ export default async function DoorSignPrint({
                 // ضربدر سهمِ این کارت از ستون (p.widthPercent) — برای shrink-to-fit
                 const dayColMm = (SHEET_MM - SHEET_PAD_MM - 13.5) / 7;
                 const cardMm = (p.widthPercent / 100) * dayColMm;
-                const lines = maxTitleLines(cardMm);
+                const cardHmm = (p.heightPercent / 100) * BODY_MM_A;
+                const lines = maxTitleLines(cardMm, detail);
                 return (
                   <div
                     key={`${p.key}#${i}`}
@@ -646,7 +740,7 @@ export default async function DoorSignPrint({
                     }}
                   >
                     <div className={`ds-card${e.courseType === 'عملی' ? ' lab' : ''}`}>
-                      <div className="ds-t" style={{ fontSize: `${fitTitlePt(e.title, cardMm, lines)}pt` }}>
+                      <div className="ds-t" style={{ fontSize: `${fitTitlePt(e.title, cardMm, cardHmm, lines, detail, badgeEmOf(e.weekType))}pt`, WebkitLineClamp: lines }}>
                         {e.title}{e.merged ? ' 🔗' : ''}
                         <WeekBadge weekType={e.weekType} />
                       </div>
@@ -673,7 +767,7 @@ export default async function DoorSignPrint({
           <span className="k"><span className="ds-sw lab" />عملی / آزمایشگاه</span>
           <span className="k"><span className="ds-chip">فرد</span><span className="ds-chip">زوج</span> هفتهٔ فرد یا زوج</span>
         </div>
-        <div>محور زمان {fa(axis.from)}:۰۰ تا {fa(axis.to)}:۰۰ · هر {model === 'B' ? 'ستون' : 'خط افقی'} = یک ساعت · خط‌چین = نیم‌ساعت · ساعت‌های خالی: کلاس ندارد</div>
+        <div>محور زمان {fa(axis.from)}:۰۰ تا {fa(axis.to)}:۰۰ · هر {model === 'B' ? 'ستون' : 'خط افقی'} = یک ساعت · خط‌چین = نیم‌ساعت · ساعت‌های خالی: کلاس ندارد · کارت: {DETAIL[detail].label}</div>
         <div>چاپ: <span dir="ltr">{fa(printDate)}</span></div>
       </div>
       <div className="ds-brand-b">سامانه جامع آفاق · نسخهٔ {fa(appVersion)}{model === 'B' ? ' · مدل ب (روزها در سطر)' : ''}</div>
