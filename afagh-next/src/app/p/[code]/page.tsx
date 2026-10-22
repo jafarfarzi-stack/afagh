@@ -1,11 +1,12 @@
 import React from 'react';
 import Link from 'next/link';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   classrooms,
   offering_professors,
   professor_class_attendance,
+  schedules,
   universities,
 } from '@/db/schema';
 import { getSessionUser, getStaffByUser } from '@/lib/auth';
@@ -272,6 +273,38 @@ export default async function RoomCheckinPage({
   const weekly = await listWeeklySessionsInRoom(roomId, term?.id ?? null);
   const todayDow = iranDowFromJalali(now.jalali);
 
+  /* اتاق‌های هم‌نام: در دادهٔ واقعی دو رکورد با نامِ «كلاس 4 عمومي» وجود دارد
+     (یکی ۱۶۱ سانس، دیگری صفر). اگر QRِ رکوردِ خالی روی درب چاپ شده باشد،
+     استاد بن‌بست می‌خورد و فکر می‌کند سامانه خراب است. پس هم‌نام‌های دارای
+     برنامه را پیشنهاد می‌دهیم. */
+  const twinRooms = weekly.length === 0
+    ? await (async () => {
+        const same = await db
+          .select({ id: classrooms.id })
+          .from(classrooms)
+          .where(and(eq(classrooms.name, room.name), ne(classrooms.id, room.id), eq(classrooms.isActive, 1)))
+          .catch(() => []);
+        if (!same.length) return [] as { id: number; slots: number }[];
+        const rows = await db
+          .select({ roomId: schedules.roomId })
+          .from(schedules)
+          .where(and(
+            inArray(schedules.roomId, same.map(s => s.id)),
+            eq(schedules.scheduleType, 'CLASS'),
+          ))
+          .catch(() => []);
+        const counts = new Map<number, number>();
+        for (const r of rows) {
+          if (r.roomId == null) continue;
+          counts.set(r.roomId, (counts.get(r.roomId) ?? 0) + 1);
+        }
+        return same
+          .map(s => ({ id: s.id, slots: counts.get(s.id) ?? 0 }))
+          .filter(s => s.slots > 0)
+          .sort((a, b) => b.slots - a.slots);
+      })()
+    : [];
+
   // استادِ مشترک در همهٔ روزها، نه فقط امروز
   const weeklyOfferingIds = [...new Set(weekly.map(w => w.offeringId))];
   const myShared = new Set<number>();
@@ -313,8 +346,27 @@ export default async function RoomCheckinPage({
         </summary>
 
         {weekly.length === 0 ? (
-          <div className="mt-3">
+          <div className="mt-3 space-y-2">
             <Notice kind="info" text="برای این اتاق در ترم جاری برنامه‌ای ثبت نشده است." />
+            {twinRooms.length > 0 ? (
+              <div className="space-y-1.5">
+                <div className="text-[10px] font-black text-slate-700">
+                  این نام برای چند اتاق ثبت شده؛ این اتاق‌های هم‌نام برنامه دارند:
+                </div>
+                {twinRooms.map(t => (
+                  <Link
+                    key={t.id}
+                    href={`/p/room-${t.id}`}
+                    className="flex items-center justify-between rounded-2xl border border-indigo-200 bg-indigo-50 px-3 py-2"
+                  >
+                    <span className="text-[11px] font-black text-indigo-900">
+                      اتاق {faDigits(room.name)} — رکورد #{faDigits(t.id)}
+                    </span>
+                    <span className="text-[10px] font-bold text-indigo-700">{faDigits(t.slots)} سانس ←</span>
+                  </Link>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="mt-3 space-y-4">
