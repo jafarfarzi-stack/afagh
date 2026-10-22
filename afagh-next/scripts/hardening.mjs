@@ -246,6 +246,8 @@ try {
     'thesis_supervisions','teaching_decrees','offering_payroll_extras',
     'staff_activity_entries','payroll_cash_extras','exam_payments','payroll_objections',
     'teaching_role_defs',
+    'classroom_edu_experts',
+    'course_offering_edu_experts',
   ];
   const checks = await client.query(
     `SELECT c.relname AS table_name, c.relrowsecurity AS rls_enabled

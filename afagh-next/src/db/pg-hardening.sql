@@ -712,6 +712,29 @@ CREATE POLICY expert_scopes_admin_read ON "expert_scopes" FOR SELECT TO afagh_ap
           WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
             AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'VICE_EDU')));
 
+-- classroom_edu_experts: کارشناس آموزش فقط ردیف‌های خودش (تخصیص به اتاق) را می‌خواند؛
+-- مدیر/کارشناس ارشد همه را (الگوی نقش‌محور، هم‌ردیف expert_scopes). نوشتن از اتصال مالک (BYPASSRLS) می‌گذرد.
+ALTER TABLE "classroom_edu_experts" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS classroom_edu_experts_self_read ON "classroom_edu_experts";
+CREATE POLICY classroom_edu_experts_self_read ON "classroom_edu_experts" FOR SELECT TO afagh_app
+  USING ("userId" = nullif(current_setting('app.user_id', true), '')::int);
+DROP POLICY IF EXISTS classroom_edu_experts_admin_read ON "classroom_edu_experts";
+CREATE POLICY classroom_edu_experts_admin_read ON "classroom_edu_experts" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'VICE_EDU')));
+
+-- course_offering_edu_experts: همین الگو (تخصیص کارشناس به ارائه).
+ALTER TABLE "course_offering_edu_experts" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS course_offering_edu_experts_self_read ON "course_offering_edu_experts";
+CREATE POLICY course_offering_edu_experts_self_read ON "course_offering_edu_experts" FOR SELECT TO afagh_app
+  USING ("userId" = nullif(current_setting('app.user_id', true), '')::int);
+DROP POLICY IF EXISTS course_offering_edu_experts_admin_read ON "course_offering_edu_experts";
+CREATE POLICY course_offering_edu_experts_admin_read ON "course_offering_edu_experts" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+          WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+            AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'VICE_EDU')));
+
 ALTER TABLE "grade_change_log" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS grade_change_log_self_read ON "grade_change_log";
 CREATE POLICY grade_change_log_self_read ON "grade_change_log" FOR SELECT TO afagh_app
