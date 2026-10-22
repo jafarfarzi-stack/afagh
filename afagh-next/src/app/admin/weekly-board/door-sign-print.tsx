@@ -71,13 +71,19 @@ export type DoorSignDetail = 'title' | 'prof' | 'full';
 const DETAIL: Record<DoorSignDetail, {
   /** سهمِ ارتفاعِ کارت که به تیتر می‌رسد (۰..۱) */
   titleShare: number;
-  /** سقفِ فونتِ تیتر (pt) — در حالتِ عنوان‌تنها پوستر «بلند» می‌شود */
+  /**
+   * اندازهٔ «استانداردِ» تیتر (pt) — سقفِ مطلق است، نه هدفِ رشد.
+   * درسِ کوتاه در کارتِ بزرگ هم از این عدد بزرگ‌تر نمی‌شود؛ فقط اگر جا
+   * نشد کوچک‌تر می‌شود. قبلاً این عدد ۲۰/۱۵/۱۳ بود و فونت با بزرگ‌شدنِ
+   * کارت بزرگ می‌شد، نتیجه این بود که روی یک پوستر چند اندازهٔ متفاوت
+   * دیده می‌شد («کارت بزرگ بود، فونت را هم بزرگ کرد»).
+   */
   maxPt: number;
   label: string;
 }> = {
-  title: { titleShare: 1.0, maxPt: 20, label: 'فقط نام درس' },
-  prof: { titleShare: 0.72, maxPt: 15, label: 'نام درس + استاد' },
-  full: { titleShare: 0.56, maxPt: 13, label: 'نام درس + استاد + ساعت' },
+  title: { titleShare: 1.0, maxPt: 15, label: 'فقط نام درس' },
+  prof: { titleShare: 0.72, maxPt: 13, label: 'نام درس + استاد' },
+  full: { titleShare: 0.56, maxPt: 11, label: 'نام درس + استاد + ساعت' },
 };
 
 /** پهنای برچسبِ هفته بر حسب em از فونتِ تیتر — تا در محاسبهٔ fit تیتر حساب شود
@@ -302,7 +308,7 @@ export default async function DoorSignPrint({
     /* shrink-to-fit: اندازه از ارتفاع و عرضِ خودِ کارت گرفته می‌شود و می‌تواند
        تا ۶.۵pt برسد. قبلاً max(11pt, …) یک کفِ سفت بود و کارتِ باریک/کوتاه
        را مجبور می‌کرد کلمه را وسطِ حرف بشکند (همان «مدیریت تولید» عمودی). */
-    font-size:clamp(6.5pt, min(32cqh,13cqi), 17pt);
+    font-size:clamp(6.5pt, min(32cqh,13cqi), 15pt);
     display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3;
     overflow:hidden; text-align:center; word-break:break-word; overflow-wrap:anywhere; }
   .ds-wk { display:inline-block; margin-inline-start:1mm; border:0.6pt solid #b45309; border-radius:0.7mm; padding:0 0.5mm;
@@ -313,12 +319,12 @@ export default async function DoorSignPrint({
      چون با ellipsis به «دکتر سعید پورمح…» تبدیل می‌شد و بی‌فایده بود. */
   .ds-p { font-family:'Shabnam', 'Vazirmatn', Tahoma, sans-serif; font-weight:400; line-height:1.14;
     color:#1f2937; max-width:100%; overflow:hidden; text-align:center;
-    font-size:clamp(6pt, min(16cqh,8.5cqi), 10.5pt); display:none;
+    font-size:clamp(5.5pt, min(14cqh,7.5cqi), 8pt); display:none;
     -webkit-box-orient:vertical; -webkit-line-clamp:2; word-break:break-word; }
   /* ساعتِ شروع/پایان: سومِ اولویت — کوچک‌ترین و کم‌رنگ‌ترین (بالای ستون‌ها و
      روی خط‌های ساعت هم پیداست). */
   .ds-h { font-weight:500; line-height:1.1; color:#475569;
-    font-size:clamp(6pt, min(13cqh,6.5cqi), 8.5pt); display:none; }
+    font-size:clamp(5pt, min(11cqh,5.5cqi), 7pt); display:none; }
 
   /* کدام سطرها دیده شوند — از روی فضای واقعیِ خودِ کارت.
      هندسهٔ فعلی: هر ساعت ≈ ۱۲mm، پس ۱ ساعت ≈ ۱۲mm · ۲ ساعت ≈ ۲۴mm · ۳ ساعت ≈ ۳۶mm.
@@ -348,7 +354,7 @@ export default async function DoorSignPrint({
   .ds-m2 .ds-h { display:none !important; }
   /* در حالتِ دو‌سطری، استاد سهمِ بیشتری از ارتفاع دارد → کمی درشت‌تر.
      سه کلاس نوشته شده تا بر قاعدهٔ مخصوصِ مدل ب (.ds-day-b .ds-p) هم مقدم باشد. */
-  .ds-m2 .ds-card .ds-p { font-size:clamp(6.5pt, min(19cqh,9cqi), 11pt); }
+  .ds-m2 .ds-card .ds-p { font-size:clamp(6pt, min(17cqh,8cqi), 9.5pt); }
 
   .ds-ft { display:flex; align-items:center; justify-content:space-between; gap:4mm; font-size:7pt; color:#334155; padding-top:1.2mm; }
   .ds-ft .k { display:inline-flex; align-items:center; gap:1mm; margin-inline-end:3mm; }
@@ -415,8 +421,8 @@ export default async function DoorSignPrint({
      ⚠️ font-size عنوان از JS می‌آید (fitTitlePt — shrink-to-fit واقعی بر
      پایهٔ پهنای کارت و طولِ عنوان)، پس اینجا فقط line-clamp را کنترل
      می‌کنیم. هر قاعدۀ font-size اینجا مقدار inline را لغو می‌کرد. */
-  .ds-day-b .ds-p{ font-size:clamp(6pt, min(11cqh,5.5cqi), 8.5pt); display:none; }
-  .ds-day-b .ds-h{ font-size:clamp(5.5pt, min(9cqh,4cqi), 7.5pt); display:none; }
+  .ds-day-b .ds-p{ font-size:clamp(5.5pt, min(10cqh,5cqi), 8pt); display:none; }
+  .ds-day-b .ds-h{ font-size:clamp(5pt, min(8cqh,3.6cqi), 7pt); display:none; }
   /* همان اولویت: عنوان همیشه؛ استاد اگر عرض ≥ ۱۹mm؛ ساعت اگر عرض ≥ ۲۴mm */
   @container dsb (min-width:19mm){ .ds-day-b .ds-p{ display:-webkit-box; } }
   @container dsb (min-width:24mm){ .ds-day-b .ds-h{ display:block; } }
@@ -469,6 +475,15 @@ export default async function DoorSignPrint({
       margin:0 !important; border-radius:0 !important; box-shadow:none !important;
       overflow:hidden; break-inside:avoid; page-break-inside:avoid;
       break-after:avoid; page-break-after:avoid; }
+
+    /* ── سه حالتِ جزئیات باید در چاپ هم دقیقاً همان باشند ──────────────────
+       قاعدههای .ds-m1/.ds-m2 بیرونِ این بلوک‌اند؛ ولی در چاپ، container query
+       با ابعادِ کاغذ بازمحاسبه می‌شود و مرورگر می‌تواند قاعدهٔ فضایی
+       (.ds-grid .ds-p { display:-webkit-box }) را دوباره برنده کند. تکرارِ
+       صریحِ همین دو قاعده اینجا تضمین می‌کند خروجیِ کاغذ با پیش‌نمایشِ صفحه
+       یکی باشد — همان چیزی که کاربر گفت «در چاپ اعمال نمی‌شود». */
+    .ds-m1 .ds-p, .ds-m1 .ds-h { display:none !important; }
+    .ds-m2 .ds-h { display:none !important; }
   }
   `;
 

@@ -4,6 +4,7 @@ import {
   academic_terms, classrooms, course_offerings, courses, departments, enrollments, faculties,
   majors, offering_professors, schedules, staff, students, users,
 } from '@/db/schema';
+import { cookies } from 'next/headers';
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { currentExpertFilters } from '@/lib/expert-scope';
@@ -11,6 +12,7 @@ import { getSetting, getBool } from '@/lib/settings';
 import { groupIntoMerged, mergedGroupKey, professorCalendarEntryKey, type ProfessorCalendarWeekType } from '@/lib/professor-calendar-layout';
 import ProfessorCalendarGrid, { type ProfessorCalendarEntry } from '@/app/professor/professor-calendar-grid';
 import DoorSignPrint, { type DoorSignDetail } from './door-sign-print';
+import DoorSignDetailSelect, { DOOR_DETAIL_COOKIE } from './DoorSignDetailSelect';
 import PrintButton from './PrintButton';
 import pkg from '../../../../package.json';
 const APP_VERSION = (pkg as { version?: string }).version ?? '1.0.0';
@@ -343,8 +345,14 @@ export default async function WeeklyBoardPage({ searchParams }: {
        ۱) فقط نام درس (+ زوج/فرد)      → ?d=1
        ۲) نام درس + استاد              → ?d=2
        ۳) نام درس + استاد + ساعت        → پیش‌فرض (همان رفتارِ قبلی)
-     «زوج/فرد» در هر سه حالت چاپ می‌شود و به این انتخاب ربطی ندارد. */
-  const detail: DoorSignDetail = sp.d === '1' ? 'title' : sp.d === '2' ? 'prof' : 'full';
+     «زوج/فرد» در هر سه حالت چاپ می‌شود و به این انتخاب ربطی ندارد.
+
+     ⚠️ چرا کوکی هم خوانده می‌شود: انتخاب در URL می‌ماند، ولی مسیرهای چاپی
+     (`?print=door`، تبِ دیگر، پنجرهٔ چاپِ تازه، آدرسِ ذخیره‌شده) پارامتر `d`
+     را با خود نمی‌برند و به پیش‌فرض برمی‌گشتند — یعنی «حالت در چاپ اعمال
+     نمی‌شد». حالا اگر `d` در آدرس نبود، آخرین انتخابِ کاربر از کوکی می‌آید. */
+  const dRaw = sp.d ?? (await cookies()).get(DOOR_DETAIL_COOKIE)?.value ?? '';
+  const detail: DoorSignDetail = dRaw === '1' ? 'title' : dRaw === '2' ? 'prof' : 'full';
   // فقط کلاس‌های «فعال» در انتخاب‌گر می‌آیند. فعال/غیرفعال‌کردن کلاس ربطی به سردر
   // کلاسی ندارد و جای آن صفحهٔ تنظیمات است (بخش «داده‌های پایه»).
   const termId = Number(sp.term) || 0;
@@ -685,7 +693,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
         {([['board', '🗓 تابلوی کلاس‌ها'], ['prof', '👨‍🏫 برنامهٔ استاد'], ['student', '🎓 برنامهٔ دانشجو']] as const).map(([v, t]) => (
           <a
             key={v}
-            href={`/admin/weekly-board?term=${term?.id ?? ''}&tab=${v}${showCode ? '&code=1' : ''}${titleParam ? `&title=${titleParam}` : ''}${genderParam ? `&gender=${genderParam}` : ''}${printCount ? '&count=1' : ''}${model === 'B' ? '&model=B' : ''}&from=${hourAxis.from}&to=${hourAxis.to}`}
+            href={`/admin/weekly-board?term=${term?.id ?? ''}&tab=${v}${showCode ? '&code=1' : ''}${titleParam ? `&title=${titleParam}` : ''}${genderParam ? `&gender=${genderParam}` : ''}${printCount ? '&count=1' : ''}${model === 'B' ? '&model=B' : ''}${detail === 'title' ? '&d=1' : detail === 'prof' ? '&d=2' : ''}&from=${hourAxis.from}&to=${hourAxis.to}`}
             className={`rounded-xl px-4 py-2 text-sm font-black ${tab === v ? 'bg-teal-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
           >
             {t}
@@ -760,13 +768,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
             <option value="B">مدل ب — روزها سطر (زمان ستون)</option>
           </select>
         </label>
-        <label className="text-xs font-bold">جزئیات کارت سردر
-          <select name="d" defaultValue={detail === 'title' ? '1' : detail === 'prof' ? '2' : ''} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
-            <option value="">نام درس + استاد + ساعت (کامل)</option>
-            <option value="2">نام درس + استاد (بدون ساعت)</option>
-            <option value="1">فقط نام درس (درشت‌ترین فونت)</option>
-          </select>
-        </label>
+        <DoorSignDetailSelect value={detail === 'title' ? '1' : detail === 'prof' ? '2' : ''} />
         <label className="text-xs font-bold">محور زمان از
           <select name="from" defaultValue={String(hourAxis.from)} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
             {FROM_HOURS.map(h => <option key={h} value={h}>{faDigits(h)}:۰۰</option>)}
