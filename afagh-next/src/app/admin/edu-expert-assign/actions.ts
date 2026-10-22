@@ -2,9 +2,14 @@
 
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
-import { academic_terms, course_offerings, users } from '@/db/schema';
+import { academic_terms, course_offering_edu_experts, course_offerings, users } from '@/db/schema';
 import { requireRoleOrPermission } from '@/lib/permissions-enforcer';
-import { listEduExpertCandidates, listOfferingExpertAssignments } from '@/lib/edu-expert';
+import {
+  addOfferingEduExperts,
+  listEduExpertCandidates,
+  listOfferingExpertAssignments,
+  setOfferingEduExperts,
+} from '@/lib/edu-expert';
 
 const EDU = ['ADMIN', 'EDU_EXPERT'];
 const EDU_PERM = ['scheduling:manage_chart'];
@@ -18,7 +23,10 @@ export interface EduExpertAssignRow {
   rooms: string[];
   /** آیا درس اصلاً سانس/اتاق دارد؟ (فیلترِ «فقط کلاس‌های دارای برنامه») */
   hasSchedule: boolean;
+  /** کارشناسِ اصلی (اولین نفر) — سازگاری با UI تک‌مقداری */
   assignedUserId: number | null;
+  /** همهٔ کارشناسانِ این کلاس — یک کلاس می‌تواند چند کارشناس داشته باشد */
+  assignedUserIds: number[];
   resolvedUserId: number | null;
   source: 'offering' | 'scope' | null;
 }
@@ -62,6 +70,7 @@ export async function getEduExpertAssignInit(termId?: number): Promise<EduExpert
       rooms: r.rooms,
       hasSchedule: r.hasSchedule,
       assignedUserId: r.assignedUserId,
+      assignedUserIds: r.assignedUserIds,
       resolvedUserId: r.resolvedUserId,
       source: r.source,
     })),
@@ -81,7 +90,9 @@ async function assertExpert(userId: number | null): Promise<{ ok: true; userId: 
   return { ok: true, userId };
 }
 
-/** تخصیص یک کلاس به یک کارشناس (یا آزاد کردن با userId = null). */
+/** تخصیص یک کلاس به یک کارشناس (یا آزاد کردن با userId = null).
+ *  ⚠ جایگزینِ کاملِ فهرست است: اگر کلاس چند کارشناس داشت، بقیه حذف می‌شوند.
+ *  برای افزودنِ بدون حذف از `addOfferingEduExpertAction` استفاده کنید. */
 export async function setOfferingEduExpertAction(
   offeringId: number,
   userId: number | null,
@@ -91,15 +102,60 @@ export async function setOfferingEduExpertAction(
   const chk = await assertExpert(userId);
   if (!chk.ok) return { ok: false, error: chk.error };
 
-  await db
-    .update(course_offerings)
-    .set({ eduExpertUserId: chk.userId })
-    .where(eq(course_offerings.id, offeringId));
-
+  await setOfferingEduExperts(offeringId, chk.userId == null ? [] : [chk.userId]);
   return { ok: true };
 }
 
-/** تخصیص گروهی — برای وقتی که چند کلاس به یک کارشناس سپرده می‌شوند. */
+/** جایگزینیِ کاملِ فهرستِ کارشناسانِ یک کلاس — برای ذخیرهٔ چند‌کارشناسه. */
+export async function setOfferingEduExpertsAction(
+  offeringId: number,
+  userIds: number[],
+): Promise<{ ok: boolean; userIds?: number[]; error?: string }> {
+  await requireRoleOrPermission(EDU, EDU_PERM);
+
+  for (const id of userIds) {
+    const chk = await assertExpert(id);
+    if (!chk.ok) return { ok: false, error: chk.error };
+  }
+
+  const saved = await setOfferingEduExperts(offeringId, userIds);
+  return { ok: true, userIds: saved };
+}
+
+/** افزودنِ یک کارشناس به یک کلاس، بدون دست‌زدن به کارشناسانِ فعلی. */
+export async function addOfferingEduExpertAction(
+  offeringId: number,
+  userId: number,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireRoleOrPermission(EDU, EDU_PERM);
+
+  const chk = await assertExpert(userId);
+  if (!chk.ok) return { ok: false, error: chk.error };
+  if (chk.userId == null) return { ok: false, error: 'کارشناس انتخاب نشده.' };
+
+  await addOfferingEduExperts([offeringId], chk.userId);
+  return { ok: true };
+}
+
+/** حذفِ یک کارشناس از یک کلاس (بقیه می‌مانند). */
+export async function removeOfferingEduExpertAction(
+  offeringId: number,
+  userId: number,
+): Promise<{ ok: boolean; userIds?: number[]; error?: string }> {
+  await requireRoleOrPermission(EDU, EDU_PERM);
+
+  const current = await db
+    .select({ userId: course_offering_edu_experts.userId })
+    .from(course_offering_edu_experts)
+    .where(eq(course_offering_edu_experts.offeringId, offeringId))
+    .orderBy(asc(course_offering_edu_experts.id));
+  const next = current.map((r) => r.userId).filter((id) => id !== userId);
+
+  const saved = await setOfferingEduExperts(offeringId, next);
+  return { ok: true, userIds: saved };
+}
+
+/** تخصیص گروهی — جایگزینیِ کامل: همهٔ کلاس‌های انتخابی دقیقاً همین یک کارشناس را می‌گیرند. */
 export async function bulkSetOfferingEduExpertAction(
   offeringIds: number[],
   userId: number | null,
@@ -119,12 +175,38 @@ export async function bulkSetOfferingEduExpertAction(
     .where(inArray(course_offerings.id, ids));
   if (!existing.length) return { ok: true, updated: 0 };
 
-  await db
-    .update(course_offerings)
-    .set({ eduExpertUserId: chk.userId })
-    .where(inArray(course_offerings.id, existing.map((e) => e.id)));
-
+  for (const e of existing) {
+    await setOfferingEduExperts(e.id, chk.userId == null ? [] : [chk.userId]);
+  }
   return { ok: true, updated: existing.length };
+}
+
+/**
+ * تخصیص گروهی — افزودنی: کارشناس به فهرستِ هر کلاس اضافه می‌شود و کارشناسانِ
+ * قبلی دست‌نخورده می‌مانند. این همان چیزی است که «یک کلاس، چند کارشناس» را
+ * برای تخصیصِ انبوه ممکن می‌کند.
+ */
+export async function bulkAddOfferingEduExpertAction(
+  offeringIds: number[],
+  userId: number,
+): Promise<{ ok: boolean; updated?: number; error?: string }> {
+  await requireRoleOrPermission(EDU, EDU_PERM);
+
+  const chk = await assertExpert(userId);
+  if (!chk.ok) return { ok: false, error: chk.error };
+  if (chk.userId == null) return { ok: false, error: 'کارشناس انتخاب نشده.' };
+
+  const ids = [...new Set(offeringIds.filter((n) => Number.isFinite(n)))];
+  if (!ids.length) return { ok: true, updated: 0 };
+
+  const existing = await db
+    .select({ id: course_offerings.id })
+    .from(course_offerings)
+    .where(inArray(course_offerings.id, ids));
+  if (!existing.length) return { ok: true, updated: 0 };
+
+  const updated = await addOfferingEduExperts(existing.map((e) => e.id), chk.userId);
+  return { ok: true, updated };
 }
 
 /** آزاد کردن همهٔ تخصیص‌های یک ترم (بازگشت به «از نقش‌ها»). */
@@ -138,10 +220,18 @@ export async function clearTermEduExpertAction(termId: number): Promise<{ ok: bo
 
   if (!rows.length) return { ok: true, updated: 0 };
 
+  const ids = rows.map((r) => r.id);
+
+  // هر دو لایه پاک می‌شوند: جدولِ واسط و ستونِ «کارشناسِ اصلی».
+  // اگر فقط ستون پاک شود، فهرستِ چند‌کارشناسه باقی می‌ماند و کلاس همچنان
+  // «تخصیص صریح» شمرده می‌شود — یعنی دکمه بی‌اثر به نظر می‌رسد.
+  await db
+    .delete(course_offering_edu_experts)
+    .where(inArray(course_offering_edu_experts.offeringId, ids));
   await db
     .update(course_offerings)
     .set({ eduExpertUserId: null })
-    .where(inArray(course_offerings.id, rows.map((r) => r.id)));
+    .where(inArray(course_offerings.id, ids));
 
   return { ok: true, updated: rows.length };
 }

@@ -3,22 +3,28 @@
  *
  * دو سطح تخصیص وجود دارد و اولویت با سطحِ ریزتر (کلاس) است:
  *
- *   ۱) سطحِ کلاس   → `course_offerings.eduExpertUserId`  (تخصیص در «تعریف کلاس»)
+ *   ۱) سطحِ کلاس   → جدولِ `course_offering_edu_experts` (چند‌به‌چند، مهاجرت ۰۱۱۱)
+ *                     ستونِ `course_offerings.eduExpertUserId` فقط «کارشناسِ اصلی»
+ *                     (اولین نفر) را نگه می‌دارد تا مصرف‌کننده‌های تک‌مقداری نشکنند.
  *   ۲) سطحِ نقش    → `expert_scopes` (تخصیص دانشگاه/دانشکده/گروه/رشته)
  *
- * اگر برای کلاس تخصیص صریح نشده باشد (NULL)، کارشناس از روی دامنهٔ نقشیِ
+ * اگر برای کلاس تخصیص صریح نشده باشد، کارشناس از روی دامنهٔ نقشیِ
  * او پایین می‌آید: رشتهٔ درس → گروهِ سازنده → دانشکده → دانشگاه. این باعث
  * می‌شود صفحهٔ کارشناس آموزش همیشه مقداری داشته باشد، حتی پیش از اینکه
  * مدیر برای هر کلاس دستی تخصیص بدهد.
+ *
+ * «چند کارشناس برای یک کلاس» مجاز است: هر تعداد ردیف در جدولِ واسط. در آن
+ * حالت `source` همچنان 'offering' است و `userIds` همهٔ آن‌ها را برمی‌گرداند.
  *
  * این ماژول عمداً بدون 'use server' است تا هم در Server Action و هم در
  * Server Component قابل استفاده باشد.
  */
 
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   classrooms,
+  course_offering_edu_experts,
   course_offerings,
   courses,
   departments,
@@ -107,10 +113,83 @@ export async function getExpertScopeLabels(userId: number): Promise<string[]> {
 }
 
 export interface OfferingExpertResolution {
-  /** کارشناس مسئول — از تخصیص سطح کلاس یا (اگر نبود) از دامنهٔ نقش */
+  /** کارشناس مسئول (اصلی) — از تخصیص سطح کلاس یا (اگر نبود) از دامنهٔ نقش */
   userId: number | null;
+  /** همهٔ کارشناسانِ تخصیص‌یافته به این کلاس (۱ یا بیشتر). اگر از نقش‌ها آمده باشد، تک‌عضوی. */
+  userIds: number[];
   /** منبع تصمیم: 'offering' = تخصیص صریح کلاس · 'scope' = از نقش‌ها · null = هیچ‌کدام */
   source: 'offering' | 'scope' | null;
+}
+
+/**
+ * فهرستِ کاملِ کارشناسانِ یک کلاس از جدولِ واسط (بدون fallback نقش‌ها).
+ * برای ویرایشگرِ تک‌کلاس لازم است تا بداند دقیقاً چه چیزی ذخیره شده.
+ */
+export async function getOfferingEduExpertIds(offeringId: number): Promise<number[]> {
+  const rows = await db
+    .select({ userId: course_offering_edu_experts.userId })
+    .from(course_offering_edu_experts)
+    .where(eq(course_offering_edu_experts.offeringId, offeringId))
+    .orderBy(asc(course_offering_edu_experts.id))
+    .catch(() => []);
+  return rows.map((r) => r.userId);
+}
+
+/**
+ * جایگزینیِ کاملِ فهرستِ کارشناسانِ یک کلاس.
+ *
+ * همهٔ نوشتن‌ها از این‌جا رد می‌شوند تا ستونِ «کارشناسِ اصلی» هرگز از جدولِ
+ * واسط جدا نیفتد. `userIds` خالی = آزاد کردن کلاس (بازگشت به نقش‌ها).
+ * خروجی، فهرستِ نهاییِ ذخیره‌شده است (تکراری‌ها حذف می‌شوند).
+ */
+export async function setOfferingEduExperts(
+  offeringId: number,
+  userIds: number[],
+): Promise<number[]> {
+  const ids = [...new Set(userIds.filter((n) => Number.isInteger(n) && n > 0))];
+
+  await db.delete(course_offering_edu_experts).where(eq(course_offering_edu_experts.offeringId, offeringId));
+  if (ids.length) {
+    await db
+      .insert(course_offering_edu_experts)
+      .values(ids.map((userId) => ({ offeringId, userId })))
+      .onConflictDoNothing();
+  }
+
+  // ستونِ تک‌مقداری = اولین نفر؛ خالی اگر کسی نمانده باشد.
+  await db
+    .update(course_offerings)
+    .set({ eduExpertUserId: ids[0] ?? null })
+    .where(eq(course_offerings.id, offeringId));
+
+  return ids;
+}
+
+/**
+ * افزودنِ یک کارشناس به کلاس بدون دست‌زدن به بقیه.
+ * برای تخصیصِ گروهی («این ۵ کلاس را هم به آقای X بده») لازم است، وگرنه
+ * تخصیصِ دوم کارشناسِ اول را پاک می‌کرد.
+ */
+export async function addOfferingEduExperts(
+  offeringIds: number[],
+  userId: number,
+): Promise<number> {
+  const ids = [...new Set(offeringIds.filter((n) => Number.isInteger(n) && n > 0))];
+  if (!ids.length || !Number.isInteger(userId) || userId <= 0) return 0;
+
+  await db
+    .insert(course_offering_edu_experts)
+    .values(ids.map((offeringId) => ({ offeringId, userId })))
+    .onConflictDoNothing();
+
+  // برای ارائه‌هایی که هنوز «کارشناسِ اصلی» ندارند، همین نفر اصلی می‌شود.
+  // (اگر از قبل اصلی دارند، دست نمی‌زنیم — افزودن نفر دوم نباید اولی را جابه‌جا کند.)
+  await db
+    .update(course_offerings)
+    .set({ eduExpertUserId: userId })
+    .where(and(inArray(course_offerings.id, ids), isNull(course_offerings.eduExpertUserId)));
+
+  return ids.length;
 }
 
 /**
@@ -118,6 +197,8 @@ export interface OfferingExpertResolution {
  *
  * `offering` باید دست‌کم `id`، `ownerDepartmentId` و `universityId` را داشته باشد.
  * برای هر سه سطح (کلاس، گروه، دانشگاه) نگاه می‌شود و دقیق‌ترین برنده است.
+ * اگر کلاس چند کارشناس داشته باشد، همه در `userIds` برمی‌گردند و `userId`
+ * اولین نفر (کارشناسِ اصلی) است.
  */
 export async function resolveEduExpertForOffering(offering: {
   id: number;
@@ -126,12 +207,18 @@ export async function resolveEduExpertForOffering(offering: {
   targetMajorId?: number | null;
   eduExpertUserId?: number | null;
 }): Promise<OfferingExpertResolution> {
+  // ۱) تخصیص صریحِ سطح کلاس (چند‌به‌چند) — برندهٔ قطعی
+  const assigned = await getOfferingEduExpertIds(offering.id);
+  if (assigned.length) {
+    return { userId: assigned[0], userIds: assigned, source: 'offering' };
+  }
+  // سازگاری با فراخوانی‌هایی که خودشان رکورد را خوانده‌اند و ستون را پاس می‌دهند
   if (offering.eduExpertUserId) {
-    return { userId: offering.eduExpertUserId, source: 'offering' };
+    return { userId: offering.eduExpertUserId, userIds: [offering.eduExpertUserId], source: 'offering' };
   }
 
   const scopes = await db.select().from(expert_scopes).catch(() => []);
-  if (!scopes.length) return { userId: null, source: null };
+  if (!scopes.length) return { userId: null, userIds: [], source: null };
 
   // دقتِ هر سطح: MAJOR (۴) > DEPARTMENT (۳) > FACULTY (۲) > UNIVERSITY (۱)
   const byPrecision = (type: string, id: number | null | undefined) => {
@@ -159,9 +246,9 @@ export async function resolveEduExpertForOffering(offering: {
     if (hit) candidates.push({ precision: 1, userId: hit });
   }
 
-  if (!candidates.length) return { userId: null, source: null };
+  if (!candidates.length) return { userId: null, userIds: [], source: null };
   candidates.sort((a, b) => b.precision - a.precision);
-  return { userId: candidates[0].userId, source: 'scope' };
+  return { userId: candidates[0].userId, userIds: [candidates[0].userId], source: 'scope' };
 }
 
 /**
@@ -178,7 +265,10 @@ export async function listOfferingExpertAssignments(termId: number): Promise<
     rooms: string[];
     /** آیا برای این درس اصلاً سانس/اتاق تعریف شده؟ (برای فیلترِ جدول) */
     hasSchedule: boolean;
+    /** کارشناسِ اصلی (اولین نفر) — برای سازگاری با UIهای تک‌مقداری */
     assignedUserId: number | null;
+    /** همهٔ کارشناسانِ تخصیص‌یافته به این کلاس (۰ یا بیشتر) */
+    assignedUserIds: number[];
     resolvedUserId: number | null;
     source: 'offering' | 'scope' | null;
     isActive: number;
@@ -249,8 +339,27 @@ export async function listOfferingExpertAssignments(termId: number): Promise<
     return m ? m.userId : null;
   };
 
+  /* کارشناسانِ سطحِ کلاس — یک کوئری برای همهٔ ارائه‌های ترم (چند‌به‌چند، ۰۱۱۱).
+     ستونِ قدیمی `eduExpertUserId` هم به‌عنوان تورِ ایمنی خوانده می‌شود تا اگر
+     جایی خارج از این ماژول نوشته شده باشد، در جدول دیده شود. */
+  const expertRows = offeringIds.length
+    ? await db
+        .select({ offeringId: course_offering_edu_experts.offeringId, userId: course_offering_edu_experts.userId })
+        .from(course_offering_edu_experts)
+        .where(inArray(course_offering_edu_experts.offeringId, offeringIds))
+        .orderBy(asc(course_offering_edu_experts.id))
+        .catch(() => [])
+    : [];
+  const expertsByOffering = new Map<number, number[]>();
+  for (const e of expertRows) {
+    const list = expertsByOffering.get(e.offeringId) ?? [];
+    if (!list.includes(e.userId)) list.push(e.userId);
+    expertsByOffering.set(e.offeringId, list);
+  }
+
   return rows.map((r) => {
-    if (r.eduExpertUserId) {
+    const explicit = expertsByOffering.get(r.offeringId) ?? (r.eduExpertUserId ? [r.eduExpertUserId] : []);
+    if (explicit.length) {
       return {
         offeringId: r.offeringId,
         courseTitle: r.courseTitle,
@@ -258,8 +367,9 @@ export async function listOfferingExpertAssignments(termId: number): Promise<
         departmentName: deptName(r.ownerDepartmentId),
         rooms: roomsByOffering.get(r.offeringId) ?? [],
         hasSchedule: scheduledOfferings.has(r.offeringId),
-        assignedUserId: r.eduExpertUserId,
-        resolvedUserId: r.eduExpertUserId,
+        assignedUserId: explicit[0],
+        assignedUserIds: explicit,
+        resolvedUserId: explicit[0],
         source: 'offering' as const,
         isActive: r.isActive ?? 0,
       };
@@ -275,6 +385,7 @@ export async function listOfferingExpertAssignments(termId: number): Promise<
       rooms: roomsByOffering.get(r.offeringId) ?? [],
       hasSchedule: scheduledOfferings.has(r.offeringId),
       assignedUserId: null,
+      assignedUserIds: [],
       resolvedUserId: fromScope,
       source: fromScope ? ('scope' as const) : null,
       isActive: r.isActive ?? 0,

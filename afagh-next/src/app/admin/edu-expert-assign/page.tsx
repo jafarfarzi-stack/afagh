@@ -10,8 +10,10 @@ export const dynamic = 'force-dynamic';
  * مثلاً ۲۰ کلاس به یک کارشناس سپرده می‌شود، رفتن به ۲۰ صفحه درد است. اینجا
  * همهٔ کلاس‌های ترم را می‌بینید و یک‌جا تخصیص می‌دهید.
  *
- * منبعِ حقیقت: `course_offerings.eduExpertUserId`؛ اگر NULL باشد از
- * `expert_scopes` (تخصیص نقش‌ها) پایین می‌آید.
+ * منبعِ حقیقت: جدولِ واسطِ `course_offering_edu_experts` (چند کارشناس برای یک
+ * کلاس، مهاجرت ۰۱۱۱)؛ ستونِ `course_offerings.eduExpertUserId` فقط «کارشناسِ
+ * اصلی» را نگه می‌دارد. اگر هیچ تخصیص صریحی نباشد از `expert_scopes`
+ * (تخصیص نقش‌ها) پایین می‌آید.
  */
 export default async function EduExpertAssignPage({
   searchParams,
