@@ -393,8 +393,11 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5 space-y-1">
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] font-black text-slate-600 shrink-0">گروه مسئول</span>
+                      {/* عرضِ کامل + بدون min-w-0: سلکتِ باریک نام‌های بلند فارسی را
+                          به «…» برش می‌زند و کاربر نمی‌تواند بخواند. */}
                       <select
-                        className="input text-[11px] py-0.5 h-7 flex-1 min-w-0"
+                        dir="rtl"
+                        className="input flex-1 min-w-[7rem] text-[11px] py-0.5 h-7"
                         value={roomDeptId(r) ?? ''}
                         disabled={pending}
                         onChange={(e) => {
@@ -444,26 +447,30 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
                       </span>
                     ))}
                     {!ids.length && <span className="text-[11px] text-amber-700">بدون کارشناس</span>}
-                    <select
-                      className="input text-[11px] py-0.5 h-7 w-28"
-                      value=""
-                      disabled={pending}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        e.target.value = '';
-                        if (v) addToRoom(r, Number(v));
-                      }}
-                    >
-                      <option value="">＋ افزودن…</option>
-                      {init.candidates
-                        .filter((c) => !ids.includes(c.userId))
-                        .map((c) => (
-                          <option key={c.userId} value={c.userId}>
-                            {c.name}
-                          </option>
-                        ))}
-                    </select>
                   </div>
+
+                  {/* انتخاب‌گرِ کارشناس در سطرِ جداگانه و با عرضِ کامل — نام‌ها
+                      بلندند («… — کنترل‌کنندهٔ حضور») و در سلکتِ ۷رِمی بریده می‌شوند. */}
+                  <select
+                    dir="rtl"
+                    className="input w-full text-[11px] py-1 h-8"
+                    value=""
+                    disabled={pending}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      e.target.value = '';
+                      if (v) addToRoom(r, Number(v));
+                    }}
+                  >
+                    <option value="">＋ افزودن کارشناس / کنترل‌کننده…</option>
+                    {init.candidates
+                      .filter((c) => !ids.includes(c.userId))
+                      .map((c) => (
+                        <option key={c.userId} value={c.userId}>
+                          {c.name}
+                        </option>
+                      ))}
+                  </select>
 
                   <button
                     className="text-[11px] font-bold text-indigo-700 underline"
@@ -631,7 +638,8 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
                             </span>
                           )}
                           <select
-                            className="input text-[11px] py-0.5 h-7 w-28"
+                            dir="rtl"
+                            className="input text-[11px] py-0.5 h-7 min-w-[9rem]"
                             value=""
                             disabled={pending}
                             onChange={(e) => {
@@ -640,7 +648,7 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
                               if (v) addToOffering(r, Number(v));
                             }}
                           >
-                            <option value="">＋ افزودن…</option>
+                            <option value="">＋ افزودن کارشناس…</option>
                             {init.candidates
                               .filter((c) => !ids.includes(c.userId))
                               .map((c) => (

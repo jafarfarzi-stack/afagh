@@ -14,6 +14,7 @@ import {
   users,
 } from '@/db/schema';
 import { requireRoleOrPermission } from '@/lib/permissions-enforcer';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import {
   addClassroomEduExperts,
   addOfferingEduExperts,
@@ -67,9 +68,17 @@ export interface EduExpertAssignInit {
 export async function getEduExpertAssignInit(termId?: number): Promise<EduExpertAssignInit> {
   await requireRoleOrPermission(EDU, EDU_PERM);
 
+  /* یک‌بار دانشگاهِ جاری خوانده می‌شود و به همهٔ کوئری‌ها پاس داده می‌شود.
+     پیش از این هر تابع خودش `getCurrentUniversity` را صدا می‌زد و بخش‌هایی
+     (مثل فهرستِ اتاق‌ها) اصلاً دانشگاه را نمی‌دیدند — نتیجه، اتاق و گروهِ
+     دانشگاه‌های دیگر در همین صفحه می‌آمد. */
+  const uni = await getCurrentUniversity().catch(() => null);
+  const uniId = uni?.id ?? null;
+
   const terms = await db
     .select({ id: academic_terms.id, title: academic_terms.title, isCurrent: academic_terms.isCurrent })
     .from(academic_terms)
+    .where(uniId != null ? eq(academic_terms.universityId, uniId) : undefined)
     .orderBy(asc(academic_terms.id))
     .catch(() => []);
 
@@ -79,9 +88,9 @@ export async function getEduExpertAssignInit(termId?: number): Promise<EduExpert
 
   const [candidates, rooms, rows, deptList] = await Promise.all([
     listEduExpertCandidates(),
-    tid ? listClassroomExpertAssignments(tid) : Promise.resolve([]),
-    tid ? listOfferingExpertAssignments(tid) : Promise.resolve([]),
-    listDepartmentsForRoomOwner(),
+    tid ? listClassroomExpertAssignments(tid, uniId) : Promise.resolve([]),
+    tid ? listOfferingExpertAssignments(tid, uniId) : Promise.resolve([]),
+    listDepartmentsForRoomOwner(uniId),
   ]);
 
   return {
@@ -108,11 +117,11 @@ export async function getEduExpertAssignInit(termId?: number): Promise<EduExpert
  * گروه‌های آموزشیِ دانشگاه جاری + نامِ مدیرگروه هرکدام.
  * برای انتخاب‌گرِ «گروهِ مسئولِ اتاق» استفاده می‌شود.
  */
-export async function listDepartmentsForRoomOwner(): Promise<
+export async function listDepartmentsForRoomOwner(uniIdArg?: number | null): Promise<
   { id: number; name: string; facultyName: string | null; headName: string | null }[]
 > {
-  const { getCurrentUniversity } = await import('@/lib/university-scope');
-  const uni = await getCurrentUniversity().catch(() => null);
+  // دانشگاهِ انتخاب‌شده از صفحه پاس می‌آید تا با سوییچرِ بالای پنل هم‌خوان باشد.
+  const uniId = uniIdArg ?? (await getCurrentUniversity().catch(() => null))?.id ?? null;
   const ds = await db
     .select({
       id: departments.id,
@@ -122,7 +131,7 @@ export async function listDepartmentsForRoomOwner(): Promise<
     })
     .from(departments)
     .leftJoin(faculties, eq(faculties.id, departments.facultyId))
-    .where(uni ? eq(departments.universityId, uni.id) : undefined)
+    .where(uniId != null ? eq(departments.universityId, uniId) : undefined)
     .orderBy(asc(departments.name))
     .catch(() => []);
 
@@ -160,8 +169,7 @@ export async function setClassroomDepartmentAction(
     return { ok: false, error: 'اتاق نامعتبر است.' };
   }
 
-  const { getCurrentUniversity } = await import('@/lib/university-scope');
-  const uni = await getCurrentUniversity().catch(() => null);
+  const uniId = (await getCurrentUniversity().catch(() => null))?.id ?? null;
 
   const [room] = await db
     .select({ id: classrooms.id, universityId: classrooms.universityId })
@@ -170,7 +178,7 @@ export async function setClassroomDepartmentAction(
     .limit(1);
   if (!room) return { ok: false, error: 'اتاق یافت نشد.' };
   // مرز دانشگاه: اتاقِ دانشگاه دیگر را نمی‌توان از این‌جا تغییر داد.
-  if (uni && room.universityId != null && room.universityId !== uni.id) {
+  if (uniId != null && room.universityId != null && room.universityId !== uniId) {
     return { ok: false, error: 'این اتاق در دانشگاه شما نیست.' };
   }
 
@@ -181,7 +189,7 @@ export async function setClassroomDepartmentAction(
       .where(eq(departments.id, departmentId))
       .limit(1);
     if (!d) return { ok: false, error: 'گروه یافت نشد.' };
-    if (uni && d.universityId != null && d.universityId !== uni.id) {
+    if (uniId != null && d.universityId != null && d.universityId !== uniId) {
       return { ok: false, error: 'این گروه در دانشگاه شما نیست.' };
     }
   }

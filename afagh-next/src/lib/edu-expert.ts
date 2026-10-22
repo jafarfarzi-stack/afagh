@@ -311,8 +311,14 @@ export interface ClassroomAssignRow {
  * ساعتیِ هر اتاق بدون درخواستِ دوم باز می‌شود (۱۴۶۱ سانس در ۴۹ اتاق — سبک).
  * اتاق‌هایی که هیچ سانسِ «کلاس» ندارند برنمی‌گردند؛ سانسِ امتحان هم کنار
  * گذاشته می‌شود چون سالنِ امتحان با اتاقِ درس یکی نیست.
+ *
+ * `universityId` = دانشگاهِ انتخاب‌شده در سوییچرِ بالای پنل. بدون آن، اتاق‌های
+ * همهٔ دانشگاه‌ها در یک صفحه قاطی می‌شدند.
  */
-export async function listClassroomExpertAssignments(termId: number): Promise<ClassroomAssignRow[]> {
+export async function listClassroomExpertAssignments(
+  termId: number,
+  universityId?: number | null,
+): Promise<ClassroomAssignRow[]> {
   const raw = await db
     .select({
       scheduleId: schedules.id,
@@ -330,7 +336,13 @@ export async function listClassroomExpertAssignments(termId: number): Promise<Cl
     .from(schedules)
     .innerJoin(course_offerings, eq(course_offerings.id, schedules.offeringId))
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-    .where(and(eq(course_offerings.termId, termId), eq(course_offerings.isActive, 1)))
+    .where(and(
+      eq(course_offerings.termId, termId),
+      eq(course_offerings.isActive, 1),
+      // مرزِ دانشگاه: سوییچرِ بالای صفحه باید فهرستِ اتاق‌ها را هم عوض کند.
+      // ارائهٔ بی‌دانشگاه (دادهٔ مهاجرتی) حذف نمی‌شود.
+      universityId != null ? eq(course_offerings.universityId, universityId) : undefined,
+    ))
     .orderBy(asc(schedules.dayOfWeek), asc(schedules.startTime))
     .catch(() => []);
 
@@ -346,9 +358,37 @@ export async function listClassroomExpertAssignments(termId: number): Promise<Cl
   const deptIds = [...new Set(rows.map((r) => r.ownerDepartmentId).filter((v): v is number => typeof v === 'number'))];
   const profIds = [...new Set(rows.map((r) => r.professorId).filter((v): v is number => typeof v === 'number'))];
 
-  const [rooms, depts, profs, assignments] = await Promise.all([
-    db.select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, floor: classrooms.floor, departmentId: classrooms.departmentId })
-      .from(classrooms).where(inArray(classrooms.id, roomIds)).catch(() => []),
+  /* ── فرادادهٔ اتاق‌ها (نام/ساختمان/طبقه/گروه مسئول) ──
+     ⚠ درسِ تلخ: این کوئری قبلاً `.catch(() => [])` داشت. وقتی مهاجرت ۰۱۱۴
+     (`classrooms.departmentId`) هنوز روی دیتابیس اجرا نشده بود، کوئری خطا
+     می‌داد، آرایه خالی برمی‌گشت و `roomById.get(id)` برای همه undefined
+     می‌شد — نتیجه: نامِ هر اتاق به `اتاق ۱۱`/`اتاق ۱۱۴` تبدیل می‌شد و
+     ساختمان/طبقه/گروه مسئول همه خالی. صفحه دروغ می‌گفت ولی کسی نمی‌فهمید.
+     پس حالا: اول با ستونِ تازه تلاش می‌کنیم، اگر خطای ساختار داد (مهاجرت
+     اجرا نشده) بدونِ آن ستون دوباره تلاش می‌کنیم — صفحه هرگز جعلِ نام نمی‌کند. */
+  type RoomMeta = { id: number; name: string; buildingName: string | null; floor: string | null; departmentId: number | null };
+  const roomMetaOf = async (withDept: boolean): Promise<RoomMeta[]> => {
+    const base = db
+      .select({
+        id: classrooms.id,
+        name: classrooms.name,
+        buildingName: classrooms.buildingName,
+        floor: classrooms.floor,
+        ...(withDept ? { departmentId: classrooms.departmentId } : {}),
+      })
+      .from(classrooms)
+      .where(inArray(classrooms.id, roomIds));
+    const rs = withDept
+      ? await base.catch(() => null)
+      : await base.catch(() => []);
+    if (withDept && rs === null) return roomMetaOf(false);
+    return (rs as RoomMeta[]).map((r) => ({ ...r, departmentId: (r as RoomMeta).departmentId ?? null }));
+  };
+  const rooms = await roomMetaOf(true);
+  // اگر باز هم خالی بود یعنی مشکل واقعی است — به جای جعلِ نام، خطا بده.
+  if (!rooms.length) throw new Error('read_classroom_meta_failed');
+
+  const [depts, profs, assignments] = await Promise.all([
     deptIds.length
       ? db.select({ id: departments.id, name: departments.name }).from(departments).where(inArray(departments.id, deptIds)).catch(() => [])
       : Promise.resolve([] as { id: number; name: string }[]),
@@ -534,7 +574,10 @@ async function getOfferingClassroomIds(offeringId: number): Promise<number[]> {
  * همهٔ کلاس‌های یک ترم را با کارشناس مسئولشان برمی‌گرداند — برای صفحهٔ
  * «تخصیص کارشناس به کلاس‌ها» (جدول انبوه، بدون رفتن به تک‌تک کلاس‌ها).
  */
-export async function listOfferingExpertAssignments(termId: number): Promise<
+export async function listOfferingExpertAssignments(
+  termId: number,
+  universityId?: number | null,
+): Promise<
   {
     offeringId: number;
     courseTitle: string;
@@ -565,7 +608,11 @@ export async function listOfferingExpertAssignments(termId: number): Promise<
     })
     .from(course_offerings)
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-    .where(and(eq(course_offerings.termId, termId), eq(course_offerings.isActive, 1)))
+    .where(and(
+      eq(course_offerings.termId, termId),
+      eq(course_offerings.isActive, 1),
+      universityId != null ? eq(course_offerings.universityId, universityId) : undefined,
+    ))
     .orderBy(asc(courses.title))
     .catch(() => []);
 
