@@ -11,6 +11,7 @@ export default function SemestersTab() {
     chartTermCount,
     degreeMajor,
     detail,
+    detailLoading,
     dragCourseId,
     dropTarget,
     gridTerms,
@@ -29,6 +30,17 @@ export default function SemestersTab() {
   } = useCurriculum();
 
   if (!selectedVersion) return null;
+
+  if (activeTab === 'SEMESTERS' && !detail) {
+    if (detailLoading) {
+      return (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 text-center text-[12px] font-bold text-slate-500">
+          در حال بارگذاری ترم‌بندی…
+        </div>
+      );
+    }
+    return null;
+  }
 
   return (
     <>

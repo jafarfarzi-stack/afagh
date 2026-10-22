@@ -257,7 +257,7 @@ function useCurriculumWorkspace(
       };
     });
     const ok = await run(() => bulkAddCoursesAction(selectedVersionId, items));
-    if (ok) { setBankSelected(new Set()); setBankRoles({}); reloadDetail(selectedVersionId); }
+    if (ok) { setBankSelected(new Set()); setBankRoles({}); await reloadDetail(selectedVersionId); }
   };
 
   const handleTransferToMajor = async () => {
@@ -301,7 +301,7 @@ function useCurriculumWorkspace(
       };
     });
     const ok = await run(() => bulkAddCoursesAction(selectedVersionId, items));
-    if (ok) { closeAddCourse(); reloadDetail(selectedVersionId); setActiveTab('SEMESTERS'); }
+    if (ok) { closeAddCourse(); await reloadDetail(selectedVersionId); setActiveTab('SEMESTERS'); }
   };
 
   const handleSyncRoles = async () => {
@@ -506,17 +506,17 @@ function useCurriculumWorkspace(
   // ── فیلتر بانک: جستجو + پیشوند کد رشته ──
   const bankFiltered = useMemo(() => filterBankCourses(bank, bankQuery, codePrefix), [bank, bankQuery, codePrefix]);
   const bankVisible = visibleBank(bankFiltered);
-  const allFilteredSelected = allBankSelected(bankFiltered, bankSelected);
+  const allFilteredSelected = allBankSelected(bankVisible, bankSelected);
   const roleForBank = (b: { id: number; courseType: string }) => bankRoles[b.id] ?? roleFromBankType(b.courseType);
   const toggleSelectAllBank = () => {
-    const ids = bankFiltered.map(b => b.id);
+    const ids = bankVisible.map(b => b.id);
     if (allFilteredSelected) {
       setBankSelected(prev => { const next = new Set(prev); ids.forEach(id => next.delete(id)); return next; });
       setBankRoles(prev => { const next = { ...prev }; ids.forEach(id => { delete next[id]; }); return next; });
     } else {
       setBankSelected(prev => new Set([...prev, ...ids]));
-      setBankRoles(prev => { const next = { ...prev }; bankFiltered.forEach(b => { if (!(b.id in next)) next[b.id] = roleFromBankType(b.courseType); }); return next; });
-      const last = bankFiltered[bankFiltered.length - 1];
+      setBankRoles(prev => { const next = { ...prev }; bankVisible.forEach(b => { if (!(b.id in next)) next[b.id] = roleFromBankType(b.courseType); }); return next; });
+      const last = bankVisible[bankVisible.length - 1];
       if (last) setAddCourseForm(f => ({ ...f, courseId: String(last.id) }));
     }
   };

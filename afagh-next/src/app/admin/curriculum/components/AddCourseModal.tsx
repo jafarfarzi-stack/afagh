@@ -80,7 +80,7 @@ export default function AddCourseModal() {
                         checked={allFilteredSelected}
                         onChange={toggleSelectAllBank}
                       />
-                      انتخاب همه ({faNum(bankFiltered.length)} درس)
+                      انتخاب همهٔ نمایش‌داده‌شده ({faNum(bankVisible.length)} درس)
                     </label>
                     <span className="text-[10px] font-black text-indigo-700">{faNum(bankSelected.size)} انتخاب شد</span>
                   </div>
