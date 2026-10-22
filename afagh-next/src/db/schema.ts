@@ -795,6 +795,9 @@ export const course_offerings = pgTable('course_offerings', {
   isSharedService: integer('isSharedService').default(0),                            // 1 = استخر خدمات عمومی (فاز تأمین)
   equivalenceClusterId: integer('equivalenceClusterId').references(() => equivalence_clusters.id), // استخر ظرفیت مشترک
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  /** کارشناس آموزشِ مسئولِ همین کلاس (تخصیص در «تعریف کلاس»).
+   *  NULL = تخصیص در سطح کلاس نشده؛ آن‌وقت از expert_scopes (نقش‌ها) پایین‌می‌آید. */
+  eduExpertUserId: integer('eduExpertUserId').references((): AnyPgColumn => users.id),
 }, (t) => ({
   // H1: حداکثر یک ارائهٔ «فعال» برای هر (ترم+درس+گروه) — ارائهٔ غیرفعال‌شده
   // تاریخچه است و مانع ساخت ارائهٔ جدید نمی‌شود (مهاجرت 0103).

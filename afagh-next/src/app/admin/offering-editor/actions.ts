@@ -17,6 +17,8 @@ export interface OfferingEditRow {
   code: string; title: string; groupNumber: number; units: number | null;
   professorName: string; capacity: number; enrolledCount: number;
   departmentId: number | null;
+  /** کارشناس آموزشِ تخصیص‌یافته به این کلاس (NULL = از نقش‌ها پایین می‌آید) */
+  eduExpertUserId: number | null;
   classRows: { id: number; day: number | null; start: string | null; end: string | null; roomId: number | null }[];
   exam: { id: number | null; date: string | null; start: string | null; end: string | null } | null;
 }
@@ -33,6 +35,7 @@ export async function listOfferingsForEditor(termId: number): Promise<OfferingEd
       groupNumber: course_offerings.groupNumber, units: courses.units,
       professorId: course_offerings.professorId, capacity: course_offerings.capacity,
       enrolledCount: course_offerings.enrolledCount, departmentId: courses.departmentId,
+      eduExpertUserId: course_offerings.eduExpertUserId,
     })
     .from(course_offerings)
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
@@ -69,6 +72,7 @@ export async function listOfferingsForEditor(termId: number): Promise<OfferingEd
       units: o.units == null ? null : Number(o.units),
       professorName: (o.professorId != null && profName.get(o.professorId)) || '—',
       capacity: o.capacity, enrolledCount: o.enrolledCount ?? 0, departmentId: o.departmentId ?? null,
+      eduExpertUserId: o.eduExpertUserId ?? null,
       classRows,
       exam: ex ? { id: ex.id, date: ex.examDate ?? null, start: ex.startTime ? String(ex.startTime).slice(0, 5) : null, end: ex.endTime ? String(ex.endTime).slice(0, 5) : null } : null,
     };
@@ -207,4 +211,20 @@ async function scopeOffConds(eff: Awaited<ReturnType<typeof currentExpertFilters
     return ids.length ? [inArray(courses.departmentId, ids)] : [eq(courses.id, -1)];
   }
   return [];
+}
+/** فهرست کارشناسان آموزش برای dropdown در «تعریف کلاس». */
+export async function listEduExpertsForEditor(): Promise<{ userId: number; name: string }[]> {
+  await requireRoleOrPermission(EDU, EDU_PERM);
+  const { listEduExpertCandidates } = await import('@/lib/edu-expert');
+  return listEduExpertCandidates();
+}
+
+/** تخصیص/آزادکردن کارشناس آموزش برای یک کلاس — از داخل «تعریف کلاس». */
+export async function assignEduExpertForOfferingAction(
+  offeringId: number,
+  userId: number | null,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireRoleOrPermission(EDU, EDU_PERM);
+  const { setOfferingEduExpertAction } = await import('@/app/admin/edu-expert-assign/actions');
+  return setOfferingEduExpertAction(offeringId, userId);
 }

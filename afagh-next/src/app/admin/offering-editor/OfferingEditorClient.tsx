@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   listOfferingsForEditor, saveOfferingEditorAction, getRoomsForEditor,
+  listEduExpertsForEditor, assignEduExpertForOfferingAction,
   type OfferingEditRow,
 } from './actions';
 
@@ -13,6 +14,7 @@ export default function OfferingEditorClient({ terms }: { terms: { id: number; t
   const [termId, setTermId] = useState(() => terms.find(t => t.isCurrent)?.id ?? terms[0]?.id ?? 0);
   const [rows, setRows] = useState<OfferingEditRow[]>([]);
   const [rooms, setRooms] = useState<{ id: number; name: string }[]>([]);
+  const [experts, setExperts] = useState<{ userId: number; name: string }[]>([]);
   const [q, setQ] = useState('');
   const [open, setOpen] = useState<number | null>(null);
   const [draft, setDraft] = useState<OfferingEditRow | null>(null);
@@ -29,6 +31,7 @@ export default function OfferingEditorClient({ terms }: { terms: { id: number; t
   const load = async () => {
     setRows(await listOfferingsForEditor(termId).catch(() => []));
     setRooms(await getRoomsForEditor().catch(() => []));
+    setExperts(await listEduExpertsForEditor().catch(() => []));
   };
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -37,8 +40,7 @@ export default function OfferingEditorClient({ terms }: { terms: { id: number; t
 
   const edit = (r: OfferingEditRow) => { setOpen(r.offeringId); setDraft(JSON.parse(JSON.stringify(r))); setReason(''); setMsg(null); };
   const save = async () => {
-    if (!draft) return;
-    setBusy(true); setMsg(null);
+    if (!draft) return;    setBusy(true); setMsg(null);
     const r = await saveOfferingEditorAction({
       offeringId: draft.offeringId, capacity: draft.capacity,
       classRows: draft.classRows.map(c => ({ id: c.id, day: c.day ?? 0, start: c.start ?? '', end: c.end ?? '', roomId: c.roomId })),
@@ -46,6 +48,15 @@ export default function OfferingEditorClient({ terms }: { terms: { id: number; t
       overrideReason: reason,
     }).catch(() => ({ ok: false as const, error: 'خطا' }));
     if (r.ok) { setMsg({ kind: 'ok', text: '✅ ذخیره شد.' }); await load(); setOpen(null); }
+    else setMsg({ kind: 'err', text: r.error ?? '' });
+    setBusy(false);
+  };
+
+  /** تخصیص کارشناس آموزش — جدا از ذخیرهٔ اصلی تا کاربر بخواهد فقط همین را عوض کند. */
+  const assignExpert = async (offeringId: number, userId: number | null) => {
+    setBusy(true); setMsg(null);
+    const r = await assignEduExpertForOfferingAction(offeringId, userId).catch(() => ({ ok: false as const, error: 'خطا' }));
+    if (r.ok) { setMsg({ kind: 'ok', text: '✅ کارشناس ذخیره شد.' }); await load(); }
     else setMsg({ kind: 'err', text: r.error ?? '' });
     setBusy(false);
   };
@@ -90,6 +101,38 @@ export default function OfferingEditorClient({ terms }: { terms: { id: number; t
       {open != null && draft && (
         <div ref={panelRef} className="rounded-2xl border-2 border-indigo-500 bg-indigo-50/60 p-4 space-y-3 scroll-mt-24 shadow-lg">
           <h3 className="text-sm font-black">✏️ {draft.code} {draft.title} (گروه {draft.groupNumber})</h3>
+
+          {/* کارشناس آموزشِ مسئولِ همین کلاس. جدا از بقیهٔ فرم ذخیره می‌شود
+              چون ممکن است مدیر فقط بخواهد همین را عوض کند وگرنه تداخل زمان
+              کلاس دوباره بررسی می‌شود. */}
+          <div className="rounded-xl border border-indigo-200 bg-white p-3 space-y-2">
+            <p className="text-xs font-black text-indigo-800">👤 کارشناس آموزشِ مسئول این کلاس</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={draft.eduExpertUserId ?? ''}
+                onChange={e => assignExpert(draft.offeringId, e.target.value ? Number(e.target.value) : null)}
+                disabled={busy}
+                className={sel + ' w-64'}
+              >
+                <option value="">— از تخصیص نقش‌ها (دانشکده/گروه/رشته) —</option>
+                {experts.map(x => <option key={x.userId} value={x.userId}>{x.name}</option>)}
+              </select>
+              <span className="text-[11px] text-slate-500">
+                {draft.eduExpertUserId
+                  ? 'تخصیص صریح این کلاس — بر تخصیص نقش‌ها اولویت دارد.'
+                  : 'خالی = کارشناس از دامنهٔ نقش‌های او پایین می‌آید.'}
+              </span>
+            </div>
+            {!experts.length && (
+              <p className="text-[11px] text-amber-700">
+                هیچ کارشناس آموزشی با نقش EDU_EXPERT ثبت نشده — ابتدا در «تخصیص نقش‌ها» اضافه کنید.
+              </p>
+            )}
+            <a href="/admin/edu-expert-assign" className="inline-block text-[11px] font-bold text-indigo-700 underline">
+              📋 تخصیص گروهی برای همهٔ کلاس‌های ترم →
+            </a>
+          </div>
+
           <label className="block text-xs font-bold text-slate-600">ظرفیت
             <input type="number" value={draft.capacity} onChange={e => setDraft({ ...draft, capacity: Number(e.target.value) })} className={sel + ' w-24'} />
           </label>
