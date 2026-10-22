@@ -349,15 +349,16 @@ export default async function DoorSignPrint({
      (cqi) حساب می‌شود تا هر سه سطر جا شوند. کانتینرِ نام‌دار (dsb) تضمین می‌کند
      این قواعد فقط مدل ب را هدف بگیرند و کارت‌های مدل الف دست‌نخورده بمانند. */
   .ds-day-b .ds-card{ container-name:dsb; }
-  /* مدل ب: ارتفاع ثابت (~۲۱mm)، عرض = مدتِ درس ÷ تعدادِ سانس‌های هم‌پوشان. پس
-     آستانه‌ها روی عرض کارت (cqi) کار می‌کنند: هرچه ستون باریک‌تر، فونتِ عنوان
-     بیشتر shrink می‌شود تا کلمه وسطِ حرف نشکند. */
-  .ds-day-b .ds-t{ font-size:clamp(6.5pt, min(20cqh,11cqi), 15pt); }
+  /* مدل ب: ارتفاع ثابت (~۲۱mm)، عرض = مدتِ درس ÷ تعدادِ سانس‌های هم‌پوشان.
+     ⚠️ font-size عنوان از JS می‌آید (fitTitlePt — shrink-to-fit واقعی بر
+     پایهٔ پهنای کارت و طولِ عنوان)، پس اینجا فقط line-clamp را کنترل
+     می‌کنیم. هر قاعدۀ font-size اینجا مقدار inline را لغو می‌کرد. */
   .ds-day-b .ds-p{ font-size:clamp(6pt, min(11cqh,5.5cqi), 8.5pt); display:none; }
   .ds-day-b .ds-h{ font-size:clamp(5.5pt, min(9cqh,4cqi), 7.5pt); display:none; }
   /* همان اولویت: عنوان همیشه؛ استاد اگر عرض ≥ ۱۹mm؛ ساعت اگر عرض ≥ ۲۴mm */
   @container dsb (min-width:19mm){ .ds-day-b .ds-p{ display:-webkit-box; } }
   @container dsb (min-width:24mm){ .ds-day-b .ds-h{ display:block; } }
+  /* line-clamp با maxTitleLines هم‌خوان است (۳/۲/۱ سطر بر اساس پهنای کارت) */
   @container dsb (max-width:30mm){ .ds-day-b .ds-t{ -webkit-line-clamp:3; } }
   @container dsb (min-width:30mm) and (max-width:74mm){ .ds-day-b .ds-t{ -webkit-line-clamp:2; } }
   @container dsb (min-width:74mm){ .ds-day-b .ds-t{ -webkit-line-clamp:1; } }
@@ -437,6 +438,50 @@ export default async function DoorSignPrint({
     vLines.push({ right: ((BUF + k + 0.5) / TOTAL_FR) * 100, half: true });
   }
 
+  /* ── shrink-to-fit عنوان درس ────────────────────────────────────────────
+     مشکل: کارتِ مدل ب باریک است (۱ ساعت ≈ ۱۸.۶mm) و عنوانِ چندکلمه‌ای مثل
+     «مبانی مددکاری تجربی اجتماعی» به ۴ خط می‌شکست و با line-clamp بریده
+     می‌شد. کاربر می‌خواهد عنوان «در سطر خودش» کوچک شود، نه اینکه بشکند.
+
+     راه‌حل: CSS نمی‌تواند عرضِ متن را اندازه بگیرد، پس از قبل حساب می‌کنیم.
+     عرضِ کارت از هندسهٔ گرید می‌آید (برگهٔ ۲۹۷mm − پدینگِ ۱۲mm − ستونِ
+     برچسبِ ۲۴mm، تقسیم بر TOTAL_FR). سپس بزرگ‌ترین فونتِ نردبان را بر
+     می‌داریم که عنوان در حداکثر maxLines سطر جا شود.
+
+     عرضِ تقریبیِ هر حرف فارسی در Vazirmatn ≈ ۰.۵۴em (میانگین وزن‌دار)،
+     فاصله ≈ ۰.۲۸em. این تخمین محافظه‌کارانه است: اگر واقعیت کوچک‌تر بود،
+     فونت فقط کمی بزرگ‌تر می‌شود و همچنان جا دارد. */
+  const SHEET_MM = 297;
+  const SHEET_PAD_MM = 6 + 6;          // padding افقی برگه
+  const LABEL_COL_MM = 24;             // ستون برچسب روز در مدل ب
+  const AXIS_MM = (SHEET_MM - SHEET_PAD_MM - LABEL_COL_MM) / TOTAL_FR; // ≈۱۸.۶mm per fr
+  const CARD_PAD_MM = 0.35 * 2 + 0.9 * 2; // پدینگ slot + کارت
+  const FONT_LADDER = [13, 12, 11, 10, 9.5, 9, 8.5, 8, 7.5, 7, 6.5, 6, 5.5, 5.2];
+  const PT_PER_MM = 72 / 25.4;
+
+  /** بزرگ‌ترین فونتی (pt) که `title` در `cardMm` میلی‌متر و `maxLines` سطر جا شود. */
+  function fitTitlePt(title: string, cardMm: number, maxLines: number): number {
+    const innerMm = Math.max(cardMm - CARD_PAD_MM, 3);
+    const innerPt = innerMm * PT_PER_MM;
+    // پهنای تخمینی متن: حروف فارسی عریض‌تر از latin اند
+    const wide = (title.match(/[\u0600-\u06FF\uFB8A-\uFEFC]/g) ?? []).length;
+    const narrow = title.length - wide;
+    const emWidth = wide * 0.54 + narrow * 0.32;
+    // نردبان را از بزرگ به کوچک می‌گردیم و اولین فونتی که در maxLines جا شود
+    for (const pt of FONT_LADDER) {
+      const totalPt = emWidth * pt;
+      if (totalPt <= innerPt * maxLines) return pt;
+    }
+    return FONT_LADDER[FONT_LADDER.length - 1];
+  }
+
+  /** حداکثر سطرهای مجاز بر اساس پهنای کارت — کارتِ عریض‌تر = سطرِ کمتر. */
+  function maxTitleLines(cardMm: number): number {
+    if (cardMm >= 74) return 1;
+    if (cardMm >= 30) return 2;
+    return 3;
+  }
+
   return (
     <div className={`ds-sheet${mono ? ' ds-mono' : ''}`} dir="rtl">
       <style>{css}</style>
@@ -513,6 +558,9 @@ export default async function DoorSignPrint({
                 )}
                 {dayPlaced.map((p, i) => {
                   const e = p.entry as ProfessorCalendarEntry;
+                  // پهنای واقعی کارت بر حسب میلی‌متر — برای shrink-to-fit عنوان
+                  const cardMm = (p.heightPercent / 100) * AXIS * AXIS_MM;
+                  const lines = maxTitleLines(cardMm);
                   return (
                     <div
                       key={`${p.key}#${i}`}
@@ -527,7 +575,7 @@ export default async function DoorSignPrint({
                       }}
                     >
                       <div className={`ds-card${e.courseType === 'عملی' ? ' lab' : ''}`}>
-                        <div className="ds-t">
+                        <div className="ds-t" style={{ fontSize: `${fitTitlePt(e.title, cardMm, lines)}pt` }}>
                           {e.title}{e.merged ? ' 🔗' : ''}
                           <WeekBadge weekType={e.weekType} />
                         </div>
@@ -579,6 +627,11 @@ export default async function DoorSignPrint({
               )}
               {dayPlaced.map((p, i) => {
                 const e = p.entry as ProfessorCalendarEntry;
+                // پهنای واقعی کارت: ستونِ روز ≈ (۲۸۵ − ۱۳.۵)/۷ ≈ ۳۸.۸mm،
+                // ضربدر سهمِ این کارت از ستون (p.widthPercent) — برای shrink-to-fit
+                const dayColMm = (SHEET_MM - SHEET_PAD_MM - 13.5) / 7;
+                const cardMm = (p.widthPercent / 100) * dayColMm;
+                const lines = maxTitleLines(cardMm);
                 return (
                   <div
                     key={`${p.key}#${i}`}
@@ -593,7 +646,7 @@ export default async function DoorSignPrint({
                     }}
                   >
                     <div className={`ds-card${e.courseType === 'عملی' ? ' lab' : ''}`}>
-                      <div className="ds-t">
+                      <div className="ds-t" style={{ fontSize: `${fitTitlePt(e.title, cardMm, lines)}pt` }}>
                         {e.title}{e.merged ? ' 🔗' : ''}
                         <WeekBadge weekType={e.weekType} />
                       </div>
