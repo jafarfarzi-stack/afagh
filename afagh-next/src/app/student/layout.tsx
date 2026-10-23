@@ -1,4 +1,7 @@
 import { redirect } from 'next/navigation';
+import { eq } from 'drizzle-orm';
+import { db } from '@/db';
+import { users } from '@/db/schema';
 import { getStudentByUser, requireRole, endCurrentSession } from '@/lib/auth';
 import { alumniOf } from '@/lib/alumni';
 import { getSiblingAccounts } from '@/lib/account-switch';
@@ -12,6 +15,7 @@ import { DEMO_STUDENT } from '@/lib/demo-student-data';
 import ThemeToggle from '@/components/ThemeToggle';
 import { logoutAction } from '../login/actions';
 import StudentNav, { StudentSidebar } from './StudentNav';
+import UserAvatar from '@/components/UserAvatar';
 
 export default async function StudentLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRole(['STUDENT']);
@@ -20,6 +24,8 @@ export default async function StudentLayout({ children }: { children: React.Reac
   if (await alumniOf(user.id)) redirect('/alumni');
 
   const me = await getStudentByUser(user.id);
+  // عکس پرسنلی کاربر (برای آواتار هدر) — کلید شیء، نمایش از مسیر امن
+  const [photoRow] = await db.select({ photoKey: users.photoKey }).from(users).where(eq(users.id, user.id)).limit(1);
 
   const termScope = await getTermScope(me?.universityId ?? null);
   const demo = await isDemoStudentUser(user.id);
@@ -55,38 +61,56 @@ export default async function StudentLayout({ children }: { children: React.Reac
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col" dir="rtl">
-      {/* هدر اصلی */}
+      {/* هدر اصلی — دو ردیفی مثل کارتابل استاد:
+          ردیف۱ = لوگو + عنوان (کوتاه در موبایل) + دارک‌مود و خروج قرمز
+          ردیف۲ = سوییچر ترم و نقش (همیشه دیده می‌شود؛ پیش‌تر همه با flex-wrap
+          درهم می‌پیچید و هدر موبایل شلوغ و بلند می‌شد) */}
       <header className="bg-emerald-800 text-white shadow-md sticky top-0 z-40 print:hidden">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 p-3.5 px-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center font-bold text-base shadow-inner">
-              آ
+        <div className="max-w-7xl mx-auto flex flex-col gap-2 p-3.5 px-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center font-bold text-base shadow-inner">
+                آ
+              </div>
+              <UserAvatar userId={user.id} hasPhoto={!!photoRow?.photoKey} name={user.name} className="w-9 h-9" fallbackClass="bg-emerald-700" />
+              <div>
+                <p className="text-sm font-extrabold tracking-wide">
+                  <span className="sm:hidden">کارتابل دانشجو</span>
+                  <span className="hidden sm:inline">سامانه جامع آموزشی دانشگاه آفاق</span>
+                </p>
+                <p className="text-xs text-emerald-200">میز کاربری دانشجو — {user.name}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-extrabold tracking-wide">سامانه جامع آموزشی دانشگاه آفاق</p>
-              <p className="text-xs text-emerald-200">میز کاربری دانشجو — {user.name}</p>
+            <div className="flex flex-nowrap items-center gap-2">
+              <a
+                href="/help/student"
+                className="hidden sm:inline-flex text-xs bg-emerald-700/80 hover:bg-emerald-700 text-emerald-100 border border-emerald-600 px-3 py-1.5 rounded-lg transition-colors font-medium items-center gap-1.5"
+              >
+                <span>📖</span>
+                <span>راهنمای سیستم</span>
+              </a>
+              <a
+                href="/help/pdfs/student.pdf"
+                download
+                className="hidden sm:inline-flex text-xs bg-emerald-700/80 hover:bg-emerald-700 text-emerald-100 border border-emerald-600 px-3 py-1.5 rounded-lg transition-colors font-medium items-center gap-1.5"
+              >
+                <span>📕</span>
+                <span>PDF راهنما</span>
+              </a>
+              <ThemeToggle />
+              <form action={logoutAction}>
+                <button className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition">
+                  <span className="sm:hidden">خروج</span>
+                  <span className="hidden sm:inline">خروج از حساب</span>
+                </button>
+              </form>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <TermSwitcher
               terms={termScope.terms}
               selectedId={termScope.selectedId}
             />
-            <a
-              href="/help/student"
-              className="hidden sm:inline-flex text-xs bg-emerald-700/80 hover:bg-emerald-700 text-emerald-100 border border-emerald-600 px-3 py-1.5 rounded-lg transition-colors font-medium items-center gap-1.5"
-            >
-              <span>📖</span>
-              <span>راهنمای سیستم</span>
-            </a>
-            <a
-              href="/help/pdfs/student.pdf"
-              download
-              className="hidden sm:inline-flex text-xs bg-emerald-700/80 hover:bg-emerald-700 text-emerald-100 border border-emerald-600 px-3 py-1.5 rounded-lg transition-colors font-medium items-center gap-1.5"
-            >
-              <span>📕</span>
-              <span>PDF راهنما</span>
-            </a>
             {/* سوییچ به کارتابل استاد/مدیر گروه/ستادی و سایر حساب‌های هم‌کدملی
                 از همین سوییچر واحد انجام می‌شود. */}
             <PanelSwitcher
@@ -95,12 +119,6 @@ export default async function StudentLayout({ children }: { children: React.Reac
               permissionCount={permissionCount}
               siblings={siblings}
             />
-            <ThemeToggle />
-            <form action={logoutAction}>
-              <button className="text-xs bg-emerald-900/90 hover:bg-emerald-950 text-emerald-100 border border-emerald-700/60 px-3 py-1.5 rounded-lg transition-colors font-medium">
-                خروج از حساب
-              </button>
-            </form>
           </div>
         </div>
       </header>

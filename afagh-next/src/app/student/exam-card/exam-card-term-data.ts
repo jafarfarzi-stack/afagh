@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, eq, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { majors, student_ledger, students, users } from '@/db/schema';
 import { maskNationalCode, type ExamCardData } from '@/lib/verification';
@@ -16,6 +16,10 @@ type TermRow = { id: number; title: string };
 const EXAM_CARD_DEBT_TOLERANCE_RIALS = 0;
 
 export async function getExamCardDataForTerm(userId: number, term: TermRow): Promise<ExamCardData | null> {
+  // یک کاربر می‌تواند چند پروندهٔ دانشجویی داشته باشد (چند شماره برای
+  // سال‌های مختلف). ترتیب باید همان قانون سراسری getStudentByUser باشد
+  // (ACTIVE اول، سپس جدیدترین) — وگرنه limit(1) پروندهٔ تصادفی برمی‌دارد و
+  // کارت/بدهی/ترمِ حساب اشتباه نشان داده می‌شود.
   const [stu] = await db
     .select({
       studentId: students.id, studentCode: students.studentCode, entryYear: students.entryYear,
@@ -27,6 +31,7 @@ export async function getExamCardDataForTerm(userId: number, term: TermRow): Pro
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(majors, eq(majors.id, students.majorId))
     .where(eq(users.id, userId))
+    .orderBy(sql`CASE WHEN ${students.status} = 'ACTIVE' THEN 0 ELSE 1 END`, desc(students.id))
     .limit(1);
   if (!stu) return null;
 

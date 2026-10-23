@@ -1,5 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { eq } from 'drizzle-orm';
+import { db } from '@/db';
+import { users } from '@/db/schema';
 import { requireRole, endCurrentSession } from '@/lib/auth';
 import ThemeToggle from '@/components/ThemeToggle';
 import { logoutAction } from '../login/actions';
@@ -12,6 +15,7 @@ import TermSwitcher from '@/components/TermSwitcher';
 import { getCurrentUniversity, listUniversities } from '@/lib/university-scope';
 import { uniThemeResolved } from '@/lib/university-theme-db';
 import { getTermScope } from '@/lib/term-scope';
+import UserAvatar from '@/components/UserAvatar';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   // نقش‌های اصلی شاخهٔ /admin — همان گارد پیشین بدون تغییر.
@@ -78,6 +82,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     );
   }
   const th = await uniThemeResolved(curUni.code);
+  // عکس پرسنلی کاربر (برای آواتار هدر) — کلید شیء، نمایش از مسیر امن
+  const [photoRow] = await db.select({ photoKey: users.photoKey }).from(users).where(eq(users.id, user.id)).limit(1);
   const termScope = await getTermScope(curUni.id);
   // قفل خودکار بیکاری — سرور-محور (مدت به تفکیک نقش؛ ۰ = غیرفعال).
   // منبع حقیقت «زمان آخرین فعالیت» است؛ پس رفرش قفل را دور نمی‌زند و کاربرِ در حال کار بیرون نمی‌افتد.
@@ -126,6 +132,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <div className={`w-8 h-8 rounded-lg ${th.badge} flex items-center justify-center font-bold text-sm shadow-inner`}>
                 {curUni.title.slice(0, 1)}
               </div>
+              <UserAvatar userId={user.id} hasPhoto={!!photoRow?.photoKey} name={user.name} className="w-9 h-9" fallbackClass="bg-indigo-600" />
               <div>
                 <Link href="/admin" title="بازگشت به صفحه اول (داشبورد)" className="hover:opacity-90 transition-opacity">
                   <p className="font-extrabold text-sm tracking-wide">

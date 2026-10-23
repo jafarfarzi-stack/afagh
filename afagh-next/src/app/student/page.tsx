@@ -17,7 +17,6 @@ import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA } from '@/lib/regulations-engine';
 import { resolveStudentCurriculum } from '@/lib/curriculum-apply';
 import { getTermScope, listTermsForUniversity, termOrdinalForEntry } from '@/lib/term-scope';
-import { getBool } from '@/lib/settings';
 import {
   buildDashboardScheduleMap,
   buildProfNameMap,
@@ -26,11 +25,10 @@ import {
   toShamsi,
 } from '@/lib/student-dashboard-helpers';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
-import TermFilterChip from '@/components/TermFilterChip';
 import MessengerOnboardBanner from '@/components/MessengerOnboardBanner';
+import UserAvatar from '@/components/UserAvatar';
 import { getExamCardData } from '@/lib/verification';
 import Link from 'next/link';
-import { emergencyDropAction, emergencyDropFormAction } from './actions';
 import { DemoDashboard } from './demo-sections';
 
 export const dynamic = 'force-dynamic';
@@ -72,12 +70,6 @@ export default async function StudentDashboardPage() {
   if (demo) {
     return <DemoDashboard name={user.name} filteredTermTitle={filteredTerm?.title ?? null} />;
   }
-
-  // کلیدهای دستی مدیر: پنجرهٔ انتخاب واحد و حذف اضطراری
-  const [enrollmentWindowOpen, emergencyWithdrawOpen] = await Promise.all([
-    getBool('ENROLLMENT_WINDOW_OPEN').catch(() => true),
-    getBool('EMERGENCY_WITHDRAW_OPEN').catch(() => true),
-  ]);
 
   const examTerm = term ? { id: term.id, title: term.title } : null;
 
@@ -245,10 +237,6 @@ export default async function StudentDashboardPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in">
-      {filteredTerm && (
-        <TermFilterChip title={filteredTerm.title} universityId={me.universityId ?? null} />
-      )}
-      <MessengerOnboardBanner />
       {/* ========================================================================= */}
       {/* 1. STUDENT HERO & PROFILE SUMMARY BANNER */}
       {/* ========================================================================= */}
@@ -256,9 +244,16 @@ export default async function StudentDashboardPage() {
         <div className="absolute top-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-4 sm:gap-5">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 text-slate-950 flex items-center justify-center font-black text-3xl shadow-lg border-2 border-white/20">
-              {user.name.slice(0, 1) || 'د'}
-            </div>
+            <UserAvatar
+              userId={user.id}
+              hasPhoto={!!userRecord?.photoKey}
+              name={user.name}
+              className="w-16 h-16 sm:w-20 sm:h-20"
+              fallbackClass="bg-gradient-to-br from-emerald-400 to-teal-600"
+              fallbackTextClass="text-slate-950"
+              fallbackInitialClass="font-black text-3xl"
+              alt="عکس دانشجو"
+            />
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-xl sm:text-2xl font-black tracking-tight">{user.name}</h1>
@@ -291,10 +286,13 @@ export default async function StudentDashboardPage() {
                   : 'نامشخص'}
               </span>
             </div>
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-500/20 border border-teal-400/30 text-teal-200 font-bold">
-              <span>🪪 نظام وظیفه (سخا):</span>
-              <span className="text-white font-black">{me.militaryStatus || 'ثبت نشده'}</span>
-            </div>
+            {/* نظام وظیفه فقط برای دانشجویان مرد معنادار است (بانوان معاف‌اند) */}
+            {userRecord?.gender !== 'FEMALE' && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-500/20 border border-teal-400/30 text-teal-200 font-bold">
+                <span>🪪 نظام وظیفه (سخا):</span>
+                <span className="text-white font-black">{me.militaryStatus || 'ثبت نشده'}</span>
+              </div>
+            )}
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 font-bold">
               <span>🏛️ {filteredTerm ? 'نیمسال انتخابی:' : 'ترم جاری:'}</span>
               <span className="text-white font-black">{term?.title || 'ثبت نشده'}</span>
@@ -779,68 +777,14 @@ export default async function StudentDashboardPage() {
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* 5. CURRENT TERM ENROLLMENTS WITH EMERGENCY DROP OPTION */}
-      {/* ========================================================================= */}
-      {currentEnrollments.length > 0 && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
-              <span>📋</span>
-              <span>{filteredTerm ? 'دروس ثبت‌نام‌شده نیمسال انتخابی' : 'دروس ثبت‌نام‌شده ترم جاری'}</span>
-            </h2>
-            <span className="text-xs text-slate-500 font-bold">بازگشت دستی پس از مهلت حذف و اضافه</span>
-          </div>
-          <div className="card bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {currentEnrollments.map((c, idx) => {
-                const sched = schedMap.get(c.offeringId);
-                const prof = c.professorId ? profMap.get(c.professorId) || 'نامشخص' : 'نامشخص';
-                const isEmergencyDropped = c.emergencyWithdrawal === 1 || c.status === 'DROPPED';
-                return (
-                  <div key={c.enrollmentId} className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-900 text-sm">{c.title}</span>
-                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
-                        {c.units} واحد
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500">استاد: {prof}</p>
-                    {sched?.exam && (
-                      <p className="text-[11px] text-slate-600">📝 امتحان: {toShamsi(sched.exam.examDate)} ساعت {sched.exam.startTime}</p>
-                    )}
-                    {isEmergencyDropped ? (
-                      <span className="text-xs text-center bg-rose-100 text-rose-800 px-3 py-1.5 rounded-xl font-bold flex items-center justify-center gap-1">
-                        <span>⚠️</span>
-                        <span>حذف اضطراری انجام شده</span>
-                      </span>
-                    ) : (
-                      <>
-                        {emergencyWithdrawOpen ? (
-                          <form action={emergencyDropFormAction}>
-                            <input type="hidden" name="enrollmentId" value={c.enrollmentId} />
-                            <button
-                              type="submit"
-                              className="w-full text-xs bg-rose-100 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-300 px-3 py-1.5 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5"
-                            >
-                              <span>⚠️</span>
-                              <span>حذف اضطراری</span>
-                            </button>
-                          </form>
-                        ) : (
-                          <span className="block w-full text-center text-[11px] bg-slate-100 text-slate-500 border border-slate-200 px-3 py-1.5 rounded-xl font-bold">
-                            حذف اضطراری غیرفعال است
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ─────────────────────────────────────────────────────────────
+          بخش «دروس ثبت‌نام‌شدهٔ نیمسال + حذف اضطراری» به صفحهٔ انتخاب واحد
+          (/student/enroll) منتقل شد تا صفحهٔ اول دانشجو شلوغ نشود.
+          ───────────────────────────────────────────────────────────── */}
+
+      {/* بنر اتصال پیام‌رسان — عمداً انتهای صفحه: پیش‌تر بالای داشبورد بود و
+          محتوای اصلی را پایین می‌راند؛ حالا بدون اشغال فضای بالای صفحه است. */}
+      <MessengerOnboardBanner />
     </div>
   );
 }

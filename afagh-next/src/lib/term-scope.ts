@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { academic_terms } from '@/db/schema';
+import { toEnDigits } from '@/lib/persian-search';
 
 export const TERM_COOKIE = 'afagh_term';
 
@@ -65,21 +66,25 @@ export function filterTeachingTerms<T extends { termType?: string | null }>(
 }
 
 export function termSemesterIndex(termCode: string | null | undefined): number {
-  const last = (termCode ?? '').trim().slice(-1);
+  // ارقام فارسی/عربی هم پذیرفته شود (کدهای مهاجرت‌شده از سما)
+  const last = toEnDigits((termCode ?? '').trim()).slice(-1);
   const index = SEMESTER_INDEX[last];
   return index === undefined ? 3 : index;
 }
 
 export function termAcademicYear(term: TermCodeLike): number | null {
   if (typeof term.academicYear === 'number' && Number.isFinite(term.academicYear)) return term.academicYear;
-  const head = (term.termCode ?? '').trim().slice(0, 4);
+  const head = toEnDigits((term.termCode ?? '').trim()).slice(0, 4);
   if (!/^\d{4}$/.test(head)) return null;
   const fromCode = Number(head);
   return Number.isFinite(fromCode) ? fromCode : null;
 }
 
 export function termCodeNumber(termCode: string | null | undefined): number {
-  const parsed = Number((termCode ?? '').trim());
+  // ارقام فارسی/عربی → لاتین (کدهای مهاجرت‌شده از سما با ارقام فارسی
+  // ذخیره شده‌اند و Number() روی آن‌ها NaN می‌دهد — منجر به محاسبهٔ اشتباه
+  // شمارهٔ ترم و مرتب‌سازی خراب می‌شده).
+  const parsed = Number(toEnDigits((termCode ?? '').trim()));
   return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
 }
 
@@ -262,7 +267,16 @@ export function termOrdinalForEntry(opts: {
   let entryIdx = codes.findIndex((c) => c >= entryCode);
   if (entryIdx < 0) entryIdx = codes.length - 1; // ورودی بعد از آخرین ترمِ فهرست
   const targetIdx = codes.indexOf(termCodeNumber(targetTermCode));
-  if (targetIdx < 0) return null;
+  if (targetIdx < 0) {
+    // ترم هدف در فهرست ترم‌های آموزشی نیست (مثلاً ترم تابستان که فیلتر
+    // می‌شود، یا کد نامعتبر). به‌جای تسلیم شدن و نمایش «ترم ۱»، شماره از
+    // روی خودِ کدها حساب می‌شود: هر سال دو نیمسال (ورودی ۱۴۰۳۲ → ۱۴۰۵۱ = ۴).
+    const targetCode = termCodeNumber(targetTermCode);
+    if (!Number.isFinite(targetCode) || targetCode === Number.NEGATIVE_INFINITY) return null;
+    const semOf = (code: number) => Math.floor(code / 10) * 2 + (code % 10);
+    const ord = semOf(targetCode) - semOf(entryCode) + 1;
+    return ord >= 1 ? ord : null;
+  }
   const ordinal = targetIdx - entryIdx + 1;
   return ordinal >= 1 ? ordinal : null;
 }

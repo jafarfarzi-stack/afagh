@@ -168,7 +168,7 @@ export default function ScheduleClient({
         examDate: c.exam!.examDate,
         startTime: c.exam!.startTime,
         endTime: c.exam!.endTime,
-        room: c.exam!.room || 'سالن امتحانات مرکزی',
+        room: c.exam!.room || '',
       }))
       .sort((a, b) => a.examDate.localeCompare(b.examDate));
   }, [courses]);
@@ -437,7 +437,7 @@ export default function ScheduleClient({
                     </td>
                     <td className="p-2 border-l border-slate-200">{ex.professor}</td>
                     <td className="p-2 border-l border-slate-200 font-bold text-emerald-800">
-                      {ex.room}
+                      {ex.room || '—'}
                     </td>
                   </tr>
                 ))

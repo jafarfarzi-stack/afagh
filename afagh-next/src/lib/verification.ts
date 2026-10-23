@@ -1337,6 +1337,9 @@ export async function getExamCardData(
   userId: number,
   resolvedTerm?: { id: number; title: string } | null,
 ): Promise<ExamCardData | null> {
+  // ترتیب قطعیِ رکورد دانشجویی — همان قانون getStudentByUser (ACTIVE اول،
+  // سپس جدیدترین). کاربرِ چندشماره‌ای (چند پروندهٔ دانشجویی) باید در همهٔ
+  // صفحات یک پروندهٔ واحد ببیند؛ limit(1) بدون ترتیب پروندهٔ تصادفی می‌داد.
   const [stu] = await db
     .select({
       studentId: students.id, studentCode: students.studentCode, entryYear: students.entryYear,
@@ -1348,6 +1351,7 @@ export async function getExamCardData(
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(majors, eq(majors.id, students.majorId))
     .where(eq(users.id, userId))
+    .orderBy(sql`CASE WHEN ${students.status} = 'ACTIVE' THEN 0 ELSE 1 END`, desc(students.id))
     .limit(1);
   if (!stu) return null;
 

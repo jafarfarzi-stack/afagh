@@ -16,7 +16,6 @@ import {
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { getTermScope, listTermsForUniversity, termOrdinalForEntry } from '@/lib/term-scope';
 import { getCurrentUniversity } from '@/lib/university-scope';
-import TermFilterChip from '@/components/TermFilterChip';
 import ScheduleClient, { type StudentScheduleCourse } from './ScheduleClient';
 
 export const dynamic = 'force-dynamic';
@@ -164,7 +163,9 @@ export default async function StudentSchedulePage() {
         examDate: String(s.examDate),
         startTime: s.startTime.slice(0, 5),
         endTime: s.endTime.slice(0, 5),
-        room: s.roomName || 'سالن امتحانات مرکزی',
+        // سالن فقط اگر واقعاً تخصیص یافته باشد؛ پیش‌تر به‌صورت پیش‌فرض
+        // «سالن امتحانات مرکزی» نمایش داده می‌شد حتی وقتی تخصیصی نبود.
+        room: s.roomName || '',
       };
     } else if (s.scheduleType !== 'EXAM' && s.dayOfWeek != null) {
       entry.classes.push({
@@ -203,7 +204,6 @@ export default async function StudentSchedulePage() {
     <div className="space-y-4">
       {filteredTerm && (
         <>
-          <TermFilterChip title={filteredTerm.title} universityId={me.universityId ?? null} />
           {coursesList.length === 0 && (
             <p className="card p-5 text-center text-xs text-slate-500">
               برای نیمسال «{filteredTerm.title}» هیچ درس ثبت‌نام‌شده‌ای برای شما وجود ندارد؛ بنابراین برنامهٔ هفتگی و زمان‌بندی امتحان نمایش داده نمی‌شود.

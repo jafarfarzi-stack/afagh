@@ -16,14 +16,14 @@ import {
 } from '@/db/schema';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { getTermScope } from '@/lib/term-scope';
-import TermFilterChip from '@/components/TermFilterChip';
 import { buildPrereqContext, evaluateLogicTree, formatPrereq } from '@/lib/enroll-engine';
 import { openBypassRequestsOfStudent } from '@/lib/bypass-requests';
 import { offeringVisible } from '@/lib/offering-targeting';
 import { evaluateStudentRegulationStatus, type StudentAcademicSummary } from '@/lib/regulations-engine';
-import { getSetting } from '@/lib/settings';
+import { getBool, getSetting } from '@/lib/settings';
 import { toShamsi } from '@/lib/shamsi';
 import EnrollClient from './EnrollClient';
+import { emergencyDropFormAction } from './actions';
 import { resolveTuitionRule, type TuitionRuleContext } from '@/lib/tuition-resolver';
 import { toNum } from '@/lib/finance-rules';
 
@@ -253,6 +253,54 @@ export default async function EnrollPage() {
     };
   });
 
+  // ── وضعیت پنجرهٔ انتخاب واحد: پرچم ترم + کلید سراسری مدیر + مهلت حذف و اضافه ──
+  // پیش از این فقط isEnrollmentOpen ترم بررسی می‌شد؛ اگر تاریخ مهلت گذشته
+  // یا مدیر کلید سراسری را خاموش کرده بود، صفحه هنوز باز نشان داده می‌شد.
+  const [enrollmentWindowOpen, emergencyWithdrawOpen] = await Promise.all([
+    getBool('ENROLLMENT_WINDOW_OPEN').catch(() => true),
+    getBool('EMERGENCY_WITHDRAW_OPEN').catch(() => false),
+  ]);
+  const addDropEnd = term?.addDropEndDate ?? null;
+  const addDropTimeOpen = !addDropEnd || addDropEnd.getTime() >= Date.now();
+  const enrollOpen = !!term?.isEnrollmentOpen && enrollmentWindowOpen && addDropTimeOpen;
+
+  // ── دروس ثبت‌شدهٔ همین نیمسال (از داشبورد به اینجا منتقل شد) ──
+  const studentEnrollments = term
+    ? await db
+        .select({
+          enrollmentId: enrollments.id,
+          offeringId: enrollments.offeringId,
+          status: enrollments.status,
+          code: courses.code,
+          title: courses.title,
+          units: courses.units,
+          group: course_offerings.groupNumber,
+          professorId: course_offerings.professorId,
+          emergencyWithdrawal: enrollments.emergencyWithdrawal,
+        })
+        .from(enrollments)
+        .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+        .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+        .where(
+          and(
+            eq(enrollments.studentId, me.id),
+            eq(course_offerings.termId, term.id),
+            inArray(enrollments.status, ['REGISTERED', 'FINALIZED', 'WAITLISTED', 'PENDING_COUNCIL', 'DROPPED']),
+          ),
+        )
+    : [];
+  // استاد دروس ثبت‌شده ممکن است در فهرست ارائه‌های فعال نباشد (مثلاً ارائه غیرفعال)
+  const enrolledProfIds = [...new Set(studentEnrollments.map(e => e.professorId).filter((v): v is number => v != null))];
+  const missingProfIds = enrolledProfIds.filter(id => !profMap.has(id));
+  if (missingProfIds.length > 0) {
+    const extraProfs = await db
+      .select({ staffId: staff.id, firstName: users.firstName, lastName: users.lastName })
+      .from(staff)
+      .innerJoin(users, eq(users.id, staff.userId))
+      .where(inArray(staff.id, missingProfIds));
+    for (const p of extraProfs) profMap.set(p.staffId, `${p.firstName || ''} ${p.lastName || ''}`.trim());
+  }
+
   const cartList = cartCourses.map(c => {
     const s = schedMap.get(c.id);
     return {
@@ -271,7 +319,6 @@ export default async function EnrollPage() {
     <div className="space-y-4">
       {filteredTerm && (
         <>
-          <TermFilterChip title={filteredTerm.title} universityId={me.universityId ?? null} />
           {offerings.length === 0 && (
             <p className="card p-5 text-center text-xs text-slate-500">
               برای نیمسال «{filteredTerm.title}» هیچ گروه درسی فعالی ثبت نشده است. برای ثبت انتخاب واحد، فیلتر نیمسال را پاک کنید و نیمسال جاری را انتخاب کنید.

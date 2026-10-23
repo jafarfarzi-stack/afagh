@@ -16,7 +16,6 @@ import { getTermScope } from '@/lib/term-scope';
 import { getSetting } from '@/lib/settings';
 import { ensureDefaultProcesses } from '@/lib/workflow-engine';
 import StudentRequestsClient from './StudentRequestsClient';
-import TermFilterNote from '../term-filter-note';
 
 export const dynamic = 'force-dynamic';
 
@@ -158,7 +157,6 @@ export default async function StudentRequestsPage() {
 
   return (
     <div className="space-y-3">
-      {selectedTerm && <TermFilterNote title={selectedTerm.title} />}
       <StudentRequestsClient
         student={{
           id: me.id,

@@ -13,7 +13,6 @@ import { DEMO_STUDENT } from '@/lib/demo-student-data';
 import { COURSE_TYPE_FA } from '@/lib/student-labels';
 import { sortTermsForTranscript, groupTermsByAcademicYear, EQUIVALENCE_GROUP_YEAR } from '@/lib/scheduling-core';
 import { getTermScope } from '@/lib/term-scope';
-import TermFilterChip from '@/components/TermFilterChip';
 import PrintTranscriptButton from '@/components/PrintTranscriptButton';
 
 export const dynamic = 'force-dynamic';
@@ -232,9 +231,6 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
           ))}
           <span className="text-[10px] text-slate-400">هر مقطع کارنامهٔ جداگانه و QR جدا دارد.</span>
         </div>
-      )}
-      {filteredTerm && (
-        <TermFilterChip title={filteredTerm.title} universityId={me.universityId ?? null} />
       )}
       {/* دکمه چاپ و عملیات بالای سند */}
       <div className="flex items-center justify-between bg-white p-3 px-4 rounded-xl shadow-sm border border-slate-200 print:hidden">

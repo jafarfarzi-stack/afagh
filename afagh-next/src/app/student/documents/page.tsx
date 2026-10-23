@@ -3,7 +3,6 @@ import { db } from '@/db';
 import { document_categories, document_types, student_documents } from '@/db/schema';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { getTermScope } from '@/lib/term-scope';
-import TermFilterNote from '../term-filter-note';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,7 +33,6 @@ export default async function MyDocuments() {
 
   return (
     <div className="space-y-3">
-      {selectedTerm && <TermFilterNote title={selectedTerm.title} />}
       <div className="card">
         <h2 className="font-bold">مدارک من</h2>
         <p className="mt-1 text-xs text-slate-500">مشاهدهٔ فایل از طریق لینک امضاشدهٔ موقت؛ خود فایل در Object Storage نگهداری می‌شود.</p>

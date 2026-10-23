@@ -14,7 +14,6 @@ import { issueFinanceStatementToken } from '@/lib/verification';
 import { qrSvg } from '@/lib/qr';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import PrintTranscriptButton from '@/components/PrintTranscriptButton';
-import TermFilterChip from '../term-filter-chip';
 import { DemoFinance } from '../demo-sections';
 
 export const dynamic = 'force-dynamic';
@@ -184,9 +183,6 @@ export default async function StudentFinancePage({ searchParams }: { searchParam
           <p className="text-xs text-slate-500 mt-1">کارنامهٔ مالی ترم‌به‌ترم، چک‌ها و وام‌ها</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {selectedTerm && (
-            <TermFilterChip title={selectedTerm.title} universityId={me.universityId} />
-          )}
           <PrintTranscriptButton orientation="portrait" />
         </div>
       </div>

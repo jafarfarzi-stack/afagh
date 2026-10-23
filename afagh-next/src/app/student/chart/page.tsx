@@ -14,7 +14,6 @@ import { getStudentByUser, requireRole } from '@/lib/auth';
 import { currentTermFor } from '@/lib/terms';
 import { getTermScope } from '@/lib/term-scope';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
-import TermFilterChip from '@/components/TermFilterChip';
 import TermAutoScroll from '@/components/TermAutoScroll';
 import { resolveApplicableCurriculum, type ResolvableVersion } from '@/lib/curriculum-resolution';
 import PrintButton from '@/components/PrintButton';
@@ -222,9 +221,6 @@ export default async function StudentCurriculumChartPage() {
   return (
     <div className="space-y-4">
       <TermAutoScroll targetId={highlightAnchor} />
-      {filteredTerm && (
-        <TermFilterChip title={filteredTerm.title} universityId={me.universityId ?? null} />
-      )}
       {/* هدر راهنمای چارت */}
       <div className="card !p-4 bg-gradient-to-r from-emerald-800 to-teal-900 text-white border-0 shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-3">

@@ -11,7 +11,6 @@ import { demoExamCardData, demoTermFilterNotice } from '@/lib/demo-student-data'
 import { qrSvg } from '@/lib/qr';
 import ExamCardClient from './ExamCardClient';
 import { getExamCardDataForTerm } from './exam-card-term-data';
-import TermFilterChip from '../term-filter-chip';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,11 +32,6 @@ export default async function StudentExamCardPage() {
   if (demo) {
     return (
       <div className="space-y-3">
-        {selectedTerm && (
-          <div className="print:hidden flex justify-start">
-            <TermFilterChip title={selectedTerm.title} universityId={me?.universityId ?? user.universityId} />
-          </div>
-        )}
         {selectedTerm ? (
           <p className="print:hidden rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
             {demoTermFilterNotice(selectedTerm.title)}
@@ -101,11 +95,6 @@ export default async function StudentExamCardPage() {
 
   return (
     <div className="space-y-3">
-      {selectedTerm && (
-        <div className="print:hidden flex justify-start">
-          <TermFilterChip title={selectedTerm.title} universityId={me?.universityId ?? user.universityId} />
-        </div>
-      )}
 
       {noCourses && (
         <p className="print:hidden rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">

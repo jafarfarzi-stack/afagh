@@ -165,8 +165,6 @@ export default async function ProfessorHome() {
   return (
     <div className="space-y-6" dir="rtl">
 
-      <MessengerOnboardBanner />
-
       <div className="print:hidden bg-gradient-to-l from-indigo-950 via-indigo-900 to-slate-900 text-white rounded-3xl p-6 shadow-xl border border-indigo-700/50 space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
@@ -583,6 +581,10 @@ export default async function ProfessorHome() {
         </div>
 
       </div>
+
+      {/* بنر اتصال پیام‌رسان — انتهای صفحه (پیش‌تر بالای کارتابل بود و
+          محتوای اصلی را پایین می‌راند) */}
+      <MessengerOnboardBanner />
 
     </div>
   );

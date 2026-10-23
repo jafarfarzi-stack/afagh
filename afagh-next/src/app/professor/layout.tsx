@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { electronic_documents, departments } from '@/db/schema';
+import { electronic_documents, departments, users } from '@/db/schema';
 import { getStaffByUser, requireRole, endCurrentSession } from '@/lib/auth';
 import { headedDepartments } from '@/lib/group-manager';
 import { getSiblingAccounts } from '@/lib/account-switch';
@@ -13,11 +13,14 @@ import TermSwitcher from '@/components/TermSwitcher';
 import { getTermScope } from '@/lib/term-scope';
 import ThemeToggle from '@/components/ThemeToggle';
 import MobileTabBar from '@/components/MobileTabBar';
+import UserAvatar from '@/components/UserAvatar';
 import { logoutAction } from '../login/actions';
 
 export default async function ProfessorLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRole(['PROFESSOR']);
   const me = await getStaffByUser(user.id);
+  // عکس پرسنلی استاد (برای آواتار هدر) — کلید شیء، نمایش از مسیر امن
+  const [photoRow] = await db.select({ photoKey: users.photoKey }).from(users).where(eq(users.id, user.id)).limit(1);
   const pending = me ? await db.select({ id: electronic_documents.id }).from(electronic_documents).where(eq(electronic_documents.staffId, me.id)) : [];
   const pendingCount = pending.length;
 
@@ -74,10 +77,11 @@ export default async function ProfessorLayout({ children }: { children: React.Re
           {/* ردیف اول: لوگو + عنوان (کوتاه در موبایل) + دارک‌مود و خروج — اولیت با ابزارهای کاربر */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-sm text-white shadow">
-                آفاق
-              </div>
-              <div>
+            <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-sm text-white shadow">
+              آفاق
+            </div>
+            <UserAvatar userId={user.id} hasPhoto={!!photoRow?.photoKey} name={user.name} className="w-9 h-9" fallbackClass="bg-indigo-500" />
+            <div>
                 <p className="font-extrabold text-sm sm:text-base">
                   <span className="sm:hidden">کارتابل استاد</span>
                   <span className="hidden sm:inline">کارتابل جامع اعضای هیئت علمی و اساتید</span>

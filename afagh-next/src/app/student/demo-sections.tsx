@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import TermFilterChip from '@/components/TermFilterChip';
 import {
   DEMO_CHART,
   DEMO_CURRICULUM_TOTAL_UNITS_TEXT,
@@ -44,7 +43,6 @@ export function DemoDashboard({
     <div className="space-y-6 animate-in fade-in">
       {filteredTermTitle ? (
         <>
-          <TermFilterChip title={filteredTermTitle} universityId={null} />
           <TermNotice title={filteredTermTitle} />
         </>
       ) : (
@@ -350,7 +348,6 @@ export function DemoChart({ filteredTermTitle }: { filteredTermTitle: string | n
     <div className="space-y-4">
       {filteredTermTitle ? (
         <>
-          <TermFilterChip title={filteredTermTitle} universityId={null} />
           <TermNotice title={filteredTermTitle} />
         </>
       ) : (
@@ -461,7 +458,6 @@ export function DemoFinance({ filteredTermTitle }: { filteredTermTitle: string |
           <h1 className="font-extrabold text-slate-800 text-base sm:text-lg">💳 امور مالی من</h1>
           <p className="text-xs text-slate-500 mt-1">کارنامهٔ مالی ترم‌به‌ترم، چک‌ها و وام‌ها</p>
         </div>
-        {filteredTermTitle && <TermFilterChip title={filteredTermTitle} universityId={null} />}
       </div>
 
       {filteredTermTitle ? (

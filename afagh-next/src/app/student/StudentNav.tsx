@@ -19,6 +19,11 @@ export const NAV_ITEMS = [
   { href: '/student/thesis-proposal', label: 'پایان‌نامه و پروپوزال من', icon: '🔬', exact: false },
 ];
 
+/** مقصدهای نوار پایین موبایل — حداکثر ۵ مقصد پرتکرار + دکمهٔ منو.
+ *  «کارت آزمون» از منوی کامل قابل دسترس است؛ جایش دسترسی سریع
+ *  «میز خدمات و کمیسیون» آمده چون درخواست‌ها پرتکرارترند. */
+const BOTTOM_TAB_HREFS = ['/student', '/student/enroll', '/student/requests', '/student/transcript', '/student/finance'];
+
 export function StudentSidebar({ user }: { user: { name: string; studentCode?: string | null } }) {
   const pathname = usePathname();
 
@@ -99,18 +104,27 @@ export default function StudentNav() {
 
   return (
     <>
-      <nav className="md:hidden fixed inset-x-0 bottom-0 z-50 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] print:hidden">
+      {/* ⚡ نوار پایین بدون backdrop-blur (بلور روی المان fixed = عامل اصلی تأخیر
+          لمسی در موبایل) + touch-action:manipulation برای پاسخ فوری تب‌ها */}
+      <nav
+        className="md:hidden fixed inset-x-0 bottom-0 z-50 bg-white border-t border-slate-200 print:hidden"
+        style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+        aria-label="ناوبری اصلی دانشجو"
+      >
         <div className="max-w-md mx-auto flex items-center justify-around py-1.5 px-1">
-          {NAV_ITEMS.slice(0, 5).map(n => {
+          {BOTTOM_TAB_HREFS.map(href => NAV_ITEMS.find(n => n.href === href))
+            .filter((n): n is (typeof NAV_ITEMS)[number] => !!n)
+            .map(n => {
             const active = isActive(n);
             return (
               <Link
                 key={n.href}
                 href={n.href}
-                className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition-all ${
+                style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+                className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition-all active:scale-95 ${
                   active
-                    ? 'bg-emerald-50 text-emerald-800 font-bold shadow-xs border border-emerald-200/60 scale-105'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    ? 'bg-emerald-50 text-emerald-800 font-bold shadow-xs border border-emerald-200/60'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 active:bg-slate-100'
                 }`}
               >
                 <span className="text-base">{n.icon}</span>

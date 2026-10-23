@@ -3,7 +3,6 @@ import { getTermScope } from '@/lib/term-scope';
 import { getPublicBaseUrl } from '@/lib/settings';
 import { issueEnrollConfirmToken, verifyEnrollConfirm } from '@/lib/verification';
 import { qrSvg } from '@/lib/qr';
-import TermFilterChip from '@/components/TermFilterChip';
 import EnrollConfirmClient from './EnrollConfirmClient';
 
 export const dynamic = 'force-dynamic';
@@ -60,9 +59,6 @@ export default async function StudentEnrollConfirmPage() {
 
   return (
     <div className="space-y-3">
-      <div className="print:hidden flex justify-start">
-        <TermFilterChip title={selectedTerm.title} universityId={me?.universityId ?? user.universityId} />
-      </div>
       <EnrollConfirmClient
         termTitle={selectedTerm.title}
         blocked={blocked}
