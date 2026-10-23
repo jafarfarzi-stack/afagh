@@ -9,6 +9,13 @@ export type TabItem = { href: string; label: string; icon?: string; exact?: bool
  * نوار پایین موبایل (Bottom tab) — ۳ تا ۵ مقصد اصلی برای دسترسی سریع با شست
  * (الگوی Material Design 3 + توصیهٔ NN/g به ناوبری مرکب). فقط روی موبایل
  * (md:hidden) نمایش داده می‌شود؛ دسکتاپ منوی افقی خودش را نگه می‌دارد.
+ *
+ * ⚡ بهینه‌سازی پاسخ‌دهی لمسی (رفع «کندی دکمه‌ها» در موبایل):
+ * - بدون backdrop-blur: بلورِ پس‌زمینه روی عنصر fixed، سنگین‌ترین عامل لگ
+ *   اسکرول و تأخیر لمس در مرورگرهای موبایل است؛ پس‌زمینهٔ solid کافی است.
+ * - touch-action: manipulation + tap-highlight شفاف: حذف تأخیر ~۳۰۰ میلی‌ثانیهٔ
+ *   مرورگر برای تشخیص «دوبار-برای-زوم»، تا تب‌ها فوری پاسخ دهند.
+ * - حالت active (مقیاس/رنگ): بازخورد لمسی فوری به‌جای انتظار برای تغییر صفحه.
  */
 export default function MobileTabBar({
   items,
@@ -21,7 +28,8 @@ export default function MobileTabBar({
   return (
     <nav
       dir="rtl"
-      className="md:hidden fixed inset-x-0 bottom-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200 shadow-[0_-2px_16px_rgba(0,0,0,0.06)] print:hidden"
+      className="md:hidden fixed inset-x-0 bottom-0 z-40 bg-white border-t border-slate-200 print:hidden"
+      style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
       aria-label="ناوبری اصلی موبایل"
     >
       <div className="max-w-md mx-auto flex items-stretch justify-around px-1 py-1">
@@ -31,7 +39,8 @@ export default function MobileTabBar({
             <Link
               key={it.href}
               href={it.href}
-              className={`flex flex-1 flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 transition-colors ${
+              style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+              className={`flex flex-1 flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 transition active:bg-slate-100 active:scale-95 ${
                 active ? `${activeClass} font-bold` : 'text-slate-500'
               }`}
             >

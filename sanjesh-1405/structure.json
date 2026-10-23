@@ -1,0 +1,479 @@
+{
+    "source":  "Arshad405_struct.pdf",
+    "dataFile":  "7025.txt",
+    "description":  "پذیرفته‌شدگان کارشناسی ارشد 1405 (سنجش) - 721 رکورد",
+    "recordCount":  721,
+    "pdfFieldCount":  54,
+    "dataFieldCountPerRecord":  74,
+    "gradeSubFieldCount":  21,
+    "fields":  [
+                   {
+                       "index":  1,
+                       "name":  "شماره پرونده",
+                       "length":  7,
+                       "type":  "digit",
+                       "dataIndex":  1,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  2,
+                       "name":  "شماره داوطلبی",
+                       "length":  7,
+                       "type":  "digit",
+                       "dataIndex":  2,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  3,
+                       "name":  "نام خانوادگی",
+                       "length":  30,
+                       "type":  "char",
+                       "dataIndex":  3,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  4,
+                       "name":  "نام",
+                       "length":  30,
+                       "type":  "char",
+                       "dataIndex":  4,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  5,
+                       "name":  "نام پدر",
+                       "length":  15,
+                       "type":  "char",
+                       "dataIndex":  5,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  6,
+                       "name":  "جنسیت",
+                       "length":  3,
+                       "type":  "char",
+                       "dataIndex":  6,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  7,
+                       "name":  "تاریخ تولد",
+                       "length":  8,
+                       "type":  "digit",
+                       "dataIndex":  7,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  8,
+                       "name":  "شماره شناسنامه",
+                       "length":  10,
+                       "type":  "digit",
+                       "dataIndex":  8,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  9,
+                       "name":  "کد ملی",
+                       "length":  10,
+                       "type":  "digit",
+                       "dataIndex":  9,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  10,
+                       "name":  "زبان",
+                       "length":  10,
+                       "type":  "char",
+                       "dataIndex":  10,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  11,
+                       "name":  "عنوان اتباع خارجی",
+                       "length":  20,
+                       "type":  "digit",
+                       "dataIndex":  11,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  12,
+                       "name":  "معدل فوق دیپلم",
+                       "length":  4,
+                       "type":  "digit",
+                       "dataIndex":  12,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  13,
+                       "name":  "معدل لیسانس",
+                       "length":  4,
+                       "type":  "digit",
+                       "dataIndex":  13,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  14,
+                       "name":  "کد سهمیه ثبت نامی",
+                       "length":  1,
+                       "type":  "digit",
+                       "dataIndex":  14,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  15,
+                       "name":  "عنوان سهمیه ثبت نامی",
+                       "length":  20,
+                       "type":  "char",
+                       "dataIndex":  15,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  16,
+                       "name":  "کد سهمیه قبولی",
+                       "length":  1,
+                       "type":  "digit",
+                       "dataIndex":  16,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  17,
+                       "name":  "عنوان سهمیه قبولی",
+                       "length":  20,
+                       "type":  "char",
+                       "dataIndex":  17,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  18,
+                       "name":  "کد رشته امتحانی قبولی",
+                       "length":  4,
+                       "type":  "digit",
+                       "dataIndex":  18,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  19,
+                       "name":  "عنوان رشته امتحانی قبولی",
+                       "length":  70,
+                       "type":  "char",
+                       "dataIndex":  19,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  20,
+                       "name":  "کد رشته محل قبولی",
+                       "length":  5,
+                       "type":  "digit",
+                       "dataIndex":  20,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  21,
+                       "name":  "کد دانشگاه قبولی",
+                       "length":  4,
+                       "type":  "digit",
+                       "dataIndex":  21,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  22,
+                       "name":  "عنوان دانشگاه قبولی",
+                       "length":  85,
+                       "type":  "char",
+                       "dataIndex":  22,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  23,
+                       "name":  "کد گرایش قبولی",
+                       "length":  2,
+                       "type":  "digit",
+                       "dataIndex":  23,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  24,
+                       "name":  "عنوان گرایش قبولی",
+                       "length":  80,
+                       "type":  "char",
+                       "dataIndex":  24,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  25,
+                       "name":  "نمره کل قبولی",
+                       "length":  6,
+                       "type":  "digit",
+                       "dataIndex":  25,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  26,
+                       "name":  "اولویت قبولی",
+                       "length":  3,
+                       "type":  "digit",
+                       "dataIndex":  26,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  27,
+                       "name":  "رتبه کل در رشته امتحانی",
+                       "length":  5,
+                       "type":  "digit",
+                       "dataIndex":  27,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  28,
+                       "name":  "رتبه در گرایش قبولی",
+                       "length":  5,
+                       "type":  "digit",
+                       "dataIndex":  28,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  29,
+                       "name":  "کد رشته تحصیلی",
+                       "length":  4,
+                       "type":  "digit",
+                       "dataIndex":  29,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  30,
+                       "name":  "عنوان رشته تحصیلی",
+                       "length":  70,
+                       "type":  "char",
+                       "dataIndex":  30,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  31,
+                       "name":  "کد دانشگاه اخذ مدرک",
+                       "length":  4,
+                       "type":  "digit",
+                       "dataIndex":  31,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  32,
+                       "name":  "عنوان دانشگاه اخذ مدرک",
+                       "length":  70,
+                       "type":  "char",
+                       "dataIndex":  32,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  33,
+                       "name":  "سال و ماه و روز اخذ مدرک",
+                       "length":  8,
+                       "type":  "digit",
+                       "dataIndex":  33,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  34,
+                       "name":  "کد تعهد",
+                       "length":  1,
+                       "type":  "digit",
+                       "dataIndex":  34,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  35,
+                       "name":  "کد نظام وظیفه",
+                       "length":  2,
+                       "type":  "digit",
+                       "dataIndex":  35,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  36,
+                       "name":  "ارگان رزمندگی",
+                       "length":  31,
+                       "type":  "char",
+                       "dataIndex":  36,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  37,
+                       "name":  "مدت جبهه رزمندگی",
+                       "length":  3,
+                       "type":  "digit",
+                       "dataIndex":  37,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  38,
+                       "name":  "معلولیت",
+                       "length":  20,
+                       "type":  "char",
+                       "dataIndex":  38,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  39,
+                       "name":  "نمره خام دروس (21 درس)",
+                       "length":  6,
+                       "type":  "char",
+                       "dataIndex":  [
+                                         39,
+                                         40,
+                                         41,
+                                         42,
+                                         43,
+                                         44,
+                                         45,
+                                         46,
+                                         47,
+                                         48,
+                                         49,
+                                         50,
+                                         51,
+                                         52,
+                                         53,
+                                         54,
+                                         55,
+                                         56,
+                                         57,
+                                         58,
+                                         59
+                                     ],
+                       "subFieldCount":  21
+                   },
+                   {
+                       "index":  40,
+                       "name":  "تلفن ثابت",
+                       "length":  11,
+                       "type":  "digit",
+                       "dataIndex":  60,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  41,
+                       "name":  "تلفن همراه",
+                       "length":  11,
+                       "type":  "digit",
+                       "dataIndex":  61,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  42,
+                       "name":  "کد پستی",
+                       "length":  10,
+                       "type":  "digit",
+                       "dataIndex":  62,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  43,
+                       "name":  "کد استان اقامت",
+                       "length":  2,
+                       "type":  "digit",
+                       "dataIndex":  63,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  44,
+                       "name":  "عنوان استان اقامت",
+                       "length":  35,
+                       "type":  "char",
+                       "dataIndex":  64,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  45,
+                       "name":  "کد شهر اقامت",
+                       "length":  4,
+                       "type":  "digit",
+                       "dataIndex":  65,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  46,
+                       "name":  "عنوان شهر اقامت",
+                       "length":  35,
+                       "type":  "char",
+                       "dataIndex":  66,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  47,
+                       "name":  "آدرس",
+                       "length":  200,
+                       "type":  "char",
+                       "dataIndex":  67,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  48,
+                       "name":  "کد پیگیری اتباع خارجی",
+                       "length":  13,
+                       "type":  "digit",
+                       "dataIndex":  68,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  49,
+                       "name":  "پست الکترونیکی",
+                       "length":  50,
+                       "type":  "char",
+                       "dataIndex":  69,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  50,
+                       "name":  "کد دوره",
+                       "length":  2,
+                       "type":  "digit",
+                       "dataIndex":  70,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  51,
+                       "name":  "عنوان دوره",
+                       "length":  30,
+                       "type":  "char",
+                       "dataIndex":  71,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  52,
+                       "name":  "کد شهر محل تولد",
+                       "length":  4,
+                       "type":  "digit",
+                       "dataIndex":  72,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  53,
+                       "name":  "عنوان شهر محل تولد",
+                       "length":  35,
+                       "type":  "char",
+                       "dataIndex":  73,
+                       "subFieldCount":  1
+                   },
+                   {
+                       "index":  54,
+                       "name":  "رتبه کشوری در گرایش قبولی",
+                       "length":  6,
+                       "type":  "digit",
+                       "dataIndex":  74,
+                       "subFieldCount":  1
+                   }
+               ],
+    "codeTableCounts":  {
+                            "provinceResidence":  13,
+                            "cityResidence":  42,
+                            "birthCity":  64,
+                            "universityAdmitted":  2,
+                            "examMajor":  11,
+                            "studyMajor":  168,
+                            "universityDegree":  131,
+                            "quotaRegistration":  3,
+                            "quotaAdmission":  3,
+                            "militaryServiceOrg":  9,
+                            "courseType":  2,
+                            "commitment":  2
+                        }
+}

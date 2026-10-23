@@ -701,6 +701,20 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   .overflow-x-auto, .overflow-auto { -webkit-overflow-scrolling: touch; }
 }
 
+/* ─────────────────────────────────────────────────────────────
+   ⚡ پاسخ‌دهی فوری لمسی (رفع «کندی دکمه‌ها» در موبایل)
+   مرورگرهای موبایل پیش از اجرای کلیک ~۳۰۰ میلی‌ثانیه منتظر می‌مانند تا ببینند
+   کاربر «دوبار-برای-زوم» می‌زند یا نه؛ با touch-action: manipulation این
+   انتظار حذف می‌شود و همهٔ دکمه‌ها/لینک‌ها فوری پاسخ می‌دهند. هایلایت آبی
+   پیش‌فرض لمس هم شفاف می‌شود (بازخورد لمسی با حالت active داخلی کنترل می‌شود).
+   ───────────────────────────────────────────────────────────── */
+@media (hover: none) and (pointer: coarse) {
+  a, button, [role='button'], summary, label, select {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
 /* ── کارنامه رسمی در موبایل: ۳ ستون نیمسال زیر هم (فقط screen؛ چاپ A4 دست‌نخورده) ── */
 @media screen and (max-width: 640px) {
   .transcript-print-area .tr-term-row { grid-template-columns: minmax(0, 1fr); }

@@ -95,10 +95,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const lockOn = await evaluateIdleLock(user.id, lockMin).catch(() => false);
   // حساب‌های هم‌شخصِ همین کدملی — برای سوییچر واحد بالای صفحه
   const siblings = await getSiblingAccounts().catch(() => []);
-  // کنترل‌های ثانویهٔ هدر (سوییچرها، تم، خروج، راهنما).
-  // روی دسکتاپ (md+) در خودِ هدر و روی موبایل داخل کشوی «منو ☰» رندر می‌شوند
-  // تا بالای صفحه در موبایل تمیز و کوتاه بماند.
-  const headerControls = (
+  // سوییچرهای سراسری (نقش/نیمسال/دانشگاه) — ردیف دوم هدر، دقیقاً مثل کارتابل استاد.
+  // روی همهٔ اندازه‌ها نمایش داده می‌شوند تا در موبایل هم دیده شوند (پیش‌تر فقط
+  // دسکتاپ و وگرنه داخل کشوی ☰ می‌رفتند و کاربر موبایل آن‌ها را گم می‌کرد).
+  const headerSwitchers = (
     <>
       <PanelSwitcher
         roles={user.roles}
@@ -114,49 +114,57 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           buttonClass={th.badge}
         />
       )}
-      <Link
-        href="/help/admin"
-        className={`text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
-      >
-        📖 راهنما
-      </Link>
-      <a
-        href="/help/pdfs/admin.pdf"
-        download
-        className={`text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
-      >
-        📕 PDF
-      </a>
-      <ThemeToggle />
-      <form action={logoutAction}>
-        <button className={`text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}>
-          خروج
-        </button>
-      </form>
     </>
   );
   return (
     <div className="min-h-screen bg-sky-50/70" data-uni={curUni.code}>
       <header className={`${th.header} text-white shadow-md transition-colors`}>
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 p-3.5 pl-4 pr-14 sm:pr-4">
-          <div className="flex items-center gap-3">
-            <div className={`w-8 h-8 rounded-lg ${th.badge} flex items-center justify-center font-bold text-sm shadow-inner`}>
-              {curUni.title.slice(0, 1)}
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 p-3.5 pl-4 pr-14 sm:pr-4">
+          {/* ردیف اول: عنوان (کوتاه در موبایل) + دارک‌مود و خروج قرمز — مثل کارتابل استاد */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <div className={`w-8 h-8 rounded-lg ${th.badge} flex items-center justify-center font-bold text-sm shadow-inner`}>
+                {curUni.title.slice(0, 1)}
+              </div>
+              <div>
+                <Link href="/admin" title="بازگشت به صفحه اول (داشبورد)" className="hover:opacity-90 transition-opacity">
+                  <p className="font-extrabold text-sm tracking-wide">
+                    <span className="sm:hidden">داشبورد مدیریت</span>
+                    <span className="hidden sm:inline">داشبورد مدیریت جامع {curUni.title}</span>
+                  </p>
+                </Link>
+                <p className="text-xs opacity-80">{user.name} · نقش‌ها: {user.roles.join('، ')}</p>
+              </div>
             </div>
-            <div>
-              <Link href="/admin" title="بازگشت به صفحه اول (داشبورد)" className="hover:opacity-90 transition-opacity">
-                <p className="font-extrabold text-sm tracking-wide">داشبورد مدیریت جامع {curUni.title}</p>
+            <div className="flex flex-nowrap items-center gap-2">
+              <Link
+                href="/help/admin"
+                className={`hidden sm:inline-flex text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
+              >
+                📖 راهنما
               </Link>
-              <p className="text-xs opacity-80">{user.name} · نقش‌ها: {user.roles.join('، ')}</p>
+              <a
+                href="/help/pdfs/admin.pdf"
+                download
+                className={`hidden sm:inline-flex text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
+              >
+                📕 PDF
+              </a>
+              <ThemeToggle />
+              <form action={logoutAction}>
+                <button className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition">
+                  <span className="sm:hidden">خروج</span>
+                  <span className="hidden sm:inline">خروج از سامانه</span>
+                </button>
+              </form>
             </div>
           </div>
-          {/* ردیف کنترل‌ها فقط روی دسکتاپ (md+). در موبایل داخل کشوی «منو ☰» نمایش داده می‌شوند
-              تا هدر بالا تمیز و کوتاه بماند. */}
-          <div className="hidden md:flex flex-wrap items-center gap-2">
-            {headerControls}
+          {/* ردیف دوم: سوییچرهای نقش/نیمسال/دانشگاه — روی موبایل هم قابل‌دسترس */}
+          <div className="flex flex-wrap items-center gap-2">
+            {headerSwitchers}
           </div>
         </div>
-        <AdminNav roles={user.roles} permissions={permissionCodes} theme={th} controls={headerControls} />
+        <AdminNav roles={user.roles} permissions={permissionCodes} theme={th} />
       </header>
       <main className="mx-auto max-w-6xl p-3 sm:p-5 pb-16">{children}</main>
       <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />

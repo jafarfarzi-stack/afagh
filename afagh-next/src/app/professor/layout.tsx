@@ -70,35 +70,20 @@ export default async function ProfessorLayout({ children }: { children: React.Re
   return (
     <div className="min-h-screen bg-slate-50" dir="rtl">
       <header className="print:hidden bg-slate-900 text-white shadow-md border-b border-slate-800">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-sm text-white shadow">
-              آفاق
-            </div>
-            <div>
-              <p className="font-extrabold text-sm sm:text-base">کارتابل جامع اعضای هیئت علمی و اساتید</p>
-              <p className="text-xs text-slate-400">{user.name}{me ? ' · کد پرسنلی: ' + me.staffCode : ''} · گروه: {deptName}</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 w-full sm:w-auto">
-            <div className="flex flex-nowrap items-center gap-2">
-              <TermSwitcher
-                terms={termScope.terms}
-                selectedId={termScope.selectedId}
-              />
-              <PanelSwitcher
-                roles={user.roles}
-                current="professor"
-                permissionCount={permissionCount}
-                siblings={siblings}
-                groupTitle={
-                  headed.length === 1
-                    ? headed[0].name
-                    : headed.length > 1
-                      ? `${headed.length.toLocaleString('fa-IR')} گروه`
-                      : undefined
-                }
-              />
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 p-4">
+          {/* ردیف اول: لوگو + عنوان (کوتاه در موبایل) + دارک‌مود و خروج — اولیت با ابزارهای کاربر */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-sm text-white shadow">
+                آفاق
+              </div>
+              <div>
+                <p className="font-extrabold text-sm sm:text-base">
+                  <span className="sm:hidden">کارتابل استاد</span>
+                  <span className="hidden sm:inline">کارتابل جامع اعضای هیئت علمی و اساتید</span>
+                </p>
+                <p className="text-xs text-slate-400">{user.name}{me ? ' · کد پرسنلی: ' + me.staffCode : ''} · گروه: {deptName}</p>
+              </div>
             </div>
             <div className="flex flex-nowrap items-center gap-2">
               <Link
@@ -117,9 +102,32 @@ export default async function ProfessorLayout({ children }: { children: React.Re
               <ThemeToggle />
               <form action={logoutAction}>
                 <button className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition">
-                  خروج از سامانه
+                  <span className="sm:hidden">خروج</span>
+                  <span className="hidden sm:inline">خروج از سامانه</span>
                 </button>
               </form>
+            </div>
+          </div>
+          {/* ردیف دوم: سوییچر نیمسال و نقش — کنار هم */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-nowrap items-center gap-2">
+              <TermSwitcher
+                terms={termScope.terms}
+                selectedId={termScope.selectedId}
+              />
+              <PanelSwitcher
+                roles={user.roles}
+                current="professor"
+                permissionCount={permissionCount}
+                siblings={siblings}
+                groupTitle={
+                  headed.length === 1
+                    ? headed[0].name
+                    : headed.length > 1
+                      ? `${headed.length.toLocaleString('fa-IR')} گروه`
+                      : undefined
+                }
+              />
             </div>
           </div>
         </div>
