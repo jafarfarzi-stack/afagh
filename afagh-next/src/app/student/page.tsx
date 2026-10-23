@@ -24,9 +24,9 @@ import {
   resolveDashboardTerm,
   toShamsi,
 } from '@/lib/student-dashboard-helpers';
+import { getSetting } from '@/lib/settings';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
 import MessengerOnboardBanner from '@/components/MessengerOnboardBanner';
-import UserAvatar from '@/components/UserAvatar';
 import { getExamCardData } from '@/lib/verification';
 import Link from 'next/link';
 import { DemoDashboard } from './demo-sections';
@@ -72,6 +72,13 @@ export default async function StudentDashboardPage() {
   }
 
   const examTerm = term ? { id: term.id, title: term.title } : null;
+
+  // نام کوچک دانشجو برای خوش‌آمدگویی (نام کامل در هدرِ بالای صفحه آمده است)
+  const firstName = (user.name || '').trim().split(/\s+/)[0] || 'دانشجو';
+  const [universityName, universityLogo] = await Promise.all([
+    getSetting('UNIVERSITY_NAME'),
+    getSetting('UNIVERSITY_LOGO'),
+  ]);
 
   const [
     majorRows,
@@ -227,7 +234,7 @@ export default async function StudentDashboardPage() {
         units: c.units,
         professor: c.professorId ? profMap.get(c.professorId) || 'نامشخص' : 'نامشخص',
         examDate: s?.exam?.examDate ?? null,
-        examTime: s?.exam ? `${s.exam.startTime} تا ${s.exam.endTime}` : null,
+        examTime: s?.exam ? `${s.exam.startTime}` : null,
         room: s?.exam?.room ?? null,
         seatNumber: examCard?.courses.find(ec => ec.enrollmentId === c.enrollmentId)?.seatNumber ?? null,
       };
@@ -244,33 +251,25 @@ export default async function StudentDashboardPage() {
         <div className="absolute top-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-4 sm:gap-5">
-            <UserAvatar
-              userId={user.id}
-              hasPhoto={!!userRecord?.photoKey}
-              name={user.name}
-              className="w-16 h-16 sm:w-20 sm:h-20"
-              fallbackClass="bg-gradient-to-br from-emerald-400 to-teal-600"
-              fallbackTextClass="text-slate-950"
-              fallbackInitialClass="font-black text-3xl"
-              alt="عکس دانشجو"
-            />
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl sm:text-2xl font-black tracking-tight">{user.name}</h1>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-400 text-slate-950 shadow-xs">
-                  {statusFa[me.status || 'ACTIVE'] || 'دانشجوی فعال'}
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white/15 text-emerald-100 border border-white/20">
-                  ترم {(termOrdinal ?? me.currentTermNo ?? 0).toLocaleString('fa-IR')} تحصیلی
-                </span>
+            {universityLogo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={universityLogo}
+                alt="نشان دانشگاه"
+                className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/90 p-1.5 object-contain shadow-md shrink-0"
+              />
+            ) : (
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-emerald-600 flex items-center justify-center font-black text-2xl shadow-inner shrink-0">
+                آ
               </div>
+            )}
+            <div className="space-y-1">
+              {/* نام دانشگاه فقط در دسکتاپ (در موبایل فقط نشان/ارم کافی است) */}
+              <p className="hidden sm:block text-xs sm:text-sm text-emerald-200 font-medium">{universityName}</p>
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight">خوش‌آمدی {firstName} عزیز 👋</h1>
               <p className="text-xs sm:text-sm text-emerald-200 font-medium">
                 {major?.name || '—'} · {level?.title || '—'} · ورودی سال {me.entryYear ?? '—'}
               </p>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-emerald-300/90 pt-1 font-mono">
-                <span>شماره دانشجویی: <strong className="text-white font-bold font-mono" dir="ltr">{me.studentCode}</strong></span>
-                <span>کد ملی: <strong className="text-white font-bold font-mono" dir="ltr">{userRecord?.nationalCode || '—'}</strong></span>
-              </div>
             </div>
           </div>
 
@@ -294,8 +293,10 @@ export default async function StudentDashboardPage() {
               </div>
             )}
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 font-bold">
-              <span>🏛️ {filteredTerm ? 'نیمسال انتخابی:' : 'ترم جاری:'}</span>
-              <span className="text-white font-black">{term?.title || 'ثبت نشده'}</span>
+              <span>🎓 ترم تحصیلی:</span>
+              <span className="text-white font-black">
+                {(termOrdinal ?? me.currentTermNo ?? 0).toLocaleString('fa-IR')}
+              </span>
             </div>
           </div>
         </div>
@@ -456,9 +457,6 @@ export default async function StudentDashboardPage() {
               <div className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
                 🛒
               </div>
-              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
-                صف Redis
-              </span>
             </div>
             <div className="mt-3">
               <h3 className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-emerald-900 transition">
@@ -478,9 +476,6 @@ export default async function StudentDashboardPage() {
               <div className="w-11 h-11 rounded-2xl bg-teal-100 text-teal-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
                 📇
               </div>
-              <span className="text-[10px] bg-teal-100 text-teal-800 px-2 py-0.5 rounded-full font-bold">
-                QR Code
-              </span>
             </div>
             <div className="mt-3">
               <h3 className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-teal-900 transition">
@@ -500,9 +495,6 @@ export default async function StudentDashboardPage() {
               <div className="w-11 h-11 rounded-2xl bg-lime-100 text-lime-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
                 🖨️
               </div>
-              <span className="text-[10px] bg-lime-100 text-lime-800 px-2 py-0.5 rounded-full font-bold">
-                QR Code
-              </span>
             </div>
             <div className="mt-3">
               <h3 className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-lime-900 transition">

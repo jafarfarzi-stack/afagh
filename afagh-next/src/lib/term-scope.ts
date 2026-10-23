@@ -256,27 +256,16 @@ export function termOrdinalForEntry(opts: {
   terms: TermCodeLike[];
   targetTermCode: string | null | undefined;
 }): number | null {
-  const { entryYear, entryTerm, terms, targetTermCode } = opts;
+  const { entryYear, entryTerm, targetTermCode } = opts;
   if (entryYear == null || !targetTermCode) return null;
   const entryCode = Number(`${entryYear}${entryTerm ?? 1}`);
-  if (!Number.isFinite(entryCode)) return null;
-  const ordered = sortTermsChronologically(filterTeachingTerms(terms));
-  if (!ordered.length) return null;
-  const codes = ordered.map((t) => termCodeNumber(t.termCode));
-  // اولین ترمِ آموزشی که به ترمِ ورود می‌رسد (تطابق دقیق یا اولین ترمِ بعدی)
-  let entryIdx = codes.findIndex((c) => c >= entryCode);
-  if (entryIdx < 0) entryIdx = codes.length - 1; // ورودی بعد از آخرین ترمِ فهرست
-  const targetIdx = codes.indexOf(termCodeNumber(targetTermCode));
-  if (targetIdx < 0) {
-    // ترم هدف در فهرست ترم‌های آموزشی نیست (مثلاً ترم تابستان که فیلتر
-    // می‌شود، یا کد نامعتبر). به‌جای تسلیم شدن و نمایش «ترم ۱»، شماره از
-    // روی خودِ کدها حساب می‌شود: هر سال دو نیمسال (ورودی ۱۴۰۳۲ → ۱۴۰۵۱ = ۴).
-    const targetCode = termCodeNumber(targetTermCode);
-    if (!Number.isFinite(targetCode) || targetCode === Number.NEGATIVE_INFINITY) return null;
-    const semOf = (code: number) => Math.floor(code / 10) * 2 + (code % 10);
-    const ord = semOf(targetCode) - semOf(entryCode) + 1;
-    return ord >= 1 ? ord : null;
-  }
-  const ordinal = targetIdx - entryIdx + 1;
-  return ordinal >= 1 ? ordinal : null;
+  const targetCode = termCodeNumber(targetTermCode);
+  if (!Number.isFinite(entryCode) || !Number.isFinite(targetCode) || targetCode === Number.NEGATIVE_INFINITY) return null;
+  // شمارهٔ ترم را مستقیماً از کدهای ترم حساب می‌کنیم (هر سال = ۲ نیمسال):
+  // ورودی ۱۴۰۳۲ → ۴ نیمسال پس از مبدأ، ۱۴۰۵۱ → ۷ نیمسال ⇒ اختلاف + ۱ = ترم ۴.
+  // این روش مستقل از این است که دانشگاه چه تعداد ترم را در جدول ثبت کرده باشد
+  // (پیش‌تر به‌خاطر کوتاه‌بودن فهرستِ ترم‌ها، همیشه «ترم ۱» نمایش می‌داد).
+  const semOf = (code: number) => Math.floor(code / 10) * 2 + (code % 10);
+  const ord = semOf(targetCode) - semOf(entryCode) + 1;
+  return ord >= 1 ? ord : null;
 }

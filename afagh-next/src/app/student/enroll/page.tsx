@@ -6,6 +6,7 @@ import {
   classrooms,
   course_offerings,
   courses,
+  degree_level_configs,
   enrollments,
   majors,
   schedules,
@@ -15,7 +16,8 @@ import {
   financial_terms,
 } from '@/db/schema';
 import { getStudentByUser, requireRole } from '@/lib/auth';
-import { getTermScope } from '@/lib/term-scope';
+import { getTermScope, termOrdinalForEntry } from '@/lib/term-scope';
+import { resolveStudentCurriculumScope, scopeOfferingsByCurriculum } from '@/lib/enroll-curriculum-scope';
 import { buildPrereqContext, evaluateLogicTree, formatPrereq } from '@/lib/enroll-engine';
 import { openBypassRequestsOfStudent } from '@/lib/bypass-requests';
 import { offeringVisible } from '@/lib/offering-targeting';
@@ -89,6 +91,62 @@ export default async function EnrollPage() {
     { degreeLevelId: me.degreeLevelId, majorId: me.majorId ?? null, entryYear: me.entryYear },
   ));
 
+  // ── 🗺️ اعمال چارت تحصیلی (چارت درسی مصوب): دانشجو فقط دروسِ ترم خودش را ببیند ──
+  // حل نسخهٔ برنامه بر اساس رشته/مقطع/سال ورود (هم‌راستا با صفحهٔ چارت)؛
+  // در صورت عدم وجود نسخه، اسکوپ اعمال نمی‌شود و رفتار پیشین حفظ می‌گردد.
+  const curriculumScope = await resolveStudentCurriculumScope(me.id);
+  const studentTermOrdinal = term
+    ? termOrdinalForEntry({
+        entryYear: me.entryYear,
+        entryTerm: me.entryTerm,
+        terms: termScope.terms,
+        targetTermCode: term.termCode,
+      })
+    : null;
+
+  // محاسبهٔ دروس مردودی برای «تکرار» (تا کاتالوگِ محدود به ترم، انتخاب واحد را مسدود نکند)
+  const allEnr = term
+    ? await db
+        .select({
+          courseId: courses.id,
+          grade: enrollments.gradeValue,
+          status: enrollments.status,
+          gradingType: courses.gradingType,
+          affectsGpa: courses.affectsGpa,
+          minPassedMark: courses.minPassedMark,
+        })
+        .from(enrollments)
+        .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+        .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+        .where(eq(enrollments.studentId, me.id))
+    : [];
+  const passedCourseIds = new Set<number>();
+  const inProgressCourseIds = new Set<number>();
+  const failedCourseIds = new Set<number>();
+  for (const r of allEnr) {
+    const isDescriptive = r.gradingType === 'DESCRIPTIVE' || r.affectsGpa === 0;
+    const minMark = Number(r.minPassedMark ?? 10);
+    const grade = r.grade != null ? Number(r.grade) : null;
+    const passed = r.status === 'EQUIV_PASSED' || (grade != null && (isDescriptive ? grade !== 0 : grade >= minMark));
+    if (passed) { passedCourseIds.add(r.courseId); continue; }
+    if (r.status === 'DROPPED') continue;
+    if (grade == null && ['REGISTERED', 'FINALIZED', 'WAITLISTED', 'PENDING_COUNCIL'].includes(r.status)) {
+      inProgressCourseIds.add(r.courseId);
+      continue;
+    }
+    failedCourseIds.add(r.courseId);
+  }
+  const retakeCourseIds = new Set<number>(
+    [...failedCourseIds].filter(c => !passedCourseIds.has(c) && !inProgressCourseIds.has(c)),
+  );
+
+  const scopedOfferings = scopeOfferingsByCurriculum(
+    offeringsForStudent,
+    curriculumScope,
+    studentTermOrdinal,
+    retakeCourseIds,
+  );
+
   // دریافت اطلاعات اساتید
   const profUsers = await db
     .select({
@@ -158,7 +216,7 @@ export default async function EnrollPage() {
   const prereqCtx = await buildPrereqContext(me.id);
   const prereqLabel = new Map<number, string>();
   const prereqMet = new Map<number, boolean>();
-  for (const o of offeringsForStudent) {
+  for (const o of scopedOfferings) {
     const node = prereqCtx.ruleByCourse.get(o.courseId ?? -1);
     const lbl = formatPrereq(node, prereqCtx.titles);
     if (lbl) prereqLabel.set(o.id, lbl);
@@ -182,6 +240,9 @@ export default async function EnrollPage() {
   const [majorRow] = me.majorId
     ? await db.select({ facultyId: majors.facultyId }).from(majors).where(eq(majors.id, me.majorId)).limit(1)
     : [null];
+  const [degreeLevelRow] = me.degreeLevelId
+    ? await db.select({ title: degree_level_configs.title }).from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1)
+    : [null];
   const tuitionCtx: TuitionRuleContext = {
     degreeLevelId: me.degreeLevelId,
     majorId: me.majorId,
@@ -197,7 +258,7 @@ export default async function EnrollPage() {
 
   // محاسبه شهریه برای هر درس
   const tuitionMap = new Map<number, { fixed: number; variable: number; perUnit: number; total: number }>();
-  for (const o of offeringsForStudent) {
+  for (const o of scopedOfferings) {
     const ctx = { ...tuitionCtx, offeringType: o.offeringType || 'NORMAL' };
     const rule = resolveTuitionRule(allTuitionRules, ctx);
     if (rule) {
@@ -235,7 +296,7 @@ export default async function EnrollPage() {
         .where(inArray(course_offerings.id, cartOfferingIds))
     : [];
 
-  const offerings = offeringsForStudent.map(o => {
+  const offerings = scopedOfferings.map(o => {
     const s = schedMap.get(o.id);
     const tuition = tuitionMap.get(o.id) ?? { fixed: 0, variable: 0, perUnit: 0, total: 0 };
     return {
@@ -335,6 +396,10 @@ export default async function EnrollPage() {
         cartStartedAt={cart.length ? cart.map(c => c.createdAt?.getTime?.() ?? 0).filter(Boolean).sort((a, b) => a - b)[0] || null : null}
         regulationStatus={regulationStatus}
         bypassRequests={bypassRequests}
+        degreeLevelTitle={degreeLevelRow?.title ?? undefined}
+        curriculumScoped={curriculumScope.resolved}
+        curriculumVersionLabel={curriculumScope.versionCode ?? null}
+        studentTermOrdinal={studentTermOrdinal}
       />
     </div>
   );

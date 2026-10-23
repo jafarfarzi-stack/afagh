@@ -139,6 +139,14 @@ function TempWeeklySchedule({ cart }: { cart: CartItem[] }) {
 
 export default function EnrollClient(props: {
   sajjadPortalUrl: string;
+  /** عنوان مقطع تحصیلی دانشجو (مثلاً «کارشناسی‌ارشد») — برای نوار وضعیت آیین‌نامه */
+  degreeLevelTitle?: string;
+  /** آیا کاتالوگ بر اساس چارت تحصیلی مصوب فیلتر شده است؟ */
+  curriculumScoped?: boolean;
+  /** کد نسخهٔ برنامه (مثلاً «۱۴۰۴») — برای نمایش در بنر چارت */
+  curriculumVersionLabel?: string | null;
+  /** شمارهٔ ترم جاریِ تحصیلیِ دانشجو (برای نمایش در بنر چارت) */
+  studentTermOrdinal?: number | null;
   student: { id: number; status: string };
   term: { id: number | null; title: string; open: boolean; isSummer?: boolean };
   offerings: OfferingItem[];
@@ -499,43 +507,47 @@ export default function EnrollClient(props: {
         </div>
       )}
 
+      {/* بنر اعمال چارت تحصیلی (فیلتر کاتالوگ بر اساس سرفصل و ترم دانشجو) */}
+      {props.curriculumScoped && (
+        <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium flex items-start gap-2">
+          <span className="text-base leading-none">🗺️</span>
+          <span>
+            کاتالوگ بر اساس <b>چارت تحصیلی مصوب</b> شما
+            {props.curriculumVersionLabel ? ` (نسخهٔ ${faNum(props.curriculumVersionLabel)})` : ''}
+            {props.studentTermOrdinal ? ` و ترم ${faNum(props.studentTermOrdinal)}` : ''}
+            فیلتر شده است؛ فقط دروس سرفصلِ مربوط به ترم شما نمایش داده می‌شود.
+          </span>
+        </div>
+      )}
+
       {/* نوار وضعیت آیین‌نامه تحصیلی و سقف واحد */}
       {props.regulationStatus && (
-        <div className="p-3.5 bg-slate-900 text-white rounded-2xl shadow flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-            <div className="flex items-center gap-1.5">
-              <span className="text-indigo-400 font-bold">📜 مقطع و سهمیه:</span>
-              <span className="bg-indigo-950 text-indigo-200 px-2.5 py-1 rounded-lg border border-indigo-800 font-semibold">
-                {props.regulationStatus.quotaType === 'SHAHED_ISARGAR' ? 'سهمیه شاهد و ایثارگر' : 'سهمیه عادی'}
-              </span>
+        <div className="p-4 bg-slate-900 text-white rounded-2xl shadow space-y-3">
+          {/* نوار وضعیت آیین‌نامه — هم‌راستا در قالب کارت‌های یک‌دست */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-xl bg-slate-800/70 border border-slate-700 px-3 py-2">
+              <p className="text-[10px] text-indigo-300 font-bold mb-1">📜 مقطع تحصیلی</p>
+              <p className="text-sm font-black text-white">{props.degreeLevelTitle || '—'}</p>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-indigo-400 font-bold">🎯 سقف مجاز انتخاب واحد:</span>
-              <span className="bg-emerald-950 text-emerald-300 font-black px-2.5 py-1 rounded-lg border border-emerald-700">
-                {faNum(effectiveMaxUnits)} واحد
-              </span>
-              {(props.regulationStatus.compensatoryUnits ?? 0) > 0 && (
-                <span className="text-[10px] text-emerald-400/80">
-                  (شامل {faNum(props.regulationStatus.compensatoryUnits ?? 0)} واحد جبرانی)
-                </span>
-              )}
+            <div className="rounded-xl bg-slate-800/70 border border-slate-700 px-3 py-2">
+              <p className="text-[10px] text-indigo-300 font-bold mb-1">🎯 سقف مجاز انتخاب واحد</p>
+              <p className="text-sm font-black text-emerald-300">{faNum(effectiveMaxUnits)} واحد</p>
             </div>
             {props.regulationStatus.minAllowedUnits > 0 && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-indigo-400 font-bold">⬇️ حداقل واحد این ترم:</span>
-                <span className="bg-slate-800 text-slate-200 px-2.5 py-1 rounded-lg border border-slate-600 font-semibold">
-                  {faNum(props.regulationStatus.minAllowedUnits)} واحد
-                </span>
+              <div className="rounded-xl bg-slate-800/70 border border-slate-700 px-3 py-2">
+                <p className="text-[10px] text-indigo-300 font-bold mb-1">⬇️ حداقل واحد این ترم</p>
+                <p className="text-sm font-black text-white">{faNum(props.regulationStatus.minAllowedUnits)} واحد</p>
               </div>
             )}
-            <div className="flex items-center gap-1.5">
-              <span className="text-indigo-400 font-bold">📊 پیشرفت تحصیلی:</span>
-              <span className="text-slate-300 font-mono">
-                {faNum(props.regulationStatus.passedUnits)} از {faNum(props.regulationStatus.totalRequiredUnits)} واحد پاس‌شده ({faNum(props.regulationStatus.remainingUnits)} باقیمانده)
-              </span>
+            <div className="rounded-xl bg-slate-800/70 border border-slate-700 px-3 py-2">
+              <p className="text-[10px] text-indigo-300 font-bold mb-1">📊 پیشرفت تحصیلی</p>
+              <p className="text-xs font-bold text-slate-200 font-mono leading-relaxed">
+                {faNum(props.regulationStatus.passedUnits)}/{faNum(props.regulationStatus.totalRequiredUnits)} واحد
+                <span className="text-slate-400"> · {faNum(props.regulationStatus.remainingUnits)} باقی</span>
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {props.regulationStatus.isGraduating && (
               <span className="bg-amber-500 text-slate-950 font-black px-2.5 py-1 rounded-lg">
                 🎓 دانشجوی ترم آخر
@@ -555,6 +567,9 @@ export default function EnrollClient(props: {
               <span className="bg-orange-600 text-white font-bold px-2.5 py-1 rounded-lg">
                 ☀️ ترم تابستان
               </span>
+            )}
+            {(props.regulationStatus.compensatoryUnits ?? 0) > 0 && (
+              <span className="text-[10px] text-emerald-400/90">شامل {faNum(props.regulationStatus.compensatoryUnits ?? 0)} واحد جبرانی در سقف مجاز</span>
             )}
           </div>
         </div>
@@ -602,28 +617,50 @@ export default function EnrollClient(props: {
         </div>
       )}
 
-      {/* دکمه انتخاب هوشمند و سریع از روی چارت */}
-      <div className="card !p-4 bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white rounded-2xl border-0 shadow-lg flex flex-wrap items-center justify-between gap-3">
+      {/* کلاس آنلاین — همیشه در دسترس (حتی خارج از زمان انتخاب واحد) */}
+      <Link
+        href="/student/virtual-classes"
+        className="card !p-4 bg-gradient-to-r from-sky-900 via-blue-900 to-slate-900 text-white rounded-2xl border-0 shadow-lg flex flex-wrap items-center justify-between gap-3 no-underline"
+      >
         <div>
           <h3 className="font-extrabold text-white text-sm sm:text-base flex items-center gap-2">
-            <span>🤖</span>
-            <span>انتخاب واحد هوشمند بر اساس چارت سرفصل و کنترل تداخل</span>
+            <span>💻</span>
+            <span>کلاس آنلاین و جلسات وبینار LMS</span>
           </h3>
-          <p className="text-xs text-emerald-200 mt-0.5">
-            سیستم با بررسی تمام گروه‌های درسی، بهترین گروه‌های دارای ظرفیت و <b>فاقد تداخل کلاسی و امتحانی</b> را در سبد شما می‌چیند.
+          <p className="text-xs text-sky-200 mt-0.5">
+            ورود مستقیم به کلاس‌های مجازی BigBlueButton و پیگیری جلسات امروزِ دروس شما
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={autoFill}
-            disabled={busy || !props.term.open || isBlockedCommission}
-            className="bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black text-xs px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50 inline-flex items-center gap-1.5"
-          >
-            <span>⚡</span>
-            <span>چیدمان خودکار دروس ترم (بدون تداخل)</span>
-          </button>
+        <span className="bg-sky-500 hover:bg-sky-400 text-sky-950 font-black text-xs px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 inline-flex items-center gap-1.5">
+          <span>🚪</span>
+          <span>ورود به کلاس آنلاین</span>
+        </span>
+      </Link>
+
+      {/* دکمه انتخاب هوشمند و سریع از روی چارت — فقط در زمان باز‌بودن پنجرهٔ انتخاب واحد */}
+      {props.term.open && (
+        <div className="card !p-4 bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white rounded-2xl border-0 shadow-lg flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-extrabold text-white text-sm sm:text-base flex items-center gap-2">
+              <span>🤖</span>
+              <span>انتخاب واحد هوشمند بر اساس چارت سرفصل و کنترل تداخل</span>
+            </h3>
+            <p className="text-xs text-emerald-200 mt-0.5">
+              سیستم با بررسی تمام گروه‌های درسی، بهترین گروه‌های دارای ظرفیت و <b>فاقد تداخل کلاسی و امتحانی</b> را در سبد شما می‌چیند.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={autoFill}
+              disabled={busy || isBlockedCommission}
+              className="bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black text-xs px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50 inline-flex items-center gap-1.5"
+            >
+              <span>⚡</span>
+              <span>چیدمان خودکار دروس ترم (بدون تداخل)</span>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {!props.term.open && (
         <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800 border border-amber-200">
@@ -825,7 +862,7 @@ export default function EnrollClient(props: {
                         <span>📝</span>
                         <span className="font-bold">امتحان پایان‌ترم:</span>
                         <span className="text-slate-600 font-medium">
-                          تاریخ {faNum(c.examSchedule.examDate)} ساعت {faNum(c.examSchedule.startTime)} الی {faNum(c.examSchedule.endTime)}
+                          تاریخ {faNum(c.examSchedule.examDate)} ساعت {faNum(c.examSchedule.startTime)}
                         </span>
                       </div>
                     )}
@@ -1062,7 +1099,7 @@ export default function EnrollClient(props: {
                     )}
                     {o.examSchedule && (
                       <span>
-                        📝 <b>امتحان پایان‌ترم:</b> تاریخ {faNum(o.examSchedule.examDate)} ساعت {faNum(o.examSchedule.startTime)} الی {faNum(o.examSchedule.endTime)}
+                        📝 <b>امتحان پایان‌ترم:</b> تاریخ {faNum(o.examSchedule.examDate)} ساعت {faNum(o.examSchedule.startTime)}
                       </span>
                     )}
                   </div>
