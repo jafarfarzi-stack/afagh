@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { academic_terms, classrooms, course_offerings, courses, degree_level_configs, majors, offering_professors, schedules, staff, users } from '@/db/schema';
 import { requireDepHead } from '@/lib/group-manager';
 import { targetingLabel } from '@/lib/offering-targeting';
+import { getBool } from '@/lib/settings';
 import { addScheduleAction, createOfferingAction, deactivateOfferingAction, deleteScheduleAction, updateOfferingAction } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -13,6 +14,10 @@ export default async function OfferingsPage({ searchParams }: { searchParams: Pr
   const sp = await searchParams;
   const { staff: me, deptId } = await requireDepHead();
   const [term] = await db.select().from(academic_terms).where(eq(academic_terms.isCurrent, 1)).limit(1);
+  // آیا چارت تحصیلی در انتخاب واحد الزامی است؟ (تنظیم پنل مدیر)
+  // وقتی خاموش باشد، هدف‌گیریِ هر ارائه (رشته/ورودی) تنها راه کنترل دسترسی است
+  // و بنابراین تعیین آن‌ها در زمان ارائه الزامی می‌گردد.
+  const requireChart = await getBool('ENROLL_REQUIRE_CURRICULUM_CHART').catch(() => true);
 
   const deptCourses = await db.select().from(courses).where(eq(courses.departmentId, deptId)).orderBy(courses.code);
   const courseById = new Map(deptCourses.map(c => [c.id, c]));
@@ -53,14 +58,14 @@ export default async function OfferingsPage({ searchParams }: { searchParams: Pr
   const TargetSelects = (o: typeof mine[number] | null) => (
     <>
       <select name="deg" defaultValue={o?.targetDegreeLevelId ?? ''} className="input !py-1 !px-2">
-        <option value="">مقطع: همه</option>
+        <option value="">مقطع مجاز: همه</option>
         {degrees.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
       </select>
-      <select name="major" defaultValue={o?.targetMajorId ?? ''} className="input !py-1 !px-2">
-        <option value="">رشته: همه</option>
+      <select name="major" defaultValue={o?.targetMajorId ?? ''} className="input !py-1 !px-2" required={!requireChart}>
+        <option value="">رشته مجاز{requireChart ? ': همه' : ' (الزامی)'}</option>
         {majorRows.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
       </select>
-      <input name="ys" type="number" placeholder="ورودی از" defaultValue={o?.entryYearStart ?? ''} className="input !py-1 !px-2 w-20" dir="ltr" />
+      <input name="ys" type="number" placeholder="ورودی مجاز از" defaultValue={o?.entryYearStart ?? ''} className="input !py-1 !px-2 w-24" dir="ltr" required={!requireChart} />
       <input name="ye" type="number" placeholder="تا" defaultValue={o?.entryYearEnd ?? ''} className="input !py-1 !px-2 w-20" dir="ltr" />
     </>
   );
@@ -69,9 +74,19 @@ export default async function OfferingsPage({ searchParams }: { searchParams: Pr
     <div className="space-y-4">
       {sp.msg && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">✓ {sp.msg}</p>}
       {sp.err && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-800">⛔ {sp.err}</p>}
+      {!requireChart && (
+        <div className="rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800">
+          ⚠️ چارت تحصیلی در انتخاب واحد الزامی <b>نیست</b>؛ بنابراین هدف‌گیریِ هر ارائه (رشته مجاز + بازهٔ ورودی) تعیین‌کنندهٔ این است که کدام دانشجو آن را می‌بیند. تعیین «رشته مجاز» و «ورودی مجاز از» هنگام ایجاد/ویرایش ارائه <b>الزامی</b> است.
+        </div>
+      )}
 
       <div className="card space-y-3">
         <h2 className="font-bold">ارائهٔ جدید — ترم جاری: {term?.title ?? '—'}</h2>
+        {!requireChart && (
+          <p className="text-[11px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1">
+            چون چارت تحصیلی در انتخاب واحد الزامی نیست، تعیین «رشته مجاز» و «ورودی مجاز از» برای هر ارائه الزامی است.
+          </p>
+        )}
         <form action={createOfferingAction} className="flex flex-wrap items-center gap-2 text-xs">
           <input type="hidden" name="termId" value={term?.id ?? 0} />
           <select name="courseId" required className="input !py-1 !px-2 min-w-44">

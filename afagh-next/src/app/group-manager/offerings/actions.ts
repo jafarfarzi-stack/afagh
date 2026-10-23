@@ -3,6 +3,7 @@
 import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
+import { getBool } from '@/lib/settings';
 import { cart_items, course_offerings, schedules } from '@/db/schema';
 import { back, courseInDept, num, optNum, requireDepHead, str } from '@/lib/group-manager';
 import {
@@ -35,6 +36,13 @@ export async function createOfferingAction(fd: FormData) {
   const ys = optNum(fd, 'ys'), ye = optNum(fd, 'ye');
   const eyErr = validateEntryYearRange(ys, ye);
   if (eyErr) back('/group-manager/offerings', 'err', eyErr);
+  // وقتی چارت تحصیلی در انتخاب واحد الزامی نیست، هدف‌گیریِ هر ارائه تنها راه
+  // کنترلِ دسترسی است → رشتهٔ مجاز و بازهٔ ورودی باید حتماً مشخص شوند.
+  const requireChart = await getBool('ENROLL_REQUIRE_CURRICULUM_CHART').catch(() => true);
+  if (!requireChart) {
+    if (optNum(fd, 'major') == null) back('/group-manager/offerings', 'err', 'چون چارت تحصیلی در انتخاب واحد الزامی نیست، باید «رشتهٔ مجاز» هر ارائه مشخص شود.');
+    if (optNum(fd, 'ys') == null) back('/group-manager/offerings', 'err', 'چون چارت تحصیلی الزامی نیست، باید «ورودی مجاز از» هر ارائه مشخص شود.');
+  }
   const dupId = await findDuplicateOffering(db, { termId, courseId, groupNumber: group });
   if (dupId != null)
     back('/group-manager/offerings', 'err', 'این درس با همین گروه در ترم جاری قبلاً ارائه شده است.');
@@ -67,6 +75,13 @@ export async function updateOfferingAction(fd: FormData) {
   const ys = optNum(fd, 'ys'), ye = optNum(fd, 'ye');
   const eyErr = validateEntryYearRange(ys, ye);
   if (eyErr) back('/group-manager/offerings', 'err', eyErr);
+  // وقتی چارت تحصیلی در انتخاب واحد الزامی نیست، هدف‌گیریِ هر ارائه تنها راه
+  // کنترلِ دسترسی است → رشتهٔ مجاز و بازهٔ ورودی باید حتماً مشخص شوند.
+  const requireChart = await getBool('ENROLL_REQUIRE_CURRICULUM_CHART').catch(() => true);
+  if (!requireChart) {
+    if (optNum(fd, 'major') == null) back('/group-manager/offerings', 'err', 'چون چارت تحصیلی در انتخاب واحد الزامی نیست، باید «رشتهٔ مجاز» هر ارائه مشخص شود.');
+    if (optNum(fd, 'ys') == null) back('/group-manager/offerings', 'err', 'چون چارت تحصیلی الزامی نیست، باید «ورودی مجاز از» هر ارائه مشخص شود.');
+  }
   await db.update(course_offerings).set({
     capacity: cap, waitlistCapacity: num(fd, 'waitCap'), groupNumber: group,
     professorId,

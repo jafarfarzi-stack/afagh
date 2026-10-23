@@ -97,11 +97,14 @@ export function scopeOfferingsByCurriculum<T extends { courseId: number | null }
   scope: StudentCurriculumScope,
   currentTermOrdinal: number | null,
   retakeCourseIds: Set<number>,
+  requireChart: boolean,
 ): T[] {
-  // اگر چارت مصوبی برای رشته/مقطع دانشجو منتشر نشده باشد، کاتالوگ **خالی** بازگردانده
-  // می‌شود (طبق دستور کاربر: «کاتالوگ تخصیص‌نیافته باید خالی باشد») — نه اینکه همهٔ
-  // ارائه‌های بدون هدف‌گیری نمایش داده شود. علت در بنرِ پایین‌دستی به دانشجو گزارش می‌شود.
-  if (!scope.resolved) return [];
+  // چارت مصوبی حل نشد:
+  //  - اگر چارت در انتخاب واحد الزامی باشد → کاتالوگ **خالی** (بنر ارجاع به مدیر گروه).
+  //  - در غیر این صورت → کاتالوگ بر اساس هدف‌گیریِ هر ارائه (رشته/ورودی) نمایش داده
+  //    می‌شود (رفتار پیشینِ offeringVisible)؛ در این حالت تعیین رشته/ورودیِ مجاز
+  //    در زمان ارائه الزامی است.
+  if (!scope.resolved) return requireChart ? [] : offerings;
 
   return offerings.filter((o) => {
     const cid = o.courseId;
@@ -110,7 +113,12 @@ export function scopeOfferingsByCurriculum<T extends { courseId: number | null }
     const rec = scope.recommendedByCourse.get(cid);
     if (rec == null) return true;                   // درس آزاد (بدون ترم مشخص)
     if (currentTermOrdinal != null && rec === currentTermOrdinal) return true; // ترم جاری
-    if (retakeCourseIds.has(cid)) return true;      // تکرار درس مردودی
+    if (retakeCourseIds.has(cid)) return true;      // تکرار (حتی ترم بالاتر)
+    // ترم‌های پایین‌تر: دسترسی آزاد — دانشجو می‌تواند درسِ ترم‌های قبلی را نیز بگیرد
+    // (مثلاً دانشجوی ترم ۵ می‌تواند درس ترم ۳ را اخذ کند).
+    if (currentTermOrdinal != null && rec < currentTermOrdinal) return true;
+    // rec > currentTermOrdinal (ترم‌های بالاتر): پیش‌فرض مخفی — فقط با تخصیصِ
+    // صریح مدیر گروه نمایش داده می‌شود (ویژگی تخصیص در گام بعد پیاده‌سازی می‌شود).
     return false;
   });
 }

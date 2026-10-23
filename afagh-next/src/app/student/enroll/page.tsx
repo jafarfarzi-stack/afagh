@@ -140,11 +140,13 @@ export default async function EnrollPage() {
     [...failedCourseIds].filter(c => !passedCourseIds.has(c) && !inProgressCourseIds.has(c)),
   );
 
+  const requireChart = await getBool('ENROLL_REQUIRE_CURRICULUM_CHART').catch(() => true);
   const scopedOfferings = scopeOfferingsByCurriculum(
     offeringsForStudent,
     curriculumScope,
     studentTermOrdinal,
     retakeCourseIds,
+    requireChart,
   );
 
   // دریافت اطلاعات اساتید
@@ -398,6 +400,7 @@ export default async function EnrollPage() {
         bypassRequests={bypassRequests}
         degreeLevelTitle={degreeLevelRow?.title ?? undefined}
         curriculumScoped={curriculumScope.resolved}
+        curriculumRequired={requireChart}
         curriculumReason={curriculumScope.reason}
         curriculumVersionLabel={curriculumScope.versionCode ?? null}
         studentTermOrdinal={studentTermOrdinal}

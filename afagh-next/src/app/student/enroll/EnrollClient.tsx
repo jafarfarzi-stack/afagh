@@ -143,6 +143,8 @@ export default function EnrollClient(props: {
   degreeLevelTitle?: string;
   /** آیا کاتالوگ بر اساس چارت تحصیلی مصوب فیلتر شده است؟ */
   curriculumScoped?: boolean;
+  /** آیا چارت تحصیلی در انتخاب واحد الزامی است؟ (تنظیم پنل مدیر) — تعیین‌کنندهٔ پیامِ خالی‌بودن کاتالوگ */
+  curriculumRequired?: boolean;
   /** علتِ حل‌نشدن چارت (هنگامی که curriculumScoped=false) — برای پیام صریح به دانشجو */
   curriculumReason?: string | null;
   /** کد نسخهٔ برنامه (مثلاً «۱۴۰۴») — برای نمایش در بنر چارت */
@@ -517,15 +519,22 @@ export default function EnrollClient(props: {
             کاتالوگ بر اساس <b>چارت تحصیلی مصوب</b> شما
             {props.curriculumVersionLabel ? ` (نسخهٔ ${faNum(props.curriculumVersionLabel)})` : ''}
             {props.studentTermOrdinal ? ` و ترم ${faNum(props.studentTermOrdinal)}` : ''}
-            فیلتر شده است؛ فقط دروس سرفصلِ مربوط به ترم شما نمایش داده می‌شود.
+            فیلتر شده است؛ دروس چارت مصوبِ ترم جاری و ترم‌های پایین‌تر نمایش داده می‌شود (دروس ترم‌های بالاتر با تخصیص مدیرگروه قابل‌مشاهده‌اند).
           </span>
         </div>
-      ) : (
+      ) : props.curriculumRequired ? (
         <div className="p-3 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-medium flex items-start gap-2">
           <span className="text-base leading-none">⚠️</span>
           <span>
             <b>دانشجوی گرامی جهت تخصیص چارت دروس به مدیرگروه مراجعه کنید.</b> تا زمان انتشار چارت تحصیلی مصوب،
             لیست دروس انتخاب واحد خالی نمایش داده می‌شود.
+          </span>
+        </div>
+      ) : (
+        <div className="p-3 rounded-2xl bg-sky-50 border border-sky-200 text-sky-900 text-xs font-medium flex items-start gap-2">
+          <span className="text-base leading-none">ℹ️</span>
+          <span>
+            چارت تحصیلی در انتخاب واحد الزامی نیست؛ کاتالوگ بر اساس <b>هدف‌گیریِ رشته و ورودیِ هر ارائه</b> نمایش داده می‌شود.
           </span>
         </div>
       )}
@@ -1044,7 +1053,28 @@ export default function EnrollClient(props: {
         </div>
 
         <div className="space-y-2.5">
-          {props.offerings.map(o => {
+          {props.offerings.length === 0 ? (
+            <div className="flex flex-col items-center justify-center text-center py-16 px-4 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/60">
+              <div className="text-4xl mb-3">🗂️</div>
+              {props.curriculumRequired ? (
+                <>
+                  <p className="font-extrabold text-slate-700 text-sm">فهرست دروس انتخاب واحد خالی است</p>
+                  <p className="text-xs text-slate-500 mt-2 max-w-md leading-relaxed">
+                    دانشجوی گرامی جهت تخصیص چارت دروس به مدیرگروه مراجعه کنید.
+                    تا زمان انتشار چارت تحصیلی مصوب، هیچ درسی برای انتخاب نمایش داده نمی‌شود.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-extrabold text-slate-700 text-sm">ارائه‌ای متناظر با هدف‌گیری شما یافت نشد</p>
+                  <p className="text-xs text-slate-500 mt-2 max-w-md leading-relaxed">
+                    چارت تحصیلی در انتخاب واحد الزامی نیست؛ نمایش دروس بر اساس هدف‌گیریِ رشته و ورودیِ هر ارائه است.
+                    در حال حاضر ارائه‌ای با رشته/ورودیِ شما مطابقت ندارد.
+                  </p>
+                </>
+              )}
+            </div>
+          ) : props.offerings.map(o => {
             const inCart = props.cart.some(c => c.id === o.id);
             const lv = live[o.id];
             const remainingSeats = lv ? lv.remaining : o.capacity - o.enrolled;
