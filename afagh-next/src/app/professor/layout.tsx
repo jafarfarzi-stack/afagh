@@ -100,14 +100,14 @@ export default async function ProfessorLayout({ children }: { children: React.Re
             />
             <Link
               href="/help/professor"
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition"
+              className="hidden sm:inline-flex items-center px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition"
             >
               📖 راهنمای استاد
             </Link>
             <a
               href="/help/pdfs/professor.pdf"
               download
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition"
+              className="hidden sm:inline-flex items-center px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition"
             >
               📕 PDF
             </a>
@@ -127,6 +127,12 @@ export default async function ProfessorLayout({ children }: { children: React.Re
             className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
           >
             🏠 داشبورد و کلاس‌ها
+          </Link>
+          <Link
+            href="/help/professor"
+            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-emerald-300 whitespace-nowrap shrink-0"
+          >
+            📖 راهنما
           </Link>
           {/* سوییچ به سایر کارتابل‌ها (دانشجو، مدیر گروه، مالی/آموزش) از سوییچر
               بالای صفحه انجام می‌شود — اینجا لینک تکراری نمی‌گذاریم. */}
