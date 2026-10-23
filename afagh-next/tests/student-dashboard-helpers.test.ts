@@ -45,7 +45,12 @@ assert.equal(e1.classes[0].startTime, '08:00');
 assert.equal(e1.classes[0].room, 'A1');
 assert.equal(e1.classes[0].building, 'ساختمان ۱');
 assert.equal(e1.exam?.examDate, '1403-03-20');
-assert.equal(e1.exam?.room, 'سالن امتحانات مرکزی');
+// سالن جعلی حذف شد: بدون تخصیص واقعی، رشتهٔ خالی (نمایش «—» در UI)
+assert.equal(e1.exam?.room, '');
+const e1WithRoom = buildDashboardScheduleMap([
+  { offeringId: 7, scheduleType: 'EXAM', dayOfWeek: null, examDate: '1403-03-21', startTime: '09:00', endTime: '11:00', roomName: 'سالن ۳', buildingName: null },
+]).get(7)!;
+assert.equal(e1WithRoom.exam?.room, 'سالن ۳');
 const e2 = sched.get(2)!;
 assert.equal(e2.classes.length, 0);
 assert.equal(e2.exam, undefined);
