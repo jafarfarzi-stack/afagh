@@ -290,6 +290,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/schedule-conflicts',
+    icon: '🚦',
+    title: 'تداخل‌های واقعی برنامه',
+    desc: 'گزارش و رفع تداخل استاد/سالن (کلاس ادغامی تفکیک شده)',
+    group: 'plan',
+    roles: ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'],
+    accent: 'from-rose-900 to-indigo-950 border-rose-700/50',
+    iconBg: 'bg-rose-700/80 border-rose-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/templates',
     icon: '📨',
     title: 'قالب‌های پیامک و ارتباطات',

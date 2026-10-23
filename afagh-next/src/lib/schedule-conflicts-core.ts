@@ -1,0 +1,343 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ *  تشخیص «تداخل واقعی» برنامهٔ هفتگی — هستهٔ خالص (بدون DB، بدون fs)
+ *
+ *  چرا این ماژول جدا است؟
+ *  ─────────────────────────────────────────────────────────────────────
+ *  در ترم ۱۴۰۵۱ سما، شمارش سادهٔ هم‌پوشانی‌ها ۷۱۶ مورد را نشان می‌داد؛
+ *  اما بیشترِ آن‌ها «تداخل» نبودند بلکه **کلاس ادغامی** بودند: چند درسِ
+ *  مختلف که واقعاً در یک جلسه و یک سالن برگزار می‌شوند. قاعدهٔ درست را
+ *  خودِ مخزن از قبل دارد (`src/lib/professor-calendar-layout.ts`) و اینجا
+ *  همان قاعده را — در سطحِ «یک جفت اسلات» — پیاده می‌کنیم تا خروجیِ گزارش
+ *  با آنچه استاد در تقویمش می‌بیند یکی باشد:
+ *
+ *    دو ارائه «ادغامی» (و نه تداخل) هستند اگر
+ *      الف) کلید ادغامِ دستیِ یکسان و غیرـSOLO داشته باشند، یا
+ *      ب) ساعت شروع و پایان دقیقاً یکی باشد و سالن هم یکی باشد
+ *         (سالنِ NULL یعنی «نامشخص» و مانع ادغام نمی‌شود — همان موردی که
+ *          در بررسیِ استاد ۱۳۴ دیدیم: ۷ درس سالن داشتند و یکی NULL بود).
+ *
+ *  «SOLO-n» یعنی کارشناس عمداً کلاس را از ادغام جدا کرده؛ پس اگر هنوز
+ *  هم‌پوشانی دارد، واقعاً باید اصلاح شود و نباید پنهان بماند.
+ *
+ *  این فایل خالص است تا `tests/schedule-conflicts.test.ts` بتواند رفتارش را
+ *  زیر `tsx` قفل کند (اسکریپت‌های مخزن نمی‌توانند از `src/*.ts` ایمپورت کنند،
+ *  اما تست‌ها می‌توانند).
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+
+export const DAY_NAMES_FA = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'] as const;
+
+export type ConflictKind = 'PROFESSOR' | 'ROOM';
+
+/** یک ردیفِ برنامهٔ هفتگی (schedules با scheduleType='CLASS') به‌همراه متنِ نمایشی */
+export interface ConflictSlot {
+  scheduleId: number;
+  offeringId: number;
+  dayOfWeek: number | null;
+  /** فرمت «HH:MM» */
+  startTime: string;
+  endTime: string;
+  roomId: number | null;
+  roomName: string | null;
+  professorId: number | null;
+  professorName: string | null;
+  courseCode: string;
+  courseTitle: string;
+  groupNumber: number;
+  enrolledCount: number;
+  sharedScheduleGroupKey: string | null;
+}
+
+/** یک تداخلِ واقعی: دو ارائه که در یک روز هم‌پوشانی دارند و ادغامی هم نیستند */
+export interface ConflictPair {
+  kind: ConflictKind;
+  /** استاد (staff.id) یا سالن (classrooms.id) */
+  entityId: number;
+  entityName: string;
+  dayOfWeek: number;
+  dayName: string;
+  a: ConflictSlot;
+  b: ConflictSlot;
+  /** دقیقه‌های هم‌پوشانیِ واقعی (همیشه > ۰) */
+  overlapMinutes: number;
+  /** بازهٔ اشتراک به‌صورت دقیقه از نیمه‌شب — برای نمایش «ساعت تداخل» */
+  overlapFrom: number;
+  overlapTo: number;
+  /** کلید پایدار برای ذخیرهٔ «بررسی شد» — با جابه‌جایی ردیف‌ها عوض نمی‌شود */
+  fingerprint: string;
+}
+
+/** «HH:MM» → دقیقه از نیمه‌شب؛ مقدارِ بد → null */
+export function toMinutes(v: string | null | undefined): number | null {
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(v ?? '').trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (!Number.isFinite(h) || !Number.isFinite(min) || h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+
+/** دقیقه → «HH:MM» */
+export function minutesToHm(v: number): string {
+  const h = Math.floor(v / 60);
+  const m = v % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/** طولِ اشتراکِ دو بازه (دقیقه)؛ ۰ یعنی هیچ هم‌پوشانی */
+export function overlapMinutes(aStart: number, aEnd: number, bStart: number, bEnd: number): number {
+  const from = Math.max(aStart, bStart);
+  const to = Math.min(aEnd, bEnd);
+  return to > from ? to - from : 0;
+}
+
+/** کلید ادغامِ دستیِ معتبر — «SOLO-» یعنی عمداً جدا شده، پس ادغام نیست */
+export function sharedMergeKey(v: string | null | undefined): string | null {
+  const k = String(v ?? '').trim();
+  if (!k) return null;
+  if (k.startsWith('SOLO-')) return null;
+  return k;
+}
+
+/** آیا این ارائه عمداً از ادغام جدا شده است؟ (`SOLO-<id>`) */
+export function isExplicitlySplit(v: string | null | undefined): boolean {
+  return String(v ?? '').trim().startsWith('SOLO-');
+}
+
+/**
+ * آیا این دو اسلات «یک جلسهٔ ادغامی» هستند؟ (یعنی تداخل نیستند)
+ * جزئیاتِ قاعده در بالای فایل.
+ */
+export function isMergedPair(a: ConflictSlot, b: ConflictSlot): boolean {
+  const ka = sharedMergeKey(a.sharedScheduleGroupKey);
+  const kb = sharedMergeKey(b.sharedScheduleGroupKey);
+  if (ka && kb && ka === kb) return true;
+
+  // اگر کارشناس یکی را عمداً «جدا» کرده، دیگر ادغامی نیست — حتی اگر ساعت و
+  // سالن یکی باشد؛ چون «جدا» یعنی دو کلاسِ مستقل، و دو کلاسِ مستقل در یک
+  // سالن و یک ساعت یعنی تصرفِ فیزیکیِ دوگانه که باید اصلاح شود.
+  if (isExplicitlySplit(a.sharedScheduleGroupKey) || isExplicitlySplit(b.sharedScheduleGroupKey)) return false;
+
+  const sameTime = a.startTime === b.startTime && a.endTime === b.endTime;
+  if (!sameTime) return false;
+  // سالنِ تعیین‌نشده (NULL) یعنی «نامشخص»؛ نباید جلوی تشخیصِ ادغام را بگیرد
+  if (a.roomId == null || b.roomId == null) return true;
+  return Number(a.roomId) === Number(b.roomId);
+}
+
+/** اثرانگشتِ پایدارِ یک تداخل — مبنای ذخیرهٔ «بررسی شد» */
+export function conflictFingerprint(
+  kind: ConflictKind,
+  entityId: number,
+  dayOfWeek: number,
+  aScheduleId: number,
+  bScheduleId: number,
+): string {
+  const lo = Math.min(Number(aScheduleId), Number(bScheduleId));
+  const hi = Math.max(Number(aScheduleId), Number(bScheduleId));
+  return `${kind}:${entityId}:${dayOfWeek}:${lo}:${hi}`;
+}
+
+export interface ConflictScanResult {
+  pairs: ConflictPair[];
+  /** تعداد جفت‌هایی که هم‌پوشانی داشتند و استاد یا سالنِ مشترک داشتند (قبل از فیلتر ادغام) */
+  rawOverlaps: number;
+  /** تعداد جفت‌هایی که به‌دلیل «ادغامی بودن» از فهرست حذف شدند */
+  mergedSkipped: number;
+  /** تعداد اسلات‌های یکتایی که واقعاً بررسی شد */
+  slotsScanned: number;
+  /** چند ردیفِ برنامه تکراری بود و یک‌بار شمرده شد */
+  duplicateSlots: number;
+}
+
+/**
+ * حذفِ ردیف‌های تکراریِ برنامه.
+ *
+ * چرا لازم شد: در ترم ۱۴۰۵۱، ۱۱۴ ارائه ردیفِ CLASS کاملاً یکسان (همان روز،
+ * ساعت و سالن) دو تا چهار بار داشتند — ۲۲۹ ردیفِ اضافه. بدون این پاک‌سازی،
+ * هر تداخل به‌جای یک‌بار سه‌چهار بار در گزارش می‌آمد و کارشناس فکر می‌کرد
+ * برنامه سه برابر خراب‌تر از واقعیت است. (خودِ ردیفِ تکراری یک نقصِ دادهٔ
+ * جداست، ولی گزارشِ تداخل نباید آن را چند برابر نشان دهد.)
+ *
+ * کلیدِ یکتایی سالن را هم شامل می‌شود: دو ردیف با ساعت یکسان و سالنِ متفاوت
+ * «تکراری» نیستند، دو ادعای متفاوت‌اند و باید دیده شوند.
+ */
+export function dedupeSlots(slots: readonly ConflictSlot[]): { slots: ConflictSlot[]; removed: number } {
+  const seen = new Set<string>();
+  const out: ConflictSlot[] = [];
+  for (const s of slots) {
+    if (s == null) continue;
+    const key = [
+      s.offeringId,
+      s.dayOfWeek ?? 'n',
+      s.startTime,
+      s.endTime,
+      s.roomId ?? 'n',
+    ].join('|');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return { slots: out, removed: slots.length - out.length };
+}
+
+/**
+ * اسکنِ کاملِ یک ترم: خروجی فقط تداخل‌های واقعی است.
+ *
+ * ترتیبِ خروجی: نوع (استاد پیش از سالن)، سپس موجودیت، روز، ساعت شروع —
+ * تا کارشناس بتواند از بالا پایین، استادبه‌استاد پیش برود.
+ */
+export function detectScheduleConflicts(rawSlots: readonly ConflictSlot[]): ConflictScanResult {
+  const deduped = dedupeSlots(rawSlots);
+  const slots = deduped.slots;
+  const pairs: ConflictPair[] = [];
+  let mergedSkipped = 0;
+  let rawOverlaps = 0;
+
+  const byDay = new Map<number, ConflictSlot[]>();
+  for (const s of slots) {
+    const d = Number(s.dayOfWeek);
+    if (!Number.isInteger(d) || d < 0 || d > 6) continue;
+    const list = byDay.get(d) ?? [];
+    list.push(s);
+    byDay.set(d, list);
+  }
+
+  for (const [day, list] of byDay) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i];
+        const b = list[j];
+        // دو اسلاتِ یک ارائه (برنامهٔ دوجلسه‌ایِ یک درس) تداخلِ گزارش‌کردنی نیست
+        if (Number(a.offeringId) === Number(b.offeringId)) continue;
+
+        // اول ارزان‌ترین شرط: بدون استاد یا سالنِ مشترک، هر هم‌پوشانی‌ای بی‌ربط است
+        const sameProfessor =
+          a.professorId != null && b.professorId != null && Number(a.professorId) === Number(b.professorId);
+        const sameRoom = a.roomId != null && b.roomId != null && Number(a.roomId) === Number(b.roomId);
+        if (!sameProfessor && !sameRoom) continue;
+
+        const aS = toMinutes(a.startTime);
+        const aE = toMinutes(a.endTime);
+        const bS = toMinutes(b.startTime);
+        const bE = toMinutes(b.endTime);
+        if (aS == null || aE == null || bS == null || bE == null) continue;
+        if (aE <= aS || bE <= bS) continue; // بازهٔ معکوس/تهی — دادهٔ خراب
+
+        const ov = overlapMinutes(aS, aE, bS, bE);
+        if (ov <= 0) continue;
+        rawOverlaps++;
+
+        if (isMergedPair(a, b)) { mergedSkipped++; continue; }
+
+        const push = (kind: ConflictKind, entityId: number, entityName: string) => {
+          pairs.push({
+            kind,
+            entityId,
+            entityName,
+            dayOfWeek: day,
+            dayName: DAY_NAMES_FA[day] ?? `روز ${day}`,
+            a,
+            b,
+            overlapMinutes: ov,
+            overlapFrom: Math.max(aS, bS),
+            overlapTo: Math.min(aE, bE),
+            fingerprint: conflictFingerprint(kind, entityId, day, a.scheduleId, b.scheduleId),
+          });
+        };
+
+        if (sameProfessor) push('PROFESSOR', Number(a.professorId), a.professorName ?? `استاد ${a.professorId}`);
+        if (sameRoom) push('ROOM', Number(a.roomId), a.roomName ?? `کلاس ${a.roomId}`);
+      }
+    }
+  }
+
+  pairs.sort(
+    (x, y) =>
+      (x.kind === y.kind ? 0 : x.kind === 'PROFESSOR' ? -1 : 1) ||
+      x.entityName.localeCompare(y.entityName, 'fa') ||
+      x.dayOfWeek - y.dayOfWeek ||
+      x.overlapFrom - y.overlapFrom,
+  );
+
+  return {
+    pairs,
+    mergedSkipped,
+    rawOverlaps,
+    slotsScanned: slots.length,
+    duplicateSlots: deduped.removed,
+  };
+}
+
+export interface ConflictSummary {
+  professor: number;
+  room: number;
+  professorEntities: number;
+  roomEntities: number;
+  studentsAtRisk: number;
+  worstOverlapMinutes: number;
+}
+
+/** خلاصهٔ بالای صفحه: چند تداخل، چند استاد/سالن درگیر، بدترین هم‌پوشانی */
+export function summarizeConflicts(pairs: readonly ConflictPair[]): ConflictSummary {
+  const profs = new Set<number>();
+  const rooms = new Set<number>();
+  let studentsAtRisk = 0;
+  let worst = 0;
+  let professor = 0;
+  let room = 0;
+  const seenPair = new Set<string>();
+
+  for (const p of pairs) {
+    if (p.kind === 'PROFESSOR') { professor++; profs.add(p.entityId); }
+    else { room++; rooms.add(p.entityId); }
+    if (p.overlapMinutes > worst) worst = p.overlapMinutes;
+    const key = `${p.a.offeringId}:${p.b.offeringId}`;
+    if (!seenPair.has(key)) {
+      seenPair.add(key);
+      studentsAtRisk += Number(p.a.enrolledCount ?? 0) + Number(p.b.enrolledCount ?? 0);
+    }
+  }
+  return {
+    professor,
+    room,
+    professorEntities: profs.size,
+    roomEntities: rooms.size,
+    studentsAtRisk,
+    worstOverlapMinutes: worst,
+  };
+}
+
+/** فهرستِ یکتا برای نمایش «کدام استادها / کدام سالن‌ها درگیرند» */
+export function groupConflictsByEntity(pairs: readonly ConflictPair[]): {
+  kind: ConflictKind;
+  entityId: number;
+  entityName: string;
+  items: ConflictPair[];
+}[] {
+  const map = new Map<string, { kind: ConflictKind; entityId: number; entityName: string; items: ConflictPair[] }>();
+  for (const p of pairs) {
+    const key = `${p.kind}:${p.entityId}`;
+    const cur = map.get(key) ?? { kind: p.kind, entityId: p.entityId, entityName: p.entityName, items: [] };
+    cur.items.push(p);
+    map.set(key, cur);
+  }
+  return [...map.values()].sort(
+    (x, y) =>
+      (x.kind === y.kind ? 0 : x.kind === 'PROFESSOR' ? -1 : 1) ||
+      y.items.length - x.items.length ||
+      x.entityName.localeCompare(y.entityName, 'fa'),
+  );
+}
+
+/** برچسب‌های فارسیِ دلیلِ «بررسی شد» */
+export const CONFLICT_REASON_LABELS: Record<string, string> = {
+  MERGED_OK: 'کلاس ادغامی است (یک جلسهٔ واقعی)',
+  PROF_OK: 'استاد هماهنگ است (حضور نوبتی/تفکیک جلسه)',
+  ROOM_OK: 'سالن اشتراکی/بزرگ — اشکالی ندارد',
+  WILL_FIX: 'نیاز به اصلاح برنامه (فعلاً پذیرفته شده)',
+  OTHER: 'سایر موارد',
+};
+
+export const CONFLICT_REASON_CODES = Object.keys(CONFLICT_REASON_LABELS);

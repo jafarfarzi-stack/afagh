@@ -1075,6 +1075,44 @@ export const enroll_bypass_requests = pgTable('enroll_bypass_requests', {
   index('idx_bypass_term').on(t.termId),
 ]);
 
+/**
+ * ثبتِ «بررسی/پذیرش» تداخل‌های واقعی برنامهٔ هفتگی (مهاجرت ۰۱۱۶).
+ *
+ * چرا جدول جدا؟ شمارشِ خامِ هم‌پوشانیِ اسلات‌ها در ۱۴۰۵۱ معادل ۷۱۶ مورد بود
+ * ولی تداخلِ واقعی فقط ۶۹ تا — بقیه «کلاس ادغامی» بودند که قاعده‌اش در
+ * `src/lib/professor-calendar-layout.ts` است. کارشناس آموزش باید بتواند
+ * باقی‌مانده را یکی‌یکی بررسی و **پذیرش** کند تا هفتهٔ بعد دوباره به‌عنوان
+ * خطای تازه بالا نیایند. اینجا فقط وضعیتِ بررسی ذخیره می‌شود؛ رفعِ واقعی
+ * یا اصلاحِ `schedules` است یا تعیینِ `course_offerings.sharedScheduleGroupKey`.
+ */
+export const schedule_conflict_reviews = pgTable('schedule_conflict_reviews', {
+  id: serial('id').primaryKey(),
+  termId: integer('termId').notNull().references(() => academic_terms.id, { onDelete: 'cascade' }),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  /** PROFESSOR | ROOM */
+  kind: varchar('kind', { length: 20 }).notNull(),
+  /** staff.id برای PROFESSOR، classrooms.id برای ROOM */
+  entityId: integer('entityId').notNull(),
+  dayOfWeek: integer('dayOfWeek').notNull(),
+  scheduleAId: integer('scheduleAId').notNull().references(() => schedules.id, { onDelete: 'cascade' }),
+  scheduleBId: integer('scheduleBId').notNull().references(() => schedules.id, { onDelete: 'cascade' }),
+  /** اثرانگشتِ پایدار: kind:entityId:day:min(scheduleId):max(scheduleId) */
+  fingerprint: varchar('fingerprint', { length: 120 }).notNull(),
+  /** REVIEWED (بررسی و پذیرفته شد) | RESOLVED (رفعِ واقعی ثبت شد) */
+  status: varchar('status', { length: 20 }).notNull().default('REVIEWED'),
+  /** کد دلیل: MERGED_OK | PROF_OK | ROOM_OK | WILL_FIX | OTHER */
+  reasonCode: varchar('reasonCode', { length: 40 }),
+  reasonText: text('reasonText'),
+  reviewedByUserId: integer('reviewedByUserId').references(() => users.id),
+  reviewedAt: timestamp('reviewedAt').defaultNow(),
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+}, (t) => [
+  index('idx_sconflict_term').on(t.termId),
+  index('idx_sconflict_entity').on(t.kind, t.entityId),
+  uniqueIndex('uq_sconflict_term_fp').on(t.termId, t.fingerprint),
+]);
+
 export const grade_appeals = pgTable('grade_appeals', {
   id: serial('id').primaryKey(),
   enrollmentId: integer('enrollmentId').notNull().references(() => enrollments.id),
