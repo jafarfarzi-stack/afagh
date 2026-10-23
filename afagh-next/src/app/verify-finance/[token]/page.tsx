@@ -136,7 +136,7 @@ export default async function VerifyFinancePage({ params }: { params: Promise<{ 
         <div className="space-y-2 text-xs">
           <h2 className="font-bold text-slate-300">📋 ریز ترم‌به‌ترم:</h2>
           <div className="overflow-x-auto rounded-2xl border border-slate-800">
-            <table className="w-full text-right">
+            <table className="w-full text-right rt">
               <thead className="bg-slate-950 text-slate-400">
                 <tr>
                   <th className="p-2">نیمسال</th>

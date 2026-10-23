@@ -9,7 +9,8 @@ import PanelSwitcher from '@/components/PanelSwitcher';
 import { getSiblingAccounts } from '@/lib/account-switch';
 import UniversitySwitcher from './UniversitySwitcher';
 import TermSwitcher from '@/components/TermSwitcher';
-import { getCurrentUniversity, listUniversities, uniTheme } from '@/lib/university-scope';
+import { getCurrentUniversity, listUniversities } from '@/lib/university-scope';
+import { uniThemeResolved } from '@/lib/university-theme-db';
 import { getTermScope } from '@/lib/term-scope';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -76,7 +77,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </div>
     );
   }
-  const th = uniTheme(curUni.code);
+  const th = await uniThemeResolved(curUni.code);
   const termScope = await getTermScope(curUni.id);
   // قفل خودکار بیکاری — سرور-محور (مدت به تفکیک نقش؛ ۰ = غیرفعال).
   // منبع حقیقت «زمان آخرین فعالیت» است؛ پس رفرش قفل را دور نمی‌زند و کاربرِ در حال کار بیرون نمی‌افتد.

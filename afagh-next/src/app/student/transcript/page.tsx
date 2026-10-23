@@ -288,7 +288,7 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
           <div className="bg-slate-100 px-3 py-1 font-bold text-slate-900 border-b border-slate-800 text-[11px]">
             مشخصات فردی، تحصیلی و آیین‌نامه ملاک عمل
           </div>
-          <table className="w-full text-right text-[11px] border-collapse">
+          <table className="w-full text-right text-[11px] border-collapse rt">
             <tbody>
               <tr className="border-b border-slate-300">
                 <td className="p-1.5 bg-slate-50 font-medium text-slate-600 w-1/6 border-l border-slate-300">نام و نام خانوادگی:</td>
@@ -411,7 +411,7 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
                     </div>
 
                     {/* جدول دروس */}
-                  <table className="w-full text-right text-[11px] border-collapse">
+                  <table className="w-full text-right text-[11px] border-collapse rt">
                     <thead>
                       <tr className="bg-slate-100 border-b border-slate-700 font-bold text-slate-800">
                         <th className="p-1 border-l border-slate-300 text-center w-6">ردیف</th>
@@ -494,7 +494,7 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
           <div className="bg-slate-800 text-white px-3 py-1 font-bold text-center text-xs">
             خلاصه وضعیت تحصیلی کل دوره تا تاریخ صدور کارنامه
           </div>
-          <table className="w-full text-center text-[11px] border-collapse font-bold">
+          <table className="w-full text-center text-[11px] border-collapse font-bold rt">
             <tbody>
               <tr className="bg-slate-100 border-b border-slate-400 text-slate-700">
                 <td className="p-2 border-l border-slate-300">کل واحدهای اخذشده</td>

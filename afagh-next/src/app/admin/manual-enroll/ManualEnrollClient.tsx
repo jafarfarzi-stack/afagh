@@ -570,7 +570,7 @@ const filteredCatalog = useMemo(() => {
         <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
           <div className="p-3 border-b bg-slate-50 font-black text-sm">🗂️ ثبت‌نام‌های انجام‌شده توسط کارشناس (آخرین ۵۰)</div>
           <div className="max-h-[30rem] overflow-y-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-xs rt">
               <thead className="sticky top-0 bg-slate-100 text-slate-600"><tr>
                 <th className="p-2 text-right">دانشجو</th><th className="p-2 text-right">درس</th><th className="p-2 text-right">ترم</th>
                 <th className="p-2 text-right">توسط</th><th className="p-2 text-right">زمان</th><th className="p-2 text-center">نادیده</th><th className="p-2 text-right">دلیل</th>

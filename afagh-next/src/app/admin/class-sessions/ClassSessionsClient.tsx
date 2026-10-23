@@ -3,6 +3,8 @@
 import { useState, useTransition } from 'react';
 import { toggleSessionFlagAction } from './actions';
 
+import MobileCardList, { type CardColumn } from '@/components/MobileCardList';
+
 export interface OfferingRow {
   id: number;
   code: string;
@@ -188,7 +190,7 @@ export default function ClassSessionsClient({
       )}
 
       <div className="overflow-x-auto rounded-xl border border-slate-300 bg-white">
-        <table className="w-full text-xs">
+        <table className="w-full text-xs rt hidden md:table">
           <thead>
             <tr className="bg-slate-900 text-center text-[11px] text-white">
               <th className="p-2.5">جلسه</th>
@@ -245,6 +247,46 @@ export default function ClassSessionsClient({
             )}
           </tbody>
         </table>
+        <MobileCardList
+          rows={sessions}
+          columns={[
+            { key: 'sessionNo', label: 'جلسه', title: true, render: (s) => faNum(s.sessionNo) },
+            { key: 'sessionDate', label: 'تاریخ', subtitle: true, render: (s) => faNum(s.sessionDate) },
+            { key: 'startTime', label: 'ساعت', render: (s) => <span dir="ltr">{s.startTime}–{s.endTime}</span> },
+            { key: 'roomName', label: 'محل تشکیل', render: (s) => s.roomName ?? '—' },
+            {
+              key: 'status',
+              label: 'وضعیت',
+              render: (s) => (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">
+                  {STATUS_FA[s.status] ?? s.status}
+                </span>
+              ),
+            },
+            {
+              key: 'isMakeUp',
+              label: 'جبرانی',
+              render: (s) =>
+                Number(s.isMakeUp ?? 0) === 1 ? (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">جبرانی</span>
+                ) : (
+                  '—'
+                ),
+            },
+            { key: 'createdAt', label: 'تاریخ ایجاد', render: (s) => jdate(s.createdAt) },
+            { key: 'professorViewedAt', label: 'مشاهدهٔ استاد', render: (s) => jdate(s.professorViewedAt) },
+            { key: 'updatedAt', label: 'آخرین تغییر', render: (s) => jdate(s.updatedAt) },
+          ]}
+          getKey={(s) => s.id}
+          renderActions={(s) => (
+            <div className="flex flex-wrap gap-1">
+              <Chip on={flagOf(s, 'isHoliday')} label="تعطیل" tone="border-rose-300 bg-rose-100 text-rose-800" onClick={() => toggle(s, 'isHoliday')} />
+              <Chip on={flagOf(s, 'isExtraSession')} label="فوق‌برنامه" tone="border-violet-300 bg-violet-100 text-violet-800" onClick={() => toggle(s, 'isExtraSession')} />
+              <Chip on={flagOf(s, 'isActive')} label="فعال" tone="border-emerald-300 bg-emerald-100 text-emerald-800" onClick={() => toggle(s, 'isActive')} />
+            </div>
+          )}
+          empty={<div className="p-6 text-center text-sm text-slate-500">برای این درس جلسه‌ای ثبت نشده است؛ ابتدا از «برنامه‌ریزی درسی ← تقویم ترم» جلسات ترم را تولید کنید.</div>}
+        />
       </div>
     </div>
   );

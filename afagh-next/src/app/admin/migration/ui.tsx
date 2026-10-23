@@ -190,7 +190,7 @@ export function Uploader({
           </div>
           {curSheet.sample.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-[10px]">
+              <table className="w-full text-right text-[10px] rt">
                 <thead><tr className="text-slate-500">{curSheet.headers.map((h, i) => <th key={i} className="p-1">{h || i + 1}</th>)}</tr></thead>
                 <tbody>
                   {curSheet.sample.map((r, i) => (

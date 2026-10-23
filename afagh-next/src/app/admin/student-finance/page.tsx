@@ -139,7 +139,7 @@ export default async function StudentFinancePage() {
         <div className="card">
           <h2 className="font-bold text-slate-800 mb-3 border-b border-slate-100 pb-2">دانشجویان بدهکار (بیشترین بدهی)</h2>
           <div className="overflow-x-auto">
-            <table className="w-full text-right text-sm">
+            <table className="w-full text-right text-sm rt">
               <thead>
                 <tr className="text-xs text-slate-500 border-b border-slate-200">
                   <th className="p-2">دانشجو</th>
@@ -171,7 +171,7 @@ export default async function StudentFinancePage() {
         <div className="card">
           <h2 className="font-bold text-slate-800 mb-3 border-b border-slate-100 pb-2">پرونده‌های در انتظار اقدام مالی</h2>
           <div className="overflow-x-auto">
-            <table className="w-full text-right text-sm">
+            <table className="w-full text-right text-sm rt">
               <thead>
                 <tr className="text-xs text-slate-500 border-b border-slate-200">
                   <th className="p-2">کد رهگیری</th>
@@ -206,7 +206,7 @@ export default async function StudentFinancePage() {
       <div className="card">
         <h2 className="font-bold text-slate-800 mb-3 border-b border-slate-100 pb-2">آخرین تراکنش‌های دفتر مالی</h2>
         <div className="overflow-x-auto">
-          <table className="w-full text-right text-sm">
+          <table className="w-full text-right text-sm rt">
             <thead>
               <tr className="text-xs text-slate-500 border-b border-slate-200">
                 <th className="p-2">تاریخ</th>

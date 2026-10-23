@@ -72,7 +72,7 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
           <p className="text-[11px] text-slate-400">ردیف/ستون برای نقشهٔ حضور و غیاب. کلاس غیرفعال در انتخاب‌گر سردر کلاس نمایش داده نمی‌شود.</p>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-right text-xs">
+            <table className="w-full text-right text-xs rt">
               <thead>
                 <tr className="text-slate-500">
                   <th className="p-2">نام</th><th className="p-2">ظرفیت</th><th className="p-2">نوع</th>

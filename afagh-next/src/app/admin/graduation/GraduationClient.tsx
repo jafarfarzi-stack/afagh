@@ -194,7 +194,7 @@ export default function GraduationClient({
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-[11px] sm:text-xs">
+            <table className="w-full text-[11px] sm:text-xs rt">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   {['دانشجو', 'رشته / مقطع', 'واحد', 'معدل', 'مدیر گروه', 'ایرانداک', 'وضعیت', 'آخرین رویداد', ''].map(h => (
@@ -443,7 +443,7 @@ function DossierDrawer({ d, steps, pending, onClose, run }: {
           </div>
 
           {!!d.degrees.length && (
-            <table className="w-full text-[10px] mt-2">
+            <table className="w-full text-[10px] mt-2 rt">
               <thead className="bg-slate-50 text-slate-500"><tr>
                 {['نوع', 'سریال', 'کد استعلام', 'کد صحت', 'تاریخ', 'تحویل'].map(h => <th key={h} className="p-1 text-right font-black">{h}</th>)}
               </tr></thead>
@@ -482,7 +482,7 @@ function DossierDrawer({ d, steps, pending, onClose, run }: {
             </p>
           )}
           {!!d.deliveries.length && (
-            <table className="w-full text-[10px]">
+            <table className="w-full text-[10px] rt">
               <thead className="bg-slate-50 text-slate-500"><tr>
                 {['رویداد', 'کانال', 'گیرنده', 'نتیجه', 'زمان'].map(h => <th key={h} className="p-1 text-right font-black">{h}</th>)}
               </tr></thead>
@@ -535,7 +535,7 @@ function DeptsTab({ depts, onSave, onDelete, pending }: {
     <div className="grid lg:grid-cols-3 gap-3">
       <div className="card p-3 lg:col-span-2 overflow-x-auto">
         <h3 className="text-xs font-black text-slate-800 mb-2">دپارتمان‌های تسویه‌حساب (کاملاً قابل پیکربندی)</h3>
-        <table className="w-full text-[11px]">
+        <table className="w-full text-[11px] rt">
           <thead className="bg-slate-50 text-slate-500"><tr>
             {['کد', 'عنوان', 'بررسی خودکار', 'نقش مسئول', 'ترتیب', 'فعال', ''].map(h => <th key={h} className="p-2 text-right font-black">{h}</th>)}
           </tr></thead>
@@ -632,7 +632,7 @@ function AlumniTab({ rows, services, pending, onFilter, onResolve }: {
           <input value={note} onChange={e => setNote(e.target.value)} placeholder="یادداشت کارشناس برای اقدام بعدی"
             className="border border-slate-200 rounded-lg px-2 py-1 text-[10px] flex-1 min-w-48" />
         </div>
-        <table className="w-full text-[11px]">
+        <table className="w-full text-[11px] rt">
           <thead className="bg-slate-50 text-slate-500"><tr>
             {['کد رهگیری', 'دانش‌آموخته', 'خدمت', 'مقصد', 'هزینه', 'وضعیت', 'تاریخ', 'اقدام'].map(h => <th key={h} className="p-2 text-right font-black">{h}</th>)}
           </tr></thead>

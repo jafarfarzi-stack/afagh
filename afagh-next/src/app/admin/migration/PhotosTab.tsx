@@ -123,7 +123,7 @@ export default function PhotosTab() {
           {report.sample.length > 0 && (
             <div className="overflow-x-auto">
               <p className="mb-1 text-xs font-bold text-slate-600">نمونهٔ تطبیق‌ها</p>
-              <table className="w-full text-right text-[11px]">
+              <table className="w-full text-right text-[11px] rt">
                 <thead><tr className="text-slate-500"><th className="p-1">فایل</th><th className="p-1">شخص</th><th className="p-1">تطبیق بر پایهٔ</th><th className="p-1">وضعیت</th></tr></thead>
                 <tbody>
                   {report.sample.map((s, i) => (

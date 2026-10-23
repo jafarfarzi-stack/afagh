@@ -43,15 +43,15 @@ export default async function CategoryPage({ params }: { params: Promise<{ group
         <Link href="/admin" className="text-xs font-bold text-indigo-700 hover:underline">→ بازگشت به داشبورد</Link>
       </div>
       <p className="text-xs text-slate-500 -mt-3">{g.group.desc} — {g.modules.length} ماژول</p>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+      <div className="grid grid-cols-2 min-[400px]:grid-cols-3 lg:grid-cols-4 gap-3">
         {g.modules.map(m => (
           <Link
             key={m.href}
             href={m.href}
-            className={`group h-full p-4 rounded-2xl bg-gradient-to-br ${m.accent} text-white shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-start justify-between border`}
+            className={`group h-full p-3 rounded-2xl bg-gradient-to-br ${m.accent} text-white shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-start justify-between border`}
           >
-            <div className="flex items-start gap-3">
-              <div className={`w-11 h-11 shrink-0 rounded-xl ${m.iconBg} border flex items-center justify-center text-2xl shadow-inner group-hover:scale-110 transition-transform`}>
+            <div className="flex items-start gap-2">
+              <div className={`w-9 h-9 shrink-0 rounded-xl ${m.iconBg} border flex items-center justify-center text-xl shadow-inner group-hover:scale-110 transition-transform`}>
                 {m.icon}
               </div>
               <div>

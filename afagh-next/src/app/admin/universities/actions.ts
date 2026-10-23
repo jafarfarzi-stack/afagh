@@ -111,3 +111,23 @@ export async function deleteUniversityLogoAction(universityId: number) {
   await db.update(universities).set({ logoUrl: null }).where(eq(universities.id, universityId));
   revalidatePath('/admin/universities');
 }
+
+/**
+ * ذخیرهٔ برندینگ اختصاصی دانشگاه (بازنویسیِ UNI_THEMES). مقادیر به شکل JSON در
+ * ستونِ brand_json نگه‌داری می‌شوند؛ مقدارِ خالی در لایهٔ اپلیکیشن → تمِ پیش‌فرض.
+ */
+export async function saveUniversityBrandAction(formData: FormData) {
+  await requireRole(['ADMIN']);
+  const universityId = Number(formData.get('universityId'));
+  if (!Number.isSafeInteger(universityId) || universityId <= 0) throw new Error('دانشگاه نامشخص است');
+  if (!(await canActOnUniversity(universityId))) throw new Error('دسترسی به این دانشگاه مجاز نیست.');
+  const keys = ['header', 'badge', 'ring', 'soft', 'navPanel', 'navBorder', 'navHover', 'navActive', 'navMuted', 'navInput'] as const;
+  const brand: Record<string, string> = {};
+  for (const k of keys) {
+    const v = String(formData.get(k) || '').trim();
+    if (!v) throw new Error(`فیلد ${k} نمی‌تواند خالی باشد`);
+    brand[k] = v;
+  }
+  await db.update(universities).set({ brandJson: brand as any }).where(eq(universities.id, universityId));
+  revalidatePath('/admin/universities');
+}

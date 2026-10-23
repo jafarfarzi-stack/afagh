@@ -443,7 +443,7 @@ setForm(Object.fromEntries(editFields.map(f => {
         )}
 
         <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
+          <table className="w-full text-right text-xs rt">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
                 <th className="w-40 p-2.5">

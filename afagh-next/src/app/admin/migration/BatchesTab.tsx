@@ -144,7 +144,7 @@ export default function BatchesTab({ sourceCode }: { sourceCode: string }) {
 
       <div className="card overflow-x-auto">
         <h3 className="mb-2 text-sm font-bold">دسته‌های واردشده</h3>
-        <table className="w-full text-right text-xs">
+        <table className="w-full text-right text-xs rt">
           <thead>
             <tr className="text-slate-500">
               <th className="p-2">#</th><th className="p-2">نوع</th><th className="p-2">فایل / برگه</th>
@@ -213,7 +213,7 @@ export default function BatchesTab({ sourceCode }: { sourceCode: string }) {
           <div className="mt-3 overflow-x-auto">
             <p className="mb-1 text-xs font-bold text-slate-600">سطرهای خطادار دستهٔ {openBatch} ({fmt(rows.length)})</p>
             {rows.length === 0 ? <p className="p-2 text-[11px] text-slate-400">سطر خطاداری نمانده.</p> : (
-              <table className="w-full text-right text-[11px]">
+              <table className="w-full text-right text-[11px] rt">
                 <thead><tr className="text-slate-500"><th className="p-1">خط</th><th className="p-1">خطا</th><th className="p-1">دادهٔ خام</th></tr></thead>
                 <tbody>
                   {rows.slice(0, 100).map(r => (
@@ -237,7 +237,7 @@ export default function BatchesTab({ sourceCode }: { sourceCode: string }) {
         <p className="mb-2 text-[11px] text-slate-500">
           کارهایی مثل «اعمال نمرات» یا «ثبت مانده اولیه» فایل ندارند، ولی همه‌شان سند دارند و برگشت‌پذیرند.
         </p>
-        <table className="w-full text-right text-xs">
+        <table className="w-full text-right text-xs rt">
           <thead><tr className="text-slate-500"><th className="p-2">عملیات</th><th className="p-2">دسته</th><th className="p-2">تعداد نوشته</th><th className="p-2">واگردپذیر</th><th className="p-2">آخرین اجرا</th><th className="p-2"></th></tr></thead>
           <tbody>
             {groups.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-slate-400">هنوز چیزی روی سامانه نوشته نشده.</td></tr>}
@@ -274,7 +274,7 @@ export default function BatchesTab({ sourceCode }: { sourceCode: string }) {
           </div>
           {rollback.details.filter(d => d.result !== 'DELETED' && d.result !== 'RESTORED').length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-[11px]">
+              <table className="w-full text-right text-[11px] rt">
                 <thead><tr className="text-slate-500"><th className="p-1">جدول</th><th className="p-1">شناسه</th><th className="p-1">نتیجه</th><th className="p-1">توضیح</th></tr></thead>
                 <tbody>
                   {rollback.details.filter(d => d.result !== 'DELETED' && d.result !== 'RESTORED').slice(0, 50).map((d, i) => (

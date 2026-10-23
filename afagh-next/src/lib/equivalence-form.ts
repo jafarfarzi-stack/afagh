@@ -192,14 +192,14 @@ export async function buildEquivalenceFormHtml(params: {
   <div class="title">فرم رسمی معادل‌سازی دروس</div>
   <div class="doc-no">موضوع: معادل‌سازی دروس گذرانده‌شده در مؤسسهٔ آموزش عالی قبلی</div>
 
-  <table class="info">
+  <table class="info rt">
     <tr><td class="k">نام و نام خانوادگی</td><td>${escapeHtml(studentName)}</td><td class="k">کد ملی${showFull ? ' (کامل)' : ''}</td><td>${faNum(displayedCode)}</td></tr>
     <tr><td class="k">شمارهٔ دانشجویی</td><td>${faNum(studentCode)}</td><td class="k">رشته / مقطع</td><td>${escapeHtml(majorTitle)} — ${escapeHtml(degreeTitle)}</td></tr>
     <tr><td class="k">مؤسسهٔ مبدأ</td><td colspan="3">${escapeHtml(previousUniversity)}</td></tr>
     ${inquiryCode ? `<tr><td class="k">کد استعلام</td><td colspan="3"><b>${escapeHtml(inquiryCode)}</b> <span style="font-size:11px;color:#475569;">(برای استعلام اصالت، همین کد یا QR پایین سند کافی است — نیازی به کد ملی کامل نیست.)</span></td></tr>` : ''}
   </table>
 
-  <table class="courses">
+  <table class="courses rt">
     <thead>
       <tr><th>ردیف</th><th>عنوان درس مبدأ</th><th>واحد</th><th>نمره</th><th>کد درس مقصد</th><th>عنوان درس مقصد</th></tr>
     </thead>

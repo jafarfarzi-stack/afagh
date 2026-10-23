@@ -147,7 +147,7 @@ function BackupRestorePanel({ flash }: { flash: (ok: boolean, text: string) => v
             {minioList.length === 0 ? (
               <p className="text-sm text-slate-400">فایلی وجود ندارد.</p>
             ) : (
-              <table className="w-full text-xs">
+              <table className="w-full text-xs rt">
                 <thead><tr className="border-b border-slate-200">
                   <th className="text-right py-2 px-2 font-bold">کلید</th>
                   <th className="text-left py-2 px-2 font-bold">حجم</th>

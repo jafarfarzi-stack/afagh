@@ -137,7 +137,7 @@ export default function ManualAttendanceClient({
       )}
 
       <div className="overflow-x-auto rounded-xl border border-slate-300 bg-white">
-        <table className="w-full text-xs">
+        <table className="w-full text-xs rt">
           <thead>
             <tr className="bg-slate-900 text-center text-[11px] text-white">
               <th className="p-2.5">جلسه</th>

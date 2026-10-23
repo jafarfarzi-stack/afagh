@@ -173,7 +173,7 @@ export default function CodeMapTab({ domains, sourceCode }: { domains: DomainDef
             <button className="btn-ghost text-xs" onClick={addCode}>+ افزودن</button>
           </div>
         </div>
-        <table className="w-full text-right text-xs">
+        <table className="w-full text-right text-xs rt">
           <thead>
             <tr className="text-slate-500">
               <th className="p-2">کد قدیمی</th><th className="p-2">عنوان قدیمی</th>

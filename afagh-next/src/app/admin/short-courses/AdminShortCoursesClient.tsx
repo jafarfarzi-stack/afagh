@@ -394,7 +394,7 @@ export default function AdminShortCoursesClient({
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-xs">
+              <table className="w-full border-collapse text-xs rt">
                 <thead>
                   <tr className="bg-slate-900 text-white text-right">
                     <th className="p-3">ردیف</th>

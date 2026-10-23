@@ -146,7 +146,7 @@ export default function AlumniClient({ me, services, initialRequests, degrees, i
       {/* درخواست‌های من */}
       <div className="card p-4 overflow-x-auto">
         <h2 className="text-sm font-black text-slate-800 mb-2">پیگیری درخواست‌های من</h2>
-        <table className="w-full text-[11px]">
+        <table className="w-full text-[11px] rt">
           <thead className="bg-slate-50 text-slate-500"><tr>
             {['کد رهگیری', 'خدمت', 'مقصد', 'هزینه', 'وضعیت', 'تاریخ', 'اقدام'].map(h => <th key={h} className="p-2 text-right font-black">{h}</th>)}
           </tr></thead>

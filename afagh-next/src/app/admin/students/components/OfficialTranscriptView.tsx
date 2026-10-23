@@ -142,7 +142,7 @@ export default function OfficialTranscriptView({
         {termDisplayTitle(t.termCode, t.termTitle)}
         <span className="block font-normal text-slate-700">وضعیت دانشجو: {t.termStatusTitle || '—'} — <b className={t.probation ? 'text-red-700' : 'text-emerald-700'}>{t.probation ? 'مشروط' : 'عادی'}</b></span>
       </div>
-      <table className="tr-term-table w-full text-[9px]" style={{ tableLayout: 'fixed' }}>
+      <table className="tr-term-table w-full text-[9px] rt" style={{ tableLayout: 'fixed' }}>
         <colgroup>
           <col style={{ width: '15%' }} />
           <col style={{ width: '40%' }} />
@@ -195,7 +195,7 @@ export default function OfficialTranscriptView({
   return (
     <div dir="rtl" className="tr-root border-2 border-slate-700 text-slate-900 bg-white">
       {/* کل کادر بالا (سربرگ + مشخصات) در thead است تا در همهٔ صفحات چاپ تکرار شود */}
-      <table className="tr-doc">
+      <table className="tr-doc rt">
         <thead>
           <tr><td className="tr-doc-cell">
       {/* سربرگ سما */}
@@ -296,7 +296,7 @@ export default function OfficialTranscriptView({
       <tr><td className="tr-doc-cell">
       <div className="tr-breakdown border-t-2 border-slate-700 px-3 py-2">
         <p className="font-extrabold text-[11px] mb-1">جدول وضعیت دروس گذرانده (کاتالوگ رشته)</p>
-        <table className="w-full text-[10px] border border-slate-400">
+        <table className="w-full text-[10px] border border-slate-400 rt">
           <thead>
             <tr className="bg-slate-100 border-b border-slate-300">
               <th className="p-1 border-l border-slate-300">نوع درس</th>

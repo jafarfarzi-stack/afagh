@@ -309,7 +309,7 @@ export default async function StudentCurriculumChartPage() {
                   </div>
 
                   <div className="overflow-x-auto">
-                    <table className="w-full text-right text-xs">
+                    <table className="w-full text-right text-xs rt">
                       <thead>
                         <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
                           <th className="p-2">کد درس</th>
@@ -372,7 +372,7 @@ export default async function StudentCurriculumChartPage() {
           {chartRows.length > 0 && (
             <div className="card !p-4 bg-white shadow-sm space-y-3 curriculum-print-area">
               <h4 className="font-extrabold text-slate-900 text-sm">📋 جمع‌بندی نوع درس و پیشرفت شما</h4>
-              <table className="w-full border-collapse text-xs">
+              <table className="w-full border-collapse text-xs rt">
                 <thead>
                   <tr className="bg-slate-100 text-center">
                     <th className="p-2 border border-slate-300">نوع درس</th>

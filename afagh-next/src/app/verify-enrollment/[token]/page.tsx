@@ -123,7 +123,7 @@ export default async function VerifyEnrollmentPage({ params }: { params: Promise
         <div className="space-y-2 text-xs">
           <h2 className="font-bold text-slate-300">📋 دروس ثبت‌شده در {res.termTitle}:</h2>
           <div className="overflow-x-auto rounded-2xl border border-slate-800">
-            <table className="w-full text-right">
+            <table className="w-full text-right rt">
               <thead className="bg-slate-950 text-slate-400">
                 <tr>
                   <th className="p-2">ردیف</th>

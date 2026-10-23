@@ -383,7 +383,7 @@ export default function StudentRequestsClient({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 tabstrip">
           <button
             onClick={() => setActiveTab('MY_REQUESTS')}
             className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all shadow ${

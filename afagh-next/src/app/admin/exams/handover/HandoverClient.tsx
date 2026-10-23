@@ -113,7 +113,7 @@ export default function HandoverClient({
 
       <section className="overflow-x-auto rounded-xl border border-slate-300 bg-white">
         <h2 className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-800">جلسه‌های امتحان</h2>
-        <table className="w-full text-xs">
+        <table className="w-full text-xs rt">
           <thead>
             <tr className="bg-slate-900 text-center text-[11px] text-white">
               <th className="p-2.5">جلسه</th>
@@ -174,7 +174,7 @@ export default function HandoverClient({
 
       <section className="overflow-x-auto rounded-xl border border-slate-300 bg-white">
         <h2 className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-800">تحویل اوراق به استاد و بازگشت به بایگانی</h2>
-        <table className="w-full text-xs">
+        <table className="w-full text-xs rt">
           <thead>
             <tr className="bg-slate-900 text-center text-[11px] text-white">
               <th className="p-2.5">درس</th>

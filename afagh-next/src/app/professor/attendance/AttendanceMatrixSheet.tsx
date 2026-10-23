@@ -32,7 +32,7 @@ export default function AttendanceMatrixSheet({
 
   return (
     <div className="transcript-print-area tr-root bg-white border-2 border-slate-800 shadow-sm text-xs text-slate-800">
-      <table className="tr-doc">
+      <table className="tr-doc rt">
         <thead>
           <tr>
             <td className="tr-doc-cell">
@@ -56,7 +56,7 @@ export default function AttendanceMatrixSheet({
           <tr className="tr-doc-row">
             <td className="tr-doc-cell">
               {/* ماتریس دانشجو × جلسه */}
-              <table className="tr-term-table w-full border-collapse text-center">
+              <table className="tr-term-table w-full border-collapse text-center rt">
                 <thead>
                   <tr className="bg-slate-100 text-[10px] text-slate-700">
                     <th className="border border-slate-300 px-1 py-1">ردیف</th>

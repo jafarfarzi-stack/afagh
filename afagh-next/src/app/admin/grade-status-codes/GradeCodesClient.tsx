@@ -377,7 +377,7 @@ export default function GradeCodesClient({
               {bankLoading && <div className="p-4 text-center text-xs text-slate-400 font-bold">بارگذاری...</div>}
               {!bankLoading && bankCourses.length === 0 && <div className="p-6 text-center text-xs text-slate-400 font-bold">درسی یافت نشد.</div>}
               {!bankLoading && bankCourses.length > 0 && (
-                <table className="w-full border-collapse text-xs">
+                <table className="w-full border-collapse text-xs rt">
                   <thead>
                     <tr className="bg-slate-900 text-white text-center">
                       <th className="p-2 border border-slate-800 w-10">ردیف</th>
@@ -463,7 +463,7 @@ export default function GradeCodesClient({
                 {filtered.length === 0 && !loading && <div className="p-6 text-center text-xs text-slate-400 font-bold">درسی یافت نشد.</div>}
                 {filtered.length > 0 && (
                   <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
+                    <table className="w-full border-collapse text-xs rt">
                       <thead>
                         <tr className="bg-slate-900 text-white text-center">
                           <th className="p-2.5 border border-slate-800 w-10">ردیف</th>
@@ -541,7 +541,7 @@ export default function GradeCodesClient({
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-xs">
+                  <table className="w-full border-collapse text-xs rt">
                     <thead>
                       <tr className="bg-slate-900 text-white text-center">
                         <th className="p-2 border border-slate-800 w-10">ردیف</th>
@@ -639,7 +639,7 @@ export default function GradeCodesClient({
                     <span className="bg-amber-600/30 text-amber-200 px-2 py-0.5 rounded-full text-[10px]">{g.courses.length} درس</span>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
+                    <table className="w-full border-collapse text-xs rt">
                       <thead>
                         <tr className="bg-slate-100 text-center">
                           <th className="p-1.5 border border-slate-200">نیمسال</th>

@@ -311,7 +311,7 @@ export default function LivePayrollClient({
         </div>
 
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-          <table className="w-full text-right text-xs">
+          <table className="w-full text-right text-xs rt">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="p-2">استاد</th>
@@ -424,7 +424,7 @@ export default function LivePayrollClient({
             <div className="mb-2 text-slate-600">
               نرخ هر واحد: {money(slip.calc?.rate ?? 0)} · موظفی: {faNum(slip.calc?.dutyUnits ?? 0)} واحد · مالیات: {faNum(slip.calc?.taxRate ?? 0)}٪
             </div>
-            <table className="w-full text-right">
+            <table className="w-full text-right rt">
               <thead className="bg-slate-50">
                 <tr>
                   <th className="p-2">درس</th><th className="p-2">واحد</th><th className="p-2">نقش</th>
@@ -689,7 +689,7 @@ function CoefficientsRulesLiveTab({ term, onToast, busy }: CoefficientsRulesLive
         </div>
 
         <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-          <table className="w-full text-right text-xs border-collapse">
+          <table className="w-full text-right text-xs border-collapse rt">
             <thead>
               <tr className="bg-slate-900 text-white">
                 <th className="p-2.5">کد قانون</th>
@@ -819,7 +819,7 @@ function CoefficientsRulesLiveTab({ term, onToast, busy }: CoefficientsRulesLive
 
         {/* لیست قوانین */}
         <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-          <table className="w-full text-right text-xs border-collapse">
+          <table className="w-full text-right text-xs border-collapse rt">
             <thead>
               <tr className="bg-slate-900 text-white">
                 <th className="p-2.5">شناسه</th>

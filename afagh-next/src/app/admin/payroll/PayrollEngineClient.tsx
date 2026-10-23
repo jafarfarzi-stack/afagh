@@ -409,7 +409,7 @@ export default function PayrollEngineClient({ universityTitle }: { universityTit
 
               <div>
                 <h4 className="font-black text-slate-900 mb-2">فهرست دروس مصوب ابلاغ‌شده جهت تدریس:</h4>
-                <table className="w-full text-right text-xs border-collapse">
+                <table className="w-full text-right text-xs border-collapse rt">
                   <thead>
                     <tr className="bg-slate-100 border-b">
                       <th className="p-2">کد درس</th>
@@ -539,7 +539,7 @@ export default function PayrollEngineClient({ universityTitle }: { universityTit
                   📚 ریز دروس تدریس‌شده و محاسبه واحدهای معادل (Coefficients & Equivalent Units):
                 </h4>
                 <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                  <table className="w-full text-right text-xs border-collapse">
+                  <table className="w-full text-right text-xs border-collapse rt">
                     <thead>
                       <tr className="bg-slate-100 text-slate-800 border-b">
                         <th className="p-2">کد درس</th>

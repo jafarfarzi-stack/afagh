@@ -841,6 +841,13 @@
       "when": 1794400001000,
       "tag": "0114_classroom_department",
       "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1794400001100,
+      "tag": "0115_university_brand",
+      "breakpoints": true
     }
   ]
 }

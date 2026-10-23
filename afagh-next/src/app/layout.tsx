@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import '../styles/mobile-tables.css';
 import PrintThemeGuard from '@/components/PrintThemeGuard';
+import MobileTableEnhancer from '@/components/MobileTableEnhancer';
 
 export const metadata: Metadata = { title: 'سامانه جامع آفاق', description: 'کالبد Next.js + PostgreSQL — سه داشبورد ایزوله' };
 
@@ -17,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <link rel="preload" href="/fonts/vazirmatn-latin-700.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
       <body className="min-h-screen">
         <PrintThemeGuard />
+        <MobileTableEnhancer />
         {children}
       </body>
     </html>

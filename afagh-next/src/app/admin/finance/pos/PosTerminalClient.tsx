@@ -227,7 +227,7 @@ export default function PosTerminalClient({ terminal, universityId }: Props) {
             <p className="text-center text-slate-500 py-4 text-xs">تراکنشی یافت نشد</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-[11px]">
+              <table className="w-full text-right text-[11px] rt">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-500">
                     <th className="pb-1">STAN</th>

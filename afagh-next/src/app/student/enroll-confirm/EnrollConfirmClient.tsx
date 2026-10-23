@@ -94,7 +94,7 @@ export default function EnrollConfirmClient(props: {
           ))}
         </div>
 
-        <table className="w-full text-right text-xs">
+        <table className="w-full text-right text-xs rt">
           <thead>
             <tr className="border-y-2 border-slate-800 text-slate-600">
               <th className="p-2">ردیف</th>

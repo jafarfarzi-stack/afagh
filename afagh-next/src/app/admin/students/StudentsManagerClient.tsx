@@ -8,6 +8,7 @@ import { requestStepUpAction } from '@/lib/step-up-actions';
 import type { RegulationConfig } from '@/lib/regulations-engine';
 import { ClientTh, ServerTh, useClientTable, type ColumnDef } from '@/components/DataTable';
 import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, studentStatusChip, studentStatusFa} from '@/lib/student-labels';
+import MobileCardList from '@/components/MobileCardList';
 
 // ── هستهٔ خالص و قرارداد داده از ماژول‌های جدا (ریفکتور دور ۱۱) ──
 import type { StudentItem, RegulationPick, Pagination, StaffItem, CodeLabels, TranscriptPrintOptions, OriginUniversity, CohortStats} from './types';
@@ -1458,7 +1459,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                 <p className="text-center text-amber-700 bg-amber-50 border border-amber-200 rounded p-3 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">کارنامه‌ای برای این دانشجو یافت نشد (ممکن است نمرات در مرحلهٔ انتقال باشد).</p>
               ) : transcriptView === 'simple' ? (
                 <div className="overflow-x-auto border border-slate-300 rounded">
-                  <table className="w-full text-right text-[11px]">
+                  <table className="w-full text-right text-[11px] rt">
                     <thead className="bg-slate-100 border-b border-slate-300 font-bold">
                       <tr>
                         <th className="p-1.5">ترم</th>
@@ -1571,8 +1572,8 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                 </select>
               </div>
 
-              <div className="overflow-x-auto border border-slate-300 rounded">
-                <table className="w-full min-w-[860px] table-fixed text-right text-xs">
+              <div className="overflow-x-auto border border-slate-300 rounded hidden md:block">
+                <table className="w-full min-w-[860px] table-fixed text-right text-xs rt rt--scroll">
                   <colgroup>
                     <col style={{ width: 150 }} />
                     <col style={{ width: 140 }} />
@@ -1637,6 +1638,40 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                   </tbody>
                 </table>
               </div>
+
+              <MobileCardList<StudentItem>
+                rows={props.students}
+                columns={[
+                  { key: 'name', label: 'نام', title: true, render: (s) => `${s.firstName} ${s.lastName}`.trim() || '—' },
+                  { key: 'studentCode', label: 'شماره دانشجویی', subtitle: true },
+                  { key: 'nationalCode', label: 'کد ملی', render: (s) => <span dir="ltr">{s.nationalCode}</span> },
+                  { key: 'majorName', label: 'رشته' },
+                  { key: 'degreeLevel', label: 'مقطع' },
+                  { key: 'entryYear', label: 'سال ورود', render: (s) => s.entryYear },
+                  { key: 'status', label: 'وضعیت', bare: true, render: (s) => (
+                    <span
+                      title={s.samaStatusCode ? `کد سما: ${s.samaStatusCode}` : s.status}
+                      className={`${studentStatusChip(s.status)} text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap`}
+                    >
+                      {studentStatusFa(s.status, s.samaStatusCode, uniCodeOf((s as { universityId?: number | null }).universityId))}
+                    </span>
+                  ) },
+                ]}
+                getKey={(s) => s.id}
+                renderActions={(s) => (
+                  <button
+                    onClick={() => {
+                      const realIdx = props.students.findIndex(x => x.id === s.id);
+                      setSelectedStuIdx(realIdx >= 0 ? realIdx : 0);
+                      setStuTab('info_combined');
+                    }}
+                    className="bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-[11px] px-2.5 py-1 rounded font-bold whitespace-nowrap"
+                  >
+                    مشاهده پرونده 🔍
+                  </button>
+                )}
+                empty={<div className="p-6 text-center text-xs text-slate-400">موردی یافت نشد.</div>}
+              />
 
               {/* صفحه‌بندی */}
               {pg && pg.totalPages > 1 && (
@@ -1962,7 +1997,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
               </div>
 
               <div className="overflow-x-auto border border-slate-300 rounded">
-                <table className="w-full min-w-[900px] table-fixed text-right text-xs">
+                <table className="w-full min-w-[900px] table-fixed text-right text-xs rt rt--scroll">
                   <colgroup>
                     <col style={{ width: 150 }} />
                     <col style={{ width: 90 }} />
@@ -2345,7 +2380,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                 <p className="text-center text-slate-500 py-8 bg-slate-50 rounded-lg border border-slate-200">هیچ لاگ تغییری برای نمرات این دانشجو در سامانه ثبت نشده است.</p>
               ) : (
                 <div className="border border-slate-300 rounded-lg overflow-x-auto">
-                  <table className="w-full text-right text-[11px]">
+                  <table className="w-full text-right text-[11px] rt">
                     <thead className="bg-slate-100 border-b border-slate-300 font-bold">
                       <tr>
                         <th className="p-2">#</th>

@@ -296,7 +296,7 @@ export default async function AdminHome({
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-sm">
+              <table className="w-full text-right text-sm rt">
                 <thead>
                   <tr className="text-xs text-slate-500 border-b border-slate-200">
                     <InboxTh label="کد رهگیری" col="track" sortKey={sortKey} sortDir={sortDir} href={sortHref} />

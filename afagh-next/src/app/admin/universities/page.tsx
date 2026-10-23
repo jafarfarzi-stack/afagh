@@ -1,6 +1,8 @@
 import { db } from '@/db';
 import { universities, samin_connections } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { uniTheme } from '@/lib/university-theme';
+import { mergeBrand } from '@/lib/university-theme-db';
 import UniversitiesClient from './UniversitiesClient';
 
 export const dynamic = 'force-dynamic';
@@ -20,7 +22,12 @@ export default async function UniversitiesPage() {
         </p>
       </div>
       <UniversitiesClient
-        universities={unis.map(u => ({ id: u.id, code: u.code, title: u.title, kind: u.kind, status: u.status, saminCode: u.saminCode, province: u.province, dissolvedAt: u.dissolvedAt, isActive: u.isActive, logoUrl: u.logoUrl }))}
+        universities={unis.map(u => ({
+          id: u.id, code: u.code, title: u.title, kind: u.kind, status: u.status,
+          saminCode: u.saminCode, province: u.province, dissolvedAt: u.dissolvedAt,
+          isActive: u.isActive, logoUrl: u.logoUrl,
+          brand: mergeBrand(uniTheme(u.code), u.brandJson),
+        }))}
         connections={conns.map(c => ({ universityId: c.universityId, apiBaseUrl: c.apiBaseUrl, authBaseUrl: c.authBaseUrl, clientId: c.clientId, username: c.username, isEnabled: c.isEnabled, lastSyncAt: c.lastSyncAt ? c.lastSyncAt.toISOString() : null, hasSecret: !!c.clientSecretEnc }))}
       />
     </div>

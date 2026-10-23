@@ -155,7 +155,7 @@ export default function LessonPlansClient({
       <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-3">
         <h3 className="font-extrabold text-slate-900 text-base">وضعیت طرح درس ارائه‌ها</h3>
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-xs">
+          <table className="w-full border-collapse text-xs rt">
             <thead>
               <tr className="bg-slate-900 text-white text-center">
                 <th className="p-2.5 border border-slate-800 w-12">ردیف</th>

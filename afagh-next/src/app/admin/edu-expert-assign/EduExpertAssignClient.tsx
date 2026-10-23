@@ -15,6 +15,8 @@ import {
   type EduExpertAssignInit,
 } from './actions';
 
+import MobileCardList, { type CardColumn } from '@/components/MobileCardList';
+
 type Row = EduExpertAssignInit['rows'][number];
 type Room = EduExpertAssignInit['rooms'][number];
 
@@ -566,7 +568,7 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
           </div>
 
           <div className="card overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm rt hidden md:table">
               <thead className="bg-slate-900 text-white">
                 <tr>
                   <th className="p-2 w-8">
@@ -687,6 +689,95 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
                 )}
               </tbody>
             </table>
+            <MobileCardList
+              rows={rows}
+              columns={[
+                { key: 'courseTitle', label: 'درس', title: true },
+                { key: 'offeringId', label: '#', subtitle: true, render: (r) => r.offeringId },
+                { key: 'groupNumber', label: 'گروه', render: (r) => r.groupNumber },
+                {
+                  key: 'rooms',
+                  label: 'کلاس (اتاق)',
+                  render: (r) => (r.rooms.length ? r.rooms.join(' · ') : 'بدون اتاق'),
+                },
+                {
+                  key: 'source',
+                  label: 'منبع',
+                  render: (r) => {
+                    const n = offExpertIds(r).length;
+                    return (
+                      <span
+                        className={
+                          r.source === 'offering'
+                            ? 'text-indigo-700 font-bold'
+                            : r.source === 'classroom'
+                              ? 'text-sky-700'
+                              : r.source === 'scope'
+                                ? 'text-emerald-700'
+                                : 'text-slate-400'
+                        }
+                      >
+                        {SOURCE_LABEL[r.source ?? 'none']}
+                        {n > 1 ? ` (${n} نفر)` : ''}
+                      </span>
+                    );
+                  },
+                },
+              ]}
+              getKey={(r) => r.offeringId}
+              renderActions={(r) => {
+                const ids = offExpertIds(r);
+                return (
+                  <div className="flex flex-wrap items-center gap-1">
+                    {ids.map((id) => (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-bold text-indigo-800"
+                      >
+                        {nameOf.get(id) ?? `#${id}`}
+                        <button
+                          type="button"
+                          onClick={() => removeFromOffering(r, id)}
+                          disabled={pending}
+                          className="text-rose-600 hover:text-rose-800 font-black"
+                          aria-label={`حذف ${nameOf.get(id) ?? id}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                    {!ids.length && (
+                      <span className="text-[11px] text-slate-400">
+                        {r.resolvedUserId
+                          ? `${SOURCE_LABEL[r.source ?? 'none']}: ${nameOf.get(r.resolvedUserId) ?? r.resolvedUserId}`
+                          : 'بدون کارشناس'}
+                      </span>
+                    )}
+                    <select
+                      dir="rtl"
+                      className="input text-[11px] py-0.5 h-7 min-w-[9rem]"
+                      value=""
+                      disabled={pending}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        e.target.value = '';
+                        if (v) addToOffering(r, Number(v));
+                      }}
+                    >
+                      <option value="">＋ افزودن کارشناس…</option>
+                      {init.candidates
+                        .filter((c) => !ids.includes(c.userId))
+                        .map((c) => (
+                          <option key={c.userId} value={c.userId}>
+                            {c.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                );
+              }}
+              empty={<div className="p-6 text-center text-sm text-slate-500">درسی یافت نشد.</div>}
+            />
           </div>
         </>
       )}

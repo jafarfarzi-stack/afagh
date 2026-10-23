@@ -871,7 +871,7 @@ export default function ProfessorAttendanceClient({
                     </button>
                     {openCourses.has(o.id) && (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
+                      <table className="w-full text-xs rt">
                         <thead className="bg-white text-slate-500">
                           <tr>
                             <th className="p-1.5 text-right font-black w-24">تاریخ</th>
@@ -1300,7 +1300,7 @@ export default function ProfessorAttendanceClient({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-xs">
+          <table className="w-full border-collapse text-xs rt">
             <thead>
               <tr className="bg-slate-900 text-white text-center">
                 <th className="p-3 border border-slate-800 w-12 font-extrabold">ردیف</th>

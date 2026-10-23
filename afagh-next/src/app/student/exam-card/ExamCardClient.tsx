@@ -407,7 +407,7 @@ export default function ExamCardClient({ user, publicBaseUrl, examTicket, examTi
 
           {/* Exams Timetable on the Card */}
           <div className="overflow-x-auto">
-            <table className="w-full text-right text-xs border-collapse border border-slate-400">
+            <table className="w-full text-right text-xs border-collapse border border-slate-400 rt">
               <thead>
                 <tr className="bg-slate-900 text-white">
                   <th className="p-2 border border-slate-700 text-center w-10">ردیف</th>

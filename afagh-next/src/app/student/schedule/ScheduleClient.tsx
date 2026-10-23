@@ -242,7 +242,7 @@ export default function ScheduleClient({
       </div>
 
       <div className="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-sm print:hidden">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 tabstrip">
           <span className="text-xs font-bold text-slate-600">فیلتر نمایش هفته:</span>
           <button
             onClick={() => setWeekFilter('ALL')}
@@ -324,7 +324,7 @@ export default function ScheduleClient({
         </h3>
 
         <div className="overflow-x-auto rounded-xl border border-slate-300">
-          <table className="w-full text-right text-xs border-collapse">
+          <table className="w-full text-right text-xs border-collapse rt">
             <thead className="bg-slate-100 text-slate-800 border-b border-slate-300">
               <tr>
                 <th className="p-2 border-l border-slate-300 text-center w-12">ردیف</th>
@@ -402,7 +402,7 @@ export default function ScheduleClient({
         </h3>
 
         <div className="overflow-x-auto rounded-xl border border-slate-300">
-          <table className="w-full text-right text-xs border-collapse">
+          <table className="w-full text-right text-xs border-collapse rt">
             <thead className="bg-slate-100 text-slate-800 border-b border-slate-300">
               <tr>
                 <th className="p-2 border-l border-slate-300 text-center w-12">ردیف</th>

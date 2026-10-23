@@ -206,7 +206,7 @@ export default function RolesClient(props: {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm rt">
             <thead>
               <tr className="text-xs text-slate-500 border-b">
                 <th className="p-2 text-right">کد</th>
@@ -367,7 +367,7 @@ export default function RolesClient(props: {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm rt">
                 <thead>
                   <tr className="text-xs text-slate-500 border-b">
                     <th className="p-2 text-right">سمت</th>

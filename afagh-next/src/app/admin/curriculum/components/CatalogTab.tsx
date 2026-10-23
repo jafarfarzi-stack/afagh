@@ -24,7 +24,7 @@ export default function CatalogTab() {
           <span className="text-[11px] text-slate-500 font-bold">{isDraft ? 'حالت پیش‌نویس: ویرایش فعال' : 'حالت فقط‌خواندنی (بسته به وضعیت)'}</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-xs">
+          <table className="w-full border-collapse text-xs rt">
             <thead>
               <tr className="bg-slate-900 text-white text-center">
                 <th className="p-2.5 border border-slate-800">کد نسخه</th>

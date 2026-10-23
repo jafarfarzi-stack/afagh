@@ -86,7 +86,7 @@ export default function SanjeshImportPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-2">
           <h3 className="font-extrabold text-sm text-slate-900">پیش‌نمایش ({preview.count} رکورد)</h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-[10px]">
+            <table className="w-full text-[10px] rt">
               <thead className="bg-slate-100">
                 <tr>{Object.keys(preview.sample[0] || {}).map(k => <th key={k} className="p-1 text-right">{k}</th>)}</tr>
               </thead>

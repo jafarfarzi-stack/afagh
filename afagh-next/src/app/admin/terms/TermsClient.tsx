@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import { toJalaliFromDate } from '@/lib/calendar';
+import MobileCardList, { type CardColumn } from '@/components/MobileCardList';
 import {
   activateTermAction,
   bulkActivateTermsAction,
@@ -44,6 +45,36 @@ const TERM_TYPE_LABEL: Record<string, string> = {
   EQUIVALENCE: 'معادل‌سازی',
   SPECIAL: 'ویژه',
 };
+
+const termColumns: CardColumn<TermRow>[] = [
+  { key: 'title', label: 'عنوان', title: true },
+  { key: 'termCode', label: 'کد', subtitle: true },
+  { key: 'termType', label: 'نوع', render: (t) => TERM_TYPE_LABEL[t.termType] ?? t.termType },
+  { key: 'startDate', label: 'شروع', render: (t) => jalaliOf(t.startDate) },
+  { key: 'endDate', label: 'پایان', render: (t) => jalaliOf(t.endDate) },
+  {
+    key: 'isCurrent',
+    label: 'پرچم فعال',
+    bare: true,
+    render: (t) =>
+      t.isCurrent ? (
+        <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px]">فعال</span>
+      ) : (
+        <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px]">—</span>
+      ),
+  },
+  {
+    key: 'containsToday',
+    label: 'امروز داخل این نیمسال است؟',
+    bare: true,
+    render: (t) =>
+      t.containsToday ? (
+        <span className="px-1.5 py-0.5 rounded bg-indigo-600 text-white text-[10px]">بله</span>
+      ) : (
+        <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px]">خیر</span>
+      ),
+  },
+];
 
 export default function TermsClient({
   today,
@@ -315,7 +346,7 @@ export default function TermsClient({
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-[11px]">
+                <table className="hidden md:table w-full text-[11px] rt">
                   <thead>
                     <tr className="bg-slate-50 border-b text-slate-600">
                       <th className="px-2 py-1 text-right">کد</th>
@@ -375,6 +406,21 @@ export default function TermsClient({
                     ))}
                   </tbody>
                 </table>
+                <MobileCardList
+                  rows={list}
+                  columns={termColumns}
+                  getKey={(t) => t.id}
+                  renderActions={(t) => (
+                    <button
+                      disabled={busy !== null}
+                      onClick={() => run('single', async () => activateTermAction(t.id))}
+                      className="border border-indigo-300 text-indigo-700 px-2 py-0.5 rounded text-[10px] hover:bg-indigo-50 disabled:opacity-50"
+                    >
+                      فعال‌سازی برای {u.code}
+                    </button>
+                  )}
+                  empty={<div>موردی یافت نشد.</div>}
+                />
               </div>
             )}
           </div>

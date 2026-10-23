@@ -120,7 +120,7 @@ export default async function VerifyTranscriptPage({ params }: { params: Promise
             وضعیت تحصیلی در هر نیمسال <span className="font-normal text-slate-500">(مرز مشروطی این مقطع: {faNum(res.probationThreshold)})</span>
           </div>
           {res.terms.length ? (
-            <table className="w-full text-xs">
+            <table className="w-full text-xs rt">
               <thead>
                 <tr className="bg-slate-100 text-[10px] text-slate-600">
                   <th className="p-2 text-right">نیمسال</th>

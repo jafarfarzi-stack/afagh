@@ -108,7 +108,7 @@ export default async function GradeAuditPage({ searchParams }: { searchParams: P
           <p className="text-[11px] text-amber-800 font-bold">درخواست بازی وجود ندارد.</p>
         ) : (
           <div className="overflow-x-auto bg-white rounded-lg border border-amber-200">
-            <table className="w-full text-right text-[11px]">
+            <table className="w-full text-right text-[11px] rt">
               <thead className="bg-amber-100 border-b border-amber-300 font-bold">
                 <tr>
                   <th className="p-2">#</th>
@@ -145,7 +145,7 @@ export default async function GradeAuditPage({ searchParams }: { searchParams: P
         {q && <Link href="/admin/grades/audit" className="px-3 py-1.5 bg-slate-100 border border-slate-300 text-xs rounded">پاک‌سازی</Link>}
       </form>
       <div className="border border-slate-300 rounded-lg overflow-x-auto bg-white">
-        <table className="w-full text-right text-[11px]">
+        <table className="w-full text-right text-[11px] rt">
           <thead className="bg-slate-100 border-b border-slate-300 font-bold">
             <tr>
               <th className="p-2">#</th>

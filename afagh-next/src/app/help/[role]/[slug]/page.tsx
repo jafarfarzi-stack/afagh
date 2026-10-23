@@ -77,7 +77,7 @@ export default async function HelpTopicPage(props: { params: Promise<{ role: str
         {t.tables?.map((tb, i) => (
           <section key={i} aria-label={tb.caption ?? 'جدول راهنما'} className="overflow-x-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             {tb.caption && <h2 className="mb-2 text-sm font-black text-slate-900">📊 {tb.caption}</h2>}
-            <table className="w-full min-w-96 border-collapse text-xs">
+            <table className="w-full min-w-96 border-collapse text-xs rt">
               <thead>
                 <tr className="bg-slate-100">
                   {tb.head.map((h, j) => (

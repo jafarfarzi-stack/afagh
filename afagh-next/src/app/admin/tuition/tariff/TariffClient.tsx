@@ -201,7 +201,7 @@ export default function TariffClient({
               </p>
             </div>
 
-            <table className="w-full border-collapse text-[11px]">
+            <table className="w-full border-collapse text-[11px] rt">
               <thead>
                 <tr className="bg-slate-50 text-slate-600">
                   <th className="border-t border-slate-200 px-2 py-1 text-right font-bold">نوع درس مالی</th>

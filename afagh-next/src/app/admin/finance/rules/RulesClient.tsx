@@ -183,7 +183,7 @@ export default function RulesClient(props: {
             <p className="py-4 text-center text-xs text-slate-500">هنوز نوع تخفیفی تعریف نشده است.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs rt">
                 <thead>
                   <tr className="border-b border-slate-200 text-[11px] text-slate-500">
                     <th className="p-2">کد</th><th className="p-2">عنوان</th><th className="p-2">نوع</th>
@@ -270,7 +270,7 @@ export default function RulesClient(props: {
             <p className="py-4 text-center text-xs text-slate-500">هنوز بنیادی تعریف نشده است.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs rt">
                 <thead>
                   <tr className="border-b border-slate-200 text-[11px] text-slate-500">
                     <th className="p-2">کد</th><th className="p-2">عنوان</th><th className="p-2">تسویه</th>
@@ -377,7 +377,7 @@ export default function RulesClient(props: {
             <p className="py-4 text-center text-xs text-slate-500">هنوز فرمولی تعریف نشده است.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs rt">
                 <thead>
                   <tr className="border-b border-slate-200 text-[11px] text-slate-500">
                     <th className="p-2">اولویت</th><th className="p-2">عنوان</th><th className="p-2">مقطع</th>
@@ -484,7 +484,7 @@ export default function RulesClient(props: {
             <p className="py-4 text-center text-xs text-slate-500">هنوز نوع وامی تعریف نشده است.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs rt">
                 <thead>
                   <tr className="border-b border-slate-200 text-[11px] text-slate-500">
                     <th className="p-2">کد</th><th className="p-2">عنوان</th><th className="p-2">نهاد</th>
@@ -656,7 +656,7 @@ function CoefficientTab(props: {
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
+          <table className="w-full text-right text-xs rt">
             <thead>
               <tr className="border-b border-slate-200 text-[11px] text-slate-500">
                 <th className="p-2">نیمسال</th><th className="p-2">ضریب متغیر</th><th className="p-2">ضریب ثابت</th>
@@ -790,7 +790,7 @@ function SubjectFeeTab(props: {
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
+          <table className="w-full text-right text-xs rt">
             <thead>
               <tr className="border-b border-slate-200 text-[11px] text-slate-500">
                 <th className="p-2">کد</th><th className="p-2">عنوان</th><th className="p-2">نوع</th>

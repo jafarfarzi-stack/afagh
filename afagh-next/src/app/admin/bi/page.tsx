@@ -84,7 +84,7 @@ export default async function AdminBiPage() {
           <p className="text-sm text-slate-400">پاسخ ارزشیابی‌ای برای این ترم ثبت نشده است.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-right text-sm">
+            <table className="w-full text-right text-sm rt">
               <thead className="text-xs text-slate-400">
                 <tr className="border-b border-slate-700">
                   <th className="p-2">استاد</th>
@@ -176,7 +176,7 @@ export default async function AdminBiPage() {
           <p className="text-sm text-slate-400">هنوز گزارشی کش نشده است.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-right text-xs">
+            <table className="w-full text-right text-xs rt">
               <thead className="text-slate-400">
                 <tr className="border-b border-slate-700">
                   <th className="p-1.5">کلید</th><th className="p-1.5">نوع</th><th className="p-1.5">ردیف</th>

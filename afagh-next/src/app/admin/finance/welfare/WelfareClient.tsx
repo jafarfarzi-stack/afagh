@@ -191,7 +191,7 @@ export default function WelfareClient() {
         <h2 className="font-bold text-slate-800 mb-2 text-sm">
           {selectedTitle} ({faNum(loanTotal)})
         </h2>
-        <table className="w-full text-xs">
+        <table className="w-full text-xs rt">
           <thead>
             <tr className="border-b border-slate-200 text-slate-500">
               <th className="py-2 px-2 text-right">دانشجو</th>

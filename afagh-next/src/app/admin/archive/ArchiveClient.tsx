@@ -73,7 +73,7 @@ export default function ArchiveClient(props: {
       </div>
 
       <div className="card overflow-x-auto">
-        <table className="w-full text-right text-sm">
+        <table className="w-full text-right text-sm rt">
           <thead><tr className="text-xs text-slate-500">
             <th className="p-2">#</th><th className="p-2">شخص</th><th className="p-2">دسته/نوع</th>
             <th className="p-2">فایل</th><th className="p-2">زمان</th><th className="p-2">وضعیت</th><th className="p-2">اقدام</th>

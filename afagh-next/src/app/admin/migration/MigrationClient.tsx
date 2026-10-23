@@ -152,7 +152,7 @@ function HistoryTab() {
   return (
     <div className="card overflow-x-auto">
       <h3 className="mb-2 text-sm font-bold">تاریخچهٔ عملیات مهاجرت</h3>
-      <table className="w-full text-right text-xs">
+      <table className="w-full text-right text-xs rt">
         <thead><tr className="text-slate-500"><th className="p-2">#</th><th className="p-2">نوع</th><th className="p-2">فایل</th><th className="p-2">حالت</th><th className="p-2">ردیف</th><th className="p-2">ثبت</th><th className="p-2">موجود/به‌روز</th><th className="p-2">نامعتبر</th><th className="p-2">زمان</th></tr></thead>
         <tbody>
           {runs.length === 0 && <tr><td colSpan={9} className="p-4 text-center text-slate-400">هنوز عملیاتی اجرا نشده.</td></tr>}

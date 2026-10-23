@@ -2374,6 +2374,7 @@ export const universities = pgTable('universities', {
   province: varchar('province', { length: 80 }),
   dissolvedAt: varchar('dissolvedAt', { length: 10 }),
   note: text('note'),
+  brandJson: jsonb('brand_json'), // برندینگ اختصاصی (بازنویسیِ UNI_THEMES؛ NULL = تمِ پیش‌فرض)
   isActive: integer('isActive').notNull().default(1),
   createdAt: timestamp('createdAt').defaultNow()
 });

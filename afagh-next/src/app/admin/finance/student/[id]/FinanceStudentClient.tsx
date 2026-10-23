@@ -199,7 +199,7 @@ export default function FinanceStudentClient(props: {
 
           {props.discounts.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs rt rt--scroll">
                 <thead>
                   <tr className="border-b border-slate-200 text-[11px] text-slate-500">
                     <th className="p-2">نوع</th><th className="p-2">ترم</th><th className="p-2">مقدار</th>
@@ -311,7 +311,7 @@ export default function FinanceStudentClient(props: {
 
           {props.sponsorships.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs rt rt--scroll">
                 <thead>
                   <tr className="border-b border-slate-200 text-[11px] text-slate-500">
                     <th className="p-2">بنیاد</th><th className="p-2">ترم</th><th className="p-2">پوشش</th>
@@ -400,7 +400,7 @@ export default function FinanceStudentClient(props: {
 
           {props.cheques.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs rt rt--scroll">
                 <thead>
                   <tr className="border-b border-slate-200 text-[11px] text-slate-500">
                     <th className="p-2">شماره</th><th className="p-2">بانک</th><th className="p-2">مبلغ</th>
@@ -528,7 +528,7 @@ export default function FinanceStudentClient(props: {
 
           {props.loans.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs rt rt--scroll">
                 <thead>
                   <tr className="border-b border-slate-200 text-[11px] text-slate-500">
                     <th className="p-2">نوع وام</th><th className="p-2">پرداخت‌کننده</th><th className="p-2">کد</th><th className="p-2">مبلغ</th>

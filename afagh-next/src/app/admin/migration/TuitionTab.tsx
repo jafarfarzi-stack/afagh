@@ -174,7 +174,7 @@ export default function TuitionTab({ sourceCode, formulas, runs, financialCount 
             {summary.worst.length > 0 && (
               <div className="overflow-x-auto">
                 <p className="mb-1 text-xs font-bold text-slate-600">بزرگ‌ترین اختلاف‌ها</p>
-                <table className="w-full text-right text-xs">
+                <table className="w-full text-right text-xs rt">
                   <thead><tr className="text-slate-500"><th className="p-2">دانشجو</th><th className="p-2">ترم</th><th className="p-2">قدیمی</th><th className="p-2">فرمول</th><th className="p-2">اختلاف</th><th className="p-2">وضعیت</th><th className="p-2">توضیح</th></tr></thead>
                   <tbody>
                     {summary.worst.map((w, i) => (
@@ -198,7 +198,7 @@ export default function TuitionTab({ sourceCode, formulas, runs, financialCount 
 
       <div className="card overflow-x-auto">
         <h3 className="mb-2 text-sm font-bold">فرمول‌های منتقل‌شده ({fmt(formulas.length)})</h3>
-        <table className="w-full text-right text-xs">
+        <table className="w-full text-right text-xs rt">
           <thead><tr className="text-slate-500"><th className="p-2">کد</th><th className="p-2">عنوان</th><th className="p-2">ترم</th><th className="p-2">مقطع</th><th className="p-2">ثابت</th><th className="p-2">نظری</th><th className="p-2">عملی</th><th className="p-2">عمومی</th><th className="p-2">عبارت</th></tr></thead>
           <tbody>
             {formulas.length === 0 && <tr><td colSpan={9} className="p-4 text-center text-slate-400">هنوز فرمولی وارد نشده.</td></tr>}
@@ -221,7 +221,7 @@ export default function TuitionTab({ sourceCode, formulas, runs, financialCount 
 
       <div className="card overflow-x-auto">
         <h3 className="mb-2 text-sm font-bold">تاریخچهٔ مقایسه‌ها</h3>
-        <table className="w-full text-right text-xs">
+        <table className="w-full text-right text-xs rt">
           <thead><tr className="text-slate-500"><th className="p-2">#</th><th className="p-2">ترم</th><th className="p-2">رواداری</th><th className="p-2">ردیف</th><th className="p-2">منطبق</th><th className="p-2">اختلاف</th><th className="p-2">بدون فرمول</th><th className="p-2">اختلاف کل</th><th className="p-2">زمان</th><th className="p-2"></th></tr></thead>
           <tbody>
             {runs.length === 0 && <tr><td colSpan={10} className="p-4 text-center text-slate-400">هنوز مقایسه‌ای اجرا نشده.</td></tr>}

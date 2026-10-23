@@ -170,7 +170,7 @@ export default function StudentFormulaClient() {
       </div>
 
       <div className="card overflow-x-auto">
-        <table className="w-full text-xs">
+        <table className="w-full text-xs rt">
           <thead>
             <tr className="border-b border-slate-200 text-slate-500">
               <th className="py-2 px-2 text-right">دانشجو</th>

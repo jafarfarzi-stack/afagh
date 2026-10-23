@@ -108,7 +108,7 @@ export default function RegulationsClient(props: {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm rt">
             <thead>
               <tr className="text-xs text-slate-500 border-b">
                 <th className="p-2 text-right">کد</th>

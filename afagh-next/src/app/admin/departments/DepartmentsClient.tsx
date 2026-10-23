@@ -168,7 +168,7 @@ export default function DepartmentsClient({
       )}
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-        <table className="w-full text-right text-xs">
+        <table className="w-full text-right text-xs rt">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
               {COLS.map(c => (

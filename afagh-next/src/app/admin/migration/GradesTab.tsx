@@ -132,7 +132,7 @@ export default function GradesTab({ sourceCode, stats }: { sourceCode: string; s
               ))}
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs rt">
                 <thead><tr className="text-slate-500"><th className="p-2">دانشجو</th><th className="p-2">ترم</th><th className="p-2">درس</th><th className="p-2">نمرهٔ قدیمی</th><th className="p-2">نمرهٔ فعلی</th><th className="p-2">وضعیت</th><th className="p-2">توضیح</th></tr></thead>
                 <tbody>
                   {shown.length === 0 && <tr><td colSpan={7} className="p-4 text-center text-slate-400">ردیفی با این فیلتر نیست.</td></tr>}

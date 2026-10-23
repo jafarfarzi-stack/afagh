@@ -143,7 +143,7 @@ export default function ExamPaymentsClient(props: {
             تا آن زمان این استادان آمادهٔ پرداخت نیستند:
           </p>
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-xs rt">
               <thead>
                 <tr className="border-b border-amber-200 text-[11px] text-amber-800">
                   <th className="p-1.5 text-right">استاد</th>
@@ -212,7 +212,7 @@ export default function ExamPaymentsClient(props: {
           فهرست پرداخت‌ها <span className="text-xs font-normal text-slate-500">— جمع: {money(total)}</span>
         </h2>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm rt">
             <thead>
               <tr className="text-xs text-slate-500 border-b">
                 <th className="p-2 text-right">استاد</th>

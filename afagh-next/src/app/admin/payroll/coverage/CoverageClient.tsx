@@ -145,7 +145,7 @@ export default function CoverageClient() {
 
       {/* جدول */}
       <div className="border rounded-lg overflow-x-auto bg-white">
-        <table className="w-full text-sm min-w-[900px]">
+        <table className="w-full text-sm min-w-[900px] rt rt--scroll">
           <thead className="bg-gray-50">
             <tr>
               <th className="p-2 text-right">درس</th>

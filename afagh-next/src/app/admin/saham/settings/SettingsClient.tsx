@@ -118,7 +118,7 @@ export default function SettingsClient({ universities, faculties, initialCodes, 
       </div>
 
       <div className="card !p-0 overflow-hidden">
-        <table className="w-full text-right text-xs">
+        <table className="w-full text-right text-xs rt">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
               <th className="p-2.5">عنوان واحد</th>

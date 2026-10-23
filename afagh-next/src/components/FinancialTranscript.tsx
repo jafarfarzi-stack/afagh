@@ -209,7 +209,7 @@ export default function FinancialTranscript({
     <div dir="rtl" className="transcript-print-area tr-root tr-fin-root bg-white border-2 border-slate-800 shadow-xl print:shadow-none text-xs text-slate-800">
       {/* ساختار سند به سبک کارنامهٔ تحصیلی: table.tr-doc با thead/tfoot تا سربرگ
           و بلوک امضا در همهٔ صفحات چاپ تکرار شوند و ردیف‌ها بین دو صفحه نشکنند. */}
-      <table className="tr-doc">
+      <table className="tr-doc rt">
         <thead>
           <tr>
             <td className="tr-doc-cell">
@@ -252,7 +252,7 @@ export default function FinancialTranscript({
             <td className="tr-doc-cell">
       <div className="space-y-3 p-4">
         {/* ── جدول مشخصات ── */}
-        <table className="tr-fin-info w-full border-collapse border border-slate-700 text-[11px]">
+        <table className="tr-fin-info w-full border-collapse border border-slate-700 text-[11px] rt">
           <tbody>
             <tr>
               <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">نام و نام خانوادگی</td>
@@ -292,7 +292,7 @@ export default function FinancialTranscript({
           <h3 className="border-b border-slate-700 bg-indigo-900 px-3 py-1.5 text-[12px] font-black text-white">
             {scopeLabel || 'جمع کل دوره'}
           </h3>
-          <table className="tr-fin-totals w-full border-collapse text-center text-[11px]">
+          <table className="tr-fin-totals w-full border-collapse text-center text-[11px] rt">
             <thead>
               <tr className="bg-slate-100 text-slate-700">
                 <th className="border border-slate-300 px-1 py-1.5">جمع شهریه (ریال)</th>
@@ -355,7 +355,7 @@ export default function FinancialTranscript({
                                   : '(محاسباتی — مبنای سند، جمع دفتر کل است)'}
                               </span>
                             </p>
-                            <table className="tr-term-table tr-fin-courses w-full border-collapse text-[9px]" style={{ tableLayout: 'fixed' }}>
+                            <table className="tr-term-table tr-fin-courses w-full border-collapse text-[9px] rt" style={{ tableLayout: 'fixed' }}>
                               <colgroup>
                                 <col style={{ width: '6%' }} />
                                 <col style={{ width: '14%' }} />
@@ -425,7 +425,7 @@ export default function FinancialTranscript({
         {cheques.length > 0 && (
           <div className="tr-breakdown break-inside-avoid">
             <h3 className="mb-1 border-b-2 border-slate-800 pb-1 text-[12px] font-black text-slate-900">چک‌های دانشجو</h3>
-            <table className="tr-fin-list w-full border-collapse border border-slate-700 text-center text-[10px]">
+            <table className="tr-fin-list w-full border-collapse border border-slate-700 text-center text-[10px] rt">
               <thead>
                 <tr className="bg-slate-100 text-slate-700">
                   <th className="border border-slate-300 px-1 py-1">شمارهٔ چک</th>
@@ -456,7 +456,7 @@ export default function FinancialTranscript({
         {loans.length > 0 && (
           <div className="tr-breakdown break-inside-avoid">
             <h3 className="mb-1 border-b-2 border-slate-800 pb-1 text-[12px] font-black text-slate-900">وام‌های دانشجو</h3>
-            <table className="tr-fin-list w-full border-collapse border border-slate-700 text-center text-[10px]">
+            <table className="tr-fin-list w-full border-collapse border border-slate-700 text-center text-[10px] rt">
               <thead>
                 <tr className="bg-slate-100 text-slate-700">
                   <th className="border border-slate-300 px-1 py-1">نوع وام</th>
@@ -539,7 +539,7 @@ function TermSummary({ t }: { t: TranscriptTermView }) {
   for (let i = 0; i < items.length; i += 3) rows.push(items.slice(i, i + 3));
 
   return (
-    <table className="tr-fin-sum w-full border-collapse text-[9px]" style={{ tableLayout: 'fixed' }}>
+    <table className="tr-fin-sum w-full border-collapse text-[9px] rt" style={{ tableLayout: 'fixed' }}>
       <colgroup>
         {[0, 1, 2].map((i) => (
           <col key={i} style={{ width: '33.33%' }} />

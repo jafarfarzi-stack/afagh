@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ClientTh, useClientTable, type ColumnDef } from '@/components/DataTable';
+import MobileCardList from '@/components/MobileCardList';
 
 export type StaffRow = {
   staffId: number;
@@ -171,7 +172,7 @@ export default function StaffTable({
         </div>
       )}
       <div className="overflow-x-auto">
-      <table className="w-full table-fixed text-right text-xs">
+      <table className="w-full table-fixed text-right text-xs rt hidden md:table">
         <colgroup>
           <col style={{ width: 150 }} />
           <col style={{ width: 100 }} />
@@ -251,6 +252,54 @@ export default function StaffTable({
           )}
         </tbody>
       </table>
+
+      <MobileCardList<StaffRow>
+        rows={t.visible}
+        columns={[
+          { key: 'name', label: 'نام', title: true, render: (r) => `${r.name} ${r.family}` },
+          { key: 'staffCode', label: 'کد', subtitle: true, render: (r) => r.staffCode ?? '' },
+          { key: 'dept', label: 'گروه', render: (r) => r.dept ?? '' },
+          { key: 'rank', label: 'رتبه/نوع', render: (r) => r.rank ?? r.type ?? '' },
+          { key: 'led', label: 'مدیر کدام گروه', render: (r) => (ledBy[r.userId] ?? []).join('، ') || '—' },
+          { key: 'status', label: 'وضعیت', bare: true, render: (r) => (r.active === 1 ? 'فعال' : 'غیرفعال') },
+        ]}
+        getKey={(r) => r.userId}
+        renderActions={(r) => {
+          const myRoles = userRoleIds[r.userId] ?? [];
+          return (
+            <>
+              <form action={toggleActiveAction}>
+                <input type="hidden" name="staffId" value={r.staffId} />
+                <input type="hidden" name="next" value={r.active === 1 ? '0' : '1'} />
+                <button
+                  title={r.active === 1 ? 'پرونده فعال است — برای خارج‌کردن از فهرست‌های عملیاتی کلیک کنید' : 'پرونده غیرفعال است — برای فعال‌سازی کلیک کنید'}
+                  className={'px-2 py-0.5 rounded border text-[11px] font-bold whitespace-nowrap ' +
+                    (r.active === 1
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+                      : 'bg-slate-100 border-slate-300 text-slate-500 hover:bg-slate-200')}
+                >
+                  {r.active === 1 ? '● فعال' : '○ غیرفعال'}
+                </button>
+              </form>
+              <form action={toggleAction}>
+                <input type="hidden" name="userId" value={r.userId} />
+                <input type="hidden" name="assign" value={heads.has(r.userId) ? '0' : '1'} />
+                <button className={heads.has(r.userId) ? 'text-red-600 hover:underline' : 'text-teal-700 hover:underline'}>
+                  {heads.has(r.userId) ? 'گرفتن نقش' : 'دادن نقش'}
+                </button>
+              </form>
+              <button
+                onClick={() => openModal(r)}
+                className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 border border-slate-300 text-[11px]"
+                title={`نقش‌های فعلی: ${myRoles.map(roleTitle).join('، ') || 'هیچ'}`}
+              >
+                {myRoles.length > 0 ? `⚙ ${myRoles.length} نقش` : '⚙ نقش‌ها'}
+              </button>
+            </>
+          );
+        }}
+        empty={<div className="p-6 text-center text-slate-400">موردی یافت نشد.</div>}
+      />
 
       {roleModalFor && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">

@@ -346,7 +346,7 @@ export default function AdminWorkflowsClient({
           </div>
 
           <div className="card overflow-x-auto">
-            <table className="w-full text-right text-xs">
+            <table className="w-full text-right text-xs rt">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold">
                   <th className="p-3">کد رهگیری</th>
@@ -741,7 +741,7 @@ export default function AdminWorkflowsClient({
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs rt">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold">
                     <th className="p-2.5">فرآیند</th>
@@ -823,7 +823,7 @@ export default function AdminWorkflowsClient({
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs rt">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold">
                     <th className="p-3">نام و مسئولیت</th>

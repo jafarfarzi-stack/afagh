@@ -40,7 +40,7 @@ export default async function CoursesPage({ searchParams }: { searchParams: Prom
       <div className="card">
         <h2 className="mb-2 font-bold">دروس گروه ({rows.length})</h2>
         <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
+          <table className="w-full text-right text-xs rt">
             <thead><tr className="text-slate-500"><th className="p-2">کد</th><th className="p-2">عنوان</th><th className="p-2">تئوری</th><th className="p-2">عملی</th><th className="p-2">نوع</th><th className="p-2">نمره‌دهی</th><th className="p-2">معدل</th><th className="p-2"></th></tr></thead>
             <tbody>
               {rows.map(c => (

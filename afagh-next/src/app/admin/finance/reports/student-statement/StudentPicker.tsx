@@ -185,7 +185,7 @@ export default function StudentPicker({
       {/* ── جدول ── */}
       <div className="card overflow-hidden p-0">
         <div className="max-h-[70vh] overflow-auto">
-          <table className="w-full text-right text-xs">
+          <table className="w-full text-right text-xs rt">
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-slate-200 bg-slate-50/95 text-slate-600 backdrop-blur">
                 <th className="p-2.5 font-black">دانشجو</th>

@@ -378,7 +378,7 @@ export default function AdmissionsClient({
               <span className="text-xs text-slate-400 font-mono">{stagingTable.visible.length} از {stagingList.length} رکورد</span>
             </div>
 
-            <table className="w-full table-fixed text-right text-xs">
+            <table className="w-full table-fixed text-right text-xs rt">
               <colgroup>
                 <col style={{ width: 110 }} />
                 <col style={{ width: 180 }} />
@@ -761,7 +761,7 @@ export default function AdmissionsClient({
               <span className="text-xs text-slate-400 font-mono">{initialApiLogs.length} فراخوانی اخیر</span>
             </div>
 
-            <table className="w-full text-right text-xs">
+            <table className="w-full text-right text-xs rt">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold">
                   <th className="p-3">سرویس</th>

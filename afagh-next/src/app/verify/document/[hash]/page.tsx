@@ -59,7 +59,7 @@ export default async function VerifyDocumentPage({ params }: { params: Promise<{
         )}
 
         {doc && (
-          <table className="w-full text-sm border-collapse">
+          <table className="w-full text-sm border-collapse rt">
             <tbody>
               {[
                 ['نوع سند', doc.typeTitle ?? '—'],

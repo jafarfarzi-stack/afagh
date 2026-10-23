@@ -17,6 +17,7 @@ import {
 } from './actions';
 import { examProctorClockInAction, examChainOverviewAction } from '@/lib/exam-actions';
 import { jalaliDateOf, parseJalaliDate } from '@/lib/scheduling-core';
+import MobileCardList, { type CardColumn } from '@/components/MobileCardList';
 
 const faNum = (n: any) => (n === null || n === undefined || n === '' ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
 
@@ -51,6 +52,44 @@ const ATT_LABELS: Record<string, { label: string; cls: string }> = {
   LATE: { label: 'تأخیر', cls: 'bg-amber-100 text-amber-800' },
   PENDING: { label: 'در انتظار', cls: 'bg-slate-100 text-slate-600' },
 };
+
+type ExamCourse = ExamWorkspace['courses'][number];
+
+const examCourseColumns: CardColumn<ExamCourse>[] = [
+  { key: 'courseTitle', label: 'عنوان', title: true },
+  { key: 'courseCode', label: 'کد درس', subtitle: true },
+  { key: 'groupNumber', label: 'گروه', render: (c) => faNum(c.groupNumber) },
+  { key: 'professorName', label: 'استاد', render: (c) => c.professorName || '—' },
+  {
+    key: 'examDate',
+    label: 'تاریخ / ساعت',
+    render: (c) =>
+      c.examDate ? `${faNum(c.examDate)} — ${faNum(c.startTime)} تا ${faNum(c.endTime)}` : '—',
+  },
+  {
+    key: 'room',
+    label: 'سالن',
+    render: (c) => `${c.roomName}${c.buildingName ? ` (${c.buildingName})` : ''}`,
+  },
+  {
+    key: 'sheets',
+    label: 'بستهٔ اوراق',
+    bare: true,
+    render: (c) =>
+      c.expectedSheets === 0 && c.deliveredSheets === 0 ? (
+        <span className="text-slate-400 font-bold">بسته ثبت نشده</span>
+      ) : (
+        <span
+          className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+            c.isFullyCollected ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+          }`}
+        >
+          {faNum(c.deliveredSheets)} از {faNum(c.expectedSheets)} برگه{' '}
+          {c.isFullyCollected ? '✓ جمع‌آوری کامل' : 'در جریان'}
+        </span>
+      ),
+  },
+];
 
 type ExamTab = 'SCHEDULE_TABLE' | 'EXAM_COURSES' | 'EXAM_HALLS' | 'PROCTORS' | 'CONFLICT_CHECKER' | 'PLANNING';
 
@@ -322,7 +361,7 @@ export default function ExamPlanningClient({ initial, universityId }: { initial:
             </div>
           )}
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-xs">
+            <table className="w-full border-collapse text-xs rt">
               <thead>
                 <tr className="bg-slate-900 text-white text-center">
                   <th className="p-2.5 border border-slate-800">سشن</th>
@@ -383,7 +422,7 @@ export default function ExamPlanningClient({ initial, universityId }: { initial:
             </div>
           )}
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-xs">
+            <table className="hidden md:table w-full border-collapse text-xs rt">
               <thead>
                 <tr className="bg-slate-900 text-white text-center">
                   <th className="p-2.5 border border-slate-800">کد درس</th>
@@ -421,6 +460,12 @@ export default function ExamPlanningClient({ initial, universityId }: { initial:
                 ))}
               </tbody>
             </table>
+            <MobileCardList
+              rows={courses}
+              columns={examCourseColumns}
+              getKey={(c) => c.offeringId}
+              empty={<div>موردی یافت نشد.</div>}
+            />
           </div>
         </div>
       )}
@@ -581,7 +626,7 @@ export default function ExamPlanningClient({ initial, universityId }: { initial:
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-xs">
+                <table className="w-full border-collapse text-xs rt">
                   <thead>
                     <tr className="bg-slate-900 text-white text-center">
                       <th className="p-2.5 border border-slate-800">تاریخ</th>

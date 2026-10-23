@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { ClientTh, useClientTable, type ColumnDef } from '@/components/DataTable';
+import MobileCardList from '@/components/MobileCardList';
 
 export type FinanceStudent = {
   studentId: number;
@@ -49,8 +50,9 @@ export default function FinanceTable({ students }: { students: FinanceStudent[] 
     ((s.firstName || '').trim()[0] ?? '') + ((s.lastName || '').trim()[0] ?? '');
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200">
-      <table className="w-full table-fixed text-right text-sm">
+    <>
+      <div className="overflow-x-auto rounded-xl border border-slate-200 hidden md:block">
+      <table className="w-full table-fixed text-right text-sm rt">
         <colgroup>
           <col style={{ width: 205 }} />
           <col style={{ width: 108 }} />
@@ -164,5 +166,36 @@ export default function FinanceTable({ students }: { students: FinanceStudent[] 
         </tfoot>
       </table>
     </div>
+
+    <MobileCardList<FinanceStudent>
+      rows={t.visible}
+      columns={[
+        { key: 'name', label: 'دانشجو', title: true, render: (s) => `${s.firstName || ''} ${s.lastName || ''}`.trim() || '—' },
+        { key: 'studentCode', label: 'شمارهٔ دانشجویی', subtitle: true, render: (s) => s.studentCode ?? '—' },
+        { key: 'majorTitle', label: 'رشته', render: (s) => s.majorTitle ?? '—' },
+        { key: 'degreeTitle', label: 'مقطع', render: (s) => s.degreeTitle ?? '—' },
+        { key: 'entryYear', label: 'ورودی', render: (s) => faYear(s.entryYear) },
+        { key: 'charges', label: 'شهریه', render: (s) => fa(s.charges) },
+        { key: 'discounts', label: 'تخفیف', render: (s) => money(s.discounts) },
+        { key: 'sponsorships', label: 'پوشش بنیاد', render: (s) => money(s.sponsorships) },
+        { key: 'payments', label: 'پرداخت', render: (s) => fa(s.payments) },
+        { key: 'chequesCleared', label: 'چک وصولی', render: (s) => money(s.chequesCleared) },
+        { key: 'loans', label: 'وام', render: (s) => money(s.loans) },
+        { key: 'pendingCheques', label: 'چک در انتظار', render: (s) => money(s.pendingCheques) },
+        { key: 'balance', label: 'مانده', bare: true, render: (s) => (
+          <span className={`inline-block min-w-[86px] rounded-full border px-2 py-0.5 text-center text-[11px] font-black ${s.balance > 0 ? 'border-rose-200 bg-rose-50 text-rose-700' : s.balance < 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-600'}`}>
+            {fa(s.balance)}
+          </span>
+        ) },
+      ]}
+      getKey={(s) => s.studentId}
+      renderActions={(s) => (
+        <Link href={`/admin/finance/student/${s.studentId}`} title="کارنامهٔ مالی دانشجو" className="shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-px text-[10px] font-black text-emerald-700 transition hover:bg-emerald-100">
+          📄 کارنامهٔ مالی
+        </Link>
+      )}
+      empty={<div className="p-8 text-center text-xs text-slate-500">دانشجویی با این فیلترها یافت نشد.</div>}
+    />
+    </>
   );
 }

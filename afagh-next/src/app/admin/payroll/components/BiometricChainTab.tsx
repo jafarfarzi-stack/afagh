@@ -87,7 +87,7 @@ export default function BiometricChainTab({ state, api }: Props) {
 
           {/* Biometric Logs Table */}
           <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-            <table className="w-full text-right text-xs border-collapse">
+            <table className="w-full text-right text-xs border-collapse rt">
               <thead>
                 <tr className="bg-slate-900 text-white">
                   <th className="p-2.5">کد</th>

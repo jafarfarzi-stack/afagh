@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -93,28 +93,103 @@ export function StudentSidebar({ user }: { user: { name: string; studentCode?: s
 
 export default function StudentNav() {
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  const isActive = (n: (typeof NAV_ITEMS)[number]) =>
+    n.exact ? pathname === n.href : pathname.startsWith(n.href);
 
   return (
-    <nav className="md:hidden fixed inset-x-0 bottom-0 z-50 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] print:hidden">
-      <div className="max-w-md mx-auto flex items-center justify-around py-1.5 px-1">
-        {NAV_ITEMS.slice(0, 5).map(n => {
-          const isActive = n.exact ? pathname === n.href : pathname.startsWith(n.href);
-          return (
-            <Link
-              key={n.href}
-              href={n.href}
-              className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition-all ${
-                isActive
-                  ? 'bg-emerald-50 text-emerald-800 font-bold shadow-xs border border-emerald-200/60 scale-105'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <span className="text-base">{n.icon}</span>
-              <span className="text-[10px] leading-tight line-clamp-1">{n.label.split(' ')[0]}</span>
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
+    <>
+      <nav className="md:hidden fixed inset-x-0 bottom-0 z-50 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] print:hidden">
+        <div className="max-w-md mx-auto flex items-center justify-around py-1.5 px-1">
+          {NAV_ITEMS.slice(0, 5).map(n => {
+            const active = isActive(n);
+            return (
+              <Link
+                key={n.href}
+                href={n.href}
+                className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition-all ${
+                  active
+                    ? 'bg-emerald-50 text-emerald-800 font-bold shadow-xs border border-emerald-200/60 scale-105'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <span className="text-base">{n.icon}</span>
+                <span className="text-[10px] leading-tight line-clamp-1">{n.label.split(' ')[0]}</span>
+              </Link>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-label="باز کردن منوی کامل"
+            className="flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all"
+          >
+            <span className="text-base leading-none">☰</span>
+            <span className="text-[10px] leading-tight">منو</span>
+          </button>
+        </div>
+      </nav>
+
+      {open && (
+        <div className="md:hidden fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="منوی دانشجو">
+          <div className="absolute inset-0 bg-slate-950/50" onClick={() => setOpen(false)} />
+          <aside className="absolute bottom-0 inset-x-0 max-h-[82vh] overflow-y-auto rounded-t-2xl bg-white shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 sticky top-0 bg-white rounded-t-2xl">
+              <p className="font-extrabold text-slate-900">منوی دانشجو</p>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label="بستن منو"
+                className="rounded-lg px-2 py-1 text-xl leading-none text-slate-500 hover:bg-slate-100"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-2 space-y-1">
+              {NAV_ITEMS.map(n => {
+                const active = isActive(n);
+                return (
+                  <Link
+                    key={n.href}
+                    href={n.href}
+                    onClick={() => setOpen(false)}
+                    className={`flex items-center justify-between px-3 py-2.5 rounded-xl font-bold transition-all ${
+                      active
+                        ? 'bg-emerald-700 text-white shadow-md'
+                        : 'text-slate-700 hover:text-slate-950 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-base">{n.icon}</span>
+                      <span>{n.label}</span>
+                    </div>
+                    {n.badge && (
+                      <span
+                        className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-black ${
+                          active ? 'bg-emerald-900 text-emerald-100' : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {n.badge}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+              <Link
+                href="/help/student"
+                onClick={() => setOpen(false)}
+                className="flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:text-emerald-800 hover:bg-emerald-50 transition"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span>📖</span>
+                  <span>راهنمای دانشجو</span>
+                </div>
+                <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">راهنما</span>
+              </Link>
+            </div>
+          </aside>
+        </div>
+      )}
+    </>
   );
 }

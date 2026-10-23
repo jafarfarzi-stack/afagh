@@ -397,7 +397,7 @@ export function DemoChart({ filteredTermTitle }: { filteredTermTitle: string | n
                   </div>
 
                   <div className="overflow-x-auto">
-                    <table className="w-full text-right text-xs">
+                    <table className="w-full text-right text-xs rt">
                       <thead>
                         <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
                           <th className="p-2">کد درس</th>

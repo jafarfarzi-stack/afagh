@@ -38,7 +38,7 @@ export default function ProfAvailabilityModal() {
                   }
                   return (
                     <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                      <table className="w-full border-collapse text-xs">
+                      <table className="w-full border-collapse text-xs rt">
                         <thead>
                           <tr className="bg-slate-900 text-white text-center">
                             <th className="p-2.5 border border-slate-800 font-extrabold">روز هفته</th>

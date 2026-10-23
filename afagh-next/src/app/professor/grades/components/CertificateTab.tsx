@@ -96,7 +96,7 @@ export default function CertificateTab({ offering, termTitle, professorName, uni
 
       {/* جدول نمرات */}
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse border border-slate-400 text-xs">
+        <table className="w-full border-collapse border border-slate-400 text-xs rt">
           <thead>
             <tr className="bg-slate-900 text-white text-center">
               <th className="p-2 border border-slate-700 w-12 font-bold">ردیف</th>

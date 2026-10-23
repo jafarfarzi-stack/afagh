@@ -1,14 +1,29 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { upsertUniversity, saveSaminConnection, deleteUniversity, uploadUniversityLogoAction, deleteUniversityLogoAction } from './actions';
+import { upsertUniversity, saveSaminConnection, deleteUniversity, uploadUniversityLogoAction, deleteUniversityLogoAction, saveUniversityBrandAction } from './actions';
+import { UNI_THEMES, type UniTheme } from '@/lib/university-theme';
 
-type Uni = { id: number; code: string; title: string; kind: string; status: string; saminCode: string | null; province: string | null; dissolvedAt: string | null; isActive: number; logoUrl: string | null };
+type Uni = { id: number; code: string; title: string; kind: string; status: string; saminCode: string | null; province: string | null; dissolvedAt: string | null; isActive: number; logoUrl: string | null; brand: UniTheme };
 type Conn = { universityId: number; apiBaseUrl: string; authBaseUrl: string; clientId: string | null; username: string | null; isEnabled: number; lastSyncAt: string | null; hasSecret: boolean };
+
+const BRAND_FIELDS: { key: keyof UniTheme; label: string }[] = [
+  { key: 'header', label: 'هدر (header)' },
+  { key: 'badge', label: 'نشان (badge)' },
+  { key: 'ring', label: 'حاشیه (ring)' },
+  { key: 'soft', label: 'نرم (soft)' },
+  { key: 'navPanel', label: 'پنل ناوبری (navPanel)' },
+  { key: 'navBorder', label: 'مرز ناوبری (navBorder)' },
+  { key: 'navHover', label: 'هاور ناوبری (navHover)' },
+  { key: 'navActive', label: 'فعال ناوبری (navActive)' },
+  { key: 'navMuted', label: 'کمرنگ ناوبری (navMuted)' },
+  { key: 'navInput', label: 'ورودی ناوبری (navInput)' },
+];
 
 export default function UniversitiesClient({ universities, connections }: { universities: Uni[]; connections: Conn[] }) {
   const [editing, setEditing] = useState<Uni | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [brandOpen, setBrandOpen] = useState<number | null>(null);
   const [msg, setMsg] = useState('');
   const addCodeRef = useRef<HTMLInputElement>(null);
   const openAdd = () => { setEditing(null); setShowAdd(true); setTimeout(() => addCodeRef.current?.focus(), 0); };
@@ -26,7 +41,7 @@ export default function UniversitiesClient({ universities, connections }: { univ
             ➕ {showAdd ? 'بستن فرم افزودن' : 'افزودن دانشگاه جدید'}
           </button>
         </div>
-        <table className="w-full text-xs">
+        <table className="w-full text-xs rt">
           <thead>
             <tr className="bg-slate-50 border-b text-slate-600">
               <th className="px-2 py-2 text-right">کد</th>
@@ -59,6 +74,7 @@ export default function UniversitiesClient({ universities, connections }: { univ
                   </td>
                   <td className="px-2 py-2 flex gap-1">
                     <button onClick={() => setEditing(u)} className="text-indigo-600 hover:underline">ویرایش</button>
+                    <button onClick={() => setBrandOpen(u.id)} className="text-fuchsia-600 hover:underline">برندینگ</button>
                     <ConnButton uni={u} conn={c} onMsg={setMsg} />
                   </td>
                 </tr>
@@ -88,6 +104,53 @@ export default function UniversitiesClient({ universities, connections }: { univ
           </form>
         </div>
       )}
+
+      {brandOpen != null && (() => {
+        const u = universities.find(x => x.id === brandOpen);
+        return u ? <BrandEditor key={u.id} uni={u} onClose={() => setBrandOpen(null)} onMsg={setMsg} /> : null;
+      })()}
+    </div>
+  );
+}
+
+function BrandEditor({ uni, onClose, onMsg }: { uni: Uni; onClose: () => void; onMsg: (s: string) => void }) {
+  const [draft, setDraft] = useState<UniTheme>(uni.brand);
+  return (
+    <div className="card space-y-3 border-fuchsia-300">
+      <div className="flex items-center justify-between">
+        <h3 className="font-bold text-sm">برندینگ {uni.title} ({uni.code})</h3>
+        <button onClick={onClose} className="border px-2 py-0.5 rounded text-xs">×</button>
+      </div>
+      <p className="text-[11px] leading-5 text-slate-500">
+        تم‌های دانشگاه از پیش‌فرضِ سخت‌کد شروع می‌شوند. برای تغییر، یک تم را انتخاب کنید یا مقادیر کلاس‌های Tailwind را مستقیماً ویرایش کنید.
+        مقدار خالی → استفاده از پیش‌فرض.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {Object.entries(UNI_THEMES).map(([code, th]) => (
+          <button key={code} type="button" onClick={() => setDraft(th)} className={`text-[11px] px-2 py-1 rounded border ${th.badge}`}>{code}</button>
+        ))}
+      </div>
+      <div className={`rounded-xl p-3 ${draft.header}`}>
+        <p className="text-white text-xs">پیش‌نمایش هدر (header)</p>
+        <p className={`mt-1 text-[11px] ${draft.soft}`}>متن نرم (soft)</p>
+      </div>
+      <form action={async (fd) => {
+        fd.set('universityId', String(uni.id));
+        BRAND_FIELDS.forEach(f => fd.set(f.key, draft[f.key]));
+        try { await saveUniversityBrandAction(fd); onMsg(`برندینگ ${uni.code} ذخیره شد`); onClose(); }
+        catch (e: any) { onMsg(e.message); }
+      }} className="grid grid-cols-1 gap-2 text-xs">
+        {BRAND_FIELDS.map(f => (
+          <label key={f.key} className="flex items-center gap-2">
+            <span className="w-44 shrink-0 text-slate-600">{f.label}</span>
+            <input value={draft[f.key]} onChange={e => setDraft(d => ({ ...d, [f.key]: e.target.value }))} className="border rounded px-2 py-1 flex-1 font-mono text-[11px]" />
+          </label>
+        ))}
+        <div className="flex gap-2">
+          <button type="submit" className="bg-fuchsia-600 text-white px-4 py-1.5 rounded text-xs">ذخیره برندینگ</button>
+          <button type="button" onClick={onClose} className="border px-3 py-1.5 rounded text-xs">انصراف</button>
+        </div>
+      </form>
     </div>
   );
 }

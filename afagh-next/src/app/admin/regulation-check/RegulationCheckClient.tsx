@@ -163,7 +163,7 @@ export default function RegulationCheckClient() {
 
       {rows.length > 0 && (
         <div className="border border-slate-300 rounded-lg overflow-x-auto">
-          <table className="w-full text-[11px] text-right">
+          <table className="w-full text-[11px] text-right rt">
             <thead className="bg-slate-100 border-b border-slate-300 font-bold">
               <tr>
                 <th className="p-2 w-8">
@@ -258,7 +258,7 @@ export default function RegulationCheckClient() {
         </div>
         {statusRows.length > 0 && (
           <div className="border border-slate-300 rounded-lg overflow-x-auto">
-            <table className="w-full text-[11px] text-right">
+            <table className="w-full text-[11px] text-right rt">
               <thead className="bg-slate-100 border-b border-slate-300 font-bold">
                 <tr>
                   <th className="p-2">کد دانشجویی</th>

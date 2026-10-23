@@ -53,7 +53,7 @@ export default async function PosPage() {
       <div className="card">
         <h2 className="mb-3 border-b border-slate-100 pb-2 font-bold text-slate-800">آخرین تراکنش‌های POS</h2>
         <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
+          <table className="w-full text-right text-xs rt">
             <thead>
               <tr className="border-b border-slate-100 text-slate-500">
                 <th className="pb-2">STAN</th>

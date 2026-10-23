@@ -293,7 +293,7 @@ export default function ProctorExamAttendanceClient({ sessions, staffName }: { s
 
           {/* فهرست داوطلبان نشسته در این سالن */}
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-xs rt">
               <thead>
                 <tr className="bg-slate-900 text-white text-center text-[11px]">
                   <th className="p-2.5">صندلی</th>

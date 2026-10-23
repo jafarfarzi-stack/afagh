@@ -201,7 +201,7 @@ export default function GroupContentPanel({
         📖 دروس ({courses.length.toLocaleString('fa-IR')})
       </h4>
       <div className="mb-3 overflow-x-auto">
-        <table className="w-full border-collapse text-xs">
+        <table className="w-full border-collapse text-xs rt">
           <thead>
             <tr className="bg-slate-100 text-center text-slate-500">
               <th className="w-10 border border-slate-200 p-2">
@@ -266,7 +266,7 @@ export default function GroupContentPanel({
         🎓 رشته‌ها ({majors.length.toLocaleString('fa-IR')})
       </h4>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-xs">
+        <table className="w-full border-collapse text-xs rt">
           <thead>
             <tr className="bg-slate-100 text-center text-slate-500">
               <th className="w-10 border border-slate-200 p-2">

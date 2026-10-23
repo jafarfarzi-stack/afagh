@@ -154,7 +154,7 @@ export default function CouncilClient() {
 
       {tab === 'meetings' && (
         <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm rt">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="p-2 text-right">#</th>
@@ -224,7 +224,7 @@ export default function CouncilClient() {
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm rt">
               <thead className="bg-slate-50 text-slate-600">
                 <tr>
                   <th className="p-2 text-right">#</th>

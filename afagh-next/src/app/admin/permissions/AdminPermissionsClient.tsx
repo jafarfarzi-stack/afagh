@@ -352,7 +352,7 @@ export default function AdminPermissionsClient({ initial }: { initial: Permissio
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs border-collapse">
+          <table className="w-full text-right text-xs border-collapse rt">
             <thead>
               <tr className="bg-slate-900 text-white">
                 <th className="p-3 w-64">عنوان مجوز و شرح دسترسی</th>

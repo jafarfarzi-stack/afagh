@@ -142,7 +142,7 @@ export default function StudentCardsClient({
       </div>
 
       <div className="card !p-0 bg-white border-slate-300 overflow-x-auto">
-        <table className="w-full text-right text-xs">
+        <table className="w-full text-right text-xs rt">
           <thead className="bg-slate-100 text-slate-700">
             <tr>
               {['دانشجو', 'شمارهٔ دانشجویی', 'وضعیت تحصیلی', 'بدهی (ریال)', 'وضعیت کارت', 'انقضا', 'توکن امنیتی', 'عملیات'].map(h => (
