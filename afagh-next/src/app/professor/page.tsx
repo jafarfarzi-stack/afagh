@@ -33,7 +33,6 @@ import {
   type ProfessorScheduleRow,
 } from '@/lib/professor-data';
 import ProfessorWeekTable from './week-table';
-import ProfessorTermFilterBanner from './term-filter-banner';
 
 export const dynamic = 'force-dynamic';
 
@@ -166,7 +165,6 @@ export default async function ProfessorHome() {
   return (
     <div className="space-y-6" dir="rtl">
 
-      <ProfessorTermFilterBanner selectedTerm={selectedTerm} universityId={universityId} demo={demo} />
       <MessengerOnboardBanner />
 
       <div className="print:hidden bg-gradient-to-l from-indigo-950 via-indigo-900 to-slate-900 text-white rounded-3xl p-6 shadow-xl border border-indigo-700/50 space-y-4">
@@ -267,7 +265,7 @@ export default async function ProfessorHome() {
         recordings={demo ? DEMO_RECORDINGS : undefined}
       />
 
-      <div className="print:hidden grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className="print:hidden grid grid-cols-2 min-[400px]:grid-cols-3 sm:grid-cols-4 gap-3 sm:gap-4">
         <Link
           href="/professor/schedule"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-indigo-400 hover:shadow-md transition space-y-2 group"
@@ -277,7 +275,7 @@ export default async function ProfessorHome() {
           </div>
           <div>
             <h3 className="font-extrabold text-sm text-slate-900">برنامه هفتگی تدریس</h3>
-            <p className="text-[11px] text-slate-500 mt-0.5 leading-4">
+            <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 leading-4">
               مشاهده روزها، ساعات تشکیل، شماره کلاس فیزیکی و تواتر زوج/فرد
             </p>
           </div>
@@ -292,7 +290,7 @@ export default async function ProfessorHome() {
           </div>
           <div>
             <h3 className="font-extrabold text-sm text-slate-900">ثبت حضور و غیاب</h3>
-            <p className="text-[11px] text-slate-500 mt-0.5 leading-4">
+            <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 leading-4">
               ثبت وضعیت هر جلسه، تاخیر، غیبت موجه و هشدار ماده ۳/۱۶
             </p>
           </div>
@@ -307,7 +305,7 @@ export default async function ProfessorHome() {
           </div>
           <div>
             <h3 className="font-extrabold text-sm text-slate-900">بارم‌بندی و ثبت نمرات</h3>
-            <p className="text-[11px] text-slate-500 mt-0.5 leading-4">
+            <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 leading-4">
               تعیین سهم میان‌ترم و پایان‌ترم (جمع ۲۰)، نمرات مشترک و رسیدگی به اعتراضات
             </p>
           </div>
@@ -322,7 +320,7 @@ export default async function ProfessorHome() {
           </div>
           <div>
             <h3 className="font-extrabold text-sm text-slate-900">قرارداد تدریس و مالی</h3>
-            <p className="text-[11px] text-slate-500 mt-0.5 leading-4">
+            <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 leading-4">
               مشاهده فرم رسمی، جزئیات مالی، نرخ هر ساعت و امضای دیجیتال
             </p>
           </div>

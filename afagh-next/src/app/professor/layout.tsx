@@ -12,6 +12,7 @@ import SessionLock from '@/components/SessionLock';
 import TermSwitcher from '@/components/TermSwitcher';
 import { getTermScope } from '@/lib/term-scope';
 import ThemeToggle from '@/components/ThemeToggle';
+import MobileTabBar from '@/components/MobileTabBar';
 import { logoutAction } from '../login/actions';
 
 export default async function ProfessorLayout({ children }: { children: React.ReactNode }) {
@@ -120,10 +121,10 @@ export default async function ProfessorLayout({ children }: { children: React.Re
         </div>
 
         {/* Navigation Bar */}
-        <nav className="mx-auto flex max-w-6xl gap-1.5 px-4 pb-3 text-xs flex-wrap items-center">
+        <nav className="mx-auto flex max-w-6xl gap-1.5 px-4 pb-3 text-xs items-center flex-nowrap overflow-x-auto md:flex-wrap md:overflow-visible">
           <Link
             href="/professor"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200"
+            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
           >
             🏠 داشبورد و کلاس‌ها
           </Link>
@@ -131,63 +132,72 @@ export default async function ProfessorLayout({ children }: { children: React.Re
               بالای صفحه انجام می‌شود — اینجا لینک تکراری نمی‌گذاریم. */}
           <Link
             href="/professor/schedule"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200"
+            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
           >
             🗓️ برنامه هفتگی تدریس
           </Link>
           <Link
             href="/professor/attendance"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200"
+            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
           >
             📋 ثبت حضور و غیاب
           </Link>
           <Link
             href="/professor/grades"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200"
+            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
           >
             📝 بارم‌بندی و ثبت نمرات
           </Link>
           <Link
             href="/professor/availability"
-            className="px-3 py-1.5 rounded-xl font-bold transition bg-amber-400 text-slate-950 hover:bg-amber-300 shadow-xs"
+            className="px-3 py-1.5 rounded-xl font-bold transition bg-amber-400 text-slate-950 hover:bg-amber-300 shadow-xs whitespace-nowrap shrink-0"
           >
             🗓️ اعلام ساعات حضور ترم
           </Link>
           <Link
             href="/professor/performance"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200"
+            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
           >
             📊 کارنامه عملکرد و ارزیابی
           </Link>
           <Link
             href="/professor/evaluation"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200"
+            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
           >
             📈 کارنامه ارزشیابی دانشجویان
           </Link>
           <Link
             href="/professor/contract"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200"
+            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
           >
             📑 فرم قرارداد حق‌التدریس
           </Link>
           <Link
             href="/professor/broadcast"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200"
+            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
             title="ارسال پیام به دانشجویان کلاس‌های خودتان"
           >
             📣 پیام به کلاس
           </Link>
           <Link
             href="/professor/documents"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200"
+            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
           >
             اسناد و امضا {pendingCount > 0 && <span className="mr-1 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-black text-slate-900">{pendingCount}</span>}
           </Link>
         </nav>
       </header>
 
-      <main className="mx-auto max-w-6xl p-4 sm:p-6">{children}</main>
+      <main className="mx-auto max-w-6xl p-4 sm:p-6 pb-24 md:pb-6">{children}</main>
+      <MobileTabBar
+        activeClass="text-indigo-700"
+        items={[
+          { href: '/professor', label: 'داشبورد', icon: '🏠', exact: true },
+          { href: '/professor/schedule', label: 'برنامه', icon: '🗓️' },
+          { href: '/professor/attendance', label: 'حضور و غیاب', icon: '📋' },
+          { href: '/professor/grades', label: 'نمرات', icon: '📝' },
+        ]}
+      />
       <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />
     </div>
   );

@@ -95,6 +95,46 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const lockOn = await evaluateIdleLock(user.id, lockMin).catch(() => false);
   // حساب‌های هم‌شخصِ همین کدملی — برای سوییچر واحد بالای صفحه
   const siblings = await getSiblingAccounts().catch(() => []);
+  // کنترل‌های ثانویهٔ هدر (سوییچرها، تم، خروج، راهنما).
+  // روی دسکتاپ (md+) در خودِ هدر و روی موبایل داخل کشوی «منو ☰» رندر می‌شوند
+  // تا بالای صفحه در موبایل تمیز و کوتاه بماند.
+  const headerControls = (
+    <>
+      <PanelSwitcher
+        roles={user.roles}
+        current="admin"
+        permissionCount={permissionCodes.length}
+        siblings={siblings}
+      />
+      <TermSwitcher terms={termScope.terms} selectedId={termScope.selectedId} />
+      {canSwitchUniversity && (
+        <UniversitySwitcher
+          universities={unis.map(u => ({ code: u.code, title: u.title, kind: u.kind }))}
+          currentCode={curUni.code}
+          buttonClass={th.badge}
+        />
+      )}
+      <Link
+        href="/help/admin"
+        className={`text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
+      >
+        📖 راهنما
+      </Link>
+      <a
+        href="/help/pdfs/admin.pdf"
+        download
+        className={`text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
+      >
+        📕 PDF
+      </a>
+      <ThemeToggle />
+      <form action={logoutAction}>
+        <button className={`text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}>
+          خروج
+        </button>
+      </form>
+    </>
+  );
   return (
     <div className="min-h-screen bg-sky-50/70" data-uni={curUni.code}>
       <header className={`${th.header} text-white shadow-md transition-colors`}>
@@ -110,48 +150,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <p className="text-xs opacity-80">{user.name} · نقش‌ها: {user.roles.join('، ')}</p>
             </div>
           </div>
-          {/* ردیف کنترل‌ها می‌شکند تا در موبایل صفحه را عریض نکند (سرریز ۵۰۰px+ بود) */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* سوییچر واحد: برگشت به کارتابل استاد/مدیر گروه/دانشجو و حساب‌های هم‌کدملی */}
-            <PanelSwitcher
-              roles={user.roles}
-              current="admin"
-              permissionCount={permissionCodes.length}
-              siblings={siblings}
-            />
-            <TermSwitcher
-              terms={termScope.terms}
-              selectedId={termScope.selectedId}
-            />
-            {canSwitchUniversity && (
-              <UniversitySwitcher
-                universities={unis.map(u => ({ code: u.code, title: u.title, kind: u.kind }))}
-                currentCode={curUni.code}
-                buttonClass={th.badge}
-              />
-            )}
-            <Link
-              href="/help/admin"
-              className={`text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
-            >
-              📖 راهنما
-            </Link>
-            <a
-              href="/help/pdfs/admin.pdf"
-              download
-              className={`text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
-            >
-              📕 PDF
-            </a>
-            <ThemeToggle />
-              <form action={logoutAction}>
-              <button className={`text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}>
-                خروج
-              </button>
-            </form>
+          {/* ردیف کنترل‌ها فقط روی دسکتاپ (md+). در موبایل داخل کشوی «منو ☰» نمایش داده می‌شوند
+              تا هدر بالا تمیز و کوتاه بماند. */}
+          <div className="hidden md:flex flex-wrap items-center gap-2">
+            {headerControls}
           </div>
         </div>
-        <AdminNav roles={user.roles} permissions={permissionCodes} theme={th} />
+        <AdminNav roles={user.roles} permissions={permissionCodes} theme={th} controls={headerControls} />
       </header>
       <main className="mx-auto max-w-6xl p-3 sm:p-5 pb-16">{children}</main>
       <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />
