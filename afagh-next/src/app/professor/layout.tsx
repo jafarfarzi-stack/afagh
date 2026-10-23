@@ -80,118 +80,50 @@ export default async function ProfessorLayout({ children }: { children: React.Re
               <p className="text-xs text-slate-400">{user.name}{me ? ' · کد پرسنلی: ' + me.staffCode : ''} · گروه: {deptName}</p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <TermSwitcher
-              terms={termScope.terms}
-              selectedId={termScope.selectedId}
-            />
-            <PanelSwitcher
-              roles={user.roles}
-              current="professor"
-              permissionCount={permissionCount}
-              siblings={siblings}
-              groupTitle={
-                headed.length === 1
-                  ? headed[0].name
-                  : headed.length > 1
-                    ? `${headed.length.toLocaleString('fa-IR')} گروه`
-                    : undefined
-              }
-            />
-            <Link
-              href="/help/professor"
-              className="hidden sm:inline-flex items-center px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition"
-            >
-              📖 راهنمای استاد
-            </Link>
-            <a
-              href="/help/pdfs/professor.pdf"
-              download
-              className="hidden sm:inline-flex items-center px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition"
-            >
-              📕 PDF
-            </a>
-            <ThemeToggle />
-            <form action={logoutAction}>
-              <button className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition">
-                خروج از سامانه
-              </button>
-            </form>
+          <div className="flex flex-wrap items-center justify-between gap-2 w-full sm:w-auto">
+            <div className="flex flex-nowrap items-center gap-2">
+              <TermSwitcher
+                terms={termScope.terms}
+                selectedId={termScope.selectedId}
+              />
+              <PanelSwitcher
+                roles={user.roles}
+                current="professor"
+                permissionCount={permissionCount}
+                siblings={siblings}
+                groupTitle={
+                  headed.length === 1
+                    ? headed[0].name
+                    : headed.length > 1
+                      ? `${headed.length.toLocaleString('fa-IR')} گروه`
+                      : undefined
+                }
+              />
+            </div>
+            <div className="flex flex-nowrap items-center gap-2">
+              <Link
+                href="/help/professor"
+                className="hidden sm:inline-flex items-center px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition"
+              >
+                📖 راهنمای استاد
+              </Link>
+              <a
+                href="/help/pdfs/professor.pdf"
+                download
+                className="hidden sm:inline-flex items-center px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition"
+              >
+                📕 PDF
+              </a>
+              <ThemeToggle />
+              <form action={logoutAction}>
+                <button className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition">
+                  خروج از سامانه
+                </button>
+              </form>
+            </div>
           </div>
         </div>
 
-        {/* Navigation Bar */}
-        <nav className="mx-auto flex max-w-6xl gap-1.5 px-4 pb-3 text-xs items-center flex-nowrap overflow-x-auto md:flex-wrap md:overflow-visible">
-          <Link
-            href="/professor"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
-          >
-            🏠 داشبورد و کلاس‌ها
-          </Link>
-          <Link
-            href="/help/professor"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-emerald-300 whitespace-nowrap shrink-0"
-          >
-            📖 راهنما
-          </Link>
-          {/* سوییچ به سایر کارتابل‌ها (دانشجو، مدیر گروه، مالی/آموزش) از سوییچر
-              بالای صفحه انجام می‌شود — اینجا لینک تکراری نمی‌گذاریم. */}
-          <Link
-            href="/professor/schedule"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
-          >
-            🗓️ برنامه هفتگی تدریس
-          </Link>
-          <Link
-            href="/professor/attendance"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
-          >
-            📋 ثبت حضور و غیاب
-          </Link>
-          <Link
-            href="/professor/grades"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
-          >
-            📝 بارم‌بندی و ثبت نمرات
-          </Link>
-          <Link
-            href="/professor/availability"
-            className="px-3 py-1.5 rounded-xl font-bold transition bg-amber-400 text-slate-950 hover:bg-amber-300 shadow-xs whitespace-nowrap shrink-0"
-          >
-            🗓️ اعلام ساعات حضور ترم
-          </Link>
-          <Link
-            href="/professor/performance"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
-          >
-            📊 کارنامه عملکرد و ارزیابی
-          </Link>
-          <Link
-            href="/professor/evaluation"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
-          >
-            📈 کارنامه ارزشیابی دانشجویان
-          </Link>
-          <Link
-            href="/professor/contract"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
-          >
-            📑 فرم قرارداد حق‌التدریس
-          </Link>
-          <Link
-            href="/professor/broadcast"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
-            title="ارسال پیام به دانشجویان کلاس‌های خودتان"
-          >
-            📣 پیام به کلاس
-          </Link>
-          <Link
-            href="/professor/documents"
-            className="px-3 py-1.5 rounded-xl font-bold transition hover:bg-white/10 text-slate-200 whitespace-nowrap shrink-0"
-          >
-            اسناد و امضا {pendingCount > 0 && <span className="mr-1 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-black text-slate-900">{pendingCount}</span>}
-          </Link>
-        </nav>
       </header>
 
       <main className="mx-auto max-w-6xl p-4 sm:p-6 pb-24 md:pb-6">{children}</main>
