@@ -518,8 +518,10 @@ export const courses = pgTable('courses', {
   standardCode: varchar('standardCode', { length: 50 }),    // کد استاندارد وزارت علوم
   ministryCode: varchar('ministryCode', { length: 50 }),    // کد وزارت علوم
   title: varchar('title', { length: 150 }).notNull(),
-  theoreticalUnits: numeric('theoreticalUnits', { precision: 3, scale: 1 }).default('0'),
-  practicalUnits: numeric('practicalUnits', { precision: 3, scale: 1 }).default('0'),
+  // scale=2 لازم است: سما برای درس‌هایی مثل «آشنایی با صنعت کامپیوتر» تفکیک
+  // ۰.۷۵/۰.۲۵ دارد و با یک رقم اعشار، مبلغ شهریه ۵۰۰ هزار ریال به‌ازای هر دانشجو خطا می‌رفت.
+  theoreticalUnits: numeric('theoreticalUnits', { precision: 4, scale: 2 }).default('0'),
+  practicalUnits: numeric('practicalUnits', { precision: 4, scale: 2 }).default('0'),
   units: numeric('units', { precision: 3, scale: 1 }).notNull(),
   courseType: varchar('courseType', { length: 50 }),
   departmentId: integer('departmentId').references(() => departments.id),

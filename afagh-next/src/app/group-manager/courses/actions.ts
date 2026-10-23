@@ -13,13 +13,27 @@ export async function createCourseAction(fd: FormData) {
   const type = str(fd, 'type') || 'تخصصی', grading = str(fd, 'grading') || 'NUMERIC';
   if (!code || !title) back('/group-manager/courses', 'err', 'کد و عنوان درس الزامی است.');
   if (theo < 0 || prac < 0 || theo + prac === 0) back('/group-manager/courses', 'err', 'واحد درس نامعتبر است.');
+  // «نوع درس مالی» اجباری است: درسِ بدون آن در موتور شهریه صفر حساب می‌شود و
+  // بی‌صدا از صورت‌حساب دانشجو جا می‌ماند. جای اصلاح/بازبینی‌اش کارتابل
+  // «نوع درس مالی دروس» در /admin/course-finance است.
+  const maliRaw = str(fd, 'maliType');
+  if (!maliRaw) back('/group-manager/courses', 'err', 'نوع درس مالی را انتخاب کنید.');
+  const maliType = Number(maliRaw);
+  if (!Number.isInteger(maliType) || maliType < 0 || maliType > 99) {
+    back('/group-manager/courses', 'err', 'نوع درس مالی نامعتبر است.');
+  }
   const [dup] = await db.select({ id: courses.id }).from(courses).where(eq(courses.code, code)).limit(1);
   if (dup) back('/group-manager/courses', 'err', 'کد درس تکراری است: ' + code);
   await db.insert(courses).values({
     code, title, theoreticalUnits: String(theo), practicalUnits: String(prac), units: String(theo + prac),
     courseType: type, gradingType: grading, affectsGpa: fd.get('gpa') ? 1 : 0, departmentId: deptId,
+    // بی‌این‌فیلد، درسِ ساخته‌شده از کارتابل مدیر گروه در کوئری‌های
+    // «مرز دانشگاهی» نامرئی می‌شد (universityId = NULL).
+    universityId: me.universityId ?? null,
+    legacyMaliType: maliType,
   });
   revalidatePath('/group-manager/courses');
+  revalidatePath('/admin/course-finance');
   back('/group-manager/courses', 'msg', 'درس «' + title + '» تعریف شد (' + (theo + prac) + ' واحد).');
 }
 

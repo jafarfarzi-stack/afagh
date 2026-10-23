@@ -2,37 +2,11 @@ import { and, asc, desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { faculties, majors, tuition_term_tariff } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { MALI_TYPE_LABELS } from '@/lib/mali-types';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import TariffClient, { type TariffGroup } from './TariffClient';
 
 export const dynamic = 'force-dynamic';
-
-/**
- * نام «نوع درس مالی» سما — همان کدهای J_MaliType که نرخ‌ها به آن گره خورده‌اند.
- *
- * توجه: عمداً `export` ندارد. Next 16 برای فایل‌های page نوع تولید می‌کند که
- * هر اکسپورت اضافه‌ای (جز default/config/metadata/…) را رد می‌کند و build را
- * با TS2344 می‌شکند؛ در حالی که `tsc --noEmit` تنها این را نمی‌بیند، چون
- * `.next/types` فقط هنگام build ساخته می‌شود.
- */
-const MALI_TYPE_LABELS: Record<number, string> = {
-  1: 'عمومی',
-  2: 'پایه',
-  3: 'تخصصی',
-  4: 'اصلی',
-  5: 'نظری-عملی',
-  6: 'پروژه',
-  9: 'اردو',
-  10: 'اختیاری',
-  11: 'کارورزی',
-  12: 'عمومی عملی',
-  13: 'پیش‌دانشگاهی',
-  14: 'نظری-عملی کارگاهی',
-  15: 'نظری-عملی با پروژه',
-  20: 'جبرانی',
-  22: 'عملی آز/کارگاه ۲س',
-  23: 'عملی آز/کارگاه ۳س',
-};
 
 export default async function AnnualTariffPage({
   searchParams,
