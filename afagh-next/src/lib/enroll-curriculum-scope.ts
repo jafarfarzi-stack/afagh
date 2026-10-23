@@ -98,8 +98,10 @@ export function scopeOfferingsByCurriculum<T extends { courseId: number | null }
   currentTermOrdinal: number | null,
   retakeCourseIds: Set<number>,
 ): T[] {
-  // اگر چارت حل نشد → رفتار قدیم (فیلتر نشود) تا انتخاب واحد همچنان کار کند
-  if (!scope.resolved) return offerings;
+  // اگر چارت مصوبی برای رشته/مقطع دانشجو منتشر نشده باشد، کاتالوگ **خالی** بازگردانده
+  // می‌شود (طبق دستور کاربر: «کاتالوگ تخصیص‌نیافته باید خالی باشد») — نه اینکه همهٔ
+  // ارائه‌های بدون هدف‌گیری نمایش داده شود. علت در بنرِ پایین‌دستی به دانشجو گزارش می‌شود.
+  if (!scope.resolved) return [];
 
   return offerings.filter((o) => {
     const cid = o.courseId;

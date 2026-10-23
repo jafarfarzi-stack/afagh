@@ -398,6 +398,7 @@ export default async function EnrollPage() {
         bypassRequests={bypassRequests}
         degreeLevelTitle={degreeLevelRow?.title ?? undefined}
         curriculumScoped={curriculumScope.resolved}
+        curriculumReason={curriculumScope.reason}
         curriculumVersionLabel={curriculumScope.versionCode ?? null}
         studentTermOrdinal={studentTermOrdinal}
       />

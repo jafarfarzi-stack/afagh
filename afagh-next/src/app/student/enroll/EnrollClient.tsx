@@ -143,6 +143,8 @@ export default function EnrollClient(props: {
   degreeLevelTitle?: string;
   /** آیا کاتالوگ بر اساس چارت تحصیلی مصوب فیلتر شده است؟ */
   curriculumScoped?: boolean;
+  /** علتِ حل‌نشدن چارت (هنگامی که curriculumScoped=false) — برای پیام صریح به دانشجو */
+  curriculumReason?: string | null;
   /** کد نسخهٔ برنامه (مثلاً «۱۴۰۴») — برای نمایش در بنر چارت */
   curriculumVersionLabel?: string | null;
   /** شمارهٔ ترم جاریِ تحصیلیِ دانشجو (برای نمایش در بنر چارت) */
@@ -508,7 +510,7 @@ export default function EnrollClient(props: {
       )}
 
       {/* بنر اعمال چارت تحصیلی (فیلتر کاتالوگ بر اساس سرفصل و ترم دانشجو) */}
-      {props.curriculumScoped && (
+      {props.curriculumScoped ? (
         <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium flex items-start gap-2">
           <span className="text-base leading-none">🗺️</span>
           <span>
@@ -516,6 +518,14 @@ export default function EnrollClient(props: {
             {props.curriculumVersionLabel ? ` (نسخهٔ ${faNum(props.curriculumVersionLabel)})` : ''}
             {props.studentTermOrdinal ? ` و ترم ${faNum(props.studentTermOrdinal)}` : ''}
             فیلتر شده است؛ فقط دروس سرفصلِ مربوط به ترم شما نمایش داده می‌شود.
+          </span>
+        </div>
+      ) : (
+        <div className="p-3 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-medium flex items-start gap-2">
+          <span className="text-base leading-none">⚠️</span>
+          <span>
+            <b>دانشجوی گرامی جهت تخصیص چارت دروس به مدیرگروه مراجعه کنید.</b> تا زمان انتشار چارت تحصیلی مصوب،
+            لیست دروس انتخاب واحد خالی نمایش داده می‌شود.
           </span>
         </div>
       )}
