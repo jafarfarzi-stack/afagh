@@ -143,7 +143,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 <p className="text-xs opacity-80">{user.name} · نقش‌ها: {user.roles.join('، ')}</p>
               </div>
             </div>
-            <div className="flex flex-nowrap items-center gap-2">
+            {/* یک ارتفاع و یک تراز برای همهٔ کنترل‌ها (`.hdr-controls` در globals.css) */}
+            <div className="hdr-controls flex flex-nowrap items-center gap-2">
               <Link
                 href="/help/admin"
                 className={`hidden sm:inline-flex text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
@@ -167,7 +168,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </div>
           </div>
           {/* ردیف دوم: سوییچرهای نقش/نیمسال/دانشگاه — روی موبایل هم قابل‌دسترس */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="hdr-controls flex flex-wrap items-center gap-2 lg:flex-nowrap lg:shrink-0">
             {headerSwitchers}
           </div>
         </div>

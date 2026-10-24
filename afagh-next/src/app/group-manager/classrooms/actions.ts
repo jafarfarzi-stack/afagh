@@ -1,9 +1,9 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { classrooms, schedules } from '@/db/schema';
+import { classrooms, faculties, schedules } from '@/db/schema';
 import { back, num, requireDepHead, str } from '@/lib/group-manager';
 import { classroomOwnedBy, readClassroomUni } from '@/lib/offering-scheduling';
 
@@ -22,7 +22,26 @@ export async function saveClassroomAction(fd: FormData) {
   }
   const isActiveRaw = fd.get('isActive');
   const isActive = isActiveRaw == null ? 1 : (Number(isActiveRaw) ? 1 : 0);
-  const vals = { name, capacity: cap, roomType: str(fd, 'roomType') || null, buildingName: str(fd, 'building') || null, floor: str(fd, 'floor') || null, rowsCount: num(fd, 'rows') || null, colsCount: num(fd, 'cols') || null, isActive };
+  // دانشکده — جای «ساختمان» (ساختمان در سامانه تعریف ندارد)؛ فقط دانشکدهٔ همین دانشگاه
+  let facultyId: number | null = null;
+  let facultyName: string | null = null;
+  const facultyRaw = str(fd, 'facultyId');
+  if (facultyRaw) {
+    const fid = Number(facultyRaw);
+    const owned = Number.isInteger(fid) && fid > 0 && myUni != null
+      ? await db
+          .select({ id: faculties.id, name: faculties.name })
+          .from(faculties)
+          .where(and(eq(faculties.id, fid), eq(faculties.universityId, myUni)))
+          .limit(1)
+      : [];
+    if (!owned.length) back('/group-manager/classrooms', 'err', 'دانشکدهٔ انتخاب‌شده متعلق به دانشگاه شما نیست.');
+    facultyId = fid;
+    facultyName = owned[0].name;
+  }
+  // نام دانشکده در ستون قدیمی `buildingName` هم نوشته می‌شود تا صفحه‌هایی که
+  // هنوز «ساختمان» را نمایش می‌دهند خالی نمانند (منبع حقیقت: facultyId).
+  const vals = { name, capacity: cap, roomType: str(fd, 'roomType') || null, facultyId, buildingName: facultyName, floor: str(fd, 'floor') || null, rowsCount: num(fd, 'rows') || null, colsCount: num(fd, 'cols') || null, isActive };
   if (id) await db.update(classrooms).set(vals).where(eq(classrooms.id, id));
   else await db.insert(classrooms).values({ ...vals, universityId: myUni });
   revalidatePath('/group-manager/classrooms');

@@ -749,3 +749,20 @@ html {
 @supports (min-height: 100dvh) {
   .min-h-screen { min-height: 100dvh; }
 }
+
+/* ─── نوار هدر (دسکتاپ): همهٔ کنترل‌ها یک ارتفاع و یک تراز ───────────────
+   مشکل: دکمهٔ حالت شب ۳۴px بود، سوییچرها ۳۰px و سوییچر کارتابل‌ها ۳۴px
+   (به‌خاطر بجِ شمارنده با leading-5)؛ نتیجه اینکه کنترل‌های یک ردیف با هم
+   هم‌تراز نبودند. اینجا ارتفاع همهٔ کنترل‌های سطح اول به ۳۲px قفل می‌شود.
+   ⚠ فقط فرزندِ مستقیم یا نوهٔ مستقیم هدف است تا آیتم‌های منوی بازشو
+   (که عمداً بلندترند) دست‌نخورده بمانند. */
+.hdr-controls > a,
+.hdr-controls > button,
+.hdr-controls > form > button,
+.hdr-controls > div > button,
+.hdr-controls > details > summary {
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}

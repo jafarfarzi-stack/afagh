@@ -3,6 +3,7 @@ import { promisify } from 'util';
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { sessionTransport, UNKNOWN_CLIENT_IP } from '@/lib/proxy-trust';
+import { homeFor as homeForRoute } from '@/lib/home-route';
 import { and, asc, desc, eq, gt, inArray, lt, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { ensureBaseReferenceData } from '@/lib/base-data';
@@ -725,31 +726,12 @@ export async function requireRole(allowed: string[]): Promise<SessionUser> {
   return u;
 }
 
-export function homeFor(roles: string[]): string {
-  // نقشی ندارد → برگرد به ورود با پیام روشن (جلوگیری از حلقهٔ بی‌پایان ورود)
-  if (roles.length === 0) return '/login?e=norole';
-  if (roles.includes('STUDENT')) return '/student';
-  if (roles.includes('PROCTOR') && !roles.includes('ADMIN') && !roles.includes('EDU_EXPERT')) return '/proctor';
-  if (roles.includes('PROFESSOR') && !roles.includes('ADMIN') && !roles.includes('EDU_EXPERT')) return '/professor';
-  // مدیر گروهی که استاد هم هست، بالاتر به /professor رفته است؛ پنل مدیر گروه از
-  // همان‌جا یک کلیک فاصله دارد (کارتابل‌ها ادغام شده‌اند). این خط برای کسی است
-  // که *فقط* مدیر گروه است و قبلاً اشتباهاً به /admin فرستاده می‌شد.
-  if (roles.includes('DEP_HEAD') && !roles.includes('ADMIN') && !roles.includes('EDU_EXPERT') && !roles.includes('VICE_EDU'))
-    return '/group-manager';
-  // کنترل‌کنندهٔ حضور و غیاب فقط یک کار دارد: ثبتِ تشکیلِ کلاس‌ها. پس به همان
-  // کارتابل می‌رود، نه به داشبورد مدیریتی که هیچ مجوزی در آن ندارد.
-  if (roles.includes('ATTENDANCE_CONTROLLER') && !roles.includes('ADMIN') && !roles.includes('EDU_EXPERT') && !roles.includes('VICE_EDU'))
-    return '/admin/attendance-control';
-  if (roles.includes('FINANCE_EXPERT') || roles.includes('FINANCE')) return '/admin/payroll';
-  if (roles.includes('VAULT_MANAGER')) return '/admin/exams';
-  if (roles.includes('MILITARY_OFFICER')) return '/admin/students';
-  if (roles.includes('ARCHIVE_EXPERT')) return '/admin/archive';
-  // کارشناس فارغ‌التحصیلی فقط «میز دفاع پایان‌نامه» را در شاخهٔ /admin می‌بیند؛
-  // فرستادنش به /admin که گاردِ دیگری دارد، حلقهٔ ریدایرکت می‌ساخت.
-  if (roles.includes('GRADUATION_EXPERT') && !roles.includes('ADMIN') && !roles.includes('EDU_EXPERT') && !roles.includes('VICE_EDU'))
-    return '/admin/defense-scheduling';
-  return '/admin';
-}
+/**
+ * «بعد از ورود کدام کارتابل؟» — پیاده‌سازی در `home-route.ts` است تا خالص و
+ * تست‌پذیر بماند. اینجا فقط دوباره صادر می‌شود تا همهٔ ایمپورت‌های موجود
+ * (`from '@/lib/auth'`) دست‌نخورده کار کنند.
+ */
+export const homeFor = homeForRoute;
 
 export async function getStudentByUser(userId: number) {
   // یک کاربر می‌تواند چند پروندهٔ دانشجویی داشته باشد (مثلاً یک NO_SHOW قدیمی

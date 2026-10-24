@@ -40,8 +40,15 @@ export default function PanelSwitcher({
   const [busy, setBusy] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
 
-  const panels = availablePanels(roles, permissionCount).filter(l => l.key !== current);
-  const total = panels.length + siblings.length;
+  /**
+   * همهٔ کارتابل‌ها نمایش داده می‌شوند — از جمله کارتابلِ فعلی (با برچسب
+   * «اینجا هستید»). پیش‌تر کارتابل فعلی فیلتر می‌شد و کاربرِ سه‌نقشی فکر
+   * می‌کرد نقشش گم شده: از /admin که به استاد می‌رفت، فقط «دانشجو» می‌ماند
+   * و معلوم نبود سه کارتابل دارد یا دو تا.
+   */
+  const panels = availablePanels(roles, permissionCount);
+  const others = panels.filter(l => l.key !== current);
+  const total = others.length + siblings.length;
 
   // بستن با کلیک بیرون / Escape
   useEffect(() => {
@@ -105,7 +112,33 @@ export default function PanelSwitcher({
               <p className="px-2 pb-1 pt-1 text-[11px] font-black text-slate-400">کارتابل‌های من</p>
               {panels.map(l => {
                 const hint = l.key === 'group-manager' && groupTitle ? `مدیر گروه: ${groupTitle}` : panelRoleHint(l.key, roles);
-                return (
+                const isCurrent = l.key === current;
+                const body = (
+                  <>
+                    <span className="text-base leading-6" aria-hidden>{l.icon}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className={`block text-sm font-bold ${isCurrent ? 'text-indigo-700' : 'text-slate-800'}`}>
+                        {l.label}
+                        {l.key === 'group-manager' && groupTitle ? <span className="font-normal text-slate-500"> ({groupTitle})</span> : null}
+                      </span>
+                      {hint && <span className="block text-[11px] text-slate-500">{hint}</span>}
+                    </span>
+                    {isCurrent && (
+                      <span className="shrink-0 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-black text-indigo-700">
+                        اینجا هستید
+                      </span>
+                    )}
+                  </>
+                );
+                return isCurrent ? (
+                  <div
+                    key={l.key}
+                    aria-current="page"
+                    className="flex items-start gap-2 rounded-lg bg-indigo-50/60 px-2 py-2"
+                  >
+                    {body}
+                  </div>
+                ) : (
                   <Link
                     key={l.key}
                     href={l.href}
@@ -113,14 +146,7 @@ export default function PanelSwitcher({
                     onClick={close}
                     className="flex items-start gap-2 rounded-lg px-2 py-2 transition hover:bg-slate-50"
                   >
-                    <span className="text-base leading-6" aria-hidden>{l.icon}</span>
-                    <span className="min-w-0">
-                      <span className="block text-sm font-bold text-slate-800">
-                        {l.label}
-                        {l.key === 'group-manager' && groupTitle ? <span className="font-normal text-slate-500"> ({groupTitle})</span> : null}
-                      </span>
-                      {hint && <span className="block text-[11px] text-slate-500">{hint}</span>}
-                    </span>
+                    {body}
                   </Link>
                 );
               })}

@@ -10,10 +10,13 @@ import {
   conflictFingerprint,
   dedupeSlots,
   detectScheduleConflicts,
+  groupConflictPairs,
   groupConflictsByEntity,
   isExplicitlySplit,
   isMergedPair,
+  isNearMergedPair,
   minutesToHm,
+  NEAR_SESSION_TOLERANCE_MIN,
   overlapMinutes,
   sharedMergeKey,
   summarizeConflicts,
@@ -199,6 +202,101 @@ eq('کلید معمولی SOLO نیست', isExplicitlySplit('MC-1-2'), false);
   ]);
   eq('تداخل تکراری نمی‌شود', r.pairs.length, 1);
   eq('تکراری‌های حذف‌شده', r.duplicateSlots, 2);
+}
+
+console.log('\n=== «احتمالاً یک جلسه» — تلورانسِ ۲۰ دقیقه ===');
+eq('تلورانس', NEAR_SESSION_TOLERANCE_MIN, 20);
+{
+  // همان موردِ واقعی ۱۴۰۵۱: ۴۵۱۷۰ در سما ۱۴:۰۰–۱۶:۱۵ و بقیه ۱۳:۴۵–۱۶:۱۰، همه سالن ۶۳
+  const a = slot({ scheduleId: 1, offeringId: 1, roomId: 63, startTime: '13:45', endTime: '16:10' });
+  const b = slot({ scheduleId: 2, offeringId: 2, roomId: 63, startTime: '14:00', endTime: '16:15' });
+  ok('اختلاف ۱۵ دقیقه در همان سالن ⇒ پیشنهاد ادغام', isNearMergedPair(a, b));
+  ok('ولی ادغامِ خودکار نیست (تداخل گزارش می‌شود)', !isMergedPair(a, b));
+}
+{
+  const a = slot({ scheduleId: 1, offeringId: 1, roomId: 63, startTime: '13:45', endTime: '16:10' });
+  const b = slot({ scheduleId: 2, offeringId: 2, roomId: 65, startTime: '13:45', endTime: '16:10' });
+  ok('سالنِ متفاوت ⇒ پیشنهاد ادغام نیست (تصرف دوگانهٔ فیزیکی)', !isNearMergedPair(a, b));
+}
+{
+  const a = slot({ scheduleId: 1, offeringId: 1, roomId: 63, startTime: '08:00', endTime: '10:00' });
+  const b = slot({ scheduleId: 2, offeringId: 2, roomId: 63, startTime: '09:00', endTime: '11:00' });
+  ok('اختلاف یک‌ساعته ⇒ پیشنهاد ادغام نیست', !isNearMergedPair(a, b));
+}
+{
+  const a = slot({ scheduleId: 1, offeringId: 1, roomId: 63, professorId: 10 });
+  const b = slot({ scheduleId: 2, offeringId: 2, roomId: 63, professorId: 11 });
+  ok('استادِ متفاوت ⇒ پیشنهاد ادغام نیست', !isNearMergedPair(a, b));
+}
+{
+  const a = slot({ scheduleId: 1, offeringId: 1, sharedScheduleGroupKey: 'SOLO-1', startTime: '13:45' });
+  const b = slot({ scheduleId: 2, offeringId: 2, startTime: '14:00' });
+  ok('SOLO ⇒ حتی پیشنهاد ادغام هم نه', !isNearMergedPair(a, b));
+}
+
+console.log('\n=== گروه‌بندی: یک مسئله، نه چند ردیف ===');
+{
+  // پنج درسِ یک استاد در یک بازه (همان الگوی شکایتِ کاربر: «هر کدام را دوبار نشان داده»)
+  const five = [
+    slot({ scheduleId: 1, offeringId: 1, courseCode: '45170', startTime: '14:00', endTime: '16:15', roomId: 63 }),
+    slot({ scheduleId: 2, offeringId: 2, courseCode: '71009', startTime: '13:45', endTime: '16:10', roomId: 63 }),
+    slot({ scheduleId: 3, offeringId: 3, courseCode: '22109', startTime: '13:45', endTime: '16:10', roomId: 63 }),
+    slot({ scheduleId: 4, offeringId: 4, courseCode: '43115', startTime: '13:45', endTime: '16:10', roomId: 63 }),
+    slot({ scheduleId: 5, offeringId: 5, courseCode: '45031', startTime: '13:45', endTime: '16:10', roomId: 63 }),
+  ];
+  const r = detectScheduleConflicts(five);
+  // ۴۵۱۷۰ هم استادِ مشترک دارد هم سالنِ مشترک ⇒ هم تداخلِ استاد هم سالن (۸ جفت)
+  eq('جفت‌های خام', r.pairs.length, 8);
+  eq('تداخلِ استاد', r.pairs.filter(p => p.kind === 'PROFESSOR').length, 4);
+  eq('تداخلِ سالن', r.pairs.filter(p => p.kind === 'ROOM').length, 4);
+  ok('همه «احتمالاً یک جلسه»', r.pairs.every(p => p.likelyMerged));
+  const g = groupConflictPairs(r.pairs);
+  eq('یک مسئله', g.length, 1);
+  eq('پنج درس درگیر', g[0].slots.length, 5);
+  eq('هشت جفت زیرِ آن', g[0].pairs.length, 8);
+  eq('دو موجودیت (استاد + سالن)', g[0].entities.length, 2);
+  eq('نوعِ ترکیبی', g[0].kind, 'MIXED');
+  eq('پنجرهٔ کل', [g[0].windowFrom, g[0].windowTo], [825, 975]);
+  eq('پرچم پیشنهاد ادغام', g[0].likelyMerged, true);
+  eq('دانشجویان یکتا', g[0].students, 50);
+}
+{
+  // دو بازهٔ جدا برای همان استاد ⇒ دو مسئله
+  const r = detectScheduleConflicts([
+    slot({ scheduleId: 1, offeringId: 1, startTime: '08:00', endTime: '10:00', roomId: 5 }),
+    slot({ scheduleId: 2, offeringId: 2, startTime: '08:00', endTime: '10:00', roomId: 6 }),
+    slot({ scheduleId: 3, offeringId: 3, startTime: '14:00', endTime: '16:00', roomId: 5 }),
+    slot({ scheduleId: 4, offeringId: 4, startTime: '14:00', endTime: '16:00', roomId: 6 }),
+  ]);
+  const g = groupConflictPairs(r.pairs);
+  eq('دو مسئلهٔ مستقل', g.length, 2);
+  eq('هر مسئله دو درس', g.map(x => x.slots.length), [2, 2]);
+}
+{
+  // بازه‌های چسبیده (۱۰:۰۰ پایان و ۱۰:۰۰ شروع) نباید یکی شوند
+  const r = detectScheduleConflicts([
+    slot({ scheduleId: 1, offeringId: 1, startTime: '08:00', endTime: '10:00', roomId: 5 }),
+    slot({ scheduleId: 2, offeringId: 2, startTime: '08:00', endTime: '10:00', roomId: 6 }),
+    slot({ scheduleId: 3, offeringId: 3, startTime: '09:00', endTime: '11:00', roomId: 5 }),
+    slot({ scheduleId: 4, offeringId: 4, startTime: '09:00', endTime: '11:00', roomId: 6 }),
+  ]);
+  const g = groupConflictPairs(r.pairs);
+  eq('هم‌پوشانیِ ۹–۱۰ همه را یکی می‌کند', g.length, 1);
+  eq('چهار درس', g[0].slots.length, 4);
+}
+{
+  // بررسی‌شدنِ گروه فقط وقتی است که همهٔ جفت‌هایش بررسی شده باشند
+  const r = detectScheduleConflicts([
+    slot({ scheduleId: 1, offeringId: 1, roomId: 5 }),
+    slot({ scheduleId: 2, offeringId: 2, roomId: 6 }),
+    slot({ scheduleId: 3, offeringId: 3, roomId: 7 }),
+  ]);
+  const fp = r.pairs[0].fingerprint;
+  const g = groupConflictPairs(r.pairs, p => p.fingerprint === fp);
+  eq('یک مسئله', g.length, 1);
+  eq('ناقص ⇒ بررسی‌نشده', g[0].reviewed, false);
+  const g2 = groupConflictPairs(r.pairs, () => true);
+  eq('کامل ⇒ بررسی‌شده', g2[0].reviewed, true);
 }
 
 console.log('\n=== اثرانگشت و خلاصه ===');

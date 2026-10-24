@@ -89,7 +89,8 @@ export default async function ProfessorLayout({ children }: { children: React.Re
                 <p className="text-xs text-slate-400">{user.name}{me ? ' · کد پرسنلی: ' + me.staffCode : ''} · گروه: {deptName}</p>
               </div>
             </div>
-            <div className="flex flex-nowrap items-center gap-2">
+            {/* یک ارتفاع و یک تراز برای همهٔ کنترل‌ها (`.hdr-controls` در globals.css) */}
+            <div className="hdr-controls flex flex-nowrap items-center gap-2">
               <Link
                 href="/help/professor"
                 className="hidden sm:inline-flex items-center px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 hover:text-white transition"
@@ -113,8 +114,8 @@ export default async function ProfessorLayout({ children }: { children: React.Re
             </div>
           </div>
           {/* ردیف دوم: سوییچر نیمسال و نقش — کنار هم */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex flex-nowrap items-center gap-2">
+          <div className="hdr-controls flex flex-wrap items-center gap-2 lg:flex-nowrap lg:shrink-0">
+            <div className="hdr-controls flex flex-nowrap items-center gap-2">
               <TermSwitcher
                 terms={termScope.terms}
                 selectedId={termScope.selectedId}

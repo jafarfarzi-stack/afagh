@@ -4,7 +4,7 @@ import { resolveAllSettings, SETTING_GROUPS } from '@/lib/settings';
 import { SECRET_MASK, type SettingView } from '@/lib/settings-shared';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { db } from '@/db';
-import { classrooms } from '@/db/schema';
+import { classrooms, faculties } from '@/db/schema';
 import SettingsClient from './SettingsClient';
 import { adminSaveClassroomAction, adminDeleteClassroomAction } from './actions';
 
@@ -37,6 +37,22 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
   const rooms = uni
     ? await db.select().from(classrooms).where(eq(classrooms.universityId, uni.id)).orderBy(classrooms.name)
     : [];
+  /**
+   * دانشکده‌های همان دانشگاهِ فعال (سوییچ دانشگاه).
+   *
+   * چرا «دانشکده» و نه «ساختمان»؟ ساختمان در سامانه تعریف ندارد و ورودیِ آزاد
+   * بود؛ نتیجه اینکه هر کس یک نام می‌نوشت («ساختمان ۲»، «ابوریحان»، «۲»…) و
+   * داده قابل گزارش‌گیری نبود. دانشکده موجودیتِ واقعیِ سامانه است و با سوییچ
+   * دانشگاه هم‌تراز می‌ماند. ستون `buildingName` در دیتابیس دست‌نخورده می‌ماند
+   * (دادهٔ قبلی حذف نمی‌شود)، ولی از این پس نوشته نمی‌شود.
+   */
+  const facultiesOfUni = uni
+    ? await db
+        .select({ id: faculties.id, name: faculties.name })
+        .from(faculties)
+        .where(eq(faculties.universityId, uni.id))
+        .orderBy(faculties.name)
+    : [];
 
   return (
     <div className="space-y-8">
@@ -62,7 +78,12 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
                 {ROOM_TYPES.map(t => <option key={t} value={t}>{t || '—'}</option>)}
               </select>
             </label>
-            <label className="text-slate-500">ساختمان<input name="building" className="block mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm" /></label>
+            <label className="text-slate-500">دانشکده
+              <select name="facultyId" className="block mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm max-w-48">
+                <option value="">— بدون دانشکده —</option>
+                {facultiesOfUni.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            </label>
             <label className="text-slate-500">طبقه<input name="floor" className="block mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm w-16" dir="ltr" placeholder="مثلاً ۲" /></label>
             <label className="text-slate-500">ردیف‌ها<input name="rows" type="number" min={0} className="block mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm w-16" dir="ltr" /></label>
             <label className="text-slate-500">ستون‌ها<input name="cols" type="number" min={0} className="block mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm w-16" dir="ltr" /></label>
@@ -76,8 +97,7 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
               <thead>
                 <tr className="text-slate-500">
                   <th className="p-2">نام</th><th className="p-2">ظرفیت</th><th className="p-2">نوع</th>
-                  <th className="p-2">ساختمان</th><th className="p-2">طبقه</th><th className="p-2">نیمکت (ر×س)</th><th className="p-2">وضعیت</th><th className="p-2"></th>
-                </tr>
+                  <th className="p-2">دانشکده</th><th className="p-2">طبقه</th><th className="p-2">نیمکت (ر×س)</th><th className="p-2">وضعیت</th><th className="p-2"></th>                </tr>
               </thead>
               <tbody>
                 {rooms.map(r => (
@@ -88,7 +108,10 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
                         <input name="name" defaultValue={r.name} className="border border-slate-300 rounded-lg px-2 py-1 w-32 text-sm" />
                         <input name="cap" type="number" min={1} defaultValue={r.capacity} className="border border-slate-300 rounded-lg px-2 py-1 w-16 text-sm" dir="ltr" />
                         <input name="roomType" defaultValue={r.roomType ?? ''} className="border border-slate-300 rounded-lg px-2 py-1 w-24 text-sm" />
-                        <input name="building" defaultValue={r.buildingName ?? ''} className="border border-slate-300 rounded-lg px-2 py-1 w-28 text-sm" />
+                        <select name="facultyId" defaultValue={String(r.facultyId ?? '')} className="border border-slate-300 rounded-lg px-2 py-1 w-40 text-sm">
+                          <option value="">— بدون دانشکده —</option>
+                          {facultiesOfUni.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                        </select>
                         <input name="floor" defaultValue={r.floor ?? ''} className="border border-slate-300 rounded-lg px-2 py-1 w-14 text-sm" dir="ltr" />
                         <input name="rows" type="number" defaultValue={r.rowsCount ?? ''} className="border border-slate-300 rounded-lg px-2 py-1 w-14 text-sm" dir="ltr" />
                         <input name="cols" type="number" defaultValue={r.colsCount ?? ''} className="border border-slate-300 rounded-lg px-2 py-1 w-14 text-sm" dir="ltr" />

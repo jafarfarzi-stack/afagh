@@ -1,10 +1,10 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { classrooms, schedules } from '@/db/schema';
+import { classrooms, faculties, schedules } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { classroomOwnedBy, readClassroomUni } from '@/lib/offering-scheduling';
@@ -29,11 +29,44 @@ export async function adminSaveClassroomAction(fd: FormData) {
       redirect('/admin/settings?err=' + encodeURIComponent('این کلاس متعلق به دانشگاه شما نیست.'));
     }
   }
+  /**
+   * دانشکده — جای «ساختمان» (درخواست آموزش: ساختمان در سامانه تعریف ندارد).
+   * فقط دانشکده‌های همان دانشگاهِ فعال پذیرفته می‌شوند تا با سوییچ دانشگاه
+   * ناسازگاری پیش نیاید.
+   */
+  let facultyId: number | null = null;
+  let facultyName: string | null = null;
+  const facultyRaw = String(fd.get('facultyId') ?? '').trim();
+  if (facultyRaw) {
+    const fid = Number(facultyRaw);
+    const owned = Number.isInteger(fid) && fid > 0 && myUni != null
+      ? await db
+          .select({ id: faculties.id, name: faculties.name })
+          .from(faculties)
+          .where(and(eq(faculties.id, fid), eq(faculties.universityId, myUni)))
+          .limit(1)
+      : [];
+    if (!owned.length) {
+      redirect('/admin/settings?err=' + encodeURIComponent('دانشکدهٔ انتخاب‌شده متعلق به دانشگاه فعال نیست.'));
+    }
+    facultyId = fid;
+    facultyName = owned[0].name;
+  }
+
   const vals = {
     name,
     capacity: cap,
     roomType: String(fd.get('roomType') ?? '') || null,
-    buildingName: String(fd.get('building') ?? '') || null,
+    facultyId,
+    /**
+     * نام دانشکده در ستون قدیمیِ `buildingName` هم نوشته می‌شود.
+     *
+     * چرا؟ ده‌ها صفحه (حضور و غیاب، تخصیص کارشناس، سالن امتحان، گزارش کلاس‌ها)
+     * همین ستون را به‌عنوان «ساختمان کلاس» نمایش می‌دهند. تا وقتی همهٔ آن‌ها به
+     * `facultyId` منتقل نشده‌اند، این هم‌نویسی از نمایشِ «بدون ساختمان» جلوگیری
+     * می‌کند. `facultyId` منبع حقیقت است؛ این ستون فقط برای نمایش.
+     */
+    buildingName: facultyName,
     floor: String(fd.get('floor') ?? '') || null,
     rowsCount: Number(fd.get('rows')) || null,
     colsCount: Number(fd.get('cols')) || null,

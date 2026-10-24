@@ -118,6 +118,111 @@ export async function markConflictReviewedAction(input: MarkReviewedInput): Prom
   }
 }
 
+/** یک جفتِ داخلِ یک «مسئله» — برای ثبتِ گروهی */
+export interface GroupReviewItem {
+  fingerprint: string;
+  kind: 'PROFESSOR' | 'ROOM';
+  entityId: number;
+  dayOfWeek: number;
+  scheduleAId: number;
+  scheduleBId: number;
+}
+
+/**
+ * پذیرشِ یک «مسئله» با همهٔ جفت‌هایش، در یک تراکنش.
+ *
+ * چرا گروهی؟ چون در نمایش، یک مسئله ممکن است ۴ جفت داشته باشد؛ اگر کارشناس
+ * باید چهار بار «پذیرش» بزند، عملاً هیچ‌وقت گزارش را تمیز نمی‌کند.
+ */
+export async function markConflictGroupReviewedAction(input: {
+  termId: number;
+  reasonCode: string;
+  reasonText?: string;
+  items: GroupReviewItem[];
+}): Promise<MutateResult> {
+  try {
+    const { user, universityId } = await scope();
+    const termId = Number(input?.termId);
+    if (!Number.isInteger(termId) || termId <= 0) return { ok: false, error: 'ترم نامعتبر است.' };
+
+    const items = (input?.items ?? []).filter(
+      it =>
+        it &&
+        String(it.fingerprint ?? '').trim() &&
+        (it.kind === 'PROFESSOR' || it.kind === 'ROOM') &&
+        Number.isFinite(Number(it.entityId)) &&
+        Number.isFinite(Number(it.dayOfWeek)) &&
+        Number.isFinite(Number(it.scheduleAId)) &&
+        Number.isFinite(Number(it.scheduleBId)),
+    );
+    if (!items.length) return { ok: false, error: 'موردی برای ثبت وجود ندارد.' };
+
+    const reasonCode = CONFLICT_REASON_CODES.includes(String(input.reasonCode ?? ''))
+      ? String(input.reasonCode)
+      : 'OTHER';
+    const reasonText = String(input.reasonText ?? '').slice(0, 500) || null;
+
+    await db.transaction(async (tx) => {
+      for (const it of items) {
+        await tx.execute(sql`
+          insert into schedule_conflict_reviews
+            ("termId", "universityId", "kind", "entityId", "dayOfWeek",
+             "scheduleAId", "scheduleBId", "fingerprint", "status",
+             "reasonCode", "reasonText", "reviewedByUserId", "reviewedAt", "updatedAt")
+          values (${termId}, ${universityId}, ${it.kind}, ${Number(it.entityId)}, ${Number(it.dayOfWeek)},
+                  ${Number(it.scheduleAId)}, ${Number(it.scheduleBId)}, ${String(it.fingerprint)}, 'REVIEWED',
+                  ${reasonCode}, ${reasonText}, ${user.id}, now(), now())
+          on conflict ("termId", "fingerprint")
+          do update set "status" = 'REVIEWED',
+                        "reasonCode" = excluded."reasonCode",
+                        "reasonText" = excluded."reasonText",
+                        "reviewedByUserId" = excluded."reviewedByUserId",
+                        "reviewedAt" = now(),
+                        "updatedAt" = now()
+        `);
+      }
+      await appendAudit(tx, {
+        actorUserId: user.id,
+        action: 'SCHEDULE_CONFLICT_GROUP_REVIEWED',
+        entityType: 'schedule_conflict',
+        entityId: termId,
+        details: JSON.stringify({ count: items.length, reasonCode, fingerprints: items.map(i => i.fingerprint) }),
+      });
+    });
+
+    revalidatePath(PATH);
+    return { ok: true, message: `${items.length} جفت تداخل پذیرفته شد.` };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'خطا در ثبت بررسی.' };
+  }
+}
+
+/** بازگرداندنِ یک «مسئله» (همهٔ جفت‌هایش) به فهرستِ باز */
+export async function undoConflictGroupAction(termId: number, fingerprints: string[]): Promise<MutateResult> {
+  try {
+    const { user } = await scope();
+    const id = Number(termId);
+    const fps = [...new Set((fingerprints ?? []).map(f => String(f ?? '').trim()).filter(Boolean))];
+    if (!Number.isInteger(id) || id <= 0 || !fps.length) return { ok: false, error: 'ورودی نامعتبر است.' };
+    await db.transaction(async (tx) => {
+      await tx.delete(schedule_conflict_reviews).where(
+        and(eq(schedule_conflict_reviews.termId, id), inArray(schedule_conflict_reviews.fingerprint, fps)),
+      );
+      await appendAudit(tx, {
+        actorUserId: user.id,
+        action: 'SCHEDULE_CONFLICT_GROUP_REVIEW_UNDO',
+        entityType: 'schedule_conflict',
+        entityId: id,
+        details: JSON.stringify({ count: fps.length, fingerprints: fps }),
+      });
+    });
+    revalidatePath(PATH);
+    return { ok: true, message: `${fps.length} جفت به فهرستِ باز برگشت.` };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'خطا در بازگردانی.' };
+  }
+}
+
 /** بازگرداندنِ یک تداخل به فهرستِ باز (لغوِ پذیرش) */
 export async function undoConflictReviewAction(termId: number, fingerprint: string): Promise<MutateResult> {
   try {
@@ -141,6 +246,68 @@ export async function undoConflictReviewAction(termId: number, fingerprint: stri
     return { ok: true, message: 'به فهرستِ باز برگشت.' };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? 'خطا در بازگردانی.' };
+  }
+}
+
+/**
+ * ادغامِ گروهیِ چند «مسئله» در یک تراکنش.
+ *
+ * چرا لازم شد: در ۱۴۰۵۱ هشت مسئله «احتمالاً یک جلسه» بودند (همان استاد، همان
+ * سالن، اختلافِ ساعت ≤ ۲۰ دقیقه). ادغامِ تک‌تک یعنی هشت رفت‌وبرگشت؛ اینجا
+ * یک‌جا انجام می‌شود ولی فقط برای گروه‌هایی که UI به‌عنوان «قطعی» نشان داده —
+ * هیچ‌چیز خودکار و بی‌تأیید ادغام نمی‌شود.
+ */
+export async function markOfferingsMergedBulkAction(
+  termId: number,
+  groups: number[][],
+): Promise<MutateResult> {
+  try {
+    const { user, universityId } = await scope();
+    const id = Number(termId);
+    if (!Number.isInteger(id) || id <= 0) return { ok: false, error: 'ترم نامعتبر است.' };
+
+    const cleaned = (groups ?? [])
+      .map(g => [...new Set((g ?? []).map(Number))].filter(n => Number.isInteger(n) && n > 0))
+      .filter(g => g.length >= 2);
+    if (!cleaned.length) return { ok: false, error: 'گروهِ قابل ادغامی ارسال نشد.' };
+
+    const allIds = [...new Set(cleaned.flat())];
+    const rows = await db
+      .select({ id: course_offerings.id })
+      .from(course_offerings)
+      .where(and(
+        inArray(course_offerings.id, allIds),
+        eq(course_offerings.termId, id),
+        eq(course_offerings.universityId, universityId),
+      ));
+    if (rows.length !== allIds.length) {
+      return { ok: false, error: 'برخی کلاس‌ها یافت نشد یا به این ترم/دانشگاه تعلق ندارند.' };
+    }
+
+    const keys: string[] = [];
+    await db.transaction(async (tx) => {
+      for (const ids of cleaned) {
+        const key = `MC-${id}-${Math.min(...ids)}`;
+        keys.push(key);
+        await tx
+          .update(course_offerings)
+          .set({ sharedScheduleGroupKey: key })
+          .where(and(inArray(course_offerings.id, ids), eq(course_offerings.termId, id)));
+      }
+      await appendAudit(tx, {
+        actorUserId: user.id,
+        action: 'SCHEDULE_CONFLICT_MERGED_BULK',
+        entityType: 'course_offering',
+        entityId: id,
+        details: JSON.stringify({ termId: id, groups: cleaned, keys }),
+      });
+    });
+
+    revalidatePath(PATH);
+    revalidatePath('/admin/course-merge');
+    return { ok: true, message: `${cleaned.length} مسئله (${allIds.length} کلاس) ادغام شد.` };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'خطا در ادغامِ گروهی.' };
   }
 }
 

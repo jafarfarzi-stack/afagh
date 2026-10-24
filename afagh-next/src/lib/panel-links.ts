@@ -81,16 +81,20 @@ export function panelRoleHint(key: PanelKey, roles: readonly string[]): string {
  * پنل‌هایی که این کاربر مجاز است ببیند — به ترتیب نمایش.
  * `permissionCount` = تعداد مجوزهای سفارشی (RBAC)؛ اگر > ۰ باشد، کاربر حتی
  * بدون نقش سیستمیِ ستادی هم می‌تواند وارد /admin شود (هم‌راستا با گارد).
+ *
+ * ترتیب: کارتابل کارشناسی/مدیریت اول می‌آید — همان اولویتی که `homeFor` برای
+ * انتخابِ کارتابلِ پس از ورود دارد. این‌طور فهرستِ سوییچر با مقصدِ ورود یکی است
+ * و کاربرِ چندنقشی سرگردان نمی‌شود.
  */
 export function availablePanels(roles: readonly string[], permissionCount = 0): PanelLink[] {
   const has = (r: string) => roles.includes(r);
   const out: PanelLink[] = [];
-  if (has('PROFESSOR')) out.push({ key: 'professor', href: '/professor', label: 'کارتابل استاد', icon: '👨‍🏫' });
-  if (has('DEP_HEAD')) out.push({ key: 'group-manager', href: '/group-manager', label: 'پنل مدیر گروه', icon: '🏛️' });
   if (permissionCount > 0 || ADMIN_PANEL_ROLES.some(has)) {
     out.push({ key: 'admin', href: '/admin', label: 'داشبورد مدیریت', icon: '🗂️' });
   }
-  if (has('STUDENT')) out.push({ key: 'student', href: '/student', label: 'پنل دانشجو', icon: '🎓' });
+  if (has('PROFESSOR')) out.push({ key: 'professor', href: '/professor', label: 'کارتابل استاد', icon: '👨‍🏫' });
+  if (has('DEP_HEAD')) out.push({ key: 'group-manager', href: '/group-manager', label: 'پنل مدیر گروه', icon: '🏛️' });
   if (has('PROCTOR')) out.push({ key: 'proctor', href: '/proctor', label: 'پورتال مراقب', icon: '📷' });
+  if (has('STUDENT')) out.push({ key: 'student', href: '/student', label: 'پنل دانشجو', icon: '🎓' });
   return out;
 }

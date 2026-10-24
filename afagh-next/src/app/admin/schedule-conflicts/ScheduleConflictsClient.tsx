@@ -5,26 +5,47 @@ import Link from 'next/link';
 import MobileCardList, { type CardColumn } from '@/components/MobileCardList';
 import {
   loadConflictsAction,
-  markConflictReviewedAction,
+  markConflictGroupReviewedAction,
   markOfferingsMergedAction,
-  undoConflictReviewAction,
+  markOfferingsMergedBulkAction,
+  undoConflictGroupAction,
 } from './actions';
 import {
-  CONFLICT_REASON_LABELS,
   CONFLICT_REASON_CODES,
-  DAY_NAMES_FA,
+  CONFLICT_REASON_LABELS,
   minutesToHm,
+  type ConflictGroup,
   type ConflictPair,
+  type ConflictSlot,
 } from '@/lib/schedule-conflicts-core';
 import type { ScheduleConflictReport } from '@/lib/schedule-conflicts';
 
 type Term = { id: number; termCode: string; title: string };
 
 const fa = (n: number | string | null | undefined) => Number(n ?? 0).toLocaleString('fa-IR');
-const KIND_BADGE: Record<ConflictPair['kind'], { label: string; cls: string }> = {
+
+const KIND_BADGE: Record<ConflictPair['kind'] | 'MIXED', { label: string; cls: string }> = {
   PROFESSOR: { label: 'استاد', cls: 'bg-violet-700/30 text-violet-200 border-violet-500/40' },
   ROOM: { label: 'سالن', cls: 'bg-amber-700/30 text-amber-200 border-amber-500/40' },
+  MIXED: { label: 'استاد+سالن', cls: 'bg-rose-700/30 text-rose-200 border-rose-500/40' },
 };
+
+/** یک درسِ درگیر در مسئله */
+function SlotLine({ s }: { s: ConflictSlot }) {
+  return (
+    <div className="leading-5">
+      <span className="font-mono text-[11px] text-slate-500" dir="ltr">
+        {s.courseCode}
+      </span>{' '}
+      <span className="text-[12px]">{s.courseTitle}</span>
+      <span className="text-[11px] text-slate-500">
+        {' '}
+        • گروه {fa(s.groupNumber)} • {fa(s.enrolledCount)} نفر
+        {s.roomName ? ` • ${s.roomName}` : ''}
+      </span>
+    </div>
+  );
+}
 
 export default function ScheduleConflictsClient({ terms }: { terms: Term[] }) {
   const [termId, setTermId] = useState<number | null>(terms[0]?.id ?? null);
@@ -35,7 +56,7 @@ export default function ScheduleConflictsClient({ terms }: { terms: Term[] }) {
   const [kind, setKind] = useState<'ALL' | 'PROFESSOR' | 'ROOM'>('ALL');
   const [showReviewed, setShowReviewed] = useState(false);
   const [q, setQ] = useState('');
-  const [, startTransition] = useTransition();
+  const [busy, startTransition] = useTransition();
 
   const load = useCallback((tid: number) => {
     setError(null);
@@ -53,85 +74,131 @@ export default function ScheduleConflictsClient({ terms }: { terms: Term[] }) {
     if (termId) load(termId);
   }, [termId, load]);
 
-  const reviewedPairs = useMemo(() => {
-    if (!report) return [] as ConflictPair[];
-    return report.pairs.filter((p) => report.reviewed[p.fingerprint]);
-  }, [report]);
-
-  const openPairs = useMemo(() => {
-    if (!report) return [] as ConflictPair[];
-    return report.pairs.filter((p) => !report.reviewed[p.fingerprint]);
-  }, [report]);
-
   const visible = useMemo(() => {
-    const src = showReviewed ? reviewedPairs : openPairs;
-    const filtered = kind === 'ALL' ? src : src.filter((p) => p.kind === kind);
-    const needle = q.trim();
-    if (!needle) return filtered;
-    return filtered.filter((p) =>
-      [p.entityName, p.a.courseTitle, p.a.courseCode, p.b.courseTitle, p.b.courseCode].some((v) =>
-        String(v ?? '').includes(needle),
-      ),
+    if (!report) return [] as ConflictGroup[];
+    const src = report.groups.filter((g) => (showReviewed ? g.reviewed : !g.reviewed));
+    const byKind = kind === 'ALL' ? src : src.filter((g) => g.kinds.includes(kind));
+    const needle = q.trim().toLowerCase();
+    if (!needle) return byKind;
+    return byKind.filter((g) =>
+      [
+        g.entityName,
+        g.dayName,
+        ...g.slots.map((s) => `${s.courseCode} ${s.courseTitle} ${s.roomName ?? ''}`),
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(needle),
     );
-  }, [openPairs, reviewedPairs, showReviewed, kind, q]);
+  }, [report, kind, showReviewed, q]);
 
-  const summary = report?.summary;
-
-  const onMerge = (p: ConflictPair) => {
+  const onMergeGroup = (g: ConflictGroup) => {
     if (!termId) return;
-    if (!window.confirm(`دو کلاس «${p.a.courseTitle}» و «${p.b.courseTitle}» ادغام شوند؟\nدر تقویم استاد با برچسب «کلاس ادغامی» نمایش داده می‌شوند.`)) return;
+    const ids = g.slots.map((s) => s.offeringId);
+    if (ids.length < 2) return;
+    if (
+      !window.confirm(
+        `${ids.length} کلاس به‌عنوان یک جلسهٔ ادغامی ثبت شوند؟\n\n` +
+          g.slots.map((s) => `• ${s.courseCode} ${s.courseTitle} (گروه ${s.groupNumber})`).join('\n') +
+          `\n\nدر تقویم استاد با برچسب «کلاس ادغامی» نمایش داده می‌شوند و از این گزارش حذف می‌شوند.`,
+      )
+    )
+      return;
     setMsg(null);
     startTransition(async () => {
-      const res = await markOfferingsMergedAction(termId, [p.a.offeringId, p.b.offeringId]);
+      const res = await markOfferingsMergedAction(termId, ids);
       setMsg(res.ok ? res.message ?? 'ادغام شد.' : res.error);
       if (res.ok) load(termId);
     });
   };
 
-  const onAccept = (p: ConflictPair, reasonCode: string) => {
+  const onAcceptGroup = (g: ConflictGroup, reasonCode: string) => {
     if (!termId) return;
     setMsg(null);
     startTransition(async () => {
-      const res = await markConflictReviewedAction({
+      const res = await markConflictGroupReviewedAction({
         termId,
-        fingerprint: p.fingerprint,
-        kind: p.kind,
-        entityId: p.entityId,
-        dayOfWeek: p.dayOfWeek,
-        scheduleAId: p.a.scheduleId,
-        scheduleBId: p.b.scheduleId,
         reasonCode,
+        items: g.pairs.map((p) => ({
+          fingerprint: p.fingerprint,
+          kind: p.kind,
+          entityId: p.entityId,
+          dayOfWeek: p.dayOfWeek,
+          scheduleAId: p.a.scheduleId,
+          scheduleBId: p.b.scheduleId,
+        })),
       });
-      setMsg(res.ok ? 'بررسی شد.' : res.error);
+      setMsg(res.ok ? res.message ?? 'بررسی شد.' : res.error);
       if (res.ok) load(termId);
     });
   };
 
-  const onUndo = (fp: string) => {
+  const onMergeAllLikely = () => {
+    if (!termId || !report) return;
+    const targets = report.groups.filter((g) => !g.reviewed && g.likelyMerged && g.slots.length >= 2);
+    if (!targets.length) return;
+    const total = targets.reduce((n, g) => n + g.slots.length, 0);
+    if (
+      !window.confirm(
+        `${targets.length} مسئله که «احتمالاً یک جلسه» هستند ادغام شوند؟ (${total} کلاس)\n\n` +
+          `شرط: همان استاد، همان سالن، اختلافِ ساعت کمتر از ۲۰ دقیقه.\n` +
+          `مواردی که سالن یا استادشان متفاوت است دست‌نخورده می‌مانند.`,
+      )
+    )
+      return;
+    setMsg(null);
+    startTransition(async () => {
+      const res = await markOfferingsMergedBulkAction(
+        termId,
+        targets.map((g) => g.slots.map((s) => s.offeringId)),
+      );
+      setMsg(res.ok ? res.message ?? 'ادغام شد.' : res.error);
+      if (res.ok) load(termId);
+    });
+  };
+
+  const onUndoGroup = (g: ConflictGroup) => {
     if (!termId) return;
     setMsg(null);
     startTransition(async () => {
-      const res = await undoConflictReviewAction(termId, fp);
+      const res = await undoConflictGroupAction(termId, g.pairs.map((p) => p.fingerprint));
       setMsg(res.ok ? res.message ?? 'بازگشت.' : res.error);
       if (res.ok) load(termId);
     });
   };
 
-  const renderActions = (p: ConflictPair) => (
-    <div className="flex flex-wrap gap-1.5">
+  const reasonOf = (g: ConflictGroup) => {
+    if (!report) return null;
+    for (const p of g.pairs) {
+      const r = report.reviewed[p.fingerprint];
+      if (r) return r;
+    }
+    return null;
+  };
+
+  const groupActions = (g: ConflictGroup) => (
+    <div className="flex flex-wrap items-center gap-1.5">
       <button
-        onClick={() => onMerge(p)}
-        className="rounded bg-violet-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-violet-500"
+        onClick={() => onMergeGroup(g)}
+        disabled={busy || g.slots.length < 2}
+        className="rounded bg-violet-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-violet-500 disabled:opacity-50"
+        title="همهٔ دروسِ این بازه به‌عنوان یک جلسهٔ ادغامی ثبت می‌شوند"
       >
-        ادغام
+        ادغام {g.slots.length > 2 ? `(${fa(g.slots.length)} درس)` : ''}
       </button>
-      <button
-        onClick={() => onAccept(p, 'MERGED_OK')}
-        className="rounded border px-2 py-1 text-[11px] hover:bg-slate-100 dark:hover:bg-slate-800"
-        title={CONFLICT_REASON_LABELS.MERGED_OK}
+      <select
+        defaultValue=""
+        onChange={(e) => e.target.value && onAcceptGroup(g, e.target.value)}
+        className="rounded border px-1.5 py-1 text-[11px] bg-white dark:bg-slate-800"
+        title="پذیرش کلِ این مسئله با ذکر دلیل"
       >
-        پذیرش
-      </button>
+        <option value="">پذیرش…</option>
+        {CONFLICT_REASON_CODES.map((c) => (
+          <option key={c} value={c}>
+            {CONFLICT_REASON_LABELS[c] ?? c}
+          </option>
+        ))}
+      </select>
       <Link
         href="/admin/offering-editor"
         className="rounded border border-slate-400 px-2 py-1 text-[11px] hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -141,16 +208,52 @@ export default function ScheduleConflictsClient({ terms }: { terms: Term[] }) {
     </div>
   );
 
-  const columns: CardColumn<ConflictPair>[] = [
-    { key: 'entity', label: 'موجودیت', title: true, render: (p) => `${p.entityName}` },
-    { key: 'dayoverlap', label: 'روز / تداخل', subtitle: true, render: (p) => `${p.dayName} • ${minutesToHm(p.overlapFrom)}–${minutesToHm(p.overlapTo)} (${fa(p.overlapMinutes)} دقیقه)` },
-    { key: 'courseA', label: 'درس اول', render: (p) => `${p.a.courseTitle} (${p.a.courseCode} • گروه ${p.a.groupNumber})` },
-    { key: 'courseB', label: 'درس دوم', render: (p) => `${p.b.courseTitle} (${p.b.courseCode} • گروه ${p.b.groupNumber})` },
-    { key: 'students', label: 'دانشجو', render: (p) => fa(Number(p.a.enrolledCount) + Number(p.b.enrolledCount)) },
+  const columns: CardColumn<ConflictGroup>[] = [
+    {
+      key: 'entity',
+      label: 'موجودیت',
+      title: true,
+      render: (g) => (
+        <span className="flex flex-wrap items-center gap-1.5">
+          {g.entities.map((e) => (
+            <span key={`${e.kind}:${e.id}`} className="flex items-center gap-1">
+              <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${KIND_BADGE[e.kind].cls}`}>
+                {KIND_BADGE[e.kind].label}
+              </span>
+              <span>{e.name}</span>
+            </span>
+          ))}
+        </span>
+      ),
+    },
+    {
+      key: 'when',
+      label: 'زمان',
+      subtitle: true,
+      render: (g) => (
+        <span className="font-mono text-[11px]" dir="ltr">
+          {g.dayName} {minutesToHm(g.windowFrom)}–{minutesToHm(g.windowTo)}
+          {g.likelyMerged ? ' · احتمالاً یک جلسه' : ''}
+        </span>
+      ),
+    },
+    {
+      key: 'slots',
+      label: 'دروس درگیر',
+      render: (g) => (
+        <div className="space-y-0.5">
+          {g.slots.map((s) => (
+            <SlotLine key={s.offeringId} s={s} />
+          ))}
+        </div>
+      ),
+    },
+    { key: 'students', label: 'دانشجو', render: (g) => fa(g.students) },
   ];
 
   return (
     <div dir="rtl" className="space-y-4">
+      {/* ── سربرگ ── */}
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-bold">گزارش تداخل‌های واقعی برنامهٔ هفتگی</h1>
         <span className="text-xs text-slate-400">کارشناس آموزش — بررسی و رفع</span>
@@ -158,6 +261,7 @@ export default function ScheduleConflictsClient({ terms }: { terms: Term[] }) {
           value={termId ?? ''}
           onChange={(e) => setTermId(Number(e.target.value))}
           className="ms-auto rounded border px-2 py-1.5 text-sm bg-white dark:bg-slate-800"
+          aria-label="ترم"
         >
           {terms.map((t) => (
             <option key={t.id} value={t.id}>
@@ -167,24 +271,46 @@ export default function ScheduleConflictsClient({ terms }: { terms: Term[] }) {
         </select>
       </div>
 
-      {msg && <div className="rounded-lg border border-emerald-500/40 bg-emerald-950/30 p-2 text-sm text-emerald-200">{msg}</div>}
-      {error && <div className="rounded-lg border border-rose-500/40 bg-rose-950/30 p-2 text-sm text-rose-200">{error}</div>}
+      {msg && (
+        <div className="rounded-lg border border-emerald-500/40 bg-emerald-950/30 p-2 text-sm text-emerald-200">{msg}</div>
+      )}
+      {error && (
+        <div className="rounded-lg border border-rose-500/40 bg-rose-950/30 p-2 text-sm text-rose-200">{error}</div>
+      )}
 
-      {summary && (
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="تداخلِ واقعیِ باز" value={fa(openPairs.length)} tone="rose" />
+      {/* ── آمار ── */}
+      {report && (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          <Stat label="مسئلهٔ باز" value={fa(report.openIssues)} tone="rose" />
+          <Stat label="احتمالاً یک جلسه (یک‌کلیکی)" value={fa(report.likelyMergedIssues)} tone="amber" />
+          <Stat label="جفتِ تداخلِ باز" value={fa(report.pairs.length - report.reviewedCount)} />
+          <Stat label="ادغامی (حذف‌شده)" value={fa(report.mergedSkipped)} tone="ok" />
           <Stat
-            label="هم‌پوشانیِ خام (قبل از فیلتر ادغام)"
-            value={fa(summary ? (report?.rawOverlaps ?? 0) : 0)}
-          />
-          <Stat label="ادغامی (حذف‌شده از گزارش)" value={fa(report?.mergedSkipped ?? 0)} tone="ok" />
-          <Stat
-            label={`استاد / سالن درگیر (${fa(summary.professorEntities)} / ${fa(summary.roomEntities)})`}
-            value={fa(summary.professor + summary.room)}
+            label="استاد / سالن درگیر"
+            value={`${fa(report.summary.professorEntities)} / ${fa(report.summary.roomEntities)}`}
           />
         </div>
       )}
 
+      {/* ── اقدامِ گروهی برای مواردِ قطعی ── */}
+      {report && report.likelyMergedIssues > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2">
+          <span className="text-xs leading-6 text-amber-900">
+            {fa(report.likelyMergedIssues)} مسئله «احتمالاً یک جلسه» است: همان استاد، همان سالن و اختلافِ ساعت
+            کمتر از ۲۰ دقیقه. با یک کلیک همه ادغام می‌شوند؛ مواردی که استاد یا سالنشان متفاوت است دست‌نخورده
+            می‌مانند.
+          </span>
+          <button
+            onClick={onMergeAllLikely}
+            disabled={busy}
+            className="ms-auto rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50"
+          >
+            ادغام همهٔ مواردِ قطعی
+          </button>
+        </div>
+      )}
+
+      {/* ── فیلترها ── */}
       <div className="card">
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex rounded-lg border border-slate-300 dark:border-slate-700 p-0.5 text-xs">
@@ -205,13 +331,13 @@ export default function ScheduleConflictsClient({ terms }: { terms: Term[] }) {
               onChange={(e) => setShowReviewed(e.target.checked)}
               className="size-4"
             />
-            نمایش بررسی‌شده‌ها ({fa(reviewedPairs.length)})
+            نمایش بررسی‌شده‌ها ({fa(report ? report.totalIssues - report.openIssues : 0)})
           </label>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="جست‌وجو درس / استاد / سالن…"
-            className="ms-auto w-56 rounded border px-2 py-1.5 text-sm bg-white dark:bg-slate-800"
+            className="ms-auto w-full rounded border px-2 py-1.5 text-sm bg-white dark:bg-slate-800 sm:w-64"
           />
         </div>
       </div>
@@ -220,94 +346,88 @@ export default function ScheduleConflictsClient({ terms }: { terms: Term[] }) {
 
       {!loading && report && (
         <>
-          {/* نمای دسکتاپ */}
+          {/* ── نمای دسکتاپ ── */}
           <div className="card hidden md:block">
             <div className="overflow-x-auto">
               <table className="w-full text-right text-xs rt">
                 <thead>
                   <tr className="text-slate-500">
-                    <th className="p-2">نوع</th>
-                    <th className="p-2">موجودیت</th>
+                    <th className="p-2">موجودیتِ درگیر</th>
                     <th className="p-2">روز</th>
-                    <th className="p-2">بازهٔ تداخل</th>
-                    <th className="p-2">درس اول</th>
-                    <th className="p-2">درس دوم</th>
+                    <th className="p-2">بازه</th>
+                    <th className="p-2">دروس درگیر</th>
                     <th className="p-2">دانشجو</th>
                     <th className="p-2">عملیات</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {visible.map((p) => {
-                    const badge = KIND_BADGE[p.kind];
-                    const reviewed = report.reviewed[p.fingerprint];
+                  {visible.map((g) => {
+                    const rev = reasonOf(g);
                     return (
-                      <tr key={p.fingerprint} className="border-t border-slate-100 dark:border-slate-700">
-                        <td className="p-2">
-                          <span className={`rounded-full border px-2 py-0.5 text-[10px] ${badge.cls}`}>{badge.label}</span>
+                      <tr key={g.key} className="border-t border-slate-100 dark:border-slate-700 align-top">
+                        <td className="p-2 font-medium">
+                          <div className="space-y-0.5">
+                            {g.entities.map((e) => (
+                              <div key={`${e.kind}:${e.id}`} className="flex items-center gap-1">
+                                <span
+                                  className={`rounded-full border px-1.5 py-0.5 text-[10px] ${KIND_BADGE[e.kind].cls}`}
+                                >
+                                  {KIND_BADGE[e.kind].label}
+                                </span>
+                                <span>{e.name}</span>
+                              </div>
+                            ))}
+                          </div>
+                          {g.likelyMerged && (
+                            <span
+                              className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800"
+                              title="همان استاد، همان سالن و اختلافِ ساعت کمتر از ۲۰ دقیقه — به‌احتمالِ زیاد یک جلسه است"
+                            >
+                              احتمالاً یک جلسه
+                            </span>
+                          )}
                         </td>
-                        <td className="p-2 font-medium">{p.entityName}</td>
-                        <td className="p-2">{p.dayName}</td>
-                        <td className="p-2" dir="ltr">
-                          {minutesToHm(p.overlapFrom)}–{minutesToHm(p.overlapTo)}
-                          <span className="text-slate-400"> ({fa(p.overlapMinutes)}′)</span>
-                        </td>
-                        <td className="p-2">
-                          <div>{p.a.courseTitle}</div>
-                          <div className="text-[11px] text-slate-500" dir="ltr">
-                            {p.a.courseCode} • گروه {p.a.groupNumber}
+                        <td className="p-2 whitespace-nowrap">{g.dayName}</td>
+                        <td className="p-2 whitespace-nowrap font-mono" dir="ltr">
+                          {minutesToHm(g.windowFrom)}–{minutesToHm(g.windowTo)}
+                          <div className="text-[10px] text-slate-400">
+                            هم‌پوشانی {minutesToHm(g.overlapFrom)}–{minutesToHm(g.overlapTo)}
                           </div>
                         </td>
                         <td className="p-2">
-                          <div>{p.b.courseTitle}</div>
-                          <div className="text-[11px] text-slate-500" dir="ltr">
-                            {p.b.courseCode} • گروه {p.b.groupNumber}
+                          <div className="space-y-0.5">
+                            {g.slots.map((s) => (
+                              <SlotLine key={s.offeringId} s={s} />
+                            ))}
                           </div>
+                          {g.slots.length > 2 && (
+                            <div className="mt-1 text-[10px] text-slate-400">
+                              {fa(g.slots.length)} درس در یک بازه — یک مسئله، نه {fa(g.pairs.length)} مسئله.
+                            </div>
+                          )}
                         </td>
                         <td className="p-2 font-mono" dir="ltr">
-                          {fa(Number(p.a.enrolledCount) + Number(p.b.enrolledCount))}
+                          {fa(g.students)}
                         </td>
                         <td className="p-2">
-                          {reviewed ? (
+                          {rev ? (
                             <div className="space-y-1">
-                              <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                                بررسی‌شده: {CONFLICT_REASON_LABELS[reviewed.reasonCode ?? 'OTHER'] ?? reviewed.reasonCode}
+                              <span className="inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                                {CONFLICT_REASON_LABELS[rev.reasonCode ?? 'OTHER'] ?? rev.reasonCode}
                               </span>
-                              <div>
-                                <button
-                                  onClick={() => onUndo(p.fingerprint)}
-                                  className="rounded border px-2 py-0.5 text-[10px] hover:bg-slate-100 dark:hover:bg-slate-800"
-                                >
-                                  بازگردانی
-                                </button>
+                              <div className="text-[10px] text-slate-400">
+                                {rev.reviewedByName ?? ''} {rev.reviewedAt ?? ''}
                               </div>
+                              <button
+                                onClick={() => onUndoGroup(g)}
+                                disabled={busy}
+                                className="rounded border px-2 py-0.5 text-[10px] hover:bg-slate-100 dark:hover:bg-slate-800"
+                              >
+                                بازگردانی
+                              </button>
                             </div>
                           ) : (
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <button
-                                onClick={() => onMerge(p)}
-                                className="rounded bg-violet-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-violet-500"
-                              >
-                                ادغام
-                              </button>
-                              <select
-                                defaultValue=""
-                                onChange={(e) => e.target.value && onAccept(p, e.target.value)}
-                                className="rounded border px-1.5 py-1 text-[11px] bg-white dark:bg-slate-800"
-                              >
-                                <option value="">پذیرش…</option>
-                                {CONFLICT_REASON_CODES.map((c) => (
-                                  <option key={c} value={c}>
-                                    {CONFLICT_REASON_LABELS[c] ?? c}
-                                  </option>
-                                ))}
-                              </select>
-                              <Link
-                                href="/admin/offering-editor"
-                                className="rounded border border-slate-400 px-2 py-1 text-[11px] hover:bg-slate-100 dark:hover:bg-slate-800"
-                              >
-                                اصلاح
-                              </Link>
-                            </div>
+                            groupActions(g)
                           )}
                         </td>
                       </tr>
@@ -315,7 +435,7 @@ export default function ScheduleConflictsClient({ terms }: { terms: Term[] }) {
                   })}
                   {visible.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="p-4 text-center text-slate-400">
+                      <td colSpan={6} className="p-4 text-center text-slate-400">
                         {showReviewed ? 'موردی بررسی‌شده یافت نشد.' : 'تداخلِ واقعیِ باز یافت نشد. 🎉'}
                       </td>
                     </tr>
@@ -325,34 +445,34 @@ export default function ScheduleConflictsClient({ terms }: { terms: Term[] }) {
             </div>
           </div>
 
-          {/* نمای موبایل (≤۷۶۸px) */}
+          {/* ── نمای موبایل ── */}
           <MobileCardList
             rows={visible}
             columns={columns}
-            getKey={(p) => p.fingerprint}
-            renderActions={(p) =>
-              report.reviewed[p.fingerprint] ? (
-                <button
-                  onClick={() => onUndo(p.fingerprint)}
-                  className="rounded border px-3 py-1 text-xs hover:bg-slate-100 dark:hover:bg-slate-800"
-                >
-                  بازگردانیِ بررسی
-                </button>
-              ) : (
-                renderActions(p)
-              )
-            }
+            getKey={(g) => g.key}
+            renderActions={(g) => (reasonOf(g) ? (
+              <button
+                onClick={() => onUndoGroup(g)}
+                disabled={busy}
+                className="rounded border px-3 py-1 text-xs hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                بازگردانیِ بررسی
+              </button>
+            ) : (
+              groupActions(g)
+            ))}
           />
         </>
       )}
 
       <p className="text-[11px] leading-6 text-slate-500">
-        تشخیصِ تداخل از همان قاعدهٔ «کلاس ادغامی» سامانه پیروی می‌کند: اگر دو ارائه روز، ساعت و سالنِ یکسان
-        داشته باشند یک جلسه‌اند، نه تداخل. ستونِ «هم‌پوشانیِ خام» می‌گوید چند جفت اسلات با استاد/سالنِ مشترک
-        ساعتی را اشغال کرده‌اند، پیش از آنکه موارد ادغامی کنار گذاشته شوند.
+        هر ردیف یک <b>مسئله</b> است، نه یک جفت: اگر استاد در یک بازه پنج درس داشته باشد، همه در یک ردیف
+        فهرست می‌شوند. برچسبِ «احتمالاً یک جلسه» یعنی همان استاد، همان سالن و اختلافِ ساعت کمتر از ۲۰ دقیقه —
+        با یک کلیک «ادغام» کلِ آن بازه یک جلسهٔ ادغامی می‌شود (چیزی خودکار پنهان نمی‌شود؛ تصمیم با شماست).
         {report ? (
           <>
-            {' '}این ترم {fa(report.slotsScanned)} ردیفِ برنامه بررسی شد
+            {' '}
+            این ترم {fa(report.slotsScanned)} ردیف برنامه بررسی شد
             {report.duplicateSlots > 0 ? ` (${fa(report.duplicateSlots)} ردیفِ تکراری یک‌بار شمرده شد)` : ''}.
           </>
         ) : null}{' '}
@@ -366,13 +486,15 @@ export default function ScheduleConflictsClient({ terms }: { terms: Term[] }) {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: 'rose' | 'ok' }) {
+function Stat({ label, value, tone }: { label: string; value: string; tone?: 'rose' | 'ok' | 'amber' }) {
   const cls =
     tone === 'rose'
       ? 'border-rose-200 bg-rose-50 text-rose-800'
       : tone === 'ok'
         ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-        : 'border-slate-200 bg-slate-50 text-slate-800';
+        : tone === 'amber'
+          ? 'border-amber-200 bg-amber-50 text-amber-900'
+          : 'border-slate-200 bg-slate-50 text-slate-800';
   return (
     <div className={`rounded-xl border px-3 py-2 ${cls}`}>
       <p className="text-[10px] opacity-80">{label}</p>

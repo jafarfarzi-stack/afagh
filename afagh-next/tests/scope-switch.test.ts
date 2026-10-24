@@ -4,6 +4,7 @@ import {
   universitySwitchTarget,
 } from '../src/lib/scope-switch.ts';
 import { ADMIN_PANEL_ROLES, availablePanels } from '../src/lib/panel-links.ts';
+import { homeFor } from '../src/lib/home-route.ts';
 
 let pass = 0;
 let fail = 0;
@@ -49,13 +50,28 @@ eq('بدون Referer → داشبورد', universitySwitchTarget(null), '/admin'
 
 console.log('--- ۴. availablePanels: همهٔ نقش‌های کاربر یک لینک می‌گیرند ---');
 const keys = (roles: string[], perms = 0) => availablePanels(roles, perms).map(p => p.key);
-eq('استاد + مدیر گروه + کارشناس مالی', keys(['PROFESSOR', 'DEP_HEAD', 'FINANCE_EXPERT']), ['professor', 'group-manager', 'admin']);
+eq('استاد + مدیر گروه + کارشناس مالی', keys(['PROFESSOR', 'DEP_HEAD', 'FINANCE_EXPERT']), ['admin', 'professor', 'group-manager']);
 eq('استاد تنها → بدون لینک مدیریت', keys(['PROFESSOR']), ['professor']);
 eq('مدیر گروه تنها → بدون لینک مدیریت', keys(['DEP_HEAD']), ['group-manager']);
 eq('کارشناس آموزش + دانشجو', keys(['EDU_EXPERT', 'STUDENT']), ['admin', 'student']);
-eq('مجوز سفارشی بدون نقش ستادی → /admin', keys(['PROFESSOR'], 1), ['professor', 'admin']);
+eq('مجوز سفارشی بدون نقش ستادی → /admin', keys(['PROFESSOR'], 1), ['admin', 'professor']);
 eq('هیچ نقش/مجوزی', keys([], 0), []);
 eq('همهٔ نقش‌های ستادی در فهرست پنل مدیریت‌اند', ADMIN_PANEL_ROLES.every(r => keys([r]).includes('admin')), true);
+
+console.log('--- ۵. homeFor: اولویتِ کارتابل پس از ورود ---');
+// موردِ واقعی: پویا بارمان ویسی با سه نقش EDU_EXPERT + PROFESSOR + STUDENT
+eq('سه نقش (کارشناس+استاد+دانشجو) → کارشناس', homeFor(['EDU_EXPERT', 'PROFESSOR', 'STUDENT']), '/admin');
+eq('کارشناس + دانشجو → کارشناس', homeFor(['EDU_EXPERT', 'STUDENT']), '/admin');
+eq('استاد + دانشجو → استاد', homeFor(['PROFESSOR', 'STUDENT']), '/professor');
+eq('دانشجو تنها', homeFor(['STUDENT']), '/student');
+eq('استاد تنها', homeFor(['PROFESSOR']), '/professor');
+eq('مدیر گروه تنها', homeFor(['DEP_HEAD']), '/group-manager');
+eq('مدیر گروه + استاد → استاد', homeFor(['DEP_HEAD', 'PROFESSOR']), '/professor');
+eq('کارشناس مالی', homeFor(['FINANCE_EXPERT']), '/admin/payroll');
+eq('کارشناس مالی + استاد → کارشناس مالی', homeFor(['FINANCE_EXPERT', 'PROFESSOR']), '/admin/payroll');
+eq('مراقب تنها', homeFor(['PROCTOR']), '/proctor');
+eq('معاون آموزشی', homeFor(['VICE_EDU']), '/admin');
+eq('بدون نقش → پیام ورود', homeFor([]), '/login?e=norole');
 
 console.log(`\n${pass} pass, ${fail} fail`);
 if (fail > 0) process.exit(1);

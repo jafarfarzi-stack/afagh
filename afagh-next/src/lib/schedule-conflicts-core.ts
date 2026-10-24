@@ -64,6 +64,12 @@ export interface ConflictPair {
   /** بازهٔ اشتراک به‌صورت دقیقه از نیمه‌شب — برای نمایش «ساعت تداخل» */
   overlapFrom: number;
   overlapTo: number;
+  /**
+   * «احتمالاً یک جلسهٔ ادغامی» — همان استاد، همان سالن، و اختلافِ ساعت در حد
+   * چند دقیقه. این پرچم چیزی را پنهان نمی‌کند؛ فقط به کارشناس می‌گوید با یک
+   * کلیک می‌تواند کلِ گروه را ادغام کند. (توضیح در `isNearMergedPair`)
+   */
+  likelyMerged: boolean;
   /** کلید پایدار برای ذخیرهٔ «بررسی شد» — با جابه‌جایی ردیف‌ها عوض نمی‌شود */
   fingerprint: string;
 }
@@ -126,8 +132,44 @@ export function isMergedPair(a: ConflictSlot, b: ConflictSlot): boolean {
   return Number(a.roomId) === Number(b.roomId);
 }
 
-/** اثرانگشتِ پایدارِ یک تداخل — مبنای ذخیرهٔ «بررسی شد» */
-export function conflictFingerprint(
+/**
+ * تلورانسِ «یک جلسه» — چند دقیقه اختلافِ ساعت در دادهٔ سما طبیعی است.
+ *
+ * چرا لازم شد: در ۱۴۰۵۱ درسِ ۴۵۱۷۰ در سما ۱۴:۰۰–۱۶:۱۵ ثبت شده بود و چهار
+ * درسِ دیگرِ همان استاد ۱۳:۴۵–۱۶:۱۰ — هر پنج درس در یک سالن و یک جلسه. چون
+ * قاعدهٔ سخت‌گیرانه «ساعتِ دقیقاً یکسان» را می‌خواست، آن یک درس از ادغام جا
+ * ماند و چهار تداخلِ جدا تولید کرد. با این تلورانس، «یک جلسه» شناخته می‌شود
+ * ولی **به‌صورت پیشنهاد**، نه حذفِ خودکار.
+ */
+export const NEAR_SESSION_TOLERANCE_MIN = 20;
+
+/**
+ * آیا این دو اسلات «به‌احتمالِ زیاد یک جلسه» هستند؟ (پیشنهادِ ادغام، نه حکم)
+ *
+ * شرط‌ها: همان استاد، همان سالن (سالنِ NULL مانع نیست)، و اختلافِ ساعتِ شروع
+ * و پایان هر دو در حدِ تلورانس. اگر سالن‌ها متفاوت باشند، ادغام نیست — یک
+ * استاد در دو کلاسِ فیزیکیِ مختلف یعنی تصرفِ دوگانه که باید بررسی شود.
+ */
+export function isNearMergedPair(a: ConflictSlot, b: ConflictSlot): boolean {
+  if (isExplicitlySplit(a.sharedScheduleGroupKey) || isExplicitlySplit(b.sharedScheduleGroupKey)) return false;
+  // یک جلسهٔ ادغامی یک استاد دارد؛ دو استادِ متفاوت یعنی دو کلاس.
+  if (a.professorId == null || b.professorId == null) return false;
+  if (Number(a.professorId) !== Number(b.professorId)) return false;
+  if (isMergedPair(a, b)) return true;
+  if (a.roomId != null && b.roomId != null && Number(a.roomId) !== Number(b.roomId)) return false;
+
+  const aS = toMinutes(a.startTime);
+  const aE = toMinutes(a.endTime);
+  const bS = toMinutes(b.startTime);
+  const bE = toMinutes(b.endTime);
+  if (aS == null || aE == null || bS == null || bE == null) return false;
+
+  return (
+    Math.abs(aS - bS) <= NEAR_SESSION_TOLERANCE_MIN && Math.abs(aE - bE) <= NEAR_SESSION_TOLERANCE_MIN
+  );
+}
+
+/** اثرانگشتِ پایدارِ یک تداخل — مبنای ذخیرهٔ «بررسی شد» */export function conflictFingerprint(
   kind: ConflictKind,
   entityId: number,
   dayOfWeek: number,
@@ -229,7 +271,26 @@ export function detectScheduleConflicts(rawSlots: readonly ConflictSlot[]): Conf
         if (ov <= 0) continue;
         rawOverlaps++;
 
-        if (isMergedPair(a, b)) { mergedSkipped++; continue; }
+        const merged = isMergedPair(a, b);
+
+        /**
+         * ادغام، تداخلِ استاد را حل می‌کند ولی تداخلِ سالن را نه.
+         *
+         * یک جلسهٔ ادغامی یک استاد دارد. اگر دو استادِ متفاوت در یک سالن و یک
+         * ساعت باشند، سالن واقعاً دو بار تصرف شده — این را نباید با بهانهٔ
+         * «ادغامی» پنهان کرد. (پیش از این اصلاح، این موارد کلاً از گزارش
+         * می‌افتادند و فقط ۷۰ تداخلِ سالن می‌ماند.)
+         */
+        const differentTeachers =
+          a.professorId != null && b.professorId != null && Number(a.professorId) !== Number(b.professorId);
+
+        const professorConflict = sameProfessor && !merged;
+        const roomConflict = sameRoom && (!merged || differentTeachers);
+
+        if (!professorConflict && !roomConflict) {
+          if (merged) mergedSkipped++;
+          continue;
+        }
 
         const push = (kind: ConflictKind, entityId: number, entityName: string) => {
           pairs.push({
@@ -243,12 +304,13 @@ export function detectScheduleConflicts(rawSlots: readonly ConflictSlot[]): Conf
             overlapMinutes: ov,
             overlapFrom: Math.max(aS, bS),
             overlapTo: Math.min(aE, bE),
+            likelyMerged: isNearMergedPair(a, b),
             fingerprint: conflictFingerprint(kind, entityId, day, a.scheduleId, b.scheduleId),
           });
         };
 
-        if (sameProfessor) push('PROFESSOR', Number(a.professorId), a.professorName ?? `استاد ${a.professorId}`);
-        if (sameRoom) push('ROOM', Number(a.roomId), a.roomName ?? `کلاس ${a.roomId}`);
+        if (professorConflict) push('PROFESSOR', Number(a.professorId), a.professorName ?? `استاد ${a.professorId}`);
+        if (roomConflict) push('ROOM', Number(a.roomId), a.roomName ?? `کلاس ${a.roomId}`);
       }
     }
   }
@@ -329,6 +391,196 @@ export function groupConflictsByEntity(pairs: readonly ConflictPair[]): {
       y.items.length - x.items.length ||
       x.entityName.localeCompare(y.entityName, 'fa'),
   );
+}
+
+/**
+ * یک «مسئله» — چند جفتِ تداخلِ هم‌زمان که در واقع یک مشکل‌اند.
+ *
+ * چرا گروه‌بندی لازم شد: گزارشِ جفتی درست است ولی برای کارشناس گمراه‌کننده.
+ * اگر استادی پنج درس در بازهٔ ۱۳:۴۵–۱۶:۱۵ داشته باشد، گزارشِ جفتی ۴ ردیف
+ * می‌سازد که یک طرفشان تکرار می‌شود و کاربر فکر می‌کند «هر مورد دوبار نشان
+ * داده شده»؛ بدتر آنکه همان پنج درس چون سالنِ مشترک هم دارند، ۴ ردیفِ
+ * «سالن» هم تولید می‌کنند. در واقع **یک** مسئله است با پنج درسِ درگیر.
+ */
+export interface ConflictEntity {
+  kind: ConflictKind;
+  id: number;
+  name: string;
+}
+
+export interface ConflictGroup {
+  /** کلیدِ نمایشیِ پایدار (برای React) */
+  key: string;
+  /** نوعِ اصلی؛ اگر هم استاد و هم سالن درگیر باشند `MIXED` */
+  kind: ConflictKind | 'MIXED';
+  /** همهٔ نوع‌های درگیر (برای فیلترِ استاد/سالن) */
+  kinds: ConflictKind[];
+  /** استاد(ها) و سالن(های) درگیر */
+  entities: ConflictEntity[];
+  /** نامِ موجودیت‌ها با «،» — برای جست‌وجو و نمایشِ خلاصه */
+  entityName: string;
+  dayOfWeek: number;
+  dayName: string;
+  /** اتحادِ بازهٔ همهٔ اسلات‌های درگیر: «از ۱۳:۴۵ تا ۱۶:۱۵» */
+  windowFrom: number;
+  windowTo: number;
+  /** بیشترین هم‌پوشانیِ داخلِ گروه */
+  overlapMinutes: number;
+  overlapFrom: number;
+  overlapTo: number;
+  /** همهٔ ارائه‌های درگیر (یکتا، مرتب بر اساس کد درس) */
+  slots: ConflictSlot[];
+  /** جفت‌های تشکیل‌دهنده — برای ثبتِ «بررسی شد» به‌ازای هر جفت */
+  pairs: ConflictPair[];
+  /** همهٔ جفت‌ها «احتمالاً یک جلسه»اند ⇒ یک کلیک برای ادغامِ کلِ گروه */
+  likelyMerged: boolean;
+  /** مجموع دانشجویانِ ارائه‌های یکتا */
+  students: number;
+  /** همهٔ جفت‌های این گروه قبلاً بررسی شده‌اند */
+  reviewed: boolean;
+}
+
+/**
+ * تبدیلِ جفت‌های تداخل به «مسئله»ها.
+ *
+ * دو جفت در یک مسئله‌اند اگر روزشان یکی باشد، بازهٔ هم‌پوشانی‌شان با هم
+ * **هم‌پوشانیِ مثبت** داشته باشد، و:
+ *   • به یک موجودیتِ یکسان اشاره کنند (همان استاد یا همان سالن)، یا
+ *   • یک درسِ مشترک داشته باشند (همان پنج درس، یک مسئله).
+ *
+ * این‌طور «استاد» و «سالنِ» یک جفتِ درس در یک ردیف می‌آیند، نه دو ردیف.
+ * بازه‌های فقط لبه‌به‌لبه (۱۰:۰۰ پایان و ۱۰:۰۰ شروع) جدا می‌مانند.
+ */
+export function groupConflictPairs(
+  pairs: readonly ConflictPair[],
+  isReviewed?: (p: ConflictPair) => boolean,
+): ConflictGroup[] {
+  const n = pairs.length;
+  if (n === 0) return [];
+
+  const parent = Array.from({ length: n }, (_, i) => i);
+  const find = (x: number): number => {
+    let i = x;
+    while (parent[i] !== i) {
+      parent[i] = parent[parent[i]];
+      i = parent[i];
+    }
+    return i;
+  };
+  const union = (x: number, y: number) => {
+    const rx = find(x);
+    const ry = find(y);
+    if (rx !== ry) parent[ry] = rx;
+  };
+
+  const windowsOverlap = (p: ConflictPair, q: ConflictPair) =>
+    p.overlapFrom < q.overlapTo && q.overlapFrom < p.overlapTo;
+
+  const sharesSlot = (p: ConflictPair, q: ConflictPair) => {
+    const pa = Number(p.a.offeringId);
+    const pb = Number(p.b.offeringId);
+    const qa = Number(q.a.offeringId);
+    const qb = Number(q.b.offeringId);
+    return pa === qa || pa === qb || pb === qa || pb === qb;
+  };
+
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const p = pairs[i];
+      const q = pairs[j];
+      if (p.dayOfWeek !== q.dayOfWeek) continue;
+      if (!windowsOverlap(p, q)) continue;
+      const sameEntity = p.kind === q.kind && Number(p.entityId) === Number(q.entityId);
+      if (sameEntity || sharesSlot(p, q)) union(i, j);
+    }
+  }
+
+  const byRoot = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    const list = byRoot.get(r) ?? [];
+    list.push(i);
+    byRoot.set(r, list);
+  }
+
+  const out: ConflictGroup[] = [];
+
+  for (const idxs of byRoot.values()) {
+    const cluster = idxs.map(i => pairs[i]);
+
+    const slotMap = new Map<number, ConflictSlot>();
+    const entityMap = new Map<string, ConflictEntity>();
+    for (const p of cluster) {
+      slotMap.set(Number(p.a.offeringId), p.a);
+      slotMap.set(Number(p.b.offeringId), p.b);
+      entityMap.set(`${p.kind}:${p.entityId}`, { kind: p.kind, id: Number(p.entityId), name: p.entityName });
+    }
+
+    const slots = [...slotMap.values()].sort(
+      (x, y) => x.courseCode.localeCompare(y.courseCode, 'fa', { numeric: true }),
+    );
+    const entities = [...entityMap.values()].sort(
+      (x, y) =>
+        (x.kind === y.kind ? 0 : x.kind === 'PROFESSOR' ? -1 : 1) ||
+        x.name.localeCompare(y.name, 'fa'),
+    );
+
+    let windowFrom = Number.POSITIVE_INFINITY;
+    let windowTo = 0;
+    let overlapMinutes = 0;
+    let overlapFrom = Number.POSITIVE_INFINITY;
+    let overlapTo = 0;
+    let students = 0;
+    for (const s of slots) {
+      const st = toMinutes(s.startTime);
+      const en = toMinutes(s.endTime);
+      if (st != null) windowFrom = Math.min(windowFrom, st);
+      if (en != null) windowTo = Math.max(windowTo, en);
+      students += Number(s.enrolledCount ?? 0);
+    }
+    for (const p of cluster) {
+      overlapMinutes = Math.max(overlapMinutes, p.overlapMinutes);
+      overlapFrom = Math.min(overlapFrom, p.overlapFrom);
+      overlapTo = Math.max(overlapTo, p.overlapTo);
+    }
+    if (!Number.isFinite(windowFrom)) windowFrom = 0;
+
+    const kinds = [...new Set(entities.map(e => e.kind))].sort(
+      (x, y) => (x === y ? 0 : x === 'PROFESSOR' ? -1 : 1),
+    );
+    const first = cluster[0];
+    const key = `${first.dayOfWeek}:${overlapFrom}:${overlapTo}:${entities.map(e => `${e.kind[0]}${e.id}`).join('+')}`;
+
+    out.push({
+      key,
+      kind: kinds.length === 1 ? kinds[0] : 'MIXED',
+      kinds,
+      entities,
+      entityName: entities.map(e => e.name).join('، '),
+      dayOfWeek: first.dayOfWeek,
+      dayName: first.dayName,
+      windowFrom,
+      windowTo,
+      overlapMinutes,
+      overlapFrom,
+      overlapTo,
+      slots,
+      pairs: cluster,
+      likelyMerged: cluster.every(p => p.likelyMerged),
+      students,
+      reviewed: isReviewed ? cluster.every(p => isReviewed(p)) : false,
+    });
+  }
+
+  out.sort(
+    (x, y) =>
+      y.slots.length - x.slots.length ||
+      (x.kind === y.kind ? 0 : x.kind === 'PROFESSOR' ? -1 : x.kind === 'ROOM' ? 1 : -1) ||
+      x.entityName.localeCompare(y.entityName, 'fa') ||
+      x.dayOfWeek - y.dayOfWeek ||
+      x.overlapFrom - y.overlapFrom,
+  );
+  return out;
 }
 
 /** برچسب‌های فارسیِ دلیلِ «بررسی شد» */

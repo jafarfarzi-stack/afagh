@@ -17,7 +17,9 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   detectScheduleConflicts,
+  groupConflictPairs,
   summarizeConflicts,
+  type ConflictGroup,
   type ConflictPair,
   type ConflictSlot,
   type ConflictSummary,
@@ -34,8 +36,16 @@ export interface ConflictReviewRow {
 
 export interface ScheduleConflictReport {
   termId: number;
-  /** تداخل‌های واقعی (ادغامی‌ها حذف شده‌اند) */
+  /** تداخل‌های واقعی (ادغامی‌ها حذف شده‌اند) — سطحِ «جفت» */
   pairs: ConflictPair[];
+  /**
+   * همان تداخل‌ها، گروه‌بندی‌شده در «مسئله» — سطحِ نمایش.
+   *
+   * یک استاد با ۵ درس در یک بازه، در سطح جفت ۴ ردیف می‌سازد که یک طرفشان
+   * تکرار می‌شود (و کاربر فکر می‌کند دوبار نمایش داده شده)؛ در سطح گروه یک
+   * ردیف با ۵ درس است.
+   */
+  groups: ConflictGroup[];
   /** تداخل‌هایی که کارشناس قبلاً بررسی/پذیرفته — کلید: اثرانگشت */
   reviewed: Record<string, ConflictReviewRow>;
   summary: ConflictSummary;
@@ -47,8 +57,14 @@ export interface ScheduleConflictReport {
   slotsScanned: number;
   /** چند ردیفِ برنامه تکراری بود و یک‌بار شمرده شد */
   duplicateSlots: number;
-  /** تعداد ردیف‌هایی که کارشناس بررسی کرده (برای نمایش پیشرفت) */
+  /** تعداد جفت‌هایی که کارشناس بررسی کرده (برای نمایش پیشرفت) */
   reviewedCount: number;
+  /** تعداد «مسئله»های باز (گروهی که همهٔ جفت‌هایش بررسی نشده) */
+  openIssues: number;
+  /** تعداد «مسئله»های کل */
+  totalIssues: number;
+  /** چند مسئله «احتمالاً یک جلسهٔ ادغامی» است و با یک کلیک بسته می‌شود */
+  likelyMergedIssues: number;
 }
 
 type SlotDbRow = {
@@ -143,9 +159,13 @@ export async function loadScheduleConflicts(
     };
   }
 
+  const groups = groupConflictPairs(scan.pairs, p => Boolean(reviewed[p.fingerprint]));
+  const openGroups = groups.filter(g => !g.reviewed);
+
   return {
     termId,
     pairs: scan.pairs,
+    groups,
     reviewed,
     summary: summarizeConflicts(scan.pairs),
     rawOverlaps: scan.rawOverlaps,
@@ -153,6 +173,9 @@ export async function loadScheduleConflicts(
     slotsScanned: scan.slotsScanned,
     duplicateSlots: scan.duplicateSlots,
     reviewedCount: Object.keys(reviewed).length,
+    openIssues: openGroups.length,
+    totalIssues: groups.length,
+    likelyMergedIssues: openGroups.filter(g => g.likelyMerged).length,
   };
 }
 
