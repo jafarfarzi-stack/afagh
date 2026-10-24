@@ -1,8 +1,10 @@
 import { redirect } from 'next/navigation';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { users } from '@/db/schema';
+import { users, universities } from '@/db/schema';
 import { getStudentByUser, requireRole, endCurrentSession } from '@/lib/auth';
+import { getSetting } from '@/lib/settings';
+import { majors as majorsTable } from '@/db/schema';
 import { alumniOf } from '@/lib/alumni';
 import { getSiblingAccounts } from '@/lib/account-switch';
 import PanelSwitcher from '@/components/PanelSwitcher';
@@ -26,6 +28,23 @@ export default async function StudentLayout({ children }: { children: React.Reac
   const me = await getStudentByUser(user.id);
   // عکس پرسنلی کاربر (برای آواتار هدر) — کلید شیء، نمایش از مسیر امن
   const [photoRow] = await db.select({ photoKey: users.photoKey }).from(users).where(eq(users.id, user.id)).limit(1);
+
+  // ارم دانشگاه دانشجو — جای حرف ثابت «آ» در هدر. اول ارم اختصاصی خود دانشگاه
+  // (ستون universities.logoUrl)، بعد ارم سراسری تنظیمات؛ اگر هیچ‌کدام نبود،
+  // همان حرف «آ» به‌عنوان Fallback نمایش داده می‌شود تا چیدمان هدر نشکند.
+  const uniLogoRow = me?.universityId
+    ? await db.select({ logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, me.universityId)).limit(1)
+    : [];
+  const universityLogoUrl = uniLogoRow?.[0]?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
+
+  // نام رشتهٔ دانشجو — به‌جای عبارت تکراری «کارتابل دانشجو» در سربرگ، خوش‌آمدگویی
+  // و رشتهٔ 학생 نمایش داده می‌شود (هیروی داشبورد هم خوش‌آمدگویی دارد؛ اینجا
+  // هویت تحصیلی کافی است تا سربرگ خالی و تکراری نباشد).
+  const majorRow = me?.majorId
+    ? await db.select({ name: majorsTable.name }).from(majorsTable).where(eq(majorsTable.id, me.majorId)).limit(1)
+    : [];
+  const majorTitle = majorRow?.[0]?.name ?? null;
+  const firstName = (user.name || '').trim().split(/\s+/)[0] || 'دانشجو';
 
   const termScope = await getTermScope(me?.universityId ?? null);
   const demo = await isDemoStudentUser(user.id);
@@ -69,16 +88,29 @@ export default async function StudentLayout({ children }: { children: React.Reac
         <div className="max-w-7xl mx-auto flex flex-col gap-2 p-3.5 px-4">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center font-bold text-base shadow-inner">
-                آ
-              </div>
+              {/* ارم دانشگاه جای حرف ثابت «آ» — اگر ارمی ثبت نشده باشد،
+                  حرف «آ» به‌عنوان fallback نمایش داده می‌شود */}
+              {universityLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={universityLogoUrl}
+                  alt="نشان دانشگاه"
+                  className="w-9 h-9 rounded-lg bg-white object-contain p-0.5 shadow-inner shrink-0"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center font-bold text-base shadow-inner shrink-0">
+                  آ
+                </div>
+              )}
               <UserAvatar userId={user.id} hasPhoto={!!photoRow?.photoKey} name={user.name} className="w-9 h-9" fallbackClass="bg-emerald-700" />
-              <div>
-                <p className="text-sm font-extrabold tracking-wide">
-                  <span className="sm:hidden">کارتابل دانشجو</span>
-                  <span className="hidden sm:inline">سامانه جامع آموزشی دانشگاه آفاق</span>
+              <div className="min-w-0">
+                <p className="text-sm font-extrabold tracking-wide truncate">
+                  خوش‌آمدی {firstName} 👋
                 </p>
-                <p className="text-xs text-emerald-200">میز کاربری دانشجو — {user.name}</p>
+                <p className="text-xs text-emerald-200 truncate">
+                  {majorTitle || 'دانشجوی گرامی'}
+                  {me?.entryYear ? ` · ورودی سال ${me.entryYear}` : ''}
+                </p>
               </div>
             </div>
             <div className="flex flex-nowrap items-center gap-2">

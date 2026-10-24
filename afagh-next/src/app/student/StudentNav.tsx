@@ -24,6 +24,16 @@ export const NAV_ITEMS = [
  *  «میز خدمات و کمیسیون» آمده چون درخواست‌ها پرتکرارترند. */
 const BOTTOM_TAB_HREFS = ['/student', '/student/enroll', '/student/requests', '/student/transcript', '/student/finance'];
 
+/** برچسب نوار پایین — نام کامل خدمت (پیش‌تر فقط کلمهٔ اول بریده می‌شد:
+ *  «انتخاب»، «امور»، «میز» که نامخدمت را نامفهوم می‌کرد) */
+const TAB_LABELS: Record<string, string> = {
+  '/student': 'داشبورد',
+  '/student/enroll': 'انتخاب واحد',
+  '/student/requests': 'میز خدمات',
+  '/student/transcript': 'کارنامه',
+  '/student/finance': 'امور مالی',
+};
+
 export function StudentSidebar({ user }: { user: { name: string; studentCode?: string | null } }) {
   const pathname = usePathname();
 
@@ -128,7 +138,9 @@ export default function StudentNav() {
                 }`}
               >
                 <span className="text-base">{n.icon}</span>
-                <span className="text-[10px] leading-tight line-clamp-1">{n.label.split(' ')[0]}</span>
+                <span className="text-[10px] leading-tight line-clamp-2 text-center min-h-[24px] flex items-center">
+                  {TAB_LABELS[n.href] ?? n.label}
+                </span>
               </Link>
             );
           })}
