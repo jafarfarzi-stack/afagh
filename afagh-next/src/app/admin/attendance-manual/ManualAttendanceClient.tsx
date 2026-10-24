@@ -20,6 +20,16 @@ export interface ManualRow {
   status: string | null;
   note: string | null;
   punches: number;
+  /** کلیدِ ادغامِ دستیِ عرضه (برای گروه‌بندی در سرور) */
+  sharedScheduleGroupKey?: string | null;
+  /** این ردیف یک «کلاس ادغامی» است — چند عرضه در یک جلسهٔ فیزیکی */
+  merged?: boolean;
+  /** چند عرضه در این کلاس ادغام شده‌اند */
+  memberCount?: number;
+  /** همهٔ شناسهٔ جلسه‌های عضو (ثبت روی همهٔ این‌ها اعمال می‌شود) */
+  memberSessionIds?: number[];
+  /** برچسبِ کوتاهِ نشانِ ادغام */
+  memberTitles?: string;
 }
 
 const faNum = (v: unknown) =>
@@ -167,6 +177,14 @@ export default function ManualAttendanceClient({
                   <td className="p-2.5">
                     <span className="font-black text-indigo-950">{r.courseCode}</span>
                     <span className="block text-[10px] text-slate-500">{r.courseTitle}</span>
+                    {r.merged ? (
+                      <span
+                        title={`این کلاس از ${faNum(r.memberCount ?? 2)} عرضه تشکیل شده و ثبت روی همهٔ آن‌ها اعمال می‌شود.`}
+                        className="mt-0.5 inline-block rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-black text-violet-800 border border-violet-200"
+                      >
+                        🔗 {r.memberTitles ?? 'کلاس ادغامی'}
+                      </span>
+                    ) : null}
                   </td>
                   <td className="p-2.5 font-bold text-slate-800">{r.professorName}</td>
                   <td className="p-2.5 text-center">

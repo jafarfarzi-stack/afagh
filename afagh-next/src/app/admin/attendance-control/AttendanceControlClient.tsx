@@ -2,6 +2,9 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import { recordAttendanceFromConsole } from '@/app/p/[code]/actions';
+import { mergeBadgeText } from '@/lib/merged-class-core';
+
+const faNum = (v: number) => String(v).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
 
 export interface ControlRowView {
   roomId: number;
@@ -22,6 +25,14 @@ export interface ControlRowView {
   recordedAtLabel: string | null;
   recordedBy: string | null;
   recordedMethod: string | null;
+  /** این ردیف یک «کلاس ادغامی» است — چند عرضه در یک جلسهٔ فیزیکی */
+  merged: boolean;
+  /** چند عرضه در این کلاس ادغام شده‌اند */
+  memberCount: number;
+  /** عناوینِ درس‌های عضو — برای نمایشِ کوچکِ زیرِ عنوان */
+  memberTitles: string;
+  /** همهٔ شناسهٔ جلسه‌های عضو (ثبت روی همهٔ این‌ها اعمال می‌شود) */
+  memberSessionIds: number[];
 }
 
 const ERR_FA: Record<string, string> = {
@@ -55,6 +66,7 @@ export default function AttendanceControlClient({
 }) {
   const [done, setDone] = useState<Record<number, boolean>>({});
   const [err, setErr] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [, startTransition] = useTransition();
   const [filter, setFilter] = useState<Filter>('all');
@@ -68,7 +80,7 @@ export default function AttendanceControlClient({
       if (filter === 'pending' && isDone(r)) return false;
       if (filter === 'done' && !isDone(r)) return false;
       if (needle) {
-        const hay = `${r.roomName} ${r.courseTitle} ${r.courseCode} ${r.professorName}`;
+        const hay = `${r.roomName} ${r.courseTitle} ${r.courseCode} ${r.professorName} ${r.memberTitles}`;
         if (!hay.includes(needle)) return false;
       }
       return true;
@@ -90,12 +102,19 @@ export default function AttendanceControlClient({
 
   function record(r: ControlRowView) {
     setErr(null);
+    setNote(null);
     setPendingId(r.sessionId);
     startTransition(async () => {
       const res = await recordAttendanceFromConsole({ roomId: r.roomId, sessionId: r.sessionId });
       setPendingId(null);
-      if (res.ok) setDone((d) => ({ ...d, [r.sessionId]: true }));
-      else setErr(ERR_FA[res.error ?? ''] ?? 'ثبت حضور ممکن نشد.');
+      if (res.ok) {
+        setDone((d) => ({ ...d, [r.sessionId]: true }));
+        if (res.merged) {
+          setNote(`این کلاس ${mergeBadgeText(r.memberCount)} بود؛ حضور روی همهٔ ${faNum(res.recordedCount ?? r.memberCount)} جلسه ثبت شد.`);
+        }
+      } else {
+        setErr(ERR_FA[res.error ?? ''] ?? 'ثبت حضور ممکن نشد.');
+      }
     });
   }
 
@@ -111,8 +130,13 @@ export default function AttendanceControlClient({
                 : 'bg-amber-100 text-amber-800'
             }`}
           >
-            {doneCount} از {total} جلسه ثبت شد
+            {faNum(doneCount)} از {faNum(total)} کلاس ثبت شد
           </span>
+        </div>
+
+        <div className="text-[10px] font-bold text-slate-500 leading-6">
+          کلاس‌های ادغامی (چند عرضه در یک جلسه با یک استاد) فقط یک ردیف با نشان 🔗 دیده می‌شوند و ثبتِ
+          آن روی همهٔ عرضه‌ها اعمال می‌شود.
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -147,6 +171,12 @@ export default function AttendanceControlClient({
             {err}
           </div>
         ) : null}
+
+        {note ? (
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-[11px] font-bold text-indigo-900">
+            🔗 {note}
+          </div>
+        ) : null}
       </div>
 
       {grouped.length === 0 ? (
@@ -166,7 +196,7 @@ export default function AttendanceControlClient({
                   {list[0].buildingName ? <span className="text-slate-400 font-bold"> — {list[0].buildingName}</span> : null}
                 </div>
                 <div className="text-[10px] font-bold text-slate-500">
-                  {roomDone} از {list.length} ثبت شد
+                  {faNum(roomDone)} از {faNum(list.length)} کلاس ثبت شد
                 </div>
               </div>
 
@@ -183,10 +213,25 @@ export default function AttendanceControlClient({
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <div className="text-[11px] font-black text-slate-800 truncate">{r.courseTitle}</div>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-[11px] font-black text-slate-800 truncate">{r.courseTitle}</span>
+                          {r.merged ? (
+                            <span
+                              title={`این کلاس از ${faNum(r.memberCount)} عرضه تشکیل شده: ${r.memberTitles}`}
+                              className="shrink-0 text-[9px] font-black rounded-full px-1.5 py-0.5 bg-violet-100 text-violet-800 border border-violet-200"
+                            >
+                              🔗 {mergeBadgeText(r.memberCount)}
+                            </span>
+                          ) : null}
+                        </div>
                         <div className="text-[10px] font-bold text-slate-500 truncate">
                           {r.professorName} · گروه {r.groupNumber} · {r.courseCode}
                         </div>
+                        {r.merged && r.memberTitles ? (
+                          <div className="text-[9px] font-bold text-violet-700/80 truncate" title={r.memberTitles}>
+                            {r.memberTitles}
+                          </div>
+                        ) : null}
                       </div>
 
                       {ok ? (

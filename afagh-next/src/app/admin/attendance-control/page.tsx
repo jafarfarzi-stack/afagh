@@ -2,7 +2,8 @@ import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { faDigits } from '@/lib/calendar';
 import { checkinState, checkinWindowLabel, tehranNow } from '@/lib/room-checkin';
-import { listControlledRooms, listTodaySessionsForRooms } from '@/lib/attendance-control';
+import { listControlledRooms, listMergedTodaySessionsForRooms } from '@/lib/attendance-control';
+import { mergeBadgeText, mergeMemberTitles } from '@/lib/merged-class-core';
 import AttendanceControlClient, { type ControlRowView } from './AttendanceControlClient';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,10 @@ export const dynamic = 'force-dynamic';
  *
  * ⚠ گاردِ نقش این‌جاست؛ ولی مرجعِ نهاییِ ثبت، Server Action است که همه‌چیز را
  *   (اتاق، تاریخ، پنجرهٔ زمانی، مالکیت، مرز دانشگاه) دوباره بررسی می‌کند.
+ *
+ * کلاس‌های ادغامی: اگر در یک ساعت چند عرضه (مثلاً «ریاضی» و «ریاضی ۱») با یک
+ * استاد در یک اتاق برگزار شوند، فقط **یک** ردیف با نشان 🔗 نشان داده می‌شود و
+ * ثبتِ آن روی همهٔ اعضا اعمال می‌شود.
  */
 export default async function AttendanceControlPage() {
   const user = await requireRole(['ADMIN', 'EDU_EXPERT', 'ATTENDANCE_CONTROLLER']);
@@ -27,11 +32,12 @@ export default async function AttendanceControlPage() {
 
   const rooms = await listControlledRooms(user.id, uni?.id ?? null);
   const now = tehranNow();
-  const rowsRaw = await listTodaySessionsForRooms(rooms.map((r) => r.id), now.jalali);
+  const groups = await listMergedTodaySessionsForRooms(rooms.map((r) => r.id), now.jalali);
 
   const fa = (v: string) => faDigits(v);
 
-  const rows: ControlRowView[] = rowsRaw.map((r) => {
+  const rows: ControlRowView[] = groups.map((g) => {
+    const r = g.members[0];
     const state = checkinState(r.startTime, r.endTime, now.minutes);
     const win = checkinWindowLabel(r.startTime, r.endTime);
     return {
@@ -54,6 +60,11 @@ export default async function AttendanceControlPage() {
         : null,
       recordedBy: r.recordedBy,
       recordedMethod: r.recordedMethod,
+      // ── ادغام ──
+      merged: g.merged,
+      memberCount: g.members.length,
+      memberTitles: mergeMemberTitles(g.members),
+      memberSessionIds: g.memberSessionIds,
     };
   });
 

@@ -20,7 +20,8 @@ import {
   tehranNow,
 } from '@/lib/room-checkin';
 import { listSessionsInRoom, listUpcomingSessionsInRoom, listWeeklySessionsInRoom } from '@/lib/room-session-lookup';
-import { canControlRoom, getRecorderPolicy, listTodaySessionsForRooms } from '@/lib/attendance-control';
+import { canControlRoom, getRecorderPolicy, listMergedTodaySessionsForRooms } from '@/lib/attendance-control';
+import { mergeBadgeText, mergeMemberTitles } from '@/lib/merged-class-core';
 import { recordRoomAttendance } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -28,6 +29,8 @@ export const dynamic = 'force-dynamic';
 const MSG: Record<string, string> = {
   ok: 'حضور شما با موفقیت ثبت شد.',
   okctrl: 'حضور استاد برای این جلسه ثبت شد.',
+  okmerged: 'این کلاس ادغامی بود؛ حضور روی همهٔ کلاس‌های ادغامی ثبت شد.',
+  okctrlmerged: 'این کلاس ادغامی بود؛ حضور استاد روی همهٔ کلاس‌های ادغامی ثبت شد.',
   already: 'حضور برای این جلسه قبلاً ثبت شده است.',
 };
 
@@ -262,10 +265,22 @@ export default async function RoomCheckinPage({
 
   // جلساتِ امروزِ همین اتاق با وضعیتِ ثبتِ هرکدام — برای کارتابلِ کنترل‌کننده.
   // (یک اتاق است، پس همان کوئریِ دسته‌ای ارزان تمام می‌شود.)
-  const roomToday = await listTodaySessionsForRooms([roomId], now.jalali).catch(() => []);
+  //
+  // گروه‌بندیِ «کلاس ادغامی»: اگر در یک ساعت چند عرضه با یک استاد در این اتاق
+  // برگزار شوند (مثلاً «ریاضی» و «ریاضی ۱»)، فقط یک ردیف با نشان 🔗 دیده
+  // می‌شود و ثبتِ آن روی همهٔ اعضا اعمال می‌شود.
+  const roomTodayGroups = await listMergedTodaySessionsForRooms([roomId], now.jalali).catch(() => []);
+  const roomToday = roomTodayGroups.flatMap(g => g.members);
   const anyBySlot = new Map(roomToday.map(r => [`${r.offeringId}|${r.startTime}`, r]));
-  const ctrlRows = ctrlCan ? roomToday : [];
-  const ctrlDone = ctrlRows.filter(r => r.recordedAt != null).length;
+  const ctrlGroups = ctrlCan ? roomTodayGroups : [];
+  const ctrlDone = ctrlGroups.filter(g => g.members[0]?.recordedAt != null).length;
+
+  // اگر کلاسِ «تمرکز»ِ استاد ادغامی است (چند عرضه در یک جلسه)، بج 🔗 نشان بده
+  // تا بداند یک ثبت روی همهٔ کلاس‌هایش اعمال می‌شود.
+  const focusGroup = focus
+    ? roomTodayGroups.find(g => g.memberSessionIds.includes(focus.id)) ?? null
+    : null;
+  const focusMemberTitles = focusGroup ? mergeMemberTitles(focusGroup.members) : '';
 
   const ctrlCard = ctrlCan ? (
     <Card>
@@ -273,22 +288,24 @@ export default async function RoomCheckinPage({
         <summary className="cursor-pointer list-none flex items-center justify-between gap-2">
           <span className="text-sm font-black text-slate-900">کنترل حضور و غیاب این اتاق</span>
           <span className={`text-[10px] font-black rounded-full px-2 py-0.5 ${
-            ctrlRows.length > 0 && ctrlDone === ctrlRows.length
+            ctrlGroups.length > 0 && ctrlDone === ctrlGroups.length
               ? 'bg-emerald-100 text-emerald-800'
               : 'bg-amber-100 text-amber-800'
           }`}>
-            {faDigits(ctrlDone)} از {faDigits(ctrlRows.length)} جلسه
+            {faDigits(ctrlDone)} از {faDigits(ctrlGroups.length)} کلاس
           </span>
         </summary>
 
-        {ctrlRows.length === 0 ? (
+        {ctrlGroups.length === 0 ? (
           <div className="mt-3">
             <Notice kind="info" text="امروز جلسه‌ای در این اتاق برگزار نمی‌شود." />
           </div>
         ) : (
           <div className="mt-3 space-y-1.5">
-            {ctrlRows.map(r => {
+            {ctrlGroups.map(g => {
+              const r = g.members[0];
               const st = checkinState(r.startTime, r.endTime, now.minutes);
+              const memberTitles = mergeMemberTitles(g.members);
               return (
                 <div
                   key={r.sessionId}
@@ -302,10 +319,25 @@ export default async function RoomCheckinPage({
                     {faDigits(r.endTime)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[11px] font-black text-slate-800 truncate">{r.courseTitle}</div>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[11px] font-black text-slate-800 truncate">{r.courseTitle}</span>
+                      {g.merged ? (
+                        <span
+                          title={`این کلاس از ${g.members.length} عرضه تشکیل شده: ${memberTitles}`}
+                          className="shrink-0 text-[9px] font-black rounded-full px-1.5 py-0.5 bg-violet-100 text-violet-800 border border-violet-200"
+                        >
+                          🔗 {mergeBadgeText(g.members.length)}
+                        </span>
+                      ) : null}
+                    </div>
                     <div className="text-[10px] font-bold text-slate-500 truncate">
                       {r.professorName} · گروه {faDigits(r.groupNumber)}
                     </div>
+                    {g.merged && memberTitles ? (
+                      <div className="text-[9px] font-bold text-violet-700/80 truncate" title={memberTitles}>
+                        {memberTitles}
+                      </div>
+                    ) : null}
                   </div>
 
                   {r.recordedAt ? (
@@ -333,6 +365,7 @@ export default async function RoomCheckinPage({
             })}
             <div className="text-[9px] font-bold text-slate-400 pt-1">
               ثبت به نامِ استادِ هر جلسه انجام می‌شود و نام شما به‌عنوان ثبت‌کننده در سابقه می‌ماند.
+              {' '}کلاس‌های ادغامی با یک ثبت روی همهٔ عرضه‌ها اعمال می‌شوند.
             </div>
           </div>
         )}
@@ -599,13 +632,28 @@ export default async function RoomCheckinPage({
         ) : (
           <>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-1">
-              <div className="text-sm font-black text-slate-900">{focus.courseTitle}</div>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-sm font-black text-slate-900 truncate">{focus.courseTitle}</span>
+                {focusGroup?.merged ? (
+                  <span
+                    title={`این کلاس از ${focusGroup.members.length} عرضه تشکیل شده: ${focusMemberTitles}`}
+                    className="shrink-0 text-[9px] font-black rounded-full px-1.5 py-0.5 bg-violet-100 text-violet-800 border border-violet-200"
+                  >
+                    🔗 {mergeBadgeText(focusGroup.members.length)}
+                  </span>
+                ) : null}
+              </div>
               <div className="text-[11px] font-bold text-slate-500" dir="ltr">
                 {faDigits(focus.courseCode)} · گروه {faDigits(focus.groupNumber)}
               </div>
               <div className="text-[11px] font-bold text-slate-600">
                 {timeLabel(focus.startTime, focus.endTime)}
               </div>
+              {focusGroup?.merged && focusMemberTitles ? (
+                <div className="text-[10px] font-bold text-violet-700/80" title={focusMemberTitles}>
+                  کلاس ادغامی: {focusMemberTitles}
+                </div>
+              ) : null}
             </div>
 
             {focus.recorded ? (

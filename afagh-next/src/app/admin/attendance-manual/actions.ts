@@ -1,10 +1,11 @@
 'use server';
 
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { class_sessions, course_offerings, professor_class_attendance } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
+import { sessionIdsInMergedGroup } from '@/lib/merged-class-sessions';
 
 /**
  * تأیید/لغو دستی حضور استاد برای یک جلسهٔ کلاس (کارشناس آموزش).
@@ -12,13 +13,16 @@ import { getStaffByUser, requireRole } from '@/lib/auth';
  * اثر انگشت خودکار از گیت خوانده می‌شود؛ این مسیر برای مواردی است که دستگاه
  * ثبت نکرده (خرابی/ورود از درِ دیگر/مأموریت). روش ثبت `MANUAL_BY_EXPERT` و
  * هویت تأییدکننده + یادداشت ذخیره می‌شود تا قابل ممیزی باشد.
+ *
+ * **کلاس ادغامی:** اگر جلسه جزءِ یک کلاسِ چندعرضه‌ای باشد، تأیید روی همهٔ
+ * جلسه‌های عضو اعمال می‌شود — هر کدام به نامِ استادِ خودش.
  */
 export async function confirmProfessorAttendanceAction(px: {
   sessionId: number;
   staffId: number;
   isPresent: boolean;
   note?: string | null;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; error?: string; sessionCount?: number }> {
   try {
     const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
     const me = await getStaffByUser(user.id);
@@ -41,24 +45,31 @@ export async function confirmProfessorAttendanceAction(px: {
       .where(eq(course_offerings.id, session.offeringId))
       .limit(1);
 
+    // گسترش به کلِ کلاس ادغامی (یک جلسهٔ فیزیکی، چند عرضه)
+    const group = await sessionIdsInMergedGroup(sessionId);
+    const targetIds = group.sessionIds.length ? group.sessionIds : [sessionId];
+
     await db.transaction(async tx => {
       await tx.delete(professor_class_attendance).where(and(
-        eq(professor_class_attendance.sessionId, sessionId),
+        inArray(professor_class_attendance.sessionId, targetIds),
         eq(professor_class_attendance.staffId, staffId),
       ));
-      await tx.insert(professor_class_attendance).values({
-        sessionId,
-        staffId,
-        verificationMethod: 'MANUAL_BY_EXPERT',
-        status: px.isPresent ? 'VALID' : 'REVOKED',
-        note: (px.note ?? '').toString().slice(0, 300) || null,
-        confirmedByStaffId: me.id,
-        universityId: offering?.universityId ?? null,
-      });
+      await tx.insert(professor_class_attendance).values(
+        targetIds.map(sid => ({
+          sessionId: sid,
+          staffId,
+          verificationMethod: 'MANUAL_BY_EXPERT',
+          status: px.isPresent ? 'VALID' : 'REVOKED',
+          note: (px.note ?? '').toString().slice(0, 300) || null,
+          confirmedByStaffId: me.id,
+          universityId: offering?.universityId ?? null,
+        })),
+      );
     });
 
     revalidatePath('/admin/attendance-manual');
-    return { ok: true };
+    revalidatePath('/professor/attendance');
+    return { ok: true, sessionCount: targetIds.length };
   } catch (err) {
     return { ok: false, error: (err as Error)?.message || 'ثبت حضور ممکن نشد.' };
   }
@@ -72,11 +83,13 @@ export async function confirmProfessorAttendanceAction(px: {
  * کارنامهٔ عملکرد استاد از آن «جلسات برگزارشده» را می‌شمارند؛ پس تیک کارشناس
  * مستقیماً روی محاسبهٔ کسور/حق‌الزحمه اثر می‌گذارد.
  * «لغو» جلسه را به SCHEDULED برمی‌گرداند و `updatedAt` هم به‌روز می‌شود.
+ *
+ * **کلاس ادغامی:** تیک روی همهٔ جلسه‌های عضو اعمال می‌شود.
  */
 export async function markClassHeldAction(px: {
   sessionId: number;
   held: boolean;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; error?: string; sessionCount?: number }> {
   try {
     const user = await requireRole(['ADMIN', 'EDU_EXPERT']);
     const me = await getStaffByUser(user.id);
@@ -102,15 +115,19 @@ export async function markClassHeldAction(px: {
       return { ok: false, error: 'این جلسه در دانشگاه شما نیست.' };
     }
 
+    // گسترش به کلِ کلاس ادغامی
+    const group = await sessionIdsInMergedGroup(sessionId);
+    const targetIds = group.sessionIds.length ? group.sessionIds : [sessionId];
+
     await db
       .update(class_sessions)
       .set({ status: px.held ? 'HELD' : 'SCHEDULED', updatedAt: new Date() })
-      .where(eq(class_sessions.id, sessionId));
+      .where(inArray(class_sessions.id, targetIds));
 
     revalidatePath('/admin/attendance-manual');
     revalidatePath('/admin/class-sessions');
     revalidatePath('/professor/attendance');
-    return { ok: true };
+    return { ok: true, sessionCount: targetIds.length };
   } catch (err) {
     return { ok: false, error: (err as Error)?.message || 'ثبت تشکیل کلاس ممکن نشد.' };
   }

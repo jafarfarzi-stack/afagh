@@ -9,6 +9,7 @@ import {
 } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import { generateClassSessionsForOffering, generateClassSessionsForTerm } from '@/lib/class-session-generator';
+import { sessionIdsInMergedGroup } from '@/lib/merged-class-sessions';
 import { logger } from '@/lib/logger';
 import type { HardConflict } from '@/lib/scheduling-core';
 
@@ -18,8 +19,19 @@ export interface AttendanceEntry {
   lateMinutes?: number;
 }
 
-/** ذخیرهٔ حضور و غیاب یک جلسهٔ کلاس (استادِ خودِ درس) — تراکنشی: بازنویسی همان جلسه */
-export async function saveSessionAttendanceAction(sessionId: number, entries: AttendanceEntry[]): Promise<{ ok: boolean; error?: string; savedCount?: number }> {
+/**
+ * ذخیرهٔ حضور و غیاب یک جلسهٔ کلاس (استادِ خودِ درس) — تراکنشی: بازنویسی همان جلسه.
+ *
+ * **کلاس ادغامی:** اگر این جلسه جزءِ یک کلاسِ فیزیکیِ چندعرضه‌ای باشد (مثلاً
+ * «ریاضی» و «ریاضی ۱» با یک استاد، یک اتاق، ساعت ۸)، استاد فقط یک بار برگهٔ
+ * حضور را پر می‌کند و این‌جا روی **همهٔ** جلسه‌های عضو اعمال می‌شود. هر عرضه
+ * ردیف‌های حضورِ دانشجویانِ خودش را می‌گیرد (دانشجویانشان فرق دارد)، ولی
+ * «تشکیل کلاس» برای همه یک‌جا ثبت می‌شود تا حق‌التدریس ناقص نماند.
+ *
+ * ⚠ فقط عرضه‌هایی که استاد واقعاً استادِ آن‌هاست (مالک یا استادِ مشترک) ثبت
+ *   می‌شوند؛ وگرنه حضورِ یک استاد روی کلاسِ استادِ دیگر نوشته می‌شد.
+ */
+export async function saveSessionAttendanceAction(sessionId: number, entries: AttendanceEntry[]): Promise<{ ok: boolean; error?: string; savedCount?: number; sessionCount?: number }> {
   try {
     const user = await requireRole(['PROFESSOR']);
     const me = await getStaffByUser(user.id);
@@ -37,35 +49,65 @@ export async function saveSessionAttendanceAction(sessionId: number, entries: At
     );
     if (clean.length === 0) return { ok: false, error: 'ردیف حضوری برای ذخیره وجود ندارد.' };
 
+    // ── گسترش به کلِ کلاس ادغامی ──
+    const group = await sessionIdsInMergedGroup(Number(sessionId));
+    const targetIds = group.sessionIds.length ? group.sessionIds : [Number(sessionId)];
+
+    // مالکیتِ هر جلسه: استادِ اصلیِ عرضه یا استادِ مشترکِ ثبت‌شده
+    const targetOfferings = await db
+      .select({ sessionId: class_sessions.id, offeringId: class_sessions.offeringId, professorId: course_offerings.professorId })
+      .from(class_sessions)
+      .innerJoin(course_offerings, eq(course_offerings.id, class_sessions.offeringId))
+      .where(inArray(class_sessions.id, targetIds));
+    const sharedRows = targetOfferings.length
+      ? await db
+          .select({ offeringId: offering_professors.offeringId })
+          .from(offering_professors)
+          .where(and(
+            eq(offering_professors.staffId, me.id),
+            inArray(offering_professors.offeringId, targetOfferings.map(r => r.offeringId)),
+          ))
+      : [];
+    const sharedOfferings = new Set(sharedRows.map(r => r.offeringId));
+    const owned = new Map<number, number>(); // sessionId → offeringId
+    for (const r of targetOfferings) {
+      if (r.professorId === me.id || sharedOfferings.has(r.offeringId)) owned.set(r.sessionId, r.offeringId);
+    }
+    // جلسهٔ ورودی همیشه مجاز است (گاردِ بالا)
+    owned.set(Number(sessionId), session.offeringId);
+
+    const studentIds = [...new Set(clean.map(e => e.studentId))];
     let inserted = 0;
     await db.transaction(async tx => {
-      await tx.delete(student_class_attendance).where(eq(student_class_attendance.sessionId, Number(sessionId)));
-      const studentIds = [...new Set(clean.map(e => e.studentId))];
-      const enRows = studentIds.length > 0
-        ? await tx.select({ id: enrollments.id, studentId: enrollments.studentId }).from(enrollments)
-          .where(and(eq(enrollments.offeringId, session.offeringId), inArray(enrollments.studentId, studentIds)))
-        : [];
-      const enrollmentByStudent = new Map(enRows.map(r => [r.studentId, r.id]));
-      const rows: (typeof student_class_attendance.$inferInsert)[] = [];
-      for (const e of clean) {
-        const enrollmentId = enrollmentByStudent.get(e.studentId);
-        if (enrollmentId !== undefined) rows.push({ sessionId: Number(sessionId), enrollmentId, status: e.status });
+      for (const [sid, offeringId] of owned) {
+        // ردیف‌های حضورِ دانشجویانِ همین عرضه (دانشجویانِ هر عرضه جداست)
+        const enRows = studentIds.length > 0
+          ? await tx.select({ id: enrollments.id, studentId: enrollments.studentId }).from(enrollments)
+              .where(and(eq(enrollments.offeringId, offeringId), inArray(enrollments.studentId, studentIds)))
+          : [];
+        const enrollmentByStudent = new Map(enRows.map(r => [r.studentId, r.id]));
+        const rows: (typeof student_class_attendance.$inferInsert)[] = [];
+        for (const e of clean) {
+          const enrollmentId = enrollmentByStudent.get(e.studentId);
+          if (enrollmentId !== undefined) rows.push({ sessionId: sid, enrollmentId, status: e.status });
+        }
+        await tx.delete(student_class_attendance).where(eq(student_class_attendance.sessionId, sid));
+        if (rows.length) await tx.insert(student_class_attendance).values(rows);
+        inserted += rows.length;
+        // ثبت حضور استاد — همان جلسه (بدون تکرار)
+        await tx.delete(professor_class_attendance).where(and(
+          eq(professor_class_attendance.sessionId, sid),
+          eq(professor_class_attendance.staffId, me.id),
+        ));
+        await tx.insert(professor_class_attendance).values({
+          sessionId: sid, staffId: me.id,
+          verificationMethod: 'MANUAL_ATTENDANCE_SHEET', status: 'VALID',
+        });
       }
-      if (rows.length) await tx.insert(student_class_attendance).values(rows);
-      inserted = rows.length;
-      // ثبت حضور استاد — همان جلسه (بدون تکرار)
-      await tx.delete(professor_class_attendance).where(and(
-        eq(professor_class_attendance.sessionId, Number(sessionId)),
-        eq(professor_class_attendance.staffId, me.id),
-      ));
-      await tx.insert(professor_class_attendance).values({
-        sessionId: Number(sessionId), staffId: me.id,
-        verificationMethod: 'MANUAL_ATTENDANCE_SHEET', status: 'VALID',
-      });
     });
 
     revalidatePath('/professor/attendance');
-    return { ok: true, savedCount: inserted };
+    return { ok: true, savedCount: inserted, sessionCount: owned.size };
   } catch (err) {
     return { ok: false, error: (err as Error)?.message || 'خطا در ذخیرهٔ حضور و غیاب.' };
   }

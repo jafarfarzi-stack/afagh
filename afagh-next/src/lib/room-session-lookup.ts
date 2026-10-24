@@ -35,6 +35,8 @@ export interface RoomSessionRow {
   groupNumber: number;
   /** اتاقی که برای این جلسه حل شد (همیشه = roomId ورودی) */
   roomId: number;
+  /** کلیدِ ادغامِ دستیِ کارشناس — برای تشخیصِ «کلاس ادغامی» */
+  sharedScheduleGroupKey: string | null;
 }
 
 /** 'HH:MM:SS' یا 'HH:MM' → 'HH:MM' */
@@ -92,6 +94,7 @@ export async function listSessionsInRoom(roomId: number, jalaliDate: string): Pr
       courseTitle: courses.title,
       courseCode: courses.code,
       groupNumber: course_offerings.groupNumber,
+      sharedScheduleGroupKey: course_offerings.sharedScheduleGroupKey,
     })
     .from(class_sessions)
     .innerJoin(course_offerings, eq(course_offerings.id, class_sessions.offeringId))
@@ -119,6 +122,7 @@ export async function listSessionsInRoom(roomId: number, jalaliDate: string): Pr
       courseCode: r.courseCode,
       groupNumber: r.groupNumber,
       roomId,
+      sharedScheduleGroupKey: r.sharedScheduleGroupKey ?? null,
     }));
 }
 
@@ -162,6 +166,7 @@ export async function listUpcomingSessionsInRoom(
       courseTitle: courses.title,
       courseCode: courses.code,
       groupNumber: course_offerings.groupNumber,
+      sharedScheduleGroupKey: course_offerings.sharedScheduleGroupKey,
     })
     .from(class_sessions)
     .innerJoin(course_offerings, eq(course_offerings.id, class_sessions.offeringId))
@@ -193,6 +198,7 @@ export async function listUpcomingSessionsInRoom(
       courseCode: r.courseCode,
       groupNumber: r.groupNumber,
       roomId,
+      sharedScheduleGroupKey: r.sharedScheduleGroupKey ?? null,
     });
     if (out.length >= limit) break;
   }

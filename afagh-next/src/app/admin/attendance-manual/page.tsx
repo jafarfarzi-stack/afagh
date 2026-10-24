@@ -4,6 +4,7 @@ import { class_sessions, course_offerings, courses, professor_class_attendance, 
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { currentTermFor, termsFor } from '@/lib/terms';
+import { mergeBadgeText } from '@/lib/merged-class-core';
 import ManualAttendanceClient, { type ManualRow } from './ManualAttendanceClient';
 
 export const dynamic = 'force-dynamic';
@@ -47,6 +48,7 @@ export default async function ManualAttendancePage({
           courseCode: courses.code,
           courseTitle: courses.title,
           staffId: course_offerings.professorId,
+          sharedScheduleGroupKey: course_offerings.sharedScheduleGroupKey,
           professorName: sql<string>`${users.firstName} || ' ' || ${users.lastName}`,
           recordedMethod: professor_class_attendance.verificationMethod,
           recordedStatus: professor_class_attendance.status,
@@ -85,15 +87,45 @@ export default async function ManualAttendancePage({
         status: r.recordedStatus ?? null,
         note: r.recordedNote ?? null,
         punches: Number(r.punches ?? 0),
+        sharedScheduleGroupKey: r.sharedScheduleGroupKey ?? null,
       }))
     : [];
+
+  /* ── کلاس‌های ادغامیِ دستی → یک ردیف ───────────────────────────────────
+     اگر کارشناس چند عرضه را «ادغام» کرده باشد (یک استاد، یک اتاق، یک ساعت)،
+     این‌جا فقط ردیفِ نماینده می‌ماند و بقیه در `memberSessionIds` نگه داشته
+     می‌شوند؛ اکشن‌ها (`confirmProfessorAttendanceAction` /
+     `markClassHeldAction`) خودشان روی همهٔ اعضا اعمال می‌شوند.
+
+     ⚠ فقط ادغامِ **دستی** (`K:`) این‌جا یکی می‌شود. ادغامِ خودکارِ
+     ساعت/استاد/اتاق نیاز به حلِ اتاق دارد که این صفحه (فهرستِ کلِ ترم) انجام
+     نمی‌دهد؛ آن موارد در کارتابل کنترل‌کننده و صفحهٔ QR سردر یک‌ردیفی‌اند. */
+  const mergedRows: ManualRow[] = [];
+  const byKey = new Map<string, ManualRow[]>();
+  for (const r of rows) {
+    const k = String(r.sharedScheduleGroupKey ?? '').trim();
+    if (!k || k.startsWith('SOLO-')) { mergedRows.push(r); continue; }
+    const list = byKey.get(k) ?? [];
+    list.push(r);
+    byKey.set(k, list);
+  }
+  for (const list of byKey.values()) {
+    const [primary, ...rest] = list;
+    mergedRows.push({
+      ...primary,
+      merged: list.length > 1,
+      memberCount: list.length,
+      memberSessionIds: list.map(x => x.sessionId),
+      memberTitles: mergeBadgeText(list.length),
+    });
+  }
 
   return (
     <ManualAttendanceClient
       terms={terms.map(t => ({ id: t.id, title: t.title, termCode: t.termCode, isCurrent: !!t.isCurrent, isActive: t.id === (active?.id ?? -1) }))}
       termId={term?.id ?? 0}
       termTitle={term?.title ?? '—'}
-      rows={rows}
+      rows={mergedRows}
     />
   );
 }

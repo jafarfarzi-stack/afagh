@@ -58,6 +58,10 @@ export interface AttendanceCourseOffering {
   scheduleTime: string;
   hasSchedules?: boolean;
   canGenerate?: boolean;
+  /** این کلاس ادغامی است — چند عرضه در یک جلسهٔ فیزیکی */
+  merged?: boolean;
+  /** چند عرضه در این کلاس ادغام شده‌اند */
+  memberCount?: number;
   students: StudentInfo[];
   sessions: ClassSessionItem[];
 }
@@ -861,6 +865,14 @@ export default function ProfessorAttendanceClient({
                       className="w-full flex flex-wrap items-center gap-2 px-2 py-1.5 rounded-xl bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 transition"
                     >
                       <span className="font-black text-slate-900 text-xs">{o.title}</span>
+                      {o.merged ? (
+                        <span
+                          title={`این کلاس از ${faNum(o.memberCount ?? 2)} عرضه تشکیل شده؛ ثبت حضور روی همهٔ آن‌ها اعمال می‌شود.`}
+                          className="text-[10px] rounded-full px-2 py-0.5 font-black bg-violet-100 text-violet-800 border border-violet-200"
+                        >
+                          🔗 {faNum(o.memberCount ?? 2)} عرضه
+                        </span>
+                      ) : null}
                       <span className="text-[10px] font-mono text-slate-500">({o.code})</span>
                       <span className="text-[10px] rounded-full px-2 py-0.5 font-black bg-white text-slate-600 border border-slate-200">گروه {faNum(o.groupNumber)}</span>
                       <span className="text-[10px] rounded-full px-2 py-0.5 font-black bg-white text-indigo-700 border border-indigo-200">

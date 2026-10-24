@@ -46,6 +46,7 @@ import {
 } from '@/db/schema';
 import { getBool, getSetting } from '@/lib/settings';
 import { iranDowFromJalali } from '@/lib/room-checkin';
+import { groupSessionsIntoMerged, type MergedSessionGroup } from '@/lib/merged-class-core';
 
 export type AttendanceRecorderMode = 'PROFESSOR' | 'CONTROLLER' | 'BOTH';
 
@@ -253,6 +254,8 @@ export interface ControlSessionRow {
   recordedMethod: string | null;
   recordedStatus: string | null;
   recordedBy: string | null;
+  /** کلیدِ ادغامِ دستی — برای تشخیصِ «کلاس ادغامی» (یک جلسه، چند عرضه) */
+  sharedScheduleGroupKey: string | null;
 }
 
 /**
@@ -306,6 +309,7 @@ export async function listTodaySessionsForRooms(
       courseCode: courses.code,
       groupNumber: course_offerings.groupNumber,
       professorStaffId: course_offerings.professorId,
+      sharedScheduleGroupKey: course_offerings.sharedScheduleGroupKey,
     })
     .from(class_sessions)
     .innerJoin(course_offerings, eq(course_offerings.id, class_sessions.offeringId))
@@ -410,10 +414,39 @@ export async function listTodaySessionsForRooms(
       recordedMethod: a?.method ?? null,
       recordedStatus: a?.status ?? null,
       recordedBy: (a?.confirmedBy != null && confirmName.get(a.confirmedBy)) || null,
+      sharedScheduleGroupKey: r.sharedScheduleGroupKey ?? null,
     });
   }
 
   return out.sort((x, y) => x.startTime.localeCompare(y.startTime) || x.roomName.localeCompare(y.roomName, 'fa'));
+}
+
+/**
+ * همان جلساتِ امروز، ولی گروه‌بندی‌شده به «کلاس فیزیکی».
+ *
+ * چرا لازم شد: در یک اتاق و یک ساعت ممکن است چند عرضه (مثلاً «ریاضی» و
+ * «ریاضی ۱») با یک استاد برگزار شوند که در عمل **یک** کلاس‌اند. اگر تک‌تک
+ * نشان داده شوند، کنترل‌کننده باید چند بار «ثبت حضور» بزند و اگر یکی را
+ * فراموش کند، حضورِ آن کلاس ناقص می‌ماند.
+ *
+ * UI فقط ردیفِ نماینده را نشان می‌دهد؛ ثبت روی نماینده، خودکار روی همهٔ
+ * اعضا اعمال می‌شود (`recordCore` در `p/[code]/actions.ts`).
+ */
+export async function listMergedTodaySessionsForRooms(
+  roomIds: number[],
+  jalaliDate: string,
+): Promise<MergedSessionGroup<ControlSessionRow>[]> {
+  const rows = await listTodaySessionsForRooms(roomIds, jalaliDate);
+  return groupSessionsIntoMerged(rows.map(r => ({
+    sessionId: r.sessionId,
+    offeringId: r.offeringId,
+    roomId: r.roomId,
+    startTime: r.startTime,
+    endTime: r.endTime,
+    professorId: r.professorStaffId,
+    sharedScheduleGroupKey: r.sharedScheduleGroupKey,
+    row: r,
+  }))).map(g => ({ ...g, members: g.members.map(m => m.row) }));
 }
 
 /**

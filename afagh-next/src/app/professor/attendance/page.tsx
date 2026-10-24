@@ -288,6 +288,8 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
       scheduleTime,
       hasSchedules: g.members.some(m => (schedulesByOffering.get(m.offering.id)?.length ?? 0) > 0),
       canGenerate: g.members.some(m => (schedulesByOffering.get(m.offering.id) ?? []).some(r => r.scheduleType === 'CLASS' && r.dayOfWeek != null)),
+      merged: g.merged,
+      memberCount: g.members.length,
       students: studentsList,
       sessions,
     };
