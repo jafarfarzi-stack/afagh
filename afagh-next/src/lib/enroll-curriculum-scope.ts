@@ -16,7 +16,7 @@
 
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { curriculum_courses } from '@/db/schema';
+import { curriculum_courses, student_course_grants } from '@/db/schema';
 import { resolveStudentCurriculum } from './curriculum-apply';
 import type { ResolutionReason } from './curriculum-resolution';
 
@@ -30,6 +30,8 @@ export interface StudentCurriculumScope {
   courseIds: Set<number>;
   /** courseId → ترم پیشنهادی (recommendedSemester، ۱..۸ / ۹=تابستان)؛ null = بدون ترم مشخص */
   recommendedByCourse: Map<number, number | null>;
+  /** courseIdهایی که مدیر گروه صریحاً برای این دانشجو تخصیص داده (حتی ترم بالاتر) */
+  grantedCourseIds: Set<number>;
 }
 
 /**
@@ -38,6 +40,17 @@ export interface StudentCurriculumScope {
 export async function resolveStudentCurriculumScope(
   studentId: number,
 ): Promise<StudentCurriculumScope> {
+  // تخصیص‌های صریح مدیر گروه — مستقل از حل‌شدنِ چارت بارگذاری می‌شوند تا اگر
+  // چارت حل نشد هم در دسترس باشند (اعمالِ آن‌ها فقط در حالت resolved معنا دارد).
+  const grantRows = await db
+    .select({ courseId: student_course_grants.courseId })
+    .from(student_course_grants)
+    .where(eq(student_course_grants.studentId, studentId));
+  const grantedCourseIds = new Set<number>();
+  for (const g of grantRows) {
+    if (g.courseId != null) grantedCourseIds.add(g.courseId);
+  }
+
   const resolution = await resolveStudentCurriculum(studentId);
   if (!resolution.version) {
     return {
@@ -47,6 +60,7 @@ export async function resolveStudentCurriculumScope(
       versionCode: null,
       courseIds: new Set(),
       recommendedByCourse: new Map(),
+      grantedCourseIds,
     };
   }
 
@@ -74,6 +88,7 @@ export async function resolveStudentCurriculumScope(
     versionCode: resolution.version.versionCode ?? null,
     courseIds,
     recommendedByCourse,
+    grantedCourseIds,
   };
 }
 
@@ -87,10 +102,12 @@ export async function resolveStudentCurriculumScope(
  *
  * قانون نمایش:
  *   - خارج از چارت (courseId در version نباشد) → مخفی
+ *   - تخصیص صریح مدیر گروه (student_course_grants) → نمایش، حتی ترم بالاتر
  *   - ترم پیشنهادی = ترم جاری → نمایش
  *   - ترم پیشنهادی = null (آزاد) → نمایش (در هر ترم مجاز)
+ *   - ترم‌های پایین‌تر → نمایش (دانشجو می‌تواند درس ترم‌های قبلی را نیز بگیرد)
  *   - دروس مردودی برای تکرار → نمایش
- *   - بقیه (دروس ترم‌های دیگر که هنوز نگذرانده) → مخفی
+ *   - ترم‌های بالاتر بدون تخصیص → مخفی
  */
 export function scopeOfferingsByCurriculum<T extends { courseId: number | null }>(
   offerings: T[],
@@ -110,6 +127,9 @@ export function scopeOfferingsByCurriculum<T extends { courseId: number | null }
     const cid = o.courseId;
     if (cid == null) return false;                  // ارائه بدون درس پیوست → خارج از چارت
     if (!scope.courseIds.has(cid)) return false;    // خارج از چارت → مخفی
+    // تخصیص صریح مدیر گروه — تنها راه بازشدنِ درسِ ترم بالاتر (بعد از چک عضویت،
+    // پس تخصیص نمی‌تواند درسی از خارج چارت را باز کند).
+    if (scope.grantedCourseIds.has(cid)) return true;
     const rec = scope.recommendedByCourse.get(cid);
     if (rec == null) return true;                   // درس آزاد (بدون ترم مشخص)
     if (currentTermOrdinal != null && rec === currentTermOrdinal) return true; // ترم جاری
@@ -118,7 +138,7 @@ export function scopeOfferingsByCurriculum<T extends { courseId: number | null }
     // (مثلاً دانشجوی ترم ۵ می‌تواند درس ترم ۳ را اخذ کند).
     if (currentTermOrdinal != null && rec < currentTermOrdinal) return true;
     // rec > currentTermOrdinal (ترم‌های بالاتر): پیش‌فرض مخفی — فقط با تخصیصِ
-    // صریح مدیر گروه نمایش داده می‌شود (ویژگی تخصیص در گام بعد پیاده‌سازی می‌شود).
+    // صریح مدیر گروه (student_course_grants) نمایش داده می‌شود.
     return false;
   });
 }

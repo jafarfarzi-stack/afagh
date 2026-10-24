@@ -651,6 +651,31 @@ export const curriculum_courses = pgTable('curriculum_courses', {
 }));
 
 /**
+ * تخصیص صریحِ «درس ترم بالاتر» توسط مدیر گروه.
+ *
+ * قانون چارت در انتخاب واحد: دانشجو درسِ ترم جاری و ترم‌های پایین‌ترِ خودش را
+ * می‌بیند؛ درسِ ترم‌های بالاتر فقط با تخصیصِ این جدول نمایان می‌شود (مثلاً
+ * دانشجوی ترم ۵ که برای جبرانی باید درس ترم ۶ را بگیرد). درس حتماً باید عضو
+ * چارتِ همان دانشجو باشد — تخصیص نمی‌تواند درسی از خارج چارت باز کند.
+ */
+export const student_course_grants = pgTable('student_course_grants', {
+  id: serial('id').primaryKey(),
+  studentId: integer('studentId').notNull().references(() => students.id, { onDelete: 'cascade' }),
+  courseId: integer('courseId').notNull().references(() => courses.id, { onDelete: 'cascade' }),
+  curriculumVersionId: integer('curriculumVersionId').references(() => curriculum_versions.id, { onDelete: 'set null' }),
+  /** شمارهٔ ترمِ پیشنهادیِ همین درس در چارت (برای نمایش «چرا بالاتر است») */
+  termOrdinal: integer('termOrdinal'),
+  reason: text('reason'),
+  grantedByStaffId: integer('grantedByStaffId').references(() => staff.id, { onDelete: 'set null' }),
+  grantedByUserId: integer('grantedByUserId').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('createdAt').defaultNow(),
+}, (t) => ({
+  uqStudentCourse: unique('uq_student_course_grants_student_course').on(t.studentId, t.courseId),
+  studentIdx: index('idx_scg_student').on(t.studentId),
+  courseIdx: index('idx_scg_course').on(t.courseId),
+}));
+
+/**
  * چرخهٔ تأیید نسخهٔ برنامه — جدول append-only؛ هر گذارِ وضعیت دقیقاً یک ردیف.
  * (Audit دانشگاه: چه‌کسی، چه زمانی، از چه وضعیتی به کدام — با امضای الکترونیک اختیاری)
  */

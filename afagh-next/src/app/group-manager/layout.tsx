@@ -78,6 +78,7 @@ export default async function GroupManagerLayout({ children }: { children: React
           <Link href="/group-manager" className="hover:underline">خانه</Link>
           <Link href="/group-manager/courses" className="hover:underline">دروس گروه</Link>
           <Link href="/group-manager/offerings" className="hover:underline">ارائه‌های ترم</Link>
+          <Link href="/group-manager/grants" className="hover:underline">تخصیص درس ترم بالاتر</Link>
           <Link href="/group-manager/classrooms" className="hover:underline">کلاس‌ها</Link>
           <Link href="/group-manager/equivalence" className="hover:underline">معادل‌سازی دروس</Link>
           <Link href="/group-manager/bypass" className="hover:underline">درخواست‌های بدون پیش‌نیاز</Link>
