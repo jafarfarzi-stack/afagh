@@ -1,20 +1,17 @@
 import Link from 'next/link';
-import { and, count, eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { isDemoProfessorUser } from '@/lib/demo-accounts';
 import {
-  DEMO_ACADEMIC_RANK,
   DEMO_DASHBOARD_CLASSES,
   DEMO_DASHBOARD_CONTRACT,
-  DEMO_DASHBOARD_SUMMARY,
-  DEMO_DEPARTMENT_NAME,
   DEMO_LIVE_SESSIONS,
   DEMO_TERM_TITLE,
 } from '@/lib/demo-professor-data';
 import { DEMO_RECORDINGS } from '@/lib/demo-student-data';
 import { db } from '@/db';
 import {
-  departments, electronic_documents,
-  professor_availabilities, professor_term_contracts, payroll_statements,
+  electronic_documents,
+  professor_term_contracts, payroll_statements,
   universities,
 } from '@/db/schema';
 import { getSetting } from '@/lib/settings';
@@ -24,12 +21,8 @@ import MessengerOnboardBanner from '@/components/MessengerOnboardBanner';
 import { getTodayLiveClasses } from '@/lib/moodle-bbb';
 import { professorTermFilter } from '@/lib/professor-term-filter';
 import {
-  groupIntoMerged,
+  getProfessorMergedClasses,
   mergedDisplayTitle,
-  mergedGroupKey,
-  offeringSharedKeys,
-  professorScheduleRows,
-  professorUniqueOfferings,
   type ProfessorScheduleRow,
 } from '@/lib/professor-data';
 import ProfessorWeekTable from './week-table';
@@ -48,32 +41,24 @@ export default async function ProfessorHome() {
 
   const universityId = me.universityId ?? user.universityId ?? null;
 
-  const [termFilter, liveSessions, deptRows, uniRows] = await Promise.all([
+  const [termFilter, liveSessions, uniRows] = await Promise.all([
     professorTermFilter(universityId),
     getTodayLiveClasses({ universityId, staffId: me.id, viewerUserId: user.id }),
-    me.departmentId
-      ? db.select({ name: departments.name }).from(departments).where(eq(departments.id, me.departmentId)).limit(1)
-      : Promise.resolve([]),
     universityId
       ? db.select({ title: universities.title, logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, universityId)).limit(1)
       : Promise.resolve([]),
   ]);
   const { term, selectedTerm } = termFilter;
-  const deptName = deptRows[0]?.name ?? null;
   const [uniRow] = uniRows;
   const needLogoFallback = !uniRow?.logoUrl;
 
-  const [scheduleRows, contractRows, availabilityRows, pays, termDocs, logoFallback] = await Promise.all([
-    term ? professorScheduleRows(me.id, term.id, universityId) : Promise.resolve([]),
+  const [mergedClasses, contractRows, pays, logoFallback] = await Promise.all([
+    term ? getProfessorMergedClasses(me.id, term.id, universityId) : Promise.resolve(null),
     term
       ? db.select({ id: professor_term_contracts.id, contractType: professor_term_contracts.contractType, baseDutyUnits: professor_term_contracts.baseDutyUnits })
           .from(professor_term_contracts)
           .where(and(eq(professor_term_contracts.staffId, me.id), eq(professor_term_contracts.termId, term.id)))
           .limit(1)
-      : Promise.resolve([]),
-    term
-      ? db.select({ n: count() }).from(professor_availabilities)
-          .where(and(eq(professor_availabilities.staffId, me.id), eq(professor_availabilities.termId, term.id)))
       : Promise.resolve([]),
     term
       ? db
@@ -82,21 +67,23 @@ export default async function ProfessorHome() {
           .innerJoin(professor_term_contracts, eq(professor_term_contracts.id, payroll_statements.contractId))
           .where(and(eq(professor_term_contracts.staffId, me.id), eq(professor_term_contracts.termId, term.id)))
       : Promise.resolve([]),
-    term
-      ? db
-          .select({ id: electronic_documents.id, title: electronic_documents.title, signatureStatus: electronic_documents.signatureStatus, signedAt: electronic_documents.signedAt, documentHash: electronic_documents.documentHash, createdAt: electronic_documents.createdAt })
-          .from(electronic_documents)
-          .where(and(eq(electronic_documents.staffId, me.id), eq(electronic_documents.termId, term.id)))
-      : Promise.resolve([]),
     needLogoFallback ? getSetting('UNIVERSITY_LOGO').catch(() => '') : Promise.resolve(''),
   ]);
   const universityLogoUrl = uniRow?.logoUrl || logoFallback || null;
 
   const contract = contractRows[0] ?? null;
 
-  const availabilityCount = Number(availabilityRows[0]?.n ?? 0);
-  const gradeDeadline = term?.gradeEntryDeadline ?? null;
+  const scheduleRows = mergedClasses?.scheduleRows ?? [];
+  const mergeSharedKeys = mergedClasses?.mergeSharedKeys ?? new Map<number, string>();
+  const mergedClassGroups = mergedClasses?.mergedClassGroups ?? [];
 
+  // وضعیت امضای اسناد این ترم — برای بخش قرارداد پایین صفحه
+  const termDocs = term && me
+    ? await db
+        .select({ signatureStatus: electronic_documents.signatureStatus })
+        .from(electronic_documents)
+        .where(and(eq(electronic_documents.staffId, me.id), eq(electronic_documents.termId, term.id)))
+    : [];
   const signatureStatus = termDocs.some(d => d.signatureStatus === 'SIGNED')
     ? 'SIGNED'
     : termDocs.length > 0
@@ -104,20 +91,6 @@ export default async function ProfessorHome() {
       : 'NONE';
 
   const termTitle = demo ? DEMO_TERM_TITLE : term?.title ?? '';
-
-  const uniqueScheduleRows = professorUniqueOfferings(scheduleRows);
-  const mergeSlotsById = new Map<number, { dayOfWeek: number | null; startTime: string; endTime: string; roomKey: string }[]>();
-  for (const r of scheduleRows) {
-    const list = mergeSlotsById.get(r.id) ?? [];
-    list.push({ dayOfWeek: r.dayOfWeek, startTime: r.startTime, endTime: r.endTime, roomKey: r.roomName });
-    mergeSlotsById.set(r.id, list);
-  }
-  const mergeSharedKeys = await offeringSharedKeys(uniqueScheduleRows.map(r => r.id));
-  const mergedClassGroups = groupIntoMerged(
-    uniqueScheduleRows,
-    r => r.id,
-    r => mergedGroupKey(mergeSharedKeys.get(r.id) ?? null, mergeSlotsById.get(r.id) ?? []),
-  );
 
   const classCards = demo
     ? DEMO_DASHBOARD_CLASSES.map(c => ({
@@ -157,105 +130,10 @@ export default async function ProfessorHome() {
         };
       });
 
-  const realOfferings = demo ? [] : mergedClassGroups;
-  const realScheduledCount = scheduleRows.filter(r => r.hasSchedule).length;
-  const realUnscheduledCount = scheduleRows.filter(r => !r.hasSchedule).length;
   const weekTableRows = scheduleRows.map(r => ({ ...r, sharedScheduleGroupKey: mergeSharedKeys.get(r.id) ?? null }));
 
   return (
     <div className="space-y-6" dir="rtl">
-
-      <div className="print:hidden bg-gradient-to-l from-indigo-950 via-indigo-900 to-slate-900 text-white rounded-3xl p-6 shadow-xl border border-indigo-700/50 space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-400 text-slate-950">
-              {demo
-                ? DEMO_TERM_TITLE
-                : term
-                  ? term.title
-                  : 'نیمسال تحصیلی جاری برای دانشگاه شما تعیین نشده است'}
-            </span>
-            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight mt-2">
-              خوش آمدید، استاد گرامی {user.name}
-            </h1>
-            <p className="text-xs text-indigo-200 mt-1">
-              کد پرسنلی: {faNum(me.staffCode)}
-              {demo
-                ? ` · مرتبه علمی: ${DEMO_ACADEMIC_RANK}`
-                : me.academicRank
-                  ? ` · مرتبه علمی: ${me.academicRank}`
-                  : ''}
-              {` · گروه: ${demo ? DEMO_DEPARTMENT_NAME : deptName ?? 'ثبت نشده'}`}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/professor/schedule"
-              className="px-4 py-2 rounded-xl bg-white text-indigo-950 font-extrabold text-xs shadow hover:bg-indigo-50 transition"
-            >
-              🗓️ برنامه هفتگی تدریس
-            </Link>
-            <Link
-              href="/professor/contract"
-              className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs shadow transition"
-            >
-              📑 مشاهده و امضای قرارداد تدریس
-            </Link>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
-          <div className="bg-white/10 p-3 rounded-2xl border border-white/10">
-            <span className="text-indigo-200 block mb-0.5">تعداد کلاس‌های ترم:</span>
-            <span className="font-extrabold text-white text-sm">
-              {faNum(demo ? DEMO_DASHBOARD_SUMMARY.classCount : realOfferings.length)}{' '}
-              {DEMO_DASHBOARD_SUMMARY.classCountLabel}
-            </span>
-            {!demo && realUnscheduledCount > 0 && (
-              <span className="block mt-1 text-[10px] text-amber-200 font-bold">
-                {faNum(realScheduledCount)} جلسه زمان‌بندی‌شده · {faNum(realUnscheduledCount)} بدون ساعت
-              </span>
-            )}
-          </div>
-          <div className="bg-white/10 p-3 rounded-2xl border border-white/10">
-            <span className="text-indigo-200 block mb-0.5">
-              {demo ? DEMO_DASHBOARD_SUMMARY.availabilityLabel : 'اعلام ساعات حضور ترم:'}
-            </span>
-            <span className="font-extrabold text-sm text-emerald-300">
-              {demo
-                ? DEMO_DASHBOARD_SUMMARY.availabilityValue
-                : availabilityCount > 0
-                  ? `${faNum(availabilityCount)} بازهٔ زمانی ثبت شده`
-                  : 'ثبت نشده'}
-            </span>
-          </div>
-          <div className="bg-white/10 p-3 rounded-2xl border border-white/10">
-            <span className="text-indigo-200 block mb-0.5">
-              {demo ? DEMO_DASHBOARD_SUMMARY.contractLabel : 'قرارداد حق‌التدریس:'}
-            </span>
-            <span className="font-extrabold text-amber-300 text-sm">
-              {demo
-                ? DEMO_DASHBOARD_SUMMARY.contractValue
-                : signatureStatus === 'SIGNED'
-                  ? 'امضا شده'
-                  : signatureStatus === 'PENDING'
-                    ? 'در انتظار امضای الکترونیک'
-                    : 'سندی ثبت نشده'}
-            </span>
-          </div>
-          <div className="bg-white/10 p-3 rounded-2xl border border-white/10">
-            <span className="text-indigo-200 block mb-0.5">مهلت نهایی‌سازی نمرات:</span>
-            <span className="font-extrabold text-white text-sm">
-              {demo
-                ? DEMO_DASHBOARD_SUMMARY.gradeDeadlineValue
-                : gradeDeadline
-                  ? faDate(gradeDeadline)
-                  : 'تعیین نشده'}
-            </span>
-          </div>
-        </div>
-      </div>
 
       <VirtualClassroomWidget
         user={{ id: user.id, name: user.name, role: 'PROFESSOR' }}

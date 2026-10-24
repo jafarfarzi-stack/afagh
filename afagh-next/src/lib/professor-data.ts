@@ -1,4 +1,5 @@
 import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { cache } from 'react';
 import { db } from '@/db';
 import { hasProfessorSchedule, professorRangeMatch } from '@/lib/professor-week-grid';
 import {
@@ -310,6 +311,36 @@ export async function offeringSharedKeys(offeringIds: number[]): Promise<Map<num
   }
   return out;
 }
+
+/**
+ * کلاس‌های ترم استاد + ادغام کلاس‌های هم‌زمان (shared schedule) — نتیجه با
+ * `cache()` بین درخواست تکرار نمی‌شود، پس layout (سربرگ ادغام‌شده) و صفحهٔ
+ * داشبورد که هر دو این را می‌خوانند فقط یک بار کوئری می‌زنند.
+ */
+export const getProfessorMergedClasses = cache(async (
+  staffId: number,
+  termId: number,
+  universityId?: number | null,
+) => {
+  const scheduleRows = await professorScheduleRows(staffId, termId, universityId);
+  const uniqueScheduleRows = professorUniqueOfferings(scheduleRows);
+  const mergeSlotsById = new Map<
+    number,
+    { dayOfWeek: number | null; startTime: string; endTime: string; roomKey: string }[]
+  >();
+  for (const r of scheduleRows) {
+    const list = mergeSlotsById.get(r.id) ?? [];
+    list.push({ dayOfWeek: r.dayOfWeek, startTime: r.startTime, endTime: r.endTime, roomKey: r.roomName });
+    mergeSlotsById.set(r.id, list);
+  }
+  const mergeSharedKeys = await offeringSharedKeys(uniqueScheduleRows.map(r => r.id));
+  const mergedClassGroups = groupIntoMerged(
+    uniqueScheduleRows,
+    r => r.id,
+    r => mergedGroupKey(mergeSharedKeys.get(r.id) ?? null, mergeSlotsById.get(r.id) ?? []),
+  );
+  return { scheduleRows, uniqueScheduleRows, mergeSlotsById, mergeSharedKeys, mergedClassGroups };
+});
 
 export function mergedDisplayTitle(primaryTitle: string, codes: string[]): string {
   const uniq = [...new Set(codes)];

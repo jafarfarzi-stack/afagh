@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { eq } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { electronic_documents, departments, users } from '@/db/schema';
+import { electronic_documents, departments, users, professor_availabilities, universities } from '@/db/schema';
 import { getStaffByUser, requireRole, endCurrentSession } from '@/lib/auth';
 import { headedDepartments } from '@/lib/group-manager';
 import { getSiblingAccounts } from '@/lib/account-switch';
@@ -10,19 +10,24 @@ import PanelSwitcher from '@/components/PanelSwitcher';
 import { ADMIN_PANEL_ROLES } from '@/lib/panel-links';
 import SessionLock from '@/components/SessionLock';
 import TermSwitcher from '@/components/TermSwitcher';
-import { getTermScope } from '@/lib/term-scope';
 import ThemeToggle from '@/components/ThemeToggle';
 import MobileTabBar from '@/components/MobileTabBar';
 import UserAvatar from '@/components/UserAvatar';
 import { logoutAction } from '../login/actions';
+import { professorTermFilter } from '@/lib/professor-term-filter';
+import { getProfessorMergedClasses } from '@/lib/professor-data';
+import { isDemoProfessorUser } from '@/lib/demo-accounts';
+import { DEMO_DASHBOARD_SUMMARY } from '@/lib/demo-professor-data';
+import { getSetting } from '@/lib/settings';
+
+const faNum = (n: any) => (n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
+const faDate = (d: Date | string | null | undefined) => (d ? new Date(d).toLocaleDateString('fa-IR') : null);
 
 export default async function ProfessorLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRole(['PROFESSOR']);
   const me = await getStaffByUser(user.id);
   // عکس پرسنلی استاد (برای آواتار هدر) — کلید شیء، نمایش از مسیر امن
   const [photoRow] = await db.select({ photoKey: users.photoKey }).from(users).where(eq(users.id, user.id)).limit(1);
-  const pending = me ? await db.select({ id: electronic_documents.id }).from(electronic_documents).where(eq(electronic_documents.staffId, me.id)) : [];
-  const pendingCount = pending.length;
 
   // نام گروه آموزشی واقعی
   let deptName = '—';
@@ -68,25 +73,100 @@ export default async function ProfessorLayout({ children }: { children: React.Re
 
   // استاد به یک دانشگاه تعلق دارد؛ فیلتر نیمسال فقط با همان دانشگاه اعتبارسنجی می‌شود
   const universityId = me?.universityId ?? null;
-  const termScope = await getTermScope(universityId);
+  // professorTermFilter (به‌جای getTermScope) چون ردیف کامل ترم — از جمله
+  // gradeEntryDeadline — را برای کاشی «مهلت نهایی‌سازی نمرات» در سربرگ می‌خواهیم.
+  const termFilter = await professorTermFilter(universityId);
+  const termScope = { terms: termFilter.terms, selectedId: termFilter.selectedTerm?.id ?? null };
+  const term = termFilter.term;
+
+  // ── داده‌های سربرگ ادغام‌شده (جای کارت هیروی داشبورد) ─────────────────────
+  // پیش از این، خوش‌آمدگویی/کد پرسنلی/چهار کاشی وضعیت در یک کارت بنفش جداگانه
+  // زیر هدر نمایش داده می‌شد و دو دکمهٔ آن («برنامه هفتگی»، «قرارداد») با
+  // کاشی‌های دسترسی سریع داشبورد تکرار داشتند. حالا همه در یک بلوک بالای صفحه‌اند.
+  const demo = me ? await isDemoProfessorUser(user.id) : false;
+
+  const [uniRow, availabilityRows, mergedClasses, termDocs] = await Promise.all([
+    universityId
+      ? db.select({ title: universities.title, logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, universityId)).limit(1)
+      : Promise.resolve([]),
+    me && term
+      ? db.select({ n: count() }).from(professor_availabilities)
+          .where(and(eq(professor_availabilities.staffId, me.id), eq(professor_availabilities.termId, term.id)))
+      : Promise.resolve([]),
+    me && term ? getProfessorMergedClasses(me.id, term.id, universityId) : Promise.resolve(null),
+    me
+      ? db.select({ termId: electronic_documents.termId, signatureStatus: electronic_documents.signatureStatus })
+          .from(electronic_documents).where(eq(electronic_documents.staffId, me.id))
+      : Promise.resolve([]),
+  ]);
+  const universityLogoUrl = uniRow?.[0]?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
+  const availabilityCount = Number(availabilityRows?.[0]?.n ?? 0);
+  const classCount = mergedClasses?.mergedClassGroups.length ?? 0;
+
+  // وضعیت امضای اسناد این ترم — از فهرست اسناد استاد مشتق می‌شود
+  const termDocRows = term ? termDocs.filter(d => d.termId === term.id) : [];
+  const signatureStatus = termDocRows.some(d => d.signatureStatus === 'SIGNED')
+    ? 'SIGNED'
+    : termDocRows.length > 0
+      ? 'PENDING'
+      : 'NONE';
+  const gradeDeadline = term?.gradeEntryDeadline ?? null;
+
+  // مقادیر کاشی‌های وضعیت — برای حساب دمو، دادهٔ نمایشی
+  const summary = {
+    classCount: demo ? DEMO_DASHBOARD_SUMMARY.classCount : classCount,
+    availabilityLabel: demo ? DEMO_DASHBOARD_SUMMARY.availabilityLabel : 'اعلام ساعات حضور ترم:',
+    availabilityValue: demo
+      ? DEMO_DASHBOARD_SUMMARY.availabilityValue
+      : availabilityCount > 0
+        ? `${faNum(availabilityCount)} بازهٔ زمانی ثبت شده`
+        : 'ثبت نشده',
+    contractLabel: demo ? DEMO_DASHBOARD_SUMMARY.contractLabel : 'قرارداد حق‌التدریس:',
+    contractValue: demo
+      ? DEMO_DASHBOARD_SUMMARY.contractValue
+      : signatureStatus === 'SIGNED'
+        ? 'امضا شده'
+        : signatureStatus === 'PENDING'
+          ? 'در انتظار امضای الکترونیک'
+          : 'سندی ثبت نشده',
+    gradeDeadlineValue: demo
+      ? DEMO_DASHBOARD_SUMMARY.gradeDeadlineValue
+      : gradeDeadline
+        ? faDate(gradeDeadline)
+        : 'تعیین نشده',
+  };
 
   return (
     <div className="min-h-screen bg-slate-50" dir="rtl">
       <header className="print:hidden bg-slate-900 text-white shadow-md border-b border-slate-800">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 p-4">
-          {/* ردیف اول: لوگو + عنوان (کوتاه در موبایل) + دارک‌مود و خروج — اولیت با ابزارهای کاربر */}
+          {/* ردیف اول: ارم + آواتار + خوش‌آمدگویی و هویت + ابزارهای کاربر */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-sm text-white shadow">
-              آفاق
-            </div>
-            <UserAvatar userId={user.id} hasPhoto={!!photoRow?.photoKey} name={user.name} className="w-9 h-9" fallbackClass="bg-indigo-500" />
-            <div>
-                <p className="font-extrabold text-sm sm:text-base">
-                  <span className="sm:hidden">کارتابل استاد</span>
-                  <span className="hidden sm:inline">کارتابل جامع اعضای هیئت علمی و اساتید</span>
+              {/* ارم دانشگاه جای حرف ثابت «آفاق» — اگر ارمی ثبت نشده باشد،
+                  همان حرف به‌عنوان fallback نمایش داده می‌شود */}
+              {universityLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={universityLogoUrl}
+                  alt="نشان دانشگاه"
+                  className="w-9 h-9 rounded-xl bg-white object-contain p-0.5 shadow shrink-0"
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-sm text-white shadow shrink-0">
+                  آفاق
+                </div>
+              )}
+              <UserAvatar userId={user.id} hasPhoto={!!photoRow?.photoKey} name={user.name} className="w-9 h-9" fallbackClass="bg-indigo-500" />
+              <div className="min-w-0">
+                <p className="font-extrabold text-sm sm:text-base truncate">
+                  خوش آمدید، استاد گرامی {user.name}
                 </p>
-                <p className="text-xs text-slate-400">{user.name}{me ? ' · کد پرسنلی: ' + me.staffCode : ''} · گروه: {deptName}</p>
+                <p className="text-xs text-slate-400 truncate">
+                  کد پرسنلی: {me ? faNum(me.staffCode) : '—'}
+                  {me?.academicRank ? ` · مرتبه علمی: ${me.academicRank}` : ''}
+                  {` · گروه: ${deptName}`}
+                </p>
               </div>
             </div>
             {/* یک ارتفاع و یک تراز برای همهٔ کنترل‌ها (`.hdr-controls` در globals.css) */}
@@ -113,6 +193,28 @@ export default async function ProfessorLayout({ children }: { children: React.Re
               </form>
             </div>
           </div>
+          {/* کاشی‌های وضعیت — ادغام‌شده از کارت هیروی حذف‌شدهٔ داشبورد */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] sm:text-xs">
+            <div className="bg-white/10 p-2 rounded-2xl border border-white/10">
+              <span className="text-indigo-200 block mb-0.5">تعداد کلاس‌های ترم:</span>
+              <span className="font-extrabold text-white text-sm">
+                {faNum(summary.classCount)} {DEMO_DASHBOARD_SUMMARY.classCountLabel}
+              </span>
+            </div>
+            <div className="bg-white/10 p-2 rounded-2xl border border-white/10">
+              <span className="text-indigo-200 block mb-0.5">{summary.availabilityLabel}</span>
+              <span className="font-extrabold text-sm text-emerald-300">{summary.availabilityValue}</span>
+            </div>
+            <div className="bg-white/10 p-2 rounded-2xl border border-white/10">
+              <span className="text-indigo-200 block mb-0.5">{summary.contractLabel}</span>
+              <span className="font-extrabold text-amber-300 text-sm">{summary.contractValue}</span>
+            </div>
+            <div className="bg-white/10 p-2 rounded-2xl border border-white/10">
+              <span className="text-indigo-200 block mb-0.5">مهلت نهایی‌سازی نمرات:</span>
+              <span className="font-extrabold text-white text-sm">{summary.gradeDeadlineValue}</span>
+            </div>
+          </div>
+
           {/* ردیف دوم: سوییچر نیمسال و نقش — کنار هم */}
           <div className="hdr-controls flex flex-wrap items-center gap-2 lg:flex-nowrap lg:shrink-0">
             <div className="hdr-controls flex flex-nowrap items-center gap-2">
