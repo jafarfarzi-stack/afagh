@@ -106,6 +106,22 @@ ALTER TABLE "document_signatures" ENABLE ROW LEVEL SECURITY;
 -- چرخهٔ تأیید برنامهٔ درسی: دفتر ممیزیِ فقط-مالک (بدون سیاست = deny-all برای نقش اپ)
 ALTER TABLE "curriculum_approvals" ENABLE ROW LEVEL SECURITY;
 
+-- جداول پشتیبان دستیِ اطلاعات شخصی (مثل enr_extra_backup_14051 که با studentId ساخته
+-- شده‌اند): اگر موجود باشند RLS می‌گیرند (بدون سیاست = deny-all برای نقش اپ) تا چک
+-- پوششِ hardening قرمز نشود. روی نصب تازه وجود ندارند → بلوک بی‌اثر است.
+DO $$
+DECLARE t text;
+BEGIN
+  FOR t IN
+    SELECT c.relname FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind = 'r'
+      AND c.relname LIKE 'enr\_extra\_backup\_%'
+  LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+  END LOOP;
+END $$;
+
 -- ══ ۳) سیاست‌های خواندن (SELECT) — تعریف مشترک uid ══
 -- uid = nullif(current_setting('app.user_id', true), '')::int
 --    (نبودِ تنظیم → NULL → استفاده در مقایسه FALSE → صفر ردیف)
