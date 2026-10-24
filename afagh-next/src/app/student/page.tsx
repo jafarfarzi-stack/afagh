@@ -1,22 +1,17 @@
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import {
   classrooms,
   course_offerings,
   courses,
-  degree_level_configs,
-  educational_regulations,
   enrollments,
-  majors,
   schedules,
   staff,
   users,
   virtual_classrooms,
 } from '@/db/schema';
-import { db, withUserRls } from '@/db';
+import { db } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
-import { calculateOfficialGPA } from '@/lib/regulations-engine';
-import { resolveStudentCurriculum } from '@/lib/curriculum-apply';
-import { getTermScope, listTermsForUniversity, termOrdinalForEntry } from '@/lib/term-scope';
+import { getTermScope } from '@/lib/term-scope';
 import {
   buildDashboardScheduleMap,
   buildProfNameMap,
@@ -24,7 +19,6 @@ import {
   resolveDashboardTerm,
   toShamsi,
 } from '@/lib/student-dashboard-helpers';
-import { getSetting } from '@/lib/settings';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
 import MessengerOnboardBanner from '@/components/MessengerOnboardBanner';
 import { getExamCardData } from '@/lib/verification';
@@ -32,18 +26,6 @@ import Link from 'next/link';
 import { DemoDashboard } from './demo-sections';
 
 export const dynamic = 'force-dynamic';
-
-const statusFa: Record<string, string> = {
-  ACTIVE: 'مجاز به ادامه تحصیل',
-  PROBATION: 'مشروط',
-  GRADUATED: 'فارغ‌التحصیل',
-  REGISTERED: 'ثبت قطعی',
-  WAITLISTED: 'اتاق انتظار',
-  PENDING_COUNCIL: 'در انتظار شورا',
-  DROPPED: 'حذف‌شده',
-  ABSENT: 'غایب',
-  REJECTED: 'مردود',
-};
 
 export default async function StudentDashboardPage() {
   const user = await requireRole(['STUDENT']);
@@ -56,75 +38,17 @@ export default async function StudentDashboardPage() {
   ]);
   const { filteredTerm, term } = resolveDashboardTerm(termScope);
 
-  // شمارهٔ ترم تحصیلی بر مبنای ورودی — جایگاهِ ترمِ فعلی نسبت به ترمِ ورود
-  const ordinalTerms = await listTermsForUniversity(me.universityId, { limit: null }).catch(() => []);
-  const termOrdinal = term
-    ? termOrdinalForEntry({
-        entryYear: me.entryYear,
-        entryTerm: me.entryTerm,
-        terms: ordinalTerms,
-        targetTermCode: (term as { termCode?: string | null }).termCode ?? null,
-      })
-    : null;
-
   if (demo) {
     return <DemoDashboard name={user.name} filteredTermTitle={filteredTerm?.title ?? null} />;
   }
 
   const examTerm = term ? { id: term.id, title: term.title } : null;
 
-  // نام کوچک دانشجو برای خوش‌آمدگویی (نام کامل در هدرِ بالای صفحه آمده است)
-  const firstName = (user.name || '').trim().split(/\s+/)[0] || 'دانشجو';
-  const [universityName, universityLogo] = await Promise.all([
-    getSetting('UNIVERSITY_NAME'),
-    getSetting('UNIVERSITY_LOGO'),
-  ]);
-
   const [
-    majorRows,
-    levelRows,
-    curriculum,
     examCard,
-    regRows,
-    userRows,
-    allRows,
-    officialGpaResult,
     currentEnrollments,
   ] = await Promise.all([
-    me.majorId
-      ? db.select().from(majors).where(eq(majors.id, me.majorId)).limit(1)
-      : Promise.resolve([]),
-    me.degreeLevelId
-      ? db.select().from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1)
-      : Promise.resolve([]),
-    resolveStudentCurriculum(me.id),
     getExamCardData(user.id, examTerm),
-    me.regulationId
-      ? db.select().from(educational_regulations).where(eq(educational_regulations.id, me.regulationId)).limit(1)
-      : Promise.resolve([]),
-    db.select().from(users).where(eq(users.id, user.id)).limit(1),
-    withUserRls(user.id, tx =>
-      tx
-        .select({
-          id: enrollments.id,
-          code: courses.code,
-          title: courses.title,
-          units: courses.units,
-          practicalUnits: courses.practicalUnits,
-          courseType: courses.courseType,
-          gradingType: courses.gradingType,
-          affectsGpa: courses.affectsGpa,
-          status: enrollments.status,
-          grade: enrollments.gradeValue,
-          gradeStatus: enrollments.gradeStatus,
-          termId: course_offerings.termId,
-        })
-        .from(enrollments)
-        .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
-        .innerJoin(courses, eq(courses.id, course_offerings.courseId))
-        .where(eq(enrollments.studentId, me.id))
-    ),
-    calculateOfficialGPA(me.id),
     term
       ? db
         .select({
@@ -151,14 +75,6 @@ export default async function StudentDashboardPage() {
         )
       : Promise.resolve([]),
   ]);
-
-  const major = majorRows[0] ?? null;
-  const level = levelRows[0] ?? null;
-  const requiredUnitsTotal = curriculum.version ? Number(curriculum.version.totalRequiredUnits ?? 0) : 0;
-  const reg = regRows[0] ?? null;
-  const userRecord = userRows[0] ?? null;
-
-  const currentUnitsTotal = currentEnrollments.reduce((sum, c) => sum + Number(c.units || 0), 0);
 
   const offeringIds = distinctIds(currentEnrollments.map(c => c.offeringId));
   const professorIds = distinctIds(currentEnrollments.map(c => c.professorId));
@@ -244,199 +160,6 @@ export default async function StudentDashboardPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in">
-      {/* ========================================================================= */}
-      {/* 1. STUDENT HERO & PROFILE SUMMARY BANNER */}
-      {/* ========================================================================= */}
-      <div className="card bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white p-6 sm:p-7 rounded-3xl shadow-xl border border-emerald-700/40 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-center gap-4 sm:gap-5">
-            {universityLogo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={universityLogo}
-                alt="نشان دانشگاه"
-                className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/90 p-1.5 object-contain shadow-md shrink-0"
-              />
-            ) : (
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-emerald-600 flex items-center justify-center font-black text-2xl shadow-inner shrink-0">
-                آ
-              </div>
-            )}
-            <div className="space-y-1">
-              {/* نام دانشگاه فقط در دسکتاپ (در موبایل فقط نشان/ارم کافی است) */}
-              <p className="hidden sm:block text-xs sm:text-sm text-emerald-200 font-medium">{universityName}</p>
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight">خوش‌آمدی {firstName} عزیز 👋</h1>
-              <p className="text-xs sm:text-sm text-emerald-200 font-medium">
-                {major?.name || '—'} · {level?.title || '—'} · ورودی سال {me.entryYear ?? '—'}
-              </p>
-            </div>
-          </div>
-
-          {/* Quick Status Chips */}
-          <div className="flex flex-wrap md:flex-col items-start md:items-end gap-2 text-xs">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 font-bold">
-              <span>💳 وضعیت مالی:</span>
-              <span className="text-white font-black">
-                {examCard
-                  ? examCard.isFinancialCleared
-                    ? 'تسویه کامل (تراز ۰ ریال)'
-                    : `بدهی ${examCard.debt.toLocaleString('fa-IR')} ریال`
-                  : 'نامشخص'}
-              </span>
-            </div>
-            {/* نظام وظیفه فقط برای دانشجویان مرد معنادار است (بانوان معاف‌اند) */}
-            {userRecord?.gender !== 'FEMALE' && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-500/20 border border-teal-400/30 text-teal-200 font-bold">
-                <span>🪪 نظام وظیفه (سخا):</span>
-                <span className="text-white font-black">{me.militaryStatus || 'ثبت نشده'}</span>
-              </div>
-            )}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 font-bold">
-              <span>🎓 ترم تحصیلی:</span>
-              <span className="text-white font-black">
-                {(termOrdinal ?? me.currentTermNo ?? 0).toLocaleString('fa-IR')}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 2. KEY METRIC STAT CARDS (معدل، واحدهای گذرانده، ترم جاری، رتبه) */}
-      {/* ========================================================================= */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
-        {/* GPA */}
-        <div className="card p-4 sm:p-5 bg-white border border-slate-200 rounded-2xl shadow-xs hover:shadow-md transition flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-slate-500">معدل کل تحصیلی (GPA)</span>
-            <span className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center text-sm font-black">
-              📊
-            </span>
-          </div>
-          <div className="my-2">
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 font-mono">
-              {officialGpaResult.gpa.toFixed(2)}
-            </div>
-            <p className="text-[11px] text-slate-500 font-bold mt-0.5 flex items-center gap-1">
-              <span>📚</span>
-              <span>{officialGpaResult.totalUnits.toLocaleString('fa-IR')} واحد در کارنامه</span>
-            </p>
-          </div>
-          <Link
-            href="/student/transcript"
-            className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-1 pt-2 border-t border-slate-100"
-          >
-            <span>مشاهده جزئیات کارنامه</span>
-            <span>←</span>
-          </Link>
-        </div>
-
-        {/* Passed Units */}
-        <div className="card p-4 sm:p-5 bg-white border border-slate-200 rounded-2xl shadow-xs hover:shadow-md transition flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-slate-500">واحدهای گذرانده کل</span>
-            <span className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center text-sm font-black">
-              📚
-            </span>
-          </div>
-          <div className="my-2">
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 font-mono">
-              {officialGpaResult.passedUnits.toLocaleString('fa-IR')}{' '}
-              <span className="text-sm font-bold text-slate-400">
-                {requiredUnitsTotal > 0 ? `/ ${requiredUnitsTotal.toLocaleString('fa-IR')}` : ''}
-              </span>
-            </div>
-            {requiredUnitsTotal > 0 ? (
-              <p className="text-[11px] text-slate-500 font-bold mt-0.5">
-                {Math.round((officialGpaResult.passedUnits / requiredUnitsTotal) * 100).toLocaleString('fa-IR')}٪ از چارت مصوب
-                ({level?.title || 'مقطع ثبت‌شده'}) تکمیل شد
-              </p>
-            ) : (
-              <p className="text-[11px] text-slate-500 font-bold mt-0.5">
-                مجموع واحد چارت مصوب برای این دانشجو تعریف نشده است
-              </p>
-            )}
-          </div>
-          <Link
-            href="/student/chart"
-            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 pt-2 border-t border-slate-100"
-          >
-            <span>مشاهده چارت و سرفصل‌ها</span>
-            <span>←</span>
-          </Link>
-        </div>
-
-        {/* Current Term Units */}
-        <div className="card p-4 sm:p-5 bg-white border border-slate-200 rounded-2xl shadow-xs hover:shadow-md transition flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-slate-500">{filteredTerm ? 'واحدهای نیمسال انتخابی' : 'واحدهای ترم جاری'}</span>
-            <span className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center text-sm font-black">
-              🛒
-            </span>
-          </div>
-          <div className="my-2">
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 font-mono">
-              {currentUnitsTotal.toLocaleString('fa-IR')} <span className="text-sm font-bold text-slate-400">واحد</span>
-            </div>
-            <p className="text-[11px] text-emerald-700 font-bold mt-0.5">
-              {currentEnrollments.length.toLocaleString('fa-IR')} عنوان درسی ثبت‌شده در {filteredTerm ? 'نیمسال انتخابی' : 'ترم جاری'}
-            </p>
-          </div>
-          <Link
-            href="/student/schedule"
-            className="text-[11px] font-bold text-amber-700 hover:text-amber-900 flex items-center gap-1 pt-2 border-t border-slate-100"
-          >
-            <span>برنامه هفتگی و ساعات کلاس</span>
-            <span>←</span>
-          </Link>
-        </div>
-
-        {/* Exam Card & Seats */}
-        <div className="card p-4 sm:p-5 bg-white border border-slate-200 rounded-2xl shadow-xs hover:shadow-md transition flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-slate-500">کارت آزمون و شماره صندلی</span>
-            <span className="w-8 h-8 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center text-sm font-black">
-              📇
-            </span>
-          </div>
-          <div className="my-2">
-            <div
-              className={`text-base sm:text-lg font-black flex items-center gap-1.5 ${
-                examCard?.isFinancialCleared ? 'text-emerald-800' : 'text-amber-700'
-              }`}
-            >
-              <span
-                className={`w-2.5 h-2.5 rounded-full ${
-                  examCard?.isFinancialCleared ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
-                }`}
-              ></span>
-              <span>
-                {!examCard
-                  ? 'رکورد کارت ثبت نشده'
-                  : examCard.isFinancialCleared
-                    ? '✓ کارت صادر و فعال شد'
-                    : '🔒 کارت قفل است'}
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-500 font-bold mt-0.5">
-              {!examCard
-                ? 'برای صدور کارت به امور آموزش مراجعه کنید'
-                : examCard.isFinancialCleared
-                  ? `شماره صندلی ${examCard.courses.filter(c => c.seatNumber != null).length.toLocaleString('fa-IR')} درس تخصیص یافته است`
-                  : `بدهی مالی: ${examCard.debt.toLocaleString('fa-IR')} ریال`}
-            </p>
-          </div>
-          <Link
-            href="/student/exam-card"
-            className="text-[11px] font-bold text-rose-700 hover:text-rose-900 flex items-center gap-1 pt-2 border-t border-slate-100"
-          >
-            <span>دریافت و چاپ کارت امتحان</span>
-            <span>←</span>
-          </Link>
-        </div>
-      </div>
-
       {/* ========================================================================= */}
       {/* 3. QUICK ACTION SERVICE PORTAL (میز دسترسی سریع به امکانات) */}
       {/* ========================================================================= */}

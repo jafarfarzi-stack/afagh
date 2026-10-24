@@ -38,7 +38,7 @@ export function StudentSidebar({ user }: { user: { name: string; studentCode?: s
   const pathname = usePathname();
 
   return (
-    <aside className="hidden md:flex flex-col w-64 lg:w-72 bg-white border-l border-slate-200 shadow-xs shrink-0 min-h-[calc(100vh-65px)] sticky top-[65px] self-start print:hidden">
+    <aside className="hidden md:flex flex-col w-64 lg:w-72 bg-white border-l border-slate-200 shadow-xs shrink-0 max-h-screen sticky top-0 self-start overflow-y-auto print:hidden">
       {/* Student Profile Quick Tile */}
       <div className="p-4 border-b border-slate-100 bg-slate-50/70">
         <div className="flex items-center gap-3">

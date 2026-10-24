@@ -1,17 +1,17 @@
 import { redirect } from 'next/navigation';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { users, universities } from '@/db/schema';
+import { users, universities, majors as majorsTable, degree_level_configs } from '@/db/schema';
 import { getStudentByUser, requireRole, endCurrentSession } from '@/lib/auth';
 import { getSetting } from '@/lib/settings';
-import { majors as majorsTable } from '@/db/schema';
+import { studentDebtRials } from '@/lib/verification';
 import { alumniOf } from '@/lib/alumni';
 import { getSiblingAccounts } from '@/lib/account-switch';
 import PanelSwitcher from '@/components/PanelSwitcher';
 import { ADMIN_PANEL_ROLES } from '@/lib/panel-links';
 import SessionLock from '@/components/SessionLock';
 import TermSwitcher from '@/components/TermSwitcher';
-import { getTermScope } from '@/lib/term-scope';
+import { getTermScope, termOrdinalForEntry } from '@/lib/term-scope';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
 import { DEMO_STUDENT } from '@/lib/demo-student-data';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -26,29 +26,60 @@ export default async function StudentLayout({ children }: { children: React.Reac
   if (await alumniOf(user.id)) redirect('/alumni');
 
   const me = await getStudentByUser(user.id);
-  // عکس پرسنلی کاربر (برای آواتار هدر) — کلید شیء، نمایش از مسیر امن
-  const [photoRow] = await db.select({ photoKey: users.photoKey }).from(users).where(eq(users.id, user.id)).limit(1);
+  // عکس پرسنلی کاربر (آواتار هدر) + جنسیت (چیپ نظام وظیفه فقط برای مردان)
+  const [userRow] = await db
+    .select({ photoKey: users.photoKey, gender: users.gender })
+    .from(users)
+    .where(eq(users.id, user.id))
+    .limit(1);
 
-  // ارم دانشگاه دانشجو — جای حرف ثابت «آ» در هدر. اول ارم اختصاصی خود دانشگاه
-  // (ستون universities.logoUrl)، بعد ارم سراسری تنظیمات؛ اگر هیچ‌کدام نبود،
-  // همان حرف «آ» به‌عنوان Fallback نمایش داده می‌شود تا چیدمان هدر نشکند.
-  const uniLogoRow = me?.universityId
-    ? await db.select({ logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, me.universityId)).limit(1)
-    : [];
-  const universityLogoUrl = uniLogoRow?.[0]?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
-
-  // نام رشتهٔ دانشجو — به‌جای عبارت تکراری «کارتابل دانشجو» در سربرگ، خوش‌آمدگویی
-  // و رشتهٔ 학생 نمایش داده می‌شود (هیروی داشبورد هم خوش‌آمدگویی دارد؛ اینجا
-  // هویت تحصیلی کافی است تا سربرگ خالی و تکراری نباشد).
-  const majorRow = me?.majorId
-    ? await db.select({ name: majorsTable.name }).from(majorsTable).where(eq(majorsTable.id, me.majorId)).limit(1)
-    : [];
+  // ── داده‌های سربرگ ادغام‌شده ───────────────────────────────────────────────
+  // پیش از این، خوش‌آمدگویی/رشته/وضعیت مالی/ترم در یک کارت سبز جداگانه زیر هدر
+  // («هیرو») نمایش داده می‌شد و با خود هدر تکرار می‌شد. حالا همه در یک بلوک
+  // سبز بالای صفحه جمع شده‌اند و کارت جداگانه‌ای وجود ندارد.
+  const [uniRow, majorRow, levelRow] = await Promise.all([
+    me?.universityId
+      ? db.select({ title: universities.title, logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, me.universityId)).limit(1)
+      : Promise.resolve([]),
+    me?.majorId
+      ? db.select({ name: majorsTable.name }).from(majorsTable).where(eq(majorsTable.id, me.majorId)).limit(1)
+      : Promise.resolve([]),
+    me?.degreeLevelId
+      ? db.select({ title: degree_level_configs.title }).from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1)
+      : Promise.resolve([]),
+  ]);
+  const universityLogoUrl = uniRow?.[0]?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
   const majorTitle = majorRow?.[0]?.name ?? null;
-  const firstName = (user.name || '').trim().split(/\s+/)[0] || 'دانشجو';
+  const levelTitle = levelRow?.[0]?.title ?? null;
+
+  // وضعیت مالی — یک کوئری سبک روی دفتر تراکنش (همان محاسبهٔ بدهی کارت آزمون)
+  const debtRials = me ? await studentDebtRials(me.id).catch(() => null) : null;
+  const financialLabel =
+    debtRials == null
+      ? 'نامشخص'
+      : debtRials === 0
+        ? 'تسویه کامل (تراز ۰ ریال)'
+        : `بدهی ${debtRials.toLocaleString('fa-IR')} ریال`;
 
   const termScope = await getTermScope(me?.universityId ?? null);
   const demo = await isDemoStudentUser(user.id);
   const sidebarStudentCode = demo ? DEMO_STUDENT.studentCode : me?.studentCode ?? null;
+
+  // شمارهٔ ترم تحصیلی بر مبنای ورودی — جایگاهِ ترمِ انتخاب‌شده نسبت به ترمِ ورود
+  const selectedTerm =
+    termScope.terms.find(t => t.id === termScope.selectedId) ??
+    termScope.terms.find(t => t.id === termScope.effectiveId) ??
+    null;
+  const studentTermOrdinal = selectedTerm && me
+    ? termOrdinalForEntry({
+        entryYear: me.entryYear,
+        entryTerm: me.entryTerm,
+        terms: [],
+        targetTermCode: selectedTerm.termCode,
+      })
+    : null;
+
+  const firstName = (user.name || '').trim().split(/\s+/)[0] || 'دانشجو';
 
   // حساب‌های هم‌شخص (شماره دانشجویی/کد پرسنلی دیگرِ همین کدملی) برای سوییچر بالای صفحه
   const siblings = await getSiblingAccounts().catch(() => []);
@@ -80,11 +111,9 @@ export default async function StudentLayout({ children }: { children: React.Reac
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col" dir="rtl">
-      {/* هدر اصلی — دو ردیفی مثل کارتابل استاد:
-          ردیف۱ = لوگو + عنوان (کوتاه در موبایل) + دارک‌مود و خروج قرمز
-          ردیف۲ = سوییچر ترم و نقش (همیشه دیده می‌شود؛ پیش‌تر همه با flex-wrap
-          درهم می‌پیچید و هدر موبایل شلوغ و بلند می‌شد) */}
-      <header className="bg-emerald-800 text-white shadow-md sticky top-0 z-40 print:hidden">
+      {/* هدر اصلی — یک بلوک سبز ادغام‌شده: خوش‌آمدگویی + هویت تحصیلی +
+          چیپ‌های وضعیت + سوییچر ترم/نقش. کارت هیروی جداگانه حذف شده است. */}
+      <header className="bg-emerald-800 text-white shadow-md print:hidden">
         <div className="max-w-7xl mx-auto flex flex-col gap-2 p-3.5 px-4">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-3">
@@ -102,14 +131,13 @@ export default async function StudentLayout({ children }: { children: React.Reac
                   آ
                 </div>
               )}
-              <UserAvatar userId={user.id} hasPhoto={!!photoRow?.photoKey} name={user.name} className="w-9 h-9" fallbackClass="bg-emerald-700" />
+              <UserAvatar userId={user.id} hasPhoto={!!userRow?.photoKey} name={user.name} className="w-9 h-9" fallbackClass="bg-emerald-700" />
               <div className="min-w-0">
-                <p className="text-sm font-extrabold tracking-wide truncate">
-                  خوش‌آمدی {firstName} 👋
+                <p className="text-sm sm:text-base font-extrabold tracking-wide truncate">
+                  خوش‌آمدی {firstName} عزیز 👋
                 </p>
-                <p className="text-xs text-emerald-200 truncate">
-                  {majorTitle || 'دانشجوی گرامی'}
-                  {me?.entryYear ? ` · ورودی سال ${me.entryYear}` : ''}
+                <p className="text-[11px] sm:text-xs text-emerald-200 truncate">
+                  {majorTitle || '—'} · {levelTitle || '—'} · ورودی سال {me?.entryYear ?? '—'}
                 </p>
               </div>
             </div>
@@ -138,6 +166,27 @@ export default async function StudentLayout({ children }: { children: React.Reac
               </form>
             </div>
           </div>
+          {/* چیپ‌های وضعیت — ادغام‌شده از کارت هیروی حذف‌شدهٔ داشبورد */}
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px] sm:text-xs">
+            <span className="inline-flex items-center gap-1 rounded-xl bg-emerald-500/20 border border-emerald-400/30 px-2 py-0.5 font-bold text-emerald-100">
+              <span>💳 وضعیت مالی:</span>
+              <b className="font-black text-white">{financialLabel}</b>
+            </span>
+            {/* نظام وظیفه فقط برای دانشجویان مرد معنادار است (بانوان معف‌اند) */}
+            {userRow?.gender !== 'FEMALE' && (
+              <span className="inline-flex items-center gap-1 rounded-xl bg-teal-500/20 border border-teal-400/30 px-2 py-0.5 font-bold text-teal-100">
+                <span>🪖 نظام وظیفه (سخا):</span>
+                <b className="font-black text-white">{me?.militaryStatus || 'ثبت نشده'}</b>
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1 rounded-xl bg-indigo-500/20 border border-indigo-400/30 px-2 py-0.5 font-bold text-indigo-100">
+              <span>🎓 ترم تحصیلی:</span>
+              <b className="font-black text-white">
+                {(studentTermOrdinal ?? me?.currentTermNo ?? 0).toLocaleString('fa-IR')}
+              </b>
+            </span>
+          </div>
+
           <div className="flex flex-wrap items-center gap-2">
             <TermSwitcher
               terms={termScope.terms}

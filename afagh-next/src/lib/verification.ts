@@ -39,7 +39,8 @@ const log = createLogger({ mod: 'verification' });
  * هر سه گیت (کارت، آزمون، کارت ورود به جلسه) از همین استفاده می‌کنند تا
  * انواع قدیمی (TUITION_FIXED/VARIABLE) و POS_PAYMENT نامرئی نمانند.
  */
-async function studentDebtRials(studentId: number): Promise<number> {
+/** بدهی مالی دانشجو (ریال) — صادرشده برای نمایش در سربرگ پنل دانشجو */
+export async function studentDebtRials(studentId: number): Promise<number> {
   const rows = await db
     .select({ transactionType: student_ledger.transactionType, amount: student_ledger.amount })
     .from(student_ledger)
