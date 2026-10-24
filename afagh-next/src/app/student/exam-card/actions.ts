@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { course_offerings, enrollments, evaluation_responses, students } from '@/db/schema';
 import { getSessionUser } from '@/lib/auth';
 import { createLogger } from '@/lib/logger';
+import { getEvaluationWindow } from '@/lib/evaluation-window';
 
 const log = createLogger({ mod: 'exam-card' });
 
@@ -51,7 +52,19 @@ export async function submitCourseEvaluationAction(
   if (!en) return { ok: false, error: 'این درس در فهرست ثبت‌نام شما نیست.' };
   if (en.hasEvaluated) return { ok: false, error: 'برای این درس پیش‌تر ارزشیابی ثبت کرده‌اید.' };
 
-  const [off] = await db.select({ id: course_offerings.id }).from(course_offerings).where(eq(course_offerings.id, en.offeringId)).limit(1);
+  const [off] = await db
+    .select({ id: course_offerings.id, termId: course_offerings.termId, universityId: course_offerings.universityId })
+    .from(course_offerings)
+    .where(eq(course_offerings.id, en.offeringId))
+    .limit(1);
+
+  // 🔒 پنجرهٔ ارزشیابی (دستور کاربر: ارزشیابی فقط در بازهٔ تعیین‌شده توسط مدیریت و
+  // پیش از امتحانات فعال است). بدون دورهٔ فعال یا خارج از بازه → ثبت رد می‌شود.
+  const window = await getEvaluationWindow(off?.universityId ?? null, off?.termId ?? null);
+  if (!window.open) {
+    log.info('course_evaluation_window_closed', { enrollmentId: en.id, offeringId: en.offeringId, reason: window.reason });
+    return { ok: false, error: window.message };
+  }
 
   const answers: { key: string; value: number }[] = [
     { key: 'profMastery', value: clampScore(payload.profMastery) },

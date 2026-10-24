@@ -5,6 +5,7 @@ import { getSetting } from '@/lib/settings';
 import { getSessionUser, getStudentByUser } from '@/lib/auth';
 import { getPublicBaseUrl } from '@/lib/settings';
 import { getExamCardData, issueExamTicketToken } from '@/lib/verification';
+import { getEvaluationWindow } from '@/lib/evaluation-window';
 import { getTermScope } from '@/lib/term-scope';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
 import { demoExamCardData, demoTermFilterNotice } from '@/lib/demo-student-data';
@@ -93,6 +94,9 @@ export default async function StudentExamCardPage() {
 
   const noCourses = !!card && card.courses.length === 0;
 
+  // وضعیت پنجرهٔ ارزشیابی (باز/بسته + بازهٔ تاریخ) — برای نمایش به دانشجو
+  const evalWindow = await getEvaluationWindow(universityId, selectedTerm?.id ?? null);
+
   return (
     <div className="space-y-3">
 
@@ -112,6 +116,11 @@ export default async function StudentExamCardPage() {
         card={card}
         ticketQr={ticketQr}
         universityLogoUrl={universityLogoUrl}
+        evaluationWindow={{
+          open: evalWindow.open,
+          message: evalWindow.message,
+          title: evalWindow.title,
+        }}
       />
     </div>
   );

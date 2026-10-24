@@ -290,6 +290,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/evaluations',
+    icon: '🗓️',
+    title: 'پنجرهٔ ارزشیابی اساتید',
+    desc: 'بازهٔ باز/بستهٔ ارزشیابی پیش از امتحانات',
+    group: 'plan',
+    roles: ['ADMIN'],
+    accent: 'from-indigo-900 to-indigo-950 border-indigo-700/50',
+    iconBg: 'bg-indigo-700/80 border-indigo-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/schedule-conflicts',
     icon: '🚦',
     title: 'تداخل‌های واقعی برنامه',

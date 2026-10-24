@@ -43,6 +43,8 @@ interface Props {
   /** حساب دمو: داده‌ها نمایشی است و هیچ ارزشیابی‌ای در پایگاه داده ثبت نمی‌شود */
   demo?: boolean;
   universityLogoUrl?: string | null;
+  /** وضعیت پنجرهٔ باز/بستهٔ ارزشیابی (از سرور — دورهٔ فعالِ مدیریت) */
+  evaluationWindow?: { open: boolean; message: string; title: string | null };
 }
 
 /**
@@ -70,7 +72,7 @@ function toShamsi(dStr: string | null | undefined): string {
   }
 }
 
-export default function ExamCardClient({ user, publicBaseUrl, examTicket, examTicketBlocked, card, ticketQr, demo = false, universityLogoUrl }: Props) {
+export default function ExamCardClient({ user, publicBaseUrl, examTicket, examTicketBlocked, card, ticketQr, demo = false, universityLogoUrl, evaluationWindow }: Props) {
   const [courses, setCourses] = useState<StudentCourseEvaluationItem[]>(card?.courses ?? []);
   /** بدهی واقعی از دفتر کل مالی — نه یک عدد ثابت */
   const [financialDebt, setFinancialDebt] = useState<number>(card?.debt ?? 0);
@@ -259,6 +261,16 @@ export default function ExamCardClient({ user, publicBaseUrl, examTicket, examTi
                 ? 'کلیه اساتید و امکانات فیزیکی کلاس‌ها با موفقیت و به صورت ناشناس ارزشیابی شدند.'
                 : 'برای تضمین کیفیت آموزش و مشاهده کارت ورود به جلسه، تکمیل فرم‌های ارزشیابی الزامی است.'}
             </p>
+
+            {evaluationWindow && (
+              <p className={`mb-2 rounded-xl border px-3 py-2 text-[11px] font-bold ${
+                evaluationWindow.open
+                  ? 'border-emerald-300 bg-emerald-100/60 text-emerald-900'
+                  : 'border-rose-300 bg-rose-50 text-rose-800'
+              }`}>
+                {evaluationWindow.open ? '🟢' : '🔒'} {evaluationWindow.message}
+              </p>
+            )}
 
             <div className="text-[11px] font-bold text-slate-500">
               ارزشیابی پیش از آزمون انجام می‌شود و استاد تا پس از نهایی شدن نمرات هیچ دسترسی‌ای به نظرات ندارد.
