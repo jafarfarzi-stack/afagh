@@ -146,8 +146,11 @@ function profDisplay(
   if (showGenderHonor) {
     const female = m.profGender === 'FEMALE' || (!m.profGender && normFa(m.profLegacyTitle).includes('خانم'));
     const male = m.profGender === 'MALE' || (!m.profGender && normFa(m.profLegacyTitle).includes('آقا'));
-    // قاعدهٔ استاندارد سردر: فقط «خانم» و «آقای» (بدون سرکار/جناب) — بسیار کوتاه‌تر و مناسب چاپ
-    honor = female ? 'خانم' : male ? 'آقای' : '';
+    // تفاوتِ گزینهٔ «کوتاه» (آقای/خانم) و «کامل» (جناب آقای/سرکار خانم) — قبلاً
+    // پارامترِ `shortHonor` اصلاً استفاده نمی‌شد و دو گزینه یکسان بودند.
+    honor = female ? (shortHonor ? 'خانم' : 'سرکار خانم')
+      : male ? (shortHonor ? 'آقای' : 'جناب آقای')
+        : '';
   }
   return [honor, degree, showFirst ? first : '', last].filter(Boolean).join(' ');
 }
@@ -460,25 +463,25 @@ export default async function WeeklyBoardPage({ searchParams }: {
     // NOTE: مبنا همهٔ سانس‌های کلاسی است (CLASS/EVEN/ODD/BOTH) نه فقط CLASS — وگرنه
     // کلاس‌هایی که فقط سانس زوج/فرد دارند از فهرست پوستر جا می‌مانند.
     //
-    // ⚠ باگِ پیشین: فقط `facultyId` در فهرست «کلاس (پوستر درب)» اعمال می‌شد و
-    //   `deptId` کاملاً نادیده گرفته می‌شد؛ نتیجه این بود که با انتخابِ «گروه»
-    //   فهرستِ کلاس‌ها تغییر نمی‌کرد و کاربر فکر می‌کرد فیلتر کار نمی‌کند.
-    const facDeptIds = facultyId ? depts.filter(d => d.facultyId === facultyId).map(d => d.id) : null;
+    // اتصالِ درستِ کلاس→دانشکده: فیلترِ دانشکده فهرستِ کلاس‌ها را بر اساس
+    // `classrooms."facultyId"` (مالکِ فیزیکیِ اتاق) محدود می‌کند، نه بر اساسِ اینکه
+    // کدام درسِ آن دانشکده را میزبانی می‌کند — این همان اشکالی بود که کاربر گزارش
+    // کرد («مشکلت از اتصال کلاسها به دانشکده هاست»). فیلترِ گروه همچنان بر اساسِ
+    // رشتهٔ درس (courses."departmentId") اعمال می‌شود چون گروه مالکِ اتاق نیست.
     // گروهِ انتخاب‌شده باید متعلق به همین دانشگاه/دانشکده باشد؛ وگرنه fail-closed.
     if (deptId && !depts.some(d => d.id === deptId)) return [];
-    const scopedDeptIds = deptId ? [deptId] : facDeptIds;
-    if (scopedDeptIds && scopedDeptIds.length === 0) return []; // fail-closed مثل scopeConds
     const rows0 = await db.select({ id: classrooms.id, name: classrooms.name, buildingName: classrooms.buildingName, floor: classrooms.floor, capacity: classrooms.capacity, facultyId: classrooms.facultyId })
       .from(classrooms)
       .where(and(
         uni ? eq(classrooms.universityId, uni.id) : undefined,
         eq(classrooms.isActive, 1),
+        facultyId ? eq(classrooms.facultyId, facultyId) : undefined,
         sql`EXISTS (SELECT 1 FROM schedules s
           JOIN course_offerings o ON o.id = s."offeringId"
           JOIN courses c ON c.id = o."courseId"
           WHERE s."roomId" = classrooms.id AND s."scheduleType" <> 'EXAM'
             AND o."termId" = ${term.id} AND o."isActive" = 1
-            ${scopedDeptIds ? sql`AND c."departmentId" IN (${sql.join(scopedDeptIds.map(n => sql`${n}`), sql`, `)})` : sql``})`,
+            ${deptId ? sql`AND c."departmentId" = ${deptId}` : sql``})`,
       ))
       .orderBy(asc(classrooms.id));
     // ادغام هم‌نام‌های مهاجرت سما (دو ردیف یک نام، بدون ساختمان): یک گزینه، همهٔ idها
@@ -540,7 +543,12 @@ export default async function WeeklyBoardPage({ searchParams }: {
           eq(course_offerings.termId, term.id),
           eq(course_offerings.isActive, 1),
           ...(selRoom ? [inArray(schedules.roomId, selRoom.aliasIds)] : []),
-          ...await scopeConds(user.roles, deptId, facultyId, uni?.id ?? null),
+          // وقتی کلاس (پوستر درب) انتخاب شده، فیلترِ نمایشیِ دانشکده/گروه اعمال
+          // نمی‌شود؛ پوسترِ یک اتاقِ فیزیکی باید همهٔ کلاس‌های آن اتاق را نشان
+          // دهد (کلاس‌ها از دانشکده‌های مختلف در یک اتاقِ مشترک برگزار می‌شوند).
+          // مرزِ دانشگاه و دامنهٔ نقش (EDU_EXPERT) همچنان در `roleScopeConds` اعمال است.
+          ...(selRoom ? [] : await viewScopeConds(deptId, facultyId, uni?.id ?? null)),
+          ...await roleScopeConds(user.roles, uni?.id ?? null),
         ))
         .orderBy(asc(courses.title), asc(course_offerings.groupNumber))
     : [];
@@ -557,7 +565,7 @@ export default async function WeeklyBoardPage({ searchParams }: {
   let personRows: BoardRow[] = [];
   if ((tab === 'prof' || tab === 'student') && q && term) {
     personSearched = true;
-    const scope = await scopeConds(user.roles, 0, 0, uni?.id ?? null);
+    const scope = await roleScopeConds(user.roles, uni?.id ?? null);
     if (tab === 'prof') {
       const [p] = await db.select({
         id: staff.id, staffCode: staff.staffCode,
@@ -695,6 +703,8 @@ export default async function WeeklyBoardPage({ searchParams }: {
         startHour={hourAxis.from}
         endHour={hourAxis.to}
         detail={detail}
+        showCode={showCode}
+        printCount={printCount}
       />
     );
   }
@@ -741,58 +751,57 @@ export default async function WeeklyBoardPage({ searchParams }: {
           </FilterSelect>
         </label>
         <label className="text-xs font-bold">عنوان استاد
-          <select name="title" defaultValue={titleParam} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+          <FilterSelect name="title" defaultValue={titleParam} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
             <option value="">پیرو تنظیم سامانه</option>
             <option value="academic">فقط مرتبه علمی (دکتر/مهندس) — کم‌جا</option>
             <option value="1">با عنوان کامل (آقای دکتر …)</option>
             <option value="0">مربی‌ها بدون «مهندس»</option>
             <option value="name">فقط نام (بدون عنوان)</option>
-          </select>
+          </FilterSelect>
         </label>
         <label className="text-xs font-bold">پیشوند آقا / خانم
-          <select name="gender" defaultValue={genderParam} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+          <FilterSelect name="gender" defaultValue={genderParam} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
             <option value="">پیرو تنظیم سامانه</option>
             <option value="0">بدون آقا/خانم (کم‌جا — ویژهٔ چاپ)</option>
             <option value="short">کوتاه (آقای / خانم) ✓ پیش‌فرض</option>
             <option value="full">کامل (جناب آقای / سرکار خانم)</option>
-          </select>
+          </FilterSelect>
         </label>
         <label className="text-xs font-bold">کد درس
-          <select name="code" defaultValue={showCode ? '1' : ''} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+          <FilterSelect name="code" defaultValue={showCode ? '1' : ''} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
             <option value="">بدون کد (خواناتر)</option>
             <option value="1">نمایش کد درس</option>
-          </select>
+          </FilterSelect>
         </label>
         <label className="text-xs font-bold">تعداد دانشجو در چاپ
-          <select name="count" defaultValue={printCount ? '1' : ''} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+          <FilterSelect name="count" defaultValue={printCount ? '1' : ''} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
             <option value="">بدون تعداد (کم‌جا)</option>
             <option value="1">نمایش تعداد (👥 n/ظرفیت)</option>
-          </select>
+          </FilterSelect>
         </label>
         <label className="text-xs font-bold">حالت چاپ
-          <select name="mono" defaultValue={mono ? '1' : ''} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+          <FilterSelect name="mono" defaultValue={mono ? '1' : ''} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
             <option value="">رنگی</option>
             <option value="1">سیاه‌سفید (عملی = خط‌چین)</option>
-          </select>
+          </FilterSelect>
         </label>
         <label className="text-xs font-bold">چیدمان سردر
-          <select name="model" defaultValue={model} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+          <FilterSelect name="model" defaultValue={model} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
             <option value="A">مدل الف — روزها ستون (پیش‌فرض)</option>
             <option value="B">مدل ب — روزها سطر (زمان ستون)</option>
-          </select>
+          </FilterSelect>
         </label>
         <DoorSignDetailSelect value={detail === 'title' ? '1' : detail === 'prof' ? '2' : ''} />
         <label className="text-xs font-bold">محور زمان از
-          <select name="from" defaultValue={String(hourAxis.from)} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+          <FilterSelect name="from" defaultValue={String(hourAxis.from)} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
             {FROM_HOURS.map(h => <option key={h} value={h}>{faDigits(h)}:۰۰</option>)}
-          </select>
+          </FilterSelect>
         </label>
         <label className="text-xs font-bold">تا
-          <select name="to" defaultValue={String(hourAxis.to)} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+          <FilterSelect name="to" defaultValue={String(hourAxis.to)} className="block mt-1 border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
             {TO_HOURS.map(h => <option key={h} value={h}>{h === 24 ? '۲۴:۰۰' : `${faDigits(h)}:۰۰`}</option>)}
-          </select>
+          </FilterSelect>
         </label>
-        <button className="rounded-xl bg-indigo-700 px-5 py-2 text-white font-black text-sm">نمایش</button>
         <PrintButton />
       </form>
 
@@ -814,6 +823,8 @@ export default async function WeeklyBoardPage({ searchParams }: {
           startHour={hourAxis.from}
           endHour={hourAxis.to}
           detail={detail}
+          showCode={showCode}
+          printCount={printCount}
         />
       ) : term && (
         <div className="print-area prof-week-print rounded-2xl border border-slate-300 bg-white p-4 space-y-3" dir="rtl">
@@ -901,7 +912,12 @@ export default async function WeeklyBoardPage({ searchParams }: {
   );
 }
 
-async function scopeConds(roles: string[], deptId: number, facultyId: number, uniId: number | null): Promise<any[]> {
+/**
+ * فیلترِ نمایشیِ دانشکده/گروه — فقط وقتی کلاسی (پوستر درب) انتخاب نشده اعمال
+ * می‌شود. چون پوسترِ یک اتاقِ فیزیکی باید همهٔ کلاس‌های آن اتاق را نشان دهد،
+ * حتی اگر کلاس‌ها از دانشکده‌های دیگر باشند (اتاق‌های مشترکِ دانشگاه).
+ */
+async function viewScopeConds(deptId: number, facultyId: number, uniId: number | null): Promise<any[]> {
   const c: any[] = [];
   if (deptId) {
     // اعتبارسنجی گروه در برابر دانشگاه جاری — نامعتبر/بیگانه → هیچ (fail-closed)
@@ -918,6 +934,16 @@ async function scopeConds(roles: string[], deptId: number, facultyId: number, un
       c.push(ids.length ? inArray(courses.departmentId, ids) : sql`1=0`);
     }
   }
+  return c;
+}
+
+/**
+ * مرزِ امنیت/دسترسی بر پایهٔ نقش (EDU_EXPERT) — همیشه اعمال می‌شود، چه کلاسی
+ * انتخاب شده باشد چه نه. فیلترِ دانشگده/گروهِ کارشناس را اعمال می‌کند تا داده‌ای
+ * خارج از دامنهٔ او نشت نکند.
+ */
+async function roleScopeConds(roles: string[], uniId: number | null): Promise<any[]> {
+  const c: any[] = [];
   if (roles.includes('EDU_EXPERT')) {
     const eff = await currentExpertFilters().catch(() => null);
     // تقاطع دانشگاهی: دامنهٔ کارشناس باید دانشگاه جاری را پوشش دهد

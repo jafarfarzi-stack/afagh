@@ -143,6 +143,15 @@ export interface DoorSignPrintProps {
    *   'title' فقط نام درس | 'prof' درس+استاد | 'full' درس+استاد+ساعت
    */
   detail?: DoorSignDetail;
+  /**
+   * نمایشِ کد درس روی کارت (فیلترِ «کد درس» از نوار فیلتر). پیش‌فرض خاموش
+   * چون کد کارت را شلوغ می‌کند؛ کاربر با زدنِ تیکِ «کد درس» آن را فعال می‌کند.
+   */
+  showCode?: boolean;
+  /**
+   * نمایشِ تعداد دانشجو (👥 n/ظرفیت) روی کارت (فیلترِ «تعداد دانشجو در چاپ»).
+   */
+  printCount?: boolean;
 }
 
 export default async function DoorSignPrint({
@@ -160,6 +169,8 @@ export default async function DoorSignPrint({
   startHour = DEFAULT_AXIS_FROM,
   endHour = DEFAULT_AXIS_TO,
   detail = 'full',
+  showCode = false,
+  printCount = false,
 }: DoorSignPrintProps) {
   // بازهٔ محور زمان (قابل تنظیم توسط دانشگاه) — محورِ دقیقه‌ای برای چیدمان کارت‌ها
   const axis = normalizeAxisHours(startHour, endHour);
@@ -325,6 +336,15 @@ export default async function DoorSignPrint({
      روی خط‌های ساعت هم پیداست). */
   .ds-h { font-weight:500; line-height:1.1; color:#475569;
     font-size:clamp(5pt, min(11cqh,5.5cqi), 7pt); display:none; }
+  /* کد درس: برچسبِ کوچکِ نشان‌دار بالای عنوان — فقط وقتی فیلترِ «کد درس» روشن
+     است رندر می‌شود (پس پیش‌فرضِ نمایش همیشه روشن است). */
+  .ds-code { display:inline-block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font-family:'Vazirmatn','Shabnam',Tahoma,sans-serif; font-weight:700; line-height:1.1;
+    color:#3730a3; background:#e0e7ff; border:0.5pt solid #6366f1; border-radius:0.7mm;
+    padding:0 1mm; font-size:clamp(6pt, min(14cqh,8cqi), 9pt); }
+  /* تعداد دانشجو (👥 n/ظرفیت): زیرِ ساعت. فقط وقتی فیلترِ «تعداد دانشجو» روشن است. */
+  .ds-cnt { display:block; font-weight:600; line-height:1.1; color:#0f766e;
+    font-size:clamp(5pt, min(11cqh,5.5cqi), 7pt); }
 
   /* کدام سطرها دیده شوند — از روی فضای واقعیِ خودِ کارت.
      هندسهٔ فعلی: هر ساعت ≈ ۱۲mm، پس ۱ ساعت ≈ ۱۲mm · ۲ ساعت ≈ ۲۴mm · ۳ ساعت ≈ ۳۶mm.
@@ -381,6 +401,8 @@ export default async function DoorSignPrint({
   .ds-mono .ds-sw { border-color:#000; background:#fff; }
   .ds-mono .ds-sw.lab { border-style:dashed; }
   .ds-mono .ds-chip { border-color:#000; color:#000; }
+  .ds-mono .ds-code { color:#000; background:#fff; border-color:#000; }
+  .ds-mono .ds-cnt { color:#000; }
 
   /* ── مدل ب: روزها در سطر، زمان در ستون ── */
   .ds-grid-b{ flex:1; display:grid; min-height:0;
@@ -683,12 +705,16 @@ export default async function DoorSignPrint({
                       }}
                     >
                       <div className={`ds-card${e.courseType === 'عملی' ? ' lab' : ''}`}>
+                        {showCode && e.code ? <div className="ds-code">{fa(e.code)}</div> : null}
                         <div className="ds-t" style={{ fontSize: `${fitTitlePt(e.title, cardMm, cardHmm, lines, detail, badgeEmOf(e.weekType))}pt`, WebkitLineClamp: lines }}>
                           {e.title}{e.merged ? ' 🔗' : ''}
                           <WeekBadge weekType={e.weekType} />
                         </div>
                         {e.professorName ? <div className="ds-p">{e.professorName}</div> : null}
                         <div className="ds-h"><span dir="ltr">{fa(e.startTime)} – {fa(e.endTime)}</span></div>
+                        {printCount && (e.enrolledCount != null || e.capacity != null) ? (
+                          <div className="ds-cnt"><span dir="ltr">👥 {fa(e.enrolledCount ?? '—')}/{fa(e.capacity ?? '—')}</span></div>
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -755,12 +781,16 @@ export default async function DoorSignPrint({
                     }}
                   >
                     <div className={`ds-card${e.courseType === 'عملی' ? ' lab' : ''}`}>
+                      {showCode && e.code ? <div className="ds-code">{fa(e.code)}</div> : null}
                       <div className="ds-t" style={{ fontSize: `${fitTitlePt(e.title, cardMm, cardHmm, lines, detail, badgeEmOf(e.weekType))}pt`, WebkitLineClamp: lines }}>
                         {e.title}{e.merged ? ' 🔗' : ''}
                         <WeekBadge weekType={e.weekType} />
                       </div>
                       {e.professorName ? <div className="ds-p">{e.professorName}</div> : null}
                       <div className="ds-h"><span dir="ltr">{fa(e.startTime)} – {fa(e.endTime)}</span></div>
+                      {printCount && (e.enrolledCount != null || e.capacity != null) ? (
+                        <div className="ds-cnt"><span dir="ltr">👥 {fa(e.enrolledCount ?? '—')}/{fa(e.capacity ?? '—')}</span></div>
+                      ) : null}
                     </div>
                   </div>
                 );
