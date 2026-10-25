@@ -1,9 +1,10 @@
 import Link from 'next/link';
-import { and, eq } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import { isDemoProfessorUser } from '@/lib/demo-accounts';
 import {
   DEMO_DASHBOARD_CLASSES,
   DEMO_DASHBOARD_CONTRACT,
+  DEMO_DASHBOARD_SUMMARY,
   DEMO_LIVE_SESSIONS,
   DEMO_TERM_TITLE,
 } from '@/lib/demo-professor-data';
@@ -11,6 +12,7 @@ import { DEMO_RECORDINGS } from '@/lib/demo-student-data';
 import { db } from '@/db';
 import {
   electronic_documents,
+  professor_availabilities,
   professor_term_contracts, payroll_statements,
   universities,
 } from '@/db/schema';
@@ -52,7 +54,7 @@ export default async function ProfessorHome() {
   const [uniRow] = uniRows;
   const needLogoFallback = !uniRow?.logoUrl;
 
-  const [mergedClasses, contractRows, pays, logoFallback] = await Promise.all([
+  const [mergedClasses, contractRows, pays, logoFallback, availabilityRows] = await Promise.all([
     term ? getProfessorMergedClasses(me.id, term.id, universityId) : Promise.resolve(null),
     term
       ? db.select({ id: professor_term_contracts.id, contractType: professor_term_contracts.contractType, baseDutyUnits: professor_term_contracts.baseDutyUnits })
@@ -68,7 +70,13 @@ export default async function ProfessorHome() {
           .where(and(eq(professor_term_contracts.staffId, me.id), eq(professor_term_contracts.termId, term.id)))
       : Promise.resolve([]),
     needLogoFallback ? getSetting('UNIVERSITY_LOGO').catch(() => '') : Promise.resolve(''),
+    // تعداد بازه‌های «اعلام ساعات حضور» این ترم — برای نوار وضعیت داشبورد
+    term
+      ? db.select({ n: count() }).from(professor_availabilities)
+          .where(and(eq(professor_availabilities.staffId, me.id), eq(professor_availabilities.termId, term.id)))
+      : Promise.resolve([]),
   ]);
+  const availabilityCount = Number(availabilityRows?.[0]?.n ?? 0);
   const universityLogoUrl = uniRow?.logoUrl || logoFallback || null;
 
   const contract = contractRows[0] ?? null;
@@ -132,6 +140,56 @@ export default async function ProfessorHome() {
 
   const weekTableRows = scheduleRows.map(r => ({ ...r, sharedScheduleGroupKey: mergeSharedKeys.get(r.id) ?? null }));
 
+  // ── نوار وضعیت چهارگانه ────────────────────────────────────────────────
+  // پیش‌تر این چهار عدد در «سربرگ» و به شکل چهار کادر بزرگ بودند و در موبایل
+  // دو ردیف کامل از ارتفاع را می‌بلعیدند. حالا یک نوار باریک‌اند: آیکن + مقدار
+  // + برچسب کوتاه، چهار ستون در یک ردیف (حتی در ۳۶۰px هم جا می‌شود).
+  const gradeDeadline = term?.gradeEntryDeadline ?? null;
+  const stats: { icon: string; label: string; value: string; tone: string; title: string }[] = [
+    {
+      icon: '📚',
+      label: 'کلاس‌ها',
+      value: demo ? `${faNum(DEMO_DASHBOARD_SUMMARY.classCount)} گروه` : `${faNum(classCards.length)} گروه`,
+      tone: 'text-indigo-700',
+      title: 'تعداد گروه‌های درسی این نیمسال',
+    },
+    {
+      icon: '⏰',
+      label: 'ساعات حضور',
+      value: demo
+        ? '✓ تایید شده'
+        : availabilityCount > 0
+          ? `${faNum(availabilityCount)} بازه`
+          : 'ثبت نشده',
+      tone: demo || availabilityCount > 0 ? 'text-emerald-700' : 'text-slate-500',
+      title: 'بازه‌های اعلام ساعات حضور ثبت‌شده در این نیمسال',
+    },
+    {
+      icon: '📑',
+      label: 'قرارداد',
+      value: demo
+        ? 'آماده امضا'
+        : signatureStatus === 'SIGNED'
+          ? 'امضا شده'
+          : signatureStatus === 'PENDING'
+            ? 'در انتظار'
+            : 'ثبت نشده',
+      tone: demo || signatureStatus === 'SIGNED' ? 'text-emerald-700' : signatureStatus === 'PENDING' ? 'text-amber-700' : 'text-slate-500',
+      title: 'وضعیت امضای الکترونیک قرارداد حق‌التدریس',
+    },
+    {
+      icon: '🗓️',
+      label: 'مهلت نمرات',
+      value: demo
+        ? '۴۸ ساعت'
+        : gradeDeadline
+          ? faDate(gradeDeadline) ?? 'تعیین نشده'
+          : 'تعیین نشده',
+      tone: gradeDeadline ? 'text-rose-700' : 'text-slate-500',
+      title: 'آخرین مهلت ثبت و نهایی‌سازی نمرات این نیمسال',
+    },
+  ];
+
   return (
     <div className="space-y-6" dir="rtl">
 
@@ -140,6 +198,19 @@ export default async function ProfessorHome() {
         initialSessions={demo ? DEMO_LIVE_SESSIONS : liveSessions}
         recordings={demo ? DEMO_RECORDINGS : undefined}
       />
+
+      {/* ── نوار وضعیت (جانشین چهار کادر حذف‌شدهٔ سربرگ) ──────────────────
+          یک ردیف باریک، چهار ستون مساوی: آیکن + مقدار + برچسب کوتاه.
+          ارتفاع کل ~۵۶px در برابر ~۱۳۵px کادرهای قبلی در سربرگ. */}
+      <div className="print:hidden grid grid-cols-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs [&>*+*]:border-r [&>*+*]:border-slate-200">
+        {stats.map(s => (
+          <div key={s.label} className="min-w-0 px-1.5 py-2.5 text-center" title={s.title}>
+            <div className="text-base leading-none" aria-hidden>{s.icon}</div>
+            <div className={`mt-1 truncate text-[11px] font-extrabold leading-tight ${s.tone}`}>{s.value}</div>
+            <div className="truncate text-[10px] leading-tight text-slate-500">{s.label}</div>
+          </div>
+        ))}
+      </div>
 
       <div className="print:hidden grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-4">
         <Link

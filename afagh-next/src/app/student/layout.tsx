@@ -115,8 +115,8 @@ export default async function StudentLayout({ children }: { children: React.Reac
           چیپ‌های وضعیت + سوییچر ترم/نقش. کارت هیروی جداگانه حذف شده است. */}
       <header className="bg-emerald-800 text-white shadow-md print:hidden">
         <div className="max-w-7xl mx-auto flex flex-col gap-2 p-3.5 px-4">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
               {/* ارم دانشگاه جای حرف ثابت «آ» — اگر ارمی ثبت نشده باشد،
                   حرف «آ» به‌عنوان fallback نمایش داده می‌شود */}
               {universityLogoUrl ? (
@@ -131,7 +131,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
                   آ
                 </div>
               )}
-              <UserAvatar userId={user.id} hasPhoto={!!userRow?.photoKey} name={user.name} className="w-9 h-9" fallbackClass="bg-emerald-700" />
+              <UserAvatar userId={user.id} hasPhoto={!!userRow?.photoKey} name={user.name} className="w-9 h-9 shrink-0" fallbackClass="bg-emerald-700" />
               <div className="min-w-0">
                 <p className="text-sm sm:text-base font-extrabold tracking-wide truncate">
                   خوش‌آمدی {firstName} عزیز 👋
@@ -210,7 +210,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
         <StudentSidebar user={{ name: user.name, studentCode: sidebarStudentCode }} />
 
         {/* محتوای اصلی صفحه */}
-        <main className="flex-1 min-w-0 p-3 sm:p-5 md:p-6 pb-24 md:pb-8">
+        <main className="flex-1 min-w-0 overflow-x-hidden p-3 sm:p-5 md:p-6 pb-24 md:pb-8">
           {children}
         </main>
       </div>

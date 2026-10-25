@@ -59,6 +59,15 @@
    پیش‌تنظیم است (Vazirmatn, Tahoma, sans-serif) ⇒ بدون هیچ تغییر ظاهری. */
 body { @apply bg-slate-100 text-slate-800 font-sans; }
 
+/* ── محافظِ سرریز افقی در موبایل ──
+   اگر عنصری پهن‌تر از عرضِ صفحه باشد، در RTL کل صفحه به‌سمت چپ جابه‌جا و
+   «نیمه‌خالی/بُرش‌خورده» دیده می‌شد (مثلاً جدولِ هفتگیِ ۹۶۰px یا نوارِ کنترلِ هدر).
+   این قاعده فقط در موبایل فعال است (سایدبارِ چسبانِ دسکتاپ دست‌نخورده می‌ماند) و
+   از overflow-x:hidden استفاده می‌کند تا هیچ اسکرولِ افقیِ سراسری نماند. */
+@media (max-width: 768px) {
+  html, body { overflow-x: hidden; max-width: 100%; }
+}
+
 /* ── نگاشت تم روشن/تیره روی یوتیلیتی‌های پرکاربرد ──
    مقادیر :root دقیقاً برابر تیلویند اصلی‌اند ⇒ حالت روشن هیچ تغییری نمی‌کند.
    در .dark هر رنگ به پلهٔ خوانای مقابل نگاشت می‌شود. */
@@ -762,7 +771,22 @@ html {
 .hdr-controls > div > button,
 .hdr-controls > details > summary {
   height: 2rem;
-  display: inline-flex;
   align-items: center;
   white-space: nowrap;
+}
+
+/* ⚠ `display` عمداً از قاعدهٔ بالا جدا شده است.
+   پیش‌تر `.hdr-controls > a { display:inline-flex }` بود و همین، کلاس
+   Tailwind `.hidden` را می‌شکست: انتخابگر `.hdr-controls > a` (یک کلاس +
+   یک تگ = 0,1,1) بر `.hidden` (0,1,0) غلبه می‌کرد. نتیجه این بود که لینک‌های
+   «راهنمای استاد» و «PDF» که با `hidden sm:inline-flex` برای موبایل پنهان
+   شده بودند، در موبایل هم رندر می‌شدند و ~۱۸۰px سرریز افقی می‌ساختند
+   (سند ۶۷۲px در ویوپورت ۳۹۰px). حالا `display` فقط برای عنصری اعمال می‌شود
+   که با `.hidden` پنهان نشده باشد. */
+.hdr-controls > a:not(.hidden),
+.hdr-controls > button:not(.hidden),
+.hdr-controls > form > button,
+.hdr-controls > div > button:not(.hidden),
+.hdr-controls > details > summary {
+  display: inline-flex;
 }
