@@ -782,6 +782,8 @@ export const financial_terms = pgTable('financial_terms', {
 export const classrooms = pgTable('classrooms', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 100 }).notNull(),
+  // ── کد کلاس (اختیاری) — همراهِ نام، کلاس را برای تفکیکِ کلاس‌های هم‌نام مشخص می‌کند (درخواست کاربر) ──
+  code: varchar('code', { length: 30 }),
   capacity: integer('capacity').notNull(),
   roomType: varchar('roomType', { length: 30 }),
   buildingName: varchar('buildingName', { length: 100 }),

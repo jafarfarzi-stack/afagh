@@ -125,56 +125,66 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen bg-sky-50/70" data-uni={curUni.code}>
       <header className={`${th.header} text-white shadow-md transition-colors`}>
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 p-3.5 pl-4 pr-14 sm:pr-4">
-          {/* ردیف اول: عنوان (کوتاه در موبایل) + دارک‌مود و خروج قرمز — مثل کارتابل استاد */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-lg ${th.badge} flex items-center justify-center font-bold text-sm shadow-inner`}>
-                {curUni.title.slice(0, 1)}
-              </div>
-              <UserAvatar userId={user.id} hasPhoto={!!photoRow?.photoKey} name={user.name} className="w-9 h-9" fallbackClass="bg-indigo-600" />
-              <div>
-                <Link href="/admin" title="بازگشت به صفحه اول (داشبورد)" className="hover:opacity-90 transition-opacity">
-                  <p className="font-extrabold text-sm tracking-wide">
-                    <span className="sm:hidden">داشبورد مدیریت</span>
-                    <span className="hidden sm:inline">داشبورد مدیریت جامع {curUni.title}</span>
-                  </p>
-                </Link>
-                <p className="text-xs opacity-80">{user.name} · نقش‌ها: {user.roles.join('، ')}</p>
-              </div>
+        {/*
+          هدرِ تک‌سطری: هویت (ارم/آواتار/عنوان) + سوییچرهای نقش/نیمسال/دانشگاه +
+          ابزارهای کاربر — همه در یک سطر. در عرض‌های کم، flex-wrap به‌خودی‌خود
+          آن‌ها را به سطرهای بعدی می‌برد (همان رفتارِ قبلیِ دو‌سطری، فقط فشرده‌تر).
+
+          نکته: دکمهٔ شناور «منو» (AdminNav: fixed top-3 right-3) روی همین گوشه
+          می‌افتد؛ با یک فاصله‌گیرِ بی‌محتوا (w-16) جای آن در سطر رزرو می‌شود تا
+          هیچ کنترلی زیر آن نرود (پیش‌تر در موبایل هم همپوشانی داشت).
+        */}
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-2 p-3.5 pl-4 pr-4">
+          {/* رزروِ جای دکمهٔ شناور «منو» */}
+          <div aria-hidden className="w-16 shrink-0" />
+          {/* هویت: ارم + آواتار + عنوان */}
+          <div className="flex min-w-0 items-center gap-3">
+            <div className={`w-8 h-8 shrink-0 rounded-lg ${th.badge} flex items-center justify-center font-bold text-sm shadow-inner`}>
+              {curUni.title.slice(0, 1)}
             </div>
-            {/* یک ارتفاع و یک تراز برای همهٔ کنترل‌ها (`.hdr-controls` در globals.css) */}
-            <div className="hdr-controls flex flex-nowrap items-center gap-2">
-              <Link
-                href="/help/admin"
-                className={`hidden sm:inline-flex text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
-              >
-                📖 راهنما
+            <UserAvatar userId={user.id} hasPhoto={!!photoRow?.photoKey} name={user.name} className="w-9 h-9 shrink-0" fallbackClass="bg-indigo-600" />
+            <div className="min-w-0">
+              <Link href="/admin" title="بازگشت به صفحه اول (داشبورد)" className="block hover:opacity-90 transition-opacity">
+                <p className="truncate font-extrabold text-sm tracking-wide">
+                  <span className="sm:hidden">داشبورد مدیریت</span>
+                  <span className="hidden sm:inline">داشبورد مدیریت جامع {curUni.title}</span>
+                </p>
               </Link>
-              <a
-                href="/help/pdfs/admin.pdf"
-                download
-                className={`hidden sm:inline-flex text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
-              >
-                📕 PDF
-              </a>
-              <ThemeToggle />
-              <form action={logoutAction}>
-                <button className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition">
-                  <span className="sm:hidden">خروج</span>
-                  <span className="hidden sm:inline">خروج از سامانه</span>
-                </button>
-              </form>
+              <p className="truncate text-xs opacity-80">{user.name} · نقش‌ها: {user.roles.join('، ')}</p>
             </div>
           </div>
-          {/* ردیف دوم: سوییچرهای نقش/نیمسال/دانشگاه — روی موبایل هم قابل‌دسترس */}
-          <div className="hdr-controls flex flex-wrap items-center gap-2 lg:flex-nowrap lg:shrink-0">
+          {/* سوییچرهای نقش/نیمسال/دانشگاه — در همان سطرِ هویت (پیش‌تر سطر دوم بود) */}
+          <div className="hdr-controls flex flex-wrap items-center gap-2">
             {headerSwitchers}
+          </div>
+          {/* ابزارهای کاربر — چسبیده به لبهٔ چپِ هدر (یک ارتفاع و یک تراز برای همه
+              — `.hdr-controls` در globals.css) */}
+          <div className="hdr-controls ms-auto flex flex-nowrap items-center gap-2">
+            <Link
+              href="/help/admin"
+              className={`hidden sm:inline-flex text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
+            >
+              📖 راهنما
+            </Link>
+            <a
+              href="/help/pdfs/admin.pdf"
+              download
+              className={`hidden sm:inline-flex text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
+            >
+              📕 PDF
+            </a>
+            <ThemeToggle />
+            <form action={logoutAction}>
+              <button className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition">
+                <span className="sm:hidden">خروج</span>
+                <span className="hidden sm:inline">خروج از سامانه</span>
+              </button>
+            </form>
           </div>
         </div>
         <AdminNav roles={user.roles} permissions={permissionCodes} theme={th} />
       </header>
-      <main className="mx-auto max-w-6xl p-3 sm:p-5 pb-16">{children}</main>
+      <main className="mx-auto max-w-[1600px] p-3 sm:p-5 pb-16">{children}</main>
       <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />
     </div>
   );

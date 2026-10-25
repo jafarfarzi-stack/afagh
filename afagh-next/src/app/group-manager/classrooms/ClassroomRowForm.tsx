@@ -12,6 +12,7 @@ interface Props {
   /** برای حالت ویرایش مقدار دارد؛ برای افزودن حذف شود */
   id?: number;
   name?: string;
+  code?: string | null;
   cap?: number;
   roomType?: string | null;
   facultyId?: number | null;
@@ -31,7 +32,7 @@ const INITIAL: SaveClassroomResult = { ok: false };
  * نویگیت نشود و اسکرولِ کاربر (مخصوصاً برای کلاس‌های پایینِ لیست) حفظ گردد.
  */
 export default function ClassroomRowForm(props: Props) {
-  const { id, name, cap, roomType, facultyId, floor, rows, cols, isActive = 1, faculties, variant = 'row' } = props;
+  const { id, name, code, cap, roomType, facultyId, floor, rows, cols, isActive = 1, faculties, variant = 'row' } = props;
   const [state, action, pending] = useActionState(saveClassroomAction, INITIAL);
 
   // پس از ذخیرهٔ موفق، کلید فرم را می‌زنیم تا با مقادیرِ تازهِٔ (پس از revalidate)
@@ -54,6 +55,7 @@ export default function ClassroomRowForm(props: Props) {
     <form key={resetKey} action={action} className={wrapCls}>
       {id != null && <input type="hidden" name="id" value={id} />}
       <label className="text-slate-500">نام<input name="name" required defaultValue={name ?? ''} className="input mt-1 !py-1 !px-2 w-32" /></label>
+      <label className="text-slate-500">کد<input name="code" defaultValue={code ?? ''} className="input mt-1 !py-1 !px-2 w-24" dir="ltr" placeholder="اختیاری" /></label>
       <label className="text-slate-500">ظرفیت<input name="cap" type="number" min={1} required defaultValue={cap ?? ''} className="input mt-1 !py-1 !px-2 w-16" dir="ltr" /></label>
       {variant === 'new' ? (
         <label className="text-slate-500">نوع

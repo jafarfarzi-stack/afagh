@@ -29,6 +29,8 @@ export async function saveClassroomAction(
     const id = num(fd, 'id');
     const name = str(fd, 'name'), cap = num(fd, 'cap');
     if (!name || cap <= 0) return { ok: false, err: 'نام کلاس و ظرفیت مثبت الزامی است.' };
+    // کد کلاس اختیاری است (درخواست کاربر) — رشتهٔ خالی ⇒ NULL در پایگاه داده
+    const code = str(fd, 'code') || null;
     const myUni = me.universityId ?? null;
     // ویرایش فقط روی کلاسِ همین دانشگاه (G3) — کلاس عام/سیستمی (universityId=NULL)
     // هم برای مدیر گروه قابل ویرایش نیست؛ آن‌ها را آموزش می‌سازد.
@@ -58,7 +60,7 @@ export async function saveClassroomAction(
     }
     // نام دانشکده در ستون قدیمی `buildingName` هم نوشته می‌شود تا صفحه‌هایی که
     // هنوز «ساختمان» را نمایش می‌دهند خالی نمانند (منبع حقیقت: facultyId).
-    const vals = { name, capacity: cap, roomType: str(fd, 'roomType') || null, facultyId, buildingName: facultyName, floor: str(fd, 'floor') || null, rowsCount: num(fd, 'rows') || null, colsCount: num(fd, 'cols') || null, isActive };
+    const vals = { name, code, capacity: cap, roomType: str(fd, 'roomType') || null, facultyId, buildingName: facultyName, floor: str(fd, 'floor') || null, rowsCount: num(fd, 'rows') || null, colsCount: num(fd, 'cols') || null, isActive };
     if (id) {
       await db.update(classrooms).set(vals).where(eq(classrooms.id, id));
     } else {

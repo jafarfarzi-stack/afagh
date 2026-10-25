@@ -33,7 +33,7 @@ export default async function ClassroomsPage() {
         <h2 className="mb-2 font-bold">کلاس‌ها ({rooms.length})</h2>
         <div className="overflow-x-auto">
         <table className="w-full text-right text-xs rt">
-          <thead><tr className="text-slate-500"><th className="p-2">نام</th><th className="p-2">ظرفیت</th><th className="p-2">نوع</th><th className="p-2">دانشکده</th><th className="p-2">نیمکت (ر×س)</th><th className="p-2"></th></tr></thead>
+          <thead><tr className="text-slate-500"><th className="p-2">نام</th><th className="p-2">کد</th><th className="p-2">ظرفیت</th><th className="p-2">نوع</th><th className="p-2">دانشکده</th><th className="p-2">نیمکت (ر×س)</th><th className="p-2"></th></tr></thead>
           <tbody>
             {rooms.map(r => (
               <tr key={r.id} className="border-t border-slate-100">
@@ -41,6 +41,7 @@ export default async function ClassroomsPage() {
                   <ClassroomRowForm
                     id={r.id}
                     name={r.name}
+                    code={r.code}
                     cap={r.capacity}
                     roomType={r.roomType}
                     facultyId={r.facultyId}
