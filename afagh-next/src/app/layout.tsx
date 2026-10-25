@@ -1,10 +1,24 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import '../styles/mobile-tables.css';
 import PrintThemeGuard from '@/components/PrintThemeGuard';
 import MobileTableEnhancer from '@/components/MobileTableEnhancer';
+import PwaRegister from '@/components/PwaRegister';
 
-export const metadata: Metadata = { title: 'سامانه جامع آفاق', description: 'کالبد Next.js + PostgreSQL — سه داشبورد ایزوله' };
+export const metadata: Metadata = {
+  title: 'سامانه جامع آفاق',
+  description: 'کالبد Next.js + PostgreSQL — سه داشبورد ایزوله',
+  applicationName: 'آفاق',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: { capable: true, title: 'آفاق', statusBarStyle: 'default' },
+  icons: { icon: '/icons/icon-192.png', apple: '/icons/apple-touch-icon.png' },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#4f46e5',
+  width: 'device-width',
+  initialScale: 1,
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -20,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen">
         <PrintThemeGuard />
         <MobileTableEnhancer />
+        <PwaRegister />
         {children}
       </body>
     </html>
