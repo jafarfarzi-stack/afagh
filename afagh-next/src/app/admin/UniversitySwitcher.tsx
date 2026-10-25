@@ -32,7 +32,7 @@ export default function UniversitySwitcher({
         <span className="max-w-36 truncate">{cur.title}{cur.kind === 'DISSOLVED' ? ' (منحله)' : ''}</span>
         <span className="text-[10px] opacity-70">▾</span>
       </summary>
-      <div className="absolute left-0 top-full mt-1 z-50 min-w-52 max-w-72 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
+      <div className="fixed inset-x-2 bottom-2 z-[60] max-h-[65vh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl md:absolute md:inset-x-auto md:bottom-auto md:right-0 md:top-full md:mt-1 md:max-h-none md:min-w-52 md:overflow-hidden md:rounded-xl">
         {universities.map(u => {
           const active = u.code === currentCode;
           return (

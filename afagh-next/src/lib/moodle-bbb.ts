@@ -209,3 +209,52 @@ export async function getTodayLiveClasses(opts?: {
     recordingsCount: recordingCount.get(r.classroomId) ?? 0,
   }));
 }
+
+/**
+ * آیا در سامانه برای این دامنه **اصلاً** اتاق کلاس مجازی تعریف شده است؟
+ *
+ * چرا جدا از `getTodayLiveClasses`: آن تابع فقط «جلسات امروز» را برمی‌گرداند و
+ * آرایهٔ خالی می‌تواند دو معنا داشته باشد — «هیچ کلاسی امروز نیست» یا
+ * «کلاس مجازی در سامانه راه‌اندازی نشده». برای تصمیمِ نمایش/عدم‌نمایشِ ویجت
+ * باید این دو را از هم تشخیص داد: اگر هیچ اتاقی تعریف نشده باشد، ویجت
+ * («کلاس‌های آنلاین امروز») در داشبورد استاد به‌کل رندر نمی‌شود.
+ */
+export async function hasVirtualClassroomSetup(opts?: {
+  universityId?: number | null;
+  staffId?: number | null;
+  viewerUserId?: number | null;
+}): Promise<boolean> {
+  if (opts?.viewerUserId) {
+    const kind = await demoKindForUser(opts.viewerUserId);
+    if (kind === 'STUDENT' || kind === 'PROFESSOR') return true;
+  }
+
+  const cond: SQL[] = [];
+  if (opts?.universityId) cond.push(eq(virtual_classrooms.universityId, opts.universityId));
+  if (opts?.staffId) {
+    const mine = or(
+      eq(course_offerings.professorId, opts.staffId),
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(offering_professors)
+          .where(
+            and(
+              eq(offering_professors.offeringId, course_offerings.id),
+              eq(offering_professors.staffId, opts.staffId),
+            ),
+          ),
+      ),
+    );
+    if (mine) cond.push(mine);
+  }
+
+  const [row] = await db
+    .select({ one: sql<number>`1` })
+    .from(virtual_classrooms)
+    .innerJoin(course_offerings, eq(course_offerings.id, virtual_classrooms.courseOfferingId))
+    .where(cond.length ? and(...cond) : undefined)
+    .limit(1);
+
+  return !!row;
+}

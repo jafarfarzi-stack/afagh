@@ -35,33 +35,32 @@ export default async function CategoryPage({ params }: { params: Promise<{ group
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="font-extrabold text-slate-800 text-base sm:text-lg">
           {g.group.icon} {g.group.title}
         </h1>
         <Link href="/admin" className="text-xs font-bold text-indigo-700 hover:underline">→ بازگشت به داشبورد</Link>
       </div>
-      <p className="text-xs text-slate-500 -mt-3">{g.group.desc} — {g.modules.length} ماژول</p>
-      <div className="grid grid-cols-2 min-[400px]:grid-cols-3 lg:grid-cols-4 gap-3">
+      <p className="text-[11px] sm:text-xs text-slate-500">{g.group.desc} — {g.modules.length} ماژول</p>
+
+      {/* کاشی‌های ماژول — همان الگوی «آیکن + عنوان کوتاه» کارتابل استاد/دانشجو.
+          پیش‌تر هر کاشی یک پاراگراف توضیح داشت؛ در موبایل با ۳ ستون، کاشی‌ها
+          بسیار بلند و ناخوانا می‌شدند. توضیح حذف شد و عنوان تا ۳ خط جمع می‌شود. */}
+      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3.5">
         {g.modules.map(m => (
           <Link
             key={m.href}
             href={m.href}
-            className={`group h-full p-3 rounded-2xl bg-gradient-to-br ${m.accent} text-white shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-start justify-between border`}
+            title={m.title}
+            className={`group flex min-h-[96px] flex-col items-center justify-start gap-2 rounded-2xl bg-gradient-to-br ${m.accent} px-2 py-3 text-center text-white shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all border`}
           >
-            <div className="flex items-start gap-2">
-              <div className={`w-9 h-9 shrink-0 rounded-xl ${m.iconBg} border flex items-center justify-center text-xl shadow-inner group-hover:scale-110 transition-transform`}>
-                {m.icon}
-              </div>
-              <div>
-                <h3 className="font-extrabold text-sm leading-6">{m.title}</h3>
-                <p className="text-[11px] text-white/70 mt-1 leading-5">{m.desc}</p>
-              </div>
+            <div className={`w-10 h-10 shrink-0 rounded-2xl ${m.iconBg} border flex items-center justify-center text-lg shadow-inner group-hover:scale-110 transition-transform`}>
+              {m.icon}
             </div>
-            <span className="text-white/50 font-extrabold text-sm group-hover:text-white group-hover:-translate-x-1 transition-all mt-1">
-              ←
-            </span>
+            <h3 className="line-clamp-3 font-extrabold text-[11px] sm:text-xs leading-tight">
+              {m.title}
+            </h3>
           </Link>
         ))}
       </div>

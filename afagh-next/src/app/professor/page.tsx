@@ -20,7 +20,7 @@ import { getSetting } from '@/lib/settings';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import VirtualClassroomWidget from '@/components/VirtualClassroomWidget';
 import MessengerOnboardBanner from '@/components/MessengerOnboardBanner';
-import { getTodayLiveClasses } from '@/lib/moodle-bbb';
+import { getTodayLiveClasses, hasVirtualClassroomSetup } from '@/lib/moodle-bbb';
 import { professorTermFilter } from '@/lib/professor-term-filter';
 import {
   getProfessorMergedClasses,
@@ -43,9 +43,12 @@ export default async function ProfessorHome() {
 
   const universityId = me.universityId ?? user.universityId ?? null;
 
-  const [termFilter, liveSessions, uniRows] = await Promise.all([
+  const [termFilter, liveSessions, vcConfigured, uniRows] = await Promise.all([
     professorTermFilter(universityId),
     getTodayLiveClasses({ universityId, staffId: me.id, viewerUserId: user.id }),
+    // آیا اصلاً کلاس مجازی (Moodle/BBB) در سامانه راه‌اندازی شده؟ اگر نه،
+    // ویجت «کلاس‌های آنلاین امروز» به‌کل نمایش داده نمی‌شود.
+    hasVirtualClassroomSetup({ universityId, staffId: me.id, viewerUserId: user.id }).catch(() => false),
     universityId
       ? db.select({ title: universities.title, logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, universityId)).limit(1)
       : Promise.resolve([]),
@@ -193,11 +196,16 @@ export default async function ProfessorHome() {
   return (
     <div className="space-y-6" dir="rtl">
 
-      <VirtualClassroomWidget
-        user={{ id: user.id, name: user.name, role: 'PROFESSOR' }}
-        initialSessions={demo ? DEMO_LIVE_SESSIONS : liveSessions}
-        recordings={demo ? DEMO_RECORDINGS : undefined}
-      />
+      {/* ویجت کلاس مجازی فقط وقتی رندر می‌شود که در سامانه برای این استاد
+          اتاق کلاس آنلاین تعریف شده باشد. اگر Moodle/BBB راه‌اندازی نشده
+          باشد، این بلوک به‌کل از داشبورد حذف می‌شود (نه با پیام «خالی»). */}
+      {(demo || vcConfigured) && (
+        <VirtualClassroomWidget
+          user={{ id: user.id, name: user.name, role: 'PROFESSOR' }}
+          initialSessions={demo ? DEMO_LIVE_SESSIONS : liveSessions}
+          recordings={demo ? DEMO_RECORDINGS : undefined}
+        />
+      )}
 
       {/* ── نوار وضعیت (جانشین چهار کادر حذف‌شدهٔ سربرگ) ──────────────────
           یک ردیف باریک، چهار ستون مساوی: آیکن + مقدار + برچسب کوتاه.

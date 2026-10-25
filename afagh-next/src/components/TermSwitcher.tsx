@@ -36,16 +36,16 @@ export default function TermSwitcher({
         className="list-none [&::-webkit-details-marker]:hidden bg-white/15 hover:bg-white/25 border-white/25 text-white border rounded-lg px-2 py-1.5 text-xs font-bold cursor-pointer flex items-center gap-1.5 select-none"
       >
         <span className="text-[10px] opacity-70">🗓</span>
-        <span className="text-[10px] opacity-80">نیمسال</span>
-        <span className="max-w-36 truncate">{current ? current.title : 'همهٔ نیمسال‌ها'}</span>
+        {/* برچسب «نیمسال» فقط از sm به بالا — در موبایل جا را برای سوییچر
+            کارتابل باز می‌کند تا هر دو در یک ردیف سربرگ جا شوند */}
+        <span className="hidden sm:inline text-[10px] opacity-80">نیمسال</span>
+        <span className="max-w-24 sm:max-w-36 truncate">{current ? current.title : 'همهٔ نیمسال‌ها'}</span>
         <span className="text-[10px] opacity-70">▾</span>
       </summary>
-      {/* ⚠ `right-0` (نه `left-0`): این سوییچر در RTL چسبیده به لبهٔ راستِ
-          سربرگ است. با `left-0` پنل از لبهٔ چپِ خودِ details به سمت راست باز
-          می‌شد و در موبایل ۶۰px از صفحه بیرون می‌زد (عنوان ترم‌ها بریده
-          می‌شد). حالا لبهٔ راستِ پنل روی لبهٔ راستِ دکمه می‌نشیند و پنل به
-          سمت چپِ صفحه باز می‌شود. */}
-      <div className="absolute right-0 top-full mt-1 z-50 min-w-56 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
+      {/* در موبایل به‌شکل «شیت» تمام‌عرض از پایین باز می‌شود؛ `absolute` در
+          RTL بسته به جای دکمه، از یک لبه بیرون می‌زد و عنوان ترم‌ها بریده
+          می‌شد. از md به بالا همان منوی کشوییِ چسبیده به دکمه است. */}
+      <div className="fixed inset-x-2 bottom-2 z-[60] max-h-[65vh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl md:absolute md:inset-x-auto md:bottom-auto md:right-0 md:top-full md:mt-1 md:max-h-none md:min-w-56 md:overflow-hidden md:rounded-xl">
         <div className="max-h-80 overflow-y-auto py-1">
           <form action="/api/scope/term" method="post" className="block">
             <input type="hidden" name="termId" value="" />

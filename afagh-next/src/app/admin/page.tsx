@@ -199,22 +199,21 @@ export default async function AdminHome({
           <h1 className="font-extrabold text-slate-800 text-base sm:text-lg">دسته‌بندی سامانه</h1>
           <span className="text-xs text-slate-500">{groups.reduce((s, g) => s + g.modules.length, 0)} ماژول در دسترس نقش شما</span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
           {groups.map(g => (
             <Link
               key={g.group.key}
               href={`/admin/c/${g.group.key}`}
-              className="group h-full p-4 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-start justify-between"
+              className="group h-full p-3 sm:p-4 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-start gap-2.5 sm:gap-3"
             >
-              <div className="flex items-start gap-3">
-                <div className="w-11 h-11 shrink-0 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                  {g.group.icon}
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-sm leading-6 text-slate-800">{g.group.title}</h3>
-                  <p className="text-[11px] text-slate-500 mt-1 leading-5">{g.group.desc}</p>
-                  <p className="text-[10px] text-indigo-600 mt-1 font-bold">{g.modules.length} ماژول ←</p>
-                </div>
+              <div className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-xl sm:text-2xl group-hover:scale-110 transition-transform">
+                {g.group.icon}
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-extrabold text-[12px] sm:text-sm leading-tight text-slate-800">{g.group.title}</h3>
+                {/* توضیح دسته فقط از sm به بالا — در موبایل کارت را بی‌دلیل بلند می‌کرد */}
+                <p className="hidden sm:block text-[11px] text-slate-500 mt-1 leading-5">{g.group.desc}</p>
+                <p className="text-[10px] text-indigo-600 mt-1 font-bold">{g.modules.length} ماژول ←</p>
               </div>
             </Link>
           ))}

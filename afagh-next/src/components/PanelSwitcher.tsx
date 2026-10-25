@@ -97,7 +97,9 @@ export default function PanelSwitcher({
         title="تعویض کارتابل (نقش) یا حساب دیگری با همین کدملی"
       >
         <span aria-hidden>🔀</span>
-        <span>کارتابل‌ها و حساب‌ها</span>
+        {/* در موبایل برچسب کوتاه — تا با سوییچر نیمسال در یک ردیف جا شود */}
+        <span className="hidden sm:inline">کارتابل‌ها و حساب‌ها</span>
+        <span className="sm:hidden">کارتابل</span>
         <span className="rounded-full bg-white/25 px-1.5 text-[10px] font-black leading-5">{total.toLocaleString('fa-IR')}</span>
       </button>
 
@@ -105,7 +107,7 @@ export default function PanelSwitcher({
         <div
           role="menu"
           dir="rtl"
-          className="absolute left-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-800 shadow-2xl"
+          className="fixed inset-x-2 bottom-2 z-[60] max-h-[65vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-2xl md:absolute md:inset-x-auto md:bottom-auto md:right-0 md:top-full md:mt-2 md:max-h-none md:w-80 md:overflow-hidden md:rounded-xl"
         >
           {panels.length > 0 && (
             <div className="p-2">
@@ -134,7 +136,7 @@ export default function PanelSwitcher({
                   <div
                     key={l.key}
                     aria-current="page"
-                    className="flex items-start gap-2 rounded-lg bg-indigo-50/60 px-2 py-2"
+                    className="flex items-start gap-2 rounded-lg bg-indigo-50 px-2 py-2 ring-1 ring-inset ring-indigo-200"
                   >
                     {body}
                   </div>
